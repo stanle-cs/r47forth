@@ -12,10 +12,10 @@
 
 #if !defined(TESTSUITE_BUILD)
   #if !defined(SAVE_SPACE_DM42_8ASN)
-  TO_QSPI const int      KEY_X_5[6] = {-1, 80, 160, 240, 320, 400};
+  TO_QSPI const int16_t KEY_X_5[6] = {-1, 80, 160, 240, 320, 400};
   static void fnAsnDisplay(uint8_t page) {                // Heavily modified by JM from the original fnShow
   #define YOFF 32
-    int16_t x1,x2,yy;
+    int16_t x1, x2, yy;
     int kk = 0;
     int16_t key;
     char Name[16];
