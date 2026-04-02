@@ -71,6 +71,7 @@ void generateConstantArray39(char *name, char *value) {
 
   memset(&real39, 0, REAL39_SIZE_IN_BYTES);
   stringToReal(value, (real_t *)&real39, &ctxtReal39);
+  realReduce((real_t *)&real39, (real_t *)&real39, &ctxtReal39);
 
   strcpy(whiteSpace, "                                        ");
   whiteSpace[13 - strlen(name)] = 0;
@@ -78,7 +79,6 @@ void generateConstantArray39(char *name, char *value) {
   emitConstant(name, "real_t", &real39, REAL39_SIZE_IN_BYTES, "const_");
   cntReal39++;
 }
-
 
 void generateConstantArray34(char *name, char *value) {
   real34_t real34;
@@ -89,6 +89,7 @@ void generateConstantArray34(char *name, char *value) {
 
   memset(&real34, 0, REAL34_SIZE_IN_BYTES);
   stringToReal34(value, &real34);
+  real34Reduce(&real34, &real34);
 
   strcpy(whiteSpace, "                                        ");
   whiteSpace[9 - strlen(name)] = 0;
@@ -96,7 +97,6 @@ void generateConstantArray34(char *name, char *value) {
   emitConstant(name, "real34_t", &real34, REAL34_SIZE_IN_BYTES, "const34_");
   cntReal34++;
 }
-
 
 void generateConstantArray51(char *name, char *value) {
   real51_t real51;
@@ -107,6 +107,7 @@ void generateConstantArray51(char *name, char *value) {
 
   memset(&real51, 0, REAL51_SIZE_IN_BYTES);
   stringToReal(value, (real_t *)&real51, &ctxtReal51);
+  realReduce((real_t *)&real51, (real_t *)&real51, &ctxtReal51);
 
   strcpy(whiteSpace, "                                        ");
   whiteSpace[13 - strlen(name)] = 0;
@@ -114,7 +115,6 @@ void generateConstantArray51(char *name, char *value) {
   emitConstant(name, "real_t", &real51, REAL51_SIZE_IN_BYTES, "const_");
   cntReal51++;
 }
-
 
 void generateConstantArray75(char *name, char *value) {
   real_t real75;
@@ -125,6 +125,7 @@ void generateConstantArray75(char *name, char *value) {
 
   memset(&real75, 0, REAL_SIZE_IN_BYTES);
   stringToReal(value, (real_t *)&real75, &ctxtReal75);
+  realReduce((real_t *)&real75, (real_t *)&real75, &ctxtReal75);
 
   strcpy(whiteSpace, "                                        ");
   whiteSpace[13 - strlen(name)] = 0;
@@ -132,7 +133,6 @@ void generateConstantArray75(char *name, char *value) {
   emitConstant(name, "real_t", &real75, REAL_SIZE_IN_BYTES, "const_");
   cntReal75++;
 }
-
 
 void generateConstantArray6147(char *name, char *value) {
   real6147_t real6147;
@@ -143,6 +143,7 @@ void generateConstantArray6147(char *name, char *value) {
 
   memset(&real6147, 0, REAL6147_SIZE_IN_BYTES);
   stringToReal(value, (real_t *)&real6147, &ctxtReal6147);
+  realReduce((real_t *)&real6147, (real_t *)&real6147, &ctxtReal6147);
 
   strcpy(whiteSpace, "                                        ");
   whiteSpace[9 - strlen(name)] = 0;
@@ -150,7 +151,6 @@ void generateConstantArray6147(char *name, char *value) {
   emitConstant(name, "real_t", &real6147, REAL6147_SIZE_IN_BYTES, "const6147_");
   cntReal6147++;
 }
-
 
 void generateConstantArray2139(char *name, char *value) {
   real2139_t real2139;
@@ -161,6 +161,7 @@ void generateConstantArray2139(char *name, char *value) {
 
   memset(&real2139, 0, REAL2139_SIZE_IN_BYTES);
   stringToReal(value, (real_t *)&real2139, &ctxtReal2139);
+  realReduce((real_t *)&real2139, (real_t *)&real2139, &ctxtReal2139);
 
   strcpy(whiteSpace, "                                        ");
   whiteSpace[9 - strlen(name)] = 0;
@@ -178,6 +179,7 @@ void generateConstantArray1071(char *name, char *value) {
 
   memset(&real1071, 0, REAL1071_SIZE_IN_BYTES);
   stringToReal(value, (real_t *)&real1071, &ctxtReal1071);
+  realReduce((real_t *)&real1071, (real_t *)&real1071, &ctxtReal1071);
 
   strcpy(whiteSpace, "                                        ");
   whiteSpace[9 - strlen(name)] = 0;
@@ -272,9 +274,9 @@ void generateAllConstants(void) {
 /*073*/  generateConstantArray39("PHI",           "+1.618033988749894848204586834365638117720309179805762862e+00"); cc++; // math constant phi = (1 + sqrt(5)) / 2
 /*074*/  generateConstantArray39("PHI0",          "+2.067833848461929323081115412147497340171545654934323552e-15"); cc++;
 /*075*/  generateConstantArray39("omega",         "+7.292115000000000000000000000000000000000000000000000000e-05"); cc++;
-/*076*/  generateConstantArray39("minusInfinity", "-9.999999999999999999999999999999999999999999999999999999e+9999"); cc++; // math "constant"
-/*077*/  generateConstantArray39("plusInfinity",  "+9.999999999999999999999999999999999999999999999999999999e+9999"); cc++; // math "constant"
-/*078*/  generateConstantArray39("0",             "0"); cc++;
+/*076*/  generateConstantArray39("minusInfinity", "-9e+9999"                                                     ); cc++; // math "constant"
+/*077*/  generateConstantArray39("plusInfinity",  "+9e+9999"                                                     ); cc++; // math "constant"
+/*078*/  generateConstantArray39("0",             "0"                                                            ); cc++;
 /*079*/  generateConstantArray39("BB",            "+3.566668367128895828373073810012662699038701534076244140e-01"); cc++; //  solution to equation 1.2 in https://arxiv.org/pdf/2309.05050.pdf : sqrt(36x+3) / 4 + sin(2 pi sqrt(12x+1) / 3) = 0
 /*080*/  generateConstantArray39("DeltaS",        "+2.414213562373095048801688724209698078569671875376948073e+00"); cc++; //  1+√2
 /*081*/  generateConstantArray39("movSofa",       "+2.219531668871970000000000000000000000000000000000000000e+00"); cc++; //  https://mathworld.wolfram.com/MovingSofaProblem.html. The moving sofa number is the result of a lot of equation solving
@@ -407,7 +409,7 @@ void generateAllConstants(void) {
   generateConstantArray39("GlukFzuk",      "+1.600000000000000000000000000000000000000000000000000000e+02"); // defined uk       : 1600 x
   generateConstantArray39("GlusFzus",      "+1.280000000000000000000000000000000000000000000000000000e+02"); // defined uz       : 1200 x
   generateConstantArray39("bananamm",      "+178.0");
-  generateConstantArray39("bananaInch",    "+7.007874015748031496062992125984251968503937007874015748");
+  generateConstantArray39("bananaInch",    "+7.007874015748031496062992125984251968503937007874015748"    );
   generateConstantArray39("InchToCm",      "+2.540000000000000000000000000000000000000000000000000000e+00"); // cm     = inch × 0.0254 × 1000 / 10
   generateConstantArray39("273p15",        "+2.731500000000000000000000000000000000000000000000000000e+02"); // defined Temperature : 273.15                                // SI exact
   generateConstantArray39("459p67",        "+4.596700000000000000000000000000000000000000000000000000e+02"); // defined Temperature : 459.67                                // 273.15 × 9/5 − 32 = 459.67 exactly
@@ -492,18 +494,18 @@ void generateAllConstants(void) {
   generateConstantArray39("2e6",           "+2.000000000000000000000000000000000000000000000000000000e+06");
   generateConstantArray39("2p32",          "+4.294967296000000000000000000000000000000000000000000000e+09");
   generateConstantArray39("1e32",          "+1.000000000000000000000000000000000000000000000000000000e+32");
-  generateConstantArray39("2p31__1",       "+2147483647");
-  generateConstantArray39("10p9__1",       "+999999999");
-  generateConstantArray39("2p63",          "+9223372036854775808");
-  generateConstantArray39("2p64",          "+18446744073709551616");
-  generateConstantArray39("1e_10000",      "+1.000000000000000000000000000000000000000000000000000000e-10000");
+  generateConstantArray39("2p31__1",       "+2147483647"                                                  );
+  generateConstantArray39("10p9__1",       "+999999999"                                                   );
+  generateConstantArray39("2p63",          "+9223372036854775808"                                         );
+  generateConstantArray39("2p64",          "+18446744073709551616"                                        );
+  generateConstantArray39("1e_10000",      "+1.000000000000000000000000000000000000000000000000000e-10000");
   generateConstantArray39("995on1000",     "+9.950000000000000000000000000000000000000000000000000000e-01");
   generateConstantArray39("1e_32",         "+1.000000000000000000000000000000000000000000000000000000e-32");
   generateConstantArray39("rt3",           "+1.732050807568877293527446341505872366942805253810380628e+00");
   generateConstantArray39("rt5",           "+2.236067977499789696409173668731276235440618359611525724e+00");
   generateConstantArray39("rt7",           "+2.645751311064590590501615753639260425710259183082450180e+00");
   generateConstantArray39("GaluseqE",      "+3.370000000000000000000000000000000000000000000000000000e+01");
-  generateConstantArray39("1e_6143",       "+1.000000000000000000000000000000000000000000000000000000e-6143");
+  generateConstantArray39("1e_6143",       "+1.0000000000000000000000000000000000000000000000000000e-6143");
   generateConstantArray39("rtpi",          "+1.772453850905516027298167483341145182797549456122387128e+00");
   generateConstantArray39("1onpi",         "+3.183098861837906715377675267450287240689192914809128975e-01");
   generateConstantArray39("pisq",          "+9.869604401089358618834490999876151135313699407240790626e+00");

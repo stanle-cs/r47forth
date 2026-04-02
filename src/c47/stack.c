@@ -340,6 +340,7 @@ void fnUndo(uint16_t unusedButMandatoryParameter) {
 
 void undo(void) {
   #if defined(DEBUGUNDO)
+    print_caller("UNDO");
     printf(">>> Undoing, calcMode = %i ...", calcMode);
   #endif // DEBUGUNDO
                                         #if defined(DEBUGUNDO)
@@ -423,6 +424,6 @@ void undo(void) {
 
 void fillStackWithReal0(void) {
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-  real34Zero(REGISTER_REAL34_DATA(REGISTER_X));
+  real34SetZero(REGISTER_REAL34_DATA(REGISTER_X));
   fnFillStack(0);
 }
