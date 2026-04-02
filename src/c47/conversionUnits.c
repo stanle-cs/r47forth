@@ -49,7 +49,7 @@ static void unitConversion(const real_t * const coefficient, uint16_t multiplyDi
   adjustResult(REGISTER_X, false, false, -1, -1, -1);
 }
 
-TO_QSPI static const real_t *conversionFactors[constFactorEND] = {
+TO_QSPI_PTRS static const real_t *conversionFactors[constFactorEND] = {
     [constFactorFt2Hectare]   = const_Ft2ToHa,      /*   0 */
     [constFactorFt2M2]        = const_Ft2ToM2,
     [constFactorHectareKm2]   = const_100,
