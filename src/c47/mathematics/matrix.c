@@ -1762,7 +1762,7 @@ void realMatrixFree(real34Matrix_t *matrix) {
 void realMatrixIdentity(real34Matrix_t *matrix, uint16_t size) {
   if(realMatrixInit(matrix, size, size)) {
     for(uint16_t i = 0; i < size; ++i) {
-      real34Copy(const34_1, &matrix->matrixElements[i * size + i]);
+      real34SetOne(&matrix->matrixElements[i * size + i]);
     }
   }
   else {
@@ -1838,8 +1838,8 @@ void complexMatrixFree(complex34Matrix_t *matrix) {
 void complexMatrixIdentity(complex34Matrix_t *matrix, uint16_t size) {
   if(complexMatrixInit(matrix, size, size)) {
     for(uint16_t i = 0; i < size; ++i) {
-      real34Copy(const34_1, VARIABLE_REAL34_DATA(&matrix->matrixElements[i * size + i]));
-      real34SetZero(           VARIABLE_IMAG34_DATA(&matrix->matrixElements[i * size + i]));
+      real34SetOne( VARIABLE_REAL34_DATA(&matrix->matrixElements[i * size + i]));
+      real34SetZero(VARIABLE_IMAG34_DATA(&matrix->matrixElements[i * size + i]));
     }
   }
   else {
