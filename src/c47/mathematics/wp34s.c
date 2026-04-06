@@ -12,6 +12,10 @@
  ******************************************************/
 
 
+#if !defined(PC_BUILD)
+  #undef CACHE_DEBUG
+  #undef TRACE_VECTOR
+#endif
 
 /****************************************************************************************************
  * Modified for direct handling of 1071 digit contexts.
@@ -29,6 +33,9 @@ static void C47_WP34S_SinCosTanTaylor_temp1071 (const real_t *angle, bool_t swap
 // called from WP34S_Cvt2RadSinCosTan for 75 digits max, by by agm, sin, sinc, cos, tan, multiple elliptic functions, exp (complex), fib, gd, tanh, WP34S_Zeta
 // called from C47_WP34S_Cvt2RadSinCosTan for 1071+ XFN
 static void doWP34S_SinCosTanTaylor(real_t* angle, bool* sinNeg, bool* cosNeg, bool* swap, real_t* sinOut, real_t* cosOut, real_t* tanOut, angularMode_t angularMode, int32_t savedContextDigits, realContext_t* realContext) {
+  #if defined(TRACE_VECTOR)
+    print_caller("doWP34S_SinCosTanTaylor");
+  #endif //TRACE_VECTOR
   const real_t *angle45, *angle90, *angle180;
   angle45  = const_0;
   angle90  = const_0;
@@ -175,6 +182,9 @@ static void doWP34S_SinCosTanTaylor(real_t* angle, bool* sinNeg, bool* cosNeg, b
 //
 // Have to be careful here to ensure that every function we call can handle the increased size of the numbers we're using.
 static void C47_WP34S_Cvt2RadSinCosTan_75temp(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
+  #if defined(TRACE_VECTOR)
+    print_caller("WP34S_Cvt2RadSinCosTan");
+  #endif //TRACE_VECTOR
   bool_t sinNeg = false, cosNeg = false, swap = false;
   real_t angle;
 
@@ -210,6 +220,9 @@ static void C47_WP34S_Cvt2RadSinCosTan_75temp(const real_t *an, angularMode_t an
 
 
 static void doTaylorIterations(const real_t *a, real_t* angle, real_t* a2, real_t* t, real_t* j, real_t* z, real_t* sin, real_t* cos, real_t *sinOut, real_t *cosOut, real_t* epsilonOrCompare, const bool_t doEpsilon, const int epsilonDigits, realContext_t *realContext) {
+  #if defined(TRACE_VECTOR)
+    print_caller("doTaylorIterations");
+  #endif //TRACE_VECTOR
   char tmpEpsilon[16];
   bool_t endSin = (sinOut == NULL), endCos = (cosOut == NULL);
   int i;
@@ -297,9 +310,12 @@ static void doTaylorIterations(const real_t *a, real_t* angle, real_t* a2, real_
 }
 
 
-// used by normal TRIG, used from externally from bessel.c
+// used by normal TRIG
 // Calculate sin, cos by Taylor series and tan by division
 void C47_WP34S_SinCosTanTaylor_temp75(const real_t *a, bool_t swap, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) { // a in radian
+  #if defined(TRACE_VECTOR)
+    print_caller("WP34S_SinCosTanTaylor");
+  #endif //TRACE_VECTOR
   bool_t doEpsilon = false;
   int   epsilonDigits;
   real_t angle, a2, t, j, z, sin, cos, epsilonOrCompare;
@@ -384,8 +400,11 @@ void C47_WP34S_Cvt2RadSinCosTan(const real_t *an, angularMode_t angularMode, rea
 
 
 //Used by normal C47 TRIG as well as XFN
-// Calculate sin, cos by Taylor series and tan by division, for 1071 contexts
+// Calculate sin, cos by Taylor series and tan by division, allowing for 1071 contexts
 void C47_WP34S_SinCosTanTaylor_temp1071(const real_t *a, bool_t swap, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) { // a in radian
+  #if defined(TRACE_VECTOR)
+    print_caller("C47_WP34S_SinCosTanTaylor");
+  #endif //TRACE_VECTOR
   real1071_t angle, a2, t, j, z, sin, cos, epsilonOrCompare;
 
   doTaylorIterations(a, (real_t*)&angle, (real_t*)&a2, (real_t*)&t, (real_t*)&j, (real_t*)&z, (real_t*)&sin, (real_t*)&cos, sinOut, cosOut, (real_t*)&epsilonOrCompare, true /*doEpsilon*/, 1040, realContext);
@@ -563,7 +582,7 @@ static bool_t doAtan(  real_t *a, real_t* angle, real_t* a2, real_t* t, real_t* 
 }
 
 
-static void WP34S_Atan_75temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void WP34S_Atan_75temp_old(const real_t *x, real_t *angle, realContext_t *realContext) {
   bool_t doEpsilon = false;
   real_t a, b, a2, t, j, z, last, epsilon; //-- added epsilon for convergence;
   int doubles = 0;
@@ -591,6 +610,71 @@ static void WP34S_Atan_75temp(const real_t *x, real_t *angle, realContext_t *rea
     return; //NaN
   }
   realContext->digits = savedContextDigits;
+}
+
+
+// ---------------------------------------------------------------------------
+// Generic cache helpers for 1-input and 2-input trig wrappers
+// ---------------------------------------------------------------------------
+typedef struct { bool_t valid; int32_t digits; real_t x, result;    } cache1_t;
+typedef struct { bool_t valid; int32_t digits; real_t y, x, result; } cache2_t;
+
+static void cache_commit(bool_t *valid, real_t *cacheResult, const real_t *result) {
+  if(!realIsSpecial(result)) { realCopy(result, cacheResult); *valid = true; }
+}
+
+static bool_t cache1_check(cache1_t *c, const real_t *x, real_t *result, realContext_t *ctx) {
+  if(c->valid && ctx->digits <= c->digits && realCompareEqual(&c->x, x)) {
+    realCopy(&c->result, result);
+    return true;
+  }
+  return false;
+}
+static void cache1_prepare(cache1_t *c, const real_t *x, realContext_t *ctx) {
+  realCopy(x, &c->x);
+  c->digits = ctx->digits;
+  c->valid  = false;
+}
+
+static bool_t cache2_check(cache2_t *c, const real_t *y, const real_t *x, real_t *result, realContext_t *ctx) {
+  if(c->valid && ctx->digits <= c->digits && realCompareEqual(&c->y, y) && realCompareEqual(&c->x, x)) {
+    realCopy(&c->result, result);
+    return true;
+  }
+  return false;
+}
+static void cache2_prepare(cache2_t *c, const real_t *y, const real_t *x, realContext_t *ctx) {
+  realCopy(y, &c->y);
+  realCopy(x, &c->x);
+  c->digits = ctx->digits;
+  c->valid  = false;
+}
+
+
+
+
+// Cached wrapper for realTan. Skips computation if inputs and required precision
+// match the previous call. Cache is global; inputs are copied before the call
+// to prevent aliasing if the underlying function overwrites its input pointers.
+static cache1_t tanCache;
+void WP34S_Atan_75temp(const real_t *x, real_t *tan, realContext_t *realContext) {
+  #if defined(CACHE_DEBUG)
+    print_caller("WP34S_Atan_75temp");
+  #endif // CACHE_DEBUG
+  real_t localX;
+  realCopy(x, &localX);
+  if(cache1_check(&tanCache, &localX, tan, realContext)) {
+    #if defined(CACHE_DEBUG)
+      printf("   WP34S_Atan_75temp: quick return for repeated value\n");
+    #endif // CACHE_DEBUG
+    return;
+  }
+  #if defined(CACHE_DEBUG)
+    printf("WP34S_Atan_75temp: long process calc\n");
+  #endif // CACHE_DEBUG
+  cache1_prepare(&tanCache, &localX, realContext);
+  WP34S_Atan_75temp_old(&localX, tan, realContext);
+  cache_commit(&tanCache.valid, &tanCache.result, tan);
 }
 
 
@@ -623,6 +707,9 @@ void C47_WP34S_Atan(const real_t *x, real_t *angle, realContext_t *realContext) 
 #define _3piOn4(d) (d > 51 ? (d > 75 ? const1071_3piOn4 : const_3piOn4_75) : const_3piOn4)
 
 static bool_t doAtan2(const real_t *y, const real_t *x, real_t *atan, real_t *r, real_t *t, realContext_t *realContext) {
+  #if defined(TRACE_VECTOR)
+    char ddd1[240], ddd2[240], ddd3[500];realToString(y, ddd1);realToString(x, ddd2);sprintf(ddd3, "atan2(%s/%s)",ddd1,ddd2);print_caller(ddd3);
+  #endif //TRACE_VECTOR
   const bool_t xNeg = realIsNegative((real_t*)x);
   const bool_t yNeg = realIsNegative((real_t*)y);
 
@@ -735,12 +822,40 @@ static bool_t doAtan2(const real_t *y, const real_t *x, real_t *atan, real_t *r,
 }
 
 
-static void WP34S_Atan2_75temp(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
+static void WP34S_Atan2_75temp_old(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   real_t r, t;
   if(!doAtan2(y, x, atan, &r, &t, realContext)) {
     return; //NaN
   }
 }
+
+
+// Cached wrapper for WP34S_Atan2. Skips computation if inputs and required precision
+// match the previous call. Cache is global; inputs are copied before the call
+// to prevent aliasing if the underlying function overwrites its input pointers.
+static cache2_t atan2Cache;
+void WP34S_Atan2_75temp(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
+  #if defined(CACHE_DEBUG)
+    print_caller("WP34S_Atan2_75temp");
+  #endif // CACHE_DEBUG
+  real_t localY, localX;
+  realCopy(y, &localY);
+  realCopy(x, &localX);
+  if(cache2_check(&atan2Cache, &localY, &localX, atan, realContext)) {
+    #if defined(CACHE_DEBUG)
+      printf("   WP34S_Atan2_75temp: quick return for repeated value\n");
+    #endif // CACHE_DEBUG
+    return;
+  }
+  #if defined(CACHE_DEBUG)
+    printf("WP34S_Atan2_75temp: long process calc\n");
+  #endif // CACHE_DEBUG
+  cache2_prepare(&atan2Cache, &localY, &localX, realContext);
+  WP34S_Atan2_75temp_old(&localY, &localX, atan, realContext);
+  cache_commit(&atan2Cache.valid, &atan2Cache.result, atan);
+}
+
+
 
 static void C47do_WP34S_Atan2_1071temp(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   real1071_t r, t;
@@ -760,6 +875,9 @@ void C47_WP34S_Atan2(const real_t *y, const real_t *x, real_t *atan, realContext
 
 
 static bool_t doAsin(real_t *x, real_t *angle, real_t *abx, real_t *z, realContext_t *realContext) {
+  #if defined(TRACE_VECTOR)
+    char ddd1[100], ddd3[200];realToString(x, ddd1);sprintf(ddd3, "doAsin(%s)",ddd1);print_caller(ddd3);
+  #endif //TRACE_VECTOR
   if(realIsNaN((real_t*)x)) {
     realSetNaN((real_t*)angle);
     return false;
@@ -781,12 +899,40 @@ static bool_t doAsin(real_t *x, real_t *angle, real_t *abx, real_t *z, realConte
 }
 
 
-static void WP34S_Asin_75temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void WP34S_Asin_75temp_old(const real_t *x, real_t *angle, realContext_t *realContext) {
   real_t abx, z;
   if(!doAsin((real_t*)x, (real_t*)angle, (real_t*)&abx, (real_t*)&z, realContext)) {
     return; //NaN
   }
 }
+
+
+// Cached wrapper for WP34S_Asin. Skips computation if inputs and required precision
+// match the previous call. Cache is global; inputs are copied before the call
+// to prevent aliasing if the underlying function overwrites its input pointers.
+static cache1_t asinCache;
+void WP34S_Asin_75temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+  #if defined(CACHE_DEBUG)
+    print_caller("WP34S_Asin_75temp");
+  #endif // CACHE_DEBUG
+  real_t localX;
+  realCopy(x, &localX);
+  if(cache1_check(&asinCache, &localX, angle, realContext)) {
+    #if defined(CACHE_DEBUG)
+      printf("   WP34S_Asin_75temp: quick return for repeated value\n");
+    #endif // CACHE_DEBUG
+    return;
+  }
+  #if defined(CACHE_DEBUG)
+    printf("WP34S_Asin_75temp: long process calc\n");
+  #endif // CACHE_DEBUG
+  cache1_prepare(&asinCache, &localX, realContext);
+  WP34S_Asin_75temp_old(&localX, angle, realContext);
+  cache_commit(&asinCache.valid, &asinCache.result, angle);
+}
+
+
+
 
 static void C47do_WP34S_Asin_1071temp(const real_t *x, real_t *angle, realContext_t *realContext) {
   real1071_t abx, z;
@@ -807,6 +953,9 @@ void C47_WP34S_Asin(const real_t *x, real_t *angle, realContext_t *realContext) 
 
 
 static bool_t doAcos(real_t *x, real_t *angle, real_t *abx, real_t *z, realContext_t *realContext) {
+  #if defined(TRACE_VECTOR)
+    char ddd1[100], ddd3[200];realToString(x, ddd1);sprintf(ddd3, "doAcos(%s)",ddd1);print_caller(ddd3);
+  #endif //TRACE_VECTOR
   if(realIsNaN((real_t*)x)) {
     realSetNaN((real_t*)angle);
     return false;
@@ -833,12 +982,39 @@ static bool_t doAcos(real_t *x, real_t *angle, real_t *abx, real_t *z, realConte
 }
 
 
-static void WP34S_Acos_75temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void WP34S_Acos_75temp_old(const real_t *x, real_t *angle, realContext_t *realContext) {
   real_t abx, z;
   if(!doAcos((real_t*)x, (real_t*)angle, (real_t*)&abx, (real_t*)&z, realContext)) {
     return; //NaN
   }
 }
+
+
+// Cached wrapper for WP34S_Acos. Skips computation if inputs and required precision
+// match the previous call. Cache is global; inputs are copied before the call
+// to prevent aliasing if the underlying function overwrites its input pointers.
+static cache1_t acosCache;
+void WP34S_Acos_75temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+  #if defined(CACHE_DEBUG)
+    print_caller("WP34S_Acos_75temp");
+  #endif // CACHE_DEBUG
+  real_t localX;
+  realCopy(x, &localX);
+  if(cache1_check(&acosCache, &localX, angle, realContext)) {
+    #if defined(CACHE_DEBUG)
+      printf("   WP34S_Acos_75temp: quick return for repeated value\n");
+    #endif // CACHE_DEBUG
+    return;
+  }
+  #if defined(CACHE_DEBUG)
+    printf("WP34S_Acos_75temp: long process calc\n");
+  #endif // CACHE_DEBUG
+  cache1_prepare(&acosCache, &localX, realContext);
+  WP34S_Acos_75temp_old(&localX, angle, realContext);
+  cache_commit(&acosCache.valid, &acosCache.result, angle);
+}
+
+
 
 static void C47do_WP34S_Acos_1071temp(const real_t *x, real_t *angle, realContext_t *realContext) {
   real1071_t abx, z;
