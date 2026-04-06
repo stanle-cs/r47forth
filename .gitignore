@@ -17,7 +17,7 @@
 backup.bin
 backup.cfg
 backupR47.cfg
-wp43.sav    
+wp43.sav
 wp43.dat
 c47.sav
 c47.dat
@@ -33,6 +33,7 @@ tags
 /PROGRAMS
 /SAVFILES
 /src/generated
+AGENTS.md
 
 # Created by https://www.toptal.com/developers/gitignore/api/macos,windows,linux,codeblocks,valgrind,vscode
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos,windows,linux,codeblocks,valgrind,vscode
