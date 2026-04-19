@@ -396,13 +396,15 @@ jacobi_am
 
 ellipticK
 ellipticE
-;ellipticPi
+ellipticPi
 ellipticFphi
 ellipticEphi
 jacobi_zeta
+jacobi_audit
 
 LINPOL
 
 tempConv
+unitConversion
 
 programs

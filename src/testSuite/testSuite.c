@@ -90,6 +90,18 @@ const funcTest_t funcTestNoParam[] = {
   {"fnCubeRoot",             fnCubeRoot            },
   {"fnCxToRe",               fnCxToRe              },
   {"fnCvtTemp",              fnCvtTemp             },
+  {"fnCvtDbRatio",           fnCvtDbRatio          },
+  {"fnCvtDegGrad",           fnCvtDegGrad          },
+  {"fnCvtDegRad",            fnCvtDegRad           },
+  {"fnCvtGradRad",           fnCvtGradRad          },
+  {"fnCvtHMSHR",             fnCvtHMSHR            },
+  {"fnCvtRatioDb",           fnCvtRatioDb          },
+  {"fnKmletok100K",          fnKmletok100K         },
+  {"fnL100Tomgus",           fnL100Tomgus          },
+  {"fnL100Tomguk",           fnL100Tomguk          },
+  {"fnMgeuktok100M",         fnMgeuktok100M        },
+  {"fnMgeustok100M",         fnMgeustok100M        },
+  {"fnUnitConvert",          fnUnitConvert         },
   {"fnCyx",                  fnCyx                 },
   {"fnDateTo",               fnDateTo              },
   {"fnDateToJulian",         fnDateToJulian        },
@@ -1762,8 +1774,9 @@ bool_t real34AreEqual(real34_t *a, real34_t *b) {
     }
     return false;
   }
-  if(real34IsZero(a) && real34IsZero(b))
+  if(real34IsZero(a) && real34IsZero(b)) {
     return real34IsNegative(a) == real34IsNegative(b);
+  }
 
   return real34CompareEqual(a, b);
 }
@@ -3207,7 +3220,9 @@ void processLine(void) {
 
   else if(strncmp(line, "OUT: ", 5) == 0) {
     //printf("%s\n", line);
-    if(timedFunction && timerOperation) startTimer();
+    if(timedFunction && timerOperation) {
+      startTimer();
+    }
     callFunction();
     if(timedFunction && timerOperation) {
       timedFunction = true;
