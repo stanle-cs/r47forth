@@ -849,7 +849,7 @@ int main(int argc, char* argv[]) {
 
   strcpy(externalDeclarations, "  extern const uint8_t constants[];\n");
   realArray[0] = 0;
-  sprintf(realTConstantArray, "\nTO_QSPI const real_t *realtConstants[NOUC] = {\n");
+  sprintf(realTConstantArray, "\nTO_QSPI_PTRS const real_t *realtConstants[NOUC] = {\n");
   cntRealt = 0;
 
   generateAllConstants();
