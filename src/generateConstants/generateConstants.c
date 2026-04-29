@@ -70,7 +70,7 @@ static void emitConstant(const char *name, const char *type, const void *vptr, i
 }
 
 void generateConstant(char *name, int32_t digits, bool_t exact, char *value) {
-  real12321_t real;
+  REAL_T_PTR(real, 12321);
   char temp[20];
 
   #if defined(DEBUG)
@@ -84,24 +84,22 @@ void generateConstant(char *name, int32_t digits, bool_t exact, char *value) {
   int32_t maxDigits = ((digits + 2) / 6) * 6 + 3; // Assuming DECDPUN = 3 and memory alignment is 4 bytes
   ctxtReal.digits = maxDigits;
 
-  memset(&real, 0, sizeof(real12321_t));
-  stringToReal(value, &real, &ctxtReal);
-  realReduce(&real, &real, &ctxtReal);
+  memset(real, 0, REAL_SIZE_IN_BYTES(12321));
+  stringToReal(value, real, &ctxtReal);
+  realReduce(real, real, &ctxtReal);
 
   if(exact) {
     strcpy(temp, "const_");
-    real.C47Bits = REAL_EXACT;
   }
   else {
     sprintf(temp, "const%" PRId32 "_", maxDigits);
-    real.C47Bits = REAL_NONE;
   }
 
   strcpy(whiteSpace, "                                              ");
   whiteSpace[25 - strlen(name) - strlen(temp)] = 0;
 
   int32_t lenInBytes = 10 + sizeof(decNumberUnit) * (maxDigits / DECDPUN);
-  emitConstant(name, "real_t", &real, lenInBytes, temp);
+  emitConstant(name, "real_t", real, lenInBytes, temp);
 
   cntRealt++;
 
@@ -360,6 +358,8 @@ void generateAllConstants(void) {
          generateConstant("1oneE",         39, APPROX, "+3.678794411714423215955237701614608674458111310317678345e-01");
          generateConstant("1e_49",          1, EXACT,  "+1e-49"                                                       );
          generateConstant("1e_37",          1, EXACT,  "+1e-37"                                                       );
+         generateConstant("1e_34",          1, EXACT,  "+1e-34"                                                       );
+         generateConstant("1e_30",          1, EXACT,  "+1e-30"                                                       );
          generateConstant("1e_24",          1, EXACT,  "+1e-24"                                                       );
          generateConstant("1e_6",           1, EXACT,  "+1e-06"                                                       );
          generateConstant("1e_16",          1, EXACT,  "+1e-16"                                                       );
