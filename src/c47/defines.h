@@ -780,7 +780,7 @@
 #define FLAG_alphaCAP                         0xc00f
 #define FLAG_RUNTIM                           0xc010
 #define FLAG_AMORT_HP12C                      0x8011
-#define FLAG_spare2                           0xc012 // spare
+#define FLAG_spare                            0xc012 // spare
 #define FLAG_TRACE                            0x8013
 #define FLAG_USER                             0x8014
 #define FLAG_LOWBAT                           0xc015
@@ -2308,9 +2308,9 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define V_COPY      2
 #define V_NANA      3
 
-#define isMatrix2dVector(rows,cols)          ((rows == 1 && cols == 2) || (rows == 2 && cols == 1))
-#define isMatrix3dVector(rows,cols)          ((rows == 1 && cols == 3) || (rows == 3 && cols == 1))
-#define isMatrixVector(rows,cols)            ((isMatrix3dVector(rows,cols) || isMatrix2dVector(rows,cols)))
+#define isMatrix2dVector(rows, cols)         ((rows == 1 && cols == 2) || (rows == 2 && cols == 1))
+#define isMatrix3dVector(rows, cols)         ((rows == 1 && cols == 3) || (rows == 3 && cols == 1))
+#define isMatrixVector(rows, cols)           ((isMatrix3dVector(rows, cols) || isMatrix2dVector(rows, cols)))
 #define getTagAngularMode(tag)               ( tag & amAngleMask)
 #define is2dVectorPolar(tag)                 ((tag & amPolar) == amPolar)
 #define is3dVectorPolarSPHCYL(tag)           ((tag & amPolar) == amPolar)
@@ -2414,7 +2414,9 @@ static inline uint8_t regCtoKS(const int16_t regC) {
       else if((lint)->_mp_size < 0) {                        \
         printf(" lint=-");                                   \
       }                                                      \
-      else printf(" lint=+");                                \
+      else {                                                 \
+        printf(" lint=+");                                   \
+      }                                                      \
       for(i=0; i<abs((lint)->_mp_size); i++) {               \
         printf("%" PRIu64, (uint64)((lint)->_mp_d[i]));      \
       }                                                      \
@@ -2436,7 +2438,9 @@ static inline uint8_t regCtoKS(const int16_t regC) {
       if(getRegisterLongIntegerSign(reg) == LI_ZERO) {                                                 \
         printf("lint=0");                                                                              \
       }                                                                                                \
-      else if(getRegisterLongIntegerSign(reg) == LI_NEGATIVE) printf("lint=-");                        \
+      else if(getRegisterLongIntegerSign(reg) == LI_NEGATIVE) {                                        \
+        printf("lint=-");                                                                              \
+      }                                                                                                \
       else {                                                                                           \
         printf("lint=+");                                                                              \
       }                                                                                                \
