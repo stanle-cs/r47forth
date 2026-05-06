@@ -656,9 +656,9 @@ TO_QSPI const int16_t menu_alphaMisc[]    ={ ITM_CR,                        ITM_
 TO_QSPI const int16_t menu_EQN[]         = { ITM_EQ_NEW,                    ITM_EQ_EDI,                  -MNU_2NDDERIV,                -MNU_1STDERIV,                -MNU_Sf,                      -MNU_Solver,
                                              ITM_EQ_DEL,                    ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_Grapher               };
 
-TO_QSPI const int16_t menu_ADV[]         = { ITM_PIn,                       ITM_SIGMAn,                   ITM_FDQX,                     ITM_FQX,                     -MNU_Sfdx,                     ITM_SOLVE,
-                                             ITM_iPIn,                      ITM_iSIGMAn,                  ITM_SLVC,                     ITM_SLVQ,                     ITM_PGMINT,                   ITM_PGMSLV,
-                                             ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL                  };
+TO_QSPI const int16_t menu_ADV[]         = { ITM_PIn,                       ITM_SIGMAn,                   ITM_FQX,                      ITM_PLTf,                    -MNU_Sfdx,                     ITM_SOLVE,
+                                             ITM_iPIn,                      ITM_iSIGMAn,                  ITM_FDQX,                     ITM_PGMPLT,                   ITM_PGMINT,                   ITM_PGMSLV,
+                                             ITM_SLVQ,                      ITM_SLVC,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL                  };
 
 TO_QSPI const int16_t menu_1stDeriv[]    = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_GRAPHS,                   ITM_FPHERE                };
 //note: the items in here are dynamically assigned, including the static ones
@@ -903,12 +903,28 @@ TO_QSPI const int16_t menu_PREFIX[]      = { ITM_SI_k,                      ITM_
                                              ITM_SI_Ki,                     ITM_SI_Mi,                  ITM_SI_Gi,                ITM_SI_Ti,             ITM_SI_Pi,                   ITM_2TO10             };                //JM HOME
 
 
+TO_QSPI const int16_t menu_Plotf[]       = {  VAR_LX,                       VAR_UX,                     ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
+                                              ITM_SCALE,                    ITM_PLOTRST,                ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+                                              ITM_MZOOMY,                   ITM_PZOOMY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
+
+                                              ITM_SHOWY,                    ITM_SHOWX,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+                                              ITM_CPXPLOT,                  ITM_LISTXY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+                                             -MNU_GRAPHS,                   ITM_SNAP,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+
+                                              ITM_PCROS,                    ITM_PPLUS,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+                                              ITM_PLINE,                    ITM_PBOX,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+                                              ITM_PCURVE,                   ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
+
+                                              ITM_DIFF,                     ITM_INTG,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
+                                              ITM_RMS,                      ITM_SHADE,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
+                                              ITM_NVECT,                    ITM_VECT,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL};
+
 
 TO_QSPI const int16_t menu_PLOTFUNC[]    = {  VAR_LX,                       VAR_UX,                     ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
                                               ITM_SCALE,                    ITM_PLOTRST,                ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                               ITM_MZOOMY,                   ITM_PZOOMY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
 
-                                              ITM_SHOWY,                    ITM_SHOWX,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+                                              ITM_SHOWY,                    ITM_SHOWX,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                               ITM_CPXPLOT,                  ITM_LISTXY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                              -MNU_GRAPHS,                   ITM_SNAP,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
 
@@ -1137,8 +1153,9 @@ TO_QSPI const softmenu_t softmenu[] = {
 /* 175 */  {.menuItem = -MNU_PRINTER,       .numItems = sizeof(menu_Printer       )/sizeof(int16_t), .softkeyItem = menu_Printer        },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references.
 /* 176 */  {.menuItem = -MNU_VECT,          .numItems = sizeof(menu_VECT          )/sizeof(int16_t), .softkeyItem = menu_VECT           },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references.
 /* 177 */  {.menuItem = -MNU_TAMNORM,       .numItems = sizeof(menu_TamNorm       )/sizeof(int16_t), .softkeyItem = menu_TamNorm        },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+/* 178 */  {.menuItem = -MNU_PLTf,          .numItems = sizeof(menu_Plotf         )/sizeof(int16_t), .softkeyItem = menu_Plotf          },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 
-/* 178 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
+/* 179 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
 
 
 };
@@ -2085,6 +2102,7 @@ bool_t isFunctionItemAMenu(int16_t item) { //masquarading
          item == ITM_GAP_RX    ||
          item == ITM_GAP_R     ||
          item == ITM_PLOT_STAT ||
+         item == ITM_PLTf      ||
          item == ITM_EQ_NEW    ||
          item == ITM_SIM_EQ    ||
          item == ITM_DELITM    ||

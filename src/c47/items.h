@@ -2832,7 +2832,11 @@
 #define ITM_2730                    2730
 #define ITM_2731                    2731 //spares for Matrix/Vector
 
-#define LAST_ITEM                   2732
+#define ITM_PGMPLT                  2732
+#define MNU_PLTf                    2733
+#define ITM_PLTf                    2734
+
+#define LAST_ITEM                   2735
 
 #define SCREENDUMP                    9875 // Used to signal screen dump operated (not to be confused with SNAP)
 #define NOPARAM                       9876 // Item for function who don't need an item

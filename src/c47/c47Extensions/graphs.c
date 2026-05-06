@@ -323,6 +323,10 @@ void fnPlotReset(uint16_t unusedButMandatoryParameter) {
 }
 
 
+void fnPlotf(uint16_t unusedButMandatoryParameter) {
+  showSoftmenu(-MNU_PLTf);
+}
+
 void fnPlotSQ(uint16_t unusedButMandatoryParameter) {
     #if defined(DMCP_BUILD)
       lcd_refresh();

@@ -42,6 +42,7 @@ void    fnPy               (uint16_t unusedButMandatoryParameter);
 void    fnListXY           (uint16_t unusedButMandatoryParameter);
 void    fnStatList         (void);
 void    graph_plotmem      (void);
+void    fnPlotf            (uint16_t unusedButMandatoryParameter);
 void    fnPlotSQ           (uint16_t unusedButMandatoryParameter);
 void    fnPlotReset        (uint16_t unusedButMandatoryParameter);
 void    fnPlotStatAdv      (uint16_t unusedButMandatoryParameter);
