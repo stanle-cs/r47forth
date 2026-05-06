@@ -345,10 +345,10 @@ void fnPlotSQ(uint16_t unusedButMandatoryParameter) {
     showHideHourGlass();
     refreshStatusBar();
 
-    if(menu(0) != -MNU_PLOT_FUNC && plotStatMx[0] == 'D') {
+    if(menu(0) != -MNU_PLOT_FUNC && plotStatMx[0] == 'D' && !(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED)) {
       showSoftmenu(-MNU_PLOT_FUNC);
     }
-    else if(menu(0) != -MNU_PLOT_STAT && plotStatMx[0] == 'S') {
+    else if(menu(0) != -MNU_PLOT_STAT && plotStatMx[0] == 'S' && !(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED)) {
       showSoftmenu(-MNU_PLOT_STAT);
     }
 }
