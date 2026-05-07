@@ -286,6 +286,28 @@ static void convertRegisterToReal(calcRegister_t source, real_t *destination) {
   }
 }
 
+// Wrapper around execute_rpn_function that narrows ctxtReal34/39/51/75 to graph-eqn precision
+// for the duration of the call when LOW_GRAPH_ACC is enabled. Saves and restores.
+// Wider guards (+12, +18) on 51 and 75 because of some math functions (gamma, Bessel, hypergeometric)
+static void execute_rpn_function_graphAcc(void) {
+  #if defined(LOW_GRAPH_ACC)
+    int32_t s34 = ctxtReal34.digits;
+    int32_t s39 = ctxtReal39.digits;
+    int32_t s51 = ctxtReal51.digits;
+    int32_t s75 = ctxtReal75.digits;
+    ctxtReal34.digits = significantDigitsForEqnGraphs;
+    ctxtReal39.digits = significantDigitsForEqnGraphs + 3;
+    ctxtReal51.digits = significantDigitsForEqnGraphs + 12;
+    ctxtReal75.digits = significantDigitsForEqnGraphs + 18;
+    execute_rpn_function();
+    ctxtReal34.digits = s34;
+    ctxtReal39.digits = s39;
+    ctxtReal51.digits = s51;
+    ctxtReal75.digits = s75;
+  #else
+    execute_rpn_function();
+  #endif
+}
 
 typedef struct {
   uint32_t xData   [REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
@@ -506,7 +528,7 @@ void commitHighResPointsInOrder(PlotPoint *buffer, int count) {
   for(int i = 0; i < count; i++) {
     if(!buffer[i].stored) {
       convertRealToReal34RegisterPush(PP_X(buffer[i]), REGISTER_X);
-      execute_rpn_function();
+      execute_rpn_function_graphAcc();
       AddtoDrawMx();
       buffer[i].stored = true;
     }
@@ -768,7 +790,7 @@ bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, 
     realMultiply(spanLeft, leftFactor, sampleX, ctxtGraphs);
     realAdd     (xLeft,    sampleX,    sampleX, ctxtGraphs);
     convertRealToReal34RegisterPush(sampleX, REGISTER_X);
-    execute_rpn_function();
+    execute_rpn_function_graphAcc();
 
     // Skip if we get invalid results
     if(real34IsInfinite(REGISTER_REAL34_DATA(REGISTER_Y)) || real34IsNaN(REGISTER_REAL34_DATA(REGISTER_Y))) {
@@ -789,7 +811,7 @@ bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, 
     realMultiply(spanRight, fineFactor, sampleX, ctxtGraphs);
     realAdd     (xGap,      sampleX,    sampleX, ctxtGraphs);
     convertRealToReal34RegisterPush(sampleX, REGISTER_X);
-    execute_rpn_function();
+    execute_rpn_function_graphAcc();
 
     if(real34IsInfinite(REGISTER_REAL34_DATA(REGISTER_Y)) || real34IsNaN(REGISTER_REAL34_DATA(REGISTER_Y))) {
       continue;
@@ -1116,20 +1138,10 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       return;
     }
 
-  #if defined(LOW_GRAPH_ACC)
-    //Change to SDIGS digit operation for graphs;
-    if(significantDigitsForEqnGraphs <= 6) {
-      ctxtReal34.digits = significantDigitsForEqnGraphs;
-      ctxtReal39.digits = significantDigitsForEqnGraphs+3;
-      ctxtReal51.digits = significantDigitsForEqnGraphs+6;
-      ctxtReal75.digits = significantDigitsForEqnGraphs+9;
-    }
-  #endif
-
     fillStackWithReal0();
 
     convertRealToReal34RegisterPush(x_max_r, REGISTER_X);
-    execute_rpn_function();
+    execute_rpn_function_graphAcc();
     convertRegisterToReal(REGISTER_Y, tmpA);
     realCopyAbs(tmpA, tmpA);
     int32ToReal(2, tmpB);
@@ -1185,7 +1197,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       if(realIsNegative(cmpRes)) realCopy(x_min_r, x);
 
       convertRealToReal34RegisterPush(x, REGISTER_X);
-      execute_rpn_function();
+      execute_rpn_function_graphAcc();
 
       // Handle complex plotting
       if(getSystemFlag(FLAG_CPXPLOT)) {
@@ -1436,7 +1448,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           realSubtract(x, tmpB, x, ctxtGraphs);
           jumpedBack = true;
           convertRealToReal34RegisterPush(x, REGISTER_X);
-          execute_rpn_function();
+          execute_rpn_function_graphAcc();
           convertRegisterToReal(REGISTER_Y, y02);
           // grad2 = (y02 - y01) / (x - x01)
           realSubtract(y02, y01, tmpA, ctxtGraphs);
@@ -1472,7 +1484,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
             if(!realIsNegative(cmpRes)) break;
 
             convertRealToReal34RegisterPush(jumpBackX, REGISTER_X);
-            execute_rpn_function();
+            execute_rpn_function_graphAcc();
             convertRegisterToReal(REGISTER_Y, jbY);
 
             jumpBackBuffer[jumpBackCount].stored = false;
@@ -1566,13 +1578,13 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
             #endif // GRAPHDEBUG
             for(int i = 0; i < jumpBackCount; i++) {
               convertRealToReal34RegisterPush(PP_X(jumpBackBuffer[i]), REGISTER_X);
-              execute_rpn_function();
+              execute_rpn_function_graphAcc();
               AddtoDrawMx();
             }
 
             // Also plot the original grid point (jumpBackStartX, jumpBackStartY)
             convertRealToReal34RegisterPush(jumpBackStartX, REGISTER_X);
-            execute_rpn_function();
+            execute_rpn_function_graphAcc();
             AddtoDrawMx();
 
             // Set position to continue from the original grid point
@@ -1821,12 +1833,6 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     if(inHighResMode && highResCount > 0) {
       abandonHighResMode(&highResCount, &inHighResMode);
     }
-
-    #if defined(LOW_GRAPH_ACC)
-      //Change to SDIGS digit operation for fresh stack;
-      ctxtReal34.digits = 34; //Change back to normal operation for stack;
-      ctxtReal39.digits = 39; //Change back to 39 digit operation for stack;
-    #endif //LOW_GRAPH_ACC
 
     fillStackWithReal0();
 
