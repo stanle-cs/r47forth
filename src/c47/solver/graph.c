@@ -227,16 +227,67 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
 
 
 
-
-
 //******************************************************************************************************************************
+// Graph plotting helpers, converted to real_t for all math domain values.
+// Loop counters, indices, booleans, register flags and direction selectors stay int / bool_t / int8_t.
+// All real_t arithmetic uses ctxtGraphs (= &ctxtReal39).
+//******************************************************************************************************************************
+
+#define PLOT_DIGITS    39
+#define ctxtGraphs     &ctxtReal39
+
+// Stringify a macro's value so we can pass it to stringToReal without hard coding it twice.
+//   _R_STR_OF(SS1)  ->  "1.8"   (when #define SS1 1.8)
+#define _R_STR(x)     #x
+#define _R_STR_OF(x)  _R_STR(x)
+
+
+// File-scope static helpers used by the helpers below and by graph_eqn.
+// Defined here so they are visible to both before first use.
+
+// Convert real_t to double via realToFloat. realToFloat is byte-pattern based and does not
+// round-trip through a locale-formatted string, so it is safe under any LC_NUMERIC. Precision
+// is float-grade (~7 digits), which is fine for the curvature heuristics that consume it.
+static double realToDoubleVal(const real_t *r) {
+  float f;
+  realToFloat(r, &f);
+  return (double)f;
+}
+
+// Push real_t into a register as real34 (decQuad). Mirrors convertDoubleToReal34Register/Push
+// but with realToReal34 in place of stringToReal34, which keeps up to 34 digits.
+static void convertRealToReal34Register(const real_t *x, calcRegister_t destination) {
+  reallocateRegister(destination, dtReal34, 0, amNone);
+  realToReal34(x, REGISTER_REAL34_DATA(destination));
+}
+
+static void convertRealToReal34RegisterPush(const real_t *x, calcRegister_t destination) {
+  setSystemFlag(FLAG_ASLIFT);
+  liftStack();
+  convertRealToReal34Register(x, destination);
+  setSystemFlag(FLAG_ASLIFT);
+}
+
+// Read a register as real_t at full precision. getRegisterAsRealQuiet is the canonical helper
+// and handles every register data type; on failure leave NaN so downstream comparisons fail safely.
+static void convertRegisterToReal(calcRegister_t source, real_t *destination) {
+  if(!getRegisterAsRealQuiet(source, destination)) {
+    realSetNaN(destination);
+  }
+}
 
 
 typedef struct {
-  double x, y;
-  double grad;
-  bool_t stored;
+  uint32_t xData   [REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t yData   [REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t gradData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  bool_t   stored;
 } PlotPoint;
+
+#define PP_X(pp)    ((real_t *)((pp).xData))
+#define PP_Y(pp)    ((real_t *)((pp).yData))
+#define PP_GRAD(pp) ((real_t *)((pp).gradData))
+
 
 #define SS1 1.8                       // 1.4 grad2/grad2 threshold for 50% dx
 #define SS2 2.4                       // 2   grad2/grad2 threshold for jumping back
@@ -249,10 +300,14 @@ typedef struct {
 #define REVERT_THRESHOLD 0.8          // When to revert to previous dx
 
 
-bool_t validateDiscontinuityResolution(PlotPoint *buffer, int count, double yBefore, double yAfter, double discontinuityThreshold) {
+bool_t validateDiscontinuityResolution(PlotPoint *buffer, int count, const real_t *yBefore, const real_t *yAfter, const real_t *discontinuityThreshold) {
   #if defined(GRAPHDEBUG)
+    char strBuf1[64], strBuf2[64], strBuf3[64], strBuf4[64];
+    realToString(yBefore,                strBuf1);
+    realToString(yAfter,                 strBuf2);
+    realToString(discontinuityThreshold, strBuf3);
     printf("\nVALIDATING DISCONTINUITY RESOLUTION:");
-    printf("\n  Points: %d, yBefore=%.6f, yAfter=%.6f, threshold=%.6f\n", count, yBefore, yAfter, discontinuityThreshold);
+    printf("\n  Points: %d, yBefore=%s, yAfter=%s, threshold=%s\n", count, strBuf1, strBuf2, strBuf3);
   #endif // GRAPHDEBUG
 
   if(count < 3) {
@@ -263,39 +318,72 @@ bool_t validateDiscontinuityResolution(PlotPoint *buffer, int count, double yBef
   }
 
   // Check if the fine-stepped points show smooth transition
-  double maxJump = 0;
-  double totalVariation = 0;
+  REAL_T_PTR(maxJump,        PLOT_DIGITS);
+  REAL_T_PTR(totalVariation, PLOT_DIGITS);
+  REAL_T_PTR(jump,           PLOT_DIGITS);
+  REAL_T_PTR(diff,           PLOT_DIGITS);
+  REAL_T_PTR(cmpRes,         PLOT_DIGITS);
+  int32ToReal(0, maxJump);
+  int32ToReal(0, totalVariation);
 
   // Check continuity between consecutive fine points
   for(int i = 1; i < count; i++) {
-    double jump = fabs(buffer[i].y - buffer[i-1].y);
-    totalVariation += jump;
-    if(jump > maxJump) {
-      maxJump = jump;
+    realSubtract(PP_Y(buffer[i]), PP_Y(buffer[i-1]), diff, ctxtGraphs);
+    realCopyAbs(diff, jump);
+    realAdd(totalVariation, jump, totalVariation, ctxtGraphs);
+    realCompare(jump, maxJump, cmpRes, ctxtGraphs);
+    if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+      realCopy(jump, maxJump);
     }
   }
 
   // Also check connection to endpoints
-  double startJump = fabs(buffer[0].y - yBefore);
-  double endJump = fabs(yAfter - buffer[count-1].y);
+  REAL_T_PTR(startJump, PLOT_DIGITS);
+  REAL_T_PTR(endJump,   PLOT_DIGITS);
+  realSubtract(PP_Y(buffer[0]),         yBefore, diff, ctxtGraphs);
+  realCopyAbs(diff, startJump);
+  realSubtract(yAfter, PP_Y(buffer[count-1]), diff, ctxtGraphs);
+  realCopyAbs(diff, endJump);
 
-  if(startJump > maxJump) {
-    maxJump = startJump;
+  realCompare(startJump, maxJump, cmpRes, ctxtGraphs);
+  if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+    realCopy(startJump, maxJump);
   }
-  if(endJump > maxJump) {
-    maxJump = endJump;
+  realCompare(endJump, maxJump, cmpRes, ctxtGraphs);
+  if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+    realCopy(endJump, maxJump);
   }
 
   // If the maximum jump in fine steps is still above threshold, discontinuity persists
-  bool_t discontinuityResolved = (maxJump < discontinuityThreshold);
+  realCompare(maxJump, discontinuityThreshold, cmpRes, ctxtGraphs);
+  bool_t discontinuityResolved = realIsNegative(cmpRes);
 
   // Additional check: fine points should show reasonable continuity
-  double avgVariation = totalVariation / (count - 1);
-  bool_t smoothTransition = (maxJump < 3.0 * avgVariation) || (maxJump < discontinuityThreshold * 0.5);
+  REAL_T_PTR(avgVariation, PLOT_DIGITS);
+  REAL_T_PTR(threeAvg,     PLOT_DIGITS);
+  REAL_T_PTR(halfThresh,   PLOT_DIGITS);
+  REAL_T_PTR(countMinus1,  PLOT_DIGITS);
+  REAL_T_PTR(three,        PLOT_DIGITS);
+  int32ToReal(count - 1, countMinus1);
+  realDivide(totalVariation, countMinus1, avgVariation, ctxtGraphs);
+  int32ToReal(3, three);
+  realMultiply(three, avgVariation, threeAvg, ctxtGraphs);
+  realCopy(discontinuityThreshold, halfThresh);
+  realDivideBy2(halfThresh, ctxtGraphs);
+
+  realCompare(maxJump, threeAvg, cmpRes, ctxtGraphs);
+  bool_t below3xAvg = realIsNegative(cmpRes);
+  realCompare(maxJump, halfThresh, cmpRes, ctxtGraphs);
+  bool_t belowHalfThresh = realIsNegative(cmpRes);
+  bool_t smoothTransition = below3xAvg || belowHalfThresh;
 
   #if defined(GRAPHDEBUG)
-    printf("  maxJump=%.6f, avgVariation=%.6f\n", maxJump, avgVariation);
-    printf("  startJump=%.6f, endJump=%.6f\n", startJump, endJump);
+    realToString(maxJump,      strBuf1);
+    realToString(avgVariation, strBuf2);
+    realToString(startJump,    strBuf3);
+    realToString(endJump,      strBuf4);
+    printf("  maxJump=%s, avgVariation=%s\n", strBuf1, strBuf2);
+    printf("  startJump=%s, endJump=%s\n", strBuf3, strBuf4);
     printf("  discontinuityResolved=%d, smoothTransition=%d\n", discontinuityResolved, smoothTransition);
   #endif // GRAPHDEBUG
   return discontinuityResolved && smoothTransition;
@@ -303,67 +391,111 @@ bool_t validateDiscontinuityResolution(PlotPoint *buffer, int count, double yBef
 
 
 
-double calculateNewStepSize(int discontinuityDetected, double grad1, double grad2, bool_t grad2IncreaseDetected, double dx0) {
+void calculateNewStepSize(int discontinuityDetected, const real_t *grad1, const real_t *grad2, bool_t grad2IncreaseDetected, const real_t *dx0, real_t *newDx) {
   #if defined(GRAPHDEBUG)
-    printf("calculateNewStepSize: discontinuity=%d, grad1=%.6f, grad2=%.6f, increase=%d, dx0=%.6f\n", discontinuityDetected, grad1, grad2, grad2IncreaseDetected, dx0);
+    char strBuf1[64], strBuf2[64], strBuf3[64], strBuf4[64], strBuf5[64], strBuf6[64];
+    realToString(grad1, strBuf1);
+    realToString(grad2, strBuf2);
+    realToString(dx0,   strBuf3);
+    printf("calculateNewStepSize: discontinuity=%d, grad1=%s, grad2=%s, increase=%d, dx0=%s\n", discontinuityDetected, strBuf1, strBuf2, grad2IncreaseDetected, strBuf3);
   #endif // GRAPHDEBUG
 
   if(discontinuityDetected > 0 && discontinuityDetected <= FINE) {
-    double newDx = dJMP * dx0;
+    REAL_T_PTR(djmpReal, PLOT_DIGITS);
+    stringToReal(_R_STR_OF(dJMP), djmpReal, ctxtGraphs);
+    realMultiply(djmpReal, dx0, newDx, ctxtGraphs);
     #if defined(GRAPHDEBUG)
-      printf("  -> Discontinuity mode: newDx=%.6f\n", newDx);
+      realToString(newDx, strBuf4);
+      printf("  -> Discontinuity mode: newDx=%s\n", strBuf4);
     #endif // GRAPHDEBUG
-    return newDx;
+    return;
   }
-  else if(grad2 == 0 || grad1 == 0) {
+  else if(realIsZero(grad2) || realIsZero(grad1)) {
+    realCopy(dx0, newDx);
     #if defined(GRAPHDEBUG)
-      printf("  -> Zero gradient: keeping dx0=%.6f\n", dx0);
+      printf("  -> Zero gradient: keeping dx0=%s\n", strBuf3);
     #endif // GRAPHDEBUG
-    return dx0;
+    return;
   }
   else if(grad2IncreaseDetected) {
-    double ratio1 = grad2/grad1;
-    double ratio2 = grad1/grad2;
-    double newDx = dx0 * ((ratio1 > SS1 || ratio2 > SS1) ? 0.5 : 1.0);
+    REAL_T_PTR(ratio1,  PLOT_DIGITS);
+    REAL_T_PTR(ratio2,  PLOT_DIGITS);
+    REAL_T_PTR(ss1Real, PLOT_DIGITS);
+    REAL_T_PTR(half,    PLOT_DIGITS);
+    REAL_T_PTR(cmpRes,  PLOT_DIGITS);
+    realDivide(grad2, grad1, ratio1, ctxtGraphs);
+    realDivide(grad1, grad2, ratio2, ctxtGraphs);
+    stringToReal(_R_STR_OF(SS1), ss1Real, ctxtGraphs);
+    stringToReal("0.5",          half,    ctxtGraphs);
+
+    bool_t scaleHalf = false;
+    realCompare(ratio1, ss1Real, cmpRes, ctxtGraphs);
+    if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+      scaleHalf = true;
+    }
+    else {
+      realCompare(ratio2, ss1Real, cmpRes, ctxtGraphs);
+      if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+        scaleHalf = true;
+      }
+    }
+
+    if(scaleHalf) {
+      realMultiply(dx0, half, newDx, ctxtGraphs);
+    }
+    else {
+      realCopy(dx0, newDx);
+    }
     #if defined(GRAPHDEBUG)
-      printf("  -> Gradient increase: ratio1=%.3f, ratio2=%.3f, newDx=%.6f\n", ratio1, ratio2, newDx);
+      realToString(ratio1, strBuf4);
+      realToString(ratio2, strBuf5);
+      realToString(newDx,  strBuf6);
+      printf("  -> Gradient increase: ratio1=%s, ratio2=%s, newDx=%s\n", strBuf4, strBuf5, strBuf6);
     #endif // GRAPHDEBUG
-    return newDx;
+    return;
   }
   else {
+    realCopy(dx0, newDx);
     #if defined(GRAPHDEBUG)
-      printf("  -> No change: keeping dx0=%.6f\n", dx0);
+      printf("  -> No change: keeping dx0=%s\n", strBuf3);
     #endif // GRAPHDEBUG
-    return dx0;
+    return;
   }
 }
 
 
 
-void enterHighResMode(bool_t *inHighResMode, int *highResCount, double *highResStartX, double *baselineCurvatureChange, double *cumulativeCurvatureChange, double x, double curvatureChange) {
+void enterHighResMode(bool_t *inHighResMode, int *highResCount, real_t *highResStartX, real_t *baselineCurvatureChange, real_t *cumulativeCurvatureChange, const real_t *x, const real_t *curvatureChange) {
   #if defined(GRAPHDEBUG)
-    printf("*** ENTERING HIGH-RES MODE at x=%.6f, curvatureChange=%.6f ***\n", x, curvatureChange);
+    char strBuf1[64], strBuf2[64];
+    realToString(x,               strBuf1);
+    realToString(curvatureChange, strBuf2);
+    printf("*** ENTERING HIGH-RES MODE at x=%s, curvatureChange=%s ***\n", strBuf1, strBuf2);
   #endif // GRAPHDEBUG
   *inHighResMode = true;
   *highResCount = 0;
-  *highResStartX = x;
-  *baselineCurvatureChange = curvatureChange;
-  *cumulativeCurvatureChange = 0;
+  realCopy(x,               highResStartX);
+  realCopy(curvatureChange, baselineCurvatureChange);
+  int32ToReal(0, cumulativeCurvatureChange);
 }
 
 
 
 void commitHighResPointsInOrder(PlotPoint *buffer, int count) {
   #if defined(GRAPHDEBUG)
+    char strBuf1[64], strBuf2[64], strBuf3[64];
     printf("*** COMMITTING %d HIGH-RES POINTS ***\n", count);
     for(int i = 0; i < count; i++) {
-      printf("  Point %d: x=%.6f, y=%.6f, grad=%.6f, stored=%d\n",
-             i, buffer[i].x, buffer[i].y, buffer[i].grad, buffer[i].stored);
+      realToString(PP_X(buffer[i]),    strBuf1);
+      realToString(PP_Y(buffer[i]),    strBuf2);
+      realToString(PP_GRAD(buffer[i]), strBuf3);
+      printf("  Point %d: x=%s, y=%s, grad=%s, stored=%d\n",
+             i, strBuf1, strBuf2, strBuf3, buffer[i].stored);
     }
   #endif // GRAPHDEBUG
   for(int i = 0; i < count; i++) {
     if(!buffer[i].stored) {
-      convertDoubleToReal34RegisterPush(buffer[i].x, REGISTER_X);
+      convertRealToReal34RegisterPush(PP_X(buffer[i]), REGISTER_X);
       execute_rpn_function();
       AddtoDrawMx();
       buffer[i].stored = true;
@@ -384,18 +516,18 @@ void abandonHighResMode(int *highResCount, bool_t *inHighResMode) {
 
 
 
-void resetHighResTracking(int *highResCount, bool_t *inHighResMode, double *cumulativeCurvatureChange) {
+void resetHighResTracking(int *highResCount, bool_t *inHighResMode, real_t *cumulativeCurvatureChange) {
   #if defined(GRAPHDEBUG)
     printf("*** RESETTING HIGH-RES TRACKING ***\n");
   #endif // GRAPHDEBUG
   *highResCount = 0;
   *inHighResMode = false;
-  *cumulativeCurvatureChange = 0;
+  int32ToReal(0, cumulativeCurvatureChange);
 }
 
 
 
-bool_t detectTrueDiscontinuity(double y0, double y1, double y2, double grad0, double grad1, double grad2, double yAvg, int count) {  // Distinguish between genuine discontinuities and normal peaks
+bool_t detectTrueDiscontinuity(const real_t *y0, const real_t *y1, const real_t *y2, const real_t *grad0, const real_t *grad1, const real_t *grad2, const real_t *yAvg, int count) {  // Distinguish between genuine discontinuities and normal peaks
   if(real34IsSpecial(REGISTER_REAL34_DATA(REGISTER_X)) || ((getRegisterDataType(REGISTER_X) == dtComplex34) && (real34IsSpecial(REGISTER_IMAG34_DATA(REGISTER_X))))) {
     return true;
   }
@@ -403,37 +535,126 @@ bool_t detectTrueDiscontinuity(double y0, double y1, double y2, double grad0, do
     return false;
   }
 
-  bool_t extremeMagnitudeJump = (fabs(y2) > 100 * yAvg) && (fabs(y1) < 10 * yAvg);
+  REAL_T_PTR(absY1,        PLOT_DIGITS);
+  REAL_T_PTR(absY2,        PLOT_DIGITS);
+  REAL_T_PTR(hundredYAvg,  PLOT_DIGITS);
+  REAL_T_PTR(tenYAvg,      PLOT_DIGITS);
+  REAL_T_PTR(hundred,      PLOT_DIGITS);
+  REAL_T_PTR(ten,          PLOT_DIGITS);
+  REAL_T_PTR(cmpRes,       PLOT_DIGITS);
+  realCopyAbs(y1, absY1);
+  realCopyAbs(y2, absY2);
+  int32ToReal(100, hundred);
+  int32ToReal(10,  ten);
+  realMultiply(hundred, yAvg, hundredYAvg, ctxtGraphs);
+  realMultiply(ten,     yAvg, tenYAvg,     ctxtGraphs);
+
+  realCompare(absY2, hundredYAvg, cmpRes, ctxtGraphs);
+  bool_t absY2GtHundred = realIsPositive(cmpRes) && !realIsZero(cmpRes);
+  realCompare(absY1, tenYAvg, cmpRes, ctxtGraphs);
+  bool_t absY1LtTen     = realIsNegative(cmpRes);
+  bool_t extremeMagnitudeJump = absY2GtHundred && absY1LtTen;
+
   bool_t gradientDiscontinuity = false;
-  if(grad0 != 0 && grad1 != 0 && grad2 != 0) {
+  if(!realIsZero(grad0) && !realIsZero(grad1) && !realIsZero(grad2)) {
 
     // Calculate expected gradient based on trend
-    double expectedGrad = grad1 + (grad1 - grad0); // Linear extrapolation
-    double gradientRatio = fabs(grad2) / (fabs(expectedGrad) + 1e-10);
+    REAL_T_PTR(diffG1G0,        PLOT_DIGITS);
+    REAL_T_PTR(expectedGrad,    PLOT_DIGITS);
+    REAL_T_PTR(absExpectedGrad, PLOT_DIGITS);
+    REAL_T_PTR(absGrad2,        PLOT_DIGITS);
+    REAL_T_PTR(epsilon,         PLOT_DIGITS);
+    REAL_T_PTR(denom,           PLOT_DIGITS);
+    REAL_T_PTR(gradientRatio,   PLOT_DIGITS);
+    REAL_T_PTR(diffTmp,         PLOT_DIGITS);
+    REAL_T_PTR(absY2mY1,        PLOT_DIGITS);
+    REAL_T_PTR(absY1mY0,        PLOT_DIGITS);
+    REAL_T_PTR(twentyAbsY1mY0,  PLOT_DIGITS);
+    REAL_T_PTR(fiveYAvg,        PLOT_DIGITS);
+    REAL_T_PTR(fifty,           PLOT_DIGITS);
+    REAL_T_PTR(twenty,          PLOT_DIGITS);
+    REAL_T_PTR(five,            PLOT_DIGITS);
+
+    realSubtract(grad1, grad0, diffG1G0, ctxtGraphs);                // grad1 - grad0
+    realAdd(grad1, diffG1G0, expectedGrad, ctxtGraphs);              // grad1 + (grad1 - grad0)
+    realCopyAbs(expectedGrad, absExpectedGrad);
+    realCopyAbs(grad2, absGrad2);
+    stringToReal("1e-10", epsilon, ctxtGraphs);
+    realAdd(absExpectedGrad, epsilon, denom, ctxtGraphs);
+    realDivide(absGrad2, denom, gradientRatio, ctxtGraphs);
+
+    realSubtract(y2, y1, diffTmp, ctxtGraphs);
+    realCopyAbs(diffTmp, absY2mY1);
+    realSubtract(y1, y0, diffTmp, ctxtGraphs);
+    realCopyAbs(diffTmp, absY1mY0);
+
+    int32ToReal(50, fifty);
+    int32ToReal(20, twenty);
+    int32ToReal(5,  five);
+    realMultiply(twenty, absY1mY0, twentyAbsY1mY0, ctxtGraphs);
+    realMultiply(five,   yAvg,     fiveYAvg,       ctxtGraphs);
+
+    realCompare(gradientRatio, fifty, cmpRes, ctxtGraphs);
+    bool_t ratioGt50      = realIsPositive(cmpRes) && !realIsZero(cmpRes);
+    realCompare(absY2mY1, twentyAbsY1mY0, cmpRes, ctxtGraphs);
+    bool_t y2mY1Gt20Y1mY0 = realIsPositive(cmpRes) && !realIsZero(cmpRes);
+    realCompare(absY2mY1, fiveYAvg, cmpRes, ctxtGraphs);
+    bool_t y2mY1Gt5YAvg   = realIsPositive(cmpRes) && !realIsZero(cmpRes);
 
     // Only flag if gradient changes by more than 50x AND the function values suggest discontinuity
-    gradientDiscontinuity = (gradientRatio > 50) && (fabs(y2 - y1) > 20 * fabs(y1 - y0)) && (fabs(y2 - y1) > 5 * yAvg);
+    gradientDiscontinuity = ratioGt50 && y2mY1Gt20Y1mY0 && y2mY1Gt5YAvg;
+
+    #if defined(GRAPHDEBUG)
+      if(gradientDiscontinuity) {
+        char dbgBuf1[64], dbgBuf2[64], dbgBuf3[64];
+        realToString(expectedGrad,  dbgBuf1);
+        realToString(grad2,         dbgBuf2);
+        realToString(gradientRatio, dbgBuf3);
+        printf("  gradient details: expected=%s, actual=%s, ratio=%s\n", dbgBuf1, dbgBuf2, dbgBuf3);
+      }
+    #endif // GRAPHDEBUG
   }
 
   // Check for sign oscillation that indicates numerical instability not smooth peaks
   bool_t signOscillationInstability = false;
   if(count >= 6) {
     // Look for rapid alternating signs with increasing magnitude - indicates instability
-    bool_t y0Pos = (y0 > 0), y1Pos = (y1 > 0), y2Pos = (y2 > 0);
+    bool_t y0Pos = !realIsNegative(y0) && !realIsZero(y0);
+    bool_t y1Pos = !realIsNegative(y1) && !realIsZero(y1);
+    bool_t y2Pos = !realIsNegative(y2) && !realIsZero(y2);
     if(y0Pos != y1Pos && y1Pos != y2Pos) {
       // Alternating signs - check if magnitudes are increasing dramatically
-      double mag0 = fabs(y0), mag1 = fabs(y1), mag2 = fabs(y2);
-      signOscillationInstability = (mag2 > 5 * mag1) && (mag1 > 5 * mag0) && (mag2 > 10 * yAvg);
+      REAL_T_PTR(mag0,     PLOT_DIGITS);
+      REAL_T_PTR(mag1,     PLOT_DIGITS);
+      REAL_T_PTR(mag2,     PLOT_DIGITS);
+      REAL_T_PTR(fiveMag1, PLOT_DIGITS);
+      REAL_T_PTR(fiveMag0, PLOT_DIGITS);
+      REAL_T_PTR(tenYAvg2, PLOT_DIGITS);
+      REAL_T_PTR(five2,    PLOT_DIGITS);
+      REAL_T_PTR(ten2,     PLOT_DIGITS);
+      REAL_T_PTR(cmpRes2,  PLOT_DIGITS);
+      realCopyAbs(y0, mag0);
+      realCopyAbs(y1, mag1);
+      realCopyAbs(y2, mag2);
+      int32ToReal(5,  five2);
+      int32ToReal(10, ten2);
+      realMultiply(five2, mag1, fiveMag1, ctxtGraphs);
+      realMultiply(five2, mag0, fiveMag0, ctxtGraphs);
+      realMultiply(ten2,  yAvg, tenYAvg2, ctxtGraphs);
+
+      realCompare(mag2, fiveMag1, cmpRes2, ctxtGraphs);
+      bool_t mag2Gt5Mag1  = realIsPositive(cmpRes2) && !realIsZero(cmpRes2);
+      realCompare(mag1, fiveMag0, cmpRes2, ctxtGraphs);
+      bool_t mag1Gt5Mag0  = realIsPositive(cmpRes2) && !realIsZero(cmpRes2);
+      realCompare(mag2, tenYAvg2, cmpRes2, ctxtGraphs);
+      bool_t mag2Gt10YAvg = realIsPositive(cmpRes2) && !realIsZero(cmpRes2);
+
+      signOscillationInstability = mag2Gt5Mag1 && mag1Gt5Mag0 && mag2Gt10YAvg;
     }
   }
 
   #if defined(GRAPHDEBUG)
     printf("discontinuity check: extreme=%d, gradient=%d, oscillation=%d\n", extremeMagnitudeJump, gradientDiscontinuity, signOscillationInstability);
-    if(gradientDiscontinuity) {
-      double expectedGrad = grad1 + (grad1 - grad0);
-      double gradientRatio = fabs(grad2) / (fabs(expectedGrad) + 1e-10);
-      printf("  gradient details: expected=%.6f, actual=%.6f, ratio=%.3f\n", expectedGrad, grad2, gradientRatio);
-    }
   #endif // GRAPHDEBUG
   return extremeMagnitudeJump || gradientDiscontinuity || signOscillationInstability;
 }
@@ -446,148 +667,238 @@ bool_t detectTrueDiscontinuity(double y0, double y1, double y2, double grad0, do
 // =============================================================================
 
 typedef struct {
-  double x;           // x-coordinate of asymptote
-  double gapWidth;    // width of the discontinuity gap
-  bool_t hasPositive;   // approaches +infinity
-  bool_t hasNegative;   // approaches -infinity
-  double maxHeight;   // standard maximum height for rendering
+  uint32_t xData        [REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];   // x-coordinate of asymptote
+  uint32_t gapWidthData [REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];   // width of the discontinuity gap
+  uint32_t maxHeightData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];   // standard maximum height for rendering
+  bool_t   hasPositive;                                          // approaches +infinity
+  bool_t   hasNegative;                                          // approaches -infinity
 } AsymptoteInfo;
+
+#define AI_X(ai)         ((real_t *)((ai).xData))
+#define AI_GAPWIDTH(ai)  ((real_t *)((ai).gapWidthData))
+#define AI_MAXHEIGHT(ai) ((real_t *)((ai).maxHeightData))
 
 #define MAX_ASYMPTOTES 10
 #define ASYMPTOTE_HEIGHT_RATIO 0.8  // 80% of y-axis range
 #define MIN_GAP_WIDTH_RATIO 0.001   // Minimum gap width as ratio of x-range
 #define ASYMPTOTE_SAMPLE_POINTS 5   // Points to sample on each side
 
-bool_t detectAndCharacterizeAsymptote(double xLeft, double yLeft, double xRight, double yRight, double xGap, double gapWidth, AsymptoteInfo *asymptote) {
+
+bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, const real_t *xRight, const real_t *yRight, const real_t *xGap, const real_t *gapWidth, const real_t *xMin, const real_t *xMax, const real_t *yMin, const real_t *yMax, AsymptoteInfo *asymptote) {
+  #if defined(GRAPHDEBUG)
+    char strBuf1[64], strBuf2[64], strBuf3[64], strBuf4[64];
+    realToString(xGap,     strBuf1);
+    realToString(gapWidth, strBuf2);
+    realToString(xLeft,    strBuf3);
+    realToString(yLeft,    strBuf4);
+    printf("Checking asymptote at x=%s, gap=%s\n", strBuf1, strBuf2);
+    printf("  Left: x=%s, y=%s\n", strBuf3, strBuf4);
+    realToString(xRight, strBuf1);
+    realToString(yRight, strBuf2);
+    printf("  Right: x=%s, y=%s\n", strBuf1, strBuf2);
+  #endif // GRAPHDEBUG
+
+  // Check if gap is significant enough
+  REAL_T_PTR(xRange,    PLOT_DIGITS);
+  REAL_T_PTR(yRange,    PLOT_DIGITS);
+  REAL_T_PTR(minRatio,  PLOT_DIGITS);
+  REAL_T_PTR(minGap,    PLOT_DIGITS);
+  REAL_T_PTR(cmpRes,    PLOT_DIGITS);
+  realSubtract(xMax, xMin, xRange, ctxtGraphs);
+  stringToReal(_R_STR_OF(MIN_GAP_WIDTH_RATIO), minRatio, ctxtGraphs);
+  realMultiply(minRatio, xRange, minGap, ctxtGraphs);
+  realCompare(gapWidth, minGap, cmpRes, ctxtGraphs);
+  if(realIsNegative(cmpRes)) {
     #if defined(GRAPHDEBUG)
-      printf("Checking asymptote at x=%.6f, gap=%.6f\n", xGap, gapWidth);
-      printf("  Left: x=%.6f, y=%.6f\n", xLeft, yLeft);
-      printf("  Right: x=%.6f, y=%.6f\n", xRight, yRight);
+      char dbgBuf1[64], dbgBuf2[64];
+      realToString(gapWidth, dbgBuf1);
+      realToString(minGap,   dbgBuf2);
+      printf("  Gap too small: %s < %s\n", dbgBuf1, dbgBuf2);
     #endif // GRAPHDEBUG
+    return false;
+  }
 
-    // Check if gap is significant enough
-    double xRange = x_max - x_min;
-    if(gapWidth < MIN_GAP_WIDTH_RATIO * xRange) {
-      #if defined(GRAPHDEBUG)
-        printf("  Gap too small: %.6f < %.6f\n", gapWidth, MIN_GAP_WIDTH_RATIO * xRange);
-      #endif // GRAPHDEBUG
-      return false;
+  // Sample only 2 points on each side to minimize memory usage
+  REAL_T_PTR(leftMaxY,  PLOT_DIGITS);
+  REAL_T_PTR(rightMaxY, PLOT_DIGITS);
+  REAL_T_PTR(leftMinY,  PLOT_DIGITS);
+  REAL_T_PTR(rightMinY, PLOT_DIGITS);
+  realCopy(yLeft,  leftMaxY);
+  realCopy(yLeft,  leftMinY);
+  realCopy(yRight, rightMaxY);
+  realCopy(yRight, rightMinY);
+
+  // Scratch for sample formulas:
+  //   left  side: sampleX = xLeft + (xGap   - xLeft) * (0.7 + 0.2 * i / 2)
+  //   right side: sampleX = xGap  + (xRight - xGap)  * (0.2 * i / 2)
+  REAL_T_PTR(zeroPoint7, PLOT_DIGITS);
+  REAL_T_PTR(zeroPoint2, PLOT_DIGITS);
+  REAL_T_PTR(two,        PLOT_DIGITS);
+  REAL_T_PTR(iReal,      PLOT_DIGITS);
+  REAL_T_PTR(fineFactor, PLOT_DIGITS);   // 0.2 * i / 2
+  REAL_T_PTR(leftFactor, PLOT_DIGITS);   // 0.7 + fineFactor
+  REAL_T_PTR(spanLeft,   PLOT_DIGITS);   // xGap - xLeft
+  REAL_T_PTR(spanRight,  PLOT_DIGITS);   // xRight - xGap
+  REAL_T_PTR(sampleX,    PLOT_DIGITS);
+  REAL_T_PTR(sampleY,    PLOT_DIGITS);
+  stringToReal("0.7", zeroPoint7, ctxtGraphs);
+  stringToReal("0.2", zeroPoint2, ctxtGraphs);
+  int32ToReal(2, two);
+  realSubtract(xGap,   xLeft, spanLeft,  ctxtGraphs);
+  realSubtract(xRight, xGap,  spanRight, ctxtGraphs);
+
+  // Sample just 2 points on each side (minimal sampling)
+  for(int i = 1; i <= 2; i++) {
+    int32ToReal(i, iReal);
+    realDivide  (zeroPoint2, two,        fineFactor, ctxtGraphs);   // 0.2 / 2
+    realMultiply(fineFactor, iReal,      fineFactor, ctxtGraphs);   // (0.2/2) * i
+    realAdd     (zeroPoint7, fineFactor, leftFactor, ctxtGraphs);   // 0.7 + ...
+
+    // Left side samples (approaching asymptote from left)
+    realMultiply(spanLeft, leftFactor, sampleX, ctxtGraphs);
+    realAdd     (xLeft,    sampleX,    sampleX, ctxtGraphs);
+    convertRealToReal34RegisterPush(sampleX, REGISTER_X);
+    execute_rpn_function();
+
+    // Skip if we get invalid results
+    if(real34IsInfinite(REGISTER_REAL34_DATA(REGISTER_Y)) || real34IsNaN(REGISTER_REAL34_DATA(REGISTER_Y))) {
+      continue;
     }
 
-    // Sample only 2 points on each side to minimize memory usage
-    double leftMaxY = yLeft, rightMaxY = yRight;
-    double leftMinY = yLeft, rightMinY = yRight;
-
-    // Sample just 2 points on each side (minimal sampling)
-    for(int i = 1; i <= 2; i++) {
-      // Left side samples (approaching asymptote from left)
-      double sampleX = xLeft + (xGap - xLeft) * (0.7 + 0.2 * i / 2);
-      convertDoubleToReal34RegisterPush(sampleX, REGISTER_X);
-      execute_rpn_function();
-
-      // Skip if we get invalid results
-      if(real34IsInfinite(REGISTER_REAL34_DATA(REGISTER_Y)) || real34IsNaN(REGISTER_REAL34_DATA(REGISTER_Y))) {
-        continue;
-      }
-
-      double sampleY = convertRegisterToDouble(REGISTER_Y);
-      if(sampleY > leftMaxY) {
-        leftMaxY = sampleY;
-      }
-      if(sampleY < leftMinY) {
-        leftMinY = sampleY;
-      }
-
-      // Right side samples (approaching asymptote from right)
-      sampleX = xGap + (xRight - xGap) * (0.2 * i / 2);
-      convertDoubleToReal34RegisterPush(sampleX, REGISTER_X);
-      execute_rpn_function();
-
-      if(real34IsInfinite(REGISTER_REAL34_DATA(REGISTER_Y)) || real34IsNaN(REGISTER_REAL34_DATA(REGISTER_Y))) {
-        continue;
-      }
-
-      sampleY = convertRegisterToDouble(REGISTER_Y);
-      if(sampleY > rightMaxY) {
-        rightMaxY = sampleY;
-      }
-      if(sampleY < rightMinY) {
-        rightMinY = sampleY;
-      }
+    convertRegisterToReal(REGISTER_Y, sampleY);
+    realCompare(sampleY, leftMaxY, cmpRes, ctxtGraphs);
+    if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+      realCopy(sampleY, leftMaxY);
+    }
+    realCompare(sampleY, leftMinY, cmpRes, ctxtGraphs);
+    if(realIsNegative(cmpRes)) {
+      realCopy(sampleY, leftMinY);
     }
 
-    // Determine if we have a vertical asymptote based on extreme values
-    double yRange = y_max - y_min;
-    double extremeThreshold = yRange * 2.0; // Values beyond 2x the plot range
+    // Right side samples (approaching asymptote from right)
+    realMultiply(spanRight, fineFactor, sampleX, ctxtGraphs);
+    realAdd     (xGap,      sampleX,    sampleX, ctxtGraphs);
+    convertRealToReal34RegisterPush(sampleX, REGISTER_X);
+    execute_rpn_function();
 
-    bool_t leftGoesPositive = (leftMaxY > y_max + extremeThreshold);
-    bool_t leftGoesNegative = (leftMinY < y_min - extremeThreshold);
-    bool_t rightGoesPositive = (rightMaxY > y_max + extremeThreshold);
-    bool_t rightGoesNegative = (rightMinY < y_min - extremeThreshold);
-
-    // Must have extreme behavior on at least one side
-    if(!(leftGoesPositive || leftGoesNegative || rightGoesPositive || rightGoesNegative)) {
-      #if defined(GRAPHDEBUG)
-        printf("  No extreme behavior detected\n");
-        printf("    Left: max=%.3f, min=%.3f (need >%.3f or <%.3f)\n",
-               leftMaxY, leftMinY, y_max + extremeThreshold, y_min - extremeThreshold);
-        printf("    Right: max=%.3f, min=%.3f\n", rightMaxY, rightMinY);
-      #endif // GRAPHDEBUG
-      return false;
+    if(real34IsInfinite(REGISTER_REAL34_DATA(REGISTER_Y)) || real34IsNaN(REGISTER_REAL34_DATA(REGISTER_Y))) {
+      continue;
     }
 
-    // Fill asymptote info
-    asymptote->x = xGap;
-    asymptote->gapWidth = gapWidth;
-    asymptote->hasPositive = leftGoesPositive || rightGoesPositive;
-    asymptote->hasNegative = leftGoesNegative || rightGoesNegative;
-    asymptote->maxHeight = yRange * ASYMPTOTE_HEIGHT_RATIO;
+    convertRegisterToReal(REGISTER_Y, sampleY);
+    realCompare(sampleY, rightMaxY, cmpRes, ctxtGraphs);
+    if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+      realCopy(sampleY, rightMaxY);
+    }
+    realCompare(sampleY, rightMinY, cmpRes, ctxtGraphs);
+    if(realIsNegative(cmpRes)) {
+      realCopy(sampleY, rightMinY);
+    }
+  }
 
+  // Determine if we have a vertical asymptote based on extreme values
+  REAL_T_PTR(extremeThreshold, PLOT_DIGITS);
+  REAL_T_PTR(yMaxPlus,         PLOT_DIGITS);
+  REAL_T_PTR(yMinMinus,        PLOT_DIGITS);
+  REAL_T_PTR(twoR,             PLOT_DIGITS);
+  realSubtract(yMax, yMin, yRange, ctxtGraphs);
+  int32ToReal(2, twoR);
+  realMultiply(yRange, twoR, extremeThreshold, ctxtGraphs);   // Values beyond 2x the plot range
+  realAdd     (yMax, extremeThreshold, yMaxPlus,  ctxtGraphs);
+  realSubtract(yMin, extremeThreshold, yMinMinus, ctxtGraphs);
+
+  realCompare(leftMaxY,  yMaxPlus,  cmpRes, ctxtGraphs);
+  bool_t leftGoesPositive  = realIsPositive(cmpRes) && !realIsZero(cmpRes);
+  realCompare(leftMinY,  yMinMinus, cmpRes, ctxtGraphs);
+  bool_t leftGoesNegative  = realIsNegative(cmpRes);
+  realCompare(rightMaxY, yMaxPlus,  cmpRes, ctxtGraphs);
+  bool_t rightGoesPositive = realIsPositive(cmpRes) && !realIsZero(cmpRes);
+  realCompare(rightMinY, yMinMinus, cmpRes, ctxtGraphs);
+  bool_t rightGoesNegative = realIsNegative(cmpRes);
+
+  // Must have extreme behavior on at least one side
+  if(!(leftGoesPositive || leftGoesNegative || rightGoesPositive || rightGoesNegative)) {
     #if defined(GRAPHDEBUG)
-      printf("  ASYMPTOTE DETECTED at x=%.6f (memory efficient)\n", asymptote->x);
-      printf("    Gap width: %.6f\n", asymptote->gapWidth);
-      printf("    Goes positive: %d, negative: %d\n", asymptote->hasPositive, asymptote->hasNegative);
-      printf("    Standard height: %.3f\n", asymptote->maxHeight);
+      char dbgBuf1[64], dbgBuf2[64], dbgBuf3[64], dbgBuf4[64];
+      realToString(leftMaxY,  dbgBuf1);
+      realToString(leftMinY,  dbgBuf2);
+      realToString(yMaxPlus,  dbgBuf3);
+      realToString(yMinMinus, dbgBuf4);
+      printf("  No extreme behavior detected\n");
+      printf("    Left: max=%s, min=%s (need >%s or <%s)\n", dbgBuf1, dbgBuf2, dbgBuf3, dbgBuf4);
+      realToString(rightMaxY, dbgBuf1);
+      realToString(rightMinY, dbgBuf2);
+      printf("    Right: max=%s, min=%s\n", dbgBuf1, dbgBuf2);
     #endif // GRAPHDEBUG
+    return false;
+  }
+
+  // Fill asymptote info
+  REAL_T_PTR(heightRatio, PLOT_DIGITS);
+  realCopy(xGap,     AI_X(*asymptote));
+  realCopy(gapWidth, AI_GAPWIDTH(*asymptote));
+  asymptote->hasPositive = leftGoesPositive  || rightGoesPositive;
+  asymptote->hasNegative = leftGoesNegative  || rightGoesNegative;
+  stringToReal(_R_STR_OF(ASYMPTOTE_HEIGHT_RATIO), heightRatio, ctxtGraphs);
+  realMultiply(yRange, heightRatio, AI_MAXHEIGHT(*asymptote), ctxtGraphs);
+
+  #if defined(GRAPHDEBUG)
+    char dbgBuf1[64], dbgBuf2[64], dbgBuf3[64];
+    realToString(AI_X(*asymptote),         dbgBuf1);
+    realToString(AI_GAPWIDTH(*asymptote),  dbgBuf2);
+    realToString(AI_MAXHEIGHT(*asymptote), dbgBuf3);
+    printf("  ASYMPTOTE DETECTED at x=%s (memory efficient)\n", dbgBuf1);
+    printf("    Gap width: %s\n", dbgBuf2);
+    printf("    Goes positive: %d, negative: %d\n", asymptote->hasPositive, asymptote->hasNegative);
+    printf("    Standard height: %s\n", dbgBuf3);
+  #endif // GRAPHDEBUG
 
   return true;
 }
 
 
 
+// Direction selectors only, no math content here. Stay as small ints.
 typedef struct {
-    double dx;
-    double dy;
+  int8_t dx;   // -1, 0 or +1
+  int8_t dy;   // -1, 0 or +1
 } PointOffset;
 
 // Three possible templates for asymptotes
 TO_QSPI const PointOffset asymptote_offsets_both[] = {
-    { -1.0, -1.0 }, // (x - offset, -height)
-    { -1.0,  1.0 }, // (x - offset, +height)
-    {  1.0,  1.0 }  // (x + offset, +height)
+  { -1, -1 }, // (x - offset, -height)
+  { -1,  1 }, // (x - offset, +height)
+  {  1,  1 }  // (x + offset, +height)
 };
 
 TO_QSPI const PointOffset asymptote_offsets_positive[] = {
-    { -1.0,  0.0 }, // (x - offset, 0)
-    { -1.0,  1.0 }, // (x - offset, +height)
-    {  1.0,  1.0 }  // (x + offset, +height)
+  { -1,  0 }, // (x - offset, 0)
+  { -1,  1 }, // (x - offset, +height)
+  {  1,  1 }  // (x + offset, +height)
 };
 
 TO_QSPI const PointOffset asymptote_offsets_negative[] = {
-    { -1.0,  0.0 }, // (x - offset, 0)
-    { -1.0, -1.0 }, // (x - offset, -height)
-    {  1.0, -1.0 }  // (x + offset, -height)
+  { -1,  0 }, // (x - offset, 0)
+  { -1, -1 }, // (x - offset, -height)
+  {  1, -1 }  // (x + offset, -height)
 };
 
 
 
 void renderAsymptote(AsymptoteInfo *asymptote) {
-  double x_center = asymptote->x;
-  double offset = 1e-3;  // Small x offset
-  double asymptoteHeight = 10000.0;
+  REAL_T_PTR(xCenter,         PLOT_DIGITS);
+  REAL_T_PTR(offset,          PLOT_DIGITS);   // Small x offset
+  REAL_T_PTR(asymptoteHeight, PLOT_DIGITS);
+  REAL_T_PTR(x,               PLOT_DIGITS);
+  REAL_T_PTR(y,               PLOT_DIGITS);
+  realCopy(AI_X(*asymptote), xCenter);
+  stringToReal("1e-3",  offset,          ctxtGraphs);
+  stringToReal("10000", asymptoteHeight, ctxtGraphs);
 
   #if defined(GRAPHDEBUG)
-    printf("Rendering asymptote at x=%.6f with clean 3-point vertical sequence\n", x_center);
+    char strBuf1[64];
+    realToString(xCenter, strBuf1);
+    printf("Rendering asymptote at x=%s with clean 3-point vertical sequence\n", strBuf1);
   #endif // GRAPHDEBUG
 
   const PointOffset* offsets = NULL;
@@ -604,10 +915,27 @@ void renderAsymptote(AsymptoteInfo *asymptote) {
 
   if(offsets) {
     for(int i = 0; i < 3; i++) {
-      double x = x_center + offsets[i].dx * offset;
-      double y = offsets[i].dy * ((offsets[i].dy == 0.0) ? 0.0 : asymptoteHeight);
-      convertDoubleToReal34Register(x, REGISTER_X);
-      convertDoubleToReal34Register(y, REGISTER_Y);
+      // x = xCenter + dx * offset
+      realCopy(xCenter, x);
+      if(offsets[i].dx > 0) {
+        realAdd(x, offset, x, ctxtGraphs);
+      }
+      else if(offsets[i].dx < 0) {
+        realSubtract(x, offset, x, ctxtGraphs);
+      }
+      // y = (dy == 0) ? 0 : dy * asymptoteHeight
+      if(offsets[i].dy == 0) {
+        int32ToReal(0, y);
+      }
+      else if(offsets[i].dy > 0) {
+        realCopy(asymptoteHeight, y);
+      }
+      else {
+        realCopy(asymptoteHeight, y);
+        realChangeSign(y);
+      }
+      convertRealToReal34Register(x, REGISTER_X);
+      convertRealToReal34Register(y, REGISTER_Y);
       AddtoDrawMx();
     }
   }
@@ -618,24 +946,37 @@ void renderAsymptote(AsymptoteInfo *asymptote) {
 
 
 
-bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, double grad0, double grad1, double grad2, double yAvg, int count, double x0, double x1, double x2, AsymptoteInfo *asymptotes, int *asymptoteCount) {
+bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, const real_t *y2, const real_t *grad0, const real_t *grad1, const real_t *grad2, const real_t *yAvg, int count, const real_t *x0, const real_t *x1, const real_t *x2, const real_t *xMin, const real_t *xMax, const real_t *yMin, const real_t *yMax, AsymptoteInfo *asymptotes, int *asymptoteCount) {
 
   // If not a vertical asymptote, do discontinuity detection
   bool_t hasDiscontinuity = detectTrueDiscontinuity(y0, y1, y2, grad0, grad1, grad2, yAvg, count);
 
   if(hasDiscontinuity && count >= 4 && *asymptoteCount < MAX_ASYMPTOTES) {
     // Check if this discontinuity might be an asymptote using the detailed method
-    double gapWidth = fabs(x2 - x0);
-    double xGap = (x0 + x2) / 2.0;
+    REAL_T_PTR(gapWidth, PLOT_DIGITS);
+    REAL_T_PTR(xGap,     PLOT_DIGITS);
+    REAL_T_PTR(diff,     PLOT_DIGITS);
+    REAL_T_PTR(sumX,     PLOT_DIGITS);
+    realSubtract(x2, x0, diff, ctxtGraphs);
+    realCopyAbs(diff, gapWidth);
+    realAdd(x0, x2, sumX, ctxtGraphs);
+    realCopy(sumX, xGap);
+    realDivideBy2(xGap, ctxtGraphs);                   // (x0 + x2) / 2
 
     #if defined(GRAPHDEBUG)
-      printf("Checking complex discontinuity for asymptote: x0=%.6f, x1=%.6f, x2=%.6f\n", x0, x1, x2);
-      printf("  Gap center: %.6f, width: %.6f\n", xGap, gapWidth);
+      char strBuf1[64], strBuf2[64], strBuf3[64];
+      realToString(x0, strBuf1);
+      realToString(x1, strBuf2);
+      realToString(x2, strBuf3);
+      printf("Checking complex discontinuity for asymptote: x0=%s, x1=%s, x2=%s\n", strBuf1, strBuf2, strBuf3);
+      realToString(xGap,     strBuf1);
+      realToString(gapWidth, strBuf2);
+      printf("  Gap center: %s, width: %s\n", strBuf1, strBuf2);
     #endif // GRAPHDEBUG
 
     AsymptoteInfo candidateAsymptote;
 
-    if(detectAndCharacterizeAsymptote(x0, y0, x2, y2, xGap, gapWidth, &candidateAsymptote)) {
+    if(detectAndCharacterizeAsymptote(x0, y0, x2, y2, xGap, gapWidth, xMin, xMax, yMin, yMax, &candidateAsymptote)) {
       // Store the asymptote
       asymptotes[*asymptoteCount] = candidateAsymptote;
       (*asymptoteCount)++;
@@ -666,38 +1007,97 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
 // =============================================================================
 
 
+
+  #define ctxtGraphs &ctxtReal39
+
+  // realToDoubleVal, convertRealToReal34Register, convertRealToReal34RegisterPush
+  // and convertRegisterToReal are defined at the top of graph_eqn_helpers_real.c
+  // (which is compiled before this file in graph.c) and are visible here.
+
   static void graph_eqn(uint16_t mode) {
     currentKeyCode = 255;
     calcMode = CM_GRAPH;
     saveForUndo();
     regStatsXY = findNamedVariable(plotStatMx);
-    double x;
-    double x01 = x_min;
-    double y01 = 0;
-    double y02 = 0;
-    double y00 = 0; // Add y00 for improved discontinuity detection
-    double dy;
-    double dx0 = (x_max-x_min)/SCREEN_WIDTH_GRAPH*10;
-    double dx = dx0;
-    double grad2 = 1;
-    double grad1 = 1;
-    double grad0 = 1;
-    double prevDx = dx0; // Track previous step size
+    REAL_T_PTR(x, 39);
+    REAL_T_PTR(x01, 39);
+    REAL_T_PTR(y01, 39);
+    REAL_T_PTR(y02, 39);
+    REAL_T_PTR(y00, 39);                          // Add y00 for improved discontinuity detection
+    REAL_T_PTR(dy, 39);
+    REAL_T_PTR(dx0, 39);
+    REAL_T_PTR(dx, 39);
+    REAL_T_PTR(grad2, 39);
+    REAL_T_PTR(grad1, 39);
+    REAL_T_PTR(grad0, 39);
+    REAL_T_PTR(prevDx, 39);                       // Track previous step size
+    REAL_T_PTR(yAvg, 39);
+    REAL_T_PTR(x_min_r, 39);                      // real_t copy of external double x_min
+    REAL_T_PTR(x_max_r, 39);                      // real_t copy of external double x_max
+    REAL_T_PTR(y_min_r, 39);                      // real_t copy of external double y_min
+    REAL_T_PTR(y_max_r, 39);                      // real_t copy of external double y_max
+    REAL_T_PTR(jumpBackStartX, 39);
+    REAL_T_PTR(jumpBackStartY, 39);
+    REAL_T_PTR(jumpBackX, 39);
+    REAL_T_PTR(jumpBackDx, 39);
+    REAL_T_PTR(jbY, 39);
+    REAL_T_PTR(discontinuityThreshold, 39);
+    REAL_T_PTR(maxCurvatureChange, 39);
+    REAL_T_PTR(linearSlope, 39);
+    REAL_T_PTR(interpolationError, 39);
+    REAL_T_PTR(curvatureChange, 39);
+    REAL_T_PTR(newDx, 39);
+    REAL_T_PTR(improvementRatio, 39);
+    REAL_T_PTR(highResStartX, 39);
+    REAL_T_PTR(cumulativeCurvatureChange, 39);
+    REAL_T_PTR(baselineCurvatureChange, 39);
+    REAL_T_PTR(savedXBeforeHighres, 39);
+    REAL_T_PTR(savedDxBeforeHighres, 39);
+    REAL_T_PTR(tmpA, 39);
+    REAL_T_PTR(tmpB, 39);
+    REAL_T_PTR(cmpRes, 39);
     int16_t count = 0;
     int16_t ss0 = 0;
     int16_t ss1 = 0;
     int16_t ss2 = 0;
     uint8_t discontinuityDetected = 0;
     bool_t  grad2IncreaseDetected = false;
-    double yAvg = 0.1;
     int loop = 0;
     bool_t jumpedBack = false;
     AsymptoteInfo asymptotes[MAX_ASYMPTOTES];
     int asymptoteCount = 0;
+  #if defined(GRAPHDEBUG)
+    char strBuf1[42], strBuf2[42], strBuf3[42], strBuf4[42], strBuf5[42], strBuf6[42];
+    REAL_T_PTR(lastSignChange, 39);
+  #endif // GRAPHDEBUG
+
+    convertDoubleToReal(x_min, x_min_r, ctxtGraphs);
+    convertDoubleToReal(x_max, x_max_r, ctxtGraphs);
+    convertDoubleToReal(y_min, y_min_r, ctxtGraphs);
+    convertDoubleToReal(y_max, y_max_r, ctxtGraphs);
+    realCopy(x_min_r, x01);
+    realSetZero(y01);
+    realSetZero(y02);
+    realSetZero(y00);
+    realSetZero(dy);
+    realSubtract(x_max_r, x_min_r, tmpA, ctxtGraphs);
+    int32ToReal(SCREEN_WIDTH_GRAPH, tmpB);
+    realDivide(tmpA, tmpB, tmpA, ctxtGraphs);
+    int32ToReal(10, tmpB);
+    realMultiply(tmpA, tmpB, dx0, ctxtGraphs);
+    realCopy(dx0, dx);
+    realSetOne(grad2);
+    realSetOne(grad1);
+    realSetOne(grad0);
+    realCopy(dx0, prevDx);
+    stringToReal("0.1", yAvg, ctxtGraphs);
 
   #if defined(GRAPHDEBUG)
+    realToString(x_min_r, strBuf1);
+    realToString(x_max_r, strBuf2);
+    realToString(dx0, strBuf3);
     printf("\n=== GRAPH EQUATION DEBUG START ===\n");
-    printf("Initial parameters: xMin=%.6f, xMax=%.6f, dx0=%.6f\n", x_min, x_max, dx0);
+    printf("Initial parameters: xMin=%s, xMax=%s, dx0=%s\n", strBuf1, strBuf2, strBuf3);
     printf("Screen width: %d, SS1=%.1f, SS2=%.1f\n", SCREEN_WIDTH_GRAPH, SS1, SS2);
   #endif // GRAPHDEBUG
 
@@ -718,9 +1118,12 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
 
     fillStackWithReal0();
 
-    convertDoubleToReal34RegisterPush(x_max, REGISTER_X);
+    convertRealToReal34RegisterPush(x_max_r, REGISTER_X);
     execute_rpn_function();
-    yAvg += 2 * fabs(convertRegisterToDouble(REGISTER_Y));
+    convertRegisterToReal(REGISTER_Y, tmpA);
+    realCopyAbs(tmpA, tmpA);
+    int32ToReal(2, tmpB);
+    realFMA(tmpB, tmpA, yAvg, yAvg, ctxtGraphs);     // yAvg += 2 * |REGISTER_Y|
 
     if(mode == initDrwMx) {
       fnClDrawMx(3);
@@ -728,7 +1131,8 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
       asymptoteCount = 0; // Reset asymptote tracking for new plot
     }
   #if defined(GRAPHDEBUG)
-    printf("dx0=%f discontinuityDetected:%u grad2IncreaseDetected:%u\n", dx0, discontinuityDetected, grad2IncreaseDetected);
+    realToString(dx0, strBuf1);
+    printf("dx0=%s discontinuityDetected:%u grad2IncreaseDetected:%u\n", strBuf1, discontinuityDetected, grad2IncreaseDetected);
   #endif // GRAPHDEBUG
 
     //Main loop, default is 40 x 6 point gaps, across the 240 wide screen
@@ -737,29 +1141,40 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
     PlotPoint highResBuffer[HIGH_RES_SAMPLE_COUNT];
     int highResCount = 0;
     bool_t inHighResMode = false;
-    double highResStartX = 0;
-    double cumulativeCurvatureChange = 0;
-    double baselineCurvatureChange = 0;
-    double savedXBeforeHighres = 0;
-    double savedDxBeforeHighres = dx0;
+    realSetZero(highResStartX);
+    realSetZero(cumulativeCurvatureChange);
+    realSetZero(baselineCurvatureChange);
+    realSetZero(savedXBeforeHighres);
+    realCopy(dx0, savedDxBeforeHighres);
 
     #if defined(GRAPHDEBUG)
       int cnt = 0;
       int cycleCount = 0;
-      double lastSignChange = x_min;
+      realCopy(x_min_r, lastSignChange);
       int signChangeCount = 0;
     #endif //GRAPHDEBUG
 
-    for(x = x_min; x <= x_max; x += STEP_OFFSET * dx) {
+    realCopy(x_min_r, x);
+    while(1) {
+      // x <= x_max ?
+      realCompare(x, x_max_r, cmpRes, ctxtGraphs);
+      if(!realIsZero(cmpRes) && realIsPositive(cmpRes)) break;
+
       #if defined(GRAPHDEBUG)
+        realToString(x, strBuf1);
+        realToString(dx, strBuf2);
         printf("\n###################################\n");
-        printf("--- Iteration %d: x=%.6f, dx=%.6f ---\n", cnt, x, dx);
+        printf("--- Iteration %d: x=%s, dx=%s ---\n", cnt, strBuf1, strBuf2);
       #endif //GRAPHDEBUG
 
       jumpedBack = false;
-      x = fmax(x_min, fmin(x_max, x));
+      // x = max(x_min, min(x_max, x))
+      realCompare(x, x_max_r, cmpRes, ctxtGraphs);
+      if(!realIsZero(cmpRes) && realIsPositive(cmpRes)) realCopy(x_max_r, x);
+      realCompare(x, x_min_r, cmpRes, ctxtGraphs);
+      if(realIsNegative(cmpRes)) realCopy(x_min_r, x);
 
-      convertDoubleToReal34RegisterPush(x, REGISTER_X);
+      convertRealToReal34RegisterPush(x, REGISTER_X);
       execute_rpn_function();
 
       // Handle complex plotting
@@ -770,32 +1185,45 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
         fnRCL(TEMP_REGISTER_1);
         fnRealPart(0);
         AddtoDrawMx();
-        continue;
+        goto incrementX;
       }
 
-      y02 = convertRegisterToDouble(REGISTER_Y);
+      convertRegisterToReal(REGISTER_Y, y02);
 
       #if defined(GRAPHDEBUG)
-        printf("y02=%.6f\n", y02);
+        realToString(y02, strBuf1);
+        printf("y02=%s\n", strBuf1);
       #endif // GRAPHDEBUG
 
       // Calculate gradient and detect anomalies
       if(count > 0) {
-        dy = y02 - y01;
-        grad2 = (x != x01) ? dy / (x - x01) : 0.0;
+        realSubtract(y02, y01, dy, ctxtGraphs);
+        realCompare(x, x01, cmpRes, ctxtGraphs);
+        if(!realIsZero(cmpRes)) {
+          realSubtract(x, x01, tmpA, ctxtGraphs);
+          realDivide(dy, tmpA, grad2, ctxtGraphs);
+        }
+        else {
+          realSetZero(grad2);
+        }
 
         #if defined(GRAPHDEBUG)
-          printf("dy=%.6f, grad2=%.6f\n", dy, grad2);
+          realToString(dy,    strBuf1);
+          realToString(grad2, strBuf2);
+          printf("dy=%s, grad2=%s\n", strBuf1, strBuf2);
 
           // Track sign changes for cycle detection
           if(count > 1) {
-            bool_t currentPositive = (y02 > 0);
-            bool_t lastPositive = (y01 > 0);
+            bool_t currentPositive = (!realIsZero(y02) && realIsPositive(y02));
+            bool_t lastPositive    = (!realIsZero(y01) && realIsPositive(y01));
             if(currentPositive != lastPositive) {
               signChangeCount++;
-              printf("[SIGN CHANGE #%d at x=%.6f, distance from last=%.6f]\n",
-                     signChangeCount, x, x - lastSignChange);
-              lastSignChange = x;
+              realSubtract(x, lastSignChange, tmpA, ctxtGraphs);
+              realToString(x,    strBuf1);
+              realToString(tmpA, strBuf2);
+              printf("[SIGN CHANGE #%d at x=%s, distance from last=%s]\n",
+                     signChangeCount, strBuf1, strBuf2);
+              realCopy(x, lastSignChange);
               if(signChangeCount % 2 == 0) {
                 cycleCount++;
                 printf("[HALF CYCLE #%d COMPLETE]\n", cycleCount);
@@ -807,38 +1235,105 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
         // Update sign states
         ss0 = ss1;
         ss1 = ss2;
-        ss2 = grad2 == 0 ? 0 : grad2 > 0 ? 1 : -1;
-        grad0 = grad1;
-        grad1 = grad2;
+        ss2 = realIsZero(grad2) ? 0 : (realIsNegative(grad2) ? -1 : 1);
+        realCopy(grad1, grad0);
+        realCopy(grad2, grad1);
 
         #if defined(GRAPHDEBUG)
+          realToString(grad0, strBuf1);
+          realToString(grad1, strBuf2);
+          realToString(grad2, strBuf3);
           printf("Signs: ss0=%d, ss1=%d, ss2=%d\n", ss0, ss1, ss2);
-          printf("Grads: grad0=%.6f, grad1=%.6f, grad2=%.6f\n", grad0, grad1, grad2);
+          printf("Grads: grad0=%s, grad1=%s, grad2=%s\n", strBuf1, strBuf2, strBuf3);
         #endif // GRAPHDEBUG
 
         // Detect gradient anomalies using improved logic
-        if(grad1 != 0 && grad2 != 0) {
-          bool_t yRatioCheck1 = (fabs(y02/y01) > 1.01 && fabs(grad2/grad1) > SS2);
-          bool_t yRatioCheck2 = (fabs(y01/y02) > 1.01 && fabs(grad1/grad2) > SS2);
+        if(!realIsZero(grad1) && !realIsZero(grad2)) {
+          REAL_T_PTR(absY02OverY01, 39);
+          REAL_T_PTR(absY01OverY02, 39);
+          REAL_T_PTR(absG2OverG1,   39);
+          REAL_T_PTR(absG1OverG2,   39);
+          REAL_T_PTR(absY00,        39);
+          REAL_T_PTR(absY01,        39);
+          REAL_T_PTR(absY02,        39);
+          REAL_T_PTR(twoAbsY01,     39);
+          REAL_T_PTR(absG2mG1,      39);
+          REAL_T_PTR(absG1mG0,      39);
+          REAL_T_PTR(tenAbsG1mG0,   39);
+          REAL_T_PTR(ss2_r,         39);
+          REAL_T_PTR(oneOhOne,      39);
+          REAL_T_PTR(ten,           39);
+          REAL_T_PTR(two,           39);
+
+          stringToReal("1.01", oneOhOne, ctxtGraphs);
+          int32ToReal(10, ten);
+          int32ToReal(2,  two);
+          convertDoubleToReal(SS2, ss2_r, ctxtGraphs);
+
+          realDivide(y02, y01, tmpA, ctxtGraphs);
+          realCopyAbs(tmpA, absY02OverY01);
+          realDivide(y01, y02, tmpA, ctxtGraphs);
+          realCopyAbs(tmpA, absY01OverY02);
+          realDivide(grad2, grad1, tmpA, ctxtGraphs);
+          realCopyAbs(tmpA, absG2OverG1);
+          realDivide(grad1, grad2, tmpA, ctxtGraphs);
+          realCopyAbs(tmpA, absG1OverG2);
+          realCopyAbs(y00, absY00);
+          realCopyAbs(y01, absY01);
+          realCopyAbs(y02, absY02);
+          realMultiply(two, absY01, twoAbsY01, ctxtGraphs);
+          realSubtract(grad2, grad1, tmpA, ctxtGraphs);
+          realCopyAbs(tmpA, absG2mG1);
+          realSubtract(grad1, grad0, tmpA, ctxtGraphs);
+          realCopyAbs(tmpA, absG1mG0);
+          realMultiply(ten, absG1mG0, tenAbsG1mG0, ctxtGraphs);
+
+          realCompare(absY02OverY01, oneOhOne, cmpRes, ctxtGraphs);
+          bool_t a1 = !realIsZero(cmpRes) && realIsPositive(cmpRes);
+          realCompare(absG2OverG1, ss2_r, cmpRes, ctxtGraphs);
+          bool_t a2 = !realIsZero(cmpRes) && realIsPositive(cmpRes);
+          bool_t yRatioCheck1 = (a1 && a2);
+
+          realCompare(absY01OverY02, oneOhOne, cmpRes, ctxtGraphs);
+          bool_t b1 = !realIsZero(cmpRes) && realIsPositive(cmpRes);
+          realCompare(absG1OverG2, ss2_r, cmpRes, ctxtGraphs);
+          bool_t b2 = !realIsZero(cmpRes) && realIsPositive(cmpRes);
+          bool_t yRatioCheck2 = (b1 && b2);
 
           // Conservative oscillation detection - only flag if it's truly problematic
-          bool_t signOscillation1 = (ss0 == 1  && ss1 == -1 && ss2 == 1) && (fabs(y02) > 2 * fabs(y01)) && (fabs(y00) > 2 * fabs(y01));
-          bool_t signOscillation2 = (ss0 == -1 && ss1 == 1  && ss2 == -1) && (fabs(y02) > 2 * fabs(y01)) && (fabs(y00) > 2 * fabs(y01));
+          realCompare(absY02, twoAbsY01, cmpRes, ctxtGraphs);
+          bool_t y02BigEnough = !realIsZero(cmpRes) && realIsPositive(cmpRes);
+          realCompare(absY00, twoAbsY01, cmpRes, ctxtGraphs);
+          bool_t y00BigEnough = !realIsZero(cmpRes) && realIsPositive(cmpRes);
+          bool_t signOscillation1 = (ss0 == 1  && ss1 == -1 && ss2 == 1) && y02BigEnough && y00BigEnough;
+          bool_t signOscillation2 = (ss0 == -1 && ss1 == 1  && ss2 == -1) && y02BigEnough && y00BigEnough;
 
           // Zero crossing detection - only if accompanied by large gradient changes
-          bool_t zeroCrossing1 = (ss1 == 1  && ss2 == -1  && y01 > 0 && y02 < 0) && (fabs(grad2 - grad1) > 10 * fabs(grad1 - grad0));
-          bool_t zeroCrossing2 = (ss1 == -1 && ss2 == 1   && y01 < 0 && y02 > 0) && (fabs(grad2 - grad1) > 10 * fabs(grad1 - grad0));
+          realCompare(absG2mG1, tenAbsG1mG0, cmpRes, ctxtGraphs);
+          bool_t bigGradJump = !realIsZero(cmpRes) && realIsPositive(cmpRes);
+          bool_t y01Pos = !realIsZero(y01) && realIsPositive(y01);
+          bool_t y02Neg = realIsNegative(y02);
+          bool_t y01Neg = realIsNegative(y01);
+          bool_t y02Pos = !realIsZero(y02) && realIsPositive(y02);
+          bool_t zeroCrossing1 = (ss1 == 1  && ss2 == -1  && y01Pos && y02Neg) && bigGradJump;
+          bool_t zeroCrossing2 = (ss1 == -1 && ss2 == 1   && y01Neg && y02Pos) && bigGradJump;
 
           grad2IncreaseDetected = yRatioCheck1 || yRatioCheck2 || signOscillation1 || signOscillation2 || zeroCrossing1 || zeroCrossing2;
 
           #if defined(GRAPHDEBUG)
+            realToString(absY02OverY01, strBuf1);
+            realToString(absG2OverG1,   strBuf2);
+            realToString(absY01OverY02, strBuf3);
+            realToString(absG1OverG2,   strBuf4);
+            realToString(y01,           strBuf5);
+            realToString(y02,           strBuf6);
             printf("Gradient increase checks:\n");
-            printf("  yRatio1(%.3f>1.01 && %.3f>%.1f): %d\n", fabs(y02/y01), fabs(grad2/grad1), SS2, yRatioCheck1);
-            printf("  yRatio2(%.3f>1.01 && %.3f>%.1f): %d\n", fabs(y01/y02), fabs(grad1/grad2), SS2, yRatioCheck2);
+            printf("  yRatio1(%s>1.01 && %s>%.1f): %d\n", strBuf1, strBuf2, SS2, yRatioCheck1);
+            printf("  yRatio2(%s>1.01 && %s>%.1f): %d\n", strBuf3, strBuf4, SS2, yRatioCheck2);
             printf("  signOsc1(%d,%d,%d): %d\n", ss0, ss1, ss2, signOscillation1);
             printf("  signOsc2(%d,%d,%d): %d\n", ss0, ss1, ss2, signOscillation2);
-            printf("  zeroCross1(ss=%d->%d, y=%.3f->%.3f): %d\n", ss1, ss2, y01, y02, zeroCrossing1);
-            printf("  zeroCross2(ss=%d->%d, y=%.3f->%.3f): %d\n", ss1, ss2, y01, y02, zeroCrossing2);
+            printf("  zeroCross1(ss=%d->%d, y=%s->%s): %d\n", ss1, ss2, strBuf5, strBuf6, zeroCrossing1);
+            printf("  zeroCross2(ss=%d->%d, y=%s->%s): %d\n", ss1, ss2, strBuf5, strBuf6, zeroCrossing2);
             printf("  => grad2IncreaseDetected: %d\n", grad2IncreaseDetected);
           #endif // GRAPHDEBUG
 
@@ -852,20 +1347,42 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
 
         // Update running average
         if(count == 0) {
-          yAvg += 2 * fabs(y02);
+          realCopyAbs(y02, tmpA);
+          int32ToReal(2, tmpB);
+          realFMA(tmpB, tmpA, yAvg, yAvg, ctxtGraphs);     // yAvg += 2 * |y02|
         }
-        else if(fabs(y02) > yAvg) {
-          yAvg += fabs(y02) / count;
+        else {
+          realCopyAbs(y02, tmpA);
+          realCompare(tmpA, yAvg, cmpRes, ctxtGraphs);
+          if(!realIsZero(cmpRes) && realIsPositive(cmpRes)) {
+            int32ToReal(count, tmpB);
+            realDivide(tmpA, tmpB, tmpA, ctxtGraphs);      // |y02|/count
+            realAdd(yAvg, tmpA, yAvg, ctxtGraphs);
+          }
         }
 
         #if defined(GRAPHDEBUG)
-          printf("yAvg=%.6f\n", yAvg);
+          realToString(yAvg, strBuf1);
+          printf("yAvg=%s\n", strBuf1);
         #endif // GRAPHDEBUG
 
         // Use improved discontinuity detection
         if(discontinuityDetected == 0) {
-          double x00 = (count > 1) ? x01 - dx : x_min;
-          bool_t trueDiscontinuity = detectTrueDiscontinuityWithAsymptote(y00, y01, y02, grad0, grad1, grad2, yAvg, count, x00, x01, x, asymptotes, &asymptoteCount);
+          REAL_T_PTR(x00, 39);
+          if(count > 1) {
+            realSubtract(x01, dx, x00, ctxtGraphs);
+          }
+          else {
+            realCopy(x_min_r, x00);
+          }
+          // Helper now takes real_t pointers directly and the four plot bounds
+          bool_t trueDiscontinuity = detectTrueDiscontinuityWithAsymptote(
+            y00,  y01,  y02,
+            grad0, grad1, grad2,
+            yAvg, count,
+            x00,  x01,  x,
+            x_min_r, x_max_r, y_min_r, y_max_r,
+            asymptotes, &asymptoteCount);
           if(trueDiscontinuity) {
             discontinuityDetected = FINE;
             #if defined(GRAPHDEBUG)
@@ -877,8 +1394,10 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
         // Jump-back logic for discontinuities and gradient increases
         if((discontinuityDetected == FINE) || (discontinuityDetected == 0 && grad2IncreaseDetected)) {
           #if defined(GRAPHDEBUG)
+            realToString(x,   strBuf1);
+            realToString(y02, strBuf2);
             printf("JUMPING BACK: discontinuity=%d, gradIncrease=%d\n", discontinuityDetected, grad2IncreaseDetected);
-            printf("  Before jump: x=%.6f, y=%.6f\n", x, y02);
+            printf("  Before jump: x=%s, y=%s\n", strBuf1, strBuf2);
           #endif // GRAPHDEBUG
 
           // If in high-res mode, abandon it since we're jumping back anyway
@@ -887,45 +1406,70 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
           }
 
           // Store the current position and original discontinuity trigger
-          double jumpBackStartX = x;
-          double jumpBackStartY = y02;
+          realCopy(x,   jumpBackStartX);
+          realCopy(y02, jumpBackStartY);
           bool_t wasDiscontinuity = (discontinuityDetected == FINE);
-          double discontinuityThreshold = wasDiscontinuity ? fabs(y02 - y01) * 0.1 : 0; // 10% of original jump
+          // discontinuityThreshold = wasDiscontinuity ? |y02 - y01| * 0.1 : 0
+          if(wasDiscontinuity) {
+            realSubtract(y02, y01, tmpA, ctxtGraphs);
+            realCopyAbs(tmpA, tmpA);
+            stringToReal("0.1", tmpB, ctxtGraphs);
+            realMultiply(tmpA, tmpB, discontinuityThreshold, ctxtGraphs);
+          }
+          else {
+            realSetZero(discontinuityThreshold);
+          }
 
-          x -= dx * JMP;
+          // x -= dx * JMP
+          convertDoubleToReal(JMP, tmpA, ctxtGraphs);
+          realMultiply(dx, tmpA, tmpB, ctxtGraphs);
+          realSubtract(x, tmpB, x, ctxtGraphs);
           jumpedBack = true;
-          convertDoubleToReal34RegisterPush(x, REGISTER_X);
+          convertRealToReal34RegisterPush(x, REGISTER_X);
           execute_rpn_function();
-          y02 = convertRegisterToDouble(REGISTER_Y);
-          grad2 = (y02 - y01) / (x - x01);
+          convertRegisterToReal(REGISTER_Y, y02);
+          // grad2 = (y02 - y01) / (x - x01)
+          realSubtract(y02, y01, tmpA, ctxtGraphs);
+          realSubtract(x, x01, tmpB, ctxtGraphs);
+          realDivide(tmpA, tmpB, grad2, ctxtGraphs);
           ss0 = ss1;
           ss1 = ss2;
-          ss2 = grad2 == 0 ? 0 : grad2 > 0 ? 1 : -1;
+          ss2 = realIsZero(grad2) ? 0 : (realIsNegative(grad2) ? -1 : 1);
 
           #if defined(GRAPHDEBUG)
-            printf("  After jump: x=%.6f, y=%.6f, newGrad=%.6f\n", x, y02, grad2);
+            realToString(x,     strBuf1);
+            realToString(y02,   strBuf2);
+            realToString(grad2, strBuf3);
+            printf("  After jump: x=%s, y=%s, newGrad=%s\n", strBuf1, strBuf2, strBuf3);
             printf("  Will evaluate %d fine-step points\n", FINE);
             if(wasDiscontinuity) {
-              printf("  Discontinuity threshold: %.6f\n", discontinuityThreshold);
+              realToString(discontinuityThreshold, strBuf4);
+              printf("  Discontinuity threshold: %s\n", strBuf4);
             }
           #endif // GRAPHDEBUG
 
-          // Sample the fine-stepped points
+          // Sample the fine-stepped points (PlotPoint still holds doubles)
           PlotPoint jumpBackBuffer[FINE];
           int jumpBackCount = 0;
-          double jumpBackX = x;
-          double jumpBackDx = dJMP * dx0;
+          realCopy(x, jumpBackX);
+          // jumpBackDx = dJMP * dx0
+          convertDoubleToReal(dJMP, tmpA, ctxtGraphs);
+          realMultiply(tmpA, dx0, jumpBackDx, ctxtGraphs);
 
-          for(int jbStep = 0; jbStep < FINE && jumpBackX < jumpBackStartX; jbStep++) {
-            convertDoubleToReal34RegisterPush(jumpBackX, REGISTER_X);
+          for(int jbStep = 0; jbStep < FINE; jbStep++) {
+            // jumpBackX < jumpBackStartX ?
+            realCompare(jumpBackX, jumpBackStartX, cmpRes, ctxtGraphs);
+            if(!realIsNegative(cmpRes)) break;
+
+            convertRealToReal34RegisterPush(jumpBackX, REGISTER_X);
             execute_rpn_function();
-            double jbY = convertRegisterToDouble(REGISTER_Y);
+            convertRegisterToReal(REGISTER_Y, jbY);
 
-            jumpBackBuffer[jumpBackCount].x = jumpBackX;
-            jumpBackBuffer[jumpBackCount].y = jbY;
             jumpBackBuffer[jumpBackCount].stored = false;
+            realCopy(jumpBackX, PP_X(jumpBackBuffer[jumpBackCount]));
+            realCopy(jbY,       PP_Y(jumpBackBuffer[jumpBackCount]));
             jumpBackCount++;
-            jumpBackX += jumpBackDx;
+            realAdd(jumpBackX, jumpBackDx, jumpBackX, ctxtGraphs);
           }
 
           bool_t shouldCommitPoints = false;
@@ -933,7 +1477,8 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
           if(wasDiscontinuity) {
             // For discontinuity cases, validate that fine points actually resolve the discontinuity
             bool_t discontinuityResolved = validateDiscontinuityResolution(
-              jumpBackBuffer, jumpBackCount, y01, jumpBackStartY, discontinuityThreshold);
+              jumpBackBuffer, jumpBackCount,
+              y01, jumpBackStartY, discontinuityThreshold);
 
             if(discontinuityResolved) {
               #if defined(GRAPHDEBUG)
@@ -952,33 +1497,54 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
             }
           }
           else {
-            // For gradient increase cases, evaluate if points add significant detail
+            // For gradient increase cases, evaluate if points add significant detail.
+            // PlotPoint members are real_t now, so reads convert to double for the local analysis.
             if(jumpBackCount >= 3) {
               // Calculate curvature variation in the jump-back region
-              double maxCurvatureChange = 0;
+              double maxCurvD = 0;
               for(int i = 1; i < jumpBackCount - 1; i++) {
-                double g1 = (jumpBackBuffer[i].y - jumpBackBuffer[i-1].y) / (jumpBackBuffer[i].x - jumpBackBuffer[i-1].x);
-                double g2 = (jumpBackBuffer[i+1].y - jumpBackBuffer[i].y) / (jumpBackBuffer[i+1].x - jumpBackBuffer[i].x);
-                double curvChange = fabs(g2 - g1);
-                if(curvChange > maxCurvatureChange) {
-                  maxCurvatureChange = curvChange;
+                double xi   = realToDoubleVal(PP_X(jumpBackBuffer[i]));
+                double xim1 = realToDoubleVal(PP_X(jumpBackBuffer[i-1]));
+                double xip1 = realToDoubleVal(PP_X(jumpBackBuffer[i+1]));
+                double yi   = realToDoubleVal(PP_Y(jumpBackBuffer[i]));
+                double yim1 = realToDoubleVal(PP_Y(jumpBackBuffer[i-1]));
+                double yip1 = realToDoubleVal(PP_Y(jumpBackBuffer[i+1]));
+                double g1d = (yi   - yim1) / (xi   - xim1);
+                double g2d = (yip1 - yi  ) / (xip1 - xi  );
+                double curvChangeD = fabs(g2d - g1d);
+                if(curvChangeD > maxCurvD) {
+                  maxCurvD = curvChangeD;
                 }
               }
               // Compare with linear interpolation
-              double linearSlope = (jumpBackStartY - y01) / (jumpBackStartX - x01);
-              double interpolationError = 0;
+              double jumpBackStartYd = realToDoubleVal(jumpBackStartY);
+              double jumpBackStartXd = realToDoubleVal(jumpBackStartX);
+              double y01d  = realToDoubleVal(y01);
+              double x01d  = realToDoubleVal(x01);
+              double linearSlopeD = (jumpBackStartYd - y01d) / (jumpBackStartXd - x01d);
+              double interpErrD = 0;
               for(int i = 0; i < jumpBackCount; i++) {
-                double expectedY = y01 + linearSlope * (jumpBackBuffer[i].x - x01);
-                double error = fabs(jumpBackBuffer[i].y - expectedY);
-                if(error > interpolationError) {
-                  interpolationError = error;
+                double xi = realToDoubleVal(PP_X(jumpBackBuffer[i]));
+                double yi = realToDoubleVal(PP_Y(jumpBackBuffer[i]));
+                double expectedYd = y01d + linearSlopeD * (xi - x01d);
+                double errD = fabs(yi - expectedYd);
+                if(errD > interpErrD) {
+                  interpErrD = errD;
                 }
               }
+              // Hand the results back to real_t for downstream logic
+              convertDoubleToReal(maxCurvD,     maxCurvatureChange, ctxtGraphs);
+              convertDoubleToReal(linearSlopeD, linearSlope,        ctxtGraphs);
+              convertDoubleToReal(interpErrD,   interpolationError, ctxtGraphs);
               // Points are useful if they show significant non-linear behavior
-              bool_t jumpBackPointsUseful = (interpolationError > 0.1 * fabs(jumpBackStartY - y01)) || (maxCurvatureChange > fabs(linearSlope) * 0.5);
+              bool_t jumpBackPointsUseful =
+                (interpErrD > 0.1 * fabs(jumpBackStartYd - y01d)) ||
+                (maxCurvD   > fabs(linearSlopeD) * 0.5);
 
               #if defined(GRAPHDEBUG)
-                printf("  Gradient increase evaluation: maxCurv=%.6f, interpError=%.6f, useful=%d\n", maxCurvatureChange, interpolationError, jumpBackPointsUseful);
+                realToString(maxCurvatureChange, strBuf1);
+                realToString(interpolationError, strBuf2);
+                printf("  Gradient increase evaluation: maxCurv=%s, interpError=%s, useful=%d\n", strBuf1, strBuf2, jumpBackPointsUseful);
               #endif // GRAPHDEBUG
               shouldCommitPoints = jumpBackPointsUseful;
             }
@@ -989,24 +1555,26 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
               printf("  COMMITTING %d jump-back points\n", jumpBackCount);
             #endif // GRAPHDEBUG
             for(int i = 0; i < jumpBackCount; i++) {
-              convertDoubleToReal34RegisterPush(jumpBackBuffer[i].x, REGISTER_X);
+              convertRealToReal34RegisterPush(PP_X(jumpBackBuffer[i]), REGISTER_X);
               execute_rpn_function();
               AddtoDrawMx();
             }
 
             // Also plot the original grid point (jumpBackStartX, jumpBackStartY)
-            convertDoubleToReal34RegisterPush(jumpBackStartX, REGISTER_X);
+            convertRealToReal34RegisterPush(jumpBackStartX, REGISTER_X);
             execute_rpn_function();
             AddtoDrawMx();
 
             // Set position to continue from the original grid point
-            x = jumpBackStartX;
-            y02 = jumpBackStartY;
-            dx = dx0; // Reset to original step size
-            jumpedBack = false; // Clear flag since we've handled the plotting
+            realCopy(jumpBackStartX, x);
+            realCopy(jumpBackStartY, y02);
+            realCopy(dx0, dx);              // Reset to original step size
+            jumpedBack = false;             // Clear flag since we've handled the plotting
 
             #if defined(GRAPHDEBUG)
-              printf("  Continuing from original grid point: x=%.6f, y=%.6f\n", x, y02);
+              realToString(x,   strBuf1);
+              realToString(y02, strBuf2);
+              printf("  Continuing from original grid point: x=%s, y=%s\n", strBuf1, strBuf2);
             #endif // GRAPHDEBUG
           }
           else {  // not fine points
@@ -1014,129 +1582,187 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
               printf("  DISCARDING %d jump-back points, but preserving original grid flow\n", jumpBackCount);
             #endif // GRAPHDEBUG
             // Restore to the original grid point and continue normal processing, ensures original grid point gets plotted in the normal flow
-            x = jumpBackStartX;
-            y02 = jumpBackStartY;
-            dx = dx0; // Revert to original step size
-            jumpedBack = false; // Clear flag so the original point gets plotted normally
+            realCopy(jumpBackStartX, x);
+            realCopy(jumpBackStartY, y02);
+            realCopy(dx0, dx);              // Revert to original step size
+            jumpedBack = false;             // Clear flag so the original point gets plotted normally
 
             // Recalculate gradient for the original point
-            grad2 = (y02 - y01) / (x - x01);
+            realSubtract(y02, y01, tmpA, ctxtGraphs);
+            realSubtract(x, x01, tmpB, ctxtGraphs);
+            realDivide(tmpA, tmpB, grad2, ctxtGraphs);
             ss0 = ss1;
             ss1 = ss2;
-            ss2 = grad2 == 0 ? 0 : grad2 > 0 ? 1 : -1;
+            ss2 = realIsZero(grad2) ? 0 : (realIsNegative(grad2) ? -1 : 1);
 
             #if defined(GRAPHDEBUG)
-              printf("  Restored to original grid: x=%.6f, y=%.6f, grad=%.6f\n", x, y02, grad2);
+              realToString(x,     strBuf1);
+              realToString(y02,   strBuf2);
+              realToString(grad2, strBuf3);
+              printf("  Restored to original grid: x=%s, y=%s, grad=%s\n", strBuf1, strBuf2, strBuf3);
               printf("  Original grid point will be plotted normally\n");
             #endif // GRAPHDEBUG
           }
         }
 
         // Calculate curvature change for resolution assessment
-        double curvatureChange = 0;
-        if(count > 1 && grad0 != 0 && grad1 != 0) {
-          curvatureChange = fabs((grad2 - grad1) - (grad1 - grad0));
+        realSetZero(curvatureChange);
+        if(count > 1 && !realIsZero(grad0) && !realIsZero(grad1)) {
+          // curvatureChange = |(grad2 - grad1) - (grad1 - grad0)|
+          realSubtract(grad2, grad1, tmpA, ctxtGraphs);
+          realSubtract(grad1, grad0, tmpB, ctxtGraphs);
+          realSubtract(tmpA, tmpB, tmpA, ctxtGraphs);
+          realCopyAbs(tmpA, curvatureChange);
           #if defined(GRAPHDEBUG)
-            printf("curvatureChange=%.6f = |(%f-%f)-(%f-%f)|\n", curvatureChange, grad2, grad1, grad1, grad0);
+            realToString(curvatureChange, strBuf1);
+            realToString(grad2,           strBuf2);
+            realToString(grad1,           strBuf3);
+            realToString(grad0,           strBuf4);
+            printf("curvatureChange=%s = |(%s-%s)-(%s-%s)|\n", strBuf1, strBuf2, strBuf3, strBuf3, strBuf4);
           #endif // GRAPHDEBUG
         }
 
         // Determine new step size and resolution mode
-        double newDx = calculateNewStepSize(discontinuityDetected, grad1, grad2, grad2IncreaseDetected, dx0);
+        calculateNewStepSize(discontinuityDetected, grad1, grad2, grad2IncreaseDetected, dx0, newDx);
 
         // Check if we're entering high-resolution mode (only if not jumped back) and only trigger high-res for genuine curvature issues, not discontinuity-related step reductions
-        if(!jumpedBack && !inHighResMode && newDx < prevDx * REVERT_THRESHOLD && discontinuityDetected == 0 && curvatureChange > 0) {
-          savedXBeforeHighres = x01;  // Save the last good x position
-          savedDxBeforeHighres = prevDx;
+        // newDx < prevDx * REVERT_THRESHOLD ?
+        convertDoubleToReal(REVERT_THRESHOLD, tmpA, ctxtGraphs);
+        realMultiply(prevDx, tmpA, tmpB, ctxtGraphs);
+        realCompare(newDx, tmpB, cmpRes, ctxtGraphs);
+        bool_t newDxBelowThresh = realIsNegative(cmpRes);
+        bool_t curvNonZero = !realIsZero(curvatureChange) && realIsPositive(curvatureChange);
+        if(!jumpedBack && !inHighResMode && newDxBelowThresh && discontinuityDetected == 0 && curvNonZero) {
+          realCopy(x01,    savedXBeforeHighres);     // Save the last good x position
+          realCopy(prevDx, savedDxBeforeHighres);
 
           #if defined(GRAPHDEBUG)
-            printf("HIGH-RES TRIGGER: newDx(%.6f) < prevDx(%.6f) * threshold(%.2f) = %.6f\n", newDx, prevDx, REVERT_THRESHOLD, prevDx * REVERT_THRESHOLD);
-            printf("Curvature-based trigger: discontinuity=%d, curvatureChange=%.6f\n", discontinuityDetected, curvatureChange);
-            printf("Saving state: x=%.6f, dx=%.6f, cycle=%d\n", savedXBeforeHighres, savedDxBeforeHighres, cycleCount);
+            realToString(newDx,                strBuf1);
+            realToString(prevDx,               strBuf2);
+            realToString(tmpB,                 strBuf3);
+            realToString(curvatureChange,      strBuf4);
+            realToString(savedXBeforeHighres,  strBuf5);
+            realToString(savedDxBeforeHighres, strBuf6);
+            printf("HIGH-RES TRIGGER: newDx(%s) < prevDx(%s) * threshold(%.2f) = %s\n", strBuf1, strBuf2, REVERT_THRESHOLD, strBuf3);
+            printf("Curvature-based trigger: discontinuity=%d, curvatureChange=%s\n", discontinuityDetected, strBuf4);
+            printf("Saving state: x=%s, dx=%s, cycle=%d\n", strBuf5, strBuf6, cycleCount);
           #endif // GRAPHDEBUG
 
-          enterHighResMode(&inHighResMode, &highResCount, &highResStartX, &baselineCurvatureChange, &cumulativeCurvatureChange, x, curvatureChange);
+          enterHighResMode(&inHighResMode, &highResCount,
+                           highResStartX, baselineCurvatureChange, cumulativeCurvatureChange,
+                           x, curvatureChange);
         }
 
           #if defined(GRAPHDEBUG)
-            else if(!jumpedBack && !inHighResMode && newDx < prevDx * REVERT_THRESHOLD) {
-                 printf("HIGH-RES BLOCKED: newDx(%.6f) < threshold but discontinuity=%d or curvatureChange=%.6f\n", newDx, discontinuityDetected, curvatureChange);
+            else if(!jumpedBack && !inHighResMode && newDxBelowThresh) {
+                 realToString(newDx,           strBuf1);
+                 realToString(curvatureChange, strBuf2);
+                 printf("HIGH-RES BLOCKED: newDx(%s) < threshold but discontinuity=%d or curvatureChange=%s\n", strBuf1, discontinuityDetected, strBuf2);
             }
           #endif // GRAPHDEBUG
 
         // If in high-res mode, buffer the point and assess improvement
         if(inHighResMode && !jumpedBack) {
-          cumulativeCurvatureChange += curvatureChange;
+          realAdd(cumulativeCurvatureChange, curvatureChange, cumulativeCurvatureChange, ctxtGraphs);
 
           #if defined(GRAPHDEBUG)
-            printf("HIGH-RES MODE: count=%d/%d, cumCurv=%.6f, baseline=%.6f\n", highResCount, HIGH_RES_SAMPLE_COUNT, cumulativeCurvatureChange, baselineCurvatureChange);
+            realToString(cumulativeCurvatureChange, strBuf1);
+            realToString(baselineCurvatureChange,   strBuf2);
+            printf("HIGH-RES MODE: count=%d/%d, cumCurv=%s, baseline=%s\n", highResCount, HIGH_RES_SAMPLE_COUNT, strBuf1, strBuf2);
           #endif // GRAPHDEBUG
 
           if(highResCount < HIGH_RES_SAMPLE_COUNT) { // Buffer high-res points in order
-            highResBuffer[highResCount].x = x;
-            highResBuffer[highResCount].y = y02;
-            highResBuffer[highResCount].grad = grad2;
+            realCopy(x,     PP_X(highResBuffer[highResCount]));
+            realCopy(y02,   PP_Y(highResBuffer[highResCount]));
+            realCopy(grad2, PP_GRAD(highResBuffer[highResCount]));
             highResBuffer[highResCount].stored = false;
             highResCount++;
             #if defined(GRAPHDEBUG)
-              printf("  Buffered point %d: x=%.6f, y=%.6f\n", highResCount-1, x, y02);
+              realToString(x,   strBuf1);
+              realToString(y02, strBuf2);
+              printf("  Buffered point %d: x=%s, y=%s\n", highResCount-1, strBuf1, strBuf2);
             #endif // GRAPHDEBUG
           }
           else {
             // Evaluate if high-res provided sufficient improvement
-            double improvementRatio = (baselineCurvatureChange > 0) ? cumulativeCurvatureChange / (baselineCurvatureChange * HIGH_RES_SAMPLE_COUNT) : 1.0;
+            // improvementRatio = (baselineCurvatureChange > 0) ? cumCurv / (baseline * count) : 1
+            bool_t baselinePos = !realIsZero(baselineCurvatureChange) && realIsPositive(baselineCurvatureChange);
+            if(baselinePos) {
+              int32ToReal(HIGH_RES_SAMPLE_COUNT, tmpA);
+              realMultiply(baselineCurvatureChange, tmpA, tmpB, ctxtGraphs);
+              realDivide(cumulativeCurvatureChange, tmpB, improvementRatio, ctxtGraphs);
+            }
+            else {
+              realSetOne(improvementRatio);
+            }
 
             #if defined(GRAPHDEBUG)
-              printf("EVALUATING HIGH-RES: improvementRatio=%.3f (need %.2f)\n", improvementRatio, MIN_IMPROVEMENT_RATIO);
-              printf("  cumCurv=%.6f, baseline*count=%.6f\n", cumulativeCurvatureChange, baselineCurvatureChange * HIGH_RES_SAMPLE_COUNT);
+              realToString(improvementRatio,          strBuf1);
+              realToString(cumulativeCurvatureChange, strBuf2);
+              int32ToReal(HIGH_RES_SAMPLE_COUNT, tmpA);
+              realMultiply(baselineCurvatureChange, tmpA, tmpB, ctxtGraphs);
+              realToString(tmpB,                      strBuf3);
+              printf("EVALUATING HIGH-RES: improvementRatio=%s (need %.2f)\n", strBuf1, MIN_IMPROVEMENT_RATIO);
+              printf("  cumCurv=%s, baseline*count=%s\n", strBuf2, strBuf3);
             #endif // GRAPHDEBUG
 
-            if(improvementRatio >= MIN_IMPROVEMENT_RATIO) {            // High-res was beneficial, commit buffered points in sequence
+            convertDoubleToReal(MIN_IMPROVEMENT_RATIO, tmpA, ctxtGraphs);
+            realCompare(improvementRatio, tmpA, cmpRes, ctxtGraphs);
+            if(!realIsNegative(cmpRes)) {                              // High-res was beneficial, commit buffered points in sequence
               commitHighResPointsInOrder(highResBuffer, highResCount);
-              resetHighResTracking(&highResCount, &inHighResMode, &cumulativeCurvatureChange);
+              resetHighResTracking(&highResCount, &inHighResMode, cumulativeCurvatureChange);
               // Continue with current step size
             }
             else {                                                   // High-res didn't help, abandon and continue from last good point with larger dx
               #if defined(GRAPHDEBUG)
-                printf("HIGH-RES FAILED: reverting to x=%.6f, dx=%.6f\n", savedXBeforeHighres, savedDxBeforeHighres);
+                realToString(savedXBeforeHighres,  strBuf1);
+                realToString(savedDxBeforeHighres, strBuf2);
+                printf("HIGH-RES FAILED: reverting to x=%s, dx=%s\n", strBuf1, strBuf2);
               #endif // GRAPHDEBUG
               abandonHighResMode(&highResCount, &inHighResMode);
-              x = savedXBeforeHighres + savedDxBeforeHighres;
-              dx = savedDxBeforeHighres;
+              realAdd(savedXBeforeHighres, savedDxBeforeHighres, x, ctxtGraphs);
+              realCopy(savedDxBeforeHighres, dx);
               // Don't set jumpedBack since we want to continue forward, just with larger steps
-              continue; // Skip to next iteration with the adjusted x
+              goto incrementX; // Skip to next iteration with the adjusted x
             }
           }
         }
 
-        prevDx = dx;
-        dx = newDx;
+        realCopy(dx,    prevDx);
+        realCopy(newDx, dx);
 
         #if defined(GRAPHDEBUG)
-          printf("Step size: prevDx=%.6f -> dx=%.6f\n", prevDx, dx);
+          realToString(prevDx, strBuf1);
+          realToString(dx,     strBuf2);
+          printf("Step size: prevDx=%s -> dx=%s\n", strBuf1, strBuf2);
         #endif // GRAPHDEBUG
       }
 
       // Add point to plot (skip if in high-res buffering mode or jumped back)
-      if(!jumpedBack && dx >= 0 && !inHighResMode) {
+      // dx >= 0 ?
+      bool_t dxNonNeg = !realIsNegative(dx);
+      if(!jumpedBack && dxNonNeg && !inHighResMode) {
         #if defined(GRAPHDEBUG)
-          printf("ADDING POINT TO PLOT: x=%.6f, y=%.6f\n", x, y02);
+          realToString(x,   strBuf1);
+          realToString(y02, strBuf2);
+          printf("ADDING POINT TO PLOT: x=%s, y=%s\n", strBuf1, strBuf2);
         #endif // GRAPHDEBUG
         AddtoDrawMx();
       }
       else {
         #if defined(GRAPHDEBUG)
-          printf("SKIPPING PLOT: jumpedBack=%d, dx=%.6f, inHighRes=%d\n", jumpedBack, dx, inHighResMode);
+          realToString(dx, strBuf1);
+          printf("SKIPPING PLOT: jumpedBack=%d, dx=%s, inHighRes=%d\n", jumpedBack, strBuf1, inHighResMode);
         #endif // GRAPHDEBUG
       }
 
       // Update state for next iteration
       if(count > 0) {
-        grad1 = grad2;
+        realCopy(grad2, grad1);
       }
-      y00 = y01; // Update y00 for improved discontinuity detection
-      y01 = y02;
-      x01 = x;
+      realCopy(y01, y00); // Update y00 for improved discontinuity detection
+      realCopy(y02, y01);
+      realCopy(x,   x01);
 
       if(discontinuityDetected != 0) {
         discontinuityDetected--;
@@ -1166,6 +1792,12 @@ bool_t detectTrueDiscontinuityWithAsymptote(double y0, double y1, double y2, dou
       #if defined(GRAPHDEBUG)
         cnt++;
       #endif //GRAPHDEBUG
+
+      incrementX:
+      // x += STEP_OFFSET * dx
+      convertDoubleToReal(STEP_OFFSET, tmpA, ctxtGraphs);
+      realMultiply(tmpA, dx, tmpB, ctxtGraphs);
+      realAdd(x, tmpB, x, ctxtGraphs);
     }
 
     #if defined(GRAPHDEBUG)
