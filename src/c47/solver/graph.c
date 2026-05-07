@@ -228,13 +228,23 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
 
 
 //******************************************************************************************************************************
-// Graph plotting helpers, converted to real_t for all math domain values.
+// Graph plotting helpers and graph_eqn, converted to real_t for all math domain values.
 // Loop counters, indices, booleans, register flags and direction selectors stay int / bool_t / int8_t.
-// All real_t arithmetic uses ctxtGraphs (= &ctxtReal39).
+// All real_t arithmetic uses ctxtGraphs (= &ctxtGraphsLocal), narrowed to 14 working digits at
+// graph_eqn entry. Helpers are defined first in this file, then graph_eqn at the bottom.
 //******************************************************************************************************************************
 
-#define PLOT_DIGITS    39
-#define ctxtGraphs     &ctxtReal39
+#define PLOT_DIGITS    39    // Storage size for every real_t. Must be >= 34 because register
+                              // reads via real34ToReal write up to 34 digits unconditionally
+                              // (decQuadToNumber takes no context). Speed comes from the working
+                              // precision in ctxtGraphsLocal, not from this storage size.
+
+// File-scope custom context for graph calculations. Initialized at graph_eqn entry from
+// ctxtReal39 with digits narrowed to 14 working digits. decNumber ops are O(N) for add and
+// O(N^2) for multiply/divide in the digit count, so 14 vs 39 is a real speedup. All real_t
+// arithmetic in graph_eqn and the helpers uses this context via ctxtGraphs.
+static decContext ctxtGraphsLocal;
+#define ctxtGraphs     &ctxtGraphsLocal
 
 // Stringify a macro's value so we can pass it to stringToReal without hard coding it twice.
 //   _R_STR_OF(SS1)  ->  "1.8"   (when #define SS1 1.8)
@@ -1007,55 +1017,55 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 // =============================================================================
 
 
-
-  #define ctxtGraphs &ctxtReal39
-
-  // realToDoubleVal, convertRealToReal34Register, convertRealToReal34RegisterPush
-  // and convertRegisterToReal are defined at the top of graph_eqn_helpers_real.c
-  // (which is compiled before this file in graph.c) and are visible here.
-
   static void graph_eqn(uint16_t mode) {
     currentKeyCode = 255;
     calcMode = CM_GRAPH;
     saveForUndo();
     regStatsXY = findNamedVariable(plotStatMx);
-    REAL_T_PTR(x, 39);
-    REAL_T_PTR(x01, 39);
-    REAL_T_PTR(y01, 39);
-    REAL_T_PTR(y02, 39);
-    REAL_T_PTR(y00, 39);                          // Add y00 for improved discontinuity detection
-    REAL_T_PTR(dy, 39);
-    REAL_T_PTR(dx0, 39);
-    REAL_T_PTR(dx, 39);
-    REAL_T_PTR(grad2, 39);
-    REAL_T_PTR(grad1, 39);
-    REAL_T_PTR(grad0, 39);
-    REAL_T_PTR(prevDx, 39);                       // Track previous step size
-    REAL_T_PTR(yAvg, 39);
-    REAL_T_PTR(x_min_r, 39);                      // real_t copy of external double x_min
-    REAL_T_PTR(x_max_r, 39);                      // real_t copy of external double x_max
-    REAL_T_PTR(y_min_r, 39);                      // real_t copy of external double y_min
-    REAL_T_PTR(y_max_r, 39);                      // real_t copy of external double y_max
-    REAL_T_PTR(jumpBackStartX, 39);
-    REAL_T_PTR(jumpBackStartY, 39);
-    REAL_T_PTR(jumpBackX, 39);
-    REAL_T_PTR(jumpBackDx, 39);
-    REAL_T_PTR(jbY, 39);
-    REAL_T_PTR(discontinuityThreshold, 39);
-    REAL_T_PTR(maxCurvatureChange, 39);
-    REAL_T_PTR(linearSlope, 39);
-    REAL_T_PTR(interpolationError, 39);
-    REAL_T_PTR(curvatureChange, 39);
-    REAL_T_PTR(newDx, 39);
-    REAL_T_PTR(improvementRatio, 39);
-    REAL_T_PTR(highResStartX, 39);
-    REAL_T_PTR(cumulativeCurvatureChange, 39);
-    REAL_T_PTR(baselineCurvatureChange, 39);
-    REAL_T_PTR(savedXBeforeHighres, 39);
-    REAL_T_PTR(savedDxBeforeHighres, 39);
-    REAL_T_PTR(tmpA, 39);
-    REAL_T_PTR(tmpB, 39);
-    REAL_T_PTR(cmpRes, 39);
+
+    // Configure the graph-local context: 14 working digits, full ctxtReal39 settings otherwise.
+    // 14 digits is the working precision; PLOT_DIGITS (storage) stays at 39 because register
+    // reads via real34ToReal write up to 34 digits regardless of context. Done every call so it
+    // stays in sync if ctxtReal39 itself is reconfigured between calls.
+    ctxtGraphsLocal = ctxtReal39;
+    ctxtGraphsLocal.digits = 14;
+    REAL_T_PTR(x, PLOT_DIGITS);
+    REAL_T_PTR(x01, PLOT_DIGITS);
+    REAL_T_PTR(y01, PLOT_DIGITS);
+    REAL_T_PTR(y02, PLOT_DIGITS);
+    REAL_T_PTR(y00, PLOT_DIGITS);                          // Add y00 for improved discontinuity detection
+    REAL_T_PTR(dy, PLOT_DIGITS);
+    REAL_T_PTR(dx0, PLOT_DIGITS);
+    REAL_T_PTR(dx, PLOT_DIGITS);
+    REAL_T_PTR(grad2, PLOT_DIGITS);
+    REAL_T_PTR(grad1, PLOT_DIGITS);
+    REAL_T_PTR(grad0, PLOT_DIGITS);
+    REAL_T_PTR(prevDx, PLOT_DIGITS);                       // Track previous step size
+    REAL_T_PTR(yAvg, PLOT_DIGITS);
+    REAL_T_PTR(x_min_r, PLOT_DIGITS);                      // real_t copy of external double x_min
+    REAL_T_PTR(x_max_r, PLOT_DIGITS);                      // real_t copy of external double x_max
+    REAL_T_PTR(y_min_r, PLOT_DIGITS);                      // real_t copy of external double y_min
+    REAL_T_PTR(y_max_r, PLOT_DIGITS);                      // real_t copy of external double y_max
+    REAL_T_PTR(jumpBackStartX, PLOT_DIGITS);
+    REAL_T_PTR(jumpBackStartY, PLOT_DIGITS);
+    REAL_T_PTR(jumpBackX, PLOT_DIGITS);
+    REAL_T_PTR(jumpBackDx, PLOT_DIGITS);
+    REAL_T_PTR(jbY, PLOT_DIGITS);
+    REAL_T_PTR(discontinuityThreshold, PLOT_DIGITS);
+    REAL_T_PTR(maxCurvatureChange, PLOT_DIGITS);
+    REAL_T_PTR(linearSlope, PLOT_DIGITS);
+    REAL_T_PTR(interpolationError, PLOT_DIGITS);
+    REAL_T_PTR(curvatureChange, PLOT_DIGITS);
+    REAL_T_PTR(newDx, PLOT_DIGITS);
+    REAL_T_PTR(improvementRatio, PLOT_DIGITS);
+    REAL_T_PTR(highResStartX, PLOT_DIGITS);
+    REAL_T_PTR(cumulativeCurvatureChange, PLOT_DIGITS);
+    REAL_T_PTR(baselineCurvatureChange, PLOT_DIGITS);
+    REAL_T_PTR(savedXBeforeHighres, PLOT_DIGITS);
+    REAL_T_PTR(savedDxBeforeHighres, PLOT_DIGITS);
+    REAL_T_PTR(tmpA, PLOT_DIGITS);
+    REAL_T_PTR(tmpB, PLOT_DIGITS);
+    REAL_T_PTR(cmpRes, PLOT_DIGITS);
     int16_t count = 0;
     int16_t ss0 = 0;
     int16_t ss1 = 0;
@@ -1068,7 +1078,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     int asymptoteCount = 0;
   #if defined(GRAPHDEBUG)
     char strBuf1[42], strBuf2[42], strBuf3[42], strBuf4[42], strBuf5[42], strBuf6[42];
-    REAL_T_PTR(lastSignChange, 39);
+    REAL_T_PTR(lastSignChange, PLOT_DIGITS);
   #endif // GRAPHDEBUG
 
     convertDoubleToReal(x_min, x_min_r, ctxtGraphs);
@@ -1249,21 +1259,21 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
         // Detect gradient anomalies using improved logic
         if(!realIsZero(grad1) && !realIsZero(grad2)) {
-          REAL_T_PTR(absY02OverY01, 39);
-          REAL_T_PTR(absY01OverY02, 39);
-          REAL_T_PTR(absG2OverG1,   39);
-          REAL_T_PTR(absG1OverG2,   39);
-          REAL_T_PTR(absY00,        39);
-          REAL_T_PTR(absY01,        39);
-          REAL_T_PTR(absY02,        39);
-          REAL_T_PTR(twoAbsY01,     39);
-          REAL_T_PTR(absG2mG1,      39);
-          REAL_T_PTR(absG1mG0,      39);
-          REAL_T_PTR(tenAbsG1mG0,   39);
-          REAL_T_PTR(ss2_r,         39);
-          REAL_T_PTR(oneOhOne,      39);
-          REAL_T_PTR(ten,           39);
-          REAL_T_PTR(two,           39);
+          REAL_T_PTR(absY02OverY01, PLOT_DIGITS);
+          REAL_T_PTR(absY01OverY02, PLOT_DIGITS);
+          REAL_T_PTR(absG2OverG1,   PLOT_DIGITS);
+          REAL_T_PTR(absG1OverG2,   PLOT_DIGITS);
+          REAL_T_PTR(absY00,        PLOT_DIGITS);
+          REAL_T_PTR(absY01,        PLOT_DIGITS);
+          REAL_T_PTR(absY02,        PLOT_DIGITS);
+          REAL_T_PTR(twoAbsY01,     PLOT_DIGITS);
+          REAL_T_PTR(absG2mG1,      PLOT_DIGITS);
+          REAL_T_PTR(absG1mG0,      PLOT_DIGITS);
+          REAL_T_PTR(tenAbsG1mG0,   PLOT_DIGITS);
+          REAL_T_PTR(ss2_r,         PLOT_DIGITS);
+          REAL_T_PTR(oneOhOne,      PLOT_DIGITS);
+          REAL_T_PTR(ten,           PLOT_DIGITS);
+          REAL_T_PTR(two,           PLOT_DIGITS);
 
           stringToReal("1.01", oneOhOne, ctxtGraphs);
           int32ToReal(10, ten);
@@ -1368,7 +1378,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
         // Use improved discontinuity detection
         if(discontinuityDetected == 0) {
-          REAL_T_PTR(x00, 39);
+          REAL_T_PTR(x00, PLOT_DIGITS);
           if(count > 1) {
             realSubtract(x01, dx, x00, ctxtGraphs);
           }
