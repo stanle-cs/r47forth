@@ -220,6 +220,7 @@
     extern int                  currentBezel; // 0=normal, 1=AIM, 2=TAM
   #endif //PC_BUILD
 
+  extern bool_t                loadTestPrograms;
 
   extern uint8_t calcModel;
 

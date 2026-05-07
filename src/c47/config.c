@@ -1766,7 +1766,9 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
                                    #if defined(PC_BUILD) && (VERBOSE_LEVEL > -1)
                                      printf("addTestPrograms\n");
                                    #endif
-      addTestPrograms();
+      if(loadTestPrograms) {
+        addTestPrograms();
+      }
     #endif // !SAVE_SPACE_DM42_14
 
     // Equation formulae

@@ -185,6 +185,10 @@
         printf("Activated: %s\n", argv[arg]);
         dumpMenus = 2;
       }
+      if(strcmp(argv[arg], "--testPgms") == 0) {
+        loadTestPrograms = true;
+        printf("Activated: %s\n", argv[arg]);
+      }
 
       if(strcmp(argv[arg], "--help") == 0 || strcmp(argv[arg], "--h") == 0 || strcmp(argv[arg], "-h") == 0) {
         char cc[2];
@@ -231,6 +235,7 @@
         printf("%s47 --dumpMenus2     : output all static menus to drive; new file name format in the form 'RIBBONS.1.bmp'\n", cc);
         printf("%s47 --writeexportall : output all PROGs (internal use)\n", cc);
         printf("%s47 --help           : list all SIM switches\n", cc);
+        printf("%s47 --testPgms       : load the test programs testPgms.bin if present\n", cc);
         printf("%s47 --h              : see --help\n", cc);
         return 0;
       }
