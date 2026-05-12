@@ -363,7 +363,7 @@
           showSoftmenu(-MNU_TAMLBLONLY);
         }
         else if(tam.mode == TM_SOLVE) {
-          if(tam.function == ITM_SOLVE && calcMode == CM_PEM) {
+          if((tam.function == ITM_SOLVE || tam.function == ITM_PLTf) && calcMode == CM_PEM) {
             showSoftmenu(-MNU_TAMVARONLY);
           }
           else {
@@ -1237,7 +1237,7 @@ printf("tam.value: %d\n", tam.value);
       }
 
       case TM_SOLVE: {
-        if(func == ITM_SOLVE && calcMode == CM_PEM) {
+        if((func == ITM_SOLVE || func == ITM_PLTf) && calcMode == CM_PEM) {
           showSoftmenu(-MNU_TAMVARONLY);
         }
         else {
