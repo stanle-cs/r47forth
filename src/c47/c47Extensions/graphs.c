@@ -292,8 +292,13 @@ void fnPshade (uint16_t unusedButMandatoryParameter) {
 }
 
 
-void fnComplexPlot (uint16_t unusedButMandatoryParameter) {
-  flipSystemFlag(FLAG_CPXPLOT);
+void fnComplexPlot (uint16_t mode) {
+  if(mode == ITM_CPXPLOT) {
+    flipSystemFlag(FLAG_CPXPLOT);
+  } else 
+  if(mode == ITM_IMPLOT) {
+    flipSystemFlag(FLAG_IMPLOT);
+  }
   fnRefreshState();                //jm
   fnEqSolvGraph(EQ_PLOT_LU);
   fnPlotSQ(0);

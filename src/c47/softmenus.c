@@ -908,12 +908,12 @@ TO_QSPI const int16_t menu_Plotf[]       = {  VAR_LX,                       VAR_
                                               ITM_MZOOMY,                   ITM_PZOOMY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
 
                                               ITM_SHOWY,                    ITM_SHOWX,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                              ITM_CPXPLOT,                  ITM_LISTXY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+                                              ITM_CPXPLOT,                  ITM_IMPLOT,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                              -MNU_GRAPHS,                   ITM_SNAP,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
 
                                               ITM_PCROS,                    ITM_PPLUS,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                               ITM_PLINE,                    ITM_PBOX,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                              ITM_PCURVE,                   ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
+                                              ITM_PCURVE,                   ITM_LISTXY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
 
                                               ITM_DIFF,                     ITM_INTG,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
                                               ITM_RMS,                      ITM_SHADE,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
@@ -925,12 +925,12 @@ TO_QSPI const int16_t menu_PLOTFUNC[]    = {  VAR_LX,                       VAR_
                                               ITM_MZOOMY,                   ITM_PZOOMY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
 
                                               ITM_SHOWY,                    ITM_SHOWX,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                              ITM_CPXPLOT,                  ITM_LISTXY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+                                              ITM_CPXPLOT,                  ITM_IMPLOT,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                              -MNU_GRAPHS,                   ITM_SNAP,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
 
                                               ITM_PCROS,                    ITM_PPLUS,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                               ITM_PLINE,                    ITM_PBOX,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                              ITM_PCURVE,                   ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
+                                              ITM_PCURVE,                   ITM_LISTXY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
 
                                               ITM_DIFF,                     ITM_INTG,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
                                               ITM_RMS,                      ITM_SHADE,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,

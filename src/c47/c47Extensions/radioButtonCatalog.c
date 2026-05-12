@@ -134,6 +134,7 @@ TO_QSPI const radiocb_t indexOfRadioCbEepromItems[] = {
   {ITM_LARGELI,          FLAG_LARGELI,           CB_JC},  //SetSetting
   {ITM_IRFRAC,           FLAG_IRFRAC ,           CB_JC},  //SetSetting
   {ITM_CPXPLOT,          FLAG_CPXPLOT,           CB_JC},  // graph EQN & PLSTAT options
+  {ITM_IMPLOT,           FLAG_IMPLOT,            CB_JC},  // graph EQN & PLSTAT options
   {ITM_SHOWX,            FLAG_SHOWX  ,           CB_JC},  // graph EQN & PLSTAT options
   {ITM_SHOWY,            FLAG_SHOWY  ,           CB_JC},  // graph EQN & PLSTAT options
   {ITM_PBOX,             FLAG_PBOX   ,           CB_JC},  // graph EQN & PLSTAT options
@@ -270,6 +271,7 @@ TO_QSPI const uint16_t systemFlagParams[] = {  // CB_JC CHECK BOX System flags c
   FLAG_LARGELI,
   FLAG_IRFRAC,
   FLAG_CPXPLOT,
+  FLAG_IMPLOT,
   FLAG_SHOWX,
   FLAG_SHOWY,
   FLAG_PBOX,
