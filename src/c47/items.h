@@ -506,7 +506,7 @@
 #define SFL_alphaCAP                 478 // The SFL item names are not used
 #define SFL_RUNTIM                   479 // The SFL item names are not used
 #define SFL_AMORT_HP12C              480 // The SFL item names are not used
-#define SFL_spare                    481 // The SFL item names are not used
+#define SFL_IMPLOT                   481 // The SFL item names are not used
 #define SFL_TRACE                    482 // The SFL item names are not used
 #define SFL_USER                     483 // The SFL item names are not used
 #define SFL_LOWBAT                   484 // The SFL item names are not used
@@ -2832,7 +2832,12 @@
 #define ITM_2730                    2730
 #define ITM_2731                    2731 //spares for Matrix/Vector
 
-#define LAST_ITEM                   2732
+#define ITM_PGMPLT                  2732
+#define MNU_PLTf                    2733
+#define ITM_PLTf                    2734
+#define ITM_IMPLOT                  2735
+
+#define LAST_ITEM                   2736
 
 #define SCREENDUMP                    9875 // Used to signal screen dump operated (not to be confused with SNAP)
 #define NOPARAM                       9876 // Item for function who don't need an item

@@ -292,8 +292,13 @@ void fnPshade (uint16_t unusedButMandatoryParameter) {
 }
 
 
-void fnComplexPlot (uint16_t unusedButMandatoryParameter) {
-  flipSystemFlag(FLAG_CPXPLOT);
+void fnComplexPlot (uint16_t mode) {
+  if(mode == ITM_CPXPLOT) {
+    flipSystemFlag(FLAG_CPXPLOT);
+  } else 
+  if(mode == ITM_IMPLOT) {
+    flipSystemFlag(FLAG_IMPLOT);
+  }
   fnRefreshState();                //jm
   fnEqSolvGraph(EQ_PLOT_LU);
   fnPlotSQ(0);
@@ -323,6 +328,10 @@ void fnPlotReset(uint16_t unusedButMandatoryParameter) {
 }
 
 
+void fnPlotf(uint16_t unusedButMandatoryParameter) {
+  showSoftmenu(-MNU_PLTf);
+}
+
 void fnPlotSQ(uint16_t unusedButMandatoryParameter) {
     #if defined(DMCP_BUILD)
       lcd_refresh();
@@ -345,10 +354,10 @@ void fnPlotSQ(uint16_t unusedButMandatoryParameter) {
     showHideHourGlass();
     refreshStatusBar();
 
-    if(menu(0) != -MNU_PLOT_FUNC && plotStatMx[0] == 'D') {
+    if(menu(0) != -MNU_PLOT_FUNC && plotStatMx[0] == 'D' && !(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED)) {
       showSoftmenu(-MNU_PLOT_FUNC);
     }
-    else if(menu(0) != -MNU_PLOT_STAT && plotStatMx[0] == 'S') {
+    else if(menu(0) != -MNU_PLOT_STAT && plotStatMx[0] == 'S' && !(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED)) {
       showSoftmenu(-MNU_PLOT_STAT);
     }
 }
