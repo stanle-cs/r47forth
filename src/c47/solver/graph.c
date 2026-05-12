@@ -246,6 +246,20 @@ static  decContext  ctxtGraphsLocal;
 #define _R_STR_OF(x)  _R_STR(x)
 
 
+// REAL_T_PTR buffers are smaller than a full decNumber, because we only need
+// a few digits. The realIs* and realChangeSign macros poke at struct fields
+// inline, so GCC's bounds checker complains the small buffer cannot fit the
+// big struct -- false alarm, decNumber only touches the bytes we have. The
+// helpers below wrap each macro in a tiny function so GCC sees no inline
+// access at the call sites. The pragma silences it inside the wrappers.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+__attribute__((noinline)) static bool_t graphIsZero    (const real_t *x) { return realIsZero(x);     }
+__attribute__((noinline)) static bool_t graphIsNegative(const real_t *x) { return realIsNegative(x); }
+__attribute__((noinline)) static bool_t graphIsPositive(const real_t *x) { return realIsPositive(x); }
+__attribute__((noinline)) static void   graphChangeSign(real_t *x)       { realChangeSign(x);        }
+#pragma GCC diagnostic pop
+
 // Convert real_t to double via realToFloat. Does not round-trip through a locale-formatted string.
 // Float precision (~7 digits), which is fine for the calcs.
 static double realToDoubleVal(const real_t *r) {
@@ -371,7 +385,6 @@ bool_t validateDiscontinuityResolution(PlotPoint *buffer, int count, const real_
   REAL_T_PTR(totalVariation, PLOT_DIGITS);
   REAL_T_PTR(jump,           PLOT_DIGITS);
   REAL_T_PTR(diff,           PLOT_DIGITS);
-  REAL_T_PTR(cmpRes,         PLOT_DIGITS);
   realSetZero(maxJump);
   realSetZero(totalVariation);
 
@@ -380,8 +393,7 @@ bool_t validateDiscontinuityResolution(PlotPoint *buffer, int count, const real_
     realSubtract(PP_Y(buffer[i]), PP_Y(buffer[i-1]), diff, ctxtGraphs);
     realCopyAbs(diff, jump);
     realAdd(totalVariation, jump, totalVariation, ctxtGraphs);
-    realCompare(jump, maxJump, cmpRes, ctxtGraphs);
-    if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+    if(realCompareGreaterThan(jump, maxJump)) {
       realCopy(jump, maxJump);
     }
   }
@@ -394,18 +406,15 @@ bool_t validateDiscontinuityResolution(PlotPoint *buffer, int count, const real_
   realSubtract(yAfter, PP_Y(buffer[count-1]), diff, ctxtGraphs);
   realCopyAbs(diff, endJump);
 
-  realCompare(startJump, maxJump, cmpRes, ctxtGraphs);
-  if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+  if(realCompareGreaterThan(startJump, maxJump)) {
     realCopy(startJump, maxJump);
   }
-  realCompare(endJump, maxJump, cmpRes, ctxtGraphs);
-  if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+  if(realCompareGreaterThan(endJump, maxJump)) {
     realCopy(endJump, maxJump);
   }
 
   // If the maximum jump in fine steps is still above threshold, discontinuity persists
-  realCompare(maxJump, discontinuityThreshold, cmpRes, ctxtGraphs);
-  bool_t discontinuityResolved = realIsNegative(cmpRes);
+  bool_t discontinuityResolved = realCompareLessThan(maxJump, discontinuityThreshold);
 
   // Additional check: fine points should show reasonable continuity
   REAL_T_PTR(avgVariation, PLOT_DIGITS);
@@ -418,10 +427,8 @@ bool_t validateDiscontinuityResolution(PlotPoint *buffer, int count, const real_
   realCopy(discontinuityThreshold, halfThresh);
   realDivideBy2(halfThresh, ctxtGraphs);
 
-  realCompare(maxJump, threeAvg, cmpRes, ctxtGraphs);
-  bool_t below3xAvg = realIsNegative(cmpRes);
-  realCompare(maxJump, halfThresh, cmpRes, ctxtGraphs);
-  bool_t belowHalfThresh = realIsNegative(cmpRes);
+  bool_t below3xAvg = realCompareLessThan(maxJump, threeAvg);
+  bool_t belowHalfThresh = realCompareLessThan(maxJump, halfThresh);
   bool_t smoothTransition = below3xAvg || belowHalfThresh;
 
   #if defined(GRAPHDEBUG)
@@ -457,7 +464,7 @@ void calculateNewStepSize(int discontinuityDetected, const real_t *grad1, const 
     #endif // GRAPHDEBUG
     return;
   }
-  else if(realIsZero(grad2) || realIsZero(grad1)) {
+  else if(graphIsZero(grad2) || graphIsZero(grad1)) {
     realCopy(dx0, newDx);
     #if defined(GRAPHDEBUG)
       printf("  -> Zero gradient: keeping dx0=%s\n", strBuf3);
@@ -468,22 +475,11 @@ void calculateNewStepSize(int discontinuityDetected, const real_t *grad1, const 
     REAL_T_PTR(ratio1,  PLOT_DIGITS);
     REAL_T_PTR(ratio2,  PLOT_DIGITS);
     REAL_T_PTR(ss1Real, PLOT_DIGITS);
-    REAL_T_PTR(cmpRes,  PLOT_DIGITS);
     realDivide(grad2, grad1, ratio1, ctxtGraphs);
     realDivide(grad1, grad2, ratio2, ctxtGraphs);
     stringToReal(_R_STR_OF(SS1), ss1Real, ctxtGraphs);
 
-    bool_t scaleHalf = false;
-    realCompare(ratio1, ss1Real, cmpRes, ctxtGraphs);
-    if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
-      scaleHalf = true;
-    }
-    else {
-      realCompare(ratio2, ss1Real, cmpRes, ctxtGraphs);
-      if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
-        scaleHalf = true;
-      }
-    }
+    bool_t scaleHalf = realCompareGreaterThan(ratio1, ss1Real) || realCompareGreaterThan(ratio2, ss1Real);
 
     if(scaleHalf) {
       realMultiply(dx0, const_1on2, newDx, ctxtGraphs);
@@ -585,20 +581,17 @@ bool_t detectTrueDiscontinuity(const real_t *y0, const real_t *y1, const real_t 
   REAL_T_PTR(absY2,        PLOT_DIGITS);
   REAL_T_PTR(hundredYAvg,  PLOT_DIGITS);
   REAL_T_PTR(tenYAvg,      PLOT_DIGITS);
-  REAL_T_PTR(cmpRes,       PLOT_DIGITS);
   realCopyAbs(y1, absY1);
   realCopyAbs(y2, absY2);
   realMultiply(const_100, yAvg, hundredYAvg, ctxtGraphs);
   realMultiply(const_10,  yAvg, tenYAvg,     ctxtGraphs);
 
-  realCompare(absY2, hundredYAvg, cmpRes, ctxtGraphs);
-  bool_t absY2GtHundred = realIsPositive(cmpRes) && !realIsZero(cmpRes);
-  realCompare(absY1, tenYAvg, cmpRes, ctxtGraphs);
-  bool_t absY1LtTen     = realIsNegative(cmpRes);
+  bool_t absY2GtHundred = realCompareGreaterThan(absY2, hundredYAvg);
+  bool_t absY1LtTen     = realCompareLessThan(absY1, tenYAvg);
   bool_t extremeMagnitudeJump = absY2GtHundred && absY1LtTen;
 
   bool_t gradientDiscontinuity = false;
-  if(!realIsZero(grad0) && !realIsZero(grad1) && !realIsZero(grad2)) {
+  if(!graphIsZero(grad0) && !graphIsZero(grad1) && !graphIsZero(grad2)) {
 
     // Calculate expected gradient based on trend
     REAL_T_PTR(diffG1G0,        PLOT_DIGITS);
@@ -630,12 +623,9 @@ bool_t detectTrueDiscontinuity(const real_t *y0, const real_t *y1, const real_t 
     realMultiply(const_20, absY1mY0, twentyAbsY1mY0, ctxtGraphs);
     realMultiply(const_5,  yAvg,     fiveYAvg,       ctxtGraphs);
 
-    realCompare(gradientRatio, const_50, cmpRes, ctxtGraphs);
-    bool_t ratioGt50      = realIsPositive(cmpRes) && !realIsZero(cmpRes);
-    realCompare(absY2mY1, twentyAbsY1mY0, cmpRes, ctxtGraphs);
-    bool_t y2mY1Gt20Y1mY0 = realIsPositive(cmpRes) && !realIsZero(cmpRes);
-    realCompare(absY2mY1, fiveYAvg, cmpRes, ctxtGraphs);
-    bool_t y2mY1Gt5YAvg   = realIsPositive(cmpRes) && !realIsZero(cmpRes);
+    bool_t ratioGt50      = realCompareGreaterThan(gradientRatio, const_50);
+    bool_t y2mY1Gt20Y1mY0 = realCompareGreaterThan(absY2mY1, twentyAbsY1mY0);
+    bool_t y2mY1Gt5YAvg   = realCompareGreaterThan(absY2mY1, fiveYAvg);
 
     // Only flag if gradient changes by more than 50x AND the function values suggest discontinuity
     gradientDiscontinuity = ratioGt50 && y2mY1Gt20Y1mY0 && y2mY1Gt5YAvg;
@@ -655,9 +645,9 @@ bool_t detectTrueDiscontinuity(const real_t *y0, const real_t *y1, const real_t 
   bool_t signOscillationInstability = false;
   if(count >= 6) {
     // Look for rapid alternating signs with increasing magnitude - indicates instability
-    bool_t y0Pos = !realIsNegative(y0) && !realIsZero(y0);
-    bool_t y1Pos = !realIsNegative(y1) && !realIsZero(y1);
-    bool_t y2Pos = !realIsNegative(y2) && !realIsZero(y2);
+    bool_t y0Pos = !graphIsNegative(y0) && !graphIsZero(y0);
+    bool_t y1Pos = !graphIsNegative(y1) && !graphIsZero(y1);
+    bool_t y2Pos = !graphIsNegative(y2) && !graphIsZero(y2);
     if(y0Pos != y1Pos && y1Pos != y2Pos) {
       // Alternating signs - check if magnitudes are increasing dramatically
       REAL_T_PTR(mag0,     PLOT_DIGITS);
@@ -666,7 +656,6 @@ bool_t detectTrueDiscontinuity(const real_t *y0, const real_t *y1, const real_t 
       REAL_T_PTR(fiveMag1, PLOT_DIGITS);
       REAL_T_PTR(fiveMag0, PLOT_DIGITS);
       REAL_T_PTR(tenYAvg2, PLOT_DIGITS);
-      REAL_T_PTR(cmpRes2,  PLOT_DIGITS);
       realCopyAbs(y0, mag0);
       realCopyAbs(y1, mag1);
       realCopyAbs(y2, mag2);
@@ -674,12 +663,9 @@ bool_t detectTrueDiscontinuity(const real_t *y0, const real_t *y1, const real_t 
       realMultiply(const_5,  mag0, fiveMag0, ctxtGraphs);
       realMultiply(const_10, yAvg, tenYAvg2, ctxtGraphs);
 
-      realCompare(mag2, fiveMag1, cmpRes2, ctxtGraphs);
-      bool_t mag2Gt5Mag1  = realIsPositive(cmpRes2) && !realIsZero(cmpRes2);
-      realCompare(mag1, fiveMag0, cmpRes2, ctxtGraphs);
-      bool_t mag1Gt5Mag0  = realIsPositive(cmpRes2) && !realIsZero(cmpRes2);
-      realCompare(mag2, tenYAvg2, cmpRes2, ctxtGraphs);
-      bool_t mag2Gt10YAvg = realIsPositive(cmpRes2) && !realIsZero(cmpRes2);
+      bool_t mag2Gt5Mag1  = realCompareGreaterThan(mag2, fiveMag1);
+      bool_t mag1Gt5Mag0  = realCompareGreaterThan(mag1, fiveMag0);
+      bool_t mag2Gt10YAvg = realCompareGreaterThan(mag2, tenYAvg2);
 
       signOscillationInstability = mag2Gt5Mag1 && mag1Gt5Mag0 && mag2Gt10YAvg;
     }
@@ -735,12 +721,10 @@ bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, 
   REAL_T_PTR(yRange,    PLOT_DIGITS);
   REAL_T_PTR(minRatio,  PLOT_DIGITS);
   REAL_T_PTR(minGap,    PLOT_DIGITS);
-  REAL_T_PTR(cmpRes,    PLOT_DIGITS);
   realSubtract(xMax, xMin, xRange, ctxtGraphs);
   stringToReal(_R_STR_OF(MIN_GAP_WIDTH_RATIO), minRatio, ctxtGraphs);
   realMultiply(minRatio, xRange, minGap, ctxtGraphs);
-  realCompare(gapWidth, minGap, cmpRes, ctxtGraphs);
-  if(realIsNegative(cmpRes)) {
+  if(realCompareLessThan(gapWidth, minGap)) {
     #if defined(GRAPHDEBUG)
       char dbgBuf1[64], dbgBuf2[64];
       realToString(gapWidth, dbgBuf1);
@@ -796,12 +780,10 @@ bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, 
     }
 
     convertRegisterToReal(REGISTER_Y, sampleY);
-    realCompare(sampleY, leftMaxY, cmpRes, ctxtGraphs);
-    if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+    if(realCompareGreaterThan(sampleY, leftMaxY)) {
       realCopy(sampleY, leftMaxY);
     }
-    realCompare(sampleY, leftMinY, cmpRes, ctxtGraphs);
-    if(realIsNegative(cmpRes)) {
+    if(realCompareLessThan(sampleY, leftMinY)) {
       realCopy(sampleY, leftMinY);
     }
 
@@ -816,12 +798,10 @@ bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, 
     }
 
     convertRegisterToReal(REGISTER_Y, sampleY);
-    realCompare(sampleY, rightMaxY, cmpRes, ctxtGraphs);
-    if(realIsPositive(cmpRes) && !realIsZero(cmpRes)) {
+    if(realCompareGreaterThan(sampleY, rightMaxY)) {
       realCopy(sampleY, rightMaxY);
     }
-    realCompare(sampleY, rightMinY, cmpRes, ctxtGraphs);
-    if(realIsNegative(cmpRes)) {
+    if(realCompareLessThan(sampleY, rightMinY)) {
       realCopy(sampleY, rightMinY);
     }
   }
@@ -835,14 +815,10 @@ bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, 
   realAdd     (yMax, extremeThreshold, yMaxPlus,  ctxtGraphs);
   realSubtract(yMin, extremeThreshold, yMinMinus, ctxtGraphs);
 
-  realCompare(leftMaxY,  yMaxPlus,  cmpRes, ctxtGraphs);
-  bool_t leftGoesPositive  = realIsPositive(cmpRes) && !realIsZero(cmpRes);
-  realCompare(leftMinY,  yMinMinus, cmpRes, ctxtGraphs);
-  bool_t leftGoesNegative  = realIsNegative(cmpRes);
-  realCompare(rightMaxY, yMaxPlus,  cmpRes, ctxtGraphs);
-  bool_t rightGoesPositive = realIsPositive(cmpRes) && !realIsZero(cmpRes);
-  realCompare(rightMinY, yMinMinus, cmpRes, ctxtGraphs);
-  bool_t rightGoesNegative = realIsNegative(cmpRes);
+  bool_t leftGoesPositive  = realCompareGreaterThan(leftMaxY,  yMaxPlus);
+  bool_t leftGoesNegative  = realCompareLessThan(leftMinY,  yMinMinus);
+  bool_t rightGoesPositive = realCompareGreaterThan(rightMaxY, yMaxPlus);
+  bool_t rightGoesNegative = realCompareLessThan(rightMinY, yMinMinus);
 
   // Must have extreme behavior on at least one side
   if(!(leftGoesPositive || leftGoesNegative || rightGoesPositive || rightGoesNegative)) {
@@ -919,7 +895,7 @@ void renderAsymptote(AsymptoteInfo *asymptote) {
   REAL_T_PTR(x,               PLOT_DIGITS);
   REAL_T_PTR(y,               PLOT_DIGITS);
   realCopy(AI_X(*asymptote), xCenter);
-  stringToReal("1e-3",  offset,          ctxtGraphs);
+  stringToReal("1e-3",  offset, ctxtGraphs);
 
   #if defined(GRAPHDEBUG)
     char strBuf1[64];
@@ -958,7 +934,7 @@ void renderAsymptote(AsymptoteInfo *asymptote) {
       }
       else {
         realCopy(const_10000, y);
-        realChangeSign(y);
+        graphChangeSign(y);
       }
       convertRealToReal34Register(x, REGISTER_X);
       convertRealToReal34Register(y, REGISTER_Y);
@@ -1081,7 +1057,6 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     REAL_T_PTR(savedDxBeforeHighres, PLOT_DIGITS);
     REAL_T_PTR(tmpA, PLOT_DIGITS);
     REAL_T_PTR(tmpB, PLOT_DIGITS);
-    REAL_T_PTR(cmpRes, PLOT_DIGITS);
     int16_t count = 0;
     int16_t ss0 = 0;
     int16_t ss1 = 0;
@@ -1171,8 +1146,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     realCopy(x_min_r, x);
     while(1) {
       // x <= x_max ?
-      realCompare(x, x_max_r, cmpRes, ctxtGraphs);
-      if(!realIsZero(cmpRes) && realIsPositive(cmpRes)) break;
+      if(realCompareGreaterThan(x, x_max_r)) break;
 
       #if defined(GRAPHDEBUG)
         realToString(x, strBuf1);
@@ -1183,10 +1157,8 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
       jumpedBack = false;
       // x = max(x_min, min(x_max, x))
-      realCompare(x, x_max_r, cmpRes, ctxtGraphs);
-      if(!realIsZero(cmpRes) && realIsPositive(cmpRes)) realCopy(x_max_r, x);
-      realCompare(x, x_min_r, cmpRes, ctxtGraphs);
-      if(realIsNegative(cmpRes)) realCopy(x_min_r, x);
+      if(realCompareGreaterThan(x, x_max_r)) realCopy(x_max_r, x);
+      if(realCompareLessThan(x, x_min_r)) realCopy(x_min_r, x);
 
       convertRealToReal34RegisterPush(x, REGISTER_X);
       execute_rpn_function_graphAcc();
@@ -1213,8 +1185,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       // Calculate gradient and detect anomalies
       if(count > 0) {
         realSubtract(y02, y01, dy, ctxtGraphs);
-        realCompare(x, x01, cmpRes, ctxtGraphs);
-        if(!realIsZero(cmpRes)) {
+        if(!realCompareEqual(x, x01)) {
           realSubtract(x, x01, tmpA, ctxtGraphs);
           realDivide(dy, tmpA, grad2, ctxtGraphs);
         }
@@ -1229,8 +1200,8 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
           // Track sign changes for cycle detection
           if(count > 1) {
-            bool_t currentPositive = (!realIsZero(y02) && realIsPositive(y02));
-            bool_t lastPositive    = (!realIsZero(y01) && realIsPositive(y01));
+            bool_t currentPositive = (!graphIsZero(y02) && graphIsPositive(y02));
+            bool_t lastPositive    = (!graphIsZero(y01) && graphIsPositive(y01));
             if(currentPositive != lastPositive) {
               signChangeCount++;
               realSubtract(x, lastSignChange, tmpA, ctxtGraphs);
@@ -1250,7 +1221,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
         // Update sign states
         ss0 = ss1;
         ss1 = ss2;
-        ss2 = realIsZero(grad2) ? 0 : (realIsNegative(grad2) ? -1 : 1);
+        ss2 = graphIsZero(grad2) ? 0 : (graphIsNegative(grad2) ? -1 : 1);
         realCopy(grad1, grad0);
         realCopy(grad2, grad1);
 
@@ -1263,7 +1234,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
         #endif // GRAPHDEBUG
 
         // Detect gradient anomalies using improved logic
-        if(!realIsZero(grad1) && !realIsZero(grad2)) {
+        if(!graphIsZero(grad1) && !graphIsZero(grad2)) {
           REAL_T_PTR(absY02OverY01, PLOT_DIGITS);
           REAL_T_PTR(absY01OverY02, PLOT_DIGITS);
           REAL_T_PTR(absG2OverG1,   PLOT_DIGITS);
@@ -1299,33 +1270,26 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           realCopyAbs(tmpA, absG1mG0);
           realMultiply(const_10, absG1mG0, tenAbsG1mG0, ctxtGraphs);
 
-          realCompare(absY02OverY01, oneOhOne, cmpRes, ctxtGraphs);
-          bool_t a1 = !realIsZero(cmpRes) && realIsPositive(cmpRes);
-          realCompare(absG2OverG1, ss2_r, cmpRes, ctxtGraphs);
-          bool_t a2 = !realIsZero(cmpRes) && realIsPositive(cmpRes);
+          bool_t a1 = realCompareGreaterThan(absY02OverY01, oneOhOne);
+          bool_t a2 = realCompareGreaterThan(absG2OverG1, ss2_r);
           bool_t yRatioCheck1 = (a1 && a2);
 
-          realCompare(absY01OverY02, oneOhOne, cmpRes, ctxtGraphs);
-          bool_t b1 = !realIsZero(cmpRes) && realIsPositive(cmpRes);
-          realCompare(absG1OverG2, ss2_r, cmpRes, ctxtGraphs);
-          bool_t b2 = !realIsZero(cmpRes) && realIsPositive(cmpRes);
+          bool_t b1 = realCompareGreaterThan(absY01OverY02, oneOhOne);
+          bool_t b2 = realCompareGreaterThan(absG1OverG2, ss2_r);
           bool_t yRatioCheck2 = (b1 && b2);
 
           // Conservative oscillation detection - only flag if it's truly problematic
-          realCompare(absY02, twoAbsY01, cmpRes, ctxtGraphs);
-          bool_t y02BigEnough = !realIsZero(cmpRes) && realIsPositive(cmpRes);
-          realCompare(absY00, twoAbsY01, cmpRes, ctxtGraphs);
-          bool_t y00BigEnough = !realIsZero(cmpRes) && realIsPositive(cmpRes);
+          bool_t y02BigEnough = realCompareGreaterThan(absY02, twoAbsY01);
+          bool_t y00BigEnough = realCompareGreaterThan(absY00, twoAbsY01);
           bool_t signOscillation1 = (ss0 == 1  && ss1 == -1 && ss2 == 1) && y02BigEnough && y00BigEnough;
           bool_t signOscillation2 = (ss0 == -1 && ss1 == 1  && ss2 == -1) && y02BigEnough && y00BigEnough;
 
           // Zero crossing detection - only if accompanied by large gradient changes
-          realCompare(absG2mG1, tenAbsG1mG0, cmpRes, ctxtGraphs);
-          bool_t bigGradJump = !realIsZero(cmpRes) && realIsPositive(cmpRes);
-          bool_t y01Pos = !realIsZero(y01) && realIsPositive(y01);
-          bool_t y02Neg = realIsNegative(y02);
-          bool_t y01Neg = realIsNegative(y01);
-          bool_t y02Pos = !realIsZero(y02) && realIsPositive(y02);
+          bool_t bigGradJump = realCompareGreaterThan(absG2mG1, tenAbsG1mG0);
+          bool_t y01Pos = !graphIsZero(y01) && graphIsPositive(y01);
+          bool_t y02Neg = graphIsNegative(y02);
+          bool_t y01Neg = graphIsNegative(y01);
+          bool_t y02Pos = !graphIsZero(y02) && graphIsPositive(y02);
           bool_t zeroCrossing1 = (ss1 == 1  && ss2 == -1  && y01Pos && y02Neg) && bigGradJump;
           bool_t zeroCrossing2 = (ss1 == -1 && ss2 == 1   && y01Neg && y02Pos) && bigGradJump;
 
@@ -1363,8 +1327,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
         }
         else {
           realCopyAbs(y02, tmpA);
-          realCompare(tmpA, yAvg, cmpRes, ctxtGraphs);
-          if(!realIsZero(cmpRes) && realIsPositive(cmpRes)) {
+          if(realCompareGreaterThan(tmpA, yAvg)) {
             int32ToReal(count, tmpB);
             realDivide(tmpA, tmpB, tmpA, ctxtGraphs);      // |y02|/count
             realAdd(yAvg, tmpA, yAvg, ctxtGraphs);
@@ -1444,7 +1407,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           realDivide(tmpA, tmpB, grad2, ctxtGraphs);
           ss0 = ss1;
           ss1 = ss2;
-          ss2 = realIsZero(grad2) ? 0 : (realIsNegative(grad2) ? -1 : 1);
+          ss2 = graphIsZero(grad2) ? 0 : (graphIsNegative(grad2) ? -1 : 1);
 
           #if defined(GRAPHDEBUG)
             realToString(x,     strBuf1);
@@ -1468,8 +1431,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
           for(int jbStep = 0; jbStep < FINE; jbStep++) {
             // jumpBackX < jumpBackStartX ?
-            realCompare(jumpBackX, jumpBackStartX, cmpRes, ctxtGraphs);
-            if(!realIsNegative(cmpRes)) break;
+            if(realCompareGreaterEqual(jumpBackX, jumpBackStartX)) break;
 
             convertRealToReal34RegisterPush(jumpBackX, REGISTER_X);
             execute_rpn_function_graphAcc();
@@ -1606,7 +1568,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
             realDivide(tmpA, tmpB, grad2, ctxtGraphs);
             ss0 = ss1;
             ss1 = ss2;
-            ss2 = realIsZero(grad2) ? 0 : (realIsNegative(grad2) ? -1 : 1);
+            ss2 = graphIsZero(grad2) ? 0 : (graphIsNegative(grad2) ? -1 : 1);
 
             #if defined(GRAPHDEBUG)
               realToString(x,     strBuf1);
@@ -1620,7 +1582,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
         // Calculate curvature change for resolution assessment
         realSetZero(curvatureChange);
-        if(count > 1 && !realIsZero(grad0) && !realIsZero(grad1)) {
+        if(count > 1 && !graphIsZero(grad0) && !graphIsZero(grad1)) {
           // curvatureChange = |(grad2 - grad1) - (grad1 - grad0)|
           realSubtract(grad2, grad1, tmpA, ctxtGraphs);
           realSubtract(grad1, grad0, tmpB, ctxtGraphs);
@@ -1642,9 +1604,8 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
         // newDx < prevDx * REVERT_THRESHOLD ?
         convertDoubleToReal(REVERT_THRESHOLD, tmpA, ctxtGraphs);
         realMultiply(prevDx, tmpA, tmpB, ctxtGraphs);
-        realCompare(newDx, tmpB, cmpRes, ctxtGraphs);
-        bool_t newDxBelowThresh = realIsNegative(cmpRes);
-        bool_t curvNonZero = !realIsZero(curvatureChange) && realIsPositive(curvatureChange);
+        bool_t newDxBelowThresh = realCompareLessThan(newDx, tmpB);
+        bool_t curvNonZero = !graphIsZero(curvatureChange) && graphIsPositive(curvatureChange);
         if(!jumpedBack && !inHighResMode && newDxBelowThresh && discontinuityDetected == 0 && curvNonZero) {
           realCopy(x01,    savedXBeforeHighres);     // Save the last good x position
           realCopy(prevDx, savedDxBeforeHighres);
@@ -1699,7 +1660,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           else {
             // Evaluate if high-res provided sufficient improvement
             // improvementRatio = (baselineCurvatureChange > 0) ? cumCurv / (baseline * count) : 1
-            bool_t baselinePos = !realIsZero(baselineCurvatureChange) && realIsPositive(baselineCurvatureChange);
+            bool_t baselinePos = !graphIsZero(baselineCurvatureChange) && graphIsPositive(baselineCurvatureChange);
             if(baselinePos) {
               int32ToReal(HIGH_RES_SAMPLE_COUNT, tmpA);
               realMultiply(baselineCurvatureChange, tmpA, tmpB, ctxtGraphs);
@@ -1720,8 +1681,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
             #endif // GRAPHDEBUG
 
             convertDoubleToReal(MIN_IMPROVEMENT_RATIO, tmpA, ctxtGraphs);
-            realCompare(improvementRatio, tmpA, cmpRes, ctxtGraphs);
-            if(!realIsNegative(cmpRes)) {                              // High-res was beneficial, commit buffered points in sequence
+            if(realCompareGreaterEqual(improvementRatio, tmpA)) {                              // High-res was beneficial, commit buffered points in sequence
               commitHighResPointsInOrder(highResBuffer, highResCount);
               resetHighResTracking(&highResCount, &inHighResMode, cumulativeCurvatureChange);
               // Continue with current step size
@@ -1753,7 +1713,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
       // Add point to plot (skip if in high-res buffering mode or jumped back)
       // dx >= 0 ?
-      bool_t dxNonNeg = !realIsNegative(dx);
+      bool_t dxNonNeg = !graphIsNegative(dx);
       if(!jumpedBack && dxNonNeg && !inHighResMode) {
         #if defined(GRAPHDEBUG)
           realToString(x,   strBuf1);
