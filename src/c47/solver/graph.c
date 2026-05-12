@@ -267,14 +267,10 @@ static void convertRealToReal34RegisterPush(const real_t *x, calcRegister_t dest
 }
 
 
-#define getSystemFlagIM() false // getSystemFlag(FLAG_PBOX)
-//  Add  fnEqSolvGraph(EQ_PLOT_LU) to the toggle 
-
-
 // Read a register as real_t. For complex registers, return Re or Im depending on FLAG_IMPLOT
 static void convertRegisterToReal(calcRegister_t source, real_t *destination) {
   if(getRegisterDataType(source) == dtComplex34) {
-    if(getSystemFlagIM()) {
+    if(getSystemFlag(FLAG_IMPLOT)) {
       real34ToReal(REGISTER_IMAG34_DATA(source), destination);
     }
     else {
@@ -282,7 +278,7 @@ static void convertRegisterToReal(calcRegister_t source, real_t *destination) {
     }
     return;
   }
-  if(getSystemFlagIM()) {
+  if(getSystemFlag(FLAG_IMPLOT)) {
     realSetZero(destination);
     return;
   }
@@ -295,7 +291,7 @@ static void convertRegisterToReal(calcRegister_t source, real_t *destination) {
 static void reduceRegisterYToComponent(void) {
   if(getRegisterDataType(REGISTER_Y) == dtComplex34) {
     fnSwapXY(NOPARAM);
-    if(getSystemFlagIM()) {
+    if(getSystemFlag(FLAG_IMPLOT)) {
       fnImaginaryPart(NOPARAM);
     }
     else {
@@ -303,7 +299,7 @@ static void reduceRegisterYToComponent(void) {
     }
     fnSwapXY(NOPARAM);
   }
-  else if(getSystemFlagIM()) {
+  else if(getSystemFlag(FLAG_IMPLOT)) {
     reallocateRegister(REGISTER_Y, dtReal34, REAL34_SIZE_IN_BLOCKS, amNone);
     real34SetZero(REGISTER_REAL34_DATA(REGISTER_Y));
   }
