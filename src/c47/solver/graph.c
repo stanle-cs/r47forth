@@ -376,8 +376,8 @@ bool_t validateDiscontinuityResolution(PlotPoint *buffer, int count, const real_
   REAL_T_PTR(jump,           PLOT_DIGITS);
   REAL_T_PTR(diff,           PLOT_DIGITS);
   REAL_T_PTR(cmpRes,         PLOT_DIGITS);
-  int32ToReal(0, maxJump);
-  int32ToReal(0, totalVariation);
+  realSetZero(maxJump);
+  realSetZero(totalVariation);
 
   // Check continuity between consecutive fine points
   for(int i = 1; i < count; i++) {
@@ -416,11 +416,9 @@ bool_t validateDiscontinuityResolution(PlotPoint *buffer, int count, const real_
   REAL_T_PTR(threeAvg,     PLOT_DIGITS);
   REAL_T_PTR(halfThresh,   PLOT_DIGITS);
   REAL_T_PTR(countMinus1,  PLOT_DIGITS);
-  REAL_T_PTR(three,        PLOT_DIGITS);
   int32ToReal(count - 1, countMinus1);
   realDivide(totalVariation, countMinus1, avgVariation, ctxtGraphs);
-  int32ToReal(3, three);
-  realMultiply(three, avgVariation, threeAvg, ctxtGraphs);
+  realMultiply(const_3, avgVariation, threeAvg, ctxtGraphs);
   realCopy(discontinuityThreshold, halfThresh);
   realDivideBy2(halfThresh, ctxtGraphs);
 
@@ -474,12 +472,10 @@ void calculateNewStepSize(int discontinuityDetected, const real_t *grad1, const 
     REAL_T_PTR(ratio1,  PLOT_DIGITS);
     REAL_T_PTR(ratio2,  PLOT_DIGITS);
     REAL_T_PTR(ss1Real, PLOT_DIGITS);
-    REAL_T_PTR(half,    PLOT_DIGITS);
     REAL_T_PTR(cmpRes,  PLOT_DIGITS);
     realDivide(grad2, grad1, ratio1, ctxtGraphs);
     realDivide(grad1, grad2, ratio2, ctxtGraphs);
     stringToReal(_R_STR_OF(SS1), ss1Real, ctxtGraphs);
-    stringToReal("0.5",          half,    ctxtGraphs);
 
     bool_t scaleHalf = false;
     realCompare(ratio1, ss1Real, cmpRes, ctxtGraphs);
@@ -494,7 +490,7 @@ void calculateNewStepSize(int discontinuityDetected, const real_t *grad1, const 
     }
 
     if(scaleHalf) {
-      realMultiply(dx0, half, newDx, ctxtGraphs);
+      realMultiply(dx0, const_1on2, newDx, ctxtGraphs);
     }
     else {
       realCopy(dx0, newDx);
@@ -529,7 +525,7 @@ void enterHighResMode(bool_t *inHighResMode, int *highResCount, real_t *highResS
   *highResCount = 0;
   realCopy(x,               highResStartX);
   realCopy(curvatureChange, baselineCurvatureChange);
-  int32ToReal(0, cumulativeCurvatureChange);
+  realSetZero(cumulativeCurvatureChange);
 }
 
 
@@ -576,7 +572,7 @@ void resetHighResTracking(int *highResCount, bool_t *inHighResMode, real_t *cumu
   #endif // GRAPHDEBUG
   *highResCount = 0;
   *inHighResMode = false;
-  int32ToReal(0, cumulativeCurvatureChange);
+  realSetZero(cumulativeCurvatureChange);
 }
 
 
@@ -593,15 +589,11 @@ bool_t detectTrueDiscontinuity(const real_t *y0, const real_t *y1, const real_t 
   REAL_T_PTR(absY2,        PLOT_DIGITS);
   REAL_T_PTR(hundredYAvg,  PLOT_DIGITS);
   REAL_T_PTR(tenYAvg,      PLOT_DIGITS);
-  REAL_T_PTR(hundred,      PLOT_DIGITS);
-  REAL_T_PTR(ten,          PLOT_DIGITS);
   REAL_T_PTR(cmpRes,       PLOT_DIGITS);
   realCopyAbs(y1, absY1);
   realCopyAbs(y2, absY2);
-  int32ToReal(100, hundred);
-  int32ToReal(10,  ten);
-  realMultiply(hundred, yAvg, hundredYAvg, ctxtGraphs);
-  realMultiply(ten,     yAvg, tenYAvg,     ctxtGraphs);
+  realMultiply(const_100, yAvg, hundredYAvg, ctxtGraphs);
+  realMultiply(const_10,  yAvg, tenYAvg,     ctxtGraphs);
 
   realCompare(absY2, hundredYAvg, cmpRes, ctxtGraphs);
   bool_t absY2GtHundred = realIsPositive(cmpRes) && !realIsZero(cmpRes);
@@ -625,9 +617,6 @@ bool_t detectTrueDiscontinuity(const real_t *y0, const real_t *y1, const real_t 
     REAL_T_PTR(absY1mY0,        PLOT_DIGITS);
     REAL_T_PTR(twentyAbsY1mY0,  PLOT_DIGITS);
     REAL_T_PTR(fiveYAvg,        PLOT_DIGITS);
-    REAL_T_PTR(fifty,           PLOT_DIGITS);
-    REAL_T_PTR(twenty,          PLOT_DIGITS);
-    REAL_T_PTR(five,            PLOT_DIGITS);
 
     realSubtract(grad1, grad0, diffG1G0, ctxtGraphs);                // grad1 - grad0
     realAdd(grad1, diffG1G0, expectedGrad, ctxtGraphs);              // grad1 + (grad1 - grad0)
@@ -642,13 +631,10 @@ bool_t detectTrueDiscontinuity(const real_t *y0, const real_t *y1, const real_t 
     realSubtract(y1, y0, diffTmp, ctxtGraphs);
     realCopyAbs(diffTmp, absY1mY0);
 
-    int32ToReal(50, fifty);
-    int32ToReal(20, twenty);
-    int32ToReal(5,  five);
-    realMultiply(twenty, absY1mY0, twentyAbsY1mY0, ctxtGraphs);
-    realMultiply(five,   yAvg,     fiveYAvg,       ctxtGraphs);
+    realMultiply(const_20, absY1mY0, twentyAbsY1mY0, ctxtGraphs);
+    realMultiply(const_5,  yAvg,     fiveYAvg,       ctxtGraphs);
 
-    realCompare(gradientRatio, fifty, cmpRes, ctxtGraphs);
+    realCompare(gradientRatio, const_50, cmpRes, ctxtGraphs);
     bool_t ratioGt50      = realIsPositive(cmpRes) && !realIsZero(cmpRes);
     realCompare(absY2mY1, twentyAbsY1mY0, cmpRes, ctxtGraphs);
     bool_t y2mY1Gt20Y1mY0 = realIsPositive(cmpRes) && !realIsZero(cmpRes);
@@ -684,17 +670,13 @@ bool_t detectTrueDiscontinuity(const real_t *y0, const real_t *y1, const real_t 
       REAL_T_PTR(fiveMag1, PLOT_DIGITS);
       REAL_T_PTR(fiveMag0, PLOT_DIGITS);
       REAL_T_PTR(tenYAvg2, PLOT_DIGITS);
-      REAL_T_PTR(five2,    PLOT_DIGITS);
-      REAL_T_PTR(ten2,     PLOT_DIGITS);
       REAL_T_PTR(cmpRes2,  PLOT_DIGITS);
       realCopyAbs(y0, mag0);
       realCopyAbs(y1, mag1);
       realCopyAbs(y2, mag2);
-      int32ToReal(5,  five2);
-      int32ToReal(10, ten2);
-      realMultiply(five2, mag1, fiveMag1, ctxtGraphs);
-      realMultiply(five2, mag0, fiveMag0, ctxtGraphs);
-      realMultiply(ten2,  yAvg, tenYAvg2, ctxtGraphs);
+      realMultiply(const_5,  mag1, fiveMag1, ctxtGraphs);
+      realMultiply(const_5,  mag0, fiveMag0, ctxtGraphs);
+      realMultiply(const_10, yAvg, tenYAvg2, ctxtGraphs);
 
       realCompare(mag2, fiveMag1, cmpRes2, ctxtGraphs);
       bool_t mag2Gt5Mag1  = realIsPositive(cmpRes2) && !realIsZero(cmpRes2);
@@ -787,7 +769,6 @@ bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, 
   //   right side: sampleX = xGap  + (xRight - xGap)  * (0.2 * i / 2)
   REAL_T_PTR(zeroPoint7, PLOT_DIGITS);
   REAL_T_PTR(zeroPoint2, PLOT_DIGITS);
-  REAL_T_PTR(two,        PLOT_DIGITS);
   REAL_T_PTR(iReal,      PLOT_DIGITS);
   REAL_T_PTR(fineFactor, PLOT_DIGITS);   // 0.2 * i / 2
   REAL_T_PTR(leftFactor, PLOT_DIGITS);   // 0.7 + fineFactor
@@ -797,14 +778,13 @@ bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, 
   REAL_T_PTR(sampleY,    PLOT_DIGITS);
   stringToReal("0.7", zeroPoint7, ctxtGraphs);
   stringToReal("0.2", zeroPoint2, ctxtGraphs);
-  int32ToReal(2, two);
   realSubtract(xGap,   xLeft, spanLeft,  ctxtGraphs);
   realSubtract(xRight, xGap,  spanRight, ctxtGraphs);
 
   // Sample just 2 points on each side (minimal sampling)
   for(int i = 1; i <= 2; i++) {
     int32ToReal(i, iReal);
-    realDivide  (zeroPoint2, two,        fineFactor, ctxtGraphs);   // 0.2 / 2
+    realDivide  (zeroPoint2, const_2,    fineFactor, ctxtGraphs);   // 0.2 / 2
     realMultiply(fineFactor, iReal,      fineFactor, ctxtGraphs);   // (0.2/2) * i
     realAdd     (zeroPoint7, fineFactor, leftFactor, ctxtGraphs);   // 0.7 + ...
 
@@ -854,10 +834,8 @@ bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, 
   REAL_T_PTR(extremeThreshold, PLOT_DIGITS);
   REAL_T_PTR(yMaxPlus,         PLOT_DIGITS);
   REAL_T_PTR(yMinMinus,        PLOT_DIGITS);
-  REAL_T_PTR(twoR,             PLOT_DIGITS);
   realSubtract(yMax, yMin, yRange, ctxtGraphs);
-  int32ToReal(2, twoR);
-  realMultiply(yRange, twoR, extremeThreshold, ctxtGraphs);   // Values beyond 2x the plot range
+  realMultiply(yRange, const_2, extremeThreshold, ctxtGraphs);   // Values beyond 2x the plot range
   realAdd     (yMax, extremeThreshold, yMaxPlus,  ctxtGraphs);
   realSubtract(yMin, extremeThreshold, yMinMinus, ctxtGraphs);
 
@@ -942,12 +920,10 @@ TO_QSPI const PointOffset asymptote_offsets_negative[] = {
 void renderAsymptote(AsymptoteInfo *asymptote) {
   REAL_T_PTR(xCenter,         PLOT_DIGITS);
   REAL_T_PTR(offset,          PLOT_DIGITS);   // Small x offset
-  REAL_T_PTR(asymptoteHeight, PLOT_DIGITS);
   REAL_T_PTR(x,               PLOT_DIGITS);
   REAL_T_PTR(y,               PLOT_DIGITS);
   realCopy(AI_X(*asymptote), xCenter);
   stringToReal("1e-3",  offset,          ctxtGraphs);
-  stringToReal("10000", asymptoteHeight, ctxtGraphs);
 
   #if defined(GRAPHDEBUG)
     char strBuf1[64];
@@ -979,13 +955,13 @@ void renderAsymptote(AsymptoteInfo *asymptote) {
       }
       // y = (dy == 0) ? 0 : dy * asymptoteHeight
       if(offsets[i].dy == 0) {
-        int32ToReal(0, y);
+        realSetZero(y);
       }
       else if(offsets[i].dy > 0) {
-        realCopy(asymptoteHeight, y);
+        realCopy(const_10000, y);
       }
       else {
-        realCopy(asymptoteHeight, y);
+        realCopy(const_10000, y);
         realChangeSign(y);
       }
       convertRealToReal34Register(x, REGISTER_X);
@@ -1137,14 +1113,13 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     realSubtract(x_max_r, x_min_r, tmpA, ctxtGraphs);
     int32ToReal(SCREEN_WIDTH_GRAPH, tmpB);
     realDivide(tmpA, tmpB, tmpA, ctxtGraphs);
-    int32ToReal(10, tmpB);
-    realMultiply(tmpA, tmpB, dx0, ctxtGraphs);
+    realMultiply(tmpA, const_10, dx0, ctxtGraphs);
     realCopy(dx0, dx);
     realSetOne(grad2);
     realSetOne(grad1);
     realSetOne(grad0);
     realCopy(dx0, prevDx);
-    stringToReal("0.1", yAvg, ctxtGraphs);
+    realCopy(const_1on10, yAvg);
 
   #if defined(GRAPHDEBUG)
     realToString(x_min_r, strBuf1);
@@ -1166,8 +1141,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     execute_rpn_function_graphAcc();
     convertRegisterToReal(REGISTER_Y, tmpA);
     realCopyAbs(tmpA, tmpA);
-    int32ToReal(2, tmpB);
-    realFMA(tmpB, tmpA, yAvg, yAvg, ctxtGraphs);     // yAvg += 2 * |REGISTER_Y|
+    realFMA(const_2, tmpA, yAvg, yAvg, ctxtGraphs);     // yAvg += 2 * |REGISTER_Y|
 
     if(mode == initDrwMx) {
       fnClDrawMx(3);
@@ -1307,12 +1281,8 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           REAL_T_PTR(tenAbsG1mG0,   PLOT_DIGITS);
           REAL_T_PTR(ss2_r,         PLOT_DIGITS);
           REAL_T_PTR(oneOhOne,      PLOT_DIGITS);
-          REAL_T_PTR(ten,           PLOT_DIGITS);
-          REAL_T_PTR(two,           PLOT_DIGITS);
 
           stringToReal("1.01", oneOhOne, ctxtGraphs);
-          int32ToReal(10, ten);
-          int32ToReal(2,  two);
           convertDoubleToReal(SS2, ss2_r, ctxtGraphs);
 
           realDivide(y02, y01, tmpA, ctxtGraphs);
@@ -1326,12 +1296,12 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           realCopyAbs(y00, absY00);
           realCopyAbs(y01, absY01);
           realCopyAbs(y02, absY02);
-          realMultiply(two, absY01, twoAbsY01, ctxtGraphs);
+          realMultiply(const_2, absY01, twoAbsY01, ctxtGraphs);
           realSubtract(grad2, grad1, tmpA, ctxtGraphs);
           realCopyAbs(tmpA, absG2mG1);
           realSubtract(grad1, grad0, tmpA, ctxtGraphs);
           realCopyAbs(tmpA, absG1mG0);
-          realMultiply(ten, absG1mG0, tenAbsG1mG0, ctxtGraphs);
+          realMultiply(const_10, absG1mG0, tenAbsG1mG0, ctxtGraphs);
 
           realCompare(absY02OverY01, oneOhOne, cmpRes, ctxtGraphs);
           bool_t a1 = !realIsZero(cmpRes) && realIsPositive(cmpRes);
@@ -1393,8 +1363,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
         // Update running average
         if(count == 0) {
           realCopyAbs(y02, tmpA);
-          int32ToReal(2, tmpB);
-          realFMA(tmpB, tmpA, yAvg, yAvg, ctxtGraphs);     // yAvg += 2 * |y02|
+          realFMA(const_2, tmpA, yAvg, yAvg, ctxtGraphs);     // yAvg += 2 * |y02|
         }
         else {
           realCopyAbs(y02, tmpA);
@@ -1458,8 +1427,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           if(wasDiscontinuity) {
             realSubtract(y02, y01, tmpA, ctxtGraphs);
             realCopyAbs(tmpA, tmpA);
-            stringToReal("0.1", tmpB, ctxtGraphs);
-            realMultiply(tmpA, tmpB, discontinuityThreshold, ctxtGraphs);
+            realMultiply(tmpA, const_1on10, discontinuityThreshold, ctxtGraphs);
           }
           else {
             realSetZero(discontinuityThreshold);
