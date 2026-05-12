@@ -359,7 +359,8 @@ typedef struct {
 #define dJMP 0.2                      // Fine movement in p.u. ddx
 #define STEP_OFFSET 0.99999           // Stay off exact integers
 #define MIN_IMPROVEMENT_RATIO 1.25    // Minimum improvement needed to justify high-res
-#define HIGH_RES_SAMPLE_COUNT 3       // Number of high-res points to evaluate
+#define HIGH_RES_SAMPLE_COUNT   3        // Number of high-res points to evaluate
+#define HIGH_RES_SAMPLE_COUNT_R const_3  // real_t alias of HIGH_RES_SAMPLE_COUNT, kept in sync
 #define REVERT_THRESHOLD 0.8          // When to revert to previous dx
 
 
@@ -1321,17 +1322,14 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
         }
 
         // Update running average
+        realCopyAbs(y02, tmpA);
         if(count == 0) {
-          realCopyAbs(y02, tmpA);
           realFMA(const_2, tmpA, yAvg, yAvg, ctxtGraphs);     // yAvg += 2 * |y02|
         }
-        else {
-          realCopyAbs(y02, tmpA);
-          if(realCompareGreaterThan(tmpA, yAvg)) {
-            int32ToReal(count, tmpB);
-            realDivide(tmpA, tmpB, tmpA, ctxtGraphs);      // |y02|/count
-            realAdd(yAvg, tmpA, yAvg, ctxtGraphs);
-          }
+        else if(realCompareGreaterThan(tmpA, yAvg)) {
+          int32ToReal(count, tmpB);
+          realDivide(tmpA, tmpB, tmpA, ctxtGraphs);      // |y02|/count
+          realAdd(yAvg, tmpA, yAvg, ctxtGraphs);
         }
 
         #if defined(GRAPHDEBUG)
@@ -1662,8 +1660,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
             // improvementRatio = (baselineCurvatureChange > 0) ? cumCurv / (baseline * count) : 1
             bool_t baselinePos = !graphIsZero(baselineCurvatureChange) && graphIsPositive(baselineCurvatureChange);
             if(baselinePos) {
-              int32ToReal(HIGH_RES_SAMPLE_COUNT, tmpA);
-              realMultiply(baselineCurvatureChange, tmpA, tmpB, ctxtGraphs);
+              realMultiply(baselineCurvatureChange, HIGH_RES_SAMPLE_COUNT_R, tmpB, ctxtGraphs);
               realDivide(cumulativeCurvatureChange, tmpB, improvementRatio, ctxtGraphs);
             }
             else {
@@ -1673,8 +1670,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
             #if defined(GRAPHDEBUG)
               realToString(improvementRatio,          strBuf1);
               realToString(cumulativeCurvatureChange, strBuf2);
-              int32ToReal(HIGH_RES_SAMPLE_COUNT, tmpA);
-              realMultiply(baselineCurvatureChange, tmpA, tmpB, ctxtGraphs);
+              realMultiply(baselineCurvatureChange, HIGH_RES_SAMPLE_COUNT_R, tmpB, ctxtGraphs);
               realToString(tmpB,                      strBuf3);
               printf("EVALUATING HIGH-RES: improvementRatio=%s (need %.2f)\n", strBuf1, MIN_IMPROVEMENT_RATIO);
               printf("  cumCurv=%s, baseline*count=%s\n", strBuf2, strBuf3);
