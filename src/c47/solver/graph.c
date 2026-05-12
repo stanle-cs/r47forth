@@ -234,38 +234,26 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
 // graph_eqn entry. Helpers are defined first in this file, then graph_eqn at the bottom.
 //******************************************************************************************************************************
 
-#define PLOT_DIGITS    39    // Storage size for every real_t. Must be >= 34 because register
-                              // reads via real34ToReal write up to 34 digits unconditionally
-                              // (decQuadToNumber takes no context). Speed comes from the working
-                              // precision in ctxtGraphsLocal, not from this storage size.
+#define PLOT_DIGITS    39    // Storage size for every real_t. Must be >= 34 because register. Manage, read increase, speed from the working precision in ctxtGraphsLocal, not from this storage size.
 
-// File-scope custom context for graph calculations. Initialized at graph_eqn entry from
-// ctxtReal39 with digits narrowed to 14 working digits. decNumber ops are O(N) for add and
-// O(N^2) for multiply/divide in the digit count, so 14 vs 39 is a real speedup. All real_t
-// arithmetic in graph_eqn and the helpers uses this context via ctxtGraphs.
-static decContext ctxtGraphsLocal;
-#define ctxtGraphs     &ctxtGraphsLocal
+// Context for graph calculations. Initialized at graph_eqn entry from ctxtReal39 to 14 working digits
+// 14 vs 39 is a real speedup. All real_t arithmetic in graph_eqn and the helpers use this context via ctxtGraphs.
+static  decContext  ctxtGraphsLocal;
+#define ctxtGraphs  &ctxtGraphsLocal
 
-// Stringify a macro's value so we can pass it to stringToReal without hard coding it twice.
 //   _R_STR_OF(SS1)  ->  "1.8"   (when #define SS1 1.8)
 #define _R_STR(x)     #x
 #define _R_STR_OF(x)  _R_STR(x)
 
 
-// File-scope static helpers used by the helpers below and by graph_eqn.
-// Defined here so they are visible to both before first use.
-
-// Convert real_t to double via realToFloat. realToFloat is byte-pattern based and does not
-// round-trip through a locale-formatted string, so it is safe under any LC_NUMERIC. Precision
-// is float-grade (~7 digits), which is fine for the curvature heuristics that consume it.
+// Convert real_t to double via realToFloat. Does not round-trip through a locale-formatted string.
+// Float precision (~7 digits), which is fine for the calcs.
 static double realToDoubleVal(const real_t *r) {
   float f;
   realToFloat(r, &f);
   return (double)f;
 }
 
-// Push real_t into a register as real34 (decQuad). Mirrors convertDoubleToReal34Register/Push
-// but with realToReal34 in place of stringToReal34, which keeps up to 34 digits.
 static void convertRealToReal34Register(const real_t *x, calcRegister_t destination) {
   reallocateRegister(destination, dtReal34, 0, amNone);
   realToReal34(x, REGISTER_REAL34_DATA(destination));
@@ -278,17 +266,50 @@ static void convertRealToReal34RegisterPush(const real_t *x, calcRegister_t dest
   setSystemFlag(FLAG_ASLIFT);
 }
 
-// Read a register as real_t at full precision. getRegisterAsRealQuiet is the canonical helper
-// and handles every register data type; on failure leave NaN so downstream comparisons fail safely.
+
+#define getSystemFlagIM() false // getSystemFlag(FLAG_PBOX)
+//  Add  fnEqSolvGraph(EQ_PLOT_LU) to the toggle 
+
+
+// Read a register as real_t. For complex registers, return Re or Im depending on FLAG_IMPLOT
 static void convertRegisterToReal(calcRegister_t source, real_t *destination) {
+  if(getRegisterDataType(source) == dtComplex34) {
+    if(getSystemFlagIM()) {
+      real34ToReal(REGISTER_IMAG34_DATA(source), destination);
+    }
+    else {
+      real34ToReal(REGISTER_REAL34_DATA(source), destination);
+    }
+    return;
+  }
+  if(getSystemFlagIM()) {
+    realSetZero(destination);
+    return;
+  }
   if(!getRegisterAsRealQuiet(source, destination)) {
     realSetNaN(destination);
   }
 }
 
+// Reduce REGISTER_Y to either Re or Im (per getSystemFlagIM) before AddtoDrawMx etc.
+static void reduceRegisterYToComponent(void) {
+  if(getRegisterDataType(REGISTER_Y) == dtComplex34) {
+    fnSwapXY(NOPARAM);
+    if(getSystemFlagIM()) {
+      fnImaginaryPart(NOPARAM);
+    }
+    else {
+      fnRealPart(NOPARAM);
+    }
+    fnSwapXY(NOPARAM);
+  }
+  else if(getSystemFlagIM()) {
+    reallocateRegister(REGISTER_Y, dtReal34, REAL34_SIZE_IN_BLOCKS, amNone);
+    real34SetZero(REGISTER_REAL34_DATA(REGISTER_Y));
+  }
+}
+
 // Wrapper around execute_rpn_function that narrows ctxtReal34/39/51/75 to graph-eqn precision
-// for the duration of the call when LOW_GRAPH_ACC is enabled. Saves and restores.
-// Wider guards (+12, +18) on 51 and 75 because of some math functions (gamma, Bessel, hypergeometric)
 static void execute_rpn_function_graphAcc(void) {
   #if defined(LOW_GRAPH_ACC)
     int32_t s34 = ctxtReal34.digits;
@@ -529,6 +550,7 @@ void commitHighResPointsInOrder(PlotPoint *buffer, int count) {
     if(!buffer[i].stored) {
       convertRealToReal34RegisterPush(PP_X(buffer[i]), REGISTER_X);
       execute_rpn_function_graphAcc();
+      reduceRegisterYToComponent();
       AddtoDrawMx();
       buffer[i].stored = true;
     }
@@ -1210,6 +1232,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
         goto incrementX;
       }
 
+      reduceRegisterYToComponent();
       convertRegisterToReal(REGISTER_Y, y02);
 
       #if defined(GRAPHDEBUG)
@@ -1449,6 +1472,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           jumpedBack = true;
           convertRealToReal34RegisterPush(x, REGISTER_X);
           execute_rpn_function_graphAcc();
+          reduceRegisterYToComponent();
           convertRegisterToReal(REGISTER_Y, y02);
           // grad2 = (y02 - y01) / (x - x01)
           realSubtract(y02, y01, tmpA, ctxtGraphs);
@@ -1485,6 +1509,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
             convertRealToReal34RegisterPush(jumpBackX, REGISTER_X);
             execute_rpn_function_graphAcc();
+            reduceRegisterYToComponent();
             convertRegisterToReal(REGISTER_Y, jbY);
 
             jumpBackBuffer[jumpBackCount].stored = false;
@@ -1579,12 +1604,14 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
             for(int i = 0; i < jumpBackCount; i++) {
               convertRealToReal34RegisterPush(PP_X(jumpBackBuffer[i]), REGISTER_X);
               execute_rpn_function_graphAcc();
+              reduceRegisterYToComponent();
               AddtoDrawMx();
             }
 
             // Also plot the original grid point (jumpBackStartX, jumpBackStartY)
             convertRealToReal34RegisterPush(jumpBackStartX, REGISTER_X);
             execute_rpn_function_graphAcc();
+            reduceRegisterYToComponent();
             AddtoDrawMx();
 
             // Set position to continue from the original grid point
