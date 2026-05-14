@@ -363,7 +363,7 @@ static void unitConversion(const real_t * const coefficient, uint16_t multiplyDi
   adjustResult(REGISTER_X, false, false, -1, -1, -1);
 }
 
-TO_QSPI static const real_t *conversionFactors[constFactorEND] = {
+TO_QSPI static const real_t * const conversionFactors[constFactorEND] = {
     [constFactorFt2Hectare]   = const_Ft2ToHa,      /*   0 */
     [constFactorFt2M2]        = const_Ft2ToM2,
     [constFactorHectareKm2]   = const_100,
@@ -517,7 +517,7 @@ void fnUnitConvert(uint16_t arg) {
 
 
 //  {[(x - B) / C] * D} + E
-TO_QSPI static const real_t *cvtTempConsts[13][4] = {
+TO_QSPI static const real_t * const cvtTempConsts[13][4] = {
   //   B              C             D             E
   {const_0,       const_1,       const_9on5,    const_32     }, // ITM_CtoF     ix =  0
   {const_32,      const_9on5,    const_1,       const_0      }, // ITM_FtoC     ix =  1
