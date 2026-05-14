@@ -152,7 +152,8 @@
 
     constFactorEND              /* MUST be last */
   };
-
+  
+  bool_t isOneOfAConvertPair(uint16_t x, int16_t itemNr, int16_t *evenNrPartner);
   void fnUnitConvert  (uint16_t multiplyDivide);
 
   // Temperature

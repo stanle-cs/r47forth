@@ -1854,7 +1854,7 @@ bool_t maxfgLines(int16_t y) {
    * \param[in] xSoftkey int16_t      x location of softkey: from 0 (left) to 5 (right)
    * \param[in] ySoftKey int16_t      y location of softkey: from 0 (bottom) to 2 (top)
    * \param[in] videoMode videoMode_t Video mode normal or reverse
-   * \param[in] topLineDotted bool_t  Is the item's top line dotted
+   * \param[in] topLineDotted bool_t  Is the item top line dotted
    * \param[in] topLine bool_t        Draw a top line
    * \param[in] bottomLine bool_t     Draw a bottom line
    * \return void
@@ -1867,26 +1867,29 @@ bool_t maxfgLines(int16_t y) {
     showKey(label, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
   }
 
-  static void showSoftkey2(const char *labelSM1, int16_t xSoftkey, int16_t ySoftKey, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText) {
+  static void showSoftkey2(bool_t valid, const char *labelSM1, int16_t xSoftkey, int16_t ySoftKey, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText) {
     int16_t x1, y1, x2, y2;
     if(!initSoftkeyCoordinates(labelSM1, xSoftkey, ySoftKey, &x1, &x2, &y1, &y2)) {
       return;
     }
   char label1[30];
-  if(xSoftkey == 0 || xSoftkey == 2 || xSoftkey == 4) {
+  if((xSoftkey & 1) == 0) { // softKey even
     xx1 = x1;
     label0[0]=0;
     stringCopy(label0 + stringByteLength(label0), labelSM1);
     compressConversionName(label0);
+    showKey(labelSM1, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
   }
   truncateAtArrow(label0);
 
-  if(xSoftkey == 1 || xSoftkey == 3 || xSoftkey == 5) {
+  if((xSoftkey & 1) != 0 && valid) { // softKey odd
     label1[0]=0;
     stringCopy(label1 + stringByteLength(label1), labelSM1);
     compressConversionName(label1);
     truncateAtArrow(label1);
     showKey2(label0, label1, xx1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
+  } else {
+    showKey(labelSM1, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
   }
 }
 
@@ -1986,6 +1989,21 @@ static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t
 }
 
 
+// Trim the soft-key label from the right, one glyph at a time, until its width fits the soft-key slot (<=67 px) or only 1 len
+static uint32_t trimSoftKeyName(uint16_t lim, char *l, int mode, int comp, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows) {
+  uint32_t w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);
+  if(w > lim) {                                                                   // fits already? leave alone
+    char *cut = stringAfterPixelsC47(l, mode, comp, 67, withLeadingEmptyRows, withEndingEmptyRows);
+    if(cut == l) {                                                               // first glyph alone too wide
+      cut = l + stringNextGlyph(l, 0);                                           // keep one glyph anyway
+    }
+    *cut = 0;                                                                    // truncate in place
+    w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);// remeasure for return
+  }
+  return w;
+}
+
+
 void showKey(const char *label, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText) {
     int16_t w;
     char l[16];
@@ -1996,28 +2014,29 @@ void showKey(const char *label, int16_t x1, int16_t x2, int16_t y1, int16_t y2, 
     //    char *lw = stringAfterPixels(l, &standardFont, (rightMostSlot ? 65 : 66), false, false);
     //    *lw = 0;
     //continue with trimmed label
-    w = stringWidthC47(figlabel(l, showText, showValue), stdNoEnlarge, 0, false, false);
+    w = trimSoftKeyName(x2-x1-1, l, stdNoEnlarge, 0, false, false);                           // trim label to fit slot, returns final width
     if((showCb >= 0) || (w >= ((min(x2, SCREEN_WIDTH) - max(0, x1))*3)/4 )) {
       w = stringWidthC47(figlabel(l, showText, showValue), stdNoEnlarge, 1, false, false);
-      if(showCb >= 0) { w = w + 8; }
+      if(showCb >= 0) {
+        w = w + 8;
+      }
       //    char *lw = stringAfterPixelsC47(l, stdNoEnlarge, compressString, rightMostSlot ? 65 : 66, false, false);
       //    *lw = 0;
-    compressString = 1;       //JM compressString
-    showString(figlabel(l, showText, showValue), &standardFont, (x1 + x2 - w)/2, y1 + 2, videoMode, false, false);
-    compressString = 0;       //JM compressString
-  }
-  else {
-     //clearly short enough so no trimming was needed anyway
-     showString(figlabel(l, showText, showValue), &standardFont, (x1 + x2 - w)/2, y1 + 2, videoMode, false, false);
-  }                                                                                              //JM & dr ^^
+      compressString = 1;       //JM compressString
+      showString(figlabel(l, showText, showValue), &standardFont, (x1 + x2 - w)/2, y1 + 2, videoMode, false, false);
+      compressString = 0;       //JM compressString
+    } else {
+      //clearly short enough so no trimming was needed anyway
+      showString(figlabel(l, showText, showValue), &standardFont, (x1 + x2 - w)/2, y1 + 2, videoMode, false, false);
+    }                                                                                              //JM & dr ^^
 
-#if defined(JM_LINE2_DRAW)
-  if(showCb >= 0) {
-    if(videoMode == vmNormal) {
-      JM_LINE2(x2, y2);
+    #if defined(JM_LINE2_DRAW)
+    if(showCb >= 0) {
+      if(videoMode == vmNormal) {
+        JM_LINE2(x2, y2);
+      }
     }
-  }
-#endif // JM_LINE2_DRAW
+    #endif // JM_LINE2_DRAW
 
   //EXTRA DRAWINGS FOR RADIO_BUTTON AND CHECK_BOX
   if(showCb >= 0) {
@@ -2851,6 +2870,7 @@ void showSoftmenuCurrentPart(void) {
     int8_t showCb = NOVAL;
     int16_t showValue = NOVAL;
     showText[0] = 0;
+    int16_t oddNrPartnerForEven = 0;
 
     if(m < NUMBER_OF_DYNAMIC_SOFTMENUS) { // Dynamic softmenu
       #if defined(PC_BUILD)
@@ -2961,7 +2981,11 @@ void showSoftmenuCurrentPart(void) {
                     break;
                   }
                 }
-                showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);
+                if(isOneOfAConvertPair(x, itemNr, &oddNrPartnerForEven)) {
+                  showSoftkey2((x & 1) == 0 || itemNr == oddNrPartnerForEven, itemName, x, y, vm, true, true, showCb, showValue, showText);
+                } else {
+                  showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);                  
+                }
                 fnStrikeOutIfNotCoded(itemNr, x, y);
                 fnStrikeThroughIfNA(itemNr, x, y);
               }
@@ -3074,7 +3098,7 @@ void showSoftmenuCurrentPart(void) {
                softmenu[m].menuItem  == -MNU_MISC     || softmenu[m].menuItem  == -MNU_CONVHUM  ||
                softmenu[m].menuItem  == -MNU_CONVYMMV || softmenu[m].menuItem  == -MNU_CONVCHEF ||
                softmenu[m].menuItem  == -MNU_CONVTEMP ) {
-              showSoftkey2(indexOfItems[item%10000].itemSoftmenuName, x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, showCb, showValue, showText);
+              showSoftkey2(true, indexOfItems[item%10000].itemSoftmenuName, x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, showCb, showValue, showText);
             }
 
             else {
