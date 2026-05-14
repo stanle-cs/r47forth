@@ -1454,6 +1454,8 @@ return res;
     return x;
   }
 
+
+  // stringAfterPixelsC47: returns pointer to first glyph in string that would exceed `width` px when rendered. Write 0 there to truncate string
   char *stringAfterPixelsC47(const char *string, int mode, int comp, uint32_t width, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows) {
     int combinationFontsM = combinationFonts;
     char *resStr = (char *)string;

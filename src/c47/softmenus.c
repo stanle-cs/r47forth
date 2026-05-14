@@ -1993,7 +1993,7 @@ static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t
 static uint32_t trimSoftKeyName(uint16_t lim, char *l, int mode, int comp, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows) {
   uint32_t w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);
   if(w > lim) {                                                                   // fits already? leave alone
-    char *cut = stringAfterPixelsC47(l, mode, comp, 67, withLeadingEmptyRows, withEndingEmptyRows);
+    char *cut = stringAfterPixelsC47(l, mode, comp, lim, withLeadingEmptyRows, withEndingEmptyRows);
     if(cut == l) {                                                               // first glyph alone too wide
       cut = l + stringNextGlyph(l, 0);                                           // keep one glyph anyway
     }

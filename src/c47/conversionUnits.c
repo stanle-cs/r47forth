@@ -295,23 +295,31 @@ TO_QSPI const convPair_t convertPairs[NUM_CONVERT_PAIRS] = {                    
   { ITM_KtoF         , ITM_FtoK         },  // 2674 <-> 2673
 };
 
-bool_t isOneOfAConvertPair(uint16_t x, int16_t itemNr, int16_t *oddNrPartner) {
+static int16_t partner(int16_t input) {
   uint16_t lo = 0;                                                               // binary search bounds
   uint16_t hi = NUM_CONVERT_PAIRS;
-  while(lo < hi) {                                                               // find first .item >= itemNr
+  while(lo < hi) {                                                               // find first .item >= input
     const uint16_t mid = (lo + hi) >> 1;
-    if(convertPairs[mid].item < itemNr) {
-      lo = mid + 1;                                                              // target is to the right
+    if(convertPairs[mid].item < input) {
+      lo = mid + 1;
     }
     else {
-      hi = mid;                                                                  // target is at mid or to the left
+      hi = mid;
     }
   }
-  if(lo == NUM_CONVERT_PAIRS || convertPairs[lo].item != itemNr) {
+  if(lo == NUM_CONVERT_PAIRS || convertPairs[lo].item != input) {
+    return 0;                                                                    // not found
+  }
+  return convertPairs[lo].partner;
+}
+
+bool_t isOneOfAConvertPair(uint16_t x, int16_t itemNr, int16_t *oddNrPartner) {
+  const int16_t p = partner(itemNr);
+  if(p == 0) {
     return false;                                                                // not a conversion-pair member
   }
   if((x & 1) == 0) {
-    *oddNrPartner = convertPairs[lo].partner;                                    // even x = left softkey: report partner
+    *oddNrPartner = p;                                                           // even x = left softkey: report partner
   }
   return true;
 }
