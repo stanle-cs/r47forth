@@ -2888,6 +2888,9 @@ void showSoftmenuCurrentPart(void) {
         uint8_t *ptr = getNthString(dynamicSoftmenu[m].menuContent, currentFirstItem);
         for(y=0; y<3; y++) {
           for(x=0; x<6; x++) {
+            if((x & 1) == 0) {
+              oddNrPartnerForEven = 0;
+            }
             if(x + 6*y + currentFirstItem < numberOfItems) {
               if(*ptr != 0) {
                 vm = vmNormal;
@@ -2981,8 +2984,8 @@ void showSoftmenuCurrentPart(void) {
                     break;
                   }
                 }
-                if(isOneOfAConvertPair(x, itemNr, &oddNrPartnerForEven)) {
-                  showSoftkey2((x & 1) == 0 || itemNr == oddNrPartnerForEven, itemName, x, y, vm, true, true, showCb, showValue, showText);
+                if(isOneOfAConvertPair(x, itemNr, &oddNrPartnerForEven)) { // do the CONV magic in the softkey if odd, or if the even softKey's predicted itemNr = the real odd itemNr.
+                  showSoftkey2(((x & 1) == 0) || ((x & 1) != 0 && itemNr == oddNrPartnerForEven), itemName, x, y, vm, true, true, showCb, showValue, showText);
                 } else {
                   showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);                  
                 }
