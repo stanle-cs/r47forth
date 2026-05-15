@@ -568,6 +568,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
           case -MNU_CONVYMMV :
           case -MNU_CONVCHEF :
           case -MNU_CONVTEMP :
+          case -MNU_MyMenu:
           case -MNU_DYNAMIC  : {
             errorMessage[0]=0;
             strcat(errorMessage, indexOfItems[func].itemCatalogName);
