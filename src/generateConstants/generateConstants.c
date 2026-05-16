@@ -278,7 +278,10 @@ void generateAllConstants(void) {
          generateConstant("ShortcwtToKg",   8, EXACT,  "+45.359237"                                                   ); // kg     = short cwt × 100 × 0.45359237 (short cwt = short hundredweight)
          generateConstant("CwtToKg",       10, EXACT,  "+50.80234544"                                                 ); // kg     = cwt × 112 × 0.45359237       (cwt = long hundredweight)
          generateConstant("ShorttonToKg",   8, EXACT,  "+907.18474"                                                   ); // kg     = short ton × 2000 × 0.45359237
-         generateConstant("TonToKg",       11, EXACT,  "+1016.0469088"                                                ); // kg     =2240 × 0.4535923 39, EXACT,7
+         generateConstant("LongtonToKg",   11, EXACT,  "+1016.0469088"                                                ); // kg     =2240 × 0.4535923 39, EXACT,7
+         generateConstant("KnotToMps",     39, APPROX, "+0.5144444444444444444444444444444444444444444444444444444"   ); // m/s    = knot × 1852 / 3600
+         generateConstant("SlugToKg",      39, APPROX, "+1.459390293720636482939632545931758530183727034120734908e+01"); // kg     = slug × 0.45359237 × 9.80665 / 0.3048
+         generateConstant("SlinchToKg",    39, APPROX, "+1.751268352464763779527559055118110236220472440944881890e+02"); // kg     = slinch × 12 × SlugToKg
 
          generateConstant("CalToJ",         5, EXACT,  "+4.1868"                                                      ); // joule  = calorie × 4.1868
          generateConstant("BtuToJ",        12, EXACT,  "+1055.05585262"                                               ); // joule  = Btu × 1055.05585262

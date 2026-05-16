@@ -326,10 +326,10 @@
 #define ITM_STtoKG                   307
 #define ITM_FZUStoTBSPC              308
 #define ITM_FZUStoTSPC               309
-#define ITM_KGtoTON                  310
+#define ITM_KGtoLT                   310
 #define ITM_KGtoLIANG                311
 #define ITM_MLtoCUPC                 312
-#define ITM_TONtoKG                  313
+#define ITM_LTtoKG                   313
 #define ITM_LIANGtoKG                314
 #define ITM_MLtoCUPUK                315
 #define ITM_GtoTRZ                   316
@@ -2832,7 +2832,25 @@
 #define ITM_2730                    2730
 #define ITM_2731                    2731 //spares for Matrix/Vector
 
-#define LAST_ITEM                   2732
+#define ITM_2732                    2732
+#define ITM_2733                    2733
+#define ITM_2734                    2734
+#define ITM_2735                    2735
+
+#define ITM_KNOTtoMPS               2736
+#define ITM_MPStoKNOT               2737
+#define ITM_DEGPStoRADPS            2738
+#define ITM_RADPStoDEGPS            2739
+#define ITM_SLUGtoKG                2740
+#define ITM_KGtoSLUG                2741
+#define ITM_SLINCHtoKG              2742
+#define ITM_KGtoSLINCH              2743
+#define ITM_BLOBtoKG                2744
+#define ITM_KGtoBLOB                2745
+#define ITM_TONNEtoKG               2746
+#define ITM_KGtoTONNE               2747
+
+#define LAST_ITEM                   2748
 
 #define SCREENDUMP                    9875 // Used to signal screen dump operated (not to be confused with SNAP)
 #define NOPARAM                       9876 // Item for function who don't need an item
