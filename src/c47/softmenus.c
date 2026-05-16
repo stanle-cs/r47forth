@@ -1759,7 +1759,7 @@ void fnGetMenu(uint16_t funusedButMandatoryParameter) {
   }
 
 
-static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText);
+static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText, bool_t doubleMidLine);
 char label0[30];
 int16_t xx1;
 
@@ -1867,7 +1867,7 @@ bool_t maxfgLines(int16_t y) {
     showKey(label, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
   }
 
-  static void showSoftkey2(bool_t valid, const char *labelSM1, int16_t xSoftkey, int16_t ySoftKey, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText) {
+  static void showSoftkey2(bool_t valid, const char *labelSM1, int16_t xSoftkey, int16_t ySoftKey, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText, bool_t doubleMidLine) {
     int16_t x1, y1, x2, y2;
     if(!initSoftkeyCoordinates(labelSM1, xSoftkey, ySoftKey, &x1, &x2, &y1, &y2)) {
       return;
@@ -1878,7 +1878,7 @@ bool_t maxfgLines(int16_t y) {
     label0[0]=0;
     stringCopy(label0 + stringByteLength(label0), labelSM1);
     compressConversionName(label0);
-    showKey(labelSM1, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
+    showKey(labelSM1, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText); //purposely displaying the first half of the pair, otherwise it will not display, and wait for the second, when assigning it to a menu. Knowingly double display the softkey
   }
   truncateAtArrow(label0);
 
@@ -1887,7 +1887,7 @@ bool_t maxfgLines(int16_t y) {
     stringCopy(label1 + stringByteLength(label1), labelSM1);
     compressConversionName(label1);
     truncateAtArrow(label1);
-    showKey2(label0, label1, xx1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
+    showKey2(label0, label1, xx1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText, doubleMidLine);
   } else {
     showKey(labelSM1, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
   }
@@ -1904,7 +1904,7 @@ static inline void drawKeyFrame(int16_t x1, int16_t x2, int16_t y1, int16_t y2, 
 
 
 
-static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText) {
+static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText, bool_t doubleMidLine) {
   #define YY -100
   int16_t Text0   ;
   int16_t Arr0    ;
@@ -1984,8 +1984,14 @@ static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t
   for(int i=0; i<4; i++) {
     showStringEnhanced(t[i], &standardFont, x[i], y1 + 1, videoMode, false, false, DO_compress, NO_raise, DO_Show, NO_Bold, NO_LF);
   }
+
   // Mid vertical line, unchanged
+  if(!doubleMidLine) {
     lcd_fill_rect(x1 + midpoint, y1 + 5, 1, min(y2, SCREEN_HEIGHT - 1) + 1 - y1 - 2*5, (videoMode == vmNormal ? LCD_EMPTY_VALUE : LCD_SET_VALUE));
+  } else {
+    lcd_fill_rect(x1 + midpoint-1, y1 + 5, 1, min(y2, SCREEN_HEIGHT - 1) + 1 - y1 - 2*5, (videoMode == vmNormal ? LCD_EMPTY_VALUE : LCD_SET_VALUE));
+    lcd_fill_rect(x1 + midpoint+1, y1 + 5, 1, min(y2, SCREEN_HEIGHT - 1) + 1 - y1 - 2*5, (videoMode == vmNormal ? LCD_EMPTY_VALUE : LCD_SET_VALUE));
+  }
 }
 
 
@@ -2984,14 +2990,57 @@ void showSoftmenuCurrentPart(void) {
                     break;
                   }
                 }
-                if(isOneOfAConvertPair(x, itemNr, &oddNrPartnerForEven)) { // do the CONV magic in the softkey if odd, or if the even softKey's predicted itemNr = the real odd itemNr.
-                  showSoftkey2(((x & 1) == 0) || ((x & 1) != 0 && itemNr == oddNrPartnerForEven), itemName, x, y, vm, true, true, showCb, showValue, showText);
-                } else {
-                  showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);                  
+
+
+
+
+                // Activate the CONVERT magic to swap the arrows and move the midpoint
+                const int16_t softKeyIx  = (x^1) + 6*y;
+                const int16_t curMenu    = -softmenu[m].menuItem;
+                const int16_t itemNrPair = (curMenu == MNU_MyMenu)  ? userMenuItems[softKeyIx].item
+                                         : (curMenu == MNU_DYNAMIC) ? userMenus[currentUserMenu].menuItem[softKeyIx].item
+                                         : 0;
+                isOneOfAConvertPair(x, itemNr, &oddNrPartnerForEven);                            // side-effect: sets oddNrPartnerForEven
+                const bool_t  areBothConv = areBothConvertConfigurable(itemNr, itemNrPair);
+                const bool_t  flag        = areBothConv && (conversionPartner(itemNr, NULL, NULL, NULL) != itemNrPair);
+                const bool_t  cond        = flag || ((x & 1) == 0) || (itemNr == oddNrPartnerForEven);
+                //printf(">>> softkey x=%d y=%d itemNr=%d menu=%d itemNrPair=%d areBothConv=%d flag=%d cond=%d odd=%d\n",x, y, itemNr, curMenu , itemNrPair, areBothConv, flag, cond, oddNrPartnerForEven);
+
+                if(areBothConv) {                                                                // CONV magic on softkey
+                  showSoftkey2(cond, itemName, x, y, vm, true, true, showCb, showValue, showText, flag);
+                }
+                else {
+                  showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);
                 }
                 fnStrikeOutIfNotCoded(itemNr, x, y);
                 fnStrikeThroughIfNA(itemNr, x, y);
               }
+
+//Original version, not committed. Keep for reference, delecte at the next commit
+    //          int16_t itemNrPair = 0;
+    //          switch(-softmenu[m].menuItem) {
+    //            case MNU_MyMenu: {
+    //                itemNrPair = userMenuItems[(x^1) + 6*y].item;
+    //              break;
+    //            }
+    //            case MNU_DYNAMIC: {
+    //              itemNrPair = userMenus[currentUserMenu].menuItem[(x^1) + 6*y].item;
+    //              break;
+    //            }
+    //            default:;
+    //          }
+    //          bool_t areBothConv   = areBothConvertConfigurable(itemNr, itemNrPair);
+    //          bool_t isConvAndPair = isOneOfAConvertPair(x, itemNr, &oddNrPartnerForEven);
+    //          if(isConvAndPair || areBothConv) { // do the CONV magic in the softkey if odd, or if the even softKey's predicted itemNr = the real odd itemNr.
+    //            showSoftkey2(((x & 1) == 0) || ((x & 1) != 0 && itemNr == oddNrPartnerForEven), itemName, x, y, vm, true, true, showCb, showValue, showText, areBothConv && !isConvAndPair);
+    //          } else {
+    //            showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);                  
+    //          }
+    //          fnStrikeOutIfNotCoded(itemNr, x, y);
+    //          fnStrikeThroughIfNA(itemNr, x, y);
+    //        }
+
+
               ptr += stringByteLength((char *)ptr) + 1;
             }
           }
@@ -3101,7 +3150,7 @@ void showSoftmenuCurrentPart(void) {
                softmenu[m].menuItem  == -MNU_MISC     || softmenu[m].menuItem  == -MNU_CONVHUM  ||
                softmenu[m].menuItem  == -MNU_CONVYMMV || softmenu[m].menuItem  == -MNU_CONVCHEF ||
                softmenu[m].menuItem  == -MNU_CONVTEMP ) {
-              showSoftkey2(true, indexOfItems[item%10000].itemSoftmenuName, x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, showCb, showValue, showText);
+              showSoftkey2(true, indexOfItems[item%10000].itemSoftmenuName, x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, showCb, showValue, showText, false);
             }
 
             else {

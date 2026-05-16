@@ -1378,6 +1378,46 @@ endReturnTrue:
 
                 runFunction(item);
 
+//Original version, not committed. Keep for reference, delecte at the next commit
+//                // Double execution when a custom conversion: additional to the runfunction which operated the 'normal' conversion
+//                uint16_t userSoftKeyPartnerItem = 0;
+//                if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode != CM_PEM &&
+//                     item > 0 && 
+//                     (-softmenu[softmenuStack[0].softmenuId].menuItem == MNU_DYNAMIC || -softmenu[softmenuStack[0].softmenuId].menuItem == MNU_MyMenu) && 
+//                     isItemConversion(item)) {
+//                  switch(-softmenu[softmenuStack[0].softmenuId].menuItem) {
+//                    case MNU_MyMenu:
+//                      userSoftKeyPartnerItem = userMenuItems[dynamicMenuItem ^ 1].item; // XOR flips bit 0, equivalent to even<->odd within each pair, to find the adjacent softkey item
+//                      break;
+//                    case MNU_DYNAMIC:
+//                      userSoftKeyPartnerItem = userMenus[currentUserMenu].menuItem[dynamicMenuItem ^ 1].item; // XOR flips bit 0, equivalent to even<->odd within each pair, to find the adjacent softkey item
+//                      break;
+//                    default:;
+//                  }
+//                  int16_t p = conversionPartner(item, NULL, NULL, NULL); // this is the expected symmetricala inverse of the conversion on item, and it if the adjacent conversion is the same as this, it is the standard conversion pair and no fanciness is required
+//                  if(isItemConversion(userSoftKeyPartnerItem) && p != 0 && p != userSoftKeyPartnerItem) {
+//                    runConversionToSI(item);
+//                    runConversionFromSI(userSoftKeyPartnerItem);
+//                    temporaryInformation = TI_NO_INFO;
+//                  }
+//                }
+
+                // Double execution when a custom conversion: additional to the runfunction which operated the 'normal' conversion
+                if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode != CM_PEM && item > 0 && isItemConversion(item)) {
+                  const int16_t softKeyIx  = dynamicMenuItem ^ 1;                                                                                         // XOR flips bit 0: adjacent softkey
+                  const int16_t curMenu    = -softmenu[softmenuStack[0].softmenuId].menuItem;
+                  const int16_t itemNrPair = (curMenu == MNU_MyMenu)  ? userMenuItems[softKeyIx].item
+                                           : (curMenu == MNU_DYNAMIC) ? userMenus[currentUserMenu].menuItem[softKeyIx].item
+                                           : 0;
+                  const int16_t p          = conversionPartner(item, NULL, NULL, NULL);                                                                   // expected symmetrical inverse; if it equals itemNrPair then it's the standard pair and no fanciness is needed
+                  if(isItemConversion(itemNrPair) && p != itemNrPair) {
+                    runConversionToSI(item);
+                    runConversionFromSI(itemNrPair);
+                    temporaryInformation = TI_NO_INFO;
+                  }
+                }
+
+
                 if(calcMode == CM_EIM && !tam.mode) {
                   if(isAlphaSubmenu(0)) {
                     while(currentMenu() != -MNU_EQ_EDIT) {
