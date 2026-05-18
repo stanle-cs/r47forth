@@ -1378,29 +1378,6 @@ endReturnTrue:
 
                 runFunction(item);
 
-//Original version, not committed. Keep for reference, delecte at the next commit
-//                // Double execution when a custom conversion: additional to the runfunction which operated the 'normal' conversion
-//                uint16_t userSoftKeyPartnerItem = 0;
-//                if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode != CM_PEM &&
-//                     item > 0 && 
-//                     (-softmenu[softmenuStack[0].softmenuId].menuItem == MNU_DYNAMIC || -softmenu[softmenuStack[0].softmenuId].menuItem == MNU_MyMenu) && 
-//                     isItemConversion(item)) {
-//                  switch(-softmenu[softmenuStack[0].softmenuId].menuItem) {
-//                    case MNU_MyMenu:
-//                      userSoftKeyPartnerItem = userMenuItems[dynamicMenuItem ^ 1].item; // XOR flips bit 0, equivalent to even<->odd within each pair, to find the adjacent softkey item
-//                      break;
-//                    case MNU_DYNAMIC:
-//                      userSoftKeyPartnerItem = userMenus[currentUserMenu].menuItem[dynamicMenuItem ^ 1].item; // XOR flips bit 0, equivalent to even<->odd within each pair, to find the adjacent softkey item
-//                      break;
-//                    default:;
-//                  }
-//                  int16_t p = conversionPartner(item, NULL, NULL, NULL); // this is the expected symmetricala inverse of the conversion on item, and it if the adjacent conversion is the same as this, it is the standard conversion pair and no fanciness is required
-//                  if(isItemConversion(userSoftKeyPartnerItem) && p != 0 && p != userSoftKeyPartnerItem) {
-//                    runConversionToSI(item);
-//                    runConversionFromSI(userSoftKeyPartnerItem);
-//                    temporaryInformation = TI_NO_INFO;
-//                  }
-//                }
 
                 // Double execution when a custom conversion: additional to the runfunction which operated the 'normal' conversion
                 if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode != CM_PEM && item > 0 && isItemConversion(item)) {

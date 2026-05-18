@@ -1861,6 +1861,14 @@ bool_t maxfgLines(int16_t y) {
     }
   }
 
+
+  static void buildConversionLabel(char *dst, const char *src) {
+    dst[0] = 0;
+    stringCopy(dst, src);
+    compressConversionName(dst);
+  }
+
+
   /********************************************//**
    * \brief Displays one softkey
    *
@@ -1881,6 +1889,10 @@ bool_t maxfgLines(int16_t y) {
     showKey(label, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
   }
 
+
+  /********************************************//**
+   * \brief showSoftkey2 displays a combined softkey, and needs two passed, first the left even nmber 0 2 4, then the right odd number 1 3 5)
+   ***********************************************/
   static void showSoftkey2(bool_t valid, const char *labelSM1, int16_t xSoftkey, int16_t ySoftKey, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText, bool_t doubleMidLine) {
     int16_t x1, y1, x2, y2;
     if(!initSoftkeyCoordinates(labelSM1, xSoftkey, ySoftKey, &x1, &x2, &y1, &y2)) {
@@ -1889,17 +1901,13 @@ bool_t maxfgLines(int16_t y) {
   char label1[30];
   if((xSoftkey & 1) == 0) { // softKey even
     xx1 = x1;
-    label0[0]=0;
-    stringCopy(label0 + stringByteLength(label0), labelSM1);
-    compressConversionName(label0);
+    buildConversionLabel(label0, labelSM1);
     showKey(labelSM1, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText); //purposely displaying the first half of the pair, otherwise it will not display, and wait for the second, when assigning it to a menu. Knowingly double display the softkey
   }
   truncateAtArrow(label0);
 
   if((xSoftkey & 1) != 0 && valid) { // softKey odd
-    label1[0]=0;
-    stringCopy(label1 + stringByteLength(label1), labelSM1);
-    compressConversionName(label1);
+    buildConversionLabel(label1, labelSM1);
     truncateAtArrow(label1);
     showKey2(label0, label1, xx1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText, doubleMidLine);
   } else {
@@ -1916,6 +1924,36 @@ static inline void drawKeyFrame(int16_t x1, int16_t x2, int16_t y1, int16_t y2, 
   lcd_fill_rect(x1 + 1, y1 + 1, min(x2, SCREEN_WIDTH) - x1 - 1, min(y2, SCREEN_HEIGHT) - y1 - 1, (videoMode == vmNormal ? LCD_SET_VALUE : LCD_EMPTY_VALUE));
 }
 
+
+
+//Show a 'panelled' view of softkeys if a menu is assignable
+static void showPanelledView(int16_t x1, int16_t x2, int16_t y1, videoMode_t videoMode) {
+  //printf("currentMenu()=%d\n",currentMenu());
+  #define _off 1 // function parameter: +1 is favoured
+  if(calcMode == CM_ASSIGN && itemToBeAssigned != 0 &&
+     (currentMenu() == -MNU_HOME ||
+      currentMenu() == -MNU_MyMenu ||
+      currentMenu() == -MNU_MyAlpha ||
+      currentMenu() == -MNU_PFN ||
+      currentMenu() == -MNU_DYNAMIC)) {
+    int16_t xs[4], ys[4], ws[4], hs[4];
+    if(_off == 2) { //inner doubling of softkey box
+      xs[0] = max(0, x1)+1;         ys[0] = y1;                         ws[0] = 1; hs[0] = SOFTMENU_HEIGHT;
+      xs[1] = x2-1;                 ys[1] = y1;                         ws[1] = 1; hs[1] = SOFTMENU_HEIGHT;
+      xs[2] = max(0, x1)+1;         ys[2] = y1+1;                       ws[2] = min(x2, SCREEN_WIDTH)-max(0, x1)-2; hs[2] = 1;
+      xs[3] = max(0, x1)+1;         ys[3] = y1+SOFTMENU_HEIGHT-1;       ws[3] = min(x2, SCREEN_WIDTH)-max(0, x1)-2; hs[3] = 1;
+    }
+    else { //positioning of nails or rivets
+      xs[0] = max(0, x1)+2+_off;    ys[0] = y1+1+_off;                  ws[0] = 3; hs[0] = 2;
+      xs[1] = max(0, x1)+2+_off;    ys[1] = y1+SOFTMENU_HEIGHT-2-_off;  ws[1] = 3; hs[1] = 2;
+      xs[2] = x2-1-3-_off;          ys[2] = y1+1+_off;                  ws[2] = 3; hs[2] = 2;
+      xs[3] = x2-1-3-_off;          ys[3] = y1+SOFTMENU_HEIGHT-2-_off;  ws[3] = 3; hs[3] = 2;
+    }
+    for(int i=0; i<4; i++) {
+      lcd_fill_rect(xs[i], ys[i], ws[i], hs[i], (videoMode == vmNormal ? LCD_EMPTY_VALUE : LCD_SET_VALUE));
+    }
+  }
+}
 
 
 static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText, bool_t doubleMidLine) {
@@ -1935,7 +1973,7 @@ static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t
   int16_t arrowSpace;
   const char *w[4];
 
-  if(getSystemFlag(FLAG_HPCONV)) {
+  if(getSystemFlag(FLAG_HPCONV) /*&& calcMode != CM_ASSIGN*/) { //select this to auto-swap to CF CONV_hp, for the duration of an assign
     t[0] = label1;
     t[1] = STD_LEFT_ARROW;
     t[2] = label0;
@@ -1976,7 +2014,7 @@ static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t
     space    = ((x2 - x1) - widths[0] - widths[1] - widths[2] - widths[3]) / 7.0f;
     Text0    = x1 + space;
     midpoint = 3.5 * space + widths[0] + widths[1];
-    if(getSystemFlag(FLAG_HPCONV)) {
+    if(getSystemFlag(FLAG_HPCONV) /*&& calcMode != CM_ASSIGN*/) {  //select this to auto-swap to CF CONV_hp, for the duration of an assign
       Arr0     = x1 + midpoint - arrowSpace - widths[1];
       Arr1   = x1 + midpoint + arrowSpace;
     }
@@ -2006,6 +2044,8 @@ static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t
     lcd_fill_rect(x1 + midpoint-1, y1 + 5, 1, min(y2, SCREEN_HEIGHT - 1) + 1 - y1 - 2*5, (videoMode == vmNormal ? LCD_EMPTY_VALUE : LCD_SET_VALUE));
     lcd_fill_rect(x1 + midpoint+1, y1 + 5, 1, min(y2, SCREEN_HEIGHT - 1) + 1 - y1 - 2*5, (videoMode == vmNormal ? LCD_EMPTY_VALUE : LCD_SET_VALUE));
   }
+
+showPanelledView(x1, x2, y1, videoMode);
 }
 
 
@@ -2081,35 +2121,7 @@ void showKey(const char *label, int16_t x1, int16_t x2, int16_t y1, int16_t y2, 
       }
     }
   }
-
-
-//Show a 'panelled' view of softkeys if a menu is assignable
-//printf("currentMenu()=%d\n",currentMenu());
-  #define _off 1 // function parameter: +1 is favoured
-  if(calcMode == CM_ASSIGN && itemToBeAssigned != 0 &&
-     (currentMenu() == -MNU_HOME ||
-      currentMenu() == -MNU_MyMenu ||
-      currentMenu() == -MNU_MyAlpha ||
-      currentMenu() == -MNU_PFN ||
-      currentMenu() == -MNU_DYNAMIC)) {
-
-    int16_t xs[4], ys[4], ws[4], hs[4];
-    if(_off == 2) { //inner doubling of softkey box
-      xs[0] = max(0, x1)+1;         ys[0] = y1;                         ws[0] = 1; hs[0] = SOFTMENU_HEIGHT;
-      xs[1] = x2-1;                 ys[1] = y1;                         ws[1] = 1; hs[1] = SOFTMENU_HEIGHT;
-      xs[2] = max(0, x1)+1;         ys[2] = y1+1;                       ws[2] = min(x2, SCREEN_WIDTH)-max(0, x1)-2; hs[2] = 1;
-      xs[3] = max(0, x1)+1;         ys[3] = y1+SOFTMENU_HEIGHT-1;       ws[3] = min(x2, SCREEN_WIDTH)-max(0, x1)-2; hs[3] = 1;
-    }
-    else { //positioning of nails or rivets
-      xs[0] = max(0, x1)+2+_off;    ys[0] = y1+1+_off;                  ws[0] = 3; hs[0] = 2;
-      xs[1] = max(0, x1)+2+_off;    ys[1] = y1+SOFTMENU_HEIGHT-2-_off;  ws[1] = 3; hs[1] = 2;
-      xs[2] = x2-1-3-_off;          ys[2] = y1+1+_off;                  ws[2] = 3; hs[2] = 2;
-      xs[3] = x2-1-3-_off;          ys[3] = y1+SOFTMENU_HEIGHT-2-_off;  ws[3] = 3; hs[3] = 2;
-    }
-    for(int i=0; i<4; i++) {
-      lcd_fill_rect(xs[i], ys[i], ws[i], hs[i], (videoMode == vmNormal ? LCD_EMPTY_VALUE : LCD_SET_VALUE));
-    }
-  }
+showPanelledView(x1, x2, y1, videoMode);
 }
 
 
@@ -3029,30 +3041,6 @@ void showSoftmenuCurrentPart(void) {
                 fnStrikeOutIfNotCoded(itemNr, x, y);
                 fnStrikeThroughIfNA(itemNr, x, y);
               }
-
-//Original version, not committed. Keep for reference, delecte at the next commit
-    //          int16_t itemNrPair = 0;
-    //          switch(-softmenu[m].menuItem) {
-    //            case MNU_MyMenu: {
-    //                itemNrPair = userMenuItems[(x^1) + 6*y].item;
-    //              break;
-    //            }
-    //            case MNU_DYNAMIC: {
-    //              itemNrPair = userMenus[currentUserMenu].menuItem[(x^1) + 6*y].item;
-    //              break;
-    //            }
-    //            default:;
-    //          }
-    //          bool_t areBothConv   = areBothConvertConfigurable(itemNr, itemNrPair);
-    //          bool_t isConvAndPair = isOneOfAConvertPair(x, itemNr, &oddNrPartnerForEven);
-    //          if(isConvAndPair || areBothConv) { // do the CONV magic in the softkey if odd, or if the even softKey's predicted itemNr = the real odd itemNr.
-    //            showSoftkey2(((x & 1) == 0) || ((x & 1) != 0 && itemNr == oddNrPartnerForEven), itemName, x, y, vm, true, true, showCb, showValue, showText, areBothConv && !isConvAndPair);
-    //          } else {
-    //            showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);                  
-    //          }
-    //          fnStrikeOutIfNotCoded(itemNr, x, y);
-    //          fnStrikeThroughIfNA(itemNr, x, y);
-    //        }
 
 
               ptr += stringByteLength((char *)ptr) + 1;
