@@ -149,9 +149,26 @@
     constFactorBananaInch,
     constFactorErgJ,
     constFactorFoeJ,            /* 140 */
+    constFactorKnotMps,
+    constFactor180onPi,
+    constFactorSlugKg,
+    constFactorSlinchKg,
+    constFactorBlobKg,
+    constFactorTonneKg,         /* 146 */
 
     constFactorEND              /* MUST be last */
   };
+
+
+  #define NUM_CONVERT_PAIRS  272
+  extern const fInMim_t MimFunctionsType3Conv[NUM_CONVERT_PAIRS];
+
+  int16_t conversionPartner          (int16_t input, int16_t *unity, int8_t *exponent, uint8_t *type);
+  bool_t  isItemConversion           (int16_t itemNr);
+  bool_t  isOneOfAConvertPair        (uint16_t x, int16_t itemNr, int16_t *oddNrPartner);
+  void    runConversionToSI          (int16_t itemNr);
+  void    runConversionFromSI        (int16_t itemNr);
+  bool_t  areBothConvertConfigurable (int16_t item1Nr, int16_t item2Nr);
 
   void fnUnitConvert  (uint16_t multiplyDivide);
 

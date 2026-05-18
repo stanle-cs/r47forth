@@ -1378,6 +1378,23 @@ endReturnTrue:
 
                 runFunction(item);
 
+
+                // Double execution when a custom conversion: additional to the runfunction which operated the 'normal' conversion
+                if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode != CM_PEM && item > 0 && isItemConversion(item)) {
+                  const int16_t softKeyIx  = dynamicMenuItem ^ 1;                                                                                         // XOR flips bit 0: adjacent softkey
+                  const int16_t curMenu    = -softmenu[softmenuStack[0].softmenuId].menuItem;
+                  const int16_t itemNrPair = (curMenu == MNU_MyMenu)  ? userMenuItems[softKeyIx].item
+                                           : (curMenu == MNU_DYNAMIC) ? userMenus[currentUserMenu].menuItem[softKeyIx].item
+                                           : 0;
+                  const int16_t p          = conversionPartner(item, NULL, NULL, NULL);                                                                   // expected symmetrical inverse; if it equals itemNrPair then it's the standard pair and no fanciness is needed
+                  if(isItemConversion(itemNrPair) && p != itemNrPair) {
+                    runConversionToSI(item);
+                    runConversionFromSI(itemNrPair);
+                    temporaryInformation = TI_NO_INFO;
+                  }
+                }
+
+
                 if(calcMode == CM_EIM && !tam.mode) {
                   if(isAlphaSubmenu(0)) {
                     while(currentMenu() != -MNU_EQ_EDIT) {
