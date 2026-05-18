@@ -319,6 +319,8 @@ typedef enum {
   UT_SPEED,                   // linear speed        SI base: m/s   km/h, mph, fps, fpf chain to m/s
   UT_ANGLE,                   // plane angle         SI base: rad   deg, grad
   UT_ANGULAR_SPEED,           // angular velocity    SI base: rad/s rpm, deg/s
+  UT_FUELECON,                // fuel economy        no SI base:    linked-function pairs only. L100/km per L/mpg US/mpg UK
+  UT_EVECON,                  // EV energy economy   no SI base:    linked-function pairs only. kWh/100km, kWh/100mi, km per kWh, mi per kWh, mpge US/UK
 } unitType_t;
 
 typedef struct {
@@ -554,24 +556,24 @@ TO_QSPI static const convPair_t convertPairs[NUM_CONVERT_PAIRS] = {             
   { ITM_KMHtoFPS     , ITM_FPStoKMH     , ITM_FPStoMPS    , +0 , UT_SPEED            },
   { ITM_FPStoMPS     , ITM_MPStoFPS     , ITM_NULL        , +0 , UT_SPEED            },
   { ITM_MPStoFPS     , ITM_FPStoMPS     , ITM_FPStoMPS    , +0 , UT_SPEED            },
-  { ITM_L100toKML    , ITM_KMLtoL100    , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_KMLtoL100    , ITM_L100toKML    , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_KMLEtoK100K  , ITM_K100KtoKMLE  , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_K100KtoKMLE  , ITM_KMLEtoK100K  , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_K100KtoKMK   , ITM_KMKtoK100K   , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_KMKtoK100K   , ITM_K100KtoKMK   , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_L100toMGUS   , ITM_MGUStoL100   , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_MGUStoL100   , ITM_L100toMGUS   , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_MGEUStoK100M , ITM_K100MtoMGEUS , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_K100MtoMGEUS , ITM_MGEUStoK100M , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_K100KtoK100M , ITM_K100MtoK100K , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_K100MtoK100K , ITM_K100KtoK100M , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_L100toMGUK   , ITM_MGUKtoL100   , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_MGUKtoL100   , ITM_L100toMGUK   , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_MGEUKtoK100M , ITM_K100MtoMGEUK , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_K100MtoMGEUK , ITM_MGEUKtoK100M , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_K100MtoMIK   , ITM_MIKtoK100M   , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
-  { ITM_MIKtoK100M   , ITM_K100MtoMIK   , ITM_NULL        , +0 , UT_NOT_CONFIGURABLE },
+  { ITM_L100toKML    , ITM_KMLtoL100    , ITM_NULL        , +0 , UT_FUELECON         },
+  { ITM_KMLtoL100    , ITM_L100toKML    , ITM_NULL        , +0 , UT_FUELECON         },
+  { ITM_KMLEtoK100K  , ITM_K100KtoKMLE  , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_K100KtoKMLE  , ITM_KMLEtoK100K  , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_K100KtoKMK   , ITM_KMKtoK100K   , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_KMKtoK100K   , ITM_K100KtoKMK   , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_L100toMGUS   , ITM_MGUStoL100   , ITM_NULL        , +0 , UT_FUELECON         },
+  { ITM_MGUStoL100   , ITM_L100toMGUS   , ITM_NULL        , +0 , UT_FUELECON         },
+  { ITM_MGEUStoK100M , ITM_K100MtoMGEUS , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_K100MtoMGEUS , ITM_MGEUStoK100M , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_K100KtoK100M , ITM_K100MtoK100K , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_K100MtoK100K , ITM_K100KtoK100M , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_L100toMGUK   , ITM_MGUKtoL100   , ITM_NULL        , +0 , UT_FUELECON         },
+  { ITM_MGUKtoL100   , ITM_L100toMGUK   , ITM_NULL        , +0 , UT_FUELECON         },
+  { ITM_MGEUKtoK100M , ITM_K100MtoMGEUK , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_K100MtoMGEUK , ITM_MGEUKtoK100M , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_K100MtoMIK   , ITM_MIKtoK100M   , ITM_NULL        , +0 , UT_EVECON           },
+  { ITM_MIKtoK100M   , ITM_K100MtoMIK   , ITM_NULL        , +0 , UT_EVECON           },
   { ITM_EVtoJ        , ITM_JtoEV        , ITM_NULL        , +0 , UT_ENERGY           },
   { ITM_JtoEV        , ITM_EVtoJ        , ITM_EVtoJ       , +0 , UT_ENERGY           },
   { ITM_BANANAtoINCH , ITM_INCHtoBANANA , ITM_INCHtoCM    , -2 , UT_DISTANCE         },
@@ -639,6 +641,10 @@ bool_t areBothConvertConfigurable(int16_t item1Nr, int16_t item2Nr) {
   const convPair_t *entry1 = findPair(item1Nr);
   const convPair_t *entry2 = findPair(item2Nr);
   return entry1 && entry2 && entry1->type == entry2->type && entry1->type != UT_NOT_CONFIGURABLE;  // both conversions are of the same configurable type, preventing the mixing of units
+}
+
+bool_t isStandardPair(int16_t item1Nr, int16_t item2Nr) {  // True when item2Nr is the standard table partner of item1Nr: a fixed pair, use the direct partner conversion, no SI round-trip and no configured-pair magic
+  return item2Nr != 0 && conversionPartner(item1Nr, NULL, NULL, NULL) == item2Nr;
 }
 
 bool_t isOneOfAConvertPair(uint16_t x, int16_t itemNr, int16_t *oddNrPartner) {

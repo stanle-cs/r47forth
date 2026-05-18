@@ -3027,8 +3027,10 @@ void showSoftmenuCurrentPart(void) {
                                          : (curMenu == MNU_DYNAMIC) ? userMenus[currentUserMenu].menuItem[softKeyIx].item
                                          : 0;
                 isOneOfAConvertPair(x, itemNr, &oddNrPartnerForEven);                            // side-effect: sets oddNrPartnerForEven
-                const bool_t  areBothConv = areBothConvertConfigurable(itemNr, itemNrPair);
-                const bool_t  flag        = areBothConv && (conversionPartner(itemNr, NULL, NULL, NULL) != itemNrPair);
+                const bool_t  bothConfigurable = areBothConvertConfigurable(itemNr, itemNrPair);
+                const bool_t  standardPair     = isStandardPair(itemNr, itemNrPair);             // fixed table pair: direct conversion, plain rendering
+                const bool_t  areBothConv = bothConfigurable || standardPair;                    // draw as a pair: same configurable type, or genuine fixed partner (covers UT_NOT_CONFIGURABLE)
+                const bool_t  flag        = bothConfigurable && !standardPair;                   // configured (non-canonical) pair: magic; canonical fixed pair: plain
                 const bool_t  cond        = flag || ((x & 1) == 0) || (itemNr == oddNrPartnerForEven);
                 //printf(">>> softkey x=%d y=%d itemNr=%d menu=%d itemNrPair=%d areBothConv=%d flag=%d cond=%d odd=%d\n",x, y, itemNr, curMenu , itemNrPair, areBothConv, flag, cond, oddNrPartnerForEven);
 
