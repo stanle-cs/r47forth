@@ -861,7 +861,7 @@ static void _decodeOneStep(uint8_t *step, uint16_t textVersion) {
             strcpy(nameOp, indexOfItems[op].itemCatalogName[0] != 0 ? indexOfItems[op].itemCatalogName : indexOfItems[op].itemSoftmenuName);
           }
         }
-        if(indexOfItems[op].param == multiply || indexOfItems[op].param == divide) {
+        if(indexOfItems[op].param == multiply || (divide & indexOfItems[op].param) == divide || (invert & indexOfItems[op].param) == invert || ((invert | multiply) & indexOfItems[op].param) == (invert | multiply)) {
           expandConversionName(nameOp);
         }
         sprintf(tmpString, "%s%s", (FIRST_CONSTANT <= op && op <= LAST_CONSTANT) ? "# " : "", nameOp);

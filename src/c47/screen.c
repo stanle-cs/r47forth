@@ -2074,6 +2074,7 @@ return res;
     }
 
     if(functionName[0] != 0) {
+      expandConversionName(functionName);
       bool_t overLapPossible = (calcMode == CM_PEM);
       padding[0] = 0;
       if(overLapPossible) {

@@ -1899,14 +1899,14 @@ bool_t maxfgLines(int16_t y) {
       return;
     }
   char label1[30];
-  if((xSoftkey & 1) == 0) { // softKey even
+  if((xSoftkey & 1) == 0) { // softKey even 0, 2, 4
     xx1 = x1;
     buildConversionLabel(label0, labelSM1);
     showKey(labelSM1, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText); //purposely displaying the first half of the pair, otherwise it will not display, and wait for the second, when assigning it to a menu. Knowingly double display the softkey
   }
-  truncateAtArrow(label0);
+  truncateAtArrow(label0); //cut off to prevent label overrun to next slot
 
-  if((xSoftkey & 1) != 0 && valid) { // softKey odd
+  if((xSoftkey & 1) != 0 && valid) { // softKey odd 1, 3, 5
     buildConversionLabel(label1, labelSM1);
     truncateAtArrow(label1);
     showKey2(label0, label1, xx1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText, doubleMidLine);

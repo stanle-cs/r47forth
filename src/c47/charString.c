@@ -128,7 +128,7 @@ void expandConversionName(char *msg1) {   // 2x16+1 character limit, rounded up 
   xcopy(inStr, msg1, min(50, stringByteLength(msg1)+1));
   inStr[50] = 0;
   msg1[0] = 0;
-  while(inStr[i] != 0) { //replace /U with /kWh; U/ with kWh/; hkm with 100km
+  while(inStr[i] != 0) { //replace /E with /kWh; E/ with kWh/; hkm with 100km
     if('h' == inStr[i] && 'k' == inStr[i+1] && 'm' == inStr[i+2]) {    //test beyond end of string is ok, it will not test positive
       msg1[jj++] = '1';
       i++;
