@@ -2978,6 +2978,7 @@ void showSoftmenuCurrentPart(void) {
     int16_t showValue = NOVAL;
     showText[0] = 0;
     int16_t oddNrPartnerForEven = 0;
+    bool_t convUserMenu = false;
 
     if(m < NUMBER_OF_DYNAMIC_SOFTMENUS) { // Dynamic softmenu
       #if defined(PC_BUILD)
@@ -3019,6 +3020,7 @@ void showSoftmenuCurrentPart(void) {
                      vm = vmReverse;       //No item name changes available for menu names
                     }
                     else {
+                      convUserMenu = true;
                       if(userMenuItems[x + 6*y].argumentName[0] == 0) {
                         changeSoftKey(itemNr, itemName, &vm, &showCb, &showValue, showText);
                       }
@@ -3037,6 +3039,7 @@ void showSoftmenuCurrentPart(void) {
                      vm = vmReverse;       //No item name changes available for menu names
                     }
                     else {
+                      convUserMenu = true;
                       if(userMenus[currentUserMenu].menuItem[x + 6*y].argumentName[0] == 0) {
                         changeSoftKey(itemNr, itemName, &vm, &showCb, &showValue, showText);
                       }
@@ -3096,6 +3099,7 @@ void showSoftmenuCurrentPart(void) {
 
 
 
+                if(convUserMenu) {                                                                 // user menus
                 // Activate the CONVERT magic to swap the arrows and move the midpoint
                 const int16_t softKeyIx  = (x^1) + 6*y;
                 const int16_t curMenu    = -softmenu[m].menuItem;
@@ -3113,9 +3117,28 @@ void showSoftmenuCurrentPart(void) {
                 if(areBothConv) {                                                                // CONV magic on softkey
                   showSoftkey2(cond, itemName, x, y, vm, true, true, showCb, showValue, showText, flag);
                 }
+
                 else {
+                    if(isItemConversion(itemNr)) {                                                 // It is definately a single here
+                      if(getSystemFlag(FLAG_HPCONV)) {
+                        //printf("SWAP, changing itemName !!!\n");
+                        changeSoftKey(conversionPartner(itemNr, NULL, NULL, NULL), itemName, &vm, &showCb, &showValue, showText);
+                        truncateAtArrow(itemName);
+                        strcat(itemName, STD_LEFT_ARROW);
+                      } else {
+                        truncateAtArrow(itemName);
+                        strcat(itemName, STD_RIGHT_ARROW);
+                      }
+//                      trimKey(itemName, 0);
+                    }
+                    showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);
+                  }
+                } 
+
+                else {                                                                            // fall through for non-user menus
                   showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);
                 }
+
                 fnStrikeOutIfNotCoded(itemNr, x, y);
                 fnStrikeThroughIfNA(itemNr, x, y);
               }
