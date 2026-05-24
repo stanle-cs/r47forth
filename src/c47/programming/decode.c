@@ -861,8 +861,9 @@ static void _decodeOneStep(uint8_t *step, uint16_t textVersion) {
             strcpy(nameOp, indexOfItems[op].itemCatalogName[0] != 0 ? indexOfItems[op].itemCatalogName : indexOfItems[op].itemSoftmenuName);
           }
         }
-        if(indexOfItems[op].param == multiply || (divide & indexOfItems[op].param) == divide || (invert & indexOfItems[op].param) == invert || ((invert | multiply) & indexOfItems[op].param) == (invert | multiply)) {
+        if(isItemConversion(op)) {
           expandConversionName(nameOp);
+          // expandAbbreviations(nameOp); // do not use this one, because we want the 100 to be fully written normally not with the small 1 0 0
         }
         sprintf(tmpString, "%s%s", (FIRST_CONSTANT <= op && op <= LAST_CONSTANT) ? "# " : "", nameOp);
         break;

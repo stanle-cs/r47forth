@@ -2074,7 +2074,7 @@ return res;
     }
 
     if(functionName[0] != 0) {
-      expandConversionName(functionName);
+      expandAbbreviations(functionName);
       bool_t overLapPossible = (calcMode == CM_PEM);
       padding[0] = 0;
       if(overLapPossible) {
@@ -5513,8 +5513,11 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         lcd_fill_rect(45+20, tamOverPemYPos, 168, 20, LCD_SET_VALUE);
         showString(tamBuffer, &standardFont, 75+20, tamOverPemYPos, vmNormal,  false, false);
       }
-      else { // Fixed line to display TAM informations
+      else { // Fixed line to display TAM informations, and ASSIGN preview information
         clearTamBuffer();
+        if(isItemConversion(itemToBeAssigned)) {
+          expandAbbreviations(tamBuffer);
+        }
         showString(tamBuffer, &standardFont, funcNameOffset_x, Y_POSITION_OF_TAM_LINE + 6, vmNormal, true, true);
       }
     }
