@@ -2119,7 +2119,7 @@ static uint32_t trimSoftKeyNameFromLeft(uint16_t lim, char *l, int mode, int com
 }
 
 
-// Trim the correct side, depending if an odd or even softkey. Trim to the arrowm and if still too wide, trim form the other side as well.
+// Trim the correct side, depending if an odd or even softkey. Trim to the arrow, and if still too wide, trim from the other side as well.
 static void trimKey(char* itemName, int x) {
   uint16_t lim = (x == 5) ? 65 : 66;
   uint32_t w;
@@ -3129,7 +3129,8 @@ void showSoftmenuCurrentPart(void) {
                         truncateAtArrow(itemName);
                         strcat(itemName, STD_RIGHT_ARROW);
                       }
-//                      trimKey(itemName, 0);
+                      expandAbbreviations(itemName);
+                      trimKey(itemName, 0);
                     }
                     showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);
                   }
