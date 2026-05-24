@@ -1869,6 +1869,8 @@ bool_t maxfgLines(int16_t y) {
   }
 
 
+
+  static void trimKey(char* itemName, int x);
   /********************************************//**
    * \brief Displays one softkey
    *
@@ -1993,7 +1995,7 @@ static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t
     w[1] = STD_RIGHT_ARROW;
     w[2] = STD_LEFT_ARROW;
     w[3] = label1;
-    arrowSpace = 10;
+    arrowSpace = 4;
   }
   for(int i=0; i<4; i++) {
     widths[i] = showStringEnhanced(w[i], &standardFont, 0, y1+YY, videoMode, false, false, DO_compress, NO_raise, NO_Show, NO_Bold, NO_LF);
@@ -2049,24 +2051,97 @@ showPanelledView(x1, x2, y1, videoMode);
 }
 
 
-// Trim the soft-key label from the right, one glyph at a time, until its width fits the soft-key slot (<=67 px) or only 1 len
+// // Trim the soft-key label from the right, one glyph at a time, until its width fits the soft-key slot (<=67 px) or only 1 len
+// static uint32_t trimSoftKeyName(uint16_t lim, char *l, int mode, int comp, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows) {
+//   uint32_t w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);
+//   if(w > lim) {                                                                   // fits already? leave alone
+//     char *cut = stringAfterPixelsC47(l, mode, comp, lim, withLeadingEmptyRows, withEndingEmptyRows);
+//     if(cut == l) {                                                               // first glyph alone too wide
+//       cut = l + stringNextGlyph(l, 0);                                           // keep one glyph anyway
+//     }
+//     *cut = 0;                                                                    // truncate in place
+//     w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);// remeasure for return
+//   }
+//   return w;
+// }
+
+
+// Trim the soft-key label from the right, one glyph at a time, until its width fits the soft-key slot (<=lim px) or only 1 len.
+//   If the natural cut would consume an arrow, the cut is moved to just past the arrow so it is preserved (same trade-off as the left-trim).
 static uint32_t trimSoftKeyName(uint16_t lim, char *l, int mode, int comp, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows) {
   uint32_t w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);
   if(w > lim) {                                                                   // fits already? leave alone
-    char *cut = stringAfterPixelsC47(l, mode, comp, lim, withLeadingEmptyRows, withEndingEmptyRows);
-    if(cut == l) {                                                               // first glyph alone too wide
-      cut = l + stringNextGlyph(l, 0);                                           // keep one glyph anyway
+    int16_t arrowEnd = -1;                                                        // byte index just past first arrow, or -1 if none
+    for(int16_t i = 0; l[i] != 0 && l[i+1] != 0; i++) {
+      if((STD_RIGHT_ARROW[0] == l[i] && STD_RIGHT_ARROW[1] == l[i+1]) ||
+         (STD_LEFT_ARROW[0]  == l[i] && STD_LEFT_ARROW[1]  == l[i+1])) {
+        arrowEnd = i + 2;
+        break;
+      }
     }
-    *cut = 0;                                                                    // truncate in place
-    w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);// remeasure for return
+    char *cut = stringAfterPixelsC47(l, mode, comp, lim, withLeadingEmptyRows, withEndingEmptyRows);
+    if(cut == l) {                                                                // first glyph alone too wide
+      cut = l + stringNextGlyph(l, 0);                                            // keep one glyph anyway
+    }
+    if(arrowEnd > 0 && cut < l + arrowEnd) {                                      // would the cut eat the arrow?
+      cut = l + arrowEnd;                                                         // push cut to just past the arrow
+    }
+    *cut = 0;                                                                     // truncate in place
+    w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows); // remeasure for return
   }
   return w;
 }
 
 
+
+// Trim the soft-key label from the left, one glyph at a time, by shifting the remaining text down in place, until the width fits the slot or the arrow is
+// reached. The arrow itself is preserved.
+static uint32_t trimSoftKeyNameFromLeft(uint16_t lim, char *l, int mode, int comp, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows) {
+  uint32_t w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);
+  while(w > lim && l[0] != 0 && l[1] != 0) {
+    if((STD_RIGHT_ARROW[0] == l[0] && STD_RIGHT_ARROW[1] == l[1]) ||
+       (STD_LEFT_ARROW[0]  == l[0] && STD_LEFT_ARROW[1]  == l[1])) {
+      break;
+    }
+    int16_t step = stringNextGlyph(l, 0);
+    if(step == 0) {
+      break;
+    }
+    int16_t k = 0;
+    while(l[step + k] != 0) {
+      l[k] = l[step + k];
+      k++;
+    }
+    l[k] = 0;
+    w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);
+  }
+  return w;
+}
+
+
+// Trim the correct side, depending if an odd or even softkey. Trim to the arrowm and if still too wide, trim form the other side as well.
+static void trimKey(char* itemName, int x) {
+  uint16_t lim = (x == 5) ? 65 : 66;
+  uint32_t w;
+  if((x & 1) == 0) { //even
+    w = trimSoftKeyName(lim, itemName, stdNoEnlarge, 0, false, false);
+    if(w > lim) {
+      trimSoftKeyNameFromLeft(lim, itemName, stdNoEnlarge, 0, false, false);
+    }
+  }
+  else {
+    w = trimSoftKeyNameFromLeft(lim, itemName, stdNoEnlarge, 0, false, false);
+    if(w > lim) {
+      trimSoftKeyName(lim, itemName, stdNoEnlarge, 0, false, false);
+    }
+  }
+}
+
+
+
 void showKey(const char *label, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText) {
     int16_t w;
-    char l[16];
+    char l[50];
 
     drawKeyFrame(x1, x2, y1, y2, videoMode, topLine, bottomLine);
 
@@ -2258,7 +2333,7 @@ static void placeSubscript(int16_t itemNr, bool_t flt, float tmpF, char *itemNam
 }
 
 
-void changeSoftKey(int16_t menuNr, int16_t itemNr, char * itemName, videoMode_t * vm, int8_t * showCb, int16_t * showValue, char * showText) {
+static void changeSoftKey(int16_t itemNr, char * itemName, videoMode_t * vm, int8_t * showCb, int16_t * showValue, char * showText) {
   float tmpF = 0;
   char tmpS[30], tmpSS[20];
   real_t tmpR;
@@ -2894,7 +2969,7 @@ void showSoftmenuCurrentPart(void) {
       }
     }
 
-    char itemName[16];
+    char itemName[50];
     itemName[0] = 0;
     char showText[16];
     showText[0] = 0;
@@ -2945,7 +3020,7 @@ void showSoftmenuCurrentPart(void) {
                     }
                     else {
                       if(userMenuItems[x + 6*y].argumentName[0] == 0) {
-                        changeSoftKey(softmenu[m].menuItem, itemNr, itemName, &vm, &showCb, &showValue, showText);
+                        changeSoftKey(itemNr, itemName, &vm, &showCb, &showValue, showText);
                       }
                     }
                     break;
@@ -2956,13 +3031,14 @@ void showSoftmenuCurrentPart(void) {
                     break;
                   }
                   case MNU_DYNAMIC: {
+                    //printf(">>>> User Menu: %i %s : %s\n",itemNr, itemName, userMenuItems[x + 6*y].argumentName);
                     itemNr = userMenus[currentUserMenu].menuItem[x + 6*y].item;
                     if(itemNr < 0) {
                      vm = vmReverse;       //No item name changes available for menu names
                     }
                     else {
                       if(userMenus[currentUserMenu].menuItem[x + 6*y].argumentName[0] == 0) {
-                        changeSoftKey(softmenu[m].menuItem, itemNr, itemName, &vm, &showCb, &showValue, showText);
+                        changeSoftKey(itemNr, itemName, &vm, &showCb, &showValue, showText);
                       }
                     }
                     break;
@@ -3065,7 +3141,7 @@ void showSoftmenuCurrentPart(void) {
           else {
             item = softkeyItem[x];
           }
-          changeSoftKey(softmenu[m].menuItem, item, itemName, &vm, &showCb, &showValue, showText);
+          changeSoftKey(item, itemName, &vm, &showCb, &showValue, showText);
 
 
           if(item < 0) { // item is softmenu name

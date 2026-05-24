@@ -163,6 +163,43 @@ void expandConversionName(char *msg1) {   // 2x16+1 character limit, rounded up 
 }
 
 
+static bool_t compressBinary(const char *in, char *out, int16_t *jjPtr) {
+  if('1' == in[0] && '0' == in[1] && '0' == in[2] && ('k' == in[3] || 'm' == in[3])) {
+    int16_t jj = *jjPtr;
+    out[jj++] = STD_BINARY_ONE[0];
+    out[jj++] = STD_BINARY_ONE[1];
+    out[jj++] = STD_BINARY_ZERO[0];
+    out[jj++] = STD_BINARY_ZERO[1];
+    out[jj++] = STD_BINARY_ZERO[0];
+    out[jj++] = STD_BINARY_ZERO[1];
+    out[jj++] = in[3];          //k or m for km or mile
+    *jjPtr = jj;
+    return true;
+  }
+  return false;
+}
+
+
+void expandAbbreviations(char *msg1) {
+  expandConversionName(msg1);
+  int16_t i = 0;
+  int16_t jj = 0;
+  char inStr[51];
+  xcopy(inStr, msg1, min(50, stringByteLength(msg1)+1));
+  inStr[50] = 0;
+  msg1[0] = 0;
+  while(inStr[i] != 0) { //replace 100k with |ook; 100m with |oom
+    if(compressBinary(inStr + i, msg1, &jj)) {    //test beyond end of string is ok, it will not test positive
+      i += 4;
+    }
+    else {
+      msg1[jj++] = inStr[i++];
+    }
+  }
+  msg1[jj++] = 0;
+}
+
+
 void compressConversionName(char *msg1) {   // 2x16+1 character limit, rounded up to 50
   int16_t i = 0;
   int16_t jj = 0;
@@ -171,14 +208,7 @@ void compressConversionName(char *msg1) {   // 2x16+1 character limit, rounded u
   inStr[50] = 0;
   msg1[0] = 0;
   while(inStr[i] != 0) { //replace 100k with |ook; 100m with |oom; /kWh with /U; kWh/ with U/
-    if('1' == inStr[i] && '0' == inStr[i+1] && '0' == inStr[i+2] && ('k' == inStr[i+3] || 'm' == inStr[i+3])) {    //test beyond end of string is ok, it will not test positive
-      msg1[jj++] = STD_BINARY_ONE[0];
-      msg1[jj++] = STD_BINARY_ONE[1];
-      msg1[jj++] = STD_BINARY_ZERO[0];
-      msg1[jj++] = STD_BINARY_ZERO[1];
-      msg1[jj++] = STD_BINARY_ZERO[0];
-      msg1[jj++] = STD_BINARY_ZERO[1];
-      msg1[jj++] = inStr[i+3];          //k or m for km or mile
+    if(compressBinary(inStr + i, msg1, &jj)) {    //test beyond end of string is ok, it will not test positive
       i += 4;
     }
     else if('/' == inStr[i] && 'k' == inStr[i+1] && 'W' == inStr[i+2] && 'h' == inStr[i+3]) {
