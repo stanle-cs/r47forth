@@ -1870,7 +1870,6 @@ bool_t maxfgLines(int16_t y) {
 
 
 
-  static void trimKey(char* itemName, int x);
   /********************************************//**
    * \brief Displays one softkey
    *
@@ -1896,6 +1895,7 @@ bool_t maxfgLines(int16_t y) {
    * \brief showSoftkey2 displays a combined softkey, and needs two passed, first the left even nmber 0 2 4, then the right odd number 1 3 5)
    ***********************************************/
   static void showSoftkey2(bool_t valid, const char *labelSM1, int16_t xSoftkey, int16_t ySoftKey, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText, bool_t doubleMidLine) {
+    //printC47ShortStringToConsole(labelSM1,"A:","\n");
     int16_t x1, y1, x2, y2;
     if(!initSoftkeyCoordinates(labelSM1, xSoftkey, ySoftKey, &x1, &x2, &y1, &y2)) {
       return;
@@ -1904,7 +1904,6 @@ bool_t maxfgLines(int16_t y) {
   if((xSoftkey & 1) == 0) { // softKey even 0, 2, 4
     xx1 = x1;
     buildConversionLabel(label0, labelSM1);
-    showKey(labelSM1, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText); //purposely displaying the first half of the pair, otherwise it will not display, and wait for the second, when assigning it to a menu. Knowingly double display the softkey
   }
   truncateAtArrow(label0); //cut off to prevent label overrun to next slot
 
@@ -1912,8 +1911,11 @@ bool_t maxfgLines(int16_t y) {
     buildConversionLabel(label1, labelSM1);
     truncateAtArrow(label1);
     showKey2(label0, label1, xx1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText, doubleMidLine);
-  } else {
-    showKey(labelSM1, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
+    //printC47ShortStringToConsole(label0,"    ","  ");
+    //printC47ShortStringToConsole(label1,"","\n");
+
+//  } else {
+//    showKey(labelSM1, x1, x2, y1, y2, videoMode, topLine, bottomLine, showCb, showValue, showText);
   }
 }
 
@@ -2120,7 +2122,7 @@ static uint32_t trimSoftKeyNameFromLeft(uint16_t lim, char *l, int mode, int com
 
 
 // Trim the correct side, depending if an odd or even softkey. Trim to the arrow, and if still too wide, trim from the other side as well.
-static void trimKey(char* itemName, int x) {
+static uint32_t trimKey(char* itemName, int x) {
   uint16_t lim = (x == 5) ? 65 : 66;
   uint32_t w;
   if((x & 1) == 0) { //even
@@ -2135,6 +2137,7 @@ static void trimKey(char* itemName, int x) {
       trimSoftKeyName(lim, itemName, stdNoEnlarge, 0, false, false);
     }
   }
+  return w;
 }
 
 
@@ -2142,27 +2145,28 @@ static void trimKey(char* itemName, int x) {
 void showKey(const char *label, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText) {
     int16_t w;
     char l[50];
+    char ll[50];
 
     drawKeyFrame(x1, x2, y1, y2, videoMode, topLine, bottomLine);
 
     xcopy(l, label, stringByteLength(label) + 1);
-    //    char *lw = stringAfterPixels(l, &standardFont, (rightMostSlot ? 65 : 66), false, false);
-    //    *lw = 0;
+
     //continue with trimmed label
-    w = trimSoftKeyName(x2-x1-1, l, stdNoEnlarge, 0, false, false);                           // trim label to fit slot, returns final width
+    strcpy(ll, figlabel(l, showText, showValue));
+    w = trimKey(ll, 0);
+  //w = trimSoftKeyName(x2-x1-1, l, stdNoEnlarge, 0, false, false);                           // trim label to fit slot, returns final width
+
     if((showCb >= 0) || (w >= ((min(x2, SCREEN_WIDTH) - max(0, x1))*3)/4 )) {
-      w = stringWidthC47(figlabel(l, showText, showValue), stdNoEnlarge, 1, false, false);
+      w = stringWidthC47(ll, stdNoEnlarge, 1, false, false);
       if(showCb >= 0) {
         w = w + 8;
       }
-      //    char *lw = stringAfterPixelsC47(l, stdNoEnlarge, compressString, rightMostSlot ? 65 : 66, false, false);
-      //    *lw = 0;
       compressString = 1;       //JM compressString
-      showString(figlabel(l, showText, showValue), &standardFont, (x1 + x2 - w)/2, y1 + 2, videoMode, false, false);
+      showString(ll, &standardFont, (x1 + x2 - w)/2, y1 + 2, videoMode, false, false);
       compressString = 0;       //JM compressString
     } else {
       //clearly short enough so no trimming was needed anyway
-      showString(figlabel(l, showText, showValue), &standardFont, (x1 + x2 - w)/2, y1 + 2, videoMode, false, false);
+      showString(ll, &standardFont, (x1 + x2 - w)/2, y1 + 2, videoMode, false, false);
     }                                                                                              //JM & dr ^^
 
     #if defined(JM_LINE2_DRAW)
@@ -3130,7 +3134,6 @@ void showSoftmenuCurrentPart(void) {
                         strcat(itemName, STD_RIGHT_ARROW);
                       }
                       expandAbbreviations(itemName);
-                      trimKey(itemName, 0);
                     }
                     showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);
                   }
