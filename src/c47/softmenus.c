@@ -2126,15 +2126,15 @@ static uint32_t trimKey(char* itemName, int x) {
   uint16_t lim = (x == 5) ? 65 : 66;
   uint32_t w;
   if((x & 1) == 0) { //even
-    w = trimSoftKeyName(lim, itemName, stdNoEnlarge, 0, false, false);
+    w = trimSoftKeyName(lim, itemName, stdNoEnlarge, 1, false, false);
     if(w > lim) {
-      trimSoftKeyNameFromLeft(lim, itemName, stdNoEnlarge, 0, false, false);
+      trimSoftKeyNameFromLeft(lim, itemName, stdNoEnlarge, 1, false, false);
     }
   }
   else {
-    w = trimSoftKeyNameFromLeft(lim, itemName, stdNoEnlarge, 0, false, false);
+    w = trimSoftKeyNameFromLeft(lim, itemName, stdNoEnlarge, 1, false, false);
     if(w > lim) {
-      trimSoftKeyName(lim, itemName, stdNoEnlarge, 0, false, false);
+      trimSoftKeyName(lim, itemName, stdNoEnlarge, 1, false, false);
     }
   }
   return w;
