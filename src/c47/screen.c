@@ -2014,9 +2014,9 @@ return res;
 //#define DEBUG_SHOWNAME
   void showFunctionName(int16_t itm, int16_t delayInMs, const char *arg) {
     int16_t item = (int16_t)itm;
-    //printf("---Function par:%4u %4u-- converted %4u--arg:|%s|-=-\n", itm, (int16_t)itm, item, arg );
+    //printf("---Function par:%4u %4u-- converted %4u--arg:|%s|-=- L=%d\n", itm, (int16_t)itm, item, arg , stringByteLength(arg));
     char functionName[64];
-    char padding[25];          //(2+0)+(15+0)+(7+0)+1 = 25
+    char padding[64];
     functionName[0] = 0;
     showFunctionNameArg = NULL;
 
