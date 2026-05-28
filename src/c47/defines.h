@@ -1516,6 +1516,10 @@ static inline uint8_t regCtoKS(const int16_t regC) {
   #define MAX_ALLOCATED_REGIONS                 5000 // Maximum number of allocated memory regions
 #endif // !DMCP_BUILD
 
+//CLLCD mode
+#define CLLCD_FULL                                 0
+#define CLLCD_XY                                   1
+
 // On/Off 1 bit
 #define OFF                                        0
 #define ON                                         1

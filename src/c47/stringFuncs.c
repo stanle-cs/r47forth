@@ -3,6 +3,14 @@
 
 #include "c47.h"
 
+
+void fnClearAlpha(uint16_t regist) {
+  reallocateRegister(regist, dtString, 1, amNone);
+  *(REGISTER_STRING_DATA(regist)) = 0;
+}
+
+
+
 void fnAlphaLeng(uint16_t regist) {
   longInteger_t stringSize;
 

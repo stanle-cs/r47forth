@@ -40,9 +40,9 @@ TO_QSPI const int16_t menu_CLK[]         = { ITM_DATE,                      ITM_
                                              ITM_GET_WOY,                   ITM_NULL,                   ITM_NULL,                 ITM_WOY_ISO,           ITM_WOY_US,                  ITM_WOY_ME                    };
 
 
-TO_QSPI const int16_t menu_CLR[]         = { ITM_CF,                        ITM_CLMENU,                 ITM_CLCVAR,               ITM_CLREGS,            ITM_CLX,                     ITM_CLSTK,
-                                             ITM_CLFALL,                    ITM_CLMALL,                 ITM_CLVALL,               ITM_CLSIGMA,           ITM_CLGRF,                   ITM_CLLCD,
-                                             ITM_RESET,                     ITM_NULL,                   ITM_CLTVM,                ITM_NULL,              ITM_CLRMOD,                  -MNU_DELETE                    };
+TO_QSPI const int16_t menu_CLR[]         = { ITM_CLSIGMA,                   ITM_CLMENU,                 ITM_CLCVAR,               ITM_CLALPHA,            ITM_CLX,                     ITM_CLSTK,
+                                             ITM_CLFALL,                    ITM_CLMALL,                 ITM_CLVALL,               ITM_CLD,                ITM_CLLCD,                   ITM_CLREGS,
+                                             ITM_RESET,                     ITM_CLRMOD,                 ITM_CLTVM,                ITM_CLGRF,              ITM_NULL,                   -MNU_DELETE                   };
 
 /*      Menu name                           <----------------------------------------------------------------------------- 6 functions ---------------------------------------------------------------------------->  */
 /*                                          <---------------------------------------------------------------------- 6 f shifted functions ------------------------------------------------------------------------->  */
@@ -827,7 +827,7 @@ TO_QSPI const int16_t menu_Base2[]       = { ITM_A,                         ITM_
                                              -MNU_BASE,                     ITM_SL,                     ITM_SR,                   ITM_2BIN,              ITM_2DEC,                    ITM_2HEX,
 
                                              ITM_A,                         ITM_B,                      ITM_C,                    ITM_D,                 ITM_E,                       ITM_F,
-                                             ITM_CB_LEADING_ZERO,           ITM_OVERFLOW,               ITM_CARRY,                ITM_NULL,              ITM_NULL,                    ITM_BITSp2,                  
+                                             ITM_CB_LEADING_ZERO,           ITM_OVERFLOW,               ITM_CARRY,                ITM_NULL,              ITM_NULL,                    ITM_BITSp2,
                                              -MNU_BASE,                     ITM_NUMB,                   ITM_SB,                   ITM_CB,                ITM_BS,                      -MNU_BITSET                   };
 
 

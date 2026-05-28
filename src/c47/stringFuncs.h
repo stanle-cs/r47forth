@@ -15,4 +15,5 @@
   void fnAlphaSL  (uint16_t regist);
   void fnAlphaPos (uint16_t regist);
   void fnXToAlpha (uint16_t unusedButMandatoryParameter);
+  void fnClearAlpha(uint16_t regist);
 #endif // !STRINGFUNCS_H

@@ -1468,7 +1468,7 @@
 #define ITM_CLCVAR                  1420
 #define ITM_CLFALL                  1421
 #define ITM_TGLFRT                  1422
-#define ITM_CLLCD                   1423
+#define ITM_CLLCD_XY                1423
 #define ITM_CLMENU                  1424
 #define ITM_DELP                    1425
 #define ITM_DELPALL                 1426
@@ -2874,9 +2874,9 @@
 //efine ITM_GET_DMX                 1558 // VAR_NO_DENMAX
 #define ITM_SET_DMX                 2770 // VAR_NO_DENMAX
 
-#define ITM_2771                    2771 // CLD
-#define ITM_2772                    2772 // CLLCD
-#define ITM_2773                    2773 // CLA
+#define ITM_CLD                     2771 // CLD
+#define ITM_CLLCD                   2772 // CLLCD
+#define ITM_CLALPHA                 2773 // CLA
 #define ITM_2774                    2774 // AIP
 #define ITM_2775                    2775 // 42string
 #define ITM_2776                    2776 // 42append
