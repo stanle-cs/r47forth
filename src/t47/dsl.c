@@ -144,22 +144,7 @@ int executeScript(const char *scriptFile) {
     int ret;
     
     if(strcmp(scriptFile, "-") == 0) {
-        // Read from stdin
-        FILE *fp = stdin;
-        char line[256];
-        char script[4096];
-        int scriptLen = 0;
-        
-        while(fgets(line, sizeof(line), fp) != NULL) {
-            size_t len = strlen(line);
-            if(scriptLen + len < (int)sizeof(script)) {
-                strcpy(script + scriptLen, line);
-                scriptLen += len;
-            }
-        }
-        script[scriptLen] = '\0';
-        
-        ret = Jim_Eval(jim_interp, script);
+        ret = Jim_Eval(jim_interp, "eval [info source [stdin read] stdin 1]");
     } else {
         // Read from file
         ret = Jim_EvalFile(jim_interp, scriptFile);
