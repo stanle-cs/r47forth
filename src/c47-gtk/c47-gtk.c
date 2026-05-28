@@ -294,6 +294,23 @@
       printf("calcModel A re-set to %d\n", calcModelNew);
     }
 
+    gtk_init(&argc, &argv);
+    setupUI();
+
+    // Without the following 8 lines of code
+    // the f- and g-shifted labels are
+    // miss aligned! I dont know why!
+    calcModeAimGui();
+    while(gtk_events_pending()) {
+      gtk_main_iteration();
+    }
+    calcModeNormalGui();
+    while(gtk_events_pending()) {
+      gtk_main_iteration();
+    }
+
+    restoreCalc();
+
 #if defined(PC_BUILD)
     // Check if scripting mode is active
     if(headlessMode || scriptFile != NULL) {
@@ -311,23 +328,6 @@
         return ret;
     }
 #endif
-
-    gtk_init(&argc, &argv);
-    setupUI();
-
-    // Without the following 8 lines of code
-    // the f- and g-shifted labels are
-    // miss aligned! I dont know why!
-    calcModeAimGui();
-    while(gtk_events_pending()) {
-      gtk_main_iteration();
-    }
-    calcModeNormalGui();
-    while(gtk_events_pending()) {
-      gtk_main_iteration();
-    }
-
-    restoreCalc();
 
     //set the calculator type again if it changes after loading the backup file
     if(calcModelNew != 255) {

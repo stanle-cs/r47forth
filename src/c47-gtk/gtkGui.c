@@ -6536,7 +6536,9 @@ int keyCntA = 0;
 
       // gtk_fixed_put(GTK_FIXED(grid), lblOn,   0, 0);     //JM Removed ON to 81
 
-      gtk_widget_show_all(frmCalc);
+      if(!headlessMode) {
+        gtk_widget_show_all(frmCalc);
+      }
 
     #else // SIMULATOR_ON_SCREEN_KEYBOARD == 0
       // The main window
@@ -6572,7 +6574,9 @@ int keyCntA = 0;
 
       g_signal_connect(screen, "draw", G_CALLBACK(drawScreen), NULL);
 
-      gtk_widget_show_all(frmCalc);
+      if(!headlessMode) {
+        gtk_widget_show_all(frmCalc);
+      }
     #endif //  (SIMULATOR_ON_SCREEN_KEYBOARD == 1)
     lcd_buffer = malloc(SCREEN_HEIGHT*(SCREEN_WIDTH/8+2)+2)+2;
     lcd_clear_buf ();
