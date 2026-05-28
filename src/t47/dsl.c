@@ -181,11 +181,25 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 static int snap(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
-        strncpy(_ioFileNameOverride, Jim_String(argv[1]), JIM_PATH_LEN - 1);
+        const char *baseName = Jim_String(argv[1]);
+        char bmpFileName[JIM_PATH_LEN];
+
+        snprintf(bmpFileName, sizeof(bmpFileName), "%s.bmp", baseName);
+        strncpy(_ioFileNameOverride, bmpFileName, JIM_PATH_LEN - 1);
         _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+
+        snprintf(filename_csv, FILENAMELEN, "%s.REGS.TSV", baseName);
+        mem__32 = getUptimeMs();
+        cancelFilename = false;
     }
     
     fnSNAP(0);
+
+    // Keep the snap-specific REGS filename from leaking into later exports.
+    if(argc > 1) {
+        cancelFilename = true;
+    }
+
     return JIM_OK;
 }
 
