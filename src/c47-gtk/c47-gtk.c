@@ -46,6 +46,12 @@
   #endif // EXPORT_ITEMS
 
   int main(int argc, char* argv[]) {
+    char *argv0Basename = NULL;
+
+    if(argc >= 1 && argv[0] != NULL) {
+      argv0Basename = g_path_get_basename(argv[0]);
+    }
+
     #if defined(__APPLE__)
       // we take the directory where the application is as the root for this application.
       // in argv[0] is the application itself. We strip the name of the app by searching for the last '/':
@@ -263,6 +269,11 @@
         return 0;
       }
     }
+
+    if(argv0Basename != NULL && strcmp(argv0Basename, "t47") == 0) {
+      headlessMode = true;
+    }
+    g_free(argv0Basename);
 
     if(strcmp(indexOfItems[LAST_ITEM].itemSoftmenuName, "Last item") != 0) {
       printf("The last item (%u)of indexOfItems[] is not \"Last item\", but is %s\n", LAST_ITEM, indexOfItems[LAST_ITEM].itemSoftmenuName);
