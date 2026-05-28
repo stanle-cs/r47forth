@@ -311,24 +311,6 @@
 
     restoreCalc();
 
-#if defined(PC_BUILD)
-    // Check if scripting mode is active
-    if(headlessMode || scriptFile != NULL) {
-        // In headless mode with no script specified, use stdin
-        if(scriptFile == NULL) {
-            scriptFile = "-";
-        }
-
-        // Initialize and execute DSL
-        initDSL();
-        int ret = executeScript(scriptFile);
-
-        // Exit without calling saveCalc() - scripting is active
-        cleanupDSL();
-        return ret;
-    }
-#endif
-
     //set the calculator type again if it changes after loading the backup file
     if(calcModelNew != 255) {
       calcModel = calcModelNew;
@@ -370,6 +352,21 @@
       case 3: fnSetHP35(0); break;
       default:;
     }
+
+#if defined(PC_BUILD)
+    // Run scripts only after normal post-restore normalization.
+    if(headlessMode || scriptFile != NULL) {
+      // In headless mode with no script specified, use stdin.
+      if(scriptFile == NULL) {
+        scriptFile = "-";
+      }
+
+      initDSL();
+      int ret = executeScript(scriptFile);
+      cleanupDSL();
+      return ret;
+    }
+#endif
 
     if(writeExportAll) {
       fnReset(CONFIRMED);
