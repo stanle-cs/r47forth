@@ -94,6 +94,9 @@ simr47: $(BUILD_PC)
 	install -C $(BUILD_PC)/src/generateConstants/constantPointers.c src/generated/
 	install -C $(BUILD_PC)/src/generateConstants/constantPointers2.c src/generated/
 	install -C $(BUILD_PC)/src/ttf2RasterFonts/rasterFontsData.c src/generated/
+	
+t47: simr47
+	@ln -f r47 t47
 
 dmcp: build.dmcp
 	cd build.dmcp.p$(DMCP_PACKAGE) && ninja dmcp
