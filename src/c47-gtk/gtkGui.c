@@ -3,6 +3,12 @@
 
 #include "c47.h"
 
+#if defined(PC_BUILD)
+  extern char *scriptFile;
+  extern bool_t headlessMode;
+  bool_t scriptingActive = FALSE;
+#endif
+
 
 //#define DEBUGMODES
 
@@ -93,7 +99,10 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
 
   static gint destroyCalc(GtkWidget* w, GdkEventAny* e, gpointer data) {
     fnStopTimerApp();
-    saveCalc();
+#if defined(PC_BUILD)
+    if(!scriptingActive)
+#endif
+      saveCalc();
     gtk_main_quit();
 
     return 0;
