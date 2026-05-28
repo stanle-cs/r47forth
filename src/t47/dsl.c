@@ -179,33 +179,6 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
- * snap [<basename>] - Wrap SNAP, producing basename.bmp and
- *                     basename.REGS.TSV output files.
- */
-static int snap(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
-{
-    if(argc > 1) {
-        const char *baseName = Jim_String(argv[1]);
-        char bmpFileName[JIM_PATH_LEN];
-
-        snprintf(bmpFileName, sizeof(bmpFileName), "%s.bmp", baseName);
-        strncpy(_ioFileNameOverride, bmpFileName, JIM_PATH_LEN - 1);
-        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
-
-        snprintf(filename_csv, FILENAMELEN, "%s.REGS.TSV", baseName);
-        
-        /* Suppress default timestamp naming in filename_csv */
-        mem__32 = getUptimeMs();
-        cancelFilename = false;
-    }
-    
-    fnSNAP(0);
-    if(argc > 1) cancelFilename = true;
-
-    return JIM_OK;
-}
-
-/**
  * savest [<filename>] - Save state to file
  */
 static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
@@ -216,6 +189,65 @@ static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
     }
     
     fnSave(SM_STATE_SAVE);
+    return JIM_OK;
+}
+
+/**
+ * tsvfnSet <path> - Set the TSV file name override
+ */
+static void tsvfnSet(const char *path)
+{
+    strncpy(filename_csv, path, FILENAMELEN - 1);
+    filename_csv[FILENAMELEN - 1] = '\0';
+    mem__32 = getUptimeMs();
+    cancelFilename = false;
+}
+
+/**
+ * tsvfnClear - Clear the TSV file name override
+ */
+static void tsvfnClear(void)
+{
+    cancelFilename = true;
+    filename_csv[0] = '\0';
+}
+
+/**
+ * snap [<basename>] - Wrap SNAP, producing basename.bmp and
+ *                     basename.REGS.TSV output files.
+ */
+static int snap(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc > 1) {
+        const char *baseName = Jim_String(argv[1]);
+        char bmpFileName[JIM_PATH_LEN];
+        char regsPath[FILENAMELEN];
+
+        snprintf(bmpFileName, sizeof(bmpFileName), "%s.bmp", baseName);
+        strncpy(_ioFileNameOverride, bmpFileName, JIM_PATH_LEN - 1);
+        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+
+        snprintf(regsPath, sizeof(regsPath), "%s.REGS.TSV", baseName);
+        tsvfnSet(regsPath);
+    }
+
+    fnSNAP(0);
+    if(argc > 1) tsvfnClear();
+
+    return JIM_OK;
+}
+
+/**
+ * tsvfn [<path>] - Set the TSV output file name.  Affects virtual
+ * printing, stats, graphs…  With no argument: clear the override.
+ */
+static int tsvfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc > 1) {
+        tsvfnSet(Jim_String(argv[1]));
+    } else {
+        tsvfnClear();
+    }
     return JIM_OK;
 }
 
@@ -271,6 +303,7 @@ void initDSL(void) {
     Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
     Jim_CreateCommand(interp, "xeq",    xeq,    NULL, NULL);
     Jim_CreateCommand(interp, "press",  press,  NULL, NULL);
+    Jim_CreateCommand(interp, "tsvfn",  tsvfn,  NULL, NULL);
     Jim_CreateCommand(interp, "snap",   snap,   NULL, NULL);
     Jim_CreateCommand(interp, "savest", savest, NULL, NULL);
 }
