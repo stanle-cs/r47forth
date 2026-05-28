@@ -3126,6 +3126,10 @@ void showSoftmenuCurrentPart(void) {
                 //printf(">>> softkey x=%d y=%d itemNr=%d menu=%d itemNrPair=%d areBothConv=%d flag=%d cond=%d odd=%d\n",x, y, itemNr, curMenu , itemNrPair, areBothConv, flag, cond, oddNrPartnerForEven);
 
                 if(areBothConv) {                                                                // CONV magic on softkey
+                  if(getSystemFlag(FLAG_HPCONV)) { //swapped
+                    //printf("SWAPPED DISPLAY\n");
+                    changeSoftKey(conversionPartner(itemNrPair, NULL, NULL, NULL), itemName, &vm, &showCb, &showValue, showText);
+                  }
                   showSoftkey2(cond, itemName, x, y, vm, true, true, showCb, showValue, showText, flag);
                 }
 

@@ -1387,8 +1387,16 @@ endReturnTrue:
                                            : (curMenu == MNU_DYNAMIC) ? userMenus[currentUserMenu].menuItem[softKeyIx].item
                                            : 0;
                   if(isItemConversion(itemNrPair) && !isStandardPair(item, itemNrPair)) {                                                          // non-standard configured pair: round-trip via SI; standard fixed pair already done by runFunction
-                    runConversionToSI(item);
-                    runConversionFromSI(itemNrPair);
+                    if(!getSystemFlag(FLAG_HPCONV)) { //normal CONV_HP clear
+                      runConversionToSI(item);
+                      runConversionFromSI(itemNrPair);
+                    } else { //flipped CONV_HP set
+                      //printf("SWAPPED RUNF\n");
+                      runFunction(conversionPartner(item, NULL, NULL, NULL));
+                      runFunction(conversionPartner(itemNrPair, NULL, NULL, NULL));
+                      runConversionToSI(conversionPartner(item, NULL, NULL, NULL));
+                      runConversionFromSI(conversionPartner(item, NULL, NULL, NULL));
+                    }
                     temporaryInformation = TI_NO_INFO;
                   }
                 }
