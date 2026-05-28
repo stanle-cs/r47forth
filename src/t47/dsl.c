@@ -137,6 +137,9 @@ static int pressOne(Jim_Interp *interp, const char *keyCode)
         /* The Gtk "Return" keypress event code is ugly; allow the user
            to give this symbolic name instead. */
         return injectScriptKey(interp, keyCode, GDK_KEY_Return);
+    } else if(strcasecmp(keyCode, "R/S") == 0) {
+        /* to give this symbolic name instead. */
+        return injectScriptKey(interp, keyCode, GDK_KEY_backslash);
     }
 
     Jim_SetResultFormatted(interp, "press: Invalid key code '%s' (expected single char, Enter/Return, or 2 digits)", keyCode);
