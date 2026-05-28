@@ -6189,6 +6189,7 @@ void fnSNAP(uint16_t unusedButMandatoryParameter) {
 
 void fnScreenDump(uint16_t unusedButMandatoryParameter) {
   #if defined(PC_BUILD)
+    extern char _ioFileNameOverride[];
     FILE *bmp;
     char bmpFileName[22];
     time_t rawTime;
@@ -6201,7 +6202,14 @@ void fnScreenDump(uint16_t unusedButMandatoryParameter) {
     time(&rawTime);
     timeInfo = localtime(&rawTime);
 
-    strftime(bmpFileName, 22, "%Y%m%d-%H%M%S00.bmp", timeInfo);
+    if(_ioFileNameOverride[0] != '\0') {
+      strncpy(bmpFileName, _ioFileNameOverride, sizeof(bmpFileName) - 1);
+      bmpFileName[sizeof(bmpFileName) - 1] = '\0';
+      _ioFileNameOverride[0] = '\0';
+    }
+    else {
+      strftime(bmpFileName, sizeof(bmpFileName), "%Y%m%d-%H%M%S00.bmp", timeInfo);
+    }
     bmp = fopen(bmpFileName, "wb");
 
     fwrite("BM", 1, 2, bmp);        // Offset 0x00  0  BMP header

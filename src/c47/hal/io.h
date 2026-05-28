@@ -196,4 +196,11 @@
    */
   void fnDiskInfo(uint16_t unusedButMandatoryParameter);
 
+   /**
+    * Override filename for file operations.
+    * When set, this filename will be used instead of the default path-based filename.
+    * This allows DSL commands to specify custom file locations.
+    */
+   extern char _ioFileNameOverride[];
+
 #endif // IO_H

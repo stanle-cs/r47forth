@@ -9,6 +9,11 @@
 #include "version.h"
 
 #if defined(PC_BUILD)
+  
+  #include "../t47/dsl.h"
+#endif
+
+#if defined(PC_BUILD)
   #include "gtkGui.h"
 
   char                modelString[50];
@@ -28,6 +33,11 @@
   int                 currentBezel; // 0=normal, 1=AIM, 2=TAM
   bool_t              resetKeys = false;
   uint8_t             calcModelNew = 255;
+
+#if defined(PC_BUILD)
+  char               *scriptFile = NULL;
+  bool_t              headlessMode = false;
+#endif
 
   #if defined(EXPORT_ITEMS)
     int sortItems(void const *a, void const *b) {
@@ -173,6 +183,22 @@
         printf("Activated: %s\n", argv[arg]);
         writeExportAll = true;
       }
+
+#if defined(PC_BUILD)
+      // Check for --script and --headless flags
+      if(strcmp(argv[arg], "--script") == 0) {
+          if(arg+1<argc && (strcmp(argv[arg+1], "-") == 0 || argv[arg+1][0] != '-')) {
+              scriptFile = argv[++arg];
+          } else {
+              // If no script filename is provided, use stdin.
+              scriptFile = "-";
+          }
+      }
+      if(strcmp(argv[arg], "--headless") == 0) {
+          headlessMode = true;
+          printf("Activated: --headless\n");
+      }
+#endif
       if(strcmp(argv[arg], "--mockup") == 0) {
         printf("Activated: %s\n", argv[arg]);
         mockup = true;
@@ -230,6 +256,8 @@
         printf("%s47 --dumpMenus1     : output all static menus to drive; old file name format in the form 'Menu_140_p1_RIBBONS.bmp'\n", cc);
         printf("%s47 --dumpMenus2     : output all static menus to drive; new file name format in the form 'RIBBONS.1.bmp'\n", cc);
         printf("%s47 --writeexportall : output all PROGs (internal use)\n", cc);
+        printf("%s47 --script <file>   : execute DSL script from file or - for stdin\n", cc);
+        printf("%s47 --headless         : suppress GTK interface startup\n", cc);
         printf("%s47 --help           : list all SIM switches\n", cc);
         printf("%s47 --h              : see --help\n", cc);
         return 0;
@@ -327,6 +355,21 @@
       case 3: fnSetHP35(0); break;
       default:;
     }
+
+#if defined(PC_BUILD)
+    // Run scripts only after normal post-restore normalization.
+    if(headlessMode || scriptFile != NULL) {
+      // In headless mode with no script specified, use stdin.
+      if(scriptFile == NULL) {
+        scriptFile = "-";
+      }
+
+      initDSL();
+      int ret = executeScript(scriptFile);
+      cleanupDSL();
+      return ret;
+    }
+#endif
 
     if(writeExportAll) {
       fnReset(CONFIRMED);

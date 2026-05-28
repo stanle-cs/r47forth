@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: Copyright The C47 Authors
+
+/**
+ * \file dsl.h
+ */
+
+#ifndef DSL_H
+#define DSL_H
+
+void initDSL(void);
+int executeScript(const char *scriptFile);
+void cleanupDSL(void);
+
+#endif
