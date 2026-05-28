@@ -187,8 +187,11 @@
 #if defined(PC_BUILD)
       // Check for --script and --headless flags
       if(strcmp(argv[arg], "--script") == 0) {
-          if(arg+1<argc && argv[arg+1][0] != '-') {
+          if(arg+1<argc && (strcmp(argv[arg+1], "-") == 0 || argv[arg+1][0] != '-')) {
               scriptFile = argv[++arg];
+          } else {
+              // If no script filename is provided, use stdin.
+              scriptFile = "-";
           }
       }
       if(strcmp(argv[arg], "--headless") == 0) {
