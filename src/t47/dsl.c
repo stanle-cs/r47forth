@@ -11,17 +11,20 @@
 
 #if defined(PC_BUILD)
 
+#include <ctype.h>
 #include <jim.h>
 #include <stdio.h>
+#include <strings.h>
 
 // Global state - declared in gtkGui.c
 extern bool_t scriptingActive;
+extern bool_t headlessMode;
 
 // External declaration for _ioFileNameOverride from hal/io.c
 extern char _ioFileNameOverride[JIM_PATH_LEN];
 
 // Jim interpreter instance
-static Jim_Interp *jim_interp = NULL;
+static Jim_Interp *g_dsl_interpreter = NULL;
 
 // ============================================================================
 // DSL Command Implementations - Jim Tcl wrappers
@@ -61,18 +64,38 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
- * helper for press() to handle the common elements for each keypress
+ * Helper for press() to handle the common elements for each keypress.
+ * At the moment, it only understands Gtk key events corresponding to
+ * ASCII characters, plus a symbolic "ENTER".
  */
-static int pressOne(Jim_Interp *interp, const char *keyCode)
+static int injectScriptKey(Jim_Interp *interp, const char *keyCode, uint32_t keyval)
 {
-    if(strlen(keyCode) != 2 || !isdigit((unsigned char)keyCode[0]) || !isdigit((unsigned char)keyCode[1])) {
-        Jim_SetResultFormatted(interp, "press: Invalid key code '%s' (expected 2 digits)", keyCode);
+    if(!scriptInjectGtkKey(keyval)) {
+        Jim_SetResultFormatted(interp, "press: failed to inject key '%s'", keyCode);
         return JIM_ERR;
     }
-    
-    GtkWidget *dummyWidget = NULL;
-    btnClicked(dummyWidget, (gpointer)keyCode);
     return JIM_OK;
+}
+
+static int pressOne(Jim_Interp *interp, const char *keyCode)
+{
+    if(headlessMode) {
+        Jim_SetResultString(interp, "press: unavailable in --headless mode", -1);
+        return JIM_ERR;
+    }
+
+    if(strlen(keyCode) == 1) {
+        /* Presume the ASCII value of the char == the GTK_KEY_* value */
+        uint32_t keyval = (uint32_t)(unsigned char)keyCode[0];
+        return injectScriptKey(interp, keyCode, keyval);
+    } else if(strcasecmp(keyCode, "ENTER") == 0) {
+        /* The Gtk "Return" keypress event code is ugly; allow the user
+           to give this symbolic name instead. */
+        return injectScriptKey(interp, keyCode, GDK_KEY_Return);
+    }
+
+    Jim_SetResultFormatted(interp, "press: Invalid key code '%s' (expected single char, Enter/Return, or 2 digits)", keyCode);
+    return JIM_ERR;
 }
 
 /**
@@ -143,20 +166,21 @@ static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 int executeScript(const char *scriptFile) {
     int ret;
     
+    Jim_Interp *interp = g_dsl_interpreter;
     if(strcmp(scriptFile, "-") == 0) {
-        ret = Jim_Eval(jim_interp, "eval [info source [stdin read] stdin 1]");
+        ret = Jim_Eval(interp, "eval [info source [stdin read] stdin 1]");
     } else {
         // Read from file
-        ret = Jim_EvalFile(jim_interp, scriptFile);
+        ret = Jim_EvalFile(interp, scriptFile);
     }
     
     // Handle errors - print to stderr with stack trace if available
     if(ret != JIM_OK) {
-        const char *errorMsg = Jim_GetString(Jim_GetResult(jim_interp), NULL);
+        const char *errorMsg = Jim_GetString(Jim_GetResult(interp), NULL);
         fprintf(stderr, "%s\n", errorMsg);
         
         // Try to get and print stack trace
-        Jim_Obj *traceObj = Jim_GetVariableStr(jim_interp, "errorInfo", 0);
+        Jim_Obj *traceObj = Jim_GetVariableStr(interp, "errorInfo", 0);
         if(traceObj) {
             const char *trace = Jim_GetString(traceObj, NULL);
             fprintf(stderr, "%s\n", trace);
@@ -174,17 +198,17 @@ void initDSL(void) {
     scriptingActive = TRUE;
     
     // Create Jim interpreter
-    jim_interp = Jim_CreateInterp();
+    Jim_Interp *interp = g_dsl_interpreter = Jim_CreateInterp();
     
     // Register core Tcl commands
-    Jim_RegisterCoreCommands(jim_interp);
+    Jim_RegisterCoreCommands(interp);
     
     // Register DSL commands at global scope
-    Jim_CreateCommand(jim_interp, "readp",  readp,  NULL, NULL);
-    Jim_CreateCommand(jim_interp, "xeq",    xeq,    NULL, NULL);
-    Jim_CreateCommand(jim_interp, "press",  press,  NULL, NULL);
-    Jim_CreateCommand(jim_interp, "snap",   snap,   NULL, NULL);
-    Jim_CreateCommand(jim_interp, "savest", savest, NULL, NULL);
+    Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
+    Jim_CreateCommand(interp, "xeq",    xeq,    NULL, NULL);
+    Jim_CreateCommand(interp, "press",  press,  NULL, NULL);
+    Jim_CreateCommand(interp, "snap",   snap,   NULL, NULL);
+    Jim_CreateCommand(interp, "savest", savest, NULL, NULL);
 }
 
 // ============================================================================
@@ -192,9 +216,9 @@ void initDSL(void) {
 // ============================================================================
 
 void cleanupDSL(void) {
-    if(jim_interp) {
-        Jim_FreeInterp(jim_interp);
-        jim_interp = NULL;
+    if(g_dsl_interpreter) {
+        Jim_FreeInterp(g_dsl_interpreter);
+        g_dsl_interpreter = NULL;
     }
 }
 

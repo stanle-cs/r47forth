@@ -121,6 +121,67 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
     return FALSE;
   }
 
+  gboolean scriptInjectGtkKey(uint32_t keyval) {
+    if(frmCalc == NULL || !gtk_widget_get_realized(frmCalc)) {
+      return FALSE;
+    }
+
+    GdkWindow *window = gtk_widget_get_window(frmCalc);
+    if(window == NULL) {
+      return FALSE;
+    }
+
+    if(!gtk_widget_has_focus(frmCalc)) {
+      gtk_widget_grab_focus(frmCalc);
+    }
+
+    GdkEvent *press = gdk_event_new(GDK_KEY_PRESS);
+    GdkEvent *release = gdk_event_new(GDK_KEY_RELEASE);
+    if(press == NULL || release == NULL) {
+      if(press != NULL) {
+        gdk_event_free(press);
+      }
+      if(release != NULL) {
+        gdk_event_free(release);
+      }
+      return FALSE;
+    }
+
+    GdkEventKey *pressKey = &press->key;
+    pressKey->window = g_object_ref(window);
+    pressKey->send_event = TRUE;
+    pressKey->time = GDK_CURRENT_TIME;
+    pressKey->state = 0;
+    pressKey->keyval = keyval;
+    pressKey->hardware_keycode = 0;
+    pressKey->group = 0;
+    pressKey->is_modifier = FALSE;
+    pressKey->length = 0;
+    pressKey->string = NULL;
+
+    GdkEventKey *releaseKey = &release->key;
+    releaseKey->window = g_object_ref(window);
+    releaseKey->send_event = TRUE;
+    releaseKey->time = GDK_CURRENT_TIME;
+    releaseKey->state = 0;
+    releaseKey->keyval = keyval;
+    releaseKey->hardware_keycode = 0;
+    releaseKey->group = 0;
+    releaseKey->is_modifier = FALSE;
+    releaseKey->length = 0;
+    releaseKey->string = NULL;
+
+    gdk_event_put(press);
+    gdk_event_put(release);
+    gdk_event_free(press);
+    gdk_event_free(release);
+
+    while(gtk_events_pending()) {
+      gtk_main_iteration();
+    }
+    return TRUE;
+  }
+
 
 //  void btn_Clicked_Gen(bool_t shF, bool_t shG, char *st) {
 //    GtkWidget *w;
