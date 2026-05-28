@@ -135,6 +135,9 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
       gtk_widget_grab_focus(frmCalc);
     }
 
+    GdkDisplay *display = gdk_window_get_display(window);
+    GdkSeat *seat = (display != NULL) ? gdk_display_get_default_seat(display) : NULL;
+    GdkDevice *keyboard = (seat != NULL) ? gdk_seat_get_keyboard(seat) : NULL;
     GdkEvent *press = gdk_event_new(GDK_KEY_PRESS);
     GdkEvent *release = gdk_event_new(GDK_KEY_RELEASE);
     if(press == NULL || release == NULL) {
@@ -171,6 +174,10 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
     releaseKey->length = 0;
     releaseKey->string = NULL;
 
+    if(keyboard != NULL) {
+      gdk_event_set_device(press, keyboard);
+      gdk_event_set_device(release, keyboard);
+    }
     gdk_event_put(press);
     gdk_event_put(release);
     gdk_event_free(press);
