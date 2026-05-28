@@ -31,17 +31,57 @@ static Jim_Interp *g_dsl_interpreter = NULL;
 // ============================================================================
 
 /**
+ * Wait until calculator program execution has fully returned control.
+ *
+ * DSL contract: xeq must not return while the execution engine is still
+ * running (or internally paused as part of run-state handling).
+ */
+static void waitForEngineReturn(void)
+{
+    while(programRunStop == PGM_RUNNING ||
+          programRunStop == PGM_PAUSED ||
+          programRunStop == PGM_KEY_PRESSED_WHILE_PAUSED) {
+        g_main_context_iteration(g_main_context_default(), TRUE);
+    }
+
+    // Drain remaining UI work queued by the final refresh path.
+    refresh_gui();
+}
+
+/**
+ * Resolve script-provided program filename in the same spirit as UI READP:
+ * if a relative path does not exist as-is, also try PROGRAMS/<name>.
+ */
+static void setReadpFilenameOverride(const char *filename)
+{
+    if(g_file_test(filename, G_FILE_TEST_EXISTS)) {
+        strncpy(_ioFileNameOverride, filename, JIM_PATH_LEN - 1);
+        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+        return;
+    }
+
+    if(strchr(filename, '/') == NULL) {
+        char fallback[JIM_PATH_LEN];
+        snprintf(fallback, sizeof(fallback), "%s/%s", PROGRAMS_DIR, filename);
+        if(g_file_test(fallback, G_FILE_TEST_EXISTS)) {
+            strncpy(_ioFileNameOverride, fallback, JIM_PATH_LEN - 1);
+            _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+            return;
+        }
+    }
+
+    // Let fnLoadProgram report the open/read failure with the original value.
+    strncpy(_ioFileNameOverride, filename, JIM_PATH_LEN - 1);
+    _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+}
+
+/**
  * readp <filename> - Load a program from file (like READP menu command)
  */
 static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     const char *filename = (argc > 1) ? Jim_String(argv[1]) : "";
-    
-    if(strlen(filename) > 0) {
-        strncpy(_ioFileNameOverride, filename, JIM_PATH_LEN - 1);
-        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
-    }
-    
+    if(strlen(filename) > 0) setReadpFilenameOverride(filename);
     fnLoadProgram(0);
     return JIM_OK;
 }
@@ -58,8 +98,9 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         Jim_SetResultFormatted(interp, "xeq: Label '%s' not found", labelName);
         return JIM_ERR;
     }
-    
+    dynamicMenuItem = -1;  // clear stale dynamic menu context
     reallyRunFunction(ITM_XEQ, (uint16_t)label);
+    waitForEngineReturn();
     return JIM_OK;
 }
 
