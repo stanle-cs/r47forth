@@ -15,7 +15,7 @@ jim_lib = custom_target('jim-libminimal',
   output: 'libjim.a',
   command: [
     sh_prog, '-c',
-    'set -eu; outdir="$1"; srcdir="$2"; case "$outdir" in /*) ;; *) outdir="$PWD/$outdir" ;; esac; builddir="$outdir/jimtcl-build"; mkdir -p "$builddir"; cd "$builddir"; "$srcdir/configure" --minimal CFLAGS=-w >/dev/null; make libjim.a >/dev/null; cp libjim.a "$outdir/libjim.a"',
+    'set -eu; outdir="$1"; srcdir="$2"; case "$outdir" in /*) ;; *) outdir="$PWD/$outdir" ;; esac; builddir="$outdir/jimtcl-build"; mkdir -p "$builddir"; cd "$builddir"; "$srcdir/configure" --minimal --with-ext=aio CFLAGS=-w >/dev/null; make libjim.a >/dev/null; cp libjim.a "$outdir/libjim.a"',
     'sh',
     '@OUTDIR@',
     jimtcl_srcdir,

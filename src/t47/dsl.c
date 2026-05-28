@@ -213,7 +213,9 @@ int executeScript(const char *scriptFile) {
     
     Jim_Interp *interp = g_dsl_interpreter;
     if(strcmp(scriptFile, "-") == 0) {
-        ret = Jim_Eval(interp, "eval [info source [stdin read] stdin 1]");
+        ret = Jim_Eval(interp, 
+            "package require aio;"
+            "eval [info source [stdin read] stdin 1]");
     } else {
         // Read from file
         ret = Jim_EvalFile(interp, scriptFile);
@@ -247,6 +249,7 @@ void initDSL(void) {
     
     // Register core Tcl commands
     Jim_RegisterCoreCommands(interp);
+    Jim_InitStaticExtensions(interp);
     
     // Register DSL commands at global scope
     Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
