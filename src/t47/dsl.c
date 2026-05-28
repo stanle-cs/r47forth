@@ -176,7 +176,8 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
- * snap [<filename>] - Take a screenshot and save to file (like SNAP handler)
+ * snap [<basename>] - Wrap SNAP, producing basename.bmp and
+ *                     basename.REGS.TSV output files.
  */
 static int snap(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
@@ -189,16 +190,14 @@ static int snap(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
 
         snprintf(filename_csv, FILENAMELEN, "%s.REGS.TSV", baseName);
+        
+        /* Suppress default timestamp naming in filename_csv */
         mem__32 = getUptimeMs();
         cancelFilename = false;
     }
     
     fnSNAP(0);
-
-    // Keep the snap-specific REGS filename from leaking into later exports.
-    if(argc > 1) {
-        cancelFilename = true;
-    }
+    if(argc > 1) cancelFilename = true;
 
     return JIM_OK;
 }
