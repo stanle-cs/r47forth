@@ -64,9 +64,7 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
- * Helper for press() to handle the common elements for each keypress.
- * At the moment, it only understands Gtk key events corresponding to
- * ASCII characters, plus a symbolic "ENTER".
+ * Helper for pressOne() to handle the common elements for each keypress.
  */
 static int injectScriptKey(Jim_Interp *interp, const char *keyCode, uint32_t keyval)
 {
@@ -76,6 +74,12 @@ static int injectScriptKey(Jim_Interp *interp, const char *keyCode, uint32_t key
     }
     return JIM_OK;
 }
+
+/**
+ * pressOne <keycode> - Fake a Gtk keypress event for a single
+ * calculator keyboard key.  At the moment, it only understands
+ * events corresponding to ASCII characters, plus a symbolic "ENTER".
+ */
 
 static int pressOne(Jim_Interp *interp, const char *keyCode)
 {
