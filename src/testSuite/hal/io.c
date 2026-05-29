@@ -7,6 +7,11 @@
 
 static FILE *_ioFileHandle = NULL;
 
+#if !defined(JIM_PATH_LEN)
+  #define JIM_PATH_LEN 1 // no jim activities needed, token length 1
+#endif // !JIM_PATH_LEN
+char _ioFileNameOverride[JIM_PATH_LEN] = {0};
+
 const char *_ioFileNameFromFilePath(ioFilePath_t path) {
   switch(path) {
     case ioPathManualSave: return "c47.sav";
