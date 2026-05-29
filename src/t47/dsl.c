@@ -211,7 +211,6 @@ static int injectScriptKey(Jim_Interp *interp, const char *keyCode, uint32_t key
  * calculator keyboard key.  At the moment, it only understands
  * events corresponding to ASCII characters, plus a symbolic "ENTER".
  */
-
 static int pressOne(Jim_Interp *interp, const char *keyCode)
 {
     if(headlessMode) {
@@ -236,8 +235,10 @@ static int pressOne(Jim_Interp *interp, const char *keyCode)
     return JIM_ERR;
 }
 
-
-static int nimmem(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+/**
+ * nim <string> - Add a string to the NIM buffer
+ */
+static int nim(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
         Jim_SetResultString(interp, "nim: missing string argument", -1);
