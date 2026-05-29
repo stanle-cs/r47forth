@@ -27,7 +27,7 @@ extern char _ioFileNameOverride[JIM_PATH_LEN];
 static Jim_Interp *g_dsl_interpreter = NULL;
 
 // ============================================================================
-// DSL Command Implementations - Jim Tcl wrappers
+// Helper functions
 // ============================================================================
 
 /**
@@ -76,6 +76,95 @@ static void setReadpFilenameOverride(const char *filename)
 }
 
 /**
+ * cmdByIndex index - Calls a built-in catalog function by its item index.
+ * This binds CAT FCNS to Tcl commands.
+ */
+static int cmdByIndex(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    int index = (int)(intptr_t)Jim_CmdPrivData(interp);
+    printf("Calling catalog function %s, index %d\n",
+        indexOfItems[index].itemCatalogName, index);
+    runFunction(index);
+    return JIM_OK;
+}
+
+/**
+ * Check if a string is a valid Tcl identifier.
+ */
+static bool_t validTclIdentifier(const char *str) {
+    if(str[0] == '\0') {
+        return FALSE;
+    }
+    if(!isalpha(str[0]) && str[0] != '_') {
+        return FALSE;
+    }
+    for(int i = 1; str[i]; ++i) {
+        if(!isalnum(str[i]) && str[i] != '_') {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+/**
+ * Register a catalog function directly if its name happens to be a
+ * valid Tcl identifier.
+ */
+static void registerCatFn(Jim_Interp *interp, const char *name, void *idx, char *cmdName, bool_t skipUtf8Identity)
+{
+    if(!name || !name[0]) {
+        return;
+    }
+    stringToUtf8(name, (uint8_t*)cmdName);
+    if(skipUtf8Identity && strcmp(name, cmdName) == 0) {
+        return;
+    }
+    if(compareString(name, name, CMP_NAME) == 0 &&
+            validTclIdentifier(cmdName)) {
+        Jim_CreateCommand(interp, cmdName, cmdByIndex, idx, NULL);
+    }
+}
+
+// ============================================================================
+// DSL Command Implementations - Jim Tcl wrappers
+// ============================================================================
+
+/**
+ * catfn <name> - Calls a built-in catalog function by its name.
+ * This is slow due to a linear lookup over a large table.  Prefer
+ * the direct call by index by using the item name as a command,
+ * when it is a legal Tcl identifier.
+ */
+static int catfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc < 2) {
+        Jim_SetResultString(interp, "catfn: missing function name", -1);
+        return JIM_ERR;
+    } else {
+        char internalName[64];
+        static const size_t max = sizeof(internalName)/2;
+        const char *fnName = (argc > 1) ? Jim_String(argv[1]) : "";
+        if(strlen(fnName) >= max) {
+            Jim_SetResultFormatted(interp, "catfn: '%s' exceeds max length %d",
+                    fnName, max);
+            return JIM_ERR;
+        }
+        utf8ToString((const uint8_t *)fnName, internalName);
+        for(int i = 0; i < LAST_ITEM; ++i) {
+            item_t item = indexOfItems[i];
+            const char* catName = item.itemCatalogName;
+            if((item.status & CAT_STATUS) == CAT_FNCT &&
+                    compareString(internalName, catName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
+                runFunction(i);
+                return JIM_OK;
+            }
+        }
+        Jim_SetResultFormatted(interp, "catfn: '%s' not in the function catalog", fnName);
+        return JIM_ERR;
+    }
+}
+
+/**
  * readp <filename> - Load a program from file (like READP menu command)
  */
 static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
@@ -87,7 +176,7 @@ static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
- * xeq <labelname> - Execute a label (like XEQ key) or built-in function
+ * xeq <labelname> - Execute a label, emulating the XEQ key action
  */
 static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
@@ -95,21 +184,7 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
     calcRegister_t label = findNamedLabel(labelName);
 
     if(label == INVALID_VARIABLE) {
-        char internalName[64];
-        static const size_t max = sizeof(internalName)/2;
-        if(strlen(labelName) >= max) {
-            Jim_SetResultFormatted(interp, "xeq: '%s' exceeds max length %d",
-                    labelName, max);
-            return JIM_ERR;
-        }
-        utf8ToString((const uint8_t *)labelName, internalName);
-        for(int i = 0; i < LAST_ITEM; ++i) {
-            if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(internalName, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
-                runFunction(i);
-                return JIM_OK;
-            }
-        }
-        Jim_SetResultFormatted(interp, "xeq: '%s' not found as label or function", labelName);
+        Jim_SetResultFormatted(interp, "xeq: '%s' not a known label", labelName);
         return JIM_ERR;
     }
 
@@ -136,7 +211,6 @@ static int injectScriptKey(Jim_Interp *interp, const char *keyCode, uint32_t key
  * calculator keyboard key.  At the moment, it only understands
  * events corresponding to ASCII characters, plus a symbolic "ENTER".
  */
-
 static int pressOne(Jim_Interp *interp, const char *keyCode)
 {
     if(headlessMode) {
@@ -161,11 +235,13 @@ static int pressOne(Jim_Interp *interp, const char *keyCode)
     return JIM_ERR;
 }
 
-
-static int push(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+/**
+ * nim <string> - Add a string to the NIM buffer
+ */
+static int nim(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
-        Jim_SetResultString(interp, "push: missing string argument", -1);
+        Jim_SetResultString(interp, "nim: missing string argument", -1);
         return JIM_ERR;
     }
     for(const char *p = Jim_String(argv[1]); *p != 0; p++) {
@@ -186,7 +262,7 @@ static int push(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
             continue;
         }
         else {
-            Jim_SetResultFormatted(interp, "push: invalid character '%c' (expected 0-9, . , - e E or space)", *p);
+            Jim_SetResultFormatted(interp, "nim: invalid character '%c' (expected 0-9, . , - e E or space)", *p);
             return JIM_ERR;
         }
         addItemToNimBuffer(item);
@@ -253,7 +329,7 @@ static void tsvfnSet(const char *path)
     mem__32 = getUptimeMs();
     cancelFilename = false;
     clearSystemFlag(FLAG_PRTACT);
-    printf("Set file name to %s\n", filename_csv);
+    printf("Overrode TSV file name to %s\n", filename_csv);
 }
 
 /**
@@ -263,7 +339,7 @@ static void tsvfnClear(void)
 {
     cancelFilename = true;
     filename_csv[0] = '\0';
-    printf("Set file name to %s\n", filename_csv);
+    printf("Cleared TSV file name override\n");
 }
 
 /**
@@ -354,13 +430,29 @@ void initDSL(void) {
     Jim_InitStaticExtensions(interp);
     
     // Register DSL commands at global scope
+    Jim_CreateCommand(interp, "catfn",  catfn,  NULL, NULL);
+    Jim_CreateCommand(interp, "nim",    nim,    NULL, NULL);
     Jim_CreateCommand(interp, "press",  press,  NULL, NULL);
-    Jim_CreateCommand(interp, "push",   push,   NULL, NULL);
     Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
     Jim_CreateCommand(interp, "savest", savest, NULL, NULL);
     Jim_CreateCommand(interp, "snap",   snap,   NULL, NULL);
     Jim_CreateCommand(interp, "tsvfn",  tsvfn,  NULL, NULL);
     Jim_CreateCommand(interp, "xeq",    xeq,    NULL, NULL);
+    
+    // Register all 🟧 CAT FCNS entries as commands, too
+    {
+        char cmdName[64];
+        for(int i = 0; i < LAST_ITEM; ++i) {
+            item_t item = indexOfItems[i];
+            const char* catName = item.itemCatalogName;
+            const char* smName  = item.itemSoftmenuName;
+            void* idx = (void*)(intptr_t)i;
+            if((item.status & CAT_STATUS) == CAT_FNCT) {
+                registerCatFn(interp, catName, idx, cmdName, FALSE);
+                registerCatFn(interp, smName,  idx, cmdName, TRUE);
+            }
+        }
+    }
 }
 
 // ============================================================================
