@@ -31,6 +31,7 @@ char                  lastTemp[16];
 #endif // PC_BUILD
 
 bool_t                loadTestPrograms = false;
+bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;
 const font_t          *cursorFont;
 TO_QSPI const char     baseDigits[63] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";

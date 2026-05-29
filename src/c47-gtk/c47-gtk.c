@@ -189,6 +189,10 @@
         loadTestPrograms = true;
         printf("Activated: %s\n", argv[arg]);
       }
+      if(strcmp(argv[arg], "--testData") == 0) {
+        loadTestData = true;
+        printf("Activated: %s\n", argv[arg]);
+      }
 
       if(strcmp(argv[arg], "--help") == 0 || strcmp(argv[arg], "--h") == 0 || strcmp(argv[arg], "-h") == 0) {
         char cc[2];
@@ -236,6 +240,7 @@
         printf("%s47 --writeexportall : output all PROGs (internal use)\n", cc);
         printf("%s47 --help           : list all SIM switches\n", cc);
         printf("%s47 --testPgms       : load the test programs testPgms.bin if present\n", cc);
+        printf("%s47 --testData       : load the test data in Reg 10 to Reg 38\n", cc);
         printf("%s47 --h              : see --help\n", cc);
         return 0;
       }

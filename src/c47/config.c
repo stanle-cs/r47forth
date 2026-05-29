@@ -1875,16 +1875,18 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
                                      printf("Populate test data\n");
                                    #endif
     //JM TEMPORARY TEST DATA IN REGISTERS
-    uint16_t n = nbrOfElements(indexOfStrings);
-    for(uint16_t i=0; i<n; i++) {
-      if(indexOfStrings[i].itemType == 0) {
-        fnStrtoX(indexOfStrings[i].itemName);
+    if(loadTestData) {
+      uint16_t n = nbrOfElements(indexOfStrings);
+      for(uint16_t i=0; i<n; i++) {
+        if(indexOfStrings[i].itemType == 0) {
+          fnStrtoX(indexOfStrings[i].itemName);
+        }
+        else if(indexOfStrings[i].itemType == 1) {
+          fnStrInputLongint(indexOfStrings[i].itemName);
+        }
+        fnStore(indexOfStrings[i].count);
+        fnDrop(NOPARAM);
       }
-      else if(indexOfStrings[i].itemType == 1) {
-        fnStrInputLongint(indexOfStrings[i].itemName);
-      }
-      fnStore(indexOfStrings[i].count);
-      fnDrop(NOPARAM);
     }
 
     //Initialize Printer status
