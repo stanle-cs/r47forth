@@ -87,7 +87,7 @@ static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
- * xeq <labelname> - Execute a label (like XEQ key)
+ * xeq <labelname> - Execute a label (like XEQ key) or built-in function
  */
 static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
@@ -95,7 +95,13 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
     calcRegister_t label = findNamedLabel(labelName);
 
     if(label == INVALID_VARIABLE) {
-        char internalName[64];                      // confirm 64 covers your longest catalog name
+        char internalName[64];
+	static const size_t max = sizeof(internalName)/2;
+	if(strlen(labelName) >= max) {
+	    Jim_SetResultFormatted(interp, "xeq: '%s' exceeds max length %d",
+		    labelName, max);
+	    return JIM_ERR;
+	}
         utf8ToString((const uint8_t *)labelName, internalName);
         for(int i = 0; i < LAST_ITEM; ++i) {
             if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(internalName, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
@@ -106,6 +112,7 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         Jim_SetResultFormatted(interp, "xeq: '%s' not found as label or function", labelName);
         return JIM_ERR;
     }
+
     dynamicMenuItem = -1;  // clear stale dynamic menu context
     reallyRunFunction(ITM_XEQ, (uint16_t)label);
     waitForEngineReturn();
