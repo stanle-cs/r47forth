@@ -2880,8 +2880,8 @@
 #define ITM_2774                    2774 // AIP
 #define ITM_42STRING                2775 // 42string
 #define ITM_42APPEND                2776 // 42append
-#define ITM_2777                    2777 // 42ARCL
-#define ITM_2778                    2778 // 42ASTO
+#define ITM_42ARCL                  2777 // 42ARCL
+#define ITM_42ASTO                  2778 // 42ASTO
 #define ITM_2779                    2779 // 42AROT
 #define ITM_2780                    2780 // 42ASHF
 #define ITM_2781                    2781 // 42ROTXY

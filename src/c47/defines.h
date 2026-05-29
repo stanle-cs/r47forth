@@ -680,7 +680,8 @@
 #define ERROR_RESERVED_VARIABLE_NAME              61
 #define ERROR_INVALID_TYPE_XFN                    62
 #define ERROR_PRINTING_DISABLED                   63
-#define LAST_ERROR_MESSAGE                        63
+#define ERROR_NO_STRING_IN_REGISTER_K             64
+#define LAST_ERROR_MESSAGE                        64
 
 //Status output messages for time consuming tasks, to keep user informed
 #define LOADING_STATE_FILE                       100

@@ -674,3 +674,24 @@ void fnStoreIJ(uint16_t unusedButMandatoryParameter) {
       }
     }
 }
+
+void fn42AlphaStore(uint16_t regist) {
+  char *source;
+  char *dest;
+  if(regInRange(regist)) {
+    if(getRegisterDataType(REGISTER_K) == dtString) {
+      source = REGISTER_STRING_DATA(REGISTER_K);
+      reallocateRegister(regist, dtString, 7, amNone);
+      dest = REGISTER_STRING_DATA(regist);
+      for(uint16_t i=0; i < 6; i++) {
+        if(*source != 0) {
+          *dest++ = *source++;
+        }
+      }
+      *dest = 0;
+    }
+    else {
+      displayCalcErrorMessage(ERROR_NO_STRING_IN_REGISTER_K, ERR_REGISTER_LINE, REGISTER_T);
+    }
+  }
+}

@@ -1640,6 +1640,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
 
   void fnClDisplay                (uint16_t unusedButMandatoryParameter) {}   //DL
   void fnClearAlpha               (uint16_t unusedButMandatoryParameter) {}   //DL
+  void fn42AlphaRecall            (uint16_t unusedButMandatoryParameter) {}   //DL
+  void fn42AlphaStore             (uint16_t unusedButMandatoryParameter) {}   //DL
 
 
 #endif // GENERATE_CATALOGS || defined(GENERATE_TESTPGMS)
@@ -4612,8 +4614,8 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2774 */  { itemToBeCoded,                NOPARAM,                     "2774",                                           "2774",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2775 */  { fnNop,                        NOPARAM,                     "42" STD_alpha,                                   "42" STD_alpha,                                (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REM          | HG_ENABLED         },
 /* 2776 */  { fnNop,                        NOPARAM,                     "42" STD_RIGHT_TACK,                              "42" STD_RIGHT_TACK,                           (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REM          | HG_ENABLED         },
-/* 2777 */  { itemToBeCoded,                NOPARAM,                     "2777",                                           "2777",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
-/* 2778 */  { itemToBeCoded,                NOPARAM,                     "2778",                                           "2778",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2777 */  { fn42AlphaRecall,              TM_REGISTER,                 "42ARCL",                                         "42ARCL",                                      (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
+/* 2778 */  { fn42AlphaStore,               TM_REGISTER,                 "42ASTO",                                         "42ASTO",                                      (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
 /* 2779 */  { itemToBeCoded,                NOPARAM,                     "2779",                                           "2779",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2780 */  { itemToBeCoded,                NOPARAM,                     "2780",                                           "2780",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2781 */  { itemToBeCoded,                NOPARAM,                     "2781",                                           "2781",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
