@@ -4034,3 +4034,40 @@ void fnDumpMenus(uint16_t newFilenameformat, const char *path) {
 void fnDumpMenusWrapper(uint16_t newFilenameformat) {
   fnDumpMenus(newFilenameformat, NULL);
 }
+
+
+// Superset of fnDumpMenus(): does not skip the six solver/derivative/Sf/
+// Grapher/SHOW menus that fnDumpMenus() filters out. Used by RefDB47
+// reference-data ingest, which needs a BMP for every static softmenu the
+// engine declares. The five solver-aware menus (1stDeriv, 2ndDeriv, Sf,
+// Solver, Grapher) have NULL-only data arrays — they render as blank
+// softkey rows in their reference state, which is the form RefDB47 wants.
+// MNU_SHOW is empty (numItems == 0) so the inner loop skips it
+// automatically. Dynamic softmenus (entries 0..NUMBER_OF_DYNAMIC_SOFTMENUS-1
+// with numItems == 0) are still skipped — they have no static content to
+// render. currentSolverStatus is masked the same way fnDumpMenus() masks
+// it, so the BMPs the two functions both produce are byte-identical.
+void fnDumpMenusAll(uint16_t newFilenameformat, const char *path) {
+#if defined(PC_BUILD)
+  int cc = currentSolverStatus;
+  currentSolverStatus = currentSolverStatus & (SOLVER_STATUS_USES_FORMULA | SOLVER_STATUS_INTERACTIVE);
+  printf("Dumping all menus (RefDB47 superset, no skip)\n");
+  int16_t m, n;
+  m = 0;
+  while(softmenu[m].menuItem != 0) {
+    n = 0;
+    while(n < softmenu[m].numItems && softmenu[m].numItems != 0) {
+      printf("m=%d n=%d softmenu[%u].numItems=%u name:%s.%u\n", m, n, m, softmenu[m].numItems, indexOfItems[m].itemCatalogName, n%18);
+      fnMenuDump(m, n, newFilenameformat, path);
+      n += 18;
+    }
+    m++;
+  }
+  currentSolverStatus = cc;
+#endif // PC_BUILD
+}
+
+
+void fnDumpMenusAllWrapper(uint16_t newFilenameformat) {
+  fnDumpMenusAll(newFilenameformat, NULL);
+}

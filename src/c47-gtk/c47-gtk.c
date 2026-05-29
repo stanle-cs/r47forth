@@ -16,6 +16,7 @@
   char                modelString[50];
   bool_t              mockup = false;
   uint16_t            dumpMenus = 0;
+  bool_t              dumpMenusAll = false;
   bool_t              writeExportAll = false;
   uint8_t             config = 0;
   bool_t              enableFunctionKeysDisplay;
@@ -228,6 +229,20 @@
           printf("  menuDump path: %s\n", menuDumpPath);
         }
       }
+      if(strcmp(argv[arg], "--dumpMenusAll") == 0) {
+        printf("Activated: %s\n", argv[arg]);
+        dumpMenus = 2;            // use new filename format
+        dumpMenusAll = true;
+        headlessMode = true;
+        if(arg+1<argc && (argv[arg+1])[0] != '-') {
+          menuDumpPath = argv[++arg];
+          if(menuDumpPath[0] == '\0' || strlen(menuDumpPath) >= 500) {
+            printf("Error: implausible --dumpMenusAll path. No work done.\n");
+            return 1;
+          }
+          printf("  menuDump path: %s\n", menuDumpPath);
+        }
+      }
 
       if(strcmp(argv[arg], "--help") == 0 || strcmp(argv[arg], "--h") == 0 || strcmp(argv[arg], "-h") == 0) {
         char cc[2];
@@ -272,6 +287,7 @@
         printf("%s47 --mockup            : output demo status bar layout\n", cc);
         printf("%s47 --dumpMenus1 [path] : output all static menus to drive; old file name format 'Menu_140_p1_RIBBONS.bmp'; default folder 'menuDump' (auto headless mode)\n", cc);
         printf("%s47 --dumpMenus2 [path] : output all static menus to drive; new file name format 'RIBBONS.1.bmp';           default folder 'menuDump' (auto headless mode)\n", cc);
+        printf("%s47 --dumpMenusAll [path] : RefDB47 superset: every static menu incl. 1stDeriv/2ndDeriv/Sf/Solver/Grapher/SHOW; new file name format; default folder 'menuDump' (auto headless mode)\n", cc);
         printf("%s47 --writeexportall    : output all PROGs (internal use)\n", cc);
         printf("%s47 --script <file>     : execute DSL script from file or - for stdin\n", cc);
         printf("%s47 --headless          : suppress GTK interface startup\n", cc);
@@ -402,7 +418,11 @@
     if(dumpMenus > 0) {
       fnReset(CONFIRMED);
       clearScreen(121);
-      fnDumpMenus(dumpMenus, menuDumpPath);
+      if(dumpMenusAll) {
+        fnDumpMenusAll(dumpMenus, menuDumpPath);
+      } else {
+        fnDumpMenus(dumpMenus, menuDumpPath);
+      }
       printf("\n\nOutput menus saved.\n");
       return 0;
     }
