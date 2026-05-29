@@ -192,7 +192,7 @@ static int push(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         addItemToNimBuffer(item);
         refreshRegisterLine(REGISTER_X);
     }
-    return injectScriptKey(interp, NULL, GDK_KEY_Return);
+    return JIM_OK;
 }
 
 
