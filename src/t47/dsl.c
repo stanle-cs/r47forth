@@ -323,6 +323,20 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
+ * loadst [<filename>] - Load state from file
+ */
+static int loadst(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc > 1) {
+        strncpy(_ioFileNameOverride, Jim_String(argv[1]), JIM_PATH_LEN - 1);
+        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+    }
+    
+    fnLoad(LM_STATE_LOAD);
+    return JIM_OK;
+}
+
+/**
  * savest [<filename>] - Save state to file
  */
 static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
@@ -448,6 +462,7 @@ void initDSL(void) {
     
     // Register DSL commands at global scope
     Jim_CreateCommand(interp, "catfn",  catfn,  NULL, NULL);
+    Jim_CreateCommand(interp, "loadst", loadst, NULL, NULL);
     Jim_CreateCommand(interp, "nim",    nim,    NULL, NULL);
     Jim_CreateCommand(interp, "press",  press,  NULL, NULL);
     Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
