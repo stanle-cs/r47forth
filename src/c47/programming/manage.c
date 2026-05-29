@@ -543,7 +543,7 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
         if(getSystemFlag(FLAG_ALPHA)) {
           char tmpChar = tmpString[4];
           tmpString[4] = 0;
-          int16_t cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : T_cursorPos);
+          int16_t cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
           tmpString[4] = tmpChar;
           xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
           tmpString[2 + cursorInString    ] = STD_CURSOR[0];
@@ -768,9 +768,15 @@ void pemAlpha(int16_t item) {
       editCommand = true;
       item = 0;
     }
-    else if(aimFunc == ITM_REM)  { // REM
-      xcopy(aimBuffer, tmpString + 6, ll);        //purposely overshoot aimbuffer, as there is sufficient space
-      aimBuffer[ll - 2 - 6] = 0;
+    else if((aimFunc == ITM_REM) || (aimFunc == ITM_42STRING) || (aimFunc == ITM_42APPEND))   { // REM or 42 string or 42 append
+      if(aimFunc == ITM_REM) {
+        xcopy(aimBuffer, tmpString + 6, ll);        //purposely overshoot aimbuffer, as there is sufficient space
+        aimBuffer[ll - 2 - 6] = 0;
+      }
+      else {
+        xcopy(aimBuffer, tmpString + 7, ll);        //purposely overshoot aimbuffer, as there is sufficient space
+        aimBuffer[ll - 2 - 7] = 0;
+      }
       T_cursorPos = stringLastGlyph(aimBuffer) + 1;
       deleteStepsFromTo(currentStep, findNextStep(currentStep));
       tam.function = aimFunc;
@@ -805,9 +811,9 @@ void pemAlpha(int16_t item) {
         tmpString[2] = 0;
         _insertInProgram((uint8_t *)tmpString, 3);
       }
-      else { // rem
+      else { // rem or 42str
         tmpString[0] = (tam.function >> 8) | 0x80;
-        tmpString[1] =  tam.function       & 0x7f;
+        tmpString[1] =  tam.function       & 0xff;
         tmpString[2] = (char)STRING_LABEL_VARIABLE;
         tmpString[3] = 0;
         _insertInProgram((uint8_t *)tmpString, 4);
@@ -926,9 +932,9 @@ void pemAlpha(int16_t item) {
       xcopy(tmpString + 3, aimBuffer, stringByteLength(aimBuffer));
       _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 3);
     }
-    else { // rem
+    else { // rem or 42str
       tmpString[0] = (aimFunc >> 8) | 0x80;
-      tmpString[1] =  aimFunc       & 0x7f;
+      tmpString[1] =  aimFunc       & 0xff;
       tmpString[2] = (char)STRING_LABEL_VARIABLE;
       tmpString[3] = stringByteLength(aimBuffer);
       xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
@@ -947,8 +953,10 @@ void pemCloseAlphaInput(void) {
   calcModeNormalGui();
   ++currentLocalStepNumber;
   currentStep = findNextStep(currentStep);
-  ++firstDisplayedLocalStepNumber;
-  firstDisplayedStep = findNextStep(firstDisplayedStep);
+  if((getNumberOfSteps() - currentLocalStepNumber) > 4) {
+    ++firstDisplayedLocalStepNumber;
+    firstDisplayedStep = findNextStep(firstDisplayedStep);
+  }
   _closeAlphaMenus();
 }
 
@@ -965,7 +973,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
     func <<= 8;
     func |= currentStep[1];
   }
-  if((func == ITM_LITERAL || func == ITM_REM)) {
+  if((func == ITM_LITERAL || func == ITM_REM || func == ITM_42STRING || func == ITM_42APPEND)) {
     pemAlpha(ITM_EDIT);
   }
   hourGlassIconEnabled = false;
@@ -1357,7 +1365,7 @@ void insertStepInProgram(const int16_t func) {
     pemCursorIsZerothStep = false;
     return;
   }
-  else if(func == ITM_REM || (!tam.mode && getSystemFlag(FLAG_ALPHA))) {
+  else if(func == ITM_REM || func == ITM_42STRING || func == ITM_42APPEND) {
     if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
       pemCloseNumberInput();
       aimBuffer[0] = 0;
@@ -1366,12 +1374,12 @@ void insertStepInProgram(const int16_t func) {
       leaveAsmMode();
       popSoftmenu();
     }
-    tam.function = ITM_REM;
+    tam.function = func;
     pemAlpha(func);
     pemCursorIsZerothStep = false;
     return;
   }
-  
+
   if(   indexOfItems[func].func == addItemToBuffer
      || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                             || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))

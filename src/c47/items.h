@@ -2878,8 +2878,8 @@
 #define ITM_CLLCD                   2772 // CLLCD
 #define ITM_CLALPHA                 2773 // CLA
 #define ITM_2774                    2774 // AIP
-#define ITM_2775                    2775 // 42string
-#define ITM_2776                    2776 // 42append
+#define ITM_42STRING                2775 // 42string
+#define ITM_42APPEND                2776 // 42append
 #define ITM_2777                    2777 // 42ARCL
 #define ITM_2778                    2778 // 42ASTO
 #define ITM_2779                    2779 // 42AROT

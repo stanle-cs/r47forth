@@ -806,7 +806,26 @@ int16_t executeOneStep(uint8_t *step) {
         }
 
         case PTP_REM: {
-          // just ignore it
+          if(op == ITM_42STRING) {
+            if(*step++ == STRING_LABEL_VARIABLE) {
+              _getStringLabelOrVariableName(step);
+              reallocateRegister(REGISTER_K, dtString, TO_BLOCKS(stringByteLength(tmpStringLabelOrVariableName) + 1), amNone);
+              xcopy(REGISTER_STRING_DATA(REGISTER_K), tmpStringLabelOrVariableName, stringByteLength(tmpStringLabelOrVariableName) + 1);
+            }
+          }
+          else if(op == ITM_42APPEND) {
+            if(*step++ == STRING_LABEL_VARIABLE) {
+              copySourceRegisterToDestRegister(REGISTER_X, LAST_TEMP_REGISTER);
+              _getStringLabelOrVariableName(step);
+              reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(stringByteLength(tmpStringLabelOrVariableName) + 1), amNone);
+              xcopy(REGISTER_STRING_DATA(REGISTER_X), tmpStringLabelOrVariableName, stringByteLength(tmpStringLabelOrVariableName) + 1);
+              fnStoreAdd(REGISTER_K);
+              copySourceRegisterToDestRegister(LAST_TEMP_REGISTER, REGISTER_X);
+            }
+          }
+          else {  // REM
+                  // just ignore it
+          }
           return 1;
         }
 
