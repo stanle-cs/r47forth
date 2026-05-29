@@ -27,7 +27,7 @@ extern char _ioFileNameOverride[JIM_PATH_LEN];
 static Jim_Interp *g_dsl_interpreter = NULL;
 
 // ============================================================================
-// DSL Command Implementations - Jim Tcl wrappers
+// Helper functions
 // ============================================================================
 
 /**
@@ -75,6 +75,45 @@ static void setReadpFilenameOverride(const char *filename)
     _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
 }
 
+// ============================================================================
+// DSL Command Implementations - Jim Tcl wrappers
+// ============================================================================
+
+/**
+ * catfn <name> - Calls a built-in catalog function by its name.
+ * This is slow due to a linear lookup over a large table.  Prefer
+ * the direct call by index by using the item name as a command,
+ * when it is a legal Tcl identifier.
+ */
+static int catfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc < 2) {
+        Jim_SetResultString(interp, "catfn: missing function name", -1);
+        return JIM_ERR;
+    } else {
+        char internalName[64];
+        static const size_t max = sizeof(internalName)/2;
+        const char *fnName = (argc > 1) ? Jim_String(argv[1]) : "";
+        if(strlen(fnName) >= max) {
+            Jim_SetResultFormatted(interp, "catfn: '%s' exceeds max length %d",
+                    fnName, max);
+            return JIM_ERR;
+        }
+        utf8ToString((const uint8_t *)fnName, internalName);
+        for(int i = 0; i < LAST_ITEM; ++i) {
+            item_t item = indexOfItems[i];
+            const char* catName = item.itemCatalogName;
+            if((item.status & CAT_STATUS) == CAT_FNCT &&
+                    compareString(internalName, catName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
+                runFunction(i);
+                return JIM_OK;
+            }
+        }
+        Jim_SetResultFormatted(interp, "catfn: '%s' not in the function catalog", fnName);
+        return JIM_ERR;
+    }
+}
+
 /**
  * readp <filename> - Load a program from file (like READP menu command)
  */
@@ -87,7 +126,7 @@ static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
- * xeq <labelname> - Execute a label (like XEQ key) or built-in function
+ * xeq <labelname> - Execute a label, emulating the XEQ key action
  */
 static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
@@ -95,21 +134,7 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
     calcRegister_t label = findNamedLabel(labelName);
 
     if(label == INVALID_VARIABLE) {
-        char internalName[64];
-        static const size_t max = sizeof(internalName)/2;
-        if(strlen(labelName) >= max) {
-            Jim_SetResultFormatted(interp, "xeq: '%s' exceeds max length %d",
-                    labelName, max);
-            return JIM_ERR;
-        }
-        utf8ToString((const uint8_t *)labelName, internalName);
-        for(int i = 0; i < LAST_ITEM; ++i) {
-            if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(internalName, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
-                runFunction(i);
-                return JIM_OK;
-            }
-        }
-        Jim_SetResultFormatted(interp, "xeq: '%s' not found as label or function", labelName);
+        Jim_SetResultFormatted(interp, "xeq: '%s' not a known label", labelName);
         return JIM_ERR;
     }
 
@@ -353,6 +378,7 @@ void initDSL(void) {
     Jim_InitStaticExtensions(interp);
     
     // Register DSL commands at global scope
+    Jim_CreateCommand(interp, "catfn",  catfn,  NULL, NULL);
     Jim_CreateCommand(interp, "press",  press,  NULL, NULL);
     Jim_CreateCommand(interp, "push",   push,   NULL, NULL);
     Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
