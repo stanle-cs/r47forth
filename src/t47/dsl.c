@@ -237,10 +237,10 @@ static int pressOne(Jim_Interp *interp, const char *keyCode)
 }
 
 
-static int push(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int nimmem(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
-        Jim_SetResultString(interp, "push: missing string argument", -1);
+        Jim_SetResultString(interp, "nim: missing string argument", -1);
         return JIM_ERR;
     }
     for(const char *p = Jim_String(argv[1]); *p != 0; p++) {
@@ -261,7 +261,7 @@ static int push(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
             continue;
         }
         else {
-            Jim_SetResultFormatted(interp, "push: invalid character '%c' (expected 0-9, . , - e E or space)", *p);
+            Jim_SetResultFormatted(interp, "nim: invalid character '%c' (expected 0-9, . , - e E or space)", *p);
             return JIM_ERR;
         }
         addItemToNimBuffer(item);
@@ -430,8 +430,8 @@ void initDSL(void) {
     
     // Register DSL commands at global scope
     Jim_CreateCommand(interp, "catfn",  catfn,  NULL, NULL);
+    Jim_CreateCommand(interp, "nim",    nim,    NULL, NULL);
     Jim_CreateCommand(interp, "press",  press,  NULL, NULL);
-    Jim_CreateCommand(interp, "push",   push,   NULL, NULL);
     Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
     Jim_CreateCommand(interp, "savest", savest, NULL, NULL);
     Jim_CreateCommand(interp, "snap",   snap,   NULL, NULL);
