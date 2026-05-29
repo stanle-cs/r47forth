@@ -93,9 +93,17 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     const char *labelName = (argc > 1) ? Jim_String(argv[1]) : "";
     calcRegister_t label = findNamedLabel(labelName);
-    
+
     if(label == INVALID_VARIABLE) {
-        Jim_SetResultFormatted(interp, "xeq: Label '%s' not found", labelName);
+        char internalName[64];                      // confirm 64 covers your longest catalog name
+        utf8ToString((const uint8_t *)labelName, internalName);
+        for(int i = 0; i < LAST_ITEM; ++i) {
+            if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(internalName, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
+                runFunction(i);
+                return JIM_OK;
+            }
+        }
+        Jim_SetResultFormatted(interp, "xeq: '%s' not found as label or function", labelName);
         return JIM_ERR;
     }
     dynamicMenuItem = -1;  // clear stale dynamic menu context
@@ -145,6 +153,41 @@ static int pressOne(Jim_Interp *interp, const char *keyCode)
     Jim_SetResultFormatted(interp, "press: Invalid key code '%s' (expected single char, Enter/Return, or 2 digits)", keyCode);
     return JIM_ERR;
 }
+
+
+static int typeNumber(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc < 2) {
+        Jim_SetResultString(interp, "typeNumber: missing string argument", -1);
+        return JIM_ERR;
+    }
+    for(const char *p = Jim_String(argv[1]); *p != 0; p++) {
+        int16_t item;
+        if(*p >= '0' && *p <= '9') {
+            item = ITM_0 + (*p - '0');
+        }
+        else if(*p == '.' || *p == ',') {
+            item = ITM_PERIOD;
+        }
+        else if(*p == '-') {
+            item = ITM_CHS;
+        }
+        else if(*p == 'e' || *p == 'E') {
+            item = ITM_EXPONENT;
+        }
+        else if(*p == ' ') {
+            continue;
+        }
+        else {
+            Jim_SetResultFormatted(interp, "typeNumber: invalid character '%c' (expected 0-9, . , - e E or space)", *p);
+            return JIM_ERR;
+        }
+        addItemToNimBuffer(item);
+        refreshRegisterLine(REGISTER_X);
+    }
+    return injectScriptKey(interp, NULL, GDK_KEY_Return);
+}
+
 
 /**
  * press <keycode> - Press a keyboard key (like pressing the button)
@@ -201,6 +244,8 @@ static void tsvfnSet(const char *path)
     filename_csv[FILENAMELEN - 1] = '\0';
     mem__32 = getUptimeMs();
     cancelFilename = false;
+    clearSystemFlag(FLAG_PRTACT);
+    printf("Set file name to %s\n", filename_csv);
 }
 
 /**
@@ -210,6 +255,7 @@ static void tsvfnClear(void)
 {
     cancelFilename = true;
     filename_csv[0] = '\0';
+    printf("Set file name to %s\n", filename_csv);
 }
 
 /**
@@ -304,6 +350,7 @@ void initDSL(void) {
     Jim_CreateCommand(interp, "xeq",    xeq,    NULL, NULL);
     Jim_CreateCommand(interp, "press",  press,  NULL, NULL);
     Jim_CreateCommand(interp, "tsvfn",  tsvfn,  NULL, NULL);
+    Jim_CreateCommand(interp, "typen",  typeNumber,   NULL, NULL);
     Jim_CreateCommand(interp, "snap",   snap,   NULL, NULL);
     Jim_CreateCommand(interp, "savest", savest, NULL, NULL);
 }
