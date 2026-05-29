@@ -359,19 +359,6 @@
       default:;
     }
 
-    // Run scripts only after normal post-restore normalization.
-    if(headlessMode || scriptFile != NULL) {
-      // In headless mode with no script specified, use stdin.
-      if(scriptFile == NULL) {
-        scriptFile = "-";
-      }
-
-      initDSL();
-      int ret = executeScript(scriptFile);
-      cleanupDSL();
-      return ret;
-    }
-
     if(writeExportAll) {
       fnReset(CONFIRMED);
       fnSaveAllPrograms(NOPARAM);
@@ -401,6 +388,18 @@
       return 0;
     }
 
+    // Run scripts only after normal post-restore normalization.
+    if(headlessMode || scriptFile != NULL) {
+      // In headless mode with no script specified, use stdin.
+      if(scriptFile == NULL) {
+        scriptFile = "-";
+      }
+
+      initDSL();
+      int ret = executeScript(scriptFile);
+      cleanupDSL();
+      return ret;
+    }
 
     refreshScreen(190);
 
