@@ -1,12 +1,17 @@
-# This is an illustrative example of a Tcl-like scrip to operate the C47/R47
+# This is an illustrative example of a Tcl-like script to operate the C47/R47.
+#
 # Commands used here:
-#   nim for numerical entry. Not that you enter as per RPN entry, negative 4 is entered as RPN, using th CHS equivalent being -: nim 4 -
-#   SIN or other commands are standard Tcl-like
-#   xeq is a standard command that can be used to execute a loaded user function or a standard function. X! Is used below as standard function as well as print x
-#   tsvfn to change the tav output file name: currently 10 char max including dot and extension. 
+#   nim    Numerical entry. Note that you enter as per RPN: negative 4 is
+#          entered the RPN way, using the CHS equivalent "-": nim 4 -
+#   SIN    SIN and other standard functions are standard Tcl-like commands.
+#   xeq    Executes a loaded user function or a standard function. Below, x!
+#          is used as a standard function, as is print x.
+#   tsvfn  Changes the TSV output file name: currently 10 char max, including
+#          the dot and extension.
+#
+# This script was called as:
+#   ./c47 --headless --script ./res/SCRIPTS/example.d47
 
-# This script was called:
-#   ./c47 --headless  --script ./res/SCRIPTS/example.d47
 
 
 nim 1.234
@@ -36,7 +41,7 @@ xeq ⎙x
 
 
 
-# Terminal output of the above script on 2026-05-29 is:
+# Terminal output of the above script, on 2026-05-29, was:
 
 # Calling catalog function SIN, index 76
 # Overrode TSV file name to fact12.tsv
@@ -50,7 +55,7 @@ xeq ⎙x
 
 
 
-# TSV output is in file fact12.tsv:
+# TSV output, as written to the file fact12.tsv:
 
 # X	0.02153569796186156851621004833491722
 # X	7.817492986337973293644656288931653E+1002
