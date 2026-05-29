@@ -1250,14 +1250,16 @@ enum REG_NUMBERS { // C program register codes
   RESERVED_VARIABLE_V,                                   //2024
   RESERVED_VARIABLE_W,                                   //2025
 
-  // Named reserved variables
-  FIRST_NAMED_RESERVED_VARIABLE,
-  RESERVED_VARIABLE_ADM = FIRST_NAMED_RESERVED_VARIABLE, //2026
+  // Removed reserved variables
+  RESERVED_VARIABLE_ADM,                                 //2026
   RESERVED_VARIABLE_DENMAX,                              //2027
   RESERVED_VARIABLE_ISM,                                 //2028
   RESERVED_VARIABLE_REALDF,                              //2029
   RESERVED_VARIABLE_NDEC,                                //2030
-  RESERVED_VARIABLE_ACC,                                 //2031
+  
+  // Named reserved variables
+  FIRST_NAMED_RESERVED_VARIABLE,
+  RESERVED_VARIABLE_ACC = FIRST_NAMED_RESERVED_VARIABLE, //2031
   RESERVED_VARIABLE_ULIM,                                //2032
   RESERVED_VARIABLE_LLIM,                                //2033
   RESERVED_VARIABLE_FV,                                  //2034
