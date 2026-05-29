@@ -36,3 +36,6 @@ void lcd_refresh(void) {
 bool_t lcd_buffer_pixel_on(uint32_t x, uint32_t y) {
 return 0;
 }
+int create_dir(char * dir) {
+return 0;
+}

@@ -3853,8 +3853,14 @@ void fnExitAllMenus(uint16_t unusedButMandatoryParameter) {
 
 
 
-void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat) {                              //JMvv procedure to dump all menus. First page only. To mod todump all pages
+void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const char *pathIn) {          //JMvv procedure to dump all menus. First page only. To mod todump all pages
 #if defined(PC_BUILD)
+  char menuDumpPath[512] = "menuDump";  // default; TODO: make definable from command line
+
+  if(pathIn != NULL && pathIn[0] != '\0' && strlen(pathIn) < sizeof(menuDumpPath)) {
+    strcpy(menuDumpPath, pathIn);
+  }
+
   doRefreshSoftMenu = true;
   showSoftmenu(softmenu[menu].menuItem);
   softmenuStack[0].firstItem += item;
@@ -3867,10 +3873,11 @@ void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat) {     
   uint16_t uint16;
   uint8_t  uint8;
 
-  gtk_widget_queue_draw(screen);
-  while(gtk_events_pending()) {
-    gtk_main_iteration();
+  if(create_dir(menuDumpPath) != 0) {
+    printf(">>> menuDump: cannot create folder %s\n", menuDumpPath);
+    return;
   }
+  printf(">>> menuDump: output folder is %s\n", menuDumpPath);
 
   //printf(">>> %s\n",indexOfItems[-softmenu[menu].menuItem].itemSoftmenuName);
   char asciiString[448];
@@ -3878,22 +3885,19 @@ void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat) {     
 
   if(newFilenameformat == 2) {
     stringToASCII(indexOfItems[-softmenu[menu].menuItem].itemSoftmenuName, asciiMenuName);
-    //printf(">>> Menustring:%s|",asciiMenuName);
     stringToFileNameChars(asciiMenuName, asciiString);
-    //printf(">>> Menustring:%s|",asciiString);
-    sprintf(bmpFileName, "%s.%d.bmp", asciiString, (int)(item/18)+1);
-    printf(">>> filename:%s|\n", bmpFileName);
+    sprintf(bmpFileName, "%s/%s.%d.bmp", menuDumpPath, asciiString, (int)(item/18)+1);
   } else   if(newFilenameformat == 1) {
     stringToASCII(indexOfItems[-softmenu[menu].menuItem].itemSoftmenuName, asciiMenuName);
-    //printf(">>> Menustring:%s|",asciiMenuName);
     stringToFileNameChars(asciiMenuName, asciiString);
-    //printf(">>> Menustring:%s|",asciiString);
-    sprintf(bmpFileName, "Menu_%03d_p%d_%s.bmp", menu, (int)(item/18)+1, asciiString);
-    printf(">>> filename:%s|\n", bmpFileName);
+    sprintf(bmpFileName, "%s/Menu_%03d_p%d_%s.bmp", menuDumpPath, menu, (int)(item/18)+1, asciiString);
   }
 
-
   bmp = fopen(bmpFileName, "wb");
+  if(bmp == NULL) {
+    printf(">>> menuDump: cannot open %s for writing\n", bmpFileName);
+    return;
+  }
 
   fwrite("BM", 1, 2, bmp);        // Offset 0x00  0  BMP header
 
@@ -3924,7 +3928,7 @@ void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat) {     
   uint32 = 0;
   fwrite(&uint32, 1, 4, bmp);     // Offset 0x1e 30  Compression
 
-  uint32 = 0x000030c0;
+  uint32 = (SCREEN_WIDTH/8 + 2) * (SCREEN_HEIGHT-171);
   fwrite(&uint32, 1, 4, bmp);     // Offset 0x22 34  Size of bitmap data (including padding)
 
   uint32 = 0x00001a7c; // 6780 pixels/m
@@ -3976,7 +3980,7 @@ void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat) {     
   for(y=SCREEN_HEIGHT-1; y>=171; y--) {
     for(x=0; x<SCREEN_WIDTH; x++) {
       uint8 <<= 1;
-      if(*(screenData + y*screenStride + x) == ON_PIXEL) {
+      if(lcd_buffer_pixel_on((uint32_t)x, (uint32_t)y)) {
         uint8 |= 1;
       }
 
@@ -3990,12 +3994,13 @@ void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat) {     
 
 
   fclose(bmp);
+  printf(">>> menuDump: wrote %s\n", bmpFileName);
   popSoftmenu();
 #endif // PC_BUILD
 }
 
 
-void fnDumpMenus(uint16_t newFilenameformat) {                      //JM
+void fnDumpMenus(uint16_t newFilenameformat, const char *path) {
 #if defined(PC_BUILD)
   int cc = currentSolverStatus;
   currentSolverStatus = currentSolverStatus & (SOLVER_STATUS_USES_FORMULA | SOLVER_STATUS_INTERACTIVE);
@@ -4015,7 +4020,7 @@ void fnDumpMenus(uint16_t newFilenameformat) {                      //JM
           case MNU_SHOW     :
             break;
           default:
-           fnMenuDump(m, n, newFilenameformat);
+           fnMenuDump(m, n, newFilenameformat, path);
          }
         n += 18;
       }
@@ -4023,6 +4028,9 @@ void fnDumpMenus(uint16_t newFilenameformat) {                      //JM
     }
   currentSolverStatus = cc;
 #endif // PC_BUILD
-}                                                                            //JM^^
+}
 
 
+void fnDumpMenusWrapper(uint16_t newFilenameformat) {
+  fnDumpMenus(newFilenameformat, NULL);
+}

@@ -85,6 +85,7 @@
    * \return FILE_OK if file opened successfully, FILE_CANCEL if file selcetion cancelled or FILE_ERROR
    */
   int ioFileOpen(ioFilePath_t path, ioFileMode_t mode);
+  int create_dir(char * dir);
 
   /**
    * Write to the open file.

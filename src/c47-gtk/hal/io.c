@@ -12,7 +12,7 @@ static FILE *_ioFileHandle = NULL;
 
 char _ioFileNameOverride[JIM_PATH_LEN] = {0};
 
-static int create_dir(char * dir) {
+int create_dir(char * dir) {
   int ret;
   #if defined(WIN32)
     ret = mkdir( dir );

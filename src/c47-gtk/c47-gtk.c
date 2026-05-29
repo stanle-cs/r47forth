@@ -32,6 +32,7 @@
   uint8_t             calcModelNew = 255;
   char               *scriptFile = NULL;
   bool_t              headlessMode = false;
+  char               *menuDumpPath = NULL;
 
   #if defined(EXPORT_ITEMS)
     int sortItems(void const *a, void const *b) {
@@ -204,10 +205,28 @@
       if(strcmp(argv[arg], "--dumpMenus1") == 0) {
         printf("Activated: %s\n", argv[arg]);
         dumpMenus = 1;
+        headlessMode = true;
+        if(arg+1<argc && (argv[arg+1])[0] != '-') {
+          menuDumpPath = argv[++arg];
+          if(menuDumpPath[0] == '\0' || strlen(menuDumpPath) >= 500) {
+            printf("Error: implausible --dumpMenus1 path. No work done.\n");
+            return 1;
+          }
+          printf("  menuDump path: %s\n", menuDumpPath);
+        }
       }
       if(strcmp(argv[arg], "--dumpMenus2") == 0) {
         printf("Activated: %s\n", argv[arg]);
         dumpMenus = 2;
+        headlessMode = true;
+        if(arg+1<argc && (argv[arg+1])[0] != '-') {
+          menuDumpPath = argv[++arg];
+          if(menuDumpPath[0] == '\0' || strlen(menuDumpPath) >= 500) {
+            printf("Error: implausible --dumpMenus2 path. No work done.\n");
+            return 1;
+          }
+          printf("  menuDump path: %s\n", menuDumpPath);
+        }
       }
 
       if(strcmp(argv[arg], "--help") == 0 || strcmp(argv[arg], "--h") == 0 || strcmp(argv[arg], "-h") == 0) {
@@ -229,35 +248,35 @@
         printf("C47/R47 license GPL3, details on 47calc.com\n");
         printf("\n%s", sss);
         printf("Activated: %s\n\n", argv[arg]);
-        printf("%s47 --background     : specify background picture\n", cc);
-        printf("%s47 --functionkeys   : display function key labels\n\n", cc);
-        printf("%s47 --landscape      : landscape orientation\n", cc);
-        printf("%s47 --portrait       : portrait orientation\n", cc);
-        printf("%s47 --auto           : automatic orientation\n\n", cc);
-        printf("%s47 --c47            : C47\n", cc);
-        printf("%s47 --r47            : R47v0 layout (f g)\n", cc);
-        printf("%s47 --r47v0          : R47v0 layout (f g)\n", cc);
-        printf("%s47 --r47v1          : R47v1 layout (fg bk)\n", cc);
-        printf("%s47 --r47v2          : R47v2 layout (fg g)\n", cc);
-        printf("%s47 --r47v3          : R47v3 layout (bk fg) \n", cc);
-        printf("%s47 --dm42           : DM42 layout\n", cc);
-        printf("%s47 --e47            : E47 layout (SIM only) (sunsetting)\n", cc);
-        printf("%s47 --n47            : N47 layout (SIM only) (sunsetting)\n", cc);
-        printf("%s47 --v47            : V47 layout (SIM only) (sunsetting)\n", cc);
-        printf("%s47 --d47            : D47 layout (SIM only) (sunsetting)\n\n", cc);
-        printf("%s47 --jm             : Setting profile: Jaco preferences\n", cc);
-        printf("%s47 --rj             : Setting profile: RJvM preferences\n", cc);
-        printf("%s47 --hp35           : Setting profile: HP-35 tribute\n\n", cc);
-        printf("%s47 --deadkeys       : typewriter style dead keys\n", cc);
-        printf("%s47 --swapctrlcode   : ctrl fix for Swiss keyboards\n", cc);
-        printf("%s47 --mockup         : output demo status bar layout\n", cc);
-        printf("%s47 --dumpMenus1     : output all static menus to drive; old file name format in the form 'Menu_140_p1_RIBBONS.bmp'\n", cc);
-        printf("%s47 --dumpMenus2     : output all static menus to drive; new file name format in the form 'RIBBONS.1.bmp'\n", cc);
-        printf("%s47 --writeexportall : output all PROGs (internal use)\n", cc);
-        printf("%s47 --script <file>  : execute DSL script from file or - for stdin\n", cc);
-        printf("%s47 --headless       : suppress GTK interface startup\n", cc);
-        printf("%s47 --help           : list all SIM switches\n", cc);
-        printf("%s47 --h              : see --help\n", cc);
+        printf("%s47 --background        : specify background picture\n", cc);
+        printf("%s47 --functionkeys      : display function key labels\n\n", cc);
+        printf("%s47 --landscape         : landscape orientation\n", cc);
+        printf("%s47 --portrait          : portrait orientation\n", cc);
+        printf("%s47 --auto              : automatic orientation\n\n", cc);
+        printf("%s47 --c47               : C47\n", cc);
+        printf("%s47 --r47               : R47v0 layout (f g)\n", cc);
+        printf("%s47 --r47v0             : R47v0 layout (f g)\n", cc);
+        printf("%s47 --r47v1             : R47v1 layout (fg bk)\n", cc);
+        printf("%s47 --r47v2             : R47v2 layout (fg g)\n", cc);
+        printf("%s47 --r47v3             : R47v3 layout (bk fg) \n", cc);
+        printf("%s47 --dm42              : DM42 layout\n", cc);
+        printf("%s47 --e47               : E47 layout (SIM only) (sunsetting)\n", cc);
+        printf("%s47 --n47               : N47 layout (SIM only) (sunsetting)\n", cc);
+        printf("%s47 --v47               : V47 layout (SIM only) (sunsetting)\n", cc);
+        printf("%s47 --d47               : D47 layout (SIM only) (sunsetting)\n\n", cc);
+        printf("%s47 --jm                : Setting profile: Jaco preferences\n", cc);
+        printf("%s47 --rj                : Setting profile: RJvM preferences\n", cc);
+        printf("%s47 --hp35              : Setting profile: HP-35 tribute\n\n", cc);
+        printf("%s47 --deadkeys          : typewriter style dead keys\n", cc);
+        printf("%s47 --swapctrlcode      : ctrl fix for Swiss keyboards\n", cc);
+        printf("%s47 --mockup            : output demo status bar layout\n", cc);
+        printf("%s47 --dumpMenus1 [path] : output all static menus to drive; old file name format 'Menu_140_p1_RIBBONS.bmp'; default folder 'menuDump' (auto headless mode)\n", cc);
+        printf("%s47 --dumpMenus2 [path] : output all static menus to drive; new file name format 'RIBBONS.1.bmp';           default folder 'menuDump' (auto headless mode)\n", cc);
+        printf("%s47 --writeexportall    : output all PROGs (internal use)\n", cc);
+        printf("%s47 --script <file>     : execute DSL script from file or - for stdin\n", cc);
+        printf("%s47 --headless          : suppress GTK interface startup\n", cc);
+        printf("%s47 --help              : list all SIM switches\n", cc);
+        printf("%s47 --h                 : see --help\n", cc);
         return 0;
       }
     }
@@ -383,7 +402,7 @@
     if(dumpMenus > 0) {
       fnReset(CONFIRMED);
       clearScreen(121);
-      fnDumpMenus(dumpMenus);
+      fnDumpMenus(dumpMenus, menuDumpPath);
       printf("\n\nOutput menus saved.\n");
       return 0;
     }
