@@ -279,6 +279,9 @@
 
 
 //Testing and debugging
+  #define    MONITOR_IRPRINT
+//#undef     MONITOR_IRPRINT
+
   #define    REFRESH_ON_SCREEN_MONITOR  //refresh debug on actual screen. Shows the refresh source number. Works on hardware and sim.
   #undef     REFRESH_ON_SCREEN_MONITOR
 
