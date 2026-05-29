@@ -172,6 +172,8 @@
       if(strcmp(argv[arg], "--writeexportall") == 0) {
         printf("Activated: %s\n", argv[arg]);
         writeExportAll = true;
+        loadTestPrograms = true;
+        // headlessMode = true;
       }
       if(strcmp(argv[arg], "--mockup") == 0) {
         printf("Activated: %s\n", argv[arg]);
