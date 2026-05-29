@@ -201,6 +201,7 @@ dist_install_PC: sim simr47
 	cp $(BUILD_PC)/src/c47-gtk/c47$(EXE) $(DIST_DIR_PC)/
 	cp $(BUILD_PC)/src/c47-gtk/r47$(EXE) $(DIST_DIR_PC)/
 	cp -r res/PROGRAMS $(DIST_DIR_PC)/res/
+	cp -r res/SCRIPTS $(DIST_DIR_PC)/res/
 	cp -r res/STATE $(DIST_DIR_PC)/res/
 	cp res/c47_pre.css $(DIST_DIR_PC)/res/
 	cp res/C47.png $(DIST_DIR_PC)/res/
