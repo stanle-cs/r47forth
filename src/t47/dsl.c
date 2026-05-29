@@ -184,7 +184,21 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
     calcRegister_t label = findNamedLabel(labelName);
 
     if(label == INVALID_VARIABLE) {
-        Jim_SetResultFormatted(interp, "xeq: '%s' not a known label", labelName);
+        char internalName[64];
+        static const size_t max = sizeof(internalName)/2;
+        if(strlen(labelName) >= max) {
+            Jim_SetResultFormatted(interp, "xeq: '%s' exceeds max length %d",
+                    labelName, max);
+            return JIM_ERR;
+        }
+        utf8ToString((const uint8_t *)labelName, internalName);
+        for(int i = 0; i < LAST_ITEM; ++i) {
+            if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(internalName, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
+                runFunction(i);
+                return JIM_OK;
+            }
+        }
+        Jim_SetResultFormatted(interp, "xeq: '%s' not found as label or function", labelName);
         return JIM_ERR;
     }
 

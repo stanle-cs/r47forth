@@ -390,6 +390,7 @@
 
 
 #if defined(T47)
+  #undef  MONITOR_IRPRINT
   #undef  REFRESH_ON_SCREEN_MONITOR
   #undef  DM42_KEYCLICK
   #undef  DM42_POWERMARKS

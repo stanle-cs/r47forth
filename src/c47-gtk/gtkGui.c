@@ -6649,6 +6649,8 @@ int keyCntA = 0;
     lcd_buffer = malloc(SCREEN_HEIGHT*(SCREEN_WIDTH/8+2)+2)+2;
     lcd_clear_buf ();
 
-  check_all_btn_widgets_for_consistency();
+    if(!headlessMode) {
+      check_all_btn_widgets_for_consistency();
+    }
   }
 #endif // PC_BUILD
