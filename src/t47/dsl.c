@@ -75,6 +75,56 @@ static void setReadpFilenameOverride(const char *filename)
     _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
 }
 
+/**
+ * cmdByIndex index - Calls a built-in catalog function by its item index.
+ * This binds CAT FCNS to Tcl commands.
+ */
+static int cmdByIndex(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    int index = (int)(intptr_t)Jim_CmdPrivData(interp);
+    printf("Calling catalog function %s, index %d\n",
+        indexOfItems[index].itemCatalogName, index);
+    runFunction(index);
+    return JIM_OK;
+}
+
+/**
+ * Check if a string is a valid Tcl identifier.
+ */
+static bool_t validTclIdentifier(const char *str) {
+    if(str[0] == '\0') {
+        return FALSE;
+    }
+    if(!isalpha(str[0]) && str[0] != '_') {
+        return FALSE;
+    }
+    for(int i = 1; str[i]; ++i) {
+        if(!isalnum(str[i]) && str[i] != '_') {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+/**
+ * Register a catalog function directly if its name happens to be a
+ * valid Tcl identifier.
+ */
+static void registerCatFn(Jim_Interp *interp, const char *name, void *idx, char *cmdName, bool_t skipUtf8Identity)
+{
+    if(!name || !name[0]) {
+        return;
+    }
+    stringToUtf8(name, (uint8_t*)cmdName);
+    if(skipUtf8Identity && strcmp(name, cmdName) == 0) {
+        return;
+    }
+    if(compareString(name, name, CMP_NAME) == 0 &&
+            validTclIdentifier(cmdName)) {
+        Jim_CreateCommand(interp, cmdName, cmdByIndex, idx, NULL);
+    }
+}
+
 // ============================================================================
 // DSL Command Implementations - Jim Tcl wrappers
 // ============================================================================
@@ -386,6 +436,21 @@ void initDSL(void) {
     Jim_CreateCommand(interp, "snap",   snap,   NULL, NULL);
     Jim_CreateCommand(interp, "tsvfn",  tsvfn,  NULL, NULL);
     Jim_CreateCommand(interp, "xeq",    xeq,    NULL, NULL);
+    
+    // Register all 🟧 CAT FCNS entries as commands, too
+    {
+        char cmdName[64];
+        for(int i = 0; i < LAST_ITEM; ++i) {
+            item_t item = indexOfItems[i];
+            const char* catName = item.itemCatalogName;
+            const char* smName  = item.itemSoftmenuName;
+            void* idx = (void*)(intptr_t)i;
+            if((item.status & CAT_STATUS) == CAT_FNCT) {
+                registerCatFn(interp, catName, idx, cmdName, FALSE);
+                registerCatFn(interp, smName,  idx, cmdName, TRUE);
+            }
+        }
+    }
 }
 
 // ============================================================================
