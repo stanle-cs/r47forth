@@ -402,7 +402,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
       #if defined(IR_PRINTING)
         printTraceTI();
         if(getSystemFlag(FLAG_TRACE) && (indexOfItems[func].status & RESULT_IN_X)){  // Trace X if function returns result in X
-          #if defined(PC_BUILD)
+          #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
             printf("**[DL]** reallyRunFunction printTraceX func %d\n", func);
             fflush(stdout);
           #endif //PC_BUILD
