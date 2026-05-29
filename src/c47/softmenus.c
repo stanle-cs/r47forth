@@ -3853,7 +3853,11 @@ void fnExitAllMenus(uint16_t unusedButMandatoryParameter) {
 
 
 
-void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const char *pathIn) {          //JMvv procedure to dump all menus. First page only. To mod todump all pages
+// distinctQuotes is propagated to stringToFileNameChars(): 0 keeps the
+// legacy `"` -> `'` mapping (--dumpMenus1/2); 1 maps `"` -> `''` so the
+// "f'" / "f\"" derivative menus get distinct filenames under
+// --dumpMenusAll.
+void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const char *pathIn, uint8_t distinctQuotes) {          //JMvv procedure to dump all menus. First page only. To mod todump all pages
 #if defined(PC_BUILD)
   char menuDumpPath[512] = "menuDump";  // default; TODO: make definable from command line
 
@@ -3885,11 +3889,11 @@ void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const 
 
   if(newFilenameformat == 2) {
     stringToASCII(indexOfItems[-softmenu[menu].menuItem].itemSoftmenuName, asciiMenuName);
-    stringToFileNameChars(asciiMenuName, asciiString);
+    stringToFileNameChars(asciiMenuName, asciiString, distinctQuotes);
     sprintf(bmpFileName, "%s/%s.%d.bmp", menuDumpPath, asciiString, (int)(item/18)+1);
   } else   if(newFilenameformat == 1) {
     stringToASCII(indexOfItems[-softmenu[menu].menuItem].itemSoftmenuName, asciiMenuName);
-    stringToFileNameChars(asciiMenuName, asciiString);
+    stringToFileNameChars(asciiMenuName, asciiString, distinctQuotes);
     sprintf(bmpFileName, "%s/Menu_%03d_p%d_%s.bmp", menuDumpPath, menu, (int)(item/18)+1, asciiString);
   }
 
@@ -4020,7 +4024,7 @@ void fnDumpMenus(uint16_t newFilenameformat, const char *path) {
           case MNU_SHOW     :
             break;
           default:
-           fnMenuDump(m, n, newFilenameformat, path);
+           fnMenuDump(m, n, newFilenameformat, path, 0);
          }
         n += 18;
       }
@@ -4058,7 +4062,7 @@ void fnDumpMenusAll(uint16_t newFilenameformat, const char *path) {
     n = 0;
     while(n < softmenu[m].numItems && softmenu[m].numItems != 0) {
       printf("m=%d n=%d softmenu[%u].numItems=%u name:%s.%u\n", m, n, m, softmenu[m].numItems, indexOfItems[m].itemCatalogName, n%18);
-      fnMenuDump(m, n, newFilenameformat, path);
+      fnMenuDump(m, n, newFilenameformat, path, 1);
       n += 18;
     }
     m++;
