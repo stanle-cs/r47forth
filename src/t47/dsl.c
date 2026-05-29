@@ -252,7 +252,7 @@ static void tsvfnSet(const char *path)
     mem__32 = getUptimeMs();
     cancelFilename = false;
     clearSystemFlag(FLAG_PRTACT);
-    printf("Set file name to %s\n", filename_csv);
+    printf("Overrode TSV file name to %s\n", filename_csv);
 }
 
 /**
@@ -262,7 +262,7 @@ static void tsvfnClear(void)
 {
     cancelFilename = true;
     filename_csv[0] = '\0';
-    printf("Set file name to %s\n", filename_csv);
+    printf("Cleared TSV file name override\n");
 }
 
 /**
