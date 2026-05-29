@@ -3381,7 +3381,7 @@ void showSoftmenuCurrentPart(void) {
         return false;
       }
     }
-    #if defined(PC_BUILD)
+    #if defined(PC_BUILD) && defined (VERBOSE_MINIMUM)
       printf("----------- ############################ CREATING HOME #########################\n");
     #endif // PC_BUILD
     for(uint16_t ii=0; ii<18; ii++) {
@@ -3411,7 +3411,7 @@ void showSoftmenuCurrentPart(void) {
         return false;
       }
     }
-    #if defined(PC_BUILD)
+    #if defined(PC_BUILD) && defined (VERBOSE_MINIMUM)
       printf("----------- ############################ CREATING PFN #########################\n");
     #endif // PC_BUILD
     for(uint16_t ii=0; ii<18; ii++) {
