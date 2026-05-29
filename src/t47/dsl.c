@@ -192,6 +192,7 @@ static int push(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         addItemToNimBuffer(item);
         refreshRegisterLine(REGISTER_X);
     }
+    closeNim();
     return JIM_OK;
 }
 
