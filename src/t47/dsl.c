@@ -461,10 +461,10 @@ void initDSL(void) {
         char cmdName[64];
         for(int i = 0; i < LAST_ITEM; ++i) {
             item_t item = indexOfItems[i];
-            const char* catName = item.itemCatalogName;
-            const char* smName  = item.itemSoftmenuName;
-            void* idx = (void*)(intptr_t)i;
             if((item.status & CAT_STATUS) == CAT_FNCT) {
+                void* idx = (void*)(intptr_t)i;
+                const char* catName = item.itemCatalogName;
+                const char* smName  = item.itemSoftmenuName;
                 registerCatFn(interp, catName, idx, cmdName, FALSE);
                 registerCatFn(interp, smName,  idx, cmdName, TRUE);
             }
