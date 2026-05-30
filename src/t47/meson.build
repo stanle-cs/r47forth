@@ -74,7 +74,22 @@ jim_lib = static_library(
   native: true,
 )
 
-t47_dep = declare_dependency(
-  include_directories: [include_directories('.'), include_directories(jim_srcdir)],
-  link_with: jim_lib,
-)
+t47_inc = [
+  include_directories('.'),
+  include_directories(jim_srcdir),
+]
+
+t47_dsl_src = files('dsl.c', 'value.c')
+
+if not meson.is_cross_build()
+  t47_dep = declare_dependency(
+    include_directories: t47_inc + [include_directories('../c47-gtk')],
+    link_with: jim_lib,
+    sources: t47_dsl_src,
+  )
+else
+  t47_dep = declare_dependency(
+    include_directories: t47_inc,
+    link_with: jim_lib,
+  )
+endif

@@ -8,6 +8,7 @@
 
 #include "c47.h"
 #include "c47-gtk.h"
+#include "value.h"
 
 #if defined(PC_BUILD)
 
@@ -33,9 +34,9 @@ enum {
     CATFN_ERROR     = -1
 };
 
-// ============================================================================
-// Helper functions
-// ============================================================================
+// =====================================================================
+// Helper functions not worth extracting to a separate module
+// =====================================================================
 
 /**
  * Wait until calculator program execution has fully returned control.
@@ -113,310 +114,6 @@ static int expectedScriptArgCount(int16_t index)
             return 1;
         default:
             return -1;
-    }
-}
-
-/**
- * True when the argument is not supported in scripts.
- */
-static bool_t dslUnsupportedArg(Jim_Interp *interp, const char *arg, const char *kind)
-{
-    if(arg[0] == '.' && arg[1] != '\0') {
-        Jim_SetResultFormatted(interp,
-            "local %s '.NN' not supported in scripts", kind);
-        return TRUE;
-    }
-    if(arg[0] == '-' && arg[1] == '>') {
-        Jim_SetResultFormatted(interp,
-            "indirect %s '->...' not supported in scripts", kind);
-        return TRUE;
-    }
-    return FALSE;
-}
-
-/**
- * Return the register number for a given letter.
- */
-static int16_t dslRegisterFromLetter(char letter)
-{
-    const char *p = strchr(registerFlagLetters, toupper((unsigned char)letter));
-    if(!p) {
-        return INVALID_VARIABLE;
-    }
-    int idx = (int)(p - registerFlagLetters);
-    if(idx <= REGISTER_K - FIRST_LETTERED_REGISTER) {
-        return (int16_t)(FIRST_LETTERED_REGISTER + idx);
-    }
-    if(idx <= REGISTER_S - FIRST_STAT_REGISTER + 12) {
-        return (int16_t)(FIRST_STAT_REGISTER + (idx - 12));
-    }
-    return (int16_t)(FIRST_SPARE_REGISTER + (idx - 18));
-}
-
-/**
- * Parse a register argument.
- */
-static int dslParseRegisterArg(Jim_Interp *interp, int16_t op, const char *arg,
-        uint16_t *outParam)
-{
-    char internalName[64];
-
-    if(dslUnsupportedArg(interp, arg, "register")) {
-        return JIM_ERR;
-    }
-
-    if(arg[0] != '\0' && arg[strspn(arg, "0123456789")] == '\0') {
-        long n = strtol(arg, NULL, 10);
-        if(n < 0 || n > 99) {
-            Jim_SetResultFormatted(interp, "register number out of range: '%s'", arg);
-            return JIM_ERR;
-        }
-        calcRegister_t reg = (calcRegister_t)(FIRST_GLOBAL_REGISTER + n);
-        if(!regInRange(reg)) {
-            Jim_SetResultFormatted(interp, "invalid register: '%s'", arg);
-            return JIM_ERR;
-        }
-        *outParam = (uint16_t)reg;
-        return JIM_OK;
-    }
-
-    if(arg[1] == '\0' && isalpha((unsigned char)arg[0])) {
-        calcRegister_t reg = dslRegisterFromLetter(arg[0]);
-        if(reg == INVALID_VARIABLE || !regInRange(reg)) {
-            Jim_SetResultFormatted(interp, "invalid register letter: '%s'", arg);
-            return JIM_ERR;
-        }
-        *outParam = (uint16_t)reg;
-        return JIM_OK;
-    }
-
-    if(strlen(arg) >= sizeof(internalName)/2) {
-        Jim_SetResultFormatted(interp, "register name too long: '%s'", arg);
-        return JIM_ERR;
-    }
-    utf8ToString((const uint8_t *)arg, internalName);
-    calcRegister_t reg;
-    if(isFunctionAllowingNewVariable((uint16_t)op)) {
-        reg = findOrAllocateNamedVariable(internalName);
-    } else {
-        reg = findNamedVariable(internalName);
-        if(reg == INVALID_VARIABLE) {
-            Jim_SetResultFormatted(interp, "undefined variable: '%s'", arg);
-            return JIM_ERR;
-        }
-    }
-    *outParam = (uint16_t)reg;
-    return JIM_OK;
-}
-
-/**
- * Parse a label argument.
- */
-static int dslParseLabelArg(Jim_Interp *interp, const char *arg, uint16_t *outParam)
-{
-    char internalName[64];
-
-    if(arg[0] != '\0' && arg[strspn(arg, "0123456789")] == '\0') {
-        long n = strtol(arg, NULL, 10);
-        if(n < 0 || n > 99) {
-            Jim_SetResultFormatted(interp, "label number out of range: '%s'", arg);
-            return JIM_ERR;
-        }
-        *outParam = (uint16_t)n;
-        return JIM_OK;
-    }
-
-    if(arg[1] == '\0') {
-        char c = arg[0];
-        if(c >= 'A' && c <= 'L') {
-            *outParam = (uint16_t)(100 + (c - 'A'));
-            return JIM_OK;
-        }
-        if(c >= 'a' && c <= 'l') {
-            *outParam = (uint16_t)(FIRST_LC_LOCAL_LABEL + (c - 'a'));
-            return JIM_OK;
-        }
-    }
-
-    if(strlen(arg) >= sizeof(internalName)/2) {
-        Jim_SetResultFormatted(interp, "label name too long: '%s'", arg);
-        return JIM_ERR;
-    }
-    utf8ToString((const uint8_t *)arg, internalName);
-    calcRegister_t label = findNamedLabel(internalName);
-    if(label == INVALID_VARIABLE) {
-        Jim_SetResultFormatted(interp, "label not found: '%s'", arg);
-        return JIM_ERR;
-    }
-    *outParam = (uint16_t)label;
-    return JIM_OK;
-}
-
-/**
- * Parse a flag argument.
- */
-static int dslParseFlagArg(Jim_Interp *interp, const char *arg, uint16_t *outParam)
-{
-    char internalName[64];
-
-    if(dslUnsupportedArg(interp, arg, "flag")) {
-        return JIM_ERR;
-    }
-
-    if(arg[0] != '\0' && arg[strspn(arg, "0123456789")] == '\0') {
-        long n = strtol(arg, NULL, 10);
-        if(n < 0 || n > LAST_GLOBAL_FLAG) {
-            Jim_SetResultFormatted(interp, "flag number out of range: '%s'", arg);
-            return JIM_ERR;
-        }
-        *outParam = (uint16_t)n;
-        return JIM_OK;
-    }
-
-    if(arg[1] == '\0' && isalpha((unsigned char)arg[0])) {
-        const char *p = strchr(registerFlagLetters, toupper((unsigned char)arg[0]));
-        if(!p) {
-            Jim_SetResultFormatted(interp, "invalid flag letter: '%s'", arg);
-            return JIM_ERR;
-        }
-        int idx = (int)(p - registerFlagLetters);
-        if(idx <= FLAG_K - FLAG_X) {
-            *outParam = (uint16_t)(FLAG_X + idx);
-        } else {
-            *outParam = (uint16_t)(FLAG_M + (idx - 12));
-        }
-        return JIM_OK;
-    }
-
-    if(strlen(arg) >= sizeof(internalName)/2) {
-        Jim_SetResultFormatted(interp, "flag name too long: '%s'", arg);
-        return JIM_ERR;
-    }
-    utf8ToString((const uint8_t *)arg, internalName);
-    for(int i = 0; i < LAST_ITEM; ++i) {
-        if((indexOfItems[i].status & CAT_STATUS) == CAT_SYFL &&
-                compareString(internalName, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) {
-            *outParam = indexOfItems[i].param;
-            return JIM_OK;
-        }
-    }
-    Jim_SetResultFormatted(interp, "system flag not found: '%s'", arg);
-    return JIM_ERR;
-}
-
-/**
- * Parse a numeric argument.
- */
-static int dslParseNumericArg(Jim_Interp *interp, int16_t index, const char *arg,
-        uint16_t *outParam)
-{
-    item_t item = indexOfItems[index];
-    int16_t minVal = item.tamMinMax >> TAM_MAX_BITS;
-    int16_t maxVal = item.tamMinMax & TAM_MAX_MASK;
-
-    if(index == ITM_PNORM) {
-        if(strcasecmp(arg, "NNZ") == 0) {
-            *outParam = pNorm_0_NNZ;
-            return JIM_OK;
-        }
-        if(strcasecmp(arg, "CNORM") == 0) {
-            *outParam = pNorm_1_CNORM;
-            return JIM_OK;
-        }
-        if(strcasecmp(arg, "ENORM") == 0) {
-            *outParam = pNorm_2_ENORM;
-            return JIM_OK;
-        }
-        if(strcasecmp(arg, "RNORM") == 0 || strcasecmp(arg, "inf") == 0 ||
-                strcasecmp(arg, "INFINITY") == 0) {
-            *outParam = pNorm_inf_RNORM;
-            return JIM_OK;
-        }
-    }
-
-    if(arg[0] == '\0' || arg[strspn(arg, "0123456789")] != '\0') {
-        Jim_SetResultFormatted(interp, "expected numeric argument, got '%s'", arg);
-        return JIM_ERR;
-    }
-    long n = strtol(arg, NULL, 10);
-    if(((item.status & PTP_STATUS) == PTP_NUMBER_8_16) && n >= 250 && n <= 499) {
-        *outParam = (uint16_t)n;
-        return JIM_OK;
-    }
-    if(n < minVal || n > maxVal) {
-        Jim_SetResultFormatted(interp, "value out of range [%d,%d]: '%s'",
-            minVal, maxVal, arg);
-        return JIM_ERR;
-    }
-    *outParam = (uint16_t)n;
-    return JIM_OK;
-}
-
-/**
- * Parse a menu argument.
- */
-static int dslParseMenuArg(Jim_Interp *interp, const char *arg, uint16_t *outParam)
-{
-    char internalName[64];
-
-    if(strlen(arg) >= sizeof(internalName)/2) {
-        Jim_SetResultFormatted(interp, "menu name too long: '%s'", arg);
-        return JIM_ERR;
-    }
-    utf8ToString((const uint8_t *)arg, internalName);
-    int16_t menu = findMenu(internalName);
-    if(menu == INVALID_MENU) {
-        Jim_SetResultFormatted(interp, "menu not found: '%s'", arg);
-        return JIM_ERR;
-    }
-    *outParam = (uint16_t)menu;
-    return JIM_OK;
-}
-
-/**
- * Generic parameter parser for catalog functions.  Dispatches calls
- * to the above type-specific parsers.
- */
-static int dslParseParam(Jim_Interp *interp, int16_t index, const char *arg,
-        uint16_t *outParam)
-{
-    uint16_t paramMode = (indexOfItems[index].status & PTP_STATUS) >> 9;
-
-    switch(paramMode) {
-        case PARAM_REGISTER:
-            return dslParseRegisterArg(interp, index, arg, outParam);
-        case PARAM_LABEL:
-        case PARAM_DECLARE_LABEL:
-            return dslParseLabelArg(interp, arg, outParam);
-        case PARAM_FLAG:
-            return dslParseFlagArg(interp, arg, outParam);
-        case PARAM_COMPARE:
-            if(strcmp(arg, "0") == 0) {
-                reallocateRegister(TEMP_REGISTER_1, dtReal34, 0, amNone);
-                real34SetZero(REGISTER_REAL34_DATA(TEMP_REGISTER_1));
-                *outParam = TEMP_REGISTER_1;
-                return JIM_OK;
-            }
-            if(strcmp(arg, "1") == 0) {
-                reallocateRegister(TEMP_REGISTER_1, dtReal34, 0, amNone);
-                real34SetOne(REGISTER_REAL34_DATA(TEMP_REGISTER_1));
-                *outParam = TEMP_REGISTER_1;
-                return JIM_OK;
-            }
-            return dslParseRegisterArg(interp, index, arg, outParam);
-        case PARAM_NUMBER_8:
-        case PARAM_NUMBER_16:
-        case PARAM_NUMBER_8_16:
-        case PARAM_SKIP_BACK:
-            return dslParseNumericArg(interp, index, arg, outParam);
-        case PARAM_SHUFFLE:
-            return dslParseNumericArg(interp, index, arg, outParam);
-        case PARAM_MENU:
-            return dslParseMenuArg(interp, arg, outParam);
-        default:
-            Jim_SetResultFormatted(interp,
-                "parameter type %u not supported in scripts", paramMode);
-            return JIM_ERR;
     }
 }
 
@@ -553,10 +250,170 @@ static int runCatalogFunctionByName(Jim_Interp *interp, const char *fnName,
     return CATFN_NOT_FOUND;
 }
 
-// ============================================================================
-// DSL Command Implementations - Jim Tcl wrappers
-// ============================================================================
+// =====================================================================
+// DSL command implementations
+// =====================================================================
 
+/*
+ * flag <name> - Get flag state (1 or 0)
+ * flag <name> <value> - Set flag (1=set, 0=clear), return new state
+ */
+static int flag(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc < 2) {
+        Jim_SetResultString(interp, "flag: missing flag argument", -1);
+        return JIM_ERR;
+    }
+
+    const char *flagArg = Jim_String(argv[1]);
+    uint16_t param;
+
+    if(dslParseFlagArg(interp, flagArg, &param) != JIM_OK) {
+        return JIM_ERR;
+    }
+    int32_t flagNum = (int32_t)param;
+
+    if(argc == 2) {
+        char resultStr[32];
+        snprintf(resultStr, sizeof(resultStr), "%d", (getSystemFlag(flagNum)) ? 1 : 0);
+        Jim_SetResultString(interp, resultStr, -1);
+        return JIM_OK;
+    }
+
+    if(argc != 3) {
+        Jim_SetResultFormatted(interp, "flag: wrong # args: expected 1 or 2, got %d", argc - 1);
+        return JIM_ERR;
+    }
+
+    const char *valueArg = Jim_String(argv[2]);
+    long newValue;
+
+    if(valueArg[0] == '\0' || valueArg[strspn(valueArg, "0123456789")] != '\0') {
+        Jim_SetResultFormatted(interp, "flag: expected numeric value, got '%s'", valueArg);
+        return JIM_ERR;
+    }
+
+    newValue = strtol(valueArg, NULL, 10);
+
+    if(newValue != 0 && newValue != 1) {
+        Jim_SetResultFormatted(interp, "flag: value must be 0 or 1, got %ld", newValue);
+        return JIM_ERR;
+    }
+
+    if(newValue == 1) {
+        setSystemFlag(flagNum);
+    } else {
+        clearSystemFlag(flagNum);
+    }
+
+    char resultStr[32];
+    snprintf(resultStr, sizeof(resultStr), "%d", (getSystemFlag(flagNum)) ? 1 : 0);
+    Jim_SetResultString(interp, resultStr, -1);
+    return JIM_OK;
+}
+
+/**
+ * reg <name> <value> - Set register, return new value
+ */
+static int reg(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc < 2) {
+        Jim_SetResultString(interp, "reg: missing register argument", -1);
+        return JIM_ERR;
+    }
+
+    const char *regArg = Jim_String(argv[1]);
+    uint16_t param;
+
+    if(dslParseRegisterArg(interp, ITM_RCL, regArg, &param) != JIM_OK) {
+        return JIM_ERR;
+    }
+    calcRegister_t regist = (calcRegister_t)param;
+
+    if(!regInRange(regist)) {
+        Jim_SetResultFormatted(interp, "invalid register: '%s'", regArg);
+        return JIM_ERR;
+    }
+
+    if(argc == 2) {
+        char buffer[1024];
+        convertRegisterToString(regist, buffer, sizeof(buffer));
+        Jim_SetResultString(interp, buffer, -1);
+        return JIM_OK;
+    }
+
+    if(argc != 3) {
+        Jim_SetResultFormatted(interp, "reg: wrong # args: expected 1 or 2, got %d", argc - 1);
+        return JIM_ERR;
+    }
+
+    const char *valueArg = Jim_String(argv[2]);
+
+    // Parse value string into temporary register
+    if(parseValueToTempRegister(interp, valueArg) != JIM_OK) {
+        return JIM_ERR;
+    }
+
+    // Copy from temp to target register
+    copySourceRegisterToDestRegister(TEMP_REGISTER_1, regist);
+
+    char buffer[1024];
+    convertRegisterToString(regist, buffer, sizeof(buffer));
+    Jim_SetResultString(interp, buffer, -1);
+    return JIM_OK;
+}
+
+/**
+ * var <name> - Get variable contents
+ * var <name> <value> - Set variable, return new value
+ */
+static int var(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc < 2) {
+        Jim_SetResultString(interp, "var: missing variable argument", -1);
+        return JIM_ERR;
+    }
+
+    const char *varArg = Jim_String(argv[1]);
+    uint16_t param;
+
+    if(dslParseRegisterArg(interp, ITM_INPUT, varArg, &param) != JIM_OK) {
+        return JIM_ERR;
+    }
+    calcRegister_t regist = (calcRegister_t)param;
+
+    if(!regInRange(regist)) {
+        Jim_SetResultFormatted(interp, "invalid variable: '%s'", varArg);
+        return JIM_ERR;
+    }
+
+    if(argc == 2) {
+        char buffer[1024];
+        convertRegisterToString(regist, buffer, sizeof(buffer));
+        Jim_SetResultString(interp, buffer, -1);
+        return JIM_OK;
+    }
+
+    if(argc != 3) {
+        Jim_SetResultFormatted(interp, "var: wrong # args: expected 1 or 2, got %d", argc - 1);
+        return JIM_ERR;
+    }
+
+    const char *valueArg = Jim_String(argv[2]);
+
+    // Parse value string into temporary register
+    if(parseValueToTempRegister(interp, valueArg) != JIM_OK) {
+        return JIM_ERR;
+    }
+
+    // Copy from temp to target register
+    copySourceRegisterToDestRegister(TEMP_REGISTER_1, regist);
+
+    char buffer[1024];
+    convertRegisterToString(regist, buffer, sizeof(buffer));
+    Jim_SetResultString(interp, buffer, -1);
+    return JIM_OK;
+}
 
 /**
  * catfn <name> - Calls a built-in catalog function by its name.
@@ -820,10 +677,10 @@ static int tsvfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
     return JIM_OK;
 }
 
-// ============================================================================
+// =====================================================================
 // DSL Execution - Reads a line at a time from the script and passes it
 // to Jim Tcl for evaluation.
-// ============================================================================
+// =====================================================================
 
 int executeScript(const char *scriptFile) {
     int ret;
@@ -854,9 +711,9 @@ int executeScript(const char *scriptFile) {
     return ret;
 }
 
-// ============================================================================
-// DSL Initialization
-// ============================================================================
+// =====================================================================
+// DSL initialization
+// =====================================================================
 
 void initDSL(void) {
     scriptingActive = TRUE;
@@ -870,13 +727,16 @@ void initDSL(void) {
     
     // Register DSL commands at global scope
     Jim_CreateCommand(interp, "catfn",  catfn,  NULL, NULL);
+    Jim_CreateCommand(interp, "flag",   flag,   NULL, NULL);
     Jim_CreateCommand(interp, "loadst", loadst, NULL, NULL);
     Jim_CreateCommand(interp, "nim",    nim,    NULL, NULL);
     Jim_CreateCommand(interp, "press",  press,  NULL, NULL);
+    Jim_CreateCommand(interp, "reg",    reg,    NULL, NULL);
     Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
     Jim_CreateCommand(interp, "savest", savest, NULL, NULL);
     Jim_CreateCommand(interp, "snap",   snap,   NULL, NULL);
     Jim_CreateCommand(interp, "tsvfn",  tsvfn,  NULL, NULL);
+    Jim_CreateCommand(interp, "var",    var,    NULL, NULL);
     Jim_CreateCommand(interp, "xeq",    xeq,    NULL, NULL);
     
     // Register all 🟧 CAT FCNS entries as commands, too
@@ -895,9 +755,9 @@ void initDSL(void) {
     }
 }
 
-// ============================================================================
-// DSL Cleanup
-// ============================================================================
+// =====================================================================
+// DSL cleanup
+// =====================================================================
 
 void cleanupDSL(void) {
     if(g_dsl_interpreter) {
