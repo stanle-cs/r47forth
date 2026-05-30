@@ -458,7 +458,11 @@ static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
  */
 static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
-    const char *labelName = (argc > 1) ? Jim_String(argv[1]) : "";
+    if(argc < 2) {
+        Jim_SetResultString(interp, "xeq: missing label name", -1);
+        return JIM_ERR;
+    }
+    const char *labelName = Jim_String(argv[1]);
     calcRegister_t label = findNamedLabel(labelName);
 
     if(label == INVALID_VARIABLE) {
