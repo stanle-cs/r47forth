@@ -11,48 +11,48 @@
 
 # --- argless (unchanged behavior) ---
 nim 1.234
-SIN
-CLX
+sin
+clx
 
 # --- basic store/recall (direct commands) ---
 nim 10
-STO 00
-CLX
-RCL 00
+sto 00
+clx
+rcl 00
 
 nim 5
-STO X
-RCL X
+sto X
+rcl X
 
 # --- store/recall arithmetic (catfn: names are not Tcl identifiers) ---
 nim 10
-STO 00
+sto 00
 
 nim 3
 catfn STO+ 00
-CLX
-RCL 00
+clx
+rcl 00
 
 nim 2
 catfn STO- 00
-CLX
-RCL 00
+clx
+rcl 00
 
 nim 4
 catfn RCL+ 00
-CLX
-RCL 00
+clx
+rcl 00
 
 nim 1
 xeq RCL- 00
 
 # --- lettered register target ---
 nim 99
-STO Y
+sto Y
 nim 1
 catfn STO+ Y
-RCL Y
+rcl Y
 
 # --- flags (direct: SF/CF are valid identifiers) ---
-SF 05
-CF 05
+sf 05
+cf 05

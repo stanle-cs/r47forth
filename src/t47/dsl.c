@@ -218,6 +218,9 @@ static void registerCatFn(Jim_Interp *interp, const char *name, void *idx, char 
     }
     if(compareString(name, name, CMP_NAME) == 0 &&
             validTclIdentifier(cmdName)) {
+        for(int i = 0; cmdName[i]; ++i) {
+            cmdName[i] = tolower((unsigned char)cmdName[i]);
+        }
         Jim_CreateCommand(interp, cmdName, cmdCatalogFn, idx, NULL);
     }
 }

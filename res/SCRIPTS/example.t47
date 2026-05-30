@@ -3,7 +3,7 @@
 # Commands used here:
 #   nim    Numerical entry. Note that you enter as per RPN: negative 4 is
 #          entered the RPN way, using the CHS equivalent "-": nim 4 -
-#   SIN    SIN and other standard functions are standard Tcl-like commands.
+#   sin    sin and other standard functions are standard Tcl-like commands.
 #   xeq    Executes a loaded user function or a standard function. Below, x!
 #          is used as a standard function, as is print x.
 #   tsvfn  Changes the TSV output file name: currently 10 char max, including
@@ -15,7 +15,7 @@
 
 
 nim 1.234
-SIN
+sin
 tsvfn fact12.tsv
 xeq ⎙x
 
