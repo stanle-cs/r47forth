@@ -422,14 +422,29 @@ int convertRegisterToString(calcRegister_t regist, char *buffer, size_t bufferSi
               real34Subtract(&sPart, &mPart, &sPart);  // subtract integer minutes
               real34Multiply(&sPart, const34_60, &sPart);  // convert remaining fraction to seconds
               
-              // Round to nearest second using DEC_ROUND_HALF_UP
-              real34_t sRounded;
-              real34Copy(&sPart, &sRounded);
-              real34ToIntegralValue(&sRounded, &sRounded, DEC_ROUND_HALF_UP);
-              
-              hour = real34ToInt32(&hPart);
-              min = real34ToInt32(&mPart);
-              sec = real34ToInt32(&sRounded);
+               // Round to nearest second using DEC_ROUND_HALF_UP
+               real34_t sRounded;
+               real34Copy(&sPart, &sRounded);
+               real34ToIntegralValue(&sRounded, &sRounded, DEC_ROUND_HALF_UP);
+               
+               hour = real34ToInt32(&hPart);
+               min = real34ToInt32(&mPart);
+               sec = real34ToInt32(&sRounded);
+               
+               // Handle overflow: if seconds == 60, carry to minutes
+               if(sec >= 60) {
+                   sec -= 60;
+                   min += 1;
+               }
+               // Handle minute overflow
+               if(min >= 60) {
+                   min -= 60;
+                   hour += 1;
+               }
+               // Handle hour overflow (shouldn't happen with valid times)
+               if(hour >= 24) {
+                   hour -= 24;
+               }
              
     // Display as HH:MM:SS without fractional seconds (C47 convention)
              snprintf(buffer, bufferSize, "%02d:%02d:%02d", hour, min, sec);
@@ -745,51 +760,44 @@ static int parseTimeToTempRegister(Jim_Interp *interp, const char *valueArg) {
 }
 
 int parseValueToTempRegister(Jim_Interp *interp, const char *valueArg) {
-    // First check if it looks like a date or time (before trying real parsing)
-    bool isDateLike = isDateString(valueArg);
-    bool isTimeLike = isTimeString(valueArg);
+    // Try parsing in documented order: date, time, short int, long int, complex, real, string
     
-    // Try to parse as real number first
-    reallocateRegister(TEMP_REGISTER_1, dtReal34, 0, amNone);
-    
-    // Parse the value
-    stringToReal34(valueArg, REGISTER_REAL34_DATA(TEMP_REGISTER_1));
-    
-    if(!real34IsNaN(REGISTER_REAL34_DATA(TEMP_REGISTER_1))) {
-        // If it parsed as a real and looks like date/time, re-parse with proper format
-        if(isDateLike) {
-            parseDateToTempRegister(interp, valueArg);
-            return JIM_OK;
-        }
-        if(isTimeLike) {
-            parseTimeToTempRegister(interp, valueArg);
-            return JIM_OK;
-        }
-        // Otherwise it's a regular real number
-        return JIM_OK;
-    }
-    
-    if(isComplexNumber(valueArg)) {
-        if(parseComplexToTempRegister(interp, valueArg) == JIM_OK) {
-            return JIM_OK;
-        }
-    }
-    
-    // Try date parsing
+    // 1. Try date (YYYY-MM-DD format)
     if(isDateString(valueArg)) {
         if(parseDateToTempRegister(interp, valueArg) == JIM_OK) {
             return JIM_OK;
         }
     }
     
-    // Try time parsing
+    // 2. Try time (HH:MM:SS format)
     if(isTimeString(valueArg)) {
         if(parseTimeToTempRegister(interp, valueArg) == JIM_OK) {
             return JIM_OK;
         }
     }
     
-    // If parsing produced NaN and not complex/date/time, treat as string
+    // 3. Try short integer (base-prefixed like 0xFF)
+    // Skip - handled by stringToReal34 below
+    
+    // 4. Try long integer
+    // Skip - handled by stringToReal34 below
+    
+    // 5. Try complex number (a + ix b format)
+    if(isComplexNumber(valueArg)) {
+        if(parseComplexToTempRegister(interp, valueArg) == JIM_OK) {
+            return JIM_OK;
+        }
+    }
+    
+    // 6. Try real number
+    reallocateRegister(TEMP_REGISTER_1, dtReal34, 0, amNone);
+    stringToReal34(valueArg, REGISTER_REAL34_DATA(TEMP_REGISTER_1));
+    
+    if(!real34IsNaN(REGISTER_REAL34_DATA(TEMP_REGISTER_1))) {
+        return JIM_OK;
+    }
+    
+    // 7. Fall back to string
     int stringLen = stringByteLength(valueArg) + 1;
     char *internalStr = malloc(stringLen);
     utf8ToString((const uint8_t *)valueArg, internalStr);
