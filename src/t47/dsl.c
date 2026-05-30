@@ -750,6 +750,14 @@ void initDSL(void) {
     {
         char cmdName[64];
         for(int i = 0; i < LAST_ITEM; ++i) {
+            switch(i) {
+                case ITM_LOADST: 
+                case ITM_READP: 
+                case ITM_SAVEST: 
+                case ITM_SNAP: 
+                case ITM_XEQ: 
+                    continue; // skip op that shadow a command above
+            }
             item_t item = indexOfItems[i];
             if((item.status & CAT_STATUS) == CAT_FNCT) {
                 void* idx = (void*)(intptr_t)i;
