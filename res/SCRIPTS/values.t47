@@ -60,3 +60,9 @@ puts "Variable z1 = [var z1]"
 
 # Overwrite real variable with complex (using round-trip)
 puts "Overwritten rw2 (was real, now complex) = [var rw2 "10 - ix11"]"
+
+# --- Date and Time Tests ---
+puts "\n=== Date and Time Tests ==="
+puts "Date ISO format: [reg 20 "2024-06-21"]"
+puts "Time ISO format: [reg 21 "18:30:45.678"]"
+
