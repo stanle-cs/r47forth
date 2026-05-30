@@ -207,14 +207,14 @@ static bool_t validTclIdentifier(const char *str) {
  * Register a catalog function directly if its name happens to be a
  * valid Tcl identifier.
  */
-static void registerCatFn(Jim_Interp *interp, const char *name, void *idx, char *cmdName, bool_t skipUtf8Identity)
+static bool_t registerCatFn(Jim_Interp *interp, const char *name, void *idx, char *cmdName, bool_t skipUtf8Identity)
 {
     if(!name || !name[0]) {
-        return;
+        return FALSE;
     }
     stringToUtf8(name, (uint8_t*)cmdName);
     if(skipUtf8Identity && strcmp(name, cmdName) == 0) {
-        return;
+        return FALSE;
     }
     if(compareString(name, name, CMP_NAME) == 0 &&
             validTclIdentifier(cmdName)) {
@@ -222,7 +222,9 @@ static void registerCatFn(Jim_Interp *interp, const char *name, void *idx, char 
             cmdName[i] = tolower((unsigned char)cmdName[i]);
         }
         Jim_CreateCommand(interp, cmdName, cmdCatalogFn, idx, NULL);
+        return TRUE;
     }
+    return FALSE;
 }
 
 /**
@@ -748,6 +750,7 @@ void initDSL(void) {
     
     // Register all 🟧 CAT FCNS entries as commands, too
     {
+        size_t added = 0, total = 0;
         char cmdName[64];
         for(int i = 0; i < LAST_ITEM; ++i) {
             switch(i) {
@@ -760,13 +763,18 @@ void initDSL(void) {
             }
             item_t item = indexOfItems[i];
             if((item.status & CAT_STATUS) == CAT_FNCT) {
+                ++total;
                 void* idx = (void*)(intptr_t)i;
                 const char* catName = item.itemCatalogName;
                 const char* smName  = item.itemSoftmenuName;
-                registerCatFn(interp, catName, idx, cmdName, FALSE);
-                registerCatFn(interp, smName,  idx, cmdName, TRUE);
+                if(registerCatFn(interp, catName, idx, cmdName, FALSE) ||
+                   registerCatFn(interp, smName,  idx, cmdName, TRUE)) {
+                    ++added;
+                }
             }
         }
+        printf("Registered %zu of %zu possible catalog functions for T47.\n",
+            added, total);
     }
 }
 
