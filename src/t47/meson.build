@@ -2,7 +2,13 @@
 
 jim_srcdir = '../../dep/jimtcl'
 
-_jimautoconf_in = host_machine.system() == 'windows' ? 'jimautoconf-win32.h' : 'jimautoconf-posix.h'
+if host_machine.system() == 'windows'
+  _jimautoconf_in = 'jimautoconf-win32.h'
+elif host_machine.system() == 'darwin'
+  _jimautoconf_in = 'jimautoconf-macos.h'
+else
+  _jimautoconf_in = 'jimautoconf-linux.h'
+endif
 configure_file(
   input: _jimautoconf_in,
   output: 'jimautoconf.h',
