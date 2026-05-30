@@ -3853,10 +3853,8 @@ void fnExitAllMenus(uint16_t unusedButMandatoryParameter) {
 
 
 
-// distinctQuotes is propagated to stringToFileNameChars(): 0 keeps the
-// legacy `"` -> `'` mapping (--dumpMenus1/2); 1 maps `"` -> `''` so the
-// "f'" / "f\"" derivative menus get distinct filenames under
-// --dumpMenusAll.
+// distinctQuotes is propagated to stringToFileNameChars(): 0 keeps the legacy `"` -> `'` mapping (--dumpMenus1/2); 1 maps `"` -> `''` so the
+// "f'" / "f\"" derivative menus get distinct filenames under --dumpMenusAll.
 void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const char *pathIn, uint8_t distinctQuotes) {          //JMvv procedure to dump all menus. First page only. To mod todump all pages
 #if defined(PC_BUILD)
   char menuDumpPath[512] = "menuDump";  // default; TODO: make definable from command line
@@ -4040,17 +4038,11 @@ void fnDumpMenusWrapper(uint16_t newFilenameformat) {
 }
 
 
-// Superset of fnDumpMenus(): does not skip the six solver/derivative/Sf/
-// Grapher/SHOW menus that fnDumpMenus() filters out. Used by RefDB47
-// reference-data ingest, which needs a BMP for every static softmenu the
-// engine declares. The five solver-aware menus (1stDeriv, 2ndDeriv, Sf,
-// Solver, Grapher) have NULL-only data arrays — they render as blank
-// softkey rows in their reference state, which is the form RefDB47 wants.
-// MNU_SHOW is empty (numItems == 0) so the inner loop skips it
-// automatically. Dynamic softmenus (entries 0..NUMBER_OF_DYNAMIC_SOFTMENUS-1
-// with numItems == 0) are still skipped — they have no static content to
-// render. currentSolverStatus is masked the same way fnDumpMenus() masks
-// it, so the BMPs the two functions both produce are byte-identical.
+// Superset of fnDumpMenus(). Keeps the six menus fnDumpMenus() drops: 1stDeriv, 2ndDeriv, Sf, Solver, Grapher, SHOW.
+// RefDB47 ingest needs a BMP for every static softmenu the engine declares. The five solver-aware menus carry
+// NULL-only data arrays. They render as blank softkey rows. That blank state is exactly what RefDB47 wants.
+// MNU_SHOW is empty (numItems == 0), so the inner loop skips it. Dynamic softmenus skip too: no static content.
+// currentSolverStatus is masked just as fnDumpMenus() masks it. Result: both functions emit byte-identical BMPs.
 void fnDumpMenusAll(uint16_t newFilenameformat, const char *path) {
 #if defined(PC_BUILD)
   int cc = currentSolverStatus;
