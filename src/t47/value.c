@@ -105,6 +105,10 @@ int dslParseRegisterArg(Jim_Interp *interp, int16_t op, const char *arg,
             return JIM_ERR;
         }
     }
+    if(reg == INVALID_VARIABLE) {
+        Jim_SetResultFormatted(interp, "could not allocate variable: '%s'", arg);
+        return JIM_ERR;
+    }
     *outParam = (uint16_t)reg;
     return JIM_OK;
 }
@@ -385,6 +389,129 @@ int convertRegisterToString(calcRegister_t regist, char *buffer, size_t bufferSi
  * - First tries real34 (numeric) parsing
  * - If that fails, stores as string using utf8ToString conversion
  */
+static bool_t isComplexNumber(const char *str) {
+    size_t len = strlen(str);
+    if(len < 5) {
+        return FALSE;
+    }
+    
+    const char *ixPos = NULL;
+    for(size_t i = 0; i < len - 2; i++) {
+        if((str[i] == 'i' || str[i] == 'I') && (str[i+1] == 'x' || str[i+1] == 'X')) {
+            ixPos = str + i;
+            break;
+        }
+    }
+    
+    if(!ixPos) {
+        return FALSE;
+    }
+    
+    const char *plusPos = NULL;
+    const char *minusPos = NULL;
+    
+    for(size_t i = 0; i < len - 2; i++) {
+        if(str[i] == '+' && (str[i+1] == ' ' || str[i+1] == '\t')) {
+            plusPos = str + i;
+        }
+        else if(str[i] == '-' && (str[i+1] == ' ' || str[i+1] == '\t')) {
+            minusPos = str + i;
+        }
+    }
+    
+    return (plusPos && plusPos < ixPos) || (minusPos && minusPos < ixPos);
+}
+
+static int parseComplexToTempRegister(Jim_Interp *interp, const char *valueArg) {
+    char buffer[1024];
+    strncpy(buffer, valueArg, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
+    
+    size_t len = strlen(buffer);
+    char *plusPos = NULL;
+    char *minusPos = NULL;
+    char *ixPos = NULL;
+    
+    for(size_t i = 0; i < len - 2; i++) {
+        if((buffer[i] == 'i' || buffer[i] == 'I') && (buffer[i+1] == 'x' || buffer[i+1] == 'X')) {
+            ixPos = buffer + i;
+            break;
+        }
+    }
+    
+    if(!ixPos) {
+        return JIM_ERR;
+    }
+    
+    for(size_t i = 0; i < len - 2; i++) {
+        if(buffer[i] == '+' && (buffer[i+1] == ' ' || buffer[i+1] == '\t')) {
+            plusPos = buffer + i;
+        }
+        else if(buffer[i] == '-' && (buffer[i+1] == ' ' || buffer[i+1] == '\t')) {
+            minusPos = buffer + i;
+        }
+    }
+    
+    char realPart[512], imagPart[512];
+    
+    if(plusPos && plusPos < ixPos) {
+        *plusPos = '\0';
+        strncpy(realPart, buffer, sizeof(realPart) - 1);
+        realPart[sizeof(realPart) - 1] = '\0';
+        
+        char *startImag = plusPos + 2;
+        while(*startImag == ' ' || *startImag == '\t') startImag++;
+        strncpy(imagPart, startImag, sizeof(imagPart) - 1);
+        imagPart[sizeof(imagPart) - 1] = '\0';
+        
+        size_t imagLen = strlen(imagPart);
+        if(imagLen > 2 && (imagPart[imagLen-2] == 'i' || imagPart[imagLen-2] == 'I') &&
+                          (imagPart[imagLen-1] == 'x' || imagPart[imagLen-1] == 'X')) {
+            imagPart[imagLen-2] = '\0';
+        }
+    }
+    else if(minusPos && minusPos < ixPos) {
+        *minusPos = '\0';
+        strncpy(realPart, buffer, sizeof(realPart) - 1);
+        realPart[sizeof(realPart) - 1] = '\0';
+        
+        char *startImag = minusPos + 2;
+        while(*startImag == ' ' || *startImag == '\t') startImag++;
+        strncpy(imagPart, startImag, sizeof(imagPart) - 1);
+        imagPart[sizeof(imagPart) - 1] = '\0';
+        
+        size_t imagLen = strlen(imagPart);
+        if(imagLen > 2 && (imagPart[imagLen-2] == 'i' || imagPart[imagLen-2] == 'I') &&
+                          (imagPart[imagLen-1] == 'x' || imagPart[imagLen-1] == 'X')) {
+            imagPart[imagLen-2] = '\0';
+        }
+        
+        if(strlen(imagPart) > 0 && imagPart[0] != '-') {
+            size_t len = strlen(imagPart);
+            memmove(imagPart + 1, imagPart, len + 1);
+            imagPart[0] = '-';
+        }
+    }
+    else {
+        return JIM_ERR;
+    }
+    
+    reallocateRegister(TEMP_REGISTER_1, dtComplex34, 0, amNone);
+    
+    real34_t realVal, imagVal;
+    stringToReal34(realPart, &realVal);
+    stringToReal34(imagPart, &imagVal);
+    
+    if(real34IsNaN(&realVal) || real34IsNaN(&imagVal)) {
+        return JIM_ERR;
+    }
+    
+    real34Copy(&realVal, REGISTER_REAL34_DATA(TEMP_REGISTER_1));
+    real34Copy(&imagVal, REGISTER_IMAG34_DATA(TEMP_REGISTER_1));
+    
+    return JIM_OK;
+}
+
 int parseValueToTempRegister(Jim_Interp *interp, const char *valueArg) {
     // Try to parse as real number first
     reallocateRegister(TEMP_REGISTER_1, dtReal34, 0, amNone);
@@ -392,18 +519,25 @@ int parseValueToTempRegister(Jim_Interp *interp, const char *valueArg) {
     // Parse the value
     stringToReal34(valueArg, REGISTER_REAL34_DATA(TEMP_REGISTER_1));
     
-    // If parsing produced NaN, it's not a valid number, so treat as string
-    if(real34IsNaN(REGISTER_REAL34_DATA(TEMP_REGISTER_1))) {
-        // Convert UTF-8 to calculator's internal string encoding
-        int stringLen = stringByteLength(valueArg) + 1;
-        char *internalStr = malloc(stringLen);
-        utf8ToString((const uint8_t *)valueArg, (uint8_t *)internalStr);
-        
-        reallocateRegister(TEMP_REGISTER_1, dtString, TO_BLOCKS(stringLen), amNone);
-        xcopy(REGISTER_STRING_DATA(TEMP_REGISTER_1), internalStr, stringLen);
-        
-        free(internalStr);
+    if(!real34IsNaN(REGISTER_REAL34_DATA(TEMP_REGISTER_1))) {
+        return JIM_OK;
     }
+    
+    if(isComplexNumber(valueArg)) {
+        if(parseComplexToTempRegister(interp, valueArg) == JIM_OK) {
+            return JIM_OK;
+        }
+    }
+    
+    // If parsing produced NaN and not complex, treat as string
+    int stringLen = stringByteLength(valueArg) + 1;
+    char *internalStr = malloc(stringLen);
+    utf8ToString((const uint8_t *)valueArg, (uint8_t *)internalStr);
+    
+    reallocateRegister(TEMP_REGISTER_1, dtString, TO_BLOCKS(stringLen), amNone);
+    xcopy(REGISTER_STRING_DATA(TEMP_REGISTER_1), internalStr, stringLen);
+    
+    free(internalStr);
     
     return JIM_OK;
 }

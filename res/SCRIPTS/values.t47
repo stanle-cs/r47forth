@@ -2,37 +2,29 @@
 
 # --- Register Get/Set Operations ---
 
-# Set a register to a value
+# Set a register to a value and print it directly (round-trip)
 reg 00 "1.234"
-
-# Get the value of a register
-set r [reg 00]
-puts "Register 00 contains: $r"
+puts "Register 00 contains: [reg 00]"
 
 # Setting returns new value
-set newval [reg 00 "5.678"]
-puts "New value set: $newval"
+puts "New value set: [reg 00 "5.678"]"
 
 # Lettered registers work too
 reg A "42"
-set a [reg A]
+puts "RA = [reg A]"
 
 # --- Variable Get/Set Operations ---
 
-# Create and set a named variable (numeric)
+# Create and set a named variable (numeric), print directly (round-trip)
 var "myvalue" "3.14159"
+puts "Named variable myvalue = [var myvalue]"
 
-# Get the named variable
-set v [var "myvalue"]
-puts "Named variable myvalue = $v"
-
-# Setting returns new value  
-set new_var [var "myvalue" "2.718"]
-puts "New value set: $new_var"
+# Setting returns new value
+puts "New value set: [var myvalue "2.718"]"
 
 # Lettered registers via var command
 var B "100"
-set b [var B]
+puts "RB = [var B]"
 
 # --- Flag Get/Set Operations ---
 
@@ -56,4 +48,15 @@ puts "myvalue: [var myvalue]"
 puts "Flag 5: [flag 5]"
 
 # Test complex numbers (if supported)
-# Note: Complex number support requires NIM buffer parsing which is still in progress
+# Set and print in one line using round-trip behavior
+puts "\n=== Complex Number Tests ==="
+puts "R10 = [reg 10 "1 + ix2"]"
+puts "R11 = [reg 11 "3 + ix4"]"
+puts "R12 = [reg 12 "5 - ix3"]"
+
+# Test var command with complex numbers
+var z1 "7 + ix9"
+puts "Variable z1 = [var z1]"
+
+# Overwrite real variable with complex (using round-trip)
+puts "Overwritten rw2 (was real, now complex) = [var rw2 "10 - ix11"]"
