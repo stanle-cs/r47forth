@@ -756,7 +756,7 @@ void initDSL(void) {
                 case ITM_SAVEST: 
                 case ITM_SNAP: 
                 case ITM_XEQ: 
-                    continue; // skip op that shadow a command above
+                    continue; // skip ops that shadow commands above
             }
             item_t item = indexOfItems[i];
             if((item.status & CAT_STATUS) == CAT_FNCT) {
