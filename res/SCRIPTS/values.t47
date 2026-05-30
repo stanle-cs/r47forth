@@ -61,16 +61,11 @@ puts "Variable z1 = [var z1]"
 # Overwrite real variable with complex (using round-trip)
 puts "Overwritten rw2 (was real, now complex) = [var rw2 {10 - ix11}]"
 
-# --- Date and Time Tests ---
-# T47 tries data types in documented order: date, time, short int, long int, complex, real, string
-# This means YYYY-MM-DD is parsed as a date, not as a real number
-puts "\n=== Date and Time Tests ==="
-puts "Date ISO format (YYYY-MM-DD): [reg 20 {2024-06-21}]"
-puts "Time ISO format (HH:MM:SS): [reg 21 {18:30:45}]"
+# --- Short Integer Tests ---
+# Format: NNN#bb where NNN is the integer value and bb is base 2-16
+puts "\n=== Short Integer Tests ==="
+puts "Hex FF in base 16: [reg 10 {FF#16}]"
+puts "Decimal 42 in base 10: [var myint {42#10}]"
 
-# Negative years are supported for dates before the common era
-puts "Negative year date: [var negdate {-0001-03-15}]"
-
-# Fractional seconds can be parsed but round to nearest second when displayed
-puts "Time with fractional seconds (rounded): [reg 22 {23:45:59.7}]"
-
+# Negative numbers work too (uses two's complement for short integers)
+puts "Negative hex -1A in base 16: [reg 11 {-1A#16}]"

@@ -585,6 +585,120 @@ static int parseComplexToTempRegister(Jim_Interp *interp, const char *valueArg) 
     real34Copy(&realVal, REGISTER_REAL34_DATA(TEMP_REGISTER_1));
     real34Copy(&imagVal, REGISTER_IMAG34_DATA(TEMP_REGISTER_1));
     
+     return JIM_OK;
+}
+
+/**
+ * Check if a string represents a short integer in the format NNN#bb (base 2-16).
+ */
+static bool_t isShortInteger(const char *str) {
+    size_t len = strlen(str);
+    
+    // Must have at least one digit, '#', and 1-2 digit base (e.g., "42#10" or "FF#16")
+    if(len < 4) {
+        return FALSE;
+    }
+    
+    // Find the '#' separator
+    const char *hashPos = strchr(str, '#');
+    if(!hashPos || hashPos == str) {
+        return FALSE;
+    }
+    
+    // Base must be after '#'
+    const char *baseStr = hashPos + 1;
+    size_t baseLen = strlen(baseStr);
+    
+    // Base should be 1-2 digits (2-16)
+    if(baseLen < 1 || baseLen > 2) {
+        return FALSE;
+    }
+    
+    // Validate base is numeric and in range 2-16
+    for(size_t i = 0; i < baseLen; i++) {
+        if(!isdigit((unsigned char)baseStr[i])) {
+            return FALSE;
+        }
+    }
+    int base = atoi(baseStr);
+    if(base < 2 || base > 16) {
+        return FALSE;
+    }
+    
+    // Validate the integer part (before '#')
+    const char *intPart = str;
+    size_t intLen = hashPos - intPart;
+    
+    // Check for optional negative sign
+    if(intPart[0] == '-') {
+        intPart++;
+        intLen--;
+    }
+    
+    // Must have at least one digit after '-' (if present)
+    if(intLen == 0) {
+        return FALSE;
+    }
+    
+    // Validate digits are valid for the base
+    for(size_t i = 0; i < intLen; i++) {
+        char c = intPart[i];
+        int digitVal;
+        
+        if(c >= '0' && c <= '9') {
+            digitVal = c - '0';
+        } else if (c >= 'A' && c <= 'F') {
+            digitVal = 10 + (c - 'A');
+        } else if (c >= 'a' && c <= 'f') {
+            digitVal = 10 + (c - 'a');
+        } else {
+            return FALSE;
+        }
+        
+        if(digitVal >= base) {
+            return FALSE;
+        }
+    }
+    
+    return TRUE;
+}
+
+static int parseShortIntegerToTempRegister(Jim_Interp *interp, const char *valueArg) {
+    (void)interp;  // Avoid unused parameter warning
+    
+    char buffer[64];
+    strncpy(buffer, valueArg, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
+    
+    // Find the '#' separator
+    char *hashPos = strchr(buffer, '#');
+    if(!hashPos || hashPos == buffer) {
+        return JIM_ERR;
+    }
+    
+    // Extract base
+    int base = atoi(hashPos + 1);
+    if(base < 2 || base > 16) {
+        return JIM_ERR;
+    }
+    
+    // Null-terminate the integer part and get it
+    *hashPos = '\0';
+    const char *intPart = buffer;
+    
+    // Parse using strtoull for the specified base
+    char *endPtr;
+    uint64_t intVal = strtoull(intPart, &endPtr, base);
+    
+    // Check if parsing was successful (not empty and fully consumed)
+    if(endPtr == intPart || *endPtr != '\0') {
+        return JIM_ERR;
+    }
+    
+    // Convert to short integer register
+    reallocateRegister(TEMP_REGISTER_1, dtShortInteger, 0, amNone);
+    convertUInt64ToShortIntegerRegister(false, intVal, base, TEMP_REGISTER_1);
+    
     return JIM_OK;
 }
 
@@ -776,8 +890,12 @@ int parseValueToTempRegister(Jim_Interp *interp, const char *valueArg) {
         }
     }
     
-    // 3. Try short integer (base-prefixed like 0xFF)
-    // Skip - handled by stringToReal34 below
+    // 3. Try short integer (NNN#bb format where NNN is the integer and bb is base 2-16)
+    if(isShortInteger(valueArg)) {
+        if(parseShortIntegerToTempRegister(interp, valueArg) == JIM_OK) {
+            return JIM_OK;
+        }
+    }
     
     // 4. Try long integer
     // Skip - handled by stringToReal34 below
