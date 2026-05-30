@@ -115,6 +115,7 @@ void fnXToAlpha(uint16_t unusedButMandatoryParameter) {
         sprintf(errorMessage, "cannot x" STD_RIGHT_ARROW STD_alpha " when X is %s", getRegisterDataTypeName(REGISTER_X, true, false));
         moreInfoOnError("In function fnXToAlpha:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      longIntegerFree(lgInt);
       return;
     }
   }
@@ -277,6 +278,7 @@ void fnAlphaRR(uint16_t regist) {
         sprintf(errorMessage, "cannot " STD_alpha "RR when X is %s", getRegisterDataTypeName(REGISTER_X, true, false));
         moreInfoOnError("In function fnAlphaRR:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      longIntegerFree(lgInt);
       return;
     }
   }
@@ -362,6 +364,7 @@ void fnAlphaRL(uint16_t regist) {
         sprintf(errorMessage, "cannot " STD_alpha "RL when X is %s", getRegisterDataTypeName(REGISTER_X, true, false));
         moreInfoOnError("In function fnAlphaRL:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      longIntegerFree(lgInt);
       return;
     }
   }
@@ -441,6 +444,7 @@ void fnAlphaSR(uint16_t regist) {
         sprintf(errorMessage, "cannot " STD_alpha "SR when X is %s", getRegisterDataTypeName(REGISTER_X, true, false));
         moreInfoOnError("In function fnAlphaSR:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      longIntegerFree(lgInt);
       return;
     }
   }
@@ -521,6 +525,7 @@ void fnAlphaSL(uint16_t regist) {
         sprintf(errorMessage, "cannot " STD_alpha "SL when X is %s", getRegisterDataTypeName(REGISTER_X, true, false));
         moreInfoOnError("In function fnAlphaSL:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      longIntegerFree(lgInt);
       return;
     }
   }
@@ -544,4 +549,79 @@ void fnAlphaSL(uint16_t regist) {
 
    xcopy(ptr, ptr + glyphPointer, stringByteLength(ptr + glyphPointer) + 1);
   }
+}
+
+
+void fn42AlphaRotate(uint16_t unusedButMandatoryParameter) {
+  longInteger_t lgInt;
+  
+  if(getRegisterDataType(REGISTER_K) != dtString) {
+    displayCalcErrorMessage(ERROR_NO_STRING_IN_REGISTER_K, ERR_REGISTER_LINE, REGISTER_T);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "cannot use 42AROT on %s", getRegisterDataTypeName(REGISTER_K, true, false));
+      moreInfoOnError("In function fn42AlphaRotate:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    return;
+  }
+  
+  longIntegerInit(lgInt);
+  switch(getRegisterDataType(REGISTER_X)) {
+    case dtLongInteger: {
+      convertLongIntegerRegisterToLongInteger(REGISTER_X, lgInt);
+      break;
+    }
+
+    case dtReal34: {
+      convertReal34ToLongInteger(REGISTER_REAL34_DATA(REGISTER_X), lgInt, DEC_ROUND_DOWN);
+      break;
+    }
+
+    case dtShortInteger: {
+      convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
+      break;
+    }
+
+    default: {
+      displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        sprintf(errorMessage, "cannot 42AROT when X is %s", getRegisterDataTypeName(REGISTER_X, true, false));
+        moreInfoOnError("In function fn42AlphaRotate:", errorMessage, NULL, NULL);
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      longIntegerFree(lgInt);
+      return;
+    }
+  }
+  if(longIntegerIsNegative(lgInt)) {
+    fnAlphaRR(REGISTER_K);
+  }
+  else {
+    fnAlphaRL(REGISTER_K);
+  }
+  longIntegerFree(lgInt);
+}
+
+
+void fn42AlphaShift(uint16_t unusedButMandatoryParameter) {
+  int16_t stringGlyphLen, steps, glyphPointer;
+  char *ptr;
+    
+  if(getRegisterDataType(REGISTER_K) != dtString) {
+    displayCalcErrorMessage(ERROR_NO_STRING_IN_REGISTER_K, ERR_REGISTER_LINE, REGISTER_T);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "cannot use 42ASHF on %s", getRegisterDataTypeName(REGISTER_K, true, false));
+      moreInfoOnError("In function fn42AlphaShift:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    return;
+  }
+
+  ptr = REGISTER_STRING_DATA(REGISTER_K);
+  stringGlyphLen = stringGlyphLength(ptr);
+
+  steps = (stringGlyphLen < 6 ? stringGlyphLen : 6);
+  
+  for(glyphPointer=0; steps > 0; steps--) {
+    glyphPointer = stringNextGlyph(ptr, glyphPointer);
+  }
+
+   xcopy(ptr, ptr + glyphPointer, stringByteLength(ptr + glyphPointer) + 1);
 }

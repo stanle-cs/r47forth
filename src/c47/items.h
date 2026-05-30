@@ -2874,16 +2874,16 @@
 //efine ITM_GET_DMX                 1558 // VAR_NO_DENMAX
 #define ITM_SET_DMX                 2770 // VAR_NO_DENMAX
 
-#define ITM_CLD                     2771 // CLD
-#define ITM_CLLCD                   2772 // CLLCD
-#define ITM_CLALPHA                 2773 // CLA
+#define ITM_CLD                     2771
+#define ITM_CLLCD                   2772
+#define ITM_CLALPHA                 2773
 #define ITM_2774                    2774 // AIP
-#define ITM_42STRING                2775 // 42string
-#define ITM_42APPEND                2776 // 42append
-#define ITM_42ARCL                  2777 // 42ARCL
-#define ITM_42ASTO                  2778 // 42ASTO
-#define ITM_2779                    2779 // 42AROT
-#define ITM_2780                    2780 // 42ASHF
+#define ITM_42STRING                2775
+#define ITM_42APPEND                2776
+#define ITM_42ARCL                  2777
+#define ITM_42ASTO                  2778
+#define ITM_42AROT                  2779
+#define ITM_42ASHF                  2780
 #define ITM_2781                    2781 // 42ROTXY
 #define ITM_2782                    2782 // 42BIT?
 #define ITM_2783                    2783 // 42→DEC
