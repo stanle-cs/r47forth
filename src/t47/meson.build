@@ -56,7 +56,7 @@ else
     jim_srcdir / 'openpty.c',
     jim_srcdir / 'jim-signal.c',
   )
-  jim_c_args = ['-w', '-DUSE_UTF8', '-DHAVE_OPENPTY']
+  jim_c_args = ['-w', '-DUSE_UTF8', '-DHAVE_OPENPTY', '-D_GNU_SOURCE']
 endif
 
 jim_inc = [
