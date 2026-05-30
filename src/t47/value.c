@@ -702,6 +702,55 @@ static int parseShortIntegerToTempRegister(Jim_Interp *interp, const char *value
     return JIM_OK;
 }
 
+static bool_t isLongInteger(const char *str) {
+    size_t len = strlen(str);
+    
+    // Long integers are just digit strings (optionally with negative sign)
+    if(len < 1) {
+        return FALSE;
+    }
+    
+    const char *intPart = str;
+    
+    // Check for optional negative sign
+    if(intPart[0] == '-') {
+        intPart++;
+    }
+    
+    // Must have at least one digit after '-' (if present)
+    if(*intPart == '\0') {
+        return FALSE;
+    }
+    
+    // Validate all remaining characters are digits
+    size_t checkLen = len - (intPart - str);
+    for(size_t i = 0; i < checkLen; i++) {
+        if(!isdigit((unsigned char)intPart[i])) {
+            return FALSE;
+        }
+    }
+    
+    return TRUE;
+}
+
+static int parseLongIntegerToTempRegister(Jim_Interp *interp, const char *valueArg) {
+    (void)interp;  // Avoid unused parameter warning
+    
+    longInteger_t lgInt;
+    longIntegerInit(lgInt);
+    
+    // Parse using decNumber's string conversion (decimal base)
+    stringToLongInteger(valueArg, 10, lgInt);
+    
+    // Convert to long integer register
+    reallocateRegister(TEMP_REGISTER_1, dtLongInteger, 0, amNone);
+    convertLongIntegerToLongIntegerRegister(lgInt, TEMP_REGISTER_1);
+    
+    longIntegerFree(lgInt);
+    
+    return JIM_OK;
+}
+
 static bool_t isDateString(const char *str) {
     size_t len = strlen(str);
     if(len < 10) {
@@ -897,10 +946,15 @@ int parseValueToTempRegister(Jim_Interp *interp, const char *valueArg) {
         }
     }
     
-    // 4. Try long integer
-    // Skip - handled by stringToReal34 below
+    // 3. Try long integer - plain digit strings without base affix (e.g., "12345")
+    if(isLongInteger(valueArg)) {
+        int result = parseLongIntegerToTempRegister(interp, valueArg);
+        if(result == JIM_OK) {
+            return JIM_OK;
+        }
+    }
     
-    // 5. Try complex number (a + ix b format)
+    // 4. Try complex number (a + ix b format)
     if(isComplexNumber(valueArg)) {
         if(parseComplexToTempRegister(interp, valueArg) == JIM_OK) {
             return JIM_OK;

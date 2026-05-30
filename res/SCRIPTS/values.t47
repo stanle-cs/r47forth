@@ -2,41 +2,32 @@
 
 # --- Register Get/Set Operations ---
 
-# Set a register to a value and print it directly (round-trip)
 reg 00 "1.234"
 puts "Register 00 contains: [reg 00]"
 
-# Setting returns new value
 puts "New value set: [reg 00 "5.678"]"
 
-# Lettered registers work too
 reg A "42"
 puts "RA = [reg A]"
 
 # --- Variable Get/Set Operations ---
 
-# Create and set a named variable (numeric), print directly (round-trip)
 var "myvalue" "3.14159"
 puts "Named variable myvalue = [var myvalue]"
 
-# Setting returns new value
 puts "New value set: [var myvalue "2.718"]"
 
-# Lettered registers via var command
 var B "100"
 puts "RB = [var B]"
 
 # --- Flag Get/Set Operations ---
 
-# Get flag state (returns 1 or 0)
 set f0 [flag 0]
 puts "Flag 0 state: $f0"
 
-# Set a flag, returns new state
 set new_flag [flag 5 1]
 puts "New flag 5 state: $new_flag"
 
-# Clear a flag
 set cleared [flag 5 0]
 
 # --- Summary Output ---
@@ -47,25 +38,56 @@ puts "RB:  [reg B]"
 puts "myvalue: [var myvalue]"
 puts "Flag 5: [flag 5]"
 
-# Test complex numbers (if supported)
-# Set and print in one line using round-trip behavior
+# --- Complex Number Tests ---
 puts "\n=== Complex Number Tests ==="
 puts "R10 = [reg 10 {1 + ix2}]"
 puts "R11 = [reg 11 {3 + ix4}]"
 puts "R12 = [reg 12 {5 - ix3}]"
 
-# Test var command with complex numbers
 var z1 "7 + ix9"
 puts "Variable z1 = [var z1]"
 
-# Overwrite real variable with complex (using round-trip)
 puts "Overwritten rw2 (was real, now complex) = [var rw2 {10 - ix11}]"
 
 # --- Short Integer Tests ---
-# Format: NNN#bb where NNN is the integer value and bb is base 2-16
+# Format: NNN#bb where NNN is the integer and bb is base 2-16
 puts "\n=== Short Integer Tests ==="
 puts "Hex FF in base 16: [reg 10 {FF#16}]"
 puts "Decimal 42 in base 10: [var myint {42#10}]"
+puts "Octal 77 in base 8: [reg 11 {77#8}]"
+puts "Binary 1010 in base 2: [reg 12 {1010#2}]"
 
-# Negative numbers work too (uses two's complement for short integers)
-puts "Negative hex -1A in base 16: [reg 11 {-1A#16}]"
+# Negative numbers use two's complement
+puts "Negative hex -A in base 16: [reg 13 {-A#16}]"
+
+# --- Long Integer Tests ---
+# Plain digit strings (no # suffix) are long integers
+puts "\n=== Long Integer Tests ==="
+var "l1" "1234567890"
+puts "Small long int: [var l1]"
+
+var "l2" "12345678901234567890"
+puts "Medium long int (20 digits): [var l2]"
+
+var "l3" "123456789012345678901234567890"
+puts "Large long int (30 digits): [var l3]"
+
+var "l4" "123456789012345678901234567891234567890123456789012345678900123456789012345678901234567890"
+puts "Very arge long int (90 digits): [var l4]"
+
+var "l5" "123456789012345678901234567891234567890123456789012345678900123456789012345678901234567891234567890123456789012345678912345678901234567890123456789001234567890123456789012345678912345678901234567890123456789123456789012345678901234567890012345678901234567890123456789123456789012345678901234567891234567890123456789012345678900123456789012345678901234567891234567890123456789012345678912345678901234567890123456789001234567890123456789012345678912345678901234567890123456789123456789012345678901234567890012345678901234567890123456789123456789012345678901234567891234567890123456789012345678900123456789012345678901234567891234567890123456789012345678912345678901234567890123456789001234567890123456789012345678912345678901234567890123456789123456789012345678901234567890012345678901234567890123456789000000000123456789012345678901234567891234567890123456789012345678900123456789012345678901234567890"
+puts "Extremely large long int (900 digits): [var l5]"
+
+# Negative long integers
+var "lneg" "-999999999999999999999999999999"
+puts "Negative long int: [var lneg]"
+
+# --- Date Tests ---
+puts "\n=== Date Tests ==="
+puts "Date (YYYY-MM-DD): [reg 20 {2024-06-21}]"
+puts "Negative year date: [var negdate {-0001-03-15}]"
+
+# --- Time Tests ---
+puts "\n=== Time Tests ==="
+puts "Time (HH:MM:SS): [reg 21 {18:30:45}]"
+puts "Time with rounding: [reg 22 {23:45:59.7}]"
