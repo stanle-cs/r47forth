@@ -13,6 +13,8 @@
 #include <ctype.h>
 #include <jim.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /**
  * True when the argument is not supported in scripts.
@@ -379,17 +381,29 @@ int convertRegisterToString(calcRegister_t regist, char *buffer, size_t bufferSi
 
 /**
  * Parse a value string and store it in a temporary register.
- * Uses calculator's internal mechanisms to determine data type.
+ * Attempts to determine the appropriate data type by trying each type in order:
+ * - First tries real34 (numeric) parsing
+ * - If that fails, stores as string using utf8ToString conversion
  */
 int parseValueToTempRegister(Jim_Interp *interp, const char *valueArg) {
-    // For simplicity, use real34 parsing for most cases
-    // Complex numbers would require more complex handling
-    
-    // First clear temp register
+    // Try to parse as real number first
     reallocateRegister(TEMP_REGISTER_1, dtReal34, 0, amNone);
     
-    // Try to parse as real number first
+    // Parse the value
     stringToReal34(valueArg, REGISTER_REAL34_DATA(TEMP_REGISTER_1));
+    
+    // If parsing produced NaN, it's not a valid number, so treat as string
+    if(real34IsNaN(REGISTER_REAL34_DATA(TEMP_REGISTER_1))) {
+        // Convert UTF-8 to calculator's internal string encoding
+        int stringLen = stringByteLength(valueArg) + 1;
+        char *internalStr = malloc(stringLen);
+        utf8ToString((const uint8_t *)valueArg, (uint8_t *)internalStr);
+        
+        reallocateRegister(TEMP_REGISTER_1, dtString, TO_BLOCKS(stringLen), amNone);
+        xcopy(REGISTER_STRING_DATA(TEMP_REGISTER_1), internalStr, stringLen);
+        
+        free(internalStr);
+    }
     
     return JIM_OK;
 }
