@@ -504,11 +504,6 @@ static int injectScriptKey(Jim_Interp *interp, const char *keyCode, uint32_t key
  */
 static int pressOne(Jim_Interp *interp, const char *keyCode)
 {
-    if(headlessMode) {
-        Jim_SetResultString(interp, "press: unavailable in --headless mode", -1);
-        return JIM_ERR;
-    }
-
     if(strlen(keyCode) == 1) {
         /* Presume the ASCII value of the char == the GTK_KEY_* value */
         uint32_t keyval = (uint32_t)(unsigned char)keyCode[0];
@@ -739,7 +734,6 @@ void initDSL(void) {
     Jim_CreateCommand(interp, "flag",   flag,   NULL, NULL);
     Jim_CreateCommand(interp, "loadst", loadst, NULL, NULL);
     Jim_CreateCommand(interp, "nim",    nim,    NULL, NULL);
-    Jim_CreateCommand(interp, "press",  press,  NULL, NULL);
     Jim_CreateCommand(interp, "reg",    reg,    NULL, NULL);
     Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
     Jim_CreateCommand(interp, "savest", savest, NULL, NULL);
@@ -747,6 +741,9 @@ void initDSL(void) {
     Jim_CreateCommand(interp, "tsvfn",  tsvfn,  NULL, NULL);
     Jim_CreateCommand(interp, "var",    var,    NULL, NULL);
     Jim_CreateCommand(interp, "xeq",    xeq,    NULL, NULL);
+    if(!headlessMode) {
+        Jim_CreateCommand(interp, "press", press, NULL, NULL);
+    }
     
     // Register all 🟧 CAT FCNS entries as commands, too
     {
