@@ -1,4 +1,4 @@
-# Regression test for parameterized catalog commands (D47 arg parsing).
+# Regression test for parameterized catalog commands (T47 arg parsing).
 #
 # Commands exercised:
 #   nim       stack literals
@@ -7,7 +7,7 @@
 #   xeq       same fallback path as catfn for non-identifier names
 #
 # Run:
-#   ./t47 --headless --script res/SCRIPTS/args.d47
+#   ./t47 --headless --script res/SCRIPTS/args.t47
 
 # --- argless (unchanged behavior) ---
 nim 1.234
