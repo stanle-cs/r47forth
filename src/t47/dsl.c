@@ -454,7 +454,7 @@ static int runCatalogItem(Jim_Interp *interp, int16_t index, int argArgc,
                 cmdName, argArgc);
             return JIM_ERR;
         }
-        printf("Calling catalog function %s, index %d\n",
+        printf("Calling argless catalog function %s, index %d\n",
             item.itemCatalogName, index);
         reallyRunFunction(index, item.param);
         return JIM_OK;
@@ -467,11 +467,12 @@ static int runCatalogItem(Jim_Interp *interp, int16_t index, int argArgc,
     }
 
     uint16_t param;
-    if(dslParseParam(interp, index, Jim_String(argArgv[0]), &param) != JIM_OK) {
+    const char *argstr = Jim_String(argArgv[0]);
+    if(dslParseParam(interp, index, argstr, &param) != JIM_OK) {
         return JIM_ERR;
     }
-    printf("Calling catalog function %s, index %d\n",
-        item.itemCatalogName, index);
+    printf("Calling catalog function %s(%s), index %d\n",
+        item.itemCatalogName, argstr, index);
     reallyRunFunction(index, param);
     return JIM_OK;
 }
