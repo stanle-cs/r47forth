@@ -81,7 +81,7 @@
 #define HAVE_WAITPID 1
 /* #undef HAVE__NSGETENVIRON */
 #define JIM_DOCS 1
-#define JIM_GITVERSION "0.83-110-g5516ba9-dirty"
+#define JIM_GITVERSION "0.83-110-g5516ba9"
 #define JIM_INSTALL 1
 /* #undef JIM_RANDOMISE_HASH */
 #define JIM_REFERENCES 1
