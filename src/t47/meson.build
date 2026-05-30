@@ -1,36 +1,95 @@
-# Jim Tcl DSL module
-#
-# Keep project-side logic minimal by delegating Jim construction to Jim's own
-# build system, configured the same way we want for simulator use.
+# Jim Tcl DSL module — baked static library (no upstream configure/make/sh).
 
-jimtcl_srcdir = meson.project_source_root() / 'dep' / 'jimtcl'
-sh_prog = find_program('sh')
+jim_srcdir = '../../dep/jimtcl'
 
-jim_lib = custom_target('jim-libminimal',
-  input: [
-    jimtcl_srcdir / 'configure',
-    jimtcl_srcdir / 'Makefile.in',
-    jimtcl_srcdir / 'auto.def',
-  ],
-  output: 'libjim.a',
-  command: [
-    sh_prog, '-c',
-    'set -eu; outdir="$1"; srcdir="$2"; case "$outdir" in /*) ;; *) outdir="$PWD/$outdir" ;; esac; builddir="$outdir/jimtcl-build"; mkdir -p "$builddir"; cd "$builddir"; "$srcdir/configure" --enable-utf8 --minimal --with-ext=aio CFLAGS=-w >/dev/null; make libjim.a >/dev/null; cp libjim.a "$outdir/libjim.a"',
-    'sh',
-    '@OUTDIR@',
-    jimtcl_srcdir,
-  ],
-  build_by_default: true,
+if host_machine.system() == 'windows'
+  _jimautoconf_in = 'jimautoconf-win32.h'
+elif host_machine.system() == 'darwin'
+  _jimautoconf_in = 'jimautoconf-macos.h'
+else
+  _jimautoconf_in = 'jimautoconf-linux.h'
+endif
+configure_file(
+  input: _jimautoconf_in,
+  output: 'jimautoconf.h',
+  copy: true,
 )
 
-# Export dependency for Jim includes and library.
-# jim-config.h in this directory matches the minimal Jim configuration used for
-# this project and allows Jim headers to be included by simulator sources.
-t47_dep = declare_dependency(
-  include_directories: [
-    include_directories('.'),
-    include_directories('../../dep/jimtcl'),
-  ],
-  sources: [jim_lib],
-  link_args: [meson.current_build_dir() / 'libjim.a'],
+jim_core_src = files(
+  jim_srcdir / 'jim.c',
+  jim_srcdir / 'jimiocompat.c',
+  jim_srcdir / 'jim-subcmd.c',
+  jim_srcdir / 'jim-format.c',
+  jim_srcdir / 'utf8.c',
+  jim_srcdir / 'jimregexp.c',
 )
+
+jim_ext_src = files(
+  jim_srcdir / 'jim-package.c',
+  jim_srcdir / 'jim-aio.c',
+  jim_srcdir / 'jim-array.c',
+  jim_srcdir / 'jim-clock.c',
+  jim_srcdir / 'jim-exec.c',
+  jim_srcdir / 'jim-file.c',
+  jim_srcdir / 'jim-pack.c',
+  jim_srcdir / 'jim-readdir.c',
+  jim_srcdir / 'jim-regexp.c',
+)
+
+jim_gen_src = files(
+  'jimgen/_glob.c',
+  'jimgen/_stdlib.c',
+  'jimgen/_tclcompat.c',
+)
+
+if host_machine.system() == 'windows'
+  jim_load_static = files('jimgen/jim-load-static-exts-win32.c')
+  jim_platform_src = files(
+    jim_srcdir / 'jim-win32compat.c',
+    jim_srcdir / 'jim-nosignal.c',
+  )
+  jim_c_args = ['-w', '-DUSE_UTF8']
+else
+  jim_load_static = files('jimgen/jim-load-static-exts.c')
+  jim_platform_src = files(
+    jim_srcdir / 'jim-tty.c',
+    jim_srcdir / 'openpty.c',
+    jim_srcdir / 'jim-signal.c',
+  )
+  jim_c_args = ['-w', '-DUSE_UTF8', '-DHAVE_OPENPTY', '-D_GNU_SOURCE']
+endif
+
+jim_inc = [
+  include_directories('.'),
+  include_directories('jimgen'),
+  include_directories(jim_srcdir),
+]
+
+jim_lib = static_library(
+  'jim',
+  jim_load_static + jim_core_src + jim_ext_src + jim_gen_src + jim_platform_src,
+  include_directories: jim_inc,
+  c_args: jim_c_args,
+  install: false,
+  native: true,
+)
+
+t47_inc = [
+  include_directories('.'),
+  include_directories(jim_srcdir),
+]
+
+t47_dsl_src = files('dsl.c', 'value.c')
+
+if not meson.is_cross_build()
+  t47_dep = declare_dependency(
+    include_directories: t47_inc + [include_directories('../c47-gtk')],
+    link_with: jim_lib,
+    sources: t47_dsl_src,
+  )
+else
+  t47_dep = declare_dependency(
+    include_directories: t47_inc,
+    link_with: jim_lib,
+  )
+endif

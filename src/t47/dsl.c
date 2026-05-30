@@ -8,6 +8,7 @@
 
 #include "c47.h"
 #include "c47-gtk.h"
+#include "value.h"
 
 #if defined(PC_BUILD)
 
@@ -26,9 +27,16 @@ extern char _ioFileNameOverride[JIM_PATH_LEN];
 // Jim interpreter instance
 static Jim_Interp *g_dsl_interpreter = NULL;
 
-// ============================================================================
-// Helper functions
-// ============================================================================
+/** runCatalogFunctionByName result codes */
+enum {
+    CATFN_NOT_FOUND = 0,
+    CATFN_OK        = 1,
+    CATFN_ERROR     = -1
+};
+
+// =====================================================================
+// Helper functions not worth extracting to a separate module
+// =====================================================================
 
 /**
  * Wait until calculator program execution has fully returned control.
@@ -76,16 +84,105 @@ static void setReadpFilenameOverride(const char *filename)
 }
 
 /**
- * cmdByIndex index - Calls a built-in catalog function by its item index.
+ * True when the catalog item expects a script-supplied argument (TAM in UI).
+ */
+static bool_t itemNeedsScriptArgs(int16_t index)
+{
+    uint16_t p = indexOfItems[index].param;
+    return TM_VALUE <= p && p <= TM_CMP;
+}
+
+/**
+ * Number of Tcl string args required after the command name, or -1 if unsupported.
+ */
+static int expectedScriptArgCount(int16_t index)
+{
+    switch(indexOfItems[index].status & PTP_STATUS) {
+        case PTP_NONE:
+            return 0;
+        case PTP_REGISTER:
+        case PTP_LABEL:
+        case PTP_DECLARE_LABEL:
+        case PTP_FLAG:
+        case PTP_COMPARE:
+        case PTP_NUMBER_8:
+        case PTP_NUMBER_16:
+        case PTP_NUMBER_8_16:
+        case PTP_SKIP_BACK:
+        case PTP_SHUFFLE:
+        case PTP_MENU:
+            return 1;
+        default:
+            return -1;
+    }
+}
+
+/**
+ * Run one catalog function, with optional script args parsed per
+ * items.c metadata.  The item index is validated, and the function
+ * is called with the parsed parameter.
+ */
+static int runCatalogItem(Jim_Interp *interp, int16_t index, int argArgc,
+        Jim_Obj *const *argArgv, const char *cmdName)
+{
+    if(index < 0 || index >= LAST_ITEM) {
+        Jim_SetResultFormatted(interp, "%s: invalid catalog index %d", cmdName, index);
+        return JIM_ERR;
+    }
+
+    if(index == ITM_DELITM) {
+        Jim_SetResultFormatted(interp, "%s: DELITM not supported in scripts yet", cmdName);
+        return JIM_ERR;
+    }
+
+    item_t item = indexOfItems[index];
+    bool_t needsArgs = itemNeedsScriptArgs(index);
+    int expected = needsArgs ? expectedScriptArgCount(index) : 0;
+
+    if(needsArgs && expected < 0) {
+        Jim_SetResultFormatted(interp, "%s: '%s' not scriptable",
+            cmdName, item.itemCatalogName);
+        return JIM_ERR;
+    }
+
+    if(!needsArgs) {
+        if(argArgc != 0) {
+            Jim_SetResultFormatted(interp, "%s: wrong # args: expected 0, got %d",
+                cmdName, argArgc);
+            return JIM_ERR;
+        }
+        printf("Calling argless catalog function %s, index %d\n",
+            item.itemCatalogName, index);
+        reallyRunFunction(index, item.param);
+        return JIM_OK;
+    }
+
+    if(argArgc != expected) {
+        Jim_SetResultFormatted(interp, "%s: wrong # args: expected %d, got %d",
+            cmdName, expected, argArgc);
+        return JIM_ERR;
+    }
+
+    uint16_t param;
+    const char *argstr = Jim_String(argArgv[0]);
+    if(dslParseParam(interp, index, argstr, &param) != JIM_OK) {
+        return JIM_ERR;
+    }
+    printf("Calling catalog function %s(%s), index %d\n",
+        item.itemCatalogName, argstr, index);
+    reallyRunFunction(index, param);
+    return JIM_OK;
+}
+
+/**
+ * cmdCatalogFn index - Calls a built-in catalog function by its item index.
  * This binds CAT FCNS to Tcl commands.
  */
-static int cmdByIndex(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int cmdCatalogFn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     int index = (int)(intptr_t)Jim_CmdPrivData(interp);
-    printf("Calling catalog function %s, index %d\n",
-        indexOfItems[index].itemCatalogName, index);
-    runFunction(index);
-    return JIM_OK;
+    return runCatalogItem(interp, (int16_t)index, argc - 1, argv + 1, argv[0] ?
+        Jim_String(argv[0]) : "command");
 }
 
 /**
@@ -110,24 +207,218 @@ static bool_t validTclIdentifier(const char *str) {
  * Register a catalog function directly if its name happens to be a
  * valid Tcl identifier.
  */
-static void registerCatFn(Jim_Interp *interp, const char *name, void *idx, char *cmdName, bool_t skipUtf8Identity)
+static bool_t registerCatFn(Jim_Interp *interp, const char *name, void *idx, char *cmdName, bool_t skipUtf8Identity)
 {
     if(!name || !name[0]) {
-        return;
+        return FALSE;
     }
     stringToUtf8(name, (uint8_t*)cmdName);
     if(skipUtf8Identity && strcmp(name, cmdName) == 0) {
-        return;
+        return FALSE;
     }
     if(compareString(name, name, CMP_NAME) == 0 &&
             validTclIdentifier(cmdName)) {
-        Jim_CreateCommand(interp, cmdName, cmdByIndex, idx, NULL);
+        for(int i = 0; cmdName[i]; ++i) {
+            cmdName[i] = tolower((unsigned char)cmdName[i]);
+        }
+        Jim_CreateCommand(interp, cmdName, cmdCatalogFn, idx, NULL);
+        return TRUE;
     }
+    return FALSE;
 }
 
-// ============================================================================
-// DSL Command Implementations - Jim Tcl wrappers
-// ============================================================================
+/**
+ * Look up a catalog function by name and run it.  Core of catfn and
+ * the by-name fallback in xeq.
+ */
+static int runCatalogFunctionByName(Jim_Interp *interp, const char *fnName,
+        int argArgc, Jim_Obj *const *argArgv, const char *cmdName)
+{
+    char internalName[64];
+    static const size_t max = sizeof(internalName)/2;
+
+    if(strlen(fnName) >= max) {
+        Jim_SetResultFormatted(interp, "%s: '%s' exceeds max length %d",
+                cmdName, fnName, max);
+        return JIM_ERR;
+    }
+    utf8ToString((const uint8_t *)fnName, internalName);
+    for(int i = 0; i < LAST_ITEM; ++i) {
+        item_t item = indexOfItems[i];
+        const char* catName = item.itemCatalogName;
+        if((item.status & CAT_STATUS) == CAT_FNCT &&
+                compareString(internalName, catName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
+            return runCatalogItem(interp, (int16_t)i, argArgc, argArgv, cmdName) == JIM_OK ?
+                CATFN_OK : CATFN_ERROR;
+        }
+    }
+    return CATFN_NOT_FOUND;
+}
+
+// =====================================================================
+// DSL command implementations
+// =====================================================================
+
+/*
+ * flag <name> - Get flag state (1 or 0)
+ * flag <name> <value> - Set flag (1=set, 0=clear), return new state
+ */
+static int flag(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc < 2) {
+        Jim_SetResultString(interp, "flag: missing flag argument", -1);
+        return JIM_ERR;
+    }
+
+    const char *flagArg = Jim_String(argv[1]);
+    uint16_t param;
+
+    if(dslParseFlagArg(interp, flagArg, &param) != JIM_OK) {
+        return JIM_ERR;
+    }
+    int32_t flagNum = (int32_t)param;
+
+    if(argc == 2) {
+        char resultStr[32];
+        snprintf(resultStr, sizeof(resultStr), "%d", (getSystemFlag(flagNum)) ? 1 : 0);
+        Jim_SetResultString(interp, resultStr, -1);
+        return JIM_OK;
+    }
+
+    if(argc != 3) {
+        Jim_SetResultFormatted(interp, "flag: wrong # args: expected 1 or 2, got %d", argc - 1);
+        return JIM_ERR;
+    }
+
+    const char *valueArg = Jim_String(argv[2]);
+    long newValue;
+
+    if(valueArg[0] == '\0' || valueArg[strspn(valueArg, "0123456789")] != '\0') {
+        Jim_SetResultFormatted(interp, "flag: expected numeric value, got '%s'", valueArg);
+        return JIM_ERR;
+    }
+
+    newValue = strtol(valueArg, NULL, 10);
+
+    if(newValue != 0 && newValue != 1) {
+        Jim_SetResultFormatted(interp, "flag: value must be 0 or 1, got %ld", newValue);
+        return JIM_ERR;
+    }
+
+    if(newValue == 1) {
+        setSystemFlag(flagNum);
+    } else {
+        clearSystemFlag(flagNum);
+    }
+
+    char resultStr[32];
+    snprintf(resultStr, sizeof(resultStr), "%d", (getSystemFlag(flagNum)) ? 1 : 0);
+    Jim_SetResultString(interp, resultStr, -1);
+    return JIM_OK;
+}
+
+/**
+ * reg <name> <value> - Set register, return new value
+ */
+static int reg(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc < 2) {
+        Jim_SetResultString(interp, "reg: missing register argument", -1);
+        return JIM_ERR;
+    }
+
+    const char *regArg = Jim_String(argv[1]);
+    uint16_t param;
+
+    if(dslParseRegisterArg(interp, ITM_RCL, regArg, &param) != JIM_OK) {
+        return JIM_ERR;
+    }
+    calcRegister_t regist = (calcRegister_t)param;
+
+    if(!regInRange(regist)) {
+        Jim_SetResultFormatted(interp, "invalid register: '%s'", regArg);
+        return JIM_ERR;
+    }
+
+    if(argc == 2) {
+        char buffer[1024];
+        convertRegisterToString(regist, buffer, sizeof(buffer));
+        Jim_SetResultString(interp, buffer, -1);
+        return JIM_OK;
+    }
+
+    if(argc != 3) {
+        Jim_SetResultFormatted(interp, "reg: wrong # args: expected 1 or 2, got %d", argc - 1);
+        return JIM_ERR;
+    }
+
+    const char *valueArg = Jim_String(argv[2]);
+
+    // Parse value string into temporary register
+    if(parseValueToTempRegister(interp, valueArg) != JIM_OK) {
+        return JIM_ERR;
+    }
+
+    // Copy from temp to target register
+    copySourceRegisterToDestRegister(TEMP_REGISTER_1, regist);
+
+    char buffer[1024];
+    convertRegisterToString(regist, buffer, sizeof(buffer));
+    Jim_SetResultString(interp, buffer, -1);
+    return JIM_OK;
+}
+
+/**
+ * var <name> - Get variable contents
+ * var <name> <value> - Set variable, return new value
+ */
+static int var(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc < 2) {
+        Jim_SetResultString(interp, "var: missing variable argument", -1);
+        return JIM_ERR;
+    }
+
+    const char *varArg = Jim_String(argv[1]);
+    uint16_t param;
+
+    if(dslParseRegisterArg(interp, ITM_INPUT, varArg, &param) != JIM_OK) {
+        return JIM_ERR;
+    }
+    calcRegister_t regist = (calcRegister_t)param;
+
+    if(!regInRange(regist)) {
+        Jim_SetResultFormatted(interp, "invalid variable: '%s'", varArg);
+        return JIM_ERR;
+    }
+
+    if(argc == 2) {
+        char buffer[1024];
+        convertRegisterToString(regist, buffer, sizeof(buffer));
+        Jim_SetResultString(interp, buffer, -1);
+        return JIM_OK;
+    }
+
+    if(argc != 3) {
+        Jim_SetResultFormatted(interp, "var: wrong # args: expected 1 or 2, got %d", argc - 1);
+        return JIM_ERR;
+    }
+
+    const char *valueArg = Jim_String(argv[2]);
+
+    // Parse value string into temporary register
+    if(parseValueToTempRegister(interp, valueArg) != JIM_OK) {
+        return JIM_ERR;
+    }
+
+    // Copy from temp to target register
+    copySourceRegisterToDestRegister(TEMP_REGISTER_1, regist);
+
+    char buffer[1024];
+    convertRegisterToString(regist, buffer, sizeof(buffer));
+    Jim_SetResultString(interp, buffer, -1);
+    return JIM_OK;
+}
 
 /**
  * catfn <name> - Calls a built-in catalog function by its name.
@@ -140,28 +431,17 @@ static int catfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
     if(argc < 2) {
         Jim_SetResultString(interp, "catfn: missing function name", -1);
         return JIM_ERR;
-    } else {
-        char internalName[64];
-        static const size_t max = sizeof(internalName)/2;
-        const char *fnName = (argc > 1) ? Jim_String(argv[1]) : "";
-        if(strlen(fnName) >= max) {
-            Jim_SetResultFormatted(interp, "catfn: '%s' exceeds max length %d",
-                    fnName, max);
-            return JIM_ERR;
-        }
-        utf8ToString((const uint8_t *)fnName, internalName);
-        for(int i = 0; i < LAST_ITEM; ++i) {
-            item_t item = indexOfItems[i];
-            const char* catName = item.itemCatalogName;
-            if((item.status & CAT_STATUS) == CAT_FNCT &&
-                    compareString(internalName, catName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
-                runFunction(i);
-                return JIM_OK;
-            }
-        }
-        Jim_SetResultFormatted(interp, "catfn: '%s' not in the function catalog", fnName);
+    }
+    const char *fnName = Jim_String(argv[1]);
+    int found = runCatalogFunctionByName(interp, fnName, argc - 2, argv + 2, "catfn");
+    if(found == CATFN_OK) {
+        return JIM_OK;
+    }
+    if(found == CATFN_ERROR) {
         return JIM_ERR;
     }
+    Jim_SetResultFormatted(interp, "catfn: '%s' not in the function catalog", fnName);
+    return JIM_ERR;
 }
 
 /**
@@ -180,23 +460,20 @@ static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
  */
 static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
-    const char *labelName = (argc > 1) ? Jim_String(argv[1]) : "";
+    if(argc < 2) {
+        Jim_SetResultString(interp, "xeq: missing label name", -1);
+        return JIM_ERR;
+    }
+    const char *labelName = Jim_String(argv[1]);
     calcRegister_t label = findNamedLabel(labelName);
 
     if(label == INVALID_VARIABLE) {
-        char internalName[64];
-        static const size_t max = sizeof(internalName)/2;
-        if(strlen(labelName) >= max) {
-            Jim_SetResultFormatted(interp, "xeq: '%s' exceeds max length %d",
-                    labelName, max);
-            return JIM_ERR;
+        int found = runCatalogFunctionByName(interp, labelName, argc - 2, argv + 2, "xeq");
+        if(found == CATFN_OK) {
+            return JIM_OK;
         }
-        utf8ToString((const uint8_t *)labelName, internalName);
-        for(int i = 0; i < LAST_ITEM; ++i) {
-            if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(internalName, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
-                runFunction(i);
-                return JIM_OK;
-            }
+        if(found == CATFN_ERROR) {
+            return JIM_ERR;
         }
         Jim_SetResultFormatted(interp, "xeq: '%s' not found as label or function", labelName);
         return JIM_ERR;
@@ -227,11 +504,6 @@ static int injectScriptKey(Jim_Interp *interp, const char *keyCode, uint32_t key
  */
 static int pressOne(Jim_Interp *interp, const char *keyCode)
 {
-    if(headlessMode) {
-        Jim_SetResultString(interp, "press: unavailable in --headless mode", -1);
-        return JIM_ERR;
-    }
-
     if(strlen(keyCode) == 1) {
         /* Presume the ASCII value of the char == the GTK_KEY_* value */
         uint32_t keyval = (uint32_t)(unsigned char)keyCode[0];
@@ -320,6 +592,20 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
+ * loadst [<filename>] - Load state from file
+ */
+static int loadst(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc > 1) {
+        strncpy(_ioFileNameOverride, Jim_String(argv[1]), JIM_PATH_LEN - 1);
+        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+    }
+    
+    fnLoad(LM_STATE_LOAD);
+    return JIM_OK;
+}
+
+/**
  * savest [<filename>] - Save state to file
  */
 static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
@@ -395,10 +681,10 @@ static int tsvfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
     return JIM_OK;
 }
 
-// ============================================================================
+// =====================================================================
 // DSL Execution - Reads a line at a time from the script and passes it
 // to Jim Tcl for evaluation.
-// ============================================================================
+// =====================================================================
 
 int executeScript(const char *scriptFile) {
     int ret;
@@ -429,9 +715,9 @@ int executeScript(const char *scriptFile) {
     return ret;
 }
 
-// ============================================================================
-// DSL Initialization
-// ============================================================================
+// =====================================================================
+// DSL initialization
+// =====================================================================
 
 void initDSL(void) {
     scriptingActive = TRUE;
@@ -445,33 +731,53 @@ void initDSL(void) {
     
     // Register DSL commands at global scope
     Jim_CreateCommand(interp, "catfn",  catfn,  NULL, NULL);
+    Jim_CreateCommand(interp, "flag",   flag,   NULL, NULL);
+    Jim_CreateCommand(interp, "loadst", loadst, NULL, NULL);
     Jim_CreateCommand(interp, "nim",    nim,    NULL, NULL);
-    Jim_CreateCommand(interp, "press",  press,  NULL, NULL);
+    Jim_CreateCommand(interp, "reg",    reg,    NULL, NULL);
     Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
     Jim_CreateCommand(interp, "savest", savest, NULL, NULL);
     Jim_CreateCommand(interp, "snap",   snap,   NULL, NULL);
     Jim_CreateCommand(interp, "tsvfn",  tsvfn,  NULL, NULL);
+    Jim_CreateCommand(interp, "var",    var,    NULL, NULL);
     Jim_CreateCommand(interp, "xeq",    xeq,    NULL, NULL);
+    if(!headlessMode) {
+        Jim_CreateCommand(interp, "press", press, NULL, NULL);
+    }
     
     // Register all 🟧 CAT FCNS entries as commands, too
     {
+        size_t added = 0, total = 0;
         char cmdName[64];
         for(int i = 0; i < LAST_ITEM; ++i) {
+            switch(i) {
+                case ITM_LOADST: 
+                case ITM_READP: 
+                case ITM_SAVEST: 
+                case ITM_SNAP: 
+                case ITM_XEQ: 
+                    continue; // skip ops that shadow commands above
+            }
             item_t item = indexOfItems[i];
-            const char* catName = item.itemCatalogName;
-            const char* smName  = item.itemSoftmenuName;
-            void* idx = (void*)(intptr_t)i;
             if((item.status & CAT_STATUS) == CAT_FNCT) {
-                registerCatFn(interp, catName, idx, cmdName, FALSE);
-                registerCatFn(interp, smName,  idx, cmdName, TRUE);
+                ++total;
+                void* idx = (void*)(intptr_t)i;
+                const char* catName = item.itemCatalogName;
+                const char* smName  = item.itemSoftmenuName;
+                if(registerCatFn(interp, catName, idx, cmdName, FALSE) ||
+                   registerCatFn(interp, smName,  idx, cmdName, TRUE)) {
+                    ++added;
+                }
             }
         }
+        printf("Registered %zu of %zu possible catalog functions for T47.\n",
+            added, total);
     }
 }
 
-// ============================================================================
-// DSL Cleanup
-// ============================================================================
+// =====================================================================
+// DSL cleanup
+// =====================================================================
 
 void cleanupDSL(void) {
     if(g_dsl_interpreter) {

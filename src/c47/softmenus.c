@@ -3853,7 +3853,11 @@ void fnExitAllMenus(uint16_t unusedButMandatoryParameter) {
 
 
 
-void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const char *pathIn) {          //JMvv procedure to dump all menus. First page only. To mod todump all pages
+// distinctQuotes is propagated to stringToFileNameChars(): 0 keeps the
+// legacy `"` -> `'` mapping (--dumpMenus1/2); 1 maps `"` -> `''` so the
+// "f'" / "f\"" derivative menus get distinct filenames under
+// --dumpMenusAll.
+void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const char *pathIn, uint8_t distinctQuotes) {          //JMvv procedure to dump all menus. First page only. To mod todump all pages
 #if defined(PC_BUILD)
   char menuDumpPath[512] = "menuDump";  // default; TODO: make definable from command line
 
@@ -3885,11 +3889,11 @@ void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const 
 
   if(newFilenameformat == 2) {
     stringToASCII(indexOfItems[-softmenu[menu].menuItem].itemSoftmenuName, asciiMenuName);
-    stringToFileNameChars(asciiMenuName, asciiString);
+    stringToFileNameChars(asciiMenuName, asciiString, distinctQuotes);
     sprintf(bmpFileName, "%s/%s.%d.bmp", menuDumpPath, asciiString, (int)(item/18)+1);
   } else   if(newFilenameformat == 1) {
     stringToASCII(indexOfItems[-softmenu[menu].menuItem].itemSoftmenuName, asciiMenuName);
-    stringToFileNameChars(asciiMenuName, asciiString);
+    stringToFileNameChars(asciiMenuName, asciiString, distinctQuotes);
     sprintf(bmpFileName, "%s/Menu_%03d_p%d_%s.bmp", menuDumpPath, menu, (int)(item/18)+1, asciiString);
   }
 
@@ -4020,7 +4024,7 @@ void fnDumpMenus(uint16_t newFilenameformat, const char *path) {
           case MNU_SHOW     :
             break;
           default:
-           fnMenuDump(m, n, newFilenameformat, path);
+           fnMenuDump(m, n, newFilenameformat, path, 0);
          }
         n += 18;
       }
@@ -4033,4 +4037,41 @@ void fnDumpMenus(uint16_t newFilenameformat, const char *path) {
 
 void fnDumpMenusWrapper(uint16_t newFilenameformat) {
   fnDumpMenus(newFilenameformat, NULL);
+}
+
+
+// Superset of fnDumpMenus(): does not skip the six solver/derivative/Sf/
+// Grapher/SHOW menus that fnDumpMenus() filters out. Used by RefDB47
+// reference-data ingest, which needs a BMP for every static softmenu the
+// engine declares. The five solver-aware menus (1stDeriv, 2ndDeriv, Sf,
+// Solver, Grapher) have NULL-only data arrays — they render as blank
+// softkey rows in their reference state, which is the form RefDB47 wants.
+// MNU_SHOW is empty (numItems == 0) so the inner loop skips it
+// automatically. Dynamic softmenus (entries 0..NUMBER_OF_DYNAMIC_SOFTMENUS-1
+// with numItems == 0) are still skipped — they have no static content to
+// render. currentSolverStatus is masked the same way fnDumpMenus() masks
+// it, so the BMPs the two functions both produce are byte-identical.
+void fnDumpMenusAll(uint16_t newFilenameformat, const char *path) {
+#if defined(PC_BUILD)
+  int cc = currentSolverStatus;
+  currentSolverStatus = currentSolverStatus & (SOLVER_STATUS_USES_FORMULA | SOLVER_STATUS_INTERACTIVE);
+  printf("Dumping all menus (RefDB47 superset, no skip)\n");
+  int16_t m, n;
+  m = 0;
+  while(softmenu[m].menuItem != 0) {
+    n = 0;
+    while(n < softmenu[m].numItems && softmenu[m].numItems != 0) {
+      printf("m=%d n=%d softmenu[%u].numItems=%u name:%s.%u\n", m, n, m, softmenu[m].numItems, indexOfItems[m].itemCatalogName, n%18);
+      fnMenuDump(m, n, newFilenameformat, path, 1);
+      n += 18;
+    }
+    m++;
+  }
+  currentSolverStatus = cc;
+#endif // PC_BUILD
+}
+
+
+void fnDumpMenusAllWrapper(uint16_t newFilenameformat) {
+  fnDumpMenusAll(newFilenameformat, NULL);
 }
