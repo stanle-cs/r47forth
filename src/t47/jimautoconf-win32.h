@@ -54,7 +54,7 @@
 #define HAVE_STDLIB_H 1
 #define HAVE_STRINGS_H 1
 /* #undef HAVE_STRPTIME */
-#define HAVE_STRUCT_FLOCK 1
+/*#define HAVE_STRUCT_FLOCK 1*/ //jm no struct flock / fcntl locking on win32
 /*#define HAVE_STRUCT_STAT_ST_MTIM 1*/ //jm MinGW _stat64 has st_mtime, no st_mtim
 /* #undef HAVE_STRUCT_STAT_ST_MTIMESPEC */
 /*#define HAVE_STRUCT_SYSINFO_UPTIME 1*/ //jm no sysinfo on win32
