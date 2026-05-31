@@ -241,7 +241,7 @@
         printf("%s47 --dumpMenus2     : output all static menus to drive; new file name format in the form 'RIBBONS.1.bmp'\n", cc);
         printf("%s47 --writeexportall : output all PROGs (internal use)\n", cc);
         printf("%s47 --help           : list all SIM switches\n", cc);
-        printf("%s47 --testPgms       : load the test programs testPgms.bin if present\n", cc);
+        printf("%s47 --testPgms       : load the test programs testPgms.bin if present; reset calculator with testPgms and create new backup.cfg when exit\n", cc);
         printf("%s47 --testData       : load the test data in Reg 10 to Reg 38\n", cc);
         printf("%s47 --h              : see --help\n", cc);
         return 0;
