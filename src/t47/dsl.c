@@ -727,7 +727,26 @@ void initDSL(void) {
     Jim_RegisterCoreCommands(interp);
     Jim_InitStaticExtensions(interp);
     
-    // Register DSL commands at global scope
+    // Register 🟧 CAT FCNS entries as commands in global scope first
+    size_t added = 0, total = 0;
+    char cmdName[64];
+    for(int i = 0; i < LAST_ITEM; ++i) {
+	item_t item = indexOfItems[i];
+	if((item.status & CAT_STATUS) == CAT_FNCT) {
+	    ++total;
+	    void* idx = (void*)(intptr_t)i;
+	    const char* catName = item.itemCatalogName;
+	    const char* smName  = item.itemSoftmenuName;
+	    if(registerCatFn(interp, catName, idx, cmdName, FALSE) ||
+	       registerCatFn(interp, smName,  idx, cmdName, TRUE)) {
+		++added;
+	    }
+	}
+    }
+    printf("Registered %zu of %zu possible catalog functions for T47.\n",
+	added, total);
+    
+    // Register DSL commands second so they can override the catalog
     Jim_CreateCommand(interp, "catfn",  catfn,  NULL, NULL);
     Jim_CreateCommand(interp, "flag",   flag,   NULL, NULL);
     Jim_CreateCommand(interp, "loadst", loadst, NULL, NULL);
@@ -740,36 +759,8 @@ void initDSL(void) {
     Jim_CreateCommand(interp, "var",    var,    NULL, NULL);
     Jim_CreateCommand(interp, "xeq",    xeq,    NULL, NULL);
     if(!headlessMode) {
+	// Conditionally add commands that require the GTK GUI
         Jim_CreateCommand(interp, "press", press, NULL, NULL);
-    }
-    
-    // Register all 🟧 CAT FCNS entries as commands, too
-    {
-        size_t added = 0, total = 0;
-        char cmdName[64];
-        for(int i = 0; i < LAST_ITEM; ++i) {
-            switch(i) {
-                case ITM_LOADST: 
-                case ITM_READP: 
-                case ITM_SAVEST: 
-                case ITM_SNAP: 
-                case ITM_XEQ: 
-                    continue; // skip ops that shadow commands above
-            }
-            item_t item = indexOfItems[i];
-            if((item.status & CAT_STATUS) == CAT_FNCT) {
-                ++total;
-                void* idx = (void*)(intptr_t)i;
-                const char* catName = item.itemCatalogName;
-                const char* smName  = item.itemSoftmenuName;
-                if(registerCatFn(interp, catName, idx, cmdName, FALSE) ||
-                   registerCatFn(interp, smName,  idx, cmdName, TRUE)) {
-                    ++added;
-                }
-            }
-        }
-        printf("Registered %zu of %zu possible catalog functions for T47.\n",
-            added, total);
     }
 }
 
