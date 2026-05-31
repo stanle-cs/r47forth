@@ -638,17 +638,25 @@ void fnAlphaIP(uint16_t regist) {
   }
 
   if(programRunStop == PGM_RUNNING) {
-    copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);  // Save register Y
-    copySourceRegisterToDestRegister(REGISTER_X, SAVED_REGISTER_X);  // Save register X
+    if(regist != REGISTER_Y) {
+      copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);  // Save register Y
+    }
+    copySourceRegisterToDestRegister(REGISTER_X, SAVED_REGISTER_X);    // Save register X
+    copySourceRegisterToDestRegister(REGISTER_L, SAVED_REGISTER_L);    // Save register L
   }
 
   switch(getRegisterDataType(REGISTER_X)) {
-    case dtShortInteger:
-    case dtReal34: {
-      fnJM_2SI(NOPARAM);   // convert real and shortint to longint
+    case dtShortInteger: {
+      convertShortIntegerRegisterToLongIntegerRegister(REGISTER_X, REGISTER_X);
       break;
     }
-    
+
+    case dtReal34: {
+      integerPartReal(DEC_ROUND_DOWN);
+      fnJM_2SI(NOPARAM);
+      break;
+    }
+
     case dtLongInteger: {
       break;
     }
@@ -663,15 +671,19 @@ void fnAlphaIP(uint16_t regist) {
     }
   }
 
-  copySourceRegisterToDestRegister(REGISTER_K, REGISTER_Y);
-  
+  if(regist != REGISTER_Y) {
+    copySourceRegisterToDestRegister(regist, REGISTER_Y);
+  }
   uint8_t grpGroupingLeftOld  = grpGroupingLeft;
-  grpGroupingLeft  = 0;                   // remove IP separators
+  grpGroupingLeft  = 0;                   // remove  IP separators
   addition[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
   grpGroupingLeft  = grpGroupingLeftOld;  // restore IP separators
-  
-  copySourceRegisterToDestRegister(REGISTER_X, REGISTER_K);
 
-  copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);  // Restore register Y
-  copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);  // Restore register X
+  copySourceRegisterToDestRegister(REGISTER_X, regist);
+
+  if(regist != REGISTER_Y) {
+    copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);  // Restore register Y
+  }
+  copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);    // Restore register X
+  copySourceRegisterToDestRegister(SAVED_REGISTER_L, REGISTER_L);    // Restore register L
 }
