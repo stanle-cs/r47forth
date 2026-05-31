@@ -16,6 +16,7 @@
   void fnAlphaPos      (uint16_t regist);
   void fnXToAlpha      (uint16_t unusedButMandatoryParameter);
   void fnClearAlpha    (uint16_t regist);
+  void fnAlphaIP       (uint16_t regist);
   void fn42AlphaRotate (uint16_t unusedButMandatoryParameter);
   void fn42AlphaShift  (uint16_t unusedButMandatoryParameter);
 #endif // !STRINGFUNCS_H

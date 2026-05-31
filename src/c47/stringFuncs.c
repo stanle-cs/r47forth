@@ -554,7 +554,7 @@ void fnAlphaSL(uint16_t regist) {
 
 void fn42AlphaRotate(uint16_t unusedButMandatoryParameter) {
   longInteger_t lgInt;
-  
+
   if(getRegisterDataType(REGISTER_K) != dtString) {
     displayCalcErrorMessage(ERROR_NO_STRING_IN_REGISTER_K, ERR_REGISTER_LINE, REGISTER_T);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -563,7 +563,7 @@ void fn42AlphaRotate(uint16_t unusedButMandatoryParameter) {
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
   }
-  
+
   longIntegerInit(lgInt);
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
@@ -604,7 +604,7 @@ void fn42AlphaRotate(uint16_t unusedButMandatoryParameter) {
 void fn42AlphaShift(uint16_t unusedButMandatoryParameter) {
   int16_t stringGlyphLen, steps, glyphPointer;
   char *ptr;
-    
+
   if(getRegisterDataType(REGISTER_K) != dtString) {
     displayCalcErrorMessage(ERROR_NO_STRING_IN_REGISTER_K, ERR_REGISTER_LINE, REGISTER_T);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -618,10 +618,60 @@ void fn42AlphaShift(uint16_t unusedButMandatoryParameter) {
   stringGlyphLen = stringGlyphLength(ptr);
 
   steps = (stringGlyphLen < 6 ? stringGlyphLen : 6);
-  
+
   for(glyphPointer=0; steps > 0; steps--) {
     glyphPointer = stringNextGlyph(ptr, glyphPointer);
   }
 
    xcopy(ptr, ptr + glyphPointer, stringByteLength(ptr + glyphPointer) + 1);
+}
+
+
+void fnAlphaIP(uint16_t regist) {
+  if(getRegisterDataType(regist) != dtString) {
+    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "cannot use " STD_alpha "IP on %s", getRegisterDataTypeName(regist, true, false));
+      moreInfoOnError("In function fnAlphaIP:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    return;
+  }
+
+  if(programRunStop == PGM_RUNNING) {
+    copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);  // Save register Y
+    copySourceRegisterToDestRegister(REGISTER_X, SAVED_REGISTER_X);  // Save register X
+  }
+
+  switch(getRegisterDataType(REGISTER_X)) {
+    case dtShortInteger:
+    case dtReal34: {
+      fnJM_2SI(NOPARAM);   // convert real and shortint to longint
+      break;
+    }
+    
+    case dtLongInteger: {
+      break;
+    }
+
+    default: {
+      displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        sprintf(errorMessage, "cannot " STD_alpha "IP when X is %s", getRegisterDataTypeName(REGISTER_X, true, false));
+        moreInfoOnError("In function fnAlphaIP:", errorMessage, NULL, NULL);
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
+      return;
+    }
+  }
+
+  copySourceRegisterToDestRegister(REGISTER_K, REGISTER_Y);
+  
+  uint8_t grpGroupingLeftOld  = grpGroupingLeft;
+  grpGroupingLeft  = 0;                   // remove IP separators
+  addition[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
+  grpGroupingLeft  = grpGroupingLeftOld;  // restore IP separators
+  
+  copySourceRegisterToDestRegister(REGISTER_X, REGISTER_K);
+
+  copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);  // Restore register Y
+  copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);  // Restore register X
 }
