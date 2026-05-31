@@ -36,10 +36,10 @@
 #define HAVE_NETDB_H 1
 #define HAVE_NETINET_IN_H 1
 #define HAVE_OPENDIR 1
-#define HAVE_OPENPTY 1
+/*#define HAVE_OPENPTY 1   */ //jm
 #define HAVE_PIPE 1
 #define HAVE_POSIX_OPENPT 1
-#define HAVE_PTY_H 1
+/*#define HAVE_PTY_H 1   */ //jm
 #define HAVE_READLINK 1
 #define HAVE_REALPATH 1
 #define HAVE_REGCOMP 1
@@ -69,7 +69,7 @@
 #define HAVE_SYS_TIME_H 1
 #define HAVE_SYS_TYPES_H 1
 #define HAVE_SYS_UN_H 1
-#define HAVE_TERMIOS_H 1
+/*#define HAVE_TERMIOS_H 1  */ //jm
 #define HAVE_TIME_H 1
 #define HAVE_UALARM 1
 #define HAVE_UMASK 1
