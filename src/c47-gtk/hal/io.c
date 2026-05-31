@@ -6,11 +6,9 @@
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-#include <jim.h>
-
 static FILE *_ioFileHandle = NULL;
 
-char _ioFileNameOverride[JIM_PATH_LEN] = {0};
+char _ioFileNameOverride[C47_PATH_MAX] = {0};
 
 int create_dir(char * dir) {
   int ret;
@@ -84,14 +82,14 @@ int file_selection_screen(const char * title, const char * base_dir, const char 
 
 
 int _ioFileNameFromFilePath(ioFilePath_t path, char * filename) {
-  static char base_dir[JIM_PATH_LEN]; // at least exceed the 256 limit
+  static char base_dir[C47_PATH_MAX]; // at least exceed the 256 limit
   char * current_dir;
   int ret = 0;
 
   if(_ioFileNameOverride[0] != '\0') {
-    strncpy(filename, _ioFileNameOverride, JIM_PATH_LEN - 1);
-    filename[JIM_PATH_LEN - 1] = '\0';
-    memset(_ioFileNameOverride, 0, JIM_PATH_LEN);
+    strncpy(filename, _ioFileNameOverride, C47_PATH_MAX - 1);
+    filename[C47_PATH_MAX - 1] = '\0';
+    memset(_ioFileNameOverride, 0, C47_PATH_MAX);
     return FILE_OK;
   }
 
@@ -184,7 +182,7 @@ int _ioFileNameFromFilePath(ioFilePath_t path, char * filename) {
       stringToASCII(tmpStringLabelOrVariableName, filename);
       //strcpy(filename, tmpStringLabelOrVariableName);
 
-      char filename1[JIM_PATH_LEN];
+      char filename1[C47_PATH_MAX];
       filename1[0] = 0;
       stringCopy(filename1, PROGRAMS_DIR "/" ALLPROGRAMS_SUBDIR "/");
       stringCopy(filename1 + stringByteLength(filename1), filename);
@@ -203,7 +201,7 @@ int _ioFileNameFromFilePath(ioFilePath_t path, char * filename) {
 int ioFileOpen(ioFilePath_t path, ioFileMode_t mode) {
   assert(_ioFileHandle == NULL);
   const char *filemode;
-  static char filename[JIM_PATH_LEN];
+  static char filename[C47_PATH_MAX];
   strcpy(filename, "untitled");
   fileNameSelected[0]=0;
   int ret = _ioFileNameFromFilePath(path, filename);
@@ -272,7 +270,7 @@ int ioEof(void) {
 
 int ioFileRemove(ioFilePath_t path, uint32_t *errorNumber) {
   assert(_ioFileHandle == NULL);
-  static char filename[JIM_PATH_LEN];
+  static char filename[C47_PATH_MAX];
   int ret = _ioFileNameFromFilePath(path, filename);
   if(ret != FILE_OK) {
     return ret;

@@ -13,7 +13,6 @@
 #if defined(PC_BUILD)
 
 #include <ctype.h>
-#include <jim.h>
 #include <stdio.h>
 #include <strings.h>
 
@@ -22,7 +21,7 @@ extern bool_t scriptingActive;
 extern bool_t headlessMode;
 
 // External declaration for _ioFileNameOverride from hal/io.c
-extern char _ioFileNameOverride[JIM_PATH_LEN];
+extern char _ioFileNameOverride[C47_PATH_MAX];
 
 // Jim interpreter instance
 static Jim_Interp *g_dsl_interpreter = NULL;
@@ -63,24 +62,24 @@ static void waitForEngineReturn(void)
 static void setReadpFilenameOverride(const char *filename)
 {
     if(g_file_test(filename, G_FILE_TEST_EXISTS)) {
-        strncpy(_ioFileNameOverride, filename, JIM_PATH_LEN - 1);
-        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+        strncpy(_ioFileNameOverride, filename, C47_PATH_MAX - 1);
+        _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
         return;
     }
 
     if(strchr(filename, '/') == NULL) {
-        char fallback[JIM_PATH_LEN];
+        char fallback[C47_PATH_MAX];
         snprintf(fallback, sizeof(fallback), "%s/%s", PROGRAMS_DIR, filename);
         if(g_file_test(fallback, G_FILE_TEST_EXISTS)) {
-            strncpy(_ioFileNameOverride, fallback, JIM_PATH_LEN - 1);
-            _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+            strncpy(_ioFileNameOverride, fallback, C47_PATH_MAX - 1);
+            _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
             return;
         }
     }
 
     // Let fnLoadProgram report the open/read failure with the original value.
-    strncpy(_ioFileNameOverride, filename, JIM_PATH_LEN - 1);
-    _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+    strncpy(_ioFileNameOverride, filename, C47_PATH_MAX - 1);
+    _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
 }
 
 /**
@@ -597,8 +596,8 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 static int loadst(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
-        strncpy(_ioFileNameOverride, Jim_String(argv[1]), JIM_PATH_LEN - 1);
-        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+        strncpy(_ioFileNameOverride, Jim_String(argv[1]), C47_PATH_MAX - 1);
+        _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
     }
     
     fnLoad(LM_STATE_LOAD);
@@ -611,8 +610,8 @@ static int loadst(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
-        strncpy(_ioFileNameOverride, Jim_String(argv[1]), JIM_PATH_LEN - 1);
-        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+        strncpy(_ioFileNameOverride, Jim_String(argv[1]), C47_PATH_MAX - 1);
+        _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
     }
     
     fnSave(SM_STATE_SAVE);
@@ -649,12 +648,12 @@ static int snap(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
         const char *baseName = Jim_String(argv[1]);
-        char bmpFileName[JIM_PATH_LEN];
+        char bmpFileName[C47_PATH_MAX];
         char regsPath[FILENAMELEN];
 
         snprintf(bmpFileName, sizeof(bmpFileName), "%s.bmp", baseName);
-        strncpy(_ioFileNameOverride, bmpFileName, JIM_PATH_LEN - 1);
-        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+        strncpy(_ioFileNameOverride, bmpFileName, C47_PATH_MAX - 1);
+        _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
 
         snprintf(regsPath, sizeof(regsPath), "%s.REGS.TSV", baseName);
         tsvfnSet(regsPath);

@@ -42,13 +42,14 @@ jim_gen_src = files(
   'jimgen/_tclcompat.c',
 )
 
+jim_c_args = ['-Wno-error', '-w', '-DUSE_UTF8', '-D_GNU_SOURCE']
 if host_machine.system() == 'windows'
   jim_load_static = files('jimgen/jim-load-static-exts-win32.c')
   jim_platform_src = files(
     jim_srcdir / 'jim-win32compat.c',
     jim_srcdir / 'jim-nosignal.c',
   )
-  jim_c_args = ['-w', '-DUSE_UTF8']
+  jim_c_args += ['-UWIN32']
 else
   jim_load_static = files('jimgen/jim-load-static-exts.c')
   jim_platform_src = files(
@@ -56,7 +57,6 @@ else
     jim_srcdir / 'openpty.c',
     jim_srcdir / 'jim-signal.c',
   )
-  jim_c_args = ['-w', '-DUSE_UTF8', '-DHAVE_OPENPTY', '-D_GNU_SOURCE']
 endif
 
 jim_inc = [

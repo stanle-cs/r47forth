@@ -37,6 +37,7 @@
 #define HAVE_NETDB_H 1
 #define HAVE_NETINET_IN_H 1
 #define HAVE_OPENDIR 1
+#define HAVE_OPENPTY 1
 #define HAVE_PIPE 1
 #define HAVE_POSIX_OPENPT 1
 #define HAVE_PTY_H 1
@@ -81,7 +82,7 @@
 #define HAVE_WAITPID 1
 /* #undef HAVE__NSGETENVIRON */
 #define JIM_DOCS 1
-#define JIM_GITVERSION "0.83-110-g5516ba9-dirty"
+#define JIM_GITVERSION "0.83-110-g5516ba9"
 #define JIM_INSTALL 1
 /* #undef JIM_RANDOMISE_HASH */
 #define JIM_REFERENCES 1
