@@ -16,6 +16,10 @@
 #include <stdio.h>
 #include <strings.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 // Global state - declared in gtkGui.c
 extern bool_t scriptingActive;
 extern bool_t headlessMode;
@@ -723,8 +727,33 @@ int executeScript(const char *scriptFile) {
 // DSL initialization
 // =====================================================================
 
+#if defined(_WIN32)
+/**
+ * Exec start with stdout/stderr detached from the parent console, so script output is invisible when
+ * run from cmd.exe even though redirection to a file still works.
+ * Attach to the parent console and rebind the C streams. > out.txt" keeps writing to the file.
+ */
+static void attachParentConsole(void) {
+    if(!AttachConsole(ATTACH_PARENT_PROCESS)) {
+        return;  // no parent console (e.g. launched from Explorer)
+    }
+    if(GetFileType(GetStdHandle(STD_OUTPUT_HANDLE)) == FILE_TYPE_UNKNOWN) {
+        freopen("CONOUT$", "w", stdout);
+    }
+    if(GetFileType(GetStdHandle(STD_ERROR_HANDLE)) == FILE_TYPE_UNKNOWN) {
+        freopen("CONOUT$", "w", stderr);
+    }
+}
+#endif
+
 void initDSL(void) {
     scriptingActive = TRUE;
+    
+#if defined(_WIN32)
+    // Reconnect stdout/stderr to the parent console (GUI-subsystem build
+    // detaches them); must run before setvbuf since freopen resets buffering.
+    attachParentConsole();
+#endif
     
     // unbuffered for the DSL session so all output is visible immediately.
     setvbuf(stdout, NULL, _IONBF, 0);
