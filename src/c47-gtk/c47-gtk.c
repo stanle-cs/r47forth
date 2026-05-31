@@ -293,6 +293,12 @@
         printf("%s47 --headless            : suppress GTK interface startup\n", cc);
         printf("%s47 --help                : list all SIM switches\n", cc);
         printf("%s47 --h                   : see --help\n", cc);
+        #if defined(_WIN32)
+          printf("\nExample for command line operation: \n  %s47.exe --headless --script res/SCRIPTS/example.t47\n", cc);
+          printf(  "Cmd returns the prompt before output ends. Run via 'start /wait %s47.exe ...' or pipe '| more' to prevent that.\n\n", cc);
+        #else
+          printf("\nExample: ./%s47 --headless --script ./res/SCRIPTS/example.t47\n\n", cc);
+        #endif
         return 0;
       }
     }

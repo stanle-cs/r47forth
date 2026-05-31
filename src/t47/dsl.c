@@ -13,16 +13,19 @@
 #if defined(PC_BUILD)
 
 #include <ctype.h>
-#include <jim.h>
 #include <stdio.h>
 #include <strings.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 // Global state - declared in gtkGui.c
 extern bool_t scriptingActive;
 extern bool_t headlessMode;
 
 // External declaration for _ioFileNameOverride from hal/io.c
-extern char _ioFileNameOverride[JIM_PATH_LEN];
+extern char _ioFileNameOverride[C47_PATH_MAX];
 
 // Jim interpreter instance
 static Jim_Interp *g_dsl_interpreter = NULL;
@@ -63,24 +66,24 @@ static void waitForEngineReturn(void)
 static void setReadpFilenameOverride(const char *filename)
 {
     if(g_file_test(filename, G_FILE_TEST_EXISTS)) {
-        strncpy(_ioFileNameOverride, filename, JIM_PATH_LEN - 1);
-        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+        strncpy(_ioFileNameOverride, filename, C47_PATH_MAX - 1);
+        _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
         return;
     }
 
     if(strchr(filename, '/') == NULL) {
-        char fallback[JIM_PATH_LEN];
+        char fallback[C47_PATH_MAX];
         snprintf(fallback, sizeof(fallback), "%s/%s", PROGRAMS_DIR, filename);
         if(g_file_test(fallback, G_FILE_TEST_EXISTS)) {
-            strncpy(_ioFileNameOverride, fallback, JIM_PATH_LEN - 1);
-            _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+            strncpy(_ioFileNameOverride, fallback, C47_PATH_MAX - 1);
+            _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
             return;
         }
     }
 
     // Let fnLoadProgram report the open/read failure with the original value.
-    strncpy(_ioFileNameOverride, filename, JIM_PATH_LEN - 1);
-    _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+    strncpy(_ioFileNameOverride, filename, C47_PATH_MAX - 1);
+    _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
 }
 
 /**
@@ -153,6 +156,7 @@ static int runCatalogItem(Jim_Interp *interp, int16_t index, int argArgc,
         }
         printf("Calling argless catalog function %s, index %d\n",
             item.itemCatalogName, index);
+        fflush(stdout);
         reallyRunFunction(index, item.param);
         return JIM_OK;
     }
@@ -170,6 +174,7 @@ static int runCatalogItem(Jim_Interp *interp, int16_t index, int argArgc,
     }
     printf("Calling catalog function %s(%s), index %d\n",
         item.itemCatalogName, argstr, index);
+    fflush(stdout);
     reallyRunFunction(index, param);
     return JIM_OK;
 }
@@ -597,8 +602,8 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 static int loadst(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
-        strncpy(_ioFileNameOverride, Jim_String(argv[1]), JIM_PATH_LEN - 1);
-        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+        strncpy(_ioFileNameOverride, Jim_String(argv[1]), C47_PATH_MAX - 1);
+        _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
     }
     
     fnLoad(LM_STATE_LOAD);
@@ -611,8 +616,8 @@ static int loadst(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
-        strncpy(_ioFileNameOverride, Jim_String(argv[1]), JIM_PATH_LEN - 1);
-        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+        strncpy(_ioFileNameOverride, Jim_String(argv[1]), C47_PATH_MAX - 1);
+        _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
     }
     
     fnSave(SM_STATE_SAVE);
@@ -628,6 +633,7 @@ static void tsvfnSet(const char *baseName)
     preventFilenameTimeout();
     clearSystemFlag(FLAG_PRTACT);
     printf("Overrode TSV file name to %s\n", filename_csv);
+    fflush(stdout);
 }
 
 /**
@@ -639,6 +645,7 @@ static void tsvfnClear(void)
     filename_csv[0] = '\0';
     mem__32 = 0;
     printf("Cleared TSV file name override\n");
+    fflush(stdout);
 }
 
 /**
@@ -649,12 +656,12 @@ static int snap(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
         const char *baseName = Jim_String(argv[1]);
-        char bmpFileName[JIM_PATH_LEN];
+        char bmpFileName[C47_PATH_MAX];
         char regsPath[FILENAMELEN];
 
         snprintf(bmpFileName, sizeof(bmpFileName), "%s.bmp", baseName);
-        strncpy(_ioFileNameOverride, bmpFileName, JIM_PATH_LEN - 1);
-        _ioFileNameOverride[JIM_PATH_LEN - 1] = '\0';
+        strncpy(_ioFileNameOverride, bmpFileName, C47_PATH_MAX - 1);
+        _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
 
         snprintf(regsPath, sizeof(regsPath), "%s.REGS.TSV", baseName);
         tsvfnSet(regsPath);
@@ -702,12 +709,14 @@ int executeScript(const char *scriptFile) {
     if(ret != JIM_OK) {
         const char *errorMsg = Jim_GetString(Jim_GetResult(interp), NULL);
         fprintf(stderr, "%s\n", errorMsg);
+        fflush(stderr);
         
         // Try to get and print stack trace
         Jim_Obj *traceObj = Jim_GetVariableStr(interp, "errorInfo", 0);
         if(traceObj) {
             const char *trace = Jim_GetString(traceObj, NULL);
             fprintf(stderr, "%s\n", trace);
+            fflush(stderr);
         }
     }
     
@@ -718,8 +727,43 @@ int executeScript(const char *scriptFile) {
 // DSL initialization
 // =====================================================================
 
+#if defined(_WIN32)
+/**
+ * GUI-subsystem build has stdout/stderr unbound from the parent console.
+ * Attach and rebind to it, unless a stream is redirected to a file/pipe.
+ */
+static void attachParentConsole(void) {
+    DWORD outType = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE));
+    DWORD errType = GetFileType(GetStdHandle(STD_ERROR_HANDLE));
+    bool_t outRedirected = (outType == FILE_TYPE_DISK || outType == FILE_TYPE_PIPE);
+    bool_t errRedirected = (errType == FILE_TYPE_DISK || errType == FILE_TYPE_PIPE);
+
+    if(outRedirected && errRedirected) {
+        return;  // both to file/pipe; nothing to do
+    }
+
+    // May fail if already attached; harmless, CONOUT$ still resolves.
+    AttachConsole(ATTACH_PARENT_PROCESS);
+    if(!outRedirected) {
+        freopen("CONOUT$", "w", stdout);
+    }
+    if(!errRedirected) {
+        freopen("CONOUT$", "w", stderr);
+    }
+}
+#endif
+
 void initDSL(void) {
     scriptingActive = TRUE;
+    
+#if defined(_WIN32)
+    // Rebind stdout/stderr to the console; before setvbuf (freopen resets it).
+    attachParentConsole();
+#endif
+    
+    // Unbuffer so output is not held back when stdout is not a tty.
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
     
     // Create Jim interpreter
     Jim_Interp *interp = g_dsl_interpreter = Jim_CreateInterp();
@@ -771,6 +815,7 @@ void initDSL(void) {
         }
         printf("Registered %zu of %zu possible catalog functions for T47.\n",
             added, total);
+        fflush(stdout);
     }
 }
 
