@@ -37,6 +37,7 @@
 #define HAVE_NETDB_H 1
 #define HAVE_NETINET_IN_H 1
 #define HAVE_OPENDIR 1
+#define HAVE_OPENPTY 1
 #define HAVE_PIPE 1
 #define HAVE_POSIX_OPENPT 1
 #define HAVE_PTY_H 1
