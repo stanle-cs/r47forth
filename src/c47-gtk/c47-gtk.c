@@ -8,7 +8,6 @@
 #include "c47.h"
 #include "version.h"
 
-
 #if defined(PC_BUILD)
   #include "../t47/dsl.h"
   #include "gtkGui.h"
@@ -184,6 +183,8 @@
       if(strcmp(argv[arg], "--writeexportall") == 0) {
         printf("Activated: %s\n", argv[arg]);
         writeExportAll = true;
+        loadTestPrograms = true;
+        // headlessMode = true;
       }
       if(strcmp(argv[arg], "--script") == 0) {
         printf("Activated: %s\n", argv[arg]);
@@ -243,6 +244,14 @@
           printf("  menuDump path: %s\n", menuDumpPath);
         }
       }
+      if(strcmp(argv[arg], "--testPgms") == 0) {
+        loadTestPrograms = true;
+        printf("Activated: %s\n", argv[arg]);
+      }
+      if(strcmp(argv[arg], "--testData") == 0) {
+        loadTestData = true;
+        printf("Activated: %s\n", argv[arg]);
+      }
 
       if(strcmp(argv[arg], "--help") == 0 || strcmp(argv[arg], "--h") == 0 || strcmp(argv[arg], "-h") == 0) {
         char cc[2];
@@ -291,6 +300,8 @@
         printf("%s47 --writeexportall      : output all PROGs (internal use)\n", cc);
         printf("%s47 --script <file>       : execute DSL script from file or - for stdin\n", cc);
         printf("%s47 --headless            : suppress GTK interface startup\n", cc);
+        printf("%s47 --testPgms            : load the test programs testPgms.bin if present; reset calculator with testPgms and create new backup.cfg when exit\n", cc);
+        printf("%s47 --testData            : load the test data in Reg 10 to Reg 38\n", cc);
         printf("%s47 --help                : list all SIM switches\n", cc);
         printf("%s47 --h                   : see --help\n", cc);
         #if defined(_WIN32)
