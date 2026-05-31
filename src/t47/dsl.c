@@ -729,18 +729,25 @@ int executeScript(const char *scriptFile) {
 
 #if defined(_WIN32)
 /**
- * Exec start with stdout/stderr detached from the parent console, so script output is invisible when
- * run from cmd.exe even though redirection to a file still works.
- * Attach to the parent console and rebind the C streams. > out.txt" keeps writing to the file.
+ * GUI-subsystem build has stdout/stderr unbound from the parent console.
+ * Attach and rebind to it, unless a stream is redirected to a file/pipe.
  */
 static void attachParentConsole(void) {
-    if(!AttachConsole(ATTACH_PARENT_PROCESS)) {
-        return;  // no parent console (e.g. launched from Explorer)
+    DWORD outType = GetFileType(GetStdHandle(STD_OUTPUT_HANDLE));
+    DWORD errType = GetFileType(GetStdHandle(STD_ERROR_HANDLE));
+    bool_t outRedirected = (outType == FILE_TYPE_DISK || outType == FILE_TYPE_PIPE);
+    bool_t errRedirected = (errType == FILE_TYPE_DISK || errType == FILE_TYPE_PIPE);
+
+    if(outRedirected && errRedirected) {
+        return;  // both to file/pipe; nothing to do
     }
-    if(GetFileType(GetStdHandle(STD_OUTPUT_HANDLE)) == FILE_TYPE_UNKNOWN) {
+
+    // May fail if already attached; harmless, CONOUT$ still resolves.
+    AttachConsole(ATTACH_PARENT_PROCESS);
+    if(!outRedirected) {
         freopen("CONOUT$", "w", stdout);
     }
-    if(GetFileType(GetStdHandle(STD_ERROR_HANDLE)) == FILE_TYPE_UNKNOWN) {
+    if(!errRedirected) {
         freopen("CONOUT$", "w", stderr);
     }
 }
@@ -750,12 +757,11 @@ void initDSL(void) {
     scriptingActive = TRUE;
     
 #if defined(_WIN32)
-    // Reconnect stdout/stderr to the parent console (GUI-subsystem build
-    // detaches them); must run before setvbuf since freopen resets buffering.
+    // Rebind stdout/stderr to the console; before setvbuf (freopen resets it).
     attachParentConsole();
 #endif
     
-    // unbuffered for the DSL session so all output is visible immediately.
+    // Unbuffer so output is not held back when stdout is not a tty.
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
     
