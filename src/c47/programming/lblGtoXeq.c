@@ -815,6 +815,15 @@ int16_t executeOneStep(uint8_t *step) {
           }
           else if(op == ITM_42APPEND) {
             if(*step++ == STRING_LABEL_VARIABLE) {
+              if(getRegisterDataType(REGISTER_K) != dtString) {
+                displayCalcErrorMessage(ERROR_NO_STRING_IN_REGISTER_K, ERR_REGISTER_LINE, REGISTER_T);
+                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+                  sprintf(errorMessage, "cannot use 42append on %s", getRegisterDataTypeName(REGISTER_K, true, false));
+                  moreInfoOnError("In function executeOneStep:", errorMessage, NULL, NULL);
+                #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+                return 0;
+              }
+
               copySourceRegisterToDestRegister(REGISTER_X, LAST_TEMP_REGISTER);
               _getStringLabelOrVariableName(step);
               reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(stringByteLength(tmpStringLabelOrVariableName) + 1), amNone);
