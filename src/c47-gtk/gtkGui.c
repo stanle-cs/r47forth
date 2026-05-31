@@ -5167,7 +5167,9 @@ static bool check_utf_string(const char *widget_name, const char *what, const ch
 
 
 void check_all_btn_widgets_for_consistency(void) {
+#if defined(VERBOSE_MINIMUM)
     printf("Checking all btn widgets for consistency...\n");
+#endif //VERBOSE_MINIMUM
 
     // Row 1 buttons
     CHECK_WIDGET_CONSISTENCY_CHECK(btn11, "btn11");
@@ -5260,7 +5262,10 @@ void check_all_btn_widgets_for_consistency(void) {
     CHECK_WIDGET_CONSISTENCY_CHECK(btn84A, "btn84A");
     CHECK_WIDGET_CONSISTENCY_CHECK(btn85A, "btn85A");
 
+#if defined(VERBOSE_MINIMUM)
     printf("Consistency check complete - none found.\n");
+#endif //VERBOSE_MINIMUM
+
 }
 #endif // SIMULATOR_ON_SCREEN_KEYBOARD == 1
 
