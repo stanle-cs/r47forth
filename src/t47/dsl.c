@@ -622,12 +622,10 @@ static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 /**
  * tsvfnSet <path> - Set the TSV file name override
  */
-static void tsvfnSet(const char *path)
+static void tsvfnSet(const char *baseName)
 {
-    strncpy(filename_csv, path, FILENAMELEN - 1);
-    filename_csv[FILENAMELEN - 1] = '\0';
-    mem__32 = getUptimeMs();
-    cancelFilename = false;
+    snprintf(filename_csv, sizeof(filename_csv), "%s.T47.TSV", baseName);
+    preventFilenameTimeout();
     clearSystemFlag(FLAG_PRTACT);
     printf("Overrode TSV file name to %s\n", filename_csv);
 }
@@ -639,6 +637,7 @@ static void tsvfnClear(void)
 {
     cancelFilename = true;
     filename_csv[0] = '\0';
+    mem__32 = 0;
     printf("Cleared TSV file name override\n");
 }
 
