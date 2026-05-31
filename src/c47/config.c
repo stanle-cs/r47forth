@@ -1838,7 +1838,9 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     refreshScreen(163);
 
     // The following lines are test data
-    #if !defined(SAVE_SPACE_DM42_14)
+    #if defined(TESTSUITE_BUILD)
+        addTestPrograms();
+    #elif !defined(SAVE_SPACE_DM42_14)
                                    #if defined(PC_BUILD) && (VERBOSE_LEVEL > -1)
                                      printf("addTestPrograms\n");
                                    #endif
