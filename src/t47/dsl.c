@@ -152,6 +152,7 @@ static int runCatalogItem(Jim_Interp *interp, int16_t index, int argArgc,
         }
         printf("Calling argless catalog function %s, index %d\n",
             item.itemCatalogName, index);
+        fflush(stdout);
         reallyRunFunction(index, item.param);
         return JIM_OK;
     }
@@ -169,6 +170,7 @@ static int runCatalogItem(Jim_Interp *interp, int16_t index, int argArgc,
     }
     printf("Calling catalog function %s(%s), index %d\n",
         item.itemCatalogName, argstr, index);
+    fflush(stdout);
     reallyRunFunction(index, param);
     return JIM_OK;
 }
@@ -627,6 +629,7 @@ static void tsvfnSet(const char *baseName)
     preventFilenameTimeout();
     clearSystemFlag(FLAG_PRTACT);
     printf("Overrode TSV file name to %s\n", filename_csv);
+    fflush(stdout);
 }
 
 /**
@@ -638,6 +641,7 @@ static void tsvfnClear(void)
     filename_csv[0] = '\0';
     mem__32 = 0;
     printf("Cleared TSV file name override\n");
+    fflush(stdout);
 }
 
 /**
@@ -701,12 +705,14 @@ int executeScript(const char *scriptFile) {
     if(ret != JIM_OK) {
         const char *errorMsg = Jim_GetString(Jim_GetResult(interp), NULL);
         fprintf(stderr, "%s\n", errorMsg);
+        fflush(stderr);
         
         // Try to get and print stack trace
         Jim_Obj *traceObj = Jim_GetVariableStr(interp, "errorInfo", 0);
         if(traceObj) {
             const char *trace = Jim_GetString(traceObj, NULL);
             fprintf(stderr, "%s\n", trace);
+            fflush(stderr);
         }
     }
     
@@ -719,6 +725,10 @@ int executeScript(const char *scriptFile) {
 
 void initDSL(void) {
     scriptingActive = TRUE;
+    
+    // unbuffered for the DSL session so all output is visible immediately.
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
     
     // Create Jim interpreter
     Jim_Interp *interp = g_dsl_interpreter = Jim_CreateInterp();
@@ -770,6 +780,7 @@ void initDSL(void) {
         }
         printf("Registered %zu of %zu possible catalog functions for T47.\n",
             added, total);
+        fflush(stdout);
     }
 }
 
