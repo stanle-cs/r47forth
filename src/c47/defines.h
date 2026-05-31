@@ -656,6 +656,14 @@
 #define TAM_BUFFER_LENGTH                         32 // TODO: find the exact maximum needed
 #define NIM_BUFFER_LENGTH                        200 // TODO: find the exact maximum needed
 
+#if defined(PATH_MAX)
+  #define C47_PATH_MAX PATH_MAX
+#elif defined(MAX_PATH)
+  #define C47_PATH_MAX MAX_PATH
+#else
+  #define C47_PATH_MAX 1024
+#endif
+
 #define DEBUG_LINES                               68 // Used in for the debug panel
 
 // List of errors
