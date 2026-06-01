@@ -628,23 +628,13 @@ void fn42AlphaShift(uint16_t unusedButMandatoryParameter) {
 
 
 void fnAlphaIP(uint16_t regist) {
-  if(getRegisterDataType(regist) != dtString) {
-    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
-    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "cannot use " STD_alpha "IP on %s", getRegisterDataTypeName(regist, true, false));
-      moreInfoOnError("In function fnAlphaIP:", errorMessage, NULL, NULL);
-    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-    return;
-  }
-
   if(programRunStop == PGM_RUNNING) {
-    if(regist != REGISTER_Y) {
-      copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);  // Save register Y
-    }
+    copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);    // Save register Y
     copySourceRegisterToDestRegister(REGISTER_X, SAVED_REGISTER_X);    // Save register X
     copySourceRegisterToDestRegister(REGISTER_L, SAVED_REGISTER_L);    // Save register L
   }
 
+  // convert X to long integer
   switch(getRegisterDataType(REGISTER_X)) {
     case dtShortInteger: {
       convertShortIntegerRegisterToLongIntegerRegister(REGISTER_X, REGISTER_X);
@@ -671,17 +661,30 @@ void fnAlphaIP(uint16_t regist) {
     }
   }
 
-  if(regist != REGISTER_Y) {
-    copySourceRegisterToDestRegister(regist, REGISTER_Y);
-  }
+  // convert X to string without separators
+  fnClearAlpha(REGISTER_Y);
+
   uint8_t grpGroupingLeftOld  = grpGroupingLeft;
   grpGroupingLeft  = 0;                   // remove  IP separators
-  addition[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
+  addition[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();  // Convert Register X to a string
   grpGroupingLeft  = grpGroupingLeftOld;  // restore IP separators
 
-  copySourceRegisterToDestRegister(REGISTER_X, regist);
+  // append X to the destination register - result is a string
+  if(lastErrorCode == ERROR_NONE) {
+    if(regist != REGISTER_Y) {
+      copySourceRegisterToDestRegister(regist, REGISTER_Y);
+    }
+    else {
+      copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
+    }
 
-  if(regist != REGISTER_Y) {
+    addition[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
+
+    copySourceRegisterToDestRegister(REGISTER_X, regist);
+  }
+
+  // restore, X, Y and L
+  if((regist != REGISTER_Y) || (lastErrorCode != ERROR_NONE)) {
     copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);  // Restore register Y
   }
   copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);    // Restore register X
