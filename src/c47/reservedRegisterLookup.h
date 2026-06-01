@@ -52,7 +52,7 @@ inline
 #endif
 #endif
 static unsigned int
-hash (register const char *str, register unsigned int len)
+hash (const char *str, unsigned int len)
 {
   TO_QSPI static const unsigned char asso_values[] =
     {
@@ -83,14 +83,24 @@ hash (register const char *str, register unsigned int len)
       17, 17, 17, 17, 17, 17, 17, 17, 17, 17,
       17, 17, 17, 17, 17, 17
     };
-  register unsigned int hval = 0;
+  unsigned int hval = 0;
 
   switch(len) {
       default:
         hval += asso_values[(unsigned char)str[2]];
+#if (defined __cplusplus && (__cplusplus >= 201703L || (__cplusplus >= 201103L && defined __clang__ && __clang_major__ + (__clang_minor__ >= 9) > 3))) || (defined __STDC_VERSION__ && __STDC_VERSION__ >= 202000L && ((defined __GNUC__ && __GNUC__ >= 10) || (defined __clang__ && __clang_major__ >= 9)))
+      [[fallthrough]];
+#elif (defined __GNUC__ && __GNUC__ >= 7) || (defined __clang__ && __clang_major__ >= 10)
+      __attribute__ ((__fallthrough__));
+#endif
       /*FALLTHROUGH*/
       case 2:
         hval += asso_values[(unsigned char)str[1]];
+#if (defined __cplusplus && (__cplusplus >= 201703L || (__cplusplus >= 201103L && defined __clang__ && __clang_major__ + (__clang_minor__ >= 9) > 3))) || (defined __STDC_VERSION__ && __STDC_VERSION__ >= 202000L && ((defined __GNUC__ && __GNUC__ >= 10) || (defined __clang__ && __clang_major__ >= 9)))
+      [[fallthrough]];
+#elif (defined __GNUC__ && __GNUC__ >= 7) || (defined __clang__ && __clang_major__ >= 10)
+      __attribute__ ((__fallthrough__));
+#endif
       /*FALLTHROUGH*/
       case 1:
         hval += asso_values[(unsigned char)str[0]];
@@ -99,6 +109,10 @@ hash (register const char *str, register unsigned int len)
   return hval;
 }
 
+#if (defined __GNUC__ && __GNUC__ + (__GNUC_MINOR__ >= 6) > 4) || (defined __clang__ && __clang_major__ >= 3)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
 TO_QSPI static const struct reservedRegister wordlist[] =
   {
     {"\241\223Y",RESERVED_VARIABLE_LY},
@@ -119,9 +133,13 @@ TO_QSPI static const struct reservedRegister wordlist[] =
     {"FV",RESERVED_VARIABLE_FV},
     {"I%/a",RESERVED_VARIABLE_IPONA}
   };
+#if (defined __GNUC__ && __GNUC__ + (__GNUC_MINOR__ >= 6) > 4) || (defined __clang__ && __clang_major__ >= 3)
+#pragma GCC diagnostic pop
+#endif
 
-const struct reservedRegister *
-lookupReservedVariableName (register const char *str, register unsigned int len)
+
+static const struct reservedRegister *
+lookupReservedVariableName (const char *str, unsigned int len)
 {
   if(len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
     {
@@ -129,11 +147,11 @@ lookupReservedVariableName (register const char *str, register unsigned int len)
 
       if(key <= MAX_HASH_VALUE)
         {
-          register const char *s = wordlist[key].name;
+          const char *s = wordlist[key].name;
 
           if(s && *str == *s && !strcmp (str + 1, s + 1))
             return &wordlist[key];
         }
     }
-  return 0;
+  return NULL;
 }

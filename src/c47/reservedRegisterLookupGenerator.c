@@ -42,9 +42,6 @@ struct {
   {1, 'V',  0,   0,   0,   0,   0},
   {1, 'W',  0,   0,   0,   0,   0},
 #endif
-
-//The gperf generator does not need a row per enum. It only needs rows for names that should resolve, therefore I remove the SPARE1-5 items. Return them when used again with valid names
-
   {{3, 'A', 'C', 'C',  0,   0,   0 }, "RESERVED_VARIABLE_ACC" },
   {{5, 161, 145, 'L', 'i', 'm',  0 }, "RESERVED_VARIABLE_ULIM" },
   {{5, 161, 147, 'L', 'i', 'm',  0 }, "RESERVED_VARIABLE_LLIM" },
