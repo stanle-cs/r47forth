@@ -1838,11 +1838,15 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     refreshScreen(163);
 
     // The following lines are test data
-    #if !defined(SAVE_SPACE_DM42_14)
+    #if defined(TESTSUITE_BUILD)
+        addTestPrograms();
+    #elif !defined(SAVE_SPACE_DM42_14)
                                    #if defined(PC_BUILD) && (VERBOSE_LEVEL > -1)
                                      printf("addTestPrograms\n");
                                    #endif
-      addTestPrograms();
+      if(loadTestPrograms) {
+        addTestPrograms();
+      }
     #endif // !SAVE_SPACE_DM42_14
 
     // Equation formulae
@@ -1873,16 +1877,18 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
                                      printf("Populate test data\n");
                                    #endif
     //JM TEMPORARY TEST DATA IN REGISTERS
-    uint16_t n = nbrOfElements(indexOfStrings);
-    for(uint16_t i=0; i<n; i++) {
-      if(indexOfStrings[i].itemType == 0) {
-        fnStrtoX(indexOfStrings[i].itemName);
+    if(loadTestData) {
+      uint16_t n = nbrOfElements(indexOfStrings);
+      for(uint16_t i=0; i<n; i++) {
+        if(indexOfStrings[i].itemType == 0) {
+          fnStrtoX(indexOfStrings[i].itemName);
+        }
+        else if(indexOfStrings[i].itemType == 1) {
+          fnStrInputLongint(indexOfStrings[i].itemName);
+        }
+        fnStore(indexOfStrings[i].count);
+        fnDrop(NOPARAM);
       }
-      else if(indexOfStrings[i].itemType == 1) {
-        fnStrInputLongint(indexOfStrings[i].itemName);
-      }
-      fnStore(indexOfStrings[i].count);
-      fnDrop(NOPARAM);
     }
 
     //Initialize Printer status
