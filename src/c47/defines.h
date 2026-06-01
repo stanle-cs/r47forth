@@ -390,6 +390,46 @@
 #undef INLINE_TEST                    //^^
 
 
+#if defined(T47)
+  #undef  MONITOR_IRPRINT
+  #undef  REFRESH_ON_SCREEN_MONITOR
+  #undef  DM42_KEYCLICK
+  #undef  DM42_POWERMARKS
+  #undef  DM42_POWERMARK_KEYPRESS
+  #undef  CLICK_REFRESHSCR
+  #undef  BATTERYTEST
+  #undef  MONITOR_VOLTAGE_INTEGRATOR
+  #undef  DEBUG_SHOWNAME
+  #undef  DEBUGSFN
+  #define DEBUGSFN false
+  #undef  FN_TIME_DEBUG1
+  #undef  VERBOSE_MINIMUM
+  #undef  VERBOSEKEYS
+  #undef  VERBOSEKEYS_BUFFERED
+  #undef  VERBOSEKEYS_AUTOCASE
+  #undef  MONITOR_CLRSCR
+  #undef  ANALYSE_REFRESH
+  #undef  PC_BUILD_TELLTALE
+  #undef  VERBOSE_DETERMINEITEM
+  #undef  VERBOSE_REGISTERS
+  #undef  GRAPHDEBUG
+  #undef  DEBUG_STAT
+  #define DEBUG_STAT 0
+  #undef  STATDEBUG
+  #undef  STATDEBUG_VERBOSE
+  #undef  DEBUGUNDO
+  #undef  DEBUG_EXECUTE
+  #undef  DEBUG_PGM
+  #undef  PAIMDEBUG
+  #undef  VERBOSE_LEVEL
+  #define VERBOSE_LEVEL -1
+  #undef  VERBOSE_COUNTER
+  #undef  PC_BUILD_VERBOSE0
+  #undef  PC_BUILD_VERBOSE1
+  #undef  PC_BUILD_VERBOSE2
+  #undef  VERBOSE_SCREEN
+  #undef  INLINE_TEST
+#endif // T47
 
 
 #define NOMATRIXCURSORS             //JM allow matrix editing to be navigated by up down keys
@@ -613,6 +653,14 @@
 #define AIM_BUFFER_LENGTH                       1024 // WP=199 double byte glyphs + trailing 0 + 1 byte to round up to a 4 byte boundary; JM increase from WP43 to 512*2 so as to exceed the 508*2+extras;
 #define TAM_BUFFER_LENGTH                         32 // TODO: find the exact maximum needed
 #define NIM_BUFFER_LENGTH                        200 // TODO: find the exact maximum needed
+
+#if defined(PATH_MAX)
+  #define C47_PATH_MAX PATH_MAX
+#elif defined(MAX_PATH)
+  #define C47_PATH_MAX MAX_PATH
+#else
+  #define C47_PATH_MAX 1024
+#endif
 
 #define DEBUG_LINES                               68 // Used in for the debug panel
 

@@ -1,0 +1,58 @@
+# Regression test for parameterized catalog commands (T47 arg parsing).
+#
+# Commands exercised:
+#   nim       stack literals
+#   STO/RCL   direct Tcl cmds (valid identifiers + register arg)
+#   catfn     catalog fn by name + args (required for STO+/-, RCL+/-, …)
+#   xeq       same fallback path as catfn for non-identifier names
+#
+# Run:
+#   ./t47 --headless --script res/SCRIPTS/args.t47
+
+# --- argless (unchanged behavior) ---
+nim 1.234
+sin
+clx
+
+# --- basic store/recall (direct commands) ---
+nim 10
+sto 00
+clx
+rcl 00
+
+nim 5
+sto X
+rcl X
+
+# --- store/recall arithmetic (catfn: names are not Tcl identifiers) ---
+nim 10
+sto 00
+
+nim 3
+catfn STO+ 00
+clx
+rcl 00
+
+nim 2
+catfn STO- 00
+clx
+rcl 00
+
+nim 4
+catfn RCL+ 00
+clx
+rcl 00
+
+nim 1
+xeq RCL- 00
+
+# --- lettered register target ---
+nim 99
+sto Y
+nim 1
+catfn STO+ Y
+rcl Y
+
+# --- flags (direct: SF/CF are valid identifiers) ---
+sf 05
+cf 05
