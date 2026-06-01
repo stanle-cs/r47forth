@@ -884,6 +884,12 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     char oneParam[200];
 
     doFnReset(CONFIRMED, loadAutoSav);
+
+    if(loadTestPrograms) { // if test programs loaded. do not continue loading the backup.cfg file
+      refreshScreen(9100);
+      return;
+    }
+
     ret = ioFileOpen(ioPathBackup, ioModeRead);
 
     if(ret != FILE_OK ) {

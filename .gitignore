@@ -5,6 +5,7 @@
 /wp43
 /c47
 /r47
+/t47
 /testSuite
 /generate*
 /ttf2RasterFonts
@@ -17,11 +18,7 @@
 backup.bin
 backup.cfg
 backupR47.cfg
-<<<<<<< HEAD
-wp43.sav
-=======
 wp43.sav    
->>>>>>> master
 wp43.dat
 c47.sav
 c47.dat
@@ -113,11 +110,10 @@ massif.out.*
 bb.out
 bb.out.*
 
-
-
 ### vscode ###
 /.vscode
 *.code-workspace
+.cache
 
 ### Windows ###
 # Windows thumbnail cache files

@@ -42,6 +42,18 @@ uint8_t *lcd_line_addr(int row) {
 }
 
 
+bool_t lcd_buffer_pixel_on(uint32_t x, uint32_t y) {
+  if(x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT) {
+    return false;
+  }
+  const uint8_t *line_buf = lcd_buffer + 52 * y;
+  const uint32_t bitIndex = SCREEN_WIDTH - 1 - x;
+  const uint32_t byte_i = bitIndex >> 3;
+  const uint32_t bit_j = bitIndex & 7u;
+  return (line_buf[2 + byte_i] >> bit_j) & 1u;
+}
+
+
 void LCD_write_line(uint8_t *line_buf) {
   if(line_buf[1] >= SCREEN_HEIGHT) {
     char tmp[1000];
