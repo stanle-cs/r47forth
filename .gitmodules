@@ -4,3 +4,6 @@
 [submodule "dep/DMCP5_SDK"]
 	path = dep/DMCP5_SDK
 	url = https://github.com/swissmicros/DMCP5_SDK.git
+[submodule "dep/jimtcl"]
+	path = dep/jimtcl
+	url = https://github.com/msteveb/jimtcl.git
