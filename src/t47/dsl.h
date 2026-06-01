@@ -11,5 +11,6 @@
 void initDSL(void);
 int executeScript(const char *scriptFile);
 void cleanupDSL(void);
+int executeCommand(const char *command);
 
 #endif

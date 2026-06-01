@@ -189,15 +189,24 @@ static int cmdCatalogFn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 /**
  * Check if a string is a valid Tcl identifier.
  */
+/**
+ * Check if a string is a bare Tcl command name: it contains no characters Tcl parses structurally. Looser than a
+ * Tcl identifier so operator/punctuation catalog names like "+", "x!", "1/x" register as bare commands.
+ */
 static bool_t validTclIdentifier(const char *str) {
     if(str[0] == '\0') {
         return FALSE;
     }
-    if(!isalpha(str[0]) && str[0] != '_') {
-        return FALSE;
+    if(str[0] == '#') {
+        return FALSE;  // leading # is a comment to Tcl
     }
-    for(int i = 1; str[i]; ++i) {
-        if(!isalnum(str[i]) && str[i] != '_') {
+    for(int i = 0; str[i]; ++i) {
+        unsigned char c = (unsigned char)str[i];
+        if(isspace(c)) {
+            return FALSE;
+        }
+        if(c == '$' || c == '[' || c == ']' || c == '{' || c == '}' ||
+           c == ';' || c == '"' || c == '\\' || c == '(' || c == ')') {
             return FALSE;
         }
     }
@@ -531,7 +540,14 @@ static int nim(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         Jim_SetResultString(interp, "nim: missing string argument", -1);
         return JIM_ERR;
     }
-    for(const char *p = Jim_String(argv[1]); *p != 0; p++) {
+    printf("NIM: "); // NIM sequentially accepts numerals and - as typed. That means -4.5E-5 is to be entered as [4.5 - E5 -] and this is automated below
+    const char *start = Jim_String(argv[1]);
+    bool_t inExponent = FALSE;
+    bool_t mantissaNeg = FALSE;
+    bool_t exponentNeg = FALSE;
+    bool_t signEmitted = FALSE;  // mantissa CHS already sent before E
+    for(const char *p = start; *p != 0; p++) {
+        printf("%c", *p);
         int16_t item;
         if(*p >= '0' && *p <= '9') {
             item = ITM_0 + (*p - '0');
@@ -540,21 +556,57 @@ static int nim(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
             item = ITM_PERIOD;
         }
         else if(*p == '-') {
-            item = ITM_CHS;
+            // Defer the sign: a leading '-' negates the mantissa, a '-' right after E negates the exponent. Either
+            // way the CHS is applied after that component's digits, simulate key entry (you type 4 then CHS, not -4).
+            if(!inExponent && p == start) {
+                mantissaNeg = TRUE;
+            }
+            else if(inExponent && (*(p - 1) == 'e' || *(p - 1) == 'E')) {
+                exponentNeg = TRUE;
+            }
+            else {
+                printf("\n");
+                fflush(stdout);
+                Jim_SetResultFormatted(interp, "nim: unexpected '-' at position %d", (int)(p - start));
+                return JIM_ERR;
+            }
+            continue;
         }
         else if(*p == 'e' || *p == 'E') {
+            // Mantissa is complete: emit its deferred sign before the E.
+            if(mantissaNeg && !signEmitted) {
+                addItemToNimBuffer(ITM_CHS);
+                refreshRegisterLine(REGISTER_X);
+                signEmitted = TRUE;
+            }
+            inExponent = TRUE;
             item = ITM_EXPONENT;
         }
         else if(*p == ' ') {
-            continue;
+            //break;  // space terminates the number
+            continue;  // skip embedded spaces
         }
         else {
+            printf("\n");
+            fflush(stdout);
             Jim_SetResultFormatted(interp, "nim: invalid character '%c' (expected 0-9, . , - e E or space)", *p);
             return JIM_ERR;
         }
         addItemToNimBuffer(item);
         refreshRegisterLine(REGISTER_X);
     }
+    // Emit any still-pending signs at end of number.
+    if(mantissaNeg && !signEmitted) {
+        addItemToNimBuffer(ITM_CHS);   // no exponent: mantissa sign at end
+        refreshRegisterLine(REGISTER_X);
+    }
+    if(exponentNeg) {
+        addItemToNimBuffer(ITM_CHS);   // exponent sign at end
+        refreshRegisterLine(REGISTER_X);
+    }
+
+    printf("\n");
+    fflush(stdout);
     closeNim();
     return JIM_OK;
 }
@@ -683,6 +735,26 @@ static int tsvfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
     return JIM_OK;
 }
 
+static void reportIfDslErrorAndEnd(Jim_Interp *interp, int ret) {
+    if(ret != JIM_OK) {
+        const char *errorMsg = Jim_GetString(Jim_GetResult(interp), NULL);
+        fprintf(stderr, "%s\n", errorMsg);
+        fflush(stderr);
+        
+        // Try to get and print stack trace
+        Jim_Obj *traceObj = Jim_GetVariableStr(interp, "errorInfo", 0);
+        if(traceObj) {
+            const char *trace = Jim_GetString(traceObj, NULL);
+            fprintf(stderr, "%s\n", trace);
+            fflush(stderr);
+        }
+    } else {
+        printf("End of script.\n");
+        printRegisterToConsole(REGISTER_X,"Register X:","\n");
+        fflush(stdout);
+    }
+}
+
 // =====================================================================
 // DSL Execution - Reads a line at a time from the script and passes it
 // to Jim Tcl for evaluation.
@@ -701,20 +773,18 @@ int executeScript(const char *scriptFile) {
         ret = Jim_EvalFile(interp, scriptFile);
     }
     
-    // Handle errors - print to stderr with stack trace if available
-    if(ret != JIM_OK) {
-        const char *errorMsg = Jim_GetString(Jim_GetResult(interp), NULL);
-        fprintf(stderr, "%s\n", errorMsg);
-        fflush(stderr);
-        
-        // Try to get and print stack trace
-        Jim_Obj *traceObj = Jim_GetVariableStr(interp, "errorInfo", 0);
-        if(traceObj) {
-            const char *trace = Jim_GetString(traceObj, NULL);
-            fprintf(stderr, "%s\n", trace);
-            fflush(stderr);
-        }
-    }
+    reportIfDslErrorAndEnd(interp, ret);
+    
+    return ret;
+}
+
+int executeCommand(const char *command) {
+    int ret;
+    
+    Jim_Interp *interp = g_dsl_interpreter;
+    ret = Jim_Eval(interp, command);
+    
+    reportIfDslErrorAndEnd(interp, ret);
     
     return ret;
 }
