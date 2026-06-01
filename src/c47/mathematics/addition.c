@@ -451,6 +451,15 @@ static void _addString(const char *stringToAppend) {
   }
 }
 
+static void _trimLeadingSpace(char *stringToTrim) {
+  int16_t len;
+  
+  if(*stringToTrim == ' ') {
+    len = stringByteLength(stringToTrim);
+    xcopy(stringToTrim, stringToTrim + 1, len);
+  }
+}
+
 /********************************************//**
  * \brief Y(string) + X(long integer) ==> X(string)
  *
@@ -556,6 +565,7 @@ void addStriReal(void) {
   }
   else {
     real34ToDisplayString(REGISTER_REAL34_DATA(REGISTER_X), getRegisterAngularMode(REGISTER_X), tmpString, &standardFont, SCREEN_WIDTH, NUMBER_OF_DISPLAY_DIGITS, !LIMITEXP, FRONTSPACE, FULLIRFRAC);
+    _trimLeadingSpace(tmpString);
   }
   _addString(tmpString);
 }
@@ -570,6 +580,7 @@ void addStriReal(void) {
  ***********************************************/
 void addStriCplx(void) {
   complex34ToDisplayString(REGISTER_COMPLEX34_DATA(REGISTER_X), tmpString, &numericFont, SCREEN_WIDTH, NUMBER_OF_DISPLAY_DIGITS, !LIMITEXP, FRONTSPACE, FULLIRFRAC, currentAngularMode, getSystemFlag(FLAG_POLAR));
+  _trimLeadingSpace(tmpString);
   _addString(tmpString);
 }
 
