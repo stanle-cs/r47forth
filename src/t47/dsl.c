@@ -189,9 +189,6 @@ static int cmdCatalogFn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
- * Check if a string is a valid Tcl identifier.
- */
-/**
  * Check if a string is a bare Tcl command name: it contains no characters Tcl parses structurally. Looser than a
  * Tcl identifier so operator/punctuation catalog names like "+", "x!", "1/x" register as bare commands.
  */
@@ -763,7 +760,7 @@ static void reportIfDslErrorAndEnd(Jim_Interp *interp, int ret) {
             fflush(stderr);
         }
     } else {
-        printf("End of script.\n");
+        printf("End of script.\n- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n");
         printRegisterToConsole(REGISTER_X,"Register X:","\n");
         fflush(stdout);
     }
@@ -864,6 +861,7 @@ void initDSL(void) {
         fflush(stdout);
         exit(0);
     }
+    printf("Registered %zu of %zu possible catalog functions for T47.\n- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n", added, total);
     fflush(stdout);
     
     // Register DSL commands afterward so that our commands having the

@@ -306,7 +306,11 @@
         printf("%s47 --hp35                : Setting profile: HP-35 tribute\n\n", cc);
         printf("%s47 --deadkeys            : typewriter style dead keys\n", cc);
         printf("%s47 --swapctrlcode        : ctrl fix for Swiss keyboards\n", cc);
-        printf("%s47 --mockup              : output demo status bar layout\n", cc);
+        printf("%s47 --testPgms            : load the test programs testPgms.bin if present; reset calculator with testPgms and create new backup.cfg when exit\n", cc);
+        printf("%s47 --testData            : load the test data in Reg 10 to Reg 38\n", cc);
+        printf("%s47 --help                : list all SIM switches\n", cc);
+        printf("%s47 --h, %s47 -h           : see --help\n\n", cc, cc);
+        printf("Dev and Automation\n%s47 --mockup              : output demo status bar layout\n", cc);
         printf("%s47 --dumpMenus1 [path]   : output all static menus to drive; old file name format 'Menu_140_p1_RIBBONS.bmp'; default folder 'menuDump' (auto headless mode)\n", cc);
         printf("%s47 --dumpMenus2 [path]   : output all static menus to drive; new file name format 'RIBBONS.1.bmp';           default folder 'menuDump' (auto headless mode)\n", cc);
         printf("%s47 --dumpMenusAll [path] : RefDB47 superset: every static menu incl. 1stDeriv/2ndDeriv/Sf/Solver/Grapher/SHOW; new file name format; default folder 'menuDump' (auto headless mode)\n", cc);
@@ -315,10 +319,6 @@
         printf("%s47 --exec <commands>     : execute DSL commands inline, ┬ e.g. ./t47 --exec 'nim 123; x!'\n", cc);
         printf("%s47 --e, %s47 -e <commands>: see --exec,                  ┴ e.g. ./t47 --exec 'nim 3; nim -4; xeq yˣ'\n", cc, cc);
         printf("%s47 --headless            : suppress GTK interface startup\n", cc);
-        printf("%s47 --testPgms            : load the test programs testPgms.bin if present; reset calculator with testPgms and create new backup.cfg when exit\n", cc);
-        printf("%s47 --testData            : load the test data in Reg 10 to Reg 38\n", cc);
-        printf("%s47 --help                : list all SIM switches\n", cc);
-        printf("%s47 --h                   : see --help\n", cc);
         printf("%s47 --dslcommands         : write registered DSL commands to ./t47-dsl-Commands.txt\n", cc);
         #if defined(_WIN32)
           printf("\nExample for command line operation: \n  %s47.exe --headless --script res/SCRIPTS/example.t47\n", cc);
