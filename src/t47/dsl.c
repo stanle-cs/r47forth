@@ -202,6 +202,13 @@ static bool_t validTclIdentifier(const char *str) {
     if(str[0] == '#') {
         return FALSE;  // leading # is a comment to Tcl
     }
+    // Reject names equal to a native Tcl operator token so the DSL does not shadow Tcl's +,-,*,/,% (use xeq + etc instead)
+    TO_QSPI static const char *tclOperators[] = { "+", "-", "*", "/", "%", NULL };
+    for(int i = 0; tclOperators[i] != NULL; ++i) {
+        if(strcmp(str, tclOperators[i]) == 0) {
+            return FALSE;
+        }
+    }
     for(int i = 0; str[i]; ++i) {
         unsigned char c = (unsigned char)str[i];
         if(isspace(c)) {
@@ -231,7 +238,10 @@ static bool_t registerCatFn(Jim_Interp *interp, const char *name, void *idx, cha
     if(compareString(name, name, CMP_NAME) == 0 &&
             validTclIdentifier(cmdName)) {
         for(int i = 0; cmdName[i]; ++i) {
-            cmdName[i] = tolower((unsigned char)cmdName[i]);
+            unsigned char c = (unsigned char)cmdName[i];
+            if(c < 0x80) {
+                cmdName[i] = tolower(c);
+            }
         }
         Jim_CreateCommand(interp, cmdName, cmdCatalogFn, idx, NULL);
         return TRUE;
@@ -462,7 +472,9 @@ static int catfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     const char *filename = (argc > 1) ? Jim_String(argv[1]) : "";
-    if(strlen(filename) > 0) setReadpFilenameOverride(filename);
+    if(strlen(filename) > 0) {
+        setReadpFilenameOverride(filename);
+    }
     fnLoadProgram(0);
     return JIM_OK;
 }
