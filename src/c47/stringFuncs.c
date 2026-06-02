@@ -4,6 +4,17 @@
 #include "c47.h"
 
 
+void trimLeadingSpace(char *stringToTrim) {
+  int16_t len;
+  
+  if(*stringToTrim == ' ') {
+    len = stringByteLength(stringToTrim);
+    xcopy(stringToTrim, stringToTrim + 1, len);
+  }
+}
+
+
+
 void fnClearAlpha(uint16_t regist) {
   reallocateRegister(regist, dtString, 1, amNone);
   *(REGISTER_STRING_DATA(regist)) = 0;
@@ -82,8 +93,224 @@ void fnAlphaToX(uint16_t regist) {
 }
 
 
+static void _readDestinationRegister(uint16_t regist) {
+  switch(getRegisterDataType(regist)) {
+    case dtLongInteger: {
+      longIntegerRegisterToDisplayString(regist, tmpString, TMP_STR_LENGTH, SCREEN_WIDTH, 50, STD_SPACE_PUNCTUATION);
+      break;
+    }
 
-void fnXToAlpha(uint16_t unusedButMandatoryParameter) {
+    case dtTime: {
+      timeToDisplayString(regist, tmpString, false);
+      break;
+    }
+
+    case dtDate: {
+      dateToDisplayString(regist, tmpString);
+      break;
+    }
+
+    case dtString: {
+      xcopy(tmpString, REGISTER_STRING_DATA(regist), stringByteLength(REGISTER_STRING_DATA(regist)) + 1);
+      break;
+    }
+
+    case dtReal34Matrix: {
+      real34MatrixToDisplayString(regist, tmpString);
+      break;
+    }
+
+    case dtComplex34Matrix: {
+      complex34MatrixToDisplayString(regist, tmpString);
+      break;
+    }
+
+    case dtShortInteger: {
+      shortIntegerToDisplayString(regist, tmpString, false, noBaseOverride);
+      break;
+    }
+
+    case dtReal34: {
+      real34ToDisplayString(REGISTER_REAL34_DATA(regist), getRegisterAngularMode(regist), tmpString, &standardFont, SCREEN_WIDTH, NUMBER_OF_DISPLAY_DIGITS, false, STD_SPACE_PUNCTUATION, true);
+      trimLeadingSpace(tmpString);
+      break;
+    }
+
+    case dtComplex34: {
+      complex34ToDisplayString(REGISTER_COMPLEX34_DATA(regist), tmpString, &numericFont, SCREEN_WIDTH, NUMBER_OF_DISPLAY_DIGITS, false, STD_SPACE_PUNCTUATION, true, getComplexRegisterAngularMode(regist), getComplexRegisterPolarMode(regist));
+      trimLeadingSpace(tmpString);
+      break;
+    }
+
+    default: {
+      tmpString[0] = 0;
+      break;
+    }
+  }
+}
+
+
+static void _doXToAlpha(uint16_t regist) {
+  longInteger_t lgInt;
+  unsigned char char1, char2;
+
+  longIntegerInit(lgInt);
+  switch(getRegisterDataType(REGISTER_X)) {
+    case dtLongInteger: {
+      convertLongIntegerRegisterToLongInteger(REGISTER_X, lgInt);
+      break;
+    }
+
+    case dtReal34: {
+      if(real34CompareAbsGreaterThan(REGISTER_REAL34_DATA(REGISTER_X), const34_1e6)) {
+        uInt32ToLongInteger(1000000, lgInt);
+      }
+      else {
+        convertReal34ToLongInteger(REGISTER_REAL34_DATA(REGISTER_X), lgInt, DEC_ROUND_DOWN);
+      }
+      break;
+    }
+
+    case dtShortInteger: {
+      convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
+      break;
+    }
+
+    case dtReal34Matrix: {
+      convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
+      break;
+    }
+
+    default: {
+      displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        sprintf(errorMessage, "cannot x" STD_RIGHT_ARROW STD_alpha " when X is %s", getRegisterDataTypeName(REGISTER_X, true, false));
+        moreInfoOnError("In function _doXToAlpha:", errorMessage, NULL, NULL);
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+
+      return;
+    }
+  }
+
+  longIntegerSetPositiveSign(lgInt);
+  //if(longIntegerCompareUInt(lgInt, standardFont.glyphs[standardFont.numberOfGlyphs - 1].charCode & 0x7fff) > 0) {
+  if(longIntegerCompareUInt(lgInt, 0x8000) >= 0) {
+    displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "for x" STD_RIGHT_ARROW STD_alpha ", X must be < 32768. Here X = %" PRIu32, (uint32_t)lgInt->_mp_d[0]); // OK for 32 and 64 bit limbs
+      moreInfoOnError("In function _doXToAlpha:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
+    return;
+  }
+
+  if(longIntegerIsZero(lgInt)) {
+    char1 = 0;
+    char2 = 0;
+  }
+  else if(lgInt->_mp_d[0] < 0x0080) {      // OK for 32 and 64 bit limbs
+    char1 = lgInt->_mp_d[0];               // OK for 32 and 64 bit limbs
+    char2 = 0;
+  }
+  else {
+    char1 = (lgInt->_mp_d[0] >> 8) | 0x80; // OK for 32 and 64 bit limbs
+    char2 = lgInt->_mp_d[0] & 0x00ff;      // OK for 32 and 64 bit limbs
+  }
+
+  longIntegerFree(lgInt);
+
+  if (regist != REGISTER_X) {
+    _readDestinationRegister(regist);
+  }
+  else {
+    tmpString[0] = 0;      // If destination register is X just return the alpha character from the character code
+  }
+
+  if(stringGlyphLength(tmpString) >= MAX_NUMBER_OF_GLYPHS_IN_STRING) {
+    displayCalcErrorMessage(ERROR_STRING_WOULD_BE_TOO_LONG, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "the resulting string would be %d characters long. Maximum is %d", stringGlyphLength(tmpString) + 1, MAX_NUMBER_OF_GLYPHS_IN_STRING);
+      moreInfoOnError("In function _doXToAlpha:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
+  }
+  else {
+    int l = stringByteLength(tmpString);
+    tmpString[l]       = char1;
+    tmpString[l + 1]   = char2;
+    if(char2) {
+      tmpString[l + 2] = 0;
+      ++l;
+    }
+    ++l;
+
+    reallocateRegister(regist, dtString, l + 1, amNone);
+    xcopy(REGISTER_STRING_DATA(regist), tmpString, l + 1);
+  }
+
+}
+
+
+void fnXToAlpha(uint16_t regist) {   // new version, similar to the hp-42s ATOX function
+  if(!saveLastX()) {
+    return;
+  }
+
+  switch(getRegisterDataType(REGISTER_X)) {
+    case dtLongInteger:
+    case dtReal34:
+    case dtShortInteger: {
+      _doXToAlpha(regist);
+      return;
+    }
+
+    case dtString: {
+      _readDestinationRegister(regist);
+      if(stringGlyphLength(tmpString) + stringGlyphLength(REGISTER_STRING_DATA(REGISTER_X)) > MAX_NUMBER_OF_GLYPHS_IN_STRING) {
+        displayCalcErrorMessage(ERROR_STRING_WOULD_BE_TOO_LONG, ERR_REGISTER_LINE, REGISTER_X);
+        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+          sprintf(errorMessage, "the resulting string would be %d (%d + %d) characters long. Maximum is %d",
+            stringGlyphLength(tmpString) + stringGlyphLength(REGISTER_STRING_DATA(REGISTER_X)),
+            stringGlyphLength(tmpString),
+            stringGlyphLength(REGISTER_STRING_DATA(REGISTER_X)), MAX_NUMBER_OF_GLYPHS_IN_STRING);
+          moreInfoOnError("In function fnXToAlpha:", errorMessage, NULL, NULL);
+        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
+      }
+      else {
+        int l = stringByteLength(tmpString);
+        xcopy(tmpString + l, REGISTER_STRING_DATA(REGISTER_X), stringByteLength(REGISTER_STRING_DATA(REGISTER_X)) + 1);
+        l = stringByteLength(tmpString);
+        reallocateRegister(regist, dtString, l + 1, amNone);
+        xcopy(REGISTER_STRING_DATA(regist), tmpString, l + 1);
+      }
+      return;
+    }
+
+    case dtReal34Matrix: {
+      if (regist != REGISTER_X) {
+        elementwiseRema_UInt16(_doXToAlpha, regist);
+      }
+      else {                                 // if X is the destination register, just return in X a string composed of the character codes from the matrux in X
+        reallocateRegister(REGISTER_L, dtString, 1, amNone);
+        xcopy(REGISTER_STRING_DATA(REGISTER_L), "", 1);
+        elementwiseRema_UInt16(_doXToAlpha, REGISTER_L);
+        fnSwapX(REGISTER_L);
+      }
+      return;
+    }
+
+    default: {
+      displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        sprintf(errorMessage, "cannot x" STD_RIGHT_ARROW STD_alpha " when X is %s", getRegisterDataTypeName(REGISTER_X, true, false));
+        moreInfoOnError("In function fnXToAlpha:", errorMessage, NULL, NULL);
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
+      return;
+    }
+  }
+
+}
+
+
+void fnXToAlphaOld(uint16_t unusedButMandatoryParameter) {   // deprecated version, only for backward compatibility
   longInteger_t lgInt;
   unsigned char char1, char2;
 

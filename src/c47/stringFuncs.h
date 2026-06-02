@@ -14,9 +14,11 @@
   void fnAlphaSR       (uint16_t regist);
   void fnAlphaSL       (uint16_t regist);
   void fnAlphaPos      (uint16_t regist);
-  void fnXToAlpha      (uint16_t unusedButMandatoryParameter);
+  void fnXToAlphaOld   (uint16_t unusedButMandatoryParameter);
+  void fnXToAlpha      (uint16_t regist);
   void fnClearAlpha    (uint16_t regist);
   void fnAlphaIP       (uint16_t regist);
   void fn42AlphaRotate (uint16_t unusedButMandatoryParameter);
   void fn42AlphaShift  (uint16_t unusedButMandatoryParameter);
+  void trimLeadingSpace(char     *stringToTrim);
 #endif // !STRINGFUNCS_H

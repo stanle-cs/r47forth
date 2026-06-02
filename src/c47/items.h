@@ -1690,7 +1690,7 @@
 #define ITM_XW                      1642
 #define ITM_XCIRC                   1643
 #define ITM_XtoDATE                 1644
-#define ITM_XtoALPHA                1645
+#define ITM_XtoALPHA_OLD            1645 // deprecated, only for backward compatibility
 #define ITM_M_QR                    1646
 #define ITM_YEAR                    1647
 #define ITM_YCIRC                   1648
@@ -2888,7 +2888,7 @@
 #define ITM_2782                    2782 // 42BIT?
 #define ITM_2783                    2783 // 42→DEC
 #define ITM_2784                    2784 // 42→OCT
-#define ITM_2785                    2785
+#define ITM_XtoALPHA                2785
 #define ITM_2786                    2786
 #define ITM_2787                    2787
 #define ITM_2788                    2788
