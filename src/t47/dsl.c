@@ -19,6 +19,8 @@
 // Global state - declared in gtkGui.c
 extern bool_t scriptingActive;
 extern bool_t headlessMode;
+extern bool_t dumpDslCmds;
+static FILE *dslDumpFile = NULL;
 
 // External declaration for _ioFileNameOverride from hal/io.c
 extern char _ioFileNameOverride[C47_PATH_MAX];
@@ -810,21 +812,46 @@ void initDSL(void) {
     // Register 🟧 CAT FCNS entries as global commands.
     char cmdName[64];
     size_t added = 0, total = 0;
+    if(dumpDslCmds) {
+        dslDumpFile = fopen("./t47-dsl-Commands.txt", "w");
+        if(dslDumpFile != NULL) {
+            fprintf(dslDumpFile, "C47/R47/T47 registered commands\n");
+            fprintf(dslDumpFile, "\n");
+            fprintf(dslDumpFile, "%s\t%s\t%s\t%s\n", "nnnn", "reg", "cat", "menu");
+            fprintf(dslDumpFile, "%s\t%s\t%s\t%s\n", "----", "---", "---", "----");
+        }
+    }
     for(int i = 0; i < LAST_ITEM; ++i) {
 	item_t item = indexOfItems[i];
 	if((item.status & CAT_STATUS) == CAT_FNCT) {
 	    ++total;
 	    void* idx = (void*)(intptr_t)i;
-	    const char* catName = item.itemCatalogName;
-	    const char* smName  = item.itemSoftmenuName;
-	    if(registerCatFn(interp, catName, idx, cmdName, FALSE) ||
-	       registerCatFn(interp, smName,  idx, cmdName, TRUE)) {
+            char catName[64];
+            char smName[64];
+            stringToUtf8(item.itemCatalogName, (uint8_t *)catName);
+            stringToUtf8(item.itemSoftmenuName, (uint8_t *)smName);
+            // Pass the original internal names to registerCatFn; it converts to UTF-8 itself. The catName/smName UTF-8
+            // copies above are only for the dump columns. Passing them in here would double-convert and corrupt glyphs.
+            bool_t reg = registerCatFn(interp, item.itemCatalogName, idx, cmdName, FALSE);
+            if(!reg) {
+                reg = registerCatFn(interp, item.itemSoftmenuName, idx, cmdName, TRUE);
+            }
+            if(reg) {
 		++added;
+                if(dslDumpFile != NULL) {
+                    fprintf(dslDumpFile, "%d\t%s\t%s\t%s\n", i, cmdName, catName, smName);
+                }
 	    }
 	}
     }
-    printf("Registered %zu of %zu possible catalog functions for T47.\n",
-	added, total);
+    if(dslDumpFile != NULL) {
+        fprintf(dslDumpFile, "\nRegistered %zu of %zu possible catalog functions.\n", added, total);
+        fclose(dslDumpFile);
+        dslDumpFile = NULL;
+        printf("Registered commands written to ./t47-dsl-Commands.txt\n");
+        fflush(stdout);
+        exit(0);
+    }
     fflush(stdout);
     
     // Register DSL commands afterward so that our commands having the

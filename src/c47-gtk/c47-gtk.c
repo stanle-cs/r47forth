@@ -34,6 +34,7 @@
   bool_t              headlessMode = false;
   char               *menuDumpPath = NULL;
   char               *scriptCommand = NULL;
+  bool_t              dumpDslCmds = false;
 
   #if defined(EXPORT_ITEMS)
     int sortItems(void const *a, void const *b) {
@@ -197,7 +198,12 @@
             scriptFile = "-";
         }
       }
-      if(strcmp(argv[arg], "--exec") == 0) {
+      if(strcmp(argv[arg], "--dslcommands") == 0) {
+        dumpDslCmds = true;
+        headlessMode = true;
+        printf("Activated: --dslcommands\n");
+      }
+      if(strcmp(argv[arg], "--exec") == 0 || strcmp(argv[arg], "--e") == 0 || strcmp(argv[arg], "-e") == 0) {
         printf("Activated: %s\n", argv[arg]);
         if(arg+1 < argc) {
           scriptCommand = argv[++arg];
@@ -306,13 +312,14 @@
         printf("%s47 --dumpMenusAll [path] : RefDB47 superset: every static menu incl. 1stDeriv/2ndDeriv/Sf/Solver/Grapher/SHOW; new file name format; default folder 'menuDump' (auto headless mode)\n", cc);
         printf("%s47 --writeexportall      : output all PROGs (internal use)\n", cc);
         printf("%s47 --script <file>       : execute DSL script from file or - for stdin\n", cc);
-        printf("%s47 --exec <commands>     : execute DSL commands inline, e.g. ./t47 --exec 'nim 123; xeq x!'\n", cc);
-        printf("%s47                                                      e.g. ./t47 --exec 'nim 3; nim -4; xeq yˣ'\n", cc);
+        printf("%s47 --exec <commands>     : execute DSL commands inline, ┬ e.g. ./t47 --exec 'nim 123; x!'\n", cc);
+        printf("%s47 --e, %s47 -e <commands>: see --exec,                  ┴ e.g. ./t47 --exec 'nim 3; nim -4; xeq yˣ'\n", cc, cc);
         printf("%s47 --headless            : suppress GTK interface startup\n", cc);
         printf("%s47 --testPgms            : load the test programs testPgms.bin if present; reset calculator with testPgms and create new backup.cfg when exit\n", cc);
         printf("%s47 --testData            : load the test data in Reg 10 to Reg 38\n", cc);
         printf("%s47 --help                : list all SIM switches\n", cc);
         printf("%s47 --h                   : see --help\n", cc);
+        printf("%s47 --dslcommands         : write registered DSL commands to ./t47-dsl-Commands.txt\n", cc);
         #if defined(_WIN32)
           printf("\nExample for command line operation: \n  %s47.exe --headless --script res/SCRIPTS/example.t47\n", cc);
           printf(  "Cmd returns the prompt before output ends. Run via 'start /wait %s47.exe ...' or pipe '| more' to prevent that.\n\n", cc);
