@@ -632,7 +632,7 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         Jim_SetResultString(interp, "press: missing key code argument", -1);
         return JIM_ERR;
     }
-    
+
     if(Jim_IsList(argv[1])) {
         int listLen = Jim_ListLength(interp, argv[1]);
         for(int i = 0; i < listLen; i++) {
@@ -651,7 +651,7 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
             return JIM_ERR;
         }
     }
-    
+
     return JIM_OK;
 }
 
@@ -664,7 +664,7 @@ static int loadst(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         strncpy(_ioFileNameOverride, Jim_String(argv[1]), C47_PATH_MAX - 1);
         _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
     }
-    
+
     fnLoad(LM_STATE_LOAD);
     return JIM_OK;
 }
@@ -678,7 +678,7 @@ static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         strncpy(_ioFileNameOverride, Jim_String(argv[1]), C47_PATH_MAX - 1);
         _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
     }
-    
+
     fnSave(SM_STATE_SAVE);
     return JIM_OK;
 }
@@ -751,7 +751,7 @@ static void reportIfDslErrorAndEnd(Jim_Interp *interp, int ret) {
         const char *errorMsg = Jim_GetString(Jim_GetResult(interp), NULL);
         fprintf(stderr, "%s\n", errorMsg);
         fflush(stderr);
-        
+
         // Try to get and print stack trace
         Jim_Obj *traceObj = Jim_GetVariableStr(interp, "errorInfo", 0);
         if(traceObj) {
@@ -773,30 +773,30 @@ static void reportIfDslErrorAndEnd(Jim_Interp *interp, int ret) {
 
 int executeScript(const char *scriptFile) {
     int ret;
-    
+
     Jim_Interp *interp = g_dsl_interpreter;
     if(strcmp(scriptFile, "-") == 0) {
-        ret = Jim_Eval(interp, 
+        ret = Jim_Eval(interp,
             "package require aio;"
             "eval [info source [stdin read] stdin 1]");
     } else {
         // Read from file
         ret = Jim_EvalFile(interp, scriptFile);
     }
-    
+
     reportIfDslErrorAndEnd(interp, ret);
-    
+
     return ret;
 }
 
 int executeCommand(const char *command) {
     int ret;
-    
+
     Jim_Interp *interp = g_dsl_interpreter;
     ret = Jim_Eval(interp, command);
-    
+
     reportIfDslErrorAndEnd(interp, ret);
-    
+
     return ret;
 }
 
@@ -806,18 +806,18 @@ int executeCommand(const char *command) {
 
 void initDSL(void) {
     scriptingActive = TRUE;
-    
+
     // unbuffered for the DSL session so all output is visible immediately.
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
-    
+
     // Create Jim interpreter
     Jim_Interp *interp = g_dsl_interpreter = Jim_CreateInterp();
-    
+
     // Register core Tcl commands
     Jim_RegisterCoreCommands(interp);
     Jim_InitStaticExtensions(interp);
-    
+
     // Register 🟧 CAT FCNS entries as global commands.
     char cmdName[64];
     size_t added = 0, total = 0;
@@ -831,10 +831,10 @@ void initDSL(void) {
         }
     }
     for(int i = 0; i < LAST_ITEM; ++i) {
-	item_t item = indexOfItems[i];
-	if((item.status & CAT_STATUS) == CAT_FNCT) {
-	    ++total;
-	    void* idx = (void*)(intptr_t)i;
+        item_t item = indexOfItems[i];
+        if((item.status & CAT_STATUS) == CAT_FNCT) {
+            ++total;
+            void* idx = (void*)(intptr_t)i;
             char catName[64];
             char smName[64];
             stringToUtf8(item.itemCatalogName, (uint8_t *)catName);
@@ -846,12 +846,12 @@ void initDSL(void) {
                 reg = registerCatFn(interp, item.itemSoftmenuName, idx, cmdName, TRUE);
             }
             if(reg) {
-		++added;
+                ++added;
                 if(dslDumpFile != NULL) {
                     fprintf(dslDumpFile, "%d\t%s\t%s\t%s\n", i, cmdName, catName, smName);
                 }
-	    }
-	}
+            }
+        }
     }
     if(dslDumpFile != NULL) {
         fprintf(dslDumpFile, "\nRegistered %zu of %zu possible catalog functions.\n", added, total);
@@ -863,7 +863,7 @@ void initDSL(void) {
     }
     printf("Registered %zu of %zu possible catalog functions for T47.\n- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n", added, total);
     fflush(stdout);
-    
+
     // Register DSL commands afterward so that our commands having the
     // same name as catalog functions override them.
     Jim_CreateCommand(interp, "catfn",  catfn,  NULL, NULL);
