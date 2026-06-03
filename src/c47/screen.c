@@ -5080,7 +5080,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
                 w = stringWidth(tmpString, getSystemFlag(FLAG_LARGELI) ? &numericFont : &standardFont, false, true);
                 int16_t tlen =stringByteLength(tmpString);
                 uint8_t savedDisplayFormat = displayFormat, savedDisplayFormatDigits = displayFormatDigits;
-                displayFormatDigits = 20;
+                displayFormatDigits = 33; //was 20 and should be 42 for full width, but it cannot be more then 33, due to the maximum Real presentation of Real34's
                 displayFormat = DF_SCI;
                 longIntegerRegisterToRealDisplayString(regist, tmpString+tlen, TMP_STR_LENGTH-tlen, SCREEN_WIDTH - prefixWidth - w, 0, toRemoveTrailingRadix);
                 displayFormat = savedDisplayFormat;
