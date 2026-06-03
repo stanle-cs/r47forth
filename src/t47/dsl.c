@@ -805,9 +805,9 @@ void initDSL(void) {
     char cmdName[64];
     size_t added = 0, total = 0;
     if(dumpDslCmds) {
-        dslDumpFile = fopen("./t47-dsl-Commands.txt", "w");
+        dslDumpFile = fopen("./t47-op-commands.txt", "w");
         if(dslDumpFile != NULL) {
-            fprintf(dslDumpFile, "C47/R47/T47 registered commands\n");
+            fprintf(dslDumpFile, "C47/R47 ops registered as T47 commands\n");
             fprintf(dslDumpFile, "\n");
             fprintf(dslDumpFile, "%s\t%s\t%s\t%s\n", "nnnn", "reg", "cat", "menu");
             fprintf(dslDumpFile, "%s\t%s\t%s\t%s\n", "----", "---", "---", "----");
