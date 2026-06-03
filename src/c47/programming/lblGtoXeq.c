@@ -809,16 +809,16 @@ int16_t executeOneStep(uint8_t *step) {
           if(op == ITM_42STRING) {
             if(*step++ == STRING_LABEL_VARIABLE) {
               _getStringLabelOrVariableName(step);
-              reallocateRegister(REGISTER_K, dtString, TO_BLOCKS(stringByteLength(tmpStringLabelOrVariableName) + 1), amNone);
-              xcopy(REGISTER_STRING_DATA(REGISTER_K), tmpStringLabelOrVariableName, stringByteLength(tmpStringLabelOrVariableName) + 1);
+              reallocateRegister(alphaRegister, dtString, TO_BLOCKS(stringByteLength(tmpStringLabelOrVariableName) + 1), amNone);
+              xcopy(REGISTER_STRING_DATA(alphaRegister), tmpStringLabelOrVariableName, stringByteLength(tmpStringLabelOrVariableName) + 1);
             }
           }
           else if(op == ITM_42APPEND) {
             if(*step++ == STRING_LABEL_VARIABLE) {
-              if(getRegisterDataType(REGISTER_K) != dtString) {
-                displayCalcErrorMessage(ERROR_NO_STRING_IN_REGISTER_K, ERR_REGISTER_LINE, REGISTER_T);
+              if(getRegisterDataType(alphaRegister) != dtString) {
+                displayCalcErrorMessage(ERROR_NO_STRING_IN_ALPHA_REGISTER, ERR_REGISTER_LINE, REGISTER_T);
                 #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-                  sprintf(errorMessage, "cannot use 42append on %s", getRegisterDataTypeName(REGISTER_K, true, false));
+                  sprintf(errorMessage, "cannot use 42append on %s", getRegisterDataTypeName(alphaRegister, true, false));
                   moreInfoOnError("In function executeOneStep:", errorMessage, NULL, NULL);
                 #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
                 return 0;
@@ -828,7 +828,7 @@ int16_t executeOneStep(uint8_t *step) {
               _getStringLabelOrVariableName(step);
               reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(stringByteLength(tmpStringLabelOrVariableName) + 1), amNone);
               xcopy(REGISTER_STRING_DATA(REGISTER_X), tmpStringLabelOrVariableName, stringByteLength(tmpStringLabelOrVariableName) + 1);
-              fnStoreAdd(REGISTER_K);
+              fnStoreAdd(alphaRegister);
               copySourceRegisterToDestRegister(LAST_TEMP_REGISTER, REGISTER_X);
             }
           }

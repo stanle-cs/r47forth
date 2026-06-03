@@ -2884,18 +2884,27 @@
 #define ITM_42ASTO                  2778
 #define ITM_42AROT                  2779
 #define ITM_42ASHF                  2780
-#define ITM_2781                    2781 // 42ROTXY
-#define ITM_2782                    2782 // 42BIT?
+#define ITM_42ROTXY                 2781
+#define ITM_42BITQ                  2782
 #define ITM_2783                    2783 // 42→DEC
 #define ITM_2784                    2784 // 42→OCT
 #define ITM_XtoALPHA                2785
-#define ITM_2786                    2786
-#define ITM_2787                    2787
-#define ITM_2788                    2788
-#define ITM_2789                    2789
-#define ITM_2790                    2790 //spares for 42s compatibility functions
+#define ITM_42AIP                   2786
+#define ITM_42ALENG                 2787
+#define ITM_42ATOX                  2788
+#define ITM_42AVIEW                 2789
+#define ITM_42CLA                   2790
+#define ITM_42POSA                  2791
+#define ITM_42PRA                   2792
+#define ITM_42XTOA                  2793
+#define ITM_42KEY                   2794
+#define ITM_42KEYG                  2795
+#define ITM_42KEYX                  2796
+#define ITM_42VRMNU                 2797
+#define ITM_2798                    2798
+#define ITM_2799                    2799 //spares for 42s compatibility functions
 
-#define LAST_ITEM                   2791
+#define LAST_ITEM                   2800
 
 #define SCREENDUMP                    9875 // Used to signal screen dump operated (not to be confused with SNAP)
 #define NOPARAM                       9876 // Item for function who don't need an item

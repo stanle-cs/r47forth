@@ -1899,6 +1899,9 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
                                    #endif
     runFunction(ITM_VERS);
 
+    //Initialize default alpha register
+    alphaRegister = REGISTER_K;
+    varMenu42 = false;
 
     //Autoloading of C47Auto.sav
     #if defined(DMCP_BUILD)

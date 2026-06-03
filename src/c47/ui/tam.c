@@ -96,7 +96,12 @@
     }
 
     if(tam.mode == TM_KEY) {
-      tbPtr = stringCopy(tbPtr, "KEY ");
+      if((tam.function == ITM_42KEYG) || (tam.function == ITM_42KEYX))  {
+        tbPtr = stringCopy(tbPtr, " 42KEY ");
+      }
+      else {
+        tbPtr = stringCopy(tbPtr, "KEY ");
+      }
       if(tam.keyInputFinished) {
         if(tam.keyIndirect) {
           tbPtr = stringCopy(tbPtr, STD_RIGHT_ARROW);
@@ -117,7 +122,7 @@
           }
           tbPtr += 2;
         }
-        if(tam.function == ITM_KEYX) {
+        if((tam.function == ITM_KEYX) || (tam.function == ITM_42KEYX))  {
           tbPtr = stringCopy(tbPtr, " XEQ ");
         }
         else {

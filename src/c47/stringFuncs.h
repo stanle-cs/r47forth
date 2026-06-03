@@ -20,5 +20,16 @@
   void fnAlphaIP       (uint16_t regist);
   void fn42AlphaRotate (uint16_t unusedButMandatoryParameter);
   void fn42AlphaShift  (uint16_t unusedButMandatoryParameter);
+  void fn42Aip         (uint16_t unusedButMandatoryParameter);
+  void fn42Aleng       (uint16_t unusedButMandatoryParameter);
+  void fn42Atox        (uint16_t unusedButMandatoryParameter);
+  void fn42Xtoa        (uint16_t unusedButMandatoryParameter);
+  void fn42Aview       (uint16_t unusedButMandatoryParameter);
+  void fn42Cla         (uint16_t unusedButMandatoryParameter);
+  void fn42Keyg        (uint16_t unusedButMandatoryParameter);
+  void fn42Keyx        (uint16_t unusedButMandatoryParameter);
+  void fn42Posa        (uint16_t unusedButMandatoryParameter);
+  void fn42Pra         (uint16_t unusedButMandatoryParameter);
+
   void trimLeadingSpace(char     *stringToTrim);
 #endif // !STRINGFUNCS_H

@@ -1466,10 +1466,19 @@ void insertStepInProgram(const int16_t func) {
     case PTP_DISABLED: {
       switch(func) {
         case ITM_KEYG:           // 1498
-        case ITM_KEYX: {         // 1499
+        case ITM_KEYX:           // 1499
+        case ITM_42KEYG:         // 2795
+        case ITM_42KEYX: {       // 2796
             int opLen;
-            tmpString[0] = (char)((ITM_KEY >> 8) | 0x80);
-            tmpString[1] = (char)( ITM_KEY       & 0xff);
+            uint16_t keyFunc;
+            if((func == ITM_42KEYG) || (func == ITM_42KEYX)) {
+              keyFunc = ITM_42KEY;
+            }
+            else {
+              keyFunc = ITM_KEY;
+            }
+            tmpString[0] = (char)((keyFunc >> 8) | 0x80);
+            tmpString[1] = (char)( keyFunc       & 0xff);
             if(tam.keyAlpha) {
               uint16_t nameLength = stringByteLength(aimBuffer + AIM_BUFFER_LENGTH / 2);
               tmpString[2] = (char)INDIRECT_VARIABLE;
@@ -1487,7 +1496,7 @@ void insertStepInProgram(const int16_t func) {
               opLen = 3;
             }
 
-            tmpString[opLen + 0] = (func == ITM_KEYX ? ITM_XEQ : ITM_GTO);
+            tmpString[opLen + 0] = (((func == ITM_KEYX) || (func == ITM_42KEYX)) ? ITM_XEQ : ITM_GTO);
             if(tam.alpha) {
               uint16_t nameLength = stringByteLength(aimBuffer);
               tmpString[opLen + 1] = (char)(tam.indirect ? INDIRECT_VARIABLE : STRING_LABEL_VARIABLE);
@@ -1801,6 +1810,8 @@ void addStepInProgram(int16_t func) {
         case ITM_GTOP:           // 1482
         case ITM_KEYG:           // 1498
         case ITM_KEYX:           // 1499
+        case ITM_42KEYG:         // 2795
+        case ITM_42KEYX:         // 2796
         case ITM_BST:            // 1734
         case ITM_SST: {          // 1736
           break;

@@ -1007,15 +1007,22 @@ void fnEdit (uint16_t unusedParamButMandatory) {
 
 
             case PARAM_KEYG_KEYX: {                            // Key Goto or Key eXecute
-              func = (opParam2 == ITM_GTO ? ITM_KEYG : ITM_KEYX);
+              if(func == ITM_KEY) {
+                func = (opParam2 == ITM_GTO ? ITM_KEYG : ITM_KEYX);
+              }
+              else {  // ITM_42KEY
+                func = (opParam2 == ITM_GTO ? ITM_42KEYG : ITM_42KEYX);
+              }
               deleteStepsFromTo(currentStep, findNextStep(currentStep));
+              if(!pemCursorIsZerothStep) {
+                fnBst(NOPARAM);
+              }
               runFunction(func);
               tamProcessInput(ITM_0 + opParam/10);
               tamProcessInput(ITM_0 + (opParam % 10));
               if((opParam3 == INDIRECT_REGISTER) || (opParam3 == INDIRECT_VARIABLE)) {
                 tamProcessInput(ITM_INDIRECTION);
               }
-              scrollPemBackwards();
               break;
             }
 

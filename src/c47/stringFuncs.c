@@ -6,7 +6,7 @@
 
 void trimLeadingSpace(char *stringToTrim) {
   int16_t len;
-  
+
   if(*stringToTrim == ' ') {
     len = stringByteLength(stringToTrim);
     xcopy(stringToTrim, stringToTrim + 1, len);
@@ -782,10 +782,10 @@ void fnAlphaSL(uint16_t regist) {
 void fn42AlphaRotate(uint16_t unusedButMandatoryParameter) {
   longInteger_t lgInt;
 
-  if(getRegisterDataType(REGISTER_K) != dtString) {
-    displayCalcErrorMessage(ERROR_NO_STRING_IN_REGISTER_K, ERR_REGISTER_LINE, REGISTER_T);
+  if(getRegisterDataType(alphaRegister) != dtString) {
+    displayCalcErrorMessage(ERROR_NO_STRING_IN_ALPHA_REGISTER, ERR_REGISTER_LINE, REGISTER_T);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "cannot use 42AROT on %s", getRegisterDataTypeName(REGISTER_K, true, false));
+      sprintf(errorMessage, "cannot use 42AROT on %s", getRegisterDataTypeName(alphaRegister, true, false));
       moreInfoOnError("In function fn42AlphaRotate:", errorMessage, NULL, NULL);
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
@@ -819,10 +819,10 @@ void fn42AlphaRotate(uint16_t unusedButMandatoryParameter) {
     }
   }
   if(longIntegerIsNegative(lgInt)) {
-    fnAlphaRR(REGISTER_K);
+    fnAlphaRR(alphaRegister);
   }
   else {
-    fnAlphaRL(REGISTER_K);
+    fnAlphaRL(alphaRegister);
   }
   longIntegerFree(lgInt);
 }
@@ -832,16 +832,16 @@ void fn42AlphaShift(uint16_t unusedButMandatoryParameter) {
   int16_t stringGlyphLen, steps, glyphPointer;
   char *ptr;
 
-  if(getRegisterDataType(REGISTER_K) != dtString) {
-    displayCalcErrorMessage(ERROR_NO_STRING_IN_REGISTER_K, ERR_REGISTER_LINE, REGISTER_T);
+  if(getRegisterDataType(alphaRegister) != dtString) {
+    displayCalcErrorMessage(ERROR_NO_STRING_IN_ALPHA_REGISTER, ERR_REGISTER_LINE, REGISTER_T);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "cannot use 42ASHF on %s", getRegisterDataTypeName(REGISTER_K, true, false));
+      sprintf(errorMessage, "cannot use 42ASHF on %s", getRegisterDataTypeName(alphaRegister, true, false));
       moreInfoOnError("In function fn42AlphaShift:", errorMessage, NULL, NULL);
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
   }
 
-  ptr = REGISTER_STRING_DATA(REGISTER_K);
+  ptr = REGISTER_STRING_DATA(alphaRegister);
   stringGlyphLen = stringGlyphLength(ptr);
 
   steps = (stringGlyphLen < 6 ? stringGlyphLen : 6);
@@ -916,4 +916,40 @@ void fnAlphaIP(uint16_t regist) {
   }
   copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);    // Restore register X
   copySourceRegisterToDestRegister(SAVED_REGISTER_L, REGISTER_L);    // Restore register L
+}
+
+//
+// 42 functions wrappers to 47 native functions
+//
+void fn42Aip(uint16_t unusedButMandatoryParameter) {
+  fnAlphaIP(alphaRegister);
+}
+
+void fn42Aleng(uint16_t unusedButMandatoryParameter) {
+  fnAlphaLeng(alphaRegister);
+}
+
+void fn42Atox(uint16_t unusedButMandatoryParameter) {
+  fnAlphaToX(alphaRegister);
+}
+
+void fn42Xtoa(uint16_t unusedButMandatoryParameter) {
+  fnXToAlpha(alphaRegister);
+}
+
+void fn42Aview(uint16_t unusedButMandatoryParameter) {
+  lastFunc = ITM_AVIEW;
+  fnAview(alphaRegister);
+}
+
+void fn42Cla(uint16_t unusedButMandatoryParameter) {
+  fnClearAlpha(alphaRegister);
+}
+
+void fn42Posa(uint16_t unusedButMandatoryParameter) {
+  fnAlphaPos(alphaRegister);
+}
+
+void fn42Pra(uint16_t unusedButMandatoryParameter) {
+  fnP_Alpha(alphaRegister);
 }

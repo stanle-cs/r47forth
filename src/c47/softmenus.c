@@ -17,8 +17,11 @@ TO_QSPI static const char bugScreenIdMustNotBe0[] = "In function showSoftmenu: i
 /*      Menu name                           <----------------------------------------------------------------------------- 6 functions ---------------------------------------------------------------------------->  */
 /*                                          <---------------------------------------------------------------------- 6 f shifted functions ------------------------------------------------------------------------->  */
 /*                                          <---------------------------------------------------------------------- 6 g shifted functions ------------------------------------------------------------------------->  */
-TO_QSPI const int16_t menu_42[]          = { ITM_42STRING,                  ITM_42APPEND,               ITM_42ARCL,               ITM_42ASTO,            ITM_42AROT,                  ITM_42ASHF,
-                                             ITM_M_DIMQ,                    ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL                      };
+TO_QSPI const int16_t menu_42[]          = { ITM_42STRING,                  ITM_42APPEND,               ITM_42ARCL,               ITM_42ASTO,            ITM_42ATOX,                  ITM_42XTOA,
+                                             ITM_42ALENG,                   ITM_42POSA,                 ITM_42AROT,               ITM_42ASHF,            ITM_42AVIEW,                 ITM_42AIP,
+                                             ITM_42KEYG,                    ITM_42KEYX,                 ITM_42VRMNU,              ITM_NULL,              ITM_42PRA,                   ITM_42CLA,
+
+                                             ITM_M_DIMQ,                    ITM_42BITQ,                 ITM_42ROTXY,              ITM_NULL,              ITM_NULL,                    ITM_NULL                        };
 
 
 TO_QSPI const int16_t menu_BITS[]        = { ITM_LOGICALAND,                ITM_LOGICALOR,              ITM_LOGICALXOR,           ITM_LOGICALNOT,        ITM_MASKL,                   ITM_MASKR,
