@@ -17,7 +17,7 @@
 #include <strings.h>
 
 // Name of the output file written by --dslcommands
-const char* dsl_ops_file = "t47-op-commands.txt";
+const char* dslOpsFileName = "t47-op-commands.txt";
 
 // Global state - declared in gtkGui.c
 extern bool_t scriptingActive;
@@ -808,7 +808,7 @@ void initDSL(void) {
     char cmdName[64];
     size_t added = 0, total = 0;
     if(dumpDslCmds) {
-        dslDumpFile = fopen(dsl_ops_file, "w");
+        dslDumpFile = fopen(dslOpsFileName, "w");
         if(dslDumpFile != NULL) {
             fprintf(dslDumpFile, "C47/R47 ops registered as T47 commands\n");
             fprintf(dslDumpFile, "\n");
@@ -843,7 +843,7 @@ void initDSL(void) {
         fprintf(dslDumpFile, "\nRegistered %zu of %zu possible catalog functions.\n", added, total);
         fclose(dslDumpFile);
         dslDumpFile = NULL;
-        printf("Registered commands written to %s.\n", dsl_ops_file);
+        printf("Registered commands written to %s.\n", dslOpsFileName);
         fflush(stdout);
         exit(0);
     }
