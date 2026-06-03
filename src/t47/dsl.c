@@ -207,7 +207,7 @@ static bool_t registerCatFn(Jim_Interp *interp, const char *name, void *idx, cha
     if(compareString(name, name, CMP_NAME) != 0) {
 	return FALSE;  // not a "name"
     }
-    TO_QSPI static const char *exprCommands[] = { "+", "-", "*", "/", "%", NULL };
+    static const char *exprCommands[] = { "+", "-", "*", "/", "%", NULL };
     for(int i = 0; exprCommands[i] != NULL; ++i) {
         if(strcmp(cmdName, exprCommands[i]) == 0) {
             return FALSE;  // do not shadow Jim expr arithmetic commands
