@@ -465,6 +465,9 @@ static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 /**
  * xeq <labelname> - Execute a label, emulating the XEQ key action
  */
+
+#undef UTF8_FAIL_DEBUG
+
 static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
@@ -472,9 +475,20 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         return JIM_ERR;
     }
     const char *labelName = Jim_String(argv[1]);
-    calcRegister_t label = findNamedLabel(labelName);
+    char internalLabel[64];
+    static const size_t maxLabel = sizeof(internalLabel)/2;
+
+    // labelName is UTF-8 from Jim but findNamedLabel compares CMP_BINARY against internal-encoded labels, so non-ASCII never
+    // matches (gamma 0xCE 0xB3 UTF-8 vs 0x83 0xB3 internal). Convert here as runCatalogFunctionByName does; not in findNamedLabel
+    if(strlen(labelName) >= maxLabel) {
+        Jim_SetResultFormatted(interp, "xeq: '%s' exceeds max length %d", labelName, maxLabel);
+        return JIM_ERR;
+    }
+    utf8ToString((const uint8_t *)labelName, internalLabel);
+    calcRegister_t label = findNamedLabel(internalLabel);
 
     if(label == INVALID_VARIABLE) {
+        // Original UTF-8 labelName here, not internalLabel: runCatalogFunctionByName does its own utf8ToString.
         int found = runCatalogFunctionByName(interp, labelName, argc - 2, argv + 2, "xeq");
         if(found == CATFN_OK) {
             return JIM_OK;
@@ -482,6 +496,15 @@ static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         if(found == CATFN_ERROR) {
             return JIM_ERR;
         }
+        #ifdef UTF8_FAIL_DEBUG
+            // Label lookup missed. Dump both encodings so a conversion fault is visible.
+            // utf8 is the raw Jim input, internal is what findNamedLabel actually searched for.
+            printf("xeq: miss; utf8='%s' internal=", labelName);
+            for(const unsigned char *p = (const unsigned char *)internalLabel; *p; ++p) {
+                printf("%02X ", *p);
+            }
+            printf("\n");
+        #endif
         Jim_SetResultFormatted(interp, "xeq: '%s' not found as label or function", labelName);
         return JIM_ERR;
     }
