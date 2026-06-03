@@ -189,37 +189,6 @@ static int cmdCatalogFn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
- * Check if a string is a bare Tcl command name: it contains no characters Tcl parses structurally. Looser than a
- * Tcl identifier so operator/punctuation catalog names like "+", "x!", "1/x" register as bare commands.
- */
-static bool_t validTclIdentifier(const char *str) {
-    if(str[0] == '\0') {
-        return FALSE;
-    }
-    if(str[0] == '#') {
-        return FALSE;  // leading # is a comment to Tcl
-    }
-    // Reject names equal to a native Tcl operator token so the DSL does not shadow Tcl's +,-,*,/,% (use xeq + etc instead)
-    TO_QSPI static const char *tclOperators[] = { "+", "-", "*", "/", "%", NULL };
-    for(int i = 0; tclOperators[i] != NULL; ++i) {
-        if(strcmp(str, tclOperators[i]) == 0) {
-            return FALSE;
-        }
-    }
-    for(int i = 0; str[i]; ++i) {
-        unsigned char c = (unsigned char)str[i];
-        if(isspace(c)) {
-            return FALSE;
-        }
-        if(c == '$' || c == '[' || c == ']' || c == '{' || c == '}' ||
-           c == ';' || c == '"' || c == '\\' || c == '(' || c == ')') {
-            return FALSE;
-        }
-    }
-    return TRUE;
-}
-
-/**
  * Register a catalog function directly if its name happens to be a
  * valid Tcl identifier.
  */
@@ -230,20 +199,34 @@ static bool_t registerCatFn(Jim_Interp *interp, const char *name, void *idx, cha
     }
     stringToUtf8(name, (uint8_t*)cmdName);
     if(skipUtf8Identity && strcmp(name, cmdName) == 0) {
-        return FALSE;
+        return FALSE;  // already registered it under the primary name
     }
-    if(compareString(name, name, CMP_NAME) == 0 &&
-            validTclIdentifier(cmdName)) {
-        for(int i = 0; cmdName[i]; ++i) {
-            unsigned char c = (unsigned char)cmdName[i];
-            if(c < 0x80) {
-                cmdName[i] = tolower(c);
-            }
+    if(compareString(name, name, CMP_NAME) != 0) {
+	return FALSE;  // not a "name"
+    }
+    TO_QSPI static const char *exprCommands[] = { "+", "-", "*", "/", "%", NULL };
+    for(int i = 0; exprCommands[i] != NULL; ++i) {
+        if(strcmp(cmdName, exprCommands[i]) == 0) {
+            return FALSE;  // do not shadow Jim expr arithmetic commands
         }
-        Jim_CreateCommand(interp, cmdName, cmdCatalogFn, idx, NULL);
-        return TRUE;
     }
-    return FALSE;
+    for(int i = 0; cmdName[i]; ++i) {
+        unsigned char c = (unsigned char)cmdName[i];
+        if( c == '$' || c == ';' || c == '"' || c == '\\' ||
+	    c == '[' || c == ']' ||
+	    c == '{' || c == '}' ||
+	    c == '(' || c == ')') {
+            return FALSE;  // refuse commands likely to cause Jim parsing errors
+        }
+    }
+    for(int i = 0; cmdName[i]; ++i) {
+	unsigned char c = (unsigned char)cmdName[i];
+	if(c < 0x80) {
+	    cmdName[i] = tolower(c);
+	}
+    }
+    Jim_CreateCommand(interp, cmdName, cmdCatalogFn, idx, NULL);
+    return TRUE;
 }
 
 /**
