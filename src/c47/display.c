@@ -2354,24 +2354,18 @@ void longIntegerRegisterToDisplayString(calcRegister_t regist, char *displayStri
 }
 
 
-
-// realSCIToDisplayString renders work in SCI form into displayString via emitSciDigits, showing digitsToDisplay digits after the radix. 
-// bcd[] is re-extracted each call since emitSciDigits mutates it while rounding.
-#define LONG_MAX_DIGITS 50 // 48 shown + 2 after (guard digits for rounding); leading carry slot is bcd[0], coefficient fills from bcd[1]
-
-static void realSCIToDisplayString(const real_t *work, char *displayString, int16_t digitsToDisplay, bool_t frontSpace) {
+// realSCIToDisplayString renders work in SCI form into displayString via emitSciDigits, showing digitsToDisplay digits after the radix.
+// bcd points to caller-supplied scratch (>= maxDigits bytes): a local for normal display, errorMessage for the long SHOW path.
+void realSCIToDisplayString(const real_t *work, char *displayString, int16_t digitsToDisplay, bool_t frontSpace, uint8_t *bcd, int16_t maxDigits) {
   int16_t numDigits, digitPointer, firstDigit, lastDigit, digitToRound, exponent;
   int32_t sign;
-  uint8_t *bcd;
 
-  char tmpString100[100];
-  bcd = (uint8_t *)(tmpString100);
-  memset(bcd, 0, LONG_MAX_DIGITS);
+  memset(bcd, 0, maxDigits);
 
-  // A real_t is left significant: decNumberGetBCD writes work->digits digit-bytes MSD first at bcd[1] with no leading zeros, and the place value of the last written digit bcd[work->digits] is work->exponent. This mirrors the real34 path where bcd[1] is the MSD and real34GetExponent gives the LSD place value; only the right edge moves from a fixed 34 to work->digits.
+  // A real_t is left significant: realGetCoefficient writes work->digits digit-bytes MSD first at bcd[1] with no leading zeros, and the place value of the last written digit bcd[work->digits] is work->exponent. This mirrors the real34 path where bcd[1] is the MSD and real34GetExponent gives the LSD place value; only the right edge moves from a fixed 34 to work->digits.
   sign     = realIsNegative(work) ? 1 : 0;
   exponent = (int16_t)work->exponent;
-  decNumberGetBCD(work, bcd + 1);
+  realGetCoefficient(work, bcd + 1);
 
   for(digitPointer=1; digitPointer<=work->digits; digitPointer++) {
     if(bcd[digitPointer] != 0) {
@@ -2418,15 +2412,15 @@ void longIntegerRegisterToRealDisplayString(calcRegister_t regist, char *display
   stringToReal(displayString, &tmpReal, &ctxtReal75);
   int32ToReal(minimum, &tmp4);
   if(minimum == 0 || !realCompareAbsLessThan(&tmpReal, &tmp4)) {
+    const int16_t regDispMaxDigits = 48; // max shown digits for register display, fits the bcdScratch buffer
     const font_t *font = getSystemFlag(FLAG_LARGELI) ? &numericFont : &standardFont;
-    // Round in place to the shown-digit count (LONG_MAX_DIGITS less the 2 guard slots) so the guard digit feeding emitSciDigits's round-ahead read is meaningful.
+    char bcdScratch[100];
     decContext c = ctxtReal75;
-    c.digits = LONG_MAX_DIGITS - 2;
+    c.digits = regDispMaxDigits;
     realPlus(&tmpReal, &tmpReal, &c);
-    // digitsToDisplay is the count of digits after the leading one (right of the radix), as the inline DF_SCI block sets it from displayFormatDigits. Clamp to the shown-digit ceiling (LONG_MAX_DIGITS less 2 guards less the 1 leading digit), then shrink to fit maxWidth.
-    int16_t digitsToDisplay = min((int16_t)displayFormatDigits, (int16_t)(LONG_MAX_DIGITS - 3));
+    int16_t digitsToDisplay = min((int16_t)displayFormatDigits, (int16_t)(regDispMaxDigits - 1)); // -1 drops the leading digit to get digits after the radix
     do {
-      realSCIToDisplayString(&tmpReal, displayString, digitsToDisplay, !FRONTSPACE);
+      realSCIToDisplayString(&tmpReal, displayString, digitsToDisplay, !FRONTSPACE, (uint8_t *)bcdScratch, sizeof(bcdScratch));
       if(digitsToDisplay == 0) {
         break;
       }
@@ -3301,86 +3295,6 @@ static void prepLongintIntoLines(int16_t *last, int16_t *source, int16_t *dest, 
     printf("BBB: source=%d %d %d [%d] %d %d\n", (uint8_t)*source, (uint8_t)errorMessage[*source-2], (uint8_t)errorMessage[*source-1], (uint8_t)errorMessage[*source], (uint8_t)errorMessage[*source+1], (uint8_t)errorMessage[*source+2]);
     printf("BBB: dest  =%d %d %d [%d] %d %d\n", (uint8_t)*dest  , (uint8_t)tmpString[*dest  -2],    (uint8_t)tmpString[*dest  -1],    (uint8_t)tmpString[*dest  ],    (uint8_t)tmpString[*dest  +1],    (uint8_t)tmpString[*dest  +2]);
   #endif //MONITOR_SHOW
-}
-
-
-
-void realToSci(real_t* num, char* dispString) {
-   char *p, *radix = Rx, *sep = SEPARATOR_RIGHT;
-   int neg, exp, mi = 0, i = 1, d = 0;
-   int sepGroup = GROUPWIDTH_RIGHT;
-
-   if(realGetExponent(num) > 672 || num->digits > 672 ) { //tighten up the spacing if it gets to a longer string
-     sep = STD_SPACE_FIGURE;
-   }
-
-    exp = realGetExponent(num);
-    realToString(num, dispString + 1500);
-    if(realIsZero(num)) {
-      sprintf(dispString, "0%s0", radix);
-      return;
-    }
-
-    neg = ((dispString + 1500)[0] == '-');
-    p = (dispString + 1500) + neg;
-
-    while(*p && (*p < '0' || *p > '9')) {
-      p++;                                      // skips to first digit
-    }
-
-    if(*p == '0' && *(p+1) == '.') {            // handle "0.ddd..." format
-      p += 2;                                   // skip "0."
-      while(*p == '0') {
-        p++;                                    // skip all leading zeros after decimal
-      }
-    }
-    dispString[mi++] = neg ? '-' : ' ';         // inserts - if prior determined
-    dispString[mi++] = *p++;                    // copies first digit incr and continue
-    if(*p == '.') {
-      p++;                                      // if 2nd char is . skip it
-    }
-    if(*p != 'E') {                             // as long as current (2nd/3rd) char is not at the end E meaning 1E, it must have been the 1., so continue to add the proper radix
-      dispString[mi++] = radix[0];              // add first half of radix
-      if(radix[0] & 0x80 && radix[1] && radix[1] != '\1') {
-        dispString[mi++] = radix[1];            // add 2nd half of radix if second half > 1
-      }
-    }
-
-    while(*p && *p != 'E' && i < 1000) {        // add seps
-      if(*p >= '0' && *p <= '9') {
-        if(d > 0 && d % sepGroup == 0 && !GROUPRIGHT_DISABLED) {
-          dispString[mi++] = sep[0];
-          if(sep[0] & 0x80 && sep[1] && sep[1] != '\1') {
-            dispString[mi++] = sep[1];
-          }
-        }
-        dispString[mi++] = *p;
-        i++;
-        d++;
-      }
-      p++;
-    }
-
-    // Remove trailing zeros and separators from the right, until first non-zero or decimal is reached
-    while( mi > 1 &&
-          ((dispString[mi-1] == '0') ||
-           (dispString[mi-2] == sep[0] && sep[1] != '\0' && sep[1] != '\1' && dispString[mi-1] == sep[1]) ||
-           (dispString[mi-1] == sep[0] && sep[1] != '\0' && sep[1] != '\1' && dispString[mi  ] == sep[1])
-          )
-         ) {
-      mi--;
-    }
-    if(mi > 0 && (dispString[mi-1] == radix[0] && (radix[1] == '\0' || radix[1] == '\1' || (radix[1] != '\0' && radix[1] != '\1' && dispString[mi-1] == radix[1])) )) {
-      mi--;
-    }
-    if(mi > 1 && (dispString[mi-2] == radix[0] && (                                        (radix[1] != '\0' && radix[1] != '\1' && dispString[mi-1] == radix[1])) )) {
-      mi -= 2;
-    }
-
-    dispString[mi] = '\0';
-    char tt[32];
-    exponentToDisplayString(exp, tt, NULL, false);
-    sprintf(dispString + mi, "%s", tt);
 }
 
 
