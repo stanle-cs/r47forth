@@ -2412,20 +2412,28 @@ void longIntegerRegisterToRealDisplayString(calcRegister_t regist, char *display
   stringToReal(displayString, &tmpReal, &ctxtReal75);
   int32ToReal(minimum, &tmp4);
   if(minimum == 0 || !realCompareAbsLessThan(&tmpReal, &tmp4)) {
-    const int16_t regDispMaxDigits = 48; // max shown digits for register display, fits the bcdScratch buffer
     const font_t *font = getSystemFlag(FLAG_LARGELI) ? &numericFont : &standardFont;
-    char bcdScratch[100];
-    decContext c = ctxtReal75;
-    c.digits = regDispMaxDigits;
-    realPlus(&tmpReal, &tmpReal, &c);
-    int16_t digitsToDisplay = min((int16_t)displayFormatDigits, (int16_t)(regDispMaxDigits - 1)); // -1 drops the leading digit to get digits after the radix
-    do {
-      realSCIToDisplayString(&tmpReal, displayString, digitsToDisplay, !FRONTSPACE, (uint8_t *)bcdScratch, sizeof(bcdScratch));
-      if(digitsToDisplay == 0) {
-        break;
-      }
-      digitsToDisplay--;
-    } while(stringWidth(displayString, font, true, true) > maxWidth);
+    // Only DF_ALL uses the extended long path. Every other format (SCI, FIX, ENG, UN, SF) is capped at 19 digits, so the old real34 delegation handles them correctly, including plain-integer fallback and the non-SCI layouts.
+    if(displayFormat == DF_ALL) {
+      const int16_t regDispMaxDigits = 48; // buffer ceiling for shown digits; the width iteration starts here and shrinks to fit
+      char bcdScratch[100];
+      decContext c = ctxtReal75;
+      c.digits = regDispMaxDigits;
+      realPlus(&tmpReal, &tmpReal, &c);
+      int16_t digitsToDisplay = regDispMaxDigits - 1; // DF_ALL ignores displayFormatDigits and fills the width; -1 drops the leading digit to get digits after the radix
+      do {
+        realSCIToDisplayString(&tmpReal, displayString, digitsToDisplay, !FRONTSPACE, (uint8_t *)bcdScratch, sizeof(bcdScratch));
+        if(digitsToDisplay == 0) {
+          break;
+        }
+        digitsToDisplay--;
+      } while(stringWidth(displayString, font, true, true) > maxWidth);
+    }
+    else {
+      real34_t tmpReal34;
+      realToReal34(&tmpReal, &tmpReal34);
+      real34ToDisplayString(&tmpReal34, amNone, displayString, font, maxWidth, 34, LIMITEXP, !FRONTSPACE, NOIRFRAC);
+    }
     if(removeTrailingRadix) {
       int lastGlyphPosition = stringLastGlyph(displayString);
       //check the radix. Two options, a single byte or two-byte radix. Delete the radix if at the right edge of the string.
