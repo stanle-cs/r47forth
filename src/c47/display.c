@@ -2413,14 +2413,14 @@ void longIntegerRegisterToRealDisplayString(calcRegister_t regist, char *display
   int32ToReal(minimum, &tmp4);
   if(minimum == 0 || !realCompareAbsLessThan(&tmpReal, &tmp4)) {
     const font_t *font = getSystemFlag(FLAG_LARGELI) ? &numericFont : &standardFont;
-    // Only DF_ALL uses the extended long path. Every other format (SCI, FIX, ENG, UN, SF) is capped at 19 digits, so the old real34 delegation handles them correctly, including plain-integer fallback and the non-SCI layouts.
-    if(displayFormat == DF_ALL) {
-      const int16_t regDispMaxDigits = 48; // buffer ceiling for shown digits; the width iteration starts here and shrinks to fit
+    // The long path is only for the wide-LI caller, which selects DF_ALL and sets displayFormatDigits above DSP_MAX. Every other caller (capped at DSP_MAX) and every other format uses the old real34 delegation, which honours plain-integer fallback and the non-SCI layouts.
+    if(displayFormat == DF_ALL && displayFormatDigits > DSP_MAX) {
+      const int16_t regDispMaxDigits = 48; // buffer ceiling for shown digits; the wide-LI caller's cap (max 42) starts the width iteration
       char bcdScratch[100];
       decContext c = ctxtReal75;
       c.digits = regDispMaxDigits;
       realPlus(&tmpReal, &tmpReal, &c);
-      int16_t digitsToDisplay = regDispMaxDigits - 1; // DF_ALL ignores displayFormatDigits and fills the width; -1 drops the leading digit to get digits after the radix
+      int16_t digitsToDisplay = regDispMaxDigits - 1; // fill the width; -1 drops the leading digit to get digits after the radix
       do {
         realSCIToDisplayString(&tmpReal, displayString, digitsToDisplay, !FRONTSPACE, (uint8_t *)bcdScratch, sizeof(bcdScratch));
         if(digitsToDisplay == 0) {
