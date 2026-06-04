@@ -2401,6 +2401,8 @@ static void realSCIToDisplayString(const real_t *work, char *displayString, int1
     exponent += numDigits++; // exponent is now the power of the MSD, numDigits the inclusive count
   }
 
+  digitsToDisplay = min(digitsToDisplay, numDigits - 1); // no trailing zeros
+
   digitToRound = min(firstDigit + digitsToDisplay, lastDigit);
 
   emitSciDigits(bcd, firstDigit, lastDigit, numDigits, exponent, sign, digitToRound, digitsToDisplay, frontSpace, displayString, displayValueX, updateDisplayValueX);
