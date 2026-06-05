@@ -16,9 +16,14 @@
 #include <stdio.h>
 #include <strings.h>
 
+// Name of the output file written by --dslcommands
+const char* dslOpsFileName = "t47-op-commands.txt";
+
 // Global state - declared in gtkGui.c
 extern bool_t scriptingActive;
 extern bool_t headlessMode;
+extern bool_t dumpDslCmds;
+static FILE *dslDumpFile = NULL;
 
 // External declaration for _ioFileNameOverride from hal/io.c
 extern char _ioFileNameOverride[C47_PATH_MAX];
@@ -187,24 +192,6 @@ static int cmdCatalogFn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
- * Check if a string is a valid Tcl identifier.
- */
-static bool_t validTclIdentifier(const char *str) {
-    if(str[0] == '\0') {
-        return FALSE;
-    }
-    if(!isalpha(str[0]) && str[0] != '_') {
-        return FALSE;
-    }
-    for(int i = 1; str[i]; ++i) {
-        if(!isalnum(str[i]) && str[i] != '_') {
-            return FALSE;
-        }
-    }
-    return TRUE;
-}
-
-/**
  * Register a catalog function directly if its name happens to be a
  * valid Tcl identifier.
  */
@@ -215,17 +202,34 @@ static bool_t registerCatFn(Jim_Interp *interp, const char *name, void *idx, cha
     }
     stringToUtf8(name, (uint8_t*)cmdName);
     if(skipUtf8Identity && strcmp(name, cmdName) == 0) {
-        return FALSE;
+        return FALSE;  // already registered it under the primary name
     }
-    if(compareString(name, name, CMP_NAME) == 0 &&
-            validTclIdentifier(cmdName)) {
-        for(int i = 0; cmdName[i]; ++i) {
-            cmdName[i] = tolower((unsigned char)cmdName[i]);
+    if(compareString(name, name, CMP_NAME) != 0) {
+	return FALSE;  // not a "name"
+    }
+    static const char *exprCommands[] = { "+", "-", "*", "/", "%", NULL };
+    for(int i = 0; exprCommands[i] != NULL; ++i) {
+        if(strcmp(cmdName, exprCommands[i]) == 0) {
+            return FALSE;  // do not shadow Jim expr arithmetic commands
         }
-        Jim_CreateCommand(interp, cmdName, cmdCatalogFn, idx, NULL);
-        return TRUE;
     }
-    return FALSE;
+    for(int i = 0; cmdName[i]; ++i) {
+        unsigned char c = (unsigned char)cmdName[i];
+        if( c == '$' || c == ';' || c == '"' || c == '\\' ||
+	    c == '[' || c == ']' ||
+	    c == '{' || c == '}' ||
+	    c == '(' || c == ')') {
+            return FALSE;  // refuse commands likely to cause Jim parsing errors
+        }
+    }
+    for(int i = 0; cmdName[i]; ++i) {
+	unsigned char c = (unsigned char)cmdName[i];
+	if(c < 0x80) {
+	    cmdName[i] = tolower(c);
+	}
+    }
+    Jim_CreateCommand(interp, cmdName, cmdCatalogFn, idx, NULL);
+    return TRUE;
 }
 
 /**
@@ -451,7 +455,9 @@ static int catfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     const char *filename = (argc > 1) ? Jim_String(argv[1]) : "";
-    if(strlen(filename) > 0) setReadpFilenameOverride(filename);
+    if(strlen(filename) > 0) {
+        setReadpFilenameOverride(filename);
+    }
     fnLoadProgram(0);
     return JIM_OK;
 }
@@ -531,7 +537,14 @@ static int nim(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         Jim_SetResultString(interp, "nim: missing string argument", -1);
         return JIM_ERR;
     }
-    for(const char *p = Jim_String(argv[1]); *p != 0; p++) {
+    printf("NIM: "); // NIM sequentially accepts numerals and - as typed. That means -4.5E-5 is to be entered as [4.5 - E5 -] and this is automated below
+    const char *start = Jim_String(argv[1]);
+    bool_t inExponent = FALSE;
+    bool_t mantissaNeg = FALSE;
+    bool_t exponentNeg = FALSE;
+    bool_t signEmitted = FALSE;  // mantissa CHS already sent before E
+    for(const char *p = start; *p != 0; p++) {
+        printf("%c", *p);
         int16_t item;
         if(*p >= '0' && *p <= '9') {
             item = ITM_0 + (*p - '0');
@@ -540,21 +553,57 @@ static int nim(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
             item = ITM_PERIOD;
         }
         else if(*p == '-') {
-            item = ITM_CHS;
+            // Defer the sign: a leading '-' negates the mantissa, a '-' right after E negates the exponent. Either
+            // way the CHS is applied after that component's digits, simulate key entry (you type 4 then CHS, not -4).
+            if(!inExponent && p == start) {
+                mantissaNeg = TRUE;
+            }
+            else if(inExponent && (*(p - 1) == 'e' || *(p - 1) == 'E')) {
+                exponentNeg = TRUE;
+            }
+            else {
+                printf("\n");
+                fflush(stdout);
+                Jim_SetResultFormatted(interp, "nim: unexpected '-' at position %d", (int)(p - start));
+                return JIM_ERR;
+            }
+            continue;
         }
         else if(*p == 'e' || *p == 'E') {
+            // Mantissa is complete: emit its deferred sign before the E.
+            if(mantissaNeg && !signEmitted) {
+                addItemToNimBuffer(ITM_CHS);
+                refreshRegisterLine(REGISTER_X);
+                signEmitted = TRUE;
+            }
+            inExponent = TRUE;
             item = ITM_EXPONENT;
         }
         else if(*p == ' ') {
-            continue;
+            //break;  // space terminates the number
+            continue;  // skip embedded spaces
         }
         else {
+            printf("\n");
+            fflush(stdout);
             Jim_SetResultFormatted(interp, "nim: invalid character '%c' (expected 0-9, . , - e E or space)", *p);
             return JIM_ERR;
         }
         addItemToNimBuffer(item);
         refreshRegisterLine(REGISTER_X);
     }
+    // Emit any still-pending signs at end of number.
+    if(mantissaNeg && !signEmitted) {
+        addItemToNimBuffer(ITM_CHS);   // no exponent: mantissa sign at end
+        refreshRegisterLine(REGISTER_X);
+    }
+    if(exponentNeg) {
+        addItemToNimBuffer(ITM_CHS);   // exponent sign at end
+        refreshRegisterLine(REGISTER_X);
+    }
+
+    printf("\n");
+    fflush(stdout);
     closeNim();
     return JIM_OK;
 }
@@ -569,7 +618,7 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         Jim_SetResultString(interp, "press: missing key code argument", -1);
         return JIM_ERR;
     }
-    
+
     if(Jim_IsList(argv[1])) {
         int listLen = Jim_ListLength(interp, argv[1]);
         for(int i = 0; i < listLen; i++) {
@@ -588,7 +637,7 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
             return JIM_ERR;
         }
     }
-    
+
     return JIM_OK;
 }
 
@@ -601,7 +650,7 @@ static int loadst(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         strncpy(_ioFileNameOverride, Jim_String(argv[1]), C47_PATH_MAX - 1);
         _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
     }
-    
+
     fnLoad(LM_STATE_LOAD);
     return JIM_OK;
 }
@@ -615,7 +664,7 @@ static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
         strncpy(_ioFileNameOverride, Jim_String(argv[1]), C47_PATH_MAX - 1);
         _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
     }
-    
+
     fnSave(SM_STATE_SAVE);
     return JIM_OK;
 }
@@ -683,30 +732,12 @@ static int tsvfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
     return JIM_OK;
 }
 
-// =====================================================================
-// DSL Execution - Reads a line at a time from the script and passes it
-// to Jim Tcl for evaluation.
-// =====================================================================
-
-int executeScript(const char *scriptFile) {
-    int ret;
-    
-    Jim_Interp *interp = g_dsl_interpreter;
-    if(strcmp(scriptFile, "-") == 0) {
-        ret = Jim_Eval(interp, 
-            "package require aio;"
-            "eval [info source [stdin read] stdin 1]");
-    } else {
-        // Read from file
-        ret = Jim_EvalFile(interp, scriptFile);
-    }
-    
-    // Handle errors - print to stderr with stack trace if available
+static void reportIfDslErrorAndEnd(Jim_Interp *interp, int ret) {
     if(ret != JIM_OK) {
         const char *errorMsg = Jim_GetString(Jim_GetResult(interp), NULL);
         fprintf(stderr, "%s\n", errorMsg);
         fflush(stderr);
-        
+
         // Try to get and print stack trace
         Jim_Obj *traceObj = Jim_GetVariableStr(interp, "errorInfo", 0);
         if(traceObj) {
@@ -714,8 +745,44 @@ int executeScript(const char *scriptFile) {
             fprintf(stderr, "%s\n", trace);
             fflush(stderr);
         }
+    } else {
+        printf("End of script.\n- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n");
+        printRegisterToConsole(REGISTER_X,"Register X:","\n");
+        fflush(stdout);
     }
-    
+}
+
+// =====================================================================
+// DSL Execution - Reads a line at a time from the script and passes it
+// to Jim Tcl for evaluation.
+// =====================================================================
+
+int executeScript(const char *scriptFile) {
+    int ret;
+
+    Jim_Interp *interp = g_dsl_interpreter;
+    if(strcmp(scriptFile, "-") == 0) {
+        ret = Jim_Eval(interp,
+            "package require aio;"
+            "eval [info source [stdin read] stdin 1]");
+    } else {
+        // Read from file
+        ret = Jim_EvalFile(interp, scriptFile);
+    }
+
+    reportIfDslErrorAndEnd(interp, ret);
+
+    return ret;
+}
+
+int executeCommand(const char *command) {
+    int ret;
+
+    Jim_Interp *interp = g_dsl_interpreter;
+    ret = Jim_Eval(interp, command);
+
+    reportIfDslErrorAndEnd(interp, ret);
+
     return ret;
 }
 
@@ -725,38 +792,64 @@ int executeScript(const char *scriptFile) {
 
 void initDSL(void) {
     scriptingActive = TRUE;
-    
+
     // unbuffered for the DSL session so all output is visible immediately.
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
-    
+
     // Create Jim interpreter
     Jim_Interp *interp = g_dsl_interpreter = Jim_CreateInterp();
-    
+
     // Register core Tcl commands
     Jim_RegisterCoreCommands(interp);
     Jim_InitStaticExtensions(interp);
-    
+
     // Register 🟧 CAT FCNS entries as global commands.
     char cmdName[64];
     size_t added = 0, total = 0;
-    for(int i = 0; i < LAST_ITEM; ++i) {
-	item_t item = indexOfItems[i];
-	if((item.status & CAT_STATUS) == CAT_FNCT) {
-	    ++total;
-	    void* idx = (void*)(intptr_t)i;
-	    const char* catName = item.itemCatalogName;
-	    const char* smName  = item.itemSoftmenuName;
-	    if(registerCatFn(interp, catName, idx, cmdName, FALSE) ||
-	       registerCatFn(interp, smName,  idx, cmdName, TRUE)) {
-		++added;
-	    }
-	}
+    if(dumpDslCmds) {
+        dslDumpFile = fopen(dslOpsFileName, "w");
+        if(dslDumpFile != NULL) {
+            fprintf(dslDumpFile, "C47/R47 ops registered as T47 commands\n");
+            fprintf(dslDumpFile, "\n");
+            fprintf(dslDumpFile, "%s\t%s\t%s\t%s\n", "nnnn", "reg", "cat", "menu");
+            fprintf(dslDumpFile, "%s\t%s\t%s\t%s\n", "----", "---", "---", "----");
+        }
     }
-    printf("Registered %zu of %zu possible catalog functions for T47.\n",
-	added, total);
+    for(int i = 0; i < LAST_ITEM; ++i) {
+        item_t item = indexOfItems[i];
+        if((item.status & CAT_STATUS) == CAT_FNCT) {
+            ++total;
+            void* idx = (void*)(intptr_t)i;
+            char catName[64];
+            char smName[64];
+            stringToUtf8(item.itemCatalogName, (uint8_t *)catName);
+            stringToUtf8(item.itemSoftmenuName, (uint8_t *)smName);
+            // Pass the original internal names to registerCatFn; it converts to UTF-8 itself. The catName/smName UTF-8
+            // copies above are only for the dump columns. Passing them in here would double-convert and corrupt glyphs.
+            bool_t reg = registerCatFn(interp, item.itemCatalogName, idx, cmdName, FALSE);
+            if(!reg) {
+                reg = registerCatFn(interp, item.itemSoftmenuName, idx, cmdName, TRUE);
+            }
+            if(reg) {
+                ++added;
+                if(dslDumpFile != NULL) {
+                    fprintf(dslDumpFile, "%d\t%s\t%s\t%s\n", i, cmdName, catName, smName);
+                }
+            }
+        }
+    }
+    if(dslDumpFile != NULL) {
+        fprintf(dslDumpFile, "\nRegistered %zu of %zu possible catalog functions.\n", added, total);
+        fclose(dslDumpFile);
+        dslDumpFile = NULL;
+        printf("Registered commands written to %s.\n", dslOpsFileName);
+        fflush(stdout);
+        exit(0);
+    }
+    printf("Registered %zu of %zu possible catalog functions for T47.\n- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n", added, total);
     fflush(stdout);
-    
+
     // Register DSL commands afterward so that our commands having the
     // same name as catalog functions override them.
     Jim_CreateCommand(interp, "catfn",  catfn,  NULL, NULL);
