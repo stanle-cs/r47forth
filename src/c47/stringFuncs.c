@@ -464,11 +464,6 @@ void fnAlphaRR(uint16_t regist) {
 
   stringGlyphLen = stringGlyphLength(REGISTER_STRING_DATA(regist));
   if(stringGlyphLen == 0) {
-    displayCalcErrorMessage(ERROR_EMPTY_STRING, ERR_REGISTER_LINE, REGISTER_X);
-    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "cannot use " STD_alpha "RR on an empty string");
-      moreInfoOnError("In function fnAlphaRR:", errorMessage, NULL, NULL);
-    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
   }
 
@@ -550,11 +545,6 @@ void fnAlphaRL(uint16_t regist) {
 
   stringGlyphLen = stringGlyphLength(REGISTER_STRING_DATA(regist));
   if(stringGlyphLen == 0) {
-    displayCalcErrorMessage(ERROR_EMPTY_STRING, ERR_REGISTER_LINE, REGISTER_X);
-    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "cannot use " STD_alpha "RL on an empty string");
-      moreInfoOnError("In function fnAlphaRL:", errorMessage, NULL, NULL);
-    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
   }
 
@@ -634,11 +624,6 @@ void fnAlphaSR(uint16_t regist) {
 
   stringGlyphLen = stringGlyphLength(REGISTER_STRING_DATA(regist));
   if(stringGlyphLen == 0) {
-    displayCalcErrorMessage(ERROR_EMPTY_STRING, ERR_REGISTER_LINE, REGISTER_X);
-    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "cannot use " STD_alpha "SR on an empty string");
-      moreInfoOnError("In function fnAlphaSR:", errorMessage, NULL, NULL);
-    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
   }
 
@@ -715,11 +700,6 @@ void fnAlphaSL(uint16_t regist) {
   ptr = REGISTER_STRING_DATA(regist);
   stringGlyphLen = stringGlyphLength(ptr);
   if(stringGlyphLen == 0) {
-    displayCalcErrorMessage(ERROR_EMPTY_STRING, ERR_REGISTER_LINE, REGISTER_X);
-    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "cannot use " STD_alpha "SL on an empty string");
-      moreInfoOnError("In function fnAlphaSL:", errorMessage, NULL, NULL);
-    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
   }
 
