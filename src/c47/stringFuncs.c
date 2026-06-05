@@ -187,7 +187,7 @@ static void _doXToAlpha(uint16_t regist) {
         sprintf(errorMessage, "cannot x" STD_RIGHT_ARROW STD_alpha " when X is %s", getRegisterDataTypeName(REGISTER_X, true, false));
         moreInfoOnError("In function _doXToAlpha:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-
+      longIntegerFree(lgInt);
       return;
     }
   }
@@ -200,6 +200,7 @@ static void _doXToAlpha(uint16_t regist) {
       sprintf(errorMessage, "for x" STD_RIGHT_ARROW STD_alpha ", X must be < 32768. Here X = %" PRIu32, (uint32_t)lgInt->_mp_d[0]); // OK for 32 and 64 bit limbs
       moreInfoOnError("In function _doXToAlpha:", errorMessage, NULL, NULL);
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
+    longIntegerFree(lgInt);
     return;
   }
 
@@ -399,12 +400,10 @@ void fnAlphaPos(uint16_t regist) {
   }
 
   if(getRegisterDataType(REGISTER_X) != dtString) {
-    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
-    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "cannot use " STD_alpha "POS? on %s (reg X)", getRegisterDataTypeName(regist, true, false));
-      moreInfoOnError("In function fnAlphaPos:", errorMessage, NULL, NULL);
-    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-    return;
+    _doXToAlpha(REGISTER_X);
+    if(lastErrorCode != ERROR_NONE) {
+      return;
+    }
   }
 
   if(stringGlyphLength(REGISTER_STRING_DATA(regist)) == 0 || stringGlyphLength(REGISTER_STRING_DATA(REGISTER_X)) == 0) {
