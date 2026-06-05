@@ -34,4 +34,5 @@
   void fn42Pra         (uint16_t unusedButMandatoryParameter);
 
   void trimLeadingSpace(char     *stringToTrim);
+  void truncateAlphaRegisterTo44Char();
 #endif // !STRINGFUNCS_H

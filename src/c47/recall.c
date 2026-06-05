@@ -578,6 +578,7 @@ void fn42AlphaRecall(uint16_t regist) {
       addition[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
       
       copySourceRegisterToDestRegister(REGISTER_X, alphaRegister);
+      truncateAlphaRegisterTo44Char();
     
       copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
       copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);

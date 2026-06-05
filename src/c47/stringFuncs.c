@@ -402,7 +402,7 @@ void fnAlphaPos(uint16_t regist) {
   if(programRunStop == PGM_RUNNING) {
     copySourceRegisterToDestRegister(REGISTER_X, SAVED_REGISTER_X);    // Save register X
   }
-  
+
   if(getRegisterDataType(REGISTER_X) != dtString) {
     _doXToAlpha(REGISTER_X);
     if(lastErrorCode != ERROR_NONE) {
@@ -416,7 +416,7 @@ void fnAlphaPos(uint16_t regist) {
 
   longIntegerInit(lgInt);
   int32ToLongInteger(-1, lgInt);
-  
+
   if(stringGlyphLength(REGISTER_STRING_DATA(regist)) != 0 && stringGlyphLength(REGISTER_STRING_DATA(REGISTER_X)) != 0) {
     ptrTarget = REGISTER_STRING_DATA(REGISTER_X);
     ptrRegist = REGISTER_STRING_DATA(regist);
@@ -438,7 +438,7 @@ void fnAlphaPos(uint16_t regist) {
 	}
   }
 
-  
+
   copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);    // Restore register X
   liftStack();
   convertLongIntegerToLongIntegerRegister(lgInt, REGISTER_X);
@@ -760,6 +760,26 @@ void fnAlphaSL(uint16_t regist) {
 //
 // New 42 alpha functions
 //
+void truncateAlphaRegisterTo44Char() {
+  int16_t stringGlyphLen, steps, glyphPointer;
+  char *ptr;
+
+  ptr = REGISTER_STRING_DATA(alphaRegister);
+  stringGlyphLen = stringGlyphLength(ptr);
+
+  if(stringGlyphLen <= 44) {
+    return;
+  }
+  else {
+    steps = (stringGlyphLen - 44);
+    for(glyphPointer=0; steps > 0; steps--) {
+      glyphPointer = stringNextGlyph(ptr, glyphPointer);
+    }
+    xcopy(ptr, ptr + glyphPointer, stringByteLength(ptr + glyphPointer) + 1);
+  }
+}
+
+
 void fn42Alpha(uint16_t unusedButMandatoryParameter) {
   char *alphaString = (programRunStop == PGM_RUNNING ? tmpStringLabelOrVariableName : aimBuffer);
   reallocateRegister(alphaRegister, dtString, TO_BLOCKS(stringByteLength(alphaString) + 1), amNone);
@@ -773,6 +793,7 @@ void fn42Append(uint16_t unusedButMandatoryParameter) {
   reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(stringByteLength(alphaString) + 1), amNone);
   xcopy(REGISTER_STRING_DATA(REGISTER_X), alphaString, stringByteLength(alphaString) + 1);
   fnStoreAdd(alphaRegister);
+  truncateAlphaRegisterTo44Char();
   copySourceRegisterToDestRegister(LAST_TEMP_REGISTER, REGISTER_X);
 }
 
@@ -922,6 +943,7 @@ void fnAlphaIP(uint16_t regist) {
 //
 void fn42Aip(uint16_t unusedButMandatoryParameter) {
   fnAlphaIP(alphaRegister);
+  truncateAlphaRegisterTo44Char();
 }
 
 void fn42Aleng(uint16_t unusedButMandatoryParameter) {
@@ -934,6 +956,7 @@ void fn42Atox(uint16_t unusedButMandatoryParameter) {
 
 void fn42Xtoa(uint16_t unusedButMandatoryParameter) {
   fnXToAlpha(alphaRegister);
+  truncateAlphaRegisterTo44Char();
 }
 
 void fn42Aview(uint16_t unusedButMandatoryParameter) {
