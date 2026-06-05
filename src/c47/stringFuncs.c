@@ -399,6 +399,10 @@ void fnAlphaPos(uint16_t regist) {
     return;
   }
 
+  if(programRunStop == PGM_RUNNING) {
+    copySourceRegisterToDestRegister(REGISTER_X, SAVED_REGISTER_X);    // Save register X
+  }
+  
   if(getRegisterDataType(REGISTER_X) != dtString) {
     _doXToAlpha(REGISTER_X);
     if(lastErrorCode != ERROR_NONE) {
@@ -406,40 +410,36 @@ void fnAlphaPos(uint16_t regist) {
     }
   }
 
-  if(stringGlyphLength(REGISTER_STRING_DATA(regist)) == 0 || stringGlyphLength(REGISTER_STRING_DATA(REGISTER_X)) == 0) {
-    displayCalcErrorMessage(ERROR_EMPTY_STRING, ERR_REGISTER_LINE, REGISTER_X);
-    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "cannot use " STD_alpha "POS? on or with an empty string");
-      moreInfoOnError("In function fnAlphaPos:", errorMessage, NULL, NULL);
-    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-    return;
-  }
-
   if(!saveLastX()) {
     return;
   }
 
   longIntegerInit(lgInt);
-  ptrTarget = REGISTER_STRING_DATA(REGISTER_X);
-  ptrRegist = REGISTER_STRING_DATA(regist);
-  lgTarget = stringByteLength(ptrTarget);
-  lgRegist = stringByteLength(ptrRegist);
-
   int32ToLongInteger(-1, lgInt);
-  for(i=0; i<=lgRegist-lgTarget; i++) {
-    found = true;
-    for(j=0; j<lgTarget; j++) {
-      if(*(ptrRegist+i+j) != *(ptrTarget+j)) {
-        found = false;
+  
+  if(stringGlyphLength(REGISTER_STRING_DATA(regist)) != 0 && stringGlyphLength(REGISTER_STRING_DATA(REGISTER_X)) != 0) {
+    ptrTarget = REGISTER_STRING_DATA(REGISTER_X);
+    ptrRegist = REGISTER_STRING_DATA(regist);
+    lgTarget = stringByteLength(ptrTarget);
+    lgRegist = stringByteLength(ptrRegist);
+
+    for(i=0; i<=lgRegist-lgTarget; i++) {
+      found = true;
+      for(j=0; j<lgTarget; j++) {
+        if(*(ptrRegist+i+j) != *(ptrTarget+j)) {
+          found = false;
+          break;
+        }
+      }
+      if(found) {
+        int32ToLongInteger(i, lgInt);
         break;
       }
-    }
-    if(found) {
-      int32ToLongInteger(i, lgInt);
-      break;
-    }
+	}
   }
 
+  
+  copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);    // Restore register X
   liftStack();
   convertLongIntegerToLongIntegerRegister(lgInt, REGISTER_X);
   longIntegerFree(lgInt);
