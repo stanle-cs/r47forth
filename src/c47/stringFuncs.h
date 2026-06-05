@@ -20,6 +20,8 @@
   void fnAlphaIP       (uint16_t regist);
   void fn42AlphaRotate (uint16_t unusedButMandatoryParameter);
   void fn42AlphaShift  (uint16_t unusedButMandatoryParameter);
+  void fn42Alpha       (uint16_t unusedButMandatoryParameter);
+  void fn42Append      (uint16_t unusedButMandatoryParameter);
   void fn42Aip         (uint16_t unusedButMandatoryParameter);
   void fn42Aleng       (uint16_t unusedButMandatoryParameter);
   void fn42Atox        (uint16_t unusedButMandatoryParameter);

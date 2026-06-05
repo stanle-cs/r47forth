@@ -778,6 +778,25 @@ void fnAlphaSL(uint16_t regist) {
   }
 }
 
+//
+// New 42 alpha functions
+//
+void fn42Alpha(uint16_t unusedButMandatoryParameter) {
+  char *alphaString = (programRunStop == PGM_RUNNING ? tmpStringLabelOrVariableName : aimBuffer);
+  reallocateRegister(alphaRegister, dtString, TO_BLOCKS(stringByteLength(alphaString) + 1), amNone);
+  xcopy(REGISTER_STRING_DATA(alphaRegister), alphaString, stringByteLength(alphaString) + 1);
+}
+
+
+void fn42Append(uint16_t unusedButMandatoryParameter) {
+  char *alphaString = (programRunStop == PGM_RUNNING ? tmpStringLabelOrVariableName : aimBuffer);
+  copySourceRegisterToDestRegister(REGISTER_X, LAST_TEMP_REGISTER);
+  reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(stringByteLength(alphaString) + 1), amNone);
+  xcopy(REGISTER_STRING_DATA(REGISTER_X), alphaString, stringByteLength(alphaString) + 1);
+  fnStoreAdd(alphaRegister);
+  copySourceRegisterToDestRegister(LAST_TEMP_REGISTER, REGISTER_X);
+}
+
 
 void fn42AlphaRotate(uint16_t unusedButMandatoryParameter) {
   longInteger_t lgInt;
@@ -917,6 +936,7 @@ void fnAlphaIP(uint16_t regist) {
   copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);    // Restore register X
   copySourceRegisterToDestRegister(SAVED_REGISTER_L, REGISTER_L);    // Restore register L
 }
+
 
 //
 // 42 functions wrappers to 47 native functions

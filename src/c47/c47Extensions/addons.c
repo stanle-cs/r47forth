@@ -301,7 +301,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
       uint8_t grpGroupingRightOld;
     #endif
     #if !defined(SAVE_SPACE_DM42_23_EDIT2)
-      char    varOrLblName[8];
+      char    varOrLblName[32];
     #endif
 
     if(tam.mode != 0) {
@@ -670,7 +670,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
         //printf("**[DL]** fnEdit cmPem func %d opParam %d opParam2 %d decodedLiteralType %d\n", func, opParam, opParam2, decodedLiteralType);
         //fflush(stdout);
 
-        if((func == ITM_LITERAL) || (func == ITM_REM) || (func == ITM_42STRING) || (func == ITM_42APPEND)) {
+        if((func == ITM_LITERAL) || (func == ITM_REM)) {
           memset(aimBuffer, 0, AIM_BUFFER_LENGTH);
 
           if(opParam == STRING_LABEL_VARIABLE) {
@@ -996,16 +996,33 @@ void fnEdit (uint16_t unusedParamButMandatory) {
               //scrollPemBackwards();
               if(opParam == STRING_LABEL_VARIABLE) {      // Variable name : Label or  edit name string
                 tamProcessInput(ITM_alpha);
-                varOrLblName[6] = 0;  // Ensure name is 6 characters maximum
+                if(stringGlyphLength(varOrLblName) == 7) {
+                  varOrLblName[stringLastGlyph(varOrLblName)] = 0;  // Ensure name is 6 characters maximum
+                }
                 strcpy(aimBuffer, varOrLblName);
-                alphaCursor = strlen(varOrLblName);
+                alphaCursor = stringGlyphLength(varOrLblName);
                 tamProcessInput(ITM_NOP);                 // to insert the resulting string in program
               }
 
               break;
             }
 
-
+            case PARAM_REM: {
+              memset(aimBuffer, 0, AIM_BUFFER_LENGTH);
+              deleteStepsFromTo(currentStep, findNextStep(currentStep));
+              if(!pemCursorIsZerothStep) {
+                fnBst(NOPARAM);
+              }
+              tamEnterMode(func);
+              if(stringGlyphLength(varOrLblName) == (func == ITM_42STRING ? 15 : 14)) {
+                varOrLblName[stringLastGlyph(varOrLblName)] = 0;  // Ensure name is 14 (42STRING) or 13 (42APPEND) characters maximum
+              }
+              strcpy(aimBuffer, varOrLblName);
+              alphaCursor = stringGlyphLength(varOrLblName);
+              tamProcessInput(ITM_NOP);                 // to insert the resulting string in program
+              break;
+            }
+            
             case PARAM_KEYG_KEYX: {                            // Key Goto or Key eXecute
               if(func == ITM_KEY) {
                 func = (opParam2 == ITM_GTO ? ITM_KEYG : ITM_KEYX);

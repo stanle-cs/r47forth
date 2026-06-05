@@ -768,7 +768,7 @@ void pemAlpha(int16_t item) {
       editCommand = true;
       item = 0;
     }
-    else if((aimFunc == ITM_REM) || (aimFunc == ITM_42STRING) || (aimFunc == ITM_42APPEND))   { // REM or 42 string or 42 append
+    else if(aimFunc == ITM_REM)   { // REM
       if(aimFunc == ITM_REM) {
         xcopy(aimBuffer, tmpString + 6, ll);        //purposely overshoot aimbuffer, as there is sufficient space
         aimBuffer[ll - 2 - 6] = 0;
@@ -842,7 +842,7 @@ void pemAlpha(int16_t item) {
     }
     else if(item == ITM_BACKSPACE) {
       if(aimBuffer[0] == 0) {
-          deleteStepsFromTo(currentStep, findNextStep(currentStep));
+        deleteStepsFromTo(currentStep, findNextStep(currentStep));
         clearSystemFlag(FLAG_ALPHA);
         calcModeNormalGui();
         _closeAlphaMenus();
@@ -973,7 +973,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
     func <<= 8;
     func |= currentStep[1];
   }
-  if((func == ITM_LITERAL || func == ITM_REM || func == ITM_42STRING || func == ITM_42APPEND)) {
+  if((func == ITM_LITERAL || func == ITM_REM)) {
     pemAlpha(ITM_EDIT);
   }
   hourGlassIconEnabled = false;
@@ -1365,7 +1365,7 @@ void insertStepInProgram(const int16_t func) {
     pemCursorIsZerothStep = false;
     return;
   }
-  else if(func == ITM_REM || func == ITM_42STRING || func == ITM_42APPEND) {
+  else if(func == ITM_REM) {
     if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
       pemCloseNumberInput();
       aimBuffer[0] = 0;
@@ -1377,6 +1377,16 @@ void insertStepInProgram(const int16_t func) {
     tam.function = func;
     pemAlpha(func);
     pemCursorIsZerothStep = false;
+    return;
+  }
+  else if(func == ITM_42STRING || func == ITM_42APPEND) {
+    tmpString[0] = (func >> 8) | 0x80;
+    tmpString[1] =  func  & 0xff;
+    tmpString[2] = (char)STRING_LABEL_VARIABLE;
+    tmpString[3] = stringByteLength(aimBuffer);
+    xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
+    _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 4);
+    aimBuffer[0] = 0;
     return;
   }
 

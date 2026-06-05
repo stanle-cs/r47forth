@@ -809,8 +809,7 @@ int16_t executeOneStep(uint8_t *step) {
           if(op == ITM_42STRING) {
             if(*step++ == STRING_LABEL_VARIABLE) {
               _getStringLabelOrVariableName(step);
-              reallocateRegister(alphaRegister, dtString, TO_BLOCKS(stringByteLength(tmpStringLabelOrVariableName) + 1), amNone);
-              xcopy(REGISTER_STRING_DATA(alphaRegister), tmpStringLabelOrVariableName, stringByteLength(tmpStringLabelOrVariableName) + 1);
+              fn42Alpha(NOPARAM);
             }
           }
           else if(op == ITM_42APPEND) {
@@ -823,13 +822,8 @@ int16_t executeOneStep(uint8_t *step) {
                 #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
                 return 0;
               }
-
-              copySourceRegisterToDestRegister(REGISTER_X, LAST_TEMP_REGISTER);
               _getStringLabelOrVariableName(step);
-              reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(stringByteLength(tmpStringLabelOrVariableName) + 1), amNone);
-              xcopy(REGISTER_STRING_DATA(REGISTER_X), tmpStringLabelOrVariableName, stringByteLength(tmpStringLabelOrVariableName) + 1);
-              fnStoreAdd(alphaRegister);
-              copySourceRegisterToDestRegister(LAST_TEMP_REGISTER, REGISTER_X);
+              fn42Append(NOPARAM);
             }
           }
           else {  // REM

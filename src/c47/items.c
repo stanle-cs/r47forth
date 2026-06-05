@@ -1641,6 +1641,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
 
   void fnClDisplay                (uint16_t unusedButMandatoryParameter) {}   //DL
   void fnClearAlpha               (uint16_t unusedButMandatoryParameter) {}   //DL
+  void fn42Alpha                  (uint16_t unusedButMandatoryParameter) {}   //DL
+  void fn42Append                 (uint16_t unusedButMandatoryParameter) {}   //DL
   void fnAlphaIP                  (uint16_t unusedButMandatoryParameter) {}   //DL
   void fn42AlphaRecall            (uint16_t unusedButMandatoryParameter) {}   //DL
   void fn42AlphaStore             (uint16_t unusedButMandatoryParameter) {}   //DL
@@ -4628,8 +4630,8 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2772 */  { fnClLcd,                      CLLCD_FULL,                  "CLLCD",                                          "CLLCD",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABL_XEQ | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
 /* 2773 */  { fnClearAlpha,                 TM_REGISTER,                 "CL"STD_alpha,                                    "CL" STD_alpha,                                (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
 /* 2774 */  { fnAlphaIP,                    TM_REGISTER,                 STD_alpha "IP",                                   STD_alpha "IP",                                (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
-/* 2775 */  { fnNop,                        NOPARAM,                     "42" STD_alpha,                                   "42" STD_alpha,                                (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REM          | HG_ENABLED         },
-/* 2776 */  { fnNop,                        NOPARAM,                     "42" STD_RIGHT_TACK,                              "42" STD_RIGHT_TACK,                           (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REM          | HG_ENABLED         },
+/* 2775 */  { fn42Alpha,                    TM_STRING,                   "42" STD_alpha,                                   "42" STD_alpha,                                (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REM          | HG_ENABLED         },
+/* 2776 */  { fn42Append,                   TM_STRING,                   "42" STD_RIGHT_TACK,                              "42" STD_RIGHT_TACK,                           (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REM          | HG_ENABLED         },
 /* 2777 */  { fn42AlphaRecall,              TM_REGISTER,                 "42ARCL",                                         "42ARCL",                                      (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
 /* 2778 */  { fn42AlphaStore,               TM_REGISTER,                 "42ASTO",                                         "42ASTO",                                      (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
 /* 2779 */  { fn42AlphaRotate,              NOPARAM,                     "42AROT",                                         "42AROT",                                      (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
