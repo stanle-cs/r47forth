@@ -59,11 +59,11 @@ void fnAlphaToX(uint16_t regist) {
   }
 
   if(stringByteLength(REGISTER_STRING_DATA(regist)) == 0) {
-    displayCalcErrorMessage(ERROR_EMPTY_STRING, ERR_REGISTER_LINE, REGISTER_X);
-    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "cannot use " STD_alpha STD_RIGHT_ARROW "x on an empty string");
-      moreInfoOnError("In function fnAlphaToX:", errorMessage, NULL, NULL);
-    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    liftStack();
+    longIntegerInit(lgInt);
+    int32ToLongInteger(0, lgInt);
+    convertLongIntegerToLongIntegerRegister(lgInt, REGISTER_X);
+    longIntegerFree(lgInt);
     return;
   }
 
