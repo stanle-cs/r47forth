@@ -3,6 +3,12 @@
 
 #include "c47.h"
 
+#if defined(PC_BUILD)
+  extern char *scriptFile;
+  extern bool_t headlessMode;
+  bool_t scriptingActive = FALSE;
+#endif
+
 
 //#define DEBUGMODES
 
@@ -93,7 +99,10 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
 
   static gint destroyCalc(GtkWidget* w, GdkEventAny* e, gpointer data) {
     fnStopTimerApp();
-    saveCalc();
+#if defined(PC_BUILD)
+    if(!scriptingActive)
+#endif
+      saveCalc();
     gtk_main_quit();
 
     return 0;
@@ -110,6 +119,74 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
     //debugf("Configure event: force a redraw");
     gtk_widget_queue_draw(w);
     return FALSE;
+  }
+
+  gboolean scriptInjectGtkKey(uint32_t keyval) {
+    if(frmCalc == NULL || !gtk_widget_get_realized(frmCalc)) {
+      return FALSE;
+    }
+
+    GdkWindow *window = gtk_widget_get_window(frmCalc);
+    if(window == NULL) {
+      return FALSE;
+    }
+
+    if(!gtk_widget_has_focus(frmCalc)) {
+      gtk_widget_grab_focus(frmCalc);
+    }
+
+    GdkDisplay *display = gdk_window_get_display(window);
+    GdkSeat *seat = (display != NULL) ? gdk_display_get_default_seat(display) : NULL;
+    GdkDevice *keyboard = (seat != NULL) ? gdk_seat_get_keyboard(seat) : NULL;
+    GdkEvent *press = gdk_event_new(GDK_KEY_PRESS);
+    GdkEvent *release = gdk_event_new(GDK_KEY_RELEASE);
+    if(press == NULL || release == NULL) {
+      if(press != NULL) {
+        gdk_event_free(press);
+      }
+      if(release != NULL) {
+        gdk_event_free(release);
+      }
+      return FALSE;
+    }
+
+    GdkEventKey *pressKey = &press->key;
+    pressKey->window = g_object_ref(window);
+    pressKey->send_event = TRUE;
+    pressKey->time = GDK_CURRENT_TIME;
+    pressKey->state = 0;
+    pressKey->keyval = keyval;
+    pressKey->hardware_keycode = 0;
+    pressKey->group = 0;
+    pressKey->is_modifier = FALSE;
+    pressKey->length = 0;
+    pressKey->string = NULL;
+
+    GdkEventKey *releaseKey = &release->key;
+    releaseKey->window = g_object_ref(window);
+    releaseKey->send_event = TRUE;
+    releaseKey->time = GDK_CURRENT_TIME;
+    releaseKey->state = 0;
+    releaseKey->keyval = keyval;
+    releaseKey->hardware_keycode = 0;
+    releaseKey->group = 0;
+    releaseKey->is_modifier = FALSE;
+    releaseKey->length = 0;
+    releaseKey->string = NULL;
+
+    if(keyboard != NULL) {
+      gdk_event_set_device(press, keyboard);
+      gdk_event_set_device(release, keyboard);
+    }
+    gdk_event_put(press);
+    gdk_event_put(release);
+    gdk_event_free(press);
+    gdk_event_free(release);
+
+    while(gtk_events_pending()) {
+      gtk_main_iteration();
+    }
+    return TRUE;
   }
 
 
@@ -6532,7 +6609,9 @@ int keyCntA = 0;
 
       // gtk_fixed_put(GTK_FIXED(grid), lblOn,   0, 0);     //JM Removed ON to 81
 
-      gtk_widget_show_all(frmCalc);
+      if(!headlessMode) {
+        gtk_widget_show_all(frmCalc);
+      }
 
     #else // SIMULATOR_ON_SCREEN_KEYBOARD == 0
       // The main window
@@ -6568,11 +6647,15 @@ int keyCntA = 0;
 
       g_signal_connect(screen, "draw", G_CALLBACK(drawScreen), NULL);
 
-      gtk_widget_show_all(frmCalc);
+      if(!headlessMode) {
+        gtk_widget_show_all(frmCalc);
+      }
     #endif //  (SIMULATOR_ON_SCREEN_KEYBOARD == 1)
     lcd_buffer = malloc(SCREEN_HEIGHT*(SCREEN_WIDTH/8+2)+2)+2;
     lcd_clear_buf ();
 
-  check_all_btn_widgets_for_consistency();
+    if(!headlessMode) {
+      check_all_btn_widgets_for_consistency();
+    }
   }
 #endif // PC_BUILD
