@@ -335,7 +335,7 @@ void fnPlotReset(uint16_t unusedButMandatoryParameter) {
 
 
 void fnPlotf(uint16_t unusedButMandatoryParameter) {
-  showSoftmenu(-MNU_PLTf);
+  fnEqSolvGraph(EQ_PLOT); // will pick up X1 X2 from the stack
 }
 
 void fnPlotSQ(uint16_t unusedButMandatoryParameter) {

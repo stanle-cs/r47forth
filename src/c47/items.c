@@ -268,7 +268,9 @@ bool_t isFunctionOldParam16(uint16_t func) {
 
     if(func != ITM_SOLVE_VAR && (calcMode == CM_NORMAL || calcMode == CM_NIM) &&
         (currentMenu() == -MNU_MVAR) &&
-        (currentSolverStatus == 258 || currentSolverStatus == 259)) {  //allow interactive functions to clear the SolverReady flag
+        (currentSolverStatus == (SOLVER_STATUS_USES_FORMULA | SOLVER_STATUS_INTERACTIVE) ||
+         currentSolverStatus == (SOLVER_STATUS_USES_FORMULA | SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_READY_TO_EXECUTE))
+        ) {                                                            //allow interactive functions to clear the SolverReady flag
       currentSolverStatus &= ~SOLVER_STATUS_READY_TO_EXECUTE;
     }
     if(indexOfItems[func].func != fnTvmVar && (calcMode == CM_NORMAL || calcMode == CM_NIM) &&
@@ -1364,6 +1366,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnJacobiZeta                (uint16_t unusedButMandatoryParameter) {}
   void fnPgmSlv                    (uint16_t unusedButMandatoryParameter) {}
   void fnSolve                     (uint16_t unusedButMandatoryParameter) {}
+  void fnMvarPlot                  (uint16_t unusedButMandatoryParameter) {}
   void fnSolveVar                  (uint16_t unusedButMandatoryParameter) {}
   void fnPgmInt                    (uint16_t unusedButMandatoryParameter) {}
   void fnIntegrate                 (uint16_t unusedButMandatoryParameter) {}
@@ -4544,7 +4547,7 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2731 */  { itemToBeCoded,                NOPARAM,                        "2731",                                        "2731",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2732 */  { itemToBeCoded,             TM_LBLONLY,                      "PGMPLT",                                      "PGMPLT",                                        (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         },
 /* 2733 */  { itemToBeCoded,                NOPARAM,  "PLT" STD_SPACE_4_PER_EM "f",                  "PLT" STD_SPACE_4_PER_EM "f",                                        (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
-/* 2734 */  { fnPlotf,                     TM_SOLVE,  "PLT" STD_SPACE_4_PER_EM "f",                  "PLT" STD_SPACE_4_PER_EM "f",                                        (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
+/* 2734 */  { fnMvarPlot,                  TM_SOLVE,  "PLT" STD_SPACE_4_PER_EM "f",                  "PLT" STD_SPACE_4_PER_EM "f",                                        (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
 /* 2735 */  { fnComplexPlot,             ITM_IMPLOT,                       "IMPLT",                                       "IMPLT",                                        (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },//GRAPH
 /* 2736 */  { itemToBeCoded,                NOPARAM,                       "BASE2",                                       "BASE2",                                        (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },//JM BASE
 /* 2737 */  { fnGetMatrixDimensions,    TM_REGISTER,                     "M.DIMN#",                                       "DIMN#",                                        (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         | RESULT_IN_X },

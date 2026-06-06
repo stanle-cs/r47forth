@@ -2121,6 +2121,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define SOLVER_STATUS_EQUATION_1ST_DERIVATIVE      0x0008 // --0- ---- ---- 10--
 #define SOLVER_STATUS_EQUATION_2ND_DERIVATIVE      0x000C // --0- ---- ---- 11--
 #define SOLVER_STATUS_EQUATION_GRAPHER             0x2000 // --1- ---- ---- 00--
+#define SOLVER_STATUS_RPN_GRAPHER                  0x4000 // -1xx xxxx xxxx xxxx
 
 #define SOLVER_STATUS_SINGLE_VARIABLE              0x0010 // 00-0 --00 ---1 ----
 #define SOLVER_STATUS_USES_FORMULA                 0x0100 // 00-0 --01 ---0 ----

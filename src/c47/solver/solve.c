@@ -174,6 +174,59 @@ void fnSolve(uint16_t labelOrVariable) {
   }
 }
 
+
+void fnMvarPlot(uint16_t labelOrVariable) {
+  if((FIRST_LABEL <= labelOrVariable && labelOrVariable <= LAST_LABEL) || (REGISTER_X <= labelOrVariable && labelOrVariable <= REGISTER_T)) {
+    // Interactive mode
+    fnPgmSlv(labelOrVariable);
+    if(lastErrorCode == ERROR_NONE) {
+      currentSolverStatus = SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_RPN_GRAPHER; //SOLVER_STATUS_EQUATION_GRAPHER;
+    }
+  }
+  else if(!(currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && (FIRST_NAMED_VARIABLE <= labelOrVariable && labelOrVariable <= LAST_NAMED_VARIABLE) && currentSolverProgram >= numberOfLabels) {
+    displayCalcErrorMessage(ERROR_NO_PROGRAM_SPECIFIED, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "label %u not found", labelOrVariable);
+      moreInfoOnError("In function fnMvarPlot:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
+  }
+  else if(FIRST_NAMED_VARIABLE <= labelOrVariable && labelOrVariable <= LAST_NAMED_VARIABLE) {
+    // Execute
+    real34_t xl, xh;
+    if(getRegisterAsReal34Quiet(REGISTER_Y, &xl) && getRegisterAsReal34Quiet(REGISTER_X, &xh)) {
+      saveForUndo(); //repeat after dropping the input parameters
+      currentSolverVariable = labelOrVariable;
+      screenUpdatingMode &= ~SCRUPD_MANUAL_MENU;
+      refreshScreen(0);
+printf("LAUNCH PLOT\n");
+      fnPlotf(NOPARAM); // uses currentSolverVariable=labelOrVariable & 
+
+//currentSolverStatus &= ~SOLVER_STATUS_RPN_GRAPHER;
+      fnUndo(0);
+
+    }
+    else {
+      displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        sprintf(errorMessage, "DataType %" PRIu32, getRegisterDataType(REGISTER_X));
+        moreInfoOnError("In function fnMvarPlot:", errorMessage, "is not a real number.", "");
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
+    }
+  }
+  else {
+    displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "unexpected parameter %u", labelOrVariable);
+      moreInfoOnError("In function fnMvarPlot:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
+  }
+}
+
+
+
 void fnSolveVar(uint16_t unusedButMandatoryParameter) {
     printStatus(1, errorMessages[REAL_SOLVER], force);
     const char *var = (char *)getNthString(dynamicSoftmenu[softmenuStack[0].softmenuId].menuContent, dynamicMenuItem);
@@ -204,7 +257,11 @@ void fnSolveVar(uint16_t unusedButMandatoryParameter) {
       temporaryInformation = TI_SOLVER_VARIABLE;
     }
     else if(currentSolverStatus & SOLVER_STATUS_READY_TO_EXECUTE) {
-      reallyRunFunction(ITM_SOLVE, regist);
+      if(currentSolverStatus & SOLVER_STATUS_RPN_GRAPHER) {
+        reallyRunFunction(ITM_PLTf, regist);
+      } else {
+        reallyRunFunction(ITM_SOLVE, regist);
+      }
     }
     else {
       currentSolverVariable = regist;
@@ -260,7 +317,7 @@ static void _executeSolver(calcRegister_t variable, const real34_t *val, real34_
   }
 }
 
-static void _executeSolverReal(calcRegister_t variable, const real_t *val, real_t *res, real_t *deriv) {
+void _executeSolverReal(calcRegister_t variable, const real_t *val, real_t *res, real_t *deriv) {
   if(currentSolverStatus & SOLVER_STATUS_TVM_APPLICATION) {
     // pass real_t value via ioVal, result comes back in same variable as real_t
     realCopy(val, res);

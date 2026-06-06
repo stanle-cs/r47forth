@@ -96,7 +96,14 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
                                       printRegisterToConsole(graphVariabl1, " = ", "\n");
                                     #endif //VERBOSE_SOLVER0
 
+    if(currentSolverStatus & SOLVER_STATUS_RPN_GRAPHER) {
+      real_t xReal, resReal;
+      real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), &xReal);
+      _executeSolverReal(currentSolverVariable, &xReal, &resReal, NULL);
+      realToReal34(&resReal, REGISTER_REAL34_DATA(REGISTER_X));
+    } else {
       parseEquation(currentFormula, EQUATION_PARSER_XEQ, tmpString, tmpString + AIM_BUFFER_LENGTH);
+    }
       adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
 
                                     #if defined(VERBOSE_SOLVER0)
@@ -200,8 +207,8 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
     }
     if(regStats != INVALID_VARIABLE) {
 
-    real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), &x);
-    real34ToReal(REGISTER_REAL34_DATA(REGISTER_Y), &y);
+      real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), &x);
+      real34ToReal(REGISTER_REAL34_DATA(REGISTER_Y), &y);
 
       real34Matrix_t stats;
       linkToRealMatrixRegister(regStats, &stats);
