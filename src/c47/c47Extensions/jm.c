@@ -145,182 +145,9 @@ uint16_t nprimes = 0;
  * \return void
  ***********************************************/
 void fnJM(uint16_t JM_OPCODE) {
-  #define JMTEMP    TEMP_REGISTER_1 // 98
-  #define JM_TEMP_I REGISTER_I // 97
-  #define JM_TEMP_J REGISTER_J // 96
-  #define JM_TEMP_K REGISTER_K // 95
 
   #if defined(OPTION_ELEC)
-    if(JM_OPCODE == 6) {                                         // Delta to Star   ZYX to ZYX; destroys IJKL & JMTEMP
-      saveForUndo();
-      setSystemFlag(FLAG_ASLIFT);
-      copySourceRegisterToDestRegister(REGISTER_X, JM_TEMP_I);   // STO I
-      copySourceRegisterToDestRegister(REGISTER_Y, JM_TEMP_J);   // STO J
-      copySourceRegisterToDestRegister(REGISTER_Z, JM_TEMP_K);   // STO K
-      fnAdd(0);                                                  // +
-      fnSwapXY(0);                                               // X<>Y
-
-      fnAdd(0);                                                  // +
-      copySourceRegisterToDestRegister(REGISTER_X, JMTEMP);      // STO JMTEMP
-      fnRCL(JM_TEMP_K);                                          // RCL I
-      fnRCL(JM_TEMP_J);                                          // RCL J     // z = (zx yz) / (x+y+z)
-      fnMultiply(0);                                             // *
-      fnSwapXY(0);                                               // X<>Y
-      fnDivide(0);                                               // /
-
-      fnRCL(JMTEMP);                                             // RCL JMTEMP
-      fnRCL(JM_TEMP_I);                                          // RCL J
-      fnRCL(JM_TEMP_J);                                          // RCL K     // y = (xy yz) / (x+y+z)
-      fnMultiply(0);                                             // *
-      fnSwapXY(0);                                               // X<>Y
-      fnDivide(0);                                               // /
-
-      fnRCL(JMTEMP);                                             // RCL JMTEMP
-      fnRCL(JM_TEMP_I);                                          // RCL I
-      fnRCL(JM_TEMP_K);                                          // RCL K     // z = (xy zx) / (x+y+z)
-      fnMultiply(0);                                             // *
-      fnSwapXY(0);                                               // X<>Y
-      fnDivide(0);                                               // /
-
-      copySourceRegisterToDestRegister(JM_TEMP_I, REGISTER_L);   // STO
-
-      temporaryInformation = TI_ABC;
-
-      adjustResult(REGISTER_X, false, true, REGISTER_X, -1, -1);
-      adjustResult(REGISTER_Y, false, true, REGISTER_Y, -1, -1);
-      adjustResult(REGISTER_Z, false, true, REGISTER_Z, -1, -1);
-    }
-
-    else if(JM_OPCODE == 7) {                                    // Star to Delta ZYX to ZYX; destroys IJKL & JMTEMP
-      saveForUndo();
-      setSystemFlag(FLAG_ASLIFT);
-      copySourceRegisterToDestRegister(REGISTER_X, JM_TEMP_I);   // STO I
-      copySourceRegisterToDestRegister(REGISTER_Y, JM_TEMP_J);   // STO J
-      copySourceRegisterToDestRegister(REGISTER_Z, JM_TEMP_K);   // STO K
-
-      fnMultiply(0);                          //IJ               // *
-      fnSwapXY(0);
-      fnRCL(JM_TEMP_I);                                          // RCL J
-      fnMultiply(0);                          //IK               // *
-      fnAdd(0);
-      fnRCL(JM_TEMP_J);                                          // RCL J
-      fnRCL(JM_TEMP_K);                                          // RCL K
-      fnMultiply(0);                          //JK               // *
-      fnAdd(0);
-      copySourceRegisterToDestRegister(REGISTER_X, JMTEMP);      // STO JMTEMP
-                                                                //
-      fnRCL(JM_TEMP_J);                                          //      zx = () / y
-      fnDivide(0);                                               //
-
-      fnRCL(JMTEMP);                                             // RCL JMTEMP
-      fnRCL(JM_TEMP_I);                                          //      yz = () / x
-      fnDivide(0);                                               //
-
-      fnRCL(JMTEMP);                                             // RCL JMTEMP
-      fnRCL(JM_TEMP_K);                                          //      xy = () / z
-      fnDivide(0);                                               //
-
-      copySourceRegisterToDestRegister(JM_TEMP_I, REGISTER_L);   // STO
-
-      temporaryInformation = TI_ABBCCA;
-      adjustResult(REGISTER_X, false, true, REGISTER_X, -1, -1);
-      adjustResult(REGISTER_Y, false, true, REGISTER_Y, -1, -1);
-      adjustResult(REGISTER_Z, false, true, REGISTER_Z, -1, -1);
-    }
-
-    else if(JM_OPCODE == 8) {                                          //SYMMETRICAL COMP to ABC   ZYX to ZYX; destroys IJKL
-      saveForUndo();
-      setSystemFlag(FLAG_ASLIFT);
-      copySourceRegisterToDestRegister(REGISTER_X, JM_TEMP_I);   // STO I  //A2
-      copySourceRegisterToDestRegister(REGISTER_Y, JM_TEMP_J);   // STO J  //A1
-      copySourceRegisterToDestRegister(REGISTER_Z, JM_TEMP_K);   // STO K  //A0
-      fnAdd(0);                                                  // +
-      fnAdd(0);                                                  // + Va = Vao + Va1 +Va2
-
-      setSystemFlag(FLAG_ASLIFT);
-      //liftStack();
-      fn_cnst_op_a(0);
-      fnRCL(JM_TEMP_I);                                          // A2
-      fnMultiply(0);                                             // * a
-      setSystemFlag(FLAG_ASLIFT);
-      //liftStack();
-      fn_cnst_op_aa(0);
-      fnRCL(JM_TEMP_J);                                          // A1
-      fnMultiply(0);                                             // * aa
-      fnAdd(0);                                                  // +
-      fnRCL(JM_TEMP_K);                                          // A0
-      fnAdd(0);                                                  // + Vb = Vao + aaVa1 +aVa2
-
-      setSystemFlag(FLAG_ASLIFT);
-      //liftStack();
-      fn_cnst_op_aa(0);
-      fnRCL(JM_TEMP_I);                                          // A2
-      fnMultiply(0);                                             // * a
-      setSystemFlag(FLAG_ASLIFT);
-      //liftStack();
-      fn_cnst_op_a(0);
-      fnRCL(JM_TEMP_J);                                          // A1
-      fnMultiply(0);                                             // * aa
-      fnAdd(0);                                                  // +
-      fnRCL(JM_TEMP_K);                                          // A0
-      fnAdd(0);                                                  // + Vb = Vao + aaVa1 +aVa2
-
-      copySourceRegisterToDestRegister(JM_TEMP_I, REGISTER_L);  // STO
-
-      temporaryInformation = TI_ABC;
-    }
-
-    else if(JM_OPCODE == 9) {                                   //ABC to SYMMETRICAL COMP   ZYX to ZYX; destroys IJKL & JMTEMP
-      saveForUndo();
-      setSystemFlag(FLAG_ASLIFT);
-      copySourceRegisterToDestRegister(REGISTER_X, JM_TEMP_I);  // STO I  //c
-      copySourceRegisterToDestRegister(REGISTER_Y, JM_TEMP_J);  // STO J  //b
-      copySourceRegisterToDestRegister(REGISTER_Z, JM_TEMP_K);  // STO K  //a
-      fnAdd(0);                                                 // +
-      fnAdd(0);                                                 // + Va0 = (Va + Vb +Vc)/3
-      liftStack();
-      reallocateRegister(REGISTER_X, dtComplex34, 0, amNone);
-      stringToReal34("3", REGISTER_REAL34_DATA(REGISTER_X));
-      stringToReal34("0", REGISTER_IMAG34_DATA(REGISTER_X));
-      copySourceRegisterToDestRegister(REGISTER_X, JMTEMP);     // STO
-      fnDivide(0);
-
-      setSystemFlag(FLAG_ASLIFT);
-      //liftStack();
-      fn_cnst_op_a(0);
-      fnRCL(JM_TEMP_J);                                         // VB
-      fnMultiply(0);                                            // * a
-      setSystemFlag(FLAG_ASLIFT);
-      //liftStack();
-      fn_cnst_op_aa(0);
-      fnRCL(JM_TEMP_I);                                         // VC
-      fnMultiply(0);                                            // * aa
-      fnAdd(0);                                                 // +
-      fnRCL(JM_TEMP_K);                                         // VA
-      fnAdd(0);                                                 // + V1 = (VA +aVb +aaVc) /3
-      fnRCL(JMTEMP);                                            // 3
-      fnDivide(0);                                              // /
-
-      setSystemFlag(FLAG_ASLIFT);
-      //liftStack();
-      fn_cnst_op_aa(0);
-      fnRCL(JM_TEMP_J);                                         // VB
-      fnMultiply(0);                                            // * a
-      setSystemFlag(FLAG_ASLIFT);
-      //liftStack();
-      fn_cnst_op_a(0);
-      fnRCL(JM_TEMP_I);                                         // VC
-      fnMultiply(0);                                            // * aa
-      fnAdd(0);                                                 // +
-      fnRCL(JM_TEMP_K);                                         // VA
-      fnAdd(0);                                                 // + V1 = (VA +aVb +aaVc) /3
-      fnRCL(JMTEMP);                                            // 3
-      fnDivide(0);                                              // /
-
-      copySourceRegisterToDestRegister(JM_TEMP_I, REGISTER_L);  // STO
-
-      temporaryInformation = TI_012;
-    }
+    if(fnJM1(JM_OPCODE)) {;}
 
 
     #define TripleRegZ1_96 96  //old:rr90
@@ -373,28 +200,6 @@ void fnJM(uint16_t JM_OPCODE) {
       fnDivide(0);
       fn3Sto(TripleRegI1_93);
     }
-
-    else if(JM_OPCODE == 20) {                                  //Copy Create X>ABC
-      saveForUndo();
-      setSystemFlag(FLAG_ASLIFT);
-      copySourceRegisterToDestRegister(REGISTER_X, JM_TEMP_I);
-
-      fnRCL(JM_TEMP_I);                                         //
-      setSystemFlag(FLAG_ASLIFT);
-      //liftStack();
-      fn_cnst_op_a(0);
-      fnMultiply(0);
-
-      fnRCL(JM_TEMP_I);                                         //
-      setSystemFlag(FLAG_ASLIFT);
-      //liftStack();
-      fn_cnst_op_aa(0);
-      copySourceRegisterToDestRegister(REGISTER_X, JM_TEMP_J);
-      fnMultiply(0);
-
-      temporaryInformation = TI_ABC;
-    }
-
     else if(JM_OPCODE == 21) {                                  // V/Z
       saveForUndo();
       flipPolar();
@@ -405,10 +210,7 @@ void fnJM(uint16_t JM_OPCODE) {
       flipPolar();
       fnSwapX(REGISTER_Z);
     }
-
-
   #endif // OPTION_ELEC
-  // Item 255 is NOP
 }
 
 
