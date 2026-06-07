@@ -8,6 +8,14 @@
 #if !defined(ELEC_H)
 #define ELEC_H
 
-bool_t fnJM1(uint16_t JM_OPCODE);
+  void fnDeltaToStar    (uint16_t unusedButMandatoryParameter);
+  void fnStarToDelta    (uint16_t unusedButMandatoryParameter);
+  void fnSymToAbc       (uint16_t unusedButMandatoryParameter);
+  void fnAbcToSym       (uint16_t unusedButMandatoryParameter);
+  void fnCopyXtoAbc     (uint16_t unusedButMandatoryParameter);
+  void fnTripleZfromVI  (uint16_t unusedButMandatoryParameter);
+  void fnTripleVfromIZ  (uint16_t unusedButMandatoryParameter);
+  void fnTripleIfromVZ  (uint16_t unusedButMandatoryParameter);
+  void fnTripleFlipPolar(uint16_t unusedButMandatoryParameter);
 
 #endif // !ELEC_H
