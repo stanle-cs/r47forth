@@ -333,6 +333,15 @@ const funcTest_t funcTestNoParam[] = {
   {"fnYear",                 fnYear                },
   {"fnZeta",                 fnZeta                },
   {"fnZip",                  fnZip                 },
+  {"fnDeltaToStar",          fnDeltaToStar         },
+  {"fnStarToDelta",          fnStarToDelta         },
+  {"fnSymToAbc",             fnSymToAbc            },
+  {"fnAbcToSym",             fnAbcToSym            },
+  {"fnCopyXtoAbc",           fnCopyXtoAbc          },
+  {"fnTripleZfromVI",        fnTripleZfromVI       },
+  {"fnTripleVfromIZ",        fnTripleVfromIZ       },
+  {"fnTripleIfromVZ",        fnTripleIfromVZ       },
+  {"fnTripleFlipPolar",      fnTripleFlipPolar     },
 
   {"fnExecute",              runPgm                },
   {"",                       NULL                  }
