@@ -1,0 +1,42 @@
+# OpAmp MyMenu example — https://tangentsoft.com/rpn/wiki?name=R47%3A%20MyMenu
+#
+# Run from the repo root:
+#   ./t47 < res/SCRIPTS/opamp-mymenu.t47
+# Reload saved state in the GUI with LOADST for opamp-mymenu.s47
+
+set p47_file  res/PROGRAMS/OpAmp.p47
+set state_file opamp-mymenu.s47
+
+# row0=g-shift (top), row1=f-shift, row2=unshifted (bottom); "" = null
+# Program labels match OpAmp.p47 (Unicode stylized names where used in file).
+# Use [list] with quoted Unicode elements — Jim Tcl braced lists truncate some UTF-8 labels.
+set mymenu [list \
+    [list {} {} {} {} {} _INIT] \
+    [list "RJ⒩⒪⒤⒮⒠" "Vⓞⓢ" "Gⓝⓘ" "Gⓘⓝⓥ" "||R" Rdiv] \
+    [list {} {} {} {} {} {}] \
+]
+
+readp $p47_file
+menu MyMenu
+catfn {M.SAV+}
+
+proc apply_layer {fw_row layer} {
+    set n [llength $layer]
+    for {set i 0} {$i < $n} {incr i} {
+        set label [lindex $layer $i]
+        if {$label ne ""} {
+            asn $fw_row [expr {$i + 1}] $label
+        }
+    }
+}
+
+proc apply_mymenu {rows} {
+    set n [llength $rows]
+    for {set matrix_row 0} {$matrix_row < $n} {incr matrix_row} {
+        apply_layer [expr {2 - $matrix_row}] [lindex $rows $matrix_row]
+    }
+}
+
+apply_mymenu $mymenu
+
+savest $state_file
