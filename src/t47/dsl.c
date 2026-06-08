@@ -1126,19 +1126,19 @@ void initDSL(void) {
   // Register DSL commands afterward so that our commands having the
   // same name as catalog functions override them.
   // clang-format off
-    Jim_CreateCommand(interp, "asn",    asnCmd,    NULL, NULL);
-    Jim_CreateCommand(interp, "catfn",  catfnCmd,  NULL, NULL);
-    Jim_CreateCommand(interp, "flag",   flagCmd,   NULL, NULL);
-    Jim_CreateCommand(interp, "loadst", loadstCmd, NULL, NULL);
-    Jim_CreateCommand(interp, "menu",   menuCmd,   NULL, NULL);
-    Jim_CreateCommand(interp, "nim",    nimCmd,    NULL, NULL);
-    Jim_CreateCommand(interp, "reg",    regCmd,    NULL, NULL);
-    Jim_CreateCommand(interp, "readp",  readpCmd,  NULL, NULL);
-    Jim_CreateCommand(interp, "savest", savestCmd, NULL, NULL);
-    Jim_CreateCommand(interp, "snap",   snapCmd,   NULL, NULL);
-    Jim_CreateCommand(interp, "tsvfn",  tsvfnCmd,  NULL, NULL);
-    Jim_CreateCommand(interp, "var",    varCmd,    NULL, NULL);
-    Jim_CreateCommand(interp, "xeq",    xeqCmd,    NULL, NULL);
+  Jim_CreateCommand(interp, "asn",    asnCmd,    NULL, NULL);
+  Jim_CreateCommand(interp, "catfn",  catfnCmd,  NULL, NULL);
+  Jim_CreateCommand(interp, "flag",   flagCmd,   NULL, NULL);
+  Jim_CreateCommand(interp, "loadst", loadstCmd, NULL, NULL);
+  Jim_CreateCommand(interp, "menu",   menuCmd,   NULL, NULL);
+  Jim_CreateCommand(interp, "nim",    nimCmd,    NULL, NULL);
+  Jim_CreateCommand(interp, "reg",    regCmd,    NULL, NULL);
+  Jim_CreateCommand(interp, "readp",  readpCmd,  NULL, NULL);
+  Jim_CreateCommand(interp, "savest", savestCmd, NULL, NULL);
+  Jim_CreateCommand(interp, "snap",   snapCmd,   NULL, NULL);
+  Jim_CreateCommand(interp, "tsvfn",  tsvfnCmd,  NULL, NULL);
+  Jim_CreateCommand(interp, "var",    varCmd,    NULL, NULL);
+  Jim_CreateCommand(interp, "xeq",    xeqCmd,    NULL, NULL);
   // clang-format on
   if(!headlessMode) {
     // Conditionally add commands that require the GTK GUI
