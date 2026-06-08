@@ -1395,8 +1395,7 @@ endReturnTrue:
                     } else { //flipped CONV_HP set
                       //printf("SWAPPED RUNF\n");
                       runFunction(conversionPartner(item, NULL, NULL, NULL));
-                      runFunction(conversionPartner(itemNrPair, NULL, NULL, NULL));
-                      runConversionToSI(conversionPartner(item, NULL, NULL, NULL));
+                      runConversionToSI(itemNrPair);
                       runConversionFromSI(conversionPartner(item, NULL, NULL, NULL));
                     }
                     temporaryInformation = TI_NO_INFO;
