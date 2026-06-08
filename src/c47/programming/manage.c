@@ -327,7 +327,7 @@ void fnClP(uint16_t label) {
 uint32_t _getProgramSize(void) {
   if(currentProgramNumber == numberOfPrograms) {
     uint8_t *step = programList[currentProgramNumber - 1].instructionPointer;
-    while(!isAtEndOfPrograms(step)) { // .END.
+    while(!(isAtEndOfProgram(step) || isAtEndOfPrograms(step))) { // END or .END.
       step = findNextStep(step);
     }
     return (uint32_t)(step - programList[currentProgramNumber - 1].instructionPointer + 2);
@@ -1869,7 +1869,7 @@ uint16_t getNumberOfSteps(void) {
   if(currentProgramNumber == numberOfPrograms) {
     uint16_t numberOfSteps = 1;
     uint8_t *step = programList[currentProgramNumber - 1].instructionPointer;
-    while(!isAtEndOfPrograms(step)) { // .END.
+    while(!(isAtEndOfProgram(step) || isAtEndOfPrograms(step))) { // END or .END.
       ++numberOfSteps;
       step = findNextStep(step);
     }

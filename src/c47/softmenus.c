@@ -3873,7 +3873,7 @@ void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const 
   showSoftmenuCurrentPart();
 
   FILE *bmp;
-  char bmpFileName[600];
+  char bmpFileName[1024];
   int32_t x, y;
   uint32_t uint32;
   uint16_t uint16;
@@ -3892,11 +3892,11 @@ void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const 
   if(newFilenameformat == 2) {
     stringToASCII(indexOfItems[-softmenu[menu].menuItem].itemSoftmenuName, asciiMenuName);
     stringToFileNameChars(asciiMenuName, asciiString, distinctQuotes);
-    sprintf(bmpFileName, "%s/%s.%d.bmp", menuDumpPath, asciiString, (int)(item/18)+1);
+    snprintf(bmpFileName, sizeof(bmpFileName), "%s/%s.%d.bmp", menuDumpPath, asciiString, (int)(item/18)+1);
   } else   if(newFilenameformat == 1) {
     stringToASCII(indexOfItems[-softmenu[menu].menuItem].itemSoftmenuName, asciiMenuName);
     stringToFileNameChars(asciiMenuName, asciiString, distinctQuotes);
-    sprintf(bmpFileName, "%s/Menu_%03d_p%d_%s.bmp", menuDumpPath, menu, (int)(item/18)+1, asciiString);
+    snprintf(bmpFileName, sizeof(bmpFileName), "%s/Menu_%03d_p%d_%s.bmp", menuDumpPath, menu, (int)(item/18)+1, asciiString);
   }
 
   bmp = fopen(bmpFileName, "wb");
