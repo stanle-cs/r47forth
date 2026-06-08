@@ -326,10 +326,10 @@
 #define ITM_STtoKG                   307
 #define ITM_FZUStoTBSPC              308
 #define ITM_FZUStoTSPC               309
-#define ITM_KGtoTON                  310
+#define ITM_KGtoLT                   310
 #define ITM_KGtoLIANG                311
 #define ITM_MLtoCUPC                 312
-#define ITM_TONtoKG                  313
+#define ITM_LTtoKG                   313
 #define ITM_LIANGtoKG                314
 #define ITM_MLtoCUPUK                315
 #define ITM_GtoTRZ                   316

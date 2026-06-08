@@ -1380,6 +1380,30 @@ endReturnTrue:
 
                 runFunction(item);
 
+
+                // Double execution when a custom conversion: additional to the runfunction which operated the 'normal' conversion
+                if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode != CM_PEM && item > 0 && isItemConversion(item)) {
+                  const int16_t softKeyIx  = dynamicMenuItem ^ 1;                                                                                  // XOR flips bit 0: adjacent softkey
+                  const int16_t curMenu    = -softmenu[softmenuStack[0].softmenuId].menuItem;
+                  const int16_t itemNrPair = (curMenu == MNU_MyMenu)  ? userMenuItems[softKeyIx].item
+                                           : (curMenu == MNU_DYNAMIC) ? userMenus[currentUserMenu].menuItem[softKeyIx].item
+                                           : 0;
+                  if(isItemConversion(itemNrPair) && !isStandardPair(item, itemNrPair)) {                                                          // non-standard configured pair: round-trip via SI; standard fixed pair already done by runFunction
+                    if(!getSystemFlag(FLAG_HPCONV)) { //normal CONV_HP clear
+                      runConversionToSI(item);
+                      runConversionFromSI(itemNrPair);
+                    } else { //flipped CONV_HP set
+                      //printf("SWAPPED RUNF\n");
+                      runFunction(conversionPartner(item, NULL, NULL, NULL));
+                      runFunction(conversionPartner(itemNrPair, NULL, NULL, NULL));
+                      runConversionToSI(conversionPartner(item, NULL, NULL, NULL));
+                      runConversionFromSI(conversionPartner(item, NULL, NULL, NULL));
+                    }
+                    temporaryInformation = TI_NO_INFO;
+                  }
+                }
+
+
                 if(calcMode == CM_EIM && !tam.mode) {
                   if(isAlphaSubmenu(0)) {
                     while(currentMenu() != -MNU_EQ_EDIT) {
