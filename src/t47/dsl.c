@@ -12,8 +12,15 @@
 
 #if defined(PC_BUILD)
 
+#include "assign.h"
+#include "calcMode.h"
+#include "keyboard.h"
+#include "softmenus.h"
+
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 
 // Name of the output file written by --dslcommands
@@ -23,6 +30,7 @@ const char* dslOpsFileName = "t47-op-commands.txt";
 extern bool_t scriptingActive;
 extern bool_t headlessMode;
 extern bool_t dumpDslCmds;
+
 static FILE *dslDumpFile = NULL;
 
 // External declaration for _ioFileNameOverride from hal/io.c
@@ -30,6 +38,9 @@ extern char _ioFileNameOverride[C47_PATH_MAX];
 
 // Jim interpreter instance
 static Jim_Interp *g_dsl_interpreter = NULL;
+
+// True after asn resolve (itemToBeAssigned may still be ITM_NULL == 0).
+static bool_t dslAsnHaveItem = FALSE;
 
 /** runCatalogFunctionByName result codes */
 enum {
@@ -268,7 +279,7 @@ static int runCatalogFunctionByName(Jim_Interp *interp, const char *fnName,
  * flag <name> - Get flag state (1 or 0)
  * flag <name> <value> - Set flag (1=set, 0=clear), return new state
  */
-static int flag(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int flagCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
         Jim_SetResultString(interp, "flag: missing flag argument", -1);
@@ -325,7 +336,7 @@ static int flag(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 /**
  * reg <name> <value> - Set register, return new value
  */
-static int reg(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int regCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
         Jim_SetResultString(interp, "reg: missing register argument", -1);
@@ -377,7 +388,7 @@ static int reg(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
  * var <name> - Get variable contents
  * var <name> <value> - Set variable, return new value
  */
-static int var(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int varCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
         Jim_SetResultString(interp, "var: missing variable argument", -1);
@@ -431,7 +442,7 @@ static int var(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
  * the direct call by index by using the item name as a command,
  * when it is a legal Tcl identifier.
  */
-static int catfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int catfnCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
         Jim_SetResultString(interp, "catfn: missing function name", -1);
@@ -450,9 +461,279 @@ static int catfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 }
 
 /**
+ * Copy a Jim string object into a null-terminated C buffer.
+ * Jim list elements may not be NUL-terminated when Jim_String is used directly.
+ */
+static int dslJimObjToCString(Jim_Interp *interp, Jim_Obj *obj, char *buf, size_t bufSize, const char *cmd)
+{
+    int len;
+    const char *s = Jim_GetString(obj, &len);
+
+    if(len < 0 || (size_t)len >= bufSize) {
+        Jim_SetResultFormatted(interp, "%s: string too long (%d bytes, max %zu)", cmd, len, bufSize - 1);
+        return JIM_ERR;
+    }
+    memcpy(buf, s, (size_t)len);
+    buf[len] = '\0';
+    return JIM_OK;
+}
+
+/**
+ * Copy a UTF-8 script string into aimBuffer for assignGetName1().
+ */
+static void dslSetAimBuffer(const char *label)
+{
+    char internalName[AIM_BUFFER_LENGTH];
+
+    utf8ToString((const uint8_t *)label, internalName);
+    internalName[AIM_BUFFER_LENGTH - 1] = '\0';
+    xcopy(aimBuffer, internalName, (uint32_t)strlen(internalName));
+    aimBuffer[strlen(internalName)] = '\0';
+}
+
+/**
+ * Leave assign mode the same way a successful softkey assign does.
+ */
+static void dslFinishAssign(void)
+{
+    calcMode = previousCalcMode;
+    shiftF = shiftG = false;
+    catalog = CATALOG_NONE;
+    screenUpdatingMode &= ~SCRUPD_MANUAL_MENU;
+    screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
+    refreshScreen(103);
+    screenUpdatingMode &= ~SCRUPD_ONE_TIME_FLAGS;
+}
+
+/**
+ * Resolve a label into itemToBeAssigned via assignGetName1().
+ */
+static int dslAsnResolveLabel(Jim_Interp *interp, const char *label)
+{
+    char internalName[AIM_BUFFER_LENGTH];
+
+    utf8ToString((const uint8_t *)label, internalName);
+    internalName[AIM_BUFFER_LENGTH - 1] = '\0';
+
+    if(compareString(internalName, "NULL", CMP_NAME) == 0) {
+        itemToBeAssigned = ITM_NULL;
+        dslAsnHaveItem = TRUE;
+        return JIM_OK;
+    }
+
+    dslSetAimBuffer(label);
+    assignGetName1();
+
+    if(itemToBeAssigned == ASSIGN_CLEAR) {
+        Jim_SetResultFormatted(interp, "asn: unknown assignable name '%s'", label);
+        return JIM_ERR;
+    }
+
+    dslAsnHaveItem = TRUE;
+    return JIM_OK;
+}
+
+/**
+ * Parse a non-negative integer Tcl argument.
+ */
+static int dslParseIntArg(Jim_Interp *interp, const char *cmdName, const char *arg,
+        long minVal, long maxVal, long *outVal)
+{
+    char *end = NULL;
+
+    if(arg[0] == '\0' || arg[strspn(arg, "0123456789")] != '\0') {
+        Jim_SetResultFormatted(interp, "%s: expected integer, got '%s'", cmdName, arg);
+        return JIM_ERR;
+    }
+
+    *outVal = strtol(arg, &end, 10);
+    if(*outVal < minVal || *outVal > maxVal) {
+        Jim_SetResultFormatted(interp, "%s: value %ld out of range [%ld..%ld]",
+            cmdName, *outVal, minVal, maxVal);
+        return JIM_ERR;
+    }
+
+    return JIM_OK;
+}
+
+/**
+ * Assign itemToBeAssigned to a softmenu slot on the current menu.
+ */
+static int dslAsnAssignSlot(Jim_Interp *interp, long fwRow, long col, bool_t finish)
+{
+    long position;
+    int16_t menuId;
+
+    if(fwRow < 0 || fwRow > 2 || col < 1 || col > 6) {
+        Jim_SetResultFormatted(interp,
+            "asn: row must be 0..2 and column 1..6, got row %ld col %ld", fwRow, col);
+        return JIM_ERR;
+    }
+
+    if(!dslAsnHaveItem) {
+        Jim_SetResultString(interp, "asn: nothing to assign (use 'asn resolve' first)", -1);
+        return JIM_ERR;
+    }
+
+    position = fwRow * 6 + (col - 1);
+    menuId = currentMenu();
+
+    switch(-menuId) {
+        case MNU_MyMenu:
+            assignToMyMenu((uint16_t)position);
+            break;
+        case MNU_MyAlpha:
+            assignToMyAlpha((uint16_t)position);
+            break;
+        case MNU_DYNAMIC:
+            assignToUserMenu((uint16_t)position);
+            break;
+        case MNU_HOME:
+            if(!setCurrentUserMenu(-MNU_DYNAMIC, "HOME")) {
+                Jim_SetResultString(interp, "asn: failed to open HOME menu", -1);
+                return JIM_ERR;
+            }
+            assignToUserMenu((uint16_t)position);
+            break;
+        case MNU_PFN:
+            if(!setCurrentUserMenu(-MNU_DYNAMIC, "P.FN")) {
+                Jim_SetResultString(interp, "asn: failed to open P.FN menu", -1);
+                return JIM_ERR;
+            }
+            assignToUserMenu((uint16_t)position);
+            break;
+        default:
+            Jim_SetResultFormatted(interp, "asn: cannot assign to menu '%s'",
+                indexOfItems[-menuId].itemCatalogName);
+            return JIM_ERR;
+    }
+
+    if(finish) {
+        dslFinishAssign();
+        dslAsnHaveItem = FALSE;
+    }
+
+    return JIM_OK;
+}
+
+/**
+ * menu <name> - Open a softmenu by catalog name (MyMenu via fnBaseMenu).
+ */
+static int menuCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    char internalName[64];
+
+    if(argc != 2) {
+        Jim_SetResultFormatted(interp, "menu: wrong # args: expected 1, got %d", argc - 1);
+        return JIM_ERR;
+    }
+
+    utf8ToString((const uint8_t *)Jim_String(argv[1]), internalName);
+    internalName[sizeof(internalName) - 1] = '\0';
+
+    if(compareString(internalName, "MyMenu", CMP_NAME) == 0 ||
+            compareString(internalName, "MyM", CMP_NAME) == 0) {
+        fnBaseMenu(0);
+        return JIM_OK;
+    }
+
+    for(int i = 0; softmenu[i].menuItem != 0; ++i) {
+        int16_t menuItem = softmenu[i].menuItem;
+        const char *catName = indexOfItems[-menuItem].itemCatalogName;
+        const char *smName  = indexOfItems[-menuItem].itemSoftmenuName;
+
+        if(compareString(internalName, catName, CMP_NAME) == 0 ||
+                (smName[0] != '\0' && compareString(internalName, smName, CMP_NAME) == 0)) {
+            showSoftmenu(menuItem);
+            return JIM_OK;
+        }
+    }
+
+    Jim_SetResultFormatted(interp, "menu: '%s' not found", Jim_String(argv[1]));
+    return JIM_ERR;
+}
+
+/**
+ * asn - Assign-to-softkey operations (wraps fnAssign / assignGetName1).
+ */
+static int asnCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+{
+    if(argc == 1) {
+        fnAssign(0);
+        dslAsnHaveItem = FALSE;
+        return JIM_OK;
+    }
+
+    const char *sub = Jim_String(argv[1]);
+
+    if(strcmp(sub, "resolve") == 0) {
+        char labelBuf[AIM_BUFFER_LENGTH];
+
+        if(argc != 3) {
+            Jim_SetResultFormatted(interp, "asn: wrong # args: expected 'asn resolve name', got %d args", argc - 1);
+            return JIM_ERR;
+        }
+        if(dslJimObjToCString(interp, argv[2], labelBuf, sizeof(labelBuf), "asn") != JIM_OK) {
+            return JIM_ERR;
+        }
+        return dslAsnResolveLabel(interp, labelBuf);
+    }
+
+    if(strcmp(sub, "to") == 0) {
+        long fwRow;
+        long col;
+
+        if(argc != 4) {
+            Jim_SetResultFormatted(interp, "asn: wrong # args: expected 'asn to row col', got %d args", argc - 1);
+            return JIM_ERR;
+        }
+        if(dslParseIntArg(interp, "asn", Jim_String(argv[2]), 0, 2, &fwRow) != JIM_OK) {
+            return JIM_ERR;
+        }
+        if(dslParseIntArg(interp, "asn", Jim_String(argv[3]), 1, 6, &col) != JIM_OK) {
+            return JIM_ERR;
+        }
+        return dslAsnAssignSlot(interp, fwRow, col, TRUE);
+    }
+
+    if(argc == 3 || argc == 4) {
+        long fwRow;
+        long col;
+
+        if(dslParseIntArg(interp, "asn", Jim_String(argv[1]), 0, 2, &fwRow) != JIM_OK) {
+            return JIM_ERR;
+        }
+        if(dslParseIntArg(interp, "asn", Jim_String(argv[2]), 1, 6, &col) != JIM_OK) {
+            return JIM_ERR;
+        }
+        if(argc == 3) {
+            return JIM_OK;
+        }
+
+        char labelBuf[AIM_BUFFER_LENGTH];
+
+        if(dslJimObjToCString(interp, argv[3], labelBuf, sizeof(labelBuf), "asn") != JIM_OK) {
+            return JIM_ERR;
+        }
+        if(labelBuf[0] == '\0') {
+            return JIM_OK;
+        }
+
+        if(dslAsnResolveLabel(interp, labelBuf) != JIM_OK) {
+            return JIM_ERR;
+        }
+        return dslAsnAssignSlot(interp, fwRow, col, TRUE);
+    }
+
+    Jim_SetResultString(interp,
+        "asn: usage: asn | asn resolve <name> | asn to <row> <col> | asn <row> <col> [<label>]", -1);
+    return JIM_ERR;
+}
+
+/**
  * readp <filename> - Load a program from file (like READP menu command)
  */
-static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int readpCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     const char *filename = (argc > 1) ? Jim_String(argv[1]) : "";
     if(strlen(filename) > 0) {
@@ -468,7 +749,7 @@ static int readp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 
 #undef UTF8_FAIL_DEBUG
 
-static int xeq(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int xeqCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
         Jim_SetResultString(interp, "xeq: missing label name", -1);
@@ -534,6 +815,34 @@ static int injectScriptKey(Jim_Interp *interp, const char *keyCode, uint32_t key
  */
 static int pressOne(Jim_Interp *interp, const char *keyCode)
 {
+    if(keyCode[0] == 'F' && keyCode[1] >= '1' && keyCode[1] <= '6' && keyCode[2] == '\0') {
+        btnFnClicked(NULL, (gpointer)(keyCode + 1));
+        return JIM_OK;
+    }
+    if(strcmp(keyCode, "@f") == 0) {
+        shiftF = !shiftF;
+        if(shiftF) {
+            shiftG = false;
+        }
+        return JIM_OK;
+    }
+    if(strcmp(keyCode, "@g") == 0) {
+        shiftG = !shiftG;
+        if(shiftG) {
+            shiftF = false;
+        }
+        return JIM_OK;
+    }
+    if(strncmp(keyCode, "@k ", 3) == 0) {
+        const char *keyId = keyCode + 3;
+        if(strlen(keyId) != 2 || keyId[0] < '0' || keyId[0] > '9' || keyId[1] < '0' || keyId[1] > '9') {
+            Jim_SetResultFormatted(interp, "press: invalid @k token '%s' (expected '@k NN')", keyCode);
+            return JIM_ERR;
+        }
+        btnClicked(NULL, (gpointer)keyId);
+        return JIM_OK;
+    }
+
     if(strlen(keyCode) == 1) {
         /* Presume the ASCII value of the char == the GTK_KEY_* value */
         uint32_t keyval = (uint32_t)(unsigned char)keyCode[0];
@@ -554,7 +863,7 @@ static int pressOne(Jim_Interp *interp, const char *keyCode)
 /**
  * nim <string> - Add a string to the NIM buffer
  */
-static int nim(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int nimCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
         Jim_SetResultString(interp, "nim: missing string argument", -1);
@@ -635,13 +944,13 @@ static int nim(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 /**
  * press <keycode> - Press a keyboard key (like pressing the button)
  */
-static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int pressCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc < 2) {
         Jim_SetResultString(interp, "press: missing key code argument", -1);
         return JIM_ERR;
     }
-
+    
     if(Jim_IsList(argv[1])) {
         int listLen = Jim_ListLength(interp, argv[1]);
         for(int i = 0; i < listLen; i++) {
@@ -660,20 +969,20 @@ static int press(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
             return JIM_ERR;
         }
     }
-
+    
     return JIM_OK;
 }
 
 /**
  * loadst [<filename>] - Load state from file
  */
-static int loadst(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int loadstCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
         strncpy(_ioFileNameOverride, Jim_String(argv[1]), C47_PATH_MAX - 1);
         _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
     }
-
+    
     fnLoad(LM_STATE_LOAD);
     return JIM_OK;
 }
@@ -681,13 +990,13 @@ static int loadst(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 /**
  * savest [<filename>] - Save state to file
  */
-static int savest(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int savestCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
         strncpy(_ioFileNameOverride, Jim_String(argv[1]), C47_PATH_MAX - 1);
         _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
     }
-
+    
     fnSave(SM_STATE_SAVE);
     return JIM_OK;
 }
@@ -720,7 +1029,7 @@ static void tsvfnClear(void)
  * snap [<basename>] - Wrap SNAP, producing basename.bmp and
  *                     basename.REGS.TSV output files.
  */
-static int snap(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int snapCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
         const char *baseName = Jim_String(argv[1]);
@@ -745,7 +1054,7 @@ static int snap(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
  * tsvfn [<path>] - Set the TSV output file name.  Affects virtual
  * printing, stats, graphs…  With no argument: clear the override.
  */
-static int tsvfn(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
+static int tsvfnCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 {
     if(argc > 1) {
         tsvfnSet(Jim_String(argv[1]));
@@ -782,19 +1091,19 @@ static void reportIfDslErrorAndEnd(Jim_Interp *interp, int ret) {
 
 int executeScript(const char *scriptFile) {
     int ret;
-
+    
     Jim_Interp *interp = g_dsl_interpreter;
     if(strcmp(scriptFile, "-") == 0) {
-        ret = Jim_Eval(interp,
+        ret = Jim_Eval(interp, 
             "package require aio;"
             "eval [info source [stdin read] stdin 1]");
     } else {
         // Read from file
         ret = Jim_EvalFile(interp, scriptFile);
     }
-
+    
     reportIfDslErrorAndEnd(interp, ret);
-
+    
     return ret;
 }
 
@@ -815,18 +1124,18 @@ int executeCommand(const char *command) {
 
 void initDSL(void) {
     scriptingActive = TRUE;
-
+    
     // unbuffered for the DSL session so all output is visible immediately.
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
-
+    
     // Create Jim interpreter
     Jim_Interp *interp = g_dsl_interpreter = Jim_CreateInterp();
-
+    
     // Register core Tcl commands
     Jim_RegisterCoreCommands(interp);
     Jim_InitStaticExtensions(interp);
-
+    
     // Register 🟧 CAT FCNS entries as global commands.
     char cmdName[64];
     size_t added = 0, total = 0;
@@ -840,27 +1149,27 @@ void initDSL(void) {
         }
     }
     for(int i = 0; i < LAST_ITEM; ++i) {
-        item_t item = indexOfItems[i];
-        if((item.status & CAT_STATUS) == CAT_FNCT) {
-            ++total;
-            void* idx = (void*)(intptr_t)i;
-            char catName[64];
-            char smName[64];
-            stringToUtf8(item.itemCatalogName, (uint8_t *)catName);
-            stringToUtf8(item.itemSoftmenuName, (uint8_t *)smName);
-            // Pass the original internal names to registerCatFn; it converts to UTF-8 itself. The catName/smName UTF-8
-            // copies above are only for the dump columns. Passing them in here would double-convert and corrupt glyphs.
-            bool_t reg = registerCatFn(interp, item.itemCatalogName, idx, cmdName, FALSE);
-            if(!reg) {
-                reg = registerCatFn(interp, item.itemSoftmenuName, idx, cmdName, TRUE);
-            }
-            if(reg) {
-                ++added;
-                if(dslDumpFile != NULL) {
-                    fprintf(dslDumpFile, "%d\t%s\t%s\t%s\n", i, cmdName, catName, smName);
-                }
-            }
-        }
+	item_t item = indexOfItems[i];
+	if((item.status & CAT_STATUS) == CAT_FNCT) {
+	    ++total;
+	    void* idx = (void*)(intptr_t)i;
+	    char catName[64];
+	    char smName[64];
+	    stringToUtf8(item.itemCatalogName, (uint8_t *)catName);
+	    stringToUtf8(item.itemSoftmenuName, (uint8_t *)smName);
+        // Pass the original internal names to registerCatFn; it converts to UTF-8 itself. The catName/smName UTF-8
+        // copies above are only for the dump columns. Passing them in here would double-convert and corrupt glyphs.
+	    bool_t reg = registerCatFn(interp, item.itemCatalogName, idx, cmdName, FALSE);
+	    if(!reg) {
+	        reg = registerCatFn(interp, item.itemSoftmenuName, idx, cmdName, TRUE);
+	    }
+	    if(reg) {
+	        ++added;
+	        if(dslDumpFile != NULL) {
+	            fprintf(dslDumpFile, "%d\t%s\t%s\t%s\n", i, cmdName, catName, smName);
+	        }
+	    }
+	}
     }
     if(dslDumpFile != NULL) {
         fprintf(dslDumpFile, "\nRegistered %zu of %zu possible catalog functions.\n", added, total);
@@ -872,23 +1181,25 @@ void initDSL(void) {
     }
     printf("Registered %zu of %zu possible catalog functions for T47.\n- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n", added, total);
     fflush(stdout);
-
+    
     // Register DSL commands afterward so that our commands having the
     // same name as catalog functions override them.
-    Jim_CreateCommand(interp, "catfn",  catfn,  NULL, NULL);
-    Jim_CreateCommand(interp, "flag",   flag,   NULL, NULL);
-    Jim_CreateCommand(interp, "loadst", loadst, NULL, NULL);
-    Jim_CreateCommand(interp, "nim",    nim,    NULL, NULL);
-    Jim_CreateCommand(interp, "reg",    reg,    NULL, NULL);
-    Jim_CreateCommand(interp, "readp",  readp,  NULL, NULL);
-    Jim_CreateCommand(interp, "savest", savest, NULL, NULL);
-    Jim_CreateCommand(interp, "snap",   snap,   NULL, NULL);
-    Jim_CreateCommand(interp, "tsvfn",  tsvfn,  NULL, NULL);
-    Jim_CreateCommand(interp, "var",    var,    NULL, NULL);
-    Jim_CreateCommand(interp, "xeq",    xeq,    NULL, NULL);
+    Jim_CreateCommand(interp, "asn",    asnCmd,    NULL, NULL);
+    Jim_CreateCommand(interp, "catfn",  catfnCmd,  NULL, NULL);
+    Jim_CreateCommand(interp, "flag",   flagCmd,   NULL, NULL);
+    Jim_CreateCommand(interp, "loadst", loadstCmd, NULL, NULL);
+    Jim_CreateCommand(interp, "menu",   menuCmd,   NULL, NULL);
+    Jim_CreateCommand(interp, "nim",    nimCmd,    NULL, NULL);
+    Jim_CreateCommand(interp, "reg",    regCmd,    NULL, NULL);
+    Jim_CreateCommand(interp, "readp",  readpCmd,  NULL, NULL);
+    Jim_CreateCommand(interp, "savest", savestCmd, NULL, NULL);
+    Jim_CreateCommand(interp, "snap",   snapCmd,   NULL, NULL);
+    Jim_CreateCommand(interp, "tsvfn",  tsvfnCmd,  NULL, NULL);
+    Jim_CreateCommand(interp, "var",    varCmd,    NULL, NULL);
+    Jim_CreateCommand(interp, "xeq",    xeqCmd,    NULL, NULL);
     if(!headlessMode) {
 	// Conditionally add commands that require the GTK GUI
-        Jim_CreateCommand(interp, "press", press, NULL, NULL);
+        Jim_CreateCommand(interp, "press", pressCmd, NULL, NULL);
     }
 }
 
