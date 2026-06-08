@@ -9,21 +9,21 @@
 // VARIOUS OPTIONS
 //*********************************
 
-#define VERSION1 "0.109.03.03b.RC1"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
+#define VERSION1 "00.109.03.03b0"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
 
-// Version 0.109.02.07b11   Public Release C47 & R47
-// Version 0.109.02.07b12   Public Release C47 & R47 launch
-// Version 0.109.02.07b13.1 Public Release C47 & R47
-// Version 0.109.03.00b0    Public Release C47 & R47
-// Version 0.109.03.00a1    Internal C47 & R47
-// Version 0.109.03.00b1    Public C47 & R47, with 2 packages for DM42
-// Version 0.109.03.00a2    Internal C47 & R47
-// Version 0.109.03.00b2    Public C47 & R47
-// Version 0.109.03.01b0    Public C47 & R47
-// Version 0.109.03.01b1    Public C47 & R47 bugfix version TVM
-// Version 0.109.03.02a0    Public C47 & R47 ALPHA version test vectors only
-// Version 0.109.03.02b0    Public C47 & R47
-
+// Version 00.109.02.07b11   Public Release C47 & R47
+// Version 00.109.02.07b12   Public Release C47 & R47 launch
+// Version 00.109.02.07b13.1 Public Release C47 & R47
+// Version 00.109.03.00b0    Public Release C47 & R47
+// Version 00.109.03.00a1    Internal C47 & R47
+// Version 00.109.03.00b1    Public C47 & R47, with 2 packages for DM42
+// Version 00.109.03.00a2    Internal C47 & R47
+// Version 00.109.03.00b2    Public C47 & R47
+// Version 00.109.03.01b0    Public C47 & R47
+// Version 00.109.03.01b1    Public C47 & R47 bugfix version TVM
+// Version 00.109.03.02a0    Public C47 & R47 ALPHA version test vectors only
+// Version 00.109.03.02b0    Public C47 & R47
+// Version 00.109.03.03b0    Public C47 & R47
 
 #if !defined(CALCMODEL)
   #define CALCMODEL USER_C47               // USER_C47 or USER_R47
