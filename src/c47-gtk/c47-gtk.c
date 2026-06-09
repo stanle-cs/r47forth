@@ -12,6 +12,13 @@
   #include "../t47/dsl.h"
   #include "gtkGui.h"
 
+  #ifdef _WIN32
+    #define WIN32_LEAN_AND_MEAN
+    #include <windows.h>
+    #include <io.h>
+  #endif
+
+
   char                modelString[50];
   bool_t              mockup = false;
   uint16_t            dumpMenus = 0;
@@ -40,6 +47,22 @@
       return compareString(a, b, CMP_EXTENSIVE);
     }
   #endif // EXPORT_ITEMS
+
+  #ifdef _WIN32
+    static bool consoleAttached = false;
+  #endif
+
+  void readyToExit(void) {
+    #ifdef _WIN32
+      if(consoleAttached) {
+        printf("\nYou may need to press ENTER to return to the command prompt\n");
+      }
+      fflush(stdout);
+      fflush(stderr);
+      FreeConsole();
+    #endif //_WIN32
+  }
+
 
   int main(int argc, char* argv[]) {
     //for debugging, force terminal output to be sequential
@@ -339,8 +362,20 @@
       g_free(argv0Basename);
     }
 
+
+    #ifdef _WIN32
+      if(headlessMode && AttachConsole(ATTACH_PARENT_PROCESS)) {
+        if(_fileno(stdout) < 0 || GetFileType((HANDLE)_get_osfhandle(_fileno(stdout))) == FILE_TYPE_UNKNOWN) {
+          freopen("CONOUT$", "w", stdout);
+          freopen("CONOUT$", "w", stderr);
+          consoleAttached = true;
+        }
+      }
+    #endif
+
     if(strcmp(indexOfItems[LAST_ITEM].itemSoftmenuName, "Last item") != 0) {
       printf("The last item (%u)of indexOfItems[] is not \"Last item\", but is %s\n", LAST_ITEM, indexOfItems[LAST_ITEM].itemSoftmenuName);
+      readyToExit();
       exit(1);
     }
 
@@ -360,6 +395,7 @@
         stringToUtf8(name[i], (uint8_t *)nameUtf8);
         printf("%s\n", nameUtf8);
       }
+      readyToExit();
       exit(0);
     #endif // EXPORT_ITEMS
 
@@ -436,6 +472,7 @@
     if(writeExportAll) {
       fnReset(CONFIRMED);
       fnSaveAllPrograms(NOPARAM);
+      readyToExit();
       return 0;
     }
 
@@ -451,6 +488,7 @@
       timeInfo = localtime(&rawTime);
       strftime(bmpFileName, 22, "%Y%m%d-%H%M****.bmp", timeInfo);
       printf("\n\nOutput file saved to: %s.\n\n", bmpFileName);
+      readyToExit();
       return 0;
     }
 
@@ -463,6 +501,7 @@
         fnDumpMenus(dumpMenus, menuDumpPath);
       }
       printf("\n\nOutput menus saved.\n");
+      readyToExit();
       return 0;
     }
 
@@ -471,6 +510,7 @@
       initDSL();
       int ret = executeCommand(scriptCommand);
       cleanupDSL();
+      readyToExit();
       return ret;
     }
     // Run scripts only after normal post-restore normalization.
@@ -482,6 +522,7 @@
       initDSL();
       int ret = executeScript(scriptFile);
       cleanupDSL();
+      readyToExit();
       return ret;
     }
     refreshScreen(190);
@@ -512,6 +553,7 @@
 
     gtk_main();
 
+    readyToExit();
     return 0;
   }
 #endif // PC_BUILD
