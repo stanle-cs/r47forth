@@ -52,7 +52,8 @@
     #if defined(__APPLE__)
       // we take the directory where the application is as the root for this application.
       // in argv[0] is the application itself. We strip the name of the app by searching for the last '/':
-      if(argc>=1) {
+      // Headless t47 keeps the shell cwd so script-relative paths resolve correctly.
+      if((argv0Basename == NULL || strcmp(argv0Basename, "t47") != 0) && argc >= 1) {
         char *curdir = malloc(1000);
         // find last /:
         char *s = strrchr(argv[0], '/');
@@ -371,16 +372,18 @@
     gtk_init(&argc, &argv);
     setupUI();
 
-    // Without the following 8 lines of code
-    // the f- and g-shifted labels are
-    // miss aligned! I dont know why!
-    calcModeAimGui();
-    while(gtk_events_pending()) {
-      gtk_main_iteration();
-    }
-    calcModeNormalGui();
-    while(gtk_events_pending()) {
-      gtk_main_iteration();
+    if(!headlessMode) {
+      // Without the following 8 lines of code
+      // the f- and g-shifted labels are
+      // miss aligned! I dont know why!
+      calcModeAimGui();
+      while(gtk_events_pending()) {
+        gtk_main_iteration();
+      }
+      calcModeNormalGui();
+      while(gtk_events_pending()) {
+        gtk_main_iteration();
+      }
     }
 
     restoreCalc();

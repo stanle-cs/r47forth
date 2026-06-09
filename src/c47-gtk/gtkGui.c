@@ -2067,6 +2067,10 @@ returnKeyPressedFalse:
     * \return void
     ***********************************************/
     void hideAllWidgets(void) {
+      if(headlessMode) {
+        return;
+      }
+
       gtk_widget_hide(lblFKey2);  //JMLINES
       gtk_widget_hide(lblGKey2);  //JMLINES
       gtk_widget_hide(btn11);
@@ -3652,6 +3656,10 @@ char sstmp[16];
     }
 
     void calcModeNormalGui(void) {
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeNormalGui     calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -3889,6 +3897,10 @@ char sstmp[16];
     }
 
     void calcModeAimGui(void) {
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeAimGui      calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -4178,6 +4190,10 @@ char sstmp[16];
     }
 
     void calcModeTamGui(void) {
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeTamGui      calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -5393,6 +5409,20 @@ static gboolean onUIActivity(GtkWidget *w, GdkEvent *event, gpointer data) {
   * \return void
   ***********************************************/
   void setupUI(void) {
+    if(headlessMode) {
+      screenStride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, SCREEN_WIDTH) / 4;
+      int numBytes = screenStride * SCREEN_HEIGHT * 4;
+      screenData = malloc(numBytes);
+      if(screenData == NULL) {
+        sprintf(errorMessage, "error allocating %d x %d = %d bytes for screenData", screenStride * 4, SCREEN_HEIGHT, numBytes);
+        moreInfoOnError("In function setupUI:", errorMessage, NULL, NULL);
+        exit(1);
+      }
+      lcd_buffer = malloc(SCREEN_HEIGHT * (SCREEN_WIDTH / 8 + 2) + 2) + 2;
+      lcd_clear_buf();
+      return;
+    }
+
     #if (SIMULATOR_ON_SCREEN_KEYBOARD == 1)
       int            numBytes, xPos, yPos;
       GError         *error;
