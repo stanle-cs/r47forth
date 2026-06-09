@@ -3648,6 +3648,7 @@ char sstmp[16];
     }
 
     void calcModeNormalGui(void) {
+      if(headlessMode) return;
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeNormalGui     calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -3885,6 +3886,7 @@ char sstmp[16];
     }
 
     void calcModeAimGui(void) {
+      if(headlessMode) return;
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeAimGui      calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -4174,6 +4176,7 @@ char sstmp[16];
     }
 
     void calcModeTamGui(void) {
+      if(headlessMode) return;
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeTamGui      calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD

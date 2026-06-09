@@ -31,7 +31,6 @@
   bool_t              resetKeys = false;
   uint8_t             calcModelNew = 255;
   char               *scriptFile = NULL;
-  bool_t              headlessMode = false;
   char               *menuDumpPath = NULL;
   char               *scriptCommand = NULL;
   bool_t              dumpDslCmds = false;
@@ -43,11 +42,9 @@
   #endif // EXPORT_ITEMS
 
   int main(int argc, char* argv[]) {
-    char *argv0Basename = NULL;
-
-    if(argc >= 1 && argv[0] != NULL) {
-      argv0Basename = g_path_get_basename(argv[0]);
-    }
+    //for debugging, force terminal output to be sequential
+    //setvbuf(stdout, NULL, _IONBF, 0);
+    //setvbuf(stderr, NULL, _IONBF, 0);
 
     #if defined(__APPLE__)
       // we take the directory where the application is as the root for this application.
@@ -186,7 +183,7 @@
         printf("Activated: %s\n", argv[arg]);
         writeExportAll = true;
         loadTestPrograms = true;
-        // headlessMode = true;
+        // headlessMode = true; //this needs to be made headless. Needs testing and tweaking. Later.
       }
       if(strcmp(argv[arg], "--script") == 0) {
         printf("Activated: %s\n", argv[arg]);
@@ -297,10 +294,10 @@
         printf("%s47 --r47v2               : R47v2 layout (fg g)\n", cc);
         printf("%s47 --r47v3               : R47v3 layout (bk fg) \n", cc);
         printf("%s47 --dm42                : DM42 layout\n", cc);
-        printf("%s47 --e47                 : E47 layout (SIM only) (sunsetting)\n", cc);
-        printf("%s47 --n47                 : N47 layout (SIM only) (sunsetting)\n", cc);
-        printf("%s47 --v47                 : V47 layout (SIM only) (sunsetting)\n", cc);
-        printf("%s47 --d47                 : D47 layout (SIM only) (sunsetting)\n\n", cc);
+        printf("%s47 --e47                 : E47 layout (SIM only) (retired, historical info only)\n", cc);
+        printf("%s47 --n47                 : N47 layout (SIM only) (retired, historical info only)\n", cc);
+        printf("%s47 --v47                 : V47 layout (SIM only) (retired, historical info only)\n", cc);
+        printf("%s47 --d47                 : D47 layout (SIM only) (retired, historical info only)\n\n", cc);
         printf("%s47 --jm                  : Setting profile: Jaco preferences\n", cc);
         printf("%s47 --rj                  : Setting profile: RJvM preferences\n", cc);
         printf("%s47 --hp35                : Setting profile: HP-35 tribute\n\n", cc);
@@ -330,10 +327,17 @@
       }
     }
 
-    if(argv0Basename != NULL && strcmp(argv0Basename, "t47") == 0) {
-      headlessMode = true;
+
+    if(!headlessMode) { //already we know it is headless, no need to check further
+      char *argv0Basename = NULL;
+      if(argc >= 1 && argv[0] != NULL) {
+        argv0Basename = g_path_get_basename(argv[0]);
+      }
+      if(argv0Basename != NULL && (strcmp(argv0Basename, "t47") == 0 || strcmp(argv0Basename, "t47.exe") == 0)) { //if not explicit, then set headless if t47 is used
+        headlessMode = true;
+      }
+      g_free(argv0Basename);
     }
-    g_free(argv0Basename);
 
     if(strcmp(indexOfItems[LAST_ITEM].itemSoftmenuName, "Last item") != 0) {
       printf("The last item (%u)of indexOfItems[] is not \"Last item\", but is %s\n", LAST_ITEM, indexOfItems[LAST_ITEM].itemSoftmenuName);
@@ -371,16 +375,18 @@
     gtk_init(&argc, &argv);
     setupUI();
 
-    // Without the following 8 lines of code
-    // the f- and g-shifted labels are
-    // miss aligned! I dont know why!
-    calcModeAimGui();
-    while(gtk_events_pending()) {
-      gtk_main_iteration();
-    }
-    calcModeNormalGui();
-    while(gtk_events_pending()) {
-      gtk_main_iteration();
+    if(!headlessMode) {
+      // Without the following 8 lines of code
+      // the f- and g-shifted labels are
+      // miss aligned! I dont know why!
+      calcModeAimGui();
+      while(gtk_events_pending()) {
+        gtk_main_iteration();
+      }
+      calcModeNormalGui();
+      while(gtk_events_pending()) {
+        gtk_main_iteration();
+      }
     }
 
     restoreCalc();
