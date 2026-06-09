@@ -633,7 +633,7 @@ Jacos Mac, Control works
       printf("PC Key released: _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, (uint16_t)(event->state), strr, SHIFT_State,shiftF,shiftG,
                   C47SpecialKey_AltGr_Pressed, C47SpecialKey_Ctrl_Pressed, C47SpecialKey_Valid_Pressed, C47SpecialKey_Ctrl_Released, C47SpecialKey_AltGr_Released);
       fflush(stdout);
-    #endif //VERBOSEKEYS || VERBOSE_MINIMUM
+    #endif //VERBOSEKEYS
 
     if(C47SpecialKey_Ctrl_Released) {
       goto returnKeyReleasedFalse;
@@ -789,7 +789,7 @@ returnKeyReleasedFalse:
       printf(  "PC Key pressed:  _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) labelText=%i plainTextMode=%i AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, event->state, strr, SHIFT_State,shiftF,shiftG,labelText, plainTextMode,
                   C47SpecialKey_AltGr_Pressed, C47SpecialKey_Ctrl_Pressed, C47SpecialKey_Valid_Pressed, C47SpecialKey_Ctrl_Released, C47SpecialKey_AltGr_Released);
       fflush(stdout);
-    #endif //VERBOSEKEYS || VERBOSE_MINIMUM
+    #endif //VERBOSEKEYS
 
     //printf("AltGr #1:%s         ; keyval=%u state=%u, event_key_strip_capslock=%u\n",
     //(event->keyval == GDK_KEY_at) ? "+@" : (event->keyval == GDK_KEY_numbersign) ? "+#" : (event->keyval == GDK_KEY_bar) ? "+|" : "",
@@ -2063,6 +2063,10 @@ returnKeyPressedFalse:
     * \return void
     ***********************************************/
     void hideAllWidgets(void) {
+      if(headlessMode) {
+        return;
+      }
+
       gtk_widget_hide(lblFKey2);  //JMLINES
       gtk_widget_hide(lblGKey2);  //JMLINES
       gtk_widget_hide(btn11);
@@ -3648,7 +3652,10 @@ char sstmp[16];
     }
 
     void calcModeNormalGui(void) {
-      if(headlessMode) return;
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeNormalGui     calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -3886,7 +3893,10 @@ char sstmp[16];
     }
 
     void calcModeAimGui(void) {
-      if(headlessMode) return;
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeAimGui      calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -4176,7 +4186,10 @@ char sstmp[16];
     }
 
     void calcModeTamGui(void) {
-      if(headlessMode) return;
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeTamGui      calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -5392,6 +5405,20 @@ static gboolean onUIActivity(GtkWidget *w, GdkEvent *event, gpointer data) {
   * \return void
   ***********************************************/
   void setupUI(void) {
+    if(headlessMode) {
+      screenStride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, SCREEN_WIDTH) / 4;
+      int numBytes = screenStride * SCREEN_HEIGHT * 4;
+      screenData = malloc(numBytes);
+      if(screenData == NULL) {
+        sprintf(errorMessage, "error allocating %d x %d = %d bytes for screenData", screenStride * 4, SCREEN_HEIGHT, numBytes);
+        moreInfoOnError("In function setupUI:", errorMessage, NULL, NULL);
+        exit(1);
+      }
+      lcd_buffer = malloc(SCREEN_HEIGHT * (SCREEN_WIDTH / 8 + 2) + 2) + 2;
+      lcd_clear_buf();
+      return;
+    }
+
     #if (SIMULATOR_ON_SCREEN_KEYBOARD == 1)
       int            numBytes, xPos, yPos;
       GError         *error;

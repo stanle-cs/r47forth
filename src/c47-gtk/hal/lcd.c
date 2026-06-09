@@ -72,7 +72,7 @@ void LCD_write_line(uint8_t *line_buf) {
     }
   }
   line_buf[0] = 0u; // Mark updated
-  if(!headlessMode) {
+  if(!headlessMode && screen != NULL) {
     gtk_widget_queue_draw_area(screen, 0, SCREEN_HEIGHT - row - 1, 400, 1);
   }
 }
