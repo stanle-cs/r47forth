@@ -72,7 +72,9 @@ void LCD_write_line(uint8_t *line_buf) {
     }
   }
   line_buf[0] = 0u; // Mark updated
-  gtk_widget_queue_draw_area(screen, 0, SCREEN_HEIGHT - row - 1, 400, 1);
+  if(!headlessMode) {
+    gtk_widget_queue_draw_area(screen, 0, SCREEN_HEIGHT - row - 1, 400, 1);
+  }
 }
 
 
@@ -208,6 +210,7 @@ void lcd_fill_rect(uint32_t x, uint32_t y, uint32_t dx, uint32_t dy, int val) {
 gboolean ui_is_active = FALSE;
 
 void refresh_gui(void) {
+  if(headlessMode) return;
   while(gtk_events_pending()) {
     if(ui_is_active) {
       break;  // Exit if UI active - original W32 issue, but safer on all OS
