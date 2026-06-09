@@ -620,9 +620,9 @@ Jacos Mac, Control works
     if(event_keyval == event->keyval + CTRL_State) {
       event_keyval = 99999999;
     }
-    char strr[30];
-    strr[0]=0;
-    #if defined(VERBOSEKEYS)
+    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
+      char strr[30];
+      strr[0]=0;
       strcat(strr,(((event->state) & 0x0001) != 0) ? "b0 " : "---");
       strcat(strr,(((event->state) & 0x0002) != 0) ? "b1 " : "---");
       strcat(strr,(((event->state) & 0x0004) != 0) ? "b2 " : "---");
@@ -630,12 +630,10 @@ Jacos Mac, Control works
       strcat(strr,(((event->state) & 0x0010) != 0) ? "b4 " : "---");
       strcat(strr,(((event->state) & 0x0020) != 0) ? "b5 " : "---");
       strcat(strr,(((event->state) & 0x0040) != 0) ? "b6 " : "---");
-    #endif //VERBOSEKEYS
-    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
       printf("PC Key released: _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, (uint16_t)(event->state), strr, SHIFT_State,shiftF,shiftG,
                   C47SpecialKey_AltGr_Pressed, C47SpecialKey_Ctrl_Pressed, C47SpecialKey_Valid_Pressed, C47SpecialKey_Ctrl_Released, C47SpecialKey_AltGr_Released);
       fflush(stdout);
-    #endif //VERBOSEKEYS
+    #endif //VERBOSEKEYS || VERBOSE_MINIMUM
 
     if(C47SpecialKey_Ctrl_Released) {
       goto returnKeyReleasedFalse;
@@ -778,9 +776,9 @@ returnKeyReleasedFalse:
   gboolean keyPressed(GtkWidget *w, GdkEventKey *event, gpointer data) {
     event_keyval = event->keyval + CTRL_State;
 
-    char strr[30];
-    strr[0]=0;
-    #if defined(VERBOSEKEYS)
+    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
+      char strr[30];
+      strr[0]=0;
       strcat(strr,(((event->state) & 0x0001) != 0) ? "b0 " : "---");
       strcat(strr,(((event->state) & 0x0002) != 0) ? "b1 " : "---");
       strcat(strr,(((event->state) & 0x0004) != 0) ? "b2 " : "---");
@@ -788,12 +786,10 @@ returnKeyReleasedFalse:
       strcat(strr,(((event->state) & 0x0010) != 0) ? "b4 " : "---");
       strcat(strr,(((event->state) & 0x0020) != 0) ? "b5 " : "---");
       strcat(strr,(((event->state) & 0x0040) != 0) ? "b6 " : "---");
-    #endif //VERBOSEKEYS
-    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
       printf(  "PC Key pressed:  _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) labelText=%i plainTextMode=%i AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, event->state, strr, SHIFT_State,shiftF,shiftG,labelText, plainTextMode,
                   C47SpecialKey_AltGr_Pressed, C47SpecialKey_Ctrl_Pressed, C47SpecialKey_Valid_Pressed, C47SpecialKey_Ctrl_Released, C47SpecialKey_AltGr_Released);
       fflush(stdout);
-    #endif //VERBOSEKEYS
+    #endif //VERBOSEKEYS || VERBOSE_MINIMUM
 
     //printf("AltGr #1:%s         ; keyval=%u state=%u, event_key_strip_capslock=%u\n",
     //(event->keyval == GDK_KEY_at) ? "+@" : (event->keyval == GDK_KEY_numbersign) ? "+#" : (event->keyval == GDK_KEY_bar) ? "+|" : "",
