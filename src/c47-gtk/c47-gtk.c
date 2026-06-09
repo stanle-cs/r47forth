@@ -73,6 +73,10 @@
       // we take the directory where the application is as the root for this application.
       // in argv[0] is the application itself. We strip the name of the app by searching for the last '/':
       // Headless t47 keeps the shell cwd so script-relative paths resolve correctly.
+      char *argv0Basename = NULL;
+      if(argc >= 1 && argv[0] != NULL) {
+        argv0Basename = g_path_get_basename(argv[0]);
+      }
       if((argv0Basename == NULL || strcmp(argv0Basename, "t47") != 0) && argc >= 1) {
         char *curdir = malloc(1000);
         // find last /:
@@ -84,6 +88,7 @@
           free(curdir);
         }
       }
+      g_free(argv0Basename);
     #endif // __APPLE__
 
     c47MemInBlocks = 0;
