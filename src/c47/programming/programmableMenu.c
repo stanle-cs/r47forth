@@ -121,7 +121,6 @@ void fnProgrammableMenu(uint16_t unusedButMandatoryParameter) {
   else if(programmableMenu.itemParam[dynamicMenuItem] != INVALID_VARIABLE) {
     int16_t prm = dynamicMenuItem;
     dynamicMenuItem = -1;
-    popSoftmenu();
     runProgram(false, programmableMenu.itemParam[prm]);
   }
 
