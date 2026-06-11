@@ -2895,7 +2895,62 @@
 #define ITM_2789                    2789
 #define ITM_2790                    2790 //spares for 42s compatibility functions
 
-#define LAST_ITEM                   2791
+#define ITM_2791                    2791
+#define ITM_2792                    2792
+#define ITM_2793                    2793
+#define ITM_2794                    2794
+#define ITM_2795                    2795
+#define ITM_2796                    2796
+#define ITM_2797                    2797
+#define ITM_2798                    2798
+#define ITM_2799                    2799
+
+
+
+#define ITM_LBSFT2toPA              2800
+#define ITM_PAtoLBSFT2              2801
+#define ITM_INLBStoNM               2802
+#define ITM_NMtoINLBS               2803
+#define ITM_LBSFTtoNPM              2804
+#define ITM_NPMtoLBSFT              2805
+#define ITM_KGFtoN                  2806
+#define ITM_NtoKGF                  2807
+#define ITM_MS2toFTS2               2808
+#define ITM_FTS2toMS2               2809
+#define ITM_MS2toINS2               2810
+#define ITM_INS2toMS2               2811
+#define ITM_KSItoMPA                2812
+#define ITM_MPAtoKSI                2813
+#define ITM_LBSIN3toBLOBIN3         2814
+#define ITM_BLOBIN3toLBSIN3         2815
+#define ITM_LBSIN3toTMM3            2816
+#define ITM_TMM3toLBSIN3            2817
+#define ITM_LBSIN3toKGM3            2818
+#define ITM_KGM3toLBSIN3            2819
+#define ITM_KGM3toBLOBIN3           2820
+#define ITM_BLOBIN3toKGM3           2821
+#define ITM_KGM3toTMM3              2822
+#define ITM_TMM3toKGM3              2823
+#define ITM_LBSFTtoKGM              2824
+#define ITM_KGMtoLBSFT              2825
+#define ITM_IN3toMM3                2826
+#define ITM_MM3toIN3                2827
+#define ITM_IN2toMM2                2828
+#define ITM_MM2toIN2                2829
+#define ITM_IN4toMM4                2830
+#define ITM_MM4toIN4                2831
+#define ITM_IN6toMM6                2832
+#define ITM_MM6toIN6                2833
+
+#define MNU_CONV_SECTION            2834
+#define MNU_CONV_MATERL             2835
+#define MNU_CONV_F_LOAD             2836
+#define MNU_CONV_M_LOAD             2837
+#define MNU_CONV_P_LOAD             2838 
+#define MNU_STRUCT                  2839
+
+
+#define LAST_ITEM                   2840
 
 #define SCREENDUMP                    9875 // Used to signal screen dump operated (not to be confused with SNAP)
 #define NOPARAM                       9876 // Item for function who don't need an item

@@ -155,12 +155,27 @@
     constFactorSlinchKg,
     constFactorBlobKg,
     constFactorTonneKg,         /* 146 */
+    constFactorLbsft2Pa,        /* 147 */
+    constFactorInlbsNm,
+    constFactorLbsftNpm,
+    constFactorKgfN,
+    constFactorKsiMpa,
+    constFactorLbsBlob,
+    constFactorLbsin3Tmm3,
+    constFactorLbsin3Kgm3,
+    constFactorKgm3Blobin3,
+    constFactorKgm3Tmm3,
+    constFactorLbsftKgm,
+    constFactorIn3Mm3,
+    constFactorIn2Mm2,          /* 159 */
+    constFactorIn4Mm4,
+    constFactorIn6Mm6,          /* 161 */
 
     constFactorEND              /* MUST be last */
   };
 
 
-  #define NUM_CONVERT_PAIRS  272
+  #define NUM_CONVERT_PAIRS  306
   extern const fInMim_t MimFunctionsType3Conv[NUM_CONVERT_PAIRS];
 
   bool_t  isStandardPair             (int16_t item1Nr, int16_t item2Nr);
