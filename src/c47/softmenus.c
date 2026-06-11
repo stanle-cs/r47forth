@@ -1884,26 +1884,6 @@ bool_t maxfgLines(int16_t y) {
     return true;
   }
 
-  static void truncateAtString(char *label, const char *search) {
-    int16_t i = 0;
-    while(label[i+1] != 0) {
-      if(search[0] == label[i] && search[1] == label[i+1]) {
-        label[i] = 0;
-        break;
-      }
-      i++;
-    }
-  }
-
-  static void truncateAtArrow(char *label) {
-    char sample[4];
-
-    stringCopy(sample, STD_RIGHT_ARROW);
-    truncateAtString(label, sample);
-
-    stringCopy(sample, STD_LEFT_ARROW);
-    truncateAtString(label, sample);
-  }
 
   void greyRect(int16_t x, int16_t y, int16_t dx, int16_t dy) {
     int16_t col, row;

@@ -1238,3 +1238,25 @@ bool_t findTwoChars(const char *tmpString, uint8_t char1, uint8_t char2, uint16_
   }
   return false;
 }
+
+
+void truncateAtString(char *label, const char *search) {
+  int16_t i = 0;
+  while(label[i+1] != 0) {
+    if(search[0] == label[i] && search[1] == label[i+1]) {
+      label[i] = 0;
+      break;
+    }
+    i++;
+  }
+}
+
+void truncateAtArrow(char *label) {
+  char sample[4];
+
+  stringCopy(sample, STD_RIGHT_ARROW);
+  truncateAtString(label, sample);
+
+  stringCopy(sample, STD_LEFT_ARROW);
+  truncateAtString(label, sample);
+}

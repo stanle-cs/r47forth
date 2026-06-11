@@ -723,6 +723,25 @@ void runConversionFromSI(int16_t itemNr) {
 
 
 
+void fullConvSoftMenuItemNameInclHPCONV(int16_t item, char *outString) {
+  if(!isItemConversion(item)) {                                                  // not a conversion: plain softmenu name
+    stringCopy(outString, indexOfItems[item].itemSoftmenuName);
+    return;
+  }
+  const int16_t useNameExcludingRightArrowOnLeft  = item;
+  const int16_t useNameExcludingRightArrowOnRight = conversionPartner(item, NULL, NULL, NULL);
+  char scratch[64];
+  stringCopy(scratch, indexOfItems[useNameExcludingRightArrowOnLeft].itemSoftmenuName);  // left side: source name up to (but excluding) the arrow
+  truncateAtArrow(scratch);
+  stringCopy(outString, scratch);
+  stringCopy(outString + stringByteLength(outString), STD_RIGHT_ARROW);                  // normal right facing arrow between the two sides
+  stringCopy(scratch, indexOfItems[useNameExcludingRightArrowOnRight].itemSoftmenuName); // right side: source name up to (but excluding) the arrow
+  truncateAtArrow(scratch);
+  stringCopy(outString + stringByteLength(outString), scratch);
+}
+
+
+
 static void unitConversion(const real_t * const coefficient, uint16_t multiplyDivide, bool_t invert) {
   real_t reX;
 

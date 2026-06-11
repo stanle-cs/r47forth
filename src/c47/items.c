@@ -552,48 +552,25 @@ bool_t isFunctionOldParam16(uint16_t func) {
         default:;
       }
 
+
       //TI for conversion menus
       if(lastErrorCode == ERROR_NONE && temporaryInformation == TI_NO_INFO) {
-        switch(softmenu[softmenuStack[0].softmenuId].menuItem) {
-          case -MNU_CONVE :
-          case -MNU_CONVP :
-          case -MNU_CONVFP:
-          case -MNU_CONVM :
-          case -MNU_CONVX :
-          case -MNU_CONVV :
-          case -MNU_CONVA :
-          case -MNU_CONVS :
-          case -MNU_CONVANG :
-          case -MNU_MISC :
-          case -MNU_CONVHUM :
-          case -MNU_CONVYMMV :
-          case -MNU_CONVCHEF :
-          case -MNU_CONVTEMP :
-          case -MNU_MyMenu:
-          case -MNU_DYNAMIC  : {
-            errorMessage[0]=0;
-            strcat(errorMessage, indexOfItems[func].itemCatalogName);
-            temporaryInformation = TI_NO_INFO;
-            int16_t i = 0;
-            while(errorMessage[i+1] != 0) {
-              if(STD_RIGHT_ARROW[0] == errorMessage[i] && (STD_RIGHT_ARROW[1] == errorMessage[i+1] || STD_RIGHT_SHORT_ARROW[1] == errorMessage[i+1])) {
-                temporaryInformation = TI_CONV_MENU_STR;
-                errorMessage[i++] = 0;
-                errorMessage[i++] = 0;
-                break;
-              }
-              i++;
-            }
-            int16_t j = 0;
-            errorMessage[j] = 0;
-            while(errorMessage[i] != 0) {
-              errorMessage[j++] =  errorMessage[i++];
-            }
-            errorMessage[j] = 0;
-            expandConversionName(errorMessage);
-            break;
+        temporaryInformation = TI_NO_INFO;
+        if(isItemConversion(func)) {
+          fullConvSoftMenuItemNameInclHPCONV(func, errorMessage);
+          errorMessage[0] = 0;
+          temporaryInformation = TI_CONV_MENU_STR;
+          int16_t i = 0;
+          while(!(STD_RIGHT_ARROW[0] == errorMessage[i] && (STD_RIGHT_ARROW[1] == errorMessage[i + 1] || STD_RIGHT_SHORT_ARROW[1] == errorMessage[i + 1]))) {
+            i++;
           }
-          default:break;
+          i += 2;                                       // step past the two bytes of the right-arrow glyph to the first byte of the second unit name
+          int16_t j = 0;
+          while(errorMessage[i] != 0) {
+            errorMessage[j++] = errorMessage[i++];
+          }
+          errorMessage[j] = 0;
+          expandAbbreviations(errorMessage);
         }
       }
     }

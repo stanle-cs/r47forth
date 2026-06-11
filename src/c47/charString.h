@@ -128,6 +128,9 @@ void     addChrBothSides       (uint8_t t, char * str);
 void     addStrBothSides       (char * str, char * str_b, char * str_e);
 
 bool_t   findTwoChars          (const char *tmpString, uint8_t char1, uint8_t char2, uint16_t *position);
+void     truncateAtString      (char *label, const char *search);
+void     truncateAtArrow       (char *label);
+
 
 #endif // !CHARSTRING_H
 

@@ -2056,6 +2056,10 @@ return res;
       else if(item >= FIRST_CONSTANT && item <= LAST_CONSTANT) {
         stringCopy(functionName, pickValidItemFromItems(item, PRIORITY_itemSoftmenuName));
       }
+      else if(isItemConversion(item)) {
+        fullConvSoftMenuItemNameInclHPCONV(item, functionName);
+        expandAbbreviations(functionName);
+      }
       else if(item < LAST_ITEM && item != MNU_DYNAMIC) {
         stringCopy(functionName, pickValidItemFromItems(item, PRIORITY_itemCatalogName));
       }
@@ -2074,7 +2078,6 @@ return res;
     }
 
     if(functionName[0] != 0) {
-      expandAbbreviations(functionName);
       bool_t overLapPossible = (calcMode == CM_PEM);
       padding[0] = 0;
       if(overLapPossible) {
@@ -3670,6 +3673,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           fnDisplayStack(3);
         }
 
+
+
+
+
+        // printf("=================================\n\ntemporaryInformation=%d \n",temporaryInformation);
+        // printf("   regist=%d getRegisterDataType(regist)=%d dtReal34=%d\n",regist, getRegisterDataType(regist), dtReal34);
+        // printf("   errorMessage=%s\n", errorMessage);
 
 
         if(lastErrorCode != 0 && regist == errorMessageRegisterLine) {
@@ -5515,9 +5525,6 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
       }
       else { // Fixed line to display TAM informations, and ASSIGN preview information
         clearTamBuffer();
-        if(isItemConversion(itemToBeAssigned)) {
-          expandAbbreviations(tamBuffer);
-        }
         showString(tamBuffer, &standardFont, funcNameOffset_x, Y_POSITION_OF_TAM_LINE + 6, vmNormal, true, true);
       }
     }
