@@ -1630,7 +1630,6 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnColumnMin                (uint16_t unusedButMandatoryParameter) {}
   void fnColumnMax                (uint16_t unusedButMandatoryParameter) {}
   void fnMatrixFind               (uint16_t unusedButMandatoryParameter) {}
-  void fnPlotf                    (uint16_t unusedButMandatoryParameter) {}
   void fnGetADM                   (uint16_t unusedButMandatoryParameter) {}
   void fnSetADM                   (uint16_t unusedButMandatoryParameter) {}
   void fnSetISM                   (uint16_t unusedButMandatoryParameter) {}

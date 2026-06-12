@@ -2632,9 +2632,6 @@ void fnEqSolvGraph (uint16_t func) {
       }
 
       graphVariabl1 = currentSolverVariable;
-      if(graphVariabl1<0) {
-        graphVariabl1 = -graphVariabl1;
-      }
 
       if(graphVariabl1 >= FIRST_NAMED_VARIABLE && graphVariabl1 <= LAST_NAMED_VARIABLE) {
         #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
