@@ -277,7 +277,7 @@
 
 #define LOW_GRAPH_ACC                                                                     //Lowered graph accuracy for EQN graphs
 //#undef LOW_GRAPH_ACC
-#define significantDigitsForEqnGraphs (significantDigits == 0 ? 12 : significantDigits)   //If 6 is chosen by user, all four types are changes as follows: 34 to SDIGS; 39 to SDIGS+3; 51 to SDIGS+6; 75 to SDIGS+9
+#define significantDigitsForEqnGraphs (significantDigits == 0 ? 12 : significantDigits)   //If <=6 is chosen by user, all four types are changed as follows: 34 to SDIGS; 39 to SDIGS+3; 51 to SDIGS+6; 75 to SDIGS+9
 #define significantDigitsForScreen    3                                                   //Only for screen coord scaling of the resulting graphic matrix: 34 to 4; 39 to 4+3; 51 to 4+3; 75 to 4+3
 
 
@@ -836,7 +836,7 @@
 #define FLAG_alphaCAP                         0xc00f
 #define FLAG_RUNTIM                           0xc010
 #define FLAG_AMORT_HP12C                      0x8011
-#define FLAG_spare                            0xc012 // spare
+#define FLAG_IMPLOT                           0x8012
 #define FLAG_TRACE                            0x8013
 #define FLAG_USER                             0x8014
 #define FLAG_LOWBAT                           0xc015
@@ -2134,6 +2134,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define SOLVER_STATUS_EQUATION_1ST_DERIVATIVE      0x0008 // --0- ---- ---- 10--
 #define SOLVER_STATUS_EQUATION_2ND_DERIVATIVE      0x000C // --0- ---- ---- 11--
 #define SOLVER_STATUS_EQUATION_GRAPHER             0x2000 // --1- ---- ---- 00--
+#define SOLVER_STATUS_RPN_GRAPHER                  0x4000 // -1xx xxxx xxxx xxxx
 
 #define SOLVER_STATUS_SINGLE_VARIABLE              0x0010 // 00-0 --00 ---1 ----
 #define SOLVER_STATUS_USES_FORMULA                 0x0100 // 00-0 --01 ---0 ----

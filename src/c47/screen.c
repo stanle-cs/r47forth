@@ -6126,7 +6126,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           doRefreshSoftMenu = false;
           graph_plotmem();
           displayShiftAndTamBuffer();
-          showSoftmenuCurrentPart();
+          if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED)) {
+            showSoftmenuCurrentPart();
+          }
+          else {
+            calcMode = CM_NORMAL;
+          }
           hourGlassIconEnabled = true;
           refreshStatusBar();
           hourGlassIconEnabled = false;
