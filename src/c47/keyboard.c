@@ -1398,7 +1398,7 @@ endReturnTrue:
                       runConversionToSI(itemNrPair);
                       runConversionFromSI(conversionPartner(item, NULL, NULL, NULL));
                     }
-                    temporaryInformation = TI_NO_INFO;
+                    temporaryInformation = TI_CONV_MENU_STR;
                   }
                 }
 

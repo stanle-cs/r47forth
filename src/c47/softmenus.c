@@ -515,7 +515,7 @@ TO_QSPI const int16_t menu_AngleConv_43S[]= {ITM_DEG2,                      ITM_
 TO_QSPI const int16_t menu_UnitConv[]        = {
                                                     -MNU_CONVE,               -MNU_CONVM,               -MNU_CONVTEMP,            -MNU_CONVX,               -MNU_CONVA,               -MNU_CONVV,
                                                     -MNU_CONVP,               -MNU_CONVYMMV,            -MNU_CONVANG,             -MNU_CONVS,               -MNU_CONVFP,              -MNU_CONVCHEF,
-                                                    -MNU_MISC,                ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 -MNU_CONVHUM};
+                                                    -MNU_MISC,                -MNU_STRUCT,              ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 -MNU_CONVHUM};
 TO_QSPI const int16_t menu_ConvA[]        = {
                                                     ITM_ACtoHA,               ITM_HAtoAC,               ITM_HECTAREtoM2,          ITM_M2toHECTARE,          ITM_MI2toKM2,             ITM_KM2toMI2,
                                                     ITM_ACUStoHA,             ITM_HAtoACUS,             ITM_MUtoM2,               ITM_M2toMU,               ITM_NMI2toKM2,            ITM_KM2toNMI2,
@@ -598,6 +598,43 @@ TO_QSPI const int16_t menu_ConvTemp[]       = {
                                                     ITM_CtoF,                 ITM_FtoC,                 ITM_CtoK,                 ITM_KtoC,                 ITM_FtoK,                 ITM_KtoF,
                                                     ITM_RAtoF,                ITM_FtoRA,                ITM_RAtoK,                ITM_KtoRA,                ITM_EVKBtoK,              ITM_KtoEVKB,
                                                     ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL                        };
+ 
+TO_QSPI const int16_t menu_ConvStruct[]     = {
+                                                    // Screen 1 — Navigation index
+                                                    -MNU_CONV_SECTION,        -MNU_CONV_MATERL,         -MNU_CONV_F_LOAD,         -MNU_CONV_M_LOAD,         -MNU_CONV_P_LOAD,         -MNU_CONVM,
+                                                    ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,
+                                                    ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_ENG,                  ITM_UNIT};
+
+TO_QSPI const int16_t menu_ConvSection[]     = {
+                                                    // Screen 2 — SECTION (bottom row first)
+                                                    ITM_LBSFTtoKGM,           ITM_KGMtoLBSFT,           ITM_INCHtoMM,             ITM_MMtoINCH,             ITM_SI_m,                 ITM_SI_k,
+                                                    ITM_NULL,                 ITM_NULL,                 ITM_IN2toMM2,             ITM_MM2toIN2,             ITM_IN4toMM4,             ITM_MM4toIN4,
+                                                    -MNU_STRUCT,              -MNU_CONV_SECTION,        ITM_IN3toMM3,             ITM_MM3toIN3,             ITM_IN6toMM6,             ITM_MM6toIN6};
+
+TO_QSPI const int16_t menu_ConvMaterial[]     = {
+                                                    // Screen 3 — MATERL
+                                                    ITM_PSItoPA,              ITM_PAtoPSI,              ITM_LBSIN3toKGM3,         ITM_KGM3toLBSIN3,         ITM_SI_m,                 ITM_SI_k,
+                                                    ITM_KSItoMPA,             ITM_MPAtoKSI,             ITM_LBSIN3toTMM3,         ITM_TMM3toLBSIN3,         ITM_KGM3toTMM3,           ITM_TMM3toKGM3,
+                                                    -MNU_STRUCT,              -MNU_CONV_MATERL,         ITM_LBSIN3toBLOBIN3,      ITM_BLOBIN3toLBSIN3,      ITM_KGM3toBLOBIN3,        ITM_BLOBIN3toKGM3};
+
+TO_QSPI const int16_t menu_CONV_FLoad[]     = {
+                                                    // Screen 4 — F LOAD
+                                                    ITM_LBSFTtoNPM,           ITM_NPMtoLBSFT,           ITM_LBFtoN,               ITM_NtoLBF,               ITM_SI_m,                 ITM_SI_k,
+                                                    ITM_NULL,                 ITM_NULL,                 ITM_LBStoKG,              ITM_KGtoLBS,              ITM_MS2toINS2,            ITM_INS2toMS2,
+                                                    -MNU_STRUCT,              -MNU_CONV_F_LOAD,         ITM_KGFtoN,               ITM_NtoKGF,               ITM_MS2toFTS2,            ITM_FTS2toMS2};
+
+TO_QSPI const int16_t menu_CONV_MLoad[]     = {
+                                                    // Screen 5 — M LOAD
+                                                    ITM_LBFFTtoNM,            ITM_NMtoLBFFT,            ITM_INLBStoNM,            ITM_NMtoINLBS,            ITM_SI_m,                 ITM_SI_k,
+                                                    ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,
+                                                    -MNU_STRUCT,              -MNU_CONV_M_LOAD,         ITM_NULL,                 ITM_NULL,                 ITM_ENG,                  ITM_UNIT};
+
+TO_QSPI const int16_t menu_CONV_PLoad[]     = {
+                                                    // Screen 6 — P LOAD
+                                                    ITM_LBSFT2toPA,           ITM_PAtoLBSFT2,           ITM_PSItoPA,              ITM_PAtoPSI,              ITM_SI_m,                 ITM_SI_k,
+                                                    ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,
+                                                    -MNU_STRUCT,              -MNU_CONV_P_LOAD,         ITM_NULL,                 ITM_NULL,                 ITM_ENG,                  ITM_UNIT};
+
 
 //---------//---------//---------//---------//---------
 
@@ -1117,7 +1154,7 @@ TO_QSPI const softmenu_t softmenu[] = {
 /* 135 */  {.menuItem = -MNU_GAP_RX,        .numItems = sizeof(menu_GAP_RX        )/sizeof(int16_t), .softkeyItem = menu_GAP_RX         },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 /* 136 */  {.menuItem = -MNU_GAP_R,         .numItems = sizeof(menu_GAP_R         )/sizeof(int16_t), .softkeyItem = menu_GAP_R          },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 /* 137 */  {.menuItem = -MNU_PREFIX,        .numItems = sizeof(menu_PREFIX        )/sizeof(int16_t), .softkeyItem = menu_PREFIX         },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
-/* 138 */  {.menuItem = -MNU_2233,          .numItems = 0,                                           .softkeyItem = NULL        },       // NOTE Next menu to use!
+/* 138 */  {.menuItem = -MNU_STRUCT,        .numItems = sizeof(menu_ConvStruct    )/sizeof(int16_t), .softkeyItem = menu_ConvStruct     },
 /* 139 */  {.menuItem = -MNU_RESETS,        .numItems = sizeof(menu_RESETS        )/sizeof(int16_t), .softkeyItem = menu_RESETS         },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 /* 140 */  {.menuItem = -MNU_RIBBONS,       .numItems = sizeof(menu_RIBBONS       )/sizeof(int16_t), .softkeyItem = menu_RIBBONS        },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 /* 141 */  {.menuItem = -MNU_INL_TST,       .numItems = sizeof(menu_Inl_Tst       )/sizeof(int16_t), .softkeyItem = menu_Inl_Tst        },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
@@ -1159,8 +1196,13 @@ TO_QSPI const softmenu_t softmenu[] = {
 /* 177 */  {.menuItem = -MNU_TAMNORM,       .numItems = sizeof(menu_TamNorm       )/sizeof(int16_t), .softkeyItem = menu_TamNorm        },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 /* 178 */  {.menuItem = -MNU_BASE2,         .numItems = sizeof(menu_Base2         )/sizeof(int16_t), .softkeyItem = menu_Base2          },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 /* 179 */  {.menuItem = -MNU_42,            .numItems = sizeof(menu_42            )/sizeof(int16_t), .softkeyItem = menu_42             },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+/* 180 */  {.menuItem = -MNU_CONV_SECTION,  .numItems = sizeof(menu_ConvSection   )/sizeof(int16_t), .softkeyItem = menu_ConvSection    },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+/* 181 */  {.menuItem = -MNU_CONV_MATERL,   .numItems = sizeof(menu_ConvMaterial  )/sizeof(int16_t), .softkeyItem = menu_ConvMaterial   },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+/* 182 */  {.menuItem = -MNU_CONV_F_LOAD,   .numItems = sizeof(menu_CONV_FLoad    )/sizeof(int16_t), .softkeyItem = menu_CONV_FLoad     },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+/* 183 */  {.menuItem = -MNU_CONV_M_LOAD,   .numItems = sizeof(menu_CONV_MLoad    )/sizeof(int16_t), .softkeyItem = menu_CONV_MLoad     },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+/* 184 */  {.menuItem = -MNU_CONV_P_LOAD,   .numItems = sizeof(menu_CONV_PLoad    )/sizeof(int16_t), .softkeyItem = menu_CONV_PLoad     },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 
-/* 180 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
+/* 185 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
 
 
 };
@@ -1842,26 +1884,6 @@ bool_t maxfgLines(int16_t y) {
     return true;
   }
 
-  static void truncateAtString(char *label, const char *search) {
-    int16_t i = 0;
-    while(label[i+1] != 0) {
-      if(search[0] == label[i] && search[1] == label[i+1]) {
-        label[i] = 0;
-        break;
-      }
-      i++;
-    }
-  }
-
-  static void truncateAtArrow(char *label) {
-    char sample[4];
-
-    stringCopy(sample, STD_RIGHT_ARROW);
-    truncateAtString(label, sample);
-
-    stringCopy(sample, STD_LEFT_ARROW);
-    truncateAtString(label, sample);
-  }
 
   void greyRect(int16_t x, int16_t y, int16_t dx, int16_t dy) {
     int16_t col, row;
@@ -3264,14 +3286,7 @@ void showSoftmenuCurrentPart(void) {
             //        +20000 -> no bottom line
             //        +30000 -> neither top nor bottom line
 
-            if(softmenu[m].menuItem  == -MNU_CONVS    || softmenu[m].menuItem  == -MNU_CONVANG  ||
-               softmenu[m].menuItem  == -MNU_CONVE    || softmenu[m].menuItem  == -MNU_CONVP    ||
-               softmenu[m].menuItem  == -MNU_CONVFP   || softmenu[m].menuItem  == -MNU_CONVM    ||
-               softmenu[m].menuItem  == -MNU_CONVX    || softmenu[m].menuItem  == -MNU_CONVV    ||
-               softmenu[m].menuItem  == -MNU_CONVA    || softmenu[m].menuItem  == -MNU_UNITCONV ||
-               softmenu[m].menuItem  == -MNU_MISC     || softmenu[m].menuItem  == -MNU_CONVHUM  ||
-               softmenu[m].menuItem  == -MNU_CONVYMMV || softmenu[m].menuItem  == -MNU_CONVCHEF ||
-               softmenu[m].menuItem  == -MNU_CONVTEMP ) {
+            if( isItemConversion(item)) {
               showSoftkey2(true, indexOfItems[item%10000].itemSoftmenuName, x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, showCb, showValue, showText, false);
             }
 
