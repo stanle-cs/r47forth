@@ -489,7 +489,6 @@ typedef struct {
   }
 
   static bool getSingleParameter (int registerNo, real_t *combined, angularMode_t *angleMode, realContext_t *c) {
-printf("Dddd %d\n", registerNo);
     *angleMode = registerIsNoAngle(registerNo) ? amNone : getRegisterAngularMode(registerNo);
 
     if(!getLongintegerRegisterAsReal1071(registerNo, combined, c)) {                        //ignore anglemode, it is handled elsewhere
@@ -1070,6 +1069,14 @@ printf("Dddd %d\n", registerNo);
       printRegisterToConsole(REGISTER_Y, "\nY:", "\n");
       printRegisterToConsole(REGISTER_X, "\nX:", "\n");
     #endif //DEBUG_XFN
+
+
+    //Step 6: drop T, A, B for a successful dyadic function
+    if(lastErrorCode == 0 && functionType == FT_DYADIC) {
+      fnDropT(NOPARAM);
+      fnDropT(NOPARAM);
+      fnDropT(NOPARAM);
+    }
 
 
     #if defined(DEBUG_XFN) || defined(DEBUGRESULT_ONLY_XFN)
