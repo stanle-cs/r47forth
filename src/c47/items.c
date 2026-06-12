@@ -552,48 +552,25 @@ bool_t isFunctionOldParam16(uint16_t func) {
         default:;
       }
 
+
       //TI for conversion menus
       if(lastErrorCode == ERROR_NONE && temporaryInformation == TI_NO_INFO) {
-        switch(softmenu[softmenuStack[0].softmenuId].menuItem) {
-          case -MNU_CONVE :
-          case -MNU_CONVP :
-          case -MNU_CONVFP:
-          case -MNU_CONVM :
-          case -MNU_CONVX :
-          case -MNU_CONVV :
-          case -MNU_CONVA :
-          case -MNU_CONVS :
-          case -MNU_CONVANG :
-          case -MNU_MISC :
-          case -MNU_CONVHUM :
-          case -MNU_CONVYMMV :
-          case -MNU_CONVCHEF :
-          case -MNU_CONVTEMP :
-          case -MNU_MyMenu:
-          case -MNU_DYNAMIC  : {
-            errorMessage[0]=0;
-            strcat(errorMessage, indexOfItems[func].itemCatalogName);
-            temporaryInformation = TI_NO_INFO;
-            int16_t i = 0;
-            while(errorMessage[i+1] != 0) {
-              if(STD_RIGHT_ARROW[0] == errorMessage[i] && (STD_RIGHT_ARROW[1] == errorMessage[i+1] || STD_RIGHT_SHORT_ARROW[1] == errorMessage[i+1])) {
-                temporaryInformation = TI_CONV_MENU_STR;
-                errorMessage[i++] = 0;
-                errorMessage[i++] = 0;
-                break;
-              }
-              i++;
-            }
-            int16_t j = 0;
-            errorMessage[j] = 0;
-            while(errorMessage[i] != 0) {
-              errorMessage[j++] =  errorMessage[i++];
-            }
-            errorMessage[j] = 0;
-            expandConversionName(errorMessage);
-            break;
+        temporaryInformation = TI_NO_INFO;
+        if(isItemConversion(func)) {
+          fullConvSoftMenuItemNameInclHPCONV(func, errorMessage);
+          errorMessage[0] = 0;
+          temporaryInformation = TI_CONV_MENU_STR;
+          int16_t i = 0;
+          while(!(STD_RIGHT_ARROW[0] == errorMessage[i] && (STD_RIGHT_ARROW[1] == errorMessage[i + 1] || STD_RIGHT_SHORT_ARROW[1] == errorMessage[i + 1]))) {
+            i++;
           }
-          default:break;
+          i += 2;                                       // step past the two bytes of the right-arrow glyph to the first byte of the second unit name
+          int16_t j = 0;
+          while(errorMessage[i] != 0) {
+            errorMessage[j++] = errorMessage[i++];
+          }
+          errorMessage[j] = 0;
+          expandAbbreviations(errorMessage);
         }
       }
     }
@@ -2033,9 +2010,9 @@ TO_QSPI const item_t indexOfItems[] = {
 /*  249 */  UNIT_CONV(constFactorBtuJ        , divide           ,            "J"                                  STD_RIGHT_ARROW            "Btu"                               ,            "J"                                  STD_RIGHT_ARROW            "Btu"                               ),
 /*  250 */  UNIT_CONV(constFactorCalJ        , multiply         ,            "cal"                                STD_RIGHT_ARROW            "J"                                 ,            "cal"                                STD_RIGHT_ARROW            "J"                                 ),
 /*  251 */  UNIT_CONV(constFactorCalJ        , divide           ,            "J"                                  STD_RIGHT_ARROW            "cal"                               ,            "J"                                  STD_RIGHT_ARROW            "cal"                               ),
-/*  252 */  UNIT_CONV(constFactorLbfftNm     , multiply         ,            "lbf"       STD_DOT             "ft" STD_RIGHT_ARROW            "Nm"                                ,            "lbf"       STD_DOT             "ft" STD_RIGHT_ARROW            "Nm"                                ),
+/*  252 */  UNIT_CONV(constFactorLbfftNm     , multiply         ,            "lbf"       STD_DOT             "ft" STD_RIGHT_ARROW            "N"         STD_DOT "m"             ,            "lbf"       STD_DOT             "ft" STD_RIGHT_ARROW            "N"         STD_DOT             "m" ),
 /* 0253 */  UNIT_CONV(constFactorLFt3        , divide           , STD_litre                                       STD_RIGHT_ARROW            "ft"        STD_SUP_3               , STD_litre                                       STD_RIGHT_ARROW            "ft"        STD_SUP_3               ),
-/*  254 */  UNIT_CONV(constFactorLbfftNm     , divide           ,            "Nm"                                 STD_RIGHT_ARROW            "lbf"       STD_DOT             "ft",            "Nm"                                 STD_RIGHT_ARROW            "lbf"       STD_DOT             "ft"),
+/*  254 */  UNIT_CONV(constFactorLbfftNm     , divide           ,            "N"         STD_DOT             "m"  STD_RIGHT_ARROW            "lbf"       STD_DOT             "ft",            "N"         STD_DOT             "m"  STD_RIGHT_ARROW            "lbf"       STD_DOT             "ft"),
 /* 0255 */  UNIT_CONV(constFactorFt3L        , multiply         ,            "ft"        STD_SUP_3                STD_RIGHT_ARROW STD_litre                                      ,            "ft"        STD_SUP_3                STD_RIGHT_ARROW STD_litre                                      ),
 /*  256 */  UNIT_CONV(constFactorCwtKg       , multiply         ,            "cwt"                                STD_RIGHT_ARROW            "kg"                                ,            "cwt"                                STD_RIGHT_ARROW            "kg"                                ),
 /*  257 */  UNIT_CONV(constFactorCwtKg       , divide           ,            "kg"                                 STD_RIGHT_ARROW            "cwt"                               ,            "kg"                                 STD_RIGHT_ARROW            "cwt"                               ),
@@ -4609,6 +4586,8 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2761 */  { itemToBeCoded,                NOPARAM,                     "2761",                                           "2761",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2762 */  { itemToBeCoded,                NOPARAM,                     "2762",                                           "2762",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 
+
+
 /* 2763 */  { fnGetADM,                        NOPARAM,                     "ADM#",                                        "ADM#",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /* 2764 */  { fnSetADM,                     REGISTER_X,                     "ADM",                                         "ADM",                                         (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 // 1606 */  { fnGetIntegerSignMode,            NOPARAM,                     "ISM#",                                        "ISM#",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
@@ -4650,6 +4629,49 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2798 */  { fn42Prompt,                   NOPARAM,                     "42PRMPT",                                        "42PRMPT",                                     (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
 /* 2799 */  { itemToBeCoded,                NOPARAM,                     "2799",                                           "2790",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 
-/* 2800 */  { itemToBeCoded,                NOPARAM,                     "",                                               "Last item",                                   (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2800 */  UNIT_CONV(constFactorLbsft2Pa    , multiply         ,            "lbs/ft" STD_SUP_2                   STD_RIGHT_ARROW                          ,            "lbs/ft" STD_SUP_2                   STD_RIGHT_ARROW),
+/* 2801 */  UNIT_CONV(constFactorLbsft2Pa    , divide           ,            "Pa"                                 STD_RIGHT_ARROW                          ,            "Pa"                                 STD_RIGHT_ARROW),
+/* 2802 */  UNIT_CONV(constFactorInlbsNm     , multiply         ,            "in" STD_DOT "lbs"                   STD_RIGHT_ARROW                          ,            "in" STD_DOT "lbs"                   STD_RIGHT_ARROW),
+/* 2803 */  UNIT_CONV(constFactorInlbsNm     , divide           ,            "N" STD_DOT "m"                      STD_RIGHT_ARROW                          ,            "N" STD_DOT "m"                      STD_RIGHT_ARROW),
+/* 2804 */  UNIT_CONV(constFactorLbsftNpm    , multiply         ,            "lbs/ft"                             STD_RIGHT_ARROW                          ,            "lbs/ft"                             STD_RIGHT_ARROW),
+/* 2805 */  UNIT_CONV(constFactorLbsftNpm    , divide           ,            "N/m"                                STD_RIGHT_ARROW                          ,            "N/m"                                STD_RIGHT_ARROW),
+/* 2806 */  UNIT_CONV(constFactorKgfN        , multiply         ,            "kgf"                                STD_RIGHT_ARROW                          ,            "kgf"                                STD_RIGHT_ARROW),
+/* 2807 */  UNIT_CONV(constFactorKgfN        , divide           ,            "N"                                  STD_RIGHT_ARROW                          ,            "N"                                  STD_RIGHT_ARROW),
+/* 2808 */  UNIT_CONV(constFactorFtM         , divide           ,            "m/s" STD_SUP_2                      STD_RIGHT_ARROW                          ,            "m/s" STD_SUP_2                      STD_RIGHT_ARROW),
+/* 2809 */  UNIT_CONV(constFactorFtM         , multiply         ,            "ft/s" STD_SUP_2                     STD_RIGHT_ARROW                          ,            "ft/s" STD_SUP_2                     STD_RIGHT_ARROW),
+/* 2810 */  UNIT_CONV(constFactorInchMm      , divide           ,            "m/s" STD_SUP_2                      STD_RIGHT_ARROW                          ,            "m/s" STD_SUP_2                      STD_RIGHT_ARROW),
+/* 2811 */  UNIT_CONV(constFactorInchMm      , multiply         ,            "in/s" STD_SUP_2                     STD_RIGHT_ARROW                          ,            "in/s" STD_SUP_2                     STD_RIGHT_ARROW),
+/* 2812 */  UNIT_CONV(constFactorKsiMpa      , multiply         ,            "ksi"                                STD_RIGHT_ARROW                          ,            "ksi"                                STD_RIGHT_ARROW),
+/* 2813 */  UNIT_CONV(constFactorKsiMpa      , divide           ,            "MPa"                                STD_RIGHT_ARROW                          ,            "MPa"                                STD_RIGHT_ARROW),
+/* 2814 */  UNIT_CONV(constFactorLbsBlob     , divide           ,            "lbs/in" STD_SUP_3                   STD_RIGHT_ARROW                          ,            "lbs/in" STD_SUP_3                   STD_RIGHT_ARROW),
+/* 2815 */  UNIT_CONV(constFactorLbsBlob     , multiply         ,            "blob/in" STD_SUP_3                  STD_RIGHT_ARROW                          ,            "blob/in" STD_SUP_3                  STD_RIGHT_ARROW),
+/* 2816 */  UNIT_CONV(constFactorLbsin3Tmm3  , multiply         ,            "lbs/in" STD_SUP_3                   STD_RIGHT_ARROW                          ,            "lbs/in" STD_SUP_3                   STD_RIGHT_ARROW),
+/* 2817 */  UNIT_CONV(constFactorLbsin3Tmm3  , divide           ,            "t/mm" STD_SUP_3                     STD_RIGHT_ARROW                          ,            "t/mm" STD_SUP_3                     STD_RIGHT_ARROW),
+/* 2818 */  UNIT_CONV(constFactorLbsin3Kgm3  , multiply         ,            "lbs/in" STD_SUP_3                   STD_RIGHT_ARROW                          ,            "lbs/in" STD_SUP_3                   STD_RIGHT_ARROW),
+/* 2819 */  UNIT_CONV(constFactorLbsin3Kgm3  , divide           ,            "kg/m" STD_SUP_3                     STD_RIGHT_ARROW                          ,            "kg/m" STD_SUP_3                     STD_RIGHT_ARROW),
+/* 2820 */  UNIT_CONV(constFactorKgm3Blobin3 , divide           ,            "kg/m" STD_SUP_3                     STD_RIGHT_ARROW                          ,            "kg/m" STD_SUP_3                     STD_RIGHT_ARROW),
+/* 2821 */  UNIT_CONV(constFactorKgm3Blobin3 , multiply         ,            "blob/in" STD_SUP_3                  STD_RIGHT_ARROW                          ,            "blob/in" STD_SUP_3                  STD_RIGHT_ARROW),
+/* 2822 */  UNIT_CONV(constFactorKgm3Tmm3    , multiply         ,            "kg/m" STD_SUP_3                     STD_RIGHT_ARROW                          ,            "kg/m" STD_SUP_3                     STD_RIGHT_ARROW),
+/* 2823 */  UNIT_CONV(constFactorKgm3Tmm3    , divide           ,            "t/mm" STD_SUP_3                     STD_RIGHT_ARROW                          ,            "t/mm" STD_SUP_3                     STD_RIGHT_ARROW),
+/* 2824 */  UNIT_CONV(constFactorLbsftKgm    , multiply         ,            "lbs/ft"                             STD_RIGHT_ARROW                          ,            "lbs/ft"                             STD_RIGHT_ARROW),
+/* 2825 */  UNIT_CONV(constFactorLbsftKgm    , divide           ,            "kg/m"                               STD_RIGHT_ARROW                          ,            "kg/m"                               STD_RIGHT_ARROW),
+/* 2826 */  UNIT_CONV(constFactorIn3Mm3      , multiply         ,            "in" STD_SUP_3                       STD_RIGHT_ARROW                          ,            "in" STD_SUP_3                       STD_RIGHT_ARROW),
+/* 2827 */  UNIT_CONV(constFactorIn3Mm3      , divide           ,            "mm" STD_SUP_3                       STD_RIGHT_ARROW                          ,            "mm" STD_SUP_3                       STD_RIGHT_ARROW),
+/* 2828 */  UNIT_CONV(constFactorIn2Mm2      , multiply         ,            "in" STD_SUP_2                       STD_RIGHT_ARROW                          ,            "in" STD_SUP_2                       STD_RIGHT_ARROW),
+/* 2829 */  UNIT_CONV(constFactorIn2Mm2      , divide           ,            "mm" STD_SUP_2                       STD_RIGHT_ARROW                          ,            "mm" STD_SUP_2                       STD_RIGHT_ARROW),
+/* 2830 */  UNIT_CONV(constFactorIn4Mm4      , multiply         ,            "in" STD_SUP_4                       STD_RIGHT_ARROW                          ,            "in" STD_SUP_4                       STD_RIGHT_ARROW),
+/* 2831 */  UNIT_CONV(constFactorIn4Mm4      , divide           ,            "mm" STD_SUP_4                       STD_RIGHT_ARROW                          ,            "mm" STD_SUP_4                       STD_RIGHT_ARROW),
+/* 2832 */  UNIT_CONV(constFactorIn6Mm6      , multiply         ,            "in" STD_SUP_6                       STD_RIGHT_ARROW                          ,            "in" STD_SUP_6                       STD_RIGHT_ARROW),
+/* 2833 */  UNIT_CONV(constFactorIn6Mm6      , divide           ,            "mm" STD_SUP_6                       STD_RIGHT_ARROW                          ,            "mm" STD_SUP_6                       STD_RIGHT_ARROW),
+
+
+/* 2834 */  { itemToBeCoded,                NOPARAM,                       "SecPrp:",                                      "SecPrp:",                                       (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2835 */  { itemToBeCoded,                NOPARAM,                       "MatPrp:",                                      "MatPrp:",                                       (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2836 */  { itemToBeCoded,                NOPARAM,                       "FLoads:",                                      "FLoads:",                                       (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2837 */  { itemToBeCoded,                NOPARAM,                       "MLoads:",                                      "MLoads:",                                       (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2838 */  { itemToBeCoded,                NOPARAM,                       "PLoads:",                                      "PLoads:",                                       (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2839 */  { itemToBeCoded,                NOPARAM,                       "Struct:",                                      "Struct:",                                       (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+
+/* 2840 */  { itemToBeCoded,                NOPARAM,                     "",                                               "Last item",                                    (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 
 };
