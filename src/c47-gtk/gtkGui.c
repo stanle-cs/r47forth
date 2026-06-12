@@ -620,9 +620,9 @@ Jacos Mac, Control works
     if(event_keyval == event->keyval + CTRL_State) {
       event_keyval = 99999999;
     }
-    char strr[30];
-    strr[0]=0;
-    #if defined(VERBOSEKEYS)
+    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
+      char strr[30];
+      strr[0]=0;
       strcat(strr,(((event->state) & 0x0001) != 0) ? "b0 " : "---");
       strcat(strr,(((event->state) & 0x0002) != 0) ? "b1 " : "---");
       strcat(strr,(((event->state) & 0x0004) != 0) ? "b2 " : "---");
@@ -630,8 +630,6 @@ Jacos Mac, Control works
       strcat(strr,(((event->state) & 0x0010) != 0) ? "b4 " : "---");
       strcat(strr,(((event->state) & 0x0020) != 0) ? "b5 " : "---");
       strcat(strr,(((event->state) & 0x0040) != 0) ? "b6 " : "---");
-    #endif //VERBOSEKEYS
-    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
       printf("PC Key released: _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, (uint16_t)(event->state), strr, SHIFT_State,shiftF,shiftG,
                   C47SpecialKey_AltGr_Pressed, C47SpecialKey_Ctrl_Pressed, C47SpecialKey_Valid_Pressed, C47SpecialKey_Ctrl_Released, C47SpecialKey_AltGr_Released);
       fflush(stdout);
@@ -778,9 +776,9 @@ returnKeyReleasedFalse:
   gboolean keyPressed(GtkWidget *w, GdkEventKey *event, gpointer data) {
     event_keyval = event->keyval + CTRL_State;
 
-    char strr[30];
-    strr[0]=0;
-    #if defined(VERBOSEKEYS)
+    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
+      char strr[30];
+      strr[0]=0;
       strcat(strr,(((event->state) & 0x0001) != 0) ? "b0 " : "---");
       strcat(strr,(((event->state) & 0x0002) != 0) ? "b1 " : "---");
       strcat(strr,(((event->state) & 0x0004) != 0) ? "b2 " : "---");
@@ -788,8 +786,6 @@ returnKeyReleasedFalse:
       strcat(strr,(((event->state) & 0x0010) != 0) ? "b4 " : "---");
       strcat(strr,(((event->state) & 0x0020) != 0) ? "b5 " : "---");
       strcat(strr,(((event->state) & 0x0040) != 0) ? "b6 " : "---");
-    #endif //VERBOSEKEYS
-    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
       printf(  "PC Key pressed:  _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) labelText=%i plainTextMode=%i AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, event->state, strr, SHIFT_State,shiftF,shiftG,labelText, plainTextMode,
                   C47SpecialKey_AltGr_Pressed, C47SpecialKey_Ctrl_Pressed, C47SpecialKey_Valid_Pressed, C47SpecialKey_Ctrl_Released, C47SpecialKey_AltGr_Released);
       fflush(stdout);
@@ -2067,6 +2063,10 @@ returnKeyPressedFalse:
     * \return void
     ***********************************************/
     void hideAllWidgets(void) {
+      if(headlessMode) {
+        return;
+      }
+
       gtk_widget_hide(lblFKey2);  //JMLINES
       gtk_widget_hide(lblGKey2);  //JMLINES
       gtk_widget_hide(btn11);
@@ -3652,6 +3652,10 @@ char sstmp[16];
     }
 
     void calcModeNormalGui(void) {
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeNormalGui     calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -3889,6 +3893,10 @@ char sstmp[16];
     }
 
     void calcModeAimGui(void) {
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeAimGui      calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -4178,6 +4186,10 @@ char sstmp[16];
     }
 
     void calcModeTamGui(void) {
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeTamGui      calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -5393,6 +5405,20 @@ static gboolean onUIActivity(GtkWidget *w, GdkEvent *event, gpointer data) {
   * \return void
   ***********************************************/
   void setupUI(void) {
+    if(headlessMode) {
+      screenStride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, SCREEN_WIDTH) / 4;
+      int numBytes = screenStride * SCREEN_HEIGHT * 4;
+      screenData = malloc(numBytes);
+      if(screenData == NULL) {
+        sprintf(errorMessage, "error allocating %d x %d = %d bytes for screenData", screenStride * 4, SCREEN_HEIGHT, numBytes);
+        moreInfoOnError("In function setupUI:", errorMessage, NULL, NULL);
+        exit(1);
+      }
+      lcd_buffer = malloc(SCREEN_HEIGHT * (SCREEN_WIDTH / 8 + 2) + 2) + 2;
+      lcd_clear_buf();
+      return;
+    }
+
     #if (SIMULATOR_ON_SCREEN_KEYBOARD == 1)
       int            numBytes, xPos, yPos;
       GError         *error;

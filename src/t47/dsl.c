@@ -694,11 +694,25 @@ static int asnCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
  * readp <filename> - Load a program from file (like READP menu command)
  */
 static int readpCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
-  const char *filename = (argc > 1) ? Jim_String(argv[1]) : "";
-  if(strlen(filename) > 0) {
-    setReadpFilenameOverride(filename);
+  if(argc < 2) {
+    Jim_SetResultString(interp, "readp: missing filename", -1);
+    return JIM_ERR;
   }
+
+  const char *filename = Jim_String(argv[1]);
+
+  lastErrorCode = ERROR_NONE;
+  setReadpFilenameOverride(filename);
   fnLoadProgram(0);
+
+  if(temporaryInformation != TI_PROGRAM_LOADED) {
+    const char *detail = (lastErrorCode != ERROR_NONE)
+        ? errorMessages[lastErrorCode]
+        : "unknown error";
+    Jim_SetResultFormatted(interp, "readp: failed to load '%s': %s", filename, detail);
+    return JIM_ERR;
+  }
+
   return JIM_OK;
 }
 
