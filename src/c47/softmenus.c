@@ -921,24 +921,6 @@ TO_QSPI const int16_t menu_PREFIX[]      = { ITM_SI_k,                      ITM_
                                              ITM_SI_m,                      ITM_SI_u,                   ITM_SI_n,                 ITM_SI_p,              ITM_SI_f,                    ITM_DSP,
                                              ITM_SI_Ki,                     ITM_SI_Mi,                  ITM_SI_Gi,                ITM_SI_Ti,             ITM_SI_Pi,                   ITM_2TO10             };                //JM HOME
 
-
-TO_QSPI const int16_t menu_Plotf[]       = {  VAR_LX,                       VAR_UX,                     ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
-                                              ITM_SCALE,                    ITM_PLOTRST,                ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                              ITM_MZOOMY,                   ITM_PZOOMY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
-
-                                              ITM_SHOWY,                    ITM_SHOWX,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                              ITM_CPXPLOT,                  ITM_IMPLOT,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                             -MNU_GRAPHS,                   ITM_SNAP,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-
-                                              ITM_PCROS,                    ITM_PPLUS,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                              ITM_PLINE,                    ITM_PBOX,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                              ITM_PCURVE,                   ITM_LISTXY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
-
-                                              ITM_DIFF,                     ITM_INTG,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
-                                              ITM_RMS,                      ITM_SHADE,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
-                                              ITM_NVECT,                    ITM_VECT,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL};
-
-
 TO_QSPI const int16_t menu_PLOTFUNC[]    = {  VAR_LX,                       VAR_UX,                     ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
                                               ITM_SCALE,                    ITM_PLOTRST,                ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                               ITM_MZOOMY,                   ITM_PZOOMY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
@@ -1172,11 +1154,10 @@ TO_QSPI const softmenu_t softmenu[] = {
 /* 175 */  {.menuItem = -MNU_PRINTER,       .numItems = sizeof(menu_Printer       )/sizeof(int16_t), .softkeyItem = menu_Printer        },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references.
 /* 176 */  {.menuItem = -MNU_VECT,          .numItems = sizeof(menu_VECT          )/sizeof(int16_t), .softkeyItem = menu_VECT           },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references.
 /* 177 */  {.menuItem = -MNU_TAMNORM,       .numItems = sizeof(menu_TamNorm       )/sizeof(int16_t), .softkeyItem = menu_TamNorm        },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
-/* 178 */  {.menuItem = -MNU_PLTf,          .numItems = sizeof(menu_Plotf         )/sizeof(int16_t), .softkeyItem = menu_Plotf          },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
-/* 179 */  {.menuItem = -MNU_BASE2,         .numItems = sizeof(menu_Base2         )/sizeof(int16_t), .softkeyItem = menu_Base2          },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
-/* 180 */  {.menuItem = -MNU_42,            .numItems = sizeof(menu_42            )/sizeof(int16_t), .softkeyItem = menu_42             },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+/* 178 */  {.menuItem = -MNU_BASE2,         .numItems = sizeof(menu_Base2         )/sizeof(int16_t), .softkeyItem = menu_Base2          },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+/* 179 */  {.menuItem = -MNU_42,            .numItems = sizeof(menu_42            )/sizeof(int16_t), .softkeyItem = menu_42             },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 
-/* 181 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
+/* 180 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
 
 
 };
