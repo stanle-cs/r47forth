@@ -2832,7 +2832,7 @@
 #define ITM_2730                    2730
 #define ITM_2731                    2731 //spares for Matrix/Vector
 #define ITM_PGMPLT                  2732
-#define MNU_PLTf                    2733
+#define MNU_2733                    2733
 #define ITM_PLTf                    2734
 #define ITM_IMPLOT                  2735
 #define MNU_BASE2                   2736
