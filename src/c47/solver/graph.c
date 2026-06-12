@@ -23,6 +23,7 @@
   #undef VERBOSE_SOLVER_ITERDATA
   #undef STATDEBUG
   #undef GRAPHDEBUG
+  #undef GRAPHDEBUG_MIN
 #endif // PC_BUILD
 
 
@@ -81,6 +82,9 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
 
 
   static void execute_rpn_function(void){
+    #if defined(GRAPHDEBUG_MIN)
+      print_caller(NULL);
+    #endif //GRAPHDEBUG_MIN
     if(graphVariabl1 <= 0 || graphVariabl1 > LAST_LABEL) {
       #if defined(PC_BUILD)
         printf("Error: No graph variable %u\n", graphVariabl1);
@@ -328,6 +332,9 @@ static void reduceRegisterYToComponent(void) {
 
 // Wrapper around execute_rpn_function that narrows ctxtReal34/39/51/75 to graph-eqn precision
 static void execute_rpn_function_graphAcc(void) {
+  #if defined(GRAPHDEBUG_MIN)
+    print_caller(NULL);
+  #endif //GRAPHDEBUG_MIN
   #if defined(LOW_GRAPH_ACC)
     int32_t s34 = ctxtReal34.digits;
     int32_t s39 = ctxtReal39.digits;
@@ -1018,6 +1025,9 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
 
   static void graph_eqn(uint16_t mode) {
+    #if defined(GRAPHDEBUG_MIN)
+      print_caller(NULL);
+    #endif //GRAPHDEBUG_MIN
     currentKeyCode = 255;
     calcMode = CM_GRAPH;
     saveForUndo();
@@ -1152,6 +1162,12 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     #endif //GRAPHDEBUG
 
     realCopy(x_min_r, x);
+
+
+
+
+// ********** MAIN LOOP ********** STARTS **********
+
     while(1) {
       // x <= x_max ?
       if(realCompareGreaterThan(x, x_max_r)) break;
@@ -1187,8 +1203,12 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
       #if defined(GRAPHDEBUG)
         realToString(y02, strBuf1);
-        printf("y02=%s\n", strBuf1);
+        printf("y02=%s, Anomaly count = %d\n", strBuf1, count);
       #endif // GRAPHDEBUG
+
+
+
+// === > === > === > Begin of skip and jump section  
 
       // Calculate gradient and detect anomalies
       if(count > 0) {
@@ -1713,6 +1733,9 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           printf("Step size: prevDx=%s -> dx=%s\n", strBuf1, strBuf2);
         #endif // GRAPHDEBUG
       }
+
+// < === < === < === End of skip and jump section  
+
 
       // Add point to plot (skip if in high-res buffering mode or jumped back)
       // dx >= 0 ?

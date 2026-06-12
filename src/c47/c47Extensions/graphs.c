@@ -1510,10 +1510,29 @@ void fnStatList() {
         ixx = statnum - ix - 1 + ListXYposition;
         char tmpBuf[100];
 
-          sprintf(tmpstr1, "[%3d] x%4s%14s, ", ixx+1, "", formatCore(grf_x(ixx), 10, false, tmpBuf, 150));
-          sprintf(tmpstr2, "y%4s%14s, ", "", formatCore(grf_y(ixx), 10, false, tmpBuf, 150));
-        strcat(tmpstr1, tmpstr2);
+        double x = grf_x(ixx);
+        if(x != x) {                                                              // NaN: x != x is true only for NaN
+          snprintf(tmpBuf, 100, "NaN");
+        } else
+        if(x > DBL_MAX || x < -DBL_MAX) {                                         // ±Inf: past finite max, no <math.h> needed
+          snprintf(tmpBuf, 100, (x < 0) ? "-Inf" : "+Inf");
+        } else {
+          snprintf(tmpBuf, 100, "%s", formatCore(grf_x(ixx), 10, false, tmpBuf, 150));
+        }
+        snprintf(tmpstr1, 100, "[%3d] x%4s%14s, ", ixx+1, "", tmpBuf);
 
+        double y = grf_y(ixx);
+        if(y != y) {                                                              // NaN: x != x is true only for NaN
+          snprintf(tmpBuf, 100, "NaN");
+        } else
+        if(y > DBL_MAX || y < -DBL_MAX) {                                         // ±Inf: past finite max, no <math.h> needed
+          snprintf(tmpBuf, 100, (y < 0) ? "-Inf" : "+Inf");
+        } else {
+          snprintf(tmpBuf, 100, "%s", formatCore(grf_y(ixx), 10, false, tmpBuf, 150));
+        }
+        snprintf(tmpstr2, 100, "y%4s%14s, ", "", tmpBuf);
+
+        strcat(tmpstr1, tmpstr2);
         print_numberstr(tmpstr1, false);
         #if defined(STATDEBUG)
           printf("%d:%s\n", ixx, tmpstr1);

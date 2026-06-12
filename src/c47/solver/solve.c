@@ -199,7 +199,9 @@ void fnMvarPlot(uint16_t labelOrVariable) {
       currentSolverVariable = labelOrVariable;
       screenUpdatingMode &= ~SCRUPD_MANUAL_MENU;
       refreshScreen(0);
-printf("LAUNCH PLOT\n");
+      #if defined(GRAPHDEBUG_MIN)
+        printf("LAUNCH PLOT\n");
+      #endif //GRAPHDEBUG_MIN
       fnPlotf(NOPARAM); // uses currentSolverVariable=labelOrVariable & 
 
 //currentSolverStatus &= ~SOLVER_STATUS_RPN_GRAPHER;

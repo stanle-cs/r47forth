@@ -331,6 +331,8 @@
   #undef     VERBOSE_REGISTERS
   #define    GRAPHDEBUG
   #undef     GRAPHDEBUG
+  #define    GRAPHDEBUG_MIN
+  #undef     GRAPHDEBUG_MIN
 
 //Verbose STAT
   #define DEBUG_STAT                 0 // PLOT & STATS verbose level can be 0, 1 or 2 (more)

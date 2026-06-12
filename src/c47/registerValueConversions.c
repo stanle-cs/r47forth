@@ -657,6 +657,14 @@ void sci_fmt(char *buf, int n, double x) {
  * Output format (if buffer allows):
  *   [-]d.dddddddddddddddde±dd\0 (up to 25–30 bytes depending on exponent digits)
  */
+    if(x != x) {                                                              // NaN: comparison is false for NaN, so this catches it
+      snprintf(buf, n, "NaN");
+      return;
+    }
+    if(x > DBL_MAX || x < -DBL_MAX) {                                         // ±Inf: anything past finite max, no <math.h> dependency needed
+      snprintf(buf, n, (x < 0) ? "-Inf" : "+Inf");
+      return;
+    }
     int exp = 0, i = 0;
     if(x < 0) {
         buf[i++] = '-';
@@ -698,6 +706,14 @@ void sci_fmt(char *buf, int n, double x) {
 
 
   void convertDoubleToString(double x, int16_t n, char *buff) { //Reformatting real strings that are formatted according to different locale settings
+    if(x != x) {                                                              // NaN: x != x is true only for NaN
+      snprintf(buff, n, "NaN");
+      return;
+    }
+    if(x > DBL_MAX || x < -DBL_MAX) {                                         // ±Inf: past finite max, no <math.h> needed
+      snprintf(buff, n, (x < 0) ? "-Inf" : "+Inf");
+      return;
+    }
     uint16_t i = 2;
     uint16_t j = 2;
     bool_t error = false;
