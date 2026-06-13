@@ -1121,7 +1121,7 @@ void fnAlphaIP(uint16_t regist) {
 
 static uint16_t _getGlyphCode(char *ptrString) {
   uint16_t glyph;
-  
+
   glyph = ptrString[0] & 0xff;
   if(glyph & 0x80) {
     glyph = (glyph << 8) | (ptrString[1] & 0xff);;
@@ -1143,7 +1143,7 @@ static void _toUpperOrLowerCase(char *ptrString, bool_t toUpper) {
     while(upperLowerTable[j].upper[0] != 0) {
       currentGlyph = (toUpper ? _getGlyphCode((char *)upperLowerTable[j].lower) : _getGlyphCode((char *)upperLowerTable[j].upper));
       if(glyph == currentGlyph) {
-        newGlyph = (toUpper ? _getGlyphCode((char *)upperLowerTable[j].upper) : _getGlyphCode((char *)upperLowerTable[j].lower)); 
+        newGlyph = (toUpper ? _getGlyphCode((char *)upperLowerTable[j].upper) : _getGlyphCode((char *)upperLowerTable[j].lower));
         if(glyph & 0x8000) {
           ptrString[pos]     = newGlyph >> 8;
           ptrString[pos + 1] = newGlyph & 0xff;
@@ -1189,6 +1189,113 @@ void fnAlphaUpper(uint16_t regist) {
 
   ptrString = REGISTER_STRING_DATA(regist);
   _toUpperOrLowerCase(ptrString, SF_TO_UPPER_CASE);
+}
+
+static void _alphaMid(char *ptrString, int32_t start, int32_t len) {
+  int16_t pos1, pos2;
+  int32_t i, lgString;
+
+  lgString = stringGlyphLength(ptrString);
+  if(start == 0) {
+    len = 0;
+  }
+  if(start > lgString) {
+    start = lgString;
+    len = 0;
+  }
+  else if(start + len - 1 > lgString) {
+    len = lgString - start + 1;
+  }
+  pos1 = 0;
+  if(start > 1) {
+    for(i=1; i<start; i++) {
+      pos1 = stringNextGlyph(ptrString, pos1);
+    }
+  }
+  pos2 = 0;
+  for(i=0; i<len; i++) {
+    if(ptrString[pos1] & 0x80) {
+      tmpString[pos2++] = ptrString[pos1++];
+    }
+    tmpString[pos2++] = ptrString[pos1++];
+  }
+  tmpString[pos2] = 0;
+  reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(stringByteLength(tmpString) + 1), amNone);
+  xcopy(REGISTER_STRING_DATA(REGISTER_X), tmpString, stringByteLength(tmpString) + 1);
+}
+
+static void _alphaLeftMidRight(uint16_t regist, uint8_t type) {
+  char *ptrString;
+  int32_t lgString, start, len;
+  longInteger_t lgInt;
+
+  if(getRegisterDataType(regist) != dtString) {
+    badTypeError(regist);
+    return;
+  }
+
+  ptrString = REGISTER_STRING_DATA(regist);
+  lgString = stringGlyphLength(ptrString);
+
+  if(!getRegisterAsLongInt(REGISTER_X, lgInt, NULL)) {
+    goto end;
+  }
+  longIntegerToInt32(lgInt, len);
+  if(len < 0) {
+    len = 0;
+  }
+  else if(len > lgString) {
+    len = lgString;
+  }
+
+  start = 0;
+  if(type == SF_MID) {
+    longIntegerFree(lgInt);
+    if(!getRegisterAsLongInt(REGISTER_Y, lgInt, NULL)) {
+      goto end;
+    }
+    longIntegerToInt32(lgInt, start);
+    if(start < 0) {
+      start = 0;
+    }
+  }
+
+  if(!saveLastX()) {
+    goto end;
+  }
+
+  switch(type) {
+    case SF_LEFT: {
+      _alphaMid(ptrString, 1, len);
+      break;
+    }
+    case SF_MID: {
+      _alphaMid(ptrString, start, len);
+      fnDropY(NOPARAM);
+      break;
+    }
+    case SF_RIGHT: {
+      _alphaMid(ptrString, lgString - len + 1, len);
+      break;
+    }
+  }
+end:
+  longIntegerFree(lgInt);
+}
+
+
+void fnAlphaLeft(uint16_t regist) {
+  _alphaLeftMidRight(regist, SF_LEFT);
+}
+
+
+void fnAlphaMid(uint16_t regist) {
+  _alphaLeftMidRight(regist, SF_MID);
+}
+
+
+void fnAlphaRight(uint16_t regist) {
+  _alphaLeftMidRight(regist, SF_RIGHT);
 }
 
 

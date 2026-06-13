@@ -1943,6 +1943,9 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 // String Functions
 #define SF_TO_UPPER_CASE                        true
 #define SF_TO_LOWER_CASE                       false
+#define SF_LEFT                                    1
+#define SF_MID                                     2
+#define SF_RIGHT                                   3
 
 
 // Screen updating mode

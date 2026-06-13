@@ -20,7 +20,10 @@
   void fnAlphaIP       (uint16_t regist);
   void fnAlphaLower    (uint16_t regist);
   void fnAlphaUpper    (uint16_t regist);
-  
+  void fnAlphaLeft     (uint16_t regist);
+  void fnAlphaMid      (uint16_t regist);
+  void fnAlphaRight    (uint16_t regist);
+
   void fn42AlphaRotate (uint16_t unusedButMandatoryParameter);
   void fn42AlphaShift  (uint16_t unusedButMandatoryParameter);
   void fn42Alpha       (uint16_t unusedButMandatoryParameter);
