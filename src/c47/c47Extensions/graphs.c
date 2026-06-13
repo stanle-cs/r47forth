@@ -624,8 +624,8 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
   //using global: FLAG_SHOWX, x_min, x_max, FLAG_SHOWY, y_min, y_max, FLAG_SCALE, PLOT_ZMY, zoomfactor
 
   #if defined(STATDEBUG) && defined(PC_BUILD)
+    printf("Axis1b: x_min = %f, y_min = %f, x_max = %f, y_max = %f\n", x_min, y_min, x_max, y_max);
     printf("PLOT_ZMY=%i  FLAG_SCALE=%i mode=%i\n", PLOT_ZMY, getSystemFlag(FLAG_SCALE), mode);
-    printf("Axis1b: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
   #endif // STATDEBUG
 
 
@@ -677,8 +677,7 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
   }
 
   #if defined(STATDEBUG) && defined(PC_BUILD)
-    printf("x_min=%f,y_min=%f,x_max=%f,y_max=%f\n", x_min, y_min, x_max, y_max);
-    printf("Axis2: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+    printf("Axis2: x_min = %f, y_min = %f, x_max = %f, y_max = %f\n", x_min, y_min, x_max, y_max);
   #endif // STATDEBUG
 
   //modify the draw range if the min == max
@@ -698,8 +697,7 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
   }
 
   #if defined(STATDEBUG) && defined(PC_BUILD)
-    printf("x_min=%f,y_min=%f,x_max=%f,y_max=%f, dx=%f, dy=%f, \n", x_min, y_min, x_max, y_max, dx, dy);
-    printf("Axis3a: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+    printf("Axis3a: x_min = %f, y_min = %f, x_max = %f, y_max = %f, dx=%f, dy=%f, \n", x_min, y_min, x_max, y_max, dx, dy);
   #endif // STATDEBUG
 
   //Calc zoom scales
@@ -759,8 +757,7 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
 
 
   #if defined(STATDEBUG) && defined(PC_BUILD)
-    printf("x_min=%f,y_min=%f,x_max=%f,y_max=%f, dx=%f, dy=%f \n", x_min, y_min, x_max, y_max, dx, dy);
-    printf("Axis3b: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+    printf("Axis3b: x_min = %f, y_min = %f, x_max = %f, y_max = %f, dx=%f, dy=%f \n", x_min, y_min, x_max, y_max, dx, dy);
   #endif // STATDEBUG
 
 
@@ -800,8 +797,7 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
   }
 
   #if defined(STATDEBUG) && defined(PC_BUILD)
-    printf("x_min=%f,y_min=%f,x_max=%f,y_max=%f, dx=%f, dy=%f \n", x_min, y_min, x_max, y_max, dx, dy);
-    printf("Axis3c: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+    printf("Axis3c: x_min = %f, y_min = %f, x_max = %f, y_max = %f, dx=%f, dy=%f \n", x_min, y_min, x_max, y_max, dx, dy);
   #endif // STATDEBUG
 
 
@@ -921,6 +917,7 @@ void graph_plotmem(void) {
 /**/        }
 /**/
 /**/        for(ix = 0; (ix < statnum); ++ix) {
+              if(doubleSpecials(grf_x(ix), NULL) || doubleSpecials(grf_y(ix), NULL)) continue;
 /**/          if(ix != 0) {
 /**/            ddx = grf_x(ix) - grf_x(ix-1);                                            //used in DIFF and INT
 /**/            if(ddx<=0) {                                                              //Cannot get slop or area if x is not growing in positive dierection
@@ -1013,6 +1010,7 @@ void graph_plotmem(void) {
 /**/
 /**/        //pre-loop to cover trivial cases of symmetrical axis
 /**/        for(cnt=0; (cnt < statnum); cnt++) {
+              if(doubleSpecials(grf_x(cnt), NULL) || doubleSpecials(grf_y(cnt), NULL)) continue;
 /**/          #if defined(STATDEBUG)
 /**/            printf("Axis0a: cnt/statnum: %i/%i  x: %f y: %f   \n", cnt, statnum, grf_x(cnt), grf_y(cnt));
 /**/          #endif // STATDEBUG
@@ -1048,6 +1046,7 @@ void graph_plotmem(void) {
 /**/
 /**/         {
 /**/          for(cnt=0; (cnt < statnum); cnt++) {
+                if(doubleSpecials(grf_x(cnt), NULL) || doubleSpecials(grf_y(cnt), NULL)) continue;
 /**/            #if defined(STATDEBUG)
 /**/              printf("Axis0a: cnt/statnum: %i/%i  x: %f y: %f   \n", cnt, statnum, grf_x(cnt), grf_y(cnt));
 /**/            #endif // STATDEBUG
@@ -1121,15 +1120,16 @@ void graph_plotmem(void) {
 /**/      for(cnt=0; (cnt < statnum); cnt++) {            //### Note XXX E- will stuff up statnum!
 /**/        sx = sx + (!getSystemFlag(FLAG_NVECT) ? grf_x(cnt) : grf_y(cnt));
 /**/        sy = sy + (!getSystemFlag(FLAG_NVECT) ? grf_y(cnt) : grf_x(cnt));
+            if(doubleSpecials(sx, NULL) || doubleSpecials(sy, NULL)) continue;
 /**/        if(sx < x_min) {
 /**/          x_min = sx;
-/**/        }
+/**/        } else
 /**/        if(sx > x_max) {
 /**/          x_max = sx;
 /**/        }
 /**/        if(sy < y_min) {
 /**/          y_min = sy;
-/**/        }
+/**/        } else
 /**/        if(sy > y_max) {
 /**/          y_max = sy;
 /**/        }
@@ -1143,7 +1143,7 @@ void graph_plotmem(void) {
 
         //Manipulate the obtained axes positions
         #if defined(STATDEBUG)
-          printf("Axis1a: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+         printf("Axis1a: x_min = %f, y_min = %f, x_max = %f, y_max = %f, \n", x_min, y_min, x_max, y_max);
         #endif // STATDEBUG
 
 
@@ -1157,7 +1157,7 @@ void graph_plotmem(void) {
         }
 
         #if defined(STATDEBUG)
-          printf("Axis3b: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+          printf("Axis3d: x_min = %f, y_min = %f, x_max = %f, y_max = %f \n", x_min, y_min, x_max, y_max);
         #endif // STATDEBUG
 
 
@@ -1175,7 +1175,7 @@ void graph_plotmem(void) {
         }
 
         #if defined(STATDEBUG)
-          printf("Axis3c: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+          printf("Axis3e: x_min = %f, y_min = %f, x_max = %f, y_max = %f \n", x_min, y_min, x_max, y_max);
         #endif // STATDEBUG
 
         sx = 0;
@@ -1251,8 +1251,8 @@ void graph_plotmem(void) {
           }
 
           #if defined(STATDEBUG)
-            printf("\n         xN1 = %d : (x_min=%f,x=%f,x_max=%f) ", xN1, x_min, x, x_max);
-            printf("yN0 = %d yN1 = %d : (y_min=%f,y=%f,y_max=%f) \n", yN0, yN1, y_min, y, y_max);
+            printf("\n         xN1 = %d : (x_min = %f, x=%f, x_max = %f) ", xN1, x_min, x, x_max);
+            printf("yN0 = %d yN1 = %d : (y_min = %f, y=%f, y_max = %f) \n", yN0, yN1, y_min, y, y_max);
             printf("plotting graph table[%d] = x:%f y:%f (dxx:%f dydx:%f) inty:%f xN1:%d yN1:%d ", ix, x, y, dxx, dydx, inty, xN1, yN1);
             printf("   ... x-ddx/2=%d dydx=%d inty=%d\n", screen_window_x(x_min, x-ddx/2, x_max), screen_window_y(y_min, dydx, y_max), screen_window_y(y_min, inty, y_max));
           #endif // STATDEBUG
@@ -1484,56 +1484,70 @@ void graph_plotmem(void) {
 
 
 //-----------------------------------------------------//-----------------------------------------------------
-void fnStatList() {
-    char tmpstr1[100], tmpstr2[100];
-    int16_t ix, ixx, statnum;
 
+bool_t doubleSpecials(double value, int8_t *kind) {
+  if(value != value) {                                                          // NaN: value != value is true only for NaN
+    if(kind != NULL) {
+      *kind = 2;
+    }
+    return true;
+  }
+  if(value > DBL_MAX) {                                                         // +Inf: past the maximum
+    if(kind != NULL) {
+      *kind = 1;
+    }
+    return true;
+  }
+  if(value < -DBL_MAX) {                                                        // -Inf: below the minimum
+    if(kind != NULL) {
+      *kind = -1;
+    }
+    return true;
+  }
+  if(kind != NULL) {                                                            // Normal value: report 0 and false
+    *kind = 0;
+  }
+  return false;
+}
+
+
+static void formatStatValue(double value, char *buf) {
+  int8_t kind;
+  if(doubleSpecials(value, &kind)) {                                            // NaN/Inf get a fixed label; kind encodes which one: 2 = NaN, 1 = +Inf, -1 = -Inf.
+    snprintf(buf, 150, "%s", (kind == 2) ? "NaN" : (kind == 1) ? "+Inf" : "-Inf");
+  }
+  else {
+    snprintf(buf, 150, "%s", formatCore(value, 10, false, buf, 150));
+  }
+}
+
+
+void fnStatList() {
+    char tmpstr1[150], tmpstr2[150];
+    int16_t ix, ixx, statnum;
     clearScreen(1);
     refreshStatusBar();
-
     if(regStatsXY != INVALID_VARIABLE && (plotStatMx[0]=='D' ? drawMxN() >= 1 : false)) {
       statnum = drawMxN();
       fnStatSum(0);
       sprintf(tmpString, "Graph data: N = %d", statnum);
       print_linestr(tmpString, true);
-
                                   #if defined(STATDEBUG)
                                     printf("Stat data %d - %d (%s)\n", statnum-1, max(0, statnum-1-6), tmpString );
                                   #endif // STATDEBUG
-
       if(ListXYposition > 0) {
         ListXYposition = 0;
       }
       else if(statnum - (min(10, statnum)-1) - 1 + ListXYposition < 0) {
         ListXYposition = - (statnum - (min(10, statnum)-1) - 1);
       }
-
       for(ix = 0; (ix < min(10, statnum)); ++ix) {
         ixx = statnum - ix - 1 + ListXYposition;
-        char tmpBuf[100];
-
-        double x = grf_x(ixx);
-        if(x != x) {                                                              // NaN: x != x is true only for NaN
-          snprintf(tmpBuf, 100, "NaN");
-        } else
-        if(x > DBL_MAX || x < -DBL_MAX) {                                         // ±Inf: past finite max, no <math.h> needed
-          snprintf(tmpBuf, 100, (x < 0) ? "-Inf" : "+Inf");
-        } else {
-          snprintf(tmpBuf, 100, "%s", formatCore(grf_x(ixx), 10, false, tmpBuf, 150));
-        }
-        snprintf(tmpstr1, 100, "[%3d] x%4s%14s, ", ixx+1, "", tmpBuf);
-
-        double y = grf_y(ixx);
-        if(y != y) {                                                              // NaN: x != x is true only for NaN
-          snprintf(tmpBuf, 100, "NaN");
-        } else
-        if(y > DBL_MAX || y < -DBL_MAX) {                                         // ±Inf: past finite max, no <math.h> needed
-          snprintf(tmpBuf, 100, (y < 0) ? "-Inf" : "+Inf");
-        } else {
-          snprintf(tmpBuf, 100, "%s", formatCore(grf_y(ixx), 10, false, tmpBuf, 150));
-        }
-        snprintf(tmpstr2, 100, "y%4s%14s, ", "", tmpBuf);
-
+        char tmpBuf[150];
+        formatStatValue(grf_x(ixx), tmpBuf);
+        snprintf(tmpstr1, 150, "[%3d] x%4s%14s, ", ixx+1, "", tmpBuf);
+        formatStatValue(grf_y(ixx), tmpBuf);
+        snprintf(tmpstr2, 150, "y%4s%14s, ", "", tmpBuf);
         strcat(tmpstr1, tmpstr2);
         print_numberstr(tmpstr1, false);
         #if defined(STATDEBUG)
