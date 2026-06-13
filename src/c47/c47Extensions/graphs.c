@@ -922,7 +922,9 @@ void graph_plotmem(void) {
 /**/        }
 /**/
 /**/        for(ix = 0; (ix < statnum); ++ix) {
-              if(doubleSpecials(grf_x(ix), NULL) || doubleSpecials(grf_y(ix), NULL)) continue;
+              if(doubleSpecialLabel(grf_x(ix)) != NULL || doubleSpecialLabel(grf_y(ix)) != NULL) {
+                continue;
+              }
 /**/          if(ix != 0) {
 /**/            ddx = grf_x(ix) - grf_x(ix-1);                                            //used in DIFF and INT
 /**/            if(ddx<=0) {                                                              //Cannot get slop or area if x is not growing in positive dierection
@@ -1015,7 +1017,9 @@ void graph_plotmem(void) {
 /**/
 /**/        //pre-loop to cover trivial cases of symmetrical axis
 /**/        for(cnt=0; (cnt < statnum); cnt++) {
-              if(doubleSpecials(grf_x(cnt), NULL) || doubleSpecials(grf_y(cnt), NULL)) continue;
+              if((doubleSpecialLabel(grf_x(cnt)) != NULL) || (doubleSpecialLabel(grf_y(cnt)) != NULL)) {
+                continue;
+              }
 /**/          #if defined(STATDEBUG)
 /**/            printf("Axis0a: cnt/statnum: %i/%i  x: %f y: %f   \n", cnt, statnum, grf_x(cnt), grf_y(cnt));
 /**/          #endif // STATDEBUG
@@ -1051,7 +1055,9 @@ void graph_plotmem(void) {
 /**/
 /**/         {
 /**/          for(cnt=0; (cnt < statnum); cnt++) {
-                if(doubleSpecials(grf_x(cnt), NULL) || doubleSpecials(grf_y(cnt), NULL)) continue;
+                if((doubleSpecialLabel(grf_x(cnt)) != NULL) || (doubleSpecialLabel(grf_y(cnt)) != NULL)) {
+                  continue;
+                }
 /**/            #if defined(STATDEBUG)
 /**/              printf("Axis0a: cnt/statnum: %i/%i  x: %f y: %f   \n", cnt, statnum, grf_x(cnt), grf_y(cnt));
 /**/            #endif // STATDEBUG
@@ -1125,7 +1131,9 @@ void graph_plotmem(void) {
 /**/      for(cnt=0; (cnt < statnum); cnt++) {            //### Note XXX E- will stuff up statnum!
 /**/        sx = sx + (!getSystemFlag(FLAG_NVECT) ? grf_x(cnt) : grf_y(cnt));
 /**/        sy = sy + (!getSystemFlag(FLAG_NVECT) ? grf_y(cnt) : grf_x(cnt));
-            if(doubleSpecials(sx, NULL) || doubleSpecials(sy, NULL)) continue;
+            if((doubleSpecialLabel(sx) != NULL) || (doubleSpecialLabel(sy) != NULL)) {
+              continue;
+            }
 /**/        if(sx < x_min) {
 /**/          x_min = sx;
 /**/        } else
@@ -1490,36 +1498,10 @@ void graph_plotmem(void) {
 
 //-----------------------------------------------------//-----------------------------------------------------
 
-bool_t doubleSpecials(double value, int8_t *kind) {
-  if(value != value) {                                                          // NaN: value != value is true only for NaN
-    if(kind != NULL) {
-      *kind = 2;
-    }
-    return true;
-  }
-  if(value > DBL_MAX) {                                                         // +Inf: past the maximum
-    if(kind != NULL) {
-      *kind = 1;
-    }
-    return true;
-  }
-  if(value < -DBL_MAX) {                                                        // -Inf: below the minimum
-    if(kind != NULL) {
-      *kind = -1;
-    }
-    return true;
-  }
-  if(kind != NULL) {                                                            // Normal value: report 0 and false
-    *kind = 0;
-  }
-  return false;
-}
-
-
 static void formatStatValue(double value, char *buf) {
-  int8_t kind;
-  if(doubleSpecials(value, &kind)) {                                            // NaN/Inf get a fixed label; kind encodes which one: 2 = NaN, 1 = +Inf, -1 = -Inf.
-    snprintf(buf, 150, "%s", (kind == 2) ? "NaN" : (kind == 1) ? "+Inf" : "-Inf");
+  const char *special = doubleSpecialLabel(value);
+  if(special != NULL) {
+    snprintf(buf, 150, "%s", special); // "NaN", "+Inf" or "-Inf" for a special value, or NULL for a normal
   }
   else {
     snprintf(buf, 150, "%s", formatCore(value, 10, false, buf, 150));
@@ -1550,9 +1532,9 @@ void fnStatList() {
         ixx = statnum - ix - 1 + ListXYposition;
         char tmpBuf[150];
         formatStatValue(grf_x(ixx), tmpBuf);
-        snprintf(tmpstr1, 150, "[%3d] x%4s%14s, ", ixx+1, "", tmpBuf);
+        snprintf(tmpstr1, 150, "[%3d] x%4s%14.32s, ", ixx+1, "", tmpBuf);
         formatStatValue(grf_y(ixx), tmpBuf);
-        snprintf(tmpstr2, 150, "y%4s%14s, ", "", tmpBuf);
+        snprintf(tmpstr2, 150, "y%4s%14.32s, ", "", tmpBuf);
         strcat(tmpstr1, tmpstr2);
         print_numberstr(tmpstr1, false);
         #if defined(STATDEBUG)

@@ -55,6 +55,5 @@ extern  float    x_max;
 extern  float    y_min;
 extern  float    y_max;
 extern  int8_t   PLOT_ZMY;
-bool_t doubleSpecials(double value, int8_t *kind);
 
 #endif // !GRAPHS_H

@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
 
 #include "c47.h"
+#include <float.h>
 
 static float fnRealToFloat(const real_t *r);
 
@@ -658,7 +659,22 @@ void convertReal34MatrixRegisterToComplex34MatrixRegister(calcRegister_t source,
 }
 
 
-void sci_fmt(char *buf, int n, double x) {
+const char *doubleSpecialLabel(double value) {                                 // Returns "NaN", "+Inf" or "-Inf" for a special value, or NULL for a normal finite value.
+  if(value != value) {
+    return "NaN";
+  }
+  if(value > DBL_MAX) {
+    return "+Inf";
+  }
+  if(value < -DBL_MAX) {
+    return "-Inf";
+  }
+  return NULL;
+}
+
+
+
+static void sci_fmt(char *buf, int n, double x) {
 /*
  * Usage:
  *   char buf[32];
@@ -667,12 +683,9 @@ void sci_fmt(char *buf, int n, double x) {
  * Output format (if buffer allows):
  *   [-]d.dddddddddddddddde±dd\0 (up to 25–30 bytes depending on exponent digits)
  */
-    if(x != x) {                                                              // NaN: comparison is false for NaN, so this catches it
-      snprintf(buf, n, "NaN");
-      return;
-    }
-    if(x > DBL_MAX || x < -DBL_MAX) {                                         // ±Inf: anything past finite max, no <math.h> dependency needed
-      snprintf(buf, n, (x < 0) ? "-Inf" : "+Inf");
+    const char *special = doubleSpecialLabel(x);    
+    if(special != NULL) {
+      snprintf(buf, n, "%s", special);  // "NaN", "+Inf" or "-Inf" for a special value
       return;
     }
     int exp = 0, i = 0;
@@ -716,12 +729,9 @@ void sci_fmt(char *buf, int n, double x) {
 
 
   void convertDoubleToString(double x, int16_t n, char *buff) { //Reformatting real strings that are formatted according to different locale settings
-    if(x != x) {                                                              // NaN: x != x is true only for NaN
-      snprintf(buff, n, "NaN");
-      return;
-    }
-    if(x > DBL_MAX || x < -DBL_MAX) {                                         // ±Inf: past finite max, no <math.h> needed
-      snprintf(buff, n, (x < 0) ? "-Inf" : "+Inf");
+    const char *special = doubleSpecialLabel(x);
+    if(special != NULL) {
+      snprintf(buff, n, "%s", special);  // "NaN", "+Inf" or "-Inf" for a special value
       return;
     }
     uint16_t i = 2;
