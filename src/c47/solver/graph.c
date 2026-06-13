@@ -237,10 +237,9 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
 
 
 //******************************************************************************************************************************
-// Graph plotting helpers and graph_eqn, converted to real_t for all math domain values.
-// Loop counters, indices, booleans, register flags and direction selectors stay int / bool_t / int8_t.
-// All real_t arithmetic uses ctxtGraphs (= &ctxtGraphsLocal), narrowed to 14 working digits at
-// graph_eqn entry. Helpers are defined first in this file, then graph_eqn at the bottom.
+// Graph plotting helpers and graph_eqn, converted to real_t for all math domain values. Loop counters, indices, booleans, register
+// flags and direction selectors stay int / bool_t / int8_t. All real_t arithmetic uses ctxtGraphs (= &ctxtGraphsLocal), narrowed
+// to 14 working digits at graph_eqn entry. Helpers are defined first in this file, then graph_eqn at the bottom.
 //******************************************************************************************************************************
 
 #define PLOT_DIGITS    39    // Storage size for every real_t. Must be >= 34 because register. Manage, read increase, speed from the working precision in ctxtGraphsLocal, not from this storage size.
@@ -255,12 +254,8 @@ static  decContext  ctxtGraphsLocal;
 #define _R_STR_OF(x)  _R_STR(x)
 
 
-// REAL_T_PTR buffers are smaller than a full decNumber, because we only need
-// a few digits. The realIs* and realChangeSign macros poke at struct fields
-// inline, so GCC's bounds checker complains the small buffer cannot fit the
-// big struct -- false alarm, decNumber only touches the bytes we have. The
-// helpers below wrap each macro in a tiny function so GCC sees no inline
-// access at the call sites. The pragma silences it inside the wrappers.
+// REAL_T_PTR buffers are smaller than a full decNumber since we only need a few digits. realIs*/realChangeSign poke struct fields inline, so
+// GCC's bounds checker wrongly thinks the small buffer cannot hold the big struct. The wrappers below hide the inline access; the pragma silences it.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"
 __attribute__((noinline)) static bool_t graphIsZero    (const real_t *x) { return realIsZero(x);     }

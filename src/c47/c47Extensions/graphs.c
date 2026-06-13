@@ -354,7 +354,12 @@ void fnPlotSQ(uint16_t unusedButMandatoryParameter) {
     }
     else {
       previousCalcMode = calcMode;
-      clearScreenOld(clrStatusBar, !clrRegisterLines, !clrSoftkeys); //Change over hourglass to the left side
+
+// Removed due to interfering and unneccesry statusbar clear befoire the user can program SNAP after PLOTf. 
+//      0.5 % chance that removing it might cause remaining hourglass on the wrong side of screen.
+//      LEaving this comment and original for a while to monitor performance. 
+//      clearScreenOld(clrStatusBar, !clrRegisterLines, !clrSoftkeys); //Change over hourglass to the left side
+
     }
 
     calcMode = CM_GRAPH;
