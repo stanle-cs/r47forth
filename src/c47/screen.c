@@ -6369,9 +6369,15 @@ void fnScreenDump(uint16_t unusedButMandatoryParameter) {
     *y = _getPositionFromRegister(REGISTER_Y, SCREEN_HEIGHT);
   }
 
-void fnClLcd(uint16_t unusedButMandatoryParameter) {
+void fnClLcd(uint16_t clear_mode) {
     int32_t x, y;
-    getPixelPos(&x, &y);
+    if(clear_mode == CLLCD_XY) {
+      getPixelPos(&x, &y);
+    }
+    else {
+      x = 0;
+      y = 0;
+    }
     if(lastErrorCode == ERROR_NONE) {
       screenUpdatingMode |= SCRUPD_MANUAL_STATUSBAR | SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
       lcd_fill_rect(x, 0, SCREEN_WIDTH - x, SCREEN_HEIGHT - y, LCD_SET_VALUE);
@@ -6379,6 +6385,15 @@ void fnClLcd(uint16_t unusedButMandatoryParameter) {
     #if defined(REFRESH_ON_SCREEN_MONITOR)
       print_linestr("Start Refresh monitoring", true);
     #endif //DMCP_REFRESH
+}
+
+
+void fnClDisplay(uint16_t unusedButMandatoryParameter) {  // same the 42S CLD
+  temporaryInformation = TI_NO_INFO;
+  if(programRunStop == PGM_RUNNING) {
+    screenUpdatingMode &= ~(SCRUPD_MANUAL_STATUSBAR | SCRUPD_SKIP_STATUSBAR_ONE_TIME);
+    refreshScreen(151);
+  }
 }
 
 
