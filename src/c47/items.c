@@ -1346,6 +1346,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnJacobiZeta                (uint16_t unusedButMandatoryParameter) {}
   void fnPgmSlv                    (uint16_t unusedButMandatoryParameter) {}
   void fnSolve                     (uint16_t unusedButMandatoryParameter) {}
+  void fnPgmPlt                    (uint16_t unusedButMandatoryParameter) {}
   void fnMvarPlot                  (uint16_t unusedButMandatoryParameter) {}
   void fnSolveVar                  (uint16_t unusedButMandatoryParameter) {}
   void fnPgmInt                    (uint16_t unusedButMandatoryParameter) {}
@@ -1608,7 +1609,6 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnColumnMin                (uint16_t unusedButMandatoryParameter) {}
   void fnColumnMax                (uint16_t unusedButMandatoryParameter) {}
   void fnMatrixFind               (uint16_t unusedButMandatoryParameter) {}
-  void fnPlotf                    (uint16_t unusedButMandatoryParameter) {}
   void fnGetADM                   (uint16_t unusedButMandatoryParameter) {}
   void fnSetADM                   (uint16_t unusedButMandatoryParameter) {}
   void fnSetISM                   (uint16_t unusedButMandatoryParameter) {}
@@ -3335,7 +3335,7 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 1544 */  { fnDropY,                         NOPARAM,                     "DROPy",                                       "DROPy",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
 /* 1545 */  { fnStoreMin,                      TM_REGISTER,                 "STO" STD_DOWN_ARROW,                          "STO" STD_DOWN_ARROW,                          (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
 /* 1546 */  { fnPgmInt,                        TM_LBLONLY,                  "PGMINT",                                      "PGMINT",                                      (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         },
-/* 1547 */  { fnPgmSlv,                        TM_SOLVE,                    "PGMSLV",                                      "PGMSLV",                                      (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         },
+/* 1547 */  { fnPgmSlv,                        TM_LBLONLY,                  "PGMSLV",                                      "PGMSLV",                                      (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         },
 /* 1548 */  { fnPixel,                         NOPARAM,                     "PIXEL",                                       "PIXEL",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
 /* 1549 */  { fnPlotStat,                      PLOT_START,                  "SCATR",                                       "SCATR",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
 /* 1550 */  { fnLegendre,                      NOPARAM,                     "P" STD_SUB_n,                                 "P" STD_SUB_n,                                 (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_ENABLED  | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
@@ -3820,7 +3820,7 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2025 */  { fnPdiff,                         NOPARAM,                     STD_DELTA "y/" STD_DELTA "x",                  STD_DELTA "y/" STD_DELTA "x",                  (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },//GRAPH
 /* 2026 */  { fnPrms,                          NOPARAM,                     "RMS",                                         "RMS",                                         (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },//GRAPH
 /* 2027 */  { fnPshade,                        NOPARAM,                     STD_INTEGRAL "AREA",                           STD_INTEGRAL "AREA",                           (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },//GRAPH
-/* 2028 */  { itemToBeCoded,                   NOPARAM,                     "PLFUNC",                                      "PLFUNC",                                      (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2028 */  { itemToBeCoded,                   NOPARAM,                     "PLFUNC",                                      "PLFUNC",                                      (0 << TAM_MAX_BITS) |     0, CAT_MNUH | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2029 */  { SetSetting,                      JC_NL,                       "NUM",                                         "NUM",                                         (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2030 */  { itemToBeCoded,                   NOPARAM,                     "",                                            "NLock",                                       (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
 /* 2031 */  { itemToBeCoded,                   NOPARAM,                     "",                                            "Nulock",                                      (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
@@ -4555,7 +4555,7 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2729 */  { fnStoreVElement,             TM_VALUE,                      "STOVEL",                                      "STOVEL",                                        (0 << TAM_MAX_BITS) |  4096, CAT_FNCT | SLS_UNCHANGED | US_ENABLED   | EIM_DISABLED | PTP_NUMBER_16    | HG_ENABLED         },
 /* 2730 */  { itemToBeCoded,                NOPARAM,                        "2730",                                        "2730",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2731 */  { itemToBeCoded,                NOPARAM,                        "2731",                                        "2731",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
-/* 2732 */  { itemToBeCoded,             TM_LBLONLY,                      "PGMPLT",                                      "PGMPLT",                                        (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         },
+/* 2732 */  { fnPgmPlt,                  TM_LBLONLY,                      "PGMPLT",                                      "PGMPLT",                                        (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         },
 /* 2733 */  { itemToBeCoded,                NOPARAM,                        "2733",                                        "2733",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2734 */  { fnMvarPlot,                  TM_SOLVE,  "PLT" STD_SPACE_4_PER_EM "f",                  "PLT" STD_SPACE_4_PER_EM "f",                                        (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
 /* 2735 */  { fnComplexPlot,             ITM_IMPLOT,                       "IMPLT",                                       "IMPLT",                                        (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },//GRAPH

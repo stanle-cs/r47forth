@@ -64,6 +64,12 @@ void fnPgmSlv(uint16_t label) {
   }
 }
 
+
+// ====== === temporarily / permanently use the PGMSOLVE's "currentSolverProgram" for plotting
+void fnPgmPlt(uint16_t label) {
+  fnPgmSlv(label);
+}
+
 void fnSolve(uint16_t labelOrVariable) {
   if((FIRST_LABEL <= labelOrVariable && labelOrVariable <= LAST_LABEL) || (REGISTER_X <= labelOrVariable && labelOrVariable <= REGISTER_T)) {
     // Interactive mode
@@ -175,12 +181,14 @@ void fnSolve(uint16_t labelOrVariable) {
 }
 
 
+// ====== === temporarily / permanently use the SOLVE's "currentSolverVariable" for plotting
+
 void fnMvarPlot(uint16_t labelOrVariable) {
   if((FIRST_LABEL <= labelOrVariable && labelOrVariable <= LAST_LABEL) || (REGISTER_X <= labelOrVariable && labelOrVariable <= REGISTER_T)) {
     // Interactive mode
     fnPgmSlv(labelOrVariable);
     if(lastErrorCode == ERROR_NONE) {
-      currentSolverStatus = SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_RPN_GRAPHER; //SOLVER_STATUS_EQUATION_GRAPHER;
+      currentSolverStatus = SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_RPN_GRAPHER;      //Full assignment, clearing not needed: currentSolverStatus &= ~SOLVER_STATUS_EQUATION_GRAPHER;
     }
   }
   else if(!(currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && (FIRST_NAMED_VARIABLE <= labelOrVariable && labelOrVariable <= LAST_NAMED_VARIABLE) && currentSolverProgram >= numberOfLabels) {
@@ -199,10 +207,16 @@ void fnMvarPlot(uint16_t labelOrVariable) {
       currentSolverVariable = labelOrVariable;
       screenUpdatingMode &= ~SCRUPD_MANUAL_MENU;
       refreshScreen(0);
-printf("LAUNCH PLOT\n");
+      currentSolverStatus |= SOLVER_STATUS_RPN_GRAPHER;// | SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_READY_TO_EXECUTE;
+      currentSolverStatus &= ~(SOLVER_STATUS_EQUATION_GRAPHER);
+      #if defined(GRAPHDEBUG_MIN)
+        printf("LAUNCH PLOT, currentSolverProgram:%d currentSolverVariable=%d currentSolverStatus=%d\n", currentSolverProgram, currentSolverVariable, currentSolverStatus);
+      #endif //GRAPHDEBUG_MIN
       fnPlotf(NOPARAM); // uses currentSolverVariable=labelOrVariable & 
 
-//currentSolverStatus &= ~SOLVER_STATUS_RPN_GRAPHER;
+      //printf("DONE calcMode=%d\n",calcMode);
+      //fnSNAP(NOPARAM);                // !!! NOT PUTTING IT HERE: BEST NOT FOR PROGRAMABILITY. USER CAN SNAP.
+      //showSoftmenu(-MNU_PLOT_FUNC);   // !!! NOT PUTTING IT HERE: BEST NOT FOR PROGRAMABILITY. USER TO OPEN INTERACTIVE MODE MENU 'PLFUNC'.
       fnUndo(0);
 
     }

@@ -9,6 +9,7 @@
 
   void fnPgmSlv          (uint16_t label);
   void fnSolve           (uint16_t labelOrVariable);
+  void fnPgmPlt          (uint16_t label);
   void fnMvarPlot        (uint16_t labelOrVariable);
   void fnSolveVar        (uint16_t unusedButMandatoryParameter);
   void _executeSolverReal(calcRegister_t variable, const real_t *val, real_t *res, real_t *deriv);

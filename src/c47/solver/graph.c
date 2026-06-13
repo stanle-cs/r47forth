@@ -23,6 +23,7 @@
   #undef VERBOSE_SOLVER_ITERDATA
   #undef STATDEBUG
   #undef GRAPHDEBUG
+  #undef GRAPHDEBUG_MIN
 #endif // PC_BUILD
 
 
@@ -73,6 +74,9 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
 
 
   static void execute_rpn_function(void){
+    #if defined(GRAPHDEBUG_MIN)
+      print_caller(NULL);
+    #endif //GRAPHDEBUG_MIN
     if(graphVariabl1 <= 0 || graphVariabl1 > LAST_LABEL) {
       #if defined(PC_BUILD)
         printf("Error: No graph variable %u\n", graphVariabl1);
@@ -91,7 +95,13 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
     if(currentSolverStatus & SOLVER_STATUS_RPN_GRAPHER) {
       real_t xReal, resReal;
       real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), &xReal);
+                                    #if defined(GRAPHDEBUG_MIN)
+                                      printRealToConsole(&xReal,"xReal:"," ==> ");
+                                    #endif //GRAPHDEBUG_MIN
       _executeSolverReal(currentSolverVariable, &xReal, &resReal, NULL);
+                                    #if defined(GRAPHDEBUG_MIN)
+                                      printRealToConsole(&resReal,"resReal:","\n");
+                                    #endif //GRAPHDEBUG_MIN
       realToReal34(&resReal, REGISTER_REAL34_DATA(REGISTER_X));
     } else {
       parseEquation(currentFormula, EQUATION_PARSER_XEQ, tmpString, tmpString + AIM_BUFFER_LENGTH);
@@ -227,10 +237,9 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
 
 
 //******************************************************************************************************************************
-// Graph plotting helpers and graph_eqn, converted to real_t for all math domain values.
-// Loop counters, indices, booleans, register flags and direction selectors stay int / bool_t / int8_t.
-// All real_t arithmetic uses ctxtGraphs (= &ctxtGraphsLocal), narrowed to 14 working digits at
-// graph_eqn entry. Helpers are defined first in this file, then graph_eqn at the bottom.
+// Graph plotting helpers and graph_eqn, converted to real_t for all math domain values. Loop counters, indices, booleans, register
+// flags and direction selectors stay int / bool_t / int8_t. All real_t arithmetic uses ctxtGraphs (= &ctxtGraphsLocal), narrowed
+// to 14 working digits at graph_eqn entry. Helpers are defined first in this file, then graph_eqn at the bottom.
 //******************************************************************************************************************************
 
 #define PLOT_DIGITS    39    // Storage size for every real_t. Must be >= 34 because register. Manage, read increase, speed from the working precision in ctxtGraphsLocal, not from this storage size.
@@ -245,12 +254,8 @@ static  decContext  ctxtGraphsLocal;
 #define _R_STR_OF(x)  _R_STR(x)
 
 
-// REAL_T_PTR buffers are smaller than a full decNumber, because we only need
-// a few digits. The realIs* and realChangeSign macros poke at struct fields
-// inline, so GCC's bounds checker complains the small buffer cannot fit the
-// big struct -- false alarm, decNumber only touches the bytes we have. The
-// helpers below wrap each macro in a tiny function so GCC sees no inline
-// access at the call sites. The pragma silences it inside the wrappers.
+// REAL_T_PTR buffers are smaller than a full decNumber since we only need a few digits. realIs*/realChangeSign poke struct fields inline, so
+// GCC's bounds checker wrongly thinks the small buffer cannot hold the big struct. The wrappers below hide the inline access; the pragma silences it.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"
 __attribute__((noinline)) static bool_t graphIsZero    (const real_t *x) { return realIsZero(x);     }
@@ -320,6 +325,9 @@ static void reduceRegisterYToComponent(void) {
 
 // Wrapper around execute_rpn_function that narrows ctxtReal34/39/51/75 to graph-eqn precision
 static void execute_rpn_function_graphAcc(void) {
+  #if defined(GRAPHDEBUG_MIN)
+    print_caller(NULL);
+  #endif //GRAPHDEBUG_MIN
   #if defined(LOW_GRAPH_ACC)
     int32_t s34 = ctxtReal34.digits;
     int32_t s39 = ctxtReal39.digits;
@@ -1010,6 +1018,9 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
 
   static void graph_eqn(uint16_t mode) {
+    #if defined(GRAPHDEBUG_MIN)
+      print_caller(NULL);
+    #endif //GRAPHDEBUG_MIN
     currentKeyCode = 255;
     calcMode = CM_GRAPH;
     saveForUndo();
@@ -1144,6 +1155,12 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     #endif //GRAPHDEBUG
 
     realCopy(x_min_r, x);
+
+
+
+
+// ********** MAIN LOOP ********** STARTS **********
+
     while(1) {
       // x <= x_max ?
       if(realCompareGreaterThan(x, x_max_r)) break;
@@ -1179,8 +1196,12 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
       #if defined(GRAPHDEBUG)
         realToString(y02, strBuf1);
-        printf("y02=%s\n", strBuf1);
+        printf("y02=%s, Anomaly count = %d\n", strBuf1, count);
       #endif // GRAPHDEBUG
+
+
+
+// === > === > === > Begin of skip and jump section  
 
       // Calculate gradient and detect anomalies
       if(count > 0) {
@@ -1705,6 +1726,9 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           printf("Step size: prevDx=%s -> dx=%s\n", strBuf1, strBuf2);
         #endif // GRAPHDEBUG
       }
+
+// < === < === < === End of skip and jump section  
+
 
       // Add point to plot (skip if in high-res buffering mode or jumped back)
       // dx >= 0 ?
@@ -2593,9 +2617,6 @@ void fnEqSolvGraph (uint16_t func) {
       }
 
       graphVariabl1 = currentSolverVariable;
-      if(graphVariabl1<0) {
-        graphVariabl1 = -graphVariabl1;
-      }
 
       if(graphVariabl1 >= FIRST_NAMED_VARIABLE && graphVariabl1 <= LAST_NAMED_VARIABLE) {
         #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)

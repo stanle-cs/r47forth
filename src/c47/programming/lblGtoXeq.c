@@ -967,7 +967,7 @@ void execProgram(uint16_t label) {
   uint16_t origLocalStepNumber = currentLocalStepNumber;
   uint8_t *origStep = currentStep;
   fnExecute(label);
-  if(programRunStop == PGM_RUNNING && (getSystemFlag(FLAG_INTING) || getSystemFlag(FLAG_SOLVING))) {
+  if(programRunStop == PGM_RUNNING && (getSystemFlag(FLAG_INTING) || getSystemFlag(FLAG_SOLVING) || (currentSolverStatus & SOLVER_STATUS_RPN_GRAPHER))) {
     runProgram(false, INVALID_VARIABLE);
     currentLocalStepNumber = origLocalStepNumber;
     currentStep = origStep;

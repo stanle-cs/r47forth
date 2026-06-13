@@ -1013,7 +1013,7 @@ char* formatCore(double value, int digits, bool handle_zero, char* buf, int widt
     real34_t value34;
     real_t valueR;
     bool_t success;
-    char tmpBuf[128];
+    char tmpBuf[150];
     convertDoubleToReal(value, &valueR, &ctxtReal39);
     realToReal34(&valueR, &value34);
     strcpy(buf, sign);
