@@ -336,7 +336,9 @@ void fnPlotReset(uint16_t unusedButMandatoryParameter) {
 
 void fnPlotf(uint16_t unusedButMandatoryParameter) {
   fnEqSolvGraph(EQ_PLOT); // will pick up X1 X2 from the stack
+  fnPlotSQ(NOPARAM);
 }
+
 
 void fnPlotSQ(uint16_t unusedButMandatoryParameter) {
     #if defined(DMCP_BUILD)

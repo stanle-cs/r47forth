@@ -103,7 +103,13 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
     if(currentSolverStatus & SOLVER_STATUS_RPN_GRAPHER) {
       real_t xReal, resReal;
       real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), &xReal);
+                                    #if defined(GRAPHDEBUG_MIN)
+                                      printRealToConsole(&xReal,"xReal:"," ==> ");
+                                    #endif //GRAPHDEBUG_MIN
       _executeSolverReal(currentSolverVariable, &xReal, &resReal, NULL);
+                                    #if defined(GRAPHDEBUG_MIN)
+                                      printRealToConsole(&resReal,"resReal:","\n");
+                                    #endif //GRAPHDEBUG_MIN
       realToReal34(&resReal, REGISTER_REAL34_DATA(REGISTER_X));
     } else {
       parseEquation(currentFormula, EQUATION_PARSER_XEQ, tmpString, tmpString + AIM_BUFFER_LENGTH);
