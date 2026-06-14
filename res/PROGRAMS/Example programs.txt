@@ -36,3 +36,5 @@ Demonstration programs included in C47 distro
 
 10.  tstData.txt   tstData.p47     Previous standard test data, from registers 10 - 38, manually loadable
 
+11.  TSTPLOT.rtf   TSTPLOT.p47     Graphing of RPN function, demo for programmed gamma function plot
+

@@ -2368,6 +2368,7 @@ bool_t isFunctionAllowingNewVariable(uint16_t op) {
     case ITM_M_DIM:
     case ITM_MVAR:
     case ITM_SOLVE:
+    case ITM_PLTf:
     case ITM_STOCFG:
     case ITM_STOMAX:
     case ITM_STOMIN:
