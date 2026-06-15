@@ -2110,7 +2110,7 @@ showPanelledView(x1, x2, y1, videoMode);
 //   If the natural cut would consume an arrow, the cut is moved to just past the arrow so it is preserved (same trade-off as the left-trim).
 static uint32_t trimSoftKeyName(uint16_t lim, char *l, int mode, int comp, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows) {
   uint32_t w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);
-  if(w > lim) {                                                                   // fits already? leave alone
+  if(w >= lim) {                                                                   // fits already? leave alone
     int16_t arrowEnd = -1;                                                        // byte index just past first arrow, or -1 if none
     for(int16_t i = 0; l[i] != 0 && l[i+1] != 0; i++) {
       if((STD_RIGHT_ARROW[0] == l[i] && STD_RIGHT_ARROW[1] == l[i+1]) ||
@@ -2138,7 +2138,7 @@ static uint32_t trimSoftKeyName(uint16_t lim, char *l, int mode, int comp, bool_
 // reached. The arrow itself is preserved.
 static uint32_t trimSoftKeyNameFromLeft(uint16_t lim, char *l, int mode, int comp, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows) {
   uint32_t w = stringWidthC47(l, mode, comp, withLeadingEmptyRows, withEndingEmptyRows);
-  while(w > lim && l[0] != 0 && l[1] != 0) {
+  while(w >= lim && l[0] != 0 && l[1] != 0) {
     if((STD_RIGHT_ARROW[0] == l[0] && STD_RIGHT_ARROW[1] == l[1]) ||
        (STD_LEFT_ARROW[0]  == l[0] && STD_LEFT_ARROW[1]  == l[1])) {
       break;
@@ -2165,13 +2165,13 @@ static uint32_t trimKey(char* itemName, int x) {
   uint32_t w;
   if((x & 1) == 0) { //even
     w = trimSoftKeyName(lim, itemName, stdNoEnlarge, 1, false, false);
-    if(w > lim) {
+    if(w >= lim) {
       trimSoftKeyNameFromLeft(lim, itemName, stdNoEnlarge, 1, false, false);
     }
   }
   else {
     w = trimSoftKeyNameFromLeft(lim, itemName, stdNoEnlarge, 1, false, false);
-    if(w > lim) {
+    if(w >= lim) {
       trimSoftKeyName(lim, itemName, stdNoEnlarge, 1, false, false);
     }
   }
@@ -3166,17 +3166,20 @@ void showSoftmenuCurrentPart(void) {
                 }
 
                 else {
+                    //This section is for a single softkey on a user menu
                     if(isItemConversion(itemNr)) {                                                 // It is definately a single here
-                      if(getSystemFlag(FLAG_HPCONV)) {
-                        //printf("SWAP, changing itemName !!!\n");
-                        changeSoftKey(conversionPartner(itemNr, NULL, NULL, NULL), itemName, &vm, &showCb, &showValue, showText);
-                        truncateAtArrow(itemName);
-                        strcat(itemName, STD_LEFT_ARROW);
-                      } else {
-                        truncateAtArrow(itemName);
-                        strcat(itemName, STD_RIGHT_ARROW);
-                      }
-                      expandAbbreviations(itemName);
+                      char s1[64];
+                      strcpy(s1, indexOfItems[conversionPartner(itemNr, NULL, NULL, NULL)].itemSoftmenuName);
+                      truncateAtArrow(s1);
+                      char s2[64];
+                      strcpy(s2, indexOfItems[itemNr].itemSoftmenuName);
+                      truncateAtArrow(s2);
+                      strcpy(itemName, s2);
+                      strcat(itemName, STD_RIGHT_ARROW);
+                      strcat(itemName, s1);
+                      // expandAbbreviations(itemName); // expand all
+                      compressConversionName(itemName); // keep E compressed
+                      trimKey(itemName, getSystemFlag(FLAG_HPCONV)); // trim the combined key from the less important side relating to HPCONV, that is let the unit normally on the face of the key dominate
                     }
                     showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);
                   }
@@ -3293,7 +3296,14 @@ void showSoftmenuCurrentPart(void) {
             //        +30000 -> neither top nor bottom line
 
             if( isItemConversion(item)) {
-              showSoftkey2(true, indexOfItems[item%10000].itemSoftmenuName, x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, showCb, showValue, showText, false);
+              char www[64];
+              //This section is for the softkey text for fixed menu pairs in the CONV menu including the magic
+              fullConvSoftMenuItemNameInclHPCONV(item, www);
+              //expandAbbreviations(www); //full expansion
+              //showSoftkey2 includes a call to compressConversionName() keep E compressed
+              showSoftkey2(true, www, x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, showCb, showValue, showText, false);
+              //The old system using indexOfItems[] directly, not working anymore since the second text part is removed to save bytes
+              //showSoftkey2(true, indexOfItems[/*getSystemFlag(FLAG_HPCONV) ? conversionPartner(item, NULL, NULL, NULL) : */item].itemSoftmenuName, x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, showCb, showValue, showText, false);
             }
 
             else {
