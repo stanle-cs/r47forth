@@ -2858,10 +2858,10 @@
 #define ITM_2756                    2756
 #define ITM_2757                    2757
 #define ITM_2758                    2758
-#define ITM_2759                    2759
-#define ITM_2760                    2760
-#define ITM_2761                    2761
-#define ITM_2762                    2762
+#define ITM_EXPSTK                  2759
+#define ITM_EXPNREG                 2760
+#define ITM_EXPX                    2761
+#define ITM_IMPREGS                 2762
 
 #define ITM_GET_ADM                 2763 // VAR_NO_ADM
 #define ITM_SET_ADM                 2764 // VAR_NO_ADM

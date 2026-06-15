@@ -11,6 +11,9 @@
 #define STATE_DIR      "STATE"
 #define STATE_EXT      ".s47"
 
+#define DATA_DIR      "DATA"
+#define DATA_EXT      ".d47"
+
 #define PROGRAMS_DIR       "PROGRAMS"
 #define ALLPROGRAMS_SUBDIR "ALLPGMS"
 
@@ -59,6 +62,8 @@
     ioPathLoadProgram           = 11, ///< program file used in READP function
     ioPathSaveAllPrograms      = 12, ///< program file used in write all programs
     ioPathExportRTFAllPrograms = 13, ///< program file used in export all programs, target RTF
+    ioPathRegImport            = 14, ///< register data import aka aparse
+    ioPathRegExport            = 15, ///< register data export
   } ioFilePath_t;
 
   /**

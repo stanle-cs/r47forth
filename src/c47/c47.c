@@ -6,6 +6,7 @@
 #include "c47Extensions/addons.h"
 #include "longIntegerType.h"
 #include "saveRestoreCalcState.h"
+#include "saveRestoreBackup.h"
 #include "statusBar.h"
 
 //#define JMSHOWCODES
