@@ -186,7 +186,7 @@
   void    runConversionFromSI        (int16_t itemNr);
   bool_t  areBothConvertConfigurable (int16_t item1Nr, int16_t item2Nr);
   void    fullConvSoftMenuItemNameInclHPCONV(int16_t item, char *outString);
-
+  void    executionConversionPartner (int16_t item, int16_t *itemNrPair, char *pairName);
 
   void fnUnitConvert  (uint16_t multiplyDivide);
 

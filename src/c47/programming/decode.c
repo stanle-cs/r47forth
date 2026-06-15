@@ -862,8 +862,8 @@ static void _decodeOneStep(uint8_t *step, uint16_t textVersion) {
           }
         }
         if(isItemConversion(op)) {
-          expandConversionName(nameOp);
-          // expandAbbreviations(nameOp); // do not use this one, because we want the 100 to be fully written normally not with the small 1 0 0
+          fullConvSoftMenuItemNameInclHPCONV(op, nameOp); //Display only the standard display partner, as a program cannot contain a custom conversion
+          // expandConversionName(nameOp);
         }
         sprintf(tmpString, "%s%s", (FIRST_CONSTANT <= op && op <= LAST_CONSTANT) ? "# " : "", nameOp);
         break;

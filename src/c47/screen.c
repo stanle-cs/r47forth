@@ -2057,7 +2057,7 @@ return res;
         stringCopy(functionName, pickValidItemFromItems(item, PRIORITY_itemSoftmenuName));
       }
       else if(isItemConversion(item)) {
-        fullConvSoftMenuItemNameInclHPCONV(item, functionName);
+        executionConversionPartner(item, NULL, functionName);
         expandAbbreviations(functionName);
       }
       else if(item < LAST_ITEM && item != MNU_DYNAMIC) {

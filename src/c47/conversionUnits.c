@@ -776,6 +776,55 @@ void fullConvSoftMenuItemNameInclHPCONV(int16_t item, char *outString) {
 }
 
 
+// Determine the conversion pair that will actually execute:
+//   - Custom non-standard pair when the active softkey context provides a different pair (MyMenu or DYNAMIC user menus) of the SAME configurable UT
+//   - Otherwise the standard pair (conversionPartner(item))
+// Outputs optional: pass NULL for either to skip
+//   itemNrPair: receives the custom partner ONLY when a custom non-standard pair applies; otherwise 0
+//   pairName:   receives the combined "left" STD_RIGHT_ARROW "right" softmenu name reflecting the executed pair, honouring FLAG_HPCONV.
+// Dependencies not in the signature: globals dynamicMenuItem, softmenuStack, softmenu[], userMenuItems[], userMenus[], currentUserMenu; flag FLAG_HPCONV.
+void executionConversionPartner(int16_t item, int16_t *itemNrPair, char *pairName) {
+  if(!isItemConversion(item)) {                                                  // not a conversion: plain softmenu name, no partner work
+    if(itemNrPair != NULL) {
+      *itemNrPair = 0;
+    }
+    if(pairName != NULL) {
+      stringCopy(pairName, indexOfItems[item].itemSoftmenuName);
+    }
+    return;
+  }
+  const int16_t softKeyIx      = dynamicMenuItem ^ 1;
+  const int16_t curMenu        = -softmenu[softmenuStack[0].softmenuId].menuItem;
+  const int16_t softKeyPartner = (curMenu == MNU_MyMenu)  ? userMenuItems[softKeyIx].item
+                               : (curMenu == MNU_DYNAMIC) ? userMenus[currentUserMenu].menuItem[softKeyIx].item
+                               : 0;
+  if(areBothConvertConfigurable(item, softKeyPartner) && !isStandardPair(item, softKeyPartner)) {  // custom non-standard pair of the SAME configurable UT
+    if(itemNrPair != NULL) {
+      *itemNrPair = softKeyPartner;
+    }
+    if(pairName != NULL) {
+      const int16_t leftItem  = getSystemFlag(FLAG_HPCONV) ? conversionPartner(softKeyPartner, NULL, NULL, NULL) : item;
+      const int16_t rightItem = getSystemFlag(FLAG_HPCONV) ? conversionPartner(item,           NULL, NULL, NULL) : softKeyPartner;
+      char scratch[64];
+      stringCopy(scratch, indexOfItems[leftItem].itemSoftmenuName);
+      truncateAtArrow(scratch);
+      stringCopy(pairName, scratch);
+      stringCopy(pairName + stringByteLength(pairName), STD_RIGHT_ARROW);
+      stringCopy(scratch, indexOfItems[rightItem].itemSoftmenuName);
+      truncateAtArrow(scratch);
+      stringCopy(pairName + stringByteLength(pairName), scratch);
+    }
+  }
+  else {
+    if(itemNrPair != NULL) {                                                     // standard pair (or mismatched UTs): no extra dispatch work
+      *itemNrPair = 0;
+    }
+    if(pairName != NULL) {                                                       // delegate the standard-pair name to the existing helper
+      fullConvSoftMenuItemNameInclHPCONV(item, pairName);
+    }
+  }
+}
+
 
 static void unitConversion(const real_t * const coefficient, uint16_t multiplyDivide, bool_t invert) {
   real_t reX;

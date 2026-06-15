@@ -1383,17 +1383,13 @@ endReturnTrue:
 
                 // Double execution when a custom conversion: additional to the runfunction which operated the 'normal' conversion
                 if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode != CM_PEM && item > 0 && isItemConversion(item)) {
-                  const int16_t softKeyIx  = dynamicMenuItem ^ 1;                                                                                  // XOR flips bit 0: adjacent softkey
-                  const int16_t curMenu    = -softmenu[softmenuStack[0].softmenuId].menuItem;
-                  const int16_t itemNrPair = (curMenu == MNU_MyMenu)  ? userMenuItems[softKeyIx].item
-                                           : (curMenu == MNU_DYNAMIC) ? userMenus[currentUserMenu].menuItem[softKeyIx].item
-                                           : 0;
-                  if(isItemConversion(itemNrPair) && !isStandardPair(item, itemNrPair)) {                                                          // non-standard configured pair: round-trip via SI; standard fixed pair already done by runFunction
+                  int16_t itemNrPair;
+                  executionConversionPartner(item, &itemNrPair, NULL);
+                  if(itemNrPair != 0) {                                                                                                            // non-zero = custom non-standard pair needing the round-trip via SI
                     if(!getSystemFlag(FLAG_HPCONV)) { //normal CONV_HP clear
                       runConversionToSI(item);
                       runConversionFromSI(itemNrPair);
                     } else { //flipped CONV_HP set
-                      //printf("SWAPPED RUNF\n");
                       runFunction(conversionPartner(item, NULL, NULL, NULL));
                       runConversionToSI(itemNrPair);
                       runConversionFromSI(conversionPartner(item, NULL, NULL, NULL));
