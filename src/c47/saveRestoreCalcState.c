@@ -510,10 +510,14 @@ void fnSaveNRegisters(uint16_t N) {
 }
 
 void fnSaveRegister(uint16_t regist) {
-  if(regist < LAST_SPARE_REGISTER || (FIRST_NAMED_VARIABLE <= regist && regist < FIRST_NAMED_VARIABLE + numberOfNamedVariables)) {
+  if(FIRST_NAMED_VARIABLE <= regist && regist < FIRST_NAMED_VARIABLE + numberOfNamedVariables) {
+    char varName[16];
+    stringToUtf8((char *)allNamedVariables[regist - FIRST_NAMED_VARIABLE].variableName + 1, (uint8_t *)varName);
+    doSaveDataFile(NULL, NULL, varName, !isXFN);                                    // named variable: save by name
+  } else if(regist < LAST_SPARE_REGISTER) {
     uint16_t beginR = regist;
     uint16_t endR   = regist;
-    doSaveDataFile(&beginR, &endR, NULL, !isXFN);
+    doSaveDataFile(&beginR, &endR, NULL, !isXFN);                                   // numbererd or lettered register: save by number
   } else {
     displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)

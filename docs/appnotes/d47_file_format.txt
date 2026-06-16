@@ -108,6 +108,8 @@ Comments go before a section or before a register's name line. Never inside an e
   Cmnt
   Stack snapshot before the regression run
 
+Do not place a comment inside a NAMED_VARIABLES section: Here, a Cmnt line there is taken as a variable name and will raise an error. 
+
 See example file below:
 
 
@@ -125,6 +127,18 @@ Accepts (3-i4) | 3-i4 | +3+i4 | -3-i4 | (+3+i4) | (-3-i4) | -2.5e-3+i4 | (-2.5e-
 Also accepts the state file format space form (real and imaginary separated by a space, no i): 3 4 | 3 -4 | -2.5 1e3
 (parentheses optional, leading sign optional)
 (parenthesis required when matrix whitespace layout is used)
+
+
+REGISTERS AND VARIABLES
+-----------------------
+
+The name line entry is either a numbered register, a lettered register, or a variable name.
+
+Numbered registers: R followed by the number. We write three digits (R000 to R099), but on read the digits are free: R7, R07 and R007 all mean register 7.
+
+Lettered registers (100 to 125): We write the short letter form RX RY RZ RT RA RB RC RD RL RI RJ RK RM RN RP RQ RR RS RE RF RG RH RO RU RV RW. The numeric form (R100 etc.) is also accepted on read. R100 is RX.
+
+Variable names: saved and loaded by name (in a NAMED_VARIABLES section), so they land in the right variable on any calculator. A name is 1 to 7 characters. Do not place a comment inside a NAMED_VARIABLES section: a Cmnt line is taken as a variable name, not a comment and will raise an error.
 
 
 EXAMPLE
