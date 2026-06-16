@@ -36,7 +36,7 @@ int _ioFileNameFromFilePath(ioFilePath_t path, char * filename) {
       return FILE_OK;
     case ioPathRegExport:
       check_create_dir(DATA_DIR);
-      ret = file_selection_screen("Export Register File", DATA_DIR, DATA_EXT, save_datafile, 0, 0, filename);
+      ret = file_selection_screen("Export Register File", DATA_DIR, DATA_EXT, save_datafile, 1, 1, filename);
       return (ret == MRET_EXIT ? FILE_CANCEL : FILE_OK);
     case ioPathRegImport:
       check_create_dir(DATA_DIR);
