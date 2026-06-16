@@ -218,6 +218,8 @@ char aimBuffer1[400];             //The concurrent use of the global aimBuffer
 
     tmpRegisterString = tmpString + START_REGISTER_VALUE;
 
+
+#if defined(OPTION_XFN_1000)
     if(isXFNRegister) {
       if(registerFMAOutputPlainString(regist, "", tmpRegisterString)) {
         strcpy(aimBuffer1, "RXFN");
@@ -231,6 +233,8 @@ char aimBuffer1[400];             //The concurrent use of the global aimBuffer
       }
       return;
     }
+#endif //OPTION_XFN_1000
+
     // else do the standard register branch
 
     switch(getRegisterDataType(regist)) {
@@ -975,6 +979,16 @@ int64_t stringToInt64(const char *str) {
 }
 
 
+  static void dataFileCommaToPeriod(char *str) {
+    while(*str) {
+      if(*str == ',') {
+        *str = '.';
+      }
+      str++;
+    }
+  }
+
+
   // Function to standardize new input to the old state file format, any new complex, into the old "re im" form. 
   // Accepts (3-i4) | 3-i4 | +3+i4 | -3-i4 | (+3+i4) | (-3-i4) | 3 -4 | 3 4 | -2.5 1e3 | -2.5e-3+i4 | (-2.5e-3-i4) | i4 | (i4) | 
   //         ( 3 - i4 ) | (1.5e2-i2.5e-3) | 0+i0 | -7+i0 | (3 -i4) | 3 -i4 | +3 +i4 | -3 -i4 | ( 3 - i 4 ) | +3 + i4 | 3 - i 4 | (-2.5e-3 - i 4)
@@ -1122,6 +1136,9 @@ int64_t stringToInt64(const char *str) {
 
     if(strcmp(type, "Real") == 0) {
       reallocateRegister(regist, dtReal34, 0, tag);
+      if(dataFileMode) {
+        dataFileCommaToPeriod(value);
+      }
       stringToReal34(value, REGISTER_REAL34_DATA(regist));
     }
 
@@ -1137,8 +1154,11 @@ int64_t stringToInt64(const char *str) {
 
     else if(strcmp(type, "THMS") == 0) {
       reallocateRegister(TEMP_REGISTER_1, dtReal34, 0, amNone);
+      if(dataFileMode) {
+        dataFileCommaToPeriod(value);
+      }
       stringToReal34(value, REGISTER_REAL34_DATA(TEMP_REGISTER_1));
-      hmmssInRegisterToSeconds(TEMP_REGISTER_1);                                 // HHMMSS-coded real -> dtTime, in place
+      hmmssInRegisterToSeconds(TEMP_REGISTER_1);
       copySourceRegisterToDestRegister(TEMP_REGISTER_1, regist);
     }
 
@@ -1161,6 +1181,9 @@ int64_t stringToInt64(const char *str) {
       }
 
       reallocateRegister(TEMP_REGISTER_1, dtReal34, 0, amNone);
+      if(dataFileMode) {
+        dataFileCommaToPeriod(value);
+      }
       stringToReal34(value, REGISTER_REAL34_DATA(TEMP_REGISTER_1));
       convertReal34RegisterToDateRegister(TEMP_REGISTER_1, TEMP_REGISTER_1, false);
       copySourceRegisterToDestRegister(TEMP_REGISTER_1, regist);
@@ -1209,12 +1232,13 @@ int64_t stringToInt64(const char *str) {
 
     else if(strcmp(type, "Cplx") == 0) {
       char *imaginaryPart;
-      char canon[200];
+      char stdTmp[200];
 
       reallocateRegister(regist, dtComplex34, 0, tag);
       if(dataFileMode) {
-        standardiseComplex(value, canon);                                       // accept (3-i4) / 3-i4 / +3+i4 / stock "re im"; emit the stock "re im" form for the parser below
-        value = canon;
+        standardiseComplex(value, stdTmp);                                       // accept (3-i4) / 3-i4 / +3+i4 / stock "re im"; emit the stock "re im" form for the parser below
+        dataFileCommaToPeriod(stdTmp);
+        value = stdTmp;
       }
       imaginaryPart = skip_word(value);
       *(imaginaryPart++) = 0;
@@ -1287,6 +1311,7 @@ int64_t stringToInt64(const char *str) {
       for(i = 0; i < rows * cols; ++i) {
         if(dataFileMode) {
           readToken(tmpString);                                                  // any whitespace (spaces and/or newlines) separates elements
+          dataFileCommaToPeriod(tmpString);
         }
         else {
           readLine(tmpString);
@@ -1303,11 +1328,12 @@ int64_t stringToInt64(const char *str) {
         char *imaginaryPart;
 
         if(dataFileMode) {
-          char canon[200];
+          char stdTmp[200];
 
           readComplexToken(tmpString);                                           // one parenthesised "(re-iIM)" group (or bare i form) per element, free-form whitespace between elements
-          standardiseComplex(tmpString, canon);
-          strcpy(tmpString, canon);
+          standardiseComplex(tmpString, stdTmp);
+          dataFileCommaToPeriod(stdTmp);
+          strcpy(tmpString, stdTmp);
         }
         else {
           readLine(tmpString);

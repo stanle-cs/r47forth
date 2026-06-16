@@ -20,7 +20,6 @@ Real - a plain number.
   R022
   Real
   6.02214076E23
-  (E or e marks the power of ten: 6.02214076E23 means 6.02214076 times 10^23)
 
 Cplx - a complex number. We write it like (3-i4). Also accepted (all the same value): 3-i4 or (3 - i4) or 3 -4 and more whitespace variants. See below for exhaustive list.
   RB
@@ -95,6 +94,15 @@ Example - a complex matrix, polar, angles in degrees (the "p" = polar):
   (2+i30)	(5+i45)
 
 A plain Real or Cplx with no colon means no special angle mode is attached.
+
+
+REAL NUMBER INPUT
+-----------------
+Real entry rules:
+  Exponent entry: E or e marks the power of ten: 6.02214076E23 means 6.02214076 times 10^23
+  No separators allowed: a number must be continuous, with no spaces and no digit-group separators.
+  Real, Cplx, Rema, Cxma, THMS, DYMD, DDMY, DMDY all use real numbers underneath, with the rules above.
+  The decimal mark may be a dot or a comma on input (3.14 or 3,14); exports always use a dot.
 
 
 COMMENTS
