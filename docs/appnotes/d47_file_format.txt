@@ -69,6 +69,11 @@ Cxma - a complex matrix. Same layout, each cell a complex number. If free spacin
   (1+i0)	(0-i1)
   (0+i1)	(1+i0)
 
+RXFN - a very long real (extended precision) used by the XFN functions. One decimal value with an E exponent, same angle tag as Real. Loads only to the stack (restores X, Y, Z), so the name must be RX. Export writes X automatically.
+  RX
+  RXFN:DEG
+  3.14159265358979323846...E+500
+
 
 ANGLE / POLAR TAG  (on Real, Cplx, and vectors / complex matrices)
 ------------------------------------------------------------------
@@ -116,7 +121,7 @@ Comments go before a section or before a register's name line. Never inside an e
   Cmnt
   Stack snapshot before the regression run
 
-Do not place a comment inside a NAMED_VARIABLES section: Here, a Cmnt line there is taken as a variable name and will raise an error. 
+Do not place a comment inside a NAMED_VARIABLES section: a Cmnt line there is taken as a variable name and will raise an error.
 
 See example file below:
 

@@ -531,7 +531,8 @@ void fnSaveRegister(uint16_t regist) {
   }
 }
 
-void fnSaveXFNRegister(uint16_t regist) {
+void fnSaveXFNRegister(uint16_t unusedButMandatoryParameter) {
+  const uint16_t regist = REGISTER_X;
   if(regist < LAST_SPARE_REGISTER - 2) {
     uint16_t beginR = regist;
     uint16_t endR   = regist;
@@ -1141,6 +1142,34 @@ int64_t stringToInt64(const char *str) {
       }
       stringToReal34(value, REGISTER_REAL34_DATA(regist));
     }
+
+#if defined(OPTION_XFN_1000)
+    else if(strcmp(type, "RXFN") == 0) {
+      if(regist != REGISTER_X) {
+        displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
+        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+          sprintf(errorMessage, "XFN import only to REGISTER_X (stack), got register %d", (int)regist);
+          moreInfoOnError("In function restoreRegister:", errorMessage, NULL, NULL);
+        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+        return;
+      }
+
+      REAL_T_PTR(paramX, 1071);
+      REAL_T_PTR(paramY, 1071);
+      REAL_T_PTR(paramTemp, 1071);
+      realContext_t c = ctxtReal75;
+      c.digits = 1034;
+      angularMode_t angleMode = tag;
+      angularMode_t tmpAngle;
+
+      if(dataFileMode) {
+        dataFileCommaToPeriod(value);
+      }
+      stringToReal(value, paramX, &c);
+
+      processResultantLongReal(REGISTER_X, 0, FT_EXTERNAL, paramX, paramY, paramTemp, &angleMode, &tmpAngle);
+    }
+#endif //OPTION_XFN_1000
 
     else if(strcmp(type, "Time") == 0) {
       reallocateRegister(regist, dtTime, 0, amNone);
