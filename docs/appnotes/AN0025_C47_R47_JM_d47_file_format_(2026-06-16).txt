@@ -1,5 +1,8 @@
-C47 / R47 REGISTER EXPORT DATA FILE (.d47) FORMAT
-=================================================
+Appnote 0025           C47 / R47 REGISTER EXPORT DATA FILE (.d47) FORMAT           2026-06-16
+=============================================================================================
+
+This appnote briefly explains the .d47 data interchange file format.
+
 
 The data file is written to the /DATA folder and the files are expected to be in that folder.
 
@@ -154,8 +157,8 @@ Lettered registers (100 to 125): We write the short letter form RX RY RZ RT RA R
 Variable names: saved and loaded by name (in a NAMED_VARIABLES section), so they land in the right variable on any calculator. A name is 1 to 7 characters. Do not place a comment inside a NAMED_VARIABLES section: a Cmnt line is taken as a variable name, not a comment and will raise an error.
 
 
-EXAMPLE
--------
+COMMENTED FILE EXAMPLE
+----------------------
 
 DATA_FILE_REVISION (this is fixed)
 0                  (this is fixed)
@@ -178,3 +181,116 @@ Rema               (this is the command stating the next line is a real matrix i
 1 2                (these are the elements, matrix input is whitespace-insensitive, it can be 1 2 3 4 or 1 2 3 \n 4, or 1 \n 2 \n 3 \n 4 \n, etc.)
 3 4
 
+
+WORKED EXAMPLE 1
+----------------
+Export from C47/R47: example to create a 100-digit version of 3^-4:
+
+CLRSTK 3 X->XFN 4 X->XFN XCHS X1/X XPOWER XRSD 100 EXPxfnx (Export XFN register X, enter file name A.d47)
+
+File A.d47:
+
+CODE: SELECT ALL
+DATA_FILE_REVISION
+0
+GLOBAL_REGISTERS
+1
+RX
+RXFN:DEG
+1.234567901234567901234567901234567901234567901234567901234567901234567901234567901234567901234567901E-2
+
+
+
+WORKED EXAMPLE 2
+----------------
+Export from C47/R47: is a lazy way of getting a complex matrix, just get the A-matrix from the ELEC menu. HOME ELEC [A]:
+
+ELEC [A] EXPreg X (Export register X, enter file name B.d47)
+
+File B.d47:
+
+CODE: SELECT ALL
+DATA_FILE_REVISION
+0
+GLOBAL_REGISTERS
+1
+RX
+Cxma
+3 3
+(1+i0)  (1+i0)  (1+i0)
+(1+i0)  (-0.5+i0.8660254037844386467637231707529362)  (-0.5-i0.8660254037844386467637231707529362)
+(1+i0)  (-0.5-i0.8660254037844386467637231707529362)  (-0.5+i0.8660254037844386467637231707529362)
+
+
+
+WORKED EXAMPLE 3
+----------------
+Export from C47/R47: is a factorisation result, this time of 45!:
+
+45 x! FACTORS EXPreg X (Export register X, enter file name B.d47)
+
+File C.d47
+
+CODE: SELECT ALL
+DATA_FILE_REVISION
+0
+GLOBAL_REGISTERS
+1
+RX
+Rema
+2 14
+2 3 5 7 11  13  17  19  23  29  31  37  41  43
+41  21  10  6 4 3 2 2 1 1 1 1 1 1
+
+
+
+WORKED EXAMPLE 4
+----------------
+Manually populated (used internet sources and a template from above) 
+
+Load the file: IMPORTr (file PELL661.d47)
+
+DATA_FILE_REVISION
+0
+Cmnt
+Pell x^2 - 661 y^2 = 1, fundamental solution. Fermat (1657) posed these to English mathematicians.
+Cmnt
+Compute R001^2 - 661 * R002^2.  R001 is 38 digits; result is exactly 1.
+GLOBAL_REGISTERS
+2
+R001
+LonI
+16421658242965910275055840472270471049
+R002
+LonI
+638728478116949861246791167518480580
+
+RCL 01 x^2 661 RCL 2 x^2 -
+
+And the result is 1!
+
+
+USER PROBLEM 1:
+---------------
+Write files to import the CUBE42 problem solution: Add the cubes of the following three numbers:
+Sum of three cubes for 42 (Booker & Sutherland, 2019; ~1e6 CPU-hours, Charity Engine).
+Compute R001^3 + R002^3 + R003^3.  Each cube is ~51 digits; they cancel to exactly 42.
+-80538738812075974
+80435758145817515
+12602123297335631
+
+
+USER PROBLEM 2:
+---------------
+Write files to import the CUBE3 problem solution: Add the cubes of the following three numbers:
+Sum of three cubes for 3, third representation found 2019 (after only 1,1,1 and 4,4,-5).
+Compute R001^3 + R002^3 + R003^3.  Cubes are ~63 digits; cancel to exactly 3.
+569936821221962380720
+-569936821113563493509
+-472715493453327032
+
+
+
+
+Author Jaco Mostert
+Copyright (C) 2026 The R47/C47 Development Team. Permission is granted to copy, distribute and/or modify this document under the terms of the GNU Free Documentation License, Version 1.3 or any later version published by the Free Software Foundation; with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts. A copy of the license can be downloaded from gnu.org.
