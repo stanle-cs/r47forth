@@ -1305,11 +1305,8 @@ void fnAlphaRev(uint16_t regist) {
     return;
   }
   
-  char *ptrTmp = tmpString;
   char *ptrString = REGISTER_STRING_DATA(regist);
   int32_t lgString = stringGlyphLength(ptrString);
-  int16_t pos = stringLastGlyph(ptrString); 
-  uint16_t glyph;
   
   if(strlen(ptrString) > TMP_STR_LENGTH) {
     displayCalcErrorMessage(ERROR_INPUT_TOO_LONG, ERR_REGISTER_LINE, REGISTER_X);
@@ -1319,7 +1316,11 @@ void fnAlphaRev(uint16_t regist) {
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
   }
-  
+
+  char *ptrTmp = tmpString;
+  int16_t pos = stringLastGlyph(ptrString); 
+  uint16_t glyph;
+
   for(int16_t i = 1; i <= lgString; i++) {
     glyph = _getGlyphCode(ptrString + pos);
     if(glyph & 0x8000) {
@@ -1330,6 +1331,7 @@ void fnAlphaRev(uint16_t regist) {
   }
   *ptrTmp = 0;
   strcpy(ptrString, tmpString);
+  tmpString[0] = 0;  // clear tmpString
 }
 
 
