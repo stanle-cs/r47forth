@@ -238,7 +238,12 @@ char aimBuffer1[400];             //The concurrent use of the global aimBuffer
 
         char yy[25];
         UI64toString(value, yy);
-        sprintf(tmpRegisterString, "%c%s %" PRIu32, sign ? '-' : '+', yy, base);
+        if(dataFileMode) {
+          sprintf(tmpRegisterString, "%c%s#%" PRIu32, sign ? '-' : '+', yy, base);
+        }
+        else {
+          sprintf(tmpRegisterString, "%c%s %" PRIu32, sign ? '-' : '+', yy, base);
+        }
         strcpy(aimBuffer1, "ShoI");
         break;
       }
@@ -277,14 +282,38 @@ char aimBuffer1[400];             //The concurrent use of the global aimBuffer
       }
 
       case dtTime: {
-        real34ToString(REGISTER_REAL34_DATA(regist), tmpRegisterString);
-        strcpy(aimBuffer1, "Time");
+        if(dataFileMode) {
+          copySourceRegisterToDestRegister(regist, TEMP_REGISTER_1);
+          fnFrom_msRegister(TEMP_REGISTER_1);                                    // dtTime -> HHMMSS-coded real, in place, so the live register is untouched
+          real34ToString(REGISTER_REAL34_DATA(TEMP_REGISTER_1), tmpRegisterString);
+          strcpy(aimBuffer1, "THMS");
+        }
+        else {
+          real34ToString(REGISTER_REAL34_DATA(regist), tmpRegisterString);
+          strcpy(aimBuffer1, "Time");
+        }
         break;
       }
 
       case dtDate: {
-        real34ToString(REGISTER_REAL34_DATA(regist), tmpRegisterString);
-        strcpy(aimBuffer1, "Date");
+        if(dataFileMode) {
+          copySourceRegisterToDestRegister(regist, TEMP_REGISTER_1);
+          convertDateRegisterToReal34Register(TEMP_REGISTER_1, TEMP_REGISTER_1); // dtDate -> real in the current date-format field order, in place
+          real34ToString(REGISTER_REAL34_DATA(TEMP_REGISTER_1), tmpRegisterString);
+          if(getSystemFlag(FLAG_YMD)) {                                          // record the field order so the loader can reproduce it
+            strcpy(aimBuffer1, "DYMD");
+          }
+          else if(getSystemFlag(FLAG_MDY)) {
+            strcpy(aimBuffer1, "DMDY");
+          }
+          else {
+            strcpy(aimBuffer1, "DDMY");
+          }
+        }
+        else {
+          real34ToString(REGISTER_REAL34_DATA(regist), tmpRegisterString);
+          strcpy(aimBuffer1, "Date");
+        }
         break;
       }
 
@@ -445,8 +474,14 @@ void fnSaveStackRegisters(uint16_t unusedButMandatoryParameter) {
   doSaveDataFile(&beginR, &endR, NULL);
 }
 
+void fnSaveLetteredRegisters(uint16_t unusedButMandatoryParameter) {
+  uint16_t beginR = REGISTER_X;
+  uint16_t endR   = REGISTER_W;
+  doSaveDataFile(&beginR, &endR, NULL);
+}
+
 void fnSaveNRegisters(uint16_t N) {
-  if(N <= 100) {
+  if(N <= 125) {
     uint16_t beginR = 0;
     uint16_t endR   = N - 1;
     doSaveDataFile(&beginR, &endR, NULL);
@@ -1067,6 +1102,50 @@ int64_t stringToInt64(const char *str) {
       stringToReal34(value, REGISTER_REAL34_DATA(regist));
     }
 
+    else if(strcmp(type, "THMS") == 0) {
+      reallocateRegister(TEMP_REGISTER_1, dtReal34, 0, amNone);
+      stringToReal34(value, REGISTER_REAL34_DATA(TEMP_REGISTER_1));
+      hmmssInRegisterToSeconds(TEMP_REGISTER_1);                                 // HHMMSS-coded real -> dtTime, in place
+      copySourceRegisterToDestRegister(TEMP_REGISTER_1, regist);
+    }
+
+    else if(strcmp(type, "DYMD") == 0 || strcmp(type, "DDMY") == 0 || strcmp(type, "DMDY") == 0) {
+      bool_t savedYMD = getSystemFlag(FLAG_YMD);                                 // the type code gives the field order; force the matching flag for the conversion, then restore the user's flags
+      bool_t savedMDY = getSystemFlag(FLAG_MDY);
+      bool_t savedDMY = getSystemFlag(FLAG_DMY);
+
+      clearSystemFlag(FLAG_YMD);
+      clearSystemFlag(FLAG_MDY);
+      clearSystemFlag(FLAG_DMY);
+      if(strcmp(type, "DYMD") == 0) {
+        setSystemFlag(FLAG_YMD);
+      }
+      else if(strcmp(type, "DMDY") == 0) {
+        setSystemFlag(FLAG_MDY);
+      }
+      else {
+        setSystemFlag(FLAG_DMY);
+      }
+
+      reallocateRegister(TEMP_REGISTER_1, dtReal34, 0, amNone);
+      stringToReal34(value, REGISTER_REAL34_DATA(TEMP_REGISTER_1));
+      convertReal34RegisterToDateRegister(TEMP_REGISTER_1, TEMP_REGISTER_1, false);
+      copySourceRegisterToDestRegister(TEMP_REGISTER_1, regist);
+
+      clearSystemFlag(FLAG_YMD);
+      clearSystemFlag(FLAG_MDY);
+      clearSystemFlag(FLAG_DMY);
+      if(savedYMD) {
+        setSystemFlag(FLAG_YMD);
+      }
+      if(savedMDY) {
+        setSystemFlag(FLAG_MDY);
+      }
+      if(savedDMY) {
+        setSystemFlag(FLAG_DMY);
+      }
+    }
+
     else if(strcmp(type, "LonI") == 0) {
       longInteger_t lgInt;
 
@@ -1089,7 +1168,7 @@ int64_t stringToInt64(const char *str) {
       uint16_t sign = (value[0] == '-' ? 1 : 0);
       uint64_t val  = stringToUint64(value + 1);
 
-      value = next_word(value);
+      value = strchr(value, '#') ? strchr(value, '#') + 1 : next_word(value);    // accept "+255#16" or the old "+255 16"
       uint32_t base = toUint32(value);
 
       convertUInt64ToShortIntegerRegister(sign, val, base, regist);

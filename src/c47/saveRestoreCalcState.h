@@ -45,6 +45,7 @@
   uint8_t  convert001090400T001090500(uint8_t parameter, uint8_t offset);
 
   void     fnSaveStackRegisters(uint16_t unusedButMandatoryParameter);
+  void     fnSaveLetteredRegisters(uint16_t unusedButMandatoryParameter);
   void     fnSaveNRegisters    (uint16_t N);
   void     fnSaveRegister      (uint16_t unusedButMandatoryParameter);
   void     fnLoadRegisters     (uint16_t unusedButMandatoryParameter);

@@ -2856,8 +2856,8 @@
 #define ITM_KGtoTONNE               2754
 #define ITM_2755                    2755
 #define ITM_2756                    2756
-#define ITM_2757                    2757
-#define ITM_2758                    2758
+#define ITM_XEXPORT                 2757
+#define ITM_EXPATOW                 2758
 #define ITM_EXPSTK                  2759
 #define ITM_EXPNREG                 2760
 #define ITM_EXPX                    2761

@@ -706,13 +706,8 @@ TO_QSPI const int16_t menu_AUDIO[]       = { ITM_BEEP,                      ITM_
 
 TO_QSPI const int16_t menu_IO[]          = { ITM_WRITEP,                    ITM_SAVEST,                   ITM_SAVE,                    ITM_LOADP,                     ITM_LOADR,                    ITM_LOADV,
                                              ITM_READP,                     ITM_LOADST,                   ITM_LOAD,                    ITM_LOADSIGMA,                 ITM_LOADSS,                  -MNU_PRINT,
-                                             ITM_EXPORTP,                   ITM_WRXPALL,                  ITM_SAVEAUT,                 ITM_NULL,                      ITM_SNAP,                    -MNU_AUDIO                 ,
-ITM_EXPSTK,  
-ITM_EXPNREG, 
-ITM_EXPX,
-ITM_IMPREGS,
-ITM_NULL,
-ITM_NULL};
+                                             ITM_EXPORTP,                   ITM_WRXPALL,                  ITM_SAVEAUT,                 ITM_NULL,                      ITM_SNAP,                    -MNU_AUDIO,
+                                             ITM_EXPX,                      ITM_EXPSTK,                   ITM_EXPATOW,                 ITM_EXPNREG,                   ITM_XEXPORT,                  ITM_IMPREGS               };
 
 #if defined(PC_BUILD)
   #define PAT  ITM_PRINT_ALL_ITEMS

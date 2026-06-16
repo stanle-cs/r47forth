@@ -1,0 +1,96 @@
+C47 / R47 REGISTER EXPORT DATA FILE (.d47) FORMAT
+=================================================
+
+The data file is written to the /DATA folder and the files are expected to be in that folder.
+
+Each register is written as three lines:
+  1. its name   (RX, R007, or a variable name)
+  2. its type   (a 4-character code, optionally with an angle/polar tag)
+  3. its value  (matrices add a "rows cols" line and then the element rows)
+
+
+VALUE TYPES
+-----------
+
+Real - a plain number.
+  RA
+  Real
+  3.14159
+
+Cplx - a complex number. We write it like (3-i4). Also accepted (all the same value): 3-i4 or (3 - i4) or 3 -4 and more whitespace variants.
+  RB
+  Cplx
+  (3-i4)
+
+LonI - a big whole number, as big as you like, up to 1000 digits.
+  RC
+  LonI
+  123456789012345678901234567890
+
+ShoI - a short integer. Written as a signed hex magnitude (with a 0x prefix), then #, then the base in decimal. So the value 255 stored in base 10 is written +0xff#10. Also accepted: the old form +0xff 10. Example: the value 255, register base 10.
+  RD
+  ShoI
+  +0xff#10
+
+Stri - text.
+  RE
+  Stri
+  Hello world
+
+THMS - written as HMS coded decimal as HH.MMSSdddd. So 13:30:45.5 is written 13.30455.
+  RI
+  THMS
+  13.30455
+
+DYMD - a date coded decimal DYMD (year.monthday), DDMY (day.monthyear), or DMDY (month.dayyear). All three are accepted. We export in the date mode of the calculator. Example, 15 June 2026 in YMD mode:
+  RJ
+  DYMD
+  2026.0615
+
+Rema - a real matrix (or vector). A "rows cols" line, then the elements. Whitespace between elements does not matter: tabs, spaces, newlines, any mix. Elements can be vertical or horisontal, or in rows. The "rows cols" count decides where rows break. We write tab-separated rows for readability.
+  RX
+  Rema
+  2 3
+  1	2	3
+  4	5	6
+
+Cxma - a complex matrix. Same layout, each cell a complex number. If free spacing is used, complex numbers must be in parenthesis. If one line per element is used, parenthesis are not required.
+  RY
+  Cxma
+  2 2
+  (1+i0)	(0-i1)
+  (0+i1)	(1+i0)
+
+
+ANGLE / POLAR TAG  (on Real, Cplx, and vectors / complex matrices)
+------------------------------------------------------------------
+
+When a number carries an angle mode, it is appended after a colon.
+A trailing "p" means polar form.
+
+  :DEG     degrees
+  :RAD     radians
+  :GRAD    gradians
+  :DMS     degrees / minutes / seconds
+  :MULTPI  multiples of pi
+
+Example - a real angle in degrees:
+  RZ
+  Real:DEG
+  90
+
+Example - a complex matrix, polar, angles in degrees (the "p" = polar):
+  RT
+  Cxma:DEGp
+  1 2
+  (2+i30)	(5+i45)
+
+A plain Real or Cplx with no colon means no special angle mode is attached.
+
+
+SPECIAL
+-------
+
+Conf - a stored configuration. You cannot write this by hand and should never put it in a data file. If a Conf entry IS present, the loader does NOT ignore it: it decodes the data straight into the configuration, overwriting calculator settings. A stray or hand-edited Conf line can silently break your calculator setup. Leave Conf out of data files entirely.
+
+???? - only appears in exports if something broke during a save. Never write it.
