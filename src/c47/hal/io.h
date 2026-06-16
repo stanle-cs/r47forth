@@ -189,6 +189,30 @@
   int load_programfile(const char * fpath, const char * fname, void * data);
 
    /**
+   * Callback function for Save Data File selected file.
+   * Called from the DMCP file_selection_screen() dialog.
+   *
+   * \param[in] path file selected
+   * \param[in] file name selected
+   * \param[in] data - unsused
+   * \param[out] set tmpFileName with the path file selected
+   * \return MRET_SAVESTATE
+   */
+  int save_datafile(const char * fpath, const char * fname, void * data);
+
+   /**
+   * Callback function for Load Data File selected file.
+   * Called from the DMCP file_selection_screen() dialog.
+   *
+   * \param[in] path file selected
+   * \param[in] file name selected
+   * \param[in] data - unsused
+   * \param[out] set tmpFileName with the path file selected
+   * \return MRET_LOADSTATE
+   */
+  int load_datafile(const char * fpath, const char * fname, void * data);
+
+   /**
    * Warning dialog.
    * Called to display a warning dialog, for ex. for version check differences.
    *

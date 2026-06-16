@@ -202,12 +202,13 @@ void _updateConstantsInEquations(void) {
 }
 //#endif
 
+#define isXFN true
 char aimBuffer1[400];             //The concurrent use of the global aimBuffer
                                   //does not work. See tmpString.
                                   //Temporary solution is to use a local variable of sufficient length for the target.
 
   static void UI64toString(uint64_t value, char * tmpRegisterString);
-  static void registerToSaveString(calcRegister_t regist) {
+  static void registerToSaveString(calcRegister_t regist, bool_t isXFNRegister) {
     longInteger_t lgInt;
     int16_t sign;
     uint64_t value;
@@ -216,6 +217,21 @@ char aimBuffer1[400];             //The concurrent use of the global aimBuffer
     uint8_t *cfg;
 
     tmpRegisterString = tmpString + START_REGISTER_VALUE;
+
+    if(isXFNRegister) {
+      if(registerFMAOutputPlainString(regist, "", tmpRegisterString)) {
+        strcpy(aimBuffer1, "RXFN");
+        angularMode_t am;
+        if(getAngleModeForRegister3r(regist, &am)) {
+          textTag(aimBuffer1, am, 0);
+        }
+      } else {
+        aimBuffer1[0] = 0;
+        tmpRegisterString[0] = 0;
+      }
+      return;
+    }
+    // else do the standard register branch
 
     switch(getRegisterDataType(regist)) {
       case dtLongInteger: {
@@ -396,7 +412,7 @@ static void saveMatrixElements(calcRegister_t regist) {
   }
 
 
-bool_t fnSaveDataRegisters(uint16_t *beginR, uint16_t *endR, char *registerName) {
+bool_t fnSaveDataRegisters(uint16_t *beginR, uint16_t *endR, char *registerName, bool_t isXFNRegister) {
   // Appends a register section to the already-open file: header, count, then per register id/name line, type line, 
   // value line, and matrix element lines. registerName != NULL saves that one named variable (beginR/endR ignored);
   // NULL saves the range *beginR..*endR inclusive. Lettered registers (100..125) use the short "RX".."RW" form. Returns false on invalid arguments.
@@ -413,7 +429,7 @@ bool_t fnSaveDataRegisters(uint16_t *beginR, uint16_t *endR, char *registerName)
     }
     sprintf(tmpString, "NAMED_VARIABLES\n%" PRIu16 "\n", (uint16_t)1);
     save(tmpString, strlen(tmpString));
-    registerToSaveString(regist);
+    registerToSaveString(regist, !isXFN);
     sprintf(tmpString, "%s\n%s\n%s\n", registerName, aimBuffer1, tmpRegisterString);
     save(tmpString, strlen(tmpString));
     saveMatrixElements(regist);
@@ -427,17 +443,16 @@ bool_t fnSaveDataRegisters(uint16_t *beginR, uint16_t *endR, char *registerName)
   sprintf(tmpString, "GLOBAL_REGISTERS\n%" PRIu16 "\n", (uint16_t)(*endR - *beginR + 1));
   save(tmpString, strlen(tmpString));
   for(regist = (calcRegister_t)*beginR; regist <= (calcRegister_t)*endR; regist++) {
-    registerToSaveString(regist);
+    registerToSaveString(regist, isXFNRegister);
     registerNumberToString(regist, regName);
     sprintf(tmpString, "%s\n%s\n%s\n", regName, aimBuffer1, tmpRegisterString);
     save(tmpString, strlen(tmpString));
-    saveMatrixElements(regist);
+    saveMatrixElements(regist); ///only executes if really a matrix otherwise returns
   }
   return true;
 }
 
-
-static void doSaveDataFile(uint16_t *beginR, uint16_t *endR, char *registerName) {
+static void doSaveDataFile(uint16_t *beginR, uint16_t *endR, char *registerName, bool_t isXFNRegister) {
   ioFilePath_t path;
   int ret;
   char header[40];
@@ -461,7 +476,7 @@ static void doSaveDataFile(uint16_t *beginR, uint16_t *endR, char *registerName)
   sprintf(header, "DATA_FILE_REVISION\n%" PRIu8 "\n", (uint8_t)0);
   save(header, strlen(header));
 
-  fnSaveDataRegisters(beginR, endR, registerName);
+  fnSaveDataRegisters(beginR, endR, registerName, isXFNRegister);
 
   dataFileMode = false;
   ioFileClose();
@@ -471,20 +486,20 @@ static void doSaveDataFile(uint16_t *beginR, uint16_t *endR, char *registerName)
 void fnSaveStackRegisters(uint16_t unusedButMandatoryParameter) {
   uint16_t beginR = REGISTER_X;
   uint16_t endR   = REGISTER_X + (getSystemFlag(FLAG_SSIZE8) ? 7 : 3);
-  doSaveDataFile(&beginR, &endR, NULL);
+  doSaveDataFile(&beginR, &endR, NULL, !isXFN);
 }
 
 void fnSaveLetteredRegisters(uint16_t unusedButMandatoryParameter) {
   uint16_t beginR = REGISTER_X;
   uint16_t endR   = REGISTER_W;
-  doSaveDataFile(&beginR, &endR, NULL);
+  doSaveDataFile(&beginR, &endR, NULL, !isXFN);
 }
 
 void fnSaveNRegisters(uint16_t N) {
   if(N <= 125) {
     uint16_t beginR = 0;
     uint16_t endR   = N - 1;
-    doSaveDataFile(&beginR, &endR, NULL);
+    doSaveDataFile(&beginR, &endR, NULL, !isXFN);
   } else {
     displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -498,7 +513,21 @@ void fnSaveRegister(uint16_t regist) {
   if(regist < LAST_SPARE_REGISTER || (FIRST_NAMED_VARIABLE <= regist && regist < FIRST_NAMED_VARIABLE + numberOfNamedVariables)) {
     uint16_t beginR = regist;
     uint16_t endR   = regist;
-    doSaveDataFile(&beginR, &endR, NULL);
+    doSaveDataFile(&beginR, &endR, NULL, !isXFN);
+  } else {
+    displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "register number out of range: %d", regist);
+      moreInfoOnError("In function fnSaveRegister:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+  }
+}
+
+void fnSaveXFNRegister(uint16_t regist) {
+  if(regist < LAST_SPARE_REGISTER - 2) {
+    uint16_t beginR = regist;
+    uint16_t endR   = regist;
+    doSaveDataFile(&beginR, &endR, NULL, isXFN);
   } else {
     displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -591,7 +620,7 @@ void doSave(uint16_t saveType) {
   sprintf(tmpString, "GLOBAL_REGISTERS\n%" PRIu16 "\n", (uint16_t)(LAST_GLOBAL_REGISTER+1));
   save(tmpString, strlen(tmpString));
   for(regist=FIRST_GLOBAL_REGISTER; regist<=LAST_GLOBAL_REGISTER; regist++) {
-    registerToSaveString(regist);
+    registerToSaveString(regist, !isXFN);
     sprintf(tmpString, "R%03" PRId16 "\n%s\n%s\n", regist, aimBuffer1, tmpRegisterString);
     save(tmpString, strlen(tmpString));
     saveMatrixElements(regist);
@@ -615,7 +644,7 @@ void doSave(uint16_t saveType) {
   sprintf(tmpString, "LOCAL_REGISTERS\n%" PRIu8 "\n", currentNumberOfLocalRegisters);
   save(tmpString, strlen(tmpString));
   for(i=0; i<currentNumberOfLocalRegisters; i++) {
-    registerToSaveString(FIRST_LOCAL_REGISTER + i);
+    registerToSaveString(FIRST_LOCAL_REGISTER + i, !isXFN);
     sprintf(tmpString, "R.%02" PRIu32 "\n%s\n%s\n", i, aimBuffer1, tmpRegisterString);
     save(tmpString, strlen(tmpString));
     saveMatrixElements(FIRST_LOCAL_REGISTER + i);
@@ -631,7 +660,7 @@ void doSave(uint16_t saveType) {
   sprintf(tmpString, "NAMED_VARIABLES\n%" PRIu16 "\n", numberOfNamedVariables);
   save(tmpString, strlen(tmpString));
   for(i=0; i<numberOfNamedVariables; i++) {
-    registerToSaveString(FIRST_NAMED_VARIABLE + i);
+    registerToSaveString(FIRST_NAMED_VARIABLE + i, !isXFN);
     stringToUtf8((char *)allNamedVariables[i].variableName + 1, (uint8_t *)tmpString);
     sprintf(tmpString + strlen(tmpString), "\n%s\n%s\n", aimBuffer1, tmpRegisterString);
     save(tmpString, strlen(tmpString));
@@ -1348,6 +1377,18 @@ int64_t stringToInt64(const char *str) {
     return 1;
   }
 
+
+  // Datafile: Reads the next line, first skipping any comment blocks: a "Cmnt" line followed by one line of comment text, repeated.
+  // Used where a register id or variable name is expected, so comments can sit between entries without
+  // affecting the entry count.
+  static void readLineSkippingComments(char *line) {
+    readLine(line);
+    while(strcmp(line, "Cmnt") == 0) {
+      readLine(line);                           // drop the comment text line
+      readLine(line);                           // next line: another Cmnt, or the real id / name
+    }
+  }
+
   uint16_t savedCalcModel = 0;
   static bool_t restoreOneSection(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d, bool_t allowUserKeys) {
     int16_t i, numberOfRegs;
@@ -1370,7 +1411,7 @@ int64_t stringToInt64(const char *str) {
       readLine(tmpString); // Number of global registers
       numberOfRegs = toInt16(tmpString);
       for(i=0; i<numberOfRegs; i++) {
-        readLine(tmpString); // Register number
+        readLineSkippingComments(tmpString); // Register number, skipping any comments
         regist = stringToRegisterNumber(tmpString);
         read2Lines(aimBuffer, tmpString); // Register data type & Register value
 
@@ -1492,6 +1533,11 @@ int64_t stringToInt64(const char *str) {
           skipMatrixData(aimBuffer, tmpString);
         }
       }
+    }
+
+    else if(strcmp(tmpString, "Cmnt") == 0) {
+      readLine(tmpString);                      // discard the single comment line that follows
+      return true;
     }
 
     else if(strcmp(tmpString, "STATISTICAL_SUMS") == 0) {

@@ -384,7 +384,7 @@ typedef struct {
   }
 
   //true only if an angle is tagged; false for longinteger angle; false and error for invalid
-  static bool_t getAngleModeForRegister3r(int registerNo, angularMode_t *angleMode ) {
+  bool_t getAngleModeForRegister3r(calcRegister_t registerNo, angularMode_t *angleMode ) {
     if(isXFNregisterValid3r(registerNo)) {
       if(getRegisterDataType(registerNo) == dtLongInteger) {
         *angleMode = amNone;
@@ -550,6 +550,32 @@ static void replaceSeparatorWithFigureSpace(char *displayString) {              
       realSCIToDisplayString(tmp1, displayString + stringByteLength(displayString), 1000, !FRONTSPACE, (uint8_t *)tmpString, 2560);
       if(realGetExponent(tmp1) > 672 || tmp1->digits > 672) {
         replaceSeparatorWithFigureSpace(displayString);
+      }
+      return true;
+    }
+    return false;
+  }
+
+
+  bool_t registerFMAOutputPlainString(calcRegister_t regist, char* prefix, char *displayString) {
+    angularMode_t angle;
+    REAL_T_PTR(tmp1, 1071);
+    REAL_T_PTR(tmp2, 1071);
+    realContext_t c = ctxtReal75;
+    c.digits = 1034;
+    c.round = DEC_ROUND_HALF_UP;
+    if(getCombinedParameter(1, regist, tmp1, tmp2, &angle, &c)) {   //use the angle of the 1st param only, if set
+      // realPlus(tmp1, tmp1, &c);
+      strcpy(displayString, prefix);
+      if(realIsNaN(tmp1) || realIsInfinite(tmp1) || realIsZero(tmp1)) {                  // DecNumber leaves an integer as integer and keeps trailing zeros. This method, after many iterations, drop the trailing zeros and forces the mantissa display WITHOUT venturing into the string based SCI creation in the rest of the 47 system.
+        realToString(tmp1, displayString + stringByteLength(displayString));             //   zero, infinity and NaN have no coefficient/exponent split, so print them untouched
+      }
+      else {
+        decNumberReduce(tmp1, tmp1, &c);                                                 //   discard trailing zeros: I want the significant digits only, not the stored precision
+        int32_t sciExp = tmp1->exponent + tmp1->digits - 1;                              //   decNumber holds a value as coefficient x 10^exponent, so the leading digit sits at exponent + (digitcount - 1), that power we show
+        tmp1->exponent = 1 - tmp1->digits;                                               //   move the point so the coefficient becomes one digit, a point, then the rest; with this non-positive exponent decNumber prints it plainly instead of in its own E-form, requiring still the exponent
+        realToString(tmp1, displayString + stringByteLength(displayString));             //   mantissa only: "1", "1.2345", "1.0001"
+        sprintf(displayString + stringByteLength(displayString), "E%+ld", (long)sciExp); //   exponent emulating decNumber standard style: E, explicit sign, no leading zeros
       }
       return true;
     }

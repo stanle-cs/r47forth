@@ -1672,6 +1672,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnSaveRegister             (uint16_t unusedButMandatoryParameter) {}
   void fnLoadRegisters            (uint16_t unusedButMandatoryParameter) {}
   void fnSaveLetteredRegisters    (uint16_t unusedButMandatoryParameter) {}
+  void fnSaveXFNRegister          (uint16_t unusedButMandatoryParameter) {}
 
 
 #endif // GENERATE_CATALOGS || defined(GENERATE_TESTPGMS)
@@ -4621,12 +4622,12 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2755 */  { itemToBeCoded,                NOPARAM,                     "2755",                                           "2755",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2756 */  { itemToBeCoded,                NOPARAM,                     "2756",                                           "2756",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 
-/* 2757 */  { itemToBeCoded,                   NOPARAM,                     "EXPxfn",                                      "EXPxfn",                                      (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
-/* 2758 */  { fnSaveLetteredRegisters,         NOPARAM,                     "EXPa-w",                                      "EXPa-w",                                      (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
-/* 2759 */  { fnSaveStackRegisters,            NOPARAM,                     "EXPstk",                                      "EXPstk",                                      (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
-/* 2760 */  { fnSaveNRegisters,               TM_VALUE,                     "EXPnreg",                                     "EXPnreg",                                     (0 << TAM_MAX_BITS) |   125, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NUMBER_8     | HG_ENABLED         },
-/* 2761 */  { fnSaveRegister,              TM_REGISTER,                     "EXPreg",                                      "EXPreg",                                      (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
-/* 2762 */  { fnLoadRegisters,                 NOPARAM,                     "IMPregs",                                     "IMPregs",                                     (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
+/* 2757 */  { fnSaveXFNRegister,           TM_REGISTER,                     "XP_xfn",                                      "XP_xfn",                                      (0 << TAM_MAX_BITS) |    97, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
+/* 2758 */  { fnSaveLetteredRegisters,         NOPARAM,                     "XP_ltr",                                      "XP_ltr",                                      (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
+/* 2759 */  { fnSaveStackRegisters,            NOPARAM,                     "XP_stk",                                      "XP_stk",                                      (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
+/* 2760 */  { fnSaveNRegisters,               TM_VALUE,                     "XP_nreg",                                     "XP_nreg",                                     (0 << TAM_MAX_BITS) |   125, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NUMBER_8     | HG_ENABLED         },
+/* 2761 */  { fnSaveRegister,              TM_REGISTER,                     "XP_reg",                                      "XP_reg",                                      (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_REGISTER     | HG_ENABLED         },
+/* 2762 */  { fnLoadRegisters,                 NOPARAM,                     "IMPORTr",                                     "IMPORTr",                                     (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
 
 /* 2763 */  { fnGetADM,                        NOPARAM,                     "ADM#",                                        "ADM#",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /* 2764 */  { fnSetADM,                     REGISTER_X,                     "ADM",                                         "ADM",                                         (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },

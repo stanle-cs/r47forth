@@ -13,6 +13,8 @@ void C47Cvt2RadSinCosTan2(real_t *an, angularMode_t angularMode, real_t *sinOut,
 void C47radSinCosTanTaylor(real_t *an, bool_t swapTemp, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext, int accNumberDigits);
 
 bool_t registerFMAOutputString(calcRegister_t regist, char* prefix, char *displayString);
+bool_t registerFMAOutputPlainString(calcRegister_t regist, char* prefix, char *displayString);
+bool_t getAngleModeForRegister3r(calcRegister_t registerNo, angularMode_t *angleMode );
 void fnXXfn         (uint16_t function);
 void fnXXfn_ToDEG   (uint16_t registerNo);
 void fnXXfn_ToRAD   (uint16_t registerNo);

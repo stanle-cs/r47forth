@@ -17,10 +17,19 @@ Real - a plain number.
   Real
   3.14159
 
-Cplx - a complex number. We write it like (3-i4). Also accepted (all the same value): 3-i4 or (3 - i4) or 3 -4 and more whitespace variants.
+  R022
+  Real
+  6.02214076E23
+  (E or e marks the power of ten: 6.02214076E23 means 6.02214076 times 10^23)
+
+Cplx - a complex number. We write it like (3-i4). Also accepted (all the same value): 3-i4 or (3 - i4) or 3 -4 and more whitespace variants. See below for exhaustive list.
   RB
   Cplx
   (3-i4)
+
+  R023
+  Cplx
+  (1.6e-19-i2.5e-19)
 
 LonI - a big whole number, as big as you like, up to 1000 digits.
   RC
@@ -47,7 +56,7 @@ DYMD - a date coded decimal DYMD (year.monthday), DDMY (day.monthyear), or DMDY 
   DYMD
   2026.0615
 
-Rema - a real matrix (or vector). A "rows cols" line, then the elements. Whitespace between elements does not matter: tabs, spaces, newlines, any mix. Elements can be vertical or horisontal, or in rows. The "rows cols" count decides where rows break. We write tab-separated rows for readability.
+Rema - a real matrix (or vector). A "rows cols" line, then the elements. Whitespace between elements does not matter: tabs, spaces, newlines, any mix. Elements can be vertical or horizontal, or in rows. The "rows cols" count decides where rows break. We write tab-separated rows for readability.
   RX
   Rema
   2 3
@@ -88,9 +97,57 @@ Example - a complex matrix, polar, angles in degrees (the "p" = polar):
 A plain Real or Cplx with no colon means no special angle mode is attached.
 
 
+COMMENTS
+--------
+
+A comment is the keyword "Cmnt" on its own line, followed by one line of text. The loader reads and drops both. Multiple consecutive comment lines allowed.
+Comments go before a section or before a register's name line. Never inside an entry: not between an entry's name, type and value, and not among matrix rows. We do not write comments in exports. They are for hand notes.
+
+  Cmnt
+  Exported from the lab calculator, 16 June 2026
+  Cmnt
+  Stack snapshot before the regression run
+
+See example file below:
+
+
 SPECIAL
 -------
 
 Conf - a stored configuration. You cannot write this by hand and should never put it in a data file. If a Conf entry IS present, the loader does NOT ignore it: it decodes the data straight into the configuration, overwriting calculator settings. A stray or hand-edited Conf line can silently break your calculator setup. Leave Conf out of data files entirely.
 
 ???? - only appears in exports if something broke during a save. Never write it.
+
+
+COMPLEX number format
+---------------------
+Accepts (3-i4) | 3-i4 | +3+i4 | -3-i4 | (+3+i4) | (-3-i4) | -2.5e-3+i4 | (-2.5e-3-i4) | i4 | (i4) | ( 3 - i4 ) | (1.5e2-i2.5e-3) | 0+i0 | -7+i0 | (3 -i4) | 3 -i4 | +3 +i4 | -3 -i4 | ( 3 - i 4 ) | +3 + i4 | 3 - i 4 | (-2.5e-3 - i 4)
+Also accepts the state file format space form (real and imaginary separated by a space, no i): 3 4 | 3 -4 | -2.5 1e3
+(parentheses optional, leading sign optional)
+(parenthesis required when matrix whitespace layout is used)
+
+
+EXAMPLE
+-------
+
+DATA_FILE_REVISION (this is fixed)
+0                  (this is fixed)
+Cmnt               (this is the main comment command)
+MAIN COMMENTS GO here, BEFORE GLOBAL_REGISTERS: between the revision header and the first section
+GLOBAL_REGISTERS   (this is fixed)
+2                  (this is the number of registers that follow)
+Cmnt               (this is the optional register comment command and line)
+REGISTER RELATED COMMENTS GO here, BEFORE the Rnnn command: between two registers
+Cmnt               (this is a second optional comment command and line)
+This is another comment line
+Cmnt               (this is a another optional comment command and line)
+This is one more comment line, always headed up with Cmnt, before the Rnn command
+RY                 (this is the destination register, example RX, RM, RK, R020, R099)
+Cplx               (this is the command stating the next line is a complex input)
+(3-i4)
+RZ                 (this is the destination register, example RX, RM, RK, R020, R099)
+Rema               (this is the command stating the next line is a real matrix input)
+2 2                (this is specific to matrix input, rows cols)
+1 2                (these are the elements, matrix input is whitespace-insensitive, it can be 1 2 3 4 or 1 2 3 \n 4, or 1 \n 2 \n 3 \n 4 \n, etc.)
+3 4
+
