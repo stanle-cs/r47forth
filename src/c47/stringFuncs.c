@@ -1299,6 +1299,40 @@ void fnAlphaRight(uint16_t regist) {
 }
 
 
+void fnAlphaRev(uint16_t regist) { 
+  if(getRegisterDataType(regist) != dtString) {
+    badTypeError(regist);
+    return;
+  }
+  
+  char *ptrTmp = tmpString;
+  char *ptrString = REGISTER_STRING_DATA(regist);
+  int32_t lgString = stringGlyphLength(ptrString);
+  int16_t pos = stringLastGlyph(ptrString); 
+  uint16_t glyph;
+  
+  if(strlen(ptrString) > TMP_STR_LENGTH) {
+    displayCalcErrorMessage(ERROR_INPUT_TOO_LONG, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "string in regist %d is too long, size %d bytes doesn't fit in tmpString (%d bytes max)", regist, (uint16_t) strlen(ptrString), TMP_STR_LENGTH);
+      moreInfoOnError("In function fnAlphaRev:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    return;
+  }
+  
+  for(int16_t i = 1; i <= lgString; i++) {
+    glyph = _getGlyphCode(ptrString + pos);
+    if(glyph & 0x8000) {
+      *ptrTmp++ = glyph >> 8;
+    }
+    *ptrTmp++ = glyph & 0xff;
+    pos = stringPrevGlyph(ptrString, pos);  
+  }
+  *ptrTmp = 0;
+  strcpy(ptrString, tmpString);
+}
+
+
 //
 // 42 functions wrappers to 47 native functions
 //
