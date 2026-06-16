@@ -5091,8 +5091,8 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
                 w = stringWidth(tmpString, getSystemFlag(FLAG_LARGELI) ? &numericFont : &standardFont, false, true);
                 int16_t tlen =stringByteLength(tmpString);
                 uint8_t savedDisplayFormat = displayFormat, savedDisplayFormatDigits = displayFormatDigits;
-                displayFormatDigits = 20;
-                displayFormat = DF_SCI;
+                displayFormatDigits = 42; // fill the screen with LI, with no seps
+                displayFormat = DF_ALL;
                 longIntegerRegisterToRealDisplayString(regist, tmpString+tlen, TMP_STR_LENGTH-tlen, SCREEN_WIDTH - prefixWidth - w, 0, toRemoveTrailingRadix);
                 displayFormat = savedDisplayFormat;
                 displayFormatDigits = savedDisplayFormatDigits;

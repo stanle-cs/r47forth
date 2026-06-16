@@ -515,6 +515,28 @@ typedef struct {
   }
 
 
+static void replaceSeparatorWithFigureSpace(char *displayString) {                  //to reduce the total string width to display due to wide seps
+  int sepLen = (SEPARATOR_RIGHT[0] != 1) ? (SEPARATOR_RIGHT[1] != 1 ? 2 : 1) : 0;
+  if(sepLen == 0) {
+    return;
+  }
+  char *tmp = tmpString;
+  int s = 0, d = 0;
+  while(displayString[s] != 0) {
+    if(displayString[s] == SEPARATOR_RIGHT[0] && (sepLen == 1 || displayString[s+1] == SEPARATOR_RIGHT[1])) {
+      tmp[d++] = STD_SPACE_FIGURE[0];
+      tmp[d++] = STD_SPACE_FIGURE[1];
+      s += sepLen;
+    }
+    else {
+      tmp[d++] = displayString[s++];
+    }
+  }
+  tmp[d] = 0;
+  xcopy(displayString, tmp, d + 1);
+}
+
+
   bool_t registerFMAOutputString(calcRegister_t regist, char* prefix, char *displayString) {
     angularMode_t angle;
     REAL_T_PTR(tmp1, 1071);
@@ -525,7 +547,10 @@ typedef struct {
     if(getCombinedParameter(1, regist, tmp1, tmp2, &angle, &c)) {   //use the angle of the 1st param only, if set
       // realPlus(tmp1, tmp1, &c);
       strcpy(displayString, prefix);
-      realToSci(tmp1, displayString + stringByteLength(displayString));
+      realSCIToDisplayString(tmp1, displayString + stringByteLength(displayString), 1000, !FRONTSPACE, (uint8_t *)tmpString, 2560);
+      if(realGetExponent(tmp1) > 672 || tmp1->digits > 672) {
+        replaceSeparatorWithFigureSpace(displayString);
+      }
       return true;
     }
     return false;
