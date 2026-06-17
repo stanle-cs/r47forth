@@ -34,11 +34,12 @@
     constFactorHpukW,
     constFactorInhgPa,
     constFactorInchMm,
+    constFactorInchM,
     constFactorWhJ,
     constFactorLbKg,
     constFactorOzG,
-    constFactorShortcwtKg,
-    constFactorStoneKg,         /*  30 */
+    constFactorShortcwtKg,      /*  30 */
+    constFactorStoneKg,
     constFactorShorttonKg,
     constFactorTonKg,
     constFactorLiangKg,
@@ -47,8 +48,8 @@
     constFactorLyM,
     constFactorMmhgPa,
     constFactorMiKm,
-    constFactorNmiKm,
-    constFactorPcM,             /*  40 */
+    constFactorNmiKm,           /*  40 */
+    constFactorPcM,
     constFactorPointMm,
     constFactorMileM,
     constFactorYardM,
@@ -57,8 +58,8 @@
     constFactorYearS,
     constFactorCaratG,
     constFactorJinKg,
-    constFactorQuartL,
-    constFactorFathomM,         /*  50 */
+    constFactorQuartL,          /*  50 */
+    constFactorFathomM,
     constFactorNMiM,
     constFactorBarrelM3,
     constFactorHectareM2,
@@ -67,8 +68,8 @@
     constFactorChiM,
     constFactorYinM,
     constFactorCunM,
-    constFactorZhangM,
-    constFactorFenM,            /*  60 */
+    constFactorZhangM,          /*  60 */
+    constFactorFenM,
     constFactorMi2Km2,
     constFactorNmi2Km2,
     constFactorKmphmps,
@@ -77,8 +78,8 @@
     constFactorRpmRadps,
     constFactorInchCm,
     constFactorNmiMi,
-    constFactorFurtom,
-    constFactorFtntos,          /*  70 */
+    constFactorFurtom,          /*  70 */
+    constFactorFtntos,
     constFactorFpftomps,
     constFactorBrdstom,
     constFactorFirtokg,
@@ -87,8 +88,8 @@
     constFactorFirtolb,
     constFactorFpftomph,
     constFactorFpstokph,
-    constFactorFpstomps,
-    constFactorL100Tokml,       /*  80 */
+    constFactorFpstomps,        /*  80 */
+    constFactorL100Tokml,
     constFactorKmletok100K,
     constFactorK100Ktokmk,
     constFactorL100Tomgus,
@@ -97,8 +98,8 @@
     constFactorL100Tomguk,
     constFactorMgeuktok100M,
     constFactorK100Mtomik,
-    constFactorCupcFzus,
-    constFactorCupcMl,          /*  90 */
+    constFactorCupcFzus,        /*  90 */
+    constFactorCupcMl,
     constFactorCupukFzuk,
     constFactorCupukMl,
     constFactorFzukCupuk,
@@ -107,8 +108,8 @@
     constFactorFzusCupc,
     constFactorFzusTbspc,
     constFactorFzusTspc,
-    constFactorMlCupc,
-    constFactorMlCupuk,         /* 100 */
+    constFactorMlCupc,          /* 100 */
+    constFactorMlCupuk,
     constFactorMlPintlq,
     constFactorMlPintuk,
     constFactorMlQt,
@@ -117,8 +118,8 @@
     constFactorMlTbspuk,
     constFactorMlTspc,
     constFactorMlTspuk,
-    constFactorPintlqMl,
-    constFactorPintukMl,        /* 110 */
+    constFactorPintlqMl,        /* 110 */
+    constFactorPintukMl,
     constFactorQtMl,
     constFactorQtusMl,
     constFactorTbspcFzus,
@@ -127,8 +128,8 @@
     constFactorTbspukMl,
     constFactorTspcFzus,
     constFactorTspcMl,
-    constFactorTspukFzuk,
-    constFactorTspukMl,         /* 120 */
+    constFactorTspukFzuk,       /* 120 */
+    constFactorTspukMl,
     constFactorMlIn3,
     constFactorIn3Ml,
     constFactorFt3Gluk,
@@ -137,8 +138,8 @@
     constFactorFt3L,
     constFactorLQtus,
     constFactorQtusL,
-    constFactorGlukFzuk,
-    constFactorFzukGluk,        /* 130 */
+    constFactorGlukFzuk,        /* 130 */
+    constFactorFzukGluk,
     constFactorGlusFzus,
     constFactorFzusGlus,
     constFactoreVJ,
@@ -147,17 +148,17 @@
     constFactorBananamm,
     constFactorInchBanana,
     constFactorBananaInch,
-    constFactorErgJ,
-    constFactorFoeJ,            /* 140 */
+    constFactorErgJ,            /* 140 */
+    constFactorFoeJ,
     constFactorKnotMps,
     constFactor180onPi,
     constFactorSlugKg,
     constFactorSlinchKg,
     constFactorBlobKg,
-    constFactorTonneKg,         /* 146 */
-    constFactorLbsft2Pa,        /* 147 */
+    constFactorTonneKg,
+    constFactorLbsft2Pa,
     constFactorInlbsNm,
-    constFactorLbsftNpm,
+    constFactorLbsftNpm,        /* 150 */
     constFactorKgfN,
     constFactorKsiMpa,
     constFactorLbsBlob,
@@ -167,9 +168,9 @@
     constFactorKgm3Tmm3,
     constFactorLbsftKgm,
     constFactorIn3Mm3,
-    constFactorIn2Mm2,          /* 159 */
+    constFactorIn2Mm2,          /* 160 */
     constFactorIn4Mm4,
-    constFactorIn6Mm6,          /* 161 */
+    constFactorIn6Mm6,          /* 162 */
 
     constFactorEND              /* MUST be last */
   };

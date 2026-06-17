@@ -355,6 +355,8 @@ void generateAllConstants(void) {
          generateConstant("459p67",         5, EXACT,  "+459.67"                                                      ); // defined Temperature : 459.67                                // 273.15 × 9/5 − 32 = 459.67 exactly
          generateConstant("kBeVK",         39, APPROX, "+8.617333262145177433663659334080639201233039577582555108e-05"); // defined Temperature : exact: 1380649/16021766340            // both kB (J/K) = 1.380649×10⁻²³ and 1 eV = 1.602176634×10⁻¹⁹ J are SI-defined exact values
 
+         generateConstant("InchToM",        4, EXACT,  "+2.54e-02"                                                    ); // m = inch × 0.0254
+         generateConstant("BlobInLbs",     39, APPROX, "+386.08858267716535433070866141732283464566929133858267716535"); // lbs per blob = 12 × g0 / ft (= SlinchToKg / LbToKg)         // uses g0, FtToM logic
          generateConstant("InlbsToNm",     17, EXACT,  "+0.11298482902761670"                                         ); // N*m    = LbfToN × InchToMm / 1000                           // uses LbfToN, InchToMm; terminates
          generateConstant("Lbsft2ToPa",    39, APPROX, "+47.88025898033584261612967670379785204014852474149392743"    ); // Pa     = LbfToN / Ft2ToM2                                   // uses LbfToN, Ft2ToM2
          generateConstant("KsiToMpa",      39, APPROX, "+6.894757293168361336722673445346890693781387562775125550"    ); // MPa    = PsiToPa / 1000                                     // uses PsiToPa
@@ -376,8 +378,9 @@ void generateAllConstants(void) {
          generateConstant("1e_34",          1, EXACT,  "+1e-34"                                                       );
          generateConstant("1e_30",          1, EXACT,  "+1e-30"                                                       );
          generateConstant("1e_24",          1, EXACT,  "+1e-24"                                                       );
-         generateConstant("1e_6",           1, EXACT,  "+1e-06"                                                       );
          generateConstant("1e_16",          1, EXACT,  "+1e-16"                                                       );
+         generateConstant("1e_12",          1, EXACT,  "+1e-12"                                                       );
+         generateConstant("1e_6",           1, EXACT,  "+1e-06"                                                       );
          generateConstant("1on10",          1, EXACT,  "+1e-01"                                                       );
          generateConstant("1on4",           2, EXACT,  "+0.25"                                                        );
          generateConstant("1on3",          39, APPROX, "+3.333333333333333333333333333333333333333333333333333333e-01");
