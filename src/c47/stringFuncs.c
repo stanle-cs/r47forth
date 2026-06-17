@@ -1130,6 +1130,16 @@ static uint16_t _getGlyphCode(char *ptrString) {
 }
 
 
+static bool_t _isSameGlyph(uint16_t glyph, char *ptrString) {
+    if(glyph & 0x8000) {
+      if((glyph  >> 8) != (*ptrString++ & 0xff)) {
+        return false;
+      }
+    }
+    return((glyph & 0xff) == (*ptrString & 0xff) ? true : false);
+}
+
+
 static void _toUpperOrLowerCase(char *ptrString, bool_t toUpper) {
   int16_t i, j, lgString, pos;
   uint16_t glyph, currentGlyph, newGlyph;
@@ -1299,15 +1309,15 @@ void fnAlphaRight(uint16_t regist) {
 }
 
 
-void fnAlphaRev(uint16_t regist) { 
+void fnAlphaRev(uint16_t regist) {
   if(getRegisterDataType(regist) != dtString) {
     badTypeError(regist);
     return;
   }
-  
+
   char *ptrString = REGISTER_STRING_DATA(regist);
   int32_t lgString = stringGlyphLength(ptrString);
-  
+
   if(strlen(ptrString) > TMP_STR_LENGTH) {
     displayCalcErrorMessage(ERROR_INPUT_TOO_LONG, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -1318,7 +1328,7 @@ void fnAlphaRev(uint16_t regist) {
   }
 
   char *ptrTmp = tmpString;
-  int16_t pos = stringLastGlyph(ptrString); 
+  int16_t pos = stringLastGlyph(ptrString);
   uint16_t glyph;
 
   for(int16_t i = 1; i <= lgString; i++) {
@@ -1327,11 +1337,71 @@ void fnAlphaRev(uint16_t regist) {
       *ptrTmp++ = glyph >> 8;
     }
     *ptrTmp++ = glyph & 0xff;
-    pos = stringPrevGlyph(ptrString, pos);  
+    pos = stringPrevGlyph(ptrString, pos);
   }
   *ptrTmp = 0;
   strcpy(ptrString, tmpString);
   tmpString[0] = 0;  // clear tmpString
+}
+
+
+void fnAlphaTrim(uint16_t regist) {
+  char *ptrString;
+  int32_t lgString;
+  int16_t glyph;
+
+  if(getRegisterDataType(regist) != dtString) {
+    badTypeError(regist);
+    return;
+  }
+
+  switch(getRegisterDataType(REGISTER_X)) {
+    case dtLongInteger:
+    case dtReal34:
+    case dtShortInteger: {
+      _doXToAlpha(REGISTER_X);  // convert X to a single character
+      break;
+    }
+    case dtString: {
+      break;
+    }
+    default: {
+      badTypeError(REGISTER_X);
+      return;
+    }
+  }
+  ptrString = REGISTER_STRING_DATA(REGISTER_X);
+  lgString = stringGlyphLength(ptrString);
+  if(lgString != 1) {
+    displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "for "STD_alpha "TRIM, X must be a single character. Here X = %s", ptrString);
+      moreInfoOnError("In function fnAlphaTrim:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
+    goto end;
+  }
+
+  glyph = _getGlyphCode(ptrString);
+  ptrString = REGISTER_STRING_DATA(regist);
+  lgString = stringGlyphLength(ptrString);
+
+  // Trim character at the beginning of the string
+  int16_t pos = 0;
+  while(_isSameGlyph(glyph, ptrString + pos)) {
+    pos = stringNextGlyph(ptrString, pos);
+  }
+  strcpy(ptrString, ptrString + pos);
+
+  // Trim character at the end of the string
+  pos = stringLastGlyph(ptrString);
+  while(_isSameGlyph(glyph, ptrString + pos)) {
+    ptrString[pos] = 0;
+    pos = stringLastGlyph(ptrString);
+  }
+
+end:
+  copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);    // Restore register X
+  copySourceRegisterToDestRegister(REGISTER_L, SAVED_REGISTER_L);    // Save register L
 }
 
 

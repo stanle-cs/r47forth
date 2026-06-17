@@ -24,6 +24,7 @@
   void fnAlphaMid      (uint16_t regist);
   void fnAlphaRight    (uint16_t regist);
   void fnAlphaRev      (uint16_t regist);
+  void fnAlphaTrim     (uint16_t regist);
 
   void fn42AlphaRotate (uint16_t unusedButMandatoryParameter);
   void fn42AlphaShift  (uint16_t unusedButMandatoryParameter);
