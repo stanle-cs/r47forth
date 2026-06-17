@@ -436,6 +436,35 @@ static int catfnCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
 }
 
 /**
+ * itemfn <number> - Calls a built-in catalog function by its numeric item code.
+ * Useful for items not registered in the catalog: bypasses name lookup entirely.
+ */
+static int itemfnCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
+  if(argc < 2) {
+    Jim_SetResultString(interp, "itemfn: missing item number", -1);
+    return JIM_ERR;
+  }
+  jim_wide itemNr;
+  if(Jim_GetWide(interp, argv[1], &itemNr) != JIM_OK) {
+    Jim_SetResultFormatted(interp, "itemfn: '%#s' is not an integer", argv[1]);
+    return JIM_ERR;
+  }
+  if(itemNr <= 0 || itemNr >= LAST_ITEM) {
+    Jim_SetResultFormatted(interp, "itemfn: item number %lld out of range (1..%d)", (long long)itemNr, LAST_ITEM - 1);
+    return JIM_ERR;
+  }
+  int effectiveArgc = argc - 2;
+  for(int i = 2; i < argc; ++i) {
+    const char *s = Jim_String(argv[i]);
+    if(s != NULL && s[0] == '#') {
+      effectiveArgc = i - 2;
+      break;
+    }
+  }
+  return runCatalogItem(interp, (int16_t)itemNr, effectiveArgc, argv + 2, "itemfn");
+}
+
+/**
  * Copy a Jim string object into a null-terminated C buffer.
  * Jim list elements may not be NUL-terminated when Jim_String is used directly.
  */
@@ -1143,6 +1172,7 @@ void initDSL(void) {
   Jim_CreateCommand(interp, "asn",    asnCmd,    NULL, NULL);
   Jim_CreateCommand(interp, "catfn",  catfnCmd,  NULL, NULL);
   Jim_CreateCommand(interp, "flag",   flagCmd,   NULL, NULL);
+  Jim_CreateCommand(interp, "itemfn", itemfnCmd, NULL, NULL);
   Jim_CreateCommand(interp, "loadst", loadstCmd, NULL, NULL);
   Jim_CreateCommand(interp, "menu",   menuCmd,   NULL, NULL);
   Jim_CreateCommand(interp, "nim",    nimCmd,    NULL, NULL);
