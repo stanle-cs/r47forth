@@ -1312,7 +1312,7 @@ enum REG_NUMBERS { // C program register codes
   RESERVED_VARIABLE_SPARE3,                              //2028
   RESERVED_VARIABLE_SPARE4,                              //2029
   RESERVED_VARIABLE_SPARE5,                              //2030
-  
+
   // Named reserved variables
   FIRST_NAMED_RESERVED_VARIABLE,
   RESERVED_VARIABLE_ACC = FIRST_NAMED_RESERVED_VARIABLE, //2031
@@ -1950,6 +1950,14 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define LM_SYSTEM_STATE                            5
 #define LM_REGISTERS_PARTIAL                       6
 #define LM_STATE_LOAD                              7
+
+// String Functions
+#define SF_TO_UPPER_CASE                        true
+#define SF_TO_LOWER_CASE                       false
+#define SF_LEFT                                    1
+#define SF_MID                                     2
+#define SF_RIGHT                                   3
+
 
 // Screen updating mode
 #define SCRUPD_AUTO                             0x00
