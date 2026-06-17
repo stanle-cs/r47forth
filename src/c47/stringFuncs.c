@@ -1390,8 +1390,8 @@ void fnAlphaTrim(uint16_t regist) {
   while(_isSameGlyph(glyph, ptrString + pos)) {
     pos = stringNextGlyph(ptrString, pos);
   }
-  strcpy(ptrString, ptrString + pos);
-
+  memmove(ptrString, ptrString + pos, strlen(ptrString + pos) + 1);
+  
   // Trim character at the end of the string
   pos = stringLastGlyph(ptrString);
   while(_isSameGlyph(glyph, ptrString + pos)) {
