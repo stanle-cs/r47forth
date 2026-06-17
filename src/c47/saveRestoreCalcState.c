@@ -465,6 +465,8 @@ static void doSaveDataFile(uint16_t *beginR, uint16_t *endR, char *registerName,
   ret = ioFileOpen(path, ioModeWrite);
   if(ret != FILE_OK) {
     if(ret == FILE_CANCEL) {
+      screenUpdatingMode = SCRUPD_AUTO;
+      refreshScreen(2996);
       return;
     }
     else {
@@ -487,7 +489,7 @@ static void doSaveDataFile(uint16_t *beginR, uint16_t *endR, char *registerName,
   temporaryInformation = TI_DATA_SAVED;   // confirm this constant
 
   screenUpdatingMode = SCRUPD_AUTO;
-  refreshScreen(1094);
+  refreshScreen(2997);
 
 }
 
@@ -2314,6 +2316,8 @@ static void doLoadDataFile(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d
   ret = ioFileOpen(path, ioModeRead);
   if(ret != FILE_OK) {
     if(ret == FILE_CANCEL) {
+      screenUpdatingMode = SCRUPD_AUTO;
+      refreshScreen(2998);
       return;
     }
     else {
@@ -2354,7 +2358,7 @@ static void doLoadDataFile(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d
   temporaryInformation = TI_DATA_LOADED;
 
   screenUpdatingMode = SCRUPD_AUTO;
-  refreshScreen(2094);
+  refreshScreen(2999);
 
 }
 
