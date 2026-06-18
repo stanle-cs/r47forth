@@ -603,7 +603,7 @@ TO_QSPI const int16_t menu_ConvStruct[]     = {
                                                     // Screen 1 — Navigation index
                                                     -MNU_CONV_SECTION,        -MNU_CONV_MATERL,         -MNU_CONV_F_LOAD,         -MNU_CONV_M_LOAD,         -MNU_CONV_P_LOAD,         -MNU_CONVM,
                                                     ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,
-                                                    ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_FIX,                  ITM_ENG,                  ITM_UNIT};
+                                                    ITM_FIX,                  ITM_SCI,                  ITM_ENG,                  ITM_UNIT,                 ITM_SIGFIG,               ITM_ALL};
 
 TO_QSPI const int16_t menu_ConvSection[]     = {
                                                     // Screen 2 — SECTION (bottom row first)
@@ -620,20 +620,20 @@ TO_QSPI const int16_t menu_ConvMaterial[]     = {
 TO_QSPI const int16_t menu_CONV_FLoad[]     = {
                                                     // Screen 4 — F LOAD
                                                     ITM_LBSFTtoNPM,           ITM_NPMtoLBSFT,           ITM_LBFtoN,               ITM_NtoLBF,               ITM_SI_m,                 ITM_SI_k,
-                                                    ITM_NULL,                 ITM_NULL,                 ITM_LBStoKG,              ITM_KGtoLBS,              ITM_MS2toINS2,            ITM_INS2toMS2,
+                                                    ITM_KGFPMtoNPM,           ITM_NPMtoKGFPM,           ITM_LBStoKG,              ITM_KGtoLBS,              ITM_MS2toINS2,            ITM_INS2toMS2,
                                                     -MNU_STRUCT,              -MNU_CONV_F_LOAD,         ITM_KGFtoN,               ITM_NtoKGF,               ITM_MS2toFTS2,            ITM_FTS2toMS2};
 
 TO_QSPI const int16_t menu_CONV_MLoad[]     = {
                                                     // Screen 5 — M LOAD
                                                     ITM_LBFFTtoNM,            ITM_NMtoLBFFT,            ITM_INLBStoNM,            ITM_NMtoINLBS,            ITM_SI_m,                 ITM_SI_k,
                                                     ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,
-                                                    -MNU_STRUCT,              -MNU_CONV_M_LOAD,         ITM_NULL,                 ITM_FIX,                 ITM_ENG,                  ITM_UNIT};
+                                                    -MNU_STRUCT,              -MNU_CONV_M_LOAD,         ITM_FIX,                  ITM_SCI,                  ITM_ENG,                  ITM_UNIT};
 
 TO_QSPI const int16_t menu_CONV_PLoad[]     = {
                                                     // Screen 6 — P LOAD
                                                     ITM_LBSFT2toPA,           ITM_PAtoLBSFT2,           ITM_PSItoPA,              ITM_PAtoPSI,              ITM_SI_m,                 ITM_SI_k,
                                                     ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,
-                                                    -MNU_STRUCT,              -MNU_CONV_P_LOAD,         ITM_NULL,                 ITM_FIX,                  ITM_ENG,                  ITM_UNIT};
+                                                    -MNU_STRUCT,              -MNU_CONV_P_LOAD,         ITM_FIX,                  ITM_SCI,                  ITM_ENG,                  ITM_UNIT};
 
 
 //---------//---------//---------//---------//---------
@@ -959,6 +959,8 @@ TO_QSPI const int16_t menu_HOME[]        = { ITM_op_j,                      ITM_
 TO_QSPI const int16_t menu_PREFIX[]      = { ITM_SI_k,                      ITM_SI_M,                   ITM_SI_G,                 ITM_SI_T,              ITM_SI_P,                    ITM_DSPCYCLE,
                                              ITM_SI_m,                      ITM_SI_u,                   ITM_SI_n,                 ITM_SI_p,              ITM_SI_f,                    ITM_DSP,
                                              ITM_SI_Ki,                     ITM_SI_Mi,                  ITM_SI_Gi,                ITM_SI_Ti,             ITM_SI_Pi,                   ITM_2TO10             };                //JM HOME
+
+
 
 TO_QSPI const int16_t menu_PLOTFUNC[]    = {  VAR_LX,                       VAR_UX,                     ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
                                               ITM_SCALE,                    ITM_PLOTRST,                ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
@@ -1855,7 +1857,6 @@ bool_t maxfgLines(int16_t y) {
   /********************************************//**
    * \brief Displays one softkey: helpers
    ***********************************************/
-  #define greyout true
   static bool_t initSoftkeyCoordinates(const char *label, int16_t xSoftkey, int16_t ySoftKey, int16_t *x1, int16_t *x2, int16_t *y1, int16_t *y2) {
     if(label[0] !=0 ) {
       if(ySoftKey==1) {
@@ -2875,6 +2876,20 @@ void fnStrikeThroughIfNA(int16_t itemNr, int16_t x, int16_t y) {
 }
 
 
+void diagonalsOnTop(int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t vm) {  // diagonals pattern
+  for(int16_t line = y1 + 3; line < y2 - 2; line += 1){
+    for(int16_t col = x1 + 3 + line%6; col < x2 - 2; col += 6) {
+      if(vm == vmNormal) {
+        setBlackPixel(col, line);
+      } else {
+        setWhitePixel(col, line);
+      }
+    }
+  }
+}
+
+
+
 typedef enum {
   openMenu  = 0,
   closeMenu = 1
@@ -3264,6 +3279,12 @@ void showSoftmenuCurrentPart(void) {
               #endif // INLINE_TEST
               //MAIN SOFTMENU DISPLAY
               showSoftkey(indexOfItems[-softmenu[menu].menuItem].itemSoftmenuName, x, y-currentFirstItem/6, vmReverse, true, true, NOVAL, NOVAL, NOTEXT);
+
+              // Indicate a 'heading' by using a self-referring menu name, i.e. MODE in gG# of MODE will make it greyed out
+              //if(currentMenu() == item) {
+              //  diagonalsOnTop(KEY_X[x], KEY_X[x+1], 217 - SOFTMENU_HEIGHT * y, 217 - SOFTMENU_HEIGHT * y + SOFTMENU_HEIGHT, vmReverse);
+              //}
+
               #if defined(INLINE_TEST)
                 }
               #endif // INLINE_TEST
@@ -3344,12 +3365,7 @@ void showSoftmenuCurrentPart(void) {
             int16_t x1, y1, x2, y2;
             initSoftkeyCoordinates(tmpq, x, 2, &x1, &x2, &y1, &y2);
             showKey(tmpq, x1, x2, y1, y2, vmNormal, false, true, NOVAL, NOVAL, tmpp);
-            // diagonals pattern
-            for(int16_t line = y1 + 3; line < y2 - 2; line += 1){
-              for(int16_t col = x1 + 3 + line%6; col < x2 - 2; col += 6) {
-                  setBlackPixel(col, line);
-              }
-            }
+            diagonalsOnTop(x1, x2, y1, y2, vmNormal);
           }
 
           fnStrikeOutIfNotCoded(item%10000, x, y-currentFirstItem/6);
