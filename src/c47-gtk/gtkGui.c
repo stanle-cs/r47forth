@@ -5215,8 +5215,12 @@ static bool check_utf_string(const char *widget_name, const char *what, const ch
     else {                                                                                                            \
       bool consistency_found = false;                                                                                 \
                                                                                                                       \
-      consistency_found |= check_utf_string(widget_name, "tooltip", gtk_widget_get_tooltip_text(widget));             \
-      consistency_found |= check_utf_string(widget_name, "tooltip markup", gtk_widget_get_tooltip_markup(widget));    \
+      gchar *_ttText = gtk_widget_get_tooltip_text(widget);   /* transfer-full: caller must g_free */               \
+      consistency_found |= check_utf_string(widget_name, "tooltip", _ttText);                                        \
+      g_free(_ttText);                                                                                               \
+      gchar *_ttMarkup = gtk_widget_get_tooltip_markup(widget);   /* transfer-full: caller must g_free */            \
+      consistency_found |= check_utf_string(widget_name, "tooltip markup", _ttMarkup);                               \
+      g_free(_ttMarkup);                                                                                             \
                                                                                                                       \
       if(GTK_IS_BUTTON(widget)) {                                                                                     \
         consistency_found |= check_utf_string(widget_name, "button label", gtk_button_get_label(GTK_BUTTON(widget))); \
