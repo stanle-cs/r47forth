@@ -2349,6 +2349,8 @@ static void doLoadDataFile(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d
     return;
   }
 
+  liftStack();
+
   while(!ioEof()) {                                                             // Loop on ioEof(): restoreOneSection() only returns false after SYSTEM_STATE, absent from data files.
     restoreOneSection(loadMode, s, n, d, false);
   }
