@@ -171,12 +171,13 @@
     constFactorIn2Mm2,          /* 160 */
     constFactorIn4Mm4,
     constFactorIn6Mm6,          /* 162 */
+    constFactorKgmNpm,
 
     constFactorEND              /* MUST be last */
   };
 
 
-  #define NUM_CONVERT_PAIRS  306
+  #define NUM_CONVERT_PAIRS  308
   extern const fInMim_t MimFunctionsType3Conv[NUM_CONVERT_PAIRS];
 
   bool_t  isStandardPair             (int16_t item1Nr, int16_t item2Nr);

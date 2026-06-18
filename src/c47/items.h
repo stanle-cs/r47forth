@@ -2939,15 +2939,26 @@
 #define ITM_IN6toMM6                2832
 #define ITM_MM6toIN6                2833
 
-#define MNU_CONV_SECTION            2834
-#define MNU_CONV_MATERL             2835
-#define MNU_CONV_F_LOAD             2836
-#define MNU_CONV_M_LOAD             2837
-#define MNU_CONV_P_LOAD             2838 
-#define MNU_STRUCT                  2839
+#define ITM_KGFPMtoNPM              2834
+#define ITM_NPMtoKGFPM              2835
+#define ITM_2836                    2836
+#define ITM_2837                    2837
+#define ITM_2838                    2838
+#define ITM_2839                    2839
+#define ITM_2840                    2840
+#define ITM_2841                    2841
+#define ITM_2842                    2842
+#define ITM_2843                    2843 // CONV Spares
+
+#define MNU_CONV_SECTION            2844
+#define MNU_CONV_MATERL             2845
+#define MNU_CONV_F_LOAD             2846
+#define MNU_CONV_M_LOAD             2847
+#define MNU_CONV_P_LOAD             2848 
+#define MNU_STRUCT                  2849
 
 
-#define LAST_ITEM                   2840
+#define LAST_ITEM                   2850
 
 #define SCREENDUMP                    9875 // Used to signal screen dump operated (not to be confused with SNAP)
 #define NOPARAM                       9876 // Item for function who don't need an item

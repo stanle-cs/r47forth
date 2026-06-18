@@ -319,6 +319,8 @@ TO_QSPI const fInMim_t MimFunctionsType3Conv[NUM_CONVERT_PAIRS] =
     {ITM_MM4toIN4       },
     {ITM_IN6toMM6       },
     {ITM_MM6toIN6       },
+    {ITM_KGFPMtoNPM     },
+    {ITM_NPMtoKGFPM     },
      // do mimRunFunction(item, indexOfItems[item].param);
    };
 
@@ -358,6 +360,7 @@ typedef enum {
   UT_EVECON,                  // EV energy economy   no SI base:    linked-function pairs only. kWh/100km, kWh/100mi, km per kWh, mi per kWh, mpge US/UK
   UT_ACCELERATION,            // acceleration        SI base:       m/s^2 ft/s^2, in/s^2
   UT_DENSITY,                 // mass density        SI base:       kg/m^3 lbs/in^3, t/mm^3, blob/in^3
+  UT_LINEAR_FORCE_DENSITY     // force density       SI base:  ???
 } unitType_t;
 
 typedef struct {
@@ -647,8 +650,8 @@ TO_QSPI static const convPair_t convertPairs[NUM_CONVERT_PAIRS] = {             
   { ITM_PAtoLBSFT2       /* 2801 */, ITM_LBSFT2toPA       , ITM_LBSFT2toPA     , +0 , UT_PRESSURE                 },
   { ITM_INLBStoNM        /* 2802 */, ITM_NMtoINLBS        , ITM_NULL           , +0 , UT_TORQUE                   },
   { ITM_NMtoINLBS        /* 2803 */, ITM_INLBStoNM        , ITM_INLBStoNM      , +0 , UT_TORQUE                   },
-  { ITM_LBSFTtoNPM       /* 2804 */, ITM_NPMtoLBSFT       , ITM_NULL           , +0 , UT_NOT_CONFIGURABLE         },  // future: UT_LINEAR_FORCE_DENSITY
-  { ITM_NPMtoLBSFT       /* 2805 */, ITM_LBSFTtoNPM       , ITM_NULL           , +0 , UT_NOT_CONFIGURABLE         },  // future: UT_LINEAR_FORCE_DENSITY
+  { ITM_LBSFTtoNPM       /* 2804 */, ITM_NPMtoLBSFT       , ITM_NULL           , +0 , UT_LINEAR_FORCE_DENSITY     },
+  { ITM_NPMtoLBSFT       /* 2805 */, ITM_LBSFTtoNPM       , ITM_LBSFTtoNPM     , +0 , UT_LINEAR_FORCE_DENSITY     },
   { ITM_KGFtoN           /* 2806 */, ITM_NtoKGF           , ITM_NULL           , +0 , UT_FORCE                    },
   { ITM_NtoKGF           /* 2807 */, ITM_KGFtoN           , ITM_KGFtoN         , +0 , UT_FORCE                    },
   { ITM_MS2toFTS2        /* 2808 */, ITM_FTS2toMS2        , ITM_FTS2toMS2      , +0 , UT_ACCELERATION             },
@@ -677,6 +680,8 @@ TO_QSPI static const convPair_t convertPairs[NUM_CONVERT_PAIRS] = {             
   { ITM_MM4toIN4         /* 2831 */, ITM_IN4toMM4         , ITM_NULL           , +0 , UT_NOT_CONFIGURABLE         },  // future: UT_SECOND_MOMENT_OF_AREA
   { ITM_IN6toMM6         /* 2832 */, ITM_MM6toIN6         , ITM_NULL           , +0 , UT_NOT_CONFIGURABLE         },  // future: UT_WARPING_CONSTANT
   { ITM_MM6toIN6         /* 2833 */, ITM_IN6toMM6         , ITM_NULL           , +0 , UT_NOT_CONFIGURABLE         },  // future: UT_WARPING_CONSTANT
+  { ITM_KGFPMtoNPM       /* 2834 */, ITM_NPMtoKGFPM       , ITM_NULL           , +0 , UT_LINEAR_FORCE_DENSITY     },
+  { ITM_NPMtoKGFPM       /* 2835 */, ITM_KGFPMtoNPM       , ITM_KGFPMtoNPM     , +0 , UT_LINEAR_FORCE_DENSITY     },
 };
 
 static const convPair_t *findPair(int16_t input) {                              // binary search; NULL if not found
@@ -1028,6 +1033,7 @@ TO_QSPI static const real_t * const conversionFactors[constFactorEND] = {
     [constFactorIn2Mm2]       = const_In2ToMm2,     /* 160 */
     [constFactorIn4Mm4]       = const_In4ToMm4,
     [constFactorIn6Mm6]       = const_In6ToMm6,     /* 162 */
+    [constFactorKgmNpm]       = const_gEarth,
   };
 
 void fnUnitConvert(uint16_t arg) {
