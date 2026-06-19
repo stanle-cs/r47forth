@@ -116,8 +116,15 @@ TO_QSPI const char angleChars[12] = STD_SUP_r STD_SUP_g STD_DEGREE "??" STD_SUP_
 #endif // !DMCP_BUILD
 
 
-static void getStringLabelOrVariableName(uint8_t *stringAddress) {
+void getStringLabelOrVariableName(uint8_t *stringAddress) {
   uint8_t stringLength = *(uint8_t *)(stringAddress++);
+  // The length byte is taken from the program step on trust. A corrupt step can
+  // claim a name longer than the bytes that remain in program memory, so clamp
+  // it to firstFreeProgramByte before xcopy reads the name; without this a
+  // damaged imported program would read past the program region.
+  if(stringAddress < firstFreeProgramByte && stringLength > firstFreeProgramByte - stringAddress) {
+    stringLength = (uint8_t)(firstFreeProgramByte - stringAddress);
+  }
   xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
   tmpStringLabelOrVariableName[stringLength] = 0;
 }
