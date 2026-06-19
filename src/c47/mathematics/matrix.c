@@ -3441,6 +3441,7 @@ void WP34S_LU_decomposition(const real34Matrix_t *matrix, real34Matrix_t *lu, ui
         realCopy(&tmpMat[k * n + k], &t);
         if(realIsZero(&t)) {
           realMatrixFree(lu);
+          freeC47Blocks(tmpMat, m * n * REAL_SIZE_IN_BLOCKS(75));
           return;
         }
 
