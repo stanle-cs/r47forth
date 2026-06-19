@@ -1679,6 +1679,7 @@ void fnEigenvalues(uint16_t unusedParamButMandatory) {
       linkToRealMatrixRegister(REGISTER_Y, &x);
       ires.header.matrixRows = ires.header.matrixColumns = 0;
       ires.matrixElements = NULL;
+      res.matrixElements = NULL;
       realEigenvalues(&x, &res, &ires);
       if(lastErrorCode == ERROR_NONE || lastErrorCode == ERROR_SOLVER_ABORT) {
         if(ires.matrixElements) {
@@ -1728,6 +1729,14 @@ void fnEigenvalues(uint16_t unusedParamButMandatory) {
 
         }
         realMatrixFree(&res);
+      }
+      // When the solver leaves an error code other than ERROR_NONE or ERROR_SOLVER_ABORT (e.g. complex eigenvalues with FL_CPXRES clear), the
+      // block above is skipped, but realEigenvalues already allocated res and ires. Release them here; on the handled paths they are already freed and NULL, so these are no-ops.
+      if(res.matrixElements)  {
+        realMatrixFree(&res);
+      }
+      if(ires.matrixElements) {
+        realMatrixFree(&ires);
       }
     }
     goto Success;
