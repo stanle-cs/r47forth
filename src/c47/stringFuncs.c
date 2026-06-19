@@ -537,6 +537,7 @@ void fnXToAlphaOld(uint16_t unusedButMandatoryParameter) {   // deprecated versi
       sprintf(errorMessage, "for x" STD_RIGHT_ARROW STD_alpha ", X must be < 32768. Here X = %" PRIu32, (uint32_t)lgInt->_mp_d[0]); // OK for 32 and 64 bit limbs
       moreInfoOnError("In function fnXToAlpha:", errorMessage, NULL, NULL);
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    longIntegerFree(lgInt);
     return;
   }
 

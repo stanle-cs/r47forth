@@ -520,6 +520,7 @@ void fnRecallIJ(uint16_t unusedButMandatoryParameter) {
       longIntegerInit(zero);
 
       if(!saveLastX()) {
+        longIntegerFree(zero);
         return;
       }
 
