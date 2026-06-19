@@ -1730,13 +1730,14 @@ void fnEigenvalues(uint16_t unusedParamButMandatory) {
         }
         realMatrixFree(&res);
       }
-      // When the solver leaves an error code other than ERROR_NONE or
-      // ERROR_SOLVER_ABORT (e.g. complex eigenvalues with FL_CPXRES clear), the
-      // block above is skipped, but realEigenvalues already allocated res and
-      // ires. Release them here; on the handled paths they are already freed and
-      // NULL, so these are no-ops.
-      if(res.matrixElements)  realMatrixFree(&res);
-      if(ires.matrixElements) realMatrixFree(&ires);
+      // When the solver leaves an error code other than ERROR_NONE or ERROR_SOLVER_ABORT (e.g. complex eigenvalues with FL_CPXRES clear), the
+      // block above is skipped, but realEigenvalues already allocated res and ires. Release them here; on the handled paths they are already freed and NULL, so these are no-ops.
+      if(res.matrixElements)  {
+        realMatrixFree(&res);
+      }
+      if(ires.matrixElements) {
+        realMatrixFree(&ires);
+      }
     }
     goto Success;
   }
