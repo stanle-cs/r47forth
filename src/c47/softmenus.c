@@ -18,8 +18,8 @@ TO_QSPI static const char bugScreenIdMustNotBe0[] = "In function showSoftmenu: i
 /*                                          <---------------------------------------------------------------------- 6 f shifted functions ------------------------------------------------------------------------->  */
 /*                                          <---------------------------------------------------------------------- 6 g shifted functions ------------------------------------------------------------------------->  */
 TO_QSPI const int16_t menu_42[]          = { ITM_42STRING,                  ITM_42APPEND,               ITM_42ARCL,               ITM_42ASTO,            ITM_42AVIEW,                 ITM_42CLA,
-                                             ITM_42ALENG,                   ITM_42POSA,                 ITM_42AROT,               ITM_42ASHF,            ITM_42PRA,                   ITM_42AIP,
-                                             ITM_42KEYG,                    ITM_42KEYX,                 ITM_42VRMNU,              ITM_NULL,              ITM_42ATOX,                  ITM_42XTOA,
+                                             ITM_42ALENG,                   ITM_42POSA,                 ITM_42AROT,               ITM_42ASHF,            ITM_42PROMPT,                ITM_42AIP,
+                                             ITM_42KEYG,                    ITM_42KEYX,                 ITM_42VRMNU,              ITM_42PRA,             ITM_42ATOX,                  ITM_42XTOA,
 
                                              ITM_M_DIMQ,                    ITM_42BITQ,                 ITM_42ROTXY,              ITM_NULL,              ITM_NULL,                    ITM_NULL                        };
 
@@ -1503,10 +1503,17 @@ void fnGetMenu(uint16_t funusedButMandatoryParameter) {
 
 
 
-  static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfBytes, uint16_t *numberOfVars) {
+static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfBytes, uint16_t *numberOfVars) {
     uint8_t *step;
     step = labelList[label].instructionPointer;
-    while((*numberOfVars < 18) && checkOpCodeOfStep(step, ITM_MVAR) && *(step + 2) == STRING_LABEL_VARIABLE) {
+    while(*numberOfVars < 18) {
+      // Skip any user REM to not stop the MVAR count. REM before an MVAR is transparent. Otherwise REM and all others still quite the MVAR count. Also before an .END.
+      while(checkOpCodeOfStep(step, ITM_REM)) {
+        step = findNextStep(step);
+      }
+      if(!(checkOpCodeOfStep(step, ITM_MVAR) && *(step + 2) == STRING_LABEL_VARIABLE)) {
+        break;
+      }
       xcopy(tmpString + *numberOfBytes, step + 4, *(step + 3));
       (void)findOrAllocateNamedVariable(tmpString + *numberOfBytes);
       *numberOfBytes += *(step + 3) + 1;
