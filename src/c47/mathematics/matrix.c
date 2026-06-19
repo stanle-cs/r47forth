@@ -2848,8 +2848,7 @@ static void addSubRealMatrices(const real34Matrix_t *y, const real34Matrix_t *x,
   int32_t i;
 
   if((y->header.matrixColumns != x->header.matrixColumns) || (y->header.matrixRows != x->header.matrixRows)) {
-    res->matrixElements = NULL; // Matrix mismatch
-    res->header.matrixRows = res->header.matrixColumns = 0;
+    realMatrixFree(res); // Matrix mismatch: res aliases an owned operand, so free it (this also clears matrixElements and the dimensions)
     return;
   }
 
@@ -2890,8 +2889,7 @@ static void addSubComplexMatrices(const complex34Matrix_t *y, const complex34Mat
   int32_t i;
 
   if((y->header.matrixColumns != x->header.matrixColumns) || (y->header.matrixRows != x->header.matrixRows)) {
-    res->matrixElements = NULL; // Matrix mismatch
-    res->header.matrixRows = res->header.matrixColumns = 0;
+    complexMatrixFree(res); // Matrix mismatch: res aliases an owned operand, so free it (this also clears matrixElements and the dimensions)
     return;
   }
 
