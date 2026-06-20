@@ -1,4 +1,4 @@
-#ifndef _JIMAUTOCONF_H
+#if !defined(_JIMAUTOCONF_H)
 #define _JIMAUTOCONF_H
 /*#define HAVE_ARPA_INET_H 1*/ //jm no sockets on win32 build
 /* #undef HAVE_BACKTRACE */
@@ -113,4 +113,4 @@
 #define jim_ext_signal 1
 #define jim_ext_stdlib 1
 #define jim_ext_tclcompat 1
-#endif
+#endif // _JIMAUTOCONF_H

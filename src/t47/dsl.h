@@ -5,7 +5,7 @@
  * \file dsl.h
  */
 
-#ifndef DSL_H
+#if !defined(DSL_H)
 #define DSL_H
 
 void initDSL(void);
@@ -15,4 +15,4 @@ int executeCommand(const char *command);
 
 extern const char* dslOpsFileName;
 
-#endif
+#endif // DSL_H

@@ -568,19 +568,19 @@ void fn42AlphaRecall(uint16_t regist) {
         copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);
         copySourceRegisterToDestRegister(REGISTER_X, SAVED_REGISTER_X);
       }
-      
-      copySourceRegisterToDestRegister(regist, REGISTER_X);  
+
+      copySourceRegisterToDestRegister(regist, REGISTER_X);
       copySourceRegisterToDestRegister(alphaRegister, REGISTER_Y);
-      
+
       if(getRegisterDataType(REGISTER_X) == dtShortInteger) {
         *(REGISTER_SHORT_INTEGER_DATA(REGISTER_X)) &= shortIntegerMask;
       }
-    
+
       addition[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
-      
+
       copySourceRegisterToDestRegister(REGISTER_X, alphaRegister);
       truncateAlphaRegisterTo44Char();
-    
+
       copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
       copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);
     }
