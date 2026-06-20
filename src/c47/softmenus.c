@@ -1558,9 +1558,10 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
       if(!(checkOpCodeOfStep(step, ITM_MVAR) && *(step + 2) == STRING_LABEL_VARIABLE)) {
         break;
       }
-      xcopy(tmpString + *numberOfBytes, step + 4, *(step + 3));
+      uint8_t varNameLen = boundProgramNameLength(step + 4, *(step + 3));
+      xcopy(tmpString + *numberOfBytes, step + 4, varNameLen);
       (void)findOrAllocateNamedVariable(tmpString + *numberOfBytes);
-      *numberOfBytes += *(step + 3) + 1;
+      *numberOfBytes += varNameLen + 1;
       (*numberOfVars)++;
       step = findNextStep(step);
     }
@@ -1675,9 +1676,13 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
         memset(tmpString, 0, TMP_STR_LENGTH);
         for(i=0; i<numberOfLabels; i++) {
           if(labelList[i].step > 0) { // Global label
-            xcopy(tmpString + 15 * numberOfGlobalLabels, labelList[i].labelPointer + 1, labelList[i].labelPointer[0]);
+            uint8_t lblNameLen = labelList[i].labelPointer[0];
+            if(lblNameLen > 14) { // this menu lays each name out in a fixed 15-byte slot
+              lblNameLen = 14;
+            }
+            xcopy(tmpString + 15 * numberOfGlobalLabels, labelList[i].labelPointer + 1, lblNameLen);
             numberOfGlobalLabels++;
-            numberOfBytes += 1 + labelList[i].labelPointer[0];
+            numberOfBytes += 1 + lblNameLen;
           }
         }
 

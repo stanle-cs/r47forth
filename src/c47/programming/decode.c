@@ -98,8 +98,9 @@ TO_QSPI const char angleChars[12] = STD_SUP_r STD_SUP_g STD_DEGREE "??" STD_SUP_
         }
       }
       else { // Global label
-        xcopy(tmpString + 100, labelList[i].labelPointer + 1, *(labelList[i].labelPointer));
-        tmpString[100 + *(labelList[i].labelPointer)] = 0;
+        uint8_t lblNameLen = boundProgramNameLength(labelList[i].labelPointer + 1, *(labelList[i].labelPointer));
+        xcopy(tmpString + 100, labelList[i].labelPointer + 1, lblNameLen);
+        tmpString[100 + lblNameLen] = 0;
         stringToUtf8(tmpString + 100, (uint8_t *)tmpString);
         printf("'%s'\n", tmpString);
       }
