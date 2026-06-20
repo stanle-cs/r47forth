@@ -333,6 +333,15 @@ const funcTest_t funcTestNoParam[] = {
   {"fnYear",                 fnYear                },
   {"fnZeta",                 fnZeta                },
   {"fnZip",                  fnZip                 },
+  {"fnDeltaToStar",          fnDeltaToStar         },
+  {"fnStarToDelta",          fnStarToDelta         },
+  {"fnSymToAbc",             fnSymToAbc            },
+  {"fnAbcToSym",             fnAbcToSym            },
+  {"fnCopyXtoAbc",           fnCopyXtoAbc          },
+  {"fnTripleZfromVI",        fnTripleZfromVI       },
+  {"fnTripleVfromIZ",        fnTripleVfromIZ       },
+  {"fnTripleIfromVZ",        fnTripleIfromVZ       },
+  {"fnTripleFlipPolar",      fnTripleFlipPolar     },
 
   {"fnExecute",              runPgm                },
   {"",                       NULL                  }
@@ -407,6 +416,7 @@ void printRegisterToString(calcRegister_t regist, char *registerContent) {
 void runPgm(uint16_t unusedButMandatoryParameter) {
   if(label != INVALID_VARIABLE) {
     dynamicSoftmenu[0].numItems = 0;
+    free(dynamicSoftmenu[0].menuContent); // release the dynamic menu buffer before dropping the pointer
     dynamicSoftmenu[0].menuContent = NULL;
     reallyRunFunction(ITM_XEQ, label);
   }

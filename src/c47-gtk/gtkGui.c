@@ -99,10 +99,13 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
 
   static gint destroyCalc(GtkWidget* w, GdkEventAny* e, gpointer data) {
     fnStopTimerApp();
-#if defined(PC_BUILD)
-    if(!scriptingActive)
-#endif
+    #if defined(PC_BUILD)
+      if(!scriptingActive) {
+    #endif
       saveCalc();
+    #if defined(PC_BUILD)
+      }
+    #endif
     gtk_main_quit();
 
     return 0;
@@ -332,7 +335,7 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
   static bool_t shortCutCommand(GtkWidget *w, int key,      int keyCode, bool_t condition1,            bool_t exitIfInNIM, bool_t disable, char *shift, char *keyForBtnClicked, uint16_t modes, int16_t requiredCalcMode2, int16_t itemForRunFunction) {
     if(key == keyCode && condition1 && !disable) {
 //      #if defined(VERBOSEKEYS)
-        printf("\n       shortCutCommand: Disable=%i, Key detected %5i=%5i: exitIfInNIM=%i keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n",disable, key, keyCode, exitIfInNIM, keyForBtnClicked, calcMode, tam.mode);
+        printf("\n       shortCutCommand: Disable=%i, Key detected %5i=%5i: exitIfInNIM=%i keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n", disable, key, keyCode, exitIfInNIM, keyForBtnClicked, calcMode, tam.mode);
 //        #endif //VERBOSEKEYS
     }
 
@@ -371,8 +374,8 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
       //Handle menus
       if(itemForRunFunction < 0) {
         #if defined(VERBOSEKEYS)
-        //printf("\n       shortCutCommand: Disable=%i, Key detected %5i=%5i: exitIfInNIM=%i keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n",disable, key, keyCode, exitIfInNIM, keyForBtnClicked, calcMode, tam.mode);
-          printf("       shortCutCommand: Handle menus: key:%i: showSoftmenu %i\n",keyCode, itemForRunFunction);
+        //printf("\n       shortCutCommand: Disable=%i, Key detected %5i=%5i: exitIfInNIM=%i keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n", disable, key, keyCode, exitIfInNIM, keyForBtnClicked, calcMode, tam.mode);
+          printf("       shortCutCommand: Handle menus: key:%i: showSoftmenu %i\n", keyCode, itemForRunFunction);
         #endif //VERBOSEKEYS
         showSoftmenu(itemForRunFunction);
         screenUpdatingMode = SCRUPD_AUTO;
@@ -383,14 +386,14 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
       //Handle functions
       if(((1 << calcMode) & modes) || calcMode == requiredCalcMode2) {
         #if defined(VERBOSEKEYS)
-        //printf("\n       shortCutCommand: Disable=%i, Key detected %5i=%5i: exitIfInNIM=%i keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n",disable, key, keyCode, exitIfInNIM, keyForBtnClicked, calcMode, tam.mode);
-          printf("       shortCutCommand: Handle functions: key:%i: showSoftmenu %i\n",keyCode, itemForRunFunction);
+        //printf("\n       shortCutCommand: Disable=%i, Key detected %5i=%5i: exitIfInNIM=%i keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n", disable, key, keyCode, exitIfInNIM, keyForBtnClicked, calcMode, tam.mode);
+          printf("       shortCutCommand: Handle functions: key:%i: showSoftmenu %i\n", keyCode, itemForRunFunction);
         #endif //VERBOSEKEYS
 
         //Handle key presses
         if(keyForBtnClicked[0] != '-') {
           #if defined(VERBOSEKEYS)
-            printf("       shortCutCommand: Handle key presses: key:%i: btnClicked %s\n",keyCode, keyForBtnClicked);
+            printf("       shortCutCommand: Handle key presses: key:%i: btnClicked %s\n", keyCode, keyForBtnClicked);
           #endif //VERBOSEKEYS
           if(shift[0] == 'f') {
             shiftF = true;
@@ -409,7 +412,7 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
         //Handle direct functions
         if(itemForRunFunction >= 0) {
           #if defined(VERBOSEKEYS)
-            printf("       shortCutCommand: Handle direct functions: key:%i: runFunction  %i\n",keyCode, itemForRunFunction);
+            printf("       shortCutCommand: Handle direct functions: key:%i: runFunction  %i\n", keyCode, itemForRunFunction);
           #endif //VERBOSEKEYS
           runFunction(itemForRunFunction);
           screenUpdatingMode = SCRUPD_AUTO;
@@ -429,7 +432,7 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
   static bool_t shortCutFNCommand(GtkWidget *w, int key,      int keyCode, bool_t condition1,            bool_t disable, char *shift, char *keyForBtnClicked, uint16_t modes, int16_t requiredCalcMode2, int16_t itemForRunFunction) {
     if(key == keyCode && condition1 && !disable) {
 //    #if defined(VERBOSEKEYS)
-        printf("\n       shortCutFNCommand: Disable=%i, Key detected %5i=%5i: keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n",disable, key, keyCode, keyForBtnClicked, calcMode, tam.mode);
+        printf("\n       shortCutFNCommand: Disable=%i, Key detected %5i=%5i: keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n", disable, key, keyCode, keyForBtnClicked, calcMode, tam.mode);
 //    #endif //VERBOSEKEYS
     }
 
@@ -448,8 +451,8 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
 
 //      //Handle menus
 //      if(itemForRunFunction < 0) {
-//        //printf("\n       shortCutFNCommand: Disable=%i, Key detected %5i=%5i: keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n",disable, key, keyCode, keyForBtnClicked, calcMode, tam.mode);
-//        printf("       shortCutFNCommand: Handle menus: key:%i: showSoftmenu %i\n",keyCode, itemForRunFunction);
+//        //printf("\n       shortCutFNCommand: Disable=%i, Key detected %5i=%5i: keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n", disable, key, keyCode, keyForBtnClicked, calcMode, tam.mode);
+//        printf("       shortCutFNCommand: Handle menus: key:%i: showSoftmenu %i\n", keyCode, itemForRunFunction);
 //        showSoftmenu(itemForRunFunction);
 //        screenUpdatingMode = SCRUPD_AUTO;
 //        refreshScreen(4);
@@ -459,14 +462,14 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
       //Handle functions
       if(((1 << calcMode) & modes) || calcMode == requiredCalcMode2) {
         #if defined(VERBOSEKEYS)
-          //printf("\n       shortCutFNCommand: Disable=%i, Key detected %5i=%5i: keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n",disable, key, keyCode, keyForBtnClicked, calcMode, tam.mode);
-          printf("       shortCutFNCommand: Handle functions: key:%i: showSoftmenu %i\n",keyCode, itemForRunFunction);
+          //printf("\n       shortCutFNCommand: Disable=%i, Key detected %5i=%5i: keyForBtnClicked:%s, calcMode=%i, tam.mode=%i\n", disable, key, keyCode, keyForBtnClicked, calcMode, tam.mode);
+          printf("       shortCutFNCommand: Handle functions: key:%i: showSoftmenu %i\n", keyCode, itemForRunFunction);
         #endif //VERBOSEKEYS
 
         //Handle key presses
         if(keyForBtnClicked[0] != '-') {
           #if defined(VERBOSEKEYS)
-            printf("                       Handle key presses: key:%i: btnClicked %s F=%i G=%i\n",keyCode, keyForBtnClicked, shiftF, shiftG);
+            printf("                       Handle key presses: key:%i: btnClicked %s F=%i G=%i\n", keyCode, keyForBtnClicked, shiftF, shiftG);
           #endif //VERBOSEKEYS
           if(shift[0] == 'f') {
             shiftF = true;
@@ -477,7 +480,7 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
             shiftG = true;
           }
           #if defined(VERBOSEKEYS)
-            printf("                       Handle key clicks: key:%i: btnClicked %s\n",keyCode, keyForBtnClicked);
+            printf("                       Handle key clicks: key:%i: btnClicked %s\n", keyCode, keyForBtnClicked);
           #endif //VERBOSEKEYS
           btnFnClicked(w, keyForBtnClicked);
           screenUpdatingMode = SCRUPD_AUTO;
@@ -623,16 +626,16 @@ Jacos Mac, Control works
     char strr[30];
     strr[0]=0;
     #if defined(VERBOSEKEYS)
-      strcat(strr,(((event->state) & 0x0001) != 0) ? "b0 " : "---");
-      strcat(strr,(((event->state) & 0x0002) != 0) ? "b1 " : "---");
-      strcat(strr,(((event->state) & 0x0004) != 0) ? "b2 " : "---");
-      strcat(strr,(((event->state) & 0x0008) != 0) ? "b3 " : "---");
-      strcat(strr,(((event->state) & 0x0010) != 0) ? "b4 " : "---");
-      strcat(strr,(((event->state) & 0x0020) != 0) ? "b5 " : "---");
-      strcat(strr,(((event->state) & 0x0040) != 0) ? "b6 " : "---");
+      strcat(strr, (((event->state) & 0x0001) != 0) ? "b0 " : "---");
+      strcat(strr, (((event->state) & 0x0002) != 0) ? "b1 " : "---");
+      strcat(strr, (((event->state) & 0x0004) != 0) ? "b2 " : "---");
+      strcat(strr, (((event->state) & 0x0008) != 0) ? "b3 " : "---");
+      strcat(strr, (((event->state) & 0x0010) != 0) ? "b4 " : "---");
+      strcat(strr, (((event->state) & 0x0020) != 0) ? "b5 " : "---");
+      strcat(strr, (((event->state) & 0x0040) != 0) ? "b6 " : "---");
     #endif //VERBOSEKEYS
     #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
-      printf("PC Key released: _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, (uint16_t)(event->state), strr, SHIFT_State,shiftF,shiftG,
+      printf("PC Key released: _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, (uint16_t)(event->state), strr, SHIFT_State, shiftF, shiftG,
                   C47SpecialKey_AltGr_Pressed, C47SpecialKey_Ctrl_Pressed, C47SpecialKey_Valid_Pressed, C47SpecialKey_Ctrl_Released, C47SpecialKey_AltGr_Released);
       fflush(stdout);
     #endif //VERBOSEKEYS
@@ -655,54 +658,51 @@ Jacos Mac, Control works
     switch(event->keyval) {
       case GDK_KEY_Shift_L: //left shift
       case GDK_KEY_Shift_R: //right shift
-          event_command_shift = 0;
-          if(SHIFT_State != 0) {     //f-shift activated on the release of the shift key, to allow for standard PC shifted chars
+        event_command_shift = 0;
+        if(SHIFT_State != 0) {     //f-shift activated on the release of the shift key, to allow for standard PC shifted chars
 
-                 if(checkNormal( 0, KEY_fg))     btnClicked(w, "00");
-            else if(checkNormal(10, KEY_fg))     btnClicked(w, "10");
-            else if(checkNormal(11, KEY_fg))     btnClicked(w, "11");
-            else if(checkNormal( 0, ITM_SHIFTf)) btnClicked(w, "00");
-            else if(checkNormal(10, ITM_SHIFTf)) btnClicked(w, "10");
-            else if(checkNormal(11, ITM_SHIFTf)) btnClicked(w, "11");
+               if(checkNormal( 0, KEY_fg))     btnClicked(w, "00");
+          else if(checkNormal(10, KEY_fg))     btnClicked(w, "10");
+          else if(checkNormal(11, KEY_fg))     btnClicked(w, "11");
+          else if(checkNormal( 0, ITM_SHIFTf)) btnClicked(w, "00");
+          else if(checkNormal(10, ITM_SHIFTf)) btnClicked(w, "10");
+          else if(checkNormal(11, ITM_SHIFTf)) btnClicked(w, "11");
 
-            else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary)) == ITM_SHIFTf) btnClicked(w, "10");
-            else if(((getSystemFlag(FLAG_USER) ? kbd_usr[ 0].primary : kbd_std[ 0].primary)) == KEY_fg    ) btnClicked(w, "00");
-            else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary)) == KEY_fg    ) btnClicked(w, "10");
-            else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary)) == KEY_fg    ) btnClicked(w, "11");
-            else if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary)) == KEY_fg    ) btnClicked(w, "27");
-            else {
-              shiftF = !shiftF;
-              shiftG = false;
-              refreshStatusBar();
-              showShiftState();
-            }
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary)) == ITM_SHIFTf) btnClicked(w, "10");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[ 0].primary : kbd_std[ 0].primary)) == KEY_fg    ) btnClicked(w, "00");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary)) == KEY_fg    ) btnClicked(w, "10");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary)) == KEY_fg    ) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary)) == KEY_fg    ) btnClicked(w, "27");
+          else {
+            shiftF = !shiftF;
+            shiftG = false;
+            refreshStatusBar();
+            showShiftState();
           }
-          SHIFT_State = 0;
-          break;
+        }
+        SHIFT_State = 0;
+        break;
 
       case GDK_KEY_Control_L: // Left Ctrl
       case GDK_KEY_Control_R: // right Ctrl
-          if(CTRL_State != 0) {
-                 if(checkNormal( 0, KEY_fg))     btnClicked(w, "00");
-            else if(checkNormal(10, KEY_fg))     btnClicked(w, "10");
-            else if(checkNormal(11, KEY_fg))     btnClicked(w, "11");
-            else if(checkNormal( 0, ITM_SHIFTg)) btnClicked(w, "00");
-            else if(checkNormal(10, ITM_SHIFTg)) btnClicked(w, "10");
-            else if(checkNormal(11, ITM_SHIFTg)) btnClicked(w, "11");
+        if(CTRL_State != 0) {
+               if(checkNormal( 0, KEY_fg))     btnClicked(w, "00");
+          else if(checkNormal(10, KEY_fg))     btnClicked(w, "10");
+          else if(checkNormal(11, KEY_fg))     btnClicked(w, "11");
+          else if(checkNormal( 0, ITM_SHIFTg)) btnClicked(w, "00");
+          else if(checkNormal(10, ITM_SHIFTg)) btnClicked(w, "10");
+          else if(checkNormal(11, ITM_SHIFTg)) btnClicked(w, "11");
 
-            else if((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTg) btnClicked(w, "11");
-            else {
-              shiftF = false;
-              shiftG = !shiftG;
-              refreshStatusBar();
-              showShiftState();
-            }
-
-
+          else if((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTg) btnClicked(w, "11");
+          else {
+            shiftF = false;
+            shiftG = !shiftG;
+            refreshStatusBar();
+            showShiftState();
+          }
         }
         CTRL_State = 0;
         break;
-
 
       case GDK_KEY_F1: // F1                                                    //**************-- FUNCTION KEYS --***************//
                   //                                                       //JM Added this portion to be able to go to NOP on emulator
@@ -781,16 +781,16 @@ returnKeyReleasedFalse:
     char strr[30];
     strr[0]=0;
     #if defined(VERBOSEKEYS)
-      strcat(strr,(((event->state) & 0x0001) != 0) ? "b0 " : "---");
-      strcat(strr,(((event->state) & 0x0002) != 0) ? "b1 " : "---");
-      strcat(strr,(((event->state) & 0x0004) != 0) ? "b2 " : "---");
-      strcat(strr,(((event->state) & 0x0008) != 0) ? "b3 " : "---");
-      strcat(strr,(((event->state) & 0x0010) != 0) ? "b4 " : "---");
-      strcat(strr,(((event->state) & 0x0020) != 0) ? "b5 " : "---");
-      strcat(strr,(((event->state) & 0x0040) != 0) ? "b6 " : "---");
+      strcat(strr, (((event->state) & 0x0001) != 0) ? "b0 " : "---");
+      strcat(strr, (((event->state) & 0x0002) != 0) ? "b1 " : "---");
+      strcat(strr, (((event->state) & 0x0004) != 0) ? "b2 " : "---");
+      strcat(strr, (((event->state) & 0x0008) != 0) ? "b3 " : "---");
+      strcat(strr, (((event->state) & 0x0010) != 0) ? "b4 " : "---");
+      strcat(strr, (((event->state) & 0x0020) != 0) ? "b5 " : "---");
+      strcat(strr, (((event->state) & 0x0040) != 0) ? "b6 " : "---");
     #endif //VERBOSEKEYS
     #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
-      printf(  "PC Key pressed:  _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) labelText=%i plainTextMode=%i AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, event->state, strr, SHIFT_State,shiftF,shiftG,labelText, plainTextMode,
+      printf(  "PC Key pressed:  _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) labelText=%i plainTextMode=%i AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, event->state, strr, SHIFT_State, shiftF, shiftG, labelText, plainTextMode,
                   C47SpecialKey_AltGr_Pressed, C47SpecialKey_Ctrl_Pressed, C47SpecialKey_Valid_Pressed, C47SpecialKey_Ctrl_Released, C47SpecialKey_AltGr_Released);
       fflush(stdout);
     #endif //VERBOSEKEYS
@@ -839,32 +839,30 @@ returnKeyReleasedFalse:
     if(!((calcMode == CM_AIM || calcMode == CM_EIM || tam.mode || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)) || tam.alpha))) {
       switch(event_key_strip_capslock) {
         case GDK_KEY_f: //f
-
-            if(checkNormal( 0,ITM_SHIFTf)) btnClicked(w, "00"); else
-            if(checkNormal(10,ITM_SHIFTf)) btnClicked(w, "10"); else
-            if(checkNormal(11,ITM_SHIFTf)) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTf )) btnClicked(w, "10"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTf )) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
+               if(checkNormal( 0, ITM_SHIFTf)) btnClicked(w, "00");
+          else if(checkNormal(10, ITM_SHIFTf)) btnClicked(w, "10");
+          else if(checkNormal(11, ITM_SHIFTf)) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTf )) btnClicked(w, "10");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTf )) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
           break;
         case GDK_KEY_g: //g
-
-            if(checkNormal( 0,ITM_SHIFTg)) btnClicked(w, "00"); else
-            if(checkNormal(10,ITM_SHIFTg)) btnClicked(w, "10"); else
-            if(checkNormal(11,ITM_SHIFTg)) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTg )) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTg )) btnClicked(w, "10"); else
-            {
-              shiftF = false;
-              shiftG = !shiftG;
-              refreshStatusBar();
-              showShiftState();
-            }
-            // if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11"); else
-            // if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10"); else
-            // if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
+               if(checkNormal( 0, ITM_SHIFTg)) btnClicked(w, "00");
+          else if(checkNormal(10, ITM_SHIFTg)) btnClicked(w, "10");
+          else if(checkNormal(11, ITM_SHIFTg)) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTg )) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTg )) btnClicked(w, "10");
+          else {
+            shiftF = false;
+            shiftG = !shiftG;
+            refreshStatusBar();
+            showShiftState();
+          }
+          // if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11"); else
+          // if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10"); else
+          // if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
           break;
         default:break;
       }
@@ -1083,7 +1081,7 @@ else if(     (CTRL_State != 65536 || allowAltGrKey)
 
     if(tam.mode == TM_STORCL) {
       #if defined(VERBOSEKEYS)
-        printf("------------------------ Checking STO/RCL ancillary functions event->keyval=%i, GDK_KEY_Up=%i\n",event->keyval, GDK_KEY_Up);
+        printf("------------------------ Checking STO/RCL ancillary functions event->keyval=%i, GDK_KEY_Up=%i\n", event->keyval, GDK_KEY_Up);
       #endif
            if(shortCutCommand(w, event->keyval, GDK_KEY_Up    , shortcutProfile == USER_C47                               , !EXITIFNIM, !DISABLED, "", "17", 0b01001, -1, 0))  { return false;}               //  [x]eq
       else if(shortCutCommand(w, event->keyval, GDK_KEY_Down  , shortcutProfile == USER_C47                               , !EXITIFNIM, !DISABLED, "", "22", 0b01001, -1, 0))  { return false;}               //  [x]eq
@@ -1159,7 +1157,7 @@ else if(     (CTRL_State != 65536 || allowAltGrKey)
     }
     else if((tamArrows) && !getSystemFlag(FLAG_ALPHA)) {
       #if defined(VERBOSEKEYS)
-        printf("------------------------ Checking GTO Up Dn ancillary functions event->keyval=%i, GDK_KEY_Up=%i\n",event->keyval, GDK_KEY_Up);
+        printf("------------------------ Checking GTO Up Dn ancillary functions event->keyval=%i, GDK_KEY_Up=%i\n", event->keyval, GDK_KEY_Up);
       #endif
            if(shortCutCommand(w, event->keyval, GDK_KEY_Up  , shortcutProfile == USER_C47                            , !EXITIFNIM, !DISABLED, "", "17", 0b01001, -1, 0)) {return false;} // [x]eq
       else if(shortCutCommand(w, event->keyval, GDK_KEY_Down, shortcutProfile == USER_C47                            , !EXITIFNIM, !DISABLED, "", "22", 0b01001, -1, 0)) {return false;} // [x]eq
@@ -1287,7 +1285,7 @@ if(   (CTRL_State != 65536 || allowAltGrKey)
 
 continueWithOldDetections:
     #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
-      printf("   Continue with old key detection using event_keyval=%u\n\n",event_keyval);
+      printf("   Continue with old key detection using event_keyval=%u\n\n", event_keyval);
       fflush(stdout);
     #endif
 
@@ -2014,49 +2012,49 @@ returnKeyPressedFalse:
     } shortCut_t;
 
     const shortCut_t shortCutString[] = {
-      {"a",        "A",  "Q",         "A"},  //00
-      {"v",        "B",  "q",         "B"},  //00
-      {"q",        "C",  "v",         "C"},  //00
-      {"o",        "D",  "Y",         "D"},  //00
-      {"l",        "E",  "o",         "E"},  //00
-      {"x",        "F",  "l",         "F"},  //00
+      {"a",         "A",     "Q",         "A"},  //00
+      {"v",         "B",     "q",         "B"},  //00
+      {"q",         "C",     "v",         "C"},  //00
+      {"o",         "D",     "Y",         "D"},  //00
+      {"l",         "E",     "o",         "E"},  //00
+      {"x",         "F",     "l",         "F"},  //00
 
-      {"m",        "G",  "m",         "G"},  //00
-      {"r",        "H",  "r",         "H"},  //00
-      {"d",        "I",  "d",         "I"},  //00
-      {"s",        "J",  ">",         "J"},  //00
-      {"c",        "K",  "" ,         "" },  //00
-      {"t",        "L",  "" ,         "" },  //00
+      {"m",         "G",     "m",         "G"},  //00
+      {"r",         "H",     "r",         "H"},  //00
+      {"d",         "I",     "d",         "I"},  //00
+      {"s",         "J",     ">",         "J"},  //00
+      {"c",         "K",     "" ,         "" },  //00
+      {"t",         "L",     "" ,         "" },  //00
 
-      {"Enter",    "",   "Enter",     "" },  //00
-      {"w",        "M",  "w",         "K"},  //00
-      {"n",        "N",  "n",         "L"},  //00
-      {"e",        "O",  "e",         "M"},  //00
-      {"Backspace","",   "Backspace", "" },  //00
+      {"Enter",     "",      "Enter",     "" },  //00
+      {"w",         "M",     "w",         "K"},  //00
+      {"n",         "N",     "n",         "L"},  //00
+      {"e",         "O",     "e",         "M"},  //00
+      {"Backspace", "",      "Backspace", "" },  //00
 
-      {"Up",       "",   "x",         ""},   //00
-      {"7" ,       "P",  "7",         "N"},  //00
-      {"8" ,       "Q",  "8",         "O"},  //00
-      {"9" ,       "R",  "9",         "P"},  //00
-      {"/" ,       "S",  "/" ,        "Q" }, //00
+      {"Up",        "",      "x",         ""},   //00
+      {"7" ,        "P",     "7",         "N"},  //00
+      {"8" ,        "Q",     "8",         "O"},  //00
+      {"9" ,        "R",     "9",         "P"},  //00
+      {"/" ,        "S",     "/" ,        "Q" }, //00
 
-      {"Dn",       "",   "Up",        ""},   //00
-      {"4" ,       "T",  "4",         "R"},  //00
-      {"5" ,       "U",  "5",         "S"},  //00
-      {"6" ,       "V",  "6",         "T"},  //00
-      {"x" ,       "W",  "x" ,        "U" }, //00
+      {"Dn",        "",      "Up",        ""},   //00
+      {"4" ,        "T",     "4",         "R"},  //00
+      {"5" ,        "U",     "5",         "S"},  //00
+      {"6" ,        "V",     "6",         "T"},  //00
+      {"x" ,        "W",     "x" ,        "U" }, //00
 
-      {"f/g",      "",   "Dn",        ""},   //00
-      {"1" ,       "X",  "1",         "V"},  //00
-      {"2" ,       "Y",  "2",         "W"},  //00
-      {"3" ,       "Z",  "3",         "X"},  //00
-      {"-" ,       "_",  "-" ,        "Y" }, //00
+      {"f/g",       "",      "Dn",        ""},   //00
+      {"1" ,        "X",     "1",         "V"},  //00
+      {"2" ,        "Y",     "2",         "W"},  //00
+      {"3" ,        "Z",     "3",         "X"},  //00
+      {"-" ,        "_",     "-" ,        "Y" }, //00
 
-      {"Esc",      "",   "Esc",       ""},   //00
-      {"0" ,       ":",  "0",         "Z"},  //00
-      {"." ,       ".",  ".",         ","},  //00
-      {"\\" ,      "?",  "\\",        "?"},  //00
-      {"+" ,     "Space","+" ,        "Space" } //00
+      {"Esc",       "",      "Esc",       ""},   //00
+      {"0" ,        ":",     "0",         "Z"},  //00
+      {"." ,        ".",     ".",         ","},  //00
+      {"\\" ,       "?",     "\\",        "?"},  //00
+      {"+" ,        "Space", "+" ,        "Space" } //00
     };
 
 
@@ -3101,30 +3099,29 @@ static bool is_valid_utf8(const char *s, size_t *error_offset);
 
 
 bool_t check_label_consistency(const uint8_t* lbl, const char* context) {
-    if (!lbl) {
-        printf("GTK3 Setup utf issue: NULL label in %s\n", context);
-        return 1;
-    }
+  if(!lbl) {
+    printf("GTK3 Setup utf issue: NULL label in %s\n", context);
+    return 1;
+  }
 
-    // Calculate length safely (stop at 22 or null terminator)
-    int len = 0;
-    while (lbl[len] != 0 && len < 22) {
-        len++;
-    }
+  // Calculate length safely (stop at 22 or null terminator)
+  int len = 0;
+  while(lbl[len] != 0 && len < 22) {
+    len++;
+  }
 
-    if (len == 0) {
-        return 0; // Empty string is OK
-    }
+  if(len == 0) {
+    return 0; // Empty string is OK
+  }
 
-    size_t bad_pos = 0;
-    if (!is_valid_utf8((const char*)lbl, &bad_pos)) {
-        printf("GTK3 Setup utf issue: Invalid UTF-8 at position %zu in %s: ",
-               bad_pos, context);
-        print_label_bytes(lbl, len);
-        return 1;
-    }
+  size_t bad_pos = 0;
+  if(!is_valid_utf8((const char*)lbl, &bad_pos)) {
+    printf("GTK3 Setup utf issue: Invalid UTF-8 at position %zu in %s: ", bad_pos, context);
+    print_label_bytes(lbl, len);
+    return 1;
+  }
 
-    return 0; // All good
+  return 0; // All good
 }
 
 
@@ -3132,7 +3129,7 @@ bool_t check_label_consistency(const uint8_t* lbl, const char* context) {
 
 
 bool debugLabelConsistency(const uint8_t *lbl, const char *ctx, const calcKey_t *key, GtkWidget *btn, bool showBtn) {
-  if(!check_label_consistency(lbl,ctx)) {
+  if(!check_label_consistency(lbl, ctx)) {
     return false;
   }
   if(key) {
@@ -3200,7 +3197,7 @@ void labelCaptionNormal(const calcKey_t *key, GtkWidget *button, GtkWidget *lblF
     stringToUtf8(sstmp, lbl);
     if((userKeyLabelSize > 0) && ((strcmp((char *)lbl, "DYNMNU") == 0) || (strcmp((char *)lbl, "XEQ") == 0) || (strcmp((char *)lbl, "RCL") == 0))) {
       if(*(getNthString((uint8_t *)userKeyLabel, keyLogicalId*6)) != 0) {
-        stringToUtf8((char *)getNthString((uint8_t *)userKeyLabel, keyLogicalId*6),lbl);
+        stringToUtf8((char *)getNthString((uint8_t *)userKeyLabel, keyLogicalId*6), lbl);
       }
     }
   }
@@ -3286,7 +3283,7 @@ char sstmp[16];
   stringToUtf8(sstmp, lbl);
   if((userKeyLabelSize > 0) && ((strcmp((char *)lbl, "DYNMNU") == 0) || (strcmp((char *)lbl, "XEQ") == 0) || (strcmp((char *)lbl, "RCL") == 0))) {
     if(*(getNthString((uint8_t *)userKeyLabel, keyLogicalId*6+1)) != 0) {
-      stringToUtf8((char *)getNthString((uint8_t *)userKeyLabel, keyLogicalId*6+1),lbl);
+      stringToUtf8((char *)getNthString((uint8_t *)userKeyLabel, keyLogicalId*6+1), lbl);
     }
   }
 
@@ -3304,7 +3301,7 @@ char sstmp[16];
   }
 
   if(key->primary == ITM_SHIFTg && key->keyId == 71) {
-    strcpy((char *)lbl,"      "); //blank the dots above the shift g key, if it is shift g specifically instead of shift f/g
+    strcpy((char *)lbl, "      "); //blank the dots above the shift g key, if it is shift g specifically instead of shift f/g
   }
 
   gtk_label_set_label(GTK_LABEL(lblF), (gchar *)lbl);
@@ -3377,7 +3374,7 @@ char sstmp[16];
   stringToUtf8(sstmp, lbl);
   if((userKeyLabelSize > 0) && ((strcmp((char *)lbl, "DYNMNU") == 0) || (strcmp((char *)lbl, "XEQ") == 0) || (strcmp((char *)lbl, "RCL") == 0))) {
     if(*(getNthString((uint8_t *)userKeyLabel, keyLogicalId*6+2)) != 0) {
-      stringToUtf8((char *)getNthString((uint8_t *)userKeyLabel, keyLogicalId*6+2),lbl);
+      stringToUtf8((char *)getNthString((uint8_t *)userKeyLabel, keyLogicalId*6+2), lbl);
     }
   }
 
@@ -3461,7 +3458,7 @@ char sstmp[16];
         R47LongpressColour = true;
       }
       else {
-          stringToUtf8(indexOfItems[numlockReplacements(4,max(key->fShiftedAim, -key->fShiftedAim),getSystemFlag(FLAG_NUMLOCK),true,false)].itemSoftmenuName, lbl);
+          stringToUtf8(indexOfItems[numlockReplacements(4, max(key->fShiftedAim, -key->fShiftedAim), getSystemFlag(FLAG_NUMLOCK), true, false)].itemSoftmenuName, lbl);
       }
 
       if(lbl[0] == 32 && lbl[1]==0) {
@@ -3511,11 +3508,11 @@ char sstmp[16];
       }
       else {
         if( shiftG && (ITM_A <= key->primaryAim && key->primaryAim <= ITM_Z)) {
-          stringToUtf8(indexOfItems[numlockReplacements(5,max(key->gShiftedAim, -key->gShiftedAim), getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG)].itemSoftmenuName, lbl);
+          stringToUtf8(indexOfItems[numlockReplacements(5, max(key->gShiftedAim, -key->gShiftedAim), getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG)].itemSoftmenuName, lbl);
         }
         else {
           if( ((!shiftF && (alphaCase == AC_LOWER)) || ( shiftF && (alphaCase == AC_UPPER))) && (ITM_A <= key->primaryAim && key->primaryAim <= ITM_Z)) {
-            stringToUtf8(indexOfItems[numlockReplacements(5,max(key->primaryAim, -key->primaryAim) + 26, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG)].itemSoftmenuName, lbl);
+            stringToUtf8(indexOfItems[numlockReplacements(5, max(key->primaryAim, -key->primaryAim) + 26, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG)].itemSoftmenuName, lbl);
           }
           else {
             if(shiftF) {
@@ -3563,7 +3560,7 @@ char sstmp[16];
         /*}*/       //dr - new AIM
       }
 
-      stringToUtf8(indexOfItems[numlockReplacements(10,key->gShiftedAim, getSystemFlag(FLAG_NUMLOCK), false, true)].itemSoftmenuName, lbl);
+      stringToUtf8(indexOfItems[numlockReplacements(10, key->gShiftedAim, getSystemFlag(FLAG_NUMLOCK), false, true)].itemSoftmenuName, lbl);
 
       //GShift set label
       if(key->gShiftedAim == 0) {
@@ -5215,8 +5212,12 @@ static bool check_utf_string(const char *widget_name, const char *what, const ch
     else {                                                                                                            \
       bool consistency_found = false;                                                                                 \
                                                                                                                       \
-      consistency_found |= check_utf_string(widget_name, "tooltip", gtk_widget_get_tooltip_text(widget));             \
-      consistency_found |= check_utf_string(widget_name, "tooltip markup", gtk_widget_get_tooltip_markup(widget));    \
+      gchar *_ttText = gtk_widget_get_tooltip_text(widget);   /* transfer-full: caller must g_free */               \
+      consistency_found |= check_utf_string(widget_name, "tooltip", _ttText);                                        \
+      g_free(_ttText);                                                                                               \
+      gchar *_ttMarkup = gtk_widget_get_tooltip_markup(widget);   /* transfer-full: caller must g_free */            \
+      consistency_found |= check_utf_string(widget_name, "tooltip markup", _ttMarkup);                               \
+      g_free(_ttMarkup);                                                                                             \
                                                                                                                       \
       if(GTK_IS_BUTTON(widget)) {                                                                                     \
         consistency_found |= check_utf_string(widget_name, "button label", gtk_button_get_label(GTK_BUTTON(widget))); \
@@ -5475,17 +5476,17 @@ static gboolean onUIActivity(GtkWidget *w, GdkEvent *event, gpointer data) {
         strcpy(modelString, "res/");
         strcat(modelString, isR47FAM ? "R47" : "C47");
         if(calcLandscape) {
-          strcat(modelString,"short.png");
+          strcat(modelString, "short.png");
         }
         else {
-          strcat(modelString,".png");
+          strcat(modelString, ".png");
         }
       }
       else {
         char modelString2[50];
-        strcpy(modelString2,"res/");
-        strcat(modelString2,modelString);
-        strcpy(modelString,modelString2);
+        strcpy(modelString2, "res/");
+        strcat(modelString2, modelString);
+        strcpy(modelString, modelString2);
       }
 
 
