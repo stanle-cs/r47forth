@@ -566,7 +566,7 @@ int16_t fnItemShowValue(int16_t item) {
     case ITM_DSPCYCLE:  result = 32700 + displayFormat;                             break;
     case ITM_SCR:       result = (scrLock & 0x03) | (nextChar & 0x03);              break;
     case ITM_DSP:       result = displayFormatDigits;                               break;
-//    case ITM_GET_ADM:    
+//    case ITM_GET_ADM:
     case ITM_SET_ADM:   result = currentAngularMode;                                break;
 //    case ITM_GET_ISM:
     case ITM_SET_ISM:   result = shortIntegerModeValue();                           break;

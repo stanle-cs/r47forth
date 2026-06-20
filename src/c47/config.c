@@ -967,16 +967,16 @@ void fnFractionType(uint16_t unusedButMandatoryParameter) {
 
   if(getSystemFlag(FLAG_FRCYC)) {
     switch(state) {
-      case STATE_offbc       : state = STATE_bc;        break;
-      case STATE_offabc      : state = STATE_abc;       break;
-      case STATE_offr_bc     : state = STATE_exfr_bc;   break;
-      case STATE_offr_abc    : state = STATE_exfr_abc;  break;
+      case STATE_offbc:    state = STATE_bc;        break;
+      case STATE_offabc:   state = STATE_abc;       break;
+      case STATE_offr_bc:  state = STATE_exfr_bc;   break;
+      case STATE_offr_abc: state = STATE_exfr_abc;  break;
 
-      case STATE_bc          : state = STATE_exfr_abc;  break;                    // 0b0001 -->
-      case STATE_abc         : state = STATE_bc;        break;                    // 0b0011 -->
-      case STATE_exfr_bc     : state = STATE_abc;       break;                    // 0b1100 -->
-      case STATE_exfr_abc    : state = STATE_exfr_bc;   break;                    // 0b1110 -->
-      default                : state = STATE_abc;       break;                    //
+      case STATE_bc:       state = STATE_exfr_abc;  break;                    // 0b0001 -->
+      case STATE_abc:      state = STATE_bc;        break;                    // 0b0011 -->
+      case STATE_exfr_bc:  state = STATE_abc;       break;                    // 0b1100 -->
+      case STATE_exfr_abc: state = STATE_exfr_bc;   break;                    // 0b1110 -->
+      default:             state = STATE_abc;       break;                    //
     }
 
     if((state & 8)) setSystemFlag(FLAG_IRFRAC); else clearSystemFlag(FLAG_IRFRAC);
