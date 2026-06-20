@@ -2928,8 +2928,8 @@
 #define ITM_BLOBIN3toKGM3           2821
 #define ITM_KGM3toTMM3              2822
 #define ITM_TMM3toKGM3              2823
-#define ITM_LBSFTtoKGM              2824
-#define ITM_KGMtoLBSFT              2825
+#define ITM_LBFTtoKGM               2824
+#define ITM_KGMtoLBFT               2825
 #define ITM_IN3toMM3                2826
 #define ITM_MM3toIN3                2827
 #define ITM_IN2toMM2                2828
@@ -2941,8 +2941,8 @@
 
 #define ITM_KGFPMtoNPM              2834
 #define ITM_NPMtoKGFPM              2835
-#define ITM_2836                    2836
-#define ITM_2837                    2837
+#define ITM_KGFtoLBF                2836
+#define ITM_LBFtoKGF                2837
 #define ITM_2838                    2838
 #define ITM_2839                    2839
 #define ITM_2840                    2840

@@ -607,7 +607,7 @@ TO_QSPI const int16_t menu_ConvStruct[]     = {
 
 TO_QSPI const int16_t menu_ConvSection[]     = {
                                                     // Screen 2 — SECTION (bottom row first)
-                                                    ITM_LBSFTtoKGM,           ITM_KGMtoLBSFT,           ITM_INCHtoMM,             ITM_MMtoINCH,             ITM_SI_m,                 ITM_SI_k,
+                                                    ITM_LBFTtoKGM,            ITM_KGMtoLBFT,            ITM_INCHtoMM,             ITM_MMtoINCH,             ITM_SI_m,                 ITM_SI_k,
                                                     ITM_NULL,                 ITM_NULL,                 ITM_IN2toMM2,             ITM_MM2toIN2,             ITM_IN4toMM4,             ITM_MM4toIN4,
                                                     -MNU_STRUCT,              -MNU_CONV_SECTION,        ITM_IN3toMM3,             ITM_MM3toIN3,             ITM_IN6toMM6,             ITM_MM6toIN6};
 
@@ -620,7 +620,7 @@ TO_QSPI const int16_t menu_ConvMaterial[]     = {
 TO_QSPI const int16_t menu_CONV_FLoad[]     = {
                                                     // Screen 4 — F LOAD
                                                     ITM_LBSFTtoNPM,           ITM_NPMtoLBSFT,           ITM_LBFtoN,               ITM_NtoLBF,               ITM_SI_m,                 ITM_SI_k,
-                                                    ITM_KGFPMtoNPM,           ITM_NPMtoKGFPM,           ITM_LBStoKG,              ITM_KGtoLBS,              ITM_MS2toINS2,            ITM_INS2toMS2,
+                                                    ITM_KGFPMtoNPM,           ITM_NPMtoKGFPM,           ITM_LBFtoKGF,             ITM_KGFtoLBF,             ITM_MS2toINS2,            ITM_INS2toMS2,
                                                     -MNU_STRUCT,              -MNU_CONV_F_LOAD,         ITM_KGFtoN,               ITM_NtoKGF,               ITM_MS2toFTS2,            ITM_FTS2toMS2};
 
 TO_QSPI const int16_t menu_CONV_MLoad[]     = {
