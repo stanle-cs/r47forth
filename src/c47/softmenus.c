@@ -1503,10 +1503,17 @@ void fnGetMenu(uint16_t funusedButMandatoryParameter) {
 
 
 
-  static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfBytes, uint16_t *numberOfVars) {
+static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfBytes, uint16_t *numberOfVars) {
     uint8_t *step;
     step = labelList[label].instructionPointer;
-    while((*numberOfVars < 18) && checkOpCodeOfStep(step, ITM_MVAR) && *(step + 2) == STRING_LABEL_VARIABLE) {
+    while(*numberOfVars < 18) {
+      // Skip any user REM to not stop the MVAR count. REM before an MVAR is transparent. Otherwise REM and all others still quite the MVAR count. Also before an .END.
+      while(checkOpCodeOfStep(step, ITM_REM)) {
+        step = findNextStep(step);
+      }
+      if(!(checkOpCodeOfStep(step, ITM_MVAR) && *(step + 2) == STRING_LABEL_VARIABLE)) {
+        break;
+      }
       xcopy(tmpString + *numberOfBytes, step + 4, *(step + 3));
       (void)findOrAllocateNamedVariable(tmpString + *numberOfBytes);
       *numberOfBytes += *(step + 3) + 1;
@@ -2657,16 +2664,16 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
 
     #if defined(SAVE_SPACE_DM42_17)
       case -MNU_F: case -MNU_BINOM: case -MNU_HYPER: case -MNU_POISS: case -MNU_GEOM:
-      case ITM_FPX   :     case ITM_FX   :      case ITM_FUX   :     case ITM_FM1P:
-      case ITM_BINOMP:     case ITM_BINOM:      case ITM_BINOMU:     case ITM_BINOMM1:
-      case ITM_NBINP :     case ITM_NBIN :      case ITM_NBINU :     case ITM_NBINM1 :
-      case ITM_HYPERP:     case ITM_HYPER:      case ITM_HYPERU:     case ITM_HYPERM1:
-      case ITM_POISSP:     case ITM_POISS:      case ITM_POISSU:     case ITM_POISSM1:
-      case ITM_GEOMP :     case ITM_GEOM :      case ITM_GEOMU :     case ITM_GEOMM1 :
+      case ITM_FPX:      case ITM_FX:      case ITM_FUX:      case ITM_FM1P:
+      case ITM_BINOMP:   case ITM_BINOM:   case ITM_BINOMU:   case ITM_BINOMM1:
+      case ITM_NBINP:    case ITM_NBIN:    case ITM_NBINU:    case ITM_NBINM1 :
+      case ITM_HYPERP:   case ITM_HYPER:   case ITM_HYPERU:   case ITM_HYPERM1:
+      case ITM_POISSP:   case ITM_POISS:   case ITM_POISSU:   case ITM_POISSM1:
+      case ITM_GEOMP:    case ITM_GEOM:    case ITM_GEOMU:    case ITM_GEOMM1 :
     #endif // SAVE_SPACE_DM42_17
 
-      case 9999       : return true; break;
-    default           : return false; break;
+    case 9999: return true;  break;
+    default:   return false; break;
   }
 }
 
@@ -3385,7 +3392,7 @@ void showSoftmenuCurrentPart(void) {
         return false;
       }
     }
-    #if defined(PC_BUILD) && defined (VERBOSE_MINIMUM)
+    #if defined(PC_BUILD) && defined(VERBOSE_MINIMUM)
       printf("----------- ############################ CREATING HOME #########################\n");
     #endif // PC_BUILD
     for(uint16_t ii=0; ii<18; ii++) {
@@ -3415,7 +3422,7 @@ void showSoftmenuCurrentPart(void) {
         return false;
       }
     }
-    #if defined(PC_BUILD) && defined (VERBOSE_MINIMUM)
+    #if defined(PC_BUILD) && defined(VERBOSE_MINIMUM)
       printf("----------- ############################ CREATING PFN #########################\n");
     #endif // PC_BUILD
     for(uint16_t ii=0; ii<18; ii++) {
@@ -4022,7 +4029,7 @@ void fnDumpMenus(uint16_t newFilenameformat, const char *path) {
           case MNU_2NDDERIV :
           case MNU_Sf       :
           case MNU_Solver   :
-          case MNU_Grapher   :
+          case MNU_Grapher  :
           case MNU_SHOW     :
             break;
           default:

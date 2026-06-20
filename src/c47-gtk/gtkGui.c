@@ -99,10 +99,13 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
 
   static gint destroyCalc(GtkWidget* w, GdkEventAny* e, gpointer data) {
     fnStopTimerApp();
-#if defined(PC_BUILD)
-    if(!scriptingActive)
-#endif
+    #if defined(PC_BUILD)
+      if(!scriptingActive) {
+    #endif
       saveCalc();
+    #if defined(PC_BUILD)
+      }
+    #endif
     gtk_main_quit();
 
     return 0;
@@ -620,9 +623,9 @@ Jacos Mac, Control works
     if(event_keyval == event->keyval + CTRL_State) {
       event_keyval = 99999999;
     }
-    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
-      char strr[30];
-      strr[0]=0;
+    char strr[30];
+    strr[0]=0;
+    #if defined(VERBOSEKEYS)
       strcat(strr,(((event->state) & 0x0001) != 0) ? "b0 " : "---");
       strcat(strr,(((event->state) & 0x0002) != 0) ? "b1 " : "---");
       strcat(strr,(((event->state) & 0x0004) != 0) ? "b2 " : "---");
@@ -630,6 +633,8 @@ Jacos Mac, Control works
       strcat(strr,(((event->state) & 0x0010) != 0) ? "b4 " : "---");
       strcat(strr,(((event->state) & 0x0020) != 0) ? "b5 " : "---");
       strcat(strr,(((event->state) & 0x0040) != 0) ? "b6 " : "---");
+    #endif //VERBOSEKEYS
+    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
       printf("PC Key released: _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, (uint16_t)(event->state), strr, SHIFT_State,shiftF,shiftG,
                   C47SpecialKey_AltGr_Pressed, C47SpecialKey_Ctrl_Pressed, C47SpecialKey_Valid_Pressed, C47SpecialKey_Ctrl_Released, C47SpecialKey_AltGr_Released);
       fflush(stdout);
@@ -776,9 +781,9 @@ returnKeyReleasedFalse:
   gboolean keyPressed(GtkWidget *w, GdkEventKey *event, gpointer data) {
     event_keyval = event->keyval + CTRL_State;
 
-    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
-      char strr[30];
-      strr[0]=0;
+    char strr[30];
+    strr[0]=0;
+    #if defined(VERBOSEKEYS)
       strcat(strr,(((event->state) & 0x0001) != 0) ? "b0 " : "---");
       strcat(strr,(((event->state) & 0x0002) != 0) ? "b1 " : "---");
       strcat(strr,(((event->state) & 0x0004) != 0) ? "b2 " : "---");
@@ -786,6 +791,8 @@ returnKeyReleasedFalse:
       strcat(strr,(((event->state) & 0x0010) != 0) ? "b4 " : "---");
       strcat(strr,(((event->state) & 0x0020) != 0) ? "b5 " : "---");
       strcat(strr,(((event->state) & 0x0040) != 0) ? "b6 " : "---");
+    #endif //VERBOSEKEYS
+    #if defined(VERBOSEKEYS) || defined(VERBOSE_MINIMUM)
       printf(  "PC Key pressed:  _keyval=%5d _state=%5d %s (SHIFT_State=%5u)(F=%u G=%u) labelText=%i plainTextMode=%i AltGr_P=%i Ctrl_P=%i Valid_P=%i Ctrl_R=%i AltGr_R=%i\n", event->keyval, event->state, strr, SHIFT_State,shiftF,shiftG,labelText, plainTextMode,
                   C47SpecialKey_AltGr_Pressed, C47SpecialKey_Ctrl_Pressed, C47SpecialKey_Valid_Pressed, C47SpecialKey_Ctrl_Released, C47SpecialKey_AltGr_Released);
       fflush(stdout);
@@ -835,32 +842,30 @@ returnKeyReleasedFalse:
     if(!((calcMode == CM_AIM || calcMode == CM_EIM || tam.mode || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)) || tam.alpha))) {
       switch(event_key_strip_capslock) {
         case GDK_KEY_f: //f
-
-            if(checkNormal( 0,ITM_SHIFTf)) btnClicked(w, "00"); else
-            if(checkNormal(10,ITM_SHIFTf)) btnClicked(w, "10"); else
-            if(checkNormal(11,ITM_SHIFTf)) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTf )) btnClicked(w, "10"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTf )) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
+               if(checkNormal( 0, ITM_SHIFTf)) btnClicked(w, "00");
+          else if(checkNormal(10, ITM_SHIFTf)) btnClicked(w, "10");
+          else if(checkNormal(11, ITM_SHIFTf)) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTf )) btnClicked(w, "10");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTf )) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
           break;
         case GDK_KEY_g: //g
-
-            if(checkNormal( 0,ITM_SHIFTg)) btnClicked(w, "00"); else
-            if(checkNormal(10,ITM_SHIFTg)) btnClicked(w, "10"); else
-            if(checkNormal(11,ITM_SHIFTg)) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTg )) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTg )) btnClicked(w, "10"); else
-            {
-              shiftF = false;
-              shiftG = !shiftG;
-              refreshStatusBar();
-              showShiftState();
-            }
-            // if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11"); else
-            // if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10"); else
-            // if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
+               if(checkNormal( 0, ITM_SHIFTg)) btnClicked(w, "00");
+          else if(checkNormal(10, ITM_SHIFTg)) btnClicked(w, "10");
+          else if(checkNormal(11, ITM_SHIFTg)) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTg )) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTg )) btnClicked(w, "10");
+          else {
+            shiftF = false;
+            shiftG = !shiftG;
+            refreshStatusBar();
+            showShiftState();
+          }
+          // if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11"); else
+          // if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10"); else
+          // if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
           break;
         default:break;
       }
@@ -5227,8 +5232,12 @@ static bool check_utf_string(const char *widget_name, const char *what, const ch
     else {                                                                                                            \
       bool consistency_found = false;                                                                                 \
                                                                                                                       \
-      consistency_found |= check_utf_string(widget_name, "tooltip", gtk_widget_get_tooltip_text(widget));             \
-      consistency_found |= check_utf_string(widget_name, "tooltip markup", gtk_widget_get_tooltip_markup(widget));    \
+      gchar *_ttText = gtk_widget_get_tooltip_text(widget);   /* transfer-full: caller must g_free */               \
+      consistency_found |= check_utf_string(widget_name, "tooltip", _ttText);                                        \
+      g_free(_ttText);                                                                                               \
+      gchar *_ttMarkup = gtk_widget_get_tooltip_markup(widget);   /* transfer-full: caller must g_free */            \
+      consistency_found |= check_utf_string(widget_name, "tooltip markup", _ttMarkup);                               \
+      g_free(_ttMarkup);                                                                                             \
                                                                                                                       \
       if(GTK_IS_BUTTON(widget)) {                                                                                     \
         consistency_found |= check_utf_string(widget_name, "button label", gtk_button_get_label(GTK_BUTTON(widget))); \
