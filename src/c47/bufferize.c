@@ -31,15 +31,15 @@ uint16_t convertItemToSubOrSup(uint16_t item, int16_t subOrSup) {
       else if(item >= ITM_A && item <= ITM_Z) return (uint16_t)((int16_t)item + (int16_t)ITM_SUB_A - (int16_t)ITM_A); //JM optimized
       else {
         switch(item) {
-          case ITM_alpha    :return ITM_SUB_alpha;
-          case ITM_delta    :return ITM_SUB_delta;
-          case ITM_mu       :return ITM_SUB_mu;
-          case ITM_pi       :return ITM_SUB_pi;
-          case ITM_SUN      :return ITM_SUB_SUN;
-          case ITM_INFINITY :return ITM_SUB_INFINITY;
-          case ITM_PLUS     :return ITM_SUB_PLUS;
-          case ITM_MINUS    :return ITM_SUB_MINUS;
-          default           :return item;
+          case ITM_alpha:    return ITM_SUB_alpha;
+          case ITM_delta:    return ITM_SUB_delta;
+          case ITM_mu:       return ITM_SUB_mu;
+          case ITM_pi:       return ITM_SUB_pi;
+          case ITM_SUN:      return ITM_SUB_SUN;
+          case ITM_INFINITY: return ITM_SUB_INFINITY;
+          case ITM_PLUS:     return ITM_SUB_PLUS;
+          case ITM_MINUS:    return ITM_SUB_MINUS;
+          default:           return item;
         }
       }
     }
@@ -50,11 +50,11 @@ uint16_t convertItemToSubOrSup(uint16_t item, int16_t subOrSup) {
       else if(item >= ITM_A && item <= ITM_Z) return (uint16_t)((int16_t)item + (int16_t)ITM_SUP_A - (int16_t)ITM_A); //JM optimized
       else {
         switch(item) {
-          case ITM_INFINITY :return ITM_SUP_INFINITY;
-          case ITM_PLUS     :return ITM_SUP_PLUS;
-          case ITM_MINUS    :return ITM_SUP_MINUS;
-          case ITM_pi       :return ITM_SUP_pi;
-          default           :return item;
+          case ITM_INFINITY: return ITM_SUP_INFINITY;
+          case ITM_PLUS:     return ITM_SUP_PLUS;
+          case ITM_MINUS:    return ITM_SUP_MINUS;
+          case ITM_pi:       return ITM_SUP_pi;
+          default:           return item;
         }
       }
     }
@@ -2684,8 +2684,8 @@ TO_QSPI static const numStr NumMsg[] = { { "^0" }, { "^1" }, { "^2" }, { "^3" },
       lastItem = 0;
     #endif //IR_PRINTING
 
-    closeNim_exit:    
-    nimNumberPart = NP_EMPTY;   //Added to ensure test for nimNumberPart in insertStepInProgram() will have the correct value 
+    closeNim_exit:
+    nimNumberPart = NP_EMPTY;   //Added to ensure test for nimNumberPart in insertStepInProgram() will have the correct value
   }
 
 
