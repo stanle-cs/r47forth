@@ -427,7 +427,6 @@ void Sett(int16_t grp) {
   void fnSetJM(uint16_t unusedButMandatoryParameter){
   #if !defined(SAVE_SPACE_DM42_24_PROFILES)
     fnDrop(NOPARAM);
-    fnSquare(0);
     resetOtherConfigurationStuff(true);
     getDateString(lastStateFileOpened);
     strcat(lastStateFileOpened, ": Jaco defaults");
@@ -435,17 +434,24 @@ void Sett(int16_t grp) {
     Sett(_JM);
 
     roundingMode = RM_HALF_UP;
-    fnKeysManagement(ITM_RIBBON_C47);
+    if(!isR47FAM) {
+      fnKeysManagement(ITM_RIBBON_C47PL);
+    } else {
+      fnKeysManagement(ITM_RIBBON_R47PL);      
+    }
 
-    itemToBeAssigned = -MNU_EE;
-    assignToMyMenu(6);
+    itemToBeAssigned = ITM_op_j;
+    assignToMyMenu(10);
     itemToBeAssigned = ITM_op_j_pol;
     assignToMyMenu(11);
     itemToBeAssigned = -MNU_RIBBONS;
-    assignToMyMenu(10);
-    itemToBeAssigned = ITM_DREAL;
     assignToMyMenu(9);
-
+    itemToBeAssigned = ITM_BOLD;
+    assignToMyMenu(8);
+    itemToBeAssigned = -MNU_DEV;
+    assignToMyMenu(7);
+    itemToBeAssigned = -MNU_EE;
+    assignToMyMenu(6);
 
     cachedDynamicMenu = 0;
 

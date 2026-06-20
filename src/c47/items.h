@@ -2101,7 +2101,7 @@
 #define ITM_2048                    2048  //blank
 #define ITM_2049                    2049  //blank
 #define ITM_2050                    2050  //blank
-#define ITM_2051                    2051  //blank
+#define ITM_BOLD                    2051
 #define ITM_AMORT_HP12C             2052
 #define ITM_2TO10                   2053
 #define ITM_USER_HRESET             2054
