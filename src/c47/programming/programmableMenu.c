@@ -86,6 +86,11 @@ void fnKeyGtoXeq(uint16_t keyNum) {
   uint8_t *opParam;
   uint16_t label;
 
+  if(secondParam == NULL) { // findKey2ndParam returns NULL on a malformed/.END. step
+    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
+    return;
+  }
+
   opParam = secondParam + 1;
   label = _get2ndParamOfKey(opParam);
 
