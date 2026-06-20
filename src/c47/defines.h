@@ -1305,7 +1305,7 @@ enum REG_NUMBERS { // C program register codes
   RESERVED_VARIABLE_SPARE3,                              //2028
   RESERVED_VARIABLE_SPARE4,                              //2029
   RESERVED_VARIABLE_SPARE5,                              //2030
-  
+
   // Named reserved variables
   FIRST_NAMED_RESERVED_VARIABLE,
   RESERVED_VARIABLE_ACC = FIRST_NAMED_RESERVED_VARIABLE, //2031

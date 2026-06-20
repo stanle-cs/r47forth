@@ -1022,7 +1022,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
               tamProcessInput(ITM_NOP);                 // to insert the resulting string in program
               break;
             }
-            
+
             case PARAM_KEYG_KEYX: {                            // Key Goto or Key eXecute
               if(func == ITM_KEY) {
                 func = (opParam2 == ITM_GTO ? ITM_KEYG : ITM_KEYX);

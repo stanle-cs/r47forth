@@ -55,28 +55,27 @@ bool_t isFunctionOldParam16(uint16_t func) {
   static uint8_t itemERRTIVal(int16_t itemNr) {
     switch(max(itemNr, -itemNr)) {
       #if defined(DMCP_BUILD)
-        case ITM_WRXPALL   :
-                            return  _TO_ITM_ERR;
+        case ITM_WRXPALL: return  _TO_ITM_ERR;
       #elif defined(PC_BUILD)
-        case ITM_SAVEAUT  :
-        case ITM_SETDAT   :
-        case ITM_SETTIM   :
-        case ITM_SYSTEM2  :
-        case ITM_ACTUSB   :
-                            return  _TO_ITM_ERR;
+        case ITM_SAVEAUT:
+        case ITM_SETDAT:
+        case ITM_SETTIM:
+        case ITM_SYSTEM2:
+        case ITM_ACTUSB:  return  _TO_ITM_ERR;
       #endif // PC_BUILD
 
-    #if defined(PC_BUILD)
-      case ITM_DISK     :
-      case ITM_BUZZ     :
-      case ITM_PLAY     :
-      case ITM_VOL      :
-      case ITM_VOLMINUS :
-      case ITM_VOLPLUS  :
-      case ITM_VOLQ     :
-      case ITM_BATT     :  return  _TO_ITM_TI;
-    #endif //PC_BUILD
-      default           :  return  _TO_ITM_NONE;
+      #if defined(PC_BUILD)
+        case ITM_DISK:
+        case ITM_BUZZ:
+        case ITM_PLAY:
+        case ITM_VOL:
+        case ITM_VOLMINUS:
+        case ITM_VOLPLUS:
+        case ITM_VOLQ:
+        case ITM_BATT:    return  _TO_ITM_TI;
+      #endif //PC_BUILD
+
+      default:            return  _TO_ITM_NONE;
     }
 }
 
@@ -108,24 +107,24 @@ bool_t isFunctionOldParam16(uint16_t func) {
 
   uint16_t indirectionType(uint16_t func) {
     switch(indexOfItems[func].param) {
-      case TM_FLAGR   :
-      case TM_FLAGW   : {
+      case TM_FLAGR:
+      case TM_FLAGW: {
         return INDPM_FLAG;
       }
-      case TM_STORCL  :
+      case TM_STORCL:
       case TM_REGISTER:
-      case TM_CMP     :
-      case TM_M_DIM   : {
+      case TM_CMP:
+      case TM_M_DIM: {
         return INDPM_REGISTER;
       }
-      case TM_LBLONLY :
-      case TM_LABEL   : {
+      case TM_LBLONLY:
+      case TM_LABEL: {
         return INDPM_LABEL;
       }
-      case TM_MENU    : {
+      case TM_MENU: {
         return INDPM_MENU;
       }
-      case TM_SOLVE   : {
+      case TM_SOLVE: {
         if(func == ITM_SOLVE) {
           return (programRunStop == PGM_RUNNING ? INDPM_REGISTER : INDPM_LABEL);
         }
