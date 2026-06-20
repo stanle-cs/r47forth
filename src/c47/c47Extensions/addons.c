@@ -33,6 +33,11 @@ All the below: because both Last x and savestack does not work due to multiple s
 #if !defined(SAVE_SPACE_DM42_23_EDIT2)
   static void _getStringLabelOrVariableName(uint8_t *stringAddress) {
     uint8_t stringLength = *(uint8_t *)(stringAddress++);
+    // The length byte comes from the program step on trust; clamp it to the bytes
+    // that remain in program memory so a corrupt step cannot read past it.
+    if(stringAddress < firstFreeProgramByte && stringLength > firstFreeProgramByte - stringAddress) {
+      stringLength = (uint8_t)(firstFreeProgramByte - stringAddress);
+    }
     xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
     tmpStringLabelOrVariableName[stringLength] = 0;
   }

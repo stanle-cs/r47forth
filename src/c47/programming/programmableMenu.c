@@ -9,6 +9,11 @@
 
 static void _getStringLabelOrVariableName(uint8_t *stringAddress) {
   uint8_t stringLength = *(uint8_t *)(stringAddress++);
+  // The length byte comes from the program step on trust; clamp it to the bytes
+  // that remain in program memory so a corrupt step cannot read past it.
+  if(stringAddress < firstFreeProgramByte && stringLength > firstFreeProgramByte - stringAddress) {
+    stringLength = (uint8_t)(firstFreeProgramByte - stringAddress);
+  }
   xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
   tmpStringLabelOrVariableName[stringLength] = 0;
 }
