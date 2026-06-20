@@ -1,4 +1,4 @@
-#ifndef _JIMAUTOCONF_H
+#if !defined(_JIMAUTOCONF_H)
 #define _JIMAUTOCONF_H
 #define HAVE_ARPA_INET_H 1
 #define HAVE_BACKTRACE 1
@@ -111,4 +111,4 @@
 #define jim_ext_signal 1
 #define jim_ext_stdlib 1
 #define jim_ext_tclcompat 1
-#endif
+#endif // _JIMAUTOCONF_H
