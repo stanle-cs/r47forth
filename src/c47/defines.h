@@ -831,7 +831,7 @@
 #define FLAG_alphaCAP                         0xc00f
 #define FLAG_RUNTIM                           0xc010
 #define FLAG_AMORT_HP12C                      0x8011
-#define FLAG_BOLD                             0x8012
+#define FLAG_spare                            0xc012
 #define FLAG_TRACE                            0x8013
 #define FLAG_USER                             0x8014
 #define FLAG_LOWBAT                           0xc015
@@ -918,8 +918,9 @@
 #define FLAG_3DXYZ                            0x8066
 #define FLAG_PRTEN                            0x8067
 #define FLAG_NORM                             0x8068 //41
+#define FLAG_BOLD                             0x8069 //42
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+41 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+42 // We can have a maximum of 128 system flags
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode
