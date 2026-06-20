@@ -1338,12 +1338,9 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           #endif // GRAPHDEBUG
         }
 
-        // Update running average
+        // Update running average : Track the largest |y02| seen so far, dampened by count. Initialised before the loop from |f(x_max)|; the count == 0 path is intentionally absent here.
         realCopyAbs(y02, tmpA);
-        if(count == 0) {
-          realFMA(const_2, tmpA, yAvg, yAvg, ctxtGraphs);     // yAvg += 2 * |y02|
-        }
-        else if(realCompareGreaterThan(tmpA, yAvg)) {
+        if(realCompareGreaterThan(tmpA, yAvg)) {
           int32ToReal(count, tmpB);
           realDivide(tmpA, tmpB, tmpA, ctxtGraphs);      // |y02|/count
           realAdd(yAvg, tmpA, yAvg, ctxtGraphs);
