@@ -86,7 +86,7 @@
     #undef TWO_FILE_PGM
     #undef HARDWARE_MODEL
     #define HARDWARE_MODEL HWM_DM42n
-    #define SAVE_SPACE_DM42_14          // DM42n & R47 hardware without Load programming sample programs testPgms
+    #define SAVE_SPACE_DM42_14          // All hardware without Load programming sample programs testPgms
   #endif // NEW_HW
 
 //ONE FILE OPERATION needs the original CRC file - see src/c47-dmcp
@@ -155,7 +155,7 @@
 
 
 
-  #if defined(PACKAGE1_NOBESSEL_NOORTHO)   // PACKAGE 1 (free 0392) // ALL DIST, Stripped X.FN menu; NO ELEC; SLOW FIN; NO VECTOR
+  #if defined(PACKAGE1_NOBESSEL_NOORTHO)   // PACKAGE 1 (free 4984) // ALL DIST, Stripped X.FN menu; NO ELEC; SLOW FIN; NO VECTOR
          //  #define SAVE_SPACE_DM42_8F        //  1216 bytes // Without Font Browsers
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
@@ -169,12 +169,12 @@
          // #define SAVE_SPACE_DM42_24_PROFILES//   240 bytes // Without any dev profile shortcuts, and no JM, RJ & HP35
     #undef  OPTION_TVM_FORMULAS                //  2280 bytes // Use TVM analytical formulas where possible
     #undef  OPTION_TVM_NEWTON                  //  1864 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
-    #undef  OPTION_ELEC                        //  ===> bytes // ELEC   see below
-    #undef  OPTION_VECTOR                      //  ===> bytes // Vector see below
+    #undef  OPTION_ELEC                        //  ===> bytes // ELEC    5102 saving if VECTOR is not in; 1352 saving if VECTOR is in
+    #undef  OPTION_VECTOR                      //  ===> bytes // Vector 11872 saving if ELEC   is not in; 8104 saving if ELEC is in
     #undef  IR_PRINTING                        // 10032 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(PACKAGE2_NODISTR)            // PACKAGE 2 (free 1288) // Limited DIST; Full X.FN menu; NO ELEC; SLOW FIN; NO VECTOR
+  #if defined(PACKAGE2_NODISTR)            // PACKAGE 2 (free 1016) // Limited DIST; Full X.FN menu; NO ELEC; FAST FIN; NO VECTOR
          // #define SAVE_SPACE_DM42_8F         //  1216 bytes // Without Font Browsers
          // #define SAVE_SPACE_DM42_12ELLIP    // 12888 bytes // Without ELLIPTIC
          // #define SAVE_SPACE_DM42_12BESSEL   //  5168 bytes // Without X.FN BESSEL
@@ -193,7 +193,7 @@
     #undef  IR_PRINTING                        // 10032 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(PACKAGE3_NOBESSEL_NOORTHO_NOFBR) // PACKAGE 3 (free 6216) // Half DIST, Stripped X.FN menu; ELEC; SLOW FIN; NO VECTOR
+  #if defined(PACKAGE3_NOBESSEL_NOORTHO_NOFBR) // PACKAGE 3 (free 12192) // Half DIST, STRIPPED X.FN menu; ELEC; SLOW FIN; // VECTOR Future
          // #define SAVE_SPACE_DM42_8F         //  1216 bytes // Without Font Browsers
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
@@ -217,7 +217,7 @@
             // 1    0     6216  free: costs 13032 -6216 =  6816
             // 1    1   - 3480  free: costs 13032--3480 = 16512
 
-  #if defined(PACKAGE4_MINIMAL_MATH)       // PACKAGE 4 (free 22232) // Minimal, no options included, FOR GITLAB PIPELINE COMPILE
+  #if defined(PACKAGE4_MINIMAL_MATH)       // PACKAGE 4 (free 26920) // Minimal, no options included, FOR GITLAB PIPELINE COMPILE
       //  #define SAVE_SPACE_DM42_8F           //  1216 bytes // Without Font Browsers
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
@@ -237,7 +237,7 @@
   #endif
 
 
-  //Options common to all DM42 hardware packages
+  //Options common to all hardware packages
   //  #define SAVE_SPACE_DM42_8        //  1856 bytes // Without Register Browser
   //  #define SAVE_SPACE_DM42_8FL      //  3280 bytes // Without Flag Browsers
   //  #define SAVE_SPACE_DM42_8ASN     //  1704 bytes // Without Assign Browser
@@ -277,7 +277,7 @@
 
 #define LOW_GRAPH_ACC                                                                     //Lowered graph accuracy for EQN graphs
 //#undef LOW_GRAPH_ACC
-#define significantDigitsForEqnGraphs (significantDigits == 0 ? 12 : significantDigits)   //If <=6 is chosen by user, all four types are changed as follows: 34 to SDIGS; 39 to SDIGS+3; 51 to SDIGS+6; 75 to SDIGS+9
+#define significantDigitsForEqnGraphs (significantDigits == 0 ? 12 : significantDigits)   //If 6 is chosen by user, all four types are changes as follows: 34 to SDIGS; 39 to SDIGS+3; 51 to SDIGS+6; 75 to SDIGS+9
 #define significantDigitsForScreen    3                                                   //Only for screen coord scaling of the resulting graphic matrix: 34 to 4; 39 to 4+3; 51 to 4+3; 75 to 4+3
 
 
@@ -840,7 +840,7 @@
 #define FLAG_alphaCAP                         0xc00f
 #define FLAG_RUNTIM                           0xc010
 #define FLAG_AMORT_HP12C                      0x8011
-#define FLAG_IMPLOT                           0x8012
+#define FLAG_IMPLOT                           0xc012
 #define FLAG_TRACE                            0x8013
 #define FLAG_USER                             0x8014
 #define FLAG_LOWBAT                           0xc015
@@ -927,8 +927,9 @@
 #define FLAG_3DXYZ                            0x8066
 #define FLAG_PRTEN                            0x8067
 #define FLAG_NORM                             0x8068 //41
+#define FLAG_BOLD                             0x8069 //42
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+41 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+42 // We can have a maximum of 128 system flags
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode
