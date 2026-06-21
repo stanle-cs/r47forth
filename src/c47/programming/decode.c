@@ -121,8 +121,13 @@ void getStringLabelOrVariableName(uint8_t *stringAddress) {
   // The length byte is taken from the program step on trust. A corrupt step can
   // claim a name longer than the bytes that remain in program memory, so clamp
   // it to firstFreeProgramByte before xcopy reads the name; without this a
-  // damaged imported program would read past the program region.
-  if(stringAddress < firstFreeProgramByte && stringLength > firstFreeProgramByte - stringAddress) {
+  // damaged imported program would read past the program region. When the name
+  // would start at or past firstFreeProgramByte there are no valid bytes left,
+  // so read nothing rather than skipping the clamp and reading unbounded.
+  if(stringAddress >= firstFreeProgramByte) {
+    stringLength = 0;
+  }
+  else if(stringLength > firstFreeProgramByte - stringAddress) {
     stringLength = (uint8_t)(firstFreeProgramByte - stringAddress);
   }
   xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
