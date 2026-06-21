@@ -125,6 +125,23 @@ int _ioFileNameFromFilePath(ioFilePath_t path, char * filename) {
       //strcat(filename, ".tsv");
       return FILE_OK;
 
+    case ioPathRegExport:
+    case ioPathRegImport:
+      current_dir = g_get_current_dir();
+      strcpy(base_dir, current_dir);
+      if(create_dir("./" DATA_DIR) != 0) {
+        return FILE_ERROR;
+      }
+      strcat(base_dir, "/" DATA_DIR);
+      if(path == ioPathRegExport) {
+        ret = file_selection_screen("Export Register File", base_dir, "*"DATA_EXT, 1, 1, filename);
+      }
+      else if(path == ioPathRegImport) {
+        ret = file_selection_screen("Import Register File", base_dir, "*"DATA_EXT, 0, 0, filename);
+      }
+      g_free(current_dir);
+      return ret;
+
     case ioPathSaveStateFile:
     case ioPathLoadStateFile:
       current_dir = g_get_current_dir();

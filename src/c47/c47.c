@@ -6,6 +6,7 @@
 #include "c47Extensions/addons.h"
 #include "longIntegerType.h"
 #include "saveRestoreCalcState.h"
+#include "saveRestoreBackup.h"
 #include "statusBar.h"
 
 //#define JMSHOWCODES
@@ -30,6 +31,7 @@ char                  lastTemp[16];
   bool_t              swapCtrlCode = false;
 #endif // PC_BUILD
 
+bool_t                headlessMode = false;
 bool_t                loadTestPrograms = false;
 bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;

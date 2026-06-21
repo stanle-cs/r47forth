@@ -1797,7 +1797,7 @@ void printTrace(int16_t func, uint16_t param) {
           fflush(stdout);
         #endif // PC_BUILD
       }
-      else if (func >= 0) {  // Don't trace menu names during program execution
+      else if(func >= 0) {  // Don't trace menu names during program execution
         printJustified(tmpString);    // Current step
         #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
           printf("**[DL]** Trace: %s\n", tmpString);
