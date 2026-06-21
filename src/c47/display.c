@@ -530,7 +530,7 @@ overRange:
   }
   IrFractionsCurrentStatus = CF_NORMAL;
 
-  bool_t forceSigIPZeroes = getSystemFlag(FLAG_SIGIP);
+  bool_t forceSigZeroes = getSystemFlag(FLAG_SIGZEROS);
   //sigfig
   //printReal34ToConsole(real34, " ------- 001 >>>>>", " <<<<<\n");   //JM
   if(displayFormat == DF_SF) {                                 //convert real34 to string, eat away all zeroes from the right and give back to FIX as a real
@@ -544,7 +544,7 @@ overRange:
       real34ToReal(real34, &tmp1);
       decContext c = ctxtReal39;
       c.digits = (SHOWMODE ? 39 : NUMBER_OF_DISPLAY_REAL_CONTEXT_DIGITS);
-      if(forceSigIPZeroes) {
+      if(forceSigZeroes) {
         roundToSignificantDigits(&tmp1, &tmp1, displayFormatDigits+1, &c); //  &ctxtReal75);
       }
       realToReal34(&tmp1, &reduced);
@@ -977,7 +977,7 @@ overRange:
       lastDigit -= digitsToTruncate;
 
       // SIG zeroing path rounds at the sig boundary; every other case rounds at the units digit shown
-      if(displayFormat == DF_SF && firstDigit + displayFormatDigits <= 34 && forceSigIPZeroes) {
+      if(displayFormat == DF_SF && firstDigit + displayFormatDigits <= 34 && forceSigZeroes) {
         digitToRound = firstDigit + displayFormatDigits;
       }
       else {
@@ -1003,7 +1003,7 @@ overRange:
         bcd[digitToRound]++;
       }
 
-      if(displayFormat == DF_SF && forceSigIPZeroes) {
+      if(displayFormat == DF_SF && forceSigZeroes) {
         lastDigit = digitToRound;
       }
 
@@ -1020,7 +1020,7 @@ overRange:
 
 
       //JM SIGFIG - blank out non-sig digits to the right                 //JM SIGFIGNEW vv
-      if(displayFormat == DF_SF && forceSigIPZeroes) {
+      if(displayFormat == DF_SF && forceSigZeroes) {
         if((displayFormatDigits+1)-exponent-1 < 0) {
            for(digitCount = firstDigit + (displayFormatDigits+1); digitCount <= 34; digitCount++) {
             bcd[digitCount] = 0;
@@ -1087,7 +1087,11 @@ overRange:
         }
 
         // Zeros after last significant digit
-        for(i=1; i<=(int16_t)displayFormatDigits_Active+exponent+1-numDigits; i++, digitCount--) {   //JM SIGFIGNEW hackpoint
+        int16_t zerosAfter = (int16_t)displayFormatDigits_Active+exponent+1-numDigits;
+        if(displayFormat == DF_SF && !forceSigZeroes) {                                              // no-zero: emit no trailing fractional zeros
+          zerosAfter = 0;
+        }
+        for(i=1; i<=zerosAfter; i++, digitCount--) {   //JM SIGFIGNEW hackpoint
           if(!GROUPRIGHT_DISABLED && digitCount%(uint16_t)GROUPWIDTH_RIGHT==0) {
             xcopy(displayString + charIndex, SEPARATOR_RIGHT,  SEPARATOR_RIGHT[0]!=1 ? (SEPARATOR_RIGHT[1]!=1 ? 2 : 1) : 0);
             charIndex +=  ( SEPARATOR_RIGHT[0]!=1 ? (SEPARATOR_RIGHT[1]!=1 ? 2 : 1) : 0);
@@ -1100,7 +1104,11 @@ overRange:
       }
       else { // zero or positive exponent
   //JM SIGFIGNEW hackpoint
-        for(digitCount=exponent, digitPointer=firstDigit; digitPointer<=firstDigit + exponent + (int16_t)displayFormatDigits_Active; digitPointer++, digitCount--) { // This line is for FIX n displaying more than 16 digits. e.g. in FIX 15: 123 456.789 123 456 789 123
+        int16_t fixLoopEnd = firstDigit + exponent + (int16_t)displayFormatDigits_Active;
+        if(displayFormat == DF_SF && !forceSigZeroes) {                                            // no-zero: stop at the last significant digit, never before the integer part (radix still emitted)
+          fixLoopEnd = min(fixLoopEnd, max(lastDigit, firstDigit + exponent));
+        }
+        for(digitCount=exponent, digitPointer=firstDigit; digitPointer<=fixLoopEnd; digitPointer++, digitCount--) { // This line is for FIX n displaying more than 16 digits. e.g. in FIX 15: 123 456.789 123 456 789 123
         //for(digitCount=exponent, digitPointer=firstDigit; digitPointer<=firstDigit + min(exponent + (int16_t)displayFormatDigits, 15); digitPointer++, digitCount--) { // This line is for fixed number of displayed digits, e.g. in FIX 15: 123 456.789 123 456 8
 
 //vvGRP handling
