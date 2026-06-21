@@ -353,7 +353,9 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     saveStateValue(&rbrMode,                        sizeof(rbrMode),                                             "rbrMode",                        "uint8");
     saveStateValue(&showContent,                    sizeof(showContent),                                         "showContent",                    "bool");
     saveStateValue(&numScreensNumericFont,          sizeof(numScreensNumericFont),                               "numScreensNumericFont",          "uint8");
+    saveStateValue(&numScreensNumericFontBold,      sizeof(numScreensNumericFontBold),                           "numScreensNumericFontBold",      "uint8");
     saveStateValue(&numLinesNumericFont,            sizeof(numLinesNumericFont),                                 "numLinesNumericFont",            "uint8");
+    saveStateValue(&numLinesNumericFontBold,        sizeof(numLinesNumericFontBold),                             "numLinesNumericFontBold",        "uint8");
     saveStateValue(&numScreensStandardFont,         sizeof(numScreensStandardFont),                              "numScreensStandardFont",         "uint8");
     saveStateValue(&numLinesStandardFont,           sizeof(numLinesStandardFont),                                "numLinesStandardFont",           "uint8");
     saveStateValue(&numScreensTinyFont,             sizeof(numScreensTinyFont),                                  "numScreensTinyFont",             "uint8");
@@ -929,7 +931,9 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     restoreStateValue(&rbrMode,                        sizeof(rbrMode),                                             "rbrMode",                        "uint8");
     restoreStateValue(&showContent,                    sizeof(showContent),                                         "showContent",                    "bool");
     restoreStateValue(&numScreensNumericFont,          sizeof(numScreensNumericFont),                               "numScreensNumericFont",          "uint8");
+    restoreStateValue(&numScreensNumericFontBold,      sizeof(numScreensNumericFontBold),                           "numScreensNumericFontBold",      "uint8");
     restoreStateValue(&numLinesNumericFont,            sizeof(numLinesNumericFont),                                 "numLinesNumericFont",            "uint8");
+    restoreStateValue(&numLinesNumericFontBold,        sizeof(numLinesNumericFontBold),                             "numLinesNumericFontBold",        "uint8");
     restoreStateValue(&numScreensStandardFont,         sizeof(numScreensStandardFont),                              "numScreensStandardFont",         "uint8");
     restoreStateValue(&numLinesStandardFont,           sizeof(numLinesStandardFont),                                "numLinesStandardFont",           "uint8");
     restoreStateValue(&numScreensTinyFont,             sizeof(numScreensTinyFont),                                  "numScreensTinyFont",             "uint8");
