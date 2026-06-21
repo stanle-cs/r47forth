@@ -928,8 +928,9 @@
 #define FLAG_PRTEN                            0x8067
 #define FLAG_NORM                             0x8068 //41
 #define FLAG_BOLD                             0x8069 //42
+#define FLAG_SIGIP                            0x806A //43
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+42 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+43 // We can have a maximum of 128 system flags
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode
@@ -2032,7 +2033,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define SIGMA_YMAX   (statisticalSumsPointer + SUM_YMAX  ) // could be a real34. No, this must be old. SIGMA_** is a Real.
 
 #define MAX_NUMBER_OF_GLYPHS_IN_STRING           508 //WP=196: Change to 512 less 3, Also change error message 33, and AIM_BUFFER_LENGTH, and MAXLINES
-#define NUMBER_OF_GLYPH_ROWS                     242 //Used in the font browser application
+#define NUMBER_OF_GLYPH_ROWS                     259 //Used in the font browser application
 
 #define YY_OFF                                     2 // 2 is off and gets transferred to bit 15 (32768 + YY)
 #define YY_TRACKING                                1 // 1 gets transferred to bit 14 (16384 + YY)

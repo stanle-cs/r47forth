@@ -383,6 +383,7 @@
   extern uint16_t               lastCenturyHighUsed;
   extern uint8_t                numScreensStandardFont;
   extern uint8_t                numScreensNumericFont;
+  extern uint8_t                numScreensNumericFontBold;
   extern uint8_t                numScreensTinyFont;
   extern uint8_t                currentAsnScr;
   extern uint8_t                currentFntScr;
@@ -410,6 +411,7 @@
   extern uint8_t                scrLock;
   extern uint8_t                alphaCase;
   extern uint8_t                numLinesNumericFont;
+  extern uint8_t                numLinesNumericFontBold;
   extern uint8_t                numLinesStandardFont;
   extern uint8_t                numLinesTinyFont;
   extern uint8_t                cursorEnabled;
