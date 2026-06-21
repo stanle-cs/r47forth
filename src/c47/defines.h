@@ -921,7 +921,7 @@
 #define FLAG_PRTEN                            0x8067
 #define FLAG_NORM                             0x8068 //41
 #define FLAG_BOLD                             0x8069 //42
-#define FLAG_SIGIP                            0x806A //43
+#define FLAG_SIGZEROS                         0x806A //43
 
 #define NUMBER_OF_SYSTEM_FLAGS                 64+43 // We can have a maximum of 128 system flags
 

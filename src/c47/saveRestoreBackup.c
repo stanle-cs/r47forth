@@ -11,7 +11,7 @@
 
 // This is used for the backup.cfg simulator backup file
 // The variable backupVersion is used in the connection
-#define BACKUP_VERSION                     1015     // FLAG_SIGIP
+#define BACKUP_VERSION                     1015     // FLAG_SIGZEROS
 /*
 1004     // Replace Norm_Key_00_VAR by the structure Norm_Key_00;
 1005     // 2024-09-06 Remove superfluous reporting when old cfg file items are not found in new files
@@ -1148,7 +1148,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
       setLongPressFg(calcModel, -MNU_HOME);
     }
     if(backupVersion < 1015) {
-      setSystemFlag(FLAG_SIGIP); //SIGIP is on per default
+      setSystemFlag(FLAG_SIGZEROS); //SIGZEROS is on per default
     }
     // Ensure valid relations between FLAG_FRACT, FLAG_IRFRAC and FLAG_IRFRQ
     if(getSystemFlag(FLAG_FRACT)) {
