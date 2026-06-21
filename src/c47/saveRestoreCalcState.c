@@ -4,7 +4,7 @@
 #include "c47.h"
 
 // This is used for the state files
-#define configFileVersion                  10000023 // long press f/g
+#define configFileVersion                  10000024 // FLAG_SIGIP
 #define VersionAllowed                     10000005 // This code will not autoload versions earlier than this
 /*
 10000001 // arbitrary starting point version 10 000 001
@@ -1667,6 +1667,9 @@ int64_t stringToInt64(const char *str) {
         if(loadedVersion < 10000012) {
           clearSystemFlag(FLAG_IRFRAC); //restore previously used manually stored flags in OTHER STUFF below
           clearSystemFlag(FLAG_IRFRQ);  //restore previously used manually stored flags in OTHER STUFF below
+        }
+        if(loadedVersion < 10000024) {
+          setSystemFlag(FLAG_SIGIP); //SIGIP is on per default
         }
 
         // Ensure valid relations between FLAG_FRACT, FLAG_IRFRAC and FLAG_IRFRQ

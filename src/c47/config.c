@@ -217,6 +217,8 @@ AMORTP2,                             xxx,        12,                            
 
 
 //FLAG,                              set/clear,  Reset,                          HP35,            JM,                   RJ,                     C47,             DefltSB,         TVM,
+3,                                   1,          FLAG_SIGIP,                    FLAG_SIGIP,       xxx,                  FLAG_SIGIP,             FLAG_SIGIP,      xxx,             xxx,                  // Clear flag  FLAG_BOLD
+3,                                   0,                xxx,                      xxx,             FLAG_SIGIP,           xxx,                    xxx,             xxx,             xxx,                  // Clear flag  FLAG_BOLD
 3,                                   0,          FLAG_BOLD,                      FLAG_BOLD,       xxx,                  FLAG_BOLD,              FLAG_BOLD,       xxx,             xxx,                  // Clear flag  FLAG_BOLD
 3,                                   1,                xxx,                      xxx,             FLAG_BOLD,            xxx,                    xxx,             xxx,             xxx,                  // Clear flag  FLAG_BOLD
 3,                                   1,          FLAG_MONIT,                     xxx,             xxx,                  xxx,                    xxx,             xxx,             xxx,                  // Set flag  FLAG_MONIT

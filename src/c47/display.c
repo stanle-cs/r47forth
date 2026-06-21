@@ -226,6 +226,7 @@ void subNumberToDisplayString(int32_t subNumber, char *displayString, char *disp
 
 
 void real34ToDisplayString(const real34_t *real34, uint32_t tag, char *displayString, const font_t *font, int16_t maxWidth, int16_t displayHasNDigits, bool_t limitExponent, bool_t frontSpace, irfracOption_t limitIrfrac) {
+  // Save display format, restored on exit
   uint8_t savedDisplayFormatDigits = displayFormatDigits;
   uint8_t savedDisplayFormat       = displayFormat;
   bool_t  ovrENG = getSystemFlag(FLAG_ENGOVR);
@@ -243,6 +244,7 @@ void real34ToDisplayString(const real34_t *real34, uint32_t tag, char *displaySt
     displayHasNDigits =  10;
   }
 
+  // Shrink digit count until the formatted string fits maxWidth
   do {
     if(updateDisplayValueX) {
       displayValueX[0] = 0;
@@ -268,6 +270,7 @@ void real34ToDisplayString(const real34_t *real34, uint32_t tag, char *displaySt
     }
   } while(stringWidth(displayString, font, true, true) > maxWidth);
 
+  // Restore display format
   displayFormat       = savedDisplayFormat;
   displayFormatDigits = savedDisplayFormatDigits;
   if(ovrENG) {
@@ -368,6 +371,7 @@ static void emitSciDigits(uint8_t *bcd, int16_t firstDigit, int16_t lastDigit, i
   if(updateDisplayValueX) {
     displayValueX[valueIndex] = 0;
   }
+  // Append the ten exponent
   if(exponent != 0) {
     if(updateDisplayValueX) {
       exponentToDisplayString(exponent, displayString + charIndex, displayValueX + valueIndex, false);
@@ -526,7 +530,7 @@ overRange:
   }
   IrFractionsCurrentStatus = CF_NORMAL;
 
-
+  bool_t forceSigIPZeroes = getSystemFlag(FLAG_SIGIP);
   //sigfig
   //printReal34ToConsole(real34, " ------- 001 >>>>>", " <<<<<\n");   //JM
   if(displayFormat == DF_SF) {                                 //convert real34 to string, eat away all zeroes from the right and give back to FIX as a real
@@ -540,7 +544,9 @@ overRange:
       real34ToReal(real34, &tmp1);
       decContext c = ctxtReal39;
       c.digits = (SHOWMODE ? 39 : NUMBER_OF_DISPLAY_REAL_CONTEXT_DIGITS);
-      roundToSignificantDigits(&tmp1, &tmp1, displayFormatDigits+1, &c); //  &ctxtReal75);
+      if(forceSigIPZeroes) {
+        roundToSignificantDigits(&tmp1, &tmp1, displayFormatDigits+1, &c); //  &ctxtReal75);
+      }
       realToReal34(&tmp1, &reduced);
       // printReal34ToConsole(&reduced, " ------- 002b >>>>>", " <<<<<\n");   //JM
       real34Reduce(&reduced, &reduced);
@@ -620,6 +626,7 @@ overRange:
     real34SetNegativeSign(&value34);
   }
 
+  // Explode value34 into a digit-per-byte bcd[], MSD first
   char tmpString100[100];
   bcd = (uint8_t *)(tmpString100);
   memset(bcd, 0, MAX_DIGITS);
@@ -683,6 +690,7 @@ overRange:
 
   // printf("value34 (INT)=%i exponent=%i limitExponent=%i (exponentLimit=%i) (exponentHideLimit=%i) \n", real34ToUInt32(&value34),  exponent, limitExponent, exponentLimit, exponentHideLimit);
 
+  // Clamp out-of-range exponents to signed infinity or near-zero
   if(limitExponent) {
     if(exponent > exponentLimit) {
       if(real34IsPositive(&value34)) {
@@ -721,6 +729,7 @@ overRange:
     }
   }
 
+  // Infinity
   if(real34IsInfinite(&value34)) {
     if(real34IsNegative(&value34)) {
       strcpy(displayString, "-" STD_INFINITY);
@@ -737,6 +746,7 @@ overRange:
     return;
   }
 
+  // NaN
   if(real34IsNaN(&value34)) {
     real34ToString(&value34, displayString);
     if(updateDisplayValueX) {
@@ -745,6 +755,7 @@ overRange:
     return;
   }
 
+  // Reset output indices; displayValueX appends to any existing prefix
   charIndex = 0;
   valueIndex = (updateDisplayValueX ? strlen(displayValueX) : 0);
 
@@ -965,13 +976,14 @@ overRange:
       numDigits -= digitsToTruncate;
       lastDigit -= digitsToTruncate;
 
-      if(displayFormat == DF_SF && firstDigit + displayFormatDigits <= 34) {
+      // SIG zeroing path rounds at the sig boundary; every other case rounds at the units digit shown
+      if(displayFormat == DF_SF && firstDigit + displayFormatDigits <= 34 && forceSigIPZeroes) {
         digitToRound = firstDigit + displayFormatDigits;
       }
       else {
         digitToRound = lastDigit;
       }
-      //printf(">>> ###A %d %d %d %d %d |", numDigits, firstDigit, lastDigit, digitToRound, exponent);
+      //printf(">>> ###A numDigits:%d firstDigit:%d lastDigit:%d digitToRound:%d exponent:%d |", numDigits, firstDigit, lastDigit, digitToRound, exponent);
       //for(i=firstDigit; i<=lastDigit; i++) {
       //  printf("%c",48+bcd[i]);
       //}
@@ -991,7 +1003,7 @@ overRange:
         bcd[digitToRound]++;
       }
 
-      if(displayFormat == DF_SF) {
+      if(displayFormat == DF_SF && forceSigIPZeroes) {
         lastDigit = digitToRound;
       }
 
@@ -1008,7 +1020,7 @@ overRange:
 
 
       //JM SIGFIG - blank out non-sig digits to the right                 //JM SIGFIGNEW vv
-      if(displayFormat == DF_SF) {
+      if(displayFormat == DF_SF && forceSigIPZeroes) {
         if((displayFormatDigits+1)-exponent-1 < 0) {
            for(digitCount = firstDigit + (displayFormatDigits+1); digitCount <= 34; digitCount++) {
             bcd[digitCount] = 0;
@@ -1315,6 +1327,7 @@ overRange:
 
   }
 
+  // DF_UN rescaled real34 in place above; restore caller's value
   if(flag2To10 && displayFormat == DF_UN) {
     real34Copy(&real34bak, real34);
   }
