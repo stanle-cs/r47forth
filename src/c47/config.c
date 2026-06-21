@@ -165,14 +165,14 @@ void configCommon(uint16_t idx) {
 
 TO_QSPI const int32_t Settings[] = {
 //variable,                          n/a,        Reset,                          HP35,            JM,                   RJ,                     C47,             DefltSB,         TVM,                  Comment
-InputDefaultDataType,                xxx,        xxx,                            ID_DP,           ID_43S,               ID_DP,                  ID_43S,          xxx,             xxx,
+InputDefaultDataType,                xxx,        xxx,                            ID_DP,           ID_43S,               ID_43S,                 ID_43S,          xxx,             xxx,
 SigFigNumberOfDigits,                xxx,        xxx,                            9,               3,                    xxx,                    xxx,             xxx,             xxx,
 AllNumberOfDigits,                   xxx,        xxx,                            xxx,             xxx,                  xxx,                    3,               xxx,             xxx,
 FixNumberOfDigits,                   xxx,        xxx,                            xxx,             xxx,                  3,                      xxx,             xxx,             xxx,
 RNG,                                 xxx,        6145,                           99,              6145,                 6145,                   6145,            xxx,             xxx,
 SDIGS,                               xxx,        0,                              16,              0,                    0,                      34,              xxx,             xxx,
 FDIGS,                               xxx,        0,                              16,              31,                   0,                      34,              xxx,             xxx,
-HIDE,                                xxx,        0,                              0,               31,                   0,                      0,               xxx,             xxx,
+HIDE,                                xxx,        0,                              0,               31,                   30,                     0,               xxx,             xxx,
 DSTACK,                              xxx,        4,                              1,               4,                    4,                      4,               xxx,             xxx,
 CACHEDDSTACK,                        xxx,        4,                              1,               4,                    4,                      4,               xxx,             xxx,
 ADM,                                 xxx,        amDegree,                       amRadian,        amDegree,             amRadian,               amDegree,        xxx,             xxx,
@@ -217,6 +217,8 @@ AMORTP2,                             xxx,        12,                            
 
 
 //FLAG,                              set/clear,  Reset,                          HP35,            JM,                   RJ,                     C47,             DefltSB,         TVM,
+3,                                   0,          FLAG_BOLD,                      FLAG_BOLD,       xxx,                  FLAG_BOLD,              FLAG_BOLD,       xxx,             xxx,                  // Clear flag  FLAG_BOLD
+3,                                   1,                xxx,                      xxx,             FLAG_BOLD,            xxx,                    xxx,             xxx,             xxx,                  // Clear flag  FLAG_BOLD
 3,                                   1,          FLAG_MONIT,                     xxx,             xxx,                  xxx,                    xxx,             xxx,             xxx,                  // Set flag  FLAG_MONIT
 3,                                   1,          FLAG_HPCONV,                    xxx,             xxx,                  xxx,                    xxx,             xxx,             xxx,                  // Set flag  FLAG_HPCONV
 3,                                   0,          xxx,                            xxx,             FLAG_HPCONV,          FLAG_HPCONV,            xxx,             xxx,             xxx,                  // Clear flag FLAG_HPCONV
@@ -425,7 +427,6 @@ void Sett(int16_t grp) {
   void fnSetJM(uint16_t unusedButMandatoryParameter){
   #if !defined(SAVE_SPACE_DM42_24_PROFILES)
     fnDrop(NOPARAM);
-    fnSquare(0);
     resetOtherConfigurationStuff(true);
     getDateString(lastStateFileOpened);
     strcat(lastStateFileOpened, ": Jaco defaults");
@@ -433,17 +434,24 @@ void Sett(int16_t grp) {
     Sett(_JM);
 
     roundingMode = RM_HALF_UP;
-    fnKeysManagement(ITM_RIBBON_C47);
+    if(!isR47FAM) {
+      fnKeysManagement(ITM_RIBBON_C47PL);
+    } else {
+      fnKeysManagement(ITM_RIBBON_R47PL);      
+    }
 
-    itemToBeAssigned = -MNU_EE;
-    assignToMyMenu(6);
+    itemToBeAssigned = ITM_op_j;
+    assignToMyMenu(10);
     itemToBeAssigned = ITM_op_j_pol;
     assignToMyMenu(11);
     itemToBeAssigned = -MNU_RIBBONS;
-    assignToMyMenu(10);
-    itemToBeAssigned = ITM_DREAL;
     assignToMyMenu(9);
-
+    itemToBeAssigned = ITM_BOLD;
+    assignToMyMenu(8);
+    itemToBeAssigned = -MNU_DEV;
+    assignToMyMenu(7);
+    itemToBeAssigned = -MNU_EE;
+    assignToMyMenu(6);
 
     cachedDynamicMenu = 0;
 

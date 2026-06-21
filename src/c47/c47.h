@@ -258,7 +258,7 @@
     extern const calcKey_t                 kbd_std_E47[37];
     extern const calcKey_t                 kbd_std_N47[37];
   #endif // PC_BUILD
-  extern const font_t                    standardFont, numericFont, tinyFont;
+  extern const font_t                    standardFont, numericFont, numericFontBold, tinyFont;
   extern const font_t                   *fontForShortInteger;
   extern const font_t                   *cursorFont;
   extern const char                      baseDigits[63];

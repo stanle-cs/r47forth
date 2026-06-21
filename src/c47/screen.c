@@ -1159,20 +1159,31 @@ return res;
       }
     #endif //GENERATE_CATALOGS
 
-    glyphId = findGlyph(font, charCode);
-    if(glyphId >= 0) {
-      glyph = (font->glyphs) + glyphId;
+    glyph = NULL;
+
+    if(getSystemFlag(FLAG_BOLD) && font == &numericFont) {                             // bold is offered for the numeric font only; standardFont and every other caller path are completely unaffected
+      int16_t boldId = findGlyphExact(&numericFontBold, charCode);     // exact probe into the separate bold font; a miss returns -1 so it can never alias glyph index 0
+      if(boldId >= 0) {
+        glyph = (numericFontBold.glyphs) + boldId;                     // draw from the bold font but keep font == &numericFont so the numDouble / HP logic below reads the right identity
+      }
     }
-    else if(glyphId == -1) {
-      generateNotFoundGlyph(-1, charCode);
-      glyph = &glyphNotFound;
-    }
-    else if(glyphId == -2) {
-      generateNotFoundGlyph(-2, charCode);
-      glyph = &glyphNotFound;
-    }
-    else {
-      glyph = NULL;
+
+    if(glyph == NULL) {                                                // no bold variant for this code, or bold disabled: the original lookup runs exactly as before
+      glyphId = findGlyph(font, charCode);
+      if(glyphId >= 0) {
+        glyph = (font->glyphs) + glyphId;
+      }
+      else if(glyphId == -1) {
+        generateNotFoundGlyph(-1, charCode);
+        glyph = &glyphNotFound;
+      }
+      else if(glyphId == -2) {
+        generateNotFoundGlyph(-2, charCode);
+        glyph = &glyphNotFound;
+      }
+      else {
+        glyph = NULL;
+      }
     }
 
     if(glyph == NULL) {
