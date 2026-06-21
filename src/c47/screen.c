@@ -1456,6 +1456,8 @@ return res;
     return x;
   }
 
+
+  // stringAfterPixelsC47: returns pointer to first glyph in string that would exceed `width` px when rendered. Write 0 there to truncate string
   char *stringAfterPixelsC47(const char *string, int mode, int comp, uint32_t width, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows) {
     int combinationFontsM = combinationFonts;
     char *resStr = (char *)string;
@@ -2016,9 +2018,9 @@ return res;
 //#define DEBUG_SHOWNAME
   void showFunctionName(int16_t itm, int16_t delayInMs, const char *arg) {
     int16_t item = (int16_t)itm;
-    //printf("---Function par:%4u %4u-- converted %4u--arg:|%s|-=-\n", itm, (int16_t)itm, item, arg );
+    //printf("---Function par:%4u %4u-- converted %4u--arg:|%s|-=- L=%d\n", itm, (int16_t)itm, item, arg , stringByteLength(arg));
     char functionName[64];
-    char padding[25];          //(2+0)+(15+0)+(7+0)+1 = 25
+    char padding[64];
     functionName[0] = 0;
     showFunctionNameArg = NULL;
 
@@ -2057,6 +2059,10 @@ return res;
       }
       else if(item >= FIRST_CONSTANT && item <= LAST_CONSTANT) {
         stringCopy(functionName, pickValidItemFromItems(item, PRIORITY_itemSoftmenuName));
+      }
+      else if(isItemConversion(item)) {
+        executionConversionPartner(item, NULL, functionName);
+        expandAbbreviations(functionName);
       }
       else if(item < LAST_ITEM && item != MNU_DYNAMIC) {
         stringCopy(functionName, pickValidItemFromItems(item, PRIORITY_itemCatalogName));
@@ -3504,7 +3510,8 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         prefixWidth = 0;
         const int16_t baseY = Y_POSITION_OF_REGISTER_X_LINE - REGISTER_LINE_HEIGHT*(regist - REGISTER_X + ((restoreRegisterT == RESTORE_T) ? 0 : ((temporaryInformation == TI_VIEW_REGISTER && regist == REGISTER_T) ? 0 : (getRegisterDataType(REGISTER_X) == dtReal34Matrix || getRegisterDataType(REGISTER_X) == dtComplex34Matrix) ? 4 - displayStack : 0)));
                                         #if defined(PC_BUILD)
-                                        if(baseY < 0) {
+                                        if(baseY < 0 && lastErrorCode != 0) {
+                                          // do not report position error if an error is bein displayed, as no line prining is done then
                                           printf("ILLEGAL BASE VALUE baseY<0 : baseY=%i regist=%u regist-REGISTER_X=%u cachedDisplayStack=%u displayStack=%u\n",  baseY, regist, regist-REGISTER_X, cachedDisplayStack, displayStack);
                                           #if defined(ANALYSE_REFRESH)
                                             print_caller(NULL);
@@ -3671,6 +3678,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           fnDisplayStack(3);
         }
 
+
+
+
+
+        // printf("=================================\n\ntemporaryInformation=%d \n",temporaryInformation);
+        // printf("   regist=%d getRegisterDataType(regist)=%d dtReal34=%d\n",regist, getRegisterDataType(regist), dtReal34);
+        // printf("   errorMessage=%s\n", errorMessage);
 
 
         if(lastErrorCode != 0 && regist == errorMessageRegisterLine) {
@@ -5514,7 +5528,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         lcd_fill_rect(45+20, tamOverPemYPos, 168, 20, LCD_SET_VALUE);
         showString(tamBuffer, &standardFont, 75+20, tamOverPemYPos, vmNormal,  false, false);
       }
-      else { // Fixed line to display TAM informations
+      else { // Fixed line to display TAM informations, and ASSIGN preview information
         clearTamBuffer();
         showString(tamBuffer, &standardFont, funcNameOffset_x, Y_POSITION_OF_TAM_LINE + 6, vmNormal, true, true);
       }
