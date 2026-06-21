@@ -4822,7 +4822,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_FONT_BROWSER: {
-        if(currentFntScr < numScreensNumericFont + numScreensStandardFont + numScreensTinyFont) {
+        if(currentFntScr < numScreensNumericFont + numScreensNumericFontBold + numScreensStandardFont + numScreensTinyFont) {
           currentFntScr++;
         }
         break;
