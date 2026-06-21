@@ -114,6 +114,8 @@
         showGlyphCode('A'+x, &standardFont, 50+200+20*x, 20, vmNormal, false, false, false);
       }
 
+      bool_t mem = getSystemFlag(FLAG_BOLD); //Prevent system BOLD setting to override normal Numeric font to Bold
+      clearSystemFlag(FLAG_BOLD);
       first = (currentFntScr-1) * NUMBER_OF_NUMERIC_FONT_LINES_PER_SCREEN;
       for(y=first; y<min(currentFntScr * NUMBER_OF_NUMERIC_FONT_LINES_PER_SCREEN, numLinesNumericFont); y++) {
         sprintf(tmpString, "%04X", glyphRow[y]<0x8000 ? glyphRow[y] : glyphRow[y]-0x8000);
@@ -121,6 +123,9 @@
         for(x=0; x<=15; x++) {
           showGlyphCode(glyphRow[y]+x, &numericFont, 46+20*x, NUMERIC_FONT_HEIGHT*(y-first)+40, vmNormal, false, false, false);
         }
+      }
+      if(mem) {
+        setSystemFlag(FLAG_BOLD);
       }
 
       if(currentFntScr == 1) {
@@ -130,7 +135,9 @@
         showString("Numeric font. Press " STD_UP_ARROW ", " STD_DOWN_ARROW " or EXIT", &standardFont, 5, 220, vmNormal, false, false);
       }
 
+
       sprintf(tmpString, "%d/%d", currentFntScr, numScreensNumericFont + numScreensNumericFontBold + numScreensStandardFont + numScreensTinyFont);
+
       showString(tmpString, &standardFont, SCREEN_WIDTH - stringWidth(tmpString, &standardFont, false, true), 220, vmNormal, false, true);
     }
 
