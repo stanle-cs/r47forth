@@ -155,6 +155,7 @@ static void _doXToAlpha(uint16_t regist) {
   unsigned char char1, char2;
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
       longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
@@ -320,6 +321,7 @@ void fnXToAlphaOld(uint16_t unusedButMandatoryParameter) {   // deprecated versi
   unsigned char char1, char2;
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
       longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
@@ -476,6 +478,7 @@ void fnAlphaRR(uint16_t regist) {
   }
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
       longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
@@ -559,6 +562,7 @@ void fnAlphaRL(uint16_t regist) {
   }
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
       longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
@@ -640,6 +644,7 @@ void fnAlphaSR(uint16_t regist) {
   }
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
       longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
@@ -719,6 +724,7 @@ void fnAlphaSL(uint16_t regist) {
   }
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
       longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
@@ -829,6 +835,7 @@ void fn42AlphaRotate(uint16_t unusedButMandatoryParameter) {
   }
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
       longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
