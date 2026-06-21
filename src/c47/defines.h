@@ -759,14 +759,16 @@
 #define TI_All_user_prgms_deleted                121
 #define TI_All_user_menus_deleted                122
 #define TI_All_user_vars_deleted                 123
+#define TI_Data_file_loaded                      124
+#define TI_Data_file_saved                       125
 
 //TI & ERROR Messages
-#define TI_Not_on_simulator                      124
-#define TI_Only_on_simulator                     125
-#define ERROR_TI_UNDO_FAILED                     126
+#define TI_Not_on_simulator                      126
+#define TI_Only_on_simulator                     127
+#define ERROR_TI_UNDO_FAILED                     128
 
 
-#define NUMBER_OF_ERROR_CODES                    127
+#define NUMBER_OF_ERROR_CODES                    129
 #define SIZE_OF_EACH_ERROR_MESSAGE                48
 
 #define NUMBER_OF_BUG_SCREEN_MESSAGES             10
@@ -1861,6 +1863,8 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define TI_AMORT_INT                             139
 #define TI_AMORT_P1                              140
 #define TI_AMORT_P2                              141
+#define TI_DATA_LOADED                           142
+#define TI_DATA_SAVED                            143
 
 #define SET_TI_TRUE_FALSE(condition)               do { temporaryInformation = TI_FALSE + (condition); } while(0) // TI_TRUE must be TI_FALSE + 1
 

@@ -3445,6 +3445,16 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         displayTemporaryInformationOnX(prefix);
       }
 
+      else if(temporaryInformation == TI_DATA_SAVED && regist == REGISTER_X) {
+        sprintf(prefix, "%s", errorMessages[TI_Data_file_saved]);
+        displayTemporaryInformationOnX(prefix);
+      }
+
+      else if(temporaryInformation == TI_DATA_LOADED && regist == REGISTER_X) {
+        sprintf(prefix, "%s", errorMessages[TI_Data_file_loaded]);
+        displayTemporaryInformationOnX(prefix);
+      }
+
       else if(temporaryInformation == TI_UNDO_DISABLED && regist == REGISTER_X) {
         showString(errorMessages[ERROR_TI_UNDO_FAILED], &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
       }

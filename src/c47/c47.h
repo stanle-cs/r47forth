@@ -107,6 +107,7 @@
     #include "registers.h"
     #include "registerValueConversions.h"
     #include "saveRestoreCalcState.h"
+    #include "saveRestoreBackup.h"
     #include "saveRestorePrograms.h"
     #include "screen.h"
     #include "softmenus.h"
