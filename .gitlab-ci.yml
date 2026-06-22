@@ -14,6 +14,7 @@ variables:
 
 macOS:
   stage: build
+  image: macos-26-xcode-26
   script:
     - HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install ccache ninja python@3.9 gtk+3 gmp pulseaudio xlsxio
     - pip3 install --upgrade pip
