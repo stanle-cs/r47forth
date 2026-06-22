@@ -179,7 +179,7 @@
 
 
 
-  #define NUM_CONVERT_PAIRS  310
+  #define NUM_CONVERT_PAIRS  314
   extern const fInMim_t MimFunctionsType3Conv[NUM_CONVERT_PAIRS];
 
   bool_t  isStandardPair             (int16_t item1Nr, int16_t item2Nr);

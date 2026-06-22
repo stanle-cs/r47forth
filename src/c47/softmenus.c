@@ -534,7 +534,7 @@ TO_QSPI const int16_t menu_ConvM[]        = {
                                                     ITM_SLUGtoKG,             ITM_KGtoSLUG,             ITM_SLINCHtoKG,           ITM_KGtoSLINCH,           ITM_BLOBtoKG,             ITM_KGtoBLOB,
                                                     ITM_LTtoKG,               ITM_KGtoLT,               ITM_STtoKG,               ITM_KGtoST,               ITM_TONNEtoKG,            ITM_KGtoTONNE,
                                                     ITM_CARATtoG,             ITM_GtoCARAT,             ITM_JINtoKG,              ITM_KGtoJIN,              ITM_LIANGtoKG,            ITM_KGtoLIANG,
-                                                    ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL};
+                                                    ITM_UNSLUGtoKG,           ITM_KGtoUNSLUG,           ITM_UNSLINCHtoKG,         ITM_KGtoUNSLINCH,         ITM_UNSLINCHtoKG,         ITM_KGtoUNSLINCH};
 TO_QSPI const int16_t menu_Misc[]        = {
                                                     ITM_HMStoHR,              ITM_HRtoHMS,              ITM_NMtoLBFFT,            ITM_LBFFTtoNM,            ITM_FRtoDB,               ITM_DBtoFR,
                                                     ITM_YEARtoS,              ITM_StoYEAR,              ITM_NULL,                 ITM_NULL,                 ITM_PRtoDB,               ITM_DBtoPR,
