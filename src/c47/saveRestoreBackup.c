@@ -11,7 +11,7 @@
 
 // This is used for the backup.cfg simulator backup file
 // The variable backupVersion is used in the connection
-#define BACKUP_VERSION                     1014     // long press f/g
+#define BACKUP_VERSION                     1015     // FLAG_SIGZEROS
 /*
 1004     // Replace Norm_Key_00_VAR by the structure Norm_Key_00;
 1005     // 2024-09-06 Remove superfluous reporting when old cfg file items are not found in new files
@@ -353,7 +353,9 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     saveStateValue(&rbrMode,                        sizeof(rbrMode),                                             "rbrMode",                        "uint8");
     saveStateValue(&showContent,                    sizeof(showContent),                                         "showContent",                    "bool");
     saveStateValue(&numScreensNumericFont,          sizeof(numScreensNumericFont),                               "numScreensNumericFont",          "uint8");
+    saveStateValue(&numScreensNumericFontBold,      sizeof(numScreensNumericFontBold),                           "numScreensNumericFontBold",      "uint8");
     saveStateValue(&numLinesNumericFont,            sizeof(numLinesNumericFont),                                 "numLinesNumericFont",            "uint8");
+    saveStateValue(&numLinesNumericFontBold,        sizeof(numLinesNumericFontBold),                             "numLinesNumericFontBold",        "uint8");
     saveStateValue(&numScreensStandardFont,         sizeof(numScreensStandardFont),                              "numScreensStandardFont",         "uint8");
     saveStateValue(&numLinesStandardFont,           sizeof(numLinesStandardFont),                                "numLinesStandardFont",           "uint8");
     saveStateValue(&numScreensTinyFont,             sizeof(numScreensTinyFont),                                  "numScreensTinyFont",             "uint8");
@@ -929,7 +931,9 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     restoreStateValue(&rbrMode,                        sizeof(rbrMode),                                             "rbrMode",                        "uint8");
     restoreStateValue(&showContent,                    sizeof(showContent),                                         "showContent",                    "bool");
     restoreStateValue(&numScreensNumericFont,          sizeof(numScreensNumericFont),                               "numScreensNumericFont",          "uint8");
+    restoreStateValue(&numScreensNumericFontBold,      sizeof(numScreensNumericFontBold),                           "numScreensNumericFontBold",      "uint8");
     restoreStateValue(&numLinesNumericFont,            sizeof(numLinesNumericFont),                                 "numLinesNumericFont",            "uint8");
+    restoreStateValue(&numLinesNumericFontBold,        sizeof(numLinesNumericFontBold),                             "numLinesNumericFontBold",        "uint8");
     restoreStateValue(&numScreensStandardFont,         sizeof(numScreensStandardFont),                              "numScreensStandardFont",         "uint8");
     restoreStateValue(&numLinesStandardFont,           sizeof(numLinesStandardFont),                                "numLinesStandardFont",           "uint8");
     restoreStateValue(&numScreensTinyFont,             sizeof(numScreensTinyFont),                                  "numScreensTinyFont",             "uint8");
@@ -1147,7 +1151,9 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     if(backupVersion < 1014) {
       setLongPressFg(calcModel, -MNU_HOME);
     }
-
+    if(backupVersion < 1015) {
+      setSystemFlag(FLAG_SIGZEROS); //SIGZEROS is on per default
+    }
     // Ensure valid relations between FLAG_FRACT, FLAG_IRFRAC and FLAG_IRFRQ
     if(getSystemFlag(FLAG_FRACT)) {
       setSystemFlag(FLAG_FRACT);
