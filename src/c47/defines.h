@@ -2169,25 +2169,19 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 
 #if !defined(DMCP_BUILD)
   #define TO_QSPI
-  #define TO_QSPI_PTRS
 #else // DMCP_BUILD
   #define beep(frequence, length)            do { while(get_beep_volume() < 11) beep_volume_up(); start_buzzer_freq(frequence * 1000); sys_delay(length); stop_buzzer(); } while(0)
   #undef TO_QSPI
-  #undef TO_QSPI_PTRS
   #if defined(TWO_FILE_PGM)
     #define TO_QSPI                          __attribute__ ((section(".qspi_data")))
-    #define TO_QSPI_PTRS                     __attribute__ ((section(".qspi_ptrs")))
   #else // !TWO_FILE_PGM
     #define TO_QSPI
-    #define TO_QSPI_PTRS
   #endif // TWO_FILE_PGM
 #endif // !DMCP_BUILD
 
 #if defined(DMCP_BUILD) && defined(NEW_HW) // DMCP5
   #undef TO_QSPI
-  #undef TO_QSPI_PTRS
   #define TO_QSPI
-  #define TO_QSPI_PTRS
 #endif // DMCP_BUILD && NEW_HW
 
 //******************************

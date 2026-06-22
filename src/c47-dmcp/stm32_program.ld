@@ -43,7 +43,6 @@ SECTIONS {
     _qspi_start = .;   /* create a global symbol at qspi start */
     KEEP(*(.qspi_dm42))      /* Added by Didier: dm42 qspi section at the beginning of the qspi memory */
     KEEP(*(.qspi_data))      /* .qspi  sections */
-    KEEP(*(.qspi_ptrs))      /* .qspi  sections */
     KEEP(*(.rodata))         /* Added by Martin .rodata  sections (constants, strings, etc.) */
     KEEP(*(.rodata*str1.1))  /* Added by Martin .rodata  sections (constants, strings, etc.) */
 
