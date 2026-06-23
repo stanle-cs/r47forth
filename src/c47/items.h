@@ -2942,10 +2942,10 @@
 #define ITM_NPMtoKGFPM              2835
 #define ITM_KGFtoLBF                2836
 #define ITM_LBFtoKGF                2837
-#define ITM_2838                    2838
-#define ITM_2839                    2839
-#define ITM_2840                    2840
-#define ITM_2841                    2841
+#define ITM_UNSLUGtoKG              2838
+#define ITM_KGtoUNSLUG              2839
+#define ITM_UNSLINCHtoKG            2840
+#define ITM_KGtoUNSLINCH            2841
 #define ITM_2842                    2842
 #define ITM_2843                    2843 // CONV Spares
 
