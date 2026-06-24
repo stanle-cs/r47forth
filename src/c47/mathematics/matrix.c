@@ -1821,11 +1821,15 @@ static uint8_t createEigenVectorIf1x1(uint16_t Rows, uint16_t Columns, bool_t is
       return 255;
     }
     if(isComplex) {
+      // consume incoming X = [n+mi]
+      fnDrop(NOPARAM);
       linkToComplexMatrixRegister(REGISTER_X, &cmatrix);
       realToReal34(const_1, VARIABLE_REAL34_DATA(cmatrix.matrixElements));
       real34SetZero(VARIABLE_IMAG34_DATA(cmatrix.matrixElements));
     }
     else {
+      // consume incoming X = [n]
+      fnDrop(NOPARAM);
       linkToRealMatrixRegister(REGISTER_X,  &rmatrix);
       realToReal34(const_1, rmatrix.matrixElements);
     }
@@ -1867,9 +1871,10 @@ void fnEigenvectors(uint16_t unusedParamButMandatory) {
       ires.matrixElements = NULL;
       realEigenvectors(&x, &res, &ires);
       if(res.matrixElements) {
-        // Success: lift the stack and install the result.
-        setSystemFlag(FLAG_ASLIFT);
-        liftStack();
+        // Success: lift the stack (removed)
+        //        setSystemFlag(FLAG_ASLIFT);
+        //        liftStack();
+        // Install the result.
         if(ires.matrixElements) {
           complex34Matrix_t cres;
           if(complexMatrixInit(&cres, res.header.matrixRows, res.header.matrixColumns)) {
@@ -1929,9 +1934,10 @@ void fnEigenvectors(uint16_t unusedParamButMandatory) {
       default:
       complexEigenvectors(&x, &res);
       if(res.matrixElements) {
-        // Success: lift the stack and install the result.
-        setSystemFlag(FLAG_ASLIFT);
-        liftStack();
+        // Success: lift the stack (removed)
+        //        setSystemFlag(FLAG_ASLIFT);
+        //        liftStack();
+        // Install the result.
         convertComplex34MatrixToComplex34MatrixRegister(&res, REGISTER_X);
         complexMatrixFree(&res);
       }
