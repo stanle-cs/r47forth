@@ -2097,12 +2097,20 @@ bool_t complexMatrixInit(complex34Matrix_t *matrix, uint16_t rows, uint16_t cols
     matrix->header.matrixColumns = matrix->header.matrixRows = 0;
     matrix->matrixElements = NULL;
             #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-              sprintf(errorMessage, "Ram full");
+              sprintf(errorMessage, "Ram full 01");
               moreInfoOnError("In function complexMatrixInit:", errorMessage, NULL, NULL);
             #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return false;
   }
   matrix->matrixElements = allocC47Blocks(neededSize);
+  if(matrix->matrixElements == NULL) {
+    matrix->header.matrixColumns = matrix->header.matrixRows = 0;
+            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+              sprintf(errorMessage, "Ram full 02");
+              moreInfoOnError("In function complexMatrixInit:", errorMessage, NULL, NULL);
+            #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    return false;
+  }
 
   matrix->header.matrixColumns = cols;
   matrix->header.matrixRows = rows;
@@ -8227,9 +8235,9 @@ static void elementwiseRemaGetResult(bool_t *complex, real34Matrix_t *x, complex
       }
     }
     if(*complex) { // promotion may have failed with RAM_FULL; only write xc when it actually exists
-    realToReal34(&a, VARIABLE_REAL34_DATA(xc->matrixElements + i));
-    realToReal34(&b, VARIABLE_IMAG34_DATA(xc->matrixElements + i));
-  }
+      realToReal34(&a, VARIABLE_REAL34_DATA(xc->matrixElements + i));
+      realToReal34(&b, VARIABLE_IMAG34_DATA(xc->matrixElements + i));
+    }
   }
   else {
     realToReal34(&a, x->matrixElements + i);
