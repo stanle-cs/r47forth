@@ -8226,8 +8226,10 @@ static void elementwiseRemaGetResult(bool_t *complex, real34Matrix_t *x, complex
         *complex = true;
       }
     }
+    if(*complex) { // promotion may have failed with RAM_FULL; only write xc when it actually exists
     realToReal34(&a, VARIABLE_REAL34_DATA(xc->matrixElements + i));
     realToReal34(&b, VARIABLE_IMAG34_DATA(xc->matrixElements + i));
+  }
   }
   else {
     realToReal34(&a, x->matrixElements + i);
