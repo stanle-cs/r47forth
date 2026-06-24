@@ -146,6 +146,15 @@ static void compareMatrices(uint16_t regist, uint8_t mode, uint32_t typeX, uint3
   else {
     convertReal34MatrixRegisterToComplex34Matrix(regist, &r);
   }
+  if(lastErrorCode != 0) {
+    if(typeX == dtReal34Matrix) {
+      complexMatrixFree(&x);
+    }
+    if(typeR == dtReal34Matrix) {
+      complexMatrixFree(&r);
+    }
+    return;
+  }
   if(x.header.matrixRows == r.header.matrixRows && x.header.matrixColumns == r.header.matrixColumns) {
     temporaryInformation = TI_TRUE;
     for(int i = 0; i < x.header.matrixRows * x.header.matrixColumns; ++i) {
