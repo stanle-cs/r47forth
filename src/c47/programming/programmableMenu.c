@@ -10,8 +10,13 @@
 static void _getStringLabelOrVariableName(uint8_t *stringAddress) {
   uint8_t stringLength = *(uint8_t *)(stringAddress++);
   // The length byte comes from the program step on trust; clamp it to the bytes
-  // that remain in program memory so a corrupt step cannot read past it.
-  if(stringAddress < firstFreeProgramByte && stringLength > firstFreeProgramByte - stringAddress) {
+  // that remain in program memory so a corrupt step cannot read past it. When the
+  // name would start at or past firstFreeProgramByte there are no valid bytes
+  // left, so read nothing rather than skipping the clamp and reading unbounded.
+  if(stringAddress >= firstFreeProgramByte) {
+    stringLength = 0;
+  }
+  else if(stringLength > firstFreeProgramByte - stringAddress) {
     stringLength = (uint8_t)(firstFreeProgramByte - stringAddress);
   }
   xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
