@@ -1696,11 +1696,13 @@ void fnEigenvalues(uint16_t unusedParamButMandatory) {
             //provide additional matrix for the eigenvalue outputs in a vector
             complex34Matrix_t cresRow;
             extractDiagonalToRowComplex34Matrix(&cres, &cresRow);
-            setSystemFlag(FLAG_ASLIFT);
-            liftStack();
-            convertComplex34MatrixToComplex34MatrixRegister(&cresRow, REGISTER_X);
-            adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
-            complexMatrixFree(&cresRow);
+            if(cresRow.matrixElements) {
+              setSystemFlag(FLAG_ASLIFT);
+              liftStack();
+              convertComplex34MatrixToComplex34MatrixRegister(&cresRow, REGISTER_X);
+              adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
+              complexMatrixFree(&cresRow);
+            }
 
             realMatrixFree(&ires);
             complexMatrixFree(&cres);
@@ -1721,11 +1723,13 @@ void fnEigenvalues(uint16_t unusedParamButMandatory) {
           //provide additional matrix for the eigenvalue outputs in a vector
           real34Matrix_t resRow;
           extractDiagonalToRowReal34Matrix(&res, &resRow);
-          setSystemFlag(FLAG_ASLIFT);
-          liftStack();
-          convertReal34MatrixToReal34MatrixRegister(&resRow, REGISTER_X);
-          adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
-          realMatrixFree(&resRow);
+          if(resRow.matrixElements) {
+            setSystemFlag(FLAG_ASLIFT);
+            liftStack();
+            convertReal34MatrixToReal34MatrixRegister(&resRow, REGISTER_X);
+            adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
+            realMatrixFree(&resRow);
+          }
 
         }
         realMatrixFree(&res);
@@ -1765,21 +1769,26 @@ void fnEigenvalues(uint16_t unusedParamButMandatory) {
     else {
       setSystemFlag(FLAG_ASLIFT);
       liftStack();
+      res.matrixElements = NULL;
       complexEigenvalues(&x, &res);
-      convertComplex34MatrixToComplex34MatrixRegister(&res, REGISTER_X);
-      adjustResult(REGISTER_X, true, true, REGISTER_X, -1, -1);
-      doneAdjusting = true;
+      if(res.matrixElements) {
+        convertComplex34MatrixToComplex34MatrixRegister(&res, REGISTER_X);
+        adjustResult(REGISTER_X, true, true, REGISTER_X, -1, -1);
+        doneAdjusting = true;
 
-      //provide additional matrix for the eigenvalue outputs in a vector
-      complex34Matrix_t resRow;
-      extractDiagonalToRowComplex34Matrix(&res, &resRow);
-      setSystemFlag(FLAG_ASLIFT);
-      liftStack();
-      convertComplex34MatrixToComplex34MatrixRegister(&resRow, REGISTER_X);
-      adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
-      complexMatrixFree(&resRow);
+        //provide additional matrix for the eigenvalue outputs in a vector
+        complex34Matrix_t resRow;
+        extractDiagonalToRowComplex34Matrix(&res, &resRow);
+        if(resRow.matrixElements) {
+          setSystemFlag(FLAG_ASLIFT);
+          liftStack();
+          convertComplex34MatrixToComplex34MatrixRegister(&resRow, REGISTER_X);
+          adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
+          complexMatrixFree(&resRow);
+        }
 
-      complexMatrixFree(&res);
+        complexMatrixFree(&res);
+      }
     }
     goto Success;
   }
@@ -1887,6 +1896,7 @@ void fnEigenvectors(uint16_t unusedParamButMandatory) {
             complexMatrixFree(&cres);
           }
           else {
+            realMatrixFree(&ires);
             displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
             #if (EXTRA_INFO_ON_CALC_ERROR == 1)
               sprintf(errorMessage, "Ram full");
