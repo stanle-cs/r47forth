@@ -89,8 +89,14 @@ bool_t checkOpCodeOfStep(const uint8_t *step, uint16_t op) {
 // - a restored state file or imported program - can claim a name longer than the
 // bytes that remain. Clamp the claimed length to the span before
 // firstFreeProgramByte so a name read can never run past the program region.
+// When the name would start at or past firstFreeProgramByte there are no valid
+// bytes left (the scan can register a label in the gap up to the RAM end), so
+// return 0 rather than skipping the clamp and leaving the length unbounded.
 uint8_t boundProgramNameLength(const uint8_t *nameStart, uint8_t claimedLength) {
-  if(nameStart < firstFreeProgramByte && claimedLength > firstFreeProgramByte - nameStart) {
+  if(nameStart >= firstFreeProgramByte) {
+    return 0;
+  }
+  if(claimedLength > firstFreeProgramByte - nameStart) {
     return (uint8_t)(firstFreeProgramByte - nameStart);
   }
   return claimedLength;
@@ -115,7 +121,7 @@ void scanLabelsAndPrograms(void) {
       numberOfLabels++;
     }
     nextStep = findNextStep(step);
-    if(nextStep == NULL || nextStep <= step || nextStep > programRegionEnd) {
+    if(nextStep == NULL || nextStep <= step || nextStep >= programRegionEnd) {
       break; // malformed program: a step runs past program memory
     }
     if(isAtEndOfProgram(step)) { // END
@@ -148,7 +154,7 @@ void scanLabelsAndPrograms(void) {
   stepNumber = 1;
   while(!isAtEndOfPrograms(step)) { // .END.
     nextStep = findNextStep(step);
-    if(nextStep == NULL || nextStep <= step || nextStep > programRegionEnd) {
+    if(nextStep == NULL || nextStep <= step || nextStep >= programRegionEnd) {
       break; // malformed program: stop before walking past program memory
     }
     if(checkOpCodeOfStep(step, ITM_LBL)) { // LBL
