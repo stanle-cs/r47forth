@@ -27,7 +27,9 @@ if build_machine.system() == 'windows'
       '--disable-cxx'],
     cross_configure_options : [
       '--host=arm-none-eabi',
-      '--disable-assembly'],
+      '--disable-assembly',
+      '--disable-shared',
+      '--disable-fft'],
     env : env
   )
 else
