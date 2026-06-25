@@ -272,7 +272,7 @@
 
 #define LOW_GRAPH_ACC                                                                     //Lowered graph accuracy for EQN graphs
 //#undef LOW_GRAPH_ACC
-#define significantDigitsForEqnGraphs (significantDigits == 0 ? 12 : significantDigits)   //If <=6 is chosen by user, all four types are changed as follows: 34 to SDIGS; 39 to SDIGS+3; 51 to SDIGS+6; 75 to SDIGS+9
+#define significantDigitsForEqnGraphs (significantDigits == 0 ? 12 : significantDigits)   //If 6 is chosen by user, all four types are changes as follows: 34 to SDIGS; 39 to SDIGS+3; 51 to SDIGS+6; 75 to SDIGS+9
 #define significantDigitsForScreen    3                                                   //Only for screen coord scaling of the resulting graphic matrix: 34 to 4; 39 to 4+3; 51 to 4+3; 75 to 4+3
 
 
@@ -761,14 +761,16 @@
 #define TI_All_user_prgms_deleted                121
 #define TI_All_user_menus_deleted                122
 #define TI_All_user_vars_deleted                 123
+#define TI_Data_file_loaded                      124
+#define TI_Data_file_saved                       125
 
 //TI & ERROR Messages
-#define TI_Not_on_simulator                      124
-#define TI_Only_on_simulator                     125
-#define ERROR_TI_UNDO_FAILED                     126
+#define TI_Not_on_simulator                      126
+#define TI_Only_on_simulator                     127
+#define ERROR_TI_UNDO_FAILED                     128
 
 
-#define NUMBER_OF_ERROR_CODES                    127
+#define NUMBER_OF_ERROR_CODES                    129
 #define SIZE_OF_EACH_ERROR_MESSAGE                48
 
 #define NUMBER_OF_BUG_SCREEN_MESSAGES             10
@@ -920,8 +922,10 @@
 #define FLAG_3DXYZ                            0x8066
 #define FLAG_PRTEN                            0x8067
 #define FLAG_NORM                             0x8068 //41
+#define FLAG_BOLD                             0x8069 //42
+#define FLAG_SIGZEROS                         0x806A //43
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+41 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+43 // We can have a maximum of 128 system flags
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode
@@ -1863,6 +1867,8 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define TI_AMORT_INT                             139
 #define TI_AMORT_P1                              140
 #define TI_AMORT_P2                              141
+#define TI_DATA_LOADED                           142
+#define TI_DATA_SAVED                            143
 
 #define SET_TI_TRUE_FALSE(condition)               do { temporaryInformation = TI_FALSE + (condition); } while(0) // TI_TRUE must be TI_FALSE + 1
 
@@ -2014,7 +2020,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define SIGMA_YMAX   (statisticalSumsPointer + SUM_YMAX  ) // could be a real34. No, this must be old. SIGMA_** is a Real.
 
 #define MAX_NUMBER_OF_GLYPHS_IN_STRING           508 //WP=196: Change to 512 less 3, Also change error message 33, and AIM_BUFFER_LENGTH, and MAXLINES
-#define NUMBER_OF_GLYPH_ROWS                     242 //Used in the font browser application
+#define NUMBER_OF_GLYPH_ROWS                     259 //Used in the font browser application
 
 #define YY_OFF                                     2 // 2 is off and gets transferred to bit 15 (32768 + YY)
 #define YY_TRACKING                                1 // 1 gets transferred to bit 14 (16384 + YY)

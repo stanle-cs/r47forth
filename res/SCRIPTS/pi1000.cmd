@@ -1,0 +1,1 @@
+ ./t47 -e 'rad; nim 1; nim 0; enter; xasin; 3dup; xadd; dropx'
