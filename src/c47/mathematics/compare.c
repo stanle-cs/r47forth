@@ -49,6 +49,13 @@ end:
     if(!getRegisterAsAnyRealQuiet(regist1, &real1) || !getRegisterAsAnyRealQuiet(regist2, &real2)) {
       return false;
     }
+    // Time stored in seconds; normalize to hours to compare against a plain number similar to =? / <? / >? (see compareRegisters also fixes in same MR)
+    if(getRegisterDataType(regist1) == dtTime) {
+      realDivide(&real1, const_3600, &real1, &ctxtReal39);
+    }
+    if(getRegisterDataType(regist2) == dtTime) {
+      realDivide(&real2, const_3600, &real2, &ctxtReal39);
+    }
     realCompare(&real1, &real2, &rcmp, &ctxtReal39);
     *res = realIsZero(&rcmp) ? 0 : realIsPositive(&rcmp) ? 1 : -1;
   }
