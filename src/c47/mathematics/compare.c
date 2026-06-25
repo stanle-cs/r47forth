@@ -661,6 +661,13 @@ static void almostEqualScalar(uint16_t regist, const uint16_t test) {
       convertTimeRegisterToReal34Register(REGISTER_X, REGISTER_X);
       break;
 
+    case type_pair_u8(dtShortInteger, dtTime):
+      convertShortIntegerRegisterToReal34Register(REGISTER_X, REGISTER_X);
+      convertReal34RegisterToTimeRegister(REGISTER_X, REGISTER_X);
+      roundTime();
+      convertTimeRegisterToReal34Register(REGISTER_X, REGISTER_X);
+      break;
+
     case type_pair_u8(dtLongInteger, dtTime):
       convertLongIntegerRegisterToReal34Register(REGISTER_X, REGISTER_X);
       // Fall through
@@ -670,6 +677,7 @@ static void almostEqualScalar(uint16_t regist, const uint16_t test) {
       convertTimeRegisterToReal34Register(REGISTER_X, REGISTER_X);
       break;
 
+    case type_pair_u8(dtTime, dtShortInteger):
     case type_pair_u8(dtTime, dtLongInteger):
       roundTime();
       convertTimeRegisterToReal34Register(REGISTER_X, REGISTER_X);
@@ -719,6 +727,13 @@ static void almostEqualScalar(uint16_t regist, const uint16_t test) {
         convertTimeRegisterToReal34Register(REGISTER_X, REGISTER_X);
         break;
 
+      case type_pair_u8(dtTime, dtShortInteger):
+        convertShortIntegerRegisterToReal34Register(REGISTER_X, REGISTER_X);
+        convertReal34RegisterToTimeRegister(REGISTER_X, REGISTER_X);
+        roundTime();
+        convertTimeRegisterToReal34Register(REGISTER_X, REGISTER_X);
+        break;
+
       case type_pair_u8(dtTime, dtLongInteger):
         convertLongIntegerRegisterToReal34Register(REGISTER_X, REGISTER_X);
         // Fall through
@@ -728,6 +743,7 @@ static void almostEqualScalar(uint16_t regist, const uint16_t test) {
         convertTimeRegisterToReal34Register(REGISTER_X, REGISTER_X);
         break;
 
+      case type_pair_u8(dtShortInteger, dtTime):
       case type_pair_u8(dtLongInteger, dtTime):
         roundTime();
         convertTimeRegisterToReal34Register(REGISTER_X, REGISTER_X);
@@ -787,6 +803,8 @@ void fnXAlmostEqual(uint16_t regist) {
     case type_pair_u8(dtTime, dtReal34):
     case type_pair_u8(dtLongInteger, dtTime):
     case type_pair_u8(dtTime, dtLongInteger):
+    case type_pair_u8(dtShortInteger, dtTime):
+    case type_pair_u8(dtTime, dtShortInteger):
     case type_pair_u8(dtTime, dtTime):
       almostEqualScalar(regist, test);
       break;
