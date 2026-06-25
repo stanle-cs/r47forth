@@ -10,11 +10,12 @@ env.append('CFLAGS',
   '-std=gnu17',
   separator : ' ')
 
-env.set('CC', 'arm-none-eabi-gcc')
 mod = import('unstable-external_project')
 
 if build_machine.system() == 'windows'
-  prefix = '/mingw64'
+  env.set('CC', 'arm-none-eabi-gcc')
+  env.set('ac_cv_sizeof_mp_limb_t', '4')
+  prefix = '/ucrt64'
   p = mod.add_project(
     'configure',
     configure_options : [
@@ -26,9 +27,7 @@ if build_machine.system() == 'windows'
       '--disable-cxx'],
     cross_configure_options : [
       '--host=arm-none-eabi',
-      '--disable-assembly',
-      '--disable-shared',
-      '--disable-fft'],
+      '--disable-assembly'],
     env : env
   )
 else
@@ -50,7 +49,5 @@ else
   )
 endif
 
-
 arm_gmp_dep = p.dependency('gmp')
 meson.override_dependency('arm-gmp-6.2.1', arm_gmp_dep)
-
