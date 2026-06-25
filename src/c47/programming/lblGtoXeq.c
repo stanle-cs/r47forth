@@ -37,7 +37,7 @@ void fnGoto(uint16_t label) {
           sprintf(errorMessage, "there is no local label %02u in current program", label);
         }
         else {
-          sprintf(errorMessage, "there is no local label %c in current program", 'A' + (label - 100));
+          sprintf(errorMessage, "there is no local label %c in current program", (label <= LAST_UC_LOCAL_LABEL ? 'A' + (label - 100) : 'a' + (label - FIRST_LC_LOCAL_LABEL)));
         }
         moreInfoOnError("In function fnGoto:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -735,6 +735,10 @@ int16_t executeOneStep(uint8_t *step) {
     op |= *(step++);
   }
 
+  #if defined(IR_PRINTING)
+    printTrace(op, NOPARAM);
+  #endif //IR_PRINTING
+
     #if defined(PC_BUILD) && defined(DEBUG_EXECUTE)
       printf("   >>>  executeOneStep: §%i§%s§%s§\n", op, indexOfItems[(op)].itemCatalogName, indexOfItems[(op)].itemSoftmenuName);
     #endif // PC_BUILD
@@ -802,7 +806,29 @@ int16_t executeOneStep(uint8_t *step) {
         }
 
         case PTP_REM: {
-          // just ignore it
+          if(op == ITM_42STRING) {
+            if(*step++ == STRING_LABEL_VARIABLE) {
+              _getStringLabelOrVariableName(step);
+              fn42Alpha(NOPARAM);
+            }
+          }
+          else if(op == ITM_42APPEND) {
+            if(*step++ == STRING_LABEL_VARIABLE) {
+              if(getRegisterDataType(alphaRegister) != dtString) {
+                displayCalcErrorMessage(ERROR_NO_STRING_IN_ALPHA_REGISTER, ERR_REGISTER_LINE, REGISTER_T);
+                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+                  sprintf(errorMessage, "cannot use 42append on %s", getRegisterDataTypeName(alphaRegister, true, false));
+                  moreInfoOnError("In function executeOneStep:", errorMessage, NULL, NULL);
+                #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+                return 0;
+              }
+              _getStringLabelOrVariableName(step);
+              fn42Append(NOPARAM);
+            }
+          }
+          else {  // REM
+                  // just ignore it
+          }
           return 1;
         }
 
@@ -815,6 +841,11 @@ int16_t executeOneStep(uint8_t *step) {
           _executeOp(step, op, (indexOfItems[op].status & PTP_STATUS) >> 9);
         }
       }
+      #if defined(IR_PRINTING)
+      //  if(getSystemFlag(FLAG_TRACE) && (indexOfItems[op].status & RESULT_IN_X)) {  // Trace X if function returns result in X
+      //    printTraceX(LINE_FULL);
+      //  }
+      #endif //IR_PRINTING
       return temporaryInformation == TI_FALSE ? 2 : 1;
     }
   }

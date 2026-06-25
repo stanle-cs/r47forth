@@ -5,6 +5,7 @@
 /wp43
 /c47
 /r47
+/t47
 /testSuite
 /generate*
 /ttf2RasterFonts
@@ -109,11 +110,10 @@ massif.out.*
 bb.out
 bb.out.*
 
-
-
 ### vscode ###
 /.vscode
 *.code-workspace
+.cache
 
 ### Windows ###
 # Windows thumbnail cache files

@@ -208,7 +208,7 @@ void exportCStructure(const char *fontsPath, const char *ttfName) {
   for(cc=0; cc<numberOfGlyphs; cc++) {
     glyphIndex = FT_Get_Char_Index(face, charCodes[cc]);
     if(glyphIndex == 0) {
-      fprintf(stderr, "character code 0x%04x not undefined in %s\n", (unsigned int)charCodes[cc], ttfName);
+      fprintf(stderr, "character code 0x%04x not defined in %s\n", (unsigned int)charCodes[cc], ttfName);
     }
     else {
       if(cc != 0) {
@@ -282,7 +282,12 @@ void exportCStructure(const char *fontsPath, const char *ttfName) {
       //////////////////////
       // Render the glyph //
       //////////////////////
-      fprintf(cFile, "    // %s\n", glyphName);
+      if(strlen(glyphName) == 0) {
+        fprintf(cFile, "    //\n");
+      }
+      else{
+        fprintf(cFile, "    // %s\n", glyphName);
+      }
 
       fprintf(cFile, "    {.charCode=0x%04x, .colsBeforeGlyph=%2d, .colsGlyph=%2d, .colsAfterGlyph=%2d, .rowsAboveGlyph=%2d, .rowsGlyph=%2d, .rowsBelowGlyph=%2d, .rank1=%3d, .rank2=%3d,\n",
                       (unsigned int)(charCodes[cc]>=0x0080 ? charCodes[cc]|0x8000 : charCodes[cc]), colsBeforeGlyph, colsGlyph, colsAfterGlyph, rowsAboveGlyph, rowsGlyph, rowsBelowGlyph, rank1, rank2);
@@ -389,7 +394,8 @@ void processFiles(const char *fontsPath, const char *outputFile) {
   // Generate the C arrays //
   ///////////////////////////
   exportCStructure(fontsPath, "C47__NumericFont.ttf");
-  exportCStructure(fontsPath, "C47__StandardFont.ttf");    //JM ^^
+  exportCStructure(fontsPath, "C47__NumericFontBold.ttf");
+  exportCStructure(fontsPath, "C47__StandardFont.ttf");
   exportCStructure(fontsPath, "C47__TinyFont.ttf");
 
   fclose(cFile);

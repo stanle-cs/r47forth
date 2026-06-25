@@ -70,7 +70,7 @@ static void emitConstant(const char *name, const char *type, const void *vptr, i
 }
 
 void generateConstant(char *name, int32_t digits, bool_t exact, char *value) {
-  real12321_t real;
+  REAL_T_PTR(real, 12321);
   char temp[20];
 
   #if defined(DEBUG)
@@ -84,24 +84,22 @@ void generateConstant(char *name, int32_t digits, bool_t exact, char *value) {
   int32_t maxDigits = ((digits + 2) / 6) * 6 + 3; // Assuming DECDPUN = 3 and memory alignment is 4 bytes
   ctxtReal.digits = maxDigits;
 
-  memset(&real, 0, sizeof(real12321_t));
-  stringToReal(value, &real, &ctxtReal);
-  realReduce(&real, &real, &ctxtReal);
+  memset(real, 0, REAL_SIZE_IN_BYTES(12321));
+  stringToReal(value, real, &ctxtReal);
+  realReduce(real, real, &ctxtReal);
 
   if(exact) {
     strcpy(temp, "const_");
-    real.C47Bits = REAL_EXACT;
   }
   else {
     sprintf(temp, "const%" PRId32 "_", maxDigits);
-    real.C47Bits = REAL_NONE;
   }
 
   strcpy(whiteSpace, "                                              ");
   whiteSpace[25 - strlen(name) - strlen(temp)] = 0;
 
   int32_t lenInBytes = 10 + sizeof(decNumberUnit) * (maxDigits / DECDPUN);
-  emitConstant(name, "real_t", &real, lenInBytes, temp);
+  emitConstant(name, "real_t", real, lenInBytes, temp);
 
   cntRealt++;
 
@@ -280,7 +278,10 @@ void generateAllConstants(void) {
          generateConstant("ShortcwtToKg",   8, EXACT,  "+45.359237"                                                   ); // kg     = short cwt × 100 × 0.45359237 (short cwt = short hundredweight)
          generateConstant("CwtToKg",       10, EXACT,  "+50.80234544"                                                 ); // kg     = cwt × 112 × 0.45359237       (cwt = long hundredweight)
          generateConstant("ShorttonToKg",   8, EXACT,  "+907.18474"                                                   ); // kg     = short ton × 2000 × 0.45359237
-         generateConstant("TonToKg",       11, EXACT,  "+1016.0469088"                                                ); // kg     =2240 × 0.4535923 39, EXACT,7
+         generateConstant("LongtonToKg",   11, EXACT,  "+1016.0469088"                                                ); // kg     =2240 × 0.4535923 39, EXACT,7
+         generateConstant("KnotToMps",     39, APPROX, "+0.5144444444444444444444444444444444444444444444444444444"   ); // m/s    = knot × 1852 / 3600
+         generateConstant("SlugToKg",      39, APPROX, "+1.459390293720636482939632545931758530183727034120734908e+01"); // kg     = slug × 0.45359237 × 9.80665 / 0.3048
+         generateConstant("SlinchToKg",    39, APPROX, "+1.751268352464763779527559055118110236220472440944881890e+02"); // kg     = slinch × 12 × SlugToKg
 
          generateConstant("CalToJ",         5, EXACT,  "+4.1868"                                                      ); // joule  = calorie × 4.1868
          generateConstant("BtuToJ",        12, EXACT,  "+1055.05585262"                                               ); // joule  = Btu × 1055.05585262
@@ -354,15 +355,32 @@ void generateAllConstants(void) {
          generateConstant("459p67",         5, EXACT,  "+459.67"                                                      ); // defined Temperature : 459.67                                // 273.15 × 9/5 − 32 = 459.67 exactly
          generateConstant("kBeVK",         39, APPROX, "+8.617333262145177433663659334080639201233039577582555108e-05"); // defined Temperature : exact: 1380649/16021766340            // both kB (J/K) = 1.380649×10⁻²³ and 1 eV = 1.602176634×10⁻¹⁹ J are SI-defined exact values
 
+         generateConstant("InchToM",        4, EXACT,  "+2.54e-02"                                                    ); // m = inch × 0.0254
+         generateConstant("BlobInLbs",     39, APPROX, "+386.08858267716535433070866141732283464566929133858267716535"); // lbs per blob = 12 × g0 / ft (= SlinchToKg / LbToKg)         // uses g0, FtToM logic
+         generateConstant("InlbsToNm",     17, EXACT,  "+0.11298482902761670"                                         ); // N*m    = LbfToN × InchToMm / 1000                           // uses LbfToN, InchToMm; terminates
+         generateConstant("Lbsft2ToPa",    39, APPROX, "+47.88025898033584261612967670379785204014852474149392743"    ); // Pa     = LbfToN / Ft2ToM2                                   // uses LbfToN, Ft2ToM2
+         generateConstant("KsiToMpa",      39, APPROX, "+6.894757293168361336722673445346890693781387562775125550"    ); // MPa    = PsiToPa / 1000                                     // uses PsiToPa
+         generateConstant("Lbsin3ToTmm3",  39, APPROX, "+2.767990471020312119364396209107378844678949200418085876e-08"); // t/mm^3 = LbToKg / 0.0254^3 × 1e-12                          // uses LbToKg
+         generateConstant("Lbsin3ToKgm3",  39, APPROX, "+27679.90471020312119364396209107378844678949200418085876"    ); // kg/m^3 = LbToKg / 0.0254^3                                  // uses LbToKg
+         generateConstant("Kgm3ToBlobin3", 39, APPROX, "+9.357254687402177724891014159299230600834745152076364992e-08"); // blob/in^3 = 0.0254^3 / SlinchToKg                           // uses SlinchToKg
+         generateConstant("LbsftToKgm",    39, APPROX, "+1.488163943569553805774278215223097112860892388451443570"    ); // kg/m   = LbToKg / FtToM                                     // uses LbToKg, FtToM
+         generateConstant("In3ToMm3",       9, EXACT,  "+16387.064"                                                   ); // mm^3   = InchToMm^3                                         // uses InchToMm; terminates
+         generateConstant("In2ToMm2",       6, EXACT,  "+645.16"                                                      ); // mm^2   = InchToMm^2                                         // uses InchToMm; terminates
+         generateConstant("In4ToMm4",      11, EXACT,  "+416231.4256"                                                 ); // mm^4   = InchToMm^4                                         // uses InchToMm; terminates
+         generateConstant("In6ToMm6",      16, EXACT,  "+268535866.540096"                                            ); // mm^6   = InchToMm^6                                         // uses InchToMm; terminates
+
          generateConstant("_108",           3, EXACT,  "-108"                                                         );
          generateConstant("_4",             1, EXACT,  "-4"                                                           );
          generateConstant("_1",             1, EXACT,  "-1"                                                           );
          generateConstant("1oneE",         39, APPROX, "+3.678794411714423215955237701614608674458111310317678345e-01");
          generateConstant("1e_49",          1, EXACT,  "+1e-49"                                                       );
          generateConstant("1e_37",          1, EXACT,  "+1e-37"                                                       );
+         generateConstant("1e_34",          1, EXACT,  "+1e-34"                                                       );
+         generateConstant("1e_30",          1, EXACT,  "+1e-30"                                                       );
          generateConstant("1e_24",          1, EXACT,  "+1e-24"                                                       );
-         generateConstant("1e_6",           1, EXACT,  "+1e-06"                                                       );
          generateConstant("1e_16",          1, EXACT,  "+1e-16"                                                       );
+         generateConstant("1e_12",          1, EXACT,  "+1e-12"                                                       );
+         generateConstant("1e_6",           1, EXACT,  "+1e-06"                                                       );
          generateConstant("1on10",          1, EXACT,  "+1e-01"                                                       );
          generateConstant("1on4",           2, EXACT,  "+0.25"                                                        );
          generateConstant("1on3",          39, APPROX, "+3.333333333333333333333333333333333333333333333333333333e-01");
@@ -420,6 +438,7 @@ void generateAllConstants(void) {
          generateConstant("1e32",           1, EXACT,  "+1e+32"                                                       );
          generateConstant("2p31__1",       10, EXACT,  "+2147483647"                                                  );
          generateConstant("10p9__1",        9, EXACT,  "+999999999"                                                   );
+         generateConstant("1000000000",    10, EXACT,  "+1000000000"                                                  ); // 10^9 for kg/m^3 ↔ t/mm^3
          generateConstant("2p63",          19, EXACT,  "+9223372036854775808"                                         );
          generateConstant("2p64",          20, EXACT,  "+18446744073709551616"                                        );
          generateConstant("1e_10000",       1, EXACT,  "+1e-10000"                                                    );

@@ -32,7 +32,7 @@ typedef enum {
 void real34ToDisplayString             (const real34_t *real34, uint32_t tag, char *displayString, const font_t *font, int16_t maxWidth, int16_t displayHasNDigits, bool_t limitExponent, bool_t frontSpace, irfracOption_t limitIrfrac);
 void dateToDisplayString               (calcRegister_t regist, char *displayString);
 void complex34ToDisplayString          (const complex34_t *complex34, char *displayString, const font_t *font, int16_t maxWidth, int16_t displayHasNDigits, bool_t limitExponent, bool_t frontSpace, irfracOption_t limitIrfrac, const uint16_t tagAngle, const bool_t tagPolar);
-void angle34ToDisplayString2           (const real34_t *angle34, uint8_t mode, char *displayString, int16_t displayHasNDigits, bool_t limitExponent, bool_t frontSpace, irfracOption_t limitIrfrac);
+void angle34ToDisplayString2           (const real34_t *angle34, uint8_t modeIn, char *displayString, int16_t displayHasNDigits, bool_t limitExponent, bool_t frontSpace, irfracOption_t limitIrfrac);
 void _numerator                        (uint64_t numer, char *displayString, int16_t *endingZero);
 void _denominator                      (uint64_t denom, char *displayString, int16_t *endingZero);
 void fractionToDisplayString           (calcRegister_t regist, char *displayString);
@@ -43,6 +43,7 @@ void realToSci(real_t* num, char* dispString);
 void shortIntegerToDisplayString       (calcRegister_t regist, char *displayString, bool_t determineFont, uint8_t baseOverride);
 #define toRemoveTrailingRadix true
 void longIntegerRegisterToRealDisplayString     (calcRegister_t regist, char *displayString, int32_t strLg, int16_t maxWidth, int32_t minimum, bool_t removeTrailingRadix);
+void realSCIToDisplayString            (const real_t *work, char *displayString, int16_t digitsToDisplay, bool_t frontSpace, uint8_t *bcd, int16_t maxDigits);
 void longIntegerToDisplayString        (longInteger_t lgInt, char *displayString, int32_t strLg, int16_t max_Width, int16_t maxExp, bool_t allowLARGELI);     //JM mod max_Width;   //JM added last parameter: Allow LARGELI
 void longIntegerToHexDisplayString     (calcRegister_t regist, char *displayString, bool_t determineFont, uint8_t baseOverride, int32_t width);
 void longIntegerRegisterToDisplayString(calcRegister_t regist, char *displayString, int32_t strLg, int16_t maxWidth, int16_t maxExp, bool_t allowLARGELI);    //JM added last parameter: Allow LARGELI

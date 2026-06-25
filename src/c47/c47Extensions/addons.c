@@ -301,7 +301,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
       uint8_t grpGroupingRightOld;
     #endif
     #if !defined(SAVE_SPACE_DM42_23_EDIT2)
-      char    varOrLblName[8];
+      char    varOrLblName[32];
     #endif
 
     if(tam.mode != 0) {
@@ -670,7 +670,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
         //printf("**[DL]** fnEdit cmPem func %d opParam %d opParam2 %d decodedLiteralType %d\n", func, opParam, opParam2, decodedLiteralType);
         //fflush(stdout);
 
-        if((func == ITM_LITERAL || func == ITM_REM)) {
+        if((func == ITM_LITERAL) || (func == ITM_REM)) {
           memset(aimBuffer, 0, AIM_BUFFER_LENGTH);
 
           if(opParam == STRING_LABEL_VARIABLE) {
@@ -996,26 +996,50 @@ void fnEdit (uint16_t unusedParamButMandatory) {
               //scrollPemBackwards();
               if(opParam == STRING_LABEL_VARIABLE) {      // Variable name : Label or  edit name string
                 tamProcessInput(ITM_alpha);
-                varOrLblName[6] = 0;  // Ensure name is 6 characters maximum
+                if(stringGlyphLength(varOrLblName) == 7) {
+                  varOrLblName[stringLastGlyph(varOrLblName)] = 0;  // Ensure name is 6 characters maximum
+                }
                 strcpy(aimBuffer, varOrLblName);
-                alphaCursor = strlen(varOrLblName);
+                alphaCursor = stringGlyphLength(varOrLblName);
                 tamProcessInput(ITM_NOP);                 // to insert the resulting string in program
               }
 
               break;
             }
 
+            case PARAM_REM: {
+              memset(aimBuffer, 0, AIM_BUFFER_LENGTH);
+              deleteStepsFromTo(currentStep, findNextStep(currentStep));
+              if(!pemCursorIsZerothStep) {
+                fnBst(NOPARAM);
+              }
+              tamEnterMode(func);
+              if(stringGlyphLength(varOrLblName) == (func == ITM_42STRING ? 15 : 14)) {
+                varOrLblName[stringLastGlyph(varOrLblName)] = 0;  // Ensure name is 14 (42STRING) or 13 (42APPEND) characters maximum
+              }
+              strcpy(aimBuffer, varOrLblName);
+              alphaCursor = stringGlyphLength(varOrLblName);
+              tamProcessInput(ITM_NOP);                 // to insert the resulting string in program
+              break;
+            }
 
             case PARAM_KEYG_KEYX: {                            // Key Goto or Key eXecute
-              func = (opParam2 == ITM_GTO ? ITM_KEYG : ITM_KEYX);
+              if(func == ITM_KEY) {
+                func = (opParam2 == ITM_GTO ? ITM_KEYG : ITM_KEYX);
+              }
+              else {  // ITM_42KEY
+                func = (opParam2 == ITM_GTO ? ITM_42KEYG : ITM_42KEYX);
+              }
               deleteStepsFromTo(currentStep, findNextStep(currentStep));
+              if(!pemCursorIsZerothStep) {
+                fnBst(NOPARAM);
+              }
               runFunction(func);
               tamProcessInput(ITM_0 + opParam/10);
               tamProcessInput(ITM_0 + (opParam % 10));
               if((opParam3 == INDIRECT_REGISTER) || (opParam3 == INDIRECT_VARIABLE)) {
                 tamProcessInput(ITM_INDIRECTION);
               }
-              scrollPemBackwards();
               break;
             }
 
@@ -1108,10 +1132,18 @@ int C47PopKeyNoBuffer(bool_t displayWaitForRelease) {
     int tmpz = -1;
     while(anyKeyWaiting()) {
       tmpz = key_pop();
-      if(tmpz > 0)   tmpf = tmpz;                   //use the last key in the buffer
-      if(tmpz == 44) signalToDoScreenDump = true;   //if any key in the buffer is 44
-      if(tmpz == 33) signalToDoEXIT = true;
-      if(tmpz == 36) signalToDoRS = true;
+      if(tmpz > 0) {
+        tmpf = tmpz;                   //use the last key in the buffer
+      }
+      if(tmpz == 44) {
+        signalToDoScreenDump = true;   //if any key in the buffer is 44
+      }
+      if(tmpz == 33) {
+        signalToDoEXIT = true;
+      }
+      if(tmpz == 36) {
+        signalToDoRS = true;
+      }
     }
 
     if(signalToDoScreenDump) {
@@ -1168,17 +1200,17 @@ void fnFrom_ymd(uint16_t unusedButMandatoryParameter){
 //=-=-=-=-=-=-==-=-
 //input is time or DMS
 //output is sexagesima coded decimal ddd.mmsssssss in the form of a normal decimal
-void fnFrom_ms(uint16_t unusedButMandatoryParameter){
+void fnFrom_msRegister(calcRegister_t regist){
     char tmpString100[100];
     char tmpString100_OUT[100];
     tmpString100[0] = 0;
     tmpString100_OUT[0] = 0;
 
-    if(getRegisterDataType(REGISTER_X) == dtTime) {
+    if(getRegisterDataType(regist) == dtTime) {
       temporaryInformation = TI_FROM_MS_TIME;
     }
-    else if(getRegisterDataType(REGISTER_X) == dtReal34 && getRegisterAngularMode(REGISTER_X) != amNone) {
-      if(getRegisterAngularMode(REGISTER_X) != amDMS) {
+    else if(getRegisterDataType(regist) == dtReal34 && getRegisterAngularMode(regist) != amNone) {
+      if(getRegisterAngularMode(regist) != amDMS) {
         fnAngularModeJM(amDMS);
       }
       temporaryInformation = TI_FROM_MS_DEG;
@@ -1189,10 +1221,10 @@ void fnFrom_ms(uint16_t unusedButMandatoryParameter){
 
     if(temporaryInformation != TI_NO_INFO) {
       if(temporaryInformation == TI_FROM_MS_TIME) {
-        copyRegisterToClipboardString2(REGISTER_X, tmpString100);
+        timeToDisplayString(regist, tmpString100, true);
       }
       if(temporaryInformation == TI_FROM_MS_DEG) {
-        real34ToDisplayString(REGISTER_REAL34_DATA(REGISTER_X), getRegisterAngularMode(REGISTER_X), tmpString100, &standardFont, SCREEN_WIDTH, NUMBER_OF_DISPLAY_DIGITS, !LIMITEXP, FRONTSPACE, NOIRFRAC);
+        real34ToDisplayString(REGISTER_REAL34_DATA(regist), getRegisterAngularMode(regist), tmpString100, &standardFont, SCREEN_WIDTH, NUMBER_OF_DISPLAY_DIGITS, !LIMITEXP, FRONTSPACE, NOIRFRAC);
         int16_t tmp_i = 0;
         while(tmpString100[tmp_i] != 0 && tmpString100[tmp_i+1] != 0) { //pre-condition the dd.mmssss to replaxce spaces with zeroes
           //printf("%c %d", tmpString100[tmp_i], tmpString100[tmp_i]);
@@ -1256,8 +1288,8 @@ void fnFrom_ms(uint16_t unusedButMandatoryParameter){
       }
 
       if(tmpString100_OUT[0] != 0) {
-        reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-        stringToReal34(tmpString100_OUT, REGISTER_REAL34_DATA(REGISTER_X));
+        reallocateRegister(regist, dtReal34, 0, amNone);
+        stringToReal34(tmpString100_OUT, REGISTER_REAL34_DATA(regist));
         #if (EXTRA_INFO_ON_CALC_ERROR == 1)
           printf("\n ------- 003 >>>%s<<<\n", tmpString100_OUT);
         #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -1265,6 +1297,11 @@ void fnFrom_ms(uint16_t unusedButMandatoryParameter){
     }
 
     //stringToReal(tmpString100, &value, &ctxtReal39);
+}
+
+
+void fnFrom_ms(uint16_t unusedButMandatoryParameter){
+  fnFrom_msRegister(REGISTER_X);
 }
 
 
@@ -1556,6 +1593,7 @@ void fn_cnst_op_A(uint16_t option) {
 
 
 
+#if defined(OPTION_VECTOR) || defined(OPTION_ELEC)
 TO_QSPI static const struct {
     unsigned rows  : 2;
     unsigned cols  : 2;
@@ -1566,16 +1604,16 @@ TO_QSPI static const struct {
     unsigned ydef  : 2;
     unsigned zdef  : 2;
 } vecCreate[] = {
-//  type     r  c   x    y    z   xdef ydef zdef
-    [ 1] = { 3, 1,  0 ,  1,   2,   2,   2,   2 },     // 3x1 vector created from xyz FOR ELEC menu //changed sequence to zyx
-    [ 2] = { 1, 3,  0 ,  1,   2,   2,   2,   2 },     // 1x3 vector created from zyx FOR MATX menu
-    [ 3] = { 1, 3,  0 ,  1,   2,   0,   0,   1 },     // 1x3 unity vectors 100
-    [ 4] = { 1, 3,  0 ,  1,   2,   0,   1,   0 },     // 1x3 unity vectors 010
-    [ 5] = { 1, 3,  0 ,  1,   2,   1,   0,   0 },     // 1x3 unity vectors 001
 
-    [ 6] = { 1, 2,  0 ,  1,   3,   2,   2,   3 },     // 1x2 vector created from yx
-    [ 7] = { 1, 2,  0 ,  1,   3,   0,   1,   3 },     // 1x2 unity vectors 10
-    [ 8] = { 1, 2,  0 ,  1,   3,   1,   0,   3 }      // 1x2 unity vectors 01
+//            type          r  c   x   y   z     xdef      ydef      zdef
+/* 1 */ [ VECT_CR_zxy ] = { 1, 3,  0,  1,  2,   V_COPY,   V_COPY,   V_COPY },     // 1x3 vector created from zyx FOR MATX menu, when converting internally, xy swapped, PHYS STYLE
+/* 2 */ [ VECT_CR_zyx ] = { 1, 3,  0,  1,  2,   V_COPY,   V_COPY,   V_COPY },     // 1x3 vector created from zyx FOR MATX menu
+/* 3 */ [ VECT_CR_100 ] = { 1, 3,  0,  1,  2,   V_D0  ,   V_D0  ,   V_D1   },     // V_DEF1x3 unity vectors 100
+/* 4 */ [ VECT_CR_010 ] = { 1, 3,  0,  1,  2,   V_D0  ,   V_D1  ,   V_D0   },     // V_DEF1x3 unity vectors 010
+/* 5 */ [ VECT_CR_001 ] = { 1, 3,  0,  1,  2,   V_D1  ,   V_D0  ,   V_D0   },     // V_DEF1x3 unity vectors 001
+/* 6 */ [ VECT_CR_yx  ] = { 1, 2,  0,  1,  3,   V_COPY,   V_COPY,   V_NANA },     // 1x2 vector created from yx
+/* 7 */ [ VECT_CR_10  ] = { 1, 2,  0,  1,  3,   V_D0  ,   V_D1  ,   V_NANA },     // V_DEF1x2 unity vectors 10
+/* 8 */ [ VECT_CR_01  ] = { 1, 2,  0,  1,  3,   V_D1  ,   V_D0  ,   V_NANA }      // V_DEF1x2 unity vectors 01
 
     // r c is the size of the matrix to be created, eg. 1x3 or 2x1 etc.
     // x y z are the matrix element number mapping to the register name, eg. x=2 means x register goes to internal matrix element 2; 3 means not copied
@@ -1586,38 +1624,152 @@ TO_QSPI static const struct {
   };
 
 
-static bool_t processDefaultVector(calcRegister_t regist, uint8_t p, uint8_t d, struct cmplxPair *x, bool_t *complexCoefs) {
-  if(d == 2) {
-    if(!getRegisterAsComplexOrReal(regist, &x[p].r, &x[p].i, complexCoefs)) {
-      return false;
+  static bool_t processDefaultVector(calcRegister_t regist, uint8_t p, uint8_t d, struct cmplxPair *x, bool_t *complexCoefs) {
+    if(d == V_COPY) {
+      if(!getRegisterAsComplexOrReal(regist, &x[p].r, &x[p].i, complexCoefs)) {
+        return false;
+      }
     }
+    else if(d <= V_D1) {
+      realCopy(d == V_D1 ? const_1 : const_0, &x[p].r);
+    }
+    return true;
   }
-  else if(d < 2) {
-    realCopy(d == 1 ? const_1 : const_0, &x[p].r);
+#endif //OPTION_VECTOR || OPTION_ELEC
+
+
+void fnExchangeStkToMx(uint16_t opType) {
+#if defined(OPTION_VECTOR)
+  switch(opType) {
+    case ITM_stkexV2:{
+      if(isRegisterMatrix2dVector(REGISTER_X)) {
+        fnConvertMxToStk(indexOfItems[ITM_V2toSTK].param);
+      }
+      else if((getRegisterDataType(REGISTER_X) == dtReal34 || getRegisterDataType(REGISTER_X) == dtLongInteger) && (getRegisterDataType(REGISTER_Y) == dtReal34 || getRegisterDataType(REGISTER_Y) == dtLongInteger)) {
+        fnConvertStkToMx(indexOfItems[ITM_STKtoV2].param);
+      }
+      else {
+        #if !defined(TESTSUITE_BUILD)
+          displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+            sprintf(errorMessage, "invalid data type %s and %s", getRegisterDataTypeName(REGISTER_Y, true, false), getRegisterDataTypeName(REGISTER_X, true, false));
+            moreInfoOnError("In function fnExchangeStkToMx:", errorMessage, NULL, NULL);
+          #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+        #endif // !TESTSUITE_BUILD
+      }
+      break;
+    }
+
+    case ITM_stkexV3:{
+      if(isRegisterMatrix3dVector(REGISTER_X)) {
+        fnConvertMxToStk(VECT_CR_AUT); // indexOfItems[ITM_V3toSTK].param);
+      }
+      else if((getRegisterDataType(REGISTER_X) == dtReal34 || getRegisterDataType(REGISTER_X) == dtLongInteger) &&
+              (getRegisterDataType(REGISTER_Y) == dtReal34 || getRegisterDataType(REGISTER_Y) == dtLongInteger) &&
+              (getRegisterDataType(REGISTER_Z) == dtReal34 || getRegisterDataType(REGISTER_Z) == dtLongInteger)) {
+        fnConvertStkToMx(VECT_CR_AUT); // indexOfItems[ITM_STKtoV3].param);
+      }
+      else {
+        #if !defined(TESTSUITE_BUILD)
+          displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+            sprintf(errorMessage, "invalid data type %s and %s", getRegisterDataTypeName(REGISTER_Y, true, false), getRegisterDataTypeName(REGISTER_X, true, false));
+            moreInfoOnError("In function fnExchangeStkToMx:", errorMessage, NULL, NULL);
+          #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+        #endif // !TESTSUITE_BUILD
+      }
+      break;
+    }
+    default:break;
   }
-  return true;
+#endif //OPTION_VECTOR
 }
 
 
-void fnConvertStkToMx(uint16_t constVector) {
+void fnConvertStkToMx(uint16_t constVector1) {
+#if defined(OPTION_VECTOR) || defined(OPTION_ELEC)
   bool_t complexCoefs = false;
   struct cmplxPair x[3];
   real34Matrix_t matrix;
   complex34Matrix_t matrixC;
   uint16_t elements;
 
+  if(constVector1 == VECT_CR_zyx) {
+    clearSystemFlag(FLAG_3DPHYS);
+  }
+  else if(constVector1 == VECT_CR_zxy) {
+    setSystemFlag(FLAG_3DPHYS);
+  }
+
+  uint16_t constVector = constVector1;
+  if(constVector == VECT_CR_AUT) {
+    constVector = VECT_CR_zyx;
+    if(getSystemFlag(FLAG_3DPHYS) && registerIsAngle(REGISTER_X) && registerIsAngle(REGISTER_Y)) {
+      constVector = VECT_CR_zxy;
+    }
+  }
+
+  if(constVector1 == M_CR_zyx) {
+    constVector = VECT_CR_zyx;
+  }
+
   elements = vecCreate[constVector].rows * vecCreate[constVector].cols;
 
-  if(!processDefaultVector(REGISTER_X, vecCreate[constVector].x, vecCreate[constVector].xdef, x, &complexCoefs)) return;
-  if(!processDefaultVector(REGISTER_Y, vecCreate[constVector].y, vecCreate[constVector].ydef, x, &complexCoefs)) return;
-  if(max(vecCreate[constVector].z, vecCreate[constVector].zdef) != 3 &&
-     !processDefaultVector(REGISTER_Z, vecCreate[constVector].z, vecCreate[constVector].zdef, x, &complexCoefs)) return;
+  if(!processDefaultVector(REGISTER_X, vecCreate[constVector].x, vecCreate[constVector].xdef, x, &complexCoefs)) return;   //if not successful register input, return
+  if(!processDefaultVector(REGISTER_Y, vecCreate[constVector].y, vecCreate[constVector].ydef, x, &complexCoefs)) return;   //if not successful register input, return
+  if(max(vecCreate[constVector].z, vecCreate[constVector].zdef) != V_NANA &&
+     !processDefaultVector(REGISTER_Z, vecCreate[constVector].z, vecCreate[constVector].zdef, x, &complexCoefs)) return;   //if not successful register input, return
 
   if(!saveLastX()) {
     return;
   }
 
-  if(vecCreate[constVector].xdef < 2 || vecCreate[constVector].ydef < 2 || vecCreate[constVector].zdef < 2) {
+
+  uint32_t ang2Dx, ang2Dy, ang3Dx, ang3Dy, ang3Dz;
+  bool_t validPolarInput, valid2DRInput, validSPHInput, validCYLInput, valid3DRInput;
+
+  if(!is_2D3D_Register_Ready(&ang2Dx, &ang2Dy, &ang3Dx, &ang3Dy, &ang3Dz, &validPolarInput, &valid2DRInput, &validSPHInput, &validCYLInput, &valid3DRInput, constVector)) {
+    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_POLAR_RECT, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "No valid coordinates for 2D/3D Rect/Polar/Spherical/Cylindrical");
+      moreInfoOnError("In function fnConvertStkToMx:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    return;
+  }
+  else {
+    if(constVector1 == M_CR_zyx && !valid3DRInput) {
+      displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        sprintf(errorMessage, "No angles allowed for ELEC M");
+        moreInfoOnError("In function fnConvertStkToMx:", errorMessage, NULL, NULL);
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      return;
+    }
+  }
+
+
+  //only allow VECT_CR_yx to allow an angle to be processed here, and immediately convert to 2D vector
+  if(validPolarInput) {
+    convertAngleFromTo(&x[0].r, ang2Dx, amRadian, &ctxtReal39);
+    if(realCompareLessThan(&x[1].r, const_0)) {
+      realSetPositiveSign(&x[1].r);
+      realAdd(&x[0].r, const39_pi, &x[0].r, &ctxtReal39);
+    }
+  }
+
+
+  //only allow VECT_CR_zyx to allow an angle to be processed here, and immediately convert to 3D vector
+  if(validSPHInput) {
+    convertAngleFromTo(&x[vecCreate[constVector].x].r, ang3Dx, amRadian, &ctxtReal39);
+    convertAngleFromTo(&x[vecCreate[constVector].y].r, ang3Dy, amRadian, &ctxtReal39);
+  }
+  else if(validCYLInput) {
+    convertAngleFromTo(&x[vecCreate[constVector].y].r, ang3Dy, amRadian, &ctxtReal39);
+  }
+
+
+
+  if(vecCreate[constVector].xdef <= V_D1 || vecCreate[constVector].ydef <= V_D1 || vecCreate[constVector].zdef <= V_D1) {  // means is either default 0 or 1
     setSystemFlag(FLAG_ASLIFT);
     liftStack();
   }
@@ -1645,68 +1797,241 @@ void fnConvertStkToMx(uint16_t constVector) {
   }
 
 
+  bool_t matrixRegisterLoaded = false;
   if(complexCoefs) {
     linkToComplexMatrixRegister(REGISTER_X,  &matrixC);
   }
   else {
     linkToRealMatrixRegister(REGISTER_X,  &matrix);
+
+    if(ang2Dx != amNone && ang2Dy == amNone && constVector == VECT_CR_yx) {
+      convertPOLto2D(&x[1].r, &x[0].r, amRadian, &matrix, &ctxtReal39);
+      matrixRegisterLoaded = true;
+    }
+    else if(ang3Dx != amNone && ang3Dy != amNone && (constVector == VECT_CR_zyx || constVector == VECT_CR_zxy)) {
+      if(constVector == VECT_CR_zxy) {
+        convertSPHto3D(&x[2].r, &x[0].r, &x[1].r, amRadian, &matrix, &ctxtReal39);
+      }
+      else {
+        convertSPHto3D(&x[2].r, &x[1].r, &x[0].r, amRadian, &matrix, &ctxtReal39);
+      }
+      matrixRegisterLoaded = true;
+    }
+    else if(ang3Dx == amNone && ang3Dy != amNone && constVector == VECT_CR_zyx) {
+      convertCYLto3D(&x[2].r, &x[1].r, &x[0].r, amRadian, &matrix, &ctxtReal39);
+      matrixRegisterLoaded = true;
+    }
   }
 
 
-  for(int i = 0; i < elements; i++) {
-    if(complexCoefs) {
-      realToReal34(&x[elements-1-i].r, VARIABLE_REAL34_DATA(&matrixC.matrixElements[i]));
-      realToReal34(&x[elements-1-i].i, VARIABLE_IMAG34_DATA(&matrixC.matrixElements[i]));
-    }
-    else {
-      realToReal34(&x[elements-1-i].r, &matrix.matrixElements[i]);
+  if(!matrixRegisterLoaded) {
+    for(int i = 0; i < elements; i++) {
+      if(complexCoefs) {
+        realToReal34(&x[elements-1-i].r, VARIABLE_REAL34_DATA(&matrixC.matrixElements[i]));
+        realToReal34(&x[elements-1-i].i, VARIABLE_IMAG34_DATA(&matrixC.matrixElements[i]));
+      }
+      else {
+        realToReal34(&x[elements-1-i].r, &matrix.matrixElements[i]);
+      }
     }
   }
 
   adjustResult(REGISTER_X, false, true, REGISTER_X, -1, -1);
 
+  if(validPolarInput) {
+    setVectorRegisterAngularMode(REGISTER_X, ang2Dx);
+    setVectorRegisterPolarMode(REGISTER_X, amPolar);
+    temporaryInformation = TI_VECTOR;
+  }
+  else if(validSPHInput) {
+    setVectorRegisterAngularMode(REGISTER_X, ang3Dx);
+    setVectorRegisterPolarMode(REGISTER_X, amPolarSPH);
+    temporaryInformation = TI_VECTOR;
+  }
+  else if(validCYLInput) {
+    setVectorRegisterAngularMode(REGISTER_X, ang3Dy);
+    setVectorRegisterPolarMode(REGISTER_X, amPolarCYL);
+    temporaryInformation = TI_VECTOR;
+  }
+#endif //OPTION_VECTOR || OPTION_ELEC
 }
 
-void fnConvertMxToStk(uint16_t param) {
+
+void fnConvertMxToStk(uint16_t param1) { //first try the vector type in lower nibble, then try the vector type in higher nibble unless high nibble = 0
+#if defined(OPTION_VECTOR) || defined(OPTION_ELEC)
   real34Matrix_t matrix;
   complex34Matrix_t matrixC;
+  uint16_t Xrows, Xcols;
 
   if(!(getRegisterDataType(REGISTER_X) == dtReal34Matrix || getRegisterDataType(REGISTER_X) == dtComplex34Matrix)) {
+    #if !defined(TESTSUITE_BUILD)
+      displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        sprintf(errorMessage, "invalid data type %s and %s", getRegisterDataTypeName(REGISTER_Y, true, false), getRegisterDataTypeName(REGISTER_X, true, false));
+        moreInfoOnError("In function fnConvertMxToStk:", errorMessage, NULL, NULL);
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    #endif // !TESTSUITE_BUILD
     return;
   }
+
+
+  //default is rectangular
+  int ang2Dx = amNone;
+  int ang3Dx = amNone;
+  int ang3Dy = amNone;
+
+  //now set the polar mode
+  if(isRegisterMatrix2dVector(REGISTER_X) && (getVectorRegisterPolarMode(REGISTER_X) == amPolar)) {
+    ang2Dx = getRegisterAngularMode(REGISTER_X) & amAngleMask;
+  }
+  else if(isRegisterMatrix3dVector(REGISTER_X) && (getVectorRegisterPolarMode(REGISTER_X) == amPolarSPH)) {
+    ang3Dx = getRegisterAngularMode(REGISTER_X) & amAngleMask;
+    ang3Dy = ang3Dx;
+  }
+  else if(isRegisterMatrix3dVector(REGISTER_X) && (getVectorRegisterPolarMode(REGISTER_X) == amPolarCYL)) {
+    ang3Dy = getRegisterAngularMode(REGISTER_X) & amAngleMask;
+  }
+
+  copySourceRegisterToDestRegister(REGISTER_X, TEMP_REGISTER_1);
+  if(getRegisterDataType(TEMP_REGISTER_1) == dtComplex34Matrix) {
+    linkToComplexMatrixRegister(TEMP_REGISTER_1, &matrixC);
+    Xrows = matrixC.header.matrixRows;
+    Xcols = matrixC.header.matrixColumns;
+  } else {
+    linkToRealMatrixRegister(TEMP_REGISTER_1, &matrix);
+    Xrows = matrix.header.matrixRows;
+    Xcols = matrix.header.matrixColumns;
+  }
+
+
+  if(param1 == VECT_CR_zyx) {
+    clearSystemFlag(FLAG_3DPHYS);
+  }
+  else if(param1 == VECT_CR_zxy) {
+    setSystemFlag(FLAG_3DPHYS);
+  }
+
+  uint16_t param = param1;
+  if(param == VECT_CR_AUT) {
+    param = VECT_CR_zyx;
+    if(getSystemFlag(FLAG_3DPHYS) && isRegisterMatrix3dVector(REGISTER_X) && (getVectorRegisterPolarMode(REGISTER_X) == amPolarSPH)) {
+      param = VECT_CR_zxy;
+    }
+  }
+
+  uint16_t constVector = param & 0x0F; //vector type in lower nibble
+  if(constVector == M_CR_zyx) { //M Matrix in ELEC cannot be in upper nibble
+    constVector = VECT_CR_zyx;
+  }
+  if(!((Xrows == vecCreate[constVector].rows && Xcols == vecCreate[constVector].cols) || (Xrows == vecCreate[constVector].cols && Xcols == vecCreate[constVector].rows))) {
+    constVector = (param & 0xF0) >> 4; //vector type in higher nibble
+    if(constVector == 0 || !((Xrows == vecCreate[constVector].rows && Xcols == vecCreate[constVector].cols) || (Xrows == vecCreate[constVector].cols && Xcols == vecCreate[constVector].rows))) {
+      return;
+    }
+  }
+
+  uint16_t elements = Xrows * Xcols;
 
   if(!saveLastX()) {
     return;
   }
 
-  copySourceRegisterToDestRegister(REGISTER_X, TEMP_REGISTER_1);
-  setSystemFlag(FLAG_ASLIFT);
-  liftStack();
-  setSystemFlag(FLAG_ASLIFT);
-  liftStack();
-  convertRealToResultRegister(const_0, REGISTER_X, amNone);
-  convertRealToResultRegister(const_0, REGISTER_Y, amNone);
-  convertRealToResultRegister(const_0, REGISTER_Z, amNone);
+  //can only be 2 or 3 elements
+  //assuming 2 elements, clearing X and preparing Y
 
-  if(getRegisterDataType(TEMP_REGISTER_1) == dtComplex34Matrix) {
-    linkToComplexMatrixRegister(TEMP_REGISTER_1,  &matrixC);
+  if(getRegisterDataType(TEMP_REGISTER_1) == dtReal34Matrix) {
+    convertRealToResultRegister(const_0, REGISTER_X, amNone);
+    setSystemFlag(FLAG_ASLIFT);
+    liftStack();
+    convertRealToResultRegister(const_0, REGISTER_X, amNone);
   }
   else {
-    linkToRealMatrixRegister(TEMP_REGISTER_1,  &matrix);
+    convertComplexToResultRegisterRPangle(const_0, const_0, REGISTER_X, amNone, !amPolar);
+    setSystemFlag(FLAG_ASLIFT);
+    liftStack();
+    convertComplexToResultRegisterRPangle(const_0, const_0, REGISTER_X, amNone, !amPolar);
+  }
+  if(elements > 2) {
+    if(getRegisterDataType(TEMP_REGISTER_1) == dtReal34Matrix) {
+      setSystemFlag(FLAG_ASLIFT);
+      liftStack();
+      convertRealToResultRegister(const_0, REGISTER_X, amNone);
+    }
+    else {
+      setSystemFlag(FLAG_ASLIFT);
+      liftStack();
+      convertComplexToResultRegisterRPangle(const_0, const_0, REGISTER_X, amNone, !amPolar);
+    }
   }
 
+  if(constVector == VECT_CR_yx && ang2Dx != amNone) {
+    real_t theta, magnitude;
+    real34ToReal(&matrix.matrixElements[0], &magnitude);
+    real34ToReal(&matrix.matrixElements[1], &theta);
+    realRectangularToPolar(&magnitude, &theta, &magnitude, &theta, &ctxtReal39); // theta in radian
+    convertAngleFromTo(&theta, amRadian, ang2Dx, &ctxtReal39);
+    realToReal34(&magnitude, &matrix.matrixElements[0]);
+    realToReal34(&theta,     &matrix.matrixElements[1]);
+  }
+  else if((constVector == VECT_CR_zyx || constVector == VECT_CR_zxy) && (ang3Dy != amNone && ang3Dx == amNone)) {           // CYL
+    real_t theta, magnitude, zz;
+    convert3DtoCYL(&matrix, &magnitude, &theta, &zz, ang3Dy, &ctxtReal39);
+    realToReal34(&magnitude, &matrix.matrixElements[0]);
+    realToReal34(&theta,     &matrix.matrixElements[1]);
+    realToReal34(&zz,        &matrix.matrixElements[2]);
+  }
+  else if((constVector == VECT_CR_zyx || constVector == VECT_CR_zxy) && (ang3Dy != amNone && ang3Dx != amNone)) {           // SPH
+    real_t theta, theta2, magnitude;
+    convert3DtoSPH(&matrix, &magnitude, &theta, &theta2, ang3Dx, &ctxtReal39);
+    realToReal34(&magnitude, &matrix.matrixElements[0]);
+//    realToReal34(constVector == VECT_CR_zxy ? &theta  : &theta2, &matrix.matrixElements[2]);
+  //  realToReal34(constVector == VECT_CR_zxy ? &theta2 : &theta , &matrix.matrixElements[1]);
+    if(constVector == VECT_CR_zxy) {
+      realToReal34(&theta,  &matrix.matrixElements[2]);
+      realToReal34(&theta2, &matrix.matrixElements[1]);
+    }
+    else {
+      realToReal34(&theta2, &matrix.matrixElements[2]);
+      realToReal34(&theta , &matrix.matrixElements[1]);
+    }
+  }
 
-  for(int i = 0; i < 3; i++) {
-    uint16_t rg = vecCreate[param].x == 2-i ? REGISTER_X : vecCreate[param].y == 2-i ? REGISTER_Y : vecCreate[param].z == 2-i ? REGISTER_Z : 0;
+  for(int i = 0; i < elements; i++) {
+    uint16_t rg = vecCreate[constVector].x == elements-1-i ? REGISTER_X : \
+                  vecCreate[constVector].y == elements-1-i ? REGISTER_Y : \
+                  vecCreate[constVector].z == elements-1-i ? REGISTER_Z : 0;
     if(getRegisterDataType(TEMP_REGISTER_1) == dtComplex34Matrix) {
       real34Copy(VARIABLE_REAL34_DATA(&matrixC.matrixElements[i]), REGISTER_REAL34_DATA(rg));
-      real34Copy(VARIABLE_REAL34_DATA(&matrixC.matrixElements[i]), REGISTER_IMAG34_DATA(rg));
+      real34Copy(VARIABLE_IMAG34_DATA(&matrixC.matrixElements[i]), REGISTER_IMAG34_DATA(rg));
+      setRegisterAngularMode(rg, getComplexRegisterAngularMode(TEMP_REGISTER_1) | getComplexRegisterPolarMode(TEMP_REGISTER_1));
     }
     else {
       real34Copy(&matrix.matrixElements[i], REGISTER_REAL34_DATA(rg));
     }
     adjustResult(rg, false, false, rg, -1, -1);
   }
+
+  if(constVector == VECT_CR_yx && ang2Dx != amNone) { //POL
+    setRegisterAngularMode(REGISTER_X, ang2Dx);
+    temporaryInformation = TI_VECTORCOMP_2DPOLAR;
+  }
+  else if(constVector == VECT_CR_yx && ang2Dx == amNone) { //RECT
+    temporaryInformation = TI_VECTORCOMP_2DRECT;
+  }
+  else if((constVector == VECT_CR_zyx || constVector == VECT_CR_zxy) && ang3Dy != amNone && ang3Dx != amNone) { //SPH
+    setRegisterAngularMode(REGISTER_X, ang3Dx);
+    setRegisterAngularMode(REGISTER_Y, ang3Dy);
+    temporaryInformation = TI_VECTORCOMP_3DSPH;
+  }
+  else if((constVector == VECT_CR_zyx || constVector == VECT_CR_zxy) && ang3Dy != amNone && ang3Dx == amNone) { //CYL
+    setRegisterAngularMode(REGISTER_Y, ang3Dy);
+    temporaryInformation = TI_VECTORCOMP_3DCYL;
+  }
+  else if((constVector == VECT_CR_zyx || constVector == VECT_CR_zxy) && ang3Dy == amNone && ang3Dx == amNone) { //RECT
+    setRegisterAngularMode(REGISTER_Y, ang3Dy);
+    temporaryInformation = TI_VECTORCOMP_3DRECT;
+  }
+#endif //OPTION_VECTOR || OPTION_ELEC
 }
 
 
@@ -1869,6 +2194,14 @@ void fnAngularModeJM(uint16_t AMODE) { //Setting to HMS does not change AM
       setComplexRegisterPolarMode(REGISTER_X, amPolar);
       //printf("###CC fnAngularModeJM (%i)=> %i\n",REGISTER_X, getRegisterTag(REGISTER_X));
     }
+    else if(getRegisterDataType(REGISTER_X) == dtReal34Matrix) {
+      //printf("###AA fnAngularModeJM (%i)<= %i\n",REGISTER_X, AMODE);
+      //printf("###BB fnAngularModeJM (%i)=> %i\n",REGISTER_X, getRegisterTag(REGISTER_X));
+      VtoAngleMode(AMODE);
+      //printf("###CC fnAngularModeJM (%i)=> %i\n",REGISTER_X, getRegisterTag(REGISTER_X));
+    }
+
+
     else {
       if((getRegisterDataType(REGISTER_X) != dtReal34) || ((getRegisterDataType(REGISTER_X) == dtReal34) && getRegisterAngularMode(REGISTER_X) == amNone)) {
 
@@ -1915,7 +2248,6 @@ void fnDRG(uint16_t unusedButMandatoryParameter) {
     case dtTime:
     case dtDate:
     case dtString:
-    case dtReal34Matrix:
     case dtConfig:
       goto to_return_noLastX;
       break;
@@ -1953,6 +2285,12 @@ void fnDRG(uint16_t unusedButMandatoryParameter) {
     fnCvtFromCurrentAngularMode(dest);
     //currentAngularMode = dest;          //remove setting of ADM!
   }
+  else if(getRegisterDataType(REGISTER_X) == dtReal34Matrix) {
+    dest = getVectorRegisterAngularMode(REGISTER_X);
+    DRG_cyc(&dest);
+    VtoAngleMode(dest);
+  }
+
 
   to_return:
   copySourceRegisterToDestRegister(TEMP_REGISTER_1, REGISTER_L);
@@ -2082,129 +2420,6 @@ void fnByteShortcutsU(uint16_t size) {
 }
 
 
-void fnP_Alpha(void) {
-    if(calcMode != CM_AIM) {
-      #if defined(DMCP_BUILD)
-        beep(440, 50);
-        beep(4400, 50);
-        beep(440, 50);
-      #endif // DMCP_BUILD
-      return;
-    }
-    xcopy(tmpString, aimBuffer, ERROR_MESSAGE_LENGTH + AIM_BUFFER_LENGTH + NIM_BUFFER_LENGTH);       //backup portion of the "message buffer" area in DMCP used by ERROR..AIM..NIM buffers, to the tmpstring area in DMCP. DMCP uses this area during create_screenshot.
-    create_filename(".REGS.TSV");
-
-    #if (VERBOSE_LEVEL >= 1)
-      clearScreen(2);
-      print_linestr("Output Aim Buffer to drive:", true);
-      print_linestr(filename_csv, false);
-    #endif // VERBOSE_LEVEL >= 1
-
-    tmpString_csv_out(5);          //aimBuffer now already copied to tmpString
-    xcopy(aimBuffer, tmpString, ERROR_MESSAGE_LENGTH + AIM_BUFFER_LENGTH + NIM_BUFFER_LENGTH);        //   This total area must be less than the tmpString storage area, which it is.
-    //print_linestr(aimBuffer, false);
-}
-
-
-
-void fnP_Regs (uint16_t registerNo) {
-    if(calcMode != CM_NORMAL) {
-      #if defined(DMCP_BUILD)
-        beep(440, 50);
-        beep(4400, 50);
-        beep(440, 50);
-      #endif // DMCP_BUILD
-      return;
-    }
-
-    create_filename(".REGS.TSV");
-
-    #if (VERBOSE_LEVEL >= 1)
-      clearScreen(3);
-      print_linestr("Output regs to drive:", true);
-      print_linestr(filename_csv, false);
-    #endif // VERBOSE_LEVEL >= 1
-
-    stackregister_csv_out((int16_t)registerNo, (int16_t)registerNo, !ONELINE);
-}
-
-
-
-void fnP_All_Regs(uint16_t option) {
-    if(calcMode != CM_NORMAL && calcMode != CM_NO_UNDO) {
-      #if defined(DMCP_BUILD)
-        beep(440, 50);
-        beep(4400, 50);
-        beep(440, 50);
-      #endif // DMCP_BUILD
-      return;
-    }
-
-    create_filename(".REGS.TSV");
-
-    #if (VERBOSE_LEVEL >= 1)
-      clearScreen(4);
-      print_linestr("Output regs to drive:", true);
-      print_linestr(filename_csv, false);
-    #endif // VERBOSE_LEVEL >= 1
-
-    switch(option) {
-      case PRN_ALL:
-        stackregister_csv_out(REGISTER_X, REGISTER_W, !ONELINE);
-        stackregister_csv_out(0, 99, !ONELINE);
-        if(currentNumberOfLocalRegisters > 0) {
-          stackregister_csv_out(FIRST_LOCAL_REGISTER, FIRST_LOCAL_REGISTER + currentNumberOfLocalRegisters - 1, !ONELINE);
-        }
-        if(numberOfNamedVariables > 0) {
-          stackregister_csv_out(FIRST_NAMED_VARIABLE, FIRST_NAMED_VARIABLE + numberOfNamedVariables - 1, !ONELINE);
-        }
-
-
-        //stackregister_csv_out(FIRST_LOCAL_REGISTER, FIRST_LOCAL_REGISTER+100, !ONELINE);
-        break;
-
-      case PRN_STK:
-        if(getSystemFlag(FLAG_SSIZE8)) {
-          stackregister_csv_out(REGISTER_X, REGISTER_D, !ONELINE);
-        }
-        else {
-          stackregister_csv_out(REGISTER_X, REGISTER_T, !ONELINE);
-        }
-        break;
-
-      case PRN_GLOBALr:
-        stackregister_csv_out(0, 99, !ONELINE);
-        break;
-
-      case PRN_LOCALr:
-        if(currentNumberOfLocalRegisters > 0) {
-          stackregister_csv_out(FIRST_LOCAL_REGISTER, FIRST_LOCAL_REGISTER + currentNumberOfLocalRegisters - 1, !ONELINE);
-        }
-        break;
-
-      case PRN_NAMEDr:
-        if(numberOfNamedVariables > 0) {
-          stackregister_csv_out(FIRST_NAMED_VARIABLE, FIRST_NAMED_VARIABLE + numberOfNamedVariables - 1, !ONELINE);
-        }
-        break;
-
-      case PRN_Xr:
-        stackregister_csv_out(REGISTER_X, REGISTER_X, !ONELINE);
-        break;
-
-      case PRN_TMP:
-        stackregister_csv_out(TEMP_REGISTER_1, TEMP_REGISTER_1, !ONELINE);
-        break;
-
-      case PRN_XYr:
-        stackregister_csv_out(REGISTER_X, REGISTER_Y, ONELINE);
-        break;
-
-      default: ;
-    }
-}
-
-
 void doubleToXRegisterReal34(double x) { //Convert from double to X register REAL34
   setSystemFlag(FLAG_ASLIFT);
   liftStack();
@@ -2256,6 +2471,19 @@ void fnStrInputLongint(char inp1[]) { // CONVERT STRING to Longint X      //DONE
 }
 
 
+void fnIntInputLongint(int32_t inp1) { // CONVERT integer to Longint X      //DONE
+  //setSystemFlag(FLAG_ASLIFT);
+  liftStack();
+
+  longInteger_t lgInt;
+  longIntegerInit(lgInt);
+  int32ToLongInteger(inp1, lgInt);
+  convertLongIntegerToLongIntegerRegister(lgInt, REGISTER_X);
+  longIntegerFree(lgInt);
+  setSystemFlag(FLAG_ASLIFT);
+}
+
+
 void fnRCL(int16_t inp) { //DONE
   setSystemFlag(FLAG_ASLIFT);
   if(inp == TEMP_REGISTER_1) {
@@ -2300,7 +2528,7 @@ void timeToReal34(uint16_t hms) { //always 24 hour time;
   // Pre-rounding
   int32ToReal34(10, &value34);
   for(bDigits = 0; bDigits < (isValid12hTime ? 14 : 16); ++bDigits) {
-    if(real34CompareAbsLessThan(&h34, &value34)) {
+    if(real34CompareAbsLessThan(&real34, &value34)) {
       break;
     }
     real34Multiply(&value34, const34_10, &value34);
@@ -2322,13 +2550,14 @@ void timeToReal34(uint16_t hms) { //always 24 hour time;
     //total seconds
     reallocateRegister(regist, dtReal34, 0, amNone);
     real34Copy(&real34, REGISTER_REAL34_DATA(regist));
+    if(sign) {
+      real34ChangeSign(REGISTER_REAL34_DATA(regist));
+    }
     return;
   }
 
   // Seconds
-  //real34ToIntegralValue(&real34, &s34, DEC_ROUND_DOWN);
   real34Copy(&real34, &s34);
-  real34Subtract(&real34, &s34, &real34); // Fractional part
   // Minutes
   real34Divide(&s34, const34_60, &m34);
   real34ToIntegralValue(&m34, &m34, DEC_ROUND_DOWN);

@@ -29,15 +29,16 @@
   void     fnSNAP                             (uint16_t unusedButMandatoryParameter);
 
 
-void       fnClLcd                            (uint16_t unusedButMandatoryParameter);
-void       fnPixel                            (uint16_t unusedButMandatoryParameter);
-void       fnPoint                            (uint16_t unusedButMandatoryParameter);
-void       fnAGraph                           (uint16_t regist);
-void       insertAlphaCursor                  (uint16_t startAt);
+  void       fnClLcd                          (uint16_t clear_mode);
+  void       fnClDisplay                      (uint16_t unusedButMandatoryParameter); //DL
+  void       fnPixel                          (uint16_t unusedButMandatoryParameter);
+  void       fnPoint                          (uint16_t unusedButMandatoryParameter);
+  void       fnAGraph                         (uint16_t regist);
+  void       insertAlphaCursor                (uint16_t startAt);
 
-void       drawSinglePixelFullWidthLine       (int y);
+  void       drawSinglePixelFullWidthLine     (int y);
 
-char       letteredRegisterName(calcRegister_t regist);
+  char       letteredRegisterName(calcRegister_t regist);
 
   #if defined(PC_BUILD)
   /**
@@ -49,10 +50,11 @@ char       letteredRegisterName(calcRegister_t regist);
    */
   gboolean drawScreen                         (GtkWidget *widget, cairo_t *cr, gpointer data);
   void     copyScreenToClipboard              (void);
+  void     copyMenuToClipboard                (void);
   void     copyRegisterXToClipboard           (void);
   void     copyStackRegistersToClipboard      (void);
   void     copyAllRegistersToClipboard        (void);
-  void     copyRegisterToClipboardString      (calcRegister_t regist, char *clipboardString);
+  void     copyRegisterToClipboardString      (calcRegister_t regist, char *clipboardString, bool_t forPrinter);
 
   /**
    * Refreshes calc's screen.
@@ -70,7 +72,7 @@ char       letteredRegisterName(calcRegister_t regist);
   #endif // PC_BUILD
 
   #if defined(DMCP_BUILD)
-    void     copyRegisterToClipboardString      (calcRegister_t regist, char *clipboardString);                   //JMCSV Added for textfiles
+    void     copyRegisterToClipboardString      (calcRegister_t regist, char *clipboardString, bool_t forPrinter);                   //JMCSV Added for textfiles
     void     refreshLcd                         (void);
   #endif // DMCP_BUILD
 

@@ -19,10 +19,12 @@ static void argError(void) {
 }
 
 static const real_t *realArg(const real_t *x) {
-  if(realIsNaN(x))
+  if(realIsNaN(x)) {
     return x;
-  if(realIsZero(x))
+  }
+  if(realIsZero(x)) {
     return getSystemFlag(FLAG_SPCRES) ? x : const_0;
+  }
   return realIsPositive(x) ? const_0 : const_180;
 }
 
@@ -72,6 +74,9 @@ static void argRema(void) {
   real_t r;
 
   convertReal34MatrixRegisterToReal34Matrix(REGISTER_X, &x);
+  if(lastErrorCode != 0) {
+    return;
+  }
   const int numOfElements = x.header.matrixRows * x.header.matrixColumns;
 
   for(int i = 0; i < numOfElements; ++i) {

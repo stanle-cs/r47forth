@@ -4,7 +4,8 @@ c47_gtk_src = files(
   'hal/audio.c',
   'hal/gui.c',
   'hal/lcd.c',
-  'hal/io.c')
+  'hal/io.c',
+  'hal/print_ir.c')
 
 override_opts = ['b_coverage=false']
 cflags        = []
@@ -33,7 +34,7 @@ endif
 # C47 Simulator
 #
 
-deps = [gtk_dep, gmp_dep, m_dep, pulse_dep]
+deps = [gtk_dep, gmp_dep, m_dep, pulse_dep, t47_dep]
 _c_args = []
 
 if host_machine.system() == 'linux'

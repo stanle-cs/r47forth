@@ -40,6 +40,10 @@ void runPgm(uint16_t unusedButMandatoryParameter);
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
 const funcTest_t funcTestNoParam[] = {
+  {"fnAmortP",               fnAmortP              },
+  {"fnAmortInt",             fnAmortInt            },
+  {"fnAmortPrn",             fnAmortPrn            },
+  {"fnAmortBal",             fnAmortBal            },
   {"fn10Pow",                fn10Pow               },
   {"fn2Pow",                 fn2Pow                },
   {"fnAdd",                  fnAdd                 },
@@ -123,7 +127,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnEllipticPi",           fnEllipticPi          },
   {"fnErf",                  fnErf                 },
   {"fnErfc",                 fnErfc                },
-  {"fnEuclideanNorm",        fnEuclideanNorm       },
+  {"fnPNorm",                fnPNorm               },
   {"fnEulersFormula",        fnEulersFormula       },
   {"fnExp",                  fnExp                 },
   {"fnExpM1",                fnExpM1               },
@@ -226,6 +230,8 @@ const funcTest_t funcTestNoParam[] = {
   {"fnMant",                 fnMant                },
   {"fnMaskl",                fnMaskl               },
   {"fnMaskr",                fnMaskr               },
+  {"fnMatrixIdentity",       fnMatrixIdentity      },
+  {"fnMatrixSquareRoot",     fnMatrixSquareRoot    },
   {"fnMax",                  fnMax                 },
   {"fnMgeuktok100M",         fnMgeuktok100M        },
   {"fnMgeustok100M",         fnMgeustok100M        },
@@ -270,8 +276,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnRollUp",               fnRollUp              },
   {"fnRound",                fnRound               },
   {"fnRoundi",               fnRoundi              },
-  {"fnRowSum",               fnRowSum              },
-  {"fnRowNorm",              fnRowNorm             },
+  {"fnRowColSum",            fnRowColSum           },
   {"fnRR",                   fnRr                  },
   {"fnRRC",                  fnRrc                 },
   {"fnSign",                 fnSign                },
@@ -328,6 +333,15 @@ const funcTest_t funcTestNoParam[] = {
   {"fnYear",                 fnYear                },
   {"fnZeta",                 fnZeta                },
   {"fnZip",                  fnZip                 },
+  {"fnDeltaToStar",          fnDeltaToStar         },
+  {"fnStarToDelta",          fnStarToDelta         },
+  {"fnSymToAbc",             fnSymToAbc            },
+  {"fnAbcToSym",             fnAbcToSym            },
+  {"fnCopyXtoAbc",           fnCopyXtoAbc          },
+  {"fnTripleZfromVI",        fnTripleZfromVI       },
+  {"fnTripleVfromIZ",        fnTripleVfromIZ       },
+  {"fnTripleIfromVZ",        fnTripleIfromVZ       },
+  {"fnTripleFlipPolar",      fnTripleFlipPolar     },
 
   {"fnExecute",              runPgm                },
   {"",                       NULL                  }
@@ -402,6 +416,7 @@ void printRegisterToString(calcRegister_t regist, char *registerContent) {
 void runPgm(uint16_t unusedButMandatoryParameter) {
   if(label != INVALID_VARIABLE) {
     dynamicSoftmenu[0].numItems = 0;
+    free(dynamicSoftmenu[0].menuContent); // release the dynamic menu buffer before dropping the pointer
     dynamicSoftmenu[0].menuContent = NULL;
     reallyRunFunction(ITM_XEQ, label);
   }
@@ -2718,8 +2733,8 @@ var2:
             isCheckingEigenvectors = (funcType == FUNC_TO_TEST) && (funcToTest == fnEigenvectors) && (regist == REGISTER_X) && (rows == cols);
             xcopy(r, r + i + 1, strlen(r + i + 1) + 1);
             if(isCheckingEigenvectors) {
-              xr1 = malloc(REAL_SIZE_IN_BYTES * cols);
-              xi1 = malloc(REAL_SIZE_IN_BYTES * cols);
+              xr1 = malloc(REAL_SIZE_IN_BYTES(75) * cols);
+              xi1 = malloc(REAL_SIZE_IN_BYTES(75) * cols);
               xf1 = malloc(sizeof(bool_t) * cols);
               for(int col = 0; col < cols; ++col) {
                 realSetZero(xr1 + col);

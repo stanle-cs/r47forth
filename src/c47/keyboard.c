@@ -138,12 +138,12 @@ static void executeFunction(const char *data, int16_t item_);
         }
 
 //integral MNU_Sf
-        else if( (IS_EQN_INTEGRATE) && dynamicMenuItem == 4) {
+        else if((IS_EQN_INTEGRATE) && dynamicMenuItem == 4) {
           item = -MNU_Sf_TOOL;
         }
 
 //integral y to x
-        else if( (IS_EQN_INTEGRATE) && dynamicMenuItem == 5) {
+        else if((IS_EQN_INTEGRATE) && dynamicMenuItem == 5) {
           item = ITM_INTEGRAL_YX;
         }
 
@@ -1139,7 +1139,9 @@ endReturnTrue:
                 processAimInput(item); // sets keyActionProcessed
                 if(tam.mode) {
                   //printf("cccc tam.mode=%i tam.f=%i Popping menu\n",tam.mode, tam.function);
+                  //This section to auto-drop out of a catalog
                   popSoftmenu();
+                  numberOfTamMenusToPop--;
                 }
               }
               else {
@@ -1281,7 +1283,7 @@ endReturnTrue:
               }
             }
             if(tam.alpha && calcMode != CM_ASSIGN && tam.mode != TM_NEWMENU &&
-              !( (tam.mode==TM_STORCL || tam.mode==TM_LABEL || tam.mode == TM_LBLONLY || tam.mode == TM_SOLVE || tam.mode == TM_KEY || tam.mode == TM_M_DIM || tam.mode == TM_REGISTER || tam.mode == TM_CMP)
+              !( (tam.mode==TM_STORCL || tam.mode==TM_LABEL || tam.mode == TM_LBLONLY || tam.mode == TM_SOLVE || tam.mode == TM_KEY || tam.mode == TM_M_DIM || tam.mode == TM_REGISTER || tam.mode == TM_CMP || tam.mode == TM_STRING)
                   && (item == CHR_num || item == CHR_case || item == ITM_SCR || item == ITM_USERMODE) )
               ) {
               if(calcMode != CM_PEM || item != ITM_NOP) { // Here we left TAM in the context of issue #454
@@ -1377,6 +1379,25 @@ endReturnTrue:
                     #endif //VERBOSEKEYS
 
                 runFunction(item);
+
+
+                // Double execution when a custom conversion: additional to the runfunction which operated the 'normal' conversion
+                if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode != CM_PEM && item > 0 && isItemConversion(item)) {
+                  int16_t itemNrPair;
+                  executionConversionPartner(item, &itemNrPair, NULL);
+                  if(itemNrPair != 0) {                                                                                                            // non-zero = custom non-standard pair needing the round-trip via SI
+                    if(!getSystemFlag(FLAG_HPCONV)) { //normal CONV_HP clear
+                      runConversionToSI(item);
+                      runConversionFromSI(itemNrPair);
+                    } else { //flipped CONV_HP set
+                      runFunction(conversionPartner(item, NULL, NULL, NULL));
+                      runConversionToSI(itemNrPair);
+                      runConversionFromSI(conversionPartner(item, NULL, NULL, NULL));
+                    }
+                    temporaryInformation = TI_CONV_MENU_STR;
+                  }
+                }
+
 
                 if(calcMode == CM_EIM && !tam.mode) {
                   if(isAlphaSubmenu(0)) {
@@ -1581,13 +1602,11 @@ endReturnTrue:
         commonShiftProcessing(ITM_SHIFTf);
         return ITM_NOP;
       }
-      else
-      if(((key->primary == ITM_SHIFTg || ShiftOverride == ITM_SHIFTg))) {
+      else if(((key->primary == ITM_SHIFTg || ShiftOverride == ITM_SHIFTg))) {
         commonShiftProcessing(ITM_SHIFTg);
         return ITM_NOP;
       }
-      else
-      if(((key->primary == KEY_fg     || ShiftOverride == KEY_fg))) {
+      else if(((key->primary == KEY_fg     || ShiftOverride == KEY_fg))) {
         commonShiftProcessing(KEY_fg);
         return ITM_NOP;
       }
@@ -1627,9 +1646,7 @@ endReturnTrue:
       Check_MultiPresses(&result, key_no);        //JM
       return result;
     }
-    else                                                                                                                        //JM^^
-
-    if(calcMode == CM_AIM || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA))) {
+    else if(calcMode == CM_AIM || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA))) {
       result = shiftF ? key->fShiftedAim :
                shiftG ? key->gShiftedAim :
                         key->primaryAim;
@@ -1853,6 +1870,14 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
             screenUpdatingMode &= !(SCRUPD_MANUAL_STATUSBAR | SCRUPD_SKIP_STATUSBAR_ONE_TIME);
             programRunStop = PGM_WAITING;
             showFunctionNameItem = 0;
+            #if defined(IR_PRINTING)
+              #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
+                printf("**[DL]** STOP program\n");
+                fflush(stdout);
+              #endif //MONITOR_IRPRINT
+              refreshStatusBar();
+              printTrace(ITM_STOP, NOPARAM);   // STOP program
+            #endif //IR_PRINTING
           }
           else if(programRunStop == PGM_PAUSED) {
             programRunStop = PGM_KEY_PRESSED_WHILE_PAUSED;
@@ -2091,8 +2116,8 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
       screenUpdatingMode |= SCRUPD_MANUAL_MENU;
       screenUpdatingMode &= ~SCRUPD_SKIP_MENU_ONE_TIME;
 
-      if(calcMode == CM_NORMAL && showFunctionNameItem == 0 && lastKeyItemDetermined == ITM_RS) {
-        showFunctionNameItem = ITM_RS;
+      if(calcMode == CM_NORMAL && showFunctionNameItem == 0 && lastKeyItemDetermined == ITM_RS && !SHOWMODE && calcMode != CM_REGISTER_BROWSER) {
+         showFunctionNameItem = ITM_RS;
         temporaryInformation = TI_NO_INFO;
         refreshRegisterLine(REGISTER_T);
       }
@@ -2460,17 +2485,6 @@ RELEASE_END:
           break;
         }
 
-        case ITM_RS:
-          showStep();
-          keyActionProcessed = true;
-          showFunctionNameItem = 0;
-          #if defined(DMCP_BUILD)
-            lcd_refresh();
-          #else // !DMCP_BUILD
-            refreshLcd(NULL);
-          #endif // DMCP_BUILD
-          break;
-
         case ITM_DOWN1: {
           if(calcMode != CM_CONFIRMATION) {
             keyActionProcessed = true;   //swapped to before fnKeyUp to be able to check if key was processed below. Chose to process it here, as fnKeyUp does not have access to item.
@@ -2790,11 +2804,24 @@ RELEASE_END:
                   refreshRegisterLine(REGISTER_X);
                   keyActionProcessed = true;
                 }
+
                 // Following commands do not timeout to NOP
                 else if(item == ITM_UNDO || item == ITM_BST || item == ITM_SST || item == ITM_PR || item == ITM_AIM || item == ITM_SNAP) {
                   runFunction(item);
                   keyActionProcessed = true;
                 }
+
+                else if(item == ITM_RS) {
+                  showStep();
+                  keyActionProcessed = true;
+                  showFunctionNameItem = 0;
+                  #if defined(DMCP_BUILD)
+                    lcd_refresh();
+                  #else // !DMCP_BUILD
+                    refreshLcd(NULL);
+                  #endif // DMCP_BUILD
+                }
+
                 break;
               }
 
@@ -3426,6 +3453,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
 
           reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(lenInBytes), amNone);
           xcopy(REGISTER_STRING_DATA(REGISTER_X), aimBuffer, lenInBytes);
+
+          #if defined(IR_PRINTING)
+            #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
+              printf("**[DL]** fnKeyEnter printTraceX\n");
+              fflush(stdout);
+            #endif //PC_BUILD
+            printTraceX(LINE_FULL);
+          #endif //IR_PRINTING
 
           if(!getSystemFlag(FLAG_ERPN)) {                                  //PHM eRPN 2021-07
                     #if defined(DEBUGUNDO)
@@ -4317,10 +4352,6 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
         }
         if(getSystemFlag(FLAG_ALPHA)) {
           pemAlpha(ITM_BACKSPACE);
-          if(aimBuffer[0] == 0 && getSystemFlag(FLAG_ALPHA)) {
-            // close if no characters left
-            pemAlpha(ITM_BACKSPACE);
-          }
           if(aimBuffer[0] == 0 && !getSystemFlag(FLAG_ALPHA)) {
             if(currentLocalStepNumber > 1) {
               --currentLocalStepNumber;
@@ -4489,9 +4520,7 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
               // make this keyActionProcessed = false; to have arrows up and down placed in bufferize
               // make arrowCasechnage true
                                                                        //JM^^
-        else
-
-        if(currentSoftmenuScrolls()) {
+        else if(currentSoftmenuScrolls()) {
           menuUp();
         }
         else if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM) && (numberOfFormulae < 2 || currentMenu() != -MNU_EQN)) {
@@ -4721,9 +4750,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
               // make this keyActionProcessed = false; to have arrows up and down placed in bufferize
               // make arrowCasechnage true
                                                                        //JM^^
-        else
-
-        if(currentSoftmenuScrolls()) {
+        else if(currentSoftmenuScrolls()) {
           menuDown();
         }
         else if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM) && (numberOfFormulae < 2 || currentMenu() != -MNU_EQN)) {
@@ -4795,7 +4822,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_FONT_BROWSER: {
-        if(currentFntScr < numScreensNumericFont + numScreensStandardFont + numScreensTinyFont) {
+        if(currentFntScr < numScreensNumericFont + numScreensNumericFontBold + numScreensStandardFont + numScreensTinyFont) {
           currentFntScr++;
         }
         break;

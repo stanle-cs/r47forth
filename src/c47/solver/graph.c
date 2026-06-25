@@ -33,17 +33,9 @@
 #define CONVERGE_FACTOR 1.0f     //
 #define NUMBERITERATIONS 9999    // 35 // Must be smaller than LIM (see STATS)
 
-typedef struct {
-      real_t Real;
-      real_t Imag;
-} cplx_t;
-
 #define ctxtSolver2 &ctxtReal39
-#define CPLX(x) &(x).Real, &(x).Imag
-
 int16_t osc = 0;
 uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
-
 
 
   static void fnPlot(uint16_t unusedButMandatoryParameter) {
@@ -185,11 +177,8 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
                                   #endif // STATDEBUG
     calcRegister_t regStats = regStatsXY;
     if(!isStatsMatrixN(&rows, regStats)) {
-      regStats = allocateNamedMatrix(plotStatMx, 1, 2);
+      regStats = allocateNamedMatrix(plotStatMx, 1, 2);   // bugfix was here. it already creates preps the 1x2 register matrix, no need to realMatrixInit a linked copy as that was never stored back nor freed
       regStatsXY = regStats;
-      real34Matrix_t stats;
-      linkToRealMatrixRegister(regStats, &stats);
-      realMatrixInit(&stats, 1, 2);
     }
     else {
       if(appendRowAtMatrixRegister(regStats)) {
@@ -396,9 +385,7 @@ void resetHighResTracking(int *highResCount, bool_t *inHighResMode, double *cumu
 
 
 bool_t detectTrueDiscontinuity(double y0, double y1, double y2, double grad0, double grad1, double grad2, double yAvg, int count) {  // Distinguish between genuine discontinuities and normal peaks
-  if(real34IsSpecial(REGISTER_REAL34_DATA(REGISTER_X)) ||
-     ((getRegisterDataType(REGISTER_X) == dtComplex34) &&
-      (real34IsSpecial(REGISTER_IMAG34_DATA(REGISTER_X))))) {
+  if(real34IsSpecial(REGISTER_REAL34_DATA(REGISTER_X)) || ((getRegisterDataType(REGISTER_X) == dtComplex34) && (real34IsSpecial(REGISTER_IMAG34_DATA(REGISTER_X))))) {
     return true;
   }
   if(count < 4) {
@@ -1262,14 +1249,6 @@ void graph_stat(uint16_t unusedButMandatoryParameter) {
     return checkRealZeroTol(a, tol) && checkRealZeroTol(b, tol);
   }
 
-  static void convertComplexRegisterToRealIfZeroImag(calcRegister_t regist) {
-    real_t b;
-    if(real34IsZero(REGISTER_IMAG34_DATA(regist))) {
-      real34ToReal(REGISTER_REAL34_DATA(regist), &b);
-      convertRealToResultRegister(&b, regist, amNone);
-    }
-  }
-
   static void divFunctionComplex(const real_t *a_re, const real_t *a_im, const real_t *b_re, const real_t *b_im, real_t *res_re, real_t *res_im) {
     if(  (realIsZero(a_re) && realIsZero(a_im)) || realIsNaN(a_re) || realIsNaN(a_im) || realIsNaN(b_re) || realIsNaN(b_im)) {
       realSetZero(res_re);
@@ -1887,6 +1866,7 @@ static inline void powCplxNat(const cplx_t *base, const uint8_t *exp, cplx_t *re
     // reset stack and lift to reasonable height
     fnUndo(0);
     liftStack();
+    setSystemFlag(FLAG_ASLIFT);
     liftStack();
 
     if(!Y2IsZero) {
@@ -1960,6 +1940,7 @@ void fnEqSolvGraph (uint16_t func) {
         case EQ_REALSOLVE_LU: {
           if(getRegisterAsReal(RESERVED_VARIABLE_LEST, &y) && getRegisterAsReal(RESERVED_VARIABLE_UEST, &x)) {
             liftStack();
+            setSystemFlag(FLAG_ASLIFT);
             reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
             liftStack();
             reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
@@ -1983,6 +1964,7 @@ void fnEqSolvGraph (uint16_t func) {
         case EQ_PLOT_LU: {           //uses limits
           if(getRegisterAsReal(RESERVED_VARIABLE_LX, &y) && getRegisterAsReal(RESERVED_VARIABLE_UX, &x)) {
             liftStack();
+            setSystemFlag(FLAG_ASLIFT);
             reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
             liftStack();
             reallocateRegister(REGISTER_X, dtReal34, 0, amNone);

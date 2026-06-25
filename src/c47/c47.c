@@ -6,6 +6,7 @@
 #include "c47Extensions/addons.h"
 #include "longIntegerType.h"
 #include "saveRestoreCalcState.h"
+#include "saveRestoreBackup.h"
 #include "statusBar.h"
 
 //#define JMSHOWCODES
@@ -30,6 +31,9 @@ char                  lastTemp[16];
   bool_t              swapCtrlCode = false;
 #endif // PC_BUILD
 
+bool_t                headlessMode = false;
+bool_t                loadTestPrograms = false;
+bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;
 const font_t          *cursorFont;
 TO_QSPI const char     baseDigits[63] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -144,6 +148,7 @@ uint16_t               lastCenturyHighUsed = 0;
 uint8_t               *lcd_buffer;
 uint8_t                numScreensStandardFont;
 uint8_t                numScreensNumericFont;
+uint8_t                numScreensNumericFontBold;
 uint8_t                numScreensTinyFont;
 uint8_t                currentAsnScr;
 uint8_t                currentFntScr;
@@ -169,6 +174,7 @@ uint8_t                displayStack;
 uint8_t                cachedDisplayStack;
 uint8_t                alphaCase;
 uint8_t                numLinesNumericFont;
+uint8_t                numLinesNumericFontBold;
 uint8_t                numLinesStandardFont;
 uint8_t                numLinesTinyFont;
 uint8_t                cursorEnabled;
@@ -333,6 +339,9 @@ real_t                 SAVED_SIGMA_LASTX;
 real_t                 SAVED_SIGMA_LASTY;
 int8_t                 SAVED_SIGMA_lastAddRem;
 
+uint16_t               amortP1;
+uint16_t               amortP2;
+
 uint16_t               lrSelectionHistobackup;
 uint16_t               lrChosenHistobackup;
 int16_t                histElementXorY;
@@ -359,6 +368,18 @@ bool_t                 cancelFilename;
 
 uint8_t                firstDayOfWeek = 1;     // Monday
 uint8_t                firstWeekOfYearDay = 4; // Thursday
+
+//#if defined(IR_PRINTING)
+  printerState_t         printerState;
+  /*
+   *  Where will the next data be printed?
+   *  Columns are in pixel units from 0 to 165 for the HP-82240 and 0 to 383 for the Martel graphic mode
+   */
+  uint16_t               printerColumn;
+//#endif //IR_PRINTING
+
+uint16_t                 alphaRegister;
+bool_t                   varMenu42;
 
 
 #if defined(DMCP_BUILD)
@@ -1196,8 +1217,7 @@ int convertKeyCode(int key) {
                             #endif //DM42_KEYCLICK
           fnTimerStart(TO_KB_ACTV, TO_KB_ACTV, TO_KB_ACTV_CURSOR);
         }
-        else
-        {
+        else {
                             #if defined(DM42_KEYCLICK)
                               keyClick(7);
                             #endif //DM42_KEYCLICK

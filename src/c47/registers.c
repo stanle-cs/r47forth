@@ -32,11 +32,11 @@ TO_QSPI const reservedVariableDescStr_t varDescr[] = {
 /*  VAR_NO_U       23 */ { ""},
 /*  VAR_NO_V       24 */ { ""},
 /*  VAR_NO_W       25 */ { ""},
-/*  VAR_NO_ADM     26 */ { ""},
-/*  VAR_NO_DENMAX  27 */ { ""},
-/*  VAR_NO_ISM     28 */ { ""},
-/*  VAR_NO_REALDF  29 */ { ""},
-/*  VAR_NO_NDEC    30 */ { ""},
+/*  VAR_NO_SPARE1  26 */ { ""},
+/*  VAR_NO_SPARE2  27 */ { ""},
+/*  VAR_NO_SPARE3  28 */ { ""},
+/*  VAR_NO_SPARE4  29 */ { ""},
+/*  VAR_NO_SPARE5  30 */ { ""},
 /*  VAR_NO_ACC     31 */ { ""},
 /*  VAR_NO_ULIM    32 */ { ""},
 /*  VAR_NO_LLIM    33 */ { ""},
@@ -85,11 +85,11 @@ TO_QSPI const reservedVariableHeader_t allReservedVariables[] = { // MUST be in 
 /*  VAR_NO_U       23 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 0}, .reservedVariableName = {1, 'U',  0,   0,   0,   0,   0,   0} },
 /*  VAR_NO_V       24 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 0}, .reservedVariableName = {1, 'V',  0,   0,   0,   0,   0,   0} },
 /*  VAR_NO_W       25 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 0}, .reservedVariableName = {1, 'W',  0,   0,   0,   0,   0,   0} },
-/*  VAR_NO_ADM     26 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = dtLongInteger, .tag = LI_POSITIVE, .readOnly = 1, .notUsed = 0}, .reservedVariableName = {3, 'A', 'D', 'M',  0,   0,   0,   0} },
-/*  VAR_NO_DENMAX  27 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = dtLongInteger, .tag = LI_POSITIVE, .readOnly = 1, .notUsed = 0}, .reservedVariableName = {5, 'D', '.', 'M', 'A', 'X',  0,   0} },
-/*  VAR_NO_ISM     28 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = dtLongInteger, .tag = LI_POSITIVE, .readOnly = 1, .notUsed = 0}, .reservedVariableName = {3, 'I', 'S', 'M',  0,   0,   0,   0} },
-/*  VAR_NO_REALDF  29 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = dtLongInteger, .tag = LI_POSITIVE, .readOnly = 1, .notUsed = 0}, .reservedVariableName = {6, 'R', 'E', 'A', 'L', 'D', 'F',  0} },
-/*  VAR_NO_NDEC    30 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = dtLongInteger, .tag = LI_POSITIVE, .readOnly = 1, .notUsed = 0}, .reservedVariableName = {4, '#', 'D', 'E', 'C',  0,   0,   0} },
+/*  VAR_NO_SPARE1  26 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 1}, .reservedVariableName = {0,   0,  0,   0,   0,   0,   0,   0} },   // Removed, spare
+/*  VAR_NO_SPARE2  27 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 1}, .reservedVariableName = {0,   0,  0,   0,   0,   0,   0,   0} },   // Removed, spare
+/*  VAR_NO_SPARE3  28 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 1}, .reservedVariableName = {0,   0,  0,   0,   0,   0,   0,   0} },   // Removed, spare
+/*  VAR_NO_SPARE4  29 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 1}, .reservedVariableName = {0,   0,  0,   0,   0,   0,   0,   0} },   // Removed, spare
+/*  VAR_NO_SPARE5  30 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 1}, .reservedVariableName = {0,   0,  0,   0,   0,   0,   0,   0} },   // Removed, spare
 /*  VAR_NO_ACC     31 */  { .header = {.pointerToRegisterData = 0,          .dataType = dtReal34,      .tag = amNone,      .readOnly = 0, .notUsed = 0}, .reservedVariableName = {3, 'A', 'C', 'C',  0,   0,   0,   0} },
 /*  VAR_NO_ULIM    32 */  { .header = {.pointerToRegisterData = 4,          .dataType = dtReal34,      .tag = amNone,      .readOnly = 0, .notUsed = 0}, .reservedVariableName = {5, 161, 145, 'L', 'i', 'm',  0,   0} },
 /*  VAR_NO_LLIM    33 */  { .header = {.pointerToRegisterData = 8,          .dataType = dtReal34,      .tag = amNone,      .readOnly = 0, .notUsed = 0}, .reservedVariableName = {5, 161, 147, 'L', 'i', 'm',  0,   0} },
@@ -678,13 +678,13 @@ bool_t validateName(const char *name) {
   }
 
   // Check for the 1st character
-  if(                                          compareChar(name, STD_A                   ) < 0) {
+  if(                                          compareChar(name, STD_A                   ) < 0) {    //    \x41
     return false;
   }
-  if(compareChar(name, STD_Z          ) > 0 && compareChar(name, STD_a                   ) < 0) {
+  if(compareChar(name, STD_Z          ) > 0 && compareChar(name, STD_a                   ) < 0) {    //    \x5a      \x61
     return false;
   }
-  if(compareChar(name, STD_z          ) > 0 && compareChar(name, STD_A_GRAVE             ) < 0) {
+  if(compareChar(name, STD_z          ) > 0 && compareChar(name, STD_A_GRAVE             ) < 0) {    //    \x7a      \x80\xc0
     return false;
   }
   if(                                          compareChar(name, STD_CROSS               ) ==0) {
@@ -693,16 +693,16 @@ bool_t validateName(const char *name) {
   if(                                          compareChar(name, STD_DIVIDE              ) ==0) {
     return false;
   }
-  if(compareChar(name, STD_z_CARON    ) > 0 && compareChar(name, STD_iota_DIALYTIKA_TONOS) < 0) {
+  if(compareChar(name, STD_z_CARON    ) > 0 && compareChar(name, STD_iota_DIALYTIKA_TONOS) < 0) {     //   \x81\x7e   \x83\x90
     return false;
   }
   if(compareChar(name, STD_sampi      ) > 0 && compareChar(name, STD_SUB_alpha           ) < 0) {
     return false;
   }
-  if(compareChar(name, STD_SUB_mu     ) > 0 && compareChar(name, STD_SUP_a               ) < 0) {
+  if(compareChar(name, STD_SUB_mu     ) > 0 && compareChar(name, STD_SUP_a               ) < 0) {     //   \xa2\x98   \xa4\x82
     return false;
   }
-  if(compareChar(name, STD_SUB_Z      ) > 0                                                   ) {
+  if(compareChar(name, STD_SUB_Z      ) > 0                                                   ) {     //   \xa4\xe9
     return false;
   }
 
@@ -766,7 +766,7 @@ static calcRegister_t _findReservedVariable(const char *variableName) {
     printStatus(0, "_findReservedVariable", force);
   #endif //VERBOSE_REGISTERS
 
-  uint8_t len = stringGlyphLength(variableName);
+  uint8_t len = stringByteLength(variableName); // gperf hash keys on byte 2 (-k'1-3'); pass byte length, not glyph count.
   const struct reservedRegister *reg = lookupReservedVariableName(variableName, len);
 
   if(reg != NULL) {
@@ -1420,67 +1420,6 @@ void copySourceRegisterToDestRegister(calcRegister_t sourceRegister, calcRegiste
   if(FIRST_RESERVED_VARIABLE <= sourceRegister && sourceRegister < FIRST_NAMED_RESERVED_VARIABLE) {
     sourceRegister = sourceRegister - FIRST_RESERVED_VARIABLE + REGISTER_X;
   }
-  else if(sourceRegister == RESERVED_VARIABLE_ADM) {
-    longInteger_t longIntVar;
-    longIntegerInit(longIntVar);
-    switch(currentAngularMode) {
-      case amDMS: {
-        uInt32ToLongInteger(1u, longIntVar);
-        break;
-      }
-      case amRadian: {
-        uInt32ToLongInteger(2u, longIntVar);
-        break;
-      }
-      case amMultPi: {
-        uInt32ToLongInteger(3u, longIntVar);
-        break;
-      }
-      case amGrad: {
-        uInt32ToLongInteger(4u, longIntVar);
-        break;
-      }
-      default: {
-        uInt32ToLongInteger(0u, longIntVar);
-        break;
-      }
-    }
-    convertLongIntegerToLongIntegerRegister(longIntVar, destRegister);
-    longIntegerFree(longIntVar);
-    return;
-  }
-  else if(sourceRegister == RESERVED_VARIABLE_DENMAX) {
-    longInteger_t longIntVar;
-    longIntegerInit(longIntVar);
-    uInt32ToLongInteger(denMax, longIntVar);
-    convertLongIntegerToLongIntegerRegister(longIntVar, destRegister);
-    longIntegerFree(longIntVar);
-    return;
-  }
-  else if(sourceRegister == RESERVED_VARIABLE_ISM) {
-    longInteger_t longIntVar;
-    longIntegerInit(longIntVar);
-    int32ToLongInteger((shortIntegerMode==SIM_2COMPL ? 2 : (shortIntegerMode==SIM_1COMPL ? 1 : (shortIntegerMode==SIM_UNSIGN ? 0 : -1))), longIntVar);
-    convertLongIntegerToLongIntegerRegister(longIntVar, destRegister);
-    longIntegerFree(longIntVar);
-    return;
-  }
-  else if(sourceRegister == RESERVED_VARIABLE_REALDF) {
-    longInteger_t longIntVar;
-    longIntegerInit(longIntVar);
-    uInt32ToLongInteger(displayFormat, longIntVar);
-    convertLongIntegerToLongIntegerRegister(longIntVar, destRegister);
-    longIntegerFree(longIntVar);
-    return;
-  }
-  else if(sourceRegister == RESERVED_VARIABLE_NDEC) {
-    longInteger_t longIntVar;
-    longIntegerInit(longIntVar);
-    uInt32ToLongInteger(displayFormatDigits, longIntVar);
-    convertLongIntegerToLongIntegerRegister(longIntVar, destRegister);
-    longIntegerFree(longIntVar);
-    return;
-  }
 
   if(   getRegisterDataType(destRegister) != getRegisterDataType(sourceRegister) || getRegisterFullSizeInBlocks(destRegister) != getRegisterFullSizeInBlocks(sourceRegister)) {
     uint32_t sizeInBlocks;
@@ -1794,7 +1733,7 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
           real_t tmpr;
           char str[100];
           uint32_t offset = (r * mat.header.matrixRows + c) * 2;
-          real34ToReal(&mat.matrixElements + offset, &tmpr);
+          real34ToReal(mat.matrixElements + offset, &tmpr);
           realPlus(&tmpr, &tmpr, &ctxtReal4);       // Real part
           if(realGetExponent(&tmpr) < -50) {
             printf("[≈0 ");
@@ -1816,7 +1755,7 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
             }
             printf("[%s", str);
           }
-          real34ToReal(&mat.matrixElements + offset + 1, &tmpr);
+          real34ToReal(mat.matrixElements + offset + 1, &tmpr);
           realPlus(&tmpr, &tmpr, &ctxtReal4);       // Imag part
           if(realGetExponent(&tmpr) < -50) {
             printf(" i≈0] ");
@@ -1877,6 +1816,48 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
     printf("%s", after);
   }
 
+
+  // A single byte less than 0x80 is a single ASCII character. A byte of 0x80 or more is the first of a 2-byte character: 
+  //   Mask off the high bit and the two bytes give the Unicode code point as 16-bit value. Example: 0xA1 0x92 -> 0x21 0x92 -> U+2192 (right arrow).
+  void printC47ShortStringToConsole(const char *s, const char *prefix, const char *suffix) {
+    #if defined(PC_BUILD)
+      const uint8_t *p = (const uint8_t *)s;
+      int cp = 0;
+      int n;
+      char text[80];
+      char hex[256];
+      int tx = 0;
+      int hx = 0;
+
+      // Readable representation: printable ASCII as-is, anything else as '.'
+      text[tx++] = '"';
+      while(*p && cp < 30) {
+        uint8_t b = *p;
+        n = (b & 0x80) ? 2 : 1;
+        if(n == 2 && p[1] == 0) {
+          n = 1;
+        }
+        text[tx++] = (n == 1 && b >= 0x20 && b < 0x7F) ? (char)b : '.';
+        for(int j = 0; j < n; j++) {
+          hx += sprintf(hex + hx, "%02X", p[j]);
+        }
+        hex[hx++] = ' ';
+        p += n;
+        cp++;
+      }
+      text[tx++] = '"';
+      text[tx] = 0;
+      hex[hx] = 0;
+
+      if(prefix) {
+        printf("%s", prefix);
+      }
+      printf("%-20s  %-60s  (%2d cp, %2d bytes)", text, hex, cp, (int)((const char *)p - s));
+      if(suffix) {
+        printf("%s", suffix);
+      }
+    #endif // PC_BUILD
+  }
 
 
   void printReal34ToConsole(const real34_t *value, const char *before, const char *after) {
@@ -2010,7 +1991,7 @@ void reallocateRegister(calcRegister_t regist, uint32_t dataType, uint16_t dataS
   }
 
   if(getRegisterDataType(regist) != dataType || ((getRegisterDataType(regist) == dtString || getRegisterDataType(regist) == dtLongInteger || getRegisterDataType(regist) == dtReal34Matrix || getRegisterDataType(regist) == dtComplex34Matrix) && getRegisterMaxDataLengthInBlocks(regist) != dataSizeWithoutDataLenBlocks)) {
-    if(!isMemoryBlockAvailable(dataSizeWithDataLenBlocks)) {
+    if(!isMemoryBlockAvailable(dataSizeWithDataLenBlocks, 2, 0.1f)) {
       #if defined(PC_BUILD)
         printf("In function reallocateRegister: required %" PRIu16 " blocks for register #%" PRId16 " but no data blocks with enough size are available!\n", dataSizeWithoutDataLenBlocks, regist);
         fflush(stdout);
@@ -2114,7 +2095,7 @@ bool_t saveLastX(void) {
 }
 
 
-static uint8_t getRegParam(bool_t *f, uint16_t *s, uint16_t *n, uint16_t *d) {
+uint8_t getRegParam(bool_t *f, uint16_t *s, uint16_t *n, uint16_t *d) {
   real_t x, p;
 
   if(getRegisterDataType(REGISTER_X) == dtReal34) {

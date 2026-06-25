@@ -21,7 +21,14 @@ void convertLongIntegerRegisterToLongInteger(calcRegister_t regist, longInteger_
 
   xcopy(lgInt->_mp_d, REGISTER_LONG_INTEGER_DATA(regist), sizeInBytes);
 
-  if(getRegisterLongIntegerSign(regist) == LI_NEGATIVE) {
+  // Trim trailing zero limbs: GMP requires _mp_size = 0 for value zero,
+  // else mpz_sizeinbase returns 0 and callers underflow on (bits - 1).
+  // GRAMOD = 0 was checked to have _mp_size = 1, not 0
+  while(sizeInBytes >= LIMB_SIZE && lgInt->_mp_d[sizeInBytes/LIMB_SIZE - 1] == 0) {
+    sizeInBytes -= LIMB_SIZE;
+  }
+
+  if(sizeInBytes > 0 && getRegisterLongIntegerSign(regist) == LI_NEGATIVE) {
     lgInt->_mp_size = -(sizeInBytes / LIMB_SIZE);
   }
   else {
@@ -325,6 +332,16 @@ void convertRealToLongIntegerRegister(const real_t *real, calcRegister_t dest, e
 
 
 
+void convertComplexRegisterToRealIfZeroImag(calcRegister_t regist) {
+  real_t b;
+  if(real34IsZero(REGISTER_IMAG34_DATA(regist))) {
+    real34ToReal(REGISTER_REAL34_DATA(regist), &b);
+    convertRealToResultRegister(&b, regist, amNone);
+  }
+}
+
+
+
 void realToIntegralValue(const real_t *source, real_t *destination, enum rounding mode, realContext_t *realContext) {
   enum rounding savedRoundingMode;
 
@@ -463,8 +480,8 @@ void convertReal34RegisterToDateRegister(calcRegister_t source, calcRegister_t d
         lastCenturyHighUsedtmp = 100*(int16_t)(real34ToInt32(&part1) / 100) + 99;
       }
     }
-    else //FLAG_MDY //FLAG_DMY
-    if(real34CompareGreaterEqual(&part3, const34_100)) {
+    //FLAG_MDY //FLAG_DMY
+    else if(real34CompareGreaterEqual(&part3, const34_100)) {
       lastCenturyHighUsedtmp = 100*(int16_t)(real34ToInt32(&part3) / 100) + 99;
     }
 
@@ -847,8 +864,6 @@ infinite:
   return (float)s * exps[e + 45];
 }
 
-//#define realToReal39(source, destination) decQuadFromNumber ((real39_t *)(destination), source, &ctxtReal39)
-
 void realToFloat(const real_t *vv, float *v) {
   *v = fnRealToFloat(vv);
 }
@@ -1194,7 +1209,6 @@ int getRegisterAsLongIntQuiet(calcRegister_t reg, longInteger_t val, bool_t *fra
   real_t rval;
   bool_t frac = false;
 
-  longIntegerInit(val);
   switch(getRegisterDataType(reg)) {
     case dtLongInteger:
       convertLongIntegerRegisterToLongInteger(reg, val);
@@ -1207,6 +1221,7 @@ int getRegisterAsLongIntQuiet(calcRegister_t reg, longInteger_t val, bool_t *fra
     case dtComplex34:
     case dtReal34:
       if(getRegisterAsReal(reg, &rval)) {
+        longIntegerInit(val); // convertRealToLongInteger expects an initialised val
         if(realIsSpecial(&rval)) {
           return ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN;
         }
@@ -1220,6 +1235,7 @@ int getRegisterAsLongIntQuiet(calcRegister_t reg, longInteger_t val, bool_t *fra
       /* fall through */
 
     default:
+      longIntegerInit(val);
       return ERROR_INVALID_DATA_TYPE_FOR_OP;
   }
   if(fractional != NULL) {
@@ -1260,7 +1276,8 @@ static void longIntegerAngleReduction(calcRegister_t regist, angularMode_t angul
       }
       case amRadian: {
         //incoming longInteger, converted via tempString to real6147, modulus 2pi into real6147, convert to real75
-        real2139_t reducedAngleTmp, reducedAngleTmp2;  // This cannot be increased to 6147 further. 6147 overruns the stack even if we just have the type in here also when using 2139 digits below.
+        REAL_T_PTR(reducedAngleTmp, 2139); // This cannot be increased to 6147 further. 6147 overruns the stack even if we just have the type in here also when using 2139 digits below.
+        REAL_T_PTR(reducedAngleTmp2, 2139);
         realContext_t c = ctxtReal75;
         c.digits = 2139;                               // Cannot be increased further. It works well on 1071, worked for a few tests already on 2139 but crashes if this goes to 6147 (together with the real_xxx above)
                                                        // The minimum required for 1000 digits input reduction is slightly less than double, so 1071 is maybe ok for 99.99% cases, but 2139 is preferred as theoretically you will not have a case where 2139 will not work.
@@ -1276,9 +1293,9 @@ static void longIntegerAngleReduction(calcRegister_t regist, angularMode_t angul
         }
 
         longIntegerToString(angle, 10, tmpString);
-        decNumberFromString((real_t *)&reducedAngleTmp, tmpString, &c);
-        WP34S_Mod((real_t *)&reducedAngleTmp, (real_t *)const6147_2pi, (real_t *)&reducedAngleTmp2, &c);
-        realPlus((real_t *)&reducedAngleTmp2, reducedAngle, &ctxtReal75);
+        decNumberFromString(reducedAngleTmp, tmpString, &c);
+        WP34S_Mod(reducedAngleTmp, const6147_2pi, reducedAngleTmp2, &c);
+        realPlus(reducedAngleTmp2, reducedAngle, &ctxtReal75);
         longIntegerFree(angle);
         return;
       }

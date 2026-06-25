@@ -23,7 +23,9 @@
       }
       }
       saveCalc();
-      gtk_main_quit();
+      if(!headlessMode) {
+        gtk_main_quit();
+      }
     #endif // PC_BUILD
 
     #if defined(DMCP_BUILD)
@@ -64,10 +66,6 @@
       jm_show_comment(tmp);
     #endif // PC_BUILD
 
-    if(!tam.mode) {
-      showSoftmenu(-MNU_ALPHA);        //JM ALPHA-HOME  Change to initialize the menu stack. it was true.
-    }
-
     alphaCase = CAPS_AIM_DEFAULT;
     nextChar = NC_NORMAL;
     clearSystemFlag(FLAG_NUMLOCK);
@@ -82,6 +80,10 @@
       yCursor = Y_POSITION_OF_AIM_LINE + 6;
       cursorFont = &standardFont;
       cursorEnabled = true;
+    }
+
+    if(!tam.mode) {
+      showSoftmenu(-MNU_ALPHA);        //JM ALPHA-HOME  Change to initialize the menu stack. it was true.
     }
 
     if(softmenuStack[0].softmenuId == 0) { // MyMenu

@@ -5,9 +5,20 @@
 make                        - Build c47 simulator (default)
 make all                    - Build c47 simulator (default)
 make sim                    - Build c47 simulator
+make simc47                 - Build c47 simulator (alias for make sim)
 make simr47                 - Build r47 simulator
 make both                   - Build both c47 and r47 simulators
 make both_asan              - Build both simulators with AddressSanitizer (memory debugging)
+```
+
+## T47 Variant Builds
+Append `t47` to a `sim`/`simc47`/`simr47`/`both` goal to build into build.sim.t47 with T47 defined. The built binary is also copied to ./t47. Does not apply to `both_asan`.
+```
+make t47                    - Build r47 simulator with T47 defined (alias for make simr47 t47)
+make sim t47                - Build c47 simulator with T47 defined
+make simc47 t47             - Build c47 simulator with T47 defined
+make simr47 t47             - Build r47 simulator with T47 defined
+make both t47               - Build both with T47 defined; ./t47 ends up the r47 build (simr47 copy runs last)
 ```
 
 ## Hardware Builds
