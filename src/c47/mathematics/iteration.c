@@ -74,7 +74,7 @@ static void incDecAndCompare(uint16_t regist, uint16_t mode) {
         real34Add(REGISTER_REAL34_DATA(regist), &fp, REGISTER_REAL34_DATA(regist));
         break;
       }
-    /* fallthrough */
+      __attribute__((fallthrough));
     }
     case dtTime: {
       if((mode & 2) == 2) {  // DSZ / ISZ : count by whole hours (similar /3600 used by MAX/MIN and compares =?)
