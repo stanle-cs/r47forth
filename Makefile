@@ -86,10 +86,10 @@ build.rel.debug:
 	meson setup $(BUILD_PC) --buildtype=custom  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true
 
 build.dmcp:
-	meson setup build.dmcp.p$(DMCP_PACKAGE)  --cross-file=src/c47-dmcp/cross_arm_gcc.build  -DDMCPVERSION=dmcp  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DDMCP_PACKAGE=$(DMCP_PACKAGE)
+	$(if $(f),test -d build.dmcp.p$(DMCP_PACKAGE) ||,rm -rf build.dmcp.p$(DMCP_PACKAGE);) meson setup build.dmcp.p$(DMCP_PACKAGE)  --cross-file=src/c47-dmcp/cross_arm_gcc.build  -DDMCPVERSION=dmcp  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DDMCP_PACKAGE=$(DMCP_PACKAGE)
 
 build.dmcp5:
-	meson setup build.dmcp5 --cross-file=src/c47-dmcp5/cross_arm_gcc.build -DDMCPVERSION=dmcp5 -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true
+	$(if $(f),test -d build.dmcp5 ||,rm -rf build.dmcp5;) meson setup build.dmcp5 --cross-file=src/c47-dmcp5/cross_arm_gcc.build -DDMCPVERSION=dmcp5 -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true
 
 sim: $(BUILD_PC)
 	cd $(BUILD_PC) && ninja sim
@@ -327,7 +327,7 @@ dist_dmcp5r47: dmcp5r47 $(DIST_TESTPGMS_DM)
 
 build.dmcp.p$(PKG): DMCP_PACKAGE = $(PKG)
 build.dmcp.p$(PKG):
-	meson setup build.dmcp.p$(PKG) \
+	$(if $(f),test -d build.dmcp.p$(PKG) ||,rm -rf build.dmcp.p$(PKG);) meson setup build.dmcp.p$(PKG) \
 	  --cross-file=src/c47-dmcp/cross_arm_gcc.build \
 	  -DDMCPVERSION=dmcp \
 	  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) \
