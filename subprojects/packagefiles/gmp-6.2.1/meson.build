@@ -26,6 +26,8 @@ if build_machine.system() == 'windows'
       '--bindir='     + prefix + '/@BINDIR@',
       '--disable-cxx'],
     cross_configure_options : [
+      '--disable-debug',
+      '--disable-dependency-tracking',
       '--host=arm-none-eabi',
       '--disable-assembly',
       '--disable-shared',
@@ -43,6 +45,8 @@ else
       '--includedir=' + prefix + '/@INCLUDEDIR@',
       '--disable-cxx'],
     cross_configure_options : [
+      '--disable-debug',
+      '--disable-dependency-tracking',
       '--host=arm-none-eabi',
       '--disable-assembly',
       '--disable-shared',
