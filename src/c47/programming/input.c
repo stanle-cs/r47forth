@@ -39,20 +39,11 @@ static bool_t _isVarMenu(uint16_t label) {
 
 void fnVarMnu(uint16_t label) {
   if(!_isVarMenu(label)) {
-    if(getSystemFlag(FLAG_IGN1ER)) {
-      clearSystemFlag(FLAG_IGN1ER);
-      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-        sprintf(errorMessage, "No MVAR menu variable instruction after the label");
-        moreInfoOnError("In function fnVarMnu:", errorMessage, NULL, NULL);
-      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
-    }
-    else {
-      displayCalcErrorMessage(ERROR_NO_MVAR_FOUND, ERR_REGISTER_LINE, REGISTER_X);
-      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-        sprintf(errorMessage, "No MVAR menu variable instruction after the label");
-        moreInfoOnError("In function fnVarMnu:", errorMessage, NULL, NULL);
-      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
-    }
+    displayCalcErrorMessage(ERROR_NO_MVAR_FOUND, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "No MVAR menu variable instruction after the label");
+      moreInfoOnError("In function fnVarMnu:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
   }
   else {
     currentMvarLabel = label;
@@ -64,20 +55,11 @@ void fnVarMnu(uint16_t label) {
 
 void fn42VarMnu(uint16_t label) {
   if(!_isVarMenu(label)) {
-    if(getSystemFlag(FLAG_IGN1ER)) {
-      clearSystemFlag(FLAG_IGN1ER);
-      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-        sprintf(errorMessage, "No MVAR menu variable instruction after the label");
-        moreInfoOnError("In function fn42VarMnu:", errorMessage, NULL, NULL);
-      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
-    }
-    else {
-      displayCalcErrorMessage(ERROR_NO_MVAR_FOUND, ERR_REGISTER_LINE, REGISTER_X);
-      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-        sprintf(errorMessage, "No MVAR menu variable instruction after the label");
-        moreInfoOnError("In function fn42VarMnu:", errorMessage, NULL, NULL);
-      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
-    }
+    displayCalcErrorMessage(ERROR_NO_MVAR_FOUND, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "No MVAR menu variable instruction after the label");
+      moreInfoOnError("In function fn42VarMnu:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
   }
   else {
     currentMvarLabel = label;
