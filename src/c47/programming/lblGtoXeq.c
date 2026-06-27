@@ -954,6 +954,9 @@ stopProgram:
     if(temporaryInformation == TI_VIEW_REGISTER) {
       screenUpdatingMode |= SCRUPD_SKIP_STACK_ONE_TIME;
     }
+    if(graphToRemainOnScreen && calcMode == CM_NORMAL) {
+      calcMode = CM_GRAPH;
+    }
     if(screenUpdatingMode == SCRUPD_AUTO && !singleStep) {
       refreshScreen(4);
     }
