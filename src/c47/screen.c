@@ -5771,6 +5771,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
                                 printf(">>> BEGIN _refreshNormalScreen calcMode=%d previousCalcMode=%d screenUpdatingMode=%d\n", calcMode, previousCalcMode, screenUpdatingMode);    //JMYY
                                 print_caller(NULL);
                               #endif // PC_BUILD &&MONITOR_CLRSCR
+        graphToRemainOnScreen = false;
         if(calcMode != CM_NIM) {
           refreshNIMdone = false;
         }
@@ -6148,6 +6149,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
       case CM_GRAPH:
           doRefreshSoftMenu = false;
           graph_plotmem();
+          graphToRemainOnScreen = true;   // a graph is now the on-screen content
           displayShiftAndTamBuffer();
           if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED)) {
             showSoftmenuCurrentPart();

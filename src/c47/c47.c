@@ -163,6 +163,7 @@ uint8_t                dispBase;
 uint8_t                fractionDigits;
 uint8_t                shortIntegerMode;
 uint8_t                previousCalcMode;
+bool_t                 graphToRemainOnScreen;
 uint8_t                grpGroupingLeft;
 uint8_t                grpGroupingGr1LeftOverflow;
 uint8_t                grpGroupingGr1Left;

@@ -398,6 +398,7 @@
   extern uint8_t                fractionDigits;
   extern uint8_t                shortIntegerMode;
   extern uint8_t                previousCalcMode;
+  extern bool_t                 graphToRemainOnScreen;
   extern uint8_t                grpGroupingLeft;
   extern uint8_t                grpGroupingGr1LeftOverflow;
   extern uint8_t                grpGroupingGr1Left;
