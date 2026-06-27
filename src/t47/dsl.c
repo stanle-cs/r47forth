@@ -45,9 +45,9 @@ static bool_t dslAsnHaveItem = FALSE;
 // clang-format off
 /** runCatalogFunctionByName result codes */
 enum {
-    CATFN_NOT_FOUND = 0,
-    CATFN_OK        = 1,
-    CATFN_ERROR     = -1
+  CATFN_NOT_FOUND = 0,
+  CATFN_OK        = 1,
+  CATFN_ERROR     = -1
 };
 // clang-format on
 
@@ -242,8 +242,7 @@ static int runCatalogFunctionByName(Jim_Interp *interp, const char *fnName, int 
   for(int i = 0; i < LAST_ITEM; ++i) {
     item_t item = indexOfItems[i];
     const char *catName = item.itemCatalogName;
-    if((item.status & CAT_STATUS) == CAT_FNCT &&
-        compareString(internalName, catName, CMP_NAME) == 0) {  //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
+    if((item.status & CAT_STATUS) == CAT_FNCT && compareString(internalName, catName, CMP_NAME) == 0) {  //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
       return runCatalogItem(interp, (int16_t)i, argArgc, argArgv, cmdName) == JIM_OK ? CATFN_OK : CATFN_ERROR;
     }
   }
@@ -433,6 +432,35 @@ static int catfnCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
   }
   Jim_SetResultFormatted(interp, "catfn: '%s' not in the function catalog", fnName);
   return JIM_ERR;
+}
+
+/**
+ * item <number> - Calls a built-in catalog function by its numeric item code.
+ * Useful for items not registered in the catalog: bypasses name lookup entirely.
+ */
+static int itemCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
+  if(argc < 2) {
+    Jim_SetResultString(interp, "item: missing item number", -1);
+    return JIM_ERR;
+  }
+  jim_wide itemNr;
+  if(Jim_GetWide(interp, argv[1], &itemNr) != JIM_OK) {
+    Jim_SetResultFormatted(interp, "item: '%#s' is not an integer", argv[1]);
+    return JIM_ERR;
+  }
+  if(itemNr <= 0 || itemNr >= LAST_ITEM) {
+    Jim_SetResultFormatted(interp, "item: item number %lld out of range (1..%d)", (long long)itemNr, LAST_ITEM - 1);
+    return JIM_ERR;
+  }
+  int effectiveArgc = argc - 2;
+  for(int i = 2; i < argc; ++i) {
+    const char *s = Jim_String(argv[i]);
+    if(s != NULL && s[0] == '#') {
+      effectiveArgc = i - 2;
+      break;
+    }
+  }
+  return runCatalogItem(interp, (int16_t)itemNr, effectiveArgc, argv + 2, "item");
 }
 
 /**
@@ -694,11 +722,25 @@ static int asnCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
  * readp <filename> - Load a program from file (like READP menu command)
  */
 static int readpCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
-  const char *filename = (argc > 1) ? Jim_String(argv[1]) : "";
-  if(strlen(filename) > 0) {
-    setReadpFilenameOverride(filename);
+  if(argc < 2) {
+    Jim_SetResultString(interp, "readp: missing filename", -1);
+    return JIM_ERR;
   }
+
+  const char *filename = Jim_String(argv[1]);
+
+  lastErrorCode = ERROR_NONE;
+  setReadpFilenameOverride(filename);
   fnLoadProgram(0);
+
+  if(temporaryInformation != TI_PROGRAM_LOADED) {
+    const char *detail = (lastErrorCode != ERROR_NONE)
+        ? errorMessages[lastErrorCode]
+        : "unknown error";
+    Jim_SetResultFormatted(interp, "readp: failed to load '%s': %s", filename, detail);
+    return JIM_ERR;
+  }
+
   return JIM_OK;
 }
 
@@ -735,15 +777,15 @@ static int xeqCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
     if(found == CATFN_ERROR) {
       return JIM_ERR;
     }
-#ifdef UTF8_FAIL_DEBUG
-    // Label lookup missed. Dump both encodings so a conversion fault is visible.
-    // utf8 is the raw Jim input, internal is what findNamedLabel actually searched for.
-    printf("xeq: miss; utf8='%s' internal=", labelName);
-    for(const unsigned char *p = (const unsigned char *)internalLabel; *p; ++p) {
-      printf("%02X ", *p);
-    }
-    printf("\n");
-#endif
+    #if defined(UTF8_FAIL_DEBUG)
+      // Label lookup missed. Dump both encodings so a conversion fault is visible.
+      // utf8 is the raw Jim input, internal is what findNamedLabel actually searched for.
+      printf("xeq: miss; utf8='%s' internal=", labelName);
+      for(const unsigned char *p = (const unsigned char *)internalLabel; *p; ++p) {
+        printf("%02X ", *p);
+      }
+      printf("\n");
+    #endif // UTF8_FAIL_DEBUG
     Jim_SetResultFormatted(interp, "xeq: '%s' not found as label or function", labelName);
     return JIM_ERR;
   }
@@ -1129,6 +1171,7 @@ void initDSL(void) {
   Jim_CreateCommand(interp, "asn",    asnCmd,    NULL, NULL);
   Jim_CreateCommand(interp, "catfn",  catfnCmd,  NULL, NULL);
   Jim_CreateCommand(interp, "flag",   flagCmd,   NULL, NULL);
+  Jim_CreateCommand(interp, "item",   itemCmd,   NULL, NULL);
   Jim_CreateCommand(interp, "loadst", loadstCmd, NULL, NULL);
   Jim_CreateCommand(interp, "menu",   menuCmd,   NULL, NULL);
   Jim_CreateCommand(interp, "nim",    nimCmd,    NULL, NULL);

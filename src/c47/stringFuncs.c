@@ -336,8 +336,10 @@ static void _doXToAlpha(uint16_t regist) {
   unsigned char char1, char2;
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertLongIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -347,17 +349,20 @@ static void _doXToAlpha(uint16_t regist) {
         uInt32ToLongInteger(1000000, lgInt);
       }
       else {
+        longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
         convertReal34ToLongInteger(REGISTER_REAL34_DATA(REGISTER_X), lgInt, DEC_ROUND_DOWN);
       }
       break;
     }
 
     case dtShortInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
 
     case dtReal34Matrix: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -400,7 +405,7 @@ static void _doXToAlpha(uint16_t regist) {
 
   longIntegerFree(lgInt);
 
-  if (regist != REGISTER_X) {
+  if(regist != REGISTER_X) {
     _readDestinationRegister(regist);
   }
   else {
@@ -467,7 +472,7 @@ void fnXToAlpha(uint16_t regist) {   // new version, similar to the hp-42s ATOX 
     }
 
     case dtReal34Matrix: {
-      if (regist != REGISTER_X) {
+      if(regist != REGISTER_X) {
         elementwiseRema_UInt16(_doXToAlpha, regist);
       }
       else {                                 // if X is the destination register, just return in X a string composed of the character codes from the matrux in X
@@ -497,8 +502,10 @@ void fnXToAlphaOld(uint16_t unusedButMandatoryParameter) {   // deprecated versi
   unsigned char char1, char2;
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertLongIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -508,12 +515,14 @@ void fnXToAlphaOld(uint16_t unusedButMandatoryParameter) {   // deprecated versi
         uInt32ToLongInteger(1000000u, lgInt);
       }
       else {
+        longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
         convertReal34ToLongInteger(REGISTER_REAL34_DATA(REGISTER_X), lgInt, DEC_ROUND_DOWN);
       }
       break;
     }
 
     case dtShortInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -537,6 +546,7 @@ void fnXToAlphaOld(uint16_t unusedButMandatoryParameter) {   // deprecated versi
       sprintf(errorMessage, "for x" STD_RIGHT_ARROW STD_alpha ", X must be < 32768. Here X = %" PRIu32, (uint32_t)lgInt->_mp_d[0]); // OK for 32 and 64 bit limbs
       moreInfoOnError("In function fnXToAlpha:", errorMessage, NULL, NULL);
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    longIntegerFree(lgInt);
     return;
   }
 
@@ -616,7 +626,7 @@ void fnAlphaPos(uint16_t regist) {
         int32ToLongInteger(i, lgInt);
         break;
       }
-	}
+    }
   }
 
 
@@ -649,8 +659,10 @@ void fnAlphaRR(uint16_t regist) {
   }
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertLongIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -670,6 +682,7 @@ void fnAlphaRR(uint16_t regist) {
     }
 
     case dtShortInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -730,8 +743,10 @@ void fnAlphaRL(uint16_t regist) {
   }
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertLongIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -751,6 +766,7 @@ void fnAlphaRL(uint16_t regist) {
     }
 
     case dtShortInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -809,8 +825,10 @@ void fnAlphaSR(uint16_t regist) {
   }
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertLongIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -820,12 +838,14 @@ void fnAlphaSR(uint16_t regist) {
         uInt32ToLongInteger(1000000u, lgInt);
       }
       else {
+        longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
         convertReal34ToLongInteger(REGISTER_REAL34_DATA(REGISTER_X), lgInt, DEC_ROUND_DOWN);
       }
       break;
     }
 
     case dtShortInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -885,8 +905,10 @@ void fnAlphaSL(uint16_t regist) {
   }
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertLongIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -896,12 +918,14 @@ void fnAlphaSL(uint16_t regist) {
         uInt32ToLongInteger(1000000u, lgInt);
       }
       else {
+        longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
         convertReal34ToLongInteger(REGISTER_REAL34_DATA(REGISTER_X), lgInt, DEC_ROUND_DOWN);
       }
       break;
     }
 
     case dtShortInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
@@ -992,18 +1016,22 @@ void fn42AlphaRotate(uint16_t unusedButMandatoryParameter) {
   }
 
   longIntegerInit(lgInt);
+  // lgInt pre-init. Each converter branch must longIntegerFree() the pre-init first, or it leaks.
   switch(getRegisterDataType(REGISTER_X)) {
     case dtLongInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertLongIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }
 
     case dtReal34: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertReal34ToLongInteger(REGISTER_REAL34_DATA(REGISTER_X), lgInt, DEC_ROUND_DOWN);
       break;
     }
 
     case dtShortInteger: {
+      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
       convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
       break;
     }

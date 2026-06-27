@@ -9,21 +9,21 @@
 // VARIOUS OPTIONS
 //*********************************
 
-#define VERSION1 "0.109.03.02b0"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
+#define VERSION1 "00.109.03.03b0"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
 
-// Version 0.109.02.07b11   Public Release C47 & R47
-// Version 0.109.02.07b12   Public Release C47 & R47 launch
-// Version 0.109.02.07b13.1 Public Release C47 & R47
-// Version 0.109.03.00b0    Public Release C47 & R47
-// Version 0.109.03.00a1    Internal C47 & R47
-// Version 0.109.03.00b1    Public C47 & R47, with 2 packages for DM42
-// Version 0.109.03.00a2    Internal C47 & R47
-// Version 0.109.03.00b2    Public C47 & R47
-// Version 0.109.03.01b0    Public C47 & R47
-// Version 0.109.03.01b1    Public C47 & R47 bugfix version TVM
-// Version 0.109.03.02a0    Public C47 & R47 ALPHA version test vectors only
-// Version 0.109.03.02b0    Public C47 & R47
-
+// Version 00.109.02.07b11   Public Release C47 & R47
+// Version 00.109.02.07b12   Public Release C47 & R47 launch
+// Version 00.109.02.07b13.1 Public Release C47 & R47
+// Version 00.109.03.00b0    Public Release C47 & R47
+// Version 00.109.03.00a1    Internal C47 & R47
+// Version 00.109.03.00b1    Public C47 & R47, with 2 packages for DM42
+// Version 00.109.03.00a2    Internal C47 & R47
+// Version 00.109.03.00b2    Public C47 & R47
+// Version 00.109.03.01b0    Public C47 & R47
+// Version 00.109.03.01b1    Public C47 & R47 bugfix version TVM
+// Version 00.109.03.02a0    Public C47 & R47 ALPHA version test vectors only
+// Version 00.109.03.02b0    Public C47 & R47
+// Version 00.109.03.03b0    Public C47 & R47
 
 #if !defined(CALCMODEL)
   #define CALCMODEL USER_C47               // USER_C47 or USER_R47
@@ -759,14 +759,16 @@
 #define TI_All_user_prgms_deleted                121
 #define TI_All_user_menus_deleted                122
 #define TI_All_user_vars_deleted                 123
+#define TI_Data_file_loaded                      124
+#define TI_Data_file_saved                       125
 
 //TI & ERROR Messages
-#define TI_Not_on_simulator                      124
-#define TI_Only_on_simulator                     125
-#define ERROR_TI_UNDO_FAILED                     126
+#define TI_Not_on_simulator                      126
+#define TI_Only_on_simulator                     127
+#define ERROR_TI_UNDO_FAILED                     128
 
 
-#define NUMBER_OF_ERROR_CODES                    127
+#define NUMBER_OF_ERROR_CODES                    129
 #define SIZE_OF_EACH_ERROR_MESSAGE                48
 
 #define NUMBER_OF_BUG_SCREEN_MESSAGES             10
@@ -831,7 +833,7 @@
 #define FLAG_alphaCAP                         0xc00f
 #define FLAG_RUNTIM                           0xc010
 #define FLAG_AMORT_HP12C                      0x8011
-#define FLAG_spare                            0xc012 // spare
+#define FLAG_spare                            0xc012
 #define FLAG_TRACE                            0x8013
 #define FLAG_USER                             0x8014
 #define FLAG_LOWBAT                           0xc015
@@ -918,8 +920,10 @@
 #define FLAG_3DXYZ                            0x8066
 #define FLAG_PRTEN                            0x8067
 #define FLAG_NORM                             0x8068 //41
+#define FLAG_BOLD                             0x8069 //42
+#define FLAG_SIGZEROS                         0x806A //43
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+41 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+43 // We can have a maximum of 128 system flags
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode
@@ -1861,6 +1865,8 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define TI_AMORT_INT                             139
 #define TI_AMORT_P1                              140
 #define TI_AMORT_P2                              141
+#define TI_DATA_LOADED                           142
+#define TI_DATA_SAVED                            143
 
 #define SET_TI_TRUE_FALSE(condition)               do { temporaryInformation = TI_FALSE + (condition); } while(0) // TI_TRUE must be TI_FALSE + 1
 
@@ -2020,7 +2026,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define SIGMA_YMAX   (statisticalSumsPointer + SUM_YMAX  ) // could be a real34. No, this must be old. SIGMA_** is a Real.
 
 #define MAX_NUMBER_OF_GLYPHS_IN_STRING           508 //WP=196: Change to 512 less 3, Also change error message 33, and AIM_BUFFER_LENGTH, and MAXLINES
-#define NUMBER_OF_GLYPH_ROWS                     242 //Used in the font browser application
+#define NUMBER_OF_GLYPH_ROWS                     259 //Used in the font browser application
 
 #define YY_OFF                                     2 // 2 is off and gets transferred to bit 15 (32768 + YY)
 #define YY_TRACKING                                1 // 1 gets transferred to bit 14 (16384 + YY)
