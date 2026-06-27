@@ -506,7 +506,7 @@ void fnSaveLetteredRegisters(uint16_t unusedButMandatoryParameter) {
 }
 
 void fnSaveNRegisters(uint16_t N) {
-  if(N <= 125) {
+  if(N >= 1 && N <= LAST_SPARE_REGISTER + 1) {   // N registers = 0..N-1; max is all 126 (0..125, i.e. up to RW)
     uint16_t beginR = 0;
     uint16_t endR   = N - 1;
     doSaveDataFile(&beginR, &endR, NULL, !isXFN);
@@ -524,10 +524,10 @@ void fnSaveRegister(uint16_t regist) {
     char varName[16];
     stringToUtf8((char *)allNamedVariables[regist - FIRST_NAMED_VARIABLE].variableName + 1, (uint8_t *)varName);
     doSaveDataFile(NULL, NULL, varName, !isXFN);                                    // named variable: save by name
-  } else if(regist < LAST_SPARE_REGISTER) {
+  } else if(regist <= LAST_SPARE_REGISTER) {
     uint16_t beginR = regist;
     uint16_t endR   = regist;
-    doSaveDataFile(&beginR, &endR, NULL, !isXFN);                                   // numbererd or lettered register: save by number
+    doSaveDataFile(&beginR, &endR, NULL, !isXFN);                                   // numbererd or lettered register: save by number (through RW = LAST_SPARE_REGISTER)
   } else {
     displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
