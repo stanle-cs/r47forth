@@ -1948,6 +1948,14 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define LM_REGISTERS_PARTIAL                       6
 #define LM_STATE_LOAD                              7
 
+// String Functions
+#define SF_TO_UPPER_CASE                        true
+#define SF_TO_LOWER_CASE                       false
+#define SF_LEFT                                    1
+#define SF_MID                                     2
+#define SF_RIGHT                                   3
+
+
 // Screen updating mode
 #define SCRUPD_AUTO                             0x00
 #define SCRUPD_MANUAL_STATUSBAR                 0x01       //0000 0001
@@ -2176,7 +2184,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
   #define beep(frequence, length)            do { while(get_beep_volume() < 11) beep_volume_up(); start_buzzer_freq(frequence * 1000); sys_delay(length); stop_buzzer(); } while(0)
   #undef TO_QSPI
   #if defined(TWO_FILE_PGM)
-    #define TO_QSPI                          __attribute__ ((section(".qspi")))
+    #define TO_QSPI                          __attribute__ ((section(".qspi_data")))
   #else // !TWO_FILE_PGM
     #define TO_QSPI
   #endif // TWO_FILE_PGM
@@ -2519,17 +2527,19 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #endif // PC_BUILD
 
 #if defined(DMCP_BUILD)
+  #define STRINGIFY_HELPER(x) #x
+  #define STRINGIFY(x) STRINGIFY_HELPER(x)
   /* Import a binary file - from https://elm-chan.org/junk/32bit/binclude.html */
   #define IMPORT_BIN(sect, file, sym) asm (                                   \
-      ".section " #sect "\n"                  /* Change section */            \
-      ".balign 4\n"                           /* Word alignment */            \
+      ".section " #sect "\n"                  /* Change section            */ \
+      ".balign 4\n"                           /* Word alignment            */ \
       ".global " #sym "\n"                    /* Export the object address */ \
-      #sym ":\n"                              /* Define the object label */   \
-      ".incbin \"" file "\"\n"                /* Import the file */           \
-      ".global _sizeof_" #sym "\n"            /* Export the object size */    \
-      ".set _sizeof_" #sym ", . - " #sym "\n" /* Define the object size */    \
-      ".balign 4\n"                           /* Word alignment */            \
-      ".section \".text\"\n")                 /* Restore section */
+      #sym ":\n"                              /* Define the object label   */ \
+      ".incbin \"" STRINGIFY(file) "\"\n"     /* Import the file           */ \
+      ".global _sizeof_" #sym "\n"            /* Export the object size    */ \
+      ".set _sizeof_" #sym ", . - " #sym "\n" /* Define the object size    */ \
+      ".balign 4\n"                           /* Word alignment            */ \
+      ".section \".text\"\n")                 /* Restore section           */
 #endif // DMCP_BUILD
 
 #endif // !DEFINES_H

@@ -18,7 +18,7 @@
 backup.bin
 backup.cfg
 backupR47.cfg
-wp43.sav    
+wp43.sav
 wp43.dat
 c47.sav
 c47.dat
@@ -34,6 +34,7 @@ tags
 /PROGRAMS
 /SAVFILES
 /src/generated
+AGENTS.md
 
 # Over_score testing agent coding
 AGENTS.md
