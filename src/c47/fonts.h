@@ -765,7 +765,7 @@
 #define STD_FOR_ALL                   "\xac\x6f" // was U+2200
 #define STD_RIGHT_DOUBLE_ARROW        "\xa1\xD2"    //JM
 #define STD_LEFT_RIGHT_DOUBLE_ARROW   "\xa1\xD4"    //JM
-#define STD_CHECKERED                 "\xa4\x27"
+#define STD_CHECKERED                 "\xa4\x04"
 #define STD_BLACK_RIGHT_TRIANGLE      "\xa5\xb6"
 #define STD_LF_PIC                    "\xa4\x0a"
 #define STD_ESC_PIC                   "\xa4\x1b"

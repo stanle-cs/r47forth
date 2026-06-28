@@ -463,11 +463,8 @@ Added QRNZ to NUM font
      U+25EE STD_TRI_RHB    Add glyph  ◮  
 
 2026-06-28
-
-   On STD font: Move
-     U+2427 to U+0459     Half checkered block
-   ADD:
-     U+2427   ␧           HP42S checkered block
+   ADD to STD font:
+     U+2404               HP42S checkered block
      U+25B6   ▶           HP42S Black right pointing triangle
      U+240A   ␊           HP42S Line Feed picture
      U+241B   ␛           HP42S ESC picture
