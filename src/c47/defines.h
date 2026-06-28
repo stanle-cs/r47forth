@@ -1946,6 +1946,14 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define LM_REGISTERS_PARTIAL                       6
 #define LM_STATE_LOAD                              7
 
+// String Functions
+#define SF_TO_UPPER_CASE                        true
+#define SF_TO_LOWER_CASE                       false
+#define SF_LEFT                                    1
+#define SF_MID                                     2
+#define SF_RIGHT                                   3
+
+
 // Screen updating mode
 #define SCRUPD_AUTO                             0x00
 #define SCRUPD_MANUAL_STATUSBAR                 0x01       //0000 0001
