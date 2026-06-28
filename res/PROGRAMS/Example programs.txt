@@ -38,3 +38,4 @@ Demonstration programs included in C47 distro
 
 11.  TSTPLOT.rtf   TSTPLOT.p47     Graphing of RPN function, demo for programmed gamma function plot
 
+12.  INTDEMO.txt   INTDEMO.p47     Accompanying program for Appnote 0022
