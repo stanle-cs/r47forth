@@ -1009,7 +1009,7 @@
 #define ITM_US                       979
 #define ITM_NEG_EXCLAMATION_MARK     980
 #define ITM_ex                       981
-#define ITM_CHECKERED                982
+#define ITM_LF_PIC                   982
 #define ITM_SMALL_SQUARE             983
 #define ITM_0984                     984
 #define ITM_0985                     985
