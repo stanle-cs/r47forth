@@ -537,7 +537,7 @@ void printTab(uint16_t col) { // pixel-aligned column
   }
   if(printerColumn < col) {
     uint16_t i, j;
-    i = (col - 1 - printerColumn) % 7;
+    i = (col - printerColumn) % 7;
     if(i == 0 && printerColumn == 0 && col > 6) {
       i = 7;  // compensate for the first column being not printed
     }
@@ -549,7 +549,7 @@ void printTab(uint16_t col) { // pixel-aligned column
         sendByteIR(0);
       }
     }
-    j = (col - 1 - printerColumn) / 7;
+    j = (col - printerColumn) / 7;
     while(j--) {
       sendByteIR(' ');
     }
@@ -1139,6 +1139,27 @@ void printReg(uint16_t regist, const char *label, bool_t eq, print_area_t where,
       return;
     }
 
+    case dtShortInteger: {
+      int16_t base, n;
+      uint64_t shortInt;
+      shortInt = *(REGISTER_SHORT_INTEGER_DATA(regist)) & shortIntegerMask;
+      base = getRegisterShortIntegerBase(regist);
+      n = ERROR_MESSAGE_LENGTH - 100;
+      sprintf(errorMessage + n--, "#%02d", base);
+      if(shortInt == 0) {
+        errorMessage[n--] = '0';
+      }
+      else {
+        while(shortInt != 0) {
+          errorMessage[n--] = baseDigits[shortInt % base];
+          shortInt /= base;
+        }
+      }
+      n++;
+      strcpy(tmpString, errorMessage + n);
+      break;
+    }
+
     default:
       copyRegisterToClipboardString(regist, tmpString, true);
       break;
@@ -1149,12 +1170,7 @@ void printReg(uint16_t regist, const char *label, bool_t eq, print_area_t where,
     uint16_t glen = stringGlyphLength(tmpString);
     if((where == LINE_NOLF) && (glen < 17)) {
       padding = 17 - glen;
-      for(i = strlen(tmpString)+padding; i >= padding; i--) {
-        tmpString[i] = tmpString[i-padding];
-      }
-      for(i = 0; i < padding; i++) {
-        tmpString[i] = ' ';
-      }
+      printTab(padding * 7 - 1);
     }
 
     if(glen > 17) {
@@ -1179,6 +1195,7 @@ void printReg(uint16_t regist, const char *label, bool_t eq, print_area_t where,
       printJustifiedLeft(tmpString);
       break;
     case LINE_NOLF:
+    case LINE_ASIS:
       printLine(tmpString, 0);
       break;
     default:
@@ -1386,7 +1403,7 @@ void printTraceErrorFunction(int16_t func, char *errorString) {
     printJustified(tmpString);
     leaveTamModeIfEnabled();
 
-    #if defined(PC_BUILD)
+    #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
       printf("**[DL]** Trace: %s\n", tmpString);
       fflush(stdout);
     #endif // PC_BUILD
@@ -1400,7 +1417,7 @@ void printTraceError(char *errorString) {
   if(getSystemFlag(FLAG_TRACE) && getSystemFlag(FLAG_PRTACT)) {   // Trace mode and printer active
     printLine(errorString, 1);
 
-    #if defined(PC_BUILD)
+    #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
       printf("**[DL]** Trace: %s\n", errorString);
       fflush(stdout);
     #endif // PC_BUILD
@@ -1420,7 +1437,7 @@ void printTraceX(uint16_t where) {
       printReg(REGISTER_X, NULL, false, where, false);  // Print register X without name header
     }
 
-    #if defined(PC_BUILD)
+    #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
       printf("**[DL]** Trace: %s\n", tmpString);
       fflush(stdout);
     #endif // PC_BUILD
@@ -1451,7 +1468,7 @@ void printTraceMatElement(uint16_t where) {
     }
     printReg(TEMP_REGISTER_1, NULL, false, where, false);  // Print temporary register 1 without name header
 
-    #if defined(PC_BUILD)
+    #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
       printf("**[DL]** printTraceMatElement where %d Trace: %s\n", where, tmpString);
       fflush(stdout);
     #endif // PC_BUILD
@@ -1469,7 +1486,7 @@ void printTraceString(char *string, uint16_t where) {
     xcopy(REGISTER_STRING_DATA(TEMP_REGISTER_1), string, lenInBytes);
     printReg(TEMP_REGISTER_1, NULL, false, where, false);  // Print register X without name header
 
-    #if defined(PC_BUILD)
+    #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
       printf("**[DL]** printTraceString Trace: %s\n", tmpString);
       fflush(stdout);
     #endif // PC_BUILD
@@ -1497,7 +1514,7 @@ void printTraceTI() {
       }
       if(tmpString[0] != 0) {
         printLine(tmpString, 1);
-        #if defined(PC_BUILD)
+        #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
           printf("**[DL]** Trace: %s\n", tmpString);
           fflush(stdout);
         #endif // PC_BUILD
@@ -1527,16 +1544,34 @@ void _getRegisterLabel(uint16_t registerNo, char *label) {
 }
 
 //
-//  PROMPT printing
+//  INPUT and PROMPT printing
 //
-void printPrompt(uint16_t regist) {
+void printInputPrompt(uint16_t func, uint16_t regist) {
   if((getSystemFlag(FLAG_TRACE) || getSystemFlag(FLAG_NORM)) && getSystemFlag(FLAG_PRTACT)) {   // Trace or Norm mode and printer active
-    if(getSystemFlag(FLAG_PRTEN) || ((programRunStop != PGM_RUNNING) && (programRunStop != PGM_SINGLE_STEP))) { // No printing in a program if PRTEN cleared
-      printReg(regist, NULL, false, LINE_LEFT, false);  // Print register left justified without name header
-      #if defined(PC_BUILD)
-        printf("**[DL]** Trace: %s\n", tmpString);
-        fflush(stdout);
-      #endif // PC_BUILD
+    if(getSystemFlag(FLAG_PRTEN) || ((programRunStop != PGM_RUNNING) && (programRunStop != PGM_SINGLE_STEP) && (programRunStop != PGM_WAITING))) { // No printing in a program if PRTEN cleared
+      if(func == ITM_PROMPT) {
+        printReg(regist, NULL, false, LINE_ASIS, false);  // Print register left justified without name header
+        print_lf();
+        #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
+          printf("**[DL]** Trace: %s\n", tmpString);
+          fflush(stdout);
+        #endif // PC_BUILD
+      }
+      else {  // ITM_INPUT
+        char label[16];
+        uint16_t len;
+        _getRegisterLabel(regist, label);
+        len = strlen(label);
+        label[len++] = '?';
+        label[len] = 0;
+        printReg(regist, label, false, LINE_ASIS, false);  // Print register left justified with name header
+        print_lf();
+        #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
+          printf("**[DL]** Trace: %s\n", tmpString);
+          fflush(stdout);
+        #endif // PC_BUILD
+        tmpString[0] = 0;
+      }
     }
   }
 }
@@ -1550,15 +1585,17 @@ void printViewAview(uint16_t func, uint16_t regist) {
       if(func == ITM_VIEW) {
         char label[16];
         _getRegisterLabel(regist, label);
-        printReg(regist, label, true, LINE_LEFT, false);  // Print register left justified with name header
-        #if defined(PC_BUILD)
+        printReg(regist, label, true, LINE_ASIS, false);  // Print register left justified with name header
+        print_lf();
+        #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
           printf("**[DL]** Trace: %s=%s\n", label, tmpString);
           fflush(stdout);
         #endif // PC_BUILD
       }
-      else {
-        printReg(regist, NULL, false, LINE_LEFT, false);  // Print register left justified without name header
-        #if defined(PC_BUILD)
+      else {  // ITM_AVIEW
+        printReg(regist, NULL, false, LINE_ASIS, false);  // Print register left justified without name header
+        print_lf();
+        #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
           printf("**[DL]** Trace: %s\n", tmpString);
           fflush(stdout);
         #endif // PC_BUILD
@@ -1589,14 +1626,14 @@ void printTrace(int16_t func, uint16_t param) {
       if(func < 0) {   // Menu
         if(func == -MNU_DYNAMIC) {
           printJustified(userMenus[currentUserMenu].menuName);    // User Menu
-          #if defined(PC_BUILD)
+          #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
             printf("**[DL]** Trace: %s\n", userMenus[currentUserMenu].menuName);
             fflush(stdout);
           #endif // PC_BUILD
         }
         else {
           printJustified(indexOfItems[-func].itemSoftmenuName);   // Predefined Menu
-          #if defined(PC_BUILD)
+          #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
             printf("**[DL]** Trace: %s\n", indexOfItems[-func].itemSoftmenuName);
             fflush(stdout);
           #endif // PC_BUILD
@@ -1657,7 +1694,7 @@ void printTrace(int16_t func, uint16_t param) {
             strcat(tmpString, (char *)allReservedVariables[param - FIRST_RESERVED_VARIABLE].reservedVariableName + 1);
             strcat(tmpString, STD_RIGHT_SINGLE_QUOTE);
           }
-          else if((tam.mode == TM_LABEL || tam.mode == TM_LBLONLY) && !tam.indirect) {
+          else if((tam.mode == TM_LABEL || tam.mode == TM_LBLONLY || func == ITM_XEQ) && !tam.indirect) {
             if(param < 99) { // Local label from 00 to 99
               sprintf(traceBuffer, " %02u", param);
             }
@@ -1732,13 +1769,16 @@ void printTrace(int16_t func, uint16_t param) {
           }
           strcat(tmpString, traceBuffer);
         }
+        else if((func == ITM_MENU) && (dynamicMenuItem >= 0)) {
+          xcopy(tmpString, programmableMenu.itemName[dynamicMenuItem], 16);
+        }
         uint16_t width = stringGlyphLength(tmpString) * 7 - 1;
         if(printerColumn + width > PAPER_WIDTH) {
           printAdvance(0);
         }
         printJustified(tmpString);
 
-        #if defined(PC_BUILD)
+        #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
           printf("**[DL]** Trace: %s\n", tmpString);
           fflush(stdout);
         #endif // PC_BUILD
@@ -1752,14 +1792,14 @@ void printTrace(int16_t func, uint16_t param) {
         strcat(traceBuffer, STD_BLACK_RIGHT_TRIANGLE);
         strcat(traceBuffer, tmpString);
         printJustified(traceBuffer);     // Current step & step number
-        #if defined(PC_BUILD)
+        #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
           printf("**[DL]** Trace: %s\n", traceBuffer);
           fflush(stdout);
         #endif // PC_BUILD
       }
-      else {
+      else if(func >= 0) {  // Don't trace menu names during program execution
         printJustified(tmpString);    // Current step
-        #if defined(PC_BUILD)
+        #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
           printf("**[DL]** Trace: %s\n", tmpString);
           fflush(stdout);
         #endif // PC_BUILD
@@ -1952,8 +1992,7 @@ static uint16_t _getUnicodeValue(calcRegister_t regist) {
   else if(getRegisterDataType(regist) == dtShortInteger) {
     longInteger_t lgInt;
 
-    longIntegerInit(lgInt);
-    convertShortIntegerRegisterToLongInteger(regist, lgInt);
+    convertShortIntegerRegisterToLongInteger(regist, lgInt); // initialises lgInt
     longIntegerToUInt32(lgInt, value);
     longIntegerFree(lgInt);
   }

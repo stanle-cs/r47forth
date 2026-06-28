@@ -120,6 +120,8 @@ TO_QSPI const radiocb_t indexOfRadioCbEepromItems[] = {
   {ITM_MNUp1 ,           FLAG_MNUp1  ,           CB_JC},
   {ITM_HPBASE,           FLAG_HPBASE ,           CB_JC},
   {ITM_AMORT_HP12C,      FLAG_AMORT_HP12C,       CB_JC},
+  {ITM_BOLD,             FLAG_BOLD,              CB_JC},
+  {ITM_SIGZEROS,         FLAG_SIGZEROS,          CB_JC},
   {ITM_2TO10,            FLAG_2TO10  ,           CB_JC},
   {ITM_DENANY,           FLAG_DENANY ,           CB_JC},
   {ITM_DENFIX,           FLAG_DENFIX ,           CB_JC},
@@ -257,6 +259,8 @@ TO_QSPI const uint16_t systemFlagParams[] = {  // CB_JC CHECK BOX System flags c
   FLAG_MNUp1,
   FLAG_HPBASE,
   FLAG_AMORT_HP12C,
+  FLAG_BOLD,
+  FLAG_SIGZEROS,
   FLAG_2TO10,
   FLAG_DENANY,
   FLAG_DENFIX,
@@ -564,6 +568,16 @@ int16_t fnItemShowValue(int16_t item) {
     case ITM_DSPCYCLE:  result = 32700 + displayFormat;                             break;
     case ITM_SCR:       result = (scrLock & 0x03) | (nextChar & 0x03);              break;
     case ITM_DSP:       result = displayFormatDigits;                               break;
+//    case ITM_GET_ADM:
+    case ITM_SET_ADM:   result = currentAngularMode;                                break;
+//    case ITM_GET_ISM:
+    case ITM_SET_ISM:   result = shortIntegerModeValue();                           break;
+//    case ITM_GET_REALDF:
+    case ITM_SET_REALDF:result = displayFormat;                                     break;
+//    case ITM_GETDMX:
+    case ITM_SET_DMX:   result = denMax;                                            break;
+//    case ITM_GET_NDEC:
+    case ITM_SET_NDEC:  result = displayFormatDigits;                               break;
     case ITM_HIDE:      result = exponentHideLimit;                                 break;
     case ITM_BESTF:     result = (lrSelection) & 0x1FF;                             break;
     case ITM_RMODE:     result = roundingMode;                                      break;

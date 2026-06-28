@@ -467,7 +467,7 @@ void fnSaveAllPrograms(uint16_t unusedButMandatoryParameter) {
   #if defined(PC_BUILD)
     const uint16_t savedCurrentLocalStepNumber = currentLocalStepNumber;
     uint16_t savedCurrentProgramNumber = currentProgramNumber;
-    uint16_t oldCurrentProgramNumber;
+    uint16_t oldCurrentProgramNumber = 0;
 
     uint16_t label;
     char labelName[16];
@@ -477,13 +477,9 @@ void fnSaveAllPrograms(uint16_t unusedButMandatoryParameter) {
             xcopy(labelName, labelList[i].labelPointer + 1, labelList[i].labelPointer[0]);
             labelName[labelList[i].labelPointer[0]]=0;
             label = findNamedLabel(labelName);
-            //printf("#### labelnumber=%i, labelname=%s\n",label, labelName);
-            oldCurrentProgramNumber = currentProgramNumber;
-
             _selectProgram(label);
-
             stringToASCII(labelName, labelName1);
-            //printf("----X %6u ? old=%6u name=%30s  ",currentProgramNumber, oldCurrentProgramNumber, labelName1);
+            //printf("#### labelNo=%5i, labelName=%11s, ----Pr no=%6u, old Pr no=%6u name=%30s,  ",label, labelName, currentProgramNumber, oldCurrentProgramNumber, labelName1);
             if(currentProgramNumber != oldCurrentProgramNumber) {
               printf("Export & saving labelnumber %5i in program number %5u: Files %s.p47 %s.rtf\n", label, currentProgramNumber, labelName1, labelName1);
               fflush(stdout);
@@ -494,6 +490,7 @@ void fnSaveAllPrograms(uint16_t unusedButMandatoryParameter) {
               printf("   Not saved: %s is not the first label in program %5u.\n", labelName1, currentProgramNumber);
               fflush(stdout);
             }
+            oldCurrentProgramNumber = currentProgramNumber;
           }
         }
     currentLocalStepNumber = savedCurrentLocalStepNumber;
@@ -524,9 +521,9 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
 
     //Check save file version
     uint32_t loadedVersion = 0;
-    readLine(tmpString);
+    readLine(tmpString, TMP_STR_LENGTH);
     if(strcmp(tmpString, "PROGRAM_FILE_FORMAT") == 0) {
-      readLine(aimBuffer); // Format of program instructions (ignore now, there is only one format)
+      readLine(aimBuffer, AIM_BUFFER_LENGTH); // Format of program instructions (ignore now, there is only one format)
     }
     else {
       sprintf(tmpString, " \nThis is not a C47 program\n\nIt will not be loaded.");
@@ -534,8 +531,8 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
       ioFileClose();
       return;
     }
-    readLine(aimBuffer); // param
-    readLine(tmpString); // value
+    readLine(aimBuffer, AIM_BUFFER_LENGTH); // param
+    readLine(tmpString, TMP_STR_LENGTH); // value
     if(strcmp(aimBuffer, "C47_program_file_version") == 0) {
       loadedVersion = stringToUint32(tmpString);
       if(loadedVersion < OLDEST_COMPATIBLE_PROGRAM_VERSION) { // Program incompatibility
@@ -558,8 +555,8 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
         return;
       }
     }
-    readLine(aimBuffer); // param
-    readLine(tmpString); // value
+    readLine(aimBuffer, AIM_BUFFER_LENGTH); // param
+    readLine(tmpString, TMP_STR_LENGTH); // value
     if(strcmp(aimBuffer, "PROGRAM") == 0) {
       pgmSizeInByte = stringToUint32(tmpString);
     }
@@ -580,7 +577,7 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
     _addSpaceAfterPrograms(pgmSizeInByte);
     startOfProgram = firstFreeProgramByte - pgmSizeInByte;
     for(i=0; i<pgmSizeInByte; i++) {
-      readLine(tmpString); // One byte
+      readLine(tmpString, TMP_STR_LENGTH); // One byte
       startOfProgram[i] = stringToUint8(tmpString);
     }
 

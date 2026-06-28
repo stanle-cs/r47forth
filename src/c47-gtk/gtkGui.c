@@ -3,6 +3,12 @@
 
 #include "c47.h"
 
+#if defined(PC_BUILD)
+  extern char *scriptFile;
+  extern bool_t headlessMode;
+  bool_t scriptingActive = FALSE;
+#endif
+
 
 //#define DEBUGMODES
 
@@ -93,7 +99,13 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
 
   static gint destroyCalc(GtkWidget* w, GdkEventAny* e, gpointer data) {
     fnStopTimerApp();
-    saveCalc();
+    #if defined(PC_BUILD)
+      if(!scriptingActive) {
+    #endif
+      saveCalc();
+    #if defined(PC_BUILD)
+      }
+    #endif
     gtk_main_quit();
 
     return 0;
@@ -110,6 +122,74 @@ static int16_t _keyCodeFromGdkKey(uint32_t gdkKey);
     //debugf("Configure event: force a redraw");
     gtk_widget_queue_draw(w);
     return FALSE;
+  }
+
+  gboolean scriptInjectGtkKey(uint32_t keyval) {
+    if(frmCalc == NULL || !gtk_widget_get_realized(frmCalc)) {
+      return FALSE;
+    }
+
+    GdkWindow *window = gtk_widget_get_window(frmCalc);
+    if(window == NULL) {
+      return FALSE;
+    }
+
+    if(!gtk_widget_has_focus(frmCalc)) {
+      gtk_widget_grab_focus(frmCalc);
+    }
+
+    GdkDisplay *display = gdk_window_get_display(window);
+    GdkSeat *seat = (display != NULL) ? gdk_display_get_default_seat(display) : NULL;
+    GdkDevice *keyboard = (seat != NULL) ? gdk_seat_get_keyboard(seat) : NULL;
+    GdkEvent *press = gdk_event_new(GDK_KEY_PRESS);
+    GdkEvent *release = gdk_event_new(GDK_KEY_RELEASE);
+    if(press == NULL || release == NULL) {
+      if(press != NULL) {
+        gdk_event_free(press);
+      }
+      if(release != NULL) {
+        gdk_event_free(release);
+      }
+      return FALSE;
+    }
+
+    GdkEventKey *pressKey = &press->key;
+    pressKey->window = g_object_ref(window);
+    pressKey->send_event = TRUE;
+    pressKey->time = GDK_CURRENT_TIME;
+    pressKey->state = 0;
+    pressKey->keyval = keyval;
+    pressKey->hardware_keycode = 0;
+    pressKey->group = 0;
+    pressKey->is_modifier = FALSE;
+    pressKey->length = 0;
+    pressKey->string = NULL;
+
+    GdkEventKey *releaseKey = &release->key;
+    releaseKey->window = g_object_ref(window);
+    releaseKey->send_event = TRUE;
+    releaseKey->time = GDK_CURRENT_TIME;
+    releaseKey->state = 0;
+    releaseKey->keyval = keyval;
+    releaseKey->hardware_keycode = 0;
+    releaseKey->group = 0;
+    releaseKey->is_modifier = FALSE;
+    releaseKey->length = 0;
+    releaseKey->string = NULL;
+
+    if(keyboard != NULL) {
+      gdk_event_set_device(press, keyboard);
+      gdk_event_set_device(release, keyboard);
+    }
+    gdk_event_put(press);
+    gdk_event_put(release);
+    gdk_event_free(press);
+    gdk_event_free(release);
+
+    while(gtk_events_pending()) {
+      gtk_main_iteration();
+    }
+    return TRUE;
   }
 
 
@@ -762,32 +842,30 @@ returnKeyReleasedFalse:
     if(!((calcMode == CM_AIM || calcMode == CM_EIM || tam.mode || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)) || tam.alpha))) {
       switch(event_key_strip_capslock) {
         case GDK_KEY_f: //f
-
-            if(checkNormal( 0,ITM_SHIFTf)) btnClicked(w, "00"); else
-            if(checkNormal(10,ITM_SHIFTf)) btnClicked(w, "10"); else
-            if(checkNormal(11,ITM_SHIFTf)) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTf )) btnClicked(w, "10"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTf )) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
+               if(checkNormal( 0, ITM_SHIFTf)) btnClicked(w, "00");
+          else if(checkNormal(10, ITM_SHIFTf)) btnClicked(w, "10");
+          else if(checkNormal(11, ITM_SHIFTf)) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTf )) btnClicked(w, "10");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTf )) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
           break;
         case GDK_KEY_g: //g
-
-            if(checkNormal( 0,ITM_SHIFTg)) btnClicked(w, "00"); else
-            if(checkNormal(10,ITM_SHIFTg)) btnClicked(w, "10"); else
-            if(checkNormal(11,ITM_SHIFTg)) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTg )) btnClicked(w, "11"); else
-            if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTg )) btnClicked(w, "10"); else
-            {
-              shiftF = false;
-              shiftG = !shiftG;
-              refreshStatusBar();
-              showShiftState();
-            }
-            // if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11"); else
-            // if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10"); else
-            // if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
+               if(checkNormal( 0, ITM_SHIFTg)) btnClicked(w, "00");
+          else if(checkNormal(10, ITM_SHIFTg)) btnClicked(w, "10");
+          else if(checkNormal(11, ITM_SHIFTg)) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == ITM_SHIFTg )) btnClicked(w, "11");
+          else if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == ITM_SHIFTg )) btnClicked(w, "10");
+          else {
+            shiftF = false;
+            shiftG = !shiftG;
+            refreshStatusBar();
+            showShiftState();
+          }
+          // if(((getSystemFlag(FLAG_USER) ? kbd_usr[11].primary : kbd_std[11].primary) == KEY_fg     )) btnClicked(w, "11"); else
+          // if(((getSystemFlag(FLAG_USER) ? kbd_usr[10].primary : kbd_std[10].primary) == KEY_fg     )) btnClicked(w, "10"); else
+          // if(((getSystemFlag(FLAG_USER) ? kbd_usr[27].primary : kbd_std[27].primary) == KEY_fg     )) btnClicked(w, "27");
           break;
         default:break;
       }
@@ -1990,6 +2068,10 @@ returnKeyPressedFalse:
     * \return void
     ***********************************************/
     void hideAllWidgets(void) {
+      if(headlessMode) {
+        return;
+      }
+
       gtk_widget_hide(lblFKey2);  //JMLINES
       gtk_widget_hide(lblGKey2);  //JMLINES
       gtk_widget_hide(btn11);
@@ -3575,6 +3657,10 @@ char sstmp[16];
     }
 
     void calcModeNormalGui(void) {
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeNormalGui     calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -3812,6 +3898,10 @@ char sstmp[16];
     }
 
     void calcModeAimGui(void) {
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeAimGui      calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -4101,6 +4191,10 @@ char sstmp[16];
     }
 
     void calcModeTamGui(void) {
+      if(headlessMode) {
+        return;
+      }
+
       #if defined(DEBUGMODES) && defined(PC_BUILD)
         printf(">>> @@@ calcModeTamGui      calcMode=%d tam.alpha=%d\n", calcMode, tam.alpha);
       #endif // DEBUGMODES && PC_BUILD
@@ -5138,8 +5232,12 @@ static bool check_utf_string(const char *widget_name, const char *what, const ch
     else {                                                                                                            \
       bool consistency_found = false;                                                                                 \
                                                                                                                       \
-      consistency_found |= check_utf_string(widget_name, "tooltip", gtk_widget_get_tooltip_text(widget));             \
-      consistency_found |= check_utf_string(widget_name, "tooltip markup", gtk_widget_get_tooltip_markup(widget));    \
+      gchar *_ttText = gtk_widget_get_tooltip_text(widget);   /* transfer-full: caller must g_free */               \
+      consistency_found |= check_utf_string(widget_name, "tooltip", _ttText);                                        \
+      g_free(_ttText);                                                                                               \
+      gchar *_ttMarkup = gtk_widget_get_tooltip_markup(widget);   /* transfer-full: caller must g_free */            \
+      consistency_found |= check_utf_string(widget_name, "tooltip markup", _ttMarkup);                               \
+      g_free(_ttMarkup);                                                                                             \
                                                                                                                       \
       if(GTK_IS_BUTTON(widget)) {                                                                                     \
         consistency_found |= check_utf_string(widget_name, "button label", gtk_button_get_label(GTK_BUTTON(widget))); \
@@ -5167,7 +5265,9 @@ static bool check_utf_string(const char *widget_name, const char *what, const ch
 
 
 void check_all_btn_widgets_for_consistency(void) {
+#if defined(VERBOSE_MINIMUM)
     printf("Checking all btn widgets for consistency...\n");
+#endif //VERBOSE_MINIMUM
 
     // Row 1 buttons
     CHECK_WIDGET_CONSISTENCY_CHECK(btn11, "btn11");
@@ -5260,7 +5360,10 @@ void check_all_btn_widgets_for_consistency(void) {
     CHECK_WIDGET_CONSISTENCY_CHECK(btn84A, "btn84A");
     CHECK_WIDGET_CONSISTENCY_CHECK(btn85A, "btn85A");
 
+#if defined(VERBOSE_MINIMUM)
     printf("Consistency check complete - none found.\n");
+#endif //VERBOSE_MINIMUM
+
 }
 #endif // SIMULATOR_ON_SCREEN_KEYBOARD == 1
 
@@ -5311,6 +5414,20 @@ static gboolean onUIActivity(GtkWidget *w, GdkEvent *event, gpointer data) {
   * \return void
   ***********************************************/
   void setupUI(void) {
+    if(headlessMode) {
+      screenStride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, SCREEN_WIDTH) / 4;
+      int numBytes = screenStride * SCREEN_HEIGHT * 4;
+      screenData = malloc(numBytes);
+      if(screenData == NULL) {
+        sprintf(errorMessage, "error allocating %d x %d = %d bytes for screenData", screenStride * 4, SCREEN_HEIGHT, numBytes);
+        moreInfoOnError("In function setupUI:", errorMessage, NULL, NULL);
+        exit(1);
+      }
+      lcd_buffer = malloc(SCREEN_HEIGHT * (SCREEN_WIDTH / 8 + 2) + 2) + 2;
+      lcd_clear_buf();
+      return;
+    }
+
     #if (SIMULATOR_ON_SCREEN_KEYBOARD == 1)
       int            numBytes, xPos, yPos;
       GError         *error;
@@ -6527,7 +6644,9 @@ int keyCntA = 0;
 
       // gtk_fixed_put(GTK_FIXED(grid), lblOn,   0, 0);     //JM Removed ON to 81
 
-      gtk_widget_show_all(frmCalc);
+      if(!headlessMode) {
+        gtk_widget_show_all(frmCalc);
+      }
 
     #else // SIMULATOR_ON_SCREEN_KEYBOARD == 0
       // The main window
@@ -6563,11 +6682,15 @@ int keyCntA = 0;
 
       g_signal_connect(screen, "draw", G_CALLBACK(drawScreen), NULL);
 
-      gtk_widget_show_all(frmCalc);
+      if(!headlessMode) {
+        gtk_widget_show_all(frmCalc);
+      }
     #endif //  (SIMULATOR_ON_SCREEN_KEYBOARD == 1)
     lcd_buffer = malloc(SCREEN_HEIGHT*(SCREEN_WIDTH/8+2)+2)+2;
     lcd_clear_buf ();
 
-  check_all_btn_widgets_for_consistency();
+    if(!headlessMode) {
+      check_all_btn_widgets_for_consistency();
+    }
   }
 #endif // PC_BUILD

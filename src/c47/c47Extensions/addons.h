@@ -11,6 +11,7 @@ void fnCFGsettings  (uint16_t unusedButMandatoryParameter);
 void fnShoiXRepeats (uint16_t numberOfRepeats);
 void fnTo_ms        (uint16_t unusedButMandatoryParameter);
 void fnFrom_ms      (uint16_t unusedButMandatoryParameter);
+void fnFrom_msRegister(calcRegister_t regist);
 void fnMultiplySI   (uint16_t multiplier);
 void fn_cnst_op_j   (uint16_t unusedButMandatoryParameter);
 void fn_cnst_op_j_pol(uint16_t unusedButMandatoryParameter);
@@ -59,6 +60,7 @@ double convert_to_double        (calcRegister_t regist);    //Convert from X reg
 void   fnStrtoX                 (const char buffer[]);      //DONE
 void   fnStrtoReg               (const char buffer[], calcRegister_t regist);                            //DONE
 void   fnStrInputReal34         (char inp1[]);              // CONVERT STRING to REAL IN X      //DONE
+void   fnIntInputLongint        (int32_t inp1);             // CONVERT integer to Longint X     //DONE
 void   fnStrInputLongint        (char inp1[]);              // CONVERT STRING to Longint X      //DONE
 void   fnRCL                    (int16_t inp);              //DONE
 

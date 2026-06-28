@@ -10,6 +10,18 @@
 typedef bool bool_t;
 
 
+
+/**
+ * combined complex type, used in complex solver, and elec, and more new functions/conversions
+ */
+typedef struct {
+      real_t Real;
+      real_t Imag;
+} cplx_t;
+
+#define CPLX(x) &(x).Real, &(x).Imag
+
+
 /**
  * \enum multiplyDivide_t
    * Used for unit conversions.
@@ -29,6 +41,15 @@ typedef enum {
   trigSin,
   trigCos
 } trigType_t;
+
+
+/**
+ * \struct fInMim_t
+ * Item s allowed in bufferize, for MIMentry function tables.
+ */
+typedef struct {
+  uint16_t itemNr;
+} fInMim_t;
 
 
 /**
@@ -130,6 +151,14 @@ typedef struct {
   glyphMartelPrinter_t  glyphs[];       ///< Pointer to the glyph description structure
 } martelFont24_t;
 
+/**
+ * \struct upperLower_t
+ * Structure keeping the Upper case / Lower case character pairs.
+ */
+typedef struct {
+  char upper[3];         ///< Upper case Unicode code point
+  char lower[3];         ///< Lower case Unicode code point
+} upperLower_t;
 
 
 /**

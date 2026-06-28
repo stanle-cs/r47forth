@@ -9,21 +9,21 @@
 // VARIOUS OPTIONS
 //*********************************
 
-#define VERSION1 "0.109.03.02b0"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
+#define VERSION1 "00.109.03.03b0"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
 
-// Version 0.109.02.07b11   Public Release C47 & R47
-// Version 0.109.02.07b12   Public Release C47 & R47 launch
-// Version 0.109.02.07b13.1 Public Release C47 & R47
-// Version 0.109.03.00b0    Public Release C47 & R47
-// Version 0.109.03.00a1    Internal C47 & R47
-// Version 0.109.03.00b1    Public C47 & R47, with 2 packages for DM42
-// Version 0.109.03.00a2    Internal C47 & R47
-// Version 0.109.03.00b2    Public C47 & R47
-// Version 0.109.03.01b0    Public C47 & R47
-// Version 0.109.03.01b1    Public C47 & R47 bugfix version TVM
-// Version 0.109.03.02a0    Public C47 & R47 ALPHA version test vectors only
-// Version 0.109.03.02b0    Public C47 & R47
-
+// Version 00.109.02.07b11   Public Release C47 & R47
+// Version 00.109.02.07b12   Public Release C47 & R47 launch
+// Version 00.109.02.07b13.1 Public Release C47 & R47
+// Version 00.109.03.00b0    Public Release C47 & R47
+// Version 00.109.03.00a1    Internal C47 & R47
+// Version 00.109.03.00b1    Public C47 & R47, with 2 packages for DM42
+// Version 00.109.03.00a2    Internal C47 & R47
+// Version 00.109.03.00b2    Public C47 & R47
+// Version 00.109.03.01b0    Public C47 & R47
+// Version 00.109.03.01b1    Public C47 & R47 bugfix version TVM
+// Version 00.109.03.02a0    Public C47 & R47 ALPHA version test vectors only
+// Version 00.109.03.02b0    Public C47 & R47
+// Version 00.109.03.03b0    Public C47 & R47
 
 #if !defined(CALCMODEL)
   #define CALCMODEL USER_C47               // USER_C47 or USER_R47
@@ -86,6 +86,7 @@
     #undef TWO_FILE_PGM
     #undef HARDWARE_MODEL
     #define HARDWARE_MODEL HWM_DM42n
+    #define SAVE_SPACE_DM42_14          // All hardware without Load programming sample programs testPgms
   #endif // NEW_HW
 
 //ONE FILE OPERATION needs the original CRC file - see src/c47-dmcp
@@ -159,7 +160,6 @@
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
     #define SAVE_SPACE_DM42_12ORTHO            //  0744 bytes // Without X.FN ORTHO MENU
-         // #define SAVE_SPACE_DM42_14         //   184 bytes // Without Load programming sample programs testPgms
          // #define SAVE_SPACE_DM42_15         //     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
          // #define SAVE_SPACE_DM42_16         //  1936 bytes // (1) Without Norml, StdNrmal & LogNrml distributions
          // #define SAVE_SPACE_DM42_17B        //  7128 bytes // (2) Without cauchy, chi, expo, logis, t, weibull
@@ -179,7 +179,6 @@
          // #define SAVE_SPACE_DM42_12ELLIP    // 12888 bytes // Without ELLIPTIC
          // #define SAVE_SPACE_DM42_12BESSEL   //  5168 bytes // Without X.FN BESSEL
          // #define SAVE_SPACE_DM42_12ORTHO    //  0744 bytes // Without X.FN ORTHO MENU
-         // #define SAVE_SPACE_DM42_14         //   184 bytes // Without Load programming sample programs testPgms
          // #define SAVE_SPACE_DM42_15         //     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
          // #define SAVE_SPACE_DM42_16         //  1936 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
     #define SAVE_SPACE_DM42_17B                //  7128 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
@@ -199,7 +198,6 @@
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
     #define SAVE_SPACE_DM42_12ORTHO            //  0744 bytes // Without X.FN ORTHO MENU
-         // #define SAVE_SPACE_DM42_14         //   184 bytes // Without Load programming sample programs testPgms
          // #define SAVE_SPACE_DM42_15         //     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
          // #define SAVE_SPACE_DM42_16         //  1936 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
          // #define SAVE_SPACE_DM42_17B        //  7128 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
@@ -219,7 +217,6 @@
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
     #define SAVE_SPACE_DM42_12ORTHO            //  0744 bytes // Without X.FN ORTHO MENU
-    #define SAVE_SPACE_DM42_14                 //   184 bytes // Without Load programming sample programs testPgms
     #define SAVE_SPACE_DM42_15                 //     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
     #define SAVE_SPACE_DM42_16                 //  1936 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
     #define SAVE_SPACE_DM42_17B                //  7128 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
@@ -245,6 +242,7 @@
   //  #define SAVE_SPACE_DM42_12PRIME  // 27208 bytes // Without ISPRIME, NEXTPRIME, FACTORS, EULPHI, MATXFACTOR, NUMTHEORY
   //  #define SAVE_SPACE_DM42_13GRF    // 17472 bytes // Without Solver & graphics & stat graphics
   //  #define SAVE_SPACE_DM42_13GRF_JM //  7520 bytes // Without More graphics (full plot from memory)
+    #define SAVE_SPACE_DM42_14         //   184 bytes // All hardware without Load programming sample programs testPgms
   //  #define SAVE_SPACE_DM42_20_TIMER //  1232 bytes // Without STOPW
     #define SAVE_SPACE_DM42_22_EDIT1   //  3256 bytes // Without number editing in X-register. Not complete EDIT removal.
     #define SAVE_SPACE_DM42_23_EDIT2   //  1560 bytes // Without number and function parameter editing in PEM. Not complete EDIT removal.
@@ -279,6 +277,9 @@
 
 
 //Testing and debugging
+  #define    MONITOR_IRPRINT
+//#undef     MONITOR_IRPRINT
+
   #define    REFRESH_ON_SCREEN_MONITOR  //refresh debug on actual screen. Shows the refresh source number. Works on hardware and sim.
   #undef     REFRESH_ON_SCREEN_MONITOR
 
@@ -389,6 +390,46 @@
 #undef INLINE_TEST                    //^^
 
 
+#if defined(T47)
+  #undef  MONITOR_IRPRINT
+  #undef  REFRESH_ON_SCREEN_MONITOR
+  #undef  DM42_KEYCLICK
+  #undef  DM42_POWERMARKS
+  #undef  DM42_POWERMARK_KEYPRESS
+  #undef  CLICK_REFRESHSCR
+  #undef  BATTERYTEST
+  #undef  MONITOR_VOLTAGE_INTEGRATOR
+  #undef  DEBUG_SHOWNAME
+  #undef  DEBUGSFN
+  #define DEBUGSFN false
+  #undef  FN_TIME_DEBUG1
+  #undef  VERBOSE_MINIMUM
+  #undef  VERBOSEKEYS
+  #undef  VERBOSEKEYS_BUFFERED
+  #undef  VERBOSEKEYS_AUTOCASE
+  #undef  MONITOR_CLRSCR
+  #undef  ANALYSE_REFRESH
+  #undef  PC_BUILD_TELLTALE
+  #undef  VERBOSE_DETERMINEITEM
+  #undef  VERBOSE_REGISTERS
+  #undef  GRAPHDEBUG
+  #undef  DEBUG_STAT
+  #define DEBUG_STAT 0
+  #undef  STATDEBUG
+  #undef  STATDEBUG_VERBOSE
+  #undef  DEBUGUNDO
+  #undef  DEBUG_EXECUTE
+  #undef  DEBUG_PGM
+  #undef  PAIMDEBUG
+  #undef  VERBOSE_LEVEL
+  #define VERBOSE_LEVEL -1
+  #undef  VERBOSE_COUNTER
+  #undef  PC_BUILD_VERBOSE0
+  #undef  PC_BUILD_VERBOSE1
+  #undef  PC_BUILD_VERBOSE2
+  #undef  VERBOSE_SCREEN
+  #undef  INLINE_TEST
+#endif // T47
 
 
 #define NOMATRIXCURSORS             //JM allow matrix editing to be navigated by up down keys
@@ -613,6 +654,14 @@
 #define TAM_BUFFER_LENGTH                         32 // TODO: find the exact maximum needed
 #define NIM_BUFFER_LENGTH                        200 // TODO: find the exact maximum needed
 
+#if defined(PATH_MAX)
+  #define C47_PATH_MAX PATH_MAX
+#elif defined(MAX_PATH)
+  #define C47_PATH_MAX MAX_PATH
+#else
+  #define C47_PATH_MAX 1024
+#endif
+
 #define DEBUG_LINES                               68 // Used in for the debug panel
 
 // List of errors
@@ -680,7 +729,8 @@
 #define ERROR_RESERVED_VARIABLE_NAME              61
 #define ERROR_INVALID_TYPE_XFN                    62
 #define ERROR_PRINTING_DISABLED                   63
-#define LAST_ERROR_MESSAGE                        63
+#define ERROR_NO_STRING_IN_ALPHA_REGISTER         64
+#define LAST_ERROR_MESSAGE                        64
 
 //Status output messages for time consuming tasks, to keep user informed
 #define LOADING_STATE_FILE                       100
@@ -709,14 +759,16 @@
 #define TI_All_user_prgms_deleted                121
 #define TI_All_user_menus_deleted                122
 #define TI_All_user_vars_deleted                 123
+#define TI_Data_file_loaded                      124
+#define TI_Data_file_saved                       125
 
 //TI & ERROR Messages
-#define TI_Not_on_simulator                      124
-#define TI_Only_on_simulator                     125
-#define ERROR_TI_UNDO_FAILED                     126
+#define TI_Not_on_simulator                      126
+#define TI_Only_on_simulator                     127
+#define ERROR_TI_UNDO_FAILED                     128
 
 
-#define NUMBER_OF_ERROR_CODES                    127
+#define NUMBER_OF_ERROR_CODES                    129
 #define SIZE_OF_EACH_ERROR_MESSAGE                48
 
 #define NUMBER_OF_BUG_SCREEN_MESSAGES             10
@@ -781,7 +833,7 @@
 #define FLAG_alphaCAP                         0xc00f
 #define FLAG_RUNTIM                           0xc010
 #define FLAG_AMORT_HP12C                      0x8011
-#define FLAG_spare                            0xc012 // spare
+#define FLAG_spare                            0xc012
 #define FLAG_TRACE                            0x8013
 #define FLAG_USER                             0x8014
 #define FLAG_LOWBAT                           0xc015
@@ -868,8 +920,10 @@
 #define FLAG_3DXYZ                            0x8066
 #define FLAG_PRTEN                            0x8067
 #define FLAG_NORM                             0x8068 //41
+#define FLAG_BOLD                             0x8069 //42
+#define FLAG_SIGZEROS                         0x806A //43
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+41 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+43 // We can have a maximum of 128 system flags
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode
@@ -943,7 +997,8 @@ typedef enum  {
   LINE_FULL  = 0,
   LINE_LEFT  = 1,
   LINE_RIGHT = 2,
-  LINE_NOLF  = 3
+  LINE_NOLF  = 3,
+  LINE_ASIS  = 4,
 } print_area_t;
 
 
@@ -1106,11 +1161,11 @@ typedef enum  {
 #define VAR_NO_U       23
 #define VAR_NO_V       24
 #define VAR_NO_W       25
-#define VAR_NO_ADM     26
-#define VAR_NO_DENMAX  27
-#define VAR_NO_ISM     28
-#define VAR_NO_REALDF  29
-#define VAR_NO_NDEC    30
+#define VAR_NO_SPARE1  26 // removed
+#define VAR_NO_SPARE2  27 // removed
+#define VAR_NO_SPARE3  28 // removed
+#define VAR_NO_SPARE4  29 // removed
+#define VAR_NO_SPARE5  30 // removed
 #define VAR_NO_ACC     31
 #define VAR_NO_ULIM    32
 #define VAR_NO_LLIM    33
@@ -1246,14 +1301,16 @@ enum REG_NUMBERS { // C program register codes
   RESERVED_VARIABLE_V,                                   //2024
   RESERVED_VARIABLE_W,                                   //2025
 
+  // Removed reserved variables (not active for use, placeholders!)
+  RESERVED_VARIABLE_SPARE1,                              //2026
+  RESERVED_VARIABLE_SPARE2,                              //2027
+  RESERVED_VARIABLE_SPARE3,                              //2028
+  RESERVED_VARIABLE_SPARE4,                              //2029
+  RESERVED_VARIABLE_SPARE5,                              //2030
+
   // Named reserved variables
   FIRST_NAMED_RESERVED_VARIABLE,
-  RESERVED_VARIABLE_ADM = FIRST_NAMED_RESERVED_VARIABLE, //2026
-  RESERVED_VARIABLE_DENMAX,                              //2027
-  RESERVED_VARIABLE_ISM,                                 //2028
-  RESERVED_VARIABLE_REALDF,                              //2029
-  RESERVED_VARIABLE_NDEC,                                //2030
-  RESERVED_VARIABLE_ACC,                                 //2031
+  RESERVED_VARIABLE_ACC = FIRST_NAMED_RESERVED_VARIABLE, //2031
   RESERVED_VARIABLE_ULIM,                                //2032
   RESERVED_VARIABLE_LLIM,                                //2033
   RESERVED_VARIABLE_FV,                                  //2034
@@ -1515,6 +1572,10 @@ static inline uint8_t regCtoKS(const int16_t regC) {
   #define MAX_ALLOCATED_REGIONS                 5000 // Maximum number of allocated memory regions
 #endif // !DMCP_BUILD
 
+//CLLCD mode
+#define CLLCD_FULL                                 0
+#define CLLCD_XY                                   1
+
 // On/Off 1 bit
 #define OFF                                        0
 #define ON                                         1
@@ -1633,7 +1694,8 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define TM_LBLONLY                             10018
 #define TM_VARONLY                             10019
 #define TM_VALUE_NORM                          10020
-#define TM_CMP                                 10021 // TM_CMP must be the last in this list
+#define TM_STRING                              10021
+#define TM_CMP                                 10022 // TM_CMP must be the last in this list
 
 #define TAM_IN_PROGRESS                         true
 #define TAM_COMPLETE                           false
@@ -1803,6 +1865,8 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define TI_AMORT_INT                             139
 #define TI_AMORT_P1                              140
 #define TI_AMORT_P2                              141
+#define TI_DATA_LOADED                           142
+#define TI_DATA_SAVED                            143
 
 #define SET_TI_TRUE_FALSE(condition)               do { temporaryInformation = TI_FALSE + (condition); } while(0) // TI_TRUE must be TI_FALSE + 1
 
@@ -1882,6 +1946,14 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define LM_REGISTERS_PARTIAL                       6
 #define LM_STATE_LOAD                              7
 
+// String Functions
+#define SF_TO_UPPER_CASE                        true
+#define SF_TO_LOWER_CASE                       false
+#define SF_LEFT                                    1
+#define SF_MID                                     2
+#define SF_RIGHT                                   3
+
+
 // Screen updating mode
 #define SCRUPD_AUTO                             0x00
 #define SCRUPD_MANUAL_STATUSBAR                 0x01       //0000 0001
@@ -1954,7 +2026,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define SIGMA_YMAX   (statisticalSumsPointer + SUM_YMAX  ) // could be a real34. No, this must be old. SIGMA_** is a Real.
 
 #define MAX_NUMBER_OF_GLYPHS_IN_STRING           508 //WP=196: Change to 512 less 3, Also change error message 33, and AIM_BUFFER_LENGTH, and MAXLINES
-#define NUMBER_OF_GLYPH_ROWS                     242 //Used in the font browser application
+#define NUMBER_OF_GLYPH_ROWS                     259 //Used in the font browser application
 
 #define YY_OFF                                     2 // 2 is off and gets transferred to bit 15 (32768 + YY)
 #define YY_TRACKING                                1 // 1 gets transferred to bit 14 (16384 + YY)
@@ -2030,6 +2102,8 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define PARAM_NUMBER_8_16                         10
 #define PARAM_SHUFFLE                             11
 #define PARAM_MENU                                12
+#define PARAM_LITERAL                             13
+#define PARAM_REM                                 14
 
 #define CHECK_INTEGER                              0
 #define CHECK_INTEGER_EVEN                         1
@@ -2107,7 +2181,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
   #define beep(frequence, length)            do { while(get_beep_volume() < 11) beep_volume_up(); start_buzzer_freq(frequence * 1000); sys_delay(length); stop_buzzer(); } while(0)
   #undef TO_QSPI
   #if defined(TWO_FILE_PGM)
-    #define TO_QSPI                          __attribute__ ((section(".qspi")))
+    #define TO_QSPI                          __attribute__ ((section(".qspi_data")))
   #else // !TWO_FILE_PGM
     #define TO_QSPI
   #endif // TWO_FILE_PGM
@@ -2129,6 +2203,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 
 #define isSystemFlagWriteProtected(sf)       ((sf & 0x4000) != 0)
 #define shortIntegerIsZero(op)               (((*(uint64_t *)(op)) == 0) || (shortIntegerMode == SIM_SIGNMT && (((*(uint64_t *)(op)) == 1u<<((uint64_t)shortIntegerWordSize-1)))))
+#define shortIntegerModeValue()              (shortIntegerMode == SIM_2COMPL ? 2 : (shortIntegerMode == SIM_1COMPL ? 1 : (shortIntegerMode == SIM_UNSIGN ? 0 : -1)))
 #define getStackTop()                        (getSystemFlag(FLAG_SSIZE8) ? REGISTER_D : REGISTER_T)
 #define freeRegisterData(regist)             freeC47Blocks(getRegisterDataPointer(regist), getRegisterFullSizeInBlocks(regist))
 #define storeToDtConfigDescriptor(config)    (configToStore->config = config)
@@ -2449,17 +2524,19 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #endif // PC_BUILD
 
 #if defined(DMCP_BUILD)
+  #define STRINGIFY_HELPER(x) #x
+  #define STRINGIFY(x) STRINGIFY_HELPER(x)
   /* Import a binary file - from https://elm-chan.org/junk/32bit/binclude.html */
   #define IMPORT_BIN(sect, file, sym) asm (                                   \
-      ".section " #sect "\n"                  /* Change section */            \
-      ".balign 4\n"                           /* Word alignment */            \
+      ".section " #sect "\n"                  /* Change section            */ \
+      ".balign 4\n"                           /* Word alignment            */ \
       ".global " #sym "\n"                    /* Export the object address */ \
-      #sym ":\n"                              /* Define the object label */   \
-      ".incbin \"" file "\"\n"                /* Import the file */           \
-      ".global _sizeof_" #sym "\n"            /* Export the object size */    \
-      ".set _sizeof_" #sym ", . - " #sym "\n" /* Define the object size */    \
-      ".balign 4\n"                           /* Word alignment */            \
-      ".section \".text\"\n")                 /* Restore section */
+      #sym ":\n"                              /* Define the object label   */ \
+      ".incbin \"" STRINGIFY(file) "\"\n"     /* Import the file           */ \
+      ".global _sizeof_" #sym "\n"            /* Export the object size    */ \
+      ".set _sizeof_" #sym ", . - " #sym "\n" /* Define the object size    */ \
+      ".balign 4\n"                           /* Word alignment            */ \
+      ".section \".text\"\n")                 /* Restore section           */
 #endif // DMCP_BUILD
 
 #endif // !DEFINES_H

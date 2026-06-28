@@ -165,14 +165,14 @@ void configCommon(uint16_t idx) {
 
 TO_QSPI const int32_t Settings[] = {
 //variable,                          n/a,        Reset,                          HP35,            JM,                   RJ,                     C47,             DefltSB,         TVM,                  Comment
-InputDefaultDataType,                xxx,        xxx,                            ID_DP,           ID_43S,               ID_DP,                  ID_43S,          xxx,             xxx,
+InputDefaultDataType,                xxx,        xxx,                            ID_DP,           ID_43S,               ID_43S,                 ID_43S,          xxx,             xxx,
 SigFigNumberOfDigits,                xxx,        xxx,                            9,               3,                    xxx,                    xxx,             xxx,             xxx,
 AllNumberOfDigits,                   xxx,        xxx,                            xxx,             xxx,                  xxx,                    3,               xxx,             xxx,
 FixNumberOfDigits,                   xxx,        xxx,                            xxx,             xxx,                  3,                      xxx,             xxx,             xxx,
 RNG,                                 xxx,        6145,                           99,              6145,                 6145,                   6145,            xxx,             xxx,
 SDIGS,                               xxx,        0,                              16,              0,                    0,                      34,              xxx,             xxx,
 FDIGS,                               xxx,        0,                              16,              31,                   0,                      34,              xxx,             xxx,
-HIDE,                                xxx,        0,                              0,               31,                   0,                      0,               xxx,             xxx,
+HIDE,                                xxx,        0,                              0,               31,                   30,                     0,               xxx,             xxx,
 DSTACK,                              xxx,        4,                              1,               4,                    4,                      4,               xxx,             xxx,
 CACHEDDSTACK,                        xxx,        4,                              1,               4,                    4,                      4,               xxx,             xxx,
 ADM,                                 xxx,        amDegree,                       amRadian,        amDegree,             amRadian,               amDegree,        xxx,             xxx,
@@ -217,6 +217,10 @@ AMORTP2,                             xxx,        12,                            
 
 
 //FLAG,                              set/clear,  Reset,                          HP35,            JM,                   RJ,                     C47,             DefltSB,         TVM,
+3,                                   1,          FLAG_SIGZEROS,                 FLAG_SIGZEROS,    xxx,                  FLAG_SIGZEROS,          FLAG_SIGZEROS,   xxx,             xxx,                  // Clear flag  FLAG_BOLD
+3,                                   0,                xxx,                      xxx,             FLAG_SIGZEROS,        xxx,                    xxx,             xxx,             xxx,                  // Clear flag  FLAG_BOLD
+3,                                   0,          FLAG_BOLD,                      FLAG_BOLD,       xxx,                  FLAG_BOLD,              FLAG_BOLD,       xxx,             xxx,                  // Clear flag  FLAG_BOLD
+3,                                   1,                xxx,                      xxx,             FLAG_BOLD,            xxx,                    xxx,             xxx,             xxx,                  // Clear flag  FLAG_BOLD
 3,                                   1,          FLAG_MONIT,                     xxx,             xxx,                  xxx,                    xxx,             xxx,             xxx,                  // Set flag  FLAG_MONIT
 3,                                   1,          FLAG_HPCONV,                    xxx,             xxx,                  xxx,                    xxx,             xxx,             xxx,                  // Set flag  FLAG_HPCONV
 3,                                   0,          xxx,                            xxx,             FLAG_HPCONV,          FLAG_HPCONV,            xxx,             xxx,             xxx,                  // Clear flag FLAG_HPCONV
@@ -425,7 +429,6 @@ void Sett(int16_t grp) {
   void fnSetJM(uint16_t unusedButMandatoryParameter){
   #if !defined(SAVE_SPACE_DM42_24_PROFILES)
     fnDrop(NOPARAM);
-    fnSquare(0);
     resetOtherConfigurationStuff(true);
     getDateString(lastStateFileOpened);
     strcat(lastStateFileOpened, ": Jaco defaults");
@@ -433,17 +436,24 @@ void Sett(int16_t grp) {
     Sett(_JM);
 
     roundingMode = RM_HALF_UP;
-    fnKeysManagement(ITM_RIBBON_C47);
+    if(!isR47FAM) {
+      fnKeysManagement(ITM_RIBBON_C47PL);
+    } else {
+      fnKeysManagement(ITM_RIBBON_R47PL);      
+    }
 
-    itemToBeAssigned = -MNU_EE;
-    assignToMyMenu(6);
+    itemToBeAssigned = ITM_op_j;
+    assignToMyMenu(10);
     itemToBeAssigned = ITM_op_j_pol;
     assignToMyMenu(11);
     itemToBeAssigned = -MNU_RIBBONS;
-    assignToMyMenu(10);
-    itemToBeAssigned = ITM_DREAL;
     assignToMyMenu(9);
-
+    itemToBeAssigned = ITM_BOLD;
+    assignToMyMenu(8);
+    itemToBeAssigned = -MNU_DEV;
+    assignToMyMenu(7);
+    itemToBeAssigned = -MNU_EE;
+    assignToMyMenu(6);
 
     cachedDynamicMenu = 0;
 
@@ -649,27 +659,9 @@ void fnFreeMemory(uint16_t unusedButMandatoryParameter) {
 }
 
 
-void fnGetDmx(uint16_t unusedButMandatoryParameter) {
-  longInteger_t dmx;
-
-  liftStack();
-
-  longIntegerInit(dmx);
-  uInt32ToLongInteger(denMax, dmx);
-  convertLongIntegerToLongIntegerRegister(dmx, REGISTER_X);
-  longIntegerFree(dmx);
-}
-
 
 void fnGetRoundingMode(uint16_t unusedButMandatoryParameter) {
-  longInteger_t rounding;
-
-  liftStack();
-
-  longIntegerInit(rounding);
-  uInt32ToLongInteger(roundingMode, rounding);
-  convertLongIntegerToLongIntegerRegister(rounding, REGISTER_X);
-  longIntegerFree(rounding);
+  fnIntInputLongint(roundingMode);
 }
 
 
@@ -685,12 +677,6 @@ TO_QSPI const enum rounding roundingModeTable[7] = {
   DEC_ROUND_HALF_EVEN, DEC_ROUND_HALF_UP, DEC_ROUND_HALF_DOWN,
   DEC_ROUND_UP, DEC_ROUND_DOWN, DEC_ROUND_CEILING, DEC_ROUND_FLOOR
 };
-
-
-
-void fnGetIntegerSignMode(uint16_t unusedButMandatoryParameter) {
-  fnRecall(RESERVED_VARIABLE_ISM);
-}
 
 
 
@@ -796,14 +782,7 @@ uint32_t getFreeFlash(void) {
 
 
 void fnGetSignificantDigits(uint16_t unusedButMandatoryParameter) {
-  longInteger_t sigDigits;
-
-  liftStack();
-
-  longIntegerInit(sigDigits);
-  uInt32ToLongInteger(significantDigits == 0 ? 34 : significantDigits, sigDigits);
-  convertLongIntegerToLongIntegerRegister(sigDigits, REGISTER_X);
-  longIntegerFree(sigDigits);
+  fnIntInputLongint((int32_t)(significantDigits == 0 ? 34 : significantDigits));
 }
 
 
@@ -824,15 +803,10 @@ void fnSetBaseNr(uint16_t S) {
    }
  }
 
+
+
 void fnGetFractionDigits(uint16_t unusedButMandatoryParameter) {
-  longInteger_t sigDigits;
-
-  liftStack();
-
-  longIntegerInit(sigDigits);
-  uInt32ToLongInteger(fractionDigits == 0 ? 34 : fractionDigits, sigDigits);
-  convertLongIntegerToLongIntegerRegister(sigDigits, REGISTER_X);
-  longIntegerFree(sigDigits);
+  fnIntInputLongint((int32_t)(fractionDigits == 0 ? 34 : fractionDigits));
 }
 
 
@@ -870,6 +844,113 @@ void fnAngularMode(uint16_t am) {
 
 
 
+void fnGetADM(uint16_t unusedButMandatoryParameter) {
+  fnIntInputLongint(currentAngularMode);
+}
+
+
+
+void fnSetADM(uint16_t regist) {
+  longInteger_t lgInt;
+  if(!getRegisterAsLongInt(regist, lgInt, NULL)) {
+    goto end;
+  }
+  uint32_t value;
+  longIntegerToUInt32(lgInt, value);
+  if(value < amNone) {
+    fnAngularMode(value);
+  }
+end:
+  longIntegerFree(lgInt);
+}
+
+
+
+void fnGetIntegerSignMode(uint16_t unusedButMandatoryParameter) {
+  fnIntInputLongint(shortIntegerModeValue());
+}
+
+
+
+void fnSetISM(uint16_t regist) {
+  longInteger_t lgInt;
+  if(!getRegisterAsLongInt(regist, lgInt, NULL)) {
+    goto end;
+  }
+  int32_t value;
+  longIntegerToInt32(lgInt, value);
+  switch(value) {
+    case 2:  shortIntegerMode = SIM_2COMPL; break;
+    case 1:  shortIntegerMode = SIM_1COMPL; break;
+    case 0:  shortIntegerMode = SIM_UNSIGN; break;
+    default: shortIntegerMode = SIM_SIGNMT; break;
+    }
+end:
+  longIntegerFree(lgInt);
+}
+
+
+
+void fnGetDMX(uint16_t unusedButMandatoryParameter) {
+  fnIntInputLongint((int32_t)denMax);
+}
+
+
+
+void fnSetDMX(uint16_t regist) {
+  longInteger_t lgInt;
+  if(!getRegisterAsLongInt(regist, lgInt, NULL)) {
+    goto end;
+  }
+  uint32_t value;
+  longIntegerToUInt32(lgInt, value);
+  fnDenMax(value);
+end:
+  longIntegerFree(lgInt);
+}
+
+
+
+void fnGetREALDF(uint16_t unusedButMandatoryParameter) {
+  fnIntInputLongint(displayFormat);
+}
+
+
+
+void fnSetREALDF                (uint16_t regist) {
+  longInteger_t lgInt;
+  if(!getRegisterAsLongInt(regist, lgInt, NULL)) {
+    goto end;
+  }
+  uint32_t value;
+  longIntegerToUInt32(lgInt, value);
+  if(value <= DF_UN) {
+    displayFormat = value;
+  }
+end:
+  longIntegerFree(lgInt);
+}
+
+
+
+void fnGetNDEC(uint16_t unusedButMandatoryParameter) {
+  fnIntInputLongint(displayFormatDigits);
+}
+
+
+void fnSetNDEC(uint16_t regist) {
+  longInteger_t lgInt;
+  if(!getRegisterAsLongInt(regist, lgInt, NULL)) {
+    goto end;
+  }
+  uint32_t value;
+  longIntegerToUInt32(lgInt, value);
+  fnDisplayFormatDsp(value);
+end:
+  longIntegerFree(lgInt);
+}
+
+
 void fnFractionType(uint16_t unusedButMandatoryParameter) {
   #define STATE_offbc    0b0000  // B
   #define STATE_bc       0b0001  //1
@@ -896,16 +977,16 @@ void fnFractionType(uint16_t unusedButMandatoryParameter) {
 
   if(getSystemFlag(FLAG_FRCYC)) {
     switch(state) {
-      case STATE_offbc       : state = STATE_bc;        break;
-      case STATE_offabc      : state = STATE_abc;       break;
-      case STATE_offr_bc     : state = STATE_exfr_bc;   break;
-      case STATE_offr_abc    : state = STATE_exfr_abc;  break;
+      case STATE_offbc:    state = STATE_bc;        break;
+      case STATE_offabc:   state = STATE_abc;       break;
+      case STATE_offr_bc:  state = STATE_exfr_bc;   break;
+      case STATE_offr_abc: state = STATE_exfr_abc;  break;
 
-      case STATE_bc          : state = STATE_exfr_abc;  break;                    // 0b0001 -->
-      case STATE_abc         : state = STATE_bc;        break;                    // 0b0011 -->
-      case STATE_exfr_bc     : state = STATE_abc;       break;                    // 0b1100 -->
-      case STATE_exfr_abc    : state = STATE_exfr_bc;   break;                    // 0b1110 -->
-      default                : state = STATE_abc;       break;                    //
+      case STATE_bc:       state = STATE_exfr_abc;  break;                    // 0b0001 -->
+      case STATE_abc:      state = STATE_bc;        break;                    // 0b0011 -->
+      case STATE_exfr_bc:  state = STATE_abc;       break;                    // 0b1100 -->
+      case STATE_exfr_abc: state = STATE_exfr_bc;   break;                    // 0b1110 -->
+      default:             state = STATE_abc;       break;                    //
     }
 
     if((state & 8)) setSystemFlag(FLAG_IRFRAC); else clearSystemFlag(FLAG_IRFRAC);
@@ -1126,7 +1207,7 @@ void fnClAll(uint16_t confirmation) {
 
 
 void addTestPrograms(void) {
-  uint32_t numberOfBytesUsed, numberOfBytesForTheTestPrograms = TO_BYTES(TO_BLOCKS(20000));
+  uint32_t numberOfBytesUsed, numberOfBytesForTheTestPrograms = TO_BYTES(TO_BLOCKS(24000));
 
   resizeProgramMemory(TO_BLOCKS(numberOfBytesForTheTestPrograms));
   firstDisplayedStep            = beginOfProgramMemory;
@@ -1502,12 +1583,13 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     // Initialization of user key assignments
     xcopy(kbd_usr, kbd_std, sizeof(kbd_std));
     //setLongPressFg(calcModel, (calcModel == USER_R47bk_fg ? -MNU_MyMenu : -MNU_HOME));
+
     // initialize 9 real34 reserved variables: ACC, ↑Lim, ↓Lim, FV, i%/a, NPPER, PPER/a, PMT, and PV
-    for(int i=VAR_NO_ACC; i<=VAR_NO_CPERONA; i++) {
+    for(int i=VAR_NO_ACC; i<=VAR_NO_PV; i++) {
       real34SetZero((real34_t *)TO_PCMEMPTR(allReservedVariables[i].header.pointerToRegisterData));
     }
 
-    // initialize 1 long integer reserved variables: GRAMOD
+    // initialize 1 long integer reserved variable: GRAMOD
     strLgIntHeader_t *ptr = TO_PCMEMPTR(allReservedVariables[VAR_NO_GRAMOD].header.pointerToRegisterData);
     #if defined(OS64BIT)
       (ptr++)->dataMaxLengthInBlocks = TO_BLOCKS(8);
@@ -1517,6 +1599,10 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
       *(int32_t *)ptr = 0;
     #endif // OS64BIT
 
+    // initialize 7 real34 reserved variables: ↑X, ↓X, CPERONA, ↑EST, ↓EST, ↑Y, ↓Y
+    for(int i=VAR_NO_UX; i<=VAR_NO_LY; i++) {
+      real34SetZero((real34_t *)TO_PCMEMPTR(allReservedVariables[i].header.pointerToRegisterData));
+    }
 
     // initialize the global registers
     #if defined(DMCP_BUILD) && defined(OLD_HW)
@@ -1762,11 +1848,15 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     refreshScreen(163);
 
     // The following lines are test data
-    #if !defined(SAVE_SPACE_DM42_14)
+    #if defined(TESTSUITE_BUILD)
+        addTestPrograms();
+    #elif !defined(SAVE_SPACE_DM42_14)
                                    #if defined(PC_BUILD) && (VERBOSE_LEVEL > -1)
                                      printf("addTestPrograms\n");
                                    #endif
-      addTestPrograms();
+      if(loadTestPrograms) {
+        addTestPrograms();
+      }
     #endif // !SAVE_SPACE_DM42_14
 
     // Equation formulae
@@ -1797,16 +1887,18 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
                                      printf("Populate test data\n");
                                    #endif
     //JM TEMPORARY TEST DATA IN REGISTERS
-    uint16_t n = nbrOfElements(indexOfStrings);
-    for(uint16_t i=0; i<n; i++) {
-      if(indexOfStrings[i].itemType == 0) {
-        fnStrtoX(indexOfStrings[i].itemName);
+    if(loadTestData) {
+      uint16_t n = nbrOfElements(indexOfStrings);
+      for(uint16_t i=0; i<n; i++) {
+        if(indexOfStrings[i].itemType == 0) {
+          fnStrtoX(indexOfStrings[i].itemName);
+        }
+        else if(indexOfStrings[i].itemType == 1) {
+          fnStrInputLongint(indexOfStrings[i].itemName);
+        }
+        fnStore(indexOfStrings[i].count);
+        fnDrop(NOPARAM);
       }
-      else if(indexOfStrings[i].itemType == 1) {
-        fnStrInputLongint(indexOfStrings[i].itemName);
-      }
-      fnStore(indexOfStrings[i].count);
-      fnDrop(NOPARAM);
     }
 
     //Initialize Printer status
@@ -1823,6 +1915,9 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
                                    #endif
     runFunction(ITM_VERS);
 
+    //Initialize default alpha register
+    alphaRegister = REGISTER_K;
+    varMenu42 = false;
 
     //Autoloading of C47Auto.sav
     #if defined(DMCP_BUILD)

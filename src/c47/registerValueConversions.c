@@ -21,7 +21,14 @@ void convertLongIntegerRegisterToLongInteger(calcRegister_t regist, longInteger_
 
   xcopy(lgInt->_mp_d, REGISTER_LONG_INTEGER_DATA(regist), sizeInBytes);
 
-  if(getRegisterLongIntegerSign(regist) == LI_NEGATIVE) {
+  // Trim trailing zero limbs: GMP requires _mp_size = 0 for value zero,
+  // else mpz_sizeinbase returns 0 and callers underflow on (bits - 1).
+  // GRAMOD = 0 was checked to have _mp_size = 1, not 0
+  while(sizeInBytes >= LIMB_SIZE && lgInt->_mp_d[sizeInBytes/LIMB_SIZE - 1] == 0) {
+    sizeInBytes -= LIMB_SIZE;
+  }
+
+  if(sizeInBytes > 0 && getRegisterLongIntegerSign(regist) == LI_NEGATIVE) {
     lgInt->_mp_size = -(sizeInBytes / LIMB_SIZE);
   }
   else {
@@ -321,6 +328,16 @@ void convertRealToLongIntegerRegister(const real_t *real, calcRegister_t dest, e
   convertRealToLongInteger(real, lgInt, roundingMode);
   convertLongIntegerToLongIntegerRegister(lgInt, dest);
   longIntegerFree(lgInt);
+}
+
+
+
+void convertComplexRegisterToRealIfZeroImag(calcRegister_t regist) {
+  real_t b;
+  if(real34IsZero(REGISTER_IMAG34_DATA(regist))) {
+    real34ToReal(REGISTER_REAL34_DATA(regist), &b);
+    convertRealToResultRegister(&b, regist, amNone);
+  }
 }
 
 
@@ -1192,7 +1209,6 @@ int getRegisterAsLongIntQuiet(calcRegister_t reg, longInteger_t val, bool_t *fra
   real_t rval;
   bool_t frac = false;
 
-  longIntegerInit(val);
   switch(getRegisterDataType(reg)) {
     case dtLongInteger:
       convertLongIntegerRegisterToLongInteger(reg, val);
@@ -1205,6 +1221,7 @@ int getRegisterAsLongIntQuiet(calcRegister_t reg, longInteger_t val, bool_t *fra
     case dtComplex34:
     case dtReal34:
       if(getRegisterAsReal(reg, &rval)) {
+        longIntegerInit(val); // convertRealToLongInteger expects an initialised val
         if(realIsSpecial(&rval)) {
           return ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN;
         }
@@ -1218,6 +1235,7 @@ int getRegisterAsLongIntQuiet(calcRegister_t reg, longInteger_t val, bool_t *fra
       /* fall through */
 
     default:
+      longIntegerInit(val);
       return ERROR_INVALID_DATA_TYPE_FOR_OP;
   }
   if(fractional != NULL) {
