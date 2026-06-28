@@ -657,7 +657,7 @@ uint64_t WP34S_int2pow(uint64_t x) {
     setSystemFlag(FLAG_OVERFLOW);
     return 0;
   }
-  return (uint64_t)1 << (uint32_t)(exponent & 0xff); // was 1LL <<; unsigned base avoids signed-shift UB at WS 64 unsigned 2^63, result identical
+  return (uint64_t)1 << (uint32_t)(exponent & 0xff);
 }
 
 
