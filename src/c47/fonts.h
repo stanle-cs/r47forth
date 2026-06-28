@@ -759,11 +759,15 @@
 #define STD_SUB_X                     "\xa4\xe7"
 #define STD_SUB_Y                     "\xa4\xe8"
 #define STD_SUB_Z                     "\xa4\xe9"
-#define STD_BLACK_RIGHT_TRIANGLE      "\xa5\xb6"
 #define STD_CHECK_MARK                "\xa7\x13"
 #define STD_YX                        "\xa9\xf0"
 #define STD_fg                        "\xa9\xf1"
 #define STD_FOR_ALL                   "\xac\x6f" // was U+2200
 #define STD_RIGHT_DOUBLE_ARROW        "\xa1\xD2"    //JM
 #define STD_LEFT_RIGHT_DOUBLE_ARROW   "\xa1\xD4"    //JM
+#define STD_CHECKERED                 "\xa4\x27"
+#define STD_BLACK_RIGHT_TRIANGLE      "\xa5\xb6"
+#define STD_LF_PIC                    "\xa4\x0a"
+#define STD_ESC_PIC                   "\xa4\x1b"
+#define STD_SMALL_SQUARE              "\xa5\xaa"
 #endif // !FONTS_H
