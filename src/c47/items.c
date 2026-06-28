@@ -553,6 +553,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
         default:;
       }
 
+
       //TI for conversion menus
       if(lastErrorCode == ERROR_NONE && temporaryInformation == TI_NO_INFO) {
         temporaryInformation = TI_NO_INFO;
@@ -1607,7 +1608,6 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnColumnMin                (uint16_t unusedButMandatoryParameter) {}
   void fnColumnMax                (uint16_t unusedButMandatoryParameter) {}
   void fnMatrixFind               (uint16_t unusedButMandatoryParameter) {}
-
   void fnGetADM                   (uint16_t unusedButMandatoryParameter) {}
   void fnSetADM                   (uint16_t unusedButMandatoryParameter) {}
   void fnSetISM                   (uint16_t unusedButMandatoryParameter) {}
@@ -1648,12 +1648,6 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnTripleVfromIZ            (uint16_t unusedButMandatoryParameter) {}
   void fnTripleIfromVZ            (uint16_t unusedButMandatoryParameter) {}
   void fnTripleFlipPolar          (uint16_t unusedButMandatoryParameter) {}
-  void fnSaveStackRegisters       (uint16_t unusedButMandatoryParameter) {}
-  void fnSaveNRegisters           (uint16_t unusedButMandatoryParameter) {}
-  void fnSaveRegister             (uint16_t unusedButMandatoryParameter) {}
-  void fnLoadRegisters            (uint16_t unusedButMandatoryParameter) {}
-  void fnSaveLetteredRegisters    (uint16_t unusedButMandatoryParameter) {}
-  void fnSaveXFNRegister          (uint16_t unusedButMandatoryParameter) {}
   void fnAlphaLower               (uint16_t unusedButMandatoryParameter) {}
   void fnAlphaUpper               (uint16_t unusedButMandatoryParameter) {}
   void fnAlphaLeft                (uint16_t unusedButMandatoryParameter) {}
@@ -1661,6 +1655,12 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnAlphaRight               (uint16_t unusedButMandatoryParameter) {}
   void fnAlphaRev                 (uint16_t unusedButMandatoryParameter) {}
   void fnAlphaTrim                (uint16_t unusedButMandatoryParameter) {}
+  void fnSaveStackRegisters       (uint16_t unusedButMandatoryParameter) {}
+  void fnSaveNRegisters           (uint16_t unusedButMandatoryParameter) {}
+  void fnSaveRegister             (uint16_t unusedButMandatoryParameter) {}
+  void fnLoadRegisters            (uint16_t unusedButMandatoryParameter) {}
+  void fnSaveLetteredRegisters    (uint16_t unusedButMandatoryParameter) {}
+  void fnSaveXFNRegister          (uint16_t unusedButMandatoryParameter) {}
 
 
 #endif // GENERATE_CATALOGS || defined(GENERATE_TESTPGMS)
