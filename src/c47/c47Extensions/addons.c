@@ -30,25 +30,6 @@ All the below: because both Last x and savestack does not work due to multiple s
  Check for savestack in jm.c
 */
 
-#if !defined(SAVE_SPACE_DM42_23_EDIT2)
-  static void _getStringLabelOrVariableName(uint8_t *stringAddress) {
-    uint8_t stringLength = *(uint8_t *)(stringAddress++);
-    // The length byte comes from the program step on trust; clamp it to the bytes
-    // that remain in program memory so a corrupt step cannot read past it. When the
-    // name would start at or past firstFreeProgramByte there are no valid bytes
-    // left, so read nothing rather than skipping the clamp and reading unbounded.
-    if(stringAddress >= firstFreeProgramByte) {
-      stringLength = 0;
-    }
-    else if(stringLength > firstFreeProgramByte - stringAddress) {
-      stringLength = (uint8_t)(firstFreeProgramByte - stringAddress);
-    }
-    xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
-    tmpStringLabelOrVariableName[stringLength] = 0;
-  }
-#endif // !SAVE_SPACE_DM42_23_EDIT2
-
-
 #if !defined(SAVE_SPACE_DM42_22_EDIT1)
 void _fractionToString(calcRegister_t regist, char *displayString, int16_t *lessEqualGreater) {
   int16_t  sign;
@@ -698,7 +679,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
             bool isDate = (opParam == STRING_DATE ? true : false);
 
             if((opParam == STRING_REAL34)|| (opParam == STRING_COMPLEX34))  {
-              _getStringLabelOrVariableName(&currentStep[2]);
+              getStringLabelOrVariableName(&currentStep[2]);
               strcpy(tempBuffer, tmpStringLabelOrVariableName);
             }
             else {
