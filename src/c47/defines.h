@@ -155,7 +155,7 @@
 
 
 
-  #if defined(PACKAGE1_NOBESSEL_NOORTHO)   // PACKAGE 1 (free 4984) // ALL DIST, Stripped X.FN menu; NO ELEC; SLOW FIN; NO VECTOR
+  #if defined(PACKAGE1_NOBESSEL_NOORTHO)   // PACKAGE 1 (free 2560) // ALL DIST, Stripped X.FN menu; NO ELEC; SLOW FIN; NO VECTOR
          //  #define SAVE_SPACE_DM42_8F        //  1216 bytes // Without Font Browsers
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
@@ -174,7 +174,7 @@
     #undef  IR_PRINTING                        // 10032 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(PACKAGE2_NODISTR)            // PACKAGE 2 (free 1016) // Limited DIST; Full X.FN menu; NO ELEC; FAST FIN; NO VECTOR
+  #if defined(PACKAGE2_NODISTR)            // PACKAGE 2 (free 1088) // Limited DIST; Full X.FN menu; NO ELEC; FAST FIN; NO VECTOR
          // #define SAVE_SPACE_DM42_8F         //  1216 bytes // Without Font Browsers
          // #define SAVE_SPACE_DM42_12ELLIP    // 12888 bytes // Without ELLIPTIC
          // #define SAVE_SPACE_DM42_12BESSEL   //  5168 bytes // Without X.FN BESSEL
@@ -193,7 +193,7 @@
     #undef  IR_PRINTING                        // 10032 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(PACKAGE3_NOBESSEL_NOORTHO_NOFBR) // PACKAGE 3 (free 12192) // Half DIST, STRIPPED X.FN menu; ELEC; SLOW FIN; // VECTOR Future
+  #if defined(PACKAGE3_NOBESSEL_NOORTHO_NOFBR) // PACKAGE 3 (free 8304) // Half DIST, STRIPPED X.FN menu; ELEC; SLOW FIN; // VECTOR Future
          // #define SAVE_SPACE_DM42_8F         //  1216 bytes // Without Font Browsers
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
@@ -217,7 +217,7 @@
             // 1    0     6216  free: costs 13032 -6216 =  6816
             // 1    1   - 3480  free: costs 13032--3480 = 16512
 
-  #if defined(PACKAGE4_MINIMAL_MATH)       // PACKAGE 4 (free 26920) // Minimal, no options included, FOR GITLAB PIPELINE COMPILE
+  #if defined(PACKAGE4_MINIMAL_MATH)       // PACKAGE 4 (free 23200) // Minimal, no options included, FOR GITLAB PIPELINE COMPILE
       //  #define SAVE_SPACE_DM42_8F           //  1216 bytes // Without Font Browsers
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
