@@ -575,6 +575,9 @@ static void decodeLiteral(uint8_t *literalAddress) {
       char *dispStringPtr = tmpString;
       char *sourceStringPtr = tmpStringLabelOrVariableName;
       uint8_t base = (uint8_t)(*literalAddress);
+      if(base > 16) { // bases above 16 are invalid; baseChars[] only spans 0..16
+        base = 0;
+      }
       decodedIntegerBase = base;
       getStringLabelOrVariableName(literalAddress + 1);
 
