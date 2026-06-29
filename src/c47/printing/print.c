@@ -1707,8 +1707,9 @@ void printTrace(int16_t func, uint16_t param) {
             else if((param >= FIRST_LABEL) && (param <= LAST_LABEL)) { // Alpha labels
               strcat(tmpString, " " STD_LEFT_SINGLE_QUOTE);
               uint16_t strLength = stringByteLength(tmpString);
-              xcopy(tmpString + strLength, labelList[param - FIRST_LABEL].labelPointer + 1, *(labelList[param - FIRST_LABEL].labelPointer));
-              tmpString[strLength + *(labelList[param - FIRST_LABEL].labelPointer)] = 0;
+              uint8_t lblNameLen = boundProgramNameLength(labelList[param - FIRST_LABEL].labelPointer + 1, *(labelList[param - FIRST_LABEL].labelPointer));
+              xcopy(tmpString + strLength, labelList[param - FIRST_LABEL].labelPointer + 1, lblNameLen);
+              tmpString[strLength + lblNameLen] = 0;
               strcat(tmpString, STD_RIGHT_SINGLE_QUOTE);
             }
           }
@@ -2132,7 +2133,7 @@ void fnP_Tab(uint16_t column) {
 // Print User
 void fnP_User(uint16_t unusedButMandatoryParameter) {
   #if defined(IR_PRINTING)
-    char label[16];
+    char label[256]; // a global label name is a 1-byte-length string, so up to 255 bytes
     currentKeyCode = 255;
 
     if(!getSystemFlag(FLAG_PRTACT)) {
@@ -2180,8 +2181,9 @@ void fnP_User(uint16_t unusedButMandatoryParameter) {
       nextStep = findNextStep(step);
       if(checkOpCodeOfStep(step, ITM_LBL)) { // LBL
         if(*(step + 1) > LAST_LOCAL_LABEL) { // Global label
-          xcopy(label, step + 3, *(step+2));
-          label[*(step+2)] = 0;
+          uint8_t lblNameLen = boundProgramNameLength(step + 3, *(step + 2));
+          xcopy(label, step + 3, lblNameLen);
+          label[lblNameLen] = 0;
           printLine("LBL " STD_LEFT_SINGLE_QUOTE, 0);
           printLine(label, 0);
           printLine(STD_RIGHT_SINGLE_QUOTE, !firstProgramLabel);
