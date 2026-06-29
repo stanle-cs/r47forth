@@ -7,12 +7,6 @@
 
 #include "c47.h"
 
-static void _getStringLabelOrVariableName(uint8_t *stringAddress) {
-  uint8_t stringLength = *(uint8_t *)(stringAddress++);
-  xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
-  tmpStringLabelOrVariableName[stringLength] = 0;
-}
-
 static uint16_t _indirectRegister(uint8_t *paramAddress) {
   uint8_t opParam = *(uint8_t *)paramAddress;
   if(opParam <= LAST_LOCAL_REGISTER_IN_KS_CODE) { // Local register from .00 to .98
@@ -29,7 +23,7 @@ static uint16_t _indirectRegister(uint8_t *paramAddress) {
 
 static uint16_t _indirectVariable(uint8_t *stringAddress) {
   calcRegister_t regist;
-  _getStringLabelOrVariableName(stringAddress);
+  getStringLabelOrVariableName(stringAddress);
   regist = findNamedVariable(tmpStringLabelOrVariableName);
   if(regist != INVALID_VARIABLE) {
       int16_t realParam = indirectAddressing(regist, INDPM_REGISTER, 0, 99, false);
@@ -54,7 +48,7 @@ static uint16_t _get2ndParamOfKey(uint8_t *paramAddress) {
     return opParam;
   }
   else if(opParam == STRING_LABEL_VARIABLE) {
-    _getStringLabelOrVariableName(paramAddress);
+    getStringLabelOrVariableName(paramAddress);
     calcRegister_t label = findNamedLabel(tmpStringLabelOrVariableName);
     if(label != INVALID_VARIABLE) {
       return label;
