@@ -98,8 +98,9 @@ TO_QSPI const char angleChars[12] = STD_SUP_r STD_SUP_g STD_DEGREE "??" STD_SUP_
         }
       }
       else { // Global label
-        xcopy(tmpString + 100, labelList[i].labelPointer + 1, *(labelList[i].labelPointer));
-        tmpString[100 + *(labelList[i].labelPointer)] = 0;
+        uint8_t lblNameLen = boundProgramNameLength(labelList[i].labelPointer + 1, *(labelList[i].labelPointer));
+        xcopy(tmpString + 100, labelList[i].labelPointer + 1, lblNameLen);
+        tmpString[100 + lblNameLen] = 0;
         stringToUtf8(tmpString + 100, (uint8_t *)tmpString);
         printf("'%s'\n", tmpString);
       }
@@ -116,8 +117,20 @@ TO_QSPI const char angleChars[12] = STD_SUP_r STD_SUP_g STD_DEGREE "??" STD_SUP_
 #endif // !DMCP_BUILD
 
 
-static void getStringLabelOrVariableName(uint8_t *stringAddress) {
+void getStringLabelOrVariableName(uint8_t *stringAddress) {
   uint8_t stringLength = *(uint8_t *)(stringAddress++);
+  // The length byte is taken from the program step on trust. A corrupt step can
+  // claim a name longer than the bytes that remain in program memory, so clamp
+  // it to firstFreeProgramByte before xcopy reads the name; without this a
+  // damaged imported program would read past the program region. When the name
+  // would start at or past firstFreeProgramByte there are no valid bytes left,
+  // so read nothing rather than skipping the clamp and reading unbounded.
+  if(stringAddress >= firstFreeProgramByte) {
+    stringLength = 0;
+  }
+  else if(stringLength > firstFreeProgramByte - stringAddress) {
+    stringLength = (uint8_t)(firstFreeProgramByte - stringAddress);
+  }
   xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
   tmpStringLabelOrVariableName[stringLength] = 0;
 }

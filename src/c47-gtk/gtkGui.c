@@ -913,7 +913,7 @@ returnKeyReleasedFalse:
      && (    calcMode == CM_NIM
          ||  calcMode == CM_PEM
         )
-     && !getSystemFlag(FLAG_ALPHA) && (calcMode == CM_NIM & lastIntegerBase > 0) && nimNumberPart != NP_INT_BASE
+     && !getSystemFlag(FLAG_ALPHA) && calcMode == CM_NIM && lastIntegerBase > 0 && nimNumberPart != NP_INT_BASE
   ) {
      if(event->keyval >= GDK_KEY_A && event->keyval <= GDK_KEY_F) {
        addItemToBuffer(ITM_A + event->keyval - GDK_KEY_A); screenUpdatingMode = SCRUPD_AUTO; refreshScreen(3); return false;
