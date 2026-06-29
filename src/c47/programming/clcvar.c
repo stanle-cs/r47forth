@@ -293,7 +293,9 @@
         case PTP_KEYG_KEYX: {
           uint8_t *secondParam = findKey2ndParam(step - 2);
           _processOp(step, op, PARAM_NUMBER_8);
-          _processOp(secondParam, *secondParam, PARAM_LABEL);
+          if(secondParam != NULL) { // findKey2ndParam returns NULL on a malformed/.END. step
+            _processOp(secondParam, *secondParam, PARAM_LABEL);
+          }
           return true;
         }
 
