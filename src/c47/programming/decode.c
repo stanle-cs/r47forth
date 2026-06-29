@@ -405,12 +405,17 @@ uint8_t  opParam   = *(uint8_t *)(paramAddress++);
 
     case PARAM_KEYG_KEYX: {
       uint8_t *secondParam = findKey2ndParam(paramAddress - 3);
-      decodeOp(secondParam + 1, *secondParam, indexOfItems[*secondParam].itemCatalogName, PARAM_LABEL, indexOfItems[*secondParam].tamMinMax & TAM_MAX_MASK);
-      xcopy(tmpString + TMP_STR_LENGTH / 2, tmpString, stringByteLength(tmpString) + 1);
-      decodeOp(paramAddress - 1, *secondParam, op, PARAM_NUMBER_8, 21);
-      tmpString[stringByteLength(tmpString) + 1] = 0;
-      tmpString[stringByteLength(tmpString)    ] = ' ';
-      xcopy(tmpString + stringByteLength(tmpString), tmpString + TMP_STR_LENGTH / 2, stringByteLength(tmpString + TMP_STR_LENGTH / 2) + 1);
+      if(secondParam != NULL) {
+        decodeOp(secondParam + 1, *secondParam, indexOfItems[*secondParam].itemCatalogName, PARAM_LABEL, indexOfItems[*secondParam].tamMinMax & TAM_MAX_MASK);
+        xcopy(tmpString + TMP_STR_LENGTH / 2, tmpString, stringByteLength(tmpString) + 1);
+        decodeOp(paramAddress - 1, *secondParam, op, PARAM_NUMBER_8, 21);
+        tmpString[stringByteLength(tmpString) + 1] = 0;
+        tmpString[stringByteLength(tmpString)    ] = ' ';
+        xcopy(tmpString + stringByteLength(tmpString), tmpString + TMP_STR_LENGTH / 2, stringByteLength(tmpString + TMP_STR_LENGTH / 2) + 1);
+      }
+      else {
+        sprintf(tmpString, "\nIn function decodeOp: case PARAM_KEYG_KEYX, %s has no valid second key parameter!", op);
+      }
       break;
     }
 
@@ -575,6 +580,9 @@ static void decodeLiteral(uint8_t *literalAddress) {
       char *dispStringPtr = tmpString;
       char *sourceStringPtr = tmpStringLabelOrVariableName;
       uint8_t base = (uint8_t)(*literalAddress);
+      if(base > 16) { // bases above 16 are invalid; baseChars[] only spans 0..16
+        base = 0;
+      }
       decodedIntegerBase = base;
       getStringLabelOrVariableName(literalAddress + 1);
 
