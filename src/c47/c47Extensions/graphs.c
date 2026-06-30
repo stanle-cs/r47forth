@@ -837,6 +837,9 @@ void graph_plotmem(void) {
         #if defined(PC_BUILD) && defined(MONITOR_CLRSCR)
           printf("graph_plotmem: Drawing\n");
         #endif // PC_BUILD &&MONITOR_CLRSCR
+        if((programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode == CM_GRAPH) {
+          showSoftmenu(-MNU_SHOW);
+        }
         clearScreenGraphs(2, !clrTextArea, clrGraphArea);
         reDraw = false; //draw now and block reDraw in the next round
       } //continue with draw

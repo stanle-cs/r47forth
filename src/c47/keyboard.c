@@ -3988,6 +3988,9 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
             popSoftmenu();
           }
           popSoftmenu();
+          if(-currentMenu() == MNU_SHOW) { // this would be after programmed plot
+            popSoftmenu();
+          }
         }
 
         if(currentMenu() == -MNU_TIMERF) {
