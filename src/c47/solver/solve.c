@@ -482,9 +482,18 @@ int solver(calcRegister_t variable, const real34_t *y, const real34_t *x, real34
       realSetOne(&minBracketSpacing);
       minBracketSpacing.exponent -= (significantDigits == 0 || significantDigits == 34) ? solverTvmTol : significantDigits;
     }
+    else if(graphAccActive) {
+      // graphAccActive (true only inside execute_rpn_function_graphAcc) means contexts are narrowed to significantDigitsForEqnGraphs+3.
+      // follow the grapher: converge to graph precision. Set/cleared with the reduction.
+      realSetOne(&tol);
+      tol.exponent -= significantDigitsForEqnGraphs;
+      realSetOne(&minBracketSpacing);
+      minBracketSpacing.exponent -= significantDigitsForEqnGraphs;
+      realCopy(const_1e_34, &tolAlmostZero);   // residual floor stays at real34 precision
+    }
     else {
       convergenceTolerence(&tol);
-      stringToReal("1e-34", &tolAlmostZero, &ctxtSolver);
+      realCopy(const_1e_34, &tolAlmostZero);
       realCopy(const_1e_32, &minBracketSpacing);
     }
 

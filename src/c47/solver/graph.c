@@ -330,6 +330,8 @@ static void execute_rpn_function_graphAcc(void) {
     int32_t s39 = ctxtReal39.digits;
     int32_t s51 = ctxtReal51.digits;
     int32_t s75 = ctxtReal75.digits;
+    bool_t savedGraphAccActive = graphAccActive;
+    graphAccActive = true;   // paired 1:1 with the reduction below; a nested SOLVE reads this to pick the graph convergence tolerance, else it spins to the iteration cap
     ctxtReal34.digits = significantDigitsForEqnGraphs;
     ctxtReal39.digits = significantDigitsForEqnGraphs + 3;
     ctxtReal51.digits = significantDigitsForEqnGraphs + 12;
@@ -339,6 +341,7 @@ static void execute_rpn_function_graphAcc(void) {
     ctxtReal39.digits = s39;
     ctxtReal51.digits = s51;
     ctxtReal75.digits = s75;
+    graphAccActive = savedGraphAccActive;
   #else
     execute_rpn_function();
   #endif
