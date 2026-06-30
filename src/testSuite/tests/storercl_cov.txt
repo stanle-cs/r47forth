@@ -1,0 +1,69 @@
+;*************************************************************
+;** Coverage: store / recall and their arithmetic, max/min, **
+;** pair/triple and stack variants (FARG = register number).**
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+Func: fnStore
+In:  FARG=0 RX=Real:"5"
+Out: EC=0
+Func: fnStoreAdd
+In:  FARG=0 RX=Real:"3"
+Out: EC=0
+Func: fnStoreSub
+In:  FARG=0 RX=Real:"1"
+Out: EC=0
+Func: fnStoreMult
+In:  FARG=0 RX=Real:"2"
+Out: EC=0
+Func: fnStoreDiv
+In:  FARG=0 RX=Real:"4"
+Out: EC=0
+Func: fnStoreMax
+In:  FARG=0 RX=Real:"100"
+Out: EC=0
+Func: fnStoreMin
+In:  FARG=0 RX=Real:"-5"
+Out: EC=0
+Func: fnRecall
+In:  FARG=0
+Out: EC=0
+Func: fnRecallAdd
+In:  FARG=0 RX=Real:"2"
+Out: EC=0
+Func: fnRecallSub
+In:  FARG=0 RX=Real:"1"
+Out: EC=0
+Func: fnRecallMult
+In:  FARG=0 RX=Real:"3"
+Out: EC=0
+Func: fnRecallDiv
+In:  FARG=0 RX=Real:"2"
+Out: EC=0
+Func: fnRecallMax
+In:  FARG=0 RX=Real:"7"
+Out: EC=0
+Func: fnRecallMin
+In:  FARG=0 RX=Real:"9"
+Out: EC=0
+Func: fn2Sto
+In:  FARG=0 RY=Real:"2" RX=Real:"1"
+Out: EC=0
+Func: fn2Rcl
+In:  FARG=0
+Out: EC=0
+Func: fn3Sto
+In:  FARG=0 RZ=Real:"3" RY=Real:"2" RX=Real:"1"
+Out: EC=0
+Func: fn3Rcl
+In:  FARG=0
+Out: EC=0
+Func: fnStoreStack
+In:  FARG=0 RX=Real:"1"
+Out: EC=0
+Func: fnRecallStack
+In:  FARG=0
+Out: EC=0
+Func: fnLastX
+In:  FARG=0
+Out: EC=0

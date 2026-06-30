@@ -1,0 +1,39 @@
+;*************************************************************
+;** Coverage: X-vs-Y comparison predicates across operand   **
+;** types and both true/false branches.                     **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+Func: fnXLessThan
+In:  FARG=0 RY=Real:"5" RX=Real:"3"
+Out: EC=0
+Func: fnXLessThan
+In:  FARG=0 RY=Real:"3" RX=Real:"5"
+Out: EC=0
+Func: fnXLessEqual
+In:  FARG=0 RY=Real:"5" RX=Real:"5"
+Out: EC=0
+Func: fnXGreaterThan
+In:  FARG=0 RY=Real:"3" RX=Real:"5"
+Out: EC=0
+Func: fnXGreaterEqual
+In:  FARG=0 RY=Real:"5" RX=Real:"5"
+Out: EC=0
+Func: fnXEqualsTo
+In:  FARG=0 RY=Real:"5" RX=Real:"5"
+Out: EC=0
+Func: fnXEqualsTo
+In:  FARG=0 RY=Real:"3" RX=Real:"5"
+Out: EC=0
+Func: fnXNotEqual
+In:  FARG=0 RY=Real:"3" RX=Real:"5"
+Out: EC=0
+Func: fnXEqualsTo
+In:  FARG=0 RY=Cplx:"1 i 2" RX=Cplx:"1 i 2"
+Out: EC=0
+Func: fnXLessThan
+In:  FARG=0 RY=LonI:"7" RX=LonI:"3"
+Out: EC=0
+Func: fnXAlmostEqual
+In:  FARG=0 RY=Real:"5.0000001" RX=Real:"5"
+Out: EC=0

@@ -11,11 +11,22 @@ char _ioFileNameOverride[C47_PATH_MAX] = {0};
 
 const char *_ioFileNameFromFilePath(ioFilePath_t path) {
   switch(path) {
-    case ioPathManualSave: return "c47.sav";
-    case ioPathPgmFile:    return "c47.dat";
-    case ioPathTestPgms:   return "res/testPgms/testPgms.bin";
-    case ioPathBackup:     return CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg";
-    default:               return false;
+    case ioPathManualSave:          return "c47.sav";
+    case ioPathAutoSave:            return "c47auto.sav";
+    case ioPathPgmFile:             return "c47.dat";
+    case ioPathTestPgms:            return "res/testPgms/testPgms.bin";
+    case ioPathBackup:              return CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg";
+    case ioPathRegDump:             return "c47regdump.txt";
+    case ioPathSaveStateFile:       return "c47state.bin";
+    case ioPathLoadStateFile:       return "c47state.bin";
+    case ioPathSaveProgram:         return "c47program.bin";
+    case ioPathExportRTFProgram:    return "c47program.rtf";
+    case ioPathLoadProgram:         return "c47program.bin";
+    case ioPathSaveAllPrograms:     return "c47programs.bin";
+    case ioPathExportRTFAllPrograms: return "c47programs.rtf";
+    case ioPathRegImport:           return "c47regs.txt";
+    case ioPathRegExport:           return "c47regs.txt";
+    default:                        return false;
   }
 }
 

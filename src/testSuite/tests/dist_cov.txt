@@ -1,0 +1,61 @@
+;*************************************************************
+;** Coverage: GEV, Pareto and Uniform distributions.        **
+;** Params: M=location/low, S=scale, Q=shape, N=high; X=in. **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+; --- GEV (mu=0, sigma=1, xi=0.1) ---
+Func: fnGEVP
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"0.1" RX=Real:"1"
+Out: EC=0
+Func: fnGEVL
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"0.1" RX=Real:"1"
+Out: EC=0
+Func: fnGEVR
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"0.1" RX=Real:"1"
+Out: EC=0
+Func: fnGEVI
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"0.1" RX=Real:"0.5"
+Out: EC=0
+
+; --- Pareto (sigma=1, alpha=2, mu=0) ---
+Func: fnParetoP
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"2" RX=Real:"3"
+Out: EC=0
+Func: fnParetoL
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"2" RX=Real:"3"
+Out: EC=0
+Func: fnParetoU
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"2" RX=Real:"3"
+Out: EC=0
+Func: fnParetoI
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"2" RX=Real:"0.5"
+Out: EC=0
+
+; --- Pareto2 (sigma=1, alpha=2, mu=0) ---
+Func: fnPareto2P
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"2" RX=Real:"3"
+Out: EC=0
+Func: fnPareto2L
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"2" RX=Real:"3"
+Out: EC=0
+Func: fnPareto2U
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"2" RX=Real:"3"
+Out: EC=0
+Func: fnPareto2I
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RS=Real:"1" RQ=Real:"2" RX=Real:"0.5"
+Out: EC=0
+
+; --- Uniform (low=0, high=10) ---
+Func: fnUniformP
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RN=Real:"10" RX=Real:"5"
+Out: EC=0
+Func: fnUniformL
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RN=Real:"10" RX=Real:"5"
+Out: EC=0
+Func: fnUniformU
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RN=Real:"10" RX=Real:"5"
+Out: EC=0
+Func: fnUniformI
+In:  AM=DEG FL_ASLIFT=0 RM=Real:"0" RN=Real:"10" RX=Real:"0.5"
+Out: EC=0

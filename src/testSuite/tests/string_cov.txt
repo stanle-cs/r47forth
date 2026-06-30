@@ -1,0 +1,39 @@
+;*************************************************************
+;** Coverage: ALPHA register / string operations.           **
+;** Build ALPHA with fnXToAlpha, then exercise the ops.     **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+Func: fnClearAlpha
+In:  FARG=0
+Out: EC=0
+Func: fnXToAlpha
+In:  FARG=0 RX=Stri:"HELLO"
+Out: EC=0
+Func: fnAlphaLeng
+In:  FARG=0
+Out: EC=0
+Func: fnAlphaToX
+In:  FARG=0
+Out: EC=0
+Func: fnAlphaPos
+In:  FARG=0 RX=Stri:"L"
+Out: EC=0
+Func: fnAlphaRL
+In:  FARG=0
+Out: EC=0
+Func: fnAlphaRR
+In:  FARG=0
+Out: EC=0
+Func: fnAlphaSL
+In:  FARG=0
+Out: EC=0
+Func: fnAlphaSR
+In:  FARG=0
+Out: EC=0
+Func: fnAlphaIP
+In:  FARG=0 RX=Real:"3"
+Out: EC=0
+Func: fnClearAlpha
+In:  FARG=0
+Out: EC=0
