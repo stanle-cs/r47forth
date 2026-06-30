@@ -406,6 +406,8 @@ static void DEI_xeq_user(calcRegister_t regist, const real_t *x, real_t *res, re
     //clearSystemFlag(FLAG_SPCRES);
     reallocateRegister(regist, dtReal34, 0, amNone);
     realToReal34(x, REGISTER_REAL34_DATA(regist));
+    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);   // put the node's x value in REGISTER_X (like _executeSolver) so fnFillStack feeds the integrand its x, not a stale prior result.
+    realToReal34(x, REGISTER_REAL34_DATA(REGISTER_X));
     fnFillStack(NOPARAM);
     //printReal34ToConsole(REGISTER_REAL34_DATA(regist), "", " -> ");
     _integratorIteration();

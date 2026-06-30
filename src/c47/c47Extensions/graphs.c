@@ -1481,11 +1481,13 @@ void graph_plotmem(void) {
 
       }
       else {
-        displayCalcErrorMessage(ERROR_NO_SUMMATION_DATA, ERR_REGISTER_LINE, REGISTER_X);
-        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-          sprintf(errorMessage, "There is no statistical data available!");
-          moreInfoOnError("In function graph_plotmem:", errorMessage, NULL, NULL);
-        #endif // EXTRA_INFO_ON_CALC_ERROR == 1
+        if(plotStatMx[0] == 'S') {   // "no statistical data" only applies to a stat plot. A draw matrix ('D') with <2 points is a function plot still being built (e.g. a mistimed refresh mid-build) - not an error, draw nothing.
+          displayCalcErrorMessage(ERROR_NO_SUMMATION_DATA, ERR_REGISTER_LINE, REGISTER_X);
+          #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+            sprintf(errorMessage, "There is no statistical data available!");
+            moreInfoOnError("In function graph_plotmem:", errorMessage, NULL, NULL);
+          #endif // EXTRA_INFO_ON_CALC_ERROR == 1
+        }
       }
 
       #if defined(LOW_GRAPH_ACC)
