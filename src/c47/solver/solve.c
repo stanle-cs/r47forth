@@ -304,10 +304,15 @@ static void _executeSolver(calcRegister_t variable, const real34_t *val, real34_
     parseEquation(currentFormula, EQUATION_PARSER_XEQ, tmpString, tmpString + AIM_BUFFER_LENGTH);
   }
   else {
+    // also stack the variable + control flags so a nested SOLVE cannot leak into the outer point (enables PLOT(SOLVE), SOLVE(SOLVE))
     uint16_t savedCurrentSolverProgram = currentSolverProgram;
+    uint16_t savedCurrentSolverVariable = currentSolverVariable;
+    uint16_t savedCurrentSolverStatus = currentSolverStatus;
     dynamicMenuItem = -1;
     execProgram(currentSolverProgram + FIRST_LABEL);
     currentSolverProgram = savedCurrentSolverProgram;
+    currentSolverVariable = savedCurrentSolverVariable;
+    currentSolverStatus = savedCurrentSolverStatus;
   }
   if(lastErrorCode == ERROR_OVERFLOW_PLUS_INF) {
     realToReal34(const_plusInfinity, res);

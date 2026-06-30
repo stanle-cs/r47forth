@@ -302,6 +302,7 @@ static void _integratorIteration(void) {
   }
   else {
     uint16_t savedCurrentSolverProgram = currentSolverProgram;     // mirror of the solver's guard (Mihail, 9bb487e44 "Fix integral nested in SOLVE"); a nested program may repoint it. Enables INT(INT)
+    // No variable/flags stack here (unlike _executeSolver): not needed for SOLVE(INT), PLOT(INT), INT(INT) since the integrator has its own variable and a nested INTEG only clears USES_FORMULA. Only INT(SOLVE) would need it, and that is unsupported.
     dynamicMenuItem = -1;
     execProgram(currentSolverProgram + FIRST_LABEL);
     currentSolverProgram = savedCurrentSolverProgram;
