@@ -2378,6 +2378,7 @@ bool_t isFunctionAllowingNewVariable(uint16_t op) {
     case ITM_Zex:
     case ITM_Tex:
     case ITM_INTEGRAL:
+    case ITM_INTEGRAL_YX:
       return true;
 
     default:
