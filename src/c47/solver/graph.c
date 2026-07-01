@@ -2658,8 +2658,25 @@ void fnEqSolvGraph (uint16_t func) {
             printf(">>> lowerXStartValue=%f  higherXStartValue=%f\n", lowerXStartValue, higherXStartValue);
           #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
 
+          // fnClDrawMx's delete can shift the plot variable's register; cache the name, re-resolve after.
+          char plotVarName[16];
+          plotVarName[0] = 0;
+          if(currentSolverVariable >= FIRST_NAMED_VARIABLE && currentSolverVariable < FIRST_NAMED_VARIABLE + numberOfNamedVariables) {
+            uint8_t len = allNamedVariables[currentSolverVariable - FIRST_NAMED_VARIABLE].variableName[0];
+            xcopy(plotVarName, allNamedVariables[currentSolverVariable - FIRST_NAMED_VARIABLE].variableName + 1, len);
+            plotVarName[len] = 0;
+          }
+
           fnClDrawMx(5);
           strcpy(plotStatMx, "DrwMX");
+
+          if(plotVarName[0] != 0) {
+            calcRegister_t reResolved = findNamedVariable(plotVarName);
+            if(reResolved != INVALID_VARIABLE) {
+              currentSolverVariable = reResolved;
+              graphVariabl1         = reResolved;
+            }
+          }
 
           if(higherXStartValue>lowerXStartValue + 0.0001 && higherXStartValue!=DOUBLE_NOT_INIT && lowerXStartValue!=DOUBLE_NOT_INIT) { //pre-condition the plotter
             x_min = lowerXStartValue;
