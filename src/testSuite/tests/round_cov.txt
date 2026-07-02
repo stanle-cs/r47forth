@@ -6,7 +6,7 @@ In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
 
 Func: fnRdp
 In:  FARG=2 RX=Real:"3.14159265"
-Out: EC=0
+Out: EC=0 RX=Real:"3.14"
 Func: fnRdp
 In:  FARG=2 RX=Cplx:"3.14159 i 2.71828"
 Out: EC=0
@@ -18,7 +18,7 @@ In:  FARG=2 RX=ReMa:"M2,2[1.234,5.678,9.012,3.456]"
 Out: EC=0
 Func: fnRsd
 In:  FARG=3 RX=Real:"3.14159265"
-Out: EC=0
+Out: EC=0 RX=Real:"3.14"
 Func: fnRsd
 In:  FARG=3 RX=Cplx:"3.14159 i 2.71828"
 Out: EC=0
@@ -27,4 +27,4 @@ In:  FARG=3 RX=ReMa:"M2,2[1.234,5.678,9.012,3.456]"
 Out: EC=0
 Func: fnRsd
 In:  FARG=4 RX=Real:"0.000123456"
-Out: EC=0
+Out: EC=0 RX=Real:"0.0001235"
