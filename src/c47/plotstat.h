@@ -24,10 +24,6 @@
 extern  float    graph_dx;
 extern  float    graph_dy;
 extern  bool_t   roundedTicks;
-extern  bool_t   PLOT_INTG;
-extern  bool_t   PLOT_DIFF;
-extern  bool_t   PLOT_RMS;
-extern  bool_t   PLOT_SHADE;
 extern  bool_t   PLOT_AXIS;
 extern  int8_t   PLOT_ZOOM;
 extern  uint8_t  drawHistogram;

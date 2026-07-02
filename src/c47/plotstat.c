@@ -14,10 +14,6 @@ static void drawline(uint16_t selection, real_t *RR, real_t *SMI, real_t *aa0, r
 float     graph_dx;
 float     graph_dy;
 bool_t    roundedTicks;
-bool_t    PLOT_INTG;
-bool_t    PLOT_DIFF;
-bool_t    PLOT_RMS;
-bool_t    PLOT_SHADE;
 bool_t    PLOT_AXIS;
 int8_t    PLOT_ZOOM;
 uint8_t   drawHistogram;

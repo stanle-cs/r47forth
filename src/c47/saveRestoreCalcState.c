@@ -4,7 +4,7 @@
 #include "c47.h"
 
 // This is used for the state files
-#define configFileVersion                  10000024 // FLAG_SIGZEROS
+#define configFileVersion                  10000025 // FLAG_PDIFF PINTG PRMS PSHADE
 #define VersionAllowed                     10000005 // This code will not autoload versions earlier than this
 /*
 10000001 // arbitrary starting point version 10 000 001
@@ -869,10 +869,6 @@ void doSave(uint16_t saveType) {
         sprintf(tmpString, "graph_dx\n"                    "%f"   "\n",     graph_dx);                     save(tmpString, strlen(tmpString));
         sprintf(tmpString, "graph_dy\n"                    "%f"   "\n",     graph_dy);                     save(tmpString, strlen(tmpString));
         sprintf(tmpString, "roundedTicks\n%"               PRIu8  "\n",     (uint8_t)roundedTicks);        save(tmpString, strlen(tmpString));
-        sprintf(tmpString, "PLOT_INTG\n%"                  PRIu8  "\n",     (uint8_t)PLOT_INTG);           save(tmpString, strlen(tmpString));
-        sprintf(tmpString, "PLOT_DIFF\n%"                  PRIu8  "\n",     (uint8_t)PLOT_DIFF);           save(tmpString, strlen(tmpString));
-        sprintf(tmpString, "PLOT_RMS\n%"                   PRIu8  "\n",     (uint8_t)PLOT_RMS);            save(tmpString, strlen(tmpString));
-        sprintf(tmpString, "PLOT_SHADE\n%"                 PRIu8  "\n",     (uint8_t)PLOT_SHADE);          save(tmpString, strlen(tmpString));
         sprintf(tmpString, "PLOT_AXIS\n%"                  PRIu8  "\n",     (uint8_t)PLOT_AXIS);           save(tmpString, strlen(tmpString));
         sprintf(tmpString, "PLOT_ZMY\n%"                   PRIu8  "\n",     PLOT_ZMY);                     save(tmpString, strlen(tmpString));
         sprintf(tmpString, "firstDayOfWeek\n%"             PRIu8  "\n",     firstDayOfWeek);               save(tmpString, strlen(tmpString));
@@ -2268,10 +2264,6 @@ int64_t stringToInt64(const char *str) {
           else if(strcmp(aimBuffer, "graph_dx"                    ) == 0) { graph_dx              = stringToFloat(tmpString); }
           else if(strcmp(aimBuffer, "graph_dy"                    ) == 0) { graph_dy              = stringToFloat(tmpString); }
           else if(strcmp(aimBuffer, "roundedTicks"                ) == 0) { roundedTicks          = toUint8(tmpString) != 0; }
-          else if(strcmp(aimBuffer, "PLOT_INTG"                   ) == 0) { PLOT_INTG             = toUint8(tmpString) != 0; }
-          else if(strcmp(aimBuffer, "PLOT_DIFF"                   ) == 0) { PLOT_DIFF             = toUint8(tmpString) != 0; }
-          else if(strcmp(aimBuffer, "PLOT_RMS"                    ) == 0) { PLOT_RMS              = toUint8(tmpString) != 0; }
-          else if(strcmp(aimBuffer, "PLOT_SHADE"                  ) == 0) { PLOT_SHADE            = toUint8(tmpString) != 0; }
           else if(strcmp(aimBuffer, "PLOT_AXIS"                   ) == 0) { PLOT_AXIS             = toUint8(tmpString) != 0; }
           else if(strcmp(aimBuffer, "PLOT_ZMY"                    ) == 0) { PLOT_ZMY              = toUint8(tmpString); }
           else if(strcmp(aimBuffer, "firstDayOfWeek"              ) == 0) { firstDayOfWeek        = toUint8(tmpString); }
@@ -2311,6 +2303,30 @@ int64_t stringToInt64(const char *str) {
               forceSystemFlag(FLAG_PFX_ALL, toUint8(tmpString) != 0);
             } //Keep compatible by repeating, even though setting is now in systemflags
           }
+
+
+          else if(strcmp(aimBuffer, "PLOT_INTG"                      ) == 0) {
+            if(loadedVersion < 10000025) {
+              forceSystemFlag(FLAG_PINTG, toUint8(tmpString) != 0);
+            }
+          }
+          else if(strcmp(aimBuffer, "PLOT_DIFF"                      ) == 0) {
+            if(loadedVersion < 10000025) {
+              forceSystemFlag(FLAG_PDIFF, toUint8(tmpString) != 0);
+            }
+          }
+          else if(strcmp(aimBuffer, "PLOT_RMS"                      ) == 0) {
+            if(loadedVersion < 10000025) {
+              forceSystemFlag(FLAG_PRMS, toUint8(tmpString) != 0);
+            }
+          }
+          else if(strcmp(aimBuffer, "PLOT_SHADE"                      ) == 0) {
+            if(loadedVersion < 10000025) {
+              forceSystemFlag(FLAG_PSHADE, toUint8(tmpString) != 0);
+            }
+          }
+
+
 
 
 

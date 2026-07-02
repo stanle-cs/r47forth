@@ -924,8 +924,12 @@
 #define FLAG_NORM                             0x8068 //41
 #define FLAG_BOLD                             0x8069 //42
 #define FLAG_SIGZEROS                         0x806A //43
+#define FLAG_PRMS                             0x806B
+#define FLAG_PINTG                            0x806C
+#define FLAG_PDIFF                            0x806D
+#define FLAG_PSHADE                           0x806E //47
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+43 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+47 // We can have a maximum of 128 system flags
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode

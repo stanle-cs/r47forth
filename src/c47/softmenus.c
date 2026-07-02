@@ -4049,6 +4049,9 @@ void showSoftmenuCurrentPart(void) {
 
 // input param is (PageNumber << 14) +MenuNumber
 void fnPseudoMenu(uint16_t target) {
+  if(((int16_t)(target & 0x3fff)) == MNU_PLOT_FUNC && !(graphToRemainOnScreen || (calcMode == CM_GRAPH))) {
+    return;
+  }
   menuPageNumber = target >> 14;
   fnOpenMenu(((int16_t)(target & 0x3fff)));
 }

@@ -35,14 +35,15 @@ void graphResetCommon() {
   clearSystemFlag(FLAG_PCURVE);
   clearSystemFlag(FLAG_PCROS);
   clearSystemFlag(FLAG_PPLUS);
+  clearSystemFlag(FLAG_PINTG);
+  clearSystemFlag(FLAG_PDIFF);
+  clearSystemFlag(FLAG_PRMS);
+  clearSystemFlag(FLAG_PSHADE);
+
 
   real34SetZero(REGISTER_REAL34_DATA(RESERVED_VARIABLE_UY));
   real34SetZero(REGISTER_REAL34_DATA(RESERVED_VARIABLE_LY));
 
-  PLOT_INTG     = false;
-  PLOT_DIFF     = false;
-  PLOT_RMS      = false;
-  PLOT_SHADE    = false;
   PLOT_ZMY      = 0;
   PLOT_ZOOM     = 0;
   plotmode      = _SCAT;
@@ -130,9 +131,9 @@ void fnPcurve (uint16_t unusedButMandatoryParameter) {
 
 
 void fnPintg (uint16_t unusedButMandatoryParameter) {
-  PLOT_INTG = !PLOT_INTG;
-  if(!PLOT_INTG) {
-    PLOT_SHADE = false;
+  flipSystemFlag(FLAG_PINTG);
+  if(!getSystemFlag(FLAG_PINTG)) {
+    clearSystemFlag(FLAG_PSHADE);
   }
   clearSystemFlag(FLAG_VECT);
   clearSystemFlag(FLAG_NVECT);
@@ -142,7 +143,7 @@ void fnPintg (uint16_t unusedButMandatoryParameter) {
 
 
 void fnPdiff (uint16_t unusedButMandatoryParameter) {
-  PLOT_DIFF  = !PLOT_DIFF;
+  flipSystemFlag(FLAG_PDIFF);
   clearSystemFlag(FLAG_VECT);
   clearSystemFlag(FLAG_NVECT);
   fnRefreshState();                //jm
@@ -151,7 +152,7 @@ void fnPdiff (uint16_t unusedButMandatoryParameter) {
 
 
 void fnPrms (uint16_t unusedButMandatoryParameter) {
-  PLOT_RMS   = !PLOT_RMS;
+  flipSystemFlag(FLAG_PRMS);
   clearSystemFlag(FLAG_VECT);
   clearSystemFlag(FLAG_NVECT);
   fnRefreshState();                //jm
@@ -250,10 +251,10 @@ void fnPvect (uint16_t unusedButMandatoryParameter) {
   if(getSystemFlag(FLAG_VECT)) {
     clearSystemFlag(FLAG_NVECT);
   }
-  PLOT_INTG    = false;
-  PLOT_DIFF    = false;
-  PLOT_RMS     = false;
-  PLOT_SHADE   = false;
+  clearSystemFlag(FLAG_PINTG);
+  clearSystemFlag(FLAG_PDIFF);
+  clearSystemFlag(FLAG_PRMS);
+  clearSystemFlag(FLAG_PSHADE);
   fnRefreshState();                //jm
   fnPlotSQ(0);
 }
@@ -264,10 +265,10 @@ void fnPNvect (uint16_t unusedButMandatoryParameter) {
   if(getSystemFlag(FLAG_NVECT)) {
     clearSystemFlag(FLAG_VECT);
   }
-  PLOT_INTG   = false;
-  PLOT_DIFF   = false;
-  PLOT_RMS    = false;
-  PLOT_SHADE  = false;
+  clearSystemFlag(FLAG_PINTG);
+  clearSystemFlag(FLAG_PDIFF);
+  clearSystemFlag(FLAG_PRMS);
+  clearSystemFlag(FLAG_PSHADE);
   fnRefreshState();                //jm
   fnPlotSQ(0);
 }
@@ -281,9 +282,9 @@ void fnScale (uint16_t unusedButMandatoryParameter) {
 
 
 void fnPshade (uint16_t unusedButMandatoryParameter) {
-  PLOT_SHADE = !PLOT_SHADE;
-  if(PLOT_SHADE) {
-    PLOT_INTG = true;
+  flipSystemFlag(FLAG_PSHADE);
+  if(getSystemFlag(FLAG_PSHADE)) {
+    setSystemFlag(FLAG_PINTG);
   }
   clearSystemFlag(FLAG_VECT);
   clearSystemFlag(FLAG_NVECT);
@@ -389,7 +390,7 @@ void fnListXY(uint16_t unusedButMandatoryParameter) {
     lastPlotMode = PLOT_NOTHING;
     strcpy(plotStatMx, "STATS");
     setSystemFlag(FLAG_PLINE);
-    PLOT_SHADE = true;
+    setSystemFlag(FLAG_PSHADE);
     fnPlotSQ(0);
   }
 
@@ -591,7 +592,7 @@ void graph_text(void) {
     }
     ypos += 48 + 2*19;
 
-    if(PLOT_INTG && !invalid_intg) {
+    if(getSystemFlag(FLAG_PINTG) && !invalid_intg) {
       snprintf(tmpString, bufLen, "  Trapezoid integral");
       showStringEnhanced(tmpString, &tinyFont, 1, ypos, vmNormal, false, false, NO_compress, NO_raise, DO_Show, DO_Bold, DO_LF);
 
@@ -600,14 +601,14 @@ void graph_text(void) {
       ypos += 20;
     }
 
-    if(PLOT_DIFF && !invalid_diff) {
+    if(getSystemFlag(FLAG_PDIFF) && !invalid_diff) {
       snprintf(tmpString, bufLen, "  Numerical slope");
       showStringEnhanced(tmpString, &tinyFont, 1, ypos, vmNormal, false, false, NO_compress, NO_raise, DO_Show, DO_Bold, DO_LF);
       plotdeltabig(6, ypos+4+4-2-4);
       ypos += 20;
     }
 
-    if(PLOT_RMS && !invalid_rms) {
+    if(getSystemFlag(FLAG_PRMS) && !invalid_rms) {
       snprintf(tmpString, bufLen, "  Root Mean Square RMS");
       showStringEnhanced(tmpString, &tinyFont, 1, ypos, vmNormal, false, false, NO_compress, NO_raise, DO_Show, DO_Bold, DO_LF);
       plotrms(6, ypos+4+4-2-3);
@@ -896,7 +897,7 @@ void graph_plotmem(void) {
         plotmode = _SCAT;
       }
 
-        if(PLOT_INTG) {
+        if(getSystemFlag(FLAG_PINTG)) {
           rmsy = fabs(grf_y(0));
           for(ix = 0; (ix < statnum); ++ix) {
             rmsy = sqrt((rmsy * rmsy * ix + grf_y(ix) * grf_y(ix)) / (ix+1.0));      // Changed rmsy to use the standard RMS calc, and not shoft it to the trapezium x-centre
@@ -918,9 +919,9 @@ void graph_plotmem(void) {
           invalid_rms  = false;                                                      //RMSy
 
 //#################################################### vvv SCALING LOOP DIFF INTG RMS vvv #########################
-/**/      if(PLOT_DIFF || PLOT_INTG || PLOT_RMS) {
+/**/      if(getSystemFlag(FLAG_PDIFF) || getSystemFlag(FLAG_PINTG) || getSystemFlag(FLAG_PRMS)) {
 /**/        inty = inty_off;                                                          //  integral starting constant co-incides with graph
-/**/        if(PLOT_RMS) {
+/**/        if(getSystemFlag(FLAG_PRMS)) {
 /**/          rmsy = fabs(grf_y(0));
 /**/        }
 /**/
@@ -947,7 +948,7 @@ void graph_plotmem(void) {
 /**/              if(grf_x(ix) > x_max) {
 /**/                x_max = grf_x(ix);
 /**/              }
-/**/              if(PLOT_DIFF) {
+/**/              if(getSystemFlag(FLAG_PDIFF)) {
 /**/                //plotDiff(); //dydx                                            //Differential
 /**/                if(ddx != 0) {
 /**/                  if(ix == 1) {                               // only two samples available
@@ -968,7 +969,7 @@ void graph_plotmem(void) {
 /**/                  y_max = dydx;
 /**/                }
 /**/              }
-/**/              if(PLOT_INTG) {
+/**/              if(getSystemFlag(FLAG_PINTG)) {
 /**/                inty = inty + (grf_y(ix) + grf_y(ix-1)) / 2 * ddx;
 /**/                if(inty < y_min) {
 /**/                  y_min = inty;
@@ -977,7 +978,7 @@ void graph_plotmem(void) {
 /**/                  y_max = inty;
 /**/                }
 /**/              }
-/**/              if(PLOT_RMS) {
+/**/              if(getSystemFlag(FLAG_PRMS)) {
 /**/                rmsy = sqrt((rmsy * rmsy * ix + grf_y(ix) * grf_y(ix)) / (ix+1.0));      // Changed rmsy to use the standard RMS calc, and not shoft it to the trapezium x-centre
 /**/                if(rmsy < y_min) {
 /**/                  y_min = rmsy;
@@ -1016,7 +1017,7 @@ void graph_plotmem(void) {
 /**/
 /**/      float scaleRmsy = 0;
 /**/
-/**/      if(getSystemFlag(FLAG_PBOX) || getSystemFlag(FLAG_PLINE) || getSystemFlag(FLAG_PCROS) || getSystemFlag(FLAG_PPLUS) || !(PLOT_DIFF || PLOT_INTG)) {  //XXXX
+/**/      if(getSystemFlag(FLAG_PBOX) || getSystemFlag(FLAG_PLINE) || getSystemFlag(FLAG_PCROS) || getSystemFlag(FLAG_PPLUS) || !(getSystemFlag(FLAG_PDIFF) || getSystemFlag(FLAG_PINTG))) {  //XXXX
 /**/
 /**/        //pre-loop to cover trivial cases of symmetrical axis
 /**/        for(cnt=0; (cnt < statnum); cnt++) {
@@ -1200,7 +1201,7 @@ void graph_plotmem(void) {
         ix = 0;
         inty = inty_off;                                                         //  integral starting constant co-incides with graph
         rmsy = 0;
-        if(PLOT_RMS) {
+        if(getSystemFlag(FLAG_PRMS)) {
           rmsy = fabs(grf_y(0));
         }
 
@@ -1216,9 +1217,9 @@ void graph_plotmem(void) {
             x = 0;
             y = 0;
 
-            if(ix !=0 && ( (PLOT_DIFF && !invalid_diff) || (PLOT_INTG && !invalid_intg) || (PLOT_RMS && !invalid_rms) )) {
+            if(ix !=0 && ( (getSystemFlag(FLAG_PDIFF) && !invalid_diff) || (getSystemFlag(FLAG_PINTG) && !invalid_intg) || (getSystemFlag(FLAG_PRMS) && !invalid_rms) )) {
               ddx = grf_x(ix) - grf_x(ix-1);
-              if(PLOT_DIFF && ddx != 0) {
+              if(getSystemFlag(FLAG_PDIFF) && ddx != 0) {
                 if(ix == 1 || ( fabs( ((grf_x(ix) - grf_x(ix-1)) / (grf_x(ix-1) - grf_x(ix-2))) - 1) > 0.0001 )) {                               // only two samples available
                   dydx = (grf_y(ix) - grf_y(ix-1)) / ddx;   // Differential
                   dxx = (grf_x(ix) + grf_x(ix-1) )/2;
@@ -1232,10 +1233,10 @@ void graph_plotmem(void) {
                 dydx = FLoatingMax;
               }
 
-              if(PLOT_RMS)  {
+              if(getSystemFlag(FLAG_PRMS))  {
                 rmsy = sqrt ( (rmsy * rmsy * ix + grf_y(ix) * grf_y(ix)) / (ix+1.0) );      // Changed rmsy to use the standard RMS calc, and not shoft it to the trapezium x-centre
               }
-              if(PLOT_INTG) {
+              if(getSystemFlag(FLAG_PINTG)) {
                 inty = inty + (grf_y(ix) + grf_y(ix-1)) / 2 * ddx;
               }
             }
@@ -1371,7 +1372,7 @@ void graph_plotmem(void) {
                                  false                     /*line*/   );
 
 
-              if(PLOT_DIFF && !invalid_diff && ix != 0) {
+              if(getSystemFlag(FLAG_PDIFF) && !invalid_diff && ix != 0) {
                 #if defined(STATDEBUG)
                   printf("Plotting Delta x=%f dy=%f \n", dxx, dydx);
                 #endif // STATDEBUG
@@ -1379,7 +1380,7 @@ void graph_plotmem(void) {
               }
 
 
-              if(PLOT_RMS && !invalid_rms && ix != 0) {
+              if(getSystemFlag(FLAG_PRMS) && !invalid_rms && ix != 0) {
                 #if defined(STATDEBUG)
                   printf("Plotting RMSy x=%f rmsy=%f \n", x - ddx/2, rmsy);
                 #endif // STATDEBUG
@@ -1387,7 +1388,7 @@ void graph_plotmem(void) {
               }
 
 
-              if(PLOT_INTG && !invalid_intg && ix !=0) {
+              if(getSystemFlag(FLAG_PINTG) && !invalid_intg && ix !=0) {
                 #if defined(STATDEBUG)
                   printf("Plotting Integral x=%f intg(x)=%f\n", x-ddx/2, inty);
                 #endif // STATDEBUG
@@ -1413,7 +1414,7 @@ void graph_plotmem(void) {
                   plotline1(xAvg-2, yNintg, xN0,    yNintg);
                 }
 
-                if(PLOT_SHADE) {
+                if(getSystemFlag(FLAG_PSHADE)) {
                   int16_t yNoff = screen_window_y(y_min, 0, y_max);
                   plotrect(xN0, yN0,   xN1, yN1);
                   plotrect(xN0, yNoff, xN1, yN0);
