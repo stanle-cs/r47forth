@@ -1,0 +1,12 @@
+;*************************************************************
+;** Coverage: program-engine clear-local-variables walk.    **
+;** fnClCVar walks the current program's steps and clears    **
+;** the referenced local variables/registers. Requires the   **
+;** sample programs (res/testPgms/testPgms.bin) to be loaded. **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+; walk the current program and clear its local variables
+Func: fnClCVar
+In:  FARG=0
+Out: EC=0

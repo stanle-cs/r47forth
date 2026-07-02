@@ -137,6 +137,9 @@ const funcTest_t funcTestNoParam[] = {
   {"fnAlphaRR",              fnAlphaRR             },
   {"fnAlphaSL",              fnAlphaSL             },
   {"fnAlphaSR",              fnAlphaSR             },
+  // Program engine: clear the local variables of the current program (walks the
+  // loaded program steps; needs res/testPgms/testPgms.bin staged in the CWD).
+  {"fnClCVar",               fnClCVar              },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
