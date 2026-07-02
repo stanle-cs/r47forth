@@ -80,13 +80,13 @@ Out: EC=0
 Func: fnCurveFittingLR
 In:  FARG=0
 Out: EC=0
-; predict y from x and x from y using the fit
+; predict y from x and x from y using the linear fit of y=2x
 Func: fnYIsFnx
 In:  FARG=0 RX=Real:"6"
-Out: EC=0
+Out: EC=0 RX=Real:"12"
 Func: fnXIsFny
 In:  FARG=0 RX=Real:"12"
-Out: EC=0
+Out: EC=0 RX=Real:"6"
 Func: fnCurveFittingReset
 In:  FARG=0
 Out: EC=0
