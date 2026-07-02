@@ -280,6 +280,7 @@ matrixops_cov
 prime_cov
 disterr_cov
 iteration_cov
+numextra_cov
 dist_cov
 curvefit_cov
 error_cov
