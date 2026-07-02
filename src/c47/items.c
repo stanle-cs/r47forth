@@ -1658,6 +1658,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnLoadRegisters            (uint16_t unusedButMandatoryParameter) {}
   void fnSaveLetteredRegisters    (uint16_t unusedButMandatoryParameter) {}
   void fnSaveXFNRegister          (uint16_t unusedButMandatoryParameter) {}
+  void fnCheckLessEqualMinusZero  (uint16_t unusedButMandatoryParameter) {}
+  void fnCheckGreaterEqualPlusZero(uint16_t unusedButMandatoryParameter) {}
 
 
 #endif // GENERATE_CATALOGS || defined(GENERATE_TESTPGMS)
@@ -4692,6 +4694,16 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2847 */  { itemToBeCoded,                NOPARAM,                       "MLoads:",                                      "MLoads:",                                       (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2848 */  { itemToBeCoded,                NOPARAM,                       "PLoads:",                                      "PLoads:",                                       (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2849 */  { itemToBeCoded,                NOPARAM,                       "Struct:",                                      "Struct:",                                       (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2850 */  { fnCheckLessEqualMinusZero,       NOPARAM,     "x" STD_LESS_EQUAL "-0?",                       "x" STD_LESS_EQUAL "-0?",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
+/* 2851 */  { fnCheckGreaterEqualPlusZero,     NOPARAM,  "x" STD_GREATER_EQUAL "+0?",                    "x" STD_GREATER_EQUAL "+0?",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
+/* 2852 */  { fnPseudoMenu,                    NOPARAM,                    "PLTFCNS",                                      "PLTFCNS",                                       (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
+/* 2853 */  { itemToBeCoded,                   NOPARAM,                  "2853",                                           "2853",                                          (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2854 */  { itemToBeCoded,                   NOPARAM,                  "2854",                                           "2854",                                          (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2855 */  { itemToBeCoded,                   NOPARAM,                  "2855",                                           "2855",                                          (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2856 */  { itemToBeCoded,                   NOPARAM,                  "2856",                                           "2856",                                          (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2857 */  { itemToBeCoded,                   NOPARAM,                  "2857",                                           "2857",                                          (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2858 */  { itemToBeCoded,                   NOPARAM,                  "2858",                                           "2858",                                          (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2859 */  { itemToBeCoded,                   NOPARAM,                  "2859",                                           "2859",                                          (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 
 /* 2850 */  { itemToBeCoded,                NOPARAM,                     "",                                               "Last item",                                    (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 
