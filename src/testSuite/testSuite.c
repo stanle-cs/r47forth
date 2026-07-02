@@ -107,6 +107,12 @@ const funcTest_t funcTestNoParam[] = {
   {"fnRecallStack",          fnRecallStack         },
   // Value/type predicates and small math ops.
   {"fnCheckType",            fnCheckType           },
+  {"fnIse",                  fnIse                 },
+  {"fnIsg",                  fnIsg                 },
+  {"fnIsz",                  fnIsz                 },
+  {"fnDse",                  fnDse                 },
+  {"fnDsl",                  fnDsl                 },
+  {"fnDsz",                  fnDsz                 },
   {"fnCheckNumber",          fnCheckNumber         },
   {"fnCheckAngle",           fnCheckAngle          },
   {"fnCheckMatrix",          fnCheckMatrix         },
