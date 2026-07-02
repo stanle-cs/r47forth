@@ -277,6 +277,7 @@ compare_cov
 mathspecial_cov
 checkval_cov
 matrixops_cov
+matrix2_cov
 prime_cov
 disterr_cov
 iteration_cov
