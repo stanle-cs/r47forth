@@ -279,6 +279,7 @@ curvefit_cov
 error_cov
 saverestore_cov
 clcvar_cov
+numeric_diff_cov
 percentPlusMG
 deltaPercent
 
