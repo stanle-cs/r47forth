@@ -36,6 +36,7 @@ bool_t          screenChange;
 void (*funcToTest)(uint16_t);
 void (*funcCvt)(uint16_t);
 void runPgm(uint16_t unusedButMandatoryParameter);
+void covBackupRoundtrip(uint16_t unusedButMandatoryParameter);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
@@ -142,6 +143,10 @@ const funcTest_t funcTestNoParam[] = {
   // steps; needs res/testPgms/testPgms.bin staged in the CWD).
   {"fnGotoDot",              fnGotoDot             },
   {"fnClCVar",               fnClCVar              },
+  // Backup serializer round-trip: save the whole calculator state to backup.cfg
+  // and restore it. Exercises both directions of saveRestoreBackup.c. Resets the
+  // calculator, so its corpus test must run last.
+  {"fnBackupRoundtrip",      covBackupRoundtrip    },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
@@ -547,6 +552,18 @@ void runPgm(uint16_t unusedButMandatoryParameter) {
     dynamicSoftmenu[0].menuContent = NULL;
     reallyRunFunction(ITM_XEQ, label);
   }
+}
+
+
+
+void covBackupRoundtrip(uint16_t unusedButMandatoryParameter) {
+  // Save the whole calculator state to backup.cfg and restore it, exercising both
+  // the serialize and deserialize halves of saveRestoreBackup.c. restoreCalc()
+  // bails when the sample programs are loaded, so clear that flag first; it resets
+  // the calculator, so this must be the last test in the list.
+  loadTestPrograms = false;
+  saveCalc();
+  restoreCalc();
 }
 
 
@@ -3180,6 +3197,9 @@ void functionToCall(char *functionName) {
 
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
+    }
+    else if(funcToTest == covBackupRoundtrip) {
+      functionIndex = ITM_NOP; // testSuite-local coverage driver, not a catalog item
     }
     else {
       for(functionIndex=1; functionIndex<=LAST_ITEM; functionIndex++) {
