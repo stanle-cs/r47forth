@@ -6368,7 +6368,7 @@ void fnScreenDump(uint16_t unusedButMandatoryParameter) {
         #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
         return -1;
       }
-      real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), &x);
+      real34ToReal(REGISTER_REAL34_DATA(regist), &x);
       if(realIsNegative(&x) && realIsZero(&x)) {    // for -0. return -maxValuePlusOne as there is no -0 for int32_t
         value = -maxValuePlusOne;
       }
@@ -6485,7 +6485,7 @@ void fnPoint(uint16_t unusedButMandatoryParameter) {
       }
       if(y < 0) {                  // Draw a horizontal line at |y|
         y = (y > -SCREEN_HEIGHT ? -y : 0);      // -240 is mapped to y=0
-        a = (y == 0 ? 1 : 2);                   // to clip y
+        a = (y == 239 ? 1 : 2);                 // to clip y
         b = (y == 0 ? 0 : (y == 239 ? 0 : 1));  // to clip width on borders
         lcd_fill_rect(0, SCREEN_HEIGHT - y - a, SCREEN_WIDTH, 2 + b, LCD_EMPTY_VALUE);
       }
