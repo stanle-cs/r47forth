@@ -32,6 +32,7 @@ char                  lastTemp[16];
 #endif // PC_BUILD
 
 bool_t                headlessMode = false;
+bool_t                snapSkipRefresh = false;
 bool_t                loadTestPrograms = false;
 bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;

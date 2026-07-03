@@ -222,6 +222,7 @@
   #endif //PC_BUILD
 
   extern bool_t                headlessMode;
+  extern bool_t                snapSkipRefresh;
   extern bool_t                loadTestPrograms;
   extern bool_t                loadTestData;
 

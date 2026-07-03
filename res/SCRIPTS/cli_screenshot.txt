@@ -1,0 +1,20 @@
+Headless screenshots (t47)
+
+Build:  make simc47 t47
+
+Normal screen (stack, menus, status bar):
+  ./t47 --exec 'nim 2; nim 3; xeq +; snap'
+
+Graphic screen (PIXEL / POINT / plot), keep the drawn pixels:
+  ./t47 --snapskiprefresh --exec 'cllcd; nim 240; chs; nim 300; pixel; snap'
+
+Output: newest ./YYYYMMDD-HHMMSS.bmp in cwd (time is the sim clock).
+
+Notes:
+  ;              separates commands.
+  negative num   type the value then  chs   (nim 240; chs -> -240).
+  stack order    first nim -> Y, second nim -> X.
+  script file    ./t47 --headless --script file.t47   (instead of --exec).
+  snap           saves a screenshot; default redraws the whole screen first.
+  --snapskiprefresh  snap saves the screen as-is, so drawn PIXEL/POINT/plot
+                 pixels are not wiped by the redraw.

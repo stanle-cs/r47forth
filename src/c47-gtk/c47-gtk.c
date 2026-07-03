@@ -239,6 +239,10 @@
           headlessMode = true;
           printf("Activated: --headless\n");
       }
+      if(strcmp(argv[arg], "--snapskiprefresh") == 0) {
+          snapSkipRefresh = true;
+          printf("Activated: --snapskiprefresh\n");
+      }
       if(strcmp(argv[arg], "--mockup") == 0) {
         printf("Activated: %s\n", argv[arg]);
         mockup = true;
@@ -345,6 +349,7 @@
         printf("%s47 --exec <commands>     : execute DSL commands inline, ┬ e.g. ./t47 --exec 'nim 123; x!'\n", cc);
         printf("%s47 --e, %s47 -e <commands>: see --exec,                  ┴ e.g. ./t47 --exec 'nim 3; nim -4; xeq yˣ'\n", cc, cc);
         printf("%s47 --headless            : suppress GTK interface startup\n", cc);
+        printf("%s47 --snapskiprefresh     : prevents refresh spoiling the graphic screens for DSL snap\n", cc);
         printf("%s47 --dslcommands         : produce T47 ops table in %s\n", cc, dslOpsFileName);
         #if defined(_WIN32)
           printf("\nExample for command line operation: \n  %s47.exe --headless --script res/SCRIPTS/example.t47\n", cc);
