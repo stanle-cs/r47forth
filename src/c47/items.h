@@ -2345,11 +2345,11 @@
 #define SFL_PRTEN                   2290
 #define SFL_NORM                    2291
 #define SFL_BOLD                    2292
-#define SFL_SIGZEROS                   2293
-#define SFL_2294                    2294
-#define SFL_2295                    2295
-#define SFL_2296                    2296
-#define SFL_2297                    2297
+#define SFL_SIGZEROS                2293
+#define SFL_PRMS                    2294
+#define SFL_PINTG                   2295
+#define SFL_PDIFF                   2296
+#define SFL_PSHADE                  2297
 #define SFL_2298                    2298
 #define SFL_2299                    2299
 #define SFL_2300                    2300
