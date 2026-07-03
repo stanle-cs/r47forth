@@ -6201,9 +6201,11 @@ void fnSNAP(uint16_t unusedButMandatoryParameter) {
     printf("fnSNAP!\n");
   #endif // PC_BUILD
   resetShiftState();                  //JM To avoid f or g top left of the screen, clear to make sure
-  screenUpdatingMode = SCRUPD_AUTO;
   temporaryInformation = TI_NO_INFO;
-  refreshScreen(80);
+  if(!snapSkipRefresh) {              //--snapskiprefresh keeps the raw graphic screen
+    screenUpdatingMode = SCRUPD_AUTO;
+    refreshScreen(80);
+  }
 
   #if defined(PC_BUILD)  //added the xcopy commands needed for hardware, to better duplicate the hardware standardScreenDump
     xcopy(tmpString, errorMessage, ERROR_MESSAGE_LENGTH + AIM_BUFFER_LENGTH + NIM_BUFFER_LENGTH + TAM_BUFFER_LENGTH);       //backup portion of the "message buffer" area in DMCP used by ERROR..AIM..NIM buffers, to the tmpstring area in DMCP. DMCP uses this area during create_screenshot.
@@ -6247,6 +6249,16 @@ void fnScreenDump(uint16_t unusedButMandatoryParameter) {
     }
     else {
       strftime(bmpFileName, sizeof(bmpFileName), "%Y%m%d-%H%M%S00.bmp", timeInfo);
+      for(int i = 0; i < 100; i++) {    //if the name clashes, increment the trailing 00..99 until free; 99 overwrites
+        FILE *existing;
+        bmpFileName[15] = '0' + i / 10;
+        bmpFileName[16] = '0' + i % 10;
+        existing = fopen(bmpFileName, "rb");
+        if(existing == NULL) {
+          break;
+        }
+        fclose(existing);
+      }
     }
     bmp = fopen(bmpFileName, "wb");
 
