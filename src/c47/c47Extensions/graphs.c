@@ -69,93 +69,46 @@ void fnClGrf(uint16_t unusedButMandatoryParameter) {
 
 void fnPline(uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_PLINE);
-  if(!getSystemFlag(FLAG_PLINE) && !getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
-    setSystemFlag(FLAG_PBOX);
-  }
-  if(!getSystemFlag(FLAG_PLINE)) {
-    clearSystemFlag(FLAG_PCURVE);
-  }
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
 
 void fnPcros(uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_PCROS);
-  if(getSystemFlag(FLAG_PCROS)) {
-    clearSystemFlag(FLAG_PBOX);
-    clearSystemFlag(FLAG_PPLUS);
-  }
-  if(!getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
-    setSystemFlag(FLAG_PLINE);
-  }
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
 void fnPplus(uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_PPLUS);
-  if(getSystemFlag(FLAG_PPLUS)) {
-    clearSystemFlag(FLAG_PBOX);
-    clearSystemFlag(FLAG_PCROS);
-  }
-  if(!getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
-    setSystemFlag(FLAG_PLINE);
-  }
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
 
 void fnPbox (uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_PBOX);
-  if(getSystemFlag(FLAG_PBOX)) {
-    clearSystemFlag(FLAG_PCROS);
-    clearSystemFlag(FLAG_PPLUS);
-  }
-  if(!getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
-    setSystemFlag(FLAG_PLINE);
-  }
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
 void fnPcurve (uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_PCURVE);
-  if(getSystemFlag(FLAG_PCURVE)) {
-    setSystemFlag(FLAG_PLINE);
-  }
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
 
 void fnPintg (uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_PINTG);
-  if(!getSystemFlag(FLAG_PINTG)) {
-    clearSystemFlag(FLAG_PSHADE);
-  }
-  clearSystemFlag(FLAG_VECT);
-  clearSystemFlag(FLAG_NVECT);
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
 
 void fnPdiff (uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_PDIFF);
-  clearSystemFlag(FLAG_VECT);
-  clearSystemFlag(FLAG_NVECT);
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
 
 void fnPrms (uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_PRMS);
-  clearSystemFlag(FLAG_VECT);
-  clearSystemFlag(FLAG_NVECT);
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
@@ -248,47 +201,25 @@ static void multiplyZoomFactors(float plotzoomx, float plotzoomy, float histofac
 
 void fnPvect (uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_VECT);
-  if(getSystemFlag(FLAG_VECT)) {
-    clearSystemFlag(FLAG_NVECT);
-  }
-  clearSystemFlag(FLAG_PINTG);
-  clearSystemFlag(FLAG_PDIFF);
-  clearSystemFlag(FLAG_PRMS);
-  clearSystemFlag(FLAG_PSHADE);
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
 
 void fnPNvect (uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_NVECT);
-  if(getSystemFlag(FLAG_NVECT)) {
-    clearSystemFlag(FLAG_VECT);
-  }
-  clearSystemFlag(FLAG_PINTG);
-  clearSystemFlag(FLAG_PDIFF);
-  clearSystemFlag(FLAG_PRMS);
-  clearSystemFlag(FLAG_PSHADE);
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
 
 void fnScale (uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_SCALE);
-  fnRefreshState();                //jm
+  fnRefreshState();
   fnPlotSQ(0);
 }
 
 
 void fnPshade (uint16_t unusedButMandatoryParameter) {
   flipSystemFlag(FLAG_PSHADE);
-  if(getSystemFlag(FLAG_PSHADE)) {
-    setSystemFlag(FLAG_PINTG);
-  }
-  clearSystemFlag(FLAG_VECT);
-  clearSystemFlag(FLAG_NVECT);
-  fnRefreshState();                //jm
   fnPlotSQ(0);
 }
 
@@ -296,17 +227,10 @@ void fnPshade (uint16_t unusedButMandatoryParameter) {
 void fnComplexPlot (uint16_t mode) {
   if(mode == ITM_CPXPLOT) {
     flipSystemFlag(FLAG_CPXPLOT);
-    if(getSystemFlag(FLAG_CPXPLOT)) {
-      clearSystemFlag(FLAG_IMPLOT);
-    }
-  } else 
+  } else
   if(mode == ITM_IMPLOT) {
     flipSystemFlag(FLAG_IMPLOT);
-    if(getSystemFlag(FLAG_IMPLOT)) {
-      clearSystemFlag(FLAG_CPXPLOT);
-    }
   }
-  fnRefreshState();                //jm
   fnEqSolvGraph(EQ_PLOT_LU);
   fnPlotSQ(0);
 }
@@ -390,7 +314,6 @@ void fnListXY(uint16_t unusedButMandatoryParameter) {
     lastPlotMode = PLOT_NOTHING;
     strcpy(plotStatMx, "STATS");
     setSystemFlag(FLAG_PLINE);
-    setSystemFlag(FLAG_PSHADE);
     fnPlotSQ(0);
   }
 

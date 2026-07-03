@@ -137,6 +137,114 @@ doInteractionFlags:
               }
               break;
 
+    // Graph plot marker interlocks: at least one of PLINE/PBOX/PCROS/PPLUS stays on;
+    // PBOX/PCROS/PPLUS are mutually exclusive; PCURVE implies PLINE
+    case FLAG_PLINE:
+              if(!getSystemFlag(FLAG_PLINE) && !getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
+                _setSystemFlag(FLAG_PBOX);
+              }
+              if(!getSystemFlag(FLAG_PLINE)) {
+                _clearSystemFlag(FLAG_PCURVE);
+              }
+              break;
+
+    case FLAG_PBOX:
+              if(getSystemFlag(FLAG_PBOX)) {
+                _clearSystemFlag(FLAG_PCROS);
+                _clearSystemFlag(FLAG_PPLUS);
+              }
+              if(!getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
+                _setSystemFlag(FLAG_PLINE);
+              }
+              break;
+
+    case FLAG_PCROS:
+              if(getSystemFlag(FLAG_PCROS)) {
+                _clearSystemFlag(FLAG_PBOX);
+                _clearSystemFlag(FLAG_PPLUS);
+              }
+              if(!getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
+                _setSystemFlag(FLAG_PLINE);
+              }
+              break;
+
+    case FLAG_PPLUS:
+              if(getSystemFlag(FLAG_PPLUS)) {
+                _clearSystemFlag(FLAG_PBOX);
+                _clearSystemFlag(FLAG_PCROS);
+              }
+              if(!getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
+                _setSystemFlag(FLAG_PLINE);
+              }
+              break;
+
+    case FLAG_PCURVE:
+              if(getSystemFlag(FLAG_PCURVE)) {
+                _setSystemFlag(FLAG_PLINE);
+              }
+              break;
+
+    // Graph plot overlay interlocks: overlays and vectors are mutually exclusive groups;
+    // PSHADE implies PINTG (nothing to shade without the integral)
+    case FLAG_PINTG:
+              if(getSystemFlag(FLAG_PINTG)) {
+                _clearSystemFlag(FLAG_VECT);
+                _clearSystemFlag(FLAG_NVECT);
+              }
+              else {
+                _clearSystemFlag(FLAG_PSHADE);
+              }
+              break;
+
+    case FLAG_PDIFF:
+    case FLAG_PRMS:
+              if(getSystemFlag(systemFlag)) {
+                _clearSystemFlag(FLAG_VECT);
+                _clearSystemFlag(FLAG_NVECT);
+              }
+              break;
+
+    case FLAG_PSHADE:
+              if(getSystemFlag(FLAG_PSHADE)) {
+                _setSystemFlag(FLAG_PINTG);
+                _clearSystemFlag(FLAG_VECT);
+                _clearSystemFlag(FLAG_NVECT);
+              }
+              break;
+
+    case FLAG_VECT:
+              if(getSystemFlag(FLAG_VECT)) {
+                _clearSystemFlag(FLAG_NVECT);
+                _clearSystemFlag(FLAG_PINTG);
+                _clearSystemFlag(FLAG_PDIFF);
+                _clearSystemFlag(FLAG_PRMS);
+                _clearSystemFlag(FLAG_PSHADE);
+              }
+              break;
+
+    case FLAG_NVECT:
+              if(getSystemFlag(FLAG_NVECT)) {
+                _clearSystemFlag(FLAG_VECT);
+                _clearSystemFlag(FLAG_PINTG);
+                _clearSystemFlag(FLAG_PDIFF);
+                _clearSystemFlag(FLAG_PRMS);
+                _clearSystemFlag(FLAG_PSHADE);
+              }
+              break;
+
+    // Complex plot interlocks: CPXPLOT and IMPLOT are mutually exclusive
+    case FLAG_CPXPLOT:
+              if(getSystemFlag(FLAG_CPXPLOT)) {
+                _clearSystemFlag(FLAG_IMPLOT);
+              }
+              break;
+
+    case FLAG_IMPLOT:
+              if(getSystemFlag(FLAG_IMPLOT)) {
+                _clearSystemFlag(FLAG_CPXPLOT);
+              }
+              break;
+
     default: break;
   }
 }

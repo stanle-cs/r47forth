@@ -42,7 +42,6 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
   static void fnPlot(uint16_t unusedButMandatoryParameter) {
       lastPlotMode = PLOT_NOTHING;
       strcpy(plotStatMx, "DrwMX");
-      setSystemFlag(FLAG_PSHADE);
       fnPlotSQ(0);
       //  C47 advanced plot ^^
   }
@@ -1840,7 +1839,6 @@ void graph_stat(uint16_t unusedButMandatoryParameter) {
       lastPlotMode = PLOT_NOTHING;
       calcMode = CM_GRAPH;
       reDraw = true;
-      setSystemFlag(FLAG_PSHADE);
 
       if(!getSystemFlag(FLAG_PLINE) && !getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
         fnPline(NOPARAM);
