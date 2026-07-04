@@ -691,28 +691,30 @@ void graphAxisDraw (void){
 
 float auto_tick(float tick_int_f) {
   #if !defined(SAVE_SPACE_DM42_13GRF)
-    char tmpString2[100];
-
     if(!roundedTicks) {
       return tick_int_f;
     }
     //Obtain scaling of ticks, to about 20 intervals left to right.
-    //graphtype tick_int_f = (x_max-x_min)/20;                                                 //printf("tick interval:%f ",tick_int_f);
-    snprintf(tmpString2, 100, "%.1e", fabs(tick_int_f));
-    char tx[4];
-    //get mantissa
-    tx[0] = tmpString2[0]; //expecting the form "6.5e+01"
-    tx[1] = tmpString2[1]; //the decimal radix is copied over, so region setting should not affect it
-    tx[2] = tmpString2[2]; //the exponent is stripped
-    tx[3] = 0;
-    tick_int_f = strtof (tx, NULL);  //creating the form "6.5"
-    //printf("tick0 %f orgstr %s ==> tx %s \n",tick_int_f, tmpString2, tx);
-    //get exponent
-    tmpString2[0] = '1';
-    tmpString2[2] = '0';  //creating "1.0e+01"
-    float tick_int_f_mult = strtof (tmpString2, NULL);
-    //tick_int_f = (float)(tx[0]-48) + (float)(tx[2]-48)/10.0f;
-    //printf("tick1 %f x %f, orgstr %s ==> tx %s \n",tick_int_f, tick_int_f_mult, tmpString2, tx);
+    //Numeric mantissa/exponent split; the previous "%.1e" string surgery needs _printf_float which is no longer linked on DMCP
+    double tick_m = fabs((double)tick_int_f);
+    double tick_mult = 1.0;
+    if(tick_m > 0) {
+      while(tick_m < 1.0) {
+        tick_m *= 10.0;
+        tick_mult /= 10.0;
+      }
+      while(tick_m >= 10.0) {
+        tick_m /= 10.0;
+        tick_mult *= 10.0;
+      }
+      tick_m = floor(tick_m * 10.0 + 0.5) / 10.0; //round mantissa to 1 decimal as "%.1e" did
+      if(tick_m >= 10.0) {
+        tick_m /= 10.0;
+        tick_mult *= 10.0;
+      }
+    }
+    tick_int_f = (float)tick_m;
+    float tick_int_f_mult = (float)tick_mult;
 
     if(tick_int_f > 0) {
       //if(tick_int_f <= 0.3) {
