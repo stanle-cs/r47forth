@@ -1248,7 +1248,9 @@ uint8_t *getNthString(uint8_t *ptr, int16_t n) { // Starting with string 0 (the 
 
 
 void fnDynamicMenu(uint16_t unusedButMandatoryParameter) {
-  printf("fnDynamicMenu:\n       softmenuId = %d\n  dynamicMenuItem = %d\n", softmenuStack[0].softmenuId, dynamicMenuItem);
+  #if defined(PC_BUILD)
+    printf("fnDynamicMenu:\n       softmenuId = %d\n  dynamicMenuItem = %d\n", softmenuStack[0].softmenuId, dynamicMenuItem);
+  #endif //PC_BUILD
 }
 
 
