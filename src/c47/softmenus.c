@@ -2406,6 +2406,40 @@ static void placeSubscript(int16_t itemNr, bool_t flt, float tmpF, char *itemNam
 }
 
 
+//One significant digit like sprintf "%5.G" + eatSpacesMid, for 1e-34 <= x <= 1, using the radix mark setting; eg. 1 -> "1", 0.5 -> "0.5", 0.001235 -> "0.001", 3.4e-5 -> "3E-05"
+static void accToString(char *s, float x) {
+  int16_t e = 0;
+  double m = x;
+  while(m && m < 1.0) {
+    m *= 10.0;
+    e--;
+  }
+  int16_t d = (int16_t)(m + 0.5);
+  if(d >= 10) {
+    d = 1;
+    e++;
+  }
+  if(e >= -4 && e <= 0) { //fixed notation "1", "0.5" .. "0.0001", as %G does
+    int16_t i = 0;
+    if(e == 0) {
+      s[i++] = '0' + d;
+    }
+    else {
+      s[i++] = '0';
+      s[i++] = RADIX34_MARK_CHAR;
+      for(int16_t z = 0; z < -e - 1; z++) {
+        s[i++] = '0';
+      }
+      s[i++] = '0' + d;
+    }
+    s[i] = 0;
+  }
+  else {
+    sprintf(s, "%dE-%02d", (int)d, (int)-e);
+  }
+}
+
+
 static void changeSoftKey(int16_t itemNr, char * itemName, videoMode_t * vm, int8_t * showCb, int16_t * showValue, char * showText) {
   float tmpF = 0;
   char tmpS[30], tmpSS[20];
@@ -2440,8 +2474,7 @@ static void changeSoftKey(int16_t itemNr, char * itemName, videoMode_t * vm, int
                           strcpy(tmpS, STD_GAUSS_WHITE_R "1");
                         }
                         else {
-                          sprintf(tmpS, "%5.G", tmpF);
-                          strcpy(tmpS, eatSpacesMid(tmpS));
+                          accToString(tmpS, tmpF);
                         }
                       }
                       stringCopy(showText + stringByteLength(showText), tmpS);
