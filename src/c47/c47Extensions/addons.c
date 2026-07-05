@@ -2503,7 +2503,7 @@ double convert_to_double(calcRegister_t regist) { //Convert from X register to d
       return 0;
   }
   realToString(&tmpy, tmpString);
-  y = strtof(tmpString, NULL);
+  y = (float)stringToDouble(tmpString);
   return y;
 }
 
