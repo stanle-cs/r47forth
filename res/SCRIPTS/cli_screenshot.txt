@@ -12,6 +12,10 @@ Stat graph (SCATR / HISTOX / HISTOY): enter data with Σ+, then plot.
 Plot commands render immediately, so both snap modes capture the graph:
   ./t47 --snapskiprefresh --exec 'clΣ; nim 1; nim 1; xeq Σ+; nim 4; nim 2; xeq Σ+; nim 9; nim 3; xeq Σ+; nim 16; nim 4; xeq Σ+; nim 25; nim 5; xeq Σ+; xeq SCATR; snap'
 
+Plot test suite (AN0022b)
+  ./t47 --exec 'readp ./docs/appnotes/sources/AN0022b_programs/func.p47; xeq PLTROOT'
+
+
 Output: newest ./YYYYMMDD-HHMMSS.bmp in cwd (time is the sim clock).
 
 Notes:

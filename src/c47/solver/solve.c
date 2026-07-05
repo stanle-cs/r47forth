@@ -37,6 +37,7 @@
 void fnPgmSlv(uint16_t label) {
   if(FIRST_LABEL <= label && label <= LAST_LABEL) {
     currentSolverProgram = label - FIRST_LABEL;
+    currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
   }
   else if(REGISTER_X <= label && label <= REGISTER_T) {
     // Interactive mode
@@ -53,6 +54,7 @@ void fnPgmSlv(uint16_t label) {
     }
     else {
       currentSolverProgram = label - FIRST_LABEL;
+      currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
     }
   }
   else {
