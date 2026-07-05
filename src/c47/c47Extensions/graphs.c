@@ -13,16 +13,42 @@ bool_t    invalid_intg = true;
 bool_t    invalid_diff = true;
 bool_t    invalid_rms  = true;
 
-float     x_min = 0;
-float     x_max = 1;
-float     y_min = 0;
-float     y_max = 1;
+#if defined(STATDEBUG) && defined(PC_BUILD)
+  static double dbl(const real_t *r) {                 // debug printf convenience only
+    double d;
+    realToDouble(r, &d);
+    return d;
+  }
+#endif // STATDEBUG && PC_BUILD
+
+// Map float data values against the real_t range globals. Stat data stays float precision; the range survives any exponent.
+static int16_t screenX(float x) {
+  real_t t;
+  convertDoubleToReal(x, &t, &ctxtReal39);
+  return screen_window_x_r(x_min, &t, x_max);
+}
+static int16_t screenY(float y) {
+  real_t t;
+  convertDoubleToReal(y, &t, &ctxtReal39);
+  return screen_window_y_r(y_min, &t, y_max);
+}
+
+// Graph range limits. Sized 34 so a reserved-variable real34 decodes in losslessly and ctxtReal39 writes fit (capacity rounds up to 39 digits); float dies below 1E-38 which these must support.
+REAL_T_PTR(x_min, 34);
+REAL_T_PTR(x_max, 34);
+REAL_T_PTR(y_min, 34);
+REAL_T_PTR(y_max, 34);
 int8_t    PLOT_ZMY = 0;
 
 
 void graphResetCommon() {
   graph_dx      = 0;
   graph_dy      = 0;
+
+  realSetZero(x_min);
+  realCopy(const_1, x_max);
+  realSetZero(y_min);
+  realCopy(const_1, y_max);
 
   clearSystemFlag(FLAG_CPXPLOT);
   clearSystemFlag(FLAG_SHOWY);
@@ -183,19 +209,29 @@ static void calculateZoomFactor(float factor, float *aa) {
 }
 
 
-static void multiplyZoomFactors(float plotzoomx, float plotzoomy, float histofactor, float *x_min, float *x_max, float *y_min, float *y_max, float *dx, float *dy) {
-    *x_min = *x_min - *dx * zoomfactor;
-    *y_min = *y_min - *dy * zoomfactor;
-    *x_max = *x_max + *dx * zoomfactor;
-    *y_max = *y_max + *dy * zoomfactor;
-    *dx = *x_max - *x_min;
-    *dy = *y_max - *y_min;
-    float xavg = (*x_max + *x_min)/2;
-    float yavg = (*y_max + *y_min)/2;
-    *y_min = yavg - *dy/2 * plotzoomy * histofactor;
-    *y_max = yavg + *dy/2 * plotzoomy * histofactor;
-    *x_min = xavg - *dx/2 * plotzoomx * histofactor;
-    *x_max = xavg + *dx/2 * plotzoomx * histofactor;
+static void multiplyZoomFactors(float plotzoomx, float plotzoomy, float histofactor, real_t *x_min, real_t *x_max, real_t *y_min, real_t *y_max, real_t *dx, real_t *dy) {
+    real_t k, t, xavg, yavg;                           // ranges in real_t; the zoom scalars are dimensionless fractions, combined in float/double then converted once per use
+    convertDoubleToReal(zoomfactor, &k, &ctxtReal39);    // k = zoomfactor
+    realMultiply(dx, &k, &t, &ctxtReal39);               // t = dx * zoomfactor
+    realSubtract(x_min, &t, x_min, &ctxtReal39);         // x_min = x_min - dx * zoomfactor
+    realAdd(x_max, &t, x_max, &ctxtReal39);              // x_max = x_max + dx * zoomfactor
+    realMultiply(dy, &k, &t, &ctxtReal39);               // t = dy * zoomfactor
+    realSubtract(y_min, &t, y_min, &ctxtReal39);         // y_min = y_min - dy * zoomfactor
+    realAdd(y_max, &t, y_max, &ctxtReal39);              // y_max = y_max + dy * zoomfactor
+    realSubtract(x_max, x_min, dx, &ctxtReal39);         // dx = x_max - x_min
+    realSubtract(y_max, y_min, dy, &ctxtReal39);         // dy = y_max - y_min
+    realAdd(x_max, x_min, &xavg, &ctxtReal39);           // xavg = x_max + x_min
+    realMultiply(&xavg, const_1on2, &xavg, &ctxtReal39); // xavg = (x_max + x_min) / 2
+    realAdd(y_max, y_min, &yavg, &ctxtReal39);           // yavg = y_max + y_min
+    realMultiply(&yavg, const_1on2, &yavg, &ctxtReal39); // yavg = (y_max + y_min) / 2
+    convertDoubleToReal((double)plotzoomy * (double)histofactor / 2.0, &k, &ctxtReal39); // k = plotzoomy * histofactor / 2
+    realMultiply(dy, &k, &t, &ctxtReal39);               // t = dy/2 * plotzoomy * histofactor
+    realSubtract(&yavg, &t, y_min, &ctxtReal39);         // y_min = yavg - dy/2 * plotzoomy * histofactor
+    realAdd(&yavg, &t, y_max, &ctxtReal39);              // y_max = yavg + dy/2 * plotzoomy * histofactor
+    convertDoubleToReal((double)plotzoomx * (double)histofactor / 2.0, &k, &ctxtReal39); // k = plotzoomx * histofactor / 2
+    realMultiply(dx, &k, &t, &ctxtReal39);               // t = dx/2 * plotzoomx * histofactor
+    realSubtract(&xavg, &t, x_min, &ctxtReal39);         // x_min = xavg - dx/2 * plotzoomx * histofactor
+    realAdd(&xavg, &t, x_max, &ctxtReal39);              // x_max = xavg + dx/2 * plotzoomx * histofactor
 }
 
 
@@ -471,17 +507,22 @@ void graph_text(void) {
     char ss[100], tt[100];
     char tmpbuf[PLOT_TMP_BUF_SIZE];
     int32_t n;
-    grphNumFormatter(ss, "(", x_max, 2, "");
+    double xmaxd, ymaxd, xmind, ymind;
+    realToDouble(x_max, &xmaxd);
+    realToDouble(y_max, &ymaxd);
+    realToDouble(x_min, &xmind);
+    realToDouble(y_min, &ymind);
+    grphNumFormatter(ss, "(", xmaxd, 2, "");
     uint16_t ssw = showStringEnhanced(padEquals(tmpbuf, ss), &standardFont, 0, 0, vmNormal, false, false, NO_compress, NO_raise, NO_Show, NO_Bold, NO_LF);
-    grphNumFormatter(tt, radixProcess(tmpbuf, "#"), y_max, 2, ")");
+    grphNumFormatter(tt, radixProcess(tmpbuf, "#"), ymaxd, 2, ")");
     uint16_t ttw = showStringEnhanced(padEquals(tmpbuf, tt), &standardFont, 0, 0, vmNormal, false, false, NO_compress, NO_raise, NO_Show, NO_Bold, NO_LF);
     ypos += 38;
     n = showString(padEquals(tmpbuf, ss), &standardFont, 160-3-2-ssw-ttw, ypos, vmNormal, false, false);
     showString(padEquals(tmpbuf, tt), &standardFont, n+3, ypos, vmNormal, false, false);
-    grphNumFormatter(ss, "(", x_min, 2, "");
+    grphNumFormatter(ss, "(", xmind, 2, "");
     ypos += 19;
     n = showString(padEquals(tmpbuf, ss), &standardFont, 1, ypos, vmNormal, false, false);
-    grphNumFormatter(ss, radixProcess(tmpbuf, "#"), y_min, 2, ")");
+    grphNumFormatter(ss, radixProcess(tmpbuf, "#"), ymind, 2, ")");
     showString(padEquals(tmpbuf, ss), &standardFont, n+3,  ypos, vmNormal, false, false);
     ypos -= 38;
     showGraphTickText1(tick_int_x, tick_int_y, 1, ypos, ypos-12, 3);
@@ -552,81 +593,89 @@ void graph_text(void) {
 void graph_Include0(bool_t mode, uint16_t statnum) {
   //using global: FLAG_SHOWX, x_min, x_max, FLAG_SHOWY, y_min, y_max, FLAG_SCALE, PLOT_ZMY, zoomfactor
 
+  real_t tmp, k;
+
   #if defined(STATDEBUG) && defined(PC_BUILD)
-    printf("Axis1b: x_min = %f, y_min = %f, x_max = %f, y_max = %f\n", x_min, y_min, x_max, y_max);
+    printf("Axis1b: x_min = %f, y_min = %f, x_max = %f, y_max = %f\n", dbl(x_min), dbl(y_min), dbl(x_max), dbl(y_max));
     printf("PLOT_ZMY=%i  FLAG_SCALE=%i mode=%i\n", PLOT_ZMY, getSystemFlag(FLAG_SCALE), mode);
   #endif // STATDEBUG
 
 
   //Check and correct if min and max is swapped
-  if(x_min>0.0f && x_min > x_max) {
-    x_min = x_min - (-x_max+x_min)* 1.1f;
+  if(realCompareGreaterThan(x_min, const_0) && realCompareGreaterThan(x_min, x_max)) {     // x_min > 0 && x_min > x_max
+    realSubtract(x_min, x_max, &tmp, &ctxtReal39);     // tmp = x_min - x_max
+    convertDoubleToReal(1.1, &k, &ctxtReal39);         // k = 1.1
+    realMultiply(&tmp, &k, &tmp, &ctxtReal39);         // tmp = (x_min - x_max) * 1.1
+    realSubtract(x_min, &tmp, x_min, &ctxtReal39);     // x_min = x_min - (x_min - x_max) * 1.1
   }
-  if(x_min<0.0f && x_min > x_max) {
-    x_min = x_min + (-x_max+x_min)* 1.1f;
+  if(realCompareLessThan(x_min, const_0) && realCompareGreaterThan(x_min, x_max)) {        // x_min < 0 && x_min > x_max
+    realSubtract(x_min, x_max, &tmp, &ctxtReal39);     // tmp = x_min - x_max
+    convertDoubleToReal(1.1, &k, &ctxtReal39);         // k = 1.1
+    realMultiply(&tmp, &k, &tmp, &ctxtReal39);         // tmp = (x_min - x_max) * 1.1
+    realAdd(x_min, &tmp, x_min, &ctxtReal39);          // x_min = x_min + (x_min - x_max) * 1.1
   }
 
 
   //include the 0 axis
+  convertDoubleToReal(-0.05, &k, &ctxtReal39);         // k = -0.05
   if(getSystemFlag(FLAG_SHOWX)) {
-    if(x_min > 0.0f && x_max > 0.0f) {
-      if(x_min <= x_max) {
-        x_min = -0.05f * x_max;
+    if(realCompareGreaterThan(x_min, const_0) && realCompareGreaterThan(x_max, const_0)) { // x_min > 0 && x_max > 0
+      if(realCompareLessEqual(x_min, x_max)) {         // x_min <= x_max
+        realMultiply(x_max, &k, x_min, &ctxtReal39);   // x_min = -0.05 * x_max
       }
       else {
-        x_min = 0.0f;
+        realSetZero(x_min);                            // x_min = 0
       }
     }
-    if(x_min < 0.0f && x_max < 0.0f) {
-      if(x_min >= x_max) {
-        x_min = -0.05f * x_max;
+    if(realCompareLessThan(x_min, const_0) && realCompareLessThan(x_max, const_0)) {       // x_min < 0 && x_max < 0
+      if(realCompareGreaterEqual(x_min, x_max)) {      // x_min >= x_max
+        realMultiply(x_max, &k, x_min, &ctxtReal39);   // x_min = -0.05 * x_max
       }
       else {
-        x_max = 0.0f;
+        realSetZero(x_max);                            // x_max = 0
       }
     }
   }
   if(getSystemFlag(FLAG_SHOWY)) {
-    if(y_min > 0.0f && y_max > 0.0f) {
-      if(y_min <= y_max) {
-        y_min = -0.05f * y_max;
+    if(realCompareGreaterThan(y_min, const_0) && realCompareGreaterThan(y_max, const_0)) { // y_min > 0 && y_max > 0
+      if(realCompareLessEqual(y_min, y_max)) {         // y_min <= y_max
+        realMultiply(y_max, &k, y_min, &ctxtReal39);   // y_min = -0.05 * y_max
       }
       else {
-        y_min = 0.0f;
+        realSetZero(y_min);                            // y_min = 0
       }
     }
-    if(y_min < 0.0f && y_max < 0.0f) {
-      if(y_min >= y_max) {
-        y_min = -0.05f * y_max;
+    if(realCompareLessThan(y_min, const_0) && realCompareLessThan(y_max, const_0)) {       // y_min < 0 && y_max < 0
+      if(realCompareGreaterEqual(y_min, y_max)) {      // y_min >= y_max
+        realMultiply(y_max, &k, y_min, &ctxtReal39);   // y_min = -0.05 * y_max
       }
       else {
-        y_max = 0.0f;
+        realSetZero(y_max);                            // y_max = 0
       }
     }
   }
 
   #if defined(STATDEBUG) && defined(PC_BUILD)
-    printf("Axis2: x_min = %f, y_min = %f, x_max = %f, y_max = %f\n", x_min, y_min, x_max, y_max);
+    printf("Axis2: x_min = %f, y_min = %f, x_max = %f, y_max = %f\n", dbl(x_min), dbl(y_min), dbl(x_max), dbl(y_max));
   #endif // STATDEBUG
 
   //modify the draw range if the min == max
-  float dx = x_max-x_min;
-  float dy = y_max-y_min;
-  if(dy == 0.0f) {
-    dy = 1.0f;
-    y_max = y_min + dy/2.0f;
-    y_min = y_max - dy;
-    dy = y_max-y_min;
+  real_t dx, dy;
+  realSubtract(x_max, x_min, &dx, &ctxtReal39);        // dx = x_max - x_min
+  realSubtract(y_max, y_min, &dy, &ctxtReal39);        // dy = y_max - y_min
+  if(realIsZero(&dy)) {                                // dy == 0: manufacture a 1-wide window around the value
+    realAdd(y_min, const_1on2, y_max, &ctxtReal39);    // y_max = y_min + 0.5
+    realSubtract(y_max, const_1, y_min, &ctxtReal39);  // y_min = y_max - 1
+    realSubtract(y_max, y_min, &dy, &ctxtReal39);      // dy = y_max - y_min
   }
-  if(dx == 0.0f) {
-    dx = 1.0f;
-    x_max = x_min + dx/2.0f;
-    x_min = x_max - dx;
-    dx = x_max-x_min;
+  if(realIsZero(&dx)) {                                // dx == 0: manufacture a 1-wide window around the value
+    realAdd(x_min, const_1on2, x_max, &ctxtReal39);    // x_max = x_min + 0.5
+    realSubtract(x_max, const_1, x_min, &ctxtReal39);  // x_min = x_max - 1
+    realSubtract(x_max, x_min, &dx, &ctxtReal39);      // dx = x_max - x_min
   }
 
   #if defined(STATDEBUG) && defined(PC_BUILD)
-    printf("Axis3a: x_min = %f, y_min = %f, x_max = %f, y_max = %f, dx=%f, dy=%f, \n", x_min, y_min, x_max, y_max, dx, dy);
+    printf("Axis3a: x_min = %f, y_min = %f, x_max = %f, y_max = %f, dx=%f, dy=%f, \n", dbl(x_min), dbl(y_min), dbl(x_max), dbl(y_max), dbl(&dx), dbl(&dy));
   #endif // STATDEBUG
 
   //Calc zoom scales
@@ -645,9 +694,9 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
     float histofactor = drawHistogram == 0 ? 1 : 1/zoomfactor * (((float)statnum + 2.0f)  /  ((float)(statnum) - 1.0f) - 1)/2;     //Create space on the sides of the graph for the wider histogram columns
     calculateZoomFactor(PLOT_ZOOM * 0.75, &plotzoomx);
     plotzoomy = drawHistogram == 1 ? 1 : plotzoomx;
-    multiplyZoomFactors(plotzoomx, plotzoomy, histofactor, &x_min, &x_max, &y_min, &y_max, &dx, &dy);
+    multiplyZoomFactors(plotzoomx, plotzoomy, histofactor, x_min, x_max, y_min, y_max, &dx, &dy);
     if(drawHistogram == 1) {
-      y_min = 0;
+      realSetZero(y_min);
     }
   }
   else { //mode != PLOTSTAT
@@ -664,7 +713,7 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
       calculateZoomFactor(PLOT_ZMY * 0.55, &plotzoomy);
       //use this line if the x-display-range is to be the same as the y-display-range
       //plotzoomx = plotStatMx[0]=='D' ? 1 : plotzoomy;
-      multiplyZoomFactors(plotzoomx, plotzoomy, 1/*histofactor*/, &x_min, &x_max, &y_min, &y_max, &dx, &dy);
+      multiplyZoomFactors(plotzoomx, plotzoomy, 1/*histofactor*/, x_min, x_max, y_min, y_max, &dx, &dy);
       //printf("PLOT_ZMY=%i plotzoomx=%f, plotzoomy=%f\n",PLOT_ZMY, plotzoomx, plotzoomy);
     }
     else {
@@ -672,12 +721,12 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
       //PLOT_ZMY = 18, special case to allow Ylo Yhi
       //_LY _UY override only if ZOOM is not set, AND Yup and Ylo are not zero
       if(fabs(plotzoomx-1) < 0.00001 && fabs(plotzoomy-1) < 0.00001 && !(real34IsZero(REGISTER_REAL34_DATA(RESERVED_VARIABLE_LY)) && real34IsZero(REGISTER_REAL34_DATA(RESERVED_VARIABLE_UY)))) {
-        y_min = convertRegisterToDouble(RESERVED_VARIABLE_LY);
-        y_max = convertRegisterToDouble(RESERVED_VARIABLE_UY);
+        real34ToReal(REGISTER_REAL34_DATA(RESERVED_VARIABLE_LY), y_min);    // y_min = Ylo, the user's reserved variable
+        real34ToReal(REGISTER_REAL34_DATA(RESERVED_VARIABLE_UY), y_max);    // y_max = Yhi
       }
       else {
-        y_min = -10;
-        y_max = 10;
+        int32ToReal(-10, y_min);                       // y_min = -10
+        int32ToReal(10, y_max);                        // y_max = 10
       }
 
     }
@@ -686,7 +735,7 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
 
 
   #if defined(STATDEBUG) && defined(PC_BUILD)
-    printf("Axis3b: x_min = %f, y_min = %f, x_max = %f, y_max = %f, dx=%f, dy=%f \n", x_min, y_min, x_max, y_max, dx, dy);
+    printf("Axis3b: x_min = %f, y_min = %f, x_max = %f, y_max = %f, dx=%f, dy=%f \n", dbl(x_min), dbl(y_min), dbl(x_max), dbl(y_max), dbl(&dx), dbl(&dy));
   #endif // STATDEBUG
 
 
@@ -695,38 +744,55 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
   if(getSystemFlag(FLAG_SCALE)) {
     // if y >> x, then y simply takes on the X range and can be increased using ZMY
     if(mode == PLOTSTAT) {
-      x_min = min(x_min, y_min);
-      x_max = max(x_max, y_max);
-      y_min = x_min;
-      y_max = x_max;
+      if(realCompareGreaterThan(x_min, y_min)) {       // x_min = min(x_min, y_min)
+        realCopy(y_min, x_min);
+      }
+      if(realCompareLessThan(x_max, y_max)) {          // x_max = max(x_max, y_max)
+        realCopy(y_max, x_max);
+      }
+      realCopy(x_min, y_min);                          // y_min = x_min
+      realCopy(x_max, y_max);                          // y_max = x_max
     }
     else {  //new equal scale calculation to keep the grpah centre of screen
-      float dx = fabs(x_max - x_min);
-      float dy = fabs(y_max - y_min);
-      //printf("dx=%f dy=%f\n", dx, dy);
-      if(dx > 1e-10 && dy/dx > 100000) {
-        y_min = x_min;
-        y_max = x_max;
-        dx = fabs(x_max - x_min);
-        dy = fabs(y_max - y_min);
+      realSubtract(x_max, x_min, &dx, &ctxtReal39);    // dx = |x_max - x_min|
+      realSetPositiveSign(&dx);
+      realSubtract(y_max, y_min, &dy, &ctxtReal39);    // dy = |y_max - y_min|
+      realSetPositiveSign(&dy);
+      convertDoubleToReal(1e-10, &k, &ctxtReal39);     // k = 1e-10
+      realDivide(&dy, &dx, &tmp, &ctxtReal39);         // tmp = dy/dx (infinite when dx == 0; harmless, the dx > 1e-10 test excludes that case like the float original did)
+      bool_t dxBigEnough = realCompareGreaterThan(&dx, &k);                        // dx > 1e-10
+      int32ToReal(100000, &k);                         // k = 100000
+      if(dxBigEnough && realCompareGreaterThan(&tmp, &k)) {                        // dx > 1e-10 && dy/dx > 100000: y takes on the x range
+        realCopy(x_min, y_min);                        // y_min = x_min
+        realCopy(x_max, y_max);                        // y_max = x_max
+        realSubtract(x_max, x_min, &dx, &ctxtReal39);  // dx = |x_max - x_min|
+        realSetPositiveSign(&dx);
+        realSubtract(y_max, y_min, &dy, &ctxtReal39);  // dy = |y_max - y_min|
+        realSetPositiveSign(&dy);
       }
       else {
-        if(dx > dy) {
-          dy = dx;
+        if(realCompareGreaterThan(&dx, &dy)) {         // the larger of dx and dy rules both axes
+          realCopy(&dx, &dy);                          // dy = dx
         }
         else {
-          dx = dy;
+          realCopy(&dy, &dx);                          // dx = dy
         }
       }
-      x_min = (x_min + x_max)/2 - dx/2;
-      x_max = x_min + dx;
-      y_min = (y_min + y_max)/2 - dy/2;
-      y_max = y_min + dy;
+      realAdd(x_min, x_max, &tmp, &ctxtReal39);        // tmp = x_min + x_max
+      realMultiply(&tmp, const_1on2, &tmp, &ctxtReal39);                           // tmp = (x_min + x_max) / 2, the x centre
+      realMultiply(&dx, const_1on2, &k, &ctxtReal39);  // k = dx/2
+      realSubtract(&tmp, &k, x_min, &ctxtReal39);      // x_min = centre - dx/2
+      realAdd(x_min, &dx, x_max, &ctxtReal39);         // x_max = x_min + dx
+      realAdd(y_min, y_max, &tmp, &ctxtReal39);        // tmp = y_min + y_max
+      realMultiply(&tmp, const_1on2, &tmp, &ctxtReal39);                           // tmp = (y_min + y_max) / 2, the y centre
+      realMultiply(&dy, const_1on2, &k, &ctxtReal39);  // k = dy/2
+      realSubtract(&tmp, &k, y_min, &ctxtReal39);      // y_min = centre - dy/2
+      realAdd(y_min, &dy, y_max, &ctxtReal39);         // y_max = y_min + dy
     }
   }
 
   #if defined(STATDEBUG) && defined(PC_BUILD)
-    printf("Axis3c: x_min = %f, y_min = %f, x_max = %f, y_max = %f, dx=%f, dy=%f \n", x_min, y_min, x_max, y_max, dx, dy);
+    printf("Axis3c: x_min = %f, y_min = %f, x_max = %f, y_max = %f, dx=%f, dy=%f \n", dbl(x_min), dbl(y_min), dbl(x_max), dbl(y_max), dbl(&dx), dbl(&dy));
   #endif // STATDEBUG
 
 
@@ -782,8 +848,8 @@ void graph_plotmem(void) {
       int16_t yo, yn;
       int16_t yN0 = 0, yN1 = 0;
       float x;
-      float y;
       float sx, sy;
+      real_t xr, yr;
       float ddx = FLoatingMax;
       float dxx = FLoatingMax;
       float dydx = FLoatingMax;
@@ -830,12 +896,12 @@ void graph_plotmem(void) {
         }
 
         //AUTOSCALE
-        x_min = FLoatingMax;
-        x_max = FLoatingMin;
-        y_min = FLoatingMax;
-        y_max = FLoatingMin;
+        convertDoubleToReal(FLoatingMax, x_min, &ctxtReal39);              // seed the range impossibly wide open: x_min = +1e38, x_max = -1e38,
+        convertDoubleToReal(FLoatingMin, x_max, &ctxtReal39);              //   so the first data point replaces both
+        convertDoubleToReal(FLoatingMax, y_min, &ctxtReal39);
+        convertDoubleToReal(FLoatingMin, y_max, &ctxtReal39);
         #if defined(STATDEBUG)
-          printf("Axis0: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+          printf("Axis0: x: %f -> %f y: %f -> %f   \n", dbl(x_min), dbl(x_max), dbl(y_min), dbl(y_max));
         #endif // STATDEBUG
         if(plotmode != _VECT) {
           invalid_intg = false;                                                      //integral scale
@@ -856,21 +922,22 @@ void graph_plotmem(void) {
 /**/          if(ix != 0) {
 /**/            ddx = grf_x(ix) - grf_x(ix-1);                                            //used in DIFF and INT
 /**/            if(ddx<=0) {                                                              //Cannot get slop or area if x is not growing in positive dierection
-/**/              x_min = FLoatingMax;
-/**/              x_max = FLoatingMin;
-/**/              y_min = FLoatingMax;
-/**/              y_max = FLoatingMin;
+/**/              convertDoubleToReal(FLoatingMax, x_min, &ctxtReal39);
+/**/              convertDoubleToReal(FLoatingMin, x_max, &ctxtReal39);
+/**/              convertDoubleToReal(FLoatingMax, y_min, &ctxtReal39);
+/**/              convertDoubleToReal(FLoatingMin, y_max, &ctxtReal39);
 /**/              invalid_diff = true;
 /**/              invalid_intg = true;
 /**/              invalid_rms  = true;
 /**/              break;
 /**/            }
 /**/            else {
-/**/              if(grf_x(ix) < x_min) {
-/**/                x_min = grf_x(ix);
+/**/              grf_x_r(ix, &xr);                    // xr = grf_x(ix)
+/**/              if(realCompareLessThan(&xr, x_min)) {                    // if(grf_x(ix) < x_min) x_min = grf_x(ix)
+/**/                realCopy(&xr, x_min);
 /**/              }
-/**/              if(grf_x(ix) > x_max) {
-/**/                x_max = grf_x(ix);
+/**/              if(realCompareGreaterThan(&xr, x_max)) {                 // if(grf_x(ix) > x_max) x_max = grf_x(ix)
+/**/                realCopy(&xr, x_max);
 /**/              }
 /**/              if(getSystemFlag(FLAG_PDIFF)) {
 /**/                //plotDiff(); //dydx                                            //Differential
@@ -886,29 +953,32 @@ void graph_plotmem(void) {
 /**/                  dydx = FLoatingMax;
 /**/                }
 /**/
-/**/                if(dydx < y_min) {
-/**/                  y_min = dydx;
+/**/                convertDoubleToReal(dydx, &yr, &ctxtReal39);        // yr = dydx, the float overlay value as y-range candidate
+/**/                if(realCompareLessThan(&yr, y_min)) {                 // if(dydx < y_min) y_min = dydx
+/**/                  realCopy(&yr, y_min);
 /**/                }
-/**/                if(dydx > y_max) {
-/**/                  y_max = dydx;
+/**/                if(realCompareGreaterThan(&yr, y_max)) {              // if(dydx > y_max) y_max = dydx
+/**/                  realCopy(&yr, y_max);
 /**/                }
 /**/              }
 /**/              if(getSystemFlag(FLAG_PINTG)) {
 /**/                inty = inty + (grf_y(ix) + grf_y(ix-1)) / 2 * ddx;
-/**/                if(inty < y_min) {
-/**/                  y_min = inty;
+/**/                convertDoubleToReal(inty, &yr, &ctxtReal39);        // yr = inty, the float overlay value as y-range candidate
+/**/                if(realCompareLessThan(&yr, y_min)) {                 // if(inty < y_min) y_min = inty
+/**/                  realCopy(&yr, y_min);
 /**/                }
-/**/                if(inty > y_max) {
-/**/                  y_max = inty;
+/**/                if(realCompareGreaterThan(&yr, y_max)) {              // if(inty > y_max) y_max = inty
+/**/                  realCopy(&yr, y_max);
 /**/                }
 /**/              }
 /**/              if(getSystemFlag(FLAG_PRMS)) {
 /**/                rmsy = sqrt((rmsy * rmsy * ix + grf_y(ix) * grf_y(ix)) / (ix+1.0));      // Changed rmsy to use the standard RMS calc, and not shoft it to the trapezium x-centre
-/**/                if(rmsy < y_min) {
-/**/                  y_min = rmsy;
+/**/                convertDoubleToReal(rmsy, &yr, &ctxtReal39);        // yr = rmsy, the float overlay value as y-range candidate
+/**/                if(realCompareLessThan(&yr, y_min)) {                 // if(rmsy < y_min) y_min = rmsy
+/**/                  realCopy(&yr, y_min);
 /**/                }
-/**/                if(rmsy > y_max) {
-/**/                  y_max = rmsy;
+/**/                if(realCompareGreaterThan(&yr, y_max)) {              // if(rmsy > y_max) y_max = rmsy
+/**/                  realCopy(&yr, y_max);
 /**/                }
 /**/              }
 /**/            }
@@ -921,7 +991,7 @@ void graph_plotmem(void) {
 //#################################################### ^^^ SCALING LOOP ^^^ #########################
 
           #if defined(STATDEBUG)
-            printf("Axis0b1: x: %f -> %f y: %f -> %f  %d \n", x_min, x_max, y_min, y_max, invalid_diff);
+            printf("Axis0b1: x: %f -> %f y: %f -> %f  %d \n", dbl(x_min), dbl(x_max), dbl(y_min), dbl(y_max), invalid_diff);
           #endif // STATDEBUG
 
 //#################################################### vvv SCALING LOOP  vvv #########################
@@ -951,33 +1021,48 @@ void graph_plotmem(void) {
 /**/          #if defined(STATDEBUG)
 /**/            printf("Axis0a: cnt/statnum: %i/%i  x: %f y: %f   \n", cnt, statnum, grf_x(cnt), grf_y(cnt));
 /**/          #endif // STATDEBUG
-/**/          if(grf_x(cnt) < x_min) {
-/**/            x_min = grf_x(cnt);
+/**/          grf_x_r(cnt, &xr);                       // xr = grf_x(cnt)
+/**/          grf_y_r(cnt, &yr);                       // yr = grf_y(cnt)
+/**/          if(realCompareLessThan(&xr, x_min)) {                        // if(grf_x(cnt) < x_min) x_min = grf_x(cnt)
+/**/            realCopy(&xr, x_min);
 /**/          }
-/**/          if(grf_x(cnt) > x_max) {
-/**/            x_max = grf_x(cnt);
+/**/          if(realCompareGreaterThan(&xr, x_max)) {                     // if(grf_x(cnt) > x_max) x_max = grf_x(cnt)
+/**/            realCopy(&xr, x_max);
 /**/          }
-/**/          if(grf_y(cnt) < y_min) {
-/**/            y_min = grf_y(cnt);
+/**/          if(realCompareLessThan(&yr, y_min)) {                        // if(grf_y(cnt) < y_min) y_min = grf_y(cnt)
+/**/            realCopy(&yr, y_min);
 /**/          }
-/**/          if(grf_y(cnt) > y_max) {
-/**/            y_max = grf_y(cnt);
+/**/          if(realCompareGreaterThan(&yr, y_max)) {                     // if(grf_y(cnt) > y_max) y_max = grf_y(cnt)
+/**/            realCopy(&yr, y_max);
 /**/          }
 /**/          scaleRmsy = sqrt((scaleRmsy * scaleRmsy * cnt + grf_y(cnt) * grf_y(cnt)) / (cnt+1.0));
 /**/        }
 /**/
+/**/        //The peak filter and symmetry heuristics below are dimensionless float logic: run them on float mirrors of the
+/**/        //real_t y range and commit only values they changed, so extreme-magnitude ranges pass through untouched.
+/**/        float fy_min, fy_max;
+/**/        {
+/**/          double d;
+/**/          realToDouble(y_min, &d);
+/**/          fy_min = (float)d;
+/**/          realToDouble(y_max, &d);
+/**/          fy_max = (float)d;
+/**/        }
+/**/        float fy_min0 = fy_min;
+/**/        float fy_max0 = fy_max;
+/**/
 /**/        //pre-loop to cover trivial quasi symmetrical axis
-/**/        if(y_max > 0 && y_min < 0 && (y_max > 4 * scaleRmsy)) { //force the RMS if large peaks occur
-/**/          y_max = scaleRmsy;
+/**/        if(fy_max > 0 && fy_min < 0 && (fy_max > 4 * scaleRmsy)) { //force the RMS if large peaks occur
+/**/          fy_max = scaleRmsy;
 /**/        }
-/**/        else if(y_max > 0 && y_min < 0 && (-y_min > 4 * scaleRmsy)) {
-/**/          y_min = -scaleRmsy;
+/**/        else if(fy_max > 0 && fy_min < 0 && (-fy_min > 4 * scaleRmsy)) {
+/**/          fy_min = -scaleRmsy;
 /**/        }
-/**/        else if(y_max > 0 && y_min < 0 && (y_max > -y_min) && (y_max / y_min < 1.2)) { //make x-axis sit in the middle if close enough
-/**/          y_min = -y_max;
+/**/        else if(fy_max > 0 && fy_min < 0 && (fy_max > -fy_min) && (fy_max / fy_min < 1.2)) { //make x-axis sit in the middle if close enough
+/**/          fy_min = -fy_max;
 /**/        }
-/**/        else if(y_max > 0 && y_min < 0 && (y_max < -y_min) && (y_min / y_max < 1.2)) {
-/**/          y_max = -y_min;
+/**/        else if(fy_max > 0 && fy_min < 0 && (fy_max < -fy_min) && (fy_min / fy_max < 1.2)) {
+/**/          fy_max = -fy_min;
 /**/        }
 /**/
 /**/
@@ -1008,16 +1093,16 @@ void graph_plotmem(void) {
 /**/       //       aa = a0 * 1.1;
 /**/       //     }
 /**/            //printf("%f %f %f %f %f %f %f %f %f  %f\n", a8, a7, a6, a5, a4, a3, a2, a1, a0, aa);
-/**/            if(aa < y_min) {
+/**/            if(aa < fy_min) {
 /**/              y_mincnt++;
-/**/              if(fabs(aa / y_min) < 4 ) {//|| aa == a0 * 1.1) {
-/**/                if(aa < y_min) {
-/**/                 y_min = aa;
+/**/              if(fabs(aa / fy_min) < 4 ) {//|| aa == a0 * 1.1) {
+/**/                if(aa < fy_min) {
+/**/                 fy_min = aa;
 /**/                }
 /**/                y_mincnt=0;
 /**/              }
 /**/              else if(y_mincnt==3) {
-/**/                y_min = aa;
+/**/                fy_min = aa;
 /**/                y_mincnt=0;
 /**/              }
 /**/            }
@@ -1025,16 +1110,16 @@ void graph_plotmem(void) {
 /**/             y_mincnt=0;
 /**/            }
 /**/
-/**/            if(aa > y_max) {
+/**/            if(aa > fy_max) {
 /**/              y_maxcnt++;
-/**/              if(fabs(aa / y_max) < 4 ) {//|| aa == a0 * 1.1) {
-/**/                if(aa>y_max) {
-/**/                  y_max = aa;
+/**/              if(fabs(aa / fy_max) < 4 ) {//|| aa == a0 * 1.1) {
+/**/                if(aa>fy_max) {
+/**/                  fy_max = aa;
 /**/                }
 /**/                y_maxcnt=0;
 /**/              }
 /**/              else if(y_maxcnt==3) {
-/**/                y_max = aa;
+/**/                fy_max = aa;
 /**/                y_maxcnt=0;
 /**/              }
 /**/            }
@@ -1043,12 +1128,18 @@ void graph_plotmem(void) {
 /**/            }
 /**/
 /**/            #if defined(STATDEBUG)
-/**/              printf("Axis0b: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+/**/              printf("Axis0b: x: %f -> %f y: %f -> %f   \n", dbl(x_min), dbl(x_max), fy_min, fy_max);
 /**/            #endif // STATDEBUG
 /**/            if(exitKeyWaiting()) {
 /**/              goto plotmemExit;
 /**/            }
 /**/          }
+/**/        }
+/**/        if(fy_min != fy_min0) {
+/**/          convertDoubleToReal(fy_min, y_min, &ctxtReal39);
+/**/        }
+/**/        if(fy_max != fy_max0) {
+/**/          convertDoubleToReal(fy_max, y_max, &ctxtReal39);
 /**/        }
 /**/      }
 /**/    }
@@ -1062,17 +1153,19 @@ void graph_plotmem(void) {
             if((doubleSpecialLabel(sx) != NULL) || (doubleSpecialLabel(sy) != NULL)) {
               continue;
             }
-/**/        if(sx < x_min) {
-/**/          x_min = sx;
+/**/        convertDoubleToReal(sx, &xr, &ctxtReal39); // xr = sx, the running vector sum
+/**/        convertDoubleToReal(sy, &yr, &ctxtReal39); // yr = sy
+/**/        if(realCompareLessThan(&xr, x_min)) {                          // if(sx < x_min) x_min = sx
+/**/          realCopy(&xr, x_min);
 /**/        } else
-/**/        if(sx > x_max) {
-/**/          x_max = sx;
+/**/        if(realCompareGreaterThan(&xr, x_max)) {                       // else if(sx > x_max) x_max = sx
+/**/          realCopy(&xr, x_max);
 /**/        }
-/**/        if(sy < y_min) {
-/**/          y_min = sy;
+/**/        if(realCompareLessThan(&yr, y_min)) {                          // if(sy < y_min) y_min = sy
+/**/          realCopy(&yr, y_min);
 /**/        } else
-/**/        if(sy > y_max) {
-/**/          y_max = sy;
+/**/        if(realCompareGreaterThan(&yr, y_max)) {                       // else if(sy > y_max) y_max = sy
+/**/          realCopy(&yr, y_max);
 /**/        }
 /**/        if(exitKeyWaiting()) {
 /**/          goto plotmemExit;
@@ -1084,7 +1177,7 @@ void graph_plotmem(void) {
 
         //Manipulate the obtained axes positions
         #if defined(STATDEBUG)
-         printf("Axis1a: x_min = %f, y_min = %f, x_max = %f, y_max = %f, \n", x_min, y_min, x_max, y_max);
+         printf("Axis1a: x_min = %f, y_min = %f, x_max = %f, y_max = %f, \n", dbl(x_min), dbl(y_min), dbl(x_max), dbl(y_max));
         #endif // STATDEBUG
 
 
@@ -1098,25 +1191,25 @@ void graph_plotmem(void) {
         }
 
         #if defined(STATDEBUG)
-          printf("Axis3d: x_min = %f, y_min = %f, x_max = %f, y_max = %f \n", x_min, y_min, x_max, y_max);
+          printf("Axis3d: x_min = %f, y_min = %f, x_max = %f, y_max = %f \n", dbl(x_min), dbl(y_min), dbl(x_max), dbl(y_max));
         #endif // STATDEBUG
 
 
         if(plotmode != _VECT) {
-          yn = screen_window_y(y_min, grf_y(0), y_max);
-          xn = screen_window_x(x_min, grf_x(0), x_max);
-          xN1 = xn;
-          yN1 = yn;
+          grf_y_r(0, &yr);
+          grf_x_r(0, &xr);
         }
         else {
-          yn = screen_window_y(y_min, 0, y_max);
-          xn = screen_window_x(x_min, 0, x_max);
-          xN1 = xn;
-          yN1 = yn;
+          realSetZero(&yr);
+          realSetZero(&xr);
         }
+        yn = screen_window_y_r(y_min, &yr, y_max);
+        xn = screen_window_x_r(x_min, &xr, x_max);
+        xN1 = xn;
+        yN1 = yn;
 
         #if defined(STATDEBUG)
-          printf("Axis3e: x_min = %f, y_min = %f, x_max = %f, y_max = %f \n", x_min, y_min, x_max, y_max);
+          printf("Axis3e: x_min = %f, y_min = %f, x_max = %f, y_max = %f \n", dbl(x_min), dbl(y_min), dbl(x_max), dbl(y_max));
         #endif // STATDEBUG
 
         sx = 0;
@@ -1139,7 +1232,6 @@ void graph_plotmem(void) {
         for(ix = 0; (ix < statnum); ++ix) {
           if(plotmode != _VECT) {
             x = 0;
-            y = 0;
 
             if(ix !=0 && ( (getSystemFlag(FLAG_PDIFF) && !invalid_diff) || (getSystemFlag(FLAG_PINTG) && !invalid_intg) || (getSystemFlag(FLAG_PRMS) && !invalid_rms) )) {
               ddx = grf_x(ix) - grf_x(ix-1);
@@ -1165,22 +1257,24 @@ void graph_plotmem(void) {
               }
             }
 
-            x = grf_x(ix);
-            y = grf_y(ix);
+            x = grf_x(ix);                           // float x stays for the RMS overlay maths below
+            grf_x_r(ix, &xr);                        // xr = grf_x(ix)
+            grf_y_r(ix, &yr);                        // yr = grf_y(ix)
 
           }
           else { //_VECT
             sx = sx + (!getSystemFlag(FLAG_NVECT) ? grf_x(ix) : grf_y(ix));
             sy = sy + (!getSystemFlag(FLAG_NVECT) ? grf_y(ix) : grf_x(ix));
             x = sx;
-            y = sy;
+            convertDoubleToReal(sx, &xr, &ctxtReal39);                     // xr = sx
+            convertDoubleToReal(sy, &yr, &ctxtReal39);                     // yr = sy
           }
           xo = xN1;
           yo = yN1;
           yN0 = prev_y_unclipped;
 
-          xN1 = screen_window_x(x_min, x, x_max);
-          yN1 = screen_window_y_nolimit(y_min, y, y_max);
+          xN1 = screen_window_x_r(x_min, &xr, x_max);
+          yN1 = screen_window_y_nolimit_r(y_min, &yr, y_max);
           int16_t current_y_unclipped = yN1;
 
           if(ix == 0) {
@@ -1192,10 +1286,10 @@ void graph_plotmem(void) {
           }
 
           #if defined(STATDEBUG)
-            printf("\n         xN1 = %d : (x_min = %f, x=%f, x_max = %f) ", xN1, x_min, x, x_max);
-            printf("yN0 = %d yN1 = %d : (y_min = %f, y=%f, y_max = %f) \n", yN0, yN1, y_min, y, y_max);
-            printf("plotting graph table[%d] = x:%f y:%f (dxx:%f dydx:%f) inty:%f xN1:%d yN1:%d ", ix, x, y, dxx, dydx, inty, xN1, yN1);
-            printf("   ... x-ddx/2=%d dydx=%d inty=%d\n", screen_window_x(x_min, x-ddx/2, x_max), screen_window_y(y_min, dydx, y_max), screen_window_y(y_min, inty, y_max));
+            printf("\n         xN1 = %d : (x_min = %f, x=%f, x_max = %f) ", xN1, dbl(x_min), x, dbl(x_max));
+            printf("yN0 = %d yN1 = %d : (y_min = %f, y=%f, y_max = %f) \n", yN0, yN1, dbl(y_min), dbl(&yr), dbl(y_max));
+            printf("plotting graph table[%d] = x:%f y:%f (dxx:%f dydx:%f) inty:%f xN1:%d yN1:%d ", ix, x, dbl(&yr), dxx, dydx, inty, xN1, yN1);
+            printf("   ... x-ddx/2=%d dydx=%d inty=%d\n", screenX(x-ddx/2), screenY(dydx), screenY(inty));
           #endif // STATDEBUG
 
           int16_t minN_y, minN_x;
@@ -1300,7 +1394,7 @@ void graph_plotmem(void) {
                 #if defined(STATDEBUG)
                   printf("Plotting Delta x=%f dy=%f \n", dxx, dydx);
                 #endif // STATDEBUG
-                plotdelta(screen_window_x( x_min, dxx, x_max), screen_window_y(y_min, dydx, y_max));
+                plotdelta(screenX(dxx), screenY(dydx));
               }
 
 
@@ -1308,7 +1402,7 @@ void graph_plotmem(void) {
                 #if defined(STATDEBUG)
                   printf("Plotting RMSy x=%f rmsy=%f \n", x - ddx/2, rmsy);
                 #endif // STATDEBUG
-                plotrms(screen_window_x(x_min, x - ddx/2, x_max), screen_window_y(y_min, rmsy, y_max));
+                plotrms(screenX(x - ddx/2), screenY(rmsy));
               }
 
 
@@ -1316,9 +1410,11 @@ void graph_plotmem(void) {
                 #if defined(STATDEBUG)
                   printf("Plotting Integral x=%f intg(x)=%f\n", x-ddx/2, inty);
                 #endif // STATDEBUG
-                int16_t xN0   = screen_window_x(x_min, grf_x(ix-1), x_max);
-                //uint16_t xN1   = screen_window_x(x_min, grf_x(ix), x_max);
-                int16_t yNintg= screen_window_y(y_min, inty, y_max);
+                real_t xPrev;
+                grf_x_r(ix-1, &xPrev);
+                int16_t xN0   = screen_window_x_r(x_min, &xPrev, x_max);
+                //uint16_t xN1   = screen_window_x_r(x_min, &xr, x_max);
+                int16_t yNintg= screenY(inty);
                 int16_t xAvg  = ((xN0+xN1) >> 1);
 
                 if(abs((int16_t)(xN1-xN0)) >= 6) {
@@ -1339,7 +1435,7 @@ void graph_plotmem(void) {
                 }
 
                 if(getSystemFlag(FLAG_PSHADE)) {
-                  int16_t yNoff = screen_window_y(y_min, 0, y_max);
+                  int16_t yNoff = screenY(0);
                   plotrect(xN0, yN0,   xN1, yN1);
                   plotrect(xN0, yNoff, xN1, yN0);
                   if(abs((int16_t)(xN1-xN0)) >= 6) {

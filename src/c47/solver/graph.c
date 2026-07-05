@@ -238,8 +238,10 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
 // to 14 working digits at graph_eqn entry. Helpers are defined first in this file, then graph_eqn at the bottom.
 //******************************************************************************************************************************
 
-#define PLOT_DIGITS    16    // Storage size for the graph real_t buffers; must exceed the working digits in ctxtGraphsLocal
-                             // Register Y reads are rounded to working digits in convertRegisterToReal.
+#define PLOT_DIGITS           16    // Storage size for the graph real_t buffers; must exceed GRAPH_WORKING_DIGITS so every result fits. 16 allocates 21 digits after REAL_MAX_DIGITS rounding.
+#define GRAPH_WORKING_DIGITS  14    // Working precision for all graph math. 14 instead of 39 digits is a real speedup and pixels only need ~5 pixels.
+                                    // Also sets the too-close limit: ranges narrower than 100x the ULP, e.g. 1.0000000000001 to 1.0000000000002, are unplottable at 14 digits and get widened.
+                                    // Register Y reads are rounded to working digits in convertRegisterToReal.
 
 // Context for graph calculations. Initialized at graph_eqn entry from ctxtReal39 to 14 working digits
 // 14 vs 39 is a real speedup. All real_t arithmetic in graph_eqn and the helpers use this context via ctxtGraphs.
@@ -1032,7 +1034,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
     // Configure the graph-local context: 14 working digits, full ctxtReal39 settings otherwise.
     ctxtGraphsLocal = ctxtReal39;
-    ctxtGraphsLocal.digits = 14;
+    ctxtGraphsLocal.digits = GRAPH_WORKING_DIGITS;
     REAL_T_PTR(x, PLOT_DIGITS);
     REAL_T_PTR(x01, PLOT_DIGITS);
     REAL_T_PTR(y01, PLOT_DIGITS);
@@ -1084,10 +1086,10 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     REAL_T_PTR(lastSignChange, PLOT_DIGITS);
   #endif // GRAPHDEBUG
 
-    convertDoubleToReal(x_min, x_min_r, ctxtGraphs);
-    convertDoubleToReal(x_max, x_max_r, ctxtGraphs);
-    convertDoubleToReal(y_min, y_min_r, ctxtGraphs);
-    convertDoubleToReal(y_max, y_max_r, ctxtGraphs);
+    realPlus(x_min, x_min_r, ctxtGraphs);            // x_min_r = x_min rounded to the graph working digits
+    realPlus(x_max, x_max_r, ctxtGraphs);            // x_max_r = x_max
+    realPlus(y_min, y_min_r, ctxtGraphs);            // y_min_r = y_min
+    realPlus(y_max, y_max_r, ctxtGraphs);            // y_max_r = y_max
     realCopy(x_min_r, x01);
     realSetZero(y01);
     realSetZero(y02);
@@ -2531,15 +2533,14 @@ static inline void powCplxNat(const cplx_t *base, const uint8_t *exp, cplx_t *re
     printStatus(1, errorMessages[COMPLEX_SOLVER], force);
     saveForUndo();
                                         #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
-                                          double higherXStartValue = convertRegisterToDouble(REGISTER_X);
-                                          double lowerXStartValue = convertRegisterToDouble(REGISTER_Y);
+                                          real_t loXd, hiXd;
                                           printRegisterToConsole(REGISTER_Y, ">>> lowerXStartValue=", "");
                                           printRegisterToConsole(REGISTER_X, " higherXStartValue=", "\n");
-                                          if(higherXStartValue>lowerXStartValue + 0.01 && higherXStartValue!=DOUBLE_NOT_INIT && lowerXStartValue!=DOUBLE_NOT_INIT) { //pre-condition the plotter
-                                            x_min = lowerXStartValue;
-                                            x_max = higherXStartValue;
+                                          if(getRegisterAsReal(REGISTER_X, &hiXd) && getRegisterAsReal(REGISTER_Y, &loXd) && realCompareGreaterThan(&hiXd, &loXd)) { //pre-condition the plotter
+                                            realCopy(&loXd, x_min);
+                                            realCopy(&hiXd, x_max);
                                           }
-                                          printf("xmin:%f, xmax:%f\n", x_min, x_max);
+                                          printf("xmin:%f, xmax:%f\n", realToDoubleVal(x_min), realToDoubleVal(x_max));
                                         #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
     // initialize_function();
     complexSolver();
@@ -2653,10 +2654,10 @@ void fnEqSolvGraph (uint16_t func) {
         case EQ_PLOT: {
 
     //      PLOT_ZMY = 0; removed default zeroing of the zoom factor in eqn as it is irritating with the new y range control
-          double higherXStartValue = convertRegisterToDouble(REGISTER_X);
-          double lowerXStartValue = convertRegisterToDouble(REGISTER_Y);
+          real_t loX, hiX, x_d, mag, tmpR;
+          bool_t rangeOK = getRegisterAsReal(REGISTER_X, &hiX) && getRegisterAsReal(REGISTER_Y, &loX);
           #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
-            printf(">>> lowerXStartValue=%f  higherXStartValue=%f\n", lowerXStartValue, higherXStartValue);
+            printf(">>> lowerXStartValue=%f  higherXStartValue=%f\n", realToDoubleVal(&loX), realToDoubleVal(&hiX));
           #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
 
           // fnClDrawMx's delete can shift the plot variable's register; cache the name, re-resolve after.
@@ -2679,26 +2680,38 @@ void fnEqSolvGraph (uint16_t func) {
             }
           }
 
-          if(higherXStartValue>lowerXStartValue + 0.0001 && higherXStartValue!=DOUBLE_NOT_INIT && lowerXStartValue!=DOUBLE_NOT_INIT) { //pre-condition the plotter
-            x_min = lowerXStartValue;
-            x_max = higherXStartValue;
+          if(rangeOK && realCompareGreaterThan(&hiX, &loX)) { //pre-condition the plotter                 // if(X > Y) { x_min = Y; x_max = X; }
+            realCopy(&loX, x_min);                                         // x_min = Y, the lower stack value
+            realCopy(&hiX, x_max);                                         // x_max = X, the higher stack value
           }
-          if(x_min > x_max) { //swap if entered in incorrect sequence
-            float kk = x_max;
-            x_max = x_min;
-            x_min = kk;
+          if(realCompareGreaterThan(x_min, x_max)) { //swap if entered in incorrect sequence
+            realCopy(x_max, &tmpR);                                        // tmpR = x_max
+            realCopy(x_min, x_max);                                        // x_max = x_min
+            realCopy(&tmpR, x_min);                                        // x_min = old x_max
           }
-          float x_d = fabs(x_max-x_min);
-          if(x_d < 0.0001) { //too close together for float type
-            x_d = 0.0001 * 10;
-            if(fabs(x_min)<0.0001 || fabs(x_max)<0.0001) { //abort old values typically 0 - 0 and change to -1 to 1
-              x_d = 10;
+          realSubtract(x_max, x_min, &x_d, &ctxtReal39);                   // x_d = x_max - x_min, the span, >= 0 after the swap above
+          realCopyAbs(x_min, &mag);                                        // mag = |x_min|
+          realCopyAbs(x_max, &tmpR);                                       // tmpR = |x_max|
+          if(realCompareGreaterThan(&tmpR, &mag)) {
+            realCopy(&tmpR, &mag);                                         // mag = max(|x_min|, |x_max|)
+          }
+          realSetOne(&tmpR);
+          tmpR.exponent = 3 - GRAPH_WORKING_DIGITS;                        // tmpR = 1E-11, 100x the ULP of the graph working precision
+          realMultiply(&mag, &tmpR, &tmpR, &ctxtReal39);                   // tmpR = mag * 1E-11, the narrowest plottable span
+          if(realCompareLessEqual(&x_d, &tmpR)) { //span too small to plot at working precision           // if(x_d <= mag * 1E-11)
+            if(realIsZero(&mag)) {                //typically 0 - 0: change to -1 to 1
+              int32ToReal(-1, x_min);                                      // x_min = -1
+              int32ToReal(1, x_max);                                       // x_max = 1
             }
-            x_min = x_min - 0.1 * x_d;
-            x_max = x_max + 0.1 * x_d;
+            else {                                //widen by 10% of the magnitude
+              convertDoubleToReal(0.1, &tmpR, &ctxtReal39);                // tmpR = 0.1
+              realMultiply(&mag, &tmpR, &tmpR, &ctxtReal39);               // tmpR = 0.1 * mag
+              realSubtract(x_min, &tmpR, x_min, &ctxtReal39);              // x_min = x_min - 0.1 * mag
+              realAdd(x_max, &tmpR, x_max, &ctxtReal39);                   // x_max = x_max + 0.1 * mag
+            }
           }
           #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
-            printf("xmin:%f, xmax:%f\n", x_min, x_max);
+            printf("xmin:%f, xmax:%f\n", realToDoubleVal(x_min), realToDoubleVal(x_max));
           #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
 
           initialize_function();

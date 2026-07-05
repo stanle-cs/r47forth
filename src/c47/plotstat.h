@@ -68,6 +68,8 @@ void    showGraphTickText  (float tick_int_x, float tick_int_y, int32_t xoff, in
 //graph functions
 float   grf_x(int i);
 float   grf_y(int i);
+void    grf_x_r(int i, real_t *v);
+void    grf_y_r(int i, real_t *v);
 
 #define PLOT_TMP_BUF_SIZE   32
 char    *radixProcess(char *output, const char * ss);

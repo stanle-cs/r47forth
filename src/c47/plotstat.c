@@ -33,8 +33,8 @@ void statGraphReset(void){
   roundedTicks  = true;
   clearSystemFlag(FLAG_SHOWX);
   clearSystemFlag(FLAG_PLINE);
-  y_min         = 0;
-  y_max         = 1;
+  realSetZero(y_min);
+  realCopy(const_1, y_max);
 }
 
 
@@ -64,6 +64,34 @@ void statGraphReset(void){
       xf = 0;
     }
     return xf;
+  }
+
+
+  void grf_x_r(int i, real_t *v) {                   // real_t reader of the stat/draw matrix; the float grf_x stays for float-precision consumers
+    calcRegister_t regStats = regStatsXY;
+    if(regStats != INVALID_VARIABLE) {
+      real34Matrix_t stats;
+      linkToRealMatrixRegister(regStats, &stats);
+      const uint16_t cols = stats.header.matrixColumns;
+      real34ToReal(&stats.matrixElements[i * cols    ], v);
+    }
+    else {
+      realSetZero(v);
+    }
+  }
+
+
+  void grf_y_r(int i, real_t *v) {
+    calcRegister_t regStats = regStatsXY;
+    if(regStats != INVALID_VARIABLE) {
+      real34Matrix_t stats;
+      linkToRealMatrixRegister(regStats, &stats);
+      const uint16_t cols = stats.header.matrixColumns;
+      real34ToReal(&stats.matrixElements[i * cols + 1], v);
+    }
+    else {
+      realSetZero(v);
+    }
   }
 
 
@@ -103,11 +131,11 @@ static int16_t screenWindowRatio(const real_t *v_min, const real_t *v, const rea
   real_t tempr, den;
   bool_t err = false;
 
-  realSubtract(v, v_min, &tempr, &ctxtReal39);
-  realSubtract(v_max, v_min, &den, &ctxtReal39);
-  realDivide(&tempr, &den, &tempr, &ctxtReal39);
-  int32ToReal(scale, &den);
-  realMultiply(&tempr, &den, &tempr, &ctxtReal39);
+  realSubtract(v, v_min, &tempr, &ctxtReal39);       // tempr = x - x_min
+  realSubtract(v_max, v_min, &den, &ctxtReal39);     // den = x_max - x_min
+  realDivide(&tempr, &den, &tempr, &ctxtReal39);     // tempr = (x - x_min) / (x_max - x_min)
+  int32ToReal(scale, &den);                          // den = scale
+  realMultiply(&tempr, &den, &tempr, &ctxtReal39);   // tempr = (x - x_min) / (x_max - x_min) * scale
   if(realIsNegative(&tempr)) {                       // ROUND_F2I equivalent: +-0.5, then truncate towards zero in realToInt32C47
     realSubtract(&tempr, const_1on2, &tempr, &ctxtReal39);
   }
@@ -202,6 +230,18 @@ int16_t _screen_window_y(float y_min, float y, float y_max, bool_t nolimit) {
   int16_t screen_window_y(float y_min, float y, float y_max) {
     return _screen_window_y(y_min, y, y_max, limit);
   }
+
+// Map float data values against the real_t range globals. Stat data stays float precision; the range survives any exponent.
+int16_t screenX(float x) {
+  real_t t;
+  convertDoubleToReal(x, &t, &ctxtReal39);
+  return screen_window_x_r(x_min, &t, x_max);
+}
+int16_t screenY(float y) {
+  real_t t;
+  convertDoubleToReal(y, &t, &ctxtReal39);
+  return screen_window_y_r(y_min, &t, y_max);
+}
 
 
 
@@ -532,15 +572,16 @@ void pixelline(int16_t xo, int16_t yo, int16_t xn, int16_t yn, bool_t vmNormal) 
 
 void graphAxisDraw (void){
 #if !defined(SAVE_SPACE_DM42_13GRF)
-  if(x_min <= FLoatingMin || x_min >= FLoatingMax || x_max <= FLoatingMin || x_max >= FLoatingMax || y_min <= FLoatingMin || y_min >= FLoatingMax || y_max <= FLoatingMin || y_max >= FLoatingMax) {
+  if(realIsSpecial(x_min) || realIsSpecial(x_max) || realIsSpecial(y_min) || realIsSpecial(y_max)
+     || realCompareGreaterEqual(x_min, x_max) || realCompareGreaterEqual(y_min, y_max)) {   //rejects NaN/infinite, reversed, empty and never-autoscaled ranges (the +-1E38 seeds); any magnitude is drawable
     return;
   }
   uint32_t cnt;
 
   clearScreenPixels();
   //GRAPH ZERO AXIS
-  yzero = screen_window_y(y_min, 0, y_max);
-  xzero = screen_window_x(x_min, 0, x_max);
+  yzero = screen_window_y_r(y_min, const_0, y_max);
+  xzero = screen_window_x_r(x_min, const_0, x_max);
 
   uint32_t minnx, minny;
   minny = 0;
@@ -561,6 +602,18 @@ void graphAxisDraw (void){
 
   float x;
   float y;
+  float fx_min, fx_max, fy_min, fy_max;                //tick loops step in float; the interval underflows to 0 at extreme-magnitude ranges and the tick_int_* > 0 guards then skip the ticks
+  {
+    double d;
+    realToDouble(x_min, &d);
+    fx_min = (float)d;
+    realToDouble(x_max, &d);
+    fx_max = (float)d;
+    realToDouble(y_min, &d);
+    fy_min = (float)d;
+    realToDouble(y_max, &d);
+    fy_max = (float)d;
+  }
 
   if( PLOT_AXIS && !(yzero == SCREEN_HEIGHT_GRAPH-1 || yzero == minny)) {
     //DRAW XAXIS
@@ -576,52 +629,52 @@ void graphAxisDraw (void){
 
    force_refresh(timed);
 
-   if(0<x_max && 0>x_min) {
-     for(x=0; x<=x_max; x+=tick_int_x) {                           //draw x ticks
+   if(tick_int_x > 0 && 0<fx_max && 0>fx_min) {
+     for(x=0; x<=fx_max; x+=tick_int_x) {                           //draw x ticks
           #if defined(STATDEBUG) && defined(PC_BUILD)
          printf(">> x=%d   \n", (int)x);
           #endif // STATDEBUG && PC_BUILD
-       cnt = screen_window_x(x_min, x, x_max);
+       cnt = screenX(x);
        //printf(">>>>>A %f %d ", x, cnt);
        setBlackPixel(cnt, min(yzero+1, SCREEN_HEIGHT_GRAPH-1));    //tick
        setBlackPixel(cnt, max(yzero-1, minny));                    //tick
      }
-     for(x=0; x>=x_min; x+=-tick_int_x) {                          //draw x ticks
-       cnt = screen_window_x(x_min, x, x_max);
+     for(x=0; x>=fx_min; x+=-tick_int_x) {                         //draw x ticks
+       cnt = screenX(x);
        //printf(">>>>>B %f %d ", x, cnt);
        setBlackPixel(cnt, min(yzero+1, SCREEN_HEIGHT_GRAPH-1));    //tick
        setBlackPixel(cnt, max(yzero-1, minny));                    //tick
      }
-     for(x=0; x<=x_max; x+=tick_int_x*5) {                         //draw x ticks
-       cnt = screen_window_x(x_min, x, x_max);
+     for(x=0; x<=fx_max; x+=tick_int_x*5) {                        //draw x ticks
+       cnt = screenX(x);
        setBlackPixel(cnt, min(yzero+2, SCREEN_HEIGHT_GRAPH-1));    //tick
        setBlackPixel(cnt, max(yzero-2, minny));                    //tick
        setBlackPixel(cnt, min(yzero+3, SCREEN_HEIGHT_GRAPH-1));    //tick
        setBlackPixel(cnt, max(yzero-3, minny));                    //tick
      }
-     for(x=0; x>=x_min; x+=-tick_int_x*5) {                        //draw x ticks
-       cnt = screen_window_x(x_min, x, x_max);
+     for(x=0; x>=fx_min; x+=-tick_int_x*5) {                       //draw x ticks
+       cnt = screenX(x);
        setBlackPixel(cnt, min(yzero+2, SCREEN_HEIGHT_GRAPH-1));    //tick
        setBlackPixel(cnt, max(yzero-2, minny));                    //tick
        setBlackPixel(cnt, min(yzero+3, SCREEN_HEIGHT_GRAPH-1));    //tick
        setBlackPixel(cnt, max(yzero-3, minny));                    //tick
      }
    }
-   else {
-     for(x=x_min; x<=x_max; x+=tick_int_x) {                       //draw x ticks
+   else if(tick_int_x > 0) {
+     for(x=fx_min; x<=fx_max; x+=tick_int_x) {                     //draw x ticks
           #if defined(STATDEBUG) && defined(PC_BUILD)
           printf(">>>x=%d   \n", (int)x);
           #endif // STATDEBUG && PC_BUILD
-        cnt = screen_window_x(x_min, x, x_max);
+        cnt = screenX(x);
         //printf(">>>>>A %f %d ", x, cnt);
           setBlackPixel(cnt, min(yzero+1, SCREEN_HEIGHT_GRAPH-1)); //tick
           setBlackPixel(cnt, max(yzero-1, minny));                 //tick
        }
-      for(x=x_min; x<=x_max; x+=tick_int_x*5) {                    //draw x ticks
+      for(x=fx_min; x<=fx_max; x+=tick_int_x*5) {                  //draw x ticks
           #if defined(STATDEBUG) && defined(PC_BUILD)
           printf(">>>>x=%d   \n", (int)x);
           #endif // STATDEBUG && PC_BUILD
-        cnt = screen_window_x(x_min, x, x_max);
+        cnt = screenX(x);
           setBlackPixel(cnt, min(yzero+2, SCREEN_HEIGHT_GRAPH-1)); //tick
           setBlackPixel(cnt, max(yzero-2, minny));                 //tick
           setBlackPixel(cnt, min(yzero+3, SCREEN_HEIGHT_GRAPH-1)); //tick
@@ -649,58 +702,58 @@ void graphAxisDraw (void){
 
 
     force_refresh(timed);
-    if(0<y_max && 0>y_min) {
-      for(y=0; y<=y_max; y+=tick_int_y) {                      //draw y ticks
+    if(tick_int_y > 0 && 0<fy_max && 0>fy_min) {
+      for(y=0; y<=fy_max; y+=tick_int_y) {                     //draw y ticks
           #if defined(STATDEBUG) && defined(PC_BUILD)
           printf(">>y=%d   \n", (int)y);
           #endif // STATDEBUG && PC_BUILD
-        cnt = screen_window_y(y_min, y, y_max);
+        cnt = screenY(y);
         setBlackPixel(max(xzero-1, 0), cnt);                    //tick
         setBlackPixel(min(xzero+1, SCREEN_WIDTH_GRAPH-1), cnt); //tick
       }
-      for(y=0; y>=y_min; y+=-tick_int_y) {                      //draw y ticks
+      for(y=0; y>=fy_min; y+=-tick_int_y) {                     //draw y ticks
           #if defined(STATDEBUG) && defined(PC_BUILD)
           printf(">>>y=%d   \n", (int)y);
           #endif // STATDEBUG && PC_BUILD
-        cnt = screen_window_y(y_min, y, y_max);
+        cnt = screenY(y);
         setBlackPixel(max(xzero-1, 0), cnt);                    //tick
         setBlackPixel(min(xzero+1, SCREEN_WIDTH_GRAPH-1), cnt); //tick
       }
-      for(y=0; y<=y_max; y+=tick_int_y*5) {                     //draw y ticks
+      for(y=0; y<=fy_max; y+=tick_int_y*5) {                    //draw y ticks
           #if defined(STATDEBUG) && defined(PC_BUILD)
           printf(">>>>y=%d   \n", (int)y);
           #endif // STATDEBUG && PC_BUILD
-        cnt = screen_window_y(y_min, y, y_max);
+        cnt = screenY(y);
         setBlackPixel(max(xzero-2, 0), cnt);                    //tick
         setBlackPixel(min(xzero+2, SCREEN_WIDTH_GRAPH-1), cnt); //tick
         setBlackPixel(max(xzero-3, 0), cnt);                    //tick
         setBlackPixel(min(xzero+3, SCREEN_WIDTH_GRAPH-1), cnt); //tick
       }
-      for(y=0; y>=y_min; y+=-tick_int_y*5) {                    //draw y ticks
+      for(y=0; y>=fy_min; y+=-tick_int_y*5) {                   //draw y ticks
           #if defined(STATDEBUG) && defined(PC_BUILD)
           printf(">>>>>y=%d   \n", (int)y);
           #endif // STATDEBUG && PC_BUILD
-        cnt = screen_window_y(y_min, y, y_max);
+        cnt = screenY(y);
         setBlackPixel(max(xzero-2, 0), cnt);                    //tick
         setBlackPixel(min(xzero+2, SCREEN_WIDTH_GRAPH-1), cnt); //tick
         setBlackPixel(max(xzero-3, 0), cnt);                    //tick
         setBlackPixel(min(xzero+3, SCREEN_WIDTH_GRAPH-1), cnt); //tick
       }
     }
-    else {
-      for(y=y_min; y<=y_max; y+=tick_int_y) {                   //draw y ticks
+    else if(tick_int_y > 0) {
+      for(y=fy_min; y<=fy_max; y+=tick_int_y) {                 //draw y ticks
           #if defined(STATDEBUG) && defined(PC_BUILD)
           printf(">>>>>>>y=%d   \n", (int)y);
           #endif // STATDEBUG && PC_BUILD
-        cnt = screen_window_y(y_min, y, y_max);
+        cnt = screenY(y);
         setBlackPixel(max(xzero-1, 0), cnt);                    //tick
         setBlackPixel(min(xzero+1, SCREEN_WIDTH_GRAPH-1), cnt); //tick
       }
-      for(y=y_min; y<=y_max; y+=tick_int_y*5) {                 //draw y ticks
+      for(y=fy_min; y<=fy_max; y+=tick_int_y*5) {               //draw y ticks
           #if defined(STATDEBUG) && defined(PC_BUILD)
           printf(">>>>>>>>y=%d   \n", (int)y);
           #endif // STATDEBUG && PC_BUILD
-        cnt = screen_window_y(y_min, y, y_max);
+        cnt = screenY(y);
         setBlackPixel(max(xzero-2, 0), cnt);                    //tick
         setBlackPixel(min(xzero+2, SCREEN_WIDTH_GRAPH-1), cnt); //tick
         setBlackPixel(max(xzero-3, 0), cnt);                    //tick
@@ -784,15 +837,21 @@ void graph_axis (void){
     graph_dx = 0; //XXX override manual setting from GRAPH to auto, temporarily. Can program these to fixed values.
     graph_dy = 0;
 
+    real_t w;
+    double wd;
     if(graph_dx == 0) {
-      tick_int_x = auto_tick((x_max-x_min)/20);
+      realSubtract(x_max, x_min, &w, &ctxtReal39);   // w = x_max - x_min
+      realToDouble(&w, &wd);
+      tick_int_x = auto_tick((float)(wd/20.0));      // tick_int_x = auto_tick((x_max - x_min) / 20)
     }
     else {
       tick_int_x = graph_dx;
     }
 
     if(graph_dy == 0) {
-      tick_int_y = auto_tick((y_max-y_min)/20);
+      realSubtract(y_max, y_min, &w, &ctxtReal39);   // w = y_max - y_min
+      realToDouble(&w, &wd);
+      tick_int_y = auto_tick((float)(wd/20.0));      // tick_int_y = auto_tick((y_max - y_min) / 20)
     }
     else {
       tick_int_y = graph_dy;
@@ -1192,8 +1251,7 @@ currentKeyCode = 255;
   uint16_t  cnt, ix, numberOfPlotPoints;
   int16_t  xo, xn, xN;
   int16_t  yo, yn, yN;
-  float x;
-  float y;
+  real_t xr, yr, fminr, fmaxr;
 
   numberOfPlotPoints = 0;
   roundedTicks = false;
@@ -1225,12 +1283,12 @@ currentKeyCode = 255;
       clearScreenGraphs(3, !clrTextArea, clrGraphArea);
 
       //AUTOSCALE
-      x_min = FLoatingMax;
-      x_max = FLoatingMin;
-      y_min = FLoatingMax;
-      y_max = FLoatingMin;
+      convertDoubleToReal(FLoatingMax, x_min, &ctxtReal39);                // seed the range impossibly wide open: x_min = +1e38, x_max = -1e38,
+      convertDoubleToReal(FLoatingMin, x_max, &ctxtReal39);                //   so the first data point replaces both
+      convertDoubleToReal(FLoatingMax, y_min, &ctxtReal39);
+      convertDoubleToReal(FLoatingMin, y_max, &ctxtReal39);
       #if defined(STATDEBUG) && defined(PC_BUILD)
-        printf("Axis0: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+        printf("Axis0: x: %f -> %f y: %f -> %f   \n", dbl(x_min), dbl(x_max), dbl(y_min), dbl(y_max));
       #endif // STATDEBUG && PC_BUILD
 
 
@@ -1239,20 +1297,22 @@ currentKeyCode = 255;
       #if defined(STATDEBUG) && defined(PC_BUILD)
         printf("Axis0a: x: %f y: %f   \n", grf_x(cnt), grf_y(cnt));
       #endif // STATDEBUG && PC_BUILD
-      if(grf_x(cnt) < x_min) {
-        x_min = grf_x(cnt);
+      grf_x_r(cnt, &xr);                             // xr = grf_x(cnt)
+      grf_y_r(cnt, &yr);                             // yr = grf_y(cnt)
+      if(realCompareLessThan(&xr, x_min)) {          // if(grf_x(cnt) < x_min) x_min = grf_x(cnt)
+        realCopy(&xr, x_min);
       }
-      if(grf_x(cnt) > x_max) {
-        x_max = grf_x(cnt);
+      if(realCompareGreaterThan(&xr, x_max)) {       // if(grf_x(cnt) > x_max) x_max = grf_x(cnt)
+        realCopy(&xr, x_max);
       }
-      if(grf_y(cnt) < y_min) {
-        y_min = grf_y(cnt);
+      if(realCompareLessThan(&yr, y_min)) {          // if(grf_y(cnt) < y_min) y_min = grf_y(cnt)
+        realCopy(&yr, y_min);
       }
-      if(grf_y(cnt) > y_max) {
-        y_max = grf_y(cnt);
+      if(realCompareGreaterThan(&yr, y_max)) {       // if(grf_y(cnt) > y_max) y_max = grf_y(cnt)
+        realCopy(&yr, y_max);
       }
       #if defined(STATDEBUG) && defined(PC_BUILD)
-        printf("Axis0b: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+        printf("Axis0b: x: %f -> %f y: %f -> %f   \n", dbl(x_min), dbl(x_max), dbl(y_min), dbl(y_max));
       #endif // STATDEBUG && PC_BUILD
       if(exitKeyWaiting()) {
         return;
@@ -1260,13 +1320,15 @@ currentKeyCode = 255;
     }
     //##  ################################################## ^^^ SCALING LOOP ^^^
       #if defined(STATDEBUG) && defined(PC_BUILD)
-        printf("Axis1a: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+        printf("Axis1a: x: %f -> %f y: %f -> %f   \n", dbl(x_min), dbl(x_max), dbl(y_min), dbl(y_max));
       #endif // STATDEBUG && PC_BUILD
 
-      if(x_min <= FLoatingMin || x_max <= FLoatingMin || y_min <= FLoatingMin || y_max <= FLoatingMin) {
+      convertDoubleToReal(FLoatingMin, &fminr, &ctxtReal39);
+      convertDoubleToReal(FLoatingMax, &fmaxr, &ctxtReal39);
+      if(realCompareLessEqual(x_min, &fminr) || realCompareLessEqual(x_max, &fminr) || realCompareLessEqual(y_min, &fminr) || realCompareLessEqual(y_max, &fminr)) {
         goto scaleMinusInfinity;
       }
-      if(x_min >= FLoatingMax || x_max >= FLoatingMax || y_min >= FLoatingMax || y_max >= FLoatingMax) {
+      if(realCompareGreaterEqual(x_min, &fmaxr) || realCompareGreaterEqual(x_max, &fmaxr) || realCompareGreaterEqual(y_min, &fmaxr) || realCompareGreaterEqual(y_max, &fmaxr)) {
         goto scalePlusInfinity;
       }
 
@@ -1287,38 +1349,41 @@ currentKeyCode = 255;
       roundedTicks = false;
 //    }
 
-    if(x_min <= FLoatingMin || x_max <= FLoatingMin || y_min <= FLoatingMin || y_max <= FLoatingMin) {
+    if(realCompareLessEqual(x_min, &fminr) || realCompareLessEqual(x_max, &fminr) || realCompareLessEqual(y_min, &fminr) || realCompareLessEqual(y_max, &fminr)) {
        goto scaleMinusInfinity;
      }
-     if(x_min >= FLoatingMax || x_max >= FLoatingMax || y_min >= FLoatingMax || y_max >= FLoatingMax) {
+     if(realCompareGreaterEqual(x_min, &fmaxr) || realCompareGreaterEqual(x_max, &fmaxr) || realCompareGreaterEqual(y_min, &fmaxr) || realCompareGreaterEqual(y_max, &fmaxr)) {
        goto scalePlusInfinity;
      }
 
 
 
     graph_axis();
-    yn = screen_window_y(y_min, grf_y(0), y_max);
-    xn = screen_window_x(x_min, grf_x(0), x_max);
+    grf_y_r(0, &yr);
+    grf_x_r(0, &xr);
+    yn = screen_window_y_r(y_min, &yr, y_max);
+    xn = screen_window_x_r(x_min, &xr, x_max);
     xN = xn;
     yN = yn;
       #if defined(STATDEBUG) && defined(PC_BUILD)
-      printf("Axis3c: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
+      printf("Axis3c: x: %f -> %f y: %f -> %f   \n", dbl(x_min), dbl(x_max), dbl(y_min), dbl(y_max));
       #endif // STATDEBUG && PC_BUILD
 
+      grf_x_r(1, &yr);                                 //yr and xr hold the first two x values just for the column width
       int16_t colw = (int16_t) (
-                                 (  (screen_window_x(x_min, grf_x(1), x_max) - screen_window_x(x_min, grf_x(0), x_max))  / 2.0f  )
+                                 (  (screen_window_x_r(x_min, &yr, x_max) - screen_window_x_r(x_min, &xr, x_max))  / 2.0f  )
                                 ) - 1;
         //#################################################### vvv MAIN GRAPH LOOP vvv #########################
       for(ix = 0; (ix < numberOfPlotPoints); ++ix) {
-        x = grf_x(ix);
-        y = grf_y(ix);
+        grf_x_r(ix, &xr);
+        grf_y_r(ix, &yr);
         xo = xN;
         yo = yN;
-        xN = screen_window_x(x_min, x, x_max);
-        yN = screen_window_y(y_min, y, y_max);
+        xN = screen_window_x_r(x_min, &xr, x_max);
+        yN = screen_window_y_r(y_min, &yr, y_max);
 
         #if defined(STATDEBUG) && defined(PC_BUILD)
-          printf("plotting graph table[%d] = x:%f y:%f xN:%d yN:%d drawHistogram:%d ", ix, x, y, xN, yN, drawHistogram);
+          printf("plotting graph table[%d] = x:%f y:%f xN:%d yN:%d drawHistogram:%d ", ix, grf_x(ix), grf_y(ix), xN, yN, drawHistogram);
         #endif // STATDEBUG && PC_BUILD
 
         int16_t minN_y, minN_x;
@@ -1391,16 +1456,21 @@ currentKeyCode = 255;
       strcat(ss, histElementXorY == 1 ? "y)" : "x)");
       showString(padEquals(tmpbuf, ss), &standardFont, horOffset + 17, Y_POSITION_OF_REGISTER_Z_LINE + autoinc*index++   -7 +autoshift, vmNormal, false, false);
 
-      grphNumFormatter(ss, "(", x_max, 2, "");
-      grphNumFormatter(tt, radixProcess(tmpbuf, "#"), y_max, 2, ")");
+      double xmaxd, ymaxd, xmind, ymind;
+      realToDouble(x_max, &xmaxd);
+      realToDouble(y_max, &ymaxd);
+      realToDouble(x_min, &xmind);
+      realToDouble(y_min, &ymind);
+      grphNumFormatter(ss, "(", xmaxd, 2, "");
+      grphNumFormatter(tt, radixProcess(tmpbuf, "#"), ymaxd, 2, ")");
       strcat(tt, padEquals(tmpbuf, ss));
       n = showString(padEquals(tmpbuf, ss), &standardFont, 160-2-3-2 - stringWidth(tt, &standardFont, false, false), Y_POSITION_OF_REGISTER_Z_LINE + autoinc*index + 2   -3  +autoshift, vmNormal, false, false);
-      grphNumFormatter(ss, radixProcess(tmpbuf, "#"), y_max, 2, ")");
+      grphNumFormatter(ss, radixProcess(tmpbuf, "#"), ymaxd, 2, ")");
       showString(padEquals(tmpbuf, ss), &standardFont, n+3,           Y_POSITION_OF_REGISTER_Z_LINE + autoinc*index++  -3  + autoshift + 2, vmNormal, false, false);
 
-      grphNumFormatter(ss, "(", x_min, 2, "");
+      grphNumFormatter(ss, "(", xmind, 2, "");
       n = showString(padEquals(tmpbuf, ss), &standardFont, horOffset, Y_POSITION_OF_REGISTER_Z_LINE + autoinc*index    -6  + autoshift + 2, vmNormal, false, false);
-      grphNumFormatter(ss, radixProcess(tmpbuf, "#"), y_min, 2, ")");
+      grphNumFormatter(ss, radixProcess(tmpbuf, "#"), ymind, 2, ")");
       showString(padEquals(tmpbuf, ss), &standardFont, n+3,           Y_POSITION_OF_REGISTER_Z_LINE + autoinc*index++  -6  + autoshift + 2, vmNormal, false, false);
 
       strcpy(ss, "Bin centres:");
@@ -1560,16 +1630,19 @@ void graphDrawLRline(uint16_t selection) {
       double  ix;
       int16_t   xo = 0, xn, xN = 0;
       int16_t   yo = 0, yn, yN = 0;
-      double    x = x_min;
+      double fx_min, fx_max;                           //curve fit overlay evaluates in double; the real_t range converts once here
+      realToDouble(x_min, &fx_min);
+      realToDouble(x_max, &fx_max);
+      double    x = fx_min;
       double    y = 0.0;
       int16_t   Intervals = numberIntervals; //starting point to calculate dx
       uint16_t  iterations = 0;
-      double    intervalW = (double)(x_max-x_min)/(double)(Intervals);
+      double    intervalW = (fx_max-fx_min)/(double)(Intervals);
 
       int16_t minN_y, minN_x;
       minN_y = 0;
       minN_x = SCREEN_WIDTH-SCREEN_HEIGHT_GRAPH;
-      for(ix = (double)x_min-intervalW; iterations < 2000 && x < x_max+(x_max-x_min)*0.5 && xN < SCREEN_WIDTH-1; iterations++) {       //Variable accuracy line plot
+      for(ix = fx_min-intervalW; iterations < 2000 && x < fx_max+(fx_max-fx_min)*0.5 && xN < SCREEN_WIDTH-1; iterations++) {       //Variable accuracy line plot
         xo = xN;
         yo = yN;
         uint16_t xx;
@@ -1590,8 +1663,8 @@ void graphDrawLRline(uint16_t selection) {
             }
           }
           yIsFnx( USEFLOATING, selection, x, &y, a0, a1, a2, &XX, &YY, RR, SMI, aa0, aa1, aa2);
-          xN = screen_window_x(x_min, (float)x, x_max);
-          yN = screen_window_y(y_min, (float)y, y_max);
+          xN = screenX((float)x);
+          yN = screenY((float)y);
           if((abs((int)yN-(int)yo)<=2 /*&& abs((int)xN-(int)xo)<=2*/) || iterations == 0 || xN <= minN_x) {
             break;
           }
@@ -1600,7 +1673,7 @@ void graphDrawLRline(uint16_t selection) {
         //printf("### iter:%u ix=%20lf xx=%i x=%lf y=%lf xN=%u yN=%u\n", iterations, ix, xx, x, y, xN, yN);
         if(iterations > 0) {  //Allow for starting values to accumulate in the registers at ix = 0
           #if defined(STATDEBUG) && defined(PC_BUILD)
-            printf("plotting graph: iter:%u ix:%f I.vals:%u ==>xmin:%f (x:%f) xmax:%f ymin:%f (y:%f) ymax:%f xN:%d yN:%d \n", iterations, ix, Intervals, x_min, x, x_max, y_min, y, y_max,  xN, yN);
+            printf("plotting graph: iter:%u ix:%f I.vals:%u ==>xmin:%f (x:%f) xmax:%f ymin:%f (y:%f) ymax:%f xN:%d yN:%d \n", iterations, ix, Intervals, fx_min, x, fx_max, dbl(y_min), y, dbl(y_max),  xN, yN);
           #endif // STATDEBUG && PC_BUILD
           #define tol 4
           if(xN<SCREEN_WIDTH_GRAPH && xN>minN_x && yN<SCREEN_HEIGHT_GRAPH-tol && yN>minN_y) {
@@ -1697,15 +1770,20 @@ void graphDrawLRline(uint16_t selection) {
         strcpy(ss, "r" STD_SUP_2 "=");
         showString(padEquals(tmpbuf, ss), &standardFont, horOffset, Y_POSITION_OF_REGISTER_Z_LINE + autoinc*index++   +2 +autoshift, vmNormal, false, false);
 
-        grphNumFormatter(ss, "(", x_max, 2, "");
+        double xmaxd, ymaxd, xmind, ymind;
+        realToDouble(x_max, &xmaxd);
+        realToDouble(y_max, &ymaxd);
+        realToDouble(x_min, &xmind);
+        realToDouble(y_min, &ymind);
+        grphNumFormatter(ss, "(", xmaxd, 2, "");
         uint16_t ssw = showStringEnhanced(padEquals(tmpbuf, ss), &standardFont, 0, 0, vmNormal, false, false, NO_compress, NO_raise, NO_Show, NO_Bold, NO_LF);
-        grphNumFormatter(tt, radixProcess(tmpbuf, "#"), y_max, 2, ")");
+        grphNumFormatter(tt, radixProcess(tmpbuf, "#"), ymaxd, 2, ")");
         uint16_t ttw = showStringEnhanced(padEquals(tmpbuf, tt), &standardFont, 0, 0, vmNormal, false, false, NO_compress, NO_raise, NO_Show, NO_Bold, NO_LF);
         n = showString(padEquals(tmpbuf, ss), &standardFont, 160-3-2-ssw-ttw, Y_POSITION_OF_REGISTER_Z_LINE + autoinc*index + 2       +autoshift, vmNormal, false, false);
         showString(padEquals(tmpbuf, tt), &standardFont, n+3, Y_POSITION_OF_REGISTER_Z_LINE + autoinc*index++ +autoshift + 2, vmNormal, false, false);
-        grphNumFormatter(ss, "(", x_min, 2, "");
+        grphNumFormatter(ss, "(", xmind, 2, "");
         n = showString(padEquals(tmpbuf, ss), &standardFont, horOffset, Y_POSITION_OF_REGISTER_Z_LINE + autoinc*index    -2  +autoshift + 2, vmNormal, false, false);
-        grphNumFormatter(ss, radixProcess(tmpbuf, "#"), y_min, 2, ")");
+        grphNumFormatter(ss, radixProcess(tmpbuf, "#"), ymind, 2, ")");
         showString(padEquals(tmpbuf, ss), &standardFont, n+3,       Y_POSITION_OF_REGISTER_Z_LINE + autoinc*index++  -2  +autoshift + 2, vmNormal, false, false);
 
       }
