@@ -97,21 +97,40 @@ void statGraphReset(void){
 
 #define ROUND_F2I(f) ((int)((f) >= 0 ? (f) + 0.5f : (f) - 0.5f))
 
-int16_t screen_window_x(float x_min, float x, float x_max) {
-  int16_t temp;
-  float tempr;
+// (x - x_min) / (x_max - x_min) * scale in real_t, rounded half away from zero like ROUND_F2I, clamped to +-32767 like the float original.
+static int16_t screenWindowRatio(const real_t *v_min, const real_t *v, const real_t *v_max, int32_t scale) {
+  int32_t temp;
+  real_t tempr, den;
+  bool_t err = false;
 
-  tempr = ((x - x_min) / (x_max - x_min) * (float)(SCREEN_HEIGHT_GRAPH - 1));
-
-  if(tempr > 32766) {
-    temp = 32767;
-  }
-  else if(tempr < -32766) {
-    temp = -32767;
+  realSubtract(v, v_min, &tempr, &ctxtReal39);
+  realSubtract(v_max, v_min, &den, &ctxtReal39);
+  realDivide(&tempr, &den, &tempr, &ctxtReal39);
+  int32ToReal(scale, &den);
+  realMultiply(&tempr, &den, &tempr, &ctxtReal39);
+  if(realIsNegative(&tempr)) {                       // ROUND_F2I equivalent: +-0.5, then truncate towards zero in realToInt32C47
+    realSubtract(&tempr, const_1on2, &tempr, &ctxtReal39);
   }
   else {
-    temp = (int16_t)ROUND_F2I(tempr);
+    realAdd(&tempr, const_1on2, &tempr, &ctxtReal39);
   }
+  temp = realToInt32C47(&tempr, &err);               // err is set when tempr is NaN, infinite or beyond int32 range, e.g. after division by zero when v_max == v_min
+
+  if(err) {
+    temp = realIsNegative(&tempr) ? -32767 : 32767;
+  }
+  else if(temp > 32766) {
+    temp = 32767;
+  }
+  else if(temp < -32766) {
+    temp = -32767;
+  }
+
+  return (int16_t)temp;
+}
+
+int16_t screen_window_x_r(const real_t *x_min, const real_t *x, const real_t *x_max) {
+  int16_t temp = screenWindowRatio(x_min, x, x_max, SCREEN_HEIGHT_GRAPH - 1);
 
   if(temp > SCREEN_HEIGHT_GRAPH - 1) {
     temp = SCREEN_HEIGHT_GRAPH - 1;
@@ -123,23 +142,18 @@ int16_t screen_window_x(float x_min, float x, float x_max) {
   return temp + SCREEN_WIDTH - SCREEN_HEIGHT_GRAPH;
 }
 
+int16_t screen_window_x(float x_min, float x, float x_max) {
+  real_t x_min_r, x_r, x_max_r;
+  convertDoubleToReal(x_min, &x_min_r, &ctxtReal39);
+  convertDoubleToReal(x,     &x_r,     &ctxtReal39);
+  convertDoubleToReal(x_max, &x_max_r, &ctxtReal39);
+  return screen_window_x_r(&x_min_r, &x_r, &x_max_r);
+}
+
 
 #define minn 0
-int16_t _screen_window_y(float y_min, float y, float y_max, bool_t nolimit) {
-  int32_t temp;
-  float tempr;
-
-  tempr = ((y - y_min) / (y_max - y_min) * (float)(SCREEN_HEIGHT_GRAPH - 1 - minn));
-
-  if(tempr > 32766) {
-    temp = 32767;
-  }
-  else if(tempr < -32766) {
-    temp = -32767;
-  }
-  else {
-    temp = (int16_t)ROUND_F2I(tempr);
-  }
+static int16_t _screen_window_y_r(const real_t *y_min, const real_t *y, const real_t *y_max, bool_t nolimit) {
+  int16_t temp = screenWindowRatio(y_min, y, y_max, SCREEN_HEIGHT_GRAPH - 1 - minn);
 
   if(!nolimit) {
     if(temp > SCREEN_HEIGHT_GRAPH - 1 - minn) {
@@ -162,8 +176,24 @@ int16_t _screen_window_y(float y_min, float y, float y_max, bool_t nolimit) {
   return (int16_t)(SCREEN_HEIGHT_GRAPH - 1 - temp);
 }
 
+int16_t _screen_window_y(float y_min, float y, float y_max, bool_t nolimit) {
+  real_t y_min_r, y_r, y_max_r;
+  convertDoubleToReal(y_min, &y_min_r, &ctxtReal39);
+  convertDoubleToReal(y,     &y_r,     &ctxtReal39);
+  convertDoubleToReal(y_max, &y_max_r, &ctxtReal39);
+  return _screen_window_y_r(&y_min_r, &y_r, &y_max_r, nolimit);
+}
+
   #define nolimit true
   #define limit false
+
+  int16_t screen_window_y_nolimit_r(const real_t *y_min, const real_t *y, const real_t *y_max) {
+    return _screen_window_y_r(y_min, y, y_max, nolimit);
+  }
+
+  int16_t screen_window_y_r(const real_t *y_min, const real_t *y, const real_t *y_max) {
+    return _screen_window_y_r(y_min, y, y_max, limit);
+  }
 
   int16_t screen_window_y_nolimit(float y_min, float y, float y_max) {
     return _screen_window_y(y_min, y, y_max, nolimit);

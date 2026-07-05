@@ -80,6 +80,9 @@ char    *formatDoubleWidth(real34_t *real34, int digits, char* itemName, bool_t*
 int16_t screen_window_x(float x_min, float x, float x_max);
 int16_t screen_window_y(float y_min, float y, float y_max);
 int16_t screen_window_y_nolimit(float y_min, float y, float y_max);
+int16_t screen_window_x_r(const real_t *x_min, const real_t *x, const real_t *x_max);
+int16_t screen_window_y_r(const real_t *y_min, const real_t *y, const real_t *y_max);
+int16_t screen_window_y_nolimit_r(const real_t *y_min, const real_t *y, const real_t *y_max);
 int32_t statMxN(void);
 
 void    statGraphReset     (void);
