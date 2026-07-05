@@ -87,6 +87,7 @@
 
 
   //Section to convert doubles and floats
+  double  stringToDouble                                     (const char *str);                  //Locale-free strtod: accepts '.' or ',' regardless of the region setting
   void    convertDoubleToString                              (double x, int16_t n, char *buff);  //Reformatting double/float strings that are formatted according to different locale settings
   void    convertDoubleToReal                                (double x, real_t *destination, realContext_t *ctxt);
   void    convertDoubleToReal34Register                      (double x, calcRegister_t destination);

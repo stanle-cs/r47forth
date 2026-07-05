@@ -650,11 +650,11 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     }
 
     else if(!strcmp(valueType, "float")) {
-      *(float *)buffer = atof(valuePtr);
+      *(float *)buffer = (float)stringToDouble(valuePtr);
     }
 
     else if(!strcmp(valueType, "double")) {
-      *(double *)buffer = atof(valuePtr);
+      *(double *)buffer = stringToDouble(valuePtr);
     }
 
     else if(!strcmp(valueType, "real")) {
