@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
 
 #include "c47.h"
+#include <locale.h>
 
 // This is used for the state files
 #define configFileVersion                  10000025 // FLAG_PDIFF PINTG PRMS PSHADE
@@ -81,9 +82,17 @@ static uint32_t toUint32(const char *str) {
   return strtoul(str, NULL, 10);
 }
 
-// Floating point conversion functions
+// Floating point conversion function: accepts '.' or ',' in the file regardless of the locale, so config files written under one region setting load correctly under another
 float stringToFloat(const char *str) {
-  return strtof(str, NULL);
+  char buf[48];
+  const char radix = *localeconv()->decimal_point;
+  uint32_t i = 0;
+  while(str[i] != 0 && i < sizeof(buf) - 1) {
+    buf[i] = (str[i] == '.' || str[i] == ',') ? radix : str[i];
+    i++;
+  }
+  buf[i] = 0;
+  return strtof(buf, NULL);
 }
 
 // Lettered-register names for registers FIRST_LETTERED_REGISTER..LAST_SPARE_REGISTER (100..125), in register-number order:
