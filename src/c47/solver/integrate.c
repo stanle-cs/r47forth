@@ -140,6 +140,7 @@ saveForUndo();
 #if defined(SPEEDUPEXPERIMENT)
     real_t digits;
     uint8_t significantDigitsMem = significantDigits;
+    int32_t s4 = ctxtReal4.digits, s34 = ctxtReal34.digits, s39 = ctxtReal39.digits, s51 = ctxtReal51.digits, s75 = ctxtReal75.digits; // save contexts for integration nesting
     int32_t digitsN = 0;
     WP34S_Ln(&acc, &digits, &ctxtReal39);
     realDivide(&digits, const39_ln10, &digits, &ctxtReal39);
@@ -173,11 +174,11 @@ saveForUndo();
         //int32ToReal(-digitsN, &tt);
         //realRescale(&res, &res, &tt, &ctxtReal4);
       significantDigits = significantDigitsMem;
-      ctxtReal4.digits  = 6;
-      ctxtReal34.digits = 34;
-      ctxtReal39.digits = 39;
-      ctxtReal51.digits = 51;
-      ctxtReal75.digits = 75;
+      ctxtReal4.digits  = s4;
+      ctxtReal34.digits = s34;
+      ctxtReal39.digits = s39;
+      ctxtReal51.digits = s51;
+      ctxtReal75.digits = s75;
     }
     else if(digitsN <= 10) {
       #if defined(PC_BUILD)
@@ -200,11 +201,11 @@ saveForUndo();
         //int32ToReal(-digitsN, &tt);
         //realRescale(&res, &res, &tt, &ctxtReal39);  or ose ACC. But best is to use N decimals. This does not work right
       significantDigits = significantDigitsMem;
-      ctxtReal4.digits  = 6;
-      ctxtReal34.digits = 34;
-      ctxtReal39.digits = 39;
-      ctxtReal51.digits = 51;
-      ctxtReal75.digits = 75;
+      ctxtReal4.digits  = s4;
+      ctxtReal34.digits = s34;
+      ctxtReal39.digits = s39;
+      ctxtReal51.digits = s51;
+      ctxtReal75.digits = s75;
     }
     else {
     #if defined(PC_BUILD)
