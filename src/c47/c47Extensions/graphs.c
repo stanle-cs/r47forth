@@ -769,6 +769,7 @@ void graph_plotmem(void) {
       } //continue with draw
 
       #if defined(LOW_GRAPH_ACC)
+        int32_t s34 = ctxtReal34.digits, s39 = ctxtReal39.digits, s51 = ctxtReal51.digits, s75 = ctxtReal75.digits;
         //Change to SDIGS digit operation for graphs;
         ctxtReal34.digits = significantDigitsForScreen;
         ctxtReal39.digits = significantDigitsForScreen+3;
@@ -913,7 +914,7 @@ void graph_plotmem(void) {
 /**/            }
 /**/          }
 /**/          if(exitKeyWaiting()) {
-/**/             return;
+/**/             goto plotmemExit;
 /**/          }
 /**/        }
 /**/      }
@@ -1045,7 +1046,7 @@ void graph_plotmem(void) {
 /**/              printf("Axis0b: x: %f -> %f y: %f -> %f   \n", x_min, x_max, y_min, y_max);
 /**/            #endif // STATDEBUG
 /**/            if(exitKeyWaiting()) {
-/**/              return;
+/**/              goto plotmemExit;
 /**/            }
 /**/          }
 /**/        }
@@ -1074,7 +1075,7 @@ void graph_plotmem(void) {
 /**/          y_max = sy;
 /**/        }
 /**/        if(exitKeyWaiting()) {
-/**/          return;
+/**/          goto plotmemExit;
 /**/        }
 /**/      }
 /**/    }
@@ -1387,7 +1388,7 @@ void graph_plotmem(void) {
             #endif // PC_BUILD
           }
           if(exitKeyWaiting()) {
-            return;
+            goto plotmemExit;
           }
           #if defined(STATDEBUG) && defined(PC_BUILD)
             fflush(stdout);
@@ -1414,12 +1415,13 @@ void graph_plotmem(void) {
         }
       }
 
+plotmemExit: ;
       #if defined(LOW_GRAPH_ACC)
         //Change to normal operation for graphs;
-        ctxtReal34.digits = 34;
-        ctxtReal39.digits = 39;
-        ctxtReal51.digits = 51;
-        ctxtReal75.digits = 75;
+        ctxtReal34.digits = s34;
+        ctxtReal39.digits = s39;
+        ctxtReal51.digits = s51;
+        ctxtReal75.digits = s75;
       #endif //LOW_GRAPH_ACC
   #endif // !SAVE_SPACE_DM42_13GRF_JM
 }

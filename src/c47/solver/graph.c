@@ -238,7 +238,8 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
 // to 14 working digits at graph_eqn entry. Helpers are defined first in this file, then graph_eqn at the bottom.
 //******************************************************************************************************************************
 
-#define PLOT_DIGITS    39    // Storage size for every real_t. Must be >= 34 because register. Manage, read increase, speed from the working precision in ctxtGraphsLocal, not from this storage size.
+#define PLOT_DIGITS    16    // Storage size for the graph real_t buffers; must exceed the working digits in ctxtGraphsLocal
+                             // Register Y reads are rounded to working digits in convertRegisterToReal.
 
 // Context for graph calculations. Initialized at graph_eqn entry from ctxtReal39 to 14 working digits
 // 14 vs 39 is a real speedup. All real_t arithmetic in graph_eqn and the helpers use this context via ctxtGraphs.
@@ -283,22 +284,26 @@ static void convertRealToReal34RegisterPush(const real_t *x, calcRegister_t dest
 
 // Read a register as real_t. For complex registers, return Re or Im depending on FLAG_IMPLOT
 static void convertRegisterToReal(calcRegister_t source, real_t *destination) {
+  real_t tmp;
   if(getRegisterDataType(source) == dtComplex34) {
     if(getSystemFlag(FLAG_IMPLOT)) {
-      real34ToReal(REGISTER_IMAG34_DATA(source), destination);
+      real34ToReal(REGISTER_IMAG34_DATA(source), &tmp);
     }
     else {
-      real34ToReal(REGISTER_REAL34_DATA(source), destination);
+      real34ToReal(REGISTER_REAL34_DATA(source), &tmp);
     }
+    realPlus(&tmp, destination, ctxtGraphs);
     return;
   }
   if(getSystemFlag(FLAG_IMPLOT)) {
     realSetZero(destination);
     return;
   }
-  if(!getRegisterAsRealQuiet(source, destination)) {
+  if(!getRegisterAsRealQuiet(source, &tmp)) {
     realSetNaN(destination);
+    return;
   }
+  realPlus(&tmp, destination, ctxtGraphs);
 }
 
 // Reduce REGISTER_Y to either Re or Im (per getSystemFlagIM) before AddtoDrawMx etc.
@@ -1026,9 +1031,6 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     regStatsXY = findNamedVariable(plotStatMx);
 
     // Configure the graph-local context: 14 working digits, full ctxtReal39 settings otherwise.
-    // 14 digits is the working precision; PLOT_DIGITS (storage) stays at 39 because register
-    // reads via real34ToReal write up to 34 digits regardless of context. Done every call so it
-    // stays in sync if ctxtReal39 itself is reconfigured between calls.
     ctxtGraphsLocal = ctxtReal39;
     ctxtGraphsLocal.digits = 14;
     REAL_T_PTR(x, PLOT_DIGITS);
@@ -1803,6 +1805,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     fillStackWithReal0();
 
     #if defined(LOW_GRAPH_ACC)
+      int32_t s34 = ctxtReal34.digits, s39 = ctxtReal39.digits, s51 = ctxtReal51.digits, s75 = ctxtReal75.digits;
       //Change to SDIGS digit operation for screen graphs;
       if(significantDigitsForEqnGraphs <= 6) {
         ctxtReal34.digits = significantDigitsForScreen;
@@ -1819,11 +1822,11 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     refreshStatusBar();
     fnPlot(0);
     #if defined(LOW_GRAPH_ACC)
-      //Change to normal operation for graphs;
-      ctxtReal34.digits = 34;
-      ctxtReal39.digits = 39;
-      ctxtReal51.digits = 51;
-      ctxtReal75.digits = 75;
+      //Restore saved, not native: PLOT can run nested via PGMPLT
+      ctxtReal34.digits = s34;
+      ctxtReal39.digits = s39;
+      ctxtReal51.digits = s51;
+      ctxtReal75.digits = s75;
     #endif //LOW_GRAPH_ACC
 
   }
