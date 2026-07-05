@@ -6301,10 +6301,10 @@ void fnScreenDump(uint16_t unusedButMandatoryParameter) {
     uint32 = 0x000030c0;
     fwrite(&uint32, 1, 4, bmp);     // Offset 0x22 34  Size of bitmap data (including padding)
 
-    uint32 = 0x00001a7c; // 6780 pixels/m
+    uint32 = 0x00000b13; // 2835 pixels/m (72 dpi), same as DMCP standardScreenDump so sim and hardware BMPs compare identical. Was 0x1a7c = 6780 pixels/m, chosen for life-size printing: 400 px / 6780 px/m = 59.0 mm, the physical LCD width
     fwrite(&uint32, 1, 4, bmp);     // Offset 0x26 38  Horizontal print resolution
 
-    uint32 = 0x00001a7c; // 6780 pixels/m
+    uint32 = 0x00000b13; // 2835 pixels/m (72 dpi), same as DMCP standardScreenDump so sim and hardware BMPs compare identical. Was 0x1a7c = 6780 pixels/m, chosen for life-size printing: 400 px / 6780 px/m = 59.0 mm, the physical LCD width
     fwrite(&uint32, 1, 4, bmp);     // Offset 0x2a 42  Vertical print resolution
 
     uint32 = 0x00000002;
