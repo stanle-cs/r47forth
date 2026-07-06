@@ -2202,7 +2202,6 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #endif // EXTRA_INFO_ON_CALC_ERROR == 0 || TESTSUITE_BUILD || DMCP_BUILD
 
 #define isSystemFlagWriteProtected(sf)       ((sf & 0x4000) != 0)
-#define shortIntegerIsZero(op)               (((*(uint64_t *)(op)) == 0) || (shortIntegerMode == SIM_SIGNMT && (((*(uint64_t *)(op)) == 1u<<((uint64_t)shortIntegerWordSize-1)))))
 #define shortIntegerModeValue()              (shortIntegerMode == SIM_2COMPL ? 2 : (shortIntegerMode == SIM_1COMPL ? 1 : (shortIntegerMode == SIM_UNSIGN ? 0 : -1)))
 #define getStackTop()                        (getSystemFlag(FLAG_SSIZE8) ? REGISTER_D : REGISTER_T)
 #define freeRegisterData(regist)             freeC47Blocks(getRegisterDataPointer(regist), getRegisterFullSizeInBlocks(regist))
