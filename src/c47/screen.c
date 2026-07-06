@@ -4,10 +4,6 @@
 #include "c47.h"
 #include "version.h"
 
-#if defined(PC_BUILD) && defined(ANALYSE_REFRESH)
-  #include <execinfo.h>
-#endif //PC_BUILD
-
 static void refreshRegisterLineRestoreT(void);
 static void _refreshPemScreen(void);
 
