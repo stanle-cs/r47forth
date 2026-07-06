@@ -112,14 +112,16 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
                                       printRegisterToConsole(REGISTER_X, " = ", "\n");
                                     #endif //VERBOSE_SOLVER0
 
-                                    #if defined(PC_BUILD)
-                                      if(lastErrorCode != 0) {
-                                        #if defined(VERBOSE_SOLVER00)
-                                        printf("ERROR CODE in execute_rpn_function: %u\n", lastErrorCode);
-                                        #endif // VERBOSE_SOLVER00
-                                        lastErrorCode = 0;
-                                      }
-                                    #endif // PC_BUILD
+      if(lastErrorCode != 0) { //failed evaluation: the sample has no value; NaN it, else the stale register content plots incorrect data
+                                    #if defined(PC_BUILD) && defined(VERBOSE_SOLVER00)
+                                      printf("ERROR CODE in execute_rpn_function: %u\n", lastErrorCode);
+                                    #endif // PC_BUILD && VERBOSE_SOLVER00
+        real_t nanR;
+        realSetNaN(&nanR);
+        reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+        realToReal34(&nanR, REGISTER_REAL34_DATA(REGISTER_X));
+        lastErrorCode = 0;
+      }
       fnRCL(regStats);
 
                                     #if defined(VERBOSE_SOLVER0)
@@ -136,13 +138,15 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
                                     }
 
     }
-    else {
-      #if defined(PC_BUILD)
-        #if defined(VERBOSE_SOLVER00)
-        printf("ERROR in execute_rpn_function; invalid variable: %u\n", lastErrorCode);
-        #endif // VERBOSE_SOLVER00
-        lastErrorCode = 0;
-      #endif
+    else { //invalid plot variable: nothing was stored or executed, and fnRCL above never ran, so the caller would sample stale REGISTER_Y content; NaN it
+                                    #if defined(PC_BUILD) && defined(VERBOSE_SOLVER00)
+                                      printf("ERROR in execute_rpn_function; invalid variable: %u\n", lastErrorCode);
+                                    #endif // PC_BUILD && VERBOSE_SOLVER00
+      real_t nanR;
+      realSetNaN(&nanR);
+      reallocateRegister(REGISTER_Y, dtReal34, 0, amNone);
+      realToReal34(&nanR, REGISTER_REAL34_DATA(REGISTER_Y));
+      lastErrorCode = 0;
     }
   }
 
@@ -975,6 +979,10 @@ void renderAsymptote(AsymptoteInfo *asymptote) {
 
 
 bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, const real_t *y2, const real_t *grad0, const real_t *grad1, const real_t *grad2, const real_t *yAvg, int count, const real_t *x0, const real_t *x1, const real_t *x2, const real_t *xMin, const real_t *xMax, const real_t *yMin, const real_t *yMax, AsymptoteInfo *asymptotes, int *asymptoteCount) {
+
+  if(realIsSpecial(y0) || realIsSpecial(y1) || realIsSpecial(y2)) { //NaN/infinite samples are domain gaps, not discontinuities: no fine-stepping, no asymptote markers
+    return false;
+  }
 
   // If not a vertical asymptote, do discontinuity detection
   bool_t hasDiscontinuity = detectTrueDiscontinuity(y0, y1, y2, grad0, grad1, grad2, yAvg, count);
