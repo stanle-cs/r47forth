@@ -3,20 +3,8 @@
 
 #include "c47.h"
 
-#include "c47Extensions/addons.h"
-#include "longIntegerType.h"
-#include "saveRestoreCalcState.h"
-#include "saveRestoreBackup.h"
-#include "statusBar.h"
-
 //#define JMSHOWCODES
 //#define BUFFER_CLICK_DETECTION
-
-#if defined(DMCP_BUILD)
-  #include "c47Extensions/inlineTest.h"
-  #include "c47Extensions/jm.h"
-  #include "c47Extensions/keyboardTweak.h"
-#endif
 
 uint16_t              lastI = 0;
 uint16_t              lastJ = 0;
@@ -32,6 +20,7 @@ char                  lastTemp[16];
 #endif // PC_BUILD
 
 bool_t                headlessMode = false;
+bool_t                snapSkipRefresh = false;
 bool_t                loadTestPrograms = false;
 bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;

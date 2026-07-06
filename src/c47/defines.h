@@ -947,13 +947,6 @@
 
 
 
-typedef enum {
-  LI_ZERO     = 0, // Long integer sign 0
-  LI_NEGATIVE = 1, // Long integer sign -
-  LI_POSITIVE = 2  // Long integer sign +
-} longIntegerSign_t;
-
-
 // PRINTING
 #define PROFF   0
 #define PRON    1
@@ -965,41 +958,6 @@ typedef enum {
 
 #define PROG    false
 #define LIST    true
-
-typedef enum {
-  PRINT_BYTE,
-  PRINT_CHAR,
-  PRINT_TAB,
-  PRINT_ALPHA,
-  PRINT_ALPHA_NOADV,
-  PRINT_ALPHA_JUST
-} printArgument_t;
-
-
-
-typedef enum {
-  PRINTER_HP,
-  PRINTER_MARTEL,
-  PRINTER_OTHER
-} printerModel_t;
-
-
-
-typedef enum  {
-  PMODE_DEFAULT = 0,
-  PMODE_GRAPHICS = 1,
-  PMODE_SMALLGRAPHICS = 2,
-  PMODE_SERIAL = 3
-} print_modes_t;
-
-
-typedef enum  {
-  LINE_FULL  = 0,
-  LINE_LEFT  = 1,
-  LINE_RIGHT = 2,
-  LINE_NOLF  = 3,
-  LINE_ASIS  = 4,
-} print_area_t;
 
 
 
@@ -2210,7 +2168,6 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #endif // EXTRA_INFO_ON_CALC_ERROR == 0 || TESTSUITE_BUILD || DMCP_BUILD
 
 #define isSystemFlagWriteProtected(sf)       ((sf & 0x4000) != 0)
-#define shortIntegerIsZero(op)               (((*(uint64_t *)(op)) == 0) || (shortIntegerMode == SIM_SIGNMT && (((*(uint64_t *)(op)) == 1u<<((uint64_t)shortIntegerWordSize-1)))))
 #define shortIntegerModeValue()              (shortIntegerMode == SIM_2COMPL ? 2 : (shortIntegerMode == SIM_1COMPL ? 1 : (shortIntegerMode == SIM_UNSIGN ? 0 : -1)))
 #define getStackTop()                        (getSystemFlag(FLAG_SSIZE8) ? REGISTER_D : REGISTER_T)
 #define freeRegisterData(regist)             freeC47Blocks(getRegisterDataPointer(regist), getRegisterFullSizeInBlocks(regist))

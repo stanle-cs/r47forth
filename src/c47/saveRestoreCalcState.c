@@ -81,9 +81,17 @@ static uint32_t toUint32(const char *str) {
   return strtoul(str, NULL, 10);
 }
 
-// Floating point conversion functions
+// Floating point conversion function: accepts '.' or ',' in the file regardless of the locale, so config files written under one region setting load correctly under another
 float stringToFloat(const char *str) {
-  return strtof(str, NULL);
+  char buf[48];
+  const char radix = *localeconv()->decimal_point;
+  uint32_t i = 0;
+  while(str[i] != 0 && i < sizeof(buf) - 1) {
+    buf[i] = (str[i] == '.' || str[i] == ',') ? radix : str[i];
+    i++;
+  }
+  buf[i] = 0;
+  return strtof(buf, NULL);
 }
 
 // Lettered-register names for registers FIRST_LETTERED_REGISTER..LAST_SPARE_REGISTER (100..125), in register-number order:
@@ -417,7 +425,7 @@ static void saveMatrixElements(calcRegister_t regist) {
 
 
 bool_t fnSaveDataRegisters(uint16_t *beginR, uint16_t *endR, char *registerName, bool_t isXFNRegister) {
-  // Appends a register section to the already-open file: header, count, then per register id/name line, type line, 
+  // Appends a register section to the already-open file: header, count, then per register id/name line, type line,
   // value line, and matrix element lines. registerName != NULL saves that one named variable (beginR/endR ignored);
   // NULL saves the range *beginR..*endR inclusive. Lettered registers (100..125) use the short "RX".."RW" form. Returns false on invalid arguments.
   char tmpString[3000];           // Local target buffer. registerToSaveString() emits the value through the global
@@ -866,8 +874,11 @@ void doSave(uint16_t saveType) {
         sprintf(tmpString, "amortP1\n%"                    PRIu16 "\n",     amortP1);                      save(tmpString, strlen(tmpString));
         sprintf(tmpString, "amortP2\n%"                    PRIu16 "\n",     amortP2);                      save(tmpString, strlen(tmpString));
         sprintf(tmpString, "lrChosen\n%"                   PRIu16 "\n",     lrChosen);                     save(tmpString, strlen(tmpString));
-        sprintf(tmpString, "graph_dx\n"                    "%f"   "\n",     graph_dx);                     save(tmpString, strlen(tmpString));
-        sprintf(tmpString, "graph_dy\n"                    "%f"   "\n",     graph_dy);                     save(tmpString, strlen(tmpString));
+        char floatString[32];
+        sci_fmt(floatString, sizeof(floatString), graph_dx);
+        sprintf(tmpString, "graph_dx\n"                    "%s"   "\n",     floatString);                  save(tmpString, strlen(tmpString));
+        sci_fmt(floatString, sizeof(floatString), graph_dy);
+        sprintf(tmpString, "graph_dy\n"                    "%s"   "\n",     floatString);                  save(tmpString, strlen(tmpString));
         sprintf(tmpString, "roundedTicks\n%"               PRIu8  "\n",     (uint8_t)roundedTicks);        save(tmpString, strlen(tmpString));
         sprintf(tmpString, "PLOT_INTG\n%"                  PRIu8  "\n",     (uint8_t)PLOT_INTG);           save(tmpString, strlen(tmpString));
         sprintf(tmpString, "PLOT_DIFF\n%"                  PRIu8  "\n",     (uint8_t)PLOT_DIFF);           save(tmpString, strlen(tmpString));
@@ -1011,11 +1022,11 @@ int64_t stringToInt64(const char *str) {
   }
 
 
-  // Function to standardize new input to the old state file format, any new complex, into the old "re im" form. 
-  // Accepts (3-i4) | 3-i4 | +3+i4 | -3-i4 | (+3+i4) | (-3-i4) | 3 -4 | 3 4 | -2.5 1e3 | -2.5e-3+i4 | (-2.5e-3-i4) | i4 | (i4) | 
+  // Function to standardize new input to the old state file format, any new complex, into the old "re im" form.
+  // Accepts (3-i4) | 3-i4 | +3+i4 | -3-i4 | (+3+i4) | (-3-i4) | 3 -4 | 3 4 | -2.5 1e3 | -2.5e-3+i4 | (-2.5e-3-i4) | i4 | (i4) |
   //         ( 3 - i4 ) | (1.5e2-i2.5e-3) | 0+i0 | -7+i0 | (3 -i4) | 3 -i4 | +3 +i4 | -3 -i4 | ( 3 - i 4 ) | +3 + i4 | 3 - i 4 | (-2.5e-3 - i 4)
   //         (parentheses optional, leading sign optional)
-  // as well as the state file form  "3 -4"  (backward compatibility). Form and free white space is enabled by 'i' (which can never occur in a real number string). 
+  // as well as the state file form  "3 -4"  (backward compatibility). Form and free white space is enabled by 'i' (which can never occur in a real number string).
   static void standardiseComplex(const char *src, char *dest) {
     char work[200];
     char *w = work;

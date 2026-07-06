@@ -443,7 +443,7 @@ void prepareNewLine(void) {
  *  Print to IR
  */
 void printIR(uint8_t c) { // prints a single character
-  const print_modes_t mode = printerState.print_mode;
+  const printModes_t mode = printerState.print_mode;
 
   if(c == '\n' && (mode == PMODE_GRAPHICS || mode == PMODE_SMALLGRAPHICS)) {
     // better LF for graphics printing
@@ -743,7 +743,7 @@ void printLine(const char *buff, int with_lf) {
 //  Print buffer right justified
 //
 void printJustified(const char *buff) {
-  //print_modes_t pmode = printerState.print_mode;
+  //printModes_t pmode = printerState.print_mode;
   uint16_t len = stringGlyphLength(buff) * 7 - 1;
   uint16_t paperWidth = PAPER_WIDTH;
 
@@ -760,7 +760,7 @@ void printJustified(const char *buff) {
 //  Print buffer justified on the left half of the paper line
 //
 void printJustifiedLeft(const char *buff) {
-  //print_modes_t pmode = printerState.print_mode;
+  //printModes_t pmode = printerState.print_mode;
   uint16_t len = stringGlyphLength(buff) * 7 - 1;
   uint16_t paperWidth = (PAPER_WIDTH / 2) - 7;
 
@@ -965,7 +965,7 @@ static void _complex34ToPrintString(real34_t *registReal34, real34_t *registImag
 //
 //  Print a single register
 //
-void printReg(uint16_t regist, const char *label, bool_t eq, print_area_t where, bool prSigma) {
+void printReg(uint16_t regist, const char *label, bool_t eq, printArea_t where, bool prSigma) {
   uint16_t tagAngle;
   uint16_t tagPolar;
   real34_t *real34;

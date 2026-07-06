@@ -666,8 +666,18 @@ void sci_fmt(char *buf, int n, double x) {
  *
  * Output format (if buffer allows):
  *   [-]d.dddddddddddddddde±dd\0 (up to 25–30 bytes depending on exponent digits)
+ *   eg. 2.5 -> "2.50000000000000e+00", -0.05 -> "-5.00000007450580e-02", 0 -> "0.00000000000000e+00"
+ *   NaN -> "nan", +Inf -> "inf", -Inf -> "-inf"; compatible with strtof
  */
     int exp = 0, i = 0;
+    if(isnan(x)) {
+      snprintf(buf, n, "nan");
+      return;
+    }
+    if(isinf(x)) {
+      snprintf(buf, n, x < 0 ? "-inf" : "inf");
+      return;
+    }
     if(x < 0) {
         buf[i++] = '-';
         x = -x;
@@ -869,6 +879,20 @@ void realToFloat(const real_t *vv, float *v) {
 }
 
 
+// Locale-free parse: accepts '.' or ',' regardless of the locale, so decNumber output (always '.') and files written under any region setting parse correctly. Buffer sized for a full 75-digit real string with exponent.
+double stringToDouble(const char *str) {
+  char buf[120];
+  const char radix = *localeconv()->decimal_point;
+  uint32_t i = 0;
+  while(str[i] != 0 && i < sizeof(buf) - 1) {
+    buf[i] = (str[i] == '.' || str[i] == ',') ? radix : str[i];
+    i++;
+  }
+  buf[i] = 0;
+  return strtod(buf, NULL);
+}
+
+
 static double fnRealToDouble(const real_t *r) {
   char buffer[100];
   if(realIsSpecial(r)) {
@@ -881,7 +905,7 @@ static double fnRealToDouble(const real_t *r) {
     return realIsPositive(r) ? 0.0 : -0.0;
   }
   decNumberToString((decNumber*)r, buffer);
-  return strtod(buffer, NULL);
+  return stringToDouble(buffer);
 }
 
 
