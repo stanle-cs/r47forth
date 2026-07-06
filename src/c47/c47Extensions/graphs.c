@@ -21,18 +21,6 @@ bool_t    invalid_rms  = true;
   }
 #endif // STATDEBUG && PC_BUILD
 
-// Map float data values against the real_t range globals. Stat data stays float precision; the range survives any exponent.
-static int16_t screenX(float x) {
-  real_t t;
-  convertDoubleToReal(x, &t, &ctxtReal39);
-  return screen_window_x_r(x_min, &t, x_max);
-}
-static int16_t screenY(float y) {
-  real_t t;
-  convertDoubleToReal(y, &t, &ctxtReal39);
-  return screen_window_y_r(y_min, &t, y_max);
-}
-
 // Graph range limits. Sized 34 so a reserved-variable real34 decodes in losslessly and ctxtReal39 writes fit (capacity rounds up to 39 digits); float dies below 1E-38 which these must support.
 REAL_T_PTR(x_min, 34);
 REAL_T_PTR(x_max, 34);
@@ -487,17 +475,21 @@ void fnListXY(uint16_t unusedButMandatoryParameter) {
 #define bufLen 40
 
 
-  static void showGraphTickText1(float tick_int_x, float tick_int_y, int32_t xoff, int32_t yoff1, int32_t yoff2, uint16_t acc) {
+  static void showGraphTickText1(double tick_int_x, double tick_int_y, int32_t xoff, int32_t yoff1, int32_t yoff2, uint16_t acc) {
     char buff[32];
     char outstr[bufLen];
     char tmpBuf[100];
-    snprintf(tmpString, bufLen, "  y %8s/tick  ", radixProcess(buff, formatCore(tick_int_y, acc, false, tmpBuf, 50)));
-    convertDigits(smallE(buff, tmpString), outstr);
-    showString(outstr, &standardFont, xoff, yoff1, vmNormal, true, true);
+    if(tick_int_y > 0) {                             // 0 only when the interval underflowed double, beyond 1e+-308: no ticks drawn, so no label
+      snprintf(tmpString, bufLen, "  y %8s/tick  ", radixProcess(buff, formatCore(tick_int_y, acc, false, tmpBuf, 50)));
+      convertDigits(smallE(buff, tmpString), outstr);
+      showString(outstr, &standardFont, xoff, yoff1, vmNormal, true, true);
+    }
 
-    snprintf(tmpString, bufLen, "  x %8s/tick  ", radixProcess(buff, formatCore(tick_int_x, acc, false, tmpBuf, 50)));
-    convertDigits(smallE(buff, tmpString), outstr);
-    showString(outstr, &standardFont, xoff, yoff2, vmNormal, true, true);
+    if(tick_int_x > 0) {
+      snprintf(tmpString, bufLen, "  x %8s/tick  ", radixProcess(buff, formatCore(tick_int_x, acc, false, tmpBuf, 50)));
+      convertDigits(smallE(buff, tmpString), outstr);
+      showString(outstr, &standardFont, xoff, yoff2, vmNormal, true, true);
+    }
   }
 
 

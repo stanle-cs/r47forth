@@ -263,13 +263,14 @@ __attribute__((noinline)) static bool_t graphIsPositive(const real_t *x) { retur
 __attribute__((noinline)) static void   graphChangeSign(real_t *x)       { realChangeSign(x);        }
 #pragma GCC diagnostic pop
 
-// Convert real_t to double via realToFloat. Does not round-trip through a locale-formatted string.
-// Float precision (~7 digits), which is fine for the calcs.
-static double realToDoubleVal(const real_t *r) {
-  float f;
-  realToFloat(r, &f);
-  return (double)f;
-}
+#if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
+  // Return-value convenience wrapper of realToDouble; debug prints only
+  static double realToDoubleVal(const real_t *r) {
+    double d;
+    realToDouble(r, &d);
+    return d;
+  }
+#endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
 
 static void convertRealToReal34Register(const real_t *x, calcRegister_t destination) {
   reallocateRegister(destination, dtReal34, 0, amNone);
@@ -306,6 +307,16 @@ static void convertRegisterToReal(calcRegister_t source, real_t *destination) {
     return;
   }
   realPlus(&tmp, destination, ctxtGraphs);
+}
+
+// Normalised read for the jump-back analysis: out = (v - origin) / span, dimensionless and O(1) at any data magnitude
+static double normCoord(const real_t *v, const real_t *origin, const real_t *span) {
+  real_t t;
+  double d;
+  realSubtract(v, origin, &t, ctxtGraphs);           // t = v - origin
+  realDivide(&t, span, &t, ctxtGraphs);              // t = (v - origin) / span
+  realToDouble(&t, &d);
+  return d;
 }
 
 // Reduce REGISTER_Y to either Re or Im (per getSystemFlagIM) before AddtoDrawMx etc.
@@ -1489,17 +1500,28 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           }
           else {
             // For gradient increase cases, evaluate if points add significant detail.
-            // PlotPoint members are real_t now, so reads convert to double for the local analysis.
+            // The analysis runs in normalised coordinates, x' = (x - x01)/spanX and y' = (y - y01)/spanY, so the
+            // double maths is O(1) at any data magnitude; the usefulness thresholds are scale-invariant, unchanged.
             if(jumpBackCount >= 3) {
+              real_t spanX, spanY;
+              realSubtract(jumpBackStartX, x01, &spanX, ctxtGraphs);       // spanX = jumpBackStartX - x01
+              realSubtract(jumpBackStartY, y01, &spanY, ctxtGraphs);       // spanY = jumpBackStartY - y01
+              if(realIsZero(&spanY)) {                                     // flat region: any y unit gives the same decision, the thresholds scale with it
+                realCopy(&spanX, &spanY);
+              }
+              if(realIsZero(&spanX)) {                                     // zero-width region: nothing to analyse, keep the points
+                shouldCommitPoints = true;
+              }
+              else {
               // Calculate curvature variation in the jump-back region
               double maxCurvD = 0;
               for(int i = 1; i < jumpBackCount - 1; i++) {
-                double xi   = realToDoubleVal(PP_X(jumpBackBuffer[i]));
-                double xim1 = realToDoubleVal(PP_X(jumpBackBuffer[i-1]));
-                double xip1 = realToDoubleVal(PP_X(jumpBackBuffer[i+1]));
-                double yi   = realToDoubleVal(PP_Y(jumpBackBuffer[i]));
-                double yim1 = realToDoubleVal(PP_Y(jumpBackBuffer[i-1]));
-                double yip1 = realToDoubleVal(PP_Y(jumpBackBuffer[i+1]));
+                double xi   = normCoord(PP_X(jumpBackBuffer[i]),   x01, &spanX);
+                double xim1 = normCoord(PP_X(jumpBackBuffer[i-1]), x01, &spanX);
+                double xip1 = normCoord(PP_X(jumpBackBuffer[i+1]), x01, &spanX);
+                double yi   = normCoord(PP_Y(jumpBackBuffer[i]),   y01, &spanY);
+                double yim1 = normCoord(PP_Y(jumpBackBuffer[i-1]), y01, &spanY);
+                double yip1 = normCoord(PP_Y(jumpBackBuffer[i+1]), y01, &spanY);
                 double g1d = (yi   - yim1) / (xi   - xim1);
                 double g2d = (yip1 - yi  ) / (xip1 - xi  );
                 double curvChangeD = fabs(g2d - g1d);
@@ -1508,22 +1530,22 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
                 }
               }
               // Compare with linear interpolation
-              double jumpBackStartYd = realToDoubleVal(jumpBackStartY);
-              double jumpBackStartXd = realToDoubleVal(jumpBackStartX);
-              double y01d  = realToDoubleVal(y01);
-              double x01d  = realToDoubleVal(x01);
+              double jumpBackStartYd = normCoord(jumpBackStartY, y01, &spanY);     // 1 by construction, or 0 for a flat region
+              double jumpBackStartXd = normCoord(jumpBackStartX, x01, &spanX);     // 1 by construction
+              double y01d  = 0.0;                                                  // the origin of the normalised coordinates
+              double x01d  = 0.0;
               double linearSlopeD = (jumpBackStartYd - y01d) / (jumpBackStartXd - x01d);
               double interpErrD = 0;
               for(int i = 0; i < jumpBackCount; i++) {
-                double xi = realToDoubleVal(PP_X(jumpBackBuffer[i]));
-                double yi = realToDoubleVal(PP_Y(jumpBackBuffer[i]));
+                double xi = normCoord(PP_X(jumpBackBuffer[i]), x01, &spanX);
+                double yi = normCoord(PP_Y(jumpBackBuffer[i]), y01, &spanY);
                 double expectedYd = y01d + linearSlopeD * (xi - x01d);
                 double errD = fabs(yi - expectedYd);
                 if(errD > interpErrD) {
                   interpErrD = errD;
                 }
               }
-              // Hand the results back to real_t for downstream logic
+              // Keep the results in real_t for the debug prints; normalised units
               convertDoubleToReal(maxCurvD,     maxCurvatureChange, ctxtGraphs);
               convertDoubleToReal(linearSlopeD, linearSlope,        ctxtGraphs);
               convertDoubleToReal(interpErrD,   interpolationError, ctxtGraphs);
@@ -1538,6 +1560,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
                 printf("  Gradient increase evaluation: maxCurv=%s, interpError=%s, useful=%d\n", strBuf1, strBuf2, jumpBackPointsUseful);
               #endif // GRAPHDEBUG
               shouldCommitPoints = jumpBackPointsUseful;
+              }
             }
           }
 

@@ -11,16 +11,16 @@ static real_t RR, SMI, aa0, aa1, aa2, sa0, sa1; //L.R. variables
 static void drawline(uint16_t selection, real_t *RR, real_t *SMI, real_t *aa0, real_t *aa1, real_t *aa2, real_t *sa0, real_t *sa1);
 
 
-float     graph_dx;
-float     graph_dy;
+double    graph_dx;
+double    graph_dy;
 bool_t    roundedTicks;
 bool_t    PLOT_AXIS;
 int8_t    PLOT_ZOOM;
 uint8_t   drawHistogram;
 
 int8_t    plotmode;
-float     tick_int_x;
-float     tick_int_y;
+double    tick_int_x;
+double    tick_int_y;
 uint32_t  xzero;
 uint32_t  yzero;
 
@@ -232,12 +232,12 @@ int16_t _screen_window_y(float y_min, float y, float y_max, bool_t nolimit) {
   }
 
 // Map float data values against the real_t range globals. Stat data stays float precision; the range survives any exponent.
-int16_t screenX(float x) {
+int16_t screenX(double x) {
   real_t t;
   convertDoubleToReal(x, &t, &ctxtReal39);
   return screen_window_x_r(x_min, &t, x_max);
 }
-int16_t screenY(float y) {
+int16_t screenY(double y) {
   real_t t;
   convertDoubleToReal(y, &t, &ctxtReal39);
   return screen_window_y_r(y_min, &t, y_max);
@@ -600,20 +600,13 @@ void graphAxisDraw (void){
     printf("xzero=%d yzero=%d   \n", (int)xzero, (int)yzero);
     #endif // STATDEBUG && PC_BUILD
 
-  float x;
-  float y;
-  float fx_min, fx_max, fy_min, fy_max;                //tick loops step in float; the interval underflows to 0 at extreme-magnitude ranges and the tick_int_* > 0 guards then skip the ticks
-  {
-    double d;
-    realToDouble(x_min, &d);
-    fx_min = (float)d;
-    realToDouble(x_max, &d);
-    fx_max = (float)d;
-    realToDouble(y_min, &d);
-    fy_min = (float)d;
-    realToDouble(y_max, &d);
-    fy_max = (float)d;
-  }
+  double x;
+  double y;
+  double fx_min, fx_max, fy_min, fy_max;               //tick loops step in double; the interval underflows to 0 only beyond 1e+-308 and the tick_int_* > 0 guards then skip the ticks
+  realToDouble(x_min, &fx_min);
+  realToDouble(x_max, &fx_max);
+  realToDouble(y_min, &fy_min);
+  realToDouble(y_max, &fy_max);
 
   if( PLOT_AXIS && !(yzero == SCREEN_HEIGHT_GRAPH-1 || yzero == minny)) {
     //DRAW XAXIS
@@ -768,7 +761,7 @@ void graphAxisDraw (void){
 }
 
 
-float auto_tick(float tick_int_f) {
+double auto_tick(double tick_int_f) {
   #if !defined(SAVE_SPACE_DM42_13GRF)
     if(!roundedTicks) {
       return tick_int_f;
@@ -792,8 +785,8 @@ float auto_tick(float tick_int_f) {
         tick_mult *= 10.0;
       }
     }
-    tick_int_f = (float)tick_m;
-    float tick_int_f_mult = (float)tick_mult;
+    tick_int_f = tick_m;
+    double tick_int_f_mult = tick_mult;
 
     if(tick_int_f > 0) {
       //if(tick_int_f <= 0.3) {
@@ -804,19 +797,19 @@ float auto_tick(float tick_int_f) {
       //}
       //else
       if(tick_int_f <= 1.3) {
-        tick_int_f = 1.0f;
+        tick_int_f = 1.0;
       }
       else if(tick_int_f <= 1.7) {
-        tick_int_f = 1.5f;
+        tick_int_f = 1.5;
       }
       else if(tick_int_f <= 3.0) {
-        tick_int_f = 2.0f;
+        tick_int_f = 2.0;
       }
       else if(tick_int_f <= 6.5) {
-        tick_int_f = 5.0f;
+        tick_int_f = 5.0;
       }
       else if(tick_int_f <= 9.9) {
-        tick_int_f = 7.5f;
+        tick_int_f = 7.5;
       }
       //no higher values than 9.9 possible
     }
@@ -842,7 +835,7 @@ void graph_axis (void){
     if(graph_dx == 0) {
       realSubtract(x_max, x_min, &w, &ctxtReal39);   // w = x_max - x_min
       realToDouble(&w, &wd);
-      tick_int_x = auto_tick((float)(wd/20.0));      // tick_int_x = auto_tick((x_max - x_min) / 20)
+      tick_int_x = auto_tick(wd/20.0);               // tick_int_x = auto_tick((x_max - x_min) / 20)
     }
     else {
       tick_int_x = graph_dx;
@@ -851,7 +844,7 @@ void graph_axis (void){
     if(graph_dy == 0) {
       realSubtract(y_max, y_min, &w, &ctxtReal39);   // w = y_max - y_min
       realToDouble(&w, &wd);
-      tick_int_y = auto_tick((float)(wd/20.0));      // tick_int_y = auto_tick((y_max - y_min) / 20)
+      tick_int_y = auto_tick(wd/20.0);               // tick_int_y = auto_tick((y_max - y_min) / 20)
     }
     else {
       tick_int_y = graph_dy;
