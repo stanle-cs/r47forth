@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
 
 #include "c47.h"
-#include <locale.h>
 
 // This is used for the state files
 #define configFileVersion                  10000024 // FLAG_SIGZEROS
@@ -426,7 +425,7 @@ static void saveMatrixElements(calcRegister_t regist) {
 
 
 bool_t fnSaveDataRegisters(uint16_t *beginR, uint16_t *endR, char *registerName, bool_t isXFNRegister) {
-  // Appends a register section to the already-open file: header, count, then per register id/name line, type line, 
+  // Appends a register section to the already-open file: header, count, then per register id/name line, type line,
   // value line, and matrix element lines. registerName != NULL saves that one named variable (beginR/endR ignored);
   // NULL saves the range *beginR..*endR inclusive. Lettered registers (100..125) use the short "RX".."RW" form. Returns false on invalid arguments.
   char tmpString[3000];           // Local target buffer. registerToSaveString() emits the value through the global
@@ -1023,11 +1022,11 @@ int64_t stringToInt64(const char *str) {
   }
 
 
-  // Function to standardize new input to the old state file format, any new complex, into the old "re im" form. 
-  // Accepts (3-i4) | 3-i4 | +3+i4 | -3-i4 | (+3+i4) | (-3-i4) | 3 -4 | 3 4 | -2.5 1e3 | -2.5e-3+i4 | (-2.5e-3-i4) | i4 | (i4) | 
+  // Function to standardize new input to the old state file format, any new complex, into the old "re im" form.
+  // Accepts (3-i4) | 3-i4 | +3+i4 | -3-i4 | (+3+i4) | (-3-i4) | 3 -4 | 3 4 | -2.5 1e3 | -2.5e-3+i4 | (-2.5e-3-i4) | i4 | (i4) |
   //         ( 3 - i4 ) | (1.5e2-i2.5e-3) | 0+i0 | -7+i0 | (3 -i4) | 3 -i4 | +3 +i4 | -3 -i4 | ( 3 - i 4 ) | +3 + i4 | 3 - i 4 | (-2.5e-3 - i 4)
   //         (parentheses optional, leading sign optional)
-  // as well as the state file form  "3 -4"  (backward compatibility). Form and free white space is enabled by 'i' (which can never occur in a real number string). 
+  // as well as the state file form  "3 -4"  (backward compatibility). Form and free white space is enabled by 'i' (which can never occur in a real number string).
   static void standardiseComplex(const char *src, char *dest) {
     char work[200];
     char *w = work;
