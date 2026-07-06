@@ -519,8 +519,10 @@ void fnEdit (uint16_t unusedParamButMandatory) {
                   }
                 }
               }
-              printf("**[DL]** dtComplex34 aimBuffer %s nimBufferDisplay %s\n", aimBuffer, nimBufferDisplay);
-              fflush(stdout);
+              #if defined(PC_BUILD)
+                printf("**[DL]** dtComplex34 aimBuffer %s nimBufferDisplay %s\n", aimBuffer, nimBufferDisplay);
+                fflush(stdout);
+              #endif //PC_BUILD
 
               exponentSignLocation = realExponentSignLocation;
               calcMode = CM_NIM;
@@ -1281,9 +1283,9 @@ void fnFrom_msRegister(calcRegister_t regist){
       if(tmpString100_OUT[0] != 0) {
         reallocateRegister(regist, dtReal34, 0, amNone);
         stringToReal34(tmpString100_OUT, REGISTER_REAL34_DATA(regist));
-        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        #if (EXTRA_INFO_ON_CALC_ERROR == 1) && defined(PC_BUILD)
           printf("\n ------- 003 >>>%s<<<\n", tmpString100_OUT);
-        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1) && PC_BUILD
       }
     }
 
