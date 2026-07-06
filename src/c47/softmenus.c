@@ -564,9 +564,9 @@ TO_QSPI const int16_t menu_ConvV[]        = {
                                                    ITM_FZUStoGLUS,            ITM_GLUStoFZUS,           ITM_BARRELtoM3,           ITM_M3toBARREL,           ITM_QTUStoL,              ITM_LtoQTUS               };
 
 TO_QSPI const int16_t menu_ConvS[]        = {
-                                                    ITM_KNOTtoKMH,            ITM_KMHtoKNOT,            ITM_KMHtoMPS,             ITM_MPStoKMH,             ITM_MPHtoKMH,             ITM_KMHtoMPH,
-                                                    ITM_MPHtoMPS,             ITM_MPStoMPH,             ITM_FPStoKMH,             ITM_KMHtoFPS,             ITM_FPStoMPS,             ITM_MPStoFPS,
-                                                    ITM_KNOTtoMPS,            ITM_MPStoKNOT,            ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL};
+                                                    ITM_MPStoKMH,             ITM_KMHtoMPS,             ITM_KMHtoMPH,             ITM_MPHtoKMH,             ITM_MPHtoMPS,             ITM_MPStoMPH,
+                                                    ITM_FPStoKMH,             ITM_KMHtoFPS,             ITM_FPStoMPH,             ITM_MPHtoFPS,             ITM_FPStoMPS,             ITM_MPStoFPS,
+                                                    ITM_KNOTtoKMH,            ITM_KMHtoKNOT,            ITM_KNOTtoMPH,            ITM_MPHtoKNOT,            ITM_KNOTtoMPS,            ITM_MPStoKNOT};
 
 TO_QSPI const int16_t menu_ConvAng[]        = {
                                                     ITM_DEGtoRAD,             ITM_RADtoDEG,             ITM_DEGtoGRAD,            ITM_GRADtoDEG,            ITM_GRADtoRAD,            ITM_RADtoGRAD,
