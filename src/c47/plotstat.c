@@ -699,6 +699,18 @@ float auto_tick(float tick_int_f) {
     double tick_m = fabs((double)tick_int_f);
     double tick_mult = 1.0;
     if(tick_m > 0) {
+#if 1  //log10/pow live in libm (-lm) which nano.specs does not strip, pow is already in use in graphs.c
+      tick_mult = pow(10.0, floor(log10(tick_m)));   //decade of the value
+      tick_m /= tick_mult;                           //mantissa, 1 <= m < 10 up to one step of log10/pow rounding, corrected below
+      if(tick_m < 1.0) {
+        tick_m *= 10.0;
+        tick_mult /= 10.0;
+      }
+      if(tick_m >= 10.0) {
+        tick_m /= 10.0;
+        tick_mult *= 10.0;
+      }
+#else  //The loop version is kept deliberately, to reconsider when the newlib nano situation is settled (it iterates once per decade, e.g. ~300x for 1E-300)
       while(tick_m < 1.0) {
         tick_m *= 10.0;
         tick_mult /= 10.0;
@@ -707,6 +719,7 @@ float auto_tick(float tick_int_f) {
         tick_m /= 10.0;
         tick_mult *= 10.0;
       }
+#endif
       tick_m = floor(tick_m * 10.0 + 0.5) / 10.0; //round mantissa to 1 decimal as "%.1e" did
       if(tick_m >= 10.0) {
         tick_m /= 10.0;
