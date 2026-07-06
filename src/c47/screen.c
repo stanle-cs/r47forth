@@ -71,16 +71,30 @@ bool_t blockMonitoring = false;
    TO_QSPI static const char versionStr[]        = "  " MODELTEXT " " VERSION_STRING ".";
   #if defined(PC_BUILD)
 
-    TO_QSPI static const char versionStr2[]     = "  " MODELTEXT " Sim " VERSION1 ", dated " __DATE__ ".";
+    TO_QSPI static const char versionStr2[]     = "  " MODELTEXT " Sim " VERSION1 ", dd ";
   #else // !PC_BUILD
     #if defined(TWO_FILE_PGM)
-      TO_QSPI static const char versionStr2[]   = "  " MODELTEXT " QSPI " VERSION1 ", dated " __DATE__ ".";
+      TO_QSPI static const char versionStr2[]   = "  " MODELTEXT " QSPI " VERSION1 ", dd ";
     #else // !TWO_FILE_PGM
       #if !defined(TWO_FILE_PGM)
-        TO_QSPI static const char versionStr2[] = "  " MODELTEXT " No QSPI " VERSION1 ", dated " __DATE__ ".";
+        TO_QSPI static const char versionStr2[] = "  " MODELTEXT " No QSPI " VERSION1 ", dd ";
       #endif // !TWO_FILE_PGM
     #endif // TWO_FILE_PGM
   #endif // PC_BUILD
+
+  // __DATE__ pads a single digit day to two chars; shift left for single spaces
+  TO_QSPI static const char versionDateStr[] = {
+    __DATE__[0], __DATE__[1], __DATE__[2], ' ',
+    __DATE__[4] == ' ' ? __DATE__[5]  : __DATE__[4],
+    __DATE__[4] == ' ' ? ' '          : __DATE__[5],
+    __DATE__[4] == ' ' ? __DATE__[7]  : ' ',
+    __DATE__[4] == ' ' ? __DATE__[8]  : __DATE__[7],
+    __DATE__[4] == ' ' ? __DATE__[9]  : __DATE__[8],
+    __DATE__[4] == ' ' ? __DATE__[10] : __DATE__[9],
+    __DATE__[4] == ' ' ? '.'          : __DATE__[10],
+    __DATE__[4] == ' ' ? '\0'         : '.',
+    '\0'
+  };
 
   /* Names of day of week */
 typedef struct {
@@ -3276,7 +3290,8 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         clearRegisterLine(REGISTER_Z, true, true);
         clearRegisterLine(REGISTER_Y, true, true);
         clearRegisterLine(REGISTER_X, true, true);
-        showStringEnhanced(versionStr2,    &standardFont, 1, Y_POSITION_OF_REGISTER_T_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
+        sprintf(prefix, "%s%s", versionStr2, versionDateStr);
+        showStringEnhanced(prefix,         &standardFont, 1, Y_POSITION_OF_REGISTER_T_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
         showStringEnhanced(versionStr,     &standardFont, 1, Y_POSITION_OF_REGISTER_Z_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
         showStringEnhanced(disclaimerStr,  &standardFont, 1, Y_POSITION_OF_REGISTER_Y_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
       }
@@ -3406,7 +3421,8 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         clearRegisterLine(REGISTER_T, true, true);
         showString(errorMessages[TI_Backup_restored], &standardFont, 1, Y_POSITION_OF_REGISTER_Z_LINE + 6, vmNormal, true, true);
         showStringEnhanced(versionStr,  &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
-        showStringEnhanced(versionStr2, &standardFont, 1, Y_POSITION_OF_REGISTER_Y_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
+        sprintf(prefix, "%s%s", versionStr2, versionDateStr);
+        showStringEnhanced(prefix,      &standardFont, 1, Y_POSITION_OF_REGISTER_Y_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
       }
 
       else if(temporaryInformation == TI_STATEFILE_RESTORED && regist == REGISTER_X) {
