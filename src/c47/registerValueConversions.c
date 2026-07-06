@@ -675,7 +675,7 @@ const char *doubleSpecialLabel(double value) {                                 /
 
 
 
-static void sci_fmt(char *buf, int n, double x) {
+void sci_fmt(char *buf, int n, double x) {
 /*
  * Usage:
  *   char buf[32];
@@ -683,13 +683,18 @@ static void sci_fmt(char *buf, int n, double x) {
  *
  * Output format (if buffer allows):
  *   [-]d.dddddddddddddddde±dd\0 (up to 25–30 bytes depending on exponent digits)
+ *   eg. 2.5 -> "2.50000000000000e+00", -0.05 -> "-5.00000007450580e-02", 0 -> "0.00000000000000e+00"
+ *   NaN -> "nan", +Inf -> "inf", -Inf -> "-inf"; compatible with strtof
  */
-    const char *special = doubleSpecialLabel(x);    
-    if(special != NULL) {
-      snprintf(buf, n, "%s", special);  // "NaN", "+Inf" or "-Inf" for a special value
+    int exp = 0, i = 0;
+    if(isnan(x)) {
+      snprintf(buf, n, "nan");
       return;
     }
-    int exp = 0, i = 0;
+    if(isinf(x)) {
+      snprintf(buf, n, x < 0 ? "-inf" : "inf");
+      return;
+    }
     if(x < 0) {
         buf[i++] = '-';
         x = -x;
