@@ -277,7 +277,7 @@
 
 #define LOW_GRAPH_ACC                                                                     //Lowered graph accuracy for EQN graphs
 //#undef LOW_GRAPH_ACC
-#define significantDigitsForEqnGraphs (significantDigits == 0 ? 12 : significantDigits)   //If 6 is chosen by user, all four types are changes as follows: 34 to SDIGS; 39 to SDIGS+3; 51 to SDIGS+6; 75 to SDIGS+9
+#define significantDigitsForEqnGraphs (significantDigits == 0 ? 12 : significantDigits)   //While plotting, all four context types reduce: 34 to SDIGS; 39 to SDIGS+3; 51 to SDIGS+12; 75 to SDIGS+18
 #define significantDigitsForScreen    3                                                   //Only for screen coord scaling of the resulting graphic matrix: 34 to 4; 39 to 4+3; 51 to 4+3; 75 to 4+3
 
 
@@ -929,8 +929,12 @@
 #define FLAG_NORM                             0x8068 //41
 #define FLAG_BOLD                             0x8069 //42
 #define FLAG_SIGZEROS                         0x806A //43
+#define FLAG_PRMS                             0x806B
+#define FLAG_PINTG                            0x806C
+#define FLAG_PDIFF                            0x806D
+#define FLAG_PSHADE                           0x806E //47
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+43 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+47 // We can have a maximum of 128 system flags
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode
@@ -2210,7 +2214,6 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #endif // EXTRA_INFO_ON_CALC_ERROR == 0 || TESTSUITE_BUILD || DMCP_BUILD
 
 #define isSystemFlagWriteProtected(sf)       ((sf & 0x4000) != 0)
-#define shortIntegerIsZero(op)               (((*(uint64_t *)(op)) == 0) || (shortIntegerMode == SIM_SIGNMT && (((*(uint64_t *)(op)) == 1u<<((uint64_t)shortIntegerWordSize-1)))))
 #define shortIntegerModeValue()              (shortIntegerMode == SIM_2COMPL ? 2 : (shortIntegerMode == SIM_1COMPL ? 1 : (shortIntegerMode == SIM_UNSIGN ? 0 : -1)))
 #define getStackTop()                        (getSystemFlag(FLAG_SSIZE8) ? REGISTER_D : REGISTER_T)
 #define freeRegisterData(regist)             freeC47Blocks(getRegisterDataPointer(regist), getRegisterFullSizeInBlocks(regist))
@@ -2457,7 +2460,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define debugf(a) do { fprintf(stderr, "%sdebug:%s %s %s(%s %s:%d)%s\n", COLOR_GREEN,  a, COLOR_DEFAULT, COLOR_CYAN, __FUNCTION__, __FILE__, __LINE__, COLOR_DEFAULT);fflush(stderr); } while(0)
 #define errorf(a) do { fprintf(stderr, "%serror:%s %s %s(%s %s:%d)%s\n", COLOR_YELLOW, a, COLOR_DEFAULT, COLOR_CYAN, __FUNCTION__, __FILE__, __LINE__, COLOR_DEFAULT);fflush(stderr); } while(0)
 #define abortf(a) do { fprintf(stderr, "%sabort: %s(%s %s:%d)%s\n",      COLOR_RED,                      COLOR_CYAN, __FUNCTION__, __FILE__, __LINE__, COLOR_DEFAULT);perror(a);fflush(stderr);abort(); } while(0)
-#define userAbort(a) do { fprintf(stderr, "%serror:%s %s \n", COLOR_YELLOW, a, COLOR_DEFAULT);fflush(stderr); } while(0)
+#define userAbortf(a) do { fprintf(stderr, "%serror:%s %s \n", COLOR_YELLOW, a, COLOR_DEFAULT);fflush(stderr); } while(0)   //prints and continues, does not abort
 
 // To time a piece of code (not on DM42 hardware), you can use the following code snippet:
 // struct timespec stopwatch_start, stopwatch_stop;

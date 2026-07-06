@@ -42,7 +42,6 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
   static void fnPlot(uint16_t unusedButMandatoryParameter) {
       lastPlotMode = PLOT_NOTHING;
       strcpy(plotStatMx, "DrwMX");
-      PLOT_SHADE = true;
       fnPlotSQ(0);
       //  C47 advanced plot ^^
   }
@@ -113,14 +112,16 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
                                       printRegisterToConsole(REGISTER_X, " = ", "\n");
                                     #endif //VERBOSE_SOLVER0
 
-                                    #if defined(PC_BUILD)
-                                      if(lastErrorCode != 0) {
-                                        #if defined(VERBOSE_SOLVER00)
-                                        printf("ERROR CODE in execute_rpn_function: %u\n", lastErrorCode);
-                                        #endif // VERBOSE_SOLVER00
-                                        lastErrorCode = 0;
-                                      }
-                                    #endif // PC_BUILD
+      if(lastErrorCode != 0) { //failed evaluation: the sample has no value; NaN it, else the stale register content plots incorrect data
+                                    #if defined(PC_BUILD) && defined(VERBOSE_SOLVER00)
+                                      printf("ERROR CODE in execute_rpn_function: %u\n", lastErrorCode);
+                                    #endif // PC_BUILD && VERBOSE_SOLVER00
+        real_t nanR;
+        realSetNaN(&nanR);
+        reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+        realToReal34(&nanR, REGISTER_REAL34_DATA(REGISTER_X));
+        lastErrorCode = 0;
+      }
       fnRCL(regStats);
 
                                     #if defined(VERBOSE_SOLVER0)
@@ -137,13 +138,15 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
                                     }
 
     }
-    else {
-      #if defined(PC_BUILD)
-        #if defined(VERBOSE_SOLVER00)
-        printf("ERROR in execute_rpn_function; invalid variable: %u\n", lastErrorCode);
-        #endif // VERBOSE_SOLVER00
-        lastErrorCode = 0;
-      #endif
+    else { //invalid plot variable: nothing was stored or executed, and fnRCL above never ran, so the caller would sample stale REGISTER_Y content; NaN it
+                                    #if defined(PC_BUILD) && defined(VERBOSE_SOLVER00)
+                                      printf("ERROR in execute_rpn_function; invalid variable: %u\n", lastErrorCode);
+                                    #endif // PC_BUILD && VERBOSE_SOLVER00
+      real_t nanR;
+      realSetNaN(&nanR);
+      reallocateRegister(REGISTER_Y, dtReal34, 0, amNone);
+      realToReal34(&nanR, REGISTER_REAL34_DATA(REGISTER_Y));
+      lastErrorCode = 0;
     }
   }
 
@@ -223,6 +226,7 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
                                   #endif // STATDEBUG
     }
     else {
+      calcMode = CM_NORMAL;
       displayCalcErrorMessage(ERROR_NOT_ENOUGH_MEMORY_FOR_NEW_MATRIX, ERR_REGISTER_LINE, REGISTER_X); // Invalid input data type for this operation
       #if (EXTRA_INFO_ON_CALC_ERROR == 1)
         sprintf(errorMessage, "additional matrix line not added; rows = %i", rows);
@@ -239,7 +243,10 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
 // to 14 working digits at graph_eqn entry. Helpers are defined first in this file, then graph_eqn at the bottom.
 //******************************************************************************************************************************
 
-#define PLOT_DIGITS    39    // Storage size for every real_t. Must be >= 34 because register. Manage, read increase, speed from the working precision in ctxtGraphsLocal, not from this storage size.
+#define PLOT_DIGITS           16    // Storage size for the graph real_t buffers; must exceed GRAPH_WORKING_DIGITS so every result fits. 16 allocates 21 digits after REAL_MAX_DIGITS rounding.
+#define GRAPH_WORKING_DIGITS  14    // Working precision for all graph math. 14 instead of 39 digits is a real speedup and pixels only need ~5 pixels.
+                                    // Also sets the too-close limit: ranges narrower than 100x the ULP, e.g. 1.0000000000001 to 1.0000000000002, are unplottable at 14 digits and get widened.
+                                    // Register Y reads are rounded to working digits in convertRegisterToReal.
 
 // Context for graph calculations. Initialized at graph_eqn entry from ctxtReal39 to 14 working digits
 // 14 vs 39 is a real speedup. All real_t arithmetic in graph_eqn and the helpers use this context via ctxtGraphs.
@@ -261,13 +268,14 @@ __attribute__((noinline)) static bool_t graphIsPositive(const real_t *x) { retur
 __attribute__((noinline)) static void   graphChangeSign(real_t *x)       { realChangeSign(x);        }
 #pragma GCC diagnostic pop
 
-// Convert real_t to double via realToFloat. Does not round-trip through a locale-formatted string.
-// Float precision (~7 digits), which is fine for the calcs.
-static double realToDoubleVal(const real_t *r) {
-  float f;
-  realToFloat(r, &f);
-  return (double)f;
-}
+#if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
+  // Return-value convenience wrapper of realToDouble; debug prints only
+  static double realToDoubleVal(const real_t *r) {
+    double d;
+    realToDouble(r, &d);
+    return d;
+  }
+#endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
 
 static void convertRealToReal34Register(const real_t *x, calcRegister_t destination) {
   reallocateRegister(destination, dtReal34, 0, amNone);
@@ -284,22 +292,36 @@ static void convertRealToReal34RegisterPush(const real_t *x, calcRegister_t dest
 
 // Read a register as real_t. For complex registers, return Re or Im depending on FLAG_IMPLOT
 static void convertRegisterToReal(calcRegister_t source, real_t *destination) {
+  real_t tmp;
   if(getRegisterDataType(source) == dtComplex34) {
     if(getSystemFlag(FLAG_IMPLOT)) {
-      real34ToReal(REGISTER_IMAG34_DATA(source), destination);
+      real34ToReal(REGISTER_IMAG34_DATA(source), &tmp);
     }
     else {
-      real34ToReal(REGISTER_REAL34_DATA(source), destination);
+      real34ToReal(REGISTER_REAL34_DATA(source), &tmp);
     }
+    realPlus(&tmp, destination, ctxtGraphs);
     return;
   }
   if(getSystemFlag(FLAG_IMPLOT)) {
     realSetZero(destination);
     return;
   }
-  if(!getRegisterAsRealQuiet(source, destination)) {
+  if(!getRegisterAsRealQuiet(source, &tmp)) {
     realSetNaN(destination);
+    return;
   }
+  realPlus(&tmp, destination, ctxtGraphs);
+}
+
+// Normalised read for the jump-back analysis: out = (v - origin) / span, dimensionless and O(1) at any data magnitude
+static double normCoord(const real_t *v, const real_t *origin, const real_t *span) {
+  real_t t;
+  double d;
+  realSubtract(v, origin, &t, ctxtGraphs);           // t = v - origin
+  realDivide(&t, span, &t, ctxtGraphs);              // t = (v - origin) / span
+  realToDouble(&t, &d);
+  return d;
 }
 
 // Reduce REGISTER_Y to either Re or Im (per getSystemFlagIM) before AddtoDrawMx etc.
@@ -330,6 +352,8 @@ static void execute_rpn_function_graphAcc(void) {
     int32_t s39 = ctxtReal39.digits;
     int32_t s51 = ctxtReal51.digits;
     int32_t s75 = ctxtReal75.digits;
+    bool_t savedGraphAccActive = graphAccActive;
+    graphAccActive = true;   // paired 1:1 with the reduction below; a nested SOLVE reads this to pick the graph convergence tolerance, else it spins to the iteration cap
     ctxtReal34.digits = significantDigitsForEqnGraphs;
     ctxtReal39.digits = significantDigitsForEqnGraphs + 3;
     ctxtReal51.digits = significantDigitsForEqnGraphs + 12;
@@ -339,6 +363,7 @@ static void execute_rpn_function_graphAcc(void) {
     ctxtReal39.digits = s39;
     ctxtReal51.digits = s51;
     ctxtReal75.digits = s75;
+    graphAccActive = savedGraphAccActive;
   #else
     execute_rpn_function();
   #endif
@@ -955,6 +980,10 @@ void renderAsymptote(AsymptoteInfo *asymptote) {
 
 bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, const real_t *y2, const real_t *grad0, const real_t *grad1, const real_t *grad2, const real_t *yAvg, int count, const real_t *x0, const real_t *x1, const real_t *x2, const real_t *xMin, const real_t *xMax, const real_t *yMin, const real_t *yMax, AsymptoteInfo *asymptotes, int *asymptoteCount) {
 
+  if(realIsSpecial(y0) || realIsSpecial(y1) || realIsSpecial(y2)) { //NaN/infinite samples are domain gaps, not discontinuities: no fine-stepping, no asymptote markers
+    return false;
+  }
+
   // If not a vertical asymptote, do discontinuity detection
   bool_t hasDiscontinuity = detectTrueDiscontinuity(y0, y1, y2, grad0, grad1, grad2, yAvg, count);
 
@@ -1024,11 +1053,8 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     regStatsXY = findNamedVariable(plotStatMx);
 
     // Configure the graph-local context: 14 working digits, full ctxtReal39 settings otherwise.
-    // 14 digits is the working precision; PLOT_DIGITS (storage) stays at 39 because register
-    // reads via real34ToReal write up to 34 digits regardless of context. Done every call so it
-    // stays in sync if ctxtReal39 itself is reconfigured between calls.
     ctxtGraphsLocal = ctxtReal39;
-    ctxtGraphsLocal.digits = 14;
+    ctxtGraphsLocal.digits = GRAPH_WORKING_DIGITS;
     REAL_T_PTR(x, PLOT_DIGITS);
     REAL_T_PTR(x01, PLOT_DIGITS);
     REAL_T_PTR(y01, PLOT_DIGITS);
@@ -1080,10 +1106,10 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     REAL_T_PTR(lastSignChange, PLOT_DIGITS);
   #endif // GRAPHDEBUG
 
-    convertDoubleToReal(x_min, x_min_r, ctxtGraphs);
-    convertDoubleToReal(x_max, x_max_r, ctxtGraphs);
-    convertDoubleToReal(y_min, y_min_r, ctxtGraphs);
-    convertDoubleToReal(y_max, y_max_r, ctxtGraphs);
+    realPlus(x_min, x_min_r, ctxtGraphs);            // x_min_r = x_min rounded to the graph working digits
+    realPlus(x_max, x_max_r, ctxtGraphs);            // x_max_r = x_max
+    realPlus(y_min, y_min_r, ctxtGraphs);            // y_min_r = y_min
+    realPlus(y_max, y_max_r, ctxtGraphs);            // y_max_r = y_max
     realCopy(x_min_r, x01);
     realSetZero(y01);
     realSetZero(y02);
@@ -1483,17 +1509,28 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
           }
           else {
             // For gradient increase cases, evaluate if points add significant detail.
-            // PlotPoint members are real_t now, so reads convert to double for the local analysis.
+            // The analysis runs in normalised coordinates, x' = (x - x01)/spanX and y' = (y - y01)/spanY, so the
+            // double maths is O(1) at any data magnitude; the usefulness thresholds are scale-invariant, unchanged.
             if(jumpBackCount >= 3) {
+              real_t spanX, spanY;
+              realSubtract(jumpBackStartX, x01, &spanX, ctxtGraphs);       // spanX = jumpBackStartX - x01
+              realSubtract(jumpBackStartY, y01, &spanY, ctxtGraphs);       // spanY = jumpBackStartY - y01
+              if(realIsZero(&spanY)) {                                     // flat region: any y unit gives the same decision, the thresholds scale with it
+                realCopy(&spanX, &spanY);
+              }
+              if(realIsZero(&spanX)) {                                     // zero-width region: nothing to analyse, keep the points
+                shouldCommitPoints = true;
+              }
+              else {
               // Calculate curvature variation in the jump-back region
               double maxCurvD = 0;
               for(int i = 1; i < jumpBackCount - 1; i++) {
-                double xi   = realToDoubleVal(PP_X(jumpBackBuffer[i]));
-                double xim1 = realToDoubleVal(PP_X(jumpBackBuffer[i-1]));
-                double xip1 = realToDoubleVal(PP_X(jumpBackBuffer[i+1]));
-                double yi   = realToDoubleVal(PP_Y(jumpBackBuffer[i]));
-                double yim1 = realToDoubleVal(PP_Y(jumpBackBuffer[i-1]));
-                double yip1 = realToDoubleVal(PP_Y(jumpBackBuffer[i+1]));
+                double xi   = normCoord(PP_X(jumpBackBuffer[i]),   x01, &spanX);
+                double xim1 = normCoord(PP_X(jumpBackBuffer[i-1]), x01, &spanX);
+                double xip1 = normCoord(PP_X(jumpBackBuffer[i+1]), x01, &spanX);
+                double yi   = normCoord(PP_Y(jumpBackBuffer[i]),   y01, &spanY);
+                double yim1 = normCoord(PP_Y(jumpBackBuffer[i-1]), y01, &spanY);
+                double yip1 = normCoord(PP_Y(jumpBackBuffer[i+1]), y01, &spanY);
                 double g1d = (yi   - yim1) / (xi   - xim1);
                 double g2d = (yip1 - yi  ) / (xip1 - xi  );
                 double curvChangeD = fabs(g2d - g1d);
@@ -1502,22 +1539,22 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
                 }
               }
               // Compare with linear interpolation
-              double jumpBackStartYd = realToDoubleVal(jumpBackStartY);
-              double jumpBackStartXd = realToDoubleVal(jumpBackStartX);
-              double y01d  = realToDoubleVal(y01);
-              double x01d  = realToDoubleVal(x01);
+              double jumpBackStartYd = normCoord(jumpBackStartY, y01, &spanY);     // 1 by construction, or 0 for a flat region
+              double jumpBackStartXd = normCoord(jumpBackStartX, x01, &spanX);     // 1 by construction
+              double y01d  = 0.0;                                                  // the origin of the normalised coordinates
+              double x01d  = 0.0;
               double linearSlopeD = (jumpBackStartYd - y01d) / (jumpBackStartXd - x01d);
               double interpErrD = 0;
               for(int i = 0; i < jumpBackCount; i++) {
-                double xi = realToDoubleVal(PP_X(jumpBackBuffer[i]));
-                double yi = realToDoubleVal(PP_Y(jumpBackBuffer[i]));
+                double xi = normCoord(PP_X(jumpBackBuffer[i]), x01, &spanX);
+                double yi = normCoord(PP_Y(jumpBackBuffer[i]), y01, &spanY);
                 double expectedYd = y01d + linearSlopeD * (xi - x01d);
                 double errD = fabs(yi - expectedYd);
                 if(errD > interpErrD) {
                   interpErrD = errD;
                 }
               }
-              // Hand the results back to real_t for downstream logic
+              // Keep the results in real_t for the debug prints; normalised units
               convertDoubleToReal(maxCurvD,     maxCurvatureChange, ctxtGraphs);
               convertDoubleToReal(linearSlopeD, linearSlope,        ctxtGraphs);
               convertDoubleToReal(interpErrD,   interpolationError, ctxtGraphs);
@@ -1532,6 +1569,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
                 printf("  Gradient increase evaluation: maxCurv=%s, interpError=%s, useful=%d\n", strBuf1, strBuf2, jumpBackPointsUseful);
               #endif // GRAPHDEBUG
               shouldCommitPoints = jumpBackPointsUseful;
+              }
             }
           }
 
@@ -1801,6 +1839,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     fillStackWithReal0();
 
     #if defined(LOW_GRAPH_ACC)
+      int32_t s34 = ctxtReal34.digits, s39 = ctxtReal39.digits, s51 = ctxtReal51.digits, s75 = ctxtReal75.digits;
       //Change to SDIGS digit operation for screen graphs;
       if(significantDigitsForEqnGraphs <= 6) {
         ctxtReal34.digits = significantDigitsForScreen;
@@ -1817,11 +1856,11 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     refreshStatusBar();
     fnPlot(0);
     #if defined(LOW_GRAPH_ACC)
-      //Change to normal operation for graphs;
-      ctxtReal34.digits = 34;
-      ctxtReal39.digits = 39;
-      ctxtReal51.digits = 51;
-      ctxtReal75.digits = 75;
+      //Restore saved, not native: PLOT can run nested via PGMPLT
+      ctxtReal34.digits = s34;
+      ctxtReal39.digits = s39;
+      ctxtReal51.digits = s51;
+      ctxtReal75.digits = s75;
     #endif //LOW_GRAPH_ACC
 
   }
@@ -1837,7 +1876,6 @@ void graph_stat(uint16_t unusedButMandatoryParameter) {
       lastPlotMode = PLOT_NOTHING;
       calcMode = CM_GRAPH;
       reDraw = true;
-      PLOT_SHADE = true;
 
       if(!getSystemFlag(FLAG_PLINE) && !getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
         fnPline(NOPARAM);
@@ -2527,21 +2565,53 @@ static inline void powCplxNat(const cplx_t *base, const uint8_t *exp, cplx_t *re
     printStatus(1, errorMessages[COMPLEX_SOLVER], force);
     saveForUndo();
                                         #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
-                                          double higherXStartValue = convertRegisterToDouble(REGISTER_X);
-                                          double lowerXStartValue = convertRegisterToDouble(REGISTER_Y);
+                                          real_t loXd, hiXd;
                                           printRegisterToConsole(REGISTER_Y, ">>> lowerXStartValue=", "");
                                           printRegisterToConsole(REGISTER_X, " higherXStartValue=", "\n");
-                                          if(higherXStartValue>lowerXStartValue + 0.01 && higherXStartValue!=DOUBLE_NOT_INIT && lowerXStartValue!=DOUBLE_NOT_INIT) { //pre-condition the plotter
-                                            x_min = lowerXStartValue;
-                                            x_max = higherXStartValue;
+                                          if(getRegisterAsReal(REGISTER_X, &hiXd) && getRegisterAsReal(REGISTER_Y, &loXd) && realCompareGreaterThan(&hiXd, &loXd)) { //pre-condition the plotter
+                                            realCopy(&loXd, x_min);
+                                            realCopy(&hiXd, x_max);
                                           }
-                                          printf("xmin:%f, xmax:%f\n", x_min, x_max);
+                                          printf("xmin:%f, xmax:%f\n", realToDoubleVal(x_min), realToDoubleVal(x_max));
                                         #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
     // initialize_function();
     complexSolver();
   }
 
 #endif //SAVE_SPACE_DM42_13GRF
+
+
+//-----------------------------------------------------//-----------------------------------------------------
+//Helper for plot range check of pair: swap reversed limits, detect too narrow range and increase to 10% if needed, allow up to 100x minimum range
+void graphRangeGuard(real_t *lo, real_t *hi) {
+  real_t span, mag, tmpR;
+  if(realCompareGreaterThan(lo, hi)) { //swap if entered in incorrect sequence
+    realCopy(hi, &tmpR);                                             // tmpR = hi
+    realCopy(lo, hi);                                                // hi = lo
+    realCopy(&tmpR, lo);                                             // lo = old hi
+  }
+  realSubtract(hi, lo, &span, &ctxtReal39);                          // span = hi - lo, >= 0 after the swap above
+  realCopyAbs(lo, &mag);                                             // mag = |lo|
+  realCopyAbs(hi, &tmpR);                                            // tmpR = |hi|
+  if(realCompareGreaterThan(&tmpR, &mag)) {
+    realCopy(&tmpR, &mag);                                           // mag = max(|lo|, |hi|)
+  }
+  realSetOne(&tmpR);
+  tmpR.exponent = 3 - GRAPH_WORKING_DIGITS;                          // tmpR = 1E-11, 100x the ULP of the graph working precision
+  realMultiply(&mag, &tmpR, &tmpR, &ctxtReal39);                     // tmpR = mag * 1E-11, the narrowest plottable span
+  if(realCompareLessEqual(&span, &tmpR)) { //span too small to plot at working precision
+    if(realIsZero(&mag)) {                 //typically 0 - 0: change to -1 to 1
+      int32ToReal(-1, lo);                                           // lo = -1
+      int32ToReal(1, hi);                                            // hi = 1
+    }
+    else {                                 //widen by 10% of the magnitude
+      convertDoubleToReal(0.1, &tmpR, &ctxtReal39);                  // tmpR = 0.1
+      realMultiply(&mag, &tmpR, &tmpR, &ctxtReal39);                 // tmpR = 0.1 * mag
+      realSubtract(lo, &tmpR, lo, &ctxtReal39);                      // lo = lo - 0.1 * mag
+      realAdd(hi, &tmpR, hi, &ctxtReal39);                           // hi = hi + 0.1 * mag
+    }
+  }
+}
 
 
 //-----------------------------------------------------//-----------------------------------------------------
@@ -2598,6 +2668,14 @@ void fnEqSolvGraph (uint16_t func) {
         }
         case EQ_PLOT: {              //uses X, Y
           if(getRegisterAsReal(REGISTER_X, &x) && getRegisterAsReal(REGISTER_Y, &y)) {
+            if(realIsSpecial(&x) || realIsSpecial(&y) || realCompareEqual(&x, &y)) { //screen raw incoming range: keep the old UX/LX and error
+              calcMode = CM_NORMAL;    //leave the graph screen so the error line renders, same as graph_stat/fnPlotStat
+              displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
+              #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+                moreInfoOnError("In function fnEqSolvGraph:", "plot range limits must be finite and distinct", NULL, NULL);
+              #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+              return;
+            }
             reallocateRegister(RESERVED_VARIABLE_UX, dtReal34, 0, amNone);
             reallocateRegister(RESERVED_VARIABLE_LX, dtReal34, 0, amNone);
             realToReal34(&x, REGISTER_REAL34_DATA(RESERVED_VARIABLE_UX));
@@ -2618,6 +2696,7 @@ void fnEqSolvGraph (uint16_t func) {
         #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
       }
       else {
+        calcMode = CM_NORMAL;
         displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
         #if (EXTRA_INFO_ON_CALC_ERROR == 1)
           sprintf(errorMessage, "unexpected parameter %u", graphVariabl1);
@@ -2649,35 +2728,39 @@ void fnEqSolvGraph (uint16_t func) {
         case EQ_PLOT: {
 
     //      PLOT_ZMY = 0; removed default zeroing of the zoom factor in eqn as it is irritating with the new y range control
-          double higherXStartValue = convertRegisterToDouble(REGISTER_X);
-          double lowerXStartValue = convertRegisterToDouble(REGISTER_Y);
+          real_t loX, hiX;
+          bool_t rangeOK = getRegisterAsReal(REGISTER_X, &hiX) && getRegisterAsReal(REGISTER_Y, &loX);
           #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
-            printf(">>> lowerXStartValue=%f  higherXStartValue=%f\n", lowerXStartValue, higherXStartValue);
+            printf(">>> lowerXStartValue=%f  higherXStartValue=%f\n", realToDoubleVal(&loX), realToDoubleVal(&hiX));
           #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
+
+          // fnClDrawMx's delete can shift the plot variable's register; cache the name, re-resolve after.
+          char plotVarName[16];
+          plotVarName[0] = 0;
+          if(currentSolverVariable >= FIRST_NAMED_VARIABLE && currentSolverVariable < FIRST_NAMED_VARIABLE + numberOfNamedVariables) {
+            uint8_t len = allNamedVariables[currentSolverVariable - FIRST_NAMED_VARIABLE].variableName[0];
+            xcopy(plotVarName, allNamedVariables[currentSolverVariable - FIRST_NAMED_VARIABLE].variableName + 1, len);
+            plotVarName[len] = 0;
+          }
 
           fnClDrawMx(5);
           strcpy(plotStatMx, "DrwMX");
 
-          if(higherXStartValue>lowerXStartValue + 0.0001 && higherXStartValue!=DOUBLE_NOT_INIT && lowerXStartValue!=DOUBLE_NOT_INIT) { //pre-condition the plotter
-            x_min = lowerXStartValue;
-            x_max = higherXStartValue;
-          }
-          if(x_min > x_max) { //swap if entered in incorrect sequence
-            float kk = x_max;
-            x_max = x_min;
-            x_min = kk;
-          }
-          float x_d = fabs(x_max-x_min);
-          if(x_d < 0.0001) { //too close together for float type
-            x_d = 0.0001 * 10;
-            if(fabs(x_min)<0.0001 || fabs(x_max)<0.0001) { //abort old values typically 0 - 0 and change to -1 to 1
-              x_d = 10;
+          if(plotVarName[0] != 0) {
+            calcRegister_t reResolved = findNamedVariable(plotVarName);
+            if(reResolved != INVALID_VARIABLE) {
+              currentSolverVariable = reResolved;
+              graphVariabl1         = reResolved;
             }
-            x_min = x_min - 0.1 * x_d;
-            x_max = x_max + 0.1 * x_d;
           }
+
+          if(rangeOK && realCompareGreaterThan(&hiX, &loX)) { //pre-condition the plotter                 // if(X > Y) { x_min = Y; x_max = X; }
+            realCopy(&loX, x_min);                                         // x_min = Y, the lower stack value
+            realCopy(&hiX, x_max);                                         // x_max = X, the higher stack value
+          }
+          graphRangeGuard(x_min, x_max); //swap if entered in incorrect sequence; widen spans too small to plot at working precision
           #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
-            printf("xmin:%f, xmax:%f\n", x_min, x_max);
+            printf("xmin:%f, xmax:%f\n", realToDoubleVal(x_min), realToDoubleVal(x_max));
           #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
 
           initialize_function();

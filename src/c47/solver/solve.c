@@ -37,6 +37,7 @@
 void fnPgmSlv(uint16_t label) {
   if(FIRST_LABEL <= label && label <= LAST_LABEL) {
     currentSolverProgram = label - FIRST_LABEL;
+    currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
   }
   else if(REGISTER_X <= label && label <= REGISTER_T) {
     // Interactive mode
@@ -53,6 +54,7 @@ void fnPgmSlv(uint16_t label) {
     }
     else {
       currentSolverProgram = label - FIRST_LABEL;
+      currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
     }
   }
   else {
@@ -304,10 +306,15 @@ static void _executeSolver(calcRegister_t variable, const real34_t *val, real34_
     parseEquation(currentFormula, EQUATION_PARSER_XEQ, tmpString, tmpString + AIM_BUFFER_LENGTH);
   }
   else {
+    // also stack the variable + control flags so a nested SOLVE cannot leak into the outer point (enables PLOT(SOLVE), SOLVE(SOLVE))
     uint16_t savedCurrentSolverProgram = currentSolverProgram;
+    uint16_t savedCurrentSolverVariable = currentSolverVariable;
+    uint16_t savedCurrentSolverStatus = currentSolverStatus;
     dynamicMenuItem = -1;
     execProgram(currentSolverProgram + FIRST_LABEL);
     currentSolverProgram = savedCurrentSolverProgram;
+    currentSolverVariable = savedCurrentSolverVariable;
+    currentSolverStatus = savedCurrentSolverStatus;
   }
   if(lastErrorCode == ERROR_OVERFLOW_PLUS_INF) {
     realToReal34(const_plusInfinity, res);
@@ -477,9 +484,18 @@ int solver(calcRegister_t variable, const real34_t *y, const real34_t *x, real34
       realSetOne(&minBracketSpacing);
       minBracketSpacing.exponent -= (significantDigits == 0 || significantDigits == 34) ? solverTvmTol : significantDigits;
     }
+    else if(graphAccActive) {
+      // graphAccActive (true only inside execute_rpn_function_graphAcc) means contexts are narrowed to significantDigitsForEqnGraphs+3.
+      // follow the grapher: converge to graph precision. Set/cleared with the reduction.
+      realSetOne(&tol);
+      tol.exponent -= significantDigitsForEqnGraphs;
+      realSetOne(&minBracketSpacing);
+      minBracketSpacing.exponent -= significantDigitsForEqnGraphs;
+      realCopy(const_1e_34, &tolAlmostZero);   // residual floor stays at real34 precision
+    }
     else {
       convergenceTolerence(&tol);
-      stringToReal("1e-34", &tolAlmostZero, &ctxtSolver);
+      realCopy(const_1e_34, &tolAlmostZero);
       realCopy(const_1e_32, &minBracketSpacing);
     }
 

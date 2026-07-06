@@ -32,6 +32,7 @@ char                  lastTemp[16];
 #endif // PC_BUILD
 
 bool_t                headlessMode = false;
+bool_t                snapSkipRefresh = false;
 bool_t                loadTestPrograms = false;
 bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;
@@ -74,6 +75,7 @@ bool_t                 reDraw = true;
 bool_t                 refreshNIMdone = false;
 bool_t                 cleanupAfterShift = false;
 bool_t                 solverEstimatesUsed = false;
+bool_t                 graphAccActive = false;
 bool_t                 updateOldConstants;
 
 
