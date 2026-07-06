@@ -256,7 +256,9 @@ void fnComplexPlot (uint16_t mode) {
     flipSystemFlag(FLAG_IMPLOT);
   }
   fnEqSolvGraph(EQ_PLOT_LU);
-  fnPlotSQ(0);
+  if(lastErrorCode == ERROR_NONE) { //same guard as fnPlotf
+    fnPlotSQ(0);
+  }
 }
 
 
@@ -285,7 +287,9 @@ void fnPlotReset(uint16_t unusedButMandatoryParameter) {
 
 void fnPlotf(uint16_t unusedButMandatoryParameter) {
   fnEqSolvGraph(EQ_PLOT); // will pick up X1 X2 from the stack
-  fnPlotSQ(NOPARAM);
+  if(lastErrorCode == ERROR_NONE) { //on a rejected range already set CM_NORMAL; prevent fnPlotSQ to force CM_GRAPH back and hide the error
+    fnPlotSQ(NOPARAM);
+  }
 }
 
 
@@ -711,10 +715,12 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
     else {
 
       //PLOT_ZMY = 18, special case to allow Ylo Yhi
-      //_LY _UY override only if ZOOM is not set, AND Yup and Ylo are not zero
-      if(fabs(plotzoomx-1) < 0.00001 && fabs(plotzoomy-1) < 0.00001 && !(real34IsZero(REGISTER_REAL34_DATA(RESERVED_VARIABLE_LY)) && real34IsZero(REGISTER_REAL34_DATA(RESERVED_VARIABLE_UY)))) {
+      //_LY _UY override only if ZOOM is not set, AND Yup and Ylo are not zero, AND both are finite (NaN/infinite from old backups fall back to the default range)
+      if(fabs(plotzoomx-1) < 0.00001 && fabs(plotzoomy-1) < 0.00001 && !(real34IsZero(REGISTER_REAL34_DATA(RESERVED_VARIABLE_LY)) && real34IsZero(REGISTER_REAL34_DATA(RESERVED_VARIABLE_UY)))
+          && !real34IsSpecial(REGISTER_REAL34_DATA(RESERVED_VARIABLE_LY)) && !real34IsSpecial(REGISTER_REAL34_DATA(RESERVED_VARIABLE_UY))) {
         real34ToReal(REGISTER_REAL34_DATA(RESERVED_VARIABLE_LY), y_min);    // y_min = Ylo, the user's reserved variable
         real34ToReal(REGISTER_REAL34_DATA(RESERVED_VARIABLE_UY), y_max);    // y_max = Yhi
+        graphRangeGuard(y_min, y_max);                 //swap reversed limits; widen Ylo == Yhi and spans below working precision
       }
       else {
         int32ToReal(-10, y_min);                       // y_min = -10
@@ -1495,6 +1501,7 @@ void graph_plotmem(void) {
       }
       else {
         if(plotStatMx[0] == 'S') {   // "no statistical data" only applies to a stat plot. A draw matrix ('D') with <2 points is a function plot still being built (e.g. a mistimed refresh mid-build) - not an error, draw nothing.
+          calcMode = CM_NORMAL;
           displayCalcErrorMessage(ERROR_NO_SUMMATION_DATA, ERR_REGISTER_LINE, REGISTER_X);
           #if (EXTRA_INFO_ON_CALC_ERROR == 1)
             sprintf(errorMessage, "There is no statistical data available!");

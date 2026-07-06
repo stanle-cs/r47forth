@@ -222,6 +222,7 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
                                   #endif // STATDEBUG
     }
     else {
+      calcMode = CM_NORMAL;
       displayCalcErrorMessage(ERROR_NOT_ENOUGH_MEMORY_FOR_NEW_MATRIX, ERR_REGISTER_LINE, REGISTER_X); // Invalid input data type for this operation
       #if (EXTRA_INFO_ON_CALC_ERROR == 1)
         sprintf(errorMessage, "additional matrix line not added; rows = %i", rows);
@@ -2573,6 +2574,39 @@ static inline void powCplxNat(const cplx_t *base, const uint8_t *exp, cplx_t *re
 
 
 //-----------------------------------------------------//-----------------------------------------------------
+//Helper for plot range check of pair: swap reversed limits, detect too narrow range and increase to 10% if needed, allow up to 100x minimum range
+void graphRangeGuard(real_t *lo, real_t *hi) {
+  real_t span, mag, tmpR;
+  if(realCompareGreaterThan(lo, hi)) { //swap if entered in incorrect sequence
+    realCopy(hi, &tmpR);                                             // tmpR = hi
+    realCopy(lo, hi);                                                // hi = lo
+    realCopy(&tmpR, lo);                                             // lo = old hi
+  }
+  realSubtract(hi, lo, &span, &ctxtReal39);                          // span = hi - lo, >= 0 after the swap above
+  realCopyAbs(lo, &mag);                                             // mag = |lo|
+  realCopyAbs(hi, &tmpR);                                            // tmpR = |hi|
+  if(realCompareGreaterThan(&tmpR, &mag)) {
+    realCopy(&tmpR, &mag);                                           // mag = max(|lo|, |hi|)
+  }
+  realSetOne(&tmpR);
+  tmpR.exponent = 3 - GRAPH_WORKING_DIGITS;                          // tmpR = 1E-11, 100x the ULP of the graph working precision
+  realMultiply(&mag, &tmpR, &tmpR, &ctxtReal39);                     // tmpR = mag * 1E-11, the narrowest plottable span
+  if(realCompareLessEqual(&span, &tmpR)) { //span too small to plot at working precision
+    if(realIsZero(&mag)) {                 //typically 0 - 0: change to -1 to 1
+      int32ToReal(-1, lo);                                           // lo = -1
+      int32ToReal(1, hi);                                            // hi = 1
+    }
+    else {                                 //widen by 10% of the magnitude
+      convertDoubleToReal(0.1, &tmpR, &ctxtReal39);                  // tmpR = 0.1
+      realMultiply(&mag, &tmpR, &tmpR, &ctxtReal39);                 // tmpR = 0.1 * mag
+      realSubtract(lo, &tmpR, lo, &ctxtReal39);                      // lo = lo - 0.1 * mag
+      realAdd(hi, &tmpR, hi, &ctxtReal39);                           // hi = hi + 0.1 * mag
+    }
+  }
+}
+
+
+//-----------------------------------------------------//-----------------------------------------------------
 void fnEqSolvGraph (uint16_t func) {
   #if !defined(SAVE_SPACE_DM42_13GRF)
       hourGlassIconEnabled = true;
@@ -2626,6 +2660,14 @@ void fnEqSolvGraph (uint16_t func) {
         }
         case EQ_PLOT: {              //uses X, Y
           if(getRegisterAsReal(REGISTER_X, &x) && getRegisterAsReal(REGISTER_Y, &y)) {
+            if(realIsSpecial(&x) || realIsSpecial(&y) || realCompareEqual(&x, &y)) { //screen raw incoming range: keep the old UX/LX and error
+              calcMode = CM_NORMAL;    //leave the graph screen so the error line renders, same as graph_stat/fnPlotStat
+              displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
+              #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+                moreInfoOnError("In function fnEqSolvGraph:", "plot range limits must be finite and distinct", NULL, NULL);
+              #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+              return;
+            }
             reallocateRegister(RESERVED_VARIABLE_UX, dtReal34, 0, amNone);
             reallocateRegister(RESERVED_VARIABLE_LX, dtReal34, 0, amNone);
             realToReal34(&x, REGISTER_REAL34_DATA(RESERVED_VARIABLE_UX));
@@ -2646,6 +2688,7 @@ void fnEqSolvGraph (uint16_t func) {
         #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
       }
       else {
+        calcMode = CM_NORMAL;
         displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
         #if (EXTRA_INFO_ON_CALC_ERROR == 1)
           sprintf(errorMessage, "unexpected parameter %u", graphVariabl1);
@@ -2677,7 +2720,7 @@ void fnEqSolvGraph (uint16_t func) {
         case EQ_PLOT: {
 
     //      PLOT_ZMY = 0; removed default zeroing of the zoom factor in eqn as it is irritating with the new y range control
-          real_t loX, hiX, x_d, mag, tmpR;
+          real_t loX, hiX;
           bool_t rangeOK = getRegisterAsReal(REGISTER_X, &hiX) && getRegisterAsReal(REGISTER_Y, &loX);
           #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
             printf(">>> lowerXStartValue=%f  higherXStartValue=%f\n", realToDoubleVal(&loX), realToDoubleVal(&hiX));
@@ -2707,32 +2750,7 @@ void fnEqSolvGraph (uint16_t func) {
             realCopy(&loX, x_min);                                         // x_min = Y, the lower stack value
             realCopy(&hiX, x_max);                                         // x_max = X, the higher stack value
           }
-          if(realCompareGreaterThan(x_min, x_max)) { //swap if entered in incorrect sequence
-            realCopy(x_max, &tmpR);                                        // tmpR = x_max
-            realCopy(x_min, x_max);                                        // x_max = x_min
-            realCopy(&tmpR, x_min);                                        // x_min = old x_max
-          }
-          realSubtract(x_max, x_min, &x_d, &ctxtReal39);                   // x_d = x_max - x_min, the span, >= 0 after the swap above
-          realCopyAbs(x_min, &mag);                                        // mag = |x_min|
-          realCopyAbs(x_max, &tmpR);                                       // tmpR = |x_max|
-          if(realCompareGreaterThan(&tmpR, &mag)) {
-            realCopy(&tmpR, &mag);                                         // mag = max(|x_min|, |x_max|)
-          }
-          realSetOne(&tmpR);
-          tmpR.exponent = 3 - GRAPH_WORKING_DIGITS;                        // tmpR = 1E-11, 100x the ULP of the graph working precision
-          realMultiply(&mag, &tmpR, &tmpR, &ctxtReal39);                   // tmpR = mag * 1E-11, the narrowest plottable span
-          if(realCompareLessEqual(&x_d, &tmpR)) { //span too small to plot at working precision           // if(x_d <= mag * 1E-11)
-            if(realIsZero(&mag)) {                //typically 0 - 0: change to -1 to 1
-              int32ToReal(-1, x_min);                                      // x_min = -1
-              int32ToReal(1, x_max);                                       // x_max = 1
-            }
-            else {                                //widen by 10% of the magnitude
-              convertDoubleToReal(0.1, &tmpR, &ctxtReal39);                // tmpR = 0.1
-              realMultiply(&mag, &tmpR, &tmpR, &ctxtReal39);               // tmpR = 0.1 * mag
-              realSubtract(x_min, &tmpR, x_min, &ctxtReal39);              // x_min = x_min - 0.1 * mag
-              realAdd(x_max, &tmpR, x_max, &ctxtReal39);                   // x_max = x_max + 0.1 * mag
-            }
-          }
+          graphRangeGuard(x_min, x_max); //swap if entered in incorrect sequence; widen spans too small to plot at working precision
           #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
             printf("xmin:%f, xmax:%f\n", realToDoubleVal(x_min), realToDoubleVal(x_max));
           #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0

@@ -1,0 +1,48 @@
+Headless screenshots (t47)
+
+Build:  make simc47 t47
+        (exactly that; a bare "make t47" builds the R47-based t47 instead)
+
+CAUTION, calculator state: the sim starts from the setup in the current
+backup.cfg (C47-based t47) or backupR47.cfg (R47-based t47) in the working
+folder. Display settings (DSP, HIDE, grouping, profile) change how numbers
+render in the stack, menus and graph tick/legend text, so screenshot
+comparisons are only valid against the same setup. For a guaranteed clean
+slate, temporarily rename the cfg file aside before the run and restore it
+after: the sim then starts from factory defaults. Do NOT use a profile
+switch like --jm for this; profiles are not factory defaults (JM sets
+HIDE=31, which renders numbers below 1E-31 as 0). All reference bmps in
+the repo root (MR*_A..I) reproduce from factory defaults.
+
+Normal screen (stack, menus, status bar):
+  ./t47 --exec 'nim 2; nim 3; xeq +; snap'
+
+Graphic screen (PIXEL / POINT / plot), keep the drawn pixels:
+  ./t47 --snapskiprefresh --exec 'cllcd; nim 240; chs; nim 300; pixel; snap'
+
+Stat graph (SCATR / HISTOX / HISTOY): enter data with Σ+, then plot.
+Plot commands render immediately, so both snap modes capture the graph:
+  ./t47 --snapskiprefresh --exec 'clΣ; nim 1; nim 1; xeq Σ+; nim 4; nim 2; xeq Σ+; nim 9; nim 3; xeq Σ+; nim 16; nim 4; xeq Σ+; nim 25; nim 5; xeq Σ+; xeq SCATR; snap'
+
+Plot test suite examples
+  ./t47 --exec 'readp ./docs/appnotes/sources/AN0022b_programs/func.p47; xeq PLTROOT'
+  ./t47 -e 'readp ./PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; item 2734 "xx"; snap'
+
+Stat graph at 1E-50 (reference MR3_C_SCATR_1E-50.bmp; both axes scaled):
+  ./t47 --snapskiprefresh --exec 'clΣ; nim 1e-50; nim 1e-50; xeq Σ+; nim 4e-50; nim 2e-50; xeq Σ+; nim 9e-50; nim 3e-50; xeq Σ+; nim 16e-50; nim 4e-50; xeq Σ+; nim 25e-50; nim 5e-50; xeq Σ+; xeq SCATR; snap'
+
+Range screening examples (error text appears on stdout):
+  NaN/inf STO rejected:  ./t47 --exec 'flag SPCRES 1; nim 1; nim 0; item 99; item 2548'
+  equal limits rejected: ./t47 --exec 'readp ./PROGRAMS/FFX.p47; pgmplt FFX; nim 5; nim 5; item 2734 "xx"'
+  (items: 2547 STO up-Y, 2548 STO down-Y, 99 divide, 2734 PLTf)
+
+Output: newest ./YYYYMMDD-HHMMSS.bmp in cwd (time is the sim clock).
+
+Notes:
+  ;              separates commands.
+  negative num   type the value then  chs   (nim 240; chs -> -240).
+  stack order    first nim -> Y, second nim -> X.
+  script file    ./t47 --headless --script file.t47   (instead of --exec).
+  snap           saves a screenshot; default redraws the whole screen first.
+  --snapskiprefresh  snap saves the screen as-is, so drawn PIXEL/POINT/plot
+                 pixels are not wiped by the redraw.

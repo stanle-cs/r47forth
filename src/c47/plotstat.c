@@ -1257,7 +1257,7 @@ currentKeyCode = 255;
   uint16_t  cnt, ix, numberOfPlotPoints;
   int16_t  xo, xn, xN;
   int16_t  yo, yn, yN;
-  real_t xr, yr, fminr, fmaxr;
+  real_t xr, yr;
 
   numberOfPlotPoints = 0;
   roundedTicks = false;
@@ -1329,13 +1329,11 @@ currentKeyCode = 255;
         printf("Axis1a: x: %f -> %f y: %f -> %f   \n", dbl(x_min), dbl(x_max), dbl(y_min), dbl(y_max));
       #endif // STATDEBUG && PC_BUILD
 
-      convertDoubleToReal(FLoatingMin, &fminr, &ctxtReal39);
-      convertDoubleToReal(FLoatingMax, &fmaxr, &ctxtReal39);
-      if(realCompareLessEqual(x_min, &fminr) || realCompareLessEqual(x_max, &fminr) || realCompareLessEqual(y_min, &fminr) || realCompareLessEqual(y_max, &fminr)) {
-        goto scaleMinusInfinity;
+      if((realIsInfinite(x_min) && realIsNegative(x_min)) || (realIsInfinite(x_max) && realIsNegative(x_max)) || (realIsInfinite(y_min) && realIsNegative(y_min)) || (realIsInfinite(y_max) && realIsNegative(y_max))) {
+        goto scaleMinusInfinity;   //-infinite data; previously was x <= -1E38
       }
-      if(realCompareGreaterEqual(x_min, &fmaxr) || realCompareGreaterEqual(x_max, &fmaxr) || realCompareGreaterEqual(y_min, &fmaxr) || realCompareGreaterEqual(y_max, &fmaxr)) {
-        goto scalePlusInfinity;
+      if(realIsSpecial(x_min) || realIsSpecial(x_max) || realIsSpecial(y_min) || realIsSpecial(y_max) || realCompareGreaterThan(x_min, x_max) || realCompareGreaterThan(y_min, y_max)) {
+        goto scalePlusInfinity;    //+infinite or NaN data, or the +-1E38 seeds untouched (no plottable point); any finite magnitude passes
       }
 
 
@@ -1355,12 +1353,12 @@ currentKeyCode = 255;
       roundedTicks = false;
 //    }
 
-    if(realCompareLessEqual(x_min, &fminr) || realCompareLessEqual(x_max, &fminr) || realCompareLessEqual(y_min, &fminr) || realCompareLessEqual(y_max, &fminr)) {
-       goto scaleMinusInfinity;
-     }
-     if(realCompareGreaterEqual(x_min, &fmaxr) || realCompareGreaterEqual(x_max, &fmaxr) || realCompareGreaterEqual(y_min, &fmaxr) || realCompareGreaterEqual(y_max, &fmaxr)) {
-       goto scalePlusInfinity;
-     }
+    if((realIsInfinite(x_min) && realIsNegative(x_min)) || (realIsInfinite(x_max) && realIsNegative(x_max)) || (realIsInfinite(y_min) && realIsNegative(y_min)) || (realIsInfinite(y_max) && realIsNegative(y_max))) {
+      goto scaleMinusInfinity;     //-infinite range after graph_Include0
+    }
+    if(realIsSpecial(x_min) || realIsSpecial(x_max) || realIsSpecial(y_min) || realIsSpecial(y_max) || realCompareGreaterThan(x_min, x_max) || realCompareGreaterThan(y_min, y_max)) {
+      goto scalePlusInfinity;      //+infinite, NaN or reversed range after graph_Include0
+    }
 
 
 
@@ -1507,6 +1505,7 @@ currentKeyCode = 255;
 
   }
   else {
+    calcMode = CM_NORMAL;
     displayCalcErrorMessage(ERROR_NO_SUMMATION_DATA, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
       sprintf(errorMessage, "There is no statistical data available!");
@@ -1517,6 +1516,7 @@ currentKeyCode = 255;
 
 
   scalePlusInfinity:
+  calcMode = CM_NORMAL;
   displayCalcErrorMessage(ERROR_OVERFLOW_PLUS_INF, ERR_REGISTER_LINE, REGISTER_X);
   #if (EXTRA_INFO_ON_CALC_ERROR == 1)
     sprintf(errorMessage, "Plus Infinity encountered!");
@@ -1525,6 +1525,7 @@ currentKeyCode = 255;
   return;
 
   scaleMinusInfinity:
+  calcMode = CM_NORMAL;
   displayCalcErrorMessage(ERROR_OVERFLOW_MINUS_INF, ERR_REGISTER_LINE, REGISTER_X);
   #if (EXTRA_INFO_ON_CALC_ERROR == 1)
     sprintf(errorMessage, "Minus Infinity encountered!");
