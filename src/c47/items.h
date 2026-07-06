@@ -2965,8 +2965,7 @@
 #define ITM_2856                    2856
 #define ITM_2857                    2857
 #define ITM_2858                    2858
-#define ITM_2859                    2859
-#define MNU_TAMLOCALLABEL           2860
+#define MNU_TAMLOCALLABEL           2859
 
 #define LAST_ITEM                   2861
 
