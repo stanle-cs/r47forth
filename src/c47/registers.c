@@ -1580,7 +1580,7 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
   }
 
   else if(getRegisterDataType(regist) == dtString && parameterType == INDPM_LABEL) {
-    value = findNamedLabel(REGISTER_STRING_DATA(regist));
+    value = findNamedLabel(REGISTER_STRING_DATA(regist), ALL_LABELS);
     isValidAlpha = true;
     if(value == INVALID_VARIABLE) {
       displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);

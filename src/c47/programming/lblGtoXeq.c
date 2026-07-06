@@ -42,9 +42,9 @@ void fnGoto(uint16_t label) {
         moreInfoOnError("In function fnGoto:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     }
-    else if(label >= FIRST_LABEL && label <= LAST_LABEL) { // Global named label
+    else if(label >= FIRST_LABEL && label <= LAST_LABEL) { // Global or local named label
       if((label - FIRST_LABEL) < numberOfLabels) {
-        goToGlobalStep((int16_t)labelList[label - FIRST_LABEL].step);
+        goToGlobalStep(abs((int16_t)labelList[label - FIRST_LABEL].step));
         return;
       }
       else {
@@ -86,7 +86,7 @@ void goToGlobalStep(int32_t step) {
     for(uint16_t lbl=0; lbl<numberOfLabels; lbl++) {
       uint8_t *lblPtr;
       lblPtr = labelList[lbl].labelPointer;
-      if(labelList[lbl].step > 0 && *lblPtr == len) { // It's a global label and the length is OK
+      if(((labelList[lbl].step > 0) || (labelList[lbl].step < 0 && *(labelList[lbl].labelPointer - 1) == LOCAL_LABEL_VARIABLE)) && *lblPtr == len) { // It's a global lor a local named abel and the length is OK
         for(c=0; c<len; c++) {
           if(labelName[c] != lblPtr[c + 1]) {
             break;
@@ -94,7 +94,7 @@ void goToGlobalStep(int32_t step) {
         }
         if(c == len) {
           if(dupNum <= 0) {
-            step = labelList[lbl].step;
+            step = abs(labelList[lbl].step);
             break;
           }
           else {
@@ -342,9 +342,9 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
       if(opParam <= LAST_LOCAL_LABEL) { // Local label from 00 to 99 or from A to l
         reallyRunFunction(op, opParam);
       }
-      else if(opParam == STRING_LABEL_VARIABLE) {
+      else if((opParam == STRING_LABEL_VARIABLE) || (opParam == LOCAL_LABEL_VARIABLE)) {
         getStringLabelOrVariableName(paramAddress);
-        calcRegister_t label = findNamedLabel(tmpStringLabelOrVariableName);
+        calcRegister_t label = findNamedLabel(tmpStringLabelOrVariableName,opParam);
         if(label != INVALID_VARIABLE || op == ITM_LBLQ) {
           reallyRunFunction(op, label);
         }
@@ -975,7 +975,7 @@ void execProgram(uint16_t label) {
 
 void fnCheckLabel(uint16_t label) {
   if(dynamicMenuItem >= 0) {
-    label = findNamedLabel(dynmenuGetLabel(dynamicMenuItem));
+    label = findNamedLabel(dynmenuGetLabel(dynamicMenuItem),ALL_LABELS);
   }
 
   // Local Label 00 to 99 and A to l
