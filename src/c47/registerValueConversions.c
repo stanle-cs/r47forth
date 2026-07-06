@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
 
 #include "c47.h"
-#include <locale.h>
 
 static float fnRealToFloat(const real_t *r);
 
