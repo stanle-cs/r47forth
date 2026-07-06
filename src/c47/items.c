@@ -664,7 +664,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
       if(func == ITM_XEQ && dynamicMenuItem > -1) {
         char *varCatalogItem = dynmenuGetLabel(dynamicMenuItem);
         if(strcmp(varCatalogItem, "XEQ") != 0) {
-          calcRegister_t label = findNamedLabel(varCatalogItem);
+          calcRegister_t label = findNamedLabel(varCatalogItem, GLOBAL_LABELS);
           if(label != INVALID_VARIABLE) {
             if(calcMode == CM_PEM) {
               insertUserItemInProgram(func, varCatalogItem);
@@ -4704,7 +4704,8 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2857 */  { itemToBeCoded,                   NOPARAM,                  "2857",                                           "2857",                                          (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2858 */  { itemToBeCoded,                   NOPARAM,                  "2858",                                           "2858",                                          (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2859 */  { itemToBeCoded,                   NOPARAM,                  "2859",                                           "2859",                                          (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2860 */  { itemToBeCoded,                NOPARAM,                     "",                                               "TamLocalLabel",                                 (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 
-/* 2850 */  { itemToBeCoded,                NOPARAM,                     "",                                               "Last item",                                    (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2861 */  { itemToBeCoded,                NOPARAM,                     "",                                               "Last item",                                    (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 
 };

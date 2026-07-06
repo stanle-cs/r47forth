@@ -598,7 +598,7 @@ TO_QSPI const int16_t menu_ConvTemp[]       = {
                                                     ITM_CtoF,                 ITM_FtoC,                 ITM_CtoK,                 ITM_KtoC,                 ITM_FtoK,                 ITM_KtoF,
                                                     ITM_RAtoF,                ITM_FtoRA,                ITM_RAtoK,                ITM_KtoRA,                ITM_EVKBtoK,              ITM_KtoEVKB,
                                                     ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL,                 ITM_NULL                        };
- 
+
 TO_QSPI const int16_t menu_ConvStruct[]     = {
                                                     // Screen 1 — Navigation index
                                                     -MNU_CONV_SECTION,        -MNU_CONV_MATERL,         -MNU_CONV_F_LOAD,         -MNU_CONV_M_LOAD,         -MNU_CONV_P_LOAD,         -MNU_CONVM,
@@ -828,13 +828,15 @@ TO_QSPI const int16_t menu_TamRclTVM[]   = { ITM_STORCL_NPPER,              ITM_
 
 TO_QSPI const int16_t menu_TamShuffle[]  = { ITM_NULL,                      ITM_NULL,                   ITM_REG_X,                ITM_REG_Y,             ITM_REG_Z,                   ITM_REG_T                     };
 
-TO_QSPI const int16_t menu_TamLabel[]    = { ITM_INDIRECTION,               -MNU_PROG,                  ITM_REG_C,                ITM_REG_D,             ITM_REG_E,                   ITM_REG_F,
+TO_QSPI const int16_t menu_TamLabel[]    = { ITM_INDIRECTION,               -MNU_PROG,                  ITM_COLON,                ITM_REG_D,             ITM_REG_E,                   ITM_REG_F,
                                              ITM_a,                         ITM_b,                      ITM_c,                    ITM_d,                 ITM_e,                       ITM_f,
                                              ITM_g,                         ITM_h,                      ITM_i,                    ITM_j,                 ITM_k,                       ITM_l                         };
 
+TO_QSPI const int16_t menu_TamLocalLabel[]= { ITM_NULL,                     -MNU_PROG,                  ITM_alpha,                ITM_NULL,              ITM_NULL,                    ITM_NULL                      };
+
 TO_QSPI const int16_t menu_TamMenu []    = { ITM_INDIRECTION,               -MNU_MENU,                  ITM_INDIRECT_X,           ITM_INDIRECT_Y,        ITM_INDIRECT_Z,              ITM_INDIRECT_T                };
 
-TO_QSPI const int16_t menu_TamLabelOnly[]= { ITM_INDIRECTION,               -MNU_PROG,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL                      };
+TO_QSPI const int16_t menu_TamLabelOnly[]= { ITM_INDIRECTION,               -MNU_PROG,                  ITM_COLON,                ITM_NULL,              ITM_NULL,                    ITM_NULL                      };
 
 
 TO_QSPI const int16_t menu_Eim[]         = {
@@ -1203,8 +1205,9 @@ TO_QSPI const softmenu_t softmenu[] = {
 /* 182 */  {.menuItem = -MNU_CONV_F_LOAD,   .numItems = sizeof(menu_CONV_FLoad    )/sizeof(int16_t), .softkeyItem = menu_CONV_FLoad     },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 /* 183 */  {.menuItem = -MNU_CONV_M_LOAD,   .numItems = sizeof(menu_CONV_MLoad    )/sizeof(int16_t), .softkeyItem = menu_CONV_MLoad     },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 /* 184 */  {.menuItem = -MNU_CONV_P_LOAD,   .numItems = sizeof(menu_CONV_PLoad    )/sizeof(int16_t), .softkeyItem = menu_CONV_PLoad     },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+/* 185 */  {.menuItem = -MNU_TAMLOCALLABEL, .numItems = sizeof(menu_TamLocalLabel )/sizeof(int16_t), .softkeyItem = menu_TamLocalLabel  },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 
-/* 185 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
+/* 186 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
 
 
 };
@@ -1648,7 +1651,6 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
   static void initVariableSoftmenu(int16_t menu) {
     int16_t i, numberOfBytes, numberOfGlobalLabels;
     uint8_t *ptr;
-
     #if defined(PC_BUILD)
       //printf("initvariableSoftMenu (cachedDynamicMenu=%i)",cachedDynamicMenu);
     #endif // PC_BUILD
@@ -1676,8 +1678,8 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
         numberOfGlobalLabels = 0;
         memset(tmpString, 0, TMP_STR_LENGTH);
         for(i=0; i<numberOfLabels; i++) {
-          if(labelList[i].step > 0) { // Global label
-            uint8_t lblNameLen = labelList[i].labelPointer[0];
+          if((!tam.colon && (labelList[i].step > 0)) || (tam.colon && labelList[i].program == currentProgramNumber && (*(labelList[i].labelPointer-1) == LOCAL_LABEL_VARIABLE))) { // Global label or local named label
+           uint8_t lblNameLen = labelList[i].labelPointer[0];
             if(lblNameLen > 14) { // this menu lays each name out in a fixed 15-byte slot
               lblNameLen = 14;
             }
@@ -3227,7 +3229,7 @@ void showSoftmenuCurrentPart(void) {
                     }
                     showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);
                   }
-                } 
+                }
 
                 else {                                                                            // fall through for non-user menus
                   showSoftkey(itemName, x, y, vm, true, true, showCb, showValue, showText);

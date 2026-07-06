@@ -2966,8 +2966,9 @@
 #define ITM_2857                    2857
 #define ITM_2858                    2858
 #define ITM_2859                    2859
+#define MNU_TAMLOCALLABEL           2860
 
-#define LAST_ITEM                   2860
+#define LAST_ITEM                   2861
 
 #define SCREENDUMP                    9875 // Used to signal screen dump operated (not to be confused with SNAP)
 #define NOPARAM                       9876 // Item for function who don't need an item

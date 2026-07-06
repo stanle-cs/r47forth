@@ -691,6 +691,7 @@ typedef struct {
   bool_t     alpha;
   int16_t    currentOperation;
   bool_t     dot;
+  bool_t     colon;
   bool_t     indirect;
   int16_t    digitsSoFar;
   int16_t    value0;       // to store the initial value for indirection
