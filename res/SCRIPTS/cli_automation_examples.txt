@@ -8,11 +8,12 @@ backup.cfg (C47-based t47) or backupR47.cfg (R47-based t47) in the working
 folder. Display settings (DSP, HIDE, grouping, profile) change how numbers
 render in the stack, menus and graph tick/legend text, so screenshot
 comparisons are only valid against the same setup. For a guaranteed clean
-slate, temporarily rename the cfg file aside before the run and restore it
-after: the sim then starts from factory defaults. Do NOT use a profile
+slate start with --reset: factory defaults, the cfg file is not loaded
+(equivalent to temporarily renaming the cfg aside). Do NOT use a profile
 switch like --jm for this; profiles are not factory defaults (JM sets
 HIDE=31, which renders numbers below 1E-31 as 0). All reference bmps in
-the repo root (MR*_A..I) reproduce from factory defaults.
+the repo root (MR*_A..I) reproduce from factory defaults:
+  ./t47 --reset --exec '...'
 
 Normal screen (stack, menus, status bar):
   ./t47 --exec 'nim 2; nim 3; xeq +; snap'
@@ -34,6 +35,8 @@ Stat graph at 1E-50 (reference MR3_C_SCATR_1E-50.bmp; both axes scaled):
 Range screening examples (error text appears on stdout):
   NaN/inf STO rejected:  ./t47 --exec 'flag SPCRES 1; nim 1; nim 0; item 99; item 2548'
   equal limits rejected: ./t47 --exec 'readp ./PROGRAMS/FFX.p47; pgmplt FFX; nim 5; nim 5; item 2734 "xx"'
+  out-of-domain range:   ./t47 --reset -e 'readp ./PROGRAMS/FFX.p47; pgmplt FFX; nim 1; nim 10; item 2734 "xx"'
+                         (every sample infinite -> "no plottable sample in the plot range")
   (items: 2547 STO up-Y, 2548 STO down-Y, 99 divide, 2734 PLTf)
 
 Output: newest ./YYYYMMDD-HHMMSS.bmp in cwd (time is the sim clock).

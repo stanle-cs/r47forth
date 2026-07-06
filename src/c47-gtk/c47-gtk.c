@@ -25,6 +25,7 @@
   bool_t              dumpMenusAll = false;
   bool_t              writeExportAll = false;
   uint8_t             config = 0;
+  bool_t              factoryReset = false;
   bool_t              enableFunctionKeysDisplay;
   bool_t              calcLandscape;
   bool_t              calcAutoLandscapePortrait;
@@ -187,6 +188,10 @@
         printf("Activated: %s\n", argv[arg]);
       }
 
+      if(strcmp(argv[arg], "--reset") == 0) {
+        factoryReset = true;
+        printf("Activated: %s\n", argv[arg]);
+      }
       if(strcmp(argv[arg], "--jm") == 0) {
         config = 1;
         printf("Activated: %s\n", argv[arg]);
@@ -331,6 +336,7 @@
         printf("%s47 --n47                 : N47 layout (SIM only) (retired, historical info only)\n", cc);
         printf("%s47 --v47                 : V47 layout (SIM only) (retired, historical info only)\n", cc);
         printf("%s47 --d47                 : D47 layout (SIM only) (retired, historical info only)\n\n", cc);
+        printf("%s47 --reset               : factory defaults, do not load backup.cfg (scripted --exec/--script runs never write it back either)\n", cc);
         printf("%s47 --jm                  : Setting profile: Jaco preferences\n", cc);
         printf("%s47 --rj                  : Setting profile: RJvM preferences\n", cc);
         printf("%s47 --hp35                : Setting profile: HP-35 tribute\n\n", cc);
@@ -436,7 +442,13 @@
       }
     }
 
-    restoreCalc();
+    if(factoryReset) {   //--reset: factory defaults, backup.cfg deliberately not loaded
+      fnReset(CONFIRMED);
+      printf("Factory reset: backup.cfg not loaded\n");
+    }
+    else {
+      restoreCalc();
+    }
 
     //set the calculator type again if it changes after loading the backup file
     if(calcModelNew != 255) {
