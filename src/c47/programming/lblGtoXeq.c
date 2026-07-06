@@ -853,7 +853,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
   lastErrorCode = ERROR_NONE;
   hourGlassIconEnabled = true;
   programRunStop = PGM_RUNNING;
-  if(!getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING)) {
+  if(!getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING) && !graphAccActive) {
     showHideHourGlass();
     screenUpdatingMode = SCRUPD_AUTO;
     screenUpdatingMode |= SCRUPD_SKIP_STATUSBAR_ONE_TIME;
@@ -943,7 +943,7 @@ stopProgram:
   if(programRunStop != PGM_RUNNING) {
     entryStatus &= 0xfe;
   }
-  if(!getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING)) {
+  if(!getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING) && !graphAccActive) {
     showHideHourGlass();
     if(temporaryInformation == TI_VIEW_REGISTER) {
       screenUpdatingMode |= SCRUPD_SKIP_STACK_ONE_TIME;
