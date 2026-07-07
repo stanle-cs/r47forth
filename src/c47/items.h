@@ -506,7 +506,7 @@
 #define SFL_alphaCAP                 478
 #define SFL_RUNTIM                   479
 #define SFL_AMORT_HP12C              480
-#define SFL_spare                    481
+#define SFL_IMPLOT                   481
 #define SFL_TRACE                    482
 #define SFL_USER                     483
 #define SFL_LOWBAT                   484
@@ -2345,11 +2345,11 @@
 #define SFL_PRTEN                   2290
 #define SFL_NORM                    2291
 #define SFL_BOLD                    2292
-#define SFL_SIGZEROS                   2293
-#define SFL_2294                    2294
-#define SFL_2295                    2295
-#define SFL_2296                    2296
-#define SFL_2297                    2297
+#define SFL_SIGZEROS                2293
+#define SFL_PRMS                    2294
+#define SFL_PINTG                   2295
+#define SFL_PDIFF                   2296
+#define SFL_PSHADE                  2297
 #define SFL_2298                    2298
 #define SFL_2299                    2299
 #define SFL_2300                    2300
@@ -2831,7 +2831,7 @@
 #define ITM_2730                    2730
 #define ITM_2731                    2731 //spares for Matrix/Vector
 #define ITM_PGMPLT                  2732
-#define MNU_PLTf                    2733
+#define MNU_2733                    2733
 #define ITM_PLTf                    2734
 #define ITM_IMPLOT                  2735
 #define MNU_BASE2                   2736

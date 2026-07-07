@@ -140,6 +140,7 @@ saveForUndo();
 #if defined(SPEEDUPEXPERIMENT)
     real_t digits;
     uint8_t significantDigitsMem = significantDigits;
+    int32_t s4 = ctxtReal4.digits, s34 = ctxtReal34.digits, s39 = ctxtReal39.digits, s51 = ctxtReal51.digits, s75 = ctxtReal75.digits; // save contexts for integration nesting
     int32_t digitsN = 0;
     WP34S_Ln(&acc, &digits, &ctxtReal39);
     realDivide(&digits, const39_ln10, &digits, &ctxtReal39);
@@ -173,11 +174,11 @@ saveForUndo();
         //int32ToReal(-digitsN, &tt);
         //realRescale(&res, &res, &tt, &ctxtReal4);
       significantDigits = significantDigitsMem;
-      ctxtReal4.digits  = 6;
-      ctxtReal34.digits = 34;
-      ctxtReal39.digits = 39;
-      ctxtReal51.digits = 51;
-      ctxtReal75.digits = 75;
+      ctxtReal4.digits  = s4;
+      ctxtReal34.digits = s34;
+      ctxtReal39.digits = s39;
+      ctxtReal51.digits = s51;
+      ctxtReal75.digits = s75;
     }
     else if(digitsN <= 10) {
       #if defined(PC_BUILD)
@@ -200,11 +201,11 @@ saveForUndo();
         //int32ToReal(-digitsN, &tt);
         //realRescale(&res, &res, &tt, &ctxtReal39);  or ose ACC. But best is to use N decimals. This does not work right
       significantDigits = significantDigitsMem;
-      ctxtReal4.digits  = 6;
-      ctxtReal34.digits = 34;
-      ctxtReal39.digits = 39;
-      ctxtReal51.digits = 51;
-      ctxtReal75.digits = 75;
+      ctxtReal4.digits  = s4;
+      ctxtReal34.digits = s34;
+      ctxtReal39.digits = s39;
+      ctxtReal51.digits = s51;
+      ctxtReal75.digits = s75;
     }
     else {
     #if defined(PC_BUILD)
@@ -302,6 +303,7 @@ static void _integratorIteration(void) {
   }
   else {
     uint16_t savedCurrentSolverProgram = currentSolverProgram;     // mirror of the solver's guard (Mihail, 9bb487e44 "Fix integral nested in SOLVE"); a nested program may repoint it. Enables INT(INT)
+    // No variable/flags stack here (unlike _executeSolver): not needed for SOLVE(INT), PLOT(INT), INT(INT) since the integrator has its own variable and a nested INTEG only clears USES_FORMULA. Only INT(SOLVE) would need it, and that is unsupported.
     dynamicMenuItem = -1;
     execProgram(currentSolverProgram + FIRST_LABEL);
     currentSolverProgram = savedCurrentSolverProgram;
@@ -405,6 +407,8 @@ static void DEI_xeq_user(calcRegister_t regist, const real_t *x, real_t *res, re
     //clearSystemFlag(FLAG_SPCRES);
     reallocateRegister(regist, dtReal34, 0, amNone);
     realToReal34(x, REGISTER_REAL34_DATA(regist));
+    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);   // put the node's x value in REGISTER_X (like _executeSolver) so fnFillStack feeds the integrand its x, not a stale prior result.
+    realToReal34(x, REGISTER_REAL34_DATA(REGISTER_X));
     fnFillStack(NOPARAM);
     //printReal34ToConsole(REGISTER_REAL34_DATA(regist), "", " -> ");
     _integratorIteration();
