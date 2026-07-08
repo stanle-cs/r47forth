@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "sequentialthinking": {
+      "command": "/home/stan/.local/bin/sequential-thinking-mcp",
+      "args": [
+        "--mode", "stdio"
+      ]
+    },
+    "serena": {
+      "command": "/home/stan/.local/bin/serena",
+      "args": [
+        "start-mcp-server",
+        "--context", "ide-assistant"
+      ]
+    }
+  }
+}

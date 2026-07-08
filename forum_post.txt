@@ -1,0 +1,142 @@
+Rebasing my local c47/R47 changes onto every upstream update has been driving me up the wall, so I finally sat down and did something about it. This is a way to override upstream source files and add new ones from a separate directory, without touching anything under src/.
+
+What you can do with it:
+
+[list]
+[*]swap out any upstream .c for your own copy that lives outside the tree
+[*]add new .c files that get compiled and linked automatically, no poking at the dmcp/dmcp5 meson files
+[*]stack several packages, with last-one-wins if two of them touch the same file
+[/list]
+
+Nothing happens unless you pass CUSTOM_PKG. Leave it off and the build is exactly what it is today.
+
+The patch is small on purpose. One commit, four files:
+
+[code]
+Makefile                 | 24 +++++-------
+meson.build              | 38 +++++++++++++++++
+meson_options.txt        |  6 ++++
+tools/resolve_c47_src.py | 70 ++++++++++++++++++++++++++++++++++
+[/code]
+
+No .c or .h touched, and src/c43/meson.build is untouched too. The example package isn't part of the patch itself (didn't want a demo dir showing up in the tree if this ever gets merged), it just rides along in the zip.
+
+Forum won't let me attach a bare .patch, so it's in the attached zip together with the example custom_package/ dir.
+
+[b]Trying it[/b]
+
+Unzip somewhere, then from your c43 checkout:
+
+[code]git am /path/to/custom_package.patch[/code]
+
+drop the custom_package/ dir from the zip into the repo root and
+
+[code]make sim CUSTOM_PKG=custom_package[/code]
+
+The example overrides constants.c and mathematics/factorial.c and adds a custom_math.c. The code in it doesn't actually do anything (calculator behaves identically), it's just there to prove the wiring, so to check it really got built in:
+
+[code]nm build.sim/sim | grep custom_[/code]
+
+Heads up that release/DMCP builds run LTO and will strip those tiny functions out of the symbol table even though they're compiled and linked fine. Hardware builds are the same story, e.g. make dmcpr47 CUSTOM_PKG=custom_package.
+
+[b]Rolling your own[/b]
+
+[code]mkdir -p my_pkg/mathematics
+cp src/c43/constants.c my_pkg/constants.c
+cp src/c43/mathematics/factorial.c my_pkg/mathematics/factorial.c[/code]
+
+Edit the copies, keeping the subdir layout for anything under a subdirectory. Add whatever new sources you want, then a little my_pkg/meson.build:
+
+[code]# relative to src/c43/
+pkg_overrides = ['constants.c', 'mathematics/factorial.c']
+pkg_custom_sources = files('my_feature.c')[/code]
+
+make sim CUSTOM_PKG=my_pkg and you're off. The package dir lands on the include path so your overrides can #include headers you keep alongside them.
+
+Makefile hands CUSTOM_PKG to every target I could find: sim, simr47, both_asan, test_asan, build.rel, build.rel.debug, dmcp, dmcpr47, dmcp5, dmcp5r47, dmcp_pkg1-3. Straight meson works too if you prefer:
+
+[code]meson setup build.dmcp --cross-file=src/c47-dmcp/cross_arm_gcc.build \
+  -DDMCPVERSION=dmcp -DDMCP_PACKAGE=4 -DCUSTOM_PKG=my_pkg[/code]
+
+CUSTOM_PKG=pkg_a,pkg_b layers them left to right, last wins on a clash and you get a warning at configure. Typo an override that matches nothing upstream and you get a warning for that too.
+
+[b]The mechanism[/b]
+
+The thing that makes this cheap is that src/c43/meson.build sets c47_src and the dmcp/dmcp5/gtk dirs just read that variable. So all the work is in root meson.build, in two parts. Before the subdirs I walk the packages, pull pkg_overrides and pkg_custom_sources out of each one, and add the include path (add_project_arguments has to run before any target exists, so this can't wait). Then after subdir('src/c47') I re-run set_variable('c47_src', ...) with the resolved list, which just clobbers the assignment src/c47 made a moment earlier. That's the whole trick, and it's why src/c43/meson.build stays byte-for-byte identical: no guard conditions, no reindenting its ~230-line file list.
+
+[code]
+custom_pkg_list = get_option('CUSTOM_PKG')
+custom_pkg_override_args = []
+custom_pkg_sources = []
+pkg_python3 = find_program('python3', 'python')
+if custom_pkg_list != []
+  foreach pkg : custom_pkg_list
+    subdir(pkg)
+    this_overrides = get_variable('pkg_overrides', [])
+    set_variable('pkg_overrides', [])
+    this_custom = get_variable('pkg_custom_sources', files())
+    set_variable('pkg_custom_sources', files())
+    foreach f : this_overrides
+      custom_pkg_override_args += pkg + ':' + f
+    endforeach
+    custom_pkg_sources += this_custom
+    add_project_arguments('-I' + meson.project_source_root() / pkg, language: 'c', native: true)
+    if meson.is_cross_build()
+      add_project_arguments('-I' + meson.project_source_root() / pkg, language: 'c', native: false)
+    endif
+  endforeach
+endif
+
+subdir('docs/code')
+subdir('dep')
+subdir('src/c47')
+
+if custom_pkg_list != []
+  c47_src_info = run_command(pkg_python3, 'tools/resolve_c47_src.py',
+                              meson.project_source_root() / 'src/c43/meson.build',
+                              custom_pkg_override_args, check: true)
+  foreach w : c47_src_info.stderr().strip().split('\n')
+    if w != ''
+      warning(w)
+    endif
+  endforeach
+  set_variable('c47_src', files(c47_src_info.stdout().strip().split('\n')) + custom_pkg_sources)
+endif
+[/code]
+
+resolve_c47_src.py does the list editing. It reads the c47_src = files(...) block out of src/c43/meson.build, swaps in override paths where they match, and prints the result, one path per line, warnings on stderr for meson to pick up. Point being there's no second copy of the file list anywhere to fall out of sync. Overrides come in as pkgdir:relpath with a colon rather than a slash so a package can sit at a nested path (packages/whatever) and the split still does the right thing. It strips inline comments before the regex so a ')' in a comment inside that files() block doesn't chop the list short, and bails with an error if it can't find the block at all instead of silently building the wrong thing. The comment stripping is line-based and dumb, so a '#' inside a string literal in there would throw it off, but that doesn't happen anywhere in the current tree.
+
+[b]The bit I'm unsure about[/b]
+
+I could only get the include path to actually show up in the compile commands by passing native: true, which is backwards from how I read the meson docs (native being the build machine). For the cross builds I add native: false as well behind is_cross_build(), and that's the one that reaches the ARM compiler. Works, and I've eyeballed compile_commands.json for both native and cross to confirm the -I is there, but I can't tell you why native: true is the one that matters for the host compiler on a native build. If anyone actually understands meson's machine model here and knows the clean way to say "put this include dir on every C target no matter the machine", I'll take it.
+
+[b]What I've run it through[/b]
+
+Baseline with no package (comes out identical to plain master), single and layered packages, the dup and unmatched-override warnings, custom-source injection, an empty package, and every target above including both cross builds with a peek at compile_commands.json to confirm the include path. Overridden functions do the right thing at runtime, and a plain rebuild afterwards is clean. There's a little test script for the resolver's parsing corners (comment-with-paren, nested dirs, the error path, the warning variants) that I kept out of the patch, can toss it in if people want it.
+
+Worth knowing: flipping CUSTOM_PKG means a full reconfigure, because the resolve happens at meson setup. blow away the build dir and setup again. meson configure on its own won't redo it.
+
+[b]What it touches upstream[/b]
+
+[code]
+meson.build               +38       the two blocks above
+meson_options.txt         +6        the CUSTOM_PKG option
+Makefile                  +13/-11   flag pass-through
+tools/resolve_c47_src.py  new, 70   the resolver
+src/c43/meson.build       -         untouched
+src/c47-dmcp*/meson.build -         untouched
+.c / .h                   -         none
+[/code]
+
+Single commit, so git revert HEAD backs the whole thing out.
+
+[b]Stuff I'd want opinions on before opening an MR[/b]
+
+[list]
+[*]Is a python helper at configure time OK here, or would you rather it be pure meson? python's always around since meson runs on it, but every pure-meson version I tried needed edits inside src/c43/meson.build, which was the whole thing I was trying to avoid.
+[*]Unmatched override is a warning right now. Error instead?
+[*]pkg_custom_sources goes into c47_src globally (sim + both DMCP flavours). Anyone need per-target scoping, or is that overkill?
+[*]Naming/placement convention for package dirs, or is ad-hoc fine?
+[/list]
+
+Tear it apart if something looks off. If it holds up I'll push the branch and open the MR on GitLab.
