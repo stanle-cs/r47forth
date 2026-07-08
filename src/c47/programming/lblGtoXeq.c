@@ -257,7 +257,21 @@ void fnReturn(uint16_t skip) {
 
   /* Not in a subroutine */
   else {
-    goToPgmStep(currentProgramNumber, 1);
+    #if PGMPTR_TO_NEXT_AFTER_RTN
+      // Rest one step past this RTN (currentStep is the RTN), staying inside the current main program.
+      if(isAtEndOfProgram(findNextStep(currentStep)) || isAtEndOfPrograms(findNextStep(currentStep))) {
+        goToPgmStep(currentProgramNumber, 1);   // next step is an END or the final .END.: wrap to the start of the active main program (legacy)
+      }
+      else {
+        int32_t rtnGlobalStep = 1;
+        for(uint8_t *stepScan = beginOfProgramMemory; stepScan != NULL && stepScan < currentStep; stepScan = findNextStep(stepScan)) {
+          rtnGlobalStep++;
+        }
+        goToGlobalStep(rtnGlobalStep + 1);   // rest on the instruction after the RTN (next routine in the same main program)
+      }
+    #else
+      goToPgmStep(currentProgramNumber, 1);
+    #endif
     if(currentNumberOfLocalRegisters > 0) {
       allocateLocalRegisters(0);
     }

@@ -539,6 +539,7 @@
 #undef  USECURVES                          // activate spline curve option in the plot menu
 #define XFN_EXTENDED_2PI_FOR_MOD         1 // for X_MOD only, if detect precise X_PI 1034 digits, it extends pi to 2139 (or as per contxt up to 6147) in XFN only. Needs to by exact, to 0 ULP difference.
 #define YYSystem                         true // Enable the shortcut system to allow two-digit year defaults, i.e. 23.1212 [.d] to decode to 2023.1212
+#define PGMPTR_TO_NEXT_AFTER_RTN         1 // 1: top-level RTN rests one step past the RTN (wraps at END). 0: rests on the program's first step as per legacy
 
 
 #if defined(TESTSUITE_BUILD)
