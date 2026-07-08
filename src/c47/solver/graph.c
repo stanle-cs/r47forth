@@ -34,6 +34,8 @@
 #define CONVERGE_FACTOR 1.0f     //
 #define NUMBERITERATIONS 9999    // 35 // Must be smaller than LIM (see STATS)
 
+#define ALLOW_NESTED_PARTPLOT_ON_EXIT 0   // 1: interrupted plot still shows the partial graph (legacy). 0 (default): stop dead on the PLT step, stack intact
+
 #define ctxtSolver2 &ctxtReal39
 int16_t osc = 0;
 uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
@@ -120,7 +122,9 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
         realSetNaN(&nanR);
         reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
         realToReal34(&nanR, REGISTER_REAL34_DATA(REGISTER_X));
-        lastErrorCode = 0;
+        if(lastErrorCode != ERROR_SOLVER_ABORT) {   // keep an abort alive to stop the plot; ordinary eval errors just NaN this sample
+          lastErrorCode = 0;
+        }
       }
       fnRCL(regStats);
 
@@ -1047,6 +1051,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     #if defined(GRAPHDEBUG_MIN)
       print_caller(NULL);
     #endif //GRAPHDEBUG_MIN
+    bool_t plotAborted = false;   // R/S/EXIT or a nested-engine abort: skip the draw and exit dead, do not enter the graph view
     currentKeyCode = 255;
     calcMode = CM_GRAPH;
     saveForUndo();
@@ -1188,6 +1193,15 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       // x <= x_max ?
       if(realCompareGreaterThan(x, x_max_r)) break;
 
+      if(lastErrorCode == ERROR_SOLVER_ABORT || programRunStop == PGM_WAITING || exitKeyWaiting()) {   // R/S/EXIT or a nested-engine abort stops the plot (PGM_WAITING survives, lastErrorCode does not)
+        lastErrorCode = ERROR_SOLVER_ABORT;
+        if(programRunStop == PGM_RUNNING) {   // halt the outer program too (a plain plot does not otherwise set this); interactive plot left untouched
+          programRunStop = PGM_WAITING;
+        }
+        plotAborted = true;
+        break;
+      }
+
       #if defined(GRAPHDEBUG)
         realToString(x, strBuf1);
         realToString(dx, strBuf2);
@@ -1202,6 +1216,13 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
 
       convertRealToReal34RegisterPush(x, REGISTER_X);
       execute_rpn_function_graphAcc();
+
+      if(lastErrorCode == ERROR_SOLVER_ABORT || programRunStop == PGM_WAITING || exitKeyWaiting()) {   // catch the interrupt in the thin window, before this point is stored and x advanced
+        lastErrorCode = ERROR_SOLVER_ABORT;
+        if(programRunStop == PGM_RUNNING) { programRunStop = PGM_WAITING; }
+        plotAborted = true;
+        break;
+      }
 
       // Handle complex plotting
       if(getSystemFlag(FLAG_CPXPLOT)) {
@@ -1805,10 +1826,9 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       #if defined(DMCP_BUILD)
         if(exitKeyWaiting()) {
           progressHalfSecUpdate_Integer(force+1, "Interrupted Iter:", loop, halfSec_clearZ, halfSec_clearT, halfSec_disp);
-          fnClearStack(0);
-          calcMode = CM_NORMAL;
-          screenUpdatingMode = SCRUPD_AUTO;
-          screenUpdatingMode |= SCRUPD_SKIP_STATUSBAR_ONE_TIME;
+          lastErrorCode = ERROR_SOLVER_ABORT;
+          if(programRunStop == PGM_RUNNING) { programRunStop = PGM_WAITING; }   // stop the outer program too, else it runs on and re-plots
+          plotAborted = true;
           break;
         }
       #endif //DMCP_BUILD
@@ -1836,7 +1856,9 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       abandonHighResMode(&highResCount, &inHighResMode);
     }
 
-    fillStackWithReal0();
+    if(!plotAborted) {   // leave the interrupted stack intact; a completed plot clears it as before
+      fillStackWithReal0();
+    }
 
     #if defined(LOW_GRAPH_ACC)
       int32_t s34 = ctxtReal34.digits, s39 = ctxtReal39.digits, s51 = ctxtReal51.digits, s75 = ctxtReal75.digits;
@@ -1847,14 +1869,25 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       }
     #endif //LOW_GRAPH_ACC
 
-    if(!GRAPHMODE) { //Change over hourglass to the left side
-      clearScreenOld(clrStatusBar, !clrRegisterLines, !clrSoftkeys);
+    bool_t showGraph = !plotAborted;
+    #if ALLOW_NESTED_PARTPLOT_ON_EXIT
+      showGraph = true;   // legacy: draw the partial graph even on an interrupted plot
+    #endif
+    if(showGraph) {
+      if(!GRAPHMODE) { //Change over hourglass to the left side
+        clearScreenOld(clrStatusBar, !clrRegisterLines, !clrSoftkeys);
+      }
+      calcMode = CM_GRAPH;
+      hourGlassIconEnabled = true;       //clear the current portion of statusbar
+      showHideHourGlass();
+      refreshStatusBar();
+      fnPlot(0);
     }
-    calcMode = CM_GRAPH;
-    hourGlassIconEnabled = true;       //clear the current portion of statusbar
-    showHideHourGlass();
-    refreshStatusBar();
-    fnPlot(0);
+    else {   // interrupted plot: stop dead on the PLT step, do not enter the graph view; stack left intact for inspection
+      calcMode = CM_NORMAL;
+      screenUpdatingMode = SCRUPD_AUTO;
+      screenUpdatingMode |= SCRUPD_SKIP_STATUSBAR_ONE_TIME;
+    }
     #if defined(LOW_GRAPH_ACC)
       //Restore saved, not native: PLOT can run nested via PGMPLT
       ctxtReal34.digits = s34;
@@ -2471,6 +2504,8 @@ static inline void powCplxNat(const cplx_t *base, const uint8_t *exp, cplx_t *re
       if(exitKeyWaiting()) {
         showString("key Waiting ...", &standardFont, 20, 40, vmNormal, false, false);
         progressHalfSecUpdate_Integer(force+1, "Interrupted Iter:", iterationCounter, halfSec_clearZ, halfSec_clearT, halfSec_disp);
+        lastErrorCode = ERROR_SOLVER_ABORT;
+        if(programRunStop == PGM_RUNNING) { programRunStop = PGM_WAITING; }   // halt the outer program too, like every other abort point
         calcMode = CM_NORMAL;
         screenUpdatingMode = SCRUPD_AUTO;
         screenUpdatingMode |= SCRUPD_SKIP_STATUSBAR_ONE_TIME;

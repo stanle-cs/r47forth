@@ -156,6 +156,7 @@ void fnSolve(uint16_t labelOrVariable) {
         case SOLVER_RESULT_ABORTED: {
           temporaryInformation = TI_SOLVER_FAILED;
           displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          programRunStop = PGM_WAITING;   // R/S halts the whole program on the SOLVE step
           break;
         }
       }
@@ -669,7 +670,7 @@ retryLevel:
         }
       }
 
-      if(exitKeyWaiting()) {
+      if(exitKeyWaiting() || (programRunStop == PGM_WAITING)) {   // key/EXIT, or a nested engine already aborted (PGM_WAITING survives, lastErrorCode does not)
           progressHalfSecUpdate_Integer(force+1, "Interrupted Iter:", loop, halfSec_clearZ, halfSec_clearT, halfSec_disp);
           programRunStop = PGM_WAITING;
           displayCalcErrorMessage(ERROR_SOLVER_ABORT, REGISTER_T, NIM_REGISTER_LINE);
