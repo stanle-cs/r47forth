@@ -330,6 +330,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnWpositive",            fnWpositive           },
   {"fnXthRoot",              fnXthRoot             },
   {"fnXToDate",              fnXToDate             },
+  {"fnXAlmostEqual",         fnXAlmostEqual        },
   {"fnYear",                 fnYear                },
   {"fnZeta",                 fnZeta                },
   {"fnZip",                  fnZip                 },
