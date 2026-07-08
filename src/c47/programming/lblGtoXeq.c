@@ -258,9 +258,10 @@ void fnReturn(uint16_t skip) {
   /* Not in a subroutine */
   else {
     #if PGMPTR_TO_NEXT_AFTER_RTN
-      // Rest one step past this RTN (currentStep is the RTN), staying inside the current main program.
-      if(isAtEndOfProgram(findNextStep(currentStep)) || isAtEndOfPrograms(findNextStep(currentStep))) {
-        goToPgmStep(currentProgramNumber, 1);   // next step is an END or the final .END.: wrap to the start of the active main program (legacy)
+      // Rest one step past this RTN, staying inside the current main program.
+      if(isAtEndOfProgram(currentStep)            || isAtEndOfPrograms(currentStep)              // ended via END (the main program terminator)
+      || isAtEndOfProgram(findNextStep(currentStep)) || isAtEndOfPrograms(findNextStep(currentStep))) {   // or the RTN's next step is that END
+        goToPgmStep(currentProgramNumber, 1);   // wrap to the start of the active main program (never cross into the next one)
       }
       else {
         int32_t rtnGlobalStep = 1;
