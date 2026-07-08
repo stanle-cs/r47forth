@@ -2,7 +2,7 @@ Demonstration programs included in C47 distro
 
 1a.  Binet1.txt     -------.---    Original Binet graphing program, Jaco Mostert, in text format
 
-1b.  Binet3.rft     BinetV3.p47    Binet graphing version 3, Jaco Mostert
+1b.  BinetV3.rft    BinetV3.p47    Binet graphing version 3, Jaco Mostert
                                    https://forum.swissmicros.com/viewtopic.php?p=17761#p17761
 
 2.   SPIRALk.rtf    SPIRALk.p47    Revised spiral program by Jaco Mostert, modified by RAprism, barrymead
