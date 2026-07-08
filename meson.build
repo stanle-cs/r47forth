@@ -86,9 +86,86 @@ else
   conf_data.set('VERSION_MODDED', 0)
 endif
 
+# External custom packages (optional, isolated from upstream)
+# Phase 1: capture overrides and set include paths before any subdirs
+custom_pkg_list = get_option('CUSTOM_PKG')
+custom_pkg_specs = []
+custom_pkg_sources = []
+pkg_python3 = find_program('python3', 'python')
+shadow_dir = meson.project_build_root() / 'custom_pkg_shadow'
+
+if custom_pkg_list != []
+  foreach pkg : custom_pkg_list
+    subdir(pkg)
+    this_overrides = get_variable('pkg_override_sources', [])
+    set_variable('pkg_override_sources', [])
+    this_custom = get_variable('pkg_custom_sources', files())
+    set_variable('pkg_custom_sources', files())
+    foreach f : this_overrides
+      custom_pkg_specs += pkg + ':' + f
+    endforeach
+    custom_pkg_sources += this_custom
+    this_headers = get_variable('pkg_override_headers', [])
+    set_variable('pkg_override_headers', [])
+    foreach h : this_headers
+      custom_pkg_specs += pkg + ':' + h
+    endforeach
+    add_project_arguments('-I' + meson.project_source_root() / pkg, language: 'c', native: true)
+    if meson.is_cross_build()
+      add_project_arguments('-I' + meson.project_source_root() / pkg, language: 'c', native: false)
+    endif
+  endforeach
+  # Shadow dir -I must be added before any subdir() declares targets
+  add_project_arguments('-I' + shadow_dir, language: 'c', native: true)
+  if meson.is_cross_build()
+    add_project_arguments('-I' + shadow_dir, language: 'c', native: false)
+  endif
+endif
+
 subdir('docs/code')
 subdir('dep')
 subdir('src/c47')
+
+# Phase 2: build shadow tree and apply overrides after subdir('src/c47')
+if custom_pkg_list != []
+  shadow_dir = meson.project_build_root() / 'custom_pkg_shadow'
+  pkg_info = run_command(pkg_python3, 'tools/resolve_c47_src.py', '--shadow',
+                         meson.project_source_root() / 'src/c47/meson.build',
+                         meson.project_source_root(), shadow_dir,
+                         custom_pkg_specs, check: true)
+  foreach w : pkg_info.stderr().strip().split('\n')
+    if w != ''
+      warning(w)
+    endif
+  endforeach
+  lines = pkg_info.stdout().strip().split('\n')
+  if lines[0].substring(0, 8) != 'INCDIRS:'
+    error('Custom package resolver did not output INCDIRS line')
+  endif
+  inc_list = lines[0].substring(8).split(';')
+  # inc_list[0] is the shadow dir (already added as -I in Phase 1);
+  # rest are upstream relative dirs for c47_inc
+  upstream_incs = []
+  idx = 0
+  foreach inc : inc_list
+    if idx > 0
+      upstream_incs += inc
+    endif
+    idx += 1
+  endforeach
+  set_variable('c47_inc', include_directories('custom_pkg_shadow', upstream_incs))
+  # Source list: every entry points into the shadow dir
+  src_lines = []
+  idx = 0
+  foreach line : lines
+    if idx > 0
+      src_lines += line
+    endif
+    idx += 1
+  endforeach
+  set_variable('c47_src', src_lines + custom_pkg_sources)
+endif
+
 subdir('src/ttf2RasterFonts')
 subdir('src/generateConstants')
 subdir('src/generateCatalogs')

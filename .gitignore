@@ -35,7 +35,10 @@ tags
 /SAVFILES
 /src/generated
 AGENTS.md
-
+/storage
+/.cline
+/.serena
+opencode.json
 # Over_score testing agent coding
 AGENTS.md
 

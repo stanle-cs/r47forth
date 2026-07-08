@@ -27,3 +27,9 @@ option('DMCP_PACKAGE',
   value       : '',
   description : 'define variable acc. to defines.h to save space for DM42 dmcp builds'
 )
+
+option('CUSTOM_PKG',
+  type        : 'array',
+  value       : [],
+  description : 'external custom package directories (supports pkg_override_sources, pkg_custom_sources, pkg_override_headers)'
+)
