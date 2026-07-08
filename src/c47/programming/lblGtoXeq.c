@@ -985,11 +985,13 @@ stopProgram:
 
 void execProgram(uint16_t label) {
   uint16_t origLocalStepNumber = currentLocalStepNumber;
+  uint16_t origProgramNumber = currentProgramNumber;   // the nested run repoints to the function's program; restore it too so the caller (and the final return to the system) stays in the right program
   uint8_t *origStep = currentStep;
   fnExecute(label);
   if(programRunStop == PGM_RUNNING && (getSystemFlag(FLAG_INTING) || getSystemFlag(FLAG_SOLVING) || (currentSolverStatus & SOLVER_STATUS_RPN_GRAPHER))) {
     runProgram(false, INVALID_VARIABLE);
     currentLocalStepNumber = origLocalStepNumber;
+    currentProgramNumber = origProgramNumber;
     currentStep = origStep;
   }
 }
