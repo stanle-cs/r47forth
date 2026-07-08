@@ -1291,7 +1291,12 @@ void graph_plotmem(void) {
             yo = yN1;
             yN0 = yN1;
             prev_y_unclipped = yN1;  // Initialize for next iteration
-            continue;  // Skip clipping for first point
+            if(plotmode != _VECT && xN1 < SCREEN_WIDTH_GRAPH && xN1 >= (SCREEN_WIDTH - SCREEN_HEIGHT_GRAPH) && yN1 < SCREEN_HEIGHT_GRAPH && yN1 >= 0) {
+              plotPointGeneric(xN1, yN1, xN1, yN1,   // draw the first point's marker; no line (no previous point)
+                                 getSystemFlag(FLAG_PCROS), false, getSystemFlag(FLAG_PBOX),
+                                 getSystemFlag(FLAG_PPLUS), false);
+            }
+            continue;  // Skip clipping/line for first point (no previous point)
           }
 
           #if defined(STATDEBUG)
