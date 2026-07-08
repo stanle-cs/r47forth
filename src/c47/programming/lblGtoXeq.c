@@ -73,7 +73,8 @@ void fnGoto(uint16_t label) {
 void goToGlobalStep(int32_t step) {
   if(dynamicMenuItem >= 0) {
     int16_t dupNum = 0;
-    uint8_t *labelName = (uint8_t *)dynmenuGetLabelWithDup(dynamicMenuItem, &dupNum);
+    bool_t localLabel = (softmenu[softmenuStack[1].softmenuId].menuItem == -MNU_TAMLOCALLABEL);
+    char *labelName = (char *)dynmenuGetLabelWithDup(dynamicMenuItem, &dupNum);
 
     if(*labelName == 0) {
       return;
@@ -81,28 +82,11 @@ void goToGlobalStep(int32_t step) {
     if((softmenu[softmenuStack[0].softmenuId].menuItem != -MNU_PROG) && (softmenu[softmenuStack[0].softmenuId].menuItem != -MNU_PROGS)) {  // Don't apply the dupNum logic in configurable menus
       dupNum = 0;
     }
-
-    int16_t c, len = stringByteLength((char *)labelName);
-    for(uint16_t lbl=0; lbl<numberOfLabels; lbl++) {
-      uint8_t *lblPtr;
-      lblPtr = labelList[lbl].labelPointer;
-      if(((labelList[lbl].step > 0) || (labelList[lbl].step < 0 && *(labelList[lbl].labelPointer - 1) == LOCAL_LABEL_VARIABLE)) && *lblPtr == len) { // It's a global lor a local named abel and the length is OK
-        for(c=0; c<len; c++) {
-          if(labelName[c] != lblPtr[c + 1]) {
-            break;
-          }
-        }
-        if(c == len) {
-          if(dupNum <= 0) {
-            step = abs(labelList[lbl].step);
-            break;
-          }
-          else {
-            --dupNum;
-          }
-        }
-      }
+    uint16_t lbl = findNamedLabelWithDuplicate(labelName, dupNum, (localLabel ? LOCAL_LABELS : GLOBAL_LABELS));
+    if(lbl == INVALID_VARIABLE) {
+      return;
     }
+    step = abs(labelList[lbl - FIRST_LABEL].step);
   }
 
   defineCurrentProgramFromGlobalStepNumber(step);
