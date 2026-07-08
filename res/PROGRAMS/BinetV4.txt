@@ -1,5 +1,5 @@
 LBL ‘Binet’
-  # Plot the Binet function, V03.
+  # Plot the Binet function, V04.
   LocR 11
   STOCFG R.02
   STOS R.03
