@@ -8,6 +8,9 @@
 
 #include "c47.h"
 
+// Drop stale interrupt keys at top-level program start (a leftover key prior to pgm run can trip us). 1 = on, 0 = off.
+#define CLEAR_KEYS_ON_PGM_START 0
+
 void fnGoto(uint16_t label) {
   if(tam.mode || calcMode != CM_PEM) {
     if(dynamicMenuItem >= 0) {
@@ -850,6 +853,12 @@ int16_t executeOneStep(uint8_t *step) {
 void runProgram(bool_t singleStep, uint16_t menuLabel) {
   bool_t nestedEngine = (programRunStop == PGM_RUNNING);
   uint16_t startingSubLevel = (nestedEngine && menuLabel == INVALID_VARIABLE) ? currentSubroutineLevel : 0;
+  #if defined(DMCP_BUILD) && CLEAR_KEYS_ON_PGM_START
+    if(!nestedEngine && !singleStep) {   // top-level run start: drop stale keys so the per-step keys buffers start clean
+      key_pop_all();
+      clearKeyBuffer();
+    }
+  #endif
   lastErrorCode = ERROR_NONE;
   hourGlassIconEnabled = true;
   programRunStop = PGM_RUNNING;
