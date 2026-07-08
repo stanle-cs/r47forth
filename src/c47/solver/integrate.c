@@ -235,6 +235,9 @@ done:
     if(lastErrorCode != ERROR_SOLVER_ABORT) {
       temporaryInformation = TI_INTEGRAL;
     }
+    else {
+      programRunStop = PGM_WAITING;   // abort halts the program; PGM_WAITING lets an outer engine stop too (like fnSolve)
+    }
     adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
   }
   else {
@@ -621,6 +624,16 @@ static void _integrate(calcRegister_t regist, const real_t *a, const real_t *b, 
     do { // DEI_j_loop::
         char tmps[100];
         exitSignalled |= exitKeyWaiting();
+        if(programRunStop == PGM_WAITING) {   // nested engine aborted: stop at once (not via the half-second exit path)
+          displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          return;
+        }
+        #if !defined(INTEGRATION_TWO_STAGE_EXIT)
+          if(exitSignalled) {   // key caught: abort now; do not wait for the ~0.5s tick (a short nested integral finishes first and swallows the press)
+            displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            return;
+          }
+        #endif
         loop++;
         if(checkHalfSec()) {
           sprintf(tmps, "Level:  %i Iter: ", (int16_t)realToInt32C47(&lvl, NULL));
@@ -965,6 +978,16 @@ static void _integrate_mm(calcRegister_t regist, const real_t *llim, const real_
     do {
         char tmps[64];
         exitSignalled |= exitKeyWaiting();
+        if(programRunStop == PGM_WAITING) {   // nested engine aborted: stop at once (not via the half-second exit path)
+          displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          return;
+        }
+        #if !defined(INTEGRATION_TWO_STAGE_EXIT)
+          if(exitSignalled) {   // key caught: abort now; do not wait for the ~0.5s tick (a short nested integral finishes first and swallows the press)
+            displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            return;
+          }
+        #endif
         loop++;
         if(checkHalfSec()) {
           sprintf(tmps, "Level: %i/%i Iter: ", (int16_t)k, (int16_t)maxlevel);
@@ -1325,6 +1348,16 @@ static void dbl_exp_int_new(calcRegister_t regist, const real_t *a, const real_t
         // only the loop counter changes each time.
           char tmps[64];
           exitSignalled |= exitKeyWaiting();
+          if(programRunStop == PGM_WAITING) {   // nested engine aborted: stop at once (not via the half-second exit path)
+            displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            return;
+          }
+          #if !defined(INTEGRATION_TWO_STAGE_EXIT)
+            if(exitSignalled) {   // key caught: abort now; do not wait for the ~0.5s tick (a short nested integral finishes first and swallows the press)
+              displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              return;
+            }
+          #endif
           loop++;
           if(checkHalfSec()) {
             sprintf(tmps, "Level: %i/%i Iter: ", (int16_t)k, (int16_t)maxlevel);
@@ -1405,6 +1438,16 @@ static void dbl_exp_int_new(calcRegister_t regist, const real_t *a, const real_t
 
           char tmps[64];
           exitSignalled |= exitKeyWaiting();
+          if(programRunStop == PGM_WAITING) {   // nested engine aborted: stop at once (not via the half-second exit path)
+            displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            return;
+          }
+          #if !defined(INTEGRATION_TWO_STAGE_EXIT)
+            if(exitSignalled) {   // key caught: abort now; do not wait for the ~0.5s tick (a short nested integral finishes first and swallows the press)
+              displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              return;
+            }
+          #endif
           loop++;
           if(checkHalfSec()) {
             sprintf(tmps, "Level: %i/%i Iter: ", (int16_t)k, (int16_t)maxlevel);

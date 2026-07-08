@@ -784,6 +784,9 @@ int16_t executeOneStep(uint8_t *step) {
       currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
       _executeOp(step, op, PARAM_REGISTER);
       if(temporaryInformation == TI_SOLVER_FAILED) {
+        if(lastErrorCode == ERROR_SOLVER_ABORT) {   // abort: keep the error so the loop halts on the SOLVE step (like INT); no not-found skip
+          return 0;
+        }
         lastErrorCode = ERROR_NONE;
         return 2;
       }
