@@ -1217,6 +1217,13 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       convertRealToReal34RegisterPush(x, REGISTER_X);
       execute_rpn_function_graphAcc();
 
+      if(lastErrorCode == ERROR_SOLVER_ABORT || programRunStop == PGM_WAITING || exitKeyWaiting()) {   // catch the interrupt in the thin window, before this point is stored and x advanced
+        lastErrorCode = ERROR_SOLVER_ABORT;
+        if(programRunStop == PGM_RUNNING) { programRunStop = PGM_WAITING; }
+        plotAborted = true;
+        break;
+      }
+
       // Handle complex plotting
       if(getSystemFlag(FLAG_CPXPLOT)) {
         fnRCL(REGISTER_Y);
@@ -1819,6 +1826,8 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       #if defined(DMCP_BUILD)
         if(exitKeyWaiting()) {
           progressHalfSecUpdate_Integer(force+1, "Interrupted Iter:", loop, halfSec_clearZ, halfSec_clearT, halfSec_disp);
+          lastErrorCode = ERROR_SOLVER_ABORT;
+          if(programRunStop == PGM_RUNNING) { programRunStop = PGM_WAITING; }   // stop the outer program too, else it runs on and re-plots
           plotAborted = true;
           break;
         }
@@ -2495,6 +2504,8 @@ static inline void powCplxNat(const cplx_t *base, const uint8_t *exp, cplx_t *re
       if(exitKeyWaiting()) {
         showString("key Waiting ...", &standardFont, 20, 40, vmNormal, false, false);
         progressHalfSecUpdate_Integer(force+1, "Interrupted Iter:", iterationCounter, halfSec_clearZ, halfSec_clearT, halfSec_disp);
+        lastErrorCode = ERROR_SOLVER_ABORT;
+        if(programRunStop == PGM_RUNNING) { programRunStop = PGM_WAITING; }   // halt the outer program too, like every other abort point
         calcMode = CM_NORMAL;
         screenUpdatingMode = SCRUPD_AUTO;
         screenUpdatingMode |= SCRUPD_SKIP_STATUSBAR_ONE_TIME;
