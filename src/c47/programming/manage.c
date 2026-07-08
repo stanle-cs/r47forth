@@ -1865,20 +1865,38 @@ calcRegister_t findNamedLabel(const char *labelName, uint8_t labelType) {
 
 calcRegister_t findNamedLabelWithDuplicate(const char *labelName, int16_t dupNum, uint8_t labelType) {
   if((labelType == ALL_LABELS) || (labelType == LOCAL_LABELS)) {       // Start searching for local named labels
-    for(uint16_t lbl=0; lbl<numberOfLabels; lbl++) {
-      if(labelList[lbl].program == currentProgramNumber && labelList[lbl].step < 0 && *(labelList[lbl].labelPointer - 1) == LOCAL_LABEL_VARIABLE) { // Is in the current program and is a named local label
-        uint8_t lblNameLen = boundProgramNameLength(labelList[lbl].labelPointer + 1, *(labelList[lbl].labelPointer));
-        xcopy(tmpString, labelList[lbl].labelPointer + 1, lblNameLen);
-        tmpString[lblNameLen] = 0;
-        if(compareString(tmpString, labelName, CMP_BINARY) == 0) {
-          if(dupNum <= 0) {
-            return lbl + FIRST_LABEL;
-          }
-          else {
-            --dupNum;
+    bool_t labelFound = false;
+    uint16_t firstLabel = 0;
+    uint16_t nextLabel = 0;
+    uint16_t lbl;
+
+    for(lbl=0; lbl<numberOfLabels; lbl++) {
+      if(labelList[lbl].program > currentProgramNumber) {   // After the current program
+        break;
+      }
+      if(labelList[lbl].program == currentProgramNumber) { // Within the current progrm
+        if(labelList[lbl].step < 0 &&  *(labelList[lbl].labelPointer - 1) == LOCAL_LABEL_VARIABLE) { // Is a named local label
+          uint8_t lblNameLen = boundProgramNameLength(labelList[lbl].labelPointer + 1, *(labelList[lbl].labelPointer));
+          xcopy(tmpString, labelList[lbl].labelPointer + 1, lblNameLen);
+          tmpString[lblNameLen] = 0;
+          if(compareString(tmpString, labelName, CMP_BINARY) == 0) {   // Label name match
+            if(firstLabel == 0) {    // First label occurence in the current program
+              firstLabel = lbl;
+              labelFound = true;
+            }
+            uint16_t labelLocalStepNumber = (-labelList[lbl].step) - programList[currentProgramNumber - 1].step + 1;
+            if(labelLocalStepNumber > currentLocalStepNumber) {
+              nextLabel = lbl;  // First label occurence after the current program step
+              break;
+            }
           }
         }
       }
+    }
+    // return local label found, if any
+    if(labelFound) {   // If a local label found in the program
+      lbl = (nextLabel != 0 ? nextLabel : firstLabel); // First found label label after current program step or the first found label in the program
+      return lbl + FIRST_LABEL;
     }
   }
   if((labelType == ALL_LABELS) || (labelType == GLOBAL_LABELS)) {      // then search global labels

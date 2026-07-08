@@ -1648,7 +1648,17 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
     dynamicSoftmenu[menu].numItems = (numberOfBytes <= 19) ? 0 : 18;
   }
 
+  static int16_t _removeDuplicateLabels(int16_t n) {
+    if (n == 0) return 0;
 
+    int16_t j = 0;
+    for (int16_t i = 1; i < n; i++) {
+      if(strcmp(tmpString + 15 * i, tmpString + 15 * j) != 0) {
+        xcopy(tmpString + 15 * ++j, tmpString + 15 * i, 15);
+      }
+    }
+    return j + 1;
+  }
 
   static void initVariableSoftmenu(int16_t menu) {
     int16_t i, numberOfBytes, numberOfGlobalLabels;
@@ -1693,6 +1703,9 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
 
         if(numberOfGlobalLabels != 0) {
           qsort(tmpString, numberOfGlobalLabels, 15, sortMenu);
+          if (tam.colon) {  // Don't show duplicates for local named labels which use the scan forward search method
+            numberOfGlobalLabels = _removeDuplicateLabels(numberOfGlobalLabels);
+          }
         }
 
         ptr = malloc(numberOfBytes);

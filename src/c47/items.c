@@ -330,7 +330,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
         while(currentSubroutineLevel > 0) {
           fnReturn(0);
         }
-        fnReturn(0); // 1 more time to clean local registers
+        //fnReturn(0); // 1 more time to clean local registers
+        cleanLocalFlagsAndRegisters();
       }
 
 /* Full refresh included in showHideHourGlass above, so removinf it here to save time

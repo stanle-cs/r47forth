@@ -17,18 +17,41 @@ void fnGoto(uint16_t label) {
 
     // Local Label 00 to 99 and A to l
     if(label <= LAST_LOCAL_LABEL) {
-      // Search for local label
-      for(uint16_t lbl=0; lbl<numberOfLabels; lbl++) {
-        if(labelList[lbl].program == currentProgramNumber && labelList[lbl].step < 0 && *(labelList[lbl].labelPointer) == label) { // Is in the current program and is a local label and is the searched label
-          if(programRunStop == PGM_RUNNING) {
-            currentLocalStepNumber = (-labelList[lbl].step) - programList[currentProgramNumber - 1].step + 1;
-            currentStep = labelList[lbl].labelPointer - 1;
-          }
-          else {
-            goToGlobalStep(-labelList[lbl].step);
-          }
-          return;
+      // Search forwward for the the local label in the current program
+      bool_t labelFound = false;
+      uint16_t firstLabel = 0;
+      uint16_t nextLabel = 0;
+      uint16_t lbl;
+
+      for(lbl=0; lbl<numberOfLabels; lbl++) {
+        if(labelList[lbl].program > currentProgramNumber) {   // After the current program
+          break;
         }
+        if(labelList[lbl].program == currentProgramNumber) { // Within the current progrm
+          if(labelList[lbl].step < 0 && *(labelList[lbl].labelPointer) == label &&  *(labelList[lbl].labelPointer - 1) == ITM_LBL) { // Is a local label and is the searched label
+            if(firstLabel == 0) {    // First label occurence in the current program
+              firstLabel = lbl;
+              labelFound = true;
+            }
+            uint16_t labelLocalStepNumber = (-labelList[lbl].step) - programList[currentProgramNumber - 1].step + 1;
+            if(labelLocalStepNumber > currentLocalStepNumber) {
+                nextLabel = lbl;  // First label occurence after the current program step
+                break;
+            }
+          }
+        }
+      }
+      // Goto local label found, if any
+      if(labelFound) {   // If a local label found in the program
+        lbl = (nextLabel != 0 ? nextLabel : firstLabel); // Will goto the first found label label after current program step or the first found label in teh program
+        if(programRunStop == PGM_RUNNING) {
+          currentLocalStepNumber = (-labelList[lbl].step) - programList[currentProgramNumber - 1].step + 1;
+          currentStep = labelList[lbl].labelPointer - 1;
+        }
+        else {
+          goToGlobalStep(-labelList[lbl].step);
+        }
+        return;
       }
 
       displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
@@ -239,6 +262,12 @@ void fnReturn(uint16_t skip) {
   /* Not in a subroutine */
   else {
     goToPgmStep(currentProgramNumber, 1);
+    pemCursorIsZerothStep = true;
+    cleanLocalFlagsAndRegisters();
+  }
+}
+
+void cleanLocalFlagsAndRegisters() {
     if(currentNumberOfLocalRegisters > 0) {
       allocateLocalRegisters(0);
     }
@@ -250,11 +279,7 @@ void fnReturn(uint16_t skip) {
     }
     currentLocalFlags = NULL;
     currentLocalRegisters = NULL;
-    pemCursorIsZerothStep = true;
-  }
 }
-
-
 
 void fnRunProgram(uint16_t unusedButMandatoryParameter) {
   if(currentInputVariable != INVALID_VARIABLE) {
