@@ -38,6 +38,7 @@ void runPgm(uint16_t unusedButMandatoryParameter);
 void covBackupRoundtrip(uint16_t unusedButMandatoryParameter);
 void covConvToSI(uint16_t itemNr);
 void covConvFromSI(uint16_t itemNr);
+void covStateRoundtrip(uint16_t unusedButMandatoryParameter);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
@@ -156,6 +157,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnBackupRoundtrip",      covBackupRoundtrip    },
   {"covConvToSI",            covConvToSI           },
   {"covConvFromSI",          covConvFromSI         },
+  {"fnStateRoundtrip",       covStateRoundtrip     },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
@@ -581,6 +583,29 @@ void covBackupRoundtrip(uint16_t unusedButMandatoryParameter) {
   loadTestPrograms = false;
   saveCalc();
   restoreCalc();
+}
+
+void covStateRoundtrip(uint16_t unusedButMandatoryParameter) {
+  // Save the whole calculator state and load it straight back, driving both the
+  // serialize half (doSave) and the deserialize half (doLoad, restoreOneSection)
+  // of saveRestoreCalcState.c. In the host build the DMCP power_check_screen()
+  // guard is compiled out, so doSave runs. Loading rewrites the state from file,
+  // so this must run late in the list; the round-trip is lossless, so seeded
+  // registers survive it.
+  //
+  // Two save flavours and several load modes are exercised: the full state file
+  // (stateSave/stateLoad, c47state.bin) plus a manual save (manualSave, c47.sav)
+  // read back one section at a time, covering the loadMode dispatch in
+  // restoreOneSection (registers, named variables, statistical sums, system
+  // state). The partial loads reload from the same manual save, so the seeded
+  // registers are preserved.
+  fnSave(SM_STATE_SAVE);
+  fnLoad(LM_STATE_LOAD);
+  fnSave(SM_MANUAL_SAVE);
+  fnLoad(LM_REGISTERS);
+  fnLoad(LM_NAMED_VARIABLES);
+  fnLoad(LM_SUMS);
+  fnLoad(LM_SYSTEM_STATE);
 }
 
 
@@ -3235,7 +3260,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI) {
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {
