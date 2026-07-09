@@ -1348,10 +1348,10 @@ enum REG_NUMBERS_IN_KS_CODE { // Key Stroke register codes
   LAST_SPARE_REGISTERS_IN_KS_CODE = REGISTER_W_IN_KS_CODE,
 
   // OP parameter special values
-  CNST_BEYOND_250       = 250,        // [DL] !!!!! to be changed from 250 to 249 !!!!!
+  LOCAL_LABEL_VARIABLE  = 249,
+  CNST_BEYOND_250       = 250,        // [DL] Not an issue to have it above LOCAL_LABEL_VARIABLE as both are used in different contexts
   //CNST_BEYOND_500       = 251,
   //CNST_BEYOND_750       = 252,
-  LOCAL_LABEL_VARIABLE  = 249,
   SYSTEM_FLAG_NUMBER    = 250,
   VALUE_0               = 251,
   VALUE_1               = 252,
