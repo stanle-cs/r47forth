@@ -42,6 +42,7 @@ void covStateRoundtrip(uint16_t unusedButMandatoryParameter);
 void covEqCalc(uint16_t unusedButMandatoryParameter);
 void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t unusedButMandatoryParameter);
+void covTvm(uint16_t which);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
@@ -164,6 +165,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnEqCalcCov",            covEqCalc             },
   {"fnDerivEqCov",           covDerivEq            },
   {"fnSolveRootCov",         covSolveRoot          },
+  {"fnTvmCov",               covTvm                },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
@@ -693,6 +695,45 @@ void covSolveRoot(uint16_t unusedButMandatoryParameter) {
   // the solver's convergence, so assign rather than OR.
   currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
   fnSolve(var);
+}
+
+static void covStoTvm(int32_t value, uint16_t reg) {
+  // Store an integer into a reserved TVM register through the calculator's own
+  // STO, which types the destination correctly.
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(value, REGISTER_REAL34_DATA(REGISTER_X));
+  reallyRunFunction(ITM_STO, reg);
+}
+
+void covTvm(uint16_t which) {
+  // Solve one time-value-of-money variable from the others with fnTvmVar
+  // (tvm.c). In the testSuite build the internal `testing` flag is true, so
+  // fnTvmVar executes the solve directly instead of waiting on the MVAR menu.
+  // A consistent END-mode problem with round numbers - N=3, I%/yr=100 (periodic
+  // rate 100%), PV=-1000, PMT=0, FV=8000, one payment and compounding period per
+  // year - so every solved variable is exact: FV=-PV(1+i)^N=8000, PV=-1000, N=3,
+  // I%=100, PMT=0. FARG selects the target (0=FV, 1=PV, 2=PMT, 3=N, 4=I%); the
+  // result is copied from its reserved register into X for the corpus to assert.
+  setSystemFlag(FLAG_ENDPMT);
+  covStoTvm(3,     RESERVED_VARIABLE_NPPER);
+  covStoTvm(100,   RESERVED_VARIABLE_IPONA);
+  covStoTvm(-1000, RESERVED_VARIABLE_PV);
+  covStoTvm(0,     RESERVED_VARIABLE_PMT);
+  covStoTvm(8000,  RESERVED_VARIABLE_FV);
+  covStoTvm(1,     RESERVED_VARIABLE_PPERONA);
+  covStoTvm(1,     RESERVED_VARIABLE_CPERONA);
+  currentSolverStatus = 0;
+  uint16_t target;
+  switch(which) {
+    case 1:  target = RESERVED_VARIABLE_PV;    break;
+    case 2:  target = RESERVED_VARIABLE_PMT;   break;
+    case 3:  target = RESERVED_VARIABLE_NPPER; break;
+    case 4:  target = RESERVED_VARIABLE_IPONA; break;
+    default: target = RESERVED_VARIABLE_FV;    break;
+  }
+  fnTvmVar(target);
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  real34Copy(REGISTER_REAL34_DATA(target), REGISTER_REAL34_DATA(REGISTER_X));
 }
 
 
@@ -3347,7 +3388,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot) {
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {
