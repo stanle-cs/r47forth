@@ -630,6 +630,15 @@ void covEqCalc(uint16_t formulaIndex) {
     "100-2" STD_CROSS "3^2",  // 6  precedence across x and ^
     "COS(0)",                 // 7  function call -> 1
     "SIN(0)",                 // 8  function call -> 0
+    "-5+3",                   // 9  unary minus
+    "COS(SIN(0))",            // 10 nested function calls
+    "TAN(0)",                 // 11 another function
+    "LN(1)",                  // 12 natural log
+    "((2+3)^2-1)",            // 13 deeper nesting
+    "2^3^2",                  // 14 power associativity
+    "A+2",                    // 15 named variable A (= X in)
+    "A^2",                    // 16 named variable in a power
+    "A" STD_CROSS "A+1",      // 17 variable used twice
   };
   const uint16_t n = sizeof(covFormulae) / sizeof(covFormulae[0]);
   if(formulaIndex >= n) {
@@ -638,6 +647,9 @@ void covEqCalc(uint16_t formulaIndex) {
   if(numberOfFormulae == 0) {
     fnEqNew(NOPARAM);
   }
+  // Store the corpus input (X) into the named variable A so a formula can
+  // reference it; this exercises the variable-resolution path in the parser.
+  reallyRunFunction(ITM_STO, findOrAllocateNamedVariable("A"));
   setEquation(currentFormula, covFormulae[formulaIndex]);
   fnEqCalc(NOPARAM);
 }
