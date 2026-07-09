@@ -639,6 +639,8 @@ void covEqCalc(uint16_t formulaIndex) {
     "A+2",                    // 15 named variable A (= X in)
     "A^2",                    // 16 named variable in a power
     "A" STD_CROSS "A+1",      // 17 variable used twice
+    "2+3=5",                  // 18 equation that holds (residual 0)
+    "3+4=10",                 // 19 equation residual (RHS-LHS = 10-7 = 3)
   };
   const uint16_t n = sizeof(covFormulae) / sizeof(covFormulae[0]);
   if(formulaIndex >= n) {

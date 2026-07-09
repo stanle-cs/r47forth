@@ -63,3 +63,10 @@ Out: EC=0 RX=Real:"16"
 Func: fnEqCalcCov
 In:  FARG=17 RX=Real:"4"
 Out: EC=0 RX=Real:"17"
+; equations with '=' return the residual (RHS-LHS); drives the equals path
+Func: fnEqCalcCov
+In:  FARG=18 RX=Real:"0"
+Out: EC=0 RX=Real:"0"
+Func: fnEqCalcCov
+In:  FARG=19 RX=Real:"0"
+Out: EC=0 RX=Real:"3"
