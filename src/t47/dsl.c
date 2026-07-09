@@ -758,6 +758,45 @@ static int readpCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
 }
 
 /**
+ * xportp <labelname> <filename> - Export a program to RTF (like the XPORTP menu command).
+ */
+static int xportpCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
+  if(argc != 3) {
+    Jim_SetResultFormatted(interp, "xportp: wrong # args: expected <label> <filename>, got %d", argc - 1);
+    return JIM_ERR;
+  }
+
+  const char *labelName = Jim_String(argv[1]);
+  const char *filename = Jim_String(argv[2]);
+  char internalLabel[64];
+  static const size_t maxLabel = sizeof(internalLabel) / 2;
+
+  if(strlen(labelName) >= maxLabel) {
+    Jim_SetResultFormatted(interp, "xportp: '%s' exceeds max length %d", labelName, maxLabel);
+    return JIM_ERR;
+  }
+  utf8ToString((const uint8_t *)labelName, internalLabel);
+  calcRegister_t label = findNamedLabel(internalLabel);
+  if(label == INVALID_VARIABLE) {
+    Jim_SetResultFormatted(interp, "xportp: '%s' not found as a global label", labelName);
+    return JIM_ERR;
+  }
+
+  strncpy(_ioFileNameOverride, filename, C47_PATH_MAX - 1);
+  _ioFileNameOverride[C47_PATH_MAX - 1] = '\0';
+
+  lastErrorCode = ERROR_NONE;
+  reallyRunFunction(ITM_EXPORTP, (uint16_t)label);
+
+  if(lastErrorCode != ERROR_NONE) {
+    Jim_SetResultFormatted(interp, "xportp: export of '%s' failed: %s", labelName, errorMessages[lastErrorCode]);
+    return JIM_ERR;
+  }
+
+  return JIM_OK;
+}
+
+/**
  * xeq <labelname> - Execute a label, emulating the XEQ key action
  */
 
@@ -1196,6 +1235,7 @@ void initDSL(void) {
   Jim_CreateCommand(interp, "tsvfn",  tsvfnCmd,  NULL, NULL);
   Jim_CreateCommand(interp, "var",    varCmd,    NULL, NULL);
   Jim_CreateCommand(interp, "xeq",    xeqCmd,    NULL, NULL);
+  Jim_CreateCommand(interp, "xportp", xportpCmd, NULL, NULL);
   // clang-format on
   if(!headlessMode) {
     // Conditionally add commands that require the GTK GUI
