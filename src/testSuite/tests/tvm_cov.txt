@@ -50,3 +50,21 @@ Out: EC=0 RX=Real:"-200"
 Func: fnAmortCov
 In:  FARG=2 RX=Real:"0"
 Out: EC=0 RX=Real:"-1000"
+
+; BEGIN mode (annuity due): the payment-timing factor lifts FV to 700*(1+i)=1400
+Func: fnTvmPmtCov
+In:  FARG=10 RX=Real:"0"
+Out: EC=0 RX=Real:"1400"
+Func: fnTvmPmtCov
+In:  FARG=12 RX=Real:"0"
+Out: EC=0 RX=Real:"-100"
+; HP12C amortisation (FLAG_AMORT_HP12C): rate 1.00 is exact, so BAL/PRN/INT match
+Func: fnAmortCov
+In:  FARG=10 RX=Real:"0"
+Out: EC=0 RX=Real:"800"
+Func: fnAmortCov
+In:  FARG=11 RX=Real:"0"
+Out: EC=0 RX=Real:"-200"
+Func: fnAmortCov
+In:  FARG=12 RX=Real:"0"
+Out: EC=0 RX=Real:"-1000"

@@ -745,20 +745,30 @@ void covTvm(uint16_t which) {
 void covTvmPmt(uint16_t which) {
   // TVM with a non-zero payment (annuity), driving the annuity-factor and
   // payment-timing branches of calculateFV / calculatePV / calculatePMT.
-  // Consistent END-mode problem: N=3, I%/yr=100 (periodic rate 100%), PV=0,
-  // PMT=-100, FV=700 (an ordinary annuity: FV = -PMT*((1+i)^N-1)/i = 700). FARG
-  // selects the target (0=FV, 1=PV, 2=PMT); the result is asserted in X.
-  setSystemFlag(FLAG_ENDPMT);
+  // Consistent problem: N=3, I%/yr=100 (periodic rate 100%), PV=0, PMT=-100.
+  // In END mode this is an ordinary annuity, FV = -PMT*((1+i)^N-1)/i = 700; with
+  // FARG >= 10 the driver clears FLAG_ENDPMT (BEGIN mode, annuity due), where the
+  // payment-timing factor (1+i) lifts the future value to FV = 700*(1+i) = 1400
+  // and covers the p=1 branch. FARG selects the target (0/10=FV, 1/11=PV,
+  // 2/12=PMT); the result is asserted in X.
+  const bool_t begin = which >= 10;
+  const uint16_t sel = begin ? (uint16_t)(which - 10) : which;
+  if(begin) {
+    clearSystemFlag(FLAG_ENDPMT);
+  }
+  else {
+    setSystemFlag(FLAG_ENDPMT);
+  }
   covStoTvm(3,    RESERVED_VARIABLE_NPPER);
   covStoTvm(100,  RESERVED_VARIABLE_IPONA);
   covStoTvm(0,    RESERVED_VARIABLE_PV);
   covStoTvm(-100, RESERVED_VARIABLE_PMT);
-  covStoTvm(700,  RESERVED_VARIABLE_FV);
+  covStoTvm(begin ? 1400 : 700, RESERVED_VARIABLE_FV);
   covStoTvm(1,    RESERVED_VARIABLE_PPERONA);
   covStoTvm(1,    RESERVED_VARIABLE_CPERONA);
   currentSolverStatus = 0;
   uint16_t target;
-  switch(which) {
+  switch(sel) {
     case 1:  target = RESERVED_VARIABLE_PV;  break;
     case 2:  target = RESERVED_VARIABLE_PMT; break;
     default: target = RESERVED_VARIABLE_FV;  break;
@@ -783,9 +793,19 @@ void covAmort(uint16_t which) {
   // first period the interest is 1000*1.00=1000, the principal is 1200-1000=200
   // and the balance falls to 800. covAmort sets the TVM state, points the
   // amortisation range at period 1 (amortP1=amortP2=1), and calls the requested
-  // amortisation function (0=BAL, 1=PRN, 2=INT); the result is left in X.
+  // amortisation function (0=BAL, 1=PRN, 2=INT); the result is left in X. With
+  // FARG >= 10 the driver sets FLAG_AMORT_HP12C, exercising the HP12C period-by-
+  // period balance path (amortBalAt_HP12C); the periodic rate 1.00 is exact so
+  // the rounded schedule matches the analytical one.
+  const bool_t hp12c = which >= 10;
+  const uint16_t sel = hp12c ? (uint16_t)(which - 10) : which;
   setSystemFlag(FLAG_ENDPMT);
-  clearSystemFlag(FLAG_AMORT_HP12C);
+  if(hp12c) {
+    setSystemFlag(FLAG_AMORT_HP12C);
+  }
+  else {
+    clearSystemFlag(FLAG_AMORT_HP12C);
+  }
   covStoTvm(3,     RESERVED_VARIABLE_NPPER);
   covStoTvm(100,   RESERVED_VARIABLE_IPONA);
   covStoTvm(1000,  RESERVED_VARIABLE_PV);
@@ -794,10 +814,10 @@ void covAmort(uint16_t which) {
   covStoTvm(1,     RESERVED_VARIABLE_CPERONA);
   amortP1 = 1;
   amortP2 = 1;
-  if(which == 1) {
+  if(sel == 1) {
     fnAmortPrn(NOPARAM);
   }
-  else if(which == 2) {
+  else if(sel == 2) {
     fnAmortInt(NOPARAM);
   }
   else {
