@@ -39,6 +39,7 @@ void covBackupRoundtrip(uint16_t unusedButMandatoryParameter);
 void covConvToSI(uint16_t itemNr);
 void covConvFromSI(uint16_t itemNr);
 void covStateRoundtrip(uint16_t unusedButMandatoryParameter);
+void covEqCalc(uint16_t unusedButMandatoryParameter);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
@@ -158,6 +159,7 @@ const funcTest_t funcTestNoParam[] = {
   {"covConvToSI",            covConvToSI           },
   {"covConvFromSI",          covConvFromSI         },
   {"fnStateRoundtrip",       covStateRoundtrip     },
+  {"fnEqCalcCov",            covEqCalc             },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
@@ -606,6 +608,34 @@ void covStateRoundtrip(uint16_t unusedButMandatoryParameter) {
   fnLoad(LM_NAMED_VARIABLES);
   fnLoad(LM_SUMS);
   fnLoad(LM_SYSTEM_STATE);
+}
+
+void covEqCalc(uint16_t formulaIndex) {
+  // Evaluate one of a table of formulas through the equation engine, selected by
+  // FARG. fnEqCalc() runs parseEquation() in EQUATION_PARSER_XEQ mode over the
+  // current formula, driving the tokeniser, the operator-precedence parser, and
+  // the function dispatch in equation.c; the result lands in X. A single formula
+  // slot is created and reused, so no formula accumulates in the pool.
+  static const char * const covFormulae[] = {
+    "2+3",                    // 0  addition
+    "1+2" STD_CROSS "3",      // 1  precedence: x binds tighter than +
+    "(1+2)" STD_CROSS "3",    // 2  parentheses override precedence
+    "2^10",                   // 3  power
+    "10-2-3",                 // 4  left-associative subtraction
+    "2" STD_CROSS "(3+4)^2",  // 5  nested parentheses and power
+    "100-2" STD_CROSS "3^2",  // 6  precedence across x and ^
+    "COS(0)",                 // 7  function call -> 1
+    "SIN(0)",                 // 8  function call -> 0
+  };
+  const uint16_t n = sizeof(covFormulae) / sizeof(covFormulae[0]);
+  if(formulaIndex >= n) {
+    return;
+  }
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, covFormulae[formulaIndex]);
+  fnEqCalc(NOPARAM);
 }
 
 
@@ -3260,7 +3290,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip) {
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {
