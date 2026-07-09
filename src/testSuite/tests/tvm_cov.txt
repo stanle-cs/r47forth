@@ -23,3 +23,18 @@ Out: EC=0 RX=Real:"100"
 Func: fnTvmCov
 In:  FARG=2 RX=Real:"0"
 Out: EC=0 RX=Real:"0"
+
+; annuity (PMT != 0): ordinary annuity N=3, i=100%, PMT=-100, PV=0 -> FV=700
+Func: fnTvmPmtCov
+In:  FARG=0 RX=Real:"0"
+Out: EC=0 RX=Real:"700"
+Func: fnTvmPmtCov
+In:  FARG=2 RX=Real:"0"
+Out: EC=0 RX=Real:"-100"
+Func: fnTvmPmtCov
+In:  FARG=1 RX=Real:"0"
+Out: EC=0 RX=Real:"0"
+; effective annual rate: 100%/yr compounded twice -> 125%
+Func: fnEffCov
+In:  FARG=0 RX=Real:"0"
+Out: EC=0 RX=Real:"125"

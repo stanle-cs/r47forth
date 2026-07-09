@@ -43,6 +43,8 @@ void covEqCalc(uint16_t unusedButMandatoryParameter);
 void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t unusedButMandatoryParameter);
 void covTvm(uint16_t which);
+void covTvmPmt(uint16_t which);
+void covEff(uint16_t unusedButMandatoryParameter);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
@@ -166,6 +168,8 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDerivEqCov",           covDerivEq            },
   {"fnSolveRootCov",         covSolveRoot          },
   {"fnTvmCov",               covTvm                },
+  {"fnTvmPmtCov",            covTvmPmt             },
+  {"fnEffCov",               covEff                },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
@@ -734,6 +738,41 @@ void covTvm(uint16_t which) {
   fnTvmVar(target);
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
   real34Copy(REGISTER_REAL34_DATA(target), REGISTER_REAL34_DATA(REGISTER_X));
+}
+
+void covTvmPmt(uint16_t which) {
+  // TVM with a non-zero payment (annuity), driving the annuity-factor and
+  // payment-timing branches of calculateFV / calculatePV / calculatePMT.
+  // Consistent END-mode problem: N=3, I%/yr=100 (periodic rate 100%), PV=0,
+  // PMT=-100, FV=700 (an ordinary annuity: FV = -PMT*((1+i)^N-1)/i = 700). FARG
+  // selects the target (0=FV, 1=PV, 2=PMT); the result is asserted in X.
+  setSystemFlag(FLAG_ENDPMT);
+  covStoTvm(3,    RESERVED_VARIABLE_NPPER);
+  covStoTvm(100,  RESERVED_VARIABLE_IPONA);
+  covStoTvm(0,    RESERVED_VARIABLE_PV);
+  covStoTvm(-100, RESERVED_VARIABLE_PMT);
+  covStoTvm(700,  RESERVED_VARIABLE_FV);
+  covStoTvm(1,    RESERVED_VARIABLE_PPERONA);
+  covStoTvm(1,    RESERVED_VARIABLE_CPERONA);
+  currentSolverStatus = 0;
+  uint16_t target;
+  switch(which) {
+    case 1:  target = RESERVED_VARIABLE_PV;  break;
+    case 2:  target = RESERVED_VARIABLE_PMT; break;
+    default: target = RESERVED_VARIABLE_FV;  break;
+  }
+  fnTvmVar(target);
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  real34Copy(REGISTER_REAL34_DATA(target), REGISTER_REAL34_DATA(REGISTER_X));
+}
+
+void covEff(uint16_t unusedButMandatoryParameter) {
+  // Effective annual interest rate: fnEff computes 100*((iA/(100*cperA)+1)^cperA
+  // - 1) from the nominal rate and the compounding frequency, leaving it in X.
+  // Nominal 100%/yr compounded 2/yr -> effective 100*((1+0.5)^2-1) = 125%.
+  covStoTvm(100, RESERVED_VARIABLE_IPONA);
+  covStoTvm(2,   RESERVED_VARIABLE_CPERONA);
+  fnEff(NOPARAM);
 }
 
 
@@ -3388,7 +3427,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm) {
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {
