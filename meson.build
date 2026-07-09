@@ -110,6 +110,9 @@ if custom_pkg_list != []
     foreach h : this_headers
       custom_pkg_specs += pkg + ':' + h
     endforeach
+    if this_overrides.length() == 0 and this_headers.length() == 0 and this_custom.length() == 0
+      warning('Package ' + pkg + ' declared none of pkg_override_sources, pkg_override_headers, or pkg_custom_sources')
+    endif
     add_project_arguments('-I' + meson.project_source_root() / pkg, language: 'c', native: true)
     if meson.is_cross_build()
       add_project_arguments('-I' + meson.project_source_root() / pkg, language: 'c', native: false)

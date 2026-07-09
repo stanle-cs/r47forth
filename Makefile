@@ -42,7 +42,7 @@ clean: $(GMP_MESON_BUILD)
 	rm -f src_files_stamp testPgms_stamp
 
 build.sim:
-	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true
+	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -DCUSTOM_PKG=$(CUSTOM_PKG)
 
 build.sim.t47:
 	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Dc_args="-DT47"
@@ -137,19 +137,17 @@ docs: build.sim
 
 testPgms: build.sim
 	cd $(BUILD_PC) && ninja testPgms
-	mkdir -p res/testPgms
-	cp $(BUILD_PC)/src/generateTestPgms/testPgms.bin res/testPgms/
+	$(if $(CUSTOM_PKG),@echo "CUSTOM_PKG active: skipping res/testPgms copy",mkdir -p res/testPgms && cp $(BUILD_PC)/src/generateTestPgms/testPgms.bin res/testPgms/)
 
 test: clean build.sim testPgms
 	cd $(BUILD_PC) && ninja test
 
 test_asan: clean testPgms
-	meson setup $(BUILD_PC)
 ifeq ($(OS),Windows_NT)
 	@echo "Warning: AddressSanitizer not supported on Windows MinGW, building without ASAN"
-	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Dc_args="-Wno-deprecated-declarations"
+	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Dc_args="-Wno-deprecated-declarations" -DCUSTOM_PKG=$(CUSTOM_PKG) --reconfigure
 else
-	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Dc_args="-Wno-deprecated-declarations" -Db_sanitize=address
+	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Dc_args="-Wno-deprecated-declarations" -Db_sanitize=address -DCUSTOM_PKG=$(CUSTOM_PKG) --reconfigure
 endif
 	cd $(BUILD_PC) && ninja test
 
