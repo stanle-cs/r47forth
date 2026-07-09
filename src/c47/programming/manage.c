@@ -1880,7 +1880,7 @@ calcRegister_t findNamedLabelWithDuplicate(const char *labelName, int16_t dupNum
           xcopy(tmpString, labelList[lbl].labelPointer + 1, lblNameLen);
           tmpString[lblNameLen] = 0;
           if(compareString(tmpString, labelName, CMP_BINARY) == 0) {   // Label name match
-            if(firstLabel == 0) {    // First label occurence in the current program
+            if(!labelFound) {    // First label occurence in the current program
               firstLabel = lbl;
               labelFound = true;
             }
