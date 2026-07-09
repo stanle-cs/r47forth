@@ -5,7 +5,8 @@
 ;convertPairs[] item both SI round-trip halves run: covConvToSI = runConversionToSI
 ;(the unity conversion then 10^exp) and covConvFromSI = runConversionFromSI (10^-exp,
 ;the unity partner, the item partner) - the machinery behind custom conversion pairs.
-;Register X must match bit-exact. 2 identical passes catch state contamination.
+;The values are computed exactly, register X is checked to the testSuite tolerance
+;of at least 30 significant digits. 2 identical passes catch state contamination.
 
 In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0
 

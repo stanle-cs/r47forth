@@ -3274,7 +3274,7 @@ static void loadItemNameTable(void) {
   char  itemsHPath[2100], buffer[1000];
   FILE *itemsH;
 
-  sprintf(itemsHPath, "%s/../../c47/items.h", filePath);
+  snprintf(itemsHPath, sizeof(itemsHPath), "%s/../../c47/items.h", filePath);
   itemsH = fopen(itemsHPath, "rb");
   if(itemsH == NULL) {
     printf("Cannot open file %s to resolve ITM_ names!\n", itemsHPath);
@@ -3334,7 +3334,13 @@ void itemToCall(char *itemSpec) {
     }
   }
   else if('0' <= itemSpec[0] && itemSpec[0] <= '9') {
-    itemNr = atoi(itemSpec);
+    char *end;
+    itemNr = (int32_t)strtol(itemSpec, &end, 10);
+    if(*end != 0) {
+      printf("\nItem number has trailing characters: %s\n", itemSpec);
+      abortTest();
+      return;
+    }
   }
   else {
     printf("\nItem must be an ITM_ name or an item number: %s\n", itemSpec);

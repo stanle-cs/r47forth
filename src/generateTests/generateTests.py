@@ -72,6 +72,20 @@ CTX39 = Context(prec=39, rounding=ROUND_HALF_EVEN)           # ctxtReal39, the C
 CTX34 = Context(prec=34, rounding=ROUND_HALF_EVEN)           # real34, the result register
 
 #**************************************************************************************************
+#* write_atomic
+#* Purpose:     write a generated file so a reader can never see a half-written one
+#* Source:      target path and the full file text
+#* Destination: the file at path, LF line endings on every platform
+#* Function:    writes to a temp file in the same directory and renames it over the target;
+#*              newline='\n' stops MinGW python turning the files CRLF on Windows builds
+#**************************************************************************************************
+def write_atomic(path, text):
+  tmp = path + '.tmp'
+  with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
+    f.write(text)
+  os.replace(tmp, path)
+
+#**************************************************************************************************
 #* round34
 #* Purpose:     final rounding of a computed value to the result register width
 #* Source:      a Decimal at working precision
@@ -99,20 +113,30 @@ def load_constants():
     if m:
       defines[m.group(1)] = int(m.group(2))
   consts = {}
-  active = [True]                                            # one bool per nested #if level
+  active = [(True, False)]                                   # (active, evaluable) per #if level
   for line in open(f'{SRC}/generateConstants/generateConstants.c', encoding='utf-8'):
     if re.match(r'\s*#if', line):                            # any #if/#ifdef: push a level
       m = re.match(r'\s*#if\s*\((\w+)\s*==\s*(\d+)\)', line)
-      # only the (NAME == n) form is evaluated; other #if forms guard no constants, so True
-      active.append(defines.get(m.group(1)) == int(m.group(2)) if m else True)
+      # only the (NAME == n) form is evaluated; other #if forms stay active in BOTH branches
+      # (their #else must not hide constants we cannot judge)
+      if m:
+        active.append((defines.get(m.group(1)) == int(m.group(2)), True))
+      else:
+        active.append((True, False))
       continue
+    if re.match(r'\s*#elif', line):
+      sys.exit('generateConstants.c uses #elif, which this parser cannot evaluate.\n'
+               '  Fix: extend the preprocessor handling in load_constants(), or restructure '
+               'the conditional to #if/#else.')
     if re.match(r'\s*#else', line):
-      active[-1] = not active[-1]
+      state, evaluable = active[-1]
+      if evaluable:
+        active[-1] = (not state, True)
       continue
     if re.match(r'\s*#endif', line):
       active.pop()
       continue
-    if not all(active):
+    if not all(state for state, evaluable in active):
       continue
     m = re.search(r'generateConstant\("([^"]+)",\s*\d+,\s*\w+,\s*"([+-][0-9.eE+-]+)"', line)
     if m:
@@ -207,9 +231,20 @@ def load_temp_rows():
 #*                  { ITM_CtoF /* 220 */, ITM_FtoC, ITM_FtoK, +0, UT_TEMPERATURE },
 #*              partner and unity names resolve to item numbers via items.h (ITM_NULL -> 0);
 #*              an unresolvable name aborts telling which row and column to fix. A new pair is
-#*              picked up automatically once its convertPairs[] row exists.
+#*              picked up automatically once its convertPairs[] row exists. Silent-parse guards:
+#*              the row count must equal NUM_CONVERT_PAIRS (a reformatted row or declaration
+#*              cannot silently shrink the test set) and the /* item number */ comment must
+#*              agree with the ITM_ name's define.
 #**************************************************************************************************
 def load_convert_pairs(numbers_by_name):
+  num_pairs = None
+  for line in open(f'{SRC}/c47/conversionUnits.h', encoding='utf-8'):
+    m = re.match(r'\s*#define\s+NUM_CONVERT_PAIRS\s+(\d+)', line)
+    if m:
+      num_pairs = int(m.group(1))
+  if num_pairs is None:
+    sys.exit('NUM_CONVERT_PAIRS not found in src/c47/conversionUnits.h.\n'
+             '  Fix: the define was renamed or moved; align this search with it.')
   rows, active = [], False
   pat = re.compile(r'\s*\{\s*(ITM_\w+)\s*/\*\s*(\d+)\s*\*/\s*,\s*(\w+)\s*,\s*(\w+)\s*,'
                    r'\s*([+-]?\d+)\s*,\s*(UT_\w+)')
@@ -220,19 +255,36 @@ def load_convert_pairs(numbers_by_name):
     if active:
       m = pat.match(line)
       if m:
-        row = {'item': int(m.group(2)), 'exp': int(m.group(5)), 'ut': m.group(6)}
+        itm_name = m.group(1)
+        if itm_name not in numbers_by_name:
+          sys.exit(f'convertPairs row of {itm_name}: no define in items.h.\n'
+                   f'  Fix: correct the item name in that row (src/c47/conversionUnits.c) '
+                   f'or add the define to items.h.')
+        item = numbers_by_name[itm_name]
+        if item != int(m.group(2)):
+          sys.exit(f'convertPairs row of {itm_name}: the /* {m.group(2)} */ comment disagrees '
+                   f'with items.h ({itm_name} = {item}).\n'
+                   f'  Fix: update the item number comment in that row '
+                   f'(src/c47/conversionUnits.c) to /* {item} */.')
+        row = {'item': item, 'exp': int(m.group(5)), 'ut': m.group(6)}
         for column, name in (('partner', m.group(3)), ('unity', m.group(4))):
           if name == 'ITM_NULL':
             row[column] = 0
           elif name in numbers_by_name:
             row[column] = numbers_by_name[name]
           else:
-            sys.exit(f'convertPairs row of {m.group(1)}: {column} {name} has no define in '
+            sys.exit(f'convertPairs row of {itm_name}: {column} {name} has no define in '
                      f'items.h.\n  Fix: correct the {column} column of that row in '
                      f'src/c47/conversionUnits.c, or add the missing item define.')
         rows.append(row)
       elif '};' in line:
         break
+  if len(rows) != num_pairs:
+    sys.exit(f'parsed {len(rows)} convertPairs rows but NUM_CONVERT_PAIRS is {num_pairs}.\n'
+             f'  Fix: every row must keep the shape {{ ITM_x /* nnn */, partner, unity, exp, '
+             f'UT_type }} on one line including the /* item number */ comment; a row without '
+             f'it is invisible to this script. If the declaration itself was reformatted, '
+             f'align the searches in load_convert_pairs() with it.')
   return rows
 
 #**************************************************************************************************
@@ -377,17 +429,20 @@ def predict(D, fn, arg, x):
     f = CTX39.divide(f, consts['GalusToL'])
     return unit_conversion(x, f, 'invert multiply')
   if fn == 'fnCvtHMSHR':                                     # sexagesimal
+    # Formula-level mirror, NOT the C's time-type path (fnHMStoTM/fnHRtoTM). Exact for the
+    # input 1 used here; HMS is UT_NOT_CONFIGURABLE so it is never chained in SI trips. If HMS
+    # ever becomes configurable or gets other inputs, verify this branch against the C anew.
     if arg == 'divide':                                      # HMS -> HR: H.MMSS to decimal hours
       h = int(x)
-      mmss = CTX39.multiply(x - h, Decimal(100))
+      mmss = CTX39.multiply(CTX39.subtract(x, Decimal(h)), Decimal(100))
       m = int(mmss)
-      s = CTX39.multiply(mmss - m, Decimal(100))
+      s = CTX39.multiply(CTX39.subtract(mmss, Decimal(m)), Decimal(100))
       hr = CTX39.add(Decimal(h), CTX39.divide(Decimal(m), Decimal(60)))
       return round34(CTX39.add(hr, CTX39.divide(s, Decimal(3600))))
     h = int(x)                                               # HR -> HMS: decimal hours to H.MMSS
-    rem = CTX39.multiply(x - h, Decimal(60))
+    rem = CTX39.multiply(CTX39.subtract(x, Decimal(h)), Decimal(60))
     m = int(rem)
-    s = CTX39.multiply(rem - m, Decimal(60))
+    s = CTX39.multiply(CTX39.subtract(rem, Decimal(m)), Decimal(60))
     hms = CTX39.add(Decimal(h), CTX39.divide(Decimal(m), Decimal(100)))
     return round34(CTX39.add(hms, CTX39.divide(s, Decimal(10000))))
   if fn == 'fnCvtRatioDb':                                   # (10|20) * log10(x)
@@ -640,7 +695,8 @@ def render(tests):
   out.append(';the item tables, independently of the calculator code. The constants themselves are')
   out.append(';not verified here: test and calculator share the same source. Every convertPairs[]')
   out.append(';item converts input 1 via the real dispatch chain (Item: -> reallyRunFunction);')
-  out.append(f';register X must match bit-exact. {PASSES} identical passes catch state contamination.')
+  out.append(';the values are computed exactly, register X is checked to the testSuite tolerance')
+  out.append(f';of at least 30 significant digits. {PASSES} identical passes catch state contamination.')
   out.append('')
   out.append('In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0')
   for p in range(PASSES):                                    # the identical passes: the same
@@ -671,7 +727,8 @@ def render_si(tests):
   out.append(';convertPairs[] item both SI round-trip halves run: covConvToSI = runConversionToSI')
   out.append(';(the unity conversion then 10^exp) and covConvFromSI = runConversionFromSI (10^-exp,')
   out.append(';the unity partner, the item partner) - the machinery behind custom conversion pairs.')
-  out.append(f';Register X must match bit-exact. {PASSES} identical passes catch state contamination.')
+  out.append(';The values are computed exactly, register X is checked to the testSuite tolerance')
+  out.append(f';of at least 30 significant digits. {PASSES} identical passes catch state contamination.')
   out.append('')
   out.append('In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0')
   for p in range(PASSES):                                    # the identical passes: the same
@@ -695,6 +752,9 @@ def render_si(tests):
 #*              per label; EXTRA flags stored labels no longer generated
 #**************************************************************************************************
 def check(expected, path):
+  if not os.path.exists(path):
+    print(f'{path} does not exist; run generateTests.py without arguments to create it')
+    return 1
   stored, label = {}, None
   for line in open(path, encoding='utf-8'):
     m = re.match(r'; (T\w+)', line)
@@ -712,8 +772,8 @@ def check(expected, path):
     elif value.compare(stored[label]) != 0:
       print(f'MISMATCH {label}: computed {value}, stored {stored[label]}')
       failed += 1
-  for label in sorted(set(stored) - {label for label, _ in expected}):
-    print(f'EXTRA    {label} in {path} but no longer generated')
+  for extra_label in sorted(set(stored) - {lab for lab, _ in expected}):
+    print(f'EXTRA    {extra_label} in {path} but no longer generated')
     failed += 1
   print(f'{len(expected)} values checked against {os.path.basename(path)}, {failed} problem(s)')
   return failed
@@ -739,11 +799,9 @@ def main():
     failed += check([(label, value) for label, wrapper, item, value in tests_si], OUTPUT_SI)
     return 1 if failed else 0
   if args == [] or (len(args) == 2 and args[0] == '--stamp'):
-    with open(OUTPUT, 'w', encoding='utf-8') as f:
-      f.write(render(tests))
+    write_atomic(OUTPUT, render(tests))
     print(f'{len(tests)} items x {PASSES} passes written to {OUTPUT}')
-    with open(OUTPUT_SI, 'w', encoding='utf-8') as f:
-      f.write(render_si(tests_si))
+    write_atomic(OUTPUT_SI, render_si(tests_si))
     print(f'{len(tests_si)} SI half-trips x {PASSES} passes written to {OUTPUT_SI}')
     if args:
       open(args[1], 'w').close()                             # the meson stamp file

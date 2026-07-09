@@ -1,7 +1,8 @@
 # Conversion regression set
 
 `src/testSuite/tests/conversions.txt` tests every conversion pair in `convertPairs[]`: convert
-1 unit, compare register X bit-exact against a value predicted from first principles. 318
+1 unit, compare register X against a value computed from first principles (the values are
+exact; the testSuite compares to its tolerance of at least 30 significant digits). 318
 items, repeated in identical passes to catch state contamination (the PASSES constant in
 `generateTests.py`, currently 2, so 636 tests). It runs with the standard suite (`make test` /
 `make repeattest`); it is listed in `testSuiteList.txt`.
@@ -34,7 +35,7 @@ so a wrong literal there passes both. Verifying the constants needs an independe
 Custom conversion pairs execute through `runConversionToSI` / `runConversionFromSI`
 (conversionUnits.c:757): the unity conversion plus a 10^exp scale, and their inverses.
 `conversionsSI.txt` (also generated) runs both halves per configurable item through the
-testSuite wrappers `covConvToSI` / `covConvFromSI` with input 1, compared bit-exact against
+testSuite wrappers `covConvToSI` / `covConvFromSI` with input 1, compared against
 values computed here. `UT_NOT_CONFIGURABLE` items are skipped: custom pairs cannot be formed
 on them.
 

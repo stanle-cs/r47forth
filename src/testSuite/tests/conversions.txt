@@ -3,7 +3,8 @@
 ;the item tables, independently of the calculator code. The constants themselves are
 ;not verified here: test and calculator share the same source. Every convertPairs[]
 ;item converts input 1 via the real dispatch chain (Item: -> reallyRunFunction);
-;register X must match bit-exact. 2 identical passes catch state contamination.
+;the values are computed exactly, register X is checked to the testSuite tolerance
+;of at least 30 significant digits. 2 identical passes catch state contamination.
 
 In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0
 
