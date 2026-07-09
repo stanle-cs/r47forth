@@ -341,11 +341,7 @@
         tam.max = indexOfItems[ITM_GTO].tamMinMax & TAM_MAX_MASK;
       }
       else if(tam.dot) {
-        if(!catalog) {
-          tam.dot = false;
-        }
-        popSoftmenu();
-        --numberOfTamMenusToPop;
+        tam.dot = false;
       }
       else if(tam.colon) {
         if(!catalog) {
