@@ -36,6 +36,8 @@ bool_t          screenChange;
 void (*funcToTest)(uint16_t);
 void runPgm(uint16_t unusedButMandatoryParameter);
 void covBackupRoundtrip(uint16_t unusedButMandatoryParameter);
+void covConvToSI(uint16_t itemNr);
+void covConvFromSI(uint16_t itemNr);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
@@ -152,6 +154,8 @@ const funcTest_t funcTestNoParam[] = {
   // and restore it. Exercises both directions of saveRestoreBackup.c. Resets the
   // calculator, so its corpus test must run last.
   {"fnBackupRoundtrip",      covBackupRoundtrip    },
+  {"covConvToSI",            covConvToSI           },
+  {"covConvFromSI",          covConvFromSI         },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
@@ -577,6 +581,18 @@ void covBackupRoundtrip(uint16_t unusedButMandatoryParameter) {
   loadTestPrograms = false;
   saveCalc();
   restoreCalc();
+}
+
+
+
+// Wrappers exposing the SI round-trip halves (custom conversion pairs) to generated tests
+// in conversionsSI.txt; the param is the convertPairs[] item number
+void covConvToSI(uint16_t itemNr) {
+  runConversionToSI((int16_t)itemNr);
+}
+
+void covConvFromSI(uint16_t itemNr) {
+  runConversionFromSI((int16_t)itemNr);
 }
 
 
@@ -3219,8 +3235,8 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip) {
-      functionIndex = ITM_NOP; // testSuite-local coverage driver, not a catalog item
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI) {
+      functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {
       for(functionIndex=1; functionIndex<=LAST_ITEM; functionIndex++) {

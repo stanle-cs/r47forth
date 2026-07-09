@@ -27,7 +27,26 @@ it mirrors.
 Not covered: the constant values themselves. Test and calculator share `generateConstants.c`,
 so a wrong literal there passes both. Verifying the constants needs an independent source.
 
-`generateTests.py --check` compares computed values against the existing file without writing.
+`generateTests.py --check` compares computed values against the existing files without writing.
+
+## SI round trips (conversionsSI.txt)
+
+Custom conversion pairs execute through `runConversionToSI` / `runConversionFromSI`
+(conversionUnits.c:757): the unity conversion plus a 10^exp scale, and their inverses.
+`conversionsSI.txt` (also generated) runs both halves per configurable item through the
+testSuite wrappers `covConvToSI` / `covConvFromSI` with input 1, compared bit-exact against
+values computed here. `UT_NOT_CONFIGURABLE` items are skipped: custom pairs cannot be formed
+on them.
+
+Before writing anything, the generator checks the `convertPairs[]` table itself and aborts
+the build with a fix instruction per problem: partner rows must point at each other, a unity
+must be a same-type item whose own unity is `ITM_NULL` (the C executes exactly ONE hop), and
+`UT_NOT_CONFIGURABLE` rows must have `ITM_NULL` unity. A unit consistency check then verifies
+that items converting FROM the same displayed unit reach the same SI value through their own
+factor + unity + exponent route (to 1e-4 relative: novelty units use short constants;
+reciprocal fuel/energy types are excluded, their shared-source values legitimately differ).
+The display name is ground truth the factor table does not know, so this catches wrong
+factors, swapped multiply/divide, wrong unity and wrong exponent independently.
 
 ## Adding a conversion pair - code changes
 
