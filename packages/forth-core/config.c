@@ -1522,12 +1522,13 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     }
     memset(ram, 0, TO_BYTES(RAM_SIZE_IN_BLOCKS));
 
-    #if !defined(DMCP_BUILD) || !defined(OLD_HW)
-      if(globalRegister == NULL) {
-        globalRegister = malloc(sizeof(registerHeader_t) * NUMBER_OF_GLOBAL_REGISTERS);
-        freeMemoryRegions = malloc(sizeof(freeMemoryRegion_t) * MAX_FREE_REGIONS);
-      }
-    #endif // DMCP_BUILD && OLD_HW
+     #if !defined(DMCP_BUILD) || !defined(OLD_HW)
+       if(globalRegister == NULL) {
+         globalRegister = malloc(sizeof(registerHeader_t) * NUMBER_OF_GLOBAL_REGISTERS);
+         freeMemoryRegions = malloc(sizeof(freeMemoryRegion_t) * MAX_FREE_REGIONS);
+       }
+       memset(globalRegister, 0, sizeof(registerHeader_t) * NUMBER_OF_GLOBAL_REGISTERS);
+     #endif // DMCP_BUILD && OLD_HW
 
     freeMemoryRegions[0].blockAddress = TO_C47MEMPTR(ram + allReservedVariables[LAST_RESERVED_VARIABLE - FIRST_RESERVED_VARIABLE].header.pointerToRegisterData + REAL34_SIZE_IN_BLOCKS);
     freeMemoryRegions[0].sizeInBlocks = RAM_SIZE_IN_BLOCKS - freeMemoryRegions[0].blockAddress - 1; // - 1: one block for an empty program
@@ -1561,12 +1562,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     memset(nimBufferDisplay, 0, NIM_BUFFER_LENGTH);
     memset(tamBuffer,        0, TAM_BUFFER_LENGTH);
 
-    #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
-      extern int forthDictSelfTest(void);
-      forthDictSelfTest();
-    #endif
-
-    // Empty program initialization
+     // Empty program initialization
     beginOfProgramMemory          = (uint8_t *)(ram + (RAM_SIZE_IN_BLOCKS - 1)); // Last block of RAM
     currentStep                   = beginOfProgramMemory;
     firstFreeProgramByte          = beginOfProgramMemory + 2;
@@ -1695,10 +1691,10 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     histElementXorY = -1;
 
 
-    x_min = -10;
-    x_max = 10;
-    y_min = 0;
-    y_max = 1;
+    int32ToReal(-10, x_min);
+    int32ToReal(10, x_max);
+    realSetZero(y_min);
+    realCopy(const_1, y_max);
 
 
 
@@ -1877,7 +1873,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     currentSolverProgram = 0xffffu;
     currentSolverVariable = INVALID_VARIABLE;
     currentSolverNestingDepth = 0;
-
+    graphAccActive = false;
     graphVariabl1 = 0;
 
     // Timer application
@@ -1943,12 +1939,16 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     fnClearFlag(FLAG_USER);
     fnRefreshState();
 
-    #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
-      extern int forthDictSelfTest(void);
-      if(forthDictSelfTest()) {
-        fprintf(stderr, "FORTH DICT SELF-TEST FAILED\n");
-      }
-    #endif
+     #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
+       extern int forthDictSelfTest(void);
+       if(forthDictSelfTest()) {
+         fprintf(stderr, "FORTH DICT SELF-TEST FAILED\n");
+         exit(1);
+       }
+       if(headlessMode) {
+         exit(0);
+       }
+     #endif
   }
 }
 

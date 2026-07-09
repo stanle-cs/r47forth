@@ -132,7 +132,7 @@ subdir('src/c47')
 # Phase 2: build shadow tree and apply overrides after subdir('src/c47')
 if custom_pkg_list != []
   shadow_dir = meson.project_build_root() / 'custom_pkg_shadow'
-  pkg_info = run_command(pkg_python3, 'tools/resolve_c47_src.py', '--shadow',
+  pkg_info = run_command(pkg_python3, 'tools/resolve_c47_src.py', '--shadow', '--gen-lists',
                          meson.project_source_root() / 'src/c47/meson.build',
                          meson.project_source_root(), shadow_dir,
                          custom_pkg_specs, check: true)
@@ -156,17 +156,29 @@ if custom_pkg_list != []
     endif
     idx += 1
   endforeach
-  set_variable('c47_inc', include_directories('custom_pkg_shadow', upstream_incs))
-  # Source list: every entry points into the shadow dir
+  set_variable('c47_inc', include_directories('custom_pkg_shadow', 'src/generateCatalogs', 'src/generateConstants', upstream_incs))
+  # Source list: every entry points into the shadow dir (skip GENCAT:/GENTST: lines)
   src_lines = []
   idx = 0
   foreach line : lines
-    if idx > 0
+    if idx > 0 and line.substring(0, 7) != 'GENCAT:' and line.substring(0, 7) != 'GENTST:'
       src_lines += line
     endif
     idx += 1
   endforeach
   set_variable('c47_src', src_lines + custom_pkg_sources)
+  # F1: remap generator source lists to shadow paths
+  gen_cat_srcs = []
+  gen_tst_srcs = []
+  foreach line : lines
+    if line.substring(0, 7) == 'GENCAT:'
+      gen_cat_srcs += line.substring(7)
+    elif line.substring(0, 7) == 'GENTST:'
+      gen_tst_srcs += line.substring(7)
+    endif
+  endforeach
+  set_variable('generateCatalogs_src', gen_cat_srcs)
+  set_variable('generateTestPgms_src', gen_tst_srcs)
 endif
 
 subdir('src/ttf2RasterFonts')

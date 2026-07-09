@@ -88,7 +88,7 @@ def strip_comments(content):
     return '\n'.join(line.split('#')[0] for line in content.split('\n'))
 
 
-def do_shadow(meson_build, project_root, shadow_dir, specs):
+def do_shadow(meson_build, project_root, shadow_dir, specs, gen_lists=False):
     """Shadow-tree mode: build symlink tree, overlay overrides, emit paths."""
 
     # --- F9/F10: validate shadow_dir before ANY mutation -------------------
@@ -249,14 +249,31 @@ def do_shadow(meson_build, project_root, shadow_dir, specs):
     for s in upstream:
         print(os.path.join(shadow_dir, s))
 
+    # --- F1: Emit generator source lists if --gen-lists flag is set ---
+    if gen_lists:
+        m_gc = re.search(r'generateCatalogs_src\s*=\s*files\((.*?)\)', content_clean, re.DOTALL)
+        if m_gc:
+            gen_cat_srcs = re.findall(r"'([^']+)'", m_gc.group(1))
+            for s in gen_cat_srcs:
+                print('GENCAT:' + os.path.join(shadow_dir, s))
+        m_gt = re.search(r'generateTestPgms_src\s*=\s*files\((.*?)\)', content_clean, re.DOTALL)
+        if m_gt:
+            gen_tst_srcs = re.findall(r"'([^']+)'", m_gt.group(1))
+            for s in gen_tst_srcs:
+                print('GENTST:' + os.path.join(shadow_dir, s))
+
 
 # ================================================================
 # Entry point
 # ================================================================
 if __name__ == '__main__':
-    if sys.argv[1:2] == ['--shadow']:
-        do_shadow(sys.argv[2], sys.argv[3], sys.argv[4],
-                  sys.argv[5:] if len(sys.argv) > 5 else [])
+    if '--shadow' in sys.argv[1:]:
+        shadow_idx = sys.argv.index('--shadow')
+        gen_lists = '--gen-lists' in sys.argv
+        non_flag_args = [a for a in sys.argv[1:] if a not in ('--shadow', '--gen-lists')]
+        do_shadow(non_flag_args[0], non_flag_args[1], non_flag_args[2],
+                  non_flag_args[3:] if len(non_flag_args) > 3 else [],
+                  gen_lists)
         sys.exit(0)
 
     # --- Source override mode (default) — unchanged for H1-H5 ---

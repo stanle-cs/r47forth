@@ -12,11 +12,15 @@
 /* ---- §1.1 In-RAM header layout ---- */
 
 #define FORTH_NULL      0xFFFFu     /* end-of-chain sentinel (region-relative) */
+#define FORTH_PRIM_NONE ((uint16_t)0xFFFFu)  /* forthFindPrim miss sentinel (C-3, §3.3) */
 #define FORTH_NAME_MAX  31
 
 #define FF_IMMEDIATE    0x01        /* execute even in compile state */
 #define FF_SMUDGE       0x02        /* hidden: definition in progress / incomplete */
 #define FF_RESERVED     0xFC        /* must be 0 */
+#ifndef FTOK_EXIT
+  #define FTOK_EXIT     0x0000u     /* end of colon definition body */
+#endif
 
 typedef struct {                    /* stored in ram[], NEVER dereferenced as-is */
   uint16_t link;                    /* region-relative offset of previous header, or FORTH_NULL */
@@ -45,6 +49,11 @@ extern forthDict_t fdict;
 void forthDictInit(void);
 void forthDictClear(void);
 
+/* Test-only: override initial block count to force early realloc (DESIGN.md §7) */
+#if defined(PC_BUILD)
+  void forthDictSetTestInitialBlocks(uint16_t blocks);
+#endif
+
 /* Ensure at least `bytes` free; may realloc the region. Returns true on success. */
 bool forthDictEnsure(uint16_t bytes);
 
@@ -55,17 +64,26 @@ uint16_t forthDictAllocate(uint8_t nameLen, uint16_t bodyBytes);
 /* Write name into the header at region-relative offset `hdrOff`. */
 void forthDictWriteName(uint16_t hdrOff, const char *name, uint8_t nameLen);
 
-/* Emit a single byte at fdict.here (bumps here). */
-void forthDictEmitByte(uint8_t byte);
+/* Emit a 16-bit token at fdict.here; grows region if needed (§3.3.7). */
+bool forthDictEmit(ftoken_t tok);
 
-/* Emit a 16-bit token at fdict.here (LE, bumps here by 2). */
-void forthDictEmit(ftoken_t tok);
+/* Emit raw bytes (nBytes must be even) at fdict.here; grows region if needed (§3.3.7). */
+bool forthDictEmitBytes(const void *src, uint16_t nBytes);
 
-/* Emit raw bytes at fdict.here. */
-void forthDictEmitBytes(const uint8_t *data, uint8_t len);
+/* Clear FF_SMUDGE at entryOff, block-round fdict.here (§3.3.7). */
+bool forthDictFinishDef(uint16_t entryOff);
 
-/* Finish current definition: emit FTOK_EXIT, clear FF_SMUDGE, block-round fdict.here. */
-void forthDictFinishDef(void);
+/* Start a colon-word definition (§3.3.7). */
+bool startDefinition(const char *name);
+
+/* Finish current definition: emit FTOK_EXIT, clear smudge, block-round (§3.3.7). */
+bool finishDefinition(void);
+
+/* Abort current definition; idempotent (§3.3.7). */
+void abortDefinition(void);
+
+/* Returns true if a definition is currently open (smudged). */
+bool isDefinitionOpen(void);
 
 /* Lookup: §4.1 resolution order */
 /* Scan forthPrims[] for name; returns index or 0xFFFF if not found. */
@@ -75,7 +93,38 @@ uint16_t forthFindPrim(const char *name);
    Returns true on hit, sets *idx to dictionary index. */
 bool forthFindColon(const char *name, uint16_t *idx);
 
+/* Reverse lookup: §4.2 resolution order (C47 label first, Forth colon second) */
+typedef enum {
+  FORTH_XEQ_NONE = 0,
+  FORTH_XEQ_LABEL = 1,
+  FORTH_XEQ_COLON = 2
+} forthXEQType_t;
+
+/* Resolve name for XEQ: C47 label first, Forth colon fallback (§4.2).
+   Sets *param to label ID (LABEL) or dictionary index (COLON). */
+forthXEQType_t forthResolveXEQ(const char *name, uint16_t *param);
+
 /* Inner interpreter entry (§3.2) */
 void forthInner(uint16_t entryIndex, bool fromProgram);
+
+/* Push helpers (§3.3.4) — shared by inner interpreter and outer interpreter */
+void forthPushReal34(const real34_t *val);
+void forthPushInt32(int32_t val);
+
+/* Bridge functions (§6) */
+void fnForthCall(uint16_t param);
+void fnForthOuter(uint16_t param);
+
+/* Outer interpreter (§3.3) */
+void forthOuterInterpret(const char *source);
+
+/* Self-test harness (DESIGN.md §7) */
+int forthDictSelfTest(void);
+
+/* Test-only: expose forthRunning for re-entrancy guard test (§3.2) */
+#ifdef FORTH_DEBUG_SELFTEST
+void forthTestSetRunning(bool val);
+bool forthTestIsRunning(void);
+#endif
 
 #endif /* FORTH_DICT_H */
