@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
 
 #include "c47.h"
+#include "forth_dict.h"  // for forthDictInit()
 
 /* Run the Forth dictionary self-test after memory init on PC builds. */
 #ifndef FORTH_DEBUG_SELFTEST
@@ -1939,7 +1940,11 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     fnClearFlag(FLAG_USER);
     fnRefreshState();
 
-     #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
+    /* Reset hook: reinitialize Forth dictionary.
+     * (DESIGN.md §6 — clears stale base/here/latest after RAM clear.) */
+    forthDictInit();
+
+      #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
        extern int forthDictSelfTest(void);
        if(forthDictSelfTest()) {
          fprintf(stderr, "FORTH DICT SELF-TEST FAILED\n");

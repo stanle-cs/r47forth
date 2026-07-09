@@ -91,11 +91,28 @@ static bool_t popIsFalse(void)
       break;
   }
 
-  /* Do NOT drop X here — the Forth countdown loop relies on X persisting
-     for the next iteration's DUP.  (C47 fnDrop/_Drop has unusual rotation
-     semantics that break the DUP/MINUS/0BR/BR pattern.) */
+  /* FTOK_0BR CONSUMES its operand (DESIGN.md §2.2): pops X after the
+     zero/false test.  IF compiles a DUP before 0BR precisely because
+     0BR pops the tested value. */
+  fnDrop(NOPARAM);
   return isZero;
 }
+
+/* ---- DMCP key poll: R/S (36) or EXIT (33) interrupt (§3.2) ---- */
+
+#if defined(DMCP_BUILD)
+static bool_t pollProgramInterrupt(void)
+{
+  int key = C47PopKeyNoBuffer(DISPLAY_WAIT_FOR_RELEASE) + 1;
+  if (key == 36 || key == 33) {
+    programRunStop = PGM_WAITING;
+    return true;
+  } else if (key > 0) {
+    setLastKeyCode(key);
+  }
+  return false;
+}
+#endif
 
 /* ---- Dictionary body lookup: index → region-relative body offset ---- */
 
@@ -167,6 +184,14 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
       break;
     }
 
+    /* Key poll — primary interrupt on DMCP hardware (§3.2) */
+#if defined(DMCP_BUILD)
+    if (pollProgramInterrupt()) {
+      forthRunning = false;
+      return;
+    }
+#endif
+
     /* Runaway backstop (§2.2) */
     if (++dispatches >= RUNAWAY_CAP) {
       lastErrorCode = ERROR_RAM_FULL;
@@ -193,7 +218,7 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
       continue;
     }
 
-    if (tok <= 0x0FFF) {
+    if (tok >= FTOK_PRIM_BASE && tok <= 0x0FFF) {
       /* FTOK_PRIM: token = index + 1 (§2.2) */
       uint16_t primIdx = (uint16_t)(tok - 1);
       if (primIdx >= forthPrimCount) {
@@ -248,14 +273,13 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         break;
       }
 
-       case FTOK_ILIT: {
-         /* Push 4-byte int32 as dtLongInteger (§2.2, §3.3.5) */
-         int32_t v = (int32_t)((int8_t)fdict.base[ip] |
-                               ((uint32_t)fdict.base[ip + 1] << 8) |
-                               ((uint32_t)fdict.base[ip + 2] << 16) |
-                               ((uint32_t)fdict.base[ip + 3] << 24));
-         ip += 4;
-         forthPushInt32(v);
+        case FTOK_ILIT: {
+          /* Push 4-byte int32 as dtLongInteger (§2.2, §3.3.5)
+           * memcpy avoids sign-extension bug on byte 0 (fix #1). */
+          int32_t v;
+          memcpy(&v, fdict.base + ip, 4);
+          ip += 4;
+          forthPushInt32(v);
          if (lastErrorCode != ERROR_NONE) {
            forthRunning = false;
            return;
@@ -263,23 +287,25 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
          break;
        }
 
-      case FTOK_BR: {
-        /* Unconditional branch: signed int16 delta in cells (§2.2) */
-        int16_t delta = (int16_t)((int8_t)fdict.base[ip] |
-                                  ((uint16_t)fdict.base[ip + 1] << 8));
-        ip += 2;
-        ip += (uint16_t)(delta * 2);
-        break;
-      }
-
-       case FTOK_0BR: {
-         /* Conditional branch: pop X, branch if zero/false (§2.2, §3.2) */
-         int16_t delta = (int16_t)((int8_t)fdict.base[ip] |
-                                   ((uint16_t)fdict.base[ip + 1] << 8));
+       case FTOK_BR: {
+         /* Unconditional branch: signed int16 delta in cells (§2.2)
+          * memcpy avoids sign-extension bug on byte 0 (fix #16a). */
+         int16_t delta;
+         memcpy(&delta, fdict.base + ip, 2);
          ip += 2;
-         if (popIsFalse()) {
-           ip += (uint16_t)(delta * 2);
-         }
+          ip += (int32_t)delta * 2;
+          break;
+        }
+
+        case FTOK_0BR: {
+          /* Conditional branch: pop X, branch if zero/false (§2.2, §3.2)
+           * memcpy avoids sign-extension bug on byte 0 (fix #16b). */
+          int16_t delta;
+          memcpy(&delta, fdict.base + ip, 2);
+          ip += 2;
+          if (popIsFalse()) {
+            ip += (int32_t)delta * 2;
+          }
          if (lastErrorCode != ERROR_NONE) {
            forthRunning = false;
            return;
@@ -330,7 +356,11 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
             return;
         }
 
-        /* H1: PGM_RUNNING save/set/restore wrap around this call (§2.2 resolved issue 2) */
+        /* H1: PGM_RUNNING save/set/restore wrap around this call (§2.2 resolved issue 2)
+         * Pattern: save current state, mark RUNNING, execute, restore only if
+         * unchanged.  If reallyRunFunction modifies programRunStop (e.g., keypress
+         * aborts execution), the restore is intentionally skipped — the new value
+         * (e.g., PGM_STOPPED) is preserved.  Safe under single-threaded assumption. */
         {
           uint8_t savedRunStop = programRunStop;
           programRunStop = PGM_RUNNING;

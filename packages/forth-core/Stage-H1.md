@@ -468,7 +468,8 @@ extern void fnForthOuter(uint16_t param);
 
 void fnForthCall(uint16_t param)
 {
-    forthInner(param, true);
+    forthInner(param, programRunStop == PGM_RUNNING);
+    // (Pass true only if called from a running program, not interactively.)
 }
 
 void fnForthOuter(uint16_t unused)

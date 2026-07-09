@@ -33,3 +33,9 @@ option('CUSTOM_PKG',
   value       : [],
   description : 'external custom package directories (supports pkg_override_sources, pkg_custom_sources, pkg_override_headers)'
 )
+
+option('FORTH_DEBUG_SELFTEST',
+  type        : 'boolean',
+  value       : true,
+  description : 'Enable Forth dictionary self-test on boot'
+)

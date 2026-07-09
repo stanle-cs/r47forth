@@ -13,7 +13,20 @@
 
 /* ---- §1.2 Dictionary control block (package BSS, NOT in the arena) ---- */
 
-forthDict_t fdict;
+/* Static initialization ensures fdict is well-formed even if production never
+ * calls forthDictInit() before a lookup. On hardware there is no
+ * FORTH_DEBUG_SELFTEST to trigger the self-test (which is what calls
+ * forthDictInit on PC), so base must be NULL and latest must be the
+ * end-of-chain sentinel from the very first instruction.
+ * Field order per DESIGN.md §1.2: base, sizeBlocks, here, latest, count.
+ */
+forthDict_t fdict = {
+  .base       = NULL,
+  .sizeBlocks = 0,
+  .here       = 0,
+  .latest     = FORTH_NULL,   // 0xFFFF end-of-chain sentinel
+  .count      = 0,
+};
 
 /* Test-only: override initial block count to force early realloc (DESIGN.md §7) */
 #if defined(PC_BUILD)
@@ -50,6 +63,7 @@ bool forthDictEnsure(uint16_t bytes)
 {
   /* 64 KB offset wrap (§3.3.8 C-10): reject before growing */
   if ((uint32_t)fdict.here + bytes > 0xFFFEu) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
 
@@ -144,14 +158,19 @@ uint16_t forthFindPrim(const char *name)
 
 bool forthFindColon(const char *name, uint16_t *idx)
 {
+  /* Guard against uninitialized dict (e.g., production hw path). */
+  if (!fdict.base) return false;
+
   uint16_t off = fdict.latest;
   uint16_t n = 0;
+  size_t queryLen = strlen(name);
 
   while (off != FORTH_NULL) {
     forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
 
     if (!(hdr->flags & FF_SMUDGE)) {
       if (hdr->nameLen > 0 &&
+          queryLen == hdr->nameLen &&
           memcmp(fdict.base + off + 4, name, (size_t)hdr->nameLen) == 0) {
         *idx = fdict.count - 1 - n;
         return true;
@@ -179,6 +198,7 @@ bool forthDictEmit(ftoken_t tok)
 
 bool forthDictEmitBytes(const void *src, uint16_t nBytes)
 {
+  if (nBytes % 2 != 0) return false;
   uint16_t i;
   for (i = 0; i < nBytes; i += 2) {
     ftoken_t c;
@@ -202,9 +222,11 @@ bool startDefinition(const char *name)
 {
   size_t nameLen = strlen(name);
   if (nameLen == 0 || nameLen > FORTH_NAME_MAX) {
+    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
   if (fdict.count >= 0x6F00) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
   openDef.here = fdict.here;

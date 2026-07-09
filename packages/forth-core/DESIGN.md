@@ -1236,6 +1236,21 @@ pkg_custom_sources   = files('forth_dict.c','forth_prims.c','forth_inner.c',
 ```
 (Stage 2 adds `softmenus.c`, `keyboard.c` to `pkg_override_sources`.)
 
+### §6.2 Reset Hook
+
+When the user performs a RESET (ON CLEAR in C47, or programmatic doFnReset):
+
+1. RAM is zeroed (config.c, memset by existing code).
+2. freeMemoryRegions() rebuilds the free-list metadata.
+3. **forthDictInit() is called** (new, as part of the reset sequence).
+
+This call:
+- Resets fdict.base, fdict.here, fdict.latest, fdict.count to zero.
+- Clears the managed block arena, preparing for new Forth definitions.
+- Ensures no stale pointers into reused RAM (hardware lifecycle safety).
+
+See fix #11 (Fable audit, hardware reset safety).
+
 ---
 
 ## 7. Stage-1 acceptance (what the local model must deliver)

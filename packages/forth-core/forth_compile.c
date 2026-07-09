@@ -80,31 +80,33 @@ static forthNumType_t classifyNumber(const char *s) {
 
   bool hasDot = false;
   bool hasExp = false;
-  int16_t expPos = -1;
-  int16_t digits = 0;
+  int16_t mantissaDigits = 0;
+  int16_t expDigits = 0;
 
   while (i < len) {
     if (s[i] >= '0' && s[i] <= '9') {
-      digits++;
+      if (hasExp) {
+        expDigits++;
+      } else {
+        mantissaDigits++;
+      }
       i++;
     } else if (s[i] == '.' && !hasDot && !hasExp) {
       hasDot = true;
       i++;
     } else if ((s[i] == 'e' || s[i] == 'E') && !hasExp) {
       hasExp = true;
-      expPos = i;
+      i++;
+    } else if ((s[i] == '+' || s[i] == '-') && hasExp) {
+      /* Sign immediately after e/E — valid per §3.3.5 */
       i++;
     } else {
       return FORTH_NUM_NONE;
     }
   }
 
-  if (hasExp) {
-    int16_t ei = expPos + 1;
-    if (ei < len && (s[ei] == '+' || s[ei] == '-')) ei++;
-    if (ei >= len || s[ei] < '0' || s[ei] > '9') return FORTH_NUM_NONE;
-  }
-  if (digits == 0) return FORTH_NUM_NONE;
+  if (hasExp && expDigits == 0) return FORTH_NUM_NONE;
+  if (mantissaDigits == 0) return FORTH_NUM_NONE;
   if (hasDot || hasExp) return FORTH_NUM_REAL;
   return FORTH_NUM_INT;
 }
@@ -124,7 +126,9 @@ static bool parseNumberAsInt32(const char *buf, int32_t *out) {
 
   if (longIntegerCompareInt(li, INT32_MAX) <= 0 &&
       longIntegerCompareInt(li, INT32_MIN) >= 0) {
-    longIntegerToInt32(li, *out);
+    int32_t v;
+    longIntegerToInt32(li, v);
+    *out = v;
     longIntegerFree(li);
     return true;
   }

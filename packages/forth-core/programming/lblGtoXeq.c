@@ -363,13 +363,17 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
       }
       else if(opParam == STRING_LABEL_VARIABLE) {
         getStringLabelOrVariableName(paramAddress);
-        uint16_t resolvedParam;
+        uint16_t resolvedParam = (uint16_t)INVALID_VARIABLE;
         forthXEQType_t res = forthResolveXEQ(tmpStringLabelOrVariableName, &resolvedParam);
-        if (res == FORTH_XEQ_LABEL || op == ITM_LBLQ) {
+        if (res == FORTH_XEQ_LABEL) {
           reallyRunFunction(op, resolvedParam);
         }
         else if (res == FORTH_XEQ_COLON) {
-          reallyRunFunction(ITM_FCALL, resolvedParam);
+          if (op == ITM_LBLQ) {
+            reallyRunFunction(op, (uint16_t)INVALID_VARIABLE);
+          } else {
+            reallyRunFunction(ITM_FCALL, resolvedParam);
+          }
         }
         else {
           displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);

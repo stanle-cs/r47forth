@@ -9,5 +9,5 @@
 
 void fnForthCall(uint16_t param)
 {
-    forthInner(param, true);
+    forthInner(param, programRunStop == PGM_RUNNING);
 }
