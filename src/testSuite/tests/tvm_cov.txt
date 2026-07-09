@@ -38,3 +38,15 @@ Out: EC=0 RX=Real:"0"
 Func: fnEffCov
 In:  FARG=0 RX=Real:"0"
 Out: EC=0 RX=Real:"125"
+
+; amortisation of a loan PV=1000, i=100%, PMT=-1200; period 1: interest 1000,
+; principal 200, balance falls to 800
+Func: fnAmortCov
+In:  FARG=0 RX=Real:"0"
+Out: EC=0 RX=Real:"800"
+Func: fnAmortCov
+In:  FARG=1 RX=Real:"0"
+Out: EC=0 RX=Real:"-200"
+Func: fnAmortCov
+In:  FARG=2 RX=Real:"0"
+Out: EC=0 RX=Real:"-1000"

@@ -45,6 +45,7 @@ void covSolveRoot(uint16_t unusedButMandatoryParameter);
 void covTvm(uint16_t which);
 void covTvmPmt(uint16_t which);
 void covEff(uint16_t unusedButMandatoryParameter);
+void covAmort(uint16_t which);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
@@ -170,6 +171,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnTvmCov",               covTvm                },
   {"fnTvmPmtCov",            covTvmPmt             },
   {"fnEffCov",               covEff                },
+  {"fnAmortCov",             covAmort              },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
@@ -773,6 +775,34 @@ void covEff(uint16_t unusedButMandatoryParameter) {
   covStoTvm(100, RESERVED_VARIABLE_IPONA);
   covStoTvm(2,   RESERVED_VARIABLE_CPERONA);
   fnEff(NOPARAM);
+}
+
+void covAmort(uint16_t which) {
+  // Amortisation schedule for a loan: PV=1000, I%/yr=100 (periodic rate 100%),
+  // PMT=-1200, END mode, one payment and compounding period per year. For the
+  // first period the interest is 1000*1.00=1000, the principal is 1200-1000=200
+  // and the balance falls to 800. covAmort sets the TVM state, points the
+  // amortisation range at period 1 (amortP1=amortP2=1), and calls the requested
+  // amortisation function (0=BAL, 1=PRN, 2=INT); the result is left in X.
+  setSystemFlag(FLAG_ENDPMT);
+  clearSystemFlag(FLAG_AMORT_HP12C);
+  covStoTvm(3,     RESERVED_VARIABLE_NPPER);
+  covStoTvm(100,   RESERVED_VARIABLE_IPONA);
+  covStoTvm(1000,  RESERVED_VARIABLE_PV);
+  covStoTvm(-1200, RESERVED_VARIABLE_PMT);
+  covStoTvm(1,     RESERVED_VARIABLE_PPERONA);
+  covStoTvm(1,     RESERVED_VARIABLE_CPERONA);
+  amortP1 = 1;
+  amortP2 = 1;
+  if(which == 1) {
+    fnAmortPrn(NOPARAM);
+  }
+  else if(which == 2) {
+    fnAmortInt(NOPARAM);
+  }
+  else {
+    fnAmortBal(NOPARAM);
+  }
 }
 
 
@@ -3427,7 +3457,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff) {
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff || funcToTest == covAmort) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {
