@@ -22,11 +22,62 @@ Shadow mode:
 
 Warnings go to stderr and are captured by meson.
 """
+import filecmp
 import os
 import re
 import shutil
 import sys
 
+
+SENTINEL_NAME = 'DO_NOT_EDIT_shadow_tree.txt'
+
+
+# ---------------------------------------------------------------------------
+# Safety helpers  (F9, F10, F11)
+# ---------------------------------------------------------------------------
+
+def assert_shadow_dir(shadow_dir):
+    """Validate that *shadow_dir* is a plausible custom_pkg_shadow path.
+
+    The directory name must be 'custom_pkg_shadow' and the path must be
+    absolute.  Fails with sys.exit(1) on any violation.
+    """
+    if not shadow_dir or not os.path.isabs(shadow_dir):
+        print(f'ERROR: shadow_dir must be a non-empty absolute path: {shadow_dir!r}', file=sys.stderr)
+        sys.exit(1)
+    shadow_dir = os.path.realpath(shadow_dir)
+    if os.path.basename(shadow_dir) != 'custom_pkg_shadow':
+        print(f'ERROR: shadow_dir basename is not "custom_pkg_shadow": '
+              f'{shadow_dir}', file=sys.stderr)
+        sys.exit(1)
+
+
+def assert_contained(path, parent, label='path'):
+    """Assert *path* resolves inside *parent* using os.path.commonpath.
+
+    Both arguments are resolved through os.path.realpath before comparison
+    so symlinks and .. components cannot bypass the check.  On violation
+    the offending path is printed to stderr and sys.exit(1).
+    """
+    parent = os.path.realpath(parent)
+    resolved = os.path.realpath(path)
+    try:
+        common = os.path.commonpath([parent, resolved])
+    except ValueError:
+        # e.g. cross-drive on Windows
+        print(f'ERROR: {label} escapes containment: {resolved} '
+              f'(expected under {parent})', file=sys.stderr)
+        sys.exit(1)
+    if common != parent:
+        print(f'ERROR: {label} escapes containment: {resolved} '
+              f'(expected under {parent})', file=sys.stderr)
+        sys.exit(1)
+    return resolved
+
+
+# ---------------------------------------------------------------------------
+# Core helpers
+# ---------------------------------------------------------------------------
 
 def extract_rel(op):
     return op.split(':', 1)[1] if ':' in op else op
@@ -39,6 +90,10 @@ def strip_comments(content):
 
 def do_shadow(meson_build, project_root, shadow_dir, specs):
     """Shadow-tree mode: build symlink tree, overlay overrides, emit paths."""
+
+    # --- F9/F10: validate shadow_dir before ANY mutation -------------------
+    assert_shadow_dir(shadow_dir)
+
     with open(meson_build) as f:
         content = f.read()
 
@@ -64,9 +119,30 @@ def do_shadow(meson_build, project_root, shadow_dir, specs):
     # Build INCDIRS line: shadow dir first, then upstream include dirs
     inc_dirs_line = 'INCDIRS:' + ';'.join([shadow_dir] + resolved_incs)
 
-    # Wipe and recreate shadow directory
-    shutil.rmtree(shadow_dir, ignore_errors=True)
+    # --- F9: wipe and recreate shadow directory with safety guards ----------
     src_c47_dir = os.path.join(project_root, 'src', 'c47')
+
+    # F9: only delete what we created — sentinel gate
+    abs_shadow = os.path.realpath(shadow_dir)
+    sentinel = os.path.join(abs_shadow, SENTINEL_NAME)
+    if os.path.isdir(abs_shadow) and os.listdir(abs_shadow) and not os.path.isfile(sentinel):
+        print(f'ERROR: refusing to delete {abs_shadow}: existing non-empty directory has no shadow-tree sentinel — not created by this script', file=sys.stderr)
+        sys.exit(1)
+    print(f'REMOVING: {abs_shadow}', file=sys.stderr)
+    shutil.rmtree(abs_shadow, ignore_errors=True)
+    # F9: verify the directory is actually gone
+    if os.path.isdir(abs_shadow):
+        print(f'ERROR: rmtree failed — shadow dir still exists: '
+              f'{abs_shadow}', file=sys.stderr)
+        sys.exit(1)
+    # F12: write sentinel immediately after (before walk) so a crash mid-walk
+    # doesn't leave a sentinel-less tree that blocks the next run.
+    os.makedirs(shadow_dir, exist_ok=True)
+    sentinel_path = os.path.join(shadow_dir, SENTINEL_NAME)
+    with open(sentinel_path, 'w') as sf:
+        sf.write('DO NOT EDIT files in this directory.\n'
+                 'This is a generated shadow tree managed by resolve_c47_src.py.\n'
+                 'Edits to symlinks here modify upstream source files.\n')
 
     # Symlink-or-copy helper (mutable state for fallback)
     copy_state = [os.environ.get('CUSTOM_PKG_SHADOW_COPY') == '1']
@@ -106,19 +182,36 @@ def do_shadow(meson_build, project_root, shadow_dir, specs):
         pkg_file = os.path.join(project_root, pkgdir, rel)
         upstream_file = os.path.join(src_c47_dir, rel)
 
+        # --- F4: fatal if override file missing from the package -----------
         if not os.path.isfile(pkg_file):
-            print(f'CUSTOM_PKG override "{rel}": not found in package '
-                  f'"{pkgdir}" — ignored', file=sys.stderr)
-            continue
+            print(f'ERROR: CUSTOM_PKG override "{rel}": not found in package '
+                  f'"{pkgdir}" ({pkg_file})', file=sys.stderr)
+            sys.exit(1)
 
+        # --- F4: fatal if no corresponding upstream file --------------------
         if not os.path.isfile(upstream_file):
-            print(f'CUSTOM_PKG override "{rel}": does not exist in '
-                  f'src/c47/ — ignored', file=sys.stderr)
-            continue
+            print(f'ERROR: CUSTOM_PKG override "{rel}": does not exist in '
+                  f'src/c47/ ({upstream_file})', file=sys.stderr)
+            sys.exit(1)
+
+        # --- F11: containment on upstream_file (defence-in-depth) ----------
+        assert_contained(upstream_file, src_c47_dir,
+                         label=f'upstream_file for override "{rel}"')
+
+        # --- F10: containment on dst_path parent dir -----------------------
+        dst_path = os.path.join(shadow_dir, rel)
+        assert_contained(os.path.dirname(dst_path), shadow_dir,
+                         label=f'dst_path for override "{rel}"')
+
+        # --- F15: byte-identical override warning --------------------------
+        if filecmp.cmp(pkg_file, upstream_file, shallow=False):
+            print(f'CUSTOM_PKG override "{rel}": byte-identical to upstream '
+                  f'(dead shadow — upstream changes to this file are masked)',
+                  file=sys.stderr)
 
         # Replace existing symlink/file in shadow with the override
-        dst_path = os.path.join(shadow_dir, rel)
-        if os.path.exists(dst_path):
+        if os.path.lexists(dst_path):
+            print(f'REMOVING: {dst_path}', file=sys.stderr)
             os.remove(dst_path)
         link_or_copy(pkg_file, dst_path)
 
