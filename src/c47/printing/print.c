@@ -1719,7 +1719,7 @@ void printTrace(int16_t func, uint16_t param) {
       if(func == ITM_LBL) {
         printAdvance(0); // Skip one line before printing the label
         sprintf(traceBuffer, " %02d", currentLocalStepNumber);
-        strcat(traceBuffer, STD_BLACK_RIGHT_TRIANGLE);
+        strcat(traceBuffer, STD_BLACK_RIGHTSMALLTRIANGLE);
         strcat(traceBuffer, tmpString);
         printJustified(traceBuffer);     // Current step & step number
         #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
@@ -1827,7 +1827,7 @@ void printProgram(bool_t list, uint16_t lines) {
         }
         printAdvance(0); // Skip one line before printing the label
         sprintf(tmpString, " %02d" , firstDisplayedLocalStepNumber + line - lineOffset + lineOffsetTam);
-        strcat(tmpString, STD_BLACK_RIGHT_TRIANGLE);
+        strcat(tmpString, STD_BLACK_RIGHTSMALLTRIANGLE);
         printLine(tmpString, 0);
       }
       else if(!startOfLine) {
@@ -1841,7 +1841,7 @@ void printProgram(bool_t list, uint16_t lines) {
     }
     else {
       sprintf(tmpString, "%02d" , firstDisplayedLocalStepNumber + line - lineOffset + lineOffsetTam);
-      strcat(tmpString, (isLabel ? STD_BLACK_RIGHT_TRIANGLE : " "));
+      strcat(tmpString, (isLabel ? STD_BLACK_RIGHTSMALLTRIANGLE : " "));
       printLine(tmpString, 0);
     }
 

@@ -129,6 +129,17 @@ static int expectedScriptArgCount(int16_t index) {
 }
 
 /**
+ * Headless DSL has no GUI refresh loop, so a command that queued a plot
+ * (GRAPHMODE) would only render during snap's own redraw.  Render it now.
+ */
+static void dslRenderPendingPlot(void) {
+  if(GRAPHMODE) {
+    screenUpdatingMode = SCRUPD_AUTO;
+    refreshScreen(211);                //dsl.c owns trace id range 210..219
+  }
+}
+
+/**
  * Run one catalog function, with optional script args parsed per
  * items.c metadata.  The item index is validated, and the function
  * is called with the parsed parameter.
@@ -161,6 +172,7 @@ static int runCatalogItem(Jim_Interp *interp, int16_t index, int argArgc, Jim_Ob
     printf("Calling argless catalog function %s, index %d\n", item.itemCatalogName, index);
     fflush(stdout);
     reallyRunFunction(index, item.param);
+    dslRenderPendingPlot();
     return JIM_OK;
   }
 
@@ -177,6 +189,7 @@ static int runCatalogItem(Jim_Interp *interp, int16_t index, int argArgc, Jim_Ob
   printf("Calling catalog function %s(%s), index %d\n", item.itemCatalogName, argstr, index);
   fflush(stdout);
   reallyRunFunction(index, param);
+  dslRenderPendingPlot();
   return JIM_OK;
 }
 
@@ -501,7 +514,7 @@ static void dslFinishAssign(void) {
   catalog = CATALOG_NONE;
   screenUpdatingMode &= ~SCRUPD_MANUAL_MENU;
   screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
-  refreshScreen(103);
+  refreshScreen(210);                  //dsl.c owns trace id range 210..219
   screenUpdatingMode &= ~SCRUPD_ONE_TIME_FLAGS;
 }
 
@@ -793,6 +806,7 @@ static int xeqCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
   dynamicMenuItem = -1;  // clear stale dynamic menu context
   reallyRunFunction(ITM_XEQ, (uint16_t)label);
   waitForEngineReturn();
+  dslRenderPendingPlot();
   return JIM_OK;
 }
 

@@ -63,6 +63,7 @@ bool_t                 reDraw = true;
 bool_t                 refreshNIMdone = false;
 bool_t                 cleanupAfterShift = false;
 bool_t                 solverEstimatesUsed = false;
+bool_t                 graphAccActive = false;
 bool_t                 updateOldConstants;
 
 
@@ -152,6 +153,7 @@ uint8_t                dispBase;
 uint8_t                fractionDigits;
 uint8_t                shortIntegerMode;
 uint8_t                previousCalcMode;
+bool_t                 graphToRemainOnScreen;
 uint8_t                grpGroupingLeft;
 uint8_t                grpGroupingGr1LeftOverflow;
 uint8_t                grpGroupingGr1Left;

@@ -313,6 +313,7 @@
   extern bool_t                 refreshNIMdone;
   extern bool_t                 cleanupAfterShift;
   extern bool_t                 solverEstimatesUsed;
+  extern bool_t                 graphAccActive;
   extern bool_t                 updateOldConstants;
 
 
@@ -407,6 +408,7 @@
   extern uint8_t                fractionDigits;
   extern uint8_t                shortIntegerMode;
   extern uint8_t                previousCalcMode;
+  extern bool_t                 graphToRemainOnScreen;
   extern uint8_t                grpGroupingLeft;
   extern uint8_t                grpGroupingGr1LeftOverflow;
   extern uint8_t                grpGroupingGr1Left;

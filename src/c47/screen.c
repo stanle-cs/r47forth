@@ -71,16 +71,30 @@ bool_t blockMonitoring = false;
    TO_QSPI static const char versionStr[]        = "  " MODELTEXT " " VERSION_STRING ".";
   #if defined(PC_BUILD)
 
-    TO_QSPI static const char versionStr2[]     = "  " MODELTEXT " Sim " VERSION1 ", dated " __DATE__ ".";
+    TO_QSPI static const char versionStr2[]     = "  " MODELTEXT " Sim " VERSION1 ", dd ";
   #else // !PC_BUILD
     #if defined(TWO_FILE_PGM)
-      TO_QSPI static const char versionStr2[]   = "  " MODELTEXT " QSPI " VERSION1 ", dated " __DATE__ ".";
+      TO_QSPI static const char versionStr2[]   = "  " MODELTEXT " QSPI " VERSION1 ", dd ";
     #else // !TWO_FILE_PGM
       #if !defined(TWO_FILE_PGM)
-        TO_QSPI static const char versionStr2[] = "  " MODELTEXT " No QSPI " VERSION1 ", dated " __DATE__ ".";
+        TO_QSPI static const char versionStr2[] = "  " MODELTEXT " No QSPI " VERSION1 ", dd ";
       #endif // !TWO_FILE_PGM
     #endif // TWO_FILE_PGM
   #endif // PC_BUILD
+
+  // __DATE__ pads a single digit day to two chars; shift left for single spaces
+  TO_QSPI static const char versionDateStr[] = {
+    __DATE__[0], __DATE__[1], __DATE__[2], ' ',
+    __DATE__[4] == ' ' ? __DATE__[5]  : __DATE__[4],
+    __DATE__[4] == ' ' ? ' '          : __DATE__[5],
+    __DATE__[4] == ' ' ? __DATE__[7]  : ' ',
+    __DATE__[4] == ' ' ? __DATE__[8]  : __DATE__[7],
+    __DATE__[4] == ' ' ? __DATE__[9]  : __DATE__[8],
+    __DATE__[4] == ' ' ? __DATE__[10] : __DATE__[9],
+    __DATE__[4] == ' ' ? '.'          : __DATE__[10],
+    __DATE__[4] == ' ' ? '\0'         : '.',
+    '\0'
+  };
 
   /* Names of day of week */
 typedef struct {
@@ -3276,7 +3290,8 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         clearRegisterLine(REGISTER_Z, true, true);
         clearRegisterLine(REGISTER_Y, true, true);
         clearRegisterLine(REGISTER_X, true, true);
-        showStringEnhanced(versionStr2,    &standardFont, 1, Y_POSITION_OF_REGISTER_T_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
+        sprintf(prefix, "%s%s", versionStr2, versionDateStr);
+        showStringEnhanced(prefix,         &standardFont, 1, Y_POSITION_OF_REGISTER_T_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
         showStringEnhanced(versionStr,     &standardFont, 1, Y_POSITION_OF_REGISTER_Z_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
         showStringEnhanced(disclaimerStr,  &standardFont, 1, Y_POSITION_OF_REGISTER_Y_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
       }
@@ -3406,7 +3421,8 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         clearRegisterLine(REGISTER_T, true, true);
         showString(errorMessages[TI_Backup_restored], &standardFont, 1, Y_POSITION_OF_REGISTER_Z_LINE + 6, vmNormal, true, true);
         showStringEnhanced(versionStr,  &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
-        showStringEnhanced(versionStr2, &standardFont, 1, Y_POSITION_OF_REGISTER_Y_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
+        sprintf(prefix, "%s%s", versionStr2, versionDateStr);
+        showStringEnhanced(prefix,      &standardFont, 1, Y_POSITION_OF_REGISTER_Y_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
       }
 
       else if(temporaryInformation == TI_STATEFILE_RESTORED && regist == REGISTER_X) {
@@ -5767,6 +5783,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
                                 printf(">>> BEGIN _refreshNormalScreen calcMode=%d previousCalcMode=%d screenUpdatingMode=%d\n", calcMode, previousCalcMode, screenUpdatingMode);    //JMYY
                                 print_caller(NULL);
                               #endif // PC_BUILD &&MONITOR_CLRSCR
+        graphToRemainOnScreen = false;
         if(calcMode != CM_NIM) {
           refreshNIMdone = false;
         }
@@ -6144,8 +6161,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
       case CM_GRAPH:
           doRefreshSoftMenu = false;
           graph_plotmem();
+          graphToRemainOnScreen = true;   // a graph is now the on-screen content
           displayShiftAndTamBuffer();
-          showSoftmenuCurrentPart();
+          if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED)) {
+            showSoftmenuCurrentPart();
+          }
+          else {
+            calcMode = CM_NORMAL;
+          }
           hourGlassIconEnabled = true;
           refreshStatusBar();
           hourGlassIconEnabled = false;
@@ -6290,10 +6313,10 @@ void fnScreenDump(uint16_t unusedButMandatoryParameter) {
     uint32 = 0x000030c0;
     fwrite(&uint32, 1, 4, bmp);     // Offset 0x22 34  Size of bitmap data (including padding)
 
-    uint32 = 0x00001a7c; // 6780 pixels/m
+    uint32 = 0x00000b13; // 2835 pixels/m (72 dpi), same as DMCP standardScreenDump so sim and hardware BMPs compare identical. Was 0x1a7c = 6780 pixels/m, chosen for life-size printing: 400 px / 6780 px/m = 59.0 mm, the physical LCD width
     fwrite(&uint32, 1, 4, bmp);     // Offset 0x26 38  Horizontal print resolution
 
-    uint32 = 0x00001a7c; // 6780 pixels/m
+    uint32 = 0x00000b13; // 2835 pixels/m (72 dpi), same as DMCP standardScreenDump so sim and hardware BMPs compare identical. Was 0x1a7c = 6780 pixels/m, chosen for life-size printing: 400 px / 6780 px/m = 59.0 mm, the physical LCD width
     fwrite(&uint32, 1, 4, bmp);     // Offset 0x2a 42  Vertical print resolution
 
     uint32 = 0x00000002;

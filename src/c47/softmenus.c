@@ -706,9 +706,9 @@ TO_QSPI const int16_t menu_alphaMisc[]    ={ ITM_CR,                        ITM_
 TO_QSPI const int16_t menu_EQN[]         = { ITM_EQ_NEW,                    ITM_EQ_EDI,                  -MNU_2NDDERIV,                -MNU_1STDERIV,                -MNU_Sf,                      -MNU_Solver,
                                              ITM_EQ_DEL,                    ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_Grapher               };
 
-TO_QSPI const int16_t menu_ADV[]         = { ITM_PIn,                       ITM_SIGMAn,                   ITM_FDQX,                     ITM_FQX,                     -MNU_Sfdx,                     ITM_SOLVE,
-                                             ITM_iPIn,                      ITM_iSIGMAn,                  ITM_SLVC,                     ITM_SLVQ,                     ITM_PGMINT,                   ITM_PGMSLV,
-                                             ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL                  };
+TO_QSPI const int16_t menu_ADV[]         = { ITM_PIn,                       ITM_SIGMAn,                   ITM_FQX,                      ITM_PLTf,                    -MNU_Sfdx,                     ITM_SOLVE,
+                                             ITM_iPIn,                      ITM_iSIGMAn,                  ITM_FDQX,                     ITM_PGMPLT,                   ITM_PGMINT,                   ITM_PGMSLV,
+                                             ITM_SLVQ,                      ITM_SLVC,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL                  };
 
 TO_QSPI const int16_t menu_1stDeriv[]    = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_GRAPHS,                   ITM_FPHERE                };
 //note: the items in here are dynamically assigned, including the static ones
@@ -963,19 +963,17 @@ TO_QSPI const int16_t menu_PREFIX[]      = { ITM_SI_k,                      ITM_
                                              ITM_SI_m,                      ITM_SI_u,                   ITM_SI_n,                 ITM_SI_p,              ITM_SI_f,                    ITM_DSP,
                                              ITM_SI_Ki,                     ITM_SI_Mi,                  ITM_SI_Gi,                ITM_SI_Ti,             ITM_SI_Pi,                   ITM_2TO10             };                //JM HOME
 
-
-
 TO_QSPI const int16_t menu_PLOTFUNC[]    = {  VAR_LX,                       VAR_UX,                     ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
                                               ITM_SCALE,                    ITM_PLOTRST,                ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                               ITM_MZOOMY,                   ITM_PZOOMY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
 
-                                              ITM_SHOWY,                    ITM_SHOWX,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                              ITM_CPXPLOT,                  ITM_LISTXY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+                                              ITM_SHOWY,                    ITM_SHOWX,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
+                                              ITM_CPXPLOT,                  ITM_IMPLOT,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                              -MNU_GRAPHS,                   ITM_SNAP,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
 
                                               ITM_PCROS,                    ITM_PPLUS,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
                                               ITM_PLINE,                    ITM_PBOX,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,                           //JM GRAPH
-                                              ITM_PCURVE,                   ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
+                                              ITM_PCURVE,                   ITM_LISTXY,                 ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
 
                                               ITM_DIFF,                     ITM_INTG,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
                                               ITM_RMS,                      ITM_SHADE,                  ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
@@ -2300,6 +2298,7 @@ bool_t isFunctionItemAMenu(int16_t item) { //masquarading
          item == ITM_GAP_RX    ||
          item == ITM_GAP_R     ||
          item == ITM_PLOT_STAT ||
+         item == ITM_PLTf      ||
          item == ITM_EQ_NEW    ||
          item == ITM_SIM_EQ    ||
          item == ITM_DELITM    ||
@@ -4100,6 +4099,9 @@ void showSoftmenuCurrentPart(void) {
 
 // input param is (PageNumber << 14) +MenuNumber
 void fnPseudoMenu(uint16_t target) {
+  if(((int16_t)(target & 0x3fff)) == MNU_PLOT_FUNC && !(graphToRemainOnScreen || (calcMode == CM_GRAPH))) {
+    return;
+  }
   menuPageNumber = target >> 14;
   fnOpenMenu(((int16_t)(target & 0x3fff)));
 }
@@ -4239,10 +4241,10 @@ void fnMenuDump(uint16_t menu, uint16_t item, uint16_t newFilenameformat, const 
   uint32 = (SCREEN_WIDTH/8 + 2) * (SCREEN_HEIGHT-171);
   fwrite(&uint32, 1, 4, bmp);     // Offset 0x22 34  Size of bitmap data (including padding)
 
-  uint32 = 0x00001a7c; // 6780 pixels/m
+  uint32 = 0x00000b13; // 2835 pixels/m (72 dpi), same as DMCP standardScreenDump so sim and hardware BMPs compare identical. Was 0x1a7c = 6780 pixels/m, chosen for life-size printing: 400 px / 6780 px/m = 59.0 mm, the physical LCD width
   fwrite(&uint32, 1, 4, bmp);     // Offset 0x26 38  Horizontal print resolution
 
-  uint32 = 0x00001a7c; // 6780 pixels/m
+  uint32 = 0x00000b13; // 2835 pixels/m (72 dpi), same as DMCP standardScreenDump so sim and hardware BMPs compare identical. Was 0x1a7c = 6780 pixels/m, chosen for life-size printing: 400 px / 6780 px/m = 59.0 mm, the physical LCD width
   fwrite(&uint32, 1, 4, bmp);     // Offset 0x2a 42  Vertical print resolution
 
   uint32 = 0x00000002;
