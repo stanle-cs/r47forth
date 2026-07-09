@@ -599,6 +599,17 @@ void covBackupRoundtrip(uint16_t unusedButMandatoryParameter) {
   restoreCalc();
 }
 
+static void covClobberRegs(void) {
+  // Overwrite the seeded global registers R00..R02 with a sentinel so a following
+  // load must restore them from file for the round-trip assertion to mean
+  // anything (a no-op load would leave the sentinel and fail the test).
+  for(uint16_t r = 0; r < 3; ++r) {
+    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+    int32ToReal34(-99999, REGISTER_REAL34_DATA(REGISTER_X));
+    reallyRunFunction(ITM_STO, r);
+  }
+}
+
 void covStateRoundtrip(uint16_t unusedButMandatoryParameter) {
   // Save the whole calculator state and load it straight back, driving both the
   // serialize half (doSave) and the deserialize half (doLoad, restoreOneSection)
@@ -611,11 +622,18 @@ void covStateRoundtrip(uint16_t unusedButMandatoryParameter) {
   // (stateSave/stateLoad, c47state.bin) plus a manual save (manualSave, c47.sav)
   // read back one section at a time, covering the loadMode dispatch in
   // restoreOneSection (registers, named variables, statistical sums, system
-  // state). The partial loads reload from the same manual save, so the seeded
-  // registers are preserved.
+  // state).
+  //
+  // The seeded registers R00..R02 are clobbered with a sentinel after each save
+  // and before the matching load, so the corpus assertion that they come back is
+  // proof that the load actually reads and restores the file - a no-op load would
+  // leave the sentinel and fail the test, rather than passing on state that was
+  // simply never changed.
   fnSave(SM_STATE_SAVE);
+  covClobberRegs();
   fnLoad(LM_STATE_LOAD);
   fnSave(SM_MANUAL_SAVE);
+  covClobberRegs();
   fnLoad(LM_REGISTERS);
   fnLoad(LM_NAMED_VARIABLES);
   fnLoad(LM_SUMS);
@@ -737,6 +755,16 @@ void covTvm(uint16_t which) {
     case 4:  target = RESERVED_VARIABLE_IPONA; break;
     default: target = RESERVED_VARIABLE_FV;    break;
   }
+  // Clobber the target with a deliberately-wrong value (50) before solving, so
+  // fnTvmVar must recompute it: a no-op solve would leave 50 and fail the corpus
+  // assertion instead of passing on the value the target was pre-seeded with.
+  // 50 differs from every expected answer (8000,
+  // -1000, 3, 100, 0). For the closed-form variables (FV/PV/PMT/N) the seed is
+  // irrelevant and simply overwritten; for the iterative I% solve the rate solver
+  // takes the seeded register as its starting guess, so 50 is a wrong guess that
+  // still lies in the convergence basin - the I% case therefore proves the solver
+  // moves from a wrong start to 100, not that it confirms a pre-seeded answer.
+  covStoTvm(50, target);
   fnTvmVar(target);
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
   real34Copy(REGISTER_REAL34_DATA(target), REGISTER_REAL34_DATA(REGISTER_X));
@@ -773,9 +801,15 @@ void covTvmPmt(uint16_t which) {
     case 2:  target = RESERVED_VARIABLE_PMT; break;
     default: target = RESERVED_VARIABLE_FV;  break;
   }
+  // Clobber the target with a deliberately-wrong value (50) before solving, so a
+  // no-op fnTvmVar would leave 50 and fail rather than pass on the pre-seeded
+  // value. 50 differs from every expected answer (700/1400 FV, 0 PV, -100
+  // PMT); all three targets here are closed-form, so the seed is just overwritten.
+  covStoTvm(50, target);
   fnTvmVar(target);
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
   real34Copy(REGISTER_REAL34_DATA(target), REGISTER_REAL34_DATA(REGISTER_X));
+  setSystemFlag(FLAG_ENDPMT);  // restore the default payment-timing mode (test isolation)
 }
 
 void covEff(uint16_t unusedButMandatoryParameter) {
@@ -823,6 +857,7 @@ void covAmort(uint16_t which) {
   else {
     fnAmortBal(NOPARAM);
   }
+  clearSystemFlag(FLAG_AMORT_HP12C);  // restore the default amortisation mode (test isolation)
 }
 
 
