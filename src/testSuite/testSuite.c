@@ -40,6 +40,8 @@ void covConvToSI(uint16_t itemNr);
 void covConvFromSI(uint16_t itemNr);
 void covStateRoundtrip(uint16_t unusedButMandatoryParameter);
 void covEqCalc(uint16_t unusedButMandatoryParameter);
+void covDerivEq(uint16_t order);
+void covSolveRoot(uint16_t unusedButMandatoryParameter);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
@@ -160,6 +162,8 @@ const funcTest_t funcTestNoParam[] = {
   {"covConvFromSI",          covConvFromSI         },
   {"fnStateRoundtrip",       covStateRoundtrip     },
   {"fnEqCalcCov",            covEqCalc             },
+  {"fnDerivEqCov",           covDerivEq            },
+  {"fnSolveRootCov",         covSolveRoot          },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
@@ -636,6 +640,45 @@ void covEqCalc(uint16_t formulaIndex) {
   }
   setEquation(currentFormula, covFormulae[formulaIndex]);
   fnEqCalc(NOPARAM);
+}
+
+void covDerivEq(uint16_t order) {
+  // Differentiate the current formula f(X) at the point in X, through the
+  // equation derivative path (fn1stDerivEq / fn2ndDerivEq in differentiate.c,
+  // which evaluate the formula via parseEquation each iteration). A formula in
+  // the named variable X is set once and reused; the eval point comes from X.
+  // order 2 -> second derivative, else first. Result lands in X.
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, "X^3");
+  currentSolverVariable = findOrAllocateNamedVariable("X");
+  reallyRunFunction(ITM_STO, currentSolverVariable);
+  if(order == 2) {
+    fn2ndDerivEq(NOPARAM);
+  }
+  else {
+    fn1stDerivEq(NOPARAM);
+  }
+}
+
+void covSolveRoot(uint16_t unusedButMandatoryParameter) {
+  // Find a root of the current formula f(X)=X^2-4 with the numeric root solver
+  // (fnSolve -> solver() in solve.c). The two guesses come from Y and X on the
+  // stack; the solver evaluates the formula (equation.c) each iteration and
+  // converges to a root, leaving it in X. Using a formula avoids a program
+  // fixture, so SOLVER_STATUS_USES_FORMULA is set explicitly.
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, "X^2-4");
+  const uint16_t var = findOrAllocateNamedVariable("X");
+  currentSolverVariable = var;
+  // Reset the solver status to exactly USES_FORMULA: a prior solver-driving test
+  // (e.g. the equation derivative) can leave other status bits set that change
+  // the solver's convergence, so assign rather than OR.
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+  fnSolve(var);
 }
 
 
@@ -3290,7 +3333,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc) {
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {

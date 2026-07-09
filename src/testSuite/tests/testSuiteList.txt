@@ -288,6 +288,8 @@ error_cov
 saverestore_cov
 numeric_diff_cov
 eq_cov
+deriv_cov
+solve_cov
 percentPlusMG
 deltaPercent
 
