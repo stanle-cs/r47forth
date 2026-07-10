@@ -563,6 +563,15 @@ TO_QSPI const int16_t menu_ConvV[]        = {
                                                    ITM_FZUStoML,              ITM_MLtoFZUS,             ITM_GalUStoFT3,           ITM_FT3toGalUS,           ITM_GLUStoL,              ITM_LtoGLUS,
                                                    ITM_FZUStoGLUS,            ITM_GLUStoFZUS,           ITM_BARRELtoM3,           ITM_M3toBARREL,           ITM_QTUStoL,              ITM_LtoQTUS               };
 
+//==============================================================================
+         // CONV step 6/6 of ADDING to CONV    [grep for "add conversion items to CONV menu"]
+         // =================================================================================
+         // Add both new items adjacent in the matching menu_Conv* array (6 softkeys per row, ITM_NULL fills unused slots, always odd/even).
+         // The "do not add menus here, add at the end" rule in the softmenu registry applies to new MENUS only, not to items within a menu.
+         // The testSuite build creates conversions.txt and conversionsSI.txt their git diff must show ONLY the new tests.
+         // The same build also runs the constants audit (constantsCheck.py): a new constant without an independent-source REF entry fails the build as UNREFERENCED (see CONV step 1/6).
+//==============================================================================
+
 TO_QSPI const int16_t menu_ConvS[]        = {
                                                     ITM_MPStoKMH,             ITM_KMHtoMPS,             ITM_KMHtoMPH,             ITM_MPHtoKMH,             ITM_MPHtoMPS,             ITM_MPStoMPH,
                                                     ITM_FPStoKMH,             ITM_KMHtoFPS,             ITM_FPStoMPH,             ITM_MPHtoFPS,             ITM_FPStoMPS,             ITM_MPStoFPS,
@@ -3246,7 +3255,7 @@ void showSoftmenuCurrentPart(void) {
                 const bool_t  bothConfigurable = areBothConvertConfigurable(itemNr, itemNrPair);
                 const bool_t  standardPair     = isStandardPair(itemNr, itemNrPair);             // fixed table pair: direct conversion, plain rendering
                 const bool_t  areBothConv = bothConfigurable || standardPair;                    // draw as a pair: same configurable type, or genuine fixed partner (covers UT_NOT_CONFIGURABLE)
-                const bool_t  flag        = bothConfigurable && !standardPair;                   // configured (non-canonical) pair: magic; canonical fixed pair: plain
+                const bool_t  flag        = bothConfigurable && !standardPair;                   // configured (non-standard) pair: magic; standard fixed pair: plain
                 const bool_t  cond        = flag || ((x & 1) == 0) || (itemNr == oddNrPartnerForEven);
                 //printf(">>> softkey x=%d y=%d itemNr=%d menu=%d itemNrPair=%d areBothConv=%d flag=%d cond=%d odd=%d\n",x, y, itemNr, curMenu , itemNrPair, areBothConv, flag, cond, oddNrPartnerForEven);
 
