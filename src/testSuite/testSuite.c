@@ -41,7 +41,9 @@ void covConvFromSI(uint16_t itemNr);
 void covStateRoundtrip(uint16_t unusedButMandatoryParameter);
 void covEqCalc(uint16_t unusedButMandatoryParameter);
 void covDerivEq(uint16_t order);
-void covSolveRoot(uint16_t unusedButMandatoryParameter);
+void covSolveRoot(uint16_t which);
+void covDerivErr(uint16_t which);
+void covSolveErr(uint16_t which);
 void covTvm(uint16_t which);
 void covTvmPmt(uint16_t which);
 void covEff(uint16_t unusedButMandatoryParameter);
@@ -170,6 +172,8 @@ const funcTest_t funcTestNoParam[] = {
   {"fnEqCalcCov",            covEqCalc             },
   {"fnDerivEqCov",           covDerivEq            },
   {"fnSolveRootCov",         covSolveRoot          },
+  {"fnDerivErrCov",          covDerivErr           },
+  {"fnSolveErrCov",          covSolveErr           },
   {"fnTvmCov",               covTvm                },
   {"fnTvmPmtCov",            covTvmPmt             },
   {"fnEffCov",               covEff                },
@@ -709,16 +713,17 @@ void covDerivEq(uint16_t order) {
   }
 }
 
-void covSolveRoot(uint16_t unusedButMandatoryParameter) {
-  // Find a root of the current formula f(X)=X^2-4 with the numeric root solver
-  // (fnSolve -> solver() in solve.c). The two guesses come from Y and X on the
-  // stack; the solver evaluates the formula (equation.c) each iteration and
-  // converges to a root, leaving it in X. Using a formula avoids a program
-  // fixture, so SOLVER_STATUS_USES_FORMULA is set explicitly.
+void covSolveRoot(uint16_t which) {
+  // Find a root of a formula with the numeric root solver (fnSolve -> solver() in
+  // solve.c). The two guesses come from Y and X on the stack; the solver
+  // evaluates the formula (equation.c) each iteration, leaving the result in X.
+  // Using a formula avoids a program fixture, so SOLVER_STATUS_USES_FORMULA is set
+  // explicitly. which < 2 uses f(X)=X^2-4 (roots +/-2); which >= 2 uses
+  // f(X)=X^2+1, which has no real root, driving the solver's no-root-found path.
   if(numberOfFormulae == 0) {
     fnEqNew(NOPARAM);
   }
-  setEquation(currentFormula, "X^2-4");
+  setEquation(currentFormula, (which >= 2) ? "X^2+1" : "X^2-4");
   const uint16_t var = findOrAllocateNamedVariable("X");
   currentSolverVariable = var;
   // Reset the solver status to exactly USES_FORMULA: a prior solver-driving test
@@ -727,6 +732,33 @@ void covSolveRoot(uint16_t unusedButMandatoryParameter) {
   currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
   fnSolve(var);
 }
+
+void covDerivErr(uint16_t which) {
+  // Drive the error/dispatch branches of the program-based derivative entry
+  // (derivativeCommon in differentiate.c), which the formula path covDerivEq does
+  // not reach. which=0: a stack register whose letter names no program label ->
+  // ERROR_LABEL_NOT_FOUND; otherwise an out-of-range parameter -> ERROR_OUT_OF_RANGE.
+  if(which == 0) {
+    fn1stDeriv(REGISTER_T);            // letter 'T' names no program label
+  }
+  else {
+    fn1stDeriv(FIRST_NAMED_VARIABLE);  // outside [FIRST_LABEL,LAST_LABEL] and [X,T]
+  }
+}
+
+void covSolveErr(uint16_t which) {
+  // Drive the error/dispatch branches of fnPgmSlv (solve.c), distinct from the
+  // formula solver covSolveRoot drives. which=0: a stack register whose letter
+  // names no program label -> ERROR_LABEL_NOT_FOUND; otherwise an out-of-range
+  // parameter -> ERROR_OUT_OF_RANGE.
+  if(which == 0) {
+    fnPgmSlv(REGISTER_T);
+  }
+  else {
+    fnPgmSlv(FIRST_NAMED_VARIABLE);
+  }
+}
+
 
 static void covStoTvm(int32_t value, uint16_t reg) {
   // Store an integer into a reserved TVM register through the calculator's own
@@ -3560,7 +3592,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff || funcToTest == covAmort || funcToTest == covEffToI || funcToTest == covAmortNext) {
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff || funcToTest == covAmort || funcToTest == covEffToI || funcToTest == covAmortNext || funcToTest == covDerivErr || funcToTest == covSolveErr) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {
