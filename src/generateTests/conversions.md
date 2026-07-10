@@ -77,3 +77,5 @@ Rules that catch people out:
 - First build after adding a constant fails against the stale generated header:
   `install -C build.sim/src/generateConstants/constantPointers{.h,.c,2.c} src/generated/`
   then rebuild.
+- If a generated `.txt` is deleted without touching any generator dependency, ninja considers
+  the stamp fresh and rebuilds nothing; recreate it with `python3 src/generateTests/generateTests.py`.

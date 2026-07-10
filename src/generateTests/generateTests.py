@@ -229,12 +229,12 @@ def load_temp_rows():
 #*                  {'item': 220, 'partner': 221, 'unity': 2669, 'exp': 0, 'ut': 'UT_TEMPERATURE'}
 #* Function:    parses every row between the declaration and its closing brace:
 #*                  { ITM_CtoF /* 220 */, ITM_FtoC, ITM_FtoK, +0, UT_TEMPERATURE },
-#*              partner and unity names resolve to item numbers via items.h (ITM_NULL -> 0);
-#*              an unresolvable name aborts telling which row and column to fix. A new pair is
-#*              picked up automatically once its convertPairs[] row exists. Silent-parse guards:
-#*              the row count must equal NUM_CONVERT_PAIRS (a reformatted row or declaration
-#*              cannot silently shrink the test set) and the /* item number */ comment must
-#*              agree with the ITM_ name's define.
+#*              ALL item numbers (own, partner, unity) resolve from the ITM_ names via items.h;
+#*              the /* nnn */ comments are NOT read - they drift and are not maintained. An
+#*              unresolvable name aborts telling which row and column to fix. A new pair is
+#*              picked up automatically once its convertPairs[] row exists. Silent-parse guard:
+#*              the row count must equal NUM_CONVERT_PAIRS, so a reformatted row or declaration
+#*              cannot silently shrink the test set.
 #**************************************************************************************************
 def load_convert_pairs(numbers_by_name):
   num_pairs = None
@@ -246,7 +246,7 @@ def load_convert_pairs(numbers_by_name):
     sys.exit('NUM_CONVERT_PAIRS not found in src/c47/conversionUnits.h.\n'
              '  Fix: the define was renamed or moved; align this search with it.')
   rows, active = [], False
-  pat = re.compile(r'\s*\{\s*(ITM_\w+)\s*/\*\s*(\d+)\s*\*/\s*,\s*(\w+)\s*,\s*(\w+)\s*,'
+  pat = re.compile(r'\s*\{\s*(ITM_\w+)\s*(?:/\*[^*]*\*/)?\s*,\s*(\w+)\s*,\s*(\w+)\s*,'
                    r'\s*([+-]?\d+)\s*,\s*(UT_\w+)')
   for line in open(f'{SRC}/c47/conversionUnits.c', encoding='utf-8'):
     if 'convertPairs[NUM_CONVERT_PAIRS]' in line:
@@ -260,14 +260,8 @@ def load_convert_pairs(numbers_by_name):
           sys.exit(f'convertPairs row of {itm_name}: no define in items.h.\n'
                    f'  Fix: correct the item name in that row (src/c47/conversionUnits.c) '
                    f'or add the define to items.h.')
-        item = numbers_by_name[itm_name]
-        if item != int(m.group(2)):
-          sys.exit(f'convertPairs row of {itm_name}: the /* {m.group(2)} */ comment disagrees '
-                   f'with items.h ({itm_name} = {item}).\n'
-                   f'  Fix: update the item number comment in that row '
-                   f'(src/c47/conversionUnits.c) to /* {item} */.')
-        row = {'item': item, 'exp': int(m.group(5)), 'ut': m.group(6)}
-        for column, name in (('partner', m.group(3)), ('unity', m.group(4))):
+        row = {'item': numbers_by_name[itm_name], 'exp': int(m.group(4)), 'ut': m.group(5)}
+        for column, name in (('partner', m.group(2)), ('unity', m.group(3))):
           if name == 'ITM_NULL':
             row[column] = 0
           elif name in numbers_by_name:
@@ -281,10 +275,9 @@ def load_convert_pairs(numbers_by_name):
         break
   if len(rows) != num_pairs:
     sys.exit(f'parsed {len(rows)} convertPairs rows but NUM_CONVERT_PAIRS is {num_pairs}.\n'
-             f'  Fix: every row must keep the shape {{ ITM_x /* nnn */, partner, unity, exp, '
-             f'UT_type }} on one line including the /* item number */ comment; a row without '
-             f'it is invisible to this script. If the declaration itself was reformatted, '
-             f'align the searches in load_convert_pairs() with it.')
+             f'  Fix: every row must keep the shape {{ ITM_x, partner, unity, exp, UT_type }} '
+             f'on one line; a reformatted row is invisible to this script. If the declaration '
+             f'itself was reformatted, align the searches in load_convert_pairs() with it.')
   return rows
 
 #**************************************************************************************************
@@ -303,34 +296,62 @@ def left_unit_of(cat_field):
 #**************************************************************************************************
 #* load_items
 #* Purpose:     each conversion item's function, argument and source unit name
-#* Source:      src/c47/items.c item table lines
+#* Source:      src/c47/items.c, the indexOfItems[] table, and LAST_ITEM from items.h
 #* Destination: dict item number -> (function name, argument, left unit tokens)
-#* Function:    matches the two line shapes that exist:
-#*              UNIT_CONV macro, the multiplicative conversions:
-#*                  /* 2860 */  UNIT_CONV(constFactorMphKnot, multiply, "mph" STD_RIGHT_ARROW, ...)
+#* Function:    item numbers come from COUNTING the table entries, exactly as the compiler
+#*              assigns array positions. The /* nnn */ comments are NOT read: they drift and
+#*              are not maintained with urgency. Every line opening an entry ('{' or
+#*              'UNIT_CONV(' after the optional leading comment) advances the position; the
+#*              final count must be LAST_ITEM + 1 (positions 0..LAST_ITEM-1 plus the sentinel
+#*              row at position LAST_ITEM) or generation aborts. Two entry shapes are decoded:
+#*                  UNIT_CONV(constFactorMphKnot, multiply, "mph" STD_RIGHT_ARROW, ...)
 #*                  -> ('fnUnitConvert', ('constFactorMphKnot', 'multiply'), '"mph"')
-#*              raw table entry naming a formula function from FNS, first field after the brace:
-#*                  /*  220 */  { fnCvtTemp, 0, "..." ... }  -> ('fnCvtTemp', '0', ...)
-#*                  /*  367 */  { fnCvtHMSHR, divide, ... }  -> ('fnCvtHMSHR', 'divide', ...)
-#*              the leading /* item number */, function, first argument and the catalog name
-#*              field (up to the next comma) are read; the rest of the line is display data.
-#*              An item using a function absent from FNS is not matched at all, and
-#*              predict_all() aborts on it by name.
+#*                  { fnCvtTemp, 0, "..." ... }  -> ('fnCvtTemp', '0', ...)
+#*              only the function, first argument and the catalog name field (up to the next
+#*              comma) are read; the rest of the line is display data. An item using a
+#*              function absent from FNS is counted but not decoded, and predict_all() aborts
+#*              on it by name.
 #**************************************************************************************************
 def load_items():
+  last_item = None
+  for line in open(f'{SRC}/c47/items.h', encoding='utf-8'):
+    m = re.match(r'#define\s+LAST_ITEM\s+(\d+)', line)
+    if m:
+      last_item = int(m.group(1))
+  if last_item is None:
+    sys.exit('LAST_ITEM not found in src/c47/items.h.\n'
+             '  Fix: the define was renamed or moved; align this search with it.')
   items = {}
-  pat_unit = re.compile(r'/\*\s*(\d+)\s*\*/\s*UNIT_CONV\((\w+)\s*,\s*([\w| ]+?)\s*,(.*)$')
-  pat_raw  = re.compile(r'/\*\s*(\d+)\s*\*/\s*\{\s*(' + FNS + r')\s*,\s*([\w| ]+?)\s*,(.*)$')
+  position = -1
+  active = False
+  pat_unit = re.compile(r'\s*UNIT_CONV\((\w+)\s*,\s*([\w| ]+?)\s*,(.*)$')
+  pat_raw  = re.compile(r'\s*\{\s*(' + FNS + r')\s*,\s*([\w| ]+?)\s*,(.*)$')
   for line in open(f'{SRC}/c47/items.c', encoding='utf-8'):
-    m = pat_unit.match(line)
-    if m:
-      left = left_unit_of(m.group(4).split(',')[0])
-      items[int(m.group(1))] = ('fnUnitConvert', (m.group(2), m.group(3)), left)
+    if not active:
+      if re.search(r'const item_t indexOfItems\[\]\s*=\s*\{', line):
+        active = True
       continue
-    m = pat_raw.match(line)
+    if re.match(r'\s*};', line):
+      break
+    entry = re.sub(r'^\s*/\*[^*]*\*/\s*', '', line)          # strip the untrusted /* nnn */
+    if not re.match(r'\s*(\{|UNIT_CONV\()', entry):
+      continue                                               # blank and comment-only lines
+    position += 1
+    m = pat_unit.match(entry)
     if m:
-      left = left_unit_of(m.group(4).split(',')[0])
-      items[int(m.group(1))] = (m.group(2), m.group(3).strip(), left)
+      left = left_unit_of(m.group(3).split(',')[0])
+      items[position] = ('fnUnitConvert', (m.group(1), m.group(2)), left)
+      continue
+    m = pat_raw.match(entry)
+    if m:
+      left = left_unit_of(m.group(3).split(',')[0])
+      items[position] = (m.group(1), m.group(2).strip(), left)
+  if position + 1 != last_item + 1:
+    sys.exit(f'counted {position + 1} indexOfItems[] entries but LAST_ITEM is {last_item}, '
+             f'expected {last_item + 1} entries (positions 0..{last_item - 1} plus the '
+             f'sentinel row).\n'
+             f'  Fix: an entry spans more than one line or the table shape changed; align '
+             f'load_items() with items.c, and check LAST_ITEM in items.h matches the table.')
   return items
 
 #**************************************************************************************************
@@ -344,7 +365,7 @@ def load_items():
 def load_item_names():
   by_number, by_name = {}, {}
   for line in open(f'{SRC}/c47/items.h', encoding='utf-8'):
-    m = re.match(r'#define\s+(ITM_\w+)\s+(\d+)\s*$', line)
+    m = re.match(r'#define\s+(ITM_\w+)\s+(\d+)\s*(?:(?://|/\*).*)?$', line)
     if m:
       by_number.setdefault(int(m.group(2)), m.group(1))
       by_name[m.group(1)] = int(m.group(2))
@@ -401,6 +422,11 @@ def predict(D, fn, arg, x):
     coeff = const_by_cname(consts, D['slots'][factor])
     return unit_conversion(x, coeff, ops)
   if fn == 'fnCvtTemp':                                      # ((x - B) / C) * D + E
+    if int(arg) >= len(D['temp_rows']):
+      sys.exit(f'fnCvtTemp index {arg} but cvtTempConsts has only {len(D["temp_rows"])} '
+               f'rows.\n  Fix: add row ix={arg} to cvtTempConsts[][4] in '
+               f'src/c47/conversionUnits.c; row position = the ix parameter of the item '
+               f'in items.c.')
     B, C, Dd, E = (temp_const(consts, n) for n in D['temp_rows'][int(arg)])
     x = CTX39.subtract(x, B)
     x = CTX39.divide(x, C)
@@ -578,10 +604,21 @@ def predict_si_all(D):
 #*              the same UT type; the unity's own unity must be ITM_NULL, because
 #*              runConversionToSI executes exactly ONE hop (conversionUnits.c:757), so a
 #*              two-hop chain would silently produce non-SI values; UT_NOT_CONFIGURABLE rows
-#*              must have unity ITM_NULL
+#*              must have unity ITM_NULL. Also enforces ascending item order: findPair()'s
+#*              binary search silently fails on unsorted rows, degrading menus and custom
+#*              pairs unseen.
 #**************************************************************************************************
 def check_pairs_table(D):
   problems = []
+  previous = None
+  for row in D['rows']:
+    if previous is not None and row['item'] <= previous:
+      problems.append(f'convertPairs[] rows out of ascending item order: item {row["item"]} '
+                      f'({D["names"].get(row["item"], "?")}) follows {previous}. findPair()\'s '
+                      f'binary search silently fails on unsorted entries.\n'
+                      f'  Fix: move the row to its ascending position in convertPairs[] '
+                      f'(src/c47/conversionUnits.c).')
+    previous = row['item']
   for row in D['rows']:
     item, name = row['item'], D['names'].get(row['item'], '?')
     where = f'convertPairs row of item {item} ({name})'

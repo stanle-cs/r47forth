@@ -46,7 +46,8 @@ c47regdumpTest.txt
 tags
 /PROGRAMS
 /SAVFILES
-/src/generated
+/src/generated/*
+!/src/generated/constantsVerification.txt
 AGENTS.md
 
 # Over_score testing agent coding
