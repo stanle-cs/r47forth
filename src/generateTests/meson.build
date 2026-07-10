@@ -10,6 +10,7 @@ conversionsTests_stamp = custom_target('conversions.txt',
   output           : 'conversions_txt.stamp',
   command          : [py3_generateTests, '@INPUT@', '--stamp', '@OUTPUT@'],
   depend_files     : files(
+    'constantsCheck.py',
     '../generateConstants/generateConstants.c',
     '../c47/defines.h',
     '../c47/conversionUnits.h',

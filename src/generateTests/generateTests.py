@@ -478,6 +478,32 @@ def predict(D, fn, arg, x):
   sys.exit(f'no predictor for {fn}: add a branch above mirroring the C, see the header note')
 
 #**************************************************************************************************
+#* check_step_markers
+#* Purpose:     keep the developer guidance alive: the "CONV step n/6" comment chain in the
+#*              sources is THE add-a-pair procedure (see conversions.md)
+#* Source:      the six source files carrying the chain
+#* Destination: silent when all present; aborts naming every missing marker
+#* Function:    plain substring search; a deleted or reworded step comment becomes a build
+#*              message instead of silently orphaning the chain
+#**************************************************************************************************
+def check_step_markers():
+  markers = [
+    (f'{SRC}/generateConstants/generateConstants.c', 'CONV step 1/6'),
+    (f'{SRC}/c47/conversionUnits.h',                 'CONV step 2/6'),
+    (f'{SRC}/c47/conversionUnits.c',                 'CONV step 3/6'),
+    (f'{SRC}/c47/items.h',                           'CONV step 4/6'),
+    (f'{SRC}/c47/items.c',                           'CONV step 5/6'),
+    (f'{SRC}/c47/softmenus.c',                       'CONV step 6/6'),
+  ]
+  missing = [f'{path}: "{marker}"' for path, marker in markers
+             if marker not in open(path, encoding='utf-8').read()]
+  if missing:
+    sys.exit('CONV step comment chain broken - missing:\n  ' + '\n  '.join(missing) +
+             '\n  Fix: the numbered "CONV step n/6" comments are the definitive procedure for '
+             'adding a conversion pair (see conversions.md); restore the comment at each '
+             'listed location, keeping the marker text exactly.')
+
+#**************************************************************************************************
 #* load_all
 #* Purpose:     one load of every parsed source, shared by generation and checks
 #* Source:      all load_* functions
@@ -608,6 +634,47 @@ def predict_si_all(D):
 #*              binary search silently fails on unsorted rows, degrading menus and custom
 #*              pairs unseen.
 #**************************************************************************************************
+#**************************************************************************************************
+#* check_mim_table
+#* Purpose:     abort the build when MimFunctionsType3Conv[] disagrees with convertPairs[]
+#* Source:      the MimFunctionsType3Conv[] initialiser in src/c47/conversionUnits.c and D
+#* Destination: silent when the array lists exactly the convertPairs items; aborts naming
+#*              every missing, extra or duplicate entry WITH its fix
+#* Function:    the array is sized NUM_CONVERT_PAIRS and zero-fills silently, so a forgotten
+#*              entry compiles cleanly and the item just vanishes from the MIM catalog -
+#*              this check is the only thing that notices
+#**************************************************************************************************
+def check_mim_table(D):
+  entries, active = [], False
+  for line in open(f'{SRC}/c47/conversionUnits.c', encoding='utf-8'):
+    if 'MimFunctionsType3Conv[NUM_CONVERT_PAIRS]' in line:
+      active = True
+      continue
+    if active:
+      m = re.match(r'\s*\{\s*(ITM_\w+)\s*\}', line)
+      if m:
+        entries.append(m.group(1))
+      elif '};' in line:
+        break
+  pair_names = [D['names'][row['item']] for row in D['rows']]
+  problems = []
+  for name in sorted(set(pair_names) - set(entries)):
+    problems.append(f'{name} is in convertPairs[] but MISSING from MimFunctionsType3Conv[]; '
+                    f'the array zero-fills silently and the item vanishes from the MIM '
+                    f'catalog.\n  Fix: add {{{name}}} to MimFunctionsType3Conv[] in '
+                    f'src/c47/conversionUnits.c (CONV step 3/6).')
+  for name in sorted(set(entries) - set(pair_names)):
+    problems.append(f'{name} is in MimFunctionsType3Conv[] but not in convertPairs[].\n'
+                    f'  Fix: remove the entry or add the missing convertPairs[] row '
+                    f'(src/c47/conversionUnits.c, CONV step 3/6).')
+  for name in sorted({n for n in entries if entries.count(n) > 1}):
+    problems.append(f'{name} appears more than once in MimFunctionsType3Conv[].\n'
+                    f'  Fix: remove the duplicate entry (src/c47/conversionUnits.c).')
+  if problems:
+    sys.exit('MimFunctionsType3Conv[] check FAILED - the array is in '
+             'src/c47/conversionUnits.c and must list exactly the convertPairs[] items:\n'
+             + '\n'.join(problems))
+
 def check_pairs_table(D):
   problems = []
   previous = None
@@ -826,8 +893,10 @@ def check(expected, path):
 #**************************************************************************************************
 def main():
   args = sys.argv[1:]
+  check_step_markers()
   D = load_all()
   check_pairs_table(D)
+  check_mim_table(D)
   check_unit_consistency(D)
   tests    = predict_all(D)
   tests_si = predict_si_all(D)
@@ -840,6 +909,11 @@ def main():
     print(f'{len(tests)} items x {PASSES} passes written to {OUTPUT}')
     write_atomic(OUTPUT_SI, render_si(tests_si))
     print(f'{len(tests_si)} SI half-trips x {PASSES} passes written to {OUTPUT_SI}')
+    import subprocess                                        # the constants audit runs in the
+    audit = subprocess.run([sys.executable, f'{HERE}/constantsCheck.py'])  # same build, no
+    if audit.returncode != 0:                                # manual step (CONV step 6/6)
+      sys.exit('the constants audit reported open decisions (see above); the build stays red '
+               'until they are resolved in constantsCheck.py')
     if args:
       open(args[1], 'w').close()                             # the meson stamp file
     return 0

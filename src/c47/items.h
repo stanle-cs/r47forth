@@ -2971,6 +2971,14 @@
 #define ITM_KNOTtoMPH               2861
 #define ITM_MPHtoFPS                2862
 #define ITM_FPStoMPH                2863
+//==============================================================================
+         // CONV step 4/6 of ADDING to CONV    [grep for "add conversion items to CONV menu"]
+         // =================================================================================
+         // Rename or add two adjacent CONV items/spares below into the new pair's ITM_<X>to<Y> / ITM_<Y>to<X> defines
+         // Increment LAST_ITEM only when the spares are exhausted.
+         // It is best to only add CONV items incrementally, without re-using old available slots, to keep the tables sorted incrementally
+         // Next Step: CONV step 5/6 in src/c47/items.c.
+//==============================================================================
 #define ITM_2864                    2864 // CONV spares
 #define ITM_2865                    2865 // CONV spares
 #define ITM_2866                    2866 // CONV spares

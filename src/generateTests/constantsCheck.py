@@ -19,7 +19,9 @@
 # new constant used by the conversion tables MUST get a REF entry here with an independent
 # source; this script aborts the discipline gap loudly (UNREFERENCED in the decision list).
 #
-# Usage: python3 src/generateTests/constantsCheck.py   (exit 1 while decisions are open)
+# Usage: runs AUTOMATICALLY in every testSuite build (invoked by generateTests.py after test
+# generation; a nonzero exit fails the build). Manual run for iteration:
+#   python3 src/generateTests/constantsCheck.py   (exit 1 while decisions are open)
 import os
 import re
 import sys
@@ -636,8 +638,10 @@ def main():
   out.append('=' * 100)
   out.append(f'END OF RECORD - {len(entries)} entries; SHA-256 of the entry section between')
   out.append(f'the ruled lines: {body_sha}')
-  with open(OUTPUT, 'w', encoding='utf-8', newline='\n') as f:
+  tmp = OUTPUT + '.tmp'                                      # atomic: no torn record on disk
+  with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
     f.write('\n'.join(out) + '\n')
+  os.replace(tmp, OUTPUT)
   print(f'{len(entries)} constants verified, {len(decisions)} decision(s) needed, '
         f'written to {OUTPUT}')
   return 1 if decisions else 0

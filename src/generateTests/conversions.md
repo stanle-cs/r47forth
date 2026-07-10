@@ -49,29 +49,20 @@ reciprocal fuel/energy types are excluded, their shared-source values legitimate
 The display name is ground truth the factor table does not know, so this catches wrong
 factors, swapped multiply/divide, wrong unity and wrong exponent independently.
 
-## Adding a conversion pair - code changes
+## Adding a conversion pair
 
-| File | What changes |
-|---|---|
-| `src/generateConstants/generateConstants.c` | `generateConstant(...)` for each new factor (`EXACT` if it terminates, else `APPROX` with 39 digits) |
-| `src/c47/conversionUnits.h` | `constFactorXxx` enum entry; `UT_Xxx` unit type if a new physical type |
-| `src/c47/conversionUnits.c` | `conversionFactors[]` entry; two `convertPairs[]` rows; bump `NUM_CONVERT_PAIRS`; list in `MimFunctionsType3Conv[]` |
-| `src/c47/items.h` | `ITM_XtoY` / `ITM_YtoX` defines (use the CONV spare numbers; bump `LAST_ITEM` only when spares run out) |
-| `src/c47/items.c` | Two `UNIT_CONV(factor, multiply/divide, ...)` lines at those item numbers |
-| `src/c47/softmenus.c` | Add both items to the relevant `menu_ConvXxx[]` array (18-slot screens, `ITM_NULL` fills gaps) |
+The procedure lives IN THE SOURCE FILES as a numbered comment chain: start at "CONV step 1/6"
+in `src/generateConstants/generateConstants.c`; each step states its own file's rules and
+names the next file. The per-table semantics (polarity, unity, exponent) live in the comments
+at the tables themselves. The build enforces the chain: the generator aborts with a fix
+message on any table inconsistency and on a missing step comment.
 
 The tests come for free: the next build regenerates `conversions.txt` with the new pair's
-predicted values, and the testSuite fails if the calculator disagrees with the prediction.
-Check the git diff of `conversions.txt`: only the new tests may appear.
+computed values, and the testSuite fails if the calculator disagrees. Check the git diff of
+`conversions.txt`: only the new tests may appear.
 
-Rules that catch people out:
+Gotchas that belong to no single file:
 
-- Polarity: `multiply` means `result = X x factor` converts left unit to right unit; the
-  partner item uses `divide` with the SAME factor. Check by computing `1 [left] [op] [factor]`
-  by hand.
-- `convertPairs[]` unity field: `ITM_NULL` when the item's OUTPUT is the SI base; otherwise
-  the item that converts the output one hop towards SI. `UT_NOT_CONFIGURABLE` items always
-  use `ITM_NULL`.
 - If the new pair needs a new FORMULA (not a plain factor), `generateTests.py` must learn it
   too: add a predictor mirroring the new C function, or generation aborts with "no predictor".
 - First build after adding a constant fails against the stale generated header:
@@ -89,7 +80,9 @@ conventions) at 60-digit precision, never reading the C file's formulas or calcu
 and writes `src/generated/constantsVerification.txt`: per constant the independent reference
 with its source, the compiled C47 literal with its comment, and a verdict. Constants that
 differ or rest on unstandardised conventions are collected in a decision list at the top.
-Run: `python3 src/generateTests/constantsCheck.py` (exit 1 while decisions are open).
+It runs automatically in every testSuite build (invoked by `generateTests.py`; open
+decisions fail the build). Manual run for iteration:
+`python3 src/generateTests/constantsCheck.py` (exit 1 while decisions are open).
 
 ## Adding a constant - the dev process
 
@@ -106,8 +99,8 @@ Every constant used by the conversion tables is verified independently. When you
    document (never from your own step 1 line), citing the source registry `[n]`; extend the
    `REFERENCES` registry if the source is new. Conventions without a standard go into
    `ASSUMPTIONS` (and `CONVENTION_ANCHORS` if other constants derive from them).
-4. Run `python3 src/generateTests/constantsCheck.py`. It aborts the discipline for you: a
-   used constant without a `REF` entry lands in the decision list as UNREFERENCED, and any
-   mismatch against your independent value is flagged with the agreeing digit count.
-5. Commit `src/generated/constantsVerification.txt` together with the constant. The script
-   must exit 0 (no open decisions) or the difference must be brought to review.
+4. Build the testSuite: it regenerates the tests AND runs the constants audit. A used
+   constant without a `REF` entry fails the build as UNREFERENCED, and any mismatch against
+   your independent value is flagged with the agreeing digit count.
+5. Commit `src/generated/constantsVerification.txt` together with the constant. The build
+   must be green (no open decisions) or the difference must be brought to review.
