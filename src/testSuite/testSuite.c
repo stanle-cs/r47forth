@@ -604,10 +604,13 @@ void covBackupRoundtrip(uint16_t unusedButMandatoryParameter) {
 }
 
 static void covClobberRegs(void) {
-  // Overwrite the seeded global registers R00..R02 with a sentinel so a following
+  // Overwrite the seeded global registers R00..R05 with a sentinel so a following
   // load must restore them from file for the round-trip assertion to mean
-  // anything (a no-op load would leave the sentinel and fail the test).
-  for(uint16_t r = 0; r < 3; ++r) {
+  // anything (a no-op load would leave the sentinel and fail the test). The
+  // sentinel is a real, so it also destroys the datatype of the mixed-type
+  // registers (R03 complex, R04 string, R05 short integer) - the load must
+  // restore both the value and the type.
+  for(uint16_t r = 0; r < 6; ++r) {
     reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
     int32ToReal34(-99999, REGISTER_REAL34_DATA(REGISTER_X));
     reallyRunFunction(ITM_STO, r);
@@ -628,7 +631,7 @@ void covStateRoundtrip(uint16_t unusedButMandatoryParameter) {
   // restoreOneSection (registers, named variables, statistical sums, system
   // state).
   //
-  // The seeded registers R00..R02 are clobbered with a sentinel after each save
+  // The seeded registers R00..R05 are clobbered with a sentinel after each save
   // and before the matching load, so the corpus assertion that they come back is
   // proof that the load actually reads and restores the file - a no-op load would
   // leave the sentinel and fail the test, rather than passing on state that was
