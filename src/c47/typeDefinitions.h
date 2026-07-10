@@ -790,6 +790,16 @@ typedef struct {
 } printerState_t;
 
 
+/**
+ * \enum namedLabels_t
+ */
+typedef enum {
+  GLOBAL_LABELS = STRING_LABEL_VARIABLE,    // Only global labels
+  LOCAL_LABELS  = LOCAL_LABEL_VARIABLE,     // Only local named labels
+  ALL_LABELS    = 0                         // Both global and local names lables
+} namedLabels_t;
+
+
   #if defined(PC_BUILD)
   /**
    * \struct calcKeyboard_t

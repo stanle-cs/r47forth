@@ -341,11 +341,7 @@
         tam.max = indexOfItems[ITM_GTO].tamMinMax & TAM_MAX_MASK;
       }
       else if(tam.dot) {
-        if(!catalog) {
-          tam.dot = false;
-        }
-        popSoftmenu();
-        --numberOfTamMenusToPop;
+        tam.dot = false;
       }
       else if(tam.colon) {
         if(!catalog) {
@@ -937,7 +933,7 @@ printf("tam.value: %d\n", tam.value);
       }
       else if(tam.mode == TM_LABEL || tam.mode == TM_LBLONLY || tam.mode == TM_SOLVE || (tam.mode == TM_KEY && tam.keyInputFinished) || (tam.mode == TM_DELITM && softmenu[softmenuStack[0].softmenuId].menuItem == -MNU_PROGS)) {
         if(!tam.indirect) {
-          value = findNamedLabelWithDuplicate(buffer, dupNum, ALL_LABELS);
+          value = findNamedLabelWithDuplicate(buffer, dupNum, (tam.colon ? LOCAL_LABELS : GLOBAL_LABELS));
         }
         else {
           value = findNamedVariable(buffer);

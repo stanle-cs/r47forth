@@ -1360,10 +1360,10 @@ enum REG_NUMBERS_IN_KS_CODE { // Key Stroke register codes
   LAST_SPARE_REGISTERS_IN_KS_CODE = REGISTER_W_IN_KS_CODE,
 
   // OP parameter special values
-  CNST_BEYOND_250       = 250,        // [DL] !!!!! to be changed from 250 to 249 !!!!!
+  LOCAL_LABEL_VARIABLE  = 249,
+  CNST_BEYOND_250       = 250,        // [DL] Not an issue to have it above LOCAL_LABEL_VARIABLE as both are used in different contexts
   //CNST_BEYOND_500       = 251,
   //CNST_BEYOND_750       = 252,
-  LOCAL_LABEL_VARIABLE  = 249,
   SYSTEM_FLAG_NUMBER    = 250,
   VALUE_0               = 251,
   VALUE_1               = 252,
@@ -1371,12 +1371,6 @@ enum REG_NUMBERS_IN_KS_CODE { // Key Stroke register codes
   INDIRECT_REGISTER     = 254,
   INDIRECT_VARIABLE     = 255,
 };
-
-typedef enum {
-  GLOBAL_LABELS = STRING_LABEL_VARIABLE,    // Only global labels
-  LOCAL_LABELS  = LOCAL_LABEL_VARIABLE,     // Only local named labels
-  ALL_LABELS    = 0                         // Both global and local names lables
-} namedLabels_t;
 
 #define NUMBER_OF_GLOBAL_REGISTERS      (LAST_GLOBAL_REGISTER          - FIRST_GLOBAL_REGISTER          + 1) // 137 = 100 numbered + 12 lettered + 6 stat + 8 spare + 9 saved_stach + 2 temp
 #define NUMBER_OF_LETTERED_REGISTERS    (LAST_LETTERED_REGISTER        - FIRST_LETTERED_REGISTER        + 1) // 12 lettered from X to K

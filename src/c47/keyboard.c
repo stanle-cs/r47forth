@@ -3619,7 +3619,6 @@ ram_full:
 
 
 void fnKeyExit(uint16_t unusedButMandatoryParameter) {
-    printf("**[DL]** fnKeyExit\n");fflush(stdout);
     if(tam.mode == TM_KEY && !tam.keyInputFinished) {
       if(tam.digitsSoFar == 0) {
         tamProcessInput(ITM_2);

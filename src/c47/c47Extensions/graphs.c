@@ -320,10 +320,15 @@ void fnPlotSQ(uint16_t unusedButMandatoryParameter) {
     showHideHourGlass();
     refreshStatusBar();
 
-    if(menu(0) != -MNU_PLOT_FUNC && plotStatMx[0] == 'D' && !(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED)) {
+    if(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) {
+      if(menu(0) != -MNU_SHOW) {           //blank menu under a programmed plot; EXIT pops it back
+        showSoftmenu(-MNU_SHOW);
+      }
+    }
+    else if(menu(0) != -MNU_PLOT_FUNC && plotStatMx[0] == 'D') {
       showSoftmenu(-MNU_PLOT_FUNC);
     }
-    else if(menu(0) != -MNU_PLOT_STAT && plotStatMx[0] == 'S' && !(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED)) {
+    else if(menu(0) != -MNU_PLOT_STAT && plotStatMx[0] == 'S') {
       showSoftmenu(-MNU_PLOT_STAT);
     }
 }
@@ -825,9 +830,6 @@ void graph_plotmem(void) {
         #if defined(PC_BUILD) && defined(MONITOR_CLRSCR)
           printf("graph_plotmem: Drawing\n");
         #endif // PC_BUILD &&MONITOR_CLRSCR
-        if((programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode == CM_GRAPH) {
-          showSoftmenu(-MNU_SHOW);
-        }
         clearScreenGraphs(2, !clrTextArea, clrGraphArea);
         reDraw = false; //draw now and block reDraw in the next round
       } //continue with draw
