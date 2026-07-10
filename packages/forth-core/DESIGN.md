@@ -242,14 +242,32 @@ extern const forthPrimDef_t forthPrims[];   // forth_prims.c, index-stable, appe
 extern const uint16_t       forthPrimCount;
 ```
 
-**Index stability rule:** never reorder or delete a primitive; the numeric index
-is the on-disk/on-arena token (§2). Retire a primitive by pointing it at a
-`fnNotAvailable`-style stub, never by removal.
+**Index stability rule (APPEND-ONLY):** never reorder, insert mid-table, or
+delete a primitive; the numeric index is the on-disk/on-arena token (§2).
+New entries are appended at the end only. Retire a primitive by pointing it at
+a `fnNotAvailable`-style stub, never by removal. Inserting mid-table shifts
+every subsequent token and corrupts all compiled bodies that reference those
+indices.
 
 **Name encoding (Stage-1 clarification, folded in):** primitive names use C47
 glyph encoding (same as stored labels), so a single `compareString` path serves
 both. ASCII names are byte-identical single-byte glyphs, verified. Lookup is
 case-sensitive via `compareString(CMP_BINARY)` — see §4.1.
+
+**Alpha-mode keyboard aliases (glyph entries):** alpha-mode keyboard entry emits
+C47 glyph codes for multiply and divide, not ASCII. The tokenizer's glyph-wise
+advance delivers the full two-byte token intact; the prim table provides alias
+entries so name lookup succeeds:
+
+| alias entry | `fonts.h` macro | bytes          | delegates to |
+|-------------|-----------------|----------------|--------------|
+| `PRIM_CROSS`| `STD_CROSS`     | `\x80\xd7` (×) | `pMul` (`*`) |
+| `PRIM_DOT`  | `STD_DOT`       | `\x80\xb7` (·) | `pMul` (`*`) |
+| `PRIM_DIVGL`| `STD_DIVIDE`    | `\x80\xf7` (÷) | `pDiv` (`/`) |
+
+`STD_PLUS`/`STD_MINUS` are plain ASCII (`\x2b`/`\x2d`) and need no alias.
+`PRODUCT_SIGN` (defines.h:2229) is flag-dependent (`FLAG_MULTx` chooses × or ·),
+so both `STD_CROSS` and `STD_DOT` must resolve to the multiply handler.
 
 ---
 
@@ -769,6 +787,12 @@ source is one line. Definition names are additionally capped at
 tokens longer than 31 bytes are legal only as number literals. Never author
 names as UTF-8; a UTF-8 lead byte (0xC0+) is misparsed as a C47 two-byte
 glyph high byte.
+
+**Keyboard-authored source:** alpha-mode keypad entry produces two-byte C47
+operator glyphs for multiply (`STD_CROSS` `\x80\xd7` or `STD_DOT` `\x80\xb7`)
+and divide (`STD_DIVIDE` `\x80\xf7`). The tokenizer's glyph-wise advance
+delivers these as intact two-byte tokens. The prim table alias entries
+(§1.3) ensure name lookup resolves them to the correct handler.
 
 #### 3.3.4 Interpret-state execution discipline (C-7 — mirror the inner interpreter)
 

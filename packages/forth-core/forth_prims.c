@@ -26,7 +26,10 @@ enum {
   PRIM_MINUS = 5,
   PRIM_MUL   = 6,
   PRIM_DIV   = 7,
-  PRIM_COUNT = 8
+  PRIM_CROSS = 8,
+  PRIM_DOT   = 9,
+  PRIM_DIVGL = 10,
+  PRIM_COUNT = 11
 };
 
 const forthPrimDef_t forthPrims[PRIM_COUNT] = {
@@ -38,6 +41,9 @@ const forthPrimDef_t forthPrims[PRIM_COUNT] = {
   [PRIM_MINUS] = { "-",      0, pMinus },
   [PRIM_MUL]   = { "*",      0, pMul   },
   [PRIM_DIV]   = { "/",      0, pDiv   },
+  [PRIM_CROSS] = { STD_CROSS, 0, pMul  },
+  [PRIM_DOT]   = { STD_DOT,   0, pMul  },
+  [PRIM_DIVGL] = { STD_DIVIDE, 0, pDiv },
 };
 
 const uint16_t forthPrimCount = PRIM_COUNT;

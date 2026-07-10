@@ -1066,7 +1066,61 @@ static int test_outer_nonstring_x(void)
     return 1;
   }
   printf("    PASS: non-string X -> ERROR_INVALID_DATA_TYPE_FOR_OP (%d)\n",
-         ERROR_INVALID_DATA_TYPE_FOR_OP);
+          ERROR_INVALID_DATA_TYPE_FOR_OP);
+  return 0;
+}
+
+/* Keyboard glyph: "3 4 " STD_CROSS via fnForthOuter -> X == 12 */
+static int test_outer_glyph_cross(void)
+{
+  lastErrorCode = ERROR_NONE;
+  x_set_string("3 4 " STD_CROSS);
+  fnForthOuter(NOPARAM);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: \"3 4 <cross>\" error %d\n", lastErrorCode);
+    return 1;
+  }
+  if (!x_is_longint(12)) {
+    printf("    FAIL: \"3 4 <cross>\" X != 12\n");
+    return 1;
+  }
+  printf("    PASS: \"3 4 <cross>\" (STD_CROSS) -> X==12\n");
+  return 0;
+}
+
+/* Keyboard glyph: "3 4 " STD_DOT via fnForthOuter -> X == 12 */
+static int test_outer_glyph_dot(void)
+{
+  lastErrorCode = ERROR_NONE;
+  x_set_string("3 4 " STD_DOT);
+  fnForthOuter(NOPARAM);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: \"3 4 <dot>\" error %d\n", lastErrorCode);
+    return 1;
+  }
+  if (!x_is_longint(12)) {
+    printf("    FAIL: \"3 4 <dot>\" X != 12\n");
+    return 1;
+  }
+  printf("    PASS: \"3 4 <dot>\" (STD_DOT) -> X==12\n");
+  return 0;
+}
+
+/* Keyboard glyph: "8 4 " STD_DIVIDE via fnForthOuter -> X == 2 */
+static int test_outer_glyph_divide(void)
+{
+  lastErrorCode = ERROR_NONE;
+  x_set_string("8 4 " STD_DIVIDE);
+  fnForthOuter(NOPARAM);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: \"8 4 <divide>\" error %d\n", lastErrorCode);
+    return 1;
+  }
+  if (!x_is_longint(2)) {
+    printf("    FAIL: \"8 4 <divide>\" X != 2\n");
+    return 1;
+  }
+  printf("    PASS: \"8 4 <divide>\" (STD_DIVIDE) -> X==2\n");
   return 0;
 }
 
@@ -1256,6 +1310,45 @@ static int test_xeq_precedence(void)
   }
   printf("    PASS: forthResolveXEQ returns LABEL when C47 label shadows Forth word\n");
   return 0;
+}
+
+/* §4.2 XEQ item lookup: forthResolveXEQ finds C47 built-in items by name.
+ * Tests: FORTH -> ITM_FORTH, FCALL -> ITM_FCALL, label shadows item. */
+static int test_xeq_item_lookup(void)
+{
+  uint16_t param;
+  forthXEQType_t res;
+  int fail = 0;
+
+  /* Test 1: "FORTH" resolves to ITM_FORTH */
+  res = forthResolveXEQ("FORTH", &param);
+  if (res != FORTH_XEQ_ITEM || param != ITM_FORTH) {
+    printf("    FAIL: forthResolveXEQ(\"FORTH\") returned %d/%u (expected ITEM/%d)\n",
+           res, param, ITM_FORTH);
+    fail = 1;
+  }
+
+  /* Test 2: "FCALL" resolves to ITM_FCALL */
+  res = forthResolveXEQ("FCALL", &param);
+  if (res != FORTH_XEQ_ITEM || param != ITM_FCALL) {
+    printf("    FAIL: forthResolveXEQ(\"FCALL\") returned %d/%u (expected ITEM/%d)\n",
+           res, param, ITM_FCALL);
+    fail = 1;
+  }
+
+  /* Test 3: a non-existent name returns NONE */
+  res = forthResolveXEQ("NONEXISTENT_ITEM", &param);
+  if (res != FORTH_XEQ_NONE) {
+    printf("    FAIL: forthResolveXEQ(\"NONEXISTENT_ITEM\") returned %d (expected NONE)\n",
+           res);
+    fail = 1;
+  }
+
+  if (!fail) {
+    printf("    PASS: XEQ item lookup: FORTH->ITEM(%d), FCALL->ITEM(%d), miss->NONE\n",
+           ITM_FORTH, ITM_FCALL);
+  }
+  return fail;
 }
 
 /* §7.1 fnForthCall interactive (fix #4): fromProgram must reflect programRunStop.
@@ -1733,6 +1826,8 @@ int forthDictSelfTest(void)
 #endif
   printf("  [DEBUG] running test_xeq_precedence...\n");
   fail |= test_xeq_precedence();
+  printf("  [DEBUG] running test_xeq_item_lookup...\n");
+  fail |= test_xeq_item_lookup();
   printf("  [DEBUG] running test_fnforthcall_interactive...\n");
   fail |= test_fnforthcall_interactive();
   printf("  [DEBUG] running test_lblq_undefined_no_ub...\n");
@@ -1784,6 +1879,12 @@ int forthDictSelfTest(void)
   fail |= test_ilit_compile_interpret_parity();
   printf("  [DEBUG] running test_outer_real_literal...\n");
   fail |= test_outer_real_literal();
+  printf("  [DEBUG] running test_outer_glyph_cross...\n");
+  fail |= test_outer_glyph_cross();
+  printf("  [DEBUG] running test_outer_glyph_dot...\n");
+  fail |= test_outer_glyph_dot();
+  printf("  [DEBUG] running test_outer_glyph_divide...\n");
+  fail |= test_outer_glyph_divide();
 
   forthDictClear();
 
