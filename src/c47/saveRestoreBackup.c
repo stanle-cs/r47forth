@@ -674,11 +674,17 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
 
     else if(!strcmp(valueType, "hexDump")) {
       uint32_t numberOfBytes = stringToUint32(valuePtr);
+      if(numberOfBytes > size) {
+        numberOfBytes = size;
+      }
       uint8_t hi, lo, *buf = (uint8_t *)buffer;
       uint8_t *v;
       for(uint32_t count=0; count < numberOfBytes; count++, buf++) {
         if(count % 32 == 0) {
           paramCurrent = paramCurrent->next;
+          if(paramCurrent == NULL) {
+            break;
+          }
           v = (uint8_t *)paramCurrent->param + 7;
         }
 
