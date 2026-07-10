@@ -32,7 +32,7 @@ void fnGoto(uint16_t label) {
         }
         if(labelList[lbl].program == currentProgramNumber) { // Within the current progrm
           if(labelList[lbl].step < 0 && *(labelList[lbl].labelPointer) == label &&  *(labelList[lbl].labelPointer - 1) == ITM_LBL) { // Is a local label and is the searched label
-            if(firstLabel == 0) {    // First label occurence in the current program
+            if(!labelFound) {    // First label occurence in the current program
               firstLabel = lbl;
               labelFound = true;
             }
@@ -1016,12 +1016,12 @@ void fnCheckLabel(uint16_t label) {
   if(dynamicMenuItem >= 0) {
     label = findNamedLabel(dynmenuGetLabel(dynamicMenuItem),ALL_LABELS);
   }
-
+  
   // Local Label 00 to 99 and A to l
   if(label <= LAST_LOCAL_LABEL) {
     // Search for local label
     for(uint16_t lbl=0; lbl<numberOfLabels; lbl++) {
-      if(labelList[lbl].program == currentProgramNumber && labelList[lbl].step < 0 && *(labelList[lbl].labelPointer) == label) { // Is in the current program and is a local label and is the searched label
+      if(labelList[lbl].program == currentProgramNumber && labelList[lbl].step < 0 && *(labelList[lbl].labelPointer) == label &&  *(labelList[lbl].labelPointer - 1) == ITM_LBL) { // Is in the current program and is a local label and is the searched label
         temporaryInformation = TI_TRUE;
         return;
       }
