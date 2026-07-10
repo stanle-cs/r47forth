@@ -4,7 +4,7 @@ Project:    C47/R47, community firmware for HP-42/DM42-class scientific
             calculators (this repository)
 Generated:  2026-07-10 (UTC date; the input hashes below pin the exact audited state)
 Repository: git@gitlab.com:rpncalculators/c43.git
-Commit:     5f69d3c63f7637750e718fa897e72c164f7fb92f (working tree had uncommitted changes)
+Commit:     dd448984a28be6f62fab5db5134c8158abd084d6
             (note: the committed copy of this file is necessarily one commit
             ahead of the recorded hash)
 Input:      src/generateConstants/generateConstants.c
