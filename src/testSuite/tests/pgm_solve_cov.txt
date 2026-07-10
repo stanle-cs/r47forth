@@ -1,0 +1,31 @@
+;*************************************************************
+;** Coverage: program-based derivative and root solver.     **
+;** covLoadPgm builds a labelled RPN program S (f(X)=X^2-4)  **
+;** and loads it through fnLoadProgram; covDerivPgm and      **
+;** covSolvePgm then differentiate and solve it through the  **
+;** program (execProgram) branches of differentiate.c and   **
+;** solve.c that the formula corpora cannot reach. Adds a    **
+;** program to memory, so this runs late (serialize_cov,     **
+;** which resets, stays last).                               **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+; build and load program S: f(X) = X^2 - 4
+Func: fnLoadPgmCov
+In:  FARG=0
+Out: EC=0
+
+; first derivative of X^2-4 is 2X; at X=3 -> 6 (central difference is exact here)
+Func: fnDerivPgmCov
+In:  FARG=1 RX=Real:"3"
+Out: EC=0 RX=Real:"6"
+
+; second derivative of X^2-4 is 2 everywhere (central 2nd difference is h-exact)
+Func: fnDerivPgmCov
+In:  FARG=2 RX=Real:"3"
+Out: EC=0 RX=Real:"2"
+
+; solve f(X)=X^2-4=0 from guesses bracketing the positive root -> 2
+Func: fnSolvePgmCov
+In:  FARG=0 RY=Real:"1" RX=Real:"3"
+Out: EC=0 RX=Real:"2"

@@ -44,6 +44,9 @@ void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t which);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
+void covLoadPgm(uint16_t unusedButMandatoryParameter);
+void covDerivPgm(uint16_t order);
+void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covTvm(uint16_t which);
 void covTvmPmt(uint16_t which);
 void covEff(uint16_t unusedButMandatoryParameter);
@@ -174,6 +177,9 @@ const funcTest_t funcTestNoParam[] = {
   {"fnSolveRootCov",         covSolveRoot          },
   {"fnDerivErrCov",          covDerivErr           },
   {"fnSolveErrCov",          covSolveErr           },
+  {"fnLoadPgmCov",           covLoadPgm            },
+  {"fnDerivPgmCov",          covDerivPgm           },
+  {"fnSolvePgmCov",          covSolvePgm           },
   {"fnTvmCov",               covTvm                },
   {"fnTvmPmtCov",            covTvmPmt             },
   {"fnEffCov",               covEff                },
@@ -757,6 +763,73 @@ void covSolveErr(uint16_t which) {
   else {
     fnPgmSlv(FIRST_NAMED_VARIABLE);
   }
+}
+
+void covLoadPgm(uint16_t unusedButMandatoryParameter) {
+  // Build a small labelled RPN program S computing f(X) = X^2 - 4 (root at X=2,
+  // derivative 2X) and load it through the official loader fnLoadProgram
+  // (saveRestorePrograms.c), which appends it safely and registers the global
+  // label. This gives the program-based solver and differentiator a smooth f(X)
+  // to drive - the execProgram branch the formula corpus cannot reach. The bytes
+  // are LBL "S" / X^2 / literal 4 / SUB / END in the program-file format
+  // (PROGRAM_VERSION 1, one byte per line). The file is written to
+  // c47programTest.bin - the Test-suffixed name the test HAL maps ioPathLoadProgram
+  // to, never the real c47program.bin, so the suite cannot clobber a user's saved
+  // program (the artifact-naming rule from MR !1487).
+  static const uint8_t pgm[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'S',            // LBL "S"
+    ITM_SQUARE,                                        // X^2
+    ITM_LITERAL, STRING_REAL34, 1, '4',                // 4
+    ITM_SUB,                                           // X^2 - 4
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
+  };
+  FILE *f = fopen("c47programTest.bin", "wb");
+  if(f == NULL) {
+    return;
+  }
+  fprintf(f, "PROGRAM_FILE_FORMAT\n0\nC47_program_file_version\n1\nPROGRAM\n%u\n", (unsigned)sizeof(pgm));
+  for(size_t i = 0; i < sizeof(pgm); ++i) {
+    fprintf(f, "%u\n", pgm[i]);
+  }
+  fclose(f);
+  fnLoadProgram(NOPARAM);
+}
+
+void covDerivPgm(uint16_t order) {
+  // Program-based derivative: differentiate the loaded program S (f(X)=X^2-4) at
+  // the point in X through derivativeCommon -> calcDeriv -> execProgram
+  // (differentiate.c) - the program branch covDerivEq (formula) does not reach.
+  // f'(X)=2X, so the first derivative at X=3 is 6.
+  const calcRegister_t label = findNamedLabel("S", GLOBAL_LABELS);
+  if(label == INVALID_VARIABLE) {
+    return;
+  }
+  currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
+  if(order == 2) {
+    fn2ndDeriv(label);
+  }
+  else {
+    fn1stDeriv(label);
+  }
+}
+
+void covSolvePgm(uint16_t unusedButMandatoryParameter) {
+  // Program-based root solve: find a root of the loaded program S (f(X)=X^2-4)
+  // with fnSolve -> solver() over the program (execProgram each iteration in
+  // solve.c) - the program branch covSolveRoot (formula) does not reach. The two
+  // guesses come from Y and X on the stack; the positive root is 2. fnPgmSlv
+  // selects the program, then fnSolve over a named variable runs the iteration
+  // (the program reads the trial value the solver leaves in X).
+  const calcRegister_t label = findNamedLabel("S", GLOBAL_LABELS);
+  if(label == INVALID_VARIABLE) {
+    return;
+  }
+  // Clear the whole solver status first: a prior TVM or interactive solve can
+  // leave bits set (e.g. SOLVER_STATUS_TVM_APPLICATION) that send _executeSolver
+  // down the wrong evaluation path, so assign rather than clear a single bit.
+  currentSolverStatus = 0;
+  fnPgmSlv(label);
+  fnSolve(findOrAllocateNamedVariable("X"));
 }
 
 
@@ -3592,7 +3665,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff || funcToTest == covAmort || funcToTest == covEffToI || funcToTest == covAmortNext || funcToTest == covDerivErr || funcToTest == covSolveErr) {
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff || funcToTest == covAmort || funcToTest == covEffToI || funcToTest == covAmortNext || funcToTest == covDerivErr || funcToTest == covSolveErr || funcToTest == covLoadPgm || funcToTest == covDerivPgm || funcToTest == covSolvePgm) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {

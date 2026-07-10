@@ -439,12 +439,14 @@ programs
 
 ; These coverage files mutate shared state that the per-test In: reset does not
 ; clear - clcvar_cov clears the loaded sample programs' local variables,
-; matrix2_cov leaves the indexed-matrix pointer set, and serialize_state_cov
-; saves the loaded programs and reloads the whole state from file - so they must
-; run after programs.txt (which consumes the pristine sample-program fixture),
-; not before. serialize_cov resets the calculator, so it stays last.
+; matrix2_cov leaves the indexed-matrix pointer set, serialize_state_cov saves
+; the loaded programs and reloads the whole state from file, and pgm_solve_cov
+; appends a program to memory - so they must run after programs.txt (which
+; consumes the pristine sample-program fixture), not before. serialize_cov resets
+; the calculator, so it stays last.
 matrix2_cov
 clcvar_cov
 serialize_state_cov
+pgm_solve_cov
 
 serialize_cov
