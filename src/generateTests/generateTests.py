@@ -10,8 +10,8 @@
 # 39-digit context, result rounded half even to the 34-digit register). Calculator output is never read, so the testSuite checks the calculator
 # against an independent computation of the same definitions.
 # 
-# NOT covered: the constant values themselves. Test and calculator share generateConstants.c, so a wrong literal there passes both.
-# Verifying constants would need an independent source. That is not done here.
+# NOT covered here: the constant values themselves. Test and calculator share generateConstants.c, so a wrong literal there passes
+# both. constantsCheck.py (same directory) covers that gap: it recomputes every conversion constant from independent references.
 #
 # Usage:
 #   generateTests.py                    write conversions.txt and conversionsSI.txt

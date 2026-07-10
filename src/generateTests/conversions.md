@@ -79,3 +79,35 @@ Rules that catch people out:
   then rebuild.
 - If a generated `.txt` is deleted without touching any generator dependency, ninja considers
   the stamp fresh and rebuilds nothing; recreate it with `python3 src/generateTests/generateTests.py`.
+
+## Constants verification (constantsCheck.py)
+
+The generated tests cannot verify the constant values themselves: test and calculator share
+`generateConstants.c`. `constantsCheck.py` closes that gap. It recomputes every conversion
+constant from the defining documents of the units (exact legal/SI definitions, referenced
+conventions) at 60-digit precision, never reading the C file's formulas or calculator output,
+and writes `src/generated/constantsVerification.txt`: per constant the independent reference
+with its source, the compiled C47 literal with its comment, and a verdict. Constants that
+differ or rest on unstandardised conventions are collected in a decision list at the top.
+Run: `python3 src/generateTests/constantsCheck.py` (exit 1 while decisions are open).
+
+## Adding a constant - the dev process
+
+Every constant used by the conversion tables is verified independently. When you add one:
+
+1. Add the `generateConstant("Name", digits, EXACT|APPROX, "+value")` line in
+   `src/generateConstants/generateConstants.c`, with a comment stating the physical
+   relationship. `EXACT` when the value terminates, else `APPROX` with 39 digits. Give ALL
+   the digits your source gives; round the last digit half-even, do not truncate.
+2. Refresh the stale generated header:
+   `install -C build.sim/src/generateConstants/constantPointers{.h,.c,2.c} src/generated/`
+   then rebuild.
+3. Add a `REF` entry in `constantsCheck.py`: the value recomputed from the unit's DEFINING
+   document (never from your own step 1 line), citing the source registry `[n]`; extend the
+   `REFERENCES` registry if the source is new. Conventions without a standard go into
+   `ASSUMPTIONS` (and `CONVENTION_ANCHORS` if other constants derive from them).
+4. Run `python3 src/generateTests/constantsCheck.py`. It aborts the discipline for you: a
+   used constant without a `REF` entry lands in the decision list as UNREFERENCED, and any
+   mismatch against your independent value is flagged with the agreeing digit count.
+5. Commit `src/generated/constantsVerification.txt` together with the constant. The script
+   must exit 0 (no open decisions) or the difference must be brought to review.
