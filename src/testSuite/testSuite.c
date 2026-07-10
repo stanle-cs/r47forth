@@ -1642,7 +1642,7 @@ var1:
   //Setting a program to run
   else if(strcmp(l, "PGM") == 0) {
     r[strlen(r) - 1] = 0;
-    label = findNamedLabel(r + 1);
+    label = findNamedLabel(r + 1, GLOBAL_LABELS);
     if(label == INVALID_VARIABLE) {
       printf("\nUnknown global label: %s\n", r+1);
       abortTest();

@@ -2965,7 +2965,7 @@
 #define ITM_2856                    2856 // General items / any items spare
 #define ITM_2857                    2857 // General items / any items spare
 #define ITM_2858                    2858 // General items / any items spare
-#define ITM_2859                    2859 // General items / any items spare
+#define MNU_TAMLOCALLABEL           2859
 
 #define ITM_MPHtoKNOT               2860
 #define ITM_KNOTtoMPH               2861
