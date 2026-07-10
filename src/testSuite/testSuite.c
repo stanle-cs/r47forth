@@ -47,6 +47,11 @@ void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
+void covIntegrate(uint16_t which);
+void covIntegrateErr(uint16_t which);
+void covIntegratePgm(uint16_t unusedButMandatoryParameter);
+void covSumProd(uint16_t which);
+void covISumProd(uint16_t which);
 void covTvm(uint16_t which);
 void covTvmPmt(uint16_t which);
 void covEff(uint16_t unusedButMandatoryParameter);
@@ -180,6 +185,11 @@ const funcTest_t funcTestNoParam[] = {
   {"fnLoadPgmCov",           covLoadPgm            },
   {"fnDerivPgmCov",          covDerivPgm           },
   {"fnSolvePgmCov",          covSolvePgm           },
+  {"fnIntegrateCov",         covIntegrate          },
+  {"fnIntegrateErrCov",      covIntegrateErr       },
+  {"fnIntegratePgmCov",      covIntegratePgm       },
+  {"fnSumProdCov",           covSumProd            },
+  {"fnISumProdCov",          covISumProd           },
   {"fnTvmCov",               covTvm                },
   {"fnTvmPmtCov",            covTvmPmt             },
   {"fnEffCov",               covEff                },
@@ -765,34 +775,44 @@ void covSolveErr(uint16_t which) {
   }
 }
 
+static void covWriteAndLoadPgm(const uint8_t *pgm, size_t n) {
+  // Write a program in the program-file format (PROGRAM_VERSION 1, one byte per
+  // line) and import it through the official loader fnLoadProgram, which appends
+  // it safely and registers the global label. The file is the Test-suffixed name
+  // the test HAL maps ioPathLoadProgram to (c47programTest.bin), never the real
+  // c47program.bin, so the suite cannot clobber a user's saved program.
+  FILE *f = fopen("c47programTest.bin", "wb");
+  if(f == NULL) {
+    return;
+  }
+  fprintf(f, "PROGRAM_FILE_FORMAT\n0\nC47_program_file_version\n1\nPROGRAM\n%u\n", (unsigned)n);
+  for(size_t i = 0; i < n; ++i) {
+    fprintf(f, "%u\n", pgm[i]);
+  }
+  fclose(f);
+  fnLoadProgram(NOPARAM);
+}
+
 void covLoadPgm(uint16_t unusedButMandatoryParameter) {
-  // Build a small labelled RPN program S computing f(X) = X^2 - 4 (root at X=2,
-  // derivative 2X) and load it through the official loader fnLoadProgram
-  // (saveRestorePrograms.c), which appends it safely and registers the global
-  // label. This gives the program-based solver and differentiator a smooth f(X)
-  // to drive - the execProgram branch the formula corpus cannot reach. The bytes
-  // are LBL "S" / X^2 / literal 4 / SUB / END in the program-file format
-  // (PROGRAM_VERSION 1, one byte per line). The file is written to
-  // c47programTest.bin - the Test-suffixed name the test HAL maps ioPathLoadProgram
-  // to, never the real c47program.bin, so the suite cannot clobber a user's saved
-  // program (the artifact-naming rule from MR !1487).
-  static const uint8_t pgm[] = {
+  // Build and import two labelled RPN programs: S = X^2 - 4 (root at X=2,
+  // derivative 2X) for the solver / differentiator / integrator / real summation,
+  // and T = X^2 (which returns a long integer for a long-integer counter) for the
+  // indexed summation. Both reach the execProgram branches the formula corpus
+  // cannot. Bytes: LBL name / X^2 / [literal 4 / SUB] / END.
+  static const uint8_t pgmS[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 1, 'S',            // LBL "S"
     ITM_SQUARE,                                        // X^2
     ITM_LITERAL, STRING_REAL34, 1, '4',                // 4
     ITM_SUB,                                           // X^2 - 4
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
   };
-  FILE *f = fopen("c47programTest.bin", "wb");
-  if(f == NULL) {
-    return;
-  }
-  fprintf(f, "PROGRAM_FILE_FORMAT\n0\nC47_program_file_version\n1\nPROGRAM\n%u\n", (unsigned)sizeof(pgm));
-  for(size_t i = 0; i < sizeof(pgm); ++i) {
-    fprintf(f, "%u\n", pgm[i]);
-  }
-  fclose(f);
-  fnLoadProgram(NOPARAM);
+  static const uint8_t pgmT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'T',            // LBL "T"
+    ITM_SQUARE,                                        // X^2
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
+  };
+  covWriteAndLoadPgm(pgmS, sizeof(pgmS));
+  covWriteAndLoadPgm(pgmT, sizeof(pgmT));
 }
 
 void covDerivPgm(uint16_t order) {
@@ -830,6 +850,110 @@ void covSolvePgm(uint16_t unusedButMandatoryParameter) {
   currentSolverStatus = 0;
   fnPgmSlv(label);
   fnSolve(findOrAllocateNamedVariable("X"));
+}
+
+void covIntegrate(uint16_t which) {
+  // Integrate the current formula f(X) over [Y, X] with fnIntegrateYX (integrate.c
+  // -> the double-exponential integrator, evaluating the formula via parseEquation
+  // each iteration). which selects the integrand; the lower limit comes from Y and
+  // the upper from X on the stack; the result lands in X. A formula avoids a
+  // program fixture, so SOLVER_STATUS_USES_FORMULA is set explicitly.
+  static const char * const covIntegrand[] = {
+    "X",                              // 0  integral of X     over [0,2] = 2
+    "X" STD_CROSS "X",                // 1  integral of X*X   over [0,3] = 9
+    "X+1",                            // 2  integral of X+1   over [0,2] = 4
+    "X" STD_CROSS "X" STD_CROSS "X",  // 3  integral of X^3   over [0,2] = 4
+    "2" STD_CROSS "X",                // 4  integral of 2*X   over [0,3] = 9
+  };
+  const uint16_t n = sizeof(covIntegrand) / sizeof(covIntegrand[0]);
+  if(which >= n) {
+    return;
+  }
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, covIntegrand[which]);
+  const uint16_t var = findOrAllocateNamedVariable("X");
+  currentSolverVariable = var;
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+  // Accuracy: zero the ACC reserved variable, which the integrator reads as the
+  // default 1e-32 tolerance. This does not touch X/Y, which carry the limits that
+  // fnIntegrateYX reads (upper from X, lower from Y).
+  reallocateRegister(RESERVED_VARIABLE_ACC, dtReal34, 0, amNone);
+  int32ToReal34(0, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ACC));
+  fnIntegrateYX(var);
+}
+
+void covIntegrateErr(uint16_t which) {
+  // Drive the dispatch error branches of the integrator (_fnIntegrate / fnPgmInt in
+  // integrate.c). which=0: a stack register whose letter names no program label ->
+  // ERROR_LABEL_NOT_FOUND; otherwise a named variable with no program specified ->
+  // ERROR_NO_PROGRAM_SPECIFIED.
+  if(which == 0) {
+    fnIntegrate(REGISTER_T);
+  }
+  else {
+    currentSolverStatus = 0;
+    currentSolverProgram = 9999;   // >= numberOfLabels: no program specified
+    fnIntegrate(FIRST_NAMED_VARIABLE);
+  }
+}
+
+void covIntegratePgm(uint16_t unusedButMandatoryParameter) {
+  // Program-based integral: integrate the loaded program S (f(X)=X^2-4) over [Y,X]
+  // through fnPgmInt -> the integrator's execProgram branch (integrate.c), distinct
+  // from the formula path covIntegrate drives. Integral of X^2-4 over [0,3] is
+  // [X^3/3 - 4X] = 9 - 12 = -3. Requires the sample programs staged, so its corpus
+  // runs after programs.txt.
+  const calcRegister_t label = findNamedLabel("S", GLOBAL_LABELS);
+  if(label == INVALID_VARIABLE) {
+    return;
+  }
+  currentSolverStatus = 0;
+  fnPgmInt(label);
+  reallocateRegister(RESERVED_VARIABLE_ACC, dtReal34, 0, amNone);
+  int32ToReal34(0, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ACC));
+  fnIntegrateYX(findOrAllocateNamedVariable("X"));
+}
+
+void covSumProd(uint16_t which) {
+  // Program-based summation / product (sumprod.c). fnProgrammableSum /
+  // fnProgrammableProduct run the loaded program S (f(n)=n^2-4) for the counter
+  // n = Z, Z+X, ... up to Y (from=Z, to=Y, step=X on the stack), accumulating the
+  // sum or product of f(n). For n=3,4,5: sum = 5+12+21 = 38, product = 5*12*21 =
+  // 1260. Requires the sample programs staged, so its corpus runs after programs.
+  const calcRegister_t label = findNamedLabel("S", GLOBAL_LABELS);
+  if(label == INVALID_VARIABLE) {
+    return;
+  }
+  currentSolverStatus = 0;
+  if(which == 1) {
+    fnProgrammableProduct(label);
+  }
+  else {
+    fnProgrammableSum(label);
+  }
+}
+
+void covISumProd(uint16_t which) {
+  // Program-based indexed (long-integer) summation / product (isumprod.c).
+  // fnProgrammableiSum / fnProgrammableiProduct run the loaded program T (f(n)=n^2,
+  // which returns a long integer for a long-integer counter) for n = Z, Z+X, ...
+  // up to Y (from=Z, to=Y, step=X, all long integers on the stack), accumulating a
+  // long-integer sum or product. For n=1,3,5 (from=1, to=5, step=2): sum =
+  // 1+9+25 = 35, product = 1*9*25 = 225. Requires the sample programs staged, so
+  // its corpus runs after programs.
+  const calcRegister_t label = findNamedLabel("T", GLOBAL_LABELS);
+  if(label == INVALID_VARIABLE) {
+    return;
+  }
+  currentSolverStatus = 0;
+  if(which == 1) {
+    fnProgrammableiProduct(label);
+  }
+  else {
+    fnProgrammableiSum(label);
+  }
 }
 
 
@@ -3665,7 +3789,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff || funcToTest == covAmort || funcToTest == covEffToI || funcToTest == covAmortNext || funcToTest == covDerivErr || funcToTest == covSolveErr || funcToTest == covLoadPgm || funcToTest == covDerivPgm || funcToTest == covSolvePgm) {
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff || funcToTest == covAmort || funcToTest == covEffToI || funcToTest == covAmortNext || funcToTest == covDerivErr || funcToTest == covSolveErr || funcToTest == covLoadPgm || funcToTest == covDerivPgm || funcToTest == covSolvePgm || funcToTest == covIntegrate || funcToTest == covIntegrateErr || funcToTest == covIntegratePgm || funcToTest == covSumProd || funcToTest == covISumProd) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {

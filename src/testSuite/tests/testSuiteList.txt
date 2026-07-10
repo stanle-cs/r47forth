@@ -290,6 +290,7 @@ numeric_diff_cov
 eq_cov
 deriv_cov
 solve_cov
+integrate_cov
 tvm_cov
 percentPlusMG
 deltaPercent
