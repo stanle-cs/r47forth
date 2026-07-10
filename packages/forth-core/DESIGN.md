@@ -618,16 +618,16 @@ while nextToken(buf):                          // tokenizer §3.3.3 (C-6)
     word = buf
     if word == ":":
         if state == COMPILE:                   // C-4: nested ':' — a second
-            error(ERROR_OPERATION_UNDEFINED)   // snapshot would clobber the
+            error(ERROR_INVALID_NAME)          // snapshot would clobber the
             abortDefinition(); stop line       // single static abort record
         if not nextToken(name):                // C-4: ':' with no following word
-            error(ERROR_OPERATION_UNDEFINED); stop line  // nothing allocated yet —
+            error(ERROR_INVALID_NAME); stop line  // nothing allocated yet —
                                                          // no abort needed
         if not startDefinition(name): stop line   // §3.3.7 (C-9); error already shown
         state = COMPILE; continue
     if word == ";":
         if state == INTERPRET:                 // C-4
-            error(ERROR_OPERATION_UNDEFINED); stop line
+            error(ERROR_INVALID_NAME); stop line
         if not finishDefinition(): stop line   // finishDefinition emits FTOK_EXIT itself
         state = INTERPRET; continue
     idx = forthFindPrim(word)                  // §4.1 step 1
@@ -662,7 +662,7 @@ while nextToken(buf):                          // tokenizer §3.3.3 (C-6)
     label = findNamedLabel(word)               // §4.1 step 4 (C-2: number BEFORE label)
     if label != INVALID_VARIABLE:
         if state == COMPILE:                   // C-1: compiled C47-label calls are
-            error(ERROR_OPERATION_UNDEFINED)   // DEFERRED to stage 2 — message intent:
+            error(ERROR_INVALID_NAME)          // DEFERRED to stage 2 — message intent:
             abortDefinition(); stop line       // "cannot compile a C47 label call (stage 2)"
         else:                                  // C-1: fresh findNamedLabel per use (no
                                                // staleness); PGM_RUNNING protocol as
@@ -672,18 +672,44 @@ while nextToken(buf):                          // tokenizer §3.3.3 (C-6)
             if programRunStop == PGM_RUNNING: programRunStop = saved
             if lastErrorCode != ERROR_NONE: stop line        // C-7 gate
         continue
-    error("undefined word: %s", word)          // §4.1 last resort
+    error(ERROR_FUNCTION_NOT_FOUND, word)      // §4.1 last resort — token in errorMessage
     abortDefinition-if-open; stop line
 
 end of line:
     if state == COMPILE:                       // C-4: unterminated definition —
         abortDefinition()                      // without the abort, the smudged entry
-        error(ERROR_OPERATION_UNDEFINED)       // leaks: permanently invisible yet
+        error(ERROR_INVALID_NAME)              // leaks: permanently invisible yet
                                                // holding a dictionary index + arena bytes
     else if lastErrorCode == ERROR_NONE:
         setSystemFlag(FLAG_ASLIFT)             // C-7: mirrors the inner interpreter's
                                                // rsp == 0 exit
 ```
+
+**Error code mapping (C-13):** Forth errors use distinct C47 error codes to
+communicate the failure class accurately.  `ERROR_OPERATION_UNDEFINED` (13,
+"Operation is undefined in this mode") is reserved for inner-interpreter
+anomalies (re-entrancy guard, unsupported PTP classes) where the operation
+genuinely cannot execute.  Outer-interpreter errors use codes that match the
+failure semantics:
+
+| Condition | Error Code | Text |
+|-----------|-----------|------|
+| Unknown word (last resort) | `ERROR_FUNCTION_NOT_FOUND` (7) | "No such function" |
+| Syntax error (`:` in compile, `;` in interpret, unterminated def) | `ERROR_INVALID_NAME` (48) | "Invalid name" |
+| Token exceeds `FORTH_TOKEN_MAX` (63) | `ERROR_INPUT_TOO_LONG` (10) | "Input is too long" |
+| Empty or overlong definition name | `ERROR_INVALID_NAME` (48) | "Invalid name" |
+| C47 label in compile state | `ERROR_INVALID_NAME` (48) | "Invalid name" |
+| Outer re-entrancy guard | `ERROR_OPERATION_UNDEFINED` (13) | "Operation is undefined in this mode" |
+| Inner re-entrancy guard | `ERROR_OPERATION_UNDEFINED` (13) | "Operation is undefined in this mode" |
+| Unsupported PTP class in FTOK_C47 | `ERROR_OPERATION_UNDEFINED` (13) | "Operation is undefined in this mode" |
+
+**Context display (C-14):** On `ERROR_FUNCTION_NOT_FOUND`, the offending token
+is written to `errorMessage` before `displayCalcErrorMessage`.  The upstream
+display layer (`screen.c` `_refreshRegisterLine`) concatenates
+`errorMessages[code]` with `errorMessage` for select codes.  This is extended
+to include `ERROR_FUNCTION_NOT_FOUND` so the display shows
+`"No such function: TOKEN"`.  When the error occurs inside an open definition,
+the context includes the definition name: `"No such function: TOKEN (in WORD)"`.
 
 #### 3.3.1 State & line discipline (C-4)
 
@@ -693,14 +719,14 @@ end of line:
   the keypress records a program step and `fnForthOuter` never runs; when a
   *running* program executes `ITM_FORTH`, PEM is not active. The only
   shared-state hazard is `aimBuffer`/`tmpString` (§3.3.2).
-- `:` while `state == COMPILE` → `ERROR_OPERATION_UNDEFINED`,
-  `abortDefinition()`, stop the line (a second snapshot would clobber the
-  single static abort record).
-- `;` while `state == INTERPRET` → `ERROR_OPERATION_UNDEFINED`, stop.
-- `:` with no following word on the line → `ERROR_OPERATION_UNDEFINED`, stop
-  (nothing allocated yet — no abort needed).
+- `:` while `state == COMPILE` → `ERROR_INVALID_NAME` (48, "Invalid name"),
+   `abortDefinition()`, stop the line (a second snapshot would clobber the
+   single static abort record).
+- `;` while `state == INTERPRET` → `ERROR_INVALID_NAME` (48, "Invalid name"), stop.
+- `:` with no following word on the line → `ERROR_INVALID_NAME` (48, "Invalid name"), stop
+   (nothing allocated yet — no abort needed).
 - End of line with `state == COMPILE` (unterminated definition) →
-  `abortDefinition()` then `ERROR_OPERATION_UNDEFINED`.
+   `abortDefinition()` then `ERROR_INVALID_NAME` (48, "Invalid name").
 - Defining a name that collides with a primitive is **allowed silently**;
   the new word is permanently shadowed (§4.1 prims win). Documented
   behavior, not an error.
@@ -774,7 +800,7 @@ bool nextToken(char buf[FORTH_TOKEN_MAX + 1]) {
   while (forthSource[pos] != 0 && forthSource[pos] != ' ')
     pos = stringNextGlyph(forthSource, pos); // never tests a glyph's 2nd byte
   int16_t len = pos - start;
-  if (len > FORTH_TOKEN_MAX) { displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ...);
+  if (len > FORTH_TOKEN_MAX) { displayCalcErrorMessage(ERROR_INPUT_TOO_LONG, ...);
                                return false; /* caller aborts line (and open def) */ }
   xcopy(buf, forthSource + start, len); buf[len] = 0;
   return true;
@@ -909,8 +935,8 @@ Therefore in sub-phase C:
   reallyRunFunction(ITM_XEQ, label);
   if (programRunStop == PGM_RUNNING) programRunStop = saved;`
 - **Compile state:** same resolution succeeding in compile state raises
-  `ERROR_OPERATION_UNDEFINED` and aborts the definition (§3.3.7). Message
-  intent: "cannot compile a C47 label call (stage 2)".
+   `ERROR_INVALID_NAME` (48, "Invalid name") and aborts the definition (§3.3.7).
+   Message intent: "cannot compile a C47 label call (stage 2)".
 - Consequently the sub-phase C compiler emits **only**
   `FTOK_PRIM`, `FTOK_CALL`, `FTOK_LIT`, `FTOK_ILIT`, `FTOK_EXIT` (restated
   at the top of §3.3).
@@ -1077,8 +1103,11 @@ For a bare name typed at `ITM_FORTH` / found while compiling:
 4. **C47 named label** — `findNamedLabel(name)` (unchanged upstream code). Lets
    Forth call existing keystroke programs by name — **interpret state only**
    in stage C; the same resolution succeeding in compile state raises
-   `ERROR_OPERATION_UNDEFINED` and aborts the definition (C-1, §3.3.6).
-   Else **undefined-word error**.
+    `ERROR_INVALID_NAME` (48, "Invalid name") and aborts the definition (C-1, §3.3.6).
+    Else **undefined-word error**: `ERROR_FUNCTION_NOT_FOUND` (7, "No such function")
+    with the offending token in `errorMessage` for context display.  When the
+    error occurs inside an open definition, the definition name is appended
+    as `"(in WORDNAME)"` and the definition is aborted.
 
 **Order rationale (C-2 — number BEFORE label; amends the earlier draft that
 had label as step 3):** numbers are tried *after* the Forth dictionary, so a
@@ -1107,6 +1136,31 @@ resolver:
   `reallyRunFunction(ITM_FCALL, widx)` instead of erroring.
 - `_executeOp`, `PARAM_LABEL`/`STRING_LABEL_VARIABLE` arm (lblGtoXeq.c:345-357):
   same fallback before `ERROR_LABEL_NOT_FOUND`.
+
+**Complete `findNamedLabel` call-site map** (20 sites, 6 hooked, 14 excluded):
+
+| # | File | Line (upstream) | Context | Hooked? | Rationale |
+|---|------|----------------|---------|---------|-----------|
+| 1 | `items.c` | ~664 | XEQ-by-menu, `runFunction` | **YES** (H1) | Primary user-facing XEQ path |
+| 2 | `lblGtoXeq.c` | ~345 | `PARAM_LABEL`/`STRING_LABEL_VARIABLE` | **YES** (H2) | Program execution XEQ |
+| 3 | `ui/tam.c` | ~917 | `_tamProcessInput`, XEQ alpha entry | **YES** (H3) | Interactive TAM XEQ `'NAME'` |
+| 4 | `keyboard.c` | ~2229 | keyboard shortcut XEQ path | **YES** (H4) | Keyboard-driven XEQ |
+| 5 | `screen.c` | ~813 | long-press/config execution | **YES** (H5) | Screen-driven XEQ |
+| 6 | `forth_dict.c` | ~295 | `forthResolveXEQ` | **YES** (H6) | Central resolver (DESIGN.md §4.2) |
+| 7 | `assign.c` | ~ | assignment target resolution | NO | Undesigned; re-entrancy TBD |
+| 8 | `saveRestorePrograms.c` | ~ | program serialization | NO | Sub-phase E (save/restore) |
+| 9 | `solver/*.c` | ~ | solver equation parsing | NO | Re-entrancy design stage 2+ |
+| 10 | `registers.c` | ~ | register name resolution | NO | Re-entrancy design stage 2+ |
+| 11 | `keyboard.c` | ~272 | dynamic softmenu label lookup | NO | Menu display, not execution |
+| 12 | `keyboard.c` | ~1333 | label variable assignment | NO | Assignment path, not XEQ |
+| 13 | `keyboard.c` | ~3181 | label resolution for catalog | NO | Catalog display, not execution |
+| 14 | `lblGtoXeq.c` | ~1019 | dynamic menu label resolution | NO | Menu display, not execution |
+| 15 | `forth_compile.c` | ~298 | compile-time label resolution | NO | Compile path, not runtime XEQ |
+| 16-20 | `ui/tam.c` | ~ | TAM variable/label display | NO | Display-only, not execution |
+
+**Exclusion rationale:** Sites 7-10 require re-entrancy analysis (stage 2+).
+Sites 11-20 are display/assignment/compile paths — they do not execute user
+code, so a Forth fallback would be incorrect or unnecessary.
 
 **Order for reverse lookup:** C47 label first (preserve existing programs'
 behavior exactly), Forth colon def second. This is the *opposite* precedence of

@@ -130,8 +130,8 @@ A bare `ninja -C build.sim` picks up the changes. **No reconfigure needed.**
 ### Copy Mode (Windows / `CUSTOM_PKG_SHADOW_COPY=1`)
 
 If symlink creation fails (common on Windows without privilege) or you set
-`CUSTOM_PKG_SHADOW_COPY=1`, the resolver falls back to file copies.  A loud
-warning is printed at configure time:
+`CUSTOM_PKG_SHADOW_COPY=1`, the resolver falls back to file copies.  A warning
+is printed at configure time:
 
 ```
 WARNING: symlink not available, using file copies — bare ninja will NOT see
@@ -172,17 +172,31 @@ when meson's internal state is corrupted (rare).
 
 ---
 
+## Multiple Packages
+
+`CUSTOM_PKG` accepts a comma-separated list of package directories.  Overrides
+are applied in order — later packages override earlier ones for the same file:
+
+```
+meson setup build.sim --buildtype=custom -DRASPBERRY=false \
+    -DDECNUMBER_FASTMUL=true -DCUSTOM_PKG=packages/pkg-a,packages/pkg-b --reconfigure
+ninja -C build.sim
+```
+
 ## Makefile Targets
 
 The top-level `Makefile` propagates `CUSTOM_PKG` through these targets:
 
-| Target       | Propagates CUSTOM_PKG? | Notes                                    |
-|-------------|------------------------|------------------------------------------|
-| `sim`       | Yes (via `build.sim`)  | Standard simulator build                 |
-| `simr47`    | Yes (via `build.sim`)  | R47 simulator build                      |
-| `testPgms`  | Yes (via `build.sim`)  | Skips `res/testPgms/` copy when CUSTOM_PKG is set — prevents package builds from contaminating the shared test corpus |
-| `test_asan` | Yes                    | ASan-instrumented test run               |
-| `test`      | Yes (via `build.sim`)  | Full clean build + test                  |
+| Target              | Propagates CUSTOM_PKG? | Notes                                    |
+|--------------------|------------------------|------------------------------------------|
+| `sim`              | Yes (via `build.sim`)  | Standard simulator build                 |
+| `simr47`           | Yes (via `build.sim`)  | R47 simulator build                      |
+| `testPgms`         | Yes (via `build.sim`)  | Skips `res/testPgms/` copy when CUSTOM_PKG is set — prevents package builds from contaminating the shared test corpus |
+| `test_asan`        | Yes                    | ASan-instrumented test run               |
+| `test`             | Yes (via `build.sim`)  | Full clean build + test                  |
+| `dmcp`             | Yes (via `build.dmcp`) | DM42 cross-build                         |
+| `dmcp5`            | Yes (via `build.dmcp5`)| DM50 cross-build                         |
+| `dmcp_pkg<name>`   | Yes (via `build.dmcp.p<name>`) | DM42 packaged cross-build          |
 
 Usage: `make sim CUSTOM_PKG=packages/my-pkg`
 

@@ -1184,6 +1184,49 @@ static int test_xeq_end_to_end(void)
   return 0;
 }
 
+/* §4.2 TAM dispatcher: reallyRunFunction(ITM_FCALL, idx) executes Forth word.
+ * Tests the exact dispatch path used by the tam.c H-hook (DESIGN.md §4.2).
+ * Mutation: remove H-hook from tam.c -> ERROR_FUNCTION_NOT_FOUND instead of
+ *   executing the word. */
+static int test_tam_dispatcher(void)
+{
+  /* Define word "TAMX": ILIT(77) EXIT */
+  uint16_t w = begin_word("TAMX", 4);
+  if (w == FORTH_NULL) {
+    printf("    SKIP: alloc failed\n");
+    return 0;
+  }
+  forthDictEmit(T_ILIT);
+  emit_int32(77);
+  end_word(w);
+
+  /* Get dictionary index */
+  uint16_t idx;
+  if (!forthFindColon("TAMX", &idx)) {
+    printf("    FAIL: cannot find TAMX\n");
+    return 1;
+  }
+
+  /* Dispatch via reallyRunFunction — the exact path the tam.c H-hook uses:
+   *   reallyRunFunction(ITM_FCALL, widx);  (tam.c ~line 970) */
+  uint8_t savedRunStop = programRunStop;
+  programRunStop = PGM_RUNNING;
+  lastErrorCode = ERROR_NONE;
+  reallyRunFunction(ITM_FCALL, idx);
+  programRunStop = savedRunStop;
+
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: reallyRunFunction(ITM_FCALL) raised error %d\n", lastErrorCode);
+    return 1;
+  }
+  if (!x_is_longint(77)) {
+    printf("    FAIL: X should be 77 after reallyRunFunction(ITM_FCALL, TAMX), got wrong value\n");
+    return 1;
+  }
+  printf("    PASS: reallyRunFunction(ITM_FCALL, TAMX) -> X=77, TAM dispatch path works\n");
+  return 0;
+}
+
 /* §7.1 re-entrancy: forthRunning guard fires on nested entry (§3.2)
   * Uses test-only forthTestSetRunning to prime the guard, avoiding
   * reallyRunFunction/display calls that may not be safe in headless mode.
@@ -1820,6 +1863,8 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_xeq_end_to_end...\n");
   fail |= test_xeq_end_to_end();
+  printf("  [DEBUG] running test_tam_dispatcher...\n");
+  fail |= test_tam_dispatcher();
 #ifdef FORTH_DEBUG_SELFTEST
   printf("  [DEBUG] running test_reentrancy...\n");
   fail |= test_reentrancy();

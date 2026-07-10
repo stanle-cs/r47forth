@@ -222,7 +222,7 @@ bool startDefinition(const char *name)
 {
   size_t nameLen = strlen(name);
   if (nameLen == 0 || nameLen > FORTH_NAME_MAX) {
-    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
   if (fdict.count >= 0x6F00) {
@@ -276,6 +276,17 @@ bool isDefinitionOpen(void)
   return openDef.open;
 }
 
+bool openDefinitionName(char *buf, int bufSize)
+{
+  if (!openDef.open || openDef.entryOff == FORTH_NULL || !fdict.base || bufSize <= 0) return false;
+  forthHeader_t *hdr = (forthHeader_t *)(fdict.base + openDef.entryOff);
+  uint8_t len = hdr->nameLen;
+  if (len >= (uint8_t)bufSize) len = (uint8_t)(bufSize - 1);
+  memcpy(buf, fdict.base + openDef.entryOff + 4, (size_t)len);
+  buf[len] = '\0';
+  return len > 0;
+}
+
 /* ---- Reverse lookup: §4.2 resolution order ---- */
 
 forthXEQType_t forthResolveXEQ(const char *name, uint16_t *param)
@@ -287,7 +298,19 @@ forthXEQType_t forthResolveXEQ(const char *name, uint16_t *param)
     return FORTH_XEQ_LABEL;
   }
 
-  /* Forth colon fallback */
+  /* C47 item name second (built-in functions like FORTH) */
+  {
+    uint16_t i;
+    for (i = 1; i < LAST_ITEM; i++) {
+      if ((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT &&
+          compareString(name, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) {
+        *param = i;
+        return FORTH_XEQ_ITEM;
+      }
+    }
+  }
+
+  /* Forth colon last */
   {
     uint16_t widx;
     if (forthFindColon(name, &widx)) {

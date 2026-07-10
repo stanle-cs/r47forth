@@ -85,6 +85,10 @@ void abortDefinition(void);
 /* Returns true if a definition is currently open (smudged). */
 bool isDefinitionOpen(void);
 
+/* Copy the name of the open definition into buf (up to bufSize-1 chars).
+   Returns true if a name was copied, false if no open definition. */
+bool openDefinitionName(char *buf, int bufSize);
+
 /* Lookup: §4.1 resolution order */
 /* Scan forthPrims[] for name; returns index or 0xFFFF if not found. */
 uint16_t forthFindPrim(const char *name);
@@ -93,15 +97,16 @@ uint16_t forthFindPrim(const char *name);
    Returns true on hit, sets *idx to dictionary index. */
 bool forthFindColon(const char *name, uint16_t *idx);
 
-/* Reverse lookup: §4.2 resolution order (C47 label first, Forth colon second) */
+/* Reverse lookup: §4.2 resolution order (label > item > colon) */
 typedef enum {
   FORTH_XEQ_NONE = 0,
   FORTH_XEQ_LABEL = 1,
-  FORTH_XEQ_COLON = 2
+  FORTH_XEQ_COLON = 2,
+  FORTH_XEQ_ITEM  = 3
 } forthXEQType_t;
 
-/* Resolve name for XEQ: C47 label first, Forth colon fallback (§4.2).
-   Sets *param to label ID (LABEL) or dictionary index (COLON). */
+/* Resolve name for XEQ: C47 label first, C47 item second, Forth colon last (§4.2).
+   Sets *param to label ID (LABEL), item ID (ITEM), or dictionary index (COLON). */
 forthXEQType_t forthResolveXEQ(const char *name, uint16_t *param);
 
 /* Inner interpreter entry (§3.2) */

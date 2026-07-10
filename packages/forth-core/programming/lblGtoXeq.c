@@ -375,6 +375,9 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
             reallyRunFunction(ITM_FCALL, resolvedParam);
           }
         }
+        else if (res == FORTH_XEQ_ITEM) {
+          reallyRunFunction(resolvedParam, NOPARAM);
+        }
         else {
           displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
           #if (EXTRA_INFO_ON_CALC_ERROR == 1)

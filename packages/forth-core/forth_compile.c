@@ -48,7 +48,7 @@ static bool nextToken(char buf[FORTH_TOKEN_MAX + 1]) {
     tokenizerPos = stringNextGlyph(tokenizerSource, tokenizerPos);
   int16_t len = tokenizerPos - start;
   if (len > FORTH_TOKEN_MAX) {
-    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    displayCalcErrorMessage(ERROR_INPUT_TOO_LONG, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
   xcopy(buf, tokenizerSource + start, len);
@@ -211,14 +211,14 @@ void forthOuterInterpret(const char *source) {
     /* ---- C-4: ':' colon matches the ':' character (B2) ---- */
     if (compareString(buf, ":", CMP_BINARY) == 0) {
       if (state == STATE_COMPILE) {
-        abortDefinition();
-        displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-        lineOK = false;
-      } else {
-        char name[FORTH_TOKEN_MAX + 1];
-        if (!nextToken(name)) {
-          displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-          lineOK = false;
+         abortDefinition();
+         displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+         lineOK = false;
+       } else {
+         char name[FORTH_TOKEN_MAX + 1];
+         if (!nextToken(name)) {
+           displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+           lineOK = false;
         } else if (!startDefinition(name)) {
           lineOK = false;
         } else {
@@ -231,8 +231,8 @@ void forthOuterInterpret(const char *source) {
     /* ---- C-4: ';' ---- */
     if (strcmp(buf, ";") == 0) {
       if (state == STATE_INTERPRET) {
-        displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-        lineOK = false;
+         displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+         lineOK = false;
       } else {
         if (!finishDefinition()) {
           lineOK = false;
@@ -297,14 +297,14 @@ void forthOuterInterpret(const char *source) {
     {
       calcRegister_t label = findNamedLabel(buf);
       if (label != INVALID_VARIABLE) {
-        if (state == STATE_COMPILE) {
-          displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-          abortDefinition();
-          lineOK = false;
-        } else {
-          uint8_t saved = programRunStop;
-          programRunStop = PGM_RUNNING;
-          reallyRunFunction(ITM_XEQ, (uint16_t)label);
+         if (state == STATE_COMPILE) {
+           displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+           abortDefinition();
+           lineOK = false;
+         } else {
+           uint8_t saved = programRunStop;
+           programRunStop = PGM_RUNNING;
+           reallyRunFunction(ITM_XEQ, (uint16_t)label);
           if (programRunStop == PGM_RUNNING) programRunStop = saved;
           if (lastErrorCode != ERROR_NONE) {
             if (isDefinitionOpen()) abortDefinition();
@@ -316,7 +316,15 @@ void forthOuterInterpret(const char *source) {
     }
 
     /* ---- §4.1 last resort: undefined word ---- */
-    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    {
+      char defName[FORTH_TOKEN_MAX + 1];
+      if (isDefinitionOpen() && openDefinitionName(defName, sizeof(defName))) {
+        snprintf(errorMessage, ERROR_MESSAGE_LENGTH, "%s (in %s)", buf, defName);
+      } else {
+        snprintf(errorMessage, ERROR_MESSAGE_LENGTH, "%s", buf);
+      }
+    }
+    displayCalcErrorMessage(ERROR_FUNCTION_NOT_FOUND, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     if (isDefinitionOpen()) abortDefinition();
     lineOK = false;
   }
@@ -325,7 +333,7 @@ void forthOuterInterpret(const char *source) {
   if (state == STATE_COMPILE) {
     /* C-4: unterminated definition — abort first, then error */
     abortDefinition();
-    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
   } else if (lastErrorCode == ERROR_NONE) {
     /* C-7: ASLIFT-set gate checks lastErrorCode == ERROR_NONE */
     setSystemFlag(FLAG_ASLIFT);

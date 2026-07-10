@@ -146,6 +146,7 @@ def do_shadow(meson_build, project_root, shadow_dir, specs, gen_lists=False):
 
     # Symlink-or-copy helper (mutable state for fallback)
     copy_state = [os.environ.get('CUSTOM_PKG_SHADOW_COPY') == '1']
+    copy_warned = [False]
 
     def link_or_copy(src_path, dst_path):
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)
@@ -155,6 +156,9 @@ def do_shadow(meson_build, project_root, shadow_dir, specs, gen_lists=False):
             else:
                 os.symlink(os.path.abspath(src_path), dst_path)
         except OSError:
+            if not copy_state[0]:
+                print('WARNING: symlink not available, using file copies — bare ninja will NOT see', file=sys.stderr)
+                print('         source edits; reconfigure required after each change', file=sys.stderr)
             copy_state[0] = True
             shutil.copy2(src_path, dst_path)
 
