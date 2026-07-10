@@ -45,7 +45,9 @@ void covSolveRoot(uint16_t unusedButMandatoryParameter);
 void covTvm(uint16_t which);
 void covTvmPmt(uint16_t which);
 void covEff(uint16_t unusedButMandatoryParameter);
+void covEffToI(uint16_t unusedButMandatoryParameter);
 void covAmort(uint16_t which);
+void covAmortNext(uint16_t which);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
@@ -171,7 +173,9 @@ const funcTest_t funcTestNoParam[] = {
   {"fnTvmCov",               covTvm                },
   {"fnTvmPmtCov",            covTvmPmt             },
   {"fnEffCov",               covEff                },
+  {"fnEffToICov",            covEffToI             },
   {"fnAmortCov",             covAmort              },
+  {"fnAmortNextCov",         covAmortNext          },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
@@ -821,33 +825,33 @@ void covEff(uint16_t unusedButMandatoryParameter) {
   fnEff(NOPARAM);
 }
 
-void covAmort(uint16_t which) {
-  // Amortisation schedule for a loan: PV=1000, I%/yr=100 (periodic rate 100%),
-  // PMT=-1200, END mode, one payment and compounding period per year. For the
-  // first period the interest is 1000*1.00=1000, the principal is 1200-1000=200
-  // and the balance falls to 800. covAmort sets the TVM state, points the
-  // amortisation range at period 1 (amortP1=amortP2=1), and calls the requested
-  // amortisation function (0=BAL, 1=PRN, 2=INT); the result is left in X. With
-  // FARG >= 10 the driver sets FLAG_AMORT_HP12C, exercising the HP12C period-by-
-  // period balance path (amortBalAt_HP12C); the periodic rate 1.00 is exact so
-  // the rounded schedule matches the analytical one.
-  const bool_t hp12c = which >= 10;
-  const uint16_t sel = hp12c ? (uint16_t)(which - 10) : which;
+void covEffToI(uint16_t unusedButMandatoryParameter) {
+  // Inverse of fnEff: the nominal annual rate from the effective rate (read from
+  // X) and the compounding frequency (CPER/a). fnEffToI computes
+  // iA = 100*cperA*((EFF/100+1)^(1/cperA)-1); EFF=125% compounded 2/yr gives
+  // ((1.25+1)^(1/2)-1)*100*2 = (1.5-1)*200 = 100% nominal - the exact inverse of
+  // the covEff case (100% nominal, 2/yr -> 125% effective).
+  covStoTvm(2, RESERVED_VARIABLE_CPERONA);
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(125, REGISTER_REAL34_DATA(REGISTER_X));
+  fnEffToI(NOPARAM);
+}
+
+// Common loan state for the amortisation drivers: PV=1000, I%/yr=100 (periodic
+// rate 100%), PMT=-1200, END mode, one payment and compounding period per year.
+// Period 1: interest 1000, principal 200, balance 800; period 2 (start 800):
+// interest 800, principal 400, balance 400.
+static void covSeedAmortLoan(void) {
   setSystemFlag(FLAG_ENDPMT);
-  if(hp12c) {
-    setSystemFlag(FLAG_AMORT_HP12C);
-  }
-  else {
-    clearSystemFlag(FLAG_AMORT_HP12C);
-  }
   covStoTvm(3,     RESERVED_VARIABLE_NPPER);
   covStoTvm(100,   RESERVED_VARIABLE_IPONA);
   covStoTvm(1000,  RESERVED_VARIABLE_PV);
   covStoTvm(-1200, RESERVED_VARIABLE_PMT);
   covStoTvm(1,     RESERVED_VARIABLE_PPERONA);
   covStoTvm(1,     RESERVED_VARIABLE_CPERONA);
-  amortP1 = 1;
-  amortP2 = 1;
+}
+
+static void covRunAmort(uint16_t sel) {
   if(sel == 1) {
     fnAmortPrn(NOPARAM);
   }
@@ -857,7 +861,48 @@ void covAmort(uint16_t which) {
   else {
     fnAmortBal(NOPARAM);
   }
+}
+
+void covAmort(uint16_t which) {
+  // Amortisation schedule for the shared loan. FARG encodes two axes: band =
+  // FARG/10 selects the mode (0 = single-period analytical, 1 = HP12C period-by-
+  // period balance path amortBalAt_HP12C, 2 = multi-period analytical range
+  // [1,2]); sel = FARG%10 selects the figure (0 = BAL, 1 = PRN, 2 = INT). The
+  // result is left in X. The periodic rate 1.00 is exact, so the HP12C rounded
+  // schedule matches the analytical one. For the range [1,2] the interest and
+  // principal accumulate over both periods (INT=1000+800=1800, PRN=200+400=600)
+  // and BAL is the balance after period 2 (=400), driving the multi-period
+  // accumulation loop the single-period cases skip.
+  const uint16_t band = which / 10;
+  const uint16_t sel  = which % 10;
+  covSeedAmortLoan();
+  if(band == 1) {
+    setSystemFlag(FLAG_AMORT_HP12C);
+  }
+  else {
+    clearSystemFlag(FLAG_AMORT_HP12C);
+  }
+  amortP1 = 1;
+  amortP2 = (band == 2) ? 2 : 1;
+  covRunAmort(sel);
   clearSystemFlag(FLAG_AMORT_HP12C);  // restore the default amortisation mode (test isolation)
+  amortP1 = 1;
+  amortP2 = 1;                        // restore the default amortisation range (test isolation)
+}
+
+void covAmortNext(uint16_t which) {
+  // Advance the amortisation range with fnAmortNext, then read period 2. From the
+  // [1,1] range fnAmortNext moves it to [2,2] (amortP1=amortP2=2); period 2 has
+  // interest 800, principal 400 and balance 400. FARG selects the figure (0=BAL,
+  // 1=PRN, 2=INT).
+  covSeedAmortLoan();
+  clearSystemFlag(FLAG_AMORT_HP12C);
+  amortP1 = 1;
+  amortP2 = 1;
+  fnAmortNext(NOPARAM);
+  covRunAmort(which);
+  amortP1 = 1;
+  amortP2 = 1;                        // restore the default amortisation range (test isolation)
 }
 
 
@@ -3512,7 +3557,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff || funcToTest == covAmort) {
+    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff || funcToTest == covAmort || funcToTest == covEffToI || funcToTest == covAmortNext) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {

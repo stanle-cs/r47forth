@@ -68,3 +68,32 @@ Out: EC=0 RX=Real:"-200"
 Func: fnAmortCov
 In:  FARG=12 RX=Real:"0"
 Out: EC=0 RX=Real:"-1000"
+
+; effective -> nominal (inverse of fnEff): 125% effective compounded 2/yr -> 100%
+Func: fnEffToICov
+In:  FARG=0 RX=Real:"0"
+Out: EC=0 RX=Real:"100"
+
+; multi-period amortisation range [1,2]: interest and principal accumulate over
+; both periods (INT=1000+800, PRN=200+400) and BAL is the balance after period 2
+Func: fnAmortCov
+In:  FARG=20 RX=Real:"0"
+Out: EC=0 RX=Real:"400"
+Func: fnAmortCov
+In:  FARG=21 RX=Real:"0"
+Out: EC=0 RX=Real:"-600"
+Func: fnAmortCov
+In:  FARG=22 RX=Real:"0"
+Out: EC=0 RX=Real:"-1800"
+
+; fnAmortNext advances the range [1,1] -> [2,2]; period 2: interest 800,
+; principal 400, balance 400
+Func: fnAmortNextCov
+In:  FARG=0 RX=Real:"0"
+Out: EC=0 RX=Real:"400"
+Func: fnAmortNextCov
+In:  FARG=1 RX=Real:"0"
+Out: EC=0 RX=Real:"-400"
+Func: fnAmortNextCov
+In:  FARG=2 RX=Real:"0"
+Out: EC=0 RX=Real:"-800"
