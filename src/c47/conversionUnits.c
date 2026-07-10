@@ -337,17 +337,15 @@ TO_QSPI const fInMim_t MimFunctionsType3Conv[NUM_CONVERT_PAIRS] =
 
 
 //==============================================================================
-// ADD A NEW CONVERSION PAIR TO THE PAIR-LIST
-//==============================================================================
-// 1. Add the pair to the matching menu_Conv* array in items.h. Two adjacent ITM_ entries in a row form one pair (positions 0/1, 2/3, 4/5, ...).
-//
-// 2. Add TWO rows below, bidirectional
-//      { ITM_AtoB , ITM_BtoA },   // NNN <-> MMM
-//      { ITM_BtoA , ITM_AtoB },   // MMM <-> NNN
-//
-// 3. KEEP THE ARRAY SORTED ASCENDING by the FIRST item code. The binary search in isOneOfAConvertPair() silently fails on unsorted entries.
-//
-// 4. Update NUM_CONVERT_PAIRS by 2.
+         // CONV step 3/6 of ADDING to CONV    [grep for "add conversion items to CONV menu"]
+         // =================================================================================
+         // Three tables to extend in this file:
+         //   1. conversionFactors[]      one designated entry: [constFactor<Xxx>] = const_<Name>
+         //   2. convertPairs[]           two rows, one per direction, five fields each (field semantics in the convPair_t comment below; unity/exponent conventions per type in the unitType_t comments). 
+         //                               KEEP THE ARRAY SORTED ASCENDING by the first item code: the binary search in findPair() silently fails on unsorted entries.
+         //   3. MimFunctionsType3Conv[]  two entries (catalog lookup)
+         // The testSuite build aborts with a per-problem fix message on any table inconsistency (src/generateTests/generateTests.py).
+         // Next Step: CONV step 4/6 in src/c47/items.h.
 //==============================================================================
 
 typedef enum {
@@ -776,7 +774,10 @@ void runConversionFromSI(int16_t itemNr) {
     fnMultiplySI(100 - entry->exponent);                                         // undo the exponent
   }
   if(entry->unity != ITM_NULL) {
-    runFunction(findPair(entry->unity)->partner);                                // execute the inverse of the unity step
+    const convPair_t *unityEntry = findPair(entry->unity);                       // a unity outside convertPairs[] must not crash
+    if(unityEntry != NULL) {
+      runFunction(unityEntry->partner);                                          // execute the inverse of the unity step
+    }
   }
   runFunction(entry->partner);                                                   // execute the inverse of the user's choice
 }
@@ -967,7 +968,7 @@ TO_QSPI static const real_t * const conversionFactors[constFactorEND] = {
     [constFactorFpftokph]     = const_fpfToKph,
     [constFactorBrdstoin]     = const_brdsToIn,
     [constFactorFirtolb]      = const_firToLb,
-    [constFactorFpftomph]     = const_fpfToMph,
+    [constFactorFpftomph]     = const39_fpfToMph,
     [constFactorFpstokph]     = const_fpsToKph,
     [constFactorFpstomps]     = const_fpsToMps,
     [constFactorL100Tokml]    = const_100,          /*  80 */
@@ -1070,7 +1071,7 @@ void fnUnitConvert(uint16_t arg) {
 
 
 //  {[(x - B) / C] * D} + E
-TO_QSPI static const real_t * const cvtTempConsts[13][4] = {
+TO_QSPI static const real_t * const cvtTempConsts[12][4] = {
   //   B              C             D             E
   {const_0,       const_1,       const_9on5,    const_32     }, // ITM_CtoF     ix =  0
   {const_32,      const_9on5,    const_1,       const_0      }, // ITM_FtoC     ix =  1
