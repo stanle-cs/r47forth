@@ -623,6 +623,15 @@ void covBackupRoundtrip(uint16_t unusedButMandatoryParameter) {
   restoreCalc();
 }
 
+static void covStoTvm(int32_t value, uint16_t reg) {
+  // Store an integer into a register through the calculator's own STO, which
+  // types the destination correctly. Seeds the reserved TVM registers and
+  // clobbers global registers with a sentinel.
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(value, REGISTER_REAL34_DATA(REGISTER_X));
+  reallyRunFunction(ITM_STO, reg);
+}
+
 static void covClobberRegs(void) {
   // Overwrite the seeded global registers R00..R05 with a sentinel so a following
   // load must restore them from file for the round-trip assertion to mean
@@ -631,9 +640,7 @@ static void covClobberRegs(void) {
   // registers (R03 complex, R04 string, R05 short integer) - the load must
   // restore both the value and the type.
   for(uint16_t r = 0; r < 6; ++r) {
-    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-    int32ToReal34(-99999, REGISTER_REAL34_DATA(REGISTER_X));
-    reallyRunFunction(ITM_STO, r);
+    covStoTvm(-99999, r);
   }
 }
 
@@ -969,12 +976,14 @@ void covISumProd(uint16_t which) {
 }
 
 
-static void covStoTvm(int32_t value, uint16_t reg) {
-  // Store an integer into a reserved TVM register through the calculator's own
-  // STO, which types the destination correctly.
+static void covSolveTvmTarget(uint16_t target) {
+  // Clobber the target with a deliberately-wrong value (50) so a no-op fnTvmVar
+  // would leave 50 and fail rather than pass on the pre-seeded answer, solve for
+  // it, and copy the result into X for the corpus to assert.
+  covStoTvm(50, target);
+  fnTvmVar(target);
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-  int32ToReal34(value, REGISTER_REAL34_DATA(REGISTER_X));
-  reallyRunFunction(ITM_STO, reg);
+  real34Copy(REGISTER_REAL34_DATA(target), REGISTER_REAL34_DATA(REGISTER_X));
 }
 
 void covTvm(uint16_t which) {
@@ -1003,19 +1012,11 @@ void covTvm(uint16_t which) {
     case 4:  target = RESERVED_VARIABLE_IPONA; break;
     default: target = RESERVED_VARIABLE_FV;    break;
   }
-  // Clobber the target with a deliberately-wrong value (50) before solving, so
-  // fnTvmVar must recompute it: a no-op solve would leave 50 and fail the corpus
-  // assertion instead of passing on the value the target was pre-seeded with.
-  // 50 differs from every expected answer (8000,
-  // -1000, 3, 100, 0). For the closed-form variables (FV/PV/PMT/N) the seed is
-  // irrelevant and simply overwritten; for the iterative I% solve the rate solver
-  // takes the seeded register as its starting guess, so 50 is a wrong guess that
-  // still lies in the convergence basin - the I% case therefore proves the solver
-  // moves from a wrong start to 100, not that it confirms a pre-seeded answer.
-  covStoTvm(50, target);
-  fnTvmVar(target);
-  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-  real34Copy(REGISTER_REAL34_DATA(target), REGISTER_REAL34_DATA(REGISTER_X));
+  // The closed-form variables (FV/PV/PMT/N) ignore the wrong seed and simply
+  // overwrite it; the iterative I% solve takes the seeded 50 as its starting
+  // guess, a wrong start inside the convergence basin, so that case proves the
+  // solver moves from a wrong start to 100.
+  covSolveTvmTarget(target);
 }
 
 void covTvmPmt(uint16_t which) {
@@ -1049,14 +1050,8 @@ void covTvmPmt(uint16_t which) {
     case 2:  target = RESERVED_VARIABLE_PMT; break;
     default: target = RESERVED_VARIABLE_FV;  break;
   }
-  // Clobber the target with a deliberately-wrong value (50) before solving, so a
-  // no-op fnTvmVar would leave 50 and fail rather than pass on the pre-seeded
-  // value. 50 differs from every expected answer (700/1400 FV, 0 PV, -100
-  // PMT); all three targets here are closed-form, so the seed is just overwritten.
-  covStoTvm(50, target);
-  fnTvmVar(target);
-  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-  real34Copy(REGISTER_REAL34_DATA(target), REGISTER_REAL34_DATA(REGISTER_X));
+  // All three targets here are closed-form, so the wrong seed is overwritten.
+  covSolveTvmTarget(target);
   setSystemFlag(FLAG_ENDPMT);  // restore the default payment-timing mode (test isolation)
 }
 
