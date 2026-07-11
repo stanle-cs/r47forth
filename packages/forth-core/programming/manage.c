@@ -1431,7 +1431,7 @@ void insertStepInProgram(const int16_t func) {
       pemCloseNumberInput(); aimBuffer[0] = 0;
     }
     if(catalog) { leaveAsmMode(); popSoftmenu(); }
-    bool_t wasOn = forthEntryStateAtCursor();
+    bool_t wasOn = forthEntryStateAtInsertion();
     tmpString[0] = (ITM_FORTH >> 8) | 0x80;
     tmpString[1] =  ITM_FORTH       & 0xff;
     tmpString[2] = (char)STRING_LABEL_VARIABLE;
@@ -1440,6 +1440,8 @@ void insertStepInProgram(const int16_t func) {
     if(!wasOn) {
       tam.function = ITM_FORTH;
       pemAlpha(ITM_FORTH);
+    } else {
+      clearSystemFlag(FLAG_ALPHA);
     }
     pemCursorIsZerothStep = false;
     return;
@@ -1456,8 +1458,8 @@ void insertStepInProgram(const int16_t func) {
   }
 
   if(!tam.mode && !getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0
-     && indexOfItems[func].func == addItemToBuffer
-     && forthEntryStateAtCursor()) {
+      && indexOfItems[func].func == addItemToBuffer
+      && forthEntryStateAtInsertion()) {
     tam.function = ITM_FORTH;
     pemAlpha(func);
     pemCursorIsZerothStep = false;
@@ -1858,7 +1860,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
   }
   else {
     tmpString[opBytes++] = (func >> 8) | 0x80;
-    tmpString[opBytes++] =  func       & 0x7f;
+    tmpString[opBytes++] =  func       & 0xff;  // audit F4: 0x7f masked low bytes >= 0x80 (e.g. ITM_XEQP1=0x08AF) — §9.10 item 4 resolved
   }
 
   tmpString[opBytes    ] = (char)STRING_LABEL_VARIABLE;

@@ -79,3 +79,35 @@ bool forthEntryStateAtCursor(void)
 
     return forthMarkerTurnsOn(currentStep);
 }
+
+/* §9.4 (audit fix F1): entry state governing an INSERTION at currentStep.
+ * The new step will follow the step immediately BEFORE currentStep, so derive
+ * from that predecessor. currentStep may sit past the pre-move of
+ * addStepInProgram (manage.c) or past the committed line after ENTER
+ * (pemCloseAlphaInput) — in both cases the predecessor is the step the spec's
+ * "cursor lands on" language means. */
+bool forthEntryStateAtInsertion(void)
+{
+  if (pemCursorIsZerothStep) return false;
+
+  uint8_t *progStart = NULL;
+  for (uint16_t i = 0; i < numberOfPrograms; i++) {
+    if (programList[i].instructionPointer <= (uint8_t *)currentStep) {
+      progStart = programList[i].instructionPointer;
+    }
+  }
+  if (!progStart || progStart >= currentStep) return false;  /* top of program */
+
+  uint8_t *prev = progStart;                 /* find predecessor of currentStep */
+  for (;;) {
+    uint8_t *next = findNextStep(prev);
+    if (!next || next <= prev) return false; /* defensive: malformed walk */
+    if (next >= currentStep) break;          /* prev is the predecessor */
+    prev = next;
+  }
+
+  uint8_t len;
+  if (!forthStepPayload(prev, &len)) return false;  /* RPN step: RPN */
+  if (len > 0) return true;                          /* source step: Forth */
+  return forthMarkerTurnsOn(prev);                   /* marker: its direction */
+}

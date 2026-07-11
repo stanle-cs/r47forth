@@ -1221,7 +1221,8 @@ resolver:
   `findNamedLabel` returns `INVALID_VARIABLE`, call `forthFindColon`; on hit,
   `reallyRunFunction(ITM_FCALL, widx)` instead of erroring.
 - `_executeOp`, `PARAM_LABEL`/`STRING_LABEL_VARIABLE` arm (lblGtoXeq.c:345-357):
-  same fallback before `ERROR_LABEL_NOT_FOUND`.
+   same fallback before `ERROR_LABEL_NOT_FOUND`, for `op == ITM_XEQ || ITM_XEQP1` only;
+   all other PARAM_LABEL ops keep the upstream ERROR_LABEL_NOT_FOUND halt (audit fix F3).
 
 **Complete `findNamedLabel` call-site map** (20 sites, 6 hooked, 14 excluded):
 
@@ -2072,12 +2073,10 @@ dictionary high-water mark; budget unchanged (≤ 2 KB on the 64 KB part).
    `FORTH '…'` per §9.5; whether the import parser round-trips these is
    unverified. Binary state save is unaffected. Verify before advertising
    program text export of Forth programs.
-4. **[GAP — upstream oddity, monitor only]** `insertUserItemInProgram`
-   writes the opcode low byte as `func & 0x7f` (src/c47/programming/
-   manage.c:1788) — wrong for any func whose low byte ≥ 0x80. Harmless for
-   the P-3 path (`ITM_XEQ` = 3), but do not reuse that helper for
-   `ITM_FORTH` (2842 low byte 0x1A would be safe, yet the latent bug argues
-   for the explicit byte writes specced in E1).
+ 4. **[RESOLVED — FIX-4]** `insertUserItemInProgram` low-byte mask fixed:
+    `func & 0x7f` → `func & 0xff` in
+    packages/forth-core/programming/manage.c:1863. Verified by
+    test_useritem_xeqp1_opcode (ITM_XEQP1=0x08AF → 0x88 0xAF, not 0x88 0x2F).
 5. **[Documented boundary]** R/S-after-`GTO` cold starts inherit the
    previous run's dictionary generation (§9.3). Revisit only if user
    reports demand it; Architecture 2 subsumes it.

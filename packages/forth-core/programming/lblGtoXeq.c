@@ -366,21 +366,21 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
         getStringLabelOrVariableName(paramAddress);
         uint16_t resolvedParam = (uint16_t)INVALID_VARIABLE;
         forthXEQType_t res = forthResolveXEQ(tmpStringLabelOrVariableName, &resolvedParam);
+        bool_t forthFallbackOp = (op == ITM_XEQ || op == ITM_XEQP1);
         if (res == FORTH_XEQ_LABEL) {
           reallyRunFunction(op, resolvedParam);
         }
-        else if (res == FORTH_XEQ_COLON) {
-          if (op == ITM_LBLQ) {
-            reallyRunFunction(op, (uint16_t)INVALID_VARIABLE);
-          } else {
-            reallyRunFunction(ITM_FCALL, resolvedParam);
-            if(op == ITM_XEQP1 && programRunStop == PGM_RUNNING && lastErrorCode == ERROR_NONE) {
-              currentReturnLocalStep++;
-            }
+        else if (res == FORTH_XEQ_COLON && forthFallbackOp) {
+          reallyRunFunction(ITM_FCALL, resolvedParam);
+          if(op == ITM_XEQP1 && programRunStop == PGM_RUNNING && lastErrorCode == ERROR_NONE) {
+            currentReturnLocalStep++;
           }
         }
-        else if (res == FORTH_XEQ_ITEM) {
+        else if (res == FORTH_XEQ_ITEM && forthFallbackOp) {
           reallyRunFunction(resolvedParam, NOPARAM);
+        }
+        else if (op == ITM_LBLQ) {
+          reallyRunFunction(op, (uint16_t)INVALID_VARIABLE);
         }
         else {
           displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);

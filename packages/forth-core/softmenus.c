@@ -995,8 +995,9 @@ TO_QSPI const int16_t menu_PLOT_STAT[]    = {
 
 
 TO_QSPI const int16_t menu_ALPHA[]       = { -MNU_ALPHA_OMEGA,             -MNU_ALPHAMATH,             -MNU_ALPHAMISC,           -MNU_ALPHAINTL,         ITM_T_LEFT_ARROW,            ITM_T_RIGHT_ARROW,
-                                             -MNU_MyAlpha,                  ITM_XEDIT,                  ITM_XSWAP,                ITM_ASSIGN,            ITM_T_LLEFT_ARROW,           ITM_T_RRIGHT_ARROW,
-                                             CHR_case,                      CHR_num,                    ITM_SCR,                  ITM_USERMODE,          ITM_T_UP_ARROW,              ITM_T_DOWN_ARROW                 };   //DL
+                                              -MNU_MyAlpha,                  ITM_XEDIT,                  ITM_XSWAP,                ITM_ASSIGN,            ITM_T_LLEFT_ARROW,           ITM_T_RRIGHT_ARROW,
+                                              CHR_case,                      CHR_num,                    ITM_SCR,                  ITM_USERMODE,          ITM_T_UP_ARROW,              ITM_T_DOWN_ARROW,
+                                              -MNU_FORTH,                    ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL                 };   //DL
 
 
 TO_QSPI const int16_t menu_GAP_L[]       = { ITM_GAPPER_L,                  ITM_GAPCOM_L,               ITM_GAPDOT_L,             ITM_GAPNARAPO_L,       ITM_GAPSPC_L,                ITM_GAPNIL_L,
@@ -1854,36 +1855,43 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
           int16_t stepCount = 0;
           while (step && step <= currentStep) {
             stepCount++;
-            if (stepCount > 1000) break;
+            if (stepCount > 1000) break; /* behavioral limit: programs with >1000 steps are not fully scanned (§9.6 documented deviation) */
             uint8_t *next = findNextStep(step);
             if (checkOpCodeOfStep(step, ITM_FORTH) && step[2] == STRING_LABEL_VARIABLE) {
               uint8_t len = step[3];
               if (len > 0) {
-                const char *src = (const char *)(step + 4);
+                char line[256];
+                xcopy(line, (const char *)(step + 4), len);
+                line[len] = 0;
                 int16_t pos = 0;
                 char tok[FORTH_TOKEN_MAX + 1];
 
-                while (pos < len && src[pos] == ' ')
-                  pos++;
+                while (pos < len && line[pos] == ' ')
+                  pos = stringNextGlyph(line, pos);
                 while (pos < len) {
-                  int16_t tokStart = pos;
-                  while (pos < len && src[pos] != ' ')
-                    pos++;
-                  int16_t tokLen = pos - tokStart;
-                  xcopy(tok, src + tokStart, tokLen);
+                  int16_t start = pos;
+                  while (pos < len && line[pos] != ' ')
+                    pos = stringNextGlyph(line, pos);
+                  int16_t tokLen = pos - start;
+                  if (tokLen > FORTH_TOKEN_MAX) {
+                    while (pos < len && line[pos] == ' ')
+                      pos = stringNextGlyph(line, pos);
+                    continue;
+                  }
+                  xcopy(tok, line + start, tokLen);
                   tok[tokLen] = 0;
 
                   if (compareString(tok, ":", CMP_BINARY) == 0) {
-                    while (pos < len && src[pos] == ' ')
-                      pos++;
+                    while (pos < len && line[pos] == ' ')
+                      pos = stringNextGlyph(line, pos);
                     if (pos < len) {
                       int16_t nameStart = pos;
-                      while (pos < len && src[pos] != ' ')
-                        pos++;
+                      while (pos < len && line[pos] != ' ')
+                        pos = stringNextGlyph(line, pos);
                       int16_t nameLen = pos - nameStart;
                       if (nameLen > 0 && nameLen <= 14) {
                         char nameBuf[15];
-                        xcopy(nameBuf, src + nameStart, nameLen);
+                        xcopy(nameBuf, line + nameStart, nameLen);
                         nameBuf[nameLen] = 0;
                         int16_t dup = 0;
                         for (int16_t d = 0; d < nNames; d++) {
@@ -1899,8 +1907,8 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
                       }
                     }
                   }
-                  while (pos < len && src[pos] == ' ')
-                    pos++;
+                  while (pos < len && line[pos] == ' ')
+                    pos = stringNextGlyph(line, pos);
                 }
               }
             }

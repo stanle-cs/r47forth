@@ -136,6 +136,7 @@ void forthOuterInterpret(const char *source);
 bool forthStepPayload(const uint8_t *step, uint8_t *lenOut);
 bool forthMarkerTurnsOn(const uint8_t *markerStep);
 bool forthEntryStateAtCursor(void);
+bool forthEntryStateAtInsertion(void);
 
 /* Self-test harness (DESIGN.md §7) */
 int forthDictSelfTest(void);
