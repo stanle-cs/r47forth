@@ -287,11 +287,6 @@ curvefit_cov
 error_cov
 saverestore_cov
 numeric_diff_cov
-eq_cov
-deriv_cov
-solve_cov
-integrate_cov
-tvm_cov
 percentPlusMG
 deltaPercent
 
@@ -437,6 +432,18 @@ constants
 elec
 
 programs
+
+; eq_cov/deriv_cov/solve_cov/integrate_cov/tvm_cov mutate shared state the
+; per-test In: reset does not clear - a formula in the pool, the named variables
+; A and X, and the reserved TVM registers - so they run after programs.txt, not
+; before it. They also run before pgm_solve_cov: their error cases assert that
+; the letter 'T' names no program label, which pgm_solve_cov's loaded program T
+; would otherwise satisfy.
+eq_cov
+deriv_cov
+solve_cov
+integrate_cov
+tvm_cov
 
 ; These coverage files mutate shared state that the per-test In: reset does not
 ; clear - clcvar_cov clears the loaded sample programs' local variables,
