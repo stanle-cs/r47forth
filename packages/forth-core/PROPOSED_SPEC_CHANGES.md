@@ -122,3 +122,65 @@ pointer/count — see `test_dict_reloc.c:1319-1333` (failure branch) and
 `:1339-1353` (success path). This does
 **not** implicate upstream: the bug was entirely in a forth-core test
 helper's own restore logic, not in any upstream code path.
+
+---
+
+## [PROPOSED] Corrected file:line citations invalidated by Prompts 1-4
+
+DESIGN.md is read-only for this agent, so these corrections are staged here
+for a human/design-side edit rather than applied directly. All four sites
+below cite `packages/forth-core/` files; every citation to an upstream
+`src/c47/` file was checked and is unaffected (Prompts 1-4 never touch
+upstream, so no upstream line number can have drifted).
+
+Method: grepped DESIGN.md for every `packages/forth-core/*.c:NNNN` /
+`test_dict_reloc.c:NNNN` citation, then diffed the cited range's expected
+content (from the citing prose) against the file's current content at that
+line range. Four citations, spread across three DESIGN.md locations, no
+longer match; all four independently point at the same two tests, both in
+`test_dict_reloc.c`, which have moved because of the many tests Prompts 1-4
+added earlier in that file. No other `packages/forth-core/` citation in
+DESIGN.md was found to be stale — in particular, none of Prompts 1-4's edits
+to `programming/manage.c`, `core/freeList.c`, `keyboard.c`, or `softmenus.c`
+invalidate anything, because DESIGN.md never cites those override files by
+line number (it cites their `src/c47/` upstream counterparts instead, or the
+override at all — see item 4 below, which cites no line number today).
+
+1. **DESIGN.md:620** (§3.2 ASLIFT-on-exit discussion): currently reads
+   `` `test_dict_reloc.c` (~310-325) currently asserts clear-on-exit ``.
+   Lines 310-325 are now mid-way through an unrelated 0BR test. The ASLIFT
+   stack test (`test_stack_aslift`) is now at
+   **[VERIFIED: test_dict_reloc.c:124-148]**. Correction: replace
+   `(~310-325)` with `(~124-148)`.
+
+2. **DESIGN.md:1563** (§3.3-C amendment table, row C2): currently cites
+   `test_dict_reloc.c:958-980` for "hand-assembled self-test body updated in
+   the same commit" (the `FTOK_C47`/`PTP_NUMBER_8` padded-dispatch test).
+   Lines 958-980 are now inside `test_ilit_compile_interpret_parity`, an
+   unrelated test. The actual test (`test_c47_ptp_number8_padded`) is now at
+   **[VERIFIED: test_dict_reloc.c:460-489]**. Correction: replace
+   `test_dict_reloc.c:958-980` with `test_dict_reloc.c:460-489`.
+   (`forth_inner.c:162-163` in the same row is untouched by Prompts 1-4 and
+   remains accurate.)
+
+3. **DESIGN.md:1565** (§3.3-C amendment table, row C4): currently cites
+   `test_dict_reloc.c:310-325` for "flip the clear-on-exit assertion in stack
+   test c" — the same stale range as item 1, same corrected range
+   **[VERIFIED: test_dict_reloc.c:124-148]**. Correction: replace
+   `test_dict_reloc.c:310-325` with `test_dict_reloc.c:124-148`.
+   (`forth_inner.c:78-82` in the same row is untouched and remains accurate.)
+
+4. **DESIGN.md:2086-2092** (§9.10 item 4, F4 resolution): the current text
+   (ratified 2026-07-11) says the fix landed "in the overridden
+   `packages/forth-core/programming/manage.c`" but cites no line number — the
+   prior wording's `:1863` citation was dropped when this item was reworded
+   and never replaced. The fix (`func & 0xff`, with the `audit F4` tag
+   comment) is at **[VERIFIED: packages/forth-core/programming/manage.c:1879]**
+   today. Correction: append `:1879` to that sentence (e.g. "...in the
+   overridden packages/forth-core/programming/manage.c:1879.").
+   Line-number citations into an actively-edited override file are inherently
+   fragile — worth flagging that this is the second time this exact citation
+   has drifted (1863 → dropped → 1879); a future edit to
+   `insertUserItemInProgram` will invalidate it again. Citing the anchor
+   comment (`audit F4`) alongside the line number, as the code itself already
+   does, would survive re-numbering better than the line number alone.
