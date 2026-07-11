@@ -173,29 +173,29 @@ const funcTest_t funcTestNoParam[] = {
   // Backup serializer round-trip: save the whole calculator state to backup.cfg
   // and restore it. Exercises both directions of saveRestoreBackup.c. Resets the
   // calculator, so its corpus test must run last.
-  {"fnBackupRoundtrip",      covBackupRoundtrip    },
-  {"covConvToSI",            covConvToSI           },
-  {"covConvFromSI",          covConvFromSI         },
-  {"fnStateRoundtrip",       covStateRoundtrip     },
-  {"fnEqCalcCov",            covEqCalc             },
-  {"fnDerivEqCov",           covDerivEq            },
-  {"fnSolveRootCov",         covSolveRoot          },
-  {"fnDerivErrCov",          covDerivErr           },
-  {"fnSolveErrCov",          covSolveErr           },
-  {"fnLoadPgmCov",           covLoadPgm            },
-  {"fnDerivPgmCov",          covDerivPgm           },
-  {"fnSolvePgmCov",          covSolvePgm           },
-  {"fnIntegrateCov",         covIntegrate          },
-  {"fnIntegrateErrCov",      covIntegrateErr       },
-  {"fnIntegratePgmCov",      covIntegratePgm       },
-  {"fnSumProdCov",           covSumProd            },
-  {"fnISumProdCov",          covISumProd           },
-  {"fnTvmCov",               covTvm                },
-  {"fnTvmPmtCov",            covTvmPmt             },
-  {"fnEffCov",               covEff                },
-  {"fnEffToICov",            covEffToI             },
-  {"fnAmortCov",             covAmort              },
-  {"fnAmortNextCov",         covAmortNext          },
+  {"fnBackupRoundtrip",      covBackupRoundtrip, 1 },
+  {"covConvToSI",            covConvToSI, 1 },
+  {"covConvFromSI",          covConvFromSI, 1 },
+  {"fnStateRoundtrip",       covStateRoundtrip, 1 },
+  {"fnEqCalcCov",            covEqCalc, 1 },
+  {"fnDerivEqCov",           covDerivEq, 1 },
+  {"fnSolveRootCov",         covSolveRoot, 1 },
+  {"fnDerivErrCov",          covDerivErr, 1 },
+  {"fnSolveErrCov",          covSolveErr, 1 },
+  {"fnLoadPgmCov",           covLoadPgm, 1 },
+  {"fnDerivPgmCov",          covDerivPgm, 1 },
+  {"fnSolvePgmCov",          covSolvePgm, 1 },
+  {"fnIntegrateCov",         covIntegrate, 1 },
+  {"fnIntegrateErrCov",      covIntegrateErr, 1 },
+  {"fnIntegratePgmCov",      covIntegratePgm, 1 },
+  {"fnSumProdCov",           covSumProd, 1 },
+  {"fnISumProdCov",          covISumProd, 1 },
+  {"fnTvmCov",               covTvm, 1 },
+  {"fnTvmPmtCov",            covTvmPmt, 1 },
+  {"fnEffCov",               covEff, 1 },
+  {"fnEffToICov",            covEffToI, 1 },
+  {"fnAmortCov",             covAmort, 1 },
+  {"fnAmortNextCov",         covAmortNext, 1 },
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },
@@ -3801,7 +3801,7 @@ void functionToCall(char *functionName) {
     if(funcToTest == runPgm) {
       functionIndex = ITM_XEQ;
     }
-    else if(funcToTest == covBackupRoundtrip || funcToTest == covConvToSI || funcToTest == covConvFromSI || funcToTest == covStateRoundtrip || funcToTest == covEqCalc || funcToTest == covDerivEq || funcToTest == covSolveRoot || funcToTest == covTvm || funcToTest == covTvmPmt || funcToTest == covEff || funcToTest == covAmort || funcToTest == covEffToI || funcToTest == covAmortNext || funcToTest == covDerivErr || funcToTest == covSolveErr || funcToTest == covLoadPgm || funcToTest == covDerivPgm || funcToTest == covSolvePgm || funcToTest == covIntegrate || funcToTest == covIntegrateErr || funcToTest == covIntegratePgm || funcToTest == covSumProd || funcToTest == covISumProd) {
+    else if(funcTestNoParam[function].coverageDriver) {
       functionIndex = ITM_NOP; // testSuite-local coverage drivers, not catalog items
     }
     else {
