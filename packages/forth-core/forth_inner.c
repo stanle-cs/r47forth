@@ -10,7 +10,6 @@
 
 /* ---- §2.2 Token constants ---- */
 
-#define FTOK_EXIT         0x0000
 #define FTOK_PRIM_BASE    0x0001
 #define FTOK_CALL_BASE    0x1000
 #define FTOK_LIT          0x7F00

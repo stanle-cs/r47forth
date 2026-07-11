@@ -287,6 +287,35 @@ bool openDefinitionName(char *buf, int bufSize)
   return len > 0;
 }
 
+/* ---- Index → name reverse lookup (for FCALL redirect, C6) ---- */
+
+bool forthDictNameByIndex(uint16_t idx, char *buf, int bufSize)
+{
+  uint16_t off = fdict.latest;
+  uint16_t n = 0;
+
+  if (idx >= fdict.count || !fdict.base || !buf || bufSize <= 0) {
+    return false;
+  }
+
+  while (off != FORTH_NULL) {
+    if (fdict.count - 1 - n == idx) {
+      forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+      if (hdr->flags & FF_SMUDGE) return false;
+      uint8_t len = hdr->nameLen;
+      if (len >= (uint8_t)bufSize) len = (uint8_t)(bufSize - 1);
+      memcpy(buf, fdict.base + off + 4, (size_t)len);
+      buf[len] = '\0';
+      return true;
+    }
+    forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+    off = hdr->link;
+    n++;
+  }
+
+  return false;
+}
+
 /* ---- Reverse lookup: §4.2 resolution order ---- */
 
 forthXEQType_t forthResolveXEQ(const char *name, uint16_t *param)

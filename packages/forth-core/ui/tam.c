@@ -961,10 +961,7 @@ printf("tam.value: %d\n", tam.value);
               if (forthFindColon(buffer, &widx)) {
                 leaveTamModeIfEnabled();
                 if(calcMode == CM_PEM) {
-                  aimBuffer[0] = 0;
-                  if(!programListEnd) {
-                    scrollPemBackwards();
-                  }
+                  insertUserItemInProgram(tam.function, buffer);
                 }
                 else {
                   reallyRunFunction(ITM_FCALL, widx);

@@ -2950,6 +2950,7 @@
 #define ITM_2843                    2843 // CONV MENU Spares
 #define ITM_FORTH                   2842 // Forth outer interpreter entry
 #define ITM_FCALL                   2843 // Forth inner-call bridge (runtime param = dictionary index)
+#define MNU_FORTH                   213  // dynamic soft-menu id for in-program : NAME picker (§9.6)
 
 #define MNU_CONV_SECTION            2844
 #define MNU_CONV_MATERL             2845

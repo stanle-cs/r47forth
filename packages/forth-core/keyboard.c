@@ -10,6 +10,27 @@ TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineI
 
 static void executeFunction(const char *data, int16_t item_);
 
+/* pickerInsertName — insert dynmenuGetLabel(dynamicMenuItem) + trailing space
+ * into aimBuffer at T_cursorPos (§9.6 P-H7).
+ * Returns true on success, false if buffer would overflow.
+ * Mutation: inserting at aimBuffer end instead of T_cursorPos breaks mid-line
+ * picks; omitting trailing space glues tokens together. */
+bool_t pickerInsertName(void)
+{
+  const char *pickName = dynmenuGetLabel(dynamicMenuItem);
+  int32_t nameLen = stringByteLength(pickName);
+  int32_t bufLen = stringByteLength(aimBuffer);
+  if(bufLen + nameLen + 1 < 256 && stringGlyphLength(aimBuffer) + nameLen + 1 <= 196) {
+    xcopy(aimBuffer + T_cursorPos + nameLen + 1, aimBuffer + T_cursorPos,
+          stringByteLength(aimBuffer + T_cursorPos) + 1);
+    xcopy(aimBuffer + T_cursorPos, pickName, nameLen);
+    aimBuffer[T_cursorPos + nameLen] = ' ';
+    T_cursorPos += nameLen + 1;
+    return true;
+  }
+  return false;
+}
+
   int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
     int16_t item = ITM_NOP;
     dynamicMenuItem = -1;
@@ -73,6 +94,12 @@ static void executeFunction(const char *data, int16_t item_);
         else {
           item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : MNU_DYNAMIC);
         }
+        break;
+      }
+
+      case MNU_FORTH: {
+        dynamicMenuItem = firstItem + itemShift + fn;
+        item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : ITM_NOP);
         break;
       }
 
@@ -957,10 +984,24 @@ endReturnTrue:
 
 
 
-        lastKeyItemDetermined = item;
-      }
+          lastKeyItemDetermined = item;
 
-      // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
+          // MNU_FORTH picker: insert name at cursor during Forth capture (§9.6 P-H7)
+          // Mutation: inserting at aimBuffer end instead of T_cursorPos breaks mid-line
+          // picks; omitting trailing space glues tokens together.
+          if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
+             && tam.function == ITM_FORTH
+             && item == ITM_NOP
+             && dynamicMenuItem >= 0
+             && dynamicMenuItem < dynamicSoftmenu[softmenuStack[0].softmenuId].numItems) {
+            if(pickerInsertName()) {
+              pemAlpha(ITM_NOP);
+            }
+            return;
+          }
+        }
+
+       // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
       if(calcMode == CM_GRAPH && currentMenu() == -MNU_PLOT_FUNC && (item == VAR_LX || item == VAR_UX)) {
         calcMode = CM_NORMAL;
         screenUpdatingMode = SCRUPD_AUTO;

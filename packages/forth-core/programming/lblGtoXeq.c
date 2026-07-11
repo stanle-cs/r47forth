@@ -159,6 +159,7 @@ void fnGotoDot(uint16_t globalStepNumber) {
 
 
 void fnExecute(uint16_t label) {
+  if(programRunStop != PGM_RUNNING) { /* §9.3 bump site A: interactive XEQ */ forthRunGenBump(); }
   if(programRunStop == PGM_RUNNING) {
     subroutineLevelHeader_t *oldCurrentSubroutineLevelData = currentSubroutineLevelData;
     allSubroutineLevels.numberOfSubroutineLevels += 1;
@@ -373,6 +374,9 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
             reallyRunFunction(op, (uint16_t)INVALID_VARIABLE);
           } else {
             reallyRunFunction(ITM_FCALL, resolvedParam);
+            if(op == ITM_XEQP1 && programRunStop == PGM_RUNNING && lastErrorCode == ERROR_NONE) {
+              currentReturnLocalStep++;
+            }
           }
         }
         else if (res == FORTH_XEQ_ITEM) {
@@ -853,6 +857,14 @@ int16_t executeOneStep(uint8_t *step) {
               fn42Append(NOPARAM);
             }
           }
+          else if(op == ITM_FORTH) {
+            if(*step++ == STRING_LABEL_VARIABLE) {
+              if(*step != 0) {              // len > 0: source step
+                forthProgramStep(step);     // step -> [len][bytes...] (§9.2)
+              }                             // len == 0: marker — run-time no-op
+            }
+            return 1;
+          }
           else {  // REM
                   // just ignore it
           }
@@ -889,6 +901,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
       clearKeyBuffer();
     }
   #endif
+  if(!nestedEngine && !singleStep && menuLabel != INVALID_VARIABLE) { /* §9.3 bump site B: menu-key start */ forthRunGenBump(); }
   lastErrorCode = ERROR_NONE;
   hourGlassIconEnabled = true;
   programRunStop = PGM_RUNNING;

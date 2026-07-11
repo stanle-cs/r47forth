@@ -120,8 +120,22 @@ void forthPushInt32(int32_t val);
 void fnForthCall(uint16_t param);
 void fnForthOuter(uint16_t param);
 
+/* Program-step entry (P-2, §3.3.2) */
+void forthProgramStep(const uint8_t *payload);
+
+/* Run-generation (§9.3) */
+void forthRunGenBump(void);
+
+/* Index → name reverse lookup (for FCALL redirect, C6) */
+bool forthDictNameByIndex(uint16_t idx, char *buf, int bufSize);
+
 /* Outer interpreter (§3.3) */
 void forthOuterInterpret(const char *source);
+
+/* §9.4 derived-state helpers (read-only, no persisted flag) */
+bool forthStepPayload(const uint8_t *step, uint8_t *lenOut);
+bool forthMarkerTurnsOn(const uint8_t *markerStep);
+bool forthEntryStateAtCursor(void);
 
 /* Self-test harness (DESIGN.md §7) */
 int forthDictSelfTest(void);

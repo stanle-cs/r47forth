@@ -23,6 +23,22 @@
 static char  forthSource[FORTH_SOURCE_MAX];
 static bool  forthOuterActive = false;
 
+/* ---- §9.3 Run-generation counter (P-5) ---- */
+
+static uint16_t forthRunGeneration   = 0;
+static uint16_t forthResetGeneration = 0;
+
+void forthRunGenBump(void) {
+  forthRunGeneration++;
+}
+
+static void forthRunGenCheckReset(void) {
+  if (forthResetGeneration != forthRunGeneration) {
+    forthDictClear();
+    forthResetGeneration = forthRunGeneration;
+  }
+}
+
 /* ---- §3.3.3 Tokenizer state (C-6) ---- */
 
 #define FORTH_TOKEN_MAX 63
@@ -357,6 +373,22 @@ void fnForthOuter(uint16_t unused) {
   }
   xcopy(forthSource, REGISTER_STRING_DATA(REGISTER_X), len + 1);
   fnDrop(NOPARAM);
+  forthOuterActive = true;
+  forthOuterInterpret(forthSource);
+  forthOuterActive = false;
+}
+
+/* ---- P-2: Program-step entry point (§3.3.2, §9.2) ---- */
+
+void forthProgramStep(const uint8_t *payload) {
+  if (forthOuterActive) {
+    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  uint8_t len = *payload;
+  xcopy(forthSource, payload + 1, len);
+  forthSource[len] = 0;
+  forthRunGenCheckReset();
   forthOuterActive = true;
   forthOuterInterpret(forthSource);
   forthOuterActive = false;

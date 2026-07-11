@@ -21,6 +21,12 @@ correction) are likewise folded in place. Amendment tags (C-1..C-13) are
 retained inline at each merge site for traceability. This document is again
 single-source authoritative: where it speaks, nothing else does.
 
+**Amendment note (2026-07-10):** the PEM-native-entry stage (§9) is merged
+with amendment tags P-1..P-10; P-1..P-4 amend §0.1/§0.2, §2.1, §3.1/§3.3.1,
+§3.3.2, §4.2 and §6/§6.2 in place. Every normative claim in the P-series
+carries a `[VERIFIED: file:line]` citation against the tree of 2026-07-10 or
+an explicit `[GAP]`/`[DECISION NEEDED]` marker (§9.10).
+
 ---
 
 ## 0. How Forth fits into the existing machine (read first)
@@ -62,12 +68,17 @@ Two genuinely free slots exist at the tail (`items.c:4690-4691`, `CAT_FREE`):
 /* 2843 */ { itemToBeCoded, NOPARAM, "2843", "2843", ... CAT_FREE ... PTP_DISABLED ... },
 ```
 
-**We claim these two.** They become the only two new C47 items Forth needs:
+**We claim these two.** They become the two executable C47 items Forth needs
+(plus, since the §9 PEM-entry stage, one **menu** id claimed from a mid-table
+`CAT_FREE` slot — see the third row; many such slots exist, e.g. 213-219 at
+items.c:2003-2009 in the package override [VERIFIED:
+packages/forth-core/items.c:2003]):
 
 | new item id            | value | role                                                        |
 |------------------------|-------|-------------------------------------------------------------|
-| `ITM_FORTH`            | 2842  | outer interpreter entry (run/compile a Forth source line)   |
+| `ITM_FORTH`            | 2842  | outer interpreter entry (run/compile a Forth source line); in PEM: the entry-mode **toggle** and the tag of **source-text program steps** (§9) |
 | `ITM_FCALL`            | 2843  | inner-call bridge: **runtime** param (from program bytes / TAM entry) = dictionary index of a colon def. NOTE: the table row's `param` *field* is the TAM mode tag `TM_VALUE`, NOT a dictionary index — see the full rows in §0.2. |
+| `MNU_FORTH`            | 213   | dynamic soft-menu id for the in-program `: NAME` picker (§9.6). `CAT_MENU`, `itemToBeCoded`, names `"FWRD"`/`"FWRD"` — the same row shape as `MNU_PROG` (items.c:3196, upstream) [VERIFIED: src/c47/items.c:3196]. |
 
 **Slot assignment (DECIDED, verified 2026-07-06):** the two items claim the
 `CAT_FREE`/`itemToBeCoded` tail spares — 2842 at items.c:4690, 2843 at
@@ -101,7 +112,24 @@ these correctly:
   `EIM_DISABLED` on **both** items, stated explicitly like every surrounding
   row (it is the zero value, but the spec must not leave it implied).
 - `PTP_STATUS` 0x1E00 — **program parameter type** (drives `executeOneStep`, §3).
-  - `ITM_FORTH`  → `PTP_NONE`   (no inline parameter).
+  - `ITM_FORTH`  → `PTP_REM` (**P-1, supersedes the original `PTP_NONE`**): the
+    step carries an inline `STRING_LABEL_VARIABLE` string payload — the Forth
+    source line (or a zero-length payload = the §9.4 toggle marker). `PTP_REM`
+    is chosen because every upstream consumer already handles it generically:
+    step length via `countLiteralBytes` (`step + *step + 1` for
+    `STRING_LABEL_VARIABLE`) [VERIFIED: src/c47/programming/nextStep.c:297-300,
+    236-238], listing render via `decodeRem` (`NAME 'payload'`) [VERIFIED:
+    src/c47/programming/decode.c:905-908, 828-843], variable-scan skip
+    [VERIFIED: src/c47/programming/clcvar.c:273-277], and the
+    `insertStepInProgram` PTP switch treats it as "nothing to do" (entry is
+    routed earlier, §9.4) [VERIFIED: src/c47/programming/manage.c:1705-1708].
+    Run dispatch happens in the `executeOneStep` `PTP_REM` arm, which the
+    package already owns [VERIFIED:
+    packages/forth-core/programming/lblGtoXeq.c:838-863]. **Breaking encode
+    change:** a program step recorded under the old `PTP_NONE` two-byte
+    encoding is unreadable after this change (the decoder would consume the
+    following step's first byte as the string-type byte). No migration is
+    provided; the representation predates any release.
   - `ITM_FCALL`  → `PTP_NUMBER_16` (a 16-bit inline param = dictionary index).
 - `HG_STATUS` 0x6000 — hourglass. Use `HG_ENABLED`.
 - `RESULT_IN_X` 0x8000 — set on `ITM_FCALL` (Forth words generally return in X).
@@ -123,11 +151,21 @@ to write at items.c:4690-4691 are therefore exactly:
 ```c
 /* 2842 */ { fnForthOuter, NOPARAM,  "FORTH", "FORTH",
              (0 << TAM_MAX_BITS) |     0,
-             CAT_FNCT | SLS_ENABLED | US_ENABLED | EIM_DISABLED | PTP_NONE      | HG_ENABLED },
+             CAT_FNCT | SLS_ENABLED | US_ENABLED | EIM_DISABLED | PTP_REM       | HG_ENABLED },
 /* 2843 */ { fnForthCall,  TM_VALUE, "FCALL", "FCALL",
              (0 << TAM_MAX_BITS) | 16383,
              CAT_FNCT | SLS_ENABLED | US_ENABLED | EIM_DISABLED | PTP_NUMBER_16 | HG_ENABLED | RESULT_IN_X },
 ```
+
+(P-1: the `ITM_FORTH` row above shows `PTP_REM`, superseding the `PTP_NONE`
+this section originally specified and the row currently committed at
+packages/forth-core/items.c:4707 [VERIFIED: packages/forth-core/items.c:4707
+— still `PTP_NONE` today; changing it is a §9 work item]. The `PTP_REM` shape
+follows `REM` itself: `fnNop, NOPARAM, ... CAT_FNCT | SLS_ENABLED |
+US_ENABLED | EIM_DISABLED | PTP_REM | HG_ENABLED` [VERIFIED:
+packages/forth-core/items.c:3374]. `func` stays `fnForthOuter` — interactive
+dispatch (catalog/XEQ outside PEM) still reads its source from X, §3.3.2;
+the PTP class only governs program encode/step-length/dispatch.)
 
 `ITM_FCALL` tamMinMax note: the max field is 14 bits, so 16383 is the largest
 expressible TAM ceiling. The full `FTOK_CALL` index space runs to
@@ -288,10 +326,17 @@ Therefore our new items encode in-program as:
 
 | item      | id   | program bytes            |
 |-----------|------|--------------------------|
-| `ITM_FORTH` | 2842 | `0x8B 0x1A`            |
+| `ITM_FORTH` | 2842 | `0x8B 0x1A 0xFD len bytes[len]` (P-1; `0xFD` = `STRING_LABEL_VARIABLE` 253) |
 | `ITM_FCALL` | 2843 | `0x8B 0x1B` + param     |
 
 `0x8B = 0x80 | (2842>>8)`, `0x1A = 2842 & 0xFF`; `0x1B = 2843 & 0xFF`.
+`ITM_FORTH` is `PTP_REM` (P-1, §0.2): the opcode is followed by the string
+type byte `STRING_LABEL_VARIABLE` (253, defines.h:1363), a 1-byte length
+`len` (0..255), and `len` payload bytes — the same shape `pemAlpha` commits
+for `REM`/`42STR` steps [VERIFIED: src/c47/programming/manage.c:953-959].
+`len == 0` is the §9.4 toggle marker; `len > 0` is a Forth source line
+(§9.1). Step length falls out of upstream `countLiteralBytes` unchanged
+[VERIFIED: src/c47/programming/nextStep.c:236-238].
 `ITM_FCALL` is `PTP_NUMBER_16`, so **two** parameter bytes follow the opcode,
 holding the dictionary index (LE), consumed by `_executeOp(..., PARAM_NUMBER_16)`
 (the default arm at lblGtoXeq.c:835).
@@ -414,14 +459,20 @@ inner interpreter as a **new module** invoked when the two Forth items execute;
 we do **not** change the outer `runProgram` loop shape.
 
 ### 3.1 Dispatch path for `ITM_FCALL` / `ITM_FORTH`
-Both items have real `func` pointers in the overridden `indexOfItems[]`, so they
-already flow through `executeOneStep` default arm → `runFunction` (lblGtoXeq.c:781)
-→ `reallyRunFunction` → `indexOfItems[func].func(param)` (items.c:399). No new
-case in `executeOneStep` is required for *execution*. The only executor edits
-are the two table entries (§6, hook H1).
+Both items have real `func` pointers in the overridden `indexOfItems[]`, so
+interactive dispatch flows through `executeFunction` → `runFunction` →
+`reallyRunFunction` → `indexOfItems[func].func(param)` (items.c:399).
 
 - `indexOfItems[ITM_FCALL].func = fnForthCall;` — `param` = dictionary index.
-- `indexOfItems[ITM_FORTH].func = fnForthOuter;` — reads source from alpha reg.
+  In-program `ITM_FCALL` steps flow through the `executeOneStep` default arm
+  unchanged (PTP_NUMBER_16).
+- `indexOfItems[ITM_FORTH].func = fnForthOuter;` — reads source from the X
+  register (§3.3.2). **P-1 supersession:** in-program `ITM_FORTH` steps do
+  NOT reach `fnForthOuter`; they are `PTP_REM` steps dispatched by the
+  `ITM_FORTH` case in `executeOneStep`'s `PTP_REM` arm to
+  `forthProgramStep` (§9.2), which reads source from the step payload. The
+  original claim "no new case in `executeOneStep` is required" holds only
+  for `ITM_FCALL`.
 
 ### 3.2 The inner interpreter (`forth_inner.c`, pseudocode)
 Threaded-code walker. Uses one explicit return stack in package BSS (NOT the C
@@ -715,9 +766,11 @@ the context includes the definition name: `"No such function: TOKEN (in WORD)"`.
 
 - `state` is a **local variable** of one `forthOuterInterpret()` invocation,
   initialized `INTERPRET`. It does not persist across lines; definitions are
-  single-line in stage C. There is no interaction with C47's PRGM mode: in PEM
-  the keypress records a program step and `fnForthOuter` never runs; when a
-  *running* program executes `ITM_FORTH`, PEM is not active. The only
+  single-line in stage C — and therefore may not span program steps (§9.1).
+  There is no interaction with C47's PRGM mode: in PEM the keypress records a
+  program step (a source step or marker per §9.4) and `fnForthOuter` never
+  runs; when a *running* program executes `ITM_FORTH`, PEM is not active and
+  the entry point is `forthProgramStep` (P-2, §3.3.2/§9.2). The only
   shared-state hazard is `aimBuffer`/`tmpString` (§3.3.2).
 - `:` while `state == COMPILE` → `ERROR_INVALID_NAME` (48, "Invalid name"),
    `abortDefinition()`, stop the line (a second snapshot would clobber the
@@ -776,6 +829,39 @@ tmpString)" is **stricken** for the source line itself (RAM cost: 256 B BSS
 The interpret-state source of `fromProgram` for nested `forthInner` calls
 (an earlier draft of the pseudocode wrote `forthInner(widx)` with the second
 argument missing): `forthInner(widx, programRunStop == PGM_RUNNING)`.
+
+**Program-step entry point (P-2, §9.2 — second front-end over the same
+core).** When the program runner reaches an `ITM_FORTH` source step, source
+comes from the step's inline payload, not from X. A second, sibling entry
+point in `forth_compile.c` shares `forthSource` and the `forthOuterActive`
+guard (both are `static` there [VERIFIED:
+packages/forth-core/forth_compile.c:23-24], which is why this function must
+live in the same file):
+
+```c
+// forth_compile.c — called only from the executeOneStep ITM_FORTH arm (§9.2)
+// payload points at the step's [len][bytes...] pair (after the type byte).
+void forthProgramStep(const uint8_t *payload) {
+  if (forthOuterActive) {                     // same nested-entry refusal as
+    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;                                   // fnForthOuter (§3.3.2)
+  }
+  uint8_t len = *payload;                     // 0..255: always < FORTH_SOURCE_MAX(256)
+  xcopy(forthSource, payload + 1, len);       // copy BEFORE interpreting: executed
+  forthSource[len] = 0;                       // words may move/rewrite program memory
+  forthRunGenCheckReset();                    // §9.3 lazy dictionary reset
+  forthOuterActive = true;
+  forthOuterInterpret(forthSource);
+  forthOuterActive = false;
+}
+```
+
+The private-copy rule of this section applies with extra force here: the
+payload lives in *program memory*, and an interpreted word may run a C47
+program (label fallback, §3.3.6) that edits or clears programs, moving
+`beginOfProgramMemory` under the pointer. Never interpret out of program
+memory in place. The X-register path (`fnForthOuter` above) is unchanged and
+remains the interactive/REPL entry.
 
 #### 3.3.3 Tokenizer (C-6; glyph-wise advance is a correctness requirement)
 
@@ -1165,7 +1251,28 @@ code, so a Forth fallback would be incorrect or unnecessary.
 **Order for reverse lookup:** C47 label first (preserve existing programs'
 behavior exactly), Forth colon def second. This is the *opposite* precedence of
 §4.1 on purpose — inside Forth, Forth wins; from the C47 side, C47 wins, so no
-existing keystroke program silently changes meaning.
+existing keystroke program silently changes meaning. The committed resolver
+`forthResolveXEQ` implements label → C47 item name → colon, in that order
+[VERIFIED: packages/forth-core/forth_dict.c:292-323], and the interactive TAM
+hook applies the same order (label handled upstream of the hook; item-name
+scan then colon fallback) [VERIFIED: packages/forth-core/ui/tam.c:943-971].
+
+**PEM recording of `XEQ 'NAME'` (P-3 — names persist, never `widx`).** When
+`XEQ 'NAME'` resolves to a Forth colon word while **recording in PEM**, the
+step recorded is the ordinary name-string `XEQ` step (opcode +
+`STRING_LABEL_VARIABLE` + name) via `insertUserItemInProgram` [VERIFIED:
+src/c47/programming/manage.c:1775-1804; hook call at
+packages/forth-core/ui/tam.c:964, working-tree change of 2026-07-10] — NOT an
+`ITM_FCALL` step with a baked-in index. Resolution then happens at *run* time
+in the `_executeOp` `STRING_LABEL_VARIABLE` arm through `forthResolveXEQ`
+[VERIFIED: packages/forth-core/programming/lblGtoXeq.c:364-390], fresh on
+every execution. This keeps the §9 invariant that program↔Forth crossings are
+name strings; dictionary indices never persist in program memory. (The
+`ITM_XEQP1` return-step adjustment when the target is a colon word is part of
+the same working-tree change [VERIFIED:
+packages/forth-core/programming/lblGtoXeq.c:376-378].) Known hole: `ITM_FCALL`
+itself is still a keyable `PTP_NUMBER_16` item, so a user can hand-enter
+`FCALL nn` in PEM and persist an index — see §9.10 open item 2.
 
 ### 4.3 Why not synthesize label IDs
 Rejected alternative: register Forth words into `labelList[]` with synthetic IDs
@@ -1284,7 +1391,31 @@ future upstream merges reviewable.
 | H3  | `src/c47/items.c`                   | `runFunction` XEQ-by-menu branch **items.c:664-685**                          | Same fallback as H2 for interactive `XEQ 'name'`.                                              |
 | H4  | `src/c47/keyboard.c`                | `executeFunction` **keyboard.c:928** (near runFunction call **:1164/:1429**) | *(Optional stage-2)* route a dedicated Forth soft-key / alpha-entry to `ITM_FORTH`. No stage-1 edit. |
 | H5  | `src/c47/saveRestoreBackup.c`       | label save **:398/:526**, restore **:815-816/:988**                          | Add symmetric save/restore of the Forth region ptr + `fdict` scalars (§5.5).                    |
-| H6  | `src/c47/softmenus.c`               | dynamic-catalog switch **softmenus.c:1657**, PROG build **:1673-1704**       | *(Stage 2)* add `MNU_FORTH` case enumerating `fdict` names, mirroring the PROG label loop.      |
+| H6  | `src/c47/softmenus.c`               | dynamic-catalog switch **softmenus.c:1657**, PROG build **:1673-1704**       | `MNU_FORTH` dynamic-menu case — **re-scoped by §9.6**: it enumerates `: NAME` text-scan results from the current program's `ITM_FORTH` steps (not `fdict` names), mirroring the PROG label loop [VERIFIED: src/c47/softmenus.c:1673-1704]. Also add `MNU_FORTH` to the rebuild-always condition at softmenus.c:3039 (§9.6). |
+
+§9 (PEM-native entry) adds the following hooks. Same override discipline:
+byte-identical to upstream except the marked insertions.
+
+| id  | file (override)                     | upstream anchor (re-verify before editing)                                   | edit                                                                                          |
+|-----|-------------------------------------|------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| P-H1 | `src/c47/items.c` *(existing override)* | `ITM_FORTH` row, package items.c:4707                                    | `PTP_NONE` → `PTP_REM` (P-1, §0.2). Claim slot 213 for the `MNU_FORTH` `CAT_MENU` row (§0.1, §9.6). |
+| P-H2 | `src/c47/programming/manage.c` **(new override)** | REM route **manage.c:1386-1399**; addItemToBuffer route **:1411**; `pemAlpha` **:773-966**; `pemAlphaEdit` **:982-998**; fnPem cursor hack **:566-575** | `ITM_FORTH` toggle arm + in-region capture route in `insertStepInProgram`; `ITM_FORTH` support in `pemAlpha` (EDIT-extraction offset, empty-commit rule) and `pemAlphaEdit`; `"FORTH "` branch in the fnPem cursor-offset hack. All specified exactly in §9.4. |
+| P-H3 | `src/c47/programming/lblGtoXeq.c` *(existing override)* | `executeOneStep` `PTP_REM` arm, package lblGtoXeq.c:838-863; `fnExecute` :~270-303; `runProgram` :886-897 | `ITM_FORTH` case in the `PTP_REM` arm → `forthProgramStep` (§9.2); run-generation bump sites (§9.3). |
+| P-H4 | `src/c47/programming/decode.c` **(new override)** | `decodeRem` **decode.c:828-843**                                          | `ITM_FORTH` marker arm: zero-length payload renders `»FORTH`/`FORTH«` from scan parity (§9.5); non-empty payloads keep the generic `FORTH '…'` form. |
+| P-H5 | `src/c47/softmenus.c` **(new override — same file as H6)** | `softmenu[]` dynamic area **:1017-1029**, `dynamicSoftmenu[]` **:1211-1234**, `initVariableSoftmenu` **:1648+**, cached rebuild **:3039** | `MNU_FORTH` rows appended to BOTH arrays (order must match — upstream comment softmenus.c:1021-1028); `initVariableSoftmenu` case building the `: NAME` scan content (§9.6); `MNU_FORTH` added to the rebuild-always disjunction. |
+| P-H6 | `src/c47/defines.h` **(new header override)** | `NUMBER_OF_DYNAMIC_SOFTMENUS 22` **defines.h:1429**                        | 22 → 23. This is the upstream-documented procedure for adding a dynamic menu ("don't forget to adjust NUMBER_OF_DYNAMIC_SOFTMENUS in defines.h", softmenus.c:1025-1028). defines.h is machine-wide: keep the override byte-identical except this one line, and re-diff it on every upstream merge. |
+| P-H7 | `src/c47/keyboard.c` *(existing override)* | dynamic-menu dispatch; `dynmenuGetLabel` idiom **keyboard.c:1153-1156**    | `MNU_FORTH` picker press → insert name text + one space into `aimBuffer` at `T_cursorPos` during Forth capture (§9.6). |
+
+**Override-content status (updated 2026-07-10, superseding the 2026-07-05
+note):** the package now carries real hooks in `items.c`/`items.h` (the two
+item rows + defines), `programming/lblGtoXeq.c` (H2 + `forthResolveXEQ`
+dispatch), `ui/tam.c` (H3 + P-3 PEM name-insert, working tree), `keyboard.c`
+(H4), `screen.c` (H5-display / error context), `error.c` (C-14 context
+concatenation) and `config.c` (§6.2 reset hook) [VERIFIED:
+packages/forth-core/meson.build:2-4]. `saveRestoreBackup.c` (§5.5 H5-save) is
+**not yet** an override in the tree [GAP: save/restore of the dictionary
+region remains unimplemented]. §9 adds `programming/manage.c`,
+`programming/decode.c`, `softmenus.c` and the `defines.h` header override.
 
 **Override-content status (as of 2026-07-05):** the four override files in
 `packages/forth-core/` (`items.c`, `items.h`, `programming/lblGtoXeq.c`,
@@ -1305,14 +1436,18 @@ packages/forth-core/forth_bridge.c       fnForthOuter (ITM_FORTH), fnForthCall (
 packages/forth-core/meson.build          pkg_override_sources / pkg_custom_sources / pkg_override_headers
 ```
 
-`meson.build` shape (per README §"Create Your Own Package"):
+`meson.build` shape — current tree [VERIFIED: packages/forth-core/meson.build:2-4]:
 ```meson
-pkg_override_sources = ['items.c', 'programming/lblGtoXeq.c', 'saveRestoreBackup.c']
+pkg_override_sources = ['config.c', 'error.c', 'items.c', 'screen.c',
+                        'programming/lblGtoXeq.c', 'ui/tam.c', 'keyboard.c']
 pkg_override_headers = ['items.h']
-pkg_custom_sources   = files('forth_dict.c','forth_prims.c','forth_inner.c',
-                             'forth_compile.c','forth_bridge.c')
+pkg_custom_sources   = files('forth_dict.c', 'forth_prims.c', 'forth_inner.c',
+                             'forth_compile.c', 'forth_bridge.c', 'test_dict_reloc.c')
 ```
-(Stage 2 adds `softmenus.c`, `keyboard.c` to `pkg_override_sources`.)
+§9 grows `pkg_override_sources` by `'programming/manage.c'`,
+`'programming/decode.c'`, `'softmenus.c'`, and `pkg_override_headers` by
+`'defines.h'` (P-H2/P-H4/P-H5/P-H6). `saveRestoreBackup.c` joins when §5.5
+H5 lands.
 
 ### §6.2 Reset Hook
 
@@ -1328,6 +1463,16 @@ This call:
 - Ensures no stale pointers into reused RAM (hardware lifecycle safety).
 
 See fix #11 (Fable audit, hardware reset safety).
+
+**Two reset primitives — do not confuse them (P-4).** `forthDictInit`
+(forth_dict.c:39-46) only zeroes the control block; it is correct **only**
+when the arena itself has just been rebuilt (the RESET path above,
+config.c:1945 in the package override [VERIFIED:
+packages/forth-core/config.c:1945]). Calling it while the arena is live
+*leaks the dictionary region* (base is dropped without `freeC47Blocks`).
+`forthDictClear` (forth_dict.c:48-58) frees the region first and is the
+correct primitive for any live-arena reset — in particular the §9.3
+run-scoped dictionary reset [VERIFIED: packages/forth-core/forth_dict.c:39-58].
 
 ---
 
@@ -1417,6 +1562,527 @@ Also in the H1 series (decided 2026-07-06, this document):
   backstop. Required-change site: forth_inner.c:65.
 - **Integer literal type** (§3.3 number-type conformance, audit T1-2):
   `forthPushInt32` (forth_inner.c:27-33) stores `dtLongInteger`, not real34.
+
+## 9. PEM-native Forth entry — source-as-truth program steps
+
+Added 2026-07-10 (amendment tags P-1..P-10 plus hooks P-H1..P-H7 in §6;
+P-1..P-4 are merged in place at
+§0.1/§0.2, §2.1, §3.3.2, §4.2 and §6/§6.2). Goal: in PEM, define a Forth word
+and use it later in the *same* program with no separate trip through the
+FORTH catalog item — the Forth analog of `LBL … RTN/END` defining and calling
+a subroutine inline.
+
+Decisions in force (all DECIDED; verified against the tree as cited):
+
+1. **Source-as-truth.** A Forth line is a self-identifying `ITM_FORTH`
+   program step whose payload is the source text (§9.1). The compiler
+   (`forthOuterInterpret`) stays the single authority on token layout;
+   program→Forth references are name strings resolved at run time; `widx`
+   never persists (§4.2 P-3).
+2. **Execute-in-place** (Architecture 1). The runner interprets each
+   `ITM_FORTH` source step as it reaches it (§9.2). An optional pre-scan
+   (Architecture 2) is future work over the *same* representation (§9.10).
+3. **Program-scoped dictionary lifecycle** via a run-generation counter and
+   lazy reset (§9.3).
+4. **Entry-only toggle** — one item (`ITM_FORTH`), no runtime mode flag;
+   keypad state is *derived*, never stored (§9.4); symmetric `»FORTH`/
+   `FORTH«` display computed at render time (§9.5); in-region `: NAME`
+   picker (§9.6).
+5. **Errors** halt the program at the offending step with Forth-meaningful
+   messages (§9.7).
+6. **Inline single-line entry is DEFERRED** — a future front-end over this
+   same stored representation. Do not build any part of it in this stage.
+
+### 9.1 Stored representation
+
+One step shape, two meanings (encoding normative in §2.1, P-1):
+
+```
+0x8B 0x1A  STRING_LABEL_VARIABLE(0xFD)  len  bytes[len]
+```
+
+- `len > 0`  → **source step**: `bytes` is one Forth source line in C47 glyph
+  encoding (same encoding `pemAlpha` writes into `aimBuffer`,
+  §3.3.3 "keyboard-authored source").
+- `len == 0` → **toggle marker**: a run-time no-op recording where the author
+  flipped Forth entry on/off (§9.4). Marker vs. source is decided by `len`
+  alone; there is no second item id.
+- **Empty source lines are not representable** — the `len == 0` encoding is
+  reserved for markers. The entry layer enforces this (§9.4 rule E3).
+- Payload capacity: 255 bytes (1-byte len). The capture buffer caps entry at
+  196 glyphs / <256 bytes [VERIFIED: src/c47/programming/manage.c:854], and
+  every payload fits `FORTH_SOURCE_MAX` (256 incl. NUL) [VERIFIED:
+  packages/forth-core/forth_compile.c:22] — `len ≤ 255` ⇒ `len + 1 ≤ 256`,
+  no truncation path exists.
+- Step length, listing decode, CLCVAR scan, and PEM insertion all ride the
+  existing `PTP_REM` machinery with zero upstream edits (citations in §0.2
+  P-1).
+- A **definition may not span steps**: `forthOuterInterpret`'s compile state
+  is local to one line (C-4, §3.3.1), so `: NAME … ;` must be complete within
+  one source step. An unterminated definition is aborted and reported at that
+  step (§9.7).
+
+### 9.2 Execution semantics — execute-in-place (Architecture 1)
+
+**Runner dispatch site.** `executeOneStep`'s `PTP_REM` arm — package-owned
+[VERIFIED: packages/forth-core/programming/lblGtoXeq.c:838-863] — gains an
+`ITM_FORTH` case, modeled byte-for-byte on the `ITM_42STRING` case:
+
+```c
+// packages/forth-core/programming/lblGtoXeq.c, inside case PTP_REM:
+else if(op == ITM_FORTH) {
+  if(*step++ == STRING_LABEL_VARIABLE) {
+    if(*step != 0) {              // len > 0: source step
+      forthProgramStep(step);     // §3.3.2 P-2; step -> [len][bytes...]
+    }                             // len == 0: marker — run-time no-op
+  }
+  return 1;
+}
+```
+
+- **Halting on error:** `forthProgramStep` reports through
+  `displayCalcErrorMessage`/`lastErrorCode` (§3.3, §9.7). `runProgram` checks
+  `lastErrorCode` after every step and breaks *without advancing*
+  [VERIFIED: packages/forth-core/programming/lblGtoXeq.c:925-947], so the
+  program halts showing the offending `ITM_FORTH` step. `return 1` is
+  correct for the success path (advance one step), same as `42STRING`.
+- **`:`-lines are stack-neutral.** In compile state the outer interpreter
+  only emits tokens — prims/colon-calls/numbers all take the `emit` branch
+  [VERIFIED: packages/forth-core/forth_compile.c:250-254, 271-275, 156-158];
+  nothing touches the C47 stack except an immediate primitive (none carry
+  `FF_IMMEDIATE` in stage C) or an error path. Any other line executes
+  against the shared C47 stack exactly as the interactive REPL does.
+- **Reachability constraint (the one place the LBL analogy leaks).** A
+  definition exists only after execution has fallen through its source step.
+  A `GTO` that jumps over `: SQ … ;` leaves `SQ` undefined at the call site.
+  `LBL`s, by contrast, are pre-scanned (`scanLabelsAndPrograms`). Document
+  in the manual; the failure mode is the ordinary §9.7 unresolved-word halt,
+  not corruption. Architecture 2 (a run-start pre-scan that compiles all
+  `:`-lines first, giving forward-reference parity) hangs off the §9.3
+  run-generation seam and changes **nothing** in the stored representation;
+  it is explicitly NOT built now.
+- **SST parity.** Single-stepping executes one whole source line per SST
+  press — one `executeOneStep` call [VERIFIED:
+  packages/forth-core/programming/lblGtoXeq.c:925 — one call per loop
+  iteration; `runProgram(true, …)` breaks after it at :974-976]. No special
+  SST handling: the step is self-identifying.
+- **Interactive dispatch unchanged.** Outside a program, `ITM_FORTH` still
+  funnels to `fnForthOuter` (X-register REPL) via
+  `runFunction`/`reallyRunFunction`; the PTP class is not consulted on that
+  path [VERIFIED: §0.4 chain; packages/forth-core/forth_compile.c:344-363].
+  In PEM the item never reaches dispatch — `insertStepInProgram` routes it
+  first (§9.4).
+
+### 9.3 Program-scoped dictionary lifecycle (P-5)
+
+A run that executes any `ITM_FORTH` source step gets a fresh dictionary, so
+runs are deterministic, redefinition is clean, and words do not accumulate
+across runs. Implemented **lazily** with a run-generation counter — there is
+a sanctioned package-owned seam at run start (the package owns
+`lblGtoXeq.c`), but an *unconditional* reset there could not honor "a run
+that contains any `ITM_FORTH` step" without pre-scanning, so the generation
+scheme is normative:
+
+```c
+// forth_compile.c (BSS)
+static uint16_t forthRunGeneration  = 0;   // bumped at fresh-run starts
+static uint16_t forthResetGeneration = 0;  // generation the dict last reset at
+
+void forthRunGenBump(void)      { forthRunGeneration++; }     // called from lblGtoXeq.c
+static void forthRunGenCheckReset(void) {                     // called by forthProgramStep
+  if (forthResetGeneration != forthRunGeneration) {
+    forthDictClear();                       // NOT forthDictInit — §6.2 P-4
+    forthResetGeneration = forthRunGeneration;
+  }
+}
+```
+
+**Bump sites (exactly two, both in the package `lblGtoXeq.c` override):**
+
+1. `fnExecute` entry, gated `if(programRunStop != PGM_RUNNING)` — an
+   interactive `XEQ` start. Program-internal `XEQ` steps arrive with
+   `PGM_RUNNING` set and do not bump [VERIFIED: nested calls run under
+   `PGM_RUNNING`, packages/forth-core/programming/lblGtoXeq.c:886-897].
+2. Top of `runProgram`, **before** `programRunStop = PGM_RUNNING` (the line
+   at packages/forth-core/programming/lblGtoXeq.c:897), gated
+   `if(!nestedEngine && !singleStep && menuLabel != INVALID_VARIABLE)` — a
+   program started from a menu key [VERIFIED: menuLabel dispatch at
+   packages/forth-core/programming/lblGtoXeq.c:904-912].
+
+**Deliberate non-bump sites:** `fnRunProgram` (R/S) and SST. Consequences,
+all documented behavior:
+
+- `XEQ 'PRG'` / menu start → first `ITM_FORTH` step of the run sees a fresh
+  dictionary. Deterministic.
+- `STOP` mid-program, then R/S → same generation; words defined before the
+  pause **survive** the resume. (R/S has always meant *continue*.)
+- `GTO`-then-R/S cold start → inherits the previous generation; stale words
+  from an earlier run may still resolve until the next `XEQ` start. This is
+  the accepted price of resume-safety; if it ever bites, Architecture 2's
+  pre-scan subsumes it.
+- SST-only execution never resets; redefinition-by-latest-wins keeps `3 SQ`
+  correct (§1.2 `latest` chain, newest-first lookup §4.1).
+- Interactive REPL definitions share the same dictionary and are wiped by
+  the next fresh run's first `ITM_FORTH` step — programs are
+  **self-contained** in this stage: a program that uses a Forth word defines
+  it. Interactive/cross-program word reuse is out of scope.
+- Generation wrap (uint16) is harmless: the check is pure equality and both
+  counters move together.
+
+### 9.4 Entry-only toggle — no runtime flag, keypad state derived (P-6)
+
+**What the toggle is.** `ITM_FORTH`, pressed in PEM, is an entry-mode
+toggle. It commits a **marker step** (§9.1) and, when opening a region,
+drops the keypad into Forth text capture. It sets **no runtime flag**:
+committed steps are self-identifying, so the runner (§9.2), SST, the
+program scanner and branch logic never ask "am I in Forth mode?". The only
+transient state is the same state ordinary alpha capture already uses
+(`FLAG_ALPHA`, `aimBuffer`, `tam.function`) — cleared when capture closes,
+exactly as `REM` entry behaves today [VERIFIED REM model:
+src/c47/programming/manage.c:1386-1399 → pemAlpha:773-966].
+
+**The debt-free invariant (normative).** When the cursor lands on an
+existing step, the keypad's Forth-vs-RPN behavior for *new forward entry* is
+derived from **that step**, never from a persisted flag:
+
+```c
+// forth_bridge.c
+bool forthEntryStateAtCursor(void) {
+  if (pemCursorIsZerothStep) return false;              // top of program: RPN
+  const uint8_t *S = currentStep;
+  if (!checkOpCodeOfStep((uint8_t *)S, ITM_FORTH)) return false;  // RPN step: RPN
+  uint8_t len = forthStepPayloadLen(S);                 // byte S[3] (§9.1)
+  if (len > 0) return true;                             // source step: Forth
+  return forthMarkerTurnsOn(S);                         // marker: » = Forth, « = RPN
+}
+```
+
+- Land on an RPN step → RPN keypad, even between markers (self-identifying
+  steps make mid-region RPN insertion legal; the runner does not care).
+- Land on a Forth source step → Forth keypad (the next line continues the
+  region).
+- Land on a marker → the direction that marker itself establishes: after an
+  opening (`»FORTH`) occurrence, Forth; after a closing (`FORTH«`) one, RPN.
+- Power-off anywhere, scroll away and back, insert into the middle — the
+  answer is recomputed from the program bytes at the cursor every time.
+  There is nothing to go stale.
+
+`forthMarkerTurnsOn(step)` (forth_bridge.c) computes occurrence parity by a
+left-to-right walk: find the owning program's start (largest
+`programList[i].instructionPointer ≤ step` — `programList` is rebuilt by
+`scanLabelsAndPrograms` on every edit [VERIFIED:
+src/c47/programming/manage.c:730, 102-160]), then walk `findNextStep` from
+there to `step`, counting `ITM_FORTH` steps with `len == 0`; the occurrence
+is *opening* iff the count of markers strictly before it is even. Cost is
+one program walk per call — the same order as `scanLabelsAndPrograms`,
+which upstream already runs on every single step insertion [VERIFIED:
+src/c47/programming/manage.c:730]. Unbalanced regions (odd marker count to
+end-of-program) are legal; the region simply extends to the program's end.
+
+**Entry routing (manage.c override, P-H2). Exact edits:**
+
+E1. *Toggle arm* in `insertStepInProgram`, inserted after the `ITM_REM` arm
+    (manage.c:1386-1399) and modeled on it:
+
+```c
+else if(func == ITM_FORTH) {
+  if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
+    pemCloseNumberInput(); aimBuffer[0] = 0;            // as the REM arm
+  }
+  if(catalog) { leaveAsmMode(); popSoftmenu(); }        // as the REM arm
+  bool_t wasOn = forthEntryStateAtCursor();
+  tmpString[0] = (ITM_FORTH >> 8) | 0x80;               // commit the marker:
+  tmpString[1] =  ITM_FORTH       & 0xff;               // 0x8B 0x1A 0xFD 0x00
+  tmpString[2] = (char)STRING_LABEL_VARIABLE;
+  tmpString[3] = 0;
+  _insertInProgram((uint8_t *)tmpString, 4);
+  if(!wasOn) {                                          // opening »FORTH:
+    tam.function = ITM_FORTH;                           // enter Forth capture
+    pemAlpha(ITM_FORTH);                                // opens the line placeholder;
+  }                                                     //   ITM_FORTH is not an
+                                                        //   addItemToBuffer item, so no
+                                                        //   character is fed (REM model:
+                                                        //   manage.c:1396 pemAlpha(func))
+                                                        // closing FORTH«: stay RPN
+  pemCursorIsZerothStep = false;
+  return;
+}
+```
+
+E2. *In-region capture route*, inserted immediately before the
+    `addItemToBuffer`/number check (manage.c:1411):
+
+```c
+if(!tam.mode && !getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0
+   && indexOfItems[func].func == addItemToBuffer
+   && forthEntryStateAtCursor()) {
+  tam.function = ITM_FORTH;
+  pemAlpha(func);            // opens a new source-line capture, feeds first key
+  pemCursorIsZerothStep = false;
+  return;
+}
+```
+
+    Only printable items (`func == addItemToBuffer` — digits included) open
+    a capture; every other key (navigation, ENTER, function keys, R/S)
+    keeps its normal PEM meaning. That is the precise sense in which the
+    toggle "flips the keypad": text keys type Forth source, everything else
+    is unchanged; a function keystroke in-region records an ordinary RPN
+    step (legal — see the invariant above).
+
+E3. *Empty-commit rule* in `pemAlpha`: when capture ends (`ITM_ENTER` arm,
+    manage.c:882-888, and the `fnSst`/`fnBst`-triggered
+    `pemCloseAlphaInput` path) with `tam.function == ITM_FORTH` **and**
+    `aimBuffer[0] == 0`, delete the placeholder step (the exact deletion the
+    empty-`ITM_BACKSPACE` arm already performs, manage.c:861-868) instead of
+    committing. Rationale: an empty committed line would be byte-identical
+    to a marker and flip every subsequent occurrence's parity (§9.1).
+
+E4. *Capture machinery:* no other `pemAlpha` change is needed for entry —
+    the placeholder-insert and per-key re-insert paths key on
+    `tam.function`/the step's own opcode generically for `func >= 128`
+    [VERIFIED: src/c47/programming/manage.c:826-838 (placeholder),
+    938-960 (re-insert)], so `ITM_FORTH` source steps commit with the
+    correct opcode automatically. Re-entering capture for the *next* line
+    after ENTER is E2's job (derived state — the cursor now sits on the
+    just-committed source step, so `forthEntryStateAtCursor()` is true).
+
+E5. *Editing an existing line:* `pemAlphaEdit` gains
+    `|| func == ITM_FORTH` [VERIFIED gate today keys on
+    `ITM_LITERAL || ITM_REM`: src/c47/programming/manage.c:994], and the
+    `pemAlpha(ITM_EDIT)` extraction arm gains an `ITM_FORTH` case mirroring
+    the REM case (manage.c:795-803) with offset **8** instead of 6: the
+    decoded form is `"FORTH"`(5) + `" "`(1) + `STD_LEFT_SINGLE_QUOTE`(2)
+    [VERIFIED render shape: src/c47/programming/decode.c:832-835], so
+    `xcopy(aimBuffer, tmpString + 8, ll); aimBuffer[ll - 2 - 8] = 0;`.
+    The fnPem cursor-offset hack (manage.c:566-575) gains a `"FORTH "`
+    branch: prefix compare of 6 bytes → `cursorInString = T_cursorPos + 6`
+    (the pattern of the existing `"REM "`→`+4` branch — offset = prefix byte
+    length [VERIFIED: src/c47/programming/manage.c:570]).
+    Markers are **not** editable this way (`len == 0` has no text); EDIT on
+    a marker is a no-op.
+
+**Explicit non-mechanism (guardrail):** there is no `FLAG_FORTHMODE`, no
+field in `tam`, no persisted byte anywhere recording "entry is in Forth
+mode". If a future edit appears to need one, STOP: it violates this
+section's invariant and must come back as a design change.
+
+### 9.5 Symmetric display — `»FORTH` / `FORTH«` at render time (P-7)
+
+The same single item renders directionally, computed from scan parity at
+display time — never stored as two items and never cached:
+
+- Glyphs exist in the standard font: `STD_RIGHT_DOUBLE_ANGLE` = `"\x80\xbb"`
+  (»), `STD_LEFT_DOUBLE_ANGLE` = `"\x80\xab"` («) [VERIFIED:
+  src/c47/fonts.h:156, 150]. Tokens: `»FORTH` = `STD_RIGHT_DOUBLE_ANGLE
+  "FORTH"` (7 bytes, 6 glyphs); `FORTH«` = `"FORTH" STD_LEFT_DOUBLE_ANGLE`.
+  Both fit every surface (item name fields are `char[16]`, §0.1; listing
+  lines wrap at 337 px [VERIFIED: src/c47/programming/manage.c:604]).
+- **Render site:** `decodeRem` (decode.c override, P-H4). For
+  `op == ITM_FORTH && len == 0`, write the marker token chosen by
+  `forthMarkerTurnsOn(step)` (§9.4) into `tmpString` instead of the generic
+  `FORTH ''`. For `len > 0` keep the generic `decodeRem` form —
+  `FORTH '…source…'` — unchanged [VERIFIED generic path:
+  src/c47/programming/decode.c:828-843]. Because `decodeOneStep` is the
+  single decode funnel, the PEM listing, SST/trace display and the program
+  browser all show the same tokens [VERIFIED callers:
+  src/c47/programming/manage.c:565, 785; src/c47/programming/nextStep.c:364;
+  src/c47/programming/decode.c:42, 65, 112].
+- *Transient during capture:* the open placeholder is byte-identical to a
+  marker until the first key lands (E4). The decode arm therefore renders
+  `len == 0` as an (empty) source line, not as a marker, when
+  `step == currentStep && getSystemFlag(FLAG_ALPHA) && tam.function ==
+  ITM_FORTH` — all globals visible to decode.c. E3 guarantees no empty line
+  survives capture, so the exception is display-only.
+- The renderer *can* see the running state cheaply (one program walk per
+  marker rendered, ≤ a handful per screen, §9.4 cost note) — so the
+  documented fallback (two display-distinct items) is **not needed** and
+  must not be built.
+- Text export (`decodeOneStep_XPORT` / MODE_RTF) inherits the same
+  rendering; import-side handling is unverified — see §9.10 open item 3.
+
+### 9.6 Name discovery — the in-region `: NAME` picker (P-8)
+
+The entry-time analog of `scanLabelsAndPrograms` → `MNU_PROG` [VERIFIED
+model: src/c47/programming/manage.c:102 (scan);
+src/c47/softmenus.c:1673-1704 (menu build)]. While Forth capture is active,
+previously *authored* words in this program are pickable — no compilation,
+no catalog, no dictionary lookup:
+
+- **Menu id:** `MNU_FORTH` = item 213 (§0.1). Registration requires all
+  three upstream pieces, in matching order (upstream's own comment:
+  softmenus.c:1021-1028): a `softmenu[]` row and a `dynamicSoftmenu[]` row
+  appended to the dynamic area [VERIFIED: src/c47/softmenus.c:1017-1029,
+  1211-1234 — all 22 current slots occupied], and
+  `NUMBER_OF_DYNAMIC_SOFTMENUS` 22 → 23 (defines.h:1429, header override
+  P-H6 — the procedure upstream's comment explicitly prescribes).
+- **Content build** (`initVariableSoftmenu` case `MNU_FORTH`, P-H5): walk
+  `findNextStep` from the owning program's start to `currentStep`
+  (inclusive); for each `ITM_FORTH` step with `len > 0`, scan the payload
+  text with the §3.3.3 glyph-wise tokenizer for the pattern
+  `":" <name>` (token `:` followed by a name token — mid-line occurrences
+  after `;` included); collect names into fixed 15-byte slots in
+  `tmpString`, qsort, pack — the exact `MNU_PROG` builder pattern
+  [VERIFIED: src/c47/softmenus.c:1675-1698]. **Names longer than 14 bytes
+  are omitted** (not truncated — a truncated pick would insert a *wrong*
+  name; deliberate deviation from `MNU_PROG`, which truncates labels).
+  Duplicates (redefinitions) collapse to one entry.
+- **No validation at entry.** The scan is text-only; picking a name never
+  resolves it against the dictionary or checks reachability. Resolution is
+  deferred to run time (§9.2) — a picked name can still fail at run with
+  the §9.7 unresolved-word halt (e.g. its definition line was later
+  deleted). This is by design.
+- **Presentation:** entering Forth capture (E1/E2) pushes `-MNU_FORTH` on
+  top of the `-MNU_ALPHA` menu `pemAlpha` already shows [VERIFIED:
+  src/c47/programming/manage.c:822]; the user pops back to the alpha menu
+  with EXIT as usual.
+- **Refresh:** `fnOpenMenu` rebuilds on open [VERIFIED:
+  src/c47/softmenus.c:1261-1270], but the display path caches by menu id and
+  rebuilds only `-MNU_DYNAMIC` unconditionally [VERIFIED:
+  src/c47/softmenus.c:3039-3042]. `MNU_FORTH` must join that rebuild-always
+  disjunction (`|| softmenu[m].menuItem == -MNU_FORTH`), or a word defined
+  on the previous line would not appear while the menu stays displayed —
+  this is the acceptance-critical line (§9.9 item 3).
+- **Pick action** (keyboard.c override, P-H7): during Forth capture, a
+  `MNU_FORTH` softkey press inserts `dynmenuGetLabel(dynamicMenuItem)` plus
+  one trailing space into `aimBuffer` at `T_cursorPos`, using the same
+  insert-at-cursor idiom as `pemAlpha`'s `addItemToBuffer` arm [VERIFIED
+  idioms: src/c47/keyboard.c:1153-1156 (dynmenuGetLabel→aimBuffer);
+  src/c47/programming/manage.c:854-857 (insert at cursor)].
+
+### 9.7 Error surface (P-9)
+
+All Forth errors surface through the existing C47 protocol at the
+`ITM_FORTH` step, with the C-13/C-14 mappings unchanged:
+
+- `forthProgramStep` → `forthOuterInterpret` displays via
+  `displayCalcErrorMessage` and sets `lastErrorCode` (§3.3 pseudocode;
+  committed paths [VERIFIED: packages/forth-core/forth_compile.c:210-341]).
+- `runProgram` halts *at* the step, cursor on it, because the step pointer
+  only advances when `lastErrorCode == ERROR_NONE` [VERIFIED:
+  packages/forth-core/programming/lblGtoXeq.c:925-947].
+- Unknown word: `ERROR_FUNCTION_NOT_FOUND` with the offending token (and
+  `(in WORD)` when a definition was open) in `errorMessage`; the display
+  layer concatenates for this code — the C-14 extension is live in the
+  package [VERIFIED: packages/forth-core/error.c:288,
+  packages/forth-core/screen.c:3734] — so the user sees
+  `No such function: TOKEN`, not a misleading generic C47 error.
+- Malformed definition (nested `:`, stray `;`, `:` with no name, unterminated
+  line): `ERROR_INVALID_NAME` + `abortDefinition()` (C-4; [VERIFIED:
+  packages/forth-core/forth_compile.c:212-244, 333-336]) — the smudged
+  entry never leaks (§3.3.7).
+- Marker steps cannot error (run-time no-op, §9.2).
+
+### 9.8 Naming & width (P-10)
+
+- `ITM_FORTH` stays the internal C identifier; no new executable item ids.
+- Catalog/soft-menu label of the toggle item: `"FORTH"` (5 glyphs — fits the
+  `char[16]` fields and the 14-byte dynamic-menu display slot [VERIFIED cap:
+  src/c47/softmenus.c:1680-1682]).
+- Listing tokens: `»FORTH` / `FORTH«` (§9.5) for markers; `FORTH '…'` for
+  source lines.
+- Picker menu label: `"FWRD"` (`MNU_FORTH` row, §0.1). Picker entries: word
+  names ≤ 14 bytes (§9.6).
+
+### 9.9 Stage-P acceptance (each with the escaping mutation that must fail it)
+
+1. **Define-and-use in one program.** Program: `»FORTH`, `: SQ DUP * ;`,
+   `3 SQ`, `FORTH«`, `END`. `XEQ` it → `X == 9`, `dtLongInteger`.
+   *Mutation:* drop the `forthProgramStep` call from the §9.2 arm (make
+   source steps no-ops) — X stays unchanged and the test fails.
+2. **Derived keypad state.** (a) Cursor on an RPN step → digit key opens
+   number entry (RPN); (b) cursor on a Forth source step → digit key opens
+   Forth capture and types text; (c) cursor on `»FORTH` → capture; on
+   `FORTH«` → RPN; (d) power-off mid-region (simulator save/load), land on
+   the same step → identical behavior to (a)-(c).
+   *Mutation:* replace `forthEntryStateAtCursor()` with a static bool set by
+   the toggle — case (d) and scroll-away-and-back regress.
+3. **Picker sees an uncompiled word.** Author `: SQ DUP * ;` as a source
+   step; **without any run**, on the next capture line the `MNU_FORTH`
+   picker lists `SQ`; picking inserts `SQ ` into the buffer.
+   *Mutation:* remove `MNU_FORTH` from the softmenus.c:3039 rebuild-always
+   disjunction — the just-defined word is missing until the menu is
+   re-opened, failing the test.
+4. **Symmetric marker display.** Two markers around a source line render
+   `»FORTH` … `FORTH«`; adding a third marker after them renders `»FORTH`
+   again. BST/SST display and the PEM listing agree.
+   *Mutation:* invert `forthMarkerTurnsOn`'s parity (odd instead of even) —
+   every marker renders with the wrong direction.
+5. **Glyph operators in program lines.** A source step authored on the
+   alpha keypad containing `×` (`STD_CROSS`) and `÷` (`STD_DIVIDE`)
+   compiles: `: D2 2 ÷ ;` runs (`8 D2` → 4). Chain verified in the tree:
+   alpha capture stores `itemSoftmenuName` bytes [VERIFIED:
+   src/c47/programming/manage.c:853-856], the tokenizer advances glyph-wise
+   [VERIFIED: packages/forth-core/forth_compile.c:42-57], and the prim table
+   carries the alias entries [VERIFIED: packages/forth-core/forth_prims.c:44-46].
+   *Mutation:* delete the `PRIM_DIVGL` alias row — `÷` raises
+   `ERROR_FUNCTION_NOT_FOUND` and the test fails.
+6. **Integer literal type parity.** `7` typed on the RPN keypad and `7`
+   executed from a Forth source step both leave `dtLongInteger` in X
+   [VERIFIED path: packages/forth-core/forth_inner.c:43-56
+   (`forthPushInt32` → `convertLongIntegerToLongIntegerRegister`)].
+   *Mutation:* revert `forthPushInt32` to `int32ToReal34` — type probe
+   fails.
+7. **Forth-meaningful halt.** (a) `»FORTH`, `: SQ DUP *` (no `;`) → run
+   halts at that step with `ERROR_INVALID_NAME`, definition aborted (no
+   smudged leak: defining `SQ` correctly afterwards works). (b) `3 SQX`
+   with `SQX` undefined → halts at that step showing
+   `No such function: SQX`.
+   *Mutation:* return 1 unconditionally from the §9.2 arm ignoring
+   `lastErrorCode` — the program runs past the bad step and (a)/(b) fail.
+8. **Marker no-op & empty-line rule.** A lone `»FORTH`/`FORTH«` pair with
+   nothing between them runs to completion with stack untouched; ENTER on
+   an empty capture line leaves **no** step behind (step count unchanged).
+   *Mutation:* drop rule E3 — the empty commit becomes a third marker and
+   test 4's parity assertions fail downstream.
+9. **Run-scoped lifecycle.** (a) Run the test-1 program twice → second run
+   identical (redefinition clean, `fdict.count` after run 2 equals after
+   run 1 — no accumulation). (b) Insert `STOP` between the definition and
+   `3 SQ`; run, then R/S → still `X == 9` (resume keeps the dictionary).
+   *Mutation:* bump the generation in `fnRunProgram` too — (b) fails with
+   `No such function: SQ`.
+10. **XEQ-by-name from RPN records a name.** In PEM, `XEQ` + alpha `SQ`
+    (a Forth word) records a name-string `XEQ` step, and the program bytes
+    contain the glyphs `SQ` — no `ITM_FCALL` opcode, no index [VERIFIED
+    mechanism: §4.2 P-3].
+    *Mutation:* re-route the tam.c PEM branch to
+    `insertStepInProgram(ITM_FCALL)` with `tam.value = widx` — the byte
+    probe finds `0x8B 0x1B` and fails; additionally the step goes stale
+    after `CLEAR FORTH` + redefinition in a different order.
+
+Arena reporting rule (§5.4) applies: the acceptance run must report the
+dictionary high-water mark; budget unchanged (≤ 2 KB on the 64 KB part).
+
+### 9.10 Open decisions / gaps (ranked by implementation impact)
+
+1. **[GAP — save/restore]** `saveRestoreBackup.c` H5 (§5.5) is still not in
+   the tree. Program steps (including `ITM_FORTH` payloads) ride the
+   existing program-memory save unchanged, but the *dictionary* does not
+   round-trip. Acceptable for this stage only because §9.3 makes the
+   dictionary run-scoped/reconstructible; becomes blocking the moment
+   cross-run persistence is promised.
+2. **[DECISION NEEDED — `FCALL` keyable in PEM]** `ITM_FCALL` is
+   `PTP_NUMBER_16`/`TM_VALUE`, so `FCALL nn` can be hand-entered as a
+   program step, persisting a dictionary index in violation of the
+   names-only invariant (§4.2 P-3). Recommended: reject `ITM_FCALL` in
+   `insertStepInProgram` (one arm in the P-H2 override,
+   `ERROR_NON_PROGRAMMABLE_COMMAND`) — not yet decided, not yet specced.
+3. **[GAP — text export/import]** `decodeOneStep_XPORT`
+   (src/c47/saveRestorePrograms.c:203) will emit `»FORTH`/`FORTH«`/
+   `FORTH '…'` per §9.5; whether the import parser round-trips these is
+   unverified. Binary state save is unaffected. Verify before advertising
+   program text export of Forth programs.
+4. **[GAP — upstream oddity, monitor only]** `insertUserItemInProgram`
+   writes the opcode low byte as `func & 0x7f` (src/c47/programming/
+   manage.c:1788) — wrong for any func whose low byte ≥ 0x80. Harmless for
+   the P-3 path (`ITM_XEQ` = 3), but do not reuse that helper for
+   `ITM_FORTH` (2842 low byte 0x1A would be safe, yet the latent bug argues
+   for the explicit byte writes specced in E1).
+5. **[Documented boundary]** R/S-after-`GTO` cold starts inherit the
+   previous run's dictionary generation (§9.3). Revisit only if user
+   reports demand it; Architecture 2 subsumes it.
+
+---
 
 *(End of document. The former trailing patch-sections — "Stage 1 — Resolution
 Clarifications", the §3.3 tokenizer NOTE, and the §2.2 FTOK_LIT-size
