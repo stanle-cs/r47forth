@@ -886,6 +886,14 @@ void pemAlpha(int16_t item) {
         clearSystemFlag(FLAG_ALPHA);
         calcModeNormalGui();
         _closeAlphaMenus();
+        // Capture-abort reset: tam.function is set by the Forth capture open
+        // paths (E1/E2, manage.c:1441/1463) and never reset by upstream on
+        // this backspace-abort exit. Idle value 0 matches the global `tam`'s
+        // zero-initialized boot state [VERIFIED: src/c47/c47.c:190 — no
+        // initializer, static storage] and the documented invariant that
+        // tam.mode, not tam.function, is the "in TAM" gate [VERIFIED:
+        // src/c47/typeDefinitions.h:672-680].
+        tam.function = 0;
         return;
       }
       else if(T_cursorPos == 0) {
@@ -993,6 +1001,9 @@ void pemCloseAlphaInput(void) {
     clearSystemFlag(FLAG_ALPHA);
     calcModeNormalGui();
     _closeAlphaMenus();
+    // Capture-close reset: see the identical rationale/citations at the
+    // ITM_BACKSPACE abort branch above (manage.c:889-895).
+    tam.function = 0;
     return;
   }
   aimBuffer[0] = 0;
@@ -1005,6 +1016,11 @@ void pemCloseAlphaInput(void) {
     firstDisplayedStep = findNextStep(firstDisplayedStep);
   }
   _closeAlphaMenus();
+  // Capture-close reset: see the identical rationale/citations at the
+  // ITM_BACKSPACE abort branch above (manage.c:889-895). This branch commits
+  // REM/LITERAL/non-empty-FORTH source lines alike, so the reset must be
+  // unconditional here too, not just gated on tam.function == ITM_FORTH.
+  tam.function = 0;
 }
 
 

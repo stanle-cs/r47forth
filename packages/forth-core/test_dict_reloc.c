@@ -4347,6 +4347,164 @@ static int test_e1_direction_mid_program(void)
     return fail;
 }
 
+/* test_tam_function_cleared_after_capture
+ * tam.function is a side-channel flag set by the Forth capture open paths
+ * (E1/E2, manage.c:1441/1463) with no verified reset on capture close before
+ * this fix. Open capture as in test_e2_continuation_after_enter, commit with
+ * pemAlpha(ITM_ENTER) (the close path, manage.c:998), and assert
+ * tam.function != ITM_FORTH — a stale sentinel must not survive commit.
+ * Escaping mutation: remove the `tam.function = 0;` reset added at the end
+ * of pemCloseAlphaInput's generic commit branch (manage.c:1019-1023) — the
+ * assertion fails (tam.function stays ITM_FORTH). */
+static int test_tam_function_cleared_after_capture(void)
+{
+    uint8_t prog[] = {
+        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
+        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
+        ' ', '*', ' ', ';',                                              /* * ; */
+    };
+    int fail = 0;
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+        printf("    FAIL: writeTestProgram failed\n");
+        return 1;
+    }
+
+    uint8_t *savedCurrentStep = currentStep;
+    bool_t savedZeroth = pemCursorIsZerothStep;
+    uint16_t savedLocalStep = currentLocalStepNumber;
+    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+    uint8_t savedCalcMode = calcMode;
+    int16_t savedCatalog = catalog;
+    int16_t savedTamFunction = tam.function;
+    char aimBufSave[256];
+    memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+    /* Setup: cursor on .END. (where pemCloseAlphaInput leaves cursor after ENTER) */
+    currentStep = beginOfProgramMemory + sizeof(prog);  /* .END. appended by writeTestProgram */
+    pemCursorIsZerothStep = false;
+    currentLocalStepNumber = 3;
+    clearSystemFlag(FLAG_ALPHA);
+    calcMode = CM_PEM;
+    catalog = CATALOG_NONE;
+    aimBuffer[0] = 0;
+    tam.mode = 0;
+    tam.function = 0;
+
+    extern void addStepInProgram(int16_t func);
+    addStepInProgram(ITM_2);   /* E2 continuation: opens Forth capture, tam.function = ITM_FORTH */
+
+    if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+        printf("    FAIL: setup did not open Forth capture (FLAG_ALPHA=%d tam.function=%d)\n",
+               (int)getSystemFlag(FLAG_ALPHA), (int)tam.function);
+        fail = 1;
+    }
+
+    if (!fail) {
+        extern void pemAlpha(int16_t item);
+        pemAlpha(ITM_ENTER);   /* capture-close path: commit "2" as a Forth source line */
+
+        if (tam.function == ITM_FORTH) {
+            printf("    FAIL: tam.function == ITM_FORTH after capture close (stale sentinel survived commit)\n");
+            fail = 1;
+        }
+    }
+
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    currentLocalStepNumber = savedLocalStep;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    calcMode = savedCalcMode;
+    catalog = savedCatalog;
+    tam.function = savedTamFunction;
+    memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+
+    if (!fail) {
+        printf("    PASS: tam.function != ITM_FORTH after capture close\n");
+    }
+    return fail;
+}
+
+/* test_tam_function_cleared_after_abort
+ * Same invariant as test_tam_function_cleared_after_capture, but for the
+ * abort path: opening the capture (addStepInProgram(ITM_FORTH), as in
+ * test_toggle_inserts_marker's opening case) leaves aimBuffer empty, then
+ * pemAlpha(ITM_BACKSPACE) with an empty buffer is the abort/EXIT gesture
+ * (manage.c:883-897) — it deletes the placeholder step and clears
+ * FLAG_ALPHA. Assert tam.function != ITM_FORTH afterward.
+ * Escaping mutation: remove the `tam.function = 0;` reset added in the
+ * ITM_BACKSPACE abort branch (manage.c:889-896) — the assertion fails. */
+static int test_tam_function_cleared_after_abort(void)
+{
+    uint8_t prog[] = {
+        0x4C,                                                             /* ITM_sin (RPN) */
+        0x85, 0xB2,                                                       /* ITM_END */
+    };
+    int fail = 0;
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+        printf("    FAIL: writeTestProgram failed\n");
+        return 1;
+    }
+
+    uint8_t *savedCurrentStep = currentStep;
+    bool_t savedZeroth = pemCursorIsZerothStep;
+    int16_t savedCatalog = catalog;
+    uint16_t savedLocalStep = currentLocalStepNumber;
+    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+    uint8_t savedCalcMode = calcMode;
+    int16_t savedTamFunction = tam.function;
+    char aimBufSave[256];
+    memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+    /* Setup: cursor on ITM_END (offset 1) — pre-move skipped, predecessor RPN
+     * step → wasOn=false → capture opens, aimBuffer stays empty */
+    currentStep = beginOfProgramMemory + 1;
+    pemCursorIsZerothStep = false;
+    currentLocalStepNumber = 2;
+    clearSystemFlag(FLAG_ALPHA);
+    calcMode = CM_PEM;
+    catalog = CATALOG_NONE;
+    aimBuffer[0] = 0;
+    tam.mode = 0;
+    tam.function = 0;
+
+    extern void addStepInProgram(int16_t func);
+    addStepInProgram(ITM_FORTH);
+
+    if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH || aimBuffer[0] != 0) {
+        printf("    FAIL: setup did not open an empty Forth capture (FLAG_ALPHA=%d tam.function=%d aimBuffer[0]=%d)\n",
+               (int)getSystemFlag(FLAG_ALPHA), (int)tam.function, (int)aimBuffer[0]);
+        fail = 1;
+    }
+
+    if (!fail) {
+        extern void pemAlpha(int16_t item);
+        pemAlpha(ITM_BACKSPACE);   /* abort/EXIT gesture: empty buffer, deletes placeholder */
+
+        if (tam.function == ITM_FORTH) {
+            printf("    FAIL: tam.function == ITM_FORTH after capture abort (stale sentinel survived EXIT)\n");
+            fail = 1;
+        }
+    }
+
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    currentLocalStepNumber = savedLocalStep;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    calcMode = savedCalcMode;
+    catalog = savedCatalog;
+    tam.function = savedTamFunction;
+    memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+
+    if (!fail) {
+        printf("    PASS: tam.function != ITM_FORTH after capture abort\n");
+    }
+    return fail;
+}
+
 /* FIX-6: free-list integrity check */
 static int test_freelist_consistent(void);
 
@@ -4756,6 +4914,18 @@ int forthDictSelfTest(void)
 
    printf("  [DEBUG] running test_e1_direction_mid_program...\n");
    fail |= test_e1_direction_mid_program();
+   forthDictClear();
+
+   /* Capture lifecycle: tam.function must not survive capture close/abort */
+   printf("\nFORTH CAPTURE LIFECYCLE TESTS (tam.function reset on close/abort)\n");
+   forthDictInit();
+
+   printf("  [DEBUG] running test_tam_function_cleared_after_capture...\n");
+   fail |= test_tam_function_cleared_after_capture();
+   forthDictClear();
+
+   printf("  [DEBUG] running test_tam_function_cleared_after_abort...\n");
+   fail |= test_tam_function_cleared_after_abort();
    forthDictClear();
 
    /* FIX-3: restrict Forth fallback to XEQ/XEQ.SKP only */
