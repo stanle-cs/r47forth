@@ -4259,6 +4259,81 @@ static int test_useritem_xeqp1_opcode(void)
   return 0;
 }
 
+/* test_useritem_xeqp1_decodes
+ * F4 follow-through (DESIGN.md §9.10 item 4): the write side
+ * (insertUserItemInProgram) is tested by test_useritem_xeqp1_opcode; this
+ * test verifies the full insert -> decode/display path. decode.c's own
+ * two-byte opcode reassembly (_decodeOneStep: op &= 0x7f; op <<= 8;
+ * op |= *(step++);) already ORs in the low byte unmasked and is
+ * byte-identical to upstream src/c47/programming/decode.c at that site
+ * [VERIFIED: packages/forth-core/programming/decode.c:866-869] -- no decode-
+ * side bug exists. This test instead exercises manage.c's write-side fix
+ * THROUGH decode: insertUserItemInProgram(ITM_XEQP1, "SQ2") writes the step,
+ * decodeOneStep() reconstructs the opcode from those bytes and renders it,
+ * and the rendered text must name ITM_XEQP1's catalog entry "XEQ.SKP"
+ * [VERIFIED: src/c47/items.c:4033] via the PARAM_LABEL/STRING_LABEL_VARIABLE
+ * rendering [VERIFIED: packages/forth-core/programming/decode.c:198-224],
+ * i.e. "XEQ.SKP 'SQ2'" -- not the item at the corrupted opcode.
+ * Escaping mutation: revert manage.c's mask to & 0x7f (the F4 regression) --
+ * the written low byte becomes 0x2F, decode.c faithfully (and correctly)
+ * reconstructs opcode 0x082F = 2095, whose catalog entry is the unrelated
+ * unit-conversion item "rad/s->" [VERIFIED: src/c47/items.c:3905], so the
+ * rendered-text assertion fails. */
+static int test_useritem_xeqp1_decodes(void)
+{
+  /* Minimal program */
+  uint8_t prog[] = { 0x4C };  /* ITM_sin */
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  /* Save state */
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+
+  /* Setup for insertUserItemInProgram (identical to test_useritem_xeqp1_opcode) */
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  clearSystemFlag(FLAG_ALPHA);
+
+  extern void insertUserItemInProgram(int16_t func, char *funcParam);
+  insertUserItemInProgram(ITM_XEQP1, "SQ2");
+
+  scanLabelsAndPrograms();
+
+  int fail = 0;
+
+  /* XEQP1 step starts at offset 1 (after ITM_sin) */
+  uint8_t *s = beginOfProgramMemory + 1;
+  decodeOneStep(s);
+
+  char reference[32];
+  sprintf(reference, "XEQ.SKP " STD_LEFT_SINGLE_QUOTE "SQ2" STD_RIGHT_SINGLE_QUOTE);
+
+  if (strcmp(tmpString, reference) != 0) {
+    printf("    FAIL: tmpString = '%s', expected '%s' (opcode not reconstructed as ITM_XEQP1=0x%04X)\n",
+           tmpString, reference, ITM_XEQP1);
+    fail = 1;
+  }
+
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+
+  if (!fail) {
+    printf("    PASS: XEQP1 user item decodes to '%s' (opcode 0x%04X)\n", reference, ITM_XEQP1);
+  }
+  return fail;
+}
+
 /* test_e1_direction_mid_program
  * Program: RPN step, marker(»), source, marker(«), END, .END.
  * Cursor ON the RPN step (predecessor semantics: insertion follows it,
@@ -4950,6 +5025,10 @@ int forthDictSelfTest(void)
 
     printf("  [DEBUG] running test_useritem_xeqp1_opcode...\n");
     fail |= test_useritem_xeqp1_opcode();
+    forthDictClear();
+
+    printf("  [DEBUG] running test_useritem_xeqp1_decodes...\n");
+    fail |= test_useritem_xeqp1_decodes();
     forthDictClear();
 
     /* F5: Forth picker is a submenu entry inside MNU_ALPHA, not an overlay */
