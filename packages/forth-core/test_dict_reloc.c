@@ -35,7 +35,7 @@
 /* ---- Primitive indices (mirror forth_prims.c) ---- */
 
 enum { P_DUP = 0, P_DROP = 1, P_SWAP = 2, P_OVER = 3,
-       P_PLUS = 4, P_MINUS = 5, P_MUL = 6, P_DIV = 7 };
+  P_PLUS = 4, P_MINUS = 5, P_MUL = 6, P_DIV = 7 };
 
 #define PRIM_TOKEN(idx) ((ftoken_t)((idx) + T_PRIM_BASE))
 
@@ -148,107 +148,107 @@ static int test_stack_aslift(void)
 }
 
 /* ---- Branch forward: BR skips over a DROP token ----
-  * Mutation: BR delta miscalculated (wrong cell arithmetic)          ---- */
- static int test_branch_fwd(void)
- {
-   /*
-    * Layout (cells):
-    *   0: BR
-    *   1: delta +1  (skip 1 cell = DROP)
-    *   2: DROP      (skipped)
-    *   3: ILIT
-    *   4-5: int32 42
-    *   6: EXIT
-    */
-    uint16_t w = begin_word("BF", 2);
-   if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
-   forthDictEmit(T_BR);
-   emit_int16(1);           /* skip 1 cell = DROP token */
-   forthDictEmit(PRIM_TOKEN(P_DROP));  /* skipped */
-   forthDictEmit(T_ILIT);
-   emit_int32(42);
-   end_word(w);
+ * Mutation: BR delta miscalculated (wrong cell arithmetic)          ---- */
+static int test_branch_fwd(void)
+{
+  /*
+   * Layout (cells):
+   *   0: BR
+   *   1: delta +1  (skip 1 cell = DROP)
+   *   2: DROP      (skipped)
+   *   3: ILIT
+   *   4-5: int32 42
+   *   6: EXIT
+   */
+  uint16_t w = begin_word("BF", 2);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit(T_BR);
+  emit_int16(1);           /* skip 1 cell = DROP token */
+  forthDictEmit(PRIM_TOKEN(P_DROP));  /* skipped */
+  forthDictEmit(T_ILIT);
+  emit_int32(42);
+  end_word(w);
 
-   lastErrorCode = ERROR_NONE;
-   bool err = run_word("BF");
-   if (err) {
-     printf("    FAIL: unexpected error %d during fwd branch\n", lastErrorCode);
-     return 1;
-   }
-   if (!x_is_longint(42)) {
-     printf("    FAIL: X should be 42 after BR forward skip\n");
-     return 1;
-   }
-   printf("    PASS: BR forward skips DROP\n");
-   return 0;
- }
+  lastErrorCode = ERROR_NONE;
+  bool err = run_word("BF");
+  if (err) {
+    printf("    FAIL: unexpected error %d during fwd branch\n", lastErrorCode);
+    return 1;
+  }
+  if (!x_is_longint(42)) {
+    printf("    FAIL: X should be 42 after BR forward skip\n");
+    return 1;
+  }
+  printf("    PASS: BR forward skips DROP\n");
+  return 0;
+}
 
 /* ---- Branch backward: canonical countdown loop (DESIGN.md §2.2) ----
-   * Body: DUP 0BR(+6) ILIT(-1) + BR(-9) EXIT
-   * Counter starts at 5, decremented to 0 over 5 iterations, terminates.
-   * 0BR CONSUMES the DUP'd copy; the original counter stays for +.
-   * Deltas are in CELLS, signed, relative to the cell after the delta.
-   * Cell layout:
-   *   0:  DUP
-   *   1:  0BR
-   *   2:  delta +6  (skip ILIT(-1) + + + BR + delta = 6 cells → EXIT)
-   *   3:  ILIT
-   *   4-5: int32 -1 (2 cells, LE)
-   *   6:  +
-   *   7:  BR
-   *   8:  delta -9  (back to cell 0: ip=9, 9+(-9)=0)
-   *   9:  EXIT
-   * 0BR: at cell 1, delta at cell 2, ip=3. +6 → ip=9 (EXIT). ✓
-   * BR:  at cell 7, delta at cell 8, ip=9. -9 → ip=0 (DUP). ✓
-   * Mutation: revert to "DUP ILIT 1 MINUS 0BR BR" → infinite loop (hang).
-   * Mutation: 0BR doesn't consume → DUP accumulates, loop hangs.         ---- */
-  static int test_branch_back(void)
-  {
-    uint16_t w = begin_word("BB", 2);
-    if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
-    forthDictEmit(PRIM_TOKEN(P_DUP));
-    forthDictEmit(T_0BR);
-    emit_int16(6);
-    forthDictEmit(T_ILIT);
-    emit_int32(-1);
-    forthDictEmit(PRIM_TOKEN(P_PLUS));
-    forthDictEmit(T_BR);
-    emit_int16(-9);
-    forthDictEmit(T_EXIT);
-    end_word(w);
+ * Body: DUP 0BR(+6) ILIT(-1) + BR(-9) EXIT
+ * Counter starts at 5, decremented to 0 over 5 iterations, terminates.
+ * 0BR CONSUMES the DUP'd copy; the original counter stays for +.
+ * Deltas are in CELLS, signed, relative to the cell after the delta.
+ * Cell layout:
+ *   0:  DUP
+ *   1:  0BR
+ *   2:  delta +6  (skip ILIT(-1) + + + BR + delta = 6 cells → EXIT)
+ *   3:  ILIT
+ *   4-5: int32 -1 (2 cells, LE)
+ *   6:  +
+ *   7:  BR
+ *   8:  delta -9  (back to cell 0: ip=9, 9+(-9)=0)
+ *   9:  EXIT
+ * 0BR: at cell 1, delta at cell 2, ip=3. +6 → ip=9 (EXIT). ✓
+ * BR:  at cell 7, delta at cell 8, ip=9. -9 → ip=0 (DUP). ✓
+ * Mutation: revert to "DUP ILIT 1 MINUS 0BR BR" → infinite loop (hang).
+ * Mutation: 0BR doesn't consume → DUP accumulates, loop hangs.         ---- */
+static int test_branch_back(void)
+{
+  uint16_t w = begin_word("BB", 2);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit(PRIM_TOKEN(P_DUP));
+  forthDictEmit(T_0BR);
+  emit_int16(6);
+  forthDictEmit(T_ILIT);
+  emit_int32(-1);
+  forthDictEmit(PRIM_TOKEN(P_PLUS));
+  forthDictEmit(T_BR);
+  emit_int16(-9);
+  forthDictEmit(T_EXIT);
+  end_word(w);
 
-    /* Seed X = 5 (counter) */
-    forthPushInt32(5);
-    lastErrorCode = ERROR_NONE;
-    bool err = run_word("BB");
-    if (err) {
-      printf("    FAIL: unexpected error %d during back branch loop\n", lastErrorCode);
-      return 1;
-    }
-    if (!x_is_longint(0)) {
-      printf("    FAIL: X should be 0 after countdown loop (got non-zero)\n");
-      return 1;
-    }
-    printf("    PASS: canonical backward loop 5→0 terminates, X==0\n");
-    return 0;
+  /* Seed X = 5 (counter) */
+  forthPushInt32(5);
+  lastErrorCode = ERROR_NONE;
+  bool err = run_word("BB");
+  if (err) {
+    printf("    FAIL: unexpected error %d during back branch loop\n", lastErrorCode);
+    return 1;
   }
+  if (!x_is_longint(0)) {
+    printf("    FAIL: X should be 0 after countdown loop (got non-zero)\n");
+    return 1;
+  }
+  printf("    PASS: canonical backward loop 5→0 terminates, X==0\n");
+  return 0;
+}
 
 /* ---- 0BR with dtLongInteger zero — toothed ----
-  * Base sentinel (42) below the tested value (0).
-  * 0BR pops 0, branches if zero → sentinel exposed in X.
-  * If branch NOT taken (raw real34IsZero misreads long-int zero),
-  * ILIT 999 executes → X = 999.
-  * Cell layout:
-  *   0:  ILIT
-  *   1-2: int32 42  (base sentinel, 2 cells LE)
-  *   3:  ILIT
-  *   4-5: int32 0   (2 cells LE)
-  *   6:  0BR
-  *   7:  delta +3  (ip=8, +3 → ip=11 EXIT)
-  *   8:  ILIT
-  *   9-10: int32 999 (not-taken sentinel, 2 cells LE)
-  *   11: EXIT
-  * Mutation: raw real34IsZero on dtLongInteger 0 → no branch → X=999. ---- */
+ * Base sentinel (42) below the tested value (0).
+ * 0BR pops 0, branches if zero → sentinel exposed in X.
+ * If branch NOT taken (raw real34IsZero misreads long-int zero),
+ * ILIT 999 executes → X = 999.
+ * Cell layout:
+ *   0:  ILIT
+ *   1-2: int32 42  (base sentinel, 2 cells LE)
+ *   3:  ILIT
+ *   4-5: int32 0   (2 cells LE)
+ *   6:  0BR
+ *   7:  delta +3  (ip=8, +3 → ip=11 EXIT)
+ *   8:  ILIT
+ *   9-10: int32 999 (not-taken sentinel, 2 cells LE)
+ *   11: EXIT
+ * Mutation: raw real34IsZero on dtLongInteger 0 → no branch → X=999. ---- */
 static int test_0br_longint(void)
 {
   uint16_t w = begin_word("ZB", 2);
@@ -267,7 +267,7 @@ static int test_0br_longint(void)
   bool err = run_word("ZB");
   if (err) {
     printf("    FAIL: 0BR error on dtLongInteger zero (T1-1 mutation: error %d)\n",
-           lastErrorCode);
+    lastErrorCode);
     return 1;
   }
   if (!x_is_longint(42)) {
@@ -279,18 +279,18 @@ static int test_0br_longint(void)
 }
 
 /* ---- 0BR consumes its operand (branch NOT taken) ----
-   * Pushes 7 (non-zero), then 0BR should pop it and NOT branch.
-   * If 0BR does NOT pop: stack has 7,999 → X=999, Y=7.
-   * If 0BR pops correctly: stack has 999 → X=999, Y=0.
-   * Cell layout:
-   *   0:  ILIT
-   *   1-2: int32 7   (non-zero test value, 2 cells LE)
-   *   3:  0BR
-   *   4:  delta +3  (ip=5, +3 → ip=8 EXIT)
-   *   5:  ILIT
-   *   6-7: int32 999 (not-taken sentinel, 2 cells LE)
-   *   8:  EXIT
-   * Mutation: no fnDrop in popIsFalse → Y=7 (operand not consumed).  ---- */
+ * Pushes 7 (non-zero), then 0BR should pop it and NOT branch.
+ * If 0BR does NOT pop: stack has 7,999 → X=999, Y=7.
+ * If 0BR pops correctly: stack has 999 → X=999, Y=0.
+ * Cell layout:
+ *   0:  ILIT
+ *   1-2: int32 7   (non-zero test value, 2 cells LE)
+ *   3:  0BR
+ *   4:  delta +3  (ip=5, +3 → ip=8 EXIT)
+ *   5:  ILIT
+ *   6-7: int32 999 (not-taken sentinel, 2 cells LE)
+ *   8:  EXIT
+ * Mutation: no fnDrop in popIsFalse → Y=7 (operand not consumed).  ---- */
 static int test_0br_consumes(void)
 {
   uint16_t w = begin_word("ZC", 2);
@@ -307,7 +307,7 @@ static int test_0br_consumes(void)
   bool err = run_word("ZC");
   if (err) {
     printf("    FAIL: 0BR consume test error (mutation: no fnDrop, error %d)\n",
-           lastErrorCode);
+    lastErrorCode);
     return 1;
   }
   if (!x_is_longint(999)) {
@@ -323,22 +323,22 @@ static int test_0br_consumes(void)
 }
 
 /* ---- 0BR on long-int zero: branch taken ----
-   * X = dtLongInteger 0 must be seen as zero by the type-dispatched test.
-   * If branch taken → ILIT 42 executes → X = 42.
-   * If branch NOT taken (raw real34IsZero misreads long-int zero) →
-   * ILIT 999 executes → EXIT → X = 999.
-   * Cell layout:
-   *   0:  ILIT
-   *   1-2: int32 0   (2 cells LE)
-   *   3:  0BR
-   *   4:  delta +4  (ip=5, +4 → ip=9 ILIT 42)
-   *   5:  ILIT
-   *   6-7: int32 999 (not-taken sentinel, 2 cells LE)
-   *   8:  EXIT
-   *   9:  ILIT
-   *   10-11: int32 42 (taken sentinel, 2 cells LE)
-   *   12: EXIT
-   * Mutation: raw real34IsZero on dtLongInteger 0 → no branch → X=999. ---- */
+ * X = dtLongInteger 0 must be seen as zero by the type-dispatched test.
+ * If branch taken → ILIT 42 executes → X = 42.
+ * If branch NOT taken (raw real34IsZero misreads long-int zero) →
+ * ILIT 999 executes → EXIT → X = 999.
+ * Cell layout:
+ *   0:  ILIT
+ *   1-2: int32 0   (2 cells LE)
+ *   3:  0BR
+ *   4:  delta +4  (ip=5, +4 → ip=9 ILIT 42)
+ *   5:  ILIT
+ *   6-7: int32 999 (not-taken sentinel, 2 cells LE)
+ *   8:  EXIT
+ *   9:  ILIT
+ *   10-11: int32 42 (taken sentinel, 2 cells LE)
+ *   12: EXIT
+ * Mutation: raw real34IsZero on dtLongInteger 0 → no branch → X=999. ---- */
 static int test_0br_longint_taken_branch(void)
 {
   uint16_t w = begin_word("ZS", 2);
@@ -359,7 +359,7 @@ static int test_0br_longint_taken_branch(void)
   bool err = run_word("ZS");
   if (err) {
     printf("    FAIL: 0BR taken-branch test error (mutation: raw real34IsZero, error %d)\n",
-           lastErrorCode);
+    lastErrorCode);
     return 1;
   }
   if (!x_is_longint(42)) {
@@ -376,7 +376,7 @@ static int test_0br_longint_taken_branch(void)
  * Mutation: ip+=8 bug (treating ILIT payload as 8 bytes, desyncs to next token) ---- */
 static int test_literal_after_lit(void)
 {
-   uint16_t w = begin_word("LA", 2);
+  uint16_t w = begin_word("LA", 2);
   if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
   forthDictEmit(T_ILIT);
   emit_int32(10);
@@ -429,10 +429,10 @@ static int test_lit_roundtrip(void)
 }
 
 /* ---- Fix #13: FTOK_C47 PTP_NONE dispatch (hand-assembled) ----
-  * Body: C47(ITM_NULL, NOPARAM) | ILIT(55) | EXIT
-  * ITM_NULL (0) has PTP_NONE — no inline param consumed, no-op on stack.
-  * ip advances 2 bytes past itemId, then ILIT 55 runs.
-  * Mutation: wrong ip advance -> ILIT misread. ---- */
+ * Body: C47(ITM_NULL, NOPARAM) | ILIT(55) | EXIT
+ * ITM_NULL (0) has PTP_NONE — no inline param consumed, no-op on stack.
+ * ip advances 2 bytes past itemId, then ILIT 55 runs.
+ * Mutation: wrong ip advance -> ILIT misread. ---- */
 static int test_c47_ptp_none(void)
 {
   uint16_t w = begin_word("CN", 2);
@@ -458,11 +458,11 @@ static int test_c47_ptp_none(void)
 }
 
 /* ---- Fix #13: FTOK_C47 PTP_NUMBER_8 padded dispatch (hand-assembled) ----
-  * Body: C47(ITM_PAUSE, 0) | ILIT(33) | EXIT
-  * ITM_PAUSE (38) has PTP_NUMBER_8 — 1-byte param padded to 2-byte cell.
-  * fnPause is a no-op stub; param=0 means no pause.
-  * ip advances 2 past itemId, 2 past param cell.
-  * Mutation: ip += 1 for param -> desync. ---- */
+ * Body: C47(ITM_PAUSE, 0) | ILIT(33) | EXIT
+ * ITM_PAUSE (38) has PTP_NUMBER_8 — 1-byte param padded to 2-byte cell.
+ * fnPause is a no-op stub; param=0 means no pause.
+ * ip advances 2 past itemId, 2 past param cell.
+ * Mutation: ip += 1 for param -> desync. ---- */
 static int test_c47_ptp_number8_padded(void)
 {
   uint16_t w = begin_word("C8", 2);
@@ -637,7 +637,7 @@ static int test_rstack_overflow(void)
 
   /* Sentinel: sets X = 777 */
   {
-     uint16_t w = begin_word("RS", 2);
+    uint16_t w = begin_word("RS", 2);
     if (w != FORTH_NULL) {
       forthDictEmit(T_ILIT);
       emit_int32(777);
@@ -685,16 +685,16 @@ static int test_rstack_overflow(void)
 }
 
 /* ---- Runaway guard: BR -2 infinite loop ----
-  * Body: BR -2 (infinite loop over BR token + delta, never reaches EXIT).
-  * RUNAWAY_CAP = 4096 dispatches; guard must trigger and halt.
-  * Use sentinel approach: word "RR1" sets X=444, then "RR2" runs the loop.
-  * If guard halts before BR modifies X, X stays 444.
-  * Mutation: no runaway cap -> infinite loop (hang).                   ---- */
+ * Body: BR -2 (infinite loop over BR token + delta, never reaches EXIT).
+ * RUNAWAY_CAP = 4096 dispatches; guard must trigger and halt.
+ * Use sentinel approach: word "RR1" sets X=444, then "RR2" runs the loop.
+ * If guard halts before BR modifies X, X stays 444.
+ * Mutation: no runaway cap -> infinite loop (hang).                   ---- */
 static int test_runaway_guard(void)
 {
   /* Prime word: sets X = 444 */
   {
-     uint16_t w = begin_word("RR1", 3);
+    uint16_t w = begin_word("RR1", 3);
     if (w != FORTH_NULL) {
       forthDictEmit(T_ILIT);
       emit_int32(444);
@@ -703,7 +703,7 @@ static int test_runaway_guard(void)
   }
 
   /* RR2: BR -2 (infinite loop, never reaches EXIT) */
-   uint16_t w = begin_word("RR2", 3);
+  uint16_t w = begin_word("RR2", 3);
   if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
   forthDictEmit(T_BR);
   emit_int16(-2);
@@ -727,20 +727,20 @@ static int test_runaway_guard(void)
 }
 
 /* ---- Malformed token ----
-  * (a) Bad PRIM index: token 0x0FFF -> primIdx = 0x0FFE >= forthPrimCount
-  * (b) Bad CALL index: CALL to nonexistent colon def
-  * (c) Reserved token: 0x7F05 (unrecognized, above T_C47)
-  * Each word: [bad token] | ILIT 555 | EXIT
-  * ILIT 555 is the sentinel: if bad token is not caught, ILIT 555 executes -> X=555.
-  * Prime X=444 before each test; if error caught, X stays 444.
-  * Mutation: no bounds check -> sentinel executes, X=555.              ---- */
+ * (a) Bad PRIM index: token 0x0FFF -> primIdx = 0x0FFE >= forthPrimCount
+ * (b) Bad CALL index: CALL to nonexistent colon def
+ * (c) Reserved token: 0x7F05 (unrecognized, above T_C47)
+ * Each word: [bad token] | ILIT 555 | EXIT
+ * ILIT 555 is the sentinel: if bad token is not caught, ILIT 555 executes -> X=555.
+ * Prime X=444 before each test; if error caught, X stays 444.
+ * Mutation: no bounds check -> sentinel executes, X=555.              ---- */
 static int test_malformed_token(void)
 {
   int fail = 0;
 
   /* Prime word: sets X = 444 */
   {
-     uint16_t w = begin_word("MRP", 3);
+    uint16_t w = begin_word("MRP", 3);
     if (w != FORTH_NULL) {
       forthDictEmit(T_ILIT);
       emit_int32(444);
@@ -750,7 +750,7 @@ static int test_malformed_token(void)
 
   /* (a) Bad PRIM index: 0x0FFF | ILIT 555 | EXIT */
   {
-     uint16_t w = begin_word("MP", 2);
+    uint16_t w = begin_word("MP", 2);
     if (w != FORTH_NULL) {
       forthDictEmit(0x0FFF);
       forthDictEmit(T_ILIT);
@@ -774,7 +774,7 @@ static int test_malformed_token(void)
 
   /* (b) Bad CALL index: CALL(0x6FFF) | ILIT 555 | EXIT */
   {
-     uint16_t w = begin_word("MC", 2);
+    uint16_t w = begin_word("MC", 2);
     if (w != FORTH_NULL) {
       forthDictEmit((ftoken_t)(T_CALL_BASE + 0x6FFF));
       forthDictEmit(T_ILIT);
@@ -798,7 +798,7 @@ static int test_malformed_token(void)
 
   /* (c) Reserved token: 0x7F05 | ILIT 555 | EXIT */
   {
-     uint16_t w = begin_word("MR", 2);
+    uint16_t w = begin_word("MR", 2);
     if (w != FORTH_NULL) {
       forthDictEmit(0x7F05);
       forthDictEmit(T_ILIT);
@@ -823,8 +823,8 @@ static int test_malformed_token(void)
   return fail;
 }
 /* ---- ILIT sign-extend fix (fix #1) ----
-   * Compiles : TEST128 128 ; and verifies X = 128 (not -128).
-   * Mutation: revert to (int8_t) sign-extend on byte 0.               ---- */
+ * Compiles : TEST128 128 ; and verifies X = 128 (not -128).
+ * Mutation: revert to (int8_t) sign-extend on byte 0.               ---- */
 static int test_ilit_sign_extend(void)
 {
   uint16_t w = begin_word("T128", 4);
@@ -876,8 +876,8 @@ static int test_ilit_sign_extend(void)
 }
 
 /* ---- ILIT arithmetic divergence (fix #1) ----
-   * ILIT 42 + ILIT 128 + PLUS should produce 170.
-   * Mutation: ILIT 128 produces -128 (sign-extend); 42+(-128) = -86 != 170. ---- */
+ * ILIT 42 + ILIT 128 + PLUS should produce 170.
+ * Mutation: ILIT 128 produces -128 (sign-extend); 42+(-128) = -86 != 170. ---- */
 static int test_ilit_arithmetic_divergence(void)
 {
   /* Hand-assembled: ILIT 42 | ILIT 128 | PLUS | EXIT */
@@ -905,19 +905,19 @@ static int test_ilit_arithmetic_divergence(void)
 }
 
 /* ---- BR delta sign-extend fix (fix #16) ----
-   * BR with delta whose high byte != 0 must not sign-extend from byte 0.
-   * Tests a forward branch with delta = 260 cells (0x0104).
-   * With memcpy, delta = +260 cells.  Without memcpy (old buggy code),
-   * byte 0 = 0x04 would be read correctly, but byte 1 = 0x01 could be
-   * misinterpreted if the code used int8_t sign-extension.
-   * Layout (cells, 2 bytes each):
-   *   0: BR token
-   *   1: delta +260 (skip 260 cells = 520 bytes)
-   *   2-261: filler tokens (skipped)
-   *   262: ILIT 777
-   *   263-264: int32 777
-   *   265: EXIT
-   */
+ * BR with delta whose high byte != 0 must not sign-extend from byte 0.
+ * Tests a forward branch with delta = 260 cells (0x0104).
+ * With memcpy, delta = +260 cells.  Without memcpy (old buggy code),
+ * byte 0 = 0x04 would be read correctly, but byte 1 = 0x01 could be
+ * misinterpreted if the code used int8_t sign-extension.
+ * Layout (cells, 2 bytes each):
+ *   0: BR token
+ *   1: delta +260 (skip 260 cells = 520 bytes)
+ *   2-261: filler tokens (skipped)
+ *   262: ILIT 777
+ *   263-264: int32 777
+ *   265: EXIT
+ */
 static int test_br_delta_sign_extend(void)
 {
   uint16_t w = begin_word("BDS", 3);
@@ -965,10 +965,10 @@ static void x_set_string(const char *s)
 }
 
 /* ---- ILIT compiled vs interpreted parity (fix #1) ----
-   * Compiled ": W 128 + ;" with X=42 -> 170.
-   * Interpreted "42 128 +" -> 170.
-   * Both paths must agree. Mutation: ILIT sign-extend in compiled path
-   * gives -86 (42 + -128) instead of 170. ---- */
+ * Compiled ": W 128 + ;" with X=42 -> 170.
+ * Interpreted "42 128 +" -> 170.
+ * Both paths must agree. Mutation: ILIT sign-extend in compiled path
+ * gives -86 (42 + -128) instead of 170. ---- */
 static int test_ilit_compile_interpret_parity(void)
 {
   /* Compiled path: define : W 128 + ; */
@@ -1062,11 +1062,11 @@ static int test_outer_nonstring_x(void)
   fnForthOuter(NOPARAM);
   if (lastErrorCode != ERROR_INVALID_DATA_TYPE_FOR_OP) {
     printf("    FAIL: non-string X gave error %d (expected %d)\n",
-           lastErrorCode, ERROR_INVALID_DATA_TYPE_FOR_OP);
+    lastErrorCode, ERROR_INVALID_DATA_TYPE_FOR_OP);
     return 1;
   }
   printf("    PASS: non-string X -> ERROR_INVALID_DATA_TYPE_FOR_OP (%d)\n",
-          ERROR_INVALID_DATA_TYPE_FOR_OP);
+  ERROR_INVALID_DATA_TYPE_FOR_OP);
   return 0;
 }
 
@@ -1228,9 +1228,9 @@ static int test_tam_dispatcher(void)
 }
 
 /* §7.1 re-entrancy: forthRunning guard fires on nested entry (§3.2)
-  * Uses test-only forthTestSetRunning to prime the guard, avoiding
-  * reallyRunFunction/display calls that may not be safe in headless mode.
-  * Requires FORTH_DEBUG_SELFTEST (meson OPTION). */
+ * Uses test-only forthTestSetRunning to prime the guard, avoiding
+ * reallyRunFunction/display calls that may not be safe in headless mode.
+ * Requires FORTH_DEBUG_SELFTEST (meson OPTION). */
 #ifdef FORTH_DEBUG_SELFTEST
 static int test_reentrancy(void)
 {
@@ -1263,7 +1263,7 @@ static int test_reentrancy(void)
 
   if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
     printf("    FAIL: expected ERROR_OPERATION_UNDEFINED (%d), got %d\n",
-           ERROR_OPERATION_UNDEFINED, lastErrorCode);
+    ERROR_OPERATION_UNDEFINED, lastErrorCode);
     return 1;
   }
   if (x_is_longint(99)) {
@@ -1275,7 +1275,7 @@ static int test_reentrancy(void)
     return 1;
   }
   printf("    PASS: re-entrancy guard fired (err=%d), word not executed\n",
-         lastErrorCode);
+  lastErrorCode);
   return 0;
 }
 #endif /* FORTH_DEBUG_SELFTEST */
@@ -1354,7 +1354,7 @@ static int test_xeq_precedence(void)
 
   if (res != FORTH_XEQ_LABEL) {
     printf("    FAIL: forthResolveXEQ returned %d (expected %d = FORTH_XEQ_LABEL)\n",
-           res, FORTH_XEQ_LABEL);
+    res, FORTH_XEQ_LABEL);
     return 1;
   }
   printf("    PASS: forthResolveXEQ returns LABEL when C47 label shadows Forth word\n");
@@ -1373,7 +1373,7 @@ static int test_xeq_item_lookup(void)
   res = forthResolveXEQ("FORTH", &param);
   if (res != FORTH_XEQ_ITEM || param != ITM_FORTH) {
     printf("    FAIL: forthResolveXEQ(\"FORTH\") returned %d/%u (expected ITEM/%d)\n",
-           res, param, ITM_FORTH);
+    res, param, ITM_FORTH);
     fail = 1;
   }
 
@@ -1381,7 +1381,7 @@ static int test_xeq_item_lookup(void)
   res = forthResolveXEQ("FCALL", &param);
   if (res != FORTH_XEQ_ITEM || param != ITM_FCALL) {
     printf("    FAIL: forthResolveXEQ(\"FCALL\") returned %d/%u (expected ITEM/%d)\n",
-           res, param, ITM_FCALL);
+    res, param, ITM_FCALL);
     fail = 1;
   }
 
@@ -1389,13 +1389,13 @@ static int test_xeq_item_lookup(void)
   res = forthResolveXEQ("NONEXISTENT_ITEM", &param);
   if (res != FORTH_XEQ_NONE) {
     printf("    FAIL: forthResolveXEQ(\"NONEXISTENT_ITEM\") returned %d (expected NONE)\n",
-           res);
+    res);
     fail = 1;
   }
 
   if (!fail) {
     printf("    PASS: XEQ item lookup: FORTH->ITEM(%d), FCALL->ITEM(%d), miss->NONE\n",
-           ITM_FORTH, ITM_FCALL);
+    ITM_FORTH, ITM_FCALL);
   }
   return fail;
 }
@@ -1438,7 +1438,7 @@ static int test_fnforthcall_interactive(void)
   }
   if (!x_is_longint(15)) {
     printf("    FAIL: X should be 15 after interactive fnForthCall(FIFTEEN), got %s (hardcoded true bug?)\n",
-           getRegisterDataType(REGISTER_X) == dtLongInteger ? "wrong longint" : "non-longint");
+    getRegisterDataType(REGISTER_X) == dtLongInteger ? "wrong longint" : "non-longint");
     return 1;
   }
   printf("    PASS: fnForthCall interactive (PGM_STOPPED) -> X=15, word executed fully\n");
@@ -1762,7 +1762,7 @@ static int test_forth_step_ptp_rem(void)
 {
   if ((indexOfItems[ITM_FORTH].status & PTP_STATUS) != PTP_REM) {
     printf("    FAIL: ITM_FORTH PTP is %x, expected PTP_REM (%x)\n",
-           indexOfItems[ITM_FORTH].status & PTP_STATUS, PTP_REM);
+    indexOfItems[ITM_FORTH].status & PTP_STATUS, PTP_REM);
     return 1;
   }
   printf("    PASS: ITM_FORTH PTP is PTP_REM\n");
@@ -1779,14 +1779,14 @@ static int test_forth_step_sizing(void)
   uint8_t *next = findKey2ndParam(marker);
   if (next != marker + 4) {
     printf("    FAIL: marker step: next=%p, expected %p (buf+4)\n",
-           next, marker + 4);
+    next, marker + 4);
     return 1;
   }
 
   next = findKey2ndParam(source);
   if (next != source + 9) {
     printf("    FAIL: source step: next=%p, expected %p (buf+9)\n",
-           next, source + 9);
+    next, source + 9);
     return 1;
   }
 
@@ -2038,7 +2038,7 @@ static int test_exec_step_halts_on_error(void)
   executeOneStep(step);
   if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
     printf("    FAIL: lastErrorCode = %d (expected ERROR_FUNCTION_NOT_FOUND=%d)\n",
-           lastErrorCode, ERROR_FUNCTION_NOT_FOUND);
+    lastErrorCode, ERROR_FUNCTION_NOT_FOUND);
     return 1;
   }
   printf("    PASS: executeOneStep on undefined word sets ERROR_FUNCTION_NOT_FOUND\n");
@@ -2082,19 +2082,19 @@ static void probeListPtrs(const char *tag)
   }
 
   printf("  [PROBE %s] labelList=%p addr=%u %s (region %d [%u..%u])\n",
-         tag, (void *)labelList, (unsigned)lblAddr,
-         lblInFree ? "IN FREE REGION" : (labelList ? "OK" : "NULL"),
-         (int)lblRegion,
-         lblRegion >= 0 ? (unsigned)freeMemoryRegions[lblRegion].blockAddress : 0,
-         lblRegion >= 0 ? (unsigned)(freeMemoryRegions[lblRegion].blockAddress + freeMemoryRegions[lblRegion].sizeInBlocks) : 0);
+  tag, (void *)labelList, (unsigned)lblAddr,
+  lblInFree ? "IN FREE REGION" : (labelList ? "OK" : "NULL"),
+  (int)lblRegion,
+  lblRegion >= 0 ? (unsigned)freeMemoryRegions[lblRegion].blockAddress : 0,
+  lblRegion >= 0 ? (unsigned)(freeMemoryRegions[lblRegion].blockAddress + freeMemoryRegions[lblRegion].sizeInBlocks) : 0);
   printf("  [PROBE %s] programList=%p addr=%u %s (region %d [%u..%u])\n",
-         tag, (void *)programList, (unsigned)prgAddr,
-         prgInFree ? "IN FREE REGION" : (programList ? "OK" : "NULL"),
-         (int)prgRegion,
-         prgRegion >= 0 ? (unsigned)freeMemoryRegions[prgRegion].blockAddress : 0,
-         prgRegion >= 0 ? (unsigned)(freeMemoryRegions[prgRegion].blockAddress + freeMemoryRegions[prgRegion].sizeInBlocks) : 0);
+  tag, (void *)programList, (unsigned)prgAddr,
+  prgInFree ? "IN FREE REGION" : (programList ? "OK" : "NULL"),
+  (int)prgRegion,
+  prgRegion >= 0 ? (unsigned)freeMemoryRegions[prgRegion].blockAddress : 0,
+  prgRegion >= 0 ? (unsigned)(freeMemoryRegions[prgRegion].blockAddress + freeMemoryRegions[prgRegion].sizeInBlocks) : 0);
   printf("  [PROBE %s] numberOfLabels=%u numberOfPrograms=%u numberOfFreeMemoryRegions=%d\n",
-         tag, (unsigned)numberOfLabels, (unsigned)numberOfPrograms, (int)numberOfFreeMemoryRegions);
+  tag, (unsigned)numberOfLabels, (unsigned)numberOfPrograms, (int)numberOfFreeMemoryRegions);
 }
 
 /* ---- COMMIT 5: §9.4 derived-state helpers + test-program infrastructure ---- */
@@ -2115,9 +2115,9 @@ static void probeListPtrs(const char *tag)
  *   programList[0] = { step:1, instructionPointer: beginOfProgramMemory }
  *   numberOfPrograms = 1
  *   Default program memory = 1 block (4 bytes) — too small for test programs,
-  *   so writeTestProgram expands by moving beginOfProgramMemory backwards into
-  *   the free-memory region, and adjusts freeMemoryRegions[0] accordingly.
-  */
+ *   so writeTestProgram expands by moving beginOfProgramMemory backwards into
+ *   the free-memory region, and adjusts freeMemoryRegions[0] accordingly.
+ */
 
 static uint8_t *testProgOrigBegin;   /* saved for restoreTestProgram */
 static uint16_t testProgOrigFreeSize; /* saved freeMemoryRegions[0].sizeInBlocks */
@@ -2134,112 +2134,112 @@ static uint16_t testProgOrigFreeSize; /* saved freeMemoryRegions[0].sizeInBlocks
 #if 0
 static void restoreTestProgram_OLD_REGION_SURGERY(void)
 {
-    *(testProgOrigBegin + 0) = (ITM_END >> 8) | 0x80;
-    *(testProgOrigBegin + 1) =  ITM_END       & 0xff;
-    *(testProgOrigBegin + 2) = 0xFF;
-    *(testProgOrigBegin + 3) = 0xFF;
+  *(testProgOrigBegin + 0) = (ITM_END >> 8) | 0x80;
+  *(testProgOrigBegin + 1) =  ITM_END       & 0xff;
+  *(testProgOrigBegin + 2) = 0xFF;
+  *(testProgOrigBegin + 3) = 0xFF;
 
-    beginOfProgramMemory = testProgOrigBegin;
-    currentStep = beginOfProgramMemory;
-    firstFreeProgramByte = beginOfProgramMemory + 2;
-    freeProgramBytes = 0;
-    freeMemoryRegions[0].sizeInBlocks =
-        TO_C47MEMPTR(testProgOrigBegin) - freeMemoryRegions[0].blockAddress;
-    { uint32_t end0 = (uint32_t)freeMemoryRegions[0].blockAddress +
-                        (uint32_t)freeMemoryRegions[0].sizeInBlocks;
-      int32_t keep = 1;
-      for (int32_t _i = 1; _i < numberOfFreeMemoryRegions; _i++) {
-        uint32_t rStart = (uint32_t)freeMemoryRegions[_i].blockAddress;
-        if (rStart >= end0) {
-          freeMemoryRegions[keep] = freeMemoryRegions[_i];
-          keep++;
-        }
+  beginOfProgramMemory = testProgOrigBegin;
+  currentStep = beginOfProgramMemory;
+  firstFreeProgramByte = beginOfProgramMemory + 2;
+  freeProgramBytes = 0;
+  freeMemoryRegions[0].sizeInBlocks =
+  TO_C47MEMPTR(testProgOrigBegin) - freeMemoryRegions[0].blockAddress;
+  { uint32_t end0 = (uint32_t)freeMemoryRegions[0].blockAddress +
+    (uint32_t)freeMemoryRegions[0].sizeInBlocks;
+    int32_t keep = 1;
+    for (int32_t _i = 1; _i < numberOfFreeMemoryRegions; _i++) {
+      uint32_t rStart = (uint32_t)freeMemoryRegions[_i].blockAddress;
+      if (rStart >= end0) {
+        freeMemoryRegions[keep] = freeMemoryRegions[_i];
+        keep++;
       }
-      numberOfFreeMemoryRegions = keep;
     }
-    scanLabelsAndPrograms();
+    numberOfFreeMemoryRegions = keep;
+  }
+  scanLabelsAndPrograms();
 }
 #endif
 
 static void restoreTestProgram(void)
 {
-    if (!testProgOrigBegin) {
-        scanLabelsAndPrograms();
-        return;
-    }
-
-    /* Write pristine 4-byte empty program at current beginOfProgramMemory */
-    beginOfProgramMemory[0] = (ITM_END >> 8) | 0x80;
-    beginOfProgramMemory[1] =  ITM_END       & 0xff;
-    beginOfProgramMemory[2] = 0xFF;
-    beginOfProgramMemory[3] = 0xFF;
-
-    currentStep = beginOfProgramMemory;
-
-    /* Shrink program memory to minimal 1 block via production API.
-     * This moves beginOfProgramMemory forward and adds the delta to the
-     * last free region — keeps the free list consistent. */
-    resizeProgramMemory(1);
-
-    /* Re-scan labels and programs; recomputes firstFreeProgramByte and
-     * freeProgramBytes from the program bytes (manage.c:184-185). */
-    probeListPtrs("writeTestProgram");
+  if (!testProgOrigBegin) {
     scanLabelsAndPrograms();
+    return;
+  }
+
+  /* Write pristine 4-byte empty program at current beginOfProgramMemory */
+  beginOfProgramMemory[0] = (ITM_END >> 8) | 0x80;
+  beginOfProgramMemory[1] =  ITM_END       & 0xff;
+  beginOfProgramMemory[2] = 0xFF;
+  beginOfProgramMemory[3] = 0xFF;
+
+  currentStep = beginOfProgramMemory;
+
+  /* Shrink program memory to minimal 1 block via production API.
+   * This moves beginOfProgramMemory forward and adds the delta to the
+   * last free region — keeps the free list consistent. */
+  resizeProgramMemory(1);
+
+  /* Re-scan labels and programs; recomputes firstFreeProgramByte and
+   * freeProgramBytes from the program bytes (manage.c:184-185). */
+  probeListPtrs("writeTestProgram");
+  scanLabelsAndPrograms();
 }
 
 static void cleanupTestProgram(void)
 {
-    /* Free dict BEFORE restoring the program region.
-     * If dict is freed after restoreTestProgram collapses free
-     * regions, the dict's allocation falls inside the restored
-     * region 0 and triggers a false-positive overlap warning. */
-    if (fdict.base) {
-        freeC47Blocks(fdict.base, fdict.sizeBlocks);
-    }
-    fdict.base = NULL;
-    fdict.sizeBlocks = 0;
-    fdict.here = 0;
-    fdict.latest = FORTH_NULL;
-    fdict.count = 0;
+  /* Free dict BEFORE restoring the program region.
+   * If dict is freed after restoreTestProgram collapses free
+   * regions, the dict's allocation falls inside the restored
+   * region 0 and triggers a false-positive overlap warning. */
+  if (fdict.base) {
+    freeC47Blocks(fdict.base, fdict.sizeBlocks);
+  }
+  fdict.base = NULL;
+  fdict.sizeBlocks = 0;
+  fdict.here = 0;
+  fdict.latest = FORTH_NULL;
+  fdict.count = 0;
 
-    restoreTestProgram();
+  restoreTestProgram();
 
-    /* Reset saved state so a future writeTestProgram re-captures */
-    testProgOrigBegin = NULL;
-    testProgOrigFreeSize = 0;
+  /* Reset saved state so a future writeTestProgram re-captures */
+  testProgOrigBegin = NULL;
+  testProgOrigFreeSize = 0;
 }
 
 static bool writeTestProgram(const uint8_t *bytes, uint16_t n)
 {
-    if (!bytes || n == 0) return false;
+  if (!bytes || n == 0) return false;
 
-    uint16_t neededBytes = n + 2;  /* program + .END. */
-    uint16_t neededBlocks = TO_BLOCKS(neededBytes);
+  uint16_t neededBytes = n + 2;  /* program + .END. */
+  uint16_t neededBlocks = TO_BLOCKS(neededBytes);
 
-    uint16_t currentSizeBlocks =
-        RAM_SIZE_IN_BLOCKS - TO_C47MEMPTR(beginOfProgramMemory);
+  uint16_t currentSizeBlocks =
+  RAM_SIZE_IN_BLOCKS - TO_C47MEMPTR(beginOfProgramMemory);
 
-    /* Save original state for restore */
-    testProgOrigBegin = beginOfProgramMemory;
-    testProgOrigFreeSize = freeMemoryRegions[0].sizeInBlocks;
+  /* Save original state for restore */
+  testProgOrigBegin = beginOfProgramMemory;
+  testProgOrigFreeSize = freeMemoryRegions[0].sizeInBlocks;
 
-    if (neededBlocks > currentSizeBlocks) {
-        /* Safety: don't overlap data region */
-        uint16_t maxBlocks = RAM_SIZE_IN_BLOCKS - (uint16_t)freeMemoryRegions[0].blockAddress - 1;
-        if (neededBlocks > maxBlocks) {
-            return false;
-        }
-        /* Use the production API — keeps the free list consistent */
-        resizeProgramMemory(neededBlocks);
+  if (neededBlocks > currentSizeBlocks) {
+    /* Safety: don't overlap data region */
+    uint16_t maxBlocks = RAM_SIZE_IN_BLOCKS - (uint16_t)freeMemoryRegions[0].blockAddress - 1;
+    if (neededBlocks > maxBlocks) {
+      return false;
     }
+    /* Use the production API — keeps the free list consistent */
+    resizeProgramMemory(neededBlocks);
+  }
 
-    memcpy(beginOfProgramMemory, bytes, n);
-    beginOfProgramMemory[n]     = 0xFF;
-    beginOfProgramMemory[n + 1] = 0xFF;
-    firstFreeProgramByte = beginOfProgramMemory + n;
-    freeProgramBytes = ((uint8_t *)(ram + RAM_SIZE_IN_BLOCKS) - firstFreeProgramByte) - 2;
-    scanLabelsAndPrograms();
-    return true;
+  memcpy(beginOfProgramMemory, bytes, n);
+  beginOfProgramMemory[n]     = 0xFF;
+  beginOfProgramMemory[n + 1] = 0xFF;
+  firstFreeProgramByte = beginOfProgramMemory + n;
+  freeProgramBytes = ((uint8_t *)(ram + RAM_SIZE_IN_BLOCKS) - firstFreeProgramByte) - 2;
+  scanLabelsAndPrograms();
+  return true;
 }
 
 /* test_marker_parity
@@ -2249,50 +2249,50 @@ static bool writeTestProgram(const uint8_t *bytes, uint16_t n)
  * every direction flips. (§9.9 acceptance 4 logic) */
 static int test_marker_parity(void)
 {
-    /* marker | source | marker | marker | .END. */
-    uint8_t prog[] = {
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 1 */
-        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ',               /* source */
-        'D', 'U', 'P', ' ', '*', ' ', ';',
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 2 */
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 3 */
-    };
+  /* marker | source | marker | marker | .END. */
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 1 */
+    0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ',               /* source */
+    'D', 'U', 'P', ' ', '*', ' ', ';',
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 2 */
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 3 */
+  };
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    const uint8_t *marker1 = beginOfProgramMemory;
-    const uint8_t *marker2 = beginOfProgramMemory + 4 + 16;  /* after marker(4) + source(16) */
-    const uint8_t *marker3 = marker2 + 4;
+  const uint8_t *marker1 = beginOfProgramMemory;
+  const uint8_t *marker2 = beginOfProgramMemory + 4 + 16;  /* after marker(4) + source(16) */
+  const uint8_t *marker3 = marker2 + 4;
 
-    int fail = 0;
+  int fail = 0;
 
-    /* Marker 1: 0 markers before it → even → opening (true) */
-    if (!forthMarkerTurnsOn(marker1)) {
-        printf("    FAIL: marker 1 should turn on (opening)\n");
-        fail = 1;
-    }
+  /* Marker 1: 0 markers before it → even → opening (true) */
+  if (!forthMarkerTurnsOn(marker1)) {
+    printf("    FAIL: marker 1 should turn on (opening)\n");
+    fail = 1;
+  }
 
-    /* Marker 2: 1 marker before it (marker1) → odd → closing (false) */
-    if (forthMarkerTurnsOn(marker2)) {
-        printf("    FAIL: marker 2 should NOT turn on (closing)\n");
-        fail = 1;
-    }
+  /* Marker 2: 1 marker before it (marker1) → odd → closing (false) */
+  if (forthMarkerTurnsOn(marker2)) {
+    printf("    FAIL: marker 2 should NOT turn on (closing)\n");
+    fail = 1;
+  }
 
-    /* Marker 3: 2 markers before it (marker1, marker2) → even → opening (true) */
-    if (!forthMarkerTurnsOn(marker3)) {
-        printf("    FAIL: marker 3 should turn on (opening)\n");
-        fail = 1;
-    }
+  /* Marker 3: 2 markers before it (marker1, marker2) → even → opening (true) */
+  if (!forthMarkerTurnsOn(marker3)) {
+    printf("    FAIL: marker 3 should turn on (opening)\n");
+    fail = 1;
+  }
 
-    cleanupTestProgram();
+  cleanupTestProgram();
 
-    if (!fail) {
-        printf("    PASS: marker parity = true/false/true for 1st/3rd/4th\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: marker parity = true/false/true for 1st/3rd/4th\n");
+  }
+  return fail;
 }
 
 /* test_entry_state_derivation
@@ -2305,83 +2305,83 @@ static int test_marker_parity(void)
  * (§9.9 acceptance 2 logic) */
 static int test_entry_state_derivation(void)
 {
-    /* marker | source | marker | marker | ITM_sin | .END. */
-    uint8_t prog[] = {
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 1 (opening) */
-        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ',               /* source */
-        'D', 'U', 'P', ' ', '*', ' ', ';',
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 2 (closing) */
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 3 (opening) */
-        0x4C,                                                            /* ITM_sin (76) */
-    };
+  /* marker | source | marker | marker | ITM_sin | .END. */
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 1 (opening) */
+    0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ',               /* source */
+    'D', 'U', 'P', ' ', '*', ' ', ';',
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 2 (closing) */
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 3 (opening) */
+    0x4C,                                                            /* ITM_sin (76) */
+  };
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    const uint8_t *marker1 = beginOfProgramMemory;
-    const uint8_t *source  = beginOfProgramMemory + 4;
-    const uint8_t *marker2 = beginOfProgramMemory + 4 + 16;
-    const uint8_t *marker3 = marker2 + 4;
-    const uint8_t *rpnStep = marker3 + 4;
+  const uint8_t *marker1 = beginOfProgramMemory;
+  const uint8_t *source  = beginOfProgramMemory + 4;
+  const uint8_t *marker2 = beginOfProgramMemory + 4 + 16;
+  const uint8_t *marker3 = marker2 + 4;
+  const uint8_t *rpnStep = marker3 + 4;
 
-    int fail = 0;
+  int fail = 0;
 
-    /* Save original cursor state */
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
+  /* Save original cursor state */
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
 
-    /* RPN step → false */
-    currentStep = (uint8_t *)rpnStep;
-    pemCursorIsZerothStep = false;
-    if (forthEntryStateAtCursor()) {
-        printf("    FAIL: RPN step (ITM_sin) should return false\n");
-        fail = 1;
-    }
+  /* RPN step → false */
+  currentStep = (uint8_t *)rpnStep;
+  pemCursorIsZerothStep = false;
+  if (forthEntryStateAtCursor()) {
+    printf("    FAIL: RPN step (ITM_sin) should return false\n");
+    fail = 1;
+  }
 
-    /* Source step → true */
-    currentStep = (uint8_t *)source;
-    pemCursorIsZerothStep = false;
-    if (!forthEntryStateAtCursor()) {
-        printf("    FAIL: source step should return true\n");
-        fail = 1;
-    }
+  /* Source step → true */
+  currentStep = (uint8_t *)source;
+  pemCursorIsZerothStep = false;
+  if (!forthEntryStateAtCursor()) {
+    printf("    FAIL: source step should return true\n");
+    fail = 1;
+  }
 
-    /* Opening marker → true */
-    currentStep = (uint8_t *)marker1;
-    pemCursorIsZerothStep = false;
-    if (!forthEntryStateAtCursor()) {
-        printf("    FAIL: opening marker should return true\n");
-        fail = 1;
-    }
+  /* Opening marker → true */
+  currentStep = (uint8_t *)marker1;
+  pemCursorIsZerothStep = false;
+  if (!forthEntryStateAtCursor()) {
+    printf("    FAIL: opening marker should return true\n");
+    fail = 1;
+  }
 
-    /* Closing marker → false */
-    currentStep = (uint8_t *)marker2;
-    pemCursorIsZerothStep = false;
-    if (forthEntryStateAtCursor()) {
-        printf("    FAIL: closing marker should return false\n");
-        fail = 1;
-    }
+  /* Closing marker → false */
+  currentStep = (uint8_t *)marker2;
+  pemCursorIsZerothStep = false;
+  if (forthEntryStateAtCursor()) {
+    printf("    FAIL: closing marker should return false\n");
+    fail = 1;
+  }
 
-    /* Zeroth-step flag → false */
-    currentStep = (uint8_t *)source;
-    pemCursorIsZerothStep = true;
-    if (forthEntryStateAtCursor()) {
-        printf("    FAIL: zeroth-step should return false\n");
-        fail = 1;
-    }
+  /* Zeroth-step flag → false */
+  currentStep = (uint8_t *)source;
+  pemCursorIsZerothStep = true;
+  if (forthEntryStateAtCursor()) {
+    printf("    FAIL: zeroth-step should return false\n");
+    fail = 1;
+  }
 
-    /* Restore cursor state */
-    currentStep = savedCurrentStep;
-    pemCursorIsZerothStep = savedZeroth;
+  /* Restore cursor state */
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
 
-    cleanupTestProgram();
+  cleanupTestProgram();
 
-    if (!fail) {
-        printf("    PASS: entry state derived from step bytes, not flag\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: entry state derived from step bytes, not flag\n");
+  }
+  return fail;
 }
 
 /* ---- COMMIT 6: manage.c override — toggle, in-region, FCALL redirect ---- */
@@ -2400,120 +2400,120 @@ static int test_entry_state_derivation(void)
  */
 static int test_toggle_inserts_marker(void)
 {
-    int fail = 0;
+  int fail = 0;
 
-    /* ---- Opening case: RPN step → wasOn=false → FLAG_ALPHA set ---- */
-    {
-        uint8_t prog[] = {
-            0x4C,                                                             /* ITM_sin (RPN) */
-            0x85, 0xB2,                                                       /* ITM_END */
-        };
+  /* ---- Opening case: RPN step → wasOn=false → FLAG_ALPHA set ---- */
+  {
+    uint8_t prog[] = {
+      0x4C,                                                             /* ITM_sin (RPN) */
+      0x85, 0xB2,                                                       /* ITM_END */
+    };
 
-        if (!writeTestProgram(prog, sizeof(prog))) {
-            printf("    FAIL: writeTestProgram (opening) failed\n");
-            return 1;
-        }
-
-        uint8_t *savedCurrentStep = currentStep;
-        bool_t savedZeroth = pemCursorIsZerothStep;
-        int16_t savedCatalog = catalog;
-        uint16_t savedLocalStep = currentLocalStepNumber;
-        bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
-
-        /* Cursor on ITM_END (offset 1) — pre-move skipped */
-        currentStep = beginOfProgramMemory + 1;
-        pemCursorIsZerothStep = false;
-        currentLocalStepNumber = 2;
-        catalog = CATALOG_NONE;
-        aimBuffer[0] = 0;
-        tam.mode = 0;
-        clearSystemFlag(FLAG_ALPHA);
-
-        extern void addStepInProgram(int16_t func);
-        addStepInProgram(ITM_FORTH);
-
-        /* Check: FLAG_ALPHA set (capture opened) */
-        if (!getSystemFlag(FLAG_ALPHA)) {
-            printf("    FAIL: FLAG_ALPHA not set after opening toggle\n");
-            fail = 1;
-        }
-
-        /* Check: marker inserted before ITM_END */
-        uint8_t *marker = beginOfProgramMemory + 1;
-        if (*(marker + 0) != 0x8B || *(marker + 1) != 0x1A ||
-            *(marker + 2) != 0xFD || *(marker + 3) != 0x00) {
-            printf("    FAIL: opening marker not found (got 0x%02X 0x%02X 0x%02X 0x%02X)\n",
-                   *(marker+0), *(marker+1), *(marker+2), *(marker+3));
-            fail = 1;
-        }
-
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        catalog = savedCatalog;
-        currentLocalStepNumber = savedLocalStep;
-        if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    FAIL: writeTestProgram (opening) failed\n");
+      return 1;
     }
 
-    /* ---- Closing case: source step → wasOn=true → FLAG_ALPHA clear ---- */
-    {
-        uint8_t prog[] = {
-            0x8B, 0x1A, 0xFD, 0x00,                                         /* marker (opening) */
-            0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* source: : SQ DUP * ; */
-            ' ', '*', ' ', ';',
-            0x85, 0xB2,                                                       /* ITM_END */
-        };
+    uint8_t *savedCurrentStep = currentStep;
+    bool_t savedZeroth = pemCursorIsZerothStep;
+    int16_t savedCatalog = catalog;
+    uint16_t savedLocalStep = currentLocalStepNumber;
+    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
 
-        if (!writeTestProgram(prog, sizeof(prog))) {
-            printf("    FAIL: writeTestProgram (closing) failed\n");
-            return 1;
-        }
+    /* Cursor on ITM_END (offset 1) — pre-move skipped */
+    currentStep = beginOfProgramMemory + 1;
+    pemCursorIsZerothStep = false;
+    currentLocalStepNumber = 2;
+    catalog = CATALOG_NONE;
+    aimBuffer[0] = 0;
+    tam.mode = 0;
+    clearSystemFlag(FLAG_ALPHA);
 
-        uint8_t *savedCurrentStep = currentStep;
-        bool_t savedZeroth = pemCursorIsZerothStep;
-        int16_t savedCatalog = catalog;
-        uint16_t savedLocalStep = currentLocalStepNumber;
-        bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+    extern void addStepInProgram(int16_t func);
+    addStepInProgram(ITM_FORTH);
 
-        /* Cursor on ITM_END (offset 20) — pre-move skipped */
-        currentStep = beginOfProgramMemory + 20;
-        pemCursorIsZerothStep = false;
-        currentLocalStepNumber = 3;
-        catalog = CATALOG_NONE;
-        aimBuffer[0] = 0;
-        tam.mode = 0;
-        clearSystemFlag(FLAG_ALPHA);
-
-        extern void addStepInProgram(int16_t func);
-        addStepInProgram(ITM_FORTH);
-
-        /* Check: FLAG_ALPHA clear (closing toggle, no capture) */
-        if (getSystemFlag(FLAG_ALPHA)) {
-            printf("    FAIL: FLAG_ALPHA set after closing toggle (should be clear)\n");
-            fail = 1;
-        }
-
-        /* Check: closing marker inserted before ITM_END (offset 20) */
-        uint8_t *marker2 = beginOfProgramMemory + 20;
-        if (*(marker2 + 0) != 0x8B || *(marker2 + 1) != 0x1A ||
-            *(marker2 + 2) != 0xFD || *(marker2 + 3) != 0x00) {
-            printf("    FAIL: closing marker not found (got 0x%02X 0x%02X 0x%02X 0x%02X)\n",
-                   *(marker2+0), *(marker2+1), *(marker2+2), *(marker2+3));
-            fail = 1;
-        }
-
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        catalog = savedCatalog;
-        currentLocalStepNumber = savedLocalStep;
-        if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    /* Check: FLAG_ALPHA set (capture opened) */
+    if (!getSystemFlag(FLAG_ALPHA)) {
+      printf("    FAIL: FLAG_ALPHA not set after opening toggle\n");
+      fail = 1;
     }
 
-    if (!fail) {
-        printf("    PASS: toggle inserts marker, opens/closes capture correctly\n");
+    /* Check: marker inserted before ITM_END */
+    uint8_t *marker = beginOfProgramMemory + 1;
+    if (*(marker + 0) != 0x8B || *(marker + 1) != 0x1A ||
+    *(marker + 2) != 0xFD || *(marker + 3) != 0x00) {
+      printf("    FAIL: opening marker not found (got 0x%02X 0x%02X 0x%02X 0x%02X)\n",
+      *(marker+0), *(marker+1), *(marker+2), *(marker+3));
+      fail = 1;
     }
-    return fail;
+
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    catalog = savedCatalog;
+    currentLocalStepNumber = savedLocalStep;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  }
+
+  /* ---- Closing case: source step → wasOn=true → FLAG_ALPHA clear ---- */
+  {
+    uint8_t prog[] = {
+      0x8B, 0x1A, 0xFD, 0x00,                                         /* marker (opening) */
+      0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* source: : SQ DUP * ; */
+      ' ', '*', ' ', ';',
+      0x85, 0xB2,                                                       /* ITM_END */
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    FAIL: writeTestProgram (closing) failed\n");
+      return 1;
+    }
+
+    uint8_t *savedCurrentStep = currentStep;
+    bool_t savedZeroth = pemCursorIsZerothStep;
+    int16_t savedCatalog = catalog;
+    uint16_t savedLocalStep = currentLocalStepNumber;
+    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+
+    /* Cursor on ITM_END (offset 20) — pre-move skipped */
+    currentStep = beginOfProgramMemory + 20;
+    pemCursorIsZerothStep = false;
+    currentLocalStepNumber = 3;
+    catalog = CATALOG_NONE;
+    aimBuffer[0] = 0;
+    tam.mode = 0;
+    clearSystemFlag(FLAG_ALPHA);
+
+    extern void addStepInProgram(int16_t func);
+    addStepInProgram(ITM_FORTH);
+
+    /* Check: FLAG_ALPHA clear (closing toggle, no capture) */
+    if (getSystemFlag(FLAG_ALPHA)) {
+      printf("    FAIL: FLAG_ALPHA set after closing toggle (should be clear)\n");
+      fail = 1;
+    }
+
+    /* Check: closing marker inserted before ITM_END (offset 20) */
+    uint8_t *marker2 = beginOfProgramMemory + 20;
+    if (*(marker2 + 0) != 0x8B || *(marker2 + 1) != 0x1A ||
+    *(marker2 + 2) != 0xFD || *(marker2 + 3) != 0x00) {
+      printf("    FAIL: closing marker not found (got 0x%02X 0x%02X 0x%02X 0x%02X)\n",
+      *(marker2+0), *(marker2+1), *(marker2+2), *(marker2+3));
+      fail = 1;
+    }
+
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    catalog = savedCatalog;
+    currentLocalStepNumber = savedLocalStep;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  }
+
+  if (!fail) {
+    printf("    PASS: toggle inserts marker, opens/closes capture correctly\n");
+  }
+  return fail;
 }
 
 /* test_fcall_redirect_records_name
@@ -2525,98 +2525,47 @@ static int test_toggle_inserts_marker(void)
  */
 static int test_fcall_redirect_records_name(void)
 {
-    /* Define SQ */
-    define_word("SQ", 2);
-    uint16_t sqIdx = fdict.count - 1;
+  /* Define SQ */
+  define_word("SQ", 2);
+  uint16_t sqIdx = fdict.count - 1;
 
-    /* Minimal program */
-    uint8_t prog[] = { 0x4C };  /* ITM_sin */
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  /* Minimal program */
+  uint8_t prog[] = { 0x4C };  /* ITM_sin */
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    /* Save state */
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
-    uint16_t savedLocalStep = currentLocalStepNumber;
-    uint16_t savedTamValue = tam.value;
-    bool_t savedTamIndirect = tam.indirect;
-    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  /* Save state */
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedTamValue = tam.value;
+  bool_t savedTamIndirect = tam.indirect;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
 
-    /* Setup for FCALL insertion */
-    currentStep = beginOfProgramMemory;
-    pemCursorIsZerothStep = false;
-    currentLocalStepNumber = 1;
-    aimBuffer[0] = 0;
-    tam.mode = 0;
-    tam.indirect = false;
-    tam.value = sqIdx;
-    clearSystemFlag(FLAG_ALPHA);
+  /* Setup for FCALL insertion */
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  tam.indirect = false;
+  tam.value = sqIdx;
+  clearSystemFlag(FLAG_ALPHA);
 
-    extern void insertStepInProgram(const int16_t func);
-    insertStepInProgram(ITM_FCALL);
+  extern void insertStepInProgram(const int16_t func);
+  insertStepInProgram(ITM_FCALL);
 
-    /* Rescan to update pointers */
-    probeListPtrs("pre-scan:2502");
-    scanLabelsAndPrograms();
+  /* Rescan to update pointers */
+  probeListPtrs("pre-scan:2502");
+  scanLabelsAndPrograms();
 
-    /* Byte-probe: the step at currentStep should be the redirected form */
-    uint8_t *s = beginOfProgramMemory;
-    if (*s != 0x8B || *(s+1) != 0x1A || *(s+2) != 0xFD) {
-        printf("    FAIL: step does not start with ITM_FORTH opcode (got 0x%02X 0x%02X 0x%02X)\n",
-               *s, *(s+1), *(s+2));
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        currentLocalStepNumber = savedLocalStep;
-        tam.value = savedTamValue;
-        tam.indirect = savedTamIndirect;
-        if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-        return 1;
-    }
-
-    uint8_t nameLen = *(s + 3);
-    if (nameLen != 2) {
-        printf("    FAIL: name length is %d, expected 2\n", nameLen);
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        currentLocalStepNumber = savedLocalStep;
-        tam.value = savedTamValue;
-        tam.indirect = savedTamIndirect;
-        return 1;
-    }
-
-    if (*(s + 4) != 'S' || *(s + 5) != 'Q') {
-        printf("    FAIL: name is '%c%c', expected 'SQ'\n", *(s+4), *(s+5));
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        currentLocalStepNumber = savedLocalStep;
-        tam.value = savedTamValue;
-        tam.indirect = savedTamIndirect;
-        return 1;
-    }
-
-    /* Verify NO ITM_FCALL opcode (0x8B 0x1B) anywhere in program */
-    uint8_t *p = beginOfProgramMemory;
-    uint8_t *end = firstFreeProgramByte;
-    while (p < end - 1) {
-        if (*p == 0x8B && *(p+1) == 0x1B) {
-            printf("    FAIL: ITM_FCALL opcode (0x8B 0x1B) found in program!\n");
-            cleanupTestProgram();
-            currentStep = savedCurrentStep;
-            pemCursorIsZerothStep = savedZeroth;
-            currentLocalStepNumber = savedLocalStep;
-            tam.value = savedTamValue;
-            tam.indirect = savedTamIndirect;
-            if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-            return 1;
-        }
-        p++;
-    }
-
+  /* Byte-probe: the step at currentStep should be the redirected form */
+  uint8_t *s = beginOfProgramMemory;
+  if (*s != 0x8B || *(s+1) != 0x1A || *(s+2) != 0xFD) {
+    printf("    FAIL: step does not start with ITM_FORTH opcode (got 0x%02X 0x%02X 0x%02X)\n",
+    *s, *(s+1), *(s+2));
     cleanupTestProgram();
     currentStep = savedCurrentStep;
     pemCursorIsZerothStep = savedZeroth;
@@ -2624,9 +2573,60 @@ static int test_fcall_redirect_records_name(void)
     tam.value = savedTamValue;
     tam.indirect = savedTamIndirect;
     if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    return 1;
+  }
 
-    printf("    PASS: FCALL redirect records name '%.*s', no ITM_FCALL opcode\n", nameLen, (char*)(s+4));
-    return 0;
+  uint8_t nameLen = *(s + 3);
+  if (nameLen != 2) {
+    printf("    FAIL: name length is %d, expected 2\n", nameLen);
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    currentLocalStepNumber = savedLocalStep;
+    tam.value = savedTamValue;
+    tam.indirect = savedTamIndirect;
+    return 1;
+  }
+
+  if (*(s + 4) != 'S' || *(s + 5) != 'Q') {
+    printf("    FAIL: name is '%c%c', expected 'SQ'\n", *(s+4), *(s+5));
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    currentLocalStepNumber = savedLocalStep;
+    tam.value = savedTamValue;
+    tam.indirect = savedTamIndirect;
+    return 1;
+  }
+
+  /* Verify NO ITM_FCALL opcode (0x8B 0x1B) anywhere in program */
+  uint8_t *p = beginOfProgramMemory;
+  uint8_t *end = firstFreeProgramByte;
+  while (p < end - 1) {
+    if (*p == 0x8B && *(p+1) == 0x1B) {
+      printf("    FAIL: ITM_FCALL opcode (0x8B 0x1B) found in program!\n");
+      cleanupTestProgram();
+      currentStep = savedCurrentStep;
+      pemCursorIsZerothStep = savedZeroth;
+      currentLocalStepNumber = savedLocalStep;
+      tam.value = savedTamValue;
+      tam.indirect = savedTamIndirect;
+      if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+      return 1;
+    }
+    p++;
+  }
+
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  tam.value = savedTamValue;
+  tam.indirect = savedTamIndirect;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+
+  printf("    PASS: FCALL redirect records name '%.*s', no ITM_FCALL opcode\n", nameLen, (char*)(s+4));
+  return 0;
 }
 
 /* test_fcall_redirect_rejects_stale
@@ -2636,67 +2636,44 @@ static int test_fcall_redirect_records_name(void)
  */
 static int test_fcall_redirect_rejects_stale(void)
 {
-    /* Define a word so fdict.count > 0 */
-    define_word("X", 1);
+  /* Define a word so fdict.count > 0 */
+  define_word("X", 1);
 
-    /* Minimal program */
-    uint8_t prog[] = { 0x4C };  /* ITM_sin */
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  /* Minimal program */
+  uint8_t prog[] = { 0x4C };  /* ITM_sin */
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    /* Save state */
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
-    uint16_t savedLocalStep = currentLocalStepNumber;
-    uint16_t savedTamValue = tam.value;
-    bool_t savedTamIndirect = tam.indirect;
-    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
-    uint8_t *endBefore = firstFreeProgramByte;
+  /* Save state */
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedTamValue = tam.value;
+  bool_t savedTamIndirect = tam.indirect;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t *endBefore = firstFreeProgramByte;
 
-    /* Setup: invalid widx */
-    currentStep = beginOfProgramMemory;
-    pemCursorIsZerothStep = false;
-    currentLocalStepNumber = 1;
-    aimBuffer[0] = 0;
-    tam.mode = 0;
-    tam.indirect = false;
-    tam.value = fdict.count;  /* out of range */
-    clearSystemFlag(FLAG_ALPHA);
+  /* Setup: invalid widx */
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  tam.indirect = false;
+  tam.value = fdict.count;  /* out of range */
+  clearSystemFlag(FLAG_ALPHA);
 
-    lastErrorCode = ERROR_NONE;
+  lastErrorCode = ERROR_NONE;
 
-    extern void insertStepInProgram(const int16_t func);
-    insertStepInProgram(ITM_FCALL);
+  extern void insertStepInProgram(const int16_t func);
+  insertStepInProgram(ITM_FCALL);
 
-    /* Check: error was raised */
-    if (lastErrorCode != ERROR_NON_PROGRAMMABLE_COMMAND) {
-        printf("    FAIL: lastErrorCode = %d, expected %d (ERROR_NON_PROGRAMMABLE_COMMAND)\n",
-               lastErrorCode, ERROR_NON_PROGRAMMABLE_COMMAND);
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        currentLocalStepNumber = savedLocalStep;
-        tam.value = savedTamValue;
-        tam.indirect = savedTamIndirect;
-        if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-        return 1;
-    }
-
-    /* Check: program unchanged (no bytes inserted) */
-    if (firstFreeProgramByte != endBefore) {
-        printf("    FAIL: program memory changed (firstFreeProgramByte moved)\n");
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        currentLocalStepNumber = savedLocalStep;
-        tam.value = savedTamValue;
-        tam.indirect = savedTamIndirect;
-        if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-        return 1;
-    }
-
+  /* Check: error was raised */
+  if (lastErrorCode != ERROR_NON_PROGRAMMABLE_COMMAND) {
+    printf("    FAIL: lastErrorCode = %d, expected %d (ERROR_NON_PROGRAMMABLE_COMMAND)\n",
+    lastErrorCode, ERROR_NON_PROGRAMMABLE_COMMAND);
     cleanupTestProgram();
     currentStep = savedCurrentStep;
     pemCursorIsZerothStep = savedZeroth;
@@ -2704,9 +2681,32 @@ static int test_fcall_redirect_rejects_stale(void)
     tam.value = savedTamValue;
     tam.indirect = savedTamIndirect;
     if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    return 1;
+  }
 
-    printf("    PASS: FCALL with stale widx rejected, error raised, program unchanged\n");
-    return 0;
+  /* Check: program unchanged (no bytes inserted) */
+  if (firstFreeProgramByte != endBefore) {
+    printf("    FAIL: program memory changed (firstFreeProgramByte moved)\n");
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    currentLocalStepNumber = savedLocalStep;
+    tam.value = savedTamValue;
+    tam.indirect = savedTamIndirect;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    return 1;
+  }
+
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  tam.value = savedTamValue;
+  tam.indirect = savedTamIndirect;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+
+  printf("    PASS: FCALL with stale widx rejected, error raised, program unchanged\n");
+  return 0;
 }
 
 
@@ -2721,85 +2721,85 @@ static int test_fcall_redirect_rejects_stale(void)
  * COMMIT 5's test_marker_parity invariant would flip downstream. */
 static int test_forth_empty_enter_leaves_no_step(void)
 {
-    uint8_t prog[] = { 0x4C };  /* ITM_sin */
+  uint8_t prog[] = { 0x4C };  /* ITM_sin */
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
-    uint16_t savedLocalStep = currentLocalStepNumber;
-    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
-    uint16_t savedTamFunc = tam.function;
-    int stepsBefore = getNumberOfSteps();
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint16_t savedTamFunc = tam.function;
+  int stepsBefore = getNumberOfSteps();
 
-    currentStep = beginOfProgramMemory;
-    pemCursorIsZerothStep = false;
-    currentLocalStepNumber = 1;
-    aimBuffer[0] = 0;
-    tam.mode = 0;
-    clearSystemFlag(FLAG_ALPHA);
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  clearSystemFlag(FLAG_ALPHA);
 
-    extern void insertStepInProgram(const int16_t func);
-    insertStepInProgram(ITM_FORTH);
+  extern void insertStepInProgram(const int16_t func);
+  insertStepInProgram(ITM_FORTH);
 
-    if (!getSystemFlag(FLAG_ALPHA)) {
-        printf("    FAIL: FLAG_ALPHA not set after opening capture\n");
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        currentLocalStepNumber = savedLocalStep;
-        tam.function = savedTamFunc;
-        if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-        return 1;
-    }
-    if (aimBuffer[0] != 0) {
-        printf("    FAIL: aimBuffer not empty after opening capture\n");
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        currentLocalStepNumber = savedLocalStep;
-        tam.function = savedTamFunc;
-        if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-        return 1;
-    }
-
-    extern void pemAlpha(int16_t item);
-    pemAlpha(ITM_ENTER);
-
-    if (getSystemFlag(FLAG_ALPHA)) {
-        printf("    FAIL: FLAG_ALPHA still set after E3 deletion\n");
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        currentLocalStepNumber = savedLocalStep;
-        tam.function = savedTamFunc;
-        return 1;
-    }
-
-    int stepsAfter = getNumberOfSteps();
-    if (stepsAfter != stepsBefore + 1) {
-        printf("    FAIL: step count = %d, expected %d (only opening marker remains)\n",
-               stepsAfter, stepsBefore + 1);
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        currentLocalStepNumber = savedLocalStep;
-        tam.function = savedTamFunc;
-        return 1;
-    }
-
+  if (!getSystemFlag(FLAG_ALPHA)) {
+    printf("    FAIL: FLAG_ALPHA not set after opening capture\n");
     cleanupTestProgram();
     currentStep = savedCurrentStep;
     pemCursorIsZerothStep = savedZeroth;
     currentLocalStepNumber = savedLocalStep;
     tam.function = savedTamFunc;
     if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    return 1;
+  }
+  if (aimBuffer[0] != 0) {
+    printf("    FAIL: aimBuffer not empty after opening capture\n");
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    currentLocalStepNumber = savedLocalStep;
+    tam.function = savedTamFunc;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    return 1;
+  }
 
-    printf("    PASS: empty ENTER deletes placeholder, FLAG_ALPHA clear, step count correct\n");
-    return 0;
+  extern void pemAlpha(int16_t item);
+  pemAlpha(ITM_ENTER);
+
+  if (getSystemFlag(FLAG_ALPHA)) {
+    printf("    FAIL: FLAG_ALPHA still set after E3 deletion\n");
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    currentLocalStepNumber = savedLocalStep;
+    tam.function = savedTamFunc;
+    return 1;
+  }
+
+  int stepsAfter = getNumberOfSteps();
+  if (stepsAfter != stepsBefore + 1) {
+    printf("    FAIL: step count = %d, expected %d (only opening marker remains)\n",
+    stepsAfter, stepsBefore + 1);
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    currentLocalStepNumber = savedLocalStep;
+    tam.function = savedTamFunc;
+    return 1;
+  }
+
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  tam.function = savedTamFunc;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+
+  printf("    PASS: empty ENTER deletes placeholder, FLAG_ALPHA clear, step count correct\n");
+  return 0;
 }
 
 /* test_forth_edit_extracts_source
@@ -2809,46 +2809,36 @@ static int test_forth_empty_enter_leaves_no_step(void)
  * starts with two garbage bytes from STD_LEFT_SINGLE_QUOTE). */
 static int test_forth_edit_extracts_source(void)
 {
-    uint8_t prog[] = {
-        0x8B, 0x1A,  /* ITM_FORTH */
-        0xFD,         /* STRING_LABEL_VARIABLE */
-        12,           /* length */
-        ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', ' ', '*', ' ', ';'
-    };
+  uint8_t prog[] = {
+    0x8B, 0x1A,  /* ITM_FORTH */
+    0xFD,         /* STRING_LABEL_VARIABLE */
+    12,           /* length */
+    ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', ' ', '*', ' ', ';'
+  };
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
-    uint16_t savedLocalStep = currentLocalStepNumber;
-    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
-    uint16_t savedTamFunc = tam.function;
-    char aimSaved[AIM_BUFFER_LENGTH];
-    xcopy(aimSaved, aimBuffer, sizeof(aimSaved));
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint16_t savedTamFunc = tam.function;
+  char aimSaved[AIM_BUFFER_LENGTH];
+  xcopy(aimSaved, aimBuffer, sizeof(aimSaved));
 
-    currentStep = beginOfProgramMemory;
-    pemCursorIsZerothStep = false;
-    currentLocalStepNumber = 1;
-    clearSystemFlag(FLAG_ALPHA);
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+  clearSystemFlag(FLAG_ALPHA);
 
-    extern void pemAlpha(int16_t item);
-    pemAlpha(ITM_EDIT);
+  extern void pemAlpha(int16_t item);
+  pemAlpha(ITM_EDIT);
 
-    if (strcmp(aimBuffer, ": SQ DUP * ;") != 0) {
-        printf("    FAIL: aimBuffer = '%s', expected ': SQ DUP * ;'\n", aimBuffer);
-        cleanupTestProgram();
-        currentStep = savedCurrentStep;
-        pemCursorIsZerothStep = savedZeroth;
-        currentLocalStepNumber = savedLocalStep;
-        tam.function = savedTamFunc;
-        xcopy(aimBuffer, aimSaved, sizeof(aimSaved));
-        if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-        return 1;
-    }
-
+  if (strcmp(aimBuffer, ": SQ DUP * ;") != 0) {
+    printf("    FAIL: aimBuffer = '%s', expected ': SQ DUP * ;'\n", aimBuffer);
     cleanupTestProgram();
     currentStep = savedCurrentStep;
     pemCursorIsZerothStep = savedZeroth;
@@ -2856,9 +2846,19 @@ static int test_forth_edit_extracts_source(void)
     tam.function = savedTamFunc;
     xcopy(aimBuffer, aimSaved, sizeof(aimSaved));
     if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    return 1;
+  }
 
-    printf("    PASS: FORTH EDIT extracts source correctly (offset 8)\n");
-    return 0;
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  tam.function = savedTamFunc;
+  xcopy(aimBuffer, aimSaved, sizeof(aimSaved));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+
+  printf("    PASS: FORTH EDIT extracts source correctly (offset 8)\n");
+  return 0;
 }
 
 /* test_decode_marker_directions
@@ -2870,75 +2870,75 @@ static int test_forth_edit_extracts_source(void)
  * all three direction assertions fail. */
 static int test_decode_marker_directions(void)
 {
-    uint8_t prog[] = {
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 1 */
-        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ',               /* source */
-        'D', 'U', 'P', ' ', '*', ' ', ';',
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 2 */
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 3 */
-    };
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 1 */
+    0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ',               /* source */
+    'D', 'U', 'P', ' ', '*', ' ', ';',
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 2 */
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 3 */
+  };
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    const uint8_t *marker1 = beginOfProgramMemory;
-    const uint8_t *source  = beginOfProgramMemory + 4;
-    const uint8_t *marker2 = beginOfProgramMemory + 4 + 16;
-    const uint8_t *marker3 = marker2 + 4;
+  const uint8_t *marker1 = beginOfProgramMemory;
+  const uint8_t *source  = beginOfProgramMemory + 4;
+  const uint8_t *marker2 = beginOfProgramMemory + 4 + 16;
+  const uint8_t *marker3 = marker2 + 4;
 
-    int fail = 0;
+  int fail = 0;
 
-    /* Marker 1: opening → \x80\xbbFORTH (7 bytes: 2 glyph + 5 "FORTH") */
-    decodeOneStep((uint8_t *)marker1);
-    if (strlen(tmpString) != 7 ||
-        tmpString[0] != (char)0x80 || tmpString[1] != (char)0xBB ||
-        memcmp(tmpString + 2, "FORTH", 5) != 0) {
-        printf("    FAIL: marker 1 tmpString = '%s' (len=%zu), expected \\x80\\xbbFORTH\n",
-               tmpString, strlen(tmpString));
-        fail = 1;
-    }
+  /* Marker 1: opening → \x80\xbbFORTH (7 bytes: 2 glyph + 5 "FORTH") */
+  decodeOneStep((uint8_t *)marker1);
+  if (strlen(tmpString) != 7 ||
+  tmpString[0] != (char)0x80 || tmpString[1] != (char)0xBB ||
+  memcmp(tmpString + 2, "FORTH", 5) != 0) {
+    printf("    FAIL: marker 1 tmpString = '%s' (len=%zu), expected \\x80\\xbbFORTH\n",
+    tmpString, strlen(tmpString));
+    fail = 1;
+  }
 
-    /* Marker 2: closing → FORTH\x80\xab */
-    decodeOneStep((uint8_t *)marker2);
-    if (strlen(tmpString) != 7 ||
-        memcmp(tmpString, "FORTH", 5) != 0 ||
-        tmpString[5] != (char)0x80 || tmpString[6] != (char)0xAB) {
-        printf("    FAIL: marker 2 tmpString = '%s' (len=%zu), expected FORTH\\x80\\xab\n",
-               tmpString, strlen(tmpString));
-        fail = 1;
-    }
+  /* Marker 2: closing → FORTH\x80\xab */
+  decodeOneStep((uint8_t *)marker2);
+  if (strlen(tmpString) != 7 ||
+  memcmp(tmpString, "FORTH", 5) != 0 ||
+  tmpString[5] != (char)0x80 || tmpString[6] != (char)0xAB) {
+    printf("    FAIL: marker 2 tmpString = '%s' (len=%zu), expected FORTH\\x80\\xab\n",
+    tmpString, strlen(tmpString));
+    fail = 1;
+  }
 
-    /* Marker 3: opening → \x80\xbbFORTH */
-    decodeOneStep((uint8_t *)marker3);
-    if (strlen(tmpString) != 7 ||
-        tmpString[0] != (char)0x80 || tmpString[1] != (char)0xBB ||
-        memcmp(tmpString + 2, "FORTH", 5) != 0) {
-        printf("    FAIL: marker 3 tmpString = '%s' (len=%zu), expected \\x80\\xbbFORTH\n",
-               tmpString, strlen(tmpString));
-        fail = 1;
-    }
+  /* Marker 3: opening → \x80\xbbFORTH */
+  decodeOneStep((uint8_t *)marker3);
+  if (strlen(tmpString) != 7 ||
+  tmpString[0] != (char)0x80 || tmpString[1] != (char)0xBB ||
+  memcmp(tmpString + 2, "FORTH", 5) != 0) {
+    printf("    FAIL: marker 3 tmpString = '%s' (len=%zu), expected \\x80\\xbbFORTH\n",
+    tmpString, strlen(tmpString));
+    fail = 1;
+  }
 
-    /* Source step: generic path — starts with "FORTH" and contains source text */
-    decodeOneStep((uint8_t *)source);
-    if (memcmp(tmpString, "FORTH", 5) != 0) {
-        printf("    FAIL: source step tmpString = '%s', expected to start with FORTH\n",
-               tmpString);
-        fail = 1;
-    }
-    if (strstr(tmpString, "SQ") == NULL) {
-        printf("    FAIL: source step tmpString = '%s', expected to contain source text\n",
-               tmpString);
-        fail = 1;
-    }
+  /* Source step: generic path — starts with "FORTH" and contains source text */
+  decodeOneStep((uint8_t *)source);
+  if (memcmp(tmpString, "FORTH", 5) != 0) {
+    printf("    FAIL: source step tmpString = '%s', expected to start with FORTH\n",
+    tmpString);
+    fail = 1;
+  }
+  if (strstr(tmpString, "SQ") == NULL) {
+    printf("    FAIL: source step tmpString = '%s', expected to contain source text\n",
+    tmpString);
+    fail = 1;
+  }
 
-    cleanupTestProgram();
+  cleanupTestProgram();
 
-    if (!fail) {
-        printf("    PASS: marker directions = \\x80\\xbbFORTH / FORTH\\x80\\ab / \\x80\\xbbFORTH; source unchanged\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: marker directions = \\x80\\xbbFORTH / FORTH\\x80\\ab / \\x80\\xbbFORTH; source unchanged\n");
+  }
+  return fail;
 }
 
 /* test_decode_source_unchanged
@@ -2948,39 +2948,39 @@ static int test_decode_marker_directions(void)
  * (rendering them as markers). */
 static int test_decode_source_unchanged(void)
 {
-    const char srcText[] = "2 2 +";
-    uint8_t len = (uint8_t)strlen(srcText);
-    /* Build: ITM_FORTH opcode + STRING_LABEL_VARIABLE + len + name bytes */
-    uint8_t step[64];
-    uint8_t *p = step;
-    *p++ = (ITM_FORTH >> 8) | 0x80;  /* 0x8B */
-    *p++ =  ITM_FORTH       & 0xFF;  /* 0x1A */
-    *p++ = STRING_LABEL_VARIABLE;     /* 0xFD */
-    *p++ = len;
-    memcpy(p, srcText, len);
-    p += len;
-    uint16_t stepSize = (uint16_t)(p - step);
+  const char srcText[] = "2 2 +";
+  uint8_t len = (uint8_t)strlen(srcText);
+  /* Build: ITM_FORTH opcode + STRING_LABEL_VARIABLE + len + name bytes */
+  uint8_t step[64];
+  uint8_t *p = step;
+  *p++ = (ITM_FORTH >> 8) | 0x80;  /* 0x8B */
+  *p++ =  ITM_FORTH       & 0xFF;  /* 0x1A */
+  *p++ = STRING_LABEL_VARIABLE;     /* 0xFD */
+  *p++ = len;
+  memcpy(p, srcText, len);
+  p += len;
+  uint16_t stepSize = (uint16_t)(p - step);
 
-    if (!writeTestProgram(step, stepSize)) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  if (!writeTestProgram(step, stepSize)) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    decodeOneStep((uint8_t *)beginOfProgramMemory);
+  decodeOneStep((uint8_t *)beginOfProgramMemory);
 
-    /* Reference: "FORTH " + STD_LEFT_SINGLE_QUOTE + srcText + STD_RIGHT_SINGLE_QUOTE */
-    char reference[64];
-    sprintf(reference, "FORTH " STD_LEFT_SINGLE_QUOTE "%s" STD_RIGHT_SINGLE_QUOTE, srcText);
+  /* Reference: "FORTH " + STD_LEFT_SINGLE_QUOTE + srcText + STD_RIGHT_SINGLE_QUOTE */
+  char reference[64];
+  sprintf(reference, "FORTH " STD_LEFT_SINGLE_QUOTE "%s" STD_RIGHT_SINGLE_QUOTE, srcText);
 
-    if (strcmp(tmpString, reference) != 0) {
-        printf("    FAIL: tmpString = '%s', expected '%s'\n", tmpString, reference);
-        cleanupTestProgram();
-        return 1;
-    }
-
+  if (strcmp(tmpString, reference) != 0) {
+    printf("    FAIL: tmpString = '%s', expected '%s'\n", tmpString, reference);
     cleanupTestProgram();
-    printf("    PASS: len>0 source step renders as '%s' (generic path unchanged)\n", reference);
-    return 0;
+    return 1;
+  }
+
+  cleanupTestProgram();
+  printf("    PASS: len>0 source step renders as '%s' (generic path unchanged)\n", reference);
+  return 0;
 }
 
 /* COMMIT 9: MNU_FORTH row at slot 213 is CAT_MENU with "FWRD" label.
@@ -2991,13 +2991,13 @@ static int test_mnu_forth_row(void)
 
   if ((indexOfItems[MNU_FORTH].status & CAT_STATUS) != CAT_MENU) {
     printf("    FAIL: MNU_FORTH CAT_STATUS is %x, expected CAT_MENU (%x)\n",
-           indexOfItems[MNU_FORTH].status & CAT_STATUS, CAT_MENU);
+    indexOfItems[MNU_FORTH].status & CAT_STATUS, CAT_MENU);
     fail = 1;
   }
 
   if (compareString(indexOfItems[MNU_FORTH].itemCatalogName, "FWRD", CMP_BINARY) != 0) {
     printf("    FAIL: MNU_FORTH itemCatalogName is '%s', expected 'FWRD'\n",
-           indexOfItems[MNU_FORTH].itemCatalogName);
+    indexOfItems[MNU_FORTH].itemCatalogName);
     fail = 1;
   }
 
@@ -3018,13 +3018,13 @@ static int test_dynamic_menu_registration(void)
 
   if (dynamicSoftmenu[22].menuItem != -MNU_FORTH) {
     printf("    FAIL: dynamicSoftmenu[22].menuItem = %d, expected %d (-MNU_FORTH)\n",
-           dynamicSoftmenu[22].menuItem, -MNU_FORTH);
+    dynamicSoftmenu[22].menuItem, -MNU_FORTH);
     fail = 1;
   }
 
   if (softmenu[22].menuItem != -MNU_FORTH) {
     printf("    FAIL: softmenu[22].menuItem = %d, expected %d (-MNU_FORTH)\n",
-           softmenu[22].menuItem, -MNU_FORTH);
+    softmenu[22].menuItem, -MNU_FORTH);
     fail = 1;
   }
 
@@ -3044,7 +3044,7 @@ static int test_static_menu_integrity(void)
 
   if (softmenu[23].menuItem != -MNU_TAMFLAG) {
     printf("    FAIL: softmenu[23].menuItem = %d, expected %d (-MNU_TAMFLAG)\n",
-           softmenu[23].menuItem, -MNU_TAMFLAG);
+    softmenu[23].menuItem, -MNU_TAMFLAG);
     fail = 1;
   }
 
@@ -3084,7 +3084,7 @@ static int test_picker_scan_basic(void)
 
   /* currentStep on the CUBE step — mutation check: exclusive bound (<)
    * would skip this step, so CUBE would be missing from the menu */
-   const uint8_t *cubeStep = beginOfProgramMemory + 4 + 16;
+  const uint8_t *cubeStep = beginOfProgramMemory + 4 + 16;
   uint8_t *savedCurrentStep = currentStep;
   uint16_t savedProgNum = currentProgramNumber;
 
@@ -3135,10 +3135,10 @@ static int test_picker_scan_basic(void)
 }
 
 /* test_picker_omits_long_names
-  * Two 15-byte word names and one 14-byte name. The 15-byte names are omitted,
-  * only the 14-byte name is present.
-  * Escaping mutation: truncating instead of omitting — the 15-byte names
-  * are cut to 14 bytes and appear in menuContent, so numItems > 1. */
+ * Two 15-byte word names and one 14-byte name. The 15-byte names are omitted,
+ * only the 14-byte name is present.
+ * Escaping mutation: truncating instead of omitting — the 15-byte names
+ * are cut to 14 bytes and appear in menuContent, so numItems > 1. */
 static int test_picker_omits_long_names(void)
 {
   /* marker | : ABCDEFGHIJKLMNO (15) ; | : PQRSTUVWXYZABCD (15) ; | : SHORT (5) ; | marker | .END. */
@@ -3172,7 +3172,7 @@ static int test_picker_omits_long_names(void)
 
   if (dynamicSoftmenu[22].numItems != 1) {
     printf("    FAIL: numItems = %d, expected 1 (two 15-byte names omitted, SHORT kept)\n",
-           dynamicSoftmenu[22].numItems);
+    dynamicSoftmenu[22].numItems);
     fail = 1;
   }
 
@@ -3244,7 +3244,7 @@ static int test_picker_dedupes(void)
 
   if (dynamicSoftmenu[22].numItems != 1) {
     printf("    FAIL: numItems = %d, expected 1 (deduped)\n",
-           dynamicSoftmenu[22].numItems);
+    dynamicSoftmenu[22].numItems);
     fail = 1;
   }
 
@@ -3682,61 +3682,61 @@ static int test_picker_long_token_skipped(void)
   return fail;
 }
 
- /* test_program_memory_no_overlap
-  * Mutation: writeTestProgram directly manipulates freeMemoryRegions[0].sizeInBlocks
-  * instead of using resizeProgramMemory, creating free-list fragments that overlap
-  * with region 0 and trigger the overlap warning in freeListFree().
+/* test_program_memory_no_overlap
+ * Mutation: writeTestProgram directly manipulates freeMemoryRegions[0].sizeInBlocks
+ * instead of using resizeProgramMemory, creating free-list fragments that overlap
+ * with region 0 and trigger the overlap warning in freeListFree().
  * (§memory refactor: allocator consistency) */
 static int test_program_memory_no_overlap(void)
 {
-    /* Program large enough to trigger resizeProgramMemory expansion */
-    uint8_t prog[] = {
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
-        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
-        ' ', '*', ' ', ';',
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
-    };
-    int fail = 0;
+  /* Program large enough to trigger resizeProgramMemory expansion */
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
+    0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
+    ' ', '*', ' ', ';',
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
+  };
+  int fail = 0;
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  /* Allocate and free some blocks through the proper API to exercise
+   * the free list, then verify no overlap exists. */
+  { void *blk1 = allocC47Blocks(2);
+    void *blk2 = allocC47Blocks(3);
+    if (!blk1 || !blk2) {
+      printf("    FAIL: allocC47Blocks returned NULL\n");
+      fail = 1;
     }
-
-    /* Allocate and free some blocks through the proper API to exercise
-     * the free list, then verify no overlap exists. */
-    { void *blk1 = allocC47Blocks(2);
-      void *blk2 = allocC47Blocks(3);
-      if (!blk1 || !blk2) {
-        printf("    FAIL: allocC47Blocks returned NULL\n");
-        fail = 1;
-      }
-      else {
-        freeC47Blocks(blk1, 2);
-        freeC47Blocks(blk2, 3);
-      }
+    else {
+      freeC47Blocks(blk1, 2);
+      freeC47Blocks(blk2, 3);
     }
+  }
 
-    /* Check free list for overlap: regions must be strictly ordered */
-    { bool overlap = false;
-      for (int32_t i = 1; i < numberOfFreeMemoryRegions && !overlap; i++) {
-        uint32_t prevEnd = (uint32_t)freeMemoryRegions[i - 1].blockAddress +
-                           (uint32_t)freeMemoryRegions[i - 1].sizeInBlocks;
-        if (prevEnd >= (uint32_t)freeMemoryRegions[i].blockAddress) {
-          overlap = true;
-        }
-      }
-      if (overlap) {
-        printf("    FAIL: free memory regions overlap detected\n");
-        fail = 1;
+  /* Check free list for overlap: regions must be strictly ordered */
+  { bool overlap = false;
+    for (int32_t i = 1; i < numberOfFreeMemoryRegions && !overlap; i++) {
+      uint32_t prevEnd = (uint32_t)freeMemoryRegions[i - 1].blockAddress +
+      (uint32_t)freeMemoryRegions[i - 1].sizeInBlocks;
+      if (prevEnd >= (uint32_t)freeMemoryRegions[i].blockAddress) {
+        overlap = true;
       }
     }
-
-    cleanupTestProgram();
-    if (!fail) {
-        printf("    PASS: no free-list overlap after program memory resize + alloc/free\n");
+    if (overlap) {
+      printf("    FAIL: free memory regions overlap detected\n");
+      fail = 1;
     }
-    return fail;
+  }
+
+  cleanupTestProgram();
+  if (!fail) {
+    printf("    PASS: no free-list overlap after program memory resize + alloc/free\n");
+  }
+  return fail;
 }
 
 /* test_cleanup_no_overlap
@@ -3746,60 +3746,60 @@ static int test_program_memory_no_overlap(void)
  * (§memory refactor: cleanup order) */
 static int test_cleanup_no_overlap(void)
 {
-    uint8_t prog[] = {
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
-        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
-        ' ', '*', ' ', ';',
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
-    };
-    int fail = 0;
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
+    0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
+    ' ', '*', ' ', ';',
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
+  };
+  int fail = 0;
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  /* Allocate and free some blocks to exercise the free list */
+  { void *blk1 = allocC47Blocks(2);
+    void *blk2 = allocC47Blocks(3);
+    if (!blk1 || !blk2) {
+      printf("    FAIL: allocC47Blocks returned NULL\n");
+      fail = 1;
     }
-
-    /* Allocate and free some blocks to exercise the free list */
-    { void *blk1 = allocC47Blocks(2);
-      void *blk2 = allocC47Blocks(3);
-      if (!blk1 || !blk2) {
-        printf("    FAIL: allocC47Blocks returned NULL\n");
-        fail = 1;
-      }
-      else {
-        freeC47Blocks(blk1, 2);
-        freeC47Blocks(blk2, 3);
-      }
+    else {
+      freeC47Blocks(blk1, 2);
+      freeC47Blocks(blk2, 3);
     }
+  }
 
-    /* cleanupTestProgram frees dict BEFORE restoring program memory.
-     * After cleanup, free list should be consistent with no overlap. */
-    cleanupTestProgram();
+  /* cleanupTestProgram frees dict BEFORE restoring program memory.
+   * After cleanup, free list should be consistent with no overlap. */
+  cleanupTestProgram();
 
-    /* Verify free list integrity */
-    { bool overlap = false;
-      int32_t n = numberOfFreeMemoryRegions;
-      if (n < 1) {
-        printf("    FAIL: no free memory regions after cleanup\n");
-        fail = 1;
-      }
-      for (int32_t i = 1; i < n && !overlap; i++) {
-        uint32_t prevEnd = (uint32_t)freeMemoryRegions[i - 1].blockAddress +
-                           (uint32_t)freeMemoryRegions[i - 1].sizeInBlocks;
-        if (prevEnd >= (uint32_t)freeMemoryRegions[i].blockAddress) {
-          overlap = true;
-        }
-      }
-      if (overlap) {
-        printf("    FAIL: free memory regions overlap after cleanup\n");
-        fail = 1;
+  /* Verify free list integrity */
+  { bool overlap = false;
+    int32_t n = numberOfFreeMemoryRegions;
+    if (n < 1) {
+      printf("    FAIL: no free memory regions after cleanup\n");
+      fail = 1;
+    }
+    for (int32_t i = 1; i < n && !overlap; i++) {
+      uint32_t prevEnd = (uint32_t)freeMemoryRegions[i - 1].blockAddress +
+      (uint32_t)freeMemoryRegions[i - 1].sizeInBlocks;
+      if (prevEnd >= (uint32_t)freeMemoryRegions[i].blockAddress) {
+        overlap = true;
       }
     }
-
-    if (!fail) {
-        printf("    PASS: cleanup order produces consistent free list, no overlap\n");
+    if (overlap) {
+      printf("    FAIL: free memory regions overlap after cleanup\n");
+      fail = 1;
     }
-    return fail;
+  }
+
+  if (!fail) {
+    printf("    PASS: cleanup order produces consistent free list, no overlap\n");
+  }
+  return fail;
 }
 
 /* test_softmenu_trailing_null
@@ -3809,63 +3809,63 @@ static int test_cleanup_no_overlap(void)
  * (§softmenu: zero-initialized allocation) */
 static int test_softmenu_trailing_null(void)
 {
-    uint8_t prog[] = {
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
-        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
-        ' ', '*', ' ', ';',
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
-    };
-    int fail = 0;
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
+    0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
+    ' ', '*', ' ', ';',
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
+  };
+  int fail = 0;
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  const uint8_t *cubeStep = beginOfProgramMemory + 4 + 16;
+  uint8_t *savedCurrentStep = currentStep;
+  uint16_t savedProgNum = currentProgramNumber;
+
+  currentProgramNumber = 1;
+  currentStep = (uint8_t *)cubeStep;
+
+  testInitVariableSoftmenu(22);
+
+  if (dynamicSoftmenu[22].numItems != 1) {
+    printf("    FAIL: numItems = %d, expected 1\n", dynamicSoftmenu[22].numItems);
+    fail = 1;
+  }
+
+  /* Verify the content is properly NUL-terminated: iterate through
+   * all names, then confirm the byte immediately after is '\0'. */
+  if (dynamicSoftmenu[22].menuContent && !fail) {
+    const char *content = (const char *)dynamicSoftmenu[22].menuContent;
+    int count = 0;
+    while (*content && count < dynamicSoftmenu[22].numItems) {
+      content += strlen(content) + 1;
+      count++;
     }
-
-    const uint8_t *cubeStep = beginOfProgramMemory + 4 + 16;
-    uint8_t *savedCurrentStep = currentStep;
-    uint16_t savedProgNum = currentProgramNumber;
-
-    currentProgramNumber = 1;
-    currentStep = (uint8_t *)cubeStep;
-
-    testInitVariableSoftmenu(22);
-
-    if (dynamicSoftmenu[22].numItems != 1) {
-        printf("    FAIL: numItems = %d, expected 1\n", dynamicSoftmenu[22].numItems);
-        fail = 1;
+    if (count != dynamicSoftmenu[22].numItems || *content != '\0') {
+      printf("    FAIL: menu content not properly NUL-terminated (count=%d, byte=%d)\n",
+      count, (unsigned char)*content);
+      fail = 1;
     }
+  }
 
-    /* Verify the content is properly NUL-terminated: iterate through
-     * all names, then confirm the byte immediately after is '\0'. */
-    if (dynamicSoftmenu[22].menuContent && !fail) {
-        const char *content = (const char *)dynamicSoftmenu[22].menuContent;
-        int count = 0;
-        while (*content && count < dynamicSoftmenu[22].numItems) {
-            content += strlen(content) + 1;
-            count++;
-        }
-        if (count != dynamicSoftmenu[22].numItems || *content != '\0') {
-            printf("    FAIL: menu content not properly NUL-terminated (count=%d, byte=%d)\n",
-                   count, (unsigned char)*content);
-            fail = 1;
-        }
-    }
+  /* Cleanup */
+  if (dynamicSoftmenu[22].menuContent) {
+    free(dynamicSoftmenu[22].menuContent);
+    dynamicSoftmenu[22].menuContent = NULL;
+  }
+  dynamicSoftmenu[22].numItems = 0;
+  currentStep = savedCurrentStep;
+  currentProgramNumber = savedProgNum;
+  cleanupTestProgram();
 
-    /* Cleanup */
-    if (dynamicSoftmenu[22].menuContent) {
-        free(dynamicSoftmenu[22].menuContent);
-        dynamicSoftmenu[22].menuContent = NULL;
-    }
-    dynamicSoftmenu[22].numItems = 0;
-    currentStep = savedCurrentStep;
-    currentProgramNumber = savedProgNum;
-    cleanupTestProgram();
-
-    if (!fail) {
-        printf("    PASS: softmenu content properly NUL-terminated\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: softmenu content properly NUL-terminated\n");
+  }
+  return fail;
 }
 
 /* test_e2_continuation_after_enter
@@ -3877,93 +3877,93 @@ static int test_softmenu_trailing_null(void)
  * .END. derives false (not an ITM_FORTH step), E2 misses, RPN number entry. */
 static int test_e2_continuation_after_enter(void)
 {
-    uint8_t prog[] = {
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
-        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
-        ' ', '*', ' ', ';',                                              /* * ; */
-    };
-    int fail = 0;
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
+    0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
+    ' ', '*', ' ', ';',                                              /* * ; */
+  };
+  int fail = 0;
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+  /* Setup: cursor on .END. (where pemCloseAlphaInput leaves cursor after ENTER) */
+  currentStep = beginOfProgramMemory + sizeof(prog);  /* .END. appended by writeTestProgram */
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 3;
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  tam.function = 0;
+
+  extern void addStepInProgram(int16_t func);
+  addStepInProgram(ITM_2);
+
+  /* Assert: FLAG_ALPHA set (Forth capture opened) */
+  if (!getSystemFlag(FLAG_ALPHA)) {
+    printf("    FAIL: FLAG_ALPHA not set — E2 missed (continuation failed)\n");
+    fail = 1;
+  }
+
+  /* Assert: tam.function == ITM_FORTH */
+  if (tam.function != ITM_FORTH) {
+    printf("    FAIL: tam.function = %d, expected ITM_FORTH (%d)\n",
+    (int)tam.function, ITM_FORTH);
+    fail = 1;
+  }
+
+  /* Assert: aimBuffer contains "2" */
+  if (aimBuffer[0] != '2' || aimBuffer[1] != 0) {
+    printf("    FAIL: aimBuffer = '%s', expected '2'\n", aimBuffer);
+    fail = 1;
+  }
+
+  /* Cleanup: close capture via pemAlpha(ITM_ENTER) to commit the step */
+  if (!fail) {
+    extern void pemAlpha(int16_t item);
+    pemAlpha(ITM_ENTER);
+
+    /* Verify committed step is an ITM_FORTH source step with payload "2" */
+    scanLabelsAndPrograms();
+    uint8_t *committedStep = beginOfProgramMemory + 4 + 16;  /* after marker + source */
+    if (*(committedStep + 0) != 0x8B || *(committedStep + 1) != 0x1A ||
+    *(committedStep + 2) != 0xFD || *(committedStep + 3) != 1 ||
+    *(committedStep + 4) != '2') {
+      printf("    FAIL: committed step not ITM_FORTH '2' (got 0x%02X 0x%02X 0x%02X 0x%02X '%c')\n",
+      *(committedStep+0), *(committedStep+1), *(committedStep+2),
+      *(committedStep+3), *(committedStep+4));
+      fail = 1;
     }
+  }
 
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
-    uint16_t savedLocalStep = currentLocalStepNumber;
-    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
-    uint8_t savedCalcMode = calcMode;
-    int16_t savedCatalog = catalog;
-    int16_t savedTamFunction = tam.function;
-    char aimBufSave[256];
-    memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
 
-    /* Setup: cursor on .END. (where pemCloseAlphaInput leaves cursor after ENTER) */
-    currentStep = beginOfProgramMemory + sizeof(prog);  /* .END. appended by writeTestProgram */
-    pemCursorIsZerothStep = false;
-    currentLocalStepNumber = 3;
-    clearSystemFlag(FLAG_ALPHA);
-    calcMode = CM_PEM;
-    catalog = CATALOG_NONE;
-    aimBuffer[0] = 0;
-    tam.mode = 0;
-    tam.function = 0;
-
-    extern void addStepInProgram(int16_t func);
-    addStepInProgram(ITM_2);
-
-    /* Assert: FLAG_ALPHA set (Forth capture opened) */
-    if (!getSystemFlag(FLAG_ALPHA)) {
-        printf("    FAIL: FLAG_ALPHA not set — E2 missed (continuation failed)\n");
-        fail = 1;
-    }
-
-    /* Assert: tam.function == ITM_FORTH */
-    if (tam.function != ITM_FORTH) {
-        printf("    FAIL: tam.function = %d, expected ITM_FORTH (%d)\n",
-               (int)tam.function, ITM_FORTH);
-        fail = 1;
-    }
-
-    /* Assert: aimBuffer contains "2" */
-    if (aimBuffer[0] != '2' || aimBuffer[1] != 0) {
-        printf("    FAIL: aimBuffer = '%s', expected '2'\n", aimBuffer);
-        fail = 1;
-    }
-
-    /* Cleanup: close capture via pemAlpha(ITM_ENTER) to commit the step */
-    if (!fail) {
-        extern void pemAlpha(int16_t item);
-        pemAlpha(ITM_ENTER);
-
-        /* Verify committed step is an ITM_FORTH source step with payload "2" */
-        scanLabelsAndPrograms();
-        uint8_t *committedStep = beginOfProgramMemory + 4 + 16;  /* after marker + source */
-        if (*(committedStep + 0) != 0x8B || *(committedStep + 1) != 0x1A ||
-            *(committedStep + 2) != 0xFD || *(committedStep + 3) != 1 ||
-            *(committedStep + 4) != '2') {
-            printf("    FAIL: committed step not ITM_FORTH '2' (got 0x%02X 0x%02X 0x%02X 0x%02X '%c')\n",
-                   *(committedStep+0), *(committedStep+1), *(committedStep+2),
-                   *(committedStep+3), *(committedStep+4));
-            fail = 1;
-        }
-    }
-
-    cleanupTestProgram();
-    currentStep = savedCurrentStep;
-    pemCursorIsZerothStep = savedZeroth;
-    currentLocalStepNumber = savedLocalStep;
-    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-    calcMode = savedCalcMode;
-    catalog = savedCatalog;
-    tam.function = savedTamFunction;
-    memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
-
-    if (!fail) {
-        printf("    PASS: E2 continuation after ENTER — Forth capture opened correctly\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: E2 continuation after ENTER — Forth capture opened correctly\n");
+  }
+  return fail;
 }
 
 /* test_e2_not_inside_rpn_gap
@@ -3974,71 +3974,71 @@ static int test_e2_continuation_after_enter(void)
  * cursor" (two steps back) — this case flips to capture. */
 static int test_e2_not_inside_rpn_gap(void)
 {
-    uint8_t prog[] = {
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 1 (opening) */
-        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
-        ' ', '*', ' ', ';',                                              /* * ; */
-        0x4C,                                                             /* ITM_sin (RPN) */
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 2 (closing) */
-    };
-    int fail = 0;
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 1 (opening) */
+    0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
+    ' ', '*', ' ', ';',                                              /* * ; */
+    0x4C,                                                             /* ITM_sin (RPN) */
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 2 (closing) */
+  };
+  int fail = 0;
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
-    uint16_t savedLocalStep = currentLocalStepNumber;
-    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
-    uint8_t savedCalcMode = calcMode;
-    int16_t savedCatalog = catalog;
-    int16_t savedTamFunction = tam.function;
-    char aimBufSave[256];
-    memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
 
-    /* Setup: cursor ON the RPN step (ITM_sin at offset 20) */
-    currentStep = beginOfProgramMemory + 4 + 16;  /* ITM_sin */
-    pemCursorIsZerothStep = false;
-    currentLocalStepNumber = 3;
-    clearSystemFlag(FLAG_ALPHA);
-    calcMode = CM_PEM;
-    catalog = CATALOG_NONE;
-    aimBuffer[0] = 0;
-    tam.mode = 0;
-    tam.function = 0;
+  /* Setup: cursor ON the RPN step (ITM_sin at offset 20) */
+  currentStep = beginOfProgramMemory + 4 + 16;  /* ITM_sin */
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 3;
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  tam.function = 0;
 
-    extern void addStepInProgram(int16_t func);
-    addStepInProgram(ITM_2);
+  extern void addStepInProgram(int16_t func);
+  addStepInProgram(ITM_2);
 
-    /* Assert: FLAG_ALPHA NOT set (RPN step → RPN entry, no Forth capture) */
-    if (getSystemFlag(FLAG_ALPHA)) {
-        printf("    FAIL: FLAG_ALPHA set — should NOT capture inside RPN gap\n");
-        fail = 1;
-    }
+  /* Assert: FLAG_ALPHA NOT set (RPN step → RPN entry, no Forth capture) */
+  if (getSystemFlag(FLAG_ALPHA)) {
+    printf("    FAIL: FLAG_ALPHA set — should NOT capture inside RPN gap\n");
+    fail = 1;
+  }
 
-    /* Assert: number entry began (aimBuffer[0] = '+' sign prefix, aimBuffer[1] = '2' digit) */
-    if (aimBuffer[0] != '+' || aimBuffer[1] != '2') {
-        printf("    FAIL: aimBuffer[0] = '%c' (0x%02X), aimBuffer[1] = '%c' (0x%02X) — expected '+'/'2' for number entry\n",
-               aimBuffer[0], (unsigned char)aimBuffer[0], aimBuffer[1], (unsigned char)aimBuffer[1]);
-        fail = 1;
-    }
+  /* Assert: number entry began (aimBuffer[0] = '+' sign prefix, aimBuffer[1] = '2' digit) */
+  if (aimBuffer[0] != '+' || aimBuffer[1] != '2') {
+    printf("    FAIL: aimBuffer[0] = '%c' (0x%02X), aimBuffer[1] = '%c' (0x%02X) — expected '+'/'2' for number entry\n",
+    aimBuffer[0], (unsigned char)aimBuffer[0], aimBuffer[1], (unsigned char)aimBuffer[1]);
+    fail = 1;
+  }
 
-    cleanupTestProgram();
-    currentStep = savedCurrentStep;
-    pemCursorIsZerothStep = savedZeroth;
-    currentLocalStepNumber = savedLocalStep;
-    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-    calcMode = savedCalcMode;
-    catalog = savedCatalog;
-    tam.function = savedTamFunction;
-    memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
 
-    if (!fail) {
-        printf("    PASS: E2 does not capture inside RPN gap — RPN entry preserved\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: E2 does not capture inside RPN gap — RPN entry preserved\n");
+  }
+  return fail;
 }
 
 /* FIX-3 tests: restrict Forth fallback to XEQ/XEQ.SKP only */
@@ -4080,7 +4080,7 @@ static int test_gto_word_errors(void)
 
   if (lastErrorCode != ERROR_LABEL_NOT_FOUND) {
     printf("    FAIL: lastErrorCode = %d (expected ERROR_LABEL_NOT_FOUND %d)\n",
-           lastErrorCode, ERROR_LABEL_NOT_FOUND);
+    lastErrorCode, ERROR_LABEL_NOT_FOUND);
     return 1;
   }
   longIntegerInit(li);
@@ -4123,7 +4123,7 @@ static int test_gto_item_errors(void)
 
   if (lastErrorCode != ERROR_LABEL_NOT_FOUND) {
     printf("    FAIL: lastErrorCode = %d (expected ERROR_LABEL_NOT_FOUND %d)\n",
-           lastErrorCode, ERROR_LABEL_NOT_FOUND);
+    lastErrorCode, ERROR_LABEL_NOT_FOUND);
     return 1;
   }
   longIntegerInit(li);
@@ -4219,7 +4219,7 @@ static int test_useritem_xeqp1_opcode(void)
   uint8_t *s = beginOfProgramMemory + 1;
   if (*s != 0x88 || *(s+1) != 0xAF || *(s+2) != 0xFD) {
     printf("    FAIL: step does not start with ITM_XEQP1 opcode (got 0x%02X 0x%02X 0x%02X)\n",
-           *s, *(s+1), *(s+2));
+    *s, *(s+1), *(s+2));
     cleanupTestProgram();
     currentStep = savedCurrentStep;
     pemCursorIsZerothStep = savedZeroth;
@@ -4318,7 +4318,7 @@ static int test_useritem_xeqp1_decodes(void)
 
   if (strcmp(tmpString, reference) != 0) {
     printf("    FAIL: tmpString = '%s', expected '%s' (opcode not reconstructed as ITM_XEQP1=0x%04X)\n",
-           tmpString, reference, ITM_XEQP1);
+    tmpString, reference, ITM_XEQP1);
     fail = 1;
   }
 
@@ -4343,83 +4343,83 @@ static int test_useritem_xeqp1_decodes(void)
  * suppresses the capture — assertion fails. */
 static int test_e1_direction_mid_program(void)
 {
-    uint8_t prog[] = {
-        0x4C,                                                             /* ITM_sin (RPN) */
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 1 (») */
-        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
-        ' ', '*', ' ', ';',                                              /* * ; */
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 2 («) */
-         0x85, 0xB2,                                                       /* ITM_END */
-    };
-    int fail = 0;
+  uint8_t prog[] = {
+    0x4C,                                                             /* ITM_sin (RPN) */
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 1 (») */
+    0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
+    ' ', '*', ' ', ';',                                              /* * ; */
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker 2 («) */
+    0x85, 0xB2,                                                       /* ITM_END */
+  };
+  int fail = 0;
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
-    uint16_t savedLocalStep = currentLocalStepNumber;
-    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
-    uint8_t savedCalcMode = calcMode;
-    int16_t savedCatalog = catalog;
-    int16_t savedTamFunction = tam.function;
-    char aimBufSave[256];
-    memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
 
-    /* Setup: cursor ON the RPN step (ITM_sin at offset 0) */
-    currentStep = beginOfProgramMemory;
-    pemCursorIsZerothStep = false;
-    currentLocalStepNumber = 1;
-    clearSystemFlag(FLAG_ALPHA);
-    calcMode = CM_PEM;
-    catalog = CATALOG_NONE;
-    aimBuffer[0] = 0;
-    tam.mode = 0;
-    tam.function = 0;
+  /* Setup: cursor ON the RPN step (ITM_sin at offset 0) */
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  tam.function = 0;
 
-    extern void addStepInProgram(int16_t func);
-    addStepInProgram(ITM_FORTH);
+  extern void addStepInProgram(int16_t func);
+  addStepInProgram(ITM_FORTH);
 
-    /* Assert: FLAG_ALPHA set (opening marker, capture opened) */
-    if (!getSystemFlag(FLAG_ALPHA)) {
-        printf("    FAIL: FLAG_ALPHA not set — E1 should open capture (wasOn=false from RPN predecessor)\n");
-        fail = 1;
-    }
+  /* Assert: FLAG_ALPHA set (opening marker, capture opened) */
+  if (!getSystemFlag(FLAG_ALPHA)) {
+    printf("    FAIL: FLAG_ALPHA not set — E1 should open capture (wasOn=false from RPN predecessor)\n");
+    fail = 1;
+  }
 
-    /* Assert: new marker inserted between RPN step and old marker */
-    scanLabelsAndPrograms();
-    /* After insertion: RPN(1) + newMarker(4) + oldMarker(4) + source(16) + marker2(4) + END(2) + .END.(2) */
-    uint8_t *newMarker = beginOfProgramMemory + 1;  /* right after ITM_sin */
-    if (*(newMarker + 0) != 0x8B || *(newMarker + 1) != 0x1A ||
-        *(newMarker + 2) != 0xFD || *(newMarker + 3) != 0x00) {
-        printf("    FAIL: new marker not at expected position (got 0x%02X 0x%02X 0x%02X 0x%02X)\n",
-               *(newMarker+0), *(newMarker+1), *(newMarker+2), *(newMarker+3));
-        fail = 1;
-    }
+  /* Assert: new marker inserted between RPN step and old marker */
+  scanLabelsAndPrograms();
+  /* After insertion: RPN(1) + newMarker(4) + oldMarker(4) + source(16) + marker2(4) + END(2) + .END.(2) */
+  uint8_t *newMarker = beginOfProgramMemory + 1;  /* right after ITM_sin */
+  if (*(newMarker + 0) != 0x8B || *(newMarker + 1) != 0x1A ||
+  *(newMarker + 2) != 0xFD || *(newMarker + 3) != 0x00) {
+    printf("    FAIL: new marker not at expected position (got 0x%02X 0x%02X 0x%02X 0x%02X)\n",
+    *(newMarker+0), *(newMarker+1), *(newMarker+2), *(newMarker+3));
+    fail = 1;
+  }
 
-    /* Cleanup: close capture */
-    if (!fail) {
-        extern void pemAlpha(int16_t item);
-        /* Close the Forth capture by entering empty (E3: should delete placeholder) */
-        pemAlpha(ITM_ENTER);
-    }
+  /* Cleanup: close capture */
+  if (!fail) {
+    extern void pemAlpha(int16_t item);
+    /* Close the Forth capture by entering empty (E3: should delete placeholder) */
+    pemAlpha(ITM_ENTER);
+  }
 
-    cleanupTestProgram();
-    currentStep = savedCurrentStep;
-    pemCursorIsZerothStep = savedZeroth;
-    currentLocalStepNumber = savedLocalStep;
-    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-    calcMode = savedCalcMode;
-    catalog = savedCatalog;
-    tam.function = savedTamFunction;
-    memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
 
-    if (!fail) {
-        printf("    PASS: E1 direction mid-program — opening marker inserted, capture opened\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: E1 direction mid-program — opening marker inserted, capture opened\n");
+  }
+  return fail;
 }
 
 /* test_tam_function_cleared_after_capture
@@ -4433,72 +4433,72 @@ static int test_e1_direction_mid_program(void)
  * assertion fails (tam.function stays ITM_FORTH). */
 static int test_tam_function_cleared_after_capture(void)
 {
-    uint8_t prog[] = {
-        0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
-        0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
-        ' ', '*', ' ', ';',                                              /* * ; */
-    };
-    int fail = 0;
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
+    0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', /* : SQ DUP */
+    ' ', '*', ' ', ';',                                              /* * ; */
+  };
+  int fail = 0;
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+  /* Setup: cursor on .END. (where pemCloseAlphaInput leaves cursor after ENTER) */
+  currentStep = beginOfProgramMemory + sizeof(prog);  /* .END. appended by writeTestProgram */
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 3;
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  tam.function = 0;
+
+  extern void addStepInProgram(int16_t func);
+  addStepInProgram(ITM_2);   /* E2 continuation: opens Forth capture, tam.function = ITM_FORTH */
+
+  if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+    printf("    FAIL: setup did not open Forth capture (FLAG_ALPHA=%d tam.function=%d)\n",
+    (int)getSystemFlag(FLAG_ALPHA), (int)tam.function);
+    fail = 1;
+  }
+
+  if (!fail) {
+    extern void pemAlpha(int16_t item);
+    pemAlpha(ITM_ENTER);   /* capture-close path: commit "2" as a Forth source line */
+
+    if (tam.function == ITM_FORTH) {
+      printf("    FAIL: tam.function == ITM_FORTH after capture close (stale sentinel survived commit)\n");
+      fail = 1;
     }
+  }
 
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
-    uint16_t savedLocalStep = currentLocalStepNumber;
-    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
-    uint8_t savedCalcMode = calcMode;
-    int16_t savedCatalog = catalog;
-    int16_t savedTamFunction = tam.function;
-    char aimBufSave[256];
-    memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
 
-    /* Setup: cursor on .END. (where pemCloseAlphaInput leaves cursor after ENTER) */
-    currentStep = beginOfProgramMemory + sizeof(prog);  /* .END. appended by writeTestProgram */
-    pemCursorIsZerothStep = false;
-    currentLocalStepNumber = 3;
-    clearSystemFlag(FLAG_ALPHA);
-    calcMode = CM_PEM;
-    catalog = CATALOG_NONE;
-    aimBuffer[0] = 0;
-    tam.mode = 0;
-    tam.function = 0;
-
-    extern void addStepInProgram(int16_t func);
-    addStepInProgram(ITM_2);   /* E2 continuation: opens Forth capture, tam.function = ITM_FORTH */
-
-    if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
-        printf("    FAIL: setup did not open Forth capture (FLAG_ALPHA=%d tam.function=%d)\n",
-               (int)getSystemFlag(FLAG_ALPHA), (int)tam.function);
-        fail = 1;
-    }
-
-    if (!fail) {
-        extern void pemAlpha(int16_t item);
-        pemAlpha(ITM_ENTER);   /* capture-close path: commit "2" as a Forth source line */
-
-        if (tam.function == ITM_FORTH) {
-            printf("    FAIL: tam.function == ITM_FORTH after capture close (stale sentinel survived commit)\n");
-            fail = 1;
-        }
-    }
-
-    cleanupTestProgram();
-    currentStep = savedCurrentStep;
-    pemCursorIsZerothStep = savedZeroth;
-    currentLocalStepNumber = savedLocalStep;
-    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-    calcMode = savedCalcMode;
-    catalog = savedCatalog;
-    tam.function = savedTamFunction;
-    memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
-
-    if (!fail) {
-        printf("    PASS: tam.function != ITM_FORTH after capture close\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: tam.function != ITM_FORTH after capture close\n");
+  }
+  return fail;
 }
 
 /* test_tam_function_cleared_after_abort
@@ -4512,72 +4512,72 @@ static int test_tam_function_cleared_after_capture(void)
  * ITM_BACKSPACE abort branch (manage.c:889-896) — the assertion fails. */
 static int test_tam_function_cleared_after_abort(void)
 {
-    uint8_t prog[] = {
-        0x4C,                                                             /* ITM_sin (RPN) */
-        0x85, 0xB2,                                                       /* ITM_END */
-    };
-    int fail = 0;
+  uint8_t prog[] = {
+    0x4C,                                                             /* ITM_sin (RPN) */
+    0x85, 0xB2,                                                       /* ITM_END */
+  };
+  int fail = 0;
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  int16_t savedCatalog = catalog;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedTamFunction = tam.function;
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+  /* Setup: cursor on ITM_END (offset 1) — pre-move skipped, predecessor RPN
+   * step → wasOn=false → capture opens, aimBuffer stays empty */
+  currentStep = beginOfProgramMemory + 1;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 2;
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  tam.function = 0;
+
+  extern void addStepInProgram(int16_t func);
+  addStepInProgram(ITM_FORTH);
+
+  if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH || aimBuffer[0] != 0) {
+    printf("    FAIL: setup did not open an empty Forth capture (FLAG_ALPHA=%d tam.function=%d aimBuffer[0]=%d)\n",
+    (int)getSystemFlag(FLAG_ALPHA), (int)tam.function, (int)aimBuffer[0]);
+    fail = 1;
+  }
+
+  if (!fail) {
+    extern void pemAlpha(int16_t item);
+    pemAlpha(ITM_BACKSPACE);   /* abort/EXIT gesture: empty buffer, deletes placeholder */
+
+    if (tam.function == ITM_FORTH) {
+      printf("    FAIL: tam.function == ITM_FORTH after capture abort (stale sentinel survived EXIT)\n");
+      fail = 1;
     }
+  }
 
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
-    int16_t savedCatalog = catalog;
-    uint16_t savedLocalStep = currentLocalStepNumber;
-    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
-    uint8_t savedCalcMode = calcMode;
-    int16_t savedTamFunction = tam.function;
-    char aimBufSave[256];
-    memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
 
-    /* Setup: cursor on ITM_END (offset 1) — pre-move skipped, predecessor RPN
-     * step → wasOn=false → capture opens, aimBuffer stays empty */
-    currentStep = beginOfProgramMemory + 1;
-    pemCursorIsZerothStep = false;
-    currentLocalStepNumber = 2;
-    clearSystemFlag(FLAG_ALPHA);
-    calcMode = CM_PEM;
-    catalog = CATALOG_NONE;
-    aimBuffer[0] = 0;
-    tam.mode = 0;
-    tam.function = 0;
-
-    extern void addStepInProgram(int16_t func);
-    addStepInProgram(ITM_FORTH);
-
-    if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH || aimBuffer[0] != 0) {
-        printf("    FAIL: setup did not open an empty Forth capture (FLAG_ALPHA=%d tam.function=%d aimBuffer[0]=%d)\n",
-               (int)getSystemFlag(FLAG_ALPHA), (int)tam.function, (int)aimBuffer[0]);
-        fail = 1;
-    }
-
-    if (!fail) {
-        extern void pemAlpha(int16_t item);
-        pemAlpha(ITM_BACKSPACE);   /* abort/EXIT gesture: empty buffer, deletes placeholder */
-
-        if (tam.function == ITM_FORTH) {
-            printf("    FAIL: tam.function == ITM_FORTH after capture abort (stale sentinel survived EXIT)\n");
-            fail = 1;
-        }
-    }
-
-    cleanupTestProgram();
-    currentStep = savedCurrentStep;
-    pemCursorIsZerothStep = savedZeroth;
-    currentLocalStepNumber = savedLocalStep;
-    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-    calcMode = savedCalcMode;
-    catalog = savedCatalog;
-    tam.function = savedTamFunction;
-    memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
-
-    if (!fail) {
-        printf("    PASS: tam.function != ITM_FORTH after capture abort\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: tam.function != ITM_FORTH after capture abort\n");
+  }
+  return fail;
 }
 
 /* FIX-6: free-list integrity check */
@@ -4617,12 +4617,12 @@ int forthDictSelfTest(void)
   define_word(words[0], lens[0]);
   baseBefore = fdict.base;
   printf("  After '%s': base=%p, here=%u, size=%u blocks, latest=%u\n",
-         words[0], (void *)fdict.base, fdict.here, fdict.sizeBlocks, fdict.latest);
+  words[0], (void *)fdict.base, fdict.here, fdict.sizeBlocks, fdict.latest);
 
   for (int i = 1; i < numWords; i++) {
     define_word(words[i], lens[i]);
     printf("  After '%s': base=%p, here=%u, size=%u blocks, latest=%u\n",
-           words[i], (void *)fdict.base, fdict.here, fdict.sizeBlocks, fdict.latest);
+    words[i], (void *)fdict.base, fdict.here, fdict.sizeBlocks, fdict.latest);
   }
 
   baseAfter = fdict.base;
@@ -4630,7 +4630,7 @@ int forthDictSelfTest(void)
   if (baseAfter != baseBefore) {
     relocObserved = 1;
     printf("  PASS: relocation detected (base moved from %p to %p)\n",
-           (void *)baseBefore, (void *)baseAfter);
+    (void *)baseBefore, (void *)baseAfter);
   } else {
     printf("  WARN: no relocation observed (base unchanged at %p)\n", (void *)baseBefore);
   }
@@ -4663,10 +4663,10 @@ int forthDictSelfTest(void)
     }
     if (chainCount == numWords) {
       printf("  PASS: link chain has %d unsmudged entries (expected %d)\n",
-             chainCount, numWords);
+      chainCount, numWords);
     } else {
       printf("  FAIL: link chain has %d unsmudged entries (expected %d)\n",
-             chainCount, numWords);
+      chainCount, numWords);
       fail = 1;
     }
   }
@@ -4682,14 +4682,14 @@ int forthDictSelfTest(void)
     printf("FORTH DICT SELF-TEST: FAILED\n");
   } else {
     printf("FORTH DICT SELF-TEST: PASSED%s\n",
-           relocObserved ? " (with relocation)" : " (no relocation triggered)");
+    relocObserved ? " (with relocation)" : " (no relocation triggered)");
   }
 
   forthDictClear();
 
   /* ==================================================================
-    * Lifecycle tests  --  fix #2 + #11 (init/reset safety)
-    * ================================================================== */
+   * Lifecycle tests  --  fix #2 + #11 (init/reset safety)
+   * ================================================================== */
   printf("\nFORTH LIFECYCLE TESTS (init/reset safety)\n");
   printf("  [DEBUG] running test_lifecycle_pre_init...\n");
   fail |= test_lifecycle_pre_init();
@@ -4699,9 +4699,9 @@ int forthDictSelfTest(void)
   forthDictClear();
 
   /* ==================================================================
-    * H1 acceptance tests  --  DESIGN.md §7.1 / §7.5
-    * Run BEFORE mutation tests to avoid heap corruption from double-free.
-    * ================================================================== */
+   * H1 acceptance tests  --  DESIGN.md §7.1 / §7.5
+   * Run BEFORE mutation tests to avoid heap corruption from double-free.
+   * ================================================================== */
   printf("\nFORTH H1 ACCEPTANCE TESTS (XEQ / re-entrancy / precedence)\n");
   forthDictInit();
 
@@ -4946,9 +4946,9 @@ int forthDictSelfTest(void)
   fail |= test_picker_insert_mid_line();
   forthDictClear();
 
-    printf("  [DEBUG] running test_picker_trailing_space...\n");
-    fail |= test_picker_trailing_space();
-    forthDictClear();
+  printf("  [DEBUG] running test_picker_trailing_space...\n");
+  fail |= test_picker_trailing_space();
+  forthDictClear();
 
   /* FIX-1: softmenus.c — glyph-wise bounded picker tokenizer */
   printf("  [DEBUG] running test_picker_glyph_tokenize...\n");
@@ -4959,132 +4959,132 @@ int forthDictSelfTest(void)
   fail |= test_picker_long_token_skipped();
   forthDictClear();
 
-    /* Memory refactor: allocator consistency + zero-init */
-   printf("\nFORTH MEMORY REFACTOR TESTS (allocator consistency)\n");
-   forthDictInit();
+  /* Memory refactor: allocator consistency + zero-init */
+  printf("\nFORTH MEMORY REFACTOR TESTS (allocator consistency)\n");
+  forthDictInit();
 
-    printf("  [DEBUG] running test_program_memory_no_overlap...\n");
-    fail |= test_program_memory_no_overlap();
-    forthDictClear();
+  printf("  [DEBUG] running test_program_memory_no_overlap...\n");
+  fail |= test_program_memory_no_overlap();
+  forthDictClear();
 
-    printf("  [DEBUG] running test_cleanup_no_overlap...\n");
-    fail |= test_cleanup_no_overlap();
-    forthDictClear();
+  printf("  [DEBUG] running test_cleanup_no_overlap...\n");
+  fail |= test_cleanup_no_overlap();
+  forthDictClear();
 
-    printf("  [DEBUG] running test_softmenu_trailing_null...\n");
-   fail |= test_softmenu_trailing_null();
-   forthDictClear();
+  printf("  [DEBUG] running test_softmenu_trailing_null...\n");
+  fail |= test_softmenu_trailing_null();
+  forthDictClear();
 
-   /* FIX-2: derived state at insertion point */
-   printf("\nFORTH FIX-2 TESTS (derived state at insertion point)\n");
-   forthDictInit();
+  /* FIX-2: derived state at insertion point */
+  printf("\nFORTH FIX-2 TESTS (derived state at insertion point)\n");
+  forthDictInit();
 
-   printf("  [DEBUG] running test_e2_continuation_after_enter...\n");
-   fail |= test_e2_continuation_after_enter();
-   forthDictClear();
+  printf("  [DEBUG] running test_e2_continuation_after_enter...\n");
+  fail |= test_e2_continuation_after_enter();
+  forthDictClear();
 
-   printf("  [DEBUG] running test_e2_not_inside_rpn_gap...\n");
-   fail |= test_e2_not_inside_rpn_gap();
-   forthDictClear();
+  printf("  [DEBUG] running test_e2_not_inside_rpn_gap...\n");
+  fail |= test_e2_not_inside_rpn_gap();
+  forthDictClear();
 
-   printf("  [DEBUG] running test_e1_direction_mid_program...\n");
-   fail |= test_e1_direction_mid_program();
-   forthDictClear();
+  printf("  [DEBUG] running test_e1_direction_mid_program...\n");
+  fail |= test_e1_direction_mid_program();
+  forthDictClear();
 
-   /* Capture lifecycle: tam.function must not survive capture close/abort */
-   printf("\nFORTH CAPTURE LIFECYCLE TESTS (tam.function reset on close/abort)\n");
-   forthDictInit();
+  /* Capture lifecycle: tam.function must not survive capture close/abort */
+  printf("\nFORTH CAPTURE LIFECYCLE TESTS (tam.function reset on close/abort)\n");
+  forthDictInit();
 
-   printf("  [DEBUG] running test_tam_function_cleared_after_capture...\n");
-   fail |= test_tam_function_cleared_after_capture();
-   forthDictClear();
+  printf("  [DEBUG] running test_tam_function_cleared_after_capture...\n");
+  fail |= test_tam_function_cleared_after_capture();
+  forthDictClear();
 
-   printf("  [DEBUG] running test_tam_function_cleared_after_abort...\n");
-   fail |= test_tam_function_cleared_after_abort();
-   forthDictClear();
+  printf("  [DEBUG] running test_tam_function_cleared_after_abort...\n");
+  fail |= test_tam_function_cleared_after_abort();
+  forthDictClear();
 
-   /* FIX-3: restrict Forth fallback to XEQ/XEQ.SKP only */
-   printf("\nFORTH FIX-3 TESTS (PARAM_LABEL fallback restricted to XEQ/XEQ.SKP)\n");
-   forthDictInit();
+  /* FIX-3: restrict Forth fallback to XEQ/XEQ.SKP only */
+  printf("\nFORTH FIX-3 TESTS (PARAM_LABEL fallback restricted to XEQ/XEQ.SKP)\n");
+  forthDictInit();
 
-   printf("  [DEBUG] running test_gto_word_errors...\n");
-   fail |= test_gto_word_errors();
-   forthDictClear();
+  printf("  [DEBUG] running test_gto_word_errors...\n");
+  fail |= test_gto_word_errors();
+  forthDictClear();
 
-   printf("  [DEBUG] running test_gto_item_errors...\n");
-   fail |= test_gto_item_errors();
-   forthDictClear();
+  printf("  [DEBUG] running test_gto_item_errors...\n");
+  fail |= test_gto_item_errors();
+  forthDictClear();
 
-    printf("  [DEBUG] running test_xeq_word_still_calls...\n");
-    fail |= test_xeq_word_still_calls();
-    forthDictClear();
+  printf("  [DEBUG] running test_xeq_word_still_calls...\n");
+  fail |= test_xeq_word_still_calls();
+  forthDictClear();
 
-    /* FIX-4: manage.c — insertUserItemInProgram opcode low-byte mask */
-    printf("\nFORTH FIX-4 TESTS (manage.c: insertUserItemInProgram low-byte mask)\n");
+  /* FIX-4: manage.c — insertUserItemInProgram opcode low-byte mask */
+  printf("\nFORTH FIX-4 TESTS (manage.c: insertUserItemInProgram low-byte mask)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_useritem_xeqp1_opcode...\n");
+  fail |= test_useritem_xeqp1_opcode();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_useritem_xeqp1_decodes...\n");
+  fail |= test_useritem_xeqp1_decodes();
+  forthDictClear();
+
+  /* F5: Forth picker is a submenu entry inside MNU_ALPHA, not an overlay */
+  printf("\nFORTH F5 TESTS (alpha menu presentation)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_alpha_menu_on_top_during_capture...\n");
+  fail |= test_alpha_menu_on_top_during_capture();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_alpha_menu_contains_fwrd...\n");
+  fail |= test_alpha_menu_contains_fwrd();
+  forthDictClear();
+
+  /* FIX-6: free-list integrity — LAST test, after all cleanup */
+  printf("\nFORTH FIX-6 TESTS (free-list integrity + arena report)\n");
+  printf("  [DEBUG] running test_freelist_consistent...\n");
+  fail |= test_freelist_consistent();
+
+  printf("  [DEBUG] running test_freelist_double_free_guarded...\n");
+  fail |= test_freelist_double_free_guarded();
+
+  printf("  [DEBUG] running test_freelist_interior_double_free...\n");
+  fail |= test_freelist_interior_double_free();
+
+  printf("  [DEBUG] running test_freelist_no_mutation_on_oversize_free...\n");
+  fail |= test_freelist_no_mutation_on_oversize_free();
+
+  /* FIX-6: Arena report (§5.4/§9.9 duty) — define words, report, then clear */
+  { uint32_t freeRamBefore = getFreeRamMemory();
     forthDictInit();
-
-    printf("  [DEBUG] running test_useritem_xeqp1_opcode...\n");
-    fail |= test_useritem_xeqp1_opcode();
-    forthDictClear();
-
-    printf("  [DEBUG] running test_useritem_xeqp1_decodes...\n");
-    fail |= test_useritem_xeqp1_decodes();
-    forthDictClear();
-
-    /* F5: Forth picker is a submenu entry inside MNU_ALPHA, not an overlay */
-    printf("\nFORTH F5 TESTS (alpha menu presentation)\n");
-    forthDictInit();
-
-    printf("  [DEBUG] running test_alpha_menu_on_top_during_capture...\n");
-    fail |= test_alpha_menu_on_top_during_capture();
-    forthDictClear();
-
-    printf("  [DEBUG] running test_alpha_menu_contains_fwrd...\n");
-    fail |= test_alpha_menu_contains_fwrd();
-    forthDictClear();
-
-    /* FIX-6: free-list integrity — LAST test, after all cleanup */
-    printf("\nFORTH FIX-6 TESTS (free-list integrity + arena report)\n");
-    printf("  [DEBUG] running test_freelist_consistent...\n");
-    fail |= test_freelist_consistent();
-
-    printf("  [DEBUG] running test_freelist_double_free_guarded...\n");
-    fail |= test_freelist_double_free_guarded();
-
-    printf("  [DEBUG] running test_freelist_interior_double_free...\n");
-    fail |= test_freelist_interior_double_free();
-
-    printf("  [DEBUG] running test_freelist_no_mutation_on_oversize_free...\n");
-    fail |= test_freelist_no_mutation_on_oversize_free();
-
-    /* FIX-6: Arena report (§5.4/§9.9 duty) — define words, report, then clear */
-    { uint32_t freeRamBefore = getFreeRamMemory();
-      forthDictInit();
-      define_word("AR1", 3);
-      define_word("AR2", 3);
-      define_word("AR3", 3);
-      uint32_t freeRamAfter = getFreeRamMemory();
-      uint16_t dictBlocks = fdict.sizeBlocks;
-      uint32_t dictBytes = TO_BYTES(dictBlocks);
-      printf("  FORTH ARENA: dict here=%u sizeBlocks=%u  freeRamDelta=%ld\n",
-             fdict.here, fdict.sizeBlocks, (long)(freeRamBefore - freeRamAfter));
-      if (dictBlocks > 512) {
-        printf("    WARN: dict region %u blocks (%u bytes) exceeds 2 KB budget\n",
-               dictBlocks, dictBytes);
-      } else {
-        printf("    PASS: dict region %u blocks (%u bytes) within 2 KB budget\n",
-               dictBlocks, dictBytes);
-      }
-      forthDictClear();
+    define_word("AR1", 3);
+    define_word("AR2", 3);
+    define_word("AR3", 3);
+    uint32_t freeRamAfter = getFreeRamMemory();
+    uint16_t dictBlocks = fdict.sizeBlocks;
+    uint32_t dictBytes = TO_BYTES(dictBlocks);
+    printf("  FORTH ARENA: dict here=%u sizeBlocks=%u  freeRamDelta=%ld\n",
+    fdict.here, fdict.sizeBlocks, (long)(freeRamBefore - freeRamAfter));
+    if (dictBlocks > 512) {
+      printf("    WARN: dict region %u blocks (%u bytes) exceeds 2 KB budget\n",
+      dictBlocks, dictBytes);
+    } else {
+      printf("    PASS: dict region %u blocks (%u bytes) within 2 KB budget\n",
+      dictBlocks, dictBytes);
     }
+    forthDictClear();
+  }
 
-    /* FIX-6: allocated regions should return to start value after all cleanup */
-    if (numberOfAllocatedMemoryRegions != allocRegionsStart) {
-      printf("  WARN: numberOfAllocatedMemoryRegions = %d (start=%d, expected unchanged)\n",
-             numberOfAllocatedMemoryRegions, allocRegionsStart);
-    }
+  /* FIX-6: allocated regions should return to start value after all cleanup */
+  if (numberOfAllocatedMemoryRegions != allocRegionsStart) {
+    printf("  WARN: numberOfAllocatedMemoryRegions = %d (start=%d, expected unchanged)\n",
+    numberOfAllocatedMemoryRegions, allocRegionsStart);
+  }
 
-    if (fail) {
+  if (fail) {
     printf("\nFORTH SELF-TEST: FAILED\n");
   } else {
     printf("\nFORTH SELF-TEST: ALL PASSED\n");
@@ -5101,55 +5101,55 @@ int forthDictSelfTest(void)
  */
 static int test_alpha_menu_on_top_during_capture(void)
 {
-    int fail = 0;
+  int fail = 0;
 
-    uint8_t prog[] = {
-        0x4C,                                                             /* ITM_sin (RPN) */
-        0x85, 0xB2,                                                       /* ITM_END */
-    };
+  uint8_t prog[] = {
+    0x4C,                                                             /* ITM_sin (RPN) */
+    0x85, 0xB2,                                                       /* ITM_END */
+  };
 
-    if (!writeTestProgram(prog, sizeof(prog))) {
-        printf("    FAIL: writeTestProgram failed\n");
-        return 1;
-    }
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
 
-    uint8_t *savedCurrentStep = currentStep;
-    bool_t savedZeroth = pemCursorIsZerothStep;
-    int16_t savedCatalog = catalog;
-    uint16_t savedLocalStep = currentLocalStepNumber;
-    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
-    uint8_t savedSoftmenuStackId = softmenuStack[0].softmenuId;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  int16_t savedCatalog = catalog;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedSoftmenuStackId = softmenuStack[0].softmenuId;
 
-    currentStep = beginOfProgramMemory + 1;
-    pemCursorIsZerothStep = false;
-    currentLocalStepNumber = 2;
-    catalog = CATALOG_NONE;
-    aimBuffer[0] = 0;
-    tam.mode = 0;
-    clearSystemFlag(FLAG_ALPHA);
-    tam.function = ITM_FORTH;
+  currentStep = beginOfProgramMemory + 1;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 2;
+  catalog = CATALOG_NONE;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = ITM_FORTH;
 
-    extern void addStepInProgram(int16_t func);
-    addStepInProgram(ITM_FORTH);
+  extern void addStepInProgram(int16_t func);
+  addStepInProgram(ITM_FORTH);
 
-    if (currentMenu() != -MNU_ALPHA) {
-        printf("    FAIL: currentMenu() = %d, expected %d (-MNU_ALPHA)\n",
-               currentMenu(), -MNU_ALPHA);
-        fail = 1;
-    }
+  if (currentMenu() != -MNU_ALPHA) {
+    printf("    FAIL: currentMenu() = %d, expected %d (-MNU_ALPHA)\n",
+    currentMenu(), -MNU_ALPHA);
+    fail = 1;
+  }
 
-    cleanupTestProgram();
-    currentStep = savedCurrentStep;
-    pemCursorIsZerothStep = savedZeroth;
-    catalog = savedCatalog;
-    currentLocalStepNumber = savedLocalStep;
-    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
-    softmenuStack[0].softmenuId = savedSoftmenuStackId;
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  catalog = savedCatalog;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  softmenuStack[0].softmenuId = savedSoftmenuStackId;
 
-    if (!fail) {
-        printf("    PASS: alpha menu on top during Forth capture (not MNU_FORTH overlay)\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: alpha menu on top during Forth capture (not MNU_FORTH overlay)\n");
+  }
+  return fail;
 }
 
 /* test_alpha_menu_contains_fwrd
@@ -5160,41 +5160,41 @@ static int test_alpha_menu_on_top_during_capture(void)
  */
 static int test_alpha_menu_contains_fwrd(void)
 {
-    int fail = 0;
+  int fail = 0;
 
-    extern const softmenu_t softmenu[];
-    /* Find MNU_ALPHA in the softmenu array (dynamic — index may vary by build) */
-    int16_t alphaIdx = -1;
-    for (int16_t si = 0; si < 200; si++) {
-        if (softmenu[si].menuItem == -MNU_ALPHA) {
-            alphaIdx = si;
-            break;
-        }
+  extern const softmenu_t softmenu[];
+  /* Find MNU_ALPHA in the softmenu array (dynamic — index may vary by build) */
+  int16_t alphaIdx = -1;
+  for (int16_t si = 0; si < 200; si++) {
+    if (softmenu[si].menuItem == -MNU_ALPHA) {
+      alphaIdx = si;
+      break;
     }
-    if (alphaIdx < 0) {
-        printf("    FAIL: MNU_ALPHA not found in softmenu array\n");
-        return 1;
-    }
-    const int16_t *items = softmenu[alphaIdx].softkeyItem;
-    int16_t numItems = softmenu[alphaIdx].numItems;
-    bool_t found = false;
+  }
+  if (alphaIdx < 0) {
+    printf("    FAIL: MNU_ALPHA not found in softmenu array\n");
+    return 1;
+  }
+  const int16_t *items = softmenu[alphaIdx].softkeyItem;
+  int16_t numItems = softmenu[alphaIdx].numItems;
+  bool_t found = false;
 
-    for (int16_t i = 0; i < numItems; i++) {
-        if (items[i] == -MNU_FORTH) {
-            found = true;
-            break;
-        }
+  for (int16_t i = 0; i < numItems; i++) {
+    if (items[i] == -MNU_FORTH) {
+      found = true;
+      break;
     }
+  }
 
-    if (!found) {
-        printf("    FAIL: -MNU_FORTH not found in menu_ALPHA table (%d items)\n", numItems);
-        fail = 1;
-    }
+  if (!found) {
+    printf("    FAIL: -MNU_FORTH not found in menu_ALPHA table (%d items)\n", numItems);
+    fail = 1;
+  }
 
-    if (!fail) {
-        printf("    PASS: menu_ALPHA contains -MNU_FORTH entry (FWRD submenu)\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: menu_ALPHA contains -MNU_FORTH entry (FWRD submenu)\n");
+  }
+  return fail;
 }
 
 /* test_freelist_consistent
@@ -5205,49 +5205,49 @@ static int test_alpha_menu_contains_fwrd(void)
  * creates overlapping regions that this test catches. */
 static int test_freelist_consistent(void)
 {
-    int fail = 0;
+  int fail = 0;
 
-    if (numberOfFreeMemoryRegions < 1) {
-        printf("    FAIL: no free memory regions\n");
-        return 1;
+  if (numberOfFreeMemoryRegions < 1) {
+    printf("    FAIL: no free memory regions\n");
+    return 1;
+  }
+
+  /* Check strictly increasing blockAddress and no overlap */
+  for (int32_t i = 1; i < numberOfFreeMemoryRegions; i++) {
+    uint32_t prevEnd = (uint32_t)freeMemoryRegions[i - 1].blockAddress +
+    (uint32_t)freeMemoryRegions[i - 1].sizeInBlocks;
+    uint32_t curAddr = (uint32_t)freeMemoryRegions[i].blockAddress;
+    if (prevEnd > curAddr) {
+      printf("    FAIL: overlap between regions %ld and %ld "
+      "(prev end=%u, cur addr=%u)\n",
+      (long)(i - 1), (long)i, prevEnd, curAddr);
+      fail = 1;
     }
-
-    /* Check strictly increasing blockAddress and no overlap */
-    for (int32_t i = 1; i < numberOfFreeMemoryRegions; i++) {
-        uint32_t prevEnd = (uint32_t)freeMemoryRegions[i - 1].blockAddress +
-                           (uint32_t)freeMemoryRegions[i - 1].sizeInBlocks;
-        uint32_t curAddr = (uint32_t)freeMemoryRegions[i].blockAddress;
-        if (prevEnd > curAddr) {
-            printf("    FAIL: overlap between regions %ld and %ld "
-                   "(prev end=%u, cur addr=%u)\n",
-                   (long)(i - 1), (long)i, prevEnd, curAddr);
-            fail = 1;
-        }
-        if (freeMemoryRegions[i].sizeInBlocks == 0) {
-            printf("    FAIL: region %ld has zero size\n", (long)i);
-            fail = 1;
-        }
+    if (freeMemoryRegions[i].sizeInBlocks == 0) {
+      printf("    FAIL: region %ld has zero size\n", (long)i);
+      fail = 1;
     }
+  }
 
-    /* Check no region overlaps program memory */
-    { uint16_t progStart = TO_C47MEMPTR(beginOfProgramMemory);
-      uint16_t progEnd = RAM_SIZE_IN_BLOCKS;
-      for (int32_t i = 0; i < numberOfFreeMemoryRegions; i++) {
-        uint32_t rStart = (uint32_t)freeMemoryRegions[i].blockAddress;
-        uint32_t rEnd = rStart + (uint32_t)freeMemoryRegions[i].sizeInBlocks;
-        if (rStart < progEnd && rEnd > progStart) {
-            printf("    FAIL: free region %ld [%u..%u) overlaps program [%u..%u)\n",
-                   (long)i, (uint32_t)progStart, (uint32_t)progEnd, rStart, rEnd);
-            fail = 1;
-        }
+  /* Check no region overlaps program memory */
+  { uint16_t progStart = TO_C47MEMPTR(beginOfProgramMemory);
+    uint16_t progEnd = RAM_SIZE_IN_BLOCKS;
+    for (int32_t i = 0; i < numberOfFreeMemoryRegions; i++) {
+      uint32_t rStart = (uint32_t)freeMemoryRegions[i].blockAddress;
+      uint32_t rEnd = rStart + (uint32_t)freeMemoryRegions[i].sizeInBlocks;
+      if (rStart < progEnd && rEnd > progStart) {
+        printf("    FAIL: free region %ld [%u..%u) overlaps program [%u..%u)\n",
+        (long)i, (uint32_t)progStart, (uint32_t)progEnd, rStart, rEnd);
+        fail = 1;
       }
     }
+  }
 
-    if (!fail) {
-        printf("    PASS: free list consistent (%ld regions, no overlap)\n",
-               (long)numberOfFreeMemoryRegions);
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: free list consistent (%ld regions, no overlap)\n",
+    (long)numberOfFreeMemoryRegions);
+  }
+  return fail;
 }
 
 /* test_freelist_double_free_guarded
@@ -5258,42 +5258,42 @@ static int test_freelist_consistent(void)
  * test_freelist_consistent() FAILs (overlap between adjacent regions). */
 static int test_freelist_double_free_guarded(void)
 {
-    int fail = 0;
-    const size_t blocks = 4;
+  int fail = 0;
+  const size_t blocks = 4;
 
-    void *blk = allocC47Blocks(blocks);
-    if (!blk) {
-        printf("    FAIL: allocC47Blocks returned NULL\n");
-        return 1;
-    }
+  void *blk = allocC47Blocks(blocks);
+  if (!blk) {
+    printf("    FAIL: allocC47Blocks returned NULL\n");
+    return 1;
+  }
 
-    freeC47Blocks(blk, blocks); /* legitimate free */
+  freeC47Blocks(blk, blocks); /* legitimate free */
 
-    int32_t countBefore = numberOfFreeMemoryRegions;
-    freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
-    memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
+  int32_t countBefore = numberOfFreeMemoryRegions;
+  freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
+  memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
 
-    freeC47Blocks(blk, blocks); /* double free — must be a no-op */
+  freeC47Blocks(blk, blocks); /* double free — must be a no-op */
 
-    if (numberOfFreeMemoryRegions != countBefore) {
-        printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after double free\n",
-               (long)countBefore, (long)numberOfFreeMemoryRegions);
-        fail = 1;
-    }
-    else if (memcmp(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t)) != 0) {
-        printf("    FAIL: a free region's blockAddress/sizeInBlocks changed after double free\n");
-        fail = 1;
-    }
+  if (numberOfFreeMemoryRegions != countBefore) {
+    printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after double free\n",
+    (long)countBefore, (long)numberOfFreeMemoryRegions);
+    fail = 1;
+  }
+  else if (memcmp(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t)) != 0) {
+    printf("    FAIL: a free region's blockAddress/sizeInBlocks changed after double free\n");
+    fail = 1;
+  }
 
-    if (test_freelist_consistent()) {
-        printf("    FAIL: test_freelist_consistent failed after double free\n");
-        fail = 1;
-    }
+  if (test_freelist_consistent()) {
+    printf("    FAIL: test_freelist_consistent failed after double free\n");
+    fail = 1;
+  }
 
-    if (!fail) {
-        printf("    PASS: exact-match double free rejected, free list unchanged\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: exact-match double free rejected, free list unchanged\n");
+  }
+  return fail;
 }
 
 /* test_freelist_interior_double_free
@@ -5307,57 +5307,57 @@ static int test_freelist_double_free_guarded(void)
  * test_freelist_consistent() FAILs. */
 static int test_freelist_interior_double_free(void)
 {
-    int fail = 0;
-    const size_t firstBlocks = 2;
-    const size_t secondBlocks = 3;
+  int fail = 0;
+  const size_t firstBlocks = 2;
+  const size_t secondBlocks = 3;
 
-    void *big = allocC47Blocks(firstBlocks + secondBlocks);
-    if (!big) {
-        printf("    FAIL: allocC47Blocks returned NULL\n");
-        return 1;
-    }
+  void *big = allocC47Blocks(firstBlocks + secondBlocks);
+  if (!big) {
+    printf("    FAIL: allocC47Blocks returned NULL\n");
+    return 1;
+  }
 
-    uint16_t bigAddr = TO_C47MEMPTR(big);
-    void *first = big;
-    void *second = TO_PCMEMPTR(bigAddr + firstBlocks);
+  uint16_t bigAddr = TO_C47MEMPTR(big);
+  void *first = big;
+  void *second = TO_PCMEMPTR(bigAddr + firstBlocks);
 
-    /* Splitting one tracked allocation into two manual sub-frees is a test
-     * technique, not a real caller pattern: allocatedMemoryRegions[] only has
-     * one entry (the combined alloc above), so these two legitimate frees
-     * trip the sibling "Memory freeing A/B" bookkeeping diagnostics in
-     * freeListFree (size mismatch, then address not found). That is expected
-     * noise from this test, not a free-list corruption — the guard under
-     * test only cares about freeMemoryRegions[] overlap, checked below. */
-    freeC47Blocks(first, firstBlocks);   /* frees [bigAddr, bigAddr+2) */
-    freeC47Blocks(second, secondBlocks); /* frees [bigAddr+2, bigAddr+5), coalesces */
+  /* Splitting one tracked allocation into two manual sub-frees is a test
+   * technique, not a real caller pattern: allocatedMemoryRegions[] only has
+   * one entry (the combined alloc above), so these two legitimate frees
+   * trip the sibling "Memory freeing A/B" bookkeeping diagnostics in
+   * freeListFree (size mismatch, then address not found). That is expected
+   * noise from this test, not a free-list corruption — the guard under
+   * test only cares about freeMemoryRegions[] overlap, checked below. */
+  freeC47Blocks(first, firstBlocks);   /* frees [bigAddr, bigAddr+2) */
+  freeC47Blocks(second, secondBlocks); /* frees [bigAddr+2, bigAddr+5), coalesces */
 
-    int32_t countBefore = numberOfFreeMemoryRegions;
-    freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
-    memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
+  int32_t countBefore = numberOfFreeMemoryRegions;
+  freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
+  memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
 
-    /* second's address is now interior to the coalesced region, not equal to
-     * its blockAddress (which is bigAddr, from the first sub-block). */
-    freeC47Blocks(second, secondBlocks); /* interior double free — must be a no-op */
+  /* second's address is now interior to the coalesced region, not equal to
+   * its blockAddress (which is bigAddr, from the first sub-block). */
+  freeC47Blocks(second, secondBlocks); /* interior double free — must be a no-op */
 
-    if (numberOfFreeMemoryRegions != countBefore) {
-        printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after interior double free\n",
-               (long)countBefore, (long)numberOfFreeMemoryRegions);
-        fail = 1;
-    }
-    else if (memcmp(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t)) != 0) {
-        printf("    FAIL: free list changed after interior double free\n");
-        fail = 1;
-    }
+  if (numberOfFreeMemoryRegions != countBefore) {
+    printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after interior double free\n",
+    (long)countBefore, (long)numberOfFreeMemoryRegions);
+    fail = 1;
+  }
+  else if (memcmp(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t)) != 0) {
+    printf("    FAIL: free list changed after interior double free\n");
+    fail = 1;
+  }
 
-    if (test_freelist_consistent()) {
-        printf("    FAIL: test_freelist_consistent failed after interior double free\n");
-        fail = 1;
-    }
+  if (test_freelist_consistent()) {
+    printf("    FAIL: test_freelist_consistent failed after interior double free\n");
+    fail = 1;
+  }
 
-    if (!fail) {
-        printf("    PASS: interior double free rejected, free list unchanged\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: interior double free rejected, free list unchanged\n");
+  }
+  return fail;
 }
 
 /* test_freelist_no_mutation_on_oversize_free
@@ -5368,43 +5368,43 @@ static int test_freelist_interior_double_free(void)
  * the region grows and the size-unchanged assertion FAILs. */
 static int test_freelist_no_mutation_on_oversize_free(void)
 {
-    int fail = 0;
-    const size_t blocks = 4;
-    const size_t oversizeBlocks = blocks + 10;
+  int fail = 0;
+  const size_t blocks = 4;
+  const size_t oversizeBlocks = blocks + 10;
 
-    void *blk = allocC47Blocks(blocks);
-    if (!blk) {
-        printf("    FAIL: allocC47Blocks returned NULL\n");
-        return 1;
-    }
+  void *blk = allocC47Blocks(blocks);
+  if (!blk) {
+    printf("    FAIL: allocC47Blocks returned NULL\n");
+    return 1;
+  }
 
-    freeC47Blocks(blk, blocks); /* legitimate free */
+  freeC47Blocks(blk, blocks); /* legitimate free */
 
-    int32_t countBefore = numberOfFreeMemoryRegions;
-    freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
-    memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
+  int32_t countBefore = numberOfFreeMemoryRegions;
+  freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
+  memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
 
-    freeC47Blocks(blk, oversizeBlocks); /* oversize double free — must be a no-op */
+  freeC47Blocks(blk, oversizeBlocks); /* oversize double free — must be a no-op */
 
-    if (numberOfFreeMemoryRegions != countBefore) {
-        printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after oversize double free\n",
-               (long)countBefore, (long)numberOfFreeMemoryRegions);
-        fail = 1;
-    }
-    else if (memcmp(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t)) != 0) {
-        printf("    FAIL: a free region grew after oversize double free\n");
-        fail = 1;
-    }
+  if (numberOfFreeMemoryRegions != countBefore) {
+    printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after oversize double free\n",
+    (long)countBefore, (long)numberOfFreeMemoryRegions);
+    fail = 1;
+  }
+  else if (memcmp(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t)) != 0) {
+    printf("    FAIL: a free region grew after oversize double free\n");
+    fail = 1;
+  }
 
-    if (test_freelist_consistent()) {
-        printf("    FAIL: test_freelist_consistent failed after oversize double free\n");
-        fail = 1;
-    }
+  if (test_freelist_consistent()) {
+    printf("    FAIL: test_freelist_consistent failed after oversize double free\n");
+    fail = 1;
+  }
 
-    if (!fail) {
-        printf("    PASS: oversize double free rejected, no region grew\n");
-    }
-    return fail;
+  if (!fail) {
+    printf("    PASS: oversize double free rejected, no region grew\n");
+  }
+  return fail;
 }
 
 #endif  // PC_BUILD
