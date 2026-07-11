@@ -1224,6 +1224,16 @@ resolver:
    same fallback before `ERROR_LABEL_NOT_FOUND`, for `op == ITM_XEQ || ITM_XEQP1` only;
    all other PARAM_LABEL ops keep the upstream ERROR_LABEL_NOT_FOUND halt (audit fix F3).
 
+**LBLQ semantics.** A Forth colon definition is not an RPN label. `LBL?` on a
+name that resolves only in the Forth dictionary reports label-not-found
+(`LBLQ`'s own negative result, not an error halt): `forthFallbackOp` gates the
+Forth fallback to `ITM_XEQ`/`ITM_XEQP1` only, so a `FORTH_XEQ_COLON` result
+for `op == ITM_LBLQ` falls through to the `op == ITM_LBLQ` arm
+(`reallyRunFunction(op, INVALID_VARIABLE)`) instead of `ITM_FCALL` or
+`displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ...)`. Verified by the FIX-3
+gating in packages/forth-core/programming/lblGtoXeq.c:382-383 (`_executeOp`,
+`PARAM_LABEL` arm).
+
 **Complete `findNamedLabel` call-site map** (20 sites, 6 hooked, 14 excluded):
 
 | # | File | Line (upstream) | Context | Hooked? | Rationale |
@@ -2073,10 +2083,14 @@ dictionary high-water mark; budget unchanged (≤ 2 KB on the 64 KB part).
    `FORTH '…'` per §9.5; whether the import parser round-trips these is
    unverified. Binary state save is unaffected. Verify before advertising
    program text export of Forth programs.
- 4. **[RESOLVED — FIX-4]** `insertUserItemInProgram` low-byte mask fixed:
-    `func & 0x7f` → `func & 0xff` in
-    packages/forth-core/programming/manage.c:1863. Verified by
-    test_useritem_xeqp1_opcode (ITM_XEQP1=0x08AF → 0x88 0xAF, not 0x88 0x2F).
+ 4. **[RESOLVED — F4, ratified 2026-07-11]** `insertUserItemInProgram` wrote the
+    opcode low byte as `func & 0x7f`, corrupting any item whose low byte >= 0x80
+    (e.g. ITM_XEQP1 = 0x08AF -> 0x88 0x2F). Fixed to `func & 0xff` in the
+    overridden packages/forth-core/programming/manage.c. Blast radius exceeds
+    forth-core: the fix changes encoding for ALL user items with low byte >= 0x80
+    inserted via this helper. Write side verified by test_useritem_xeqp1_opcode;
+    decode side verified by test_useritem_xeqp1_decodes (F4 follow-through task).
+    Program-text export round-trip remains [GAP] — see item 3.
 5. **[Documented boundary]** R/S-after-`GTO` cold starts inherit the
    previous run's dictionary generation (§9.3). Revisit only if user
    reports demand it; Architecture 2 subsumes it.

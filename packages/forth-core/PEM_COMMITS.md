@@ -29,6 +29,10 @@ package repo (/home/stan/c43). Rules, non-negotiable:
    every line identical except the marked insertions.
 3. AUTHORITY. packages/forth-core/DESIGN.md is the single authority. Read the
    § slice named in the prompt BEFORE coding. Do not relitigate DECIDED items.
+   Spec authority: DESIGN.md is written only by the design/review side.
+   Implementation models propose changes via [PROPOSED] blocks in
+   PROPOSED_SPEC_CHANGES.md; promotion into DESIGN.md is a human/design-side
+   action.
 4. LOCKED DECISIONS (apply everywhere):
    - Names-only invariant: no Forth dictionary index (widx) ever persists into
      a program step. Program↔Forth crossings are name strings resolved at run.

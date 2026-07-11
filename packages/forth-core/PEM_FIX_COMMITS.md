@@ -408,3 +408,55 @@ Report both transcripts. From this commit on, the gate is:
 build + both headless runs + **zero freeList diagnostics** + ALL PASSED.
 
 **Gate** per header, upgraded as above. **Report and STOP.**
+
+## FIX-6 addendum — core/freeList.c: double-free / invalid-free guard
+
+**Goal.** FIX-6 made the gate honest about *existing* free-list corruption
+but the allocator itself had no defense against a double free: `freeListFree`
+had no guard at all upstream, and an earlier interim guard in the override
+was defective in three ways — (a) its size-grow branch could extend a free
+region over an adjacent allocated block, turning a detected error into
+silent corruption; (b) it matched only exact `blockAddress == C47RamPtr`,
+missing a double free of an address since coalesced into a larger free
+region; (c) it was silent on device builds (all PC-only diagnostics compiled
+out under `#if !defined(DMCP_BUILD)`).
+
+**Fix.** `freeListFree` gains an unconditional double-free / invalid-free
+guard using range-overlap detection: any free whose
+`[address, address+size)` overlaps an existing `freeMemoryRegions[]` entry is
+rejected — loud (`errorf` + backtrace) in PC builds, silent-but-safe on
+device builds where diagnostics are compiled out, and it **never mutates the
+list** on a hit. Upstream's `>=` overlap diagnostics (`freeListReduce`,
+`freeListFree`) are RETAINED at full sensitivity: they are deliberate
+double-free detectors (upstream's own comment: "This suggests there was
+double-free!"), and the guard removes the duplicate-insertion cause rather
+than relaxing the detector to `>`. Diff to upstream
+(`diff src/c47/core/freeList.c packages/forth-core/core/freeList.c`) is the
+guard hunk only.
+
+**Root causes found and fixed in forth-core (Step 4 of the guard task).**
+Rerunning the full self-test suite with the corrected (loud) guard surfaced
+one real, previously-silent double free: `test_xeq_precedence()`
+(test_dict_reloc.c:1284) reallocated `labelList` via `reallocC47Blocks`
+(which frees the pre-expansion block internally on success —
+`freeListRealloc`, core/freeList.c:90), then on both its success and failure
+paths restored the pre-realloc `savedLabelList`/`savedNumLabels` snapshot —
+reinstating a pointer to memory the realloc had already freed. The next
+`scanLabelsAndPrograms()` call then double-freed it. Fixed by rescanning from
+the (unmodified) program memory instead of restoring the stale snapshot
+(test_dict_reloc.c:1319-1333, 1339-1353). This root cause was entirely
+forth-core's own test helper — no upstream code was implicated. No other
+"Memory freeing C" or restored `>=` overlap occurrences were found in the
+clean suite run.
+
+**Tests.** `test_freelist_double_free_guarded` (exact-address double free),
+`test_freelist_interior_double_free` (double free of an address coalesced
+into the interior of a larger region), `test_freelist_no_mutation_on_oversize_free`
+(double free with a larger size must not grow the region). Each verified
+empirically against its escaping mutation (guard-loop disabled, guard
+reverted to exact-match, old size-grow branch re-added respectively): FAIL
+under the mutation, PASS on revert.
+
+**Candidate upstream MR** — see `PROPOSED_SPEC_CHANGES.md` (the guard is not
+Forth-specific; it protects the shared C47 allocator used by GMP reals,
+config.c, register data, and the Forth dictionary alike).
