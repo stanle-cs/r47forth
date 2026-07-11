@@ -145,9 +145,9 @@ void freeListReduce(void *pcMemPtr, size_t oldSizeInBlocks, size_t newSizeInBloc
   }
 
   #if !defined(DMCP_BUILD)
-    // check for overlap (FIX-6: use > not >= to avoid false positives on adjacent regions)
+    // check for overlap
     for(i=1; i<numberOfFreeMemoryRegions; i++) {
-      if((freeMemoryRegions[i-1].blockAddress + freeMemoryRegions[i-1].sizeInBlocks) > freeMemoryRegions[i].blockAddress) {
+      if((freeMemoryRegions[i-1].blockAddress + freeMemoryRegions[i-1].sizeInBlocks) >= freeMemoryRegions[i].blockAddress) {
         printf("\n*** Free memory regions overlap discovered in freeListReduce()!\n");
         printf("*** This suggests there was double-free!\n");
         //printf("Free blocks (%" PRId32 "):\n", numberOfFreeMemoryRegions);
@@ -188,82 +188,101 @@ void freeListReduce(void *pcMemPtr, size_t oldSizeInBlocks, size_t newSizeInBloc
   }
 }
 
- void freeListFree(void *pcMemPtr, size_t sizeInBlocks) {
-   uint16_t C47RamPtr, addr;
-   int32_t i, j;
-   bool_t done;
+void freeListFree(void *pcMemPtr, size_t sizeInBlocks) {
+  uint16_t C47RamPtr, addr;
+  int32_t i, j;
+  bool_t done;
 
-   // GMP never calls free with pcMemPtr beeing NULL
-   if(pcMemPtr == NULL) {
-     return;
-   }
+  // GMP never calls free with pcMemPtr beeing NULL
+  if(pcMemPtr == NULL) {
+    return;
+  }
 
-   if(sizeInBlocks == 0) {
-     sizeInBlocks = 1;
-   }
-   C47RamPtr = TO_C47MEMPTR(pcMemPtr);
+  if(sizeInBlocks == 0) {
+    sizeInBlocks = 1;
+  }
 
-   // Double-free guard: check if address is already in the free list.
-   // Run this BEFORE the allocated-regions diagnostic to avoid
-   // "Memory freeing B" on legitimate double-frees.
-   for(i=0; i<numberOfFreeMemoryRegions; i++) {
-     if(freeMemoryRegions[i].blockAddress == C47RamPtr) {
-       if(freeMemoryRegions[i].sizeInBlocks < sizeInBlocks) {
-         freeMemoryRegions[i].sizeInBlocks = (uint16_t)sizeInBlocks;
-       }
-       return;
-     }
-   }
+  C47RamPtr = TO_C47MEMPTR(pcMemPtr);
 
-   #if !defined(DMCP_BUILD)
-     //printf("Freeing %zd bytes\n", TO_BYTES(sizeInBlocks));
-     int region;
-     for(region=0; region<numberOfAllocatedMemoryRegions; region++) {
-       if(allocatedMemoryRegions[region].blockAddress == C47RamPtr) {
-         //printf("Memory freeing: %5zd blocks at address %5u     (number of allocated regions = %4d)\n", sizeInBlocks, C47RamPtr, numberOfAllocatedMemoryRegions - 1);
-         if(allocatedMemoryRegions[region].sizeInBlocks != sizeInBlocks) {
-           errorf("---->Memory freeing A (regions):");
-           fprintf(stderr, "%zd blocks at address %" PRIu16 ", but %" PRIu16 " were allocated\n", sizeInBlocks, C47RamPtr, allocatedMemoryRegions[region].sizeInBlocks);
-                                         #if !defined(WIN32)
-                                           void *callstack[128];
-                                           int frames = backtrace(callstack, 128);
-                                           char **strs = backtrace_symbols(callstack, frames);
-                                           printf("%30s%42s%s\n\n\n", "", "freeListFree called from: ", strs[1]);
-                                           printf("%30s%42s%s\n\n\n", "", "backtrace: ", "");
-                                           for(int i = 1; i < frames; i++) {
-                                               printf("%30s%42d: %s\n", "", i, strs[i]);
-                                           }
-                                           free(strs);
-                                         #endif
-           fflush(stderr);
-         }
-         if(numberOfAllocatedMemoryRegions - region - 1) {
-           xcopy(allocatedMemoryRegions + region, allocatedMemoryRegions + region + 1, (numberOfAllocatedMemoryRegions - region - 1) * sizeof(freeMemoryRegion_t));
-         }
-         numberOfAllocatedMemoryRegions--;
-         region = -1;
-         break;
-       }
-     }
-     if(region >= numberOfAllocatedMemoryRegions) {
-       errorf("---->Memory freeing B (number of regions):");
-       fprintf(stderr, "%5zd blocks at address %5u never allocated at this address     (number of allocated regions = %4d)\n", sizeInBlocks, C47RamPtr, numberOfAllocatedMemoryRegions);
-                                         #if !defined(WIN32)
-                                           void *callstack[128];
-                                           int frames = backtrace(callstack, 128);
-                                           char **strs = backtrace_symbols(callstack, frames);
-                                           printf("%30s%42s%s\n\n\n", "", "freeListFree called from: ", strs[1]);
-                                           printf("%30s%42s%s\n\n\n", "", "backtrace: ", "");
-                                           for(int i = 1; i < frames; i++) {
-                                               printf("%30s%42d: %s\n", "", i, strs[i]);
-                                           }
-                                           free(strs);
-                                         #endif
-       fflush(stderr);
-     }
-   #endif // !DMCP_BUILD
+  // Double-free / invalid-free guard (FIX-6): reject any free whose range
+  // overlaps an existing free region. Runs unconditionally so device builds
+  // (DMCP, diagnostics compiled out) cannot insert a duplicate/overlapping
+  // region and corrupt the list. Never mutates the list: a double free is
+  // always a caller bug and the free list must survive it unchanged.
+  for(i=0; i<numberOfFreeMemoryRegions; i++) {
+    uint32_t rStart = (uint32_t)freeMemoryRegions[i].blockAddress;
+    uint32_t rEnd   = rStart + (uint32_t)freeMemoryRegions[i].sizeInBlocks;
+    if((uint32_t)C47RamPtr < rEnd && (uint32_t)C47RamPtr + (uint32_t)sizeInBlocks > rStart) {
+      #if !defined(DMCP_BUILD)
+        errorf("---->Memory freeing C (double/invalid free):");
+        fprintf(stderr, "%zd blocks at address %" PRIu16 " overlap free region [%" PRIu32 "..%" PRIu32 ")\n",
+                sizeInBlocks, C47RamPtr, rStart, rEnd);
+        #if !defined(WIN32)
+          { void *callstack[128];
+            int frames = backtrace(callstack, 128);
+            char **strs = backtrace_symbols(callstack, frames);
+            printf("%30s%42s%s\n\n\n", "", "freeListFree called from: ", strs[1]);
+            for(int f = 1; f < frames; f++) {
+              printf("%30s%42d: %s\n", "", f, strs[f]);
+            }
+            free(strs);
+          }
+        #endif
+        fflush(stderr);
+      #endif
+      return;
+    }
+  }
 
-    done = false;
+  #if !defined(DMCP_BUILD)
+    //printf("Freeing %zd bytes\n", TO_BYTES(sizeInBlocks));
+    int region;
+    for(region=0; region<numberOfAllocatedMemoryRegions; region++) {
+      if(allocatedMemoryRegions[region].blockAddress == C47RamPtr) {
+        //printf("Memory freeing: %5zd blocks at address %5u     (number of allocated regions = %4d)\n", sizeInBlocks, C47RamPtr, numberOfAllocatedMemoryRegions - 1);
+        if(allocatedMemoryRegions[region].sizeInBlocks != sizeInBlocks) {
+          errorf("---->Memory freeing A (regions):");
+          fprintf(stderr, "%zd blocks at address %" PRIu16 ", but %" PRIu16 " were allocated\n", sizeInBlocks, C47RamPtr, allocatedMemoryRegions[region].sizeInBlocks);
+                                        #if !defined(WIN32)
+                                          void *callstack[128];
+                                          int frames = backtrace(callstack, 128);
+                                          char **strs = backtrace_symbols(callstack, frames);
+                                          printf("%30s%42s%s\n\n\n", "", "freeListFree called from: ", strs[1]);
+                                          printf("%30s%42s%s\n\n\n", "", "backtrace: ", "");
+                                          for(int i = 1; i < frames; i++) {
+                                              printf("%30s%42d: %s\n", "", i, strs[i]);
+                                          }
+                                          free(strs);
+                                        #endif
+          fflush(stderr);
+        }
+        if(numberOfAllocatedMemoryRegions - region - 1) {
+          xcopy(allocatedMemoryRegions + region, allocatedMemoryRegions + region + 1, (numberOfAllocatedMemoryRegions - region - 1) * sizeof(freeMemoryRegion_t));
+        }
+        numberOfAllocatedMemoryRegions--;
+        region = -1;
+        break;
+      }
+    }
+    if(region >= numberOfAllocatedMemoryRegions) {
+      errorf("---->Memory freeing B (number of regions):");
+      fprintf(stderr, "%5zd blocks at address %5u never allocated at this address     (number of allocated regions = %4d)\n", sizeInBlocks, C47RamPtr, numberOfAllocatedMemoryRegions);
+                                        #if !defined(WIN32)
+                                          void *callstack[128];
+                                          int frames = backtrace(callstack, 128);
+                                          char **strs = backtrace_symbols(callstack, frames);
+                                          printf("%30s%42s%s\n\n\n", "", "freeListFree called from: ", strs[1]);
+                                          printf("%30s%42s%s\n\n\n", "", "backtrace: ", "");
+                                          for(int i = 1; i < frames; i++) {
+                                              printf("%30s%42d: %s\n", "", i, strs[i]);
+                                          }
+                                          free(strs);
+                                        #endif
+      fflush(stderr);
+    }
+  #endif // !DMCP_BUILD
+
+  done = false;
 
   // is the freed block just before an other free block?
   addr = C47RamPtr + sizeInBlocks; // Address of the 1st bloc after the blocks to be freed;
@@ -294,12 +313,16 @@ void freeListReduce(void *pcMemPtr, size_t oldSizeInBlocks, size_t newSizeInBloc
   }
 
   #if !defined(DMCP_BUILD)
-    // check for overlap (FIX-6: use > not >= to avoid false positives on adjacent regions)
+    // check for overlap
     for(i=1; i<numberOfFreeMemoryRegions; i++) {
-      if((freeMemoryRegions[i-1].blockAddress + freeMemoryRegions[i-1].sizeInBlocks) > freeMemoryRegions[i].blockAddress) {
-         printf("\n*** Free memory regions overlap discovered in freeListFree()!\n");
-         printf("*** This suggests there was double-free!\n");
-         break;
+      if((freeMemoryRegions[i-1].blockAddress + freeMemoryRegions[i-1].sizeInBlocks) >= freeMemoryRegions[i].blockAddress) {
+        printf("\n*** Free memory regions overlap discovered in freeListFree()!\n");
+        printf("*** This suggests there was double-free!\n");
+        //printf("Free blocks (%" PRId32 "):\n", numberOfFreeMemoryRegions);
+        //for(j=0; j<numberOfFreeMemoryRegions; j++) {
+        //  printf("  %2" PRId32 " starting at %5" PRIu16 ": %5" PRIu16 " blocks = %6" PRIu32 " bytes\n", j, freeMemoryRegions[j].blockAddress, freeMemoryRegions[j].sizeInBlocks, TO_BYTES((uint32_t)freeMemoryRegions[j].sizeInBlocks));
+        //}
+        break;
       }
     }
   #endif // !DMCP_BUILD

@@ -1286,8 +1286,6 @@ static int test_xeq_precedence(void)
   const char *sharedName = "XEQP";
   uint8_t nameLen = (uint8_t)sizeof("XEQP") - 1;
 
-  uint16_t savedNumLabels = numberOfLabels;
-  labelList_t *savedLabelList = labelList;
   if (numberOfLabels >= 4096) {
     printf("    SKIP: label table full\n");
     return 0;
@@ -1325,8 +1323,13 @@ static int test_xeq_precedence(void)
   /* Define a Forth word with the same name */
   uint16_t w = begin_word(sharedName, nameLen);
   if (w == FORTH_NULL) {
-    labelList = savedLabelList;
-    numberOfLabels = savedNumLabels;
+    /* reallocC47Blocks() above already freed the pre-expansion labelList
+     * block (freeListRealloc frees the old pointer on success — core/
+     * freeList.c:90 [VERIFIED]); rescanning rebuilds labelList/
+     * numberOfLabels from the (unmodified) program memory instead of
+     * reinstating a pointer/size pair that a later scanLabelsAndPrograms()
+     * would free a second time. */
+    scanLabelsAndPrograms();
     freeC47Blocks(labelBuf, TO_BLOCKS(nameLen + 1));
     printf("    SKIP: alloc failed\n");
     return 0;
@@ -1339,11 +1342,14 @@ static int test_xeq_precedence(void)
   uint16_t param;
   forthXEQType_t res = forthResolveXEQ(sharedName, &param);
 
-  /* Restore labelList pointer and count, free label data.
-   * Fix #15: restore savedLabelList (not just count) to avoid freeing the
-   * expanded block later with the old size (double-free / mismatched free). */
-  labelList = savedLabelList;
-  numberOfLabels = savedNumLabels;
+  /* Rescan to rebuild labelList/numberOfLabels from the (unmodified) program
+   * memory. The old "Fix #15" approach of restoring savedLabelList/
+   * savedNumLabels here was itself a double-free: reallocC47Blocks() already
+   * freed the pre-expansion labelList block on success (freeListRealloc
+   * frees the old pointer unconditionally — core/freeList.c:90 [VERIFIED]),
+   * so reinstating that stale pointer left the next scanLabelsAndPrograms()
+   * call freeing already-freed memory. */
+  scanLabelsAndPrograms();
   freeC47Blocks(labelBuf, TO_BLOCKS(nameLen + 1));
 
   if (res != FORTH_XEQ_LABEL) {
@@ -2039,6 +2045,58 @@ static int test_exec_step_halts_on_error(void)
   return 0;
 }
 
+/* probeListPtrs (temporary probe — removed before commit):
+ * For each of labelList and programList, if non-NULL, check whether
+ * TO_C47MEMPTR(ptr) falls inside any freeMemoryRegions[] entry.
+ * Prints tag, pointer, region index and bounds, plus counters. */
+static void probeListPtrs(const char *tag)
+{
+  uint16_t lblAddr = 0, prgAddr = 0;
+  bool_t lblInFree = false, prgInFree = false;
+  int32_t lblRegion = -1, prgRegion = -1;
+
+  if (labelList != NULL) {
+    lblAddr = TO_C47MEMPTR(labelList);
+    for (int32_t i = 0; i < numberOfFreeMemoryRegions; i++) {
+      uint32_t rStart = (uint32_t)freeMemoryRegions[i].blockAddress;
+      uint32_t rEnd = rStart + (uint32_t)freeMemoryRegions[i].sizeInBlocks;
+      if ((uint32_t)lblAddr >= rStart && (uint32_t)lblAddr < rEnd) {
+        lblInFree = true;
+        lblRegion = i;
+        break;
+      }
+    }
+  }
+
+  if (programList != NULL) {
+    prgAddr = TO_C47MEMPTR(programList);
+    for (int32_t i = 0; i < numberOfFreeMemoryRegions; i++) {
+      uint32_t rStart = (uint32_t)freeMemoryRegions[i].blockAddress;
+      uint32_t rEnd = rStart + (uint32_t)freeMemoryRegions[i].sizeInBlocks;
+      if ((uint32_t)prgAddr >= rStart && (uint32_t)prgAddr < rEnd) {
+        prgInFree = true;
+        prgRegion = i;
+        break;
+      }
+    }
+  }
+
+  printf("  [PROBE %s] labelList=%p addr=%u %s (region %d [%u..%u])\n",
+         tag, (void *)labelList, (unsigned)lblAddr,
+         lblInFree ? "IN FREE REGION" : (labelList ? "OK" : "NULL"),
+         (int)lblRegion,
+         lblRegion >= 0 ? (unsigned)freeMemoryRegions[lblRegion].blockAddress : 0,
+         lblRegion >= 0 ? (unsigned)(freeMemoryRegions[lblRegion].blockAddress + freeMemoryRegions[lblRegion].sizeInBlocks) : 0);
+  printf("  [PROBE %s] programList=%p addr=%u %s (region %d [%u..%u])\n",
+         tag, (void *)programList, (unsigned)prgAddr,
+         prgInFree ? "IN FREE REGION" : (programList ? "OK" : "NULL"),
+         (int)prgRegion,
+         prgRegion >= 0 ? (unsigned)freeMemoryRegions[prgRegion].blockAddress : 0,
+         prgRegion >= 0 ? (unsigned)(freeMemoryRegions[prgRegion].blockAddress + freeMemoryRegions[prgRegion].sizeInBlocks) : 0);
+  printf("  [PROBE %s] numberOfLabels=%u numberOfPrograms=%u numberOfFreeMemoryRegions=%d\n",
+         tag, (unsigned)numberOfLabels, (unsigned)numberOfPrograms, (int)numberOfFreeMemoryRegions);
+}
+
 /* ---- COMMIT 5: §9.4 derived-state helpers + test-program infrastructure ---- */
 
 /* writeTestProgram: expand program memory if needed, write bytes, append
@@ -2125,6 +2183,7 @@ static void restoreTestProgram(void)
 
     /* Re-scan labels and programs; recomputes firstFreeProgramByte and
      * freeProgramBytes from the program bytes (manage.c:184-185). */
+    probeListPtrs("writeTestProgram");
     scanLabelsAndPrograms();
 }
 
@@ -2499,6 +2558,7 @@ static int test_fcall_redirect_records_name(void)
     insertStepInProgram(ITM_FCALL);
 
     /* Rescan to update pointers */
+    probeListPtrs("pre-scan:2502");
     scanLabelsAndPrograms();
 
     /* Byte-probe: the step at currentStep should be the redirected form */
@@ -4151,6 +4211,7 @@ static int test_useritem_xeqp1_opcode(void)
   insertUserItemInProgram(ITM_XEQP1, "SQ2");
 
   /* Rescan to update pointers */
+  probeListPtrs("pre-scan:4154");
   scanLabelsAndPrograms();
 
   /* Byte-probe: insertUserItemInProgram advances past ITM_sin (1 byte),
@@ -4288,6 +4349,11 @@ static int test_e1_direction_mid_program(void)
 
 /* FIX-6: free-list integrity check */
 static int test_freelist_consistent(void);
+
+/* FIX-6: double-free guard tests (range-overlap guard in freeListFree) */
+static int test_freelist_double_free_guarded(void);
+static int test_freelist_interior_double_free(void);
+static int test_freelist_no_mutation_on_oversize_free(void);
 
 /* F5: alpha menu presentation tests */
 static int test_alpha_menu_on_top_during_capture(void);
@@ -4733,6 +4799,15 @@ int forthDictSelfTest(void)
     printf("  [DEBUG] running test_freelist_consistent...\n");
     fail |= test_freelist_consistent();
 
+    printf("  [DEBUG] running test_freelist_double_free_guarded...\n");
+    fail |= test_freelist_double_free_guarded();
+
+    printf("  [DEBUG] running test_freelist_interior_double_free...\n");
+    fail |= test_freelist_interior_double_free();
+
+    printf("  [DEBUG] running test_freelist_no_mutation_on_oversize_free...\n");
+    fail |= test_freelist_no_mutation_on_oversize_free();
+
     /* FIX-6: Arena report (§5.4/§9.9 duty) — define words, report, then clear */
     { uint32_t freeRamBefore = getFreeRamMemory();
       forthDictInit();
@@ -4922,6 +4997,163 @@ static int test_freelist_consistent(void)
     if (!fail) {
         printf("    PASS: free list consistent (%ld regions, no overlap)\n",
                (long)numberOfFreeMemoryRegions);
+    }
+    return fail;
+}
+
+/* test_freelist_double_free_guarded
+ * FIX-6: freeListFree's range-overlap guard must reject a double free of the
+ * exact same (pointer, size) pair without mutating the free list at all.
+ * Escaping mutation: remove the guard loop in freeListFree (core/freeList.c)
+ * — the second free proceeds, inserts a duplicate/overlapping region, and
+ * test_freelist_consistent() FAILs (overlap between adjacent regions). */
+static int test_freelist_double_free_guarded(void)
+{
+    int fail = 0;
+    const size_t blocks = 4;
+
+    void *blk = allocC47Blocks(blocks);
+    if (!blk) {
+        printf("    FAIL: allocC47Blocks returned NULL\n");
+        return 1;
+    }
+
+    freeC47Blocks(blk, blocks); /* legitimate free */
+
+    int32_t countBefore = numberOfFreeMemoryRegions;
+    freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
+    memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
+
+    freeC47Blocks(blk, blocks); /* double free — must be a no-op */
+
+    if (numberOfFreeMemoryRegions != countBefore) {
+        printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after double free\n",
+               (long)countBefore, (long)numberOfFreeMemoryRegions);
+        fail = 1;
+    }
+    else if (memcmp(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t)) != 0) {
+        printf("    FAIL: a free region's blockAddress/sizeInBlocks changed after double free\n");
+        fail = 1;
+    }
+
+    if (test_freelist_consistent()) {
+        printf("    FAIL: test_freelist_consistent failed after double free\n");
+        fail = 1;
+    }
+
+    if (!fail) {
+        printf("    PASS: exact-match double free rejected, free list unchanged\n");
+    }
+    return fail;
+}
+
+/* test_freelist_interior_double_free
+ * FIX-6: free two adjacent allocations so they coalesce into one free region,
+ * then double-free the SECOND allocation's address — now interior to the
+ * coalesced region, not equal to its blockAddress. The range-overlap guard
+ * must still catch this.
+ * Escaping mutation: revert the guard to the old exact blockAddress==C47RamPtr
+ * match — the interior address no longer equals any region's blockAddress, the
+ * double free slips through, inserts an overlapping region, and
+ * test_freelist_consistent() FAILs. */
+static int test_freelist_interior_double_free(void)
+{
+    int fail = 0;
+    const size_t firstBlocks = 2;
+    const size_t secondBlocks = 3;
+
+    void *big = allocC47Blocks(firstBlocks + secondBlocks);
+    if (!big) {
+        printf("    FAIL: allocC47Blocks returned NULL\n");
+        return 1;
+    }
+
+    uint16_t bigAddr = TO_C47MEMPTR(big);
+    void *first = big;
+    void *second = TO_PCMEMPTR(bigAddr + firstBlocks);
+
+    /* Splitting one tracked allocation into two manual sub-frees is a test
+     * technique, not a real caller pattern: allocatedMemoryRegions[] only has
+     * one entry (the combined alloc above), so these two legitimate frees
+     * trip the sibling "Memory freeing A/B" bookkeeping diagnostics in
+     * freeListFree (size mismatch, then address not found). That is expected
+     * noise from this test, not a free-list corruption — the guard under
+     * test only cares about freeMemoryRegions[] overlap, checked below. */
+    freeC47Blocks(first, firstBlocks);   /* frees [bigAddr, bigAddr+2) */
+    freeC47Blocks(second, secondBlocks); /* frees [bigAddr+2, bigAddr+5), coalesces */
+
+    int32_t countBefore = numberOfFreeMemoryRegions;
+    freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
+    memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
+
+    /* second's address is now interior to the coalesced region, not equal to
+     * its blockAddress (which is bigAddr, from the first sub-block). */
+    freeC47Blocks(second, secondBlocks); /* interior double free — must be a no-op */
+
+    if (numberOfFreeMemoryRegions != countBefore) {
+        printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after interior double free\n",
+               (long)countBefore, (long)numberOfFreeMemoryRegions);
+        fail = 1;
+    }
+    else if (memcmp(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t)) != 0) {
+        printf("    FAIL: free list changed after interior double free\n");
+        fail = 1;
+    }
+
+    if (test_freelist_consistent()) {
+        printf("    FAIL: test_freelist_consistent failed after interior double free\n");
+        fail = 1;
+    }
+
+    if (!fail) {
+        printf("    PASS: interior double free rejected, free list unchanged\n");
+    }
+    return fail;
+}
+
+/* test_freelist_no_mutation_on_oversize_free
+ * FIX-6: double-freeing with a LARGER sizeInBlocks than originally allocated
+ * must not grow the free region the address falls in.
+ * Escaping mutation: re-add the old size-grow branch (if sizeInBlocks <
+ * requested, grow freeMemoryRegions[i].sizeInBlocks to the requested size) —
+ * the region grows and the size-unchanged assertion FAILs. */
+static int test_freelist_no_mutation_on_oversize_free(void)
+{
+    int fail = 0;
+    const size_t blocks = 4;
+    const size_t oversizeBlocks = blocks + 10;
+
+    void *blk = allocC47Blocks(blocks);
+    if (!blk) {
+        printf("    FAIL: allocC47Blocks returned NULL\n");
+        return 1;
+    }
+
+    freeC47Blocks(blk, blocks); /* legitimate free */
+
+    int32_t countBefore = numberOfFreeMemoryRegions;
+    freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
+    memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
+
+    freeC47Blocks(blk, oversizeBlocks); /* oversize double free — must be a no-op */
+
+    if (numberOfFreeMemoryRegions != countBefore) {
+        printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after oversize double free\n",
+               (long)countBefore, (long)numberOfFreeMemoryRegions);
+        fail = 1;
+    }
+    else if (memcmp(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t)) != 0) {
+        printf("    FAIL: a free region grew after oversize double free\n");
+        fail = 1;
+    }
+
+    if (test_freelist_consistent()) {
+        printf("    FAIL: test_freelist_consistent failed after oversize double free\n");
+        fail = 1;
+    }
+
+    if (!fail) {
+        printf("    PASS: oversize double free rejected, no region grew\n");
     }
     return fail;
 }
