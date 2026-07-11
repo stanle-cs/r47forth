@@ -62,6 +62,12 @@ void covPlotHash(uint16_t which);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
+// Omitted trailing coverageDriver fields are zero by the C standard; silence the
+// per-row -Wextra noise the same way reservedRegisterLookup.h does.
+#if (defined __GNUC__ && __GNUC__ + (__GNUC_MINOR__ >= 6) > 4) || (defined __clang__ && __clang_major__ >= 3)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
 const funcTest_t funcTestNoParam[] = {
   // Save / restore calc state (serializers; file I/O).
   {"fnSaveRegister",         fnSaveRegister        },
@@ -537,6 +543,9 @@ const funcTest_t funcTestNoParam[] = {
   {"fnExecute",              runPgm                },
   {"",                       NULL                  }
 };
+#if (defined __GNUC__ && __GNUC__ + (__GNUC_MINOR__ >= 6) > 4) || (defined __clang__ && __clang_major__ >= 3)
+#pragma GCC diagnostic pop
+#endif
 
 
 
