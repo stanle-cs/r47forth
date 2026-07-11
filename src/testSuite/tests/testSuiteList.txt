@@ -82,6 +82,9 @@ xnor
 xor
 mirror
 shift_rotate
+bits_cov
+flags_cov
+statsx_cov
 
 addition_longInteger
 addition_time
@@ -457,6 +460,7 @@ matrix2_cov
 clcvar_cov
 serialize_state_cov
 pgm_solve_cov
+clearvars_cov
 
 serialize_cov
 

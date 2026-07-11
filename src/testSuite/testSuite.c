@@ -542,6 +542,29 @@ const funcTest_t funcTestNoParam[] = {
   {"fnTripleVfromIZ",        fnTripleVfromIZ       },
   {"fnTripleIfromVZ",        fnTripleIfromVZ       },
   {"fnTripleFlipPolar",      fnTripleFlipPolar     },
+  // Bit set/flip on X and the bit-set/clear tests (FARG = bit number).
+  {"fnSb",                   fnSb                  },
+  {"fnBs",                   fnBs                  },
+  {"fnBc",                   fnBc                  },
+  {"fnFb",                   fnFb                  },
+  // Flag test and test-and-modify (FARG = flag number).
+  {"fnIsFlagSet",            fnIsFlagSet           },
+  {"fnIsFlagSetSet",         fnIsFlagSetSet        },
+  {"fnIsFlagSetClear",       fnIsFlagSetClear      },
+  {"fnIsFlagSetFlip",        fnIsFlagSetFlip       },
+  {"fnIsFlagClearSet",       fnIsFlagClearSet      },
+  {"fnIsFlagClearClear",     fnIsFlagClearClear    },
+  {"fnIsFlagClearFlip",      fnIsFlagClearFlip     },
+  {"fnFlipFlag",             fnFlipFlag            },
+  {"fnGetSystemFlag",        fnGetSystemFlag       },
+  // Clear / delete all named variables (FARG = confirmation).
+  {"fnClearAllVariables",    fnClearAllVariables   },
+  {"fnDeleteAllVariables",   fnDeleteAllVariables  },
+  // Statistics readouts (need accumulated sigma data; FARG selects the sum).
+  {"fnXmin",                 fnXmin                },
+  {"fnXmax",                 fnXmax                },
+  {"fnRangeXY",              fnRangeXY             },
+  {"fnStatSum",              fnStatSum             },
 
   {"fnExecute",              runPgm                },
   {"",                       NULL                  }
