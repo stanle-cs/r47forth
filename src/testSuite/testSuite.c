@@ -783,6 +783,8 @@ static void covWriteAndLoadPgm(const uint8_t *pgm, size_t n) {
   // c47program.bin, so the suite cannot clobber a user's saved program.
   FILE *f = fopen("c47programTest.bin", "wb");
   if(f == NULL) {
+    printf("\nCannot open c47programTest.bin for writing\n");
+    abortTest();
     return;
   }
   fprintf(f, "PROGRAM_FILE_FORMAT\n0\nC47_program_file_version\n1\nPROGRAM\n%u\n", (unsigned)n);
@@ -822,6 +824,8 @@ void covDerivPgm(uint16_t order) {
   // f'(X)=2X, so the first derivative at X=3 is 6.
   const calcRegister_t label = findNamedLabel("S", GLOBAL_LABELS);
   if(label == INVALID_VARIABLE) {
+    printf("\nUnknown global label: S\n");
+    abortTest();
     return;
   }
   currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
@@ -842,6 +846,8 @@ void covSolvePgm(uint16_t unusedButMandatoryParameter) {
   // (the program reads the trial value the solver leaves in X).
   const calcRegister_t label = findNamedLabel("S", GLOBAL_LABELS);
   if(label == INVALID_VARIABLE) {
+    printf("\nUnknown global label: S\n");
+    abortTest();
     return;
   }
   // Clear the whole solver status first: a prior TVM or interactive solve can
@@ -907,6 +913,8 @@ void covIntegratePgm(uint16_t unusedButMandatoryParameter) {
   // runs after programs.txt.
   const calcRegister_t label = findNamedLabel("S", GLOBAL_LABELS);
   if(label == INVALID_VARIABLE) {
+    printf("\nUnknown global label: S\n");
+    abortTest();
     return;
   }
   currentSolverStatus = 0;
@@ -924,6 +932,8 @@ void covSumProd(uint16_t which) {
   // 1260. Requires the sample programs staged, so its corpus runs after programs.
   const calcRegister_t label = findNamedLabel("S", GLOBAL_LABELS);
   if(label == INVALID_VARIABLE) {
+    printf("\nUnknown global label: S\n");
+    abortTest();
     return;
   }
   currentSolverStatus = 0;
@@ -945,6 +955,8 @@ void covISumProd(uint16_t which) {
   // its corpus runs after programs.
   const calcRegister_t label = findNamedLabel("T", GLOBAL_LABELS);
   if(label == INVALID_VARIABLE) {
+    printf("\nUnknown global label: T\n");
+    abortTest();
     return;
   }
   currentSolverStatus = 0;
