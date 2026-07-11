@@ -1,0 +1,20 @@
+;*************************************************************
+;** Coverage: plot regression. covPlotHash renders a graph **
+;** into the frame buffer through fnEqSolvGraph (EQ_PLOT)   **
+;** over a fixed [-5,5] range, snapshots it through the     **
+;** SNAP screen dump, and leaves the SHA-256 of the bitmap  **
+;** in X. The reference hashes below pin the rendered plot; **
+;** a change to the grapher, fonts or the blitter moves the **
+;** hash and fails the test. Kept in its own file so it can **
+;** be commented out if a future upstream change alters the **
+;** render.                                                 **
+;*************************************************************
+In: AM=RAD FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+; plot f(X)=X^2 over [-5,5]
+Func: fnPlotHashCov
+In:  FARG=0
+Out: EC=0 RX=Stri:"9C804C44D5B233E64EA969DC4F9CF35E53D431697ADD0BEEA22CBB18BB248C77"
+; plot f(X)=SIN(X) over [-5,5] (radians)
+Func: fnPlotHashCov
+In:  FARG=1
+Out: EC=0 RX=Stri:"7164E1B8A390797ADC903C1D7A8AE5F0EC80B54845D20CD5E422F137EDCDEB81"
