@@ -463,6 +463,7 @@ serialize_state_cov
 pgm_solve_cov
 histo_cov
 clearvars_cov
+config_cov
 
 serialize_cov
 

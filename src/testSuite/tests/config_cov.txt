@@ -1,0 +1,111 @@
+;*************************************************************
+;** Coverage: configuration modes, display settings and     **
+;** getters (config.c). Getters push the current setting to **
+;** X; setters assign a mode or limit. The register-reading **
+;** setters (REALDF/ADM/DMX/ISM/NDEC) take their value from **
+;** the register named by FARG. fnClAll takes FARG =        **
+;** CONFIRMED.                                              **
+;*************************************************************
+In: FL_SPCRES=0 SD=0
+
+; --- getters: push the current setting to X ---
+Func: fnGetWordSize
+In:  WS=32
+Out: EC=0 RX=LonI:"32"
+Func: fnGetRoundingMode
+In:  RMODE=2
+Out: EC=0 RX=LonI:"2"
+Func: fnGetLastErr
+Out: EC=0 RX=LonI:"0"
+Func: fnGetSignificantDigits
+Out: EC=0
+Func: fnGetIntegerSignMode
+Out: EC=0
+Func: fnGetADM
+Out: EC=0
+Func: fnGetDMX
+Out: EC=0
+Func: fnGetRange
+Out: EC=0
+Func: fnGetHide
+Out: EC=0
+Func: fnGetNDEC
+Out: EC=0
+Func: fnGetREALDF
+Out: EC=0
+Func: fnGetFractionDigits
+Out: EC=0
+
+; --- value setters (FARG is the value) ---
+Func: fnAngularMode
+In:  FARG=2
+Out: EC=0
+Func: fnIntegerMode
+In:  FARG=0
+Out: EC=0
+Func: fnRange
+In:  FARG=150
+Out: EC=0
+Func: fnHide
+In:  FARG=0
+Out: EC=0
+Func: fnSetBaseNr
+In:  FARG=10
+Out: EC=0
+Func: fnSetFractionDigits
+In:  FARG=3
+Out: EC=0
+Func: fnSetSignificantDigits
+In:  FARG=12
+Out: EC=0
+Func: fnSetRoundingMode
+In:  FARG=1
+Out: EC=0
+
+; --- register-reading setters (FARG names the register) ---
+Func: fnSetADM
+In:  FARG=0 R00=Real:"1"
+Out: EC=0
+Func: fnSetDMX
+In:  FARG=0 R00=Real:"1"
+Out: EC=0
+Func: fnSetISM
+In:  FARG=0 R00=Real:"1"
+Out: EC=0
+Func: fnSetNDEC
+In:  FARG=0 R00=Real:"4"
+Out: EC=0
+Func: fnSetREALDF
+In:  FARG=0 R00=Real:"2"
+Out: EC=0
+
+; --- fixed setters, display-format toggles and info ---
+Func: fnFractionType
+Out: EC=0
+Func: fnSetC47
+Out: EC=0
+Func: fnSetRJ
+Out: EC=0
+Func: fnSetJM
+Out: EC=0
+Func: fnSetHP35
+Out: EC=0
+Func: fnResetTVM
+Out: EC=0
+Func: fnMenuGapL
+Out: EC=0
+Func: fnMenuGapR
+Out: EC=0
+Func: fnMenuGapRX
+Out: EC=0
+Func: fnSettingsDispFormatGrpL
+In:  FARG=3
+Out: EC=0
+Func: fnSettingsDispFormatGrpR
+In:  FARG=3
+Out: EC=0
+Func: fnWho
+Out: EC=0
+Func: fnClAll
+In:  FARG=9877
+Out: EC=0
