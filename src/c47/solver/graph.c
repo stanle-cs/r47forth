@@ -2809,6 +2809,12 @@ void fnEqSolvGraph (uint16_t func) {
           screenUpdatingMode = SCRUPD_AUTO;
           screenUpdatingMode |= SCRUPD_SKIP_STATUSBAR_ONE_TIME;
           refreshScreen(239);
+          if(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) {
+            // The refresh above dropped a running program back to CM_NORMAL, so a following programmed SNAP would repaint and capture the register
+            // display instead of the plot. This copies PLTf (via fnPlotSQ) so the SNAP re-renders it; the SNAP's own refresh performs the CM_NORMAL drop for the program steps that follow.
+            calcMode = CM_GRAPH;
+            reDraw = true;
+          }
           break;
         }
         default: ;
