@@ -560,11 +560,21 @@ const funcTest_t funcTestNoParam[] = {
   // Clear / delete all named variables (FARG = confirmation).
   {"fnClearAllVariables",    fnClearAllVariables   },
   {"fnDeleteAllVariables",   fnDeleteAllVariables  },
+  // Register range management (range packed in X as s.NNDDD).
+  {"fnRegSort",              fnRegSort             },
+  {"fnRegSwap",              fnRegSwap             },
+  {"fnRegCopy",              fnRegCopy             },
+  {"fnRegClr",               fnRegClr              },
   // Statistics readouts (need accumulated sigma data; FARG selects the sum).
   {"fnXmin",                 fnXmin                },
   {"fnXmax",                 fnXmax                },
   {"fnRangeXY",              fnRangeXY             },
   {"fnStatSum",              fnStatSum             },
+  // Histogram setup (fnConvertStatsToHisto arms it; FARG = ITM_X / ITM_Y).
+  {"fnSetNBins",             fnSetNBins            },
+  {"fnSetLoBin",             fnSetLoBin            },
+  {"fnSetHiBin",             fnSetHiBin            },
+  {"fnConvertStatsToHisto",  fnConvertStatsToHisto },
 
   {"fnExecute",              runPgm                },
   {"",                       NULL                  }
