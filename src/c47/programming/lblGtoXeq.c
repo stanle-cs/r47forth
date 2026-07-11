@@ -757,6 +757,12 @@ int16_t executeOneStep(uint8_t *step) {
     op |= *(step++);
   }
 
+  // Stop before the trace below and the switch, both of which index indexOfItems[op].
+  if(op >= LAST_ITEM && op != 0x7fff) { // 0x7fff is .END., handled by its own case
+    displayCalcErrorMessage(ERROR_UNDEFINED_OPCODE, ERR_REGISTER_LINE, REGISTER_X);
+    return 0;
+  }
+
   #if defined(OPTION_IR_PRINTING)
     printTrace(op, NOPARAM);
   #endif //OPTION_IR_PRINTING

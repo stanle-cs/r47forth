@@ -300,7 +300,7 @@ uint8_t *findKey2ndParam(uint8_t *step) {
   }
 
   uint8_t *secondParam;
-  if(op == 0x7fff) { // .END.
+  if(op >= LAST_ITEM) { // do not index past the item table; 0x7fff (.END.) lands here too
     return NULL;
   }
   else {
