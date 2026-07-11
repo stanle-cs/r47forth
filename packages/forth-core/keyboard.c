@@ -12,9 +12,7 @@ static void executeFunction(const char *data, int16_t item_);
 
 /* pickerInsertName — insert dynmenuGetLabel(dynamicMenuItem) + trailing space
  * into aimBuffer at T_cursorPos (§9.6 P-H7).
- * Returns true on success, false if buffer would overflow.
- * Mutation: inserting at aimBuffer end instead of T_cursorPos breaks mid-line
- * picks; omitting trailing space glues tokens together. */
+ * Returns true on success, false if buffer would overflow. */
 bool_t pickerInsertName(void)
 {
   const char *pickName = dynmenuGetLabel(dynamicMenuItem);
@@ -987,8 +985,6 @@ endReturnTrue:
           lastKeyItemDetermined = item;
 
           // MNU_FORTH picker: insert name at cursor during Forth capture (§9.6 P-H7)
-          // Mutation: inserting at aimBuffer end instead of T_cursorPos breaks mid-line
-          // picks; omitting trailing space glues tokens together.
           if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
              && tam.function == ITM_FORTH
              && item == ITM_NOP

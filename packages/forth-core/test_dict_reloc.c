@@ -5066,7 +5066,7 @@ int forthDictSelfTest(void)
       uint32_t freeRamAfter = getFreeRamMemory();
       uint16_t dictBlocks = fdict.sizeBlocks;
       uint32_t dictBytes = TO_BYTES(dictBlocks);
-      printf("  FORTH ARENA: dict here=%u sizeBlocks=%u  freeRam=%ld\n",
+      printf("  FORTH ARENA: dict here=%u sizeBlocks=%u  freeRamDelta=%ld\n",
              fdict.here, fdict.sizeBlocks, (long)(freeRamBefore - freeRamAfter));
       if (dictBlocks > 512) {
         printf("    WARN: dict region %u blocks (%u bytes) exceeds 2 KB budget\n",
