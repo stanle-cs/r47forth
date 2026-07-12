@@ -6625,11 +6625,16 @@ static void calculateEigenvalues(real_t *a, real_t *q, real_t *r, real_t *eig, r
     last_check_iter = 0;
     no_improvement_count = 0;
 
-    // Initialize ALL elements to zero for eig, q, and r
+    // Initialize eig, q and r (size*size*2 reals each) to zero.
     for(int i = 0; i < size * size * 2; i++) {
       realSetZero(eig + i);
       realSetZero(q + i);
       realSetZero(r + i);
+    }
+    // previousDiagonal stores only the size-element diagonal (size*2 reals). The
+    // eigenvalue solvers allocate it that size, so zeroing it with the eigenvector
+    // size*size*2 bound above overran the buffer into the following pool block.
+    for(int i = 0; i < size * 2; i++) {
       realSetZero(previousDiagonal + i);
     }
 
