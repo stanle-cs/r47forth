@@ -90,6 +90,7 @@ endif
 # Phase 1: capture overrides and set include paths before any subdirs
 custom_pkg_list = get_option('CUSTOM_PKG')
 custom_pkg_specs = []
+custom_pkg_patch_specs = []
 custom_pkg_sources = []
 pkg_python3 = find_program('python3', 'python')
 shadow_dir = meson.project_build_root() / 'custom_pkg_shadow'
@@ -110,8 +111,13 @@ if custom_pkg_list != []
     foreach h : this_headers
       custom_pkg_specs += pkg + ':' + h
     endforeach
-    if this_overrides.length() == 0 and this_headers.length() == 0 and this_custom.length() == 0
-      warning('Package ' + pkg + ' declared none of pkg_override_sources, pkg_override_headers, or pkg_custom_sources')
+    this_patches = get_variable('pkg_patch_sources', [])
+    set_variable('pkg_patch_sources', [])
+    foreach p : this_patches
+      custom_pkg_patch_specs += pkg + ':' + p
+    endforeach
+    if this_overrides.length() == 0 and this_headers.length() == 0 and this_custom.length() == 0 and this_patches.length() == 0
+      warning('Package ' + pkg + ' declared none of pkg_override_sources, pkg_override_headers, pkg_custom_sources, or pkg_patch_sources')
     endif
     add_project_arguments('-I' + meson.project_source_root() / pkg, language: 'c', native: true)
     if meson.is_cross_build()
@@ -135,7 +141,8 @@ if custom_pkg_list != []
   pkg_info = run_command(pkg_python3, 'tools/resolve_c47_src.py', '--shadow', '--gen-lists',
                          meson.project_source_root() / 'src/c47/meson.build',
                          meson.project_source_root(), shadow_dir,
-                         custom_pkg_specs, check: true)
+                         custom_pkg_specs, '--patches', custom_pkg_patch_specs,
+                         check: true)
   foreach w : pkg_info.stderr().strip().split('\n')
     if w != ''
       warning(w)
@@ -209,6 +216,12 @@ test('pkg_patch_refresh',
 test('pkg_patch_apply',
   find_program('python3'),
   args : ['tools/test_pkg_patch_apply.py'],
+  workdir : meson.project_source_root()
+)
+
+test('pkg_patch_resolver',
+  find_program('python3'),
+  args : ['tools/test_pkg_patch_resolver.py'],
   workdir : meson.project_source_root()
 )
 

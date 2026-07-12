@@ -28,6 +28,18 @@ import re
 import shutil
 import sys
 
+# Patch-overlay machinery (§2/§3/§5/§8). Build-time safe: neither this
+# module nor pkg_patch_apply/pkg_patch_common may import libclang —
+# that is authoring tooling only (§4, ratified; asserted at the bottom
+# of this file and by the pkg_patch test suites).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pkg_patch_apply import (
+    PatchApplyError,
+    apply_patch_stack,
+    assert_mutually_exclusive,
+    collect_patch_stacks,
+)
+
 
 SENTINEL_NAME = 'DO_NOT_EDIT_shadow_tree.txt'
 
@@ -88,8 +100,14 @@ def strip_comments(content):
     return '\n'.join(line.split('#')[0] for line in content.split('\n'))
 
 
-def do_shadow(meson_build, project_root, shadow_dir, specs, gen_lists=False):
-    """Shadow-tree mode: build symlink tree, overlay overrides, emit paths."""
+def do_shadow(meson_build, project_root, shadow_dir, specs,
+              patch_specs=(), gen_lists=False):
+    """Shadow-tree mode: build symlink tree, overlay overrides and
+    function-level patch stacks, emit paths.
+
+    specs: 'pkgdir:rel' whole-file overrides (existing mechanism).
+    patch_specs: 'pkgdir:patchfilename' entries from pkg_patch_sources.
+    """
 
     # --- F9/F10: validate shadow_dir before ANY mutation -------------------
     assert_shadow_dir(shadow_dir)
@@ -98,6 +116,43 @@ def do_shadow(meson_build, project_root, shadow_dir, specs, gen_lists=False):
         content = f.read()
 
     content_clean = strip_comments(content)
+
+    # --- §2/§3/§8 patch-stack validation, BEFORE any mutation --------------
+    # Group patch specs per package, preserving CUSTOM_PKG order.
+    pkg_patch_map = {}
+    for pspec in patch_specs:
+        if ':' not in pspec:
+            print(f'ERROR: malformed patch spec {pspec!r} '
+                  f'(expected "pkgdir:filename")', file=sys.stderr)
+            sys.exit(1)
+        pkgdir, fname = pspec.split(':', 1)
+        pkg_patch_map.setdefault(pkgdir, []).append(fname)
+
+    try:
+        patch_stacks = collect_patch_stacks(
+            list(pkg_patch_map.items()), project_root)
+
+        # §8 mutual exclusivity: whole-file override vs function patch
+        # on the same upstream file is fatal — checked before the F9
+        # wipe so a failing configure leaves the shadow tree untouched.
+        override_rel_to_pkgs = {}
+        for spec in specs:
+            rel = extract_rel(spec)
+            pkgdir = spec.split(':', 1)[0]
+            override_rel_to_pkgs.setdefault(rel, []).append(pkgdir)
+        # Provenance from the validated stacks: each patch path is
+        # <project_root>/<pkgdir>/patches/<file>.
+        patch_rel_to_pkgs = {
+            rel: [os.path.relpath(os.path.dirname(os.path.dirname(p)),
+                                  project_root)
+                  for p in paths]
+            for rel, paths in patch_stacks.items()
+        }
+        assert_mutually_exclusive(override_rel_to_pkgs,
+                                  patch_rel_to_pkgs)
+    except PatchApplyError as e:
+        print(f'ERROR: {e}', file=sys.stderr)
+        sys.exit(1)
 
     # Parse c47_src = files(...)
     m = re.search(r'c47_src\s*=\s*files\((.*?)\)', content_clean, re.DOTALL)
@@ -272,12 +327,20 @@ def do_shadow(meson_build, project_root, shadow_dir, specs, gen_lists=False):
 # ================================================================
 if __name__ == '__main__':
     if '--shadow' in sys.argv[1:]:
-        shadow_idx = sys.argv.index('--shadow')
         gen_lists = '--gen-lists' in sys.argv
-        non_flag_args = [a for a in sys.argv[1:] if a not in ('--shadow', '--gen-lists')]
-        do_shadow(non_flag_args[0], non_flag_args[1], non_flag_args[2],
-                  non_flag_args[3:] if len(non_flag_args) > 3 else [],
-                  gen_lists)
+        args = [a for a in sys.argv[1:]
+                if a not in ('--shadow', '--gen-lists')]
+        # Everything after '--patches' is a 'pkgdir:patchfile' spec
+        # from pkg_patch_sources; everything before is a whole-file
+        # override spec as always.
+        patch_specs = []
+        if '--patches' in args:
+            split = args.index('--patches')
+            patch_specs = args[split + 1:]
+            args = args[:split]
+        do_shadow(args[0], args[1], args[2],
+                  args[3:] if len(args) > 3 else [],
+                  patch_specs, gen_lists)
         sys.exit(0)
 
     # --- Source override mode (default) — unchanged for H1-H5 ---

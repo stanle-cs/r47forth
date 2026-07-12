@@ -99,6 +99,38 @@ def _seed_blob(sha, source_repo, scratch_repo):
             and written.stdout.decode().strip() == full)
 
 
+def _rel_key(rel):
+    """Canonical comparison key for an upstream rel path: separators
+    and dot-segments normalized, case folded per platform rules — so
+    './ui//tam.c' and 'ui/tam.c' (and, on case-insensitive
+    filesystems, 'UI/Tam.c') cannot dodge the §8 exclusivity check by
+    formatting alone."""
+    return os.path.normcase(os.path.normpath(rel.replace('\\', '/')))
+
+
+def assert_mutually_exclusive(override_rel_to_pkgs, patch_rel_to_pkgs):
+    """§8 (ratified): a given upstream file may be targeted by EITHER
+    whole-file override OR function-level patches, never both, across
+    all active packages.  Both arguments map rel -> list of pkgdirs.
+    Raises PatchApplyError naming every offending rel and the packages
+    on both sides.  Must run BEFORE any shadow-tree mutation."""
+    overrides = {_rel_key(rel): (rel, pkgs)
+                 for rel, pkgs in override_rel_to_pkgs.items()}
+    patches = {_rel_key(rel): (rel, pkgs)
+               for rel, pkgs in patch_rel_to_pkgs.items()}
+    both = sorted(set(overrides) & set(patches))
+    if both:
+        details = '; '.join(
+            f'"{overrides[k][0]}" is whole-file-overridden by '
+            f'{sorted(set(overrides[k][1]))} AND function-patched by '
+            f'{sorted(set(patches[k][1]))}'
+            for k in both)
+        raise PatchApplyError(
+            f'mutual-exclusivity violation (§8): one mechanism per '
+            f'upstream file — {details}. Pick whole-file override OR '
+            f'function-level patches for each file.')
+
+
 def collect_patch_stacks(pkg_patch_specs, project_root):
     """Validate and order every declared patch across all active
     packages (§2 dual-signal, §3 cumulative ordered composition).
