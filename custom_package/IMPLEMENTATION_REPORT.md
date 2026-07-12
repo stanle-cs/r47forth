@@ -1,218 +1,295 @@
-# Implementation Report — Patch-Based Package Overlay System
+# Implementation Report — Plain-Diff Package Overlay System (Revision 2)
 
 **Branch:** `package-manager/patch-based-overlay` (local commits only; not
 pushed, not merged).
-**Status:** all 8 units implemented, committed, and gated; self-audit run
-with 3 findings fixed.
+**Status:** revision 2 (plain-diff, single mechanism) fully implemented over
+6 units, superseding revision 1 (function-boundary/libclang), which was
+implemented and self-audited on this same branch and is preserved at
+`checkpoint/pre-plain-diff-revert-20260712-1541` for reference/rollback.
+Self-audit run against revision 2; no new defects found.
 
 > **Audit status: this implementation has NOT been independently audited by
-> a separate model or session. Everything below — including the self-audit —
-> was produced and verified by the same session that wrote the code. Treat
-> it as self-reviewed only until an independent review happens.**
+> a separate model or session.** Everything below — including both the
+> revision-1 self-audit and the revision-2 self-audit — was produced and
+> verified by the same session that wrote the code. Treat it as
+> self-reviewed only until an independent review happens.
 
 ---
 
-## 1. Commits
+## 1. Why this document is a revision, not an addendum
+
+This branch's package-manager work happened in two passes:
+
+- **Revision 1** (commits `8599271cf`..`cc3eac47e`, preserved on
+  `checkpoint/pre-plain-diff-revert-20260712-1541`): libclang-based
+  function-boundary patch granularity, with a separate whole-file-override
+  mechanism for anything libclang couldn't attribute to a function body, and
+  a mutual-exclusivity check keeping the two mechanisms apart.
+- **Revision 2** (commits `b81055d28`..`a7f7c47eb`, this report): plain
+  whole-file `git diff`, one mechanism, no restriction on what a developer
+  edits. Revision 1's function-boundary machinery was judged to buy conflict
+  precision the actual constraint (package size) didn't require, at a real
+  cost — a build-adjacent libclang dependency, a second storage convention,
+  a cross-mechanism exclusivity check, and authoring friction. See
+  `custom_package/PROPOSED_SPEC_CHANGES.md`'s "Why revision 2" section for
+  the full rationale and the explicitly accepted trade-off (two packages
+  editing *different lines* of the same function still compose; *same-line*
+  edits now conflict, where function-boundary splitting would have composed
+  them — judged acceptable since package size, not conflict avoidance, is
+  the actual goal).
+
+This report describes revision 2's current, final state. It does not
+re-narrate revision 1's implementation history in detail — that's on the
+checkpoint branch and in that branch's own commit messages — but does
+record what was removed and why, since "removed, not just superseded" is
+itself a decision worth a reviewer's attention.
+
+## 2. Commits
 
 | Unit | Commit | Implements |
 |------|--------------|------------|
-| 1 | `8599271cf` | Storage convention + documentation: `packages/<pkg>/patches/<NNN>-<rel_encoded>.patch`, dual-signal target declaration, ordering/composition rules, materialize/refresh workflow, patch-vs-whole-file-vs-new-file table in `custom_package/README.md`; commits the approved spec file. Docs only. |
-| 2 | `c780d086f` | `tools/pkg_patch_extract.py` — libclang function-boundary extractor (authoring-only) + `tools/pkg_patch_common.py` — libclang-free shared convention module (filename codec, header parse, §2 dual-signal validation). Fixtures: braces-in-string, `#ifdef`-guarded definition, macro-expanded braces, header-identity, real-file check (`fnPExport` 162–271). |
-| 3 | `c1ee04eb2` | `tools/pkg_patch_refresh.py` — detection (body string compare), per-function patch generation via synthetic single-function-replaced files, byte-exact totality check (loud §8 rejection of any non-function-scoped change), real CLI with ordinal reuse + stale-patch removal; meson test wiring. Replaced the prior draft whose hunk-attribution misclassified context-overlapping hunks (its own tests failed). |
-| 4 | `002e4312d` | `tools/pkg_patch_apply.py` — `git apply -3` against a freshly materialized upstream copy in a scratch git repo (real tree never touched), pre-image blob seeding, **unconditional conflict-marker scan after every patch** (§5 ratified); empirical §5/§1 findings written into the spec. |
-| 5 | `09580ef46` | `collect_patch_stacks()` — §2 validation of every declared patch, per-rel stacks sorted by `(integer ordinal, CUSTOM_PKG list index)`; loud rejection of malformed names and declared/on-disk mismatches in both directions. |
-| 6 | `97135dab7` | End-to-end two-package same-function conflict through the real pipeline (refresh-generated patches → collect → apply): loud failure naming the losing patch; contrast test proving different-function edits still compose. Fixtures self-constructed/torn-down; nothing synthetic committed. |
-| 7 | `64c606245` | §8 mutual exclusivity as a **fatal configure error**, checked **before** the F9 wipe; `pkg_patch_sources` meson variable + `--patches` resolver CLI; rel-key normalization so path formatting can't dodge the check; import-audited resolver run (decision 4 hard enforcement). Verified at the real meson level. |
-| 8 | `8cb660a90` | Shadow-tree integration: patch stacks materialized as regular files in `custom_pkg_shadow/` with F10/F11 containment mirrored, symlink removed before write (+ defense-in-depth symlink-write refusal in apply), F15 dead-shadow warning extended to self-cancelling stacks. Real meson e2e: configure + compile of a patched `keyboard.c`; meson-level conflict failure; vanilla build unaffected. |
-| audit | `cc3eac47e` | Self-audit fixes (see §5). |
+| 1 | `b81055d28` | Spec revision: `custom_package/PROPOSED_SPEC_CHANGES.md` rewritten — SUPERSEDED section (dual-signal classification, libclang granularity, mechanism mutual-exclusivity) with why each is overturned; KEPT section (materialize/refresh, `.patch` format, cumulative ordering, `git apply -3` + marker scan, loud conflicts, whole-new-file storage) with both empirical findings (blob ancestry, `-U3` vs `-U10`) carried forward verbatim; New Decisions 1–7. Docs only. |
+| 2 | `47ff9e11c` | Removal: deleted `tools/pkg_patch_extract.py` (libclang extractor) + its test/fixtures; deleted `tools/pkg_patch_refresh.py` (function-boundary version) + its test; removed `assert_mutually_exclusive` from `pkg_patch_apply.py`; deleted `test_pkg_patch_apply.py`/`test_pkg_patch_resolver.py` (built on removed machinery); stripped the `--patches` CLI and patch-application block from `resolve_c47_src.py`, returning it to whole-file-override-only pending Unit 4. Confirmed no dead imports via fresh-interpreter smoke tests. |
+| 3 | `b32499a4e` | `tools/pkg_patch_refresh.py` rewritten: `refresh(pkgdir, project_root)` scans a whole package directory (not one file), whole-file `git diff --no-index --full-index` per changed file (any kind of change, no restriction), ordinal reuse (including manual renames), stale-patch deletion on revert, new-file detection/reporting. 16 tests. |
+| 4 | `5c5af5f5d` | Resolver auto-discovery: `collect_patch_stacks`/`collect_new_files` (glob-based, no declarations) in `pkg_patch_apply.py`; `resolve_c47_src.py do_shadow()` rewritten to take a package-directory list and apply patches/copy new files with the same F9/F10/F11/F12/F15 guards; `meson.build` Phase 1 no longer calls `subdir(pkg)` at all (no per-package `-I`, no declaration reading); `resolver_safety_test.sh` updated for the new CLI, 9/9 still pass. 14 tests. |
+| 5 | `fb602b307` | Makefile: verified (not re-implemented) `CUSTOM_PKG=` already threaded through all 10 named targets; new `check-custom-pkg-{sim,dmcp,dmcp5}` phony targets fixing a real, empirically-reproduced bug (switching `CUSTOM_PKG` against an existing build dir silently reused the stale shadow tree — Make's directory-existence-gated target semantics meant `meson setup` never re-ran); `pkg_build PKG=<dir>` (clean → test-gated → refresh → size-checked zip at `pkg_dist/`, not `dist/` — collided with an existing upstream `dist` script, caught by the first real run). `custom_package/README.md` rewritten for revision 2. |
+| 6 | `a7f7c47eb` | Same-line two-package conflict verified through the real build path: automated test (`test_pkg_patch_resolver.py`, 2 new tests — conflict case + different-lines-compose contrast case) plus a real, since-deleted `meson setup` run against two scratch packages, confirming the exact same failure message the automated test asserts. |
 
 All existing sentinel-gate delete-safety and symlink-escape containment
-guards in `resolve_c47_src.py` are **unchanged** (`assert_shadow_dir`,
-`assert_contained`, F9 wipe guard, F12 sentinel write). No unit required
-touching them, so no stop-and-skip was triggered.
+guards in `resolve_c47_src.py` (`assert_shadow_dir`, `assert_contained`, F9
+wipe guard, F12 sentinel write, F15 dead-shadow warning) are **unchanged**
+across every unit — confirmed both by code inspection and by
+`tools/resolver_safety_test.sh` (9/9 PASS on the current CLI).
 
-## 2. Empirical answers (formerly `[VERIFIED: pending]`, now in `PROPOSED_SPEC_CHANGES.md`)
+## 3. What was removed, and why (Unit 2 detail)
 
-**§5 blob ancestry — HOLDS, and every failure mode observed is loud.**
-Real-drift experiment (patch authored against this repo's committed
-`keyboard.c`, applied against the upstream clone's genuinely drifted HEAD
-version, 7 churned hunks): with the pre-image blob resolvable and seeded
-into the scratch apply repo, far-from-churn edits apply cleanly and
-overlapping-churn edits three-way-merge into conflict markers that the
-unconditional scan catches. Without ancestry, git prints `repository lacks
-the necessary blob to perform 3-way merge. Falling back to direct
-application...` and either direct-applies (clean context) or fails outright
-— never a silent mis-merge. Safeguards that make this hold: `refresh`
-writes full 40-char pre-image SHAs and hard-fails at generation if the blob
-isn't resolvable (upstream must be committed); `apply_patch_stack` seeds
-each patch's pre-image blob into its scratch odb (resolving abbreviated
-index lines first). Residual caveat: a shallow clone lacking historical
-blobs degrades to the loud no-ancestry behavior. Adjacent-line drift (no
-unchanged separating line) conflicts loudly even via `-3`.
+- **`tools/pkg_patch_extract.py`** (libclang function-boundary extractor)
+  and its fixtures/tests — no longer needed; revision 2 does no C-source
+  parsing at all, only whole-file `git diff`.
+- **The classification logic in the old `refresh`** (per-function hunk
+  splitting via synthetic single-function-replaced files, a totality check
+  rejecting non-function-scoped changes) — revision 2's `refresh` has no
+  such restriction; any kind of change is just diff output.
+- **`pkg_override_sources`/`pkg_override_headers`/`pkg_custom_sources`/
+  `pkg_patch_sources` meson.build declarations**, and the `subdir(pkg)`
+  evaluation that read them — replaced by pure auto-discovery
+  (`patches/`+`files/` globbing); a package directory is never `subdir()`'d
+  into at all now.
+- **The mutual-exclusivity check** between function-patch and whole-file-
+  override mechanisms — nothing left for it to guard against with only one
+  override mechanism. (A different, much narrower pair of existence checks
+  remains for `patches/` vs. `files/` — see New Decision 6 — but it can't be
+  triggered by two competing *mechanisms*, only by an individual patch/file
+  entry targeting a path that should/shouldn't exist upstream.)
 
-**§1 context window — keep `-U3`; the spec's assumption was reversed by
-measurement.** `git apply` has no fuzz, so a *larger* window is strictly
-worse for direct application under drift: real churn 6 lines from the edit
-broke `-U10` but not `-U3`. Window size is irrelevant once `-3` engages
-(the merge uses the recorded blob, not the context). Resilience comes from
-ancestry, not width.
+## 4. `[GAP]` items (out of scope, not touched)
 
-## 3. `[GAP]` items (out of scope, not touched)
+- **testSuite** — clean at 6/9674→9674/9674 (0 failures) on every vanilla
+  `make test` run in this session. The 6-failure signature seen briefly
+  during Unit 4's real end-to-end testing traced to a **leftover
+  `CUSTOM_PKG=packages/forth-core`-configured `build.sim`** from an earlier
+  session, not a real regression — confirmed by re-running `make test`
+  (which always starts from `clean`, i.e. genuinely vanilla) and observing
+  0 failures. Not a `[GAP]` against this branch's work; recorded here only
+  because it caused momentary confusion during this session and is worth
+  a future reader knowing was a red herring, not a real finding.
+- **forth-core is not migrated to the new convention.** `packages/forth-core/`
+  is out of scope (Stage-2 Forth work, explicitly excluded by the task's
+  scope lock) and still uses the pre-revision-1 whole-file-override
+  convention (`pkg_override_sources` in its own `meson.build`, override
+  files sitting directly at `packages/forth-core/<rel>`). Since the
+  resolver no longer reads any package `meson.build` at all (auto-discovery
+  only globs `patches/`+`files/`), **`CUSTOM_PKG=packages/forth-core` will
+  configure successfully but silently contribute nothing** — forth-core's
+  override files aren't under `patches/` or `files/`, so they're simply not
+  discovered; the build proceeds as if forth-core were empty, with no
+  error. This is a real, foreseeable consequence of the revert that this
+  task's scope lock explicitly forbids me from fixing (touching
+  `packages/forth-core/` content beyond `[GAP]` logging). **Flagged
+  prominently for human follow-up**: forth-core needs either (a) migration
+  to the `patches/`+`files/` convention (materialize each of its 11
+  whole-file overrides + 6 custom sources, run `refresh`, move new files
+  under `files/`), or (b) an explicit decision to keep it on a different,
+  older resolver/branch until migrated. Until then, `./packages/forth-core/
+  build-test.sh` will very likely "succeed" at building a binary but with
+  none of forth-core's actual functionality compiled in — worth verifying
+  directly before assuming otherwise, since I did not run it (out of
+  scope, and running it would itself risk misleading a reader about
+  forth-core's status if it happened to pass for unrelated reasons).
+- **Package-level build configuration has no home.** Recorded as a "Known
+  open item" in `PROPOSED_SPEC_CHANGES.md`: forth-core's
+  `FORTH_DEBUG_SELFTEST` conditional `-D` flag is exactly this class of
+  thing, and there is no mechanism for a `patches/`+`files/`-only package
+  to express it.
 
-- **testSuite pre-existing failure** — 6/9674 program tests fail (SPIRAL,
-  `programs.txt` line 35: register Z complex34 instead of real34), with
-  `freeList.c` double-free diagnostics from the forth-core override
-  (`freeListFree` at `core/freeList.c:217/244/268`). Present at baseline
-  before any change in this session; signature identical (6/9674, same
-  test, same stderr) after every unit. Forth-core / `freeList.c` is
-  explicitly out of scope for this branch.
+## 5. `[DECISION NEEDED]` / judgment calls for human review
 
-## 4. `[DECISION NEEDED]` / judgment calls for human review
+1. **`pkg_build`'s test-then-refresh ordering.** Per the task's explicit
+   step list, `pkg_build` runs the test gate (`make test
+   CUSTOM_PKG=$(PKG)`) **before** `refresh`, then zips whatever `refresh`
+   produces. This means the artifact that ships is `refresh`'s *output*,
+   which was never itself run through the test gate — only the
+   *pre-refresh* on-disk `patches/`+`files/` state was tested. In the
+   common case these are identical (a developer runs `refresh` before
+   committing, so `patches/` is already up to date and `refresh` in
+   `pkg_build` is a no-op — confirmed empirically: every `pkg_build` run in
+   this session's testing printed `no changes ... already up to date`).
+   But if a developer has stale materialized working copies lying around
+   at `pkg_build` time, the shipped zip could differ from what was tested.
+   Implemented exactly as specified rather than reordered, since reordering
+   against explicit instructions is exactly the kind of unstated decision
+   this task's process is designed to avoid — flagged here for a human to
+   ratify or override.
+2. **`PKG` variable name collision** (Makefile): `pkg_build`'s `PKG=<dir>`
+   shares a name with the pre-existing numbered DMCP build-variant pattern
+   targets (`dmcp_pkg1`/`2`/`3`, `build.dmcp.p$(PKG)`). Safe for
+   `pkg_build`'s normal standalone invocation; unsafe only if combined with
+   a numbered `dmcp_pkg*` goal in the same `make` command line (Make
+   expands `$(PKG)` in target names at parse time). Documented in both the
+   Makefile and the README rather than silently risked or renamed against
+   the task's explicit `PKG=<dir>` naming.
+3. **Case-insensitive-filesystem patch-target collisions** (carried over
+   from the revision-1 self-audit, still unresolved because still
+   untestable): a patch filename/header declaring a case-different variant
+   of a real upstream path (e.g. `KeyBoard.c` vs. `keyboard.c`) is rejected
+   on this Linux host because `os.path.isfile` is case-sensitive here — but
+   on a case-insensitive filesystem (macOS default, Windows), the same
+   check could resolve the case-different path to the real file and accept
+   it, writing the shadow-tree entry under the wrong-cased name. Flagged,
+   not fixed — no case-insensitive test environment available in this
+   session.
+4. **forth-core migration** — see `[GAP]` above; a decision, not just a gap,
+   since it determines whether `packages/forth-core/` needs active
+   migration work before this branch is usable for its original purpose.
 
-None of the existing safety guards needed modification, so no unit was
-stopped/skipped. Items a reviewer should ratify:
+## 6. Self-audit (revision 2)
 
-1. **Tooling location:** new modules live in `tools/` beside
-   `resolve_c47_src.py` (`pkg_patch_common/extract/refresh/apply` + tests),
-   continuing the prior session's layout, rather than under
-   `custom_package/` as the run instructions literally said. They are
-   successor modules to the resolver; keeping them beside it kept the
-   import graph and meson wiring simple.
-2. **Conflict boundary:** §7 is enforced as *overlapping edits* (git merge
-   semantics). Two packages editing the SAME function on lines separated by
-   at least one unchanged line compose cleanly. The spec's wording ("same
-   function, overlapping edits") supports this, but it's worth a conscious
-   ratification since function-granularity governs authoring, while
-   conflict detection is line-granular.
-3. **Prior-session working-tree edits left uncommitted** (out of my scope
-   lock): `packages/forth-core/PROPOSED_SPEC_CHANGES.md` (content moved to
-   `custom_package/`), `packages/forth-core/PEM_FIX_COMMITS.md` (+2-line
-   SUPERSEDED note). Also untracked and left alone:
-   `custom_package/QWEN_IMPLEMENTATION_PROMPTS.md`, the read-only
-   `upstream/` clone (used by the Unit 4 experiment), `tools/__pycache__/`.
-4. **Superseded draft removed:** the prior session's parallel
-   implementation `custom_package/tools/detect_changed_functions.py` (+
-   test + fixtures, all untracked) was deleted; its detection tests were
-   ported into `tools/test_pkg_patch_refresh.py`. Its patch generator was
-   incorrect (rewrote hunk headers to whole-function ranges while emitting
-   only `-U3` windows — invalid patches for any function taller than the
-   window).
-5. **Case-insensitive filesystems:** §8 rel keys are `normcase`d, but this
-   Linux host cannot test real case-insensitive collision behavior
-   (macOS/Windows checkouts).
+Adversarial pass against the current implementation, five checks per the
+task's list, each empirically re-verified (not just re-asserted) with a
+construction different from Unit 5's own verification runs where a prior
+run existed:
 
-## 5. Self-audit findings (fixed in `cc3eac47e`)
+1. **libclang/clang.cindex remnants** — exhaustive grep across
+   `custom_package/` and `tools/` found only documentation comments and
+   regression-guard tests asserting the *absence* of clang (e.g.
+   `TestNoLibclangDependency`), never an actual import. A fresh-interpreter
+   import of every `tools/pkg_patch_*.py` module + `resolve_c47_src.py`
+   confirmed zero `clang`/`clang.*` modules loaded. **No defect.**
+2. **`pkg_build` producing a zip despite a failing test** — tried a
+   *different* failure mode than Unit 5's own verification (which used a
+   compile-breaking syntax error): a patch targeting a **nonexistent
+   upstream path**, which fails at the `meson setup` **configure** step
+   inside `make test`, not at `ninja`. `pkg_build` stopped there; no
+   `pkg_dist/` directory was even created. **No defect.**
+3. **Oversized package bypassing the size check** — tried a *different*
+   construction than Unit 5's own verification (which used one file
+   shrunk via `PKG_MAX_SIZE`): 20 separate small `.c` files (84KB raw)
+   whose zip compresses to 6534 bytes — confirming the check is genuinely
+   against the real assembled zip's `stat`-reported size (an aggregate of
+   many files, not any single file or an estimate), correctly rejected at
+   `PKG_MAX_SIZE=5000` and correctly passed at `PKG_MAX_SIZE=50000`.
+   **No defect.**
+4. **`CUSTOM_PKG` switch without an intervening `make clean`** — tried a
+   *different* scenario than Unit 5's own verification (which switched
+   real-package↔empty): switched directly between **two different
+   real, non-empty packages** (`packages/_audit4_a` → `packages/_audit4_b`)
+   via successive `make sim` calls with no `clean` between them. Confirmed
+   via `grep` on the shadow tree: package A's marker text was fully absent
+   and package B's fully present after the switch — the reconfigure-on-
+   change stamp mechanism genuinely replaced the shadow tree, not silently
+   reused it. **No defect.**
+5. **Subtly wrong patch target path** — three variants probed directly
+   against `collect_patch_stacks`: a trailing slash in the `+++` header
+   target (caught by the dual-signal filename/header mismatch check); a
+   case-different target name relative to the real upstream file (caught
+   by the upstream-existence check — see item 3 in §5 above for the
+   case-insensitive-filesystem caveat on this one specifically); an extra
+   path segment (`src/keyboard.c` instead of `keyboard.c`, caught by the
+   upstream-existence check). **No defect found on this platform** (Linux,
+   case-sensitive filesystem).
 
-Adversarial pass attacking the loud-failure guarantees:
+No fixes were required this round — the hardening from revision 1's own
+self-audit (path-traversal/absolute-path rejection, tab-timestamp header
+parsing, multi-file-patch rejection, all in `pkg_patch_common.py`) carried
+forward unchanged into revision 2, since that module was reused as-is
+rather than rewritten.
 
-1. **Path traversal / absolute-path decode (fixed):**
-   `010-..__evil.c.patch` decoded to `../evil.c`, and
-   `010-__etc__passwd.patch` to `/etc/passwd` — `os.path.join` *discards*
-   the `src/c47` prefix for absolute paths, so validation probed the raw
-   filesystem path. The resolver's containment guards did catch these
-   downstream, but the codec now rejects `..`/`.`/empty segments and
-   absolute rels outright.
-2. **Tab+timestamp diff headers (fixed):** a standard
-   `+++ b/test.c\t2026-...` header parsed the timestamp into the target,
-   wrongly rejecting a valid patch (loud-but-wrong). Tab suffix now
-   stripped.
-3. **Multi-file patches (fixed):** a patch with two diff sections was
-   validated against its first `+++` header only; a second section
-   creating a new file would apply in the scratch repo and be silently
-   discarded — a real silent-drop hole. Exactly one `+++` header is now
-   required.
+## 7. Mutation-test coverage (revision 2, current suites)
 
-Audits that found no defect: libclang import-graph grep + fresh-interpreter
-import assertions + import-audited full resolver run (decision 4);
-`rc==0`-with-markers caught by the unconditional scan (mutation-verified);
-alternate same-function conflict construction (one package, two ordinals,
-divergent same-line edits) fails loudly naming the second patch; §8 dodge
-attempts via `./test.c` and `src/../test.c` both caught through the real
-resolver CLI.
+Each test's docstring names the bug it exists to catch; summarized by
+suite (all wired as meson tests; all pass):
 
-## 6. Mutation-test coverage
+**`test_pkg_patch_common.py` (16, unchanged from revision 1)** — filename
+codec roundtrip/rejections; traversal/absolute-path rejection (5 hostile
+filenames); `+++` target parse (nested path, `src/c47/` prefix strip,
+tab-timestamp header, no-header, multi-file-patch rejection); dual-signal
+mismatch/missing-upstream rejection; fresh-interpreter no-libclang
+assertion (updated wording for revision 2, same guarantee).
 
-Each test's docstring names the bug it exists to catch. Summary by suite
-(all wired as meson tests; all pass):
+**`test_pkg_patch_refresh.py` (16, revision 2)** — the three cases the
+task explicitly specified (changed file produces an applying patch;
+unchanged file produces nothing; reverted edit deletes the stale patch);
+directory-scanning correctness (mixed changed/unchanged, nested paths,
+`patches/`/`files/`/stray-`meson.build` excluded from the scan); new-file
+reporting (no upstream counterpart → reported, not patched, no error);
+ordinal reuse across re-refresh and preservation of a manual rename;
+patch validity (independent multi-file diffs don't interfere; git headers
++ dual-signal present; **no restriction on kind of change**, proving New
+Decision 1 against the removed function-boundary restriction); binary-file
+rejection; uncommitted-upstream rejection; a real-repo run against an
+actual `src/c47/*.c` file via a self-cleaning scratch package.
 
-**`test_pkg_patch_common.py` (16)** — filename codec roundtrip/rejections
-(missing prefix, missing suffix, empty rel); traversal/absolute rejection
-(5 hostile filenames; mutation: drop the segment check); `+++` target
-parse (nested, `src/c47/` prefix strip, tab-timestamp, no-header,
-multi-file rejection); §2 dual-signal: filename/header mismatch raises
-naming both values (mutation: remove the cross-check), agreed-but-missing
-upstream raises (mutation: remove the existence check — silent "new file"
-reclassification); fresh-interpreter proof that importing the shared
-module pulls in no `clang*`/extractor module.
+**`test_pkg_patch_resolver.py` (16, revision 2)** — auto-discovery unit
+tests (every on-disk patch used automatically, no declaration to drop;
+nonexistent-upstream-target fatal — Unit 4's specified case; legal
+new-file accepted; `files/` mirroring an existing upstream path fatal;
+two packages claiming the same new file fatal); through the real resolver
+CLI: two packages' non-overlapping patches on the same file both apply
+(Unit 4's specified multi-package case); nonexistent-target patch fails
+configure end-to-end; new `.c` copied AND compiled, new `.h` copied but
+NOT added to the source list; real upstream file never modified;
+patches+files coexist on different targets; sentinel present, untouched
+sibling stays a symlink; self-cancelling stack warns "dead shadow";
+import-audited resolver run aborts on any `clang*` import; **same-line
+two-package conflict fails loudly naming the losing patch, no
+marker-bearing file survives (Unit 6)**; **different-lines-same-function
+still composes (Unit 6 contrast case, the explicit revision-2 trade-off)**.
 
-**`test_pkg_patch_extract.py` (10)** — braces in string/char literals
-(naive counter ends the function early); `#ifdef`-guarded definitions
-(parsing without the real `-D` flags reports the inactive branch);
-in-body `#ifdef` must not truncate the extent; macro-expanded braces (no
-literal brace on the line at all); included-header function leakage
-(mutation: drop the cursor-file identity check); real upstream file
-(`fnPExport`); missing `compile_commands.json`/entry raise clearly (no
-flag-guessing fallback).
+Total: 48 automated tests across 3 suites, plus `tools/resolver_safety_test.sh`
+(9 scenarios: symlink-mode success, decoy-shadow-dir refusal,
+path-traversal-via-hostile-filename rejection, copy-mode success, each with
+a canary-survival check) run manually (not meson-wired, matching its
+pre-existing convention as a standalone regression script).
 
-**`test_pkg_patch_refresh.py` (15)** — detection over/under-reporting;
-upstream-order determinism; added function surfaces as structural;
-global-only and global-beside-function-change both rejected with nothing
-written (mutation: drop the totality check — the global edit silently
-vanishes from the build); single patch applies via `git apply --check`
-and reproduces the edit byte-for-byte; dual-signal + git headers present;
-removed lines come only from the edited function; two changed functions →
-two ordinals in upstream order (the prior draft overwrote one patch with
-the other); ordinal reuse on re-refresh; stale patch removal on revert;
-pre-image blob resolvable (`cat-file -t == blob`); refresh refuses
-uncommitted upstream (mutation: drop the `cat-file -e` gate); real-repo
-run against `src/c47/mathematics/min.c` via a self-removed scratch
-package.
+## 8. End-to-end evidence (real meson/make, scratch artifacts deleted after)
 
-**`test_pkg_patch_apply.py` (19)** — fresh-interpreter no-libclang
-assertion; marker scanner catches all three marker kinds, no false
-positives on `<<=`/`>=`/dash-rule comments; single/stacked application
-reproduces the authored file, cumulative not last-wins, upstream file
-untouched; outright failure names the patch and writes no output;
-same-line conflict raises; **`rc==0`-with-markers caught only by the
-unconditional scan** (mutation: make the scan conditional on exit
-status); drift trio — separated-context drift merges only via the seeded
-pre-image blob (mutation: drop `_seed_blob`, verified failing with git's
-"lacks the necessary blob"), same-line drift and adjacent-line drift both
-conflict loudly; ordering — order-dependent chain applies 010→020→030
-under shuffled declarations, swapped ordinals fail with no output,
-missing prefix rejected, declared-but-missing and on-disk-but-undeclared
-both rejected, ordinal tie follows package list order and reverses with
-it; Unit 6 pair — same-function divergence fails naming the loser,
-different-function edits compose.
+- Real `meson setup`+`ninja` with a scratch package patching `keyboard.c`
+  and adding a `files/scratch_new.c`: both applied correctly, the patched
+  object compiled, and the new file appeared in `compile_commands.json` and
+  compiled too (Unit 4).
+- Real `meson setup` with two scratch packages patching the same line of
+  `keyboard.c` divergently: configure failed with `010-keyboard.c.patch
+  applied against keyboard.c left conflict markers at line(s) [15, 17, 19]`
+  naming the losing patch's full path (Unit 6).
+- Real `make pkg_build` runs (Unit 5 + self-audit): clean patch → 4/4
+  `make test` pass → 736-byte zip containing only `patches/`; oversized
+  zip correctly rejected and deleted at both a tight literal limit and via
+  20-small-files aggregation; compile-breaking patch and configure-fatal
+  patch both stopped `pkg_build` before any `pkg_dist/` output existed;
+  missing/nonexistent `PKG=` both rejected with a named error.
+- Real `make sim` `CUSTOM_PKG` switching (Unit 5 + self-audit): populated
+  build dir with no stamp forces one reconfigure (treating pre-existing
+  state as unknown, not assumed-empty); identical repeated value is a
+  silent no-op; switching to a real package, back to empty, and directly
+  between two different real packages all force correct reconfigures,
+  verified via shadow-tree content grep each time (not just exit codes).
+- Vanilla `make test` (no `CUSTOM_PKG`): run after every unit in this
+  session, always 0 testSuite failures out of the full suite, confirming
+  the byte-for-byte-vanilla-build invariant held throughout.
+- `tools/resolver_safety_test.sh`: 9/9 PASS against the current resolver
+  CLI — F9 sentinel-gate delete-safety and F10/F11 containment guards
+  fully intact under the new patches/+files/ discovery mechanism.
 
-**`test_pkg_patch_resolver.py` (13)** — §8 unit checks (disjoint passes,
-same rel raises naming both packages, formatting variants caught);
-through the real resolver CLI: override+patch on one file exits 1 with
-the §8 message, the check precedes the F9 wipe (sentinel'd canary
-survives a failing run; mutation: move the check after the wipe),
-single-mechanism configs pass, §2 mismatch fatal end-to-end; shadow
-integration: patched rel is a regular file with hand-verified content,
-siblings stay symlinks, sentinel intact, real upstream byte-identical
-after the run (the write-through-symlink corruption bug),
-override+patch coexist on different files, self-cancelling stack warns
-"dead shadow", two-package conflict exits 1 leaving no marker-bearing
-file; import-audited resolver run aborts on any `clang*` import.
-
-## 7. End-to-end evidence (real meson, scratch artifacts deleted after)
-
-- `meson setup … -DCUSTOM_PKG=packages/_scratch_e2e` → configure OK,
-  `CUSTOM_PKG patched "keyboard.c": 1 patch(es) applied`, shadow holds the
-  patched regular file, `ninja` compiled the patched `keyboard.c` object.
-- Two scratch packages patching the same `keyboard.c` line divergently →
-  `meson setup` **fails** configure: `010-keyboard.c.patch applied against
-  keyboard.c left conflict markers at line(s) [15, 17, 19]`.
-- Whole-file override + patch on `keyboard.c` → `meson setup` **fails**
-  configure with the §8 mutual-exclusivity error naming both packages.
-- Declared-but-missing patch file → `meson setup` fails configure loudly.
-- Vanilla configure (no `CUSTOM_PKG`): no shadow tree created; all 5
-  pkg_patch suites pass in the vanilla build dir; every meson change is
-  inside `custom_pkg_list != []` blocks plus unconditional `test()`
-  entries (no product-code effect).
-- Full `meson test -C build.sim`: 5/5 pkg_patch suites OK; forth-core
-  (whole-file overrides) reconfigured and rebuilt cleanly under the new
-  resolver; testSuite unchanged at its pre-existing baseline (§3 `[GAP]`).
+Do not push. Do not merge. Everything above is committed locally on
+`package-manager/patch-based-overlay` for human review; the pre-revert
+state remains reachable at `checkpoint/pre-plain-diff-revert-20260712-1541`.
