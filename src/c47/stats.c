@@ -787,7 +787,7 @@ void fnRangeXY(uint16_t unusedButMandatoryParameter) {
   }
 
 
-  static void initHistoMatrix(real_t *s) {
+  static bool_t initHistoMatrix(real_t *s) {
     uint16_t rows = 0, cols;
     calcRegister_t regHisto = findNamedVariable("HISTO");
     if(!isHistoMatrix(&rows, "HISTO")) {
@@ -822,6 +822,7 @@ void fnRangeXY(uint16_t unusedButMandatoryParameter) {
         moreInfoOnError("In function initHistoMatrix:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     }
+    return regHisto != INVALID_VARIABLE;
   }
 
 
@@ -955,6 +956,7 @@ static void convertStatsMatrixToHistoMatrix(uint16_t statsVariableToHistogram) {
       linkToRealMatrixRegister(regStats, &stats);
       const uint16_t rows = stats.header.matrixRows, cols = stats.header.matrixColumns;
       if(cols == 2) {
+        bool_t histoBuilt = true;
 
         for(i = 0; i < NN; i++) {
           int32ToReal(i, &ii);
@@ -962,7 +964,10 @@ static void convertStatsMatrixToHistoMatrix(uint16_t statsVariableToHistogram) {
           realMultiply(&ii, &bw, &ii, &ctxtReal39);
           realAdd(&ii, &lb, &ii, &ctxtReal39);                      //bin midpoint
           //printRealToConsole(&ii, "midpoint ", " \n");
-          initHistoMatrix(&ii);                                     // Set up all x-mid-points of the bins in HISTO, with 0 in y
+          if(!initHistoMatrix(&ii)) {                               // append failed (RAM full): stop before the populate loop writes past HISTO
+            histoBuilt = false;
+            break;
+          }
           linkToRealMatrixRegister(regHisto, &histo);
           //#if defined(PC_BUILD)
           //  printf("Histo Matrix init: %d ",i);
@@ -971,7 +976,7 @@ static void convertStatsMatrixToHistoMatrix(uint16_t statsVariableToHistogram) {
           //#endif // PC_BUILD
         }
 
-        if(isStatsMatrix(&i, statMx) && isHistoMatrix(&i, "HISTO")) {
+        if(histoBuilt && isStatsMatrix(&i, statMx) && isHistoMatrix(&i, "HISTO")) {
           for(i = 0; i < rows; i++) {
             //printf("n=%d ^^^^ i=%d ", n, i);
             for(j = 0; j < NN; j++) {
