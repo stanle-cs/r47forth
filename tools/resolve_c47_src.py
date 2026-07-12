@@ -282,6 +282,42 @@ def do_shadow(meson_build, project_root, shadow_dir, specs,
                   f'({len(spec_list)} packages override this file, last wins)',
                   file=sys.stderr)
 
+    # --- Apply function-level patch stacks (§3/§5) ----------------------
+    # §8 guarantees these rels are disjoint from whole-file overrides.
+    for rel in sorted(patch_stacks):
+        stack = patch_stacks[rel]
+        upstream_file = os.path.join(src_c47_dir, rel)
+        dst_path = os.path.join(shadow_dir, rel)
+
+        # --- F11/F10 containment, mirroring the override path ----------
+        assert_contained(upstream_file, src_c47_dir,
+                         label=f'upstream_file for patch target "{rel}"')
+        assert_contained(os.path.dirname(dst_path), shadow_dir,
+                         label=f'dst_path for patch target "{rel}"')
+
+        # The shadow entry is currently a symlink INTO src/c47/ —
+        # remove it before writing so the patched result never goes
+        # through the link to the real upstream file.
+        if os.path.lexists(dst_path):
+            print(f'REMOVING: {dst_path}', file=sys.stderr)
+            os.remove(dst_path)
+
+        try:
+            final = apply_patch_stack(rel, stack, project_root, dst_path)
+        except PatchApplyError as e:
+            print(f'ERROR: {e}', file=sys.stderr)
+            sys.exit(1)
+
+        # --- F15 extension: net-identical patch stack is a dead shadow -
+        with open(upstream_file, 'r') as uf:
+            if uf.read() == final:
+                print(f'CUSTOM_PKG patches for "{rel}": net result is '
+                      f'byte-identical to upstream (dead shadow — the '
+                      f'patch stack cancels itself out)', file=sys.stderr)
+
+        print(f'CUSTOM_PKG patched "{rel}": {len(stack)} patch(es) '
+              f'applied', file=sys.stderr)
+
     # Warn about overrides that were never consumed
     warned = set()
     for spec in specs:

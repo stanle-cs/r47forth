@@ -278,6 +278,15 @@ def apply_patch_stack(rel, patch_paths, project_root, dest_path,
             run(['git', 'commit', '-q', '-m',
                  f'applied {os.path.basename(patch_path)}'], cwd=scratch)
 
+        if os.path.islink(dest_path):
+            # Defense-in-depth: in the shadow tree dest starts life as
+            # a symlink INTO src/c47/ — writing through it would edit
+            # the real upstream file. The caller must have removed it;
+            # never follow it.
+            raise PatchApplyError(
+                f'refusing to write patched result through symlink '
+                f'{dest_path} (would modify its target, potentially '
+                f'the real upstream file)')
         os.makedirs(os.path.dirname(os.path.abspath(dest_path)),
                     exist_ok=True)
         with open(target, 'r') as f:

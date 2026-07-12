@@ -63,10 +63,17 @@ class TestAssertMutuallyExclusive(unittest.TestCase):
                 {'./ui//tam.c': ['packages/b']})
 
 
+OTHER_C = """\
+int other_func(void) {
+    return 5;
+}
+"""
+
+
 class _MiniProject:
     """Miniature project tree the real resolver CLI can run against:
       <root>/src/c47/meson.build   (c47_src / c47_inc parseable)
-      <root>/src/c47/test.c        (committed)
+      <root>/src/c47/test.c, other.c   (committed)
       <root>/packages/...          (per test)
       <root>/build/custom_pkg_shadow   (shadow target)
     """
@@ -77,8 +84,10 @@ class _MiniProject:
         os.makedirs(src)
         with open(os.path.join(src, 'test.c'), 'w') as f:
             f.write(UPSTREAM_3FN)
+        with open(os.path.join(src, 'other.c'), 'w') as f:
+            f.write(OTHER_C)
         with open(os.path.join(src, 'meson.build'), 'w') as f:
-            f.write("c47_src = files('test.c')\n"
+            f.write("c47_src = files('test.c', 'other.c')\n"
                     "c47_inc = include_directories('.')\n")
         for args in (['init', '-q'], ['config', 'user.email', 'x@x'],
                      ['config', 'user.name', 'x']):
@@ -194,6 +203,122 @@ class TestResolverMutualExclusivity(unittest.TestCase):
             r = p.run_resolver([], [pspec])
             self.assertEqual(r.returncode, 1)
             self.assertIn('mismatch', r.stderr)
+
+
+class TestShadowTreeIntegration(unittest.TestCase):
+    """Unit 8: patch stacks materialized into custom_pkg_shadow/."""
+
+    def test_shadow_contains_patched_regular_file(self):
+        """BUG THIS TEST EXISTS TO CATCH: the patched rel left as a
+        symlink to pristine upstream (patch silently unapplied), or
+        the result not matching hand-application of the patch."""
+        expected = _edit_function(UPSTREAM_3FN, 'return x + 2;',
+                                  'return x * 22;')
+        with _MiniProject() as p:
+            pspec = p.add_patch_pkg()
+            r = p.run_resolver([], [pspec])
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+            shadow_file = os.path.join(p.shadow, 'test.c')
+            self.assertTrue(os.path.isfile(shadow_file))
+            self.assertFalse(os.path.islink(shadow_file),
+                             'patched result must be a real file, '
+                             'not a symlink')
+            with open(shadow_file) as f:
+                self.assertEqual(f.read(), expected)
+
+            # Untouched sibling stays a symlink to upstream
+            other = os.path.join(p.shadow, 'other.c')
+            self.assertTrue(os.path.islink(other))
+
+            # Sentinel still present (F9/F12 guard untouched)
+            self.assertTrue(os.path.isfile(os.path.join(
+                p.shadow, 'DO_NOT_EDIT_shadow_tree.txt')))
+
+    def test_real_upstream_file_never_modified(self):
+        """BUG THIS TEST EXISTS TO CATCH: writing the patched result
+        through the shadow symlink INTO src/c47/ — editing the real
+        upstream file, violating the project's core invariant."""
+        with _MiniProject() as p:
+            pspec = p.add_patch_pkg()
+            r = p.run_resolver([], [pspec])
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(os.path.join(p.root, 'src', 'c47', 'test.c')) as f:
+                self.assertEqual(f.read(), UPSTREAM_3FN)
+            self.assertFalse(
+                os.path.islink(os.path.join(p.root, 'src', 'c47',
+                                            'test.c')))
+
+    def test_patch_and_override_coexist_on_different_files(self):
+        """Bug: patch machinery breaking the existing whole-file
+        override path (or vice versa) when both are active on
+        DIFFERENT files — the legal §8 configuration."""
+        override_content = OTHER_C.replace('return 5;', 'return 55;')
+        expected_patched = _edit_function(UPSTREAM_3FN,
+                                          'return x + 2;',
+                                          'return x * 22;')
+        with _MiniProject() as p:
+            spec = p.add_override_pkg(rel='other.c',
+                                      content=override_content)
+            pspec = p.add_patch_pkg()
+            r = p.run_resolver([spec], [pspec])
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+            with open(os.path.join(p.shadow, 'test.c')) as f:
+                self.assertEqual(f.read(), expected_patched)
+            with open(os.path.join(p.shadow, 'other.c')) as f:
+                self.assertEqual(f.read(), override_content)
+
+    def test_net_identical_stack_warns_dead_shadow(self):
+        """F15 extension: a stack that cancels itself out (010 edits,
+        020 reverts) must configure successfully but warn 'dead
+        shadow' — silent masking of future upstream changes is the
+        failure mode."""
+        edited = _edit_function(UPSTREAM_3FN, 'return x + 2;',
+                                'return x * 22;')
+        with _MiniProject() as p:
+            pspec1 = p.add_patch_pkg(
+                fname='010-test.c.patch',
+                patch_text=_author_git_patch(UPSTREAM_3FN, edited))
+            p.add_patch_pkg(
+                fname='020-test.c.patch',
+                patch_text=_author_git_patch(edited, UPSTREAM_3FN))
+            pkg = pspec1.split(':', 1)[0]
+            r = p.run_resolver(
+                [], [f'{pkg}:010-test.c.patch',
+                     f'{pkg}:020-test.c.patch'])
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn('dead shadow', r.stderr)
+            with open(os.path.join(p.shadow, 'test.c')) as f:
+                self.assertEqual(f.read(), UPSTREAM_3FN)
+
+    def test_same_function_conflict_fails_configure_end_to_end(self):
+        """§7 through the REAL configure entry point: two packages
+        patch the same function divergently — resolver must exit 1
+        naming the conflict; no marker-bearing file may remain in the
+        shadow tree."""
+        edit_a = _edit_function(UPSTREAM_3FN, 'return x + 2;',
+                                'return x * 100;')
+        edit_b = _edit_function(UPSTREAM_3FN, 'return x + 2;',
+                                'return x - 5;')
+        with _MiniProject() as p:
+            pa = p.add_patch_pkg(
+                pkg='packages/pkg-a',
+                patch_text=_author_git_patch(UPSTREAM_3FN, edit_a))
+            pb = p.add_patch_pkg(
+                pkg='packages/pkg-b',
+                patch_text=_author_git_patch(UPSTREAM_3FN, edit_b))
+            r = p.run_resolver([], [pa, pb])
+            self.assertEqual(r.returncode, 1)
+            self.assertIn('pkg-b', r.stderr)
+
+            shadow_file = os.path.join(p.shadow, 'test.c')
+            if os.path.isfile(shadow_file) \
+                    and not os.path.islink(shadow_file):
+                with open(shadow_file) as f:
+                    self.assertNotIn('<<<<<<<', f.read(),
+                                     'no conflict-marker file may '
+                                     'reach the compiler')
 
 
 class TestResolverLibclangFreedom(unittest.TestCase):
