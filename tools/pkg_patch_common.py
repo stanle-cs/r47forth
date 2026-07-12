@@ -40,6 +40,18 @@ def decode_patch_filename(filename):
             f'patch filename has empty rel after ordinal: {filename!r}')
 
     rel = rel_encoded.replace('__', '/')
+
+    # Containment at the source: a decoded rel must be a plain relative
+    # path strictly below src/c47/. '..' segments, absolute paths (a
+    # leading '__' would decode to '/...' and os.path.join would then
+    # DISCARD the src/c47 prefix entirely), '.' segments and empty
+    # segments are all fatal here, before any path is ever built.
+    parts = rel.split('/')
+    if any(p in ('', '.', '..') for p in parts):
+        raise ValueError(
+            f'patch filename decodes to invalid rel {rel!r} '
+            f'(absolute, empty, "." or ".." segment): {filename!r}')
+
     return (ordinal, rel)
 
 
@@ -51,23 +63,37 @@ _PLUS_PLUS_RE = re.compile(r'^\+\+\+ b/(.+)$')
 
 
 def parse_patch_target(patch_file_path):
-    """Read the patch file, find the first '+++ b/...' header line,
-    strip the 'b/' prefix and any leading 'src/c47/', return the bare
-    rel path (e.g. 'keyboard.c', 'programming/manage.c').
+    """Read the patch file, find its '+++ b/...' header line, strip the
+    'b/' prefix and any leading 'src/c47/', return the bare rel path
+    (e.g. 'keyboard.c', 'programming/manage.c').
 
-    Raises ValueError if no '+++ b/...' line is found.
+    Raises ValueError if no '+++ b/...' line is found, or if MORE than
+    one is found: a patch targets exactly one upstream file — a second
+    diff section would either fail to apply (file absent from the
+    scratch repo) or, worse, create a file that is then silently
+    discarded, dropping part of the package's edit from the build.
     """
+    targets = []
     with open(patch_file_path, 'r') as f:
         for line in f:
             line = line.rstrip('\n').rstrip('\r')
             m = _PLUS_PLUS_RE.match(line)
             if m:
-                target = m.group(1)
+                # Standard unified-diff headers may carry a
+                # tab-separated timestamp: '+++ b/file.c\t2026-...'.
+                target = m.group(1).split('\t')[0]
                 if target.startswith('src/c47/'):
                     target = target[len('src/c47/'):]
-                return target
-    raise ValueError(
-        f'no +++ b/... header found in patch file: {patch_file_path!r}')
+                targets.append(target)
+    if not targets:
+        raise ValueError(
+            f'no +++ b/... header found in patch file: {patch_file_path!r}')
+    if len(targets) > 1:
+        raise ValueError(
+            f'patch file contains {len(targets)} +++ headers '
+            f'({targets}) — a package patch must target exactly one '
+            f'upstream file: {patch_file_path!r}')
+    return targets[0]
 
 
 # ---------------------------------------------------------------------------

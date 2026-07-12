@@ -58,6 +58,24 @@ class TestDecodePatchFilename(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_patch_filename('010-.patch')
 
+    def test_decode_rejects_path_traversal_and_absolute(self):
+        """SELF-AUDIT FINDING: '010-..__evil.c.patch' decoded to
+        '../evil.c' and '010-__etc__passwd.patch' to '/etc/passwd' —
+        and os.path.join DISCARDS the src/c47 prefix for an absolute
+        rel, so validation would probe the raw filesystem path.
+        Decode must reject '..'/'.'/empty segments and absolute rels
+        before any path is built.
+
+        Mutation: drop the segment check in decode_patch_filename —
+        these decode 'successfully' and this test fails."""
+        for fname in ('010-..__evil.c.patch',
+                      '010-__etc__passwd.patch',
+                      '010-ui__..__..__evil.c.patch',
+                      '010-.__test.c.patch',
+                      '010-ui____tam.c.patch'):
+            with self.assertRaises(ValueError, msg=fname):
+                decode_patch_filename(fname)
+
 
 class TestParsePatchTarget(unittest.TestCase):
     """Tests for parse_patch_target — +++ header extraction."""
@@ -103,6 +121,41 @@ class TestParsePatchTarget(unittest.TestCase):
         try:
             target = parse_patch_target(fname)
             self.assertEqual(target, 'keyboard.c')
+        finally:
+            os.unlink(fname)
+
+    def test_parse_handles_tab_timestamp_header(self):
+        """SELF-AUDIT FINDING: a standard unified-diff header with a
+        tab-separated timestamp ('+++ b/test.c\\t2026-07-12 ...')
+        parsed to 'test.c\\t2026-07-12 ...' — a valid patch would be
+        rejected as a target mismatch. The tab-suffix must be
+        stripped per the unified-diff format."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.patch',
+                                         delete=False) as f:
+            f.write('--- a/test.c\t2026-07-12 10:00:00\n')
+            f.write('+++ b/test.c\t2026-07-12 10:00:01\n')
+            f.write('@@ -1 +1 @@\n-x\n+y\n')
+            fname = f.name
+        try:
+            self.assertEqual(parse_patch_target(fname), 'test.c')
+        finally:
+            os.unlink(fname)
+
+    def test_parse_rejects_multi_file_patch(self):
+        """SELF-AUDIT FINDING: a patch with TWO diff sections validated
+        against its first +++ header only; a second section creating a
+        new file would apply in the scratch repo and then be silently
+        discarded (part of the package's edit dropped from the build).
+        Exactly one +++ header per patch, or ValueError."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.patch',
+                                         delete=False) as f:
+            f.write('--- a/test.c\n+++ b/test.c\n@@ -1 +1 @@\n-x\n+y\n')
+            f.write('--- /dev/null\n+++ b/sneaky.c\n@@ -0,0 +1 @@\n+int s;\n')
+            fname = f.name
+        try:
+            with self.assertRaises(ValueError) as cm:
+                parse_patch_target(fname)
+            self.assertIn('exactly one', str(cm.exception))
         finally:
             os.unlink(fname)
 
