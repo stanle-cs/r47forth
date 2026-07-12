@@ -64,102 +64,83 @@ PI   = D('3.14159265358979323846264338327950288419716939937510582097494459230781
 #* ASSUMPTIONS - printed verbatim at the top of the report
 #**************************************************************************************************
 ASSUMPTIONS = [
- 'A1  The C47/R47 constants are copied from src/generateConstants/generateConstants.c, taking',
- '    the #if branch actually compiled per the defines in src/c47/defines.h. Where a constant',
- '    is defined in both branches, both are shown.',
- 'A2  Direction: a constant may be stored as X-to-Y or Y-to-X; a value matching the RECIPROCAL',
- '    of the reference is counted as correct and marked so.',
- 'A3  mmHg/inHg: C47 KEEPS the BS 350:2004 abbreviated convention (133.3224 Pa) as its',
- '    standard (decision 2026-07-10), selected via MMHG_PA_133_3224 = 1 [16]; the #else',
- '    branch holds the conventional (non-abbreviated) values 133.322387415 /',
- '    3386.388640341 Pa [17].',
- 'A4  banana: no external standard exists. The C47 value bananamm = 178 mm is taken as the',
- '    DEFINING convention and is therefore correct by definition; bananaInch is verified',
- '    against it (178/25.4).',
- 'A5  beard-second: 10 nm (the Google Calculator convention) is assumed; a 5 nm variant is',
- '    also documented [12].',
- 'A6  UK kitchen measures: imperial tablespoon = 5/8 imp floz, teaspoon = tbsp/3, cup = 10',
- '    imp floz (pre-metric convention) [13]; the modern metric 15/5 ml spoons differ.',
- 'A7  US cup: the customary cup = 8 US floz = 236.5882365 ml [3]; the US legal cup of 240 ml',
- '    differs.',
- 'A8  firkin (FFF system): 90 lb exactly, the mass of a firkin (9 imperial gallons) of water',
- '    at 10 lb/gal [11].',
- 'A9  Gasoline gallon equivalent: 33.7 kWh per US gallon, the US EPA window-sticker MPGe',
- '    factor [10].',
+ 'A1  The C47/R47 constants are copied from src/generateConstants/generateConstants.c, taking the #if branch',
+ '    actually compiled per the defines in src/c47/defines.h. Where a constant is defined in both branches,',
+ '    both are shown.',
+ 'A2  Direction: a constant may be stored as X-to-Y or Y-to-X; a value matching the RECIPROCAL of the reference is',
+ '    counted as correct and marked so.',
+ 'A3  mmHg/inHg: C47 KEEPS the BS 350:2004 abbreviated convention (133.3224 Pa) as its standard (decision',
+ '    2026-07-10), selected via MMHG_PA_133_3224 = 1 [16]; the #else branch holds the conventional',
+ '    (non-abbreviated) values',
+ '    133.322387415 / 3386.388640341 Pa [17].',
+ 'A4  banana: no external standard exists. The C47 value bananamm = 178 mm is taken as the DEFINING convention',
+ '    and is therefore correct by definition; bananaInch is verified against it (178/25.4).',
+ 'A5  beard-second: 10 nm (the Google Calculator convention) is assumed; a 5 nm variant is also documented [12].',
+ 'A6  UK kitchen measures: imperial tablespoon = 5/8 imp floz, teaspoon = tbsp/3, cup = 10 imp floz (pre-metric',
+ '    convention) [13]; the modern metric 15/5 ml spoons differ.',
+ 'A7  US cup: the customary cup = 8 US floz = 236.5882365 ml [3]; the US legal cup of 240 ml differs.',
+ 'A8  firkin (FFF system): 90 lb exactly, the mass of a firkin (9 imperial gallons) of water at 10 lb/gal [11].',
+ 'A9  Gasoline gallon equivalent: 33.7 kWh per US gallon, the US EPA window-sticker MPGe factor [10].',
 ]
 
 #**************************************************************************************************
 #* REFERENCES - the numbered source registry printed in the report; [n] tags below cite these
 #**************************************************************************************************
 REFERENCES = [
- '[1]  BIPM, The International System of Units (SI Brochure), 9th edition 2019: defining',
- '     constants Table 1 p130; non-SI accepted units (min/h/d, au, ha, L, t, mmHg) Table 8',
- '     pp145-146 - https://www.bipm.org/en/publications/si-brochure (accessed 2026-07-10)',
- '[2]  NIST Special Publication 811 (2008 ed.), Guide for the Use of the SI: conversion',
- '     factors Appendix B, alphabetical list B.8 pp49-67 -',
- '     https://physics.nist.gov/cuu/pdf/sp811.pdf (accessed 2026-07-10)',
- '[3]  NIST Handbook 44, Appendix C "General Tables of Units of Measurement", pp C1-C17',
- '     (customary length/mass/volume, cup/tbsp/tsp, hp electric) -',
+ '[1]  BIPM, The International System of Units (SI Brochure), 9th edition 2019: defining constants Table 1 p130;',
+ '     non-SI accepted units (min/h/d, au, ha, L, t, mmHg) Table 8 pp145-146 -',
+ '     https://www.bipm.org/en/publications/si-brochure (accessed 2026-07-10)',
+ '[2]  NIST Special Publication 811 (2008 ed.), Guide for the Use of the SI: conversion factors Appendix B,',
+ '     alphabetical list B.8 pp49-67 - https://physics.nist.gov/cuu/pdf/sp811.pdf (accessed 2026-07-10)',
+ '[3]  NIST Handbook 44, Appendix C "General Tables of Units of Measurement", pp C1-C17 (customary',
+ '     length/mass/volume, cup/tbsp/tsp, hp electric) -',
  '     https://www.nist.gov/pml/owm/nist-handbook-44-current-edition (accessed 2026-07-10)',
- '[4]  International Yard and Pound Agreement 1959: 1 yd = 0.9144 m, 1 lb = 0.45359237 kg',
- '     exactly; US Federal Register Doc. 59-5442, 24 FR 5348 (1959-07-01); tabulated in [2]',
- '     B.8 and [3] App. C p C2/C8',
- '[5]  UK Weights and Measures Act 1985 (c.72), Schedule 1 "Definitions of units of',
- '     measurement": gallon = 4.54609 cubic decimetres exactly -',
- '     https://www.legislation.gov.uk/ukpga/1985/72/schedule/1 (accessed 2026-07-10)',
- '[6]  CGPM resolutions: 3rd CGPM 1901 p70 (g0 = 9.80665 m/s^2), 10th CGPM 1954 Resolution 4',
- '     (atm = 101325 Pa), 4th CGPM 1907 p105 (metric carat = 0.2 g) -',
- '     https://www.bipm.org/en/committees/cg/cgpm/resolutions (accessed 2026-07-10)',
- '[7]  SI 2019 defining constants (26th CGPM 2018, Resolution 1): kB = 1.380649e-23 J/K and',
- '     e = 1.602176634e-19 C, both exact; NIST SP 330 (2019 ed.) Table 1 p4; also [1] Table 1',
- '     p130',
- '[8]  IAU Resolution 2012 B2 (au = 149597870700 m exactly); IAU Resolution 2015 B2 Table 1',
- '     (pc = 648000/pi au exactly); light-year = c x Julian year (365.25 d), c = 299792458',
- '     m/s [1] - https://www.iau.org/administration/resolutions/general_assemblies/',
+ '[4]  International Yard and Pound Agreement 1959: 1 yd = 0.9144 m, 1 lb = 0.45359237 kg exactly; US Federal',
+ '     Register Doc. 59-5442, 24 FR 5348 (1959-07-01); tabulated in [2] B.8 and [3] App. C p C2/C8',
+ '[5]  UK Weights and Measures Act 1985 (c.72), Schedule 1 "Definitions of units of measurement": gallon = 4.54609',
+ '     cubic decimetres exactly - https://www.legislation.gov.uk/ukpga/1985/72/schedule/1 (accessed 2026-07-10)',
+ '[6]  CGPM resolutions: 3rd CGPM 1901 p70 (g0 = 9.80665 m/s^2), 10th CGPM 1954 Resolution 4 (atm = 101325 Pa),',
+ '     4th CGPM 1907 p105 (metric carat = 0.2 g) - https://www.bipm.org/en/committees/cg/cgpm/resolutions',
  '     (accessed 2026-07-10)',
- '[9]  ISO 31-4:1992 Annex B (superseded by ISO 80000-5): Btu(IT) = 1055.05585262 J exactly;',
- '     calorie(IT) = 4.1868 J exactly (5th Int. Conference on the Properties of Steam,',
- '     London 1956); also [2] B.8 p52 (Btu(IT)), p53 (cal(IT))',
- '[23] ISO 80000-3 (Quantities and units - Space and time) / IEC 80000-13: level of a power',
- '     quantity in dB uses the decade factor 10, level of a field (root-power) quantity the',
- '     factor 20',
- '[24] NPL (National Physical Laboratory, UK) 1998, p13 footnote, on mercury-column pressure',
- '     conventions - identified only as cited by the C source comment of MmhgToPa/InhgToPa;',
- '     the exact NPL document title is not recorded in the repository',
- '[10] US EPA fuel economy labeling (MPGe), 40 CFR Part 600: 33.7 kWh per gallon of gasoline',
- '     (window-sticker convention) - https://www.epa.gov/fueleconomy (accessed 2026-07-10)',
+ '[7]  SI 2019 defining constants (26th CGPM 2018, Resolution 1): kB = 1.380649e-23 J/K and e = 1.602176634e-19 C,',
+ '     both exact; NIST SP 330 (2019 ed.) Table 1 p4; also [1] Table 1 p130',
+ '[8]  IAU Resolution 2012 B2 (au = 149597870700 m exactly); IAU Resolution 2015 B2 Table 1 (pc = 648000/pi au',
+ '     exactly); light-year = c x Julian year (365.25 d), c = 299792458 m/s [1] -',
+ '     https://www.iau.org/administration/resolutions/general_assemblies/ (accessed 2026-07-10)',
+ '[9]  ISO 31-4:1992 Annex B (superseded by ISO 80000-5): Btu(IT) = 1055.05585262 J exactly; calorie(IT) =',
+ '     4.1868 J exactly (5th Int. Conference on the Properties of Steam, London 1956); also [2] B.8 p52',
+ '     (Btu(IT)), p53 (cal(IT))',
+ '[10] US EPA fuel economy labeling (MPGe), 40 CFR Part 600: 33.7 kWh per gallon of gasoline (window-sticker',
+ '     convention) - https://www.epa.gov/fueleconomy (accessed 2026-07-10)',
  '[11] Wikipedia: FFF system, section "Units" (firkin = 90 lb) - permanent link',
- '     https://en.wikipedia.org/w/index.php?title=FFF_system&oldid=1343014422',
+ '     https://en.wikipedia.org/w/index.php?title=FFF_system&oldid=1343014422 (accessed 2026-07-10)',
+ '[12] Wikipedia: List of humorous units of measurement, section "Beard-second" (5 nm physicist variant, 10 nm',
+ '     Google Calculator variant) - permanent link',
+ '     https://en.wikipedia.org/w/index.php?title=List_of_humorous_units_of_measurement&oldid=1356149592',
  '     (accessed 2026-07-10)',
- '[12] Wikipedia: List of humorous units of measurement, section "Beard-second" (5 nm',
- '     physicist variant, 10 nm Google Calculator variant) - permanent link',
- '     https://en.wikipedia.org/w/index.php?title=List_of_humorous_units_of_measurement'
-     '&oldid=1356149592 (accessed 2026-07-10)',
- '[13] Wikipedia: Cooking weights and measures, table "British (imperial) measures" -',
- '     permanent link https://en.wikipedia.org/w/index.php?title=Cooking_weights_and_measures'
-     '&oldid=1355681534 (accessed 2026-07-10)',
- '[14] Chinese market units (shizhi), State Council 1959: chi = 1/3 m, jin = 0.5 kg;',
- '     Wikipedia: Chinese units of measurement, section "People\'s Republic of China" -',
- '     permanent link https://en.wikipedia.org/w/index.php?title=Chinese_units_of_measurement'
-     '&oldid=1357247228 (accessed 2026-07-10)',
+ '[13] Wikipedia: Cooking weights and measures, table "British (imperial) measures" - permanent link',
+ '     https://en.wikipedia.org/w/index.php?title=Cooking_weights_and_measures&oldid=1355681534',
+ '     (accessed 2026-07-10)',
+ '[14] Chinese market units (shizhi), State Council 1959: chi = 1/3 m, jin = 0.5 kg; Wikipedia: Chinese units of',
+ '     measurement, section "People\'s Republic of China" - permanent link',
+ '     https://en.wikipedia.org/w/index.php?title=Chinese_units_of_measurement&oldid=1357247228',
+ '     (accessed 2026-07-10)',
  '[15] pi, OEIS A000796 - https://oeis.org/A000796 (accessed 2026-07-10)',
- '[16] BS 350:2004 Conversion factors for units, p51: mmHg = 133.3224 Pa (abbreviated',
- '     convention; also cited by the C source comment and NPL 1998 p13 footnote)',
- '[17] Conventional mercury column: rho_Hg = 13.5951 g/cm^3 at 0 degC x g0 = 9.80665 m/s^2,',
- '     product exactly 133.322387415 Pa; [2] B.8 p58 lists the rounded 1.333224e2',
- '[18] International Extraordinary Hydrographic Conference, Monaco 1929: 1 nmi = 1852 m;',
- '     also [1] Table 8 p145 and [2] B.8 p59',
- '[19] DTP/PostScript point = 1/72 in; Wikipedia: Point (typography), section "Desktop',
- '     publishing point" - permanent link',
- '     https://en.wikipedia.org/w/index.php?title=Point_(typography)&oldid=1361729836',
- '     (accessed 2026-07-10)',
- '[20] Gregorian calendar mean year = 365.2425 d: leap rule 97/400, papal bull Inter',
- '     gravissimas (1582)',
- '[21] US survey foot = 1200/3937 m exactly (retained by the 1959 agreement [4] for surveys)',
- '     - https://www.nist.gov/pml/us-surveyfoot (accessed 2026-07-10)',
+ '[16] BS 350:2004 Conversion factors for units, p51: mmHg = 133.3224 Pa (abbreviated convention; also cited by the',
+ '     C source comment and NPL 1998 p13 footnote)',
+ '[17] Conventional mercury column: rho_Hg = 13.5951 g/cm^3 at 0 degC x g0 = 9.80665 m/s^2, product exactly',
+ '     133.322387415 Pa; [2] B.8 p58 lists the rounded 1.333224e2',
+ '[18] International Extraordinary Hydrographic Conference, Monaco 1929: 1 nmi = 1852 m; also [1] Table 8 p145 and',
+ '     [2] B.8 p59',
+ '[19] DTP/PostScript point = 1/72 in; Wikipedia: Point (typography), section "Desktop publishing point" - permanent',
+ '     link https://en.wikipedia.org/w/index.php?title=Point_(typography)&oldid=1361729836 (accessed 2026-07-10)',
+ '[20] Gregorian calendar mean year = 365.2425 d: leap rule 97/400, papal bull Inter gravissimas (1582)',
+ '[21] US survey foot = 1200/3937 m exactly (retained by the 1959 agreement [4] for surveys) -',
+ '     https://www.nist.gov/pml/us-surveyfoot (accessed 2026-07-10)',
  '[22] Wikipedia: Foe (unit) (1 foe = 1e51 erg = 1e44 J) - permanent link',
- '     https://en.wikipedia.org/w/index.php?title=Foe_(unit)&oldid=1360897827',
- '     (accessed 2026-07-10)',
+ '     https://en.wikipedia.org/w/index.php?title=Foe_(unit)&oldid=1360897827 (accessed 2026-07-10)',
+ '[23] ISO 80000-3 (Quantities and units - Space and time) / IEC 80000-13: level of a power quantity in dB uses the',
+ '     decade factor 10, level of a field (root-power) quantity the factor 20',
 ]
 
 #**************************************************************************************************
@@ -181,6 +162,8 @@ REF = {
   '1e_12':        (D('1e-12'),           'metric prefix scale [1]'),
   '1000':         (D(1000),              'tonne = 1000 kg [1]'),
   '10000':        (D(10000),             'hectare = 10^4 m^2 [1]'),
+  '0':            (D(0),                 'additive identity, exact by definition'),
+  '1':            (D(1),                 'multiplicative identity, exact by definition'),
   '2':            (D(2),                 'jin = 0.5 kg, so 2 jin/kg [14]'),
   '3':            (D(3),                 'chi = 1/3 m, so 3 chi/m [14]'),
   'e':            (EV,                   'elementary charge = eV in J, exact [7]'),
@@ -390,7 +373,7 @@ def load_c47_constants():
     if re.match(r'\s*#endif', line):
       active.pop()
       continue
-    m = re.search(r'generateConstant\("([^"]+)",\s*\d+,\s*(\w+),\s*"([+-][0-9.eE+-]+)"\s*\)\s*;'
+    m = re.search(r'generateConstant\("([^"]+)",\s*\d+,\s*(\w+),\s*"([+-]?[0-9.eE+-]+)"\s*\)\s*;'
                   r'\s*(//.*)?$', line)
     if m:
       prefix = 'const39_' if m.group(2) == 'APPROX' else 'const_'
@@ -413,8 +396,6 @@ def input_fingerprints():
   import datetime
   import hashlib
   import subprocess
-  lines = [f'Generated:  {datetime.datetime.now(datetime.timezone.utc).date().isoformat()} '
-           f'(UTC date; the input hashes below pin the exact audited state)']
   root = os.path.normpath(os.path.join(SRC, '..'))
   def git(*args):
     try:
@@ -424,15 +405,47 @@ def input_fingerprints():
       return ''
   commit = git('rev-parse', 'HEAD') or 'unavailable'
   dirty  = ' (working tree had uncommitted changes)' if git('status', '--porcelain') else ''
-  lines.append(f'Repository: {git("remote", "get-url", "origin") or "unavailable"}')
-  lines.append(f'Commit:     {commit}{dirty}')
-  lines.append('            (note: the committed copy of this file is necessarily one commit')
-  lines.append('            ahead of the recorded hash)')
-  for path in (f'{SRC}/generateConstants/generateConstants.c', f'{SRC}/c47/defines.h'):
+  # Above the first ruled line: the volatile provenance. It is excluded from the rewrite test in main(), so a plain
+  # build never re-certificates on date or commit churn alone.
+  above = [f'Generated:   {datetime.datetime.now(datetime.timezone.utc).date().isoformat()} '
+           f'(UTC date; the input hashes below pin the exact audited state)',
+           f'Commit:      {commit}{dirty}']
+  below = [f'Repository:  {git("remote", "get-url", "origin") or "unavailable"}',
+           '             (note: the committed copy of this file is at least one commit ahead of the recorded hash; more',
+           '             when the certified content has been stable across multiple commits)']
+  gc_path = f'{SRC}/generateConstants/generateConstants.c'
+  digest = hashlib.sha256(open(gc_path, 'rb').read()).hexdigest()
+  below.append(f'Input:       {os.path.relpath(gc_path, root)}')
+  below.append(f'             SHA-256 {digest}')
+  # defines.h is consulted ONLY to evaluate #if (NAME == n) branch selection in generateConstants.c; fingerprint just
+  # those name=value pairs, so unrelated defines.h edits do not force a re-certificate. Other conditional forms
+  # (#ifdef, #if defined, #if EXPR) are deliberately not evaluated: both branches stay active in the parse.
+  consulted = sorted(set(re.findall(r'#if\s*\((\w+)\s*==\s*\d+\)', open(gc_path, encoding='utf-8').read())))
+  defines = {}
+  for line in open(f'{SRC}/c47/defines.h', encoding='utf-8'):
+    m = re.match(r'#define\s+(\w+)\s+(\d+)', line)
+    if m:
+      defines[m.group(1)] = m.group(2)
+  pairs = [f'{name} = {defines.get(name, "UNDEFINED")}' for name in consulted]
+  digest = hashlib.sha256('\n'.join(pairs).encode('utf-8')).hexdigest()
+  below.append('Input:       src/c47/defines.h - only the defines consulted for #if branch selection (form "#if (NAME == n)"):')
+  for pair in pairs:
+    below.append(f'             {pair}')
+  below.append(f'             SHA-256 of the list above: {digest}')
+  # The used-constants scan (which constants the conversion machinery uses, feeding the UNREFERENCED check) reads the
+  # conversion sources too; items.c is scoped to the conversion-function rows so unrelated item churn does not force a
+  # re-certificate. items.h contributes only item numbering, which cannot change the used set on its own.
+  for path in (f'{SRC}/c47/conversionUnits.h', f'{SRC}/c47/conversionUnits.c'):
     digest = hashlib.sha256(open(path, 'rb').read()).hexdigest()
-    lines.append(f'Input:      {os.path.relpath(path, root)}')
-    lines.append(f'            SHA-256 {digest}')
-  return lines
+    below.append(f'Input:       {os.path.relpath(path, root)}')
+    below.append(f'             SHA-256 {digest}')
+  sys.path.insert(0, HERE)
+  import generateTests as gt
+  rows = [l for l in open(f'{SRC}/c47/items.c', encoding='utf-8') if any(fn in l for fn in gt.FNS.split('|'))]
+  digest = hashlib.sha256(''.join(rows).encode('utf-8')).hexdigest()
+  below.append(f'Input:       src/c47/items.c - only the {len(rows)} item rows naming the conversion items:')
+  below.append(f'             SHA-256 of those lines: {digest}')
+  return above, below
 
 #**************************************************************************************************
 #* used_constants
@@ -460,7 +473,7 @@ def used_constants():
     m = re.search(r'void ' + fname + r'\b.*?\n\}', src, re.S)
     if m:
       used.update(re.findall(r'\bconst(?:39|51)?_\w+', m.group(0)))
-  return {re.sub(r'^const(?:39|51)?_', '', u) for u in used} - {'0', '1'}
+  return {re.sub(r'^const(?:39|51)?_', '', u) for u in used}
 
 #**************************************************************************************************
 #* matching_digits
@@ -557,56 +570,50 @@ def main():
     decisions.append(f'{name}: used by the conversion tables but has NO REF entry - add one '
                      f'with an independent source (see "Adding a constant" in conversions.md)')
   body = '\n\n'.join(entries)
+  body = '\n'.join(l.rstrip() for l in body.split('\n'))   # no trailing whitespace inside the hashed region
   import hashlib
-  body_sha = hashlib.sha256(body.encode('utf-8')).hexdigest()
+  above, below = input_fingerprints()
   out = []
-  out.append('INDEPENDENT AUDIT of the C47/R47 conversion constants - provenance record')
-  out.append('=' * 100)
-  out.append('Project:    C47/R47, community firmware for HP-42/DM42-class scientific')
-  out.append('            calculators (this repository)')
-  out.extend(input_fingerprints())
-  out.append('Generator:  src/generateTests/constantsCheck.py; regenerate with')
-  out.append('            python3 src/generateTests/constantsCheck.py   (exit 1 while any')
-  out.append('            decision is open). Environment: Python 3, stdlib decimal only.')
-  out.append('Encoding:   UTF-8; non-ASCII occurs only inside quoted C source comments.')
-  out.append('            Lines up to 255 characters are intentional (verbatim quotes and')
-  out.append('            full-precision reference lines); do not re-wrap.')
+  out.append('AUDIT CERTIFICATE of the C47/R47 conversion constants comprising INDEPENDENT sources and calculations.')
+  out.extend(above)
+  out.append('Note:        Regenerated at every testSuite run; re-written only when the parts between the ruled lines change.')
+  out.append('             For a clean Commit line above: make test, commit, then make test again and re-commit the certificate.')
+  out.append('=' * 120)
+  out.append('Project:     C47/R47, community firmware for DM42-class scientific calculators (this repository)')
+  out.extend(below)
+  out.append('Generator:   src/generateTests/constantsCheck.py; regenerate with python3 src/generateTests/constantsCheck.py')
+  out.append('             (exit 1 while any decision is open). Environment: Python 3, stdlib decimal only.')
+  out.append('Encoding:    UTF-8; non-ASCII occurs only inside quoted C source comments. Lines to 255 characters are')
+  out.append('             intentional (verbatim quotes and full-precision reference lines); text in 120-character format,')
+  out.append('             do not re-wrap; the END OF RECORD line exceeds 120 by design.')
   out.append('')
-  out.append('THIS DOCUMENT IS AN AUDIT. Every conversion constant DECLARED in the C source')
-  out.append('file src/generateConstants/generateConstants.c (the #if branch actually')
-  out.append('compiled, per src/c47/defines.h) is checked against a reference value computed')
-  out.append('INDEPENDENTLY from the defining documents of each unit. The C47 lines below are')
-  out.append('the audited declarations, quoted for comparison only; they contribute nothing')
-  out.append('to the reference values. No calculator output is used anywhere.')
+  out.append('THIS DOCUMENT IS AN AUDIT. Every conversion constant DECLARED in the C source file')
+  out.append('src/generateConstants/generateConstants.c (the #if branch actually compiled, per src/c47/defines.h) is checked')
+  out.append('against a reference value computed INDEPENDENTLY from the defining documents of each unit. The C47 lines below')
+  out.append('are the audited declarations, quoted for comparison only; they contribute nothing to the reference values.')
+  out.append('No calculator output is used anywhere.')
   out.append('')
   out.append('METHOD')
-  out.append('Reference values are computed with 90-digit decimal arithmetic, rounding half')
-  out.append('even, and displayed to at most 60 significant digits. A verdict "Correct to N')
-  out.append('verified digits" means: N is the number of significant digits stored in the C47')
-  out.append('literal (trailing zeros counted, so +100 stores 3 digits while +1e+03 stores 1),')
-  out.append('and rounding the reference to N significant digits (half even) reproduces the')
-  out.append('stored value exactly - a correctly rounded final stored digit therefore counts')
-  out.append('as verified.')
-  out.append('SCOPE: although high precision is stated throughout (90-digit references,')
-  out.append('declarations of up to 55 digits), the calculator rounds every constant to, and')
-  out.append('computes with, 34 significant digits (real34) at runtime. That is immaterial to')
-  out.append('this document, which audits the raw source declarations, not their runtime use.')
+  out.append('Reference values are computed with 90-digit decimal arithmetic, rounding half even, and displayed to at most 60')
+  out.append('significant digits. A verdict "Correct to N verified digits" means: N is the number of significant digits stored')
+  out.append('in the C47 literal (trailing zeros counted, so +100 stores 3 digits while +1e+03 stores 1), and rounding the')
+  out.append('reference to N significant digits (half even) reproduces the stored value exactly - a correctly rounded final')
+  out.append('stored digit therefore counts as verified.')
+  out.append('SCOPE: although high precision is stated throughout (90-digit references, declarations of up to 55 digits),')
+  out.append('the calculator rounds every constant to, and computes with, 34 significant digits (real34) at runtime.')
+  out.append('That is immaterial to this document, which audits the raw source declarations, not their runtime use.')
   out.append('')
   out.append('VERDICTS - the complete vocabulary this generator can emit:')
   out.append('  "Correct to N verified digit(s)"                 every stored digit verified')
   out.append('  "... as the RECIPROCAL (assumption A2)"          verified against 1/reference')
-  out.append('  "Correct by convention: ..."                     the C47 value IS the')
-  out.append('                                                   definition (assumption A4)')
-  out.append('  "DIFFERS from digit n of m - decision needed"    mismatch; also listed under')
-  out.append('                                                   DECISIONS NEEDED')
-  out.append('An "open decision" is any DIFFERS verdict, any convention awaiting review, any')
-  out.append('constant used by the conversion tables without a REF entry (UNREFERENCED), or')
-  out.append('any REF entry without a matching declaration. A "note" line may add evidence or')
-  out.append('context to a verdict without changing it.')
+  out.append('  "Correct by convention: ..."                     the C47 value IS the definition (assumption A4)')
+  out.append('  "DIFFERS from digit n of m - decision needed"    mismatch; also listed under DECISIONS NEEDED')
+  out.append('An "open decision" is any DIFFERS verdict, any convention awaiting review, any constant used by the conversion')
+  out.append('tables without a REF entry (UNREFERENCED), or any REF entry without a matching declaration. A "note" line may')
+  out.append('add evidence or context to a verdict without changing it.')
   out.append('')
-  out.append('RECORD FORMAT - one block per constant, sorted case-insensitively by constant')
-  out.append('name (the part after the const_/const39_ prefix); the block anchor is the full')
-  out.append('C identifier:')
+  out.append('RECORD FORMAT - one block per constant, sorted case-insensitively by constant name (the part after the')
+  out.append('const_/const39_ prefix); the block anchor is the full C identifier:')
   out.append('  reference  <value or DEFINED-BY-C47> <derivation with [n] and An citations>')
   out.append('  C47        <declared literal>        <the C source comment, quoted VERBATIM,')
   out.append('                                        errors included; it played no part in')
@@ -614,7 +621,6 @@ def main():
   out.append('  C47 #else  <the literal of the branch NOT compiled, where one exists>')
   out.append('  verdict    <one phrase from VERDICTS above>')
   out.append('  note       <optional evidence or cross-reference>')
-  out.append('The first whitespace-delimited token after each field name is the value.')
   out.append('Assumption A1 applies to every entry; A2 wherever RECIPROCAL appears.')
   out.append('')
   out.append('ASSUMPTIONS')
@@ -631,16 +637,39 @@ def main():
     for d in decisions:
       out.append(f'  - {d}')
     out.append('')
-  out.append('=' * 100)
-  out.append('')
-  out.append(body)
-  out.append('')
-  out.append('=' * 100)
-  out.append(f'END OF RECORD - {len(entries)} entries; SHA-256 of the entry section between')
-  out.append(f'the ruled lines: {body_sha}')
+  # The whole text part before the data is blocked at 120: '** ' + content + padding + ' **'; only the ruled and
+  # separator lines stay bare. Content is authored to 114 characters; dynamic decision lines may widen their own line.
+  # Exactly two '=' ruled lines exist, top and bottom; they delimit the recorded SHA and the rewrite test. The '-'
+  # separator between the certificate text and the data lies inside that region and uses a different character on purpose.
+  rule = '=' * 120
+  sep  = '-' * 120
+  out = [l if l == rule else '** ' + l.ljust(114) + ' **' for l in out]
+  out.extend([sep, '', body, ''])
+  certified_sha = hashlib.sha256('\n'.join(out[out.index(rule) + 1:]).encode('utf-8')).hexdigest()
+  out.append(rule)
+  out.append(f'END OF RECORD - {len(entries)} entries; SHA-256 of the lines between the ruled lines '
+             f'(both excluded, LF-joined, no trailing newline): {certified_sha}')
+  new = '\n'.join(out) + '\n'
+  # Rewrite the tracked certificate only when the parts between the ruled lines change. Everything above the first ruled
+  # line (title, Generated:, Commit:, Note:) is volatile provenance and excluded, so a plain build never dirties the
+  # file. One exception refreshes the stamp: the on-disk copy records a dirty tree and this run's tree is clean, so the
+  # first make test after committing re-writes the provenance (procedure in conversions.md).
+  def certified(text):
+    lines = text.split('\n')
+    return lines[lines.index(rule):] if rule in lines else lines
+  try:
+    disk = open(OUTPUT, encoding='utf-8').read()
+    if certified(disk) == certified(new):
+      staleStamp = 'uncommitted changes' in disk and 'uncommitted changes' not in new
+      if not staleStamp:
+        print(f'{len(entries)} constants verified, {len(decisions)} decision(s) needed, '
+              f'{OUTPUT} unchanged')
+        return 1 if decisions else 0
+  except OSError:
+    pass
   tmp = OUTPUT + '.tmp'                                      # atomic: no torn record on disk
   with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
-    f.write('\n'.join(out) + '\n')
+    f.write(new)
   os.replace(tmp, OUTPUT)
   print(f'{len(entries)} constants verified, {len(decisions)} decision(s) needed, '
         f'written to {OUTPUT}')

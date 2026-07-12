@@ -84,6 +84,16 @@ It runs automatically in every testSuite build (invoked by `generateTests.py`; o
 decisions fail the build). Manual run for iteration:
 `python3 src/generateTests/constantsCheck.py` (exit 1 while decisions are open).
 
+The certificate is regenerated at every run but the file is only re-written when the parts
+between its ruled lines change; the `Generated:`/`Commit:` provenance above the first ruled
+line is excluded, so a plain `make test` never dirties the committed copy. The defines.h
+input is fingerprinted over only the defines consulted for `#if` branch selection (currently
+`MMHG_PA_133_3224`), so unrelated defines.h edits do not force a re-certificate. The process
+is the usual one, run twice when the certificate changed: run `make test` and commit whatever
+changed (the certificate's stamp records the dirty tree it was generated on); then run
+`make test` again on the now-clean tree - the certificate refreshes its stamp exactly once -
+and commit the re-stamped certificate on its own.
+
 ## Adding a constant - the dev process
 
 Every constant used by the conversion tables is verified independently. When you add one:

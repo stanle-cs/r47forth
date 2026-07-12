@@ -1,206 +1,198 @@
-INDEPENDENT AUDIT of the C47/R47 conversion constants - provenance record
-====================================================================================================
-Project:    C47/R47, community firmware for HP-42/DM42-class scientific
-            calculators (this repository)
-Generated:  2026-07-10 (UTC date; the input hashes below pin the exact audited state)
-Repository: git@gitlab.com:rpncalculators/c43.git
-Commit:     dd448984a28be6f62fab5db5134c8158abd084d6
-            (note: the committed copy of this file is necessarily one commit
-            ahead of the recorded hash)
-Input:      src/generateConstants/generateConstants.c
-            SHA-256 aa7cdcdc994e4b8c3fde58ecab126e77b0df3ace87e82a600f30164740802634
-Input:      src/c47/defines.h
-            SHA-256 25ad234b50f8340e21edb1f2870b957388e88e23ccf72a47a58331e8c2ae3ebe
-Generator:  src/generateTests/constantsCheck.py; regenerate with
-            python3 src/generateTests/constantsCheck.py   (exit 1 while any
-            decision is open). Environment: Python 3, stdlib decimal only.
-Encoding:   UTF-8; non-ASCII occurs only inside quoted C source comments.
-            Lines up to 255 characters are intentional (verbatim quotes and
-            full-precision reference lines); do not re-wrap.
+** AUDIT CERTIFICATE of the C47/R47 conversion constants comprising INDEPENDENT sources and calculations.             **
+** Generated:   2026-07-12 (UTC date; the input hashes below pin the exact audited state)                             **
+** Commit:      bea6475d8ec2423e1d4407821d541572b1bc5b9b (working tree had uncommitted changes)                       **
+** Note:        Regenerated at every testSuite run; re-written only when the parts between the ruled lines change.    **
+**              For a clean Commit line above: make test, commit, then make test again and re-commit the certificate. **
+========================================================================================================================
+** Project:     C47/R47, community firmware for DM42-class scientific calculators (this repository)                   **
+** Repository:  git@gitlab.com:rpncalculators/c43.git                                                                 **
+**              (note: the committed copy of this file is at least one commit ahead of the recorded hash; more        **
+**              when the certified content has been stable across multiple commits)                                   **
+** Input:       src/generateConstants/generateConstants.c                                                             **
+**              SHA-256 aa7cdcdc994e4b8c3fde58ecab126e77b0df3ace87e82a600f30164740802634                              **
+** Input:       src/c47/defines.h - only the defines consulted for #if branch selection (form "#if (NAME == n)"):     **
+**              MMHG_PA_133_3224 = 1                                                                                  **
+**              SHA-256 of the list above: b6120bb810c1e19b4cd94046ec907e1f38eef9ad01cbd689f759ff469396126d           **
+** Input:       src/c47/conversionUnits.h                                                                             **
+**              SHA-256 4984c628eadce66edd914ddb8212b4144c48d8748ad74fa350e7a10d372c6ec8                              **
+** Input:       src/c47/conversionUnits.c                                                                             **
+**              SHA-256 d67d6397a2546f6c122a7b0b880c6bd0a0531a6f5cc5b75845e710a2d75e80b2                              **
+** Input:       src/c47/items.c - only the 46 item rows naming the conversion items:                                  **
+**              SHA-256 of those lines: 3d3dfb057fa4b1a700b30b8e47d0ae8cf284c4285dcba43fc78c8e31503bcf92              **
+** Generator:   src/generateTests/constantsCheck.py; regenerate with python3 src/generateTests/constantsCheck.py      **
+**              (exit 1 while any decision is open). Environment: Python 3, stdlib decimal only.                      **
+** Encoding:    UTF-8; non-ASCII occurs only inside quoted C source comments. Lines to 255 characters are             **
+**              intentional (verbatim quotes and full-precision reference lines); text in 120-character format,       **
+**              do not re-wrap; the END OF RECORD line exceeds 120 by design.                                         **
+**                                                                                                                    **
+** THIS DOCUMENT IS AN AUDIT. Every conversion constant DECLARED in the C source file                                 **
+** src/generateConstants/generateConstants.c (the #if branch actually compiled, per src/c47/defines.h) is checked     **
+** against a reference value computed INDEPENDENTLY from the defining documents of each unit. The C47 lines below     **
+** are the audited declarations, quoted for comparison only; they contribute nothing to the reference values.         **
+** No calculator output is used anywhere.                                                                             **
+**                                                                                                                    **
+** METHOD                                                                                                             **
+** Reference values are computed with 90-digit decimal arithmetic, rounding half even, and displayed to at most 60    **
+** significant digits. A verdict "Correct to N verified digits" means: N is the number of significant digits stored   **
+** in the C47 literal (trailing zeros counted, so +100 stores 3 digits while +1e+03 stores 1), and rounding the       **
+** reference to N significant digits (half even) reproduces the stored value exactly - a correctly rounded final      **
+** stored digit therefore counts as verified.                                                                         **
+** SCOPE: although high precision is stated throughout (90-digit references, declarations of up to 55 digits),        **
+** the calculator rounds every constant to, and computes with, 34 significant digits (real34) at runtime.             **
+** That is immaterial to this document, which audits the raw source declarations, not their runtime use.              **
+**                                                                                                                    **
+** VERDICTS - the complete vocabulary this generator can emit:                                                        **
+**   "Correct to N verified digit(s)"                 every stored digit verified                                     **
+**   "... as the RECIPROCAL (assumption A2)"          verified against 1/reference                                    **
+**   "Correct by convention: ..."                     the C47 value IS the definition (assumption A4)                 **
+**   "DIFFERS from digit n of m - decision needed"    mismatch; also listed under DECISIONS NEEDED                    **
+** An "open decision" is any DIFFERS verdict, any convention awaiting review, any constant used by the conversion     **
+** tables without a REF entry (UNREFERENCED), or any REF entry without a matching declaration. A "note" line may      **
+** add evidence or context to a verdict without changing it.                                                          **
+**                                                                                                                    **
+** RECORD FORMAT - one block per constant, sorted case-insensitively by constant name (the part after the             **
+** const_/const39_ prefix); the block anchor is the full C identifier:                                                **
+**   reference  <value or DEFINED-BY-C47> <derivation with [n] and An citations>                                      **
+**   C47        <declared literal>        <the C source comment, quoted VERBATIM,                                     **
+**                                         errors included; it played no part in                                      **
+**                                         the verification>                                                          **
+**   C47 #else  <the literal of the branch NOT compiled, where one exists>                                            **
+**   verdict    <one phrase from VERDICTS above>                                                                      **
+**   note       <optional evidence or cross-reference>                                                                **
+** Assumption A1 applies to every entry; A2 wherever RECIPROCAL appears.                                              **
+**                                                                                                                    **
+** ASSUMPTIONS                                                                                                        **
+** A1  The C47/R47 constants are copied from src/generateConstants/generateConstants.c, taking the #if branch         **
+**     actually compiled per the defines in src/c47/defines.h. Where a constant is defined in both branches,          **
+**     both are shown.                                                                                                **
+** A2  Direction: a constant may be stored as X-to-Y or Y-to-X; a value matching the RECIPROCAL of the reference is   **
+**     counted as correct and marked so.                                                                              **
+** A3  mmHg/inHg: C47 KEEPS the BS 350:2004 abbreviated convention (133.3224 Pa) as its standard (decision            **
+**     2026-07-10), selected via MMHG_PA_133_3224 = 1 [16]; the #else branch holds the conventional                   **
+**     (non-abbreviated) values                                                                                       **
+**     133.322387415 / 3386.388640341 Pa [17].                                                                        **
+** A4  banana: no external standard exists. The C47 value bananamm = 178 mm is taken as the DEFINING convention       **
+**     and is therefore correct by definition; bananaInch is verified against it (178/25.4).                          **
+** A5  beard-second: 10 nm (the Google Calculator convention) is assumed; a 5 nm variant is also documented [12].     **
+** A6  UK kitchen measures: imperial tablespoon = 5/8 imp floz, teaspoon = tbsp/3, cup = 10 imp floz (pre-metric      **
+**     convention) [13]; the modern metric 15/5 ml spoons differ.                                                     **
+** A7  US cup: the customary cup = 8 US floz = 236.5882365 ml [3]; the US legal cup of 240 ml differs.                **
+** A8  firkin (FFF system): 90 lb exactly, the mass of a firkin (9 imperial gallons) of water at 10 lb/gal [11].      **
+** A9  Gasoline gallon equivalent: 33.7 kWh per US gallon, the US EPA window-sticker MPGe factor [10].                **
+**                                                                                                                    **
+** REFERENCES                                                                                                         **
+** [1]  BIPM, The International System of Units (SI Brochure), 9th edition 2019: defining constants Table 1 p130;     **
+**      non-SI accepted units (min/h/d, au, ha, L, t, mmHg) Table 8 pp145-146 -                                       **
+**      https://www.bipm.org/en/publications/si-brochure (accessed 2026-07-10)                                        **
+** [2]  NIST Special Publication 811 (2008 ed.), Guide for the Use of the SI: conversion factors Appendix B,          **
+**      alphabetical list B.8 pp49-67 - https://physics.nist.gov/cuu/pdf/sp811.pdf (accessed 2026-07-10)              **
+** [3]  NIST Handbook 44, Appendix C "General Tables of Units of Measurement", pp C1-C17 (customary                   **
+**      length/mass/volume, cup/tbsp/tsp, hp electric) -                                                              **
+**      https://www.nist.gov/pml/owm/nist-handbook-44-current-edition (accessed 2026-07-10)                           **
+** [4]  International Yard and Pound Agreement 1959: 1 yd = 0.9144 m, 1 lb = 0.45359237 kg exactly; US Federal        **
+**      Register Doc. 59-5442, 24 FR 5348 (1959-07-01); tabulated in [2] B.8 and [3] App. C p C2/C8                   **
+** [5]  UK Weights and Measures Act 1985 (c.72), Schedule 1 "Definitions of units of measurement": gallon = 4.54609   **
+**      cubic decimetres exactly - https://www.legislation.gov.uk/ukpga/1985/72/schedule/1 (accessed 2026-07-10)      **
+** [6]  CGPM resolutions: 3rd CGPM 1901 p70 (g0 = 9.80665 m/s^2), 10th CGPM 1954 Resolution 4 (atm = 101325 Pa),      **
+**      4th CGPM 1907 p105 (metric carat = 0.2 g) - https://www.bipm.org/en/committees/cg/cgpm/resolutions            **
+**      (accessed 2026-07-10)                                                                                         **
+** [7]  SI 2019 defining constants (26th CGPM 2018, Resolution 1): kB = 1.380649e-23 J/K and e = 1.602176634e-19 C,   **
+**      both exact; NIST SP 330 (2019 ed.) Table 1 p4; also [1] Table 1 p130                                          **
+** [8]  IAU Resolution 2012 B2 (au = 149597870700 m exactly); IAU Resolution 2015 B2 Table 1 (pc = 648000/pi au       **
+**      exactly); light-year = c x Julian year (365.25 d), c = 299792458 m/s [1] -                                    **
+**      https://www.iau.org/administration/resolutions/general_assemblies/ (accessed 2026-07-10)                      **
+** [9]  ISO 31-4:1992 Annex B (superseded by ISO 80000-5): Btu(IT) = 1055.05585262 J exactly; calorie(IT) =           **
+**      4.1868 J exactly (5th Int. Conference on the Properties of Steam, London 1956); also [2] B.8 p52              **
+**      (Btu(IT)), p53 (cal(IT))                                                                                      **
+** [10] US EPA fuel economy labeling (MPGe), 40 CFR Part 600: 33.7 kWh per gallon of gasoline (window-sticker         **
+**      convention) - https://www.epa.gov/fueleconomy (accessed 2026-07-10)                                           **
+** [11] Wikipedia: FFF system, section "Units" (firkin = 90 lb) - permanent link                                      **
+**      https://en.wikipedia.org/w/index.php?title=FFF_system&oldid=1343014422 (accessed 2026-07-10)                  **
+** [12] Wikipedia: List of humorous units of measurement, section "Beard-second" (5 nm physicist variant, 10 nm       **
+**      Google Calculator variant) - permanent link                                                                   **
+**      https://en.wikipedia.org/w/index.php?title=List_of_humorous_units_of_measurement&oldid=1356149592             **
+**      (accessed 2026-07-10)                                                                                         **
+** [13] Wikipedia: Cooking weights and measures, table "British (imperial) measures" - permanent link                 **
+**      https://en.wikipedia.org/w/index.php?title=Cooking_weights_and_measures&oldid=1355681534                      **
+**      (accessed 2026-07-10)                                                                                         **
+** [14] Chinese market units (shizhi), State Council 1959: chi = 1/3 m, jin = 0.5 kg; Wikipedia: Chinese units of     **
+**      measurement, section "People's Republic of China" - permanent link                                            **
+**      https://en.wikipedia.org/w/index.php?title=Chinese_units_of_measurement&oldid=1357247228                      **
+**      (accessed 2026-07-10)                                                                                         **
+** [15] pi, OEIS A000796 - https://oeis.org/A000796 (accessed 2026-07-10)                                             **
+** [16] BS 350:2004 Conversion factors for units, p51: mmHg = 133.3224 Pa (abbreviated convention; also cited by the  **
+**      C source comment and NPL 1998 p13 footnote)                                                                   **
+** [17] Conventional mercury column: rho_Hg = 13.5951 g/cm^3 at 0 degC x g0 = 9.80665 m/s^2, product exactly          **
+**      133.322387415 Pa; [2] B.8 p58 lists the rounded 1.333224e2                                                    **
+** [18] International Extraordinary Hydrographic Conference, Monaco 1929: 1 nmi = 1852 m; also [1] Table 8 p145 and   **
+**      [2] B.8 p59                                                                                                   **
+** [19] DTP/PostScript point = 1/72 in; Wikipedia: Point (typography), section "Desktop publishing point" - permanent **
+**      link https://en.wikipedia.org/w/index.php?title=Point_(typography)&oldid=1361729836 (accessed 2026-07-10)     **
+** [20] Gregorian calendar mean year = 365.2425 d: leap rule 97/400, papal bull Inter gravissimas (1582)              **
+** [21] US survey foot = 1200/3937 m exactly (retained by the 1959 agreement [4] for surveys) -                       **
+**      https://www.nist.gov/pml/us-surveyfoot (accessed 2026-07-10)                                                  **
+** [22] Wikipedia: Foe (unit) (1 foe = 1e51 erg = 1e44 J) - permanent link                                            **
+**      https://en.wikipedia.org/w/index.php?title=Foe_(unit)&oldid=1360897827 (accessed 2026-07-10)                  **
+** [23] ISO 80000-3 (Quantities and units - Space and time) / IEC 80000-13: level of a power quantity in dB uses the  **
+**      decade factor 10, level of a field (root-power) quantity the factor 20                                        **
+**                                                                                                                    **
+** 140 conversion constants checked; 0 open decision(s).                                                              **
+**                                                                                                                    **
+------------------------------------------------------------------------------------------------------------------------
 
-THIS DOCUMENT IS AN AUDIT. Every conversion constant DECLARED in the C source
-file src/generateConstants/generateConstants.c (the #if branch actually
-compiled, per src/c47/defines.h) is checked against a reference value computed
-INDEPENDENTLY from the defining documents of each unit. The C47 lines below are
-the audited declarations, quoted for comparison only; they contribute nothing
-to the reference values. No calculator output is used anywhere.
+const_0
+  reference  0                                                       additive identity, exact by definition
+  C47        0
+  verdict    Correct to 1 verified digit
 
-METHOD
-Reference values are computed with 90-digit decimal arithmetic, rounding half
-even, and displayed to at most 60 significant digits. A verdict "Correct to N
-verified digits" means: N is the number of significant digits stored in the C47
-literal (trailing zeros counted, so +100 stores 3 digits while +1e+03 stores 1),
-and rounding the reference to N significant digits (half even) reproduces the
-stored value exactly - a correctly rounded final stored digit therefore counts
-as verified.
-SCOPE: although high precision is stated throughout (90-digit references,
-declarations of up to 55 digits), the calculator rounds every constant to, and
-computes with, 34 significant digits (real34) at runtime. That is immaterial to
-this document, which audits the raw source declarations, not their runtime use.
-
-VERDICTS - the complete vocabulary this generator can emit:
-  "Correct to N verified digit(s)"                 every stored digit verified
-  "... as the RECIPROCAL (assumption A2)"          verified against 1/reference
-  "Correct by convention: ..."                     the C47 value IS the
-                                                   definition (assumption A4)
-  "DIFFERS from digit n of m - decision needed"    mismatch; also listed under
-                                                   DECISIONS NEEDED
-An "open decision" is any DIFFERS verdict, any convention awaiting review, any
-constant used by the conversion tables without a REF entry (UNREFERENCED), or
-any REF entry without a matching declaration. A "note" line may add evidence or
-context to a verdict without changing it.
-
-RECORD FORMAT - one block per constant, sorted case-insensitively by constant
-name (the part after the const_/const39_ prefix); the block anchor is the full
-C identifier:
-  reference  <value or DEFINED-BY-C47> <derivation with [n] and An citations>
-  C47        <declared literal>        <the C source comment, quoted VERBATIM,
-                                        errors included; it played no part in
-                                        the verification>
-  C47 #else  <the literal of the branch NOT compiled, where one exists>
-  verdict    <one phrase from VERDICTS above>
-  note       <optional evidence or cross-reference>
-The first whitespace-delimited token after each field name is the value.
-Assumption A1 applies to every entry; A2 wherever RECIPROCAL appears.
-
-ASSUMPTIONS
-A1  The C47/R47 constants are copied from src/generateConstants/generateConstants.c, taking
-    the #if branch actually compiled per the defines in src/c47/defines.h. Where a constant
-    is defined in both branches, both are shown.
-A2  Direction: a constant may be stored as X-to-Y or Y-to-X; a value matching the RECIPROCAL
-    of the reference is counted as correct and marked so.
-A3  mmHg/inHg: C47 KEEPS the BS 350:2004 abbreviated convention (133.3224 Pa) as its
-    standard (decision 2026-07-10), selected via MMHG_PA_133_3224 = 1 [16]; the #else
-    branch holds the conventional (non-abbreviated) values 133.322387415 /
-    3386.388640341 Pa [17].
-A4  banana: no external standard exists. The C47 value bananamm = 178 mm is taken as the
-    DEFINING convention and is therefore correct by definition; bananaInch is verified
-    against it (178/25.4).
-A5  beard-second: 10 nm (the Google Calculator convention) is assumed; a 5 nm variant is
-    also documented [12].
-A6  UK kitchen measures: imperial tablespoon = 5/8 imp floz, teaspoon = tbsp/3, cup = 10
-    imp floz (pre-metric convention) [13]; the modern metric 15/5 ml spoons differ.
-A7  US cup: the customary cup = 8 US floz = 236.5882365 ml [3]; the US legal cup of 240 ml
-    differs.
-A8  firkin (FFF system): 90 lb exactly, the mass of a firkin (9 imperial gallons) of water
-    at 10 lb/gal [11].
-A9  Gasoline gallon equivalent: 33.7 kWh per US gallon, the US EPA window-sticker MPGe
-    factor [10].
-
-REFERENCES
-[1]  BIPM, The International System of Units (SI Brochure), 9th edition 2019: defining
-     constants Table 1 p130; non-SI accepted units (min/h/d, au, ha, L, t, mmHg) Table 8
-     pp145-146 - https://www.bipm.org/en/publications/si-brochure (accessed 2026-07-10)
-[2]  NIST Special Publication 811 (2008 ed.), Guide for the Use of the SI: conversion
-     factors Appendix B, alphabetical list B.8 pp49-67 -
-     https://physics.nist.gov/cuu/pdf/sp811.pdf (accessed 2026-07-10)
-[3]  NIST Handbook 44, Appendix C "General Tables of Units of Measurement", pp C1-C17
-     (customary length/mass/volume, cup/tbsp/tsp, hp electric) -
-     https://www.nist.gov/pml/owm/nist-handbook-44-current-edition (accessed 2026-07-10)
-[4]  International Yard and Pound Agreement 1959: 1 yd = 0.9144 m, 1 lb = 0.45359237 kg
-     exactly; US Federal Register Doc. 59-5442, 24 FR 5348 (1959-07-01); tabulated in [2]
-     B.8 and [3] App. C p C2/C8
-[5]  UK Weights and Measures Act 1985 (c.72), Schedule 1 "Definitions of units of
-     measurement": gallon = 4.54609 cubic decimetres exactly -
-     https://www.legislation.gov.uk/ukpga/1985/72/schedule/1 (accessed 2026-07-10)
-[6]  CGPM resolutions: 3rd CGPM 1901 p70 (g0 = 9.80665 m/s^2), 10th CGPM 1954 Resolution 4
-     (atm = 101325 Pa), 4th CGPM 1907 p105 (metric carat = 0.2 g) -
-     https://www.bipm.org/en/committees/cg/cgpm/resolutions (accessed 2026-07-10)
-[7]  SI 2019 defining constants (26th CGPM 2018, Resolution 1): kB = 1.380649e-23 J/K and
-     e = 1.602176634e-19 C, both exact; NIST SP 330 (2019 ed.) Table 1 p4; also [1] Table 1
-     p130
-[8]  IAU Resolution 2012 B2 (au = 149597870700 m exactly); IAU Resolution 2015 B2 Table 1
-     (pc = 648000/pi au exactly); light-year = c x Julian year (365.25 d), c = 299792458
-     m/s [1] - https://www.iau.org/administration/resolutions/general_assemblies/
-     (accessed 2026-07-10)
-[9]  ISO 31-4:1992 Annex B (superseded by ISO 80000-5): Btu(IT) = 1055.05585262 J exactly;
-     calorie(IT) = 4.1868 J exactly (5th Int. Conference on the Properties of Steam,
-     London 1956); also [2] B.8 p52 (Btu(IT)), p53 (cal(IT))
-[23] ISO 80000-3 (Quantities and units - Space and time) / IEC 80000-13: level of a power
-     quantity in dB uses the decade factor 10, level of a field (root-power) quantity the
-     factor 20
-[24] NPL (National Physical Laboratory, UK) 1998, p13 footnote, on mercury-column pressure
-     conventions - identified only as cited by the C source comment of MmhgToPa/InhgToPa;
-     the exact NPL document title is not recorded in the repository
-[10] US EPA fuel economy labeling (MPGe), 40 CFR Part 600: 33.7 kWh per gallon of gasoline
-     (window-sticker convention) - https://www.epa.gov/fueleconomy (accessed 2026-07-10)
-[11] Wikipedia: FFF system, section "Units" (firkin = 90 lb) - permanent link
-     https://en.wikipedia.org/w/index.php?title=FFF_system&oldid=1343014422
-     (accessed 2026-07-10)
-[12] Wikipedia: List of humorous units of measurement, section "Beard-second" (5 nm
-     physicist variant, 10 nm Google Calculator variant) - permanent link
-     https://en.wikipedia.org/w/index.php?title=List_of_humorous_units_of_measurement&oldid=1356149592 (accessed 2026-07-10)
-[13] Wikipedia: Cooking weights and measures, table "British (imperial) measures" -
-     permanent link https://en.wikipedia.org/w/index.php?title=Cooking_weights_and_measures&oldid=1355681534 (accessed 2026-07-10)
-[14] Chinese market units (shizhi), State Council 1959: chi = 1/3 m, jin = 0.5 kg;
-     Wikipedia: Chinese units of measurement, section "People's Republic of China" -
-     permanent link https://en.wikipedia.org/w/index.php?title=Chinese_units_of_measurement&oldid=1357247228 (accessed 2026-07-10)
-[15] pi, OEIS A000796 - https://oeis.org/A000796 (accessed 2026-07-10)
-[16] BS 350:2004 Conversion factors for units, p51: mmHg = 133.3224 Pa (abbreviated
-     convention; also cited by the C source comment and NPL 1998 p13 footnote)
-[17] Conventional mercury column: rho_Hg = 13.5951 g/cm^3 at 0 degC x g0 = 9.80665 m/s^2,
-     product exactly 133.322387415 Pa; [2] B.8 p58 lists the rounded 1.333224e2
-[18] International Extraordinary Hydrographic Conference, Monaco 1929: 1 nmi = 1852 m;
-     also [1] Table 8 p145 and [2] B.8 p59
-[19] DTP/PostScript point = 1/72 in; Wikipedia: Point (typography), section "Desktop
-     publishing point" - permanent link
-     https://en.wikipedia.org/w/index.php?title=Point_(typography)&oldid=1361729836
-     (accessed 2026-07-10)
-[20] Gregorian calendar mean year = 365.2425 d: leap rule 97/400, papal bull Inter
-     gravissimas (1582)
-[21] US survey foot = 1200/3937 m exactly (retained by the 1959 agreement [4] for surveys)
-     - https://www.nist.gov/pml/us-surveyfoot (accessed 2026-07-10)
-[22] Wikipedia: Foe (unit) (1 foe = 1e51 erg = 1e44 J) - permanent link
-     https://en.wikipedia.org/w/index.php?title=Foe_(unit)&oldid=1360897827
-     (accessed 2026-07-10)
-
-138 conversion constants checked; 0 open decision(s).
-
-====================================================================================================
+const_1
+  reference  1                                                       multiplicative identity, exact by definition
+  C47        +1
+  verdict    Correct to 1 verified digit
 
 const_10
   reference  1E+1                                                    dB power-quantity decade factor [23]
-  C47        +10                                                     
+  C47        +10
   verdict    Correct to 2 verified digits
 
 const_100
   reference  1E+2                                                    definitional integer of the per-100 fuel economy unit family (no external source applicable)
-  C47        +100                                                    
+  C47        +100
   verdict    Correct to 3 verified digits
 
 const_1000
   reference  1E+3                                                    tonne = 1000 kg [1]
-  C47        +1e+03                                                  
+  C47        +1e+03
   verdict    Correct to 1 verified digit
 
 const_10000
   reference  1E+4                                                    hectare = 10^4 m^2 [1]
-  C47        +1e+04                                                  
+  C47        +1e+04
   verdict    Correct to 1 verified digit
 
 const39_180onPi
   reference  57.2957795130823208767981548141051703324054724665643215491602 degrees per radian = 180/pi [15]
-  C47        +57.29577951308232087679815481410517033240547246656432155 
+  C47        +57.29577951308232087679815481410517033240547246656432155
   verdict    Correct to 55 verified digits
 
 const_1e_12
   reference  1E-12                                                   metric prefix scale [1]
-  C47        +1e-12                                                  
+  C47        +1e-12
   verdict    Correct to 1 verified digit
 
 const_2
   reference  2                                                       jin = 0.5 kg, so 2 jin/kg [14]
-  C47        +2                                                      
+  C47        +2
   verdict    Correct to 1 verified digit
 
 const_20
   reference  2E+1                                                    dB field-quantity decade factor [23]
-  C47        +20                                                     
+  C47        +20
   verdict    Correct to 2 verified digits
 
 const39_200onPi
   reference  63.6619772367581343075535053490057448137838582961825794990669 gradians per radian = 200/pi [15]
-  C47        +63.6619772367581343075535053490057448137838582961825795 
+  C47        +63.6619772367581343075535053490057448137838582961825795
   verdict    Correct to 54 verified digits
 
 const_273p15
@@ -210,12 +202,12 @@ const_273p15
 
 const_3
   reference  3                                                       chi = 1/3 m, so 3 chi/m [14]
-  C47        +3                                                      
+  C47        +3
   verdict    Correct to 1 verified digit
 
 const_32
   reference  32                                                      0 degC = 32 degF; Fahrenheit scale definition [2]
-  C47        +32                                                     
+  C47        +32
   verdict    Correct to 2 verified digits
 
 const_459p67
@@ -225,12 +217,12 @@ const_459p67
 
 const_9on10
   reference  0.9                                                     gradian per degree = 9/10; deg and grad definitions [1]
-  C47        +0.9                                                    
+  C47        +0.9
   verdict    Correct to 1 verified digit
 
 const_9on5
   reference  1.8                                                     Fahrenheit per Celsius degree = 9/5 [2]
-  C47        +1.8                                                    
+  C47        +1.8
   verdict    Correct to 2 verified digits
 
 const_AccreToHa
@@ -255,12 +247,12 @@ const_AuToM
 
 const39_bananaInch
   reference  7.0078740157480314960629921259842519685039370078740157480315 banana (178 mm, assumption A4) / inch [4]
-  C47        +7.007874015748031496062992125984251968503937007874015748 
+  C47        +7.007874015748031496062992125984251968503937007874015748
   verdict    Correct to 55 verified digits
 
 const_bananamm
   reference  DEFINED-BY-C47                                          the banana length; C47 defines the convention (assumption A4)
-  C47        +178                                                    
+  C47        +178
   verdict    Correct by convention: this value IS the definition (assumption A4)
 
 const_BarrelToM3
@@ -480,7 +472,7 @@ const_GalukToL
 
 const_GaluseqE
   reference  33.7                                                    gasoline gallon equivalent = 33.7 kWh, assumption A9 [10]
-  C47        +33.7                                                   
+  C47        +33.7
   verdict    Correct to 3 verified digits
 
 const_GalusToL
@@ -852,6 +844,5 @@ const_ZhangToM
   C47        +3e-01                                                  // m      = zhàng / 0.3
   verdict    Correct to 1 verified digit as the RECIPROCAL (assumption A2)
 
-====================================================================================================
-END OF RECORD - 138 entries; SHA-256 of the entry section between
-the ruled lines: ac5ddad4f256e61fde7aaff5a18182210742b964324c1814fc1a0b337fc12cea
+========================================================================================================================
+END OF RECORD - 140 entries; SHA-256 of the lines between the ruled lines (both excluded, LF-joined, no trailing newline): bd6257a157dbf1805ac95817fec0b5515281f7b66edefcc34707aa35d9d64934
