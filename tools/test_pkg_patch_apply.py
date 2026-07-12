@@ -19,6 +19,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pkg_patch_apply import (
+    collect_patch_stacks,
     PatchApplyError,
     apply_patch_stack,
     scan_conflict_markers,
@@ -299,6 +300,200 @@ class TestBlobAncestryDrift(unittest.TestCase):
                     repo.rel, _patch_paths(repo, written), repo.tmpdir,
                     dest, base_content=drifted)
             self.assertIn('conflict markers', str(cm.exception))
+        finally:
+            repo.__exit__()
+
+
+def _author_git_patch(base_text, new_text, rel='test.c'):
+    """Author a git-format patch (full index line) taking src/c47/<rel>
+    from base_text to new_text, via a throwaway git repo."""
+    import shutil
+    import tempfile
+    t = tempfile.mkdtemp()
+    try:
+        for args in (['init', '-q'], ['config', 'user.email', 'x@x'],
+                     ['config', 'user.name', 'x']):
+            subprocess.run(['git'] + args, cwd=t, capture_output=True)
+        path = os.path.join(t, 'src', 'c47', rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(base_text)
+        subprocess.run(['git', 'add', '-A'], cwd=t, capture_output=True)
+        subprocess.run(['git', 'commit', '-q', '-m', 'base'], cwd=t,
+                       capture_output=True)
+        with open(path, 'w') as f:
+            f.write(new_text)
+        return subprocess.run(['git', 'diff', '--full-index'], cwd=t,
+                              capture_output=True, text=True).stdout
+    finally:
+        shutil.rmtree(t, ignore_errors=True)
+
+
+class TestOrderingEnforcement(unittest.TestCase):
+    """Unit 5: numeric-prefix ordering for cumulative per-file stacks
+    (§3): sort by integer ordinal, tie-break by CUSTOM_PKG list order;
+    malformed or misdeclared patches rejected loudly."""
+
+    # Order-dependent chain: each patch edits the SAME line, so any
+    # out-of-order application fails to apply.
+    V1 = UPSTREAM_3FN
+    V2 = UPSTREAM_3FN.replace('return x + 2;', 'return x + 2 + 10;')
+    V3 = UPSTREAM_3FN.replace('return x + 2;', 'return x + 2 + 10 + 20;')
+    V4 = UPSTREAM_3FN.replace('return x + 2;',
+                              'return x + 2 + 10 + 20 + 30;')
+
+    def _repo_with_chain(self, names=('010-test.c.patch',
+                                      '020-test.c.patch',
+                                      '030-test.c.patch')):
+        """Repo whose patches/ holds the three chained patches under
+        *names* (written to disk in reverse order deliberately)."""
+        repo = _TempGitRepo()
+        repo.__enter__()
+        repo.write_src(self.V1)
+        chain = [_author_git_patch(self.V1, self.V2),
+                 _author_git_patch(self.V2, self.V3),
+                 _author_git_patch(self.V3, self.V4)]
+        for fname, text in reversed(list(zip(names, chain))):
+            with open(os.path.join(repo.patches_dir, fname), 'w') as f:
+                f.write(text)
+        return repo
+
+    def test_stack_applies_in_ordinal_order_regardless_of_declaration_order(self):
+        """BUG THIS TEST EXISTS TO CATCH: applying patches in
+        declaration or directory order instead of parsed-ordinal order.
+        The chain only applies 010→020→030; declarations are shuffled.
+        """
+        repo = self._repo_with_chain()
+        try:
+            declared = ['030-test.c.patch', '010-test.c.patch',
+                        '020-test.c.patch']
+            stacks = collect_patch_stacks(
+                [(repo.pkgdir, declared)], repo.tmpdir)
+            self.assertEqual(list(stacks.keys()), ['test.c'])
+            self.assertEqual(
+                [os.path.basename(p) for p in stacks['test.c']],
+                ['010-test.c.patch', '020-test.c.patch',
+                 '030-test.c.patch'])
+
+            dest = os.path.join(repo.tmpdir, 'out', 'test.c')
+            final = apply_patch_stack('test.c', stacks['test.c'],
+                                      repo.tmpdir, dest)
+            self.assertEqual(final, self.V4)
+        finally:
+            repo.__exit__()
+
+    def test_wrong_ordinal_assignment_fails_loudly(self):
+        """Bug: an out-of-order stack silently producing a wrong file.
+        With the chain's first patch renamed to 030 and its last to 010
+        the sorted stack is genuinely mis-ordered — application must
+        raise, not emit a half-patched file."""
+        repo = self._repo_with_chain(names=('030-test.c.patch',
+                                            '020-test.c.patch',
+                                            '010-test.c.patch'))
+        try:
+            declared = sorted(repo.list_patches())
+            stacks = collect_patch_stacks(
+                [(repo.pkgdir, declared)], repo.tmpdir)
+            dest = os.path.join(repo.tmpdir, 'out', 'test.c')
+            with self.assertRaises(PatchApplyError):
+                apply_patch_stack('test.c', stacks['test.c'],
+                                  repo.tmpdir, dest)
+            self.assertFalse(os.path.exists(dest))
+        finally:
+            repo.__exit__()
+
+    def test_missing_prefix_rejected(self):
+        """Bug: a patch without the <NNN>- prefix accepted with some
+        default ordinal — ordering would become implementation-defined.
+        Must be a loud failure naming the file."""
+        repo = self._repo_with_chain()
+        try:
+            bad = os.path.join(repo.patches_dir, 'test.c.patch')
+            with open(bad, 'w') as f:
+                f.write(_author_git_patch(self.V1, self.V2))
+            declared = ['010-test.c.patch', '020-test.c.patch',
+                        '030-test.c.patch', 'test.c.patch']
+            with self.assertRaises(PatchApplyError) as cm:
+                collect_patch_stacks([(repo.pkgdir, declared)],
+                                     repo.tmpdir)
+            self.assertIn('test.c.patch', str(cm.exception))
+        finally:
+            repo.__exit__()
+
+    def test_declared_but_missing_rejected(self):
+        """Bug: a declared patch file missing on disk silently skipped
+        (typo'd filename in pkg_patch_sources -> patch quietly absent
+        from the build)."""
+        repo = self._repo_with_chain()
+        try:
+            declared = ['010-test.c.patch', '020-test.c.patch',
+                        '030-test.c.patch', '040-test.c.patch']
+            with self.assertRaises(PatchApplyError) as cm:
+                collect_patch_stacks([(repo.pkgdir, declared)],
+                                     repo.tmpdir)
+            self.assertIn('040-test.c.patch', str(cm.exception))
+        finally:
+            repo.__exit__()
+
+    def test_on_disk_but_undeclared_rejected(self):
+        """Bug: a .patch present in patches/ but absent from
+        pkg_patch_sources silently dropped from the build — the exact
+        silent-misconfiguration failure mode the README warns about
+        for typo'd variable names."""
+        repo = self._repo_with_chain()
+        try:
+            declared = ['010-test.c.patch', '020-test.c.patch']
+            with self.assertRaises(PatchApplyError) as cm:
+                collect_patch_stacks([(repo.pkgdir, declared)],
+                                     repo.tmpdir)
+            self.assertIn('030-test.c.patch', str(cm.exception))
+            self.assertIn('not declared', str(cm.exception))
+        finally:
+            repo.__exit__()
+
+    def test_ordinal_tie_broken_by_package_list_order(self):
+        """§3: same ordinal in two packages targeting the same rel —
+        the earlier package in the CUSTOM_PKG list applies first, and
+        reversing the list reverses the order.
+
+        Bug: tie-break by package name / path / hash order instead of
+        list position."""
+        repo = _TempGitRepo()
+        repo.__enter__()
+        try:
+            repo.write_src(UPSTREAM_3FN)
+            edit_alpha = _edit_function(UPSTREAM_3FN,
+                                        'return x + 1;',
+                                        'return x * 11;')
+            edit_gamma = _edit_function(UPSTREAM_3FN,
+                                        'return x + 3;',
+                                        'return x * 33;')
+            pkg_a = 'packages/pkg-a'
+            pkg_b = 'packages/pkg-b'
+            for pkg, text in ((pkg_a, edit_alpha), (pkg_b, edit_gamma)):
+                d = os.path.join(repo.tmpdir, pkg, 'patches')
+                os.makedirs(d, exist_ok=True)
+                with open(os.path.join(d, '010-test.c.patch'), 'w') as f:
+                    f.write(_author_git_patch(UPSTREAM_3FN, text))
+
+            spec_ab = [(pkg_a, ['010-test.c.patch']),
+                       (pkg_b, ['010-test.c.patch'])]
+            spec_ba = list(reversed(spec_ab))
+
+            stack_ab = collect_patch_stacks(spec_ab, repo.tmpdir)['test.c']
+            stack_ba = collect_patch_stacks(spec_ba, repo.tmpdir)['test.c']
+            self.assertEqual([p.split(os.sep)[-3] for p in stack_ab],
+                             ['pkg-a', 'pkg-b'])
+            self.assertEqual([p.split(os.sep)[-3] for p in stack_ba],
+                             ['pkg-b', 'pkg-a'])
+
+            # Both orders compose cleanly (different functions) to the
+            # same cumulative result.
+            dest = os.path.join(repo.tmpdir, 'out', 'test.c')
+            final = apply_patch_stack('test.c', stack_ab, repo.tmpdir,
+                                      dest)
+            self.assertIn('x * 11', final)
+            self.assertIn('x * 33', final)
         finally:
             repo.__exit__()
 

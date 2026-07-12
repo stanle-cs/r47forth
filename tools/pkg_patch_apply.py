@@ -36,7 +36,11 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from pkg_patch_common import decode_patch_filename, parse_patch_target
+from pkg_patch_common import (
+    decode_patch_filename,
+    parse_patch_target,
+    validate_patch_declaration,
+)
 
 
 class PatchApplyError(Exception):
@@ -93,6 +97,77 @@ def _seed_blob(sha, source_repo, scratch_repo):
                              cwd=scratch_repo)
     return (written.returncode == 0
             and written.stdout.decode().strip() == full)
+
+
+def collect_patch_stacks(pkg_patch_specs, project_root):
+    """Validate and order every declared patch across all active
+    packages (§2 dual-signal, §3 cumulative ordered composition).
+
+    pkg_patch_specs: ordered list of (pkgdir, declared_filenames) —
+    pkgdir project-root-relative, in -DCUSTOM_PKG list order;
+    declared_filenames from that package's pkg_patch_sources.
+
+    Returns {rel: [absolute patch paths]} with each stack sorted by
+    (integer ordinal from the filename, package list index) — the
+    earlier-listed package wins ordinal ties (§3). Dict insertion order
+    follows first appearance; callers iterate stacks per rel.
+
+    Loud failures (PatchApplyError), never silent skips:
+    - a declared patch file that does not exist on disk;
+    - a .patch file on disk that is not declared in pkg_patch_sources
+      (a typo'd declaration must not silently drop a patch from the
+      build — same philosophy as the README's scope warning);
+    - a malformed filename (missing <NNN>- prefix, missing .patch);
+    - filename/+++-header target mismatch or a target with no upstream
+      counterpart (§2, via validate_patch_declaration).
+
+    Duplicate ordinals for the same rel within ONE package cannot
+    exist: the filename IS <NNN>-<rel>.patch, so the filesystem forbids
+    them. Duplicates across packages are legal ties, broken by package
+    order. Ordinals are exactly three digits (decode rejects anything
+    else), so integer and string ordering coincide; we sort by the
+    parsed integer regardless.
+    """
+    entries = {}  # rel -> list of (ordinal, pkg_index, path)
+
+    for pkg_index, (pkgdir, declared) in enumerate(pkg_patch_specs):
+        patches_dir = os.path.join(project_root, pkgdir, 'patches')
+        declared = list(declared)
+
+        on_disk = set()
+        if os.path.isdir(patches_dir):
+            on_disk = {f for f in os.listdir(patches_dir)
+                       if f.endswith('.patch')}
+        undeclared = on_disk - set(declared)
+        if undeclared:
+            raise PatchApplyError(
+                f'package {pkgdir}: patch file(s) present in patches/ '
+                f'but not declared in pkg_patch_sources: '
+                f'{sorted(undeclared)} — declare or remove them '
+                f'(a patch must never be silently dropped from the '
+                f'build)')
+
+        for fname in declared:
+            path = os.path.join(patches_dir, fname)
+            if not os.path.isfile(path):
+                raise PatchApplyError(
+                    f'package {pkgdir}: declared patch {fname!r} not '
+                    f'found at {path}')
+            try:
+                ordinal, _ = decode_patch_filename(fname)
+                rel = validate_patch_declaration(pkgdir, fname,
+                                                 project_root)
+            except ValueError as e:
+                raise PatchApplyError(
+                    f'package {pkgdir}: invalid patch {fname!r}: {e}')
+            entries.setdefault(rel, []).append((ordinal, pkg_index,
+                                                path))
+
+    stacks = {}
+    for rel, lst in entries.items():
+        lst.sort(key=lambda t: (t[0], t[1]))
+        stacks[rel] = [path for _, _, path in lst]
+    return stacks
 
 
 def apply_patch_stack(rel, patch_paths, project_root, dest_path,
