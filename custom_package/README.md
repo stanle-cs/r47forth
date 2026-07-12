@@ -149,7 +149,7 @@ You never write `.patch` files by hand.  Edit a fully materialized real file
    `cp src/c47/keyboard.c packages/my-pkg/keyboard.c`
 2. Edit the copy — function bodies only (see the table above).
 3. Regenerate the patch stack:
-   `python3 tools/pkg_patch_refresh.py my-pkg keyboard.c`
+   `python3 tools/pkg_patch_refresh.py packages/my-pkg keyboard.c`
    This diffs your copy against upstream at function-boundary granularity
    (libclang against a vanilla build's `compile_commands.json`) and writes
    one `.patch` per changed function under `packages/my-pkg/patches/`.

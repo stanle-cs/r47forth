@@ -186,6 +186,26 @@ subdir('src/generateConstants')
 subdir('src/generateCatalogs')
 subdir('src/generateTestPgms')
 subdir('src/testSuite')
+
+# Patch-overlay tooling tests (§1/§2/§4)
+test('pkg_patch_common',
+  find_program('python3'),
+  args : ['tools/test_pkg_patch_common.py'],
+  workdir : meson.project_source_root()
+)
+
+test('pkg_patch_extract',
+  find_program('python3'),
+  args : ['tools/test_pkg_patch_extract.py'],
+  workdir : meson.project_source_root()
+)
+
+test('pkg_patch_refresh',
+  find_program('python3'),
+  args : ['tools/test_pkg_patch_refresh.py'],
+  workdir : meson.project_source_root()
+)
+
 subdir('src/t47')
 
 # Jim Tcl DSL module (only for PC_BUILD)

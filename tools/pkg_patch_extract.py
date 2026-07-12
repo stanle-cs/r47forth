@@ -89,11 +89,17 @@ def _find_compile_args(file_path, compile_commands_json_path):
     )
 
 
-def list_function_ranges(file_path, compile_commands_json_path):
+def list_function_ranges(file_path, compile_commands_json_path,
+                         flags_file=None):
     """Return a list of (name: str, start_line: int, end_line: int),
     1-indexed inclusive, for every function *definition* (not
     declaration/prototype) in file_path, using clang.cindex against the
     real compile args for file_path found in compile_commands_json_path.
+
+    If flags_file is given, the compile args are looked up for that file
+    instead of file_path — used to parse a materialized package copy
+    (packages/<pkg>/<rel>, which has no compile_commands.json entry of
+    its own) with the flags of the upstream file it mirrors.
 
     - Uses clang.cindex.Index.create() and Index.parse() with the args
       list resolved from the compile_commands.json entry whose 'file'
@@ -126,7 +132,8 @@ def list_function_ranges(file_path, compile_commands_json_path):
             f'Configure a vanilla build first (no CUSTOM_PKG) per BUILD.md.'
         )
 
-    args = _find_compile_args(file_path, compile_commands_json_path)
+    args = _find_compile_args(flags_file if flags_file is not None else file_path,
+                              compile_commands_json_path)
 
     index = clang.cindex.Index.create()
     tu = index.parse(file_path, args,
