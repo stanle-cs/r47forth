@@ -58,12 +58,14 @@ void covEff(uint16_t unusedButMandatoryParameter);
 void covEffToI(uint16_t unusedButMandatoryParameter);
 void covAmort(uint16_t which);
 void covAmortNext(uint16_t which);
-void covPlotHash(uint16_t which);
+void covEqSet(uint16_t which);
+void covLoadGraphPgms(uint16_t unusedButMandatoryParameter);
+void covBmpName(uint16_t which);
+void covHashBmp(uint16_t which);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
-// Omitted trailing coverageDriver fields are zero by the C standard; silence the
-// per-row -Wextra noise the same way reservedRegisterLookup.h does.
+// Omitted trailing coverageDriver fields are zero by the C standard; silence the per-row -Wextra noise the same way reservedRegisterLookup.h does.
 #if (defined __GNUC__ && __GNUC__ + (__GNUC_MINOR__ >= 6) > 4) || (defined __clang__ && __clang_major__ >= 3)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
@@ -183,7 +185,10 @@ const funcTest_t funcTestNoParam[] = {
   {"fnBackupRoundtrip",      covBackupRoundtrip, 1 },
   {"covConvToSI",            covConvToSI, 1 },
   {"covConvFromSI",          covConvFromSI, 1 },
-  {"fnPlotHashCov",          covPlotHash, 1 },
+  {"fnEqSetCov",             covEqSet, 1 },
+  {"fnLoadGraphPgmsCov",     covLoadGraphPgms, 1 },
+  {"fnBmpNameCov",           covBmpName, 1 },
+  {"fnHashBmpCov",           covHashBmp, 1 },
   {"fnStateRoundtrip",       covStateRoundtrip, 1 },
   {"fnEqCalcCov",            covEqCalc, 1 },
   {"fnDerivEqCov",           covDerivEq, 1 },
@@ -1233,29 +1238,75 @@ static void sha256Final(sha256Ctx *c, char outHex[65]) {
   outHex[64] = 0;
 }
 
-void covPlotHash(uint16_t which) {
+// Plot-regression drivers (graphs_cov.txt). Each graph is rendered by XEQ of a small RPN program ending in SNAP (G1..G4, staged by covLoadGraphPgms),
+// i.e. in the real programmed UI context, and pinned by a SHA-256 of the SNAP screen dump:
+//   EQN Draw_y^x: G1 - X.SWAP the formula in from the X string, then Draw it;
+//   ADV PLTf    : G2 - program plot (PGMPLT ->00 via R00, then PLTf 'x');
+//   PLOT PLSTAT : G3 - statistics plot from the seeded sums;
+//   REGR SCATR  : G4 - scatter plot from the same seeded sums;
+//   REGR HISTO  : (not yet programmable, interactive only).
+//   REGR ASSESS : (not yet programmable, interactive only).
+// covBmpName numbers the bitmap (c47plotTest<N>.bmp) so every graph stays on disk; covHashBmp pins its SHA-256.
+void covEqSet(uint16_t which) {
+  // Stage the fallback formula G1 swaps out; also allocates the formula slot and the solver variable. The plot range comes from the stack on the XEQ line.
   if(numberOfFormulae == 0) {
     fnEqNew(NOPARAM);
   }
   setEquation(currentFormula, which == 1 ? "SIN(X)" : "X^2");
   currentSolverVariable = findOrAllocateNamedVariable("X");
-  // Fixed plot range [-5, 5] on the stack (EQ_PLOT reads Y as the lower and X as
-  // the upper limit) so the rendered curve does not depend on a range left by an
-  // earlier plot.
-  reallocateRegister(REGISTER_Y, dtReal34, 0, amNone);
-  int32ToReal34(-5, REGISTER_REAL34_DATA(REGISTER_Y));
-  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-  int32ToReal34(5, REGISTER_REAL34_DATA(REGISTER_X));
-  fnEqSolvGraph(EQ_PLOT);
+}
 
-  // Snapshot the plot to a Test-suffixed bitmap through the SNAP screen dump and
-  // SHA-256 the file, then leave the 64-digit hex in X for the corpus to compare
-  // against the stored reference.
-  strcpy(_ioFileNameOverride, "c47plotTest.bmp");
-  fnScreenDump(NOPARAM);
-  FILE *bmp = fopen("c47plotTest.bmp", "rb");
+// Two-byte program opcode: the high bit on the first byte marks that a second opcode byte follows (the decoder's (op & 0x80) convention).
+#define OP2(itm) (uint8_t)(((itm) >> 8) | 0x80), (uint8_t)((itm) & 0xff)
+
+void covLoadGraphPgms(uint16_t unusedButMandatoryParameter) {
+  // Build and import the graph programs through the official loader like program S (covLoadPgm). G2..G4 match the numbered bitmaps they snap.
+  static const uint8_t pgmG1[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'G', '1',    // LBL "G1"
+    OP2(ITM_XSWAP),                                 // X.SWAP (formula <-> X string)
+    ITM_DROP,                                       // DROP the old formula text
+    OP2(ITM_DRAW),                                  // Draw y^x
+    OP2(ITM_PLTFCNS),                               // PLTFCNS (plot menu up, as interactive Draw shows it)
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmG2[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'G', '2',    // LBL "G2"
+    OP2(ITM_PGMPLT), INDIRECT_REGISTER, 0,          // PGMPLT ->00
+    OP2(ITM_PLTf), STRING_LABEL_VARIABLE, 1, 'x',   // PLTf 'x'
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmG3[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'G', '3',    // LBL "G3"
+    OP2(ITM_PLOT_STAT),                             // PLSTAT
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmG4[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'G', '4',    // LBL "G4"
+    OP2(ITM_PLOT_SCATR),                            // SCATR
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  covWriteAndLoadPgm(pgmG1, sizeof(pgmG1));
+  covWriteAndLoadPgm(pgmG2, sizeof(pgmG2));
+  covWriteAndLoadPgm(pgmG3, sizeof(pgmG3));
+  covWriteAndLoadPgm(pgmG4, sizeof(pgmG4));
+}
+
+void covBmpName(uint16_t which) {
+  // Point the next SNAP dump at c47plotTest<FARG>.bmp; the override is consumed by one dump, so this runs before each XEQ of a graph program.
+  sprintf(_ioFileNameOverride, "c47plotTest%u.bmp", which);
+}
+
+void covHashBmp(uint16_t which) {
+  // SHA-256 the numbered Test bitmap the graph program's SNAP just wrote; the 64-digit hex lands in X for the corpus to compare against the reference.
+  char bmpName[24];
+  sprintf(bmpName, "c47plotTest%u.bmp", which);
+  FILE *bmp = fopen(bmpName, "rb");
   if(bmp == NULL) {
-    printf("\nCannot open c47plotTest.bmp\n");
+    printf("\nCannot open %s\n", bmpName);
     abortTest();
     return;
   }
@@ -1570,6 +1621,14 @@ void setParameter(char *p) {
         }
         else {
           setSystemFlag(FLAG_SPCRES);
+        }
+      }
+      else if(!strcmp(l+3, "PLINE")) {
+        if(r[0] == '0') {
+          clearSystemFlag(FLAG_PLINE);
+        }
+        else {
+          setSystemFlag(FLAG_PLINE);
         }
       }
       else if(!strcmp(l+3, "CPXRES")) {
