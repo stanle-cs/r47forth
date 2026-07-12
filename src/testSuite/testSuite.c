@@ -65,7 +65,8 @@ void covHashBmp(uint16_t which);
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
-// Omitted trailing coverageDriver fields are zero by the C standard; silence the per-row -Wextra noise the same way reservedRegisterLookup.h does.
+// Omitted trailing coverageDriver fields are zero by the C standard; silence the
+// per-row -Wextra noise the same way reservedRegisterLookup.h does.
 #if (defined __GNUC__ && __GNUC__ + (__GNUC_MINOR__ >= 6) > 4) || (defined __clang__ && __clang_major__ >= 3)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
@@ -1238,17 +1239,20 @@ static void sha256Final(sha256Ctx *c, char outHex[65]) {
   outHex[64] = 0;
 }
 
-// Plot-regression drivers (graphs_cov.txt). Each graph is rendered by XEQ of a small RPN program ending in SNAP (G1..G4, staged by covLoadGraphPgms),
-// i.e. in the real programmed UI context, and pinned by a SHA-256 of the SNAP screen dump:
+// Plot-regression drivers (graphs_cov.txt). Each graph is rendered by XEQ of a
+// small RPN program ending in SNAP (G1..G4, staged by covLoadGraphPgms), i.e. in
+// the real programmed UI context, and pinned by a SHA-256 of the SNAP dump:
 //   EQN Draw_y^x: G1 - X.SWAP the formula in from the X string, then Draw it;
 //   ADV PLTf    : G2 - program plot (PGMPLT ->00 via R00, then PLTf 'x');
 //   PLOT PLSTAT : G3 - statistics plot from the seeded sums;
 //   REGR SCATR  : G4 - scatter plot from the same seeded sums;
 //   REGR HISTO  : (not yet programmable, interactive only).
 //   REGR ASSESS : (not yet programmable, interactive only).
-// covBmpName numbers the bitmap (c47plotTest<N>.bmp) so every graph stays on disk; covHashBmp pins its SHA-256.
+// covBmpName numbers the bitmap (c47plotTest<N>.bmp) so every graph stays on
+// disk; covHashBmp pins its SHA-256.
 void covEqSet(uint16_t which) {
-  // Stage the fallback formula G1 swaps out; also allocates the formula slot and the solver variable. The plot range comes from the stack on the XEQ line.
+  // Stage the fallback formula G1 swaps out; also allocates the formula slot and
+  // the solver variable. The plot range comes from the stack on the XEQ line.
   if(numberOfFormulae == 0) {
     fnEqNew(NOPARAM);
   }
@@ -1256,11 +1260,13 @@ void covEqSet(uint16_t which) {
   currentSolverVariable = findOrAllocateNamedVariable("X");
 }
 
-// Two-byte program opcode: the high bit on the first byte marks that a second opcode byte follows (the decoder's (op & 0x80) convention).
+// Two-byte program opcode: the high bit on the first byte marks that a second
+// opcode byte follows (the decoder's (op & 0x80) convention).
 #define OP2(itm) (uint8_t)(((itm) >> 8) | 0x80), (uint8_t)((itm) & 0xff)
 
 void covLoadGraphPgms(uint16_t unusedButMandatoryParameter) {
-  // Build and import the graph programs through the official loader like program S (covLoadPgm). G2..G4 match the numbered bitmaps they snap.
+  // Build and import the graph programs through the official loader like program
+  // S (covLoadPgm). G2..G4 match the numbered bitmaps they snap.
   static const uint8_t pgmG1[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 2, 'G', '1',    // LBL "G1"
     OP2(ITM_XSWAP),                                 // X.SWAP (formula <-> X string)
@@ -1302,12 +1308,14 @@ static void covPlotBmpName(char *out, uint16_t which) {
 }
 
 void covBmpName(uint16_t which) {
-  // Point the next SNAP dump at c47plotTest<FARG>.bmp; the override is consumed by one dump, so this runs before each XEQ of a graph program.
+  // Point the next SNAP dump at c47plotTest<FARG>.bmp; the override is consumed
+  // by one dump, so this runs before each XEQ of a graph program.
   covPlotBmpName(_ioFileNameOverride, which);
 }
 
 void covHashBmp(uint16_t which) {
-  // SHA-256 the numbered Test bitmap the graph program's SNAP just wrote; the 64-digit hex lands in X for the corpus to compare against the reference.
+  // SHA-256 the numbered Test bitmap the graph program's SNAP just wrote; the
+  // 64-digit hex lands in X for the corpus to compare against the reference.
   char bmpName[24];
   covPlotBmpName(bmpName, which);
   FILE *bmp = fopen(bmpName, "rb");
