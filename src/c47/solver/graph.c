@@ -2723,6 +2723,15 @@ void fnEqSolvGraph (uint16_t func) {
           break;
       }
 
+      if(!(currentSolverVariable >= FIRST_NAMED_VARIABLE && currentSolverVariable <= LAST_NAMED_VARIABLE)) {
+        // No plot variable assigned (e.g. a programmed Draw after X.SWAP loaded a fresh formula): auto-assign like the interactive MVAR menu does
+        // (softmenus.c) when the formula holds exactly one variable; with several variables the existing error below still applies.
+        parseEquation(currentFormula, EQUATION_PARSER_MVAR, aimBuffer, tmpString);
+        if(tmpString[0] != 0 && (getNthString((uint8_t *)tmpString, 1))[0] == 0) {
+          currentSolverVariable = findOrAllocateNamedVariable(tmpString);
+        }
+      }
+
       graphVariabl1 = currentSolverVariable;
 
       if(graphVariabl1 >= FIRST_NAMED_VARIABLE && graphVariabl1 <= LAST_NAMED_VARIABLE) {
