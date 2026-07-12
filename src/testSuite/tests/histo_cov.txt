@@ -9,6 +9,12 @@
 ;*************************************************************
 In: FL_SPCRES=0 SD=0
 
+; clear the accumulator first: earlier tests (serialize_state_cov) leave points
+; in it, which would be histogrammed together with the three added below
+Func: fnClSigma
+In:  FARG=0 RX=Real:"0"
+Out: EC=0
+
 ; accumulate (x,y) = (1,1)
 Func: fnSigmaAddRem
 In:  FARG=1 RY=Real:"1" RX=Real:"1"
