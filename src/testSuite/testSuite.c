@@ -1295,15 +1295,21 @@ void covLoadGraphPgms(uint16_t unusedButMandatoryParameter) {
   covWriteAndLoadPgm(pgmG4, sizeof(pgmG4));
 }
 
+// The on-disk name of graph <which>'s bitmap. covBmpName points the SNAP dump
+// at it and covHashBmp reads it back; one builder keeps the two from drifting.
+static void covPlotBmpName(char *out, uint16_t which) {
+  sprintf(out, "c47plotTest%u.bmp", which);
+}
+
 void covBmpName(uint16_t which) {
   // Point the next SNAP dump at c47plotTest<FARG>.bmp; the override is consumed by one dump, so this runs before each XEQ of a graph program.
-  sprintf(_ioFileNameOverride, "c47plotTest%u.bmp", which);
+  covPlotBmpName(_ioFileNameOverride, which);
 }
 
 void covHashBmp(uint16_t which) {
   // SHA-256 the numbered Test bitmap the graph program's SNAP just wrote; the 64-digit hex lands in X for the corpus to compare against the reference.
   char bmpName[24];
-  sprintf(bmpName, "c47plotTest%u.bmp", which);
+  covPlotBmpName(bmpName, which);
   FILE *bmp = fopen(bmpName, "rb");
   if(bmp == NULL) {
     printf("\nCannot open %s\n", bmpName);
