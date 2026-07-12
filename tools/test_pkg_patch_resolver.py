@@ -198,6 +198,74 @@ class TestCollectNewFiles(unittest.TestCase):
 # Through the real resolver CLI
 # ---------------------------------------------------------------------------
 
+class TestSameLineConflictTwoPackages(unittest.TestCase):
+    """Unit 6: two packages patching OVERLAPPING lines of the same
+    function must fail loudly through the real build path (the actual
+    resolver CLI subprocess meson's run_command invokes — not `git
+    apply` called in isolation). Self-contained: constructs its own
+    fixture packages inside a temp project and tears the whole temp
+    project down in __exit__; nothing synthetic is ever committed."""
+
+    def test_same_line_conflict_fails_configure_loudly(self):
+        """BUG THIS TEST EXISTS TO CATCH: today's pre-redesign behavior
+        (or a regression back to it) would silently pick one package's
+        version — mere same-file duplication was only ever a warning.
+        Two packages both editing the same line of the same function
+        with genuinely divergent content must instead fail configure,
+        naming the losing patch, and must leave no marker-bearing file
+        for the compiler to see."""
+        with _MiniProject() as p:
+            edit_a = UPSTREAM_TEST_C.replace('return 1;', 'return 100;')
+            edit_b = UPSTREAM_TEST_C.replace('return 1;', 'return 999;')
+            p.refresh_pkg('packages/pkg-a', 'test.c', edit_a)
+            p.refresh_pkg('packages/pkg-b', 'test.c', edit_b)
+
+            r = p.run_resolver(['packages/pkg-a', 'packages/pkg-b'])
+
+            self.assertEqual(r.returncode, 1)
+            self.assertIn('pkg-b', r.stderr)
+
+            shadow_file = os.path.join(p.shadow, 'test.c')
+            if os.path.isfile(shadow_file) and not os.path.islink(shadow_file):
+                with open(shadow_file) as f:
+                    self.assertNotIn('<<<<<<<', f.read(),
+                                     'no conflict-marker file may reach '
+                                     'the compiler')
+
+    def test_different_lines_same_function_still_compose(self):
+        """Contrast case guarding against over-broad failure: two
+        packages editing DIFFERENT lines of the same function (with at
+        least one unchanged line separating them) must still compose
+        cleanly — this is the explicitly accepted trade-off from
+        'Why revision 2' in PROPOSED_SPEC_CHANGES.md, not a bug."""
+        upstream = ("int f(void) {\n"
+                    "    int a = 1;\n"
+                    "    int b = 2;\n"
+                    "    int c = 3;\n"
+                    "    return a + b + c;\n"
+                    "}\n")
+        with _MiniProject() as p:
+            with open(os.path.join(p.root, 'src', 'c47', 'test.c'),
+                     'w') as f:
+                f.write(upstream)
+            subprocess.run(['git', 'add', '-A'], cwd=p.root,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'retarget'],
+                           cwd=p.root, capture_output=True)
+
+            edit_a = upstream.replace('int a = 1;', 'int a = 100;')
+            edit_b = upstream.replace('int c = 3;', 'int c = 300;')
+            p.refresh_pkg('packages/pkg-a', 'test.c', edit_a)
+            p.refresh_pkg('packages/pkg-b', 'test.c', edit_b)
+
+            r = p.run_resolver(['packages/pkg-a', 'packages/pkg-b'])
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(os.path.join(p.shadow, 'test.c')) as f:
+                content = f.read()
+            self.assertIn('a = 100', content)
+            self.assertIn('c = 300', content)
+
+
 class TestResolverCumulativeApplication(unittest.TestCase):
 
     def test_two_packages_nonoverlapping_patches_both_apply_in_order(self):
