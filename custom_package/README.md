@@ -39,8 +39,9 @@ byte-for-byte identical.
 | `pkg_override_sources`| array  | Filenames (relative to `src/c47/`) to replace with your copies |
 | `pkg_override_headers`| array  | Header filenames (relative to `src/c47/`) to replace            |
 | `pkg_custom_sources`  | files() | New `.c` files your package adds to the build                  |
+| `pkg_patch_sources`   | array  | `.patch` filenames (in `patches/`) applying function-level patches to upstream files — see **Function-Level Patch Overrides** below |
 
-All three default to empty.  If none are declared, meson emits a warning:
+All four default to empty.  If none are declared, meson emits a warning:
 
 ```
 WARNING: Package packages/my-pkg declared none of pkg_override_sources,
@@ -62,6 +63,103 @@ the exact variable names above.
   shadow") — the file is still shadowed, masking future upstream changes.
 - A missing override file or a spec that doesn't match any upstream source is
   a **fatal error** (configure fails).
+
+---
+
+## Function-Level Patch Overrides (new)
+
+In addition to whole-file overrides (`pkg_override_sources`), packages can
+apply **function-level patches** to upstream files.  A patch is a unified diff
+(`.patch` file, `git diff -U3` format or greater context) stored at:
+
+```
+packages/<pkgdir>/patches/<NNN>-<rel_encoded>.patch
+```
+
+where `<NNN>` is a zero-padded 3-digit ordinal (e.g. `010`, `020`) and
+`<rel_encoded>` is the upstream relative path with every `/` replaced by `__`
+(e.g. `programming/manage.c` becomes `programming__manage.c`).  Patches are
+declared in the package's `meson.build`:
+
+```meson
+# Apply function-level patches to upstream files
+pkg_patch_sources = ['010-keyboard.c.patch', '020-programming__manage.c.patch']
+```
+
+**Dual-signal validation (§2, ratified):** every patch carries two independent
+signals identifying its target:
+1. The on-disk filename (decoded from the convention above).
+2. The `+++ b/...` header line inside the unified diff.
+
+These must agree.  A mismatch (e.g. filename says `keyboard.c` but the header
+says `screen.c`) is a **fatal configure error** — never silently treated as a
+new file.  A patch whose agreed target does not exist under `src/c47/` is
+likewise a fatal configure error.
+
+### Patch vs. Whole-File vs. New File — Which Mechanism When
+
+| Your change is…                                   | Mechanism | Declared via |
+|---------------------------------------------------|-----------|--------------|
+| Edits **inside existing function bodies**          | `.patch` file(s) under `patches/` | `pkg_patch_sources` |
+| Globals, `#define`s, macros, structs, typedefs, added/removed functions | whole-file override at `packages/<pkgdir>/<rel>` | `pkg_override_sources` / `pkg_override_headers` |
+| A **genuinely new file** (no upstream counterpart at that relative path) | whole new file in your package | `pkg_custom_sources` |
+
+The whole-file and new-file conventions are unchanged from today (see
+**Override Semantics** and **Variable Reference** above).  A new file is
+stored whole; an override of an existing upstream file that cannot be
+expressed as function-body patches is stored whole via `pkg_override_sources`.
+
+**Mutual exclusivity (§8, ratified):** a given upstream file may be targeted by
+exactly one mechanism: either whole-file override (`pkg_override_sources` /
+`pkg_override_headers`) OR function-level patches (`pkg_patch_sources`), never
+both — across **all** active packages.  The build tool enforces this as a
+fatal error at configure time.
+
+### Composition and Ordering (§3)
+
+Multiple patches may target the same upstream file — from one package or from
+several.  They apply as a **cumulative, explicitly ordered stack**, not
+last-listed-wins:
+
+1. All patches targeting a given rel are collected across every active
+   package in the `-DCUSTOM_PKG` list.
+2. They are sorted by the numeric `<NNN>` ordinal (parsed as an integer);
+   ties (same ordinal, different packages) are broken by the package's
+   position in the `CUSTOM_PKG` list — the earlier-listed package's patch
+   applies first.
+3. Each patch applies on top of the previous patch's output (`git apply -3`
+   against a freshly materialized copy of the current upstream file).
+4. After **every** patch application, the result is scanned for conflict
+   markers (`<<<<<<<`, `=======`, `>>>>>>>`) regardless of `git apply`'s
+   exit status.  Any marker, or any outright apply failure, is a **fatal
+   configure error** naming the patch file — a genuine same-function conflict
+   between two packages fails loudly, never resolved by silently picking one
+   (§7).
+
+Duplicate ordinals within the *same* package for the *same* target file are
+rejected (ambiguous order), as are malformed filenames (missing `NNN-`
+prefix, missing `.patch` suffix).
+
+### Authoring Workflow — Materialize and Refresh (§6)
+
+You never write `.patch` files by hand.  Edit a fully materialized real file
+(full compiler/LSP context), then re-derive the patches:
+
+1. Copy the upstream file into your package at the mirrored path:
+   `cp src/c47/keyboard.c packages/my-pkg/keyboard.c`
+2. Edit the copy — function bodies only (see the table above).
+3. Regenerate the patch stack:
+   `python3 tools/pkg_patch_refresh.py my-pkg keyboard.c`
+   This diffs your copy against upstream at function-boundary granularity
+   (libclang against a vanilla build's `compile_commands.json`) and writes
+   one `.patch` per changed function under `packages/my-pkg/patches/`.
+4. Declare the generated patch files in `pkg_patch_sources`.
+
+The materialized working copy is the authoring artifact; the `.patch` files
+are what the build consumes.  `pkg_patch_refresh.py` (and its libclang
+dependency) is **authoring tooling only** — the configure/build step never
+imports libclang (§4, ratified; enforced by an import assertion, not
+convention).
 
 ---
 
