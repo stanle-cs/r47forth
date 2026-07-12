@@ -1319,7 +1319,7 @@ int64_t stringToInt64(const char *str) {
       // A register's data size is a uint16_t block count. Refuse file-supplied
       // dimensions that would overflow it, or reallocateRegister would truncate
       // the size, under-allocate, and restoreMatrixData would write out of bounds.
-      if((uint64_t)rows * cols * REAL34_SIZE_IN_BLOCKS > 0xFFFFu) {
+      if((uint64_t)rows * cols * REAL34_SIZE_IN_BLOCKS + TO_BLOCKS(sizeof(matrixHeader_t)) > 0xFFFFu) {
         rows = cols = 0;
       }
       reallocateRegister(regist, dtReal34Matrix, REAL34_SIZE_IN_BLOCKS * rows * cols, tag);
@@ -1338,7 +1338,7 @@ int64_t stringToInt64(const char *str) {
       cols = toUint16(numOfCols);
       // See the dtReal34Matrix branch: refuse dimensions that would overflow the
       // uint16_t register data size and cause an out-of-bounds restore write.
-      if((uint64_t)rows * cols * COMPLEX34_SIZE_IN_BLOCKS > 0xFFFFu) {
+      if((uint64_t)rows * cols * COMPLEX34_SIZE_IN_BLOCKS + TO_BLOCKS(sizeof(matrixHeader_t)) > 0xFFFFu) {
         rows = cols = 0;
       }
       reallocateRegister(regist, dtComplex34Matrix, COMPLEX34_SIZE_IN_BLOCKS * rows * cols, tag);
