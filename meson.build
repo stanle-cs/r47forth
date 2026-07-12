@@ -195,6 +195,12 @@ test('pkg_patch_common',
   workdir : meson.project_source_root()
 )
 
+test('pkg_patch_refresh',
+  find_program('python3'),
+  args : ['tools/test_pkg_patch_refresh.py'],
+  workdir : meson.project_source_root()
+)
+
 subdir('src/t47')
 
 # Jim Tcl DSL module (only for PC_BUILD)
