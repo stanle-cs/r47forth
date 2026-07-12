@@ -8,25 +8,67 @@ Source mode (default):
   Outputs one file path per line to stdout (resolved from project root):
     For overrides: the override path (e.g. "custom_package/statusBar.c")
     For originals: the upstream path with src/c47/ prefix (e.g. "src/c47/assign.c")
+  NOTE: this mode predates the patch-overlay package system and is not
+  invoked by the current build (meson.build only ever calls --shadow
+  mode below); kept as-is, out of scope for the patch-overlay redesign.
 
 Shadow mode:
-  resolve_c47_src.py --shadow <src_c47_meson_build> <project_root> <shadow_dir> [spec ...]
+  resolve_c47_src.py --shadow <src_c47_meson_build> <project_root> <shadow_dir> [pkgdir ...]
   Builds a shadow directory containing symlinks to every file under src/c47/,
-  overlays package override files (both .c and .h) on top, and outputs include
-  dirs and source list for meson.  Every c47 source compiles from the shadow
+  overlays each active package's patches/ and files/ content on top (see
+  "Patch-overlay package system" below), and outputs include dirs and
+  source list for meson.  Every c47 source compiles from the shadow
   directory so all translation units see the same headers by construction.
-  Each spec is "pkgdir:relative/path".  The script distinguishes header vs
-  source overrides by file extension (.h vs anything else).
+  Each positional argument after shadow_dir is a package directory
+  (project-root-relative, e.g. "packages/my-pkg"), in -DCUSTOM_PKG order.
   stdout line 1: INCDIRS:<dir1>;<dir2>;...   (shadow dir first)
-  stdout lines 2..N: source paths, one per line (all into shadow_dir)
+  stdout lines 2..N: source paths, one per line, all into shadow_dir —
+    upstream sources followed by any newly-compiled files/*.c sources
+    (both are plain shadow-dir paths; the caller does not need to tell
+    them apart, both compile the same way)
+
+Patch-overlay package system (PROPOSED_SPEC_CHANGES.md, revision 2):
+  A package directory (project-root-relative, e.g. "packages/my-pkg")
+  contains exactly two subdirectories the resolver reads — no
+  meson.build inside a package directory is read or evaluated, no
+  declarations of any kind:
+    <pkgdir>/patches/<NNN>-<rel_encoded>.patch
+        A whole-file `git diff` against src/c47/<rel> (no restriction
+        on what kind of change). Auto-discovered by globbing; every
+        *.patch file found is applied — see collect_patch_stacks in
+        pkg_patch_apply.py. Applied via `git apply -3` against a
+        freshly materialized copy of the current upstream file, with
+        an unconditional post-apply conflict-marker scan (see
+        pkg_patch_apply.apply_patch_stack). Cumulative across packages,
+        ordered by (numeric ordinal, -DCUSTOM_PKG list position).
+    <pkgdir>/files/<rel>
+        A genuinely new file with no upstream counterpart, stored
+        whole, path-mirrored. Auto-discovered by walking files/
+        recursively — see collect_new_files in pkg_patch_apply.py.
+        Copied directly into the shadow tree; *.c entries are also
+        added to the compiled source list (emitted as NEWSRC: lines).
+  Both are validated, and the shadow tree is wiped/rebuilt, ONLY after
+  validation succeeds — a failing configure leaves any existing shadow
+  tree untouched (same F9 sentinel-gate discipline as always).
+
+  This module (resolve_c47_src.py) and pkg_patch_apply.py/
+  pkg_patch_common.py have NO libclang dependency — plain `git diff`,
+  not AST-based extraction; there is nothing to wall off.
 
 Warnings go to stderr and are captured by meson.
 """
-import filecmp
 import os
 import re
 import shutil
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pkg_patch_apply import (
+    PatchApplyError,
+    apply_patch_stack,
+    collect_new_files,
+    collect_patch_stacks,
+)
 
 
 SENTINEL_NAME = 'DO_NOT_EDIT_shadow_tree.txt'
@@ -88,17 +130,13 @@ def strip_comments(content):
     return '\n'.join(line.split('#')[0] for line in content.split('\n'))
 
 
-def do_shadow(meson_build, project_root, shadow_dir, specs,
+def do_shadow(meson_build, project_root, shadow_dir, pkg_list,
               gen_lists=False):
-    """Shadow-tree mode: build symlink tree, overlay whole-file
-    overrides, emit paths.
+    """Shadow-tree mode: build symlink tree, overlay each active
+    package's auto-discovered patches/ and files/ content, emit paths.
 
-    specs: 'pkgdir:rel' whole-file overrides.
-
-    NOTE: this is the pre-patch-overlay whole-file-override mechanism
-    only, kept temporarily as of this commit. It is superseded by
-    auto-discovered patches/+files/ (PROPOSED_SPEC_CHANGES.md, revision
-    2, New Decision 3) in a following commit.
+    pkg_list: package directories (project-root-relative), in
+    -DCUSTOM_PKG order.
     """
 
     # --- F9/F10: validate shadow_dir before ANY mutation -------------------
@@ -108,6 +146,14 @@ def do_shadow(meson_build, project_root, shadow_dir, specs,
         content = f.read()
 
     content_clean = strip_comments(content)
+
+    # --- Auto-discover and validate, BEFORE any shadow-tree mutation -------
+    try:
+        patch_stacks = collect_patch_stacks(pkg_list, project_root)
+        new_files = collect_new_files(pkg_list, project_root)
+    except PatchApplyError as e:
+        print(f'ERROR: {e}', file=sys.stderr)
+        sys.exit(1)
 
     # Parse c47_src = files(...)
     m = re.search(r'c47_src\s*=\s*files\((.*?)\)', content_clean, re.DOTALL)
@@ -156,7 +202,6 @@ def do_shadow(meson_build, project_root, shadow_dir, specs,
 
     # Symlink-or-copy helper (mutable state for fallback)
     copy_state = [os.environ.get('CUSTOM_PKG_SHADOW_COPY') == '1']
-    copy_warned = [False]
 
     def link_or_copy(src_path, dst_path):
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)
@@ -181,87 +226,65 @@ def do_shadow(meson_build, project_root, shadow_dir, specs,
             link_or_copy(os.path.join(src_c47_dir, rel),
                          os.path.join(shadow_dir, rel))
 
-    # --- Overlay package overrides ---
-    override_map = {}
-    for spec in specs:
-        rel = extract_rel(spec)
-        override_map.setdefault(rel, []).append(spec)
-
-    used = set()
-    rels_with_match = set()
-
-    for rel, spec_list in override_map.items():
-        chosen = spec_list[-1]  # last wins
-        pkgdir = chosen.split(':', 1)[0]
-        pkg_file = os.path.join(project_root, pkgdir, rel)
-        upstream_file = os.path.join(src_c47_dir, rel)
-
-        # --- F4: fatal if override file missing from the package -----------
-        if not os.path.isfile(pkg_file):
-            print(f'ERROR: CUSTOM_PKG override "{rel}": not found in package '
-                  f'"{pkgdir}" ({pkg_file})', file=sys.stderr)
-            sys.exit(1)
-
-        # --- F4: fatal if no corresponding upstream file --------------------
-        if not os.path.isfile(upstream_file):
-            print(f'ERROR: CUSTOM_PKG override "{rel}": does not exist in '
-                  f'src/c47/ ({upstream_file})', file=sys.stderr)
-            sys.exit(1)
-
-        # --- F11: containment on upstream_file (defence-in-depth) ----------
-        assert_contained(upstream_file, src_c47_dir,
-                         label=f'upstream_file for override "{rel}"')
-
-        # --- F10: containment on dst_path parent dir -----------------------
+    # --- Apply patch stacks (cumulative, ordered) ---------------------------
+    for rel in sorted(patch_stacks):
+        stack = patch_stacks[rel]
+        upstream_file = os.path.join(src_c47_dir, *rel.split('/'))
         dst_path = os.path.join(shadow_dir, rel)
+
+        # --- F11/F10 containment, same guards as the walk above ------------
+        assert_contained(upstream_file, src_c47_dir,
+                         label=f'upstream_file for patch target "{rel}"')
         assert_contained(os.path.dirname(dst_path), shadow_dir,
-                         label=f'dst_path for override "{rel}"')
+                         label=f'dst_path for patch target "{rel}"')
 
-        # --- F15: byte-identical override warning --------------------------
-        if filecmp.cmp(pkg_file, upstream_file, shallow=False):
-            print(f'CUSTOM_PKG override "{rel}": byte-identical to upstream '
-                  f'(dead shadow — upstream changes to this file are masked)',
-                  file=sys.stderr)
-
-        # Replace existing symlink/file in shadow with the override
+        # The shadow entry is currently a symlink INTO src/c47/ — remove
+        # it before writing so the patched result never goes through
+        # the link to the real upstream file.
         if os.path.lexists(dst_path):
             print(f'REMOVING: {dst_path}', file=sys.stderr)
             os.remove(dst_path)
-        link_or_copy(pkg_file, dst_path)
 
-        used.add(chosen)
-        rels_with_match.add(rel)
+        try:
+            final = apply_patch_stack(rel, stack, project_root, dst_path)
+        except PatchApplyError as e:
+            print(f'ERROR: {e}', file=sys.stderr)
+            sys.exit(1)
 
-        if len(spec_list) > 1:
-            print(f'CUSTOM_PKG override "{rel}": duplicated '
-                  f'({len(spec_list)} packages override this file, last wins)',
-                  file=sys.stderr)
+        # --- F15 extension: net-identical patch stack is a dead shadow -
+        with open(upstream_file, 'r') as uf:
+            if uf.read() == final:
+                print(f'CUSTOM_PKG patches for "{rel}": net result is '
+                      f'byte-identical to upstream (dead shadow — the '
+                      f'patch stack cancels itself out)', file=sys.stderr)
 
-    # Warn about overrides that were never consumed
-    warned = set()
-    for spec in specs:
-        if spec not in used:
-            rel = extract_rel(spec)
-            if rel in warned:
-                continue
-            warned.add(rel)
-            same_rel = [s for s in specs if extract_rel(s) == rel]
-            if len(same_rel) == 1:
-                print(f'CUSTOM_PKG override "{rel}": does not match any '
-                      f'upstream source — ignored', file=sys.stderr)
-            elif rel in rels_with_match:
-                print(f'CUSTOM_PKG override "{rel}": duplicated '
-                      f'({len(same_rel)} packages override this file, last wins)',
-                      file=sys.stderr)
-            else:
-                print(f'CUSTOM_PKG override "{rel}": {len(same_rel)} packages '
-                      f'override this file but none match upstream',
-                      file=sys.stderr)
+        print(f'CUSTOM_PKG patched "{rel}": {len(stack)} patch(es) '
+              f'applied', file=sys.stderr)
+
+    # --- Copy new files (files/*), track newly-compiled sources ------------
+    new_source_rels = []
+    for rel in sorted(new_files):
+        pkgdir, abs_path = new_files[rel]
+        dst_path = os.path.join(shadow_dir, rel)
+
+        assert_contained(os.path.dirname(dst_path), shadow_dir,
+                         label=f'dst_path for new file "{rel}"')
+
+        if os.path.lexists(dst_path):
+            print(f'REMOVING: {dst_path}', file=sys.stderr)
+            os.remove(dst_path)
+        link_or_copy(abs_path, dst_path)
+
+        print(f'CUSTOM_PKG new file "{rel}" from {pkgdir}', file=sys.stderr)
+        if rel.endswith('.c'):
+            new_source_rels.append(rel)
 
     # Emit output
     print(inc_dirs_line)
     for s in upstream:
         print(os.path.join(shadow_dir, s))
+    for rel in sorted(new_source_rels):
+        print(os.path.join(shadow_dir, rel))
 
     # --- F1: Emit generator source lists if --gen-lists flag is set ---
     if gen_lists:
@@ -290,7 +313,9 @@ if __name__ == '__main__':
                   gen_lists)
         sys.exit(0)
 
-    # --- Source override mode (default) — unchanged for H1-H5 ---
+    # --- Source override mode (default) — predates the patch-overlay
+    # package system, not invoked by the current build, out of scope
+    # for the patch-overlay redesign. Unchanged. ---
     meson_build = sys.argv[1]
     overrides = sys.argv[2:] if len(sys.argv) > 2 else []
 

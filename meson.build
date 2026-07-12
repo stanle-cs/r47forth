@@ -87,38 +87,18 @@ else
 endif
 
 # External custom packages (optional, isolated from upstream)
-# Phase 1: capture overrides and set include paths before any subdirs
+# Phase 1: set the shadow include path before any subdirs.
+#
+# A package directory contains exactly patches/ and files/ — no
+# meson.build inside a package is read or evaluated (auto-discovery,
+# PROPOSED_SPEC_CHANGES.md revision 2, New Decision 3). files/*.c
+# sources compile from the shadow tree like everything else, so no
+# per-package -I is needed (only the shadow dir's own -I, below).
 custom_pkg_list = get_option('CUSTOM_PKG')
-custom_pkg_specs = []
-custom_pkg_sources = []
 pkg_python3 = find_program('python3', 'python')
 shadow_dir = meson.project_build_root() / 'custom_pkg_shadow'
 
 if custom_pkg_list != []
-  foreach pkg : custom_pkg_list
-    subdir(pkg)
-    this_overrides = get_variable('pkg_override_sources', [])
-    set_variable('pkg_override_sources', [])
-    this_custom = get_variable('pkg_custom_sources', files())
-    set_variable('pkg_custom_sources', files())
-    foreach f : this_overrides
-      custom_pkg_specs += pkg + ':' + f
-    endforeach
-    custom_pkg_sources += this_custom
-    this_headers = get_variable('pkg_override_headers', [])
-    set_variable('pkg_override_headers', [])
-    foreach h : this_headers
-      custom_pkg_specs += pkg + ':' + h
-    endforeach
-    if this_overrides.length() == 0 and this_headers.length() == 0 and this_custom.length() == 0
-      warning('Package ' + pkg + ' declared none of pkg_override_sources, pkg_override_headers, or pkg_custom_sources')
-    endif
-    add_project_arguments('-I' + meson.project_source_root() / pkg, language: 'c', native: true)
-    if meson.is_cross_build()
-      add_project_arguments('-I' + meson.project_source_root() / pkg, language: 'c', native: false)
-    endif
-  endforeach
-  # Shadow dir -I must be added before any subdir() declares targets
   add_project_arguments('-I' + shadow_dir, language: 'c', native: true)
   if meson.is_cross_build()
     add_project_arguments('-I' + shadow_dir, language: 'c', native: false)
@@ -135,7 +115,7 @@ if custom_pkg_list != []
   pkg_info = run_command(pkg_python3, 'tools/resolve_c47_src.py', '--shadow', '--gen-lists',
                          meson.project_source_root() / 'src/c47/meson.build',
                          meson.project_source_root(), shadow_dir,
-                         custom_pkg_specs,
+                         custom_pkg_list,
                          check: true)
   foreach w : pkg_info.stderr().strip().split('\n')
     if w != ''
@@ -167,7 +147,7 @@ if custom_pkg_list != []
     endif
     idx += 1
   endforeach
-  set_variable('c47_src', src_lines + custom_pkg_sources)
+  set_variable('c47_src', src_lines)
   # F1: remap generator source lists to shadow paths
   gen_cat_srcs = []
   gen_tst_srcs = []
@@ -198,6 +178,12 @@ test('pkg_patch_common',
 test('pkg_patch_refresh',
   find_program('python3'),
   args : ['tools/test_pkg_patch_refresh.py'],
+  workdir : meson.project_source_root()
+)
+
+test('pkg_patch_resolver',
+  find_program('python3'),
+  args : ['tools/test_pkg_patch_resolver.py'],
   workdir : meson.project_source_root()
 )
 
