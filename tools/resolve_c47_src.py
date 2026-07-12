@@ -28,18 +28,6 @@ import re
 import shutil
 import sys
 
-# Patch-overlay machinery (§2/§3/§5/§8). Build-time safe: neither this
-# module nor pkg_patch_apply/pkg_patch_common may import libclang —
-# that is authoring tooling only (§4, ratified; asserted at the bottom
-# of this file and by the pkg_patch test suites).
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from pkg_patch_apply import (
-    PatchApplyError,
-    apply_patch_stack,
-    assert_mutually_exclusive,
-    collect_patch_stacks,
-)
-
 
 SENTINEL_NAME = 'DO_NOT_EDIT_shadow_tree.txt'
 
@@ -101,12 +89,16 @@ def strip_comments(content):
 
 
 def do_shadow(meson_build, project_root, shadow_dir, specs,
-              patch_specs=(), gen_lists=False):
-    """Shadow-tree mode: build symlink tree, overlay overrides and
-    function-level patch stacks, emit paths.
+              gen_lists=False):
+    """Shadow-tree mode: build symlink tree, overlay whole-file
+    overrides, emit paths.
 
-    specs: 'pkgdir:rel' whole-file overrides (existing mechanism).
-    patch_specs: 'pkgdir:patchfilename' entries from pkg_patch_sources.
+    specs: 'pkgdir:rel' whole-file overrides.
+
+    NOTE: this is the pre-patch-overlay whole-file-override mechanism
+    only, kept temporarily as of this commit. It is superseded by
+    auto-discovered patches/+files/ (PROPOSED_SPEC_CHANGES.md, revision
+    2, New Decision 3) in a following commit.
     """
 
     # --- F9/F10: validate shadow_dir before ANY mutation -------------------
@@ -116,43 +108,6 @@ def do_shadow(meson_build, project_root, shadow_dir, specs,
         content = f.read()
 
     content_clean = strip_comments(content)
-
-    # --- §2/§3/§8 patch-stack validation, BEFORE any mutation --------------
-    # Group patch specs per package, preserving CUSTOM_PKG order.
-    pkg_patch_map = {}
-    for pspec in patch_specs:
-        if ':' not in pspec:
-            print(f'ERROR: malformed patch spec {pspec!r} '
-                  f'(expected "pkgdir:filename")', file=sys.stderr)
-            sys.exit(1)
-        pkgdir, fname = pspec.split(':', 1)
-        pkg_patch_map.setdefault(pkgdir, []).append(fname)
-
-    try:
-        patch_stacks = collect_patch_stacks(
-            list(pkg_patch_map.items()), project_root)
-
-        # §8 mutual exclusivity: whole-file override vs function patch
-        # on the same upstream file is fatal — checked before the F9
-        # wipe so a failing configure leaves the shadow tree untouched.
-        override_rel_to_pkgs = {}
-        for spec in specs:
-            rel = extract_rel(spec)
-            pkgdir = spec.split(':', 1)[0]
-            override_rel_to_pkgs.setdefault(rel, []).append(pkgdir)
-        # Provenance from the validated stacks: each patch path is
-        # <project_root>/<pkgdir>/patches/<file>.
-        patch_rel_to_pkgs = {
-            rel: [os.path.relpath(os.path.dirname(os.path.dirname(p)),
-                                  project_root)
-                  for p in paths]
-            for rel, paths in patch_stacks.items()
-        }
-        assert_mutually_exclusive(override_rel_to_pkgs,
-                                  patch_rel_to_pkgs)
-    except PatchApplyError as e:
-        print(f'ERROR: {e}', file=sys.stderr)
-        sys.exit(1)
 
     # Parse c47_src = files(...)
     m = re.search(r'c47_src\s*=\s*files\((.*?)\)', content_clean, re.DOTALL)
@@ -282,42 +237,6 @@ def do_shadow(meson_build, project_root, shadow_dir, specs,
                   f'({len(spec_list)} packages override this file, last wins)',
                   file=sys.stderr)
 
-    # --- Apply function-level patch stacks (§3/§5) ----------------------
-    # §8 guarantees these rels are disjoint from whole-file overrides.
-    for rel in sorted(patch_stacks):
-        stack = patch_stacks[rel]
-        upstream_file = os.path.join(src_c47_dir, rel)
-        dst_path = os.path.join(shadow_dir, rel)
-
-        # --- F11/F10 containment, mirroring the override path ----------
-        assert_contained(upstream_file, src_c47_dir,
-                         label=f'upstream_file for patch target "{rel}"')
-        assert_contained(os.path.dirname(dst_path), shadow_dir,
-                         label=f'dst_path for patch target "{rel}"')
-
-        # The shadow entry is currently a symlink INTO src/c47/ —
-        # remove it before writing so the patched result never goes
-        # through the link to the real upstream file.
-        if os.path.lexists(dst_path):
-            print(f'REMOVING: {dst_path}', file=sys.stderr)
-            os.remove(dst_path)
-
-        try:
-            final = apply_patch_stack(rel, stack, project_root, dst_path)
-        except PatchApplyError as e:
-            print(f'ERROR: {e}', file=sys.stderr)
-            sys.exit(1)
-
-        # --- F15 extension: net-identical patch stack is a dead shadow -
-        with open(upstream_file, 'r') as uf:
-            if uf.read() == final:
-                print(f'CUSTOM_PKG patches for "{rel}": net result is '
-                      f'byte-identical to upstream (dead shadow — the '
-                      f'patch stack cancels itself out)', file=sys.stderr)
-
-        print(f'CUSTOM_PKG patched "{rel}": {len(stack)} patch(es) '
-              f'applied', file=sys.stderr)
-
     # Warn about overrides that were never consumed
     warned = set()
     for spec in specs:
@@ -366,17 +285,9 @@ if __name__ == '__main__':
         gen_lists = '--gen-lists' in sys.argv
         args = [a for a in sys.argv[1:]
                 if a not in ('--shadow', '--gen-lists')]
-        # Everything after '--patches' is a 'pkgdir:patchfile' spec
-        # from pkg_patch_sources; everything before is a whole-file
-        # override spec as always.
-        patch_specs = []
-        if '--patches' in args:
-            split = args.index('--patches')
-            patch_specs = args[split + 1:]
-            args = args[:split]
         do_shadow(args[0], args[1], args[2],
                   args[3:] if len(args) > 3 else [],
-                  patch_specs, gen_lists)
+                  gen_lists)
         sys.exit(0)
 
     # --- Source override mode (default) — unchanged for H1-H5 ---

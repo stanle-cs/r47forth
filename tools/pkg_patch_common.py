@@ -1,8 +1,9 @@
-"""Shared parsing / validation helpers for patch-based package overlays.
+"""Shared parsing / validation helpers for patch-based package overlays
+(plain-diff design, PROPOSED_SPEC_CHANGES.md revision 2).
 
 Used by both the build-time resolver (resolve_c47_src.py) and the
-future authoring tool (pkg_patch_extract.py).  Contains NO libclang
-imports — those belong only in authoring tooling (§4, ratified).
+authoring tool (pkg_patch_refresh.py).  Generic filename/header parsing
+only — no dependency on any particular diff granularity.
 """
 import os
 import re

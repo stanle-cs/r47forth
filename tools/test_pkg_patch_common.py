@@ -174,26 +174,28 @@ class TestParsePatchTarget(unittest.TestCase):
 
 
 class TestNoLibclangDependency(unittest.TestCase):
-    """§4 (ratified): libclang is an authoring-time dependency ONLY.
+    """Revision 2 (plain-diff design) has no libclang dependency
+    anywhere, build-time or authoring-time — there is no C-source
+    parsing at all, only whole-file `git diff`. This guards
+    pkg_patch_common specifically, since it's the module shared with
+    the build-time resolver: every meson/ninja configure would depend
+    on libclang if this ever regressed.
 
     BUG THIS TEST EXISTS TO CATCH: someone adds an import (direct or
-    transitive) of clang/clang.cindex to pkg_patch_common — the module
-    shared with the build-time resolver — making every meson/ninja
-    configure depend on libclang.
+    transitive) of clang/clang.cindex to pkg_patch_common.
     """
 
     def test_pkg_patch_common_never_imports_clang(self):
-        """Mutation: add 'import clang.cindex' (or an import of
-        pkg_patch_extract) to pkg_patch_common.py — this test fails.
-        Checked in a fresh interpreter so this test file's own imports
-        cannot mask or pollute the result.
+        """Mutation: add 'import clang.cindex' to pkg_patch_common.py
+        — this test fails. Checked in a fresh interpreter so this test
+        file's own imports cannot mask or pollute the result.
         """
         import subprocess
         code = (
             'import sys; sys.path.insert(0, sys.argv[1]); '
             'import pkg_patch_common; '
             'bad = [m for m in sys.modules if m == "clang" '
-            'or m.startswith("clang.") or m == "pkg_patch_extract"]; '
+            'or m.startswith("clang.")]; '
             'sys.exit(1 if bad else 0)'
         )
         result = subprocess.run(
@@ -202,7 +204,7 @@ class TestNoLibclangDependency(unittest.TestCase):
             capture_output=True, text=True)
         self.assertEqual(result.returncode, 0,
                          'importing pkg_patch_common must not pull in '
-                         'clang/clang.cindex or pkg_patch_extract '
+                         'clang/clang.cindex '
                          '(build-time path must stay libclang-free)')
 
 

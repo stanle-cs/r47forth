@@ -1,19 +1,19 @@
-"""Build-time patch application for the patch-based package overlay system.
+"""Build-time patch application for the plain-diff package overlay system
+(PROPOSED_SPEC_CHANGES.md, revision 2).
 
-Applies an ordered stack of function-level .patch files to a freshly
-materialized copy of the current upstream file via `git apply -3`
-(PROPOSED_SPEC_CHANGES.md §5), inside a scratch git repository — the real
-working tree (src/c47/) is never touched.
+Applies an ordered stack of whole-file .patch files to a freshly
+materialized copy of the current upstream file via `git apply -3`, inside
+a scratch git repository — the real working tree (src/c47/) is never
+touched.
 
-RATIFIED §5: after EVERY `git apply -3` call the result is scanned for
-conflict markers as a distinct step, regardless of git's exit status —
-`-3` can leave `<<<<<<<`/`=======`/`>>>>>>>` in the output, and a marker
-could in principle sit in content git considers successfully merged.
-Any marker, or any outright apply failure, raises PatchApplyError — the
-configure step must die loudly (§7), never ship a silently-picked
-version.
+After EVERY `git apply -3` call the result is scanned for conflict markers
+as a distinct step, regardless of git's exit status — `-3` can leave
+`<<<<<<<`/`=======`/`>>>>>>>` in the output, and a marker could in
+principle sit in content git considers successfully merged. Any marker, or
+any outright apply failure, raises PatchApplyError — the configure step
+must die loudly, never ship a silently-picked version.
 
-Blob ancestry (§5, verified empirically — see PROPOSED_SPEC_CHANGES.md):
+Blob ancestry (verified empirically — see PROPOSED_SPEC_CHANGES.md):
 `git apply -3` can only three-way merge if the pre-image blob named in
 the patch's `index` line exists in the object database it runs against.
 The scratch repository starts empty, so every patch's pre-image blob is
@@ -23,9 +23,9 @@ itself — `git apply` still direct-applies when context matches — but
 under drift it downgrades a mergeable situation to an outright failure,
 which is loud, not silent.
 
-This module is imported by the build-time resolver: it must NEVER import
-libclang/clang.cindex or pkg_patch_extract (§4, ratified — enforced by
-test_pkg_patch_apply.py and the resolver's own import assertion).
+This is a single, plain-diff mechanism — there is no separate
+function-boundary extraction step and no libclang dependency anywhere in
+this module or its callers.
 """
 import os
 import re
@@ -103,32 +103,9 @@ def _rel_key(rel):
     """Canonical comparison key for an upstream rel path: separators
     and dot-segments normalized, case folded per platform rules — so
     './ui//tam.c' and 'ui/tam.c' (and, on case-insensitive
-    filesystems, 'UI/Tam.c') cannot dodge the §8 exclusivity check by
-    formatting alone."""
+    filesystems, 'UI/Tam.c') are recognized as the same target
+    regardless of formatting."""
     return os.path.normcase(os.path.normpath(rel.replace('\\', '/')))
-
-
-def assert_mutually_exclusive(override_rel_to_pkgs, patch_rel_to_pkgs):
-    """§8 (ratified): a given upstream file may be targeted by EITHER
-    whole-file override OR function-level patches, never both, across
-    all active packages.  Both arguments map rel -> list of pkgdirs.
-    Raises PatchApplyError naming every offending rel and the packages
-    on both sides.  Must run BEFORE any shadow-tree mutation."""
-    overrides = {_rel_key(rel): (rel, pkgs)
-                 for rel, pkgs in override_rel_to_pkgs.items()}
-    patches = {_rel_key(rel): (rel, pkgs)
-               for rel, pkgs in patch_rel_to_pkgs.items()}
-    both = sorted(set(overrides) & set(patches))
-    if both:
-        details = '; '.join(
-            f'"{overrides[k][0]}" is whole-file-overridden by '
-            f'{sorted(set(overrides[k][1]))} AND function-patched by '
-            f'{sorted(set(patches[k][1]))}'
-            for k in both)
-        raise PatchApplyError(
-            f'mutual-exclusivity violation (§8): one mechanism per '
-            f'upstream file — {details}. Pick whole-file override OR '
-            f'function-level patches for each file.')
 
 
 def collect_patch_stacks(pkg_patch_specs, project_root):
@@ -261,8 +238,8 @@ def apply_patch_stack(rel, patch_paths, project_root, dest_path,
                 raise PatchApplyError(
                     f'{os.path.basename(patch_path)} applied against '
                     f'{rel} left conflict markers at line(s) '
-                    f'{markers} — unresolved same-function conflict '
-                    f'(§7). Full patch path: {patch_path}. '
+                    f'{markers} — unresolved overlapping edit between '
+                    f'packages. Full patch path: {patch_path}. '
                     f'git apply stderr: {result.stderr.strip()!r}')
 
             if result.returncode != 0:
