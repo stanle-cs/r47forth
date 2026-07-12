@@ -29,6 +29,21 @@ bool_t pickerInsertName(void)
   return false;
 }
 
+/* forthPickerGuard — guard for MNU_FORTH picker action in executeFunction (§9.6).
+ * Returns true only when all Forth-capture conjuncts hold AND the current
+ * softmenu is actually MNU_FORTH (menu-identity check, placed before any
+ * dynamicSoftmenu[] indexing to prevent OOB access on wrong menu). */
+bool_t forthPickerGuard(int16_t item)
+{
+  if(softmenu[softmenuStack[0].softmenuId].menuItem != -MNU_FORTH) return false;
+  return (calcMode == CM_PEM
+      && getSystemFlag(FLAG_ALPHA)
+      && tam.function == ITM_FORTH
+      && item == ITM_NOP
+      && dynamicMenuItem >= 0
+      && dynamicMenuItem < dynamicSoftmenu[softmenuStack[0].softmenuId].numItems);
+}
+
   int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
     int16_t item = ITM_NOP;
     dynamicMenuItem = -1;
@@ -97,7 +112,7 @@ bool_t pickerInsertName(void)
 
       case MNU_FORTH: {
         dynamicMenuItem = firstItem + itemShift + fn;
-        item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : ITM_NOP);
+        item = ITM_NOP; // always ITM_NOP: press handled in executeFunction (§9.6 P-H7)
         break;
       }
 
@@ -982,22 +997,18 @@ endReturnTrue:
 
 
 
-          lastKeyItemDetermined = item;
+        lastKeyItemDetermined = item;
 
-          // MNU_FORTH picker: insert name at cursor during Forth capture (§9.6 P-H7)
-          if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
-             && tam.function == ITM_FORTH
-             && item == ITM_NOP
-             && dynamicMenuItem >= 0
-             && dynamicMenuItem < dynamicSoftmenu[softmenuStack[0].softmenuId].numItems) {
-            if(pickerInsertName()) {
-              pemAlpha(ITM_NOP);
-            }
-            return;
+        // MNU_FORTH picker: insert name at cursor during Forth capture (§9.6 P-H7)
+        if(forthPickerGuard(item)) {
+          if(pickerInsertName()) {
+            pemAlpha(ITM_NOP);
           }
+          return;
         }
+      }
 
-       // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
+      // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
       if(calcMode == CM_GRAPH && currentMenu() == -MNU_PLOT_FUNC && (item == VAR_LX || item == VAR_UX)) {
         calcMode = CM_NORMAL;
         screenUpdatingMode = SCRUPD_AUTO;

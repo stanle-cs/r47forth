@@ -2,8 +2,7 @@
 // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
 
 #include "c47.h"
-
-#define FORTH_TOKEN_MAX 63
+#include "forth_dict.h"
 
 TO_QSPI static const char bugScreenIdMustNotBe0[] = "In function showSoftmenu: id must not be 0!";
 

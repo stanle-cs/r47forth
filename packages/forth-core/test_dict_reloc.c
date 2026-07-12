@@ -1593,6 +1593,61 @@ static int test_dict_space_full(void)
   return 0;
 }
 
+/* test_number_then_no_label_fallthrough
+ * C-8 classify-gate: a classified number that fails to emit must NOT fall
+ * through to label lookup.  Without the gate, processNumber returns false
+ * on emit failure, the token falls through to findNamedLabel, then to
+ * ERROR_FUNCTION_NOT_FOUND (overwriting the original ERROR_RAM_FULL).
+ * Mutation: revert to single-bool fall-through -> lastErrorCode ends as
+ * ERROR_FUNCTION_NOT_FOUND and the test FAILS.
+ */
+static int test_number_then_no_label_fallthrough(void)
+{
+  forthDictClear();
+  forthDictSetTestInitialBlocks(4);
+  forthDictInit();
+
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": PAD ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: could not define PAD (error %d)\n", lastErrorCode);
+    return 1;
+  }
+
+  fdict.here = 0xFFF6;
+
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": W 42 ;");
+
+  if (!fdict.base) {
+    printf("    FAIL: fdict.base is NULL (realloc failed)\n");
+    return 1;
+  }
+
+  if (lastErrorCode != ERROR_RAM_FULL) {
+    printf("    FAIL: lastErrorCode = %d (expected %d = ERROR_RAM_FULL)\n",
+           lastErrorCode, ERROR_RAM_FULL);
+    return 1;
+  }
+
+  if (strstr(errorMessage, "42")) {
+    printf("    FAIL: errorMessage contains '42' (label lookup occurred: '%s')\n",
+           errorMessage);
+    return 1;
+  }
+
+  {
+    uint16_t idx;
+    if (forthFindColon("W", &idx)) {
+      printf("    FAIL: word W found (definition not aborted)\n");
+      return 1;
+    }
+  }
+
+  printf("    PASS: classified number emit failure does not fall through to label lookup\n");
+  return 0;
+}
+
 
 /* ---- Fix #8: prefix-match bug (SQ vs SQUARE) ----
  * Mutation #8: remove queryLen == hdr->nameLen check -> SQUARE matches SQ. ---- */
@@ -3511,6 +3566,96 @@ static int test_picker_trailing_space(void)
   return fail;
 }
 
+/* test_picker_guard_menu_identity
+ * ForthPickerGuard must check softmenu[softmenuStack[0].softmenuId].menuItem
+ * == -MNU_FORTH BEFORE any dynamicSoftmenu[] indexing. With Forth capture
+ * globals set (CM_PEM, FLAG_ALPHA, tam.function=ITM_FORTH, valid dynamicMenuItem),
+ * pointing at the MNU_FORTH menu -> guard true; pointing at any other menu
+ * -> guard false.
+ * Escaping mutation: drop the menu-identity conjunct from forthPickerGuard —
+ * the wrong-menu case returns true and the test FAILs. */
+static int test_picker_guard_menu_identity(void)
+{
+  extern bool_t forthPickerGuard(int16_t);
+  extern const softmenu_t softmenu[];
+
+  int fail = 0;
+
+  /* Save state */
+  uint8_t savedCalcMode = calcMode;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  int16_t savedTamFunction = tam.function;
+  int16_t savedDynMenuItem = dynamicMenuItem;
+  int16_t savedSoftmenuStackId = softmenuStack[0].softmenuId;
+
+  /* Set up Forth capture globals */
+  calcMode = CM_PEM;
+  setSystemFlag(FLAG_ALPHA);
+  tam.function = ITM_FORTH;
+  dynamicMenuItem = 0;  /* valid index */
+
+  /* Find MNU_FORTH index in softmenu[] */
+  int16_t forthMenuIdx = -1;
+  for (int16_t si = 0; si < 200; si++) {
+    if (softmenu[si].menuItem == -MNU_FORTH) {
+      forthMenuIdx = si;
+      break;
+    }
+  }
+  if (forthMenuIdx < 0) {
+    printf("    FAIL: MNU_FORTH not found in softmenu array\n");
+    fail = 1;
+    goto cleanup_guard;
+  }
+
+  /* Save and set numItems so dynamicMenuItem=0 is in range */
+  int16_t savedForthNumItems = dynamicSoftmenu[forthMenuIdx].numItems;
+  dynamicSoftmenu[forthMenuIdx].numItems = 6;
+
+  /* Find a non-MNU_FORTH dynamic menu (any other entry) */
+  int16_t otherMenuIdx = -1;
+  for (int16_t si = 0; si < NUMBER_OF_DYNAMIC_SOFTMENUS; si++) {
+    if (si != forthMenuIdx) {
+      otherMenuIdx = si;
+      break;
+    }
+  }
+  if (otherMenuIdx < 0) {
+    printf("    FAIL: no other dynamic menu found\n");
+    fail = 1;
+    goto cleanup_guard_numitems;
+  }
+
+  /* Test 1: MNU_FORTH menu -> guard should be true */
+  softmenuStack[0].softmenuId = forthMenuIdx;
+  if (!forthPickerGuard(ITM_NOP)) {
+    printf("    FAIL: forthPickerGuard returned false for MNU_FORTH menu\n");
+    fail = 1;
+  }
+
+  /* Test 2: non-MNU_FORTH menu -> guard should be false (menu-identity conjunct) */
+  softmenuStack[0].softmenuId = otherMenuIdx;
+  if (forthPickerGuard(ITM_NOP)) {
+    printf("    FAIL: forthPickerGuard returned true for non-MNU_FORTH menu (menu-identity conjunct missing)\n");
+    fail = 1;
+  }
+
+cleanup_guard_numitems:
+  dynamicSoftmenu[forthMenuIdx].numItems = savedForthNumItems;
+cleanup_guard:
+  /* Restore state */
+  calcMode = savedCalcMode;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  tam.function = savedTamFunction;
+  dynamicMenuItem = savedDynMenuItem;
+  softmenuStack[0].softmenuId = savedSoftmenuStackId;
+
+  if (!fail) {
+    printf("    PASS: forthPickerGuard true for MNU_FORTH, false for other menu\n");
+  }
+  return fail;
+}
+
 /* test_picker_glyph_tokenize
  * Source step: ": A<a2><20>B DUP ;" — name contains STD_ANGLE ("\xa2\x20").
  * Build the menu; assert menuContent contains the 4-byte name "A\xa2\x20B"
@@ -4592,6 +4737,10 @@ static int test_freelist_no_mutation_on_oversize_free(void);
 static int test_alpha_menu_on_top_during_capture(void);
 static int test_alpha_menu_contains_fwrd(void);
 
+/* C-13: end-of-line error precedence tests */
+static int test_unterminated_def_errors(void);
+static int test_overlong_token_in_def_keeps_error(void);
+
 int forthDictSelfTest(void)
 {
   int fail = 0;
@@ -4787,6 +4936,9 @@ int forthDictSelfTest(void)
   fail |= test_dict_name_too_long();
   printf("  [DEBUG] running test_dict_space_full...\n");
   fail |= test_dict_space_full();
+
+  printf("  [DEBUG] running test_number_then_no_label_fallthrough...\n");
+  fail |= test_number_then_no_label_fallthrough();
   forthDictClear();
 
   printf("  [DEBUG] running test_prefix_no_match...\n");
@@ -4950,6 +5102,11 @@ int forthDictSelfTest(void)
   fail |= test_picker_trailing_space();
   forthDictClear();
 
+  /* COMMIT 13: keyboard.c — F7 picker-guard menu-identity conjunct */
+  printf("  [DEBUG] running test_picker_guard_menu_identity...\n");
+  fail |= test_picker_guard_menu_identity();
+  forthDictClear();
+
   /* FIX-1: softmenus.c — glyph-wise bounded picker tokenizer */
   printf("  [DEBUG] running test_picker_glyph_tokenize...\n");
   fail |= test_picker_glyph_tokenize();
@@ -5041,6 +5198,16 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_alpha_menu_contains_fwrd...\n");
   fail |= test_alpha_menu_contains_fwrd();
+  forthDictClear();
+
+  /* C-13: end-of-line error precedence tests */
+  printf("\nFORTH C-13 TESTS (end-of-line error precedence)\n");
+  printf("  [DEBUG] running test_unterminated_def_errors...\n");
+  fail |= test_unterminated_def_errors();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_overlong_token_in_def_keeps_error...\n");
+  fail |= test_overlong_token_in_def_keeps_error();
   forthDictClear();
 
   /* FIX-6: free-list integrity — LAST test, after all cleanup */
@@ -5405,6 +5572,84 @@ static int test_freelist_no_mutation_on_oversize_free(void)
     printf("    PASS: oversize double free rejected, no region grew\n");
   }
   return fail;
+}
+
+/* test_unterminated_def_errors
+ * C-4: End of line with state == COMPILE (unterminated definition) must
+ * abort the definition and display ERROR_INVALID_NAME. The word must not
+ * be visible after the error, and fdict.count must be restored.
+ * Escaping mutation: remove or over-tighten the end-of-line block in
+ * forth_compile.c — no error is shown and the count grows (smudged leak). */
+static int test_unterminated_def_errors(void)
+{
+  uint16_t countBefore = fdict.count;
+  uint16_t idx;
+
+  lastErrorCode = ERROR_NONE;
+  x_set_string(": FOO DUP");
+  fnForthOuter(NOPARAM);
+
+  if (lastErrorCode != ERROR_INVALID_NAME) {
+    printf("    FAIL: lastErrorCode = %d, expected %d (ERROR_INVALID_NAME)\n",
+           lastErrorCode, ERROR_INVALID_NAME);
+    return 1;
+  }
+
+  if (forthFindColon("FOO", &idx)) {
+    printf("    FAIL: FOO should not be visible after unterminated def\n");
+    return 1;
+  }
+
+  if (fdict.count != countBefore) {
+    printf("    FAIL: fdict.count changed from %u to %u (smudged leak)\n",
+           countBefore, fdict.count);
+    return 1;
+  }
+
+  printf("    PASS: unterminated def shows INVALID_NAME, word invisible, count restored\n");
+  return 0;
+}
+
+/* test_overlong_token_in_def_keeps_error
+ * C-13: When a token exceeds FORTH_TOKEN_MAX inside a definition, the
+ * ERROR_INPUT_TOO_LONG from the tokenizer must NOT be masked by a subsequent
+ * ERROR_INVALID_NAME from the end-of-line handler. The definition must be
+ * aborted, the word invisible, and count restored.
+ * Escaping mutation: revert to unconditional displayCalcErrorMessage(ERROR_INVALID_NAME)
+ * in the end-of-line block — INVALID_NAME masks INPUT_TOO_LONG. */
+static int test_overlong_token_in_def_keeps_error(void)
+{
+  uint16_t countBefore = fdict.count;
+  uint16_t idx;
+  char longSource[256];
+
+  /* Build ": FOO " + a 70-byte spaceless ASCII token */
+  snprintf(longSource, sizeof(longSource), ": FOO %s",
+           "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst");
+
+  lastErrorCode = ERROR_NONE;
+  x_set_string(longSource);
+  fnForthOuter(NOPARAM);
+
+  if (lastErrorCode != ERROR_INPUT_TOO_LONG) {
+    printf("    FAIL: lastErrorCode = %d, expected %d (ERROR_INPUT_TOO_LONG, not INVALID_NAME %d)\n",
+           lastErrorCode, ERROR_INPUT_TOO_LONG, ERROR_INVALID_NAME);
+    return 1;
+  }
+
+  if (forthFindColon("FOO", &idx)) {
+    printf("    FAIL: FOO should not be visible after overlong token error\n");
+    return 1;
+  }
+
+  if (fdict.count != countBefore) {
+    printf("    FAIL: fdict.count changed from %u to %u\n",
+           countBefore, fdict.count);
+    return 1;
+  }
+
+  printf("    PASS: overlong token preserves INPUT_TOO_LONG (not masked by INVALID_NAME), word invisible, count restored\n");
+  return 0;
 }
 
 #endif  // PC_BUILD

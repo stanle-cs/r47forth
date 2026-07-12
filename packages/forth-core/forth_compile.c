@@ -41,8 +41,6 @@ static void forthRunGenCheckReset(void) {
 
 /* ---- §3.3.3 Tokenizer state (C-6) ---- */
 
-#define FORTH_TOKEN_MAX 63
-
 static const char *tokenizerSource;
 static int16_t     tokenizerPos;
 
@@ -300,11 +298,18 @@ void forthOuterInterpret(const char *source) {
       }
     }
 
-    /* ---- §4.1 step 3: number (C-2: number BEFORE label) ---- */
-    if (processNumber(buf, state == STATE_COMPILE)) {
+    /* ---- §4.1 step 3: number (C-2: number BEFORE label, C-8 classify-gate) ---- */
+    if (classifyNumber(buf) != FORTH_NUM_NONE) {
+      if (!processNumber(buf, state == STATE_COMPILE)) {
+        /* Classified as number but processing failed — do NOT fall through */
+        if (isDefinitionOpen()) abortDefinition();
+        lineOK = false;
+        break;
+      }
       if (lastErrorCode != ERROR_NONE) {
         if (isDefinitionOpen()) abortDefinition();
         lineOK = false;
+        break;
       }
       continue;
     }
@@ -346,10 +351,13 @@ void forthOuterInterpret(const char *source) {
   }
 
   /* ---- End of line ---- */
-  if (state == STATE_COMPILE) {
-    /* C-4: unterminated definition — abort first, then error */
+  if (state == STATE_COMPILE && isDefinitionOpen()) {
+    /* C-4: truly unterminated — abort always; display INVALID_NAME only if
+     * no prior error was shown (never mask e.g. ERROR_INPUT_TOO_LONG). */
     abortDefinition();
-    displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    if (lastErrorCode == ERROR_NONE) {
+      displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    }
   } else if (lastErrorCode == ERROR_NONE) {
     /* C-7: ASLIFT-set gate checks lastErrorCode == ERROR_NONE */
     setSystemFlag(FLAG_ASLIFT);

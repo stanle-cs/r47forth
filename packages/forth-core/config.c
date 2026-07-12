@@ -4,10 +4,6 @@
 #include "c47.h"
 #include "forth_dict.h"  // for forthDictInit()
 
-/* Run the Forth dictionary self-test after memory init on PC builds. */
-#ifndef FORTH_DEBUG_SELFTEST
-// leave undefined by default; define it via build flag -DFORTH_DEBUG_SELFTEST when you want the self-test
-#endif
 //C47 defaults (used in both settings arrays)
 #define _gapl   ITM_SPACE_PUNCTUATION
 #define _gprl   3
@@ -1523,13 +1519,12 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     }
     memset(ram, 0, TO_BYTES(RAM_SIZE_IN_BLOCKS));
 
-     #if !defined(DMCP_BUILD) || !defined(OLD_HW)
-       if(globalRegister == NULL) {
-         globalRegister = malloc(sizeof(registerHeader_t) * NUMBER_OF_GLOBAL_REGISTERS);
-         freeMemoryRegions = malloc(sizeof(freeMemoryRegion_t) * MAX_FREE_REGIONS);
-       }
-       memset(globalRegister, 0, sizeof(registerHeader_t) * NUMBER_OF_GLOBAL_REGISTERS);
-     #endif // DMCP_BUILD && OLD_HW
+    #if !defined(DMCP_BUILD) || !defined(OLD_HW)
+      if(globalRegister == NULL) {
+        globalRegister = malloc(sizeof(registerHeader_t) * NUMBER_OF_GLOBAL_REGISTERS);
+        freeMemoryRegions = malloc(sizeof(freeMemoryRegion_t) * MAX_FREE_REGIONS);
+      }
+    #endif // DMCP_BUILD && OLD_HW
 
     freeMemoryRegions[0].blockAddress = TO_C47MEMPTR(ram + allReservedVariables[LAST_RESERVED_VARIABLE - FIRST_RESERVED_VARIABLE].header.pointerToRegisterData + REAL34_SIZE_IN_BLOCKS);
     freeMemoryRegions[0].sizeInBlocks = RAM_SIZE_IN_BLOCKS - freeMemoryRegions[0].blockAddress - 1; // - 1: one block for an empty program
@@ -1563,7 +1558,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     memset(nimBufferDisplay, 0, NIM_BUFFER_LENGTH);
     memset(tamBuffer,        0, TAM_BUFFER_LENGTH);
 
-     // Empty program initialization
+    // Empty program initialization
     beginOfProgramMemory          = (uint8_t *)(ram + (RAM_SIZE_IN_BLOCKS - 1)); // Last block of RAM
     currentStep                   = beginOfProgramMemory;
     firstFreeProgramByte          = beginOfProgramMemory + 2;
@@ -1875,6 +1870,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     currentSolverVariable = INVALID_VARIABLE;
     currentSolverNestingDepth = 0;
     graphAccActive = false;
+
     graphVariabl1 = 0;
 
     // Timer application

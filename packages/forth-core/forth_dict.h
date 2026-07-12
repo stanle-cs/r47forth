@@ -14,6 +14,7 @@
 #define FORTH_NULL      0xFFFFu     /* end-of-chain sentinel (region-relative) */
 #define FORTH_PRIM_NONE ((uint16_t)0xFFFFu)  /* forthFindPrim miss sentinel (C-3, §3.3) */
 #define FORTH_NAME_MAX  31
+#define FORTH_TOKEN_MAX 63  /* §3.3.3 tokenizer max token length */
 
 #define FF_IMMEDIATE    0x01        /* execute even in compile state */
 #define FF_SMUDGE       0x02        /* hidden: definition in progress / incomplete */
