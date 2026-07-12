@@ -1,30 +1,34 @@
 # Custom Packages — README
 
-External custom packages let you extend C47 (add sources, override upstream
+External custom packages let you extend C47 (patch upstream files, add new
 files) **without modifying any `src/` file**.  Every new line of meson
 configuration lives inside `if custom_pkg_list != []` blocks in the top-level
 `meson.build` — a vanilla build (`-DCUSTOM_PKG` unset or empty) is
 byte-for-byte identical.
 
+This is the plain-diff design (PROPOSED_SPEC_CHANGES.md, revision 2). It
+supersedes an earlier function-boundary/libclang design that briefly existed
+on this branch and was reverted — see
+`custom_package/IMPLEMENTATION_REPORT.md` if you're looking for that history.
+
 ---
 
 ## Quick Start
 
-1. Create a package directory, e.g. `packages/my-pkg/`.
-2. Write a `meson.build` that declares what the package provides:
+A package directory contains exactly two subdirectories — **nothing else is
+read**. There is no `meson.build` inside a package, and nothing to declare:
 
-   ```meson
-   # Override upstream src/c47/foo.c with your copy
-   pkg_override_sources = ['foo.c']
+```
+packages/my-pkg/
+├── patches/
+│   └── 010-keyboard.c.patch     # a git diff against src/c47/keyboard.c
+└── files/
+    └── my_module.c              # a brand-new file, no upstream counterpart
+```
 
-   # Override upstream src/c47/bar.h with your copy
-   pkg_override_headers = ['bar.h']
-
-   # Add brand-new source files compiled into the build
-   pkg_custom_sources   = files('my_module.c', 'my_helper.c')
-   ```
-
-3. Configure with the package:
+1. Create the package directory and populate `patches/`/`files/` — normally
+   via the **materialize-and-refresh workflow** below, not by hand.
+2. Configure and build with the package active:
 
    ```
    meson setup build.sim --buildtype=custom -DRASPBERRY=false \
@@ -32,169 +36,120 @@ byte-for-byte identical.
    ninja -C build.sim
    ```
 
-## Variable Reference
+   or, via the Makefile (recommended — see **Makefile Targets** below):
 
-| Variable              | Type   | Purpose                                                        |
-|-----------------------|--------|----------------------------------------------------------------|
-| `pkg_override_sources`| array  | Filenames (relative to `src/c47/`) to replace with your copies |
-| `pkg_override_headers`| array  | Header filenames (relative to `src/c47/`) to replace            |
-| `pkg_custom_sources`  | files() | New `.c` files your package adds to the build                  |
-| `pkg_patch_sources`   | array  | `.patch` filenames (in `patches/`) applying function-level patches to upstream files — see **Function-Level Patch Overrides** below |
+   ```
+   make sim CUSTOM_PKG=packages/my-pkg
+   ```
 
-All four default to empty.  If none are declared, meson emits a warning:
+## The Two Mechanisms
 
-```
-WARNING: Package packages/my-pkg declared none of pkg_override_sources,
-         pkg_override_headers, or pkg_custom_sources
-```
+| Your change is…                                                         | Mechanism | Where |
+|---------------------------------------------------------------------------|-----------|-------|
+| Any change to an **existing** upstream file — a function body, a global, a `#define`, a struct, an added/removed function, anything | a `.patch` (plain `git diff`, no restriction on content) | `patches/<NNN>-<rel_encoded>.patch` |
+| A **genuinely new file** with no upstream counterpart at that relative path | the whole file, stored as-is | `files/<rel>` |
 
-**Scope warning:** your package's `meson.build` executes in the *top-level*
-meson scope (via `subdir()`).  A typo such as `pkg_override_source` (missing
-`_s`) creates an unused variable — no error, no override, green build.  Use
-the exact variable names above.
+There is no classification step and nothing to declare: whether a given
+change belongs under `patches/` or `files/` is inferred purely from whether
+its mirrored path exists under `src/c47/` — and the resolver enforces this
+at configure time (see **Fatal Checks** below), so getting it backwards is
+a loud, named error, not a silent misfile.
 
-## Override Semantics
-
-- Your override file must live at `packages/my-pkg/<relative-path>`, matching
-  the path relative to `src/c47/`.  E.g. `pkg_override_sources = ['foo.c']`
-  expects `packages/my-pkg/foo.c`.
-- The override replaces the upstream file entirely in the shadow tree.
-- If the override is byte-identical to upstream, a warning is emitted ("dead
-  shadow") — the file is still shadowed, masking future upstream changes.
-- A missing override file or a spec that doesn't match any upstream source is
-  a **fatal error** (configure fails).
-
----
-
-## Function-Level Patch Overrides (new)
-
-In addition to whole-file overrides (`pkg_override_sources`), packages can
-apply **function-level patches** to upstream files.  A patch is a unified diff
-(`.patch` file, `git diff -U3` format or greater context) stored at:
+### Patch Storage Format
 
 ```
 packages/<pkgdir>/patches/<NNN>-<rel_encoded>.patch
 ```
 
-where `<NNN>` is a zero-padded 3-digit ordinal (e.g. `010`, `020`) and
-`<rel_encoded>` is the upstream relative path with every `/` replaced by `__`
-(e.g. `programming/manage.c` becomes `programming__manage.c`).  Patches are
-declared in the package's `meson.build`:
+`<NNN>` is a zero-padded 3-digit ordinal (`010`, `020`, …) and `<rel_encoded>`
+is the upstream relative path with every `/` replaced by `__` (e.g.
+`programming/manage.c` becomes `programming__manage.c`). A patch is a
+`git diff` (`-U3` or greater context) of the **whole file**, targeting
+`src/c47/<rel>` — every `*.patch` file found under `patches/` is applied
+automatically; there is no separate list to keep in sync.
 
-```meson
-# Apply function-level patches to upstream files
-pkg_patch_sources = ['010-keyboard.c.patch', '020-programming__manage.c.patch']
-```
+**Dual-signal validation:** every patch carries two independent signals for
+its target — the on-disk filename, and the `+++ b/...` header line inside
+the diff itself. These must agree, and the agreed target must exist under
+`src/c47/`. Either check failing is a **fatal configure error** naming the
+patch and the mismatch — never silently reclassified as something else.
 
-**Dual-signal validation (§2, ratified):** every patch carries two independent
-signals identifying its target:
-1. The on-disk filename (decoded from the convention above).
-2. The `+++ b/...` header line inside the unified diff.
+### Composition and Ordering
 
-These must agree.  A mismatch (e.g. filename says `keyboard.c` but the header
-says `screen.c`) is a **fatal configure error** — never silently treated as a
-new file.  A patch whose agreed target does not exist under `src/c47/` is
-likewise a fatal configure error.
-
-### Patch vs. Whole-File vs. New File — Which Mechanism When
-
-| Your change is…                                   | Mechanism | Declared via |
-|---------------------------------------------------|-----------|--------------|
-| Edits **inside existing function bodies**          | `.patch` file(s) under `patches/` | `pkg_patch_sources` |
-| Globals, `#define`s, macros, structs, typedefs, added/removed functions | whole-file override at `packages/<pkgdir>/<rel>` | `pkg_override_sources` / `pkg_override_headers` |
-| A **genuinely new file** (no upstream counterpart at that relative path) | whole new file in your package | `pkg_custom_sources` |
-
-The whole-file and new-file conventions are unchanged from today (see
-**Override Semantics** and **Variable Reference** above).  A new file is
-stored whole; an override of an existing upstream file that cannot be
-expressed as function-body patches is stored whole via `pkg_override_sources`.
-
-**Mutual exclusivity (§8, ratified):** a given upstream file may be targeted by
-exactly one mechanism: either whole-file override (`pkg_override_sources` /
-`pkg_override_headers`) OR function-level patches (`pkg_patch_sources`), never
-both — across **all** active packages.  The build tool enforces this as a
-fatal error at configure time.
-
-### Composition and Ordering (§3)
-
-Multiple patches may target the same upstream file — from one package or from
-several.  They apply as a **cumulative, explicitly ordered stack**, not
+Multiple patches may target the same upstream file — from one package or
+several. They apply as a **cumulative, explicitly ordered stack**, not
 last-listed-wins:
 
 1. All patches targeting a given rel are collected across every active
    package in the `-DCUSTOM_PKG` list.
-2. They are sorted by the numeric `<NNN>` ordinal (parsed as an integer);
-   ties (same ordinal, different packages) are broken by the package's
-   position in the `CUSTOM_PKG` list — the earlier-listed package's patch
-   applies first.
+2. Sorted by the numeric `<NNN>` ordinal (parsed as an integer); ties (same
+   ordinal, different packages) are broken by the package's position in the
+   `CUSTOM_PKG` list — the earlier-listed package's patch applies first.
 3. Each patch applies on top of the previous patch's output (`git apply -3`
    against a freshly materialized copy of the current upstream file).
 4. After **every** patch application, the result is scanned for conflict
-   markers (`<<<<<<<`, `=======`, `>>>>>>>`) regardless of `git apply`'s
-   exit status.  Any marker, or any outright apply failure, is a **fatal
-   configure error** naming the patch file — a genuine same-function conflict
-   between two packages fails loudly, never resolved by silently picking one
-   (§7).
+   markers (`<<<<<<<`, `=======`, `>>>>>>>`) regardless of `git apply`'s exit
+   status. Any marker, or any outright apply failure, is a **fatal configure
+   error** naming the patch file — a genuine overlapping edit between two
+   packages fails loudly, never resolved by silently picking one.
 
-Duplicate ordinals within the *same* package for the *same* target file are
-rejected (ambiguous order), as are malformed filenames (missing `NNN-`
-prefix, missing `.patch` suffix).
+(Trade-off, stated explicitly: without function-boundary splitting, two
+packages editing *different lines of the same function* still compose
+cleanly via `-3`; two packages editing the *same* lines conflict loudly.
+The package-size goal this system exists for doesn't need finer granularity
+than that — see `PROPOSED_SPEC_CHANGES.md`'s "Why revision 2" section.)
 
-### Authoring Workflow — Materialize and Refresh (§6)
+### Fatal Checks
 
-You never write `.patch` files by hand.  Edit a fully materialized real file
-(full compiler/LSP context), then re-derive the patches:
+All of the following are **configure-time fatal errors**, checked before
+the shadow tree is touched:
 
-1. Copy the upstream file into your package at the mirrored path:
-   `cp src/c47/keyboard.c packages/my-pkg/keyboard.c`
-2. Edit the copy — function bodies only (see the table above).
-3. Regenerate the patch stack:
-   `python3 tools/pkg_patch_refresh.py packages/my-pkg keyboard.c`
-   This diffs your copy against upstream at function-boundary granularity
-   (libclang against a vanilla build's `compile_commands.json`) and writes
-   one `.patch` per changed function under `packages/my-pkg/patches/`.
-4. Declare the generated patch files in `pkg_patch_sources`.
+- A patch whose target doesn't exist under `src/c47/` (typo, renamed,
+  deleted upstream file).
+- A `files/<rel>` entry whose mirrored path **does** exist under `src/c47/`
+  — that's an existing-file change and belongs under `patches/` instead.
+- Two packages both providing a `files/<rel>` entry for the same path — two
+  competing whole files with no common base to merge against, so this can't
+  degrade to a loud `git apply` conflict the way a `patches/` collision can;
+  it's caught before either file reaches the shadow tree.
+- A malformed patch filename (missing the `NNN-` prefix, missing `.patch`,
+  path-traversal or absolute-path encoding).
 
-The materialized working copy is the authoring artifact; the `.patch` files
-are what the build consumes.  `pkg_patch_refresh.py` (and its libclang
-dependency) is **authoring tooling only** — the configure/build step never
-imports libclang (§4, ratified; enforced by an import assertion, not
-convention).
+## Authoring Workflow — Materialize and Refresh
 
----
+You never write `.patch` files by hand. Edit a fully materialized real file
+(full compiler/LSP context), then re-derive the patch set for the whole
+package in one step:
 
-## Shadow Tree — Safety & Editing
+```
+cp src/c47/keyboard.c packages/my-pkg/keyboard.c   # materialize
+# ... edit packages/my-pkg/keyboard.c freely — any kind of change ...
+python3 tools/pkg_patch_refresh.py packages/my-pkg  # regenerate patches/
+```
 
-### Sentinel Gate
+`refresh` scans every materialized file directly under the package
+directory (excluding `patches/` and `files/` themselves) and, for each that
+mirrors a real upstream path:
 
-The resolver creates a *shadow tree* at `build.sim/custom_pkg_shadow/` — a
-mirror of `src/c47/` with your overrides layered on top.  On each reconfigure,
-it wipes and rebuilds this tree.
+- differs from upstream → writes/overwrites `patches/<NNN>-<rel>.patch`
+  (ordinal reused from any existing patch for that rel, including a manual
+  rename — so refresh never fights an explicit cross-package ordering
+  choice you made by hand);
+- identical to upstream (a reverted edit) → deletes any existing patch for
+  that rel, so `patches/` never accumulates stale output;
+- has no upstream counterpart at all → left alone and reported — a
+  genuinely new file belongs directly under `files/<rel>`, placed there by
+  you, not auto-detected by `refresh`.
 
-**Delete-safety:** before wiping, the resolver checks for the sentinel file
-`DO_NOT_EDIT_shadow_tree.txt` at the shadow root.  If the directory exists, is
-non-empty, and **lacks** this sentinel, the resolver **refuses to delete it**
-and aborts with a clear error.  This prevents accidental destruction of
-directories that were not created by the resolver.
+The materialized working copy is a local authoring convenience — only
+`patches/` and `files/` are meant to be committed. `pkg_patch_refresh.py`
+has no libclang or other AST-parsing dependency; it's plain `git diff`.
 
-### DO NOT Edit the Shadow Tree
+## items.c — Generator Stub Requirement
 
-The shadow tree contains symlinks (or copies) to upstream source files.  Editing
-a file through the shadow edits the **upstream** file — violating the core
-promise that packages never modify `src/`.
-
-IDEs and language servers that follow `compile_commands.json` will resolve
-"Go to Definition" into the shadow tree.  **Do not edit files you reach this
-way.**  Edit only your package's own files under `packages/`.
-
----
-
-## items.c Override — Generator Stub Requirement
-
-If your package overrides `src/c47/items.c` (via
-`pkg_override_sources = ['items.c', …]`), the override file must include
-**stub definitions** for every new handler referenced by table rows you add,
-inside the generator guard block:
+If your package patches `src/c47/items.c` to add new handler table rows,
+the patch must also add **stub definitions** for those handlers inside the
+generator guard block:
 
 ```c
 #if defined(GENERATE_CATALOGS) || defined(GENERATE_TESTPGMS)
@@ -206,14 +161,44 @@ inside the generator guard block:
 Upstream `items.c` provides stubs for all built-in handlers in this block.
 The catalog generator (`generateCatalogs`) and test-program generator
 (`generateTestPgms`) compile `items.c` with `GENERATE_CATALOGS` or
-`GENERATE_TESTPGMS` defined — real handler bodies are replaced by empty stubs.
-If your override adds new table rows with new handler names but doesn't provide
-matching stubs, the generator builds will fail to link with "undefined
-reference" errors.
+`GENERATE_TESTPGMS` defined — real handler bodies are replaced by empty
+stubs. Adding table rows for new handler names without matching stubs makes
+the generator builds fail to link with "undefined reference" errors.
 
-**Rule:** an `items.c` override that adds table rows *must* add matching stubs
-inside the `GENERATE_*` block.  The `runFunction`/dispatch path at the bottom
-of `items.c` is outside the `GENERATE_*` guard and does not need stubs.
+---
+
+## Shadow Tree — Safety & Editing
+
+### Sentinel Gate
+
+The resolver creates a *shadow tree* at `build.sim/custom_pkg_shadow/` — a
+mirror of `src/c47/` with your package's patches/new files layered on top.
+On each reconfigure, it wipes and rebuilds this tree, but only **after**
+every active package's `patches/`+`files/` content validates — a failing
+configure leaves any existing shadow tree untouched.
+
+**Delete-safety:** before wiping, the resolver checks for the sentinel file
+`DO_NOT_EDIT_shadow_tree.txt` at the shadow root. If the directory exists,
+is non-empty, and **lacks** this sentinel, the resolver **refuses to delete
+it** and aborts with a clear error — this prevents accidental destruction of
+directories that were not created by the resolver.
+
+### DO NOT Edit the Shadow Tree
+
+Most of the shadow tree is symlinks to upstream source files (or, for a
+patched file, a real file containing the applied result — see below).
+Editing an unpatched entry through the shadow edits the **upstream** file —
+violating the core promise that packages never modify `src/`.
+
+IDEs and language servers that follow `compile_commands.json` will resolve
+"Go to Definition" into the shadow tree. **Do not edit files you reach this
+way.** Edit only your package's materialized working copies under
+`packages/`, then re-run `refresh`.
+
+A patched file's shadow entry is a **real file** (never a symlink) holding
+the applied result — editing it directly is harmless-but-pointless (it's
+regenerated on every reconfigure) but still isn't the right place to work;
+edit the materialized copy and refresh instead.
 
 ---
 
@@ -221,59 +206,46 @@ of `items.c` is outside the `GENERATE_*` guard and does not need stubs.
 
 ### Normal Edits (Symlink Mode — Default on Linux)
 
-When the shadow tree uses symlinks (default on Linux), editing your package
-source files or upstream files propagates to the shadow tree automatically.
-A bare `ninja -C build.sim` picks up the changes. **No reconfigure needed.**
+Unpatched upstream files are symlinked into the shadow tree; editing
+upstream propagates automatically, no reconfigure needed. A **patched**
+file's shadow entry is a real, applied-result file — editing your package's
+materialized copy requires re-running `refresh` and reconfiguring to
+re-apply the patch into the shadow tree.
 
 ### Copy Mode (Windows / `CUSTOM_PKG_SHADOW_COPY=1`)
 
 If symlink creation fails (common on Windows without privilege) or you set
-`CUSTOM_PKG_SHADOW_COPY=1`, the resolver falls back to file copies.  A warning
-is printed at configure time:
-
-```
-WARNING: symlink not available, using file copies — bare ninja will NOT see
-         source edits; reconfigure required after each change
-```
-
-In copy mode, the shadow tree is a snapshot.  Editing a source file does **not**
-update the copy.  You must reconfigure after each change:
-
-```
-meson setup build.sim --reconfigure -DCUSTOM_PKG=packages/my-pkg …
-ninja -C build.sim
-```
-
-### Structural Upstream Changes
-
-If upstream `src/c47/meson.build` changes (new source files added, include dirs
-changed), the shadow tree won't reflect the change until the next reconfigure.
-This is benign — the `-Isrc/c47` fallback include path serves the new header —
-until you override that file.  Reconfigure to pick up structural changes.
+`CUSTOM_PKG_SHADOW_COPY=1`, the resolver falls back to file copies — a
+warning is printed at configure time, and the shadow tree becomes a
+snapshot requiring `--reconfigure` after every change.
 
 ### Changing `-DCUSTOM_PKG`
 
-Changing the `-DCUSTOM_PKG` option value dirties meson's coredata.  The next
-`ninja` run will trigger regeneration, which re-executes the full `meson.build`
-including the resolver's `run_command`.  The shadow tree is rebuilt
-automatically.  Explicit `--reconfigure` is not strictly required but is good
-practice:
+**Via the Makefile** (`make sim`/`make test`/etc.): switching `CUSTOM_PKG`
+between invocations against an existing build directory **forces a
+reconfigure automatically** — the Makefile compares the requested value
+against a stamp left by the last successful setup and re-runs `meson setup
+--reconfigure` if they differ (including switching to/from empty). This is
+independent of `f=1`, which only controls whether the GMP subproject is
+force-rebuilt for DMCP cross-builds. See the `check-custom-pkg-sim`/
+`check-custom-pkg-dmcp`/`check-custom-pkg-dmcp5` targets in the top-level
+`Makefile` if you want the mechanism in detail.
 
-```
-meson setup build.sim --reconfigure -DCUSTOM_PKG=packages/my-pkg …
-ninja -C build.sim
-```
+**Calling `meson setup` directly** (bypassing the Makefile): you are
+responsible for passing `--reconfigure` yourself when changing `-DCUSTOM_PKG`
+against an existing build directory — meson's own coredata dirtying handles
+this on the next `ninja` run in most cases, but `--reconfigure` is the
+reliable way.
 
-**Do not `rm -rf build.sim`.**  Deleting the build directory is unnecessary
-cargo-cult.  Use `--reconfigure` instead.  The only time full deletion helps is
-when meson's internal state is corrupted (rare).
+**Do not `rm -rf build.sim`.** Deleting the build directory is unnecessary
+cargo-cult; use `--reconfigure` (or the Makefile targets above, which handle
+it for you).
 
 ---
 
 ## Multiple Packages
 
-`CUSTOM_PKG` accepts a comma-separated list of package directories.  Overrides
-are applied in order — later packages override earlier ones for the same file:
+`CUSTOM_PKG` accepts a comma-separated list of package directories:
 
 ```
 meson setup build.sim --buildtype=custom -DRASPBERRY=false \
@@ -281,29 +253,59 @@ meson setup build.sim --buildtype=custom -DRASPBERRY=false \
 ninja -C build.sim
 ```
 
+Patches from different packages targeting the **same** upstream file compose
+cumulatively in `CUSTOM_PKG` list order (see **Composition and Ordering**
+above) — this is not last-wins.
+
 ## Makefile Targets
 
-The top-level `Makefile` propagates `CUSTOM_PKG` through these targets:
+`CUSTOM_PKG=` threads through the standard build/test targets, same pattern
+as the existing `DMCP_PACKAGE=`/`f=` variables:
 
-| Target              | Propagates CUSTOM_PKG? | Notes                                    |
-|--------------------|------------------------|------------------------------------------|
-| `sim`              | Yes (via `build.sim`)  | Standard simulator build                 |
-| `simr47`           | Yes (via `build.sim`)  | R47 simulator build                      |
-| `testPgms`         | Yes (via `build.sim`)  | Skips `res/testPgms/` copy when CUSTOM_PKG is set — prevents package builds from contaminating the shared test corpus |
-| `test_asan`        | Yes                    | ASan-instrumented test run               |
-| `test`             | Yes (via `build.sim`)  | Full clean build + test                  |
-| `dmcp`             | Yes (via `build.dmcp`) | DM42 cross-build                         |
-| `dmcp5`            | Yes (via `build.dmcp5`)| DM50 cross-build                         |
-| `dmcp_pkg<name>`   | Yes (via `build.dmcp.p<name>`) | DM42 packaged cross-build          |
+| Target                              | Notes |
+|--------------------------------------|-------|
+| `sim`, `simc47`, `simr47`, `both`     | Standard/R47 simulator builds |
+| `test`, `repeattest`                  | Full and incremental test runs |
+| `dmcp`, `dmcpr47`, `dmcp5`, `dmcp5r47`| DM42/DM50 cross-builds |
 
 Usage: `make sim CUSTOM_PKG=packages/my-pkg`
+
+### `pkg_build PKG=<dir>` — Building a Distributable Package
+
+The sole sanctioned way to produce a distributable package artifact:
+
+```
+make pkg_build PKG=packages/my-pkg
+```
+
+This runs, in order: `make clean`; `make test CUSTOM_PKG=<dir>` (a failing
+test suite stops here — no artifact is produced); `refresh` against `<dir>`
+(so any un-refreshed materialized edits are captured); then assembles a zip
+containing **only** `<dir>/patches/*` and `<dir>/files/*` (materialized
+working copies and anything else in the package directory are excluded) at
+`pkg_dist/<pkg-name>.zip`.
+
+The resulting zip's **actual size** is checked against `PKG_MAX_SIZE`
+(default 200000 bytes / ~200KB) — exceeding it is a fatal error naming the
+real size and the limit, and the oversized zip is deleted, not left behind
+as a false-positive artifact. Override with
+`make pkg_build PKG=packages/my-pkg PKG_MAX_SIZE=500000`.
+
+**Note:** `PKG` is also used elsewhere in this Makefile for the numbered
+DMCP build-variant targets (`dmcp_pkg1`/`2`/`3`, unrelated to `CUSTOM_PKG`
+package overlays). `make pkg_build PKG=packages/my-pkg` alone is unaffected;
+invoking `pkg_build` together with a numbered `dmcp_pkg*` target in the
+*same* command line would collide (Make expands `$(PKG)` in target names at
+parse time) — don't do that.
 
 ---
 
 ## Limitations
 
-- **Documentation:** doxygen (`docs/code`) only scans `src/c47/`.  Package
-  sources and overrides do not appear in generated documentation.
-- **Generator source lists:** the catalog and test-program generators compile
-  from the shadow tree.  If your package adds items via an `items.c` override,
-  the generators will include them (provided the stub requirement above is met).
+- **Documentation:** doxygen (`docs/code`) only scans `src/c47/`. Package
+  sources and patches do not appear in generated documentation.
+- **Package-level build configuration:** there is no mechanism for a
+  package to add its own build options/flags (e.g. a custom meson
+  `get_option()`-gated `-D` define) — a package directory contains only
+  `patches/`+`files/`, nothing else is read. If you need this, see the
+  "Known open item" in `PROPOSED_SPEC_CHANGES.md`.

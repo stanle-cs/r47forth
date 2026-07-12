@@ -1,4 +1,4 @@
-.PHONY: all clean sim test test_asan dmcp dmcpr47 dmcp5 dmcp5r47 docs testPgms both_asan dist_windows dist_macos dist_linux dist_dmcp dist_dmcpr47 dist_dmcp5 dist_dmcp5r47 repeattest simc47 simr47 t47
+.PHONY: all clean sim test test_asan dmcp dmcpr47 dmcp5 dmcp5r47 docs testPgms both_asan dist_windows dist_macos dist_linux dist_dmcp dist_dmcpr47 dist_dmcp5 dist_dmcp5r47 repeattest simc47 simr47 t47 check-custom-pkg-sim check-custom-pkg-dmcp check-custom-pkg-dmcp5 pkg_build
 
 all: sim
 both: sim simr47
@@ -36,13 +36,47 @@ clean: $(GMP_MESON_BUILD)
 	rm -f t47$(EXE)
 	rm -rf wp43-windows* wp43-macos* wp43-linux* wp43-dm42*
 	rm -rf c47-windows* c47-macos* c47-linux* c47-dmcp* r47-dmcp*
-	rm -rf build build.sim build.sim.t47 build.dmcp build.dmcp.* build.dmcp5 build.rel build.rel.debug
+	rm -rf build build.sim build.sim.t47 build.dmcp build.dmcp.* build.dmcp5 build.rel build.rel.debug pkg_dist
 	rm -f src/generated/*.c src/generated/constantPointers.h src/generated/softmenuCatalogs.h
 	rm -rf PROGRAMS/ALLPGMS
 	rm -f src_files_stamp testPgms_stamp
 
+MESON_SETUP_SIM = meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -DCUSTOM_PKG=$(CUSTOM_PKG)
+
 build.sim:
-	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -DCUSTOM_PKG=$(CUSTOM_PKG)
+	$(MESON_SETUP_SIM)
+	@echo "$(CUSTOM_PKG)" > $(BUILD_PC)/.custom_pkg_stamp
+
+# check-custom-pkg-sim (package-manager surface, PROPOSED_SPEC_CHANGES.md
+# revision 2, New Decision 7): `build.sim` above is a directory-existence-
+# gated Make target — once $(BUILD_PC) exists, its recipe is SKIPPED on
+# every later invocation, so switching CUSTOM_PKG (including to/from empty)
+# between `make sim`/`make test`/etc. calls would otherwise silently keep
+# building against the PREVIOUS package's stale shadow tree: no error, no
+# rebuild, no signal at all. This phony target runs on EVERY invocation
+# (unlike build.sim itself) and forces --reconfigure through directly when
+# the requested CUSTOM_PKG differs from the stamp left by the last
+# successful setup.
+#
+# Independent of f=1: f=1 only controls whether the GMP subproject is
+# force-rebuilt, in build.dmcp/build.dmcp5's own recipe below — it has no
+# relationship to CUSTOM_PKG or the shadow tree. `make sim f=1
+# CUSTOM_PKG=packages/other-pkg` still gets a forced reconfigure here for
+# the package-overlay reason, independent of whatever f=1 does elsewhere.
+check-custom-pkg-sim:
+	@if [ -d "$(BUILD_PC)" ]; then \
+		STAMP="$(BUILD_PC)/.custom_pkg_stamp"; \
+		if [ ! -f "$$STAMP" ]; then \
+			LAST="<unknown-pre-existing-build>"; \
+		else \
+			LAST="$$(cat "$$STAMP")"; \
+		fi; \
+		if [ "$$LAST" != "$(CUSTOM_PKG)" ]; then \
+			echo "CUSTOM_PKG changed ('$$LAST' -> '$(CUSTOM_PKG)'): forcing reconfigure of $(BUILD_PC)"; \
+			$(MESON_SETUP_SIM) --reconfigure; \
+			echo "$(CUSTOM_PKG)" > "$$STAMP"; \
+		fi; \
+	fi
 
 build.sim.t47:
 	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Dc_args="-DT47"
@@ -85,13 +119,53 @@ build.rel:
 build.rel.debug:
 	meson setup $(BUILD_PC) --buildtype=custom  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true
 
+MESON_SETUP_DMCP  = meson setup build.dmcp.p$(DMCP_PACKAGE) --cross-file=src/c47-dmcp/cross_arm_gcc.build -DDMCPVERSION=dmcp -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DDMCP_PACKAGE=$(DMCP_PACKAGE) -DCUSTOM_PKG=$(CUSTOM_PKG)
+MESON_SETUP_DMCP5 = meson setup build.dmcp5 --cross-file=src/c47-dmcp5/cross_arm_gcc.build -DDMCPVERSION=dmcp5 -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DCUSTOM_PKG=$(CUSTOM_PKG)
+
 build.dmcp:
 	$(if $(f),test -d build.dmcp.p$(DMCP_PACKAGE) ||,rm -rf build.dmcp.p$(DMCP_PACKAGE);) meson setup build.dmcp.p$(DMCP_PACKAGE)  --cross-file=src/c47-dmcp/cross_arm_gcc.build  -DDMCPVERSION=dmcp  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DDMCP_PACKAGE=$(DMCP_PACKAGE) -DCUSTOM_PKG=$(CUSTOM_PKG)
+	@echo "$(CUSTOM_PKG)" > build.dmcp.p$(DMCP_PACKAGE)/.custom_pkg_stamp
 
 build.dmcp5:
 	$(if $(f),test -d build.dmcp5 ||,rm -rf build.dmcp5;) meson setup build.dmcp5 --cross-file=src/c47-dmcp5/cross_arm_gcc.build -DDMCPVERSION=dmcp5 -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DCUSTOM_PKG=$(CUSTOM_PKG)
+	@echo "$(CUSTOM_PKG)" > build.dmcp5/.custom_pkg_stamp
 
-sim: $(BUILD_PC)
+# check-custom-pkg-dmcp / -dmcp5: same New-Decision-7 reasoning as
+# check-custom-pkg-sim above. The primary case these matter for is f=1
+# (build.dmcp/build.dmcp5 above already wipe-and-reconfigure unconditionally
+# WITHOUT f=1 — f=1 is exactly what makes them keep/reuse an existing build
+# dir, which is also when a CUSTOM_PKG change could otherwise go unnoticed).
+check-custom-pkg-dmcp:
+	@if [ -d "build.dmcp.p$(DMCP_PACKAGE)" ]; then \
+		STAMP="build.dmcp.p$(DMCP_PACKAGE)/.custom_pkg_stamp"; \
+		if [ ! -f "$$STAMP" ]; then \
+			LAST="<unknown-pre-existing-build>"; \
+		else \
+			LAST="$$(cat "$$STAMP")"; \
+		fi; \
+		if [ "$$LAST" != "$(CUSTOM_PKG)" ]; then \
+			echo "CUSTOM_PKG changed ('$$LAST' -> '$(CUSTOM_PKG)'): forcing reconfigure of build.dmcp.p$(DMCP_PACKAGE)"; \
+			$(MESON_SETUP_DMCP) --reconfigure; \
+			echo "$(CUSTOM_PKG)" > "$$STAMP"; \
+		fi; \
+	fi
+
+check-custom-pkg-dmcp5:
+	@if [ -d "build.dmcp5" ]; then \
+		STAMP="build.dmcp5/.custom_pkg_stamp"; \
+		if [ ! -f "$$STAMP" ]; then \
+			LAST="<unknown-pre-existing-build>"; \
+		else \
+			LAST="$$(cat "$$STAMP")"; \
+		fi; \
+		if [ "$$LAST" != "$(CUSTOM_PKG)" ]; then \
+			echo "CUSTOM_PKG changed ('$$LAST' -> '$(CUSTOM_PKG)'): forcing reconfigure of build.dmcp5"; \
+			$(MESON_SETUP_DMCP5) --reconfigure; \
+			echo "$(CUSTOM_PKG)" > "$$STAMP"; \
+		fi; \
+	fi
+
+sim: check-custom-pkg-sim $(BUILD_PC)
 	cd $(BUILD_PC) && ninja sim
 	cp $(BUILD_PC)/src/c47-gtk/c47$(EXE) ./
 	$(T47CP_C47)
@@ -103,7 +177,7 @@ sim: $(BUILD_PC)
 
 simc47: sim
 
-simr47: $(BUILD_PC)
+simr47: check-custom-pkg-sim $(BUILD_PC)
 	cd $(BUILD_PC) && ninja simr47
 	cp $(BUILD_PC)/src/c47-gtk/r47$(EXE) ./
 	$(T47CP_R47)
@@ -120,16 +194,16 @@ t47:
 	@:
 endif
 
-dmcp: build.dmcp
+dmcp: check-custom-pkg-dmcp build.dmcp
 	cd build.dmcp.p$(DMCP_PACKAGE) && ninja dmcp
 
-dmcpr47: build.dmcp
+dmcpr47: check-custom-pkg-dmcp build.dmcp
 	cd build.dmcp.p$(DMCP_PACKAGE) && ninja dmcp_r47
 
-dmcp5: build.dmcp5
+dmcp5: check-custom-pkg-dmcp5 build.dmcp5
 	cd build.dmcp5 && ninja dmcp5
 
-dmcp5r47: build.dmcp5
+dmcp5r47: check-custom-pkg-dmcp5 build.dmcp5
 	cd build.dmcp5 && ninja dmcp5_r47
 
 docs: build.sim
@@ -139,8 +213,56 @@ testPgms: build.sim
 	cd $(BUILD_PC) && ninja testPgms
 	$(if $(CUSTOM_PKG),@echo "CUSTOM_PKG active: skipping res/testPgms copy",mkdir -p res/testPgms && cp $(BUILD_PC)/src/generateTestPgms/testPgms.bin res/testPgms/)
 
-test: clean build.sim testPgms
+test: clean check-custom-pkg-sim build.sim testPgms
 	cd $(BUILD_PC) && ninja test
+
+# pkg_build PKG=<dir> (PROPOSED_SPEC_CHANGES.md revision 2, New Decision
+# 5): the sole sanctioned way to produce a distributable package
+# artifact — test-gated (a package that fails its own test suite
+# produces no artifact) and size-limited against the actual assembled
+# zip, not an estimate.
+#
+# NOTE on the PKG variable name: `PKG` is also used elsewhere in this
+# Makefile for the numbered DMCP build-variant pattern targets
+# (build.dmcp.p$(PKG), dmcp_pkg$(PKG), dist_dmcp_pkg$(PKG) — unrelated
+# to CUSTOM_PKG package overlays). Because Make expands $(PKG) in
+# target names at parse time, invoking `make pkg_build dmcp_pkg1
+# PKG=packages/my-pkg` in the SAME command line would corrupt those
+# other targets' names. In practice pkg_build is invoked alone
+# (`make pkg_build PKG=packages/my-pkg`), which is unaffected — flagged
+# here, and in the implementation report, as a known naming collision
+# rather than silently risked.
+PKG_MAX_SIZE = 200000
+
+pkg_build:
+	@if [ -z "$(PKG)" ]; then \
+		echo "ERROR: pkg_build requires PKG=<package-dir>, e.g. make pkg_build PKG=packages/my-pkg" >&2; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(PKG)" ]; then \
+		echo "ERROR: pkg_build: package directory not found: $(PKG)" >&2; \
+		exit 1; \
+	fi
+	$(MAKE) clean
+	$(MAKE) test CUSTOM_PKG=$(PKG)
+	python3 tools/pkg_patch_refresh.py $(PKG)
+	@mkdir -p "$(CURDIR)/pkg_dist"
+	@rm -f "$(CURDIR)/pkg_dist/$(notdir $(PKG)).zip"
+	@cd $(PKG) && zip -r -q "$(CURDIR)/pkg_dist/$(notdir $(PKG)).zip" \
+		$(if $(wildcard $(PKG)/patches),patches) \
+		$(if $(wildcard $(PKG)/files),files)
+	@ZIP="$(CURDIR)/pkg_dist/$(notdir $(PKG)).zip"; \
+	if [ ! -f "$$ZIP" ]; then \
+		echo "ERROR: pkg_build: $$ZIP was not created (package has neither patches/ nor files/?)" >&2; \
+		exit 1; \
+	fi; \
+	ACTUAL_SIZE=$$(stat -c%s "$$ZIP" 2>/dev/null || stat -f%z "$$ZIP"); \
+	if [ "$$ACTUAL_SIZE" -gt "$(PKG_MAX_SIZE)" ]; then \
+		echo "ERROR: pkg_build: $$ZIP is $$ACTUAL_SIZE bytes, exceeds PKG_MAX_SIZE=$(PKG_MAX_SIZE) bytes" >&2; \
+		rm -f "$$ZIP"; \
+		exit 1; \
+	fi; \
+	echo "pkg_build: $$ZIP is $$ACTUAL_SIZE bytes (limit $(PKG_MAX_SIZE))"
 
 test_asan: clean testPgms
 ifeq ($(OS),Windows_NT)
@@ -165,7 +287,7 @@ testPgms_stamp: build.sim src_files_stamp
 	cp $(BUILD_PC)/src/generateTestPgms/testPgms.bin res/testPgms/
 	touch $@
 
-repeattest: build.sim testPgms_stamp
+repeattest: check-custom-pkg-sim build.sim testPgms_stamp
 	cd $(BUILD_PC) && ninja test
 
 build.rel/wiki: build.rel
