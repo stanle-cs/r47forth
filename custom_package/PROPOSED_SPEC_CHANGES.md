@@ -1,192 +1,279 @@
-# Proposed Spec Changes — Patch-Based Package Overlay System
+# Proposed Spec Changes — Plain-Diff Package Overlay System
 
-**Status:** proposal, not ratified. No `custom_package/DESIGN.md` exists today;
-this document is written so it could later seed one, but formalizing it is a
-human decision. `custom_package/README.md` is treated as the sole existing
-authority on current behavior for this pass — `packages/forth-core/DESIGN.md`
-governs forth-core's own Forth logic only and is not cited here.
+**Status:** revision 2, supersedes revision 1's libclang/function-boundary
+design. No `custom_package/DESIGN.md` exists today; this document is written
+so it could later seed one, but formalizing it is a human decision.
+`custom_package/README.md` is the sole existing authority on current
+behavior — `packages/forth-core/DESIGN.md` governs forth-core's own Forth
+logic only and is not cited here.
 
 **Scope:** package overlay/manager machinery only — `tools/resolve_c47_src.py`
-(or its replacement), `custom_package/README.md`, and new patch
-generation/application tooling. Does not touch forth-core's Stage-2 Forth
-work, `freeList.c`, `labelList`/`programList`, or any other audit-backlog
-item.
+and the `tools/pkg_patch_*.py` tooling, `custom_package/README.md`,
+`Makefile`, top-level `meson.build`. Does not touch forth-core's Stage-2
+Forth work, `freeList.c`, `labelList`/`programList`, or any other
+audit-backlog item.
 
-**Goal of the redesign:** move from whole-file symlink overrides
-(last-listed-wins) to patch-based, function-boundary-granular overrides with
-cumulative, explicitly ordered per-file composition.
-
-No `[GAP]`s outside scope were surfaced during this pass.
-
----
-
-## 1. Storage Format
-
-**Decision:** package overrides are stored as unified diff patches (`.patch`
-files, `git diff -U3` or greater context) against the upstream file they
-target, rather than whole-file copies. Files with no upstream counterpart at
-the same relative path continue to be stored whole, unchanged from today's
-convention.
-
-**Rationale:** a patch makes the *delta* — the actual thing a package is
-responsible for — reviewable and diffable against upstream drift, instead of
-requiring a human to diff two full files to find out what a package actually
-changed.
-
-**Today, for contrast:** overrides are committed as complete replacement
-files. `packages/forth-core/meson.build:2` lists eleven whole-file overrides
-(`config.c`, `error.c`, `items.c`, `screen.c`, …) via `pkg_override_sources`,
-each a full copy of the upstream file with edits inline
-[VERIFIED: packages/forth-core/meson.build:2]. "The override replaces the
-upstream file entirely in the shadow tree" is the explicit current contract
-[VERIFIED: custom_package/README.md:60].
-
-**[VERIFIED: empirically, Unit 4]** Context-line policy: **`-U3` is the
-default and larger windows are NOT more resilient — they are strictly worse
-for direct application.** The assumption above ("larger context … more
-resilient matching") is empirically **reversed** for `git apply`: unlike
-`patch(1)`, `git apply` has no fuzz — every context line must match (offset
-search only). Real-drift experiment (this repo's committed `keyboard.c` vs
-upstream HEAD's, 7 churned hunks): a one-line function-body edit 6 lines away
-from real churn applied cleanly at `-U3` but failed outright at `-U10`
-(the churn landed inside the 10-line window). With blob ancestry available,
-`git apply -3` rescued both window sizes identically (three-way merge uses
-the recorded pre-image blob, not the context window). Conclusion: keep
-`-U3`; resilience comes from `-3` + resolvable pre-image blobs (item 5),
-not from wider context.
+**Goal of the redesign (unchanged across both revisions):** move from
+whole-file symlink overrides (last-listed-wins, no diff visibility) to
+patch-based overrides with cumulative, explicitly ordered per-file
+composition — so a package's actual delta against upstream is reviewable
+without diffing two full files by hand, and two packages' independent
+contributions to the same file compose instead of one silently clobbering
+the other.
 
 ---
 
-## 2. New-vs-Overlay Distinction
+## Why revision 2: what changed and why
 
-**Decision:** determined by path-mirroring — a patch file's relative path
-must exactly match the upstream file it targets. No separate marker or
-directive is needed to distinguish "this overrides an upstream file" from
-"this is a new file."
+Revision 1 (implemented, then reverted on this branch) added
+function-boundary granularity via libclang: patches were split per changed
+function, and a separate whole-file-override mechanism handled anything
+libclang couldn't attribute to a function body (globals, macros, structs,
+added/removed functions), with a configure-time check enforcing the two
+mechanisms stay mutually exclusive per file.
 
-**Rationale:** removes a class of declaration (today's separate
-`pkg_override_sources` vs. `pkg_custom_sources` lists) in favor of one
-inference rule, reducing the surface for the exact kind of silent
-misconfiguration the current README already warns about (a typo'd variable
-name silently producing no override, no error, green build
-[VERIFIED: custom_package/README.md:50-53]).
+That design achieved its stated goal — avoiding spurious conflicts between
+packages editing unrelated functions in the same file — but the actual
+motivating constraint for this whole redesign is **package size** (DM42-class
+flash/RAM budget; small, reviewable diffs), not merge-conflict avoidance
+specifically. Function-boundary splitting bought conflict precision at a
+real cost: a new build-time dependency (libclang) that had to be walled off
+from the build path with its own enforcement machinery, a second storage
+convention (whole-file override) that existed solely to catch what
+function-splitting couldn't express, a mutual-exclusivity check to keep
+those two conventions from colliding, and real authoring friction (a
+developer editing a global couldn't use the same command as one editing a
+function body). None of that machinery is required to hit the actual goal.
 
-**[RATIFIED]** — today, an override whose relative path doesn't match any
-upstream source is a **fatal configure error** — `resolve_c47_src.py` exits 1
-with "does not exist in src/c47/" [VERIFIED: tools/resolve_c47_src.py:196-199],
-and the shadow-mode path emits the equivalent fatal error at
-[VERIFIED: tools/resolve_c47_src.py:190-199] as well as a distinct "does not
-match any upstream source — ignored" warning path for the non-shadow mode
-[VERIFIED: tools/resolve_c47_src.py:326-327]. Under pure path-mirroring
-inference, a misspelled path that was meant to override an existing file
-would instead be silently classified as "new file, store whole" — turning
-today's loud fatal error into silent misclassification.
-
-**Decision: path-mirroring is not the only signal.** Every patch file must
-carry an explicit override-target declaration in addition to its path — e.g.
-a required one-line header (comment) in the patch naming the upstream file it
-targets, or an equivalent required manifest entry — and the resolver must
-verify the declared target matches the path-inferred target, failing loudly
-on any mismatch. Rationale (human reviewer): the entire point of the
-redesign is loud failure; silently reclassifying a typo'd override path as
-"must be a new file" undermines that on day one, and the authoring overhead
-of one required line is cheap relative to that risk. Left to Step 2 to pick
-the exact declaration mechanism (header comment vs. manifest entry).
+**Revision 2: plain whole-file `git diff`, one mechanism, no restriction on
+what a developer edits.** This achieves the same size win (a diff is still
+small relative to a full-file copy for a localized change) with none of the
+above cost. The tradeoff being accepted: two packages editing different
+parts of the *same function* now produce a textual diff conflict (git's
+merge granularity is line-based, not AST-based) where function-boundary
+splitting would have composed them cleanly. This is judged an acceptable
+tradeoff — it fails loudly (per §5/§7, unchanged) rather than silently, and
+same-function-different-package edits are the less common case in practice.
 
 ---
 
-## 3. Composition
+## SUPERSEDED (revision 1 decisions, not carried forward)
 
-**Decision:** multiple packages targeting the same upstream file apply as a
-cumulative, explicitly ordered patch stack, not last-listed-wins. Ordering is
-declared explicitly per file via a numeric prefix convention (e.g. `001-`,
-`002-`), following the OpenWrt/`quilt`-series model.
+- **§2 (rev 1) — dual-signal override-target declaration** as a mechanism
+  for distinguishing "this overrides an upstream file" from "this is a new
+  file." Superseded not because dual-signal validation itself was wrong
+  (it stays, see New Decision 6 below, and it caught two real self-audit
+  bugs in the rev-1 implementation) — superseded because the thing it was
+  disambiguating (patch vs. whole-file-override, two competing mechanisms)
+  no longer exists. Under revision 2, "does this rel exist upstream"
+  alone determines whether an entry belongs under `patches/` (exists) or
+  `files/` (doesn't) — inferred, not developer-declared, and each of the
+  two directories independently enforces its own existence check (New
+  Decision 6), which is sufficient on its own; no separate classification
+  layer is needed.
+- **§4 (rev 1) — function-boundary patch granularity via libclang.**
+  Superseded per the rationale above: the size goal doesn't require
+  function-boundary granularity, and removing it eliminates an entire
+  category of build-time risk (a wrongly-reachable libclang import) and
+  authoring friction (restricting what a developer may edit in one pass).
+  Plain `git diff` of the whole materialized file replaces it — see New
+  Decision 1.
+- **§8 (rev 1) — mutual exclusivity between function-patch and
+  whole-file-override mechanisms.** Superseded because there is only one
+  override mechanism now (`patches/`); the check existed solely to prevent
+  two competing mechanisms from targeting the same file, and with only one
+  mechanism there is nothing left for it to guard against. (A different,
+  much narrower existence-based check remains for `patches/` vs. `files/`
+  — see New Decision 6 — but it is not a revival of §8; it can't be
+  triggered by two active mechanisms on the same file, only by a
+  patch/file individually targeting a nonexistent/existent-when-it-
+  shouldn't-be upstream path.)
+- **`pkg_override_sources` / `pkg_override_headers` / `pkg_custom_sources`
+  / `pkg_patch_sources`** manual meson.build declarations, and the
+  per-package `subdir(pkg)` meson evaluation that read them. Superseded by
+  auto-discovery (New Decision 3): a package directory contains exactly
+  `patches/` and `files/`, nothing else is read or evaluated.
 
-**Rationale:** today, when two packages override the same file, only the
-last-listed package's version survives — the other package's contribution is
-silently dropped from the build (a warning is printed, but the build still
-succeeds and ships without it). Cumulative composition preserves every
-package's independent contribution instead of requiring one package to
-subsume the other's diff by hand.
+## KEPT (still valid under revision 2, unchanged in substance)
 
-**Today, for contrast:** `chosen = spec_list[-1]  # last wins`
-[VERIFIED: tools/resolve_c47_src.py:184], with the equivalent non-shadow-mode
-logic at [VERIFIED: tools/resolve_c47_src.py:308-310] (`override_map[s].pop()`
-consuming overrides in list order, last one taking effect). The current
-"duplicated (N packages override this file, last wins)" message is a
-**warning only** — it does not fail the build
-[VERIFIED: tools/resolve_c47_src.py:225-228,242-245]. This proposal changes
-that: see item 7, which upgrades unresolved same-function conflicts (not mere
-same-file duplication) to a hard failure.
+- **Materialize-then-edit developer workflow** (rev 1 §6): a full, real,
+  editable copy of an upstream file, full compiler/LSP context — `refresh`
+  re-derives patches from it. Revision 2 removes the function-boundary
+  restriction on what may be edited in the materialized copy (see New
+  Decision 1) but keeps the workflow shape itself.
+- **`.patch` storage format** (rev 1 §1): `git diff` output, `-U3` or
+  greater context, path-mirrored to the upstream file targeted. The
+  empirical finding that `-U3` is the right choice (below) still holds —
+  it was never about function-boundary granularity, only about `git
+  apply`'s lack of fuzz under drift.
+- **Cumulative, explicitly ordered composition** (rev 1 §3): numeric-prefix
+  convention, applied in ordinal order across all active packages.
+- **Application via `git apply -3`** against a freshly materialized
+  upstream copy, with an **explicit, unconditional post-apply scan for
+  conflict markers** as a distinct checked step (rev 1 §5) — a clean exit
+  code alone was never sufficient and still isn't.
+- **Loud-failure conflict philosophy** (rev 1 §7): a genuine overlapping
+  edit between two packages fails the build, never silently resolved by
+  picking one side.
+- **New files with no upstream counterpart stored whole**, path-mirrored,
+  no diffing (rev 1's "today, for contrast" baseline — unchanged).
 
-**Open question for implementation:** exact sort key when two patches for the
-same file share a numeric prefix (collision), and whether prefixes must be
-globally unique per file or merely define a total order (ties broken by,
-e.g., package directory name). `quilt` itself uses an explicit `series` file
-rather than filename-embedded prefixes alone — Qwen should evaluate whether a
-`series`-file-per-target or filename-prefix-only convention better fits this
-project's existing "everything declared in `meson.build`" style
-[VERIFIED: custom_package/README.md:4-6].
+### Empirical findings carried forward unchanged (still valid — neither depends on function-boundary granularity)
+
+**Context window:** `-U3` is kept; a larger window is empirically *less*
+resilient for direct application under drift (`git apply` has no fuzz — real
+churn 6 lines from an edit broke `-U10` but not `-U3` in the original
+experiment), and window size is irrelevant once `-3` three-way merge
+engages (the merge uses the recorded pre-image blob, not the context). See
+the full experiment record preserved below under "Application Mechanism."
+
+**Blob ancestry:** holds, with the implemented safeguards (full-index
+patches; generation-time `git cat-file -e` gate; scratch-repo application
+with odb seeding of each patch's pre-image blob), and its failure mode is
+loud in every observed case (conflict markers caught by the unconditional
+scan, or an outright `git apply` failure) — never a silent mis-merge. Full
+record preserved below.
 
 ---
 
-## 4. Patch Granularity
+## New Decisions (revision 2)
 
-**Decision:** patches are generated and applied at function-boundary
-granularity (one logical diff per overridden function), using libclang
-(`clang.cindex`) against `compile_commands.json` to locate real function
-boundaries — not brace-matching or raw line diffing.
+### 1. Single mechanism: plain whole-file diff
 
-**Rationale:** avoids spurious conflicts between packages editing unrelated
-functions in the same file, and correctly handles macro-expanded braces,
-`#ifdef`-guarded bodies, and string/char-literal braces that break
-token/brace-based scanning.
+Package overrides of an existing upstream file are stored as one `git diff`
+of the **whole materialized file** against its upstream counterpart —
+`-U3` or greater context, no restriction on what kind of change it
+contains. A function body, a global, a `#define`, a struct or typedef, an
+added or removed function — all are just diff output; the tool draws no
+distinction between them and imposes none on the developer.
 
-**[VERIFIED: resolved during implementation]** `clang.cindex` was not
-installed at design time (`ModuleNotFoundError`, Python 3.12.3); it is now
-present in this environment (python3-clang bindings against system
-libclang-18, `/usr/lib/x86_64-linux-gnu/libclang-18.so`) and is exercised by
-`tools/test_pkg_patch_extract.py`. It remains a dependency of
-authoring/refresh tooling only — any CI gate that runs the extractor tests
-needs it; the configure/build path does not.
+**Rationale:** the package-size constraint this redesign exists for is
+satisfied by diffing (a localized change produces a small patch regardless
+of granularity); function-boundary restriction added real authoring
+friction without being necessary for that goal (see "Why revision 2"
+above).
 
-**[RATIFIED]** — "A vanilla build (`-DCUSTOM_PKG` unset or empty) is
-byte-for-byte identical [to upstream]" is a hard, explicit invariant today
-[VERIFIED: custom_package/README.md:5-7]. The libclang dependency must be
-scoped to package-authoring tooling (the `refresh` command, item 6) — invoked
-by a developer when generating/updating a patch — and must **not** be a
-dependency of the shadow-tree build step itself (`resolve_c47_src.py --shadow`,
-invoked by every `meson`/`ninja` build with `CUSTOM_PKG` set
-[VERIFIED: meson.build:133-138]). The build step must only ever consume
-already-generated, checked-in `.patch` files via `git apply -3` (item 5) — it
-must not re-parse C source with libclang on every build.
+### 2. `refresh` operates on a package directory, not a single file
 
-**Decision: hard-enforce, not document-only.** This must be a CI/configure-time
-assertion, not a comment or README note that can silently rot. Concretely:
-the configure-time build step (whatever runs on every `meson`/`ninja`
-invocation) must fail if it can reach or import the libclang extractor
-module — e.g. an explicit check that the shadow-tree resolver process has no
-`clang`/`clang.cindex` import in its call graph, or a CI job that greps the
-build-time code path for forbidden imports. Left to Step 2 (item 2 of the
-Step 2 breakdown, function-boundary extractor) to specify the exact
-assertion mechanism.
+`refresh` takes a package directory as its only argument (e.g.
+`python3 tools/pkg_patch_refresh.py packages/my-pkg`), not a single target
+file. It walks every materialized file directly under the package
+directory that mirrors an upstream path (excluding `patches/` and `files/`
+themselves — those are refresh's *output* and the new-file store,
+respectively, not its input), diffs each against its upstream counterpart
+at the same relative path, and for each: writes/overwrites a `.patch` file
+if the materialized copy differs from upstream, or deletes any existing
+`.patch` for that path if the materialized copy no longer differs (a
+reverted edit) — so a package directory's `patches/` always reflects
+exactly the current state of its materialized working copies, never
+accumulating stale patches from abandoned edits.
+
+Materialized working copies are an authoring-time convenience, not checked
+in — only `patches/` and `files/` are (see New Decision 3).
+
+### 3. Auto-discovery — no manual declarations
+
+A package directory contains exactly two subdirectories the resolver reads:
+`patches/*.patch` (diffs, matched via the numeric-prefix + path-mirroring
+filename convention already in place) and `files/*` (whole new files,
+path-mirrored, recursively). Both are glob-matched by the resolver directly
+at configure time — no `meson.build` inside a package directory is read or
+evaluated, and none should exist; a package's on-disk `patches/`+`files/`
+content **is** its declaration.
+
+**Rationale:** removes an entire class of the silent-misconfiguration bug
+this project has repeatedly had to guard against by hand (a typo'd
+declaration variable name silently producing no override, no error, green
+build). If a `.patch` file exists on disk, it is applied — there is no
+separate "did you also remember to list it" step to typo.
+
+### 4. `CUSTOM_PKG=` Makefile threading
+
+`CUSTOM_PKG=` threads through the existing `sim`, `simc47`, `simr47`,
+`both`, `test`, `repeattest`, `dmcp`, `dmcpr47`, `dmcp5`, `dmcp5r47`
+Makefile targets as an optional variable, passed through to each target's
+underlying `meson setup -D...` invocation — the same pattern already
+established for `DMCP_PACKAGE=`/`f=`. **[VERIFIED during implementation]**
+this threading was already in place for all ten targets prior to this unit
+(each depends, directly or transitively, on `build.sim`/`build.dmcp`/
+`build.dmcp5`, which already pass `-DCUSTOM_PKG=$(CUSTOM_PKG)`) — confirmed
+via `make -n <target> CUSTOM_PKG=packages/x | grep -- -DCUSTOM_PKG` for
+each target rather than re-implemented. New Decision 7 (reconfigure-on-
+change) is what was actually missing and is implemented fresh.
+
+### 5. `pkg_build PKG=<dir>` — the sole distributable-artifact path
+
+A new Makefile target, `pkg_build PKG=<dir>`, is the only sanctioned way to
+produce a distributable package artifact. It is test-gated (a package whose
+`make test CUSTOM_PKG=$(PKG)` fails produces no artifact, full stop) and
+enforces a size limit (`PKG_MAX_SIZE`, default 200KB) against the actual
+assembled zip, not an estimate. Full recipe in `Makefile`/§ below.
+
+### 6. Fatal-at-configure: patch/file target must (not) exist upstream
+
+Both directions are checked, each independently sufficient (see
+"Superseded — §2" above for why no separate classification signal is
+needed on top of these):
+
+- A `patches/<NNN>-<rel>.patch` whose mirrored path does not correspond to
+  a real file under `src/c47/<rel>` is a **fatal configure error** — typo,
+  renamed, or deleted upstream file — naming the offending patch and path.
+  (The dual-signal check from rev-1 — patch's own `+++` header cross-checked
+  against its filename-decoded path — is kept as a second, independent
+  check on top of the existence check: it catches a corrupted/mis-authored
+  patch file even when the filename alone would resolve to a real path.)
+- A `files/<rel>` whose mirrored path **does** correspond to a real file
+  under `src/c47/<rel>` is likewise a **fatal configure error** — this
+  is a change to an existing file placed under the wrong mechanism; it
+  belongs under `patches/` instead. Naming the offending file and path.
+- Two packages both placing a `files/<rel>` at the same mirrored path (both
+  believing they're introducing the same new file) is a **fatal configure
+  error** naming both packages and the path — there is no git-merge concept
+  to fall back on for two competing whole files with no common base, so
+  this cannot degrade to a loud-conflict-via-marker-scan the way two
+  patches on the same existing file can; it must be caught before either
+  file is ever copied into the shadow tree.
+
+### 7. Reconfigure-on-`CUSTOM_PKG`-change, distinct from `f=1`
+
+Switching the `CUSTOM_PKG` value between invocations against an existing
+build directory forces a reconfigure by default. **Rationale:** Make's
+directory-existence-gated target semantics mean `build.sim:`'s recipe (the
+`meson setup` call) does not re-run once `build.sim/` already exists —
+so today, invoking `make sim` with a different (or newly-empty, or
+newly-set) `CUSTOM_PKG` value than the previous invocation used silently
+reuses the previous shadow tree with no error and no rebuild of the
+overlay. A stamp file recording the last-used `CUSTOM_PKG` value, checked
+unconditionally before every build, closes this.
+
+**This is independent of, and must not be conflated with, `f=1`**, which
+controls only whether the GMP subproject is force-rebuilt
+(`$(if $(f),test -d ...,rm -rf ...)` in the `build.dmcp`/`build.dmcp5`
+rules) and has no relationship to `CUSTOM_PKG` or the shadow tree at all.
+`f=1` says "trust the existing GMP build even if present"; the
+`CUSTOM_PKG` stamp check says "always verify the package overlay matches
+what was actually requested, regardless of what `f` says." A developer
+passing `f=1 CUSTOM_PKG=packages/other-pkg` still gets a forced reconfigure
+for the package-overlay reason, independent of GMP being skipped for the
+`f=1` reason. Documented explicitly in the Makefile at the stamp-check
+target, not left to be inferred.
 
 ---
 
-## 5. Application Mechanism
+## Application Mechanism (record preserved from revision 1 — still valid)
 
 **Decision:** patches are applied via `git apply -3` against a freshly
 materialized copy of the current upstream file at build/prepare time.
 
-**[VERIFIED: empirically, Unit 4]** Blob ancestry **holds, with the
-implemented safeguards, and its failure mode is loud.** Real-drift
-experiment (patch authored against this repo's committed `keyboard.c`,
-applied against upstream HEAD's genuinely drifted version):
+**[VERIFIED: empirically]** Blob ancestry **holds, with the implemented
+safeguards, and its failure mode is loud.** Real-drift experiment (patch
+authored against this repo's committed `keyboard.c`, applied against
+upstream HEAD's genuinely drifted version):
 
 - *Ancestry available* (pre-image blob resolvable, seeded into the scratch
   apply repo): drift far from the edit → clean apply; drift overlapping the
   edit → `git apply -3` three-way-merges into a conflicted state and the
-  unconditional marker scan catches it → **loud conflict** (§7 satisfied).
+  unconditional marker scan catches it → **loud conflict**.
 - *No ancestry* (pre-image blob unresolvable where apply runs): git prints
   `repository lacks the necessary blob to perform 3-way merge. Falling back
   to direct application...`; direct apply succeeds only while the `-U3`
@@ -196,148 +283,79 @@ applied against upstream HEAD's genuinely drifted version):
 Implementation notes that make ancestry hold in practice: (1) `refresh`
 writes a full 40-char pre-image SHA and hard-fails if `git cat-file -e`
 cannot resolve it at generation time (i.e. upstream file must be committed);
-(2) `apply_patch_stack` applies inside a scratch git repo (never the real
-working tree) and seeds each patch's pre-image blob into that scratch odb
-from this repository (abbreviated index lines are resolved via
-`git rev-parse <sha>^{blob}` first); (3) because patches are generated and
-applied within this same repository, upstream pulls keep old pre-image blobs
-in history, so ancestry survives drift. Known residual caveat: a **shallow
-clone** of this repo may lack historical blobs — that degrades to the loud
+(2) the apply step runs inside a scratch git repo (never the real working
+tree) and seeds each patch's pre-image blob into that scratch odb from this
+repository (abbreviated index lines are resolved via `git rev-parse
+<sha>^{blob}` first); (3) because patches are generated and applied within
+this same repository, upstream pulls keep old pre-image blobs in history,
+so ancestry survives drift. Known residual caveat: a **shallow clone** of
+this repo may lack historical blobs — that degrades to the loud
 no-ancestry behavior above, not to silent misapplication. Adjacent-line
-drift (no unchanged line separating drift from edit) conflicts loudly even
-via `-3` — regression-encoded in `tools/test_pkg_patch_apply.py`.
+drift (no unchanged line separating drift from an edit) conflicts loudly
+even via `-3`.
 
 **[RATIFIED]** — conflict-marker detection is not optional and is not
 implied by `git apply -3`'s own exit code. `git apply -3` can exit
-successfully while having left `<<<<<<<`/`=======`/`>>>>>>>` conflict markers
-embedded in the merged output — a three-way merge "succeeding" in git's sense
-is not the same as the result being valid, marker-free source. Relying on
-the C compiler to incidentally reject such a file is not an acceptable
-substitute for an explicit check (a marker could in principle land inside a
-comment or string and "compile" while silently corrupting behavior).
+successfully while having left `<<<<<<<`/`=======`/`>>>>>>>` conflict
+markers embedded in the merged output. Relying on the C compiler to
+incidentally reject such a file is not an acceptable substitute for an
+explicit check.
 
 **Decision: scan for conflict markers as a distinct checked step**, run
 unconditionally after every `git apply -3` regardless of its reported exit
-status, and fail the configure/build step if any marker is found. This ties
-directly into item 7's hard-failure requirement — item 7's invariant is only
-actually enforced if this scan exists.
+status, and fail the configure/build step if any marker is found.
+
+### Context-line window (`-U3`) — record preserved from revision 1
+
+**[VERIFIED: empirically]** `-U3` is the default and larger windows are NOT
+more resilient — they are strictly worse for direct application. Unlike
+`patch(1)`, `git apply` has no fuzz — every context line must match (offset
+search only). Real-drift experiment (this repo's committed `keyboard.c` vs
+upstream HEAD's, 7 churned hunks): a one-line edit 6 lines away from real
+churn applied cleanly at `-U3` but failed outright at `-U10` (the churn
+landed inside the 10-line window). With blob ancestry available, `git apply
+-3` rescued both window sizes identically (three-way merge uses the
+recorded pre-image blob, not the context window). Conclusion: keep `-U3`;
+resilience comes from `-3` + resolvable pre-image blobs, not from wider
+context. (This finding predates and is independent of the function-boundary
+vs. plain-diff granularity question — it is purely about `git apply`
+mechanics and applies unchanged under revision 2.)
 
 ---
 
-## 6. Materialize/Refresh Developer Workflow
+## Conflict Philosophy (unchanged from revision 1)
 
-**Decision:** developers edit a fully materialized, real whole file (full
-compiler/LSP context) in a working directory — not a bare patch or fragment.
-A `refresh` command re-derives the patch from the developer's edits by
-diffing the materialized file against upstream, at function-boundary
-granularity per item 4.
+**Decision (hard invariant):** a genuine overlapping edit between two
+packages targeting the same upstream file must fail the build loudly,
+either as a patch-apply failure or explicit conflict markers requiring
+manual resolution. Never silently resolved by picking one package's
+version.
 
-**Rationale:** preserves a property the current design already relies on —
-today's overrides *are* real whole files specifically so IDEs/LSPs following
-`compile_commands.json` resolve real definitions
-[VERIFIED: custom_package/README.md:88-90]. Editing a bare patch fragment
-would regress that.
-
-**Open question for implementation:** where the materialized working file
-lives, and which artifact is the checked-in source of truth. Two options:
-(a) the materialized file lives at today's conventional path
-(`packages/<pkg>/<relative-path>`) and the `.patch` is a derived/generated
-build artifact (not committed); or (b) the `.patch` is what's committed and
-is the source of truth, with the materialized file living in a separate,
-gitignored working directory regenerated on demand. This choice determines
-code-review ergonomics (reviewing a real diff vs. reviewing a diff derived
-from a working copy that may be stale relative to the committed patch) and
-must be decided before Step 2's patch-generation prompt can specify exact
-file paths.
+**Revision 2 note:** without function-boundary splitting, "overlapping
+edit" is now git's own line-based merge-conflict definition, not an
+AST-aware one — two packages editing *different lines of the same
+function* still compose cleanly (git's three-way merge handles that as
+today's `-3` mechanics already prove); two packages editing the *same
+line*, or lines within each other's `-U3` context in a way that produces
+a genuine hunk overlap, conflict loudly. This is the accepted tradeoff
+described in "Why revision 2" above.
 
 ---
 
-## 7. Conflict Philosophy
+## Known open item
 
-**Decision (hard invariant):** a genuine same-function conflict between two
-packages — same function, overlapping edits — must fail the build loudly,
-either as a patch-apply failure or explicit conflict markers requiring manual
-resolution. Never silently resolved by picking one package's version.
-
-**Rationale:** silent resolution would mean one package's fix or behavior
-change simply disappears from the shipped build with no signal to either
-package author — the exact failure mode item 3 is designed to eliminate for
-non-overlapping changes to the same file, and item 5's marker-detection
-requirement exists specifically to make this invariant enforceable rather
-than aspirational.
-
-**Relationship to current behavior:** this is a strictly *stronger*
-guarantee than exists today. Today, two packages overriding the same file is
-only ever a stderr warning ("last wins") and the build still succeeds
-[VERIFIED: tools/resolve_c47_src.py:225-228]. Under this proposal, mere
-same-file overlap (different functions) composes cleanly per item 3, but a
-genuine same-function content conflict must hard-fail — a case that today's
-whole-file model cannot even distinguish from "different functions, same
-file," since it never looks inside the file. This is called out explicitly
-so this isn't mistaken for an accidental behavior change during review.
-
----
-
-## 8. Fallback for Non-Function-Scoped Changes
-
-**Decision:** (a) — changes to globals, `#define`s, macros, structs, or
-typedefs fall back to whole-file override under today's existing convention
-(`pkg_override_sources`, unchanged), rather than being deferred as an
-undesigned gap.
-
-**Rationale:** the existing whole-file mechanism is already proven and
-already carries the full existing safety-guard set — sentinel-gated
-delete-safety [VERIFIED: tools/resolve_c47_src.py:126-137,
-custom_package/README.md:76-80], symlink-escape containment guards
-[VERIFIED: tools/resolve_c47_src.py:55-75,201-208], fatal-on-missing-match
-[VERIFIED: tools/resolve_c47_src.py:189-199], and byte-identical "dead
-shadow" warnings [VERIFIED: tools/resolve_c47_src.py:210-214]. Building a
-second new mechanism for non-function-scoped changes, on day one of the
-patch-based redesign, would duplicate that guard set for no proven benefit —
-function-boundary patching's whole rationale (item 4) is about reducing
-spurious conflicts between packages editing unrelated *functions*, which
-doesn't apply to a global/macro/struct change in the first place.
-
-**[RATIFIED]** — if package A function-patches file X and package B
-whole-file-overrides file X, the configure step must treat this as a
-**fatal error**, not attempt to layer one mechanism's output on top of the
-other's. The two mechanisms must be mutually exclusive per target file,
-enforced by the tool at configure time — not left to convention or authoring
-discipline. Rationale (human reviewer): same reasoning as other
-same-file-ambiguity cases in this project — one mechanism per file, and the
-tool must be the thing that enforces it, not documentation. This should be
-added as an explicit checked invariant in Step 2's ordering/composition
-prompt (item 5 of the Step 2 breakdown), not left implicit.
-
----
-
-## Summary of `[DECISION NEEDED]` Items — RATIFIED (human review)
-
-1. §2 — **RATIFIED:** path-mirroring alone is insufficient; every patch must
-   carry an explicit override-target declaration (header comment or manifest
-   entry, mechanism TBD in Step 2), checked against the path-inferred target,
-   failing loudly on mismatch.
-2. §4 — **RATIFIED:** libclang/`clang.cindex` is a dependency of authoring
-   tooling only, never of the build-time shadow-tree step; enforced by a
-   CI/configure-time assertion (not documentation alone) — exact mechanism
-   TBD in Step 2.
-3. §5 — **RATIFIED:** conflict-marker detection after `git apply -3` is a
-   distinct checked step, run unconditionally regardless of `git apply -3`'s
-   own exit status.
-4. §8 — **RATIFIED:** function-patch and whole-file-override mechanisms are
-   mutually exclusive per target file, enforced by the tool as a fatal
-   configure error.
-
-All four `[DECISION NEEDED]` items from the initial draft are now resolved.
-Ready for Step 2 pending explicit go-ahead.
-
-## Summary of formerly-`[VERIFIED: pending]` Items — RESOLVED (Unit 4, empirical)
-
-1. §5 — blob ancestry **holds** with the implemented safeguards (full-index
-   patches, generation-time `cat-file -e` gate, scratch-repo application
-   with odb seeding); every failure mode observed under real drift was loud
-   (conflict markers caught by the unconditional scan, or outright apply
-   failure) — see §5 for the full experiment record.
-2. §1 — `-U3` retained; a larger window is empirically *less* resilient for
-   direct application (git apply has no fuzz) and irrelevant once `-3`
-   three-way merge engages — see §1 for the experiment record.
+**Package-level build configuration is not addressed by this design.**
+Forth-core's current `packages/forth-core/meson.build` conditionally adds
+`-DFORTH_DEBUG_SELFTEST` via a top-level meson option — a form of
+package-level build configuration that has no home under the
+patches-and-files-only convention (New Decision 3 explicitly states a
+package directory contains nothing else, and no per-package `meson.build`
+is read). This is out of scope for this revision (forth-core migration is
+explicitly excluded — see Known Migration Gap in
+`custom_package/IMPLEMENTATION_REPORT.md`) and is flagged here as a
+`[DECISION NEEDED]` for whoever migrates forth-core: either such flags move
+to the top-level `meson_options.txt` (one of the three files the package
+manager itself owns) with the package selecting them by name somehow, or
+this class of configuration is dropped entirely in favor of patches to the
+relevant `#ifdef`/`#define` sites directly (which the single-diff mechanism
+now supports without restriction, unlike revision 1).
