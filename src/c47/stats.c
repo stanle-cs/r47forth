@@ -809,6 +809,9 @@ void fnRangeXY(uint16_t unusedButMandatoryParameter) {
       linkToRealMatrixRegister(regHisto, &histo);
       rows = histo.header.matrixRows;
       cols = histo.header.matrixColumns;
+      if(rows == 0) {           // matrixRows is a 12-bit field: >= 4096 rows wrap to 0, making (rows-1) index far out of bounds
+        return false;
+      }
       realToReal34(s,       &histo.matrixElements[(rows-1) * cols    ]);
       real34SetZero(&histo.matrixElements[(rows-1) * cols + 1]);
       //printf(">>>>>HISTO rows=%d  cols=%d  ",rows, cols);
