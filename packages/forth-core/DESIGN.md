@@ -158,11 +158,10 @@ to write at items.c:4690-4691 are therefore exactly:
 ```
 
 (P-1: the `ITM_FORTH` row above shows `PTP_REM`, superseding the `PTP_NONE`
-this section originally specified and the row currently committed at
-packages/forth-core/items.c:4707 [VERIFIED: packages/forth-core/items.c:4707
-— still `PTP_NONE` today; changing it is a §9 work item]. The `PTP_REM` shape
-follows `REM` itself: `fnNop, NOPARAM, ... CAT_FNCT | SLS_ENABLED |
-US_ENABLED | EIM_DISABLED | PTP_REM | HG_ENABLED` [VERIFIED:
+this section originally specified. `PTP_REM` landed via PEM C2
+[VERIFIED: packages/forth-core/items.c:4707 — `PTP_REM` confirmed]. The
+`PTP_REM` shape follows `REM` itself: `fnNop, NOPARAM, ... CAT_FNCT |
+SLS_ENABLED | US_ENABLED | EIM_DISABLED | PTP_REM | HG_ENABLED` [VERIFIED:
 packages/forth-core/items.c:3374]. `func` stays `fnForthOuter` — interactive
 dispatch (catalog/XEQ outside PEM) still reads its source from X, §3.3.2;
 the PTP class only governs program encode/step-length/dispatch.)
@@ -617,7 +616,7 @@ at all. When entered via `ITM_FCALL`, the item's `SLS_ENABLED` (§0.2) makes
 the epilogue agree redundantly. **Required code change (build session, NOT
 applied here):** add `setSystemFlag(FLAG_ASLIFT)` before the `rsp == 0` return
 in `forth_inner.c`. **Required test change (same commit):** stack test c in
-`test_dict_reloc.c` (~310-325) currently asserts clear-on-exit — that
+`test_dict_reloc.c` (~124-148) currently asserts clear-on-exit — that
 assertion enshrines the wrong behavior and must be flipped. The *internal*
 scrub (each push forcing its own lift, clearing after) is correct and
 unchanged; only the final exit state changes.
@@ -1385,6 +1384,49 @@ Mirror these for the Forth region (hook H5, §6). Because links are
 region-relative, the saved bytes are position-independent; on restore, set
 `fdict.base = TO_PCMEMPTR(savedRamPtr)`.
 
+### 5.6 Allocator double-free guard (override: core/freeList.c)
+
+upstream `freeListFree` has no defense against a double free or an invalid
+free. On PC-simulator builds a double free of an exact address already
+produced misleading diagnostics because the address had been removed from
+`allocatedMemoryRegions[]` by the first free — but the function still
+inserted the region into the free list a second time, corrupting it. On DMCP
+(device) builds the diagnostic code is compiled out entirely, so the same
+call silently corrupts the free list.
+
+The override `packages/forth-core/core/freeList.c` inserts a
+range-overlap guard in `freeListFree`, immediately after
+`C47RamPtr = TO_C47MEMPTR(pcMemPtr);` and before the existing
+`#if !defined(DMCP_BUILD)` diagnostic block:
+
+1. Runs **unconditionally** (before any `#if !defined(DMCP_BUILD)` gate),
+   so device builds get the same protection as the simulator.
+2. Checks `[C47RamPtr, C47RamPtr+sizeInBlocks)` against every existing
+   `freeMemoryRegions[]` entry for interval overlap (not exact-address
+   match), so a double free of an address that has since coalesced into a
+   larger region is still caught.
+3. Never mutates `freeMemoryRegions[]` on a hit — logs (PC builds only, via
+   `errorf`/`fprintf(stderr, ...)` plus a backtrace) and returns. A double
+   free is always a caller bug; the free list must survive it unchanged.
+4. Restores the overlap detector at the bottom of `freeListFree` and
+   `freeListReduce` to `>=` (its original upstream form), since
+   adjacent-but-not-yet-coalesced free regions can no longer occur once the
+   guard above prevents the duplicate insertion.
+
+The override is byte-identical to upstream except this single hunk. It is
+an upstream-MR candidate: the guard is not Forth-specific; `freeListFree` is
+the shared C47 allocator used by GMP reals, config.c, register data, and
+the Forth dictionary/label-list machinery alike.
+
+Test coverage (`packages/forth-core/test_dict_reloc.c`, FIX-6 section):
+`test_freelist_double_free_guarded` (exact-address double free),
+`test_freelist_interior_double_free` (double free of an address coalesced
+into the interior of a larger region),
+`test_freelist_no_mutation_on_oversize_free` (double free with a larger
+size than originally allocated must not grow the region). All three assert
+the free list is byte-for-byte unchanged and that `test_freelist_consistent()`
+still passes afterward.
+
 ---
 
 ## 6. Exact hook points (file:line)
@@ -1400,9 +1442,13 @@ future upstream merges reviewable.
 | H1b | `src/c47/items.h`                   | `#define ITM_2842 2842`, `#define ITM_2843 2843` (items.h ~2949-2950)         | Add `#define ITM_FORTH 2842` / `#define ITM_FCALL 2843` aliases (keep the numeric `ITM_2842`/`ITM_2843` names too). Do NOT touch upstream's `ITM_FWORD 2003` (items.h:2056) — that is the swap-endian item, referenced by softmenus.c:866 (§0.1 naming warning). |
 | H2  | `src/c47/programming/lblGtoXeq.c`   | `_executeOp` `PARAM_LABEL` arm **lblGtoXeq.c:341-357**                        | Before `ERROR_LABEL_NOT_FOUND`, add Forth colon-def fallback → `reallyRunFunction(ITM_FCALL,widx)`. |
 | H3  | `src/c47/items.c`                   | `runFunction` XEQ-by-menu branch **items.c:664-685**                          | Same fallback as H2 for interactive `XEQ 'name'`.                                              |
-| H4  | `src/c47/keyboard.c`                | `executeFunction` **keyboard.c:928** (near runFunction call **:1164/:1429**) | *(Optional stage-2)* route a dedicated Forth soft-key / alpha-entry to `ITM_FORTH`. No stage-1 edit. |
+| H4  | `src/c47/keyboard.c`                | `executeFunction` **keyboard.c:928** (near runFunction call **:1164/:1429**) | **[LANDED]** §4.2 site 4: Forth fallback after label miss (`forthFindColon` → `reallyRunFunction(ITM_FCALL, widx)` at **keyboard.c:2293-2300**); P-H7: `MNU_FORTH` picker (`forthPickerGuard` + `pickerInsertName` at **keyboard.c:13-46**, dispatch **:1001-1008**, softmenu case **:113-118**). |
 | H5  | `src/c47/saveRestoreBackup.c`       | label save **:398/:526**, restore **:815-816/:988**                          | Add symmetric save/restore of the Forth region ptr + `fdict` scalars (§5.5).                    |
 | H6  | `src/c47/softmenus.c`               | dynamic-catalog switch **softmenus.c:1657**, PROG build **:1673-1704**       | `MNU_FORTH` dynamic-menu case — **re-scoped by §9.6**: it enumerates `: NAME` text-scan results from the current program's `ITM_FORTH` steps (not `fdict` names), mirroring the PROG label loop [VERIFIED: src/c47/softmenus.c:1673-1704]. Also add `MNU_FORTH` to the rebuild-always condition at softmenus.c:3039 (§9.6). |
+| H7  | `src/c47/config.c`                  | `doFnReset` **config.c:1506**; `memset(ram, 0, ...)` **:1519**               | **[LANDED]** §6.2 reset hook: `#include "forth_dict.h"`; `forthDictInit()` after RAM clear (**config.c:1941**); PC self-test runner: `forthDictSelfTest()` + `exit(0)` on headless (**config.c:1944-1952**). |
+| H8  | `src/c47/error.c`                   | `fnErrorMessage` tmpString formatting **error.c:282-289**                     | **[LANDED]** C-14 concatenation: `ERROR_FUNCTION_NOT_FOUND` with `errorMessage[0]` → `sprintf(tmpString, "%s: %s", errorMessages[lastErrorCode], errorMessage)` (**error.c:288-289**). |
+| H9  | `src/c47/screen.c`                  | `_executeItem` label-not-found **screen.c:822**; error display **screen.c:3725** | **[LANDED]** §4.2 site 5: Forth fallback after label miss (`forthFindColon` → `reallyRunFunction(ITM_FCALL, widx)` at **screen.c:823-830**); C-14 display: `ERROR_FUNCTION_NOT_FOUND` with `errorMessage[0]` → concatenated message with width guard (**screen.c:3734-3741**). |
+| H10 | `src/c47/core/freeList.c`           | `freeListFree` after `C47RamPtr = TO_C47MEMPTR(pcMemPtr);` **freeList.c:205** | **[LANDED]** core/freeList.c — freeListFree guard hunk only — unconditional range-overlap double-free rejection; upstream-MR candidate (§5.6). |
 
 §9 (PEM-native entry) adds the following hooks. Same override discipline:
 byte-identical to upstream except the marked insertions.
@@ -1416,6 +1462,10 @@ byte-identical to upstream except the marked insertions.
 | P-H5 | `src/c47/softmenus.c` **(new override — same file as H6)** | `softmenu[]` dynamic area **:1017-1029**, `dynamicSoftmenu[]` **:1211-1234**, `initVariableSoftmenu` **:1648+**, cached rebuild **:3039** | `MNU_FORTH` rows appended to BOTH arrays (order must match — upstream comment softmenus.c:1021-1028); `initVariableSoftmenu` case building the `: NAME` scan content (§9.6); `MNU_FORTH` added to the rebuild-always disjunction. |
 | P-H6 | `src/c47/defines.h` **(new header override)** | `NUMBER_OF_DYNAMIC_SOFTMENUS 22` **defines.h:1429**                        | 22 → 23. This is the upstream-documented procedure for adding a dynamic menu ("don't forget to adjust NUMBER_OF_DYNAMIC_SOFTMENUS in defines.h", softmenus.c:1025-1028). defines.h is machine-wide: keep the override byte-identical except this one line, and re-diff it on every upstream merge. |
 | P-H7 | `src/c47/keyboard.c` *(existing override)* | dynamic-menu dispatch; `dynmenuGetLabel` idiom **keyboard.c:1153-1156**    | `MNU_FORTH` picker press → insert name text + one space into `aimBuffer` at `T_cursorPos` during Forth capture (§9.6). |
+
+† The §6 hook IDs (H1–H9, P-H1–P-H7) and the §4.2 call-site-map H-numbers
+are independent numbering schemes; an H-number in §4.2 does not correspond to
+a hook of the same ID in §6.
 
 **Override-content status (updated 2026-07-10, superseding the 2026-07-05
 note):** the package now carries real hooks in `items.c`/`items.h` (the two
@@ -1450,15 +1500,15 @@ packages/forth-core/meson.build          pkg_override_sources / pkg_custom_sourc
 `meson.build` shape — current tree [VERIFIED: packages/forth-core/meson.build:2-4]:
 ```meson
 pkg_override_sources = ['config.c', 'error.c', 'items.c', 'screen.c',
-                        'programming/lblGtoXeq.c', 'ui/tam.c', 'keyboard.c']
-pkg_override_headers = ['items.h']
+                        'programming/lblGtoXeq.c', 'programming/manage.c',
+                        'programming/decode.c', 'ui/tam.c', 'keyboard.c',
+                        'softmenus.c', 'core/freeList.c']
+pkg_override_headers = ['items.h', 'defines.h']
 pkg_custom_sources   = files('forth_dict.c', 'forth_prims.c', 'forth_inner.c',
-                             'forth_compile.c', 'forth_bridge.c', 'test_dict_reloc.c')
+                             'forth_compile.c', 'forth_bridge.c',
+                             'test_dict_reloc.c')
 ```
-§9 grows `pkg_override_sources` by `'programming/manage.c'`,
-`'programming/decode.c'`, `'softmenus.c'`, and `pkg_override_headers` by
-`'defines.h'` (P-H2/P-H4/P-H5/P-H6). `saveRestoreBackup.c` joins when §5.5
-H5 lands.
+`saveRestoreBackup.c` joins when §5.5 H5 lands.
 
 ### §6.2 Reset Hook
 
@@ -1560,9 +1610,9 @@ With H1 itself:
 | id | change | code site | spec |
 |----|--------|-----------|------|
 | C1 | `FTOK_C47` runs under program semantics: save `programRunStop`, set `PGM_RUNNING`, restore only if still `PGM_RUNNING` after | forth_inner.c:169 (bare `reallyRunFunction` call) | §2.2 resolved issue 2, §3.2 FTOK_C47 arm |
-| C2 | `FTOK_C47`/`PTP_NUMBER_8` param padded to a full cell (6-byte encoding); decoder `ip += 2` not `+= 1`; hand-assembled self-test body updated in the same commit | forth_inner.c:162-163; test_dict_reloc.c:958-980 | §2.2 resolved issue 1 |
+| C2 | `FTOK_C47`/`PTP_NUMBER_8` param padded to a full cell (6-byte encoding); decoder `ip += 2` not `+= 1`; hand-assembled self-test body updated in the same commit | forth_inner.c:162-163; test_dict_reloc.c:460-489 | §2.2 resolved issue 1 |
 | C3 | `forthRunning` re-entrancy guard (refuse nested entry, `ERROR_OPERATION_UNDEFINED` per C-12 — NOT `ERROR_RAM_FULL`, cleared on every exit path) | forth_inner.c:44-55 (static `rstack`/`rsp`, no guard); landed at forth_inner.c:105 | §3.2 re-entrancy guard |
-| C4 | `setSystemFlag(FLAG_ASLIFT)` before the normal `rsp == 0` return; flip the clear-on-exit assertion in stack test c | forth_inner.c:78-82; test_dict_reloc.c:310-325 | §3.2 ASLIFT on exit |
+| C4 | `setSystemFlag(FLAG_ASLIFT)` before the normal `rsp == 0` return; flip the clear-on-exit assertion in stack test c | forth_inner.c:78-82; test_dict_reloc.c:124-148 | §3.2 ASLIFT on exit |
 | C5 | `forthFindColon` skips entries with `FF_SMUDGE` set | forth_dict.c:152-181 (no flags check) | §3.3 startDefinition |
 | C6 | `forthDictWriteName` clamps the copy to `hdr->nameLen` (currently copies `strlen(name)` — overrun) | forth_dict.c:115-120 | §3.3 known defect |
 | C7 | `_Static_assert(sizeof(forthPrims)/sizeof(forthPrims[0]) <= 0x0FFF, ...)` in forth_prims.c | forth_prims.c (no assert exists) | §7 invariants |
@@ -1943,10 +1993,7 @@ no catalog, no dictionary lookup:
   deferred to run time (§9.2) — a picked name can still fail at run with
   the §9.7 unresolved-word halt (e.g. its definition line was later
   deleted). This is by design.
-- **Presentation:** entering Forth capture (E1/E2) pushes `-MNU_FORTH` on
-  top of the `-MNU_ALPHA` menu `pemAlpha` already shows [VERIFIED:
-  src/c47/programming/manage.c:822]; the user pops back to the alpha menu
-  with EXIT as usual.
+- **Presentation (reworked, commit 097c7e3bd):** the picker is a static submenu entry — `-MNU_FORTH` occupies a row appended to `menu_ALPHA` (softmenus.c override), so during any alpha capture the user opens FWRD from the alpha menu; EXIT pops back. The earlier design (push `-MNU_FORTH` on top of `-MNU_ALPHA` at capture open) is superseded — no `showSoftmenu(-MNU_FORTH)` call exists. Verified by `test_alpha_menu_on_top_during_capture` / `test_alpha_menu_contains_fwrd`.
 - **Refresh:** `fnOpenMenu` rebuilds on open [VERIFIED:
   src/c47/softmenus.c:1261-1270], but the display path caches by menu id and
   rebuilds only `-MNU_DYNAMIC` unconditionally [VERIFIED:
@@ -2072,12 +2119,7 @@ dictionary high-water mark; budget unchanged (≤ 2 KB on the 64 KB part).
    round-trip. Acceptable for this stage only because §9.3 makes the
    dictionary run-scoped/reconstructible; becomes blocking the moment
    cross-run persistence is promised.
-2. **[DECISION NEEDED — `FCALL` keyable in PEM]** `ITM_FCALL` is
-   `PTP_NUMBER_16`/`TM_VALUE`, so `FCALL nn` can be hand-entered as a
-   program step, persisting a dictionary index in violation of the
-   names-only invariant (§4.2 P-3). Recommended: reject `ITM_FCALL` in
-   `insertStepInProgram` (one arm in the P-H2 override,
-   `ERROR_NON_PROGRAMMABLE_COMMAND`) — not yet decided, not yet specced.
+2. **[RESOLVED — FCALL reject-and-redirect, ratified 2026-07-11 series]** A PEM gesture that would record ITM_FCALL+widx is rewritten to the §9.2 stored form with the word's NAME (reverse lookup via forthDictNameByIndex); an unresolvable/indirect widx is rejected with ERROR_NON_PROGRAMMABLE_COMMAND. Implemented in the manage.c override's insertStepInProgram FCALL arm; verified by test_fcall_redirect_records_name / test_fcall_redirect_rejects_stale. The names-only invariant (§4.2 P-3) is enforced at entry.
 3. **[GAP — text export/import]** `decodeOneStep_XPORT`
    (src/c47/saveRestorePrograms.c:203) will emit `»FORTH`/`FORTH«`/
    `FORTH '…'` per §9.5; whether the import parser round-trips these is
@@ -2086,7 +2128,7 @@ dictionary high-water mark; budget unchanged (≤ 2 KB on the 64 KB part).
  4. **[RESOLVED — F4, ratified 2026-07-11]** `insertUserItemInProgram` wrote the
     opcode low byte as `func & 0x7f`, corrupting any item whose low byte >= 0x80
     (e.g. ITM_XEQP1 = 0x08AF -> 0x88 0x2F). Fixed to `func & 0xff` in the
-    overridden packages/forth-core/programming/manage.c. Blast radius exceeds
+     overridden packages/forth-core/programming/manage.c:1879 (anchor: `audit F4` comment). Blast radius exceeds
     forth-core: the fix changes encoding for ALL user items with low byte >= 0x80
     inserted via this helper. Write side verified by test_useritem_xeqp1_opcode;
     decode side verified by test_useritem_xeqp1_decodes (F4 follow-through task).
