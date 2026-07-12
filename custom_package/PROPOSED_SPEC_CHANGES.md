@@ -41,11 +41,19 @@ each a full copy of the upstream file with edits inline
 upstream file entirely in the shadow tree" is the explicit current contract
 [VERIFIED: custom_package/README.md:60].
 
-**Open question for implementation:** minimum/maximum context-line policy for
-generated patches — `-U3` is GNU-diff default and is assumed here, but a
-larger context window trades larger patch files for more resilient matching
-against minor upstream drift. Qwen should confirm this empirically against
-real upstream churn (see item 5) rather than it being asserted here.
+**[VERIFIED: empirically, Unit 4]** Context-line policy: **`-U3` is the
+default and larger windows are NOT more resilient — they are strictly worse
+for direct application.** The assumption above ("larger context … more
+resilient matching") is empirically **reversed** for `git apply`: unlike
+`patch(1)`, `git apply` has no fuzz — every context line must match (offset
+search only). Real-drift experiment (this repo's committed `keyboard.c` vs
+upstream HEAD's, 7 churned hunks): a one-line function-body edit 6 lines away
+from real churn applied cleanly at `-U3` but failed outright at `-U10`
+(the churn landed inside the 10-line window). With blob ancestry available,
+`git apply -3` rescued both window sizes identically (three-way merge uses
+the recorded pre-image blob, not the context window). Conclusion: keep
+`-U3`; resilience comes from `-3` + resolvable pre-image blobs (item 5),
+not from wider context.
 
 ---
 
@@ -134,12 +142,13 @@ functions in the same file, and correctly handles macro-expanded braces,
 `#ifdef`-guarded bodies, and string/char-literal braces that break
 token/brace-based scanning.
 
-**[VERIFIED: pending, checked in this pass]** `clang.cindex` is **not
-currently installed** in this environment: `python3 -c "import clang.cindex"`
-raises `ModuleNotFoundError: No module named 'clang'` (Python 3.12.3, checked
-during this design pass). This is a new dependency the implementation must
-add — to the dev environment and to any CI/build gate that invokes the
-extractor — not something already available and merely unused.
+**[VERIFIED: resolved during implementation]** `clang.cindex` was not
+installed at design time (`ModuleNotFoundError`, Python 3.12.3); it is now
+present in this environment (python3-clang bindings against system
+libclang-18, `/usr/lib/x86_64-linux-gnu/libclang-18.so`) and is exercised by
+`tools/test_pkg_patch_extract.py`. It remains a dependency of
+authoring/refresh tooling only — any CI gate that runs the extractor tests
+needs it; the configure/build path does not.
 
 **[RATIFIED]** — "A vanilla build (`-DCUSTOM_PKG` unset or empty) is
 byte-for-byte identical [to upstream]" is a hard, explicit invariant today
@@ -169,20 +178,34 @@ assertion mechanism.
 **Decision:** patches are applied via `git apply -3` against a freshly
 materialized copy of the current upstream file at build/prepare time.
 
-**[VERIFIED: pending]** Whether patch generation preserves real blob
-ancestry — i.e., whether the generated patch's `index` line carries a blob
-SHA that is actually resolvable as a git object in the repository where
-`git apply -3` runs — is **not verified in this pass** and cannot be, without
-the generator/applier code existing to test against. This matters because
-upstream is consumed from a separate clone (`/home/stan/c43`, tracking
-`https://gitlab.com/rpncalculators/c43.git`) rather than a single unified git
-history shared with the patch-application site — `git apply -3`'s three-way
-merge depends on the blob referenced by the patch's `index` line being a real
-object `git cat-file -e` can resolve; without that, `-3` degrades to a plain
-(non-merging) apply on any drift. **This is assigned as an explicit empirical
-check to the Step 2 implementation prompt covering patch application** — Qwen
-must test this against real patches and real upstream drift, not assume it
-works.
+**[VERIFIED: empirically, Unit 4]** Blob ancestry **holds, with the
+implemented safeguards, and its failure mode is loud.** Real-drift
+experiment (patch authored against this repo's committed `keyboard.c`,
+applied against upstream HEAD's genuinely drifted version):
+
+- *Ancestry available* (pre-image blob resolvable, seeded into the scratch
+  apply repo): drift far from the edit → clean apply; drift overlapping the
+  edit → `git apply -3` three-way-merges into a conflicted state and the
+  unconditional marker scan catches it → **loud conflict** (§7 satisfied).
+- *No ancestry* (pre-image blob unresolvable where apply runs): git prints
+  `repository lacks the necessary blob to perform 3-way merge. Falling back
+  to direct application...`; direct apply succeeds only while the `-U3`
+  context is untouched by drift, and otherwise **fails outright** — loud,
+  never a silent mis-merge.
+
+Implementation notes that make ancestry hold in practice: (1) `refresh`
+writes a full 40-char pre-image SHA and hard-fails if `git cat-file -e`
+cannot resolve it at generation time (i.e. upstream file must be committed);
+(2) `apply_patch_stack` applies inside a scratch git repo (never the real
+working tree) and seeds each patch's pre-image blob into that scratch odb
+from this repository (abbreviated index lines are resolved via
+`git rev-parse <sha>^{blob}` first); (3) because patches are generated and
+applied within this same repository, upstream pulls keep old pre-image blobs
+in history, so ancestry survives drift. Known residual caveat: a **shallow
+clone** of this repo may lack historical blobs — that degrades to the loud
+no-ancestry behavior above, not to silent misapplication. Adjacent-line
+drift (no unchanged line separating drift from edit) conflicts loudly even
+via `-3` — regression-encoded in `tools/test_pkg_patch_apply.py`.
 
 **[RATIFIED]** — conflict-marker detection is not optional and is not
 implied by `git apply -3`'s own exit code. `git apply -3` can exit
@@ -308,10 +331,13 @@ prompt (item 5 of the Step 2 breakdown), not left implicit.
 All four `[DECISION NEEDED]` items from the initial draft are now resolved.
 Ready for Step 2 pending explicit go-ahead.
 
-## Summary of `[VERIFIED: pending]` Items (assigned to Step 2 for empirical confirmation)
+## Summary of formerly-`[VERIFIED: pending]` Items — RESOLVED (Unit 4, empirical)
 
-1. §5 — whether `git apply -3` blob-ancestry (`index` line SHA resolvability)
-   actually holds given upstream is consumed from a separate clone, across
-   real drift scenarios.
-2. §1 — context-line window (`-U3` vs. larger) resilience against real
-   upstream churn.
+1. §5 — blob ancestry **holds** with the implemented safeguards (full-index
+   patches, generation-time `cat-file -e` gate, scratch-repo application
+   with odb seeding); every failure mode observed under real drift was loud
+   (conflict markers caught by the unconditional scan, or outright apply
+   failure) — see §5 for the full experiment record.
+2. §1 — `-U3` retained; a larger window is empirically *less* resilient for
+   direct application (git apply has no fuzz) and irrelevant once `-3`
+   three-way merge engages — see §1 for the experiment record.
