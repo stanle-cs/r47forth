@@ -1,13 +1,9 @@
-;*************************************************************
-;** Coverage: plot regression. Each graph is rendered       **
-;** by XEQ of a small RPN program ending in SNAP, i.e.      **
-;** the real programmed UI path (G1..G4, staged below).     **
-;** fnBmpNameCov names the dump c47plotTest<N>.bmp (kept    **
-;** on disk); fnHashBmpCov pins its SHA-256, so a change    **
-;** to the grapher, fonts or blitter fails the test.        **
-;** Own file, so it can be commented out if an upstream     **
-;** change legitimately alters the render.                  **
-;*************************************************************
+;*******************************************************************************************************************************
+;** Coverage: plot regression. Each graph is rendered by XEQ of a small RPN program ending in SNAP (G1..G4, staged below),    **
+;** i.e. the real programmed UI context. fnBmpNameCov names the SNAP bitmap c47plotTest<N>.bmp (kept on disk for inspection); **
+;** fnHashBmpCov pins its SHA-256, so a change to the grapher, fonts or the blitter fails the test. Own file, so it can be    **
+;** commented out if an upstream change legitimately alters the render.                                                       **
+;*******************************************************************************************************************************
 In: AM=RAD FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
 
 ; stage program S (f(X)=X^2-4; serialize_cov's reset wiped program memory) and the graph programs G1..G4
