@@ -1,4 +1,5 @@
-# Implementation Report — Plain-Diff Package Overlay System (Revision 2)
+# Implementation Report — Plain-Diff Package Overlay System (Revision 2 +
+Automatic Classification / Flat Working Directory)
 
 **Branch:** `package-manager/patch-based-overlay` (local commits only; not
 pushed, not merged).
@@ -6,13 +7,18 @@ pushed, not merged).
 6 units, superseding revision 1 (function-boundary/libclang), which was
 implemented and self-audited on this same branch and is preserved at
 `checkpoint/pre-plain-diff-revert-20260712-1541` for reference/rollback.
-Self-audit run against revision 2; no new defects found.
+A follow-on revision (§9 below) then replaced revision 2's manually
+populated `patches/`/`files/` split with fully automatic classification
+from a flat working directory, preserved pre-change at
+`checkpoint/pre-flat-workdir-revision-20260712-1824`. Self-audit run after
+each revision; no defects found in either round beyond what each round's
+own commits already fixed.
 
 > **Audit status: this implementation has NOT been independently audited by
-> a separate model or session.** Everything below — including both the
-> revision-1 self-audit and the revision-2 self-audit — was produced and
-> verified by the same session that wrote the code. Treat it as
-> self-reviewed only until an independent review happens.
+> a separate model or session.** Everything below — including every
+> self-audit round — was produced and verified by the same session that
+> wrote the code. Treat it as self-reviewed only until an independent
+> review happens.
 
 ---
 
@@ -290,6 +296,105 @@ pre-existing convention as a standalone regression script).
   CLI — F9 sentinel-gate delete-safety and F10/F11 containment guards
   fully intact under the new patches/+files/ discovery mechanism.
 
+## 9. Automatic Classification, Flat Working Directory
+
+**Commit:** `d3e593216`. **Checkpoint before this revision:**
+`checkpoint/pre-flat-workdir-revision-20260712-1824`.
+
+Revises revision 2's authoring workflow: previously a developer manually
+placed pre-authored `.patch` files into `patches/` and whole new files into
+`files/` themselves, deciding which mechanism applied. This revision
+removes that decision entirely. A package's working area is now flat,
+mirroring upstream paths directly (the same shape as the original,
+pre-revision-1 whole-file-override convention); `patches/` and `files/`
+become generated build output only, written entirely by `refresh`, never
+created or edited by hand.
+
+**What changed:**
+
+- `refresh` (`tools/pkg_patch_refresh.py`) now scans a flat working area
+  and classifies each file automatically: exists upstream → diff into
+  `patches/`; doesn't exist upstream → copy whole into `files/`
+  automatically (previously: left alone and reported, requiring the
+  developer to place it under `files/` themselves — this "report only"
+  half of revision 2's New Decision 2 is marked `[SUPERSEDED]` in
+  `PROPOSED_SPEC_CHANGES.md`, the diff/stale-cleanup half is unchanged).
+- Stale-cleanup generalized from "reverted edit" to "not producible from
+  the current working area at all," which also covers a working-area file
+  being **deleted** outright between `refresh` runs — this case did not
+  exist before (revision 2's `refresh` only ever compared a *present*
+  working file against upstream; a deleted file was simply never visited).
+- New: a per-package manifest (`<pkgdir>/.refresh-manifest.json`, sha256
+  of every entry as `refresh` wrote it, **committed**) enables drift
+  detection — an existing `patches/`/`files/` entry that doesn't match what
+  `refresh` itself last recorded writing there is **warned about** (not
+  failed) and then overwritten with correct, freshly generated content.
+  The warn-not-fail choice (the task left this as a judgment call) is
+  because the normal edit-then-refresh cycle and a genuine hand-tamper
+  both end at the identical overwrite operation — failing here would
+  punish the ordinary case for sharing code with the suspicious one; the
+  goal is visibility into drift, not blocking a self-healing artifact.
+- New `packages/.gitignore` (scoped to `packages/`, does not touch the
+  top-level upstream `.gitignore`) excludes flat working-area files from
+  version control while keeping `patches/`, `files/`, and the manifest
+  tracked. The manifest is deliberately **not** gitignored — without it
+  committed, a fresh clone's first `refresh` would have no history of
+  prior writes and would flag every legitimately committed entry as
+  unrecorded drift.
+- The build-time resolver (`resolve_c47_src.py`, `collect_patch_stacks`/
+  `collect_new_files` in `pkg_patch_apply.py`) is **completely unchanged**
+  — it never read anything but `patches/*.patch` and `files/*`, and still
+  doesn't. Confirmed via `git diff` showing zero changes to those files in
+  this commit, and via the full `test_pkg_patch_resolver.py` suite (16
+  tests, all against the resolver's real CLI) passing unmodified against
+  the new `refresh`.
+
+**Test coverage added:** `tools/test_pkg_patch_refresh.py` grew from 16 to
+34 tests. New coverage: automatic classification (new file → `files/`
+automatically, the core behavior change); stale cleanup on working-file
+deletion for both `patches/` and `files/`; the manifest file's own
+exclusion from the working-area scan (would otherwise recursively
+classify itself as a new file); five manifest/drift tests (clean-cycle
+no-false-positives, hand-edited patch, hand-added-with-no-record patch,
+hand-edited `files/` entry, non-fatality, cross-invocation persistence).
+Full list and the bug each catches is in the commit message for
+`d3e593216`.
+
+**Self-audit (4 items specified by the task), each verified empirically
+against a real scratch package in this repository, not just the unit test
+suite:**
+
+1. Grepped `tools/`, `custom_package/*.md`, and the `Makefile` for any
+   remaining "developer manually places/creates `patches/`/`files/`"
+   language — the only hit was `PROPOSED_SPEC_CHANGES.md`'s own
+   `[SUPERSEDED]` note, correctly describing the retired behavior. **No
+   defect.**
+2. Real refresh cycle: materialized a `keyboard.c` edit and a new
+   `scratch_helper.c`, refreshed (both classified correctly), then
+   **deleted both working-area files** and refreshed again — both the
+   patch and the `files/` entry were removed (`no longer producible from
+   the working area`), directories left genuinely empty, not merely
+   ignored. **No defect.**
+3. Real hand-edit: appended a tamper line directly to a generated patch
+   file (working copy left untouched), refreshed again — printed a
+   warning naming the exact file (`content does not match what refresh
+   last wrote for it (hand-edited directly, bypassing the working
+   area?)`), then overwrote it with correct content (confirmed via
+   `grep`, tamper text gone). **No defect — the guard fires and
+   self-heals as designed.**
+4. Real `git add -A` on a scratch package: staged only `patches/` and the
+   manifest, never the flat working-area files; confirmed
+   `packages/forth-core/`'s pre-existing tracked files continue to show
+   modifications normally (ignore rules never affect already-tracked
+   files, so this revision cannot accidentally hide changes to
+   forth-core's still-unmigrated whole-file overrides). **No defect.**
+
+No fixes were required this round.
+
+---
+
 Do not push. Do not merge. Everything above is committed locally on
-`package-manager/patch-based-overlay` for human review; the pre-revert
-state remains reachable at `checkpoint/pre-plain-diff-revert-20260712-1541`.
+`package-manager/patch-based-overlay` for human review; prior states
+remain reachable at `checkpoint/pre-plain-diff-revert-20260712-1541`
+(pre-revision-2) and `checkpoint/pre-flat-workdir-revision-20260712-1824`
+(pre-§9, i.e. revision 2 as its own complete, self-audited state).
