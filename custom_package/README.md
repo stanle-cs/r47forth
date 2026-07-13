@@ -138,8 +138,10 @@ last-listed-wins:
 2. Sorted by the numeric `<NNN>` ordinal (parsed as an integer); ties (same
    ordinal, different packages) are broken by the package's position in the
    `CUSTOM_PKG` list — the earlier-listed package's patch applies first.
-3. Each patch applies on top of the previous patch's output (`git apply -3`
-   against a freshly materialized copy of the current upstream file).
+3. The current upstream file is materialized fresh **once**, then each
+   patch in the sorted stack applies in turn via `git apply -3` — each
+   patch three-way-merges against the *previous* patch's output, not
+   against pristine upstream again, so the stack is genuinely cumulative.
 4. After **every** patch application, the result is scanned for conflict
    markers (`<<<<<<<`, `=======`, `>>>>>>>`) regardless of `git apply`'s exit
    status. Any marker, or any outright apply failure, is a **fatal configure
@@ -222,9 +224,16 @@ cycle and must not be blocked by the mechanism that also catches tampering.
 Your flat working-area files (everything directly under a package
 directory except `patches/`, `files/`, and the manifest) are local editing
 scratch — `.gitignore`d via `packages/.gitignore`, never committed. Only
-`patches/`, `files/`, and `.refresh-manifest.json` are tracked and shipped.
-Running `git add -A` inside a package directory stages only the generated
+`patches/`, `files/`, and `.refresh-manifest.json` are tracked in git.
+Running `git add -A` inside a package directory stages only these generated
 entries; your working copies are silently excluded, by design.
+
+Note the distinction from `pkg_build`'s distributable zip (below): the
+**git repo** tracks the manifest alongside `patches/`+`files/` (so drift
+detection has history across clones), but the **zip artifact** contains
+only `patches/`+`files/` — the manifest is an authoring-time bookkeeping
+file with no purpose for a consumer of the built package, so it's not
+shipped in the zip.
 
 `pkg_patch_refresh.py` has no libclang or other AST-parsing dependency;
 it's plain `git diff` plus a straight file copy for new files.
@@ -290,10 +299,19 @@ edit your working copy and refresh instead.
 
 ### Normal Edits (Symlink Mode — Default on Linux)
 
-Unpatched upstream files are symlinked into the shadow tree; editing
-upstream propagates automatically, no reconfigure needed. A **patched**
-file's shadow entry is a real, applied-result file — editing your working
-copy requires re-running `refresh` and reconfiguring to re-apply the patch
+Unpatched upstream files, and `files/` (new-file) entries, are both
+symlinked into the shadow tree — for `files/` entries, the shadow symlink
+points at `<pkgdir>/files/<rel>`, so once that entry exists, re-running
+`refresh` after further edits (which rewrites `files/<rel>` in place)
+propagates through the symlink automatically, **no reconfigure needed**.
+Reconfigure is only required the *first* time a given `files/<rel>` entry
+is created (the shadow tree doesn't have the symlink yet).
+
+A **patched** file's shadow entry is different: it's a real, applied-result
+file, not a symlink (patched content is derived, and must never be reached
+by following a symlink back to real upstream — see **DO NOT Edit the
+Shadow Tree** above). Editing your working copy requires re-running
+`refresh` **and reconfiguring** every time, to re-apply the patch stack
 into the shadow tree.
 
 ### Copy Mode (Windows / `CUSTOM_PKG_SHADOW_COPY=1`)
@@ -351,6 +369,7 @@ as the existing `DMCP_PACKAGE=`/`f=` variables:
 | `sim`, `simc47`, `simr47`, `both`     | Standard/R47 simulator builds |
 | `test`, `repeattest`                  | Full and incremental test runs |
 | `dmcp`, `dmcpr47`, `dmcp5`, `dmcp5r47`| DM42/DM50 cross-builds |
+| `test_asan`                           | ASan-instrumented test run — always passes `--reconfigure` itself, so it needs no reconfigure-on-change stamp check (see below) |
 
 Usage: `make sim CUSTOM_PKG=packages/my-pkg`
 
@@ -368,6 +387,16 @@ test suite stops here — no artifact is produced); `refresh` against `<dir>`
 edits not yet refreshed); then assembles a zip containing **only**
 `<dir>/patches/*` and `<dir>/files/*` (your working-area files and anything
 else in the package directory are excluded) at `pkg_dist/<pkg-name>.zip`.
+
+Note the order: the test suite runs **before** `refresh`, against whatever
+`patches/`/`files/` are already committed — `refresh` only re-syncs them
+from any working-area edits you haven't refreshed yet. In the normal case
+(you ran `refresh` yourself before committing) this step is a no-op and
+what's tested and what's shipped are identical. If you leave un-refreshed
+working-area edits lying around at `pkg_build` time, the artifact that
+ships is `refresh`'s *output*, which the test step never saw — run
+`refresh` yourself first if you want a guarantee that the tested and
+shipped states match exactly.
 
 The resulting zip's **actual size** is checked against `PKG_MAX_SIZE`
 (default 200000 bytes / ~200KB) — exceeding it is a fatal error naming the
