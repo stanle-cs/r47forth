@@ -171,6 +171,17 @@ accumulating stale patches from abandoned edits.
 Materialized working copies are an authoring-time convenience, not checked
 in — only `patches/` and `files/` are (see New Decision 3).
 
+**[SUPERSEDED — see "Automatic Classification, Flat Working Directory"
+below]** the "no upstream counterpart → left alone and reported, developer
+places it under `files/` themselves" half of this decision. `refresh` now
+performs that placement automatically; a developer never manually creates
+or populates `files/` (or `patches/`) at all. The "diff existing-upstream
+files into `patches/`, clean up stale/reverted entries" half is unchanged
+— only the new-file handling and the shape of the working area (flat,
+mirroring upstream, with `patches/`+`files/` excluded from the scan) is
+superseded, generalized to a genuinely automatic classification step with
+no developer decision anywhere in it.
+
 ### 3. Auto-discovery — no manual declarations
 
 A package directory contains exactly two subdirectories the resolver reads:
@@ -257,6 +268,112 @@ passing `f=1 CUSTOM_PKG=packages/other-pkg` still gets a forced reconfigure
 for the package-overlay reason, independent of GMP being skipped for the
 `f=1` reason. Documented explicitly in the Makefile at the stamp-check
 target, not left to be inferred.
+
+---
+
+## Automatic Classification, Flat Working Directory
+
+**Status:** implemented. Supersedes the "developer manually places files
+into `patches/` or `files/` themselves" half of New Decision 2 above. Does
+not touch New Decision 3 (the build-time resolver's `patches/*.patch` /
+`files/*` reading logic) at all — that remains exactly as implemented;
+only what *populates* those two directories changes.
+
+**Decision:** a package's working area is flat, mirroring upstream paths
+directly — the same shape as the original (pre-revision-1) whole-file-
+override convention:
+
+```
+packages/my-pkg/
+├── keyboard.c        # materialized copy of an existing upstream file, edited
+└── my_module.c       # a brand-new file, no upstream counterpart
+```
+
+The developer never creates `patches/` or `files/` themselves and never
+decides which one a given file belongs in. `refresh` (invoked directly, or
+via `make pkg_build PKG=<dir>`, which already called it) scans every file
+directly under the package directory's flat working area — excluding
+`patches/`/`files/` themselves, which are now purely generated — and
+classifies each automatically:
+
+- **A real upstream file exists at this mirrored path** → diff it against
+  upstream → write/update `patches/<NNN>-<name>.patch`. If the working copy
+  no longer differs from upstream (reverted edit), any stale patch for it
+  is deleted.
+- **No upstream file exists at this mirrored path** → copy it whole into
+  `files/<name>` (path-mirrored), automatically — not left for the
+  developer to place there by hand.
+- **A working-area file present at a prior `refresh` but now deleted**
+  (the developer removed their scratch copy): the corresponding generated
+  `patches/`/`files/` entry is deleted too — the same "no longer producible
+  from the working area" cleanup as the reverted-edit case, generalized to
+  cover deletion as well as reversion, for both output mechanisms.
+
+**Rationale:** removes the last remaining developer *decision* from the
+authoring workflow. Revision 2 already removed manual declarations
+(New Decision 3) and function-boundary classification (New Decision 1)
+that were the point of a change; the one thing still left to a human was
+*which generated directory a file belongs in* — trivially and always
+correctly inferable from whether the path exists upstream, so leaving it
+to the developer added a step that could only ever be done one right way,
+with a wrong way (misplacing a new file into `patches/`, or an existing-
+file edit into `files/`) available to get wrong. Automatic classification
+removes that wrong way entirely; the developer's only decision is what to
+edit, not where to put the result.
+
+**`patches/` and `files/` are build OUTPUT ONLY.** A developer manually
+placing or editing a file inside either directory is not a supported
+workflow. This is enforced, not just documented: a hidden per-package
+manifest, `<pkgdir>/.refresh-manifest.json` (tracking the sha256 of every
+entry as `refresh` itself wrote it, committed alongside `patches/`+`files/`
+— see below for why it must be committed), lets `refresh` detect drift on
+every run. Before overwriting any `patches/`/`files/` entry, `refresh`
+compares its current on-disk content against the manifest's recorded hash
+for it:
+
+- **Matches:** normal case — either untouched since last `refresh`, or this
+  is the first time this entry has ever been written. No warning.
+- **Mismatches, or the entry exists with no manifest record at all:**
+  something outside `refresh` touched `patches/`/`files/` directly (hand-
+  added or hand-edited, bypassing the working area). **Warned loudly (not
+  failed)** — see "Warn, not fail" below — and then self-healed: `refresh`
+  overwrites with freshly generated, correct content regardless, exactly as
+  it would on the completely normal edit-working-copy-then-refresh path
+  (which exercises the identical overwrite code, just without triggering
+  the warning, since the manifest matches).
+
+**Warn, not fail — reasoning:** the normal "edit working copy, run
+`refresh`" cycle and the "someone hand-tampered with generated output"
+case both end at the exact same overwrite operation; the only difference
+`refresh` can observe is whether the *pre-overwrite* on-disk content
+matches its own manifest record. Failing the build/authoring step here
+would punish the artifact for existing in a state `refresh` can and does
+correctly repair — the goal (per the task that introduced this check) is
+"catch drift between what's committed and what the working area actually
+reflects," i.e. visibility, not "be maximally strict for its own sake."
+A human reading the warning can decide whether the drift was intentional
+(e.g. a merge conflict resolution someone hand-patched into a `.patch`
+file directly, which `refresh` will now silently discard) — the warning
+exists so that decision is at least visible, not silent.
+
+**The manifest is committed, not gitignored, alongside `patches/`+`files/`.**
+Without it being committed, a fresh clone's first `refresh` run would have
+no history of "what did refresh generate last" and would flag every single
+legitimately-committed entry as unrecorded drift — a wall of false
+positives on day one for every package. Committing it means the manifest's
+state travels with the repo exactly like the patches/files it describes.
+
+**The flat working area is `.gitignore`d** (`packages/.gitignore`, scoped
+to the `packages/` subtree — does not touch the top-level `.gitignore`,
+which is an upstream file). Only `patches/`, `files/`, and the manifest are
+tracked; everything else directly under a package directory is local
+editing scratch and must never be committed. Verified empirically against
+a real test package in this repository: `git add -A` stages only the
+`patches/`/`files/`/manifest entries, never the flat working-area files;
+already-tracked files (e.g. `packages/forth-core/`'s pre-existing
+whole-file overrides, which predate this convention and are out of scope
+for migration here) are completely unaffected, since gitignore rules never
+apply to files git already tracks.
 
 ---
 

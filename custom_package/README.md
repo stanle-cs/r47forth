@@ -42,28 +42,43 @@ theoretical concern.
 
 **If you want to use this system today**, author a new package from
 scratch via the **Authoring Workflow** below. **If you need forth-core
-working**, it needs to be migrated to the `patches/`+`files/` convention
-first (materialize each of its whole-file overrides, run `refresh`, move
-its genuinely-new source files under `files/`) — that migration has not
-been done and is out of scope for this document to walk through.
+working**, it needs to be migrated to the flat-working-area convention
+first (place each of its whole-file overrides and genuinely-new source
+files into a flat working area and run `refresh`, letting it classify and
+generate `patches/`+`files/` automatically) — that migration has not been
+done and is out of scope for this document to walk through.
 
 ---
 
 ## Quick Start
 
-A package directory contains exactly two subdirectories — **nothing else is
-read**. There is no `meson.build` inside a package, and nothing to declare:
+A package's **working area is flat**, mirroring upstream paths directly —
+no subdirectories for you to manage, no `meson.build`, nothing to declare:
 
 ```
 packages/my-pkg/
-├── patches/
-│   └── 010-keyboard.c.patch     # a git diff against src/c47/keyboard.c
-└── files/
-    └── my_module.c              # a brand-new file, no upstream counterpart
+├── keyboard.c        # your edited copy of an existing upstream file
+└── my_module.c       # a brand-new file, no upstream counterpart
 ```
 
-1. Create the package directory and populate `patches/`/`files/` — normally
-   via the **materialize-and-refresh workflow** below, not by hand.
+You never create `patches/` or `files/` yourself, and never decide which
+one anything belongs in — both are **generated build output**, written
+entirely by `refresh` (see **Authoring Workflow** below). After running
+`refresh`, the package directory looks like:
+
+```
+packages/my-pkg/
+├── keyboard.c                        # your working copy (gitignored, not committed)
+├── my_module.c                       # your working copy (gitignored, not committed)
+├── .refresh-manifest.json            # generated, committed
+├── patches/
+│   └── 010-keyboard.c.patch          # generated, committed
+└── files/
+    └── my_module.c                   # generated, committed
+```
+
+1. Create the package directory and edit files directly in it — normally
+   via the **materialize-and-refresh workflow** below.
 2. Configure and build with the package active:
 
    ```
@@ -85,11 +100,13 @@ packages/my-pkg/
 | Any change to an **existing** upstream file — a function body, a global, a `#define`, a struct, an added/removed function, anything | a `.patch` (plain `git diff`, no restriction on content) | `patches/<NNN>-<rel_encoded>.patch` |
 | A **genuinely new file** with no upstream counterpart at that relative path | the whole file, stored as-is | `files/<rel>` |
 
-There is no classification step and nothing to declare: whether a given
-change belongs under `patches/` or `files/` is inferred purely from whether
-its mirrored path exists under `src/c47/` — and the resolver enforces this
-at configure time (see **Fatal Checks** below), so getting it backwards is
-a loud, named error, not a silent misfile.
+There is no classification decision for you to make: `refresh` infers
+which mechanism a working-area file belongs to purely from whether its
+mirrored path exists under `src/c47/`, and writes the result to the right
+place automatically. The resolver independently enforces the same
+existence rule at configure time (see **Fatal Checks** below) — belt and
+suspenders — so even a hand-tampered `patches/`/`files/` entry that got
+the classification backwards is a loud, named error, not a silent misfile.
 
 ### Patch Storage Format
 
@@ -153,33 +170,64 @@ the shadow tree is touched:
 
 ## Authoring Workflow — Materialize and Refresh
 
-You never write `.patch` files by hand. Edit a fully materialized real file
-(full compiler/LSP context), then re-derive the patch set for the whole
-package in one step:
+You never write `.patch` files, and never touch `files/`, by hand — both
+are generated output. Edit a fully materialized real file (full
+compiler/LSP context) directly in the flat working area, then let
+`refresh` classify and regenerate everything in one step:
 
 ```
 cp src/c47/keyboard.c packages/my-pkg/keyboard.c   # materialize
 # ... edit packages/my-pkg/keyboard.c freely — any kind of change ...
-python3 tools/pkg_patch_refresh.py packages/my-pkg  # regenerate patches/
+echo 'int helper(void) { return 1; }' > packages/my-pkg/helper.c  # a new file
+python3 tools/pkg_patch_refresh.py packages/my-pkg  # classify + regenerate
 ```
 
-`refresh` scans every materialized file directly under the package
-directory (excluding `patches/` and `files/` themselves) and, for each that
-mirrors a real upstream path:
+(or `make pkg_build PKG=packages/my-pkg`, which calls `refresh` for you as
+one of its steps — see **Makefile Targets** below.)
 
-- differs from upstream → writes/overwrites `patches/<NNN>-<rel>.patch`
-  (ordinal reused from any existing patch for that rel, including a manual
-  rename — so refresh never fights an explicit cross-package ordering
-  choice you made by hand);
-- identical to upstream (a reverted edit) → deletes any existing patch for
-  that rel, so `patches/` never accumulates stale output;
-- has no upstream counterpart at all → left alone and reported — a
-  genuinely new file belongs directly under `files/<rel>`, placed there by
-  you, not auto-detected by `refresh`.
+`refresh` scans every file directly under the package directory's flat
+working area (excluding `patches/`, `files/`, and its own manifest, all of
+which are generated output, never scan input) and classifies each
+**automatically** — you make no placement decision:
 
-The materialized working copy is a local authoring convenience — only
-`patches/` and `files/` are meant to be committed. `pkg_patch_refresh.py`
-has no libclang or other AST-parsing dependency; it's plain `git diff`.
+- **mirrors a real upstream path, and differs from it** → writes/overwrites
+  `patches/<NNN>-<rel>.patch` (ordinal reused from any existing patch for
+  that rel, including a manual rename — so refresh never fights an
+  explicit cross-package ordering choice you made by hand);
+- **mirrors a real upstream path, and no longer differs from it** (a
+  reverted edit) → deletes any existing patch for that rel;
+- **has no upstream counterpart at all** → copied automatically into
+  `files/<rel>` — you never place a file into `files/` yourself;
+- **existed at a prior `refresh` run but is now deleted from the working
+  area** (you removed your scratch copy) → the corresponding generated
+  entry (patch or `files/` copy, whichever it was) is deleted too, so
+  generated output never drifts ahead of what you're actually still
+  working on.
+
+### `patches/`/`files/` Are Output Only — Drift Detection
+
+A hidden manifest, `<pkgdir>/.refresh-manifest.json`, records the hash of
+every entry as `refresh` itself wrote it — **committed alongside
+`patches/`+`files/`**, not gitignored (see **Version Control** below for
+why). Before overwriting any generated entry, `refresh` compares it against
+this record: if a `patches/`/`files/` entry was hand-added or hand-edited
+directly (bypassing the working area entirely), `refresh` prints a warning
+naming it, then **self-heals** by overwriting with freshly generated,
+correct content — this is a visibility check, not a hard failure, since the
+exact same overwrite happens on every completely normal edit-then-refresh
+cycle and must not be blocked by the mechanism that also catches tampering.
+
+### Version Control
+
+Your flat working-area files (everything directly under a package
+directory except `patches/`, `files/`, and the manifest) are local editing
+scratch — `.gitignore`d via `packages/.gitignore`, never committed. Only
+`patches/`, `files/`, and `.refresh-manifest.json` are tracked and shipped.
+Running `git add -A` inside a package directory stages only the generated
+entries; your working copies are silently excluded, by design.
+
+`pkg_patch_refresh.py` has no libclang or other AST-parsing dependency;
+it's plain `git diff` plus a straight file copy for new files.
 
 ## items.c — Generator Stub Requirement
 
@@ -228,13 +276,13 @@ violating the core promise that packages never modify `src/`.
 
 IDEs and language servers that follow `compile_commands.json` will resolve
 "Go to Definition" into the shadow tree. **Do not edit files you reach this
-way.** Edit only your package's materialized working copies under
-`packages/`, then re-run `refresh`.
+way.** Edit only your package's flat working-area files under `packages/`,
+then re-run `refresh`.
 
 A patched file's shadow entry is a **real file** (never a symlink) holding
 the applied result — editing it directly is harmless-but-pointless (it's
 regenerated on every reconfigure) but still isn't the right place to work;
-edit the materialized copy and refresh instead.
+edit your working copy and refresh instead.
 
 ---
 
@@ -244,9 +292,9 @@ edit the materialized copy and refresh instead.
 
 Unpatched upstream files are symlinked into the shadow tree; editing
 upstream propagates automatically, no reconfigure needed. A **patched**
-file's shadow entry is a real, applied-result file — editing your package's
-materialized copy requires re-running `refresh` and reconfiguring to
-re-apply the patch into the shadow tree.
+file's shadow entry is a real, applied-result file — editing your working
+copy requires re-running `refresh` and reconfiguring to re-apply the patch
+into the shadow tree.
 
 ### Copy Mode (Windows / `CUSTOM_PKG_SHADOW_COPY=1`)
 
@@ -316,10 +364,10 @@ make pkg_build PKG=packages/my-pkg
 
 This runs, in order: `make clean`; `make test CUSTOM_PKG=<dir>` (a failing
 test suite stops here — no artifact is produced); `refresh` against `<dir>`
-(so any un-refreshed materialized edits are captured); then assembles a zip
-containing **only** `<dir>/patches/*` and `<dir>/files/*` (materialized
-working copies and anything else in the package directory are excluded) at
-`pkg_dist/<pkg-name>.zip`.
+(classifying and regenerating `patches/`/`files/` from any working-area
+edits not yet refreshed); then assembles a zip containing **only**
+`<dir>/patches/*` and `<dir>/files/*` (your working-area files and anything
+else in the package directory are excluded) at `pkg_dist/<pkg-name>.zip`.
 
 The resulting zip's **actual size** is checked against `PKG_MAX_SIZE`
 (default 200000 bytes / ~200KB) — exceeding it is a fatal error naming the
