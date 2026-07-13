@@ -13,6 +13,42 @@ on this branch and was reverted — see
 
 ---
 
+## Current Status — What Actually Works Right Now
+
+**The mechanism itself works** and is covered by automated tests
+(`tools/test_pkg_patch_*.py`) plus real end-to-end verification documented
+in `custom_package/IMPLEMENTATION_REPORT.md` §8 — patching, new files,
+cumulative composition, loud conflict failure, and `pkg_build` have all been
+exercised against real `meson`/`ninja`/`make` runs, not just unit tests.
+
+**No package in this repository currently uses it.** `packages/forth-core/`
+predates this convention and still declares itself the old way
+(`pkg_override_sources` in its own `meson.build`, override files sitting
+directly at `packages/forth-core/<rel>`). The resolver described in this
+document **never reads a package's `meson.build`** — it only globs
+`patches/`+`files/`. Concretely, right now:
+
+```
+make sim CUSTOM_PKG=packages/forth-core
+```
+
+**configures and builds successfully, with zero errors or warnings, and
+silently contains none of forth-core's functionality.** forth-core has no
+`patches/` or `files/` directory, so the resolver finds nothing to apply and
+proceeds as if the package list were empty. This was verified directly
+(`meson setup ... -DCUSTOM_PKG=packages/forth-core`, then grepped the
+resulting shadow tree for forth-core content: none found) — it is not a
+theoretical concern.
+
+**If you want to use this system today**, author a new package from
+scratch via the **Authoring Workflow** below. **If you need forth-core
+working**, it needs to be migrated to the `patches/`+`files/` convention
+first (materialize each of its whole-file overrides, run `refresh`, move
+its genuinely-new source files under `files/`) — that migration has not
+been done and is out of scope for this document to walk through.
+
+---
+
 ## Quick Start
 
 A package directory contains exactly two subdirectories — **nothing else is
@@ -302,6 +338,9 @@ parse time) — don't do that.
 
 ## Limitations
 
+- **No existing package uses this system yet** — see **Current Status** at
+  the top of this document. `packages/forth-core/` needs migration before
+  `CUSTOM_PKG=packages/forth-core` does anything.
 - **Documentation:** doxygen (`docs/code`) only scans `src/c47/`. Package
   sources and patches do not appear in generated documentation.
 - **Package-level build configuration:** there is no mechanism for a
