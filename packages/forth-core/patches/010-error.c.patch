@@ -1,0 +1,14 @@
+diff --git a/src/c47/error.c b/src/c47/error.c
+index b71c56f2b78982d74f0d54bcc388032a5f37fefb..a65fdd0121a3084752fe38ff79504ae51dafbede 100644
+--- a/src/c47/error.c
++++ b/src/c47/error.c
+@@ -285,6 +285,9 @@ void displayCalcErrorMessage(uint8_t errorCode, calcRegister_t errMessageRegiste
+        if(lastErrorCode == ERROR_RESERVED_VARIABLE_NAME) {
+          sprintf(tmpString, "%s: %s", errorMessages[lastErrorCode], errorMessage);
+        }
++       else if(lastErrorCode == ERROR_FUNCTION_NOT_FOUND && errorMessage[0]) {
++         sprintf(tmpString, "%s: %s", errorMessages[lastErrorCode], errorMessage);
++       }
+        else {
+          sprintf(tmpString, "%s", errorMessages[lastErrorCode]);
+        }

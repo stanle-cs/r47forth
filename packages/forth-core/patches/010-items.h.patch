@@ -1,0 +1,14 @@
+diff --git a/src/c47/items.h b/src/c47/items.h
+index 009d50ac961ac0af1eafb1130eec3dd5542d59e1..882cf7a21919d035c02ab435c3c2bf0280de6216 100644
+--- a/src/c47/items.h
++++ b/src/c47/items.h
+@@ -2948,6 +2948,9 @@
+ #define ITM_KGtoUNSLINCH            2841
+ #define ITM_2842                    2842 // CONV MENU Spares
+ #define ITM_2843                    2843 // CONV MENU Spares
++#define ITM_FORTH                   2842 // Forth outer interpreter entry
++#define ITM_FCALL                   2843 // Forth inner-call bridge (runtime param = dictionary index)
++#define MNU_FORTH                   213  // dynamic soft-menu id for in-program : NAME picker (§9.6)
+ 
+ #define MNU_CONV_SECTION            2844
+ #define MNU_CONV_MATERL             2845

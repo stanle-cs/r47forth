@@ -1941,13 +1941,21 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     forthDictInit();
 
       #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
-       extern int forthDictSelfTest(void);
-       if(forthDictSelfTest()) {
-         fprintf(stderr, "FORTH DICT SELF-TEST FAILED\n");
-         exit(1);
-       }
-       if(headlessMode) {
-         exit(0);
+       {
+         /* Run-once: tests call restoreCalc, which calls doFnReset — without
+          * this guard the suite would recursively re-enter itself. */
+         static bool forthSelfTestRan = false;
+         if(!forthSelfTestRan) {
+           forthSelfTestRan = true;
+           extern int forthDictSelfTest(void);
+           if(forthDictSelfTest()) {
+             fprintf(stderr, "FORTH DICT SELF-TEST FAILED\n");
+             exit(1);
+           }
+           if(headlessMode) {
+             exit(0);
+           }
+         }
        }
      #endif
   }

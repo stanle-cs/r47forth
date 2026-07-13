@@ -1,0 +1,184 @@
+diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
+index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85bc59e771 100644
+--- a/src/c47/programming/manage.c
++++ b/src/c47/programming/manage.c
+@@ -6,6 +6,7 @@
+  ***********************************************/
+ 
+ #include "c47.h"
++#include "forth_dict.h"
+ 
+ // Structure of the program memory.
+ // In this example the RAM is 16384 blocks (from 0 to 16383) of 4 bytes = 65536 bytes.
+@@ -565,10 +566,18 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
+       decodeOneStep(step);
+       if(firstDisplayedStepNumber + line - lineOffset == currentStepNumber && !tam.mode) {
+         if(getSystemFlag(FLAG_ALPHA)) {
+-          char tmpChar = tmpString[4];
+-          tmpString[4] = 0;
+-          int16_t cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
+-          tmpString[4] = tmpChar;
++          char tmpChar4 = tmpString[4];
++          char tmpChar6 = tmpString[6];
++          int16_t cursorInString;
++          tmpString[6] = 0;
++          if(strcmp(tmpString, "FORTH ") == 0) {
++            cursorInString = T_cursorPos + 6;
++          } else {
++            tmpString[4] = 0;
++            cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
++            tmpString[4] = tmpChar4;
++          }
++          tmpString[6] = tmpChar6;
+           xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
+           tmpString[2 + cursorInString    ] = STD_CURSOR[0];
+           tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
+@@ -801,6 +810,19 @@ void pemAlpha(int16_t item) {
+       editCommand = true;
+       item = aimFunc;
+     }
++    else if(aimFunc == ITM_FORTH) { // FORTH
++      if(currentStep[3] == 0) {
++        aimBuffer[0] = 0;
++        return;
++      }
++      xcopy(aimBuffer, tmpString + 8, ll);
++      aimBuffer[ll - 2 - 8] = 0;
++      T_cursorPos = stringLastGlyph(aimBuffer) + 1;
++      deleteStepsFromTo(currentStep, findNextStep(currentStep));
++      tam.function = aimFunc;
++      editCommand = true;
++      item = aimFunc;
++    }
+     else {
+       aimBuffer[0] = 0;
+       return;
+@@ -864,6 +886,14 @@ void pemAlpha(int16_t item) {
+         clearSystemFlag(FLAG_ALPHA);
+         calcModeNormalGui();
+         _closeAlphaMenus();
++        // Capture-abort reset: tam.function is set by the Forth capture open
++        // paths (E1/E2, manage.c:1441/1463) and never reset by upstream on
++        // this backspace-abort exit. Idle value 0 matches the global `tam`'s
++        // zero-initialized boot state [VERIFIED: src/c47/c47.c:190 — no
++        // initializer, static storage] and the documented invariant that
++        // tam.mode, not tam.function, is the "in TAM" gate [VERIFIED:
++        // src/c47/typeDefinitions.h:672-680].
++        tam.function = 0;
+         return;
+       }
+       else if(T_cursorPos == 0) {
+@@ -966,6 +996,16 @@ void pemAlpha(int16_t item) {
+ }
+ 
+ void pemCloseAlphaInput(void) {
++  if(tam.function == ITM_FORTH && aimBuffer[0] == 0) {
++    deleteStepsFromTo(currentStep, findNextStep(currentStep));
++    clearSystemFlag(FLAG_ALPHA);
++    calcModeNormalGui();
++    _closeAlphaMenus();
++    // Capture-close reset: see the identical rationale/citations at the
++    // ITM_BACKSPACE abort branch above (manage.c:889-895).
++    tam.function = 0;
++    return;
++  }
+   aimBuffer[0] = 0;
+   clearSystemFlag(FLAG_ALPHA);
+   calcModeNormalGui();
+@@ -976,6 +1016,11 @@ void pemCloseAlphaInput(void) {
+     firstDisplayedStep = findNextStep(firstDisplayedStep);
+   }
+   _closeAlphaMenus();
++  // Capture-close reset: see the identical rationale/citations at the
++  // ITM_BACKSPACE abort branch above (manage.c:889-895). This branch commits
++  // REM/LITERAL/non-empty-FORTH source lines alike, so the reset must be
++  // unconditional here too, not just gated on tam.function == ITM_FORTH.
++  tam.function = 0;
+ }
+ 
+ 
+@@ -991,7 +1036,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+     func <<= 8;
+     func |= currentStep[1];
+   }
+-  if((func == ITM_LITERAL || func == ITM_REM)) {
++  if((func == ITM_LITERAL || func == ITM_REM || func == ITM_FORTH)) {
+     pemAlpha(ITM_EDIT);
+   }
+   hourGlassIconEnabled = false;
+@@ -1397,6 +1442,26 @@ void insertStepInProgram(const int16_t func) {
+     pemCursorIsZerothStep = false;
+     return;
+   }
++  else if(func == ITM_FORTH) {
++    if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
++      pemCloseNumberInput(); aimBuffer[0] = 0;
++    }
++    if(catalog) { leaveAsmMode(); popSoftmenu(); }
++    bool_t wasOn = forthEntryStateAtInsertion();
++    tmpString[0] = (ITM_FORTH >> 8) | 0x80;
++    tmpString[1] =  ITM_FORTH       & 0xff;
++    tmpString[2] = (char)STRING_LABEL_VARIABLE;
++    tmpString[3] = 0;
++    _insertInProgram((uint8_t *)tmpString, 4);
++    if(!wasOn) {
++      tam.function = ITM_FORTH;
++      pemAlpha(ITM_FORTH);
++    } else {
++      clearSystemFlag(FLAG_ALPHA);
++    }
++    pemCursorIsZerothStep = false;
++    return;
++  }
+   else if(func == ITM_42STRING || func == ITM_42APPEND) {
+     tmpString[0] = (func >> 8) | 0x80;
+     tmpString[1] =  func  & 0xff;
+@@ -1408,6 +1473,15 @@ void insertStepInProgram(const int16_t func) {
+     return;
+   }
+ 
++  if(!tam.mode && !getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0
++      && indexOfItems[func].func == addItemToBuffer
++      && forthEntryStateAtInsertion()) {
++    tam.function = ITM_FORTH;
++    pemAlpha(func);
++    pemCursorIsZerothStep = false;
++    return;
++  }
++
+   if(   indexOfItems[func].func == addItemToBuffer
+      || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
+                                             || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
+@@ -1490,6 +1564,23 @@ void insertStepInProgram(const int16_t func) {
+     tmpString[1] =  func       & 0xff;
+   }
+ 
++   if(func == ITM_FCALL) {
++     char fname[FORTH_NAME_MAX + 1];
++     if(!tam.indirect && forthDictNameByIndex(tam.value, fname, sizeof(fname))) {
++       uint16_t nameLen = stringByteLength(fname);
++       tmpString[0] = (ITM_FORTH >> 8) | 0x80;
++       tmpString[1] =  ITM_FORTH       & 0xff;
++       tmpString[2] = (char)STRING_LABEL_VARIABLE;
++       tmpString[3] = (char)nameLen;
++       xcopy(tmpString + 4, fname, nameLen);
++       _insertInProgram((uint8_t *)tmpString, nameLen + 4);
++     }
++     else {
++       displayCalcErrorMessage(ERROR_NON_PROGRAMMABLE_COMMAND, ERR_REGISTER_LINE, REGISTER_X);
++     }
++     return;
++   }
++
+    switch(indexOfItems[func].status & PTP_STATUS) {
+     case PTP_DISABLED: {
+       switch(func) {
+@@ -1785,7 +1876,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+   }
+   else {
+     tmpString[opBytes++] = (func >> 8) | 0x80;
+-    tmpString[opBytes++] =  func       & 0x7f;
++    tmpString[opBytes++] =  func       & 0xff;  // audit F4: 0x7f masked low bytes >= 0x80 (e.g. ITM_XEQP1=0x08AF) — §9.10 item 4 resolved
+   }
+ 
+   tmpString[opBytes    ] = (char)STRING_LABEL_VARIABLE;

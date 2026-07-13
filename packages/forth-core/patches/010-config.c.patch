@@ -1,0 +1,42 @@
+diff --git a/src/c47/config.c b/src/c47/config.c
+index fbe86b5611929deb161859c78db439dee7e0b662..813104418400619e1afc1a4a98d90106459e9cca 100644
+--- a/src/c47/config.c
++++ b/src/c47/config.c
+@@ -2,6 +2,7 @@
+ // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
+ 
+ #include "c47.h"
++#include "forth_dict.h"  // for forthDictInit()
+ 
+ //C47 defaults (used in both settings arrays)
+ #define _gapl   ITM_SPACE_PUNCTUATION
+@@ -1934,6 +1935,29 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+ 
+     fnClearFlag(FLAG_USER);
+     fnRefreshState();
++
++    /* Reset hook: reinitialize Forth dictionary.
++     * (DESIGN.md §6 — clears stale base/here/latest after RAM clear.) */
++    forthDictInit();
++
++      #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
++       {
++         /* Run-once: tests call restoreCalc, which calls doFnReset — without
++          * this guard the suite would recursively re-enter itself. */
++         static bool forthSelfTestRan = false;
++         if(!forthSelfTestRan) {
++           forthSelfTestRan = true;
++           extern int forthDictSelfTest(void);
++           if(forthDictSelfTest()) {
++             fprintf(stderr, "FORTH DICT SELF-TEST FAILED\n");
++             exit(1);
++           }
++           if(headlessMode) {
++             exit(0);
++           }
++         }
++       }
++     #endif
+   }
+ }
+ 

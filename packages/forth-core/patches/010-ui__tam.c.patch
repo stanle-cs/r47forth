@@ -1,0 +1,33 @@
+diff --git a/src/c47/ui/tam.c b/src/c47/ui/tam.c
+index f2b30d54c723abb02abe2cdbb09448c7c60a1140..0f66192dca5a311ce4745afa1bd0ccc14a011d30 100644
+--- a/src/c47/ui/tam.c
++++ b/src/c47/ui/tam.c
+@@ -2,6 +2,7 @@
+ // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
+ 
+ #include "c47.h"
++#include "forth_dict.h"
+ 
+     TO_QSPI const int16_t StoOperations[][2] = {
+       {ITM_ADD,      ITM_STOADD},
+@@ -954,6 +955,20 @@ printf("tam.value: %d\n", tam.value);
+                 return;
+               }
+             }
++            /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
++            {
++              uint16_t widx;
++              if (forthFindColon(buffer, &widx)) {
++                leaveTamModeIfEnabled();
++                if(calcMode == CM_PEM) {
++                  insertUserItemInProgram(tam.function, buffer);
++                }
++                else {
++                  reallyRunFunction(ITM_FCALL, widx);
++                }
++                return;
++              }
++            }
+           }
+           if(calcMode != CM_PEM) {
+             leaveTamModeIfEnabled();

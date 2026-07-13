@@ -1,0 +1,96 @@
+diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
+index 825248860d8ee4fc1be0702c7008e2ed7a68e0e4..fbc00b0223de6ebe7ffd85cb8d1f0376e8e65bfe 100755
+--- a/src/c47/keyboard.c
++++ b/src/c47/keyboard.c
+@@ -2,6 +2,7 @@
+ // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
+ 
+ #include "c47.h"
++#include "forth_dict.h"
+ 
+ 
+ TO_QSPI static const char bugScreenNonexistentMenu[] = "In function determineFunctionKeyItem: nonexistent menu specified!";
+@@ -9,6 +10,40 @@ TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineI
+ 
+ static void executeFunction(const char *data, int16_t item_);
+ 
++/* pickerInsertName — insert dynmenuGetLabel(dynamicMenuItem) + trailing space
++ * into aimBuffer at T_cursorPos (§9.6 P-H7).
++ * Returns true on success, false if buffer would overflow. */
++bool_t pickerInsertName(void)
++{
++  const char *pickName = dynmenuGetLabel(dynamicMenuItem);
++  int32_t nameLen = stringByteLength(pickName);
++  int32_t bufLen = stringByteLength(aimBuffer);
++  if(bufLen + nameLen + 1 < 256 && stringGlyphLength(aimBuffer) + nameLen + 1 <= 196) {
++    xcopy(aimBuffer + T_cursorPos + nameLen + 1, aimBuffer + T_cursorPos,
++          stringByteLength(aimBuffer + T_cursorPos) + 1);
++    xcopy(aimBuffer + T_cursorPos, pickName, nameLen);
++    aimBuffer[T_cursorPos + nameLen] = ' ';
++    T_cursorPos += nameLen + 1;
++    return true;
++  }
++  return false;
++}
++
++/* forthPickerGuard — guard for MNU_FORTH picker action in executeFunction (§9.6).
++ * Returns true only when all Forth-capture conjuncts hold AND the current
++ * softmenu is actually MNU_FORTH (menu-identity check, placed before any
++ * dynamicSoftmenu[] indexing to prevent OOB access on wrong menu). */
++bool_t forthPickerGuard(int16_t item)
++{
++  if(softmenu[softmenuStack[0].softmenuId].menuItem != -MNU_FORTH) return false;
++  return (calcMode == CM_PEM
++      && getSystemFlag(FLAG_ALPHA)
++      && tam.function == ITM_FORTH
++      && item == ITM_NOP
++      && dynamicMenuItem >= 0
++      && dynamicMenuItem < dynamicSoftmenu[softmenuStack[0].softmenuId].numItems);
++}
++
+   int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
+     int16_t item = ITM_NOP;
+     dynamicMenuItem = -1;
+@@ -75,6 +110,12 @@ static void executeFunction(const char *data, int16_t item_);
+         break;
+       }
+ 
++      case MNU_FORTH: {
++        dynamicMenuItem = firstItem + itemShift + fn;
++        item = ITM_NOP; // always ITM_NOP: press handled in executeFunction (§9.6 P-H7)
++        break;
++      }
++
+       case MNU_VAR: {
+         dynamicMenuItem = firstItem + itemShift + fn;
+         item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : MNU_DYNAMIC);
+@@ -957,6 +998,14 @@ endReturnTrue:
+ 
+ 
+         lastKeyItemDetermined = item;
++
++        // MNU_FORTH picker: insert name at cursor during Forth capture (§9.6 P-H7)
++        if(forthPickerGuard(item)) {
++          if(pickerInsertName()) {
++            pemAlpha(ITM_NOP);
++          }
++          return;
++        }
+       }
+ 
+       // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
+@@ -2241,6 +2290,14 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+               }
+             }
+             else {
++              /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
++              {
++                uint16_t widx;
++                if (forthFindColon(funcParam, &widx)) {
++                  reallyRunFunction(ITM_FCALL, widx);
++                  return;
++                }
++              }
+               displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
+               #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+                 sprintf(errorMessage, "string '%s' is not a named label", funcParam);
