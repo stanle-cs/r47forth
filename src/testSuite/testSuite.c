@@ -39,6 +39,7 @@ void covBackupRoundtrip(uint16_t unusedButMandatoryParameter);
 void covConvToSI(uint16_t itemNr);
 void covConvFromSI(uint16_t itemNr);
 void covStateRoundtrip(uint16_t unusedButMandatoryParameter);
+void covShortIntWordSizeRestore(uint16_t unusedButMandatoryParameter);
 void covEqCalc(uint16_t unusedButMandatoryParameter);
 void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t which);
@@ -188,6 +189,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnBmpNameCov",           covBmpName, 1 },
   {"fnHashBmpCov",           covHashBmp, 1 },
   {"fnStateRoundtrip",       covStateRoundtrip, 1 },
+  {"fnShortIntWSRestoreCov", covShortIntWordSizeRestore, 1 },
   {"fnEqCalcCov",            covEqCalc, 1 },
   {"fnDerivEqCov",           covDerivEq, 1 },
   {"fnSolveRootCov",         covSolveRoot, 1 },
@@ -740,6 +742,27 @@ void covStateRoundtrip(uint16_t unusedButMandatoryParameter) {
   fnLoad(LM_NAMED_VARIABLES);
   fnLoad(LM_SUMS);
   fnLoad(LM_SYSTEM_STATE);
+}
+
+void covShortIntWordSizeRestore(uint16_t unusedButMandatoryParameter) {
+  // Regression for the short-integer masks after a state restore. The state file
+  // records shortIntegerWordSize but neither shortIntegerMask nor the sign bit,
+  // and doLoad restores the word size by plain assignment. If the mask is not
+  // rederived from the loaded word size, it keeps its pre-load value (-1 when a
+  // file saved at a narrow word size is loaded into the 64-bit default), and
+  // every later short-integer operation masks against the wrong width.
+  //
+  // Save an 8-bit state, move the live word size to 64 so shortIntegerMask
+  // becomes -1, reload the 8-bit state, then store 300 as a short integer. The
+  // store masks with shortIntegerMask: with a correct 8-bit mask that is
+  // 300 & 0xff = 44; with the stale -1 mask it stays 300. The corpus asserts 44,
+  // so the case fails unless the loader rederives the mask.
+  fnSetWordSize(8);
+  convertUInt64ToShortIntegerRegister(0, 200u, 10u, REGISTER_X); // a valid 8-bit seed to serialize
+  fnSave(SM_STATE_SAVE);
+  fnSetWordSize(64);                                             // shortIntegerMask := -1
+  fnLoad(LM_STATE_LOAD);                                         // restores word size 8; the fix rederives the mask
+  convertUInt64ToShortIntegerRegister(0, 300u, 10u, REGISTER_X); // masks with shortIntegerMask -> 44 or 300
 }
 
 void covEqCalc(uint16_t formulaIndex) {
