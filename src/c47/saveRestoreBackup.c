@@ -1396,12 +1396,9 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     }
 
     // Sanitise restored short integers: the backup restores raw register bytes, so a file written by an older build can
-    // carry values wider than the word size; mask them like every logical operation does, so stale bits cannot survive.
-    for(calcRegister_t regist = FIRST_GLOBAL_REGISTER; regist <= LAST_SPARE_REGISTER; regist++) {
-      if(getRegisterDataType(regist) == dtShortInteger) {
-        *(REGISTER_SHORT_INTEGER_DATA(regist)) &= shortIntegerMask;
-      }
-    }
+    // carry values wider than the word size. The mask and sign bit were restored above; clamp every short-integer
+    // register (all classes, not just the global block) to the word size so stale bits cannot survive.
+    clampShortIntegerRegistersToWordSize();
 
     printf("End of calc's restoration\n");
     fflush(stdout);

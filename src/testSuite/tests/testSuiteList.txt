@@ -468,6 +468,11 @@ pgm_solve_cov
 histo_cov
 clearvars_cov
 
+; short-integer masks must be rederived on state restore; saves/reloads state
+; and changes the word size, so it runs after the other state tests and before
+; serialize_cov resets the calculator.
+shortint_restore_cov
+
 serialize_cov
 
 graphs_cov
