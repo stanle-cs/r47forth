@@ -922,6 +922,7 @@ void covProgramFlow(uint16_t which) {
   // the freshly loaded labels are unambiguous and the missing-label lookup in
   // case 2 cannot resolve to a sample program.
   fnClPAll(CONFIRMED);
+  dynamicMenuItem = -1; // fnGoto and goToGlobalStep divert to a dynamic-menu label when this is >= 0
 
   switch(which) {
     case 0: { // cross-program subroutine call (XEQ) and return (RTN): 5 + 10 = 15
@@ -947,7 +948,6 @@ void covProgramFlow(uint16_t which) {
     }
     case 4: { // go to a program step by number, driving goToGlobalStep (fnGotoDot)
       covWriteAndLoadPgm(pgmG, sizeof(pgmG));
-      dynamicMenuItem = -1;
       fnGotoDot(2);
       break;
     }
@@ -963,7 +963,7 @@ void covProgramFlow(uint16_t which) {
         ITM_LBL, STRING_LABEL_VARIABLE, 1, 'L',
         ITM_LITERAL, STRING_LONG_INTEGER, 3, '1', '2', '3',
         ITM_LITERAL, STRING_REAL34, 3, '3', '.', '5',
-        ITM_LITERAL, STRING_COMPLEX34, 3, '3', 'i', '4',
+        ITM_LITERAL, STRING_COMPLEX34, 4, '3', '+', 'i', '4',
         ITM_LITERAL, STRING_ANGLE_DEGREE, 2, '4', '5',
         ITM_LITERAL, STRING_ANGLE_RADIAN, 1, '1',
         ITM_LITERAL, STRING_ANGLE_GRAD, 2, '5', '0',
