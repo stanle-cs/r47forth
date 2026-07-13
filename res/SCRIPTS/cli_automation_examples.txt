@@ -29,6 +29,25 @@ Plot test suite examples
   ./t47 --exec 'readp ./docs/appnotes/sources/AN0022b_programs/func.p47; xeq PLTROOT'
   ./t47 -e 'readp ./PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; item 2734 "xx"; snap'
 
+Programmed EQN solve and draw (cpxSlv and Draw as program steps; single-variable
+formulas only, the solve variable is picked up automatically). Program listing,
+encode with  ./rejig listing.txt -o eqndemo.p47 :
+    LBL 'CSLV'
+      'x^2+4' X.EDIT
+      1 5
+      cpxSlvˣʸ
+    RTN
+    LBL 'DRW'
+      'x^2-4' X.EDIT
+      -5 5
+      Draw_y^x
+    RTN
+  (X.EDIT loads the string in X as the current formula and drops it; X.SWAP is the
+   exchanging variant. cpxSlvˣʸ takes the two guesses from Y and X; Drawˣʸ takes
+   the plot range from Y and X.)
+  ./t47 --reset --exec 'readp eqndemo.p47; xeq CSLV; puts "X=[reg X]"'   (root 0-i2)
+  ./t47 --reset --exec 'readp eqndemo.p47; xeq DRW; snap'                (parabola, roots -2 and 2)
+
 Export a loaded program to RTF (headless; GUI XPORTP needs a file chooser):
   ./t47 --reset --exec 'readp res/PROGRAMS/GudrmPL.p47; xportp GudrmPL res/PROGRAMS/GudrmPL.rtf'
   (xportp <label> <filename>; label is a global label in a loaded program.)
