@@ -43,6 +43,13 @@ Range screening examples (error text appears on stdout):
                          (every sample infinite -> "no plottable sample in the plot range")
   (items: 2547 STO up-Y, 2548 STO down-Y, 99 divide, 2734 PLTf)
 
+State save/load and register assertions (savest/loadst take a filename):
+  save a state:    ./t47 --reset --exec 'nim 2; nim 2; item 1526 00; savest good.sav'
+  load and check:  ./t47 --reset --exec 'loadst good.sav; item 51 00; item 1527; puts "rows=[reg Y] cols=[reg X]"'
+  (items: 1526 M.DIM dims a register to Y x X reals, 51 RCL, 1527 42DIM# which drops the X-matrix dimensions to Y=rows, X=cols.
+  `reg <name>` reads a register's display string, but returns <unsupported> for matrices, so assert matrix dimensions via 42DIM# as above.
+  Register data can also be moved through hand-written .d47 files, IMPORTr/EXPreg; format in AN0025.)
+
 Output: newest ./YYYYMMDD-HHMMSS.bmp in cwd (time is the sim clock).
 
 Notes:
