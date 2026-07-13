@@ -2552,7 +2552,7 @@ void insColRealMatrix(real34Matrix_t *matrix, uint16_t beforeColNo, bool_t add) 
     for(i = 0; i < rows; ++i) {
       real34Copy(const34_0, newMat.matrixElements + (beforeColNo + i*(cols+1)));
     }
-    for(j = beforeColNo; j < cols + 1; ++j) {
+    for(j = beforeColNo; j < cols; ++j) {
       for( i = 0; i < rows; i++) {
         real34Copy(matrix->matrixElements + (j + i*cols), newMat.matrixElements + ((j+1) + i*(cols+1)));
       }
@@ -2628,7 +2628,7 @@ void insColComplexMatrix(complex34Matrix_t *matrix, uint16_t beforeColNo, bool_t
       real34Copy(const34_0, VARIABLE_REAL34_DATA(newMat.matrixElements + (beforeColNo + i*(cols+1))));
       real34Copy(const34_0, VARIABLE_IMAG34_DATA(newMat.matrixElements + (beforeColNo + i*(cols+1))));
     }
-    for(j = beforeColNo; j < cols + 1; ++j) {
+    for(j = beforeColNo; j < cols; ++j) {
       for( i = 0; i < rows; i++) {
         complex34Copy(matrix->matrixElements + (j + i*cols), newMat.matrixElements + ((j+1) + i*(cols+1)));
       }
