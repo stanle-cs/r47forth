@@ -695,11 +695,9 @@ void fnGetWordSize(uint16_t unusedButMandatoryParameter) {
 
 
 void updateShortIntegerMasks(void) {
-  // Derive the word-size-dependent short-integer bit masks from the current
-  // shortIntegerWordSize. fnSetWordSize uses this when the size changes
-  // interactively; code that assigns shortIntegerWordSize directly (state-file
-  // restore, which stores neither mask) must call it too, so shortIntegerMask
-  // and shortIntegerSignBit stay consistent with the word size.
+  // Derive the word-size-dependent short-integer bit masks from the current shortIntegerWordSize. fnSetWordSize uses this when the size changes interactively;
+  // code that assigns shortIntegerWordSize directly (state-file restore, which stores neither mask) must call it too, so that shortIntegerMask and 
+  // shortIntegerSignBit stay consistent with the word size.
   if(shortIntegerWordSize == 64) {
     shortIntegerMask    = -1;
   }

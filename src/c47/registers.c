@@ -185,12 +185,9 @@ uint32_t getRegisterDataType(calcRegister_t regist) {
 
 
 void clampShortIntegerRegistersToWordSize(void) {
-  // Mask every short-integer register down to the current word size. Used after
-  // a restore so short integers written by an older build - one that let a bit
-  // escape the word - or raw bytes reloaded without checking cannot keep
-  // out-of-range bits. Covers all register classes that can hold a short
-  // integer: the whole global block (numbered, stack, stat, spare, saved-stack,
-  // temp) plus the allocated named variables and local registers.
+  // Mask every short-integer register down to the current word size. Used after a restore so short integers written by an older build -
+  // one that let a bit escape the word - or raw bytes reloaded without checking cannot keep out-of-range bits. Covers all register classes that can hold a
+  // short integer: the whole global block (numbered, stack, stat, spare, saved-stack, temp) plus the allocated named variables and local registers.
   for(calcRegister_t regist = FIRST_GLOBAL_REGISTER; regist <= LAST_GLOBAL_REGISTER; regist++) {
     if(getRegisterDataType(regist) == dtShortInteger) {
       *(REGISTER_SHORT_INTEGER_DATA(regist)) &= shortIntegerMask;
