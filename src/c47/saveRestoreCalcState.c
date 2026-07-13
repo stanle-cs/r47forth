@@ -2434,6 +2434,12 @@ static void doLoadDataFile(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d
     restoreOneSection(loadMode, s, n, d, false);
   }
 
+  // Sanitise loaded short integers, as doLoad does. A normal data file carries no word size, so this is a no-op; but a hand-crafted file could include an
+  // OTHER_CONFIGURATION_STUFF section that reassigns shortIntegerWordSize without rederiving the mask. Rederive the mask and sign bit from the current word
+  // size, then clamp every short-integer register (whole global block, named variables, local registers) to it, so no out-of-range bits survive the import.
+  updateShortIntegerMasks();
+  clampShortIntegerRegistersToWordSize();
+
   dataFileMode = false;
   ioFileClose();
   temporaryInformation = TI_DATA_LOADED;
