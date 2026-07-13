@@ -2557,6 +2557,14 @@ void doLoad(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d, uint16_t load
         kbd_usr[i].primaryTam = kbd_std[i].primaryTam;
       }
     }
+
+    // Sanitise loaded short integers: the register section precedes shortIntegerWordSize in the file, so registers were
+    // masked against the PRE-load word size (a no-op at the 64-bit default); re-mask now that the loaded size is in.
+    for(calcRegister_t regist = FIRST_GLOBAL_REGISTER; regist <= LAST_SPARE_REGISTER; regist++) {
+      if(getRegisterDataType(regist) == dtShortInteger) {
+        *(REGISTER_SHORT_INTEGER_DATA(regist)) &= shortIntegerMask;
+      }
+    }
   }
 
   lastErrorCode = ERROR_NONE;
