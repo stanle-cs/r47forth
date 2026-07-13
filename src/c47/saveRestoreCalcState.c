@@ -1339,19 +1339,12 @@ int64_t stringToInt64(const char *str) {
       char *cfg;
 
       reallocateRegister(regist, dtConfig, 0, amNone);
-      for(cfg=(char *)REGISTER_CONFIG_DATA(regist), tag=0;  tag < (loadedVersion < 10000008 ? 896 : sizeof(dtConfigDescriptor_t)); tag++, value+=2, cfg++) {
+      // The config register holds exactly sizeof(dtConfigDescriptor_t) bytes.
+      // Older files (loadedVersion < 10000008) serialised a longer 896-byte
+      // descriptor; decode only what the current descriptor holds so the extra
+      // bytes do not overrun the register into the following pool block.
+      for(cfg=(char *)REGISTER_CONFIG_DATA(regist), tag=0;  tag < sizeof(dtConfigDescriptor_t); tag++, value+=2, cfg++) {
         *cfg = ((*value >= 'A' ? *value - 'A' + 10 : *value - '0') << 4) | (*(value + 1) >= 'A' ? *(value + 1) - 'A' + 10 : *(value + 1) - '0');
-      }
-      if(loadedVersion < 10000008) {
-        // For earlier version config files of 896 desxcriptor length, the above Write into the register must only be up to the old descriptor content.
-        // We add the defaults for the new portion of the new descriptor in the following string.
-        static const unsigned char tmpvalue[] = {
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-          0xF7, 0x77, 0xDC, 0x2C, 0x2B, 0x84, 0x2A, 0x1C,
-          0x33, 0x20, 0x30, 0x33, 0x46, 0x0C, 0x2A, 0x33,
-          0x01, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        };
-        memcpy(cfg, tmpvalue, sizeof(tmpvalue));
       }
     }
 
