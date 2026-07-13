@@ -1760,8 +1760,8 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
         for(c = 0; c < mat.header.matrixColumns; ++c) {
           real_t tmpr;
           char str[100];
-          uint32_t offset = (r * mat.header.matrixRows + c) * 2;
-          real34ToReal(mat.matrixElements + offset, &tmpr);
+          complex34_t *element = mat.matrixElements + (r * mat.header.matrixColumns + c);
+          real34ToReal(VARIABLE_REAL34_DATA(element), &tmpr);
           realPlus(&tmpr, &tmpr, &ctxtReal4);       // Real part
           if(realGetExponent(&tmpr) < -50) {
             printf("[≈0 ");
@@ -1783,7 +1783,7 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
             }
             printf("[%s", str);
           }
-          real34ToReal(mat.matrixElements + offset + 1, &tmpr);
+          real34ToReal(VARIABLE_IMAG34_DATA(element), &tmpr);
           realPlus(&tmpr, &tmpr, &ctxtReal4);       // Imag part
           if(realGetExponent(&tmpr) < -50) {
             printf(" i≈0] ");
