@@ -810,6 +810,11 @@ void fnRangeXY(uint16_t unusedButMandatoryParameter) {
       rows = histo.header.matrixRows;
       cols = histo.header.matrixColumns;
       if(rows == 0) {           // matrixRows is a 12-bit field: >= 4096 rows wrap to 0, making (rows-1) index far out of bounds
+        displayCalcErrorMessage(ERROR_NOT_ENOUGH_MEMORY_FOR_NEW_MATRIX, ERR_REGISTER_LINE, REGISTER_X);
+        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+          sprintf(errorMessage, "HISTO row count wrapped the 12-bit matrixRows field");
+          moreInfoOnError("In function initHistoMatrix:", errorMessage, NULL, NULL);
+        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
         return false;
       }
       realToReal34(s,       &histo.matrixElements[(rows-1) * cols    ]);
@@ -1024,15 +1029,17 @@ static void convertStatsMatrixToHistoMatrix(uint16_t statsVariableToHistogram) {
           //#endif // PC_BUILD
         }
 
-        liftStack();
-        setSystemFlag(FLAG_ASLIFT);
-        liftStack();
-        setSystemFlag(FLAG_ASLIFT);
-        liftStack();
-        convertRealToResultRegister(&nb, REGISTER_Z, amNone);
-        convertRealToResultRegister(&lb, REGISTER_Y, amNone);
-        convertRealToResultRegister(&hb, REGISTER_X, amNone);
-        temporaryInformation = TI_STATISTIC_HISTO;
+        if(histoBuilt) {        // a failed build has the memory error on display; do not lift the stack and overwrite it with results
+          liftStack();
+          setSystemFlag(FLAG_ASLIFT);
+          liftStack();
+          setSystemFlag(FLAG_ASLIFT);
+          liftStack();
+          convertRealToResultRegister(&nb, REGISTER_Z, amNone);
+          convertRealToResultRegister(&lb, REGISTER_Y, amNone);
+          convertRealToResultRegister(&hb, REGISTER_X, amNone);
+          temporaryInformation = TI_STATISTIC_HISTO;
+        }
       }
       else {
         displayCalcErrorMessage(ERROR_MATRIX_MISMATCH, ERR_REGISTER_LINE, REGISTER_X); // Invalid input data type for this operation

@@ -2426,11 +2426,11 @@ calcRegister_t allocateNamedMatrix(const char *name, uint16_t rows, uint16_t col
 }
 
 bool_t appendRowAtMatrixRegister(calcRegister_t regist) {
-  const uint16_t rows = REGISTER_MATRIX_HEADER(regist)->matrixRows, cols = REGISTER_MATRIX_HEADER(regist)->matrixColumns;
   if(regist == INVALID_VARIABLE) {
     return false;
   }
   else if(getRegisterDataType(regist) == dtReal34Matrix || getRegisterDataType(regist) == dtComplex34Matrix) {
+    const uint16_t rows = REGISTER_MATRIX_HEADER(regist)->matrixRows, cols = REGISTER_MATRIX_HEADER(regist)->matrixColumns;
     return redimMatrixRegister(regist, rows + 1, cols, ITM_M_DIM);
   }
   else {
