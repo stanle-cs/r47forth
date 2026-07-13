@@ -33,6 +33,13 @@ Export a loaded program to RTF (headless; GUI XPORTP needs a file chooser):
   ./t47 --reset --exec 'readp res/PROGRAMS/GudrmPL.p47; xportp GudrmPL res/PROGRAMS/GudrmPL.rtf'
   (xportp <label> <filename>; label is a global label in a loaded program.)
 
+Export / import a register data file (.d47) (headless; GUI EXPreg / IMPORTr need a file chooser):
+  ./t47 --reset --exec 'nim 3; nim 4; item 99; expreg X quot.d47'   (export register X)
+  ./t47 --reset --exec 'impreg quot.d47; puts "X=[reg X]"'          (import, then read X)
+  (expreg <reg> <filename>; impreg <filename>; reg name as for the reg command, e.g. X, 00, A.
+   The filename is used verbatim, so the folder must already exist; the GUI keeps .d47 files in
+   DATA/, but these headless examples write to the current folder.)
+
 Stat graph at 1E-50 (reference MR3_C_SCATR_1E-50.bmp; both axes scaled):
   ./t47 --snapskiprefresh --exec 'clΣ; nim 1e-50; nim 1e-50; xeq Σ+; nim 4e-50; nim 2e-50; xeq Σ+; nim 9e-50; nim 3e-50; xeq Σ+; nim 16e-50; nim 4e-50; xeq Σ+; nim 25e-50; nim 5e-50; xeq Σ+; xeq SCATR; snap'
 
