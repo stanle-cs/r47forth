@@ -589,6 +589,131 @@ Report `git show --stat HEAD`.
 
 ---
 
+## Q5b — Pillar 1 follow-up: pin the unpinned validator checks
+
+Context (architect's ruling on the Q5 mutation report): mutations 2 and 3
+stayed GREEN because of overlapping defenses, and that is ACCEPTED for the
+checks that are structurally shadowed — but two validator checks turned out
+to be reachable only through in-memory corruption, which no current test
+exercises. This task adds one direct unit test to pin them, and documents
+the declared-redundant checks so nobody "cleans them up" later.
+
+Read: `packages/forth-core/forth_dict.c` (the `forthDictValidateRestored`
+function only) and your T1.3 test in `packages/forth-core/test_dict_reloc.c`
+(grep `test_restore_validation_clamps`).
+
+Step 1 — in `forthDictValidateRestored`, update two comments (no logic
+changes):
+- On the line `bool ok = (fdict.sizeBlocks != 0) && ...` add above it:
+  ```c
+  /* Pinned by tests: sizeBlocks!=0 (T1.3b V1), here<=cap (T1.3 v1),
+   * nameLen bounds (T1.3b V2), n==count (T1.3 v2).
+   * Declared redundant (termination/robustness, shadowed by the checks
+   * above — do not remove without re-running the mutation analysis):
+   * latest<here (shadowed by walk's off+4 bound), off+4>here vs OOB reads,
+   * link strictly-decreasing (cycles are bounded by the n>count cap). */
+  ```
+
+Step 2 — add test T1.3b next to `test_restore_validation_clamps` (no file
+I/O; direct in-memory corruption; does NOT call restoreCalc):
+
+```c
+/* T1.3b (validator direct pins). V1 must fail if the sizeBlocks!=0 check is
+ * removed (stale base + zeroed scalars passes every other check: cap=0,
+ * here=0<=0, latest=FORTH_NULL skips the walk, n=0==count).
+ * V2 must fail if the nameLen bounds check is removed (a zeroed nameLen
+ * header walks clean through the off/link/count checks). */
+static int test_validate_direct_corruption(void)
+{
+  int fail = 0;
+
+  /* V1: stale base with zeroed scalars */
+  {
+    uint8_t *region = allocC47Blocks(4);
+    if (!region) { printf("    SKIP: alloc failed\n"); return 0; }
+    forthDictClear();
+    fdict.base = region;             /* simulate stale-pointer restore */
+    fdict.sizeBlocks = 0;
+    fdict.here = 0;
+    fdict.latest = FORTH_NULL;
+    fdict.count = 0;
+    forthDictValidateRestored();
+    if (fdict.base != NULL) {
+      printf("    FAIL: V1 stale base with zeroed scalars survived validation\n");
+      fail = 1;
+      forthDictClear();              /* best effort */
+    }
+    freeC47Blocks(region, 4);        /* release the deliberate orphan */
+  }
+
+  /* V2: corrupt nameLen on a real header */
+  {
+    forthDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": VD2 1 ;");
+    if (lastErrorCode != ERROR_NONE || !fdict.base) {
+      printf("    SKIP: V2 setup failed\n");
+      return fail;
+    }
+    uint8_t *preBase = fdict.base;
+    uint16_t preBlocks = fdict.sizeBlocks;
+    ((forthHeader_t *)(fdict.base + fdict.latest))->nameLen = 0;
+    forthDictValidateRestored();
+    if (fdict.base != NULL) {
+      printf("    FAIL: V2 zero-nameLen header survived validation\n");
+      fail = 1;
+      forthDictClear();
+    }
+    else {
+      freeC47Blocks(preBase, preBlocks);  /* release the deliberate orphan */
+    }
+  }
+
+  forthDictClear();
+  if (!fail) printf("    PASS: validator direct pins (sizeBlocks, nameLen)\n");
+  return fail;
+}
+```
+
+Step 3 — register it inside the existing Pillar-1 block (after
+`test_restore_validation_clamps`, still between `preserveBackupFile()` and
+`restoreBackupFile()` — it needs no file, but keep the group contiguous):
+
+```c
+  printf("  [DEBUG] running test_validate_direct_corruption...\n");
+  fail |= test_validate_direct_corruption();
+```
+
+Refresh + gate: green, +1 PASS.
+
+Mutation verification (mandatory):
+1. Delete `(fdict.sizeBlocks != 0) &&` from the validator → gate RED via V1.
+   Revert.
+2. Delete the `hdr->nameLen == 0 || hdr->nameLen > FORTH_NAME_MAX` check →
+   gate RED via V2. Revert. Final gate GREEN.
+
+Step 4 — commit (a separate small commit; also carries the gate script fix
+that predates this series and must be in history for the suite to be
+non-vacuous on a fresh checkout):
+
+```
+git add packages/forth-core/forth_dict.c packages/forth-core/test_dict_reloc.c \
+        packages/forth-core/build-test.sh \
+        packages/forth-core/patches packages/forth-core/files \
+        packages/forth-core/.refresh-manifest.json
+git commit -m "forth-core: P1 validator hardening + commit gate selftest fix
+
+Pin the two validator checks unreachable via backup-file corruption
+(sizeBlocks!=0, nameLen bounds) with a direct in-memory test; document
+the declared-redundant checks. Commit the build-test.sh change that
+injects FORTH_DEBUG_SELFTEST (previously uncommitted: a fresh checkout
+would run a vacuous-green gate)."
+```
+
+Report `git show --stat HEAD` and the mutation results.
+
+---
+
 ## Q6 — Pillar 3: open-definition snapshot helpers
 
 Read: `packages/forth-core/forth_dict.c` lines 185-200 (the `openDef` static)

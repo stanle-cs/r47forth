@@ -71,6 +71,12 @@ void forthDictValidateRestored(void)
   }
 
   uint32_t cap = (uint32_t)fdict.sizeBlocks * BYTES_PER_BLOCK;
+  /* Pinned by tests: sizeBlocks!=0 (T1.3b V1), here<=cap (T1.3 v1),
+   * nameLen bounds (T1.3b V2), n==count (T1.3 v2).
+   * Declared redundant (termination/robustness, shadowed by the checks
+   * above — do not remove without re-running the mutation analysis):
+   * latest<here (shadowed by walk's off+4 bound), off+4>here vs OOB reads,
+   * link strictly-decreasing (cycles are bounded by the n>count cap). */
   bool ok = (fdict.sizeBlocks != 0) && (fdict.here <= cap)
          && (fdict.latest == FORTH_NULL || fdict.latest < fdict.here);
 
@@ -79,9 +85,9 @@ void forthDictValidateRestored(void)
     uint16_t n = 0;
      while (off != FORTH_NULL) {
        if ((uint32_t)off + 4 > fdict.here) { ok = false; break; }
-       forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
-      if (hdr->nameLen == 0 || hdr->nameLen > FORTH_NAME_MAX) { ok = false; break; }
-      if (hdr->link != FORTH_NULL && hdr->link >= off) { ok = false; break; }
+        forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+       if (hdr->nameLen == 0 || hdr->nameLen > FORTH_NAME_MAX) { ok = false; break; }
+       if (hdr->link != FORTH_NULL && hdr->link >= off) { ok = false; break; }
       off = hdr->link;
       if (++n > fdict.count) { ok = false; break; }
     }

@@ -4979,6 +4979,62 @@ static int test_restore_validation_clamps(void)
   return fail;
 }
 
+/* T1.3b (validator direct pins). V1 must fail if the sizeBlocks!=0 check is
+ * removed (stale base + zeroed scalars passes every other check: cap=0,
+ * here=0<=0, latest=FORTH_NULL skips the walk, n=0==count).
+ * V2 must fail if the nameLen bounds check is removed (a zeroed nameLen
+ * header walks clean through the off/link/count checks). */
+static int test_validate_direct_corruption(void)
+{
+  int fail = 0;
+
+  /* V1: stale base with zeroed scalars */
+  {
+    uint8_t *region = allocC47Blocks(4);
+    if (!region) { printf("    SKIP: alloc failed\n"); return 0; }
+    forthDictClear();
+    fdict.base = region;             /* simulate stale-pointer restore */
+    fdict.sizeBlocks = 0;
+    fdict.here = 0;
+    fdict.latest = FORTH_NULL;
+    fdict.count = 0;
+    forthDictValidateRestored();
+    if (fdict.base != NULL) {
+      printf("    FAIL: V1 stale base with zeroed scalars survived validation\n");
+      fail = 1;
+      forthDictClear();              /* best effort */
+    }
+    freeC47Blocks(region, 4);        /* release the deliberate orphan */
+  }
+
+  /* V2: corrupt nameLen on a real header */
+  {
+    forthDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": VD2 1 ;");
+    if (lastErrorCode != ERROR_NONE || !fdict.base) {
+      printf("    SKIP: V2 setup failed\n");
+      return fail;
+    }
+    uint8_t *preBase = fdict.base;
+    uint16_t preBlocks = fdict.sizeBlocks;
+    ((forthHeader_t *)(fdict.base + fdict.latest))->nameLen = 0;
+    forthDictValidateRestored();
+    if (fdict.base != NULL) {
+      printf("    FAIL: V2 zero-nameLen header survived validation\n");
+      fail = 1;
+      forthDictClear();
+    }
+    else {
+      freeC47Blocks(preBase, preBlocks);  /* release the deliberate orphan */
+    }
+  }
+
+  forthDictClear();
+  if (!fail) printf("    PASS: validator direct pins (sizeBlocks, nameLen)\n");
+  return fail;
+}
+
 int forthDictSelfTest(void)
 {
   int fail = 0;
@@ -5492,6 +5548,8 @@ int forthDictSelfTest(void)
   fail |= test_restore_missing_params_defaults();
   printf("  [DEBUG] running test_restore_validation_clamps...\n");
   fail |= test_restore_validation_clamps();
+  printf("  [DEBUG] running test_validate_direct_corruption...\n");
+  fail |= test_validate_direct_corruption();
   restoreBackupFile();
 
   /* FIX-6: allocated regions must return to the start value after all

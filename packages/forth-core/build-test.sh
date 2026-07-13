@@ -45,13 +45,20 @@ echo "==> repo: ${REPO_ROOT}"
 # --- Configure (re-shadows the CUSTOM_PKG tree) ---
 if [[ "${DO_SETUP}" -eq 1 ]]; then
   echo "==> meson setup (reconfigure, CUSTOM_PKG=${PKG})"
-  # FORTH_DEBUG_SELFTEST is default-on via packages/forth-core/meson.build — no manual -D here.
   meson setup "${BUILD_DIR}" \
     --buildtype=custom \
     --reconfigure \
     -DRASPBERRY=false \
     -DDECNUMBER_FASTMUL=true \
     -DCUSTOM_PKG="${PKG}"
+  # FORTH_DEBUG_SELFTEST: under the patch-based package system the resolver
+  # never reads packages/*/meson.build, so the meson_options.txt option is
+  # consumed by nothing and the self-test suite silently compiles OUT unless
+  # the define is injected here. (`meson setup --reconfigure -Dc_args=...`
+  # does NOT reliably apply compiler args to an existing build dir;
+  # `meson configure` does.) Without this the suite is vacuous green.
+  echo "==> enabling FORTH_DEBUG_SELFTEST via c_args"
+  meson configure "${BUILD_DIR}" -Dc_args=-DFORTH_DEBUG_SELFTEST
 else
   echo "==> skipping meson setup (--no-setup); building against existing shadow"
 fi

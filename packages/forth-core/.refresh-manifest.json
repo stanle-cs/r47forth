@@ -9,7 +9,7 @@
     "PEM_COMMITS.md": "401dcd3803eab0d7b8b612168afa5b58854569b4eda9a27856bb3f4b7edeba1f",
     "PEM_FIX_COMMITS.md": "d77c13480b92fd1c22320da4c0cf3a642825160aa7da2c177407ab621f15c26c",
     "PROPOSED_SPEC_CHANGES.md": "aa684f479b2467b22422a4d09d47531113a21c3ca22e4be103546d18cca22ddf",
-    "STAGE2_QWEN_PROMPTS.md": "42321adb563957bb2270a259d6e51bdcacd21435dc6b94440dd484fdade5a282",
+    "STAGE2_QWEN_PROMPTS.md": "94e6fba209a1ad72990c7c08bdf1fc6706b25764ba6d195ddf84f1e1136376a4",
     "STAGE2_THREE_PILLARS_AUDIT.md": "7090c3a479f693c014df40470a937ee76a1fbea0f05a504e81f41decac787118",
     "STAGE2_THREE_PILLARS_PLAN.md": "8a20cffdf338fda18266ffd087acd1a889427b82dd24876066fb552174e22027",
     "Stage-H1.md": "b010ff526338a5148e1929efea0c42f141b1264a9d288fa25d54b11a91535774",
@@ -18,12 +18,12 @@
     "build-test.sh": "9b6e72d945154a2a14d2b305b9f2d1abbfcaeffb3ba4a97aa88d9d4eba019f13",
     "forth_bridge.c": "e27b8edfd6e3392410ce62f2cf715cc385b0455ff954acef22c5809d7d57f5fd",
     "forth_compile.c": "7af5c14c6f5dff7d541c147cf9d886dd06aee1fe7f926d6ac56c84e4ade9f369",
-    "forth_dict.c": "9210a3f9886540d87f370710589ea43840f6aa2348df0d0e9ba72308ec7deb00",
+    "forth_dict.c": "dfdf82f0ba411cf90cc1c235247de2c63bb3633c427f8712b9c96d073ff3587a",
     "forth_dict.h": "c3e3e37fedd894634ff830e74e96a81203bd910d2e4584795c151050cc3d881b",
     "forth_inner.c": "6e29cb6215ee64c18d086e83bb36b10a3db7b7d2cfb9c801316feaf116d54335",
     "forth_prims.c": "1f7e208d184b1ec64bee21fd311a26b77df7f64c60f9f78da879606b2bb07a46",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "test_dict_reloc.c": "7ee9801ecc31ee88d602f1b7348435ba7dc3da6b984847b99dcd759397b67c68"
+    "test_dict_reloc.c": "8929ba1318e20d7aed7cb8da2874e0a7ea35e2e264ad832d98d0e4cc7f4130fe"
   },
   "patches": {
     "010-config.c.patch": "eff3da120408e5f7d2be6ac0189000c2f3243dbe90a8474e0e01ce129deb8b27",
