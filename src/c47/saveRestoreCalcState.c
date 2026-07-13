@@ -1333,6 +1333,11 @@ int64_t stringToInt64(const char *str) {
       *(numOfCols++) = 0;
       rows = toUint16(value);
       cols = toUint16(numOfCols);
+      // A register's data size is a uint16_t block count. Refuse file-supplied dimensions that would overflow it, or reallocateRegister would truncate the size,
+      // under-allocate, and restoreMatrixData would write out of bounds.
+      if((uint64_t)rows * cols * REAL34_SIZE_IN_BLOCKS + TO_BLOCKS(sizeof(matrixHeader_t)) > 0xFFFFu) {
+        rows = cols = 0;
+      }
       reallocateRegister(regist, dtReal34Matrix, REAL34_SIZE_IN_BLOCKS * rows * cols, tag);
       REGISTER_MATRIX_HEADER(regist)->matrixRows = rows;
       REGISTER_MATRIX_HEADER(regist)->matrixColumns = cols;
@@ -1347,6 +1352,10 @@ int64_t stringToInt64(const char *str) {
       *(numOfCols++) = 0;
       rows = toUint16(value);
       cols = toUint16(numOfCols);
+      // See the dtReal34Matrix branch: refuse dimensions that would overflow the uint16_t register data size and cause an out-of-bounds restore write.
+      if((uint64_t)rows * cols * COMPLEX34_SIZE_IN_BLOCKS + TO_BLOCKS(sizeof(matrixHeader_t)) > 0xFFFFu) {
+        rows = cols = 0;
+      }
       reallocateRegister(regist, dtComplex34Matrix, COMPLEX34_SIZE_IN_BLOCKS * rows * cols, tag);
       REGISTER_MATRIX_HEADER(regist)->matrixRows = rows;
       REGISTER_MATRIX_HEADER(regist)->matrixColumns = cols;
@@ -1436,6 +1445,11 @@ int64_t stringToInt64(const char *str) {
       *(numOfCols++) = 0;
       rows = toUint16(value);
       cols = toUint16(numOfCols);
+      // Mirror restoreRegister()'s rejection of dimensions that overflow the uint16_t register data size: restoreMatrixData() reads no elements for such an entry,
+      // so skip none either (same file position) - and unclamped, the rows * cols products below would overflow int.
+      if((uint64_t)rows * cols * (strcmp(type, "Cxma") == 0 ? COMPLEX34_SIZE_IN_BLOCKS : REAL34_SIZE_IN_BLOCKS) + TO_BLOCKS(sizeof(matrixHeader_t)) > 0xFFFFu) {
+        rows = cols = 0;
+      }
 
       for(i = 0; i < rows * cols; ++i) {
         if(dataFileMode) {
