@@ -147,6 +147,10 @@ bool forthMarkerTurnsOn(const uint8_t *markerStep);
 bool forthEntryStateAtCursor(void);
 bool forthEntryStateAtInsertion(void);
 
+/* §9.2 owning-program helpers (P2 pre-scan + §9.4 refactor) */
+uint8_t *forthOwningProgramStart(const uint8_t *ptr);
+uint8_t *forthNextProgramStart(const uint8_t *progStart);
+
 /* Self-test harness (DESIGN.md §7) */
 int forthDictSelfTest(void);
 

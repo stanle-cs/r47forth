@@ -2178,94 +2178,327 @@ static int test_forth_step_sizing(void)
 }
 
 /* ---- COMMIT 3: Program-step, run-generation, name-by-index tests ---- */
-
-/* Helper: build a [len][bytes...] payload buffer for forthProgramStep */
-static void build_payload(uint8_t *buf, const char *src)
-{
-  uint8_t len = (uint8_t)strlen(src);
-  buf[0] = len;
-  memcpy(buf + 1, src, len);
-}
+/* (build_payload helper retired with Architecture 2: forthProgramStep's
+ * contract requires payloads inside real programs — see the migrated
+ * tests below.) */
 
 /* test_program_step_define_and_use
- * Mutation: forthProgramStep skipping the forthOuterInterpret call
- * (§9.9 acceptance 1 — a no-op handler). */
+ * MIGRATED to Architecture 2 (P2 ruling, 2026-07-13): forthProgramStep's
+ * contract now requires the payload to reside inside a real program (the
+ * first touch pre-scans the owning program, compiling definitions;
+ * SKIP_DEFS executes only tails). Stack-buffer payloads encode the retired
+ * execute-in-place semantics.
+ * Mutations: a no-op forthProgramStep handler (§9.9 acceptance 1), or a
+ * no-op pre-scan — either way SQ never compiles and step 2 errors. */
 static int test_program_step_define_and_use(void)
 {
-  uint8_t payload[256];
-  lastErrorCode = ERROR_NONE;
-
-  build_payload(payload, ": SQ DUP * ;");
-  forthProgramStep(payload);
-  if (lastErrorCode != ERROR_NONE) {
-    printf("    FAIL: define SQ error %d\n", lastErrorCode);
-    return 1;
-  }
-
-  lastErrorCode = ERROR_NONE;
-  build_payload(payload, "3 SQ");
-  forthProgramStep(payload);
-  if (lastErrorCode != ERROR_NONE) {
-    printf("    FAIL: run 3 SQ error %d\n", lastErrorCode);
-    return 1;
-  }
-  if (getRegisterDataType(REGISTER_X) != dtLongInteger) {
-    printf("    FAIL: X is not dtLongInteger (type %u)\n", getRegisterDataType(REGISTER_X));
-    return 1;
-  }
-  if (!x_is_longint(9)) {
-    printf("    FAIL: X != 9\n");
-    return 1;
-  }
-  printf("    PASS: forthProgramStep : SQ DUP * ;  3 SQ -> X==9\n");
-  return 0;
-}
-
-/* test_program_step_gen_reset
- * Mutation: deleting the forthRunGenCheckReset call. */
-static int test_program_step_gen_reset(void)
-{
-  uint8_t payload[256];
-  lastErrorCode = ERROR_NONE;
-
-  build_payload(payload, ": SQ DUP * ;");
-  forthProgramStep(payload);
-  if (lastErrorCode != ERROR_NONE) {
-    printf("    FAIL: define SQ error %d\n", lastErrorCode);
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 12, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', ' ', '*', ' ', ';',
+    0x8B, 0x1A, 0xFD, 4, '3', ' ', 'S', 'Q'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
     return 1;
   }
 
   forthRunGenBump();
-
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
   lastErrorCode = ERROR_NONE;
-  build_payload(payload, "3 SQ");
-  forthProgramStep(payload);
+  forthProgramStep(beginOfProgramMemory + 3);        /* define step payload */
+  if (lastErrorCode == ERROR_NONE) {
+    forthProgramStep(beginOfProgramMemory + 16 + 3); /* "3 SQ" payload */
+  }
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: program steps raised error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (getRegisterDataType(REGISTER_X) != dtLongInteger) {
+    printf("    FAIL: X is not dtLongInteger (type %u)\n", getRegisterDataType(REGISTER_X));
+    fail = 1;
+  }
+  else if (!x_is_longint(9)) {
+    printf("    FAIL: X != 9\n");
+    fail = 1;
+  }
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: forthProgramStep (real program) : SQ DUP * ;  3 SQ -> X==9\n");
+  return fail;
+}
+
+/* test_program_step_gen_reset
+ * MIGRATED to Architecture 2 (P2 ruling, 2026-07-13). The OLD expectation
+ * (FUNCTION_NOT_FOUND after a generation bump) is exactly what the
+ * pre-scan eliminates: the bump clears the dictionary AND re-arms the
+ * scan, so a later step regains program-defined words via re-scan. The
+ * new observable for the reset is an INTERACTIVE word: it must NOT
+ * survive the generation change.
+ * Mutation: deleting the forthRunGenCheckReset call in forthProgramStep
+ * -> GENX survives the bump (dict never cleared). */
+static int test_program_step_gen_reset(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 12, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', ' ', '*', ' ', ';',
+    0x8B, 0x1A, 0xFD, 4, '3', ' ', 'S', 'Q'
+  };
+  uint16_t idx;
+  int fail = 0;
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  /* Baseline run: pre-scan compiles SQ, tail executes */
+  forthRunGenBump();
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+  lastErrorCode = ERROR_NONE;
+  forthProgramStep(beginOfProgramMemory + 3);
+  if (lastErrorCode == ERROR_NONE) {
+    forthProgramStep(beginOfProgramMemory + 16 + 3);
+  }
+  programRunStop = savedRS;
+  if (lastErrorCode != ERROR_NONE || !x_is_longint(9)) {
+    printf("    FAIL: baseline run error %d\n", lastErrorCode);
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+
+  /* Interactive word: must not survive the next generation */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": GENX 1 ;");
+  if (lastErrorCode != ERROR_NONE || !forthFindColon("GENX", &idx)) {
+    printf("    FAIL: interactive GENX setup failed\n");
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+
+  forthRunGenBump();
+  savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+  lastErrorCode = ERROR_NONE;
+  forthProgramStep(beginOfProgramMemory + 16 + 3);   /* "3 SQ" in new generation */
+  programRunStop = savedRS;
+
+  if (lastErrorCode != ERROR_NONE || !x_is_longint(9)) {
+    printf("    FAIL: post-bump run error %d (re-scan should recompile SQ)\n", lastErrorCode);
+    fail = 1;
+  }
+  if (forthFindColon("GENX", &idx)) {
+    printf("    FAIL: interactive word GENX survived the generation bump (checkReset missing)\n");
+    fail = 1;
+  }
+  if (fdict.count != 1) {
+    printf("    FAIL: fdict.count = %u after re-scan (expected 1: just SQ)\n", fdict.count);
+    fail = 1;
+  }
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: gen bump clears dict, re-scan recompiles SQ -> X==9, GENX gone\n");
+  return fail;
+}
+
+/* test_prescan_forward_reference
+ * T2.1: A definition in step 2 can be called from step 1, because the
+ * pre-scan compiles all steps before execution.
+ * Must fail if the pre-scan is skipped or only covers steps before the
+ * current one (execute-in-place raises ERROR_FUNCTION_NOT_FOUND). */
+static int test_prescan_forward_reference(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 10, ':', ' ', 'F', 'W', 'D', ' ', '4', '2', ' ', ';',
+    0x8B, 0x1A, 0xFD, 3,  'F', 'W', 'D'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+  forthProgramStep(beginOfProgramMemory + 14 + 3);
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: step raised error %d (expected no error — pre-scan should compile FWD from step 1)\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!x_is_longint(42)) {
+    printf("    FAIL: X != 42\n");
+    fail = 1;
+  }
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: forward reference resolves — pre-scan compiles def before step executes\n");
+  return fail;
+}
+
+/* test_prescan_no_early_tail
+ * T2.2: DEFS_ONLY must NOT execute tail tokens. The "99" trailing the
+ * definition in step 1 must NOT be pushed during the pre-scan.
+ * Must fail if DEFS_ONLY executes interpret-state tokens (99 pushed during
+ * pre-scan too — sentinel lands one deeper). */
+static int test_prescan_no_early_tail(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 11, ':', ' ', 'A', '2', ' ', '1', ' ', ';', ' ', '9', '9',
+    0x8B, 0x1A, 0xFD, 2,  'A', '2'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+
+  forthPushInt32(777);
+  forthProgramStep(beginOfProgramMemory + 3);
+  if (lastErrorCode == ERROR_NONE) {
+    forthProgramStep(beginOfProgramMemory + 15 + 3);
+  }
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: step raised error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!x_is_longint(1)) {
+    printf("    FAIL: X != 1 (got %d)\n", x_is_longint(0) ? 0 : -1);
+    fail = 1;
+  }
+  else {
+    fnDrop(NOPARAM);
+    fnDrop(NOPARAM);
+    if (!x_is_longint(777)) {
+      printf("    FAIL: sentinel 777 not where expected (tail executed during pre-scan?)\n");
+      fail = 1;
+    }
+  }
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: DEFS_ONLY does not execute tail — 99 not pushed during pre-scan\n");
+  return fail;
+}
+
+/* test_prescan_no_recompile
+ * T2.3: SKIP_DEFS must not recompile definitions. Passing over the defining
+ * step during execution must not add a second entry to the dictionary.
+ * Must fail if SKIP_DEFS recompiles the definition when execution passes the
+ * defining step (count 2 / here grows). */
+static int test_prescan_no_recompile(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 8,  ':', ' ', 'B', '3', ' ', '5', ' ', ';',
+    0x8B, 0x1A, 0xFD, 2,  'B', '3'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+
+  forthProgramStep(beginOfProgramMemory + 3);
+  uint16_t countAfter1 = fdict.count;
+  uint16_t hereAfter1 = fdict.here;
+
+  if (lastErrorCode == ERROR_NONE) {
+    forthProgramStep(beginOfProgramMemory + 12 + 3);
+  }
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: step raised error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!x_is_longint(5)) {
+    printf("    FAIL: X != 5\n");
+    fail = 1;
+  }
+  if (fdict.count != countAfter1) {
+    printf("    FAIL: fdict.count changed from %u to %u (recompile detected)\n", countAfter1, fdict.count);
+    fail = 1;
+  }
+  if (fdict.here != hereAfter1) {
+    printf("    FAIL: fdict.here changed from %u to %u (recompile detected)\n", hereAfter1, fdict.here);
+    fail = 1;
+  }
+  if (countAfter1 != 1) {
+    printf("    FAIL: fdict.count after pre-scan = %u (expected 1)\n", countAfter1);
+    fail = 1;
+  }
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: SKIP_DEFS does not recompile — count and here unchanged\n");
+  return fail;
+}
+
+/* test_prescan_owning_scope
+ * T2.4: The pre-scan must only walk the owning program, not all programs.
+ * A word defined in program 1 must NOT be visible when executing a step in
+ * program 2.
+ * Must fail if the pre-scan walks all programs instead of only the owning
+ * one (D-2c). */
+static int test_prescan_owning_scope(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 11, ':', ' ', 'O', 'N', 'L', 'Y', '1', ' ', '8', ' ', ';',
+    0x85, 0xB2,
+    0x8B, 0x1A, 0xFD, 5,  'O', 'N', 'L', 'Y', '1'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  if (numberOfPrograms < 2) {
+    printf("    FAIL (SKIP): numberOfPrograms = %u, expected >= 2 (harness did not split at ITM_END)\n", numberOfPrograms);
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+
+  const uint8_t *prog2Step = beginOfProgramMemory + 15 + 2;
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+  forthProgramStep(prog2Step + 3);
+  programRunStop = savedRS;
+
+  int fail = 0;
   if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
-    printf("    FAIL: after bump, 3 SQ should fail with ERROR_FUNCTION_NOT_FOUND, got %d\n", lastErrorCode);
-    return 1;
+    printf("    FAIL: lastErrorCode = %d (expected ERROR_FUNCTION_NOT_FOUND=%d — pre-scan leaked across programs)\n",
+    lastErrorCode, ERROR_FUNCTION_NOT_FOUND);
+    fail = 1;
   }
-  lastErrorCode = ERROR_NONE;
-
-  build_payload(payload, ": SQ DUP * ;");
-  forthProgramStep(payload);
-  if (lastErrorCode != ERROR_NONE) {
-    printf("    FAIL: redefine SQ error %d\n", lastErrorCode);
-    return 1;
+  if (fdict.count != 0) {
+    printf("    FAIL: fdict.count = %u (expected 0 — pre-scan should not have compiled program 1's def)\n", fdict.count);
+    fail = 1;
   }
-
-  lastErrorCode = ERROR_NONE;
-  build_payload(payload, "3 SQ");
-  forthProgramStep(payload);
-  if (lastErrorCode != ERROR_NONE) {
-    printf("    FAIL: run 3 SQ after redefine error %d\n", lastErrorCode);
-    return 1;
-  }
-  if (!x_is_longint(9)) {
-    printf("    FAIL: X != 9 after resume\n");
-    return 1;
-  }
-  printf("    PASS: gen-reset clears dict after bump; resume keeps dict\n");
-  return 0;
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: pre-scan scoped to owning program — ONLY1 not visible in program 2\n");
+  return fail;
 }
 
 /* test_dict_name_by_index
@@ -2378,36 +2611,50 @@ static int test_exec_step_marker_noop(void)
 }
 
 /* test_exec_step_source_runs
- * Mutation: dropping the forthProgramStep call (arm returns 1 silently).
- * (§9.9 acceptance 1 at executeOneStep granularity) */
+ * MIGRATED to Architecture 2 (P2 ruling, 2026-07-13): drives the REAL
+ * dispatch arm (executeOneStep -> ITM_FORTH -> forthProgramStep) with
+ * steps residing in a real program, as the pre-scan contract requires.
+ * Unique coverage: the lblGtoXeq.c arm routing, not just forthProgramStep.
+ * Mutation: dropping the forthProgramStep call (arm returns 1 silently)
+ * (§9.9 acceptance 1 at executeOneStep granularity). */
 static int test_exec_step_source_runs(void)
 {
-  uint8_t defineStep[] = { 0x8B, 0x1A, 0xFD, 12, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', ' ', '*', ' ', ';' };
-  uint8_t runStep[]    = { 0x8B, 0x1A, 0xFD, 4, '3', ' ', 'S', 'Q' };
-
-  lastErrorCode = ERROR_NONE;
-  executeOneStep(defineStep);
-  if (lastErrorCode != ERROR_NONE) {
-    printf("    FAIL: define : SQ DUP * ; error %d\n", lastErrorCode);
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 12, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P', ' ', '*', ' ', ';',
+    0x8B, 0x1A, 0xFD, 4, '3', ' ', 'S', 'Q'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
     return 1;
   }
 
+  forthRunGenBump();
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
   lastErrorCode = ERROR_NONE;
-  executeOneStep(runStep);
-  if (lastErrorCode != ERROR_NONE) {
-    printf("    FAIL: run 3 SQ error %d\n", lastErrorCode);
-    return 1;
+  executeOneStep(beginOfProgramMemory);        /* define step */
+  if (lastErrorCode == ERROR_NONE) {
+    executeOneStep(beginOfProgramMemory + 16); /* "3 SQ" step */
   }
-  if (getRegisterDataType(REGISTER_X) != dtLongInteger) {
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: executeOneStep raised error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (getRegisterDataType(REGISTER_X) != dtLongInteger) {
     printf("    FAIL: X is not dtLongInteger (type %u)\n", getRegisterDataType(REGISTER_X));
-    return 1;
+    fail = 1;
   }
-  if (!x_is_longint(9)) {
+  else if (!x_is_longint(9)) {
     printf("    FAIL: X != 9\n");
-    return 1;
+    fail = 1;
   }
-  printf("    PASS: executeOneStep : SQ DUP * ; then 3 SQ -> X==9\n");
-  return 0;
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: executeOneStep (real program) : SQ DUP * ; then 3 SQ -> X==9\n");
+  return fail;
 }
 
 /* test_exec_step_halts_on_error
@@ -5596,6 +5843,26 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_program_step_gen_reset...\n");
   fail |= test_program_step_gen_reset();
+  forthDictClear();
+
+  /* P2: Pillar 2 — pre-scan contract tests (T2.1-T2.4) */
+  printf("\nFORTH P2 TESTS (pre-scan contract: forward ref, no tail, no recompile, owning scope)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_prescan_forward_reference...\n");
+  fail |= test_prescan_forward_reference();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_prescan_no_early_tail...\n");
+  fail |= test_prescan_no_early_tail();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_prescan_no_recompile...\n");
+  fail |= test_prescan_no_recompile();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_prescan_owning_scope...\n");
+  fail |= test_prescan_owning_scope();
   forthDictClear();
 
   printf("  [DEBUG] running test_dict_name_by_index...\n");

@@ -19,8 +19,9 @@
 
 /* ---- §3.3.2 / D-3: per-invocation context; idle BSS = one ptr + 2 bytes ---- */
 typedef enum {
-  FORTH_OUTER_FULL = 0          /* compile and execute (interactive semantics) */
-  /* P2 adds DEFS_ONLY / SKIP_DEFS */
+  FORTH_OUTER_FULL      = 0,  /* compile and execute (interactive semantics) */
+  FORTH_OUTER_DEFS_ONLY = 1,  /* pre-scan: compile definitions, skip ALL interpret-state tokens */
+  FORTH_OUTER_SKIP_DEFS = 2   /* step execution: skip ':'..';' regions, execute the rest */
 } forthOuterMode_t;
 
 #define FORTH_SOURCE_MAX 256
@@ -44,9 +45,15 @@ void forthRunGenBump(void) {
   forthRunGeneration++;
 }
 
+/* §9.2 first-touch pre-scan tracking (reset with the dictionary) */
+#define FORTH_SCAN_MAX 8
+static const uint8_t *forthScannedProgs[FORTH_SCAN_MAX];
+static uint8_t        forthScannedCount = 0;
+
 static void forthRunGenCheckReset(void) {
   if (forthResetGeneration != forthRunGeneration) {
     forthDictClear();
+    forthScannedCount = 0;
     forthResetGeneration = forthRunGeneration;
   }
 }
@@ -223,7 +230,6 @@ typedef enum {
  * Per DESIGN.md §3.3 pseudocode, §3.3.1 (C-4), §3.3.6 (C-1).
  */
 static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
-  (void)mode;   /* P2 uses it */
   if (forthOuterDepth >= FORTH_OUTER_NEST_MAX) {
     displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return;
@@ -241,6 +247,25 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   while (lineOK && nextToken(buf)) {
     /* ---- C-4: ':' colon matches the ':' character (B2) ---- */
     if (compareString(buf, ":", CMP_BINARY) == 0) {
+      if (mode == FORTH_OUTER_SKIP_DEFS) {
+        /* SKIP_DEFS (D-2b): definition was compiled by the pre-scan — consume
+         * ':' <name> ... ';' without touching the dictionary. */
+        char name[FORTH_TOKEN_MAX + 1];
+        if (!nextToken(name)) {
+          displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          lineOK = false;
+        } else {
+          bool closed = false;
+          while (nextToken(buf)) {
+            if (strcmp(buf, ";") == 0) { closed = true; break; }
+          }
+          if (!closed) {   /* defensive: pre-scan already errored such a step */
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            lineOK = false;
+          }
+        }
+        continue;
+      }
       if (state == STATE_COMPILE) {
          abortDefinition();
          displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -262,6 +287,9 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
     /* ---- C-4: ';' ---- */
     if (strcmp(buf, ";") == 0) {
       if (state == STATE_INTERPRET) {
+         if (mode == FORTH_OUTER_DEFS_ONLY) {
+           continue;   /* stray ';' is an execution-time error, not a pre-scan one */
+         }
          displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
          lineOK = false;
       } else {
@@ -272,6 +300,10 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
         state = STATE_INTERPRET;
       }
       continue;
+    }
+
+    if (mode == FORTH_OUTER_DEFS_ONLY && state == STATE_INTERPRET) {
+      continue;   /* D-2a: pre-scan must not execute tail code */
     }
 
     /* ---- §4.1 step 1: primitive lookup ---- */
@@ -435,13 +467,63 @@ void fnForthOuter(uint16_t unused) {
 
 /* ---- P-2: Program-step entry point (§3.3.2, §9.2) ---- */
 
+/* §9.2 Architecture 2: first-touch pre-scan of the owning program.
+ * DEFS_ONLY-compiles every Forth source step so forward references from any
+ * step's tail resolve. D-2: (a) no tail execution, (b) no recompile,
+ * (c) owning program only. */
+static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
+{
+  uint8_t *progStart = forthOwningProgramStart(anyPtrInProgram);
+  if (!progStart) {
+    return;
+  }
+  for (uint8_t i = 0; i < forthScannedCount; i++) {
+    if (forthScannedProgs[i] == progStart) {
+      return;   /* first touch already done this generation */
+    }
+  }
+
+  uint8_t *nextStart = forthNextProgramStart(progStart);
+  forthOuterCtx_t ctx;
+  uint8_t *step = progStart;
+  while (step && (nextStart == NULL || step < nextStart)) {
+    uint8_t len;
+    if (forthStepPayload(step, &len) && len > 0) {   /* markers (len==0) skipped */
+      xcopy(ctx.source, step + 4, len);
+      ctx.source[len] = 0;
+      forthOuterRun(&ctx, FORTH_OUTER_DEFS_ONLY);
+      if (lastErrorCode != ERROR_NONE) {
+        return;   /* halt at the failing step; program stays unrecorded */
+      }
+    }
+    uint8_t *next = findNextStep(step);
+    if (!next || next <= step) {
+      break;      /* defensive, mirrors forthMarkerTurnsOn */
+    }
+    step = next;
+  }
+
+  if (forthScannedCount < FORTH_SCAN_MAX) {
+    forthScannedProgs[forthScannedCount++] = progStart;
+  }
+  /* List full: program scanned but unrecorded — a later touch re-scans and
+   * recompiles. Shadowing keeps lookups correct (forthFindColon walks
+   * latest-first) at the cost of dict bytes. Bounded, documented D-2b
+   * exception; 8 distinct Forth-bearing programs per run is beyond any
+   * realistic session. */
+}
+
 void forthProgramStep(const uint8_t *payload) {
-  forthRunGenCheckReset();
+  forthRunGenCheckReset();                  /* generation first: may clear dict + scan list */
+  forthPreScanOwningProgram(payload);       /* payload sits inside the step, inside the program */
+  if (lastErrorCode != ERROR_NONE) {
+    return;                                 /* pre-scan error halts before executing this step */
+  }
   forthOuterCtx_t ctx;
   uint8_t len = *payload;
   xcopy(ctx.source, payload + 1, len);
   ctx.source[len] = 0;
-  forthOuterRun(&ctx, FORTH_OUTER_FULL);
+  forthOuterRun(&ctx, FORTH_OUTER_SKIP_DEFS);
 }
 
 /* Test-only: outer-interpreter nesting introspection (D-3) */

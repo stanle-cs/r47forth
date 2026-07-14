@@ -1126,6 +1126,21 @@ No commit — Q10's Pillar 3 commit picks these files up.
 
 ## Q10 — Pillar 3 tests, part 2 (T3.5–T3.7), then commit
 
+> **STATUS: COMPLETED BY ARCHITECT (2026-07-13) — do not re-run.** Qwen's
+> Q10 attempt hit three distinct defects, debugged and fixed directly:
+> (1) test encoding: RTN steps were written as `0x04, 0xFD` — ITM_RTN is
+> PTP_NONE, single byte; the stray 0xFD desynced the step walk and crashed
+> `scanLabelsAndPrograms` (layout-dependent segfault). (2) engine: the
+> §3.3.6 label arm's DECIDED PGM_RUNNING wrap made interactive label XEQ a
+> silent no-op leaking a subroutine level — replaced with `dynamicMenuItem
+> = -1` + direct `fnExecute(label)`; amendment in PROPOSED_SPEC_CHANGES.md.
+> (3) harness: `dynamicMenuItem` was 0 at reset, hijacking `fnGoto` into
+> menu-step semantics. T3.6 was rewritten (outer depth >2 is unreachable by
+> construction — continuation semantics — so the cap is pinned via a new
+> `forthTestSetOuterDepth` hook; the two-program construct now tests
+> continuation XEQ). Gate green (113 PASS), both mutations verified RED,
+> committed as `forth-core: P3 full re-entrancy for both interpreters`.
+
 Read: `packages/forth-core/test_dict_reloc.c` lines 2280-2340
 (`writeTestProgram` + `cleanupTestProgram` — read the actual helper bodies),
 lines 2405-2470 (a marker/source-step program byte-array example, including
@@ -1443,6 +1458,21 @@ place semantics, and report the test name + the exact assertion that fails.
 STOP there; the architect will rule. If the gate is green, you are done.
 
 ---
+
+> **Q13 STATUS: COMPLETED (2026-07-13).** Qwen's engine code was
+> spec-verbatim and is kept as-is; the STOP clause fired on three existing
+> tests encoding the retired execute-in-place contract (stack-buffer
+> payloads, definitions compiled at execution). Architect ruling: contract
+> migration, not engine change. All three were rewritten against real
+> programs (`writeTestProgram` + payloads at `beginOfProgramMemory + N`):
+> `test_program_step_define_and_use` and `test_exec_step_source_runs` keep
+> their original mutation targets; `test_program_step_gen_reset` needed a
+> NEW observable because its old expectation (FUNCTION_NOT_FOUND after a
+> generation bump) is exactly what the pre-scan eliminates — it now pins
+> `forthRunGenCheckReset` via an interactive word (GENX) that must NOT
+> survive the bump, plus `fdict.count == 1` after re-scan. The retired
+> `build_payload` helper was removed. checkReset-deletion mutation
+> verified RED; gate green (113 PASS). No commit (P2 commits at Q15).
 
 ## Q14 — Pillar 2 tests, part 1 (T2.1–T2.4)
 

@@ -360,8 +360,6 @@ State explicitly that no automated test was added and why.
 
 **Gate** per header (regression only). **Report and STOP.**
 
-SUPERSEDED by the F5 rework (097c7e3bd): submenu entry, not a push.
-
 ---
 
 ## FIX-6 — test_dict_reloc.c: make the gate honest (free-list integrity + arena report)

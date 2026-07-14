@@ -28,19 +28,40 @@ bool forthStepPayload(const uint8_t *step, uint8_t *lenOut)
     return false;
 }
 
+/* §9.2: start of the program containing ptr (largest instructionPointer <= ptr),
+ * or NULL if the program list is empty / ptr precedes all programs. */
+uint8_t *forthOwningProgramStart(const uint8_t *ptr)
+{
+    uint8_t *progStart = NULL;
+    for (uint16_t i = 0; i < numberOfPrograms; i++) {
+        if (programList[i].instructionPointer <= ptr) {
+            progStart = programList[i].instructionPointer;
+        }
+    }
+    return progStart;
+}
+
+/* §9.2: start of the next program after progStart (smallest
+ * instructionPointer strictly greater), or NULL if progStart is last. */
+uint8_t *forthNextProgramStart(const uint8_t *progStart)
+{
+    uint8_t *nextStart = NULL;
+    for (uint16_t i = 0; i < numberOfPrograms; i++) {
+        uint8_t *ip = programList[i].instructionPointer;
+        if (ip > progStart && (nextStart == NULL || ip < nextStart)) {
+            nextStart = ip;
+        }
+    }
+    return nextStart;
+}
+
 /* §9.4: marker occurrence parity.
  * Owning program start = largest programList[i].instructionPointer <= markerStep.
  * Walk findNextStep from there to markerStep, counting ITM_FORTH steps with
  * len==0 strictly before it. Opening iff count is even. */
 bool forthMarkerTurnsOn(const uint8_t *markerStep)
 {
-    uint8_t *progStart = NULL;
-
-    for (uint16_t i = 0; i < numberOfPrograms; i++) {
-        if (programList[i].instructionPointer <= markerStep) {
-            progStart = programList[i].instructionPointer;
-        }
-    }
+    uint8_t *progStart = forthOwningProgramStart(markerStep);
 
     if (!progStart) return true;
 
@@ -90,12 +111,7 @@ bool forthEntryStateAtInsertion(void)
 {
   if (pemCursorIsZerothStep) return false;
 
-  uint8_t *progStart = NULL;
-  for (uint16_t i = 0; i < numberOfPrograms; i++) {
-    if (programList[i].instructionPointer <= (uint8_t *)currentStep) {
-      progStart = programList[i].instructionPointer;
-    }
-  }
+  uint8_t *progStart = forthOwningProgramStart((const uint8_t *)currentStep);
   if (!progStart || progStart >= currentStep) return false;  /* top of program */
 
   uint8_t *prev = progStart;                 /* find predecessor of currentStep */
