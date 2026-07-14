@@ -1414,21 +1414,39 @@ static int test_outer_ctx_at_rest(void)
       return 1;
     }
 
+    printf("    [DBG] after writeTestProgram, numberOfPrograms=%u\n", numberOfPrograms);
     forthRunGenBump();
     lastErrorCode = ERROR_NONE;
+    printf("    [DBG] before forthOuterInterpret(\"NLB 5\")\n");
+    fflush(stdout);
     forthOuterInterpret("NLB 5");
+    printf("    [DBG] after forthOuterInterpret(\"NLB 5\"), err=%d\n", lastErrorCode);
+    fflush(stdout);
 
-    if (forthTestOuterCur() != NULL) {
+    printf("    [DBG] calling forthTestOuterCur...\n");
+    fflush(stdout);
+    void *cur = forthTestOuterCur();
+    printf("    [DBG] forthTestOuterCur returned %p\n", cur);
+    fflush(stdout);
+    if (cur != NULL) {
       printf("    FAIL: forthOuterCur != NULL after nested episode\n");
       fail = 1;
     }
-    if (forthTestOuterDepth() != 0) {
-      printf("    FAIL: forthOuterDepth = %u after nested episode\n",
-             (unsigned)forthTestOuterDepth());
+    printf("    [DBG] checking forthTestOuterDepth...\n");
+    fflush(stdout);
+    uint8_t depth = forthTestOuterDepth();
+    printf("    [DBG] forthTestOuterDepth returned %u\n", depth);
+    fflush(stdout);
+    if (depth != 0) {
+      printf("    FAIL: forthOuterDepth = %u after nested episode\n", depth);
       fail = 1;
     }
 
+    printf("    [DBG] calling cleanupTestProgram...\n");
+    fflush(stdout);
     cleanupTestProgram();
+    printf("    [DBG] cleanupTestProgram done\n");
+    fflush(stdout);
   }
 
   if (fail) return 1;
@@ -2498,6 +2516,237 @@ static int test_prescan_owning_scope(void)
   forthDictClear();
   cleanupTestProgram();
   if (!fail) printf("    PASS: pre-scan scoped to owning program — ONLY1 not visible in program 2\n");
+  return fail;
+}
+
+/* test_prescan_generation_rearm
+ * T2.5: After a generation bump, the pre-scan re-runs on first touch.
+ * Must fail if forthRunGenCheckReset clears the dictionary but not
+ * forthScannedCount (scan skipped after dict clear -> FUNCTION_NOT_FOUND). */
+static int test_prescan_generation_rearm(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 10, ':', ' ', 'F', 'W', 'D', ' ', '4', '2', ' ', ';',
+    0x8B, 0x1A, 0xFD, 3,  'F', 'W', 'D'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+
+  forthProgramStep(beginOfProgramMemory + 3);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: step 1 raised error %d\n", lastErrorCode);
+    programRunStop = savedRS;
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+  forthProgramStep(beginOfProgramMemory + 14 + 3);
+
+  uint16_t countAfter = fdict.count;
+
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: step 2 raised error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!x_is_longint(42)) {
+    printf("    FAIL: X != 42 after step 2\n");
+    fail = 1;
+  }
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  programRunStop = PGM_RUNNING;
+  forthProgramStep(beginOfProgramMemory + 3);
+  programRunStop = savedRS;
+
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: step 1 (new gen) raised error %d (expected no error — re-scan should recompile FWD)\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!x_is_longint(42)) {
+    printf("    FAIL: X != 42 after step 1 (new gen)\n");
+    fail = 1;
+  }
+  if (fdict.count != countAfter) {
+    printf("    FAIL: fdict.count = %u (expected %u — fresh compile, not doubled, not missing)\n",
+           fdict.count, countAfter);
+    fail = 1;
+  }
+
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: generation re-arm — re-scan recompiles after bump, count stable\n");
+  return fail;
+}
+
+/* test_prescan_error_halts
+ * T2.6: A pre-scan error must halt execution of the step; tail tokens must
+ * not execute.
+ * Must fail if pre-scan errors are swallowed and the step executes against
+ * a partial dictionary, or if the halt lands after the tail ran. */
+static int test_prescan_error_halts(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 20, '7', '7', ' ', ':', ' ', 'C', '6', ' ', 'N', 'O', 'S', 'U', 'C', 'H', 'W', 'O', 'R', 'D', ' ', ';',
+    0x8B, 0x1A, 0xFD, 1,  '1'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+
+  forthPushInt32(555);
+  forthProgramStep(beginOfProgramMemory + 3);
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+    printf("    FAIL: lastErrorCode = %d (expected ERROR_FUNCTION_NOT_FOUND=%d — pre-scan error should halt)\n",
+           lastErrorCode, ERROR_FUNCTION_NOT_FOUND);
+    fail = 1;
+  }
+  if (!x_is_longint(555)) {
+    printf("    FAIL: X != 555 sentinel (tail '77' executed — pre-scan did not halt)\n");
+    fail = 1;
+  }
+  if (fdict.count != 0) {
+    printf("    FAIL: fdict.count = %u (expected 0 — no definitions compiled on error)\n", fdict.count);
+    fail = 1;
+  }
+
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: pre-scan error halts — tail not executed, dict empty\n");
+  return fail;
+}
+
+/* test_prescan_last_step_visible
+ * T2.7: A definition in the last step of the last program must be visible
+ * to earlier steps in the same program.
+ * Must fail if the walk bound drops the final step (exclusive-bound bug)
+ * or mishandles the NULL next-program sentinel. */
+static int test_prescan_last_step_visible(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 5,  'L', 'A', 'S', 'T', '7',
+    0x8B, 0x1A, 0xFD, 11, ':', ' ', 'L', 'A', 'S', 'T', '7', ' ', '3', ' ', ';'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+
+  forthProgramStep(beginOfProgramMemory + 3);
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: step raised error %d (expected no error — LAST7 should be visible from pre-scan)\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!x_is_longint(3)) {
+    printf("    FAIL: X != 3\n");
+    fail = 1;
+  }
+
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: last step visible — walk bound includes final step with NULL next-program\n");
+  return fail;
+}
+
+/* test_prescan_two_programs_first_touch
+ * T2.8: Two programs in one write; each first-touch-scans independently.
+ * Must fail if the scanned list is a single pointer instead of an array
+ * (P2's touch would evict P1's record and a third touch of P1 would
+ * re-scan/recompile), or if nested bookkeeping broke sequential
+ * multi-program stepping. */
+static int test_prescan_two_programs_first_touch(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 1,  '9',
+    0x85, 0xB2,
+    0x8B, 0x1A, 0xFD, 9,  ':', ' ', 'P', '2', 'W', ' ', '4', ' ', ';',
+    0x8B, 0x1A, 0xFD, 3,  'P', '2', 'W'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  if (numberOfPrograms < 2) {
+    printf("    FAIL (SKIP): numberOfPrograms = %u, expected >= 2\n", numberOfPrograms);
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+
+  const uint8_t *prog1Step = beginOfProgramMemory;
+  const uint8_t *prog2Step = beginOfProgramMemory + 5 + 2;
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+
+  forthProgramStep(prog1Step + 3);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: program 1 step raised error %d\n", lastErrorCode);
+    programRunStop = savedRS;
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+
+  forthProgramStep(prog2Step + 13 + 3);
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: program 2 step raised error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!x_is_longint(4)) {
+    printf("    FAIL: X != 4 after program 2 step\n");
+    fail = 1;
+  }
+  else {
+    fnDrop(NOPARAM);
+    if (!x_is_longint(9)) {
+      printf("    FAIL: X != 9 after drop (expected 9 from program 1)\n");
+      fail = 1;
+    }
+  }
+  if (fdict.count != 1) {
+    printf("    FAIL: fdict.count = %u (expected 1 — only P2W)\n", fdict.count);
+    fail = 1;
+  }
+
+  printf("  FORTH ARENA (post-prescan): here=%u sizeBlocks=%u\n", fdict.here, fdict.sizeBlocks);
+
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) printf("    PASS: two programs first-touch — independent scans, no eviction\n");
   return fail;
 }
 
@@ -5846,7 +6095,7 @@ int forthDictSelfTest(void)
   forthDictClear();
 
   /* P2: Pillar 2 — pre-scan contract tests (T2.1-T2.4) */
-  printf("\nFORTH P2 TESTS (pre-scan contract: forward ref, no tail, no recompile, owning scope)\n");
+  printf("\nFORTH P2 TESTS (pre-scan contract: forward ref, no tail, no recompile, owning scope, gen rearm, error halt, last step, two programs)\n");
   forthDictInit();
 
   printf("  [DEBUG] running test_prescan_forward_reference...\n");
@@ -5863,6 +6112,22 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_prescan_owning_scope...\n");
   fail |= test_prescan_owning_scope();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_prescan_generation_rearm...\n");
+  fail |= test_prescan_generation_rearm();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_prescan_error_halts...\n");
+  fail |= test_prescan_error_halts();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_prescan_last_step_visible...\n");
+  fail |= test_prescan_last_step_visible();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_prescan_two_programs_first_touch...\n");
+  fail |= test_prescan_two_programs_first_touch();
   forthDictClear();
 
   printf("  [DEBUG] running test_dict_name_by_index...\n");

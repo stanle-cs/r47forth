@@ -44,6 +44,11 @@ Rules:
    `grep -n`).
 5. Match the surrounding code style (indentation, brace placement, comment
    density). No commits unless the task explicitly says to commit.
+   **NEVER run `git checkout`, `git restore`, `git reset`, `git stash`, or
+   `git clean` — on anything, ever.** The working tree carries uncommitted
+   work from earlier tasks; a file-level revert destroys it (this has
+   happened). To revert a mutation you applied for verification, re-apply
+   the inverse change with the Edit tool using the exact text you changed.
 6. Finish by reporting: (a) files changed, (b) the last ~10 lines of the gate
    output, (c) results of any task-specific verification steps, (d) any
    deviation from the spec (there should be none).
@@ -1542,6 +1547,21 @@ Mutation verification (mandatory):
 
 ---
 
+> **Q14 STATUS: COMPLETED BY ARCHITECT (2026-07-13) — do not re-run.**
+> Qwen's four tests were structurally correct but two had miscounted
+> payload length bytes (T2.1: len 9 for 10 bytes; T2.2: len 12 for 11) —
+> same defect class as Q10's RTN byte. The desynced streams made the
+> engine interpret garbage (hang on Qwen's run, segfault on re-run).
+> Worse: the stuck session ran a git file-revert that wiped ALL uncommitted
+> Q11–Q13 engine work (bridge helpers, modes, pre-scan) back to HEAD —
+> only the test file survived. The engine was reconstructed verbatim from
+> the Q11–Q13 specs, verified by the Architecture-2-only tests, and
+> everything is now COMMITTED (see preamble rule 5's new git prohibition).
+> All three Q14 mutations verified RED — note mutation 3 as originally
+> written (nextStart→NULL) is inert for T2.4 (program 2 is last, its
+> nextStart is already NULL); the effective scope mutation is forcing
+> forthOwningProgramStart to return the first program.
+
 ## Q15 — Pillar 2 tests, part 2 (T2.5–T2.8) + arena report, then commit
 
 Read: your Q14 tests in `test_dict_reloc.c` (grep `test_prescan_` and read
@@ -1599,19 +1619,19 @@ Mutation verification (mandatory):
    immediately when `forthScannedCount > 0` → T2.8 RED (program 2 never
    scanned). Revert. Final gate GREEN.
 
-Commit:
+Commit (NOTE — updated after the Q14 incident: the P2 engine and T2.1-T2.4
+are already committed as "forth-core: P2 engine (pre-scan) + T2.1-T2.4";
+this commit carries only Q15's additions):
 
 ```
-git add packages/forth-core/forth_compile.c packages/forth-core/forth_bridge.c \
-        packages/forth-core/forth_dict.h packages/forth-core/test_dict_reloc.c \
+git add packages/forth-core/test_dict_reloc.c \
         packages/forth-core/patches packages/forth-core/files \
         packages/forth-core/.refresh-manifest.json
-git commit -m "forth-core: P2 run-start pre-scan (Architecture 2)
+git commit -m "forth-core: P2 tests T2.5-T2.8 + arena report
 
-First-touch DEFS_ONLY pre-scan of the owning program at the run-generation
-seam; SKIP_DEFS step execution. Forward references from any step's tail now
-resolve program-wide. D-2: no early tail execution, no recompilation,
-owning-program scope. Tests T2.1-T2.8."
+Generation re-arm, pre-scan error halt, last-step walk bound, two-program
+first-touch. Completes the Architecture 2 test matrix (D-2 a/b/c all
+pinned)."
 ```
 
 Report `git show --stat HEAD`, the gate tail, and the
