@@ -1367,14 +1367,17 @@ static void sha256Final(sha256Ctx *c, char outHex[65]) {
   outHex[64] = 0;
 }
 
-// Plot-regression drivers (graphs_cov.txt). Each graph is rendered by XEQ of a small RPN program ending in SNAP (G1..G4, staged by covLoadGraphPgms), i.e.
+// Plot-regression drivers (graphs_cov.txt). Each graph is rendered by XEQ of a small RPN program ending in SNAP (G1..G6, staged by covLoadGraphPgms), i.e.
 // in the real programmed UI context, and pinned by a SHA-256 of the SNAP screen capture:
 //   EQN Draw_y^x: G1 - X.SWAP the formula in from the X string, then Draw it;
 //   ADV PLTf    : G2 - program plot (PGMPLT ->00 via R00, then PLTf 'x');
 //   PLOT PLSTAT : G3 - statistics plot from the seeded sums;
 //   REGR SCATR  : G4 - scatter plot from the same seeded sums;
-//   REGR HISTO  : (not yet programmable, interactive only).
-//   REGR ASSESS : (not yet programmable, interactive only).
+//   REGR ASSESS : G5 - ASSESS (PLOT_LR) lays out the linear-regression assessment (a0/a1/r^2/fit line) from the sums, default lrSelection;
+//   REGR HISTO  : G6 - HISTOX builds the HISTO matrix (auto bins) from the sums, then HPLOT draws the histogram.
+// HISTO and ASSESS were previously left "interactive only"; the missing step was the in-program HISTOX build (ASSESS needs no model
+// selection - lrSelection defaults to CF_LINEAR_FITTING). clearScreenOld does not clear the register-line text panel between plots, so
+// graphs_cov renders each rich-text plot right after a SCATR (empty panel); the SCATR's own repeated hash confirms it is order-independent.
 // covBmpName numbers the bitmap (c47plotTest<N>.bmp) so every graph stays on disk; covHashBmp pins its SHA-256.
 void covEqSet(uint16_t which) {
   // Stage the fallback formula G1 swaps out; also allocates the formula slot and the solver variable. The plot range comes from the stack on the XEQ line.
@@ -1418,10 +1421,36 @@ void covLoadGraphPgms(uint16_t unusedButMandatoryParameter) {
     OP2(ITM_SNAP),                                  // SNAP
     OP2(ITM_END),                                   // END
   };
+  // G5 (REGR ASSESS): ASSESS (PLOT_LR) lays out the linear-regression assessment
+  // (fit coefficients a0/a1, r-squared, and the fit line) from the seeded "STATS"
+  // sums; lrSelection defaults to CF_LINEAR_FITTING, so no interactive model
+  // choice is needed. graphs_cov renders it right after a SCATR (empty text panel)
+  // because clearScreenOld does not clear the register-line panel between plots.
+  static const uint8_t pgmG5[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'G', '5',    // LBL "G5"
+    OP2(ITM_PLOT_ASSESS),                           // ASSESS (PLOT_LR)
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  // G6 (REGR HISTO): HISTOX builds the "HISTO" matrix from the seeded "STATS"
+  // sums (bins auto-default to ceil(sqrt(N)) - no interactive entry), then HPLOT
+  // renders the histogram. Programming the HISTOX build is the step that makes
+  // the previously "interactive only" histogram reachable headlessly. graphs_cov
+  // renders it right after the panel-reset SCATR, and last of the plots: HISTO
+  // contaminates any following plot's render, so nothing clean can run after it.
+  static const uint8_t pgmG6[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'G', '6',    // LBL "G6"
+    OP2(ITM_HISTOX),                                // HISTOX (build HISTO matrix from STATS X)
+    OP2(ITM_HPLOT),                                 // HPLOT  (draw the histogram)
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
   covWriteAndLoadPgm(pgmG1, sizeof(pgmG1));
   covWriteAndLoadPgm(pgmG2, sizeof(pgmG2));
   covWriteAndLoadPgm(pgmG3, sizeof(pgmG3));
   covWriteAndLoadPgm(pgmG4, sizeof(pgmG4));
+  covWriteAndLoadPgm(pgmG5, sizeof(pgmG5));
+  covWriteAndLoadPgm(pgmG6, sizeof(pgmG6));
 }
 
 // The on-disk name of graph <which>'s bitmap. covBmpName points the SNAP capture at it and covHashBmp reads it back; one builder keeps the two from drifting.

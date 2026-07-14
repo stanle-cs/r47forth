@@ -1,5 +1,5 @@
 ;*******************************************************************************************************************************
-;** Coverage: plot regression. Each graph is rendered by XEQ of a small RPN program ending in SNAP (G1..G4, staged below),    **
+;** Coverage: plot regression. Each graph is rendered by XEQ of a small RPN program ending in SNAP (G1..G6, staged below),    **
 ;** i.e. the real programmed UI context. fnBmpNameCov names the SNAP bitmap c47plotTest<N>.bmp (kept on disk for inspection); **
 ;** fnHashBmpCov pins its SHA-256, so a change to the grapher, fonts or the blitter fails the test. Own file, so it can be    **
 ;** commented out if an upstream change legitimately alters the render.                                                       **
@@ -94,11 +94,61 @@ Func: fnHashBmpCov
 In:  FARG=4
 Out: EC=0 RX=Stri:"2A237EFC7B341273E460CB641130471FEE9358BAE1128F9CB8653793F2FEFF1A"
 
+; clearScreenOld does NOT clear the register-line (left) text panel between two
+; consecutive plot programs, so a plot with a full panel (ASSESS or HISTO) leaves
+; text a following plot does not overwrite. A SCATR *after a stat plot* (PLSTAT /
+; SCATR / ASSESS) renders an empty panel, so each rich-text plot below is preceded
+; by such a SCATR and renders identically to its standalone capture. HISTO is the
+; exception - it contaminates a following SCATR too - so HISTO must run last. That
+; leaves plotStatMx = "HISTO" at exit, which is benign: fnClSigma below clears
+; drawHistogram and the rest of the plot state, and every fnPlotStat resets
+; plotStatMx at entry, so no later plot or test can be affected by it.
+; DO NOT reorder HISTO before ASSESS: SCATR does not reset the panel after HISTO.
+
+; assessment plot (G5: ASSESS = PLOT_LR) rendered right after the SCATR (G4)
+; above - draws the linear-regression assessment (fit y=a0+a1x, r^2, and the fit
+; line) from the seeded STATS sums. The fit model defaults to linear
+; (lrSelection = CF_LINEAR_FITTING), so no interactive model selection is needed.
+Func: fnBmpNameCov
+In:  FARG=5
+Out: EC=0
+Func: fnExecute
+In:  FL_ASLIFT=1 PGM="G5"
+Out: EC=0
+Func: fnHashBmpCov
+In:  FARG=5
+Out: EC=0 RX=Stri:"4E21C2E4531F626867CAB399CD586F8CEB3703C532AAB9A389F1EDFBFFB38918"
+
+; panel-reset SCATR (G4, bitmap 7): an empty-panel plot between ASSESS and HISTO
+; so HISTO below renders clean. Its hash is identical to the first SCATR (bitmap
+; 4) because both follow a stat plot (PLSTAT, ASSESS); this pins that the panel is
+; reset. (A SCATR after HISTO would itself be contaminated - the reason HISTO is
+; placed last.)
+Func: fnBmpNameCov
+In:  FARG=7
+Out: EC=0
+Func: fnExecute
+In:  FL_ASLIFT=1 FL_PLINE=0 PGM="G4"
+Out: EC=0
+Func: fnHashBmpCov
+In:  FARG=7
+Out: EC=0 RX=Stri:"2A237EFC7B341273E460CB641130471FEE9358BAE1128F9CB8653793F2FEFF1A"
+
+; histogram plot (G6: HISTOX builds the HISTO matrix from the seeded STATS sums -
+; bins auto-default to ceil(sqrt(N)), no interactive entry - then HPLOT draws it),
+; rendered right after the panel-reset SCATR. Programming the HISTOX build is the
+; setup the "interactive only" note lacked.
+Func: fnBmpNameCov
+In:  FARG=6
+Out: EC=0
+Func: fnExecute
+In:  FL_ASLIFT=1 PGM="G6"
+Out: EC=0
+Func: fnHashBmpCov
+In:  FARG=6
+Out: EC=0 RX=Stri:"0AB9FAC6FE97914FE35D080F0F620AD7F1760D5B3468564F6308701F03CDC1AD"
+
 ; clear the statistical sums so they do not leak past this file
 Func: fnClSigma
 In:  FARG=0 RX=Real:"0"
 Out: EC=0
-
-; Graph items still to be covered here, and why they are not yet:
-; HISTO  - not yet programmable (interactive only); also needs bin setup pinned
-; ASSESS - not yet programmable (interactive only)
