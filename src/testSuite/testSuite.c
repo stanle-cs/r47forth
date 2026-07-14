@@ -1669,7 +1669,7 @@ void getString(char *str) {
 
 void setParameter(char *p) {
   calcRegister_t regist = 0;
-  char l[200], r[1400], real[200], imag[200], angMod[200]; //, letter;
+  char l[1400], r[1400], real[1400], imag[1400], angMod[1400]; //, letter;
   int32_t i;
   angularMode_t am = amDegree;
 
@@ -1685,6 +1685,11 @@ void setParameter(char *p) {
   }
 
   p[i] = 0;
+  if((size_t)i >= sizeof(l) || strlen(p + i + 1) >= sizeof(r)) {
+    printf("\nParameter setting is too long for the parser buffers.\n");
+    abortTest();
+    return;
+  }
   strcpy(l, p);
   strcpy(r, p + i + 1);
 
@@ -2558,9 +2563,19 @@ void inParameters(char *token) {
     while(*token != ' ' && *token != 0) {
       if(*token == '"') { // Inside a string
         lg = endOfString(token) - token;
+        if(index + lg >= (int)sizeof(parameter)) {
+          printf("\nParameter token is too long for the %d-byte parser buffer.\n", (int)sizeof(parameter));
+          abortTest();
+          return;
+        }
         strncpy(parameter + index, token, lg--);
         index += lg;
         token += lg;
+      }
+      if(index >= (int)sizeof(parameter) - 1) {
+        printf("\nParameter token is too long for the %d-byte parser buffer.\n", (int)sizeof(parameter));
+        abortTest();
+        return;
       }
       parameter[index++] = *(token++);
     }
@@ -2846,7 +2861,7 @@ bool_t real34AreEqual(real34_t *a, real34_t *b) {
 
 void checkExpectedOutParameter(char *p) {
   calcRegister_t regist = 0;
-  char l[2000], r[2000], real[200], imag[200], angMod[200], letter = 0;
+  char l[2000], r[2000], real[2000], imag[2000], angMod[2000], letter = 0;
   int32_t i;
   angularMode_t am = amDegree;
   real34_t expectedReal34, expectedImag34;
@@ -2863,6 +2878,11 @@ void checkExpectedOutParameter(char *p) {
   }
 
   p[i] = 0;
+  if((size_t)i >= sizeof(l) || strlen(p + i + 1) >= sizeof(r)) {
+    printf("\nParameter setting is too long for the parser buffers.\n");
+    abortTest();
+    return;
+  }
   strcpy(l, p);
   strcpy(r, p + i + 1);
 
@@ -4009,9 +4029,19 @@ void outParameters(char *token) {
     while(*token != ' ' && *token != 0) {
       if(*token == '"') { // Inside a string
         lg = endOfString(token) - token;
+        if(index + lg >= (int)sizeof(parameter)) {
+          printf("\nParameter token is too long for the %d-byte parser buffer.\n", (int)sizeof(parameter));
+          abortTest();
+          return;
+        }
         strncpy(parameter + index, token, lg--);
         index += lg;
         token += lg;
+      }
+      if(index >= (int)sizeof(parameter) - 1) {
+        printf("\nParameter token is too long for the %d-byte parser buffer.\n", (int)sizeof(parameter));
+        abortTest();
+        return;
       }
       parameter[index++] = *(token++);
     }
