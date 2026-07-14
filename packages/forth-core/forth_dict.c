@@ -237,6 +237,26 @@ bool forthFindColon(const char *name, uint16_t *idx)
 
 static struct { uint16_t here, latest, count, entryOff; bool open; } openDef;
 
+/* §3.2 re-entrancy (D-3): snapshot/restore openDef so a nested interpret can
+ * never finish or abort the outer line's definition. */
+void forthDefStateSave(forthDefState_t *out)
+{
+  out->here = openDef.here;
+  out->latest = openDef.latest;
+  out->count = openDef.count;
+  out->entryOff = openDef.entryOff;
+  out->open = openDef.open;
+}
+
+void forthDefStateRestore(const forthDefState_t *in)
+{
+  openDef.here = in->here;
+  openDef.latest = in->latest;
+  openDef.count = in->count;
+  openDef.entryOff = in->entryOff;
+  openDef.open = in->open;
+}
+
 bool forthDictEmit(ftoken_t tok)
 {
   if (!forthDictEnsure(2)) return false;

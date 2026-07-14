@@ -1058,6 +1058,72 @@ Mutation verification (mandatory):
 
 ---
 
+## Q9b — Pillar 3 follow-up: make rstack leaks observable
+
+Context (architect's ruling on the Q9 mutation report): mutation 1 survived
+because the watermark design silently ABSORBS a leaked rstack entry — the
+next invocation's `rspBase = rsp` just treats it as floor, and the only
+behavioral consequence (capacity loss, one entry per leak) is invisible to
+T3.4. The report's root-cause analysis was correct. The fix is direct
+observability: a test hook for `rsp`, plus asserting `rsp == 0` at rest,
+which pins the restore in EVERY error path at once.
+
+Read: `packages/forth-core/forth_inner.c` lines 155-260 and 375-385, and
+your Q9 tests in `packages/forth-core/test_dict_reloc.c` (grep
+`test_nested_preserves_outer_rstack` and `test_nested_error_unwinds_rsp`).
+
+Step 1 — `forth_inner.c`: in the FTOK_CALL bad-body error path there is a
+lone `rsp--;` (line ~245) immediately before the error handling that ends in
+`INNER_LEAVE();`. Delete that `rsp--;` line — `INNER_LEAVE()`'s
+`rsp = rspBase` subsumes it, and keeping two restore mechanisms in one path
+is what masked the Q9 mutation. (Verify the path still ends in
+`INNER_LEAVE();` — if the structure differs from this description, STOP and
+report.)
+
+Step 2 — `forth_inner.c`, in the `FORTH_DEBUG_SELFTEST` hook block at the
+end of the file, add:
+
+```c
+uint8_t forthTestGetRsp(void) { return rsp; }
+```
+
+and in `forth_dict.h`, next to `forthTestGetDepth`:
+
+```c
+uint8_t forthTestGetRsp(void);
+```
+
+Step 3 — extend the two Q9 tests:
+- In `test_nested_error_unwinds_rsp` (T3.4), immediately after the assertion
+  that running `UWMID` raised an error (and BEFORE running `UWOK`), add:
+  ```c
+  if (forthTestGetRsp() != 0) {
+    printf("    FAIL: rsp=%u leaked after error unwind (watermark restore missing)\n",
+           forthTestGetRsp());
+    fail = 1;
+  }
+  ```
+  Update the test's header comment: the rsp-at-rest assertion is the direct
+  pin; the UWOK follow-up run remains as the behavioral smoke check.
+- In `test_nested_preserves_outer_rstack` (T3.2), add the same
+  `forthTestGetRsp() == 0` assertion at the end (success paths must balance
+  too).
+
+Refresh + gate: green, same PASS count.
+
+Mutation verification (mandatory — this re-runs Q9's failed mutation with
+the new pin):
+1. In the FTOK_CALL bad-body error path, replace `INNER_LEAVE();` with
+   `do { forthDepth--; return; } while (0);` → gate must now go RED via
+   T3.4's rsp assertion. Revert.
+2. Change the `INNER_LEAVE` macro itself to drop the `rsp = rspBase;` →
+   gate RED (same assertion, proving the pin covers every error path).
+   Revert. Final gate GREEN.
+
+No commit — Q10's Pillar 3 commit picks these files up.
+
+---
+
 ## Q10 — Pillar 3 tests, part 2 (T3.5–T3.7), then commit
 
 Read: `packages/forth-core/test_dict_reloc.c` lines 2280-2340

@@ -25,7 +25,7 @@
 
 static uint16_t rstack[FORTH_RSTACK_DEPTH];
 static uint8_t  rsp;
-static bool     forthRunning = false;
+static uint8_t forthDepth = 0;   /* nested forthInner invocations */
 
 /* ---- Push helpers (stack discipline per §3.2) ---- */
 
@@ -156,26 +156,25 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
 {
   uint32_t dispatches = 0;
 
-  /* Re-entrancy guard (§3.2): nested entry destroys outer rstack */
-  if (forthRunning) {
-    lastErrorCode = ERROR_OPERATION_UNDEFINED;
+  /* Re-entrancy (§3.2, D-3): bounded nesting; rstack shared via watermark */
+  if (forthDepth >= FORTH_NEST_MAX) {
+    lastErrorCode = ERROR_OPERATION_UNDEFINED;   /* C-12: same code as old guard */
     displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED,
                             ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return;
   }
-  forthRunning = true;
+  forthDepth++;
+  uint8_t rspBase = rsp;   /* watermark: this level's rstack floor */
+  #define INNER_LEAVE() do { rsp = rspBase; forthDepth--; return; } while (0)
 
   /* Resolve body start */
   uint16_t ip = bodyOffsetOfIndex(entryIndex);
   if (ip == FORTH_NULL) {
     lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
-    displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
-                            ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-    forthRunning = false;
-    return;
-  }
-
-  rsp = 0;
+        displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                                  ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          INNER_LEAVE();
+   }
 
   for (;;) {
     /* Cooperative break: async stop from dispatched item */
@@ -186,8 +185,7 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
     /* Key poll — primary interrupt on DMCP hardware (§3.2) */
 #if defined(DMCP_BUILD)
     if (pollProgramInterrupt()) {
-      forthRunning = false;
-      return;
+      INNER_LEAVE();
     }
 #endif
 
@@ -195,9 +193,8 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
     if (++dispatches >= RUNAWAY_CAP) {
       lastErrorCode = ERROR_RAM_FULL;
       displayCalcErrorMessage(ERROR_RAM_FULL,
-                              ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-      forthRunning = false;
-      return;
+                               ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+      INNER_LEAVE();
     }
 
     /* ---- FETCH ---- */
@@ -207,10 +204,10 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
     /* ---- DECODE / DISPATCH ---- */
 
     if (tok == FTOK_EXIT) {
-      if (rsp == 0) {
+      if (rsp == rspBase) {
         /* Normal exit: set ASLIFT (C47 convention, §3.2) */
         setSystemFlag(FLAG_ASLIFT);
-        forthRunning = false;
+        forthDepth--;
         return;
       }
       ip = rstack[--rsp];
@@ -223,17 +220,15 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
       if (primIdx >= forthPrimCount) {
         lastErrorCode = ERROR_OPERATION_UNDEFINED;
         displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED,
-                                ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-        forthRunning = false;
-        return;
-      }
-       forthPrims[primIdx].fn();
-       clearSystemFlag(FLAG_ASLIFT);
-       if (lastErrorCode != ERROR_NONE) {
-         forthRunning = false;
-         return;
+                                 ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+         INNER_LEAVE();
        }
-       continue;
+        forthPrims[primIdx].fn();
+       clearSystemFlag(FLAG_ASLIFT);
+        if (lastErrorCode != ERROR_NONE) {
+          INNER_LEAVE();
+        }
+        continue;
     }
 
     if (tok <= 0x7EFF) {
@@ -241,21 +236,18 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
       if (rsp >= FORTH_RSTACK_DEPTH) {
         lastErrorCode = ERROR_RAM_FULL;
         displayCalcErrorMessage(ERROR_RAM_FULL,
-                                ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-        forthRunning = false;
-        return;
-      }
-      rstack[rsp++] = ip;
-      ip = bodyOffsetOfIndex((uint16_t)(tok - FTOK_CALL_BASE));
-      if (ip == FORTH_NULL) {
-        rsp--;
-        lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
-        displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
-                                ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-        forthRunning = false;
-        return;
-      }
-      continue;
+                                 ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+         INNER_LEAVE();
+       }
+       rstack[rsp++] = ip;
+       ip = bodyOffsetOfIndex((uint16_t)(tok - FTOK_CALL_BASE));
+        if (ip == FORTH_NULL) {
+          lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+         displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                                   ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+           INNER_LEAVE();
+         }
+       continue;
     }
 
     switch (tok) {
@@ -266,8 +258,7 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         ip += (uint16_t)sizeof(real34_t);
         forthPushReal34(&litVal);
         if (lastErrorCode != ERROR_NONE) {
-          forthRunning = false;
-          return;
+          INNER_LEAVE();
         }
         break;
       }
@@ -279,14 +270,13 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
           memcpy(&v, fdict.base + ip, 4);
           ip += 4;
           forthPushInt32(v);
-         if (lastErrorCode != ERROR_NONE) {
-           forthRunning = false;
-           return;
-         }
-         break;
-       }
+          if (lastErrorCode != ERROR_NONE) {
+            INNER_LEAVE();
+          }
+          break;
+        }
 
-       case FTOK_BR: {
+        case FTOK_BR: {
          /* Unconditional branch: signed int16 delta in cells (§2.2)
           * memcpy avoids sign-extension bug on byte 0 (fix #16a). */
          int16_t delta;
@@ -305,14 +295,13 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
           if (popIsFalse()) {
             ip += (int32_t)delta * 2;
           }
-         if (lastErrorCode != ERROR_NONE) {
-           forthRunning = false;
-           return;
-         }
-         break;
-       }
+          if (lastErrorCode != ERROR_NONE) {
+            INNER_LEAVE();
+          }
+          break;
+        }
 
-      case FTOK_C47: {
+       case FTOK_C47: {
         /* §2.2: decode itemId, param per PTP class, dispatch to C47 handler */
         uint16_t itemId = (uint16_t)(fdict.base[ip] |
                                      ((uint16_t)fdict.base[ip + 1] << 8));
@@ -322,12 +311,11 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         if (itemId >= LAST_ITEM) {
           lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
           displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
-                                  ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-          forthRunning = false;
-          return;
-        }
+                                   ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+           INNER_LEAVE();
+         }
 
-        /* Determine PTP class from item status (bits 9-13) */
+         /* Determine PTP class from item status (bits 9-13) */
         uint16_t ptpClass = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
 
         /* Decode inline param per PTP class; unsupported PTP → error */
@@ -350,12 +338,11 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
             /* PTP_LABEL, PTP_REGISTER, etc. not supported yet (C-1, §3.3.6) */
             lastErrorCode = ERROR_OPERATION_UNDEFINED;
             displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED,
-                                    ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-            forthRunning = false;
-            return;
-        }
+                                     ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+             INNER_LEAVE();
+         }
 
-        /* H1: PGM_RUNNING save/set/restore wrap around this call (§2.2 resolved issue 2)
+         /* H1: PGM_RUNNING save/set/restore wrap around this call (§2.2 resolved issue 2)
          * Pattern: save current state, mark RUNNING, execute, restore only if
          * unchanged.  If reallyRunFunction modifies programRunStop (e.g., keypress
          * aborts execution), the restore is intentionally skipped — the new value
@@ -368,8 +355,7 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         }
 
         if (lastErrorCode != ERROR_NONE) {
-          forthRunning = false;
-          return;
+          INNER_LEAVE();
         }
         break;
       }
@@ -378,16 +364,18 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
         displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
                                 ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-        forthRunning = false;
-        return;
+        INNER_LEAVE();
     }
   }
 
-  forthRunning = false;
+  rsp = rspBase;
+  forthDepth--;
+  #undef INNER_LEAVE
 }
 
-/* Test-only: prime forthRunning for re-entrancy guard test (§3.2) */
+/* Test-only: prime/read nesting depth for guard tests (§3.2) */
 #ifdef FORTH_DEBUG_SELFTEST
-void forthTestSetRunning(bool val) { forthRunning = val; }
-bool forthTestIsRunning(void) { return forthRunning; }
+void forthTestSetDepth(uint8_t d) { forthDepth = d; }
+uint8_t forthTestGetDepth(void) { return forthDepth; }
+uint8_t forthTestGetRsp(void) { return rsp; }
 #endif

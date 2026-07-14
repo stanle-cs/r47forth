@@ -86,6 +86,11 @@ bool finishDefinition(void);
 /* Abort current definition; idempotent (§3.3.7). */
 void abortDefinition(void);
 
+/* Open-definition snapshot for nested interprets (§3.2 re-entrancy) */
+typedef struct { uint16_t here, latest, count, entryOff; bool open; } forthDefState_t;
+void forthDefStateSave(forthDefState_t *out);
+void forthDefStateRestore(const forthDefState_t *in);
+
 /* Returns true if a definition is currently open (smudged). */
 bool isDefinitionOpen(void);
 
@@ -145,10 +150,21 @@ bool forthEntryStateAtInsertion(void);
 /* Self-test harness (DESIGN.md §7) */
 int forthDictSelfTest(void);
 
-/* Test-only: expose forthRunning for re-entrancy guard test (§3.2) */
+/* Inner interpreter nesting limit (§3.2) */
+#define FORTH_NEST_MAX 4
+
+/* Test-only: prime/read forthInner nesting depth (§3.2) */
 #ifdef FORTH_DEBUG_SELFTEST
-void forthTestSetRunning(bool val);
-bool forthTestIsRunning(void);
+void forthTestSetDepth(uint8_t d);
+uint8_t forthTestGetDepth(void);
+uint8_t forthTestGetRsp(void);
+#endif
+
+/* Test-only: outer-interpreter nesting introspection (D-3) */
+#ifdef FORTH_DEBUG_SELFTEST
+void *forthTestOuterCur(void);
+uint8_t forthTestOuterDepth(void);
+void forthTestSetOuterDepth(uint8_t d);
 #endif
 
 #endif /* FORTH_DICT_H */

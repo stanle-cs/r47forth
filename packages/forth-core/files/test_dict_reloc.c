@@ -14,7 +14,7 @@
 /* FORTH test harness — PC debug build only.
  * Cross-target (DMCP) must not include fork/waitpid/printf or the
  * PC_BUILD-only test helpers (forthDictSetTestInitialBlocks,
- * forthTestSetRunning/IsRunning). */
+ * forthTestSetDepth/GetDepth). */
 #if defined(PC_BUILD)
 
 #include <string.h>
@@ -519,11 +519,10 @@ static int test_c47_bad_ptp(void)
 /* ---- Fix #13: FTOK_C47 nested re-entrancy guard ----
  * Define word "NR1": ILIT(42) EXIT
  * Hand-assemble: C47(ITM_FCALL, idx(NR1)) | ILIT(999) | EXIT
- * ITM_FCALL (2843, PTP_NUMBER_16) -> fnForthCall(idx) -> forthInner(idx)
- * Re-entrancy guard fires (forthRunning already true) -> ERROR_OPERATION_UNDEFINED.
- * Sentinel ILIT 999 does NOT run.
- * Mutation: no guard -> nested forthInner runs, sentinel may or may not run. ---- */
-static int test_c47_nested_reentry(void)
+ * P3: nested forthInner via ITM_FCALL now succeeds (depth 2 <= FORTH_NEST_MAX).
+ * Must fail if the depth upgrade regresses to a single-level guard, or if the
+ * nested return corrupts the outer ip. ---- */
+static int test_c47_nested_call_succeeds(void)
 {
   uint16_t w1 = begin_word("NR1", 3);
   if (w1 == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
@@ -545,19 +544,144 @@ static int test_c47_nested_reentry(void)
 
   lastErrorCode = ERROR_NONE;
   bool err = run_word("NR");
+  if (err) {
+    printf("    FAIL: nested call should succeed (got error %d)\n", lastErrorCode);
+    return 1;
+  }
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: expected ERROR_NONE, got %d\n", lastErrorCode);
+    return 1;
+  }
+  if (!x_is_longint(999)) {
+    printf("    FAIL: sentinel ILIT 999 did not execute (outer ip corrupted by nested return)\n");
+    return 1;
+  }
+  printf("    PASS: nested forthInner succeeded (depth 2), sentinel ILIT 999 executed\n");
+  return 0;
+}
+
+/* T3.2 (D-3 core): nested forthInner fires while the OUTER level has rsp > 0.
+ * Must fail if forthInner still zeroes rsp on entry (outer return chain
+ * destroyed: TOP's tail after MID never runs). */
+static int test_nested_preserves_outer_rstack(void)
+{
+  /* WMLEAF: ILIT(1), EXIT */
+  uint16_t w = begin_word("WMLEAF", 6);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit(T_ILIT);
+  emit_int32(1);
+  end_word(w);
+  uint16_t leafIdx = fdict.count - 1;
+
+  /* WMNEST: ILIT(42), EXIT */
+  w = begin_word("WMNEST", 6);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit(T_ILIT);
+  emit_int32(42);
+  end_word(w);
+  uint16_t nestIdx = fdict.count - 1;
+
+  /* WMMID: CALL(WMLEAF), FTOK_C47+ITM_FCALL+nestIdx, CALL(WMLEAF), EXIT */
+  w = begin_word("WMMID", 5);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit((ftoken_t)(T_CALL_BASE + leafIdx));
+  forthDictEmit(T_C47);
+  { uint16_t itemId = 2843; forthDictEmitBytes(&itemId, 2); }
+  forthDictEmitBytes(&nestIdx, 2);
+  forthDictEmit((ftoken_t)(T_CALL_BASE + leafIdx));
+  end_word(w);
+  uint16_t midIdx = fdict.count - 1;
+
+  /* WMTOP: CALL(WMMID), ILIT(9), EXIT */
+  w = begin_word("WMTOP", 5);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit((ftoken_t)(T_CALL_BASE + midIdx));
+  forthDictEmit(T_ILIT);
+  emit_int32(9);
+  end_word(w);
+
+  uint8_t savedRunStop = programRunStop;
+  programRunStop = PGM_RUNNING;
+  lastErrorCode = ERROR_NONE;
+  bool err = run_word("WMTOP");
+  programRunStop = savedRunStop;
+
+  if (err) {
+    printf("    FAIL: nested call should succeed (got error %d)\n", lastErrorCode);
+    return 1;
+  }
+  if (!x_is_longint(9)) {
+    printf("    FAIL: X != 9 (TOP's tail did not run — outer rstack destroyed)\n");
+    return 1;
+  }
+  if (forthTestGetDepth() != 0) {
+    printf("    FAIL: forthDepth = %d, expected 0\n", forthTestGetDepth());
+    return 1;
+  }
+  if (forthTestGetRsp() != 0) {
+    printf("    FAIL: rsp=%u leaked (success path unbalanced)\n",
+           forthTestGetRsp());
+    return 1;
+  }
+  printf("    PASS: nested forthInner preserved outer rstack, TOP's tail executed (X=9)\n");
+  return 0;
+}
+
+/* T3.4: an error deep in a nest must unwind rsp to each level's watermark.
+ * The rsp-at-rest assertion (rsp == 0) is the direct pin; the UWOK follow-up
+ * run remains as the behavioral smoke check. */
+static int test_nested_error_unwinds_rsp(void)
+{
+  int fail = 0;
+  /* UWBAD: CALL(200) — nonexistent index → ERROR_INVALID_CORRUPTED_DATA at dispatch */
+  uint16_t w = begin_word("UWBAD", 5);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit((ftoken_t)(T_CALL_BASE + 200));
+  end_word(w);
+  uint16_t badIdx = fdict.count - 1;
+
+  /* UWMID: CALL(UWBAD), EXIT — rsp > 0 when the bad call fires */
+  w = begin_word("UWMID", 5);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit((ftoken_t)(T_CALL_BASE + badIdx));
+  end_word(w);
+
+  /* Run UWMID — expect an error */
+  bool err = run_word("UWMID");
   if (!err) {
-    printf("    FAIL: nested re-entrancy guard did not fire (no error)\n");
+    printf("    FAIL: UWMID should raise an error\n");
     return 1;
   }
-  if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
-    printf("    FAIL: expected ERROR_OPERATION_UNDEFINED, got %d\n", lastErrorCode);
+
+  if (forthTestGetRsp() != 0) {
+    printf("    FAIL: rsp=%u leaked after error unwind (watermark restore missing)\n",
+           forthTestGetRsp());
+    fail = 1;
+  }
+
+  /* UWOK: ILIT(6), EXIT — fresh word to verify rsp was restored */
+  w = begin_word("UWOK", 4);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit(T_ILIT);
+  emit_int32(6);
+  end_word(w);
+
+  lastErrorCode = ERROR_NONE;
+  err = run_word("UWOK");
+  if (err) {
+    printf("    FAIL: UWOK should succeed (got error %d)\n", lastErrorCode);
     return 1;
   }
-  if (x_is_longint(999)) {
-    printf("    FAIL: sentinel ILIT 999 executed (guard may not have halted)\n");
+  if (!x_is_longint(6)) {
+    printf("    FAIL: X != 6 after UWOK (stale rstack entry corrupted ip)\n");
     return 1;
   }
-  printf("    PASS: nested re-entrancy guard fired (ERROR_OPERATION_UNDEFINED)\n");
+  if (forthTestGetDepth() != 0) {
+    printf("    FAIL: forthDepth = %d, expected 0\n", forthTestGetDepth());
+    return 1;
+  }
+  if (fail) return 1;
+  printf("    PASS: error unwind restored rsp, follow-up UWOK succeeded (X=6)\n");
   return 0;
 }
 
@@ -1129,6 +1253,189 @@ static int test_outer_glyph_divide(void)
   return 0;
 }
 
+/* Forward declarations for test-program helpers (defined later in file) */
+static bool writeTestProgram(const uint8_t *bytes, uint16_t n);
+static void cleanupTestProgram(void);
+
+/* T3.5 (D-3): a Forth line XEQs a label whose program contains a Forth
+ * source step (outer-in-outer). The OUTER line's remaining tokens must still
+ * be consumed after the nested line. Must fail if tokenizer state is shared
+ * statics (nested init clobbers the outer position). */
+static int test_outer_nesting_tokenizer(void)
+{
+  uint8_t prog[] = {
+    0x01, 0xFD, 0x03, 'N', 'L', 'B',                         /* LBL 'NLB' */
+    0x8B, 0x1A, 0xFD, 0x01, '3',                              /* ITM_FORTH "3" */
+    0x04                                                      /* RTN (ITM_RTN=4, PTP_NONE: single byte) */
+  };
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  calcRegister_t lbl = findNamedLabel("NLB");
+  if (lbl == INVALID_VARIABLE) {
+    printf("    FAIL: findNamedLabel(\"NLB\") returned INVALID_VARIABLE\n");
+    cleanupTestProgram();
+    return 1;
+  }
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("NLB 5");
+
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: \"NLB 5\" raised error %d\n", lastErrorCode);
+    cleanupTestProgram();
+    return 1;
+  }
+  if (!x_is_longint(5)) {
+    printf("    FAIL: X != 5 (outer tail token not consumed after nested run)\n");
+    cleanupTestProgram();
+    return 1;
+  }
+  if (!y_is_longint(3)) {
+    printf("    FAIL: Y != 3 (nested Forth step result lost)\n");
+    cleanupTestProgram();
+    return 1;
+  }
+  printf("    PASS: outer nesting preserves tokenizer — X=5, Y=3\n");
+  cleanupTestProgram();
+  return 0;
+}
+
+/* T3.6 (rewritten by architect ruling): the outer depth cap is UNREACHABLE
+ * by natural construction — a label XEQ from a program-context Forth step is
+ * continuation-style (fnExecute's nested branch pushes a level and defers to
+ * the enclosing runProgram loop), so interpreter frames never stack past 2.
+ * Phase A therefore primes the depth via test hook and pins the cap check
+ * itself: must fail if the FORTH_OUTER_NEST_MAX guard in forthOuterRun is
+ * removed (the primed line would execute). Phase B keeps the two-program
+ * construct as a continuation-XEQ integration test: must fail if fnExecute's
+ * nested branch stops working from a Forth step (X != 3) or leaks its
+ * subroutine level / leaves outer depth dangling. */
+static int test_outer_depth_cap(void)
+{
+  int fail = 0;
+
+  /* ---- Phase A: hook-primed cap + recovery ---- */
+  forthTestSetOuterDepth(2);   /* == FORTH_OUTER_NEST_MAX */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("11");
+  if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
+    printf("    FAIL: primed cap: error = %d, expected ERROR_OPERATION_UNDEFINED\n",
+           lastErrorCode);
+    fail = 1;
+  }
+  if (x_is_longint(11)) {
+    printf("    FAIL: primed cap: line executed past the depth guard\n");
+    fail = 1;
+  }
+  forthTestSetOuterDepth(0);
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("11");
+  if (lastErrorCode != ERROR_NONE || !x_is_longint(11)) {
+    printf("    FAIL: recovery line \"11\" failed after cap test\n");
+    fail = 1;
+  }
+
+  /* ---- Phase B: continuation XEQ across two labels ---- */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'N', 'L', 'B',                         /* LBL 'NLB' */
+      0x8B, 0x1A, 0xFD, 0x01, '3',                              /* ITM_FORTH "3" */
+      0x04,                                                      /* RTN (ITM_RTN=4, PTP_NONE: single byte) */
+      0x01, 0xFD, 0x03, 'N', 'L', '2',                         /* LBL 'NL2' */
+      0x8B, 0x1A, 0xFD, 0x03, 'N', 'L', 'B',                    /* ITM_FORTH "NLB" */
+      0x04                                                      /* RTN (ITM_RTN=4, PTP_NONE: single byte) */
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    FAIL: writeTestProgram failed\n");
+      return 1;
+    }
+
+    forthRunGenBump();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("NL2");
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    FAIL: \"NL2\" raised error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    if (!x_is_longint(3)) {
+      printf("    FAIL: X != 3 (continuation XEQ NL2->NLB did not run NLB's step)\n");
+      fail = 1;
+    }
+    if (forthTestOuterDepth() != 0) {
+      printf("    FAIL: forthOuterDepth = %u at rest after continuation run\n",
+             (unsigned)forthTestOuterDepth());
+      fail = 1;
+    }
+    cleanupTestProgram();
+  }
+
+  if (fail) return 1;
+  printf("    PASS: outer depth cap pinned via hook; continuation XEQ NL2->NLB -> X=3\n");
+  return 0;
+}
+
+/* T3.7: after any nesting episode, forthOuterCur must be NULL at rest.
+ * Must fail if an exit path restores depth but not the ctx pointer
+ * (use-after-return into a dead stack frame on the next line). */
+static int test_outer_ctx_at_rest(void)
+{
+  int fail = 0;
+
+  /* Simple line: no nesting */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("1 2 +");
+  if (forthTestOuterCur() != NULL) {
+    printf("    FAIL: forthOuterCur != NULL after simple line\n");
+    fail = 1;
+  }
+  if (forthTestOuterDepth() != 0) {
+    printf("    FAIL: forthOuterDepth = %u after simple line\n",
+           (unsigned)forthTestOuterDepth());
+    fail = 1;
+  }
+
+  /* Nested scenario (same as T3.5) */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'N', 'L', 'B',                         /* LBL 'NLB' */
+      0x8B, 0x1A, 0xFD, 0x01, '3',                              /* ITM_FORTH "3" */
+      0x04                                                      /* RTN (ITM_RTN=4, PTP_NONE: single byte) */
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    FAIL: writeTestProgram failed\n");
+      return 1;
+    }
+
+    forthRunGenBump();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("NLB 5");
+
+    if (forthTestOuterCur() != NULL) {
+      printf("    FAIL: forthOuterCur != NULL after nested episode\n");
+      fail = 1;
+    }
+    if (forthTestOuterDepth() != 0) {
+      printf("    FAIL: forthOuterDepth = %u after nested episode\n",
+             (unsigned)forthTestOuterDepth());
+      fail = 1;
+    }
+
+    cleanupTestProgram();
+  }
+
+  if (fail) return 1;
+  printf("    PASS: forthOuterCur/forthOuterDepth NULL/0 at rest (simple + nested)\n");
+  return 0;
+}
+
 
 /* ==================================================================
  * Main self-test entry point
@@ -1232,8 +1539,8 @@ static int test_tam_dispatcher(void)
   return 0;
 }
 
-/* §7.1 re-entrancy: forthRunning guard fires on nested entry (§3.2)
- * Uses test-only forthTestSetRunning to prime the guard, avoiding
+/* §7.1 re-entrancy: depth cap fires at FORTH_NEST_MAX and recovers (§3.2)
+ * Uses test-only forthTestSetDepth to prime the guard, avoiding
  * reallyRunFunction/display calls that may not be safe in headless mode.
  * Requires FORTH_DEBUG_SELFTEST (meson OPTION). */
 #ifdef FORTH_DEBUG_SELFTEST
@@ -1256,15 +1563,15 @@ static int test_reentrancy(void)
     return 1;
   }
 
-  /* Prime the re-entrancy guard */
-  forthTestSetRunning(true);
+  /* Prime the depth cap */
+  forthTestSetDepth(FORTH_NEST_MAX);
 
   /* Call forthInner — guard should fire, word should NOT execute */
   lastErrorCode = ERROR_NONE;
   forthInner(idx, false);
 
-  /* Guard does NOT clear forthRunning; reset for subsequent tests */
-  forthTestSetRunning(false);
+  /* Reset depth for subsequent tests */
+  forthTestSetDepth(0);
 
   if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
     printf("    FAIL: expected ERROR_OPERATION_UNDEFINED (%d), got %d\n",
@@ -1275,11 +1582,11 @@ static int test_reentrancy(void)
     printf("    FAIL: sentinel value 99 was set — guard did not prevent entry\n");
     return 1;
   }
-  if (forthTestIsRunning()) {
-    printf("    FAIL: forthRunning still true after manual reset\n");
+  if (forthTestGetDepth() != 0) {
+    printf("    FAIL: forthDepth still nonzero after manual reset\n");
     return 1;
   }
-  printf("    PASS: re-entrancy guard fired (err=%d), word not executed\n",
+  printf("    PASS: depth cap fired (err=%d), word not executed\n",
   lastErrorCode);
   return 0;
 }
@@ -5186,7 +5493,11 @@ int forthDictSelfTest(void)
   fail |= test_c47_ptp_none();
   fail |= test_c47_ptp_number8_padded();
   fail |= test_c47_bad_ptp();
-  fail |= test_c47_nested_reentry();
+  fail |= test_c47_nested_call_succeeds();
+  printf("  [DEBUG] running test_nested_preserves_outer_rstack...\n");
+  fail |= test_nested_preserves_outer_rstack();
+  printf("  [DEBUG] running test_nested_error_unwinds_rsp...\n");
+  fail |= test_nested_error_unwinds_rsp();
   fail |= test_div_zero_halt();
   fail |= test_rstack_overflow();
   fail |= test_runaway_guard();
@@ -5219,6 +5530,12 @@ int forthDictSelfTest(void)
   fail |= test_outer_glyph_dot();
   printf("  [DEBUG] running test_outer_glyph_divide...\n");
   fail |= test_outer_glyph_divide();
+  printf("  [DEBUG] running test_outer_nesting_tokenizer...\n");
+  fail |= test_outer_nesting_tokenizer();
+  printf("  [DEBUG] running test_outer_depth_cap...\n");
+  fail |= test_outer_depth_cap();
+  printf("  [DEBUG] running test_outer_ctx_at_rest...\n");
+  fail |= test_outer_ctx_at_rest();
 
   forthDictClear();
 

@@ -17,11 +17,23 @@
 #define FTOK_LIT          0x7F00
 #define FTOK_ILIT         0x7F01
 
-/* ---- §3.3.2 Private source buffer & re-entrancy guard (C-5) ---- */
+/* ---- §3.3.2 / D-3: per-invocation context; idle BSS = one ptr + 2 bytes ---- */
+typedef enum {
+  FORTH_OUTER_FULL = 0          /* compile and execute (interactive semantics) */
+  /* P2 adds DEFS_ONLY / SKIP_DEFS */
+} forthOuterMode_t;
 
 #define FORTH_SOURCE_MAX 256
-static char  forthSource[FORTH_SOURCE_MAX];
-static bool  forthOuterActive = false;
+
+typedef struct {
+  char            source[FORTH_SOURCE_MAX];
+  int16_t         pos;          /* tokenizer position */
+  forthDefState_t savedDef;     /* outer level's open-definition snapshot */
+} forthOuterCtx_t;
+
+#define FORTH_OUTER_NEST_MAX 2
+static forthOuterCtx_t *forthOuterCur   = NULL;
+static uint8_t          forthOuterDepth = 0;
 
 /* ---- §9.3 Run-generation counter (P-5) ---- */
 
@@ -41,12 +53,8 @@ static void forthRunGenCheckReset(void) {
 
 /* ---- §3.3.3 Tokenizer state (C-6) ---- */
 
-static const char *tokenizerSource;
-static int16_t     tokenizerPos;
-
-static void forthTokenizerInit(const char *src) {
-  tokenizerSource = src;
-  tokenizerPos = 0;
+static void forthTokenizerInit(void) {
+  forthOuterCur->pos = 0;
 }
 
 /*
@@ -54,18 +62,18 @@ static void forthTokenizerInit(const char *src) {
  * Returns false at end of line.
  */
 static bool nextToken(char buf[FORTH_TOKEN_MAX + 1]) {
-  while (tokenizerSource[tokenizerPos] == ' ')
-    tokenizerPos = stringNextGlyph(tokenizerSource, tokenizerPos);
-  if (tokenizerSource[tokenizerPos] == 0) return false;
-  int16_t start = tokenizerPos;
-  while (tokenizerSource[tokenizerPos] != 0 && tokenizerSource[tokenizerPos] != ' ')
-    tokenizerPos = stringNextGlyph(tokenizerSource, tokenizerPos);
-  int16_t len = tokenizerPos - start;
+  while (forthOuterCur->source[forthOuterCur->pos] == ' ')
+    forthOuterCur->pos = stringNextGlyph(forthOuterCur->source, forthOuterCur->pos);
+  if (forthOuterCur->source[forthOuterCur->pos] == 0) return false;
+  int16_t start = forthOuterCur->pos;
+  while (forthOuterCur->source[forthOuterCur->pos] != 0 && forthOuterCur->source[forthOuterCur->pos] != ' ')
+    forthOuterCur->pos = stringNextGlyph(forthOuterCur->source, forthOuterCur->pos);
+  int16_t len = forthOuterCur->pos - start;
   if (len > FORTH_TOKEN_MAX) {
     displayCalcErrorMessage(ERROR_INPUT_TOO_LONG, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
-  xcopy(buf, tokenizerSource + start, len);
+  xcopy(buf, forthOuterCur->source + start, len);
   buf[len] = 0;
   return true;
 }
@@ -210,16 +218,25 @@ typedef enum {
 } forthState_t;
 
 /*
- * forthOuterInterpret — core interpret/compile loop.
- * Called by fnForthOuter and by PC tests.
+ * forthOuterRun — core interpret/compile loop.
+ * Called by forthOuterInterpret, fnForthOuter, and forthProgramStep.
  * Per DESIGN.md §3.3 pseudocode, §3.3.1 (C-4), §3.3.6 (C-1).
  */
-void forthOuterInterpret(const char *source) {
+static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
+  (void)mode;   /* P2 uses it */
+  if (forthOuterDepth >= FORTH_OUTER_NEST_MAX) {
+    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  forthOuterCtx_t *prevCtx = forthOuterCur;
+  forthOuterCur = ctx;
+  forthOuterDepth++;
+  forthDefStateSave(&ctx->savedDef);
+  forthTokenizerInit();
+
   forthState_t state = STATE_INTERPRET;
   bool lineOK = true;
   char buf[FORTH_TOKEN_MAX + 1];
-
-  forthTokenizerInit(source);
 
   while (lineOK && nextToken(buf)) {
     /* ---- C-4: ':' colon matches the ':' character (B2) ---- */
@@ -323,10 +340,28 @@ void forthOuterInterpret(const char *source) {
            abortDefinition();
            lineOK = false;
          } else {
-           uint8_t saved = programRunStop;
-           programRunStop = PGM_RUNNING;
-           reallyRunFunction(ITM_XEQ, (uint16_t)label);
-          if (programRunStop == PGM_RUNNING) programRunStop = saved;
+           /* C-1 amendment (proposed, see PROPOSED_SPEC_CHANGES.md): dispatch
+            * via fnExecute directly, NOT reallyRunFunction under a forced
+            * PGM_RUNNING wrap. ITM_XEQ is unlike ordinary items: under
+            * PGM_RUNNING, fnExecute only pushes a subroutine level and defers
+            * stepping to an enclosing runProgram loop — from an interactive
+            * Forth line no such loop exists, so the program never ran and the
+            * level leaked 3 blocks per call (found by T3.5). The §2.2
+            * livelock lives in items.c's normal-mode dispatch
+            * (refreshStatusBar pump), which a direct fnExecute call bypasses.
+            * Interactively this takes the same fnGoto+runProgram path as a
+            * keyboard XEQ and fires §9.3 bump site A (a run start must bump —
+            * the old wrap wrongly suppressed it); from a program-context
+            * Forth step (programRunStop == PGM_RUNNING) the nested branch is
+            * taken unchanged (continuation semantics, level popped by RTN).
+            * dynamicMenuItem must be cleared FIRST: fnGoto's
+            * dynamicMenuItem >= 0 branch reinterprets the label ID as a
+            * global step number (menu-launch semantics); leftover menu state
+            * (e.g. 0 after the reset path shows MyMenu) sent goToGlobalStep
+            * off the end of program memory. fnExecute itself resets it only
+            * AFTER fnGoto — too late for a name-resolved, non-menu call. */
+           dynamicMenuItem = -1;
+           fnExecute((uint16_t)label);
           if (lastErrorCode != ERROR_NONE) {
             if (isDefinitionOpen()) abortDefinition();
             lineOK = false;
@@ -362,14 +397,27 @@ void forthOuterInterpret(const char *source) {
     /* C-7: ASLIFT-set gate checks lastErrorCode == ERROR_NONE */
     setSystemFlag(FLAG_ASLIFT);
   }
+
+  forthDefStateRestore(&ctx->savedDef);
+  forthOuterDepth--;
+  forthOuterCur = prevCtx;
+}
+
+/* ---- Public wrapper: same signature as before ---- */
+void forthOuterInterpret(const char *source)
+{
+  forthOuterCtx_t ctx;
+  size_t n = strlen(source);
+  if (n >= FORTH_SOURCE_MAX) {
+    displayCalcErrorMessage(ERROR_INPUT_TOO_LONG, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  memcpy(ctx.source, source, n + 1);
+  forthOuterRun(&ctx, FORTH_OUTER_FULL);
 }
 
 /* fnForthOuter — ITM_FORTH entry point (§3.3.2) */
 void fnForthOuter(uint16_t unused) {
-  if (forthOuterActive) {
-    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-    return;
-  }
   if (getRegisterDataType(REGISTER_X) != dtString) {
     displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return;
@@ -379,26 +427,26 @@ void fnForthOuter(uint16_t unused) {
     displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return;
   }
-  xcopy(forthSource, REGISTER_STRING_DATA(REGISTER_X), len + 1);
-  fnDrop(NOPARAM);
-  forthOuterActive = true;
-  forthOuterInterpret(forthSource);
-  forthOuterActive = false;
+  forthOuterCtx_t ctx;
+  xcopy(ctx.source, REGISTER_STRING_DATA(REGISTER_X), len + 1);
+  fnDrop(NOPARAM);   /* copy MUST precede drop: drop invalidates the string */
+  forthOuterRun(&ctx, FORTH_OUTER_FULL);
 }
 
 /* ---- P-2: Program-step entry point (§3.3.2, §9.2) ---- */
 
 void forthProgramStep(const uint8_t *payload) {
-  if (forthOuterActive) {
-    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-    return;
-  }
-  uint8_t len = *payload;
-  xcopy(forthSource, payload + 1, len);
-  forthSource[len] = 0;
   forthRunGenCheckReset();
-  forthOuterActive = true;
-  forthOuterInterpret(forthSource);
-  forthOuterActive = false;
+  forthOuterCtx_t ctx;
+  uint8_t len = *payload;
+  xcopy(ctx.source, payload + 1, len);
+  ctx.source[len] = 0;
+  forthOuterRun(&ctx, FORTH_OUTER_FULL);
 }
 
+/* Test-only: outer-interpreter nesting introspection (D-3) */
+#ifdef FORTH_DEBUG_SELFTEST
+void *forthTestOuterCur(void) { return (void *)forthOuterCur; }
+uint8_t forthTestOuterDepth(void) { return forthOuterDepth; }
+void forthTestSetOuterDepth(uint8_t d) { forthOuterDepth = d; }
+#endif
