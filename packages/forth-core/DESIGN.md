@@ -477,6 +477,22 @@ interactive dispatch flows through `executeFunction` → `runFunction` →
 Threaded-code walker. Uses one explicit return stack in package BSS (NOT the C
 call stack — depth must be bounded and inspectable).
 
+**STAGE 2 AMENDMENT (ruling D-3, implemented 2026-07-13 — commit "P3 full
+re-entrancy for both interpreters"):** the single-level `forthRunning` guard
+in the pseudocode below is SUPERSEDED. `forthInner` is re-entrant to
+`FORTH_NEST_MAX` (4) via a depth counter plus an `rsp` watermark:
+`uint8_t forthDepth` replaces `forthRunning`; entry at the cap raises the
+same C-12 `ERROR_OPERATION_UNDEFINED`; each invocation records
+`rspBase = rsp` instead of zeroing `rsp`; `FTOK_EXIT` returns at
+`rsp == rspBase`; and EVERY exit path (errors, key-poll suspension,
+cooperative break) unwinds via `rsp = rspBase; forthDepth--` (one
+`INNER_LEAVE()` macro — a leaked entry is otherwise silently absorbed as the
+next invocation's floor, shrinking capacity; `forthTestGetRsp() == 0` at
+rest pins the unwind in every path). `rstack[64]` stays one shared static
+partitioned by watermarks — zero BSS growth; the FTOK_CALL overflow check
+naturally bounds the sum of all levels. Read the pseudocode's
+`forthRunning` / `rsp = 0` / `rsp == 0` lines through this amendment.
+
 ```
 #define FORTH_RSTACK_DEPTH 64            // tune against arena high-water (§5.4)
 static uint16_t rstack[FORTH_RSTACK_DEPTH];   // region-relative token offsets
@@ -640,6 +656,12 @@ EXIT, every error return, runaway guard, cooperative break). Real nesting is
 deferred until a use case demands it. **This guard MUST land in the same
 commit as H1** — H1 is what makes the re-entry path reachable.
 
+**[SUPERSEDED 2026-07-13]** The deferral above ended with ruling D-3: real
+nesting is implemented per the §3.2 amendment block (depth cap 4, `rsp`
+watermark). C-12's error code remains normative at the cap; the
+"cleared on every exit path" obligation carries over verbatim to the
+`rsp = rspBase; forthDepth--` unwind.
+
 ### 3.3 Compilation (`:` … `;`) — `forth_compile.c`
 
 Consolidated with the §3.3-C sub-phase C amendments (compiler pre-build audit,
@@ -784,6 +806,23 @@ the context includes the definition name: `"No such function: TOKEN (in WORD)"`.
   behavior, not an error.
 
 #### 3.3.2 Source acquisition, private buffer, outer re-entrancy guard (C-5)
+
+**STAGE 2 AMENDMENT (ruling D-3, implemented 2026-07-13):** the static
+`forthSource[256]` + `forthOuterActive` model below is SUPERSEDED. Each
+interpret carries a per-invocation `forthOuterCtx_t` (source[256], tokenizer
+position, openDef snapshot) on the CALLER'S C stack, chained through one
+static `forthOuterCur` pointer; `forthOuterDepth` caps nesting at
+`FORTH_OUTER_NEST_MAX` (2) with the same C-12 error. The tokenizer statics
+moved into the context; `openDef` is snapshot/restored around nesting via
+`forthDefStateSave`/`forthDefStateRestore`, so a nested line can never close
+or abort the outer line's definition. Idle BSS: ~255 B reclaimed (statics →
+one pointer + two bytes). Nesting deeper than 2 is unreachable by
+construction — a label XEQ from a program-context Forth step is
+continuation-style (fnExecute's nested branch pushes a level and defers
+stepping to the enclosing runProgram loop), so interpreter frames never
+stack past typed-line → program-step; the cap is a backstop, pinned by a
+hook-primed test. The copy discipline below (copy the X string BEFORE
+fnDrop) is unchanged and still normative.
 
 `fnForthOuter` (currently the `funcOK = false` stub in forth_bridge.c —
 delete that body; the real implementation must leave `funcOK` true on
@@ -1019,6 +1058,19 @@ Therefore in sub-phase C:
   `saved = programRunStop; programRunStop = PGM_RUNNING;
   reallyRunFunction(ITM_XEQ, label);
   if (programRunStop == PGM_RUNNING) programRunStop = saved;`
+
+  **[AMENDMENT PENDING RATIFICATION — PROPOSED_SPEC_CHANGES.md, §3.3.6
+  entry, 2026-07-13]:** the wrap above proved defective for ITM_XEQ
+  specifically, first exercised end-to-end by test T3.5: under a forced
+  PGM_RUNNING, `fnExecute` takes its nested branch (level push + fnGoto,
+  stepping deferred to an enclosing runProgram loop that does not exist
+  interactively) — the program never ran, a 3-block subroutine level leaked
+  per call, and §9.3 bump site A was suppressed. The committed
+  implementation dispatches `dynamicMenuItem = -1; fnExecute(label)`
+  directly, which bypasses the items.c normal-mode dispatch whose
+  refreshStatusBar pump was the §2.2 livelock this wrap defended against.
+  The wrap remains correct and NORMATIVE for the FTOK_C47 arm (§3.2), where
+  the dispatched items are ordinary functions, not the run-loop driver.
 - **Compile state:** same resolution succeeding in compile state raises
    `ERROR_INVALID_NAME` (48, "Invalid name") and aborts the definition (§3.3.7).
    Message intent: "cannot compile a C47 label call (stage 2)".
@@ -1384,6 +1436,21 @@ Mirror these for the Forth region (hook H5, §6). Because links are
 region-relative, the saved bytes are position-independent; on restore, set
 `fdict.base = TO_PCMEMPTR(savedRamPtr)`.
 
+**IMPLEMENTED (H5, 2026-07-13 — commits "P1 save/restore integration (H5)"
+and "P1 validator hardening"):** five name-keyed parameters in the package
+patch of `saveRestoreBackup.c`, anchored after the `programList` pair on
+both the save and restore sides: `forthDictBase` (c47Ptr) plus
+`forthDictSizeBlocks`/`forthDictHere`/`forthDictLatest`/`forthDictCount`
+(uint16). No `...Offset` companion is needed — `fdict.base` is always the
+block-aligned raw allocC47Blocks result. Defaults are pre-seeded before
+every `restoreStateValue` call, so pre-H5 backup files load as an empty
+dictionary. `forthDictValidateRestored()` (forth_dict.c) clamps
+inconsistent restored state to empty; on failure it deliberately ORPHANS
+the region rather than freeing through the very allocation tables it just
+failed to trust (documented P-4 exception). The config.c self-test hook is
+run-once guarded because restoreCalc re-enters doFnReset. Tests
+T1.1–T1.4 + T1.3b (validator direct pins), all mutation-verified.
+
 ### 5.6 Allocator double-free guard (override: core/freeList.c)
 
 upstream `freeListFree` has no defense against a double free or an invalid
@@ -1683,7 +1750,39 @@ One step shape, two meanings (encoding normative in §2.1, P-1):
   one source step. An unterminated definition is aborted and reported at that
   step (§9.7).
 
-### 9.2 Execution semantics — execute-in-place (Architecture 1)
+### 9.2 Execution semantics — run-start pre-scan (Architecture 2; supersedes execute-in-place)
+
+**STAGE 2 AMENDMENT (rulings D-2 a/b/c, implemented 2026-07-13 — commits
+"P2 engine (pre-scan)" and "P2 tests T2.5-T2.8"):** Architecture 2 is BUILT.
+`forthProgramStep` now runs `forthRunGenCheckReset()` (which also resets the
+scanned-programs list), then a FIRST-TOUCH PRE-SCAN of the owning program
+(`forthPreScanOwningProgram`: every ITM_FORTH source step is interpreted in
+`DEFS_ONLY` mode — definitions compile, interpret-state tokens are skipped:
+D-2a, no early tail execution), then executes the current payload in
+`SKIP_DEFS` mode (`:`…`;` regions consumed without touching the dictionary:
+D-2b, no recompilation). Scope is exactly the owning program (D-2c),
+resolved via `forthOwningProgramStart`/`forthNextProgramStart`
+(forth_bridge.c). Tracking: `forthScannedProgs[FORTH_SCAN_MAX=8]` +
+`forthScannedCount`, reset with the dictionary at the generation seam. The
+stored program representation is UNCHANGED, as promised below. Interactive
+`fnForthOuter` keeps `FULL` (compile-and-execute-in-place) semantics.
+
+Forward-reference parity gained: interpret-state (tail) references resolve
+against any definition in the same program, earlier or later. Documented
+limitations: (1) definition-BODY forward references (def → later def) still
+error at pre-scan time, at the referencing step (standard Forth
+define-before-use); (2) a pre-scan error halts the run at the triggering
+step BEFORE its tail executes, and the program stays unrecorded, so a fixed
+program re-scans; (3) scan-list overflow (>8 Forth-bearing programs per
+run) re-scans and recompiles on later touches — shadowing keeps lookups
+correct at the cost of dictionary bytes; (4) editing programs between
+single-steps leaves dictionary and scan list stale until the next
+generation bump (pre-existing §9.3 boundary; recorded pointers are only
+compared, never dereferenced). The "Reachability constraint" bullet below
+is RESOLVED by this amendment; the rest of this section (dispatch site,
+halting, SST parity, interactive dispatch) remains accurate as written.
+
+#### Original Architecture 1 text (dispatch site still normative)
 
 **Runner dispatch site.** `executeOneStep`'s `PTP_REM` arm — package-owned
 [VERIFIED: packages/forth-core/programming/lblGtoXeq.c:838-863] — gains an
@@ -1721,7 +1820,8 @@ else if(op == ITM_FORTH) {
   not corruption. Architecture 2 (a run-start pre-scan that compiles all
   `:`-lines first, giving forward-reference parity) hangs off the §9.3
   run-generation seam and changes **nothing** in the stored representation;
-  it is explicitly NOT built now.
+  ~~it is explicitly NOT built now~~ **[SUPERSEDED 2026-07-13: built — see
+  the Stage 2 amendment at the top of this section]**.
 - **SST parity.** Single-stepping executes one whole source line per SST
   press — one `executeOneStep` call [VERIFIED:
   packages/forth-core/programming/lblGtoXeq.c:925 — one call per loop
@@ -2113,12 +2213,12 @@ dictionary high-water mark; budget unchanged (≤ 2 KB on the 64 KB part).
 
 ### 9.10 Open decisions / gaps (ranked by implementation impact)
 
-1. **[GAP — save/restore]** `saveRestoreBackup.c` H5 (§5.5) is still not in
-   the tree. Program steps (including `ITM_FORTH` payloads) ride the
-   existing program-memory save unchanged, but the *dictionary* does not
-   round-trip. Acceptable for this stage only because §9.3 makes the
-   dictionary run-scoped/reconstructible; becomes blocking the moment
-   cross-run persistence is promised.
+1. **[RESOLVED — H5 implemented 2026-07-13]** The `saveRestoreBackup.c`
+   package patch carries the five `forthDict*` parameters; restored state
+   is validated (`forthDictValidateRestored`) and pre-H5 backups default to
+   an empty dictionary. See the §5.5 IMPLEMENTED block. The dictionary now
+   round-trips the simulator backup; §9.3 run-scoping still governs its
+   lifetime across runs.
 2. **[RESOLVED — FCALL reject-and-redirect, ratified 2026-07-11 series]** A PEM gesture that would record ITM_FCALL+widx is rewritten to the §9.2 stored form with the word's NAME (reverse lookup via forthDictNameByIndex); an unresolvable/indirect widx is rejected with ERROR_NON_PROGRAMMABLE_COMMAND. Implemented in the manage.c override's insertStepInProgram FCALL arm; verified by test_fcall_redirect_records_name / test_fcall_redirect_rejects_stale. The names-only invariant (§4.2 P-3) is enforced at entry.
 3. **[GAP — text export/import]** `decodeOneStep_XPORT`
    (src/c47/saveRestorePrograms.c:203) will emit `»FORTH`/`FORTH«`/
@@ -2135,7 +2235,10 @@ dictionary high-water mark; budget unchanged (≤ 2 KB on the 64 KB part).
     Program-text export round-trip remains [GAP] — see item 3.
 5. **[Documented boundary]** R/S-after-`GTO` cold starts inherit the
    previous run's dictionary generation (§9.3). Revisit only if user
-   reports demand it; Architecture 2 subsumes it.
+   reports demand it; Architecture 2 subsumes it. *(Architecture 2 landed
+   2026-07-13: the boundary itself is unchanged — bump sites did not move —
+   but it is now benign, because the first touch in any generation
+   re-scans the owning program.)*
 
 ---
 

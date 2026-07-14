@@ -1564,6 +1564,17 @@ Mutation verification (mandatory):
 
 ## Q15 — Pillar 2 tests, part 2 (T2.5–T2.8) + arena report, then commit
 
+> **STATUS: COMPLETED (2026-07-13) — SERIES FINISHED.** Qwen's four tests
+> were structurally sound; two carried the recurring payload-length
+> miscount (T2.6: len 19 for 20 bytes; T2.8: len 11 for 9 bytes plus the
+> derived use-step offset). The T2.8 desync was the reported segfault
+> (again mis-attributed by stdout buffering to test_outer_ctx_at_rest;
+> gdb placed it in T2.8's writeTestProgram → scanLabelsAndPrograms).
+> Fixed by architect; gate green at 121 PASS; all four mutations verified
+> RED; committed as "forth-core: P2 tests T2.5-T2.8 + arena report".
+> Arena high-water (post-prescan, T2.8): here=16 sizeBlocks=4; suite-end:
+> here=36 sizeBlocks=16, freeRamDelta=64.
+
 Read: your Q14 tests in `test_dict_reloc.c` (grep `test_prescan_` and read
 that region) — reuse their harness pattern verbatim.
 
