@@ -508,3 +508,31 @@ Out: EC=0 R01=Stri:"[1\x80\xd71 \xa1\x02 Matrix]Z"
 Func: fnAlphaIP
 In:  FARG=101 RY=Stri:"AB" RX=Real:"5"
 Out: EC=0 RY=Stri:"AB5"
+
+;=== tightened error branches: pin the operand as well as the code ===
+; The error cases above assert only the error code; a case that leaves the code correct but
+; corrupts the operand would still pass. These variants pin the untouched operand as well.
+; x->ALPHA into X, real >1e6 clamps to 1e6 which is still out of range -> EC=8, X untouched
+Func: fnXToAlpha
+In:  FARG=100 RX=Real:"2000000"
+Out: EC=8 RX=Real:"2000000"
+; deprecated >x->ALPHA< with an out-of-range long integer -> EC=8, X untouched
+Func: fnXToAlphaOld
+In:  RX=LonI:"40000"
+Out: EC=8 RX=LonI:"40000"
+; deprecated >x->ALPHA< with a real >1e6 clamped then out of range -> EC=8, X untouched
+Func: fnXToAlphaOld
+In:  RX=Real:"2000000"
+Out: EC=8 RX=Real:"2000000"
+; deprecated >x->ALPHA< with a complex operand -> EC=24, X untouched
+Func: fnXToAlphaOld
+In:  RX=Cplx:"1i2"
+Out: EC=24 RX=Cplx:"1i2"
+; APOS? with a numeric X out of range while converting to a glyph -> EC=8, searched register untouched
+Func: fnAlphaPos
+In:  FARG=0 R00=Stri:"AB" RX=Real:"40000"
+Out: EC=8 R00=Stri:"AB"
+; AIP with a complex X is an invalid type -> EC=24, target register untouched
+Func: fnAlphaIP
+In:  FARG=0 R00=Stri:"HELLO" RX=Cplx:"1i2"
+Out: EC=24 R00=Stri:"HELLO"
