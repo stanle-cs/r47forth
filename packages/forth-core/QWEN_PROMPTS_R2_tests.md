@@ -1,27 +1,11 @@
-# R2 test-suite credibility — Qwen implementation prompts
+# R2 test-suite credibility repairs — Qwen implementation prompts
 
-15 tasks, strictly ordered. Each is sized for a ~100k-token context window: it
-names the only files and anchors to read, and never requires reading DESIGN.md.
+8 tasks, strictly ordered. Each is sized for a ~100k-token context window: it
+names the only files and line ranges to read, and never requires reading
+DESIGN.md.
 
 **How to use:** paste the PREAMBLE, then one task block, into a fresh Qwen
 session. Do not run tasks out of order.
-
-**Owner prerequisite:** the reviewed working tree contains unfinished,
-pre-existing audit-probe work at the runner and EOF of
-`packages/forth-core/test_dict_reloc.c`. The exact working-tree gate does not
-compile: `audit_probe_marker_edit_leak`, `audit_probe_c47_fixed_param`,
-`audit_probe_parameterized_resolver`, and `audit_probe_first_ensure_capacity`
-are called without definitions, and `audit_probe_buried_catalog` ends after
-`showSoftmenu(-MNU_CLK);` with no closing brace or `#endif`. Do not let Qwen
-delete, complete, or reinterpret that foreign WIP. The owner must first finish
-it or supply its intended final text. Tasks below assume that prerequisite has
-been resolved and the baseline compiles.
-
-The reviewer temporarily replaced only those incomplete probe hunks with their
-previous runner/EOF shape to execute mutations, then restored the original WIP.
-That normalized baseline still failed `test_truncated_inline_operand` with
-`error 0, expected corrupted-data 18`. No production change from this review
-remains in the tree.
 
 ---
 
@@ -34,716 +18,679 @@ function, or search string) does not match what you find, STOP immediately and
 report the mismatch instead of guessing.
 
 Rules:
-1. Confirm `git branch --show-current` is `forth-core/pem-entry-fixes`. If not,
-   STOP.
+1. Confirm `git branch --show-current` is `forth-core/pem-entry-fixes`. If not, STOP.
 2. The only build/test command is `./packages/forth-core/build-test.sh`.
-   Success = `FORTH SELF-TEST: ALL PASSED` and
-   `==> BUILD + SELF-TEST GREEN.` and exit 0. Never invoke meson or ninja.
-3. All edits go in `packages/forth-core/`. Never edit `src/`. Never hand-edit
-   generated `patches/` or `files/`; `build-test.sh` refreshes them.
-4. Never touch `src/c47/core/freeList.c` or any copy. Never read DESIGN.md,
-   DESIGN-HISTORY.md, or a large source in full. Never read `items.c` at all;
-   use `grep -a`. Read `test_dict_reloc.c`, `manage.c`, `keyboard.c`, and
-   `softmenus.c` only at the anchors named by the task, at most 60 lines per
-   slice.
-5. Match surrounding style. Keep production changes minimal: flash/RAM are the
-   binding constraints.
-6. Do not commit unless the task explicitly tells you to. Never use `git stash`,
-   `git reset`, `git checkout --`, or `git restore`; never use `git add -A`.
-   Reverse a temporary mutation only with an explicit inverse `apply_patch`.
-7. If an anchor differs, a named old-contract test fails, or the owner
-   prerequisite above is unresolved, STOP and report. Never weaken a test to
-   make a production regression pass.
-8. For any dictionary test, paste the `FORTH ARENA:` line in the report.
-9. The three free-list guard tests intentionally print `errorf` diagnostics.
-   Do not attribute diagnostics by adjacent buffered output; use a debugger
-   backtrace if attribution matters.
-10. Report edits, the exact gate result, every mutation result, and surprises.
-
-For a mutation-only task, apply one listed mutation, run the sanctioned gate,
-record the named RED symptom, and immediately apply the explicit inverse patch.
-Do not leave a mutant in the tree. `UNVERIFIED` below means the reviewer did not
-execute it; it is a required part of that Qwen task, not evidence already held.
+   Success = `FORTH SELF-TEST: ALL PASSED` and `==> BUILD + SELF-TEST GREEN.`
+   and exit 0. Never invoke meson or ninja directly — a hand-rolled build omits
+   the self-test suite entirely and reports green having asserted nothing.
+3. All edits go in `packages/forth-core/`. Never edit `src/`. The build reads
+   only the GENERATED `patches/`+`files/`; build-test.sh refreshes first, so
+   using the gate is sufficient. Never hand-edit `patches/`/`files/`.
+4. Never touch `src/c47/core/freeList.c` or any copy. Never read DESIGN.md or
+   DESIGN-HISTORY.md — your prompt carries every slice you need. Never read
+   items.c (it is enormous) or test_dict_reloc.c in full; read only the ranges
+   listed. Use `grep -a`.
+5. Match surrounding code style. Keep upstream-derived files byte-identical
+   except the marked change, so the generated patch stays small.
+6. Do not commit unless told. Never `git add -A`. **Never run `git stash`,
+   `git stash pop`, `git reset`, `git checkout -- <file>`, or `git restore`** —
+   the tree carries uncommitted work and `stash@{0}` is a foreign stash from
+   another branch. If you think you need to undo something, STOP and report. A
+   red gate is safe; a mangled tree is not.
+7. If the gate goes red on a test asserting the OLD behaviour your task was
+   written to change, that test is part of your task — but STOP and report
+   before touching it. Never make a test pass by weakening the change it caught.
+   If a task changes a contract without listing the tests that encode it, the
+   spec is wrong: say so and stop.
+8. Report what you changed, the gate output, and anything that surprised you.
 
 ---
 
-## R2-01 — Bound every inline dictionary operand
-
-**File(s):** `packages/forth-core/forth_inner.c`,
-`packages/forth-core/test_dict_reloc.c`
-
-**Read:** grep `static inline ftoken_t readToken`, `case FTOK_LIT`,
-`case FTOK_ILIT`, `case FTOK_BR`, `case FTOK_0BR`, `case FTOK_C47`, and
-`test_truncated_inline_operand`; read at most 60 lines around each anchor.
-
-**The defect.** A structurally valid restored word may end immediately after an
-inline opcode. `forthInner` checks neither the token fetch nor inline payloads
-against the logical end `fdict.here`; `test_truncated_inline_operand` constructs
-an ILIT with no four-byte operand. On the normalized review baseline the test
-was RED: `truncated ILIT returned error 0, expected corrupted-data 18`.
-
-**The change.** Add one `static inline bool_t` range predicate beside
-`readToken`. It accepts an offset and byte count and returns true only when
-`fdict.base != NULL`, `offset <= fdict.here`, and
-`byteCount <= fdict.here - offset`; use subtraction so addition cannot wrap.
-Before every dictionary read, require the exact number of bytes:
-
-- token fetch: 2;
-- `FTOK_LIT`: `sizeof(real34_t)`;
-- `FTOK_ILIT`: 4;
-- `FTOK_BR` and `FTOK_0BR`: 2;
-- `FTOK_C47` item id: 2;
-- `PTP_NUMBER_8` and `PTP_NUMBER_16`: 2, including the NUMBER_8 pad byte.
-
-On failure, set `lastErrorCode = ERROR_INVALID_CORRUPTED_DATA`, call the same
-`displayCalcErrorMessage` form already used for a corrupt call target, then
-`INNER_LEAVE()` before reading or changing the calculator stack. Keep the
-existing ILIT test unchanged.
-
-**Tests that encode the old contract.** None — accepting a truncated restored
-definition is not a supported contract.
-
-**Gate:** build-test green.
-
-*Verified mutation:* the review baseline is the escaping mutant: no ILIT bounds
-guard. Exact symptom: `FAIL: truncated ILIT returned error 0, expected
-corrupted-data 18`; the sentinel-X assertion did not fire.
-
-**Report:** paste the guard sites, exact gate result, mutation result, and arena
-line.
-
----
-
-## R2-02 — Make weak inner-interpreter assertions toothed
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/forth_inner.c`
-
-**Read:** grep each test name in the table and read that function only; in
-`forth_inner.c`, grep the token named by its mutation and read ±20 lines.
-
-**The defect.** Five tests accept a silent stop or an execution path that skips
-the behavior named by the docstring. Strengthen only these tests:
-
-| # | Test | Escaping mutation now | Required RED symptom after repair |
-|---:|---|---|---|
-| 2 | `test_branch_fwd` | Decode `BR` as operand-consuming no-op. `DROP` then the trailing ILIT still leaves X=42. | Add a stack/sentinel assertion so the skipped body is observable; mutant must fail that assertion. |
-| 7 | `test_literal_after_lit` | Remove/no-op the trailing ILIT and DROP; the test checks only `lastErrorCode`. | Assert the final stack/value effect of the live token; mutant must report the wrong X/depth. |
-| 17 | `test_rstack_overflow` | Stop immediately on CALL without setting an error. Any X other than 777 is currently accepted when `lastErrorCode==ERROR_NONE`. | Require `ERROR_RAM_FULL` and unchanged sentinel X=777. |
-| 18 | `test_runaway_guard` | Decode the back branch as EXIT/no-op. X remains 444 and no error is accepted. | Require the guard's current `ERROR_RAM_FULL` and unchanged X=444. |
-| 19 | `test_malformed_token` | Silently halt each malformed arm without an error or executing sentinel 555. | Require each arm's current error: bad primitive `ERROR_OPERATION_UNDEFINED`; bad call and reserved token `ERROR_INVALID_CORRUPTED_DATA`; retain sentinel checks. |
-
-Do not alter production behavior in this task. For tests 2 and 7, construct the
-expected stack explicitly before execution and assert both the intended X and
-the stack effect already required by the word; do not rely on a value that a
-later instruction overwrites. For tests 17–19 add the exact error assertions
-above.
-
-**Tests that encode the old contract.** The five named tests are re-aimed, not
-deleted. No production contract changes.
-
-**Gate:** build-test green.
-
-*Mutation: UNVERIFIED — the reviewer proved the assertions are logically
-permissive but did not run these five mutants because the exact working tree
-does not compile. Run each table mutation and record its named RED symptom.*
-
-**Report:** paste each mutant and the exact assertion that caught it, plus arena.
-
----
-
-## R2-03 — Verify the remaining inner-interpreter teeth
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/forth_inner.c`
-
-**Read:** grep each test and token/function named below; one ±20-line subject
-slice and one test body at a time.
-
-**The defect.** No structural defect was found in these tests, but their
-docstring mutations were not executed during review. Verify every row; if a
-mutant is green, stop and report instead of improvising a new assertion.
-
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 1 | `test_stack_aslift` | Remove normal-return `setSystemFlag(FLAG_ASLIFT)`. | ASLIFT assertion false. |
-| 3 | `test_branch_back` | Reverse/ignore the negative BR delta. | X is not 0 or runaway error. |
-| 4 | `test_0br_longint` | Test long integers through `real34IsZero`. | Zero long integer takes wrong arm; X=999 instead of 42. |
-| 5 | `test_0br_consumes` | Remove `fnDrop` from `popIsFalse`. | Y remains 7 / stack-effect assertion fails. |
-| 6 | `test_0br_longint_taken_branch` | Treat long-integer zero as true. | Wrong arm, X=999 instead of 42. |
-| 8 | `test_lit_roundtrip` | Advance LIT by 8 rather than `sizeof(real34_t)`. | Trailing ILIT misdecodes; error or X!=777. |
-| 9 | `test_c47_ptp_none` | Always consume a parameter cell for `PTP_NONE`. | Trailing ILIT misdecodes; X!=55 or error. |
-| 10 | `test_c47_ptp_number8_padded` | Advance NUMBER_8 by one byte, not its padded cell. | Trailing token misdecodes; X!=33 or error. |
-| 11 | `test_c47_bad_ptp` | Dispatch an unsupported PTP instead of rejecting it. | Expected error is absent. |
-| 12 | `test_c47_nested_call_succeeds` | Restore a single-level reentrancy refusal. | Nested call errors or X!=999. |
-| 13 | `test_nested_preserves_outer_rstack` | Reset `rsp` on nested entry. | Outer tail does not reach X=9 or rstack/depth assertion fails. |
-| 14 | `test_nested_error_unwinds_rsp` | Omit nested-entry rsp watermark restore. | `rsp!=0` or follow-up execution fails. |
-| 15 | `test_outer_real_literal` | Reject/skip a real literal. | Error, wrong type, or wrong value. |
-| 16 | `test_div_zero_halt` | Continue dispatch after divide-by-zero. | Sentinel X=999 executes. |
-| 21 | `test_ilit_sign_extend` | Reconstruct byte zero through `int8_t`. | 128/300/-200 assertion fails. |
-| 22 | `test_ilit_arithmetic_divergence` | Apply the same sign-extension regression. | Arithmetic result is not 170. |
-| 23 | `test_br_delta_sign_extend` | Reconstruct branch delta through unsigned/byte sign extension. | Error or X!=777. |
-| 24 | `test_ilit_compile_interpret_parity` | Regress only compiled ILIT reconstruction. | Interpreted and compiled results diverge. |
-
-**The change.** Mutation verification only. Leave no source change if every row
-is RED for the stated reason.
-
-**Tests that encode the old contract.** None.
-
-**Gate:** build-test green after all inverse patches.
-
-*Mutation: UNVERIFIED — run every row and record the exact symptom.*
-
-**Report:** mutation/result matrix and arena line.
-
----
-
-## R2-04 — Verify outer-interpreter behavior without shared-state excuses
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/forth_compile.c`
-
-**Read:** grep the nine test names and the named tokenizer/guard anchor; read
-only the function bodies and ±20 subject lines.
-
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 25 | `test_outer_simple_expr` | Remove DUP or `+` dispatch. | X!=6. |
-| 26 | `test_outer_compile_invoke` | Skip compilation or invocation. | Error or X!=9. |
-| 27 | `test_outer_nonstring_x` | Remove the X-type guard. | Expected type error is absent/wrong. |
-| 28 | `test_outer_glyph_cross` | Remove the multiplication-glyph mapping. | Wrong value or lookup error. |
-| 29 | `test_outer_glyph_dot` | Remove the dot-glyph mapping. | Wrong parsed value/error. |
-| 30 | `test_outer_glyph_divide` | Remove the divide-glyph mapping. | Wrong quotient/error. |
-| 31 | `test_outer_nesting_tokenizer` | Reuse one static tokenizer context for nested input. | X!=5 or Y!=3. |
-| 32 | `test_outer_depth_cap` | Remove the depth cap, then separately omit context restore on the continuation arm. | Forbidden line executes/no expected error; second mutant leaves wrong X/depth. |
-| 33 | `test_outer_ctx_at_rest` | Omit final tokenizer-context restoration. | Context pointer non-NULL or depth nonzero. |
-
-**The defect.** No bad fixture was found in this group; mutations remain
-unexecuted. `test_outer_depth_cap` deliberately primes depth through its test
-hook because the guard itself is the subject; that is legitimate, not the
-derived-state defect seen in the PEM tests.
-
-**The change.** Mutation verification only. Stop on any green mutant.
-
-**Tests that encode the old contract.** None.
-
-**Gate:** build-test green after inverse patches.
-
-*Mutation: UNVERIFIED — exact working baseline was uncompilable.*
-
-**Report:** matrix and arena line.
-
----
-
-## R2-05 — Replace component tests that claim end-to-end dispatch coverage
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/ui/tam.c`, `packages/forth-core/keyboard.c`,
-`packages/forth-core/config.c`
-
-**Read:** grep `test_xeq_end_to_end`, `test_tam_dispatcher`,
-`test_xeq_item_lookup`, `test_lifecycle_reset`; in subjects grep
-`tamProcessInput`, `_tamProcessInput`, `executeFunction`, `FORTH_SELFTEST_EXPORT`,
-and the `forthDictInit` call in the reset path. Read ±30 lines each.
-
-**The defect.** Four test names/docstrings overstate their path coverage:
-
-- #34 `test_xeq_end_to_end` calls `fnForthCall` directly. Deleting XEQ routing
-  leaves it green; it proves only the bridge function.
-- #35 `test_tam_dispatcher` calls `reallyRunFunction(ITM_FCALL, idx)` directly.
-  Deleting the TAM H-hook leaves it green. Public `tamProcessInput(uint16_t)` is
-  callable and must be the entry point.
-- #38 `test_xeq_item_lookup` says a label shadows an item but creates no label
-  collision; reversing that precedence is not tested.
-- #42 `test_lifecycle_reset` calls `forthDictInit()` itself after staging the
-  word. Deleting the production reset hook in `config.c` leaves it green.
-
-**The change.** Keep the direct component coverage but rename #34 to
-`test_fnforthcall_end_to_end`. Add a separate keyboard integration test by
-changing the existing `static void executeFunction` declaration and definition
-to `FORTH_SELFTEST_EXPORT void executeFunction`, using the already-defined macro
-whose production expansion is `static`; declare it `extern` in the self-test.
-Drive its real XEQ input state and assert the Forth word result. Re-aim #35 to
-enter through public `tamProcessInput`, not `reallyRunFunction`. In #38 create
-both a calculator label and a Forth item with the same spelling, then assert the
-documented winner. In #42 invoke the actual reset entry point containing the
-production `forthDictInit` hook; do not call `forthDictInit` from the test after
-staging the word.
-
-If the reset entry point or the exact keyboard state cannot be driven without a
-new test-only export, use the same `FORTH_SELFTEST_EXPORT` pattern so production
-linkage stays static. Do not simulate the file-static chain with hand-written
-state changes.
-
-**Tests that encode the old contract.** Re-aim the four named tests; preserve
-their direct component checks under truthful names where specified.
-
-**Gate:** build-test green.
-
-*Mutation: UNVERIFIED — run these four deletions/reversals. Required symptoms:
-XEQ integration leaves the result unchanged; TAM dispatch leaves the result
-unchanged; collision resolves to the item rather than the label; production
-reset leaves the staged word visible.*
-
-**Report:** exact entry points driven, test-only exports, four mutant symptoms,
-and arena line.
-
----
-
-## R2-06 — Verify the remaining H1, lifecycle, and dictionary-error tests
-
-**File(s):** `packages/forth-core/test_dict_reloc.c` and the one small
-`forth_*.c` subject named by each test
-
-**Read:** grep each test name; then grep the called subject identifier. Do not
-read `items.c`.
-
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 36 | `test_reentrancy` | Remove the reentrancy/depth guard. | Inner call proceeds; expected error/depth assertion fails. |
-| 37 | `test_xeq_precedence` | Resolve a colon word before a calculator label. | Label-shadow assertion fails. |
-| 39 | `test_fnforthcall_interactive` | Hard-code `fromProgram=true`. | X remains 999 / interactive execution fails. |
-| 40 | `test_lblq_undefined_no_ub` | Any production mutation. | **No RED exists:** function prints `DEFERRED` and returns 0 unconditionally. Decoration. Replace it with a real callable-path test or delete it; do not count it. |
-| 41 | `test_lifecycle_pre_init` | Remove the pre-init/base-null guard. | Crash, lookup succeeds unexpectedly, or required error missing. |
-| 43 | `test_dict_name_too_long` | Accept an overlong name or suppress its error. | Error/visibility assertion fails. |
-| 44 | `test_dict_space_full` | Permit allocation past the arena or suppress error. | Unexpected success or missing error. |
-
-**The defect.** #40 is the only defined-and-called test for which no mutation
-can make the current body RED. Replace it only if the undefined-label path is
-callable from this harness; otherwise delete the test and its runner line and
-print no PASS/DEFERRED claim. The other rows need mutation verification.
-
-**The change.** Remove decorative success from #40. Mutation-test the remaining
-rows one at a time.
-
-**Tests that encode the old contract.** #40 is delete-or-replace; the rest stay.
-
-**Gate:** build-test green.
-
-*Mutation: UNVERIFIED — #40 is proven structurally incapable of RED; the other
-mutants were not executed.*
-
-**Report:** #40 disposition, mutation matrix, arena line.
-
----
-
-## R2-07 — Make parser and static-source checks fail closed
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/forth_compile.c`
-
-**Read:** grep tests #45–#51 and `test_undo_rows_us_enabled`; read each body
-only. Grep parser anchors in `forth_compile.c`; do not read `items.c`.
-
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 45 | `test_number_then_no_label_fallthrough` | Fall through from a parsed number to label lookup. | Function-not-found/wrong W or error assertion. |
-| 46 | `test_prefix_no_match` | Compare only the input prefix. | `SQUARE` is incorrectly found. |
-| 47 | `test_number_1e_minus_5` | Reject an exponent sign. | Parse error or wrong numeric value. |
-| 48 | `test_number_bad_e5` | Accept `E5`. | Expected syntax error absent. |
-| 49 | `test_number_bad_dot_e5` | Accept `.E5`. | Expected syntax error absent. |
-| 50 | `test_number_bad_3e` | Accept `3E`. | Expected syntax error absent. |
-| 51 | `test_number_bad_lone_dot` | Accept `.`. | Expected syntax error absent. |
-| 52 | `test_undo_rows_us_enabled` | Rename/reformat the searched source rows so the scanner finds nothing. | **Currently green:** fopen failure or missing row prints SKIP and returns 0. |
-
-**The defect.** #52 is a static text scan with two silent-green exits. Make an
-open failure and “row not found” return failure. Keep the runtime PTP test in the
-next task; it does not cover US.
-
-**The change.** Change only #52's SKIP returns to FAIL returns, and preserve its
-source path/row predicates. Mutation-test all eight rows.
-
-**Tests that encode the old contract.** #52 is hardened; no production contract.
-
-**Gate:** build-test green.
-
-*Mutation: UNVERIFIED — structural inspection proves #52's missing-file/row
-mutants green; parser mutants were not run.*
-
-**Report:** eight mutation results and arena line where applicable.
-
----
-
-## R2-08 — Verify program-step representation and correct prescan fixtures
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/forth_bridge.c`, `packages/forth-core/forth_compile.c`
-
-**Read:** grep tests #53–#64 and `writeTestProgram`; read one test at a time.
-In `forth_bridge.c` grep `forthEntryStateAtInsertion`; in `forth_compile.c` grep
-the prescan entry point. Read ±30 lines only.
-
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 53 | `test_forth_step_ptp_rem` | Return `PTP_NONE` instead of REM. | Status assertion fails. |
-| 54 | `test_forth_step_sizing` | Size source payload as bare opcode/fixed item. | Length/next-step assertion fails. |
-| 55 | `test_program_step_define_and_use` | Skip compile or execution of a source step. | Word absent or X wrong. |
-| 56 | `test_program_step_gen_reset` | Keep the compiled-generation cache across reset. | Generation/recompile assertion fails. |
-| 57 | `test_prescan_forward_reference` | Compile only definitions before the call. | **Currently green:** fixture puts the definition before the call despite claiming a forward reference. |
-| 58 | `test_prescan_no_early_tail` | Continue scan past owning program END. | Tail definition becomes visible. |
-| 59 | `test_prescan_no_recompile` | Recompile on every touch. | count/here changes. |
-| 60 | `test_prescan_owning_scope` | Scan from global start rather than owning program start. | Wrong-scope definition visible/missing. |
-| 61 | `test_prescan_generation_rearm` | Ignore generation change. | Reset word not recompiled/visible. |
-| 62 | `test_prescan_error_halts` | Continue after prescan compile error. | Tail executes or wrong error. |
-| 63 | `test_prescan_last_step_visible` | Stop before the last source step. | Last word absent. |
-| 64 | `test_prescan_two_programs_first_touch` | Cache only one global “already scanned” pointer. | **Currently green:** fixture touches P1 then P2 but never touches P1 again. |
-
-**The change.** In #57 put the call step before the `: FWD ... ;` source step,
-set `currentStep` to the first call payload, and recalculate offsets from the
-actual encoded lengths; do not park on a different step and hand-assign derived
-state. In #64 execute P1, then P2, then P1 again and assert the third touch does
-not change `fdict.count` or `fdict.here` and does not duplicate/recompile P1.
-Mutation-test every row.
-
-**Facts the harness forces on you.** `writeTestProgram` appends only `.END.`
-bytes `FF FF`. Explicit `0x85,0xB2` is a real `ITM_END`. Prescan fixtures #60
-and #64 use explicit END as a program separator; keep it. Do not add a second
-END blindly.
-
-**Tests that encode the old contract.** #57 and #64 are re-aimed; all others
-stay.
-
-**Gate:** build-test green.
-
-*Mutation: UNVERIFIED — #57 and #64 escaping mutants are proven from fixture
-shape but were not executed; all other rows require execution.*
-
-**Report:** final byte arrays/cursor offsets, mutation matrix, arena line.
-
----
-
-## R2-09 — Verify marker, entry-state, and FCALL tests on their real bytes
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/forth_bridge.c`, `packages/forth-core/programming/manage.c`
-
-**Read:** grep tests #65–#75; read each function only. Grep
-`addStepInProgram` and read the cursor-advance lines plus ±20; grep
-`forthEntryStateAtInsertion` and read that function.
-
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 65 | `test_dict_name_by_index` | Return latest name regardless of index. | Name/index assertion fails. |
-| 66 | `test_exec_step_marker_noop` | Execute a zero-length marker as source. | Error, X, or dictionary changes. |
-| 67 | `test_exec_step_source_runs` | Drop source-step dispatch. | X!=9. |
-| 68 | `test_exec_step_halts_on_error` | Continue after source error. | Following sentinel executes / error changes. |
-| 69 | `test_marker_parity` | Decode only one marker direction. | Parity assertion fails. |
-| 70 | `test_entry_state_derivation` | Derive from current step instead of predecessor. | Direction/state table fails. |
-| 71 | `test_toggle_inserts_marker` | Insert one marker direction for both toggles. | Bytes/state assertion fails. |
-| 72 | `test_fcall_redirect_records_name` | Store dictionary index instead of name payload. | Byte/name assertion fails. |
-| 73 | `test_fcall_redirect_rejects_stale` | Accept a stale dictionary index. | Unexpected step insertion. |
-| 74 | `test_forth_empty_enter_leaves_no_step` | Remove `hadText` from the E5 multi-line-lock predicate. | `FAIL: FLAG_ALPHA still set after E3 deletion`. |
-| 75 | `test_forth_edit_extracts_source` | Treat a bare source payload as a labelled string. | Extracted text/cursor assertion fails. |
-
-**The defect.** #68 constructs a standalone stack buffer although production
-source-step execution is described elsewhere as owning-program scoped. Move it
-into a real `writeTestProgram` program before mutation testing, preserving the
-same error and following-sentinel assertions. #72 prints `s + 4` after
-`cleanupTestProgram`; copy the displayed name to a local buffer before cleanup
-or print before cleanup so the PASS path does not dereference freed program
-memory.
-
-**Facts the harness forces on you.** `addStepInProgram` advances one step before
-inserting. A cursor parked on an RPN step therefore makes that RPN step the
-predecessor. The explicit-END toggle fixtures are otherwise correct: END makes
-the pre-move a no-op. Marker-only capture fixtures intentionally omit ITM_END;
-the appended `.END.` is their insertion point.
-
-**The change.** Correct #68 and the #72 PASS print; mutation-test every row.
-
-**Tests that encode the old contract.** #68 is fixture migration only; #72's
-assertions remain.
-
-**Gate:** build-test green.
-
-*Verified mutation:* #74 was executed. Exact RED symptom was
-`FLAG_ALPHA still set after E3 deletion`.
-
-*Mutation: UNVERIFIED — rows other than #74 require execution.*
-
-**Report:** #68 byte program/cursor, #72 lifetime fix, matrix, arena line.
-
----
-
-## R2-10 — Verify rendering and menu registration tests
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/programming/decode.c`, `packages/forth-core/softmenus.c`
-
-**Read:** grep tests #76–#80. In subjects grep the exact menu/opcode identifiers
-used by those bodies; read ±20 lines only. Never read `softmenus.c` whole.
-
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 76 | `test_decode_marker_directions` | Render both marker directions identically. | One expected rendering differs. |
-| 77 | `test_decode_source_bare` | Restore label-style prefix/suffix around source. | Bare-render string assertion fails. |
-| 78 | `test_mnu_forth_row` | Remove/renumber the Forth menu row. | Row identifier/content assertion fails. |
-| 79 | `test_dynamic_menu_registration` | Remove dynamic Forth menu registration. | Dynamic lookup/count assertion fails. |
-| 80 | `test_static_menu_integrity` | Insert Forth into the wrong static table/terminator position. | Integrity/sentinel assertion fails. |
-
-**The defect.** No fixture defect found. Execute the named mutants.
-
-**The change.** Mutation verification only.
-
-**Tests that encode the old contract.** None.
-
-**Gate:** build-test green after inverse patches.
-
-*Mutation: UNVERIFIED — exact baseline did not compile.*
-
-**Report:** mutation matrix.
-
----
-
-## R2-11 — Make picker tests prove sorting, bounds, and NULL handling
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/softmenus.c`
-
-**Read:** grep tests #81–#92 and their called picker helper names; read each test
-body. In `softmenus.c`, grep those helpers and read ±30 lines; never read the
-file whole.
-
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 81 | `test_picker_scan_basic` | Remove sorting. Program order is SQ then CUBE. | **Currently green:** only presence/count are checked. Require exact order CUBE,SQ. |
-| 82 | `test_picker_omits_long_names` | Admit names beyond the display limit. | Count/presence assertion fails. |
-| 83 | `test_picker_dedupes` | Remove duplicate suppression. | Count/name duplication fails. |
-| 84 | `test_picker_insert_at_cursor` | Insert at line start/end instead of cursor. | Exact text/cursor fails. |
-| 85 | `test_picker_insert_mid_line` | Append rather than splice. | Exact text/cursor fails. |
-| 86 | `test_picker_trailing_space` | Omit/add the separator incorrectly. | Exact text/cursor fails. |
-| 87 | `test_picker_guard_menu_identity` | Ignore menu identity. | Predicate table fails. |
-| 88 | `test_picker_glyph_tokenize` | Split a glyph token as bytes. | Token/name assertion fails. |
-| 89 | `test_picker_long_token_skipped` | Restore unchecked copy. | **Named mutant is green in the sanctioned non-ASAN gate.** Add a canary-bounded fixture/assertion; do not claim ASAN coverage. |
-| 90 | `test_program_memory_no_overlap` | Let program allocation overlap dictionary region. | Range assertion fails. |
-| 91 | `test_cleanup_no_overlap` | Free/cleanup the wrong region. | Post-cleanup range/free-list assertion fails. |
-| 92 | `test_softmenu_trailing_null` | Return `numItems=1` with `menuContent=NULL`. | **Currently green:** terminator check is conditional on non-NULL. Require non-NULL first; initialize the allocation before checking its terminator. |
-
-**The change.** Add exact sorted-order assertions to #81. For #89, surround the
-destination with fixed canary bytes and assert both remain unchanged after the
-long token; the test must fail deterministically without ASAN. In #92 fail if
-`numItems != 1` or `menuContent == NULL`, then assert the initialized trailing
-NULL slot. Mutation-test all rows.
-
-**Tests that encode the old contract.** #81, #89, #92 are hardened only.
-
-**Gate:** build-test green.
-
-*Mutation: UNVERIFIED — the three escaping paths were established by control
-flow inspection, not an executed mutant; all rows require execution.*
-
-**Report:** exact new assertions/canaries, mutation matrix, arena line.
-
----
-
-## R2-12 — Verify continuation and GTO/XEQ opcode tests
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/programming/manage.c`,
-`packages/forth-core/programming/lblGtoXeq.c`
-
-**Read:** grep tests #93–#100 and read each body. In subjects grep only the
-called function/opcode and read ±20 lines; never read `lblGtoXeq.c` whole.
-
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 93 | `test_e2_continuation_after_enter` | Ignore a source predecessor when ENTER continues capture. | Marker/source/state assertion fails. |
-| 94 | `test_e2_not_inside_rpn_gap` | Treat an RPN predecessor as inside Forth. | Unwanted continuation/marker assertion fails. |
-| 95 | `test_gto_word_errors` | Suppress missing/invalid GTO word error. | Required error absent/wrong. |
-| 96 | `test_gto_item_errors` | Resolve an invalid item as a label/word. | Required error absent/wrong. |
-| 97 | `test_xeq_word_still_calls` | Route XEQ word through GTO/error path. | X/result or call assertion fails. |
-| 98 | `test_useritem_xeqp1_opcode` | Truncate ITM_XEQP1 low byte to 0x2F. | Encoded byte probe fails. |
-| 99 | `test_useritem_xeqp1_decodes` | Reconstruct opcode without the high-bit convention. | Rendered item/name differs. |
-| 100 | `test_e1_direction_mid_program` | Insert the wrong marker direction mid-program. | Exact bytes/state fail. |
-
-**The defect.** No fixture defect found. #93 parks on appended `.END.` so the
-source step is the predecessor; #94 parks on an RPN step, pre-moves to the
-closing marker, and therefore makes the RPN step the predecessor. Those setups
-match `addStepInProgram` semantics and must not be “simplified.”
-
-**The change.** Mutation verification only.
-
-**Tests that encode the old contract.** None.
-
-**Gate:** build-test green after inverse patches.
-
-*Mutation: UNVERIFIED — exact baseline did not compile.*
-
-**Report:** mutation matrix and arena line.
-
----
-
-## R2-13 — Stop PEM tests from priming and leaking the state they claim to derive
-
-**File(s):** `packages/forth-core/test_dict_reloc.c`,
-`packages/forth-core/programming/manage.c`, `packages/forth-core/keyboard.c`
-
-**Read:** grep tests #101–#111; read each body. In `manage.c` grep
-`forthEntryStateAtInsertion`, `tam.function != ITM_FORTH`, and the catalog-menu
-drain; in `keyboard.c` grep `_closeCatalog`. Read ±30 lines only.
-
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 101 | `test_forth_multiline_lock_holds` | Clear capture after non-empty ENTER. | tam/alpha continuation assertion fails. |
-| 102 | `test_tam_function_cleared_after_abort` | Leave `tam.function=ITM_FORTH` on abort. | Exact tam assertion fails. |
-| 103 | `test_save_restore_roundtrip` | Omit one persisted Forth field. | Round-trip field mismatch. |
-| 104 | `test_restore_missing_params_defaults` | Leave missing fields uninitialized/non-default. | Default assertions fail. |
-| 105 | `test_restore_validation_clamps` | Accept out-of-range restored values. | Clamp assertion fails. |
-| 106 | `test_validate_direct_corruption` | Skip direct validation repair. | Corrupt value remains. |
-| 107 | `test_alpha_menu_on_top_during_capture` | Do not push ALPHA during real capture. | Menu assertion should fail, but fixture currently hand-sets `tam.function=ITM_FORTH`. |
-| 108 | `test_alpha_menu_contains_fwrd` | Remove FWRD from ALPHA menu. | Item/presence assertion fails. |
-| 109 | `test_forth_toggle_from_catalog_leaves_alpha_menu` | Replace the catalog-menu `while` drain with one `popSoftmenu()`. | `currentMenu() = -1318, expected -1922 (-MNU_ALPHA)`. |
-| 110 | `test_forth_capture_survives_keystroke` | Replace the A1 preservation conditional with unconditional `tam.function=ITM_LITERAL`. | `tam.function = 0x0072, expected ITM_FORTH (0x0B1A)`. |
-| 111 | `test_forth_alpha_gesture_resumes_forth` | Apply the same unconditional assignment on the AIM-resume path. | `tam.function = 0x0072, expected ITM_FORTH (0x0B1A)`. |
-
-**The defect.** #107 primes the capture sentinel it claims to observe and saves
-only `softmenuStack[0].softmenuId`. #109 primes `tam.function=ITM_FORTH`; that is
-acceptable for its catalog-teardown subject, but it writes
-`fnKeyInCatalog=1` then hard-clears it to 0 rather than restoring the saved
-value. #110 and #111 correctly derive state through real actions and caught
-their mutants.
-
-Earlier #71 also leaks `tam.function`, `tam.mode`, `aimBuffer`, menu state, and
-`calcMode`; #107 reinforces that leaked `ITM_FORTH`. Later tests save and restore
-the already-leaked value, making order part of the fixture.
-
-**The change.** Add a common PEM state snapshot/restore helper inside the
-self-test file containing the full `softmenuStack`, `tam`, `aimBuffer`,
-`calcMode`, `catalog`, `fnKeyInCatalog`, `currentStep`,
-`pemCursorIsZerothStep`, `currentLocalStepNumber`, and relevant ALPHA flag.
-Use it on every exit of #71, #74, #93, #94, and #100–#111. Do not replace real
-setup actions with assignments. Rework #107 to open capture using the same real
-marker + `addStepInProgram` path used by #110, starting from
-`tam.function=0`/ALPHA clear; assert setup before checking the menu. In #109
-restore the saved `fnKeyInCatalog`, not literal zero.
-
-Also save/restore `FLAG_SPCRES` in #16 (`test_div_zero_halt`), which currently
-clears it permanently.
-
-**Tests that encode the old contract.** Fixtures only; production contract is
-unchanged.
-
-**Gate:** build-test green.
-
-*Verified mutations:* #109, #110, and #111 were executed and produced exactly
-the table symptoms. #107 and leak-order mutations are UNVERIFIED.
-
-**Report:** snapshot fields, proof #107 derives capture, three verified mutation
-outputs, all additional mutation results, and arena line.
-
----
-
-## R2-14 — Eliminate silent setup skips and restore free-list coverage
+## R2-T1 — Give the inner-interpreter tests observable postconditions
 
 **File(s):** `packages/forth-core/test_dict_reloc.c`
 
-**Read:** grep `SKIP:`, `return 0`, tests #112–#117, and their runner lines.
-Read only the enclosing test bodies and the runner block.
+**Read:** use `grep -a -n '^static int test_\(stack_aslift\|branch_fwd\|literal_after_lit\|div_zero_halt\|rstack_overflow\|runaway_guard\|malformed_token\|br_delta_sign_extend\)' packages/forth-core/test_dict_reloc.c`, then read at most 60 lines from each returned anchor. Also read the `x_is_longint`/`y_is_longint` helpers, at most lines 90-115.
 
-| # | Test | Mutation | Required RED symptom |
-|---:|---|---|---|
-| 112 | `test_freelist_consistent` | Create overlapping/out-of-range free regions. | Consistency assertion fails. |
-| 113 | `test_freelist_double_free_guarded` | Remove exact double-free rejection. | Guard/error or consistency assertion fails — but current WIP runner does not call this test. |
-| 114 | `test_freelist_interior_double_free` | Remove interior-free rejection. | Guard or consistency assertion fails; setup currently SKIPs if no adjacent chunks are found. |
-| 115 | `test_freelist_no_mutation_on_oversize_free` | Mutate the list before rejecting oversize free. | Snapshot/consistency assertion fails. |
-| 116 | `test_unterminated_def_errors` | Replace unterminated-definition error with success/another error. | Exact error and invisibility assertions fail. |
-| 117 | `test_overlong_token_in_def_keeps_error` | Mask INPUT_TOO_LONG with INVALID_NAME. | Error precedence/count/visibility assertion fails. |
+**The defect.** Eight tests accept executions that do not establish their own
+claim. Empirical R2 probes produced these results:
 
-**The defect.** The exact-match double-free test is defined but was removed from
-the current WIP runner, so its production guard can regress without that test
-running. #114 can print SKIP and return success when it cannot find adjacent
-chunks. More broadly, many dictionary tests treat failed subject setup as SKIP:
-`begin_word`/`define_word` allocation failures, the H1 label setup, validation
-V1/V2 setup, and adjacent-pair search can all turn production allocation
-regressions green.
+- deleting `DUP PLUS` from `test_stack_aslift` left the full gate GREEN;
+- changing the forward `BR` delta from 1 to 0 left the old test GREEN because
+  the unskipped `DROP` had no relevant canary; adding a Y canary made that same
+  mutation fail with `FAIL: forward BR consumed its canary`;
+- deleting the second literal and `DROP` from `test_literal_after_lit` left the
+  gate GREEN;
+- changing the documented surviving 42 to 43 in `test_div_zero_halt` left the
+  gate GREEN; moreover, a temporary `X == 42` assertion failed against the
+  correct implementation, so the comment's “original value preserved” claim
+  is false and must not be converted into an assertion;
+- omitting the calls of `A0`, `RR2`, `MP`, `MC`, and `MR` left the gate GREEN;
+- decoding `BR +260` as `BR +4` left `test_br_delta_sign_extend` GREEN because
+  256 additional `DROP` fillers still led to `ILIT 777`.
 
-**The change.** Restore a direct runner call to #113 after #112 and before #114.
-Make every allocation/setup failure in a `test_*` return failure, not SKIP,
-unless the test is explicitly probing optional host infrastructure (#52 was
-already fixed in R2-07). Make #114 deterministic by allocating/finding its
-required pair in a freshly initialized arena; if that construction fails, the
-test is RED. Do not edit any free-list production source.
+For a calculator owner these are the guards against corrupt bytecode running
+past bounds or silently executing the wrong stack program. A green test that
+does not invoke its word is worse than no test because it blesses the guard.
 
-**Facts the harness forces on you.** The expected stderr from #113–#115 is not a
-failure. Judge their return values and assertions, not merged-log adjacency.
-`test_freelist_consistent` is also called inside #114/#115, but that does not
-replace direct runner registration for #112/#113.
+**The change.** Make these exact test-only changes:
 
-**Tests that encode the old contract.** Setup semantics only.
+1. In `test_stack_aslift`, retain the ASLIFT assertion and also require
+   `x_is_longint(10)` after `ILIT 5 DUP +`.
+2. In `test_branch_fwd`, call `forthPushInt32(123456)` immediately before
+   `run_word("BF")`; after X is checked as 42, require
+   `y_is_longint(123456)`. Thus an unskipped `DROP` consumes the canary.
+3. Change `test_literal_after_lit` to encode
+   `ILIT 10 | ILIT 20 | PLUS | EXIT`, update its body comment, and require
+   `x_is_longint(30)`. Do not keep the result-cancelling `DROP` fixture.
+4. In `test_div_zero_halt`, remove the two comment claims that X remains 42 and
+   that the “original value” is preserved. Keep the exact
+   `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN` check and the `X != 999` sentinel check.
+   Do not add an X==42 assertion.
+5. In `test_rstack_overflow`, success requires exactly
+   `lastErrorCode == ERROR_RAM_FULL` as well as `X != 777`; ERROR_NONE or any
+   other error is failure.
+6. In `test_runaway_guard`, success requires both `x_is_longint(444)` and
+   `lastErrorCode == ERROR_RAM_FULL`; delete both permissive success arms.
+7. In each `test_malformed_token` subcase, add an exact error assertion before
+   the existing sentinel checks: bad PRIM → `ERROR_OPERATION_UNDEFINED`; bad
+   CALL → `ERROR_INVALID_CORRUPTED_DATA`; reserved token →
+   `ERROR_INVALID_CORRUPTED_DATA`.
+8. In `test_br_delta_sign_extend`, emit 260 `T_EXIT` fillers instead of 260
+   `DROP` primitives. Correct +260 reaches `ILIT 777`; a low-byte-only +4
+   reaches a filler EXIT with X not 777. Update the layout comment.
+9. Do not alter production code. Give each new failure a unique `FAIL:` label.
 
-**Gate:** build-test green.
+**Tests that encode the old contract.** `test_div_zero_halt`'s comments encode
+the false X-preservation claim; re-aim the comments as above. No test encodes a
+different behavioral contract.
 
-*Mutation: UNVERIFIED — runner absence and SKIP paths are structurally proven;
-guard mutants were not executed.*
+**Facts the harness forces on you.** `forthPushInt32` lifts the existing stack;
+`y_is_longint` is already present. Production reports `ERROR_RAM_FULL` for both
+the return-stack depth guard and the runaway dispatch cap. Production reports
+the malformed-token errors listed above.
 
-**Report:** all SKIP-to-FAIL sites, runner order, six mutation results, expected
-guard diagnostics, arena line and high-water mark.
+**Gate:** build-test green. Report the arena line; the R2 baseline high-water
+was `dict here=36 sizeBlocks=16 freeRamDelta=64`.
+*Verified mutation:* R2 ran omissions of `DUP PLUS`, `A0`, `RR2`, `MP`, `MC`,
+and `MR`; with the proposed exact assertions temporarily installed they made
+the gate RED with eight distinct failures (stack result, rstack error 0,
+runaway error 0, and three malformed-token error-0 failures included). R2 also
+ran `BR delta 1 → 0`: the proposed Y canary made it RED with
+`FAIL: AUDIT R2 forward branch consumed the Y canary`. The new PLUS-form
+literal fixture and T_EXIT large-delta fixture were not temporarily installed:
+*Mutation: UNVERIFIED — run both named mutations before reporting this task
+complete.*
 
----
-
-## R2-15 — Run the full isolated suite and commit once
-
-**File(s):** `packages/forth-core/test_dict_reloc.c` and only files changed by
-R2-01 through R2-14
-
-**Read:** grep `int forthDictSelfTest`, every `fail |= test_`, and every
-`static int test_`; inspect only the runner and declaration anchors. Use a small
-script or `rg` list comparison; do not read the file whole.
-
-**The defect.** Before this review there were 117 static `test_*` definitions,
-one decorative test (#40), and one defined guard test (#113) absent from the
-current WIP runner. Global state made results order-dependent. A green run is
-credible only if every retained test is registered exactly once, every repaired
-test caught its named mutant, and the isolated normal suite is green.
-
-**The change.** Compare definition and runner sets. Every retained `test_*` must
-run exactly once, except a helper called intentionally by another test must
-still have one explicit top-level coverage decision documented. Run the full
-sanctioned gate once with all mutants removed. Confirm both success banners and
-exit 0. Report the `FORTH ARENA:` high-water line. Then stage only the files
-changed by these R2 tasks (never `git add -A`) and create one commit with message:
-
-`forth-core: make self-tests mutation-sensitive`
-
-Do not push.
-
-**Tests that encode the old contract.** All 117 tests are accounted for in
-R2-01 through R2-14; no additional contract change is authorized here.
-
-**Gate:** build-test green.
-
-*Verified mutation:* the required evidence is the complete mutation matrix from
-the preceding tasks. If any row remains `UNVERIFIED`, do not commit; report the
-specific row and stop.
-
-**Report:** definition/runner counts, duplicate/missing list (must be empty or
-explicitly justified), both green banners, exit code, arena high-water mark,
-staged file list, and commit hash.
+**Report:** paste the changed test names, each mutation run and exact RED
+symptom, the final green banners, and the arena high-water line.
 
 ---
 
-## Reviewer accounting: why the current green claim is not credible
+## R2-T2 — Replace the always-green LBL? placeholder with a reachable integration test
 
-- **Cannot fail:** `test_lblq_undefined_no_ub` always returns 0; no production
-  mutation reaches an assertion.
-- **Not run:** `test_freelist_double_free_guarded` is defined but its direct
-  runner call was replaced by unfinished audit probes in the reviewed WIP.
-- **Passes for a different reason/path:** `test_tam_dispatcher`,
-  `test_xeq_end_to_end`, `test_lifecycle_reset`,
-  `test_prescan_forward_reference`, and
-  `test_prescan_two_programs_first_touch` do not execute the path/sequence their
-  names or docstrings claim.
-- **Known escaping assertions:** `test_branch_fwd`, `test_literal_after_lit`,
-  `test_rstack_overflow`, `test_runaway_guard`, `test_malformed_token`,
-  `test_picker_scan_basic`, `test_picker_long_token_skipped`, and
-  `test_softmenu_trailing_null` admit the mutations specified above.
-- **Order-dependent:** #71 and #107 leak Forth capture state; #109 overwrites
-  `fnKeyInCatalog` rather than restoring it; #16 leaks `FLAG_SPCRES`; menu tests
-  restore only part of `softmenuStack`.
-- **Fixture audit:** aside from #57, #64, and the standalone #68 fixture, the
-  explicit `ITM_END` versus appended `.END.` choices and the predecessor effects
-  of `addStepInProgram` match their asserted scenarios.
-- **Executed spot checks:** removing E5 `hadText`, reducing the catalog drain to
-  one pop, and replacing both A1/A7 preservation arms with unconditional
-  `ITM_LITERAL` each made its intended newest test RED with the exact symptoms
-  recorded above.
+**File(s):** `packages/forth-core/test_dict_reloc.c`
+
+**Read:** grep `static int test_lblq_undefined_no_ub` and read 60 lines from its
+anchor; grep `static bool writeTestProgram` and read only its definition plus
+`cleanupTestProgram`; grep `test_gto_word_errors` and read that test only.
+
+**The defect.** `test_lblq_undefined_no_ub` prints `DEFERRED` and returns 0. It
+cannot fail. Its claim that `_executeOp` is unreachable is wrong:
+`executeOneStep`, already called by this file, reaches the static `_executeOp`.
+R2 changed the real LBL? arm from
+`reallyRunFunction(op, INVALID_VARIABLE)` to
+`reallyRunFunction(op, resolvedParam)`; the full suite stayed GREEN.
+
+**The change.** Replace the placeholder body with this real-program scenario;
+do not export `_executeOp` and do not simulate it:
+
+1. `forthDictClear()`, then define the colon word `FW` so its dictionary index
+   is 0. The body may be an immediate `EXIT`; use the existing helpers.
+2. Write exactly this program using `writeTestProgram`:
+
+```c
+uint8_t prog[] = {
+  0x01, 0x00,                         /* LBL 00 */
+  0x85, 0xDF, 0xFD, 2, 'F', 'W'      /* LBL? "FW" */
+};
+```
+
+   `0x85 0xDF` is `ITM_LBLQ` (1503); `0xFD` is
+   `STRING_LABEL_VARIABLE`. The explicit local label 00 and colon index 0 are
+   intentionally the same numeric value.
+3. Set `temporaryInformation = TI_TRUE`, set `lastErrorCode = ERROR_NONE`, and
+   call `executeOneStep(beginOfProgramMemory + 2)`.
+4. Require `lastErrorCode == ERROR_NONE` and
+   `temporaryInformation == TI_FALSE`. Correct code asks ordinary LBL? to look
+   up `INVALID_VARIABLE`, so the Forth-only name is not treated as local label
+   00. The escaping mutation passes resolved index 0 and produces TI_TRUE.
+5. On every exit, call `forthDictClear()` and `cleanupTestProgram()`; restore
+   any global that this test changes and that those helpers do not restore.
+6. Rename the test to `test_lblq_forth_name_not_local_label` and update its
+   runner call and debug label.
+
+**Tests that encode the old contract.** The old placeholder encodes none;
+replace it, do not retain a “deferred” pass.
+
+**Facts the harness forces on you.** `executeOneStep` is callable. Do not call
+or export `_executeOp`. `writeTestProgram` appends the final `.END.`; the two
+bytes `0x01,0x00` are a real LBL 00 step, not `.END.`.
+
+**Gate:** build-test green. Report the arena high-water line.
+*Mutation: UNVERIFIED — R2 verified that `INVALID_VARIABLE → resolvedParam`
+left the old suite GREEN, but did not temporarily install this replacement
+fixture. Apply that mutation after adding the test; it must go RED with TI_TRUE,
+then revert it without git restore and rerun green.*
+
+**Report:** paste the real program bytes, correct-run TI value, mutation-run TI
+value and RED label, final green banners, and arena line.
+
+---
+
+## R2-T3 — Test the production reset hook and the runtime UNDO flags
+
+**File(s):** `packages/forth-core/test_dict_reloc.c`
+
+**Read:** grep `static int test_lifecycle_reset` and read 60 lines; grep
+`static int test_undo_rows_us_enabled` and read that test; grep the self-test
+runner call sites for those two names and read 30 lines around each. Do not read
+`config.c`; the exact callable contract is below.
+
+**The defect.** `test_lifecycle_reset` calls `forthDictInit()` itself, so it
+proves the callee but not the reset wiring. R2 deleted the production
+`forthDictInit()` call from `doFnReset`; the entire suite remained GREEN.
+`test_undo_rows_us_enabled` opens an absolute source pathname and converts
+missing files or missing rows into SKIP/pass. The calculator does not execute
+that source file; it uses `indexOfItems[]`.
+
+**The change.** Make two independent changes in the same lifecycle/registration
+test task:
+
+1. Keep the existing direct `test_lifecycle_reset` as the allocator-semantic
+   unit test. Add `test_lifecycle_real_reset_hook`, PC self-test only, using
+   `fork()` so the destructive calculator reset cannot corrupt the parent test
+   process. In the child: define `SQ`; prove it is found; call
+   `doFnReset(CONFIRMED, doNotLoadAutoSav)`; require `forthFindColon("SQ", &idx)`
+   is false and `fdict.base == NULL`, `fdict.here == 0`, `fdict.count == 0`,
+   `fdict.latest == FORTH_NULL`; `_exit(0)` on success and a unique nonzero
+   code for each failure. In the parent: `waitpid`, require normal exit 0, and
+   print the child's exit code on failure. Include `<sys/types.h>`,
+   `<sys/wait.h>`, and `<unistd.h>` only inside the same PC/self-test
+   compilation guard as this file. Do not add a production export: `doFnReset`
+   is declared in `config.h` and is already callable. The self-test run-once
+   guard is set before these tests, and fork inherits it, so reset will not
+   recursively run the suite.
+2. Replace all `fopen`, absolute-path, line scanning, and SKIP behavior in
+   `test_undo_rows_us_enabled` with runtime assertions:
+
+```c
+(indexOfItems[ITM_FORTH].status & US_STATUS) == US_ENABLED
+(indexOfItems[ITM_FCALL].status & US_STATUS) == US_ENABLED
+```
+
+   Fail if either differs, printing the actual masked status. Do not read
+   `items.c` at runtime or in this task.
+
+**Tests that encode the old contract.** `test_lifecycle_reset` remains; it has a
+different direct-init contract. Re-aim `test_undo_rows_us_enabled` rather than
+adding a second filesystem test.
+
+**Facts the harness forces on you.** `CONFIRMED` is 9877;
+`doNotLoadAutoSav` is false; `doFnReset(uint16_t, bool_t)` is public. The child
+must use `_exit`, not `exit`, to avoid flushing duplicated parent buffers.
+
+**Gate:** build-test green. Report the arena high-water line.
+*Mutation: UNVERIFIED — R2 verified that deleting the production reset hook
+left the old gate GREEN. After adding the fork test, delete only that one call;
+the new test must go RED with a nonzero child status, then restore it manually.
+For the UNDO test, temporarily clear `US_ENABLED` from one runtime table entry
+inside the test setup and require its exact FAIL label, then restore.*
+
+**Report:** paste child exit behavior under the hook deletion, the runtime
+statuses, final green banners, and arena line.
+
+---
+
+## R2-T4 — Make program-step fixtures exercise the program and scan state they claim
+
+**File(s):** `packages/forth-core/test_dict_reloc.c`
+
+**Read:** grep and read at most 60 lines from each of
+`test_program_step_define_and_use`, `test_prescan_two_programs_first_touch`,
+`test_exec_step_marker_noop`, `test_exec_step_source_runs`, and
+`test_exec_step_halts_on_error`; also read the definitions of
+`writeTestProgram` and `cleanupTestProgram` only.
+
+**The defect.** The two-program test never performs the promised third touch,
+and its first program defines no word, so even adding the touch would not expose
+a single-slot scan cache. The source-execution tests do not seed X, so they are
+order-sensitive. The error test's length says 4 while its comment and byte array
+say `3 SQX` (5 bytes); it actually executes `3 SQ` and ignores the final `X`.
+It also passes a stack buffer although the Architecture-2 pre-scan contract
+requires a real program. The marker test checks only X and dictionary count,
+not its claim that the stack is untouched.
+
+**The change.** Implement these exact repairs:
+
+1. Replace the two-program fixture with two programs separated by `ITM_END`:
+   program 1 has one Forth step `: P1W 9 ; P1W` (length 13); program 2 has one
+   Forth step `: P2W 4 ; P2W` (length 13). Touch P1, then P2, then P1 again in
+   one generation. After P1 require X=9/count=1; after P2 require X=4/count=2;
+   capture `fdict.here`; after the third P1 require X=9, count still 2, and here
+   unchanged. Compute step offsets from named `sizeof` constants or explicit
+   header+payload sizes, not magic values copied from the old fixture.
+2. Immediately before the execution under test in
+   `test_program_step_define_and_use` and `test_exec_step_source_runs`, call
+   `forthPushInt32(-123456)`. Retain the X==9/type assertions. A dropped
+   handler must leave the canary, not an earlier test's 9.
+3. Rebuild `test_exec_step_halts_on_error` with
+   `writeTestProgram` and exactly one source step whose length is 5 and payload
+   is `3 SQX`. Call `executeOneStep(beginOfProgramMemory)`. Require
+   `ERROR_FUNCTION_NOT_FOUND`, then cleanup on every path. Do not define SQ and
+   do not use a stack-local fake step.
+4. Strengthen `test_exec_step_marker_noop`: seed all four stack registers with
+   distinct long integers using four `forthPushInt32` calls, snapshot their
+   values/types, execute the marker, and compare all four registers plus
+   `fdict.count` and `fdict.here`. Add a small test-local helper for reading a
+   specified stack register if necessary; do not add production code.
+
+**Tests that encode the old contract.** Re-aim the five named tests. None of
+these changes production behavior.
+
+**Facts the harness forces on you.** `writeTestProgram` appends `.END.`. An
+explicit `0x85,0xB2` separates the two programs; it is not a duplicate final
+terminator. Forth step header bytes are `0x8B,0x1A,0xFD,len`. A scan-cache
+mutation can only be observed if the re-scanned program contains a definition.
+
+**Gate:** build-test green. Report the arena high-water line.
+*Mutation: UNVERIFIED — after the change, temporarily reduce the scanned-program
+cache to one remembered pointer; the third P1 touch must make count 3/here grow.
+Separately omit each execution call; its seeded canary must produce the named
+RED label. Change the error-step length back to 4; the test must fail because
+`3 SQ` is not `3 SQX`. Run and report each before reverting manually.*
+
+**Report:** paste the exact two-program bytes/offset calculation, all mutation
+symptoms, final green banners, and arena line.
+
+---
+
+## R2-T5 — Make FWRD menu tests pin ordering, boundaries, refresh, and deterministic storage
+
+**File(s):** `packages/forth-core/test_dict_reloc.c`
+
+**Read:** grep and read at most 60 lines from each of
+`test_picker_scan_basic`, `test_picker_omits_long_names`,
+`test_picker_long_token_skipped`, and `test_softmenu_trailing_null`; read the
+existing `test_dynamic_menu_registration` and its helper declarations only.
+
+**The defect.** `test_picker_scan_basic` says “sorted” but checks only set
+membership. `test_picker_omits_long_names` says it keeps a 14-byte name but its
+kept name is `SHORT` (5 bytes). R2 removed qsort and changed the accepted bound
+from 14 to 13; the full suite stayed GREEN. R2 also removed the special
+rebuild-always condition for MNU_FORTH; the suite stayed GREEN, so no test
+reaches the cache behavior required for newly authored words. The long-token
+test admits that its unchecked-copy mutation passes without ASan, while the
+only sanctioned gate is non-ASan. By contrast, `calloc → malloc` did make
+`test_softmenu_trailing_null` RED (`count=1, byte=100`), so that test is a real
+but allocator-state-dependent tooth.
+
+**The change.** Make these exact test repairs without changing production code:
+
+1. In `test_picker_scan_basic`, assert exact order: item 0 is `CUBE`, item 1 is
+   `SQ`, and the byte after the second string terminator is zero. Keep the
+   membership diagnostics only if they add information.
+2. In `test_picker_omits_long_names`, replace `SHORT` with the distinct
+   14-byte name `KEEPABCDEFGHIJ`; set its source-step length to 18 and adjust
+   the closing-marker offset from header/payload sizes. Require exactly that
+   full 14-byte name and exactly one item. It must not share the first 14 bytes
+   of either rejected 15-byte name.
+3. Add `test_picker_rebuilds_same_menu`: create a real program with marker and
+   `: ONE 1 ;`; display/build MNU_FORTH through the same public softmenu path
+   used by the UI; prove ONE is listed; append or replace the real program so a
+   second definition `: TWO 2 ;` is before currentStep without closing/reopening
+   another menu; invoke that same public path again while MNU_FORTH is still the
+   cached menu; require TWO immediately. Save/restore the entire softmenu stack,
+   cached-menu-visible state exposed to tests, currentStep/program number, and
+   dynamic allocation. If the needed cached variable is file-static, add a
+   `FORTH_SELFTEST_EXPORT` wrapper beside the existing softmenu test wrappers;
+   it must compile to `static` outside `FORTH_DEBUG_SELFTEST` and must not alter
+   production linkage or bytes.
+4. Do not claim that `test_picker_long_token_skipped` catches an unchecked
+   copy. Rename its comment to say it pins semantic omission only. Add a
+   deterministic debug-only copy-bound test by using a self-test wrapper around
+   the exact picker token-copy helper with pre/post canaries. If the production
+   code has no separable helper, STOP and report instead of inventing an ASan
+   command or relying on stack corruption; the sanctioned gate cannot verify
+   that mutation.
+5. Keep `test_softmenu_trailing_null`. Before calling the builder, allocate and
+   free several same-size blocks filled with `0xA5` so the test is not relying
+   on a freshly zeroed heap page. The assertion remains the exact final zero.
+
+**Tests that encode the old contract.** Re-aim the four named tests and add the
+one rebuild test. No behavior contract changes.
+
+**Facts the harness forces on you.** Menu entries are 15-byte slots: at most 14
+name bytes plus NUL. The expected sorted order is binary `CUBE`, then `SQ`.
+The final menu buffer is a sequence of NUL-terminated names plus one additional
+NUL. Do not read `softmenus.c` beyond a 60-line slice anchored at `case
+MNU_FORTH` if a wrapper anchor must be confirmed.
+
+**Gate:** build-test green. Report the arena high-water line.
+*Verified mutation:* R2 ran qsort deletion, `<=14 → <=13`, and deletion of the
+MNU_FORTH rebuild-always term; all were falsely GREEN. R2 ran `calloc → malloc`;
+the existing trailing-NUL test was RED with `byte=100`. *Mutation: UNVERIFIED —
+the new exact-order, true-14-byte, and same-menu refresh tests were not
+temporarily installed; run each named mutation after implementation and report
+its exact RED label. The unchecked-copy mutation is explicitly UNVERIFIED unless
+the deterministic canary wrapper can be built under the sanctioned gate.*
+
+**Report:** paste the exact order/boundary assertions, whether a safe wrapper
+was possible, each mutation symptom, final green banners, and arena line.
+
+---
+
+## R2-T6 — Stop PEM tests from priming or leaking the global state under test
+
+**File(s):** `packages/forth-core/test_dict_reloc.c`
+
+**Read:** grep and read at most 60 lines from each of
+`test_toggle_inserts_marker`, `test_alpha_menu_on_top_during_capture`,
+`test_forth_toggle_from_catalog_leaves_alpha_menu`, and
+`test_forth_drain_clears_buried_catalog`; also read
+`test_fcall_redirect_records_name`; grep all assignments to
+`tam.function` and `fnKeyInCatalog`, but do not read unrelated functions.
+
+**The defect.** `test_alpha_menu_on_top_during_capture` assigns
+`tam.function = ITM_FORTH` before calling the path that is supposed to derive
+it and never restores the prior value. `test_toggle_inserts_marker` also does
+not save/restore tam.function between or after its opening and closing cases.
+The two catalog tests set `fnKeyInCatalog = 1` legitimately to model the static
+keyboard caller, but restore it to 0 rather than its incoming value. Test order
+therefore affects later state. `test_fcall_redirect_records_name` prints through
+`s + 4` after `cleanupTestProgram()` has released/restored the program region;
+that PASS diagnostic dereferences a stale fixture pointer. R2 confirmed these
+by source audit; no probe was left.
+
+**The change.** Make test isolation exact:
+
+1. In both subcases of `test_toggle_inserts_marker`, save incoming
+   `tam.function`, set it to 0 before the call, and restore it in cleanup.
+   In the opening case require the real call leaves `tam.function == ITM_FORTH`.
+   Do not assert closing-case tam.function until the architect resolves whether
+   E1 must clear the sentinel.
+2. In `test_alpha_menu_on_top_during_capture`, save tam.function, seed it to 0
+   rather than ITM_FORTH, require the call derives ITM_FORTH, and restore it on
+   every return path.
+3. In each test that assigns `fnKeyInCatalog`, capture
+   `bool_t savedFnKeyInCatalog` before setup and restore that exact value after
+   `_closeCatalog`; do not write a hardcoded 0. Preserve the required ordering:
+   set it only after `showSoftmenu`, immediately before `runFunction`.
+4. Audit every early return/goto in the four functions so cleanup restores
+   currentStep, program number/local step, catalog, calcMode, FLAG_ALPHA,
+   tam.function, fnKeyInCatalog, and the softmenu stack values that the function
+   changed. Do not introduce a generic global reset that could hide leaks.
+5. In `test_fcall_redirect_records_name`, print/copy the recorded name before
+   `cleanupTestProgram`; never dereference `s` afterward. Preserve all byte
+   assertions and cleanup.
+
+**Tests that encode the old contract.** The newest
+`test_forth_capture_survives_keystroke` and
+`test_forth_alpha_gesture_resumes_forth` already seed tam.function to 0 and
+derive it; leave them unchanged.
+
+**Facts the harness forces on you.** The catalog tests cannot call static
+`executeFunction`; their exact reachable approximation is
+`runFunction(func); _closeCatalog();`. `_closeCatalog` is already exposed with
+`FORTH_SELFTEST_EXPORT`; do not invent another simulation.
+
+**Gate:** build-test green. Report the arena high-water line.
+*Mutation: UNVERIFIED — seed each saved global to a distinctive non-default
+value in the runner immediately before its test and assert the value afterward;
+the pre-fix test must leak and go RED, the fixed test must preserve it. Run that
+probe for both tam.function and fnKeyInCatalog, then remove it manually.*
+
+**Report:** paste the pre-fix leak values, post-fix preservation, final green
+banners, and arena line.
+
+---
+
+## R2-T7 — Correct false test claims and add the missing item-over-colon precedence tooth
+
+**File(s):** `packages/forth-core/test_dict_reloc.c`
+
+**Read:** grep and read at most 60 lines from each of
+`test_xeq_end_to_end`, `test_xeq_item_lookup`,
+`test_useritem_xeqp1_decodes`, and `test_alpha_menu_contains_fwrd`; grep all
+literal occurrences of `§9` and `[VERIFIED:` in this test file only.
+
+**The defect.** Several comments make claims their code does not establish:
+
+- `test_xeq_end_to_end` directly calls `fnForthCall`; it does not execute an
+  XEQ step, ITM_FORTH, or both new items as its name/header says.
+- `test_xeq_item_lookup` proves item lookup, but no test proves the required
+  item-before-colon ordering.
+- the decode citation says `decode.c:866-869`, while complete two-byte opcode
+  reconstruction is at the current anchor spanning the initial byte through
+  the low-byte OR (physical lines 868-873 during R2).
+- the alpha-menu citation says `softmenus.c:1000`, a blank line; the MNU_FORTH
+  row is at the `menu_ALPHA` anchor immediately above (physical line 999 during
+  R2).
+- all test-file references to §9 are stale. Current normative replacements are
+  exact: §9.4→§8.4, §9.5→§8.5, §9.9→§8.9, §9.10→§8.10.
+
+**The change.** Do only these decisions-free repairs:
+
+1. Rename `test_xeq_end_to_end` to
+   `test_fnforthcall_executes_colon_by_index` and rewrite its header to describe
+   only what it calls/asserts. Update runner/debug labels.
+2. Extend `test_xeq_item_lookup`: define a Forth colon word named `SIN`, call
+   `forthResolveXEQ("SIN", &param)`, and require `FORTH_XEQ_ITEM` with
+   `param == ITM_SIN`. This pins item-before-colon. Clear the dictionary before
+   and after this subcase.
+3. Replace the two physical-line `[VERIFIED:]` citations with grep anchors:
+   `programming/decode.c, opCode reconstruction from first byte through low-byte
+   OR` and `softmenus.c, menu_ALPHA row containing -MNU_FORTH`. Do not install
+   new numeric line decorations.
+4. Perform only the four exact § replacements listed above throughout this
+   test file.
+5. Add a short TODO beside the renamed fnForthCall test:
+   `Missing acceptance coverage: real XEQ execution of ITM_FORTH and ITM_FCALL;
+   fixture deferred pending an independently verified reachable path.` Do not
+   improvise a simulation in this task.
+
+**Tests that encode the old contract.** Re-aim the renamed test and extend
+`test_xeq_item_lookup`; no production contract changes.
+
+**Facts the harness forces on you.** `ITM_SIN` is the real item identifier; do
+not use an ASCII character or guess a number. Resolver precedence is
+label→item→colon. This task pins only item→colon because the existing
+`test_xeq_precedence` pins label→colon.
+
+**Gate:** build-test green. Report the arena high-water line.
+*Mutation: UNVERIFIED — after adding the SIN subcase, temporarily swap the
+item and colon lookup order in `forthResolveXEQ`; the new subcase must go RED
+reporting COLON. Revert manually and rerun green. Citation/comment changes have
+no meaningful RED mutation; report them as documentation corrections, not
+coverage.*
+
+**Report:** paste the resolver mutation symptom, all renamed/replaced anchors,
+final green banners, and arena line.
+
+---
+
+## R2-T8 — Run the integrated gate, report the high-water mark, and commit once
+
+**File(s):** only files changed by R2-T1 through R2-T7 and their generated
+package metadata/output.
+
+**Read:** `git status --short`; `git diff --stat`; grep the final self-test log
+for `FORTH ARENA`, `FORTH SELF-TEST`, and `BUILD + SELF-TEST` only. Do not read
+large source files again.
+
+**The defect.** The preceding tasks intentionally remain uncommitted so they
+can be reviewed and mutation-tested as one test-suite repair. This task is the
+single integration/commit point.
+
+**The change.** Confirm every prior task reported its required RED mutation or
+explicitly reported `UNVERIFIED` and stopped. Search the working area (excluding
+generated `patches/` and `files/`) for `AUDIT-PROBE`; there must be none. Run
+`./packages/forth-core/build-test.sh` once. Require exit 0 and both exact green
+banners. Report every `FORTH ARENA` line and specifically the maximum `here`,
+`sizeBlocks`, and `freeRamDelta`; compare with the R2 baseline
+`here=36 sizeBlocks=16 freeRamDelta=64`. Run `git diff --check`. Stage only the
+specific working test file plus generated files that `build-test.sh` refreshed;
+never use `git add -A`. Expected paths are:
+
+```text
+packages/forth-core/test_dict_reloc.c
+packages/forth-core/files/test_dict_reloc.c
+packages/forth-core/.refresh-manifest.json
+```
+
+If `git status` lists any other path, STOP and report it rather than staging.
+Commit once with message `forth-core: make self-tests mutation-sensitive`.
+
+**Tests that encode the old contract.** All migrations are contained in their
+own tasks; none are deferred to this integration task.
+
+**Gate:** build-test green.
+*Verified mutation:* N/A — this is the integration task. It is valid only if
+each test-changing task supplied its own mutation result; do not substitute the
+ordinary green run for those RED proofs.
+
+**Report:** paste `git status --short` before staging, the green banners, every
+arena line and computed high-water maximum, `git diff --check`, the exact paths
+staged, and the commit hash.
+
+---
+
+## Appendix A — all 117 tests and the mutation that makes each RED
+
+Legend: **V** = mutation was run during R2; **S** = static audit only (a precise
+hypothesis, not executed); **D** = the current test has no credible mutation or
+does not prove the claim; **C** = R2 ran a production mutation and the current
+test caught it. “Task” points to the repair above.
+
+- `test_stack_aslift` — **V/D:** clear ASLIFT is RED, but deleting DUP/PLUS was GREEN; Task T1.
+- `test_branch_fwd` — **V/D:** delta 1→0 was GREEN; the T1 Y canary made it RED.
+- `test_branch_back` — **S:** change backward delta -9 by one cell; final X/error assertion should fail.
+- `test_0br_longint` — **S:** treat dtLongInteger zero as nonzero; expected branch result fails.
+- `test_0br_consumes` — **S:** leave the condition on stack; its Y-stack assertion fails.
+- `test_0br_longint_taken_branch` — **S:** use raw real34 zero test; X will not become 42.
+- `test_literal_after_lit` — **V/D:** delete live ILIT/DROP; gate stayed GREEN; Task T1.
+- `test_lit_roundtrip` — **S:** advance LIT payload by 8 instead of `sizeof(real34_t)`; X/error fails.
+- `test_c47_ptp_none` — **S:** reject PTP_NONE in the C47 primitive; expected result fails.
+- `test_c47_ptp_number8_padded` — **S:** omit NUMBER_8 padding/advance; decoded value or continuation fails.
+- `test_c47_bad_ptp` — **S:** accept an unknown PTP; exact error assertion fails.
+- `test_c47_nested_call_succeeds` — **S:** suppress the nested C47 call; X==42 fails.
+- `test_nested_preserves_outer_rstack` — **S:** reset the outer return stack during nested call; continuation fails.
+- `test_nested_error_unwinds_rsp` — **S:** omit error unwind; saved rsp assertion fails.
+- `test_outer_real_literal` — **S:** reject/retag the real literal; X type/value fails.
+- `test_div_zero_halt` — **V:** initial 42→43 stayed GREEN, disproving its comment; sentinel/error mutation remains toothed; Task T1.
+- `test_rstack_overflow` — **V/D:** omit A0; gate stayed GREEN; exact ERROR_RAM_FULL assertion makes RED; Task T1.
+- `test_runaway_guard` — **V/D:** omit RR2; gate stayed GREEN; exact ERROR_RAM_FULL assertion makes RED; Task T1.
+- `test_malformed_token` — **V/D:** omit MP/MC/MR; all stayed GREEN; exact error assertions make RED; Task T1.
+- `test_ilit_sign_extend` — **S:** decode negative ILIT as unsigned; expected negative X fails.
+- `test_ilit_arithmetic_divergence` — **S:** push ILIT as real34; integer arithmetic/type assertion fails.
+- `test_br_delta_sign_extend` — **V/D:** decode +260 as +4; DROP filler still reached 777 and gate stayed GREEN; Task T1.
+- `test_ilit_compile_interpret_parity` — **S:** compile integer literals through the real-number path; type/value parity fails.
+- `test_outer_simple_expr` — **S:** omit PLUS dispatch; expected expression value fails.
+- `test_outer_compile_invoke` — **S:** skip colon finalization/invocation; lookup or result fails.
+- `test_outer_nonstring_x` — **S:** accept non-string X; exact error assertion fails.
+- `test_outer_glyph_cross` — **S:** remove CROSS alias; function-not-found/result assertion fails.
+- `test_outer_glyph_dot` — **S:** advance tokenizer byte-wise through the glyph; token/result fails.
+- `test_outer_glyph_divide` — **S:** remove DIVIDE alias; function-not-found/result assertion fails.
+- `test_outer_nesting_tokenizer` — **S:** reset tokenizer context on nested call; outer continuation fails.
+- `test_outer_depth_cap` — **S:** remove depth cap; expected guard becomes hang/wrong error.
+- `test_outer_ctx_at_rest` — **S:** omit context unwind; at-rest state assertion fails.
+- `test_xeq_end_to_end` — **D:** it calls fnForthCall directly and never drives XEQ/ITM_FORTH; rename in T7.
+- `test_tam_dispatcher` — **S:** route TAM colon selection to the wrong function; result fails.
+- `test_reentrancy` — **S:** allow forbidden nested entry; exact error/context assertions fail.
+- `test_xeq_precedence` — **S:** resolve colon before label; label-shadow result fails.
+- `test_xeq_item_lookup` — **S:** skip item lookup; current item cases fail; item-over-colon gap fixed in T7.
+- `test_fnforthcall_interactive` — **S:** remove interactive fnForthCall execution; X result fails.
+- `test_lblq_undefined_no_ub` — **V/D:** returns 0 unconditionally; resolvedParam leak stayed GREEN; replace in T2.
+- `test_lifecycle_pre_init` — **S:** remove `fdict.base` guard; NULL access/bogus-found assertion fails.
+- `test_lifecycle_reset` — **V/D:** delete production reset hook; direct-init test stayed GREEN; Task T3.
+- `test_dict_name_too_long` — **S:** accept overlength dictionary name; rejection/error assertion fails.
+- `test_dict_space_full` — **S:** ignore arena-full return; exact full/error invariant fails.
+- `test_number_then_no_label_fallthrough` — **S:** permit numeric parse to fall through label lookup; result/error fails.
+- `test_prefix_no_match` — **S:** accept a name prefix as a word; not-found assertion fails.
+- `test_number_1e_minus_5` — **S:** reject exponent-minus syntax; value/type assertion fails.
+- `test_number_bad_e5` — **S:** accept missing exponent digits; unchanged-stack/error assertion fails.
+- `test_number_bad_dot_e5` — **S:** accept malformed dot/exponent; unchanged-stack/error assertion fails.
+- `test_number_bad_3e` — **S:** accept trailing exponent marker; unchanged-stack/error assertion fails.
+- `test_number_bad_lone_dot` — **S:** accept lone dot; unchanged-stack/error assertion fails.
+- `test_undo_rows_us_enabled` — **D:** missing absolute source path becomes SKIP/pass; replace with runtime table checks in T3.
+- `test_forth_step_ptp_rem` — **S:** use a non-REM/string PTP for the step; byte assertion fails.
+- `test_forth_step_sizing` — **S:** change encoded source-step length; step-boundary assertion fails.
+- `test_program_step_define_and_use` — **S/order-sensitive:** drop handler; X==9 should fail but X is unseeded; seed in T4.
+- `test_program_step_gen_reset` — **S:** omit generation reset; dictionary generation/count assertion fails.
+- `test_prescan_forward_reference` — **S:** execute before full pre-scan; forward lookup/result fails.
+- `test_prescan_no_early_tail` — **S:** execute the tail during pre-scan; stack sentinel math fails.
+- `test_prescan_no_recompile` — **S:** recompile on second touch in one generation; count/here grows.
+- `test_prescan_owning_scope` — **S:** scan outside owning program; foreign word/count assertion fails.
+- `test_prescan_generation_rearm` — **S:** retain scanned state across generation bump; expected rearm result fails.
+- `test_prescan_error_halts` — **S:** continue scan after compilation error; error/dictionary invariant fails.
+- `test_prescan_last_step_visible` — **S:** use an exclusive final-step bound; final definition/result fails.
+- `test_prescan_two_programs_first_touch` — **D:** promised third P1 touch is absent and P1 defines nothing; Task T4.
+- `test_dict_name_by_index` — **S:** offset index/link walk by one; exact names/count-boundary fails.
+- `test_exec_step_marker_noop` — **D/partial:** call source handler on marker may alter unobserved stack/flags; only X/count checked; Task T4.
+- `test_exec_step_source_runs` — **S/order-sensitive:** drop ITM_FORTH call; X==9 should fail but seed is not controlled; Task T4.
+- `test_exec_step_halts_on_error` — **D:** length 4 executes `3 SQ`, not claimed `3 SQX`, from a fake stack step; Task T4.
+- `test_marker_parity` — **S:** invert even/odd parity; all direction assertions fail.
+- `test_entry_state_derivation` — **S:** derive from current instead of predecessor step; region-state cases fail.
+- `test_toggle_inserts_marker` — **S/leak:** force opening on close; FLAG_ALPHA assertion fails; tam.function is not isolated; Task T6.
+- `test_fcall_redirect_records_name` — **S:** record ITM_FCALL/index instead of name bytes; byte probe fails; its PASS log also dereferences `s` after cleanup (T6).
+- `test_fcall_redirect_rejects_stale` — **S:** accept stale dictionary index; rejection assertion fails.
+- `test_forth_empty_enter_leaves_no_step` — **S:** commit empty placeholder; step-count/parity assertion fails.
+- `test_forth_edit_extracts_source` — **S:** use generic quoted decode for edit; aimBuffer/cursor assertion fails.
+- `test_decode_marker_directions` — **S:** invert marker parity; decoded marker strings fail.
+- `test_decode_source_bare` — **S:** restore `FORTH '…'` rendering; exact bare output fails.
+- `test_mnu_forth_row` — **S:** remove/rename FWRD row; menu metadata assertion fails.
+- `test_dynamic_menu_registration` — **S:** remove MNU_FORTH registration; menu id/content assertion fails.
+- `test_static_menu_integrity` — **S:** shift a fixed menu entry; table invariants fail.
+- `test_picker_scan_basic` — **V/D:** qsort deletion stayed GREEN; exact-order repair in T5.
+- `test_picker_omits_long_names` — **V/D:** `<=14 → <=13` stayed GREEN because kept name is 5 bytes; Task T5.
+- `test_picker_dedupes` — **S:** remove duplicate suppression; numItems becomes 2.
+- `test_picker_insert_at_cursor` — **S/paired:** omit insertion; buffer/cursor fails; mid-line semantics are pinned by the next test.
+- `test_picker_insert_mid_line` — **S:** append at buffer end instead of cursor; exact buffer/cursor fails.
+- `test_picker_trailing_space` — **S:** omit separator space; exact buffer fails.
+- `test_picker_guard_menu_identity` — **S:** remove menu-identity conjunct; wrong-menu case becomes true.
+- `test_picker_glyph_tokenize` — **S:** advance byte-wise; glyph-containing name splits and assertions fail.
+- `test_picker_long_token_skipped` — **D:** semantic omission is checked, but its unchecked-copy mutation passes non-ASan; Task T5.
+- `test_program_memory_no_overlap` — **S:** allocate dictionary into program region; overlap invariant fails.
+- `test_cleanup_no_overlap` — **S:** omit cleanup/free-list reconciliation; overlap/allocation invariant fails.
+- `test_softmenu_trailing_null` — **C:** `calloc → malloc` went RED with `count=1, byte=100`; harden determinism in T5.
+- `test_e2_continuation_after_enter` — **S:** use cursor rather than insertion predecessor after ENTER; continuation/tam assertion fails.
+- `test_e2_not_inside_rpn_gap` — **S:** treat RPN predecessor as Forth region; unexpected capture assertion fails.
+- `test_gto_word_errors` — **S:** let GTO fall back to a colon word; exact label-not-found behavior fails.
+- `test_gto_item_errors` — **S:** let GTO fall back to an item; exact label-not-found behavior fails.
+- `test_xeq_word_still_calls` — **S:** remove XEQ colon fallback; X/result fails.
+- `test_useritem_xeqp1_opcode` — **S:** emit XEQ instead of XEQ+1; opcode-byte assertion fails.
+- `test_useritem_xeqp1_decodes` — **S:** reconstruct only one opcode byte; decoded item assertion fails; citation fixed in T7.
+- `test_e1_direction_mid_program` — **S:** derive toggle direction from the wrong adjacent step; marker/capture assertions fail.
+- `test_forth_multiline_lock_holds` — **S:** remove non-empty ENTER relock; next-line capture assertion fails.
+- `test_tam_function_cleared_after_abort` — **S:** remove abort clear; stale ITM_FORTH assertion fails.
+- `test_freelist_consistent` — **S:** corrupt coalescing/order; region-count/size invariant fails.
+- `test_freelist_double_free_guarded` — **S:** remove exact double-free guard; free-list snapshot changes (expected diagnostic is not failure).
+- `test_freelist_interior_double_free` — **S:** remove interior-overlap guard; free-list snapshot changes (expected diagnostic is not failure).
+- `test_freelist_no_mutation_on_oversize_free` — **S:** mutate list before oversize rejection; snapshot changes (expected diagnostic is not failure).
+- `test_alpha_menu_on_top_during_capture` — **S/leak:** force FWRD on top; menu assertion fails, but tam.function is primed/leaked; Task T6.
+- `test_alpha_menu_contains_fwrd` — **S:** remove FWRD row; membership assertion fails; citation fixed in T7.
+- `test_forth_toggle_from_catalog_leaves_alpha_menu` — **S:** restore catalog overlay after dispatch; top-menu/alpha assertions fail; fnKey state cleanup in T6.
+- `test_forth_drain_clears_buried_catalog` — **S:** omit buried-catalog drain; SYSFL/catalog remains and assertions fail; fnKey cleanup in T6.
+- `test_forth_capture_survives_keystroke` — **S/clean:** restore unconditional ITM_LITERAL; derived tam.function assertion fails; state is not primed.
+- `test_forth_alpha_gesture_resumes_forth` — **S/clean:** delete insertion-state AIM arm; tam.function remains non-Forth and assertion fails; state is not primed.
+- `test_unterminated_def_errors` — **S:** accept missing semicolon; exact error/no-definition assertion fails.
+- `test_overlong_token_in_def_keeps_error` — **S:** clear the first compile error while recovering; exact retained error fails.
+- `test_save_restore_roundtrip` — **S:** omit dictionary serialization field/data; restored names/results fail.
+- `test_restore_missing_params_defaults` — **S:** treat missing Forth parameters as fatal/nondefault; default-state assertion fails.
+- `test_restore_validation_clamps` — **S:** trust corrupt saved here/count; empty-reset bounds assertion fails.
+- `test_validate_direct_corruption` — **S:** omit size/nameLen validation; direct corruption is accepted instead of reset.
+
+R2 found no fixture duplication bug involving `.END.`: explicit `ITM_END`
+bytes in these fixtures separate or terminate C47 programs, while
+`writeTestProgram` appends the final `.END.` sentinel. The three free-list guard
+diagnostics are expected and were not attributed by log adjacency.
