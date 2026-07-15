@@ -1,5 +1,7 @@
 diff --git a/src/c47/defines.h b/src/c47/defines.h
-index 52aef0d7c603b27c3c9cded032d2438f5abd4623..5b42a22f6e359c8ac6eba014929514675e6c22af 100755
+old mode 100644
+new mode 100755
+index 52aef0d7c603b27c3c9cded032d2438f5abd4623..5b42a22f6e359c8ac6eba014929514675e6c22af
 --- a/src/c47/defines.h
 +++ b/src/c47/defines.h
 @@ -1426,7 +1426,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {

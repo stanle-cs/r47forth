@@ -1,0 +1,25 @@
+# Working-area files that are NOT package content.
+#
+# The working area is a flat mirror of upstream paths, so refresh treats
+# anything without an upstream counterpart as a new source file and copies it
+# into files/ — which the resolver then shadows into the build tree and
+# pkg_build ships inside the distributable. Design docs and the dev gate script
+# live here for editing convenience, not because they belong to the firmware.
+#
+# Ignoring is retroactive: adding a pattern here makes the matching file
+# unproducible from the working area, so the next refresh deletes any
+# patches//files/ entry previously generated for it. The working copy is never
+# touched.
+#
+# Do NOT ignore *.c / *.h — test_dict_reloc.c in particular IS package content
+# (it is the self-test suite, and the build reads only the files/ copy).
+
+# Design authority, its amendment trail, and the plan/prompt/report documents.
+*.md
+
+# ARCHIVE-3.3C-amendment.txt and friends — superseded design notes.
+*.txt
+
+# The gate runner. Invoked from the working area as
+# ./packages/forth-core/build-test.sh; the firmware never reads it.
+build-test.sh

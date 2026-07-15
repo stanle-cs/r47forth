@@ -8,9 +8,16 @@
 #   ./packages/forth-core/build-test.sh --no-setup # skip meson reconfigure (build+run only)
 #   ./packages/forth-core/build-test.sh --build    # build only, do not run the suite
 #
-# Why --reconfigure by default: the CUSTOM_PKG shadow tree is (re)built at
-# `meson setup` time. A bare `ninja` after editing a package source may compile
-# the STALE shadowed copy and silently ignore your edit. Reconfiguring re-shadows.
+# Why refresh + --reconfigure by default:
+#   The resolver builds the shadow tree from the package's GENERATED patches/ and
+#   files/ — it never reads the flat working area. So an edit to
+#   packages/forth-core/<file> is INVISIBLE to the compiler until
+#   tools/pkg_patch_refresh.py regenerates patches/+files/ from it. Without the
+#   refresh step this script happily reports GREEN for code you did not build:
+#   verified directly by injecting a marker into a working-area source, running
+#   setup, and grepping the shadow — the marker was absent.
+#   The shadow itself is then (re)built at `meson setup` time, so a bare `ninja`
+#   after a refresh would still compile the stale shadow. Both steps are needed.
 # Pass --no-setup only when you KNOW no package source changed since last setup.
 #
 # Exit status: nonzero if configure fails, build fails, OR any self-test fails
@@ -42,7 +49,16 @@ done
 
 echo "==> repo: ${REPO_ROOT}"
 
-# --- Configure (re-shadows the CUSTOM_PKG tree) ---
+# --- Regenerate patches/+files/ from the flat working area ---
+# MUST precede meson setup: the resolver globs patches/+files/ and never reads
+# the working area, so skipping this compiles the PREVIOUS patch content and
+# silently ignores every edit made since the last refresh.
+if [[ "${DO_SETUP}" -eq 1 ]]; then
+  echo "==> pkg_patch_refresh (regenerating ${PKG}/patches + files from working area)"
+  python3 tools/pkg_patch_refresh.py "${PKG}"
+fi
+
+# --- Configure (re-shadows the CUSTOM_PKG tree from patches/+files/) ---
 if [[ "${DO_SETUP}" -eq 1 ]]; then
   echo "==> meson setup (reconfigure, CUSTOM_PKG=${PKG})"
   meson setup "${BUILD_DIR}" \

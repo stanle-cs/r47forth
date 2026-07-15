@@ -393,6 +393,73 @@ No fixes were required this round.
 
 ---
 
+## 10. Refresh Base Pinning (branch pkgmgr/refresh-base-commit)
+
+**Bug:** `pkg_patch_refresh.py`'s `--refresh` mode computed diffs against the
+live upstream `HEAD` (the working tree or current `src/c47/` checkout), not
+against a recorded base commit. When upstream moved between the time a
+package author last refreshed and the next refresh, the new diff
+incorporated upstream's own changes as "reverts" — silently baking
+upstream-reverts into the patch, producing larger patches that undid
+upstream commits already present in the target build's source. Over time
+this accumulated a growing set of spurious hunk reversals in every
+package's `.patch` files.
+
+**Fix:** Each package now records a `base_commit` (sha) in its
+`.refresh-manifest.json`. Refresh diffs are taken against
+`git show <base_commit>:src/c47/<rel>` rather than against the live
+working tree. If the current upstream epoch (the commit being built
+against) does not descend from the recorded `base_commit`, the refresh
+is **fatal** — it cannot produce a correct diff without rebasing first.
+Two new CLI modes support the lifecycle: `--materialize` extracts a file
+from the pinned base commit into the working area for editing;
+`--rebase-base` advances the `base_commit` to a new upstream commit,
+re-diffing existing working-area files against the new base so patches
+stay clean. A conflict-marker guard rejects any generated patch that
+contains `<<<<<<<` / `=======` / `>>>>>>>` markers, preventing
+corrupted patches from being written to disk.
+
+**Files changed** (from `git diff --stat` on branch
+`pkgmgr/refresh-base-commit`):
+
+```
+custom_package/PROPOSED_SPEC_CHANGES.md | 181 ++++++++
+custom_package/README.md                |  52 ++-
+res/testPgms/testPgms.bin               | Bin 22189 -> 22197 bytes
+tools/pkg_patch_refresh.py              | 449 ++++++++++++++++---
+tools/test_pkg_patch_refresh.py         | 770 ++++++++++++++++++++++++++++++-
+5 files changed, 1371 insertions(+), 81 deletions(-)
+```
+
+**Tests added:** 18 new tests in `tools/test_pkg_patch_refresh.py`
+(total suite grew from 34 to 52). New test names:
+
+1. `test_refresh_base_commit_recorded` — base_commit persisted in manifest
+2. `test_refresh_diff_against_base_not_head` — diff source is pinned commit
+3. `test_refresh_base_commit_advance` — base_commit updates on rebase
+4. `test_refresh_epoch_mismatch_fatal` — non-descendant epoch aborts
+5. `test_materialize_from_base_commit` — --materialize extracts from pinned base
+6. `test_materialize_creates_working_file` — materialized file lands in working area
+7. `test_rebase_base_advances_pin` — --rebase-base moves base_commit forward
+8. `test_rebase_base_regen_patches` — rebased patches reflect new base
+9. `test_conflict_marker_guard_rejects` — conflict markers in diff are fatal
+10. `test_conflict_marker_guard_clean` — clean diffs pass the guard
+11. `test_refresh_base_commit_initial` — first refresh records current HEAD
+12. `test_materialize_nonexistent_path` — materialize rejects unknown file
+13. `test_rebase_base_missing_commit` --rebase-base rejects bad sha
+14. `test_refresh_with_base_commit_unchanged` — no-op when working copy matches base
+15. `test_refresh_with_base_commit_changed` — diff reflects only local edits
+16. `test_epoch_mismatch_error_message` — error names the base and current commits
+17. `test_materialize_preserves_base_content` — materialized file matches base exactly
+18. `test_full_refresh_cycle_with_base` — end-to-end: materialize, edit, refresh, rebase
+
+**make test result:** 4/4 OK (pkg_patch_common 0.05s, pkg_patch_resolver 0.82s,
+pkg_patch_refresh 2.13s, testSuite 97.99s — 0 failures).
+
+This implementation has not yet been independently audited.
+
+---
+
 Do not push. Do not merge. Everything above is committed locally on
 `package-manager/patch-based-overlay` for human review; prior states
 remain reachable at `checkpoint/pre-plain-diff-revert-20260712-1541`

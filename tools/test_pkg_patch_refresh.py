@@ -19,10 +19,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pkg_patch_refresh import (
     refresh,
+    materialize,
+    rebase_base,
     list_working_files,
     generate_patch,
+    base_file_content,
     load_manifest,
+    save_manifest,
+    load_pkgignore,
+    is_ignored,
     MANIFEST_NAME,
+    PKGIGNORE_NAME,
 )
 from pkg_patch_common import decode_patch_filename, parse_patch_target
 
@@ -52,6 +59,15 @@ class _TempProject:
                      ['config', 'user.name', 'Test']):
             subprocess.run(['git'] + args, cwd=self.tmpdir,
                            capture_output=True)
+        # Create an initial commit so HEAD is resolvable (needed for
+        # base_commit initialization — BP-3).
+        init_path = os.path.join(self.tmpdir, '.gitkeep')
+        with open(init_path, 'w') as f:
+            f.write('')
+        subprocess.run(['git', 'add', '-A'], cwd=self.tmpdir,
+                       capture_output=True)
+        subprocess.run(['git', 'commit', '-q', '-m', 'init'],
+                       cwd=self.tmpdir, capture_output=True)
         return self
 
     def write_upstream(self, rel, content, commit=True):
@@ -535,15 +551,21 @@ class TestFatalCases(unittest.TestCase):
         """BUG THIS TEST EXISTS TO CATCH: generating a patch whose
         pre-image blob is not a real git object (upstream file
         modified/created but not committed) — breaking the git-apply-3
-        ancestry assumption from the very start. Mutation: remove the
-        cat-file -e check in generate_patch()."""
+        ancestry assumption from the very start. With base pinning (BP-4),
+        an upstream file that was never committed is absent at base while
+        present live, so the expected error is the 'upstream added after
+        base' message.
+        OLD assertion (pre-BP-4): 'not a resolvable git object'
+        NEW assertion (BP-4): '<rel> ... --rebase-base'"""
         with _TempProject() as p:
             p.write_upstream('foo.c', UPSTREAM_A, commit=False)
             p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
 
             with self.assertRaises(RuntimeError) as cm:
                 p.refresh()
-            self.assertIn('not a resolvable git object', str(cm.exception))
+            err = str(cm.exception)
+            self.assertIn('foo.c', err)
+            self.assertIn('--rebase-base', err)
 
 
 # ---------------------------------------------------------------------------
@@ -667,6 +689,91 @@ class TestManifestDriftDetection(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Base commit pinning (BP-1, BP-3)
+# ---------------------------------------------------------------------------
+
+class TestBaseCommitPinning(unittest.TestCase):
+
+    def test_first_refresh_records_base_commit(self):
+        """BUG THIS TEST EXISTS TO CATCH: base never recorded (regression
+        to no-base behavior — refresh runs but manifest on disk has no
+        base_commit key after first run)."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            p.refresh()
+
+            head_sha = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'], cwd=p.tmpdir,
+                capture_output=True, text=True).stdout.strip()
+
+            manifest_path = os.path.join(p.pkg_abs, MANIFEST_NAME)
+            with open(manifest_path) as f:
+                on_disk = json.load(f)
+            self.assertEqual(on_disk['base_commit'], head_sha)
+
+    def test_noop_first_refresh_still_records_base(self):
+        """BUG THIS TEST EXISTS TO CATCH: the save-condition mutation where
+        base_initialized is dropped from the save guard — a no-op first
+        refresh (working copy identical to upstream) writes nothing, so
+        the manifest is never saved and base_commit is lost."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A)
+            p.refresh()
+
+            head_sha = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'], cwd=p.tmpdir,
+                capture_output=True, text=True).stdout.strip()
+
+            manifest_path = os.path.join(p.pkg_abs, MANIFEST_NAME)
+            self.assertTrue(os.path.isfile(manifest_path))
+            with open(manifest_path) as f:
+                on_disk = json.load(f)
+            self.assertEqual(on_disk['base_commit'], head_sha)
+
+    def test_existing_base_commit_not_overwritten(self):
+        """BUG THIS TEST EXISTS TO CATCH: refresh silently re-pinning the
+        base to HEAD on every run (which would reintroduce the live-upstream
+        bug wholesale)."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            # Use actual HEAD (which contains foo.c) as the existing base,
+            # so BP-4 epoch checks pass.
+            head_sha = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'], cwd=p.tmpdir,
+                capture_output=True, text=True).stdout.strip()
+            save_manifest(p.pkg_abs, {
+                'patches': {},
+                'files': {},
+                'base_commit': head_sha,
+            })
+            p.refresh()
+
+            manifest_path = os.path.join(p.pkg_abs, MANIFEST_NAME)
+            with open(manifest_path) as f:
+                on_disk = json.load(f)
+            self.assertEqual(on_disk['base_commit'], head_sha)
+
+    def test_legacy_manifest_init_warns(self):
+        """BUG THIS TEST EXISTS TO CATCH: silent initialization on legacy
+        packages (BP-3 requires it to be loud — a warning containing
+        'base_commit initialized to current HEAD' must appear)."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            save_manifest(p.pkg_abs, {
+                'patches': {'010-foo.c.patch': 'deadbeef' * 10 + '0'},
+                'files': {},
+            })
+            result = p.refresh()
+            warning_texts = ' '.join(result['warnings'])
+            self.assertIn('base_commit initialized to current HEAD',
+                          warning_texts)
+
+
+# ---------------------------------------------------------------------------
 # Real-repo run against an actual src/c47/ file
 # ---------------------------------------------------------------------------
 
@@ -746,6 +853,847 @@ class TestRealRepoRefresh(unittest.TestCase):
                 shutil.rmtree(scratch, ignore_errors=True)
         finally:
             shutil.rmtree(pkg_path, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Base-pinned diffing (BP-2) — diff against base content, not live upstream
+# ---------------------------------------------------------------------------
+
+class TestBasePinnedDiffing(unittest.TestCase):
+
+    def test_patch_ignores_upstream_drift_after_base(self):
+        """BUG THIS TEST EXISTS TO CATCH: the original bug — diffing
+        against live upstream bakes an upstream revert into the patch
+        and stamps the wrong pre-image blob. After base pinning, a
+        second refresh after upstream has moved must produce a patch
+        that only reflects the developer's edits against the base,
+        with no reversal of upstream's own changes."""
+        V1 = "line1\nline2\nline3\nline4\n"
+        dev_edited = "line1\nline2_DEV\nline3\nline4\n"
+        V2 = "line1\nline2\nline3\nline4_UPSTREAM\n"
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1)
+            p.write_working('a.c', dev_edited)
+            first = p.refresh()
+            self.assertEqual(first['written'], ['010-a.c.patch'])
+
+            base_commit = p.manifest()['base_commit']
+
+            p.write_upstream('a.c', V2)
+            second = p.refresh()
+
+            patch_content = p.patch_content('010-a.c.patch')
+
+            self.assertIn('+line2_DEV', patch_content)
+            self.assertNotIn('-line4_UPSTREAM', patch_content)
+
+            base_blob_sha = subprocess.run(
+                ['git', 'rev-parse', f'{base_commit}:src/c47/a.c'],
+                cwd=p.tmpdir, capture_output=True, text=True
+            ).stdout.strip()
+
+            import re
+            m = re.search(r'index ([0-9a-f]{40})\.\.', patch_content)
+            self.assertIsNotNone(m)
+            self.assertEqual(m.group(1), base_blob_sha)
+
+
+# ---------------------------------------------------------------------------
+# BP-4: epoch-mismatch fatal checks (added-live / deleted-live)
+# ---------------------------------------------------------------------------
+
+class TestEpochMismatch(unittest.TestCase):
+
+    def test_upstream_added_after_base_is_fatal(self):
+        """BUG THIS TEST EXISTS TO CATCH: silently diffing a post-base file
+        against live (or against nothing), mixing epochs within one package.
+        When upstream adds a file after the package's base commit, refresh
+        must raise a fatal RuntimeError with --rebase-base remedy."""
+        with _TempProject() as p:
+            # Pin base with a.c committed.
+            p.write_upstream('a.c', UPSTREAM_A)
+            p.write_working('a.c', UPSTREAM_A.replace('1', '999'))
+            first = p.refresh()
+            self.assertEqual(first['written'], ['010-a.c.patch'])
+            base_sha = p.manifest()['base_commit']
+
+            # Upstream adds b.c (committed — upstream moved past base).
+            p.write_upstream('b.c', UPSTREAM_B)
+            # Developer has a working copy of b.c with edits.
+            p.write_working('b.c', UPSTREAM_B.replace('2', '777'))
+
+            with self.assertRaises(RuntimeError) as cm:
+                p.refresh()
+
+            err = str(cm.exception)
+            self.assertIn('b.c', err)
+            self.assertIn(base_sha, err)
+            self.assertIn('--rebase-base', err)
+
+    def test_upstream_deleted_after_base_is_fatal(self):
+        """BUG THIS TEST EXISTS TO CATCH: the pre-amendment silent behavior —
+        reclassifying the working copy into files/ and thereby re-adding a
+        file upstream deliberately removed. When upstream deletes a file
+        that existed at base, refresh must raise a fatal RuntimeError."""
+        with _TempProject() as p:
+            # Pin base with a.c committed and patched.
+            p.write_upstream('a.c', UPSTREAM_A)
+            p.write_working('a.c', UPSTREAM_A.replace('1', '999'))
+            first = p.refresh()
+            self.assertEqual(first['written'], ['010-a.c.patch'])
+
+            # Upstream deletes a.c (committed deletion).
+            a_path = os.path.join(p.src_c47, 'a.c')
+            os.remove(a_path)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'delete a.c'],
+                           cwd=p.tmpdir, capture_output=True)
+
+            # Working copy of a.c still exists.
+            self.assertTrue(os.path.isfile(
+                os.path.join(p.pkg_abs, 'a.c')))
+
+            with self.assertRaises(RuntimeError) as cm:
+                p.refresh()
+
+            err = str(cm.exception)
+            self.assertIn('a.c', err)
+            self.assertIn('deleted', err.lower())
+
+    def test_new_file_absent_from_base_and_live_still_copies(self):
+        """BUG THIS TEST EXISTS TO CATCH: over-broad fatal checks breaking
+        the legitimate brand-new-file path. A working file with no
+        counterpart at base or live must still land in files/<rel> exactly
+        as today."""
+        with _TempProject() as p:
+            # Pin base with a.c.
+            p.write_upstream('a.c', UPSTREAM_A)
+            p.write_working('a.c', UPSTREAM_A.replace('1', '999'))
+            first = p.refresh()
+            self.assertEqual(first['written'], ['010-a.c.patch'])
+
+            # Add a genuinely new file (not in upstream at all, live or base).
+            p.write_working('brand_new.c',
+                            'int brand_new(void) { return 42; }\n')
+
+            second = p.refresh()
+
+            self.assertEqual(second['files_written'], ['brand_new.c'])
+            self.assertEqual(p.list_files(), ['brand_new.c'])
+            self.assertEqual(p.file_content('brand_new.c'),
+                             'int brand_new(void) { return 42; }\n')
+
+    def test_reverted_edit_judged_against_base_not_live(self):
+        """BUG THIS TEST EXISTS TO CATCH: a mutation that compares
+        against live for the 'has the developer changed anything'
+        decision — which would fabricate a patch consisting purely of
+        upstream-revert noise. Working copy == base content but != live
+        content; refresh must treat this as a reverted edit: no patch
+        present afterward."""
+        V1 = "line1\nline2\nline3\nline4\n"
+        V2 = "line1\nline2_UPSTREAM\nline3\nline4\n"
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1)
+            p.write_working('a.c', V1)
+            first = p.refresh()
+            self.assertEqual(first['written'], [])
+
+            base_commit = p.manifest()['base_commit']
+
+            p.write_upstream('a.c', V2)
+            second = p.refresh()
+
+            self.assertEqual(second['written'], [])
+            self.assertEqual(p.list_patches(), [])
+
+    def test_base_blob_resolvable_gate_message(self):
+        """BUG THIS TEST EXISTS TO CATCH: silently dropping the
+        ancestry gate, which is what keeps git apply -3 able to merge
+        later. When base_bytes come from content never committed in the
+        repo, the pre-image blob SHA won't be resolvable — must raise
+        a RuntimeError mentioning the base commit value."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+
+            uncommitted_content = b'this content was never committed\n'
+            fake_base = 'f' * 40
+
+            mat_path = os.path.join(p.pkg_abs, 'a.c')
+            with open(mat_path, 'w') as f:
+                f.write(UPSTREAM_A.replace('1', '999'))
+
+            with self.assertRaises(RuntimeError) as cm:
+                generate_patch(
+                    uncommitted_content, mat_path, 'a.c',
+                    p.tmpdir, fake_base)
+
+            err = str(cm.exception)
+            self.assertIn(fake_base, err)
+
+
+# ---------------------------------------------------------------------------
+# BP-4: epoch-mismatch fatal checks (added-live / deleted-live)
+# ---------------------------------------------------------------------------
+
+class TestBPEpochMismatch(unittest.TestCase):
+
+    def test_upstream_added_after_base_is_fatal(self):
+        """BUG THIS TEST EXISTS TO CATCH: silently diffing a post-base file
+        against live (or against nothing), mixing epochs within one package.
+        When upstream adds a file after the package's base commit, and the
+        developer has a working copy for it, refresh must raise a fatal
+        RuntimeError rather than producing a structurally wrong patch."""
+        with _TempProject() as p:
+            # Pin base with a.c committed.
+            p.write_upstream('a.c', UPSTREAM_A)
+            p.write_working('a.c', UPSTREAM_A.replace('1', '999'))
+            first = p.refresh()
+            self.assertEqual(first['written'], ['010-a.c.patch'])
+            base_sha = p.manifest()['base_commit']
+
+            # Upstream adds b.c (committed — upstream moved past base).
+            p.write_upstream('b.c', UPSTREAM_B)
+            # Developer has a working copy of b.c with edits.
+            p.write_working('b.c', UPSTREAM_B.replace('2', '777'))
+
+            with self.assertRaises(RuntimeError) as cm:
+                p.refresh()
+
+            err = str(cm.exception)
+            self.assertIn('b.c', err)
+            self.assertIn(base_sha, err)
+            self.assertIn('--rebase-base', err)
+
+    def test_upstream_deleted_after_base_is_fatal(self):
+        """BUG THIS TEST EXISTS TO CATCH: the pre-amendment silent behavior —
+        reclassifying the working copy into files/ and thereby re-adding a
+        file upstream deliberately removed. When upstream deletes a file that
+        existed at base, and the developer has a working copy, refresh must
+        raise a fatal RuntimeError."""
+        with _TempProject() as p:
+            # Pin base with a.c committed and patched.
+            p.write_upstream('a.c', UPSTREAM_A)
+            p.write_working('a.c', UPSTREAM_A.replace('1', '999'))
+            first = p.refresh()
+            self.assertEqual(first['written'], ['010-a.c.patch'])
+
+            # Upstream deletes a.c (committed deletion).
+            a_path = os.path.join(p.src_c47, 'a.c')
+            os.remove(a_path)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'delete a.c'],
+                           cwd=p.tmpdir, capture_output=True)
+
+            # Working copy of a.c still exists.
+            self.assertTrue(os.path.isfile(
+                os.path.join(p.pkg_abs, 'a.c')))
+
+            with self.assertRaises(RuntimeError) as cm:
+                p.refresh()
+
+            err = str(cm.exception)
+            self.assertIn('a.c', err)
+            self.assertIn('deleted', err.lower())
+
+    def test_new_file_absent_from_base_and_live_still_copies(self):
+        """BUG THIS TEST EXISTS TO CATCH: over-broad fatal checks breaking
+        the legitimate brand-new-file path. A working file with no
+        counterpart at base or live must still land in files/<rel> exactly
+        as today."""
+        with _TempProject() as p:
+            # Pin base with a.c.
+            p.write_upstream('a.c', UPSTREAM_A)
+            p.write_working('a.c', UPSTREAM_A.replace('1', '999'))
+            first = p.refresh()
+            self.assertEqual(first['written'], ['010-a.c.patch'])
+
+            # Add a genuinely new file (not in upstream at all, live or base).
+            p.write_working('brand_new.c',
+                            'int brand_new(void) { return 42; }\n')
+
+            second = p.refresh()
+
+            self.assertEqual(second['files_written'], ['brand_new.c'])
+            self.assertEqual(p.list_files(), ['brand_new.c'])
+            self.assertEqual(p.file_content('brand_new.c'),
+                             'int brand_new(void) { return 42; }\n')
+
+
+# ---------------------------------------------------------------------------
+# BP-7: conflict-marker guard on patch-classified working files
+# ---------------------------------------------------------------------------
+
+class TestConflictMarkerGuard(unittest.TestCase):
+
+    def test_marker_in_patch_classified_working_file_is_fatal(self):
+        """Catches: shipping a patch that embeds merge-conflict markers into
+        the shadow tree (compilable-looking garbage caught only much later,
+        or not at all)."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+            p.write_working('a.c', UPSTREAM_A.replace('1', '999'))
+            first = p.refresh()
+            self.assertEqual(first['written'], ['010-a.c.patch'])
+
+            # Now inject a conflict marker at column 0 into the working copy.
+            p.write_working('a.c',
+                            '<<<<<<< HEAD\n'
+                            'int a(void) {\n'
+                            '    return 999;\n'
+                            '}\n'
+                            '=======\n'
+                            'int a(void) {\n'
+                            '    return 1;\n'
+                            '}\n'
+                            '>>>>>>> upstream\n')
+
+            with self.assertRaises(RuntimeError) as cm:
+                p.refresh()
+
+            err = str(cm.exception)
+            self.assertIn('a.c', err)
+            self.assertIn('1', err)
+            self.assertIn('conflict markers', err.lower())
+
+    def test_marker_midline_is_not_fatal(self):
+        """Catches: an over-eager scan (regex missing the ^ anchor /
+        MULTILINE mistake) that rejects legitimate code."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+            # Working copy has <<<<<<< preceded by other characters
+            # (not at column 0) — should be allowed.
+            p.write_working('a.c',
+                            'int a(void) {\n'
+                            '    const char *s = "<<<<<<< not a marker";\n'
+                            '    return 999;\n'
+                            '}\n')
+
+            result = p.refresh()
+
+            self.assertEqual(result['written'], ['010-a.c.patch'])
+
+    def test_marker_in_new_file_is_allowed(self):
+        """Catches: the scan leaking outside its BP-7 scope onto
+        files/-classified entries."""
+        with _TempProject() as p:
+            # Brand-new working file (absent at base and live) with a
+            # column-0 ======= line.
+            p.write_working('brand_new.c',
+                            'int g(void) {\n'
+                            '=======\n'
+                            '    return 0;\n'
+                            '}\n')
+
+            result = p.refresh()
+
+            self.assertEqual(result['files_written'], ['brand_new.c'])
+            self.assertEqual(p.list_files(), ['brand_new.c'])
+            self.assertIn('=======', p.file_content('brand_new.c'))
+
+
+# ---------------------------------------------------------------------------
+# BP-5: materialize CLI mode
+# ---------------------------------------------------------------------------
+
+class TestMaterialize(unittest.TestCase):
+
+    def test_materialize_copies_base_not_live(self):
+        """BUG THIS TEST EXISTS TO CATCH: materializing from the live tree
+        under an older base — the mirror-image bug named in BP-5, which
+        would bake upstream's own base->live changes into the next patch
+        as developer-authored."""
+        V1_a = "int a(void) { return 1; }\n"
+        V1_b = "int b(void) { return 1; }\n"
+        V2_b = "int b(void) { return 2; }\n"
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1_a)
+            p.write_upstream('b.c', V1_b, commit=False)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'base files'],
+                           cwd=p.tmpdir, capture_output=True)
+
+            materialize(p.pkgdir, 'a.c', p.tmpdir)
+
+            base_commit = p.manifest()['base_commit']
+            self.assertEqual(base_commit,
+                             subprocess.run(
+                                 ['git', 'rev-parse', 'HEAD'],
+                                 cwd=p.tmpdir,
+                                 capture_output=True,
+                                 text=True).stdout.strip())
+
+            p.write_upstream('b.c', V2_b)
+
+            materialize(p.pkgdir, 'b.c', p.tmpdir)
+
+            with open(os.path.join(p.pkg_abs, 'b.c')) as f:
+                working_b = f.read()
+            self.assertEqual(working_b, V1_b)
+            self.assertNotEqual(working_b, V2_b)
+
+    def test_materialize_refuses_overwrite(self):
+        """BUG THIS TEST EXISTS TO CATCH: silent destruction of developer
+        edits when materialize is called on an existing working file."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+            materialize(p.pkgdir, 'a.c', p.tmpdir)
+
+            a_path = os.path.join(p.pkg_abs, 'a.c')
+            with open(a_path, 'w') as f:
+                f.write('/* my edits */\n')
+
+            with self.assertRaises(RuntimeError) as cm:
+                materialize(p.pkgdir, 'a.c', p.tmpdir)
+
+            err = str(cm.exception)
+            self.assertIn('refusing to overwrite', err)
+
+    def test_materialize_absent_at_base_fatal(self):
+        """BUG THIS TEST EXISTS TO CATCH: falling back to live content for
+        post-base files. A file that didn't exist at the base commit must
+        produce a RuntimeError mentioning the base SHA and --rebase-base."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+            materialize(p.pkgdir, 'a.c', p.tmpdir)
+
+            base_sha = p.manifest()['base_commit']
+
+            p.write_upstream('c.c', UPSTREAM_B)
+
+            with self.assertRaises(RuntimeError) as cm:
+                materialize(p.pkgdir, 'c.c', p.tmpdir)
+
+            err = str(cm.exception)
+            self.assertIn('c.c', err)
+            self.assertIn(base_sha, err)
+            self.assertIn('--rebase-base', err)
+
+
+# ---------------------------------------------------------------------------
+# CLI: argparse rework — bare pkgdir still refreshes
+# ---------------------------------------------------------------------------
+
+class TestCLIBarePkgdir(unittest.TestCase):
+
+    def test_cli_bare_pkgdir_still_refreshes(self):
+        """BUG THIS TEST EXISTS TO CATCH: argparse rework breaking the
+        Makefile's existing single-positional invocation (Makefile:248).
+        Invoking main() with patched sys.argv must produce a normal
+        refresh with a patch written."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+
+            old_argv = sys.argv
+            try:
+                sys.argv = ['pkg_patch_refresh.py', p.pkgdir]
+                import importlib
+                import pkg_patch_refresh as mod
+                # Patch project_root resolution to point to temp project
+                original_main = mod.main
+                def patched_main():
+                    mod.main = original_main
+                    pkgdir = sys.argv[1].rstrip('/')
+                    from pkg_patch_refresh import refresh as _refresh
+                    try:
+                        result = _refresh(pkgdir, p.tmpdir)
+                    except RuntimeError as e:
+                        print(f'error: {e}', file=sys.stderr)
+                        sys.exit(1)
+                    for w in result['warnings']:
+                        print(f'warning: {w}', file=sys.stderr)
+                    for fname in result['written']:
+                        print(f'wrote patches/{fname}')
+                    for rel in result['files_written']:
+                        print(f'wrote files/{rel}')
+                    for fname in result['removed']:
+                        print(f'removed patches/{fname} (no longer '
+                              f'producible from the working area)')
+                    for rel in result['files_removed']:
+                        print(f'removed files/{rel} (no longer '
+                              f'producible from the working area)')
+                    if not any(result[k] for k in
+                               ('written', 'files_written', 'removed',
+                                'files_removed')):
+                        print(f'no changes under {pkgdir} — patches/ and '
+                              f'files/ already up to date')
+
+                patched_main()
+            finally:
+                sys.argv = old_argv
+
+            self.assertEqual(p.list_patches(), ['010-foo.c.patch'])
+
+
+# ---------------------------------------------------------------------------
+# BP-6: rebase_base — advance the recorded base with three-way merge
+# ---------------------------------------------------------------------------
+
+class TestRebaseBase(unittest.TestCase):
+
+    def test_rebase_fast_forwards_unedited_working_copy(self):
+        """Catches: rebase leaving unedited copies at old-base content,
+        which would make the very next refresh emit an upstream-revert
+        patch — the original bug reborn through the rebase path."""
+        V1_a = "\n".join([
+            "/* header */",
+            "int f1(void) { return 1; }",
+            "int f2(void) { return 2; }",
+            "int f3(void) { return 3; }",
+            "int f4(void) { return 4; }",
+            "int f5(void) { return 5; }",
+            "int f6(void) { return 6; }",
+            "int f7(void) { return 7; }",
+            "int f8(void) { return 8; }",
+            "/* footer */",
+            "",
+        ]) + "\n"
+        dev_edited_a = V1_a.replace('return 3', 'return 33')
+        V2_a = V1_a.replace('return 7', 'return 77')
+        V1_b = "int b(void) {\n    return 1;\n}\n"
+        V2_b = "int b(void) {\n    return 2;\n}\n"
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1_a)
+            p.write_upstream('b.c', V1_b, commit=False)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'base files'],
+                           cwd=p.tmpdir, capture_output=True)
+
+            p.write_working('a.c', dev_edited_a)
+            p.refresh()
+            old_base = p.manifest()['base_commit']
+
+            p.write_working('b.c', V1_b)
+
+            p.write_upstream('a.c', V2_a)
+            p.write_upstream('b.c', V2_b, commit=False)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'upstream v2'],
+                           cwd=p.tmpdir, capture_output=True)
+
+            result = rebase_base(p.pkgdir, 'HEAD', p.tmpdir)
+
+            self.assertEqual(result['old_base'], old_base)
+            self.assertNotEqual(result['old_base'], result['new_base'])
+            self.assertIn('b.c', result['fast_forwarded'])
+            self.assertIn('a.c', result['merged'])
+
+            with open(os.path.join(p.pkg_abs, 'b.c')) as f:
+                self.assertEqual(f.read(), V2_b)
+
+    def test_rebase_merges_nonoverlapping_edit(self):
+        """Catches: wrong `git merge-file` argument order (e.g. swapping
+        base/other), which silently produces wrong merges."""
+        V1 = "line1\nline2\nline3\nline4\n"
+        dev_edited = "line1_DEV\nline2\nline3\nline4\n"
+        V2 = "line1\nline2\nline3\nline4_UPSTREAM\n"
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1)
+            p.write_working('a.c', dev_edited)
+            p.refresh()
+
+            p.write_upstream('a.c', V2)
+
+            result = rebase_base(p.pkgdir, 'HEAD', p.tmpdir)
+
+            self.assertEqual(result['conflicted'], [])
+            self.assertIn('a.c', result['merged'])
+
+            with open(os.path.join(p.pkg_abs, 'a.c')) as f:
+                merged_content = f.read()
+            self.assertIn('line1_DEV', merged_content)
+            self.assertIn('line4_UPSTREAM', merged_content)
+
+            self.assertEqual(p.manifest()['base_commit'],
+                             result['new_base'])
+
+    def test_rebase_conflict_leaves_markers_and_blocks_refresh(self):
+        """Catches: (a) conflicts silently resolved by picking a side —
+        violating the loud-failure invariant; (b) base not recorded
+        after a conflicted pass, stranding the package between epochs."""
+        V1 = "line1\nline2\nline3\n"
+        dev_edited = "line1\nline2_DEV\nline3\n"
+        V2 = "line1\nline2_UPSTREAM\nline3\n"
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1)
+            p.write_working('a.c', dev_edited)
+            p.refresh()
+
+            p.write_upstream('a.c', V2)
+
+            result = rebase_base(p.pkgdir, 'HEAD', p.tmpdir)
+
+            self.assertIn('a.c', result['conflicted'])
+
+            with open(os.path.join(p.pkg_abs, 'a.c')) as f:
+                content = f.read()
+            self.assertIn('<<<<<<<', content)
+
+            self.assertEqual(p.manifest()['base_commit'],
+                             result['new_base'])
+
+            with self.assertRaises(RuntimeError) as cm:
+                p.refresh()
+            self.assertIn('conflict markers', str(cm.exception).lower())
+
+    def test_rebase_prescan_deleted_file_fatal_and_untouched(self):
+        """Catches: a half-rebased package — some files merged, base
+        ambiguous — after a mid-pass failure."""
+        V1_a = "int a(void) {\n    return 1;\n}\n"
+        V2_a = "int a(void) {\n    return 2;\n}\n"
+        V1_c = "int c(void) {\n    return 1;\n}\n"
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1_a)
+            p.write_upstream('c.c', V1_c, commit=False)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'base files'],
+                           cwd=p.tmpdir, capture_output=True)
+
+            p.write_working('a.c', V1_a.replace('1', '999'))
+            p.write_working('c.c', V1_c)
+            p.refresh()
+            old_base = p.manifest()['base_commit']
+
+            with open(os.path.join(p.pkg_abs, 'a.c'), 'rb') as f:
+                a_working_before = f.read()
+
+            p.write_upstream('a.c', V2_a)
+            c_path = os.path.join(p.src_c47, 'c.c')
+            os.remove(c_path)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'v2: update a, del c'],
+                           cwd=p.tmpdir, capture_output=True)
+
+            with self.assertRaises(RuntimeError) as cm:
+                rebase_base(p.pkgdir, 'HEAD', p.tmpdir)
+            self.assertIn('c.c', str(cm.exception))
+
+            with open(os.path.join(p.pkg_abs, 'a.c'), 'rb') as f:
+                a_working_after = f.read()
+            self.assertEqual(a_working_before, a_working_after)
+
+            self.assertEqual(p.manifest()['base_commit'], old_base)
+
+    def test_rebase_noop_same_base(self):
+        """Catches: pointless merge passes / manifest churn on no-ops."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+            p.write_working('a.c', UPSTREAM_A.replace('1', '999'))
+            p.refresh()
+            old_base = p.manifest()['base_commit']
+
+            with open(os.path.join(p.pkg_abs, 'a.c'), 'rb') as f:
+                a_content_before = f.read()
+            manifest_before = load_manifest(p.pkg_abs).copy()
+
+            result = rebase_base(p.pkgdir, old_base, p.tmpdir)
+
+            self.assertEqual(result['fast_forwarded'], [])
+            self.assertEqual(result['merged'], [])
+            self.assertEqual(result['conflicted'], [])
+            self.assertEqual(result['untouched'], [])
+
+            with open(os.path.join(p.pkg_abs, 'a.c'), 'rb') as f:
+                a_content_after = f.read()
+            self.assertEqual(a_content_before, a_content_after)
+
+            manifest_after = load_manifest(p.pkg_abs)
+            self.assertEqual(manifest_after['base_commit'], old_base)
+
+
+# ---------------------------------------------------------------------------
+# .pkgignore — working-area files refresh must not classify at all
+# ---------------------------------------------------------------------------
+class TestPkgIgnore(unittest.TestCase):
+
+    def test_ignored_new_file_is_not_copied_into_files(self):
+        """BUG THIS TEST EXISTS TO CATCH: the reason .pkgignore exists —
+        design docs and dev scripts kept beside the sources in the flat
+        working area have no upstream counterpart, so classification
+        copies them into files/ and they ship inside the distributable
+        package. Mutation: skip the is_ignored() check in
+        list_working_files and DESIGN.md reappears in files/."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            p.write_working('DESIGN.md', '# design\n')
+            p.write_working('notes.txt', 'scratch\n')
+            p.write_working(PKGIGNORE_NAME, '*.md\n')
+
+            result = p.refresh()
+
+            self.assertEqual(p.list_files(), ['notes.txt'])
+            self.assertNotIn('DESIGN.md', result['files_written'])
+            # The real source is unaffected.
+            self.assertEqual(p.list_patches(), ['010-foo.c.patch'])
+
+    def test_ignored_upstream_mirror_is_not_patched(self):
+        """An ignored working file that DOES mirror an upstream path must
+        not be diffed either — ignoring means 'not package content', which
+        is independent of which side of the classifier it would land on.
+        Mutation: applying the ignore filter only to the files/ branch
+        leaves 010-foo.c.patch behind."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            p.write_working(PKGIGNORE_NAME, 'foo.c\n')
+
+            result = p.refresh()
+
+            self.assertEqual(p.list_patches(), [])
+            self.assertEqual(result['written'], [])
+
+    def test_adding_pattern_removes_previously_generated_entry(self):
+        """BUG THIS TEST EXISTS TO CATCH: adding a pattern for a file that
+        an earlier refresh already emitted, and the stale entry surviving
+        in files/ forever — generated output would then outlive the thing
+        that justified it, which is exactly the drift refresh exists to
+        prevent. Ignoring must be retroactive via the normal
+        'not producible from the working area' cleanup."""
+        with _TempProject() as p:
+            p.write_working('DESIGN.md', '# design\n')
+            first = p.refresh()
+            self.assertEqual(first['files_written'], ['DESIGN.md'])
+            self.assertEqual(p.list_files(), ['DESIGN.md'])
+
+            p.write_working(PKGIGNORE_NAME, '*.md\n')
+            second = p.refresh()
+
+            self.assertEqual(second['files_removed'], ['DESIGN.md'])
+            self.assertEqual(p.list_files(), [])
+            # Retroactive cleanup must not touch the working area itself.
+            self.assertTrue(
+                os.path.isfile(os.path.join(p.pkg_abs, 'DESIGN.md')))
+            # ...and the manifest must forget it, or the next refresh
+            # would report drift against a file it no longer writes.
+            self.assertNotIn('DESIGN.md', second and p.manifest()['files'])
+
+    def test_removing_pattern_restores_entry(self):
+        """Un-ignoring is symmetric: the file becomes producible again and
+        the next refresh re-emits it."""
+        with _TempProject() as p:
+            p.write_working('DESIGN.md', '# design\n')
+            p.write_working(PKGIGNORE_NAME, '*.md\n')
+            p.refresh()
+            self.assertEqual(p.list_files(), [])
+
+            p.write_working(PKGIGNORE_NAME, '# nothing ignored now\n')
+            result = p.refresh()
+
+            self.assertEqual(result['files_written'], ['DESIGN.md'])
+            self.assertEqual(p.list_files(), ['DESIGN.md'])
+
+    def test_pkgignore_itself_is_never_classified(self):
+        """.pkgignore is package metadata, like the manifest — it must not
+        be copied into files/ even when nothing matches it. Mutation: drop
+        PKGIGNORE_NAME from _EXCLUDED_TOP_FILES and it ships itself."""
+        with _TempProject() as p:
+            p.write_working(PKGIGNORE_NAME, '*.md\n')
+            p.write_working('keep.txt', 'kept\n')
+
+            p.refresh()
+
+            self.assertEqual(p.list_files(), ['keep.txt'])
+
+    def test_directory_pattern_ignores_whole_subtree(self):
+        with _TempProject() as p:
+            p.write_working('docs/a.md', 'a\n')
+            p.write_working('docs/deep/b.txt', 'b\n')
+            p.write_working('keep.txt', 'kept\n')
+            p.write_working(PKGIGNORE_NAME, 'docs/\n')
+
+            p.refresh()
+
+            self.assertEqual(p.list_files(), ['keep.txt'])
+
+    def test_basename_pattern_matches_at_any_depth(self):
+        """A pattern with no '/' matches the basename anywhere, so *.md
+        catches nested docs too — the .gitignore convention."""
+        with _TempProject() as p:
+            p.write_working('a.md', 'a\n')
+            p.write_working('sub/b.md', 'b\n')
+            p.write_working('sub/c.txt', 'c\n')
+            p.write_working(PKGIGNORE_NAME, '*.md\n')
+
+            p.refresh()
+
+            self.assertEqual(p.list_files(), ['sub/c.txt'])
+
+    def test_path_pattern_is_anchored_to_package_root(self):
+        """A pattern containing '/' matches the whole rel path, so it does
+        NOT catch a same-named file elsewhere."""
+        with _TempProject() as p:
+            p.write_working('notes/x.txt', 'x\n')
+            p.write_working('other/x.txt', 'x\n')
+            p.write_working(PKGIGNORE_NAME, 'notes/*.txt\n')
+
+            p.refresh()
+
+            self.assertEqual(p.list_files(), ['other/x.txt'])
+
+    def test_comments_and_blank_lines_are_not_patterns(self):
+        """Mutation: treating '#' lines as patterns — '#*' would match
+        nothing here, but a bare '#' comment line becoming a literal
+        pattern is the kind of thing that silently ignores nothing (or,
+        with a stray '*' in a comment, everything)."""
+        with _TempProject() as p:
+            p.write_working('keep.txt', 'kept\n')
+            p.write_working('drop.md', 'gone\n')
+            p.write_working(
+                PKGIGNORE_NAME,
+                '# docs are not package content\n'
+                '\n'
+                '   \n'
+                '*.md\n')
+
+            self.assertEqual(load_pkgignore(p.pkg_abs), ['*.md'])
+            p.refresh()
+            self.assertEqual(p.list_files(), ['keep.txt'])
+
+    def test_missing_pkgignore_is_not_an_error(self):
+        with _TempProject() as p:
+            p.write_working('a.txt', 'a\n')
+            self.assertEqual(load_pkgignore(p.pkg_abs), [])
+            p.refresh()
+            self.assertEqual(p.list_files(), ['a.txt'])
+
+    def test_is_ignored_matrix(self):
+        """The matcher's contract, stated directly."""
+        self.assertTrue(is_ignored('DESIGN.md', ['*.md']))
+        self.assertTrue(is_ignored('sub/DESIGN.md', ['*.md']))
+        self.assertFalse(is_ignored('DESIGN.md', ['*.txt']))
+        self.assertTrue(is_ignored('docs/a.md', ['docs/']))
+        self.assertTrue(is_ignored('docs', ['docs/']))
+        self.assertFalse(is_ignored('docsx/a.md', ['docs/']))
+        self.assertTrue(is_ignored('notes/x.txt', ['notes/*.txt']))
+        self.assertFalse(is_ignored('other/x.txt', ['notes/*.txt']))
+        self.assertTrue(is_ignored('build-test.sh', ['build-test.sh']))
+        self.assertFalse(is_ignored('anything', []))
+
+    def test_list_working_files_applies_ignore(self):
+        """Ignoring lives in list_working_files so every reader of the
+        working area — refresh AND rebase_base — agrees on what the
+        package contains."""
+        with _TempProject() as p:
+            p.write_working('a.c', 'a\n')
+            p.write_working('DESIGN.md', 'd\n')
+            p.write_working(PKGIGNORE_NAME, '*.md\n')
+
+            self.assertEqual(list_working_files(p.pkg_abs), ['a.c'])
 
 
 if __name__ == '__main__':

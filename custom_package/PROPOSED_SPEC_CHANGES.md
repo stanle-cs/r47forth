@@ -308,6 +308,48 @@ classifies each automatically:
   `patches/`/`files/` entry is deleted too — the same "no longer producible
   from the working area" cleanup as the reverted-edit case, generalized to
   cover deletion as well as reversion, for both output mechanisms.
+- **A working-area file matching `<pkgdir>/.pkgignore`** → not classified
+  at all: neither diffed nor copied. See "Ignoring non-content" below.
+
+### Ignoring non-content (`.pkgignore`)
+
+**Status:** implemented (`load_pkgignore` / `is_ignored`, applied inside
+`list_working_files`).
+
+Automatic classification treats the working area as package content *by
+definition* — a file with no upstream counterpart **is** a new source. That
+inference is right for code and wrong for everything else a package
+accumulates: design authority, amendment trails, plan/prompt documents, a
+gate runner. `forth-core` had 18 such files; every one was being copied into
+`files/`, shadowed into the build tree, and shipped inside the distributable,
+with a fresh copy regenerated on every `refresh`.
+
+An optional top-level `<pkgdir>/.pkgignore` excludes them. One glob per line,
+`#` comments and blank lines dropped; a deliberately small `.gitignore`
+subset: trailing `/` is a directory subtree, a pattern with no `/` matches the
+**basename at any depth**, a pattern containing `/` is anchored to the package
+root. `fnmatch` globbing, with two documented divergences kept for
+implementation obviousness — `*` crosses `/` in path-form patterns, and there
+is no negation. `.pkgignore` never classifies itself.
+
+**Ignoring is retroactive by construction, not by special case.** An ignored
+file is simply absent from `list_working_files`, so it is "no longer
+producible from the working area" and the existing stale-cleanup pass deletes
+any entry previously generated for it — the same code path as reversion and
+deletion above. Removing a pattern restores it on the next run. The working
+copy is never touched.
+
+The filter lives in `list_working_files` — the one place every reader of the
+working area goes through — so `refresh` and `rebase_base` cannot disagree
+about what a package contains, and neither needs to know `.pkgignore` exists.
+
+**Known sharp edge, accepted:** package `.c` files compile from the `files/`
+copy, so ignoring one *silently removes it from the build* rather than
+erroring. This is the same failure mode as deleting a working-area source, and
+is warned about in the package README and `.pkgignore`'s own header rather
+than mechanically prevented — a whitelist of "extensions you may not ignore"
+would be a new declaration to keep in sync, which is precisely what revision 2
+exists to abolish.
 
 **Rationale:** removes the last remaining developer *decision* from the
 authoring workflow. Revision 2 already removed manual declarations
@@ -456,6 +498,187 @@ today's `-3` mechanics already prove); two packages editing the *same
 line*, or lines within each other's `-U3` context in a way that produces
 a genuine hunk overlap, conflict loudly. This is the accepted tradeoff
 described in "Why revision 2" above.
+
+---
+
+## Refresh Base Pinning — diff against the recorded base commit (PROPOSED, Phase 1 plan)
+
+**Status:** APPROVED by human review 2026-07-14, with two amendments folded
+in below: BP-4's upstream-deleted case is now a fatal stop (not a logged
+`[GAP]`), and BP-6's `--set-base` open question is resolved **no**. Branch:
+`pkgmgr/refresh-base-commit`.
+Fixes: `refresh` diffs against live upstream instead of a package's recorded
+base commit, producing wrong patches for packages whose upstream has since
+moved.
+
+**Scope:** `tools/pkg_patch_refresh.py`, `tools/test_pkg_patch_refresh.py`,
+`custom_package/README.md`, this document. **Zero apply-side changes**
+(`pkg_patch_apply.py`, `resolve_c47_src.py`, `Makefile` untouched — the
+`refresh` CLI signature at the `pkg_build` call site
+[VERIFIED: Makefile:248] is unchanged). Zero-touch upstream holds.
+
+### Root cause / current behavior
+
+1. `refresh` resolves every working file's diff counterpart to the **live
+   on-disk working tree**: `src_c47_dir = <project_root>/src/c47`
+   [VERIFIED: tools/pkg_patch_refresh.py:291], `upstream_path` built from it
+   [VERIFIED: tools/pkg_patch_refresh.py:306], and `generate_patch` runs
+   `git diff --no-index --full-index` between that live file and the working
+   copy [VERIFIED: tools/pkg_patch_refresh.py:208-209].
+2. No base-commit concept exists anywhere in the tooling: the manifest
+   schema is exactly `{'patches': {name: sha256}, 'files': {rel: sha256}}`
+   [VERIFIED: tools/pkg_patch_refresh.py:96-111].
+3. **Failure scenario (the bug):** developer materializes `keyboard.c` at
+   upstream state A and edits it; upstream then moves to state B (pull);
+   developer runs `refresh`. The diff is (A + edits) vs B, so the patch
+   encodes not only the developer's edits but the **reversal of every
+   upstream A→B change** in that file. Nothing catches it:
+   - the committed-content gate passes — B *is* committed
+     [VERIFIED: tools/pkg_patch_refresh.py:228-236];
+   - at configure time the patch applies **cleanly** — `apply_patch_stack`
+     materializes current upstream (= B, the patch's exact pre-image)
+     [VERIFIED: tools/pkg_patch_apply.py:236-243], so `-3` never needs to
+     merge and no conflict is possible;
+   - result: upstream's own changes are silently reverted in the shipped
+     build — a **silent** wrong result, violating the loud-failure hard
+     invariant (Conflict Philosophy above).
+4. The irony: the design's verified drift machinery — pre-image blob
+   seeding [VERIFIED: tools/pkg_patch_apply.py:263-267] plus `git apply
+   --3way` [VERIFIED: tools/pkg_patch_apply.py:269] — was validated
+   empirically for exactly this shape ("patch authored against this repo's
+   committed keyboard.c, applied against upstream HEAD's genuinely drifted
+   version", Application Mechanism section above). Generation-time
+   live-diffing makes that path unreachable for the refresh-after-pull
+   case: instead of a three-way merge (clean or loudly conflicted), you get
+   a structurally wrong patch that applies cleanly.
+
+### Decisions
+
+**BP-1. Per-package base commit, recorded in the manifest.**
+`.refresh-manifest.json` gains one top-level key, `"base_commit"` (full
+40-char commit SHA). The manifest is already committed and travels with
+`patches/`+`files/` (see "The manifest is committed" above), so the base
+travels too. Per-package (not per-file) because a package is one authoring
+epoch — mixed per-file bases would make every refresh and every rebase a
+cross-epoch merge with no single "current upstream" to reason about, and
+the task's own framing is a *package's* recorded base. `load_manifest`'s
+missing/corrupt-tolerant behavior [VERIFIED: tools/pkg_patch_refresh.py:99-111]
+is kept; a missing key triggers BP-3 initialization.
+
+**BP-2. `generate_patch` diffs against base content, not the live file.**
+The base copy of `<rel>` is extracted via `git show <base>:src/c47/<rel>`
+to a temp file, and the existing `git diff --no-index --full-index`
+mechanics run against that temp file instead of `src/c47/<rel>`.
+[VERIFIED: empirically, this session] the resulting `index` line's
+pre-image SHA is then exactly the **base blob's** SHA (git content-hashes
+the on-disk file; identical content = identical blob id) — so:
+- the existing `git cat-file -e` resolvability gate
+  [VERIFIED: tools/pkg_patch_refresh.py:228-236] passes unchanged (the blob
+  is in history);
+- apply-side seeding + `-3` work unchanged, and application onto moved
+  upstream goes through the exact drift path already verified in
+  "Application Mechanism": clean merge when the developer's edits don't
+  overlap upstream churn, loud conflict when they do. This is the entire
+  fix at apply time — no apply-side code changes.
+
+**BP-3. Base initialization: first refresh records `HEAD`.**
+When no `base_commit` is recorded, `refresh` records `git rev-parse HEAD`
+(fatal RuntimeError if unresolvable) at the start of the run, then
+proceeds — so a fresh package's first refresh behaves byte-identically to
+today. If generated `patches/`/`files/` entries already exist at
+initialization time (a pre-fix package with a legacy manifest), a loud
+stderr warning is printed (same channel as drift warnings) stating the
+base was assumed to be current HEAD. Residual, retroactive-only risk: if
+upstream moved between a manual materialization and the first refresh
+under the fixed tool, that first patch is wrong exactly as today —
+unavoidable without a materialization-time record; closed going forward
+by BP-5.
+
+**BP-4. Classification stays live-keyed; epoch mismatches are handled
+explicitly.** The patch-vs-files/ decision remains "does the rel exist in
+the live tree" [VERIFIED: tools/pkg_patch_refresh.py:308] — it must stay
+consistent with the configure-time existence checks (New Decision 6;
+[VERIFIED: tools/pkg_patch_apply.py:205-212]). Two mismatch cases:
+- **Exists live, absent at base** (upstream added the file after the
+  package's base): **fatal**, named error telling the developer to advance
+  the base (BP-6). Diffing that one file against live while its siblings
+  diff against base would silently mix epochs inside one package.
+- **Exists at base, deleted live** (upstream deleted the file): **fatal**,
+  named error — stop so the developer can check whether the package's
+  change is still applicable at all. [AMENDED at review, 2026-07-14: the
+  previous behavior — silent reclassification of the working file into
+  `files/`, i.e. a whole-file re-add of a file upstream deliberately
+  deleted — was originally logged here as a pre-existing `[GAP]`; the
+  human directed it be made a hard stop as part of this change.] The
+  recorded base is what makes the two no-live-counterpart cases
+  distinguishable at all: present at base → upstream deleted it → fatal;
+  absent at base too → genuinely new package file → `files/`, exactly as
+  today.
+
+**BP-5. New `--materialize <rel>` CLI mode replaces raw `cp`.**
+`python3 tools/pkg_patch_refresh.py <pkgdir> --materialize <rel>` writes
+`git show <base>:src/c47/<rel>` into the flat working area (initializing
+the base per BP-3 if unset). Fatal if `<rel>` doesn't exist at base; fatal
+if the working file already exists (no silent clobber of edits). The
+README's raw-`cp`-from-live instruction [VERIFIED: custom_package/README.md:181]
+is replaced. Rationale: once a base is pinned, copying from the *live*
+tree bakes upstream's own base→live changes into the next patch as if the
+developer authored them — the mirror image of the main bug — so the
+sanctioned materialization must come from the base.
+
+**BP-6. Advancing the base is explicit, never automatic:**
+`--rebase-base [<commit>]` (default: current HEAD). For each working file
+that exists at the old base: run `git merge-file` in place (working copy,
+old-base content, new-base content); unedited copies fast-forward to
+new-base content, genuine overlaps leave standard conflict markers in the
+working copy. The new base is recorded after the pass; any file left with
+markers blocks the next `refresh` via BP-7 until the developer resolves
+them — in the working area, with full compiler context, per the
+materialize-then-edit philosophy. `refresh` itself never moves the base.
+Drift between `patches/` and the manifest at rebase time is warn-and-
+proceed, consistent with the existing drift handling ("Warn, not fail"
+above). [RESOLVED at review, 2026-07-14] no record-only
+`--set-base <commit>` escape hatch — one sanctioned path
+(`--rebase-base`) only.
+
+**BP-7. Refresh hard-fails on conflict markers in a patch-classified
+working file.** Same column-0 regex as the ratified apply-side scan
+[VERIFIED: tools/pkg_patch_apply.py:50], applied to each working file that
+classifies as a patch, fatal like the existing binary-file case
+[VERIFIED: tools/pkg_patch_refresh.py:214-218]. Catches an unresolved
+BP-6 rebase (or a hand-paste accident) before it's baked into a `.patch`.
+Scope deliberately excludes `files/`-classified working files — they never
+pass through `merge-file` (no base counterpart) and could conceivably
+contain marker-shaped content legitimately.
+
+**BP-8. Documentation.** `custom_package/README.md` Authoring Workflow and
+Version Control sections updated: base concept, `--materialize`,
+`--rebase-base`, the BP-3 legacy-initialization warning. This spec entry is
+the design record. [AMENDED at review, 2026-07-14] hard requirement: the
+developer-facing workflow must stay **simple** and the README **accurate**
+— the happy path is exactly three commands (`--materialize`, edit,
+`refresh`), plus `--rebase-base` only when upstream moves; every README
+statement about diffing behavior must be updated to match the recorded-base
+semantics, and no stale live-diff instruction (e.g. the raw `cp`) may
+survive.
+
+**Test wiring note:** the existing harness (`_TempProject`, a committed
+temp git repo [VERIFIED: tools/test_pkg_patch_refresh.py:33-70]) already
+supports multi-commit upstream histories via repeated `write_upstream`
+commits — sufficient for base-pinning tests with no harness redesign. The
+suite is reached by the gate: meson test entries
+[VERIFIED: meson.build:172-186] run under `make test`
+[VERIFIED: Makefile:216-217].
+
+### Consolidated open items
+
+- ~~`[GAP]` upstream-deleted-file silent reclassification~~ — RESOLVED at
+  review (2026-07-14): now a fatal stop, folded into BP-4.
+- ~~Open question (BP-6): record-only `--set-base`~~ — RESOLVED at review
+  (2026-07-14): no.
+- `[UNVERIFIED]`: none. The two load-bearing mechanical claims (historical
+  blob SHA as `--no-index` pre-image; test-suite wiring into `make test`)
+  were verified empirically this session, cited inline above.
 
 ---
 

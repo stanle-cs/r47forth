@@ -21,32 +21,33 @@ in `custom_package/IMPLEMENTATION_REPORT.md` §8 — patching, new files,
 cumulative composition, loud conflict failure, and `pkg_build` have all been
 exercised against real `meson`/`ninja`/`make` runs, not just unit tests.
 
-**No package in this repository currently uses it.** `packages/forth-core/`
-predates this convention and still declares itself the old way
-(`pkg_override_sources` in its own `meson.build`, override files sitting
-directly at `packages/forth-core/<rel>`). The resolver described in this
-document **never reads a package's `meson.build`** — it only globs
-`patches/`+`files/`. Concretely, right now:
+**`packages/forth-core/` uses this convention.** It was migrated: its flat
+working area mirrors upstream paths, its `meson.build` is gone, and
+`refresh` generates its `patches/` (14) + `files/` (24). Verified by running
+`./packages/forth-core/build-test.sh` — `FORTH SELF-TEST: ALL PASSED`, exit 0,
+with forth-core code demonstrably live in the binary.
+
+**The silent-green trap this system creates — read before authoring.** The
+resolver globs `patches/`+`files/` and **never reads the flat working area**.
+So a package whose `patches/` are missing or stale:
 
 ```
-make sim CUSTOM_PKG=packages/forth-core
+make sim CUSTOM_PKG=packages/some-pkg
 ```
 
 **configures and builds successfully, with zero errors or warnings, and
-silently contains none of forth-core's functionality.** forth-core has no
-`patches/` or `files/` directory, so the resolver finds nothing to apply and
-proceeds as if the package list were empty. This was verified directly
-(`meson setup ... -DCUSTOM_PKG=packages/forth-core`, then grepped the
-resulting shadow tree for forth-core content: none found) — it is not a
-theoretical concern.
+silently contains none of that package's functionality** — the resolver finds
+nothing to apply and proceeds as if the package list were empty. The same
+applies per-file: edit `packages/forth-core/foo.c`, skip `refresh`, and the
+compiler builds the *previous* content while your gate reports green. This was
+verified directly by injecting a unique marker into a working-area source,
+running `meson setup --reconfigure`, and grepping the shadow tree: the marker
+was absent.
 
-**If you want to use this system today**, author a new package from
-scratch via the **Authoring Workflow** below. **If you need forth-core
-working**, it needs to be migrated to the flat-working-area convention
-first (place each of its whole-file overrides and genuinely-new source
-files into a flat working area and run `refresh`, letting it classify and
-generate `patches/`+`files/` automatically) — that migration has not been
-done and is out of scope for this document to walk through.
+**Therefore: always run `refresh` before building.**
+`./packages/forth-core/build-test.sh` does this for you as its first step, and
+`make pkg_build PKG=...` runs it too. A hand-rolled `meson setup && ninja` does
+not — do not hand-roll.
 
 ---
 
@@ -70,12 +71,45 @@ entirely by `refresh` (see **Authoring Workflow** below). After running
 packages/my-pkg/
 ├── keyboard.c                        # your working copy (gitignored, not committed)
 ├── my_module.c                       # your working copy (gitignored, not committed)
+├── .pkgignore                        # optional, committed — see below
 ├── .refresh-manifest.json            # generated, committed
 ├── patches/
 │   └── 010-keyboard.c.patch          # generated, committed
 └── files/
     └── my_module.c                   # generated, committed
 ```
+
+### `.pkgignore` — what is not package content
+
+Everything in the working area is package content *by definition*: a file with
+no upstream counterpart is a new source, so it gets copied into `files/`,
+shadowed into the build tree, and shipped inside the distributable. That is
+wrong for the design docs, notes and dev scripts developers keep beside the
+sources. An optional top-level `.pkgignore` excludes them from classification
+entirely — neither patched nor copied:
+
+```
+# one glob per line; blank lines and # comments ignored
+*.md            # no '/' → matches the BASENAME at any depth
+docs/           # trailing '/' → the whole subtree
+notes/*.txt     # contains '/' → anchored to the package root
+build-test.sh
+```
+
+Globbing is `fnmatch`. Two deliberate divergences from `.gitignore`, both to
+keep the implementation obvious: `*` matches across `/` in path-form patterns,
+and there is no negation (`!`). `.pkgignore` never classifies itself.
+
+Adding a pattern is **retroactive**: the file stops being producible from the
+working area, so the next `refresh` deletes any `patches/`/`files/` entry it had
+previously generated for it — the same cleanup as a reverted or deleted working
+file. Removing the pattern brings it back. Ignoring never touches the working
+copy.
+
+> Never ignore a source the build needs. Package `.c` files are compiled **from
+> the `files/` copy**, so ignoring one silently removes it from the build rather
+> than erroring — `forth-core` ignores `*.md`, `*.txt` and `build-test.sh`, and
+> nothing else.
 
 1. Create the package directory and edit files directly in it — normally
    via the **materialize-and-refresh workflow** below.
@@ -178,10 +212,16 @@ compiler/LSP context) directly in the flat working area, then let
 `refresh` classify and regenerate everything in one step:
 
 ```
-cp src/c47/keyboard.c packages/my-pkg/keyboard.c   # materialize
-# ... edit packages/my-pkg/keyboard.c freely — any kind of change ...
-echo 'int helper(void) { return 1; }' > packages/my-pkg/helper.c  # a new file
-python3 tools/pkg_patch_refresh.py packages/my-pkg  # classify + regenerate
+python3 tools/pkg_patch_refresh.py packages/my-pkg --materialize keyboard.c
+# ... edit packages/my-pkg/keyboard.c freely ...
+python3 tools/pkg_patch_refresh.py packages/my-pkg
+```
+
+Brand-new files need no materialize step — just create them in the working area:
+
+```
+echo 'int helper(void) { return 1; }' > packages/my-pkg/helper.c
+python3 tools/pkg_patch_refresh.py packages/my-pkg
 ```
 
 (or `make pkg_build PKG=packages/my-pkg`, which calls `refresh` for you as
@@ -192,7 +232,7 @@ working area (excluding `patches/`, `files/`, and its own manifest, all of
 which are generated output, never scan input) and classifies each
 **automatically** — you make no placement decision:
 
-- **mirrors a real upstream path, and differs from it** → writes/overwrites
+- **mirrors a real upstream path, and differs from it at the recorded base** → writes/overwrites
   `patches/<NNN>-<rel>.patch` (ordinal reused from any existing patch for
   that rel, including a manual rename — so refresh never fights an
   explicit cross-package ordering choice you made by hand);
@@ -209,7 +249,8 @@ which are generated output, never scan input) and classifies each
 ### `patches/`/`files/` Are Output Only — Drift Detection
 
 A hidden manifest, `<pkgdir>/.refresh-manifest.json`, records the hash of
-every entry as `refresh` itself wrote it — **committed alongside
+every entry as `refresh` itself wrote it, plus the upstream commit
+(`base_commit`) the package was authored against — **committed alongside
 `patches/`+`files/`**, not gitignored (see **Version Control** below for
 why). Before overwriting any generated entry, `refresh` compares it against
 this record: if a `patches/`/`files/` entry was hand-added or hand-edited
@@ -229,14 +270,37 @@ Running `git add -A` inside a package directory stages only these generated
 entries; your working copies are silently excluded, by design.
 
 Note the distinction from `pkg_build`'s distributable zip (below): the
-**git repo** tracks the manifest alongside `patches/`+`files/` (so drift
-detection has history across clones), but the **zip artifact** contains
-only `patches/`+`files/` — the manifest is an authoring-time bookkeeping
-file with no purpose for a consumer of the built package, so it's not
-shipped in the zip.
+**git repo** tracks the manifest alongside `patches/`+`files/` (the
+manifest records `base_commit` as well as content hashes, so drift
+detection and base tracking have history across clones), but the **zip
+artifact** contains only `patches/`+`files/` — the manifest is an
+authoring-time bookkeeping file with no purpose for a consumer of the
+built package, so it's not shipped in the zip.
 
 `pkg_patch_refresh.py` has no libclang or other AST-parsing dependency;
 it's plain `git diff` plus a straight file copy for new files.
+
+### When Upstream Moves
+
+A package records the upstream commit it was authored against (its
+*base*) in `.refresh-manifest.json`. `refresh` always diffs against that
+base — pulling new upstream commits does **not** change your patches.
+
+To move a package forward, run:
+
+```
+python3 tools/pkg_patch_refresh.py packages/my-pkg --rebase-base
+```
+
+This merges upstream's changes into your working copies. Unedited files
+fast-forward; genuine overlaps leave standard conflict markers
+(`<<<<<<<`/`=======`/`>>>>>>>`) in the working copy. `refresh` will refuse
+to run until you resolve them — edit the markers away, then re-run
+`refresh`.
+
+If upstream added or deleted a file your package touches, `refresh` and
+`--rebase-base` stop with a named error so you can check — nothing is
+ever silently reclassified or reverted.
 
 ## items.c — Generator Stub Requirement
 

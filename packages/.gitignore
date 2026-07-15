@@ -3,9 +3,12 @@
 #
 # A package directory's working area (packages/<pkg>/<flat files mirroring
 # upstream paths>) is local editing scratch, regenerated into patches/ and
-# files/ by `refresh` — it must never be committed. patches/, files/, and
-# the per-package refresh manifest ARE the checked-in artifacts and must
-# stay tracked.
+# files/ by `refresh` — it must never be committed. patches/, files/, the
+# per-package refresh manifest, and .pkgignore ARE the checked-in artifacts
+# and must stay tracked.
+#
+# .pkgignore is metadata, not scratch: it decides what `refresh` classifies at
+# all, so a clone without it regenerates every ignored doc back into files/.
 #
 # This file is scoped to packages/ only — it does not touch the top-level
 # .gitignore (an upstream file) and has no effect on packages/forth-core/'s
@@ -17,3 +20,4 @@
 !*/files
 !*/files/**
 !*/.refresh-manifest.json
+!*/.pkgignore
