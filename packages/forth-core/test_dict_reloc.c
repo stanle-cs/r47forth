@@ -1493,8 +1493,15 @@ static int test_outer_ctx_at_rest(void)
  * H1 acceptance tests  --  DESIGN.md §7.1 / §7.5
  * ================================================================== */
 
-/* §7.1 H1: XEQ of ITM_FORTH/ITM_FCALL doesn't crash; indexOfItems size check */
-static int test_xeq_end_to_end(void)
+/* R2-T7: renamed from test_xeq_end_to_end, which claimed to test XEQ of
+ * ITM_FORTH/ITM_FCALL but calls fnForthCall directly — it exercises no XEQ
+ * step, ITM_FORTH, or ITM_FCALL dispatch at all. Describes only what it
+ * actually calls/asserts: fnForthCall executing a colon word by dictionary
+ * index, plus a static indexOfItems bounds check on ITM_FCALL/ITM_FORTH.
+ * TODO: missing acceptance coverage: real XEQ execution of ITM_FORTH and
+ * ITM_FCALL; fixture deferred pending an independently verified reachable
+ * path. */
+static int test_fnforthcall_executes_colon_by_index(void)
 {
   /* Verify indexOfItems bounds: ITM_FCALL (2843) < LAST_ITEM */
   if (ITM_FCALL >= LAST_ITEM) {
@@ -1753,9 +1760,33 @@ static int test_xeq_item_lookup(void)
     fail = 1;
   }
 
+  /* Test 4 (R2-T7 item 2): item-before-colon precedence. A Forth colon word
+   * named SIN must NOT shadow the built-in item ITM_sin — resolver order is
+   * label -> item -> colon (forth_dict.c:390-419); test_xeq_precedence
+   * already pins label->colon, this pins item->colon. */
+  forthDictClear();
+  {
+    uint16_t w = begin_word("SIN", 3);
+    if (w == FORTH_NULL) {
+      printf("    SKIP: alloc failed for colon word SIN\n");
+    } else {
+      forthDictEmit(T_ILIT);
+      emit_int32(1);
+      end_word(w);
+
+      res = forthResolveXEQ("SIN", &param);
+      if (res != FORTH_XEQ_ITEM || param != ITM_sin) {
+        printf("    FAIL: forthResolveXEQ(\"SIN\") returned %d/%u (expected ITEM/%d) "
+               "— colon word shadowed the built-in item\n", res, param, ITM_sin);
+        fail = 1;
+      }
+    }
+  }
+  forthDictClear();
+
   if (!fail) {
-    printf("    PASS: XEQ item lookup: FORTH->ITEM(%d), FCALL->ITEM(%d), miss->NONE\n",
-    ITM_FORTH, ITM_FCALL);
+    printf("    PASS: XEQ item lookup: FORTH->ITEM(%d), FCALL->ITEM(%d), miss->NONE, "
+           "item SIN beats colon SIN\n", ITM_FORTH, ITM_FCALL);
   }
   return fail;
 }
@@ -2383,7 +2414,7 @@ static int test_forth_step_sizing(void)
  * first touch pre-scans the owning program, compiling definitions;
  * SKIP_DEFS executes only tails). Stack-buffer payloads encode the retired
  * execute-in-place semantics.
- * Mutations: a no-op forthProgramStep handler (§9.9 acceptance 1), or a
+ * Mutations: a no-op forthProgramStep handler (§8.9 acceptance 1), or a
  * no-op pre-scan — either way SQ never compiles and step 2 errors. */
 static int test_program_step_define_and_use(void)
 {
@@ -3044,7 +3075,7 @@ static void read_reg_int32(int reg, uint8_t *type, int32_t *val)
 /* test_exec_step_marker_noop
  * Mutation: the arm calling forthProgramStep for len==0 too (the marker
  * would interpret an empty line and set FLAG_ASLIFT/N drop state).
- * (§9.9 acceptance 8a)
+ * (§8.9 acceptance 8a)
  * R2-T4 item 4: the old test read only X and fdict.count. Seeds all four RPN
  * registers with distinct values and also checks fdict.here, so a marker that
  * silently touches Y/Z/T or grows the dict without moving X or count would
@@ -3126,7 +3157,7 @@ static int test_exec_step_marker_noop(void)
  * steps residing in a real program, as the pre-scan contract requires.
  * Unique coverage: the lblGtoXeq.c arm routing, not just forthProgramStep.
  * Mutation: dropping the forthProgramStep call (arm returns 1 silently)
- * (§9.9 acceptance 1 at executeOneStep granularity). */
+ * (§8.9 acceptance 1 at executeOneStep granularity). */
 static int test_exec_step_source_runs(void)
 {
   uint8_t prog[] = {
@@ -3171,7 +3202,7 @@ static int test_exec_step_source_runs(void)
 
 /* test_exec_step_halts_on_error
  * Mutation: the arm clearing lastErrorCode before returning.
- * (§9.9 acceptance 7b's PC-testable half)
+ * (§8.9 acceptance 7b's PC-testable half)
  *
  * R2-T4 item 3 / architect ruling 2026-07-15 (FOR_THE_ARCHITECT_R2.md):
  * standalone step execution is a fixture artifact, not a supported API — the
@@ -3289,7 +3320,7 @@ static void probeListPtrs(const char *tag)
   }
 }
 
-/* ---- COMMIT 5: §9.4 derived-state helpers + test-program infrastructure ---- */
+/* ---- COMMIT 5: §8.4 derived-state helpers + test-program infrastructure ---- */
 
 /* writeTestProgram: expand program memory if needed, write bytes, append
  * .END. sentinel, fix bookkeeping, re-scan. Returns true on success.
@@ -3440,7 +3471,7 @@ static bool writeTestProgram(const uint8_t *bytes, uint16_t n)
  * Program: marker, source(: SQ DUP * ;), marker, marker
  * Assert turnsOn == true/false/true for the 1st/3rd/4th markers.
  * Escaping mutation: inverting the parity test (odd instead of even) —
- * every direction flips. (§9.9 acceptance 4 logic) */
+ * every direction flips. (§8.9 acceptance 4 logic) */
 static int test_marker_parity(void)
 {
   /* marker | source | marker | marker | .END. */
@@ -3496,7 +3527,7 @@ static int test_marker_parity(void)
  *   closing marker → false, zeroth-step → false.
  * Escaping mutation: replacing the derivation with a static bool toggled
  * by callers (the persisted-flag bug) — the land-on-step cases regress.
- * (§9.9 acceptance 2 logic) */
+ * (§8.9 acceptance 2 logic) */
 static int test_entry_state_derivation(void)
 {
   /* marker | source | marker | marker | ITM_sin | .END. */
@@ -3937,7 +3968,7 @@ static int test_fcall_redirect_rejects_stale(void)
  * Open capture via insertStepInProgram(ITM_FORTH) (opening toggle), then
  * pemAlpha(ITM_ENTER) with empty aimBuffer; assert program step count
  * returned to exactly one marker (no phantom second marker) and FLAG_ALPHA
- * clear (§9.9 acceptance 8b).
+ * clear (§8.9 acceptance 8b).
  * Escaping mutation: dropping E3 — the empty placeholder commits and
  * COMMIT 5's test_marker_parity invariant would flip downstream. */
 static int test_forth_empty_enter_leaves_no_step(void)
@@ -4103,7 +4134,7 @@ static int test_forth_edit_extracts_source(void)
  * Writes marker/source/marker/marker program; decodeOneStep each marker;
  * assert tmpString bytes are \x80\xbbFORTH, FORTH\x80\xab, \x80\xbbFORTH
  * respectively; decode the source step and assert it renders bare
- * (§9.9 acceptance 4).
+ * (§8.9 acceptance 4).
  * Escaping mutation: inverting the parity (call !forthMarkerTurnsOn) —
  * all three direction assertions fail. */
 static int test_decode_marker_directions(void)
@@ -4307,7 +4338,7 @@ extern void testInitVariableSoftmenu(int16_t menu);
  * Assert menuContent contains "SQ" and "CUBE", numItems == 2, sorted.
  * Escaping mutation: the walk stopping BEFORE currentStep (exclusive bound) —
  * a word defined on the immediately preceding line is missing; this is
- * §9.9 acceptance 3's essence. */
+ * §8.9 acceptance 3's essence. */
 static int test_picker_scan_basic(void)
 {
   /* marker | : SQ DUP * ; | : CUBE DUP DUP * * ; | marker | .END. */
@@ -5724,13 +5755,14 @@ static int test_useritem_xeqp1_opcode(void)
 }
 
 /* test_useritem_xeqp1_decodes
- * F4 follow-through (DESIGN.md §9.10 item 4): the write side
+ * F4 follow-through (DESIGN.md §8.10 item 4): the write side
  * (insertUserItemInProgram) is tested by test_useritem_xeqp1_opcode; this
  * test verifies the full insert -> decode/display path. decode.c's own
  * two-byte opcode reassembly (_decodeOneStep: op &= 0x7f; op <<= 8;
  * op |= *(step++);) already ORs in the low byte unmasked and is
  * byte-identical to upstream src/c47/programming/decode.c at that site
- * [VERIFIED: packages/forth-core/programming/decode.c:866-869] -- no decode-
+ * [VERIFIED: programming/decode.c, opCode reconstruction from first byte
+ * through low-byte OR] -- no decode-
  * side bug exists. This test instead exercises manage.c's write-side fix
  * THROUGH decode: insertUserItemInProgram(ITM_XEQP1, "SQ2") writes the step,
  * decodeOneStep() reconstructs the opcode from those bytes and renders it,
@@ -6463,8 +6495,8 @@ int forthDictSelfTest(void)
   printf("\nFORTH H1 ACCEPTANCE TESTS (XEQ / re-entrancy / precedence)\n");
   forthDictInit();
 
-  printf("  [DEBUG] running test_xeq_end_to_end...\n");
-  fail |= test_xeq_end_to_end();
+  printf("  [DEBUG] running test_fnforthcall_executes_colon_by_index...\n");
+  fail |= test_fnforthcall_executes_colon_by_index();
   printf("  [DEBUG] running test_tam_dispatcher...\n");
   fail |= test_tam_dispatcher();
 #ifdef FORTH_DEBUG_SELFTEST
@@ -6660,8 +6692,8 @@ int forthDictSelfTest(void)
   fail |= test_exec_step_halts_on_error();
   forthDictClear();
 
-  /* COMMIT 5: §9.4 derived-state helpers + test-program infrastructure */
-  printf("\nFORTH COMMIT 5 TESTS (§9.4 derived-state helpers)\n");
+  /* COMMIT 5: §8.4 derived-state helpers + test-program infrastructure */
+  printf("\nFORTH COMMIT 5 TESTS (§8.4 derived-state helpers)\n");
   forthDictInit();
 
   printf("  [DEBUG] running test_marker_parity...\n");
@@ -6700,8 +6732,8 @@ int forthDictSelfTest(void)
   fail |= test_forth_edit_extracts_source();
   forthDictClear();
 
-  /* COMMIT 8: decode.c override — §9.5 symmetric display */
-  printf("\nFORTH COMMIT 8 TESTS (decode.c override: §9.5 marker rendering)\n");
+  /* COMMIT 8: decode.c override — §8.5 symmetric display */
+  printf("\nFORTH COMMIT 8 TESTS (decode.c override: §8.5 marker rendering)\n");
   forthDictInit();
 
   printf("  [DEBUG] running test_decode_marker_directions...\n");
@@ -6902,7 +6934,7 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_freelist_no_mutation_on_oversize_free...\n");
   fail |= test_freelist_no_mutation_on_oversize_free();
 
-  /* FIX-6: Arena report (§5.4/§9.9 duty) — define words, report, then clear */
+  /* FIX-6: Arena report (§5.4/§8.9 duty) — define words, report, then clear */
   { uint32_t freeRamBefore = getFreeRamMemory();
     forthDictInit();
     define_word("AR1", 3);
@@ -7039,7 +7071,7 @@ static int test_alpha_menu_on_top_during_capture(void)
  * F5: The MNU_ALPHA item table (menu_ALPHA) must contain a -MNU_FORTH entry
  * so the Forth word picker is reachable as a submenu from the alpha menu.
  * Escaping mutation: remove the -MNU_FORTH entry from menu_ALPHA — the assertion fails.
- * [VERIFIED: softmenus.c:1000]
+ * [VERIFIED: softmenus.c, menu_ALPHA row containing -MNU_FORTH]
  */
 static int test_alpha_menu_contains_fwrd(void)
 {
