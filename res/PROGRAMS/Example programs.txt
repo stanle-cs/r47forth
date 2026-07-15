@@ -39,3 +39,8 @@ Demonstration programs included in C47 distro
 11.  TSTPLOT.rtf   TSTPLOT.p47     Graphing of RPN function, demo for programmed gamma function plot
 
 12.  INTDEMO.txt   INTDEMO.p47     Accompanying program for Appnote 0022
+
+13.  GRAPHS.txt    GRAPHS.p47      Graph gold-standard test: every plot type programmed (EQN Draw, PLTf, PLSTAT, SCATR, ASSESS,
+                                   CENTRL, power ASSESS, HPLOT, HNORM); the ten SNAP captures match the testSuite results
+
+14.  HNSKEW.txt    HNSKEW.p47     Skewed-histogram HNORM test: the window follows the fitted Gauss, peak and both tails on screen
