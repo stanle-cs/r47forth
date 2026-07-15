@@ -889,7 +889,7 @@ void fnConvertStatsToHisto(uint16_t statsVariableToHistogram) {
     real_t lb, hb, nb, nn;
 
     if(statMx[0] != 'S') {
-      restoreStats();                            //any stats operation restores the stats matrix: HNORM leaves statMx = "HISTO" with the sums recomputed over it, which made a following HISTOX error out
+      restoreStats();                            //any stats operation restores the stats matrix (HNORM retargets statMx and the sums at "HISTO")
     }
     if(statMx[0]=='S' && isStatsMatrix(&rows, statMx)) {
       if(checkMinimumDataPoints(const_3)) {
@@ -950,7 +950,7 @@ static void convertStatsMatrixToHistoMatrix(uint16_t statsVariableToHistogram) {
     }
 
     calcRegister_t regHisto = fnClHisto(false);                       //clear and connect to HISTO matrix
-    calcRegister_t regStats = findNamedVariable(statMx);              //connect to STATS matrix - only after fnClHisto: allocating "HISTO" can shift the STATS register index, and the histogram then binned HISTO's own bin mids (1 count per bin)
+    calcRegister_t regStats = findNamedVariable(statMx);              //connect to STATS only after fnClHisto: allocating "HISTO" can shift the STATS register index
 
     if(isStatsMatrix(&i, statMx) && regStats != INVALID_VARIABLE && regHisto != INVALID_VARIABLE) {
 
@@ -993,9 +993,7 @@ static void convertStatsMatrixToHistoMatrix(uint16_t statsVariableToHistogram) {
             for(j = 0; j < NN; j++) {
               real_t t, tl, th;
               real34ToReal(&stats.matrixElements[i * cols + histElementXorY], &t);  //from X or Y, depending
-              //bin edges from loBin + j*bw directly, and the last bin's high edge is hiBin exactly. Rebuilding the edges from the stored
-              //34-digit bin mid (mid - bw/2, + bw) rounded them past the true limits, so a point equal to loBin fell outside bin 0 and a
-              //point equal to hiBin outside the last bin - the default HISTOX (loBin = xmin, hiBin = xmax) dropped the min and max points.
+              //bin edges from loBin + j*bw, last high edge hiBin exactly: points equal to the limits fall inside
               int32ToReal(j, &tl);
               realMultiply(&tl, &bw, &tl, &ctxtReal39);
               realAdd(&tl, &lb, &tl, &ctxtReal39);           //get the bin x low, exact at j == 0

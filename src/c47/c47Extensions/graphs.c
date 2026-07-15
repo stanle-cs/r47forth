@@ -43,7 +43,6 @@ void graphResetCommon() {
   clearSystemFlag(FLAG_SHOWX);
   clearSystemFlag(FLAG_VECT);
   clearSystemFlag(FLAG_NVECT);
-  clearSystemFlag(FLAG_SCALE);
   setSystemFlag(FLAG_PLINE);
   setSystemFlag(FLAG_PBOX);
   clearSystemFlag(FLAG_PCURVE);
@@ -70,6 +69,7 @@ void graphResetCommon() {
 
 void graph_reset(void){
   graphResetCommon();
+  clearSystemFlag(FLAG_SCALE);    //fnPlotSQ option; the stat plots (statGraphReset) run on plotStatScale and leave the user's flag alone
 }
 
 
@@ -692,10 +692,7 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
 //    else if(PLOT_ZOOM < RangeLo) {
 //      PLOT_ZOOM = RangeLo;
 //    }
-    //Widen the plotted range to (n+2)/(n-1) of the bin-mid span: 1.5 bin widths of margin per side for the histogram columns.
-    //multiplyZoomFactors scales the range by this factor; the pre-refactor code added a margin of dx*zoomfactor*histofactor per
-    //side with histofactor = 1/zoomfactor*((n+2)/(n-1)-1)/2. Reused unchanged as the range factor, the now-uncancelled
-    //1/zoomfactor scaled the range 15x for 3 bins, pushing the bars below the graph area.
+    //widen the histogram range to (n+2)/(n-1) of the bin-mid span: 1.5 bin widths of margin per side for the columns
     float histofactor = drawHistogram == 0 ? 1 : ((float)statnum + 2.0f)  /  ((float)(statnum) - 1.0f);
     calculateZoomFactor(PLOT_ZOOM * 0.75, &plotzoomx);
     plotzoomy = drawHistogram == 1 ? 1 : plotzoomx;
@@ -747,7 +744,7 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
 
 
 
-  //Cause scales to be the same. The fnPlotStat plots carry their own per-mode scale setting (no SCALE key in their menus); the user's SCALE flag rules the fnPlotSQ plots only.
+  //Cause scales to be the same: plotStatScale rules the fnPlotStat plots, the user's SCALE flag the fnPlotSQ plots
   if(mode == PLOTSTAT ? (plotStatScale != 0) : getSystemFlag(FLAG_SCALE)) {
     // if y >> x, then y simply takes on the X range and can be increased using ZMY
     if(mode == PLOTSTAT) {
