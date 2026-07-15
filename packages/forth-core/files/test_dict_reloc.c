@@ -2305,7 +2305,18 @@ static int test_number_bad_lone_dot(void)
 /* ---- Fix #10: UNDO rows US_ENABLED ----
  * Mutation #10: revert US_ENABLED to US_UNCHANGED -> no undo snapshot. ---- */
 
-/* Test: items.c FORTH/FCALL rows carry US_ENABLED (§0.2) */
+/* Test: items.c FORTH/FCALL rows carry US_ENABLED (§0.2)
+ *
+ * No runtime mutation check: R2-T3 asked for one ("temporarily clear
+ * US_ENABLED from one runtime table entry ... require its exact FAIL label,
+ * then restore"), but indexOfItems[] is `const item_t[]` and, even in the PC
+ * build where TO_QSPI is empty, lands in a read-only-mapped section.
+ * Confirmed empirically: casting away const and writing indexOfItems[
+ * ITM_FORTH].status SIGSEGVs (exit 139), reverted. The FAIL branch below is
+ * real and correctly labeled — read the two comparisons — but it can only be
+ * exercised by editing items.c and rebuilding, not by a runtime probe. This
+ * test's value is as a regression tripwire on the real data table if items.c
+ * itself changes. */
 static int test_undo_rows_us_enabled(void)
 {
   uint16_t forthUS = indexOfItems[ITM_FORTH].status & US_STATUS;
