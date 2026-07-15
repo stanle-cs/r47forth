@@ -2402,6 +2402,10 @@ static int test_program_step_define_and_use(void)
   lastErrorCode = ERROR_NONE;
   forthProgramStep(beginOfProgramMemory + 3);        /* define step payload */
   if (lastErrorCode == ERROR_NONE) {
+    /* Canary (R2-T4 item 2): a dropped handler must leave -123456 on X, not
+     * a stale 9 left over from an earlier test — X==9 alone cannot tell
+     * "this step ran" from "a previous test already left X at 9". */
+    forthPushInt32(-123456);
     forthProgramStep(beginOfProgramMemory + 16 + 3); /* "3 SQ" payload */
   }
   programRunStop = savedRS;
@@ -2853,18 +2857,20 @@ static int test_prescan_last_step_visible(void)
 }
 
 /* test_prescan_two_programs_first_touch
- * T2.8: Two programs in one write; each first-touch-scans independently.
- * Must fail if the scanned list is a single pointer instead of an array
- * (P2's touch would evict P1's record and a third touch of P1 would
- * re-scan/recompile), or if nested bookkeeping broke sequential
- * multi-program stepping. */
+ * T2.8 / R2-T4 item 1: Two programs in one write, each with a single Forth
+ * step that both defines and immediately calls its own word (": P1W 9 ; P1W",
+ * ": P2W 4 ; P2W") — one forthProgramStep call does both. Touch P1, then P2,
+ * then P1 again, all in ONE generation.
+ * Must fail if the scanned-program list is a single slot instead of an array:
+ * P2's touch would evict P1's record, so the third P1 touch would re-scan and
+ * recompile P1W a second time (fdict.count would read 3, not 2, and fdict.here
+ * would grow) instead of just re-running the tail call. */
 static int test_prescan_two_programs_first_touch(void)
 {
   uint8_t prog[] = {
-    0x8B, 0x1A, 0xFD, 1,  '9',
+    0x8B, 0x1A, 0xFD, 13, ':', ' ', 'P', '1', 'W', ' ', '9', ' ', ';', ' ', 'P', '1', 'W',
     0x85, 0xB2,
-    0x8B, 0x1A, 0xFD, 9,  ':', ' ', 'P', '2', 'W', ' ', '4', ' ', ';',
-    0x8B, 0x1A, 0xFD, 3,  'P', '2', 'W'
+    0x8B, 0x1A, 0xFD, 13, ':', ' ', 'P', '2', 'W', ' ', '4', ' ', ';', ' ', 'P', '2', 'W'
   };
   if (!writeTestProgram(prog, sizeof(prog))) {
     printf("    FAIL: writeTestProgram failed\n");
@@ -2878,8 +2884,10 @@ static int test_prescan_two_programs_first_touch(void)
     return 1;
   }
 
+  /* Program 1 step: header(3)+len(1)+payload(13) = 17 bytes, then a 2-byte
+   * ITM_END separator. Program 2 step starts at offset 17+2 = 19. */
   const uint8_t *prog1Step = beginOfProgramMemory;
-  const uint8_t *prog2Step = beginOfProgramMemory + 5 + 2;
+  const uint8_t *prog2Step = beginOfProgramMemory + 17 + 2;
 
   forthRunGenBump();
   lastErrorCode = ERROR_NONE;
@@ -2887,35 +2895,60 @@ static int test_prescan_two_programs_first_touch(void)
   programRunStop = PGM_RUNNING;
 
   forthProgramStep(prog1Step + 3);
-  if (lastErrorCode != ERROR_NONE) {
-    printf("    FAIL: program 1 step raised error %d\n", lastErrorCode);
+  if (lastErrorCode != ERROR_NONE || !x_is_longint(9) || fdict.count != 1) {
+    printf("    FAIL: program 1 first touch — error %d, X==9? %d, count=%u (expected 0/1/1)\n",
+           lastErrorCode, x_is_longint(9), fdict.count);
     programRunStop = savedRS;
     forthDictClear();
     cleanupTestProgram();
     return 1;
   }
 
-  forthProgramStep(prog2Step + 13 + 3);
-  programRunStop = savedRS;
-
+  forthProgramStep(prog2Step + 3);
   int fail = 0;
   if (lastErrorCode != ERROR_NONE) {
-    printf("    FAIL: program 2 step raised error %d\n", lastErrorCode);
+    printf("    FAIL: program 2 first touch raised error %d\n", lastErrorCode);
     fail = 1;
   }
   else if (!x_is_longint(4)) {
-    printf("    FAIL: X != 4 after program 2 step\n");
+    printf("    FAIL: X != 4 after program 2 first touch\n");
     fail = 1;
   }
-  else {
-    fnDrop(NOPARAM);
-    if (!x_is_longint(9)) {
-      printf("    FAIL: X != 9 after drop (expected 9 from program 1)\n");
-      fail = 1;
-    }
+  else if (fdict.count != 2) {
+    printf("    FAIL: fdict.count = %u after program 2 (expected 2: P1W, P2W)\n", fdict.count);
+    fail = 1;
   }
-  if (fdict.count != 1) {
-    printf("    FAIL: fdict.count = %u (expected 1 — only P2W)\n", fdict.count);
+
+  if (fail) {
+    programRunStop = savedRS;
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+
+  uint16_t hereAfterBothTouches = fdict.here;
+
+  /* Third touch: P1 again, same generation. Must re-run the tail call
+   * (X==9) WITHOUT re-scanning/recompiling — count and here must not move. */
+  forthProgramStep(prog1Step + 3);
+  programRunStop = savedRS;
+
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: program 1 third touch raised error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!x_is_longint(9)) {
+    printf("    FAIL: X != 9 after program 1 third touch\n");
+    fail = 1;
+  }
+  if (fdict.count != 2) {
+    printf("    FAIL: fdict.count = %u after third P1 touch (expected 2 — no re-scan)\n",
+           fdict.count);
+    fail = 1;
+  }
+  if (fdict.here != hereAfterBothTouches) {
+    printf("    FAIL: fdict.here moved from %u to %u after third P1 touch (re-scan grew the dict)\n",
+           hereAfterBothTouches, fdict.here);
     fail = 1;
   }
 
@@ -2923,7 +2956,9 @@ static int test_prescan_two_programs_first_touch(void)
 
   forthDictClear();
   cleanupTestProgram();
-  if (!fail) printf("    PASS: two programs first-touch — independent scans, no eviction\n");
+  if (!fail) {
+    printf("    PASS: two programs, three touches — independent scans, no eviction, no re-scan\n");
+  }
   return fail;
 }
 
@@ -2988,52 +3023,101 @@ static int test_dict_name_by_index(void)
 
 /* ---- COMMIT 4: executeOneStep ITM_FORTH arm tests ---- */
 
+/* read_reg_int32 — R2-T4 item 4 helper: type + int32 value of a long-integer
+ * stack register, so a marker-noop test can snapshot all four RPN registers
+ * without repeating longInteger_t boilerplate four times over. Test-local
+ * only; no production counterpart. */
+static void read_reg_int32(int reg, uint8_t *type, int32_t *val)
+{
+  *type = getRegisterDataType(reg);
+  if (*type == dtLongInteger) {
+    longInteger_t li;
+    longIntegerInit(li);
+    convertLongIntegerRegisterToLongInteger(reg, li);
+    longIntegerToInt32(li, *val);
+    longIntegerFree(li);
+  } else {
+    *val = 0;
+  }
+}
+
 /* test_exec_step_marker_noop
  * Mutation: the arm calling forthProgramStep for len==0 too (the marker
  * would interpret an empty line and set FLAG_ASLIFT/N drop state).
- * (§9.9 acceptance 8a) */
+ * (§9.9 acceptance 8a)
+ * R2-T4 item 4: the old test read only X and fdict.count. Seeds all four RPN
+ * registers with distinct values and also checks fdict.here, so a marker that
+ * silently touches Y/Z/T or grows the dict without moving X or count would
+ * still be caught. len==0 never reaches forthProgramStep (the arm's guard is
+ * `if(*step != 0)`), so no writeTestProgram/program membership is needed
+ * here — this is testing that the guard itself holds, not program execution. */
 static int test_exec_step_marker_noop(void)
 {
   uint8_t step[] = { 0x8B, 0x1A, 0xFD, 0x00 }; /* ITM_FORTH, STRING_LABEL_VARIABLE, len=0 */
-  int32_t xBefore;
-  uint16_t countBefore;
 
-  longInteger_t li;
-  longIntegerInit(li);
-  int32ToLongInteger(42, li);
-  convertLongIntegerToLongIntegerRegister(li, REGISTER_X);
-  longIntegerFree(li);
-  longIntegerInit(li);
-  convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
-  longIntegerToInt32(li, xBefore);
-  longIntegerFree(li);
+  forthPushInt32(11);
+  forthPushInt32(22);
+  forthPushInt32(33);
+  forthPushInt32(44);  /* stack: T=11 Z=22 Y=33 X=44 */
 
-  countBefore = fdict.count;
+  uint8_t typeXb, typeYb, typeZb, typeTb;
+  int32_t xB, yB, zB, tB;
+  read_reg_int32(REGISTER_X, &typeXb, &xB);
+  read_reg_int32(REGISTER_Y, &typeYb, &yB);
+  read_reg_int32(REGISTER_Z, &typeZb, &zB);
+  read_reg_int32(REGISTER_T, &typeTb, &tB);
+
+  uint16_t countBefore = fdict.count;
+  uint16_t hereBefore  = fdict.here;
   lastErrorCode = ERROR_NONE;
 
   int16_t ret = executeOneStep(step);
+
+  int fail = 0;
   if (ret != 1) {
     printf("    FAIL: executeOneStep returned %d (expected 1)\n", ret);
-    return 1;
+    fail = 1;
   }
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: lastErrorCode = %d (expected ERROR_NONE)\n", lastErrorCode);
-    return 1;
+    fail = 1;
   }
-  longIntegerInit(li);
-  convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
-  longIntegerToInt32(li, xBefore);
-  longIntegerFree(li);
-  if (xBefore != 42) {
-    printf("    FAIL: X changed to %d (expected 42)\n", xBefore);
-    return 1;
+
+  uint8_t typeXa, typeYa, typeZa, typeTa;
+  int32_t xA, yA, zA, tA;
+  read_reg_int32(REGISTER_X, &typeXa, &xA);
+  read_reg_int32(REGISTER_Y, &typeYa, &yA);
+  read_reg_int32(REGISTER_Z, &typeZa, &zA);
+  read_reg_int32(REGISTER_T, &typeTa, &tA);
+
+  if (typeXa != typeXb || xA != xB) {
+    printf("    FAIL: X changed (type %u->%u, val %d->%d)\n", typeXb, typeXa, xB, xA);
+    fail = 1;
+  }
+  if (typeYa != typeYb || yA != yB) {
+    printf("    FAIL: Y changed (type %u->%u, val %d->%d)\n", typeYb, typeYa, yB, yA);
+    fail = 1;
+  }
+  if (typeZa != typeZb || zA != zB) {
+    printf("    FAIL: Z changed (type %u->%u, val %d->%d)\n", typeZb, typeZa, zB, zA);
+    fail = 1;
+  }
+  if (typeTa != typeTb || tA != tB) {
+    printf("    FAIL: T changed (type %u->%u, val %d->%d)\n", typeTb, typeTa, tB, tA);
+    fail = 1;
   }
   if (fdict.count != countBefore) {
     printf("    FAIL: fdict.count changed from %u to %u\n", countBefore, fdict.count);
-    return 1;
+    fail = 1;
   }
-  printf("    PASS: marker (len==0) is a no-op, X and dict unchanged\n");
-  return 0;
+  if (fdict.here != hereBefore) {
+    printf("    FAIL: fdict.here changed from %u to %u\n", hereBefore, fdict.here);
+    fail = 1;
+  }
+  if (!fail) {
+    printf("    PASS: marker (len==0) is a no-op — X/Y/Z/T and dict unchanged\n");
+  }
+  return fail;
 }
 
 /* test_exec_step_source_runs
@@ -3060,6 +3144,8 @@ static int test_exec_step_source_runs(void)
   lastErrorCode = ERROR_NONE;
   executeOneStep(beginOfProgramMemory);        /* define step */
   if (lastErrorCode == ERROR_NONE) {
+    /* Canary (R2-T4 item 2): see test_program_step_define_and_use. */
+    forthPushInt32(-123456);
     executeOneStep(beginOfProgramMemory + 16); /* "3 SQ" step */
   }
   programRunStop = savedRS;
@@ -3085,20 +3171,64 @@ static int test_exec_step_source_runs(void)
 
 /* test_exec_step_halts_on_error
  * Mutation: the arm clearing lastErrorCode before returning.
- * (§9.9 acceptance 7b's PC-testable half) */
+ * (§9.9 acceptance 7b's PC-testable half)
+ *
+ * R2-T4 item 3 / architect ruling 2026-07-15 (FOR_THE_ARCHITECT_R2.md):
+ * standalone step execution is a fixture artifact, not a supported API — the
+ * P2 ruling of 2026-07-13 already requires forthProgramStep's payload to live
+ * inside a real program. The old fixture had two independent defects: its
+ * length byte said 4 for the five bytes "3 SQX" (so it silently executed
+ * "3 SQ" and never told the interpreter about the X), and its stack-local
+ * step buffer resolved through forthOwningProgramStart to a REAL, unrelated
+ * program (that function has no upper bound on its `instructionPointer <=
+ * ptr` scan), so the pre-scan compiled whatever that program happened to
+ * contain before the step ever ran. Rebuilt via writeTestProgram: no SQ
+ * definition anywhere, no stack-local step. */
 static int test_exec_step_halts_on_error(void)
 {
-  uint8_t step[] = { 0x8B, 0x1A, 0xFD, 4, '3', ' ', 'S', 'Q', 'X' }; /* 3 SQX — SQX undefined */
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 5, '3', ' ', 'S', 'Q', 'X'   /* 3 SQX — SQX undefined, length 5 */
+  };
 
-  lastErrorCode = ERROR_NONE;
-  executeOneStep(step);
-  if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
-    printf("    FAIL: lastErrorCode = %d (expected ERROR_FUNCTION_NOT_FOUND=%d)\n",
-    lastErrorCode, ERROR_FUNCTION_NOT_FOUND);
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
     return 1;
   }
-  printf("    PASS: executeOneStep on undefined word sets ERROR_FUNCTION_NOT_FOUND\n");
-  return 0;
+
+  forthRunGenBump();
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+  lastErrorCode = ERROR_NONE;
+
+  executeOneStep(beginOfProgramMemory);
+
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+    printf("    FAIL: lastErrorCode = %d (expected ERROR_FUNCTION_NOT_FOUND=%d)\n",
+           lastErrorCode, ERROR_FUNCTION_NOT_FOUND);
+    fail = 1;
+  }
+  /* Identify WHICH word was reported missing, not just that something was.
+   * With no SQ definition anywhere in this test, a length-4 truncation
+   * ("3 SQ" instead of "3 SQX") would raise the identical
+   * ERROR_FUNCTION_NOT_FOUND — SQ is exactly as undefined as SQX — so the
+   * error code alone cannot catch that mutation. errorMessage carries the
+   * offending token (forth_compile.c:409-414); require it names SQX. */
+  else if (!strstr(errorMessage, "SQX")) {
+    printf("    FAIL: errorMessage = \"%s\" (expected to name SQX — got a "
+           "truncated read of the source, e.g. only \"SQ\")\n", errorMessage);
+    fail = 1;
+  }
+
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) {
+    printf("    PASS: executeOneStep on undefined word (real program) sets "
+           "ERROR_FUNCTION_NOT_FOUND naming SQX\n");
+  }
+  return fail;
 }
 
 /* probeListPtrs — silent tripwire (was a temporary debug probe):
