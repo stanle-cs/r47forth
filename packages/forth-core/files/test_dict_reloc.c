@@ -4317,19 +4317,27 @@ static int test_picker_scan_basic(void)
   }
 
   if (dynamicSoftmenu[22].menuContent) {
+    /* R2-T5 item 1: exact order, not membership. qsort's comparator is
+     * compareString(..., CMP_EXTENSIVE) (softmenus.c sortMenu) — binary
+     * alphabetic order puts CUBE ('C') before SQ ('S'). */
     const char *content = (const char *)dynamicSoftmenu[22].menuContent;
-    int foundSQ = 0, foundCUBE = 0;
-    while (*content) {
-      if (compareString(content, "CUBE", CMP_BINARY) == 0) foundCUBE = 1;
-      if (compareString(content, "SQ", CMP_BINARY) == 0) foundSQ = 1;
-      content += strlen(content) + 1;
-    }
-    if (!foundSQ) {
-      printf("    FAIL: 'SQ' not found in menuContent\n");
+    int16_t len0 = strlen(content);
+    if (compareString(content, "CUBE", CMP_BINARY) != 0) {
+      printf("    FAIL: item 0 is '%s', expected 'CUBE'\n", content);
       fail = 1;
     }
-    if (!foundCUBE) {
-      printf("    FAIL: 'CUBE' not found in menuContent\n");
+    const char *item1 = content + len0 + 1;
+    int16_t len1 = strlen(item1);
+    if (compareString(item1, "SQ", CMP_BINARY) != 0) {
+      printf("    FAIL: item 1 is '%s', expected 'SQ'\n", item1);
+      fail = 1;
+    }
+    /* One extra NUL follows the last name's own terminator (production
+     * allocates numberOfBytes = 1 + sum(len+1)). */
+    char afterLast = *(item1 + len1 + 1);
+    if (afterLast != '\0') {
+      printf("    FAIL: byte after second string terminator = %d, expected 0\n",
+             (unsigned char)afterLast);
       fail = 1;
     }
     free(dynamicSoftmenu[22].menuContent);
@@ -4345,27 +4353,31 @@ static int test_picker_scan_basic(void)
   cleanupTestProgram();
 
   if (!fail) {
-    printf("    PASS: picker finds SQ and CUBE, numItems==2, sorted\n");
+    printf("    PASS: picker order is exactly CUBE, SQ; numItems==2; trailing NUL present\n");
   }
   return fail;
 }
 
 /* test_picker_omits_long_names
- * Two 15-byte word names and one 14-byte name. The 15-byte names are omitted,
- * only the 14-byte name is present.
+ * R2-T5 item 2: the old "kept" name was SHORT (5 bytes) — nowhere near the
+ * nameLen<=14 boundary (softmenus.c: `if (nameLen > 0 && nameLen <= 14)`), so
+ * R2's `<=14 -> <=13` mutation stayed GREEN even though it moved the boundary.
+ * Kept name is now exactly 14 bytes (KEEPABCDEFGHIJ) and shares no prefix
+ * with either rejected 15-byte name (ABCDEFGHIJKLMNO, PQRSTUVWXYZABCD), so a
+ * boundary-off-by-one can't coincidentally still look right.
  * Escaping mutation: truncating instead of omitting — the 15-byte names
  * are cut to 14 bytes and appear in menuContent, so numItems > 1. */
 static int test_picker_omits_long_names(void)
 {
-  /* marker | : ABCDEFGHIJKLMNO (15) ; | : PQRSTUVWXYZABCD (15) ; | : SHORT (5) ; | marker | .END. */
+  /* marker | :ABCDEFGHIJKLMNO(15) | :PQRSTUVWXYZABCD(15) | :KEEPABCDEFGHIJ(14) | marker | .END. */
   uint8_t prog[] = {
     0x8B, 0x1A, 0xFD, 0x00,                                              /* marker (opening) */
     0x8B, 0x1A, 0xFD, 0x13, ':', ' ', 'A', 'B', 'C', 'D', 'E', 'F',    /* : ABCDEFGHIJKLMNO (15) */
     'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', ' ', ';',
     0x8B, 0x1A, 0xFD, 0x13, ':', ' ', 'P', 'Q', 'R', 'S', 'T', 'U',    /* : PQRSTUVWXYZABCD (15) */
     'V', 'W', 'X', 'Y', 'Z', 'A', 'B', 'C', 'D', ' ', ';',
-    0x8B, 0x1A, 0xFD, 0x09, ':', ' ', 'S', 'H', 'O', 'R', 'T', ' ',    /* : SHORT (5) */
-    ';',
+    0x8B, 0x1A, 0xFD, 0x12, ':', ' ', 'K', 'E', 'E', 'P', 'A', 'B',    /* : KEEPABCDEFGHIJ (14) */
+    'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', ' ', ';',
     0x8B, 0x1A, 0xFD, 0x00,                                              /* marker (closing) */
   };
 
@@ -4374,8 +4386,8 @@ static int test_picker_omits_long_names(void)
     return 1;
   }
 
-  /* marker(4) + 15byte1(23) + 15byte2(23) + SHORT(13) = 63 → closing marker */
-  const uint8_t *closingMarker = beginOfProgramMemory + 4 + 23 + 23 + 13;
+  /* marker(4) + 15byte1(4+19=23) + 15byte2(23) + 14byte(4+18=22) = 72 → closing marker */
+  const uint8_t *closingMarker = beginOfProgramMemory + 4 + 23 + 23 + 22;
   uint8_t *savedCurrentStep = currentStep;
   uint16_t savedProgNum = currentProgramNumber;
 
@@ -4387,26 +4399,16 @@ static int test_picker_omits_long_names(void)
   int fail = 0;
 
   if (dynamicSoftmenu[22].numItems != 1) {
-    printf("    FAIL: numItems = %d, expected 1 (two 15-byte names omitted, SHORT kept)\n",
-    dynamicSoftmenu[22].numItems);
+    printf("    FAIL: numItems = %d, expected 1 (two 15-byte names omitted, "
+           "KEEPABCDEFGHIJ kept)\n", dynamicSoftmenu[22].numItems);
     fail = 1;
   }
 
   if (dynamicSoftmenu[22].menuContent) {
     const char *content = (const char *)dynamicSoftmenu[22].menuContent;
-    int foundShort = 0, foundLong = 0;
-    while (*content) {
-      if (compareString(content, "SHORT", CMP_BINARY) == 0) foundShort = 1;
-      int clen = strlen(content);
-      if (clen >= 14) foundLong = 1;  /* truncated 15-byte name would be 14 chars */
-      content += clen + 1;
-    }
-    if (foundLong) {
-      printf("    FAIL: 15-byte name should be omitted, not truncated\n");
-      fail = 1;
-    }
-    if (!foundShort) {
-      printf("    FAIL: 'SHORT' should be present\n");
+    if (compareString(content, "KEEPABCDEFGHIJ", CMP_BINARY) != 0) {
+      printf("    FAIL: kept name is '%s', expected exactly 'KEEPABCDEFGHIJ' (14 bytes)\n",
+             content);
       fail = 1;
     }
     free(dynamicSoftmenu[22].menuContent);
@@ -4422,7 +4424,114 @@ static int test_picker_omits_long_names(void)
   cleanupTestProgram();
 
   if (!fail) {
-    printf("    PASS: 15-byte names omitted, SHORT present, numItems==1\n");
+    printf("    PASS: 15-byte names omitted, exactly 14-byte KEEPABCDEFGHIJ kept, numItems==1\n");
+  }
+  return fail;
+}
+
+/* test_picker_rebuilds_same_menu
+ * R2-T5 item 3: R2 deleted the special-case term in showSoftmenuCurrentPart's
+ * dynamic-menu cache check —
+ *   if(softmenu[m].menuItem != cachedDynamicMenu || ... || softmenu[m].menuItem == -MNU_FORTH)
+ * (softmenus.c) — and the full suite stayed GREEN, because every existing
+ * picker test calls initVariableSoftmenu directly (via testInitVariableSoftmenu),
+ * bypassing the cache gate entirely. This test drives the REAL public path —
+ * showSoftmenu(-MNU_FORTH) then showSoftmenuCurrentPart(), exactly what the UI
+ * calls — twice in a row without ever changing softmenuStack[0] in between, so
+ * the second call reaches the gate with cachedDynamicMenu already == -MNU_FORTH.
+ * Every other dynamic menu can trust "same identity -> same content"; MNU_FORTH
+ * cannot, because its content is derived from live program memory that a user
+ * can edit between two views of the same menu (add a word, look at the menu
+ * again without leaving it).
+ * Escaping mutation: drop the `|| softmenu[m].menuItem == -MNU_FORTH` term —
+ * the second showSoftmenuCurrentPart() call sees an identity match and skips
+ * the rebuild, so TWO stays absent from the still-cached, now-stale content. */
+static int test_picker_rebuilds_same_menu(void)
+{
+  /* marker | : ONE 1 ; | : TWO 2 ; | marker | .END. */
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker (opening) */
+    0x8B, 0x1A, 0xFD, 0x09, ':', ' ', 'O', 'N', 'E', ' ', '1', ' ', ';', /* : ONE 1 ; */
+    0x8B, 0x1A, 0xFD, 0x09, ':', ' ', 'T', 'W', 'O', ' ', '2', ' ', ';', /* : TWO 2 ; */
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* marker (closing) */
+  };
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  /* marker(4) + ONE-step(4+9=13) = 17: last byte of the ONE step.
+   * TWO step starts at offset 17 (>17 is false, so TWO is excluded when
+   * currentStep sits inside ONE's payload). */
+  const uint8_t *withinOneStep = beginOfProgramMemory + 4 + 13 - 1;
+  /* marker(4) + ONE(13) + TWO(13) = 30: closing marker, TWO now included. */
+  const uint8_t *closingMarker = beginOfProgramMemory + 4 + 13 + 13;
+
+  uint8_t *savedCurrentStep = currentStep;
+  uint16_t savedProgNum = currentProgramNumber;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+  int16_t savedCachedDynamicMenu = cachedDynamicMenu;
+  uint8_t *savedMenuContent = dynamicSoftmenu[22].menuContent;
+  int16_t savedNumItems = dynamicSoftmenu[22].numItems;
+  dynamicSoftmenu[22].menuContent = NULL;
+  dynamicSoftmenu[22].numItems = 0;
+
+  extern void showSoftmenu(int16_t menu);
+  extern void showSoftmenuCurrentPart(void);
+
+  currentProgramNumber = 1;
+  currentStep = (uint8_t *)withinOneStep;
+
+  showSoftmenu(-MNU_FORTH);
+  showSoftmenuCurrentPart();
+
+  int fail = 0;
+
+  if (dynamicSoftmenu[22].numItems != 1 || !dynamicSoftmenu[22].menuContent ||
+      compareString((const char *)dynamicSoftmenu[22].menuContent, "ONE", CMP_BINARY) != 0) {
+    printf("    FAIL: first build — numItems=%d content='%s' (expected 1, \"ONE\")\n",
+           dynamicSoftmenu[22].numItems,
+           dynamicSoftmenu[22].menuContent ? (const char *)dynamicSoftmenu[22].menuContent : "(null)");
+    fail = 1;
+  }
+
+  if (!fail) {
+    /* Move currentStep so TWO is now "before" it too — no showSoftmenu()
+     * call in between, no menu closed/reopened, cachedDynamicMenu is still
+     * -MNU_FORTH from the first build. */
+    currentStep = (uint8_t *)closingMarker;
+    showSoftmenuCurrentPart();
+
+    int foundTWO = 0;
+    if (dynamicSoftmenu[22].menuContent) {
+      const char *content = (const char *)dynamicSoftmenu[22].menuContent;
+      while (*content) {
+        if (compareString(content, "TWO", CMP_BINARY) == 0) foundTWO = 1;
+        content += strlen(content) + 1;
+      }
+    }
+    if (!foundTWO) {
+      printf("    FAIL: second build (same cached menu) did not include TWO — "
+             "numItems=%d (stale cache not rebuilt)\n", dynamicSoftmenu[22].numItems);
+      fail = 1;
+    }
+  }
+
+  if (dynamicSoftmenu[22].menuContent) {
+    free(dynamicSoftmenu[22].menuContent);
+  }
+  dynamicSoftmenu[22].menuContent = savedMenuContent;
+  dynamicSoftmenu[22].numItems = savedNumItems;
+  cachedDynamicMenu = savedCachedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  currentStep = savedCurrentStep;
+  currentProgramNumber = savedProgNum;
+  cleanupTestProgram();
+
+  if (!fail) {
+    printf("    PASS: MNU_FORTH rebuilds on every display, even with unchanged cache identity\n");
   }
   return fail;
 }
@@ -4900,10 +5009,20 @@ static int test_picker_glyph_tokenize(void)
  * Source step: 200-byte spaceless token followed by " : SQ DUP ;".
  * The 200-byte token exceeds FORTH_TOKEN_MAX (63) and must be skipped.
  * Assert numItems == 1 and "SQ" present (the long token was skipped, not copied).
- * This is also the overflow probe: under ASAN, the old unchecked xcopy would
- * trigger stack-buffer-overflow on tok[64].
- * Escaping mutation: restore the unchecked xcopy — ASAN build fails with
- * stack-buffer-overflow; non-ASAN still passes numItems assert. */
+ *
+ * R2-T5 item 4: this test pins SEMANTIC OMISSION ONLY — that an over-length
+ * token does not appear in the built menu. It does NOT catch an unchecked
+ * copy into a fixed buffer; that claim was false and is retracted here.
+ * softmenus.c's token copy (`case MNU_FORTH:`, the `xcopy(tok, line + start,
+ * tokLen)` line) is inline in the giant initVariableSoftmenu switch, gated by
+ * `if (tokLen > FORTH_TOKEN_MAX) { skip, continue; }` immediately above it —
+ * there is no separable helper function to wrap with pre/post canaries under
+ * FORTH_DEBUG_SELFTEST. Per this task's own instruction ("If the production
+ * code has no separable helper, STOP and report instead of inventing an ASan
+ * command or relying on stack corruption"): stopped. An overflow of the
+ * length check itself can only be verified under ASan, which is not the
+ * sanctioned gate — this remains an accepted, documented gap, not a covered
+ * mutation. */
 static int test_picker_long_token_skipped(void)
 {
   /* Build payload: 200 'X' bytes + " : SQ DUP ;" (11 bytes) = 211 bytes */
@@ -5134,6 +5253,18 @@ static int test_softmenu_trailing_null(void)
 
   currentProgramNumber = 1;
   currentStep = (uint8_t *)cubeStep;
+
+  /* R2-T5 item 5: pollute the heap allocator's same-size bin with non-zero
+   * bytes before the builder's calloc(1, 4) (one name "SQ": numberOfBytes =
+   * 1 + (2+1) = 4), so a malloc()-instead-of-calloc() mutation cannot pass
+   * by accident on a freshly-mapped, already-zero page. */
+  for (int p = 0; p < 8; p++) {
+    void *junk = malloc(4);
+    if (junk) {
+      memset(junk, 0xA5, 4);
+      free(junk);
+    }
+  }
 
   testInitVariableSoftmenu(22);
 
@@ -6580,6 +6711,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_picker_omits_long_names...\n");
   fail |= test_picker_omits_long_names();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_picker_rebuilds_same_menu...\n");
+  fail |= test_picker_rebuilds_same_menu();
   forthDictClear();
 
   printf("  [DEBUG] running test_picker_dedupes...\n");
