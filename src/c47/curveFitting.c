@@ -41,6 +41,9 @@ realContext_t *realContextForecast;
 
 
 void fnCurveFitting(uint16_t curveFitting) {
+  if(statMx[0] != 'S') {
+    restoreStats();                            //a model selection is a stats operation: undo HNORM's takeover first, so the new selection is not clobbered by a later restore
+  }
   curveFitting = curveFitting & 0x01FF;
   temporaryInformation = TI_STATISTIC_LR;
 
@@ -75,6 +78,9 @@ void fnCurveFitting(uint16_t curveFitting) {
 
 
 void fnCurveFittingReset(uint16_t control) {     // JM vv
+  if(statMx[0] != 'S') {
+    restoreStats();                            //a model selection is a stats operation: undo HNORM's takeover first, so the new selection is not clobbered by a later restore
+  }
   temporaryInformation = TI_STATISTIC_LR;
   if(control == 0) {
     lrSelection = CF_LINEAR_FITTING;
@@ -96,6 +102,9 @@ void fnCurveFittingReset(uint16_t control) {     // JM vv
 
 
 void fnCurveFitting_T(uint16_t curveFitting) { // Toggle
+  if(statMx[0] != 'S') {
+    restoreStats();                            //a model selection is a stats operation: undo HNORM's takeover first, so the new selection is not clobbered by a later restore
+  }
   temporaryInformation = TI_STATISTIC_LR;
   curveFitting &= 0x01FF;                      // clear ORTHO
 

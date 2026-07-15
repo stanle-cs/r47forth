@@ -17,6 +17,7 @@ bool_t    roundedTicks;
 bool_t    PLOT_AXIS;
 int8_t    PLOT_ZOOM;
 uint8_t   drawHistogram;
+uint8_t   plotStatScale;    // equal-scale axes for the fnPlotStat plots (SCATR/CENTRL) only
 
 int8_t    plotmode;
 double    tick_int_x;
@@ -1339,6 +1340,34 @@ currentKeyCode = 255;
 
     graph_Include0(PLOTSTAT, numberOfPlotPoints);
 
+    if(drawHistogram == 1 && selection == CF_GAUSS_FITTING) {
+      //HNORM auto-range: the window must show the fitted bell, not just the bars. Extend x to a1 +- 3 sigma
+      //(the curve is down to e^-4.5 = 1.1% of the peak there) unioned with the bar range, and lift y_max to
+      //clear the peak a0 with 10% headroom. A flipped fit (a2 >= 0) has no finite tails: the bar range stays.
+      real_t rr, smi, ga0, ga1, ga2, t, sig3;
+      processCurvefitSelection(selection, &rr, &smi, &ga0, &ga1, &ga2);
+      if(!realIsNaN(&ga0) && !realIsNaN(&ga1) && !realIsNaN(&ga2) && realIsNegative(&ga2)) {
+        realMultiply(&ga2, const_1on2, &sig3, &ctxtReal39);          // sigma^2 = -a2/2
+        realSetPositiveSign(&sig3);
+        realSquareRoot(&sig3, &sig3, &ctxtReal39);                   // sigma
+        int32ToReal(3, &t);
+        realMultiply(&sig3, &t, &sig3, &ctxtReal39);                 // 3 sigma
+        realSubtract(&ga1, &sig3, &t, &ctxtReal39);                  // a1 - 3 sigma
+        if(realCompareLessThan(&t, x_min)) {
+          realCopy(&t, x_min);
+        }
+        realAdd(&ga1, &sig3, &t, &ctxtReal39);                       // a1 + 3 sigma
+        if(realCompareGreaterThan(&t, x_max)) {
+          realCopy(&t, x_max);
+        }
+        convertDoubleToReal(1.1, &t, &ctxtReal39);
+        realMultiply(&ga0, &t, &t, &ctxtReal39);                     // 1.1 * a0
+        if(realCompareGreaterThan(&t, y_max)) {
+          realCopy(&t, y_max);
+        }
+      }
+    }
+
 
 
     //graphAxisDraw();
@@ -1682,7 +1711,7 @@ void graphDrawLRline(uint16_t selection) {
           #if defined(STATDEBUG) && defined(PC_BUILD)
             printf("plotting graph: iter:%u ix:%f I.vals:%u ==>xmin:%f (x:%f) xmax:%f ymin:%f (y:%f) ymax:%f xN:%d yN:%d \n", iterations, ix, Intervals, fx_min, x, fx_max, dbl(y_min), y, dbl(y_max),  xN, yN);
           #endif // STATDEBUG && PC_BUILD
-          #define tol 4
+          #define tol 1                                    // was 4: a Gauss tail asymptotes into the bottom band and vanished instead of drawing to the frame edges
           if(xN<SCREEN_WIDTH_GRAPH && xN>minN_x && yN<SCREEN_HEIGHT_GRAPH-tol && yN>minN_y) {
             yn = yN;
             xn = xN;
@@ -1885,13 +1914,20 @@ void fnPlotCloseSmi(uint16_t unusedButMandatoryParameter){
 //
 void fnPlotStat(uint16_t plotMode){
 #if !defined(SAVE_SPACE_DM42_13GRF)
-    //restoreStats();
+  if(plotMode != PLOT_NXT && plotMode != PLOT_REV && statMx[0] != 'S') {
+    restoreStats();                   // undo a previous HNORM's takeover (fit selection to Gauss, sums recomputed over HISTO) before starting a new plot, as the EXIT key does
+  }
   switch(plotMode) {
     case PLOT_ORTHOF:
     case PLOT_START:
-    case PLOT_REV:
-    case PLOT_NXT:
     case PLOT_LR: {
+      drawHistogram = 0;
+      strcpy(plotStatMx, "STATS");
+      lastPlotMode = PLOT_NOTHING;    // an explicit plot request starts its own plot; the plot on screen (a histogram) must not hijack it below
+      break;
+    }
+    case PLOT_REV:
+    case PLOT_NXT: {                  // modify the plot on screen, so lastPlotMode stays
       drawHistogram = 0;
       strcpy(plotStatMx, "STATS");
       break;
@@ -1899,17 +1935,20 @@ void fnPlotStat(uint16_t plotMode){
     case H_PLOT: {
       drawHistogram = 1;
       strcpy(plotStatMx, "HISTO");
+      lastPlotMode = PLOT_NOTHING;
+      plotSelection = 0;              // a leftover fit selection would overlay the histogram with the previous plot's fit line and text
       break;
     }
     case H_NORM: {
       drawHistogram = 1;
+      strcpy(plotStatMx, "HISTO");    // HNORM plots the HISTO matrix; without this a direct XEQ HNORM (no HPLOT before it) reported "no statistical data"
+      lrSelectionHistobackup = lrSelection;
+      lrChosenHistobackup = lrChosen;
+      fnCurveFitting(CF_GAUSS_FITTING); // before the statMx takeover below: fnCurveFitting restores the stats when statMx is "HISTO", which would undo the takeover mid-case
       strcpy(statMx, "HISTO");
       calcSigma(0);
       plotMode = PLOT_LR;
       lastPlotMode = PLOT_START;
-      lrSelectionHistobackup = lrSelection;
-      lrChosenHistobackup = lrChosen;
-      fnCurveFitting(CF_GAUSS_FITTING);
       break;
     }
     default: {
@@ -1951,7 +1990,7 @@ void fnPlotStat(uint16_t plotMode){
     if((plotStatMx[0]=='S' && checkMinimumDataPoints(const_2)) ||
        (plotStatMx[0]=='D' && drawMxN() >= 2) ||
        (plotStatMx[0]=='H' && statMxN() >= 3) ) {
-      clearSystemFlag(FLAG_SCALE);
+      plotStatScale = 0;              // per-mode equal-scale default; the user's SCALE flag stays untouched (it belongs to the fnPlotSQ plots)
 
       if(!(lastPlotMode == PLOT_NOTHING || lastPlotMode == PLOT_START)) {
         plotMode = lastPlotMode;
@@ -2000,7 +2039,7 @@ void fnPlotStat(uint16_t plotMode){
           break;
         case PLOT_ORTHOF:
         case PLOT_START:
-          setSystemFlag(FLAG_SCALE);
+          plotStatScale = 1;
           showSoftmenu(-MNU_PLOT_SCATR);
           break;
         case PLOT_NOTHING:
