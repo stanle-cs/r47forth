@@ -121,7 +121,7 @@ In:  FL_ASLIFT=1 PGM="G7"
 Out: EC=0
 Func: fnHashBmpCov
 In:  FARG=7
-Out: EC=0 RX=Stri:"111BEFB466D6F402EF0C1AA14E7BC6C1EFB8627150EC1C6C1C489DB9400D2A09"
+Out: EC=0 RX=Stri:"F37EED64A93C6CB35C0BD76526CB561F4B19A4E8B3E28A19E5BCFA39156DE8FC"
 
 ; power-fit assessment (G9: BestF 8 then ASSESS) - the programmed model selection
 ; pattern of G5 with the power model y = a0*x^a1. The rendered fit of the seeded
@@ -186,8 +186,10 @@ In:  FARG=6
 Out: EC=0 RX=Stri:"15FD5C5BF124AA48F6BCC1E822A0CCF1AF46150764D5E5D0B564C0E753F54777"
 
 ; histogram with normal fit (G8: HISTOX builds the HISTO matrix, HNORM overlays
-; the Gauss fit). HNORM retargets the statistical sums at the HISTO matrix;
-; fnPlotStat and HISTOX restore them at the next plot, so G8 needs no ordering.
+; the Gauss fit). The window auto-ranges to the fitted bell (x to a1 +- 3 sigma,
+; y_max clearing the peak), so both tails render to the frame edges. HNORM
+; retargets the statistical sums at the HISTO matrix; fnPlotStat and HISTOX
+; restore them at the next plot, so G8 needs no ordering.
 Func: fnBmpNameCov
 In:  FARG=8
 Out: EC=0
@@ -196,7 +198,7 @@ In:  FL_ASLIFT=1 PGM="G8"
 Out: EC=0
 Func: fnHashBmpCov
 In:  FARG=8
-Out: EC=0 RX=Stri:"AFC169D9547D6985ADC00751E595EF1919484B6D7898D4EAEEF05CE248BDB99C"
+Out: EC=0 RX=Stri:"16AFB6FB03F7353ECB5DCF58B8333DF5031C5BF96EAC5594428269CA611A2D3A"
 
 ; clear the statistical sums so they do not leak past this file
 Func: fnClSigma
