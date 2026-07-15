@@ -83,11 +83,13 @@ void drawBattery(uint16_t voltage);
     uint32_t x = X_DATE;
     lcd_fill_rect(0, 0, x - 0, 20, LCD_SET_VALUE);
 
+    // Always fetch fresh for both WoY and Date display, as the WoY display below overwrites dateTimeString with a "Wnn-d" string;
+    //   a non-digit start in dateTimeString means date not yet initialized, block skipped entirely; time-only display bypasses the test.
     if(SBARUPD_Date || SBARUPD_WoY) {
       getDateString(dateTimeString);
     }
 
-    if((dateTimeString[0] >= '0' && dateTimeString[0] <= '9')) {                      // not yet initialized, senseless to continue
+    if((dateTimeString[0] >= '0' && dateTimeString[0] <= '9') || !(SBARUPD_Date || SBARUPD_WoY)) { // not yet initialized, senseless to continue
       if(SBARUPD_Date) {
         x = showString(dateTimeString, &standardFont, x, 0, vmNormal, true, true);
       }
@@ -180,9 +182,9 @@ void drawBattery(uint16_t voltage);
             break;
           }
 
-            default: {
-              x = showGlyph(STD_QUESTION_MARK,      &standardFont, x, 0, vmNormal, true, false, false); // ?
-            }
+          default: {
+            x = showGlyph(STD_QUESTION_MARK,      &standardFont, x, 0, vmNormal, true, false, false); // ?
+          }
         }
       }
       lcd_fill_rect(x, 0, X_FRAC_MODE - x, 20, LCD_SET_VALUE);
