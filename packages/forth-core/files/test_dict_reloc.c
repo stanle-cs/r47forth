@@ -18,6 +18,10 @@
 #if defined(PC_BUILD)
 
 #include <string.h>
+#include <signal.h>   /* SIGALRM: the fork test turns a child hang into a signal */
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include "c47.h"
 #include "forth_dict.h"
 #include "saveRestoreBackup.h"
@@ -1993,6 +1997,86 @@ static int test_lifecycle_reset(void)
   return 0;
 }
 
+/* Test: production doFnReset actually clears the dictionary.
+ * Uses fork() so the destructive reset cannot corrupt the parent
+ * test process. The child defines SQ, verifies it exists, calls
+ * doFnReset, then checks that SQ is gone and fdict is zeroed. */
+static int test_lifecycle_real_reset_hook(void)
+{
+  pid_t pid = fork();
+  if (pid < 0) {
+    printf("    FAIL: fork failed (%s)\n", strerror(errno));
+    return 1;
+  }
+  if (pid == 0) {
+    /* Child process.
+     * alarm() is load-bearing, not belt-and-braces: the mutation this test
+     * exists to catch (deleting forthDictInit() from doFnReset) leaves fdict
+     * stale after doFnReset's memset(ram,0,...). fdict.base stays non-NULL so
+     * forthFindColon's !base guard passes, every link then reads 0, and its
+     * walk `while (off != FORTH_NULL) off = hdr->link;` spins on base+0
+     * forever (forth_dict.c). Without this alarm the child never exits, the
+     * parent blocks in waitpid, and the whole suite hangs instead of going RED
+     * — which is exactly what happened. Turn the hang into a signal so the
+     * parent can report it. */
+    alarm(10);
+    forthDictClear();
+    uint16_t w = begin_word("SQ", 2);
+    if (w == FORTH_NULL) {
+      _exit(10);
+    }
+    forthDictEmit(PRIM_TOKEN(P_DUP));
+    forthDictEmit(PRIM_TOKEN(P_MUL));
+    end_word(w);
+
+    uint16_t idx;
+    bool foundPre = forthFindColon("SQ", &idx);
+    if (!foundPre) {
+      _exit(20);
+    }
+
+    doFnReset(CONFIRMED, doNotLoadAutoSav);
+
+    bool foundPost = forthFindColon("SQ", &idx);
+    if (foundPost) {
+      _exit(30);
+    }
+    if (fdict.base != NULL) {
+      _exit(40);
+    }
+    if (fdict.here != 0) {
+      _exit(50);
+    }
+    if (fdict.count != 0) {
+      _exit(60);
+    }
+    if (fdict.latest != FORTH_NULL) {
+      _exit(70);
+    }
+    _exit(0);
+  }
+
+  /* Parent process */
+  int status;
+  waitpid(pid, &status, 0);
+  if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+    printf("    PASS: real reset hook clears dictionary and zeroes fdict\n");
+    return 0;
+  }
+  if (WIFSIGNALED(status)) {
+    printf("    FAIL: real reset hook child killed by signal %d%s\n",
+           WTERMSIG(status),
+           WTERMSIG(status) == SIGALRM
+             ? " (timeout — reset left fdict stale; forthFindColon's unbounded"
+               " link walk spun on a zeroed chain)"
+             : "");
+    return 1;
+  }
+  printf("    FAIL: real reset hook child exited with code %d\n",
+         WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+  return 1;
+}
+
 
 /* ---- Error-handling tests: fix #7 (dict-space / name errors) ----
  * Mutation #7a: remove error display from startDefinition -> silent failure,
@@ -2224,36 +2308,15 @@ static int test_number_bad_lone_dot(void)
 /* Test: items.c FORTH/FCALL rows carry US_ENABLED (§0.2) */
 static int test_undo_rows_us_enabled(void)
 {
-  FILE *f = fopen("/home/stan/c43/packages/forth-core/items.c", "r");
-  if (!f) {
-    printf("    SKIP: cannot open items.c for static check\n");
-    return 0;
-  }
-  char line[512];
-  int forthFound = 0, fcallFound = 0;
-  int forthUS = 0, fcallUS = 0;
-  while (fgets(line, sizeof(line), f)) {
-    if (strstr(line, "\"FORTH\"") && strstr(line, "fnForthOuter")) {
-      forthFound = 1;
-      forthUS = (strstr(line, "US_ENABLED") != NULL);
-    }
-    if (strstr(line, "\"FCALL\"") && strstr(line, "fnForthCall")) {
-      fcallFound = 1;
-      fcallUS = (strstr(line, "US_ENABLED") != NULL);
-    }
-  }
-  fclose(f);
+  uint16_t forthUS = indexOfItems[ITM_FORTH].status & US_STATUS;
+  uint16_t fcallUS = indexOfItems[ITM_FCALL].status & US_STATUS;
 
-  if (!forthFound || !fcallFound) {
-    printf("    SKIP: FORTH/FCALL rows not found in items.c\n");
-    return 0;
-  }
-  if (!forthUS) {
-    printf("    FAIL: ITM_FORTH row uses US_UNCHANGED (should be US_ENABLED)\n");
+  if (forthUS != US_ENABLED) {
+    printf("    FAIL: ITM_FORTH US_STATUS is 0x%x, expected US_ENABLED (0x%x)\n", forthUS, US_ENABLED);
     return 1;
   }
-  if (!fcallUS) {
-    printf("    FAIL: ITM_FCALL row uses US_UNCHANGED (should be US_ENABLED)\n");
+  if (fcallUS != US_ENABLED) {
+    printf("    FAIL: ITM_FCALL US_STATUS is 0x%x, expected US_ENABLED (0x%x)\n", fcallUS, US_ENABLED);
     return 1;
   }
   printf("    PASS: FORTH and FCALL rows carry US_ENABLED\n");
@@ -6089,6 +6152,8 @@ int forthDictSelfTest(void)
   fail |= test_lifecycle_pre_init();
   printf("  [DEBUG] running test_lifecycle_reset...\n");
   fail |= test_lifecycle_reset();
+  printf("  [DEBUG] running test_lifecycle_real_reset_hook...\n");
+  fail |= test_lifecycle_real_reset_hook();
 
   forthDictClear();
 
