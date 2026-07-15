@@ -3,12 +3,12 @@
   "files": {
     "forth_bridge.c": "571acab3b871c3e300a95b8b5430de022fe87aa37a31b2539c69bcaad37799d5",
     "forth_compile.c": "ff783e00529200bc05b882eba0a00e0e9ba452e11b5d66b70d1ef7e7f1073da5",
-    "forth_dict.c": "21687bce83cd4053f9f20c16741660781e40081302434e796aea40ca76c9aa78",
+    "forth_dict.c": "bb6f489cf72cbecb47e18bf29a5a21f803088a4148b84e581d7a7cfcd78dda85",
     "forth_dict.h": "188b2b07b70991d4ffc2bfa6e9f044664711e3ea43699efa3e4dbfabdbc75d6a",
     "forth_inner.c": "6be14e739faca739753f3e6fd285822e62d3374df608ab417ae2437f28225663",
     "forth_prims.c": "1f7e208d184b1ec64bee21fd311a26b77df7f64c60f9f78da879606b2bb07a46",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "test_dict_reloc.c": "41cfc0c8594d1aec5ba5b42062dbc98d9f9b7e48857b869a63335fe807563f82"
+    "test_dict_reloc.c": "6c1ba40ff0d91d5559edc5f11fc2f95dc743dd3ee82cce9f50611bcbb85bd560"
   },
   "patches": {
     "010-config.c.patch": "eff3da120408e5f7d2be6ac0189000c2f3243dbe90a8474e0e01ce129deb8b27",

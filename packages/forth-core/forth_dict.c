@@ -87,6 +87,11 @@ void forthDictValidateRestored(void)
        if ((uint32_t)off + 4 > fdict.here) { ok = false; break; }
         forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
        if (hdr->nameLen == 0 || hdr->nameLen > FORTH_NAME_MAX) { ok = false; break; }
+       /* R4-3: off+4<=here (checked above) proves the HEADER fits, not the
+        * name that follows it. Probed: a valid ": VX 1 ;" entry with here
+        * force-set to latest+4 survived validation — the header fit, but its
+        * name read past the logical dictionary end. */
+       if ((uint32_t)off + 4u + hdr->nameLen > fdict.here) { ok = false; break; }
        if (hdr->link != FORTH_NULL && hdr->link >= off) { ok = false; break; }
       off = hdr->link;
       if (++n > fdict.count) { ok = false; break; }
@@ -116,12 +121,26 @@ bool forthDictEnsure(uint16_t bytes)
     return false;
   }
 
-  /* Lazy initial allocation (§5.2) */
+  /* Lazy initial allocation (§5.2).
+   * R1-1 / R4-2 item 1 (reconciled — both named this branch): the configured
+   * initial block count was allocated unconditionally and reported success
+   * even when it did not cover `bytes`, so a first request larger than the
+   * initial region was reported safe while the caller could write past the
+   * allocation. fdict.base==NULL implies fdict.here==0 in every reachable
+   * path (forthDictInit, forthDictClear, forthDictValidateRestored's
+   * normalize branch), so `here + bytes` and `bytes` are the same quantity
+   * here; using here+bytes anyway costs nothing and does not depend on that
+   * invariant continuing to hold. */
   if (!fdict.base) {
     uint16_t initBlocks = FORTH_INITIAL_BLOCKS;
 #if defined(PC_BUILD)
     if (testInitialBlocks > 0) initBlocks = testInitialBlocks;
 #endif
+    uint32_t need = (uint32_t)fdict.here + bytes;
+    uint32_t minBlocks = TO_BLOCKS(need);
+    if (minBlocks > initBlocks) {
+      initBlocks = (uint16_t)minBlocks;
+    }
     fdict.base = allocC47Blocks(initBlocks);
     if (!fdict.base) {
       return false;
@@ -153,17 +172,28 @@ bool forthDictEnsure(uint16_t bytes)
 
 uint16_t forthDictAllocate(uint8_t nameLen, uint16_t bodyBytes)
 {
-  uint16_t hdrSize = 4 + nameLen;
-  uint16_t alignedHdr = (uint16_t)TO_BLOCKS(hdrSize) * BYTES_PER_BLOCK;
-  uint16_t total = alignedHdr + bodyBytes;
+  /* R4-2 item 2: widened to uint32_t. The uint16_t form wraps a large
+   * bodyBytes request silently (probed: forthDictAllocate(31, 0xFFF0)
+   * wrapped and returned offset 0 with no error). The compiler today only
+   * calls this with bodyBytes==0, so the wrap is unreachable in practice —
+   * but the helper's own contract is checked here, not left as a false
+   * promise for the first caller that uses bodyBytes for real. */
+  uint32_t hdrSize = 4u + nameLen;
+  uint32_t alignedHdr = (uint32_t)TO_BLOCKS(hdrSize) * BYTES_PER_BLOCK;
+  uint32_t total = alignedHdr + bodyBytes;
 
-  if (!forthDictEnsure(total)) {
+  if ((uint32_t)fdict.here + total > 0xFFFEu) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return FORTH_NULL;
+  }
+
+  if (!forthDictEnsure((uint16_t)total)) {
     return FORTH_NULL;
   }
 
   uint16_t off = fdict.here;
 
-  fdict.here = (uint16_t)(off + alignedHdr);
+  fdict.here = (uint16_t)(off + (uint16_t)alignedHdr);
   /* Chain: new header's link -> previous latest */
   if (fdict.base) {
     forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);

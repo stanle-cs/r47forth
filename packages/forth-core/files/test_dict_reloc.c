@@ -2157,6 +2157,115 @@ static int test_dict_space_full(void)
   return 0;
 }
 
+/* test_dict_first_ensure_capacity
+ * R1-1: forthDictEnsure's null-base branch allocated the configured initial
+ * block count unconditionally and returned true even when that allocation did
+ * not cover the requested bytes — a first request larger than the initial
+ * region was reported safe while the caller could write past it.
+ * Escaping mutation: drop the minBlocks-to-initBlocks raise (revert to the
+ * unconditional `uint16_t initBlocks = FORTH_INITIAL_BLOCKS` / test-override
+ * allocation) — TO_BYTES(sizeBlocks) < requested and the capacity assertion
+ * fails. */
+static int test_dict_first_ensure_capacity(void)
+{
+  int fail = 0;
+
+  forthDictClear();
+  forthDictSetTestInitialBlocks(1);   /* deliberately small: 1 block = BYTES_PER_BLOCK bytes */
+
+  const uint16_t requested = BYTES_PER_BLOCK * 5;   /* well beyond the 1-block initial region */
+  bool ok = forthDictEnsure(requested);
+
+  if (!ok) {
+    printf("    FAIL: forthDictEnsure(%u) returned false\n", requested);
+    fail = 1;
+  }
+  else if (!fdict.base) {
+    printf("    FAIL: forthDictEnsure succeeded but fdict.base is NULL\n");
+    fail = 1;
+  }
+  else {
+    uint32_t capacityBytes = TO_BYTES(fdict.sizeBlocks);
+    uint32_t needed = (uint32_t)fdict.here + requested;
+    if (capacityBytes < needed) {
+      printf("    FAIL: capacity %u bytes < needed %u bytes (here=%u sizeBlocks=%u)\n",
+             capacityBytes, needed, fdict.here, fdict.sizeBlocks);
+      fail = 1;
+    }
+    else {
+      /* The last requested byte must be writable without passing the
+       * allocation — not just arithmetically claimed as covered. */
+      fdict.base[fdict.here + requested - 1] = 0xA5;
+      if (fdict.base[fdict.here + requested - 1] != 0xA5) {
+        printf("    FAIL: write to the last requested byte did not persist\n");
+        fail = 1;
+      }
+    }
+  }
+
+  forthDictClear();
+  forthDictSetTestInitialBlocks(4);   /* restore the suite's baseline override */
+
+  if (!fail) {
+    printf("    PASS: first ensure(%u) over a 1-block initial region grew capacity to cover it\n",
+           requested);
+  }
+  return fail;
+}
+
+/* test_dict_capacity_arithmetic
+ * R4-2: two independent violations of the same capacity contract.
+ * Subcase 1 restates R1-1's fix at the forthDictEnsure level (kept light —
+ * test_dict_first_ensure_capacity above is the thorough version, proving the
+ * fix by actually writing the last requested byte; both target the same
+ * null-base branch and would be redundant in full).
+ * Subcase 2 is the independent forthDictAllocate defect: hdrSize/alignedHdr/
+ * total were uint16_t and wrapped silently. Probed: forthDictAllocate(31,
+ * 0xFFF0) wrapped the total and returned offset 0 with no error.
+ * Escaping mutation: revert forthDictAllocate's total to uint16_t (drop the
+ * widened-arithmetic overflow check) — subcase 2 gets FORTH_NULL/ERROR_NONE
+ * become offset-0/no-error instead. */
+static int test_dict_capacity_arithmetic(void)
+{
+  int fail = 0;
+
+  /* Subcase 1: forthDictEnsure over a small initial region. */
+  forthDictClear();
+  forthDictSetTestInitialBlocks(1);
+  uint16_t requested1 = BYTES_PER_BLOCK + 2;
+  bool ok = forthDictEnsure(requested1);
+  if (!ok || TO_BYTES(fdict.sizeBlocks) < requested1) {
+    printf("    FAIL: subcase 1 — ensure(%u) ok=%d sizeBlocks*BPB=%u\n",
+           requested1, ok, (unsigned)TO_BYTES(fdict.sizeBlocks));
+    fail = 1;
+  }
+
+  /* Subcase 2: forthDictAllocate with a bodyBytes large enough to overflow
+   * uint16_t arithmetic (31 + aligned-header + 0xFFF0 wraps in 16 bits). */
+  forthDictClear();
+  forthDictSetTestInitialBlocks(4);
+  lastErrorCode = ERROR_NONE;
+  uint16_t off = forthDictAllocate(31, 0xFFF0u);
+  if (off != FORTH_NULL) {
+    printf("    FAIL: subcase 2 — forthDictAllocate(31, 0xFFF0) returned offset %u, expected FORTH_NULL\n",
+           off);
+    fail = 1;
+  }
+  if (lastErrorCode != ERROR_RAM_FULL) {
+    printf("    FAIL: subcase 2 — lastErrorCode = %d, expected ERROR_RAM_FULL (%d)\n",
+           lastErrorCode, ERROR_RAM_FULL);
+    fail = 1;
+  }
+
+  forthDictClear();
+  forthDictSetTestInitialBlocks(4);
+
+  if (!fail) {
+    printf("    PASS: dict capacity arithmetic is checked and truthful (ensure + allocate)\n");
+  }
+  return fail;
+}
+
 /* test_number_then_no_label_fallthrough
  * C-8 classify-gate: a classified number that fails to emit must NOT fall
  * through to label lookup.  Without the gate, processNumber returns false
@@ -6385,7 +6494,12 @@ static int test_restore_validation_clamps(void)
  * removed (stale base + zeroed scalars passes every other check: cap=0,
  * here=0<=0, latest=FORTH_NULL skips the walk, n=0==count).
  * V2 must fail if the nameLen bounds check is removed (a zeroed nameLen
- * header walks clean through the off/link/count checks). */
+ * header walks clean through the off/link/count checks).
+ * V3 (R4-3) must fail if the off+4+nameLen<=here extent check is removed: the
+ * validator proved off+4<=here (the HEADER fits) and 1<=nameLen<=31, but never
+ * proved the NAME that follows the header also fits inside here. Probed: a
+ * valid ": VX 1 ;" entry with here force-set to latest+4 (header fits, name
+ * does not) survived validation before this fix. */
 static int test_validate_direct_corruption(void)
 {
   int fail = 0;
@@ -6432,8 +6546,31 @@ static int test_validate_direct_corruption(void)
     }
   }
 
+  /* V3: header fits (off+4<=here) but the name after it runs past here */
+  {
+    forthDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": VD3 1 ;");
+    if (lastErrorCode != ERROR_NONE || !fdict.base) {
+      printf("    SKIP: V3 setup failed\n");
+      return fail;
+    }
+    uint8_t *savedBase = fdict.base;
+    uint16_t savedBlocks = fdict.sizeBlocks;
+    fdict.here = fdict.latest + 4;   /* header fits; nameLen bytes now run past here */
+    forthDictValidateRestored();
+    if (fdict.base != NULL) {
+      printf("    FAIL: V3 header name extending past here survived validation\n");
+      fail = 1;
+      forthDictClear();
+    }
+    else {
+      freeC47Blocks(savedBase, savedBlocks);  /* release the deliberate orphan */
+    }
+  }
+
   forthDictClear();
-  if (!fail) printf("    PASS: validator direct pins (sizeBlocks, nameLen)\n");
+  if (!fail) printf("    PASS: validator direct pins (sizeBlocks, nameLen, name-extent)\n");
   return fail;
 }
 
@@ -6646,6 +6783,12 @@ int forthDictSelfTest(void)
   fail |= test_dict_name_too_long();
   printf("  [DEBUG] running test_dict_space_full...\n");
   fail |= test_dict_space_full();
+
+  printf("  [DEBUG] running test_dict_first_ensure_capacity...\n");
+  fail |= test_dict_first_ensure_capacity();
+
+  printf("  [DEBUG] running test_dict_capacity_arithmetic...\n");
+  fail |= test_dict_capacity_arithmetic();
 
   printf("  [DEBUG] running test_number_then_no_label_fallthrough...\n");
   fail |= test_number_then_no_label_fallthrough();
