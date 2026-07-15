@@ -386,9 +386,141 @@ tasks.
 
 ---
 
+## R5-7 — Make a corrupt manifest fatal, and make saving it atomic
+
+**Approved by the architect 2026-07-15 (R5-A1). Both halves are one contract —
+implement them together or not at all.**
+
+**File(s):** `tools/pkg_patch_refresh.py`, `tools/test_pkg_patch_refresh.py`
+
+**Read:** in `pkg_patch_refresh.py`, read `load_manifest`, `save_manifest`,
+`resolve_head_commit` and `ensure_base_commit` (they are consecutive, roughly
+lines 143-198) and nothing else. In `test_pkg_patch_refresh.py`, read the
+`_TempProject` class and `test_legacy_manifest_init_warns`; copy their idioms.
+
+**The defect.** `load_manifest` catches `(ValueError, OSError)` and returns
+`{'patches': {}, 'files': {}}` — a value indistinguishable from a fresh
+package, and carrying no `base_commit` key. `ensure_base_commit` then reads
+`manifest.get('base_commit')` as `None`, finds `manifest['patches']` and
+`manifest['files']` both empty so its legacy warning does not fire, and records
+current HEAD as the base. A package pinned to base A, with upstream since moved
+to B, therefore silently re-pins to B and regenerates patches that revert
+upstream's own change. R5 reproduced exactly this: `repinned_to_new_head=True`,
+one generic "patch exists but was not recorded" warning, and a patch containing
+`-line4_UPSTREAM` / `+line4`.
+
+`save_manifest` makes that state reachable without a human editing anything:
+`open(path, 'w')` truncates before writing, so an interrupted or crashed process
+leaves a truncated file, which `load_manifest` then reads as "fresh package".
+The two defects feed each other.
+
+**The change — `load_manifest`.** Distinguish absent from unreadable:
+
+```
+path = <pkgdir_abs>/.refresh-manifest.json
+if not os.path.isfile(path):
+    return {'patches': {}, 'files': {}}      # genuinely new package: OK
+try:
+    with open(path) as f:
+        data = json.load(f)
+except (ValueError, OSError) as exc:
+    raise RuntimeError(                       # NEVER treat as fresh
+        f'{path} exists but is unreadable or is not valid JSON ({exc}). '
+        f'Refusing to treat a corrupt manifest as a fresh package: that '
+        f'would re-pin base_commit to current HEAD and emit patches that '
+        f'revert upstream changes (R5-A1). Restore it from git '
+        f'(git checkout -- {path}) or delete it deliberately to '
+        f're-initialize this package.')
+if not isinstance(data, dict):
+    raise RuntimeError(<same message, ' — top-level JSON is not an object'>)
+data.setdefault('patches', {})
+data.setdefault('files', {})
+return data
+```
+
+Rules, all binding:
+- The file **existing but unreadable** is fatal. Only a genuinely absent file
+  initializes a package. Do not use a bare `except:`; catch exactly
+  `(ValueError, OSError)` as today.
+- `json.load` succeeding but yielding a non-dict (a list, a string, `null`) is
+  the same class of corruption and is equally fatal — today it would reach
+  `data.setdefault` and die with an unhelpful `AttributeError`.
+- `RuntimeError` is the tool's existing fatal idiom (see `resolve_head_commit`,
+  :170). Use it. Do not call `sys.exit`, and do not add a new exception class.
+- Do not touch `ensure_base_commit`. With load fixed it can no longer be
+  reached with a silently-emptied manifest, and its legacy-init warning is
+  still correct for real legacy packages.
+
+**The change — `save_manifest`.** Write through a same-directory temporary file
+so the previous valid manifest survives interruption:
+
+```
+path = <pkgdir_abs>/.refresh-manifest.json
+fd, tmp = tempfile.mkstemp(dir=<pkgdir_abs>, prefix='.refresh-manifest.', suffix='.tmp')
+try:
+    with os.fdopen(fd, 'w') as f:
+        json.dump(manifest, f, indent=2, sort_keys=True)
+        f.write('\n')
+        f.flush()
+        os.fsync(f.fileno())      # bytes on disk BEFORE the rename
+    os.replace(tmp, path)         # atomic on POSIX and Windows
+except BaseException:
+    try: os.unlink(tmp)           # never leave .tmp litter behind
+    except OSError: pass
+    raise
+```
+
+Rules:
+- The temp file **must** be in the same directory as the target — `os.replace`
+  is only atomic within a filesystem, and `/tmp` may be a different one.
+- `fsync` before `os.replace`, not after. The point is that the rename can never
+  publish a file whose bytes have not landed.
+- Catch `BaseException`, not `Exception`: a `KeyboardInterrupt` between mkstemp
+  and replace is exactly the interruption this exists to survive, and it must
+  still clean up and re-raise.
+- Keep the output byte-identical to today (`indent=2`, `sort_keys=True`,
+  trailing newline). This must not produce a manifest diff on an unchanged
+  package — verify with `git diff --stat` after a refresh.
+- `tempfile` is already imported by the test module, not necessarily by
+  `pkg_patch_refresh.py`. Add the import if missing.
+
+**Tests** — add to `tools/test_pkg_patch_refresh.py`, using `_TempProject`:
+
+1. `test_corrupt_manifest_is_fatal` — write upstream `foo.c` at base A, a
+   working override, and a valid manifest via `save_manifest`; capture
+   `base_commit`. Truncate the manifest to invalid JSON (e.g. write `'{"patc'`).
+   Assert `p.refresh()` raises `RuntimeError`, and that the message names the
+   manifest path. **BUG THIS TEST EXISTS TO CATCH:** a corrupt manifest read as
+   a fresh package.
+2. `test_corrupt_manifest_leaves_patch_working_and_base_untouched` — same setup;
+   record the bytes of the generated patch, the working file, and the manifest's
+   `base_commit`. Corrupt the manifest, `assertRaises(RuntimeError)`, then assert
+   all three are byte-for-byte unchanged. This is R5-A1's actual requirement:
+   the failure must be inert, not partial.
+3. `test_non_dict_manifest_is_fatal` — manifest containing `[]`. Assert
+   `RuntimeError`, not `AttributeError`.
+4. `test_missing_manifest_still_initializes` — no manifest at all. Assert
+   refresh succeeds and records a `base_commit`. **This must keep passing:** the
+   change must not make a genuinely new package fatal.
+5. `test_save_manifest_leaves_no_temp_files` — call `save_manifest`, then assert
+   no entry in the package directory matches `.refresh-manifest.*.tmp`.
+6. `test_save_manifest_survives_interrupted_write` — write a valid manifest,
+   then monkeypatch `json.dump` to raise `KeyboardInterrupt`, call
+   `save_manifest` inside `assertRaises(KeyboardInterrupt)`, and assert the
+   ORIGINAL manifest is still on disk byte-for-byte and no `.tmp` litter remains.
+   **BUG THIS TEST EXISTS TO CATCH:** the in-place truncating write that made
+   the corrupt state reachable in the first place.
+
+**Gate.** `python3 -m unittest discover -s tools -p 'test_pkg_*.py'` green, then
+`./packages/forth-core/build-test.sh` green — the refresh must still produce a
+byte-identical manifest for forth-core (`git diff --stat` shows no manifest
+change). Report both.
+
+---
+
 ## R5-6 — Run the final tooling/build gates and commit once
 
-**File(s):** all paths changed by R5-1 through R5-5, plus refresh-generated
+**File(s):** all paths changed by R5-1 through R5-5 **and R5-7**, plus refresh-generated
 `packages/forth-core/patches/*.patch` and
 `packages/forth-core/.refresh-manifest.json`
 
@@ -401,6 +533,9 @@ the complete diff for only the paths named by the earlier tasks. Confirm no
 
 **The defect.** None new. This task prevents the fix series from ending with a
 unit-only green, stale generated outputs, or an uncommitted probe.
+
+**Ordering:** this task runs LAST. R5-7 is numbered after R5-5 but is sequenced
+before this one — it must be complete and green before you start here.
 
 **The change.** Make no product change. Run, in order:
 
