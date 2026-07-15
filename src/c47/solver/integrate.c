@@ -145,13 +145,6 @@ saveForUndo();
     WP34S_Ln(&acc, &digits, &ctxtReal39);
     realDivide(&digits, const39_ln10, &digits, &ctxtReal39);
     digitsN = max(min(-realToInt32C47(&digits, NULL), 34-3), 1);
-    #if defined(PC_BUILD)
-      printRealToConsole(&digits, "digits: ", "\n");
-      printf("----->>>> digitsN=%i, smallerEpsilon=%u\n", digitsN, smallerEpsilon);
-      printRealToConsole(&acc, "acc: ", "\n");
-      printRealToConsole(&llim, "llim: ", "\n");
-      printRealToConsole(&ulim, "ulim: ", "\n");
-    #endif // PC_BUILD
 
     if(digitsN == 6) {
       #if defined(PC_BUILD)
@@ -208,17 +201,7 @@ saveForUndo();
       ctxtReal75.digits = s75;
     }
     else {
-    #if defined(PC_BUILD)
-      printf("Temporary Debugging info. Can be deleted once done.\n");
-      printRealToConsole(&llim, "llim:", "\n");
-      printRealToConsole(&ulim, "ulim:", "\n");
-      printRealToConsole(&acc, "acc:", "\n");
-    #endif // PC_BUILD
     integrate(regist, &llim, &ulim, &acc, &res, smallerEpsilon ? &ctxtReal75 : &ctxtReal39);
-    #if defined(PC_BUILD)
-      printf("Temporary Debugging info. Can be deleted once done.\n");
-      printRealToConsole(&res, "res:", "\n");
-    #endif // PC_BUILD
     }
 #else // !SPEEDUPEXPERIMENT
     integrate(regist, &llim, &ulim, &acc, &res, smallerEpsilon ? &ctxtReal75 : &ctxtReal39);
@@ -950,15 +933,6 @@ static void _integrate_mm(calcRegister_t regist, const real_t *llim, const real_
   realCopy(acc, &tol);
   // max level
   maxlevel = 7;
-
-  #if defined(PC_BUILD)
-    printf"Temporary Debugging info. Can be deleted once done.\n";
-    printRealToConsole(acc, "acc:", "\n");
-    printRealToConsole(&eps, "eps:", "\n");
-    printf("digits %i\n", realContext->digits);
-    printf("regist %u\n", regist);
-    printf("currentSolverStatus=%u, screenUpdatingMode=%u\n", currentSolverStatus, screenUpdatingMode);
-  #endif // PC_BUILD
 
   realSubtract(&b, &a, &bma2, realContext); // interval half-length
   realMultiply(&bma2, const_1on2, &bma2, realContext);
