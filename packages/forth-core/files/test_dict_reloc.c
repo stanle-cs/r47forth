@@ -3613,6 +3613,7 @@ static int test_toggle_inserts_marker(void)
     int16_t savedCatalog = catalog;
     uint16_t savedLocalStep = currentLocalStepNumber;
     bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+    int16_t savedTamFunc = tam.function;
 
     /* Cursor on ITM_END (offset 1) — pre-move skipped */
     currentStep = beginOfProgramMemory + 1;
@@ -3621,6 +3622,7 @@ static int test_toggle_inserts_marker(void)
     catalog = CATALOG_NONE;
     aimBuffer[0] = 0;
     tam.mode = 0;
+    tam.function = 0;
     clearSystemFlag(FLAG_ALPHA);
 
     extern void addStepInProgram(int16_t func);
@@ -3629,6 +3631,13 @@ static int test_toggle_inserts_marker(void)
     /* Check: FLAG_ALPHA set (capture opened) */
     if (!getSystemFlag(FLAG_ALPHA)) {
       printf("    FAIL: FLAG_ALPHA not set after opening toggle\n");
+      fail = 1;
+    }
+
+    /* Check: the real call derives ITM_FORTH — R2-T6 item 1 */
+    if (tam.function != ITM_FORTH) {
+      printf("    FAIL: tam.function = %d, expected ITM_FORTH (%d) after opening toggle\n",
+             tam.function, ITM_FORTH);
       fail = 1;
     }
 
@@ -3647,6 +3656,7 @@ static int test_toggle_inserts_marker(void)
     catalog = savedCatalog;
     currentLocalStepNumber = savedLocalStep;
     if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    tam.function = savedTamFunc;
   }
 
   /* ---- Closing case: source step → wasOn=true → FLAG_ALPHA clear ---- */
@@ -3668,6 +3678,7 @@ static int test_toggle_inserts_marker(void)
     int16_t savedCatalog = catalog;
     uint16_t savedLocalStep = currentLocalStepNumber;
     bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+    int16_t savedTamFunc = tam.function;
 
     /* Cursor on ITM_END (offset 20) — pre-move skipped */
     currentStep = beginOfProgramMemory + 20;
@@ -3676,6 +3687,7 @@ static int test_toggle_inserts_marker(void)
     catalog = CATALOG_NONE;
     aimBuffer[0] = 0;
     tam.mode = 0;
+    tam.function = 0;
     clearSystemFlag(FLAG_ALPHA);
 
     extern void addStepInProgram(int16_t func);
@@ -3686,6 +3698,10 @@ static int test_toggle_inserts_marker(void)
       printf("    FAIL: FLAG_ALPHA set after closing toggle (should be clear)\n");
       fail = 1;
     }
+
+    /* No tam.function assertion here (R2-T6 item 1): whether E1 must clear
+     * the sentinel on close is unresolved; asserting either value would
+     * encode an unmade decision. */
 
     /* Check: closing marker inserted before ITM_END (offset 20) */
     uint8_t *marker2 = beginOfProgramMemory + 20;
@@ -3702,6 +3718,7 @@ static int test_toggle_inserts_marker(void)
     catalog = savedCatalog;
     currentLocalStepNumber = savedLocalStep;
     if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    tam.function = savedTamFunc;
   }
 
   if (!fail) {
@@ -3779,6 +3796,7 @@ static int test_fcall_redirect_records_name(void)
     currentLocalStepNumber = savedLocalStep;
     tam.value = savedTamValue;
     tam.indirect = savedTamIndirect;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
     return 1;
   }
 
@@ -3790,6 +3808,7 @@ static int test_fcall_redirect_records_name(void)
     currentLocalStepNumber = savedLocalStep;
     tam.value = savedTamValue;
     tam.indirect = savedTamIndirect;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
     return 1;
   }
 
@@ -3811,6 +3830,14 @@ static int test_fcall_redirect_records_name(void)
     p++;
   }
 
+  /* R2-T6 item 5: copy the name out BEFORE cleanupTestProgram() releases/
+   * restores the program region `s` points into — the old code dereferenced
+   * `s + 4` in the PASS printf AFTER cleanup, a stale-pointer read. */
+  char recordedName[3];
+  recordedName[0] = *(s + 4);
+  recordedName[1] = *(s + 5);
+  recordedName[2] = 0;
+
   cleanupTestProgram();
   currentStep = savedCurrentStep;
   pemCursorIsZerothStep = savedZeroth;
@@ -3819,7 +3846,7 @@ static int test_fcall_redirect_records_name(void)
   tam.indirect = savedTamIndirect;
   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
 
-  printf("    PASS: FCALL redirect records name '%.*s', no ITM_FCALL opcode\n", nameLen, (char*)(s+4));
+  printf("    PASS: FCALL redirect records name '%s', no ITM_FCALL opcode\n", recordedName);
   return 0;
 }
 
@@ -6965,6 +6992,7 @@ static int test_alpha_menu_on_top_during_capture(void)
   uint16_t savedLocalStep = currentLocalStepNumber;
   bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
   uint8_t savedSoftmenuStackId = softmenuStack[0].softmenuId;
+  int16_t savedTamFunc = tam.function;
 
   currentStep = beginOfProgramMemory + 1;
   pemCursorIsZerothStep = false;
@@ -6973,7 +7001,9 @@ static int test_alpha_menu_on_top_during_capture(void)
   aimBuffer[0] = 0;
   tam.mode = 0;
   clearSystemFlag(FLAG_ALPHA);
-  tam.function = ITM_FORTH;
+  /* R2-T6 item 2: seed 0, not ITM_FORTH — priming the derived value defeats
+   * the point of a test that exists to prove the call DERIVES it. */
+  tam.function = 0;
 
   extern void addStepInProgram(int16_t func);
   addStepInProgram(ITM_FORTH);
@@ -6984,6 +7014,12 @@ static int test_alpha_menu_on_top_during_capture(void)
     fail = 1;
   }
 
+  if (tam.function != ITM_FORTH) {
+    printf("    FAIL: tam.function = %d, expected ITM_FORTH (%d) — not derived\n",
+           tam.function, ITM_FORTH);
+    fail = 1;
+  }
+
   cleanupTestProgram();
   currentStep = savedCurrentStep;
   pemCursorIsZerothStep = savedZeroth;
@@ -6991,9 +7027,10 @@ static int test_alpha_menu_on_top_during_capture(void)
   currentLocalStepNumber = savedLocalStep;
   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
   softmenuStack[0].softmenuId = savedSoftmenuStackId;
+  tam.function = savedTamFunc;
 
   if (!fail) {
-    printf("    PASS: alpha menu on top during Forth capture (not MNU_FORTH overlay)\n");
+    printf("    PASS: alpha menu on top during Forth capture (not MNU_FORTH overlay), tam.function derived\n");
   }
   return fail;
 }
@@ -7082,6 +7119,7 @@ static int test_forth_toggle_from_catalog_leaves_alpha_menu(void)
   uint8_t savedCalcMode = calcMode;
   int16_t savedMenu = currentMenu();
   int16_t savedTamFunc = tam.function;
+  bool_t savedFnKeyInCatalog = fnKeyInCatalog;   /* R2-T6 item 3: incoming value, not 0 */
 
   currentStep = beginOfProgramMemory + 1;
   pemCursorIsZerothStep = false;
@@ -7110,7 +7148,7 @@ static int test_forth_toggle_from_catalog_leaves_alpha_menu(void)
   extern void _closeCatalog(void);
   runFunction(ITM_FORTH);
   _closeCatalog();          /* exactly what keyboard.c does next, :1216 */
-  fnKeyInCatalog = 0;       /* ...and :1229 */
+  fnKeyInCatalog = savedFnKeyInCatalog;   /* R2-T6 item 3: restore, don't hardcode 0 */
 
   if (currentMenu() != -MNU_ALPHA) {
     printf("    FAIL: currentMenu() = %d, expected %d (-MNU_ALPHA)\n",
@@ -7184,6 +7222,7 @@ static int test_forth_drain_clears_buried_catalog(void)
   bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
   uint8_t savedCalcMode = calcMode;
   int16_t savedTamFunc = tam.function;
+  bool_t savedFnKeyInCatalog = fnKeyInCatalog;   /* R2-T6 item 3: incoming value, not 0 */
   /* The drain pops the whole stack down past MNU_CATALOG, so restoring only
    * currentMenu() would leak a truncated stack into later tests. */
   softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
@@ -7221,7 +7260,7 @@ static int test_forth_drain_clears_buried_catalog(void)
   extern void _closeCatalog(void);
   runFunction(ITM_FORTH);
   _closeCatalog();              /* exactly what keyboard.c does next */
-  fnKeyInCatalog = 0;
+  fnKeyInCatalog = savedFnKeyInCatalog;   /* R2-T6 item 3: restore, don't hardcode 0 */
 
   if (currentMenu() != -MNU_ALPHA) {
     printf("    FAIL: currentMenu() = %d, expected %d (-MNU_ALPHA) — buried "
