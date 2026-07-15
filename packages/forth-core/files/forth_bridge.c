@@ -29,13 +29,42 @@ bool forthStepPayload(const uint8_t *step, uint8_t *lenOut)
 }
 
 /* §9.2: start of the program containing ptr (largest instructionPointer <= ptr),
- * or NULL if the program list is empty / ptr precedes all programs. */
+ * or NULL if the program list is empty, ptr precedes all programs, ptr lies
+ * outside the C47 RAM arena entirely, or ptr lies at/after the start of the
+ * genuinely next program.
+ *
+ * Bounds found during R2-T2: this scan had none, so ANY pointer at or past
+ * the last program's start resolved to that program — including a pointer
+ * outside program memory entirely (a stack buffer), which is what made
+ * test_exec_step_halts_on_error's original stack-local fixture silently
+ * pre-scan a real, unrelated program. Harmless in production only because
+ * every caller today passes a genuinely in-program pointer; this closes the
+ * gap for the first one that doesn't.
+ *
+ * The upper bound is deliberately coarse (arena membership), not
+ * firstFreeProgramByte: several PEM fixtures legitimately set currentStep ==
+ * firstFreeProgramByte (cursor parked ON the .END. sentinel, a normal PEM
+ * position), and a tighter bound rejected that — regression caught by the
+ * full gate before this landed. A stack address fails the arena check by a
+ * huge margin, so it alone closes T2's actual gap without that fragility. */
 uint8_t *forthOwningProgramStart(const uint8_t *ptr)
 {
+    uint8_t *arenaBase = (uint8_t *)ram;
+    uint8_t *arenaEnd = arenaBase + (size_t)RAM_SIZE_IN_BLOCKS * BYTES_PER_BLOCK;
+    if (!arenaBase || ptr < arenaBase || ptr >= arenaEnd) {
+        return NULL;
+    }
+
     uint8_t *progStart = NULL;
     for (uint16_t i = 0; i < numberOfPrograms; i++) {
         if (programList[i].instructionPointer <= ptr) {
             progStart = programList[i].instructionPointer;
+        }
+    }
+    if (progStart) {
+        uint8_t *nextStart = forthNextProgramStart(progStart);
+        if (nextStart && ptr >= nextStart) {
+            return NULL;  /* belongs to a later program, not this one */
         }
     }
     return progStart;

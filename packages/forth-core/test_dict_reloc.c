@@ -2731,6 +2731,65 @@ static int test_prescan_owning_scope(void)
   return fail;
 }
 
+/* test_owning_program_start_bounds
+ * R2-T2 finding, code-defect track: forthOwningProgramStart's scan had no
+ * upper bound — ANY pointer at or past the last program's start resolved to
+ * that program, including a pointer outside program memory entirely. That is
+ * what made test_exec_step_halts_on_error's original stack-local fixture
+ * silently pre-scan a real, unrelated program (probe: a stack address
+ * resolved to a real progStart instead of NULL).
+ * Three subcases, one program:
+ *   1. A pointer genuinely inside the program's payload resolves to progStart.
+ *   2. currentStep == firstFreeProgramByte (cursor on the .END. sentinel, a
+ *      normal PEM position — several capture tests set exactly this) must
+ *      still resolve. Regression guard: the first fix attempt rejected this
+ *      and broke test_e2_continuation_after_enter and three sibling tests;
+ *      caught by the full gate before landing, not by this test alone.
+ *   3. A stack-local buffer's address — nowhere near the C47 RAM arena —
+ *      must return NULL.
+ * Escaping mutation: delete the arena-membership check; subcase 3 finds a
+ * real progStart instead of NULL. */
+static int test_owning_program_start_bounds(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 7, ':', ' ', 'G', ' ', '1', ' ', ';',
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  int fail = 0;
+
+  uint8_t *inProgram = beginOfProgramMemory + 3;   /* inside the payload */
+  uint8_t *owner1 = forthOwningProgramStart(inProgram);
+  if (owner1 != beginOfProgramMemory) {
+    printf("    FAIL: in-program pointer resolved to %p, expected progStart %p\n",
+           (void *)owner1, (void *)beginOfProgramMemory);
+    fail = 1;
+  }
+
+  uint8_t *owner2 = forthOwningProgramStart(firstFreeProgramByte);
+  if (owner2 != beginOfProgramMemory) {
+    printf("    FAIL: firstFreeProgramByte (.END. sentinel position) resolved to %p, "
+           "expected progStart %p\n", (void *)owner2, (void *)beginOfProgramMemory);
+    fail = 1;
+  }
+
+  uint8_t stackLocal[4];
+  uint8_t *owner3 = forthOwningProgramStart(stackLocal);
+  if (owner3 != NULL) {
+    printf("    FAIL: stack-local pointer resolved to %p, expected NULL\n", (void *)owner3);
+    fail = 1;
+  }
+
+  cleanupTestProgram();
+  if (!fail) {
+    printf("    PASS: in-program and sentinel pointers resolve; a wild stack pointer does not\n");
+  }
+  return fail;
+}
+
 /* test_prescan_generation_rearm
  * T2.5: After a generation bump, the pre-scan re-runs on first touch.
  * Must fail if forthRunGenCheckReset clears the dictionary but not
@@ -6654,6 +6713,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_prescan_owning_scope...\n");
   fail |= test_prescan_owning_scope();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_owning_program_start_bounds...\n");
+  fail |= test_owning_program_start_bounds();
   forthDictClear();
 
   printf("  [DEBUG] running test_prescan_generation_rearm...\n");
