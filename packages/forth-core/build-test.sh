@@ -91,14 +91,20 @@ fi
 # --- Run the gated self-test suite (headless: no GTK window, clean exit) ---
 if [[ "${DO_RUN}" -eq 1 ]]; then
   echo "==> running self-test suite headless: ${BINARY} --headless"
+  logfile=$(mktemp)
+  trap 'rm -f "${logfile}"' EXIT
   set +e
-  "${BINARY}" --headless
-  status=$?
+  "${BINARY}" --headless 2>&1 | tee "${logfile}"
+  status="${PIPESTATUS[0]}"
   set -e
   echo "==> self-test EXIT STATUS: ${status}"
   if [[ "${status}" -ne 0 ]]; then
     echo "==> SELF-TEST FAILED (exit ${status}) — suite gated the build red." >&2
     exit "${status}"
+  fi
+  if ! grep -Fqx "FORTH SELF-TEST: ALL PASSED" "${logfile}"; then
+    echo "==> ERROR: suite did not run or did not report success (missing 'FORTH SELF-TEST: ALL PASSED' banner)" >&2
+    exit 1
   fi
   echo "==> BUILD + SELF-TEST GREEN."
 else
