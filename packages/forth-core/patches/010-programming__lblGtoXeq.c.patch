@@ -1,7 +1,5 @@
 diff --git a/src/c47/programming/lblGtoXeq.c b/src/c47/programming/lblGtoXeq.c
-old mode 100644
-new mode 100755
-index 1f5053c874b29edadb8e1468652bd402ce93063b..ee7e7f44772f1c1dcba531257f61f434100c8bb1
+index 1f5053c874b29edadb8e1468652bd402ce93063b..ee7e7f44772f1c1dcba531257f61f434100c8bb1 100644
 --- a/src/c47/programming/lblGtoXeq.c
 +++ b/src/c47/programming/lblGtoXeq.c
 @@ -7,6 +7,7 @@

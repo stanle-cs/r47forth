@@ -9,11 +9,13 @@ Each test's docstring names the specific bug / mutation it must catch.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,6 +30,9 @@ from pkg_patch_refresh import (
     save_manifest,
     load_pkgignore,
     is_ignored,
+    _canonicalize_mode_metadata,
+    _atomic_replace_file,
+    validate_base_commit,
     MANIFEST_NAME,
     PKGIGNORE_NAME,
 )
@@ -520,6 +525,116 @@ class TestPatchValidity(unittest.TestCase):
             applied = p.apply_patch_and_get_result('010-foo.c.patch',
                                                     'foo.c')
             self.assertEqual(applied, working)
+
+
+# ---------------------------------------------------------------------------
+# Mode canonicalization: patches are content-only, byte-deterministic
+# ---------------------------------------------------------------------------
+
+_SHA = 'a' * 40
+_SHA2 = 'b' * 40
+
+
+class TestModeCanonicalization(unittest.TestCase):
+
+    def test_index_already_100644_unchanged(self):
+        """A canonical index line (already 100644) passes through."""
+        raw = (
+            f'diff --git a/x.c b/x.c\n'
+            f'index {_SHA}..{_SHA2} 100644\n'
+            f'--- a/x.c\n'
+            f'+++ b/x.c\n'
+            f'@@ -1 +1 @@\n'
+            f'-old\n'
+            f'+new\n'
+        )
+        result = _canonicalize_mode_metadata(raw)
+        self.assertIn(f'index {_SHA}..{_SHA2} 100644', result)
+        self.assertNotIn('old mode', result)
+        self.assertNotIn('new mode', result)
+
+    def test_mode_lines_stripped_and_index_canonicalized(self):
+        """old mode/new mode lines removed; index without mode gets 100644."""
+        raw = (
+            f'diff --git a/x.c b/x.c\n'
+            f'old mode 100755\n'
+            f'new mode 100644\n'
+            f'index {_SHA}..{_SHA2}\n'
+            f'--- a/x.c\n'
+            f'+++ b/x.c\n'
+            f'@@ -1 +1 @@\n'
+            f'-old\n'
+            f'+new\n'
+        )
+        result = _canonicalize_mode_metadata(raw)
+        self.assertNotIn('old mode', result)
+        self.assertNotIn('new mode', result)
+        self.assertIn(f'index {_SHA}..{_SHA2} 100644', result)
+
+    def test_both_shapes_produce_identical_header(self):
+        """Both raw header shapes canonicalize to the same output."""
+        raw_canonical = (
+            f'diff --git a/x.c b/x.c\n'
+            f'index {_SHA}..{_SHA2} 100644\n'
+            f'--- a/x.c\n'
+            f'+++ b/x.c\n'
+            f'@@ -1 +1 @@\n'
+            f'-old\n'
+            f'+new\n'
+        )
+        raw_modes = (
+            f'diff --git a/x.c b/x.c\n'
+            f'old mode 100755\n'
+            f'new mode 100644\n'
+            f'index {_SHA}..{_SHA2}\n'
+            f'--- a/x.c\n'
+            f'+++ b/x.c\n'
+            f'@@ -1 +1 @@\n'
+            f'-old\n'
+            f'+new\n'
+        )
+        self.assertEqual(
+            _canonicalize_mode_metadata(raw_canonical),
+            _canonicalize_mode_metadata(raw_modes))
+
+    def test_e2e_generated_patch_has_canonical_mode(self):
+        """End-to-end: a generated patch has no mode lines and index ends
+        in 100644."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            result = p.refresh()
+            content = p.patch_content(result['written'][0])
+
+            self.assertNotIn('old mode', content)
+            self.assertNotIn('new mode', content)
+            m = re.search(r'index [0-9a-f]{40}\.\.[0-9a-f]{40} 100644',
+                          content)
+            self.assertIsNotNone(m,
+                                 'index line should end with 100644')
+
+    def test_byte_identical_no_patch_even_with_mode_change(self):
+        """When content bytes are identical, generate_patch returns None
+        even if the working file has a different mode."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A)
+
+            # Attempt to change the mode (may be a no-op on some FS).
+            work_path = os.path.join(p.pkg_abs, 'foo.c')
+            try:
+                os.chmod(work_path, 0o755)
+            except OSError:
+                self.skipTest('chmod not supported on this filesystem')
+
+            head = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'],
+                cwd=p.tmpdir, capture_output=True, text=True
+            ).stdout.strip()
+            base = base_file_content(p.tmpdir, head, 'foo.c')
+            patch = generate_patch(base, work_path, 'foo.c',
+                                   p.tmpdir, head)
+            self.assertIsNone(patch)
 
 
 # ---------------------------------------------------------------------------
@@ -1514,6 +1629,338 @@ class TestRebaseBase(unittest.TestCase):
             manifest_after = load_manifest(p.pkg_abs)
             self.assertEqual(manifest_after['base_commit'], old_base)
 
+    def test_rebase_binary_second_file_fatal_error_no_mutation(self):
+        """Catches: a binary file causing merge-file to return 255 (fatal)
+        after the first text file was already mutated — the working copy
+        ends up between epochs with the base advanced."""
+        V1_a = "int a(void) {\n    return 1;\n}\n"
+        V2_a = "int a(void) {\n    return 2;\n}\n"
+        binary_b_v1 = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00'
+        binary_b_v2 = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\xff'
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1_a)
+            b_path = os.path.join(p.src_c47, 'b.dat')
+            with open(b_path, 'wb') as f:
+                f.write(binary_b_v1)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'base files'],
+                           cwd=p.tmpdir, capture_output=True)
+            old_base = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'], cwd=p.tmpdir,
+                capture_output=True, text=True).stdout.strip()
+
+            a_working = V1_a.replace('1', '999')
+            p.write_working('a.c', a_working)
+            b_working_path = os.path.join(p.pkg_abs, 'b.dat')
+            with open(b_working_path, 'wb') as f:
+                f.write(binary_b_v1 + b'\x00')
+
+            save_manifest(p.pkg_abs, {
+                'base_commit': old_base,
+                'working_files': ['a.c', 'b.dat'],
+            })
+
+            with open(os.path.join(p.pkg_abs, 'a.c'), 'rb') as f:
+                a_before = f.read()
+            with open(b_working_path, 'rb') as f:
+                b_before = f.read()
+
+            p.write_upstream('a.c', V2_a)
+            with open(b_path, 'wb') as f:
+                f.write(binary_b_v2)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'v2'],
+                           cwd=p.tmpdir, capture_output=True)
+
+            with self.assertRaises(RuntimeError) as cm:
+                rebase_base(p.pkgdir, 'HEAD', p.tmpdir)
+            self.assertIn('b.dat', str(cm.exception))
+
+            with open(os.path.join(p.pkg_abs, 'a.c'), 'rb') as f:
+                a_after = f.read()
+            self.assertEqual(a_before, a_after)
+
+            with open(b_working_path, 'rb') as f:
+                b_after = f.read()
+            self.assertEqual(b_before, b_after)
+
+            self.assertEqual(p.manifest()['base_commit'], old_base)
+
+    def test_rebase_write_failure_rollback_and_old_base(self):
+        """Catches: when the second atomic write fails, the first file is
+        not rolled back, or the manifest base is advanced anyway."""
+        V1_a = "int a(void) {\n    return 1;\n}\n"
+        V2_a = "int a(void) {\n    return 2;\n}\n"
+        V1_c = "int c(void) {\n    return 1;\n}\n"
+        V2_c = "int c(void) {\n    return 2;\n}\n"
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1_a)
+            p.write_upstream('c.c', V1_c, commit=False)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'base files'],
+                           cwd=p.tmpdir, capture_output=True)
+
+            p.write_working('a.c', V1_a)
+            p.write_working('c.c', V1_c)
+            p.refresh()
+            old_base = p.manifest()['base_commit']
+
+            p.write_upstream('a.c', V2_a)
+            p.write_upstream('c.c', V2_c, commit=False)
+            subprocess.run(['git', 'add', '-A'], cwd=p.tmpdir,
+                           capture_output=True)
+            subprocess.run(['git', 'commit', '-q', '-m', 'v2'],
+                           cwd=p.tmpdir, capture_output=True)
+
+            call_count = [0]
+            original_atomic = _atomic_replace_file
+
+            def failing_atomic(path, content, mode):
+                call_count[0] += 1
+                if call_count[0] == 2:
+                    raise OSError('simulated write failure')
+                original_atomic(path, content, mode)
+
+            with mock.patch('pkg_patch_refresh._atomic_replace_file',
+                            side_effect=failing_atomic):
+                with self.assertRaises(OSError) as cm:
+                    rebase_base(p.pkgdir, 'HEAD', p.tmpdir)
+            self.assertIn('simulated write failure', str(cm.exception))
+
+            with open(os.path.join(p.pkg_abs, 'a.c'), 'r') as f:
+                self.assertEqual(f.read(), V1_a)
+
+            self.assertEqual(p.manifest()['base_commit'], old_base)
+
+    def test_rebase_warns_on_hand_edited_patch(self):
+        """R5-4: hand-editing a generated patch before rebase must
+        produce exactly one drift warning; rebase still completes."""
+        V1_a = "int a(void) {\n    return 1;\n}\n"
+        V2_a = "int a(void) {\n    return 2;\n}\n"
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1_a)
+            p.write_working('a.c', V1_a.replace('1', '999'))
+            p.refresh()
+
+            patch_path = os.path.join(p.patches_dir(), '010-a.c.patch')
+            with open(patch_path, 'a') as f:
+                f.write('# hand-tampered comment appended directly\n')
+
+            p.write_upstream('a.c', V2_a)
+
+            result = rebase_base(p.pkgdir, 'HEAD', p.tmpdir)
+
+            self.assertEqual(len(result['warnings']), 1)
+            self.assertIn('010-a.c.patch', result['warnings'][0])
+            self.assertIn('hand-edited', result['warnings'][0])
+            self.assertIn('rebase leaves generated output unchanged',
+                          result['warnings'][0])
+            self.assertIn('next refresh', result['warnings'][0])
+            self.assertNotEqual(result['old_base'], result['new_base'])
+
+    def test_rebase_warns_on_hand_edited_files_entry(self):
+        """R5-4: hand-editing a generated files/ entry before rebase must
+        produce exactly one drift warning; rebase still completes."""
+        with _TempProject() as p:
+            p.write_working('brand_new.c', 'int g(void) { return 0; }\n')
+            p.refresh()
+
+            with open(os.path.join(p.files_dir(), 'brand_new.c'),
+                      'a') as f:
+                f.write('/* hand-tampered */\n')
+
+            result = rebase_base(p.pkgdir, 'HEAD', p.tmpdir)
+
+            self.assertEqual(len(result['warnings']), 1)
+            self.assertIn('brand_new.c', result['warnings'][0])
+            self.assertIn('hand-edited', result['warnings'][0])
+            self.assertIn('rebase leaves generated output unchanged',
+                          result['warnings'][0])
+
+    def test_rebase_clean_no_warnings(self):
+        """R5-4: a rebase with no drift in generated output produces
+        an empty warnings list."""
+        V1_a = "int a(void) {\n    return 1;\n}\n"
+        V2_a = "int a(void) {\n    return 2;\n}\n"
+
+        with _TempProject() as p:
+            p.write_upstream('a.c', V1_a)
+            p.write_working('a.c', V1_a.replace('1', '999'))
+            p.refresh()
+
+            p.write_upstream('a.c', V2_a)
+
+            result = rebase_base(p.pkgdir, 'HEAD', p.tmpdir)
+
+            self.assertEqual(result['warnings'], [])
+
+
+# ---------------------------------------------------------------------------
+# R5-2: unavailable recorded base — fail before classification
+# ---------------------------------------------------------------------------
+
+class TestUnavailableBase(unittest.TestCase):
+
+    def _make_shallow_clone(self):
+        """Create an origin repo with 2 commits, then a depth-1 clone.
+        Returns (origin_dir, clone_dir, old_commit_sha)."""
+        origin = tempfile.mkdtemp()
+        for args in (['init', '-q'],
+                      ['config', 'user.email', 'test@localhost'],
+                      ['config', 'user.name', 'Test']):
+            subprocess.run(['git'] + args, cwd=origin,
+                           capture_output=True)
+
+        # Commit 1 (old base — will be unavailable in shallow clone)
+        old_file = os.path.join(origin, 'src', 'c47', 'a.c')
+        os.makedirs(os.path.dirname(old_file), exist_ok=True)
+        with open(old_file, 'w') as f:
+            f.write('int a(void) { return 1; }\n')
+        subprocess.run(['git', 'add', '-A'], cwd=origin,
+                       capture_output=True)
+        subprocess.run(['git', 'commit', '-q', '-m', 'commit 1'],
+                       cwd=origin, capture_output=True)
+
+        old_commit = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'], cwd=origin,
+            capture_output=True, text=True).stdout.strip()
+
+        # Commit 2 (HEAD — only commit visible in shallow clone)
+        with open(old_file, 'w') as f:
+            f.write('int a(void) { return 2; }\n')
+        subprocess.run(['git', 'add', '-A'], cwd=origin,
+                       capture_output=True)
+        subprocess.run(['git', 'commit', '-q', '-m', 'commit 2'],
+                       cwd=origin, capture_output=True)
+
+        # Shallow clone at depth 1
+        clone = tempfile.mkdtemp()
+        subprocess.run(
+            ['git', 'clone', '-q', '--depth', '1',
+             'file://' + origin, clone],
+            capture_output=True)
+
+        return origin, clone, old_commit
+
+    def test_refresh_shallow_clone_unavailable_base(self):
+        """BUG THIS TEST EXISTS TO CATCH: in a depth-1 clone whose manifest
+        named an older base, refresh emitted a false BP-4 'upstream added
+        ... --rebase-base' message instead of reporting that the base
+        commit itself is unavailable."""
+        origin, clone, old_commit = self._make_shallow_clone()
+        try:
+            pkgdir = 'packages/test-pkg'
+            pkg_abs = os.path.join(clone, pkgdir)
+            os.makedirs(pkg_abs, exist_ok=True)
+
+            # Write working file so refresh has something to classify
+            working_path = os.path.join(pkg_abs, 'a.c')
+            with open(working_path, 'w') as f:
+                f.write('int a(void) { return 999; }\n')
+
+            # Manifest records the old (unavailable) base
+            save_manifest(pkg_abs, {
+                'patches': {},
+                'files': {},
+                'base_commit': old_commit,
+            })
+
+            with self.assertRaises(RuntimeError) as cm:
+                refresh(pkgdir, clone)
+
+            err = str(cm.exception)
+            self.assertIn('not available', err.lower())
+            self.assertNotIn('--rebase-base', err)
+        finally:
+            shutil.rmtree(origin, ignore_errors=True)
+            shutil.rmtree(clone, ignore_errors=True)
+
+    def test_materialize_unavailable_base(self):
+        """BUG THIS TEST EXISTS TO CATCH: materialize with an unavailable
+        recorded base should raise the unavailable-base error and create
+        no working file."""
+        origin, clone, old_commit = self._make_shallow_clone()
+        try:
+            pkgdir = 'packages/test-pkg'
+            pkg_abs = os.path.join(clone, pkgdir)
+            os.makedirs(pkg_abs, exist_ok=True)
+
+            save_manifest(pkg_abs, {
+                'patches': {},
+                'files': {},
+                'base_commit': old_commit,
+            })
+
+            with self.assertRaises(RuntimeError) as cm:
+                materialize(pkgdir, 'a.c', clone)
+
+            err = str(cm.exception)
+            self.assertIn('not available', err.lower())
+
+            # No working file created
+            self.assertFalse(os.path.exists(
+                os.path.join(pkg_abs, 'a.c')))
+        finally:
+            shutil.rmtree(origin, ignore_errors=True)
+            shutil.rmtree(clone, ignore_errors=True)
+
+    def test_rebase_base_unavailable_old_base_no_working_files(self):
+        """BUG THIS TEST EXISTS TO CATCH: rebase_base advancing a manifest
+        without validating the old base when the working-file list is empty."""
+        origin, clone, old_commit = self._make_shallow_clone()
+        try:
+            pkgdir = 'packages/test-pkg'
+            pkg_abs = os.path.join(clone, pkgdir)
+            os.makedirs(pkg_abs, exist_ok=True)
+
+            save_manifest(pkg_abs, {
+                'patches': {},
+                'files': {},
+                'base_commit': old_commit,
+            })
+
+            with self.assertRaises(RuntimeError) as cm:
+                rebase_base(pkgdir, 'HEAD', clone)
+
+            err = str(cm.exception)
+            self.assertIn('not available', err.lower())
+
+            # Manifest unchanged
+            manifest = load_manifest(pkg_abs)
+            self.assertEqual(manifest['base_commit'], old_commit)
+        finally:
+            shutil.rmtree(origin, ignore_errors=True)
+            shutil.rmtree(clone, ignore_errors=True)
+
+    def test_valid_base_path_absent_still_bp4(self):
+        """Sanity: when the base IS available but a file genuinely didn't
+        exist at that commit, the existing BP-4 upstream-added error still
+        fires (not the unavailable-base error)."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+            p.refresh()
+            base_sha = p.manifest()['base_commit']
+
+            # New upstream commit adds b.c (after the base)
+            p.write_upstream('b.c', UPSTREAM_B)
+
+            # Write a working copy of b.c (as if developer created it)
+            p.write_working('b.c', 'int b(void) { return 999; }\n')
+
+            with self.assertRaises(RuntimeError) as cm:
+                p.refresh()
+
+            err = str(cm.exception)
+            # Should be BP-4 error, not unavailable-base
+            self.assertIn('exists in current upstream', err)
+            self.assertIn('--rebase-base', err)
+
 
 # ---------------------------------------------------------------------------
 # .pkgignore — working-area files refresh must not classify at all
@@ -1694,6 +2141,140 @@ class TestPkgIgnore(unittest.TestCase):
             p.write_working(PKGIGNORE_NAME, '*.md\n')
 
             self.assertEqual(list_working_files(p.pkg_abs), ['a.c'])
+
+
+# ---------------------------------------------------------------------------
+# R5-7: corrupt manifest is fatal; save_manifest is atomic
+# ---------------------------------------------------------------------------
+
+class TestCorruptManifestFatal(unittest.TestCase):
+
+    def test_corrupt_manifest_is_fatal(self):
+        """BUG THIS TEST EXISTS TO CATCH: a corrupt manifest read as
+        a fresh package."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            p.refresh()
+            base_commit = p.manifest()['base_commit']
+
+            manifest_path = os.path.join(p.pkg_abs, MANIFEST_NAME)
+            with open(manifest_path, 'w') as f:
+                f.write('{"patc')
+
+            with self.assertRaises(RuntimeError) as cm:
+                p.refresh()
+
+            self.assertIn(manifest_path, str(cm.exception))
+
+    def test_corrupt_manifest_leaves_patch_working_and_base_untouched(self):
+        """R5-A1: the failure must be inert, not partial."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            p.refresh()
+
+            patch_fname = p.list_patches()[0]
+            with open(os.path.join(p.patches_dir(), patch_fname), 'rb') as f:
+                patch_bytes_before = f.read()
+            with open(os.path.join(p.pkg_abs, 'foo.c'), 'rb') as f:
+                working_bytes_before = f.read()
+            manifest_path = os.path.join(p.pkg_abs, MANIFEST_NAME)
+            with open(manifest_path, 'rb') as f:
+                manifest_bytes_before = f.read()
+            base_commit_before = p.manifest()['base_commit']
+
+            with open(manifest_path, 'w') as f:
+                f.write('{"patc')
+
+            with self.assertRaises(RuntimeError):
+                p.refresh()
+
+            with open(os.path.join(p.patches_dir(), patch_fname), 'rb') as f:
+                patch_bytes_after = f.read()
+            with open(os.path.join(p.pkg_abs, 'foo.c'), 'rb') as f:
+                working_bytes_after = f.read()
+
+            self.assertEqual(patch_bytes_before, patch_bytes_after)
+            self.assertEqual(working_bytes_before, working_bytes_after)
+            # Manifest on disk was corrupted by the test itself, but the
+            # patch and working file are byte-for-byte unchanged.
+            self.assertIn(base_commit_before, manifest_bytes_before.decode())
+
+    def test_non_dict_manifest_is_fatal(self):
+        """A manifest containing [] must raise RuntimeError, not AttributeError."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            p.refresh()
+
+            manifest_path = os.path.join(p.pkg_abs, MANIFEST_NAME)
+            with open(manifest_path, 'w') as f:
+                f.write('[]')
+
+            with self.assertRaises(RuntimeError) as cm:
+                p.refresh()
+
+            self.assertIn('not an object', str(cm.exception))
+
+    def test_missing_manifest_still_initializes(self):
+        """A genuinely new package (no manifest at all) must still work."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+
+            result = p.refresh()
+
+            self.assertEqual(result['written'], ['010-foo.c.patch'])
+            manifest = p.manifest()
+            self.assertIn('base_commit', manifest)
+
+
+class TestAtomicSaveManifest(unittest.TestCase):
+
+    def test_save_manifest_leaves_no_temp_files(self):
+        """save_manifest must not leave .tmp litter behind."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            p.refresh()
+
+            tmp_files = [
+                f for f in os.listdir(p.pkg_abs)
+                if f.startswith('.refresh-manifest.') and f.endswith('.tmp')
+            ]
+            self.assertEqual(tmp_files, [])
+
+    def test_save_manifest_survives_interrupted_write(self):
+        """BUG THIS TEST EXISTS TO CATCH: the in-place truncating write
+        that made the corrupt state reachable in the first place."""
+        with _TempProject() as p:
+            p.write_upstream('foo.c', UPSTREAM_A)
+            p.write_working('foo.c', UPSTREAM_A.replace('1', '999'))
+            p.refresh()
+
+            manifest_path = os.path.join(p.pkg_abs, MANIFEST_NAME)
+            with open(manifest_path, 'rb') as f:
+                original_bytes = f.read()
+
+            def failing_dump(*args, **kwargs):
+                raise KeyboardInterrupt('simulated interruption')
+
+            with mock.patch('pkg_patch_refresh.json.dump',
+                            side_effect=failing_dump):
+                with self.assertRaises(KeyboardInterrupt):
+                    save_manifest(p.pkg_abs, {'patches': {}, 'files': {}})
+
+            with open(manifest_path, 'rb') as f:
+                surviving_bytes = f.read()
+
+            self.assertEqual(original_bytes, surviving_bytes)
+
+            tmp_files = [
+                f for f in os.listdir(p.pkg_abs)
+                if f.startswith('.refresh-manifest.') and f.endswith('.tmp')
+            ]
+            self.assertEqual(tmp_files, [])
 
 
 if __name__ == '__main__':

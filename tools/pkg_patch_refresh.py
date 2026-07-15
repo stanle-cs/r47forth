@@ -140,29 +140,77 @@ def _sha256_file(path):
         return _sha256_bytes(f.read())
 
 
+def _check_drift_entry(kind, key, dest_path, manifest_section, warnings,
+                       msg_missing, msg_mismatch):
+    """Core drift comparison for a single generated entry.
+    If dest_path exists, compare its hash against manifest_section[key].
+    Appends a warning on mismatch or missing record.
+    Returns False if file does not exist (nothing to check)."""
+    if not os.path.isfile(dest_path):
+        return False
+    on_disk_hash = _sha256_file(dest_path)
+    recorded_hash = manifest_section.get(key)
+    if recorded_hash is None:
+        warnings.append(msg_missing.format(kind=kind, key=key))
+    elif on_disk_hash != recorded_hash:
+        warnings.append(msg_mismatch.format(kind=kind, key=key))
+    return True
+
+
 def load_manifest(pkgdir_abs):
     """{'patches': {filename: sha256}, 'files': {rel: sha256}} recording
     the content refresh itself last wrote for each generated entry.
-    Missing/corrupt manifest is treated as empty (fresh package, or a
-    manifest that predates this mechanism) — not fatal."""
+    A genuinely missing manifest initializes a fresh package (OK).
+    An existing but unreadable manifest is fatal — treating it as fresh
+    would re-pin base_commit to current HEAD and emit patches that revert
+    upstream changes (R5-A1)."""
     path = os.path.join(pkgdir_abs, MANIFEST_NAME)
     if not os.path.isfile(path):
         return {'patches': {}, 'files': {}}
     try:
         with open(path) as f:
             data = json.load(f)
-    except (ValueError, OSError):
-        return {'patches': {}, 'files': {}}
+    except (ValueError, OSError) as exc:
+        raise RuntimeError(
+            f'{path} exists but is unreadable or is not valid JSON ({exc}). '
+            f'Refusing to treat a corrupt manifest as a fresh package: that '
+            f'would re-pin base_commit to current HEAD and emit patches that '
+            f'revert upstream changes (R5-A1). Restore it from git '
+            f'(git checkout -- {path}) or delete it deliberately to '
+            f're-initialize this package.')
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            f'{path} exists but is unreadable or is not valid JSON '
+            f'— top-level JSON is not an object. '
+            f'Refusing to treat a corrupt manifest as a fresh package: that '
+            f'would re-pin base_commit to current HEAD and emit patches that '
+            f'revert upstream changes (R5-A1). Restore it from git '
+            f'(git checkout -- {path}) or delete it deliberately to '
+            f're-initialize this package.')
     data.setdefault('patches', {})
     data.setdefault('files', {})
     return data
 
 
 def save_manifest(pkgdir_abs, manifest):
+    """Write manifest atomically via same-directory temp file + fsync +
+    rename, so the previous valid manifest survives interruption."""
     path = os.path.join(pkgdir_abs, MANIFEST_NAME)
-    with open(path, 'w') as f:
-        json.dump(manifest, f, indent=2, sort_keys=True)
-        f.write('\n')
+    fd, tmp = tempfile.mkstemp(dir=pkgdir_abs, prefix='.refresh-manifest.',
+                               suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(manifest, f, indent=2, sort_keys=True)
+            f.write('\n')
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def resolve_head_commit(project_root):
@@ -177,6 +225,21 @@ def resolve_head_commit(project_root):
     return r.stdout.strip()
 
 
+def validate_base_commit(project_root, base_commit):
+    """Raise RuntimeError if *base_commit* is not resolvable as a commit
+    in the repository at *project_root* (e.g. shallow clone, missing
+    history). Uses `git cat-file -e <sha>^{commit}`."""
+    r = run(
+        ['git', 'cat-file', '-e', base_commit + '^{commit}'],
+        cwd=project_root)
+    if r.returncode != 0:
+        raise RuntimeError(
+            f'recorded base commit {base_commit[:12]} is not available '
+            f'in this repository — this usually means the repository is '
+            f'a shallow clone or is missing history. Fetch or unshallow '
+            f'the repository to make the base commit available.')
+
+
 def ensure_base_commit(manifest, project_root, warnings):
     """Return (base_commit, initialized_bool). If the manifest already
     records a base_commit, return it unchanged. Otherwise record
@@ -187,6 +250,7 @@ def ensure_base_commit(manifest, project_root, warnings):
     upstream."""
     existing = manifest.get('base_commit')
     if existing:
+        validate_base_commit(project_root, existing)
         return (existing, False)
     head = resolve_head_commit(project_root)
     if manifest['patches'] or manifest['files']:
@@ -202,11 +266,21 @@ def base_file_content(project_root, base_commit, rel):
     """Raw BYTES of src/c47/<rel> as it existed at base_commit, or
     None if the path does not exist at that commit. Bytes, not text —
     the base copy must be byte-exact for the pre-image blob SHA to
-    match (BP-2)."""
+    match (BP-2). Caller must validate base_commit first (the commit
+    must exist in the repo). Any git error other than path absence
+    raises RuntimeError."""
     r = subprocess.run(
         ['git', 'show', f'{base_commit}:src/c47/{rel}'],
         capture_output=True, cwd=project_root)
-    return r.stdout if r.returncode == 0 else None
+    if r.returncode == 0:
+        return r.stdout
+    stderr_text = r.stderr.decode() if r.stderr else ''
+    if ('does not exist' in stderr_text or 'not a blob' in stderr_text
+            or 'but not in' in stderr_text):
+        return None
+    raise RuntimeError(
+        f'failed to extract src/c47/{rel} at base {base_commit[:12]}: '
+        f'{stderr_text.strip()}')
 
 
 def _check_drift(kind, key, dest_path, manifest_section, warnings):
@@ -219,20 +293,62 @@ def _check_drift(kind, key, dest_path, manifest_section, warnings):
     refresh overwrites and re-records the hash regardless (self-healing
     — the normal edit-working-copy-then-refresh cycle must not be
     blocked by the same mechanism that catches a hand-edit)."""
-    if not os.path.isfile(dest_path):
-        return
-    on_disk_hash = _sha256_file(dest_path)
-    recorded_hash = manifest_section.get(key)
-    if recorded_hash is None:
-        warnings.append(
-            f'{kind} {key!r} exists but was not recorded as generated by '
-            f'refresh (hand-added, bypassing the working area?) — '
-            f'overwriting with freshly generated content.')
-    elif on_disk_hash != recorded_hash:
-        warnings.append(
-            f'{kind} {key!r} content does not match what refresh last '
-            f'wrote for it (hand-edited directly, bypassing the working '
-            f'area?) — overwriting with freshly generated content.')
+    _check_drift_entry(
+        kind, key, dest_path, manifest_section, warnings,
+        msg_missing=(
+            '{kind} {key!r} exists but was not recorded as generated by '
+            'refresh (hand-added, bypassing the working area?) — '
+            'overwriting with freshly generated content.'),
+        msg_mismatch=(
+            '{kind} {key!r} content does not match what refresh last '
+            'wrote for it (hand-edited directly, bypassing the working '
+            'area?) — overwriting with freshly generated content.'),
+    )
+
+
+def _scan_drift_for_rebase(pkgdir_abs):
+    """Read-only scan of generated patches/ and files/ entries against
+    manifest hashes. Returns a list of warning strings for entries that
+    are missing from the manifest or have a content hash mismatch.
+    Does NOT overwrite or self-heal — used by rebase_base to warn the
+    user before changing the base epoch."""
+    warnings = []
+    manifest = load_manifest(pkgdir_abs)
+
+    msg_patch_missing = (
+        'patch {key!r} exists but was not recorded as generated by '
+        'refresh (hand-added?) — rebase leaves generated output unchanged; '
+        'the next refresh will regenerate/self-heal it.')
+    msg_patch_mismatch = (
+        'patch {key!r} content does not match what refresh last wrote for it '
+        '(hand-edited directly?) — rebase leaves generated output unchanged; '
+        'the next refresh will regenerate/self-heal it.')
+    msg_file_missing = (
+        'files entry {key!r} exists but was not recorded as generated by '
+        'refresh (hand-added?) — rebase leaves generated output unchanged; '
+        'the next refresh will regenerate/self-heal it.')
+    msg_file_mismatch = (
+        'files entry {key!r} content does not match what refresh last wrote '
+        'for it (hand-edited directly?) — rebase leaves generated output '
+        'unchanged; the next refresh will regenerate/self-heal it.')
+
+    patches_dir = os.path.join(pkgdir_abs, 'patches')
+    if os.path.isdir(patches_dir):
+        for fname in sorted(os.listdir(patches_dir)):
+            if fname.endswith('.patch'):
+                dest_path = os.path.join(patches_dir, fname)
+                _check_drift_entry('patch', fname, dest_path,
+                                   manifest['patches'], warnings,
+                                   msg_patch_missing, msg_patch_mismatch)
+
+    files_dir = os.path.join(pkgdir_abs, 'files')
+    for rel in _list_files_dir_entries(files_dir):
+        dest_path = os.path.join(files_dir, *rel.split('/'))
+        _check_drift_entry('files entry', rel, dest_path,
+                           manifest['files'], warnings,
+                           msg_file_missing, msg_file_mismatch)
+
+    return warnings
 
 
 def load_pkgignore(pkgdir_abs):
@@ -334,6 +450,26 @@ def _existing_patches_for_rel(patches_dir, rel):
     return matches
 
 
+def _canonicalize_mode_metadata(raw):
+    """Strip mode lines and normalize the index line to 100644.
+
+    Patch application materializes/writes byte content, so canonical 100644
+    prevents host-temp filesystem modes from becoming package state.
+    """
+    canonical_lines = []
+    for line in raw.split('\n'):
+        if re.match(r'^old mode ', line):
+            continue
+        if re.match(r'^new mode ', line):
+            continue
+        m_idx = re.match(r'^(index [0-9a-f]{40}\.\.[0-9a-f]{40})', line)
+        if m_idx:
+            canonical_lines.append(m_idx.group(1) + ' 100644')
+            continue
+        canonical_lines.append(line)
+    return '\n'.join(canonical_lines)
+
+
 def generate_patch(base_bytes, materialized_path, rel, project_root,
                    base_commit, context=3):
     """Whole-file unified diff of materialized_path against base_bytes,
@@ -355,6 +491,12 @@ def generate_patch(base_bytes, materialized_path, rel, project_root,
         tmp_fd.write(base_bytes)
         tmp_fd.close()
 
+        # Compare content bytes before diffing — a mode-only change produces
+        # no meaningful patch (the resolver writes file bytes, not modes).
+        with open(materialized_path, 'rb') as mf:
+            if mf.read() == base_bytes:
+                return None
+
         raw = run(['git', 'diff', '--no-index', '--full-index',
                    f'-U{context}', tmp_path, materialized_path]).stdout
 
@@ -366,6 +508,8 @@ def generate_patch(base_bytes, materialized_path, rel, project_root,
                 f'{rel}: base/materialized file appears to be binary — '
                 f'cannot generate a text patch. Binary overrides are not '
                 f'supported by this mechanism.')
+
+        raw = _canonicalize_mode_metadata(raw)
 
         m = re.search(r'^index ([0-9a-f]{40})\.\.', raw, re.MULTILINE)
         if m is None:
@@ -618,14 +762,36 @@ def materialize(pkgdir, rel, project_root):
     return base_commit
 
 
+def _atomic_replace_file(working_path, new_bytes, file_mode):
+    """Atomically replace *working_path* with *new_bytes* using a
+    same-directory temporary file plus os.replace, preserving *file_mode*."""
+    dir_name = os.path.dirname(working_path)
+    fd, tmp_path = tempfile.mkstemp(dir=dir_name)
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(new_bytes)
+        os.chmod(tmp_path, file_mode)
+        os.replace(tmp_path, working_path)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def rebase_base(pkgdir, new_base_ref, project_root):
     """BP-6: advance the package's recorded base to *new_base_ref*
     (a committish; 'HEAD' by default from the CLI), three-way-merging
     every working file from old-base content onto new-base content
     via `git merge-file`. Pre-scans and fails fast BEFORE mutating
-    anything. Returns dict: {'old_base', 'new_base',
+    anything. Plan-then-commit: all merges are planned before any file
+    is written; if any install fails, all installed files are rolled
+    back and the manifest base is left unchanged.
+
+    Returns dict: {'old_base', 'new_base',
     'fast_forwarded': [rels], 'merged': [rels], 'conflicted': [rels],
-    'untouched': [rels]}."""
+    'untouched': [rels], 'warnings': [drift warnings before rebase]}."""
     r = subprocess.run(
         ['git', 'rev-parse', f'{new_base_ref}^{{commit}}'],
         capture_output=True, text=True, cwd=project_root)
@@ -639,6 +805,8 @@ def rebase_base(pkgdir, new_base_ref, project_root):
     manifest = load_manifest(pkgdir_abs)
     old_base = manifest.get('base_commit')
 
+    warnings = _scan_drift_for_rebase(pkgdir_abs)
+
     empty_result = {
         'old_base': old_base,
         'new_base': new_base,
@@ -646,12 +814,15 @@ def rebase_base(pkgdir, new_base_ref, project_root):
         'merged': [],
         'conflicted': [],
         'untouched': [],
+        'warnings': warnings,
     }
 
     if old_base is None:
         manifest['base_commit'] = new_base
         save_manifest(pkgdir_abs, manifest)
         return empty_result
+
+    validate_base_commit(project_root, old_base)
 
     if old_base == new_base:
         return empty_result
@@ -684,20 +855,26 @@ def rebase_base(pkgdir, new_base_ref, project_root):
             merge_candidates.append((rel, old_bytes, new_bytes, working_path,
                                      working_bytes))
 
-    # --- Mutation pass ---
+    # --- Planning pass (no mutation) ---
+    plan = []
     fast_forwarded = []
     merged = []
     conflicted = []
 
     for rel, old_bytes, new_bytes, working_path, working_bytes in merge_candidates:
         if working_bytes == old_bytes:
-            with open(working_path, 'wb') as f:
-                f.write(new_bytes)
+            plan.append((rel, new_bytes, working_bytes, working_path,
+                         os.stat(working_path).st_mode, 'fast_forward'))
             fast_forwarded.append(rel)
         else:
+            cur_tmp = None
             old_tmp = None
             new_tmp = None
             try:
+                cur_fd, cur_tmp = tempfile.mkstemp()
+                with os.fdopen(cur_fd, 'wb') as f:
+                    f.write(working_bytes)
+
                 old_fd, old_tmp = tempfile.mkstemp()
                 with os.fdopen(old_fd, 'wb') as f:
                     f.write(old_bytes)
@@ -707,26 +884,60 @@ def rebase_base(pkgdir, new_base_ref, project_root):
                     f.write(new_bytes)
 
                 result = subprocess.run(
-                    ['git', 'merge-file', '-L', 'working', '-L', 'base',
-                     '-L', 'upstream', working_path, old_tmp, new_tmp],
+                    ['git', 'merge-file', '-p', '-L', 'working', '-L', 'base',
+                     '-L', 'upstream', cur_tmp, old_tmp, new_tmp],
                     capture_output=True, cwd=project_root)
 
                 if result.returncode < 0:
                     raise RuntimeError(
                         f'git merge-file failed for {rel} (signal '
                         f'{result.returncode}): {result.stderr.decode()!r}')
+                elif result.returncode >= 128:
+                    raise RuntimeError(
+                        f'git merge-file fatal error for {rel} (exit code '
+                        f'{result.returncode}): {result.stderr.decode()!r}')
                 elif result.returncode == 0:
+                    plan.append((rel, result.stdout, working_bytes,
+                                 working_path,
+                                 os.stat(working_path).st_mode, 'merged'))
                     merged.append(rel)
                 else:
+                    plan.append((rel, result.stdout, working_bytes,
+                                 working_path,
+                                 os.stat(working_path).st_mode, 'conflicted'))
                     conflicted.append(rel)
             finally:
-                if old_tmp:
-                    os.unlink(old_tmp)
-                if new_tmp:
-                    os.unlink(new_tmp)
+                for tmp in (cur_tmp, old_tmp, new_tmp):
+                    if tmp:
+                        os.unlink(tmp)
 
-    manifest['base_commit'] = new_base
-    save_manifest(pkgdir_abs, manifest)
+    # --- Commit phase (atomic per-file, with rollback) ---
+    installed = []
+    original_err = None
+    try:
+        for rel, proposed_bytes, original_bytes, working_path, file_mode, _cat in plan:
+            _atomic_replace_file(working_path, proposed_bytes, file_mode)
+            installed.append((rel, working_path, original_bytes, file_mode))
+
+        manifest['base_commit'] = new_base
+        save_manifest(pkgdir_abs, manifest)
+
+    except Exception as e:
+        original_err = e
+        restore_failures = []
+        for rel, working_path, original_bytes, file_mode in installed:
+            try:
+                _atomic_replace_file(working_path, original_bytes, file_mode)
+            except Exception as restore_err:
+                restore_failures.append((rel, str(restore_err)))
+
+        if restore_failures:
+            fail_str = '; '.join(
+                f'{rel}: {err}' for rel, err in restore_failures)
+            raise RuntimeError(
+                f'Rebase commit failed (original: {original_err!r}) and '
+                f'rollback incomplete — could not restore: {fail_str}')
+        raise original_err
 
     return {
         'old_base': old_base,
@@ -735,6 +946,7 @@ def rebase_base(pkgdir, new_base_ref, project_root):
         'merged': merged,
         'conflicted': conflicted,
         'untouched': untouched,
+        'warnings': warnings,
     }
 
 
@@ -773,6 +985,9 @@ def main():
         except RuntimeError as e:
             print(f'error: {e}', file=sys.stderr)
             sys.exit(1)
+
+        for w in result['warnings']:
+            print(f'warning: {w}', file=sys.stderr)
 
         if result['old_base'] is None:
             print(f"base initialized to {result['new_base'][:12]}")
