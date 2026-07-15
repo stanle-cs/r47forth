@@ -14,6 +14,15 @@
 # .gitignore (an upstream file) and has no effect on packages/forth-core/'s
 # pre-existing, already-tracked files (ignore rules never affect files git
 # already tracks).
+# Design docs are source, not scratch, and unlike the working-area sources they
+# have no generated counterpart to be tracked through: .pkgignore deliberately
+# keeps *.md/*.txt OUT of patches/ and files/, so a doc that is not tracked here
+# is tracked nowhere and exists only on one disk. (A working-area .c is safe to
+# ignore precisely because refresh regenerates it into files/ or patches/.)
+# Without these two lines every doc added after this rule landed — DESIGN-HISTORY.md,
+# the review series, the architect reports — was silently invisible to git, while
+# the docs predating it stayed tracked. Ignore rules never affect already-tracked
+# files, so the trap only sprang on new ones.
 */*
 !*/patches
 !*/patches/**
@@ -21,3 +30,5 @@
 !*/files/**
 !*/.refresh-manifest.json
 !*/.pkgignore
+!*/*.md
+!*/*.txt
