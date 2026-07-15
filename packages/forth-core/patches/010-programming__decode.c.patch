@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/decode.c b/src/c47/programming/decode.c
-index d3bbe54bf4301102586bd41128665988823664dd..45c66e8f70dbfa457d3856855d11d278fc4e6b5b 100644
+index d3bbe54bf4301102586bd41128665988823664dd..5b1809c6bd2d6a1d2b11e19aceca10a7b0432c48 100644
 --- a/src/c47/programming/decode.c
 +++ b/src/c47/programming/decode.c
 @@ -6,6 +6,7 @@
@@ -10,7 +10,7 @@ index d3bbe54bf4301102586bd41128665988823664dd..45c66e8f70dbfa457d3856855d11d278
  
  TO_QSPI const char shuffleReg[4] = {'x', 'y', 'z', 't'};
  TO_QSPI const char supDigit[24] = STD_SUP_0 STD_SUP_1 STD_SUP_2 STD_SUP_3 STD_SUP_4 STD_SUP_5 STD_SUP_6 STD_SUP_7 STD_SUP_8 STD_SUP_9;
-@@ -826,6 +827,23 @@ static void decodeLiteral(uint8_t *literalAddress) {
+@@ -826,6 +827,27 @@ static void decodeLiteral(uint8_t *literalAddress) {
  
  
  static void decodeRem(uint8_t *literalAddress, uint16_t op) {
@@ -28,6 +28,10 @@ index d3bbe54bf4301102586bd41128665988823664dd..45c66e8f70dbfa457d3856855d11d278
 +        }
 +        return;
 +      }
++    } else {
++      getStringLabelOrVariableName(literalAddress + 1);
++      stringCopy(tmpString, tmpStringLabelOrVariableName);
++      return;
 +    }
 +  }
 +

@@ -3666,6 +3666,23 @@ static int test_forth_empty_enter_leaves_no_step(void)
     return 1;
   }
 
+  /* The empty ENTER is the escape hatch, and the only close path that must
+   * clear the sentinel: the opening marker survives, so the cursor is still
+   * inside an open region and a leaked ITM_FORTH would make the next
+   * keystroke behave as if capture were still up. (E5's lock deliberately
+   * KEEPS the sentinel on the non-empty path — see
+   * test_forth_multiline_lock_holds.) */
+  if (tam.function == ITM_FORTH) {
+    printf("    FAIL: tam.function == ITM_FORTH after empty ENTER (stale sentinel "
+           "survived the escape hatch)\n");
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    currentLocalStepNumber = savedLocalStep;
+    tam.function = savedTamFunc;
+    return 1;
+  }
+
   int stepsAfter = getNumberOfSteps();
   if (stepsAfter != stepsBefore + 1) {
     printf("    FAIL: step count = %d, expected %d (only opening marker remains)\n",
@@ -3744,15 +3761,15 @@ static int test_forth_edit_extracts_source(void)
   xcopy(aimBuffer, aimSaved, sizeof(aimSaved));
   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
 
-  printf("    PASS: FORTH EDIT extracts source correctly (offset 8)\n");
+  printf("    PASS: FORTH EDIT extracts source correctly (bare, offset 0)\n");
   return 0;
 }
 
 /* test_decode_marker_directions
  * Writes marker/source/marker/marker program; decodeOneStep each marker;
  * assert tmpString bytes are \x80\xbbFORTH, FORTH\x80\xab, \x80\xbbFORTH
- * respectively; decode the source step and assert it starts with FORTH
- * and contains the source text (§9.9 acceptance 4).
+ * respectively; decode the source step and assert it renders bare
+ * (§9.9 acceptance 4).
  * Escaping mutation: inverting the parity (call !forthMarkerTurnsOn) —
  * all three direction assertions fail. */
 static int test_decode_marker_directions(void)
@@ -3807,15 +3824,11 @@ static int test_decode_marker_directions(void)
     fail = 1;
   }
 
-  /* Source step: generic path — starts with "FORTH" and contains source text */
+  /* Source step: renders BARE — no "FORTH" prefix, no quotes. Only the two
+   * marker forms carry the word "FORTH" at all. */
   decodeOneStep((uint8_t *)source);
-  if (memcmp(tmpString, "FORTH", 5) != 0) {
-    printf("    FAIL: source step tmpString = '%s', expected to start with FORTH\n",
-    tmpString);
-    fail = 1;
-  }
-  if (strstr(tmpString, "SQ") == NULL) {
-    printf("    FAIL: source step tmpString = '%s', expected to contain source text\n",
+  if (strcmp(tmpString, ": SQ DUP * ;") != 0) {
+    printf("    FAIL: source step tmpString = '%s', expected ': SQ DUP * ;'\n",
     tmpString);
     fail = 1;
   }
@@ -3823,17 +3836,19 @@ static int test_decode_marker_directions(void)
   cleanupTestProgram();
 
   if (!fail) {
-    printf("    PASS: marker directions = \\x80\\xbbFORTH / FORTH\\x80\\ab / \\x80\\xbbFORTH; source unchanged\n");
+    printf("    PASS: marker directions = \\x80\\xbbFORTH / FORTH\\x80\\ab / \\x80\\xbbFORTH; source renders bare\n");
   }
   return fail;
 }
 
-/* test_decode_source_unchanged
- * A len > 0 ITM_FORTH step renders through the pre-existing quoting path
- * byte-for-byte. Compare against a reference built from the unmodified logic.
- * Escaping mutation: the new branch swallowing len > 0 steps too
- * (rendering them as markers). */
-static int test_decode_source_unchanged(void)
+/* test_decode_source_bare
+ * A len > 0 ITM_FORTH step renders its payload BARE: no "FORTH " name prefix
+ * and no surrounding quotes. Quoting would be actively harmful — a string
+ * literal step already renders 'text' WITH quotes, so a quoted Forth payload
+ * would be indistinguishable from one. Bare collides with nothing.
+ * Escaping mutation: the len > 0 case falling through to the generic
+ * NAME STD_LEFT_SINGLE_QUOTE payload STD_RIGHT_SINGLE_QUOTE path. */
+static int test_decode_source_bare(void)
 {
   const char srcText[] = "2 2 +";
   uint8_t len = (uint8_t)strlen(srcText);
@@ -3855,18 +3870,25 @@ static int test_decode_source_unchanged(void)
 
   decodeOneStep((uint8_t *)beginOfProgramMemory);
 
-  /* Reference: "FORTH " + STD_LEFT_SINGLE_QUOTE + srcText + STD_RIGHT_SINGLE_QUOTE */
-  char reference[64];
-  sprintf(reference, "FORTH " STD_LEFT_SINGLE_QUOTE "%s" STD_RIGHT_SINGLE_QUOTE, srcText);
+  /* The payload, and nothing but the payload. */
+  if (strcmp(tmpString, srcText) != 0) {
+    printf("    FAIL: tmpString = '%s', expected '%s'\n", tmpString, srcText);
+    cleanupTestProgram();
+    return 1;
+  }
 
-  if (strcmp(tmpString, reference) != 0) {
-    printf("    FAIL: tmpString = '%s', expected '%s'\n", tmpString, reference);
+  /* Pin the collision rationale explicitly: no quote glyph may appear, or a
+   * Forth source line would render identically to a string literal step. */
+  if (strstr(tmpString, STD_LEFT_SINGLE_QUOTE) != NULL ||
+      strstr(tmpString, STD_RIGHT_SINGLE_QUOTE) != NULL) {
+    printf("    FAIL: tmpString = '%s' contains a quote glyph; bare render "
+           "must not quote (collides with a string literal step)\n", tmpString);
     cleanupTestProgram();
     return 1;
   }
 
   cleanupTestProgram();
-  printf("    PASS: len>0 source step renders as '%s' (generic path unchanged)\n", reference);
+  printf("    PASS: len>0 source step renders bare as '%s' (no prefix, no quotes)\n", srcText);
   return 0;
 }
 
@@ -5399,16 +5421,22 @@ static int test_e1_direction_mid_program(void)
   return fail;
 }
 
-/* test_tam_function_cleared_after_capture
- * tam.function is a side-channel flag set by the Forth capture open paths
- * (E1/E2, manage.c:1441/1463) with no verified reset on capture close before
- * this fix. Open capture as in test_e2_continuation_after_enter, commit with
- * pemAlpha(ITM_ENTER) (the close path, manage.c:998), and assert
- * tam.function != ITM_FORTH — a stale sentinel must not survive commit.
- * Escaping mutation: remove the `tam.function = 0;` reset added at the end
- * of pemCloseAlphaInput's generic commit branch (manage.c:1019-1023) — the
- * assertion fails (tam.function stays ITM_FORTH). */
-static int test_tam_function_cleared_after_capture(void)
+/* test_forth_multiline_lock_holds
+ * §8.4 E5: committing a NON-EMPTY Forth source line with ENTER while the
+ * cursor is still inside an open region must re-open capture on the next
+ * line — FLAG_ALPHA set and tam.function == ITM_FORTH. ENTER drops to the
+ * next Forth line; it does not leave the region.
+ *
+ * This test formerly asserted the opposite (tam.function != ITM_FORTH,
+ * "no stale sentinel"). That was the pre-E5 contract, under which the region
+ * became unreachable after the first ENTER — the exact hardware defect E5
+ * exists to fix. The anti-leak concern it guarded is real but lives on the
+ * EMPTY-ENTER escape hatch instead, where the sentinel genuinely must clear;
+ * test_forth_empty_enter_leaves_no_step pins that.
+ *
+ * Escaping mutation: drop the `hadText` term from the E5 condition — the lock
+ * then also fires on the empty escape hatch and E3's test fails. */
+static int test_forth_multiline_lock_holds(void)
 {
   uint8_t prog[] = {
     0x8B, 0x1A, 0xFD, 0x00,                                         /* marker */
@@ -5454,10 +5482,18 @@ static int test_tam_function_cleared_after_capture(void)
 
   if (!fail) {
     extern void pemAlpha(int16_t item);
-    pemAlpha(ITM_ENTER);   /* capture-close path: commit "2" as a Forth source line */
+    pemAlpha(ITM_ENTER);   /* commit "2" as a Forth source line, inside the region */
 
-    if (tam.function == ITM_FORTH) {
-      printf("    FAIL: tam.function == ITM_FORTH after capture close (stale sentinel survived commit)\n");
+    /* E5: the cursor is still inside the open region, so capture must re-open. */
+    if (tam.function != ITM_FORTH) {
+      printf("    FAIL: tam.function = %d after committing a non-empty Forth line "
+             "inside an open region, expected ITM_FORTH (E5 lock did not hold)\n",
+             (int)tam.function);
+      fail = 1;
+    }
+    if (!getSystemFlag(FLAG_ALPHA)) {
+      printf("    FAIL: FLAG_ALPHA clear after E5 re-open — the alpha layout is "
+             "what makes letter keys reachable; the region would be stranded\n");
       fail = 1;
     }
   }
@@ -5473,13 +5509,14 @@ static int test_tam_function_cleared_after_capture(void)
   memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
 
   if (!fail) {
-    printf("    PASS: tam.function != ITM_FORTH after capture close\n");
+    printf("    PASS: E5 multi-line lock holds — non-empty ENTER inside a region "
+           "re-opens capture (FLAG_ALPHA set, tam.function == ITM_FORTH)\n");
   }
   return fail;
 }
 
 /* test_tam_function_cleared_after_abort
- * Same invariant as test_tam_function_cleared_after_capture, but for the
+ * The sentinel-clear invariant, but for the
  * abort path: opening the capture (addStepInProgram(ITM_FORTH), as in
  * test_toggle_inserts_marker's opening case) leaves aimBuffer empty, then
  * pemAlpha(ITM_BACKSPACE) with an empty buffer is the abort/EXIT gesture
@@ -5568,6 +5605,11 @@ static int test_freelist_no_mutation_on_oversize_free(void);
 /* F5: alpha menu presentation tests */
 static int test_alpha_menu_on_top_during_capture(void);
 static int test_alpha_menu_contains_fwrd(void);
+
+/* A8: real-keyboard-path regression tests */
+static int test_forth_toggle_from_catalog_leaves_alpha_menu(void);
+static int test_forth_capture_survives_keystroke(void);
+static int test_forth_alpha_gesture_resumes_forth(void);
 
 /* C-13: end-of-line error precedence tests */
 static int test_unterminated_def_errors(void);
@@ -6198,8 +6240,8 @@ int forthDictSelfTest(void)
   fail |= test_decode_marker_directions();
   forthDictClear();
 
-  printf("  [DEBUG] running test_decode_source_unchanged...\n");
-  fail |= test_decode_source_unchanged();
+  printf("  [DEBUG] running test_decode_source_bare...\n");
+  fail |= test_decode_source_bare();
   forthDictClear();
 
   printf("  [DEBUG] running test_mnu_forth_row...\n");
@@ -6297,8 +6339,8 @@ int forthDictSelfTest(void)
   printf("\nFORTH CAPTURE LIFECYCLE TESTS (tam.function reset on close/abort)\n");
   forthDictInit();
 
-  printf("  [DEBUG] running test_tam_function_cleared_after_capture...\n");
-  fail |= test_tam_function_cleared_after_capture();
+  printf("  [DEBUG] running test_forth_multiline_lock_holds...\n");
+  fail |= test_forth_multiline_lock_holds();
   forthDictClear();
 
   printf("  [DEBUG] running test_tam_function_cleared_after_abort...\n");
@@ -6343,6 +6385,22 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_alpha_menu_contains_fwrd...\n");
   fail |= test_alpha_menu_contains_fwrd();
+  forthDictClear();
+
+  /* A8: real-keyboard-path regression tests */
+  printf("\nFORTH A8 TESTS (real keyboard dispatch chain)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_forth_toggle_from_catalog_leaves_alpha_menu...\n");
+  fail |= test_forth_toggle_from_catalog_leaves_alpha_menu();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_forth_capture_survives_keystroke...\n");
+  fail |= test_forth_capture_survives_keystroke();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_forth_alpha_gesture_resumes_forth...\n");
+  fail |= test_forth_alpha_gesture_resumes_forth();
   forthDictClear();
 
   /* C-13: end-of-line error precedence tests */
@@ -6533,6 +6591,295 @@ static int test_alpha_menu_contains_fwrd(void)
 
   if (!fail) {
     printf("    PASS: menu_ALPHA contains -MNU_FORTH entry (FWRD submenu)\n");
+  }
+  return fail;
+}
+
+/* test_forth_toggle_from_catalog_leaves_alpha_menu
+ * A8: When Forth is toggled from the Functions catalog (CAT → FCNS → FORTH),
+ * the real keyboard path must leave MNU_ALPHA on top.  fnKeyInCatalog=1 is what
+ * executeFunction sets before calling runFunction in catalog context.
+ *
+ * The chain under test is keyboard.c:1213-1216 — runFunction(item) followed
+ * immediately by _closeCatalog().  _closeCatalog is what eats MNU_ALPHA when the
+ * catalog stack is only half torn down (MNU_ALPHA is in CatalogMenus[]), so it is
+ * the whole point of the test and must be the REAL one: it is exported for this
+ * suite via FORTH_SELFTEST_EXPORT.  Do not hand-roll it as popSoftmenu() calls —
+ * the real one is a no-op once A2's teardown has emptied the catalog menus,
+ * whereas blind pops eat MNU_ALPHA and fail a correct implementation.
+ *
+ * Escaping mutation: revert A2 (pop once instead of draining the catalog menus)
+ * and _closeCatalog then finds MNU_CATALOG still stacked, pops MNU_ALPHA, and the
+ * assertion fails.
+ */
+static int test_forth_toggle_from_catalog_leaves_alpha_menu(void)
+{
+  int fail = 0;
+
+  uint8_t prog[] = {
+    0x4C,                                                             /* ITM_sin */
+    0x85, 0xB2,                                                       /* ITM_END */
+  };
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  int16_t savedCatalog = catalog;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedMenu = currentMenu();
+  int16_t savedTamFunc = tam.function;
+
+  currentStep = beginOfProgramMemory + 1;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 2;
+  catalog = CATALOG_FCNS;
+  calcMode = CM_PEM;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = ITM_FORTH;
+
+  extern void showSoftmenu(int16_t menu);
+  showSoftmenu(-MNU_CATALOG);
+  showSoftmenu(-MNU_FCNS);
+
+  /* fnKeyInCatalog must be set AFTER the menus are up and immediately before
+   * the dispatch — showSoftmenu() clears it. That is the real ordering too
+   * (keyboard.c:1190 sets it, :1213 dispatches, :1229 clears it). Setting it
+   * before showSoftmenu leaves it false, runFunction's PEM gate
+   * (!catalog || catalog == CATALOG_MVAR || fnKeyInCatalog) then fails, and
+   * runFunction falls through to reallyRunFunction() — EXECUTING Forth instead
+   * of inserting a step, so the arm under test never runs at all. */
+  fnKeyInCatalog = 1;
+
+  extern void runFunction(int16_t func);
+  extern void _closeCatalog(void);
+  runFunction(ITM_FORTH);
+  _closeCatalog();          /* exactly what keyboard.c does next, :1216 */
+  fnKeyInCatalog = 0;       /* ...and :1229 */
+
+  if (currentMenu() != -MNU_ALPHA) {
+    printf("    FAIL: currentMenu() = %d, expected %d (-MNU_ALPHA)\n",
+    currentMenu(), -MNU_ALPHA);
+    fail = 1;
+  }
+
+  if (!getSystemFlag(FLAG_ALPHA)) {
+    printf("    FAIL: FLAG_ALPHA not set after toggle from catalog\n");
+    fail = 1;
+  }
+
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  catalog = savedCatalog;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  showSoftmenu(savedMenu);
+  tam.function = savedTamFunc;
+
+  if (!fail) {
+    printf("    PASS: Forth toggle from catalog leaves MNU_ALPHA on top\n");
+  }
+  return fail;
+}
+
+/* test_forth_capture_survives_keystroke
+ * A8 / A1 regression: with a capture open, a SECOND printable keystroke driven
+ * through the real path must leave tam.function == ITM_FORTH. Upstream's first
+ * arm of insertStepInProgram set tam.function = ITM_LITERAL unconditionally,
+ * clobbering the capture on every key.
+ *
+ * The capture must be OPENED by driving it, not by assigning tam.function and
+ * FLAG_ALPHA: pemAlpha's per-key re-insert path takes the step opcode from
+ * currentStep[0] (manage.c:970), not from tam.function. With the cursor parked
+ * on an arbitrary step, a hand-primed capture rewrites THAT step into
+ * <its opcode> + STRING_LABEL_VARIABLE + payload — e.g. ITM_sin becomes
+ * `4c fd 01 41`, a PTP_NONE item carrying a string. findNextStep then steps one
+ * byte onto the 0xfd, decodes it as op 0x7d01, and findKey2ndParam indexes
+ * indexOfItems[32001] (LAST_ITEM is 2870) — an out-of-bounds read that
+ * segfaults. Priming the state under test does not just weaken this test; it
+ * corrupts program memory.
+ *
+ * Escaping mutation: restore the unconditional tam.function = ITM_LITERAL in
+ * insertStepInProgram's first arm — the assertion fails.
+ */
+static int test_forth_capture_survives_keystroke(void)
+{
+  int fail = 0;
+
+  /* The marker alone. The entry state is derived from the step immediately
+   * BEFORE the insertion point (forth_bridge.c:126 — an RPN predecessor means
+   * RPN, whatever came before it), and addStepInProgram advances the cursor one
+   * step before inserting (manage.c:1920-1923). So the cursor must sit ON the
+   * marker for the marker to end up as the predecessor. Parking it after an
+   * intervening ITM_sin would make that sin the predecessor and derive RPN —
+   * correctly. */
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* opening marker */
+  };
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  int16_t savedCatalog = catalog;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedTamFunc = tam.function;
+  int16_t savedMenu = currentMenu();
+
+  currentStep = beginOfProgramMemory;      /* ON the marker; insert lands after it */
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+  catalog = CATALOG_NONE;
+  calcMode = CM_PEM;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = 0;
+
+  /* Open the capture the way the machine does: a printable key with the cursor
+   * inside a region is an E2 continuation, and it creates the ITM_FORTH
+   * placeholder that the per-key re-insert path keys on. */
+  extern void addStepInProgram(int16_t func);
+  addStepInProgram(ITM_2);
+
+  if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+    printf("    FAIL: setup did not open Forth capture (FLAG_ALPHA=%d tam.function=%d)\n",
+    (int)getSystemFlag(FLAG_ALPHA), (int)tam.function);
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    catalog = savedCatalog;
+    currentLocalStepNumber = savedLocalStep;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    calcMode = savedCalcMode;
+    tam.function = savedTamFunc;
+    return 1;
+  }
+
+  /* The key under test. ITM_A (550) is what the ALPHA keyboard produces for
+   * 'A'; the ASCII code 'A' (65) is ITM_EXP, a different function entirely. */
+  extern void runFunction(int16_t func);
+  runFunction(ITM_A);
+
+  if (tam.function != ITM_FORTH) {
+    printf("    FAIL: tam.function = 0x%04X, expected ITM_FORTH (0x%04X)\n",
+    tam.function, ITM_FORTH);
+    fail = 1;
+  }
+
+  if (!getSystemFlag(FLAG_ALPHA)) {
+    printf("    FAIL: FLAG_ALPHA cleared after printable key in capture\n");
+    fail = 1;
+  }
+
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  catalog = savedCatalog;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  showSoftmenu(savedMenu);
+  tam.function = savedTamFunc;
+
+  if (!fail) {
+    printf("    PASS: Forth capture survives printable keystroke\n");
+  }
+  return fail;
+}
+
+/* test_forth_alpha_gesture_resumes_forth
+ * A8 / A7 regression: with the cursor inside an open Forth region and the keypad
+ * dropped to RPN, pressing ALPHA (ITM_AIM) must resume a FORTH capture, not a
+ * string-literal one — this is what makes dropping the keypad survivable.
+ *
+ * tam.function MUST start at 0 here, not ITM_FORTH. A7's guard reads
+ *   if(func == ITM_AIM && forthEntryStateAtInsertion()) tam.function = ITM_FORTH;
+ *   else if(tam.function != ITM_FORTH)                  tam.function = ITM_LITERAL;
+ * so seeding the sentinel satisfies the else and the assertion holds even with
+ * A7 deleted — the test would be vacuous. Starting from 0 means only A7's branch
+ * can produce ITM_FORTH.
+ *
+ * Escaping mutation: delete A7's ITM_AIM branch — tam.function comes back
+ * ITM_LITERAL and the assertion fails.
+ */
+static int test_forth_alpha_gesture_resumes_forth(void)
+{
+  int fail = 0;
+
+  /* Marker alone — see test_forth_capture_survives_keystroke for why the cursor
+   * must sit ON it: the entry state comes from the predecessor of the INSERTION
+   * point, and addStepInProgram advances one step before inserting. */
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                         /* opening marker */
+  };
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  int16_t savedCatalog = catalog;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedTamFunc = tam.function;
+  int16_t savedMenu = currentMenu();
+
+  /* Cursor inside open Forth region, keypad at RPN, no capture open. */
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+  catalog = CATALOG_NONE;
+  calcMode = CM_PEM;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = 0;          /* see header: seeding ITM_FORTH makes this vacuous */
+
+  /* Drive ALPHA (ITM_AIM) through the real keyboard path */
+  extern void runFunction(int16_t func);
+  runFunction(ITM_AIM);
+
+  if (tam.function != ITM_FORTH) {
+    printf("    FAIL: tam.function = 0x%04X, expected ITM_FORTH (0x%04X)\n",
+    tam.function, ITM_FORTH);
+    fail = 1;
+  }
+
+  if (!getSystemFlag(FLAG_ALPHA)) {
+    printf("    FAIL: FLAG_ALPHA not set after ALPHA gesture resumes Forth\n");
+    fail = 1;
+  }
+
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  catalog = savedCatalog;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  showSoftmenu(savedMenu);
+  tam.function = savedTamFunc;
+
+  if (!fail) {
+    printf("    PASS: ALPHA gesture resumes Forth (not ITM_LITERAL)\n");
   }
   return fail;
 }

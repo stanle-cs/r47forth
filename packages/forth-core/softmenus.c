@@ -3875,7 +3875,10 @@ void showSoftmenuCurrentPart(void) {
             menu(n) == -MNU_ALPHAMATH ||
             menu(n) == -MNU_ALPHAMISC ||
             menu(n) == -MNU_ALPHAINTL ||
-            menu(n) == -MNU_ALPHAintl;
+            menu(n) == -MNU_ALPHAintl ||
+            menu(n) == -MNU_FORTH;      // forth-core: FWRD is an ALPHA submenu —
+                                        // EXIT must pop back to ALPHA, not kill
+                                        // the capture (fnKeyExit CM_PEM arm)
   }
 
 

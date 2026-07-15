@@ -1,5 +1,5 @@
 diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
-index 6ef5087ccee446689890055e0cd0a71eb6dbe770..a92c2b7f102ee2bde0c8839860f7f3500d598500 100644
+index 6ef5087ccee446689890055e0cd0a71eb6dbe770..826f2176a53e05d710df4729fa9ec9c9d8812426 100644
 --- a/src/c47/softmenus.c
 +++ b/src/c47/softmenus.c
 @@ -2,6 +2,7 @@
@@ -169,3 +169,15 @@ index 6ef5087ccee446689890055e0cd0a71eb6dbe770..a92c2b7f102ee2bde0c8839860f7f350
          initVariableSoftmenu(m);
          cachedDynamicMenu = softmenu[m].menuItem;
        }
+@@ -3765,7 +3875,10 @@ void showSoftmenuCurrentPart(void) {
+             menu(n) == -MNU_ALPHAMATH ||
+             menu(n) == -MNU_ALPHAMISC ||
+             menu(n) == -MNU_ALPHAINTL ||
+-            menu(n) == -MNU_ALPHAintl;
++            menu(n) == -MNU_ALPHAintl ||
++            menu(n) == -MNU_FORTH;      // forth-core: FWRD is an ALPHA submenu —
++                                        // EXIT must pop back to ALPHA, not kill
++                                        // the capture (fnKeyExit CM_PEM arm)
+   }
+ 
+ 

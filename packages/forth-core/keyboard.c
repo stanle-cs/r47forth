@@ -475,7 +475,19 @@ bool_t forthPickerGuard(int16_t item)
     }
 
 
-    static void _closeCatalog(void) {
+    // forth-core: the self-test suite drives the real CAT->FORTH chain, which is
+    // runFunction() immediately followed by _closeCatalog() (see :1213-1216).
+    // Both that call and executeFunction() are file-static, so a test can only
+    // reach the teardown by hand-rolling a pop sequence — which diverges from
+    // this function and silently tests the wrong thing. Export it for the suite
+    // only; production linkage is unchanged.
+    #if defined(FORTH_DEBUG_SELFTEST)
+      #define FORTH_SELFTEST_EXPORT
+    #else
+      #define FORTH_SELFTEST_EXPORT static
+    #endif
+
+    FORTH_SELFTEST_EXPORT void _closeCatalog(void) {
       bool_t inCatalog = false;
       for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
         if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {

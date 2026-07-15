@@ -841,6 +841,10 @@ static void decodeRem(uint8_t *literalAddress, uint16_t op) {
         }
         return;
       }
+    } else {
+      getStringLabelOrVariableName(literalAddress + 1);
+      stringCopy(tmpString, tmpStringLabelOrVariableName);
+      return;
     }
   }
 

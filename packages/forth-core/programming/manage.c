@@ -570,13 +570,9 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
           char tmpChar6 = tmpString[6];
           int16_t cursorInString;
           tmpString[6] = 0;
-          if(strcmp(tmpString, "FORTH ") == 0) {
-            cursorInString = T_cursorPos + 6;
-          } else {
-            tmpString[4] = 0;
-            cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
-            tmpString[4] = tmpChar4;
-          }
+          tmpString[4] = 0;
+          cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
+          tmpString[4] = tmpChar4;
           tmpString[6] = tmpChar6;
           xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
           tmpString[2 + cursorInString    ] = STD_CURSOR[0];
@@ -815,8 +811,8 @@ void pemAlpha(int16_t item) {
         aimBuffer[0] = 0;
         return;
       }
-      xcopy(aimBuffer, tmpString + 8, ll);
-      aimBuffer[ll - 2 - 8] = 0;
+      xcopy(aimBuffer, tmpString, ll);   // bare render: no name prefix, no quotes
+      aimBuffer[ll] = 0;
       T_cursorPos = stringLastGlyph(aimBuffer) + 1;
       deleteStepsFromTo(currentStep, findNextStep(currentStep));
       tam.function = aimFunc;
@@ -910,11 +906,17 @@ void pemAlpha(int16_t item) {
       }
     }
     else if(item == ITM_ENTER) {
-      pemCloseAlphaInput();
-      //--firstDisplayedLocalStepNumber;
-      defineFirstDisplayedStep();
-        _closeAlphaMenus();
-      return;
+      bool_t wasForth = (tam.function == ITM_FORTH);
+      bool_t hadText  = (aimBuffer[0] != 0);           // E5 locks on a NON-EMPTY line
+      pemCloseAlphaInput();                            // only: an empty ENTER is the
+      //--firstDisplayedLocalStepNumber;               // escape hatch (E3 deletes the
+      defineFirstDisplayedStep();                      // placeholder and leaves the
+      _closeAlphaMenus();                              // region open behind it).
+      if(wasForth && hadText && forthEntryStateAtInsertion()) {   // forth-core: multi-line lock.
+        tam.function = ITM_FORTH;                      // State is DERIVED from the
+        pemAlpha(0);                                   // program bytes at the cursor —
+      }                                                // never stored. ENTER just drops
+      return;                                          // to the next Forth line.
     }
     else if(item == ITM_USERMODE) {
       fnFlipFlag(FLAG_USER);
@@ -1418,12 +1420,18 @@ void insertStepInProgram(const int16_t func) {
     firstDisplayedLocalStepNumber = 0;
   }
 
-  if(func == ITM_AIM || (!tam.mode && getSystemFlag(FLAG_ALPHA))) {
+  if(func == ITM_AIM || (!tam.mode && getSystemFlag(FLAG_ALPHA) && func != ITM_FORTH)) {
     if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
       pemCloseNumberInput();
       aimBuffer[0] = 0;
     }
-    tam.function = ITM_LITERAL;
+    if(func == ITM_AIM && forthEntryStateAtInsertion()) {
+      tam.function = ITM_FORTH;         // forth-core: ALPHA inside a Forth region
+    }                                   // resumes Forth capture, not a string literal
+    else if(tam.function != ITM_FORTH) { // forth-core: preserve an open Forth capture;
+      tam.function = ITM_LITERAL;        // upstream forced ITM_LITERAL unconditionally,
+    }                                    // which killed the empty-commit rule, the FWRD
+                                         // picker guard and the toggle-off gesture
     pemAlpha(func);
     pemCursorIsZerothStep = false;
     return;
@@ -1446,7 +1454,18 @@ void insertStepInProgram(const int16_t func) {
     if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
       pemCloseNumberInput(); aimBuffer[0] = 0;
     }
-    if(catalog) { leaveAsmMode(); popSoftmenu(); }
+    if(catalog) {                          // forth-core: NOT the REM arm's single
+      leaveAsmMode();                      // popSoftmenu(). keyboard.c calls
+      while(currentMenu() == -MNU_CATALOG  // _closeCatalog() AFTER runFunction()
+         || currentMenu() == -MNU_FCNS     // returns; it pops the current menu if
+         || currentMenu() == -MNU_CONST    // it is in CatalogMenus[], which lists
+         || currentMenu() == -MNU_CHARS    // MNU_ALPHA — so a half-torn-down stack
+         || currentMenu() == -MNU_PROGS    // costs us the alpha menu pemAlpha() is
+         || currentMenu() == -MNU_VARS     // about to push. Empty it here instead.
+         || currentMenu() == -MNU_MENUS) {
+        popSoftmenu();
+      }
+    }
     bool_t wasOn = forthEntryStateAtInsertion();
     tmpString[0] = (ITM_FORTH >> 8) | 0x80;
     tmpString[1] =  ITM_FORTH       & 0xff;

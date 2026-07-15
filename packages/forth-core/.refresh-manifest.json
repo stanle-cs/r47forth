@@ -1,21 +1,6 @@
 {
+  "base_commit": "79ce0898fffe97a3b1f37ba91d6bb9921cf10e06",
   "files": {
-    "ARCHIVE-3.3C-amendment.txt": "b8faf40c99cdad90810e7c1df43f560e28cfd92f7d7829f0cd60ebf4140d50d2",
-    "CONSOLIDATION-CHECKLIST.md": "305d1dbd061732e1d6f113c43ee6bb7094d6613e5b4b27b3df3885c5fab5ae3e",
-    "CPLAN.md": "ceb2dc4077aa590d553346a06ef54d1d12a532b33230770388ba7d4b1d228576",
-    "DESIGN.md": "82598dce45696deda3fd5c7a050b00cd601e41bd1a7348766a8e5b2204796026",
-    "FIXES_DRAFT_PATCHES.md": "5a7b1d1bb4fccb1563b87708508aa8701ea80a31c2f4e47c7010bdec442dfbe6",
-    "PEM_AUDIT_REPORT.md": "b2bbb990d4bef9255bebff21ae13aecb3f4af62d324bf44f829a1407c221da10",
-    "PEM_COMMITS.md": "401dcd3803eab0d7b8b612168afa5b58854569b4eda9a27856bb3f4b7edeba1f",
-    "PEM_FIX_COMMITS.md": "2fd884e4c7fc2e8b047d5487d12b0deab15aa1230c7f8835ba672f14453130e4",
-    "PROPOSED_SPEC_CHANGES.md": "0649aaba59d8a16b8727755b1c189786eab3d40777119bf3ef54ba991c070ff0",
-    "STAGE2_QWEN_PROMPTS.md": "c1669c9107704b2707ae5b431b81c3933458897d51569f5031362143b5d8af9c",
-    "STAGE2_THREE_PILLARS_AUDIT.md": "7090c3a479f693c014df40470a937ee76a1fbea0f05a504e81f41decac787118",
-    "STAGE2_THREE_PILLARS_PLAN.md": "8a20cffdf338fda18266ffd087acd1a889427b82dd24876066fb552174e22027",
-    "Stage-H1.md": "b010ff526338a5148e1929efea0c42f141b1264a9d288fa25d54b11a91535774",
-    "Stage1.md": "a91080a83cfab5380f9c3dee0dfb19d041e4579db38d3e78392255787da345a6",
-    "TEST_PLAN_POST_AUDIT.md": "92839ce73745b508f85d0c2d7ca8cd2485fd3f3db43580d1e30c6fba29b1e909",
-    "build-test.sh": "9b6e72d945154a2a14d2b305b9f2d1abbfcaeffb3ba4a97aa88d9d4eba019f13",
     "forth_bridge.c": "3d5408a28acd6b88c8e9ed19fe4a4c86d42338578d9d3dd83f9e93b39cd13a8f",
     "forth_compile.c": "ff783e00529200bc05b882eba0a00e0e9ba452e11b5d66b70d1ef7e7f1073da5",
     "forth_dict.c": "21687bce83cd4053f9f20c16741660781e40081302434e796aea40ca76c9aa78",
@@ -23,22 +8,22 @@
     "forth_inner.c": "6be14e739faca739753f3e6fd285822e62d3374df608ab417ae2437f28225663",
     "forth_prims.c": "1f7e208d184b1ec64bee21fd311a26b77df7f64c60f9f78da879606b2bb07a46",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "test_dict_reloc.c": "97a29fa32aee91149d36df502a6ea1b6f297c41cb22f3a2a81690b1a9c5e30a2"
+    "test_dict_reloc.c": "a1950e20cb0a5617282c83a1e89e756e57486e71c88cc97028b762bc32f4b4ec"
   },
   "patches": {
     "010-config.c.patch": "eff3da120408e5f7d2be6ac0189000c2f3243dbe90a8474e0e01ce129deb8b27",
     "010-core__freeList.c.patch": "26242d8b3e4d7689dd98def3e1e90ffd54b6075db90f3894e2071db1b65cc052",
-    "010-defines.h.patch": "f4821d558bc0d32fcd80d87d8909a97347af5c30b1676947e3053f2a1bb64c59",
+    "010-defines.h.patch": "105d355ba4c0a77f76b71cac1da280fac09ced0f12f6bb1a8ad7bea994d4e261",
     "010-error.c.patch": "cfd9d7c1cae5cc7d821204677ef3e89a2892ae7df5475e306a7a803c1920344f",
     "010-items.c.patch": "f794efe91295519dc8e09433480dd03955ce9a18e21e4c513dbc2256b20832e6",
     "010-items.h.patch": "4a10cb5e7920b8f26b2cbd4aefe732132a9b9885eb454a770a2d3981fbbcffc6",
-    "010-keyboard.c.patch": "f0dc98729b2da14f85338dc89ff4f4dc1a3eb1a897516c0f42f3e16713e6ac33",
-    "010-programming__decode.c.patch": "f57dc8fd899252d6af2ab6b956a519409dcdad7a16337ecefad5ca22794a9fa9",
-    "010-programming__lblGtoXeq.c.patch": "f44c9ac1ab10cfd780df87771a55ac7c6ead33d7b61e9b0a294f9316a571a82c",
-    "010-programming__manage.c.patch": "552a8db6a55a4ffc13318b9435473af1fa670e8050e168ea71c088d3d3fca1ee",
+    "010-keyboard.c.patch": "171becd54b3ae1a0fb403f422c0a6ea6a33e8a8432651bc1c8764ce27afab2ab",
+    "010-programming__decode.c.patch": "e203f4959390ce318d3887de8d31e3e59d687b7dc1653a25af519b76621bdfc1",
+    "010-programming__lblGtoXeq.c.patch": "b7c1a1565bdf7d207207047b624c3f4a4b977cfbdf266fba535c60bfdae968a6",
+    "010-programming__manage.c.patch": "26d0e634419396ea50cf35057df5f6b13f4b8980e11835a60e5ae6ab81c2a8fc",
     "010-saveRestoreBackup.c.patch": "3168baf04b4a5a0a724d28859d0dba80c2697353163d297ed3059676b145c1e7",
     "010-screen.c.patch": "3c1a66b0f6dc925a45d2d2433d907333da33c5e7e62580453aab186c21f2eadd",
-    "010-softmenus.c.patch": "2ebd6cba8b41b33fd76fc15ba200c735183dd1fe50ef2e1a78413402595b38dd",
+    "010-softmenus.c.patch": "bc3675097ec0e5580482b8683c55bda7930ace15a0e72cf5a163b08e3e1e6ef7",
     "010-ui__tam.c.patch": "245704b573b0e52e9d78da922a95a37fd7c55b46f5741615ed5742c9e44744d2"
   }
 }

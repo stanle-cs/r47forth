@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85bc59e771 100644
+index 1f503a7006261953de032d1bf13520b680071e38..ed470b03030b7e596d61139a85e921695fecf590 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,7 @@
@@ -10,30 +10,25 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
  
  // Structure of the program memory.
  // In this example the RAM is 16384 blocks (from 0 to 16383) of 4 bytes = 65536 bytes.
-@@ -565,10 +566,18 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
+@@ -565,10 +566,14 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
        decodeOneStep(step);
        if(firstDisplayedStepNumber + line - lineOffset == currentStepNumber && !tam.mode) {
          if(getSystemFlag(FLAG_ALPHA)) {
 -          char tmpChar = tmpString[4];
--          tmpString[4] = 0;
--          int16_t cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
--          tmpString[4] = tmpChar;
 +          char tmpChar4 = tmpString[4];
 +          char tmpChar6 = tmpString[6];
 +          int16_t cursorInString;
 +          tmpString[6] = 0;
-+          if(strcmp(tmpString, "FORTH ") == 0) {
-+            cursorInString = T_cursorPos + 6;
-+          } else {
-+            tmpString[4] = 0;
-+            cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
-+            tmpString[4] = tmpChar4;
-+          }
+           tmpString[4] = 0;
+-          int16_t cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
+-          tmpString[4] = tmpChar;
++          cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
++          tmpString[4] = tmpChar4;
 +          tmpString[6] = tmpChar6;
            xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
            tmpString[2 + cursorInString    ] = STD_CURSOR[0];
            tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
-@@ -801,6 +810,19 @@ void pemAlpha(int16_t item) {
+@@ -801,6 +806,19 @@ void pemAlpha(int16_t item) {
        editCommand = true;
        item = aimFunc;
      }
@@ -42,8 +37,8 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
 +        aimBuffer[0] = 0;
 +        return;
 +      }
-+      xcopy(aimBuffer, tmpString + 8, ll);
-+      aimBuffer[ll - 2 - 8] = 0;
++      xcopy(aimBuffer, tmpString, ll);   // bare render: no name prefix, no quotes
++      aimBuffer[ll] = 0;
 +      T_cursorPos = stringLastGlyph(aimBuffer) + 1;
 +      deleteStepsFromTo(currentStep, findNextStep(currentStep));
 +      tam.function = aimFunc;
@@ -53,7 +48,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
      else {
        aimBuffer[0] = 0;
        return;
-@@ -864,6 +886,14 @@ void pemAlpha(int16_t item) {
+@@ -864,6 +882,14 @@ void pemAlpha(int16_t item) {
          clearSystemFlag(FLAG_ALPHA);
          calcModeNormalGui();
          _closeAlphaMenus();
@@ -68,7 +63,30 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
          return;
        }
        else if(T_cursorPos == 0) {
-@@ -966,6 +996,16 @@ void pemAlpha(int16_t item) {
+@@ -880,11 +906,17 @@ void pemAlpha(int16_t item) {
+       }
+     }
+     else if(item == ITM_ENTER) {
+-      pemCloseAlphaInput();
+-      //--firstDisplayedLocalStepNumber;
+-      defineFirstDisplayedStep();
+-        _closeAlphaMenus();
+-      return;
++      bool_t wasForth = (tam.function == ITM_FORTH);
++      bool_t hadText  = (aimBuffer[0] != 0);           // E5 locks on a NON-EMPTY line
++      pemCloseAlphaInput();                            // only: an empty ENTER is the
++      //--firstDisplayedLocalStepNumber;               // escape hatch (E3 deletes the
++      defineFirstDisplayedStep();                      // placeholder and leaves the
++      _closeAlphaMenus();                              // region open behind it).
++      if(wasForth && hadText && forthEntryStateAtInsertion()) {   // forth-core: multi-line lock.
++        tam.function = ITM_FORTH;                      // State is DERIVED from the
++        pemAlpha(0);                                   // program bytes at the cursor —
++      }                                                // never stored. ENTER just drops
++      return;                                          // to the next Forth line.
+     }
+     else if(item == ITM_USERMODE) {
+       fnFlipFlag(FLAG_USER);
+@@ -966,6 +998,16 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -85,7 +103,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
    aimBuffer[0] = 0;
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
-@@ -976,6 +1016,11 @@ void pemCloseAlphaInput(void) {
+@@ -976,6 +1018,11 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -97,7 +115,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
  }
  
  
-@@ -991,7 +1036,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -991,7 +1038,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -106,7 +124,28 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1397,6 +1442,26 @@ void insertStepInProgram(const int16_t func) {
+@@ -1373,12 +1420,18 @@ void insertStepInProgram(const int16_t func) {
+     firstDisplayedLocalStepNumber = 0;
+   }
+ 
+-  if(func == ITM_AIM || (!tam.mode && getSystemFlag(FLAG_ALPHA))) {
++  if(func == ITM_AIM || (!tam.mode && getSystemFlag(FLAG_ALPHA) && func != ITM_FORTH)) {
+     if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
+       pemCloseNumberInput();
+       aimBuffer[0] = 0;
+     }
+-    tam.function = ITM_LITERAL;
++    if(func == ITM_AIM && forthEntryStateAtInsertion()) {
++      tam.function = ITM_FORTH;         // forth-core: ALPHA inside a Forth region
++    }                                   // resumes Forth capture, not a string literal
++    else if(tam.function != ITM_FORTH) { // forth-core: preserve an open Forth capture;
++      tam.function = ITM_LITERAL;        // upstream forced ITM_LITERAL unconditionally,
++    }                                    // which killed the empty-commit rule, the FWRD
++                                         // picker guard and the toggle-off gesture
+     pemAlpha(func);
+     pemCursorIsZerothStep = false;
+     return;
+@@ -1397,6 +1450,37 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -114,7 +153,18 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
 +    if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
 +      pemCloseNumberInput(); aimBuffer[0] = 0;
 +    }
-+    if(catalog) { leaveAsmMode(); popSoftmenu(); }
++    if(catalog) {                          // forth-core: NOT the REM arm's single
++      leaveAsmMode();                      // popSoftmenu(). keyboard.c calls
++      while(currentMenu() == -MNU_CATALOG  // _closeCatalog() AFTER runFunction()
++         || currentMenu() == -MNU_FCNS     // returns; it pops the current menu if
++         || currentMenu() == -MNU_CONST    // it is in CatalogMenus[], which lists
++         || currentMenu() == -MNU_CHARS    // MNU_ALPHA — so a half-torn-down stack
++         || currentMenu() == -MNU_PROGS    // costs us the alpha menu pemAlpha() is
++         || currentMenu() == -MNU_VARS     // about to push. Empty it here instead.
++         || currentMenu() == -MNU_MENUS) {
++        popSoftmenu();
++      }
++    }
 +    bool_t wasOn = forthEntryStateAtInsertion();
 +    tmpString[0] = (ITM_FORTH >> 8) | 0x80;
 +    tmpString[1] =  ITM_FORTH       & 0xff;
@@ -133,7 +183,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1408,6 +1473,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1408,6 +1492,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -149,7 +199,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1490,6 +1564,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1490,6 +1583,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -173,7 +223,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e27fa7275e13ef8ef476013ee2812a85
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1785,7 +1876,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1785,7 +1895,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;
