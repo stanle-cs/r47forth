@@ -61,379 +61,379 @@
 
 ;debug
 
-;ulp
-;neighb
-;min
-;max
-;compare
-;tvm
+ulp
+neighb
+min
+max
+compare
+tvm
 
-;changeSign
-;sign
+changeSign
+sign
 
-;not
-;and
-;nand
-;nor
-;or
-;xnor
-;xor
-;mirror
-;shift_rotate
-;bits_cov
-;flags_cov
-;statsx_cov
-;regmgmt_cov
+not
+and
+nand
+nor
+or
+xnor
+xor
+mirror
+shift_rotate
+bits_cov
+flags_cov
+statsx_cov
+regmgmt_cov
 
-;addition_longInteger
-;addition_time
-;addition_date
-;addition_string
-;addition_realMatrix
-;addition_complexMatrix
-;addition_shortInteger
-;addition_real
-;addition_complex
+addition_longInteger
+addition_time
+addition_date
+addition_string
+addition_realMatrix
+addition_complexMatrix
+addition_shortInteger
+addition_real
+addition_complex
 
-;subtraction_longInteger
-;subtraction_time
-;subtraction_date
-;subtraction_string
-;subtraction_realMatrix
-;subtraction_complexMatrix
-;subtraction_shortInteger
-;subtraction_real
-;subtraction_complex
+subtraction_longInteger
+subtraction_time
+subtraction_date
+subtraction_string
+subtraction_realMatrix
+subtraction_complexMatrix
+subtraction_shortInteger
+subtraction_real
+subtraction_complex
 
-;multiplication_longInteger
-;multiplication_time
-;multiplication_date
-;multiplication_string
-;multiplication_realMatrix
-;multiplication_complexMatrix
-;multiplication_shortInteger
-;multiplication_real
-;multiplication_complex
+multiplication_longInteger
+multiplication_time
+multiplication_date
+multiplication_string
+multiplication_realMatrix
+multiplication_complexMatrix
+multiplication_shortInteger
+multiplication_real
+multiplication_complex
 
-;division_longInteger
-;division_time
-;division_date
-;division_string
-;division_realMatrix
-;division_complexMatrix
-;division_shortInteger
-;division_real
-;division_complex
+division_longInteger
+division_time
+division_date
+division_string
+division_realMatrix
+division_complexMatrix
+division_shortInteger
+division_real
+division_complex
 
-;invert
+invert
 
-;power_longInteger
-;power_time
-;power_date
-;power_string
-;power_realMatrix
-;power_complexMatrix
-;power_shortInteger
-;power_real
-;power_complex
+power_longInteger
+power_time
+power_date
+power_string
+power_realMatrix
+power_complexMatrix
+power_shortInteger
+power_real
+power_complex
 
-;parallel_longInteger
-;parallel_time
-;parallel_date
-;parallel_string
-;parallel_realMatrix
-;parallel_complexMatrix
-;parallel_shortInteger
-;parallel_real
-;parallel_complex
+parallel_longInteger
+parallel_time
+parallel_date
+parallel_string
+parallel_realMatrix
+parallel_complexMatrix
+parallel_shortInteger
+parallel_real
+parallel_complex
 
-;prime
+prime
 
-;specialResults
+specialResults
 
 ;Answer to the Ultimate Question of Life
-;ultimateQuestionOfLife
+ultimateQuestionOfLife
 
-;rectangularToPolarB
-;polarToRectangularB
+rectangularToPolarB
+polarToRectangularB
 
-;ceil
-;floor
+ceil
+floor
 
-;roundB
-;roundiB
+roundB
+roundiB
 
-;idiv
-;idivr
-;modulo
-;remainder
+idiv
+idivr
+modulo
+remainder
 
-;mulmod
-;expmod
+mulmod
+expmod
 
-;dblDivision
-;dblDivisionRemainder
-;dblMultiplication
+dblDivision
+dblDivisionRemainder
+dblMultiplication
 
-;mant
-;expt
+mant
+expt
 
-;exp
-;expMOne
-;10pow
-;2pow
-;minusOnePow
-;log10
-;log2
-;ln
-;lnPOne
-;eulersFormula
-;eulersphi
+exp
+expMOne
+10pow
+2pow
+minusOnePow
+log10
+log2
+ln
+lnPOne
+eulersFormula
+eulersphi
 
-;arccos
-;arcsin
-;arctan
-;atan2
+arccos
+arcsin
+arctan
+atan2
 
-;cos
-;sin
-;tan
-;sinc
-;sincpi
+cos
+sin
+tan
+sinc
+sincpi
 
-;arccosh
-;arcsinh
-;arctanh
+arccosh
+arcsinh
+arctanh
 
-;cosh
-;sinh
-;tanh
+cosh
+sinh
+tanh
 
 ;The standard calculator performance test arcsin(arccos(arctan(tan(cos(sin(9°))))))-9
-;trig
+trig
 
-;xfn
+xfn
 
-;erf
-;erfc
+erf
+erfc
 
-;conjugate
-;reToCx
-;cxToRe
+conjugate
+reToCx
+cxToRe
 
-;square
-;squareRoot
-;sqrt1Px2
-;cube
-;cubeRoot
-;xthRoot
+square
+squareRoot
+sqrt1Px2
+cube
+cubeRoot
+xthRoot
 
-;lnGamma
-;gamma
-;factorial
-;gammaP
-;gammaQ
-;gammaXyLower
-;gammaXyUpper
+lnGamma
+gamma
+factorial
+gammaP
+gammaQ
+gammaXyLower
+gammaXyUpper
 
-;cyx
-;pyx
+cyx
+pyx
 
-;fractionalPart
-;integerPart
-;integerPartLonginteger
-;integerPartShortinteger
-;realPart
-;imaginaryPart
-;swapRealImaginary
+fractionalPart
+integerPart
+integerPartLonginteger
+integerPartShortinteger
+realPart
+imaginaryPart
+swapRealImaginary
 
-;gcd
-;lcm
+gcd
+lcm
 
-;magnitude
-;argument
-;unitVector
+magnitude
+argument
+unitVector
 
-;slvc
-;slvq
-;agm
+slvc
+slvq
+agm
 
-;decomp
+decomp
 ;             jmhold
 
-;dot
-;cross
+dot
+cross
 
-;matrix
+matrix
 
-;percent
-;percentMRR
-;percentT
-;percentSigma
-;stats_cov
-;mathmisc_cov
-;string_cov
-;matrix_cov
-;round_cov
-;storercl_cov
-;compare_cov
-;mathspecial_cov
-;checkval_cov
-;matrixops_cov
-;prime_cov
-;disterr_cov
-;iteration_cov
-;numextra_cov
-;dist_cov
-;curvefit_cov
-;error_cov
-;saverestore_cov
-;numeric_diff_cov
-;percentPlusMG
-;deltaPercent
+percent
+percentMRR
+percentT
+percentSigma
+stats_cov
+mathmisc_cov
+string_cov
+matrix_cov
+round_cov
+storercl_cov
+compare_cov
+mathspecial_cov
+checkval_cov
+matrixops_cov
+prime_cov
+disterr_cov
+iteration_cov
+numextra_cov
+dist_cov
+curvefit_cov
+error_cov
+saverestore_cov
+numeric_diff_cov
+percentPlusMG
+deltaPercent
 
-;logxy
-;lnbeta
-;beta
-;ixyz
-;fib
-;gd
-;invGd
+logxy
+lnbeta
+beta
+ixyz
+fib
+gd
+invGd
 
-;bessel_j
-;bessel_y
+bessel_j
+bessel_y
 
-;zeta
-;bn
-;bn_star
+zeta
+bn
+bn_star
 
-;hermite
-;hermite_p
-;laguerre
-;laguerre_alpha
-;legendre
-;chebyshev_t
-;chebyshev_u
+hermite
+hermite_p
+laguerre
+laguerre_alpha
+legendre
+chebyshev_t
+chebyshev_u
 
-;w_positive
-;w_negative
-;w_inverse
+w_positive
+w_negative
+w_inverse
 
-;jToDT
-;dToJ
-;dtToJ
-;year
-;month
-;day
-;wday
-;dateTo
-;toDate
-;xToDate
+jToDT
+dToJ
+dtToJ
+year
+month
+day
+wday
+dateTo
+toDate
+xToDate
 
-;HRtoTM
-;HMStoTM
-;toReal
+HRtoTM
+HMStoTM
+toReal
 
 ;Distributions
-;stdnormal_p
-;stdnormal_l
-;stdnormal_r
-;stdnormal_i
+stdnormal_p
+stdnormal_l
+stdnormal_r
+stdnormal_i
 
-;normal_p
-;normal_l
-;normal_r
-;normal_i
+normal_p
+normal_l
+normal_r
+normal_i
 
-;t_p
-;t_l
-;t_r
-;t_i
+t_p
+t_l
+t_r
+t_i
 
-;chi2_p
-;chi2_l
-;chi2_r
-;chi2_i
+chi2_p
+chi2_l
+chi2_r
+chi2_i
 
-;f_p
-;f_l
-;f_r
-;f_i
+f_p
+f_l
+f_r
+f_i
 
-;logNormal_p
-;logNormal_l
-;logNormal_r
-;logNormal_i
+logNormal_p
+logNormal_l
+logNormal_r
+logNormal_i
 
-;cauchy_p
-;cauchy_l
-;cauchy_r
-;cauchy_i
+cauchy_p
+cauchy_l
+cauchy_r
+cauchy_i
 
-;exponential_p
-;exponential_l
-;exponential_r
-;exponential_i
+exponential_p
+exponential_l
+exponential_r
+exponential_i
 
-;logistic_p
-;logistic_l
-;logistic_r
-;logistic_i
+logistic_p
+logistic_l
+logistic_r
+logistic_i
 
-;weibull_p
-;weibull_l
-;weibull_r
-;weibull_i
+weibull_p
+weibull_l
+weibull_r
+weibull_i
 
-;negBinomial_p
-;negBinomial_l
-;negBinomial_r
-;negBinomial_i
+negBinomial_p
+negBinomial_l
+negBinomial_r
+negBinomial_i
 
-;geometric_p
-;geometric_l
-;geometric_r
-;geometric_i
+geometric_p
+geometric_l
+geometric_r
+geometric_i
 
-;hypergeometric_p
-;hypergeometric_l
-;hypergeometric_r
-;hypergeometric_i;
+hypergeometric_p
+hypergeometric_l
+hypergeometric_r
+hypergeometric_i
 
-;binomial_p
-;binomial_l
-;binomial_r
-;binomial_i
+binomial_p
+binomial_l
+binomial_r
+binomial_i
 
-;poisson_p
-;poisson_l
-;poisson_r
-;poisson_i
+poisson_p
+poisson_l
+poisson_r
+poisson_i
 
 ; Elliptic
-;jacobi_sn
-;jacobi_cn
-;jacobi_dn
-;jacobi_am
+jacobi_sn
+jacobi_cn
+jacobi_dn
+jacobi_am
 
-;ellipticK
-;ellipticE
-;ellipticPi
-;ellipticFphi
-;ellipticEphi
-;jacobi_zeta
-;jacobi_audit
+ellipticK
+ellipticE
+ellipticPi
+ellipticFphi
+ellipticEphi
+jacobi_zeta
+jacobi_audit
 
-;LINPOL
+LINPOL
 
-;tempConv
-;conversions
-;conversionsSI
-;constants
+tempConv
+conversions
+conversionsSI
+constants
 
-;elec
+elec
 
-;programs
+programs
 
 ; eq_cov/deriv_cov/solve_cov/integrate_cov/tvm_cov mutate shared state the
 ; per-test In: reset does not clear - a formula in the pool, the named variables
@@ -441,11 +441,11 @@
 ; before it. They also run before pgm_solve_cov: their error cases assert that
 ; the letter 'T' names no program label, which pgm_solve_cov's loaded program T
 ; would otherwise satisfy.
-;eq_cov
-;deriv_cov
-;solve_cov
-;integrate_cov
-;tvm_cov
+eq_cov
+deriv_cov
+solve_cov
+integrate_cov
+tvm_cov
 
 ; These coverage files mutate shared state that the per-test In: reset does not
 ; clear - clcvar_cov clears the loaded sample programs' local variables,
@@ -460,21 +460,21 @@
 ; changes the display, format, range and grouping modes, which would leak
 ; through serialize_cov's lossless round-trip into the graphs_cov plot hashes,
 ; so it runs dead last, after graphs_cov.
-;matrix2_cov
-;clcvar_cov
-;serialize_state_cov
-;pgm_solve_cov
-;histo_cov
-;clearvars_cov
-;program_flow_cov
+matrix2_cov
+clcvar_cov
+serialize_state_cov
+pgm_solve_cov
+histo_cov
+clearvars_cov
+program_flow_cov
 
 ; short-integer masks must be rederived on state restore; saves/reloads state
 ; and changes the word size, so it runs after the other state tests and before
 ; serialize_cov resets the calculator.
-;shortint_restore_cov
+shortint_restore_cov
 
-;serialize_cov
+serialize_cov
 
 graphs_cov
 
-;config_cov
+config_cov
