@@ -8,7 +8,7 @@
     "forth_inner.c": "6be14e739faca739753f3e6fd285822e62d3374df608ab417ae2437f28225663",
     "forth_prims.c": "1f7e208d184b1ec64bee21fd311a26b77df7f64c60f9f78da879606b2bb07a46",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "test_dict_reloc.c": "a1950e20cb0a5617282c83a1e89e756e57486e71c88cc97028b762bc32f4b4ec"
+    "test_dict_reloc.c": "cea6ac785e5cba1f678babf97770d84af16a56fe5aac09783d60b0dae73ad09b"
   },
   "patches": {
     "010-config.c.patch": "eff3da120408e5f7d2be6ac0189000c2f3243dbe90a8474e0e01ce129deb8b27",
@@ -20,7 +20,7 @@
     "010-keyboard.c.patch": "171becd54b3ae1a0fb403f422c0a6ea6a33e8a8432651bc1c8764ce27afab2ab",
     "010-programming__decode.c.patch": "e203f4959390ce318d3887de8d31e3e59d687b7dc1653a25af519b76621bdfc1",
     "010-programming__lblGtoXeq.c.patch": "b7c1a1565bdf7d207207047b624c3f4a4b977cfbdf266fba535c60bfdae968a6",
-    "010-programming__manage.c.patch": "26d0e634419396ea50cf35057df5f6b13f4b8980e11835a60e5ae6ab81c2a8fc",
+    "010-programming__manage.c.patch": "f13a10ce8ecd42ee0066fc5eae81df51e6bcd80764bc301bc9c312136a1213c5",
     "010-saveRestoreBackup.c.patch": "3168baf04b4a5a0a724d28859d0dba80c2697353163d297ed3059676b145c1e7",
     "010-screen.c.patch": "3c1a66b0f6dc925a45d2d2433d907333da33c5e7e62580453aab186c21f2eadd",
     "010-softmenus.c.patch": "bc3675097ec0e5580482b8683c55bda7930ace15a0e72cf5a163b08e3e1e6ef7",

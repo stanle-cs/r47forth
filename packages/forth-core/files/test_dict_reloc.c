@@ -5608,6 +5608,7 @@ static int test_alpha_menu_contains_fwrd(void);
 
 /* A8: real-keyboard-path regression tests */
 static int test_forth_toggle_from_catalog_leaves_alpha_menu(void);
+static int test_forth_drain_clears_buried_catalog(void);
 static int test_forth_capture_survives_keystroke(void);
 static int test_forth_alpha_gesture_resumes_forth(void);
 
@@ -6393,6 +6394,9 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_forth_toggle_from_catalog_leaves_alpha_menu...\n");
   fail |= test_forth_toggle_from_catalog_leaves_alpha_menu();
+
+  printf("  [DEBUG] running test_forth_drain_clears_buried_catalog...\n");
+  fail |= test_forth_drain_clears_buried_catalog();
   forthDictClear();
 
   printf("  [DEBUG] running test_forth_capture_survives_keystroke...\n");
@@ -6687,6 +6691,116 @@ static int test_forth_toggle_from_catalog_leaves_alpha_menu(void)
 
   if (!fail) {
     printf("    PASS: Forth toggle from catalog leaves MNU_ALPHA on top\n");
+  }
+  return fail;
+}
+
+/* test_forth_drain_clears_buried_catalog
+ * R3: the ITM_FORTH catalog drain must use the same stack-wide predicate as
+ * _closeCatalog(), which scans the ENTIRE softmenu stack for MNU_CATALOG.
+ *
+ * STRUCTURAL/DEFENSIVE TEST — this constructs the state rather than reaching it
+ * by keypress, and the state is not known to be user-reachable today: ITM_FORTH
+ * lives only in the FCNS catalog, and MNU_FCNS *is* in the old top-of-stack
+ * list. It is a regression guard on the predicate itself, because the old drain
+ * had two latent gaps and both are invisible until something does become
+ * reachable:
+ *   (a) it tested only the top of the stack, while _closeCatalog() is stack-wide;
+ *   (b) its hand-written menu list (CATALOG/FCNS/CONST/CHARS/PROGS/VARS/MENUS)
+ *       omits every catalog menu that enterAsmModeIfMenuIsACatalog() also sets
+ *       `catalog` for — MNU_SYSFL here, plus the whole VARS family (MNU_REALS,
+ *       MNU_MATRS, MNU_DATES, ...) that upstream itself lists in CatalogMenus[]
+ *       (keyboard.c:407-419). A list that must be kept in sync by hand is the
+ *       defect; the stack-wide test removes the need for one.
+ * MNU_SYSFL is used because it sets `catalog` (CATALOG_SYFL, calcMode.c:120),
+ * is a static menu, and is absent from the old drain list.
+ * Escaping mutation: revert the drain to the old top-of-stack while-loop —
+ * MNU_SYSFL is not in its list, so it stops immediately, the buried MNU_CATALOG
+ * survives, and _closeCatalog() pops the MNU_ALPHA that pemAlpha() just pushed
+ * (MNU_ALPHA is itself listed in CatalogMenus[], keyboard.c:402).
+ */
+static int test_forth_drain_clears_buried_catalog(void)
+{
+  int fail = 0;
+
+  uint8_t prog[] = {
+    0x4C,                                                             /* ITM_sin */
+    0x85, 0xB2,                                                       /* ITM_END */
+  };
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  int16_t savedCatalog = catalog;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedTamFunc = tam.function;
+  /* The drain pops the whole stack down past MNU_CATALOG, so restoring only
+   * currentMenu() would leak a truncated stack into later tests. */
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  currentStep = beginOfProgramMemory + 1;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 2;
+  calcMode = CM_PEM;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = ITM_FORTH;
+
+  extern void showSoftmenu(int16_t menu);
+  catalog = CATALOG_NONE;
+  showSoftmenu(-MNU_CATALOG);   /* does not set `catalog` (calcMode.c default:) */
+  showSoftmenu(-MNU_SYSFL);     /* sets catalog = CATALOG_SYFL; NOT in the old
+                                 * drain list; MNU_CATALOG now buried under it */
+
+  if (catalog != CATALOG_SYFL) {
+    printf("    FAIL: precondition — catalog = %d, expected CATALOG_SYFL (%d)\n",
+           catalog, CATALOG_SYFL);
+    fail = 1;
+  }
+  if (currentMenu() != -MNU_SYSFL) {
+    printf("    FAIL: precondition — currentMenu() = %d, expected %d (-MNU_SYSFL)\n",
+           currentMenu(), -MNU_SYSFL);
+    fail = 1;
+  }
+
+  fnKeyInCatalog = 1;           /* after the menus are up — showSoftmenu clears it */
+
+  extern void runFunction(int16_t func);
+  extern void _closeCatalog(void);
+  runFunction(ITM_FORTH);
+  _closeCatalog();              /* exactly what keyboard.c does next */
+  fnKeyInCatalog = 0;
+
+  if (currentMenu() != -MNU_ALPHA) {
+    printf("    FAIL: currentMenu() = %d, expected %d (-MNU_ALPHA) — buried "
+           "MNU_CATALOG defeated the drain\n", currentMenu(), -MNU_ALPHA);
+    fail = 1;
+  }
+  if (!getSystemFlag(FLAG_ALPHA)) {
+    printf("    FAIL: FLAG_ALPHA not set\n");
+    fail = 1;
+  }
+
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  catalog = savedCatalog;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  tam.function = savedTamFunc;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+
+  if (!fail) {
+    printf("    PASS: buried MNU_CATALOG drained; MNU_ALPHA survives _closeCatalog\n");
   }
   return fail;
 }

@@ -1410,6 +1410,37 @@ static void _pemCloseAngleInput(int item) {
   }
 }
 
+/* forth-core: helpers for the ITM_FORTH catalog drain.
+ *
+ * _closeCatalog() (keyboard.c) runs immediately after runFunction() returns and
+ * decides "are we in the catalog" by scanning the ENTIRE softmenu stack for
+ * MNU_CATALOG; if it finds one it pops the current menu when that menu is
+ * listed in CatalogMenus[] — and MNU_ALPHA is on that list. So any MNU_CATALOG
+ * surviving anywhere beneath us costs us the alpha menu pemAlpha() is about to
+ * push, even if the top of the stack is already clean. The drain must therefore
+ * use the same stack-wide predicate _closeCatalog() uses, not a top-of-stack
+ * test. Reachable case: a non-catalog menu opened over a catalog (which leaves
+ * `catalog` set, since enterAsmModeIfMenuIsACatalog() only ever sets it) with
+ * ITM_FORTH pressed from that menu. */
+static bool_t _forthCatalogBuriedOnStack(void) {
+  for(int i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+    if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Tidy teardown of the catalog menus themselves, kept from the original drain:
+ * without it a catalog submenu reached directly (no MNU_CATALOG beneath it)
+ * would stay buried under the alpha menu. */
+static bool_t _forthCatalogMenuOnTop(void) {
+  const int16_t m = currentMenu();
+  return m == -MNU_CATALOG || m == -MNU_FCNS  || m == -MNU_CONST
+      || m == -MNU_CHARS   || m == -MNU_PROGS || m == -MNU_VARS
+      || m == -MNU_MENUS;
+}
+
 void insertStepInProgram(const int16_t func) {
                                 #if defined(DEBUG_PGM)
                                   print_caller(NULL);
@@ -1454,15 +1485,12 @@ void insertStepInProgram(const int16_t func) {
     if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
       pemCloseNumberInput(); aimBuffer[0] = 0;
     }
-    if(catalog) {                          // forth-core: NOT the REM arm's single
-      leaveAsmMode();                      // popSoftmenu(). keyboard.c calls
-      while(currentMenu() == -MNU_CATALOG  // _closeCatalog() AFTER runFunction()
-         || currentMenu() == -MNU_FCNS     // returns; it pops the current menu if
-         || currentMenu() == -MNU_CONST    // it is in CatalogMenus[], which lists
-         || currentMenu() == -MNU_CHARS    // MNU_ALPHA — so a half-torn-down stack
-         || currentMenu() == -MNU_PROGS    // costs us the alpha menu pemAlpha() is
-         || currentMenu() == -MNU_VARS     // about to push. Empty it here instead.
-         || currentMenu() == -MNU_MENUS) {
+    if(catalog) {   // forth-core: NOT the REM arm's single popSoftmenu() — see
+      leaveAsmMode();                    // _forthCatalogBuriedOnStack() above.
+      // Bounded: popSoftmenu() can re-push HOME, so never spin on it.
+      for(int i = 0; i < SOFTMENU_STACK_SIZE
+                     && (_forthCatalogMenuOnTop() || _forthCatalogBuriedOnStack());
+          i++) {
         popSoftmenu();
       }
     }
