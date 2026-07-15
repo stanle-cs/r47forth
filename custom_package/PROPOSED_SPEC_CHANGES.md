@@ -471,7 +471,13 @@ repository (abbreviated index lines are resolved via `git rev-parse
 this same repository, upstream pulls keep old pre-image blobs in history,
 so ancestry survives drift. Known residual caveat: a **shallow clone** of
 this repo may lack historical blobs — that degrades to the loud
-no-ancestry behavior above, not to silent misapplication. Adjacent-line
+no-ancestry behavior above, not to silent misapplication. **Authoring-side**
+shallow behavior is stricter: `refresh`, `materialize`, and `--rebase-base`
+all require the recorded base commit to be present in the repository
+(validated via `git cat-file -e <sha>^{commit}`). If unavailable (shallow
+clone, missing history), the tool fails with a named error before any
+classification — never producing a misleading "upstream added" diagnosis.
+Adjacent-line
 drift (no unchanged line separating drift from an edit) conflicts loudly
 even via `-3`.
 
@@ -610,14 +616,20 @@ proceeds — so a fresh package's first refresh behaves byte-identically to
 today. If generated `patches/`/`files/` entries already exist at
 initialization time (a pre-fix package with a legacy manifest), a loud
 stderr warning is printed (same channel as drift warnings) stating the
-base was assumed to be current HEAD. Residual, retroactive-only risk: if
+base was assumed to be current HEAD. If a `base_commit` IS already
+recorded, it is validated with `git cat-file -e <sha>^{commit}` — fatal
+if the commit is not available in the repository (shallow clone, missing
+history). Residual, retroactive-only risk: if
 upstream moved between a manual materialization and the first refresh
 under the fixed tool, that first patch is wrong exactly as today —
 unavoidable without a materialization-time record; closed going forward
 by BP-5.
 
 **BP-4. Classification stays live-keyed; epoch mismatches are handled
-explicitly.** The patch-vs-files/ decision remains "does the rel exist in
+explicitly.** Before any file classification, the recorded base commit is
+validated for availability (`git cat-file -e`); if unavailable, refresh
+fails with a named error (the base is missing — not a file-level problem).
+The patch-vs-files/ decision remains "does the rel exist in
 the live tree" [VERIFIED: tools/pkg_patch_refresh.py:308] — it must stay
 consistent with the configure-time existence checks (New Decision 6;
 [VERIFIED: tools/pkg_patch_apply.py:205-212]). Two mismatch cases:
@@ -640,7 +652,9 @@ consistent with the configure-time existence checks (New Decision 6;
 **BP-5. New `--materialize <rel>` CLI mode replaces raw `cp`.**
 `python3 tools/pkg_patch_refresh.py <pkgdir> --materialize <rel>` writes
 `git show <base>:src/c47/<rel>` into the flat working area (initializing
-the base per BP-3 if unset). Fatal if `<rel>` doesn't exist at base; fatal
+the base per BP-3 if unset). If the recorded base commit is unavailable,
+materialize fails before attempting extraction. Fatal if `<rel>` doesn't
+exist at base; fatal
 if the working file already exists (no silent clobber of edits). The
 README's raw-`cp`-from-live instruction [VERIFIED: custom_package/README.md:181]
 is replaced. Rationale: once a base is pinned, copying from the *live*
@@ -649,7 +663,10 @@ developer authored them — the mirror image of the main bug — so the
 sanctioned materialization must come from the base.
 
 **BP-6. Advancing the base is explicit, never automatic:**
-`--rebase-base [<commit>]` (default: current HEAD). For each working file
+`--rebase-base [<commit>]` (default: current HEAD). The old recorded base
+is validated for availability before any merge work — if unavailable,
+rebase fails with a named error and the manifest is unchanged (even with
+zero working files). For each working file
 that exists at the old base: run `git merge-file` in place (working copy,
 old-base content, new-base content); unedited copies fast-forward to
 new-base content, genuine overlaps leave standard conflict markers in the
