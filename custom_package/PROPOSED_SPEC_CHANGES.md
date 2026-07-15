@@ -405,17 +405,39 @@ legitimately-committed entry as unrecorded drift — a wall of false
 positives on day one for every package. Committing it means the manifest's
 state travels with the repo exactly like the patches/files it describes.
 
-**The flat working area is `.gitignore`d** (`packages/.gitignore`, scoped
-to the `packages/` subtree — does not touch the top-level `.gitignore`,
-which is an upstream file). Only `patches/`, `files/`, and the manifest are
-tracked; everything else directly under a package directory is local
-editing scratch and must never be committed. Verified empirically against
-a real test package in this repository: `git add -A` stages only the
-`patches/`/`files/`/manifest entries, never the flat working-area files;
-already-tracked files (e.g. `packages/forth-core/`'s pre-existing
-whole-file overrides, which predate this convention and are out of scope
-for migration here) are completely unaffected, since gitignore rules never
-apply to files git already tracks.
+**The whole package directory is tracked, working area included**
+(`packages/.gitignore` carries no rules; the top-level `.gitignore` is an
+upstream file and is not touched). `patches/`, `files/`, the manifest **and**
+the flat working-area sources are all committed.
+
+**Superseded (R5-A2, decided 2026-07-15).** This section previously required
+the opposite — the flat working area `.gitignore`d as "local editing scratch
+[that] must never be committed" — and cited as verification that `git add -A`
+stages only the generated entries. That verification tested the rule's
+mechanism, not its consequence. Two consequences make the rule unsound:
+
+1. **A clean clone deletes its own sources.** Refresh defines a missing working
+   file as deletion of its generated output. A clone has no working area, so
+   its first refresh reports `files_removed=[...]` and removes the
+   compiler-visible source. Reproduced in a scratch repo using this exact
+   `.gitignore`.
+2. **It silently swallows everything new.** The old text noted that
+   already-tracked files "are completely unaffected, since gitignore rules
+   never apply to files git already tracks" — treating that as reassurance. It
+   was the defect: the rule bit only files created *after* it landed, so the
+   existing sources survived by accident while 15 design docs added later were
+   tracked nowhere at all, with `git status` clean throughout.
+
+The accepted cost is committed redundancy: working file and generated
+counterpart both in git, able to disagree between refreshes. The refresh step
+in `build-test.sh` is what reconciles them. The alternative — keeping the
+working area local — requires an explicit deletion protocol plus a
+generated-output-to-working-area rehydration design, and simply skipping
+refresh reopens the proven silent-stale build bug.
+
+`.pkgignore` is unchanged and is **classification only**: it decides what
+refresh emits into `patches/`+`files/`, never what git tracks. Keeping docs out
+of the distributable package is its job; git policy is not.
 
 ---
 

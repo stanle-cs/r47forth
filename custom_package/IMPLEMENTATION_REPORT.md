@@ -334,10 +334,14 @@ created or edited by hand.
   both end at the identical overwrite operation — failing here would
   punish the ordinary case for sharing code with the suspicious one; the
   goal is visibility into drift, not blocking a self-healing artifact.
-- New `packages/.gitignore` (scoped to `packages/`, does not touch the
+- ~~New `packages/.gitignore` (scoped to `packages/`, does not touch the
   top-level upstream `.gitignore`) excludes flat working-area files from
   version control while keeping `patches/`, `files/`, and the manifest
-  tracked. The manifest is deliberately **not** gitignored — without it
+  tracked.~~ **REVERSED by R5-A2 (2026-07-15): the whole package directory,
+  working area included, is now tracked.** Excluding the working area was
+  unsound — refresh reads a missing working file as an instruction to delete
+  its generated output, so a clean clone deleted the compiler-visible source
+  on its first refresh. `packages/.gitignore` now carries no rules. The manifest is deliberately **not** gitignored — without it
   committed, a fresh clone's first `refresh` would have no history of
   prior writes and would flag every legitimately committed entry as
   unrecorded drift.

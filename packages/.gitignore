@@ -1,34 +1,28 @@
-# Package overlay working areas (PROPOSED_SPEC_CHANGES.md revision 2,
-# "Automatic Classification, Flat Working Directory").
+# Package working areas — everything here is tracked (R5-A2, decided 2026-07-15).
 #
-# A package directory's working area (packages/<pkg>/<flat files mirroring
-# upstream paths>) is local editing scratch, regenerated into patches/ and
-# files/ by `refresh` — it must never be committed. patches/, files/, the
-# per-package refresh manifest, and .pkgignore ARE the checked-in artifacts
-# and must stay tracked.
+# This file previously carried a blanket `*/*` rule that ignored the flat
+# working area, on the theory that it is regenerable scratch. It is not:
 #
-# .pkgignore is metadata, not scratch: it decides what `refresh` classifies at
-# all, so a clone without it regenerates every ignored doc back into files/.
+#   refresh defines a MISSING working file as deletion of its generated output.
+#   A clean clone has no working area, so the clone's first refresh reported
+#   files_removed=[...] and deleted the compiler-visible source. Verified in a
+#   scratch repo against this very file (R5-A2).
 #
-# This file is scoped to packages/ only — it does not touch the top-level
-# .gitignore (an upstream file) and has no effect on packages/forth-core/'s
-# pre-existing, already-tracked files (ignore rules never affect files git
-# already tracks).
-# Design docs are source, not scratch, and unlike the working-area sources they
-# have no generated counterpart to be tracked through: .pkgignore deliberately
-# keeps *.md/*.txt OUT of patches/ and files/, so a doc that is not tracked here
-# is tracked nowhere and exists only on one disk. (A working-area .c is safe to
-# ignore precisely because refresh regenerates it into files/ or patches/.)
-# Without these two lines every doc added after this rule landed — DESIGN-HISTORY.md,
-# the review series, the architect reports — was silently invisible to git, while
-# the docs predating it stayed tracked. Ignore rules never affect already-tracked
-# files, so the trap only sprang on new ones.
-*/*
-!*/patches
-!*/patches/**
-!*/files
-!*/files/**
-!*/.refresh-manifest.json
-!*/.pkgignore
-!*/*.md
-!*/*.txt
+# The rule also silently swallowed anything created after it landed, because
+# ignore rules never untrack what is already tracked. That is the only reason
+# the existing sources survived — and it is how 15 design docs came to be
+# tracked nowhere at all. Both failures share one cause: git's view and
+# refresh's view of "does this file exist" disagreed.
+#
+# So the working area is now the source of truth and is committed alongside the
+# generated patches/+files/. The cost is committed redundancy — a working file
+# and its generated counterpart both live in git. That is deliberate: it makes
+# refresh reproducible after a clone, which the alternative could not be
+# without a rehydration design and an explicit deletion protocol.
+#
+# .pkgignore is unaffected. It stays exactly what it was: classification only,
+# deciding what refresh emits into patches/+files/ — NOT what git tracks. It is
+# what keeps design docs out of the distributable package, and it must never
+# again double as a git policy.
+#
+# Deliberately empty of rules. Do not add a blanket working-area ignore back.

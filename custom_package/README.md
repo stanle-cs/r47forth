@@ -69,8 +69,8 @@ entirely by `refresh` (see **Authoring Workflow** below). After running
 
 ```
 packages/my-pkg/
-├── keyboard.c                        # your working copy (gitignored, not committed)
-├── my_module.c                       # your working copy (gitignored, not committed)
+├── keyboard.c                        # your working copy (tracked in git)
+├── my_module.c                       # your working copy (tracked in git)
 ├── .pkgignore                        # optional, committed — see below
 ├── .refresh-manifest.json            # generated, committed
 ├── patches/
@@ -110,6 +110,17 @@ copy.
 > the `files/` copy**, so ignoring one silently removes it from the build rather
 > than erroring — `forth-core` ignores `*.md`, `*.txt` and `build-test.sh`, and
 > nothing else.
+>
+> **This silence is a decided, accepted risk (R5-A3, 2026-07-15) — not an
+> oversight.** A `.pkgignore` pattern matching a `.c` file produces no `files/`
+> entry and **no warning**: `warnings=[]`, and the compiler simply never sees
+> the source. Verified. A dynamic warning was considered and declined; refresh
+> could reuse the resolver's own `rel.endswith('.c')` compilation predicate to
+> make the case loud without reintroducing a per-file declaration list, so the
+> option remains open at low cost if this ever bites. It was declined to keep
+> the no-declaration design free of special cases. If you are debugging a
+> source the compiler seems not to see, check `.pkgignore` first — nothing will
+> tell you.
 
 1. Create the package directory and edit files directly in it — normally
    via the **materialize-and-refresh workflow** below.
@@ -262,12 +273,25 @@ cycle and must not be blocked by the mechanism that also catches tampering.
 
 ### Version Control
 
-Your flat working-area files (everything directly under a package
-directory except `patches/`, `files/`, and the manifest) are local editing
-scratch — `.gitignore`d via `packages/.gitignore`, never committed. Only
-`patches/`, `files/`, and `.refresh-manifest.json` are tracked in git.
-Running `git add -A` inside a package directory stages only these generated
-entries; your working copies are silently excluded, by design.
+**Everything in a package directory is tracked in git** — your flat
+working-area files as well as the generated `patches/`, `files/`, and
+`.refresh-manifest.json`. `git add -A` stages all of it.
+
+This reverses an earlier design in which the working area was `.gitignore`d as
+regenerable scratch. It is not regenerable: **refresh treats a missing working
+file as an instruction to delete its generated output**, so a clean clone —
+which has no working area — deleted the compiler-visible source on its first
+refresh (R5-A2, reproduced in a scratch repo). The same rule also silently
+swallowed every file created after it landed, since ignore rules never untrack
+what is already tracked.
+
+The cost is committed redundancy: a working file and its generated counterpart
+both live in git, and a refresh-less edit makes them disagree (the refresh step
+in `build-test.sh` is what keeps them honest). That is the accepted price for a
+clone that can refresh reproducibly.
+
+`.pkgignore` is **not** git policy and never was — it decides only what refresh
+emits into `patches/`+`files/`. See below.
 
 Note the distinction from `pkg_build`'s distributable zip (below): the
 **git repo** tracks the manifest alongside `patches/`+`files/` (the
