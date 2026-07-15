@@ -141,7 +141,8 @@ void drawBattery(uint16_t voltage);
 
 
   static void showAngularMode(void) {
-    if(!((SBARUPD_AngularModeBasic) || (SBARUPD_AngularMode))) {
+    #define actualSBARUPD_AngularMode  (SBARUPD_AngularMode || currentAngularMode != amDegree)
+    if(!(SBARUPD_AngularModeBasic || actualSBARUPD_AngularMode)) {
       return;
     }
 
@@ -152,7 +153,7 @@ void drawBattery(uint16_t voltage);
         x = showGlyph(STD_MEASURED_ANGLE, &standardFont, x, 0, vmNormal, true, true, false); // Angle is 0+9 pixel wide
       }
 
-      if(SBARUPD_AngularMode) {
+      if(actualSBARUPD_AngularMode) {
         switch(currentAngularMode) {
           case amRadian: {
             x = showGlyph(STD_SUP_BOLD_r,         &standardFont, x, 0, vmNormal, true, false, false); // r  is 0+6 pixel wide
