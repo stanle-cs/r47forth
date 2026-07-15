@@ -144,6 +144,10 @@ static int test_stack_aslift(void)
     printf("    FAIL: FLAG_ASLIFT not set after normal word return (C4 mutation)\n");
     return 1;
   }
+  if (!x_is_longint(10)) {
+    printf("    FAIL: X should be 10 after ILIT 5 DUP + (stack result not computed)\n");
+    return 1;
+  }
   printf("    PASS: stack ops + ASLIFT on exit\n");
   return 0;
 }
@@ -171,6 +175,7 @@ static int test_branch_fwd(void)
   end_word(w);
 
   lastErrorCode = ERROR_NONE;
+  forthPushInt32(123456);  /* Y canary: unskipped DROP would consume it */
   bool err = run_word("BF");
   if (err) {
     printf("    FAIL: unexpected error %d during fwd branch\n", lastErrorCode);
@@ -178,6 +183,10 @@ static int test_branch_fwd(void)
   }
   if (!x_is_longint(42)) {
     printf("    FAIL: X should be 42 after BR forward skip\n");
+    return 1;
+  }
+  if (!y_is_longint(123456)) {
+    printf("    FAIL: AUDIT R2 forward branch consumed the Y canary\n");
     return 1;
   }
   printf("    PASS: BR forward skips DROP\n");
@@ -377,13 +386,14 @@ static int test_0br_longint_taken_branch(void)
  * Mutation: ip+=8 bug (treating ILIT payload as 8 bytes, desyncs to next token) ---- */
 static int test_literal_after_lit(void)
 {
+  /* Body: ILIT 10 | ILIT 20 | PLUS | EXIT */
   uint16_t w = begin_word("LA", 2);
   if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
   forthDictEmit(T_ILIT);
   emit_int32(10);
   forthDictEmit(T_ILIT);
   emit_int32(20);
-  forthDictEmit(PRIM_TOKEN(P_DROP));
+  forthDictEmit(PRIM_TOKEN(P_PLUS));
   end_word(w);
 
   lastErrorCode = ERROR_NONE;
@@ -392,7 +402,11 @@ static int test_literal_after_lit(void)
     printf("    FAIL: desynced after ILIT (ip+=8 mutation: error %d)\n", lastErrorCode);
     return 1;
   }
-  printf("    PASS: live token after ILIT executes correctly\n");
+  if (!x_is_longint(30)) {
+    printf("    FAIL: X should be 30 after ILIT 10 ILIT 20 PLUS\n");
+    return 1;
+  }
+  printf("    PASS: live token after ILIT executes correctly (10+20=30)\n");
   return 0;
 }
 
@@ -749,7 +763,7 @@ static int test_div_zero_halt(void)
     printf("    FAIL: DIV by zero did not halt (sentinel ILIT 999 executed, X=999)\n");
     return 1;
   }
-  printf("    PASS: DIV by zero halted (error %d, X preserved, sentinel not executed)\n", lastErrorCode);
+  printf("    PASS: DIV by zero halted (error %d, sentinel not executed)\n", lastErrorCode);
   return 0;
 }
 
@@ -805,11 +819,11 @@ static int test_rstack_overflow(void)
     printf("    FAIL: 70-deep chain completed (no rstack overflow guard)\n");
     return 1;
   }
-  if (lastErrorCode != ERROR_NONE) {
-    printf("    PASS: rstack overflow caught (error %d, recovered)\n", lastErrorCode);
-    return 0;
+  if (lastErrorCode != ERROR_RAM_FULL) {
+    printf("    FAIL: expected ERROR_RAM_FULL, got %d\n", lastErrorCode);
+    return 1;
   }
-  printf("    PASS: rstack overflow detected (X unchanged, err=%d)\n", lastErrorCode);
+  printf("    PASS: rstack overflow caught (error %d)\n", lastErrorCode);
   return 0;
 }
 
@@ -843,16 +857,16 @@ static int test_runaway_guard(void)
   lastErrorCode = ERROR_NONE;
   run_word("RR2");
 
-  if (x_is_longint(444)) {
-    printf("    PASS: runaway guard halted (X unchanged at 444, err=%d)\n", lastErrorCode);
-    return 0;
+  if (!x_is_longint(444)) {
+    printf("    FAIL: runaway guard: X should be 444\n");
+    return 1;
   }
-  if (lastErrorCode != ERROR_NONE) {
-    printf("    PASS: runaway guard triggered (error %d)\n", lastErrorCode);
-    return 0;
+  if (lastErrorCode != ERROR_RAM_FULL) {
+    printf("    FAIL: runaway guard: expected ERROR_RAM_FULL, got %d\n", lastErrorCode);
+    return 1;
   }
-  printf("    FAIL: runaway loop did not trigger guard (X!=444, err=%d)\n", lastErrorCode);
-  return 1;
+  printf("    PASS: runaway guard halted (X=444, err=%d)\n", lastErrorCode);
+  return 0;
 }
 
 /* ---- Malformed token ----
@@ -890,6 +904,10 @@ static int test_malformed_token(void)
       run_word("MRP");   /* X = 444 */
       lastErrorCode = ERROR_NONE;
       run_word("MP");
+      if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
+        printf("    FAIL: bad PRIM expected ERROR_OPERATION_UNDEFINED, got %d\n", lastErrorCode);
+        fail = 1;
+      }
       if (x_is_longint(555)) {
         printf("    FAIL: bad PRIM index not caught (sentinel ILIT 555 executed)\n");
         fail = 1;
@@ -914,6 +932,10 @@ static int test_malformed_token(void)
       run_word("MRP");   /* X = 444 */
       lastErrorCode = ERROR_NONE;
       run_word("MC");
+      if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+        printf("    FAIL: bad CALL expected ERROR_INVALID_CORRUPTED_DATA, got %d\n", lastErrorCode);
+        fail = 1;
+      }
       if (x_is_longint(555)) {
         printf("    FAIL: bad CALL index not caught (sentinel ILIT 555 executed)\n");
         fail = 1;
@@ -938,6 +960,10 @@ static int test_malformed_token(void)
       run_word("MRP");   /* X = 444 */
       lastErrorCode = ERROR_NONE;
       run_word("MR");
+      if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+        printf("    FAIL: reserved token expected ERROR_INVALID_CORRUPTED_DATA, got %d\n", lastErrorCode);
+        fail = 1;
+      }
       if (x_is_longint(555)) {
         printf("    FAIL: reserved token not caught (sentinel ILIT 555 executed)\n");
         fail = 1;
@@ -1042,7 +1068,7 @@ static int test_ilit_arithmetic_divergence(void)
  * Layout (cells, 2 bytes each):
  *   0: BR token
  *   1: delta +260 (skip 260 cells = 520 bytes)
- *   2-261: filler tokens (skipped)
+ *   2-261: T_EXIT fillers (skipped; low-byte +4 hits a filler EXIT)
  *   262: ILIT 777
  *   263-264: int32 777
  *   265: EXIT
@@ -1055,10 +1081,10 @@ static int test_br_delta_sign_extend(void)
   forthDictEmit(T_BR);
   emit_int16(260);  /* skip 260 cells, delta 0x0104 exercises high-byte path */
 
-  /* Filler: 260 DROP tokens (skipped by BR) */
+  /* Filler: 260 T_EXIT tokens (skipped by BR +260; low-byte +4 hits a filler EXIT) */
   int i;
   for (i = 0; i < 260; i++) {
-    forthDictEmit(PRIM_TOKEN(P_DROP));
+    forthDictEmit(T_EXIT);
   }
 
   forthDictEmit(T_ILIT);
@@ -1776,19 +1802,96 @@ static int test_fnforthcall_interactive(void)
 }
 
 
-/* §4.2 LBL? UB fix (fix #5): resolvedParam init + LBLQ guard.
- * DEFERRED to §8.5 integration — _executeOp in lblGtoXeq.c requires full
- * C47 program context (program memory, reallyRunFunction dispatch) and is
- * not unit-callable in this harness. The fix ensures:
- *   (1) resolvedParam = INVALID_VARIABLE on a miss (no uninitialized read).
- *   (2) ITM_LBLQ never receives a Forth colon index as a label ID.
- * Mutation: remove the INVALID_VARIABLE initializer -> ASan flags
- *   uninitialized-read when name matches neither label nor Forth word.
- * Verify under ASan: make test_asan CUSTOM_PKG=packages/forth-core ---- */
-static int test_lblq_undefined_no_ub(void)
+/* test_lblq_forth_name_not_local_label
+ * §4.2 LBL? UB fix: ordinary LBL? must ask for INVALID_VARIABLE, so a
+ * Forth-only colon name is never mistaken for a same-numbered LOCAL label.
+ * Program is LBL 00 + LBL?"FW", with FW a colon word at dictionary index 0 —
+ * local label 00 and colon index 0 are deliberately the same numeric value, so
+ * passing the resolved index instead of INVALID_VARIABLE finds LBL 00.
+ *
+ * PRECONDITION, and the whole reason the first attempt could not fail:
+ * fnCheckLabel (lblGtoXeq.c:1005-1008) opens with
+ *   if(dynamicMenuItem >= 0) { label = findNamedLabel(dynmenuGetLabel(...)); }
+ * i.e. it DISCARDS its label argument whenever a dynamic menu item is active.
+ * dynamicMenuItem is zero-initialized (c47.c:259) and 0 is >= 0, so under the
+ * harness the argument under test was never read and NO fixture work could make
+ * the mutation observable. Production never executes a step in that state:
+ * fnRunProgram sets dynamicMenuItem = -1 immediately before runProgram
+ * (lblGtoXeq.c:301), and the fnGoto/XEQ paths do the same (:178, :193).
+ * executeOneStep sits below that layer, so this test must establish the
+ * precondition production establishes. That is reproducing a documented
+ * production invariant, not priming the state under test.
+ *
+ * Escaping mutation: in _executeOp's ITM_LBLQ arm (lblGtoXeq.c:381), change
+ * reallyRunFunction(op, (uint16_t)INVALID_VARIABLE) to
+ * reallyRunFunction(op, resolvedParam) — LBL 00 is then found and TI_TRUE.
+ * Verified RED with TI=13 (TI_TRUE); correct code gives TI=12 (TI_FALSE).
+ */
+static int test_lblq_forth_name_not_local_label(void)
 {
-  printf("    DEFERRED to §8.5 integration (requires full program context for _executeOp)\n");
-  return 0;
+  int fail = 0;
+
+  forthDictClear();
+
+  /* writeTestProgram calls scanLabelsAndPrograms(), so LBL 00 is registered by
+   * the real scanner. Do NOT hand-build labelList: sizing it separately from
+   * numberOfLabels desynchronizes the allocation from the cleanup path and
+   * corrupts the free list. */
+  uint8_t prog[] = {
+    0x01, 0x00,                         /* LBL 00 */
+    0x85, 0xDF, 0xFD, 2, 'F', 'W'       /* LBL? "FW" */
+  };
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    forthDictClear();
+    return 1;
+  }
+
+  /* Colon word "FW" at dictionary index 0 (body = EXIT). */
+  uint16_t w = begin_word("FW", 2);
+  if (w == FORTH_NULL) {
+    printf("    FAIL: could not define colon word FW\n");
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+  end_word(w);
+
+  int16_t savedDynMenuItem = dynamicMenuItem;
+  uint8_t savedTI          = temporaryInformation;
+  uint8_t savedRunStop     = programRunStop;
+
+  dynamicMenuItem      = -1;            /* as fnRunProgram does, lblGtoXeq.c:301 */
+  temporaryInformation = TI_TRUE;       /* must be flipped to TI_FALSE by the arm */
+  lastErrorCode        = ERROR_NONE;
+  programRunStop       = PGM_RUNNING;
+
+  executeOneStep(beginOfProgramMemory + 2);   /* the LBL?"FW" step */
+
+  programRunStop  = savedRunStop;
+  dynamicMenuItem = savedDynMenuItem;
+
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: lastErrorCode = %d (expected ERROR_NONE %d)\n",
+           lastErrorCode, ERROR_NONE);
+    fail = 1;
+  }
+  if (temporaryInformation != TI_FALSE) {
+    printf("    FAIL: temporaryInformation = %d (expected TI_FALSE %d) — "
+           "LBL? treated the Forth name as local label 00\n",
+           temporaryInformation, TI_FALSE);
+    fail = 1;
+  }
+
+  temporaryInformation = savedTI;
+  forthDictClear();
+  cleanupTestProgram();
+
+  if (!fail) {
+    printf("    PASS: LBL? with Forth name sets TI_FALSE, not TI_TRUE\n");
+  }
+  return fail;
 }
 
 
@@ -6010,8 +6113,8 @@ int forthDictSelfTest(void)
   fail |= test_xeq_item_lookup();
   printf("  [DEBUG] running test_fnforthcall_interactive...\n");
   fail |= test_fnforthcall_interactive();
-  printf("  [DEBUG] running test_lblq_undefined_no_ub...\n");
-  fail |= test_lblq_undefined_no_ub();
+  printf("  [DEBUG] running test_lblq_forth_name_not_local_label...\n");
+  fail |= test_lblq_forth_name_not_local_label();
 
   forthDictClear();
 
