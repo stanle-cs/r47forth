@@ -170,14 +170,25 @@ TO_QSPI const int16_t menu_LOOP[]        = { ITM_DSE,                       ITM_
 #endif
 
 
+#if defined(OPTION_EIGEN)
+  #define EIG_SQRT ITM_M_SQRT
+  #define EIG_VEC  ITM_EIGVEC
+  #define EIG_VAL  ITM_EIGVAL
+  #define EIG_QR   ITM_M_QR
+#else // OPTION_EIGEN: blank EIGVEC EIGVAL M.QR MSQRT (LU stays)
+  #define EIG_SQRT ITM_NULL
+  #define EIG_VEC  ITM_NULL
+  #define EIG_VAL  ITM_NULL
+  #define EIG_QR   ITM_NULL
+#endif // OPTION_EIGEN
 TO_QSPI const int16_t menu_MATX[]        = {
                                              ITM_M_NEW,                     ITM_M_TRANSP,               ITM_M_EDI,                ITM_M_EDIN,            ITM_SIM_EQ,                  Mp1F6,
                                              ITM_MIDENT,                    ITM_M_DIM,                  ITM_M_DIM_GR,             ITM_M_DIMNQ,           ITM_M_CONCATB,               ITM_M_CONCATR,
                                              ITM_REGtoVEC,                  ITM_VECtoREG,               ITM_STOVEL,               ITM_RCLVEL,            ITM_NULL,                    ITM_NULL,
 
-                                             ITM_M_INV,                     ITM_M_SQRT,                 ITM_RSUM,                 ITM_CSUM,              ITM_M_DET,                   Mp2F6,
+                                             ITM_M_INV,                     EIG_SQRT,                   ITM_RSUM,                 ITM_CSUM,              ITM_M_DET,                   Mp2F6,
                                              ITM_PNORM,                     ITM_UNITV,                  ITM_M_TRANSP,             ITM_VANGLE,            ITM_DOT_PROD,                ITM_CROSS_PROD,
-                                             ITM_NULL,                      ITM_NULL,                   ITM_EIGVEC,               ITM_EIGVAL,            ITM_M_LU,                    ITM_M_QR,
+                                             ITM_NULL,                      ITM_NULL,                   EIG_VEC,                  EIG_VAL,               ITM_M_LU,                    EIG_QR,
 
                                              ITM_IPLUS,                     ITM_IMINUS,                 ITM_STOIJ,                ITM_RCLIJ,             ITM_JMINUS,                  ITM_JPLUS,
                                              ITM_M_CMIN,                    ITM_M_CMAX,                 ITM_M_RR,                 ITM_M_CC,              ITM_M_FIND,                  ITM_INDEX,
@@ -649,9 +660,15 @@ TO_QSPI const int16_t menu_CONV_PLoad[]     = {
 
 
 
+#if defined(OPTION_ASTRING)
 TO_QSPI const int16_t menu_alphaFN[]     = { ITM_FBR,                       ITM_ALPHAtoX,                 ITM_XtoALPHA,                 ITM_ALPHALENG,                ITM_ALPHAPOS,                ITM_XPARSE,
                                              ITM_ALPHASL,                   ITM_ALPHASR,                  ITM_ALPHARL,                  ITM_ALPHARR,                  ITM_ALPHALOWER,              ITM_ALPHAUPPER,
                                              ITM_ALPHATRIM,                 ITM_ALPHAREV,                 ITM_ALPHAIP,                  ITM_ALPHAMID,                 ITM_ALPHALEFT,               ITM_ALPHARIGHT                };
+#else // OPTION_ASTRING: blank the aLOWER aUPPER aTRIM aREV aMID aLEFT aRIGHT slots
+TO_QSPI const int16_t menu_alphaFN[]     = { ITM_FBR,                       ITM_ALPHAtoX,                 ITM_XtoALPHA,                 ITM_ALPHALENG,                ITM_ALPHAPOS,                ITM_XPARSE,
+                                             ITM_ALPHASL,                   ITM_ALPHASR,                  ITM_ALPHARL,                  ITM_ALPHARR,                  ITM_NULL,                    ITM_NULL,
+                                             ITM_NULL,                      ITM_NULL,                     ITM_ALPHAIP,                  ITM_NULL,                     ITM_NULL,                    ITM_NULL                      };
+#endif // OPTION_ASTRING
 
 
 
@@ -2732,7 +2749,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_YYX    :
     #endif // SAVE_SPACE_DM42_12BESSEL
 
-    #if defined(SAVE_SPACE_DM42_12PRIME)
+    #if !defined(OPTION_PRIME)
       case ITM_NEXTP  :
       case ITM_PRIME  :
       case ITM_FACTORS:
@@ -2743,7 +2760,33 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_SIGMAk :
       case ITM_SIGMAp1:
       case ITM_SIGMApk:
-    #endif // SAVE_SPACE_DM42_12PRIME
+    #endif // !OPTION_PRIME
+
+    #if !defined(OPTION_ASTRING)
+      case ITM_ALPHAMID  :
+      case ITM_ALPHALEFT :
+      case ITM_ALPHARIGHT:
+      case ITM_ALPHATRIM :
+      case ITM_ALPHAREV  :
+      case ITM_ALPHALOWER:
+      case ITM_ALPHAUPPER:
+    #endif // !OPTION_ASTRING
+
+    #if !defined(OPTION_DATAFILE)
+      case ITM_EXPX   :
+      case ITM_EXPSTK :
+      case ITM_EXPATOW:
+      case ITM_EXPNREG:
+      case ITM_XEXPORT:
+      case ITM_IMPREGS:
+    #endif // !OPTION_DATAFILE
+
+    #if !defined(OPTION_EIGEN)
+      case ITM_EIGVAL:
+      case ITM_EIGVEC:
+      case ITM_M_QR  :
+      case ITM_M_SQRT:
+    #endif // !OPTION_EIGEN
 
     #if defined(SAVE_SPACE_DM42_12ELLIP)
       case -MNU_ELLIPT:

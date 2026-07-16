@@ -7,13 +7,22 @@
 
 #include "c47.h"
 
+#if !defined(OPTION_EIGEN)                                                    // stubs for the eigen suite (real code is guarded below): EIGVAL EIGVEC M.QR MSQRT
+  void fnMatrixSquareRoot(uint16_t unusedParamButMandatory) {}
+  void fnQrDecomposition (uint16_t unusedParamButMandatory) {}
+  void fnEigenvalues     (uint16_t unusedParamButMandatory) {}
+  void fnEigenvectors    (uint16_t unusedParamButMandatory) {}
+#endif // !OPTION_EIGEN
 
+
+#if defined(OPTION_EIGEN)
 static void sqrtRealMatrix     (const real34Matrix_t *matrix, real34Matrix_t *res);
 static void sqrtComplexMatrix  (const complex34Matrix_t *matrix, complex34Matrix_t *res);
 static void realEigenvalues    (const real34Matrix_t *matrix, real34Matrix_t *res, real34Matrix_t *ires);
 static void complexEigenvalues (const complex34Matrix_t *matrix, complex34Matrix_t *res);
 static void realEigenvectors   (const real34Matrix_t *matrix, real34Matrix_t *res, real34Matrix_t *ires);
 static void complexEigenvectors(const complex34Matrix_t *matrix, complex34Matrix_t *res);
+#endif // OPTION_EIGEN
 
 
 // Eigenvalue setup
@@ -955,6 +964,7 @@ void fnInvertMatrix(uint16_t unusedParamButMandatory) {
 }
 
 
+#if defined(OPTION_EIGEN)
 void fnMatrixSquareRoot(uint16_t unusedParamButMandatory) {
   if(!saveLastX()) {
     return;
@@ -1092,6 +1102,9 @@ void fnMatrixSquareRoot(uint16_t unusedParamButMandatory) {
 
   adjustResult(REGISTER_X, false, true, REGISTER_X, -1, -1);
 }
+
+
+#endif // OPTION_EIGEN
 
 
 static void _fnEuclideanNorm(uint16_t pParam) {
@@ -1531,6 +1544,7 @@ void fnEditLinearEquationMatrixX(uint16_t unusedParamButMandatory) {
 }
 
 
+#if defined(OPTION_EIGEN)
 void fnQrDecomposition(uint16_t unusedParamButMandatory) {
   if(!saveLastX()) {
     return;
@@ -1979,6 +1993,9 @@ adjustResult(REGISTER_X, false, true, REGISTER_X, -1, -1);
 return;
 
 }
+
+
+#endif // OPTION_EIGEN
 
 
 bool_t realMatrixInit(real34Matrix_t *matrix, uint16_t rows, uint16_t cols) {
@@ -4102,6 +4119,7 @@ static void halfSumRealMatrices(const real34Matrix_t *a, const real34Matrix_t *b
 #endif //MATRIX_SQRT_USE_EIGEN
 
 
+#if defined(OPTION_EIGEN)
 static bool_t isRealMatrixDiagonal(const real34Matrix_t *matrix) {
   const uint16_t rows = matrix->header.matrixRows;
   const uint16_t cols = matrix->header.matrixColumns;
@@ -4702,6 +4720,8 @@ fail:
   res->header.matrixRows = res->header.matrixColumns = 0;
 }
 
+
+#endif // OPTION_EIGEN
 
 void invertComplexMatrix(const complex34Matrix_t *matrix, complex34Matrix_t *res) {
   const uint16_t n = matrix->header.matrixColumns;
@@ -5331,6 +5351,7 @@ static void cpxLinearEqn(const real_t *a, const real_t *b, real_t *r, uint16_t s
 
 
 /* Routines for calculating eigenpairs */
+#if defined(OPTION_EIGEN)
 static void adjCpxMat(const real_t *x, uint16_t size, real_t *res) {
   int32_t i, j;
   for(i = 0; i < size; ++i) {
@@ -8222,6 +8243,9 @@ static void complexEigenvectors(const complex34Matrix_t *matrix, complex34Matrix
     }
   }
 }
+
+
+#endif // OPTION_EIGEN
 
 
 static void elementwiseRemaGetResult(bool_t *complex, real34Matrix_t *x, complex34Matrix_t *xc, int i) {
