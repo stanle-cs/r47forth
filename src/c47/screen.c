@@ -769,7 +769,7 @@ void execTimerApp(uint16_t timerType) {
   }
 
 
-#if defined(LONGPRESS_CFG)   // only when allowed by LONGPRESS_CFG
+#if defined(OPTION_LONGPRESS_CFG)   // only when allowed by OPTION_LONGPRESS_CFG
   static void _assignLongPressKey(int keyCode) {
     char kc[4] = {};
     kc[0] = (keyCode / 10) + '0';
@@ -830,7 +830,7 @@ void execTimerApp(uint16_t timerType) {
       runFunction(item);
     }
   }
-#endif // LONGPRESS_CFG
+#endif // OPTION_LONGPRESS_CFG
 
 
   static void clearShiftTemporaryIndications(bool_t condition) {
@@ -847,7 +847,7 @@ void execTimerApp(uint16_t timerType) {
         Shft_LongPress_f_g = false;
         fnTimerStop(TO_3S_CTFF);
         fnTimerStop(TO_FG_LONG);
-      #if defined(LONGPRESS_CFG)   // only when allowed by LONGPRESS_CFG
+      #if defined(OPTION_LONGPRESS_CFG)   // only when allowed by OPTION_LONGPRESS_CFG
         int keyCode;
 
         int16_t item;
@@ -945,7 +945,7 @@ void execTimerApp(uint16_t timerType) {
           screenUpdatingMode = SCRUPD_AUTO;
           refreshScreen(23);
         }
-      #endif // LONGPRESS_CFG
+      #endif // OPTION_LONGPRESS_CFG
         shiftF = 0;
         shiftG = 0;
         showShiftState();
@@ -973,13 +973,13 @@ void execTimerApp(uint16_t timerType) {
           Shft_timeouts = false;
           resetShiftState();                                       //force into no shift state, i.e. to wait
           if((calcMode == CM_ASSIGN) && (itemToBeAssigned !=0)) {
-            #if defined(LONGPRESS_CFG)   // only when allowed by LONGPRESS_CFG
+            #if defined(OPTION_LONGPRESS_CFG)   // only when allowed by OPTION_LONGPRESS_CFG
               int keyCode = (calcModel == USER_R47bk_fg) ? 11 : (calcModel == USER_R47fg_bk || calcModel == USER_R47fg_g) ? 10 : (calcModel == USER_C47 || calcModel == USER_DM42) ? 27 : 9999;
               //shiftF = 1;
               if(previousCalcMode != CM_AIM) {   // No long press assignments in AIM
                 _assignLongPressKey(keyCode);
               }
-            #endif // LONGPRESS_CFG
+            #endif // OPTION_LONGPRESS_CFG
             shiftF = 0;
             shiftG = 0;
             screenUpdatingMode = SCRUPD_AUTO;
@@ -3359,12 +3359,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         displayTemporaryInformationOnX(prefix);
       }
 
-    #if defined(IR_PRINTING)
+    #if defined(OPTION_IR_PRINTING)
       else if(temporaryInformation == TI_PRINT_COMPLETE && regist == REGISTER_X) {
         sprintf(prefix, "Print completed");
         displayTemporaryInformationOnX(prefix);
       }
-    #endif //IR_PRINTING
+    #endif //OPTION_IR_PRINTING
 
       else if(temporaryInformation == TI_DEL_ALL_PRGMS && regist == REGISTER_X) {
         sprintf(tmpString, "%s", errorMessages[TI_All_user_prgms_deleted]);

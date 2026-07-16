@@ -3089,7 +3089,7 @@ void mimShowElement(void) {
 }
 
 
-#if !defined(SAVE_SPACE_DM42_9)
+#if defined(OPTION_SHOW)
 
 static void RegName(void) {    //JM using standard reg name, using showRegis, not using prefixWidth
   int16_t tmp;
@@ -3106,20 +3106,6 @@ static void SHOW_reset(void){
 
   temporaryInformation = TI_SHOW_REGISTER_SMALL;
   RegName();
-}
-
-
-static void checkAndEat(int16_t *source, int16_t last, int16_t *dest) {
-  uint8_t ix;
-  if(*source < last && !GROUPLEFT_DISABLED) {                  //Not in the last line
-    for(ix=0; ix<16; ix++) { //Eat away characters at the end to line up the last space
-      if((uint8_t)tmpString[(*dest)-2] == (uint8_t)STD_SPACE_PUNCTUATION[0] && (uint8_t)tmpString[(*dest)-1] == (uint8_t)STD_SPACE_PUNCTUATION[1]) break;
-      if(tmpString[(*dest)-1] == 32) break;
-      (*dest)--;
-      (*source)--;
-    }
-    tmpString[*dest] = 0;
-  }
 }
 
 
@@ -3197,7 +3183,7 @@ static void dispM(uint16_t regist, char * prefix) {
     }
   }
 }
-#endif //SAVE_SPACE_DM42_9
+
 
 
 
@@ -3327,6 +3313,20 @@ static void prepLongintIntoLines(int16_t *last, int16_t *source, int16_t *dest, 
 }
 
 
+static void checkAndEat(int16_t *source, int16_t last, int16_t *dest) {
+  uint8_t ix;
+  if(*source < last && !GROUPLEFT_DISABLED) {                  //Not in the last line
+    for(ix=0; ix<16; ix++) { //Eat away characters at the end to line up the last space
+      if((uint8_t)tmpString[(*dest)-2] == (uint8_t)STD_SPACE_PUNCTUATION[0] && (uint8_t)tmpString[(*dest)-1] == (uint8_t)STD_SPACE_PUNCTUATION[1]) break;
+      if(tmpString[(*dest)-1] == 32) break;
+      (*dest)--;
+      (*source)--;
+    }
+    tmpString[*dest] = 0;
+  }
+}
+
+
 static void showShortIntegerLine(calcRegister_t showRegis, int16_t tag, int16_t startOffset, int16_t numLines, bool_t showName) {
   int16_t source, last, d, dest, prefixWidth;
   int16_t lastSlot = startOffset + (numLines - 1) * SHOWLineSize;
@@ -3359,6 +3359,7 @@ static void showShortIntegerLine(calcRegister_t showRegis, int16_t tag, int16_t 
     checkAndEat(&source, last, &dest);
   }
 }
+#endif //OPTION_SHOW
 
 
 
@@ -3370,7 +3371,7 @@ int16_t source = 0;
 #define SHOWTNY 2
 
 void fnC47Show(uint16_t fnShow_param) {
-#if !defined(SAVE_SPACE_DM42_9)
+#if defined(OPTION_SHOW)
     uint8_t savedDisplayFormat = displayFormat, savedDisplayFormatDigits = displayFormatDigits;
     uint64_t ssf0 = systemFlags0;
     uint64_t ssf1 = systemFlags1;
@@ -3948,7 +3949,7 @@ goBreak1:
 
 #else
     fnView(REGISTER_X); // Re-direct to use VIEW instead. No more accuracy though
-#endif // !SAVE_SPACE_DM42_9
+#endif // !OPTION_SHOW
 }
 
 void _view(uint16_t regist) {
@@ -3965,22 +3966,22 @@ void _view(uint16_t regist) {
 
 void fnView(uint16_t regist) {
   _view(regist);
-  #if defined(IR_PRINTING)
+  #if defined(OPTION_IR_PRINTING)
     printViewAview(ITM_VIEW, regist);
-  #endif //IR_PRINTING
+  #endif //OPTION_IR_PRINTING
 }
 
 void fnAview(uint16_t regist) {
   _view(regist);
-  #if defined(IR_PRINTING)
+  #if defined(OPTION_IR_PRINTING)
     printViewAview(ITM_AVIEW, regist);
-  #endif //IR_PRINTING
+  #endif //OPTION_IR_PRINTING
 }
 
 void fnPrompt(uint16_t regist) {
   _view(regist);
-  #if defined(IR_PRINTING)
+  #if defined(OPTION_IR_PRINTING)
     printInputPrompt(ITM_PROMPT, regist);
-  #endif //IR_PRINTING
+  #endif //OPTION_IR_PRINTING
   fnStopProgram(NOPARAM);
 }

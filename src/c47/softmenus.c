@@ -67,8 +67,8 @@ TO_QSPI const int16_t menu_DISP[]        = { ITM_FIX,                       ITM_
                                              ITM_NULL,                      ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_SETDFLT,
                                              ITM_NULL,                      ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL                        };
 
-#if !defined(SAVE_SPACE_DM42_24_PROFILES)
-  #if !defined(SAVE_SPACE_DM42_21_HP35)
+#if defined(OPTION_DEVPROFILES)
+  #if defined(OPTION_HP35)
     TO_QSPI const int16_t menu_Dev[]     = { ITM_SetHP35,                   ITM_SetC47,                 ITM_SetJM,                ITM_SetRJ,             ITM_NULL,                    ITM_NULL                        };
   #else
     TO_QSPI const int16_t menu_Dev[]     = { ITM_NULL,                      ITM_SetC47,                 ITM_SetJM,                ITM_SetRJ,             ITM_NULL,                    ITM_NULL                        };
@@ -266,7 +266,7 @@ TO_QSPI const int16_t menu_PARTS[]       = { ITM_IP,                        ITM_
 /*                                          <---------------------------------------------------------------------- 6 f shifted functions ------------------------------------------------------------------------->  */
 /*                                          <---------------------------------------------------------------------- 6 g shifted functions ------------------------------------------------------------------------->  */
 
-#if !defined(SAVE_SPACE_DM42_15)
+#if defined(OPTION_DISTRIBUTIONS)
   #define DDMENU    -MNU_DISTR
 #else
   #define DDMENU     ITM_NULL
@@ -2718,7 +2718,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_AMORT_NXT:
     #endif // OPTION_TVM_AMORT
 
-    #if defined(SAVE_SPACE_DM42_12ORTHO)
+    #if !defined(OPTION_ORTHO)
       case -MNU_ORTHOG:
       case ITM_HN     :
       case ITM_Lm     :
@@ -2727,16 +2727,16 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_Tn     :
       case ITM_Un     :
       case ITM_HNP    :
-    #endif // SAVE_SPACE_DM42_12ORTHO
+    #endif // OPTION_ORTHO
 
-    #if defined(SAVE_SPACE_DM42_20_TIMER)
+    #if !defined(OPTION_STOPWATCH)
       case ITM_TIMER  :
-    #endif // SAVE_SPACE_DM42_20_TIMER
+    #endif // OPTION_STOPWATCH
 
-    #if defined(SAVE_SPACE_DM42_12BESSEL)
+    #if !defined(OPTION_BESSEL)
       case ITM_JYX    :
       case ITM_YYX    :
-    #endif // SAVE_SPACE_DM42_12BESSEL
+    #endif // OPTION_BESSEL
 
     #if !defined(OPTION_PRIME)
       case ITM_NEXTP  :
@@ -2781,7 +2781,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_M_SQRT:
     #endif // !OPTION_EIGEN
 
-    #if defined(SAVE_SPACE_DM42_12ELLIP)
+    #if !defined(OPTION_ELLIPTIC)
       case -MNU_ELLIPT:
       case ITM_sn:
       case ITM_cn:
@@ -2798,7 +2798,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_THtoM:
       case ITM_MtoTH:
       case ITM_ELLIPSE:
-    #endif // SAVE_SPACE_DM42_12ELLIP
+    #endif // OPTION_ELLIPTIC
 
 
     #if !(defined(OPTION_VECTOR) || defined(OPTION_ELEC))
@@ -2858,7 +2858,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
     #endif // !OPTION_XFN_1000
 
 
-    #if defined(SAVE_SPACE_DM42_17B)    // cauchy, chi, expo, logis, t, weibull
+    #if !defined(OPTION_DIST_2)    // cauchy, chi, expo, logis, t, weibull
       case  -MNU_CAUCH   :
       case  ITM_CAUCHP  :
       case  ITM_CAUCH   :
@@ -2889,10 +2889,10 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case  ITM_TX      :
       case  ITM_TUX     :
       case  ITM_TM1P    :
-    #endif // SAVE_SPACE_DM42_17B
+    #endif // !OPTION_DIST_2
 
 
-    #if defined(SAVE_SPACE_DM42_17C)   // Gev, Pareto, Uniform, Discr Uniform
+    #if !defined(OPTION_DIST_3)   // Gev, Pareto, Uniform, Discr Uniform
       case -MNU_GEV       :
       case ITM_GEVP      :
       case ITM_GEV       :
@@ -2917,9 +2917,9 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_DISUNIFORML:
       case ITM_DISUNIFORMU:
       case ITM_DISUNIFORMI:
-    #endif // SAVE_SPACE_DM42_17C
+    #endif // !OPTION_DIST_3
 
-    #if defined(SAVE_SPACE_DM42_16)
+    #if !defined(OPTION_DIST_NORMAL)
       case -MNU_NORML :
       case ITM_NORMLP :      case ITM_NORML  :      case ITM_NORMLU :      case ITM_NORMLM1:
       case ITM_LGNRMP :      case ITM_LGNRM  :      case ITM_LGNRMU :      case ITM_LGNRMM1:
@@ -2928,9 +2928,9 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_STDNORML  :
       case ITM_STDNORMLU :
       case ITM_STDNORMLM1:
-    #endif // SAVE_SPACE_DM42_16
+    #endif // !OPTION_DIST_NORMAL
 
-    #if defined(SAVE_SPACE_DM42_17)
+    #if !defined(OPTION_DIST_1)
       case -MNU_F: case -MNU_BINOM: case -MNU_HYPER: case -MNU_POISS: case -MNU_GEOM:
       case ITM_FPX:      case ITM_FX:      case ITM_FUX:      case ITM_FM1P:
       case ITM_BINOMP:   case ITM_BINOM:   case ITM_BINOMU:   case ITM_BINOMM1:
@@ -2938,7 +2938,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_HYPERP:   case ITM_HYPER:   case ITM_HYPERU:   case ITM_HYPERM1:
       case ITM_POISSP:   case ITM_POISS:   case ITM_POISSU:   case ITM_POISSM1:
       case ITM_GEOMP:    case ITM_GEOM:    case ITM_GEOMU:    case ITM_GEOMM1 :
-    #endif // SAVE_SPACE_DM42_17
+    #endif // !OPTION_DIST_1
 
     case 9999: return true;  break;
     default:   return false; break;
@@ -3890,11 +3890,11 @@ void showSoftmenuCurrentPart(void) {
   void showSoftmenu(int16_t id) {
     int16_t m;
 
-    #if defined(IR_PRINTING)
+    #if defined(OPTION_IR_PRINTING)
       if(!tam.mode) {
         printTrace(id, NOPARAM);
       }
-    #endif //IR_PRINTING
+    #endif //OPTION_IR_PRINTING
 
     #if defined(PC_BUILD)
       char tmp[200];
