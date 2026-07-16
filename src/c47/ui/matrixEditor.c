@@ -361,17 +361,22 @@ static void setRegisterAsInt(bool_t asArrayPointer, int16_t toStore, calcRegiste
 }
 
 // A shadow row/column pair, for code that drives the index itself rather than reading the user's.
-// The vector functions park their walking index here while they cross a matrix. They used to write
-// the user's I and J and put them back afterwards, through an int16_t backup that could not carry a
-// register: I=0.35 came back as -1, I=99999 as -31074, and a complex 3+ix4 as the long integer -1.
+// Two things need it. The vector functions park their walking index here while they cross a matrix,
+// and the Matrix Editor keeps its cursor here for as long as it is open. Both used to write the
+// user's I and J: the vector functions put them back afterwards, through an int16_t backup that
+// could not carry a register (I=0.35 came back as -1, I=99999 as -31074, a complex 3+ix4 as the
+// long integer -1), and the editor did not put them back at all.
 //
 // While the shadow is closed the accessors address the real registers, so INDEX, STOIJ, RCLIJ and
-// storing to I or J drive the matrix index exactly as before.
+// storing to I or J drive the matrix index exactly as before. Code that reads REGISTER_I/J without
+// going through these accessors -- softmenus.c and items.c rendering the I+/J+ labels, screen.c
+// filling lastI/lastJ -- would report the user's registers rather than the cursor if it ever ran
+// while the editor is open. It cannot today: menu_M_EDIT carries no I+/J+.
 static int16_t shadowI, shadowJ; // 0-based, i.e. what asArrayPointer=true reports
-static bool_t  ijShadowActive;
+static bool_t  ijShadowActive;   // for the vector functions; the editor is spotted by its calcMode
 
 static bool_t ijIsShadowed(void) {
-  return ijShadowActive;
+  return calcMode == CM_MIM || ijShadowActive;
 }
 
 static void beginShadowedIJ(void) {
