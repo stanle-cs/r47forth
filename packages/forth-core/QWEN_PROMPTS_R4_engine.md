@@ -7,6 +7,16 @@ DESIGN.md.
 **How to use:** paste the PREAMBLE, then one task block, into a fresh Qwen
 session. Do not run tasks out of order.
 
+**Scope after the R4 architecture interview:** the owner has resolved the
+future B/C/D, lifetime, scoping, restore, RPN-decoder, and capture-mode design
+questions in `FOR_THE_ARCHITECT_R4.md`. None of those decisions changes these
+four bounded current-engine fixes. Do not implement any of that future work from
+this file. It still needs separate prompts with traced native behavior, bounded
+file slices, reachable tests, old-contract migrations, and executed RED
+mutations. In particular, do not add `FTOK_XEQN`, parameterised items,
+`RECURSE`, local scopes, a reset flag, a dynamic scan registry, full body
+validation, or keyboard/capture changes while running R4-1 through R4-4.
+
 ---
 
 ## PREAMBLE (paste at the top of every task)

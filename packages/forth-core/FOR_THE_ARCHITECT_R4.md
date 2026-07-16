@@ -2,11 +2,16 @@
 
 ## Bottom line
 
-Do not hand B, C, or D to an implementer yet.
+The R4 decision interview is complete. B, C, and D now have an architectural
+direction, recorded below. The existing four Qwen tasks remain intentionally
+limited to defects in the engine as it stands; the accepted future work still
+needs new, independently mutation-verified implementation prompts before it is
+given to Qwen.
 
 The existing engine has four bounded implementation defects; they are specified
-as executable Qwen tasks in `QWEN_PROMPTS_R4_engine.md`. The larger result is
-that the unwritten series do not yet form one implementable contract:
+as executable Qwen tasks in `QWEN_PROMPTS_R4_engine.md`. The original review
+found these contradictions in the unwritten series; the accepted architecture
+below resolves their product-level choices:
 
 - B can invalidate the dictionary while `forthInner` is still executing from
   it.
@@ -24,7 +29,158 @@ I executed eight temporary regression probes through the sanctioned gate. All
 eight went red for the predicted reason. I then removed every probe with an
 inverse patch. The evidence is recorded below; no production fix was made.
 
-## Priority 0 — decisions required before B
+## Accepted R4 architecture
+
+This section is normative for the findings later in this memo. It records the
+owner's answers; it does not claim that the current code implements them. No R4
+product decision remains open. Details which can be derived by tracing native
+RPN behavior are implementation research, not new product questions.
+
+### Execution lifetime and invalidation
+
+1. A C47 program started from an active Forth interpreter frame is nested in
+   that active Forth generation. It must not clear or replace the dictionary
+   from which the suspended frame is executing. A pending top-level reset waits
+   until no active Forth frame can be invalidated.
+2. Replace correctness based on equality of two wrapping 16-bit generation
+   counters with a Forth-private pending-reset event/flag. A true top-level RPN
+   run marks it; the first safe Forth entry consumes it. A nested RPN launch
+   from active Forth does not start a new Forth generation. A counter may remain
+   for diagnostics, but not as the truth predicate.
+3. Every PEM single-step is also a fresh Forth generation. The current hook
+   excludes `singleStep`; that exclusion must change for the Forth-private
+   invalidation signal.
+4. This does not alter RPN mode. RPN keeps its existing run/step state and has
+   no Forth dictionary to clear. The new flag is observed only on entry to
+   Forth, and the active-Forth guard only distinguishes a nested RPN call made
+   by Forth from a genuine top-level RPN start. That is an extension of RPN's
+   existing execution contexts, not a new RPN unwind model.
+5. Ordinary outer-interpretation re-entry while a colon definition is open is
+   not a supported user path today. Add no user-visible prohibition or flash
+   cost now. Document the internal precondition and revisit it only if a future
+   `EVALUATE`-like or immediate source primitive makes the path reachable. This
+   is unrelated to runtime recursion.
+
+### Vocabulary, XEQ, and scopes
+
+1. Bare Forth source retains §4.1's order: primitive → same-scope colon →
+   number → calculator item → RPN label. Stable primitive, colon, and item ids
+   are baked into compact tokens. A named RPN label call uses `FTOK_XEQN` because
+   label ids can renumber after an edit.
+2. Forth has an explicit `XEQ 'name'` source form. It first requests the native
+   RPN label meaning of the quoted name; if no label exists, it resolves an
+   ordinary callable Forth target: primitive → same-scope colon → calculator
+   item. A number is not callable. Interpretation and compilation must share
+   that rule; compiled label calls use `FTOK_XEQN`.
+3. Runtime name storage is not a label-only principle. Named RPN parameters
+   whose native ids can change also retain their canonical quoted names and use
+   native RPN resolution/create/error behavior at execution. Stable target ids
+   remain early-bound.
+4. Forth-to-RPN label XEQ must follow existing RPN XEQ behavior exactly for
+   program-running state, return, pause/stop, and errors. XEQ is the sole RPN
+   control-flow bridge admitted in Forth. GTO, RTN, STOP, BACK, SKIP, CASE, and
+   other RPN control/declarative program steps are rejected during Forth
+   parsing/compilation with `ERROR_OPERATION_UNDEFINED`; no token is emitted.
+   Restored dictionaries must reject such encodings too.
+5. **Derived consequence, not a new decision:** RPN-side XEQ keeps its
+   established native resolution first. Only after the native label/item path
+   fails may it prepare the current program's Forth scope and resolve a colon
+   there. Interactive RPN uses the interactive Forth scope. It never searches
+   another program's Forth words.
+6. Colon definitions are local to their owning RPN program. Nested entry selects
+   the callee's local scope and return restores the caller's scope. Definitions
+   may coexist in one managed arena/generation, and already-compiled colon calls
+   remain valid, but a name lookup cannot see a different owner's definitions.
+   Primitives, calculator items, and native RPN labels retain their established
+   global visibility.
+7. Interactive definitions occupy one reserved interactive-local scope. A
+   top-level RPN generation reset clears that scope too. There is no global
+   Forth-word declaration in this series; global Forth words are explicitly
+   deferred. The current single global colon chain does **not** yet honor this
+   accepted local-scope rule.
+8. Add the standard compile-only immediate word `RECURSE`. Keep the definition
+   under construction smudged until `;`; `RECURSE` emits a call to that current
+   definition without making its name generally visible. Thus recursive words
+   are supported without changing normal lookup semantics.
+
+### Parameterised calculator items
+
+1. Series C covers all native RPN parameter types used by eligible non-flow
+   items, not only `PTP_REGISTER`. Item eligibility still excludes the
+   control/declarative operations listed above, with XEQ handled specially.
+   Forth uses operation-first canonical RPN display spelling (`STO 05`, not
+   stack-first `5 STO`) and invents no aliases. Quoted named parameters, for
+   example `STO 'RATE'`, are parsed as source text; they do not open a nested
+   alpha UI.
+2. Parameter syntax and execution must reuse a factored, bounded native RPN
+   semantic decoder. Add a Forth textual front end; do not fabricate a program
+   step, prime `tam`/catalog state, or call `executeOneStep` as a simulation.
+   Both native step execution and `FTOK_C47` should feed the same parameter
+   decoder and end at `reallyRunFunction`, so Forth cannot drift from RPN
+   register conversion, label/name handling, or errors.
+3. The upstream scan found no existing pure API at that boundary:
+   `_executeOp` is file-static in `programming/lblGtoXeq.c`;
+   `executeOneStep` owns program traversal/state; `decodeOp` is display-only;
+   and the current string-name reader is bounded by the live program buffer.
+   Factoring the clean boundary may add upstream override files; that cost is
+   accepted. A generalized reader must take explicit start/end bounds.
+4. A typed item with a missing or malformed parameter errors atomically and
+   opens no UI. Existing RPN editor catalogs remain unchanged. Exact accepted
+   spellings, ranges, create semantics, and errors come from tracing the native
+   RPN type paths; Qwen must not infer them from examples.
+
+### Entry validation, restore safety, and ownership
+
+1. Series D is lexical and structural validation on commit, not full name
+   resolution. Syntactically valid unresolved names remain legal so forward
+   program references continue to work. Final resolution remains the job of
+   pre-scan/run.
+2. Check-only validation executes nothing and mutates no stack, catalog,
+   program, or dictionary allocation. Malformed numbers, quotes, parameter
+   syntax, or colon structure reject the commit atomically and leave the prior
+   step unchanged.
+3. Replace the fixed eight-program pre-scan registry with compact, dynamic,
+   capacity-bounded tracking in the managed dictionary arena. It fails only at
+   ordinary dictionary capacity, not at an arbitrary number of programs. Any
+   implementation must report the arena high-water mark.
+4. Validate a restored dictionary fully once instead of adding bounds checks to
+   every token dispatch. Validate header/name extents, body and cell alignment,
+   token and operand extents, colon indices, XEQN length/padding, reserved token
+   ranges, legal control targets, and termination. If invalid, clear only the
+   Forth dictionary, preserve the owner's RPN save, and rebuild program
+   definitions from authoritative source. A modest flash increase is accepted
+   when it materially simplifies this validator; RAM remains the binding cost.
+5. `forthOwningProgramStart` must explicitly compute the greatest program start
+   not greater than the queried pointer. It must not depend on undocumented
+   `programList` ordering. This mirrors the firmware's existing explicit
+   min/max practice.
+
+### Forth capture is a future PEM-shaped submode
+
+1. Forth capture becomes a distinct PEM-style submode, not a wrapper around the
+   alpha state machine. For keys, catalogs, parameter entry, cancel, cursor,
+   softmenus, and alpha transitions it follows the real PEM paths. The sole
+   semantic difference is the sink: PEM inserts an RPN instruction; Forth
+   capture appends canonical source text or commits a Forth source step.
+2. Its source buffer is a managed allocation held only while Forth capture is
+   active. Nested ordinary alpha capture suspends and later restores the Forth
+   source/cursor/insertion/softmenu state. Use a relocation-safe handle rather
+   than retaining a raw pointer across allocator calls. Success appends the
+   canonical result; cancel/error restores the exact prior buffer; the outer
+   commit/cancel releases it.
+3. These UI choices are accepted but are outside the R4 engine prompt set. A
+   later keyboard/PEM audit must trace the reachable native paths and supply
+   hardware-derived tests. Current physical entry of every named-register glyph
+   remains unverified; this memo does not turn that hypothesis into a fact.
+
+### Encoding decisions which are already closed
+
+`FTOK_XEQN` is `0x7F05`; `0x7F06..0x7FFF` stays reserved. For a name length
+`len`, `inline = 1 + len`, `padded = (inline + 1) & ~1`, and the complete token
+uses `2 + padded` bytes. The pad exists only for even `len`. This allocation is
+consistent with the current token map.
+
+## Findings which the accepted B decisions resolve
 
 ### B1. `FTOK_XEQN` can free the body that is currently executing
 
@@ -57,18 +213,10 @@ reset code; it is not a claim that the current build already executes XEQN.
 **Cost to the owner.** A compiled word calling an ordinary keystroke program can
 reboot or run wrong tokens if that program itself contains a Forth step.
 
-**Decision required.** Pick a generation/lifetime rule before implementing
-XEQN. Plausible policies have different semantics and RAM/flash costs:
-
-- retain old dictionary generations until every active inner frame releases
-  them;
-- defer the reset until the outermost Forth frame unwinds (but then specify how
-  the nested Forth program step resolves its own definitions);
-- treat a program started from an active Forth frame as the same generation;
-- forbid this nesting with a defined error.
-
-Merely widening the generation counter does not address active-allocation
-invalidation.
+**Accepted ruling.** Treat a program started from an active Forth frame as part
+of the same active Forth generation and defer any pending top-level reset until
+it is safe. Never clear the allocation under a live inner frame. Merely widening
+the generation counter would not satisfy this lifetime rule.
 
 ### B2. The promised collision escape is unreachable
 
@@ -85,11 +233,11 @@ quoted label; the alleged escape hatch does not exist inside Forth.
 **Cost to the owner.** Once item-before-label precedence lands, a colliding C47
 program becomes uncallable from Forth even though the design promises otherwise.
 
-**Suggested correction.** Specify one explicit parsing word for XEQ-by-name:
-its exact token spelling, quote grammar, error codes, interpret action, compile
-encoding (`FTOK_XEQN`), and precedence. Or delete “in either state” and state
-that the escape exists only from the C47 side. Do not ask Qwen to infer it from
-`PTP_LABEL`.
+**Accepted ruling.** Add the explicit Forth source phrase `XEQ 'name'`. It asks
+for the native RPN label meaning first, then falls back to an ordinary callable
+Forth target under the accepted scope/order rule. Interpretation and compilation
+share the rule; a compiled label target uses `FTOK_XEQN`. This is parser syntax,
+not generic `PTP_LABEL` item handling.
 
 ### B3. Factoring `forthFindItem` changes a current reverse-lookup contract
 
@@ -110,12 +258,12 @@ the C47-side XEQ resolver accepts. Widening the helper instead makes the §4.1
 “safety boundary” false and forces the outer interpreter to parse params before
 C has defined how.
 
-**Decision required.** Define two policies, either as two helpers or as one
-helper with an explicit supported-PTP mask. State separately:
-
-- which item statuses forward Forth source may resolve in B and C;
-- which item statuses reverse C47 `XEQ 'NAME'` may resolve;
-- what a parameterised item name means when reverse XEQ supplies no parameter.
+**Accepted ruling.** Do not make one unqualified helper silently serve both
+contracts. Forward Forth lookup admits the native parameter types implemented by
+Series C and requires the canonical parameter source to follow. RPN-side XEQ
+keeps its established native resolver first and adds only the current-scope
+colon fallback. A bare parameterised item with no parameter is an atomic syntax
+error; it does not open a catalog or manufacture a default.
 
 ### B4. The XEQN dispatch protocol contradicts itself
 
@@ -135,9 +283,13 @@ fully specified:
   inside that colon take continuation semantics even when no enclosing
   `runProgram` loop exists.
 
-**Suggested correction.** Publish the exact three-arm pseudocode, including the
-colon arm's `fromProgram` value and the error when runtime resolution finds
-nothing. Then reconcile every earlier “same protocol” sentence to that matrix.
+**Accepted ruling.** The label arm must use the native RPN XEQ path and inherit
+its program-running, return, pause/stop, and error behavior. Calculator-item
+dispatch continues through the shared native semantic decoder and
+`reallyRunFunction`. A colon call uses the current Forth execution context and
+same active generation; it must not synthesize `PGM_RUNNING`. The later
+implementation prompt must spell this as exact pseudocode after the native path
+has been traced.
 
 ### B5. XEQN's alignment prose contains incompatible arithmetic
 
@@ -167,7 +319,7 @@ colon calls at `0x7EFF`; `0x7F00..0x7F04` are existing extended tokens;
 a colon index from encoding as `0x7F00`. With the corrected length formula,
 XEQN inline data can remain cell-aligned.
 
-## Priority 0 — decisions required before C
+## Findings which the accepted C decisions resolve
 
 ### C1. The lookup filter excludes the feature
 
@@ -176,8 +328,10 @@ adds `PTP_REGISTER`, `PTP_NUMBER_8`, and `PTP_NUMBER_16`. Unless the lookup
 policy is explicitly widened by phase, `STO` never reaches the parser described
 for `STO 05`.
 
-Specify the supported PTP set per phase and keep it separate from the reverse
-resolver policy in B3.
+**Accepted ruling.** Series C supports every native RPN parameter type used by
+eligible non-flow items, using the operation-first canonical display spelling
+and a shared bounded semantic decoder. This forward-parser policy remains
+separate from RPN-side XEQ's native resolver contract.
 
 ### C2. Source forms are examples, not an implementable grammar
 
@@ -196,8 +350,10 @@ does not answer the decisions an implementer immediately faces:
   `PTP_LABEL` class.
 
 “Mirror the VM” specifies decoding after a byte already exists; it does not
-specify how source text produces that byte. Add exact parsing pseudocode and an
-error table before C is tasked.
+specify how source text produces that byte. The architectural choice is now
+closed: trace and accept the native RPN spelling, range, create, and error rules
+for every parameter type. A future C prompt must carry the resulting exact
+grammar and error table; Qwen must not fill them in from the examples.
 
 ### C3. The decoder delta is smaller than the phasing text says
 
@@ -207,11 +363,11 @@ widening for C is `PTP_REGISTER`; the larger missing work is forward lookup,
 source parsing, and emission.
 
 The proposed register layout itself is cell-consistent: one KS byte plus one
-zero pad, then convert and range-check before dispatch. Specify the exact error
-on a failed `regInRange` and require `regKStoC` to be evaluated once rather than
-twice in prose/pseudocode.
+zero pad, then convert and range-check before dispatch. The exact error on a
+failed `regInRange` is inherited from the traced native RPN path, and
+`regKStoC` must be evaluated once rather than twice in prose/pseudocode.
 
-## Priority 0 — D conflicts with the pre-scan contract
+## Findings which the accepted D decisions resolve
 
 ### D1. Per-line resolve-on-commit rejects supported forward references
 
@@ -248,19 +404,14 @@ label execution, and future item dispatch. Adding a boolean named `checkOnly`
 without specifying each branch invites exactly the simulation error this review
 was asked to prevent.
 
-**Decision required.** First decide whether D is:
+**Accepted ruling.** D is lexical and structural validation only. It validates
+token lengths, quotes, number and parameter grammar, and colon structure while
+allowing unresolved names. It executes nothing, allocates nothing, and mutates
+no live state. Failure rejects the tentative edit atomically and preserves the
+previous step. Whole-program pre-scan/run remains responsible for final
+resolution.
 
-- lexical validation only (token lengths, `:`/`;`, number grammar, parameter
-  grammar), allowing unresolved names until run time; or
-- semantic validation of the tentative whole owning program.
-
-For the second option, specify a transactional algorithm after tentative
-insertion: which definitions are provisionally visible, how all tails are
-checked, how dictionary scalars are rolled back, whether labels/items are
-resolved, and which errors block commit. It must not execute a primitive, item,
-colon body, or label and must not depend on the prior run generation.
-
-## Current-engine defects which need an architectural ruling
+## Current-engine findings with accepted rulings
 
 ### E1. The ninth scanned program is not a bounded exception
 
@@ -277,10 +428,11 @@ unbounded until RAM full.
 **Cost to the owner.** Re-running the ninth Forth-bearing program consumes
 dictionary RAM even when no program was edited.
 
-**Decision required.** Choose the overflow behavior under the RAM constraint:
-grow tracking, reject the ninth with a defined error, redesign tracking, or
-rebuild generations deterministically. Increasing `FORTH_SCAN_MAX` merely moves
-the cliff. No Qwen task was written because the tradeoff is architectural.
+**Accepted ruling.** Replace the fixed array with compact dynamic tracking in
+the managed dictionary arena. Capacity failure is ordinary dictionary
+exhaustion, never an arbitrary program-count cliff. Report the arena high-water
+mark in the implementation task. Increasing `FORTH_SCAN_MAX` merely moves the
+defect and is not the accepted fix.
 
 ### E2. The 16-bit generation comparison aliases after 65,536 bumps
 
@@ -294,8 +446,9 @@ falsely meant “current.”
 without sampling at a Forth step can reuse stale definitions and stale scanned
 program pointers.
 
-A 32-bit counter makes the case rarer and costs BSS but does not solve lifetime
-or B1. Define invalidation semantics, not only a larger integer.
+**Accepted ruling.** A 32-bit counter makes the case rarer and costs BSS but
+does not solve lifetime or B1. Use a Forth-private pending-reset event/flag plus
+an active-frame lifetime guard; any numeric counter is diagnostic only.
 
 ### E3. The outer definition snapshot does not prevent nested abort
 
@@ -312,10 +465,13 @@ dictionary mutation the nested abort already performed.
 with `openDef.open == 1` but `here/latest/count = 0/65535/0`: an apparently open
 definition whose dictionary entry had been erased.
 
-Natural current primitives do not create this path while compiling, so I have
-not classified it as a present keypad failure. B and future immediate/re-entrant
-words make the invariant relevant. Decide whether nested outer entry is rejected
-while a definition is open or receives a truly isolated dictionary transaction.
+**Accepted ruling.** Natural current primitives do not create this path while
+compiling, so I have not classified it as a present keypad failure. Do not spend
+production bytes on a user-visible restriction today. Document the internal
+precondition that a nested outer interpretation begins with no open definition,
+and revisit with a real isolated transaction only if a future
+`EVALUATE`-like/immediate source word makes the path reachable. Runtime recursion
+is separately supported by the standard compile-only immediate `RECURSE` word.
 
 ### E4. Restored token bodies are trusted more than the safety claim admits
 
@@ -325,20 +481,21 @@ targets, or a terminating EXIT. `forthInner` then reads tokens and LIT/ILIT data
 without comparing `ip` with `fdict.here` or an entry end.
 
 This is static evidence, not an executed OOB probe; I deliberately did not turn
-a routine review into an intentional invalid read. The current H5 comment says
-a corrupt backup must “never” leave the dictionary able to read out of bounds,
-which these checks cannot establish. Decide whether to weaken that claim,
-validate bodies once on restore, or add runtime bounds. The latter costs bytes
-on every production dispatch and needs per-body end information.
+a routine review into an intentional invalid read.
+
+**Accepted ruling.** Use one full restore-time validation, not per-token
+production bounds checks. An invalid Forth dictionary is cleared and rebuilt
+from preserved RPN program source. The validator must cover the extents and
+encodings listed in the accepted architecture above.
 
 ### E5. Owning-program lookup relies on an unstated ordering invariant
 
 `forthOwningProgramStart` claims to return the largest program start `<= ptr`,
 but assigns every qualifying entry and therefore returns the *last* qualifying
-entry. It is correct only if `programList` is sorted by address. The R4 reading
-budget excluded the upstream program-list builder, so I did not promote this to
-an implementation task or claim an observed failure. Either cite and validate
-the sorted invariant or compute the maximum explicitly.
+entry. It is correct only if `programList` is sorted by address.
+
+**Accepted ruling.** Compute the maximum explicitly, matching the firmware's
+existing min/max practice; do not rely on or prove list ordering.
 
 ## Bounded current-code fixes delegated to Qwen
 
@@ -354,7 +511,31 @@ These do not require a new design decision:
    left counts 1 then 2 across two failed touches.
 
 Each task in `QWEN_PROMPTS_R4_engine.md` contains the exact test, fix, and an
-executed mutation symptom. No task implements B, C, or D.
+executed mutation symptom. No current task implements B, C, D, scoping,
+generation redesign, `RECURSE`, or capture-mode work.
+
+## Boundary and order for future implementation prompts
+
+The accepted decisions are not permission to give Qwen an underspecified
+mega-task. New prompt work should be split and mutation-proved in this order:
+
+1. engine lifetime foundations: local owner scopes, pending-reset/active-frame
+   rules including PEM single-step, dynamic pre-scan tracking, explicit owning
+   maximum, `RECURSE`, and restore-time validation;
+2. the bounded shared RPN parameter/dispatch semantic core, after tracing every
+   supported native PTP path and its exact errors;
+3. vocabulary and XEQ parsing/emission/runtime dispatch, including `FTOK_XEQN`
+   and RPN-side current-scope colon fallback;
+4. the Series C textual parameter front end and token encodings;
+5. Series D lexical/structural commit validation and atomic old-step retention;
+6. a separate keyboard/PEM prompt set for the dedicated Forth capture submode.
+
+This order is dependency guidance, not a set of Qwen tasks. Each future task
+still needs bounded file slices, old-contract test migration, a reachable test
+path, and an actually executed RED mutation. Tasks touching the managed
+dictionary must report arena high-water. The owner-scope representation is an
+implementation choice only after RAM/flash measurements; it must not change the
+accepted visibility semantics. Global Forth words remain deferred.
 
 ## Wrong citations and stale “required change” claims in §§2–4
 
