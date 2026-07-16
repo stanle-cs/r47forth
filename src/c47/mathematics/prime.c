@@ -10,9 +10,12 @@
 #if !defined(OPTION_PRIME)
   void fnIsPrime      (uint16_t unusedButMandatoryParameter){;}
   void fnNextPrime    (uint16_t unusedButMandatoryParameter){;}
+#endif // !OPTION_PRIME
+#if !defined(OPTION_FACTOR)
   void fnPrimeFactors (uint16_t unusedButMandatoryParameter){;}
   void fnEvPFacts     (uint16_t unusedButMandatoryParameter){;}
-#else
+#endif // !OPTION_FACTOR
+#if defined(OPTION_PRIME)
 
 
 #define maximumPrime 308   //10^308
@@ -595,7 +598,7 @@ void calculateNextPrime(longInteger_t currentNumber, longInteger_t nextPrime) {
 }
 
 
-  #if defined(OPTION_PRIME)
+  #if defined(OPTION_FACTOR)
     static void _showProgress(const real34_t *ss, longInteger_t nextp) {
       real34_t rr;
       clearRegisterLine(REGISTER_Z, true, true);
@@ -616,12 +619,13 @@ void calculateNextPrime(longInteger_t currentNumber, longInteger_t nextPrime) {
 
       displayFormatDigits = savedDisplayFormatDigits;
     }
-  #endif // OPTION_PRIME
+  #endif // OPTION_FACTOR
 
 
 
 
 
+#if defined(OPTION_FACTOR)
 // *** This is used with the Euler sigma function
 void longIntegerSumPowers(longInteger_t base, longInteger_t exponent, uint32_t k, longInteger_t result) {
   longInteger_t count, sum, pwr, tmp, tmpbase;
@@ -2374,5 +2378,6 @@ if(instruction == FACTORS_RESET || (instruction == FACTORS_SETUP && self->iterat
   result.attempts = self->attempt;
   return result;
 }
+#endif // OPTION_FACTOR
 
 #endif // OPTION_PRIME

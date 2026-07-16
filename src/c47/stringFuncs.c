@@ -1151,6 +1151,7 @@ void fnAlphaIP(uint16_t regist) {
 }
 
 
+#if defined(OPTION_ASTRING)
 static uint16_t _getGlyphCode(char *ptrString) {
   uint16_t glyph;
 
@@ -1201,7 +1202,6 @@ static void _toUpperOrLowerCase(char *ptrString, bool_t toUpper) {
   }
 }
 
-#if defined(OPTION_ASTRING)
 void fnAlphaLower(uint16_t regist) {
   char *ptrString;
 

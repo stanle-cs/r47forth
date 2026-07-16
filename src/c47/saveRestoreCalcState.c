@@ -133,6 +133,7 @@ static calcRegister_t stringToRegisterNumber(const char *name) {
   return (calcRegister_t)toInt16(name + 1);
 }
 
+#if defined(OPTION_DATAFILE)
 // Build a register-name field for writing: the lettered short form "RX".."RW" for registers 100..125, otherwise "Rnnn".
 static void registerNumberToString(calcRegister_t regist, char *name) {
   if(regist >= FIRST_LETTERED_REGISTER && regist <= LAST_SPARE_REGISTER) {
@@ -142,6 +143,7 @@ static void registerNumberToString(calcRegister_t regist, char *name) {
     sprintf(name, "R%03" PRId16, (int16_t)regist);
   }
 }
+#endif // OPTION_DATAFILE
 
 //Utility to add angle and polar markers
 static void textTag(char *str, const uint8_t angle, const uint8_t polmode) {
