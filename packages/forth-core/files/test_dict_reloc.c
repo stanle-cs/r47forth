@@ -2549,6 +2549,43 @@ static int test_number_bad_3e(void)
   return 0;
 }
 
+/* test_number_bad_exponent_sign_position
+ * R4-1: the grammar is [eE][+-]?digit+ — a sign is legal only as the FIRST
+ * byte immediately after e/E, and only once. "1e2-3" has its '-' after the
+ * exponent digit '2', not immediately after 'e', so it must be rejected as
+ * an undefined word — not silently accepted as a number, and not silently
+ * truncating the line before the tail "7".
+ * Escaping mutation: restore the broad clause
+ * `(s[i] == '+' || s[i] == '-') && hasExp` — lastErrorCode stays ERROR_NONE. */
+static int test_number_bad_exponent_sign_position(void)
+{
+  forthDictClear();
+  lastErrorCode = ERROR_NONE;
+  errorMessage[0] = 0;
+  forthPushInt32(444);
+
+  forthOuterInterpret("1e2-3 7");
+
+  int fail = 0;
+  if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+    printf("    FAIL: lastErrorCode = %d, expected ERROR_FUNCTION_NOT_FOUND (%d)\n",
+           lastErrorCode, ERROR_FUNCTION_NOT_FOUND);
+    fail = 1;
+  }
+  if (strcmp(errorMessage, "1e2-3") != 0) {
+    printf("    FAIL: errorMessage = '%s', expected '1e2-3'\n", errorMessage);
+    fail = 1;
+  }
+  if (!x_is_longint(444)) {
+    printf("    FAIL: X changed — malformed token or tail '7' modified X\n");
+    fail = 1;
+  }
+  if (!fail) {
+    printf("    PASS: '1e2-3' rejected as undefined word, tail '7' not processed, X unchanged\n");
+  }
+  return fail;
+}
+
 /* Test: lone . is NOT a valid number (Axis 4 spec edge case) */
 static int test_number_bad_lone_dot(void)
 {
@@ -7000,6 +7037,9 @@ int forthDictSelfTest(void)
   forthDictClear();
   printf("  [DEBUG] running test_number_bad_3e...\n");
   fail |= test_number_bad_3e();
+  forthDictClear();
+  printf("  [DEBUG] running test_number_bad_exponent_sign_position...\n");
+  fail |= test_number_bad_exponent_sign_position();
   forthDictClear();
   printf("  [DEBUG] running test_number_bad_lone_dot...\n");
   fail |= test_number_bad_lone_dot();

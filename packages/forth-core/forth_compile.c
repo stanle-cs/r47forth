@@ -126,8 +126,14 @@ static forthNumType_t classifyNumber(const char *s) {
     } else if ((s[i] == 'e' || s[i] == 'E') && !hasExp) {
       hasExp = true;
       i++;
-    } else if ((s[i] == '+' || s[i] == '-') && hasExp) {
-      /* Sign immediately after e/E — valid per §3.3.5 */
+    } else if ((s[i] == '+' || s[i] == '-') && hasExp && expDigits == 0
+               && i > 0 && (s[i - 1] == 'e' || s[i - 1] == 'E')) {
+      /* R4-1: grammar is [eE][+-]?digit+ — a sign is legal ONLY as the first
+       * byte immediately after e/E, and only one. The old clause accepted a
+       * sign anywhere after an exponent marker (e.g. "1e2-3" tokenized as a
+       * valid number instead of being rejected as an undefined word).
+       * Probed: forthOuterInterpret("1e2-3 7") left lastErrorCode ==
+       * ERROR_NONE. */
       i++;
     } else {
       return FORTH_NUM_NONE;
