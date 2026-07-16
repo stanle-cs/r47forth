@@ -575,9 +575,6 @@ void fnStoreStack(uint16_t regist) {
 static void _fnStoreElement(bool_t stepForward);
 
 void fnStoreVElement(uint16_t ix) {
-  uint16_t matrixIndexBak = matrixIndex;
-  const int16_t iBak = getIRegisterAsInt(true);
-  const int16_t jBak = getJRegisterAsInt(true);
   real_t rx;
   uint16_t rows, cols;
   if(!getMatrixDims(REGISTER_Y, "In function fnStoreVElement:", &rows, &cols)) {
@@ -591,23 +588,22 @@ void fnStoreVElement(uint16_t ix) {
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
   }
+  matrixIndexState_t bak;
+  saveMatrixIndexState(&bak);
   setIRegisterAsInt(false, (ix-1) / cols+1);
   setJRegisterAsInt(false, (ix-1) % cols+1);
   matrixIndex = REGISTER_Y;
   _fnStoreElement(false);
-  setIRegisterAsInt(false, iBak);
-  setJRegisterAsInt(false, jBak);
-  matrixIndex = matrixIndexBak;
+  restoreMatrixIndexState(&bak);
 }
 
 void fnStoreVector(uint16_t regist) {
-  uint16_t matrixIndexBak = matrixIndex;
-  const int16_t iBak = getIRegisterAsInt(true);
-  const int16_t jBak = getJRegisterAsInt(true);
   uint16_t rows, cols;
   if(!getMatrixDims(REGISTER_X, "In function fnStoreVector:", &rows, &cols)) {
     return;
   }
+  matrixIndexState_t bak;
+  saveMatrixIndexState(&bak);
   copySourceRegisterToDestRegister(getStackTop(), TEMP_REGISTER_1);
   setSystemFlag(FLAG_ASLIFT);
   liftStack();
@@ -621,16 +617,14 @@ void fnStoreVector(uint16_t regist) {
       fnToReal(NOPARAM);
     }
     if(lastErrorCode != 0) {
-      return;
+      break;
     }
     _fnStoreElement(false);
     if(lastErrorCode != 0) {
-      return;
+      break;
     }
   }
-  setIRegisterAsInt(false, iBak);
-  setJRegisterAsInt(false, jBak);
-  matrixIndex = matrixIndexBak;
+  restoreMatrixIndexState(&bak);
   fnDrop(NOPARAM);
   copySourceRegisterToDestRegister(TEMP_REGISTER_1, getStackTop());
 }

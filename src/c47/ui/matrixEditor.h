@@ -83,6 +83,37 @@
   void     setIRegisterAsInt              (bool_t asArrayPointer, int16_t toStore);
   void     setJRegisterAsInt              (bool_t asArrayPointer, int16_t toStore);
 
+  /**
+   * Which matrix was indexed. Contents are opaque: saveMatrixIndexState() fills
+   * it and restoreMatrixIndexState() puts it back.
+   */
+  typedef struct {
+    uint16_t matrixIndex;
+  } matrixIndexState_t;
+
+  /**
+   * Opens a scratch index for a function that walks a matrix itself.
+   *
+   * Remembers which matrix was indexed, and diverts I and J to a shadow so the
+   * walk cannot touch the user's registers -- they keep their value and their
+   * type, whatever those are.
+   *
+   * Pair with restoreMatrixIndexState() and route EVERY exit through it: while
+   * the shadow is open, reads of I and J see the walking index rather than the
+   * user's. Call this only once the operation cannot fail, i.e. after the
+   * argument checks, so an early return cannot leave the shadow open.
+   *
+   * \param[out] state
+   */
+  void     saveMatrixIndexState           (matrixIndexState_t *state);
+
+  /**
+   * Closes the scratch index opened by saveMatrixIndexState().
+   *
+   * \param[in] state
+   */
+  void     restoreMatrixIndexState        (const matrixIndexState_t *state);
+
   bool_t   wrapIJ                         (uint16_t rows, uint16_t cols);
 
 //  void displayVectorAngle(const real34Matrix_t *matrix, int j, int rows, int cols, uint8_t *toBeAngle);

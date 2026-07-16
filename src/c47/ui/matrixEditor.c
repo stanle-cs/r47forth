@@ -360,25 +360,70 @@ static void setRegisterAsInt(bool_t asArrayPointer, int16_t toStore, calcRegiste
   longIntegerFree(tmp_lgInt);
 }
 
+// A shadow row/column pair, for code that drives the index itself rather than reading the user's.
+// The vector functions park their walking index here while they cross a matrix. They used to write
+// the user's I and J and put them back afterwards, through an int16_t backup that could not carry a
+// register: I=0.35 came back as -1, I=99999 as -31074, and a complex 3+ix4 as the long integer -1.
+//
+// While the shadow is closed the accessors address the real registers, so INDEX, STOIJ, RCLIJ and
+// storing to I or J drive the matrix index exactly as before.
+static int16_t shadowI, shadowJ; // 0-based, i.e. what asArrayPointer=true reports
+static bool_t  ijShadowActive;
+
+static bool_t ijIsShadowed(void) {
+  return ijShadowActive;
+}
+
+static void beginShadowedIJ(void) {
+  ijShadowActive = true;
+}
+
+static void endShadowedIJ(void) {
+  ijShadowActive = false;
+}
+
 //Row of Matrix
 int16_t getIRegisterAsInt(bool_t asArrayPointer) {
+  if(ijIsShadowed()) {
+    return asArrayPointer ? shadowI : shadowI + 1;
+  }
   return getRegisterAsInt(asArrayPointer, REGISTER_I);
 }
 
 //Col of Matrix
 int16_t getJRegisterAsInt(bool_t asArrayPointer) {
+  if(ijIsShadowed()) {
+    return asArrayPointer ? shadowJ : shadowJ + 1;
+  }
   return getRegisterAsInt(asArrayPointer, REGISTER_J);
-
 }
 
 //Row of Matrix
 void setIRegisterAsInt(bool_t asArrayPointer, int16_t toStore) {
+  if(ijIsShadowed()) {
+    shadowI = asArrayPointer ? toStore : toStore - 1;
+    return;
+  }
   setRegisterAsInt(asArrayPointer, toStore, REGISTER_I);
 }
 
 //ColOfMatrix
 void setJRegisterAsInt(bool_t asArrayPointer, int16_t toStore) {
+  if(ijIsShadowed()) {
+    shadowJ = asArrayPointer ? toStore : toStore - 1;
+    return;
+  }
   setRegisterAsInt(asArrayPointer, toStore, REGISTER_J);
+}
+
+void saveMatrixIndexState(matrixIndexState_t *state) {
+  state->matrixIndex = matrixIndex;
+  beginShadowedIJ(); // from here the walking index goes to the shadow; the user's I and J are not touched
+}
+
+void restoreMatrixIndexState(const matrixIndexState_t *state) {
+  endShadowedIJ();
+  matrixIndex = state->matrixIndex;
 }
 
 bool_t wrapIJ(uint16_t rows, uint16_t cols) {
