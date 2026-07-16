@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305fd9fc65b8 100644
+index a7a56a3e94203f6b85bcf1f837d17cd041078027..f497a7ab06019ca3a0c06b41ad49f6c1c7e2d6e5 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,7 @@
@@ -10,7 +10,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
  
  // Structure of the program memory.
  // In this example the RAM is 16384 blocks (from 0 to 16383) of 4 bytes = 65536 bytes.
-@@ -565,10 +566,25 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
+@@ -569,10 +570,25 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
        decodeOneStep(step);
        if(firstDisplayedStepNumber + line - lineOffset == currentStepNumber && !tam.mode) {
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -39,7 +39,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
            xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
            tmpString[2 + cursorInString    ] = STD_CURSOR[0];
            tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
-@@ -801,6 +817,19 @@ void pemAlpha(int16_t item) {
+@@ -805,6 +821,19 @@ void pemAlpha(int16_t item) {
        editCommand = true;
        item = aimFunc;
      }
@@ -59,7 +59,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
      else {
        aimBuffer[0] = 0;
        return;
-@@ -864,6 +893,15 @@ void pemAlpha(int16_t item) {
+@@ -868,6 +897,15 @@ void pemAlpha(int16_t item) {
          clearSystemFlag(FLAG_ALPHA);
          calcModeNormalGui();
          _closeAlphaMenus();
@@ -75,7 +75,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
          return;
        }
        else if(T_cursorPos == 0) {
-@@ -880,11 +918,17 @@ void pemAlpha(int16_t item) {
+@@ -884,11 +922,17 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_ENTER) {
@@ -98,7 +98,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
      }
      else if(item == ITM_USERMODE) {
        fnFlipFlag(FLAG_USER);
-@@ -966,6 +1010,16 @@ void pemAlpha(int16_t item) {
+@@ -970,6 +1014,16 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -115,7 +115,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
    aimBuffer[0] = 0;
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
-@@ -976,6 +1030,11 @@ void pemCloseAlphaInput(void) {
+@@ -980,6 +1034,11 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -127,7 +127,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
  }
  
  
-@@ -991,7 +1050,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -995,7 +1054,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -136,7 +136,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1363,6 +1422,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1367,6 +1426,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -174,7 +174,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1373,12 +1463,18 @@ void insertStepInProgram(const int16_t func) {
+@@ -1377,12 +1467,18 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -195,7 +195,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1397,6 +1493,43 @@ void insertStepInProgram(const int16_t func) {
+@@ -1404,6 +1500,43 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -239,7 +239,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1408,6 +1541,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1415,6 +1548,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -255,7 +255,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1490,6 +1632,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1497,6 +1639,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -279,7 +279,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..c2f34022ee520a4f09fc80846042305f
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1785,7 +1944,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1792,7 +1951,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

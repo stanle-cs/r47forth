@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/lblGtoXeq.c b/src/c47/programming/lblGtoXeq.c
-index 1f5053c874b29edadb8e1468652bd402ce93063b..ee7e7f44772f1c1dcba531257f61f434100c8bb1 100644
+index 88523f072b5ce0ee346b1d78ad1b2851913643dd..48115dde55092b4406b18976141e6e37e2ed5e0e 100644
 --- a/src/c47/programming/lblGtoXeq.c
 +++ b/src/c47/programming/lblGtoXeq.c
 @@ -7,6 +7,7 @@
@@ -10,7 +10,7 @@ index 1f5053c874b29edadb8e1468652bd402ce93063b..ee7e7f44772f1c1dcba531257f61f434
  
  // Drop stale interrupt keys at top-level program start (a leftover key prior to pgm run can trip us). 1 = on, 0 = off.
  #define CLEAR_KEYS_ON_PGM_START 0
-@@ -158,6 +159,7 @@ void fnGotoDot(uint16_t globalStepNumber) {
+@@ -165,6 +166,7 @@ void fnGotoDot(uint16_t globalStepNumber) {
  
  
  void fnExecute(uint16_t label) {
@@ -18,34 +18,56 @@ index 1f5053c874b29edadb8e1468652bd402ce93063b..ee7e7f44772f1c1dcba531257f61f434
    if(programRunStop == PGM_RUNNING) {
      subroutineLevelHeader_t *oldCurrentSubroutineLevelData = currentSubroutineLevelData;
      allSubroutineLevels.numberOfSubroutineLevels += 1;
-@@ -362,9 +364,23 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
+@@ -372,10 +374,46 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
        }
-       else if(opParam == STRING_LABEL_VARIABLE) {
+       else if((opParam == STRING_LABEL_VARIABLE) || (opParam == LOCAL_LABEL_VARIABLE)) {
          getStringLabelOrVariableName(paramAddress);
--        calcRegister_t label = findNamedLabel(tmpStringLabelOrVariableName);
+-        calcRegister_t label = findNamedLabel(tmpStringLabelOrVariableName,opParam);
 -        if(label != INVALID_VARIABLE || op == ITM_LBLQ) {
--          reallyRunFunction(op, label);
-+        uint16_t resolvedParam = (uint16_t)INVALID_VARIABLE;
-+        forthXEQType_t res = forthResolveXEQ(tmpStringLabelOrVariableName, &resolvedParam);
-+        bool_t forthFallbackOp = (op == ITM_XEQ || op == ITM_XEQP1);
-+        if (res == FORTH_XEQ_LABEL) {
-+          reallyRunFunction(op, resolvedParam);
-+        }
-+        else if (res == FORTH_XEQ_COLON && forthFallbackOp) {
-+          reallyRunFunction(ITM_FCALL, resolvedParam);
-+          if(op == ITM_XEQP1 && programRunStop == PGM_RUNNING && lastErrorCode == ERROR_NONE) {
-+            currentReturnLocalStep++;
++        /* Rebase to b8f79e486: upstream added named LOCAL labels, reusing
++         * this same opParam byte (STRING_LABEL_VARIABLE == GLOBAL_LABELS,
++         * LOCAL_LABEL_VARIABLE == LOCAL_LABELS) as the labelType selector —
++         * do the real, opParam-aware label search FIRST, exactly as
++         * upstream's fix does, so a step that specifically encodes a local
++         * name resolves against local labels, not silently against an
++         * unrelated global label/colon word/item of the same name.
++         * Forth's XEQ/XEQP1 colon+item fallback only applies when the step
++         * encoded a GLOBAL name (opParam == GLOBAL_LABELS): a step asking
++         * for a LOCAL label must fail as "not found" if no local label
++         * matches, never fall through to Forth vocabulary. */
++        calcRegister_t label = findNamedLabel(tmpStringLabelOrVariableName, opParam);
++        bool_t forthFallbackEligible = (opParam == GLOBAL_LABELS)
++                                     && (op == ITM_XEQ || op == ITM_XEQP1);
++        if (label != INVALID_VARIABLE) {
+           reallyRunFunction(op, label);
+         }
++        else if (forthFallbackEligible) {
++          uint16_t resolvedParam;
++          forthXEQType_t res = forthResolveXEQ(tmpStringLabelOrVariableName, &resolvedParam);
++          if (res == FORTH_XEQ_COLON) {
++            reallyRunFunction(ITM_FCALL, resolvedParam);
++            if(op == ITM_XEQP1 && programRunStop == PGM_RUNNING && lastErrorCode == ERROR_NONE) {
++              currentReturnLocalStep++;
++            }
 +          }
-+        }
-+        else if (res == FORTH_XEQ_ITEM && forthFallbackOp) {
-+          reallyRunFunction(resolvedParam, NOPARAM);
++          else if (res == FORTH_XEQ_ITEM) {
++            reallyRunFunction(resolvedParam, NOPARAM);
++          }
++          else {
++            displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
++            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
++              sprintf(errorMessage, "string '%s' is not a named label", tmpStringLabelOrVariableName);
++              moreInfoOnError("In function _executeOp:", errorMessage, NULL, NULL);
++            #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
++          }
 +        }
 +        else if (op == ITM_LBLQ) {
 +          reallyRunFunction(op, (uint16_t)INVALID_VARIABLE);
-         }
++        }
          else {
            displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
-@@ -841,6 +857,14 @@ int16_t executeOneStep(uint8_t *step) {
+           #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+@@ -851,6 +889,14 @@ int16_t executeOneStep(uint8_t *step) {
                fn42Append(NOPARAM);
              }
            }
@@ -60,7 +82,7 @@ index 1f5053c874b29edadb8e1468652bd402ce93063b..ee7e7f44772f1c1dcba531257f61f434
            else {  // REM
                    // just ignore it
            }
-@@ -877,6 +901,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
+@@ -887,6 +933,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
        clearKeyBuffer();
      }
    #endif
@@ -68,3 +90,12 @@ index 1f5053c874b29edadb8e1468652bd402ce93063b..ee7e7f44772f1c1dcba531257f61f434
    lastErrorCode = ERROR_NONE;
    hourGlassIconEnabled = true;
    programRunStop = PGM_RUNNING;
+@@ -1016,7 +1063,7 @@ void fnCheckLabel(uint16_t label) {
+   if(dynamicMenuItem >= 0) {
+     label = findNamedLabel(dynmenuGetLabel(dynamicMenuItem),ALL_LABELS);
+   }
+-  
++
+   // Local Label 00 to 99 and A to l
+   if(label <= LAST_LOCAL_LABEL) {
+     // Search for local label

@@ -1,5 +1,5 @@
 diff --git a/src/c47/config.c b/src/c47/config.c
-index fbe86b5611929deb161859c78db439dee7e0b662..813104418400619e1afc1a4a98d90106459e9cca 100644
+index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..1d4f60bf1d9c7be98fc2d15038319ab6fd65e2af 100644
 --- a/src/c47/config.c
 +++ b/src/c47/config.c
 @@ -2,6 +2,7 @@
@@ -10,7 +10,16 @@ index fbe86b5611929deb161859c78db439dee7e0b662..813104418400619e1afc1a4a98d90106
  
  //C47 defaults (used in both settings arrays)
  #define _gapl   ITM_SPACE_PUNCTUATION
-@@ -1934,6 +1935,29 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+@@ -697,7 +698,7 @@ void fnGetWordSize(uint16_t unusedButMandatoryParameter) {
+ 
+ void updateShortIntegerMasks(void) {
+   // Derive the word-size-dependent short-integer bit masks from the current shortIntegerWordSize. fnSetWordSize uses this when the size changes interactively;
+-  // code that assigns shortIntegerWordSize directly (state-file restore, which stores neither mask) must call it too, so that shortIntegerMask and 
++  // code that assigns shortIntegerWordSize directly (state-file restore, which stores neither mask) must call it too, so that shortIntegerMask and
+   // shortIntegerSignBit stay consistent with the word size.
+   if(shortIntegerWordSize == 64) {
+     shortIntegerMask    = -1;
+@@ -1950,6 +1951,29 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
  
      fnClearFlag(FLAG_USER);
      fnRefreshState();

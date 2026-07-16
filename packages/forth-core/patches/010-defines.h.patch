@@ -1,8 +1,8 @@
 diff --git a/src/c47/defines.h b/src/c47/defines.h
-index 52aef0d7c603b27c3c9cded032d2438f5abd4623..5b42a22f6e359c8ac6eba014929514675e6c22af 100644
+index ed231842bb47fe69aa7babe93bc67243dab21e00..ab85a537c21c9f0a69617b56b56f397e12d94187 100644
 --- a/src/c47/defines.h
 +++ b/src/c47/defines.h
-@@ -1426,7 +1426,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
+@@ -1435,7 +1435,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
  #define Y_POSITION_OF_REGISTER_Y_LINE             96
  #define Y_POSITION_OF_REGISTER_X_LINE            132
  

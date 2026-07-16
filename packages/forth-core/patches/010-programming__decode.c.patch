@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/decode.c b/src/c47/programming/decode.c
-index d3bbe54bf4301102586bd41128665988823664dd..946f9b5066830d8b6e3109d00ccbeab8329625b3 100644
+index c56fea944eed6247b872fce5b866f2480086e682..bd75669d621a9ec0200acf0b579bf53f10091a6f 100644
 --- a/src/c47/programming/decode.c
 +++ b/src/c47/programming/decode.c
 @@ -6,6 +6,7 @@

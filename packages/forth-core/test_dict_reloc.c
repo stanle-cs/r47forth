@@ -1431,7 +1431,7 @@ static int test_outer_nesting_tokenizer(void)
     return 1;
   }
 
-  calcRegister_t lbl = findNamedLabel("NLB");
+  calcRegister_t lbl = findNamedLabel("NLB", GLOBAL_LABELS);
   if (lbl == INVALID_VARIABLE) {
     printf("    FAIL: findNamedLabel(\"NLB\") returned INVALID_VARIABLE\n");
     cleanupTestProgram();
@@ -2652,28 +2652,52 @@ static int test_forth_step_ptp_rem(void)
 }
 
 /* COMMIT 2: P-1 — ITM_FORTH step sizing via findKey2ndParam (PTP_REM path).
- * Escaping mutation: reverting items.c PTP_REM back to PTP_NONE (sizes as 2 bytes). */
+ * Escaping mutation: reverting items.c PTP_REM back to PTP_NONE (sizes as 2 bytes).
+ *
+ * Rebase to b8f79e486: upstream's findKey2ndParam (nextStep.c) gained
+ * programBytesAvailable(address, count) bounds-checking — it now rejects any
+ * computed "next step" pointer that falls outside [beginOfProgramMemory,
+ * firstFreeProgramByte]. The original bare stack-local marker[]/source[]
+ * arrays here are outside that range by construction (they were never part
+ * of any real program), so upstream's new guard correctly returns NULL for
+ * them — the same "stack-local test fixture" defect class as this session's
+ * own R2-T2 fix (test_exec_step_halts_on_error), independently found and
+ * fixed upstream. Rebuilt via writeTestProgram so both steps live in real,
+ * registered program memory. */
 static int test_forth_step_sizing(void)
 {
-  uint8_t marker[] = {0x8B, 0x1A, 0xFD, 0x00};
-  uint8_t source[]  = {0x8B, 0x1A, 0xFD, 0x05, '3', ' ', 'S', 'Q', ' '};
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 0x00,                                    /* marker: 4 bytes */
+    0x8B, 0x1A, 0xFD, 0x05, '3', ' ', 'S', 'Q', ' ',            /* source: 9 bytes */
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  uint8_t *marker = beginOfProgramMemory;
+  uint8_t *source = beginOfProgramMemory + 4;
+  int fail = 0;
 
   uint8_t *next = findKey2ndParam(marker);
   if (next != marker + 4) {
     printf("    FAIL: marker step: next=%p, expected %p (buf+4)\n",
-    next, marker + 4);
-    return 1;
+    (void *)next, (void *)(marker + 4));
+    fail = 1;
   }
 
   next = findKey2ndParam(source);
   if (next != source + 9) {
     printf("    FAIL: source step: next=%p, expected %p (buf+9)\n",
-    next, source + 9);
-    return 1;
+    (void *)next, (void *)(source + 9));
+    fail = 1;
   }
 
-  printf("    PASS: ITM_FORTH step sizing correct (marker=4, source=9)\n");
-  return 0;
+  cleanupTestProgram();
+  if (!fail) {
+    printf("    PASS: ITM_FORTH step sizing correct (marker=4, source=9)\n");
+  }
+  return fail;
 }
 
 /* ---- COMMIT 3: Program-step, run-generation, name-by-index tests ---- */

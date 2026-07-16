@@ -371,7 +371,10 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
 
     /* ---- §4.1 step 4: C47 label (§3.3.6, C-1) ---- */
     {
-      calcRegister_t label = findNamedLabel(buf);
+      /* GLOBAL_LABELS (upstream rebase to b8f79e486): see forth_dict.c's
+       * forthResolveXEQ for the same note — Forth's bare-name label lookup
+       * has only ever meant global labels. */
+      calcRegister_t label = findNamedLabel(buf, GLOBAL_LABELS);
       if (label != INVALID_VARIABLE) {
          if (state == STATE_COMPILE) {
            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);

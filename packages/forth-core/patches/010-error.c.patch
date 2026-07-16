@@ -1,5 +1,5 @@
 diff --git a/src/c47/error.c b/src/c47/error.c
-index b71c56f2b78982d74f0d54bcc388032a5f37fefb..a65fdd0121a3084752fe38ff79504ae51dafbede 100644
+index 382c32553be6a8cdfe1d954145262ff68673ab8c..a9eb983476b511356aa4941c40c96c6778d03039 100644
 --- a/src/c47/error.c
 +++ b/src/c47/error.c
 @@ -285,6 +285,9 @@ void displayCalcErrorMessage(uint8_t errorCode, calcRegister_t errMessageRegiste

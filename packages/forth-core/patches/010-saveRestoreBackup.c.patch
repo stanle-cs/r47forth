@@ -1,5 +1,5 @@
 diff --git a/src/c47/saveRestoreBackup.c b/src/c47/saveRestoreBackup.c
-index 6f3405cb490938cf8bb20f97b85ea6ebc9ec26e0..e6c06297e72fada32e4fc2efe38d1a99ec9cf12f 100644
+index b86ac55c82f30de2ffd02e5b65928e626eebc6c8..60652703f897cb47a756b6870c32ad555852333b 100644
 --- a/src/c47/saveRestoreBackup.c
 +++ b/src/c47/saveRestoreBackup.c
 @@ -8,6 +8,7 @@
@@ -10,7 +10,7 @@ index 6f3405cb490938cf8bb20f97b85ea6ebc9ec26e0..e6c06297e72fada32e4fc2efe38d1a99
  
  // This is used for the backup.cfg simulator backup file
  // The variable backupVersion is used in the connection
-@@ -526,6 +527,13 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+@@ -525,6 +526,13 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
      ramPtr = TO_C47MEMPTR(programList);
      saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
  
@@ -24,7 +24,7 @@ index 6f3405cb490938cf8bb20f97b85ea6ebc9ec26e0..e6c06297e72fada32e4fc2efe38d1a99
      ramPtr = TO_C47MEMPTR(currentSubroutineLevelData);
      saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
  
-@@ -846,6 +854,18 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+@@ -851,6 +859,18 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
      restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
      programList = TO_PCMEMPTR(ramPtr);
  

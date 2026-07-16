@@ -12,7 +12,7 @@
 
 // This is used for the backup.cfg simulator backup file
 // The variable backupVersion is used in the connection
-#define BACKUP_VERSION                     1016     // Graph defaults changing from float to real
+#define BACKUP_VERSION                     1017     // FLAG_SBadm
 /*
 1004     // Replace Norm_Key_00_VAR by the structure Norm_Key_00;
 1005     // 2024-09-06 Remove superfluous reporting when old cfg file items are not found in new files
@@ -22,6 +22,7 @@
 1009     // Change matrix headers, add tag
 1010     // Change constant format in equation, adding a # prefix
 1011     // Added reserve variables UY, LY, UEST, LEST.
+1016     // Graph defaults changing from float to real
 */
 
 #define backupFileName (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -369,10 +370,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     saveStateValue(&displayStack,                   sizeof(displayStack),                                        "displayStack",                   "uint8");
     saveStateValue(&hexDigits,                      sizeof(hexDigits),                                           "hexDigits",                      "uint8");
     saveStateValue(&errorMessageRegisterLine,       sizeof(errorMessageRegisterLine),                            "errorMessageRegisterLine",       "int16");
-    saveStateValue(&shortIntegerMask,               sizeof(shortIntegerMask),                                    "shortIntegerMask",               "uint64");
-    saveStateValue(&shortIntegerSignBit,            sizeof(shortIntegerSignBit),                                 "shortIntegerSignBit",            "uint64");
     saveStateValue(&temporaryInformation,           sizeof(temporaryInformation),                                "temporaryInformation",           "uint8");
-    saveStateValue(&glyphNotFound,                  sizeof(glyphNotFound),                                       "glyphNotFound",                  "hexDump");
     saveStateValue(&funcOK,                         sizeof(funcOK),                                              "funcOK",                         "bool");
     saveStateValue(&screenChange,                   sizeof(screenChange),                                        "screenChange",                   "bool");
     saveStateValue(&exponentSignLocation,           sizeof(exponentSignLocation),                                "exponentSignLocation",           "int16");
@@ -454,6 +452,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     saveStateValue(&graphVariabl1,                  sizeof(graphVariabl1),                                       "graphVariabl1",                  "int16");
     saveStateValue(&plotStatMx,                     sizeof(plotStatMx),                                          "plotStatMx",                     "hexDump");
     saveStateValue(&drawHistogram,                  sizeof(drawHistogram),                                       "drawHistogram",                  "uint8");
+    saveStateValue(&plotStatScale,                  sizeof(plotStatScale),                                       "plotStatScale",                  "uint8");
     saveStateValue(&statMx,                         sizeof(statMx),                                              "statMx",                         "hexDump");
     saveStateValue(&lrSelectionHistobackup,         sizeof(lrSelectionHistobackup),                              "lrSelectionHistobackup",         "uint16");
     saveStateValue(&lrChosenHistobackup,            sizeof(lrChosenHistobackup),                                 "lrChosenHistobackup",            "uint16");
@@ -682,11 +681,17 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
 
     else if(!strcmp(valueType, "hexDump")) {
       uint32_t numberOfBytes = stringToUint32(valuePtr);
+      if(numberOfBytes > size) {
+        numberOfBytes = size;
+      }
       uint8_t hi, lo, *buf = (uint8_t *)buffer;
       uint8_t *v;
       for(uint32_t count=0; count < numberOfBytes; count++, buf++) {
         if(count % 32 == 0) {
           paramCurrent = paramCurrent->next;
+          if(paramCurrent == NULL) {
+            break;
+          }
           v = (uint8_t *)paramCurrent->param + 7;
         }
 
@@ -945,6 +950,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     restoreStateValue(&displayFormatDigits,            sizeof(displayFormatDigits),                                 "displayFormatDigits",            "uint8");
     restoreStateValue(&timeDisplayFormatDigits,        sizeof(timeDisplayFormatDigits),                             "timeDisplayFormatDigits",        "uint8");
     restoreStateValue(&shortIntegerWordSize,           sizeof(shortIntegerWordSize),                                "shortIntegerWordSize",           "uint8");
+    updateShortIntegerMasks();  // rederive shortIntegerMask and shortIntegerSignBit from the word size just restored; the file copies (older backups) are ignored
     restoreStateValue(&significantDigits,              sizeof(significantDigits),                                   "significantDigits",              "uint8");
     fractionDigits = 34;
     restoreStateValue(&fractionDigits,                 sizeof(fractionDigits),                                      "fractionDigits",                 "uint8");
@@ -994,14 +1000,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     restoreStateValue(&displayStack,                   sizeof(displayStack),                                        "displayStack",                   "uint8");
     restoreStateValue(&hexDigits,                      sizeof(hexDigits),                                           "hexDigits",                      "uint8");
     restoreStateValue(&errorMessageRegisterLine,       sizeof(errorMessageRegisterLine),                            "errorMessageRegisterLine",       "int16");
-    restoreStateValue(&shortIntegerMask,               sizeof(shortIntegerMask),                                    "shortIntegerMask",               "uint64");
-    restoreStateValue(&shortIntegerSignBit,            sizeof(shortIntegerSignBit),                                 "shortIntegerSignBit",            "uint64");
     restoreStateValue(&temporaryInformation,           sizeof(temporaryInformation),                                "temporaryInformation",           "uint8");
-
-    restoreStateValue(&glyphNotFound,                  sizeof(glyphNotFound),                                       "glyphNotFound",                  "hexDump");
-    glyphNotFound.data   = malloc(38);
-    xcopy(glyphNotFound.data, "\xff\xf8\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\x80\x08\xff\xf8", 38);
-
     restoreStateValue(&funcOK,                         sizeof(funcOK),                                              "funcOK",                         "bool");
     restoreStateValue(&screenChange,                   sizeof(screenChange),                                        "screenChange",                   "bool");
     restoreStateValue(&exponentSignLocation,           sizeof(exponentSignLocation),                                "exponentSignLocation",           "int16");
@@ -1121,6 +1120,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     }
     restoreStateValue(&plotStatMx,                     sizeof(plotStatMx),                                          "plotStatMx",                     "hexDump");
     restoreStateValue(&drawHistogram,                  sizeof(drawHistogram),                                       "drawHistogram",                  "uint8");
+    restoreStateValue(&plotStatScale,                  sizeof(plotStatScale),                                       "plotStatScale",                  "uint8");
     restoreStateValue(&statMx,                         sizeof(statMx),                                              "statMx",                         "hexDump");
     restoreStateValue(&lrSelectionHistobackup,         sizeof(lrSelectionHistobackup),                              "lrSelectionHistobackup",         "uint16");
     restoreStateValue(&lrChosenHistobackup,            sizeof(lrChosenHistobackup),                                 "lrChosenHistobackup",            "uint16");
@@ -1210,6 +1210,9 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     }
     if(backupVersion < 1015) {
       setSystemFlag(FLAG_SIGZEROS); //SIGZEROS is on per default
+    }
+    if(backupVersion < 1017) {
+      setSystemFlag(FLAG_SBadm); //the angular mode annunciator is on per default
     }
     // Ensure valid relations between FLAG_FRACT, FLAG_IRFRAC and FLAG_IRFRQ
     if(getSystemFlag(FLAG_FRACT)) {
@@ -1414,6 +1417,11 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
       free(paramCurrent);
       paramCurrent = paramHead;
     }
+
+    // Sanitise restored short integers: the backup restores raw register bytes, so a file written by an older build can
+    // carry values wider than the word size. The mask and sign bit were restored above; clamp every short-integer
+    // register (all classes, not just the global block) to the word size so stale bits cannot survive.
+    clampShortIntegerRegistersToWordSize();
 
     printf("End of calc's restoration\n");
     fflush(stdout);

@@ -1,5 +1,5 @@
 diff --git a/src/c47/items.h b/src/c47/items.h
-index 009d50ac961ac0af1eafb1130eec3dd5542d59e1..882cf7a21919d035c02ab435c3c2bf0280de6216 100644
+index 8c5589cf9860c41a8f77aa4310559c7945e17940..af1caf26043966437631d31964f843f18afb912c 100644
 --- a/src/c47/items.h
 +++ b/src/c47/items.h
 @@ -2948,6 +2948,9 @@

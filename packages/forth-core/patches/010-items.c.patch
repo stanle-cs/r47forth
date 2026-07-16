@@ -1,5 +1,5 @@
 diff --git a/src/c47/items.c b/src/c47/items.c
-index 7371067a7c65e46e0544b1ff742027cbb3acc7d8..17b73a6ace830bafb61534d18e9a69be0f1f93ba 100644
+index 5ad07b399a632c9a7ff2231da3259dbf04ef8e8e..3b855c8a42a33a2d61b5ca00a44d26bd6dddcc44 100644
 --- a/src/c47/items.c
 +++ b/src/c47/items.c
 @@ -2,6 +2,11 @@
@@ -14,12 +14,18 @@ index 7371067a7c65e46e0544b1ff742027cbb3acc7d8..17b73a6ace830bafb61534d18e9a69be
  
  void itemToBeCoded(uint16_t unusedButMandatoryParameter) {
    funcOK = false;
-@@ -666,15 +671,22 @@ bool_t isFunctionOldParam16(uint16_t func) {
+@@ -667,15 +672,28 @@ bool_t isFunctionOldParam16(uint16_t func) {
        if(func == ITM_XEQ && dynamicMenuItem > -1) {
          char *varCatalogItem = dynmenuGetLabel(dynamicMenuItem);
          if(strcmp(varCatalogItem, "XEQ") != 0) {
--          calcRegister_t label = findNamedLabel(varCatalogItem);
+-          calcRegister_t label = findNamedLabel(varCatalogItem, GLOBAL_LABELS);
 -          if(label != INVALID_VARIABLE) {
++          /* Rebase to b8f79e486: upstream's own fix here hardcodes
++           * GLOBAL_LABELS (a dynamic-menu selection has no encoded local/
++           * global marker byte — see the opParam-aware fix in lblGtoXeq.c
++           * for the case that does). forthResolveXEQ's label step already
++           * searches GLOBAL_LABELS only, so ours is a strict superset:
++           * same label behavior, plus the item/colon fallback. */
 +          uint16_t resolvedParam;
 +          forthXEQType_t res = forthResolveXEQ(varCatalogItem, &resolvedParam);
 +          if (res == FORTH_XEQ_LABEL) {
@@ -40,7 +46,7 @@ index 7371067a7c65e46e0544b1ff742027cbb3acc7d8..17b73a6ace830bafb61534d18e9a69be
            else {
              displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
              #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-@@ -1664,6 +1676,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
+@@ -1665,6 +1683,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
    void fnSaveXFNRegister          (uint16_t unusedButMandatoryParameter) {}
    void fnCheckLessEqualMinusZero  (uint16_t unusedButMandatoryParameter) {}
    void fnCheckGreaterEqualPlusZero(uint16_t unusedButMandatoryParameter) {}
@@ -49,7 +55,18 @@ index 7371067a7c65e46e0544b1ff742027cbb3acc7d8..17b73a6ace830bafb61534d18e9a69be
  
  
  #endif // GENERATE_CATALOGS || defined(GENERATE_TESTPGMS)
-@@ -1986,7 +2000,7 @@ TO_QSPI const item_t indexOfItems[] = {
+@@ -1764,8 +1784,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
+          // Helper macro for multiplicative unit conversions.
+          // Add two UNIT_CONV lines at the correct new item numbers, one per direction: Best to copy and edit two prior pairs to ensure spacing is standard.
+          // UNIT_CONV(constFactor<Xxx>, multiply, ...) converts the left unit to the right one
+-         // (result = X x factor); the partner line uses divide with the SAME factor. Both name fields hold only 
+-         //   the LEFT unit plus the arrow ("mph" STD_RIGHT_ARROW is a complete name) 
++         // (result = X x factor); the partner line uses divide with the SAME factor. Both name fields hold only
++         //   the LEFT unit plus the arrow ("mph" STD_RIGHT_ARROW is a complete name)
+          //   the right-hand side is rebuilt at runtime from the partner item, fullConvSoftMenuItemName-InclHPCONV().
+          // Next Step: CONV step 6/6 in src/c47/softmenus.c.
+ //==============================================================================
+@@ -1997,7 +2017,7 @@ TO_QSPI const item_t indexOfItems[] = {
  /*  210 */  { fnConstant,                      81,                          STD_mu STD_SUB_G,                              "c.gerver",                                    (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
  /*  211 */  { fnConstant,                      82,                          STD_tau,                                       "c.circle",                                    (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
  /*  212 */  { fnConstant,                      83,                          STD_pi,                                        "pi",                                          (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
@@ -58,7 +75,7 @@ index 7371067a7c65e46e0544b1ff742027cbb3acc7d8..17b73a6ace830bafb61534d18e9a69be
  /*  214 */  { itemToBeCoded,                   NOPARAM,                     "0214",                                        "0214",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
  /*  215 */  { itemToBeCoded,                   NOPARAM,                     "0215",                                        "0215",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
  /*  216 */  { itemToBeCoded,                   NOPARAM,                     "0216",                                        "0216",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
-@@ -4690,8 +4704,8 @@ TO_QSPI const item_t indexOfItems[] = {
+@@ -4699,8 +4719,8 @@ TO_QSPI const item_t indexOfItems[] = {
  /* 2839 */  UNIT_CONV(constFactorSlugKg      , divide           ,            "kg"                                 STD_RIGHT_ARROW                                                ,            "kg"                                 STD_RIGHT_ARROW                                                ),
  /* 2840 */  UNIT_CONV(constFactorSlinchKg    , multiply         ,            "lbf" STD_DOT "s" STD_SUP_2 "/in"    STD_RIGHT_ARROW                                                ,            "lbf" STD_DOT "s" STD_SUP_2 "/in"    STD_RIGHT_ARROW                                                ),
  /* 2841 */  UNIT_CONV(constFactorSlinchKg    , divide           ,            "kg"                                 STD_RIGHT_ARROW                                                ,            "kg"                                 STD_RIGHT_ARROW                                                ),

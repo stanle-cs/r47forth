@@ -419,8 +419,13 @@ bool forthDictNameByIndex(uint16_t idx, char *buf, int bufSize)
 
 forthXEQType_t forthResolveXEQ(const char *name, uint16_t *param)
 {
-  /* C47 label first (§4.2: preserve existing programs' behavior) */
-  calcRegister_t label = findNamedLabel(name);
+  /* C47 label first (§4.2: preserve existing programs' behavior).
+   * GLOBAL_LABELS (upstream rebase to b8f79e486): findNamedLabel gained a
+   * labelType selector when upstream added named LOCAL labels. Forth's
+   * label lookup has only ever meant global labels (R4 ruling: "native RPN
+   * labels retain their established global visibility") — GLOBAL_LABELS
+   * preserves that exactly and does not silently adopt local-named lookup. */
+  calcRegister_t label = findNamedLabel(name, GLOBAL_LABELS);
   if (label != INVALID_VARIABLE) {
     *param = (uint16_t)label;
     return FORTH_XEQ_LABEL;
