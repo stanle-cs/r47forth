@@ -55,10 +55,21 @@ uint8_t *forthOwningProgramStart(const uint8_t *ptr)
         return NULL;
     }
 
+    /* R4 accepted ruling (E5): compute the greatest qualifying start
+     * explicitly, matching forthNextProgramStart's own min-tracking below —
+     * do not rely on or prove programList ordering. Verified:
+     * scanLabelsAndPrograms (manage.c:102-129) walks program memory
+     * sequentially and appends in that order, so programList IS built
+     * address-ascending today — but that is the builder's behavior, not a
+     * documented contract this function may depend on. The old loop just
+     * overwrote progStart on every qualifying i (last-in-iteration-order,
+     * not largest), which happens to coincide with the max only because of
+     * that unstated invariant. */
     uint8_t *progStart = NULL;
     for (uint16_t i = 0; i < numberOfPrograms; i++) {
-        if (programList[i].instructionPointer <= ptr) {
-            progStart = programList[i].instructionPointer;
+        uint8_t *ip = programList[i].instructionPointer;
+        if (ip <= ptr && (progStart == NULL || ip > progStart)) {
+            progStart = ip;
         }
     }
     if (progStart) {

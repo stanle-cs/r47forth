@@ -3063,6 +3063,75 @@ static int test_owning_program_start_bounds(void)
   return fail;
 }
 
+/* test_owning_program_start_max_not_last
+ * R4 accepted ruling (E5): forthOwningProgramStart must compute the greatest
+ * qualifying programList entry explicitly, not rely on programList being
+ * address-ascending. scanLabelsAndPrograms happens to build it that way today
+ * (manage.c:102-129 walks program memory sequentially), so the bug is latent,
+ * not currently reachable — this proves the FUNCTION's own contract,
+ * independent of that unstated builder invariant.
+ * Two programs, then programList[0] and [1] are swapped by hand so array
+ * order no longer matches address order. A query inside the higher-address
+ * program (P2) must still resolve to P2, not fall back to P1 because P1 now
+ * appears LATER in the (deliberately reversed) array.
+ * Escaping mutation: revert to unconditional overwrite
+ * (`if (ip <= ptr) progStart = ip;`, no `ip > progStart` comparison) — with
+ * this swap, the query resolves to P1 (wrong) instead of P2. */
+static int test_owning_program_start_max_not_last(void)
+{
+  uint8_t prog[] = {
+    0x4C,                          /* P1: ITM_sin (RPN), 1 byte */
+    0x85, 0xB2,                    /* ITM_END separator */
+    0x4C,                          /* P2: ITM_sin (RPN), 1 byte */
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  int fail = 0;
+
+  if (numberOfPrograms < 2) {
+    printf("    FAIL (SKIP): numberOfPrograms = %u, expected >= 2\n", numberOfPrograms);
+    cleanupTestProgram();
+    return 1;
+  }
+
+  uint8_t *p1Start = beginOfProgramMemory;
+  uint8_t *p2Start = beginOfProgramMemory + 1 + 2;   /* past P1(1) + ITM_END(2) */
+
+  /* Locate P1's and P2's real programList entries, then swap array slots 0/1
+   * so index order no longer matches address order. */
+  int16_t idx1 = -1, idx2 = -1;
+  for (uint16_t i = 0; i < numberOfPrograms; i++) {
+    if (programList[i].instructionPointer == p1Start) idx1 = (int16_t)i;
+    if (programList[i].instructionPointer == p2Start) idx2 = (int16_t)i;
+  }
+  if (idx1 < 0 || idx2 < 0) {
+    printf("    FAIL (SKIP): could not locate both programs in programList\n");
+    cleanupTestProgram();
+    return 1;
+  }
+  programList_t tmp = programList[idx1];
+  programList[idx1] = programList[idx2];
+  programList[idx2] = tmp;
+
+  uint8_t *owner = forthOwningProgramStart(p2Start);
+
+  if (owner != p2Start) {
+    printf("    FAIL: query inside P2 resolved to %p, expected P2 start %p "
+           "(array order no longer matches address order)\n",
+           (void *)owner, (void *)p2Start);
+    fail = 1;
+  }
+
+  cleanupTestProgram();
+  if (!fail) {
+    printf("    PASS: owning-program lookup finds the address maximum, not the array-order last\n");
+  }
+  return fail;
+}
+
 /* test_prescan_generation_rearm
  * T2.5: After a generation bump, the pre-scan re-runs on first touch.
  * Must fail if forthRunGenCheckReset clears the dictionary but not
@@ -7091,6 +7160,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_owning_program_start_bounds...\n");
   fail |= test_owning_program_start_bounds();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_owning_program_start_max_not_last...\n");
+  fail |= test_owning_program_start_max_not_last();
   forthDictClear();
 
   printf("  [DEBUG] running test_prescan_generation_rearm...\n");

@@ -1,14 +1,14 @@
 {
   "base_commit": "79ce0898fffe97a3b1f37ba91d6bb9921cf10e06",
   "files": {
-    "forth_bridge.c": "571acab3b871c3e300a95b8b5430de022fe87aa37a31b2539c69bcaad37799d5",
+    "forth_bridge.c": "5d58c95b9e072dcd244a70ebe235def7015196ade23dc2d0dbe99c691492bc18",
     "forth_compile.c": "07bbb76f48cafd7bd575db611c5af4e195093fd302a4a1b0b636731fde782dd9",
     "forth_dict.c": "bb6f489cf72cbecb47e18bf29a5a21f803088a4148b84e581d7a7cfcd78dda85",
     "forth_dict.h": "188b2b07b70991d4ffc2bfa6e9f044664711e3ea43699efa3e4dbfabdbc75d6a",
     "forth_inner.c": "ed86428284e605674303f30646295c865bf903264ae02528fec88066f2a3c42c",
     "forth_prims.c": "1f7e208d184b1ec64bee21fd311a26b77df7f64c60f9f78da879606b2bb07a46",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "test_dict_reloc.c": "f023d88150b6cdeb85eb34a76f89537990a85fc00afe2448e6593482c66779bf"
+    "test_dict_reloc.c": "3f9cba7423931bb31ee68bc4e6eef04131dab894d3cb161a7e1cc0e0ea023f04"
   },
   "patches": {
     "010-config.c.patch": "eff3da120408e5f7d2be6ac0189000c2f3243dbe90a8474e0e01ce129deb8b27",
