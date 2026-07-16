@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index 825248860d8ee4fc1be0702c7008e2ed7a68e0e4..9419100567e7fa706da3ec35216dfb40e6ef75b2 100644
+index 825248860d8ee4fc1be0702c7008e2ed7a68e0e4..c2aa3c83b1e63da4bb21ec1587a43e26124bea35 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,6 +2,7 @@
@@ -64,13 +64,14 @@ index 825248860d8ee4fc1be0702c7008e2ed7a68e0e4..9419100567e7fa706da3ec35216dfb40
        case MNU_VAR: {
          dynamicMenuItem = firstItem + itemShift + fn;
          item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : MNU_DYNAMIC);
-@@ -434,7 +475,19 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -434,7 +475,20 @@ static void executeFunction(const char *data, int16_t item_);
      }
  
  
 -    static void _closeCatalog(void) {
 +    // forth-core: the self-test suite drives the real CAT->FORTH chain, which is
-+    // runFunction() immediately followed by _closeCatalog() (see :1213-1216).
++    // runFunction() immediately followed by _closeCatalog() (see the PEM catalog
++    // arm's runFunction(item) / _closeCatalog() pair below).
 +    // Both that call and executeFunction() are file-static, so a test can only
 +    // reach the teardown by hand-rolling a pop sequence — which diverges from
 +    // this function and silently tests the wrong thing. Export it for the suite
@@ -85,7 +86,7 @@ index 825248860d8ee4fc1be0702c7008e2ed7a68e0e4..9419100567e7fa706da3ec35216dfb40
        bool_t inCatalog = false;
        for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
          if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {
-@@ -957,6 +1010,14 @@ endReturnTrue:
+@@ -957,6 +1011,14 @@ endReturnTrue:
  
  
          lastKeyItemDetermined = item;
@@ -100,7 +101,7 @@ index 825248860d8ee4fc1be0702c7008e2ed7a68e0e4..9419100567e7fa706da3ec35216dfb40
        }
  
        // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
-@@ -2241,6 +2302,14 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2241,6 +2303,14 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
                }
              }
              else {

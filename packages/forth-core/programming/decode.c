@@ -832,7 +832,8 @@ static void decodeRem(uint8_t *literalAddress, uint16_t op) {
     if (len == 0) {
       uint8_t *opcodeStart = literalAddress - 2;
       if (opcodeStart == currentStep && getSystemFlag(FLAG_ALPHA) && tam.function == ITM_FORTH) {
-        /* Transient capture exception: render as empty source line (§9.5) */
+        tmpString[0] = 0;
+        return;
       } else {
         if (forthMarkerTurnsOn(opcodeStart)) {
           strcpy(tmpString, STD_RIGHT_DOUBLE_ANGLE "FORTH");

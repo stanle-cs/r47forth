@@ -476,7 +476,8 @@ bool_t forthPickerGuard(int16_t item)
 
 
     // forth-core: the self-test suite drives the real CAT->FORTH chain, which is
-    // runFunction() immediately followed by _closeCatalog() (see :1213-1216).
+    // runFunction() immediately followed by _closeCatalog() (see the PEM catalog
+    // arm's runFunction(item) / _closeCatalog() pair below).
     // Both that call and executeFunction() are file-static, so a test can only
     // reach the teardown by hand-rolling a pop sequence — which diverges from
     // this function and silently tests the wrong thing. Export it for the suite

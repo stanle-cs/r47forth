@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da084040308964232d57 100644
+index 1f503a7006261953de032d1bf13520b680071e38..b95d39a6ef9fae10da1d59c2c1425e790b22f952 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,7 @@
@@ -10,7 +10,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
  
  // Structure of the program memory.
  // In this example the RAM is 16384 blocks (from 0 to 16383) of 4 bytes = 65536 bytes.
-@@ -565,10 +566,14 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
+@@ -565,10 +566,25 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
        decodeOneStep(step);
        if(firstDisplayedStepNumber + line - lineOffset == currentStepNumber && !tam.mode) {
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -22,13 +22,24 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
            tmpString[4] = 0;
 -          int16_t cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
 -          tmpString[4] = tmpChar;
-+          cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
++          if(tam.function == ITM_FORTH) {
++            /* R3-1: a non-empty ITM_FORTH source step is decoded BARE
++             * (decodeRem, §8.5) — no two-byte opening quote to skip. The
++             * ordinary-literal/REM/42-string branches below all assume that
++             * quote and are followed by an unconditional +2; give Forth a
++             * zero-byte prefix so cursorInString+2 lands before the first
++             * real payload byte instead of on top of the second one. */
++            cursorInString = T_cursorPos - 2;
++          }
++          else {
++            cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
++          }
 +          tmpString[4] = tmpChar4;
 +          tmpString[6] = tmpChar6;
            xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
            tmpString[2 + cursorInString    ] = STD_CURSOR[0];
            tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
-@@ -801,6 +806,19 @@ void pemAlpha(int16_t item) {
+@@ -801,6 +817,19 @@ void pemAlpha(int16_t item) {
        editCommand = true;
        item = aimFunc;
      }
@@ -48,12 +59,13 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
      else {
        aimBuffer[0] = 0;
        return;
-@@ -864,6 +882,14 @@ void pemAlpha(int16_t item) {
+@@ -864,6 +893,15 @@ void pemAlpha(int16_t item) {
          clearSystemFlag(FLAG_ALPHA);
          calcModeNormalGui();
          _closeAlphaMenus();
 +        // Capture-abort reset: tam.function is set by the Forth capture open
-+        // paths (E1/E2, manage.c:1441/1463) and never reset by upstream on
++        // paths (the `func == ITM_AIM` and `func == ITM_FORTH` arms in
++        // `insertStepInProgram`) and never reset by upstream on
 +        // this backspace-abort exit. Idle value 0 matches the global `tam`'s
 +        // zero-initialized boot state [VERIFIED: src/c47/c47.c:190 — no
 +        // initializer, static storage] and the documented invariant that
@@ -63,7 +75,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
          return;
        }
        else if(T_cursorPos == 0) {
-@@ -880,11 +906,17 @@ void pemAlpha(int16_t item) {
+@@ -880,11 +918,17 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_ENTER) {
@@ -86,7 +98,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
      }
      else if(item == ITM_USERMODE) {
        fnFlipFlag(FLAG_USER);
-@@ -966,6 +998,16 @@ void pemAlpha(int16_t item) {
+@@ -966,6 +1010,16 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -96,26 +108,26 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
 +    calcModeNormalGui();
 +    _closeAlphaMenus();
 +    // Capture-close reset: see the identical rationale/citations at the
-+    // ITM_BACKSPACE abort branch above (manage.c:889-895).
++    // `ITM_BACKSPACE` empty-buffer arm above.
 +    tam.function = 0;
 +    return;
 +  }
    aimBuffer[0] = 0;
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
-@@ -976,6 +1018,11 @@ void pemCloseAlphaInput(void) {
+@@ -976,6 +1030,11 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
 +  // Capture-close reset: see the identical rationale/citations at the
-+  // ITM_BACKSPACE abort branch above (manage.c:889-895). This branch commits
++  // `ITM_BACKSPACE` empty-buffer arm above. This branch commits
 +  // REM/LITERAL/non-empty-FORTH source lines alike, so the reset must be
 +  // unconditional here too, not just gated on tam.function == ITM_FORTH.
 +  tam.function = 0;
  }
  
  
-@@ -991,7 +1038,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -991,7 +1050,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -124,7 +136,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1363,6 +1410,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1363,6 +1422,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -162,7 +174,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1373,12 +1451,18 @@ void insertStepInProgram(const int16_t func) {
+@@ -1373,12 +1463,18 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -183,7 +195,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1397,6 +1481,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1397,6 +1493,34 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -218,7 +230,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1408,6 +1520,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1408,6 +1532,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -234,7 +246,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1490,6 +1611,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1490,6 +1623,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -258,7 +270,7 @@ index 1f503a7006261953de032d1bf13520b680071e38..e32c9fa1a8f0e07dfdc4da0840403089
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1785,7 +1923,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1785,7 +1935,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

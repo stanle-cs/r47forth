@@ -571,7 +571,18 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
           int16_t cursorInString;
           tmpString[6] = 0;
           tmpString[4] = 0;
-          cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
+          if(tam.function == ITM_FORTH) {
+            /* R3-1: a non-empty ITM_FORTH source step is decoded BARE
+             * (decodeRem, §8.5) — no two-byte opening quote to skip. The
+             * ordinary-literal/REM/42-string branches below all assume that
+             * quote and are followed by an unconditional +2; give Forth a
+             * zero-byte prefix so cursorInString+2 lands before the first
+             * real payload byte instead of on top of the second one. */
+            cursorInString = T_cursorPos - 2;
+          }
+          else {
+            cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
+          }
           tmpString[4] = tmpChar4;
           tmpString[6] = tmpChar6;
           xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
@@ -883,7 +894,8 @@ void pemAlpha(int16_t item) {
         calcModeNormalGui();
         _closeAlphaMenus();
         // Capture-abort reset: tam.function is set by the Forth capture open
-        // paths (E1/E2, manage.c:1441/1463) and never reset by upstream on
+        // paths (the `func == ITM_AIM` and `func == ITM_FORTH` arms in
+        // `insertStepInProgram`) and never reset by upstream on
         // this backspace-abort exit. Idle value 0 matches the global `tam`'s
         // zero-initialized boot state [VERIFIED: src/c47/c47.c:190 — no
         // initializer, static storage] and the documented invariant that
@@ -1004,7 +1016,7 @@ void pemCloseAlphaInput(void) {
     calcModeNormalGui();
     _closeAlphaMenus();
     // Capture-close reset: see the identical rationale/citations at the
-    // ITM_BACKSPACE abort branch above (manage.c:889-895).
+    // `ITM_BACKSPACE` empty-buffer arm above.
     tam.function = 0;
     return;
   }
@@ -1019,7 +1031,7 @@ void pemCloseAlphaInput(void) {
   }
   _closeAlphaMenus();
   // Capture-close reset: see the identical rationale/citations at the
-  // ITM_BACKSPACE abort branch above (manage.c:889-895). This branch commits
+  // `ITM_BACKSPACE` empty-buffer arm above. This branch commits
   // REM/LITERAL/non-empty-FORTH source lines alike, so the reset must be
   // unconditional here too, not just gated on tam.function == ITM_FORTH.
   tam.function = 0;
