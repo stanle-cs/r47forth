@@ -873,6 +873,133 @@ static int test_runaway_guard(void)
   return 0;
 }
 
+/* ---- R1-2: truncated inline operands ----
+ * forthInner read the next token and every inline LIT/ILIT/branch/C47 operand
+ * directly from fdict.base with no proof the bytes lie below fdict.here. A
+ * restored word whose logical end falls immediately after one of these tokens
+ * could read beyond the dictionary instead of raising
+ * ERROR_INVALID_CORRUPTED_DATA. Each subcase below constructs a word whose
+ * fdict.here ends exactly where the guard should catch it — no forthDictEmit
+ * call for the operand, and no end_word (which would append T_EXIT and make
+ * the body well-formed again). forthDictFinishDef block-rounds fdict.here, so
+ * "immediately after" the token can carry up to BYTES_PER_BLOCK-1 zeroed
+ * padding bytes; the guard must still reject when fewer than the required
+ * byte count remain even with that rounding. */
+
+/* Body is empty: zero bytes after the header. The very first token fetch
+ * (2 bytes) has nothing to read.
+ * Escaping mutation: remove the main-loop boundedRead(ip, 2) call — the read
+ * proceeds on whatever garbage sits past fdict.here. */
+static int test_truncated_token_fetch(void)
+{
+  int fail = 0;
+  forthDictClear();
+
+  uint16_t w = begin_word("TRTOK", 5);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictFinishDef(w);   /* no tokens emitted at all */
+
+  lastErrorCode = ERROR_NONE;
+  forthPushInt32(444);
+  bool err = run_word("TRTOK");
+
+  if (!err || lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+    printf("    FAIL: empty body — lastErrorCode = %d, expected ERROR_INVALID_CORRUPTED_DATA (%d)\n",
+           lastErrorCode, ERROR_INVALID_CORRUPTED_DATA);
+    fail = 1;
+  }
+  if (!x_is_longint(444)) {
+    printf("    FAIL: sentinel X changed after truncated token fetch\n");
+    fail = 1;
+  }
+
+  forthDictClear();
+  if (!fail) printf("    PASS: empty body rejected before the first token fetch, sentinel held\n");
+  return fail;
+}
+
+/* Body is FTOK_ILIT with no following 4-byte int32.
+ * Escaping mutation: remove the boundedRead(ip, 4) call in case FTOK_ILIT —
+ * the memcpy reads 4 bytes past fdict.here. */
+static int test_truncated_inline_operand(void)
+{
+  int fail = 0;
+  forthDictClear();
+
+  uint16_t w = begin_word("TRILIT", 6);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit(T_ILIT);
+  forthDictFinishDef(w);   /* no int32 operand, no T_EXIT */
+
+  lastErrorCode = ERROR_NONE;
+  forthPushInt32(444);
+  bool err = run_word("TRILIT");
+
+  if (!err || lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+    printf("    FAIL: truncated FTOK_ILIT — lastErrorCode = %d, expected ERROR_INVALID_CORRUPTED_DATA (%d)\n",
+           lastErrorCode, ERROR_INVALID_CORRUPTED_DATA);
+    fail = 1;
+  }
+  if (!x_is_longint(444)) {
+    printf("    FAIL: sentinel X changed after truncated FTOK_ILIT\n");
+    fail = 1;
+  }
+
+  forthDictClear();
+  if (!fail) printf("    PASS: truncated FTOK_ILIT rejected, sentinel X held\n");
+  return fail;
+}
+
+/* Body is FTOK_C47 with no following 2-byte itemId.
+ * The two bytes past fdict.here are block-rounding padding inside the SAME
+ * allocated block, not unmapped memory — their content is whatever was last
+ * written there. Forced to 0 (ITM_NULL, PTP_NONE) here so the test is
+ * deterministic: an uncontrolled garbage value read as itemId=8712 on one
+ * run, which the EXISTING downstream `itemId >= LAST_ITEM` check also
+ * rejects with the same error code, masking whether the new guard ran at all.
+ *
+ * NOT independently mutation-isolable from the main fetch guard, verified by
+ * trying: with itemId forced to 0/PTP_NONE, removing ONLY this guard still
+ * passes, because the itemId "read" (of controlled, in-bounds-looking zero
+ * bytes) consumes no further param, ip lands exactly on the now-exhausted
+ * fdict.here, and the OUTER LOOP's own boundedRead(ip, 2) — unmutated, one
+ * iteration later — catches the truncation instead. That is defense in
+ * depth working as intended, not a gap: this guard and its neighbor protect
+ * the same hazard from two sides, and removing either alone still gets
+ * caught by the other for this specific body shape. The main-fetch guard's
+ * own dedicated test (test_truncated_token_fetch) already proves that guard
+ * in isolation. */
+static int test_truncated_c47_item_id(void)
+{
+  int fail = 0;
+  forthDictClear();
+
+  uint16_t w = begin_word("TRC47", 5);
+  if (w == FORTH_NULL) { printf("    SKIP: alloc failed\n"); return 0; }
+  forthDictEmit(T_C47);
+  forthDictFinishDef(w);   /* no itemId bytes, no T_EXIT */
+  fdict.base[fdict.here - 2] = 0;   /* force a within-bounds-looking itemId=0 */
+  fdict.base[fdict.here - 1] = 0;   /* (ITM_NULL, PTP_NONE) in the padding bytes */
+
+  lastErrorCode = ERROR_NONE;
+  forthPushInt32(444);
+  bool err = run_word("TRC47");
+
+  if (!err || lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+    printf("    FAIL: truncated FTOK_C47 — lastErrorCode = %d, expected ERROR_INVALID_CORRUPTED_DATA (%d)\n",
+           lastErrorCode, ERROR_INVALID_CORRUPTED_DATA);
+    fail = 1;
+  }
+  if (!x_is_longint(444)) {
+    printf("    FAIL: sentinel X changed after truncated FTOK_C47\n");
+    fail = 1;
+  }
+
+  forthDictClear();
+  if (!fail) printf("    PASS: truncated FTOK_C47 item ID rejected, sentinel X held\n");
+  return fail;
+}
+
 /* ---- Malformed token ----
  * (a) Bad PRIM index: token 0x0FFF -> primIdx = 0x0FFE >= forthPrimCount
  * (b) Bad CALL index: CALL to nonexistent colon def
@@ -6736,6 +6863,9 @@ int forthDictSelfTest(void)
   fail |= test_rstack_overflow();
   fail |= test_runaway_guard();
   fail |= test_malformed_token();
+  fail |= test_truncated_token_fetch();
+  fail |= test_truncated_inline_operand();
+  fail |= test_truncated_c47_item_id();
   fail |= test_ilit_sign_extend();
   fail |= test_ilit_arithmetic_divergence();
   fail |= test_br_delta_sign_extend();

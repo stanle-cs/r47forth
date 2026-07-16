@@ -148,6 +148,25 @@ static inline ftoken_t readToken(uint16_t ip)
   return (ftoken_t)((hi << 8) | lo);
 }
 
+/* R1-2: forthInner read the next token and every inline LIT/ILIT/branch/C47
+ * operand directly from fdict.base with no proof the bytes lie below
+ * fdict.here. A restored word whose logical end falls immediately after
+ * FTOK_ILIT could read beyond the dictionary instead of raising
+ * ERROR_INVALID_CORRUPTED_DATA. One guard, checked before every fixed-size
+ * inline read; callers exit via INNER_LEAVE() on false so rsp/forthDepth
+ * unwind (this function cannot call that macro itself — it is scoped to
+ * forthInner's locals). */
+static inline bool boundedRead(uint16_t ip, uint16_t byteCount)
+{
+  if ((uint32_t)ip + byteCount <= fdict.here) {
+    return true;
+  }
+  lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+  displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                           ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+  return false;
+}
+
 /* ======================================================================
  *  §3.2 Inner interpreter: fetch-decode-dispatch
  * ====================================================================== */
@@ -198,6 +217,9 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
     }
 
     /* ---- FETCH ---- */
+    if (!boundedRead(ip, 2)) {
+      INNER_LEAVE();
+    }
     ftoken_t tok = readToken(ip);
     ip += 2;
 
@@ -253,6 +275,9 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
     switch (tok) {
       case FTOK_LIT: {
         /* Push 16-byte real34 literal (§2.2) */
+        if (!boundedRead(ip, (uint16_t)sizeof(real34_t))) {
+          INNER_LEAVE();
+        }
         real34_t litVal;
         memcpy(&litVal, fdict.base + ip, sizeof(real34_t));
         ip += (uint16_t)sizeof(real34_t);
@@ -266,6 +291,9 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         case FTOK_ILIT: {
           /* Push 4-byte int32 as dtLongInteger (§2.2, §3.3.5)
            * memcpy avoids sign-extension bug on byte 0 (fix #1). */
+          if (!boundedRead(ip, 4)) {
+            INNER_LEAVE();
+          }
           int32_t v;
           memcpy(&v, fdict.base + ip, 4);
           ip += 4;
@@ -279,6 +307,9 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         case FTOK_BR: {
          /* Unconditional branch: signed int16 delta in cells (§2.2)
           * memcpy avoids sign-extension bug on byte 0 (fix #16a). */
+         if (!boundedRead(ip, 2)) {
+           INNER_LEAVE();
+         }
          int16_t delta;
          memcpy(&delta, fdict.base + ip, 2);
          ip += 2;
@@ -289,6 +320,9 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         case FTOK_0BR: {
           /* Conditional branch: pop X, branch if zero/false (§2.2, §3.2)
            * memcpy avoids sign-extension bug on byte 0 (fix #16b). */
+          if (!boundedRead(ip, 2)) {
+            INNER_LEAVE();
+          }
           int16_t delta;
           memcpy(&delta, fdict.base + ip, 2);
           ip += 2;
@@ -303,6 +337,9 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
 
        case FTOK_C47: {
         /* §2.2: decode itemId, param per PTP class, dispatch to C47 handler */
+        if (!boundedRead(ip, 2)) {
+          INNER_LEAVE();
+        }
         uint16_t itemId = (uint16_t)(fdict.base[ip] |
                                      ((uint16_t)fdict.base[ip + 1] << 8));
         ip += 2;
@@ -326,10 +363,16 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
             break;
           case PTP_NUMBER_8:
             /* 1-byte value padded to a 2-byte cell (§2.2 resolved issue 1) */
+            if (!boundedRead(ip, 2)) {
+              INNER_LEAVE();
+            }
             param = (uint16_t)fdict.base[ip];
             ip += 2;
             break;
           case PTP_NUMBER_16:
+            if (!boundedRead(ip, 2)) {
+              INNER_LEAVE();
+            }
             param = (uint16_t)(fdict.base[ip] |
                                ((uint16_t)fdict.base[ip + 1] << 8));
             ip += 2;

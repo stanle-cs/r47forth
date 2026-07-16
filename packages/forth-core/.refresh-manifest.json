@@ -5,10 +5,10 @@
     "forth_compile.c": "ff783e00529200bc05b882eba0a00e0e9ba452e11b5d66b70d1ef7e7f1073da5",
     "forth_dict.c": "bb6f489cf72cbecb47e18bf29a5a21f803088a4148b84e581d7a7cfcd78dda85",
     "forth_dict.h": "188b2b07b70991d4ffc2bfa6e9f044664711e3ea43699efa3e4dbfabdbc75d6a",
-    "forth_inner.c": "6be14e739faca739753f3e6fd285822e62d3374df608ab417ae2437f28225663",
+    "forth_inner.c": "ed86428284e605674303f30646295c865bf903264ae02528fec88066f2a3c42c",
     "forth_prims.c": "1f7e208d184b1ec64bee21fd311a26b77df7f64c60f9f78da879606b2bb07a46",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "test_dict_reloc.c": "6c1ba40ff0d91d5559edc5f11fc2f95dc743dd3ee82cce9f50611bcbb85bd560"
+    "test_dict_reloc.c": "10619cc3cf5cb60d42c0aafd925a790be16954c11663b207b7a683ccaea78211"
   },
   "patches": {
     "010-config.c.patch": "eff3da120408e5f7d2be6ac0189000c2f3243dbe90a8474e0e01ce129deb8b27",
