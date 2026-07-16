@@ -1840,6 +1840,19 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
         uint8_t *progStart = NULL;
         uint8_t *step;
         int16_t nNames = 0;
+        /* R2 finding 6, ruled: accepted names are copied into 15-byte slots in
+         * this same global tmpString with no capacity check; TMP_STR_LENGTH/15
+         * = 170 complete slots fit, and a personal program with more unique
+         * definitions before the cursor could write past the workspace.
+         * Policy: truncate by scan order. Once the cap is reached, stop
+         * RECORDING new names but keep tokenizing normally — nothing else in
+         * this loop depends on nNames, and the cap must not desync the
+         * tokenizer's position in the line. Sorting applies only to the names
+         * actually collected. No error UI: this is ordinary single-user
+         * robustness (a reboot/lost-edit risk), not a reportable condition,
+         * and 170 unique word definitions before the cursor is far beyond any
+         * realistic personal program. */
+        const int16_t forthPickerMaxNames = TMP_STR_LENGTH / 15;
 
         memset(tmpString, 0, TMP_STR_LENGTH);
 
@@ -1899,7 +1912,7 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
                             break;
                           }
                         }
-                        if (!dup) {
+                        if (!dup && nNames < forthPickerMaxNames) {
                           xcopy(tmpString + 15 * nNames, nameBuf, nameLen);
                           nNames++;
                         }

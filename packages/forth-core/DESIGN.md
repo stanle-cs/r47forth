@@ -2055,11 +2055,26 @@ else if(func == ITM_FORTH) {
     pemAlpha(ITM_FORTH);                                // opens the line placeholder;
   } else {                                              //   ITM_FORTH is not an
     clearSystemFlag(FLAG_ALPHA);                        //   addItemToBuffer item, so
-  }                                                     //   no character is fed
-  pemCursorIsZerothStep = false;
+    tam.function = 0;                                   //   no character is fed.
+  }                                                      // Closing also clears
+  pemCursorIsZerothStep = false;                         // tam.function (see below).
   return;
 }
 ```
+
+    **Why the closing arm clears `tam.function` too (R2 finding 5, ruled).**
+    The transient alpha state this section's introduction promises is cleared
+    on close is `FLAG_ALPHA`, `aimBuffer`, and `tam.function` together; the
+    closing arm originally cleared only `FLAG_ALPHA`. Confirmed live, not just
+    theoretical: probed a normal open-then-close, then a completely unrelated
+    plain alpha capture at a structurally non-Forth location. The stale
+    `tam.function == ITM_FORTH` survived the close and was then inherited by
+    that unrelated capture, because `insertStepInProgram`'s `func == ITM_AIM`
+    arm only assigns `tam.function = ITM_LITERAL` when
+    `tam.function != ITM_FORTH` — the guard reads the stale value as "still in
+    a Forth capture" and skips the assignment. That mislabeling then misroutes
+    E7's cursor-offset math, which is keyed on `tam.function`, not the step's
+    real type.
 
     **Why the full teardown, and not the REM arm's single `popSoftmenu()`.**
     `pemAlpha` pushes `-MNU_ALPHA` (manage.c:844), and control then returns to
@@ -2085,13 +2100,22 @@ E2. *In-region capture route*, inserted immediately before the
 ```c
 if(!tam.mode && !getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0
    && indexOfItems[func].func == addItemToBuffer
-   && forthEntryStateAtCursor()) {
+   && forthEntryStateAtInsertion()) {
   tam.function = ITM_FORTH;
   pemAlpha(func);            // opens a new source-line capture, feeds first key
   pemCursorIsZerothStep = false;
   return;
 }
 ```
+
+    **`AtInsertion`, not `AtCursor` (R2 finding 3, ruled).** This route derives
+    from the step immediately BEFORE the insertion point, which is what
+    `forthEntryStateAtInsertion()` computes — production has always called it
+    here, not `forthEntryStateAtCursor()`. `forthEntryStateAtCursor()` answers a
+    different, landing-on-an-existing-step question (§8.4 intro, "the debt-free
+    invariant"); it has no production caller today. They are not
+    interchangeable — do not rename one to the other by symmetry — and §8.9
+    item 2's mutation below must target the function this route actually calls.
 
     Only printable items (`func == addItemToBuffer` — digits included) open
     a capture; every other key (navigation, ENTER, function keys, R/S)
@@ -2289,6 +2313,18 @@ no catalog, no dictionary lookup:
   are omitted** (not truncated — a truncated pick would insert a *wrong*
   name; deliberate deviation from `MNU_PROG`, which truncates labels).
   Duplicates (redefinitions) collapse to one entry.
+- **Item-count cap (R2 finding 6, ruled): `TMP_STR_LENGTH / 15` = 170
+  names.** `tmpString` is a fixed, shared global buffer; accepting names
+  without a count cap can write past it. Policy is **truncate by scan
+  order**: once 170 unique names are collected, further `:` names stop
+  being recorded, but the tokenizer keeps running normally — nothing else
+  in the scan depends on the count, and the cap must not desync token
+  position within the line. Sorting applies only to the names actually
+  collected, so the omitted names are whichever were encountered *last* in
+  program order, not necessarily the alphabetically-last ones. No error UI:
+  this is ordinary single-user robustness (a reboot or lost-edit risk), not
+  a reportable condition, and 170 unique word definitions before the cursor
+  is far beyond any realistic personal program.
 - **No validation at entry.** The scan is text-only; picking a name never
   resolves it against the dictionary or checks reachability. Resolution is
   deferred to run time (§8.2) — a picked name can still fail at run with
@@ -2338,8 +2374,10 @@ All Forth errors surface through the existing C47 protocol at the
 - Catalog/soft-menu label of the toggle item: `"FORTH"` (5 glyphs — fits the
   `char[16]` fields and the 14-byte dynamic-menu display slot [VERIFIED cap:
   src/c47/softmenus.c:1680-1682]).
-- Listing tokens: `»FORTH` / `FORTH«` (§8.5) for markers; `FORTH '…'` for
-  source lines.
+- Listing tokens: `»FORTH` / `FORTH«` (§8.5) for markers; source lines render
+  **bare** — no item-name prefix, no quotes (§8.5, E7, R2 finding 2, ruled).
+  A Forth `SIN` displays like the RPN `SIN` it extends. Not the generic
+  `FORTH '…'` form other REM-family payloads use.
 - Picker menu label: `"FWRD"` (`MNU_FORTH` row, §0.1). Picker entries: word
   names ≤ 14 bytes (§8.6).
 
@@ -2354,8 +2392,9 @@ All Forth errors surface through the existing C47 protocol at the
    Forth capture and types text; (c) cursor on `»FORTH` → capture; on
    `FORTH«` → RPN; (d) power-off mid-region (simulator save/load), land on
    the same step → identical behavior to (a)-(c).
-   *Mutation:* replace `forthEntryStateAtCursor()` with a static bool set by
-   the toggle — case (d) and scroll-away-and-back regress.
+   *Mutation:* replace `forthEntryStateAtInsertion()` (the function E2's route
+   actually calls, R2 finding 3) with a static bool set by the toggle —
+   case (d) and scroll-away-and-back regress.
 3. **Picker sees an uncompiled word.** Author `: SQ DUP * ;` as a source
    step; **without any run**, on the next capture line the `MNU_FORTH`
    picker lists `SQ`; picking inserts `SQ ` into the buffer.
@@ -2396,8 +2435,13 @@ All Forth errors surface through the existing C47 protocol at the
    separate check, so that edit changes nothing and cannot demonstrate the
    property.
 8. **Marker no-op & empty-line rule.** A lone `»FORTH`/`FORTH«` pair with
-   nothing between them runs to completion with stack untouched; ENTER on
-   an empty capture line leaves **no** step behind (step count unchanged).
+   nothing between them runs to completion with stack untouched; ENTER on an
+   empty capture line commits **no source step** — only the opening marker
+   already inserted when capture began remains (R2 finding 4, ruled: total
+   step count is `before + 1` for that marker, not unchanged — starting from
+   RPN and opening capture adds it before ENTER is ever pressed;
+   `test_forth_empty_enter_leaves_no_step` correctly expects the marker to
+   remain).
    *Mutation:* drop rule E3 — the empty commit becomes a third marker and
    test 4's parity assertions fail downstream.
 9. **Run-scoped lifecycle.** (a) Run the test-1 program twice → second run

@@ -1517,6 +1517,15 @@ void insertStepInProgram(const int16_t func) {
       pemAlpha(ITM_FORTH);
     } else {
       clearSystemFlag(FLAG_ALPHA);
+      // Capture-close reset: see the identical rationale/citations at the
+      // `ITM_BACKSPACE` empty-buffer arm above. Without this, a stale
+      // tam.function == ITM_FORTH survives a normal toggle-close and can
+      // mislabel the NEXT, unrelated alpha capture: insertStepInProgram's
+      // `func == ITM_AIM` arm only sets tam.function = ITM_LITERAL when
+      // `tam.function != ITM_FORTH` — a plain literal entry opened while the
+      // sentinel is stale skips that assignment and inherits ITM_FORTH,
+      // silently misrouting cursor-offset math keyed on tam.function (R3-1).
+      tam.function = 0;
     }
     pemCursorIsZerothStep = false;
     return;

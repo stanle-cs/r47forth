@@ -4220,6 +4220,96 @@ static int test_toggle_inserts_marker(void)
   return fail;
 }
 
+/* test_forth_toggle_close_resets_sentinel
+ * R2 finding 5, ruled: DESIGN.md's §8.4 intro says the transient alpha state
+ * (FLAG_ALPHA, aimBuffer, tam.function) is cleared when capture closes; the
+ * toggle-close arm of insertStepInProgram's ITM_FORTH case only cleared
+ * FLAG_ALPHA, leaving tam.function stale at ITM_FORTH.
+ * Probed and confirmed live, not just theoretical: after a normal open+close,
+ * a SUBSEQUENT, unrelated plain alpha capture (func == ITM_AIM, structurally
+ * outside any Forth region) got silently mislabeled — insertStepInProgram's
+ * `else if(tam.function != ITM_FORTH) tam.function = ITM_LITERAL;` guard skips
+ * the assignment when the sentinel is already (stale-)true, so the new
+ * capture inherits ITM_FORTH. That then misroutes R3-1's cursor-offset math,
+ * which is keyed on tam.function, not the step's real type.
+ * Escaping mutation: remove the `tam.function = 0;` added to the toggle-close
+ * arm — this test's second assertion (post-close) and third assertion
+ * (post-AIM) both fail. */
+static int test_forth_toggle_close_resets_sentinel(void)
+{
+  int fail = 0;
+
+  uint8_t prog[] = {
+    0x4C,                                                             /* ITM_sin (RPN) */
+    0x85, 0xB2,                                                       /* ITM_END */
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  int16_t savedCatalog = catalog;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  int16_t savedTamFunc = tam.function;
+
+  currentStep = beginOfProgramMemory + 1;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 2;
+  catalog = CATALOG_NONE;
+  aimBuffer[0] = 0;
+  tam.mode = 0;
+  tam.function = 0;
+  clearSystemFlag(FLAG_ALPHA);
+
+  extern void addStepInProgram(int16_t func);
+  extern void insertStepInProgram(const int16_t func);
+
+  addStepInProgram(ITM_FORTH);   /* open */
+  if (tam.function != ITM_FORTH) {
+    printf("    FAIL: tam.function = %d after open, expected ITM_FORTH (%d)\n",
+           tam.function, ITM_FORTH);
+    fail = 1;
+  }
+
+  addStepInProgram(ITM_FORTH);   /* close (toggle again) */
+  if (tam.function != 0) {
+    printf("    FAIL: tam.function = %d after toggle-close, expected 0 (stale sentinel)\n",
+           tam.function);
+    fail = 1;
+  }
+
+  /* A genuinely unrelated, non-Forth alpha capture must not inherit the
+   * (already-fixed, but re-check) sentinel. */
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = true;
+  aimBuffer[0] = 0;
+  clearSystemFlag(FLAG_ALPHA);
+  insertStepInProgram(ITM_AIM);
+  if (tam.function != ITM_LITERAL) {
+    printf("    FAIL: tam.function = %d after unrelated plain AIM capture, "
+           "expected ITM_LITERAL (%d) — stale Forth sentinel leaked\n",
+           tam.function, ITM_LITERAL);
+    fail = 1;
+  }
+
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  catalog = savedCatalog;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  tam.function = savedTamFunc;
+
+  if (!fail) {
+    printf("    PASS: toggle-close resets tam.function; a later plain capture is not mislabeled\n");
+  }
+  return fail;
+}
+
 /* test_fcall_redirect_records_name
  * Define SQ in dictionary; set tam.value to its widx;
  * insertStepInProgram(ITM_FCALL); byte-probe: step is
@@ -5052,6 +5142,101 @@ static int test_picker_rebuilds_same_menu(void)
 
   if (!fail) {
     printf("    PASS: MNU_FORTH rebuilds on every display, even with unchanged cache identity\n");
+  }
+  return fail;
+}
+
+/* test_picker_capacity_boundary
+ * R2 finding 6, ruled: the picker's accepted-name buffer is 15-byte slots in
+ * the global tmpString (TMP_STR_LENGTH=2560), giving a hard capacity of
+ * TMP_STR_LENGTH/15 = 170 names. Policy: truncate by scan order — the cap
+ * stops RECORDING new names but the tokenizer keeps running.
+ * One program with 171 unique colon definitions (cap+1) proves both edges at
+ * once: exactly 170 survive (the "at cap" edge — none of the first 170 are
+ * lost to an off-by-one), and the 171st, which is LAST in scan order, is the
+ * one dropped (proves truncation is by scan order, not silently keeping an
+ * arbitrary later one instead of an earlier one).
+ * Escaping mutation: drop the `nNames < forthPickerMaxNames` guard — numItems
+ * becomes 171 instead of 170, and (with a fixed build) the 171st slot write
+ * lands one 15-byte slot past tmpString's declared length. */
+static int test_picker_capacity_boundary(void)
+{
+  const int totalDefs = 171;   /* cap (170) + 1 */
+  const int stepBytes = 14;    /* header(4) + ": N000 1 ;"(10) */
+  uint16_t progLen = (uint16_t)(4 + totalDefs * stepBytes + 4);   /* open marker + defs + close marker */
+  uint8_t *prog = (uint8_t *)malloc(progLen);
+  if (!prog) {
+    printf("    FAIL: malloc failed\n");
+    return 1;
+  }
+
+  uint8_t *p = prog;
+  *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 0x00;   /* marker (opening) */
+  for (int i = 0; i < totalDefs; i++) {
+    char name[5];
+    sprintf(name, "N%03d", i);   /* N000 .. N170, 4 bytes each, distinct */
+    *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 10;   /* len=10: ": NNNN 1 ;" */
+    *p++ = ':'; *p++ = ' ';
+    *p++ = (uint8_t)name[0]; *p++ = (uint8_t)name[1];
+    *p++ = (uint8_t)name[2]; *p++ = (uint8_t)name[3];
+    *p++ = ' '; *p++ = '1'; *p++ = ' '; *p++ = ';';
+  }
+  *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 0x00;   /* marker (closing) */
+
+  if ((p - prog) != progLen || !writeTestProgram(prog, progLen)) {
+    printf("    FAIL: writeTestProgram failed\n");
+    free(prog);
+    return 1;
+  }
+  free(prog);
+
+  uint8_t *closingMarker = beginOfProgramMemory + (progLen - 4);
+  uint8_t *savedCurrentStep = currentStep;
+  uint16_t savedProgNum = currentProgramNumber;
+
+  currentProgramNumber = 1;
+  currentStep = closingMarker;
+
+  testInitVariableSoftmenu(22);
+
+  int fail = 0;
+
+  if (dynamicSoftmenu[22].numItems != 170) {
+    printf("    FAIL: numItems = %d, expected exactly 170 (cap; 171st dropped)\n",
+           dynamicSoftmenu[22].numItems);
+    fail = 1;
+  }
+
+  if (dynamicSoftmenu[22].menuContent) {
+    const char *content = (const char *)dynamicSoftmenu[22].menuContent;
+    int foundFirst = 0, foundLast = 0;
+    while (*content) {
+      if (compareString(content, "N000", CMP_BINARY) == 0) foundFirst = 1;
+      if (compareString(content, "N170", CMP_BINARY) == 0) foundLast = 1;
+      content += strlen(content) + 1;
+    }
+    if (!foundFirst) {
+      printf("    FAIL: 'N000' (first in scan order, well under the cap) missing\n");
+      fail = 1;
+    }
+    if (foundLast) {
+      printf("    FAIL: 'N170' (171st, last in scan order) present — should be the one dropped\n");
+      fail = 1;
+    }
+    free(dynamicSoftmenu[22].menuContent);
+    dynamicSoftmenu[22].menuContent = NULL;
+    dynamicSoftmenu[22].numItems = 0;
+  } else {
+    printf("    FAIL: menuContent is NULL\n");
+    fail = 1;
+  }
+
+  currentStep = savedCurrentStep;
+  currentProgramNumber = savedProgNum;
+  cleanupTestProgram();
+
+  if (!fail) {
+    printf("    PASS: picker capacity boundary — exactly 170 survive, 171st (scan-order-last) dropped\n");
   }
   return fail;
 }
@@ -7226,6 +7411,10 @@ int forthDictSelfTest(void)
   fail |= test_toggle_inserts_marker();
   forthDictClear();
 
+  printf("  [DEBUG] running test_forth_toggle_close_resets_sentinel...\n");
+  fail |= test_forth_toggle_close_resets_sentinel();
+  forthDictClear();
+
   printf("  [DEBUG] running test_fcall_redirect_records_name...\n");
   fail |= test_fcall_redirect_records_name();
   forthDictClear();
@@ -7288,6 +7477,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_picker_rebuilds_same_menu...\n");
   fail |= test_picker_rebuilds_same_menu();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_picker_capacity_boundary...\n");
+  fail |= test_picker_capacity_boundary();
   forthDictClear();
 
   printf("  [DEBUG] running test_picker_dedupes...\n");

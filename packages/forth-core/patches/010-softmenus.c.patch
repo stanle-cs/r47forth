@@ -1,5 +1,5 @@
 diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
-index 6ef5087ccee446689890055e0cd0a71eb6dbe770..826f2176a53e05d710df4729fa9ec9c9d8812426 100644
+index 6ef5087ccee446689890055e0cd0a71eb6dbe770..e2ea2099fd8a3ac3fe023139be4b6608575d9ee2 100644
 --- a/src/c47/softmenus.c
 +++ b/src/c47/softmenus.c
 @@ -2,6 +2,7 @@
@@ -40,7 +40,7 @@ index 6ef5087ccee446689890055e0cd0a71eb6dbe770..826f2176a53e05d710df4729fa9ec9c9
  };
  
  
-@@ -1832,6 +1836,107 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
+@@ -1832,6 +1836,120 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
          break;
        }
  
@@ -48,6 +48,19 @@ index 6ef5087ccee446689890055e0cd0a71eb6dbe770..826f2176a53e05d710df4729fa9ec9c9
 +        uint8_t *progStart = NULL;
 +        uint8_t *step;
 +        int16_t nNames = 0;
++        /* R2 finding 6, ruled: accepted names are copied into 15-byte slots in
++         * this same global tmpString with no capacity check; TMP_STR_LENGTH/15
++         * = 170 complete slots fit, and a personal program with more unique
++         * definitions before the cursor could write past the workspace.
++         * Policy: truncate by scan order. Once the cap is reached, stop
++         * RECORDING new names but keep tokenizing normally — nothing else in
++         * this loop depends on nNames, and the cap must not desync the
++         * tokenizer's position in the line. Sorting applies only to the names
++         * actually collected. No error UI: this is ordinary single-user
++         * robustness (a reboot/lost-edit risk), not a reportable condition,
++         * and 170 unique word definitions before the cursor is far beyond any
++         * realistic personal program. */
++        const int16_t forthPickerMaxNames = TMP_STR_LENGTH / 15;
 +
 +        memset(tmpString, 0, TMP_STR_LENGTH);
 +
@@ -107,7 +120,7 @@ index 6ef5087ccee446689890055e0cd0a71eb6dbe770..826f2176a53e05d710df4729fa9ec9c9
 +                            break;
 +                          }
 +                        }
-+                        if (!dup) {
++                        if (!dup && nNames < forthPickerMaxNames) {
 +                          xcopy(tmpString + 15 * nNames, nameBuf, nameLen);
 +                          nNames++;
 +                        }
@@ -148,7 +161,7 @@ index 6ef5087ccee446689890055e0cd0a71eb6dbe770..826f2176a53e05d710df4729fa9ec9c9
        default: {
          sprintf(errorMessage, "In function initVariableSoftmenu: unexpected variable softmenu %" PRId16 "!", (int16_t)(-dynamicSoftmenu[menu].menuItem));
          displayBugScreen(errorMessage);
-@@ -1839,6 +1944,11 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
+@@ -1839,6 +1957,11 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
      }
    }
  
@@ -160,7 +173,7 @@ index 6ef5087ccee446689890055e0cd0a71eb6dbe770..826f2176a53e05d710df4729fa9ec9c9
  
  static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText, bool_t doubleMidLine);
  static uint32_t trimSoftKeyName(uint16_t lim, char *l, int mode, int comp, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows);
-@@ -3036,7 +3146,7 @@ void showSoftmenuCurrentPart(void) {
+@@ -3036,7 +3159,7 @@ void showSoftmenuCurrentPart(void) {
        #if defined(PC_BUILD)
          //printf("Dynamic menu: m=%i cachedDynamicMenu=%i softmenu[m].menuItem= %i \n",m, cachedDynamicMenu, softmenu[m].menuItem);
        #endif // PC_BUILD
@@ -169,7 +182,7 @@ index 6ef5087ccee446689890055e0cd0a71eb6dbe770..826f2176a53e05d710df4729fa9ec9c9
          initVariableSoftmenu(m);
          cachedDynamicMenu = softmenu[m].menuItem;
        }
-@@ -3765,7 +3875,10 @@ void showSoftmenuCurrentPart(void) {
+@@ -3765,7 +3888,10 @@ void showSoftmenuCurrentPart(void) {
              menu(n) == -MNU_ALPHAMATH ||
              menu(n) == -MNU_ALPHAMISC ||
              menu(n) == -MNU_ALPHAINTL ||
