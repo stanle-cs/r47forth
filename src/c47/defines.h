@@ -152,118 +152,103 @@
 
 
 
-  #if defined(PACKAGE1_NOBESSEL_NOORTHO)   // PACKAGE 1 (free ✓11952) // ALL DIST, Stripped X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; NO VECTOR; IR PRINTING
-    #define OPTION_FONTBROWSER           //    1216 bytes // Without Font Browsers
-            #undef  OPTION_ELLIPTIC      //   12888 bytes // Without ELLIPTIC
-            #undef  OPTION_BESSEL        //    5168 bytes // Without X.FN BESSEL
-            #undef  OPTION_ORTHO         //    0744 bytes // Without X.FN ORTHO MENU
-    #define OPTION_DISTRIBUTIONS         //       0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
-    #define OPTION_DIST_NORMAL           //    1936 bytes // (1) Without Norml, StdNrmal & LogNrml distributions
-    #define OPTION_DIST_2                //    7128 bytes // (2) Without cauchy, chi, expo, logis, t, weibull
-    #define OPTION_DIST_1                //    9672 bytes // (3) Without Poisson/Hyper/Binomial/Geometrical/f distributions
-    #define OPTION_DIST_3                //    3208 bytes // (4) Without gev, Pareto, Uniform, Discr Uniform
-    #define OPTION_HP35                  //      88 bytes // Without config file activations only. Not complete removal
-    #define OPTION_DEVPROFILES           //     240 bytes // Without any dev profile shortcuts, and no JM, RJ & HP35
-            #undef  OPTION_TVM_FORMULAS  //    2280 bytes // Use TVM analytical formulas where possible
-            #undef  OPTION_TVM_NEWTON    //    1864 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
-            #undef  OPTION_ELEC          //    ===> bytes // ELEC    5102 saving if VECTOR is not in; 1352 saving if VECTOR is in
-            #undef  OPTION_VECTOR        //    ===> bytes // Vector 11872 saving if ELEC   is not in; 8104 saving if ELEC is in
-            #undef  OPTION_EIGEN         // ✓ 18328 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_IR_PRINTING           //   10032 bytes // Remove IR printing for old hardware
-    #define OPTION_FACTOR                // ✓  6864 bytes // Without FACTORS, M.FACT, EULPHI, SIGMA, NumTh menu (GMP factorisation; keeps primality)
+  #if defined(PACKAGE1_NOBESSEL_NOORTHO)   // PACKAGE 1 (free ✓7424) // ALL DIST, Stripped X.FN menu; NO EIGEN; NO ELEC; FAST FIN; NO VECTOR; IR PRINTING
+            #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
+            #undef  OPTION_BESSEL        // ✓  4968 bytes // Without X.FN BESSEL
+            #undef  OPTION_ORTHO         // ✓   656 bytes // Without X.FN ORTHO MENU
+    #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
+    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // (1) Without Norml, StdNrmal & LogNrml distributions
+    #define OPTION_DIST_2                // ✓  7136 bytes // (2) Without cauchy, chi, expo, logis, t, weibull
+    #define OPTION_DIST_1                // ✓  9624 bytes // (3) Without Poisson/Hyper/Binomial/Geometrical/f distributions
+    #define OPTION_DIST_3                // ✓  3280 bytes // (4) Without gev, Pareto, Uniform, Discr Uniform
+    #define OPTION_TVM_FORMULAS          // ✓  2744 bytes // Use TVM analytical formulas where possible
+    #define OPTION_TVM_NEWTON            // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
+            #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   6240 saving if VECTOR is not in; 2856 saving if VECTOR is in
+            #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
+    #define OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(PACKAGE2_NODISTR)            // PACKAGE 2 (free ✓4256) // Half DIST; Full X.FN menu; NO EIGEN; NO ELEC; FAST FIN; NO VECTOR; NO IR PRINTING
-    #define OPTION_FONTBROWSER           //    1216 bytes // Without Font Browsers
-    #define OPTION_ELLIPTIC              //   12888 bytes // Without ELLIPTIC
-    #define OPTION_BESSEL                //    5168 bytes // Without X.FN BESSEL
-    #define OPTION_ORTHO                 //    0744 bytes // Without X.FN ORTHO MENU
-    #define OPTION_DISTRIBUTIONS         //       0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
-    #define OPTION_DIST_NORMAL           //    1936 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
-    #define OPTION_DIST_2                //    7128 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
-            #undef  OPTION_DIST_1        //    9672 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
-            #undef  OPTION_DIST_3        //    3208 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
-    #define OPTION_HP35                  //       0 bytes // Without config file activations only. Not complete removal
-    #define OPTION_DEVPROFILES           //     240 bytes // Without any dev profile shortcuts, and no JM, RJ & HP35
-            #undef  OPTION_TVM_FORMULAS  //    2280 bytes // Use TVM analytical formulas where possible
-            #undef  OPTION_TVM_NEWTON    //    1864 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
-            #undef  OPTION_ELEC          //    ===> bytes // ELEC   see below
-            #undef  OPTION_VECTOR        //    ===> bytes // Vector see below
-            #undef  OPTION_EIGEN         // ✓ 18328 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_FACTOR                // ✓  6864 bytes // Without FACTORS, M.FACT, EULPHI, SIGMA, NumTh menu (GMP factorisation; keeps primality)
-            #undef  OPTION_IR_PRINTING   //   10032 bytes // Remove IR printing for old hardware
+  #if defined(PACKAGE2_NODISTR)            // PACKAGE 2 (free ✓4256) // Half DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; NO VECTOR; NO IR PRINTING
+    #define OPTION_ELLIPTIC              // ✓ 13112 bytes // Without ELLIPTIC
+    #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
+    #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
+    #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
+    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
+    #define OPTION_DIST_2                // ✓  7136 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
+            #undef  OPTION_DIST_1        // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
+            #undef  OPTION_DIST_3        // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
+            #undef  OPTION_TVM_FORMULAS  // ✓  2744 bytes // Use TVM analytical formulas where possible
+            #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
+            #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   see below
+            #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
+            #undef  OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(PACKAGE3_NOBESSEL_NOORTHO_NOFBR) // PACKAGE 3 (free ✓6200) // Limited DIST, STRIPPED X.FN menu; EIGEN; ELEC; SLOW FIN; NO VECTOR; NO IR PRINTING
-    #define OPTION_FONTBROWSER           //    1216 bytes // Without Font Browsers
-            #undef  OPTION_ELLIPTIC      //   12888 bytes // Without ELLIPTIC
-            #undef  OPTION_BESSEL        //    5168 bytes // Without X.FN BESSEL
-            #undef  OPTION_ORTHO         //    0744 bytes // Without X.FN ORTHO MENU
-    #define OPTION_DISTRIBUTIONS         //       0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
-    #define OPTION_DIST_NORMAL           //    1936 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
-            #undef  OPTION_DIST_2        //    7128 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
-            #undef  OPTION_DIST_1        //    9672 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
-            #undef  OPTION_DIST_3        //    3208 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
-    #define OPTION_HP35                  //       0 bytes // Without config file activations only. Not complete removal
-    #define OPTION_DEVPROFILES           //     240 bytes // Without any dev profile shortcuts, and no JM, RJ & HP35
-            #undef  OPTION_TVM_FORMULAS  //    2280 bytes // Use TVM analytical formulas where possible
-            #undef  OPTION_TVM_NEWTON    //    1864 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
-    #define OPTION_ELEC                  //    ===> bytes // ELEC   see below
-            #undef  OPTION_VECTOR        //    ===> bytes // Vector see below
-    #define OPTION_EIGEN                 // ✓ 18328 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_FACTOR                // ✓  6864 bytes // Without FACTORS, M.FACT, EULPHI, SIGMA, NumTh menu (GMP factorisation; keeps primality)
-            #undef  OPTION_IR_PRINTING   //   10032 bytes // Remove IR printing for old hardware
+  #if defined(PACKAGE3_NOBESSEL_NOORTHO_NOFBR) // PACKAGE 3 (free ✓6200) // Limited DIST, Stripped X.FN menu; EIGEN; ELEC; SLOW FIN; NO VECTOR; NO IR PRINTING
+            #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
+            #undef  OPTION_BESSEL        // ✓  4968 bytes // Without X.FN BESSEL
+            #undef  OPTION_ORTHO         // ✓   656 bytes // Without X.FN ORTHO MENU
+    #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
+    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
+            #undef  OPTION_DIST_2        // ✓  7136 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
+            #undef  OPTION_DIST_1        // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
+            #undef  OPTION_DIST_3        // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
+            #undef  OPTION_TVM_FORMULAS  // ✓  2744 bytes // Use TVM analytical formulas where possible
+            #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
+    #define OPTION_ELEC                  // ✓  6816 bytes // ELEC   see below
+    #define OPTION_EIGEN                 // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
+            #undef  OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
-            // ELEC VECT
-            // 0    0    13032  free: costs 0
-            // 0    1   -  696  free: costs 13032-- 696 = 13728
-            // 1    0     6216  free: costs 13032 -6216 =  6816
-            // 1    1   - 3480  free: costs 13032--3480 = 16512
+            // ELEC VECT  FLASH cost   free   (pkg4, 720896 total)
+            //  0    0          0     32692
+            //  0    1      12952     19740   VECTOR only
+            //  1    0       6240     26452   ELEC only
+            //  1    1      15808     16884   both (ELEC+VECTOR share 3384)
 
   #if defined(PACKAGE4_MINIMAL_MATH)       // PACKAGE 4 (free ✓32712) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
-    #define OPTION_FONTBROWSER           //    1216 bytes // Without Font Browsers
-            #undef  OPTION_ELLIPTIC      //   12888 bytes // Without ELLIPTIC
-            #undef  OPTION_BESSEL        //    5168 bytes // Without X.FN BESSEL
-            #undef  OPTION_ORTHO         //    0744 bytes // Without X.FN ORTHO MENU
-            #undef  OPTION_DISTRIBUTIONS //       0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
-            #undef  OPTION_DIST_NORMAL   //    1936 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
-            #undef  OPTION_DIST_2        //    7128 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
-            #undef  OPTION_DIST_1        //    9672 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
-            #undef  OPTION_DIST_3        //    3208 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
-    #define OPTION_HP35                  //       0 bytes // Without config file activations only. Not complete removal
-    #define OPTION_DEVPROFILES           //     240 bytes // Without any dev profile shortcuts, and no JM, RJ & HP35
-            #undef  OPTION_TVM_FORMULAS  //    2280 bytes // Use TVM analytical formulas where possible
-            #undef  OPTION_TVM_NEWTON    //    1864 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
-            #undef  OPTION_VECTOR        //    ===> bytes // Vector 11872 saving if ELEC   is not in; 8104 saving if ELEC is in
-            #undef  OPTION_ELEC          //    ===> bytes // ELEC    5102 saving if VECTOR is not in; 1352 saving if VECTOR is in
-            #undef  OPTION_EIGEN         // ✓ 18328 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_FACTOR                // ✓  6864 bytes // Without FACTORS, M.FACT, EULPHI, SIGMA, NumTh menu (GMP factorisation; keeps primality)
-    #define OPTION_IR_PRINTING           //   10032 bytes // Remove IR printing for old hardware
+            #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
+            #undef  OPTION_BESSEL        // ✓  4968 bytes // Without X.FN BESSEL
+            #undef  OPTION_ORTHO         // ✓   656 bytes // Without X.FN ORTHO MENU
+            #undef  OPTION_DISTRIBUTIONS // ✓     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
+            #undef  OPTION_DIST_NORMAL   // ✓  2000 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
+            #undef  OPTION_DIST_2        // ✓  7136 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
+            #undef  OPTION_DIST_1        // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
+            #undef  OPTION_DIST_3        // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
+            #undef  OPTION_TVM_FORMULAS  // ✓  2744 bytes // Use TVM analytical formulas where possible
+            #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
+            #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   6240 saving if VECTOR is not in; 2856 saving if VECTOR is in
+            #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
+    #define OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
 
   //Options common to all hardware packages 1-4
-    #define OPTION_REGBROWSER            //    1856 bytes // Without Register Browser
-    #define OPTION_FLAGBROWSER           //    3280 bytes // Without Flag Browsers
-    #define OPTION_ASNBROWSER            //    1704 bytes // Without Assign Browser
-    #define OPTION_SHOW                  //    6712 bytes // Without SHOW use VIEW
-    #define OPTION_SLV_ZETA_BETA         //    3288 bytes // SLVC, SLVQ, ZETA, BETA
-    #define OPTION_ASTRING               // ✓  1072 bytes // Without alpha string functions aMID aLEFT aRIGHT aTRIM aREV aLOWER aUPPER
-    #define OPTION_PRIME                 // ✓ 31424 bytes // Without ISPRIME, NEXTPRIME (primality; undef also forces OPTION_FACTOR off)
-    #define OPTION_GRAPHICS              //   17472 bytes // Without Solver & graphics & stat graphics
-    #define OPTION_MOREGRAPHICS          //    7520 bytes // Without More graphics (full plot from memory)
-            #undef  OPTION_SAMPLEPGMS    //     184 bytes // All hardware without Load programming sample programs testPgms
-    #define OPTION_STOPWATCH             //    1232 bytes // Without STOPW
-            #undef  OPTION_EDIT_X        //    3256 bytes // Without number editing in X-register. Not complete EDIT removal.
-            #undef  OPTION_EDIT_PEM      //    1560 bytes // Without number and function parameter editing in PEM. Not complete EDIT removal.
-    #define OPTION_LONGPRESS_CFG         //    1152 bytes // Logic for longpress assignment to the f/g key
+    #define OPTION_FONTBROWSER           // ✓  1656 bytes // Without Font Browsers
+    #define OPTION_REGBROWSER            // ✓  1784 bytes // Without Register Browser
+    #define OPTION_FLAGBROWSER           // ✓  2088 bytes // Without Flag Browsers
+    #define OPTION_ASNBROWSER            // ✓  1936 bytes // Without Assign Browser
+    #define OPTION_SHOW                  // ✓  6496 bytes // Without SHOW use VIEW
+    #define OPTION_SLV_ZETA_BETA         // ✓  5440 bytes // SLVC, SLVQ, ZETA, BETA
+    #define OPTION_ASTRING               // ✓  1024 bytes // Without alpha string functions aMID aLEFT aRIGHT aTRIM aREV aLOWER aUPPER
+    #define OPTION_PRIME                 // ✓ 31712 bytes // Without ISPRIME, NEXTPRIME (primality; undef also forces OPTION_FACTOR off)
+    #define OPTION_FACTOR                // ✓  7120 bytes // Without FACTORS, M.FACT, EULPHI, SIGMA, NumTh menu (GMP factorisation; keeps primality)
+    #define OPTION_GRAPHICS              // ✓ 19976 bytes // Without Solver & graphics & stat graphics
+    #define OPTION_MOREGRAPHICS          // ✓  7080 bytes // Without More graphics (full plot from memory)
+    #define OPTION_HP35                  // ✓    88 bytes // Without config file activations only. Not complete removal
+    #define OPTION_DEVPROFILES           // ✓   360 bytes // Without any dev profile shortcuts, and no JM, RJ & HP35
+            #undef  OPTION_SAMPLEPGMS    // ✓   200 bytes // All hardware without Load programming sample programs testPgms
+    #define OPTION_STOPWATCH             // ✓  1432 bytes // Without STOPW
+            #undef  OPTION_EDIT_X        // ✓  3240 bytes // Without number editing in X-register. Not complete EDIT removal.
+            #undef  OPTION_EDIT_PEM      // ✓  1808 bytes // Without number and function parameter editing in PEM. Not complete EDIT removal.
+    #define OPTION_LONGPRESS_CFG         // ✓  1248 bytes // Logic for longpress assignment to the f/g key
   //Large packages developed for DM42/DM42n. Could arguably work on DM42.
-            #undef  OPTION_CUBIC_159     //    4080 bytes // C47 SLVC function is 159 digits internally
-            #undef  OPTION_SQUARE_159    //    2700 bytes // C47 SLVQ function is 159 digits internally
-            #undef  OPTION_EIGEN_159     //    5480 bytes // C47 EINEN function is 159 digits internally; note both OPTION_SQUARE_159 & OPTION_CUBIC_159 used by OPTION_EIGEN_159
-            #undef  OPTION_XFN_1000      //    4850 bytes // XFN extended 1000 digit math Functionality
-    #define OPTION_TVM_AMORT             //               // Use additional AMORT in tvm
-    #define OPTION_DATAFILE              // ✓  2304 bytes // Without register/variable .d47 export & import
+            #undef  OPTION_CUBIC_159     // ✓  2880 bytes // C47 SLVC function is 159 digits internally
+            #undef  OPTION_SQUARE_159    // ✓  2656 bytes // C47 SLVQ function is 159 digits internally
+            #undef  OPTION_EIGEN_159     // ✓  2568 bytes // C47 EINEN function is 159 digits internally; note both OPTION_SQUARE_159 & OPTION_CUBIC_159 used by OPTION_EIGEN_159
+            #undef  OPTION_XFN_1000      // ✓  5224 bytes // XFN extended 1000 digit math Functionality
+            #undef  OPTION_VECTOR        // ✓ 13672 bytes // Vector 12952 saving if ELEC is not in; 9568 saving if ELEC is in
+    #define OPTION_TVM_AMORT             // ✓  1648 bytes // Use additional AMORT in tvm
+    #define OPTION_DATAFILE              // ✓  2112 bytes // Without register/variable .d47 export & import
   
    // DECNUMBER_FASTMUL        // manually include or exclude this option in the Makefile, DECNUMBER_FASTMUL
   #endif // TWO_FILE_PGM

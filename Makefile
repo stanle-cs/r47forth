@@ -86,7 +86,7 @@ build.rel.debug:
 	meson setup $(BUILD_PC) --buildtype=custom  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true
 
 build.dmcp:
-	$(if $(f),test -d build.dmcp.p$(DMCP_PACKAGE) ||,rm -rf build.dmcp.p$(DMCP_PACKAGE);) meson setup build.dmcp.p$(DMCP_PACKAGE)  --cross-file=src/c47-dmcp/cross_arm_gcc.build  -DDMCPVERSION=dmcp  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DDMCP_PACKAGE=$(DMCP_PACKAGE)
+	$(if $(f),test -d build.dmcp.p$(DMCP_PACKAGE) ||,rm -rf build.dmcp.p$(DMCP_PACKAGE);) meson setup build.dmcp.p$(DMCP_PACKAGE)  --cross-file=src/c47-dmcp/cross_arm_gcc.build  -DDMCPVERSION=dmcp  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DDMCP_PACKAGE=$(DMCP_PACKAGE) -Dmem=$(if $(filter-out 0,$(Mem)),true,false)
 
 build.dmcp5:
 	$(if $(f),test -d build.dmcp5 ||,rm -rf build.dmcp5;) meson setup build.dmcp5 --cross-file=src/c47-dmcp5/cross_arm_gcc.build -DDMCPVERSION=dmcp5 -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true
@@ -121,6 +121,7 @@ t47:
 endif
 
 dmcp: build.dmcp
+	meson setup --reconfigure build.dmcp.p$(DMCP_PACKAGE) -Dmem=$(if $(filter-out 0,$(Mem)),true,false) >/dev/null
 	cd build.dmcp.p$(DMCP_PACKAGE) && ninja dmcp
 
 dmcpr47: build.dmcp
@@ -332,9 +333,11 @@ build.dmcp.p$(PKG):
 	  -DDMCPVERSION=dmcp \
 	  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) \
 	  -DDECNUMBER_FASTMUL=true \
-	  -DDMCP_PACKAGE=$(PKG)
+	  -DDMCP_PACKAGE=$(PKG) \
+	  -Dmem=$(if $(filter-out 0,$(Mem)),true,false)
 
 dmcp_pkg$(PKG): build.dmcp.p$(PKG)
+	meson setup --reconfigure build.dmcp.p$(PKG) -Dmem=$(if $(filter-out 0,$(Mem)),true,false) >/dev/null
 	cd build.dmcp.p$(PKG) && ninja dmcp
 
 dist_dmcp_pkg$(PKG): dmcp_pkg$(PKG)
