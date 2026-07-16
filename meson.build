@@ -166,6 +166,7 @@ subdir('src/ttf2RasterFonts')
 subdir('src/generateConstants')
 subdir('src/generateCatalogs')
 subdir('src/generateTestPgms')
+subdir('src/generateTests')
 subdir('src/testSuite')
 
 # Patch-overlay tooling tests (plain-diff design, revision 2)

@@ -361,12 +361,6 @@ static void _doXToAlpha(uint16_t regist) {
       break;
     }
 
-    case dtReal34Matrix: {
-      longIntegerFree(lgInt); // the converter re-initialises lgInt; free the pre-init first
-      convertShortIntegerRegisterToLongInteger(REGISTER_X, lgInt);
-      break;
-    }
-
     default: {
       displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
       #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -1346,7 +1340,7 @@ void fnAlphaRev(uint16_t regist) {
   char *ptrString = REGISTER_STRING_DATA(regist);
   int32_t lgString = stringGlyphLength(ptrString);
 
-  if(strlen(ptrString) > TMP_STR_LENGTH) {
+  if(strlen(ptrString) >= TMP_STR_LENGTH) {   // >= : the reversed copy needs strlen + 1 bytes (trailing 0) in tmpString[TMP_STR_LENGTH]
     displayCalcErrorMessage(ERROR_INPUT_TOO_LONG, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
       sprintf(errorMessage, "string in regist %d is too long, size %d bytes doesn't fit in tmpString (%d bytes max)", regist, (uint16_t) strlen(ptrString), TMP_STR_LENGTH);

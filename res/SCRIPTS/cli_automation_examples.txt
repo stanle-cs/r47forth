@@ -29,6 +29,36 @@ Plot test suite examples
   ./t47 --exec 'readp ./docs/appnotes/sources/AN0022b_programs/func.p47; xeq PLTROOT'
   ./t47 -e 'readp ./PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; item 2734 "xx"; snap'
 
+Programmed EQN solve and draw (cpxSlv and Draw as program steps; single-variable
+formulas only, the solve variable is picked up automatically). Program listing,
+encode with  ./rejig listing.txt -o eqndemo.p47 :
+    LBL 'CSLV'
+      'x^2+4' X.EDIT
+      1 5
+      cpxSlvˣʸ
+    RTN
+    LBL 'DRW'
+      'x^2-4' X.EDIT
+      -5 5
+      Draw_y^x
+    RTN
+  (X.EDIT loads the string in X as the current formula and drops it; X.SWAP is the
+   exchanging variant. cpxSlvˣʸ takes the two guesses from Y and X; Drawˣʸ takes
+   the plot range from Y and X.)
+  ./t47 --reset --exec 'readp eqndemo.p47; xeq CSLV; puts "X=[reg X]"'   (root 0-i2)
+  ./t47 --reset --exec 'readp eqndemo.p47; xeq DRW; snap'                (parabola, roots -2 and 2)
+
+Export a loaded program to RTF (headless; GUI XPORTP needs a file chooser):
+  ./t47 --reset --exec 'readp res/PROGRAMS/GudrmPL.p47; xportp GudrmPL res/PROGRAMS/GudrmPL.rtf'
+  (xportp <label> <filename>; label is a global label in a loaded program.)
+
+Export / import a register data file (.d47) (headless; GUI EXPreg / IMPORTr need a file chooser):
+  ./t47 --reset --exec 'nim 3; nim 4; item 99; expreg X quot.d47'   (export register X)
+  ./t47 --reset --exec 'impreg quot.d47; puts "X=[reg X]"'          (import, then read X)
+  (expreg <reg> <filename>; impreg <filename>; reg name as for the reg command, e.g. X, 00, A.
+   The filename is used verbatim, so the folder must already exist; the GUI keeps .d47 files in
+   DATA/, but these headless examples write to the current folder.)
+
 Stat graph at 1E-50 (reference MR3_C_SCATR_1E-50.bmp; both axes scaled):
   ./t47 --snapskiprefresh --exec 'clΣ; nim 1e-50; nim 1e-50; xeq Σ+; nim 4e-50; nim 2e-50; xeq Σ+; nim 9e-50; nim 3e-50; xeq Σ+; nim 16e-50; nim 4e-50; xeq Σ+; nim 25e-50; nim 5e-50; xeq Σ+; xeq SCATR; snap'
 
@@ -38,6 +68,13 @@ Range screening examples (error text appears on stdout):
   out-of-domain range:   ./t47 --reset -e 'readp ./PROGRAMS/FFX.p47; pgmplt FFX; nim 1; nim 10; item 2734 "xx"'
                          (every sample infinite -> "no plottable sample in the plot range")
   (items: 2547 STO up-Y, 2548 STO down-Y, 99 divide, 2734 PLTf)
+
+State save/load and register assertions (savest/loadst take a filename):
+  save a state:    ./t47 --reset --exec 'nim 2; nim 2; item 1526 00; savest good.sav'
+  load and check:  ./t47 --reset --exec 'loadst good.sav; item 51 00; item 1527; puts "rows=[reg Y] cols=[reg X]"'
+  (items: 1526 M.DIM dims a register to Y x X reals, 51 RCL, 1527 42DIM# which drops the X-matrix dimensions to Y=rows, X=cols.
+  `reg <name>` reads a register's display string, but returns <unsupported> for matrices, so assert matrix dimensions via 42DIM# as above.
+  Register data can also be moved through hand-written .d47 files, IMPORTr/EXPreg; format in AN0025.)
 
 Output: newest ./YYYYMMDD-HHMMSS.bmp in cwd (time is the sim clock).
 

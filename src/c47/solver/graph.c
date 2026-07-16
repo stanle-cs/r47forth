@@ -14,7 +14,7 @@
   // #define VERBOSE_SOLVER0  // a lot less text
   // #define VERBOSE_SOLVER1  // a lot less text
   // #define VERBOSE_SOLVER2  // verbose a lot
-  #define VERBOSE_SOLVER_ITERDATA // One long line for each iteration
+  // #define VERBOSE_SOLVER_ITERDATA // One long line for each iteration
 #else // !PC_BUILD
   #undef VERBOSE_SOLVER00
   #undef VERBOSE_SOLVER0
@@ -2652,6 +2652,16 @@ void graphRangeGuard(real_t *lo, real_t *hi) {
 //-----------------------------------------------------//-----------------------------------------------------
 void fnEqSolvGraph (uint16_t func) {
   #if !defined(SAVE_SPACE_DM42_13GRF)
+      // No equation defined: error out before any stack or reserved-variable writes;
+      // running these items without a formula crashed in parseEquation (NULL allFormulae).
+      if(currentFormula >= numberOfFormulae || allFormulae[currentFormula].pointerToFormulaData == C47_NULL) {
+        calcMode = CM_NORMAL;
+        displayCalcErrorMessage(ERROR_NO_EQUATION_DEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+          moreInfoOnError("In function fnEqSolvGraph:", "no equation defined", NULL, NULL);
+        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+        return;
+      }
       hourGlassIconEnabled = true;
       showHideHourGlass();
       #if defined(DMCP_BUILD)
@@ -2721,6 +2731,15 @@ void fnEqSolvGraph (uint16_t func) {
         default:
           return;
           break;
+      }
+
+      if(!(currentSolverVariable >= FIRST_NAMED_VARIABLE && currentSolverVariable <= LAST_NAMED_VARIABLE)) {
+        // No plot variable assigned (e.g. a programmed Draw after X.SWAP loaded a fresh formula): auto-assign like the interactive MVAR menu does
+        // (softmenus.c) when the formula holds exactly one variable; with several variables the existing error below still applies.
+        parseEquation(currentFormula, EQUATION_PARSER_MVAR, aimBuffer, tmpString);
+        if(tmpString[0] != 0 && (getNthString((uint8_t *)tmpString, 1))[0] == 0) {
+          currentSolverVariable = findOrAllocateNamedVariable(tmpString);
+        }
       }
 
       graphVariabl1 = currentSolverVariable;
@@ -2809,6 +2828,12 @@ void fnEqSolvGraph (uint16_t func) {
           screenUpdatingMode = SCRUPD_AUTO;
           screenUpdatingMode |= SCRUPD_SKIP_STATUSBAR_ONE_TIME;
           refreshScreen(239);
+          if(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) {
+            // The refresh above dropped a running program back to CM_NORMAL, so a following programmed SNAP would repaint and capture the register
+            // display instead of the plot. This copies PLTf (via fnPlotSQ) so the SNAP re-renders it; the SNAP's own refresh performs the CM_NORMAL drop for the program steps that follow.
+            calcMode = CM_GRAPH;
+            reDraw = true;
+          }
           break;
         }
         default: ;

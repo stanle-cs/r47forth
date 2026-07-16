@@ -18,10 +18,23 @@
 backup.bin
 backup.cfg
 backupR47.cfg
+backupTest.cfg
+backupTestR47.cfg
 wp43.sav
 wp43.dat
 c47.sav
 c47.dat
+# testSuite coverage-corpus artefacts (written to the repo root by 'make test')
+c47Test.sav
+c47autoTest.sav
+c47Test.dat
+c47stateTest.bin
+c47programTest.bin
+c47programTest.rtf
+c47programsTest.bin
+c47programsTest.rtf
+c47regsTest.txt
+c47regdumpTest.txt
 *.s47
 *.zip
 !docs/appnotes/sources/
@@ -30,10 +43,12 @@ c47.dat
 !xfnToR47user.s47
 20*.REGS.TSV
 20*.bmp
+c47plotTest*.bmp
 tags
 /PROGRAMS
 /SAVFILES
-/src/generated
+/src/generated/*
+!/src/generated/constantsVerification.txt
 AGENTS.md
 /storage
 /.cline

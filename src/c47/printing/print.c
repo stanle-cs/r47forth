@@ -187,7 +187,7 @@
   /* 0x83, */ 0x221A, // #SQUARE ROOT
   /* 0x84, */ 0x222B, // #INTEGRAL
   /* 0x85, */ 0x2211, // #N-ARY SUMMATION
-  /* 0x86, */ 0x25B6, // #BLACK RIGHT-POINTING TRIANGLE                *
+  /* 0x86, */ 0x25B8, // #BLACK RIGHT-POINTING SMALL TRIANGLE                *
   /* 0x87, */ 0x03C0, // #GREEK SMALL LETTER PI
   /* 0x88, */ 0x2202, // #PARTIAL DIFFERENTIAL
   /* 0x89, */ 0x2264, // #LESS-THAN OR EQUAL TO
@@ -1719,7 +1719,7 @@ void printTrace(int16_t func, uint16_t param) {
       if(func == ITM_LBL) {
         printAdvance(0); // Skip one line before printing the label
         sprintf(traceBuffer, " %02d", currentLocalStepNumber);
-        strcat(traceBuffer, STD_BLACK_RIGHT_TRIANGLE);
+        strcat(traceBuffer, STD_BLACK_RIGHTSMALLTRIANGLE);
         strcat(traceBuffer, tmpString);
         printJustified(traceBuffer);     // Current step & step number
         #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
@@ -1827,7 +1827,7 @@ void printProgram(bool_t list, uint16_t lines) {
         }
         printAdvance(0); // Skip one line before printing the label
         sprintf(tmpString, " %02d" , firstDisplayedLocalStepNumber + line - lineOffset + lineOffsetTam);
-        strcat(tmpString, STD_BLACK_RIGHT_TRIANGLE);
+        strcat(tmpString, STD_BLACK_RIGHTSMALLTRIANGLE);
         printLine(tmpString, 0);
       }
       else if(!startOfLine) {
@@ -1841,7 +1841,7 @@ void printProgram(bool_t list, uint16_t lines) {
     }
     else {
       sprintf(tmpString, "%02d" , firstDisplayedLocalStepNumber + line - lineOffset + lineOffsetTam);
-      strcat(tmpString, (isLabel ? STD_BLACK_RIGHT_TRIANGLE : " "));
+      strcat(tmpString, (isLabel ? STD_BLACK_RIGHTSMALLTRIANGLE : " "));
       printLine(tmpString, 0);
     }
 

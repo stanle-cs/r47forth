@@ -9,7 +9,7 @@
 // VARIOUS OPTIONS
 //*********************************
 
-#define VERSION1 "00.109.03.03b0"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
+#define VERSION1 "00.109.03.04a0.int"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
 
 // Version 00.109.02.07b11   Public Release C47 & R47
 // Version 00.109.02.07b12   Public Release C47 & R47 launch
@@ -155,7 +155,7 @@
 
 
 
-  #if defined(PACKAGE1_NOBESSEL_NOORTHO)   // PACKAGE 1 (free 4984) // ALL DIST, Stripped X.FN menu; NO ELEC; SLOW FIN; NO VECTOR
+  #if defined(PACKAGE1_NOBESSEL_NOORTHO)   // PACKAGE 1 (free 2560) // ALL DIST, Stripped X.FN menu; NO ELEC; SLOW FIN; NO VECTOR
          //  #define SAVE_SPACE_DM42_8F        //  1216 bytes // Without Font Browsers
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
@@ -165,7 +165,7 @@
          // #define SAVE_SPACE_DM42_17B        //  7128 bytes // (2) Without cauchy, chi, expo, logis, t, weibull
          // #define SAVE_SPACE_DM42_17         //  9672 bytes // (3) Without Poisson/Hyper/Binomial/Geometrical/f distributions
          // #define SAVE_SPACE_DM42_17C        //  3208 bytes // (4) Without gev, Pareto, Uniform, Discr Uniform
-    #define SAVE_SPACE_DM42_21_HP35            //     0 bytes // Without config file activations only. Not complete removal
+         // #define SAVE_SPACE_DM42_21_HP35    //    88 bytes // Without config file activations only. Not complete removal
          // #define SAVE_SPACE_DM42_24_PROFILES//   240 bytes // Without any dev profile shortcuts, and no JM, RJ & HP35
     #undef  OPTION_TVM_FORMULAS                //  2280 bytes // Use TVM analytical formulas where possible
     #undef  OPTION_TVM_NEWTON                  //  1864 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
@@ -174,7 +174,7 @@
     #undef  IR_PRINTING                        // 10032 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(PACKAGE2_NODISTR)            // PACKAGE 2 (free 1016) // Limited DIST; Full X.FN menu; NO ELEC; FAST FIN; NO VECTOR
+  #if defined(PACKAGE2_NODISTR)            // PACKAGE 2 (free 1088) // Limited DIST; Full X.FN menu; NO ELEC; FAST FIN; NO VECTOR
          // #define SAVE_SPACE_DM42_8F         //  1216 bytes // Without Font Browsers
          // #define SAVE_SPACE_DM42_12ELLIP    // 12888 bytes // Without ELLIPTIC
          // #define SAVE_SPACE_DM42_12BESSEL   //  5168 bytes // Without X.FN BESSEL
@@ -186,14 +186,14 @@
     #define SAVE_SPACE_DM42_17C                //  3208 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
          // #define SAVE_SPACE_DM42_21_HP35    //     0 bytes // Without config file activations only. Not complete removal
          // #define SAVE_SPACE_DM42_24_PROFILES//   240 bytes // Without any dev profile shortcuts, and no JM, RJ & HP35
-         // #undef OPTION_TVM_FORMULAS         //  2280 bytes // Use TVM analytical formulas where possible
-         // #undef OPTION_TVM_NEWTON           //  1864 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
-    #undef  OPTION_ELEC                        //  ===> bytes // ELEC    5102 saving if VECTOR is not in; 1352 saving if VECTOR is in
-    #undef  OPTION_VECTOR                      //  ===> bytes // Vector 11872 saving if ELEC   is not in; 8104 saving if ELEC is in
+    #undef OPTION_TVM_FORMULAS                 //  2280 bytes // Use TVM analytical formulas where possible
+    #undef OPTION_TVM_NEWTON                   //  1864 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
+    #undef  OPTION_ELEC                        //  ===> bytes // ELEC   see below
+    #undef  OPTION_VECTOR                      //  ===> bytes // Vector see below
     #undef  IR_PRINTING                        // 10032 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(PACKAGE3_NOBESSEL_NOORTHO_NOFBR) // PACKAGE 3 (free 12192) // Half DIST, STRIPPED X.FN menu; ELEC; SLOW FIN; // VECTOR Future
+  #if defined(PACKAGE3_NOBESSEL_NOORTHO_NOFBR) // PACKAGE 3 (free 8304) // Half DIST, STRIPPED X.FN menu; ELEC; SLOW FIN; // VECTOR Future
          // #define SAVE_SPACE_DM42_8F         //  1216 bytes // Without Font Browsers
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
@@ -207,12 +207,17 @@
          // #define SAVE_SPACE_DM42_24_PROFILES//   240 bytes // Without any dev profile shortcuts, and no JM, RJ & HP35
     #undef  OPTION_TVM_FORMULAS                //  2280 bytes // Use TVM analytical formulas where possible
     #undef  OPTION_TVM_NEWTON                  //  1864 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
-         // #define OPTION_ELEC                //  ===> bytes // ELEC    5102 saving if VECTOR is not in; 1352 saving if VECTOR is in
-         // #undef OPTION_VECTOR               //  ===> bytes // Vector 11872 saving if ELEC   is not in; 8104 saving if ELEC is in
+          #define OPTION_ELEC                  //  ===> bytes // ELEC   see below
+          #undef OPTION_VECTOR                 //  ===> bytes // Vector see below
     #undef  IR_PRINTING                        // 10032 bytes // Remove IR printing for old hardware
   #endif
+            // ELEC VECT
+            // 0    0    13032  free: costs 0
+            // 0    1   -  696  free: costs 13032-- 696 = 13728
+            // 1    0     6216  free: costs 13032 -6216 =  6816
+            // 1    1   - 3480  free: costs 13032--3480 = 16512
 
-  #if defined(PACKAGE4_MINIMAL_MATH)       // PACKAGE 4 (free 26920) // Minimal, no options included, FOR GITLAB PIPELINE COMPILE
+  #if defined(PACKAGE4_MINIMAL_MATH)       // PACKAGE 4 (free 23200) // Minimal, no options included, FOR GITLAB PIPELINE COMPILE
       //  #define SAVE_SPACE_DM42_8F           //  1216 bytes // Without Font Browsers
     #define SAVE_SPACE_DM42_12ELLIP            // 12888 bytes // Without ELLIPTIC
     #define SAVE_SPACE_DM42_12BESSEL           //  5168 bytes // Without X.FN BESSEL
@@ -733,7 +738,8 @@
 #define ERROR_INVALID_TYPE_XFN                    62
 #define ERROR_PRINTING_DISABLED                   63
 #define ERROR_NO_STRING_IN_ALPHA_REGISTER         64
-#define LAST_ERROR_MESSAGE                        64
+#define ERROR_NO_EQUATION_DEFINED                 65
+#define LAST_ERROR_MESSAGE                        65
 
 //Status output messages for time consuming tasks, to keep user informed
 #define LOADING_STATE_FILE                       100
@@ -929,8 +935,9 @@
 #define FLAG_PINTG                            0x806C
 #define FLAG_PDIFF                            0x806D
 #define FLAG_PSHADE                           0x806E //47
+#define FLAG_SBadm                            0x806F //48
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+47 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+48 // We can have a maximum of 128 system flags
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode
@@ -1157,14 +1164,15 @@
 // 100…111                           Lettered global registers from X to L                          100…111
 // 112…117         Lettered global registers from M to S: no possibility of indirect access         211…216
 // 118…125         Lettered global registers from E to W: no possibility of indirect access         217…224
-//                                        25 undefined free registers                               225…249
+//                                        24 undefined free registers                               225…248
 // 126…134                 saved stack registers (UNDO feature) not user accessible
 // 135…136                          temporary registers not user accessible
-// 137…249              113 undefined free registers: no possibility of indirect access
+// 137…248              112 undefined free registers: no possibility of indirect access
 //
+//                                            LOCAL_LABEL_VARIABLE                                  249
 //                             SYSTEM_FLAG_NUMBER --> Used for system flag access                   250
-//                                  VALUE_0 --> Can't remember what this is!                        251
-//                                  VALUE_1 --> Can't remember what this is!                        252
+//                                       VALUE_0 --> Used for test vs. 0.                           251
+//                                       VALUE_1 --> Used for test vs. 1.                           252
 //                                           STRING_LABEL_VARIABLE                                  253
 //                                             INDIRECT_REGISTER                                    254
 //                                             INDIRECT_VARIABLE                                    255
@@ -1354,7 +1362,8 @@ enum REG_NUMBERS_IN_KS_CODE { // Key Stroke register codes
   LAST_SPARE_REGISTERS_IN_KS_CODE = REGISTER_W_IN_KS_CODE,
 
   // OP parameter special values
-  CNST_BEYOND_250       = 250,
+  LOCAL_LABEL_VARIABLE  = 249,
+  CNST_BEYOND_250       = 250,        // [DL] Not an issue to have it above LOCAL_LABEL_VARIABLE as both are used in different contexts
   //CNST_BEYOND_500       = 251,
   //CNST_BEYOND_750       = 252,
   SYSTEM_FLAG_NUMBER    = 250,
@@ -1437,7 +1446,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define SBARUPD_ComplexResult                   (getSystemFlag(FLAG_SBcr   ))
 #define SBARUPD_ComplexMode                     (getSystemFlag(FLAG_SBcpx  ))
 #define SBARUPD_AngularModeBasic                (getSystemFlag(FLAG_SBang  ))
-#define SBARUPD_AngularMode                     ( 1                         )
+#define SBARUPD_AngularMode                     (getSystemFlag(FLAG_SBadm  ))
 #define SBARUPD_FractionModeAndBaseMode         (getSystemFlag(FLAG_SBfrac ))
 #define SBARUPD_IntegerMode                     (getSystemFlag(FLAG_SBint  ))
 #define SBARUPD_MatrixMode                      (getSystemFlag(FLAG_SBmx   ))
@@ -1460,6 +1469,9 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 // Horizontal offsets in the status bar
 #define X_DATE                           ((SBARUPD_Time || SBARUPD_WoY) ? 1 : 25)
 #define X_TIME                                     45 // note: this is used only if DATE is not displayed, otherwise TIME is printed directly next to date's end
+#define X_TIME_NODATE                              25 // note: time start with the date absent: the date position, keeps the top left shift area free
+#define X_TIME_WOY      (getSystemFlag(FLAG_TDM24) ? 17 : 12) // note: time start when WoY follows and the date is absent; left of X_TIME_NODATE, the longer 12h time further
+#define X_WOY                                      81 // note: WoY start behind the date or the time (10 character date width); a shorter predecessor is padded up to this column
 #define X_REAL_COMPLEX        (X_TIME             +91)// note: this is for both dow or time, not both
 #define X_HOURGLASS_GRAPHS    (X_REAL_COMPLEX     + 4)//
 #define X_COMPLEX_MODE        (X_HOURGLASS_GRAPHS + 6)//
