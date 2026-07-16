@@ -3,6 +3,15 @@
 
 #include "c47.h"
 
+#if !defined(OPTION_DATAFILE)                                                 // stubs for .d47 register/variable export & import (real code is guarded below): EXPstk/ltr/nrg/reg/xfnx, IMPORTr
+  void fnSaveStackRegisters   (uint16_t unusedButMandatoryParameter) {}
+  void fnSaveLetteredRegisters(uint16_t unusedButMandatoryParameter) {}
+  void fnSaveNRegisters       (uint16_t N) {}
+  void fnSaveRegister         (uint16_t regist) {}
+  void fnSaveXFNRegister      (uint16_t unusedButMandatoryParameter) {}
+  void fnLoadRegisters        (uint16_t unusedButMandatoryParameter) {}
+#endif // !OPTION_DATAFILE
+
 // This is used for the state files
 #define configFileVersion                  10000026 // FLAG_SBadm
 #define VersionAllowed                     10000005 // This code will not autoload versions earlier than this
@@ -437,6 +446,7 @@ static void saveMatrixElements(calcRegister_t regist) {
   }
 
 
+#if defined(OPTION_DATAFILE)
 bool_t fnSaveDataRegisters(uint16_t *beginR, uint16_t *endR, char *registerName, bool_t isXFNRegister) {
   // Appends a register section to the already-open file: header, count, then per register id/name line, type line,
   // value line, and matrix element lines. registerName != NULL saves that one named variable (beginR/endR ignored);
@@ -577,6 +587,7 @@ void fnSaveXFNRegister(uint16_t unusedButMandatoryParameter) {
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
   }
 }
+#endif // OPTION_DATAFILE
 
 
 static void doSave(uint16_t saveType);
@@ -2401,6 +2412,7 @@ END_CONFIG:
 
 
 
+#if defined(OPTION_DATAFILE)
 static void doLoadDataFile(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d) {
   ioFilePath_t path;
   int ret;
@@ -2471,6 +2483,7 @@ static void doLoadDataFile(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d
 void fnLoadRegisters(uint16_t unusedButMandatoryParameter) {
   doLoadDataFile(LM_ALL, 0, 0, 0);
 }
+#endif // OPTION_DATAFILE
 
 
 

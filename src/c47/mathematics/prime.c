@@ -7,7 +7,7 @@
 
 #include "c47.h"
 
-#if defined(SAVE_SPACE_DM42_12PRIME)
+#if !defined(OPTION_PRIME)
   void fnIsPrime      (uint16_t unusedButMandatoryParameter){;}
   void fnNextPrime    (uint16_t unusedButMandatoryParameter){;}
   void fnPrimeFactors (uint16_t unusedButMandatoryParameter){;}
@@ -222,7 +222,7 @@ static bool_t getIntArg(longInteger_t x, calcRegister_t regist) {
 
 
 void fnIsPrime(uint16_t unusedButMandatoryParameter) {
-  #if !defined(SAVE_SPACE_DM42_12PRIME)
+  #if defined(OPTION_PRIME)
     longInteger_t tmp, primeCandidate;
 
     if(!getIntArg(primeCandidate, REGISTER_X)) {
@@ -243,7 +243,7 @@ void fnIsPrime(uint16_t unusedButMandatoryParameter) {
     longIntegerFree(tmp);
   abort1:
     longIntegerFree(primeCandidate);
-  #endif // !SAVE_SPACE_DM42_12PRIME
+  #endif // OPTION_PRIME
 }
 
 void SQUFOF(longInteger_t result, const longInteger_t N, const real34_t lastAdded);
@@ -252,7 +252,7 @@ void complete_factorization2(const longInteger_t N);
 
 
 void fnNextPrime(uint16_t unusedButMandatoryParameter) {
-  #if !defined(SAVE_SPACE_DM42_12PRIME)
+  #if defined(OPTION_PRIME)
     real_t x;
     longInteger_t tmp, currentNumber, nextPrime;
 
@@ -303,7 +303,7 @@ void fnNextPrime(uint16_t unusedButMandatoryParameter) {
     longIntegerFree(tmp);
   abort1:
     longIntegerFree(currentNumber);
-  #endif // !SAVE_SPACE_DM42_12PRIME
+  #endif // OPTION_PRIME
 }
 
 
@@ -595,7 +595,7 @@ void calculateNextPrime(longInteger_t currentNumber, longInteger_t nextPrime) {
 }
 
 
-  #if !defined(SAVE_SPACE_DM42_12PRIME)
+  #if defined(OPTION_PRIME)
     static void _showProgress(const real34_t *ss, longInteger_t nextp) {
       real34_t rr;
       clearRegisterLine(REGISTER_Z, true, true);
@@ -616,7 +616,7 @@ void calculateNextPrime(longInteger_t currentNumber, longInteger_t nextPrime) {
 
       displayFormatDigits = savedDisplayFormatDigits;
     }
-  #endif //SAVE_SPACE_DM42_12PRIME
+  #endif // OPTION_PRIME
 
 
 
@@ -670,7 +670,7 @@ void longIntegerSumPowers(longInteger_t base, longInteger_t exponent, uint32_t k
  * the result as a long integer.
  */
 static void _doFnEvPFacts     (uint16_t param) {
-  #if !defined(SAVE_SPACE_DM42_12PRIME)
+  #if defined(OPTION_PRIME)
     real_t factorR, factorI, baseR, expR, prodR, prodI;
 
     //parameter X required for k
@@ -821,7 +821,7 @@ static void _doFnEvPFacts     (uint16_t param) {
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     goto return10;
 
-  #endif //SAVE_SPACE_DM42_12PRIME
+  #endif // OPTION_PRIME
 }
 
 
@@ -1115,7 +1115,7 @@ void fnEvPFacts(uint16_t param) {
  * the calculation.
  */
 static void fnEulPhi(uint16_t unusedButMandatoryParameter) {
-  #if !defined(SAVE_SPACE_DM42_12PRIME)
+  #if defined(OPTION_PRIME)
     bool_t isMxXNegative = false;
     longInteger_t x;
     bool_t useMatrix = isRegisterMatrixFactors(REGISTER_X, &isMxXNegative);
@@ -1210,7 +1210,7 @@ static void fnEulPhi(uint16_t unusedButMandatoryParameter) {
     return1:
     longIntegerFree(x);
 
-  #endif //SAVE_SPACE_DM42_12PRIME
+  #endif // OPTION_PRIME
 }
 
 
@@ -1600,7 +1600,7 @@ typedef struct FactorAdder {
 } FactorAdder_t;
 
 
-#if !defined(SAVE_SPACE_DM42_12PRIME)
+#if defined(OPTION_PRIME)
   static void initFactorAdder(FactorAdder_t *faddr) {
     faddr->nExpons = 0;
   };
@@ -1851,7 +1851,7 @@ returnFalse:
     refreshScreen(301);
     return false;
   }
-#endif //SAVE_SPACE_DM42_12PRIME
+#endif // OPTION_PRIME
 
 
 static void printTitles(longInteger_t input) {
@@ -2375,4 +2375,4 @@ if(instruction == FACTORS_RESET || (instruction == FACTORS_SETUP && self->iterat
   return result;
 }
 
-#endif // SAVE_SPACE_DM42_12PRIME
+#endif // OPTION_PRIME
