@@ -483,6 +483,20 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
     }
   }
 
+  /* R4-4: a pre-scan is not transactional across its own steps. If an
+   * earlier step compiles a valid definition and a later step errors, the
+   * valid definition previously remained (the program was left unrecorded,
+   * so every retry compiled another copy before failing again — probed:
+   * ": G 1 ; : B NOPE ;" left fdict.count at 1 after the first failed touch,
+   * 2 after the second). Snapshot only these three region-relative scalars;
+   * fdict.base/sizeBlocks are deliberately NOT restored — an emit may have
+   * reallocated the region, so the old base is invalid, and retaining a
+   * grown region above the restored here is the same policy abortDefinition
+   * already uses. */
+  uint16_t scanHere = fdict.here;
+  uint16_t scanLatest = fdict.latest;
+  uint16_t scanCount = fdict.count;
+
   uint8_t *nextStart = forthNextProgramStart(progStart);
   forthOuterCtx_t ctx;
   uint8_t *step = progStart;
@@ -493,7 +507,11 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
       ctx.source[len] = 0;
       forthOuterRun(&ctx, FORTH_OUTER_DEFS_ONLY);
       if (lastErrorCode != ERROR_NONE) {
-        return;   /* halt at the failing step; program stays unrecorded */
+        /* Roll back this pre-scan's own definitions; program stays unrecorded. */
+        fdict.here = scanHere;
+        fdict.latest = scanLatest;
+        fdict.count = scanCount;
+        return;
       }
     }
     uint8_t *next = findNextStep(step);

@@ -3142,6 +3142,67 @@ static int test_prescan_error_halts(void)
   return fail;
 }
 
+/* test_prescan_error_rolls_back_prior_defs
+ * R4-4: a pre-scan is not transactional across its own steps. Unlike
+ * test_prescan_error_halts (error in the FIRST definition, so nothing prior
+ * ever succeeds), this program has a VALID definition before the failing
+ * one: ": G 1 ;" then ": B NOPE ;" (NOPE undefined). Before the fix, the
+ * first failed touch left G compiled (fdict.count=1, program unrecorded), and
+ * because the program stays unrecorded on error, a retry re-scanned from
+ * scratch and compiled a SECOND G (count=2) before failing again — probed
+ * exactly this: counts 1 then 2. A calculator owner retrying a program with
+ * one typo would consume RAM on every attempt until the dictionary filled.
+ * With the fix, both touches roll back to empty: count 0 both times. */
+static int test_prescan_error_rolls_back_prior_defs(void)
+{
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 7,  ':', ' ', 'G', ' ', '1', ' ', ';',
+    0x8B, 0x1A, 0xFD, 10, ':', ' ', 'B', ' ', 'N', 'O', 'P', 'E', ' ', ';'
+  };
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  forthRunGenBump();
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+
+  lastErrorCode = ERROR_NONE;
+  forthProgramStep(beginOfProgramMemory + 3);
+  uint16_t countAfterFirst = fdict.count;
+
+  lastErrorCode = ERROR_NONE;
+  forthProgramStep(beginOfProgramMemory + 3);
+  uint16_t countAfterSecond = fdict.count;
+
+  programRunStop = savedRS;
+
+  int fail = 0;
+  if (countAfterFirst != 0) {
+    printf("    FAIL: fdict.count = %u after first touch (expected 0 — G should have rolled back)\n",
+           countAfterFirst);
+    fail = 1;
+  }
+  if (countAfterSecond != 0) {
+    printf("    FAIL: fdict.count = %u after second touch (expected 0 — each retry rolls back)\n",
+           countAfterSecond);
+    fail = 1;
+  }
+  if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+    printf("    FAIL: second-touch lastErrorCode = %d, expected ERROR_FUNCTION_NOT_FOUND (%d)\n",
+           lastErrorCode, ERROR_FUNCTION_NOT_FOUND);
+    fail = 1;
+  }
+
+  forthDictClear();
+  cleanupTestProgram();
+  if (!fail) {
+    printf("    PASS: pre-scan error rolls back the prior valid def — count 0 after both touches\n");
+  }
+  return fail;
+}
+
 /* test_prescan_last_step_visible
  * T2.7: A definition in the last step of the last program must be visible
  * to earlier steps in the same program.
@@ -6998,6 +7059,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_prescan_error_halts...\n");
   fail |= test_prescan_error_halts();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_prescan_error_rolls_back_prior_defs...\n");
+  fail |= test_prescan_error_rolls_back_prior_defs();
   forthDictClear();
 
   printf("  [DEBUG] running test_prescan_last_step_visible...\n");
