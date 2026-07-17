@@ -16,6 +16,7 @@
 #define FTOK_CALL_BASE    0x1000
 #define FTOK_LIT          0x7F00
 #define FTOK_ILIT         0x7F01
+#define FTOK_C47          0x7F04
 
 /* ---- §3.3.2 / D-3: per-invocation context; idle BSS = one ptr + 2 bytes ---- */
 typedef enum {
@@ -240,6 +241,17 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
     displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return;
   }
+  /* PRECONDITION (R4-E3, accepted): a nested outer interpretation must begin
+   * with no open definition. Nested error paths call abortDefinition(),
+   * which observes the OUTER invocation's openDef — the epilogue restores
+   * openDef.open but not the dictionary bytes an inner abort rolled back.
+   * Unreachable from natural stage-C paths (compile state executes nothing);
+   * revisit only if an EVALUATE-like or immediate source word lands. */
+  #ifdef FORTH_DEBUG_SELFTEST
+  if (forthOuterDepth > 0 && isDefinitionOpen()) {
+    printf("FORTH CANARY: nested outer interpret entered with an open definition (R4-E3 precondition violated)\n");
+  }
+  #endif
   forthOuterCtx_t *prevCtx = forthOuterCur;
   forthOuterCur = ctx;
   forthOuterDepth++;
@@ -369,7 +381,33 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       continue;
     }
 
-    /* ---- §4.1 step 4: C47 label (§3.3.6, C-1) ---- */
+    /* ---- §4.1 step 4: C47 item (§4.1, forward lookup: CAT_FNCT + PTP_NONE only) ---- */
+    {
+      uint16_t itemId;
+      if (forthFindItem(buf, &itemId)) {
+        if (state == STATE_COMPILE) {
+          if (!forthDictEmit(FTOK_C47)) {
+            abortDefinition();
+            lineOK = false;
+          } else if (!forthDictEmit((ftoken_t)itemId)) {
+            abortDefinition();
+            lineOK = false;
+          }
+        } else {
+          uint8_t savedRunStop = programRunStop;
+          programRunStop = PGM_RUNNING;
+          reallyRunFunction((int16_t)itemId, NOPARAM);
+          if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+          if (lastErrorCode != ERROR_NONE) {
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+          }
+        }
+        continue;
+      }
+    }
+
+    /* ---- §4.1 step 5: C47 label (§3.3.6, C-1) ---- */
     {
       /* GLOBAL_LABELS (upstream rebase to b8f79e486): see forth_dict.c's
        * forthResolveXEQ for the same note — Forth's bare-name label lookup

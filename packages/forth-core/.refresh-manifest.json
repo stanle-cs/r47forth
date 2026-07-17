@@ -2,7 +2,7 @@
   "base_commit": "b8f79e486ae19b84af9b6db7230c9a6d1279cced",
   "files": {
     "forth_bridge.c": "5d58c95b9e072dcd244a70ebe235def7015196ade23dc2d0dbe99c691492bc18",
-    "forth_compile.c": "04cd7e6497c611a68521095a468b0d104fc6b4754c84f20597e1aad0718d091f",
+    "forth_compile.c": "9bf3ff157c708e2cb878cfd55e98415c901f4fc775b9a1d7a79211d85ceeece8",
     "forth_dict.c": "cd6da2620bb4de0d41b8bcaf9130e22388478db924ae6e8b7340b3b4c14fe526",
     "forth_dict.h": "3e1f9deb83d04728f25f3029f4e943b09df1fb687ac2baf21546c89819704f33",
     "forth_inner.c": "ed86428284e605674303f30646295c865bf903264ae02528fec88066f2a3c42c",
