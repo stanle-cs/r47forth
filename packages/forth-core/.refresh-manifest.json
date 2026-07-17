@@ -8,7 +8,7 @@
     "forth_inner.c": "ed86428284e605674303f30646295c865bf903264ae02528fec88066f2a3c42c",
     "forth_prims.c": "1f7e208d184b1ec64bee21fd311a26b77df7f64c60f9f78da879606b2bb07a46",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "test_dict_reloc.c": "7fb6ea4e5937155e4c783724321e93fd4e0f66779dbed4f034ae5bf588c8a16d"
+    "test_dict_reloc.c": "dba1866b97e3c46f6a83ccd5aef63b880dfa2d7c9eca3763dea363c223614ade"
   },
   "patches": {
     "010-config.c.patch": "2667aa89854707b1449fc91413711c851b41821f9b3be50be25d1a9ec5954524",

@@ -263,6 +263,23 @@ bool forthFindColon(const char *name, uint16_t *idx)
   return false;
 }
 
+/* §4.1 step 4: forward (Forth-source) C47 item lookup.
+ * Only matches CAT_FNCT + PTP_NONE items.  Parameterized items
+ * (PTP_REGISTER, PTP_NUMBER_8/16) are excluded — stage F4. */
+bool forthFindItem(const char *name, uint16_t *itemId)
+{
+  uint16_t i;
+  for (i = 1; i < LAST_ITEM; i++) {
+    if ((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT &&
+        (indexOfItems[i].status & PTP_STATUS) == PTP_NONE &&
+        compareString(name, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) {
+      *itemId = i;
+      return true;
+    }
+  }
+  return false;
+}
+
 /* ---- Dict-emit API (§3.3.7) ---- */
 
 static struct { uint16_t here, latest, count, entryOff; bool open; } openDef;

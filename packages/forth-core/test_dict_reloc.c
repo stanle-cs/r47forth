@@ -1358,23 +1358,33 @@ static int test_outer_item_lookup(void)
   } else if (itemId != ITM_sin) {
     printf("    FAIL: forthFindItem(\"SIN\") itemId=%u (expected %d)\n", itemId, ITM_sin);
     fail = 1;
+  } else {
+    printf("    PASS: subcase 1 — forthFindItem(\"SIN\") -> ITM_sin (%d)\n", ITM_sin);
   }
 
   /* Subcase 2: forthFindItem("STO") -> false (parameterized item) */
   if (forthFindItem("STO", &itemId)) {
     printf("    FAIL: forthFindItem(\"STO\") returned true (expected false — parameterized)\n");
     fail = 1;
+  } else {
+    printf("    PASS: subcase 2 — parameterized item STO excluded\n");
   }
 
   /* Subcase 3: forthFindItem("FORTH") -> false, forthFindItem("FCALL") -> false
    * (CAT_FNCT but PTP_REM / PTP_NUMBER_16 — the PTP_NONE filter) */
+  int subcase3Failed = 0;
   if (forthFindItem("FORTH", &itemId)) {
     printf("    FAIL: forthFindItem(\"FORTH\") returned true (expected false — PTP_REM)\n");
     fail = 1;
+    subcase3Failed = 1;
   }
   if (forthFindItem("FCALL", &itemId)) {
     printf("    FAIL: forthFindItem(\"FCALL\") returned true (expected false — PTP_NUMBER_16)\n");
     fail = 1;
+    subcase3Failed = 1;
+  }
+  if (!subcase3Failed) {
+    printf("    PASS: subcase 3 — FORTH/FCALL excluded by PTP_NONE filter\n");
   }
 
   /* Subcase 4: Compile ": ISIN SIN ;" and byte-probe the body.
@@ -1400,6 +1410,8 @@ static int test_outer_item_lookup(void)
       printf("    FAIL: body[4..5] = 0x%02X%02X (expected 0x0000 = T_EXIT)\n",
              body[5], body[4]);
       fail = 1;
+    } else {
+      printf("    PASS: subcase 4 — emitted cells 0x7F04 0x004C 0x0000\n");
     }
   }
 
@@ -1420,6 +1432,8 @@ static int test_outer_item_lookup(void)
     } else if (!x_is_longint(42)) {
       printf("    FAIL: X != 42 after \"SIN\" (colon should shadow item)\n");
       fail = 1;
+    } else {
+      printf("    PASS: subcase 5 — colon SIN shadows native item\n");
     }
   }
   forthDictClear();
@@ -1447,6 +1461,8 @@ static int test_outer_item_lookup(void)
       } else if (!real34IsZero(REGISTER_REAL34_DATA(REGISTER_X))) {
         printf("    FAIL: X is real34 but not zero (sin(0) should be 0)\n");
         fail = 1;
+      } else {
+        printf("    PASS: subcase 6 — native SIN dispatch beats global label SIN\n");
       }
     }
     cleanupTestProgram();

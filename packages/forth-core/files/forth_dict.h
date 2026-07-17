@@ -106,6 +106,9 @@ uint16_t forthFindPrim(const char *name);
    Returns true on hit, sets *idx to dictionary index. */
 bool forthFindColon(const char *name, uint16_t *idx);
 
+/* Forward (Forth-source) C47 item lookup: CAT_FNCT + PTP_NONE only (§4.1 step 4). */
+bool forthFindItem(const char *name, uint16_t *itemId);
+
 /* Reverse lookup: §4.2 resolution order (label > item > colon) */
 typedef enum {
   FORTH_XEQ_NONE = 0,
