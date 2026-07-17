@@ -50,6 +50,26 @@ Rules:
    it, the spec is wrong: say so and stop.
 8. Report what you changed, the gate output, and anything that surprised you.
 
+**Two-attempt debugger handoff (mandatory).** This rule applies only when this
+task authorizes you to fix the observed error; it never overrides an earlier
+immediate-STOP rule. After a command, test, or gate first fails because of your
+task changes, you may make at most two distinct repair attempts. A repair
+attempt is an edit intended to clear that failure followed by rerunning the
+relevant command. The original task implementation is not a repair attempt. If
+the required command is still not green after repair attempt 2 — even if the
+visible error changes — STOP. Do not make a third repair, broaden scope, or use
+git to undo anything. Leave the tree exactly as it stands; read-only inspection
+is allowed only to prepare this report:
+
+`[SOL DEBUGGER HANDOFF]`
+
+- task ID and exact failing command;
+- original failure and its relevant verbatim output;
+- attempt 1: files/hunks changed, rationale, and resulting output;
+- attempt 2: files/hunks changed, rationale, and resulting output;
+- current `git status --short`, `git diff --stat`, and relevant diff excerpts;
+- your best remaining hypotheses and anything that surprised you.
+
 ---
 
 ## R6-1 — Gate the TAM Forth fallback on `!tam.colon` (AUD-U1)
@@ -109,26 +129,35 @@ and is reported upstream separately — out of scope here).
    "FOO" / T_ILIT 42 / end_word). Push a sentinel: `forthPushInt32(31337)`.
    Do NOT create any program — no label FOO, no local label FOO.
 2. Control leg (pins that the gate is not over-broad — this is exactly
-   today's working behavior): `tamEnterMode(ITM_XEQ)`, feed the name via
-   three letter items (`tamProcessInput(ITM_F)`, `ITM_O`, `ITM_O` — grep
-   items.h for the exact letter item defines; ITM_A is 550 and letters are
-   contiguous, but verify with grep, do not assume), then
-   `tamProcessInput(ITM_ENTER)`. Require: no error, `x_is_longint(42)` (the
-   Forth word dispatched via the hook).
-3. Reset: `lastErrorCode = ERROR_NONE`, push the sentinel again
-   (`forthPushInt32(31337)`).
+   today's working behavior): set `programRunStop = PGM_RUNNING`, clear
+   `aimBuffer[0]`, and call `tamEnterMode(ITM_XEQ)`. Enter TAM alpha with
+   `tamProcessInput(ITM_alpha)`, then feed the name through the letter items'
+   real public dispatch path: `runFunction(ITM_F)`, `runFunction(ITM_O)`,
+   `runFunction(ITM_O)`. (`runFunction` dispatches each letter to
+   `addItemToBuffer`, which appends it and calls `tamProcessInput`; calling
+   `tamProcessInput(ITM_F/ITM_O)` directly does not append text.) Verify
+   `aimBuffer` is exactly `FOO`, then call `tamProcessInput(ITM_ENTER)`.
+   Require: no error and `x_is_longint(42)` (the Forth word dispatched via
+   the hook). Save and restore `programRunStop` with the other globals.
+3. Reset: `lastErrorCode = ERROR_NONE`, clear `aimBuffer[0]`, and push the
+   sentinel again (`forthPushInt32(31337)`). Clearing the buffer is mandatory:
+   the Forth fallback returns before the generic TAM cleanup clears it, and a
+   second `FOO` would otherwise become `FOOFOO`, invalidating the mutation.
 4. Colon leg: `tamEnterMode(ITM_XEQ)`, then `tamProcessInput(ITM_COLON)`
-   (sets tam.colon — the real local-request gesture), then the same three
-   letters, then `tamProcessInput(ITM_ENTER)`. Require:
+   (sets tam.colon — the real local-request gesture), enter TAM alpha with
+   `tamProcessInput(ITM_alpha)`, feed the same three letters through
+   `runFunction`, verify `aimBuffer` is exactly `FOO`, then call
+   `tamProcessInput(ITM_ENTER)`. Require:
    `lastErrorCode == ERROR_FUNCTION_NOT_FOUND` (upstream's
    neither-label-nor-function surface), `x_is_longint(31337)` (nothing
    dispatched), and `fdict.count` unchanged.
-5. Cleanup on every path: `forthDictClear()`, restore saved globals,
-   `aimBuffer[0] = 0`.
+5. Cleanup on every path: `forthDictClear()` and restore every saved global,
+   including the full saved `aimBuffer` and `programRunStop`.
 
-**STOP conditions specific to this test:** if the letters do not appear in
-`aimBuffer` after step 2's feeds (probe it), or `tamEnterMode` misbehaves
-headless (hangs, opens no TAM), STOP and report exactly what you observed —
+**STOP conditions specific to this test:** if `aimBuffer` is not exactly `FOO`
+after either leg's three `runFunction` calls (probe it), or `tamEnterMode`
+misbehaves headless (hangs, opens no TAM), STOP and report exactly what you
+observed —
 do NOT fall back to hand-priming `tam.mode`/`tam.colon`/`aimBuffer` and
 calling internals directly; a test that primes the state its subject derives
 proves nothing (this repo has been burned by that four times).

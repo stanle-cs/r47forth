@@ -43,6 +43,26 @@ Rules:
    report before touching it. Never weaken a test to make a change pass.
 8. Report what changed, exact test/gate output, and anything surprising.
 
+**Two-attempt debugger handoff (mandatory).** This rule applies only when this
+task authorizes you to fix the observed error; it never overrides an earlier
+immediate-STOP rule. After a command, test, or gate first fails because of your
+task changes, you may make at most two distinct repair attempts. A repair
+attempt is an edit intended to clear that failure followed by rerunning the
+relevant command. The original task implementation is not a repair attempt. If
+the required command is still not green after repair attempt 2 — even if the
+visible error changes — STOP. Do not make a third repair, broaden scope, or use
+git to undo anything. Leave the tree exactly as it stands; read-only inspection
+is allowed only to prepare this report:
+
+`[SOL DEBUGGER HANDOFF]`
+
+- task ID and exact failing command;
+- original failure and its relevant verbatim output;
+- attempt 1: files/hunks changed, rationale, and resulting output;
+- attempt 2: files/hunks changed, rationale, and resulting output;
+- current `git status --short`, `git diff --stat`, and relevant diff excerpts;
+- your best remaining hypotheses and anything that surprised you.
+
 ---
 
 ## R5-1 — Canonicalize patch mode metadata
