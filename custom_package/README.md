@@ -503,9 +503,8 @@ parse time) — don't do that.
 
 ## Limitations
 
-- **No existing package uses this system yet** — see **Current Status** at
-  the top of this document. `packages/forth-core/` needs migration before
-  `CUSTOM_PKG=packages/forth-core` does anything.
+- *(Stale bullet removed 2026-07-15: `packages/forth-core/` migrated to this
+  system long ago — see **Current Status** at the top of this document.)*
 - **Documentation:** doxygen (`docs/code`) only scans `src/c47/`. Package
   sources and patches do not appear in generated documentation.
 - **Package-level build configuration:** there is no mechanism for a

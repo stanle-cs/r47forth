@@ -8,8 +8,11 @@
 - Forth work lives in packages/forth-core/. DESIGN.md there is authoritative;
   DESIGN-HISTORY.md is its non-normative amendment trail.
 - Build: BUILD.md details all the builds. compile_commands.json exists; respect it.
-- Target: DM42-class hardware. Flash/RAM budget is the binding constraint —
-  report arena high-water marks with any dictionary change.
+- Target: R47 on DM42n (DMCP5). DM42 compatibility is best-effort, never
+  design-binding (ruled 2026-07-15). RAM/arena discipline is binding — report
+  arena high-water marks with any dictionary change. Flash increases are fine
+  when justified: record the measured `make dmcp5r47` delta in the stage
+  commit instead of designing around bytes.
 - Conventions: single clean commit series per stage, branch per stage.
 - Division of labor: you (Claude) do design, review, and hard debugging.
   A local model implements from your specs — write specs with zero unstated

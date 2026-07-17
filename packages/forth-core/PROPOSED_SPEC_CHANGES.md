@@ -19,7 +19,9 @@ registered in `pkg_override_sources`). Tests in
 
 ## §3.3.6 (C-1) label-arm dispatch: replace the PGM_RUNNING wrap with direct fnExecute
 
-**PROPOSED** (found during P3/T3.5, 2026-07-13). DESIGN.md §3.3.6 prescribes
+**RATIFIED** — folded into DESIGN.md §3.3.6 (see the DESIGN-HISTORY 2026-07-13
+"C-1 label-arm dispatch" entry); the body below is the historical record.
+Found during P3/T3.5, 2026-07-13. DESIGN.md §3.3.6 originally prescribed
 dispatching interpret-state C47-label calls via `reallyRunFunction(ITM_XEQ,
 label)` inside the same PGM_RUNNING save/set/restore wrap as the FTOK_C47 arm.
 That DECIDED text is defective for ITM_XEQ specifically — first exercised

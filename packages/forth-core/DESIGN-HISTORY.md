@@ -497,3 +497,102 @@ Corrections to `DESIGN.md`'s own gap list, made as part of this rewrite:
   because the source is the truth and lives in program memory; the dictionary is
   a cache the pre-scan rebuilds. The rationale now lives in `DESIGN.md` so this
   is not re-litigated.
+
+---
+
+## 2026-07-15 — R6 audit fold: stage-F architecture, platform retarget, local labels
+
+Origin: the Fable pre-execution audit (`FOR_THE_ARCHITECT_R6_preexecution_audit.md`,
+verdict NO-GO) plus its upstream-delta addendum R6.1, the R4 architecture
+interview's accepted decisions (recorded 2026-07-15, commit `2cc6b1d03`), and
+three owner rulings the same day (`R6_RESOLUTION_PLAN.md` §1). This entry
+records what the amendment pass changed and what it superseded.
+
+**New DESIGN.md §10 (Stage F).** The R4 accepted architecture is now in the
+authoritative document as DECIDED-unimplemented target state: F1 lifetime
+foundations (pending-reset flag replaces generation-equality as the truth
+predicate; active-frame guard; PEM single-step = fresh generation; dynamic
+scan tracking; RECURSE; restore-time validator), F2 shared native parameter
+decoder, F3 vocabulary/scopes/XEQ (supersedes the withdrawn Qwen prompt
+R1-4), F4 textual parameters, F5 commit validation (E9's implementation), F6
+capture submode. §9 was left unassigned — pre-renumber artifacts cite "§9.x"
+meaning today's §8.x, and reusing the number would collide.
+
+**Platform retarget (RULE-1).** Target is the R47 on DM42n (DMCP5); DM42 is
+best-effort. Flash ceases to be a design veto — stages record the measured
+`make dmcp5r47` delta instead. Knock-ons: `boundedRead` stays permanently
+alongside the future restore validator (old Q2); the `FORTH ARENA:` suite
+line is blessed as the §5.4 reporting mechanism and `bench/hwm.fs` demoted to
+optional (old Q3). CLAUDE.md's target line updated to match.
+
+**Named local labels (Q8 ruling).** Upstream b8f79e486 introduced named LOCAL
+labels (kind byte 249 vs 253, `findNamedLabel(name, labelType)`,
+position-sensitive in-program resolution, TAM `:` syntax). Ruled: Forth
+incorporates them by **mimicking upstream** — `XEQ :NAME:` source form at
+stage F3, `FTOK_XEQN` inline data adopts upstream's `[kind][len][name]`
+payload with the kind byte passed verbatim to the native resolver, bare names
+stay global-only, and a local request never falls through to Forth
+vocabulary. §0.3, §2.2, §3.3.6, §4.1/§4.2 amended. The audit's AUD-U1 (the
+tam.c hook predates `tam.colon` and lacks the gate) is scheduled as a code
+fix. The per-program word scopes of F3 deliberately mirror the
+`labelList[].program` pattern so both "local name" systems share one model.
+
+**Falsified/stale text corrected (superseded wordings, for the record):**
+
+- §8.4 E7 / §6 P-H2 claimed the fnPem cursor default "is already correct —
+  delete any FORTH branch as dead code." Falsified by hardware: bare renders
+  lack the two-byte quote the shared `+2` path assumes; the landed R3-1
+  branch (`tam.function == ITM_FORTH` → `cursorInString = T_cursorPos - 2`)
+  is now the documented contract. The old text would have deleted a live fix.
+- Stale "required change / does not exist" claims rewritten as implemented
+  invariants (R4's list): the prim-count `_Static_assert` (forth_prims.c:51),
+  ASLIFT-on-exit, public push helpers, `forthPushInt32`'s long-integer store,
+  the §3.3.7 emit/start/finish/abort API, the 0x6F00 count cap,
+  `forthDictWriteName`'s clamped 3-arg form, the §5.4 BSS-vs-stack accounting.
+- §3.2 pseudocode's two bare `return`s (prim-error, rstack guard) →
+  `INNER_LEAVE()`; the committed code always did this correctly.
+- §8.3's "generation wrap is harmless" — falsified by R4-E2's executed probe
+  (65,536 bumps alias); annotated as a known bounded defect until F1.
+- §8.4 E1's "do not fix REM by symmetry" rationale — upstream fixed REM
+  itself in b8f79e486 (shallower two-pop); both fixes coexist, not unified.
+  The E1 drain pseudocode now shows the landed bounded stack-wide form
+  (59f58dbe3) instead of the unbounded `while(anyCatalogMenuOnStack())` that
+  could spin when `popSoftmenu()` re-pushes HOME.
+- §3.3 error-table row "C47 label in compile state → INVALID_NAME" annotated
+  stage-interim (the §3.3.6/§4.1 FTOK_XEQN emission is the F3 target — the
+  R6 audit's AUD-H3 fork resolved by marking which text is current vs target).
+- §8.9 reworded per the Q1 ruling: unit analogs vs planned end-to-end paths
+  made explicit; the harness is scheduled immediately after F1.
+- §8.10 item 1 (cross-program visibility) closed as SUPERSEDED by F3 scopes;
+  the "run-scoped, not program-local" paragraph now separates implementation
+  (generation-global today) from contract (program-local under F3).
+- §4.2 gained the Q4 interim ruling (NOPARAM dispatch of parameterized items
+  via XEQ-by-name is documented behavior until F3's atomic-error rule) and
+  the label-kind pins (GLOBAL_LABELS everywhere; AUD-U1 gate scheduled).
+- §8.5 gained the Q5 ruling: the bare listing is deliberately contextual and
+  non-injective; markers are the only type cue.
+- R3-A2 (malformed-opcode walker) closed per Q6: upstream's
+  `programBytesAvailable()` guards (including the computed-end check over
+  PTP_REM payloads) cover the demonstrated class; no package-side renderer
+  bound is added without new evidence.
+- Post-migration citation refresh: LAST_ITEM 2860→2870, ITM_FORTH row
+  4707→4722, REM row 3374→3391, slot 213 = MNU_FORTH (spares 214-219),
+  `forthResolveXEQ` at forth_dict.c:420-456, config reset hook at :1957,
+  scanLabelsAndPrograms 102-194/:734, EXIT/ALPHA/OFF rows, tam hook range.
+  The §4.2 call-site map's numbers are marked drifted-by-design (anchors are
+  the durable content).
+
+**Also corrected in this pass, other documents:** CLAUDE.md target line;
+`PROPOSED_SPEC_CHANGES.md` item 2 marked RATIFIED (it was folded into §3.3.6
+on 2026-07-13 but still said PROPOSED); `Stage1.md` given a SUPERSEDED banner
+(it still described the obsolete `forthArena`); `custom_package/README.md`'s
+stale "no package uses this system yet" limitation removed. **Correction to
+this file's own 2026-07-14 entry:** it called `_saveProgram`/`fnLoadProgram`
+a "binary" format; the format is textual (one decimal byte value per line) —
+DESIGN.md §8.10 has been right about this since the R1 fold; the semantic
+point (payload bytes opaque, lossless round-trip) was and is correct.
+
+**Deferral bookkeeping (Q7):** PEM_FIX deferrals F8 (reject-path cursor
+drift) and F9.1 (phantom marker on power-off mid-capture) are carried into
+the Step-2 prompt backlog as bounded verify-then-fix-or-close tasks; they had
+fallen out of all current tracking.

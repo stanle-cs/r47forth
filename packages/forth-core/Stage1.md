@@ -1,3 +1,8 @@
+> **SUPERSEDED (2026-07-15 banner).** Historical Stage-1 plan, fully executed
+> long ago. It references the obsolete `forthArena` model — the dictionary is
+> a managed `allocC47Blocks` region (DESIGN.md §5.2). Never implement from
+> this file.
+
 Dictionary Lookup Plan (revised)
 Step 0 — Fix forthDict_t to include base
 Files: forth_dict.h, forth_dict.c
