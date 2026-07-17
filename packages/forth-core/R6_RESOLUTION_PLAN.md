@@ -8,6 +8,29 @@ DESIGN.md.
 
 ---
 
+## 0. Execution status (reconciled 2026-07-16)
+
+**GO — Steps 1 through 6 are complete.**
+
+- Step 1, authority fold: `1927d60af`.
+- Step 2, prompt hygiene and R1-4 withdrawal: `8a5fde237`.
+- Step 3, clean baseline: re-run green on 2026-07-16.
+- Step 4, corrected R1-3: completion commit `ae1a5a1af`. The earlier outer
+  arm (`4ab421a32`) and focused test body (`29f94d8e4`) were reconciled in
+  that commit without rewriting shared history; all three required mutations
+  went RED before the restored clean-tree gate passed.
+- Step 5: R6-1 `29f94d8e4`, R6-2 `416c1e26b`, R6-3 `4ab421a32`.
+  R6-4/R6-5 remain optional, report-only characterization probes and do not
+  block GO.
+- Step 6, GO checkpoint: clean gate passed with `FORTH SELF-TEST: ALL PASSED`,
+  `BUILD + SELF-TEST GREEN`, exit 0, and arena
+  `here=36 sizeBlocks=16 freeRamDelta=64`.
+
+The next required action is Step 7 / **F1 lifetime foundations**. Author its
+bounded execution prompt before changing production code.
+
+---
+
 ## 1. Rulings recorded (2026-07-15, from Stan)
 
 **RULE-1 — Platform.** The package targets the **R47 on DM42n (DMCP5)**.

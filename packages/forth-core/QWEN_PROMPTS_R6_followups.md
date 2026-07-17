@@ -8,11 +8,18 @@ predates it). R6-2/R6-3 are small hygiene tasks. R6-4/R6-5 are
 **report-only characterization probes** — they change no production code and
 commit nothing; the architect rules on their evidence afterwards.
 
-Order: R6-1 first (it commits). R6-2 and R6-3 may run in either order after
-it (one committer at a time). R6-4/R6-5 last, any order.
+**STATUS (reconciled 2026-07-16):**
 
-**How to use:** paste the PREAMBLE, then one task block, into a fresh Qwen
-session.
+| Task | Status |
+|---|---|
+| R6-1 | **EXECUTED** (29f94d8e4) |
+| R6-2 | **EXECUTED** (416c1e26b) |
+| R6-3 | **EXECUTED** (4ab421a32) |
+| R6-4 | **PENDING, NON-BLOCKING** — report-only characterization |
+| R6-5 | **PENDING, NON-BLOCKING** — report-only characterization |
+
+**How to use:** only R6-4/R6-5 remain eligible to run. Paste the PREAMBLE,
+then one report-only task block, into a fresh session; neither task commits.
 
 ---
 

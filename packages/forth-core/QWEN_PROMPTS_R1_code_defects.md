@@ -6,12 +6,13 @@
 |---|---|
 | R1-1 | **EXECUTED** (commit 1806d48d8, reconciled with R4-2) — historical record only |
 | R1-2 | **EXECUTED** (commit 390d7ba15) — historical record only |
-| R1-3 | **REWRITTEN 2026-07-15** per R6 §10.1 — the only executable task in this file |
+| R1-3 | **EXECUTED** (completion commit ae1a5a1af; outer arm 4ab421a32; focused test body 29f94d8e4) — historical record only |
 | R1-4 | **WITHDRAWN** — see its banner; FTOK_XEQN lands in stage F3 (DESIGN.md §10.3) |
 
-**How to use:** paste the PREAMBLE, then the R1-3 block, into a fresh Qwen
-session. R1-3 commits by itself; the old "one commit for R1-1..R1-4"
-instruction is void (R1-1/R1-2 were committed separately).
+**How to use:** no task in this file remains executable. R1-3 was completed
+and mutation-verified on 2026-07-16; its split history is reconciled in
+ae1a5a1af without rewriting the shared commits. The old "one commit for
+R1-1..R1-4" instruction is void.
 
 ---
 
