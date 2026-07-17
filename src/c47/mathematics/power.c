@@ -159,17 +159,35 @@ static void powReal(void) {
     return;
   }
 
-  if(realIsInfinite(&y)) {
-    if(realIsZero(&x)) {
+  if(realIsInfinite(&y)) {                             // y (the base) is +/- infinity
+    if(realIsZero(&x)) {                               // inf ^ 0 is indeterminate
       realSetNaN(&res);
     }
     else {
-      if(realIsPositive(&x) && realIsAnInteger(&x)) {
+      bool_t oddIntegerExponent = false;
+      if(realIsAnInteger(&x)) {
         WP34S_Mod(&x, const_2, &res, &ctxtReal39);
-        realCopy(realIsZero(&res) ? const_plusInfinity : const_minusInfinity, &res);
+        oddIntegerExponent = !realIsZero(&res);
       }
-      else {
+      else if(realIsNegative(&y)) {                    // (-inf) ^ non-integer is not a real number
+        if(getFlag(FLAG_CPXRES)) {
+          powCplx();
+          return;
+        }
+        displayCalcErrorMessage(ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN, ERR_REGISTER_LINE, REGISTER_X);
+        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+          moreInfoOnError("In function powReal:", "cannot do complex results if CPXRES is not set", NULL, NULL);
+        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+        return;
+      }
+      if(realIsPositive(&x)) {                         // exponent > 0  ==> +/- infinity
         realSetPlusInfinity(&res);
+      }
+      else {                                           // exponent < 0  ==> +/- zero
+        realSetZero(&res);
+      }
+      if(realIsNegative(&y) && oddIntegerExponent) {   // (-inf) ^ odd keeps the negative sign
+        realSetNegativeSign(&res);
       }
     }
     goto finish;
@@ -206,12 +224,20 @@ finish:
 uint8_t PowerComplex(const real_t *yReal, const real_t *yImag, const real_t *xReal, const real_t *xImag, real_t *rReal, real_t *rImag, realContext_t *realContext) {
   uint8_t errorCode = ERROR_NONE;
 
-  if(realIsInfinite(yReal) || realIsInfinite(yImag)) {
-    if(realIsZero(xReal) && realIsZero(xImag)) {
+  if(realIsInfinite(yReal) || realIsInfinite(yImag)) {   // the base has an infinite component
+    if(realIsZero(xReal) && realIsZero(xImag)) {          // inf ^ 0 is indeterminate
       realSetNaN(rReal);
       realSetNaN(rImag);
     }
-    else {
+    else if(realIsNegative(xReal)) {                     // Re(exponent) < 0 ==> magnitude collapses to 0
+      realSetZero(rReal);
+      realSetZero(rImag);
+    }
+    else if(realIsZero(xReal)) {                         // Re(exponent) == 0 (pure imaginary) is indeterminate
+      realSetNaN(rReal);
+      realSetNaN(rImag);
+    }
+    else {                                               // Re(exponent) > 0 ==> infinite magnitude
       realSetPlusInfinity(rReal);
       realSetPlusInfinity(rImag);
     }
