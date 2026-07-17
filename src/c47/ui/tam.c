@@ -971,7 +971,7 @@ printf("tam.value: %d\n", tam.value);
           }
         }
         if(value == INVALID_VARIABLE && ((tam.function == ITM_XEQ) || (tam.function == ITM_XEQP1))) {  // If no label found then look for XEQ 'function'
-          if(!tam.indirect) {                                                                          //  indirection (XEQ -> 'function') not supported
+          if(!tam.indirect && !tam.colon) {                                                                          //  indirection (XEQ -> 'function') not supported
             for(int i = 0; i < LAST_ITEM; ++i) {
               if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(buffer, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
                 leaveTamModeIfEnabled();
