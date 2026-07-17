@@ -26,8 +26,11 @@ DESIGN.md.
   `BUILD + SELF-TEST GREEN`, exit 0, and arena
   `here=36 sizeBlocks=16 freeRamDelta=64`.
 
-The next required action is Step 7 / **F1 lifetime foundations**. Author its
-bounded execution prompt before changing production code.
+Step 7 prompt authoring has begun. `QWEN_PROMPTS_F1_lifetime.md` contains one
+bounded executable packet, **F1-1 pending-reset truth + active-frame guard**.
+F1-2 through F1-5 are dependency-ordered but deliberately not authored against
+nonexistent future APIs. The next required action is to execute F1-1 on a clean
+tree; author F1-2 only after F1-1 commits green.
 
 ---
 
