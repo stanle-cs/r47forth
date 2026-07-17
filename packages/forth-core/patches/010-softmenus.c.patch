@@ -1,5 +1,5 @@
 diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
-index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..6b855997c0696b04a77c60260aacfdb766dfd57f 100644
+index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..055cca7e87a1d9f25160bcf4549e8267530d5772 100644
 --- a/src/c47/softmenus.c
 +++ b/src/c47/softmenus.c
 @@ -2,6 +2,7 @@
@@ -40,7 +40,7 @@ index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..6b855997c0696b04a77c60260aacfdb7
  };
  
  
-@@ -1858,6 +1862,120 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
+@@ -1858,6 +1862,116 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
          break;
        }
  
@@ -64,11 +64,7 @@ index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..6b855997c0696b04a77c60260aacfdb7
 +
 +        memset(tmpString, 0, TMP_STR_LENGTH);
 +
-+        for (i = 0; i < numberOfPrograms; i++) {
-+          if (programList[i].instructionPointer <= currentStep) {
-+            progStart = programList[i].instructionPointer;
-+          }
-+        }
++        progStart = forthOwningProgramStart(currentStep);
 +
 +        if (progStart) {
 +          step = progStart;
@@ -161,7 +157,7 @@ index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..6b855997c0696b04a77c60260aacfdb7
        default: {
          sprintf(errorMessage, "In function initVariableSoftmenu: unexpected variable softmenu %" PRId16 "!", (int16_t)(-dynamicSoftmenu[menu].menuItem));
          displayBugScreen(errorMessage);
-@@ -1865,6 +1983,11 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
+@@ -1865,6 +1979,11 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
      }
    }
  
@@ -173,7 +169,7 @@ index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..6b855997c0696b04a77c60260aacfdb7
  
  static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText, bool_t doubleMidLine);
  static uint32_t trimSoftKeyName(uint16_t lim, char *l, int mode, int comp, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows);
-@@ -3062,7 +3185,7 @@ void showSoftmenuCurrentPart(void) {
+@@ -3062,7 +3181,7 @@ void showSoftmenuCurrentPart(void) {
        #if defined(PC_BUILD)
          //printf("Dynamic menu: m=%i cachedDynamicMenu=%i softmenu[m].menuItem= %i \n",m, cachedDynamicMenu, softmenu[m].menuItem);
        #endif // PC_BUILD
@@ -182,7 +178,7 @@ index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..6b855997c0696b04a77c60260aacfdb7
          initVariableSoftmenu(m);
          cachedDynamicMenu = softmenu[m].menuItem;
        }
-@@ -3789,7 +3912,10 @@ void showSoftmenuCurrentPart(void) {
+@@ -3789,7 +3908,10 @@ void showSoftmenuCurrentPart(void) {
              menu(n) == -MNU_ALPHAMATH ||
              menu(n) == -MNU_ALPHAMISC ||
              menu(n) == -MNU_ALPHAINTL ||

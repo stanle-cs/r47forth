@@ -23,7 +23,7 @@
     "010-programming__manage.c.patch": "87bb9c7612905cd64db63c3402618e3dfab0f877a2e2ead2ad141e050a8d2f5e",
     "010-saveRestoreBackup.c.patch": "b7495bacc1fd398bd0c8b40f220fe19de6f4cd80eb2fb07ed97621ffe5ed2f0b",
     "010-screen.c.patch": "e7100fc0e708103a35c38852655340b335e86e1f98c8cda4596c3593ee569144",
-    "010-softmenus.c.patch": "cd37e449009f4ea56dbc96665d47c9a4c6defd8d727d4266014a48086b3c8c27",
+    "010-softmenus.c.patch": "6e83a447767816aff57da03182259222fb89d143843f3b190f97bfc4cb8cae09",
     "010-ui__tam.c.patch": "a25e979619cd8766ea432793bfbe90b1c456b431945ea92ff56462b874c79886"
   }
 }

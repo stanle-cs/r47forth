@@ -1882,11 +1882,7 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
 
         memset(tmpString, 0, TMP_STR_LENGTH);
 
-        for (i = 0; i < numberOfPrograms; i++) {
-          if (programList[i].instructionPointer <= currentStep) {
-            progStart = programList[i].instructionPointer;
-          }
-        }
+        progStart = forthOwningProgramStart(currentStep);
 
         if (progStart) {
           step = progStart;
