@@ -436,36 +436,32 @@ void fnRecallStack(uint16_t regist) {
 static void _fnRecallElement(bool_t stepForward);
 
 void fnRecallVElement(uint16_t ix) {
-  uint16_t matrixIndexBak = matrixIndex;
-  const int16_t iBak = getIRegisterAsInt(true);
-  const int16_t jBak = getJRegisterAsInt(true);
   uint16_t rows, cols;
   if(getMatrixDims(REGISTER_X, "In function fnRecallVElement:", &rows, &cols)) {
+    matrixIndexState_t bak;
+    saveMatrixIndexState(&bak);
     setIRegisterAsInt(false, (ix-1) / cols + 1);
     setJRegisterAsInt(false, (ix-1) % cols + 1);
     matrixIndex = REGISTER_X;
     _fnRecallElement(false);
-    setIRegisterAsInt(false, iBak);
-    setJRegisterAsInt(false, jBak);
-    matrixIndex = matrixIndexBak;
+    restoreMatrixIndexState(&bak);
   }
 }
 
 void fnRecallVector(uint16_t   regist) {
-  uint16_t matrixIndexBak = matrixIndex;
-  const int16_t iBak = getIRegisterAsInt(true);
-  const int16_t jBak = getJRegisterAsInt(true);
   uint16_t rows, cols;
   if(!getMatrixDims(REGISTER_X, "In function fnRecallVector:", &rows, &cols)) {
     return;
   }
+  matrixIndexState_t bak;
+  saveMatrixIndexState(&bak);
   matrixIndex = REGISTER_X;
   for(uint16_t ix = 1; ix <= rows * cols && lastErrorCode == 0; ix++) {  //for 5x5, from 1 to 25
     setIRegisterAsInt(false, (ix-1) / cols + 1);
     setJRegisterAsInt(false, (ix-1) % cols + 1);
     _fnRecallElement(false);
     if(lastErrorCode != 0) {
-      return;
+      break;
     }
     if(regist > REGISTER_X && regist < getStackTop()) {
       fnStore(1 + regist++);
@@ -473,13 +469,11 @@ void fnRecallVector(uint16_t   regist) {
       fnStore(regist++);
     }
     if(lastErrorCode != 0) {
-      return;
+      break;
     }
     fnDrop(NOPARAM);
   }
-  setIRegisterAsInt(false, iBak);
-  setJRegisterAsInt(false, jBak);
-  matrixIndex = matrixIndexBak;
+  restoreMatrixIndexState(&bak);
 }
 
 void fnRecallElementPlus(uint16_t unusedButMandatoryParameter) {
