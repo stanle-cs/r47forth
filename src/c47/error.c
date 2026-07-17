@@ -278,7 +278,7 @@ void displayCalcErrorMessage(uint8_t errorCode, calcRegister_t errMessageRegiste
     errorMessageRegisterLine = errMessageRegisterLine;
     screenUpdatingMode = SCRUPD_AUTO;
 
-    #if defined(IR_PRINTING)
+    #if defined(OPTION_IR_PRINTING)
        if((tam.mode != 0) && (errorCode != ERROR_LABEL_NOT_FOUND) &&   !printerState.trace_done) {
          printTrace(tam.function, tam.value);
        }
@@ -289,7 +289,7 @@ void displayCalcErrorMessage(uint8_t errorCode, calcRegister_t errMessageRegiste
          sprintf(tmpString, "%s", errorMessages[lastErrorCode]);
        }
        printTraceError(tmpString);
-    #endif //IR_PRINTING
+    #endif //OPTION_IR_PRINTING
   }
 }
 

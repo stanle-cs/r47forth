@@ -133,6 +133,7 @@ static calcRegister_t stringToRegisterNumber(const char *name) {
   return (calcRegister_t)toInt16(name + 1);
 }
 
+#if defined(OPTION_DATAFILE)
 // Build a register-name field for writing: the lettered short form "RX".."RW" for registers 100..125, otherwise "Rnnn".
 static void registerNumberToString(calcRegister_t regist, char *name) {
   if(regist >= FIRST_LETTERED_REGISTER && regist <= LAST_SPARE_REGISTER) {
@@ -142,6 +143,7 @@ static void registerNumberToString(calcRegister_t regist, char *name) {
     sprintf(name, "R%03" PRId16, (int16_t)regist);
   }
 }
+#endif // OPTION_DATAFILE
 
 //Utility to add angle and polar markers
 static void textTag(char *str, const uint8_t angle, const uint8_t polmode) {
@@ -2328,11 +2330,11 @@ int64_t stringToInt64(const char *str) {
           else if(strcmp(aimBuffer, "PLOT_ZMY"                    ) == 0) { PLOT_ZMY              = toUint8(tmpString); }
           else if(strcmp(aimBuffer, "firstDayOfWeek"              ) == 0) { firstDayOfWeek        = toUint8(tmpString); }
           else if(strcmp(aimBuffer, "firstWeekOfYearDay"          ) == 0) { firstWeekOfYearDay    = toUint8(tmpString); }
-        #if defined(IR_PRINTING)
+        #if defined(OPTION_IR_PRINTING)
           else if(strcmp(aimBuffer, "printerOn"                   ) == 0) { printerState.print_on = toUint8(tmpString); }
           else if(strcmp(aimBuffer, "printerModel"                ) == 0) { printerState.printer_model    = toUint8(tmpString); }
           else if(strcmp(aimBuffer, "printerLineDelay"            ) == 0) { printerState.delay    = toUint16(tmpString); setLineDelay(printerState.delay);}
-        #endif //IR_PRINTING
+        #endif //OPTION_IR_PRINTING
           else if(strcmp(aimBuffer, "jm_LARGELI"                  ) == 0) {
             if(loadedVersion < 10000012) {
               forceSystemFlag(FLAG_LARGELI, toUint8(tmpString) != 0);

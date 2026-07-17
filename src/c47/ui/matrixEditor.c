@@ -94,10 +94,10 @@ void fnEditMatrix(uint16_t regist) {
     nimBufferDisplay[0] = 0;
     scrollRow = scrollColumn = 0;
     showMatrixEditor();
-    #if defined(IR_PRINTING)
+    #if defined(OPTION_IR_PRINTING)
       refreshScreen(80);
       printTraceMatElement(LINE_FULL);
-    #endif //IR_PRINTING
+    #endif //OPTION_IR_PRINTING
   }
   else {
     displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -558,14 +558,14 @@ void mimEnter(bool_t commit) {
   int16_t col = getJRegisterAsInt(true);
 
   if(aimBuffer[0] != 0) {
-    #if defined(IR_PRINTING)
+    #if defined(OPTION_IR_PRINTING)
       if(aimBuffer[0] == '+') {
         printTraceString(aimBuffer + 1, LINE_NOLF);
       }
       else {
         printTraceString(aimBuffer, LINE_NOLF);
       }
-    #endif //IR_PRINTING
+    #endif //OPTION_IR_PRINTING
     if(getRegisterDataType(matrixIndex) == dtReal34Matrix) {
       real34_t real34tmp;
       real34_t *real34Ptr = &openMatrixMIMPointer.realMatrix.matrixElements[row * cols + col];
@@ -809,9 +809,9 @@ void mimAddNumber(int16_t item) {
             real34SetOne(VARIABLE_IMAG34_DATA(elm));
           }
         }
-        #if defined(IR_PRINTING)
+        #if defined(OPTION_IR_PRINTING)
           printTrace(lastFunc, item);
-        #endif //IR_PRINTING
+        #endif //OPTION_IR_PRINTING
         return;
       }
       break;
