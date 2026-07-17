@@ -478,3 +478,4 @@ serialize_cov
 graphs_cov
 
 config_cov
+stack_cov
