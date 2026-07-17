@@ -1,11 +1,17 @@
 # R1 code defects — Qwen implementation prompts
 
-4 tasks, strictly ordered. Each is sized for a ~100k-token context window: it
-names the only files and line ranges to read, and never requires reading
-DESIGN.md.
+**STATUS (2026-07-15, post-R6 audit — read before pasting anything):**
 
-**How to use:** paste the PREAMBLE, then one task block, into a fresh Qwen
-session. Do not run tasks out of order.
+| Task | Status |
+|---|---|
+| R1-1 | **EXECUTED** (commit 1806d48d8, reconciled with R4-2) — historical record only |
+| R1-2 | **EXECUTED** (commit 390d7ba15) — historical record only |
+| R1-3 | **REWRITTEN 2026-07-15** per R6 §10.1 — the only executable task in this file |
+| R1-4 | **WITHDRAWN** — see its banner; FTOK_XEQN lands in stage F3 (DESIGN.md §10.3) |
+
+**How to use:** paste the PREAMBLE, then the R1-3 block, into a fresh Qwen
+session. R1-3 commits by itself; the old "one commit for R1-1..R1-4"
+instruction is void (R1-1/R1-2 were committed separately).
 
 ---
 
@@ -45,16 +51,12 @@ Rules:
    it, the spec is wrong: say so and stop.
 8. Report what you changed, the gate output, and anything that surprised you.
 
-Before any edit, run:
-
-    tail -n 20 packages/forth-core/test_dict_reloc.c
-    grep -a -n "audit_probe_" packages/forth-core/test_dict_reloc.c
-
-At R1 audit time that file was foreign unfinished work: it ended mid
-audit_probe_buried_catalog with the top-level #if unterminated and called five
-audit_probe_* functions before declarations. Never repair, delete, or work
-around that foreign code. If it remains unfinished or overlaps this task, STOP
-and report the blocker.
+Before any edit, run `git status --short`. The tree must be clean (only your
+own task's edits may appear once you start). If anything else is modified,
+STOP and report. (The 2026-07-15 preamble's "foreign unfinished
+audit_probe_*" warning is obsolete — `test_dict_reloc.c` is complete; if a
+`grep -a -n "audit_probe_" packages/forth-core/test_dict_reloc.c` ever
+matches again, STOP: that is someone else's in-flight work.)
 
 ---
 
@@ -184,79 +186,153 @@ foreign-work blocker.
 
 ---
 
-## R1-3 — Add PTP_NONE C47 item lookup to the outer interpreter
+## R1-3 — Add the §4.1 step-4 C47 item lookup to the outer interpreter
+### (REWRITTEN 2026-07-15 per R6 §10.1 — supersedes the earlier R1-3 text)
 
 **File(s):** packages/forth-core/forth_dict.h;
-packages/forth-core/forth_dict.c; packages/forth-core/forth_compile.c;
+packages/forth-core/forth_dict.c (ADD one new function only — see the
+prohibition below); packages/forth-core/forth_compile.c;
 packages/forth-core/test_dict_reloc.c
 
-**Read:** grep -a -n "forthResolveXEQ" packages/forth-core/forth_dict.c and read
-only that function. In forth_compile.c, grep -a -n
+**Read:** In forth_compile.c, grep -a -n
 "step 3: number\|step 4: C47 label" and read from the first anchor through the
-label arm, no more than 60 lines at a time. In test_dict_reloc.c, grep -a -n
-"test_c47_ptp_none\|test_xeq_item_lookup\|test_xeq_precedence\|test_outer_compile_invoke"
-and read only those functions and registration lines. Locate SIN and STO in
+label arm, no more than 60 lines at a time. In forth_dict.c, grep -a -n
+"forthFindColon\|forthResolveXEQ" and read forthFindColon only (you will place
+the new function near it); you may read forthResolveXEQ to see the house
+style but you MUST NOT change it. In test_dict_reloc.c, grep -a -n
+"test_c47_ptp_none\|test_xeq_item_lookup\|test_xeq_precedence\|test_outer_compile_invoke\|writeTestProgram\|x_is_longint"
+and read only those functions and registration lines. Locate item rows in
 packages/forth-core/items.c with grep -a only; never open that file.
 
 **The defect.** The required outer-source order is primitive, colon, number,
-C47 item, C47 label, undefined. Current forth_compile.c jumps from number
-directly to label, and no forthFindItem helper exists. A calculator owner who
-types SIN in Forth gets label/undefined behavior instead of the native C47
-function; compiling SIN cannot emit FTOK_C47.
+C47 item, C47 label, undefined (DESIGN.md §4.1). Current forth_compile.c jumps
+from number directly to label, and no forthFindItem helper exists. A
+calculator owner who types SIN in Forth gets label/undefined behavior instead
+of the native C47 function; compiling SIN cannot emit FTOK_C47.
 
-**The change.** Declare and implement:
+**The change — part 1, the helper.** Declare in forth_dict.h and implement in
+forth_dict.c:
 
     bool forthFindItem(const char *name, uint16_t *itemId);
 
-It scans IDs 1 through LAST_ITEM - 1 and returns a match only when:
+It scans IDs 1 through LAST_ITEM - 1 and returns a match only when ALL of:
 
     (indexOfItems[i].status & CAT_STATUS) == CAT_FNCT
     (indexOfItems[i].status & PTP_STATUS) == PTP_NONE
     compareString(name, indexOfItems[i].itemCatalogName, CMP_NAME) == 0
 
-On success set *itemId = i. Refactor only the item arm of forthResolveXEQ to use
-this helper, preserving that function's different order label > item > colon.
+On success set *itemId = i and return true; on miss return false and leave
+*itemId untouched. This is the FORWARD (Forth-source) lookup only.
 
-In forth_compile.c define FTOK_C47 as 0x7F04 beside the other mirrored tokens
-and add the item arm after number and before label. Compile state emits
-FTOK_C47, then the uint16 item ID as one token cell. On either emit failure,
-abort an open definition and stop the line exactly like adjacent branches.
-Interpret state saves programRunStop, sets PGM_RUNNING, calls
-reallyRunFunction((int16_t)itemId, NOPARAM), and restores the saved state only
-if the call left programRunStop equal to PGM_RUNNING. Apply the adjacent
-lastErrorCode/abort behavior.
+**PROHIBITION (this is the load-bearing correction to the old prompt): do NOT
+touch `forthResolveXEQ` or any other existing function in forth_dict.c.** Its
+item arm deliberately filters CAT_FNCT only — no PTP filter — and that
+reverse-lookup contract is pinned by test_xeq_item_lookup (which asserts
+"FORTH" and "FCALL", both CAT_FNCT but NOT PTP_NONE, resolve as items) and
+documented as interim behavior in DESIGN.md §4.2. One helper must not serve
+both contracts (R4-B3). If you find yourself editing forthResolveXEQ, STOP.
 
-Add one focused test group proving: forthFindItem("SIN") returns ITM_SIN;
-forthFindItem("STO") is false because it is parameterized;
-forthFindItem("FORTH") is false because it is not CAT_FNCT/PTP_NONE;
-": ISIN SIN ;" stores FTOK_C47, ITM_SIN, FTOK_EXIT in order; and interpreting
-SIN on a zero real completes without error with zero result. Do not admit any
-parameterized item.
+**The change — part 2, the outer arm.** In forth_compile.c define
+FTOK_C47 as 0x7F04 beside the other mirrored token constants, and add the
+item arm between the number step and the label step (comment anchors
+"step 3: number" and "step 4: C47 label"; renumber the label arm's comment to
+"step 5" and add "step 4: C47 item" on the new arm). Behavior:
 
-**Tests that encode the old contract.** none — missing item lookup is not an
-intended contract. Leave test_xeq_item_lookup and test_xeq_precedence unchanged:
-forthResolveXEQ remains label > item > colon even though outer source is item >
-label. Leave number, C47 PTP, and outer compile/invoke tests unchanged.
+- Compile state: emit FTOK_C47, then the uint16 item ID as one token cell
+  (forthDictEmit twice). On either emit failure: abortDefinition() and stop
+  the line exactly like the adjacent branches.
+- Interpret state: save programRunStop; set PGM_RUNNING; call
+  reallyRunFunction((int16_t)itemId, NOPARAM); restore the saved value only
+  if programRunStop is still PGM_RUNNING (§2.2 protocol, identical to the
+  FTOK_C47 inner arm). Then the adjacent lastErrorCode gate: on error,
+  abortDefinition() if a definition is open, and stop the line.
 
-**Facts the harness forces on you.** reallyRunFunction is already callable from
+**Non-goals (all STOP conditions if you find yourself doing them):** no
+FTOK_XEQN, no change to the label arm, no change to forthResolveXEQ or any
+reverse-lookup path, no parameterized items (PTP_REGISTER/NUMBER_8/16 stay
+out of forthFindItem — stage F4), no new primitives, no DESIGN.md edits.
+
+**Tests.** Add one focused group `test_outer_item_lookup` (plus helpers as
+needed), registered beside test_outer_compile_invoke:
+
+1. forthFindItem("SIN") returns true with *itemId == ITM_sin. **The
+   identifier is lowercase `ITM_sin` (items.h:88, value 76)** — `ITM_SIN`
+   does not exist; do not "fix" the case anywhere else.
+2. forthFindItem("STO") returns false (parameterized item).
+3. forthFindItem("FORTH") returns false and forthFindItem("FCALL") returns
+   false (CAT_FNCT but PTP_REM / PTP_NUMBER_16 — the PTP_NONE filter, and
+   the contrast with forthResolveXEQ which DOES resolve them).
+4. Compile ": ISIN SIN ;" and byte-probe the body: FTOK_C47 (0x7F04), then
+   ITM_sin (76) as one cell, then FTOK_EXIT — in that order.
+5. Interpret order pin, colon-over-item: define ": SIN 42 ;" (colon word
+   deliberately named like the builtin), interpret "SIN", require
+   x_is_longint(42) — the colon word wins (§4.1: prim → colon → number →
+   item → label). forthDictClear() before and after this subcase.
+6. Interpret dispatch + item-over-label pin: with the dictionary clear,
+   write a real program via writeTestProgram whose bytes are exactly
+   `{ 0x01, 0xFD, 3, 'S', 'I', 'N' }` (ITM_LBL + STRING_LABEL_VARIABLE +
+   len 3 + "SIN" — a global label named SIN), then forthPushInt32(0) and
+   forthOuterInterpret("SIN"). Require lastErrorCode == ERROR_NONE and X of
+   type dtReal34 with real34IsZero true (the ITEM ran: sin(0) = 0 as a
+   real34 in every angular mode; if the LABEL had hijacked the name, the
+   empty program leaves X the unchanged dtLongInteger). Cleanup:
+   cleanupTestProgram() and forthDictClear() on every path.
+
+**Tests that encode the old contract.** test_xeq_item_lookup and
+test_xeq_precedence pin the REVERSE lookup this task must not alter — they
+must pass **unchanged**; if either goes red you have touched forthResolveXEQ:
+revert per rule 6 guidance (STOP and report, no git commands). Leave number,
+C47 PTP, and outer compile/invoke tests unchanged.
+
+**Facts the harness forces on you.** reallyRunFunction is callable from
 test-linked production code; do not export a static keyboard function or
-simulate keyboard/catalog state. Use existing stack and dictionary test
-helpers. Report the gate's FORTH ARENA high-water line.
+simulate keyboard/catalog state. writeTestProgram/cleanupTestProgram,
+x_is_longint, begin_word/end_word/emit helpers all exist. In DEFS_ONLY
+pre-scan mode, interpret-state tokens are skipped before your new arm is
+reached — no special handling needed. Report the gate's FORTH ARENA line.
 
 **Gate:** build-test green.
-*Mutation: UNVERIFIED — the sanctioned gate cannot currently compile the
-foreign truncated audit_probe_* tail. Once available: (1) temporarily bypass
-the new outer item arm; the compile/interpret assertions must fail; (2) restore
-it and remove only the PTP_NONE filter; the STO rejection must fail. Restore
-all code and rerun green.*
+*Mutations (run all three after the green run, one at a time, restore by
+re-editing — never git):*
+1. Bypass the new outer item arm (comment out its body) → subcases 4 and 6
+   go RED (SIN falls through to label/undefined).
+2. Remove only the PTP_NONE conjunct from forthFindItem → subcases 2 and 3
+   go RED.
+3. Move the item arm ABOVE the colon lookup → subcase 5 goes RED with X=…
+   real34 instead of 42.
+Restore all code and rerun green.
 
-**Report:** paste back the resolver orders, exact item filter, emitted cells,
-focused/old/full-gate results, FORTH ARENA high-water line, both mutation
-results, and any blocker.
+**Commit (this task commits alone).** After the final green run:
+`git status --short`; stage exactly
+packages/forth-core/forth_dict.h, packages/forth-core/forth_dict.c,
+packages/forth-core/forth_compile.c, packages/forth-core/test_dict_reloc.c,
+their generated counterparts under packages/forth-core/files/, and
+packages/forth-core/.refresh-manifest.json — never git add -A. If any other
+path is dirty, STOP and report. Commit once with message
+"forth-core: R1-3 — outer interpreter resolves C47 items (§4.1 step 4)".
+
+**Report:** paste back forthFindItem in full, the new outer arm, the emitted
+cells from subcase 4, all six subcase PASS lines, the three mutation RED
+symptoms, both green gate banners + exit code, the FORTH ARENA line, the
+commit hash, and anything surprising.
 
 ---
 
 ## R1-4 — Implement compiled C47 labels with FTOK_XEQN
+
+> **STATUS: WITHDRAWN 2026-07-15 — DO NOT EXECUTE ANY PART OF THIS TASK.**
+> Superseded by the R4 accepted architecture before it ever ran:
+> (1) implementing FTOK_XEQN before the stage-F1 lifetime foundations opens
+> the B1 use-after-free (an interactive word XEQ'ing a program that contains
+> a Forth step bumps the generation; the callee's first Forth step calls
+> `forthDictClear()` under the suspended `forthInner` frame);
+> (2) this task's FORTH_XEQ_COLON arm prescribes a PGM_RUNNING wrap the
+> accepted B4 ruling forbids;
+> (3) the accepted ordering puts XEQN in stage F3, after F1/F2
+> (DESIGN.md §10.3, which also adds the [kind][len][name] encoding this
+> task predates — its [len][name] encoding is obsolete).
+> Its commit instruction ("one commit for R1-1 through R1-4") is void.
+> The text below is retained as the historical record only.
 
 **File(s):** packages/forth-core/forth_compile.c;
 packages/forth-core/forth_inner.c; packages/forth-core/forth_dict.h only if

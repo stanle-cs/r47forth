@@ -1,5 +1,17 @@
 # Qwen Implementation Prompt Sequence — Patch-Based Package Overlay System
 
+> **ARCHIVED (2026-07-15) — NEVER EXECUTE ANY PROMPT IN THIS FILE.**
+> These prompts implement **revision 1** of the package system — the
+> libclang/function-boundary design (see Prompt 2) that was implemented and
+> then **reverted** on this branch (preserved at
+> `checkpoint/pre-plain-diff-revert-20260712-1541`).
+> `custom_package/PROPOSED_SPEC_CHANGES.md` is now **revision 2**
+> (plain-diff), which supersedes the spec these prompts were written
+> against; the implemented revision-2 system is documented in
+> `custom_package/README.md` and `custom_package/IMPLEMENTATION_REPORT.md`.
+> Running any prompt below would begin rebuilding the reverted design on top
+> of the live one. Historical record only.
+
 Source spec: `custom_package/PROPOSED_SPEC_CHANGES.md` (approved). Branch:
 `package-manager/patch-based-overlay`. Run prompts **in order** — each
 assumes the previous one landed and the tree is green.
