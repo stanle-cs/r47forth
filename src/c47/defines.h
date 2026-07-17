@@ -151,6 +151,31 @@
   #endif
 
 
+//    Info 2026-07-17 00.109.03.04
+//
+//       Pkg │ DIST    │ X.FN     │ FIN  │ EIGEN │ ELEC │ IR
+//      ─────┼─────────┼──────────┼──────┼───────┼──────┼────
+//        1  │ all     │ stripped │ fast │   ·   │  ·   │ ✓
+//        2  │ half    │ full     │ slow │   ·   │  ·   │ ·
+//        3  │ limited │ stripped │ slow │   ✓   │  ✓   │ ·
+//        4  │ none    │ stripped │ slow │   ·   │  ·   │ ✓
+//      Legend
+//      
+//      DIST   all      every distribution
+//             half     Normal, StdNormal, LogNormal, cauchy, chi, expo, logis, t, weibull
+//             limited  Normal, StdNormal, LogNormal only
+//             none     no distributions
+//      X.FN   full     includes Elliptic, Bessel, Orthogonal
+//             stripped none of Elliptic, Bessel, Orthogonal
+//      FIN    fast     financial funcs at full precision/speed
+//             slow     financial funcs available, but lower precision and slower
+//      EIGEN  ✓        EIGVAL + EIGVEC (est. > 16 digits)
+//             ·        no EIGVAL, EIGVEC or MSQRT
+//      ELEC   ✓        Star/Delta, Impedance, phase-sequence, parallel funcs
+//             ·        none of the above
+//      IR     ✓        IR printing enabled
+//      All C47 / DM42 packages (common to 1–4): no 2D/3D VECTOR conversions (matrix functions stay), no number editing, no 1000-digit XFN math.
+
 
   #if defined(PACKAGE1_NOBESSEL_NOORTHO)   // PACKAGE 1 (free ✓7424) // ALL DIST, Stripped X.FN menu; NO EIGEN; NO ELEC; FAST FIN; NO VECTOR; IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
