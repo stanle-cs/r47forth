@@ -975,10 +975,11 @@ printf("tam.value: %d\n", tam.value);
                 return;
               }
             }
-            /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
+            /* forth-core H-hook: Forth fallback after GLOBAL label miss — never for a
+             * tam.colon (LOCAL) request (DESIGN.md §0.3/§4.2 label-kind pins) */
             {
               uint16_t widx;
-              if (forthFindColon(buffer, &widx)) {
+              if (!tam.colon && forthFindColon(buffer, &widx)) {
                 leaveTamModeIfEnabled();
                 if(calcMode == CM_PEM) {
                   insertUserItemInProgram(tam.function, buffer);

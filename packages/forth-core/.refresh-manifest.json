@@ -2,13 +2,13 @@
   "base_commit": "b8f79e486ae19b84af9b6db7230c9a6d1279cced",
   "files": {
     "forth_bridge.c": "5d58c95b9e072dcd244a70ebe235def7015196ade23dc2d0dbe99c691492bc18",
-    "forth_compile.c": "553f873743d41239f9a6c3f9883e9b7539d497ba32e0a7b0d1f516b4ab667042",
-    "forth_dict.c": "094a5b8829e03be5a29dbb318a6fd5a88fa0a0f19bd3738ec39d4d70015e6259",
-    "forth_dict.h": "188b2b07b70991d4ffc2bfa6e9f044664711e3ea43699efa3e4dbfabdbc75d6a",
+    "forth_compile.c": "04cd7e6497c611a68521095a468b0d104fc6b4754c84f20597e1aad0718d091f",
+    "forth_dict.c": "cd6da2620bb4de0d41b8bcaf9130e22388478db924ae6e8b7340b3b4c14fe526",
+    "forth_dict.h": "3e1f9deb83d04728f25f3029f4e943b09df1fb687ac2baf21546c89819704f33",
     "forth_inner.c": "ed86428284e605674303f30646295c865bf903264ae02528fec88066f2a3c42c",
     "forth_prims.c": "1f7e208d184b1ec64bee21fd311a26b77df7f64c60f9f78da879606b2bb07a46",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "test_dict_reloc.c": "94267ac47289c4be2c663bbbfd002857be04539a05511d75b415abb58f78a75e"
+    "test_dict_reloc.c": "7fb6ea4e5937155e4c783724321e93fd4e0f66779dbed4f034ae5bf588c8a16d"
   },
   "patches": {
     "010-config.c.patch": "2667aa89854707b1449fc91413711c851b41821f9b3be50be25d1a9ec5954524",
@@ -24,6 +24,6 @@
     "010-saveRestoreBackup.c.patch": "b7495bacc1fd398bd0c8b40f220fe19de6f4cd80eb2fb07ed97621ffe5ed2f0b",
     "010-screen.c.patch": "e7100fc0e708103a35c38852655340b335e86e1f98c8cda4596c3593ee569144",
     "010-softmenus.c.patch": "cd37e449009f4ea56dbc96665d47c9a4c6defd8d727d4266014a48086b3c8c27",
-    "010-ui__tam.c.patch": "2f2741bc055ad38084d6b111f6f2366a6f3a4a5a748496ec46d777b44d25e363"
+    "010-ui__tam.c.patch": "a25e979619cd8766ea432793bfbe90b1c456b431945ea92ff56462b874c79886"
   }
 }

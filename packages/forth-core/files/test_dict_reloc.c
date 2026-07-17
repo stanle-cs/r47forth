@@ -1340,6 +1340,125 @@ static int test_outer_compile_invoke(void)
   return 0;
 }
 
+/* Forward declarations for test-program helpers (used below, defined later) */
+static bool writeTestProgram(const uint8_t *bytes, uint16_t n);
+static void cleanupTestProgram(void);
+
+/* §4.1 step 4: C47 item lookup in the outer interpreter.
+ * Tests forthFindItem and the new outer arm (compile + interpret). */
+static int test_outer_item_lookup(void)
+{
+  uint16_t itemId;
+  int fail = 0;
+
+  /* Subcase 1: forthFindItem("SIN") -> true, itemId == ITM_sin (76) */
+  if (!forthFindItem("SIN", &itemId)) {
+    printf("    FAIL: forthFindItem(\"SIN\") returned false\n");
+    fail = 1;
+  } else if (itemId != ITM_sin) {
+    printf("    FAIL: forthFindItem(\"SIN\") itemId=%u (expected %d)\n", itemId, ITM_sin);
+    fail = 1;
+  }
+
+  /* Subcase 2: forthFindItem("STO") -> false (parameterized item) */
+  if (forthFindItem("STO", &itemId)) {
+    printf("    FAIL: forthFindItem(\"STO\") returned true (expected false — parameterized)\n");
+    fail = 1;
+  }
+
+  /* Subcase 3: forthFindItem("FORTH") -> false, forthFindItem("FCALL") -> false
+   * (CAT_FNCT but PTP_REM / PTP_NUMBER_16 — the PTP_NONE filter) */
+  if (forthFindItem("FORTH", &itemId)) {
+    printf("    FAIL: forthFindItem(\"FORTH\") returned true (expected false — PTP_REM)\n");
+    fail = 1;
+  }
+  if (forthFindItem("FCALL", &itemId)) {
+    printf("    FAIL: forthFindItem(\"FCALL\") returned true (expected false — PTP_NUMBER_16)\n");
+    fail = 1;
+  }
+
+  /* Subcase 4: Compile ": ISIN SIN ;" and byte-probe the body.
+   * Expected: T_C47 (0x7F04), itemId (76 = 0x4C), T_EXIT (0x0000) */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": ISIN SIN ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: \": ISIN SIN ;\" compile error %d\n", lastErrorCode);
+    fail = 1;
+  } else {
+    /* ISIN is the latest word; body follows header(4) + name(4) = offset 8 */
+    uint16_t hdr = fdict.latest;
+    uint8_t *body = fdict.base + hdr + 8;
+    if (body[0] != 0x04 || body[1] != 0x7F) {
+      printf("    FAIL: body[0..1] = 0x%02X%02X (expected 0x047F = T_C47)\n",
+             body[1], body[0]);
+      fail = 1;
+    } else if (body[2] != 0x4C || body[3] != 0x00) {
+      printf("    FAIL: body[2..3] = 0x%02X%02X (expected 0x4C00 = ITM_sin)\n",
+             body[3], body[2]);
+      fail = 1;
+    } else if (body[4] != 0x00 || body[5] != 0x00) {
+      printf("    FAIL: body[4..5] = 0x%02X%02X (expected 0x0000 = T_EXIT)\n",
+             body[5], body[4]);
+      fail = 1;
+    }
+  }
+
+  /* Subcase 5: Colon-over-item precedence.
+   * Define ": SIN 42 ;" (colon word shadows built-in), interpret "SIN", require X=42. */
+  forthDictClear();
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": SIN 42 ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: \": SIN 42 ;\" compile error %d\n", lastErrorCode);
+    fail = 1;
+  } else {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("SIN");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    FAIL: interpret \"SIN\" error %d\n", lastErrorCode);
+      fail = 1;
+    } else if (!x_is_longint(42)) {
+      printf("    FAIL: X != 42 after \"SIN\" (colon should shadow item)\n");
+      fail = 1;
+    }
+  }
+  forthDictClear();
+
+  /* Subcase 6: Item-over-label precedence.
+   * Write a program with a label named SIN, push 0, interpret "SIN".
+   * The ITEM should run (sin(0)=0 as real34), not the LABEL. */
+  {
+    uint8_t prog[] = { 0x01, 0xFD, 3, 'S', 'I', 'N' };
+    cleanupTestProgram();
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    FAIL: writeTestProgram failed\n");
+      fail = 1;
+    } else {
+      forthPushInt32(0);
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("SIN");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    FAIL: interpret \"SIN\" error %d\n", lastErrorCode);
+        fail = 1;
+      } else if (getRegisterDataType(REGISTER_X) != dtReal34) {
+        printf("    FAIL: X is not dtReal34 (type %u) — LABEL hijacked the name\n",
+               getRegisterDataType(REGISTER_X));
+        fail = 1;
+      } else if (!real34IsZero(REGISTER_REAL34_DATA(REGISTER_X))) {
+        printf("    FAIL: X is real34 but not zero (sin(0) should be 0)\n");
+        fail = 1;
+      }
+    }
+    cleanupTestProgram();
+  }
+
+  if (!fail) {
+    printf("    PASS: outer item lookup: SIN->ITEM(%d), STO/FORTH/FCALL miss, "
+           "compile byte-probe OK, colon beats item, item beats label\n", ITM_sin);
+  }
+  return fail;
+}
+
 /* Non-string X -> ERROR_INVALID_DATA_TYPE_FOR_OP */
 static int test_outer_nonstring_x(void)
 {
@@ -1719,6 +1838,113 @@ static int test_tam_dispatcher(void)
   }
   printf("    PASS: reallyRunFunction(ITM_FCALL, TAMX) -> X=77, TAM dispatch path works\n");
   return 0;
+}
+
+/* AUD-U1: a tam.colon (LOCAL) request never falls through to Forth vocabulary.
+ * Drives the real public TAM chain: tamEnterMode, TAM alpha entry, and the
+ * letter items' runFunction -> addItemToBuffer -> tamProcessInput path.
+ * Control leg (no colon): global request -> Forth fallback dispatches word.
+ * Colon leg: local request -> ERROR_FUNCTION_NOT_FOUND, nothing dispatched. */
+static int test_tam_colon_never_falls_to_forth(void)
+{
+  uint8_t savedCalcMode = calcMode;
+  uint8_t savedLastError = lastErrorCode;
+  uint8_t savedRunStop = programRunStop;
+  char savedAimBuffer[AIM_BUFFER_LENGTH];
+  memcpy(savedAimBuffer, aimBuffer, sizeof(savedAimBuffer));
+  tamState_t savedTam = tam;
+  int fail = 0;
+
+  extern void runFunction(int16_t func);
+
+  forthDictClear();
+  /* Define colon word FOO: ILIT(42) EXIT */
+  {
+    uint16_t w = begin_word("FOO", 3);
+    if (w == FORTH_NULL) {
+      printf("    SKIP: alloc failed\n");
+      return 0;
+    }
+    forthDictEmit(T_ILIT);
+    emit_int32(42);
+    end_word(w);
+  }
+
+  uint16_t savedFdictCount = fdict.count;
+
+  /* Push sentinel */
+  forthPushInt32(31337);
+
+  /* ---- Control leg: global request (no colon) dispatches Forth word ---- */
+  calcMode = CM_NORMAL;
+  programRunStop = PGM_RUNNING;
+  lastErrorCode = ERROR_NONE;
+  aimBuffer[0] = 0;
+  tamEnterMode(ITM_XEQ);
+  tamProcessInput(ITM_alpha);
+  runFunction(ITM_F);
+  runFunction(ITM_O);
+  runFunction(ITM_O);
+  if (strcmp(aimBuffer, "FOO") != 0) {
+    printf("    FAIL(control): TAM letter path produced '%s', expected 'FOO'\n",
+           aimBuffer);
+    fail = 1;
+  }
+  tamProcessInput(ITM_ENTER);
+
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL(control): expected no error, got %d\n", lastErrorCode);
+    fail = 1;
+  } else if (!x_is_longint(42)) {
+    printf("    FAIL(control): X should be 42 (Forth word dispatched), got wrong value\n");
+    fail = 1;
+  } else {
+    printf("    PASS(control): global XEQ FOO -> Forth fallback dispatched FOO, X=42\n");
+  }
+
+  /* ---- Reset ---- */
+  lastErrorCode = ERROR_NONE;
+  aimBuffer[0] = 0;
+  forthPushInt32(31337);
+
+  /* ---- Colon leg: local request (:FOO) never falls to Forth ---- */
+  tamEnterMode(ITM_XEQ);
+  tamProcessInput(ITM_COLON);
+  tamProcessInput(ITM_alpha);
+  runFunction(ITM_F);
+  runFunction(ITM_O);
+  runFunction(ITM_O);
+  if (strcmp(aimBuffer, "FOO") != 0) {
+    printf("    FAIL(colon): TAM letter path produced '%s', expected 'FOO'\n",
+           aimBuffer);
+    fail = 1;
+  }
+  tamProcessInput(ITM_ENTER);
+
+  if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+    printf("    FAIL(colon): expected ERROR_FUNCTION_NOT_FOUND (%d), got %d\n",
+           ERROR_FUNCTION_NOT_FOUND, lastErrorCode);
+    fail = 1;
+  } else if (!x_is_longint(31337)) {
+    printf("    FAIL(colon): X should be 31337 (sentinel, nothing dispatched)\n");
+    fail = 1;
+  } else if (fdict.count != savedFdictCount) {
+    printf("    FAIL(colon): fdict.count changed from %u to %u\n",
+           savedFdictCount, fdict.count);
+    fail = 1;
+  } else {
+    printf("    PASS(colon): local XEQ :FOO -> ERROR_FUNCTION_NOT_FOUND, X=31337, fdict unchanged\n");
+  }
+
+  /* Cleanup */
+  forthDictClear();
+  calcMode = savedCalcMode;
+  lastErrorCode = savedLastError;
+  programRunStop = savedRunStop;
+  memcpy(aimBuffer, savedAimBuffer, sizeof(savedAimBuffer));
+  tam = savedTam;
+
+  return fail;
 }
 
 /* §7.1 re-entrancy: depth cap fires at FORTH_NEST_MAX and recovers (§3.2)
@@ -7198,6 +7424,8 @@ int forthDictSelfTest(void)
   fail |= test_fnforthcall_executes_colon_by_index();
   printf("  [DEBUG] running test_tam_dispatcher...\n");
   fail |= test_tam_dispatcher();
+  printf("  [DEBUG] running test_tam_colon_never_falls_to_forth...\n");
+  fail |= test_tam_colon_never_falls_to_forth();
 #ifdef FORTH_DEBUG_SELFTEST
   printf("  [DEBUG] running test_reentrancy...\n");
   fail |= test_reentrancy();
@@ -7258,6 +7486,8 @@ int forthDictSelfTest(void)
   fail |= test_outer_simple_expr();
   printf("  [DEBUG] running test_outer_compile_invoke...\n");
   fail |= test_outer_compile_invoke();
+  printf("  [DEBUG] running test_outer_item_lookup...\n");
+  fail |= test_outer_item_lookup();
   printf("  [DEBUG] running test_outer_nonstring_x...\n");
   fail |= test_outer_nonstring_x();
   printf("  [DEBUG] running test_ilit_compile_interpret_parity...\n");

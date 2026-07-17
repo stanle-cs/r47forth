@@ -1,5 +1,5 @@
 diff --git a/src/c47/ui/tam.c b/src/c47/ui/tam.c
-index 97301df3e7f567f5458eb456b35859175c5a7e97..853252556976b2a064463768b89655cd57e97dae 100644
+index 97301df3e7f567f5458eb456b35859175c5a7e97..b67e61462ea18472102c83bcd774984bc2285801 100644
 --- a/src/c47/ui/tam.c
 +++ b/src/c47/ui/tam.c
 @@ -2,6 +2,7 @@
@@ -10,14 +10,15 @@ index 97301df3e7f567f5458eb456b35859175c5a7e97..853252556976b2a064463768b89655cd
  
      TO_QSPI const int16_t StoOperations[][2] = {
        {ITM_ADD,      ITM_STOADD},
-@@ -974,6 +975,20 @@ printf("tam.value: %d\n", tam.value);
+@@ -974,6 +975,21 @@ printf("tam.value: %d\n", tam.value);
                  return;
                }
              }
-+            /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
++            /* forth-core H-hook: Forth fallback after GLOBAL label miss — never for a
++             * tam.colon (LOCAL) request (DESIGN.md §0.3/§4.2 label-kind pins) */
 +            {
 +              uint16_t widx;
-+              if (forthFindColon(buffer, &widx)) {
++              if (!tam.colon && forthFindColon(buffer, &widx)) {
 +                leaveTamModeIfEnabled();
 +                if(calcMode == CM_PEM) {
 +                  insertUserItemInProgram(tam.function, buffer);
