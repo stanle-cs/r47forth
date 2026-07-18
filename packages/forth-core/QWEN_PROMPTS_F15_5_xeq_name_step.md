@@ -7,6 +7,18 @@ pacing instruction (author ahead, gate-locked); every anchor below was
 grep-verified on the F15-3 tree, and F15-4 (forth_prims.c + test file only)
 does not touch any of them — the gate re-verifies regardless.
 
+> **AMENDMENT (2026-07-18, executed as `546aa8b6c` — the landed test and
+> the run report are normative).** The mutation's stated subcase-2
+> consequence was falsified in execution: `insertStepInProgram`'s own
+> `ITM_FCALL` arm (programming/manage.c ~1642) is a SECOND
+> name-faithfulness guard — it resolves the index back to the name
+> (`forthDictNameByIndex`) and records an `ITM_FORTH` source step, so
+> `0x8B 0x1B` never reaches program memory even under the re-route. The
+> mutation IS detected — subcase 1 goes RED (the XEQ name step
+> `0x03 0xFD 0x02 'S' 'Q'` is absent) — and subcase 2's probe is
+> defense-in-depth, declared redundant on every production path. DESIGN
+> §8.9 item 10 carries the reconciled mutation text.
+
 ## EXECUTION GATE (verify before any edit; STOP on any mismatch)
 
 1. `git branch --show-current` prints `forth-core/pem-entry-fixes` and

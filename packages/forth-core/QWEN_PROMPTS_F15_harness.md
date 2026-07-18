@@ -38,7 +38,13 @@ unit suite and get no packets.
 | F15-2 entry state + power-off round-trip | `QWEN_PROMPTS_F15_2_entry_state.md` | DONE (`5a9e9ce2d`) | 2(a-d) | F15-1 committed green (`b773597bd`) |
 | F15-3 display parity across surfaces | `QWEN_PROMPTS_F15_3_display_parity.md` | DONE (`c8b87dfa8`) | 4 | F15-2 committed green (`5a9e9ce2d`) |
 | F15-4 glyph operators + literal type parity | `QWEN_PROMPTS_F15_4_glyph_type_parity.md` | DONE (`6775252bf`; debugged — see packet amendment) | 5, 6 | F15-3 committed green (`c8b87dfa8`) |
-| F15-5 XEQ-by-name records a name step | `QWEN_PROMPTS_F15_5_xeq_name_step.md` | AUTHORED — gate-locked | 10 | F15-4 committed green |
+| F15-5 XEQ-by-name records a name step | `QWEN_PROMPTS_F15_5_xeq_name_step.md` | DONE (`546aa8b6c`; mutation consequence corrected — see packet amendment) | 10 | F15-4 committed green (`6775252bf`) |
+
+**STAGE F1.5 COMPLETE (2026-07-18).** All ten §8.9 items are end-to-end
+covered; the §8.9 coverage note is flipped and DESIGN-HISTORY carries the
+closing findings (three falsified item mutations reconciled: 9(b), 5, 10;
+the item-10 escape documented the DOUBLE name-faithfulness guard). Next:
+the F2 queue per `FSERIES_ROADMAP.md`.
 
 *Pacing amendment (owner instruction, 2026-07-17):* remaining packets are
 authored ahead of execution rather than one-per-landing — the F1 model.

@@ -692,3 +692,25 @@ The F15-4 run exposed two spec-side defects, both fixed in the landed test
   `itemCatalogName`). This closes the stale-§8.9-mutation sweep started
   with item 9(b): items 2/3/4/8 mutations are live in landed tests, 9(b)
   and 5 are reconciled, and no §8.9-derived mutation remains unexecuted.
+
+## 2026-07-18 — Stage F1.5 COMPLETE; §8.9 item 10 mutation reconciled; double-guard recorded
+
+All ten §8.9 items are now covered end-to-end (F15-1 `b773597bd`, F15-2
+`5a9e9ce2d`, F15-3 `c8b87dfa8`, F15-4 `6775252bf`, F15-5 `546aa8b6c`); the
+§8.9 coverage note is flipped to COMPLETE and a green gate certifies the
+end-to-end contracts. Closing findings:
+
+- **Item 10's mutation consequence was falsified in execution** (the third
+  and last stale §8.9 mutation, after 9(b) and 5): re-routing the tam PEM
+  branch to `insertStepInProgram(ITM_FCALL)` cannot put `0x8B 0x1B` in
+  program memory because insertStepInProgram's own ITM_FCALL arm resolves
+  the index back to a name and records an `ITM_FORTH` source step (or
+  rejects). Name-faithful recording is therefore DOUBLY guarded — the tam
+  H-hook records names directly, and the step inserter converts any
+  index-bearing insertion back to a name. The re-route mutation is still
+  detected by the name-step probe (F15-5 subcase 1 RED). The "no raw
+  FCALL opcode" probe is declared-redundant defense in depth.
+- The `vBodyWalk` BR/0BR-arm indentation nit (F1-5 cosmetic carry-over) is
+  fixed; semantics byte-identical, gate-verified.
+- Stage ledger closed out. Next per `FSERIES_ROADMAP.md`: the F2 queue
+  (F2-1..F2-4, authored and gate-locked).

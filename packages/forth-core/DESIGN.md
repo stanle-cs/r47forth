@@ -2542,24 +2542,18 @@ All Forth errors surface through the existing C47 protocol at the
 
 ### 8.9 Acceptance — target suite; per-item status below (RULED 2026-07-15, Q1)
 
-> **Coverage status (do not read the items below as delivered).** The suite
-> covers each item's *mechanism* at unit level, but most items specify an
-> **end-to-end path that is not yet driven** (R2 finding 1). Current status:
-> **fully covered:** 3 (picker via the cached public menu path,
-> `test_picker_rebuilds_same_menu`), 8 (marker no-op + empty-ENTER).
-> **Unit analog landed, end-to-end run PLANNED:** 1 (direct
-> `forthProgramStep`/`executeOneStep`, no XEQ→`runProgram` drive), 2 (a-c via
-> entry-state tests; (d) power-off round-trip missing), 4 (decode-level
-> parity; BST/SST/listing agreement on one real program missing), 5 (alias +
-> tokenizer units; the alpha-keypad `: D2 2 ÷ ;` program run missing), 6
-> (type parity units; RPN-keypad half missing), 7 (executeOneStep-level halt;
-> `runProgram`-level stop-at-step missing), 9 ((a) covered; (b) STOP→R/S
-> resume missing), 10 (byte probes; the full PEM XEQ+alpha chain missing).
-> **Ruling:** the end-to-end harness is stage **F1.5**, now in progress
-> against the landed F1 tree (`QWEN_PROMPTS_F15_harness.md` is the stage
-> ledger); its lifecycle tests pin the landed F1 semantics (§8.3 as
-> rewritten 2026-07-17). Until the harness packets land, a green gate
-> certifies the unit analogs only.
+> **Coverage status: COMPLETE (stage F1.5, closed 2026-07-18).** Every item
+> is covered end-to-end through the real engine paths, pinning the landed
+> F1 semantics (§8.3): 1/7/9 by `test_accept_run_lifecycle` (`b773597bd`),
+> 2(a-d) by `test_accept_entry_state_roundtrip` (`5a9e9ce2d`), 4 by the
+> F15-3 display-parity test against the real `lcd_buffer` (`c8b87dfa8`),
+> 5/6 by `test_accept_glyph_type_parity` (`6775252bf`), 10 by
+> `test_accept_xeq_name_step` (`546aa8b6c`); 3 and 8 were already fully
+> covered at unit level (`test_picker_rebuilds_same_menu`, marker no-op +
+> empty-ENTER). A green gate now certifies the end-to-end contracts. Three
+> of the mutations stated in the items below were falsified during
+> execution and replaced (items 5, 9(b), 10 — see the per-item notes and
+> DESIGN-HISTORY); the landed tests are normative over the item prose.
 
 1. **Define-and-use in one program.** Program: `»FORTH`, `: SQ DUP * ;`,
    `3 SQ`, `FORTH«`, `END`. `XEQ` it → `X == 9`, `dtLongInteger`.
@@ -2645,10 +2639,18 @@ All Forth errors surface through the existing C47 protocol at the
     (a Forth word) records a name-string `XEQ` step, and the program bytes
     contain the glyphs `SQ` — no `ITM_FCALL` opcode, no index [VERIFIED
     mechanism: §4.2].
-    *Mutation:* re-route the tam.c PEM branch to
-    `insertStepInProgram(ITM_FCALL)` with `tam.value = widx` — the byte
-    probe finds `0x8B 0x1B` and fails; additionally the step goes stale
-    after `CLEAR FORTH` + redefinition in a different order.
+    *Mutation (consequence corrected 2026-07-18 — F15-5 execution):*
+    re-routing the tam.c PEM branch to `insertStepInProgram(ITM_FCALL)`
+    with `tam.value = widx` does NOT put `0x8B 0x1B` in program memory:
+    `insertStepInProgram`'s own `ITM_FCALL` arm (programming/manage.c) is
+    a SECOND name-faithfulness guard — it resolves the index back to the
+    name via `forthDictNameByIndex` and records an `ITM_FORTH` source step
+    (or rejects with `ERROR_NON_PROGRAMMABLE_COMMAND` when unresolvable).
+    The re-route is still detected: the XEQ-name-step probe goes RED
+    (`0x03 0xFD len glyphs` absent). No reachable insertion path can
+    record a raw index; the "no `0x8B 0x1B`" probe is defense-in-depth
+    documentation, declared redundant on every production path
+    (F1-5 annotation convention).
 
 Arena reporting rule (§5.4) applies: the acceptance run must report the
 dictionary high-water mark; region ceiling unchanged (≤ 2 KB, §5.4).

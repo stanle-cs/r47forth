@@ -107,13 +107,13 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
       if ((uint32_t)pos + 2u > limit) return false;
       int16_t delta;
       memcpy(&delta, fdict.base + pos, 2);
-        pos += 2;
-        if (checkTarget == FORTH_NULL) {
-          int32_t target = (int32_t)pos + (int32_t)delta * 2;
-          if (target < (int32_t)bodyStart || target >= (int32_t)limit) return false;
-          if (!vBodyWalk(bodyStart, limit, entryIdx, (uint16_t)target)) return false;
-        }
+      pos += 2;
+      if (checkTarget == FORTH_NULL) {
+        int32_t target = (int32_t)pos + (int32_t)delta * 2;
+        if (target < (int32_t)bodyStart || target >= (int32_t)limit) return false;
+        if (!vBodyWalk(bodyStart, limit, entryIdx, (uint16_t)target)) return false;
       }
+    }
     else if (tok == FTOK_C47) {
       if ((uint32_t)pos + 2u > limit) return false;
       uint16_t itemId;
