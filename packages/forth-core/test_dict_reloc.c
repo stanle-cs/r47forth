@@ -6760,6 +6760,164 @@ static bool writeTestProgram(const uint8_t *bytes, uint16_t n)
   return true;
 }
 
+/* ---- Program-fixture builder (2026-07-18) ------------------------------
+ * Hand-computed byte offsets in fixtures caused five defect cycles (the
+ * F1-1 +3/+4 pointer, the F1-5 P0 payload length, the F15-4 expected
+ * image, the F2-1 fixture drive, the F2-2 +24-for-+26 segfault). Fixtures
+ * are now BUILT: each step append records its offset, payload lengths come
+ * from strlen, and step addresses are QUERIED via tpStepAddr — never
+ * computed by hand. tpRaw() is the sole escape hatch for a deliberate
+ * malformation or exact encoding assertion. New tests must use this builder
+ * (packet authoring rule); existing tests are not migrated opportunistically. */
+#define TP_MAX_BYTES 192
+#define TP_MAX_STEPS 24
+
+typedef enum {
+  TP_STEP_LBL,
+  TP_STEP_MARKER,
+  TP_STEP_SRC,
+  TP_STEP_XEQ_NAME,
+  TP_STEP_OP1,
+  TP_STEP_RAW
+} tpStepKind_t;
+
+typedef struct {
+  uint8_t  bytes[TP_MAX_BYTES];
+  uint16_t len;
+  uint8_t  stepCount;
+  bool     failed;
+  uint16_t stepOff[TP_MAX_STEPS];
+  tpStepKind_t stepKind[TP_MAX_STEPS];
+} testProg_t;
+
+static const uint8_t tpForthPrefix[3] = {
+  0x8B, 0x1A, STRING_LABEL_VARIABLE
+};
+
+static void tpInit(testProg_t *p)
+{
+  memset(p, 0, sizeof(*p));
+}
+
+static int tpReject(testProg_t *p, const char *reason)
+{
+  p->failed = true;
+  printf("    FIXTURE BUG: %s\n", reason);
+  return -1;
+}
+
+static int tpAppend(testProg_t *p, const uint8_t *b, uint16_t n,
+                    tpStepKind_t kind)
+{
+  if (p->failed) {
+    return -1;
+  }
+  if (b == NULL || n == 0 || n > TP_MAX_BYTES - p->len ||
+      p->stepCount >= TP_MAX_STEPS) {
+    return tpReject(p, "tp append rejected");
+  }
+  p->stepOff[p->stepCount] = p->len;
+  p->stepKind[p->stepCount] = kind;
+  memcpy(p->bytes + p->len, b, n);
+  p->len += n;
+  return p->stepCount++;
+}
+
+static int tpLbl(testProg_t *p, const char *name)          /* LBL 'name' */
+{
+  uint8_t s[3 + 16];
+  size_t n;
+  if (name == NULL) { return tpReject(p, "tpLbl name"); }
+  n = strlen(name);
+  if (n == 0 || n > 16) { return tpReject(p, "tpLbl name"); }
+  s[0] = ITM_LBL; s[1] = STRING_LABEL_VARIABLE; s[2] = (uint8_t)n;
+  memcpy(s + 3, name, n);
+  return tpAppend(p, s, (uint16_t)(3 + n), TP_STEP_LBL);
+}
+
+static int tpMarker(testProg_t *p)                         /* »FORTH / FORTH« */
+{
+  uint8_t m[4];
+  memcpy(m, tpForthPrefix, sizeof(tpForthPrefix));
+  m[3] = 0x00;
+  return tpAppend(p, m, 4, TP_STEP_MARKER);
+}
+
+static int tpSrc(testProg_t *p, const char *src)           /* ITM_FORTH source step */
+{
+  uint8_t s[4 + 64];
+  size_t n;
+  if (src == NULL) { return tpReject(p, "tpSrc payload"); }
+  n = strlen(src);
+  if (n == 0 || n > 64) { return tpReject(p, "tpSrc payload"); }
+  memcpy(s, tpForthPrefix, sizeof(tpForthPrefix));
+  s[3] = (uint8_t)n;
+  memcpy(s + 4, src, n);
+  return tpAppend(p, s, (uint16_t)(4 + n), TP_STEP_SRC);
+}
+
+static int tpXeqName(testProg_t *p, const char *name)      /* XEQ 'name' step */
+{
+  uint8_t s[3 + 16];
+  size_t n;
+  if (name == NULL) { return tpReject(p, "tpXeqName name"); }
+  n = strlen(name);
+  if (n == 0 || n > 16) { return tpReject(p, "tpXeqName name"); }
+  s[0] = ITM_XEQ; s[1] = STRING_LABEL_VARIABLE; s[2] = (uint8_t)n;
+  memcpy(s + 3, name, n);
+  return tpAppend(p, s, (uint16_t)(3 + n), TP_STEP_XEQ_NAME);
+}
+
+static int tpOp1(testProg_t *p, uint8_t opByte)            /* one-byte opcode; new callers use named ITM_* constants */
+{
+  return tpAppend(p, &opByte, 1, TP_STEP_OP1);
+}
+
+static int tpRaw(testProg_t *p, const uint8_t *b, uint16_t n) /* deliberate malformation or encoding assertion ONLY */
+{
+  return tpAppend(p, b, n, TP_STEP_RAW);
+}
+
+static bool tpWrite(const testProg_t *p)
+{
+  if (p->failed || p->len == 0 || p->stepCount == 0) {
+    printf("    FIXTURE BUG: refusing to write invalid fixture\n");
+    return false;
+  }
+  return writeTestProgram(p->bytes, p->len);
+}
+
+static void tpUseAuthoredEnd(const testProg_t *p)
+{
+  /* scanLabelsAndPrograms truncates firstFreeProgramByte at a malformed
+   * tail. Tests of bounded consumers need the builder's authored end as
+   * their exclusive bound, while retaining the scan's valid prefix data. */
+  firstFreeProgramByte = beginOfProgramMemory + p->len;
+  freeProgramBytes = ((uint8_t *)(ram + RAM_SIZE_IN_BLOCKS) - firstFreeProgramByte) - 2;
+}
+
+static uint8_t *tpStepAddr(const testProg_t *p, int idx)   /* valid after tpWrite */
+{
+  if (idx < 0 || idx >= p->stepCount) {
+    printf("    FIXTURE BUG: tpStepAddr(%d) out of range\n", idx);
+    return NULL;
+  }
+  return beginOfProgramMemory + p->stepOff[idx];
+}
+
+static uint8_t *tpSrcPayload(const testProg_t *p, int idx) /* -> the LENGTH byte (the forthProgramStep +3 contract) */
+{
+  uint8_t *step = tpStepAddr(p, idx);
+  if (step == NULL) {
+    return NULL;
+  }
+  if (p->stepKind[idx] != TP_STEP_SRC) {
+    printf("    FIXTURE BUG: tpSrcPayload(%d) is not a source step\n", idx);
+    return NULL;
+  }
+  return step + 3;
+}
+
 /* test_marker_parity
  * Program: marker, source(: SQ DUP * ;), marker, marker
  * Assert turnsOn == true/false/true for the 1st/3rd/4th markers.
@@ -9594,6 +9752,9 @@ static int test_overlong_token_in_def_keeps_error(void);
 /* F2-1: parameter core extraction test */
 static int test_param_core_extraction(void);
 
+/* F2-2: bounded name reader test */
+static int test_param_core_bounded_names(void);
+
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
 
@@ -10255,6 +10416,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_param_core_extraction...\n");
   fail |= test_param_core_extraction();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_param_core_bounded_names...\n");
+  fail |= test_param_core_bounded_names();
   forthDictClear();
 
   /* COMMIT 4: executeOneStep ITM_FORTH arm + bump sites */
@@ -11557,6 +11722,117 @@ static int test_param_core_extraction(void)
     }
     else {
       printf("    [2] PASS: XEQ 'W7' through relocated fallback yields X=7\n");
+    }
+
+    forthDictClear();
+    cleanupTestProgram();
+  }
+
+  programRunStop = savedRS;
+  return fail;
+}
+
+/* test_param_core_bounded_names
+ * F2-2: verify the bounded name reader (paramCoreReadName) in
+ * param_core.c clamps reads to firstFreeProgramByte. */
+static int test_param_core_bounded_names(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+
+  /* ---- Subcase 1: well-formed name step unchanged ---- */
+  {
+    testProg_t tp;
+    int sSrc, sXeq;
+    tpInit(&tp);
+    tpLbl(&tp, "F2F");
+    tpMarker(&tp);
+    sSrc = tpSrc(&tp, ": W7 7 ;");
+    tpMarker(&tp);
+    sXeq = tpXeqName(&tp, "W7");
+    tpOp1(&tp, 0x04);                                        /* RTN */
+
+    if (sSrc < 0 || sXeq < 0 || !tpWrite(&tp)) {
+      printf("    [1] FAIL: fixture build/write failed\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    programRunStop = PGM_STOPPED;
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    forthRunGenBump();
+    programRunStop = PGM_RUNNING;
+    currentStep = tpStepAddr(&tp, sSrc);
+    executeOneStep(currentStep);
+    if (lastErrorCode == ERROR_NONE) {
+      currentStep = tpStepAddr(&tp, sXeq);
+      executeOneStep(currentStep);
+    }
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: executeOneStep error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(7)) {
+      printf("    [1] FAIL: X != 7 after XEQ 'W7'\n");
+      fail = 1;
+    }
+    else {
+      printf("    [1] PASS: well-formed XEQ 'W7' through bounded reader yields X=7\n");
+    }
+
+    forthDictClear();
+    cleanupTestProgram();
+  }
+
+  /* ---- Subcase 2: lying length byte at end of program memory ---- */
+  {
+    static const uint8_t lyingXeq[] = {
+      0x03, 0xFD, 0x7F, 'W', '7'         /* XEQ, len=127, only 2 bytes    */
+    };
+    testProg_t tp;
+    int sSrc, sXeq;
+    tpInit(&tp);
+    tpLbl(&tp, "F2G");
+    tpMarker(&tp);
+    sSrc = tpSrc(&tp, ": W7 7 ;");
+    tpMarker(&tp);
+    sXeq = tpRaw(&tp, lyingXeq, sizeof(lyingXeq));           /* deliberately last: the lie crosses firstFreeProgramByte */
+
+    if (sSrc < 0 || sXeq < 0 || !tpWrite(&tp)) {
+      printf("    [2] FAIL: fixture build/write failed\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+    tpUseAuthoredEnd(&tp);
+
+    programRunStop = PGM_STOPPED;
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    forthRunGenBump();
+    programRunStop = PGM_RUNNING;
+    currentStep = tpStepAddr(&tp, sSrc);
+    executeOneStep(currentStep);
+    if (lastErrorCode == ERROR_NONE) {
+      currentStep = tpStepAddr(&tp, sXeq);
+      executeOneStep(currentStep);
+    }
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [2] FAIL: executeOneStep error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(7)) {
+      printf("    [2] FAIL: X != 7 after bounded XEQ 'W7'\n");
+      fail = 1;
+    }
+    else {
+      printf("    [2] PASS: lying length byte clamped, XEQ 'W7' resolved, X=7\n");
     }
 
     forthDictClear();

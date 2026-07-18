@@ -11,6 +11,22 @@
 #include "forth_dict.h"
 #include "param_core.h"
 
+/* F2-2 (§10.2): bounded variant of decode.c's getStringLabelOrVariableName.
+ * end is EXCLUSIVE. A name that would read past end is clamped to the
+ * available bytes; the caller's normal not-found path then reports it.
+ * The unbounded decode.c reader remains for display paths only. */
+static void paramCoreReadName(const uint8_t *stringAddress, const uint8_t *end) {
+  uint8_t stringLength = *(uint8_t *)(stringAddress++);
+  if(stringAddress >= end) {
+    stringLength = 0;
+  }
+  else if(stringLength > (uint8_t)(end - stringAddress)) {
+    stringLength = (uint8_t)(end - stringAddress);
+  }
+  xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
+  tmpStringLabelOrVariableName[stringLength] = 0;
+}
+
 static void _executeWithIndirectRegister(uint8_t *paramAddress, uint16_t op) {
   uint8_t opParam = *(uint8_t *)paramAddress;
   bool_t  tryAllocate = isFunctionAllowingNewVariable(op);
@@ -28,7 +44,7 @@ static void _executeWithIndirectRegister(uint8_t *paramAddress, uint16_t op) {
 static void _executeWithIndirectVariable(uint8_t *stringAddress, uint16_t op) {
   calcRegister_t regist;
   bool_t  tryAllocate = isFunctionAllowingNewVariable(op);
-  getStringLabelOrVariableName(stringAddress);
+  paramCoreReadName(stringAddress, firstFreeProgramByte);
   regist = findNamedVariable(tmpStringLabelOrVariableName);
   if(regist != INVALID_VARIABLE) {
       int16_t realParam = indirectAddressing(regist, indirectionType(op), indexOfItems[op].tamMinMax >> TAM_MAX_BITS, indexOfItems[op].tamMinMax & TAM_MAX_MASK, tryAllocate);
@@ -60,7 +76,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
         reallyRunFunction(op, opParam);
       }
       else if((opParam == STRING_LABEL_VARIABLE) || (opParam == LOCAL_LABEL_VARIABLE)) {
-        getStringLabelOrVariableName(paramAddress);
+        paramCoreReadName(paramAddress, firstFreeProgramByte);
         /* Rebase to b8f79e486: upstream added named LOCAL labels, reusing
          * this same opParam byte (STRING_LABEL_VARIABLE == GLOBAL_LABELS,
          * LOCAL_LABEL_VARIABLE == LOCAL_LABELS) as the labelType selector —
@@ -209,7 +225,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
         }
       }
       else if(opParam == STRING_LABEL_VARIABLE) {
-        getStringLabelOrVariableName(paramAddress);
+        paramCoreReadName(paramAddress, firstFreeProgramByte);
         calcRegister_t regist = findNamedVariable(tmpStringLabelOrVariableName);
         if(tryAllocate) {
           reallyRunFunction(op, findOrAllocateNamedVariable(tmpStringLabelOrVariableName));
@@ -249,7 +265,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
 
     case PARAM_MENU: {
       if(opParam == STRING_LABEL_VARIABLE) {
-        getStringLabelOrVariableName(paramAddress);
+        paramCoreReadName(paramAddress, firstFreeProgramByte);
         int16_t menu_id = findMenu(tmpStringLabelOrVariableName);
         if(tryAllocate) {
           reallyRunFunction(op, findOrAllocateNamedVariable(tmpStringLabelOrVariableName));
