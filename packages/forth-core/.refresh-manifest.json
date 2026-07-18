@@ -5,12 +5,12 @@
     "forth_compile.c": "da67c2f1881c0acbe9e6063295b30a6be725d48e9e1c390a91de853f57872f2a",
     "forth_dict.c": "23e291d383ae22f6a610b8b5f521168ec6f11b211d83b89a1deb1c046e29f28b",
     "forth_dict.h": "c114ad3b218f593d081db7b0e40cfdfc24e5f6d335d13858e3b7a669bccab9b9",
-    "forth_inner.c": "e4eabe63011add56a5a63491578a3afa12c718d4d76bf0372e3cd8fbab178121",
+    "forth_inner.c": "46e3b09960bf24342831ab62c45b59848e73668a249eeb728dd29dabb82bf43d",
     "forth_prims.c": "2015a3210c6754348a813d9452cc214471c5b25dba629a5def8a366431548f27",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "programming/param_core.c": "73be084dfc08619659a83b59b886a00313da49304b242106e758eaab2ef4cf66",
-    "programming/param_core.h": "00db84255d1aa40aa909ac7fadaf0d69328c98cec9a207d503fb3e4529170e58",
-    "test_dict_reloc.c": "6adf133b25b292583fe8a9735f63786fa5c5e9b02dde20c24f8475895ce7d037"
+    "programming/param_core.c": "86d99f18cbb58b907068a3535745d2ca794b091a1806a62a6fc2177d720b96c4",
+    "programming/param_core.h": "d077b747c9ece4c0633801e408e37abf1200bfbff6ae0cc5b6d610505fc0643d",
+    "test_dict_reloc.c": "e50acd00530cbaafa1132953524a06d5e4806b00ff871afbc2818e6c58f1b5ba"
   },
   "patches": {
     "010-config.c.patch": "2667aa89854707b1449fc91413711c851b41821f9b3be50be25d1a9ec5954524",

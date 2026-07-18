@@ -165,8 +165,8 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
       }
 
     case PARAM_NUMBER_8: {
-      if(opParam <= (indexOfItems[op].tamMinMax & TAM_MAX_MASK)) { // Value from 0 to 99
-        reallyRunFunction(op, opParam);
+      if (paramCoreValidateDirect(op, PTP_NUMBER_8, opParam)) {
+        paramCoreDispatchDirect(op, opParam);
       }
       else if(opParam == INDIRECT_REGISTER) {
         _executeWithIndirectRegister(paramAddress, op);
@@ -201,7 +201,10 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
 
     case PARAM_NUMBER_16: {
         if(isFunctionOldParam16(op)) {  // original Param16 functions without indirection support (little endian parameter)
-          reallyRunFunction(op, opParam + 256 * *(paramAddress));
+          uint16_t val = opParam + 256 * *(paramAddress);
+          if (paramCoreValidateDirect(op, PTP_NUMBER_16, val)) {
+            paramCoreDispatchDirect(op, val);
+          }
         }
         else {                        // new Param16 functions with indirection support (big endian parameter)
           if(opParam == INDIRECT_REGISTER) {
@@ -211,7 +214,13 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
             _executeWithIndirectVariable(paramAddress, op);
           }
           else {
-            reallyRunFunction(op, (opParam * 256) + *(paramAddress));
+            uint16_t val = (opParam * 256) + *(paramAddress);
+            if (paramCoreValidateDirect(op, PTP_NUMBER_16, val)) {
+              paramCoreDispatchDirect(op, val);
+            }
+            else {
+              sprintf(tmpString, "\nIn function _executeOp: case PARAM_NUMBER, %s  %u is not a valid parameter!", indexOfItems[op].itemCatalogName, opParam);
+            }
           }
         }
         break;
@@ -304,3 +313,25 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
   }
 }
   }
+
+/* F2-3 (§10.2): shared direct-parameter validation.
+ * Mirrors the traced native range checks exactly.
+ * PTP_NUMBER_16: native arm applies no range check in either the
+ * isFunctionOldParam16 or the new-param16 path — always true. */
+bool paramCoreValidateDirect(uint16_t op, uint16_t ptpClass, uint16_t value) {
+  if (ptpClass == PTP_NONE) {
+    return true;
+  }
+  else if (ptpClass == PTP_NUMBER_8 || ptpClass == PTP_KEYG_KEYX) {
+    return value <= (indexOfItems[op].tamMinMax & TAM_MAX_MASK);
+  }
+  else if (ptpClass == PTP_NUMBER_16) {
+    return true;
+  }
+  return false;
+}
+
+/* F2-3 (§10.2): shared direct-parameter dispatch. */
+void paramCoreDispatchDirect(uint16_t op, uint16_t value) {
+  reallyRunFunction((int16_t)op, value);
+}

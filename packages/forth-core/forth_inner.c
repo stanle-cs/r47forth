@@ -7,6 +7,7 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_prims.h"
+#include "programming/param_core.h"
 
 /* ---- §2.2 Token constants ---- */
 
@@ -396,17 +397,15 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
              INNER_LEAVE();
          }
 
-         /* H1: PGM_RUNNING save/set/restore wrap around this call (§2.2 resolved issue 2)
-         * Pattern: save current state, mark RUNNING, execute, restore only if
-         * unchanged.  If reallyRunFunction modifies programRunStop (e.g., keypress
-         * aborts execution), the restore is intentionally skipped — the new value
-         * (e.g., PGM_STOPPED) is preserved.  Safe under single-threaded assumption. */
-        {
-          uint8_t savedRunStop = programRunStop;
-          programRunStop = PGM_RUNNING;
-          reallyRunFunction((int16_t)itemId, param);
-          if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
-        }
+          /* F2-3: dispatch through shared parameter core (§10.2).
+           * PGM_RUNNING save/set/restore wrap around the call (§2.2 resolved issue 2). */
+         if (paramCoreValidateDirect(itemId, ptpClass, param)) {
+           uint8_t savedRunStop = programRunStop;
+           programRunStop = PGM_RUNNING;
+           paramCoreDispatchDirect(itemId, param);
+           if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+         }
+         /* else: native-parity silence — no error, no dispatch */
 
         if (lastErrorCode != ERROR_NONE) {
           INNER_LEAVE();

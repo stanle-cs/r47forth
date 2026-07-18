@@ -9755,6 +9755,9 @@ static int test_param_core_extraction(void);
 /* F2-2: bounded name reader test */
 static int test_param_core_bounded_names(void);
 
+/* F2-3: shared direct dispatch parity test */
+static int test_c47_param_shared_dispatch(void);
+
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
 
@@ -10420,6 +10423,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_param_core_bounded_names...\n");
   fail |= test_param_core_bounded_names();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_c47_param_shared_dispatch...\n");
+  fail |= test_c47_param_shared_dispatch();
   forthDictClear();
 
   /* COMMIT 4: executeOneStep ITM_FORTH arm + bump sites */
@@ -11837,6 +11844,315 @@ static int test_param_core_bounded_names(void)
 
     forthDictClear();
     cleanupTestProgram();
+  }
+
+  programRunStop = savedRS;
+  return fail;
+}
+
+/* test_c47_param_shared_dispatch
+ * F2-3: verify that Forth's FTOK_C47 dispatch and the native engine
+ * share the same parameter validation/dispatch path, closing the
+ * out-of-range direct-parameter drift (§10.2). */
+static int test_c47_param_shared_dispatch(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+
+  /* Self-verifying config guard: ITM_SDL must be PTP_NUMBER_8 */
+  {
+    uint16_t sdlClass = (uint16_t)(indexOfItems[ITM_SDL].status & PTP_STATUS);
+    if (sdlClass != PTP_NUMBER_8) {
+      printf("    CONFIG FAIL: ITM_SDL status=0x%04X, ptpClass=0x%04X (expected PTP_NUMBER_8=0x%04X) — re-pick fixture item\n",
+             (uint16_t)indexOfItems[ITM_SDL].status, sdlClass, PTP_NUMBER_8);
+      programRunStop = savedRS;
+      return 1;
+    }
+  }
+
+  /* ---- Subcase 1: in-range NUMBER_8 parity ---- */
+  {
+    uint16_t sdlMax = (uint16_t)(indexOfItems[ITM_SDL].tamMinMax & TAM_MAX_MASK);
+    uint8_t paramVal = 3;  /* SDL 3: shift left by 3 */
+    int subFail = 0;
+
+    /* Native: LBL 'F2H' + SDL 03 + RTN */
+    {
+      uint8_t prog[] = {
+        0x01, 0xFD, 0x03, 'F', '2', 'H',   /* LBL 'F2H' */
+        0x81, 0xA7, paramVal,                /* SDL 03    */
+        0x04                                 /* RTN       */
+      };
+
+      if (!writeTestProgram(prog, sizeof(prog))) {
+        printf("    [1] FAIL: writeTestProgram (native) failed\n");
+        programRunStop = savedRS;
+        return 1;
+      }
+
+      calcRegister_t lbl = findNamedLabel("F2H", GLOBAL_LABELS);
+      if (lbl == INVALID_VARIABLE) {
+        printf("    [1] FAIL: findNamedLabel(\"F2H\") returned INVALID_VARIABLE\n");
+        forthDictClear();
+        cleanupTestProgram();
+        programRunStop = savedRS;
+        return 1;
+      }
+
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("1");
+      if (lastErrorCode != ERROR_NONE || !x_is_longint(1)) {
+        printf("    [1] FAIL: native setup X=1 failed\n");
+        subFail = 1;
+      }
+
+      if (!subFail) {
+        programRunStop = PGM_STOPPED;
+        lastErrorCode = ERROR_NONE;
+        dynamicMenuItem = -1;
+        fnExecute(lbl);
+
+        int32_t nativeX = 0;
+        int nativeErr = lastErrorCode;
+        if (x_is_longint(0)) {
+          /* capture actual X */
+        }
+        /* Read X value */
+        {
+          longInteger_t li;
+          longIntegerInit(li);
+          convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+          longIntegerToInt32(li, nativeX);
+          longIntegerFree(li);
+        }
+
+        /* Forth: SDL3 word = FTOK_C47, cell 423, cell 3, EXIT */
+        forthDictClear();
+        cleanupTestProgram();
+
+        uint16_t w = begin_word("SDL3", 4);
+        if (w == FORTH_NULL) {
+          printf("    [1] FAIL: begin_word SDL3 failed\n");
+          programRunStop = savedRS;
+          return 1;
+        }
+        forthDictEmit(T_C47);
+        { uint16_t itemId = ITM_SDL; forthDictEmitBytes(&itemId, 2); }
+        { uint16_t p = paramVal; forthDictEmitBytes(&p, 2); }
+        end_word(w);
+
+        lastErrorCode = ERROR_NONE;
+        forthOuterInterpret("1");
+        if (lastErrorCode != ERROR_NONE || !x_is_longint(1)) {
+          printf("    [1] FAIL: forth setup X=1 failed\n");
+          subFail = 1;
+        }
+
+        if (!subFail) {
+          bool err = run_word("SDL3");
+          int32_t forthX = 0;
+          int forthErr = lastErrorCode;
+          if (!err) {
+            longInteger_t li;
+            longIntegerInit(li);
+            convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+            longIntegerToInt32(li, forthX);
+            longIntegerFree(li);
+          }
+
+          if (err) {
+            printf("    [1] FAIL: Forth SDL3 error %d\n", lastErrorCode);
+            subFail = 1;
+          }
+          else if (nativeX != forthX) {
+            printf("    [1] FAIL: X mismatch — native=%d, forth=%d\n", nativeX, forthX);
+            subFail = 1;
+          }
+          else if (nativeErr != forthErr) {
+            printf("    [1] FAIL: error mismatch — native=%d, forth=%d\n", nativeErr, forthErr);
+            subFail = 1;
+          }
+          else if (forthX != 1000) {
+            printf("    [1] FAIL: X=%d (expected 1000 = SDL 3 of 1)\n", forthX);
+            subFail = 1;
+          }
+        }
+      }
+
+      if (!subFail) {
+        printf("    [1] PASS: in-range NUMBER_8 parity — both sides X=1000, error=0\n");
+      }
+      else {
+        fail = 1;
+      }
+
+      forthDictClear();
+      cleanupTestProgram();
+    }
+  }
+
+  /* ---- Subcase 2: out-of-range NUMBER_8 parity (closed drift) ---- */
+  {
+    uint16_t outOfRange = (uint16_t)(indexOfItems[ITM_SDL].tamMinMax & TAM_MAX_MASK) + 1;
+    int subFail = 0;
+
+    if (outOfRange > 255) {
+      printf("    [2] CONFIG FAIL: computed out-of-range value %u exceeds 255 — re-pick fixture item\n", outOfRange);
+      programRunStop = savedRS;
+      return 1;
+    }
+
+    /* Native: LBL 'F2I' + SDL <outOfRange> + RTN */
+    {
+      uint8_t prog[] = {
+        0x01, 0xFD, 0x03, 'F', '2', 'I',   /* LBL 'F2I' */
+        0x81, 0xA7, (uint8_t)outOfRange,    /* SDL <oor> */
+        0x04                                 /* RTN       */
+      };
+
+      if (!writeTestProgram(prog, sizeof(prog))) {
+        printf("    [2] FAIL: writeTestProgram (native) failed\n");
+        programRunStop = savedRS;
+        return 1;
+      }
+
+      calcRegister_t lbl = findNamedLabel("F2I", GLOBAL_LABELS);
+      if (lbl == INVALID_VARIABLE) {
+        printf("    [2] FAIL: findNamedLabel(\"F2I\") returned INVALID_VARIABLE\n");
+        forthDictClear();
+        cleanupTestProgram();
+        programRunStop = savedRS;
+        return 1;
+      }
+
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("42");
+      if (lastErrorCode != ERROR_NONE || !x_is_longint(42)) {
+        printf("    [2] FAIL: native setup X=42 failed\n");
+        subFail = 1;
+      }
+
+      if (!subFail) {
+        programRunStop = PGM_STOPPED;
+        lastErrorCode = ERROR_NONE;
+        dynamicMenuItem = -1;
+        fnExecute(lbl);
+
+        int32_t nativeX = 0;
+        longInteger_t li;
+        longIntegerInit(li);
+        convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+        longIntegerToInt32(li, nativeX);
+        longIntegerFree(li);
+        int nativeErr = lastErrorCode;
+
+        /* Forth: SDL_OOR word with out-of-range param */
+        forthDictClear();
+        cleanupTestProgram();
+
+        uint16_t w = begin_word("SOOR", 4);
+        if (w == FORTH_NULL) {
+          printf("    [2] FAIL: begin_word SOOR failed\n");
+          programRunStop = savedRS;
+          return 1;
+        }
+        forthDictEmit(T_C47);
+        { uint16_t itemId = ITM_SDL; forthDictEmitBytes(&itemId, 2); }
+        { uint16_t p = outOfRange; forthDictEmitBytes(&p, 2); }
+        end_word(w);
+
+        lastErrorCode = ERROR_NONE;
+        forthOuterInterpret("42");
+        if (lastErrorCode != ERROR_NONE || !x_is_longint(42)) {
+          printf("    [2] FAIL: forth setup X=42 failed\n");
+          subFail = 1;
+        }
+
+        if (!subFail) {
+          bool err = run_word("SOOR");
+          int32_t forthX = 0;
+          longInteger_t li2;
+          longIntegerInit(li2);
+          convertLongIntegerRegisterToLongInteger(REGISTER_X, li2);
+          longIntegerToInt32(li2, forthX);
+          longIntegerFree(li2);
+          int forthErr = lastErrorCode;
+
+          if (nativeX != 42) {
+            printf("    [2] FAIL: native X changed to %d (expected 42 unchanged)\n", nativeX);
+            subFail = 1;
+          }
+          else if (nativeErr != ERROR_NONE) {
+            printf("    [2] FAIL: native error %d (expected ERROR_NONE)\n", nativeErr);
+            subFail = 1;
+          }
+          else if (forthX != 42) {
+            printf("    [2] FAIL: forth X changed to %d (expected 42 unchanged)\n", forthX);
+            subFail = 1;
+          }
+          else if (forthErr != ERROR_NONE) {
+            printf("    [2] FAIL: forth error %d (expected ERROR_NONE)\n", forthErr);
+            subFail = 1;
+          }
+        }
+      }
+
+      if (!subFail) {
+        printf("    [2] PASS: out-of-range NUMBER_8 parity — both sides silent, X=42 unchanged\n");
+      }
+      else {
+        fail |= 1;
+      }
+
+      forthDictClear();
+      cleanupTestProgram();
+    }
+  }
+
+  /* ---- Subcase 3: PTP_NONE dispatch still green through the seam ---- */
+  {
+    int subFail = 0;
+
+    /* Use ITM_sin (76) — PTP_NONE, used by step-4 forthFindItem tests */
+    uint16_t noneClass = (uint16_t)(indexOfItems[ITM_sin].status & PTP_STATUS);
+    if (noneClass != PTP_NONE) {
+      printf("    [3] CONFIG FAIL: ITM_sin ptpClass=0x%04X (expected PTP_NONE=0x%04X) — re-pick fixture item\n",
+             noneClass, PTP_NONE);
+      programRunStop = savedRS;
+      fail |= 1;
+    }
+    else {
+      uint16_t w = begin_word("SN01", 4);
+      if (w == FORTH_NULL) {
+        printf("    [3] FAIL: begin_word SN01 failed\n");
+        programRunStop = savedRS;
+        return 1;
+      }
+      forthDictEmit(T_C47);
+      { uint16_t itemId = ITM_sin; forthDictEmitBytes(&itemId, 2); }
+      end_word(w);
+
+      lastErrorCode = ERROR_NONE;
+      bool err = run_word("SN01");
+
+      if (err) {
+        printf("    [3] FAIL: PTP_NONE dispatch error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      else if (lastErrorCode != ERROR_NONE) {
+        printf("    [3] FAIL: PTP_NONE dispatch set error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+
+      if (!subFail) {
+        printf("    [3] PASS: PTP_NONE dispatch through seam — ITM_sin executed, no error\n");
+      }
+      else {
+        fail |= 1;
+      }
+
+      forthDictClear();
+    }
   }
 
   programRunStop = savedRS;
