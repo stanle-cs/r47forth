@@ -20,8 +20,8 @@ DESIGN.md.
   that commit without rewriting shared history; all three required mutations
   went RED before the restored clean-tree gate passed.
 - Step 5: R6-1 `29f94d8e4`, R6-2 `416c1e26b`, R6-3 `4ab421a32`.
-  R6-4/R6-5 remain optional, report-only characterization probes and do not
-  block GO.
+  R6-4/R6-5: **complete** (owner-confirmed 2026-07-16; report-only
+  characterization probes, no tree change by design).
 - Step 6, GO checkpoint: clean gate passed with `FORTH SELF-TEST: ALL PASSED`,
   `BUILD + SELF-TEST GREEN`, exit 0, and arena
   `here=36 sizeBlocks=16 freeRamDelta=64`.
@@ -31,6 +31,19 @@ bounded executable packet, **F1-1 pending-reset truth + active-frame guard**.
 F1-2 through F1-5 are dependency-ordered but deliberately not authored against
 nonexistent future APIs. The next required action is to execute F1-1 on a clean
 tree; author F1-2 only after F1-1 commits green.
+
+*Amendment (2026-07-16, owner instruction):* the stage now uses one packet
+per file. F1-1 was moved verbatim into `QWEN_PROMPTS_F1_1_pending_reset.md`
+(content unchanged, EXECUTION GATE added to conform), and F1-2 through F1-5
+were authored ahead of execution
+(`QWEN_PROMPTS_F1_2_run_signaling.md`, `QWEN_PROMPTS_F1_3_scan_tracking.md`,
+`QWEN_PROMPTS_F1_4_recurse.md`, `QWEN_PROMPTS_F1_5_restore_validator.md`).
+`QWEN_PROMPTS_F1_lifetime.md` remains as the stage ledger only. The "author
+only against the green tree" discipline is preserved mechanically: each
+packet opens with an EXECUTION GATE of anchor greps describing the expected
+predecessor tree and STOPs on any mismatch, so a deviating predecessor
+landing forces re-authoring instead of silent drift. Execution order is
+unchanged: F1-1 first, then strictly in sequence.
 
 ---
 
@@ -252,12 +265,18 @@ arena + flash-delta reporting:
   - **F3 — vocabulary/XEQ:** per-program scopes + interactive scope (the
     labelList-`.program` pattern), `XEQ 'NAME'` / `XEQ :NAME:` parsing word,
     FTOK_XEQN with kind byte (§2 above, superseding withdrawn R1-4), B4
-    dispatch matrix, §2.3 tests.
+    dispatch matrix, §2.3 tests. *(2026-07-16 fold, DESIGN §10.3: plus the
+    control-flow words `IF`/`ELSE`/`THEN`/`BEGIN`/`UNTIL`/`AGAIN`/`WHILE`/
+    `REPEAT` with the `IMMEDIATE` machinery, and the global scope —
+    globals' entry spelling/FORGET/arena accounting ruled at the F3 design
+    pass.)*
   - **F4 — series C textual parameters** (traced grammar + error table).
   - **F5 — series D commit validation** (E9 successor: structural = atomic
     reject, names advisory).
   - **F6 — capture submode** (managed source buffer, relocation-safe handle;
-    `tam.colon` included in the suspended/restored TAM state).
+    `tam.colon` included in the suspended/restored TAM state). *(2026-07-16
+    fold, DESIGN §10.6: plus the §4.3 dedicated Forth word catalog —
+    contents per F3 scopes, UI integrated with the final capture model.)*
   - **F1.5/parallel — §8.9 end-to-end acceptance harness** per the Q1 ruling,
     scheduled right after F1 so the lifecycle tests pin the *new* semantics.
 
