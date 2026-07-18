@@ -263,8 +263,8 @@ full sanctioned gate, manually restore the hunk afterward, and continue
 only when the named subcase goes RED for the named reason:
 
 1. In `param_core.c`'s PARAM_REGISTER arm, comment out the direct-branch
-   `reallyRunFunction(op, opParam);` call. Subcase 1 must go RED (register
-   05 never written).
+   `reallyRunFunction(op, regKStoC(opParam));` call. Subcase 1 must go RED
+   (register 05 never written).
 2. In the relocated PARAM_LABEL fallback, delete the `FORTH_XEQ_COLON`
    branch. Subcase 2 must go RED (`ERROR_LABEL_NOT_FOUND` instead of X==7).
 
