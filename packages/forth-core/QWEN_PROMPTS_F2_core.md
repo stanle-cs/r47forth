@@ -92,9 +92,10 @@ needed):
 | Task | Packet | Status | Dependency |
 |---|---|---|---|
 | F2-1 extract the native core | `QWEN_PROMPTS_F2_1_extraction.md` | DONE (`6f0ffca4b`) | F1.5 complete (F15-5 committed green) |
-| F2-2 bounded name reader | `QWEN_PROMPTS_F2_2_bounded_names.md` | **READY TO EXECUTE** | F2-1 committed green (`6f0ffca4b`) |
-| F2-3 shared direct dispatch + FTOK_C47 re-route | `QWEN_PROMPTS_F2_3_shared_dispatch.md` | AUTHORED — gate-locked | F2-2 committed green |
-| F2-4 parity acceptance sweep | `QWEN_PROMPTS_F2_4_parity_acceptance.md` | AUTHORED — gate-locked | F2-3 committed green |
+| F2-2 bounded name reader | `QWEN_PROMPTS_F2_2_bounded_names.md` | DONE (`69e594c71`) | F2-1 committed green (`6f0ffca4b`) |
+| F2-3 shared direct dispatch + FTOK_C47 re-route | `QWEN_PROMPTS_F2_3_shared_dispatch.md` | DONE (`06ce84b5a`) | F2-2 committed green (`69e594c71`) |
+| F2-4 parity acceptance sweep | `QWEN_PROMPTS_F2_4_parity_acceptance.md` | LANDED (`176e0be0f`) — REVIEW FOUND ESCAPES | F2-3 committed green (`06ce84b5a`) |
+| F2-5 acceptance correction | `QWEN_PROMPTS_F2_5_acceptance_correction.md` | **READY TO EXECUTE** | F2-4 landed; review correction required before F3 |
 
 F2-1 landed after three authoring corrections: its full-engine XEQ fixture
 repeated forever because legacy `executeOneStep(ITM_XEQ)` returns `-1`
@@ -108,6 +109,13 @@ name reads remain (indirect-variable helper, PARAM_LABEL,
 PARAM_REGISTER/PARAM_COMPARE, PARAM_MENU). Its two XEQ fixtures use the
 same corrected one-step drive. The malformed-name differential is pinned
 by `writeTestProgram`'s `0xFF 0xFF` sentinel, not an ASan assumption.
+
+F2-4's final gate was green, but its required NUMBER_8 boundary mutation
+also stayed green: both native and Forth paths compared through the same
+mutated validator. Post-stage review additionally found read-before-bound
+and available-count narrowing in the F2-2 reader, last-match NUMBER_16
+discovery, and non-isolated NUMBER_16 input state. F2-5 is the bounded
+correction packet; F2 and the F3 dependency remain open until it lands green.
 
 Authoring rules as in `QWEN_PROMPTS_F15_harness.md` (landed-tree
 verification, machine-verified literals, per-packet `/tmp/forth-f2-N-*`

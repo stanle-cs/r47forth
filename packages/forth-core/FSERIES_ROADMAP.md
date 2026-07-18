@@ -43,7 +43,7 @@ harness pins every later stage: F2..F6 packets inherit an acceptance
 backstop that fails loudly if they break lifecycle, entry state, display,
 parity, or name-faithfulness.
 
-## Stage F2 — shared RPN parameter semantic core (DESIGN §10.2) — AUTHORED
+## Stage F2 — shared RPN parameter semantic core (DESIGN §10.2) — CORRECTION READY
 
 **Status 2026-07-17:** the pre-work is DONE and the packets exist. The PTP
 trace was performed against the tree (evidence recorded in
@@ -57,12 +57,19 @@ and a parity sweep. A traced fact worth remembering: native out-of-range
 direct parameters are SILENT no-ops (sprintf only, no error code) — parity
 pins that silence.
 
+**Post-stage review 2026-07-18:** F2-1..F2-4 landed, but the first F2-4
+mutation stayed green because both engines used the same mutated validator.
+The same review found two bounded-reader defects plus last-match and state-
+isolation defects in the NUMBER_16 sweep. `QWEN_PROMPTS_F2_5_acceptance_correction.md`
+is the bounded correction; F3 is gate-locked until it commits green.
+
 | Packet | Status |
 |---|---|
-| F2-1 extract the native core | AUTHORED — gate-locked on F15-5 |
-| F2-2 bounded name reader | AUTHORED — gate-locked on F2-1 |
-| F2-3 shared dispatch + FTOK_C47 re-route | AUTHORED — gate-locked on F2-2 |
-| F2-4 parity acceptance sweep | AUTHORED — gate-locked on F2-3 |
+| F2-1 extract the native core | DONE (`6f0ffca4b`) |
+| F2-2 bounded name reader | DONE (`69e594c71`) |
+| F2-3 shared dispatch + FTOK_C47 re-route | DONE (`06ce84b5a`) |
+| F2-4 parity acceptance sweep | LANDED (`176e0be0f`) — review found escapes |
+| F2-5 acceptance correction | READY TO EXECUTE — gates F3 |
 
 **Risks (unchanged):** hidden `_executeOp` call sites or PTP consumers
 surfacing at execution → gates STOP, architect re-authors.
