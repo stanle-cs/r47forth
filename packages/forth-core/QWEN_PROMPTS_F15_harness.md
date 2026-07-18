@@ -34,22 +34,26 @@ unit suite and get no packets.
 
 | Task | Packet | Status | §8.9 items | Dependency |
 |---|---|---|---|---|
-| F15-1 end-to-end run lifecycle | `QWEN_PROMPTS_F15_1_run_lifecycle.md` | **READY TO EXECUTE** | 1, 7(a,b), 9(a,b) | F1 complete + `6345f6c64` |
-| F15-2 entry state + power-off round-trip | — | TO AUTHOR (verification pass pending) | 2(a-d) | F15-1 committed green |
+| F15-1 end-to-end run lifecycle | `QWEN_PROMPTS_F15_1_run_lifecycle.md` | DONE (`b773597bd`) | 1, 7(a,b), 9(a,b) | F1 complete + `6345f6c64` |
+| F15-2 entry state + power-off round-trip | `QWEN_PROMPTS_F15_2_entry_state.md` | **READY TO EXECUTE** | 2(a-d) | F15-1 committed green (`b773597bd`) |
 | F15-3 display parity across surfaces | — | TO AUTHOR (verification pass pending) | 4 | F15-2 committed green |
 | F15-4 glyph operators + literal type parity | — | TO AUTHOR (verification pass pending) | 5, 6 | F15-3 committed green |
 | F15-5 XEQ-by-name records a name step | — | TO AUTHOR (verification pass pending) | 10 | F15-4 committed green |
 
-Packets F15-2..F15-5 are deliberately **not** authored yet: each needs its
+Packets F15-3..F15-5 are deliberately **not** authored yet: each needs its
 own architect verification pass against the tree its predecessor leaves
-(rule 1 above). Design notes fixed so far, from the completed inventory:
+(rule 1 above). F15-2 was authored against landed F15-1 (`b773597bd`)
+with its exact 22-byte fixture, real `fnGotoDot` + `runFunction(ITM_2)`
+drive, and simulator save/restore fields verified. Design notes fixed so far,
+from the completed inventory:
 
-- **F15-2:** `forthEntryStateAtCursor` / `forthEntryStateAtInsertion`
-  (forth_bridge.c) are pure probes over `currentStep`/program bytes; model
-  is `test_entry_state_derivation` (unit analog) extended with real cursor
-  motion (`fnGotoDot`) and the 2(d) power-off round-trip modeled on
-  `test_save_restore_roundtrip`. Mutation: the §8.9 item-2 static-bool
-  replacement of `forthEntryStateAtInsertion`.
+- **F15-2 (authored):** `forthEntryStateAtCursor` /
+  `forthEntryStateAtInsertion` (forth_bridge.c) are pure probes over
+  `currentStep`/program bytes; the packet extends the unit analog with real
+  cursor motion (`fnGotoDot`), real digit dispatch (`runFunction(ITM_2)`),
+  and the 2(d) power-off round-trip modeled on `test_save_restore_roundtrip`.
+  Mutation: the §8.9 item-2 static-bool replacement of
+  `forthEntryStateAtInsertion`.
 - **F15-3:** the marker renderer is `decodeRem` (programming/decode.c,
   `forthMarkerTurnsOn` call); the parity target is agreement across the
   listing / BST-SST render surfaces on one real program including the

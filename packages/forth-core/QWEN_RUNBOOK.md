@@ -62,8 +62,9 @@ green tree its predecessor leaves behind).
 | 4 | F1-4 compile-only RECURSE | DONE (`2940a0f4f`) | `QWEN_PROMPTS_F1_4_recurse.md` |
 | 5 | F1-5 restore-time threaded-code validator | DONE (`04006089f`) | `QWEN_PROMPTS_F1_5_restore_validator.md` |
 | 6a | F1.5 stage opened: §8.3/§8.9 reconciled to landed F1 (`6345f6c64`); stage ledger is `QWEN_PROMPTS_F15_harness.md` | DONE | — |
-| 6b | F15-1 end-to-end run lifecycle (§8.9 items 1, 7, 9) | **[QWEN]** | `QWEN_PROMPTS_F15_1_run_lifecycle.md` |
-| 6c | F15-2..F15-5 (entry state, display parity, glyph/type parity, XEQ-name step) — authored ONE AT A TIME by the architect against each predecessor's landed tree (per the ledger's authoring rules), then run by Qwen | **[ARCHITECT]** then [QWEN] | `QWEN_PROMPTS_F15_harness.md` |
+| 6b | F15-1 end-to-end run lifecycle (§8.9 items 1, 7, 9) | DONE (`b773597bd`) | `QWEN_PROMPTS_F15_1_run_lifecycle.md` |
+| 6c | F15-2 derived entry state + power-off round-trip (§8.9 item 2) | **[QWEN]** | `QWEN_PROMPTS_F15_2_entry_state.md` |
+| 6d | F15-3..F15-5 (display parity, glyph/type parity, XEQ-name step) — authored ONE AT A TIME by the architect against each predecessor's landed tree (per the ledger's authoring rules), then run by Qwen | **[ARCHITECT]** then [QWEN] | `QWEN_PROMPTS_F15_harness.md` |
 | 7 | F2 — shared RPN parameter semantic core. Architect traces every native PTP path first (tracing, not inference), then authors packets. | **[ARCHITECT]** then [QWEN] | DESIGN §10.2 |
 | 8 | F3 — vocabulary/scopes/XEQ/XEQN **+ control-flow words & IMMEDIATE + global scope** (2026-07-16 folds). Architect design pass first: rule globals' entry spelling / FORGET / arena accounting; trace label grammar (R4 C2); settle control-flow compilation shapes; extend the F1-5 validator with XEQN. Then packets. | **[ARCHITECT]** then [QWEN] | DESIGN §10.3 |
 | 9 | F4 — Series C textual parameters. Architect traces native grammar + error table, then packets. | **[ARCHITECT]** then [QWEN] | DESIGN §10.4 |
