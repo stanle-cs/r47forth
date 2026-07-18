@@ -2796,7 +2796,8 @@ start/end bounds. Every supported native PTP path is traced, not inferred.
   definitions. Interactive definitions occupy one reserved interactive-local
   scope, cleared by a top-level reset. Implementation mirrors upstream's
   `labelList[].program` pattern (§0.3) — one mental model for both "local
-  name" systems. Global Forth words remain deferred.
+  name" systems. Global Forth words join this stage (2026-07-16 ruling —
+  see the global-scope bullet below; the earlier deferral is superseded).
 - **`XEQ` source forms** (the §4.1 collision escape hatch, B2): `XEQ 'NAME'`
   requests the native **global** label meaning; on miss it falls back to an
   ordinary callable Forth target (prim → same-scope colon → item; a number is
@@ -2814,9 +2815,37 @@ start/end bounds. Every supported native PTP path is traced, not inferred.
   parameter becomes an **atomic syntax error** (B3) — replacing the §4.2
   documented interim (NOPARAM dispatch), whose `test_xeq_item_lookup` rows
   migrate here.
+- **Control-flow words + `IMMEDIATE` (folded in, ruled 2026-07-16):** the
+  standard compiling words `IF`/`ELSE`/`THEN` and
+  `BEGIN`/`UNTIL`/`AGAIN`/`WHILE`/`REPEAT` land in this stage as immediate
+  primitives emitting the existing `FTOK_BR`/`FTOK_0BR` runtime tokens
+  (§2.2 — the runtime side is already implemented, and the F1-5 restore
+  validator's branch-target rules already cover everything these words can
+  emit). The §3.3.9 "stage 2" machinery lands with them: an `IMMEDIATE`
+  word setting `FF_IMMEDIATE` on `fdict.latest`, plus the colon-immediacy
+  flags lookup the compiler needs to honor it. Placement rationale:
+  `RECURSE` (F1-4) is unusable without conditionals, and F3's XEQ-bearing
+  programs are the first real consumers. Exact compilation shapes (operand
+  back-patching, compile-time control-stack discipline, whether `IF`
+  duplicates before `0BR` per §3.2's consuming-pop semantics) are settled
+  in the F3 design pass against the traced stack behavior, not inferred.
+- **Global scope (folded in, ruled 2026-07-16 — supersedes the earlier
+  "remain deferred"):** a third reserved scope alongside per-program and
+  interactive. Its words are visible from every lookup context, searched
+  after the current scope (innermost first); they survive top-level
+  lifetime resets (the scope-aware reset clears only program/interactive
+  scopes) and persist with the saved dictionary — acceptable only now that
+  the F1-5 validator makes restored bodies trustworthy. Sub-questions to
+  rule at the F3 design pass, before packets are authored: the entry
+  spelling (how a definition is marked global — extension-principle
+  answer required, no invented syntax), deletion semantics
+  (`FORGET`-class), and §5.4 arena-ceiling accounting for words that never
+  age out.
 - Acceptance anchors: the §2.3 tests of `R6_RESOLUTION_PLAN.md` (mimicry pin
   against an RPN `XEQ :T:` step at the same position; kind-faithful no-fallback;
-  kind-byte round-trip; bare-name-stays-global mutation).
+  kind-byte round-trip; bare-name-stays-global mutation). Control-flow and
+  global-scope acceptance tests are authored at stage time with the traced
+  semantics.
 
 ### 10.4 F4 — Series C: textual parameters
 
@@ -2847,3 +2876,14 @@ relocation-safe handle; nested ordinary alpha capture suspends and restores
 the full capture state — **including `tam.colon`**, which joined the `tam`
 struct in b8f79e486. Requires its own keyboard/PEM audit with
 hardware-derived tests before prompting.
+
+**Dedicated Forth word catalog (folded in, ruled 2026-07-16):** the §4.3
+"future stage" dynamic catalog lands here, on the same softmenu machinery as
+the §8.6 picker: it lists callable colon words per the F3 scope rules
+(current program's scope, interactive, global) for browsing and insertion
+during capture, and for `FCALL`/XEQ access outside it (the `ITM_FCALL`
+name-redirect bridge, §4.2, already makes picked words executable and
+recordable). Placed in F6 because the catalog must integrate with the final
+capture entry model rather than the interim alpha wrapper, and because its
+contents are defined by F3's scopes. Exact menu placement and keying are
+traced from native catalog behavior during this stage's PEM audit.

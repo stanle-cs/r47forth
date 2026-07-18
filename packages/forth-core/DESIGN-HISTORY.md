@@ -596,3 +596,31 @@ point (payload bytes opaque, lossless round-trip) was and is correct.
 drift) and F9.1 (phantom marker on power-off mid-capture) are carried into
 the Step-2 prompt backlog as bounded verify-then-fix-or-close tasks; they had
 fallen out of all current tracking.
+
+## 2026-07-16 — Stage-F roadmap completion: control flow, globals, and the word catalog get stages
+
+Owner rulings (Stan, 2026-07-16), folded into §10 as class-2 amendments:
+
+- **Control-flow words + `IMMEDIATE` → F3 (§10.3).** They had fallen through
+  the stage numbering: §3.3.9 and §2.2 called them "future work / stage 2"
+  (pre-F-series numbering), but §10's F1-F6 never claimed them, leaving
+  `RECURSE` (F1-4) without conditionals to terminate on. Ruled into F3: the
+  runtime tokens (`FTOK_BR`/`FTOK_0BR`) already exist and the F1-5 validator
+  already covers their emissions; compilation shapes are settled at the F3
+  design pass.
+- **Global Forth words → F3 (§10.3), superseding §10.3's own "remain
+  deferred".** Designed as the third reserved scope with the other two:
+  searched after the current scope, survives top-level resets, persists with
+  the validated save. Entry spelling, FORGET-class deletion, and §5.4
+  arena-ceiling accounting are named as F3-design-pass sub-questions.
+- **Dedicated Forth word catalog → F6 (§10.6),** closing §4.3's "future
+  stage" pointer. Lands with the capture submode because its contents come
+  from F3's scopes and its UI must integrate with the final capture entry
+  model, not the interim alpha wrapper.
+
+Status notes recorded in the same pass (`R6_RESOLUTION_PLAN.md`): the
+report-only probes R6-4/R6-5 are complete (owner-confirmed; no tree change by
+design — they were characterization probes). With these folds the accepted
+implementation backlog is exactly F1→F6 (plus the F1.5 §8.9 harness); the
+only post-series work is Step 8 housekeeping (freeList upstream MR, optional
+upstream reports) and documentation reconciliation as stages land.
