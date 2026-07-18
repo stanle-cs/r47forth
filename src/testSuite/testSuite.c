@@ -24,6 +24,8 @@ char testCaseName[1000], testCasePrefix[1000], testCaseSuffix[1000];
 int32_t lineNumber, numTestsFile, numTestsTotal, successfulTests, failedTests;
 int32_t functionIndex, funcType, correctSignificantDigits;
 bool_t noFailForNow = true; // abortTest counts a failure only while set; starts true so the run's first test can fail
+// A Func:/Item: setup line that failed to resolve; the Out: handler fails the case.
+bool_t caseSetupFailed;
 
 uint16_t label, functionParameter;
 
@@ -5215,11 +5217,17 @@ void functionToCall(char *functionName) {
   int32_t function;
 
   functionParameter = NOPARAM;
+  // Default to NOP so a failed Func: does not rerun the previous block's function.
+  functionIndex = ITM_NOP;
+  funcToTest    = fnNop;
+  funcType      = FUNC_TO_TEST;
+
   char *openParenthesis = strchr(functionName, '(');
   char *closeParenthesis = strchr(functionName, ')');
   if((openParenthesis && !closeParenthesis) || (!openParenthesis && closeParenthesis)) {
     printf("\nParameter parenthesis do not match!\n");
-    abortTest();
+    caseSetupFailed = true;
+    return;
   }
   else if(openParenthesis && closeParenthesis) {
     *closeParenthesis = 0;
@@ -5252,15 +5260,17 @@ void functionToCall(char *functionName) {
 
     if(functionIndex >= LAST_ITEM) {
       printf("\nThe function %s must be somewhere in the indexOfItems array!\n", functionName);
-      abortTest();
+      caseSetupFailed = true;
+      return;
     }
 
     //printf("%s=%d\n", functionName, functionIndex);
+    caseSetupFailed = false;
     return;
   }
 
   printf("\nCannot find the function to test: check spelling of the function name and remember the name is case sensitive\n");
-  abortTest();
+  caseSetupFailed = true;
 }
 
 
@@ -5333,7 +5343,7 @@ void itemToCall(char *itemSpec) {
     itemNr = lookupItemName(itemSpec);
     if(itemNr < 0) {
       printf("\nCannot find %s in items.h: check spelling of the item name and remember the name is case sensitive\n", itemSpec);
-      abortTest();
+      caseSetupFailed = true;
       return;
     }
   }
@@ -5342,30 +5352,39 @@ void itemToCall(char *itemSpec) {
     itemNr = (int32_t)strtol(itemSpec, &end, 10);
     if(*end != 0) {
       printf("\nItem number has trailing characters: %s\n", itemSpec);
-      abortTest();
+      caseSetupFailed = true;
       return;
     }
   }
   else {
     printf("\nItem must be an ITM_ name or an item number: %s\n", itemSpec);
-    abortTest();
+    caseSetupFailed = true;
     return;
   }
 
   if(itemNr <= 0 || itemNr >= LAST_ITEM) {
     printf("\nItem number %d is out of range (1..%d)\n", itemNr, LAST_ITEM - 1);
-    abortTest();
+    caseSetupFailed = true;
     return;
   }
 
   if(indexOfItems[itemNr].func == itemToBeCoded) {
     printf("\nItem %d (%s) is not an implemented function\n", itemNr, itemSpec);
-    abortTest();
+    caseSetupFailed = true;
     return;
   }
 
-  functionIndex = itemNr;
-  funcType      = FUNC_ITEM;
+  // A TAM item's param is a TM_* marker, not a value; passed through it reaches
+  // the function as a register index and segfaults. Reject as the DSL does (dsl.c:104).
+  if(TM_VALUE <= indexOfItems[itemNr].param && indexOfItems[itemNr].param <= TM_CMP) {
+    printf("\nItem %d (%s) takes a TAM parameter, which Item: cannot supply: drive it with Func: and In: FARG=n\n", itemNr, itemSpec);
+    caseSetupFailed = true;
+    return;
+  }
+
+  functionIndex   = itemNr;
+  funcType        = FUNC_ITEM;
+  caseSetupFailed = false;
 }
 
 
@@ -5550,7 +5569,14 @@ void processLine(void) {
     numTestsTotal++;
     successfulTests++;
     noFailForNow = true;
-    outParameters(line + 5);
+    if(caseSetupFailed) {
+      // Setup failed, so fnNop ran: fail-and-skip. The flag latches across this
+      // block's Out: lines; the next Func:/Item: and each file clear it.
+      abortTest();
+    }
+    else {
+      outParameters(line + 5);
+    }
   }
 
   else if(line[0] != 0) {
@@ -5565,6 +5591,8 @@ void processOneFile(void) {
   FILE *testSuite;
 
   numTestsFile = 0;
+  // Clear per file: a rejected line at a file's end has no Out: to consume the flag.
+  caseSetupFailed = false;
 
   strcpy(fileName, line);
   strcat(fileName, ".txt");
