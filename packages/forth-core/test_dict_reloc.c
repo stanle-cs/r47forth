@@ -5389,9 +5389,363 @@ static int test_accept_entry_state_roundtrip(void)
   memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
 
   return fail;
-}
+ }
 
-/* test_dict_name_by_index
+ /* accept_copy_screen_rect
+  * Copies a rectangular region from the calculator LCD buffer into a linear
+  * one-byte-per-pixel buffer. No rendering, no global mutation. */
+ static void accept_copy_screen_rect(uint8_t *dst, int x, int y, int width, int height)
+ {
+   int row, col;
+   for (row = 0; row < height; row++) {
+     for (col = 0; col < width; col++) {
+       dst[row * width + col] = lcd_buffer_pixel_on(x + col, y + row) ? 1 : 0;
+     }
+   }
+ }
+
+ /* accept_marker_token_is
+  * Returns true only when tmpString holds the exact seven-byte NUL-terminated
+  * internal marker token: opening = \x80\xbb"FORTH", closing = "FORTH"\x80\xab. */
+ static bool_t accept_marker_token_is(bool_t opening)
+ {
+   if (strlen(tmpString) != 7) return false;
+   if (opening) {
+     return (tmpString[0] == (char)0x80 && tmpString[1] == (char)0xBB &&
+             memcmp(tmpString + 2, "FORTH", 5) == 0);
+   } else {
+     return (memcmp(tmpString, "FORTH", 5) == 0 &&
+             tmpString[5] == (char)0x80 && tmpString[6] == (char)0xAB);
+   }
+ }
+
+ /* test_accept_display_parity
+  * F15-3: §8.9 item 4 — one real program renders the same marker directions
+  * on PEM, SST, and BST surfaces. Three independently accumulated subcases. */
+ static int test_accept_display_parity(void)
+ {
+   int fail = 0;
+
+   /* Save all display/program globals the three drives touch */
+   uint8_t *savedCurrentStep = currentStep;
+   uint16_t savedProgNum = currentProgramNumber;
+   uint16_t savedLocalStep = currentLocalStepNumber;
+   uint8_t *savedFirstDisplayedStep = firstDisplayedStep;
+   uint16_t savedFirstDisplayedLocal = firstDisplayedLocalStepNumber;
+   bool_t savedZeroth = pemCursorIsZerothStep;
+   uint8_t savedCalcMode = calcMode;
+   int16_t savedScreenUpdatingMode = screenUpdatingMode;
+   uint8_t savedProgRunStop = programRunStop;
+   int16_t savedTempInfo = temporaryInformation;
+   uint16_t savedCurrentInputVar = currentInputVariable;
+   bool_t savedProgramListEnd = programListEnd;
+   bool_t savedLastProgramListEnd = lastProgramListEnd;
+   int16_t savedTamMode = tam.mode;
+   int16_t savedTamFunction = tam.function;
+   bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+   char aimBufSave[256];
+   memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+   extern void fnGotoDot(uint16_t globalStepNumber);
+   extern void defineFirstDisplayedStep(void);
+   extern void fnPem(uint16_t param);
+   extern void fnSst(uint16_t param);
+   extern void fnBst(uint16_t param);
+   extern int16_t stringWidth(const char *str, const font_t *font, bool_t withLeading, bool_t withEnding);
+   extern uint32_t showString(const char *string, const font_t *font, uint32_t x, uint32_t y, videoMode_t videoMode, bool_t showLeading, bool_t showEnding);
+
+   /* Exact fixture — 35 bytes, 6 steps */
+   uint8_t prog[] = {
+     0x01, 0xFD, 0x03, 'D', '3', 'A',                       /* 1: LBL 'D3A'       (+0)  */
+     0x8B, 0x1A, 0xFD, 0x00,                               /* 2: opening »FORTH  (+6)  */
+     0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ',       /* 3: : SQ DUP * ;    (+10) */
+     'D', 'U', 'P', ' ', '*', ' ', ';',
+     0x8B, 0x1A, 0xFD, 0x00,                               /* 4: closing FORTH«  (+26) */
+     0x8B, 0x1A, 0xFD, 0x00,                               /* 5: opening »FORTH  (+30) */
+     0x04                                                   /* 6: RTN             (+34) */
+   };
+
+   const char opening[] = STD_RIGHT_DOUBLE_ANGLE "FORTH";
+   const char closing[] = "FORTH" STD_LEFT_DOUBLE_ANGLE;
+   const int x = 62;
+   const int rowPitch = 21;
+   const int marker1Y = Y_POSITION_OF_REGISTER_T_LINE + rowPitch * 2;
+   const int marker2Y = Y_POSITION_OF_REGISTER_T_LINE + rowPitch * 4;
+   const int marker3Y = Y_POSITION_OF_REGISTER_T_LINE + rowPitch * 5;
+   const int rectHeight = 21;
+
+   int openingW = stringWidth(opening, &standardFont, false, false);
+   int closingW = stringWidth(closing, &standardFont, false, false);
+
+   if (openingW <= 0 || closingW <= 0) {
+     printf("    FAIL: stringWidth returned non-positive (opening=%d, closing=%d)\n", openingW, closingW);
+     fail = 1;
+     goto restore_exit;
+   }
+   if (x + openingW > SCREEN_WIDTH || x + closingW > SCREEN_WIDTH) {
+     printf("    FAIL: marker text exceeds LCD width\n");
+     fail = 1;
+     goto restore_exit;
+   }
+
+   int maxW = (openingW > closingW) ? openingW : closingW;
+
+   /* Allocate expected rectangles and one actual scratch rectangle */
+   uint8_t *exp1 = malloc((size_t)openingW * rectHeight);
+   uint8_t *exp2 = malloc((size_t)closingW * rectHeight);
+   uint8_t *exp3 = malloc((size_t)openingW * rectHeight);
+   uint8_t *actual = malloc((size_t)maxW * rectHeight);
+
+   if (!exp1 || !exp2 || !exp3 || !actual) {
+     printf("    FAIL: malloc for pixel rectangles\n");
+     fail = 1;
+     free(exp1); free(exp2); free(exp3); free(actual);
+     goto restore_exit;
+   }
+
+   /* ---- Render expected tokens into the real calculator LCD buffer ---- */
+   /* Opening at marker1Y */
+   {
+     clearScreen(0);
+     showString(opening, &standardFont, x, marker1Y, vmNormal, false, false);
+     accept_copy_screen_rect(exp1, x, marker1Y, openingW, rectHeight);
+   }
+   /* Closing at marker2Y */
+   {
+     clearScreen(0);
+     showString(closing, &standardFont, x, marker2Y, vmNormal, false, false);
+     accept_copy_screen_rect(exp2, x, marker2Y, closingW, rectHeight);
+   }
+   /* Opening at marker3Y */
+   {
+     clearScreen(0);
+     showString(opening, &standardFont, x, marker3Y, vmNormal, false, false);
+     accept_copy_screen_rect(exp3, x, marker3Y, openingW, rectHeight);
+   }
+
+   /* ---- Subcase 1: real PEM listing ---- */
+   {
+     int sc1 = 0;
+
+     clearScreen(0);
+
+     if (!writeTestProgram(prog, sizeof(prog))) {
+       printf("    [1] FAIL: writeTestProgram\n");
+       sc1 = 1;
+     }
+     else {
+       calcMode = CM_PEM;
+       tam.mode = 0;
+       tam.function = 0;
+       aimBuffer[0] = 0;
+       clearSystemFlag(FLAG_ALPHA);
+       pemCursorIsZerothStep = false;
+       programRunStop = PGM_STOPPED;
+       lastErrorCode = ERROR_NONE;
+
+       fnGotoDot(2);
+
+       if (currentLocalStepNumber != 2) {
+         printf("    [1] FAIL: after fnGotoDot(2) step=%u, expected 2\n", currentLocalStepNumber);
+         sc1 = 1;
+       }
+       else if (currentStep != beginOfProgramMemory + 6) {
+         printf("    [1] FAIL: after fnGotoDot(2) currentStep=%p, expected %p (+6)\n",
+                (void *)currentStep, (void *)(beginOfProgramMemory + 6));
+         sc1 = 1;
+       }
+       else {
+         firstDisplayedLocalStepNumber = 0;
+         defineFirstDisplayedStep();
+         fnPem(NOPARAM);
+
+         /* Copy actual marker rectangles */
+         accept_copy_screen_rect(actual, x, marker1Y, openingW, rectHeight);
+         if (memcmp(actual, exp1, (size_t)openingW * rectHeight) != 0) {
+           printf("    [1] FAIL: PEM marker 1 pixel mismatch (expected opening)\n");
+           sc1 = 1;
+         }
+
+         accept_copy_screen_rect(actual, x, marker2Y, closingW, rectHeight);
+         if (memcmp(actual, exp2, (size_t)closingW * rectHeight) != 0) {
+           printf("    [1] FAIL: PEM marker 2 pixel mismatch (expected closing)\n");
+           sc1 = 1;
+         }
+
+         accept_copy_screen_rect(actual, x, marker3Y, openingW, rectHeight);
+         if (memcmp(actual, exp3, (size_t)openingW * rectHeight) != 0) {
+           printf("    [1] FAIL: PEM marker 3 pixel mismatch (expected opening)\n");
+           sc1 = 1;
+         }
+       }
+     }
+     cleanupTestProgram();
+
+     if (sc1) {
+       fail = 1;
+     }
+     else {
+       printf("    [1] PASS: PEM listing renders opening/closing/opening markers\n");
+     }
+   }
+
+   /* ---- Subcase 2: real SST display ---- */
+   {
+     int sc2 = 0;
+     const uint16_t steps[] = { 2, 4, 5 };
+     const uint16_t offsets[] = { 6, 26, 30 };
+     const bool_t openingExpected[] = { true, false, true };
+     int i;
+
+     if (!writeTestProgram(prog, sizeof(prog))) {
+       printf("    [2] FAIL: writeTestProgram\n");
+       sc2 = 1;
+     }
+     else {
+       for (i = 0; i < 3; i++) {
+         calcMode = CM_NORMAL;
+         programRunStop = PGM_STOPPED;
+         lastErrorCode = ERROR_NONE;
+         dynamicMenuItem = -1;
+         tam.mode = 0;
+         aimBuffer[0] = 0;
+         clearSystemFlag(FLAG_ALPHA);
+
+         fnGotoDot(steps[i]);
+
+         if (currentLocalStepNumber != steps[i]) {
+           printf("    [2] FAIL: step %d: localStep=%u, expected %u\n",
+                  i, currentLocalStepNumber, steps[i]);
+           sc2 = 1;
+         }
+         else if (currentStep != beginOfProgramMemory + offsets[i]) {
+           printf("    [2] FAIL: step %d: currentStep=%p, expected %p (+%d)\n",
+                  i, (void *)currentStep, (void *)(beginOfProgramMemory + offsets[i]), offsets[i]);
+           sc2 = 1;
+         }
+         else {
+           fnSst(NOPARAM);
+
+           if (lastErrorCode != ERROR_NONE) {
+             printf("    [2] FAIL: step %d: lastErrorCode=%d\n", i, lastErrorCode);
+             sc2 = 1;
+           }
+           else if (!accept_marker_token_is(openingExpected[i])) {
+             printf("    [2] FAIL: step %d: token mismatch (expected %s)\n",
+                    i, openingExpected[i] ? "opening" : "closing");
+             sc2 = 1;
+           }
+         }
+
+         programRunStop = PGM_STOPPED;
+       }
+     }
+     cleanupTestProgram();
+
+     if (sc2) {
+       fail = 1;
+     }
+     else {
+       printf("    [2] PASS: SST display matches PEM marker directions\n");
+     }
+   }
+
+   /* ---- Subcase 3: real BST display ---- */
+   {
+     int sc3 = 0;
+     const uint16_t startSteps[] = { 3, 5, 6 };
+     const uint16_t startOffsets[] = { 10, 30, 34 };
+     const uint16_t targetSteps[] = { 2, 4, 5 };
+     const uint16_t targetOffsets[] = { 6, 26, 30 };
+     const bool_t openingExpected[] = { true, false, true };
+     int i;
+
+     if (!writeTestProgram(prog, sizeof(prog))) {
+       printf("    [3] FAIL: writeTestProgram\n");
+       sc3 = 1;
+     }
+     else {
+       for (i = 0; i < 3; i++) {
+         calcMode = CM_NORMAL;
+         programRunStop = PGM_STOPPED;
+         lastErrorCode = ERROR_NONE;
+         dynamicMenuItem = -1;
+         tam.mode = 0;
+         aimBuffer[0] = 0;
+         clearSystemFlag(FLAG_ALPHA);
+
+         fnGotoDot(startSteps[i]);
+
+         if (currentLocalStepNumber != startSteps[i]) {
+           printf("    [3] FAIL: element %d: start localStep=%u, expected %u\n",
+                  i, currentLocalStepNumber, startSteps[i]);
+           sc3 = 1;
+         }
+         else if (currentStep != beginOfProgramMemory + startOffsets[i]) {
+           printf("    [3] FAIL: element %d: start currentStep=%p, expected %p (+%d)\n",
+                  i, (void *)currentStep, (void *)(beginOfProgramMemory + startOffsets[i]), startOffsets[i]);
+           sc3 = 1;
+         }
+         else {
+           fnBst(NOPARAM);
+
+           if (lastErrorCode != ERROR_NONE) {
+             printf("    [3] FAIL: element %d: lastErrorCode=%d\n", i, lastErrorCode);
+             sc3 = 1;
+           }
+           else if (currentLocalStepNumber != targetSteps[i]) {
+             printf("    [3] FAIL: element %d: target localStep=%u, expected %u\n",
+                    i, currentLocalStepNumber, targetSteps[i]);
+             sc3 = 1;
+           }
+           else if (currentStep != beginOfProgramMemory + targetOffsets[i]) {
+             printf("    [3] FAIL: element %d: target currentStep=%p, expected %p (+%d)\n",
+                    i, (void *)currentStep, (void *)(beginOfProgramMemory + targetOffsets[i]), targetOffsets[i]);
+             sc3 = 1;
+           }
+           else if (!accept_marker_token_is(openingExpected[i])) {
+             printf("    [3] FAIL: element %d: token mismatch (expected %s)\n",
+                    i, openingExpected[i] ? "opening" : "closing");
+             sc3 = 1;
+           }
+         }
+       }
+     }
+     cleanupTestProgram();
+
+     if (sc3) {
+       fail = 1;
+     }
+     else {
+       printf("    [3] PASS: BST display matches PEM marker directions\n");
+     }
+   }
+
+ free_rects:
+   free(exp1); free(exp2); free(exp3); free(actual);
+ restore_exit:
+   currentStep = savedCurrentStep;
+   currentProgramNumber = savedProgNum;
+   currentLocalStepNumber = savedLocalStep;
+   firstDisplayedStep = savedFirstDisplayedStep;
+   firstDisplayedLocalStepNumber = savedFirstDisplayedLocal;
+   pemCursorIsZerothStep = savedZeroth;
+   calcMode = savedCalcMode;
+   screenUpdatingMode = savedScreenUpdatingMode;
+   programRunStop = savedProgRunStop;
+   temporaryInformation = savedTempInfo;
+   currentInputVariable = savedCurrentInputVar;
+   programListEnd = savedProgramListEnd;
+   lastProgramListEnd = savedLastProgramListEnd;
+   tam.mode = savedTamMode;
+   tam.function = savedTamFunction;
+   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+   memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+
+   return fail;
+ }
+
+ /* test_dict_name_by_index
  * Mutation: off-by-one in count-1-n walk (returns wrong word's name). */
 static int test_dict_name_by_index(void)
 {
@@ -9338,6 +9692,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_accept_entry_state_roundtrip...\n");
   fail |= test_accept_entry_state_roundtrip();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_accept_display_parity...\n");
+  fail |= test_accept_display_parity();
   forthDictClear();
 
   printf("  [DEBUG] running test_dict_name_by_index...\n");
