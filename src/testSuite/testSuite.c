@@ -1843,14 +1843,6 @@ void setParameter(char *p) {
           setSystemFlag(FLAG_SPCRES);
         }
       }
-      else if(!strcmp(l+3, "SIGZEROS")) {
-        if(r[0] == '0') {
-          clearSystemFlag(FLAG_SIGZEROS);
-        }
-        else {
-          setSystemFlag(FLAG_SIGZEROS);
-        }
-      }
       else if(!strcmp(l+3, "PLINE")) {
         if(r[0] == '0') {
           clearSystemFlag(FLAG_PLINE);
@@ -1938,9 +1930,25 @@ void setParameter(char *p) {
           setSystemFlag(FLAG_ENDPMT);
         }
       }
+      // Generic fallback: resolve any system flag by its CAT_SYFL catalog name (e.g. SIG0, ENGOVR, FRACT), as dslParseFlagArg does
       else {
-        printf("\nMalformed numbered flag setting. After FL_ there shall be a number from 0 to 111, a lettered, or a system flag.\n");
-        abortTest();
+        bool_t found = false;
+        for(int16_t i = 0; i < LAST_ITEM; i++) {
+          if((indexOfItems[i].status & CAT_STATUS) == CAT_SYFL && compareString(l + 3, (char *)indexOfItems[i].itemCatalogName, CMP_NAME) == 0) {
+            if(r[0] == '0') {
+              clearSystemFlag(indexOfItems[i].param);
+            }
+            else {
+              setSystemFlag(indexOfItems[i].param);
+            }
+            found = true;
+            break;
+          }
+        }
+        if(!found) {
+          printf("\nMalformed flag setting. After FL_ there shall be a number from 0 to 111, a lettered, or a system flag name.\n");
+          abortTest();
+        }
       }
     }
   }
