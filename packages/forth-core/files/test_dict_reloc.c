@@ -5742,10 +5742,410 @@ static int test_accept_entry_state_roundtrip(void)
    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
    memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
 
-   return fail;
- }
+    return fail;
+  }
 
- /* test_dict_name_by_index
+  /* test_accept_glyph_type_parity
+   * F15-4: §8.9 items 5 and 6 — alpha-authored glyphs compile and run,
+   * and RPN-keypad / Forth-source literals share a data type.
+   * Three independently accumulated subcases. */
+  static int test_accept_glyph_type_parity(void)
+  {
+    int fail = 0;
+
+    /* Save all program/input globals */
+    uint8_t *savedCurrentStep = currentStep;
+    uint16_t savedProgNum = currentProgramNumber;
+    uint16_t savedLocalStep = currentLocalStepNumber;
+    uint8_t *savedFirstDisplayedStep = firstDisplayedStep;
+    uint16_t savedFirstDisplayedLocal = firstDisplayedLocalStepNumber;
+    bool_t savedZeroth = pemCursorIsZerothStep;
+    uint8_t savedCalcMode = calcMode;
+    int16_t savedCatalog = catalog;
+    int16_t savedTamMode = tam.mode;
+    int16_t savedTamFunction = tam.function;
+    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+    bool_t savedNumin = getSystemFlag(FLAG_NUMIN);
+    bool_t savedNumlock = getSystemFlag(FLAG_NUMLOCK);
+    uint8_t savedAlphaCase = alphaCase;
+    uint8_t savedNextChar = nextChar;
+    bool_t savedShiftF = shiftF;
+    bool_t savedShiftG = shiftG;
+    uint8_t savedProgRunStop = programRunStop;
+    int16_t savedDynamicMenuItem = dynamicMenuItem;
+    uint8_t savedInputDefault = Input_Default;
+    uint8_t savedNimNumberPart = nimNumberPart;
+    uint32_t savedLastIntegerBase = lastIntegerBase;
+    int16_t savedTCursorPos = T_cursorPos;
+    int16_t savedMenu = currentMenu();
+    char aimBufSave[256];
+    memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+    extern void fnGotoDot(uint16_t globalStepNumber);
+    extern void runFunction(int16_t func);
+    extern void addItemToNimBuffer(int16_t item);
+    extern void closeNim(void);
+    extern void setLastintegerBasetoZero(void);
+
+    /* ---- Subcase 1: §8.9 item 5, alpha-authored cross ---- */
+    {
+      int sc1 = 0;
+
+      uint8_t seedM[] = {
+        0x01, 0xFD, 0x03, 'G', '4', 'M',
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x04
+      };
+
+      uint8_t expected[] = {
+        0x01, 0xFD, 0x03, 'G', '4', 'M',
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x8B, 0x1A, 0xFD, 0x0B,
+        ':', ' ', 'M', '2', ' ', '2', ' ', 0x80, 0xD7, ' ', ';',
+        0x8B, 0x1A, 0xFD, 0x04, '3', ' ', 'M', '2',
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x04
+      };
+
+      const int16_t defItems[] = {
+        ITM_COLON, ITM_SPACE, ITM_M, ITM_2, ITM_SPACE, ITM_2,
+        ITM_SPACE, ITM_CROSS, ITM_SPACE, ITM_SEMICOLON, ITM_ENTER
+      };
+
+      const int16_t useItems[] = {
+        ITM_3, ITM_SPACE, ITM_M, ITM_2, ITM_ENTER, ITM_ENTER
+      };
+
+      if (!writeTestProgram(seedM, sizeof(seedM))) {
+        printf("    [1] FAIL: writeTestProgram\n");
+        sc1 = 1;
+      }
+      else {
+        calcMode = CM_PEM;
+        catalog = CATALOG_NONE;
+        tam.mode = 0;
+        tam.function = 0;
+        aimBuffer[0] = 0;
+        programRunStop = PGM_STOPPED;
+        dynamicMenuItem = -1;
+        pemCursorIsZerothStep = false;
+        alphaCase = AC_UPPER;
+        nextChar = NC_NORMAL;
+        shiftF = false;
+        shiftG = false;
+        clearSystemFlag(FLAG_ALPHA);
+        clearSystemFlag(FLAG_NUMLOCK);
+
+        /* Cursor ON the OPENING marker (step 2): the ALPHA route pre-moves
+         * one step (addStepInProgram) before insertStepInProgram consults
+         * forthEntryStateAtInsertion, so the governing predecessor is the
+         * »FORTH marker itself and capture opens as Forth. A first key of
+         * ':' or a digit consults the bridge WITHOUT the pre-move (LBL
+         * predecessor → RPN → number entry), which is exactly the failure
+         * this fixture originally hit. */
+        fnGotoDot(2);
+
+        if (currentStep != beginOfProgramMemory + 6) {
+          printf("    [1] FAIL: currentStep after fnGotoDot(2) = %p, expected %p\n",
+                 (void *)currentStep, (void *)(beginOfProgramMemory + 6));
+          sc1 = 1;
+        }
+        else if (currentLocalStepNumber != 2) {
+          printf("    [1] FAIL: currentLocalStepNumber = %u, expected 2\n", currentLocalStepNumber);
+          sc1 = 1;
+        }
+        else {
+          int i;
+          /* Open Forth capture with the ALPHA gesture (the sanctioned route
+           * pinned by test_forth_alpha_gesture_resumes_forth) BEFORE any
+           * text key. */
+          runFunction(ITM_AIM);
+          if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+            printf("    [1] FAIL: ALPHA gesture did not open Forth capture (alpha=%d tam.function=%d)\n",
+                   (int)getSystemFlag(FLAG_ALPHA), (int)tam.function);
+            sc1 = 1;
+          }
+          for (i = 0; sc1 == 0 && i < (int)(sizeof(defItems) / sizeof(defItems[0])); i++) {
+            runFunction(defItems[i]);
+          }
+          for (i = 0; sc1 == 0 && i < (int)(sizeof(useItems) / sizeof(useItems[0])); i++) {
+            runFunction(useItems[i]);
+          }
+
+          if (sc1 == 0 && memcmp(beginOfProgramMemory, expected, sizeof(expected)) != 0) {
+            printf("    [1] FAIL: program bytes mismatch (size %u vs expected %u)\n",
+                   (uint16_t)(firstFreeProgramByte - beginOfProgramMemory), (uint16_t)sizeof(expected));
+            sc1 = 1;
+          }
+          else if (sc1 == 0) {
+            calcRegister_t lbl = findNamedLabel("G4M", GLOBAL_LABELS);
+            if (lbl == INVALID_VARIABLE) {
+              printf("    [1] FAIL: findNamedLabel(\"G4M\") returned INVALID_VARIABLE\n");
+              sc1 = 1;
+            }
+            else {
+              lastErrorCode = ERROR_NONE;
+              dynamicMenuItem = -1;
+              programRunStop = PGM_STOPPED;
+              fnExecute(lbl);
+
+              if (lastErrorCode != ERROR_NONE) {
+                printf("    [1] FAIL: fnExecute error %d\n", lastErrorCode);
+                sc1 = 1;
+              }
+              else if (!x_is_longint(6)) {
+                printf("    [1] FAIL: X != 6 (type=%d)\n", getRegisterDataType(REGISTER_X));
+                sc1 = 1;
+              }
+            }
+          }
+        }
+      }
+
+      cleanupTestProgram();
+      forthDictClear();
+
+      if (sc1) {
+        fail = 1;
+      }
+      else {
+        printf("    [1] PASS: alpha-authored cross bytes run 3 M2 -> 6\n");
+      }
+    }
+
+    /* ---- Subcase 2: §8.9 item 5, alpha-authored divide (design fixture) ---- */
+    {
+      int sc2 = 0;
+
+      uint8_t seedD[] = {
+        0x01, 0xFD, 0x03, 'G', '4', 'D',
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x04
+      };
+
+      uint8_t expected[] = {
+        0x01, 0xFD, 0x03, 'G', '4', 'D',
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x8B, 0x1A, 0xFD, 0x0B,
+        ':', ' ', 'D', '2', ' ', '2', ' ', 0x80, 0xF7, ' ', ';',
+        0x8B, 0x1A, 0xFD, 0x04, '8', ' ', 'D', '2',
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x04
+      };
+
+      const int16_t defItems[] = {
+        ITM_COLON, ITM_SPACE, ITM_D, ITM_2, ITM_SPACE, ITM_2,
+        ITM_SPACE, ITM_OBELUS, ITM_SPACE, ITM_SEMICOLON, ITM_ENTER
+      };
+
+      const int16_t useItems[] = {
+        ITM_8, ITM_SPACE, ITM_D, ITM_2, ITM_ENTER, ITM_ENTER
+      };
+
+      if (!writeTestProgram(seedD, sizeof(seedD))) {
+        printf("    [2] FAIL: writeTestProgram\n");
+        sc2 = 1;
+      }
+      else {
+        calcMode = CM_PEM;
+        catalog = CATALOG_NONE;
+        tam.mode = 0;
+        tam.function = 0;
+        aimBuffer[0] = 0;
+        programRunStop = PGM_STOPPED;
+        dynamicMenuItem = -1;
+        pemCursorIsZerothStep = false;
+        alphaCase = AC_UPPER;
+        nextChar = NC_NORMAL;
+        shiftF = false;
+        shiftG = false;
+        clearSystemFlag(FLAG_ALPHA);
+        clearSystemFlag(FLAG_NUMLOCK);
+
+        /* Same contract as subcase 1: cursor ON the opening marker; the
+         * ALPHA route's pre-move makes »FORTH the governing predecessor. */
+        fnGotoDot(2);
+
+        if (currentStep != beginOfProgramMemory + 6) {
+          printf("    [2] FAIL: currentStep after fnGotoDot(2) = %p, expected %p\n",
+                 (void *)currentStep, (void *)(beginOfProgramMemory + 6));
+          sc2 = 1;
+        }
+        else if (currentLocalStepNumber != 2) {
+          printf("    [2] FAIL: currentLocalStepNumber = %u, expected 2\n", currentLocalStepNumber);
+          sc2 = 1;
+        }
+        else {
+          int i;
+          runFunction(ITM_AIM);
+          if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+            printf("    [2] FAIL: ALPHA gesture did not open Forth capture (alpha=%d tam.function=%d)\n",
+                   (int)getSystemFlag(FLAG_ALPHA), (int)tam.function);
+            sc2 = 1;
+          }
+          for (i = 0; sc2 == 0 && i < (int)(sizeof(defItems) / sizeof(defItems[0])); i++) {
+            runFunction(defItems[i]);
+          }
+          for (i = 0; sc2 == 0 && i < (int)(sizeof(useItems) / sizeof(useItems[0])); i++) {
+            runFunction(useItems[i]);
+          }
+
+          if (sc2 == 0 && memcmp(beginOfProgramMemory, expected, sizeof(expected)) != 0) {
+            printf("    [2] FAIL: program bytes mismatch (size %u vs expected %u)\n",
+                   (uint16_t)(firstFreeProgramByte - beginOfProgramMemory), (uint16_t)sizeof(expected));
+            sc2 = 1;
+          }
+          else if (sc2 == 0) {
+            calcRegister_t lbl = findNamedLabel("G4D", GLOBAL_LABELS);
+            if (lbl == INVALID_VARIABLE) {
+              printf("    [2] FAIL: findNamedLabel(\"G4D\") returned INVALID_VARIABLE\n");
+              sc2 = 1;
+            }
+            else {
+              lastErrorCode = ERROR_NONE;
+              dynamicMenuItem = -1;
+              programRunStop = PGM_STOPPED;
+              fnExecute(lbl);
+
+              if (lastErrorCode != ERROR_NONE) {
+                printf("    [2] FAIL: fnExecute error %d\n", lastErrorCode);
+                sc2 = 1;
+              }
+              else if (!x_is_longint(4)) {
+                printf("    [2] FAIL: X != 4 (type=%d)\n", getRegisterDataType(REGISTER_X));
+                sc2 = 1;
+              }
+            }
+          }
+        }
+      }
+
+      cleanupTestProgram();
+      forthDictClear();
+
+      if (sc2) {
+        fail = 1;
+      }
+      else {
+        printf("    [2] PASS: alpha-authored divide bytes run 8 D2 -> 4\n");
+      }
+    }
+
+    /* ---- Subcase 3: §8.9 item 6, RPN-keypad / Forth-source type parity ---- */
+    {
+      int sc3 = 0;
+
+      /* RPN half: addItemToNimBuffer(ITM_7) + closeNim() */
+      {
+        calcMode = CM_NORMAL;
+        Input_Default = ID_LI;
+        nimNumberPart = NP_EMPTY;
+        aimBuffer[0] = 0;
+        setLastintegerBasetoZero();
+        lastErrorCode = ERROR_NONE;
+
+        addItemToNimBuffer(ITM_7);
+        closeNim();
+
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [3] FAIL: RPN half error %d\n", lastErrorCode);
+          sc3 = 1;
+        }
+        else if (!x_is_longint(7)) {
+          printf("    [3] FAIL: RPN half X != 7 (type=%d)\n", getRegisterDataType(REGISTER_X));
+          sc3 = 1;
+        }
+      }
+
+      /* Seed X as dtReal34 value 42 so Forth half cannot inherit RPN result */
+      {
+        real34_t seed;
+        int32ToReal34(42, &seed);
+        reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+        real34Copy(&seed, REGISTER_REAL34_DATA(REGISTER_X));
+      }
+
+      /* Forth half: run program with source step "7" */
+      {
+        uint8_t prog[] = {
+          0x01, 0xFD, 0x03, 'T', '4', 'A',
+          0x8B, 0x1A, 0xFD, 0x00,
+          0x8B, 0x1A, 0xFD, 0x01, '7',
+          0x8B, 0x1A, 0xFD, 0x00,
+          0x04
+        };
+
+        if (!writeTestProgram(prog, sizeof(prog))) {
+          printf("    [3] FAIL: writeTestProgram (Forth half)\n");
+          sc3 = 1;
+        }
+        else {
+          calcRegister_t lbl = findNamedLabel("T4A", GLOBAL_LABELS);
+          if (lbl == INVALID_VARIABLE) {
+            printf("    [3] FAIL: findNamedLabel(\"T4A\") returned INVALID_VARIABLE\n");
+            sc3 = 1;
+          }
+          else {
+            lastErrorCode = ERROR_NONE;
+            dynamicMenuItem = -1;
+            programRunStop = PGM_STOPPED;
+            fnExecute(lbl);
+
+            if (lastErrorCode != ERROR_NONE) {
+              printf("    [3] FAIL: Forth half fnExecute error %d\n", lastErrorCode);
+              sc3 = 1;
+            }
+            else if (!x_is_longint(7)) {
+              printf("    [3] FAIL: Forth half X != 7 (type=%d)\n", getRegisterDataType(REGISTER_X));
+              sc3 = 1;
+            }
+          }
+        }
+        cleanupTestProgram();
+        forthDictClear();
+      }
+
+      if (sc3) {
+        fail = 1;
+      }
+      else {
+        printf("    [3] PASS: RPN-keypad 7 and Forth-source 7 both leave dtLongInteger\n");
+      }
+    }
+
+  restore_exit:
+    currentStep = savedCurrentStep;
+    currentProgramNumber = savedProgNum;
+    currentLocalStepNumber = savedLocalStep;
+    firstDisplayedStep = savedFirstDisplayedStep;
+    firstDisplayedLocalStepNumber = savedFirstDisplayedLocal;
+    pemCursorIsZerothStep = savedZeroth;
+    calcMode = savedCalcMode;
+    catalog = savedCatalog;
+    tam.mode = savedTamMode;
+    tam.function = savedTamFunction;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    if (savedNumin) setSystemFlag(FLAG_NUMIN); else clearSystemFlag(FLAG_NUMIN);
+    if (savedNumlock) setSystemFlag(FLAG_NUMLOCK); else clearSystemFlag(FLAG_NUMLOCK);
+    alphaCase = savedAlphaCase;
+    nextChar = savedNextChar;
+    shiftF = savedShiftF;
+    shiftG = savedShiftG;
+    programRunStop = savedProgRunStop;
+    dynamicMenuItem = savedDynamicMenuItem;
+    Input_Default = savedInputDefault;
+    nimNumberPart = savedNimNumberPart;
+    lastIntegerBase = savedLastIntegerBase;
+    T_cursorPos = savedTCursorPos;
+    showSoftmenu(savedMenu);
+    memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+
+    return fail;
+  }
+
+  /* test_dict_name_by_index
  * Mutation: off-by-one in count-1-n walk (returns wrong word's name). */
 static int test_dict_name_by_index(void)
 {
@@ -9696,6 +10096,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_accept_display_parity...\n");
   fail |= test_accept_display_parity();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_accept_glyph_type_parity...\n");
+  fail |= test_accept_glyph_type_parity();
   forthDictClear();
 
   printf("  [DEBUG] running test_dict_name_by_index...\n");
