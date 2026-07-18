@@ -333,13 +333,20 @@ Hand-built entries use `begin_word`/`end_word` with 4-glyph names ONLY
 (header = 8 bytes, no padding — `begin_word` does not zero padding bytes).
 Nine independently reported subcases, one PASS line each:
 
-1. **P0 — a real mixed dictionary validates clean.** Build interactively
-   `: VA 1 ;`, `: VB VA ;`, `: VC RECURSE ;`; then write a one-step program
-   `": PW 4 ; PW"` (payload length 13; bytes `0x8B 0x1A 0xFD 13 ...`) via
-   `writeTestProgram`. After it succeeds, set
+1. **P0 — a real mixed dictionary validates clean.** First write a one-step
+   program `": PW 4 ; PW"` (payload length 11; bytes
+   `0x8B 0x1A 0xFD 11 ...`) via `writeTestProgram`. After it succeeds, set
    `const uint8_t *payload = beginOfProgramMemory + 3;`, call
    `forthRunGenBump()`, and call `forthProgramStep(payload)` once under the
-   `PGM_RUNNING` wrap — this plants a live F1-3 scan record among the entries.
+   `PGM_RUNNING` wrap. Require no error and `PW` found. This ordering is
+   normative: the safe program-step entry consumes the F1-1 pending reset,
+   compiles PW, and plants a live F1-3 scan record before any interactive
+   words exist. Defining VA/VB/VC before this entry is wrong because the
+   pending reset would clear them. After the program step, build interactively
+   `: VA 1 ;`, `: VB VA ;`, `: VC RECURSE ;`. The record precedes PW's header
+   (F1-3 record-first ordering), i.e. it sits below the oldest entry, where
+   the chain walk never looks — the tolerance P0 pins is that validation
+   passes with a live record among the region's bytes.
    The pointer contract is literal: offsets 0..2 are the `ITM_FORTH` opcode,
    offset 3 is the source-length byte, and offset 4 is the first `':'`;
    `forthProgramStep` must receive offset 3, never offset 4 or the first source
@@ -347,7 +354,9 @@ Nine independently reported subcases, one PASS line each:
    `forthDictValidateRestored()` directly: require `fdict.base != NULL`,
    `fdict.count == 4`, and all of VA/VB/VC/PW still found. (Pins: calls,
    RECURSE self-call, literals, and record bytes tolerated in gaps.)
-   Clean up the program fixture but keep going with a fresh dict.
+   Capture `preBase`/`preBlocks` before validation and release the deliberate
+   orphan if this supposedly valid dictionary is reset. Clean up the program
+   fixture but keep going with a fresh dict.
 2. **P0b — legal backward branch validates clean.** Hand-build `LOOP`
    (4 glyphs): `begin_word`, emit `FTOK_ILIT` + 4 bytes (int32 value 1),
    emit `FTOK_BR`, emit delta `(ftoken_t)(int16_t)-5` (target =

@@ -19,11 +19,19 @@ before execution.
 
 | Task | Packet | Status | Dependency |
 |---|---|---|---|
-| F1-1 pending-reset truth + active-frame guard | `QWEN_PROMPTS_F1_1_pending_reset.md` | **READY TO EXECUTE** | R6 GO checkpoint (`b7fd711ff`) |
-| F1-2 top-level run/SST lifetime signaling | `QWEN_PROMPTS_F1_2_run_signaling.md` | AUTHORED — gate-locked | F1-1 committed green |
-| F1-3 dynamic arena-backed pre-scan tracking | `QWEN_PROMPTS_F1_3_scan_tracking.md` | AUTHORED — gate-locked | F1-2 committed green |
-| F1-4 compile-only `RECURSE` | `QWEN_PROMPTS_F1_4_recurse.md` | AUTHORED — gate-locked | F1-3 committed green |
-| F1-5 full restore-time threaded-code validator | `QWEN_PROMPTS_F1_5_restore_validator.md` | AUTHORED — gate-locked | F1-4 committed green |
+| F1-1 pending-reset truth + active-frame guard | `QWEN_PROMPTS_F1_1_pending_reset.md` | **EXECUTED** (`1834901d3`) | R6 GO checkpoint (`b7fd711ff`) |
+| F1-2 top-level run/SST lifetime signaling | `QWEN_PROMPTS_F1_2_run_signaling.md` | **EXECUTED** (`542972b32`) | F1-1 committed green |
+| F1-3 dynamic arena-backed pre-scan tracking | `QWEN_PROMPTS_F1_3_scan_tracking.md` | **EXECUTED** (`ecbd6bcce`) | F1-2 committed green |
+| F1-4 compile-only `RECURSE` | `QWEN_PROMPTS_F1_4_recurse.md` | **EXECUTED** (`2940a0f4f`) | F1-3 committed green |
+| F1-5 full restore-time threaded-code validator | `QWEN_PROMPTS_F1_5_restore_validator.md` | **EXECUTED** (`04006089f`) | F1-4 committed green |
+
+**Stage F1 completed 2026-07-17.** Two mid-stage packet amendments are part
+of the record: the byte-contract pin after F1-1's implementer off-by-one
+(`2b9b2cd05`; toolchain root cause and fixes recorded outside the repo), and
+the F1-5 P0 correction (payload length 11, program step before interactive
+defs — the original ordering contradicted F1-1's landed semantics; the
+implementer correctly STOPped on the mismatch). Next per `QWEN_RUNBOOK.md`:
+F1.5, the §8.9 acceptance harness — architect-authored against this tree.
 
 Execute the tasks strictly in order, one packet per session, each on a clean
 green tree; every packet's EXECUTION GATE must pass before its first edit.
