@@ -43,6 +43,7 @@ void forthDictInit(void)
   fdict.here = 0;
   fdict.latest = FORTH_NULL;
   fdict.count = 0;
+  forthScanTrackReset();
 }
 
 void forthDictClear(void)
@@ -55,12 +56,15 @@ void forthDictClear(void)
   fdict.here = 0;
   fdict.latest = FORTH_NULL;
   fdict.count = 0;
+  forthScanTrackReset();
 }
 
 /* H5 (§5.5): sanity-check fdict after a state restore. A torn or corrupt
  * backup must never leave fdict able to read/write out of bounds. */
 void forthDictValidateRestored(void)
 {
+  /* F1-3: a restore is a lifetime seam — records never survive it. */
+  forthScanTrackReset();
   if (fdict.base == NULL) {
     /* normalize scalars regardless of what the file said */
     fdict.sizeBlocks = 0;

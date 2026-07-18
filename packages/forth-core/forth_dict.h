@@ -138,6 +138,9 @@ void forthProgramStep(const uint8_t *payload);
 /* Run-generation (§9.3) */
 void forthRunGenBump(void);
 
+/* F1-3: drop all first-touch scan records (state lives in forth_compile.c). */
+void forthScanTrackReset(void);
+
 /* Active-frame predicate (§9.3, F1-1) */
 bool forthInnerIsActive(void);
 

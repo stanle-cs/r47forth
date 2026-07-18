@@ -50,17 +50,68 @@ void forthRunGenBump(void) {
   }
 }
 
-/* §9.2 first-touch pre-scan tracking (reset with the dictionary) */
-#define FORTH_SCAN_MAX 8
-static const uint8_t *forthScannedProgs[FORTH_SCAN_MAX];
-static uint8_t        forthScannedCount = 0;
+/* §9.2 first-touch pre-scan tracking — F1-3 (R4-E1): dynamic records inside
+ * the dictionary region. One 8-byte record per scanned program:
+ * [uint32 progOffset][uint16 prevOff][uint16 zero], newest at forthScanHead.
+ * Records die with the region (clear/init/restore reset the head); capacity
+ * failure is ordinary dictionary exhaustion. The two walk guards below are
+ * defense-in-depth for a dangling head — declared redundant on every
+ * production path (a generation seam precedes every query); do not remove
+ * without re-running the mutation analysis. */
+static uint16_t forthScanHead = FORTH_NULL;
+
+void forthScanTrackReset(void) {
+  forthScanHead = FORTH_NULL;
+}
+
+static bool forthScanIsRecorded(const uint8_t *progStart) {
+  if (!fdict.base) {
+    forthScanHead = FORTH_NULL;
+    return false;
+  }
+  uint32_t key = (uint32_t)(progStart - beginOfProgramMemory);
+  uint16_t off = forthScanHead;
+  while (off != FORTH_NULL) {
+    if ((uint32_t)off + 8u > fdict.here) {   /* dangling head: self-heal */
+      forthScanHead = FORTH_NULL;
+      return false;
+    }
+    uint32_t recKey;
+    uint16_t prev;
+    memcpy(&recKey, fdict.base + off, 4);
+    memcpy(&prev, fdict.base + off + 4, 2);
+    if (recKey == key) {
+      return true;
+    }
+    if (prev != FORTH_NULL && prev >= off) { /* chain must strictly decrease */
+      forthScanHead = FORTH_NULL;
+      return false;
+    }
+    off = prev;
+  }
+  return false;
+}
+
+static bool forthScanRecord(const uint8_t *progStart) {
+  uint8_t rec[8];
+  uint32_t key = (uint32_t)(progStart - beginOfProgramMemory);
+  uint16_t newOff = fdict.here;
+  memcpy(rec, &key, 4);
+  memcpy(rec + 4, &forthScanHead, 2);
+  rec[6] = 0;
+  rec[7] = 0;
+  if (!forthDictEmitBytes(rec, 8)) {
+    return false;
+  }
+  forthScanHead = newOff;
+  return true;
+}
 
 static void forthRunGenCheckReset(void) {
   if (!forthResetPending || forthInnerIsActive()) {
     return;
   }
   forthDictClear();
-  forthScannedCount = 0;
   forthResetGeneration = forthRunGeneration;  /* diagnostic sample only */
   forthResetPending = false;                  /* consume only after clear */
 }
@@ -530,25 +581,29 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
   if (!progStart) {
     return;
   }
-  for (uint8_t i = 0; i < forthScannedCount; i++) {
-    if (forthScannedProgs[i] == progStart) {
-      return;   /* first touch already done this generation */
-    }
+  if (forthScanIsRecorded(progStart)) {
+    return;   /* first touch already done this generation */
   }
 
-  /* R4-4: a pre-scan is not transactional across its own steps. If an
-   * earlier step compiles a valid definition and a later step errors, the
-   * valid definition previously remained (the program was left unrecorded,
-   * so every retry compiled another copy before failing again — probed:
-   * ": G 1 ; : B NOPE ;" left fdict.count at 1 after the first failed touch,
-   * 2 after the second). Snapshot only these three region-relative scalars;
-   * fdict.base/sizeBlocks are deliberately NOT restored — an emit may have
-   * reallocated the region, so the old base is invalid, and retaining a
-   * grown region above the restored here is the same policy abortDefinition
-   * already uses. */
-  uint16_t scanHere = fdict.here;
+  /* Snapshot for rollback (R4-4 policy unchanged: base/sizeBlocks are
+   * deliberately NOT restored). The record participates in the snapshot:
+   * appended first, trimmed with everything else if the scan errors. */
+  uint16_t scanHere   = fdict.here;
   uint16_t scanLatest = fdict.latest;
-  uint16_t scanCount = fdict.count;
+  uint16_t scanCount  = fdict.count;
+  uint16_t scanHead   = forthScanHead;
+
+  if (!forthScanRecord(progStart)) {
+    /* Ordinary dictionary exhaustion (R4-E1): surface it, halt the step. */
+    if (lastErrorCode == ERROR_NONE) {
+      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    }
+    fdict.here   = scanHere;
+    fdict.latest = scanLatest;
+    fdict.count  = scanCount;
+    forthScanHead = scanHead;
+    return;
+  }
 
   uint8_t *nextStart = forthNextProgramStart(progStart);
   forthOuterCtx_t ctx;
@@ -559,13 +614,14 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
       xcopy(ctx.source, step + 4, len);
       ctx.source[len] = 0;
       forthOuterRun(&ctx, FORTH_OUTER_DEFS_ONLY);
-      if (lastErrorCode != ERROR_NONE) {
-        /* Roll back this pre-scan's own definitions; program stays unrecorded. */
-        fdict.here = scanHere;
-        fdict.latest = scanLatest;
-        fdict.count = scanCount;
-        return;
-      }
+       if (lastErrorCode != ERROR_NONE) {
+         /* Roll back this pre-scan's definitions AND its record. */
+         fdict.here   = scanHere;
+         fdict.latest = scanLatest;
+         fdict.count  = scanCount;
+         forthScanHead = scanHead;
+         return;
+       }
     }
     uint8_t *next = findNextStep(step);
     if (!next || next <= step) {
@@ -573,15 +629,7 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
     }
     step = next;
   }
-
-  if (forthScannedCount < FORTH_SCAN_MAX) {
-    forthScannedProgs[forthScannedCount++] = progStart;
-  }
-  /* List full: program scanned but unrecorded — a later touch re-scans and
-   * recompiles. Shadowing keeps lookups correct (forthFindColon walks
-   * latest-first) at the cost of dict bytes. Bounded, documented D-2b
-   * exception; 8 distinct Forth-bearing programs per run is beyond any
-   * realistic session. */
+  /* Success: the record is already in place. */
 }
 
 void forthProgramStep(const uint8_t *payload) {

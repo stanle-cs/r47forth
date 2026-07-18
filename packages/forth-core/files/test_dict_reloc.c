@@ -3733,7 +3733,7 @@ static int test_owning_program_start_max_not_last(void)
 /* test_prescan_generation_rearm
  * T2.5: After a generation bump, the pre-scan re-runs on first touch.
  * Must fail if forthRunGenCheckReset clears the dictionary but not
- * forthScannedCount (scan skipped after dict clear -> FUNCTION_NOT_FOUND). */
+ * forthScanHead (scan skipped after dict clear -> FUNCTION_NOT_FOUND). */
 static int test_prescan_generation_rearm(void)
 {
   uint8_t prog[] = {
@@ -4049,6 +4049,128 @@ static int test_prescan_two_programs_first_touch(void)
   cleanupTestProgram();
   if (!fail) {
     printf("    PASS: two programs, three touches — independent scans, no eviction, no re-scan\n");
+  }
+  return fail;
+}
+
+/* test_scan_dynamic_no_cliff
+ * F1-3: R4-E1 successor — 9 programs exceed the old 8-slot array cliff.
+ * Records live in the dictionary arena; capacity failure is ordinary
+ * dictionary exhaustion. Re-touch stability: no re-scan, no recompile. */
+static int test_scan_dynamic_no_cliff(void)
+{
+  uint8_t prog[169];   /* 9 steps x 17 bytes + 8 separators x 2 bytes */
+  uint16_t p = 0;
+  int i;
+  for (i = 1; i <= 9; i++) {
+    char src[16];
+    int len = snprintf(src, sizeof(src), ": P%dW %d ; P%dW", i, i, i);
+    prog[p++] = 0x8B; prog[p++] = 0x1A; prog[p++] = 0xFD;
+    prog[p++] = (uint8_t)len;
+    memcpy(prog + p, src, (size_t)len);
+    p += (uint16_t)len;
+    if (i != 9) { prog[p++] = 0x85; prog[p++] = 0xB2; }
+  }
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  if (numberOfPrograms < 9) {
+    printf("    FAIL (SKIP): numberOfPrograms = %u, expected >= 9\n", numberOfPrograms);
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+
+  forthRunGenBump();
+  lastErrorCode = ERROR_NONE;
+  uint8_t savedRS = programRunStop;
+  programRunStop = PGM_RUNNING;
+  int fail = 0;
+
+  /* Touch programs 1..9 in order */
+  for (i = 1; i <= 9; i++) {
+    const uint8_t *stepStart = beginOfProgramMemory + (i - 1) * 19;
+    forthProgramStep(stepStart + 3);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    FAIL: program %d first touch raised error %d\n", i, lastErrorCode);
+      fail = 1;
+      break;
+    }
+    if (!x_is_longint(i)) {
+      printf("    FAIL: X != %d after program %d first touch\n", i, i);
+      fail = 1;
+      break;
+    }
+    if (fdict.count != (uint16_t)i) {
+      printf("    FAIL: fdict.count = %u after program %d (expected %d)\n",
+             fdict.count, i, i);
+      fail = 1;
+      break;
+    }
+  }
+
+  if (fail) {
+    programRunStop = savedRS;
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+
+  uint16_t hereAfter = fdict.here;
+
+  /* Re-touch program 1 and program 9 — must NOT re-scan or recompile */
+  const uint8_t *step1 = beginOfProgramMemory + 0;
+  const uint8_t *step9 = beginOfProgramMemory + 8 * 19;
+
+  forthProgramStep(step1 + 3);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: program 1 re-touch raised error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!x_is_longint(1)) {
+    printf("    FAIL: X != 1 after program 1 re-touch\n");
+    fail = 1;
+  }
+  else if (fdict.count != 9) {
+    printf("    FAIL: fdict.count = %u after program 1 re-touch (expected 9)\n", fdict.count);
+    fail = 1;
+  }
+  else if (fdict.here != hereAfter) {
+    printf("    FAIL: fdict.here moved from %u to %u after program 1 re-touch\n",
+           hereAfter, fdict.here);
+    fail = 1;
+  }
+
+  if (!fail) {
+    forthProgramStep(step9 + 3);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    FAIL: program 9 re-touch raised error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(9)) {
+      printf("    FAIL: X != 9 after program 9 re-touch\n");
+      fail = 1;
+    }
+    else if (fdict.count != 9) {
+      printf("    FAIL: fdict.count = %u after program 9 re-touch (expected 9)\n", fdict.count);
+      fail = 1;
+    }
+    else if (fdict.here != hereAfter) {
+      printf("    FAIL: fdict.here moved from %u to %u after program 9 re-touch\n",
+             hereAfter, fdict.here);
+      fail = 1;
+    }
+  }
+
+  programRunStop = savedRS;
+  forthDictClear();
+  cleanupTestProgram();
+
+  if (!fail) {
+    printf("    PASS: nine programs recorded, re-touch stable (no re-scan, no recompile)\n");
   }
   return fail;
 }
@@ -4486,6 +4608,7 @@ static void cleanupTestProgram(void)
   fdict.here = 0;
   fdict.latest = FORTH_NULL;
   fdict.count = 0;
+  forthScanTrackReset();
 
   restoreTestProgram();
 
@@ -7979,6 +8102,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_prescan_two_programs_first_touch...\n");
   fail |= test_prescan_two_programs_first_touch();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_scan_dynamic_no_cliff...\n");
+  fail |= test_scan_dynamic_no_cliff();
   forthDictClear();
 
   printf("  [DEBUG] running test_dict_name_by_index...\n");
