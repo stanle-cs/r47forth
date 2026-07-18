@@ -160,7 +160,10 @@ static void powReal(void) {
   }
 
   if(realIsInfinite(&y)) {                             // y (the base) is +/- infinity
-    if(realIsZero(&x)) {                               // inf ^ 0 is indeterminate
+    if(realIsNaN(&x)) {                                // inf ^ NaN is NaN; must precede the tests below, realIsPositive() is true for a NaN
+      realSetNaN(&res);
+    }
+    else if(realIsZero(&x)) {                          // inf ^ 0 is indeterminate
       realSetNaN(&res);
     }
     else {
@@ -225,7 +228,11 @@ uint8_t PowerComplex(const real_t *yReal, const real_t *yImag, const real_t *xRe
   uint8_t errorCode = ERROR_NONE;
 
   if(realIsInfinite(yReal) || realIsInfinite(yImag)) {   // the base has an infinite component
-    if(realIsZero(xReal) && realIsZero(xImag)) {          // inf ^ 0 is indeterminate
+    if(realIsNaN(xReal) || realIsNaN(xImag)) {           // inf ^ NaN is NaN
+      realSetNaN(rReal);
+      realSetNaN(rImag);
+    }
+    else if(realIsZero(xReal) && realIsZero(xImag)) {    // inf ^ 0 is indeterminate
       realSetNaN(rReal);
       realSetNaN(rImag);
     }
