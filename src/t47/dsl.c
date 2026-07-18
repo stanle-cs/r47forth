@@ -890,6 +890,12 @@ static int pressOne(Jim_Interp *interp, const char *keyCode) {
       Jim_SetResultFormatted(interp, "press: invalid @k token '%s' (expected '@k NN')", keyCode);
       return JIM_ERR;
     }
+    // kbd_std_*/kbd_usr hold 37 keys; see c47.h and the kbd_usr declaration in c47.c. No caller range-checks the index.
+    const int keyNumber = (keyId[0] - '0') * 10 + (keyId[1] - '0');
+    if(keyNumber >= 37) {
+      Jim_SetResultFormatted(interp, "press: '%s' is out of range (physical keys are 00..36)", keyCode);
+      return JIM_ERR;
+    }
     btnClicked(NULL, (gpointer)keyId);
     return JIM_OK;
   }
@@ -907,7 +913,7 @@ static int pressOne(Jim_Interp *interp, const char *keyCode) {
     return injectScriptKey(interp, keyCode, GDK_KEY_backslash);
   }
 
-  Jim_SetResultFormatted(interp, "press: Invalid key code '%s' (expected single char, Enter/Return, or 2 digits)", keyCode);
+  Jim_SetResultFormatted(interp, "press: Invalid key code '%s' (expected F1..F6, @f, @g, \"@k NN\" with NN 00..36, a single char, Enter or R/S)", keyCode);
   return JIM_ERR;
 }
 

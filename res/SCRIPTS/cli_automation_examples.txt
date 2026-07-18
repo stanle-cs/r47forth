@@ -75,7 +75,7 @@ State save/load and register assertions (savest/loadst take a filename):
    reg <name> reads a register's display string but returns <unsupported> for a matrix, so assert dimensions via 42DIM#.
    Register data also moves through hand-written .d47 files; format in AN0025.)
 
-Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key, single ASCII, ENTER, R/S. item and xeq call the function direct,
+Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key (NN = 00..36), single ASCII, ENTER, R/S. item and xeq call the function direct,
 so TAM and softmenu decode need press. Matrix editor, cursor to 2;2:
   ./c47 --reset --exec 'nim 3; nim 3; item 1526 00; item 51 00; item 1529; press F6; press @f; press F6; snap'
   (1529 M.EDIT; M_EDIT F5/F6 = left/right, f-shifted = up/down; snap shows "2;2=".)
