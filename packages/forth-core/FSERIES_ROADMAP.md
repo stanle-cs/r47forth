@@ -74,11 +74,14 @@ fold), `XEQ 'NAME'`/`XEQ :NAME:` source forms, `FTOK_XEQN` with kind byte,
 control-flow words `IF/ELSE/THEN/BEGIN/UNTIL/AGAIN/WHILE/REPEAT` +
 `IMMEDIATE` (2026-07-16 fold), scope-aware reset.
 
-**Architect pre-work (blocking):**
-1. Owner rulings needed from Stan (extension-principle answers, no invented
-   syntax): globals' entry spelling, FORGET-class deletion semantics, §5.4
-   arena-ceiling accounting for words that never age out.
-2. Trace the native label grammar (R4 C2) for `XEQ :NAME:` parity.
+**Architect pre-work:**
+1. ~~Owner rulings~~ **RULED 2026-07-18** (§10.3, DESIGN-HISTORY): postfix
+   `GLOBAL` (latest-entry marker, IMMEDIATE mechanism); classic `FORGET`
+   truncating the global scope at the named word; same arena + same §5.4
+   ceiling with a split global/transient high-water report. Zero open
+   owner questions remain for F3.
+2. Trace the native label grammar (R4 C2) for `XEQ :NAME:` parity —
+   against the post-F2 tree.
 3. Settle control-flow compilation shapes against the traced stack
    semantics (operand back-patching, compile-time control stack, §3.2
    consuming-pop question) — design pass documented before packets.
