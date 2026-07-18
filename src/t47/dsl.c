@@ -890,10 +890,7 @@ static int pressOne(Jim_Interp *interp, const char *keyCode) {
       Jim_SetResultFormatted(interp, "press: invalid @k token '%s' (expected '@k NN')", keyCode);
       return JIM_ERR;
     }
-    // The keyboard arrays hold 37 keys (kbd_std_*, c47.h:248-268; kbd_usr,
-    // c47.h:343) and nothing downstream range-checks the index: under FLAG_USER
-    // btnPressed (keyboard.c:1899) indexes userKeyLabel, 37*6+1 bytes
-    // (assign.c:1048), by keyCode*6. The mouse path cannot emit past 36.
+    // kbd_std_*/kbd_usr hold 37 keys; see c47.h and the kbd_usr declaration in c47.c. No caller range-checks the index.
     const int keyNumber = (keyId[0] - '0') * 10 + (keyId[1] - '0');
     if(keyNumber >= 37) {
       Jim_SetResultFormatted(interp, "press: '%s' is out of range (physical keys are 00..36)", keyCode);
