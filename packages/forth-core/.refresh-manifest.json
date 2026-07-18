@@ -3,12 +3,12 @@
   "files": {
     "forth_bridge.c": "5d58c95b9e072dcd244a70ebe235def7015196ade23dc2d0dbe99c691492bc18",
     "forth_compile.c": "da67c2f1881c0acbe9e6063295b30a6be725d48e9e1c390a91de853f57872f2a",
-    "forth_dict.c": "d7f71ab2b36893d0a0ab6c7a98ffd568fb15b5574f490e8afb136a962cb5cbd0",
-    "forth_dict.h": "1e26dea3cfb4de3199b3ba322ebba4722a1aab41b19e96ba6faee26691ce9e9d",
+    "forth_dict.c": "3967e58193ccd43f88c37477267afe4483b5c9c0cbfb6e95e25edc469f2a93c2",
+    "forth_dict.h": "c114ad3b218f593d081db7b0e40cfdfc24e5f6d335d13858e3b7a669bccab9b9",
     "forth_inner.c": "e4eabe63011add56a5a63491578a3afa12c718d4d76bf0372e3cd8fbab178121",
-    "forth_prims.c": "1f7e208d184b1ec64bee21fd311a26b77df7f64c60f9f78da879606b2bb07a46",
+    "forth_prims.c": "2015a3210c6754348a813d9452cc214471c5b25dba629a5def8a366431548f27",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "test_dict_reloc.c": "b142568bb4cfee850f2fb7637f06c924548acd4e2d31d1cd4e1401ee7b84d404"
+    "test_dict_reloc.c": "4ff273452e42fd573e89a9e68b1431b1e4ebe65bf664b207d2f7c4d8d4d8b62e"
   },
   "patches": {
     "010-config.c.patch": "2667aa89854707b1449fc91413711c851b41821f9b3be50be25d1a9ec5954524",

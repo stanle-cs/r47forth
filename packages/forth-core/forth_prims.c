@@ -3,6 +3,7 @@
 
 #include "c47.h"
 #include "forth_prims.h"
+#include "forth_dict.h"
 
 /* ---------- wrapper stubs (C47 handlers take uint16_t, primitives take void) ---------- */
 
@@ -14,6 +15,24 @@ static void pPlus(void)  { fnAdd(NOPARAM); }
 static void pMinus(void) { fnSubtract(NOPARAM); }
 static void pMul(void)   { fnMultiply(NOPARAM); }
 static void pDiv(void)   { fnDivide(NOPARAM); }
+
+#define FTOK_CALL_BASE 0x1000   /* mirror forth_compile.c / forth_inner.c */
+
+/* F1-4: compile-only immediate. Emits a call to the definition under
+ * construction; the smudged name itself stays invisible until ';'. */
+static void pRecurse(void)
+{
+  uint16_t idx;
+  if (!forthOpenDefinitionIndex(&idx)) {
+    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  if (!forthDictEmit((ftoken_t)(FTOK_CALL_BASE + idx))) {
+    if (lastErrorCode == ERROR_NONE) {
+      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    }
+  }
+}
 
 /* ---------- primitive table (index-stable, append-only) ---------- */
 
@@ -28,8 +47,9 @@ enum {
   PRIM_DIV   = 7,
   PRIM_CROSS = 8,
   PRIM_DOT   = 9,
-  PRIM_DIVGL = 10,
-  PRIM_COUNT = 11
+  PRIM_DIVGL   = 10,
+  PRIM_RECURSE = 11,
+  PRIM_COUNT   = 12
 };
 
 const forthPrimDef_t forthPrims[PRIM_COUNT] = {
@@ -43,7 +63,8 @@ const forthPrimDef_t forthPrims[PRIM_COUNT] = {
   [PRIM_DIV]   = { "/",      0, pDiv   },
   [PRIM_CROSS] = { STD_CROSS, 0, pMul  },
   [PRIM_DOT]   = { STD_DOT,   0, pMul  },
-  [PRIM_DIVGL] = { STD_DIVIDE, 0, pDiv },
+  [PRIM_DIVGL]   = { STD_DIVIDE, 0, pDiv },
+  [PRIM_RECURSE] = { "RECURSE", FF_IMMEDIATE, pRecurse },
 };
 
 const uint16_t forthPrimCount = PRIM_COUNT;

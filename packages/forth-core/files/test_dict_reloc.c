@@ -4175,6 +4175,157 @@ static int test_scan_dynamic_no_cliff(void)
   return fail;
 }
 
+/* test_recurse_compile_only
+ * F1-4: RECURSE is compile-only immediate; emits call to open definition by index. */
+static int test_recurse_compile_only(void)
+{
+  int fail = 0;
+  uint16_t idx;
+
+  /* --- Subcase 1: Body shape --- */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": SELFW RECURSE ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL [1]: define SELFW error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!forthFindColon("SELFW", &idx)) {
+    printf("    FAIL [1]: SELFW not found\n");
+    fail = 1;
+  }
+  else if (idx != fdict.count - 1) {
+    printf("    FAIL [1]: SELFW idx %u != count-1 %u\n", idx, fdict.count - 1);
+    fail = 1;
+  }
+  else {
+    uint16_t bodyOff = fdict.latest + (uint16_t)TO_BLOCKS(4 + 5) * BYTES_PER_BLOCK;
+    ftoken_t toks[2];
+    memcpy(toks, fdict.base + bodyOff, sizeof(toks));
+    if (toks[0] != (ftoken_t)(0x1000 + idx)) {
+      printf("    FAIL [1]: token 0 = 0x%04X, expected 0x%04X\n", toks[0], 0x1000 + idx);
+      fail = 1;
+    }
+    else if (toks[1] != FTOK_EXIT) {
+      printf("    FAIL [1]: token 1 = 0x%04X, expected 0x%04X (EXIT)\n", toks[1], FTOK_EXIT);
+      fail = 1;
+    }
+  }
+  if (!fail) {
+    printf("    PASS [1]: body shape — self-call token 0x%04X, EXIT\n", (0x1000 + idx));
+  }
+
+  /* --- Subcase 2: Runtime self-call is bounded and unwinds --- */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("SELFW");
+  if (lastErrorCode != ERROR_RAM_FULL) {
+    printf("    FAIL [2]: expected ERROR_RAM_FULL, got %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (forthTestGetDepth() != 0) {
+    printf("    FAIL [2]: forthDepth = %d, expected 0\n", forthTestGetDepth());
+    fail = 1;
+  }
+  else if (forthTestGetRsp() != 0) {
+    printf("    FAIL [2]: forthRsp = %d, expected 0\n", forthTestGetRsp());
+    fail = 1;
+  }
+  if (!fail) {
+    printf("    PASS [2]: runtime self-call bounded by rstack (ERROR_RAM_FULL, unwound)\n");
+  }
+  lastErrorCode = ERROR_NONE;
+
+  /* --- Subcase 3: Interpret state rejects --- */
+  uint16_t hereBefore = fdict.here;
+  uint16_t countBefore = fdict.count;
+  forthOuterInterpret("RECURSE");
+  if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
+    printf("    FAIL [3]: expected ERROR_OPERATION_UNDEFINED, got %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (fdict.here != hereBefore) {
+    printf("    FAIL [3]: here moved from %u to %u\n", hereBefore, fdict.here);
+    fail = 1;
+  }
+  else if (fdict.count != countBefore) {
+    printf("    FAIL [3]: count moved from %u to %u\n", countBefore, fdict.count);
+    fail = 1;
+  }
+  if (!fail) {
+    printf("    PASS [3]: interpret-state RECURSE rejected (ERROR_OPERATION_UNDEFINED, dict unchanged)\n");
+  }
+  lastErrorCode = ERROR_NONE;
+
+  /* --- Subcase 4: RECURSE is not the bare name --- */
+  forthOuterInterpret(": WOLD 5 ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL [4]: define WOLD (first) error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else {
+    forthOuterInterpret(": WOLD WOLD 1 + ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    FAIL [4]: redefine WOLD error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else {
+      forthOuterInterpret("WOLD");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    FAIL [4]: execute WOLD error %d\n", lastErrorCode);
+        fail = 1;
+      }
+      else if (!x_is_longint(6)) {
+        printf("    FAIL [4]: X != 6 after WOLD\n");
+        fail = 1;
+      }
+    }
+  }
+  if (!fail) {
+    printf("    PASS [4]: bare name redefinition works (WOLD -> 6)\n");
+  }
+  lastErrorCode = ERROR_NONE;
+
+  /* --- Subcase 5: Program pre-scan compiles it; emitted call really recurses --- */
+  uint8_t prog[] = { 0x8B, 0x1A, 0xFD, 19,
+    ':', ' ', 'P', 'R', 'W', ' ',
+    'R', 'E', 'C', 'U', 'R', 'S', 'E', ' ', ';', ' ',
+    'P', 'R', 'W' };
+   uint8_t savedRunStop = programRunStop;
+  int sub5Fail = 0;
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL [5]: writeTestProgram failed\n");
+    sub5Fail = 1;
+  }
+  else {
+    const uint8_t *payload = beginOfProgramMemory + 3;
+    programRunStop = PGM_RUNNING;
+    lastErrorCode = ERROR_NONE;
+    forthProgramStep(payload);
+    programRunStop = savedRunStop;
+
+    if (lastErrorCode != ERROR_RAM_FULL) {
+      printf("    FAIL [5]: expected ERROR_RAM_FULL, got %d\n", lastErrorCode);
+      sub5Fail = 1;
+    }
+    else if (!forthFindColon("PRW", &idx)) {
+      printf("    FAIL [5]: PRW not found after scan\n");
+      sub5Fail = 1;
+    }
+  }
+  lastErrorCode = ERROR_NONE;
+  cleanupTestProgram();
+
+  if (sub5Fail) {
+    fail = 1;
+  }
+  else {
+    printf("    PASS [5]: program pre-scan compiled RECURSE; execution recursed to ERROR_RAM_FULL\n");
+  }
+
+  forthDictClear();
+  return fail;
+}
+
 /* test_dict_name_by_index
  * Mutation: off-by-one in count-1-n walk (returns wrong word's name). */
 static int test_dict_name_by_index(void)
@@ -8106,6 +8257,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_scan_dynamic_no_cliff...\n");
   fail |= test_scan_dynamic_no_cliff();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_recurse_compile_only...\n");
+  fail |= test_recurse_compile_only();
   forthDictClear();
 
   printf("  [DEBUG] running test_dict_name_by_index...\n");

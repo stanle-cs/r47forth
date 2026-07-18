@@ -396,6 +396,15 @@ bool isDefinitionOpen(void)
   return openDef.open;
 }
 
+bool forthOpenDefinitionIndex(uint16_t *idx)
+{
+  if (!openDef.open) {
+    return false;
+  }
+  *idx = openDef.count;
+  return true;
+}
+
 bool openDefinitionName(char *buf, int bufSize)
 {
   if (!openDef.open || openDef.entryOff == FORTH_NULL || !fdict.base || bufSize <= 0) return false;

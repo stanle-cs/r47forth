@@ -94,6 +94,11 @@ void forthDefStateRestore(const forthDefState_t *in);
 /* Returns true if a definition is currently open (smudged). */
 bool isDefinitionOpen(void);
 
+/* F1-4: index of the definition under construction (== openDef.count;
+   the entry is smudged and invisible to forthFindColon until ';').
+   Returns false when no definition is open. */
+bool forthOpenDefinitionIndex(uint16_t *idx);
+
 /* Copy the name of the open definition into buf (up to bufSize-1 chars).
    Returns true if a name was copied, false if no open definition. */
 bool openDefinitionName(char *buf, int bufSize);
