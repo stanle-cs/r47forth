@@ -649,3 +649,24 @@ Stage F1 executed in full (commits `1834901d3` F1-1, `542972b32` F1-2,
 - §8.9 coverage note now points at the F1.5 stage ledger
   (`QWEN_PROMPTS_F15_harness.md`). Remaining §8.3-adjacent prose sweeps
   happen at F1.5 stage close.
+
+## 2026-07-18 — F3 global-scope sub-questions ruled; F2 authored ahead
+
+Owner rulings (Stan, 2026-07-18), folded into §10.3 as class-2 amendments,
+closing the three design-pass blockers named in the 2026-07-16 fold:
+
+- **Entry spelling:** postfix `GLOBAL` — an immediate-style word marking
+  the latest closed definition as global, reusing the exact latest-entry
+  mechanism F3 builds for `IMMEDIATE`. No new grammar.
+- **Deletion:** classic `FORGET <name>`, truncating the global scope at
+  the named word; not-a-global is an error.
+- **Arena accounting:** same arena, same §5.4 ceiling; definition-time
+  exhaustion is ordinary dictionary-full; the §5.4 report splits global
+  vs transient high-water.
+
+Same pass (owner pacing instruction): stage F2 was fully authored ahead of
+execution — trace + ledger (`QWEN_PROMPTS_F2_core.md`) and four
+gate-locked packets — and the F1.5 harness packet list was completed
+(F15-5). F3's remaining pre-work before packets: the control-flow
+compilation-shape design pass, the R4-C2 label-grammar trace, and the
+F1-5 validator XEQN extension spec, all against the post-F2 tree.

@@ -2819,12 +2819,17 @@ start/end bounds. Every supported native PTP path is traced, not inferred.
   after the current scope (innermost first); they survive top-level
   lifetime resets (the scope-aware reset clears only program/interactive
   scopes) and persist with the saved dictionary — acceptable only now that
-  the F1-5 validator makes restored bodies trustworthy. Sub-questions to
-  rule at the F3 design pass, before packets are authored: the entry
-  spelling (how a definition is marked global — extension-principle
-  answer required, no invented syntax), deletion semantics
-  (`FORGET`-class), and §5.4 arena-ceiling accounting for words that never
-  age out.
+  the F1-5 validator makes restored bodies trustworthy. The three
+  sub-questions are RULED (Stan, 2026-07-18): **entry spelling** — postfix
+  `GLOBAL`, an immediate-style word marking the LATEST closed definition
+  as global (the same latest-entry mechanism as `IMMEDIATE`; no new
+  grammar); **deletion** — classic `FORGET <name>` truncating the global
+  scope at the named word (it and everything defined after it in that
+  scope), error if the name is not global; **arena accounting** — globals
+  live in the same dictionary arena under the same §5.4 ceiling,
+  exhaustion at definition time is ordinary dictionary-full (F1-3
+  consistency), and the §5.4 report line splits global vs transient
+  high-water.
 - Acceptance anchors: the §2.3 tests of `R6_RESOLUTION_PLAN.md` (mimicry pin
   against an RPN `XEQ :T:` step at the same position; kind-faithful no-fallback;
   kind-byte round-trip; bare-name-stays-global mutation). Control-flow and
