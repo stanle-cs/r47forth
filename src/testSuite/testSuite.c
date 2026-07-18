@@ -1843,6 +1843,14 @@ void setParameter(char *p) {
           setSystemFlag(FLAG_SPCRES);
         }
       }
+      else if(!strcmp(l+3, "SIGZEROS")) {
+        if(r[0] == '0') {
+          clearSystemFlag(FLAG_SIGZEROS);
+        }
+        else {
+          setSystemFlag(FLAG_SIGZEROS);
+        }
+      }
       else if(!strcmp(l+3, "PLINE")) {
         if(r[0] == '0') {
           clearSystemFlag(FLAG_PLINE);
@@ -2068,6 +2076,37 @@ void setParameter(char *p) {
     }
     else {
       printf("\nMalformed grouping gap setting. The rvalue must be a number from 0 to 15.\n");
+      abortTest();
+    }
+  }
+
+  //Setting display format, e.g. DSP=FIX2, DSP=SCI4, DSP=ENG3, DSP=ALL3, DSP=SIG5, DSP=UN3
+  else if(strcmp(l, "DSP") == 0) {
+    int16_t p = 0;
+    while(r[p] != 0 && !(r[p] >= '0' && r[p] <= '9')) {   //length of the alphabetic prefix (FIX..UNIT)
+      p++;
+    }
+    uint16_t n = atoi(r + p);
+    if(!strncmp(r, "FIX", 3)) {
+      fnDisplayFormatFix(n);
+    }
+    else if(!strncmp(r, "SCI", 3)) {
+      fnDisplayFormatSci(n);
+    }
+    else if(!strncmp(r, "ENG", 3)) {
+      fnDisplayFormatEng(n);
+    }
+    else if(!strncmp(r, "ALL", 3)) {
+      fnDisplayFormatAll(n);
+    }
+    else if(!strncmp(r, "SIG", 3)) {
+      fnDisplayFormatSigFig(n);
+    }
+    else if(!strncmp(r, "UN", 2)) {                        //UN or UNIT
+      fnDisplayFormatUnit(n);
+    }
+    else {
+      printf("\nMalformed display format setting. The rvalue must be FIX, SCI, ENG, ALL, SIG or UN followed by a digit count.\n");
       abortTest();
     }
   }
