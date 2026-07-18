@@ -33,27 +33,10 @@ int file_selection_screen(const char * title, const char * base_dir, const char 
   gint res;
 
 
-  // First statement on purpose: nothing above it should run on a path that
-  // cannot produce a filename, and the strcpy below is unbounded.
+  // No GUI: frmCalc is NULL, so no chooser can run and no filename can be produced. Scripts naming their file take the _ioFileNameOverride path, not this one.
+  // FILE_ERROR, not FILE_CANCEL: callers return quietly on FILE_CANCEL with lastErrorCode at ERROR_NONE, while FILE_ERROR raises their cannot-read/write error.
   if(headlessMode) {
-    // No window exists, so there is no chooser to run and frmCalc is NULL.
-    // Creating one anyway put a modal dialog on the user's desktop and blocked
-    // there forever - the run never ends, with no error and no exit code.
-    //
-    // FILE_ERROR, not FILE_CANCEL. FILE_CANCEL means "the user dismissed the
-    // dialog", so every caller returns quietly and lastErrorCode stays
-    // ERROR_NONE - which would trade the hang for a script that reports
-    // success having done nothing. There is no user here to dismiss anything:
-    // being unable to ask for a filename is a failure, and FILE_ERROR is what
-    // makes the callers raise ERROR_CANNOT_READ_FILE / ERROR_CANNOT_WRITE_FILE
-    // (saveRestoreCalcState.c:2525, saveRestorePrograms.c:423), so it is
-    // visible in-band and not only on the terminal.
-    //
-    // A script that names its file never arrives here: readp requires one, and
-    // loadst/savest/impreg/expreg pass theirs through _ioFileNameOverride,
-    // which _ioFileNameFromFilePath honours first.
     fprintf(stderr, "%s: no file chooser without a GUI; name the file in the script instead (loadst, savest, readp, impreg and expreg all take one)\n", title);
-    fflush(stderr);
     return FILE_ERROR;
   }
 
@@ -325,10 +308,8 @@ int ioFileRemove(ioFilePath_t path, uint32_t *errorNumber) {
 
 
 void show_warning(char *string) {
+  // No GUI: gtk_dialog_run has no window to run on, so the terminal is the only place a warning can go.
   if(headlessMode) {
-    // Same reason as file_selection_screen: gtk_dialog_run on a dialog nobody
-    // can see blocks the run forever. On a headless run the terminal is the
-    // only place a warning can go.
     fprintf(stderr, "Warning: %s\n", string);
     return;
   }

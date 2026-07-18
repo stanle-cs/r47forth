@@ -56,6 +56,7 @@ Export / import a register data file (.d47) (GUI EXPreg / IMPORTr need a file ch
   ./t47 --reset --exec 'nim 3; nim 4; item 99; expreg X quot.d47'   (export register X)
   ./t47 --reset --exec 'impreg quot.d47; puts "X=[reg X]"'          (import, then read X)
   (expreg <reg> <file>; impreg <file>; reg name as for reg, e.g. X, 00, A. The filename is verbatim, so the folder must exist; the GUI keeps .d47 in DATA/.)
+  (Headless there is no chooser to open, so a file function reached without a filename stops with a cannot-read/write error and a note on stderr. Always name the file.)
 
 Stat graph at 1E-50 (both axes scaled):
   ./t47 --snapskiprefresh --exec 'clΣ; nim 1e-50; nim 1e-50; xeq Σ+; nim 4e-50; nim 2e-50; xeq Σ+; nim 9e-50; nim 3e-50; xeq Σ+; nim 16e-50; nim 4e-50; xeq Σ+; nim 25e-50; nim 5e-50; xeq Σ+; xeq SCATR; snap'
