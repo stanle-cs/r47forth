@@ -366,6 +366,13 @@ Build nine programs in one buffer (model:
   /* p == 169; program i's step starts at (i-1)*19, payload at +3 */
 ```
 
+Pointer contract (do not reinterpret the offsets): for program `i`,
+`stepStart = beginOfProgramMemory + (i-1)*19`; `stepStart[0..2]` is the
+`ITM_FORTH` opcode, `stepStart[3]` is the source-length byte, and
+`stepStart[4]` is the first source character. `forthProgramStep` takes
+`stepStart + 3`, the length byte. It must never receive `stepStart + 4` or the
+first source character.
+
 `writeTestProgram(prog, sizeof(prog))`; require `numberOfPrograms >= 9`
 (FAIL, clean up, return 1 otherwise — same policy as the two-programs test).
 Then, with the usual fixture discipline (save/restore `programRunStop`,

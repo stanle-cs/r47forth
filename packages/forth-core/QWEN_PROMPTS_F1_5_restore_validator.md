@@ -336,9 +336,14 @@ Nine independently reported subcases, one PASS line each:
 1. **P0 — a real mixed dictionary validates clean.** Build interactively
    `: VA 1 ;`, `: VB VA ;`, `: VC RECURSE ;`; then write a one-step program
    `": PW 4 ; PW"` (payload length 13; bytes `0x8B 0x1A 0xFD 13 ...`) via
-   `writeTestProgram`, `forthRunGenBump()`, and one
-   `forthProgramStep(beginOfProgramMemory + 3)` under the `PGM_RUNNING`
-   wrap — this plants a live F1-3 scan record among the entries. Then call
+   `writeTestProgram`. After it succeeds, set
+   `const uint8_t *payload = beginOfProgramMemory + 3;`, call
+   `forthRunGenBump()`, and call `forthProgramStep(payload)` once under the
+   `PGM_RUNNING` wrap — this plants a live F1-3 scan record among the entries.
+   The pointer contract is literal: offsets 0..2 are the `ITM_FORTH` opcode,
+   offset 3 is the source-length byte, and offset 4 is the first `':'`;
+   `forthProgramStep` must receive offset 3, never offset 4 or the first source
+   character. There is no leading marker step in this fixture. Then call
    `forthDictValidateRestored()` directly: require `fdict.base != NULL`,
    `fdict.count == 4`, and all of VA/VB/VC/PW still found. (Pins: calls,
    RECURSE self-call, literals, and record bytes tolerated in gaps.)

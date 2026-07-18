@@ -259,8 +259,14 @@ independently reported subcases, one PASS line each:
      'P', 'R', 'W' };
    ```
 
-   `writeTestProgram`, then under the `PGM_RUNNING` wrap call
-   `forthProgramStep(beginOfProgramMemory + 3)`. Require
+   The pointer contract is literal: offsets 0..2 are the `ITM_FORTH` opcode,
+   offset 3 is the source-length byte, and offset 4 is the first `':'`.
+   `forthProgramStep` takes `payload` at offset 3, never offset 4 or the first
+   source character. There is no leading marker step in this fixture.
+
+   After `writeTestProgram` succeeds, set
+   `const uint8_t *payload = beginOfProgramMemory + 3;`, then under the
+   `PGM_RUNNING` wrap call `forthProgramStep(payload)`. Require
    `lastErrorCode == ERROR_RAM_FULL` (the tail call spun on the real
    self-call until the return stack filled — proving DEFS_ONLY compiled the
    immediate correctly) and `forthFindColon("PRW", &idx)` true (the scan

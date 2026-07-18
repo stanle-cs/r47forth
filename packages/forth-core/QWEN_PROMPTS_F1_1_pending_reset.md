@@ -217,11 +217,31 @@ second reset consumer.
 ### Change 3 — focused lifetime test
 
 Add `test_pending_reset_lifetime`, registered immediately after
-`test_program_step_gen_reset`. Use a real one-step program containing one Forth
-source step whose payload is `"0"`; drive it through `writeTestProgram` and
-`forthProgramStep(beginOfProgramMemory + 3)`. Save/restore `programRunStop`,
-keep it `PGM_RUNNING` only around program-step calls, and clean the dictionary,
-program fixture, errors, and test depth on every path.
+`test_program_step_gen_reset`. Use exactly this real one-step program and name
+the consumer pointer once:
+
+```c
+uint8_t prog[] = { 0x8B, 0x1A, 0xFD, 1, '0' };
+```
+
+After `writeTestProgram(prog, sizeof(prog))` succeeds, set
+`const uint8_t *payload = beginOfProgramMemory + 3;` once.
+
+The byte contract is critical: offsets 0..2 are the `ITM_FORTH` opcode,
+offset 3 is the source-length byte, and offset 4 is the first source character.
+There is no leading `LBL '00'` or marker step in this fixture. Despite its
+name, `forthProgramStep(payload)` requires the pointer to the length byte, not
+the first source character. Every one of the five program-step calls in this
+test (baseline, wrap, nested, guarded, safe) must therefore call
+`forthProgramStep(payload)`. Passing `beginOfProgramMemory + 4`, `payload + 1`,
+or the address of `'0'` is forbidden: it treats ASCII `'0'` (48) as a length
+and reads beyond the fixture.
+
+Save/restore `programRunStop`, keep it `PGM_RUNNING` only around program-step
+calls, and clean the dictionary, program fixture, errors, and test depth on
+every path. Before the first full gate, grep the new function and verify exactly
+five `forthProgramStep(payload)` calls and no direct `forthProgramStep` call
+using `beginOfProgramMemory + 4`.
 
 The test has three independently reported subcases:
 
