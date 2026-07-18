@@ -1930,9 +1930,25 @@ void setParameter(char *p) {
           setSystemFlag(FLAG_ENDPMT);
         }
       }
+      // Generic fallback: resolve any system flag by its CAT_SYFL catalog name (e.g. SIG0, ENGOVR, FRACT), as dslParseFlagArg does
       else {
-        printf("\nMalformed numbered flag setting. After FL_ there shall be a number from 0 to 111, a lettered, or a system flag.\n");
-        abortTest();
+        bool_t found = false;
+        for(int16_t i = 0; i < LAST_ITEM; i++) {
+          if((indexOfItems[i].status & CAT_STATUS) == CAT_SYFL && compareString(l + 3, (char *)indexOfItems[i].itemCatalogName, CMP_NAME) == 0) {
+            if(r[0] == '0') {
+              clearSystemFlag(indexOfItems[i].param);
+            }
+            else {
+              setSystemFlag(indexOfItems[i].param);
+            }
+            found = true;
+            break;
+          }
+        }
+        if(!found) {
+          printf("\nMalformed flag setting. After FL_ there shall be a number from 0 to 111, a lettered, or a system flag name.\n");
+          abortTest();
+        }
       }
     }
   }
@@ -2068,6 +2084,37 @@ void setParameter(char *p) {
     }
     else {
       printf("\nMalformed grouping gap setting. The rvalue must be a number from 0 to 15.\n");
+      abortTest();
+    }
+  }
+
+  //Setting display format, e.g. DSP=FIX2, DSP=SCI4, DSP=ENG3, DSP=ALL3, DSP=SIG5, DSP=UN3
+  else if(strcmp(l, "DSP") == 0) {
+    int16_t p = 0;
+    while(r[p] != 0 && !(r[p] >= '0' && r[p] <= '9')) {   //length of the alphabetic prefix (FIX..UNIT)
+      p++;
+    }
+    uint16_t n = atoi(r + p);
+    if(!strncmp(r, "FIX", 3)) {
+      fnDisplayFormatFix(n);
+    }
+    else if(!strncmp(r, "SCI", 3)) {
+      fnDisplayFormatSci(n);
+    }
+    else if(!strncmp(r, "ENG", 3)) {
+      fnDisplayFormatEng(n);
+    }
+    else if(!strncmp(r, "ALL", 3)) {
+      fnDisplayFormatAll(n);
+    }
+    else if(!strncmp(r, "SIG", 3)) {
+      fnDisplayFormatSigFig(n);
+    }
+    else if(!strncmp(r, "UN", 2)) {                        //UN or UNIT
+      fnDisplayFormatUnit(n);
+    }
+    else {
+      printf("\nMalformed display format setting. The rvalue must be FIX, SCI, ENG, ALL, SIG or UN followed by a digit count.\n");
       abortTest();
     }
   }
