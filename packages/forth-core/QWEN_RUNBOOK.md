@@ -69,8 +69,8 @@ green tree its predecessor leaves behind).
 | 6f | F15-5 PEM XEQ-name step (§8.9 item 10) | DONE (`546aa8b6c`) | `QWEN_PROMPTS_F15_5_xeq_name_step.md` |
 | 6g | F1.5 stage close: §8.9 coverage flipped COMPLETE, item-10 mutation reconciled, `vBodyWalk` nit fixed, ledger closed | DONE | — |
 | 7a | F2 trace + ledger (`QWEN_PROMPTS_F2_core.md`) — PTP paths traced 2026-07-17, architecture decided | DONE (authored) | — |
-| 7b | F2-1 extract the native parameter core | **[QWEN]** after 6f | `QWEN_PROMPTS_F2_1_extraction.md` |
-| 7c | F2-2 bounded name reader | **[QWEN]** | `QWEN_PROMPTS_F2_2_bounded_names.md` |
+| 7b | F2-1 extract the native parameter core | DONE (`6f0ffca4b`, recovered) | `QWEN_PROMPTS_F2_1_extraction.md` |
+| 7c | F2-2 bounded name reader | **[QWEN]** — gate re-verified against `6f0ffca4b` | `QWEN_PROMPTS_F2_2_bounded_names.md` |
 | 7d | F2-3 shared direct dispatch + FTOK_C47 re-route | **[QWEN]** | `QWEN_PROMPTS_F2_3_shared_dispatch.md` |
 | 7e | F2-4 parity acceptance sweep (+ RULE-1 flash delta) | **[QWEN]** | `QWEN_PROMPTS_F2_4_parity_acceptance.md` |
 | 8 | F3 — vocabulary/scopes/XEQ/XEQN **+ control-flow words & IMMEDIATE + global scope** (2026-07-16 folds). Architect design pass first: rule globals' entry spelling / FORGET / arena accounting; trace label grammar (R4 C2); settle control-flow compilation shapes; extend the F1-5 validator with XEQN. Then packets. | **[ARCHITECT]** then [QWEN] | DESIGN §10.3 |

@@ -129,9 +129,12 @@ Decided architecture (stage trace; no open choices):
 - Behavior on all well-formed programs is unchanged (the clamp can only
   engage on malformed bytes) — the whole existing suite is the
   no-regression oracle.
-- The self-test build runs under ASan: an unbounded overread on the
-  malformed fixture is a loud gate failure, which is what the mutation
-  demonstrates.
+- `writeTestProgram` writes a `0xFF 0xFF` `.END.` sentinel immediately at
+  `firstFreeProgramByte`. The malformed fixture therefore has a
+  deterministic differential oracle: the bounded reader sees exactly
+  `"W7"`, while the unbounded 127-byte copy necessarily includes the
+  non-NUL sentinel and cannot resolve as `"W7"`. No sanitizer assumption
+  is needed.
 
 ### Files
 
@@ -170,9 +173,18 @@ Add `test_param_core_bounded_names`, registered after
 
 1. **Well-formed name step unchanged.** Reuse the F2-1 subcase-2 program
    verbatim (LBL 'F2F' / »FORTH / `: W7 7 ;` / FORTH« / XEQ 'W7' / RTN,
-   exact bytes in that packet's Change 3). Drive `fnExecute`; require no
-   error and `x_is_longint(7)` — the bounded reader is transparent on
-   valid input.
+   exact bytes in that packet's Change 3). Use the corrected F2-1
+   one-step drive: with `programRunStop = PGM_STOPPED`, clear
+   `lastErrorCode`, set `dynamicMenuItem = -1`, call `forthRunGenBump()`,
+   then set `programRunStop = PGM_RUNNING`. Set
+   `currentStep = beginOfProgramMemory + 10` and call
+   `executeOneStep(currentStep)` to run the source-step pre-scan; if still
+   error-free, set `currentStep = beginOfProgramMemory + 26` and call
+   `executeOneStep(currentStep)` exactly once. Require no error and
+   `x_is_longint(7)` — the bounded reader is transparent on valid input.
+   Do not use `fnExecute`: as recorded in the corrected F2-1 packet, the
+   legacy `ITM_XEQ` control return would repeat a synchronous Forth
+   fallback forever, and changing that behavior is outside F2-2.
 2. **Lying length byte at end of program memory — differential oracle
    (amended 2026-07-18: the original "expect LABEL_NOT_FOUND" oracle could
    not distinguish bounded from unbounded reads, a mutation-escape risk of
@@ -191,15 +203,17 @@ Add `test_param_core_bounded_names`, registered after
    ```
 
    (Deliberately no RTN: the malformed step must be the final program
-   bytes so the lie crosses `firstFreeProgramByte`.) Drive
-   `fnExecute(lbl)` with `lastErrorCode` pre-cleared. Require: no ASan
-   abort, `lastErrorCode == ERROR_NONE`, and `x_is_longint(7)` — the
-   bounded reader clamps the name to the 2 available bytes, reads `"W7"`,
-   and the relocated Forth fallback resolves and runs it (memory-safety
-   bound, not validation — commit-time validation is F5's). The unbounded
-   reader reads 127 garbage bytes and CANNOT produce `"W7"`, so the
-   mutation below is guaranteed RED on this subcase's success assertions
-   regardless of whether ASan fires.
+   bytes so the lie crosses `firstFreeProgramByte`.) Use the same one-step
+   drive as subcase 1: source at `beginOfProgramMemory + 10`, then the
+   malformed XEQ at `beginOfProgramMemory + 26`, with the XEQ executed
+   exactly once. Require `lastErrorCode == ERROR_NONE` and
+   `x_is_longint(7)` — the bounded reader clamps the name to the 2
+   available bytes, reads `"W7"`, and the relocated Forth fallback
+   resolves and runs it (memory-safety bound, not validation — commit-time
+   validation is F5's). The unbounded reader's 127-byte copy necessarily
+   includes `writeTestProgram`'s non-NUL `0xFF 0xFF` sentinel, so it cannot
+   produce `"W7"`; the mutation below is guaranteed RED without relying
+   on allocator contents or sanitizer instrumentation.
 
 ### Existing tests and comments
 
@@ -219,10 +233,9 @@ only when the named subcase goes RED for the named reason:
 
 1. In the PARAM_LABEL arm only, revert the call to the unbounded
    `getStringLabelOrVariableName(paramAddress)`. Subcase 2 must go RED:
-   the 127-byte garbage read cannot yield `"W7"`, so the success
-   assertions (no error + X==7) fail — possibly accompanied by an ASan
-   overread report (grep the log for `AddressSanitizer` /
-   `heap-buffer-overflow`). Record whichever symptom shows.
+   the 127-byte copy crosses the `0xFF 0xFF` sentinel and cannot yield
+   `"W7"`, so the success assertions (no error + X==7) fail. Record the
+   resulting error and X symptom.
 
 After the mutation, grep for `MUTATION F2-2` (no match), run the full gate
 green again, and record: both PASS lines; both success banners and exit 0;

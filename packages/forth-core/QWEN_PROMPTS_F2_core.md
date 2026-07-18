@@ -91,10 +91,23 @@ needed):
 
 | Task | Packet | Status | Dependency |
 |---|---|---|---|
-| F2-1 extract the native core | `QWEN_PROMPTS_F2_1_extraction.md` | AUTHORED — gate-locked | F1.5 complete (F15-5 committed green) |
-| F2-2 bounded name reader | `QWEN_PROMPTS_F2_2_bounded_names.md` | AUTHORED — gate-locked | F2-1 committed green |
+| F2-1 extract the native core | `QWEN_PROMPTS_F2_1_extraction.md` | DONE (`6f0ffca4b`) | F1.5 complete (F15-5 committed green) |
+| F2-2 bounded name reader | `QWEN_PROMPTS_F2_2_bounded_names.md` | **READY TO EXECUTE** | F2-1 committed green (`6f0ffca4b`) |
 | F2-3 shared direct dispatch + FTOK_C47 re-route | `QWEN_PROMPTS_F2_3_shared_dispatch.md` | AUTHORED — gate-locked | F2-2 committed green |
 | F2-4 parity acceptance sweep | `QWEN_PROMPTS_F2_4_parity_acceptance.md` | AUTHORED — gate-locked | F2-3 committed green |
+
+F2-1 landed after three authoring corrections: its full-engine XEQ fixture
+repeated forever because legacy `executeOneStep(ITM_XEQ)` returns `-1`
+after the synchronous Forth fallback leaves `currentStep` unchanged; the
+acceptance now drives the real source and XEQ decoders exactly once. The
+call-site inventory is four, and the PARAM_REGISTER mutation anchor is
+`reallyRunFunction(op, regKStoC(opParam))`.
+
+F2-2's execution gate was re-verified against `6f0ffca4b`: four unbounded
+name reads remain (indirect-variable helper, PARAM_LABEL,
+PARAM_REGISTER/PARAM_COMPARE, PARAM_MENU). Its two XEQ fixtures use the
+same corrected one-step drive. The malformed-name differential is pinned
+by `writeTestProgram`'s `0xFF 0xFF` sentinel, not an ASan assumption.
 
 Authoring rules as in `QWEN_PROMPTS_F15_harness.md` (landed-tree
 verification, machine-verified literals, per-packet `/tmp/forth-f2-N-*`
