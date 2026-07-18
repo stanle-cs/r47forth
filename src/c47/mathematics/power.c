@@ -168,20 +168,22 @@ static void powReal(void) {
     }
     else {
       bool_t oddIntegerExponent = false;
-      if(realIsAnInteger(&x)) {
-        WP34S_Mod(&x, const_2, &res, &ctxtReal39);
-        oddIntegerExponent = !realIsZero(&res);
-      }
-      else if(realIsNegative(&y)) {                    // (-inf) ^ non-integer is not a real number
-        if(getFlag(FLAG_CPXRES)) {
-          powCplx();
+      if(!realIsInfinite(&x)) {                        // ReM p.202: y^(+/-inf) follows the exponent sign alone; realIsAnInteger() is true for an infinity
+        if(realIsAnInteger(&x)) {
+          WP34S_Mod(&x, const_2, &res, &ctxtReal39);
+          oddIntegerExponent = !realIsZero(&res);
+        }
+        else if(realIsNegative(&y)) {                  // (-inf) ^ non-integer is not a real number
+          if(getFlag(FLAG_CPXRES)) {
+            powCplx();
+            return;
+          }
+          displayCalcErrorMessage(ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN, ERR_REGISTER_LINE, REGISTER_X);
+          #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+            moreInfoOnError("In function powReal:", "cannot do complex results if CPXRES is not set", NULL, NULL);
+          #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
           return;
         }
-        displayCalcErrorMessage(ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN, ERR_REGISTER_LINE, REGISTER_X);
-        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-          moreInfoOnError("In function powReal:", "cannot do complex results if CPXRES is not set", NULL, NULL);
-        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-        return;
       }
       if(realIsPositive(&x)) {                         // exponent > 0  ==> +/- infinity
         realSetPlusInfinity(&res);
