@@ -1,4 +1,4 @@
-# QWEN_RUNBOOK — what to run, in what order (2026-07-16)
+# QWEN_RUNBOOK — what to run, in what order (2026-07-18)
 
 One page for the operator. Answers exactly three questions: what is already
 done, what to run next, and when work must come back to the architect
@@ -106,3 +106,52 @@ Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),
 - One writer at a time; never run a packet on a dirty or red tree.
 - A packet whose EXECUTION GATE fails is never "adapted" — it goes back to
   the architect.
+
+### Mandatory preamble for every future packet that authors program fixtures
+
+Copy the following block into the packet verbatim. It applies to fixtures
+newly authored or materially rewritten after 2026-07-18. Existing tests are
+legacy evidence: do **not** migrate or reformat them unless a packet explicitly
+names that migration as its task.
+
+> **PROGRAM-FIXTURE AUTHORING RULE (mandatory)**
+>
+> `test_dict_reloc.c` program fixtures are structural, not hand-addressed.
+> Build behavior-test programs with `testProg_t` and its `tp*` helpers. Capture
+> the returned step handle when a test must execute or inspect that step, and
+> resolve it with `tpStepAddr`; abort the subcase if fixture construction,
+> `tpWrite`, or address lookup fails.
+>
+> Never add `beginOfProgramMemory + <numeric literal>`, a numeric argument to
+> `tpStepAddr`, or arithmetic derived from preceding payload lengths. Packet
+> authors must identify steps by role (for example `sSource` or `sXeq`) and
+> must not publish a calculated byte offset as a normative literal. If a
+> packet contains such an offset, stop with `[SOL DEBUGGER HANDOFF]` and report
+> the packet defect; do not repair its arithmetic locally.
+>
+> Use a typed builder accessor such as `tpSrcPayload` for an internal field.
+> If the needed step or field helper does not exist, extend the central fixture
+> builder first; do not introduce local pointer arithmetic in the test.
+>
+> Prefer named opcode/parameter constants in builder helpers. An exact byte
+> array may remain as the expected value of an encoding assertion. Raw bytes
+> inserted into the program fixture are allowed only for the encoding under
+> test or a deliberate malformation; they must enter through `tpRaw`, carry an
+> adjacent comment naming that purpose, and still use the returned handle and
+> builder-derived logical end. `tpRaw` is never a shortcut for an ordinary
+> behavior fixture.
+>
+> This rule is prospective. Do not widen the task by converting untouched
+> legacy fixtures.
+
+Every such packet must also include a fixture-lint item before its build gate.
+Inspect only added lines in the packet diff and require no matches for either
+of these forms outside the central builder:
+
+```text
+beginOfProgramMemory + <numeric literal>
+tpStepAddr(..., <numeric literal>)
+```
+
+Any match is a packet failure. Encoding tests may retain exact expected byte
+arrays, but their execution addresses must still obey this rule.
