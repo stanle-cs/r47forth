@@ -133,6 +133,9 @@ Decided architecture (stage trace; no open choices):
   `0x04`, marker = `0x8B 0x1A 0xFD 0x00`, source step =
   `0x8B 0x1A 0xFD <len> <bytes>`, XEQ-name step = `0x03 0xFD <len> <glyphs>`.
   Payload `": W7 7 ;"` is 8 bytes; name `"W7"` is 2.
+- The subcase-2 fixture is 32 bytes. Its source step begins at
+  `beginOfProgramMemory + 10`; its XEQ-name step begins at
+  `beginOfProgramMemory + 26`.
 
 ### Files
 
@@ -152,9 +155,10 @@ Modify only:
    `_putLiteral` definition's first 5 lines, and every `_executeOp(` call
    site with 3 lines of context.
 2. In `test_dict_reloc.c`, grep
-   `test_accept_run_lifecycle\|writeTestProgram\|x_is_longint\|y_is_longint`
-   and read the F15-1 test's subcase-1 drive block (the fnExecute model),
-   the helpers, and the registration lines after the newest test.
+   `test_accept_run_lifecycle\|test_xeq_word_still_calls\|writeTestProgram\|x_is_longint\|y_is_longint`
+   and read the F15-1 test's subcase-1 fixture/cleanup discipline, the
+   existing one-step XEQ-to-Forth regression's `executeOneStep` drive, the
+   helpers, and the registration lines after the newest test.
 3. `head -n 25` of another package-new pair for header style: grep
    `#ifndef\|#include` in `forth_dict.h` and mirror its guard/include
    idiom in `param_core.h`.
@@ -185,9 +189,9 @@ print `0`.
 
 Add `test_param_core_extraction`, registered after the newest existing
 test, F15-1 fixture discipline (save/restore `programRunStop`,
-`lastErrorCode = ERROR_NONE` + `dynamicMenuItem = -1` before every
-`fnExecute`, label resolution FAIL-guard, cleanup on every path). Two
-independently reported subcases:
+`lastErrorCode = ERROR_NONE` + `dynamicMenuItem = -1` before each drive,
+label resolution FAIL-guard, cleanup on every path). Two independently
+reported subcases:
 
 1. **Direct register parameter through the moved core.** Program:
 
@@ -218,9 +222,25 @@ independently reported subcases:
    };
    ```
 
-   Drive `fnExecute(lbl)`; require no error and `x_is_longint(7)` — the
-   XEQ-name step went through the relocated PARAM_LABEL fallback to the
-   Forth word defined by the same run's pre-scan.
+   Do **not** drive this fixture with `fnExecute(lbl)`: native
+   `executeOneStep` returns `-1` unconditionally for `ITM_XEQ` (its legacy
+   "the callee moved `currentStep`" contract), while the synchronous Forth
+   fallback correctly leaves `currentStep` on the XEQ instruction. The
+   outer loop therefore repeats that instruction forever. Fixing that
+   pre-existing control-flow behavior is outside this PURE EXTRACTION.
+
+   Instead, exercise both relevant instructions once through the real
+   decoder. Set `programRunStop = PGM_STOPPED`, clear `lastErrorCode`, set
+   `dynamicMenuItem = -1`, and call `forthRunGenBump()` to model the
+   top-level lifetime. Then set `programRunStop = PGM_RUNNING`, set
+   `currentStep = beginOfProgramMemory + 10`, and call
+   `executeOneStep(currentStep)` so the source step first-touch pre-scan
+   compiles `W7`. If that remains error-free, set
+   `currentStep = beginOfProgramMemory + 26` and call
+   `executeOneStep(currentStep)` exactly once. Require no error and
+   `x_is_longint(7)` — the XEQ-name step went through the relocated
+   PARAM_LABEL fallback to the Forth word defined by that fixture's
+   pre-scan.
 
 ### Existing tests and comments
 
