@@ -120,9 +120,10 @@ Decided architecture (stage trace; no open choices):
   Inside the moved `paramCoreExecuteOp`, replace any `_putLiteral(`
   call with `paramCorePutLiteral(`.
 - Every `_executeOp(` call site in lblGtoXeq.c becomes
-  `paramCoreExecuteOp(` with identical arguments (the trace found the
-  SOLVE case, the PTP_KEYG_KEYX case, and the general default arm — if you
-  find a different set, STOP and report; do not adapt).
+  `paramCoreExecuteOp(` with identical arguments (the trace found four:
+  the GTO/XEQ/BACK/CASE/SKIP special arm, the SOLVE case, the
+  PTP_KEYG_KEYX case, and the general default arm — if you find a
+  different set, STOP and report; do not adapt).
 - The package system auto-includes new package files: create the two flat
   files and nothing else — no build registration exists.
 - The relocated PARAM_LABEL arm carries the Forth XEQ fallback
