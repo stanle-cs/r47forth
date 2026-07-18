@@ -670,3 +670,25 @@ gate-locked packets — and the F1.5 harness packet list was completed
 (F15-5). F3's remaining pre-work before packets: the control-flow
 compilation-shape design pass, the R4-C2 label-grammar trace, and the
 F1-5 validator XEQN extension spec, all against the post-F2 tree.
+
+## 2026-07-18 — F15-4 debug: capture-drive contract pinned; §8.9 item 5 mutation replaced
+
+The F15-4 run exposed two spec-side defects, both fixed in the landed test
+(`6775252bf`) and reconciled here:
+
+- **Capture-drive contract (now explicit):** typing into a Forth region in
+  a test drive requires the ALPHA gesture (`runFunction(ITM_AIM)`) as the
+  FIRST key, cursor on the OPENING marker, `pemCursorIsZerothStep` owned by
+  the fixture. Mechanism: only the ALPHA arm of `insertStepInProgram`
+  consults `forthEntryStateAtInsertion()` after `addStepInProgram`'s
+  pre-move (governing predecessor = the opening marker); leading digits or
+  `':'` consult it without the pre-move, see the RPN predecessor, and open
+  number entry — behavior the landed F15-2 subcases pin as correct.
+- **§8.9 item 5's mutation was falsified empirically** (mutation escape,
+  gate stayed green): the pre-R1-3 assumption "no prim alias → ÷ is
+  FUNCTION NOT FOUND" no longer holds — the §4.1 step 4 item fallback
+  resolves the glyph to the native divide item. Item 5's mutation is
+  replaced by the capture-store mutation (manage.c `itemSoftmenuName` →
+  `itemCatalogName`). This closes the stale-§8.9-mutation sweep started
+  with item 9(b): items 2/3/4/8 mutations are live in landed tests, 9(b)
+  and 5 are reconciled, and no §8.9-derived mutation remains unexecuted.

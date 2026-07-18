@@ -65,7 +65,7 @@ green tree its predecessor leaves behind).
 | 6b | F15-1 end-to-end run lifecycle (§8.9 items 1, 7, 9) | DONE (`b773597bd`) | `QWEN_PROMPTS_F15_1_run_lifecycle.md` |
 | 6c | F15-2 derived entry state + power-off round-trip (§8.9 item 2) | DONE (`5a9e9ce2d`) | `QWEN_PROMPTS_F15_2_entry_state.md` |
 | 6d | F15-3 display parity across PEM/BST/SST surfaces (§8.9 item 4) | DONE (`c8b87dfa8`) | `QWEN_PROMPTS_F15_3_display_parity.md` |
-| 6e | F15-4 glyph operators + literal type parity (§8.9 items 5, 6) | **[QWEN]** | `QWEN_PROMPTS_F15_4_glyph_type_parity.md` |
+| 6e | F15-4 glyph operators + literal type parity (§8.9 items 5, 6) | DONE (`6775252bf`, debugged) | `QWEN_PROMPTS_F15_4_glyph_type_parity.md` |
 | 6f | F15-5 PEM XEQ-name step (§8.9 item 10) — authored, gate-locked on F15-4 | **[QWEN]** after 6e | `QWEN_PROMPTS_F15_5_xeq_name_step.md` |
 | 6g | F1.5 stage close: §8.9 coverage flip, remaining prose sweep, `vBodyWalk` indent nit, ledger closeout | **[ARCHITECT]** docs-only | `FSERIES_ROADMAP.md` |
 | 7a | F2 trace + ledger (`QWEN_PROMPTS_F2_core.md`) — PTP paths traced 2026-07-17, architecture decided | DONE (authored) | — |

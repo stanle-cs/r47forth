@@ -5,6 +5,24 @@ Origin: DESIGN §8.9 items 5 and 6, against the landed F15-3 tree
 2026-07-17 after tracing the real alpha-capture and RPN-NIM paths. Every
 payload and complete program byte count below was machine-verified.
 
+> **AMENDMENT (2026-07-18, executed as landed in `6775252bf` — the landed
+> test is normative over this packet's drive text).** The debug session on
+> the original run found two packet defects. (1) DRIVE: capture must be
+> opened with `runFunction(ITM_AIM)` BEFORE the first text key, with the
+> cursor on the OPENING marker (`fnGotoDot(2)`), asserting
+> `FLAG_ALPHA && tam.function == ITM_FORTH` before typing; the fixture must
+> also set `pemCursorIsZerothStep = false`. Reason: only the ALPHA route
+> consults `forthEntryStateAtInsertion()` AFTER `addStepInProgram`'s
+> pre-move (governing predecessor = the opening marker); a leading `':'`
+> or digit consults it WITHOUT the pre-move, sees the LBL, and lands in
+> RPN/number entry. (2) MUTATION 1 below was REPLACED: disabling the
+> `PRIM_DIVGL` alias row escapes — since R1-3, §4.1 step 4's item fallback
+> resolves `÷` to the native divide item and the program still runs. The
+> valid mutation is the capture store in `programming/manage.c`
+> (`itemSoftmenuName` → `itemCatalogName` at the aimBuffer append): glyphs
+> vanish from the captured line and both glyph subcases' byte comparisons
+> go RED while subcase 3 stays green.
+
 ## EXECUTION GATE (verify before any edit; STOP on any mismatch)
 
 1. `git branch --show-current` prints `forth-core/pem-entry-fixes` and

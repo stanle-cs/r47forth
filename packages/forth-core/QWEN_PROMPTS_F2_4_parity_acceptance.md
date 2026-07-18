@@ -194,7 +194,10 @@ only when the named subcase goes RED for the named reason:
 1. In `paramCoreValidateDirect`, change the NUMBER_8 comparison from `<=`
    to `<`. Subcase 1 must go RED at the exact boundary (max is in-range
    natively — the sweep must drive param == max in its in-range half to
-   make this mutation observable; include that value).
+   make this mutation observable; include that value). **Escape valve
+   (2026-07-18, F15-4 precedent):** if the boundary drive shows identical
+   outcomes on both sides anyway, STOP and report both outcomes verbatim
+   instead of adapting; the architect re-picks the fixture.
 2. In the FTOK_C47 arm, change the itemId bounds check from
    `>= LAST_ITEM` to `> LAST_ITEM`. Subcase 4 must go RED (the illegal id
    `LAST_ITEM` dispatches or crashes; record the symptom).

@@ -173,23 +173,33 @@ Add `test_param_core_bounded_names`, registered after
    exact bytes in that packet's Change 3). Drive `fnExecute`; require no
    error and `x_is_longint(7)` — the bounded reader is transparent on
    valid input.
-2. **Lying length byte at end of program memory.** Program whose LAST step
-   is an XEQ-name step claiming 127 name bytes with only 2 present:
+2. **Lying length byte at end of program memory — differential oracle
+   (amended 2026-07-18: the original "expect LABEL_NOT_FOUND" oracle could
+   not distinguish bounded from unbounded reads, a mutation-escape risk of
+   the F15-4 class).** The program DEFINES `W7` first, then ends with a
+   malformed XEQ-name step claiming 127 name bytes with only 2 present:
 
    ```c
    uint8_t prog[] = {
-     0x01, 0xFD, 0x03, 'F', '2', 'G',   /* LBL 'F2G'            */
-     0x03, 0xFD, 0x7F, 'W', '7'         /* XEQ, len=127, 2 bytes */
+     0x01, 0xFD, 0x03, 'F', '2', 'G',                       /* LBL 'F2G' */
+     0x8B, 0x1A, 0xFD, 0x00,                                /* »FORTH    */
+     0x8B, 0x1A, 0xFD, 0x08, ':', ' ', 'W', '7', ' ',       /* : W7 7 ;  */
+     '7', ' ', ';',
+     0x8B, 0x1A, 0xFD, 0x00,                                /* FORTH«    */
+     0x03, 0xFD, 0x7F, 'W', '7'         /* XEQ, len=127, only 2 bytes    */
    };
    ```
 
    (Deliberately no RTN: the malformed step must be the final program
    bytes so the lie crosses `firstFreeProgramByte`.) Drive
-   `fnExecute(lbl)` with `lastErrorCode` pre-cleared. Require: the gate
-   process survives (no ASan abort), and the step surfaces
-   `ERROR_LABEL_NOT_FOUND` (the clamped name resolves nowhere). Record
-   the exact error observed; if it is a DIFFERENT error code, FAIL the
-   subcase and report the observed code verbatim (architect feedback).
+   `fnExecute(lbl)` with `lastErrorCode` pre-cleared. Require: no ASan
+   abort, `lastErrorCode == ERROR_NONE`, and `x_is_longint(7)` — the
+   bounded reader clamps the name to the 2 available bytes, reads `"W7"`,
+   and the relocated Forth fallback resolves and runs it (memory-safety
+   bound, not validation — commit-time validation is F5's). The unbounded
+   reader reads 127 garbage bytes and CANNOT produce `"W7"`, so the
+   mutation below is guaranteed RED on this subcase's success assertions
+   regardless of whether ASan fires.
 
 ### Existing tests and comments
 
@@ -208,10 +218,11 @@ full sanctioned gate, manually restore the hunk afterward, and continue
 only when the named subcase goes RED for the named reason:
 
 1. In the PARAM_LABEL arm only, revert the call to the unbounded
-   `getStringLabelOrVariableName(paramAddress)`. Subcase 2 must go RED —
-   expected symptom is an ASan overread report in the gate log (grep the
-   log for `AddressSanitizer` / `heap-buffer-overflow` around the focused
-   test) or a corrupted-name failure; record whichever shows.
+   `getStringLabelOrVariableName(paramAddress)`. Subcase 2 must go RED:
+   the 127-byte garbage read cannot yield `"W7"`, so the success
+   assertions (no error + X==7) fail — possibly accompanied by an ASan
+   overread report (grep the log for `AddressSanitizer` /
+   `heap-buffer-overflow`). Record whichever symptom shows.
 
 After the mutation, grep for `MUTATION F2-2` (no match), run the full gate
 green again, and record: both PASS lines; both success banners and exit 0;

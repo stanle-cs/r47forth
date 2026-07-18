@@ -2587,12 +2587,19 @@ All Forth errors surface through the existing C47 protocol at the
 5. **Glyph operators in program lines.** A source step authored on the
    alpha keypad containing `×` (`STD_CROSS`) and `÷` (`STD_DIVIDE`)
    compiles: `: D2 2 ÷ ;` runs (`8 D2` → 4). Chain verified in the tree:
-   alpha capture stores `itemSoftmenuName` bytes [VERIFIED:
-   src/c47/programming/manage.c:853-856], the tokenizer advances glyph-wise
-   [VERIFIED: packages/forth-core/forth_compile.c:42-57], and the prim table
-   carries the alias entries [VERIFIED: packages/forth-core/forth_prims.c:44-46].
-   *Mutation:* delete the `PRIM_DIVGL` alias row — `÷` raises
-   `ERROR_FUNCTION_NOT_FOUND` and the test fails.
+   alpha capture stores `itemSoftmenuName` bytes [VERIFIED: the aimBuffer
+   append in packages/forth-core/programming/manage.c], the tokenizer
+   advances glyph-wise [VERIFIED: `nextToken` (C-6),
+   packages/forth-core/forth_compile.c], and the prim table carries the
+   alias entries [VERIFIED: packages/forth-core/forth_prims.c].
+   *Mutation (replaced 2026-07-18 — the original escaped empirically):*
+   deleting/disabling the `PRIM_DIVGL` alias row no longer fails the test:
+   since R1-3 landed, §4.1 step 4's item fallback resolves `÷` to the
+   native divide item and the program still runs — the resolution
+   redundancy is landed design, not a defect. The valid mutation is the
+   capture store: switch the manage.c aimBuffer append from
+   `itemSoftmenuName` to `itemCatalogName` — glyphs vanish from the
+   captured line and the byte-image comparison fails (F15-4, `6775252bf`).
 6. **Integer literal type parity.** `7` typed on the RPN keypad and `7`
    executed from a Forth source step both leave `dtLongInteger` in X
    [VERIFIED path: packages/forth-core/forth_inner.c:43-56

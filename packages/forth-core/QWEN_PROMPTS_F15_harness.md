@@ -37,7 +37,7 @@ unit suite and get no packets.
 | F15-1 end-to-end run lifecycle | `QWEN_PROMPTS_F15_1_run_lifecycle.md` | DONE (`b773597bd`) | 1, 7(a,b), 9(a,b) | F1 complete + `6345f6c64` |
 | F15-2 entry state + power-off round-trip | `QWEN_PROMPTS_F15_2_entry_state.md` | DONE (`5a9e9ce2d`) | 2(a-d) | F15-1 committed green (`b773597bd`) |
 | F15-3 display parity across surfaces | `QWEN_PROMPTS_F15_3_display_parity.md` | DONE (`c8b87dfa8`) | 4 | F15-2 committed green (`5a9e9ce2d`) |
-| F15-4 glyph operators + literal type parity | `QWEN_PROMPTS_F15_4_glyph_type_parity.md` | **READY TO EXECUTE** | 5, 6 | F15-3 committed green (`c8b87dfa8`) |
+| F15-4 glyph operators + literal type parity | `QWEN_PROMPTS_F15_4_glyph_type_parity.md` | DONE (`6775252bf`; debugged — see packet amendment) | 5, 6 | F15-3 committed green (`c8b87dfa8`) |
 | F15-5 XEQ-by-name records a name step | `QWEN_PROMPTS_F15_5_xeq_name_step.md` | AUTHORED — gate-locked | 10 | F15-4 committed green |
 
 *Pacing amendment (owner instruction, 2026-07-17):* remaining packets are

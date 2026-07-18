@@ -260,10 +260,18 @@ only when the named subcase goes RED for the named reason:
 1. In `paramCoreValidateDirect`, drop the NUMBER_8 range check (return
    true). Subcase 2 must go RED: the Forth side dispatches the
    out-of-range parameter (X changes or an error appears) while the
-   native side stays silent — parity broken.
-2. In the re-routed FTOK_C47 arm, replace the `paramCoreDispatchDirect`
-   call for NUMBER_8 with a direct `reallyRunFunction(itemId, param)`
-   bypassing validation. Subcase 2 must go RED for the same reason.
+   native side stays silent — parity broken. **Escape valve (amended
+   2026-07-18, F15-4 precedent):** if the subcase does NOT redden because
+   the item's own handler no-ops identically on the bad parameter, do not
+   adapt — STOP and report both observed outcomes verbatim; the architect
+   re-picks the fixture item.
+2. *(Replaced 2026-07-18 — the original "bypass validation" variant shares
+   mutation 1's escape risk.)* In the re-routed FTOK_C47 arm's NUMBER_8
+   decode, read the cell's HIGH byte as the value: `param =
+   (uint16_t)fdict.base[ip + 1];` instead of `fdict.base[ip]`. Subcase 1
+   must go RED deterministically: the parameter becomes 0 (the padded
+   cell's high byte), SDL shifts by 0, X stays 1 instead of 1000 — parity
+   broken against the native step regardless of handler behavior.
 3. In `paramCoreDispatchDirect`, swap the argument order (`value, op`) —
    compile permitting via casts — or if it does not compile, change the
    call to `reallyRunFunction((int16_t)op, NOPARAM)`. Subcase 1 must go
