@@ -25,10 +25,11 @@ were machine-verified.
    src/c47/programming/nextStep.c` shows the shared BST/SST display funnel;
    `fnBst` reaches `_showStep` after moving/defining the previous step, and
    `fnSst` reaches `showStep()` in non-PEM mode.
-6. `grep -n "lcd_clear_buf\|lcd_buffer_pixel_on" src/c47/hal/lcd.h`
-   shows both real LCD-buffer probes. `showString` draws into this buffer;
-   `screenData` is only the GTK presentation copy and is forbidden as the
-   acceptance oracle.
+6. `grep -n "lcd_buffer_pixel_on" src/c47/hal/lcd.h` shows the real
+   LCD-buffer probe, and `grep -n "#define clearScreen" src/c47/screen.h`
+   shows the production `lcd_fill_rect` clearing macro. `showString` draws
+   into this buffer; `screenData` is only the GTK presentation copy and is
+   forbidden as the acceptance oracle.
 7. `grep -n "test_decode_marker_directions\|test_accept_entry_state_roundtrip"
    packages/forth-core/test_dict_reloc.c` shows both tests registered, and
    `grep -n "test_accept_display_parity" packages/forth-core/test_dict_reloc.c`
@@ -229,8 +230,11 @@ At function entry save all display/program globals the three drives touch:
 
 Require every heap allocation below to succeed; otherwise print a focused
 FAIL, release anything already allocated, restore state, clean the fixture if
-written, and return 1. Call `lcd_clear_buf()` before every expected or actual
-PEM rendering; never clear or sample `screenData`.
+written, and return 1. Call `clearScreen(0)` before every expected or actual
+PEM rendering; this production macro clears the LCD buffer through
+`lcd_fill_rect` and is linked in the self-test target. Never clear or sample
+`screenData` (and do not call GTK-only `lcd_clear_buf`, which is not linked in
+the self-test executable).
 
 Report three independently accumulated subcases, one PASS line each. Do not
 return early after a surface mismatch; all surfaces must report before final
@@ -256,11 +260,11 @@ Compute opening/closing widths with
 within `SCREEN_WIDTH`. Allocate three `uint8_t` expected pixel rectangles (opening at
 `marker1Y`, closing at `marker2Y`, opening at `marker3Y`) and one actual
 scratch rectangle large enough for the greater width. For each expected
-rectangle separately: call `lcd_clear_buf()`, call `showString` with the exact
+rectangle separately: call `clearScreen(0)`, call `showString` with the exact
 token/x/y and `vmNormal, false, false`, then copy its rectangle with
 `accept_copy_screen_rect`.
 
-Call `lcd_clear_buf()` again, write the exact fixture, and configure the listing:
+Call `clearScreen(0)` again, write the exact fixture, and configure the listing:
 `calcMode = CM_PEM`, `tam.mode = 0`, `tam.function = 0`, `aimBuffer[0] = 0`,
 `clearSystemFlag(FLAG_ALPHA)`, `pemCursorIsZerothStep = false`,
 `programRunStop = PGM_STOPPED`, `lastErrorCode = ERROR_NONE`;
