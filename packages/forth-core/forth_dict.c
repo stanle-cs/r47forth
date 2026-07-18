@@ -59,6 +59,90 @@ void forthDictClear(void)
   forthScanTrackReset();
 }
 
+/* ---- §2.2 token constants (mirror forth_inner.c) — F1-5 validator ---- */
+#define FTOK_CALL_BASE    0x1000
+#define FTOK_LIT          0x7F00
+#define FTOK_ILIT         0x7F01
+#define FTOK_BR           0x7F02
+#define FTOK_0BR          0x7F03
+#define FTOK_C47          0x7F04
+
+/* F1-5: validate one restored body, or (checkTarget != FORTH_NULL) prove
+ * that checkTarget is a token boundary of this body at or before its EXIT.
+ * limit is exclusive. Restore-time only; the per-branch boundary sub-walk
+ * is O(body^2) and deliberately unoptimized. */
+static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
+                      uint16_t checkTarget)
+{
+  uint16_t pos = bodyStart;
+  for (;;) {
+    if (checkTarget != FORTH_NULL && pos == checkTarget) {
+      return true;
+    }
+    if ((uint32_t)pos + 2u > limit) {
+      return false;                       /* ran out without EXIT / target */
+    }
+    ftoken_t tok;
+    memcpy(&tok, fdict.base + pos, 2);
+    pos += 2;
+
+    if (tok == FTOK_EXIT) {
+      return checkTarget == FORTH_NULL;   /* end of body; target missed */
+    }
+    else if (tok >= 0x0001 && tok <= 0x0FFF) {
+      if ((uint16_t)(tok - 1) >= forthPrimCount) return false;
+    }
+    else if (tok <= 0x7EFF) {             /* 0x1000..0x7EFF: FTOK_CALL */
+      if ((uint16_t)(tok - FTOK_CALL_BASE) > entryIdx) return false;
+    }
+    else if (tok == FTOK_LIT) {
+      if ((uint32_t)pos + 16u > limit) return false;
+      pos += 16;
+    }
+    else if (tok == FTOK_ILIT) {
+      if ((uint32_t)pos + 4u > limit) return false;
+      pos += 4;
+    }
+    else if (tok == FTOK_BR || tok == FTOK_0BR) {
+      if ((uint32_t)pos + 2u > limit) return false;
+      int16_t delta;
+      memcpy(&delta, fdict.base + pos, 2);
+        pos += 2;
+        if (checkTarget == FORTH_NULL) {
+          int32_t target = (int32_t)pos + (int32_t)delta * 2;
+          if (target < (int32_t)bodyStart || target >= (int32_t)limit) return false;
+          if (!vBodyWalk(bodyStart, limit, entryIdx, (uint16_t)target)) return false;
+        }
+      }
+    else if (tok == FTOK_C47) {
+      if ((uint32_t)pos + 2u > limit) return false;
+      uint16_t itemId;
+      memcpy(&itemId, fdict.base + pos, 2);
+      pos += 2;
+      if (itemId == 0 || itemId >= LAST_ITEM) return false;
+      uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
+      if (ptp == PTP_NONE) {
+        /* no inline param */
+      }
+      else if (ptp == PTP_NUMBER_8) {
+        if ((uint32_t)pos + 2u > limit) return false;
+        if (fdict.base[pos + 1] != 0) return false;   /* padded cell */
+        pos += 2;
+      }
+      else if (ptp == PTP_NUMBER_16) {
+        if ((uint32_t)pos + 2u > limit) return false;
+        pos += 2;
+      }
+      else {
+        return false;
+      }
+    }
+    else {
+      return false;   /* 0x7F05..0xFFFF reserved — F3 adds XEQN here */
+    }
+  }
+}
+
 /* H5 (§5.5): sanity-check fdict after a state restore. A torn or corrupt
  * backup must never leave fdict able to read/write out of bounds. */
 void forthDictValidateRestored(void)
@@ -87,6 +171,7 @@ void forthDictValidateRestored(void)
   if (ok) {  /* walk the header chain: offsets must strictly decrease */
     uint16_t off = fdict.latest;
     uint16_t n = 0;
+    uint16_t succOff = fdict.here;
      while (off != FORTH_NULL) {
        if ((uint32_t)off + 4 > fdict.here) { ok = false; break; }
         forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
@@ -97,6 +182,25 @@ void forthDictValidateRestored(void)
         * name read past the logical dictionary end. */
        if ((uint32_t)off + 4u + hdr->nameLen > fdict.here) { ok = false; break; }
        if (hdr->link != FORTH_NULL && hdr->link >= off) { ok = false; break; }
+      /* F1-5: full threaded-code validation; bytes past EXIT (block padding, scan records) are inert and unchecked. */
+      {
+        uint16_t hdrSize = 4 + hdr->nameLen;
+        uint16_t alignedHdr = (uint16_t)TO_BLOCKS(hdrSize) * BYTES_PER_BLOCK;
+        uint16_t bodyStart = off + alignedHdr;
+        uint16_t i;
+        if (hdr->flags != 0) { ok = false; break; }
+        for (i = off + 4 + hdr->nameLen; i < bodyStart; i++) {
+          if (fdict.base[i] != 0) { ok = false; break; }
+        }
+        if (!ok) break;
+        if ((uint32_t)bodyStart + 2u > succOff) { ok = false; break; }
+        if (!vBodyWalk(bodyStart, succOff,
+                       (uint16_t)(fdict.count - 1 - n), FORTH_NULL)) {
+          ok = false;
+          break;
+        }
+      }
+      succOff = off;
       off = hdr->link;
       if (++n > fdict.count) { ok = false; break; }
     }

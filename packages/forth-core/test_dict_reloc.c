@@ -4326,6 +4326,291 @@ static int test_recurse_compile_only(void)
   return fail;
 }
 
+/* test_validate_restored_bodies
+ * F1-5: full threaded-code validator pins. Nine independently reported
+ * subcases — one PASS line each. T1.3b idiom: build, corrupt, call
+ * forthDictValidateRestored() directly, assert outcome, release orphan,
+ * forthDictClear() between subcases. Hand-built entries use begin_word/
+ * end_word with 4-glyph names only (header = 8 bytes, no padding). */
+static int test_validate_restored_bodies(void)
+{
+  int fail = 0;
+  uint16_t idx;
+
+  /* ---- P0: a real mixed dictionary validates clean ---- */
+  {
+    int p0Fail = 0;
+    forthDictClear();
+    /* Consume the pending F1-1 reset and plant PW + its F1-3 scan record
+     * before adding interactive words. A safe program entry after VA/VB/VC
+     * would correctly clear those words. */
+    uint8_t prog[] = {
+      0x8B, 0x1A, 0xFD, 11,
+      ':', ' ', 'P', 'W', ' ', '4', ' ', ';', ' ', 'P', 'W'
+    };
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    FAIL P0: writeTestProgram failed\n");
+      fail = p0Fail = 1;
+    } else {
+      const uint8_t *payload = beginOfProgramMemory + 3;
+      uint8_t savedRunStop = programRunStop;
+      lastErrorCode = ERROR_NONE;
+      forthRunGenBump();
+      programRunStop = PGM_RUNNING;
+      forthProgramStep(payload);
+      programRunStop = savedRunStop;
+
+      if (lastErrorCode != ERROR_NONE || !forthFindColon("PW", &idx)) {
+        printf("    FAIL P0: program step error %d or PW missing\n", lastErrorCode);
+        fail = p0Fail = 1;
+      } else {
+        lastErrorCode = ERROR_NONE;
+        forthOuterInterpret(": VA 1 ;");
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    FAIL P0: setup VA error %d\n", lastErrorCode);
+          fail = p0Fail = 1;
+        } else {
+          forthOuterInterpret(": VB VA ;");
+          if (lastErrorCode != ERROR_NONE) {
+            printf("    FAIL P0: setup VB error %d\n", lastErrorCode);
+            fail = p0Fail = 1;
+          } else {
+            forthOuterInterpret(": VC RECURSE ;");
+            if (lastErrorCode != ERROR_NONE) {
+              printf("    FAIL P0: setup VC error %d\n", lastErrorCode);
+              fail = p0Fail = 1;
+            } else {
+              uint8_t *preBase = fdict.base;
+              uint16_t preBlocks = fdict.sizeBlocks;
+              forthDictValidateRestored();
+              if (fdict.base == NULL) {
+                printf("    FAIL P0: valid dict reset\n");
+                fail = p0Fail = 1;
+                if (preBase) freeC47Blocks(preBase, preBlocks);
+              } else if (fdict.count != 4) {
+                printf("    FAIL P0: count=%u, expected 4\n", fdict.count);
+                fail = p0Fail = 1;
+              } else if (!forthFindColon("VA", &idx) || !forthFindColon("VB", &idx) ||
+                         !forthFindColon("VC", &idx) || !forthFindColon("PW", &idx)) {
+                printf("    FAIL P0: word not found\n");
+                fail = p0Fail = 1;
+              }
+            }
+          }
+        }
+      }
+      cleanupTestProgram();
+    }
+    if (!p0Fail) printf("    PASS P0: mixed dict (calls, RECURSE, literals, scan records) validates clean\n");
+    forthDictClear();
+  }
+
+  /* ---- P0b: legal backward branch validates clean ---- */
+  {
+    forthDictClear();
+    uint16_t w = begin_word("LOOP", 4);
+    if (w == FORTH_NULL) { printf("    FAIL P0b: alloc\n"); return 1; }
+    forthDictEmit(T_ILIT);
+    { int32_t v = 1; emit_int32(v); }
+    forthDictEmit(T_BR);
+    { int16_t delta = (int16_t)(-5); emit_int16(delta); }
+    end_word(w);
+    uint8_t *preBase = fdict.base;
+    uint16_t preBlocks = fdict.sizeBlocks;
+    forthDictValidateRestored();
+    if (fdict.base == NULL) {
+      printf("    FAIL P0b: legal backward branch reset\n"); fail = 1;
+      if (preBase) freeC47Blocks(preBase, preBlocks);
+    } else {
+      if (!fail) printf("    PASS P0b: legal backward branch validates clean\n");
+    }
+    forthDictClear();
+  }
+
+  /* ---- V-B1: missing EXIT ---- */
+  {
+    forthDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": VB1 1 ;");
+    if (lastErrorCode != ERROR_NONE || !fdict.base) {
+      printf("    FAIL V-B1: setup failed\n");
+      fail = 1;
+    } else {
+      uint8_t *preBase = fdict.base;
+      uint16_t preBlocks = fdict.sizeBlocks;
+      /* Body is at latest+8 (3-glyph name: "VB1" rounds to 4 blocks = 8).
+       * Body: ILIT(2) + int32(4) + EXIT(2) = 8 bytes. EXIT at offset latest+8+6. */
+      ftoken_t badTok = (ftoken_t)0x0001;  /* DUP */
+      memcpy(fdict.base + fdict.latest + 8 + 6, &badTok, 2);
+      forthDictValidateRestored();
+      if (fdict.base != NULL) {
+        printf("    FAIL V-B1: missing EXIT survived\n"); fail = 1;
+        forthDictClear();
+      } else {
+        freeC47Blocks(preBase, preBlocks);
+        if (!fail) printf("    PASS V-B1: missing EXIT detected\n");
+      }
+    }
+    forthDictClear();
+  }
+
+  /* ---- V-B2: call index above own index ---- */
+  {
+    forthDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": VA2 1 ;");
+    if (lastErrorCode != ERROR_NONE) { printf("    FAIL V-B2: setup VA2\n"); fail = 1; }
+    else {
+      forthOuterInterpret(": VB2 VA2 ;");
+      if (lastErrorCode != ERROR_NONE) { printf("    FAIL V-B2: setup VB2\n"); fail = 1; }
+      else {
+        uint8_t *preBase = fdict.base;
+        uint16_t preBlocks = fdict.sizeBlocks;
+        /* VB2 is latest, name "VB2" is 3, header rounds to 8. Body at latest+8.
+         * First token is call 0x1000 (VA2 at index 0). Patch to 0x1005. */
+        ftoken_t badTok = (ftoken_t)0x1005;
+        memcpy(fdict.base + fdict.latest + 8, &badTok, 2);
+        forthDictValidateRestored();
+        if (fdict.base != NULL) {
+          printf("    FAIL V-B2: bad call index survived\n"); fail = 1;
+          forthDictClear();
+        } else {
+          freeC47Blocks(preBase, preBlocks);
+          if (!fail) printf("    PASS V-B2: call index > entryIdx detected\n");
+        }
+      }
+    }
+    forthDictClear();
+  }
+
+  /* ---- V-B3: branch into a literal payload ---- */
+  {
+    forthDictClear();
+    uint16_t w = begin_word("BINT", 4);
+    if (w == FORTH_NULL) { printf("    FAIL V-B3: alloc\n"); return 1; }
+    forthDictEmit(T_ILIT);
+    { int32_t v = 1; emit_int32(v); }
+    forthDictEmit(T_BR);
+    /* delta -4: target = bodyStart+10 + (-4)*2 = bodyStart+2 (inside ILIT operand) */
+    { int16_t delta = (int16_t)(-4); emit_int16(delta); }
+    end_word(w);
+    uint8_t *preBase = fdict.base;
+    uint16_t preBlocks = fdict.sizeBlocks;
+    forthDictValidateRestored();
+    if (fdict.base != NULL) {
+      printf("    FAIL V-B3: branch into literal survived\n"); fail = 1;
+      forthDictClear();
+    } else {
+      freeC47Blocks(preBase, preBlocks);
+      if (!fail) printf("    PASS V-B3: branch into literal payload detected\n");
+    }
+    forthDictClear();
+  }
+
+  /* ---- V-B4: reserved token ---- */
+  {
+    forthDictClear();
+    uint16_t w = begin_word("RSV4", 4);
+    if (w == FORTH_NULL) { printf("    FAIL V-B4: alloc\n"); return 1; }
+    { ftoken_t badTok = (ftoken_t)0x7F05; forthDictEmit(badTok); }
+    end_word(w);
+    uint8_t *preBase = fdict.base;
+    uint16_t preBlocks = fdict.sizeBlocks;
+    forthDictValidateRestored();
+    if (fdict.base != NULL) {
+      printf("    FAIL V-B4: reserved token survived\n"); fail = 1;
+      forthDictClear();
+    } else {
+      freeC47Blocks(preBase, preBlocks);
+      if (!fail) printf("    PASS V-B4: reserved token detected\n");
+    }
+    forthDictClear();
+  }
+
+  /* ---- V-B5: restored smudge ---- */
+  {
+    forthDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": VB5 1 ;");
+    if (lastErrorCode != ERROR_NONE || !fdict.base) {
+      printf("    FAIL V-B5: setup failed\n");
+      fail = 1;
+    } else {
+      uint8_t *preBase = fdict.base;
+      uint16_t preBlocks = fdict.sizeBlocks;
+      ((forthHeader_t *)(fdict.base + fdict.latest))->flags |= FF_SMUDGE;
+      forthDictValidateRestored();
+      if (fdict.base != NULL) {
+        printf("    FAIL V-B5: smudged entry survived\n"); fail = 1;
+        forthDictClear();
+      } else {
+        freeC47Blocks(preBase, preBlocks);
+        if (!fail) printf("    PASS V-B5: restored smudge detected\n");
+      }
+    }
+    forthDictClear();
+  }
+
+  /* ---- V-B6: nonzero header padding ---- */
+  {
+    forthDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": VB6 1 ;");
+    if (lastErrorCode != ERROR_NONE || !fdict.base) {
+      printf("    FAIL V-B6: setup failed\n");
+      fail = 1;
+    } else {
+      uint8_t *preBase = fdict.base;
+      uint16_t preBlocks = fdict.sizeBlocks;
+      /* Name "VB6" is 3 glyphs. Header: 4 + 3 = 7, rounds to 8.
+       * Padding byte at latest + 7 (between name end and aligned header end). */
+      fdict.base[fdict.latest + 7] = 0xAA;
+      forthDictValidateRestored();
+      if (fdict.base != NULL) {
+        printf("    FAIL V-B6: nonzero padding survived\n"); fail = 1;
+        forthDictClear();
+      } else {
+        freeC47Blocks(preBase, preBlocks);
+        if (!fail) printf("    PASS V-B6: nonzero header padding detected\n");
+      }
+    }
+    forthDictClear();
+  }
+
+  /* ---- V-B7: C47 item out of range ---- */
+  {
+    forthDictClear();
+    uint16_t w = begin_word("ITM7", 4);
+    if (w == FORTH_NULL) { printf("    FAIL V-B7: alloc\n"); return 1; }
+    forthDictEmit(T_C47);
+    { ftoken_t badId = (ftoken_t)0xFFFF; forthDictEmit(badId); }
+    end_word(w);
+    uint8_t *preBase = fdict.base;
+    uint16_t preBlocks = fdict.sizeBlocks;
+    forthDictValidateRestored();
+    if (fdict.base != NULL) {
+      printf("    FAIL V-B7: out-of-range C47 item survived\n"); fail = 1;
+      forthDictClear();
+    } else {
+      freeC47Blocks(preBase, preBlocks);
+      if (!fail) printf("    PASS V-B7: C47 item out of range detected\n");
+    }
+    forthDictClear();
+  }
+
+  /* Rebuild-and-use after final reset */
+  {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": FRESH 7 ;");
+    if (lastErrorCode != ERROR_NONE || !forthFindColon("FRESH", &idx)) {
+      printf("    FAIL: dict unusable after final reset\n"); fail = 1;
+    }
+  }
+  forthDictClear();
+
+  return fail;
+}
+
 /* test_dict_name_by_index
  * Mutation: off-by-one in count-1-n walk (returns wrong word's name). */
 static int test_dict_name_by_index(void)
@@ -8261,6 +8546,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_recurse_compile_only...\n");
   fail |= test_recurse_compile_only();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_validate_restored_bodies...\n");
+  fail |= test_validate_restored_bodies();
   forthDictClear();
 
   printf("  [DEBUG] running test_dict_name_by_index...\n");
