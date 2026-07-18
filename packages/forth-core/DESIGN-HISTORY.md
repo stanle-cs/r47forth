@@ -624,3 +624,28 @@ design — they were characterization probes). With these folds the accepted
 implementation backlog is exactly F1→F6 (plus the F1.5 §8.9 harness); the
 only post-series work is Step 8 housekeeping (freeList upstream MR, optional
 upstream reports) and documentation reconciliation as stages land.
+
+## 2026-07-17 — Stage F1 landed; §8.3 rewritten to the landed lifecycle; §8.9 item 9 reconciled
+
+Stage F1 executed in full (commits `1834901d3` F1-1, `542972b32` F1-2,
+`ecbd6bcce` F1-3, `2940a0f4f` F1-4, `04006089f` F1-5; ledger closeout
+`10c04af4b`). Documentation reconciliation, first tranche:
+
+- **§8.3 rewritten** from the pre-F1 interim (generation-equality truth, two
+  scattered bump sites in `fnExecute`/`runProgram`, fixed 8-slot scan array,
+  "resume keeps the generation", known-wrap defect) to the landed mechanism:
+  pending-reset event as the sole truth, one `!nestedEngine`-gated signal
+  site at `runProgram` entry, active-frame deferral on both signal and
+  consumption, arena-backed first-touch records, R/S resume and SST as fresh
+  lifetimes. The interim text survives in git history and in this file's
+  earlier entries; the wrap defect is closed (executable proof
+  `test_pending_reset_lifetime`).
+- **§8.9 item 9(b) reconciled** to F1 semantics per the Q1 scheduling ruling
+  (2026-07-15): same observable (`X == 9` after STOP + R/S), new pinned
+  mechanism (fresh lifetime + first-touch re-derivation), a sharpened
+  assertion (a word defined interactively during the pause is dropped), and
+  a replacement mutation — the old "bump in `fnRunProgram` too" mutation is
+  meaningless now that `fnRunProgram` reaches the sole signal site.
+- §8.9 coverage note now points at the F1.5 stage ledger
+  (`QWEN_PROMPTS_F15_harness.md`). Remaining §8.3-adjacent prose sweeps
+  happen at F1.5 stage close.

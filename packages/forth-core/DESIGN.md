@@ -2016,78 +2016,55 @@ else if(op == ITM_FORTH) {
 
 ### 8.3 Program-scoped dictionary lifecycle
 
-> **Status (2026-07-15).** This section describes the **implemented interim**.
-> The accepted stage-F1 architecture (§10) replaces the generation-equality
-> comparison as the truth predicate with a Forth-private **pending-reset
-> event/flag** plus an **active-frame lifetime guard** (a C47 program started
-> from an active Forth frame is nested in that generation and must never
-> clear the dictionary a suspended `forthInner` is executing from), and makes
-> **every PEM single-step a fresh generation** (the `!singleStep` exclusion
-> below changes under F1). Counters survive as diagnostics only. Two of this
-> section's claims were empirically falsified by R4's probes and are
-> annotated below. Until F1 lands, the scheme below is what the code does and
-> what the tests pin.
+> **Status (2026-07-17).** Stage F1 landed (commits `1834901d3`..`04006089f`;
+> §10.1 and DESIGN-HISTORY hold the stage record). This section now describes
+> the **landed mechanism**. The pre-F1 interim scheme (generation-equality as
+> truth, two scattered bump sites, fixed 8-slot scan array) survives only in
+> git history and DESIGN-HISTORY.
 
-A run that executes any `ITM_FORTH` source step gets a fresh dictionary, so
-runs are deterministic, redefinition is clean, and words do not accumulate
-across runs. Implemented **lazily** with a run-generation counter — there is
-a sanctioned package-owned seam at run start (the package owns
-`lblGtoXeq.c`), but an *unconditional* reset there could not honor "a run
-that contains any `ITM_FORTH` step" without pre-scanning, so the generation
-scheme is normative:
+A run that executes any `ITM_FORTH` source step gets a fresh dictionary
+lifetime, so runs are deterministic, redefinition is clean, and words do not
+accumulate across runs. The landed mechanism (F1-1/F1-2/F1-3):
 
-```c
-// forth_compile.c (BSS)
-static uint16_t forthRunGeneration  = 0;   // bumped at fresh-run starts
-static uint16_t forthResetGeneration = 0;  // generation the dict last reset at
+- **Truth is a Forth-private pending-reset event** (`forthResetPending`,
+  forth_compile.c). The 16-bit generation counters survive as diagnostics
+  only and are never compared for correctness — the R4-E2 wrap alias is
+  structurally impossible (executable proof: `test_pending_reset_lifetime`
+  subcase 1, 65,536 bumps).
+- **One production signal site**: the top of `runProgram()`
+  (programming/lblGtoXeq.c), gated `!nestedEngine` and nothing else. Every
+  non-nested engine entry — interactive `XEQ`, R/S start, **R/S resume**,
+  run-mode **SST**, programmable-menu start, solver-driven start — requests
+  a fresh lifetime. `forthRunGenBump()` itself additionally defers the
+  request while a `forthInner` frame is active (`forthInnerIsActive()`,
+  F1-1): a launch made from a live Forth frame belongs to that lifetime.
+- **Consumption at the first safe Forth program-step entry**
+  (`forthRunGenCheckReset` inside `forthProgramStep`): clears the dictionary
+  and the first-touch scan state, samples the diagnostic counters, and
+  consumes the event. Consumption is deferred while a Forth frame is
+  active; the event stays pending.
+- **First-touch pre-scan tracking** (§8.2) lives in 8-byte records inside
+  the dictionary region itself (F1-3): capacity failure is ordinary
+  dictionary exhaustion, never a program-count cliff, and records die with
+  the region (clear / init / restore seams).
 
-void forthRunGenBump(void)      { forthRunGeneration++; }     // called from lblGtoXeq.c
-static void forthRunGenCheckReset(void) {                     // called by forthProgramStep
-  if (forthResetGeneration != forthRunGeneration) {
-    forthDictClear();                       // NOT forthDictInit() — §6.2
-    forthResetGeneration = forthRunGeneration;
-  }
-}
-```
+Consequences, all deliberate (R4 lifetime rulings 1-4):
 
-**Bump sites (exactly two, both in the package `lblGtoXeq.c` override):**
-
-1. `fnExecute` entry, gated `if(programRunStop != PGM_RUNNING)` — an
-   interactive `XEQ` start. Program-internal `XEQ` steps arrive with
-   `PGM_RUNNING` set and do not bump [VERIFIED: nested calls run under
-   `PGM_RUNNING`, packages/forth-core/programming/lblGtoXeq.c:886-897].
-2. Top of `runProgram()`, **before** `programRunStop = PGM_RUNNING` (the line
-   at packages/forth-core/programming/lblGtoXeq.c:897), gated
-   `if(!nestedEngine && !singleStep && menuLabel != INVALID_VARIABLE)` — a
-   program started from a menu key [VERIFIED: menuLabel dispatch at
-   packages/forth-core/programming/lblGtoXeq.c:904-912].
-
-**Deliberate non-bump sites:** `fnRunProgram` (R/S) and SST. Consequences,
-all documented behavior:
-
-- `XEQ 'PRG'` / menu start → first `ITM_FORTH` step of the run sees a fresh
-  dictionary. Deterministic.
-- `STOP` mid-program, then R/S → same generation; words defined before the
-  pause **survive** the resume. (R/S has always meant *continue*.)
-- `GTO`-then-R/S cold start → inherits the previous generation; stale words
-  from an earlier run may still resolve until the next `XEQ` start. This is
-  the accepted price of resume-safety; if it ever bites, Architecture 2's
-  pre-scan subsumes it.
-- SST-only execution never resets; redefinition-by-latest-wins keeps `3 SQ`
-  correct (§1.2 `latest` chain, newest-first lookup §4.1). *(Changes under
-  F1: the accepted ruling makes every PEM single-step a fresh generation —
-  R4 lifetime ruling 3, §10.)*
-- Interactive REPL definitions share the same dictionary and are wiped by
-  the next fresh run's first `ITM_FORTH` step — programs are
-  **self-contained** in this stage: a program that uses a Forth word defines
-  it. Interactive/cross-program word reuse is out of scope. *(Under F3's
+- `XEQ 'PRG'` / menu / solver start → the first `ITM_FORTH` step of the run
+  sees a fresh dictionary. Deterministic.
+- `STOP` mid-program, then R/S → the **resume is a fresh lifetime**,
+  superseding the pre-F1 "resume keeps the generation". The first-touch
+  pre-scan re-derives every program-defined word, so a self-contained
+  program resumes correctly; only words defined *interactively during the
+  pause* are dropped — the standing "programs are self-contained" rule.
+- `GTO`-then-R/S cold starts no longer inherit stale generations.
+- Run-mode SST is a fresh lifetime (R4 lifetime ruling 3); the pre-F1
+  `!singleStep` exclusion is retired.
+- Interactive REPL definitions share the dictionary and are wiped at the
+  next lifetime's consumption point — programs are **self-contained** in
+  this stage: a program that uses a Forth word defines it. *(Under F3's
   accepted scopes, interactive definitions get a reserved interactive-local
-  scope instead — §10.)*
-- Generation wrap (uint16): the "harmless — pure equality" claim was
-  **falsified empirically** (R4-E2: 65,536 bumps between touches alias the
-  counters and a stale dictionary passes as current). Accepted resolution is
-  the F1 pending-reset flag, not a wider counter; until then this is a known,
-  bounded defect (needs 65,536 run starts without touching a Forth step).
+  scope instead — §10.3.)*
 
 ### 8.4 Entry-only toggle — no runtime flag, keypad state derived
 
@@ -2578,9 +2555,10 @@ All Forth errors surface through the existing C47 protocol at the
 > (type parity units; RPN-keypad half missing), 7 (executeOneStep-level halt;
 > `runProgram`-level stop-at-step missing), 9 ((a) covered; (b) STOP→R/S
 > resume missing), 10 (byte probes; the full PEM XEQ+alpha chain missing).
-> **Ruling:** the end-to-end harness is scheduled immediately **after stage
-> F1** (§10), so its lifecycle tests pin F1's semantics rather than the
-> interim §8.3 scheme they would otherwise enshrine. Until then a green gate
+> **Ruling:** the end-to-end harness is stage **F1.5**, now in progress
+> against the landed F1 tree (`QWEN_PROMPTS_F15_harness.md` is the stage
+> ledger); its lifecycle tests pin the landed F1 semantics (§8.3 as
+> rewritten 2026-07-17). Until the harness packets land, a green gate
 > certifies the unit analogs only.
 
 1. **Define-and-use in one program.** Program: `»FORTH`, `: SQ DUP * ;`,
@@ -2644,12 +2622,18 @@ All Forth errors surface through the existing C47 protocol at the
    remain).
    *Mutation:* drop rule E3 — the empty commit becomes a third marker and
    test 4's parity assertions fail downstream.
-9. **Run-scoped lifecycle.** (a) Run the test-1 program twice → second run
-   identical (redefinition clean, `fdict.count` after run 2 equals after
-   run 1 — no accumulation). (b) Insert `STOP` between the definition and
-   `3 SQ`; run, then R/S → still `X == 9` (resume keeps the dictionary).
-   *Mutation:* bump the generation in `fnRunProgram` too — (b) fails with
-   `No such function: SQ`.
+9. **Run-scoped lifecycle (F1 semantics, reconciled 2026-07-17).** (a) Run
+   the test-1 program twice → second run identical (redefinition clean,
+   `fdict.count` after run 2 equals after run 1 — no accumulation). (b)
+   Insert `STOP` between the definition and `3 SQ`; run, then R/S → still
+   `X == 9`: the resume is a **fresh lifetime** whose first-touch pre-scan
+   re-derives `SQ` (§8.3). A word defined interactively during the pause is
+   dropped by the resume — assert both halves. *(The pre-F1 wording "resume
+   keeps the dictionary" and its `fnRunProgram`-bump mutation are obsolete:
+   `fnRunProgram` reaches the sole `runProgram` signal site by design.)*
+   *Mutation:* restore the old menu-key gate at the sole signal site
+   (`!nestedEngine && menuLabel != INVALID_VARIABLE`) — the pause-defined
+   word survives R/S and (b) fails.
 10. **XEQ-by-name from RPN records a name.** In PEM, `XEQ` + alpha `SQ`
     (a Forth word) records a name-string `XEQ` step, and the program bytes
     contain the glyphs `SQ` — no `ITM_FCALL` opcode, no index [VERIFIED
