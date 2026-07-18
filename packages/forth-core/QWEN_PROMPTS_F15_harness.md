@@ -38,11 +38,16 @@ unit suite and get no packets.
 | F15-2 entry state + power-off round-trip | `QWEN_PROMPTS_F15_2_entry_state.md` | DONE (`5a9e9ce2d`) | 2(a-d) | F15-1 committed green (`b773597bd`) |
 | F15-3 display parity across surfaces | `QWEN_PROMPTS_F15_3_display_parity.md` | DONE (`c8b87dfa8`) | 4 | F15-2 committed green (`5a9e9ce2d`) |
 | F15-4 glyph operators + literal type parity | `QWEN_PROMPTS_F15_4_glyph_type_parity.md` | **READY TO EXECUTE** | 5, 6 | F15-3 committed green (`c8b87dfa8`) |
-| F15-5 XEQ-by-name records a name step | — | TO AUTHOR (verification pass pending) | 10 | F15-4 committed green |
+| F15-5 XEQ-by-name records a name step | `QWEN_PROMPTS_F15_5_xeq_name_step.md` | AUTHORED — gate-locked | 10 | F15-4 committed green |
 
-Packet F15-5 is deliberately **not** authored yet: it needs its
-own architect verification pass against the tree its predecessor leaves
-(rule 1 above). F15-4 was authored against landed F15-3 (`c8b87dfa8`) with
+*Pacing amendment (owner instruction, 2026-07-17):* remaining packets are
+authored ahead of execution rather than one-per-landing — the F1 model.
+Rule 1's verification requirement is unchanged (F15-5's anchors were all
+grep-verified before authoring; F15-4 touches only `forth_prims.c` and the
+test file, none of F15-5's anchors); the hard EXECUTION GATE still fails
+closed if F15-4 lands with any drift. The stage packet list is now
+COMPLETE; the full forward plan for F2..F6 lives in `FSERIES_ROADMAP.md`.
+F15-4 was authored against landed F15-3 (`c8b87dfa8`) with
 exact alpha-item sequences, 38-byte glyph programs, the real RPN NIM-close
 drive, and both safe mutation anchors verified. Design notes fixed so far,
 from the completed inventory:
@@ -70,10 +75,14 @@ from the completed inventory:
   strcmp; the packet uses rename-to-sentinel instead. Item 6's RPN half
   drives the verified `addItemToNimBuffer(ITM_7)` + `closeNim()` path
   (src/c47/bufferize.c:837,2342) before comparing it with a real source step.
-- **F15-5:** hardest drive (PEM XEQ + alpha through tam); precedents exist
-  (`reallyRunFunction(ITM_FCALL, …)` dispatch tests and direct `tam.*`
-  manipulation in the suite around test_dict_reloc.c:5266). Needs its own
-  tam-chain verification before authoring.
+- **F15-5 (authored):** the tam chain is verified: the `ui/tam.c`
+  forth-core H-hook records via `insertUserItemInProgram(tam.function,
+  buffer)` in PEM and dispatches `reallyRunFunction(ITM_FCALL, widx)`
+  interactively; the recorded step is `0x03 0xFD <len> <glyphs>`
+  (ITM_XEQ=3) and ITM_FCALL (2843) would encode as `0x8B 0x1B`. The packet
+  drives the real public TAM chain (`tamEnterMode` → letter items → ENTER,
+  the `test_tam_colon_never_falls_to_forth` model) inside the landed
+  F15-2 PEM fixture block, with a compile-safe re-route mutation.
 
 Execute strictly in order, one packet per session, clean green tree each;
 every packet's EXECUTION GATE must pass before its first edit. After each
