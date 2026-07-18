@@ -6204,6 +6204,146 @@ static int test_dict_name_by_index(void)
   return 0;
 }
 
+/* test_accept_xeq_name_step
+ * F15-5: §8.9 item 10 — In PEM, XEQ + alpha name of a Forth word records
+ * the NAME (not an index), re-resolved at run time. Two independently
+ * reported subcases. */
+static int test_accept_xeq_name_step(void)
+{
+  uint8_t savedCalcMode = calcMode;
+  uint8_t savedLastError = lastErrorCode;
+  uint8_t savedRunStop = programRunStop;
+  char savedAimBuffer[AIM_BUFFER_LENGTH];
+  memcpy(savedAimBuffer, aimBuffer, sizeof(savedAimBuffer));
+  tamState_t savedTam = tam;
+  int fail = 0;
+
+  extern void runFunction(int16_t func);
+  extern void fnGotoDot(uint16_t globalStepNumber);
+
+  /* Setup: fixture program (LBL 'F5E' + RTN) */
+  uint8_t prog[] = {
+    0x01, 0xFD, 0x03, 'F', '5', 'E',   /* LBL 'F5E' */
+    0x04                               /* RTN       */
+  };
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    fail = 1;
+    goto cleanup;
+  }
+
+  /* Define the Forth word interactively */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": SQ DUP * ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: forthOuterInterpret error %d\n", lastErrorCode);
+    goto cleanup;
+  }
+
+  {
+    uint16_t idx;
+    if (!forthFindColon("SQ", &idx)) {
+      printf("    FAIL: SQ not found in dictionary\n");
+      goto cleanup;
+    }
+  }
+
+  /* PEM fixture state */
+  programRunStop = PGM_STOPPED;
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  lastErrorCode = ERROR_NONE;
+  clearSystemFlag(FLAG_ALPHA);
+
+  /* Position cursor on the LBL step */
+  fnGotoDot(1);
+  if (currentLocalStepNumber != 1) {
+    printf("    FAIL: currentLocalStepNumber = %u, expected 1\n", currentLocalStepNumber);
+    fail = 1;
+    goto cleanup;
+  }
+
+  /* Drive: real public TAM chain */
+  tamEnterMode(ITM_XEQ);
+  tamProcessInput(ITM_alpha);
+  runFunction(ITM_S);
+  runFunction(ITM_Q);
+
+  if (strcmp(aimBuffer, "SQ") != 0) {
+    printf("    FAIL: aimBuffer = '%s', expected 'SQ'\n", aimBuffer);
+    fail = 1;
+    goto cleanup;
+  }
+
+  tamProcessInput(ITM_ENTER);
+
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: lastErrorCode = %d after commit\n", lastErrorCode);
+    fail = 1;
+    goto cleanup;
+  }
+
+  /* Subcase 1: The name step was recorded */
+  {
+    const uint8_t nameStep[] = {0x03, 0xFD, 0x02, 'S', 'Q'};
+    uint8_t *p = beginOfProgramMemory;
+    uint8_t *end = firstFreeProgramByte;
+    int matches = 0;
+
+    while (p + sizeof(nameStep) <= end) {
+      if (memcmp(p, nameStep, sizeof(nameStep)) == 0) {
+        matches++;
+      }
+      p++;
+    }
+
+    if (matches != 1) {
+      printf("    FAIL(subcase1): expected exactly 1 name-step match, got %d\n", matches);
+      fail = 1;
+    } else {
+      printf("    PASS(subcase1): XEQ name step recorded: 0x03 0xFD 0x02 'S' 'Q'\n");
+    }
+  }
+
+  /* Subcase 2: No ITM_FCALL opcode, no index */
+  {
+    const uint8_t fcallOpc[] = {0x8B, 0x1B};
+    uint8_t *p = beginOfProgramMemory;
+    uint8_t *end = firstFreeProgramByte;
+    int matches = 0;
+
+    while (p + sizeof(fcallOpc) <= end) {
+      if (memcmp(p, fcallOpc, sizeof(fcallOpc)) == 0) {
+        matches++;
+      }
+      p++;
+    }
+
+    if (matches != 0) {
+      printf("    FAIL(subcase2): expected 0 FCALL opcode matches, got %d\n", matches);
+      fail = 1;
+    } else {
+      printf("    PASS(subcase2): no ITM_FCALL opcode (0x8B 0x1B) in program memory\n");
+    }
+  }
+
+cleanup:
+  tam = savedTam;
+  memcpy(aimBuffer, savedAimBuffer, sizeof(savedAimBuffer));
+  calcMode = savedCalcMode;
+  programRunStop = savedRunStop;
+  lastErrorCode = savedLastError;
+  forthDictClear();
+  cleanupTestProgram();
+  return fail;
+}
+
 /* ---- COMMIT 4: executeOneStep ITM_FORTH arm tests ---- */
 
 /* read_reg_int32 — R2-T4 item 4 helper: type + int32 value of a long-integer
@@ -10104,6 +10244,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_dict_name_by_index...\n");
   fail |= test_dict_name_by_index();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_accept_xeq_name_step...\n");
+  fail |= test_accept_xeq_name_step();
   forthDictClear();
 
   /* COMMIT 4: executeOneStep ITM_FORTH arm + bump sites */
