@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include "c47.h"
 #include "forth_dict.h"
+#include "programming/param_core.h"
 #include "saveRestoreBackup.h"
 
 /* ---- Token constants (mirror forth_inner.c §2.2) ---- */
@@ -6364,6 +6365,20 @@ static void read_reg_int32(int reg, uint8_t *type, int32_t *val)
   }
 }
 
+/* seedParamParityState — F2-5: reset RPN stack and execution state
+ * to a known baseline before each native/Forth NUMBER_16 dispatch,
+ * so the parity comparison starts from identical observable input. */
+static void seedParamParityState(void)
+{
+  forthPushInt32(11);
+  forthPushInt32(22);
+  forthPushInt32(33);
+  forthPushInt32(44);
+  lastErrorCode = ERROR_NONE;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+}
+
 /* test_exec_step_marker_noop
  * Mutation: the arm calling forthProgramStep for len==0 too (the marker
  * would interpret an empty line and set FLAG_ASLIFT/N drop state).
@@ -11853,6 +11868,67 @@ static int test_param_core_bounded_names(void)
     cleanupTestProgram();
   }
 
+#if defined(FORTH_DEBUG_SELFTEST)
+  /* ---- Subcase 3: no length byte at the exclusive end ---- */
+  {
+    uint8_t truncatedParam[] = { STRING_LABEL_VARIABLE, 0x7F };
+    uint8_t *savedFirstFree = firstFreeProgramByte;
+
+    firstFreeProgramByte = truncatedParam + 1;
+    paramCoreDebugNameLengthReads = 0;
+    paramCoreExecuteOp(truncatedParam, ITM_GTO, PARAM_LABEL);
+    firstFreeProgramByte = savedFirstFree;
+
+    if (paramCoreDebugNameLengthReads != 0) {
+      printf("    [3] FAIL: expected 0 length-byte reads, got %u\n",
+             paramCoreDebugNameLengthReads);
+      fail = 1;
+    }
+    else if (tmpStringLabelOrVariableName[0] != 0) {
+      printf("    [3] FAIL: expected empty string, got '%s'\n",
+             tmpStringLabelOrVariableName);
+      fail = 1;
+    }
+    else {
+      printf("    [3] PASS: missing name-length byte performed zero length-byte reads\n");
+    }
+
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* ---- Subcase 4: an available count wider than uint8_t ---- */
+  {
+    uint8_t wideParam[258] = {0};
+
+    wideParam[0] = STRING_LABEL_VARIABLE;
+    wideParam[1] = 2;
+    wideParam[2] = 'W';
+    wideParam[3] = '7';
+    uint8_t *savedFirstFree = firstFreeProgramByte;
+
+    firstFreeProgramByte = wideParam + 258;
+    paramCoreDebugNameLengthReads = 0;
+    paramCoreExecuteOp(wideParam, ITM_GTO, PARAM_LABEL);
+    firstFreeProgramByte = savedFirstFree;
+
+    if (paramCoreDebugNameLengthReads != 1) {
+      printf("    [4] FAIL: expected 1 length-byte read, got %u\n",
+             paramCoreDebugNameLengthReads);
+      fail = 1;
+    }
+    else if (strcmp(tmpStringLabelOrVariableName, "W7") != 0) {
+      printf("    [4] FAIL: expected 'W7', got '%s'\n",
+             tmpStringLabelOrVariableName);
+      fail = 1;
+    }
+    else {
+      printf("    [4] PASS: 256-byte name remainder preserved 'W7' without uint8_t wrap\n");
+    }
+
+    lastErrorCode = ERROR_NONE;
+  }
+#endif
+
   programRunStop = savedRS;
   return fail;
 }
@@ -12188,6 +12264,13 @@ static int test_param_parity_sweep(void)
     uint16_t sdlOutOfRange = sdlMax + 1;
     int subFail = 0;
 
+    if (!paramCoreValidateDirect(ITM_SDL, PTP_NUMBER_8, sdlMax)) {
+      printf("    [1] CONFIG FAIL: sdlMax %u rejected by paramCoreValidateDirect (inclusive boundary failed)\n",
+             sdlMax);
+      programRunStop = savedRS;
+      return 1;
+    }
+
     /* --- 1a: in-range (param == max) --- */
     {
       uint8_t prog[] = {
@@ -12357,7 +12440,7 @@ static int test_param_parity_sweep(void)
           }
 
           if (!subFail) {
-            bool err = run_word("S1B");
+            run_word("S1B");
             int32_t forthX = 0;
             int forthErr = lastErrorCode;
             {
@@ -12390,7 +12473,6 @@ static int test_param_parity_sweep(void)
       fail = 1;
     }
   }
-
   /* ---- Subcase 2: NUMBER_16 oldParam16 parity ---- */
   {
     uint16_t old16Id = LAST_ITEM;  /* sentinel: not found */
@@ -12400,6 +12482,7 @@ static int test_param_parity_sweep(void)
       uint16_t ptp = (uint16_t)(indexOfItems[i].status & PTP_STATUS);
       if (ptp == PTP_NUMBER_16 && isFunctionOldParam16(i)) {
         old16Id = i;
+        break;
       }
     }
 
@@ -12410,6 +12493,25 @@ static int test_param_parity_sweep(void)
       return 1;
     }
 
+    /* Prove no earlier id matches (independent of discovery loop) */
+    {
+      uint16_t earlier = 0;
+      for (uint16_t j = 1; j < old16Id; j++) {
+        uint16_t ptp = (uint16_t)(indexOfItems[j].status & PTP_STATUS);
+        if (ptp == PTP_NUMBER_16 && isFunctionOldParam16(j)) {
+          earlier = j;
+          break;
+        }
+      }
+      if (earlier) {
+        printf("    [2] CONFIG FAIL: earlier matching id %u exists before discovered id %u\n",
+               earlier, old16Id);
+        fail = 1;
+        programRunStop = savedRS;
+        return 1;
+      }
+    }
+
     printf("    [2] discovered oldParam16 item: id=%u (%s)\n",
            old16Id, indexOfItems[old16Id].itemCatalogName);
 
@@ -12417,6 +12519,11 @@ static int test_param_parity_sweep(void)
       uint16_t param = 5;
       uint8_t hi = (uint8_t)(old16Id >> 8);
       uint8_t lo = (uint8_t)(old16Id & 0xFF);
+      char savedStatMx[sizeof(statMx)];
+      uint16_t savedLrSelection = lrSelection;
+      uint16_t savedLrChosen = lrChosen;
+      uint8_t savedTemporaryInformation = temporaryInformation;
+      xcopy(savedStatMx, statMx, sizeof(savedStatMx));
 
       /* Native: opcode bytes + LE param (low, high) */
       uint8_t prog[8];
@@ -12460,67 +12567,117 @@ static int test_param_parity_sweep(void)
         return 1;
       }
 
-      lastErrorCode = ERROR_NONE;
-      programRunStop = PGM_STOPPED;
-      dynamicMenuItem = -1;
-      fnExecute(lbl);
-
-      int32_t nativeX = 0;
-      int nativeErr = lastErrorCode;
+      strcpy(statMx, "STATS");
+      lrSelection = savedLrSelection;
+      lrChosen = savedLrChosen;
+      temporaryInformation = savedTemporaryInformation;
+      seedParamParityState();
       {
-        longInteger_t li;
-        longIntegerInit(li);
-        convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
-        longIntegerToInt32(li, nativeX);
-        longIntegerFree(li);
+        uint8_t tType, zType, yType, xType;
+        int32_t tVal, zVal, yVal, xVal;
+        read_reg_int32(REGISTER_T, &tType, &tVal);
+        read_reg_int32(REGISTER_Z, &zType, &zVal);
+        read_reg_int32(REGISTER_Y, &yType, &yVal);
+        read_reg_int32(REGISTER_X, &xType, &xVal);
+        if (tType != dtLongInteger || tVal != 11 ||
+            zType != dtLongInteger || zVal != 22 ||
+            yType != dtLongInteger || yVal != 33 ||
+            xType != dtLongInteger || xVal != 44) {
+          printf("    [2] FAIL: native seed mismatch T=%d Z=%d Y=%d X=%d\n", tVal, zVal, yVal, xVal);
+          subFail = 1;
+        }
       }
 
-      /* Forth half */
-      forthDictClear();
-      cleanupTestProgram();
+      if (!subFail) {
+        fnExecute(lbl);
 
-      uint16_t w = begin_word("S2O", 3);
-      if (w == FORTH_NULL) {
-        printf("    [2] FAIL: begin_word S2O failed\n");
-        programRunStop = savedRS;
-        return 1;
+        int32_t nativeX = 0;
+        int nativeErr = lastErrorCode;
+        {
+          longInteger_t li;
+          longIntegerInit(li);
+          convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+          longIntegerToInt32(li, nativeX);
+          longIntegerFree(li);
+        }
+
+        /* Forth half */
+        forthDictClear();
+        cleanupTestProgram();
+
+        uint16_t w = begin_word("S2O", 3);
+        if (w == FORTH_NULL) {
+          printf("    [2] FAIL: begin_word S2O failed\n");
+          xcopy(statMx, savedStatMx, sizeof(savedStatMx));
+          lrSelection = savedLrSelection;
+          lrChosen = savedLrChosen;
+          temporaryInformation = savedTemporaryInformation;
+          programRunStop = savedRS;
+          return 1;
+        }
+        forthDictEmit(T_C47);
+        { uint16_t itemId = old16Id; forthDictEmitBytes(&itemId, 2); }
+        { uint16_t p = 5; forthDictEmitBytes(&p, 2); }
+        end_word(w);
+
+        strcpy(statMx, "STATS");
+        lrSelection = savedLrSelection;
+        lrChosen = savedLrChosen;
+        temporaryInformation = savedTemporaryInformation;
+        seedParamParityState();
+        {
+          uint8_t tType, zType, yType, xType;
+          int32_t tVal, zVal, yVal, xVal;
+          read_reg_int32(REGISTER_T, &tType, &tVal);
+          read_reg_int32(REGISTER_Z, &zType, &zVal);
+          read_reg_int32(REGISTER_Y, &yType, &yVal);
+          read_reg_int32(REGISTER_X, &xType, &xVal);
+          if (tType != dtLongInteger || tVal != 11 ||
+              zType != dtLongInteger || zVal != 22 ||
+              yType != dtLongInteger || yVal != 33 ||
+              xType != dtLongInteger || xVal != 44) {
+            printf("    [2] FAIL: forth seed mismatch T=%d Z=%d Y=%d X=%d\n", tVal, zVal, yVal, xVal);
+            subFail = 1;
+          }
+        }
+
+        if (!subFail) {
+          run_word("S2O");
+          int32_t forthX = 0;
+          int forthErr = lastErrorCode;
+          {
+            longInteger_t li;
+            longIntegerInit(li);
+            convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+            longIntegerToInt32(li, forthX);
+            longIntegerFree(li);
+          }
+
+          if (nativeX != forthX) {
+            printf("    [2] FAIL: X mismatch native=%d forth=%d\n", nativeX, forthX);
+            subFail = 1;
+          } else if (nativeErr != forthErr) {
+            printf("    [2] FAIL: error mismatch native=%d forth=%d\n", nativeErr, forthErr);
+            subFail = 1;
+          }
+        }
+
+        forthDictClear();
+        cleanupTestProgram();
       }
-      forthDictEmit(T_C47);
-      { uint16_t itemId = old16Id; forthDictEmitBytes(&itemId, 2); }
-      { uint16_t p = 5; forthDictEmitBytes(&p, 2); }
-      end_word(w);
 
-      lastErrorCode = ERROR_NONE;
-      bool err = run_word("S2O");
-      int32_t forthX = 0;
-      int forthErr = lastErrorCode;
-      {
-        longInteger_t li;
-        longIntegerInit(li);
-        convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
-        longIntegerToInt32(li, forthX);
-        longIntegerFree(li);
-      }
-
-      if (nativeX != forthX) {
-        printf("    [2] FAIL: X mismatch native=%d forth=%d\n", nativeX, forthX);
-        subFail = 1;
-      } else if (nativeErr != forthErr) {
-        printf("    [2] FAIL: error mismatch native=%d forth=%d\n", nativeErr, forthErr);
-        subFail = 1;
-      }
-
-      forthDictClear();
-      cleanupTestProgram();
+      xcopy(statMx, savedStatMx, sizeof(savedStatMx));
+      lrSelection = savedLrSelection;
+      lrChosen = savedLrChosen;
+      temporaryInformation = savedTemporaryInformation;
     }
 
     if (!subFail) {
-      printf("    [2] PASS: NUMBER_16 oldParam16 parity pinned (item=%u)\n", old16Id);
+      printf("    [2] PASS: first NUMBER_16 oldParam16 parity pinned (item=%u)\n", old16Id);
     } else {
       fail = 1;
     }
   }
-
   /* ---- Subcase 3: NUMBER_16 new-form parity ---- */
   {
     uint16_t new16Id = LAST_ITEM;  /* sentinel: not found */
@@ -12530,6 +12687,7 @@ static int test_param_parity_sweep(void)
       uint16_t ptp = (uint16_t)(indexOfItems[i].status & PTP_STATUS);
       if (ptp == PTP_NUMBER_16 && !isFunctionOldParam16(i)) {
         new16Id = i;
+        break;
       }
     }
 
@@ -12537,13 +12695,38 @@ static int test_param_parity_sweep(void)
       printf("    [3] CONFIG FAIL: no PTP_NUMBER_16 + !isFunctionOldParam16 item found\n");
       fail |= 1;
     } else {
-      printf("    [3] discovered new-form item: id=%u (%s)\n",
-             new16Id, indexOfItems[new16Id].itemCatalogName);
+      /* Prove no earlier id matches (independent of discovery loop) */
+      {
+        uint16_t earlier = 0;
+        for (uint16_t j = 1; j < new16Id; j++) {
+          uint16_t ptp = (uint16_t)(indexOfItems[j].status & PTP_STATUS);
+          if (ptp == PTP_NUMBER_16 && !isFunctionOldParam16(j)) {
+            earlier = j;
+            break;
+          }
+        }
+        if (earlier) {
+          printf("    [3] CONFIG FAIL: earlier matching id %u exists before discovered id %u\n",
+                 earlier, new16Id);
+          fail = 1;
+          programRunStop = savedRS;
+          return 1;
+        }
+      }
+
+      if (!subFail) {
+        printf("    [3] discovered new-form item: id=%u (%s)\n",
+               new16Id, indexOfItems[new16Id].itemCatalogName);
 
       {
         uint16_t param = 5;
         uint8_t hi = (uint8_t)(new16Id >> 8);
         uint8_t lo = (uint8_t)(new16Id & 0xFF);
+        char savedStatMx[sizeof(statMx)];
+        uint16_t savedLrSelection = lrSelection;
+        uint16_t savedLrChosen = lrChosen;
+        uint8_t savedTemporaryInformation = temporaryInformation;
+        xcopy(savedStatMx, statMx, sizeof(savedStatMx));
 
         /* Native: opcode bytes + BE param (high, low) */
         uint8_t prog[8];
@@ -12587,68 +12770,119 @@ static int test_param_parity_sweep(void)
           return 1;
         }
 
-        lastErrorCode = ERROR_NONE;
-        programRunStop = PGM_STOPPED;
-        dynamicMenuItem = -1;
-        fnExecute(lbl);
-
-        int32_t nativeX = 0;
-        int nativeErr = lastErrorCode;
+        strcpy(statMx, "STATS");
+        lrSelection = savedLrSelection;
+        lrChosen = savedLrChosen;
+        temporaryInformation = savedTemporaryInformation;
+        seedParamParityState();
         {
-          longInteger_t li;
-          longIntegerInit(li);
-          convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
-          longIntegerToInt32(li, nativeX);
-          longIntegerFree(li);
+          uint8_t tType, zType, yType, xType;
+          int32_t tVal, zVal, yVal, xVal;
+          read_reg_int32(REGISTER_T, &tType, &tVal);
+          read_reg_int32(REGISTER_Z, &zType, &zVal);
+          read_reg_int32(REGISTER_Y, &yType, &yVal);
+          read_reg_int32(REGISTER_X, &xType, &xVal);
+          if (tType != dtLongInteger || tVal != 11 ||
+              zType != dtLongInteger || zVal != 22 ||
+              yType != dtLongInteger || yVal != 33 ||
+              xType != dtLongInteger || xVal != 44) {
+            printf("    [3] FAIL: native seed mismatch T=%d Z=%d Y=%d X=%d\n", tVal, zVal, yVal, xVal);
+            subFail = 1;
+          }
         }
 
-        /* Forth half */
-        forthDictClear();
-        cleanupTestProgram();
+        if (!subFail) {
+          fnExecute(lbl);
 
-        uint16_t w = begin_word("S3N", 3);
-        if (w == FORTH_NULL) {
-          printf("    [3] FAIL: begin_word S3N failed\n");
-          programRunStop = savedRS;
-          return 1;
+          int32_t nativeX = 0;
+          int nativeErr = lastErrorCode;
+          {
+            longInteger_t li;
+            longIntegerInit(li);
+            convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+            longIntegerToInt32(li, nativeX);
+            longIntegerFree(li);
+          }
+
+          /* Forth half */
+          forthDictClear();
+          cleanupTestProgram();
+
+          uint16_t w = begin_word("S3N", 3);
+          if (w == FORTH_NULL) {
+            printf("    [3] FAIL: begin_word S3N failed\n");
+            xcopy(statMx, savedStatMx, sizeof(savedStatMx));
+            lrSelection = savedLrSelection;
+            lrChosen = savedLrChosen;
+            temporaryInformation = savedTemporaryInformation;
+            programRunStop = savedRS;
+            return 1;
+          }
+          forthDictEmit(T_C47);
+          { uint16_t itemId = new16Id; forthDictEmitBytes(&itemId, 2); }
+          { uint16_t p = 5; forthDictEmitBytes(&p, 2); }
+          end_word(w);
+
+          strcpy(statMx, "STATS");
+          lrSelection = savedLrSelection;
+          lrChosen = savedLrChosen;
+          temporaryInformation = savedTemporaryInformation;
+          seedParamParityState();
+          {
+            uint8_t tType, zType, yType, xType;
+            int32_t tVal, zVal, yVal, xVal;
+            read_reg_int32(REGISTER_T, &tType, &tVal);
+            read_reg_int32(REGISTER_Z, &zType, &zVal);
+            read_reg_int32(REGISTER_Y, &yType, &yVal);
+            read_reg_int32(REGISTER_X, &xType, &xVal);
+            if (tType != dtLongInteger || tVal != 11 ||
+                zType != dtLongInteger || zVal != 22 ||
+                yType != dtLongInteger || yVal != 33 ||
+                xType != dtLongInteger || xVal != 44) {
+              printf("    [3] FAIL: forth seed mismatch T=%d Z=%d Y=%d X=%d\n", tVal, zVal, yVal, xVal);
+              subFail = 1;
+            }
+          }
+
+          if (!subFail) {
+            run_word("S3N");
+            int32_t forthX = 0;
+            int forthErr = lastErrorCode;
+            {
+              longInteger_t li;
+              longIntegerInit(li);
+              convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+              longIntegerToInt32(li, forthX);
+              longIntegerFree(li);
+            }
+
+            if (nativeX != forthX) {
+              printf("    [3] FAIL: X mismatch native=%d forth=%d\n", nativeX, forthX);
+              subFail = 1;
+            } else if (nativeErr != forthErr) {
+              printf("    [3] FAIL: error mismatch native=%d forth=%d\n", nativeErr, forthErr);
+              subFail = 1;
+            }
+          }
+
+          forthDictClear();
+          cleanupTestProgram();
         }
-        forthDictEmit(T_C47);
-        { uint16_t itemId = new16Id; forthDictEmitBytes(&itemId, 2); }
-        { uint16_t p = 5; forthDictEmitBytes(&p, 2); }
-        end_word(w);
 
-        lastErrorCode = ERROR_NONE;
-        bool err = run_word("S3N");
-        int32_t forthX = 0;
-        int forthErr = lastErrorCode;
-        {
-          longInteger_t li;
-          longIntegerInit(li);
-          convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
-          longIntegerToInt32(li, forthX);
-          longIntegerFree(li);
-        }
-
-        if (nativeX != forthX) {
-          printf("    [3] FAIL: X mismatch native=%d forth=%d\n", nativeX, forthX);
-          subFail = 1;
-        } else if (nativeErr != forthErr) {
-          printf("    [3] FAIL: error mismatch native=%d forth=%d\n", nativeErr, forthErr);
-          subFail = 1;
-        }
-
-        forthDictClear();
-        cleanupTestProgram();
+        xcopy(statMx, savedStatMx, sizeof(savedStatMx));
+        lrSelection = savedLrSelection;
+        lrChosen = savedLrChosen;
+        temporaryInformation = savedTemporaryInformation;
       }
 
       if (!subFail) {
-        printf("    [3] PASS: NUMBER_16 new-form parity pinned (item=%u)\n", new16Id);
+        printf("    [3] PASS: first NUMBER_16 new-form parity pinned (item=%u)\n", new16Id);
       } else {
         fail |= 1;
       }
     }
   }
-
+  }
   /* ---- Subcase 4: Corrupted itemId still rejected at runtime ---- */
   {
     int subFail = 0;
@@ -12686,7 +12920,6 @@ static int test_param_parity_sweep(void)
 
     forthDictClear();
   }
-
   programRunStop = savedRS;
   return fail;
 }

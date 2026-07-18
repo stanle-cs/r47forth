@@ -11,19 +11,28 @@
 #include "forth_dict.h"
 #include "param_core.h"
 
+#if defined(FORTH_DEBUG_SELFTEST)
+uint32_t paramCoreDebugNameLengthReads = 0;
+#endif
+
 /* F2-2 (§10.2): bounded variant of decode.c's getStringLabelOrVariableName.
  * end is EXCLUSIVE. A name that would read past end is clamped to the
  * available bytes; the caller's normal not-found path then reports it.
  * The unbounded decode.c reader remains for display paths only. */
 static void paramCoreReadName(const uint8_t *stringAddress, const uint8_t *end) {
-  uint8_t stringLength = *(uint8_t *)(stringAddress++);
-  if(stringAddress >= end) {
-    stringLength = 0;
+  uint8_t stringLength = 0;
+  const uint8_t *nameBytes = end;
+  if(stringAddress < end) {
+    stringLength = *(uint8_t *)(stringAddress++);
+    nameBytes = stringAddress;
+    #if defined(FORTH_DEBUG_SELFTEST)
+      paramCoreDebugNameLengthReads++;
+    #endif
+    if((end - stringAddress) < stringLength) {
+      stringLength = (uint8_t)(end - stringAddress);
+    }
   }
-  else if(stringLength > (uint8_t)(end - stringAddress)) {
-    stringLength = (uint8_t)(end - stringAddress);
-  }
-  xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
+  xcopy(tmpStringLabelOrVariableName, nameBytes, stringLength);
   tmpStringLabelOrVariableName[stringLength] = 0;
 }
 

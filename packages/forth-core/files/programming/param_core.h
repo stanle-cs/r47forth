@@ -26,4 +26,8 @@ void paramCorePutLiteral(uint8_t *literalAddress);
 bool paramCoreValidateDirect(uint16_t op, uint16_t ptpClass, uint16_t value);
 void paramCoreDispatchDirect(uint16_t op, uint16_t value);
 
+#if defined(FORTH_DEBUG_SELFTEST)
+extern uint32_t paramCoreDebugNameLengthReads;
+#endif
+
 #endif /* PARAM_CORE_H */

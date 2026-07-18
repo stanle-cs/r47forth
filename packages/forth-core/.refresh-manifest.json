@@ -8,9 +8,9 @@
     "forth_inner.c": "46e3b09960bf24342831ab62c45b59848e73668a249eeb728dd29dabb82bf43d",
     "forth_prims.c": "2015a3210c6754348a813d9452cc214471c5b25dba629a5def8a366431548f27",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
-    "programming/param_core.c": "86d99f18cbb58b907068a3535745d2ca794b091a1806a62a6fc2177d720b96c4",
-    "programming/param_core.h": "d077b747c9ece4c0633801e408e37abf1200bfbff6ae0cc5b6d610505fc0643d",
-    "test_dict_reloc.c": "7f6efd17e0b00227649a20144fca7c7aab260cd051a771ec9200ed63cc6a5b0a"
+    "programming/param_core.c": "c765bd9cf840321a055b8cab4b89732ef07a1ffefea16f688aa5014da1b70f58",
+    "programming/param_core.h": "3617f9ae9cfc3ec425f6960c5e0ce8b978d471a8b1f01345278bc69a6bfc7da4",
+    "test_dict_reloc.c": "3cb5c2b35dbea5003e39d16207eb6e89fe2b6637de662251c285bfe4eb8c2307"
   },
   "patches": {
     "010-config.c.patch": "2667aa89854707b1449fc91413711c851b41821f9b3be50be25d1a9ec5954524",
