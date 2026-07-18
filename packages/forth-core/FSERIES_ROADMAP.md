@@ -43,36 +43,29 @@ harness pins every later stage: F2..F6 packets inherit an acceptance
 backstop that fails loudly if they break lifecycle, entry state, display,
 parity, or name-faithfulness.
 
-## Stage F2 — shared RPN parameter semantic core (DESIGN §10.2)
+## Stage F2 — shared RPN parameter semantic core (DESIGN §10.2) — AUTHORED
 
-**Goal:** one factored, bounded native parameter decoder feeding both native
-step execution and `FTOK_C47`, ending at `reallyRunFunction()` — Forth can
-never drift from RPN register conversion, name handling, or errors.
+**Status 2026-07-17:** the pre-work is DONE and the packets exist. The PTP
+trace was performed against the tree (evidence recorded in
+`QWEN_PROMPTS_F2_core.md`, the stage ledger) and the architecture decided:
+the byte grammars stay format-specific (changing Forth's operand encoding
+would break the F1-5 validator and save format), and the SHARED layer is
+the semantic tail — extraction of `_executeOp` into package-new
+`programming/param_core.c/.h`, a bounded name reader on execution paths,
+`paramCoreValidateDirect`/`paramCoreDispatchDirect` used by both worlds,
+and a parity sweep. A traced fact worth remembering: native out-of-range
+direct parameters are SILENT no-ops (sprintf only, no error code) — parity
+pins that silence.
 
-**Architect pre-work (blocking, tracing not inference):**
-1. Trace every supported native PTP path from `executeOneStep`/`_executeOp`
-   (file-static — the factoring seam may need new upstream override files,
-   acceptable under RULE-1): PTP_NONE, NUMBER_8, NUMBER_16, and every
-   parameter-bearing shape eligible for Forth, each documented with
-   file:line evidence in a `FOR_THE_ARCHITECT_F2_trace.md` report.
-2. Rule the override-file split (which upstream files gain package
-   overrides) BEFORE packet 1; the package system makes this cheap but the
-   gate's byte-equality checks must know every file.
-3. Define the generalized string-name reader's bounds contract (explicit
-   start/end, no NUL assumptions) against the traced call sites.
+| Packet | Status |
+|---|---|
+| F2-1 extract the native core | AUTHORED — gate-locked on F15-5 |
+| F2-2 bounded name reader | AUTHORED — gate-locked on F2-1 |
+| F2-3 shared dispatch + FTOK_C47 re-route | AUTHORED — gate-locked on F2-2 |
+| F2-4 parity acceptance sweep | AUTHORED — gate-locked on F2-3 |
 
-**Predicted packets (5):**
-- F2-1 decoder skeleton + PTP_NONE/NUMBER_8/NUMBER_16 parity (pure
-  refactor; mutation: divergence canary between old/new paths).
-- F2-2 native `executeOneStep` switched onto the shared core.
-- F2-3 `FTOK_C47` switched onto the shared core; F1-5 validator arms
-  re-checked (they mirror PTP shapes — extend if the trace found more).
-- F2-4 string-name reader + name-bearing parameters.
-- F2-5 error-surface parity acceptance (drives both halves through the
-  §8.9-style harness; arena + flash report).
-
-**Risks:** `_executeOp` factoring churn upstream-side; hidden PTP consumers
-found mid-trace (each becomes a ruled include/exclude, not an improvisation).
+**Risks (unchanged):** hidden `_executeOp` call sites or PTP consumers
+surfacing at execution → gates STOP, architect re-authors.
 
 ## Stage F3 — vocabulary, scopes, XEQ + control flow + globals (DESIGN §10.3)
 
