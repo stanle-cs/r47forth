@@ -9591,6 +9591,9 @@ static int test_forth_alpha_gesture_resumes_forth(void);
 static int test_unterminated_def_errors(void);
 static int test_overlong_token_in_def_keeps_error(void);
 
+/* F2-1: parameter core extraction test */
+static int test_param_core_extraction(void);
+
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
 
@@ -10248,6 +10251,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_accept_xeq_name_step...\n");
   fail |= test_accept_xeq_name_step();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_param_core_extraction...\n");
+  fail |= test_param_core_extraction();
   forthDictClear();
 
   /* COMMIT 4: executeOneStep ITM_FORTH arm + bump sites */
@@ -11414,6 +11421,150 @@ static int test_overlong_token_in_def_keeps_error(void)
 
   printf("    PASS: overlong token preserves INPUT_TOO_LONG (not masked by INVALID_NAME), word invisible, count restored\n");
   return 0;
+}
+
+/* test_param_core_extraction
+ * F2-1: verify the extracted parameter core (param_core.c/h) behaves
+ * identically to the original _executeOp in lblGtoXeq.c.  Two
+ * independently reported subcases. */
+static int test_param_core_extraction(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+
+  /* ---- Subcase 1: direct register parameter through the moved core ---- */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'F', '2', 'E',   /* LBL 'F2E' */
+      0x2C, 0x05,                        /* STO 05    */
+      0x04                               /* RTN       */
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [1] FAIL: writeTestProgram failed\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    calcRegister_t lbl = findNamedLabel("F2E", GLOBAL_LABELS);
+    if (lbl == INVALID_VARIABLE) {
+      printf("    [1] FAIL: findNamedLabel(\"F2E\") returned INVALID_VARIABLE\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("42");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: forthOuterInterpret(\"42\") error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(42)) {
+      printf("    [1] FAIL: X != 42 after interpret\n");
+      fail = 1;
+    }
+    else {
+      programRunStop = PGM_STOPPED;
+      lastErrorCode = ERROR_NONE;
+      dynamicMenuItem = -1;
+      fnExecute(lbl);
+
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: fnExecute error %d\n", lastErrorCode);
+        fail = 1;
+      }
+      else if (!x_is_longint(42)) {
+        printf("    [1] FAIL: X != 42 after STO\n");
+        fail = 1;
+      }
+      else {
+        int32_t reg5Val = -1;
+        bool_t isLongint = (getRegisterDataType(5) == dtLongInteger);
+        if (isLongint) {
+          longInteger_t li;
+          longIntegerInit(li);
+          convertLongIntegerRegisterToLongInteger(5, li);
+          longIntegerToInt32(li, reg5Val);
+          longIntegerFree(li);
+        }
+        if (!isLongint || reg5Val != 42) {
+          printf("    [1] FAIL: register 05 != 42 (type=%s, val=%d)\n",
+                 isLongint ? "longint" : "not-longint", reg5Val);
+          fail = 1;
+        }
+        else {
+          printf("    [1] PASS: STO 05 through moved core stores 42 in register 05\n");
+        }
+      }
+    }
+
+    forthDictClear();
+    cleanupTestProgram();
+  }
+
+  /* ---- Subcase 2: relocated Forth XEQ fallback still resolves ---- */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'F', '2', 'F',                       /* LBL 'F2F' */
+      0x8B, 0x1A, 0xFD, 0x00,                                /* »FORTH    */
+      0x8B, 0x1A, 0xFD, 0x08, ':', ' ', 'W', '7', ' ',       /* : W7 7 ;  */
+      '7', ' ', ';',
+      0x8B, 0x1A, 0xFD, 0x00,                                /* FORTH«    */
+      0x03, 0xFD, 0x02, 'W', '7',                            /* XEQ 'W7'  */
+      0x04                                                   /* RTN       */
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [2] FAIL: writeTestProgram failed\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    calcRegister_t lbl = findNamedLabel("F2F", GLOBAL_LABELS);
+    if (lbl == INVALID_VARIABLE) {
+      printf("    [2] FAIL: findNamedLabel(\"F2F\") returned INVALID_VARIABLE\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    programRunStop = PGM_STOPPED;
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    forthRunGenBump();
+    programRunStop = PGM_RUNNING;
+    currentStep = beginOfProgramMemory + 10;  /* source step */
+    executeOneStep(currentStep);
+    if (lastErrorCode == ERROR_NONE) {
+      currentStep = beginOfProgramMemory + 26;  /* XEQ 'W7' */
+      executeOneStep(currentStep);
+    }
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [2] FAIL: executeOneStep error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(7)) {
+      printf("    [2] FAIL: X != 7 after XEQ 'W7'\n");
+      fail = 1;
+    }
+    else {
+      printf("    [2] PASS: XEQ 'W7' through relocated fallback yields X=7\n");
+    }
+
+    forthDictClear();
+    cleanupTestProgram();
+  }
+
+  programRunStop = savedRS;
+  return fail;
 }
 
 #endif  // PC_BUILD
