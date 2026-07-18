@@ -4922,6 +4922,475 @@ static int test_accept_run_lifecycle(void)
   return fail;
 }
 
+/* test_accept_entry_state_roundtrip
+ * F15-2: §8.9 item 2(a-d) — PEM derives keypad state from the landed step,
+ * including after power-off. Four independently accumulated subcases. */
+static int test_accept_entry_state_roundtrip(void)
+{
+  int fail = 0;
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedMenu = currentMenu();
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+  extern void runFunction(int16_t func);
+  extern void pemAlpha(int16_t item);
+  extern void showSoftmenu(int16_t menu);
+  extern void pemCloseNumberInput(void);
+
+  /* ---- Subcase 1: §8.9 item 2(a) — RPN step keeps RPN number entry ---- */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'E', '2', 'A',
+      0x4C,
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x8B, 0x1A, 0xFD, 0x01, '7',
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x4C,
+      0x04
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [1] FAIL: writeTestProgram failed\n");
+      fail = 1;
+    }
+    else {
+      programRunStop = PGM_STOPPED;
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      lastErrorCode = ERROR_NONE;
+      clearSystemFlag(FLAG_ALPHA);
+
+      fnGotoDot(2);
+
+      if (currentLocalStepNumber != 2) {
+        printf("    [1] FAIL: currentLocalStepNumber = %u, expected 2\n", currentLocalStepNumber);
+        fail = 1;
+      }
+      else if (currentStep != beginOfProgramMemory + 6) {
+        printf("    [1] FAIL: currentStep = %p, expected %p (+6)\n",
+               (void *)currentStep, (void *)(beginOfProgramMemory + 6));
+        fail = 1;
+      }
+      else {
+        runFunction(ITM_2);
+
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [1] FAIL: lastErrorCode = %d\n", lastErrorCode);
+          fail = 1;
+        }
+        else if (getSystemFlag(FLAG_ALPHA)) {
+          printf("    [1] FAIL: FLAG_ALPHA set — should be clear for RPN\n");
+          fail = 1;
+        }
+        else if (tam.function == ITM_FORTH) {
+          printf("    [1] FAIL: tam.function = ITM_FORTH\n");
+          fail = 1;
+        }
+        else if (aimBuffer[0] != '+' || aimBuffer[1] != '2') {
+          printf("    [1] FAIL: aimBuffer[0]='%c'[1]='%c' — expected '+'/'2'\n",
+                 aimBuffer[0], aimBuffer[1]);
+          fail = 1;
+        }
+        else {
+          printf("    [1] PASS: RPN landing routes digit 2 to number entry\n");
+        }
+      }
+
+      if (aimBuffer[0] != 0) { pemCloseNumberInput(); aimBuffer[0] = 0; }
+    }
+    cleanupTestProgram();
+  }
+
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = 0;
+  tam.mode = 0;
+  catalog = CATALOG_NONE;
+  aimBuffer[0] = 0;
+  dynamicMenuItem = -1;
+  lastErrorCode = ERROR_NONE;
+
+  /* ---- Subcase 2: §8.9 item 2(b) — source step opens Forth text capture ---- */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'E', '2', 'A',
+      0x4C,
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x8B, 0x1A, 0xFD, 0x01, '7',
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x4C,
+      0x04
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [2] FAIL: writeTestProgram failed\n");
+      fail = 1;
+    }
+    else {
+      programRunStop = PGM_STOPPED;
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      lastErrorCode = ERROR_NONE;
+      clearSystemFlag(FLAG_ALPHA);
+
+      fnGotoDot(4);
+
+      if (currentLocalStepNumber != 4) {
+        printf("    [2] FAIL: currentLocalStepNumber = %u, expected 4\n", currentLocalStepNumber);
+        fail = 1;
+      }
+      else if (currentStep != beginOfProgramMemory + 11) {
+        printf("    [2] FAIL: currentStep = %p, expected %p (+11)\n",
+               (void *)currentStep, (void *)(beginOfProgramMemory + 11));
+        fail = 1;
+      }
+      else {
+        runFunction(ITM_2);
+
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [2] FAIL: lastErrorCode = %d\n", lastErrorCode);
+          fail = 1;
+        }
+        else if (!getSystemFlag(FLAG_ALPHA)) {
+          printf("    [2] FAIL: FLAG_ALPHA not set\n");
+          fail = 1;
+        }
+        else if (tam.function != ITM_FORTH) {
+          printf("    [2] FAIL: tam.function = %d, expected ITM_FORTH (%d)\n",
+                 (int)tam.function, ITM_FORTH);
+          fail = 1;
+        }
+        else if (aimBuffer[0] != '2' || aimBuffer[1] != 0) {
+          printf("    [2] FAIL: aimBuffer = '%s', expected '2'\n", aimBuffer);
+          fail = 1;
+        }
+        else {
+          printf("    [2] PASS: source landing routes digit 2 to Forth capture\n");
+        }
+      }
+
+      if (getSystemFlag(FLAG_ALPHA)) { pemAlpha(ITM_ENTER); }
+    }
+    cleanupTestProgram();
+  }
+
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = 0;
+  tam.mode = 0;
+  catalog = CATALOG_NONE;
+  aimBuffer[0] = 0;
+  dynamicMenuItem = -1;
+  lastErrorCode = ERROR_NONE;
+
+  /* ---- Subcase 3: §8.9 item 2(c) — opening and closing markers symmetric ---- */
+  {
+    int sc3 = 0;
+
+    /* Opening half */
+    {
+      uint8_t prog[] = {
+        0x01, 0xFD, 0x03, 'E', '2', 'A',
+        0x4C,
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x8B, 0x1A, 0xFD, 0x01, '7',
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x4C,
+        0x04
+      };
+
+      if (!writeTestProgram(prog, sizeof(prog))) {
+        printf("    [3] FAIL: writeTestProgram (opening)\n");
+        sc3 = 1;
+      }
+      else {
+        programRunStop = PGM_STOPPED;
+        calcMode = CM_PEM;
+        catalog = CATALOG_NONE;
+        tam.mode = 0;
+        tam.function = 0;
+        aimBuffer[0] = 0;
+        dynamicMenuItem = -1;
+        pemCursorIsZerothStep = false;
+        lastErrorCode = ERROR_NONE;
+        clearSystemFlag(FLAG_ALPHA);
+
+        fnGotoDot(3);
+
+        if (currentLocalStepNumber != 3) {
+          printf("    [3] FAIL: opening step = %u, expected 3\n", currentLocalStepNumber);
+          sc3 = 1;
+        }
+        else if (currentStep != beginOfProgramMemory + 7) {
+          printf("    [3] FAIL: opening currentStep = %p, expected %p (+7)\n",
+                 (void *)currentStep, (void *)(beginOfProgramMemory + 7));
+          sc3 = 1;
+        }
+        else {
+          runFunction(ITM_2);
+
+          if (lastErrorCode != ERROR_NONE) {
+            printf("    [3] FAIL: opening error %d\n", lastErrorCode);
+            sc3 = 1;
+          }
+          else if (!getSystemFlag(FLAG_ALPHA)) {
+            printf("    [3] FAIL: opening FLAG_ALPHA not set\n");
+            sc3 = 1;
+          }
+          else if (tam.function != ITM_FORTH) {
+            printf("    [3] FAIL: opening tam.function = %d\n", (int)tam.function);
+            sc3 = 1;
+          }
+          else if (aimBuffer[0] != '2' || aimBuffer[1] != 0) {
+            printf("    [3] FAIL: opening aimBuffer = '%s'\n", aimBuffer);
+            sc3 = 1;
+          }
+        }
+
+        if (getSystemFlag(FLAG_ALPHA)) { pemAlpha(ITM_ENTER); }
+      }
+      cleanupTestProgram();
+    }
+
+    clearSystemFlag(FLAG_ALPHA);
+    tam.function = 0;
+    tam.mode = 0;
+    catalog = CATALOG_NONE;
+    aimBuffer[0] = 0;
+    dynamicMenuItem = -1;
+    lastErrorCode = ERROR_NONE;
+
+    /* Closing half */
+    {
+      uint8_t prog[] = {
+        0x01, 0xFD, 0x03, 'E', '2', 'A',
+        0x4C,
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x8B, 0x1A, 0xFD, 0x01, '7',
+        0x8B, 0x1A, 0xFD, 0x00,
+        0x4C,
+        0x04
+      };
+
+      if (!writeTestProgram(prog, sizeof(prog))) {
+        printf("    [3] FAIL: writeTestProgram (closing)\n");
+        sc3 = 1;
+      }
+      else {
+        programRunStop = PGM_STOPPED;
+        calcMode = CM_PEM;
+        catalog = CATALOG_NONE;
+        tam.mode = 0;
+        tam.function = 0;
+        aimBuffer[0] = 0;
+        dynamicMenuItem = -1;
+        pemCursorIsZerothStep = false;
+        lastErrorCode = ERROR_NONE;
+        clearSystemFlag(FLAG_ALPHA);
+
+        fnGotoDot(5);
+
+        if (currentLocalStepNumber != 5) {
+          printf("    [3] FAIL: closing step = %u, expected 5\n", currentLocalStepNumber);
+          sc3 = 1;
+        }
+        else if (currentStep != beginOfProgramMemory + 16) {
+          printf("    [3] FAIL: closing currentStep = %p, expected %p (+16)\n",
+                 (void *)currentStep, (void *)(beginOfProgramMemory + 16));
+          sc3 = 1;
+        }
+        else {
+          runFunction(ITM_2);
+
+          if (lastErrorCode != ERROR_NONE) {
+            printf("    [3] FAIL: closing error %d\n", lastErrorCode);
+            sc3 = 1;
+          }
+          else if (getSystemFlag(FLAG_ALPHA)) {
+            printf("    [3] FAIL: closing FLAG_ALPHA set — should be RPN\n");
+            sc3 = 1;
+          }
+          else if (tam.function == ITM_FORTH) {
+            printf("    [3] FAIL: closing tam.function = ITM_FORTH\n");
+            sc3 = 1;
+          }
+          else if (aimBuffer[0] != '+' || aimBuffer[1] != '2') {
+            printf("    [3] FAIL: closing aimBuffer[0]='%c'[1]='%c'\n",
+                   aimBuffer[0], aimBuffer[1]);
+            sc3 = 1;
+          }
+        }
+
+        if (aimBuffer[0] != 0) { pemCloseNumberInput(); aimBuffer[0] = 0; }
+      }
+      cleanupTestProgram();
+    }
+
+    if (sc3) {
+      fail = 1;
+    }
+    else {
+      printf("    [3] PASS: opening marker captures and closing marker restores RPN\n");
+    }
+  }
+
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = 0;
+  tam.mode = 0;
+  catalog = CATALOG_NONE;
+  aimBuffer[0] = 0;
+  dynamicMenuItem = -1;
+  lastErrorCode = ERROR_NONE;
+
+  /* ---- Subcase 4: §8.9 item 2(d) — save/restore re-derives at source step ---- */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'E', '2', 'A',
+      0x4C,
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x8B, 0x1A, 0xFD, 0x01, '7',
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x4C,
+      0x04
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [4] FAIL: writeTestProgram failed\n");
+      fail = 1;
+    }
+    else {
+      programRunStop = PGM_STOPPED;
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      lastErrorCode = ERROR_NONE;
+      clearSystemFlag(FLAG_ALPHA);
+
+      fnGotoDot(4);
+
+      if (currentLocalStepNumber != 4) {
+        printf("    [4] FAIL: pre-save step = %u, expected 4\n", currentLocalStepNumber);
+        fail = 1;
+      }
+      else if (currentStep != beginOfProgramMemory + 11) {
+        printf("    [4] FAIL: pre-save currentStep = %p, expected %p (+11)\n",
+               (void *)currentStep, (void *)(beginOfProgramMemory + 11));
+        fail = 1;
+      }
+      else if (getSystemFlag(FLAG_ALPHA)) {
+        printf("    [4] FAIL: capture open before saveCalc\n");
+        fail = 1;
+      }
+      else {
+        saveCalc();
+
+        fnGotoDot(2);
+
+        if (currentLocalStepNumber != 2) {
+          printf("    [4] FAIL: post-goto step = %u, expected 2\n", currentLocalStepNumber);
+          fail = 1;
+        }
+        else if (currentStep != beginOfProgramMemory + 6) {
+          printf("    [4] FAIL: post-goto currentStep = %p, expected %p (+6)\n",
+                 (void *)currentStep, (void *)(beginOfProgramMemory + 6));
+          fail = 1;
+        }
+
+        aimBuffer[0] = 0;
+        clearSystemFlag(FLAG_ALPHA);
+        tam.function = 0;
+
+        {
+          bool_t savedLoad = loadTestPrograms;
+          loadTestPrograms = false;
+          restoreCalc();
+          loadTestPrograms = savedLoad;
+        }
+
+        if (currentLocalStepNumber != 4) {
+          printf("    [4] FAIL: post-restore step = %u, expected 4\n", currentLocalStepNumber);
+          fail = 1;
+        }
+        else if (currentStep != beginOfProgramMemory + 11) {
+          printf("    [4] FAIL: post-restore currentStep = %p, expected %p (+11)\n",
+                 (void *)currentStep, (void *)(beginOfProgramMemory + 11));
+          fail = 1;
+        }
+        else if (pemCursorIsZerothStep) {
+          printf("    [4] FAIL: post-restore pemCursorIsZerothStep = true\n");
+          fail = 1;
+        }
+        else {
+          runFunction(ITM_2);
+
+          if (lastErrorCode != ERROR_NONE) {
+            printf("    [4] FAIL: post-restore error %d\n", lastErrorCode);
+            fail = 1;
+          }
+          else if (!getSystemFlag(FLAG_ALPHA)) {
+            printf("    [4] FAIL: post-restore FLAG_ALPHA not set\n");
+            fail = 1;
+          }
+          else if (tam.function != ITM_FORTH) {
+            printf("    [4] FAIL: post-restore tam.function = %d\n", (int)tam.function);
+            fail = 1;
+          }
+          else if (aimBuffer[0] != '2' || aimBuffer[1] != 0) {
+            printf("    [4] FAIL: post-restore aimBuffer = '%s'\n", aimBuffer);
+            fail = 1;
+          }
+          else {
+            printf("    [4] PASS: power-off round-trip re-derives Forth capture at source step\n");
+          }
+        }
+      }
+
+      if (getSystemFlag(FLAG_ALPHA)) { pemAlpha(ITM_ENTER); }
+    }
+    cleanupTestProgram();
+  }
+
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  showSoftmenu(savedMenu);
+  memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+
+  return fail;
+}
+
 /* test_dict_name_by_index
  * Mutation: off-by-one in count-1-n walk (returns wrong word's name). */
 static int test_dict_name_by_index(void)
@@ -8865,6 +9334,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_accept_run_lifecycle...\n");
   fail |= test_accept_run_lifecycle();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_accept_entry_state_roundtrip...\n");
+  fail |= test_accept_entry_state_roundtrip();
   forthDictClear();
 
   printf("  [DEBUG] running test_dict_name_by_index...\n");
