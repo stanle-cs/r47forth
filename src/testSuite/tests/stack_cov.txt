@@ -8,7 +8,7 @@ In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 AM=DEG SS=4
 ; fnDrop clears it, fnRollDown receives the old X there (stack.c:94 writes to
 ; getStackTop(), REGISTER_D under FLAG_SSIZE8, defines.h:2203).
 Func: fnDrop
-In:  SS=8 RT=Real:"4" RZ=Real:"3" RY=Real:"2" RX=Real:"1"
+In:  SS=8 RD=Real:"0" RT=Real:"4" RZ=Real:"3" RY=Real:"2" RX=Real:"1"
 Out: EC=0 RX=Real:"2" RY=Real:"3" RZ=Real:"4" RD=Real:"0"
 Func: fnRollDown
 In:  SS=8 RT=Real:"4" RZ=Real:"3" RY=Real:"2" RX=Real:"1"
