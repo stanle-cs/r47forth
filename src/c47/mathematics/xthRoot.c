@@ -31,8 +31,8 @@ static void xthRootComplex(const real_t *aa, const real_t *bb, const real_t *cc,
     }
 
     divComplexComplex(const_1, const_0, &c, &d, &er, &ei, realContext);
-    if(realIsZero(&er) && realIsZero(&ei)) {              // an infinite order leaves y^0, which PowerComplex() reports as NaN
-      convertComplexToResultRegister(const_plusInfinity, const_plusInfinity, REGISTER_X);
+    if(realIsZero(&er) && realIsZero(&ei)) {              // an infinite order leaves y^0, indeterminate for an infinite base
+      convertComplexToResultRegister(const_NaN, const_NaN, REGISTER_X);
       return;
     }
 
