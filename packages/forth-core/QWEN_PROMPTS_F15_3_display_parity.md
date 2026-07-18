@@ -25,9 +25,10 @@ were machine-verified.
    src/c47/programming/nextStep.c` shows the shared BST/SST display funnel;
    `fnBst` reaches `_showStep` after moving/defining the previous step, and
    `fnSst` reaches `showStep()` in non-PEM mode.
-6. `grep -n "screenStride\|screenData" src/c47/c47.h` shows both PC-build
-   framebuffer globals, and `grep -n "#define SCREEN_WIDTH\|#define SCREEN_HEIGHT\|#define OFF_PIXEL"
-   packages/forth-core/defines.h` shows `400`, `240`, and `0xe0e0e0`.
+6. `grep -n "lcd_clear_buf\|lcd_buffer_pixel_on" src/c47/hal/lcd.h`
+   shows both real LCD-buffer probes. `showString` draws into this buffer;
+   `screenData` is only the GTK presentation copy and is forbidden as the
+   acceptance oracle.
 7. `grep -n "test_decode_marker_directions\|test_accept_entry_state_roundtrip"
    packages/forth-core/test_dict_reloc.c` shows both tests registered, and
    `grep -n "test_accept_display_parity" packages/forth-core/test_dict_reloc.c`
@@ -139,9 +140,12 @@ already implemented and unit-pinned; there are no production changes:
   screen-coordinate literals come directly from `fnPem` and are normative.
 - The PEM surface must be tested as a surface, not by another direct
   `decodeOneStep` unit. Render fixed expected tokens through the standard font
-  into a clean PC framebuffer, capture their exact pixel rectangles, then call
-  the real `fnPem` and compare its three marker rectangles byte-for-byte.
-  This adds no production test hook.
+  into a clean calculator `lcd_buffer`, capture their exact pixel rectangles
+  with `lcd_buffer_pixel_on`, then call the real `fnPem` and compare its three
+  marker rectangles byte-for-byte. `screenData` is not the render buffer: it
+  is only the GTK presentation copy updated by `LCD_write_line`; sampling it
+  made the first packet revision blind under mutation. This corrected oracle
+  adds no production test hook.
 
 ### Files
 
@@ -196,10 +200,11 @@ bytes (`0x0C`). Global step/offset pairs are label `(1,+0)`, marker 1
 
 Add these two `static` helpers next to the new F15-3 test:
 
-1. `accept_copy_screen_rect(uint32_t *dst, int x, int y, int width, int height)`
-   copies each framebuffer row with `memcpy` from
-   `screenData + (y + row) * screenStride + x` to
-   `dst + row * width`. It performs no rendering and changes no globals.
+1. `accept_copy_screen_rect(uint8_t *dst, int x, int y, int width, int height)`
+   loops over every row and column and stores
+   `lcd_buffer_pixel_on(x + col, y + row) ? 1 : 0` at
+   `dst[row * width + col]`. It performs no rendering and changes no globals.
+   Do not read `screenData` here.
 2. `accept_marker_token_is(bool_t opening)` returns true only for the exact
    seven-byte NUL-terminated internal token currently in `tmpString`:
    opening requires bytes `0x80 0xBB` followed by `"FORTH"`; closing requires
@@ -219,15 +224,13 @@ At function entry save all display/program globals the three drives touch:
 `pemCursorIsZerothStep`, `calcMode`, `screenUpdatingMode`, `programRunStop`,
 `temporaryInformation`, `currentInputVariable`, `programListEnd`,
 `lastProgramListEnd`, `tam.mode`, `tam.function`, `FLAG_ALPHA`, and the whole
-`aimBuffer`. Also save the complete PC framebuffer
-`screenStride * SCREEN_HEIGHT` into heap storage. Restore every saved value and
-the framebuffer on every exit after `cleanupTestProgram()`.
+`aimBuffer`. Restore every saved value on every exit after
+`cleanupTestProgram()`.
 
-Require `screenData != NULL`, `screenStride >= SCREEN_WIDTH`, and every heap
-allocation below to succeed; otherwise print a focused FAIL, release anything
-already allocated, restore state, clean the fixture if written, and return 1.
-Use `OFF_PIXEL` to clear all `screenStride * SCREEN_HEIGHT` pixels before every
-expected or actual PEM rendering.
+Require every heap allocation below to succeed; otherwise print a focused
+FAIL, release anything already allocated, restore state, clean the fixture if
+written, and return 1. Call `lcd_clear_buf()` before every expected or actual
+PEM rendering; never clear or sample `screenData`.
 
 Report three independently accumulated subcases, one PASS line each. Do not
 return early after a surface mismatch; all surfaces must report before final
@@ -250,14 +253,14 @@ Fixed tokens and geometry:
 
 Compute opening/closing widths with
 `stringWidth(token, &standardFont, false, false)` and require them positive and
-within the framebuffer. Allocate three expected pixel rectangles (opening at
+within `SCREEN_WIDTH`. Allocate three `uint8_t` expected pixel rectangles (opening at
 `marker1Y`, closing at `marker2Y`, opening at `marker3Y`) and one actual
 scratch rectangle large enough for the greater width. For each expected
-rectangle separately: clear the framebuffer to `OFF_PIXEL`, call `showString`
-with the exact token/x/y and `vmNormal, false, false`, then copy its rectangle
-with `accept_copy_screen_rect`.
+rectangle separately: call `lcd_clear_buf()`, call `showString` with the exact
+token/x/y and `vmNormal, false, false`, then copy its rectangle with
+`accept_copy_screen_rect`.
 
-Clear again, write the exact fixture, and configure the listing:
+Call `lcd_clear_buf()` again, write the exact fixture, and configure the listing:
 `calcMode = CM_PEM`, `tam.mode = 0`, `tam.function = 0`, `aimBuffer[0] = 0`,
 `clearSystemFlag(FLAG_ALPHA)`, `pemCursorIsZerothStep = false`,
 `programRunStop = PGM_STOPPED`, `lastErrorCode = ERROR_NONE`;
@@ -266,9 +269,9 @@ call `fnGotoDot(2)` and require marker 1 / offset `+6`; set
 call the real `fnPem(NOPARAM)`.
 
 Copy and `memcmp` all three actual marker rectangles against their own
-expected rectangle and exact byte count (`width * rectHeight *
-sizeof(uint32_t)`). Require all three equal. Do not accept a hash, nonblank
-pixel count, `tmpString`, or direct `decodeOneStep` as a substitute for the
+expected rectangle and exact byte count (`width * rectHeight`, one byte per
+pixel). Require all three equal. Do not accept a hash, nonblank pixel count,
+`tmpString`, `screenData`, or direct `decodeOneStep` as a substitute for the
 PEM surface. PASS text:
 
 `[1] PASS: PEM listing renders opening/closing/opening markers`
@@ -328,7 +331,7 @@ reddens in the normal green runs, STOP (rule 6).
   code, or `forth_bridge.c` outside the one temporary parity mutation, which
   must be restored.
 - No console-stdout capture and no substitution of `listPrograms()` for the
-  actual PEM framebuffer surface.
+  actual PEM LCD-buffer surface. Never use `screenData` as the oracle.
 - No new production test hook, cached render state, second marker item, or
   saved direction byte.
 - No entry-state, glyph, literal-type, or XEQ-name work (F15-4/F15-5 own those
@@ -385,7 +388,7 @@ If any unrelated path is dirty, STOP and report instead of committing.
 
 Report the new test's three PASS lines, the mutation's RED symptoms for all
 three surfaces, the final gate and arena lines, commit hash, and anything
-surprising — explicitly including any fixture offset, framebuffer coordinate,
+surprising — explicitly including any fixture offset, LCD-buffer coordinate,
 BST/SST movement, or shared-render-funnel assertion in this packet that did
 not match observed behavior (that is architect feedback, not something to
 adapt around).
