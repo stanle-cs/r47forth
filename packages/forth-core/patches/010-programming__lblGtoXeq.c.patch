@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/lblGtoXeq.c b/src/c47/programming/lblGtoXeq.c
-index 88523f072b5ce0ee346b1d78ad1b2851913643dd..48115dde55092b4406b18976141e6e37e2ed5e0e 100644
+index 88523f072b5ce0ee346b1d78ad1b2851913643dd..a92946f1bd783af3af888fb9a5ee7a10ccd53f8d 100644
 --- a/src/c47/programming/lblGtoXeq.c
 +++ b/src/c47/programming/lblGtoXeq.c
 @@ -7,6 +7,7 @@
@@ -10,15 +10,16 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..48115dde55092b4406b18976141e6e37
  
  // Drop stale interrupt keys at top-level program start (a leftover key prior to pgm run can trip us). 1 = on, 0 = off.
  #define CLEAR_KEYS_ON_PGM_START 0
-@@ -165,6 +166,7 @@ void fnGotoDot(uint16_t globalStepNumber) {
+@@ -164,7 +165,7 @@ void fnGotoDot(uint16_t globalStepNumber) {
  
  
- void fnExecute(uint16_t label) {
-+  if(programRunStop != PGM_RUNNING) { /* §9.3 bump site A: interactive XEQ */ forthRunGenBump(); }
+ 
+-void fnExecute(uint16_t label) {
++ void fnExecute(uint16_t label) {
    if(programRunStop == PGM_RUNNING) {
      subroutineLevelHeader_t *oldCurrentSubroutineLevelData = currentSubroutineLevelData;
      allSubroutineLevels.numberOfSubroutineLevels += 1;
-@@ -372,10 +374,46 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
+@@ -372,10 +373,46 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
        }
        else if((opParam == STRING_LABEL_VARIABLE) || (opParam == LOCAL_LABEL_VARIABLE)) {
          getStringLabelOrVariableName(paramAddress);
@@ -67,7 +68,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..48115dde55092b4406b18976141e6e37
          else {
            displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-@@ -851,6 +889,14 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -851,6 +888,14 @@ int16_t executeOneStep(uint8_t *step) {
                fn42Append(NOPARAM);
              }
            }
@@ -82,15 +83,15 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..48115dde55092b4406b18976141e6e37
            else {  // REM
                    // just ignore it
            }
-@@ -887,6 +933,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
+@@ -887,6 +932,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
        clearKeyBuffer();
      }
    #endif
-+  if(!nestedEngine && !singleStep && menuLabel != INVALID_VARIABLE) { /* §9.3 bump site B: menu-key start */ forthRunGenBump(); }
++  if(!nestedEngine) { /* F1-2: sole lifetime signal — every top-level engine entry (XEQ, R/S, SST, menu, solver). forthRunGenBump() defers while a Forth frame is active. */ forthRunGenBump(); }
    lastErrorCode = ERROR_NONE;
    hourGlassIconEnabled = true;
    programRunStop = PGM_RUNNING;
-@@ -1016,7 +1063,7 @@ void fnCheckLabel(uint16_t label) {
+@@ -1016,7 +1062,7 @@ void fnCheckLabel(uint16_t label) {
    if(dynamicMenuItem >= 0) {
      label = findNamedLabel(dynmenuGetLabel(dynamicMenuItem),ALL_LABELS);
    }

@@ -165,8 +165,7 @@ void fnGotoDot(uint16_t globalStepNumber) {
 
 
 
-void fnExecute(uint16_t label) {
-  if(programRunStop != PGM_RUNNING) { /* §9.3 bump site A: interactive XEQ */ forthRunGenBump(); }
+ void fnExecute(uint16_t label) {
   if(programRunStop == PGM_RUNNING) {
     subroutineLevelHeader_t *oldCurrentSubroutineLevelData = currentSubroutineLevelData;
     allSubroutineLevels.numberOfSubroutineLevels += 1;
@@ -933,7 +932,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
       clearKeyBuffer();
     }
   #endif
-  if(!nestedEngine && !singleStep && menuLabel != INVALID_VARIABLE) { /* §9.3 bump site B: menu-key start */ forthRunGenBump(); }
+  if(!nestedEngine) { /* F1-2: sole lifetime signal — every top-level engine entry (XEQ, R/S, SST, menu, solver). forthRunGenBump() defers while a Forth frame is active. */ forthRunGenBump(); }
   lastErrorCode = ERROR_NONE;
   hourGlassIconEnabled = true;
   programRunStop = PGM_RUNNING;

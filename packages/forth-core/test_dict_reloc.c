@@ -3239,6 +3239,173 @@ static int test_pending_reset_lifetime(void)
   return fail;
 }
 
+/* test_run_entry_lifetime_signaling
+ * F1-2: Every top-level engine entry signals a fresh Forth lifetime.
+ * Subcase 1: Interactive XEQ start is a fresh lifetime.
+ * Subcase 2: Run-mode SST is a fresh lifetime (R4 ruling 3).
+ * Subcase 3: A nested engine entry preserves the active lifetime. */
+static int test_run_entry_lifetime_signaling(void)
+{
+  uint8_t prog[] = {
+    0x01, 0xFD, 0x03, 'F', '2', 'A',            /* step 1: LBL 'F2A' */
+    0x8B, 0x1A, 0xFD, 0x01, '1',                /* step 2: ITM_FORTH "1" */
+    0x04                                        /* step 3: RTN */
+  };
+  uint16_t idx;
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+
+  calcRegister_t lbl = findNamedLabel("F2A", GLOBAL_LABELS);
+  if (lbl == INVALID_VARIABLE) {
+    printf("    FAIL: findNamedLabel(\"F2A\") returned INVALID_VARIABLE\n");
+    forthDictClear();
+    cleanupTestProgram();
+    return 1;
+  }
+
+  /* Subcase 1: Interactive XEQ start is a fresh lifetime */
+  {
+    programRunStop = PGM_STOPPED;
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    fnExecute(lbl);
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: baseline XEQ error %d\n", lastErrorCode);
+      fail = 1;
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": F2X 7 ;");
+    if (lastErrorCode != ERROR_NONE || !forthFindColon("F2X", &idx)) {
+      printf("    [1] FAIL: F2X setup failed\n");
+      fail = 1;
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    fnExecute(lbl);
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: second XEQ error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(1)) {
+      printf("    [1] FAIL: X != 1 after second XEQ\n");
+      fail = 1;
+    }
+    else if (forthFindColon("F2X", &idx)) {
+      printf("    [1] FAIL: F2X survived second XEQ start (not a fresh lifetime)\n");
+      fail = 1;
+    }
+    else {
+      printf("    [1] PASS: interactive XEQ start is a fresh lifetime\n");
+    }
+  }
+
+  /* Subcase 2: Run-mode SST is a fresh lifetime */
+  {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": F2S 8 ;");
+    if (lastErrorCode != ERROR_NONE || !forthFindColon("F2S", &idx)) {
+      printf("    [2] FAIL: F2S setup failed\n");
+      fail = 1;
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    dynamicMenuItem = -1;
+    fnGotoDot(2);
+
+    if (currentStep != beginOfProgramMemory + 6) {
+      printf("    [2] FAIL: currentStep != beginOfProgramMemory + 6\n");
+      fail = 1;
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    programRunStop = PGM_STOPPED;
+    lastErrorCode = ERROR_NONE;
+    runProgram(true, INVALID_VARIABLE);
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [2] FAIL: SST drive error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(1)) {
+      printf("    [2] FAIL: X != 1 after SST\n");
+      fail = 1;
+    }
+    else if (forthFindColon("F2S", &idx)) {
+      printf("    [2] FAIL: F2S survived SST (not a fresh lifetime)\n");
+      fail = 1;
+    }
+    else {
+      printf("    [2] PASS: run-mode SST is a fresh lifetime\n");
+    }
+  }
+
+  /* Subcase 3: A nested engine entry preserves the active lifetime */
+  {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": F2N 9 ;");
+    if (lastErrorCode != ERROR_NONE || !forthFindColon("F2N", &idx)) {
+      printf("    [3] FAIL: F2N setup failed\n");
+      fail = 1;
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    dynamicMenuItem = -1;
+    fnGotoDot(2);
+
+    programRunStop = PGM_RUNNING;
+    lastErrorCode = ERROR_NONE;
+    runProgram(false, INVALID_VARIABLE);
+    programRunStop = savedRS;
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: nested drive error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(1)) {
+      printf("    [3] FAIL: X != 1 after nested drive\n");
+      fail = 1;
+    }
+    else if (!forthFindColon("F2N", &idx)) {
+      printf("    [3] FAIL: F2N cleared by nested entry (should be preserved)\n");
+      fail = 1;
+    }
+    else {
+      printf("    [3] PASS: nested entry preserves active lifetime\n");
+    }
+  }
+
+  programRunStop = savedRS;
+  forthDictClear();
+  cleanupTestProgram();
+  return fail;
+}
+
 /* test_prescan_forward_reference
  * T2.1: A definition in step 2 can be called from step 1, because the
  * pre-scan compiles all steps before execution.
@@ -7760,6 +7927,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_pending_reset_lifetime...\n");
   fail |= test_pending_reset_lifetime();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_run_entry_lifetime_signaling...\n");
+  fail |= test_run_entry_lifetime_signaling();
   forthDictClear();
 
   /* P2: Pillar 2 — pre-scan contract tests (T2.1-T2.4) */
