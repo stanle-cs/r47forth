@@ -4611,6 +4611,317 @@ static int test_validate_restored_bodies(void)
   return fail;
 }
 
+/* test_accept_run_lifecycle
+ * F15-1: End-to-end acceptance of the F1 lifecycle through the real XEQ/R/S
+ * engine.  Five subcases covering §8.9 items 1, 7(a,b), 9(a,b). */
+static int test_accept_run_lifecycle(void)
+{
+  uint16_t idx;
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+
+  /* ---- Subcase 1: §8.9 item 1 — define-and-use in one program ---- */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'F', '5', 'A',
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ',
+      'D', 'U', 'P', ' ', '*', ' ', ';',
+      0x8B, 0x1A, 0xFD, 0x04, '3', ' ', 'S', 'Q',
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x04
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [1] FAIL: writeTestProgram failed\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    calcRegister_t lbl = findNamedLabel("F5A", GLOBAL_LABELS);
+    if (lbl == INVALID_VARIABLE) {
+      printf("    [1] FAIL: findNamedLabel(\"F5A\") returned INVALID_VARIABLE\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    programRunStop = PGM_STOPPED;
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    fnExecute(lbl);
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(9)) {
+      printf("    [1] FAIL: X != 9 (got %s)\n",
+             getRegisterDataType(REGISTER_X) == dtLongInteger ? "longint(!=9)" : "not longint");
+      fail = 1;
+    }
+    else {
+      printf("    [1] PASS: define-and-use in one program yields X=9\n");
+    }
+
+    /* Record count for subcase 2; keep program in place */
+  }
+
+  /* ---- Subcase 2: §8.9 item 9(a) — second run identical, no accumulation ---- */
+  {
+    uint16_t count1 = fdict.count;
+
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    calcRegister_t lbl = findNamedLabel("F5A", GLOBAL_LABELS);
+    /* lbl already resolved above, but re-resolve for discipline */
+    if (lbl == INVALID_VARIABLE) {
+      printf("    [2] FAIL: findNamedLabel(\"F5A\") returned INVALID_VARIABLE\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    programRunStop = PGM_STOPPED;
+    fnExecute(lbl);
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [2] FAIL: error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(9)) {
+      printf("    [2] FAIL: X != 9 on second run\n");
+      fail = 1;
+    }
+    else if (fdict.count != count1) {
+      printf("    [2] FAIL: fdict.count changed (%u -> %u; expected %u)\n",
+             count1, fdict.count, count1);
+      fail = 1;
+    }
+    else {
+      printf("    [2] PASS: second run identical, no accumulation\n");
+    }
+
+    forthDictClear();
+    cleanupTestProgram();
+  }
+
+  /* ---- Subcase 3: §8.9 item 9(b) — R/S resume is a fresh lifetime ---- */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'F', '5', 'B',
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ',
+      'D', 'U', 'P', ' ', '*', ' ', ';',
+      0x46,
+      0x8B, 0x1A, 0xFD, 0x04, '3', ' ', 'S', 'Q',
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x04
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [3] FAIL: writeTestProgram failed\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    calcRegister_t lbl = findNamedLabel("F5B", GLOBAL_LABELS);
+    if (lbl == INVALID_VARIABLE) {
+      printf("    [3] FAIL: findNamedLabel(\"F5B\") returned INVALID_VARIABLE\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    programRunStop = PGM_STOPPED;
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    fnExecute(lbl);
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: initial run error %d\n", lastErrorCode);
+      fail = 1;
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+    else if (programRunStop != PGM_WAITING) {
+      printf("    [3] FAIL: STOP did not halt (programRunStop=%d, expected PGM_WAITING=2)\n", programRunStop);
+      fail = 1;
+    }
+    else {
+      /* During pause: define PZW interactively */
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret(": PZW 5 ;");
+      if (lastErrorCode != ERROR_NONE || !forthFindColon("PZW", &idx)) {
+        printf("    [3] FAIL: PZW setup during pause failed\n");
+        fail = 1;
+        programRunStop = savedRS;
+        forthDictClear();
+        cleanupTestProgram();
+        return 1;
+      }
+
+      /* Resume: fnRunProgram sets dynamicMenuItem itself */
+      lastErrorCode = ERROR_NONE;
+      fnRunProgram(0);
+
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [3] FAIL: resume error %d\n", lastErrorCode);
+        fail = 1;
+      }
+      else if (!x_is_longint(9)) {
+        printf("    [3] FAIL: X != 9 after resume (SQ not re-derived)\n");
+        fail = 1;
+      }
+      else if (!forthFindColon("SQ", &idx)) {
+        printf("    [3] FAIL: SQ not found after resume\n");
+        fail = 1;
+      }
+      else if (forthFindColon("PZW", &idx)) {
+        printf("    [3] FAIL: PZW survived resume (not a fresh lifetime)\n");
+        fail = 1;
+      }
+      else {
+        printf("    [3] PASS: R/S resume re-derives program, drops interactive word\n");
+      }
+    }
+
+    forthDictClear();
+    cleanupTestProgram();
+  }
+
+  /* ---- Subcase 4: §8.9 item 7(a) — unterminated definition halts, no smudge ---- */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'F', '5', 'C',
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x8B, 0x1A, 0xFD, 0x0A, ':', ' ', 'S', 'Q', ' ',
+      'D', 'U', 'P', ' ', '*',
+      0x8B, 0x1A, 0xFD, 0x01, '7',
+      0x04
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [4] FAIL: writeTestProgram failed\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    calcRegister_t lbl = findNamedLabel("F5C", GLOBAL_LABELS);
+    if (lbl == INVALID_VARIABLE) {
+      printf("    [4] FAIL: findNamedLabel(\"F5C\") returned INVALID_VARIABLE\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    /* Baseline: push 42 */
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("42");
+    if (lastErrorCode != ERROR_NONE || !x_is_longint(42)) {
+      printf("    [4] FAIL: baseline 42 setup failed\n");
+      fail = 1;
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    programRunStop = PGM_STOPPED;
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    fnExecute(lbl);
+
+    if (lastErrorCode != ERROR_INVALID_NAME) {
+      printf("    [4] FAIL: expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(42)) {
+      printf("    [4] FAIL: X != 42 (later step executed)\n");
+      fail = 1;
+    }
+    else {
+      /* Verify no smudge: define SQ cleanly */
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret(": SQ 2 ;");
+      if (lastErrorCode != ERROR_NONE || !forthFindColon("SQ", &idx)) {
+        printf("    [4] FAIL: SQ re-define after aborted def failed\n");
+        fail = 1;
+      }
+      else {
+        printf("    [4] PASS: unterminated def halts, no smudged leak\n");
+      }
+    }
+
+    forthDictClear();
+    cleanupTestProgram();
+  }
+
+  /* ---- Subcase 5: §8.9 item 7(b) — undefined word halts at its step ---- */
+  {
+    uint8_t prog[] = {
+      0x01, 0xFD, 0x03, 'F', '5', 'D',
+      0x8B, 0x1A, 0xFD, 0x00,
+      0x8B, 0x1A, 0xFD, 0x05, '3', ' ', 'S', 'Q', 'X',
+      0x8B, 0x1A, 0xFD, 0x01, '7',
+      0x04
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [5] FAIL: writeTestProgram failed\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    calcRegister_t lbl = findNamedLabel("F5D", GLOBAL_LABELS);
+    if (lbl == INVALID_VARIABLE) {
+      printf("    [5] FAIL: findNamedLabel(\"F5D\") returned INVALID_VARIABLE\n");
+      programRunStop = savedRS;
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    programRunStop = PGM_STOPPED;
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    fnExecute(lbl);
+
+    if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+      printf("    [5] FAIL: expected ERROR_FUNCTION_NOT_FOUND, got %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(3)) {
+      printf("    [5] FAIL: X != 3 (3 was pushed, SQX failed, run halted)\n");
+      fail = 1;
+    }
+    else {
+      printf("    [5] PASS: undefined word halts at its step, later step skipped\n");
+    }
+
+    lastErrorCode = ERROR_NONE;
+    forthDictClear();
+    cleanupTestProgram();
+  }
+
+  programRunStop = savedRS;
+  return fail;
+}
+
 /* test_dict_name_by_index
  * Mutation: off-by-one in count-1-n walk (returns wrong word's name). */
 static int test_dict_name_by_index(void)
@@ -8550,6 +8861,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_validate_restored_bodies...\n");
   fail |= test_validate_restored_bodies();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_accept_run_lifecycle...\n");
+  fail |= test_accept_run_lifecycle();
   forthDictClear();
 
   printf("  [DEBUG] running test_dict_name_by_index...\n");
