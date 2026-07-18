@@ -138,6 +138,13 @@ void forthProgramStep(const uint8_t *payload);
 /* Run-generation (§9.3) */
 void forthRunGenBump(void);
 
+/* Active-frame predicate (§9.3, F1-1) */
+bool forthInnerIsActive(void);
+
+#if defined(PC_BUILD)
+void forthSetTestInnerDepth(uint8_t depth);
+#endif
+
 /* Index → name reverse lookup (for FCALL redirect, C6) */
 bool forthDictNameByIndex(uint16_t idx, char *buf, int bufSize);
 

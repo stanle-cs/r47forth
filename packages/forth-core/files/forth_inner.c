@@ -27,6 +27,17 @@ static uint16_t rstack[FORTH_RSTACK_DEPTH];
 static uint8_t  rsp;
 static uint8_t forthDepth = 0;   /* nested forthInner invocations */
 
+/* Active-frame predicate (§9.3, F1-1) */
+bool forthInnerIsActive(void) {
+  return forthDepth != 0;
+}
+
+#if defined(PC_BUILD)
+void forthSetTestInnerDepth(uint8_t depth) {
+  forthDepth = depth;
+}
+#endif
+
 /* ---- Push helpers (stack discipline per §3.2) ---- */
 
 void forthPushReal34(const real34_t *r)

@@ -37,13 +37,17 @@ typedef struct {
 static forthOuterCtx_t *forthOuterCur   = NULL;
 static uint8_t          forthOuterDepth = 0;
 
-/* ---- §9.3 Run-generation counter (P-5) ---- */
+/* ---- §9.3 Run-generation counter (P-5, F1-1: pending-reset truth) ---- */
 
 static uint16_t forthRunGeneration   = 0;
 static uint16_t forthResetGeneration = 0;
+static bool     forthResetPending    = false;
 
 void forthRunGenBump(void) {
-  forthRunGeneration++;
+  forthRunGeneration++;                 /* diagnostic only; wrapping is fine */
+  if (!forthInnerIsActive()) {
+    forthResetPending = true;
+  }
 }
 
 /* §9.2 first-touch pre-scan tracking (reset with the dictionary) */
@@ -52,11 +56,13 @@ static const uint8_t *forthScannedProgs[FORTH_SCAN_MAX];
 static uint8_t        forthScannedCount = 0;
 
 static void forthRunGenCheckReset(void) {
-  if (forthResetGeneration != forthRunGeneration) {
-    forthDictClear();
-    forthScannedCount = 0;
-    forthResetGeneration = forthRunGeneration;
+  if (!forthResetPending || forthInnerIsActive()) {
+    return;
   }
+  forthDictClear();
+  forthScannedCount = 0;
+  forthResetGeneration = forthRunGeneration;  /* diagnostic sample only */
+  forthResetPending = false;                  /* consume only after clear */
 }
 
 /* ---- §3.3.3 Tokenizer state (C-6) ---- */

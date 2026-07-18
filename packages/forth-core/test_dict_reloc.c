@@ -3074,6 +3074,171 @@ static int test_program_step_gen_reset(void)
   return fail;
 }
 
+/* test_pending_reset_lifetime
+ * F1-1: pending-reset flag is truth; active frames defer invalidation.
+ * Subcase 1: 16-bit wrap cannot cancel a reset (counter equality is NOT truth).
+ * Subcase 2: nested launch (active frame) does not request a generation.
+ * Subcase 3: pending reset waits for a safe entry (no active frame). */
+static int test_pending_reset_lifetime(void)
+{
+  /* One-step program: ITM_FORTH opcode + length-prefixed source "0" */
+  uint8_t prog[] = {
+    0x8B, 0x1A, 0xFD, 1, '0'
+  };
+  uint16_t idx;
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+
+  if (!writeTestProgram(prog, sizeof(prog))) {
+    printf("    FAIL: writeTestProgram failed\n");
+    return 1;
+  }
+  const uint8_t *payload = beginOfProgramMemory + 3;
+
+  /* Subcase 1: 16-bit wrap cannot cancel a reset */
+  {
+    /* Consume any prior event with a baseline call */
+    lastErrorCode = ERROR_NONE;
+    programRunStop = PGM_RUNNING;
+    forthProgramStep(payload);
+    programRunStop = savedRS;
+
+    /* Define interactive word */
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": WRAP 1 ;");
+    if (lastErrorCode != ERROR_NONE || !forthFindColon("WRAP", &idx)) {
+      printf("  [1] FAIL: WRAP setup failed\n");
+      fail = 1;
+      forthSetTestInnerDepth(0);
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    /* 65536 bumps: counter wraps to same value; pending-reset survives */
+    forthSetTestInnerDepth(0);
+    for (uint32_t i = 0; i < 65536u; i++) {
+      forthRunGenBump();
+    }
+
+    /* Enter real Forth program step */
+    lastErrorCode = ERROR_NONE;
+    programRunStop = PGM_RUNNING;
+    forthProgramStep(payload);
+    programRunStop = savedRS;
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("  [1] FAIL: program step error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (forthFindColon("WRAP", &idx)) {
+      printf("  [1] FAIL: WRAP survived 65536-bump wrap (counter equality is truth — WRONG)\n");
+      fail = 1;
+    }
+    else {
+      printf("  [1] PASS: 16-bit wrap cannot cancel a reset; WRAP cleared\n");
+    }
+  }
+
+  /* Subcase 2: nested launch does not request a generation */
+  {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": KEEP 2 ;");
+    if (lastErrorCode != ERROR_NONE || !forthFindColon("KEEP", &idx)) {
+      printf("  [2] FAIL: KEEP setup failed\n");
+      fail = 1;
+      forthSetTestInnerDepth(0);
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    /* Bump while active frame */
+    forthSetTestInnerDepth(1);
+    forthRunGenBump();
+    forthSetTestInnerDepth(0);
+
+    /* Enter real program step */
+    lastErrorCode = ERROR_NONE;
+    programRunStop = PGM_RUNNING;
+    forthProgramStep(payload);
+    programRunStop = savedRS;
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("  [2] FAIL: program step error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!forthFindColon("KEEP", &idx)) {
+      printf("  [2] FAIL: KEEP cleared by active-frame bump\n");
+      fail = 1;
+    }
+    else {
+      printf("  [2] PASS: nested launch does not request a generation; KEEP retained\n");
+    }
+  }
+
+  /* Subcase 3: pending reset waits for a safe entry */
+  {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": HOLD 3 ;");
+    if (lastErrorCode != ERROR_NONE || !forthFindColon("HOLD", &idx)) {
+      printf("  [3] FAIL: HOLD setup failed\n");
+      fail = 1;
+      forthSetTestInnerDepth(0);
+      forthDictClear();
+      cleanupTestProgram();
+      return 1;
+    }
+
+    /* Request reset at depth 0 */
+    forthSetTestInnerDepth(0);
+    forthRunGenBump();
+
+    /* Enter with active frame: reset deferred, HOLD survives */
+    forthSetTestInnerDepth(1);
+    lastErrorCode = ERROR_NONE;
+    programRunStop = PGM_RUNNING;
+    forthProgramStep(payload);
+    programRunStop = savedRS;
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("  [3] FAIL: guarded program step error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!forthFindColon("HOLD", &idx)) {
+      printf("  [3] FAIL: HOLD cleared during guarded entry\n");
+      fail = 1;
+    }
+    else {
+      printf("  [3a] PASS: pending reset deferred by active frame; HOLD retained\n");
+    }
+
+    /* Enter again without active frame: reset consumed, HOLD cleared */
+    forthSetTestInnerDepth(0);
+    lastErrorCode = ERROR_NONE;
+    programRunStop = PGM_RUNNING;
+    forthProgramStep(payload);
+    programRunStop = savedRS;
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("  [3b] FAIL: safe-entry program step error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (forthFindColon("HOLD", &idx)) {
+      printf("  [3b] FAIL: HOLD survived safe entry (reset not consumed)\n");
+      fail = 1;
+    }
+    else {
+      printf("  [3b] PASS: safe entry consumed pending reset; HOLD cleared\n");
+    }
+  }
+
+  forthSetTestInnerDepth(0);
+  forthDictClear();
+  cleanupTestProgram();
+  return fail;
+}
+
 /* test_prescan_forward_reference
  * T2.1: A definition in step 2 can be called from step 1, because the
  * pre-scan compiles all steps before execution.
@@ -7591,6 +7756,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_program_step_gen_reset...\n");
   fail |= test_program_step_gen_reset();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_pending_reset_lifetime...\n");
+  fail |= test_pending_reset_lifetime();
   forthDictClear();
 
   /* P2: Pillar 2 — pre-scan contract tests (T2.1-T2.4) */
