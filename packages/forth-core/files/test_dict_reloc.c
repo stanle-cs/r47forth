@@ -9758,6 +9758,9 @@ static int test_param_core_bounded_names(void);
 /* F2-3: shared direct dispatch parity test */
 static int test_c47_param_shared_dispatch(void);
 
+/* F2-4: native/Forth parameter parity acceptance sweep */
+static int test_param_parity_sweep(void);
+
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
 
@@ -10427,6 +10430,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_c47_param_shared_dispatch...\n");
   fail |= test_c47_param_shared_dispatch();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_param_parity_sweep...\n");
+  fail |= test_param_parity_sweep();
   forthDictClear();
 
   /* COMMIT 4: executeOneStep ITM_FORTH arm + bump sites */
@@ -12153,6 +12160,531 @@ static int test_c47_param_shared_dispatch(void)
 
       forthDictClear();
     }
+  }
+
+  programRunStop = savedRS;
+  return fail;
+}
+
+/* test_param_parity_sweep
+ * F2-4: pin native/Forth parameter parity across all PTP classes Forth
+ * can carry.  Four independently reported subcases. */
+static int test_param_parity_sweep(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+
+  /* ---- Subcase 1: NUMBER_8 in-range + out-of-range parity ---- */
+  {
+    uint16_t sdlClass = (uint16_t)(indexOfItems[ITM_SDL].status & PTP_STATUS);
+    if (sdlClass != PTP_NUMBER_8) {
+      printf("    [1] CONFIG FAIL: ITM_SDL ptpClass=0x%04X (expected PTP_NUMBER_8=0x%04X)\n",
+             sdlClass, PTP_NUMBER_8);
+      programRunStop = savedRS;
+      return 1;
+    }
+
+    uint16_t sdlMax = (uint16_t)(indexOfItems[ITM_SDL].tamMinMax & TAM_MAX_MASK);
+    uint16_t sdlOutOfRange = sdlMax + 1;
+    int subFail = 0;
+
+    /* --- 1a: in-range (param == max) --- */
+    {
+      uint8_t prog[] = {
+        0x01, 0xFD, 0x03, 'F', '4', 'A',   /* LBL 'F4A' */
+        0x81, 0xA7, (uint8_t)sdlMax,         /* SDL <max>  */
+        0x04                                 /* RTN       */
+      };
+
+      if (!writeTestProgram(prog, sizeof(prog))) {
+        printf("    [1a] FAIL: writeTestProgram failed\n");
+        programRunStop = savedRS;
+        return 1;
+      }
+
+      calcRegister_t lbl = findNamedLabel("F4A", GLOBAL_LABELS);
+      if (lbl == INVALID_VARIABLE) {
+        printf("    [1a] FAIL: findNamedLabel F4A failed\n");
+        forthDictClear();
+        cleanupTestProgram();
+        programRunStop = savedRS;
+        return 1;
+      }
+
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("1");
+      if (lastErrorCode != ERROR_NONE || !x_is_longint(1)) {
+        printf("    [1a] FAIL: native setup X=1 failed\n");
+        subFail = 1;
+      }
+
+      if (!subFail) {
+        programRunStop = PGM_STOPPED;
+        lastErrorCode = ERROR_NONE;
+        dynamicMenuItem = -1;
+        fnExecute(lbl);
+
+        int32_t nativeX = 0;
+        int nativeErr = lastErrorCode;
+        {
+          longInteger_t li;
+          longIntegerInit(li);
+          convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+          longIntegerToInt32(li, nativeX);
+          longIntegerFree(li);
+        }
+
+        /* Forth half */
+        forthDictClear();
+        cleanupTestProgram();
+
+        uint16_t w = begin_word("S1A", 3);
+        if (w == FORTH_NULL) {
+          printf("    [1a] FAIL: begin_word S1A failed\n");
+          programRunStop = savedRS;
+          return 1;
+        }
+        forthDictEmit(T_C47);
+        { uint16_t itemId = ITM_SDL; forthDictEmitBytes(&itemId, 2); }
+        { uint16_t p = sdlMax; forthDictEmitBytes(&p, 2); }
+        end_word(w);
+
+        lastErrorCode = ERROR_NONE;
+        forthOuterInterpret("1");
+        if (lastErrorCode != ERROR_NONE || !x_is_longint(1)) {
+          printf("    [1a] FAIL: forth setup X=1 failed\n");
+          subFail = 1;
+        }
+
+        if (!subFail) {
+          bool err = run_word("S1A");
+          int32_t forthX = 0;
+          int forthErr = lastErrorCode;
+          if (!err) {
+            longInteger_t li;
+            longIntegerInit(li);
+            convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+            longIntegerToInt32(li, forthX);
+            longIntegerFree(li);
+          }
+
+          if (nativeX != forthX) {
+            printf("    [1a] FAIL: in-range X mismatch native=%d forth=%d\n", nativeX, forthX);
+            subFail = 1;
+          } else if (nativeErr != forthErr) {
+            printf("    [1a] FAIL: in-range error mismatch native=%d forth=%d\n", nativeErr, forthErr);
+            subFail = 1;
+          }
+        }
+      }
+
+      forthDictClear();
+      cleanupTestProgram();
+    }
+
+    /* --- 1b: out-of-range (param == max+1) --- */
+    {
+      if (sdlOutOfRange > 255) {
+        printf("    [1b] CONFIG FAIL: out-of-range %u exceeds 255\n", sdlOutOfRange);
+        subFail = 1;
+      }
+
+      if (!subFail) {
+        uint8_t prog[] = {
+          0x01, 0xFD, 0x03, 'F', '4', 'B',   /* LBL 'F4B' */
+          0x81, 0xA7, (uint8_t)sdlOutOfRange, /* SDL <oor> */
+          0x04                                 /* RTN       */
+        };
+
+        if (!writeTestProgram(prog, sizeof(prog))) {
+          printf("    [1b] FAIL: writeTestProgram failed\n");
+          programRunStop = savedRS;
+          return 1;
+        }
+
+        calcRegister_t lbl = findNamedLabel("F4B", GLOBAL_LABELS);
+        if (lbl == INVALID_VARIABLE) {
+          printf("    [1b] FAIL: findNamedLabel F4B failed\n");
+          forthDictClear();
+          cleanupTestProgram();
+          programRunStop = savedRS;
+          return 1;
+        }
+
+        lastErrorCode = ERROR_NONE;
+        forthOuterInterpret("42");
+        if (lastErrorCode != ERROR_NONE || !x_is_longint(42)) {
+          printf("    [1b] FAIL: native setup X=42 failed\n");
+          subFail = 1;
+        }
+
+        if (!subFail) {
+          programRunStop = PGM_STOPPED;
+          lastErrorCode = ERROR_NONE;
+          dynamicMenuItem = -1;
+          fnExecute(lbl);
+
+          int32_t nativeX = 0;
+          int nativeErr = lastErrorCode;
+          {
+            longInteger_t li;
+            longIntegerInit(li);
+            convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+            longIntegerToInt32(li, nativeX);
+            longIntegerFree(li);
+          }
+
+          /* Forth half */
+          forthDictClear();
+          cleanupTestProgram();
+
+          uint16_t w = begin_word("S1B", 3);
+          if (w == FORTH_NULL) {
+            printf("    [1b] FAIL: begin_word S1B failed\n");
+            programRunStop = savedRS;
+            return 1;
+          }
+          forthDictEmit(T_C47);
+          { uint16_t itemId = ITM_SDL; forthDictEmitBytes(&itemId, 2); }
+          { uint16_t p = sdlOutOfRange; forthDictEmitBytes(&p, 2); }
+          end_word(w);
+
+          lastErrorCode = ERROR_NONE;
+          forthOuterInterpret("42");
+          if (lastErrorCode != ERROR_NONE || !x_is_longint(42)) {
+            printf("    [1b] FAIL: forth setup X=42 failed\n");
+            subFail = 1;
+          }
+
+          if (!subFail) {
+            bool err = run_word("S1B");
+            int32_t forthX = 0;
+            int forthErr = lastErrorCode;
+            {
+              longInteger_t li;
+              longIntegerInit(li);
+              convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+              longIntegerToInt32(li, forthX);
+              longIntegerFree(li);
+            }
+
+            if (nativeX != forthX) {
+              printf("    [1b] FAIL: out-of-range X mismatch native=%d forth=%d\n", nativeX, forthX);
+              subFail = 1;
+            } else if (nativeErr != forthErr) {
+              printf("    [1b] FAIL: out-of-range error mismatch native=%d forth=%d\n", nativeErr, forthErr);
+              subFail = 1;
+            }
+          }
+        }
+      }
+
+      forthDictClear();
+      cleanupTestProgram();
+    }
+
+    if (!subFail) {
+      printf("    [1] PASS: NUMBER_8 in-range (param=%u) + out-of-range (param=%u) parity pinned\n",
+             sdlMax, sdlOutOfRange);
+    } else {
+      fail = 1;
+    }
+  }
+
+  /* ---- Subcase 2: NUMBER_16 oldParam16 parity ---- */
+  {
+    uint16_t old16Id = LAST_ITEM;  /* sentinel: not found */
+    int subFail = 0;
+
+    for (uint16_t i = 1; i < LAST_ITEM && !subFail; i++) {
+      uint16_t ptp = (uint16_t)(indexOfItems[i].status & PTP_STATUS);
+      if (ptp == PTP_NUMBER_16 && isFunctionOldParam16(i)) {
+        old16Id = i;
+      }
+    }
+
+    if (old16Id >= LAST_ITEM) {
+      printf("    [2] CONFIG FAIL: no PTP_NUMBER_16 + isFunctionOldParam16 item found\n");
+      fail = 1;
+      programRunStop = savedRS;
+      return 1;
+    }
+
+    printf("    [2] discovered oldParam16 item: id=%u (%s)\n",
+           old16Id, indexOfItems[old16Id].itemCatalogName);
+
+    {
+      uint16_t param = 5;
+      uint8_t hi = (uint8_t)(old16Id >> 8);
+      uint8_t lo = (uint8_t)(old16Id & 0xFF);
+
+      /* Native: opcode bytes + LE param (low, high) */
+      uint8_t prog[8];
+      uint16_t progLen;
+      if (old16Id < 128) {
+        prog[0] = (uint8_t)old16Id;
+        prog[1] = (uint8_t)(param & 0xFF);
+        prog[2] = (uint8_t)(param >> 8);
+        progLen = 3;
+      } else {
+        prog[0] = 0x80 | (hi & 0x7F);
+        prog[1] = lo;
+        prog[2] = (uint8_t)(param & 0xFF);
+        prog[3] = (uint8_t)(param >> 8);
+        progLen = 4;
+      }
+      /* Prepend LBL 'F4C', append RTN */
+      uint8_t fullProg[20];
+      uint16_t fullLen = 0;
+      fullProg[fullLen++] = 0x01;
+      fullProg[fullLen++] = 0xFD;
+      fullProg[fullLen++] = 0x03;
+      fullProg[fullLen++] = 'F';
+      fullProg[fullLen++] = '4';
+      fullProg[fullLen++] = 'C';
+      for (uint16_t k = 0; k < progLen; k++) fullProg[fullLen++] = prog[k];
+      fullProg[fullLen++] = 0x04;
+
+      if (!writeTestProgram(fullProg, fullLen)) {
+        printf("    [2] FAIL: writeTestProgram failed\n");
+        programRunStop = savedRS;
+        return 1;
+      }
+
+      calcRegister_t lbl = findNamedLabel("F4C", GLOBAL_LABELS);
+      if (lbl == INVALID_VARIABLE) {
+        printf("    [2] FAIL: findNamedLabel F4C failed\n");
+        forthDictClear();
+        cleanupTestProgram();
+        programRunStop = savedRS;
+        return 1;
+      }
+
+      lastErrorCode = ERROR_NONE;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      fnExecute(lbl);
+
+      int32_t nativeX = 0;
+      int nativeErr = lastErrorCode;
+      {
+        longInteger_t li;
+        longIntegerInit(li);
+        convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+        longIntegerToInt32(li, nativeX);
+        longIntegerFree(li);
+      }
+
+      /* Forth half */
+      forthDictClear();
+      cleanupTestProgram();
+
+      uint16_t w = begin_word("S2O", 3);
+      if (w == FORTH_NULL) {
+        printf("    [2] FAIL: begin_word S2O failed\n");
+        programRunStop = savedRS;
+        return 1;
+      }
+      forthDictEmit(T_C47);
+      { uint16_t itemId = old16Id; forthDictEmitBytes(&itemId, 2); }
+      { uint16_t p = 5; forthDictEmitBytes(&p, 2); }
+      end_word(w);
+
+      lastErrorCode = ERROR_NONE;
+      bool err = run_word("S2O");
+      int32_t forthX = 0;
+      int forthErr = lastErrorCode;
+      {
+        longInteger_t li;
+        longIntegerInit(li);
+        convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+        longIntegerToInt32(li, forthX);
+        longIntegerFree(li);
+      }
+
+      if (nativeX != forthX) {
+        printf("    [2] FAIL: X mismatch native=%d forth=%d\n", nativeX, forthX);
+        subFail = 1;
+      } else if (nativeErr != forthErr) {
+        printf("    [2] FAIL: error mismatch native=%d forth=%d\n", nativeErr, forthErr);
+        subFail = 1;
+      }
+
+      forthDictClear();
+      cleanupTestProgram();
+    }
+
+    if (!subFail) {
+      printf("    [2] PASS: NUMBER_16 oldParam16 parity pinned (item=%u)\n", old16Id);
+    } else {
+      fail = 1;
+    }
+  }
+
+  /* ---- Subcase 3: NUMBER_16 new-form parity ---- */
+  {
+    uint16_t new16Id = LAST_ITEM;  /* sentinel: not found */
+    int subFail = 0;
+
+    for (uint16_t i = 1; i < LAST_ITEM && !subFail; i++) {
+      uint16_t ptp = (uint16_t)(indexOfItems[i].status & PTP_STATUS);
+      if (ptp == PTP_NUMBER_16 && !isFunctionOldParam16(i)) {
+        new16Id = i;
+      }
+    }
+
+    if (new16Id >= LAST_ITEM) {
+      printf("    [3] CONFIG FAIL: no PTP_NUMBER_16 + !isFunctionOldParam16 item found\n");
+      fail |= 1;
+    } else {
+      printf("    [3] discovered new-form item: id=%u (%s)\n",
+             new16Id, indexOfItems[new16Id].itemCatalogName);
+
+      {
+        uint16_t param = 5;
+        uint8_t hi = (uint8_t)(new16Id >> 8);
+        uint8_t lo = (uint8_t)(new16Id & 0xFF);
+
+        /* Native: opcode bytes + BE param (high, low) */
+        uint8_t prog[8];
+        uint16_t progLen;
+        if (new16Id < 128) {
+          prog[0] = (uint8_t)new16Id;
+          prog[1] = (uint8_t)(param >> 8);
+          prog[2] = (uint8_t)(param & 0xFF);
+          progLen = 3;
+        } else {
+          prog[0] = 0x80 | (hi & 0x7F);
+          prog[1] = lo;
+          prog[2] = (uint8_t)(param >> 8);
+          prog[3] = (uint8_t)(param & 0xFF);
+          progLen = 4;
+        }
+        /* Prepend LBL 'F4D', append RTN */
+        uint8_t fullProg[20];
+        uint16_t fullLen = 0;
+        fullProg[fullLen++] = 0x01;
+        fullProg[fullLen++] = 0xFD;
+        fullProg[fullLen++] = 0x03;
+        fullProg[fullLen++] = 'F';
+        fullProg[fullLen++] = '4';
+        fullProg[fullLen++] = 'D';
+        for (uint16_t k = 0; k < progLen; k++) fullProg[fullLen++] = prog[k];
+        fullProg[fullLen++] = 0x04;
+
+        if (!writeTestProgram(fullProg, fullLen)) {
+          printf("    [3] FAIL: writeTestProgram failed\n");
+          programRunStop = savedRS;
+          return 1;
+        }
+
+        calcRegister_t lbl = findNamedLabel("F4D", GLOBAL_LABELS);
+        if (lbl == INVALID_VARIABLE) {
+          printf("    [3] FAIL: findNamedLabel F4D failed\n");
+          forthDictClear();
+          cleanupTestProgram();
+          programRunStop = savedRS;
+          return 1;
+        }
+
+        lastErrorCode = ERROR_NONE;
+        programRunStop = PGM_STOPPED;
+        dynamicMenuItem = -1;
+        fnExecute(lbl);
+
+        int32_t nativeX = 0;
+        int nativeErr = lastErrorCode;
+        {
+          longInteger_t li;
+          longIntegerInit(li);
+          convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+          longIntegerToInt32(li, nativeX);
+          longIntegerFree(li);
+        }
+
+        /* Forth half */
+        forthDictClear();
+        cleanupTestProgram();
+
+        uint16_t w = begin_word("S3N", 3);
+        if (w == FORTH_NULL) {
+          printf("    [3] FAIL: begin_word S3N failed\n");
+          programRunStop = savedRS;
+          return 1;
+        }
+        forthDictEmit(T_C47);
+        { uint16_t itemId = new16Id; forthDictEmitBytes(&itemId, 2); }
+        { uint16_t p = 5; forthDictEmitBytes(&p, 2); }
+        end_word(w);
+
+        lastErrorCode = ERROR_NONE;
+        bool err = run_word("S3N");
+        int32_t forthX = 0;
+        int forthErr = lastErrorCode;
+        {
+          longInteger_t li;
+          longIntegerInit(li);
+          convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+          longIntegerToInt32(li, forthX);
+          longIntegerFree(li);
+        }
+
+        if (nativeX != forthX) {
+          printf("    [3] FAIL: X mismatch native=%d forth=%d\n", nativeX, forthX);
+          subFail = 1;
+        } else if (nativeErr != forthErr) {
+          printf("    [3] FAIL: error mismatch native=%d forth=%d\n", nativeErr, forthErr);
+          subFail = 1;
+        }
+
+        forthDictClear();
+        cleanupTestProgram();
+      }
+
+      if (!subFail) {
+        printf("    [3] PASS: NUMBER_16 new-form parity pinned (item=%u)\n", new16Id);
+      } else {
+        fail |= 1;
+      }
+    }
+  }
+
+  /* ---- Subcase 4: Corrupted itemId still rejected at runtime ---- */
+  {
+    int subFail = 0;
+
+    uint16_t w = begin_word("S4C", 3);
+    if (w == FORTH_NULL) {
+      printf("    [4] FAIL: begin_word S4C failed\n");
+      programRunStop = savedRS;
+      return 1;
+    }
+    forthDictEmit(T_C47);
+    { uint16_t itemId = LAST_ITEM; forthDictEmitBytes(&itemId, 2); }
+    end_word(w);
+
+    lastErrorCode = ERROR_NONE;
+    bool err = run_word("S4C");
+
+    if (!err || lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+      printf("    [4] FAIL: expected ERROR_INVALID_CORRUPTED_DATA (%d), got error=%d lastErrorCode=%d\n",
+             ERROR_INVALID_CORRUPTED_DATA, err, lastErrorCode);
+      subFail = 1;
+    }
+
+    if (forthTestGetDepth() != 0) {
+      printf("    [4] FAIL: depth not unwound, forthTestGetDepth()=%u\n", forthTestGetDepth());
+      subFail = 1;
+    }
+
+    if (!subFail) {
+      printf("    [4] PASS: corrupted itemId %u rejected with ERROR_INVALID_CORRUPTED_DATA, depth unwound\n",
+             LAST_ITEM);
+    } else {
+      fail |= 1;
+    }
+
+    forthDictClear();
   }
 
   programRunStop = savedRS;
