@@ -17,6 +17,8 @@
 #define FTOK_LIT          0x7F00
 #define FTOK_ILIT         0x7F01
 #define FTOK_C47          0x7F04
+#define FTOK_BR           0x7F02
+#define FTOK_0BR          0x7F03
 
 /* ---- §3.3.2 / D-3: per-invocation context; idle BSS = one ptr + 2 bytes ---- */
 typedef enum {
@@ -44,6 +46,85 @@ static uint16_t forthLatestClosedRef = FORTH_NULL;
 
 uint16_t forthLatestClosedRefGet(void) { return forthLatestClosedRef; }
 void     forthLatestClosedRefSet(uint16_t ref) { forthLatestClosedRef = ref; }
+
+/* ---- F3-5: control stack for compile-time branching ---- */
+
+#define FORTH_CSTACK_DEPTH 8
+#define CTL_ORIG 1
+#define CTL_DEST 2
+typedef struct { uint16_t pos; uint8_t kind; } forthCtl_t;
+static forthCtl_t forthCstack[FORTH_CSTACK_DEPTH];
+static uint8_t forthCsp = 0;
+
+static bool ctlPush(uint16_t pos, uint8_t kind) {
+  if (forthCsp >= FORTH_CSTACK_DEPTH) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+  forthCstack[forthCsp].pos = pos;
+  forthCstack[forthCsp].kind = kind;
+  forthCsp++;
+  return true;
+}
+static bool ctlPop(uint8_t kind, uint16_t *pos) {
+  if (forthCsp == 0 || forthCstack[forthCsp - 1].kind != kind) {
+    displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+  forthCsp--;
+  *pos = forthCstack[forthCsp].pos;
+  return true;
+}
+static bool ctlEmitBranch(ftoken_t brTok, uint16_t *deltaPosOut) {
+  if (!forthDictEmit(brTok)) return false;
+  *deltaPosOut = fdict.here;
+  return forthDictEmit((ftoken_t)0);
+}
+static void ctlPatchTo(uint16_t deltaPos, uint16_t target) {
+  int16_t delta = (int16_t)(((int32_t)target - (int32_t)(deltaPos + 2)) / 2);
+  memcpy(fdict.base + deltaPos, &delta, 2);
+}
+static bool ctlEmitBack(ftoken_t brTok, uint16_t dest) {
+  if (!forthDictEmit(brTok)) return false;
+  {
+    uint16_t deltaPos = fdict.here;
+    int16_t delta = (int16_t)(((int32_t)dest - (int32_t)(deltaPos + 2)) / 2);
+    return forthDictEmit((ftoken_t)(uint16_t)delta);
+  }
+}
+
+#define CTL_GUARD() do { if (!isDefinitionOpen()) { \
+  displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE); \
+  return; } } while (0)
+
+void forthCtlIf(void)    { CTL_GUARD(); uint16_t p;
+                            if (!ctlEmitBranch(FTOK_0BR, &p)) return;
+                            ctlPush(p, CTL_ORIG); }
+void forthCtlThen(void)  { CTL_GUARD(); uint16_t p;
+                            if (!ctlPop(CTL_ORIG, &p)) return;
+                            ctlPatchTo(p, fdict.here); }
+void forthCtlElse(void)  { CTL_GUARD(); uint16_t p1, p2;
+                            if (!ctlPop(CTL_ORIG, &p1)) return;
+                            if (!ctlEmitBranch(FTOK_BR, &p2)) return;
+                            ctlPatchTo(p1, fdict.here);
+                            ctlPush(p2, CTL_ORIG); }
+void forthCtlBegin(void) { CTL_GUARD(); ctlPush(fdict.here, CTL_DEST); }
+void forthCtlUntil(void) { CTL_GUARD(); uint16_t d;
+                            if (!ctlPop(CTL_DEST, &d)) return;
+                            ctlEmitBack(FTOK_0BR, d); }
+void forthCtlAgain(void) { CTL_GUARD(); uint16_t d;
+                            if (!ctlPop(CTL_DEST, &d)) return;
+                            ctlEmitBack(FTOK_BR, d); }
+void forthCtlWhile(void) { CTL_GUARD(); uint16_t d, p;
+                            if (!ctlPop(CTL_DEST, &d)) return;
+                            if (!ctlEmitBranch(FTOK_0BR, &p)) return;
+                            if (!ctlPush(p, CTL_ORIG)) return;
+                            ctlPush(d, CTL_DEST); }
+void forthCtlRepeat(void){ CTL_GUARD(); uint16_t d, o;
+                            if (!ctlPop(CTL_DEST, &d)) return;
+                            if (!ctlPop(CTL_ORIG, &o)) return;
+                            if (!ctlEmitBack(FTOK_BR, d)) return;
+                            ctlPatchTo(o, fdict.here); }
 
 /* ---- §9.3 Run-generation counter (P-5, F1-1: pending-reset truth) ---- */
 
@@ -378,23 +459,29 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
            lineOK = false;
         } else if (!startDefinition(name)) {
           lineOK = false;
-        } else {
-          state = STATE_COMPILE;
-        }
-      }
-      continue;
-    }
-
-    /* ---- C-4: ';' ---- */
-    if (strcmp(buf, ";") == 0) {
-      if (state == STATE_INTERPRET) {
-         if (mode == FORTH_OUTER_DEFS_ONLY) {
-           continue;   /* stray ';' is an execution-time error, not a pre-scan one */
+         } else {
+           state = STATE_COMPILE;
+           forthCsp = 0;
          }
-         displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-         lineOK = false;
-      } else {
-        if (!finishDefinition()) {
+       }
+       continue;
+     }
+
+     /* ---- C-4: ';' ---- */
+     if (strcmp(buf, ";") == 0) {
+       if (state == STATE_INTERPRET) {
+          if (mode == FORTH_OUTER_DEFS_ONLY) {
+            continue;   /* stray ';' is an execution-time error, not a pre-scan one */
+          }
+          displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          lineOK = false;
+        } else {
+          if (forthCsp != 0) {
+            abortDefinition();
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            forthCsp = 0;
+            lineOK = false;
+          } else if (!finishDefinition()) {
           lineOK = false;
         }
         /* F3-4: set tracker for same-line marks (GLOBAL/IMMEDIATE) */

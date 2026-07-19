@@ -87,7 +87,15 @@ enum {
   PRIM_RECURSE = 11,
   PRIM_GLOBAL    = 12,
   PRIM_IMMEDIATE = 13,
-  PRIM_COUNT     = 14
+  PRIM_IF        = 14,
+  PRIM_ELSE      = 15,
+  PRIM_THEN      = 16,
+  PRIM_BEGIN     = 17,
+  PRIM_UNTIL     = 18,
+  PRIM_AGAIN     = 19,
+  PRIM_WHILE     = 20,
+  PRIM_REPEAT    = 21,
+  PRIM_COUNT     = 22
 };
 
 const forthPrimDef_t forthPrims[PRIM_COUNT] = {
@@ -105,6 +113,14 @@ const forthPrimDef_t forthPrims[PRIM_COUNT] = {
   [PRIM_RECURSE] = { "RECURSE", FF_IMMEDIATE, pRecurse },
   [PRIM_GLOBAL]    = { "GLOBAL",    FF_DEFMARK, pGlobal },
   [PRIM_IMMEDIATE] = { "IMMEDIATE", FF_DEFMARK, pImmediate },
+  [PRIM_IF]        = { "IF",     FF_IMMEDIATE, forthCtlIf     },
+  [PRIM_ELSE]      = { "ELSE",   FF_IMMEDIATE, forthCtlElse   },
+  [PRIM_THEN]      = { "THEN",   FF_IMMEDIATE, forthCtlThen   },
+  [PRIM_BEGIN]     = { "BEGIN",  FF_IMMEDIATE, forthCtlBegin  },
+  [PRIM_UNTIL]     = { "UNTIL",  FF_IMMEDIATE, forthCtlUntil  },
+  [PRIM_AGAIN]     = { "AGAIN",  FF_IMMEDIATE, forthCtlAgain  },
+  [PRIM_WHILE]     = { "WHILE",  FF_IMMEDIATE, forthCtlWhile  },
+  [PRIM_REPEAT]    = { "REPEAT", FF_IMMEDIATE, forthCtlRepeat },
 };
 
 const uint16_t forthPrimCount = PRIM_COUNT;

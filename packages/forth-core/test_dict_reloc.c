@@ -10791,6 +10791,267 @@ static int test_global_marks(void)
   return fail;
 }
 
+/* test_control_flow
+ * F3-5: compile-time control flow words: IF/ELSE/THEN, BEGIN/UNTIL/AGAIN/WHILE/REPEAT
+ */
+static int test_control_flow(void)
+{
+  int fail = 0;
+
+  forthDictClear();
+  forthGDictClear();
+  lastErrorCode = ERROR_NONE;
+
+  /* [1] IF/ELSE/THEN, both arms + the no-DUP pin */
+  {
+    forthOuterInterpret(": CF1 IF 10 ELSE 20 THEN ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: CF1 compile error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      uint16_t ref;
+      if (!forthFindColon("CF1", &ref)) {
+        printf("    [1] FAIL: CF1 not found\n");
+        fail = 1;
+      } else {
+        /* Body starts after header: name "CF1" = 3 bytes. Header = 6 bytes + nameLen bytes.
+         * TO_BLOCKS(6 + 3) * BYTES_PER_BLOCK = TO_BLOCKS(9) * 4 = 2*4 = 8 */
+        { uint16_t tok;
+          memcpy(&tok, fdict.base + fdict.latest + TO_BLOCKS(6 + 3) * BYTES_PER_BLOCK, 2);
+          if (tok != 0x7F03) {
+            printf("    [1] FAIL: first body token is 0x%04X, expected 0x7F03 (FTOK_0BR)\n", tok);
+            fail = 1;
+          } else {
+            forthPushInt32(1);
+            lastErrorCode = ERROR_NONE;
+            if (run_word("CF1") || !x_is_longint(10)) {
+              printf("    [1] FAIL: CF1 with truthy flag did not leave X=10\n");
+              fail = 1;
+            } else {
+              forthPushInt32(0);
+              lastErrorCode = ERROR_NONE;
+              if (run_word("CF1") || !x_is_longint(20)) {
+                printf("    [1] FAIL: CF1 with falsy flag did not leave X=20\n");
+                fail = 1;
+              } else {
+                printf("    [1] PASS: IF consumes the flag and selects the correct arm\n");
+              }
+            }
+          }
+        }
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [2] BEGIN/WHILE/REPEAT countdown */
+  {
+    forthOuterInterpret(": CF2 BEGIN DUP WHILE 1 - REPEAT ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [2] FAIL: CF2 compile error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      forthPushInt32(5);
+      lastErrorCode = ERROR_NONE;
+      if (run_word("CF2") || !x_is_longint(0)) {
+        printf("    [2] FAIL: CF2 did not leave X=0 (got error %d)\n", lastErrorCode);
+        fail = 1;
+      } else {
+        printf("    [2] PASS: BEGIN/WHILE/REPEAT loop terminates at zero\n");
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [3] UNTIL loops while false */
+  {
+    forthOuterInterpret(": CF5 BEGIN 1 - DUP UNTIL DROP ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: CF5 compile error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      forthPushInt32(99);
+      forthPushInt32(1);
+      lastErrorCode = ERROR_NONE;
+      if (run_word("CF5") || !x_is_longint(99)) {
+        printf("    [3] FAIL: CF5 did not leave X=99\n");
+        fail = 1;
+      } else {
+        printf("    [3] PASS: UNTIL branches back on false\n");
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [4] AGAIN is the runaway-bounded infinite loop */
+  {
+    forthOuterInterpret(": CF3 BEGIN AGAIN ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [4] FAIL: CF3 compile error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      lastErrorCode = ERROR_NONE;
+      run_word("CF3");
+      if (lastErrorCode != ERROR_RAM_FULL) {
+        printf("    [4] FAIL: CF3 did not hit ERROR_RAM_FULL (got %d)\n", lastErrorCode);
+        fail = 1;
+      } else {
+        printf("    [4] PASS: AGAIN loops until the runaway backstop\n");
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [5] Nesting */
+  {
+    forthOuterInterpret(": CF4 IF 1 IF 30 THEN THEN ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [5] FAIL: CF4 compile error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      forthPushInt32(1);
+      lastErrorCode = ERROR_NONE;
+      if (run_word("CF4") || !x_is_longint(30)) {
+        printf("    [5] FAIL: CF4 with truthy flags did not leave X=30\n");
+        fail = 1;
+      } else {
+        forthPushInt32(7);
+        forthPushInt32(0);
+        lastErrorCode = ERROR_NONE;
+        if (run_word("CF4") || !x_is_longint(7)) {
+          printf("    [5] FAIL: CF4 with falsy inner flag did not leave X=7\n");
+          fail = 1;
+        } else {
+          printf("    [5] PASS: nested IF pairs resolve independently\n");
+        }
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [6] Pairing and placement errors, all atomic */
+  {
+    int subfail = 0;
+
+    /* THEN with no IF */
+    { forthOuterInterpret(": CE1 THEN ;");
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [6] FAIL: CE1 did not give ERROR_INVALID_NAME (got %d)\n", lastErrorCode);
+        subfail = 1;
+      }
+      { uint16_t ref;
+        if (forthFindColon("CE1", &ref)) {
+          printf("    [6] FAIL: CE1 findable despite error\n");
+          subfail = 1;
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* IF without THEN, unbalanced at ; */
+    { forthOuterInterpret(": CE2 IF ;");
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [6] FAIL: CE2 did not give ERROR_INVALID_NAME (got %d)\n", lastErrorCode);
+        subfail = 1;
+      }
+      { uint16_t ref;
+        if (forthFindColon("CE2", &ref)) {
+          printf("    [6] FAIL: CE2 findable despite error\n");
+          subfail = 1;
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* BEGIN THEN (kind mismatch) */
+    { forthOuterInterpret(": CE3 BEGIN THEN ;");
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [6] FAIL: CE3 did not give ERROR_INVALID_NAME (got %d)\n", lastErrorCode);
+        subfail = 1;
+      }
+      { uint16_t ref;
+        if (forthFindColon("CE3", &ref)) {
+          printf("    [6] FAIL: CE3 findable despite error\n");
+          subfail = 1;
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* BEGIN REPEAT (missing WHILE) */
+    { forthOuterInterpret(": CE4 BEGIN REPEAT ;");
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [6] FAIL: CE4 did not give ERROR_INVALID_NAME (got %d)\n", lastErrorCode);
+        subfail = 1;
+      }
+      { uint16_t ref;
+        if (forthFindColon("CE4", &ref)) {
+          printf("    [6] FAIL: CE4 findable despite error\n");
+          subfail = 1;
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* interpret-state IF (compile-only guard) */
+    { forthOuterInterpret("IF");
+      if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
+        printf("    [6] FAIL: interpret-state IF did not give ERROR_OPERATION_UNDEFINED (got %d)\n", lastErrorCode);
+        subfail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* 9 IFs overflow FORTH_CSTACK_DEPTH 8 */
+    { forthOuterInterpret(": CE5 IF IF IF IF IF IF IF IF IF 1 ;");
+      if (lastErrorCode != ERROR_RAM_FULL) {
+        printf("    [6] FAIL: CE5 did not give ERROR_RAM_FULL (got %d)\n", lastErrorCode);
+        subfail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    if (!subfail) {
+      printf("    [6] PASS: unbalanced and misplaced control words reject atomically\n");
+    } else {
+      fail = 1;
+    }
+  }
+
+  /* [7] Branches survive GLOBAL + restore */
+  {
+    forthOuterInterpret(": GLW BEGIN DUP WHILE 1 - REPEAT ; GLOBAL");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [7] FAIL: GLW GLOBAL compile error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      forthDictClear();
+      saveCalc();
+      forthGDictClear();
+      { bool_t s = loadTestPrograms; loadTestPrograms = false; restoreCalc(); loadTestPrograms = s; }
+      forthPushInt32(3);
+      lastErrorCode = ERROR_NONE;
+      if (run_word("GLW") || !x_is_longint(0)) {
+        printf("    [7] FAIL: GLW did not leave X=0 after restore\n");
+        fail = 1;
+      } else {
+        printf("    [7] PASS: compiled branches survive GLOBAL and restore validation\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      { uint8_t *rBase = gdict.base; uint16_t rBlocks = gdict.sizeBlocks;
+        gdict.base = NULL; gdict.sizeBlocks = 0; gdict.here = 0;
+        gdict.latest = FORTH_NULL; gdict.count = 0;
+        if (rBase) freeC47Blocks(rBase, rBlocks);
+      }
+    }
+  }
+
+  forthDictClear();
+  forthGDictClear();
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
 int forthDictSelfTest(void)
 {
   int fail = 0;
@@ -11440,6 +11701,16 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_global_marks...\n");
   fail |= test_global_marks();
+  forthDictClear();
+  forthGDictClear();
+
+  /* F3-5: compile-time control flow */
+  printf("\nFORTH F3-5 TESTS (compile-time control flow)\n");
+  forthDictInit();
+  forthGDictInit();
+
+  printf("  [DEBUG] running test_control_flow...\n");
+  fail |= test_control_flow();
   forthDictClear();
   forthGDictClear();
 

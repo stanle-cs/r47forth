@@ -127,6 +127,16 @@ bool forthOpenDefinitionIndex(uint16_t *idx);
    Returns true if a name was copied, false if no open definition. */
 bool openDefinitionName(char *buf, int bufSize);
 
+/* F3-5: compile-time control flow (forth_compile.c) */
+void forthCtlIf(void);
+void forthCtlThen(void);
+void forthCtlElse(void);
+void forthCtlBegin(void);
+void forthCtlUntil(void);
+void forthCtlAgain(void);
+void forthCtlWhile(void);
+void forthCtlRepeat(void);
+
 /* Lookup: §4.1 resolution order */
 /* Scan forthPrims[] for name; returns index or 0xFFFF if not found. */
 uint16_t forthFindPrim(const char *name);
