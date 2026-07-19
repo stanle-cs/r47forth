@@ -115,10 +115,10 @@ indirect-NUMBER_16 encoding collision → documented exclusion).
 
 | Packet | Status |
 |---|---|
-| F4-1 classification + direct numeric params | AUTHORED, gate-locked on F3-7 — `QWEN_PROMPTS_F4_1_direct_numeric.md` |
-| F4-2 register/flag/shuffle direct forms | AUTHORED, gate-locked on F4-1 — `QWEN_PROMPTS_F4_2_register_flag.md` |
-| F4-3 named/system-flag/indirect + bounded core | AUTHORED, gate-locked on F4-2 — `QWEN_PROMPTS_F4_3_named_indirect.md` |
-| F4-4 error-table + parity acceptance | AUTHORED, gate-locked on F4-3 — `QWEN_PROMPTS_F4_4_acceptance.md` |
+| F4-1 classification + direct numeric params | LANDED `f043c63e7` |
+| F4-2 register/flag/shuffle direct forms | LANDED `ac48f50a8` — amendment F4-2A (regInRange raises, not silent) |
+| F4-3 named/system-flag/indirect + bounded core | LANDED `fc0fabdad` — amendment F4-3A (one marker table + one cell-span function; +1920 B flash) |
+| F4-4 error-table + parity acceptance | NEXT — `QWEN_PROMPTS_F4_4_acceptance.md`, amendment F4-4A is binding |
 
 **Execution risks:** F4-1 changes landed behavior for END/RTN/STOP/RTN+1
 (currently name-dispatchable; no test pins it — verified); the
@@ -160,28 +160,42 @@ capture suspends/restores full state including `tam.colon`; plus the
 dedicated Forth word catalog (2026-07-16 fold) listing callable words per
 F3 scopes.
 
-**HARD PRECONDITION (DESIGN):** a dedicated keyboard/PEM audit with
-hardware-derived tests BEFORE any packet is authored — Stan runs the
-hardware side; the architect writes the audit doc and derives fixtures.
-**The audit charter is AUTHORED (2026-07-18): `F6_KEYBOARD_PEM_AUDIT.md`**
-— T1-T7 architect traces, Blocks A-F hardware experiments, the fixture
-derivation map, and exit criteria.  F6 packets remain UNAUTHORED by
-design until `F6_AUDIT_RESULTS.md` exists and is folded.
+**Precondition (AMENDED by owner ruling 2026-07-18):** the audit's
+architect half — traces T1-T7, folded in `F6_AUDIT_RESULTS.md`
+(2026-07-19) — satisfies the authoring precondition; the hardware bench
+(`F6_KEYBOARD_PEM_AUDIT.md` Blocks A-F) is DEFERRED to STAGE-EXIT
+confirmation on the DM42n, re-run against the landed F6 behavior before
+the stage closes.  Divergence found there is triaged by the architect
+(design amendment vs upstream report vs fix).
 
-**Predicted packets (5-6):** managed source buffer + handle; submode key
-dispatch; suspend/restore state machine; catalog data source (F3 scopes);
-catalog UI on the §8.6 softmenu machinery; end-to-end capture acceptance.
+**PACKETS AUTHORED (2026-07-19), gate-locked in order** — ledger
+`QWEN_PROMPTS_F6_core.md`: F6-1 managed capture buffer
+(`QWEN_PROMPTS_F6_1_capture_buffer.md`, gate-locked on F5-2); F6-2 TAM
+suspend/resume (`..._F6_2_tam_suspend.md`); F6-3 catalogs/menus during
+capture (`..._F6_3_capture_menus.md`); F6-4 parameter entry emits
+canonical text (`..._F6_4_param_text.md`); F6-5 dictionary-backed word
+catalog (`..._F6_5_word_catalog.md`); F6-6 acceptance battery + lifecycle
+reset (`..._F6_6_acceptance.md`).
 
-**Risks:** highest UI risk of the series; the audit is the risk control —
-no packet before it. The F15-2/F15-3 harness tests double as regression
-canaries for every keyboard-path change.
+**Risks:** highest UI risk of the series; the risk controls are the
+traces (every fixture is PC-build-derivable — see the deferred-bench
+register in `F6_AUDIT_RESULTS.md`), the standing execution gates
+(re-verified against the post-F5 tree before handoff), and the stage-exit
+bench.  The F15-2/F15-3 harness tests double as regression canaries for
+every keyboard-path change.
 
 ## After F6 — closeout (no Qwen work)
 
 Per `R6_RESOLUTION_PLAN.md` §3 and the runbook: freeList guard upstream MR
-(A prepares, S files), optional upstream reports (already drafted in
-`UPSTREAM_REPORTS_b8f79e486.md`), final docs reconciliation, flash
-baseline/deltas. Then the accepted backlog is EMPTY; anything further
+(A prepares, S files) — **upstream ruled 2026-07-19 (UPSTREAM_REPORTS §3):
+halt over continue; the guard is reworked to raise `displayBugScreen`
+instead of silent-refuse, authored as `QWEN_PROMPTS_FIX6_bugscreen.md`
+(FIX-6B, independent of the F-series, runnable any time). The MR now
+offers the fail-loud version; one open call-context question (immediate vs.
+latched raise) is deferred to upstream in the reply.** Optional upstream
+reports (already drafted in `UPSTREAM_REPORTS_b8f79e486.md`), final docs
+reconciliation, flash baseline/deltas. Then the accepted backlog is EMPTY;
+anything further
 starts with a new owner ruling.
 
 ## Sequencing summary
@@ -191,13 +205,12 @@ F1.5 ✔ → F2 ✔ (through F2-5)
   → F3-1..7 [QWEN, authored + gate-locked]
   → F4-1..4 [QWEN, authored + gate-locked]
   → F5-1..2 [QWEN, authored + gate-locked]
-  → F6 bench audit [S+A, charter authored] → fold results [A]
-  → F6-1..6 [author A → QWEN]
-  → closeout [A+S]
+  → F6-1..6 [QWEN, authored + gate-locked]
+  → F6 stage-exit bench [S+A, Blocks A-F vs landed behavior] → closeout [A+S]
 ```
 
-Everything author-able ahead of execution IS authored (13 gate-locked
-packets across F3/F4/F5); the sole remaining architect authoring is
-per-stage docs closes and the F6 packets, which are audit-gated by
-DESIGN.  Owner decision points (S): the F6 bench session
-(`F6_KEYBOARD_PEM_AUDIT.md` Blocks A-F); flash-delta runs per stage.
+Everything author-able ahead of execution IS authored (19 gate-locked
+packets across F3/F4/F5/F6); the sole remaining architect authoring is
+per-stage docs closes.  Owner decision points (S): the F6 stage-exit
+bench session (`F6_KEYBOARD_PEM_AUDIT.md` Blocks A-F, after F6-6);
+flash-delta runs per stage.

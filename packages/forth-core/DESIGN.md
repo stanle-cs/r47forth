@@ -2898,8 +2898,12 @@ the sink (source text instead of an RPN instruction). Its source buffer is a
 managed allocation held only while capture is active, addressed through a
 relocation-safe handle; nested ordinary alpha capture suspends and restores
 the full capture state — **including `tam.colon`**, which joined the `tam`
-struct in b8f79e486. Requires its own keyboard/PEM audit with
-hardware-derived tests before prompting.
+struct in b8f79e486. Requires its own keyboard/PEM audit before prompting
+*(amended by owner ruling 2026-07-18: the audit's architect traces T1-T7,
+folded in `F6_AUDIT_RESULTS.md`, satisfy the authoring precondition; the
+hardware bench of `F6_KEYBOARD_PEM_AUDIT.md` Blocks A-F is deferred to
+stage-exit confirmation on the DM42n, re-run against the landed F6
+behavior before the stage closes)*.
 
 **Dedicated Forth word catalog (folded in, ruled 2026-07-16):** the §4.3
 "future stage" dynamic catalog lands here, on the same softmenu machinery as

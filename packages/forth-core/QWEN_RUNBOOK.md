@@ -83,27 +83,39 @@ architect session first; the future-series packet has not been authored yet.
 | 8g | F3-6 XEQ forms, FTOK_XEQN, and B3 | **[GATE LOCKED]** on F3-5 | `QWEN_PROMPTS_F3_6_xeqn.md` |
 | 8h | F3-7 §2.3 acceptance pins and final stage sweep | **[GATE LOCKED]** on F3-6 | `QWEN_PROMPTS_F3_7_acceptance.md` |
 | 9a | F4 trace + ledger (grammar/error table traced 2026-07-18) | DONE (authored) | `QWEN_PROMPTS_F4_core.md` |
-| 9b | F4-1 flow classification + direct numeric params | **[GATE LOCKED]** on F3-7 | `QWEN_PROMPTS_F4_1_direct_numeric.md` |
-| 9c | F4-2 register/flag/shuffle direct forms | **[GATE LOCKED]** on F4-1 | `QWEN_PROMPTS_F4_2_register_flag.md` |
-| 9d | F4-3 named, system-flag, indirect forms | **[GATE LOCKED]** on F4-2 | `QWEN_PROMPTS_F4_3_named_indirect.md` |
-| 9e | F4-4 error-table + parity acceptance (stage close) | **[GATE LOCKED]** on F4-3 | `QWEN_PROMPTS_F4_4_acceptance.md` |
+| 9b | F4-1 flow classification + direct numeric params | **LANDED** `f043c63e7` | `QWEN_PROMPTS_F4_1_direct_numeric.md` |
+| 9c | F4-2 register/flag/shuffle direct forms | **LANDED** `ac48f50a8` (sol debug; amendment F4-2A) | `QWEN_PROMPTS_F4_2_register_flag.md` |
+| 9d | F4-3 named, system-flag, indirect forms | **LANDED** `fc0fabdad` (sol rewrite+debug; amendment F4-3A) | `QWEN_PROMPTS_F4_3_named_indirect.md` |
+| 9e | F4-4 error-table + parity acceptance (stage close) | **[NEXT — QWEN]**, read amendment F4-4A first | `QWEN_PROMPTS_F4_4_acceptance.md` |
 | 10a | F5 ledger: commit seam + tier ruling (2026-07-18) | DONE (authored) | `QWEN_PROMPTS_F5_core.md` |
 | 10b | F5-1 check mode + soundness battery | **[GATE LOCKED]** on F4-4 | `QWEN_PROMPTS_F5_1_check_mode.md` |
 | 10c | F5-2 E9 commit gate (stage close) | **[GATE LOCKED]** on F5-1 | `QWEN_PROMPTS_F5_2_commit_gate.md` |
-| 11a | F6 audit charter (traces T1-T7 + bench Blocks A-F) | DONE (authored) — **bench session is [S]+[A]**, schedule any time after F5 | `F6_KEYBOARD_PEM_AUDIT.md` |
-| 11b | F6 packets — capture submode + word catalog | **[ARCHITECT]** after the audit results fold; then [QWEN] | DESIGN §10.6 + `F6_AUDIT_RESULTS.md` (future) |
+| 11a | F6 audit — traces T1-T7 FOLDED (2026-07-19); bench Blocks A-F DEFERRED to stage-exit (owner ruling 2026-07-18) | DONE (traces) — **stage-exit bench is [S]+[A]**, after F6-6 | `F6_KEYBOARD_PEM_AUDIT.md` + `F6_AUDIT_RESULTS.md` |
+| 11b | F6 ledger: decomposition + design decisions | DONE (authored 2026-07-19) | `QWEN_PROMPTS_F6_core.md` |
+| 11c | F6-1 managed capture buffer | **[GATE LOCKED]** on F5-2 | `QWEN_PROMPTS_F6_1_capture_buffer.md` |
+| 11d | F6-2 TAM suspend/resume | **[GATE LOCKED]** on F6-1 | `QWEN_PROMPTS_F6_2_tam_suspend.md` |
+| 11e | F6-3 catalogs + menus during capture | **[GATE LOCKED]** on F6-2 | `QWEN_PROMPTS_F6_3_capture_menus.md` |
+| 11f | F6-4 parameter entry emits canonical text | **[GATE LOCKED]** on F6-3 | `QWEN_PROMPTS_F6_4_param_text.md` |
+| 11g | F6-5 dictionary-backed word catalog | **[GATE LOCKED]** on F6-4 | `QWEN_PROMPTS_F6_5_word_catalog.md` |
+| 11h | F6-6 acceptance battery (stage close) | **[GATE LOCKED]** on F6-5 | `QWEN_PROMPTS_F6_6_acceptance.md` |
 
 ## 3. After the series — no Qwen work
 
 Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),
 **S** = Stan.
 
-- Step 8 housekeeping: freeList guard upstream MR — **A** prepares the
-  patch + MR text (the guard is already in-tree; packets forbid touching
-  `freeList.c` precisely because it is earmarked for upstream), **S** forks,
-  pushes, and opens the MR upstream. Optional upstream reports (tam.c
-  item-scan colon gap; decode.c renderer indexing) — **A** drafts in the
-  `UPSTREAM_BUG_REM_alpha_menu.md` style, **S** files them.
+- Step 8 housekeeping: freeList guard upstream MR — **upstream ruled
+  2026-07-19** (UPSTREAM_REPORTS §3): halt over continue. The guard is
+  reworked to raise `displayBugScreen` (fail-loud) rather than
+  silently-refuse-and-continue; detection scan unchanged. Reworked as
+  `QWEN_PROMPTS_FIX6_bugscreen.md` (FIX-6B) — the SOLE packet allowed to
+  touch `freeList.c` (it lifts the no-touch rule for that one hunk);
+  independent of the F-series, runnable any time on a clean tree. Run it,
+  then **S** forks/pushes/opens the MR with the fail-loud patch; the reply
+  (in UPSTREAM_REPORTS §3) flags one open call-context question (immediate
+  vs. latched raise) for upstream to finalize. Optional upstream reports
+  (tam.c item-scan colon gap; decode.c renderer indexing) — **A** drafts in
+  the `UPSTREAM_BUG_REM_alpha_menu.md` style, **S** files them.
 - Final docs reconciliation pass (DESIGN.md stale/interim prose,
   DESIGN-HISTORY, ledger closeout) — **A**, docs-only commits.
 - Flash baseline/deltas (`make dmcp5r47`, RULE-1) — **S** runs, **A**

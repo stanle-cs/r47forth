@@ -127,3 +127,92 @@ for(i = 0; i < numberOfFreeMemoryRegions; i++) {
 We have been running exactly this guard in production in our fork (it also
 carries PC-side diagnostics with a backtrace) with no regressions; happy to
 submit it as an MR if you want it.
+
+---
+
+### §3 — upstream response and resolution (2026-07-19)
+
+**Upstream's ruling (quoted):**
+
+> I disagree with the analysis in point 3 regarding freeListFree. If there
+> is an overlap in the region we want to free, there is a bug, either
+> directly in the caller or perhaps one that occurred much earlier. So
+> whether the list of free blocks survives is really not important, because
+> memory will start to become corrupted from that point on anyway, and no
+> one knows how it will progress.
+>
+> What we can do is alert the user to a significant memory management issue
+> and ask him to perform a hardware reset, and try to reproduce the problem
+> and then report it. Pauli quite wisely said: It's not nice for the user
+> but it's better than continuing and getting who knows what trouble later.
+>
+> All of these memory management issues are easily identified and
+> highlighted by the simulator with yellow messages on the console.
+
+**Our position: ACCEPTED.**  The doctrine is correct — once an overlap is
+detected an earlier invariant already broke, and preserving the free list
+does not un-corrupt anything; continuing risks plausible-looking wrong
+results, the worst failure mode for a calculator.  Our "never mutate, keep
+going" was defense-in-depth that optimized for allocator survival when the
+honest condition is "state untrustworthy, halt."
+
+**Key point of agreement (the substance of the original report survives).**
+Upstream's preferred behavior — "alert the user and ask for a hardware
+reset" — REQUIRES the detection scan to run ON THE DEVICE.  That is exactly
+what §3 flagged as missing: the landed "Memory freeing A/B" diagnostics are
+`#if !defined(DMCP_BUILD)`, so today the overlapping region is inserted
+SILENTLY on hardware.  So the disagreement is only about the RESPONSE half
+(continue vs. halt); the DETECTION half is precisely what upstream's
+preferred alert needs.  Detection stays; silent-continue goes; response
+upgrades to fail-loud via `displayBugScreen` (upstream's own
+internal-fault mechanism — unconditional device + PC, non-blocking).
+
+**Resolution.**  The fork guard is reworked to the fail-loud form:
+detection scan unchanged, `displayBugScreen(...)` in place of the
+PC-only print block, backtrace block dropped (upstream's simulator
+diagnostics cover PC-side triage).  Net ~32 → ~14 lines.  Authored as
+`QWEN_PROMPTS_FIX6_bugscreen.md` (FIX-6B); the four affected self-tests
+re-pin to the new contract (list still unchanged AND
+`calcMode == CM_BUG_ON_SCREEN`).  The Step-8 MR now offers this version.
+
+**Open question deferred to upstream (call-context).**  `freeListFree`
+runs inside allocation/restore paths — e.g. the historical `DELall`
+double free sits in a config.c restore that may reset `calcMode`
+afterward, which could SWALLOW an immediately-raised bug screen.  Upstream
+knows the call graph; the MR flags whether an immediate raise is
+acceptable everywhere or whether a latched raise (set a fault flag,
+surface at the next idle/refresh) is safer.  Our tree implements the
+immediate raise (the self-tests call `freeC47Blocks` at top level, where
+it is observable); the mechanism choice is upstream's to finalize.
+
+**Pasteable reply (for the MR thread):**
+
+> Agreed, and thanks — you've convinced me on the halt-vs-continue point.
+> Preserving the free list after an overlap is detected doesn't buy
+> anything real: the corruption already happened upstream of the free, so
+> "survive and keep going" just defers an unpredictable failure. Halting
+> loudly is the right call.
+>
+> One thing worth keeping from the original note, though: your preferred
+> behaviour — alert the user, ask for a hardware reset — needs the overlap
+> *detection* to run on the device, and right now it doesn't. The "Memory
+> freeing A/B" diagnostics are all under `#if !defined(DMCP_BUILD)`, so on
+> hardware the overlapping region is inserted silently and no alert ever
+> fires. So I think we actually want the same thing: keep the detection,
+> drop the silent-continue, and make the response your bug screen.
+>
+> Reworked patch (replaces the version I floated): the unconditional
+> range-overlap scan stays, and on a hit it calls
+> `displayBugScreen("Memory management fault: an overlapping or double free
+> was detected.")` and returns without touching the list — no
+> `#if DMCP` wrapper, no backtrace block (your simulator's yellow console
+> messages already cover PC-side triage). That's ~14 lines, down from ~32,
+> and it runs identically on device and PC.
+>
+> One open question for you, since you know the call graph better: is an
+> immediate `displayBugScreen` from inside `freeListFree` safe in every
+> caller context? I'm thinking of paths like the `DELall` restore that
+> frees the stats block — if an outer operation resets `calcMode`
+> afterwards it could swallow the screen. If that's a concern I'm happy to
+> latch a fault flag and raise at the next idle/refresh instead; your call
+> on which mechanism fits. I'll send whichever form you prefer as the MR.

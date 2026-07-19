@@ -760,6 +760,115 @@ invisibility, already pinned by subcase 3).  The §8.6 picker walk stays
 unfiltered as the documented interim until the F6 catalog lands the
 scope-aware listing.
 
+## 2026-07-19 — F6 authored from traces; hardware bench deferred to stage-exit (owner ruling 2026-07-18)
+
+Owner ruling (2026-07-18, "author the F6 packet without the hardware test
+for now"): §10.6's audit precondition is split — the ARCHITECT half
+(traces T1-T7) remains the authoring gate and was performed and folded
+into `F6_AUDIT_RESULTS.md`; the HARDWARE half (`F6_KEYBOARD_PEM_AUDIT.md`
+Blocks A-F) moves from authoring precondition to STAGE-EXIT confirmation,
+re-run on the DM42n against the LANDED F6 behavior before the stage may
+close.  §10.6 amended accordingly.  Rationale recorded with the traces:
+every planned fixture is PC-build-derivable (the self-test is the gate);
+the bench's unique value is DMCP-hardware divergence (key timing, deep
+sleep, save timing), which a post-landing re-run still catches.  The
+deferred-bench register (audit results, bottom table) maps each charter
+experiment to its interim trace-derived substitute and residual risk.
+
+Trace findings that shaped the design (full evidence in
+`F6_AUDIT_RESULTS.md`): the landed capture wrapper re-commits the source
+step after EVERY key (pemAlpha's fall-through tail), so the program step
+always holds the typed text — power-off loses only cursor/open-flag, and
+F5-2's commit gate already builds on this; `tamEnterMode` commits-and-
+closes a non-empty capture line at its CM_PEM arm and TAM teardown
+scrubs `FLAG_ALPHA` and zeroes `aimBuffer` in PEM — three independent
+proofs the capture text cannot stay in `aimBuffer`; `tamEnterMode`
+clobbers `tam.mode/function` BEFORE that arm, so suspend snapshots no tam
+state (capture-era tam is deterministically {mode 0, function ITM_FORTH});
+no screen.c site reads `aimBuffer` during PEM capture (the listing
+renders the committed step), so the buffer move has zero display surface;
+`fnKeyExit`'s CM_PEM arms pick abort-vs-commit by `aimBuffer[0]` and must
+follow the sink (F6-1 Change D2 — found by trace, would have been a
+regression); the §8.6 picker is dictionary-blind (text scan), pinning the
+F6-5 delta.
+
+Stage F6 authored 2026-07-19 as six gate-locked packets on the F5-2
+commit (`QWEN_PROMPTS_F6_core.md` ledger; F6-1 capture object + managed
+256-byte buffer, uniform alloc-on-open/free-on-close, interim TAM guard;
+F6-2 TAM suspend/resume — suspension frees the buffer and resumes by
+refilling from the step, offset-based step reference, single resume
+choke point in `leaveTamModeIfEnabled`, uniform even for empty lines
+(kills the landed TAM-over-open-capture edge); F6-3 catalog picks insert
+`itemCatalogName` text (CAT_FNCT class = the §4.2 callable class); F6-4
+suspended TAM commits convert to canonical text THROUGH THE LANDED
+DECODER (mimicry = F4 parity), no-room keeps the step; F6-5 MNU_FORTH
+becomes the union catalog — landed text-scan section + interactive fdict
++ gdict, browse surface reads owners directly per F3-3A, cross-section
+duplicates show provenance; F6-6 acceptance battery + capture lifecycle
+reset at the two `forthScanTrackReset` seams — deep-sleep wake
+legitimately keeps capture open, matching landed `FLAG_ALPHA` behavior).
+Authoring-base discipline: authored on the F3-2 tree four stages ahead;
+of all files F6 touches, only `manage.c` is modified by the pending
+F3-4..F5-2 queue (F5-2's single E9 line, which F6-1 re-points), so the
+anchor-stability risk is one known line; every packet's execution gate
+re-greps its anchors and the standing re-author-on-deviation rule
+applies.
+
+## 2026-07-19 — F6 adversarial review (pre-execution): five substantive defects fixed
+
+An adversarial pass over the six authored F6 packets (owner-requested)
+before any execution.  Substantive findings, all fixed in place:
+
+1. **Suspend moved the cursor and would have displaced the TAM commit.**
+   F6-2's `forthCaptureSuspend` stepped forward "so TAM's insert lands
+   after the capture line" — but TAM commits insert via
+   `addStepInProgram(tamOperation())` (traced: tam.c:217/552/587/896/918/
+   1095), whose pre-move already places the insert after the current
+   step; stepping forward would land the committed step one position too
+   late.  Fixed: suspend does not move `currentStep` (the landed
+   commit-and-close nets to cursor-on-the-line); position restore at
+   resume retained; the retargeted mutation now deletes the resume's
+   position-restore lines.
+2. **Suspend zeroed `tam.function` and would have broken the TAM
+   session.**  `tamEnterMode` assigns the incoming TAM function BEFORE
+   the CM_PEM seam; the "capture-close reset parity" line would have
+   clobbered it (the landed `pemCloseAlphaInput` reset at that seam is
+   precisely the behavior suspend replaces).  Fixed: suspend leaves
+   `tam` untouched.
+3. **F6-3's item arm conflicted with F6-4 for parameterized items.**
+   Inserting a bare name for a `PTP_*`-parameterized item would create a
+   second entry UX beside F6-4's TAM path.  Fixed: the arm requires
+   `PTP_NONE` (SIN traced `CAT_FNCT | PTP_NONE`, items.c:1879);
+   parameterized items stay inert in `pemAlpha` — their capture UX is
+   the suspend+convert path.
+4. **F6-4's converted text lacked a word separator** when the cursor did
+   not follow a space (`5 DUP` + STO → `5 DUPSTO 05`).  Fixed: the
+   conversion prefixes one space when the byte before the cursor is
+   neither space nor line start, plus a 255-byte decode clamp
+   (keep-the-step fallback).
+5. **Unsound free-RAM oracles.**  Whole-session `getFreeRamMemory()`
+   equality asserts would red on program-memory growth (committed steps,
+   and the restore path's own inherent footprint — the landed arena line
+   records `freeRamDelta=64` post-restore).  Fixed: buffer-lifecycle
+   equalities are scoped to net-zero-program-delta windows with a
+   resize-quantum escape valve; the F6-6 restore subcase is differential
+   against a no-capture restore baseline.
+
+Fidelity corrections in the same pass: the F6-1 gate grepped a
+nonexistent test name (`test_forth_picker*` — the tree's picker tests are
+located by their quoted asserts instead); every "drive STO/XEQ/EXIT"
+became the landed idioms (`tamEnterMode(...)` direct, `fnKeyExit(NOPARAM)`,
+`addStepInProgram(ITM_FORTH)` for the toggle, `pemAlphaEdit(0)` for EDIT);
+the 196-glyph fixtures type alternating `X`/space (a single 196-glyph
+token could trip the E9 structural tier); F6-5's smudge fixture uses a
+new `forthTestSmudgeSet` FORTH_DEBUG_SELFTEST hook instead of an assumed
+header-poke idiom; F6-1's mutation 2 covers both `forthCapClose` sites
+with subcase-10 co-red; leftover authoring artifacts (a thinking-aloud
+mutation note, an imprecise C6 site count, reopen ambiguity between
+subcases) cleaned.  Core-ledger decision 6 and the affected packet
+rationales were rewritten to match; `F6_AUDIT_RESULTS.md` already carried
+the correct trace facts.
+
 ## 2026-07-19 — F4-2 debug: `regInRange` is not silent (packet amendment F4-2A)
 
 Non-normative. The F4-2 packet carried the traced claim that the native

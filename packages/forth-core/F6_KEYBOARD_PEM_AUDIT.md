@@ -1,16 +1,20 @@
 # F6 keyboard/PEM audit — the charter (HARD PRECONDITION of DESIGN §10.6)
 
-Status: **OPEN — audit not yet run.**  Authored 2026-07-18 by the
-architect as the enabling artifact for stage F6.  DESIGN §10.6 forbids
-authoring ANY F6 implementation packet before a dedicated keyboard/PEM
-audit with hardware-derived tests exists; this document is that audit's
-charter: the architect's trace plan, the owner's hardware experiment
-checklist, and the fixture-derivation map that turns recorded
-observations into packet fixtures.  When every experiment below has
-recorded observables and the architect has folded them into
-`F6_AUDIT_RESULTS.md` (created at audit time), the F6 packets may be
-authored — not before.  Authoring F6 packets from this charter alone
-would repeat the F1-5 P0 defect at stage scale.
+Status: **TRACES FOLDED (T1-T7) → `F6_AUDIT_RESULTS.md` 2026-07-19;
+BENCH (Blocks A-F) DEFERRED to stage-exit by owner ruling 2026-07-18.**
+The F6 packets are AUTHORED from the traces (`QWEN_PROMPTS_F6_core.md`
++ F6-1..F6-6); §10.6 was amended to record the split precondition.  The
+bench below remains QUEUED: it runs on the DM42n AFTER F6-6 lands,
+against the LANDED behavior (B1-B4 against the NEW suspend/resume
+contract, not the wrapper's), and the stage cannot close until every
+block has recorded observables and divergences are triaged.  The
+original charter text follows unchanged as the bench script.
+
+*(Original status, superseded 2026-07-18/19: OPEN — audit not yet run;
+authoring before the full audit was forbidden.  The deferred-bench
+register in `F6_AUDIT_RESULTS.md` records, per experiment, the
+trace-derived interim substitute and the residual hardware risk that
+motivated keeping the bench as the stage-exit gate.)*
 
 Division of labor (CLAUDE.md): **A** = architect (code traces, fixture
 derivation, packet authoring), **S** = Stan (hardware runs on the
