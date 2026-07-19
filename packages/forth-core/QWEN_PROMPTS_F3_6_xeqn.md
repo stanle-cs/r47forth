@@ -42,10 +42,89 @@ Traced facts this packet relies on (verified 2026-07-18, `b5d794df4`):
 
 ## PREAMBLE (paste before the task)
 
-Identical to F3-1's preamble with paths renamed to `f3-6`, PLUS the
-PROGRAM-FIXTURE AUTHORING RULE block exactly as printed in F3-3's preamble
-(this packet authors a program fixture).  All nine rules and the
-two-attempt handoff apply verbatim.
+You are implementing one small, fully specified task in the C47 calculator
+firmware repository at `/home/stan/c43`.  You are an implementer, not a
+designer: follow this packet exactly and make no product or architecture
+decisions.  If a quoted anchor, function, test, branch, literal, or identifier
+does not match the tree, STOP and report the mismatch instead of guessing.
+
+Rules:
+
+1. Confirm `git branch --show-current` is `forth-core/pem-entry-fixes` and run
+   `git status --short`.  The tree must be clean before any edit.  Otherwise
+   STOP.
+2. Before reading or editing a task file, write a tight todo list to the FILE
+   `/tmp/forth-f3-6-todo.md` (outside the repo): one item per file, helper,
+   test subcase, mutation, final gate, parity check, and report.  Keep it
+   updated; mark each item in progress and completed as you work, and append
+   `MUTATION APPLIED: <n>` / `MUTATION RESTORED: <n>` immediately.  Do not
+   report success with an open item.
+3. The only build/test command is `./packages/forth-core/build-test.sh`.
+   Success requires exit 0 plus both `FORTH SELF-TEST: ALL PASSED` and
+   `==> BUILD + SELF-TEST GREEN.`  Never invoke meson or ninja directly.
+   Always capture the output:
+
+   `./packages/forth-core/build-test.sh > /tmp/forth-f3-6-gate.log 2>&1; echo "gate exit: $?"`
+
+   Inspect only bounded slices: `tail -n 12`, targeted PASS/FAIL greps, and at
+   most one small context window around a failure.  Never read the full log.
+4. Edit only the flat files named by this packet under
+   `packages/forth-core/`.  Never edit `src/`, generated `patches/`, or
+   generated `files/`; the gate refreshes the generated package view.  Never
+   touch `src/c47/core/freeList.c` or any copy.
+5. Never read `DESIGN.md` or `DESIGN-HISTORY.md`.  Never read `items.c`,
+   `config.c`, `lblGtoXeq.c`, `forth_inner.c`, or `test_dict_reloc.c` in full.
+   Grep the named anchors and read only the specified local slices.
+6. Do not change an old-contract test unless this task names it.  If another
+   test reddens, STOP before editing it.
+7. Never run `git stash`, `git stash pop`, `git reset`, `git checkout --`, or
+   `git restore`.  Restore mutations by manually reversing only the mutation
+   hunk.  Never use `git add -A`.
+8. Report every required PASS/RED line, both final success banners, the arena
+   line, `git diff --check`, generated mirror equality, and surprises.
+9. Small-context recovery: this packet, `/tmp/forth-f3-6-todo.md`,
+   `git status --short`, and `git diff` are the durable task state.  After any
+   compaction or uncertainty, STOP the current step and re-read those sources;
+   never reconstruct packet text from memory.
+
+**Two-attempt debugger handoff.** After the implementation first fails a
+required command because of your changes, make at most two distinct repair
+attempts, each followed by the relevant rerun.  This does not override any
+immediate STOP rule and does not apply to an expected mutation RED.  If the
+second repair is not green, STOP and report `[SOL DEBUGGER HANDOFF]` with the
+command, bounded failure output, both repairs/results, current status/diff,
+and remaining hypotheses.
+
+
+**PROGRAM-FIXTURE AUTHORING RULE (mandatory)**
+
+`test_dict_reloc.c` program fixtures are structural, not hand-addressed.
+Build behavior-test programs with `testProg_t` and its `tp*` helpers. Capture
+the returned step handle when a test must execute or inspect that step, and
+resolve it with `tpStepAddr`; abort the subcase if fixture construction,
+`tpWrite`, or address lookup fails.
+
+Never add `beginOfProgramMemory + <numeric literal>`, a numeric argument to
+`tpStepAddr`, or arithmetic derived from preceding payload lengths. Packet
+authors must identify steps by role (for example `sSource` or `sXeq`) and
+must not publish a calculated byte offset as a normative literal. If a
+packet contains such an offset, stop with `[SOL DEBUGGER HANDOFF]` and report
+the packet defect; do not repair its arithmetic locally.
+
+Use a typed builder accessor such as `tpSrcPayload` for an internal field.
+If the needed step or field helper does not exist, extend the central fixture
+builder first; do not introduce local pointer arithmetic in the test.
+
+Prefer named opcode/parameter constants in builder helpers. An exact byte
+array may remain as the expected value of an encoding assertion. Raw bytes
+inserted into the program fixture are allowed only for the encoding under
+test or a deliberate malformation; they must enter through `tpRaw`, carry an
+adjacent comment naming that purpose, and still use the returned handle and
+builder-derived logical end. `tpRaw` is never a shortcut for an ordinary
+behavior fixture.
+
+This rule is prospective. Do not widen the task by converting untouched
+legacy fixtures.
 
 ---
 

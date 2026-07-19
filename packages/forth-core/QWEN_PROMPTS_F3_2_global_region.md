@@ -33,10 +33,59 @@ content with the helpers this packet defines.
 
 ## PREAMBLE (paste before the task)
 
-Identical to F3-1's preamble with every path renamed `f3-1` → `f3-2`
-(`/tmp/forth-f3-2-todo.md`, `/tmp/forth-f3-2-gate.log`, mutation logs
-`/tmp/forth-f3-2-mutN.log`).  All nine rules and the two-attempt debugger
-handoff apply verbatim.
+You are implementing one small, fully specified task in the C47 calculator
+firmware repository at `/home/stan/c43`.  You are an implementer, not a
+designer: follow this packet exactly and make no product or architecture
+decisions.  If a quoted anchor, function, test, branch, literal, or identifier
+does not match the tree, STOP and report the mismatch instead of guessing.
+
+Rules:
+
+1. Confirm `git branch --show-current` is `forth-core/pem-entry-fixes` and run
+   `git status --short`.  The tree must be clean before any edit.  Otherwise
+   STOP.
+2. Before reading or editing a task file, write a tight todo list to the FILE
+   `/tmp/forth-f3-2-todo.md` (outside the repo): one item per file, helper,
+   test subcase, mutation, final gate, parity check, and report.  Keep it
+   updated; mark each item in progress and completed as you work, and append
+   `MUTATION APPLIED: <n>` / `MUTATION RESTORED: <n>` immediately.  Do not
+   report success with an open item.
+3. The only build/test command is `./packages/forth-core/build-test.sh`.
+   Success requires exit 0 plus both `FORTH SELF-TEST: ALL PASSED` and
+   `==> BUILD + SELF-TEST GREEN.`  Never invoke meson or ninja directly.
+   Always capture the output:
+
+   `./packages/forth-core/build-test.sh > /tmp/forth-f3-2-gate.log 2>&1; echo "gate exit: $?"`
+
+   Inspect only bounded slices: `tail -n 12`, targeted PASS/FAIL greps, and at
+   most one small context window around a failure.  Never read the full log.
+4. Edit only the flat files named by this packet under
+   `packages/forth-core/`.  Never edit `src/`, generated `patches/`, or
+   generated `files/`; the gate refreshes the generated package view.  Never
+   touch `src/c47/core/freeList.c` or any copy.
+5. Never read `DESIGN.md` or `DESIGN-HISTORY.md`.  Never read `items.c`,
+   `config.c`, `lblGtoXeq.c`, `forth_inner.c`, or `test_dict_reloc.c` in full.
+   Grep the named anchors and read only the specified local slices.
+6. Do not change an old-contract test unless this task names it.  If another
+   test reddens, STOP before editing it.
+7. Never run `git stash`, `git stash pop`, `git reset`, `git checkout --`, or
+   `git restore`.  Restore mutations by manually reversing only the mutation
+   hunk.  Never use `git add -A`.
+8. Report every required PASS/RED line, both final success banners, the arena
+   line, `git diff --check`, generated mirror equality, and surprises.
+9. Small-context recovery: this packet, `/tmp/forth-f3-2-todo.md`,
+   `git status --short`, and `git diff` are the durable task state.  After any
+   compaction or uncertainty, STOP the current step and re-read those sources;
+   never reconstruct packet text from memory.
+
+**Two-attempt debugger handoff.** After the implementation first fails a
+required command because of your changes, make at most two distinct repair
+attempts, each followed by the relevant rerun.  This does not override any
+immediate STOP rule and does not apply to an expected mutation RED.  If the
+second repair is not green, STOP and report `[SOL DEBUGGER HANDOFF]` with the
+command, bounded failure output, both repairs/results, current status/diff,
+and remaining hypotheses.
+
 
 ---
 
