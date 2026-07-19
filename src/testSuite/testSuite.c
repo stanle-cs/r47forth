@@ -46,6 +46,7 @@ void covSolveRoot(uint16_t which);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
+void covIterationTi(uint16_t which);
 void covDerivPgm(uint16_t order);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
@@ -215,6 +216,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
+  {"fnIterationTiCov",       covIterationTi, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
@@ -897,6 +899,24 @@ static void covWriteAndLoadPgm(const uint8_t *pgm, size_t n) {
   }
   fclose(f);
   fnLoadProgram(NOPARAM);
+}
+
+void covIterationTi(uint16_t which) {
+  // Run one iteration op on the counter in R00 and leave 1 in X when it
+  // reports TI_TRUE (the decision a running program uses to skip the next
+  // step), else 0. The counter mutation itself is asserted through R00.
+  switch(which) {
+    case 0: fnIsz(0); break;
+    case 1: fnDsz(0); break;
+    case 2: fnIsg(0); break;
+    case 3: fnIse(0); break;
+    case 4: fnDse(0); break;
+    case 5: fnDsl(0); break;
+    default: break;
+  }
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(temporaryInformation == TI_TRUE ? 1 : 0, REGISTER_REAL34_DATA(REGISTER_X));
+  temporaryInformation = TI_NO_INFO;
 }
 
 void covLoadPgm(uint16_t unusedButMandatoryParameter) {
