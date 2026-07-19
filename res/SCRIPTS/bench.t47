@@ -5,7 +5,7 @@
 #
 #   ./t47bench --headless --snapskiprefresh --reset --script res/SCRIPTS/bench.t47
 #
-# Runs every program of res/PROGRAMS/bench/ (see tools/bench/genbench.py),
+# Runs every program of tools/bench/PROGRAMS/ (see tools/bench/genbench.py),
 # each of which times itself with a TICKS bracket and leaves its elapsed
 # ticks in R97. This script wraps each run in Jim's microsecond `time` as
 # well, so every repetition reports both clocks. Machine-readable output on
@@ -27,7 +27,7 @@ if {[info exists ::env(BENCH_REPS)]} {
 # BMNQN calls the stock NQueens program (label NQ), so load it first.
 readp res/PROGRAMS/NQueens.p47
 foreach bm $benchmarks {
-    readp res/PROGRAMS/bench/$bm.p47
+    readp tools/bench/PROGRAMS/$bm.p47
 }
 
 foreach bm $benchmarks {

@@ -83,8 +83,11 @@ comparisons stay honest.
 
 ## Running on the calculator
 
-Copy the nine files from `res/PROGRAMS/bench/` plus `NQueens.p47` into
-the calculator's PROGRAMS directory. To expose that directory as a USB
+Copy the nine files from `tools/bench/PROGRAMS/` plus the stock
+`res/PROGRAMS/NQueens.p47` into the calculator's PROGRAMS directory.
+(The benchmark programs live under tools rather than res/PROGRAMS on
+purpose: res/PROGRAMS ships verbatim into the release zips, and the
+bench suite should stay opt-in.) To expose that directory as a USB
 disk: shift, then the +/- key opens the MODE menu, then shift F2 is
 ActUSB; confirm, copy the files over, eject. Then, on a DM42 style
 keyboard with the default C47 layout:
@@ -155,14 +158,16 @@ what a hardware user feels is per-step overhead, not arithmetic.
 Recalibrate after a firmware upgrade, after changing the local machine,
 or when moving between power states. The calibration file records device,
 power, firmware, date, and host, so a stale calibration is at least an
-honest one.
+honest one. Keep a plain-text record of each hardware run in
+`tools/bench/results/`, named `YYYY-MM-DD_C47_<device>_<firmware sha>.txt`;
+the checked-in example is the run this repository's calibration came from.
 
 ## Regenerating the programs
 
 The .p47 files are generated, never hand-edited:
 
 ```
-python3 tools/bench/genbench.py           # regenerate res/PROGRAMS/bench/
+python3 tools/bench/genbench.py           # regenerate tools/bench/PROGRAMS/
 python3 tools/bench/genbench.py --check   # verify checked-in files match
 ```
 

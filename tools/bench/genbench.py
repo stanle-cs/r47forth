@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: Copyright The C47 Authors
 #
-# Generate the benchmark suite programs in res/PROGRAMS/bench/.
+# Generate the benchmark suite programs in tools/bench/PROGRAMS/.
 #
 # Each benchmark isolates one cost axis of the program interpreter and times
 # itself with a TICKS bracket (the pattern NQueens.p47 already uses), so the
@@ -46,7 +46,7 @@
 # (type 8 = long integer, type 9 = real34, type 253 = alpha string).
 #
 # Usage:
-#   python3 tools/bench/genbench.py           regenerate res/PROGRAMS/bench/
+#   python3 tools/bench/genbench.py           regenerate tools/bench/PROGRAMS/
 #   python3 tools/bench/genbench.py --check   verify checked-in files match
 
 import argparse
@@ -56,7 +56,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 ITEMS_H = REPO / "src" / "c47" / "items.h"
-OUT_DIR = REPO / "res" / "PROGRAMS" / "bench"
+OUT_DIR = REPO / "tools" / "bench" / "PROGRAMS"
 
 STRING_LABEL_VARIABLE = 253
 STRING_LONG_INTEGER = 8
@@ -306,7 +306,7 @@ def generate():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate res/PROGRAMS/bench/*.p47")
+    parser = argparse.ArgumentParser(description="Generate tools/bench/PROGRAMS/*.p47")
     parser.add_argument("--check", action="store_true", help="verify checked-in files match the generator")
     args = parser.parse_args()
 
