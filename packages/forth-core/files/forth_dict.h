@@ -25,6 +25,9 @@
 #ifndef FTOK_EXIT
   #define FTOK_EXIT     0x0000u     /* end of colon definition body */
 #endif
+#ifndef FTOK_XEQN
+  #define FTOK_XEQN     0x7F05u     /* XEQ by name: [kind][len][name][pad] */
+#endif
 
 typedef struct {                    /* stored in ram[], NEVER dereferenced as-is */
   uint16_t link;                    /* region-relative offset of previous header, or FORTH_NULL */
@@ -151,6 +154,11 @@ bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags);
 /* Forward (Forth-source) C47 item lookup: CAT_FNCT + PTP_NONE only (§4.1 step 4). */
 bool forthFindItem(const char *name, uint16_t *itemId);
 
+/* CAT_FNCT items whose PTP class is a parameter class (1<<9 .. 12<<9).
+   PTP_NONE/PTP_LITERAL/PTP_REM/PTP_DISABLED are OUTSIDE the set:
+   ITM_FORTH (PTP_REM) must keep resolving through the reverse path. */
+bool forthFindItemParameterized(const char *name, uint16_t *itemId);
+
 /* Reverse lookup: §4.2 resolution order (label > item > colon) */
 typedef enum {
   FORTH_XEQ_NONE = 0,
@@ -162,6 +170,14 @@ typedef enum {
 /* Resolve name for XEQ: C47 label first, C47 item second, Forth colon last (§4.2).
    Sets *param to label ID (LABEL), item ID (ITEM), or dictionary index (COLON). */
 forthXEQType_t forthResolveXEQ(const char *name, uint16_t *param);
+
+/* F3-6: XEQN dispatch result */
+typedef enum { FORTH_XEQN_DONE, FORTH_XEQN_COLON, FORTH_XEQN_ERR } forthXeqnResult_t;
+
+/* F3-6: shared XEQN dispatch (kind-faithful, B2 chain, B4 matrix).
+   kind: 253 (STRING_LABEL_VARIABLE) or 249 (LOCAL_LABEL_VARIABLE).
+   On COLON, sets *colonRef and returns — the caller dispatches. */
+forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *colonRef);
 
 /* Inner interpreter entry (§3.2) */
 void forthInner(uint16_t entryIndex, bool fromProgram);

@@ -19,6 +19,7 @@
 #define FTOK_C47          0x7F04
 #define FTOK_BR           0x7F02
 #define FTOK_0BR          0x7F03
+#define FTOK_XEQN         0x7F05
 
 /* ---- §3.3.2 / D-3: per-invocation context; idle BSS = one ptr + 2 bytes ---- */
 typedef enum {
@@ -391,6 +392,8 @@ typedef enum {
  * Called by forthOuterInterpret, fnForthOuter, and forthProgramStep.
  * Per DESIGN.md §3.3 pseudocode, §3.3.1 (C-4), §3.3.6 (C-1).
  */
+static bool forthParseXeqForm(const char *, uint8_t *, char *, uint8_t *);
+static bool emitXeqn(uint8_t, const char *, uint8_t);
 static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   if (forthOuterDepth >= FORTH_OUTER_NEST_MAX) {
     displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -457,12 +460,12 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
          if (!nextToken(name)) {
            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
            lineOK = false;
-        } else if (!startDefinition(name)) {
-          lineOK = false;
-         } else {
-           state = STATE_COMPILE;
-           forthCsp = 0;
-         }
+          } else if (!startDefinition(name)) {
+           lineOK = false;
+          } else {
+            state = STATE_COMPILE;
+            forthCsp = 0;
+          }
        }
        continue;
      }
@@ -518,6 +521,44 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       }
       if (!forthGDictForget(fname)) {
         lineOK = false;               /* error already displayed */
+      }
+       continue;
+    }
+
+    /* F3-6: XEQ — structural, deliberately unshadowable */
+    if (compareString(buf, "XEQ", CMP_BINARY) == 0) {
+      char xtok[FORTH_TOKEN_MAX + 1];
+      char xname[FORTH_NAME_MAX + 1];
+      uint8_t xkind, xlen;
+      if (!nextToken(xtok)) {
+        if (isDefinitionOpen()) abortDefinition();
+        displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+        lineOK = false;
+        continue;
+      }
+      if (mode == FORTH_OUTER_DEFS_ONLY && state == STATE_INTERPRET) {
+        continue;                     /* tail XEQ is execution, not a mark */
+      }
+      if (!forthParseXeqForm(xtok, &xkind, xname, &xlen)) {
+        if (isDefinitionOpen()) abortDefinition();
+        displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+        lineOK = false;               /* B3: only the canonical spellings exist */
+        continue;
+      }
+      if (state == STATE_COMPILE) {
+        if (!emitXeqn(xkind, xname, xlen)) {
+          abortDefinition();
+          lineOK = false;
+        }
+      } else {
+        uint16_t colonRef;
+        forthXeqnResult_t r = forthXeqnDispatch(xname, xkind, &colonRef);
+        if (r == FORTH_XEQN_COLON) {
+          forthInner(colonRef, programRunStop == PGM_RUNNING);
+        }
+        if (lastErrorCode != ERROR_NONE) {
+          lineOK = false;
+        }
       }
       continue;
     }
@@ -622,6 +663,18 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       }
     }
 
+    /* F3-6 B3 forward: bare parameterized item is an atomic syntax error.
+     * F4: this arm becomes the Series-C parameter-grammar entry. */
+    {
+      uint16_t paramItemId;
+      if (forthFindItemParameterized(buf, &paramItemId)) {
+        displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+        if (isDefinitionOpen()) abortDefinition();
+        lineOK = false;
+        continue;
+      }
+    }
+
     /* ---- §4.1 step 5: C47 label (§3.3.6, C-1) ---- */
     {
       /* GLOBAL_LABELS (upstream rebase to b8f79e486): see forth_dict.c's
@@ -699,9 +752,51 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   forthOuterCur = prevCtx;
 }
 
+/* ---- F3-6: XEQ source-form helpers ---- */
+
+/* 'NAME' -> kind 253; :NAME: -> kind 249.  The closing delimiter must be
+ * the LAST GLYPH (a two-byte glyph whose second byte merely equals the
+ * delimiter is not a close).  Name bytes pass through raw (C47 glyphs
+ * legal; 0x20 is inexpressible in a token by construction). */
+static bool forthParseXeqForm(const char *tok, uint8_t *kind,
+                              char *name, uint8_t *lenOut)
+{
+  int16_t len = (int16_t)strlen(tok);
+  char delim = tok[0];
+  if (len < 3 || (delim != '\'' && delim != ':')) return false;
+  {
+    int16_t p = 0, last = 0;
+    while (tok[p] != 0) { last = p; p = stringNextGlyph((char *)tok, p); }
+    if (last != len - 1 || tok[last] != delim) return false;
+  }
+  {
+    int16_t nlen = len - 2;
+    if (nlen < 1 || nlen > FORTH_NAME_MAX) return false;
+    memcpy(name, tok + 1, (size_t)nlen);
+    name[nlen] = 0;
+    *lenOut = (uint8_t)nlen;
+  }
+  *kind = (delim == ':') ? LOCAL_LABEL_VARIABLE : STRING_LABEL_VARIABLE;
+  return true;
+}
+
+static bool emitXeqn(uint8_t kind, const char *name, uint8_t len)
+{
+  uint8_t buf[2 + FORTH_NAME_MAX + 1];
+  uint16_t inlineBytes = (uint16_t)(2 + len);
+  uint16_t padded = (uint16_t)((inlineBytes + 1) & ~1u);
+    buf[0] = kind;
+    buf[1] = len;
+  memcpy(buf + 2, name, len);
+  if (padded > inlineBytes) buf[inlineBytes] = 0;
+  if (!forthDictEmit((ftoken_t)FTOK_XEQN)) return false;
+  return forthDictEmitBytes(buf, padded);
+}
+
 /* ---- Public wrapper: same signature as before ---- */
 void forthOuterInterpret(const char *source)
 {
+  lastErrorCode = ERROR_NONE;
   forthOuterCtx_t ctx;
   ctx.savedScope = forthCurrentScope;
   size_t n = strlen(source);

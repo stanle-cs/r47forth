@@ -37,6 +37,38 @@
 #define T_BR           0x7F02
 #define T_0BR          0x7F03
 #define T_C47          0x7F04
+#define T_XEQN         0x7F05
+
+/* ---- Program-fixture builder types (needed early by test_xeqn) ---- */
+
+#define TP_MAX_BYTES 192
+#define TP_MAX_STEPS 24
+
+typedef enum {
+  TP_STEP_LBL,
+  TP_STEP_MARKER,
+  TP_STEP_SRC,
+  TP_STEP_XEQ_NAME,
+  TP_STEP_OP1,
+  TP_STEP_RAW
+} tpStepKind_t;
+
+typedef struct testProg {
+  uint8_t  bytes[TP_MAX_BYTES];
+  uint16_t len;
+  uint8_t  stepCount;
+  bool     failed;
+  uint16_t stepOff[TP_MAX_STEPS];
+  tpStepKind_t stepKind[TP_MAX_STEPS];
+} testProg_t;
+
+/* Forward declarations for tp* helpers (defined later) */
+static void tpInit(testProg_t *);
+static int tpLbl(testProg_t *, const char *);
+static int tpSrc(testProg_t *, const char *);
+static int tpEnd(testProg_t *);
+static bool tpWrite(const testProg_t *);
+static uint8_t *tpStepAddr(const testProg_t *, int);
 
 /* ---- Primitive indices (mirror forth_prims.c) ---- */
 
@@ -105,6 +137,12 @@ static bool gemit(ftoken_t t)
 {
   if (!forthGDictEnsure(2)) return false;
   memcpy(gdict.base + gdict.here, &t, 2); gdict.here += 2; return true;
+}
+
+static bool gemit_bytes(const uint8_t *buf, uint16_t len)
+{
+  if (!forthGDictEnsure(len)) return false;
+  memcpy(gdict.base + gdict.here, buf, len); gdict.here += len; return true;
 }
 
 static void gend_word(void)
@@ -2143,11 +2181,11 @@ static int test_xeq_item_lookup(void)
     fail = 1;
   }
 
-  /* Test 2: "FCALL" resolves to ITM_FCALL */
+  /* Test 2: "FCALL" rejected by B3 reverse (PTP_NUMBER_16 is parameterized) */
   res = forthResolveXEQ("FCALL", &param);
-  if (res != FORTH_XEQ_ITEM || param != ITM_FCALL) {
-    printf("    FAIL: forthResolveXEQ(\"FCALL\") returned %d/%u (expected ITEM/%d)\n",
-    res, param, ITM_FCALL);
+  if (res != FORTH_XEQ_NONE) {
+    printf("    FAIL: forthResolveXEQ(\"FCALL\") returned %d/%u (expected NONE — B3 reject)\n",
+    res, param);
     fail = 1;
   }
 
@@ -2184,9 +2222,288 @@ static int test_xeq_item_lookup(void)
   forthDictClear();
 
   if (!fail) {
-    printf("    PASS: XEQ item lookup: FORTH->ITEM(%d), FCALL->ITEM(%d), miss->NONE, "
-           "item SIN beats colon SIN\n", ITM_FORTH, ITM_FCALL);
+    printf("    PASS: XEQ item lookup: FORTH->ITEM(%d), FCALL->NONE (B3), miss->NONE, "
+           "item SIN beats colon SIN\n", ITM_FORTH);
   }
+  return fail;
+}
+
+/* F3-6: XEQ source forms, FTOK_XEQN, kind-faithful end to end */
+static int test_xeqn(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+
+  /* ---- Subcase 1: Compile shape, both kinds ---- */
+  {
+    forthDictClear();
+    forthOuterInterpret(": X1 XEQ 'AB' ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: XEQ 'AB' compile error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      uint16_t off = fdict.latest;
+      uint16_t bodyOff = off + (uint16_t)TO_BLOCKS(6 + 2) * BYTES_PER_BLOCK;
+      uint8_t expected1[] = {0x05, 0x7F, 0xFD, 0x02, 0x41, 0x42, 0x00, 0x00};
+      int ok = 1;
+      for (int i = 0; i < (int)(sizeof(expected1)); i++) {
+        if (fdict.base[bodyOff + i] != expected1[i]) {
+          printf("    [1] FAIL: byte %d: 0x%02x != 0x%02x\n",
+                 i, fdict.base[bodyOff + i], expected1[i]);
+          ok = 0; break;
+        }
+      }
+      if (!ok) fail = 1;
+
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret(": X2 XEQ :CDE: ;");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: XEQ :CDE: compile error %d\n", lastErrorCode);
+        fail = 1;
+      } else {
+        off = fdict.latest;
+        bodyOff = off + (uint16_t)TO_BLOCKS(6 + 2) * BYTES_PER_BLOCK;
+        uint8_t expected2[] = {0x05, 0x7F, 0xF9, 0x03, 0x43, 0x44, 0x45, 0x00, 0x00, 0x00};
+        for (int i = 0; i < (int)(sizeof(expected2)); i++) {
+          if (fdict.base[bodyOff + i] != expected2[i]) {
+            printf("    [1] FAIL: X2 byte %d: 0x%02x != 0x%02x\n",
+                   i, fdict.base[bodyOff + i], expected2[i]);
+            ok = 0; break;
+          }
+        }
+        if (!ok) fail = 1;
+      }
+    }
+    if (!fail) printf("    [1] PASS: XEQN encodes kind/len/name/pad exactly\n");
+  }
+
+  /* ---- Subcase 2: Interpret-state global hit runs the program ---- */
+  {
+    forthDictClear();
+    cleanupTestProgram();
+    testProg_t tp;
+    tpInit(&tp);
+    int sLbl = tpLbl(&tp, "TG");
+    int sSrc = tpSrc(&tp, "77");
+    (void)tpEnd(&tp);
+    if (sLbl < 0 || sSrc < 0 || !tpWrite(&tp)) {
+      printf("    [2] FAIL: fixture build/write failed\n");
+      fail = 1;
+    } else {
+      programRunStop = PGM_STOPPED;
+      lastErrorCode = ERROR_NONE;
+      dynamicMenuItem = -1;
+      forthRunGenBump();
+      programRunStop = PGM_RUNNING;
+      currentStep = tpStepAddr(&tp, sSrc);
+      executeOneStep(currentStep);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [2] FAIL: program setup error %d\n", lastErrorCode);
+        fail = 1;
+      } else {
+        lastErrorCode = ERROR_NONE;
+        forthOuterInterpret("XEQ 'TG'");
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [2] FAIL: XEQ 'TG' error %d\n", lastErrorCode);
+          fail = 1;
+        } else if (!x_is_longint(77)) {
+          printf("    [2] FAIL: X != 77 after XEQ 'TG'\n");
+          fail = 1;
+        }
+      }
+    }
+    if (!fail) printf("    [2] PASS: XEQ 'NAME' interpret dispatch reaches the native XEQ path\n");
+    cleanupTestProgram();
+  }
+
+  /* ---- Subcase 3: Local requests never fall back ---- */
+  {
+    forthDictClear();
+    forthOuterInterpret(": ZZ 8 ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: define ZZ error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      forthPushInt32(55);
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("XEQ :ZZ:");
+      if (lastErrorCode != ERROR_LABEL_NOT_FOUND) {
+        printf("    [3] FAIL: expected ERROR_LABEL_NOT_FOUND got %d\n", lastErrorCode);
+        fail = 1;
+      } else if (!x_is_longint(55)) {
+        printf("    [3] FAIL: X changed from 55\n");
+        fail = 1;
+      }
+    }
+    if (!fail) printf("    [3] PASS: kind 249 miss is terminal — no fallback\n");
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* ---- Subcase 4: Global-kind fallback chain, prim then colon ---- */
+  {
+    forthDictClear();
+    forthPushInt32(5);
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'DUP'");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [4] FAIL: XEQ 'DUP' error %d\n", lastErrorCode);
+      fail = 1;
+    } else if (!x_is_longint(5) || !y_is_longint(5)) {
+      printf("    [4] FAIL: X or Y != 5 after DUP\n");
+      fail = 1;
+    }
+
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": CW 9 ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [4] FAIL: define CW error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("XEQ 'CW'");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [4] FAIL: XEQ 'CW' error %d\n", lastErrorCode);
+        fail = 1;
+      } else if (!x_is_longint(9)) {
+        printf("    [4] FAIL: X != 9 after XEQ 'CW'\n");
+        fail = 1;
+      }
+    }
+    if (!fail) printf("    [4] PASS: global-kind miss falls back prim-then-colon\n");
+  }
+
+  /* ---- Subcase 5: Compiled XEQN dispatches at run time, from both regions ---- */
+  {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": XR XEQ 'CW' ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [5] FAIL: define XR error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      if (run_word("XR")) {
+        printf("    [5] FAIL: run XR error %d\n", lastErrorCode);
+        fail = 1;
+      } else if (!x_is_longint(9)) {
+        printf("    [5] FAIL: X != 9 after run XR\n");
+        fail = 1;
+      }
+    }
+
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": GX XEQ 'CW' ; GLOBAL");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [5] FAIL: define GX GLOBAL error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      if (run_word("GX")) {
+        printf("    [5] FAIL: run GX error %d\n", lastErrorCode);
+        fail = 1;
+      } else if (!x_is_longint(9)) {
+        printf("    [5] FAIL: X != 9 after run GX\n");
+        fail = 1;
+      }
+    }
+    if (!fail) printf("    [5] PASS: FTOK_XEQN runs from transient and global bodies\n");
+  }
+
+  /* ---- Subcase 6: Corrupted inline data rejects ---- */
+  {
+    /* Runtime: bad kind byte */
+    {
+      uint16_t w = begin_word("XC", 2);
+      if (w == FORTH_NULL) {
+        printf("    [6] FAIL: alloc failed for XC\n");
+        fail = 1;
+      } else {
+        forthDictEmit((ftoken_t)T_XEQN);
+        uint8_t bad[] = {0xAA, 0x02, 'A', 'B'};
+        forthDictEmitBytes(bad, sizeof(bad));
+        end_word(w);
+        lastErrorCode = ERROR_NONE;
+        if (run_word("XC")) {
+          if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+            printf("    [6] FAIL: runtime bad kind: expected ERROR_INVALID_CORRUPTED_DATA got %d\n",
+                   lastErrorCode);
+            fail = 1;
+          }
+        } else {
+          printf("    [6] FAIL: runtime bad kind: no error\n");
+          fail = 1;
+        }
+        lastErrorCode = ERROR_NONE;
+      }
+    }
+
+    /* Validator: zero length */
+    {
+      uint16_t w = gbegin_word("XV", 2);
+      if (w == FORTH_NULL) {
+        printf("    [6] FAIL: galloc failed for XV\n");
+        fail = 1;
+      } else {
+        gemit((ftoken_t)T_XEQN);
+        uint8_t zlen[] = {0xFD, 0x00};
+        gemit_bytes(zlen, sizeof(zlen));
+        gend_word();
+        uint8_t *savedBase = gdict.base;
+        uint16_t savedBlocks = gdict.sizeBlocks;
+        forthGDictValidateRestored();
+        if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+          printf("    [6] FAIL: validator zero len: expected ERROR_INVALID_CORRUPTED_DATA got %d\n",
+                 lastErrorCode);
+          fail = 1;
+        }
+        lastErrorCode = ERROR_NONE;
+        if (savedBase) freeC47Blocks(savedBase, savedBlocks);
+      }
+    }
+    if (!fail) printf("    [6] PASS: bad kind and zero length reject at run and restore\n");
+  }
+
+  /* ---- Subcase 7: B3 forward ---- */
+  {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("STO");
+    if (lastErrorCode != ERROR_INVALID_NAME) {
+      printf("    [7] FAIL: STO: expected ERROR_INVALID_NAME got %d\n", lastErrorCode);
+      fail = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+
+    forthOuterInterpret(": BX STO ;");
+    if (lastErrorCode != ERROR_INVALID_NAME) {
+      printf("    [7] FAIL: STO compile: expected ERROR_INVALID_NAME got %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      uint16_t r;
+      if (forthFindColon("BX", &r)) {
+        printf("    [7] FAIL: BX should not exist (atomic abort)\n");
+        fail = 1;
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+
+    forthOuterInterpret("XEQ AB");
+    if (lastErrorCode != ERROR_INVALID_NAME) {
+      printf("    [7] FAIL: XEQ AB: expected ERROR_INVALID_NAME got %d\n", lastErrorCode);
+      fail = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+
+    forthOuterInterpret("XEQ");
+    if (lastErrorCode != ERROR_INVALID_NAME) {
+      printf("    [7] FAIL: XEQ bare: expected ERROR_INVALID_NAME got %d\n", lastErrorCode);
+      fail = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+
+    if (!fail) printf("    [7] PASS: bare parameterized items and malformed XEQ forms reject atomically\n");
+  }
+
+  forthDictClear();
+  cleanupTestProgram();
+  programRunStop = savedRS;
+  lastErrorCode = ERROR_NONE;
   return fail;
 }
 
@@ -6920,26 +7237,6 @@ static bool writeTestProgram(const uint8_t *bytes, uint16_t n)
  * computed by hand. tpRaw() is the sole escape hatch for a deliberate
  * malformation or exact encoding assertion. New tests must use this builder
  * (packet authoring rule); existing tests are not migrated opportunistically. */
-#define TP_MAX_BYTES 192
-#define TP_MAX_STEPS 24
-
-typedef enum {
-  TP_STEP_LBL,
-  TP_STEP_MARKER,
-  TP_STEP_SRC,
-  TP_STEP_XEQ_NAME,
-  TP_STEP_OP1,
-  TP_STEP_RAW
-} tpStepKind_t;
-
-typedef struct {
-  uint8_t  bytes[TP_MAX_BYTES];
-  uint16_t len;
-  uint8_t  stepCount;
-  bool     failed;
-  uint16_t stepOff[TP_MAX_STEPS];
-  tpStepKind_t stepKind[TP_MAX_STEPS];
-} testProg_t;
 
 static const uint8_t tpForthPrefix[3] = {
   0x8B, 0x1A, STRING_LABEL_VARIABLE
@@ -11183,6 +11480,8 @@ int forthDictSelfTest(void)
   fail |= test_xeq_precedence();
   printf("  [DEBUG] running test_xeq_item_lookup...\n");
   fail |= test_xeq_item_lookup();
+  printf("  [DEBUG] running test_xeqn...\n");
+  fail |= test_xeqn();
   printf("  [DEBUG] running test_fnforthcall_interactive...\n");
   fail |= test_fnforthcall_interactive();
   printf("  [DEBUG] running test_lblq_forth_name_not_local_label...\n");

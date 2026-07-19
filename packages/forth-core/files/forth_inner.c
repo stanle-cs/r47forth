@@ -18,6 +18,7 @@
 #define FTOK_BR           0x7F02
 #define FTOK_0BR          0x7F03
 #define FTOK_C47          0x7F04
+#define FTOK_XEQN         0x7F05
 
 /* ---- §3.2 Return stack & guards ---- */
 
@@ -125,6 +126,59 @@ static bool_t pollProgramInterrupt(void)
   return false;
 }
 #endif
+
+/* ---- F3-6: XEQN shared dispatch (kind-faithful, B2 chain, B4 matrix) ---- */
+
+forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *colonRef)
+{
+  /* 1. Label lookup with stored kind (position-sensitive inherited) */
+  calcRegister_t label = findNamedLabel(name, kind);
+  if (label != INVALID_VARIABLE) {
+    dynamicMenuItem = -1;
+    fnExecute((uint16_t)label);
+    if (lastErrorCode != ERROR_NONE) return FORTH_XEQN_ERR;
+    return FORTH_XEQN_DONE;
+  }
+
+  /* 2. Kind-faithful: local miss is terminal — no fallback */
+  if (kind == LOCAL_LABEL_VARIABLE) {
+    displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return FORTH_XEQN_ERR;
+  }
+
+  /* 3. Global-kind miss: B2 chain — prim, colon, item */
+  {
+    uint16_t pidx = forthFindPrim(name);
+    if (pidx != FORTH_PRIM_NONE) {
+      forthPrims[pidx].fn();
+      clearSystemFlag(FLAG_ASLIFT);
+      if (lastErrorCode != ERROR_NONE) return FORTH_XEQN_ERR;
+      return FORTH_XEQN_DONE;
+    }
+  }
+  {
+    uint16_t ref;
+    uint8_t fl;
+    if (forthFindColonRef(name, &ref, &fl)) {
+      *colonRef = ref;
+      return FORTH_XEQN_COLON;
+    }
+  }
+  {
+    uint16_t itemId;
+    if (forthFindItem(name, &itemId)) {
+      uint8_t savedRunStop = programRunStop;
+      programRunStop = PGM_RUNNING;
+      reallyRunFunction((int16_t)itemId, NOPARAM);
+      if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+      if (lastErrorCode != ERROR_NONE) return FORTH_XEQN_ERR;
+      return FORTH_XEQN_DONE;
+    }
+  }
+
+  displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+  return FORTH_XEQN_ERR;
+}
 
 /* ---- Region dispatch helpers (interpreter only) ---- */
 
@@ -424,6 +478,70 @@ void forthInner(uint16_t wordRef, bool fromProgram)
          }
          /* else: native-parity silence — no error, no dispatch */
 
+        if (lastErrorCode != ERROR_NONE) {
+          INNER_LEAVE();
+        }
+        break;
+      }
+
+      case FTOK_XEQN: {
+        /* F3-6: XEQN runtime dispatch — bounded-read kind/len/name/pad */
+        if (!boundedRead(curG, ip, 2)) {
+          INNER_LEAVE();
+        }
+        uint8_t xkind = innerBase(curG)[ip];
+        uint8_t xnlen = innerBase(curG)[ip + 1];
+        if (xkind != STRING_LABEL_VARIABLE && xkind != LOCAL_LABEL_VARIABLE) {
+          lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+          displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                                  ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          INNER_LEAVE();
+        }
+        if (xnlen < 1 || xnlen > FORTH_NAME_MAX) {
+          lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+          displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                                  ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          INNER_LEAVE();
+        }
+        uint16_t xinline = (uint16_t)(2 + xnlen);
+        uint16_t xpadded = (uint16_t)((xinline + 1) & ~1u);
+        if (!boundedRead(curG, ip, xpadded)) {
+          INNER_LEAVE();
+        }
+        if (xpadded > xinline && innerBase(curG)[ip + xinline] != 0) {
+          lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+          displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                                  ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          INNER_LEAVE();
+        }
+        char xname[FORTH_NAME_MAX + 1];
+        memcpy(xname, innerBase(curG) + ip + 2, xnlen);
+        xname[xnlen] = 0;
+        ip += xpadded;
+
+        uint16_t colonRef;
+        forthXeqnResult_t xr = forthXeqnDispatch(xname, xkind, &colonRef);
+        if (xr == FORTH_XEQN_COLON) {
+          /* FTOK_CALL dispatch shape */
+          if (rsp >= FORTH_RSTACK_DEPTH) {
+            lastErrorCode = ERROR_RAM_FULL;
+            displayCalcErrorMessage(ERROR_RAM_FULL,
+                                    ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            INNER_LEAVE();
+          }
+          rstack[rsp] = ip;
+          if (curG) rstackRegionBits |= (1ull << rsp);
+          else rstackRegionBits &= ~(1ull << rsp);
+          rsp++;
+          curG = (colonRef & FORTH_REF_GLOBAL) != 0;
+          ip = bodyOffsetOfRef(colonRef);
+          if (ip == FORTH_NULL) {
+            lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+            displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                                    ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            INNER_LEAVE();
+          }
+        }
         if (lastErrorCode != ERROR_NONE) {
           INNER_LEAVE();
         }

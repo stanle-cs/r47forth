@@ -163,7 +163,7 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
         if (gdict.base[pos + 1] != 0) return false;   /* padded cell */
         pos += 2;
       }
-      else if (ptp == PTP_NUMBER_16) {
+      else       if (ptp == PTP_NUMBER_16) {
         if ((uint32_t)pos + 2u > limit) return false;
         pos += 2;
       }
@@ -171,8 +171,21 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
         return false;
       }
     }
+    else if (tok == FTOK_XEQN) {
+      /* F3-6: XEQN inline [kind][len][name][pad] */
+      if ((uint32_t)pos + 2u > limit) return false;
+      uint8_t xkind = gdict.base[pos];
+      uint8_t xlen = gdict.base[pos + 1];
+      if (xkind != STRING_LABEL_VARIABLE && xkind != LOCAL_LABEL_VARIABLE) return false;
+      if (xlen < 1 || xlen > FORTH_NAME_MAX) return false;
+      uint16_t xinline = (uint16_t)(2 + xlen);
+      uint16_t xpadded = (uint16_t)((xinline + 1) & ~1u);
+      if ((uint32_t)pos + xpadded > limit) return false;
+      if (xpadded > xinline && gdict.base[pos + xinline] != 0) return false;
+      pos += xpadded;
+    }
     else {
-      return false;   /* 0x7F05..0xFFFF reserved — F3 adds XEQN here */
+      return false;   /* 0x7F06..0xFFFF reserved */
     }
   }
 }
@@ -235,6 +248,7 @@ void forthGDictValidateRestored(void)
 #if defined(PC_BUILD)
     printf("forthGDictValidateRestored: inconsistent dictionary in backup, resetting\n");
 #endif
+    lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
     /* Deliberate orphan: do NOT freeC47Blocks here — the restored allocation
      * tables are exactly what we just failed to trust (P-4 exception). */
     forthGDictInit();
@@ -444,6 +458,24 @@ bool forthFindItem(const char *name, uint16_t *itemId)
   return false;
 }
 
+/* CAT_FNCT items whose PTP class is a parameter class (1<<9 .. 12<<9).
+   PTP_NONE/PTP_LITERAL/PTP_REM/PTP_DISABLED are OUTSIDE the set:
+   ITM_FORTH (PTP_REM) must keep resolving through the reverse path. */
+bool forthFindItemParameterized(const char *name, uint16_t *itemId)
+{
+  uint16_t i;
+  for (i = 1; i < LAST_ITEM; i++) {
+    uint16_t ptp = (uint16_t)(indexOfItems[i].status & PTP_STATUS);
+    if ((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT &&
+        ptp >= PTP_DECLARE_LABEL && ptp <= PTP_MENU &&
+        compareString(name, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) {
+      *itemId = i;
+      return true;
+    }
+  }
+  return false;
+}
+
 /* ---- Dict-emit API (§3.3.7) ---- */
 
 static struct { uint16_t here, latest, count, entryOff; bool open; } openDef;
@@ -641,7 +673,20 @@ static bool validateWalkOn(const uint8_t *base, uint16_t bodyStart, uint16_t lim
     else if (tok >= FORTH_GCALL_BASE && tok <= 0x7EFF) {
       if ((uint16_t)(tok - FORTH_GCALL_BASE) >= gcount) return false;
     }
-    else if (tok >= 0x7F05) return false;  /* reserved */
+    else if (tok == FTOK_XEQN) {
+      /* F3-6: XEQN — names resolve fresh at runtime; accept and advance */
+      if ((uint32_t)pos + 2u > limit) return false;
+      uint8_t vk = base[pos];
+      uint8_t vl = base[pos + 1];
+      if (vk != STRING_LABEL_VARIABLE && vk != LOCAL_LABEL_VARIABLE) return false;
+      if (vl < 1 || vl > FORTH_NAME_MAX) return false;
+      uint16_t vi = (uint16_t)(2 + vl);
+      uint16_t vp = (uint16_t)((vi + 1) & ~1u);
+      if ((uint32_t)pos + vp > limit) return false;
+      if (vp > vi && base[pos + vi] != 0) return false;
+      pos += vp;
+    }
+    else if (tok >= 0x7F06) return false;  /* reserved */
     else if (tok == FTOK_LIT) {
       if ((uint32_t)pos + 16u > limit) return false;
       pos += 16;
@@ -725,6 +770,13 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
         uint16_t ptp2 = (uint16_t)(indexOfItems[itemId2].status & PTP_STATUS);
         if (ptp2 == PTP_NUMBER_8 || ptp2 == PTP_NUMBER_16) pos += 2;
       }
+      else if (tok == FTOK_XEQN) {
+        uint8_t xk2 = fdict.base[pos];
+        uint8_t xl2 = fdict.base[pos + 1];
+        uint16_t xi2 = (uint16_t)(2 + xl2);
+        uint16_t xp2 = (uint16_t)((xi2 + 1) & ~1u);
+        pos += xp2;
+      }
     }
     uint16_t entryBytes = pos - off;
 
@@ -767,6 +819,13 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
           pos += 2;
           uint16_t ptp3 = (uint16_t)(indexOfItems[itemId3].status & PTP_STATUS);
           if (ptp3 == PTP_NUMBER_8 || ptp3 == PTP_NUMBER_16) pos += 2;
+        }
+        else if (tok == FTOK_XEQN) {
+          uint8_t xk3 = gdict.base[pos];
+          uint8_t xl3 = gdict.base[pos + 1];
+          uint16_t xi3 = (uint16_t)(2 + xl3);
+          uint16_t xp3 = (uint16_t)((xi3 + 1) & ~1u);
+          pos += xp3;
         }
       }
     }
@@ -878,11 +937,15 @@ forthXEQType_t forthResolveXEQ(const char *name, uint16_t *param)
     return FORTH_XEQ_LABEL;
   }
 
-  /* C47 item name second (built-in functions like FORTH) */
+  /* C47 item name second (built-in functions like FORTH)
+   * B3 reverse: reject parameterized items (PTP_DECLARE_LABEL..PTP_MENU).
+   * ITM_FORTH (PTP_REM) keeps resolving; ITM_FCALL (PTP_NUMBER_16) stops. */
   {
     uint16_t i;
     for (i = 1; i < LAST_ITEM; i++) {
+      uint16_t ptp = (uint16_t)(indexOfItems[i].status & PTP_STATUS);
       if ((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT &&
+          !(ptp >= PTP_DECLARE_LABEL && ptp <= PTP_MENU) &&
           compareString(name, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) {
         *param = i;
         return FORTH_XEQ_ITEM;
