@@ -2787,7 +2787,15 @@ start/end bounds. Every supported native PTP path is traced, not inferred.
   caller's; definitions coexist in one arena/generation and already-compiled
   `FTOK_CALL` tokens stay valid, but lookup never sees another owner's
   definitions. Interactive definitions occupy one reserved interactive-local
-  scope, cleared by a top-level reset. Implementation mirrors upstream's
+  scope, cleared by a top-level reset. Scope is a property of the
+  *executing step*, not of the source-step handler alone (ruled 2026-07-18,
+  F3-3A): every step arm that resolves Forth names on a step's behalf —
+  the `ITM_FORTH` source-step handler and the XEQ/XEQP1 global-name
+  fallback — enters the owning program's scope through one shared
+  enter/restore primitive (first-touch pre-scan included) and restores on
+  exit; keyboard/tam/catalog surfaces stay INTERACTIVE. Scope guards
+  name→ref resolution only; by-ref execution (`FCALL`) and ref→name
+  display (`forthDictNameByRef`) are scope-free. Implementation mirrors upstream's
   `labelList[].program` pattern (§0.3) — one mental model for both "local
   name" systems. Global Forth words join this stage (2026-07-16 ruling —
   see the global-scope bullet below; the earlier deferral is superseded).

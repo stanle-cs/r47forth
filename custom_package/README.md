@@ -402,6 +402,26 @@ Shadow Tree** above). Editing your working copy requires re-running
 `refresh` **and reconfiguring** every time, to re-apply the patch stack
 into the shadow tree.
 
+### Optional incremental workflow: force package rematerialization
+
+When keeping an existing build directory, set
+`CUSTOM_PKG_RECONFIGURE=1` on the Make invocation immediately after
+`refresh`. This forces Meson to rebuild the same package's shadow tree and
+source list even though the `CUSTOM_PKG` value itself did not change:
+
+```sh
+python3 tools/pkg_patch_refresh.py packages/forth-core
+make dmcp5r47 f=1 CUSTOM_PKG=packages/forth-core CUSTOM_PKG_RECONFIGURE=1
+```
+
+This is required when a refresh creates a new `files/<rel>` entry: copying
+the generated file into `files/` is only the package-output step; the existing
+shadow has no link for it yet, and Meson's configured source list cannot know
+about a new `.c` file until reconfigure. It is also a convenient explicit
+workflow after patched-file edits or in copy mode. The switch is opt-in and
+preserves the incremental build directory. Once the shadow is current, omit
+it on later unchanged builds.
+
 ### Copy Mode (Windows / `CUSTOM_PKG_SHADOW_COPY=1`)
 
 If symlink creation fails (common on Windows without privilege) or you set

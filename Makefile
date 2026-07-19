@@ -56,7 +56,12 @@ build.sim:
 # rebuild, no signal at all. This phony target runs on EVERY invocation
 # (unlike build.sim itself) and forces --reconfigure through directly when
 # the requested CUSTOM_PKG differs from the stamp left by the last
-# successful setup.
+# successful setup. Set CUSTOM_PKG_RECONFIGURE=1 to force the same
+# reconfigure when the package name is unchanged but refresh has changed
+# patches/ or introduced a files/ entry that the existing shadow does not
+# contain yet. This preserves the incremental build directory while
+# rematerializing the complete package overlay and regenerating its source
+# list.
 #
 # Independent of f=1: f=1 only controls whether the GMP subproject is
 # force-rebuilt, in build.dmcp/build.dmcp5's own recipe below — it has no
@@ -71,9 +76,13 @@ check-custom-pkg-sim:
 		else \
 			LAST="$$(cat "$$STAMP")"; \
 		fi; \
-		if [ "$$LAST" != "$(CUSTOM_PKG)" ]; then \
-			echo "CUSTOM_PKG changed ('$$LAST' -> '$(CUSTOM_PKG)'): forcing reconfigure of $(BUILD_PC)"; \
-			$(MESON_SETUP_SIM) --reconfigure; \
+		if [ "$$LAST" != "$(CUSTOM_PKG)" ] || [ "$(CUSTOM_PKG_RECONFIGURE)" = "1" ]; then \
+			if [ "$(CUSTOM_PKG_RECONFIGURE)" = "1" ]; then \
+				echo "CUSTOM_PKG_RECONFIGURE=1: rematerializing package overlay in $(BUILD_PC)"; \
+			else \
+				echo "CUSTOM_PKG changed ('$$LAST' -> '$(CUSTOM_PKG)'): forcing reconfigure of $(BUILD_PC)"; \
+			fi; \
+			$(MESON_SETUP_SIM) --reconfigure && \
 			echo "$(CUSTOM_PKG)" > "$$STAMP"; \
 		fi; \
 	fi
@@ -143,9 +152,13 @@ check-custom-pkg-dmcp:
 		else \
 			LAST="$$(cat "$$STAMP")"; \
 		fi; \
-		if [ "$$LAST" != "$(CUSTOM_PKG)" ]; then \
-			echo "CUSTOM_PKG changed ('$$LAST' -> '$(CUSTOM_PKG)'): forcing reconfigure of build.dmcp.p$(DMCP_PACKAGE)"; \
-			$(MESON_SETUP_DMCP) --reconfigure; \
+		if [ "$$LAST" != "$(CUSTOM_PKG)" ] || [ "$(CUSTOM_PKG_RECONFIGURE)" = "1" ]; then \
+			if [ "$(CUSTOM_PKG_RECONFIGURE)" = "1" ]; then \
+				echo "CUSTOM_PKG_RECONFIGURE=1: rematerializing package overlay in build.dmcp.p$(DMCP_PACKAGE)"; \
+			else \
+				echo "CUSTOM_PKG changed ('$$LAST' -> '$(CUSTOM_PKG)'): forcing reconfigure of build.dmcp.p$(DMCP_PACKAGE)"; \
+			fi; \
+			$(MESON_SETUP_DMCP) --reconfigure && \
 			echo "$(CUSTOM_PKG)" > "$$STAMP"; \
 		fi; \
 	fi
@@ -158,9 +171,13 @@ check-custom-pkg-dmcp5:
 		else \
 			LAST="$$(cat "$$STAMP")"; \
 		fi; \
-		if [ "$$LAST" != "$(CUSTOM_PKG)" ]; then \
-			echo "CUSTOM_PKG changed ('$$LAST' -> '$(CUSTOM_PKG)'): forcing reconfigure of build.dmcp5"; \
-			$(MESON_SETUP_DMCP5) --reconfigure; \
+		if [ "$$LAST" != "$(CUSTOM_PKG)" ] || [ "$(CUSTOM_PKG_RECONFIGURE)" = "1" ]; then \
+			if [ "$(CUSTOM_PKG_RECONFIGURE)" = "1" ]; then \
+				echo "CUSTOM_PKG_RECONFIGURE=1: rematerializing package overlay in build.dmcp5"; \
+			else \
+				echo "CUSTOM_PKG changed ('$$LAST' -> '$(CUSTOM_PKG)'): forcing reconfigure of build.dmcp5"; \
+			fi; \
+			$(MESON_SETUP_DMCP5) --reconfigure && \
 			echo "$(CUSTOM_PKG)" > "$$STAMP"; \
 		fi; \
 	fi

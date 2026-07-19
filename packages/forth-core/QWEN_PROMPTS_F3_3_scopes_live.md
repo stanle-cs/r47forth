@@ -320,3 +320,309 @@ delta expected; note PENDING.
 ```text
 forth-core: F3-3 — definitions are scope-owned and lookup honors the owner
 ```
+
+---
+
+## AMENDMENT F3-3A (2026-07-18) — XEQ-name steps enter the owning program's scope
+
+The STOP report is CORRECT and accepted: the packet as authored is
+contradictory.  Item 6's parenthetical ("the current scope is INTERACTIVE
+unless a program step is executing") assumed XEQ-name steps participate in
+scope tracking, but items 1–4 only wire the `ITM_FORTH` source-step arm.
+An `XEQ 'W7'` step executed from a running program therefore resolves in
+INTERACTIVE scope and cannot see its own program's words — the three
+param_core failures (`ERROR_LABEL_NOT_FOUND` = 6 from the fallback arm).
+The two remaining failures (`test_recurse_compile_only` [5],
+`test_accept_run_lifecycle` [3]) are harness-level `forthFindColon` calls:
+cross-scope introspection the new contract deliberately rejects; those two
+assertions flip (named below, authorizing the edits under preamble rule 6).
+
+Design authority (architect-ruled, recorded in DESIGN-HISTORY 2026-07-18):
+scope is a property of the *executing step*, not of the source-step handler
+alone.  Every step arm that resolves Forth names on a step's behalf enters
+the owning program's scope through ONE shared primitive and restores on
+exit.  Scope guards name→ref resolution only; by-ref execution (`FCALL`)
+and ref→name display (`forthDictNameByRef`) stay scope-free.  Mutation 3
+is NOT contradictory once the XEQ arm has its own enter/restore: the
+per-source-step restore in `forthOuterRun` stays, and the XEQ arm's
+enter/restore is separate.
+
+### Resumption gate (replaces the original EXECUTION GATE for this resume)
+
+1. `git branch --show-current` is `forth-core/pem-entry-fixes`.  The tree
+   is DIRTY with exactly the F3-3 work already implemented — do NOT
+   require a clean tree and do NOT revert anything.
+2. `grep -n "forthCurrentScopeGet" packages/forth-core/forth_dict.h`
+   matches (the F3-3 export exists).
+3. `grep -rn "forthScopeEnterProgramStep" packages/forth-core` → ZERO
+   matches (this amendment adds it).
+4. The gate log shows exactly the five reported legacy failures plus all
+   five `test_scope_isolation` PASS lines.
+5. Append the amendment items to `/tmp/forth-f3-3-todo.md` (one per change
+   letter, subcase, mutation, gate, report) before editing.
+
+### Files (amends the packet's list)
+
+Modify only: `forth_dict.h`, `forth_dict.c`, `forth_compile.c`,
+`programming/param_core.c`, `test_dict_reloc.c` — all under
+`packages/forth-core/`.  `programming/param_core.c` is a flat package
+file; preamble rule 4 extends to it.
+
+### Change C — shared scope-entry primitive (forth_compile.c, forth_dict.h)
+
+Insert immediately ABOVE `forthProgramStep`:
+
+```c
+/* F3-3A: single scope-entry primitive for every scope-sensitive step arm
+ * (the ITM_FORTH source-step handler below; the XEQ/XEQP1 name fallback
+ * in param_core.c).  Generation check + first-touch pre-scan, then select
+ * the owning program's scope.  Returns the previous scope for
+ * forthScopeRestore.  On pre-scan error the scope is left unchanged and
+ * the caller halts its step. */
+uint16_t forthScopeEnterProgramStep(const uint8_t *anyPtrInProgram)
+{
+  uint16_t prev = forthCurrentScope;
+  forthRunGenCheckReset();
+  forthPreScanOwningProgram(anyPtrInProgram);
+  if (lastErrorCode != ERROR_NONE) {
+    return prev;
+  }
+  {
+    uint16_t recOff;
+    uint8_t *progStart = forthOwningProgramStart(anyPtrInProgram);
+    if (progStart && forthScanFindRecord(progStart, &recOff)) {
+      forthCurrentScope = recOff;
+    } else {
+      forthCurrentScope = FORTH_OWNER_INTERACTIVE;
+    }
+  }
+  return prev;
+}
+
+void forthScopeRestore(uint16_t prev) { forthCurrentScope = prev; }
+```
+
+Declare both in `forth_dict.h` directly under `forthCurrentScopeGet`:
+
+```c
+uint16_t forthScopeEnterProgramStep(const uint8_t *anyPtrInProgram);
+void forthScopeRestore(uint16_t prev);
+```
+
+### Change D — forthProgramStep uses the primitive (forth_compile.c)
+
+Replace the body of `forthProgramStep` (from `forthRunGenCheckReset();`
+through the `forthOuterCtx_t ctx;` declaration and its scope block) with:
+
+```c
+void forthProgramStep(const uint8_t *payload) {
+  uint16_t prevScope = forthScopeEnterProgramStep(payload);
+  if (lastErrorCode != ERROR_NONE) {
+    return;                                 /* pre-scan error halts before executing this step */
+  }
+  forthOuterCtx_t ctx;
+  ctx.savedScope = prevScope;
+  uint8_t len = *payload;
+  xcopy(ctx.source, payload + 1, len);
+  ctx.source[len] = 0;
+  forthOuterRun(&ctx, FORTH_OUTER_SKIP_DEFS);
+}
+```
+
+The old inline save/derive block (`uint16_t savedScope = ...` through the
+`}` closing the record-derivation scope) is gone; `forthOuterRun`'s
+epilogue remains the single restore point for the source-step path
+(mutation 3's target, unchanged).
+
+### Change E — delete the forthOuterRun no-op (forth_compile.c)
+
+In `forthOuterRun`, delete these five lines entirely (a tautological
+self-assignment left by the packet's ambiguity between items 3 and 4):
+
+```c
+  /* F3-3: if caller pre-set savedScope (e.g., forthProgramStep setting it to
+   * the caller's scope), do not overwrite — use it as the restore target. */
+  if (ctx->savedScope == forthCurrentScope) {
+    ctx->savedScope = forthCurrentScope;
+  }
+```
+
+Contract (now explicit): EVERY caller of `forthOuterRun` pre-sets
+`ctx.savedScope`; `forthOuterRun` only restores.  All four call sites
+already comply (`forthOuterInterpret`, `fnForthOuter`, the pre-scan loop,
+`forthProgramStep`).
+
+### Change F — the XEQ/XEQP1 fallback arm participates (programming/param_core.c)
+
+In `paramCoreExecuteOp`, PARAM_LABEL case, replace the entire
+`else if (forthFallbackEligible) { ... }` block with:
+
+```c
+        else if (forthFallbackEligible) {
+          /* F3-3A: this resolution acts for the step being executed — enter
+           * the owning program's scope (first touch included) so same-
+           * program words resolve and cross-scope words do not.  paramAddress
+           * points into the step; a non-program address (defensive) falls
+           * back to INTERACTIVE inside the helper.  Scope guards name
+           * resolution only: the FCALL dispatch below runs by ref and needs
+           * no scope of its own. */
+          uint16_t prevScope = forthScopeEnterProgramStep(paramAddress);
+          if(lastErrorCode != ERROR_NONE) {
+            forthScopeRestore(prevScope);   /* first-touch pre-scan failed: halt this step */
+          }
+          else {
+            uint16_t resolvedParam;
+            forthXEQType_t res = forthResolveXEQ(tmpStringLabelOrVariableName, &resolvedParam);
+            if(res == FORTH_XEQ_COLON) {
+              reallyRunFunction(ITM_FCALL, resolvedParam);
+              if(op == ITM_XEQP1 && programRunStop == PGM_RUNNING && lastErrorCode == ERROR_NONE) {
+                currentReturnLocalStep++;
+              }
+            }
+            else if(res == FORTH_XEQ_ITEM) {
+              reallyRunFunction(resolvedParam, NOPARAM);
+            }
+            else {
+              displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
+              #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+                sprintf(errorMessage, "string '%s' is not a named label", tmpStringLabelOrVariableName);
+                moreInfoOnError("In function _executeOp:", errorMessage, NULL, NULL);
+              #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+            }
+            forthScopeRestore(prevScope);
+          }
+        }
+```
+
+The GTO/LBLQ/not-found arms outside this block are untouched (GTO is not
+fallback-eligible; the two direct `paramCoreExecuteOp(..., ITM_GTO, ...)`
+test calls never reach the hook).
+
+### Change G — two legacy assertions flip to the new contract (test_dict_reloc.c)
+
+These two edits are NAMED by this amendment (preamble rule 6 satisfied).
+Both tests' product assertions (the RAM_FULL recursion; X == 9 after
+resume) already prove the words compiled and ran in program scope; the
+flipped lines now pin the isolation instead of the old cross-scope
+visibility.
+
+1. `test_recurse_compile_only` subcase 5 — replace:
+
+```c
+    else if (!forthFindColon("PRW", &idx)) {
+      printf("    FAIL [5]: PRW not found after scan\n");
+      sub5Fail = 1;
+    }
+```
+
+with:
+
+```c
+    else if (forthFindColon("PRW", &idx)) {   /* F3-3: program-owned, invisible interactively */
+      printf("    FAIL [5]: PRW visible from interactive scope (F3-3 isolation)\n");
+      sub5Fail = 1;
+    }
+```
+
+2. `test_accept_run_lifecycle` subcase 3 — replace:
+
+```c
+      else if (!forthFindColon("SQ", &idx)) {
+        printf("    [3] FAIL: SQ not found after resume\n");
+        fail = 1;
+      }
+```
+
+with:
+
+```c
+      else if (forthFindColon("SQ", &idx)) {   /* F3-3: program-owned, invisible interactively */
+        printf("    [3] FAIL: SQ visible from interactive scope after resume (F3-3 isolation)\n");
+        fail = 1;
+      }
+```
+
+The adjacent PZW must-not-be-found check and both PASS banner texts stay
+unchanged.
+
+### Change H — fixture step + subcase 6 (test_dict_reloc.c, test_scope_isolation)
+
+Extend the Change A fixture: append directly after the `sUseB` line
+(inside program B, before `tpWrite`):
+
+```c
+int sXeqA  = tpXeqName(&tp, "WA");
+```
+
+Include `sXeqA` in the existing -1 handle check.  ("WA" length 2 ≤ 16.)
+
+Add subcase 6 after subcase 5, same drive discipline as subcases 1–2:
+
+```c
+  /* [6] cross-program XEQ-name step: B's XEQ 'WA' must reject in B's scope */
+  forthPushInt32(88);
+  savedRS = programRunStop;             /* reuse the subcase drive locals */
+  lastErrorCode = ERROR_NONE;
+  dynamicMenuItem = -1;
+  programRunStop = PGM_RUNNING;
+  currentStep = tpStepAddr(&tp, sXeqA);
+  executeOneStep(currentStep);
+  programRunStop = savedRS;
+  if (lastErrorCode != ERROR_LABEL_NOT_FOUND) {
+    printf("    [6] FAIL: expected ERROR_LABEL_NOT_FOUND, got %d\n", lastErrorCode);
+    fail = 1;
+  }
+  else if (!x_is_longint(88)) {
+    printf("    [6] FAIL: X changed across rejected XEQ\n");
+    fail = 1;
+  }
+  else if (forthCurrentScopeGet() != FORTH_OWNER_INTERACTIVE) {
+    printf("    [6] FAIL: scope not restored after rejected XEQ step\n");
+    fail = 1;
+  }
+  else {
+    printf("    [6] PASS: cross-program XEQ-name step rejected in the step's scope\n");
+  }
+  lastErrorCode = ERROR_NONE;
+```
+
+(Adapt the drive-local names to the subcase-1 block's actual spellings if
+they differ; the discipline — save, seed, drive once, assert, restore,
+clear — is normative, the local variable names are not.)  Note the error
+is `ERROR_LABEL_NOT_FOUND` (the param_core arm's step-surface error), NOT
+`ERROR_FUNCTION_NOT_FOUND` — the same name failing in a SOURCE step
+(subcase 2) errors differently from an XEQ step by design.
+
+### Gate and mutations (supersedes the packet's section)
+
+Full gate green first: all SIX `test_scope_isolation` PASS lines, the two
+flipped legacy branches silent, all five previously-failing legacy tests
+back to their normal PASS banners, every other legacy banner, both
+success banners, exit 0.
+
+Mutations, each separately, logs `/tmp/forth-f3-3-mut1..5.log`.  During a
+mutation run, co-reds beyond the named required RED are expected mutation
+fallout and are NOT rule-6 STOP events; the named RED line must appear,
+and the post-restore gate must be fully green before the next mutation.
+
+1. UNCHANGED: delete the owner-filter skip in the shared colon walk →
+   subcase 2 MUST go RED.  (Subcase 6 and others may co-red.)
+2. RE-TARGETED: in `forthScopeEnterProgramStep`, delete the entire
+   record-derivation compound (`{ uint16_t recOff; ... }` — scope keeps
+   its previous value) → subcase 3(c) MUST go RED (WI resolves from
+   program context).  (Subcase 1 and the param_core legacy tests co-red.)
+3. UNCHANGED: in `forthOuterRun`, delete the scope restore (keep the
+   epilogue's defState restore) → subcase 4 MUST go RED.
+4. UNCHANGED: in `startDefinition`, delete the owner stamp → subcase 3(a)
+   MUST go RED.
+5. NEW: in `param_core.c`, revert Change F to the direct resolve (delete
+   the enter/error-check/restore, keep the resolve+dispatch) →
+   `test_param_core_bounded_names` [1] MUST go RED (`executeOneStep
+   error 6` instead of X=7).  Subcase 6 stays green under this mutation
+   by design (rejection either way) — the legacy positive is the
+   detector; that is why it is the named RED.
+
+Report: six PASS lines, the five recovered legacy banners, both success
+banners, exit 0, arena line vs the F3-2 baseline, `git diff --check`,
+generated-mirror equality, all five mutation REDs.  RULE-1: negligible
+flash delta expected; note PENDING.  Commit line unchanged.
