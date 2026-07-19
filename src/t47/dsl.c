@@ -993,6 +993,13 @@ static int nimCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
  * press <keycode> - Press a keyboard key (like pressing the button)
  */
 static int pressCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
+  // Registered in every build so the refusal names the reason: an unregistered command reports only "invalid command name".
+  if(headlessMode) {
+    Jim_SetResultString(interp, "press: needs the GTK GUI, which t47 and --headless do not start. Run ./c47 or ./r47 without --headless, "
+                                "or drive the function directly with item, xeq or menu.", -1);
+    return JIM_ERR;
+  }
+
   if(argc < 2) {
     Jim_SetResultString(interp, "press: missing key code argument", -1);
     return JIM_ERR;
@@ -1272,6 +1279,7 @@ void initDSL(void) {
   Jim_CreateCommand(interp, "loadst", loadstCmd, NULL, NULL);
   Jim_CreateCommand(interp, "menu",   menuCmd,   NULL, NULL);
   Jim_CreateCommand(interp, "nim",    nimCmd,    NULL, NULL);
+  Jim_CreateCommand(interp, "press",  pressCmd,  NULL, NULL);
   Jim_CreateCommand(interp, "reg",    regCmd,    NULL, NULL);
   Jim_CreateCommand(interp, "readp",  readpCmd,  NULL, NULL);
   Jim_CreateCommand(interp, "savest", savestCmd, NULL, NULL);
@@ -1283,10 +1291,6 @@ void initDSL(void) {
   Jim_CreateCommand(interp, "xeq",    xeqCmd,    NULL, NULL);
   Jim_CreateCommand(interp, "xportp", xportpCmd, NULL, NULL);
   // clang-format on
-  if(!headlessMode) {
-    // Conditionally add commands that require the GTK GUI
-    Jim_CreateCommand(interp, "press", pressCmd, NULL, NULL);
-  }
 }
 
 // =====================================================================
