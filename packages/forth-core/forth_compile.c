@@ -259,6 +259,27 @@ static bool parseParamDigits(const char *tok, uint16_t *out)
   return true;
 }
 
+/* F4-2: KS letter table (26 entries) — uppercase only (native itemSoftmenuName parity).
+ * Note: W (224) parses natively but dispatches as a silent no-op for flags;
+ * this quirk is parity, do not fix it. */
+static const struct { char c; uint8_t ks; } paramLetterKS[26] = {
+  {'X',100},{'Y',101},{'Z',102},{'T',103},{'A',104},{'B',105},
+  {'C',106},{'D',107},{'L',108},{'I',109},{'J',110},{'K',111},
+  {'M',211},{'N',212},{'P',213},{'Q',214},{'R',215},{'S',216},
+  {'E',217},{'F',218},{'G',219},{'H',220},{'O',221},{'U',222},
+  {'V',223},{'W',224},
+};
+
+static bool paramLetterToKS(const char *tok, uint8_t *ks)
+{
+  int i;
+  if (tok[0] == 0 || tok[1] != 0) return false;
+  for (i = 0; i < 26; i++) {
+    if (paramLetterKS[i].c == tok[0]) { *ks = paramLetterKS[i].ks; return true; }
+  }
+  return false;
+}
+
 /* ---- §3.3.5 Number grammar (C-8) ---- */
 
 typedef enum {
@@ -772,7 +793,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
             if (paramCoreValidateDirect(paramItemId, ptpClass, value)) {
               uint8_t savedRunStop = programRunStop;
               programRunStop = PGM_RUNNING;
-              paramCoreDispatchDirect(paramItemId, value);
+              paramCoreDispatchDirect(paramItemId, ptpClass, value);
               if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
             }
             if (lastErrorCode != ERROR_NONE) {
@@ -782,8 +803,137 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
             }
           }
           continue;
+        } else if (ptpClass == PTP_REGISTER) {
+          /* F4-2: register direct forms — number, dot, letter */
+          uint16_t regValue;
+          uint8_t regKS;
+          if (parseParamDigits(ptok, &regValue) && regValue <= 99) {
+            regKS = (uint8_t)regValue;
+          } else if (ptok[0] == '.' && parseParamDigits(ptok + 1, &regValue) && regValue <= 98) {
+            regKS = 112 + (uint8_t)regValue;
+          } else if (ptok[0] >= '0' && ptok[0] <= '9' && parseParamDigits(ptok, &regValue)) {
+            /* all digits but > 99 */
+            displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          } else if (paramLetterToKS(ptok, &regKS)) {
+            /* single letter */
+          } else {
+            /* F4-3: named + indirect */
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          }
+          if (state == STATE_COMPILE) {
+            if (!forthDictEmit(FTOK_C47)) { abortDefinition(); lineOK = false; continue; }
+            if (!forthDictEmit((ftoken_t)paramItemId)) { abortDefinition(); lineOK = false; continue; }
+            if (!forthDictEmit((ftoken_t)regKS)) { abortDefinition(); lineOK = false; continue; }
+          } else {
+            if (paramCoreValidateDirect(paramItemId, ptpClass, regKS)) {
+              uint8_t savedRunStop = programRunStop;
+              programRunStop = PGM_RUNNING;
+              paramCoreDispatchDirect(paramItemId, ptpClass, regKS);
+              if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+            }
+            if (lastErrorCode != ERROR_NONE) {
+              if (isDefinitionOpen()) abortDefinition();
+              lineOK = false;
+              continue;
+            }
+          }
+          continue;
+        } else if (ptpClass == PTP_FLAG) {
+          /* F4-2: flag direct forms — number, dot, letter */
+          uint16_t flagValue;
+          uint8_t flagByte;
+          if (parseParamDigits(ptok, &flagValue) && flagValue <= 99) {
+            flagByte = (uint8_t)flagValue;
+          } else if (ptok[0] == '.' && parseParamDigits(ptok + 1, &flagValue) && flagValue <= 31) {
+            flagByte = 112 + (uint8_t)flagValue;
+          } else if (ptok[0] == '.' && parseParamDigits(ptok + 1, &flagValue) && flagValue <= 98) {
+            displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          } else if (ptok[0] >= '0' && ptok[0] <= '9' && parseParamDigits(ptok, &flagValue)) {
+            displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          } else if (paramLetterToKS(ptok, &flagByte)) {
+            /* single letter — quirk: W (224) parses natively but dispatches as no-op */
+          } else {
+            /* F4-3: system-flag quotes */
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          }
+          if (state == STATE_COMPILE) {
+            if (!forthDictEmit(FTOK_C47)) { abortDefinition(); lineOK = false; continue; }
+            if (!forthDictEmit((ftoken_t)paramItemId)) { abortDefinition(); lineOK = false; continue; }
+            if (!forthDictEmit((ftoken_t)flagByte)) { abortDefinition(); lineOK = false; continue; }
+          } else {
+            if (paramCoreValidateDirect(paramItemId, ptpClass, flagByte)) {
+              uint8_t savedRunStop = programRunStop;
+              programRunStop = PGM_RUNNING;
+              paramCoreDispatchDirect(paramItemId, ptpClass, flagByte);
+              if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+            }
+            if (lastErrorCode != ERROR_NONE) {
+              if (isDefinitionOpen()) abortDefinition();
+              lineOK = false;
+              continue;
+            }
+          }
+          continue;
+        } else if (ptpClass == PTP_SHUFFLE) {
+          /* F4-2: shuffle — exactly 4 lowercase chars from {x,y,z,t} */
+          {
+            const char *shuffleReg = "xyzt";
+            uint8_t packed = 0, ci;
+            int si;
+            if (ptok[4] != 0) {
+              displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              if (isDefinitionOpen()) abortDefinition();
+              lineOK = false;
+              continue;
+            }
+            for (si = 0; si < 4; si++) {
+              ci = 0;
+              while (ci < 4 && shuffleReg[ci] != ptok[si]) ci++;
+              if (ci == 4) {
+                displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                if (isDefinitionOpen()) abortDefinition();
+                lineOK = false;
+                goto shuffle_done;
+              }
+              packed |= (uint8_t)(ci << (si * 2));
+            }
+            if (state == STATE_COMPILE) {
+              if (!forthDictEmit(FTOK_C47)) { abortDefinition(); lineOK = false; continue; }
+              if (!forthDictEmit((ftoken_t)paramItemId)) { abortDefinition(); lineOK = false; continue; }
+              if (!forthDictEmit((ftoken_t)packed)) { abortDefinition(); lineOK = false; continue; }
+            } else {
+              if (paramCoreValidateDirect(paramItemId, ptpClass, packed)) {
+                uint8_t savedRunStop = programRunStop;
+                programRunStop = PGM_RUNNING;
+                paramCoreDispatchDirect(paramItemId, ptpClass, packed);
+                if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+              }
+              if (lastErrorCode != ERROR_NONE) {
+                if (isDefinitionOpen()) abortDefinition();
+                lineOK = false;
+                continue;
+              }
+            }
+          }
+          shuffle_done:
+          continue;
         } else {
-          /* F4-2/F4-3: register, flag, shuffle, named, indirect forms */
+          /* F4-3: named + indirect forms */
           displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
           if (isDefinitionOpen()) abortDefinition();
           lineOK = false;

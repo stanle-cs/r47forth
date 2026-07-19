@@ -10709,6 +10709,7 @@ static int test_param_parity_sweep(void);
 
 /* F4-1: parameter classification + direct numeric parameters */
 static int test_param_textual_numeric(void);
+static int test_param_register_flag(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -12515,6 +12516,15 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_param_textual_numeric...\n");
   fail |= test_param_textual_numeric();
   forthDictClear();
+
+  /* F4-2: register, flag, and shuffle direct forms */
+  printf("\nFORTH F4-2 TESTS (register, flag, shuffle direct forms)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_param_register_flag...\n");
+  fail |= test_param_register_flag();
+  forthDictClear();
+  forthGDictClear();
 
   /* FIX-6: free-list integrity — LAST test, after all cleanup */
   printf("\nFORTH FIX-6 TESTS (free-list integrity + arena report)\n");
@@ -14926,6 +14936,583 @@ static int test_param_textual_numeric(void)
       fail |= 1;
     }
     forthDictClear();
+  }
+
+  return fail;
+}
+
+/* test_param_register_flag
+ * F4-2: register, flag, and shuffle direct parameter forms.
+ * Subcase 1: STO/RCL numbered round-trip, interpret + compiled
+ * Subcase 2: Letter registers
+ * Subcase 3: Stat-letter conversion is live
+ * Subcase 4: Local dot form encodes and stays silent unallocated
+ * Subcase 5: Flag forms
+ * Subcase 6: Shuffle
+ * Subcase 7: Validator arms
+ */
+static int test_param_register_flag(void)
+{
+  int fail = 0;
+  char sbuf[64];
+
+  /* Subcase 1: STO/RCL numbered round-trip, compiled */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    forthDictClear();
+    x_set_string(": SR0 STO 05 ;");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: compile SR0 error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      x_set_string(": RR0 RCL 05 ;");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: compile RR0 error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthPushInt32(7);
+      run_word("SR0");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: STO 05 error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      run_word("RR0");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: RCL 05 error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail && !x_is_longint(7)) {
+      printf("    [1] FAIL: RCL 05 did not return 7\n");
+      subFail = 1;
+    }
+    if (!subFail) {
+      printf("    [1] PASS: STO/RCL 05 round-trips (compiled)\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 2: Letter registers */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    forthDictClear();
+    x_set_string(": SA STO A ;");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [2] FAIL: compile SA error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      x_set_string(": RA RCL A ;");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [2] FAIL: compile RA error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthPushInt32(13);
+      run_word("SA");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [2] FAIL: STO A error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      run_word("RA");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [2] FAIL: RCL A error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail && !x_is_longint(13)) {
+      printf("    [2] FAIL: RCL A did not return 13\n");
+      subFail = 1;
+    }
+    /* Byte-image pin: ": PRA STO A ;" body cells are FTOK_C47, ITM_STO, {104,0}, FTOK_EXIT */
+    if (!subFail) {
+      x_set_string(": PRA STO A ;");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [2] FAIL: compile PRA error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint16_t w;
+      if (!forthFindColon("PRA", &w)) {
+        printf("    [2] FAIL: PRA not found\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      /* forthFindColon yields a REF index, not a byte offset; the word under
+       * test is always the newest header, so walk from fdict.latest. */
+      uint16_t bodyStart = fdict.latest + (uint16_t)TO_BLOCKS(6 + 3) * BYTES_PER_BLOCK;
+      uint16_t cell0, cell1, cell2, cell3;
+      memcpy(&cell0, fdict.base + bodyStart, 2);
+      memcpy(&cell1, fdict.base + bodyStart + 2, 2);
+      memcpy(&cell2, fdict.base + bodyStart + 4, 2);
+      memcpy(&cell3, fdict.base + bodyStart + 6, 2);
+      if (cell0 != T_C47 || cell1 != ITM_STO || cell2 != 104 || cell3 != T_EXIT) {
+        printf("    [2] FAIL: byte image {0x%04X, 0x%04X, 0x%04X, 0x%04X} expected {0x%04X, 0x%04X, 104, 0x%04X}\n",
+               cell0, cell1, cell2, cell3, T_C47, ITM_STO, T_EXIT);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      printf("    [2] PASS: lettered register A maps to KS 104 and round-trips\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 3: Stat-letter conversion is live */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    forthDictClear();
+    x_set_string(": SM STO M ;");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: compile SM error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      x_set_string(": RM RCL M ;");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [3] FAIL: compile RM error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthPushInt32(21);
+      run_word("SM");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [3] FAIL: STO M error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      run_word("RM");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [3] FAIL: RCL M error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail && !x_is_longint(21)) {
+      printf("    [3] FAIL: RCL M did not return 21\n");
+      subFail = 1;
+    }
+    if (!subFail) {
+      printf("    [3] PASS: stat register M stores through regKStoC\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 4: Local dot form encodes and stays silent unallocated */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    forthDictClear();
+    /* Byte-image: ": PRL STO .05 ;" body cell {117, 0} (112+5) */
+    x_set_string(": PRL STO .05 ;");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [4] FAIL: compile PRL error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      uint16_t w;
+      if (!forthFindColon("PRL", &w)) {
+        printf("    [4] FAIL: PRL not found\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      /* forthFindColon yields a REF index, not a byte offset; the word under
+       * test is always the newest header, so walk from fdict.latest. */
+      uint16_t bodyStart = fdict.latest + (uint16_t)TO_BLOCKS(6 + 3) * BYTES_PER_BLOCK;
+      uint16_t cell0, cell1, cell2, cell3;
+      memcpy(&cell0, fdict.base + bodyStart, 2);
+      memcpy(&cell1, fdict.base + bodyStart + 2, 2);
+      memcpy(&cell2, fdict.base + bodyStart + 4, 2);
+      memcpy(&cell3, fdict.base + bodyStart + 6, 2);
+      if (cell0 != T_C47 || cell1 != ITM_STO || cell2 != 117 || cell3 != T_EXIT) {
+        printf("    [4] FAIL: byte image {0x%04X, 0x%04X, 0x%04X, 0x%04X} expected {0x%04X, 0x%04X, 117, 0x%04X}\n",
+               cell0, cell1, cell2, cell3, T_C47, ITM_STO, T_EXIT);
+        subFail = 1;
+      }
+    }
+    /* Behavior parity (traced 2026-07-19, corrects the F4-2 packet): the native
+     * PARAM_REGISTER arm gates on regInRange(), and regInRange() is NOT a pure
+     * predicate — on a miss it calls displayCalcErrorMessage(ERROR_OUT_OF_RANGE)
+     * itself (store.c:17-72). So an unallocated local is NOT silent natively:
+     * it raises OUT_OF_RANGE and performs no store. We mirror that exactly. */
+    if (!subFail) {
+      x_set_string(": PRL2 STO .05 ;");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [4] FAIL: compile PRL2 error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthPushInt32(31);
+      run_word("PRL2");
+      if (lastErrorCode != ERROR_OUT_OF_RANGE) {
+        printf("    [4] FAIL: STO .05 unallocated expected ERROR_OUT_OF_RANGE, got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+    if (!subFail && !x_is_longint(31)) {
+      printf("    [4] FAIL: X should still be 31 after the rejected STO .05\n");
+      subFail = 1;
+    }
+    if (!subFail) {
+      printf("    [4] PASS: .05 encodes KS 117; unallocated locals raise OUT_OF_RANGE and never store\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 5: Flag forms */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    forthDictClear();
+    /* Byte-images */
+    x_set_string(": PF1 SF 10 ;");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [5] FAIL: compile PF1 error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      uint16_t w;
+      if (!forthFindColon("PF1", &w)) {
+        printf("    [5] FAIL: PF1 not found\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      /* forthFindColon yields a REF index, not a byte offset; the word under
+       * test is always the newest header, so walk from fdict.latest. */
+      uint16_t bodyStart = fdict.latest + (uint16_t)TO_BLOCKS(6 + 3) * BYTES_PER_BLOCK;
+      uint16_t cell0, cell1, cell2, cell3;
+      memcpy(&cell0, fdict.base + bodyStart, 2);
+      memcpy(&cell1, fdict.base + bodyStart + 2, 2);
+      memcpy(&cell2, fdict.base + bodyStart + 4, 2);
+      memcpy(&cell3, fdict.base + bodyStart + 6, 2);
+      if (cell0 != T_C47 || cell1 != ITM_SF || cell2 != 10 || cell3 != T_EXIT) {
+        printf("    [5] FAIL: PF1 byte image {0x%04X, 0x%04X, 0x%04X, 0x%04X} expected {0x%04X, 0x%04X, 10, 0x%04X}\n",
+               cell0, cell1, cell2, cell3, T_C47, ITM_SF, T_EXIT);
+        subFail = 1;
+      }
+    }
+    /* PF2: SF .31 -> {143, 0} */
+    if (!subFail) {
+      x_set_string(": PF2 SF .31 ;");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [5] FAIL: compile PF2 error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint16_t w;
+      if (!forthFindColon("PF2", &w)) {
+        printf("    [5] FAIL: PF2 not found\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      /* forthFindColon yields a REF index, not a byte offset; the word under
+       * test is always the newest header, so walk from fdict.latest. */
+      uint16_t bodyStart = fdict.latest + (uint16_t)TO_BLOCKS(6 + 3) * BYTES_PER_BLOCK;
+      uint16_t cell2;
+      memcpy(&cell2, fdict.base + bodyStart + 4, 2);
+      if (cell2 != 143) {
+        printf("    [5] FAIL: PF2 param cell 0x%04X, expected 143\n", cell2);
+        subFail = 1;
+      }
+    }
+    /* Errors */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      x_set_string("SF .32");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_OUT_OF_RANGE) {
+        printf("    [5] FAIL: SF .32 expected ERROR_OUT_OF_RANGE, got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      x_set_string(": SFQ SF q ;");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [5] FAIL: SF q expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      x_set_string(": CF100 CF 100 ;");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_OUT_OF_RANGE) {
+        printf("    [5] FAIL: CF 100 expected ERROR_OUT_OF_RANGE, got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      printf("    [5] PASS: flag forms encode and bound correctly\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 6: Shuffle */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    forthDictClear();
+    /* Build source with item's own glyph name */
+    if ((indexOfItems[1694].status & PTP_STATUS) != PTP_SHUFFLE) {
+      printf("    [6] FAIL: item 1694 does not have PTP_SHUFFLE status\n");
+      subFail = 1;
+    }
+    if (!subFail) {
+      sprintf(sbuf, "%s yxzt", indexOfItems[1694].itemCatalogName);
+    }
+    /* Byte-image via ": PSH <glyph> yxzt ;" */
+    if (!subFail) {
+      char cbuf[128];
+      sprintf(cbuf, ": PSH %s ;", sbuf);
+      x_set_string(cbuf);
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [6] FAIL: compile PSH error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint16_t w;
+      if (!forthFindColon("PSH", &w)) {
+        printf("    [6] FAIL: PSH not found\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      /* forthFindColon yields a REF index, not a byte offset; the word under
+       * test is always the newest header, so walk from fdict.latest. */
+      uint16_t bodyStart = fdict.latest + (uint16_t)TO_BLOCKS(6 + 3) * BYTES_PER_BLOCK;
+      uint16_t cell0, cell1, cell2, cell3;
+      memcpy(&cell0, fdict.base + bodyStart, 2);
+      memcpy(&cell1, fdict.base + bodyStart + 2, 2);
+      memcpy(&cell2, fdict.base + bodyStart + 4, 2);
+      memcpy(&cell3, fdict.base + bodyStart + 6, 2);
+      if (cell0 != T_C47 || cell1 != 1694 || cell2 != 0xE1 || cell3 != T_EXIT) {
+        printf("    [6] FAIL: byte image {0x%04X, 0x%04X, 0x%04X, 0x%04X} expected {0x%04X, 1694, 0xE1, 0x%04X}\n",
+               cell0, cell1, cell2, cell3, T_C47, T_EXIT);
+        subFail = 1;
+      }
+    }
+    /* Behavior: seed T=11,Z=22,Y=33,X=44, interpret -> X==33, Y==44, Z==22, T==11.
+     * The seed MUST ride in the source line: x_set_string overwrites X with the
+     * source string and fnForthOuter drops it, so anything pushed beforehand is
+     * shifted out of place before the shuffle ever runs. */
+    if (!subFail) {
+      char rbuf[128];
+      lastErrorCode = ERROR_NONE;
+      sprintf(rbuf, "11 22 33 44 %s", sbuf);
+      x_set_string(rbuf);
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [6] FAIL: shuffle yxzt error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint8_t ttype; int32_t tval;
+      read_reg_int32(REGISTER_X, &ttype, &tval);
+      if (ttype != dtLongInteger || tval != 33) {
+        printf("    [6] FAIL: X = %d expected 33\n", tval);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint8_t ttype; int32_t tval;
+      read_reg_int32(REGISTER_Y, &ttype, &tval);
+      if (ttype != dtLongInteger || tval != 44) {
+        printf("    [6] FAIL: Y = %d expected 44\n", tval);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint8_t ttype; int32_t tval;
+      read_reg_int32(REGISTER_Z, &ttype, &tval);
+      if (ttype != dtLongInteger || tval != 22) {
+        printf("    [6] FAIL: Z = %d expected 22\n", tval);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint8_t ttype; int32_t tval;
+      read_reg_int32(REGISTER_T, &ttype, &tval);
+      if (ttype != dtLongInteger || tval != 11) {
+        printf("    [6] FAIL: T = %d expected 11\n", tval);
+        subFail = 1;
+      }
+    }
+    /* Malformed */
+    if (!subFail) {
+      char bad1[64], bad2[64];
+      sprintf(bad1, "%s yxz", indexOfItems[1694].itemCatalogName);
+      sprintf(bad2, "%s yxzq", indexOfItems[1694].itemCatalogName);
+      lastErrorCode = ERROR_NONE;
+      x_set_string(bad1);
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [6] FAIL: yxz expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      char bad2[64];
+      sprintf(bad2, "%s yxzq", indexOfItems[1694].itemCatalogName);
+      lastErrorCode = ERROR_NONE;
+      x_set_string(bad2);
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [6] FAIL: yxzq expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      printf("    [6] PASS: shuffle yxzt packs to 0xE1 and swaps X/Y\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 7: Validator arms */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    forthGDictClear();
+    /* REGISTER cell {230, 0} -> RESET (illegal byte) */
+    {
+      uint16_t w = gbegin_word("VR1", 3);
+      if (w == FORTH_NULL) { printf("    [7] FAIL: alloc VR1\n"); subFail = 1; }
+      if (!subFail) {
+        gemit(T_C47);
+        { uint16_t itemId = ITM_STO; gemit_bytes((uint8_t[]){itemId, itemId >> 8}, 2); }
+        { uint16_t cell = 230; gemit_bytes((uint8_t[]){cell, cell >> 8}, 2); }
+      }
+      if (!subFail) gend_word();
+      uint8_t *preBase = gdict.base;
+      uint16_t preBlocks = gdict.sizeBlocks;
+      forthGDictValidateRestored();
+      if (gdict.base != NULL) {
+        printf("    [7] FAIL: REGISTER {230,0} survived validation\n");
+        subFail = 1;
+        forthGDictClear();
+      } else if (preBase) {
+        freeC47Blocks(preBase, preBlocks);
+      }
+    }
+    /* FLAG cell {150, 0} -> RESET (144..210 hole) */
+    if (!subFail) {
+      forthGDictClear();
+      uint16_t w = gbegin_word("VF1", 3);
+      if (w == FORTH_NULL) { printf("    [7] FAIL: alloc VF1\n"); subFail = 1; }
+      if (!subFail) {
+        gemit(T_C47);
+        { uint16_t itemId = ITM_SF; gemit_bytes((uint8_t[]){itemId, itemId >> 8}, 2); }
+        { uint16_t cell = 150; gemit_bytes((uint8_t[]){cell, cell >> 8}, 2); }
+      }
+      if (!subFail) gend_word();
+      uint8_t *preBase = gdict.base;
+      uint16_t preBlocks = gdict.sizeBlocks;
+      forthGDictValidateRestored();
+      if (gdict.base != NULL) {
+        printf("    [7] FAIL: FLAG {150,0} survived validation\n");
+        subFail = 1;
+        forthGDictClear();
+      } else if (preBase) {
+        freeC47Blocks(preBase, preBlocks);
+      }
+    }
+    /* SHUFFLE cell {0xE1, 1} -> RESET (pad byte) */
+    if (!subFail) {
+      forthGDictClear();
+      uint16_t w = gbegin_word("VS1", 3);
+      if (w == FORTH_NULL) { printf("    [7] FAIL: alloc VS1\n"); subFail = 1; }
+      if (!subFail) {
+        gemit(T_C47);
+        { uint16_t itemId = 1694; gemit_bytes((uint8_t[]){itemId, itemId >> 8}, 2); }
+        { uint16_t cell = 0x01E1; gemit_bytes((uint8_t[]){cell, cell >> 8}, 2); }
+      }
+      if (!subFail) gend_word();
+      uint8_t *preBase = gdict.base;
+      uint16_t preBlocks = gdict.sizeBlocks;
+      forthGDictValidateRestored();
+      if (gdict.base != NULL) {
+        printf("    [7] FAIL: SHUFFLE {0xE1,1} survived validation\n");
+        subFail = 1;
+        forthGDictClear();
+      } else if (preBase) {
+        freeC47Blocks(preBase, preBlocks);
+      }
+    }
+    /* REGISTER cell {104, 0} -> ACCEPT */
+    if (!subFail) {
+      forthGDictClear();
+      uint16_t w = gbegin_word("VR2", 3);
+      if (w == FORTH_NULL) { printf("    [7] FAIL: alloc VR2\n"); subFail = 1; }
+      if (!subFail) {
+        gemit(T_C47);
+        { uint16_t itemId = ITM_STO; gemit_bytes((uint8_t[]){itemId, itemId >> 8}, 2); }
+        { uint16_t cell = 104; gemit_bytes((uint8_t[]){cell, cell >> 8}, 2); }
+      }
+      if (!subFail) gend_word();
+      uint8_t *preBase = gdict.base;
+      uint16_t preBlocks = gdict.sizeBlocks;
+      forthGDictValidateRestored();
+      if (gdict.base == NULL) {
+        printf("    [7] FAIL: REGISTER {104,0} reset (should accept)\n");
+        subFail = 1;
+        if (preBase) freeC47Blocks(preBase, preBlocks);
+      } else {
+        forthGDictClear();
+      }
+    }
+    if (!subFail) {
+      printf("    [7] PASS: walk arms enforce register/flag/shuffle cell legality\n");
+    } else {
+      fail |= 1;
+    }
+    forthGDictClear();
   }
 
   return fail;

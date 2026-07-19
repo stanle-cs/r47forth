@@ -481,20 +481,65 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             }
             break;
           }
+          case PTP_REGISTER: {
+            /* F4-2: one cell, b0 <= 224 legal; b0 >= 225 error (markers join F4-3;
+             * malformed CELL fails loud — silence parity is for legal-form out-of-range
+             * VALUES, not corrupt encodings). */
+            if (!boundedRead(curG, ip, 2)) {
+              INNER_LEAVE();
+            }
+            uint8_t b0 = b[ip];
+            ip += 2;
+            if (b0 <= 224) {
+              param = (uint16_t)b0;
+            } else {
+              lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+              displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                                       ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              INNER_LEAVE();
+            }
+            break;
+          }
+          case PTP_FLAG: {
+            /* F4-2: one cell, legal bytes (<=143 or 211..224); else error (250 joins F4-3). */
+            if (!boundedRead(curG, ip, 2)) {
+              INNER_LEAVE();
+            }
+            uint8_t b0 = b[ip];
+            ip += 2;
+            if (b0 <= 143 || (211 <= b0 && b0 <= 224)) {
+              param = (uint16_t)b0;
+            } else {
+              lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+              displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                                       ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              INNER_LEAVE();
+            }
+            break;
+          }
+          case PTP_SHUFFLE: {
+            /* F4-2: one cell, any byte. */
+            if (!boundedRead(curG, ip, 2)) {
+              INNER_LEAVE();
+            }
+            param = (uint16_t)b[ip];
+            ip += 2;
+            break;
+          }
           default:
-            /* PTP_LABEL, PTP_REGISTER, etc. not supported yet (C-1, §3.3.6) */
+            /* PTP_LABEL, etc. not supported yet */
             lastErrorCode = ERROR_OPERATION_UNDEFINED;
             displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED,
                                      ERR_REGISTER_LINE, NIM_REGISTER_LINE);
              INNER_LEAVE();
-         }
+          }
 
-          /* F2-3: dispatch through shared parameter core (§10.2).
+          /* F2-3/F4-2: dispatch through shared parameter core (§10.2).
            * PGM_RUNNING save/set/restore wrap around the call (§2.2 resolved issue 2). */
          if (paramCoreValidateDirect(itemId, ptpClass, param)) {
            uint8_t savedRunStop = programRunStop;
            programRunStop = PGM_RUNNING;
-           paramCoreDispatchDirect(itemId, param);
+           paramCoreDispatchDirect(itemId, ptpClass, param);
            if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
          }
          /* else: native-parity silence — no error, no dispatch */

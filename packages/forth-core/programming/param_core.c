@@ -189,7 +189,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
 
     case PARAM_NUMBER_8: {
       if (paramCoreValidateDirect(op, PTP_NUMBER_8, opParam)) {
-        paramCoreDispatchDirect(op, opParam);
+        paramCoreDispatchDirect(op, PTP_NUMBER_8, opParam);
       }
       else if(opParam == INDIRECT_REGISTER) {
         _executeWithIndirectRegister(paramAddress, op);
@@ -226,7 +226,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
         if(isFunctionOldParam16(op)) {  // original Param16 functions without indirection support (little endian parameter)
           uint16_t val = opParam + 256 * *(paramAddress);
           if (paramCoreValidateDirect(op, PTP_NUMBER_16, val)) {
-            paramCoreDispatchDirect(op, val);
+            paramCoreDispatchDirect(op, PTP_NUMBER_16, val);
           }
         }
         else {                        // new Param16 functions with indirection support (big endian parameter)
@@ -239,7 +239,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
           else {
             uint16_t val = (opParam * 256) + *(paramAddress);
             if (paramCoreValidateDirect(op, PTP_NUMBER_16, val)) {
-              paramCoreDispatchDirect(op, val);
+              paramCoreDispatchDirect(op, PTP_NUMBER_16, val);
             }
             else {
               sprintf(tmpString, "\nIn function _executeOp: case PARAM_NUMBER, %s  %u is not a valid parameter!", indexOfItems[op].itemCatalogName, opParam);
@@ -354,10 +354,24 @@ bool paramCoreValidateDirect(uint16_t op, uint16_t ptpClass, uint16_t value) {
   else if (ptpClass == PTP_NUMBER_8_16) {
     return value <= (indexOfItems[op].tamMinMax & TAM_MAX_MASK);
   }
+  else if (ptpClass == PTP_REGISTER) {
+    return value <= LAST_SPARE_REGISTERS_IN_KS_CODE && regInRange(regKStoC((uint8_t)value));
+  }
+  else if (ptpClass == PTP_FLAG) {
+    return value <= LAST_LOCAL_FLAG || (FLAG_M <= value && value < FLAG_W);
+  }
+  else if (ptpClass == PTP_SHUFFLE) {
+    return true;
+  }
   return false;
 }
 
-/* F2-3 (§10.2): shared direct-parameter dispatch. */
-void paramCoreDispatchDirect(uint16_t op, uint16_t value) {
-  reallyRunFunction((int16_t)op, value);
+/* F2-3/F4-2: shared direct-parameter dispatch.
+ * PTP_REGISTER converts KS code to C register; all other classes pass value as-is. */
+void paramCoreDispatchDirect(uint16_t op, uint16_t ptpClass, uint16_t value) {
+  if (ptpClass == PTP_REGISTER) {
+    reallyRunFunction((int16_t)op, regKStoC((uint8_t)value));
+  } else {
+    reallyRunFunction((int16_t)op, value);
+  }
 }

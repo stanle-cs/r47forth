@@ -173,6 +173,25 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
         if (!(b0 <= 249 && gdict.base[pos + 1] == 0) && b0 != 250) return false;
         pos += 2;
       }
+      else if (ptp == PTP_REGISTER) {
+        if ((uint32_t)pos + 2u > limit) return false;
+        if (gdict.base[pos + 1] != 0) return false;  /* pad byte */
+        if (gdict.base[pos] > 224) return false;     /* byte legality */
+        pos += 2;
+      }
+      else if (ptp == PTP_FLAG) {
+        if ((uint32_t)pos + 2u > limit) return false;
+        if (gdict.base[pos + 1] != 0) return false;  /* pad byte */
+        { uint8_t b0 = gdict.base[pos];
+          if (!(b0 <= 143 || (211 <= b0 && b0 <= 224))) return false; }
+        pos += 2;
+      }
+      else if (ptp == PTP_SHUFFLE) {
+        if ((uint32_t)pos + 2u > limit) return false;
+        if (gdict.base[pos + 1] != 0) return false;  /* pad byte */
+        /* any byte is legal */
+        pos += 2;
+      }
       else {
         return false;
       }
@@ -745,6 +764,10 @@ static bool validateWalkOn(const uint8_t *base, uint16_t bodyStart, uint16_t lim
         if ((uint32_t)pos + 2u > limit) return false;
         pos += 2;
       }
+      else if (ptp == PTP_REGISTER || ptp == PTP_FLAG || ptp == PTP_SHUFFLE) {
+        if ((uint32_t)pos + 2u > limit) return false;
+        pos += 2;
+      }
       else return false;
     }
     else return false;
@@ -796,7 +819,8 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
         memcpy(&itemId2, fdict.base + pos, 2);
         pos += 2;
         uint16_t ptp2 = (uint16_t)(indexOfItems[itemId2].status & PTP_STATUS);
-        if (ptp2 == PTP_NUMBER_8 || ptp2 == PTP_NUMBER_16 || ptp2 == PTP_NUMBER_8_16) pos += 2;
+        if (ptp2 == PTP_NUMBER_8 || ptp2 == PTP_NUMBER_16 || ptp2 == PTP_NUMBER_8_16 ||
+            ptp2 == PTP_REGISTER || ptp2 == PTP_FLAG || ptp2 == PTP_SHUFFLE) pos += 2;
       }
       else if (tok == FTOK_XEQN) {
         uint8_t xk2 = fdict.base[pos];
@@ -846,7 +870,8 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
           memcpy(&itemId3, gdict.base + pos, 2);
           pos += 2;
           uint16_t ptp3 = (uint16_t)(indexOfItems[itemId3].status & PTP_STATUS);
-          if (ptp3 == PTP_NUMBER_8 || ptp3 == PTP_NUMBER_16 || ptp3 == PTP_NUMBER_8_16) pos += 2;
+          if (ptp3 == PTP_NUMBER_8 || ptp3 == PTP_NUMBER_16 || ptp3 == PTP_NUMBER_8_16 ||
+              ptp3 == PTP_REGISTER || ptp3 == PTP_FLAG || ptp3 == PTP_SHUFFLE) pos += 2;
         }
         else if (tok == FTOK_XEQN) {
           uint8_t xk3 = gdict.base[pos];
