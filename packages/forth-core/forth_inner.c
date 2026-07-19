@@ -245,6 +245,61 @@ static inline bool boundedRead(bool g, uint16_t ip, uint16_t byteCount)
  *  §3.2 Inner interpreter: fetch-decode-dispatch (cross-region)
  * ====================================================================== */
 
+/* F4-3: shared marker-cell dispatch — the ONE dispatch body, used by the
+ * FTOK_C47 runtime decode below and by forth_compile.c's interpret path.
+ * paramMode is the native PARAM_* selector: (status & PTP_STATUS) >> 9. */
+void forthParamMarkerDispatch(uint16_t op, uint16_t ptpClass, uint8_t *nbuf, uint16_t used)
+{
+  uint8_t savedRunStop = programRunStop;
+  programRunStop = PGM_RUNNING;
+  paramCoreExecuteOpBounded(nbuf, nbuf + used, op, (uint16_t)(ptpClass >> 9));
+  if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+}
+
+typedef enum { FORTH_MARK_NONE, FORTH_MARK_OK, FORTH_MARK_BAD } forthMarkResult_t;
+
+/* F4-3: decode one marker parameter cell group at ip into nbuf.
+ * NONE = the leading byte is not a marker legal for this class (the caller
+ * decodes its own direct form); OK = decoded, *used/*advance set;
+ * BAD = malformed encoding, ERROR_INVALID_CORRUPTED_DATA already raised.
+ * Legality comes from forthParamMarkerMask, and the cell grammar from
+ * forthParamCellSpan — the same two functions the validator walks use, so a
+ * body that validates always decodes and vice versa. The caller has already
+ * bounded-read the first cell. */
+static forthMarkResult_t decodeMarkerCell(bool g, uint16_t ip, uint16_t ptpClass,
+                                          uint8_t *nbuf, uint16_t *used, uint16_t *advance)
+{
+  const uint8_t *b = innerBase(g);
+  uint8_t b0 = b[ip];
+  uint8_t bit = (uint8_t)(forthParamMarkerBit(b0) & forthParamMarkerMask(ptpClass));
+  uint16_t span;
+
+  if (!bit) return FORTH_MARK_NONE;
+  /* Native order: for the NUMBER classes a legal direct value wins over the
+   * marker reading (param_core.c tries the direct dispatch first). */
+  if ((ptpClass == PTP_NUMBER_8 || ptpClass == PTP_NUMBER_8_16) && b0 <= 249) {
+    return FORTH_MARK_NONE;
+  }
+  if (!forthParamCellSpan(b, ip, innerHere(g), ptpClass, true, &span)) {
+    lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+    displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                            ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return FORTH_MARK_BAD;
+  }
+  if (!boundedRead(g, ip, span)) return FORTH_MARK_BAD;
+  nbuf[0] = b0;
+  nbuf[1] = b[ip + 1];
+  if (bit == FORTH_MK_NAME || bit == FORTH_MK_IND_VAR) {
+    memcpy(nbuf + 2, b + ip + 2, b[ip + 1]);
+    *used = (uint16_t)(2 + b[ip + 1]);
+  }
+  else {
+    *used = 2;
+  }
+  *advance = span;
+  return FORTH_MARK_OK;
+}
+
 void forthInner(uint16_t wordRef, bool fromProgram)
 {
   uint32_t dispatches = 0;
@@ -417,7 +472,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
           break;
         }
 
-       case FTOK_C47: {
+        case FTOK_C47: {
         /* §2.2: decode itemId, param per PTP class, dispatch to C47 handler */
         if (!boundedRead(curG, ip, 2)) {
           INNER_LEAVE();
@@ -440,6 +495,32 @@ void forthInner(uint16_t wordRef, bool fromProgram)
 
         /* Decode inline param per PTP class; unsupported PTP → error */
         uint16_t param = NOPARAM;
+        /* F4-3: marker forms first — the mask says which markers this class
+         * accepts, and a hit dispatches straight through the bounded native
+         * core (names resolve at run time, source-as-truth). */
+        {
+          uint8_t nbuf[2 + FORTH_NAME_MAX];
+          uint16_t nused = 0, nadv = 0;
+          if (forthParamMarkerMask(ptpClass) != 0) {
+            forthMarkResult_t mk;
+            if (!boundedRead(curG, ip, 2)) {
+              INNER_LEAVE();
+            }
+            mk = decodeMarkerCell(curG, ip, ptpClass, nbuf, &nused, &nadv);
+            if (mk == FORTH_MARK_BAD) {
+              INNER_LEAVE();
+            }
+            if (mk == FORTH_MARK_OK) {
+              ip += nadv;
+              forthParamMarkerDispatch(itemId, ptpClass, nbuf, nused);
+              if (lastErrorCode != ERROR_NONE) {
+                INNER_LEAVE();
+              }
+              goto c47_done;
+            }
+          }
+        }
+
         switch (ptpClass) {
           case PTP_NONE:
             /* No inline param */
@@ -453,11 +534,12 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             ip += 2;
             break;
           case PTP_NUMBER_16:
+            /* F4-3: no marker forms — a [254][ks] cell is indistinguishable
+             * from a legal little-endian value with low byte 254. */
             if (!boundedRead(curG, ip, 2)) {
               INNER_LEAVE();
             }
-            param = (uint16_t)(b[ip] |
-                               ((uint16_t)b[ip + 1] << 8));
+            memcpy(&param, b + ip, 2);
             ip += 2;
             break;
           case PTP_NUMBER_8_16: {
@@ -482,15 +564,15 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             break;
           }
           case PTP_REGISTER: {
-            /* F4-2: one cell, b0 <= 224 legal; b0 >= 225 error (markers join F4-3;
-             * malformed CELL fails loud — silence parity is for legal-form out-of-range
-             * VALUES, not corrupt encodings). */
+            /* F4-2: one cell, b0 <= 224 legal; anything else is either a
+             * marker (handled above) or a corrupt cell — fail loud. The
+             * silence parity is for legal-form out-of-range VALUES. */
             if (!boundedRead(curG, ip, 2)) {
               INNER_LEAVE();
             }
             uint8_t b0 = b[ip];
             ip += 2;
-            if (b0 <= 224) {
+            if (b0 <= LAST_SPARE_REGISTERS_IN_KS_CODE) {
               param = (uint16_t)b0;
             } else {
               lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
@@ -501,13 +583,14 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             break;
           }
           case PTP_FLAG: {
-            /* F4-2: one cell, legal bytes (<=143 or 211..224); else error (250 joins F4-3). */
+            /* F4-2: one cell, legal bytes (<=143 or 211..224); 250 and the
+             * indirection markers are handled above. */
             if (!boundedRead(curG, ip, 2)) {
               INNER_LEAVE();
             }
             uint8_t b0 = b[ip];
             ip += 2;
-            if (b0 <= 143 || (211 <= b0 && b0 <= 224)) {
+            if (b0 <= LAST_LOCAL_FLAG || (FLAG_M <= b0 && b0 <= FLAG_W)) {
               param = (uint16_t)b0;
             } else {
               lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
@@ -526,6 +609,13 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             ip += 2;
             break;
           }
+          case PTP_MENU:
+            /* F4-3: MENU has no direct form — every legal cell is a marker
+             * cell, so reaching here means the cell is corrupt. */
+            lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+            displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                                     ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            INNER_LEAVE();
           default:
             /* PTP_LABEL, etc. not supported yet */
             lastErrorCode = ERROR_OPERATION_UNDEFINED;
@@ -547,6 +637,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
         if (lastErrorCode != ERROR_NONE) {
           INNER_LEAVE();
         }
+        c47_done:
         break;
       }
 

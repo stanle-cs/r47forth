@@ -97,6 +97,106 @@ void forthGDictClear(void)
 #define FTOK_0BR          0x7F03
 #define FTOK_C47          0x7F04
 
+/* F4-3: the ONE marker-legality table. Every consumer (compiler, runtime
+ * decode, all three walks) reads it, so a class cannot accept a form in one
+ * place and reject it in another. Classes absent here take no marker at all
+ * — PTP_NUMBER_16 most importantly: a [254][ks] cell is indistinguishable
+ * from a legal little-endian direct value with low byte 254, so indirection
+ * is excluded there by design (QWEN_PROMPTS_F4_core.md §2.2). */
+uint8_t forthParamMarkerMask(uint16_t ptpClass)
+{
+  switch (ptpClass) {
+    case PTP_REGISTER:      return FORTH_MK_NAME | FORTH_MK_IND_REG | FORTH_MK_IND_VAR;
+    case PTP_MENU:          return FORTH_MK_NAME | FORTH_MK_IND_REG | FORTH_MK_IND_VAR;
+    case PTP_FLAG:          return FORTH_MK_SYSFLAG | FORTH_MK_IND_REG | FORTH_MK_IND_VAR;
+    case PTP_NUMBER_8:      return FORTH_MK_IND_REG | FORTH_MK_IND_VAR;
+    case PTP_NUMBER_8_16:   return FORTH_MK_IND_REG | FORTH_MK_IND_VAR;
+    default:                return 0;
+  }
+}
+
+/* F4-3: marker bit of a leading parameter byte, 0 if it is not a marker. */
+uint8_t forthParamMarkerBit(uint8_t b0)
+{
+  switch (b0) {
+    case STRING_LABEL_VARIABLE: return FORTH_MK_NAME;
+    case SYSTEM_FLAG_NUMBER:    return FORTH_MK_SYSFLAG;
+    case INDIRECT_REGISTER:     return FORTH_MK_IND_REG;
+    case INDIRECT_VARIABLE:     return FORTH_MK_IND_VAR;
+    default:                    return 0;
+  }
+}
+
+/* F4-3: does this class carry a name after the marker byte (253/255)? */
+static bool markerCarriesName(uint8_t bit)
+{
+  return bit == FORTH_MK_NAME || bit == FORTH_MK_IND_VAR;
+}
+
+bool forthParamCellSpan(const uint8_t *base, uint16_t pos, uint16_t limit,
+                        uint16_t ptpClass, bool strict, uint16_t *spanOut)
+{
+  uint8_t b0, bit;
+  if (ptpClass == PTP_NONE) { *spanOut = 0; return true; }
+  if ((uint32_t)pos + 2u > limit) return false;
+  b0 = base[pos];
+  bit = (uint8_t)(forthParamMarkerBit(b0) & forthParamMarkerMask(ptpClass));
+
+  /* NUMBER_8 / NUMBER_8_16 reach a marker only where the byte cannot be a
+   * legal direct value — native order (param_core.c tries direct first). */
+  if (bit && (ptpClass == PTP_NUMBER_8 || ptpClass == PTP_NUMBER_8_16) &&
+      b0 <= 249) {
+    bit = 0;
+  }
+
+  if (bit && markerCarriesName(bit)) {
+    uint8_t len = base[pos + 1];
+    uint16_t padded;
+    if (len < 1 || len > FORTH_NAME_MAX) return false;
+    padded = (uint16_t)((2 + len + 1) & ~1u);
+    if ((uint32_t)pos + padded > limit) return false;
+    if (strict && padded > (uint16_t)(2 + len) && base[pos + 2 + len] != 0) return false;
+    *spanOut = padded;
+    return true;
+  }
+  if (bit) {                              /* 254 / 250: one cell, any byte1 */
+    *spanOut = 2;
+    return true;
+  }
+
+  /* Direct forms — byte legality per class (strict walks only). */
+  if (strict) {
+    switch (ptpClass) {
+      case PTP_REGISTER:
+        if (b0 > LAST_SPARE_REGISTERS_IN_KS_CODE) return false;
+        if (base[pos + 1] != 0) return false;
+        break;
+      case PTP_FLAG:
+        if (!(b0 <= LAST_LOCAL_FLAG || (FLAG_M <= b0 && b0 <= FLAG_W))) return false;
+        if (base[pos + 1] != 0) return false;
+        break;
+      case PTP_SHUFFLE:
+        if (base[pos + 1] != 0) return false;
+        break;
+      case PTP_NUMBER_8:
+        if (base[pos + 1] != 0) return false;
+        break;
+      case PTP_NUMBER_8_16:
+        if (b0 > 250) return false;             /* 250 = extended [250][ext] */
+        if (b0 <= 249 && base[pos + 1] != 0) return false;
+        break;
+      case PTP_NUMBER_16:
+        break;                                  /* full LE cell, no marker */
+      case PTP_MENU:
+        return false;                           /* no direct MENU form yet */
+      default:
+        return false;
+    }
+  }
+  *spanOut = 2;
+  return true;
+}
+
 /* F1-5: validate one restored body in gdict, or (checkTarget != FORTH_NULL)
  * prove that checkTarget is a token boundary of this body at or before EXIT.
  * limit is exclusive. Restore-time only; the per-branch boundary sub-walk
@@ -154,47 +254,10 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
       memcpy(&itemId, gdict.base + pos, 2);
       pos += 2;
       if (itemId == 0 || itemId >= LAST_ITEM) return false;
-      uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
-      if (ptp == PTP_NONE) {
-        /* no inline param */
-      }
-      else if (ptp == PTP_NUMBER_8) {
-        if ((uint32_t)pos + 2u > limit) return false;
-        if (gdict.base[pos + 1] != 0) return false;   /* padded cell */
-        pos += 2;
-      }
-      else       if (ptp == PTP_NUMBER_16) {
-        if ((uint32_t)pos + 2u > limit) return false;
-        pos += 2;
-      }
-      else if (ptp == PTP_NUMBER_8_16) {
-        if ((uint32_t)pos + 2u > limit) return false;
-        uint8_t b0 = gdict.base[pos];
-        if (!(b0 <= 249 && gdict.base[pos + 1] == 0) && b0 != 250) return false;
-        pos += 2;
-      }
-      else if (ptp == PTP_REGISTER) {
-        if ((uint32_t)pos + 2u > limit) return false;
-        if (gdict.base[pos + 1] != 0) return false;  /* pad byte */
-        if (gdict.base[pos] > 224) return false;     /* byte legality */
-        pos += 2;
-      }
-      else if (ptp == PTP_FLAG) {
-        if ((uint32_t)pos + 2u > limit) return false;
-        if (gdict.base[pos + 1] != 0) return false;  /* pad byte */
-        { uint8_t b0 = gdict.base[pos];
-          if (!(b0 <= 143 || (211 <= b0 && b0 <= 224))) return false; }
-        pos += 2;
-      }
-      else if (ptp == PTP_SHUFFLE) {
-        if ((uint32_t)pos + 2u > limit) return false;
-        if (gdict.base[pos + 1] != 0) return false;  /* pad byte */
-        /* any byte is legal */
-        pos += 2;
-      }
-      else {
-        return false;
-      }
+      { uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
+        uint16_t span;
+        if (!forthParamCellSpan(gdict.base, pos, limit, ptp, true, &span)) return false;
+        pos += span; }
     }
     else if (tok == FTOK_XEQN) {
       /* F3-6: XEQN inline [kind][len][name][pad] */
@@ -748,27 +811,10 @@ static bool validateWalkOn(const uint8_t *base, uint16_t bodyStart, uint16_t lim
       memcpy(&itemId, base + pos, 2);
       pos += 2;
       if (itemId == 0 || itemId >= LAST_ITEM) return false;
-      uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
-      if (ptp == PTP_NONE) {
-        /* no inline param */
-      }
-      else if (ptp == PTP_NUMBER_8) {
-        if ((uint32_t)pos + 2u > limit) return false;
-        pos += 2;
-      }
-      else if (ptp == PTP_NUMBER_16) {
-        if ((uint32_t)pos + 2u > limit) return false;
-        pos += 2;
-      }
-      else if (ptp == PTP_NUMBER_8_16) {
-        if ((uint32_t)pos + 2u > limit) return false;
-        pos += 2;
-      }
-      else if (ptp == PTP_REGISTER || ptp == PTP_FLAG || ptp == PTP_SHUFFLE) {
-        if ((uint32_t)pos + 2u > limit) return false;
-        pos += 2;
-      }
-      else return false;
+      { uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
+        uint16_t span;
+        if (!forthParamCellSpan(base, pos, limit, ptp, false, &span)) return false;
+        pos += span; }
     }
     else return false;
   }
@@ -818,9 +864,12 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
         uint16_t itemId2;
         memcpy(&itemId2, fdict.base + pos, 2);
         pos += 2;
-        uint16_t ptp2 = (uint16_t)(indexOfItems[itemId2].status & PTP_STATUS);
-        if (ptp2 == PTP_NUMBER_8 || ptp2 == PTP_NUMBER_16 || ptp2 == PTP_NUMBER_8_16 ||
-            ptp2 == PTP_REGISTER || ptp2 == PTP_FLAG || ptp2 == PTP_SHUFFLE) pos += 2;
+        { uint16_t ptp2 = (uint16_t)(indexOfItems[itemId2].status & PTP_STATUS);
+          uint16_t span2;
+          /* F4-3: same grammar as the validator — a named/indirect cell is
+           * wider than one cell, so a plain +2 would mis-walk the body. */
+          if (forthParamCellSpan(fdict.base, pos, fdict.here, ptp2, true, &span2)) pos += span2;
+          else pos += 2; }
       }
       else if (tok == FTOK_XEQN) {
         uint8_t xk2 = fdict.base[pos];
@@ -869,9 +918,10 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
           uint16_t itemId3;
           memcpy(&itemId3, gdict.base + pos, 2);
           pos += 2;
-          uint16_t ptp3 = (uint16_t)(indexOfItems[itemId3].status & PTP_STATUS);
-          if (ptp3 == PTP_NUMBER_8 || ptp3 == PTP_NUMBER_16 || ptp3 == PTP_NUMBER_8_16 ||
-              ptp3 == PTP_REGISTER || ptp3 == PTP_FLAG || ptp3 == PTP_SHUFFLE) pos += 2;
+          { uint16_t ptp3 = (uint16_t)(indexOfItems[itemId3].status & PTP_STATUS);
+            uint16_t span3;
+            if (forthParamCellSpan(gdict.base, pos, gdict.here, ptp3, true, &span3)) pos += span3;
+            else pos += 2; }
         }
         else if (tok == FTOK_XEQN) {
           uint8_t xk3 = gdict.base[pos];

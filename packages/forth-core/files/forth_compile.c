@@ -9,6 +9,7 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_prims.h"
+#include "programming/param_core.h"
 
 /* ---- §2.2 Token constants (mirror forth_inner.c) ---- */
 
@@ -256,6 +257,173 @@ static bool parseParamDigits(const char *tok, uint16_t *out)
     if (v > TAM_MAX_MASK) return false;
   }
   *out = (uint16_t)v;
+  return true;
+}
+
+/* F4-3: indirection prefix — the two-byte glyph STD_RIGHT_ARROW only.
+ * No ASCII "->" and no IND spelling (V4): the typeable surface is exactly
+ * the arrow glyph and the ASCII quote. Returns the remainder or NULL. */
+static const char *checkArrowPrefix(const char *tok)
+{
+  if ((uint8_t)tok[0] == 0xa1 && (uint8_t)tok[1] == 0x92) return tok + 2;
+  return NULL;
+}
+
+/* F4-3: 'NAME' with ASCII 0x27 delimiters; the closing quote must be the
+ * LAST GLYPH (glyph-wise walk — a two-byte glyph's second byte that
+ * equals 0x27 is not a close).  Twin of forthParseXeqForm's quote arm
+ * (F3-6); kept separate so the landed XEQ parser stays untouched. */
+static bool parseQuotedName(const char *tok, char *name, uint8_t *lenOut)
+{
+  uint8_t len = 0;
+  if (tok[0] != 0x27) return false;
+  tok++;
+  while (*tok) {
+    if (*tok == 0x27) {
+      /* closing quote must be the last character */
+      if (tok[1] != 0) return false;
+      break;
+    }
+    if (len >= FORTH_NAME_MAX) return false;
+    name[len++] = *tok++;
+  }
+  if (*tok != 0x27 || len == 0) return false;
+  name[len] = 0;                 /* callers compare it as a C string */
+  *lenOut = len;
+  return true;
+}
+
+/* F4-2: KS letter table (26 entries) — uppercase only (native itemSoftmenuName parity).
+ * Note: W (224) parses natively but dispatches as a silent no-op for flags;
+ * this quirk is parity, do not fix it. */
+static const struct { char c; uint8_t ks; } paramLetterKS[26] = {
+  {'X',100},{'Y',101},{'Z',102},{'T',103},{'A',104},{'B',105},
+  {'C',106},{'D',107},{'L',108},{'I',109},{'J',110},{'K',111},
+  {'M',211},{'N',212},{'P',213},{'Q',214},{'R',215},{'S',216},
+  {'E',217},{'F',218},{'G',219},{'H',220},{'O',221},{'U',222},
+  {'V',223},{'W',224},
+};
+
+static bool paramLetterToKS(const char *tok, uint8_t *ks)
+{
+  int i;
+  if (tok[0] == 0 || tok[1] != 0) return false;
+  for (i = 0; i < 26; i++) {
+    if (paramLetterKS[i].c == tok[0]) { *ks = paramLetterKS[i].ks; return true; }
+  }
+  return false;
+}
+
+/* F4-3: the F4-2 direct register shapes (NN, .NN, letter), reused as the
+ * target of the indirection arrow. */
+static bool parseDirectRegisterKS(const char *tok, uint8_t *ks)
+{
+  uint16_t v;
+  if (parseParamDigits(tok, &v)) {
+    if (v > 99) return false;
+    *ks = (uint8_t)v;
+    return true;
+  }
+  if (tok[0] == '.' && parseParamDigits(tok + 1, &v)) {
+    if (v > 98) return false;
+    *ks = (uint8_t)(112 + v);
+    return true;
+  }
+  return paramLetterToKS(tok, ks);
+}
+
+/* F4-3: system-flag reverse map — b = 0..63 over indexOfItems[b + SFL_TDM24],
+ * b = 64..127 over indexOfItems[(b & 0x3f) + SFL_MONIT] (the same two ranges
+ * the native PARAM_FLAG arm decodes). compareString returns 0 on equal. */
+static bool parseSystemFlagName(const char *name, uint8_t *idx)
+{
+  uint16_t b;
+  for (b = 0; b < 64; b++) {
+    if (compareString(indexOfItems[b + SFL_TDM24].itemSoftmenuName, name, CMP_BINARY) == 0) {
+      *idx = (uint8_t)b;
+      return true;
+    }
+  }
+  for (b = 64; b < 128; b++) {
+    if (compareString(indexOfItems[(b & 0x3f) + SFL_MONIT].itemSoftmenuName, name, CMP_BINARY) == 0) {
+      *idx = (uint8_t)b;
+      return true;
+    }
+  }
+  return false;
+}
+
+/* F4-3: parse the marker parameter forms `ptpClass` accepts — 'NAME' (253),
+ * system-flag names (250), →register (254), →'NAME' (255). Legality comes
+ * from forthParamMarkerMask, the one table the runtime decode and the
+ * validator walks also read. Fills nbuf[0..*used-1]; false = not a marker
+ * form for this class (the caller raises ERROR_INVALID_NAME). */
+static bool parseMarkerForm(const char *tok, uint16_t ptpClass,
+                            uint8_t *nbuf, uint16_t *used)
+{
+  uint8_t mask = forthParamMarkerMask(ptpClass);
+  char qname[FORTH_NAME_MAX + 1];
+  uint8_t qlen, ks, sfIdx;
+  const char *rem;
+
+  if (mask == 0) return false;              /* PTP_NUMBER_16: excluded */
+  rem = checkArrowPrefix(tok);
+  if (rem) {
+    if ((mask & FORTH_MK_IND_VAR) && parseQuotedName(rem, qname, &qlen)) {
+      nbuf[0] = INDIRECT_VARIABLE;
+      nbuf[1] = qlen;
+      memcpy(nbuf + 2, qname, qlen);
+      *used = (uint16_t)(2 + qlen);
+      return true;
+    }
+    if ((mask & FORTH_MK_IND_REG) && parseDirectRegisterKS(rem, &ks)) {
+      nbuf[0] = INDIRECT_REGISTER;
+      nbuf[1] = ks;
+      *used = 2;
+      return true;
+    }
+    return false;
+  }
+  if (!parseQuotedName(tok, qname, &qlen)) return false;
+  if (mask & FORTH_MK_NAME) {               /* REGISTER, MENU: 'NAME' */
+    nbuf[0] = STRING_LABEL_VARIABLE;
+    nbuf[1] = qlen;
+    memcpy(nbuf + 2, qname, qlen);
+    *used = (uint16_t)(2 + qlen);
+    return true;
+  }
+  if ((mask & FORTH_MK_SYSFLAG) && parseSystemFlagName(qname, &sfIdx)) {
+    nbuf[0] = SYSTEM_FLAG_NUMBER;
+    nbuf[1] = sfIdx;
+    *used = 2;
+    return true;
+  }
+  return false;
+}
+
+/* F4-3: land a parsed marker form. Compile: FTOK_C47 + itemId + the bytes
+ * zero-padded to whole cells. Interpret: the ONE bounded-core dispatch body
+ * (forthParamMarkerDispatch), so compiled and interpreted forms cannot
+ * drift. False = error already displayed and the definition aborted. */
+static bool emitOrRunMarkerForm(bool compiling, uint16_t itemId, uint16_t ptpClass,
+                                uint8_t *nbuf, uint16_t used)
+{
+  if (compiling) {
+    uint16_t padded = (uint16_t)((used + 1) & ~1u);
+    if (padded > used) nbuf[used] = 0;
+    if (!forthDictEmit(FTOK_C47) ||
+        !forthDictEmit((ftoken_t)itemId) ||
+        !forthDictEmitBytes(nbuf, padded)) {
+      abortDefinition();
+      return false;
+    }
+    return true;
+  }
+  forthParamMarkerDispatch(itemId, ptpClass, nbuf, used);
+  if (lastErrorCode != ERROR_NONE) {
+    if (isDefinitionOpen()) abortDefinition();
+    return false;
+  }
   return true;
 }
 
@@ -709,6 +877,17 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
         if (ptpClass == PTP_NUMBER_8 || ptpClass == PTP_NUMBER_16 || ptpClass == PTP_NUMBER_8_16) {
           uint16_t value;
           if (!parseParamDigits(ptok, &value)) {
+            /* F4-3: not digits — the indirection forms are the only other
+             * shape these classes take (NUMBER_16 has an empty mask). */
+            uint8_t mbuf[2 + FORTH_NAME_MAX + 1];
+            uint16_t mused;
+            if (parseMarkerForm(ptok, ptpClass, mbuf, &mused)) {
+              if (!emitOrRunMarkerForm(state == STATE_COMPILE, paramItemId,
+                                       ptpClass, mbuf, mused)) {
+                lineOK = false;
+              }
+              continue;
+            }
             displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
             if (isDefinitionOpen()) abortDefinition();
             lineOK = false;
@@ -772,7 +951,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
             if (paramCoreValidateDirect(paramItemId, ptpClass, value)) {
               uint8_t savedRunStop = programRunStop;
               programRunStop = PGM_RUNNING;
-              paramCoreDispatchDirect(paramItemId, value);
+              paramCoreDispatchDirect(paramItemId, ptpClass, value);
               if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
             }
             if (lastErrorCode != ERROR_NONE) {
@@ -782,8 +961,168 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
             }
           }
           continue;
+        } else if (ptpClass == PTP_REGISTER) {
+          /* F4-2: register direct forms — number, dot, letter */
+          uint16_t regValue;
+          uint8_t regKS;
+          if (parseParamDigits(ptok, &regValue) && regValue <= 99) {
+            regKS = (uint8_t)regValue;
+          } else if (ptok[0] == '.' && parseParamDigits(ptok + 1, &regValue) && regValue <= 98) {
+            regKS = 112 + (uint8_t)regValue;
+          } else if (ptok[0] >= '0' && ptok[0] <= '9' && parseParamDigits(ptok, &regValue)) {
+            /* all digits but > 99 */
+            displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          } else if (paramLetterToKS(ptok, &regKS)) {
+            /* single letter */
+          } else {
+            /* F4-3: named, system-flag, and indirect forms */
+            uint8_t mbuf[2 + FORTH_NAME_MAX + 1];
+            uint16_t mused;
+            if (parseMarkerForm(ptok, ptpClass, mbuf, &mused)) {
+              if (!emitOrRunMarkerForm(state == STATE_COMPILE, paramItemId,
+                                       ptpClass, mbuf, mused)) {
+                lineOK = false;
+              }
+              continue;
+            }
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          }
+          if (state == STATE_COMPILE) {
+            if (!forthDictEmit(FTOK_C47)) { abortDefinition(); lineOK = false; continue; }
+            if (!forthDictEmit((ftoken_t)paramItemId)) { abortDefinition(); lineOK = false; continue; }
+            if (!forthDictEmit((ftoken_t)regKS)) { abortDefinition(); lineOK = false; continue; }
+          } else {
+            if (paramCoreValidateDirect(paramItemId, ptpClass, regKS)) {
+              uint8_t savedRunStop = programRunStop;
+              programRunStop = PGM_RUNNING;
+              paramCoreDispatchDirect(paramItemId, ptpClass, regKS);
+              if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+            }
+            if (lastErrorCode != ERROR_NONE) {
+              if (isDefinitionOpen()) abortDefinition();
+              lineOK = false;
+              continue;
+            }
+          }
+          continue;
+        } else if (ptpClass == PTP_FLAG) {
+          /* F4-2: flag direct forms — number, dot, letter */
+          uint16_t flagValue;
+          uint8_t flagByte;
+          if (parseParamDigits(ptok, &flagValue) && flagValue <= 99) {
+            flagByte = (uint8_t)flagValue;
+          } else if (ptok[0] == '.' && parseParamDigits(ptok + 1, &flagValue) && flagValue <= 31) {
+            flagByte = 112 + (uint8_t)flagValue;
+          } else if (ptok[0] == '.' && parseParamDigits(ptok + 1, &flagValue) && flagValue <= 98) {
+            displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          } else if (ptok[0] >= '0' && ptok[0] <= '9' && parseParamDigits(ptok, &flagValue)) {
+            displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          } else if (paramLetterToKS(ptok, &flagByte)) {
+            /* single letter — quirk: W (224) parses natively but dispatches as no-op */
+          } else {
+            /* F4-3: named, system-flag, and indirect forms */
+            uint8_t mbuf[2 + FORTH_NAME_MAX + 1];
+            uint16_t mused;
+            if (parseMarkerForm(ptok, ptpClass, mbuf, &mused)) {
+              if (!emitOrRunMarkerForm(state == STATE_COMPILE, paramItemId,
+                                       ptpClass, mbuf, mused)) {
+                lineOK = false;
+              }
+              continue;
+            }
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          }
+          if (state == STATE_COMPILE) {
+            if (!forthDictEmit(FTOK_C47)) { abortDefinition(); lineOK = false; continue; }
+            if (!forthDictEmit((ftoken_t)paramItemId)) { abortDefinition(); lineOK = false; continue; }
+            if (!forthDictEmit((ftoken_t)flagByte)) { abortDefinition(); lineOK = false; continue; }
+          } else {
+            if (paramCoreValidateDirect(paramItemId, ptpClass, flagByte)) {
+              uint8_t savedRunStop = programRunStop;
+              programRunStop = PGM_RUNNING;
+              paramCoreDispatchDirect(paramItemId, ptpClass, flagByte);
+              if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+            }
+            if (lastErrorCode != ERROR_NONE) {
+              if (isDefinitionOpen()) abortDefinition();
+              lineOK = false;
+              continue;
+            }
+          }
+          continue;
+        } else if (ptpClass == PTP_SHUFFLE) {
+          /* F4-2: shuffle — exactly 4 lowercase chars from {x,y,z,t} */
+          {
+            const char *shuffleReg = "xyzt";
+            uint8_t packed = 0, ci;
+            int si;
+            if (ptok[4] != 0) {
+              displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              if (isDefinitionOpen()) abortDefinition();
+              lineOK = false;
+              continue;
+            }
+            for (si = 0; si < 4; si++) {
+              ci = 0;
+              while (ci < 4 && shuffleReg[ci] != ptok[si]) ci++;
+              if (ci == 4) {
+                displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                if (isDefinitionOpen()) abortDefinition();
+                lineOK = false;
+                goto shuffle_done;
+              }
+              packed |= (uint8_t)(ci << (si * 2));
+            }
+            if (state == STATE_COMPILE) {
+              if (!forthDictEmit(FTOK_C47)) { abortDefinition(); lineOK = false; continue; }
+              if (!forthDictEmit((ftoken_t)paramItemId)) { abortDefinition(); lineOK = false; continue; }
+              if (!forthDictEmit((ftoken_t)packed)) { abortDefinition(); lineOK = false; continue; }
+            } else {
+              if (paramCoreValidateDirect(paramItemId, ptpClass, packed)) {
+                uint8_t savedRunStop = programRunStop;
+                programRunStop = PGM_RUNNING;
+                paramCoreDispatchDirect(paramItemId, ptpClass, packed);
+                if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+              }
+              if (lastErrorCode != ERROR_NONE) {
+                if (isDefinitionOpen()) abortDefinition();
+                lineOK = false;
+                continue;
+              }
+            }
+          }
+          shuffle_done:
+          continue;
         } else {
-          /* F4-2/F4-3: register, flag, shuffle, named, indirect forms */
+          /* F4-3: named, system-flag, and indirect forms (MENU and any other
+           * marker-capable class); PTP_NUMBER_16 has an empty mask, so the
+           * arrow there falls straight through to ERROR_INVALID_NAME. */
+          {
+            uint8_t mbuf[2 + FORTH_NAME_MAX + 1];
+            uint16_t mused;
+            if (parseMarkerForm(ptok, ptpClass, mbuf, &mused)) {
+              if (!emitOrRunMarkerForm(state == STATE_COMPILE, paramItemId,
+                                       ptpClass, mbuf, mused)) {
+                lineOK = false;
+              }
+              continue;
+            }
+          }
           displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
           if (isDefinitionOpen()) abortDefinition();
           lineOK = false;

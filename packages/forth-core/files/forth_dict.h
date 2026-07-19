@@ -187,6 +187,32 @@ typedef enum { FORTH_XEQN_DONE, FORTH_XEQN_COLON, FORTH_XEQN_ERR } forthXeqnResu
    On COLON, sets *colonRef and returns — the caller dispatches. */
 forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *colonRef);
 
+/* F4-3: shared marker-cell dispatch (253/250/254/255).
+   nbuf: marker byte + len/param byte + name bytes (for 253/255) or
+         marker byte + param byte (for 254/250).
+   used: byte count of the meaningful portion of nbuf.
+   Dispatches through paramCoreExecuteOpBounded(nbuf, nbuf+used, op, paramMode). */
+void forthParamMarkerDispatch(uint16_t op, uint16_t ptpClass, uint8_t *nbuf, uint16_t used);
+
+/* F4-3: which marker bytes a PTP class accepts. ONE table (forth_dict.c) —
+   the compiler, the runtime decode, and all three walks read it, so a class
+   can never accept a form in one place and reject it in another. */
+#define FORTH_MK_NAME     0x01u   /* 253 STRING_LABEL_VARIABLE: 'NAME'    */
+#define FORTH_MK_SYSFLAG  0x02u   /* 250 SYSTEM_FLAG_NUMBER               */
+#define FORTH_MK_IND_REG  0x04u   /* 254 INDIRECT_REGISTER: →NN           */
+#define FORTH_MK_IND_VAR  0x08u   /* 255 INDIRECT_VARIABLE: →'NAME'       */
+uint8_t forthParamMarkerMask(uint16_t ptpClass);
+uint8_t forthParamMarkerBit(uint8_t firstParamByte);
+
+/* F4-3: byte span of ONE FTOK_C47 inline parameter group starting at `pos`
+   (the first parameter cell; `limit` is exclusive). `strict` enforces byte
+   legality and the pad-zero rule — the two structural walks pass true; the
+   restore validator passes false and checks extent only, exactly as it
+   already does for every other operand shape. Returns false when the group
+   is malformed or would run past `limit`. */
+bool forthParamCellSpan(const uint8_t *base, uint16_t pos, uint16_t limit,
+                        uint16_t ptpClass, bool strict, uint16_t *spanOut);
+
 /* Inner interpreter entry (§3.2) */
 void forthInner(uint16_t entryIndex, bool fromProgram);
 

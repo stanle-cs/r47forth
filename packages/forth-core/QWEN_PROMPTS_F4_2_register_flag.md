@@ -16,8 +16,11 @@ accepts `<= LAST_LOCAL_FLAG(143)` or `FLAG_M(211) <= v < FLAG_W(224)` —
 **flag letter W (224) parses natively but dispatches as a silent no-op;
 this quirk is parity, do not fix it**
 [packages/forth-core/programming/param_core.c PARAM_FLAG arm]; the
-REGISTER arm range-gates `regInRange(regKStoC(ks))` and out-of-range is
-SILENT [param_core.c PARAM_REGISTER arm]; SHUFFLE dispatches the packed
+REGISTER arm range-gates `regInRange(regKStoC(ks))` — and (AMENDMENT
+F4-2A, traced 2026-07-19) `regInRange` is NOT a pure predicate: on a miss
+it raises `ERROR_OUT_OF_RANGE` itself [src/c47/store.c:17-72] and only
+then returns false, so the arm declines to DISPATCH but the user sees an
+error; there is no silence here [param_core.c PARAM_REGISTER arm]; SHUFFLE dispatches the packed
 byte as-is, spelling = 4 lowercase chars of `xyzt`, char i ↔ bits
 2i..2i+1 via `shuffleReg[4] = {'x','y','z','t'}`
 [src/c47/programming/decode.c:10 + PARAM_SHUFFLE arm]; the shuffle item
@@ -152,8 +155,10 @@ and remaining hypotheses.
    converting class; every other class dispatches `value` as today.
    `paramCoreValidateDirect` gains:
    - `PTP_REGISTER`: `value <= LAST_SPARE_REGISTERS_IN_KS_CODE &&
-     regInRange(regKStoC((uint8_t)value))` (out-of-range = false =
-     traced silence);
+     regInRange(regKStoC((uint8_t)value))` (F4-2A: out-of-range = false
+     AND `regInRange` has already raised `ERROR_OUT_OF_RANGE` — this
+     class is the documented exception to the "validate sets no error"
+     contract in param_core.h; note it there);
    - `PTP_FLAG`: `value <= LAST_LOCAL_FLAG || (FLAG_M <= value && value <
      FLAG_W)` — the native arm's exact condition INCLUDING the `< FLAG_W`
      quirk (mirror, don't fix);
@@ -218,13 +223,13 @@ Fresh state.  Subcases:
    forthOuterInterpret("RCL M")` → `x_is_longint(21)` (M rides
    `regKStoC(211)` — the converting dispatch).
    `[3] PASS: stat register M stores through regKStoC`
-4. **Local dot form encodes and stays silent unallocated.**  Byte-image:
+4. **Local dot form encodes and rejects unallocated.**  Byte-image:
    `": PRL STO .05 ;"` body cell `{117, 0}` (112+5).  Behavior parity
-   (traced silence): with no local registers allocated,
-   `forthPushInt32(31); forthOuterInterpret("STO .05")` → NO error
-   (`lastErrorCode == ERROR_NONE`) and X still 31 — the native
-   silent-no-op, pinned.
-   `[4] PASS: .05 encodes KS 117; unallocated locals are silently inert`
+   (F4-2A, corrected): with no local registers allocated, running
+   `STO .05` over a pushed 31 → `lastErrorCode == ERROR_OUT_OF_RANGE`
+   (raised inside `regInRange`) and X still 31 — no store happens.
+   Clear the error afterwards.
+   `[4] PASS: .05 encodes KS 117; unallocated locals raise OUT_OF_RANGE and never store`
 5. **Flag forms.**  Byte-images: `": PF1 SF 10 ;"` → `{10, 0}`;
    `": PF2 SF .31 ;"` → `{143, 0}`.  Errors: `"SF .32"` →
    `ERROR_OUT_OF_RANGE`; `"SF q"` → `ERROR_INVALID_NAME`; `"CF 100"` →
@@ -238,9 +243,11 @@ Fresh state.  Subcases:
    (verify at runtime that item 1694 has `PTP_SHUFFLE` status — CONFIG
    FAIL otherwise).  Byte-image via `": PSH <same> ;"` built with
    sprintf: parameter cell `{0xE1, 0}` (yxzt = 1|0<<2|2<<4|3<<6 = 225).
-   Behavior: seed T=11,Z=22,Y=33,X=44 (four pushes in that order),
-   interpret `sbuf` → no error and X==33, Y==44, Z==22, T==11 via
-   `read_reg_int32` on all four.  Malformed: `"<glyph> yxz"` and
+   Behavior: the seed MUST ride in the source line —
+   `"11 22 33 44 <glyph> yxzt"` — because `x_set_string` overwrites
+   REGISTER_X with the source string and `fnForthOuter` drops it, which
+   shifts anything pre-pushed by one level.  Expect no error and X==33,
+   Y==44, Z==22, T==11 via `read_reg_int32` on all four.  Malformed: `"<glyph> yxz"` and
    `"<glyph> yxzq"` → `ERROR_INVALID_NAME` (clear).
    `[6] PASS: shuffle yxzt packs to 0xE1 and swaps X/Y`
 7. **Validator arms.**  g-build three one-cell bodies and validate:
@@ -249,6 +256,15 @@ Fresh state.  Subcases:
    byte).  A REGISTER cell `{104, 0}` → ACCEPT.  (V-idiom from the F3-2
    pins; `forthGDictClear()` between builds.)
    `[7] PASS: walk arms enforce register/flag/shuffle cell legality`
+
+**Test-authoring facts (F4-2A, learned the hard way).**  `forthFindColon`
+returns a REF INDEX, not a byte offset — byte-image pins must walk from
+`fdict.latest + TO_BLOCKS(6 + nameLen) * BYTES_PER_BLOCK`.  (Using the
+ref as an offset silently works for the first word after a clear, where
+both are 0, and corrupts every later pin.)  Every subcase must open with
+`lastErrorCode = ERROR_NONE;`: the preceding F4-1 test ends on subcase 7's
+deliberate `ERROR_OPERATION_UNDEFINED` and does not clear it, so a subcase
+that reads `lastErrorCode` before setting it reports a phantom error 13.
 
 Cleanup: regions + error state; leave register 05/A/M as the suite's
 neighboring tests do (they reseed their own state).

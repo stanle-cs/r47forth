@@ -14,6 +14,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end,
+                               uint16_t op, uint16_t paramMode);
 void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode);
 void paramCorePutLiteral(uint8_t *literalAddress);
 

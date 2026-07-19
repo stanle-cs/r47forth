@@ -759,3 +759,89 @@ XEQ-name step can no longer resolve interactively-defined words (mutual
 invisibility, already pinned by subcase 3).  The §8.6 picker walk stays
 unfiltered as the documented interim until the F6 catalog lands the
 scope-aware listing.
+
+## 2026-07-19 — F4-2 debug: `regInRange` is not silent (packet amendment F4-2A)
+
+Non-normative. The F4-2 packet carried the traced claim that the native
+`PARAM_REGISTER` arm's range gate is *silent* on a miss ("out-of-range is
+SILENT"), and pinned it as subcase 4 (`STO .05` with no local registers
+allocated → `ERROR_NONE`, X untouched).  The trace was wrong in its
+consequence.  `regInRange()` (`src/c47/store.c:17-72`) is **not** a pure
+predicate: on a miss it classifies the register and calls
+`displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ...)` itself before returning
+false (under `EXTRA_INFO_ON_CALC_ERROR` it also emits the
+"In function regInRange: … is not defined!" info line).  The native arm's
+`if(regInRange(regKStoC(opParam)))` therefore raises on a miss and merely
+declines to *dispatch* — silence applies to the caller, not to the user.
+
+Ruling: mirror the native call chain exactly.  `paramCoreValidateDirect`
+keeps `regInRange(regKStoC(value))` for `PTP_REGISTER`, and the class is
+the documented exception to the "validate sets no error" contract in
+`param_core.h`.  Behavior pinned by the landed subcase 4: an unallocated
+local raises `ERROR_OUT_OF_RANGE` and performs no store (X unchanged).
+The traced-silence parity in §10.4 continues to hold where it was
+actually traced — the `PTP_NUMBER_8` out-of-range arm — not here.
+
+Two authoring defects in the same packet, found in the same debug pass:
+the acceptance test's stack seeding, and its byte-image addressing.
+`x_set_string` overwrites REGISTER_X with the source string and
+`fnForthOuter` drops it, so any stack seeded by `forthPushInt32` before
+the call is shifted one level before the line runs — a shuffle fixture
+must ride its seed in the source line (`"11 22 33 44 <glyph> yxzt"`).
+And `forthFindColon` yields a **ref index**, not a byte offset; byte-image
+pins must walk from `fdict.latest` (the ref-as-offset error is invisible
+for the first word defined after a clear, where both are 0 — which is
+exactly why three of the five image pins passed and two did not).
+
+## 2026-07-19 — F4-3 landed after a rewrite: one marker table, one cell-span, one decode body
+
+Non-normative. F4-3's implementation pass produced a working but
+structurally unsound shape — the marker grammar restated per class, seven
+copies of the 253/255 decoder in `forthInner` (one of them defined *inside*
+the switch as a GCC nested function), six copies of the emit block in the
+compiler, and the same grammar spelled a fourth and fifth time in the two
+`forthDictMakeLatestGlobal` walks. It was rewritten around two functions
+before landing, and §10.4 now records the invariant: `forthParamMarkerMask`
+is the only statement of which markers a class accepts, and
+`forthParamCellSpan` the only statement of the cell grammar. Everything else
+— `decodeMarkerCell` + `forthParamMarkerDispatch` (runtime),
+`parseMarkerForm` + `emitOrRunMarkerForm` (compiler), all three walks — reads
+them. Net effect beyond hygiene: the compiler, the runtime, and the validator
+cannot drift, which is exactly the drift F2-3 was created to close.
+
+Four substantive defects fixed in the same pass:
+
+1. **Invented surface.** The interim implementation accepted an ASCII `->`
+   spelling, an `→RNN` register form, and a `.NNN` three-digit system-flag
+   form — none of them traced, all of them contradicting the packet's V4
+   non-goal (the typeable surface is exactly the arrow glyph `\xa1\x92` and
+   the ASCII quote `0x27`). Removed.
+2. **`compareString` used as a truthiness test.** It returns 0 on equal
+   (sort.c:70), so the system-flag reverse map matched every name except the
+   right one. Compounded by `parseQuotedName` not NUL-terminating its output
+   — the map compared a name against unterminated stack bytes.
+3. **NUMBER_8 / NUMBER_8_16 indirection never reached the parser**: the
+   numeric arm rejected any non-digit token before the marker forms were
+   tried. The arm now falls through to `parseMarkerForm`.
+4. **An unsound acceptance pin.** The packet asked the validator to reject a
+   `{254, 5}` cell on a NUMBER_16 item. It cannot: for that class the cell IS
+   the legal value 1534. The exclusion is a compile-time rule and is pinned
+   there; the validator subcase pins what walks really enforce (len 0,
+   non-zero pad, name extent past the body) plus one well-formed ACCEPT so
+   the RESET pins are not vacuous.
+
+Also recorded: the acceptance test as first written papered over its own
+named-variable leak by assigning `numberOfAllocatedMemoryRegions` back to its
+start value. The landed test unwinds what it allocated instead (data block
+per variable plus the header table, back to the pre-test count) — upstream
+has no delete-named-variable API, so the teardown is explicit. Never satisfy
+a gate by writing to the counter it reads.
+
+Cost: `make dmcp5r47` flash 1090256 → 1092176 (+1920 bytes), RAM unchanged
+at 7188, Forth arena unchanged from the F4-2 baseline. All five packet
+mutations verified RED and restored; amendments F4-3A and F4-4A appended to
+their packets, and the four fixture rules that cost red gates in F4-2/F4-3
+(x_set_string vs seeded stacks, forthFindColon returning a ref index, per-
+subcase error clearing, allocation teardown) are now repeated verbatim in
+F4-4, F5-1, F5-2, and F6-6 — packets are pasted standalone, so a shared
+reference would not have travelled.

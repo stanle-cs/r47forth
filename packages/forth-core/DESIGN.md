@@ -2864,6 +2864,24 @@ control/declarative steps (GTO, RTN, STOP, BACK, SKIP, CASE, …) stay rejected
 in Forth with `ERROR_OPERATION_UNDEFINED`; XEQ is the sole control-flow
 bridge.
 
+**Marker grammar, single-sourced (landed F4-3).** The named/system-flag/
+indirect forms encode as marker cells — `[253][len][name…]` (`'NAME'`),
+`[250][index]` (system flag), `[254][ks]` (`→register`), `[255][len][name…]`
+(`→'NAME'`), names zero-padded to whole cells. Which markers a PTP class
+accepts is stated **once**, in `forthParamMarkerMask`, and the cell grammar
+**once**, in `forthParamCellSpan`; the compiler, the runtime decode, and all
+three dictionary walks read those two functions. A class can therefore never
+accept a form in one place and reject it in another, and a body that
+validates always decodes. `PTP_NUMBER_16` has an empty mask — a `[254][ks]`
+cell is indistinguishable from a legal little-endian value with low byte 254,
+so indirection there is excluded at the COMPILER, the only place it can be
+enforced; no walk can police it. For the NUMBER classes a legal direct value
+wins over the marker reading, mirroring the native arms' order. Marker forms
+dispatch through `paramCoreExecuteOpBounded` — the extracted native tail with
+an explicit end pointer — so create semantics, `ERROR_UNDEF_SOURCE_VAR`,
+`ERROR_UNDEF_MENU`, and indirection resolution are inherited, never
+re-implemented.
+
 ### 10.5 F5 — Series D: commit validation (implements E9)
 
 Lexical and structural validation on commit per §8.4 E9's two tiers:

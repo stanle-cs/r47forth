@@ -330,3 +330,71 @@ commit.
 ```text
 forth-core: F4-3 — named, system-flag, and indirect parameters through the bounded core
 ```
+
+---
+
+## AMENDMENT F4-3A (2026-07-19) — landed corrections
+
+This packet was executed and debugged by sol; the landed shape differs from
+the text above in five places. The text above is kept for provenance; where
+they conflict, THIS section is authoritative.
+
+1. **One legality table, one cell-span function, one decode body.** The
+   packet described the marker grammar per class in prose, which produced
+   seven copies of the same decoder and six copies of the same emit block.
+   Landed instead:
+   - `forthParamMarkerMask(ptpClass)` (forth_dict.c, exported) — the ONLY
+     statement of which markers a class accepts (`FORTH_MK_NAME` 253,
+     `FORTH_MK_SYSFLAG` 250, `FORTH_MK_IND_REG` 254, `FORTH_MK_IND_VAR`
+     255; NUMBER_16's mask is empty — that IS the exclusion);
+   - `forthParamCellSpan(base, pos, limit, ptp, strict, &span)` — the ONLY
+     statement of the cell grammar, used by all three walks (`strict=true`
+     for the two structural walks, `false` for the restore validator, which
+     checks extent only, exactly as it already did for every other operand);
+   - `decodeMarkerCell` (forth_inner.c, static) + `forthParamMarkerDispatch`
+     — the ONE runtime decode and the ONE dispatch body;
+   - `parseMarkerForm` / `emitOrRunMarkerForm` (forth_compile.c) — the ONE
+     source parser and the ONE emit/dispatch tail, called from all four
+     class arms.
+   A future packet touching this grammar edits the table and the span
+   function, never a per-class copy.
+2. **NUMBER_8 / NUMBER_8_16 take a marker only where the byte cannot be a
+   legal direct value** (b0 > 249). That is native order — param_core.c's
+   arms try the direct dispatch first and only then look at 254/255 — and
+   it is enforced in both `forthParamCellSpan` and `decodeMarkerCell`.
+3. **Subcase 8's validator pin for NUMBER_16 was unsound and is dropped.**
+   For a NUMBER_16 item the parameter cell is a full little-endian value:
+   `{254, 5}` IS the legal value 1534, so no validator can reject it
+   without rejecting legal programs. The exclusion lives where it can
+   actually be enforced — the COMPILER refuses the arrow for that class —
+   and subcase 8 pins that, plus three marker-cell malformations the walks
+   really do reject (len 0, non-zero pad, name extent past the body) and
+   one well-formed ACCEPT so the RESET pins are not vacuous.
+4. **`parseQuotedName` must NUL-terminate.** The system-flag reverse map
+   compares the parsed name with `compareString`, which is a C-string
+   comparison returning **0 on equal** (a truthy test reads as "not equal"
+   — the defect that made every flag name miss).
+5. **Test-authoring rules that bit here** (all four are now binding):
+   `x_set_string` overwrites REGISTER_X and `fnForthOuter` drops it, so a
+   test line that needs a seeded stack must use `forthOuterInterpret`;
+   `forthFindColon` returns a ref index, so byte images walk from
+   `fdict.latest`; every subcase opens with `lastErrorCode = ERROR_NONE;`;
+   and a test that allocates named variables MUST unwind them (data block
+   per variable + the header table, back to the pre-test count) or the
+   suite's end-of-run `numberOfAllocatedMemoryRegions` gate reddens —
+   assigning that counter to hide the growth is never acceptable.
+6. **Landed mutation anchors** (all five verified RED, then restored):
+   1. `decodeMarkerCell`, non-name branch: `nbuf[0] = b[ip+1]; *used = 1;`
+      → subcase 4's COMPILED drive reds (the interpret chain stays green —
+      that is why the compiled drive is required).
+   2. `paramCoreExecuteOpBounded`'s PARAM_REGISTER `STRING_LABEL_VARIABLE`
+      arm: `paramCoreReadName(paramAddress, firstFreeProgramByte)` →
+      subcases 1 and 3 red with ERROR_OUT_OF_RANGE.
+   3. `emitOrRunMarkerForm`: pad byte written as 1 → subcase 2's PN2 image.
+   4. `parseSystemFlagName`: second range at `SFL_MONIT + 1` → subcase 6's
+      range-two probe (index 64) reds; index 0 stays green.
+   5. `forthParamCellSpan`: drop the `len < 1` bound → subcase 8's len-0 pin.
+
+Measured cost (RULE-1): `make dmcp5r47` flash 1090256 → 1092176 bytes,
+**+1920**; RAM unchanged at 7188; Forth arena unchanged from the F4-2
+baseline (`dict here=48 sizeBlocks=16, gdict here=16 sizeBlocks=16`).

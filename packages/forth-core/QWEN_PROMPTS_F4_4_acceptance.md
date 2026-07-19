@@ -262,3 +262,80 @@ delta if the owner runs it here (stage-closing commit).
 ```text
 forth-core: F4-4 — Series C error table and native parity are pinned
 ```
+
+---
+
+## AMENDMENT F4-4A (2026-07-19) — corrections carried from the F4-2/F4-3 debug
+
+Authored before F4-2 and F4-3 were executed; five items above are now wrong
+or unsound. Where they conflict, THIS section wins.
+
+### A. Binding fixture rules (all four cost a red gate in F4-2/F4-3)
+
+1. **`x_set_string` destroys a seeded stack.** It overwrites REGISTER_X with
+   the source string and `fnForthOuter` drops it, shifting everything one
+   level. Any half of a parity pair that needs `seedSweepState()`'s stack
+   MUST run its source through `forthOuterInterpret(...)`, never
+   `x_set_string` + `fnForthOuter`. (Compile-only fixtures, which need no
+   seeded stack, may keep the x_set_string form.)
+2. **`seedSweepState()` push order is literal.** To end at X=44, Y=33, Z=22,
+   T=11, push `11, 22, 33, 44` in THAT sequence — each push lifts.
+3. **`forthFindColon` returns a REF INDEX, not a byte offset.** Every byte
+   image walks from `fdict.latest + TO_BLOCKS(6 + nameLen) * BYTES_PER_BLOCK`.
+   (Using the ref as an offset silently works for the first word defined
+   after a clear, where both are 0, and corrupts every later image.)
+4. **Every subcase opens with `lastErrorCode = ERROR_NONE;`** — a neighbour
+   test may deliberately end on an error (F4-1's subcase 7 leaves
+   ERROR_OPERATION_UNDEFINED), and an unset read reports a phantom failure.
+5. **Named variables must be unwound.** Subcase 3 creates `VS`; the suite's
+   end-of-run `numberOfAllocatedMemoryRegions` gate reddens on the leak.
+   Snapshot `numberOfNamedVariables` at test start and, at cleanup, free
+   each new variable's data (`freeRegisterData(FIRST_NAMED_VARIABLE + i)`)
+   plus the header table back to the snapshot (`freeC47Blocks` when the
+   snapshot was 0, else `reallocC47Blocks` down) — the F4-3 test has the
+   exact code. Assigning `numberOfAllocatedMemoryRegions` to mask the growth
+   is a packet violation.
+
+### B. `regInRange` is not silent (amendment F4-2A)
+
+`regInRange()` raises `ERROR_OUT_OF_RANGE` itself on a miss
+(src/c47/store.c:17-72) and only then returns false, so "the REGISTER arm is
+silent out of range" is false. Two consequences here:
+
+- Subcase 2's traced-silence claim applies ONLY to the NUMBER_8 arm (whose
+  validate has no `regInRange` conjunct) — keep it, it is correct there.
+- A native REGISTER step with a byte ABOVE 224 (e.g. `{230}`) is still
+  silent, but for a different reason: the native arm's range gate lives
+  inside the `opParam <= 224` branch, so 230 reaches the sprintf-only
+  default without ever calling `regInRange`. Say that, do not call it a
+  range-gate silence.
+
+### C. Mutation 2 is replaced
+
+The old text could not name a deterministic RED. Landed replacement:
+
+> **Mutation 2.** In `paramCoreValidateDirect`'s REGISTER arm, drop the
+> `regInRange` conjunct (accept any KS ≤ LAST_SPARE_REGISTERS_IN_KS_CODE).
+> **F4-2's `test_param_register_flag` subcase 4 MUST go RED**: an
+> unallocated local (`STO .05`) stops raising ERROR_OUT_OF_RANGE and
+> dispatches instead. This is a legacy-test RED caused by a deliberate
+> mutation, which rule 6 permits — do not edit that test.
+
+Drop the added REGISTER corrupt-value drive from subcase 2; it pinned a
+silence that is not the one the mutation breaks.
+
+### D. Mutation 3's anchor moved
+
+The pad-byte check is no longer inside a per-class runtime decode. It lives
+once, in `forthParamCellSpan` (forth_dict.c), which the runtime decoder and
+all three walks call. The mutation is: **in `forthParamCellSpan`, drop the
+`strict` pad-byte check** (`base[pos + 2 + len] != 0`). The odd-name probe
+in subcase 3 is unchanged and still the RED oracle.
+
+### E. Subcase 6's N16 row
+
+The N16-plus-arrow row stays (the compiler rejects it — that is where the
+exclusion is enforced). Do NOT add a validator pin for it: for a NUMBER_16
+item the parameter cell is a full little-endian value, so `{254, 5}` IS the
+legal value 1534 and no walk can reject it without rejecting legal programs
+(this is why F4-3's subcase 8 dropped that pin).

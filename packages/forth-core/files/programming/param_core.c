@@ -50,10 +50,10 @@ static void _executeWithIndirectRegister(uint8_t *paramAddress, uint16_t op) {
   }
 }
 
-static void _executeWithIndirectVariable(uint8_t *stringAddress, uint16_t op) {
+static void _executeWithIndirectVariable(uint8_t *stringAddress, const uint8_t *end, uint16_t op) {
   calcRegister_t regist;
   bool_t  tryAllocate = isFunctionAllowingNewVariable(op);
-  paramCoreReadName(stringAddress, firstFreeProgramByte);
+  paramCoreReadName(stringAddress, end);
   regist = findNamedVariable(tmpStringLabelOrVariableName);
   if(regist != INVALID_VARIABLE) {
       int16_t realParam = indirectAddressing(regist, indirectionType(op), indexOfItems[op].tamMinMax >> TAM_MAX_BITS, indexOfItems[op].tamMinMax & TAM_MAX_MASK, tryAllocate);
@@ -70,7 +70,7 @@ static void _executeWithIndirectVariable(uint8_t *stringAddress, uint16_t op) {
   }
 }
 
-void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
+void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16_t op, uint16_t paramMode) {
   uint8_t opParam = *(uint8_t *)(paramAddress++);
   bool_t tryAllocate = isFunctionAllowingNewVariable(op);
 
@@ -85,7 +85,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
         reallyRunFunction(op, opParam);
       }
       else if((opParam == STRING_LABEL_VARIABLE) || (opParam == LOCAL_LABEL_VARIABLE)) {
-        paramCoreReadName(paramAddress, firstFreeProgramByte);
+        paramCoreReadName(paramAddress, end);
         /* Rebase to b8f79e486: upstream added named LOCAL labels, reusing
          * this same opParam byte (STRING_LABEL_VARIABLE == GLOBAL_LABELS,
          * LOCAL_LABEL_VARIABLE == LOCAL_LABELS) as the labelType selector —
@@ -152,7 +152,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
         _executeWithIndirectRegister(paramAddress, op);
       }
       else if(opParam == INDIRECT_VARIABLE) {
-        _executeWithIndirectVariable(paramAddress, op);
+        _executeWithIndirectVariable(paramAddress, end, op);
       }
       else {
         sprintf(tmpString, "\nIn function _executeOp: case PARAM_LABEL, %s  %u is not a valid parameter!", indexOfItems[op].itemCatalogName, opParam);
@@ -179,7 +179,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
         _executeWithIndirectRegister(paramAddress, op);
       }
       else if(opParam == INDIRECT_VARIABLE) {
-        _executeWithIndirectVariable(paramAddress, op);
+        _executeWithIndirectVariable(paramAddress, end, op);
       }
       else {
         sprintf(tmpString, "\nIn function _executeOp: case PARAM_FLAG, %s  %u is not a valid parameter!", indexOfItems[op].itemCatalogName, opParam);
@@ -189,13 +189,13 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
 
     case PARAM_NUMBER_8: {
       if (paramCoreValidateDirect(op, PTP_NUMBER_8, opParam)) {
-        paramCoreDispatchDirect(op, opParam);
+        paramCoreDispatchDirect(op, PTP_NUMBER_8, opParam);
       }
       else if(opParam == INDIRECT_REGISTER) {
         _executeWithIndirectRegister(paramAddress, op);
       }
       else if(opParam == INDIRECT_VARIABLE) {
-        _executeWithIndirectVariable(paramAddress, op);
+        _executeWithIndirectVariable(paramAddress, end, op);
       }
       else {
         sprintf(tmpString, "\nIn function _executeOp: case PARAM_NUMBER, %s  %u is not a valid parameter!", indexOfItems[op].itemCatalogName, opParam);
@@ -214,7 +214,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
           _executeWithIndirectRegister(paramAddress, op);
         }
         else if(opParam == INDIRECT_VARIABLE) {
-          _executeWithIndirectVariable(paramAddress, op);
+          _executeWithIndirectVariable(paramAddress, end, op);
         }
         else {
           sprintf(tmpString, "\nIn function _executeOp: case PARAM_NUMBER, %s  %u is not a valid parameter!", indexOfItems[op].itemCatalogName, opParam);
@@ -226,7 +226,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
         if(isFunctionOldParam16(op)) {  // original Param16 functions without indirection support (little endian parameter)
           uint16_t val = opParam + 256 * *(paramAddress);
           if (paramCoreValidateDirect(op, PTP_NUMBER_16, val)) {
-            paramCoreDispatchDirect(op, val);
+            paramCoreDispatchDirect(op, PTP_NUMBER_16, val);
           }
         }
         else {                        // new Param16 functions with indirection support (big endian parameter)
@@ -234,12 +234,12 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
             _executeWithIndirectRegister(paramAddress, op);
           }
           else if(opParam == INDIRECT_VARIABLE) {
-            _executeWithIndirectVariable(paramAddress, op);
+            _executeWithIndirectVariable(paramAddress, end, op);
           }
           else {
             uint16_t val = (opParam * 256) + *(paramAddress);
             if (paramCoreValidateDirect(op, PTP_NUMBER_16, val)) {
-              paramCoreDispatchDirect(op, val);
+              paramCoreDispatchDirect(op, PTP_NUMBER_16, val);
             }
             else {
               sprintf(tmpString, "\nIn function _executeOp: case PARAM_NUMBER, %s  %u is not a valid parameter!", indexOfItems[op].itemCatalogName, opParam);
@@ -257,7 +257,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
         }
       }
       else if(opParam == STRING_LABEL_VARIABLE) {
-        paramCoreReadName(paramAddress, firstFreeProgramByte);
+        paramCoreReadName(paramAddress, end);
         calcRegister_t regist = findNamedVariable(tmpStringLabelOrVariableName);
         if(tryAllocate) {
           reallyRunFunction(op, findOrAllocateNamedVariable(tmpStringLabelOrVariableName));
@@ -287,7 +287,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
         _executeWithIndirectRegister(paramAddress, op);
       }
       else if(opParam == INDIRECT_VARIABLE) {
-        _executeWithIndirectVariable(paramAddress, op);
+        _executeWithIndirectVariable(paramAddress, end, op);
       }
       else {
         sprintf(tmpString, "\nIn function _executeOp: case PARAM_REGISTER / PARAM_COMPARE, %s  %u is not a valid parameter!", indexOfItems[op].itemCatalogName, opParam);
@@ -297,7 +297,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
 
     case PARAM_MENU: {
       if(opParam == STRING_LABEL_VARIABLE) {
-        paramCoreReadName(paramAddress, firstFreeProgramByte);
+        paramCoreReadName(paramAddress, end);
         int16_t menu_id = findMenu(tmpStringLabelOrVariableName);
         if(tryAllocate) {
           reallyRunFunction(op, findOrAllocateNamedVariable(tmpStringLabelOrVariableName));
@@ -317,7 +317,7 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
         _executeWithIndirectRegister(paramAddress, op);
       }
       else if(opParam == INDIRECT_VARIABLE) {
-        _executeWithIndirectVariable(paramAddress, op);
+        _executeWithIndirectVariable(paramAddress, end, op);
       }
       else {
         sprintf(tmpString, "\nIn function _executeOp: case PARAM_REGISTER / PARAM_COMPARE, %s  %u is not a valid parameter!", indexOfItems[op].itemCatalogName, opParam);
@@ -354,10 +354,30 @@ bool paramCoreValidateDirect(uint16_t op, uint16_t ptpClass, uint16_t value) {
   else if (ptpClass == PTP_NUMBER_8_16) {
     return value <= (indexOfItems[op].tamMinMax & TAM_MAX_MASK);
   }
+  else if (ptpClass == PTP_REGISTER) {
+    return value <= LAST_SPARE_REGISTERS_IN_KS_CODE && regInRange(regKStoC((uint8_t)value));
+  }
+  else if (ptpClass == PTP_FLAG) {
+    return value <= LAST_LOCAL_FLAG || (FLAG_M <= value && value < FLAG_W);
+  }
+  else if (ptpClass == PTP_SHUFFLE) {
+    return true;
+  }
   return false;
 }
 
-/* F2-3 (§10.2): shared direct-parameter dispatch. */
-void paramCoreDispatchDirect(uint16_t op, uint16_t value) {
-  reallyRunFunction((int16_t)op, value);
+/* F2-3/F4-2: shared direct-parameter dispatch.
+ * PTP_REGISTER converts KS code to C register; all other classes pass value as-is. */
+void paramCoreDispatchDirect(uint16_t op, uint16_t ptpClass, uint16_t value) {
+  if (ptpClass == PTP_REGISTER) {
+    reallyRunFunction((int16_t)op, regKStoC((uint8_t)value));
+  } else {
+    reallyRunFunction((int16_t)op, value);
+  }
+}
+
+/* F4-3: unbounded wrapper — delegates to Bounded with program-memory end.
+ * All landed native callers go through this unchanged. */
+void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
+  paramCoreExecuteOpBounded(paramAddress, firstFreeProgramByte, op, paramMode);
 }

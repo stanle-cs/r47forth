@@ -292,3 +292,33 @@ weave adds flash — record the delta in the stage commit.
 ```text
 forth-core: F5-1 — check mode: the tokenizer validates its own grammar
 ```
+
+---
+
+## FIXTURE RULES carried forward from the F4-2/F4-3 debug (binding, 2026-07-19)
+
+Each of these cost a red gate in stage F4. They apply to every test this
+packet adds, whether or not the body above repeats them.
+
+1. **Seeded stacks and `x_set_string` are incompatible.** `x_set_string`
+   overwrites REGISTER_X with the source string and `fnForthOuter` drops
+   it, shifting anything pushed beforehand one level down. A fixture that
+   needs values on the stack runs its source through
+   `forthOuterInterpret(...)`; `x_set_string` + `fnForthOuter` is for
+   compile-only fixtures that need no seeded stack.
+2. **`forthFindColon` returns a REF INDEX, not a byte offset.** Byte-image
+   assertions walk from
+   `fdict.latest + TO_BLOCKS(6 + nameLen) * BYTES_PER_BLOCK`. Using the ref
+   as an offset happens to work for the first word defined after a clear
+   (both are 0) and silently corrupts every later image.
+3. **Every subcase opens with `lastErrorCode = ERROR_NONE;`.** Neighbouring
+   tests deliberately end on an error code; an unset read reports a phantom
+   failure that looks like a code defect.
+4. **Anything a fixture allocates, the fixture frees** — named variables in
+   particular (data block per variable plus the header table, back to the
+   pre-test count; see `test_param_named_indirect`'s cleanup). The suite's
+   end-of-run `numberOfAllocatedMemoryRegions` gate reddens on a leak, and
+   assigning that counter to hide the growth is a packet violation.
+5. **`compareString` is a C-string comparison returning 0 on equal.** A
+   truthy test (`if (compareString(a, b, CMP_BINARY))`) reads as "not
+   equal"; and any buffer you hand it must be NUL-terminated.

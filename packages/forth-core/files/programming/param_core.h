@@ -14,6 +14,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end,
+                               uint16_t op, uint16_t paramMode);
 void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode);
 void paramCorePutLiteral(uint8_t *literalAddress);
 
@@ -22,9 +24,13 @@ void paramCorePutLiteral(uint8_t *literalAddress);
  * Validate mirrors the traced native range checks EXACTLY, including
  * their traced silence: an out-of-range direct parameter is a no-op
  * that sets no error (native parity), so validate returning false
- * means "do nothing", not "raise". */
+ * means "do nothing", not "raise".
+ * EXCEPTION (F4-2A) — PTP_REGISTER: the native gate is regInRange(), which
+ * is not a pure predicate (store.c:17-72): on a miss it raises
+ * ERROR_OUT_OF_RANGE itself and then returns false. Mirroring the native
+ * arm therefore means this one class DOES raise on a rejected value. */
 bool paramCoreValidateDirect(uint16_t op, uint16_t ptpClass, uint16_t value);
-void paramCoreDispatchDirect(uint16_t op, uint16_t value);
+void paramCoreDispatchDirect(uint16_t op, uint16_t ptpClass, uint16_t value);
 
 #if defined(FORTH_DEBUG_SELFTEST)
 extern uint32_t paramCoreDebugNameLengthReads;
