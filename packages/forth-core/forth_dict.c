@@ -409,7 +409,7 @@ bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags)
         if (hdr->nameLen > 0 &&
             queryLen == hdr->nameLen &&
             memcmp(gdict.base + off + 6, name, (size_t)hdr->nameLen) == 0) {
-          *ref = FORTH_REF_GLOBAL | gdict.count - 1 - n;
+          *ref = (uint16_t)(FORTH_REF_GLOBAL | (gdict.count - 1 - n));
           if (flags) *flags = hdr->flags;
           return true;
         }
@@ -616,6 +616,249 @@ bool forthDictNameByRef(uint16_t ref, char *buf, int bufSize)
     }
   }
 
+  return false;
+}
+
+/* ---- F3-4: GLOBAL — move transient word to gdict ---- */
+
+static bool validateWalkOn(const uint8_t *base, uint16_t bodyStart, uint16_t limit,
+                           uint16_t selfTok, uint16_t trefIdx, uint16_t gcount)
+{
+  uint16_t pos = bodyStart;
+  for (;;) {
+    if ((uint32_t)pos + 2u > limit) return false;
+    ftoken_t tok;
+    memcpy(&tok, base + pos, 2);
+    pos += 2;
+    if (tok == FTOK_EXIT) return true;
+    else if (tok >= 0x0001 && tok <= 0x0FFF) {
+      if ((uint16_t)(tok - 1) >= forthPrimCount) return false;
+    }
+    else if (tok >= FTOK_CALL_BASE && tok < FORTH_GCALL_BASE) {
+      /* Transient-space call */
+      if (tok != selfTok) return false;  /* call to another transient — illegal */
+    }
+    else if (tok >= FORTH_GCALL_BASE && tok <= 0x7EFF) {
+      if ((uint16_t)(tok - FORTH_GCALL_BASE) >= gcount) return false;
+    }
+    else if (tok >= 0x7F05) return false;  /* reserved */
+    else if (tok == FTOK_LIT) {
+      if ((uint32_t)pos + 16u > limit) return false;
+      pos += 16;
+    }
+    else if (tok == FTOK_ILIT) {
+      if ((uint32_t)pos + 4u > limit) return false;
+      pos += 4;
+    }
+    else if (tok == FTOK_BR || tok == FTOK_0BR) {
+      if ((uint32_t)pos + 2u > limit) return false;
+      pos += 2;
+    }
+    else if (tok == FTOK_C47) {
+      if ((uint32_t)pos + 2u > limit) return false;
+      uint16_t itemId;
+      memcpy(&itemId, base + pos, 2);
+      pos += 2;
+      if (itemId == 0 || itemId >= LAST_ITEM) return false;
+      uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
+      if (ptp == PTP_NONE) {
+        /* no inline param */
+      }
+      else if (ptp == PTP_NUMBER_8) {
+        if ((uint32_t)pos + 2u > limit) return false;
+        pos += 2;
+      }
+      else if (ptp == PTP_NUMBER_16) {
+        if ((uint32_t)pos + 2u > limit) return false;
+        pos += 2;
+      }
+      else return false;
+    }
+    else return false;
+  }
+}
+
+bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
+{
+  uint16_t idx = tref;
+
+  /* Step 1: validate preconditions */
+  if (!fdict.base || fdict.latest == FORTH_NULL ||
+      idx != (uint16_t)(fdict.count - 1)) {
+    displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+
+  uint16_t off = fdict.latest;
+  forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+
+  /* Step 2: defensive smudge check + compute body start */
+  if (hdr->flags & FF_SMUDGE) {
+    displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+
+  uint16_t bodyStart = off + (uint16_t)TO_BLOCKS(6 + hdr->nameLen) * BYTES_PER_BLOCK;
+  uint16_t selfTok = (ftoken_t)(0x1000 + idx);
+
+  /* Step 3: validate walk */
+  if (!validateWalkOn(fdict.base, bodyStart, fdict.here, selfTok, idx, gdict.count)) {
+    displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+
+  /* Recompute end from walk */
+  {
+    uint16_t pos = bodyStart;
+    for (;;) {
+      ftoken_t tok;
+      memcpy(&tok, fdict.base + pos, 2);
+      pos += 2;
+      if (tok == FTOK_EXIT) break;
+      else if (tok == FTOK_LIT) pos += 16;
+      else if (tok == FTOK_ILIT) pos += 4;
+      else if (tok == FTOK_BR || tok == FTOK_0BR) pos += 2;
+      else if (tok == FTOK_C47) {
+        uint16_t itemId2;
+        memcpy(&itemId2, fdict.base + pos, 2);
+        pos += 2;
+        uint16_t ptp2 = (uint16_t)(indexOfItems[itemId2].status & PTP_STATUS);
+        if (ptp2 == PTP_NUMBER_8 || ptp2 == PTP_NUMBER_16) pos += 2;
+      }
+    }
+    uint16_t entryBytes = pos - off;
+
+    /* Step 4: ensure gdict space */
+    if (!forthGDictEnsure(entryBytes)) return false;
+
+    /* Re-derive hdr for hygiene */
+    hdr = (forthHeader_t *)(fdict.base + off);
+
+    /* Step 5: copy to gdict */
+    uint16_t goff = gdict.here;
+    memcpy(gdict.base + goff, fdict.base + off, entryBytes);
+
+    /* Patch link and owner in the copy */
+    uint16_t link = gdict.latest;
+    ((forthHeader_t *)(gdict.base + goff))->link = link;
+    ((forthHeader_t *)(gdict.base + goff))->owner = FORTH_OWNER_GLOBAL;
+
+    /* Step 6: rewrite walk on the COPY — rewrite selfTok */
+    {
+      ftoken_t newTok = (ftoken_t)(FORTH_GCALL_BASE + gdict.count);
+      uint8_t newTokBytes[2];
+      memcpy(newTokBytes, &newTok, 2);
+      uint16_t gBodyStart = goff + (uint16_t)TO_BLOCKS(6 + hdr->nameLen) * BYTES_PER_BLOCK;
+      uint16_t pos = gBodyStart;
+      for (;;) {
+        ftoken_t tok;
+        memcpy(&tok, gdict.base + pos, 2);
+        pos += 2;
+        if (tok == FTOK_EXIT) break;
+        if (tok == selfTok) {
+          memcpy(gdict.base + (pos - 2), newTokBytes, 2);
+        }
+        else if (tok == FTOK_LIT) pos += 16;
+        else if (tok == FTOK_ILIT) pos += 4;
+        else if (tok == FTOK_BR || tok == FTOK_0BR) pos += 2;
+        else if (tok == FTOK_C47) {
+          uint16_t itemId3;
+          memcpy(&itemId3, gdict.base + pos, 2);
+          pos += 2;
+          uint16_t ptp3 = (uint16_t)(indexOfItems[itemId3].status & PTP_STATUS);
+          if (ptp3 == PTP_NUMBER_8 || ptp3 == PTP_NUMBER_16) pos += 2;
+        }
+      }
+    }
+
+    /* Step 7: commit gdict */
+    gdict.latest = goff;
+    gdict.here = (uint16_t)TO_BLOCKS(goff + entryBytes) * BYTES_PER_BLOCK;
+    gdict.count++;
+
+    /* Step 8: roll off fdict */
+    uint16_t savedLink = hdr->link;
+    fdict.here = off;
+    fdict.latest = savedLink;
+    fdict.count--;
+
+    /* Step 9: return global ref */
+    *grefOut = (uint16_t)(FORTH_REF_GLOBAL | (gdict.count - 1));
+    return true;
+  }
+}
+
+/* ---- F3-4: IMMEDIATE — set FF_IMMEDIATE by ref ---- */
+
+bool forthDictSetImmediateByRef(uint16_t ref)
+{
+  if (ref & FORTH_REF_GLOBAL) {
+    uint16_t idx = ref & 0x7FFFu;
+    if (!gdict.base || idx >= gdict.count) return false;
+    uint16_t off = gdict.latest;
+    uint16_t n = 0;
+    while (off != FORTH_NULL) {
+      if (gdict.count - 1 - n == idx) {
+        forthHeader_t *h = (forthHeader_t *)(gdict.base + off);
+        if (h->flags & FF_SMUDGE) return false;
+        h->flags |= FF_IMMEDIATE;
+        return true;
+      }
+      forthHeader_t *h = (forthHeader_t *)(gdict.base + off);
+      off = h->link;
+      n++;
+    }
+  } else {
+    uint16_t idx = ref;
+    if (!fdict.base || idx >= fdict.count) return false;
+    uint16_t off = fdict.latest;
+    uint16_t n = 0;
+    while (off != FORTH_NULL) {
+      if (fdict.count - 1 - n == idx) {
+        forthHeader_t *h = (forthHeader_t *)(fdict.base + off);
+        if (h->flags & FF_SMUDGE) return false;
+        h->flags |= FF_IMMEDIATE;
+        return true;
+      }
+      forthHeader_t *h = (forthHeader_t *)(fdict.base + off);
+      off = h->link;
+      n++;
+    }
+  }
+  return false;
+}
+
+/* ---- F3-4: FORGET — truncate gdict at named word ---- */
+
+bool forthGDictForget(const char *name)
+{
+  if (!gdict.base) {
+    xcopy(errorMessage, name, ERROR_MESSAGE_LENGTH);
+    displayCalcErrorMessage(ERROR_FUNCTION_NOT_FOUND, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+
+  size_t nameLen = strlen(name);
+  uint16_t off = gdict.latest;
+  uint16_t n = 0;
+
+  while (off != FORTH_NULL) {
+    forthHeader_t *hdr = (forthHeader_t *)(gdict.base + off);
+    if (hdr->nameLen > 0 &&
+        nameLen == hdr->nameLen &&
+        memcmp(gdict.base + off + 6, name, nameLen) == 0) {
+      /* Hit at `off` after skipping `n` newer entries */
+      gdict.count -= (uint16_t)(n + 1);
+      gdict.latest = hdr->link;
+      gdict.here = off;
+      return true;
+    }
+    off = hdr->link;
+    n++;
+  }
+
+  xcopy(errorMessage, name, ERROR_MESSAGE_LENGTH);
+  displayCalcErrorMessage(ERROR_FUNCTION_NOT_FOUND, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
   return false;
 }
 

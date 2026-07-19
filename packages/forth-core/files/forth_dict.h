@@ -18,7 +18,8 @@
 
 #define FF_IMMEDIATE    0x01        /* execute even in compile state */
 #define FF_SMUDGE       0x02        /* hidden: definition in progress / incomplete */
-#define FF_RESERVED     0xFC        /* must be 0 */
+#define FF_DEFMARK      0x04        /* primitive flag: definition-completing marker (GLOBAL/IMMEDIATE) */
+#define FF_RESERVED     0xF8        /* must be 0 */
 #define FORTH_OWNER_INTERACTIVE 0xFFFFu
 #define FORTH_OWNER_GLOBAL      0xFFFEu
 #ifndef FTOK_EXIT
@@ -186,6 +187,19 @@ void forthSetTestInnerDepth(uint8_t depth);
 
 /* Ref → name reverse lookup (for FCALL redirect, C6) */
 bool forthDictNameByRef(uint16_t ref, char *buf, int bufSize);
+
+/* F3-4: same-line tracker (implemented in forth_compile.c) */
+uint16_t forthLatestClosedRefGet(void);
+void     forthLatestClosedRefSet(uint16_t ref);
+
+/* F3-4: GLOBAL — move transient word to gdict */
+bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut);
+
+/* F3-4: IMMEDIATE — set FF_IMMEDIATE flag on a word */
+bool forthDictSetImmediateByRef(uint16_t ref);
+
+/* F3-4: FORGET — truncate gdict at named word */
+bool forthGDictForget(const char *name);
 
 /* Outer interpreter (§3.3) */
 void forthOuterInterpret(const char *source);

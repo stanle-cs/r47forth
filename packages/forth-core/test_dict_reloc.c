@@ -10496,6 +10496,301 @@ static int test_scope_isolation(void)
   return fail;
 }
 
+/* test_global_marks
+ * F3-4: GLOBAL/IMMEDIATE/FORGET with same-line mark discipline.
+ * Eight subcases covering GLOBAL move, same-line discipline, transient-call
+ * rejection, RECURSE rewrite, IMMEDIATE compile-time execution, FORGET
+ * truncation, pre-scan IMMEDIATE carve-out, and global+IMMEDIATE persistence. */
+static int test_global_marks(void)
+{
+  int fail = 0;
+
+  forthDictClear();
+  forthGDictClear();
+  lastErrorCode = ERROR_NONE;
+
+  /* [1] GLOBAL moves the same-line definition */
+  {
+    forthOuterInterpret(": GA 5 ; GLOBAL");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: GLOBAL produced error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      uint16_t ref;
+      if (!forthFindColon("GA", &ref) || ref != (FORTH_REF_GLOBAL | 0)) {
+        printf("    [1] FAIL: GA not found or not global (ref=%u)\n", ref);
+        fail = 1;
+      } else if (fdict.count != 0) {
+        printf("    [1] FAIL: fdict.count != 0 (got %u)\n", fdict.count);
+        fail = 1;
+      } else if (gdict.count != 1) {
+        printf("    [1] FAIL: gdict.count != 1 (got %u)\n", gdict.count);
+        fail = 1;
+      } else {
+        lastErrorCode = ERROR_NONE;
+        if (run_word("GA") || !x_is_longint(5)) {
+          printf("    [1] FAIL: GA did not leave X=5\n");
+          fail = 1;
+        } else {
+          forthOuterInterpret(": TB GA 1 + ;");
+          lastErrorCode = ERROR_NONE;
+          if (run_word("TB") || !x_is_longint(6)) {
+            printf("    [1] FAIL: TB did not leave X=6\n");
+            fail = 1;
+          } else {
+            printf("    [1] PASS: same-line GLOBAL moved the definition to gdict\n");
+          }
+        }
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [2] Same-line discipline */
+  {
+    forthOuterInterpret("GLOBAL");
+    if (lastErrorCode != ERROR_INVALID_NAME) {
+      printf("    [2] FAIL: bare GLOBAL did not give ERROR_INVALID_NAME (got %d)\n", lastErrorCode);
+      fail = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": GC 1 ;");
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("GLOBAL");
+    if (lastErrorCode != ERROR_INVALID_NAME) {
+      printf("    [2] FAIL: separate-line GLOBAL did not give ERROR_INVALID_NAME (got %d)\n", lastErrorCode);
+      fail = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+    { uint16_t ref;
+      if (forthFindColon("GC", &ref) && (ref & FORTH_REF_GLOBAL)) {
+        printf("    [2] FAIL: GC became global despite separate-line GLOBAL\n");
+        fail = 1;
+      } else {
+        printf("    [2] PASS: GLOBAL requires a definition closed on the same line\n");
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [3] A global may not call a transient */
+  {
+    forthOuterInterpret(": TD 3 ;");
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": GE TD ; GLOBAL");
+    if (lastErrorCode != ERROR_INVALID_NAME) {
+      printf("    [3] FAIL: GE calling transient TD did not error (got %d)\n", lastErrorCode);
+      fail = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+    { uint16_t ref;
+      if (forthFindColon("GE", &ref)) {
+        if (ref & FORTH_REF_GLOBAL) {
+          printf("    [3] FAIL: GE became global despite transient call\n");
+          fail = 1;
+        } else {
+          printf("    [3] PASS: transient-calling body refused GLOBAL\n");
+        }
+      } else {
+        printf("    [3] FAIL: GE not found\n");
+        fail = 1;
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [4] Self-call rewrite */
+  {
+    forthOuterInterpret(": GR 1 RECURSE ; GLOBAL");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [4] FAIL: GR RECURSE GLOBAL produced error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      uint16_t off = gdict.latest;
+      uint16_t bodyStart = off + (uint16_t)TO_BLOCKS(6 + 2) * BYTES_PER_BLOCK;
+      /* Token layout: ILIT(2) payload(4) RECURSE(2) EXIT(2) */
+      /* RECURSE token at bodyStart + 2 + 4 */
+      ftoken_t tok;
+      memcpy(&tok, gdict.base + bodyStart + 6, 2);
+      if (tok != (FORTH_GCALL_BASE + 1)) {
+        printf("    [4] FAIL: RECURSE not rewritten (tok=0x%04X, expected 0x%04X)\n",
+               tok, FORTH_GCALL_BASE + 1);
+        fail = 1;
+      } else {
+        printf("    [4] PASS: RECURSE self-call rewritten to the global index\n");
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [5] IMMEDIATE honored by the compiler */
+  {
+    forthOuterInterpret(": GI 2 ; IMMEDIATE");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [5] FAIL: IMMEDIATE produced error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      uint16_t ref; uint8_t fl;
+      if (!forthFindColonRef("GI", &ref, &fl) || !(fl & FF_IMMEDIATE)) {
+        printf("    [5] FAIL: GI not marked IMMEDIATE\n");
+        fail = 1;
+      } else {
+        forthPushInt32(0);
+        forthOuterInterpret(": TU GI ;");
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [5] FAIL: TU compilation errored (%d)\n", lastErrorCode);
+          fail = 1;
+        } else if (!x_is_longint(2)) {
+          printf("    [5] FAIL: X != 2 after TU compilation\n");
+          fail = 1;
+        } else {
+          /* Verify TU body is empty: first body token == FTOK_EXIT */
+          uint16_t tuOff = fdict.latest;
+          forthHeader_t *tuHdr = (forthHeader_t *)(fdict.base + tuOff);
+          uint16_t tuBody = tuOff + (uint16_t)TO_BLOCKS(6 + tuHdr->nameLen) * BYTES_PER_BLOCK;
+          ftoken_t tuTok;
+          memcpy(&tuTok, fdict.base + tuBody, 2);
+          if (tuTok != FTOK_EXIT) {
+            printf("    [5] FAIL: TU body not empty (tok=0x%04X)\n", tuTok);
+            fail = 1;
+          } else {
+            printf("    [5] PASS: immediate colon word executed at compile time\n");
+          }
+        }
+        lastErrorCode = ERROR_NONE;
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [6] FORGET truncates from the named word */
+  {
+    forthOuterInterpret(": G1 1 ; GLOBAL");
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": G2 2 ; GLOBAL");
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": G3 3 ; GLOBAL");
+    lastErrorCode = ERROR_NONE;
+    if (gdict.count != 5) {
+      printf("    [6] FAIL: gdict.count != 5 before FORGET (got %u)\n", gdict.count);
+      fail = 1;
+    } else {
+      forthOuterInterpret("FORGET G2");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [6] FAIL: FORGET G2 errored (%d)\n", lastErrorCode);
+        fail = 1;
+      } else if (gdict.count != 3) {
+        printf("    [6] FAIL: gdict.count != 3 after FORGET G2 (got %u)\n", gdict.count);
+        fail = 1;
+      } else {
+        uint16_t r;
+        bool g2 = forthFindColon("G2", &r);
+        bool g3 = forthFindColon("G3", &r);
+        bool g1 = forthFindColon("G1", &r);
+        if (g2 || g3 || !g1) {
+          printf("    [6] FAIL: FORGET lookup wrong (G2=%d G3=%d G1=%d)\n", g2, g3, g1);
+          fail = 1;
+        } else {
+          forthOuterInterpret("FORGET TD");
+          if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+            printf("    [6] FAIL: FORGET transient TD did not give ERROR_FUNCTION_NOT_FOUND\n");
+            fail = 1;
+          }
+          lastErrorCode = ERROR_NONE;
+          forthOuterInterpret("FORGET ZZQQ");
+          if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+            printf("    [6] FAIL: FORGET ZZQQ did not give ERROR_FUNCTION_NOT_FOUND\n");
+            fail = 1;
+          }
+          lastErrorCode = ERROR_NONE;
+          if (!fail) {
+            printf("    [6] PASS: FORGET truncated the global scope at the named word\n");
+          }
+        }
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [7] Marks apply on the pre-scan (program context) */
+  {
+    testProg_t tp; tpInit(&tp);
+    int sL   = tpLbl(&tp, "PM");
+    int sMi  = tpSrc(&tp, ": MI 3 ; IMMEDIATE");
+    int sMu  = tpSrc(&tp, ": MU MI ;");
+    int sTail= tpSrc(&tp, "MU");
+    if (sL < 0 || sMi < 0 || sMu < 0 || sTail < 0 || !tpWrite(&tp)) {
+      printf("    [7] FAIL: fixture build/write failed\n");
+      fail = 1;
+    } else {
+      forthRunGenBump();
+      uint8_t *step = tpStepAddr(&tp, sMi);
+      executeOneStep(step);
+      /* MI compiled and marked immediate; MU compiled with MI executed at compile time */
+      forthPushInt32(55);
+      step = tpStepAddr(&tp, sTail);
+      executeOneStep(step);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [7] FAIL: tail step errored (%d)\n", lastErrorCode);
+        fail = 1;
+      } else if (!x_is_longint(55)) {
+        printf("    [7] FAIL: X != 55 (MU body not empty — X=%d)\n", x_is_longint(0) ? 0 : -1);
+        fail = 1;
+      } else {
+        printf("    [7] PASS: IMMEDIATE applied during the pre-scan pass\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      cleanupTestProgram();
+    }
+  }
+
+  /* [8] Global persistence with flags */
+  {
+    forthOuterInterpret(": GJ 4 ; IMMEDIATE GLOBAL");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [8] FAIL: GJ IMMEDIATE GLOBAL errored (%d)\n", lastErrorCode);
+      fail = 1;
+    } else {
+      /* Clear fdict before save so restoreCalc does not restore an orphaned fdict region */
+      forthDictClear();
+      saveCalc();
+      forthGDictClear();
+      { bool_t s = loadTestPrograms; loadTestPrograms = false; restoreCalc(); loadTestPrograms = s; }
+      uint16_t ref; uint8_t fl;
+      if (!forthFindColonRef("GJ", &ref, &fl)) {
+        printf("    [8] FAIL: GJ not found after restore\n");
+        fail = 1;
+      } else if (!(ref & FORTH_REF_GLOBAL)) {
+        printf("    [8] FAIL: GJ not global after restore\n");
+        fail = 1;
+      } else if (!(fl & FF_IMMEDIATE)) {
+        printf("    [8] FAIL: GJ lost IMMEDIATE flag after restore\n");
+        fail = 1;
+      } else {
+        lastErrorCode = ERROR_NONE;
+        if (run_word("GJ") || !x_is_longint(4)) {
+          printf("    [8] FAIL: GJ did not leave X=4 after restore\n");
+          fail = 1;
+        } else {
+          printf("    [8] PASS: global word and its IMMEDIATE flag survive restore\n");
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+      /* Release the restored gdict region (restore allocated fresh memory) */
+      { uint8_t *rBase = gdict.base; uint16_t rBlocks = gdict.sizeBlocks;
+        gdict.base = NULL; gdict.sizeBlocks = 0; gdict.here = 0;
+        gdict.latest = FORTH_NULL; gdict.count = 0;
+        if (rBase) freeC47Blocks(rBase, rBlocks);
+      }
+    }
+  }
+
+  forthDictClear();
+  forthGDictClear();
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
 int forthDictSelfTest(void)
 {
   int fail = 0;
@@ -11137,6 +11432,16 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_scope_isolation...\n");
   fail |= test_scope_isolation();
   forthDictClear();
+
+  /* F3-4: GLOBAL/IMMEDIATE/FORGET with same-line mark discipline */
+  printf("\nFORTH F3-4 TESTS (global marks)\n");
+  forthDictInit();
+  forthGDictInit();
+
+  printf("  [DEBUG] running test_global_marks...\n");
+  fail |= test_global_marks();
+  forthDictClear();
+  forthGDictClear();
 
   /* FIX-6: free-list integrity — LAST test, after all cleanup */
   printf("\nFORTH FIX-6 TESTS (free-list integrity + arena report)\n");

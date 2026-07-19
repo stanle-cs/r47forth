@@ -28,9 +28,45 @@ static void pRecurse(void)
     return;
   }
   if (!forthDictEmit((ftoken_t)(FTOK_CALL_BASE + idx))) {
-    if (lastErrorCode == ERROR_NONE) {
-      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+     if (lastErrorCode == ERROR_NONE) {
+       displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+     }
+   }
+ }
+
+/* F3-4: GLOBAL — move the latest closed definition to gdict */
+static void pGlobal(void)
+{
+  uint16_t ref = forthLatestClosedRefGet();
+  if (ref == FORTH_NULL) {
+    displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  if (ref & FORTH_REF_GLOBAL) {
+    return;                       /* already global: idempotent no-op */
+  }
+  if (forthInnerIsActive()) {
+    displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  {
+    uint16_t gref;
+    if (forthDictMakeLatestGlobal(ref, &gref)) {
+      forthLatestClosedRefSet(gref);
     }
+  }
+}
+
+/* F3-4: IMMEDIATE — set FF_IMMEDIATE on the latest closed definition */
+static void pImmediate(void)
+{
+  uint16_t ref = forthLatestClosedRefGet();
+  if (ref == FORTH_NULL) {
+    displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  if (!forthDictSetImmediateByRef(ref)) {
+    displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
   }
 }
 
@@ -49,7 +85,9 @@ enum {
   PRIM_DOT   = 9,
   PRIM_DIVGL   = 10,
   PRIM_RECURSE = 11,
-  PRIM_COUNT   = 12
+  PRIM_GLOBAL    = 12,
+  PRIM_IMMEDIATE = 13,
+  PRIM_COUNT     = 14
 };
 
 const forthPrimDef_t forthPrims[PRIM_COUNT] = {
@@ -65,6 +103,8 @@ const forthPrimDef_t forthPrims[PRIM_COUNT] = {
   [PRIM_DOT]   = { STD_DOT,   0, pMul  },
   [PRIM_DIVGL]   = { STD_DIVIDE, 0, pDiv },
   [PRIM_RECURSE] = { "RECURSE", FF_IMMEDIATE, pRecurse },
+  [PRIM_GLOBAL]    = { "GLOBAL",    FF_DEFMARK, pGlobal },
+  [PRIM_IMMEDIATE] = { "IMMEDIATE", FF_DEFMARK, pImmediate },
 };
 
 const uint16_t forthPrimCount = PRIM_COUNT;

@@ -32,11 +32,18 @@ typedef struct {
   int16_t         pos;          /* tokenizer position */
   forthDefState_t savedDef;     /* outer level's open-definition snapshot */
   uint16_t        savedScope;   /* outer level's scope snapshot (F3-3) */
+  uint16_t        savedLatestClosed; /* F3-4: outer level's tracker snapshot */
 } forthOuterCtx_t;
 
 #define FORTH_OUTER_NEST_MAX 2
 static forthOuterCtx_t *forthOuterCur   = NULL;
 static uint8_t          forthOuterDepth = 0;
+
+/* F3-4: same-line tracker — most recently closed definition on this line */
+static uint16_t forthLatestClosedRef = FORTH_NULL;
+
+uint16_t forthLatestClosedRefGet(void) { return forthLatestClosedRef; }
+void     forthLatestClosedRefSet(uint16_t ref) { forthLatestClosedRef = ref; }
 
 /* ---- §9.3 Run-generation counter (P-5, F1-1: pending-reset truth) ---- */
 
@@ -323,6 +330,8 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   forthOuterCur = ctx;
   forthOuterDepth++;
   forthDefStateSave(&ctx->savedDef);
+  ctx->savedLatestClosed = forthLatestClosedRef;
+  forthLatestClosedRef = FORTH_NULL;
   forthTokenizerInit();
 
   forthState_t state = STATE_INTERPRET;
@@ -347,6 +356,13 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           if (!closed) {   /* defensive: pre-scan already errored such a step */
             displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
             lineOK = false;
+          } else {
+            /* F3-4: resolve consumed name for tracker (pre-scan may have moved to gdict) */
+            { uint16_t ref; uint8_t fl;
+              if (forthFindColonRef(name, &ref, &fl)) {
+                forthLatestClosedRef = ref;
+              }
+            }
           }
         }
         continue;
@@ -381,13 +397,58 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
         if (!finishDefinition()) {
           lineOK = false;
         }
+        /* F3-4: set tracker for same-line marks (GLOBAL/IMMEDIATE) */
+        if (lineOK) {
+          forthLatestClosedRef = (uint16_t)(fdict.count - 1);
+        }
         /* M3: state = INTERPRET unconditionally on ';' */
         state = STATE_INTERPRET;
       }
       continue;
     }
 
+    /* F3-4: FORGET — structural, gdict-only */
+    if (compareString(buf, "FORGET", CMP_BINARY) == 0) {
+      char fname[FORTH_TOKEN_MAX + 1];
+      if (state == STATE_COMPILE) {
+        abortDefinition();
+        displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+        lineOK = false;
+        continue;
+      }
+      if (!nextToken(fname)) {
+        displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+        lineOK = false;
+        continue;
+      }
+      if (mode == FORTH_OUTER_DEFS_ONLY) {
+        continue;                     /* behavior, not a mark: skipped in pre-scan */
+      }
+      if (forthInnerIsActive()) {
+        displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+        lineOK = false;
+        continue;
+      }
+      if (!forthGDictForget(fname)) {
+        lineOK = false;               /* error already displayed */
+      }
+      continue;
+    }
+
     if (mode == FORTH_OUTER_DEFS_ONLY && state == STATE_INTERPRET) {
+      /* F3-4: allow GLOBAL/IMMEDIATE marks through the pre-scan so that
+       * subsequent definitions on the same line see the mark immediately.
+       * On the execution pass the marks re-apply as idempotent no-ops. */
+      { uint16_t pidx = forthFindPrim(buf);
+        if (pidx != FORTH_PRIM_NONE && (forthPrims[pidx].flags & FF_DEFMARK)) {
+          forthPrims[pidx].fn();
+          clearSystemFlag(FLAG_ASLIFT);
+          if (lastErrorCode != ERROR_NONE) {
+            lineOK = false;
+          }
+          continue;
+        }
+      }
       continue;   /* D-2a: pre-scan must not execute tail code */
     }
 
@@ -414,9 +475,9 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
 
     /* ---- §4.1 step 2: colon-def lookup ---- */
     {
-      uint16_t widx;
-      if (forthFindColon(buf, &widx)) {
-        if (state == STATE_COMPILE) {
+      uint16_t widx; uint8_t wflags;
+      if (forthFindColonRef(buf, &widx, &wflags)) {
+        if (state == STATE_COMPILE && !(wflags & FF_IMMEDIATE)) {
           if (!forthDictEmit(forthTokenFromRef(widx))) {
             abortDefinition();
             lineOK = false;
@@ -546,6 +607,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
 
   forthCurrentScope = ctx->savedScope;
   forthDefStateRestore(&ctx->savedDef);
+  forthLatestClosedRef = ctx->savedLatestClosed;
   forthOuterDepth--;
   forthOuterCur = prevCtx;
 }
