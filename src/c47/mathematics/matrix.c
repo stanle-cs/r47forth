@@ -2001,6 +2001,7 @@ return;
 bool_t realMatrixInit(real34Matrix_t *matrix, uint16_t rows, uint16_t cols) {
   //Allocate Memory for Matrix
   const size_t neededSize = rows * cols * REAL34_SIZE_IN_BLOCKS;
+  matrix->header.mtag = amNone;
   if(!isMemoryBlockAvailable(neededSize, 2, 0.1f)) {
     matrix->header.matrixColumns = matrix->header.matrixRows = 0;
     matrix->matrixElements = NULL;
@@ -2110,6 +2111,7 @@ void realMatrixRedim(real34Matrix_t *matrix, uint16_t rows, uint16_t cols) {
 bool_t complexMatrixInit(complex34Matrix_t *matrix, uint16_t rows, uint16_t cols) {
   //Allocate Memory for Matrix
   const size_t neededSize = rows * cols * COMPLEX34_SIZE_IN_BLOCKS;
+  matrix->header.mtag = amNone;
   if(!isMemoryBlockAvailable(neededSize, 2, 0.1f)) {
     matrix->header.matrixColumns = matrix->header.matrixRows = 0;
     matrix->matrixElements = NULL;
@@ -2257,6 +2259,7 @@ bool_t initMatrixRegister(calcRegister_t regist, uint16_t rows, uint16_t cols, b
   else if(lastErrorCode == ERROR_NONE) {
     REGISTER_MATRIX_HEADER(regist)->matrixRows    = rows;
     REGISTER_MATRIX_HEADER(regist)->matrixColumns = cols;
+    REGISTER_MATRIX_HEADER(regist)->mtag          = amNone;
     if(complex) {
       for(uint16_t i = 0; i < rows * cols; ++i) {
         real34SetZero(VARIABLE_REAL34_DATA(REGISTER_COMPLEX34_MATRIX_ELEMENTS(regist) + i));
