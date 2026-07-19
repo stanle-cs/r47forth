@@ -47,6 +47,7 @@ void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
 void covIterationTi(uint16_t which);
+void covNamedVariableFold(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
@@ -217,6 +218,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
   {"fnIterationTiCov",       covIterationTi, 1 },
+  {"fnNamedVarFoldCov",      covNamedVariableFold, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
@@ -917,6 +919,25 @@ void covIterationTi(uint16_t which) {
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
   int32ToReal34(temporaryInformation == TI_TRUE ? 1 : 0, REGISTER_REAL34_DATA(REGISTER_X));
   temporaryInformation = TI_NO_INFO;
+}
+
+void covNamedVariableFold(uint16_t unusedButMandatoryParameter) {
+  // Names written with sub- or superscript glyphs legitimately resolve to the
+  // same variable as their plain form (CMP_NAME folding), and creation stores
+  // the raw bytes of whichever form came first. Create a variable under the
+  // subscript form, then probe and create under the plain form: the probe
+  // must find it and the second create must not duplicate it.
+  uint16_t before = numberOfNamedVariables;
+  calcRegister_t sub = findOrAllocateNamedVariable(STD_SUB_a "q");   // subscript-a followed by q
+  calcRegister_t plainFind = findNamedVariable("aq");
+  calcRegister_t plainAlloc = findOrAllocateNamedVariable("aq");
+  if(sub == INVALID_VARIABLE || plainFind != sub || plainAlloc != sub || numberOfNamedVariables != before + 1) {
+    printf("\nfold-equivalent variable lookup broken: sub=%d find=%d alloc=%d vars %d->%d\n",
+           (int)sub, (int)plainFind, (int)plainAlloc, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+  fnDeleteVariable(sub);
 }
 
 void covLoadPgm(uint16_t unusedButMandatoryParameter) {

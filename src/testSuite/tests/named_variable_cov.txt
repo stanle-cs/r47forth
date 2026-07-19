@@ -1,0 +1,13 @@
+;*************************************************************
+;** Coverage: named-variable lookup (registers.c).          **
+;** fnNamedVarFoldCov creates a variable under a subscript  **
+;** name, probes and re-creates it under the folded plain   **
+;** form, and asserts one single variable results: the      **
+;** CMP_NAME folding path of findNamedVariable(). Cleans    **
+;** up after itself.                                        **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+Func: fnNamedVarFoldCov
+In:  FARG=0
+Out: EC=0

@@ -904,8 +904,18 @@ calcRegister_t findNamedVariable(const char *variableName) {
     printStatus(0, "findNamedVariable", force);
   #endif //VERBOSE_REGISTERS
   //printf("|%20s|%20s|\n",(char *)(allNamedVariables[0].variableName + 1), variableName);
+  // Fold the probed name once instead of letting compareString() re-walk and
+  // re-fold it for every candidate. Identical bytes fold identically, so the
+  // length+memcmp test is a pure fast path for the common exact reference; a
+  // miss still goes through the folded compare, because a name written with
+  // sub- or superscript glyphs legitimately matches its folded form.
+  const size_t nameByteLength = stringByteLength(variableName);
+  uint16_t foldedName[7];
+  const int32_t foldedLength = foldNameToCharCodes(variableName, foldedName, 7); // 1..7 glyphs checked above; on the unreachable overflow (-1) every compare below misses, as on master
   for(int i = 0; i < numberOfNamedVariables; i++) {
-    if(compareString((char *)(allNamedVariables[i].variableName + 1), variableName, CMP_NAME) == 0) {
+    const uint8_t *storedName = allNamedVariables[i].variableName;
+    if((storedName[0] == nameByteLength && memcmp(storedName + 1, variableName, nameByteLength) == 0)
+        || nameEqualsPrefolded((const char *)(storedName + 1), foldedName, foldedLength)) {
       regist = i + FIRST_NAMED_VARIABLE;
       break;
     }
@@ -918,14 +928,16 @@ calcRegister_t findNamedVariable(const char *variableName) {
 
 
 
-calcRegister_t findOrAllocateNamedVariable(const char *variableName) {
+// The allocate-on-miss half of findOrAllocateNamedVariable(), for callers
+// that have already established findNamedVariable() returned INVALID_VARIABLE
+// and must not pay for a second scan.
+calcRegister_t allocateNamedVariableOnMiss(const char *variableName) {
   calcRegister_t regist = INVALID_VARIABLE;
   uint8_t len = stringGlyphLength(variableName);
   if(len < 1 || len > 7) {
     return regist;
   }
-  regist = findNamedVariable(variableName);
-  if(regist == INVALID_VARIABLE && numberOfNamedVariables <= (LAST_NAMED_VARIABLE - FIRST_NAMED_VARIABLE)) {
+  if(numberOfNamedVariables <= (LAST_NAMED_VARIABLE - FIRST_NAMED_VARIABLE)) {
     allocateNamedVariable(variableName, dtReal34, REAL34_SIZE_IN_BLOCKS);
     if(lastErrorCode == ERROR_NONE) {
       // New variables are zero by default - although this might be immediately overridden, it might require an
@@ -938,6 +950,16 @@ calcRegister_t findOrAllocateNamedVariable(const char *variableName) {
       // It is impossible to reach the limitation of number of named variables.
       return INVALID_VARIABLE;
     }
+  }
+  return regist;
+}
+
+
+
+calcRegister_t findOrAllocateNamedVariable(const char *variableName) {
+  calcRegister_t regist = findNamedVariable(variableName);
+  if(regist == INVALID_VARIABLE) {
+    regist = allocateNamedVariableOnMiss(variableName);
   }
   return regist;
 }

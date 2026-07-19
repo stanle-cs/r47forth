@@ -463,6 +463,7 @@ tvm_cov
 ; so it must run after graphs_cov.
 matrix2_cov
 clcvar_cov
+named_variable_cov
 serialize_state_cov
 pgm_solve_cov
 histo_cov

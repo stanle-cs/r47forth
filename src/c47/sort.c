@@ -67,6 +67,62 @@ static uint16_t _charCodeUnSupSubStruck(uint16_t charCode) {
 }
 #undef GLYPH_TO_CHAR_CODE
 
+// Fold a name into its canonical CMP_NAME character codes, decoding glyphs the
+// same way compareString() does: a byte with the high bit set combines with
+// the following byte, and a truncated final glyph ends the walk exactly as
+// stringNextGlyph() would end it. Returns the glyph count, or -1 when the
+// name has more than maxGlyphs glyphs. Keep in sync with compareString().
+int32_t foldNameToCharCodes(const char *name, uint16_t *folded, int32_t maxGlyphs) {
+  int32_t count = 0;
+  int16_t pos = 0;
+  uint8_t byte;
+
+  while((byte = (uint8_t)name[pos]) != 0) {
+    if(count >= maxGlyphs) {
+      return -1;
+    }
+    uint16_t charCode = byte;
+    if(byte & 0x80) {
+      charCode = (charCode << 8) + (uint8_t)name[pos + 1];
+      pos += ((uint8_t)name[pos + 1] == 0) ? 1 : 2;
+    }
+    else {
+      pos += 1;
+    }
+    folded[count++] = _charCodeUnSupSubStruck(charCode);
+  }
+  return count;
+}
+
+
+// Equality-only CMP_NAME comparison of a candidate name against a pre-folded
+// one: true exactly when compareString(candidate, original, CMP_NAME) == 0,
+// without re-walking or re-folding the original per candidate.
+bool_t nameEqualsPrefolded(const char *candidate, const uint16_t *folded, int32_t foldedLength) {
+  int32_t count = 0;
+  int16_t pos = 0;
+  uint8_t byte;
+
+  while((byte = (uint8_t)candidate[pos]) != 0) {
+    if(count >= foldedLength) {
+      return false;
+    }
+    uint16_t charCode = byte;
+    if(byte & 0x80) {
+      charCode = (charCode << 8) + (uint8_t)candidate[pos + 1];
+      pos += ((uint8_t)candidate[pos + 1] == 0) ? 1 : 2;
+    }
+    else {
+      pos += 1;
+    }
+    if(_charCodeUnSupSubStruck(charCode) != folded[count++]) {
+      return false;
+    }
+  }
+  return count == foldedLength;
+}
+
+
 int32_t compareString(const char *stra, const char *strb, int32_t comparisonType) {
   int32_t lga, lgb, i;
   int16_t posa, posb, ranka, rankb;
