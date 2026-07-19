@@ -260,4 +260,10 @@ uint8_t forthTestOuterDepth(void);
 void forthTestSetOuterDepth(uint8_t d);
 #endif
 
+/* Test-only: program-step entry counter (F3-7) */
+#ifdef FORTH_DEBUG_SELFTEST
+void forthTestProgramStepCountReset(void);
+uint32_t forthTestProgramStepCountGet(void);
+#endif
+
 #endif /* FORTH_DICT_H */

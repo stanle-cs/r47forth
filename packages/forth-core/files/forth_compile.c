@@ -675,48 +675,48 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       }
     }
 
-    /* ---- §4.1 step 5: C47 label (§3.3.6, C-1) ---- */
-    {
-      /* GLOBAL_LABELS (upstream rebase to b8f79e486): see forth_dict.c's
-       * forthResolveXEQ for the same note — Forth's bare-name label lookup
-       * has only ever meant global labels. */
-      calcRegister_t label = findNamedLabel(buf, GLOBAL_LABELS);
-      if (label != INVALID_VARIABLE) {
-         if (state == STATE_COMPILE) {
-           displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-           abortDefinition();
-           lineOK = false;
-         } else {
-           /* C-1 amendment (proposed, see PROPOSED_SPEC_CHANGES.md): dispatch
-            * via fnExecute directly, NOT reallyRunFunction under a forced
-            * PGM_RUNNING wrap. ITM_XEQ is unlike ordinary items: under
-            * PGM_RUNNING, fnExecute only pushes a subroutine level and defers
-            * stepping to an enclosing runProgram loop — from an interactive
-            * Forth line no such loop exists, so the program never ran and the
-            * level leaked 3 blocks per call (found by T3.5). The §2.2
-            * livelock lives in items.c's normal-mode dispatch
-            * (refreshStatusBar pump), which a direct fnExecute call bypasses.
-            * Interactively this takes the same fnGoto+runProgram path as a
-            * keyboard XEQ and fires §9.3 bump site A (a run start must bump —
-            * the old wrap wrongly suppressed it); from a program-context
-            * Forth step (programRunStop == PGM_RUNNING) the nested branch is
-            * taken unchanged (continuation semantics, level popped by RTN).
-            * dynamicMenuItem must be cleared FIRST: fnGoto's
-            * dynamicMenuItem >= 0 branch reinterprets the label ID as a
-            * global step number (menu-launch semantics); leftover menu state
-            * (e.g. 0 after the reset path shows MyMenu) sent goToGlobalStep
-            * off the end of program memory. fnExecute itself resets it only
-            * AFTER fnGoto — too late for a name-resolved, non-menu call. */
-           dynamicMenuItem = -1;
-           fnExecute((uint16_t)label);
-          if (lastErrorCode != ERROR_NONE) {
-            if (isDefinitionOpen()) abortDefinition();
+      /* ---- §4.1 step 5: C47 label (§3.3.6, C-1) ---- */
+     {
+       /* GLOBAL_LABELS (upstream rebase to b8f79e486): see forth_dict.c's
+        * forthResolveXEQ for the same note — Forth's bare-name label lookup
+        * has only ever meant global labels. */
+       calcRegister_t label = findNamedLabel(buf, GLOBAL_LABELS);
+       if (label != INVALID_VARIABLE) {
+          if (state == STATE_COMPILE) {
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            abortDefinition();
             lineOK = false;
-          }
-        }
-        continue;
-      }
-    }
+          } else {
+            /* C-1 amendment (proposed, see PROPOSED_SPEC_CHANGES.md): dispatch
+             * via fnExecute directly, NOT reallyRunFunction under a forced
+             * PGM_RUNNING wrap. ITM_XEQ is unlike ordinary items: under
+             * PGM_RUNNING, fnExecute only pushes a subroutine level and defers
+             * stepping to an enclosing runProgram loop — from an interactive
+             * Forth line no such loop exists, so the program never ran and the
+             * level leaked 3 blocks per call (found by T3.5). The §2.2
+             * livelock lives in items.c's normal-mode dispatch
+             * (refreshStatusBar pump), which a direct fnExecute call bypasses.
+             * Interactively this takes the same fnGoto+runProgram path as a
+             * keyboard XEQ and fires §9.3 bump site A (a run start must bump —
+             * the old wrap wrongly suppressed it); from a program-context
+             * Forth step (programRunStop == PGM_RUNNING) the nested branch is
+             * taken unchanged (continuation semantics, level popped by RTN).
+             * dynamicMenuItem must be cleared FIRST: fnGoto's
+             * dynamicMenuItem >= 0 branch reinterprets the label ID as a
+             * global step number (menu-launch semantics); leftover menu state
+             * (e.g. 0 after the reset path shows MyMenu) sent goToGlobalStep
+             * off the end of program memory. fnExecute itself resets it only
+             * AFTER fnGoto — too late for a name-resolved, non-menu call. */
+             dynamicMenuItem = -1;
+             fnExecute((uint16_t)label);
+            if (lastErrorCode != ERROR_NONE) {
+             if (isDefinitionOpen()) abortDefinition();
+             lineOK = false;
+           }
+         }
+         continue;
+       }
+     }
 
     /* ---- §4.1 last resort: undefined word ---- */
     {
@@ -924,7 +924,15 @@ uint16_t forthScopeEnterProgramStep(const uint8_t *anyPtrInProgram)
 
 void forthScopeRestore(uint16_t prev) { forthCurrentScope = prev; }
 
+/* Test-only: program-step entry counter (F3-7) */
+#ifdef FORTH_DEBUG_SELFTEST
+static uint32_t forthTestProgramStepCount = 0;
+#endif
+
 void forthProgramStep(const uint8_t *payload) {
+  #ifdef FORTH_DEBUG_SELFTEST
+  forthTestProgramStepCount++;
+  #endif
   uint16_t prevScope = forthScopeEnterProgramStep(payload);
   if (lastErrorCode != ERROR_NONE) {
     return;                                 /* pre-scan error halts before executing this step */
@@ -942,4 +950,10 @@ void forthProgramStep(const uint8_t *payload) {
 void *forthTestOuterCur(void) { return (void *)forthOuterCur; }
 uint8_t forthTestOuterDepth(void) { return forthOuterDepth; }
 void forthTestSetOuterDepth(uint8_t d) { forthOuterDepth = d; }
+#endif
+
+/* Test-only: program-step entry counter (F3-7) */
+#ifdef FORTH_DEBUG_SELFTEST
+void forthTestProgramStepCountReset(void) { forthTestProgramStepCount = 0; }
+uint32_t forthTestProgramStepCountGet(void) { return forthTestProgramStepCount; }
 #endif

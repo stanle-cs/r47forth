@@ -67,8 +67,12 @@ static void tpInit(testProg_t *);
 static int tpLbl(testProg_t *, const char *);
 static int tpSrc(testProg_t *, const char *);
 static int tpEnd(testProg_t *);
+static int tpLblLocal(testProg_t *, const char *);
+static int tpXeqLocal(testProg_t *, const char *);
+static int tpRtn(testProg_t *);
 static bool tpWrite(const testProg_t *);
 static uint8_t *tpStepAddr(const testProg_t *, int);
+static bool tpSelectStep(const testProg_t *, int);
 
 /* ---- Primitive indices (mirror forth_prims.c) ---- */
 
@@ -2502,6 +2506,439 @@ static int test_xeqn(void)
 
   forthDictClear();
   cleanupTestProgram();
+  programRunStop = savedRS;
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* test_xeqn_acceptance
+ * F3-7: four independent pins at the native/Forth resolution boundary.
+ * No product behavior changes — all instrumentation is FORTH_DEBUG_SELFTEST. */
+static int test_xeqn_acceptance(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+  uint32_t savedFirstDisplayedLocalStepNumber = firstDisplayedLocalStepNumber;
+
+  /* ---- Subcase 1: Native/Forth mimicry selects the same NEXT local instance ---- */
+  {
+    int variant;
+    for (variant = 0; variant < 2; variant++) {
+      testProg_t tp;
+      int sLblMim, sLblT1, sBody1, sRtn1, sLblT2, sBody2, sRtn2, sP, sEnd;
+      int ok = 1;
+
+      tpInit(&tp);
+      sLblMim = tpLbl(&tp, "MIM");
+      if (sLblMim < 0) { ok = 0; }
+      sLblT1 = tpLblLocal(&tp, "T");
+      if (sLblT1 < 0) { ok = 0; }
+      sBody1 = tpSrc(&tp, "11");
+      if (sBody1 < 0) { ok = 0; }
+      sRtn1 = tpRtn(&tp);
+      if (sRtn1 < 0) { ok = 0; }
+      if (variant == 0) {
+        sP = tpXeqLocal(&tp, "T");
+      } else {
+        sP = tpSrc(&tp, "XEQ :T:");
+      }
+      if (sP < 0) { ok = 0; }
+      sLblT2 = tpLblLocal(&tp, "T");
+      if (sLblT2 < 0) { ok = 0; }
+      sBody2 = tpSrc(&tp, "22");
+      if (sBody2 < 0) { ok = 0; }
+      sRtn2 = tpRtn(&tp);
+      if (sRtn2 < 0) { ok = 0; }
+      sEnd = tpEnd(&tp);
+      (void)sEnd;
+      if (sEnd < 0) { ok = 0; }
+
+      if (!ok) {
+        printf("    [1] FAIL: fixture build failed (variant %d)\n", variant);
+        fail = 1;
+        continue;
+      }
+
+      if (!tpWrite(&tp)) {
+        printf("    [1] FAIL: tpWrite failed (variant %d)\n", variant);
+        fail = 1;
+        continue;
+      }
+
+       firstDisplayedLocalStepNumber = 0;
+       forthRunGenBump();
+       programRunStop = PGM_RUNNING;
+       lastErrorCode = ERROR_NONE;
+
+       if (!tpSelectStep(&tp, sP)) {
+        printf("    [1] FAIL: tpSelectStep(sP) failed (variant %d)\n", variant);
+        fail = 1;
+        cleanupTestProgram();
+        continue;
+      }
+
+      /* Execute: for native XEQ (variant 0) executeOneStep only performs the
+         jump to the label — the subroutine body must be stepped through
+         manually.  For Forth XEQ (variant 1) executeOneStep dispatches to
+         forthProgramStep which runs the full XEQ chain in one call. */
+      {
+        int savedSubLevel = currentSubroutineLevel;
+        executeOneStep(currentStep);
+        /* Continue stepping while in the subroutine (native variant) or until
+           the step returns normally (Forth variant returns 1 from
+           forthProgramStep). */
+        while (lastErrorCode == ERROR_NONE &&
+               (currentSubroutineLevel > savedSubLevel ||
+                (variant == 0 && currentStep != NULL))) {
+          if (variant == 0 && currentSubroutineLevel <= savedSubLevel) {
+            /* Native: subroutine returned — stop. */
+            break;
+          }
+          int16_t adv = executeOneStep(currentStep);
+          if (adv <= 0) break;
+          /* Advance past the step (needed for LBL no-ops, etc.) */
+          if (adv > 0) {
+            uint8_t *next = findNextStep(currentStep);
+            if (!next) break;
+            currentStep = next;
+          }
+        }
+      }
+      firstDisplayedLocalStepNumber = 0;
+
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: error %d (variant %d)\n", lastErrorCode, variant);
+        fail = 1;
+        cleanupTestProgram();
+        continue;
+      }
+      if (!x_is_longint(22)) {
+        printf("    [1] FAIL: X != 22 (variant %d)\n", variant);
+        fail = 1;
+        cleanupTestProgram();
+        continue;
+      }
+      cleanupTestProgram();
+    }
+    if (!fail) printf("    [1] PASS: native and Forth local XEQ select the same next label instance\n");
+  }
+
+  /* ---- Subcase 2: A local miss is terminal; no word or global label dispatches ---- */
+  {
+    testProg_t tp;
+    int sLbl, sPrime, sMiss, sEnd;
+    int ok = 1;
+
+    tpInit(&tp);
+    sLbl = tpLbl(&tp, "MISS");
+    if (sLbl < 0) { ok = 0; }
+    sPrime = tpSrc(&tp, "0");
+    if (sPrime < 0) { ok = 0; }
+    sMiss = tpSrc(&tp, "XEQ :FOO:");
+    if (sMiss < 0) { ok = 0; }
+    sEnd = tpEnd(&tp);
+    if (sEnd < 0) { ok = 0; }
+
+    if (!ok) {
+      printf("    [2] FAIL: fixture build failed\n");
+      fail = 1;
+    } else if (!tpWrite(&tp)) {
+      printf("    [2] FAIL: tpWrite failed\n");
+      fail = 1;
+    } else {
+      firstDisplayedLocalStepNumber = 0;
+      forthRunGenBump();
+      lastErrorCode = ERROR_NONE;
+
+      /* Consume pre-scan with prime step */
+      if (!tpSelectStep(&tp, sPrime)) {
+        printf("    [2] FAIL: tpSelectStep(sPrime) failed\n");
+        fail = 1;
+      } else {
+        executeOneStep(currentStep);
+      }
+
+      /* Define global Forth word : FOO 88 ; GLOBAL */
+      if (!fail) {
+        forthOuterInterpret(": FOO 88 ; GLOBAL");
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [2] FAIL: define FOO error %d\n", lastErrorCode);
+          fail = 1;
+        }
+      }
+
+      /* Execute the miss step */
+      if (!fail) {
+        forthPushInt32(55);
+        forthTestProgramStepCountReset();
+        lastErrorCode = ERROR_NONE;
+
+        if (!tpSelectStep(&tp, sMiss)) {
+          printf("    [2] FAIL: tpSelectStep(sMiss) failed\n");
+          fail = 1;
+        } else {
+          executeOneStep(currentStep);
+
+          if (lastErrorCode != ERROR_LABEL_NOT_FOUND) {
+            printf("    [2] FAIL: expected ERROR_LABEL_NOT_FOUND got %d\n", lastErrorCode);
+            fail = 1;
+          }
+          if (!x_is_longint(55)) {
+            printf("    [2] FAIL: X != 55 (global word executed?)\n");
+            fail = 1;
+          }
+          if (forthTestProgramStepCountGet() != 1) {
+            printf("    [2] FAIL: step count %u != 1\n", forthTestProgramStepCountGet());
+            fail = 1;
+          }
+        }
+      }
+    }
+    if (!fail) printf("    [2] PASS: local XEQ miss is terminal with no fallback dispatch\n");
+    forthDictClear();
+    cleanupTestProgram();
+  }
+
+  /* ---- Subcase 3: Kind round-trip and malformed inline data reject before dispatch ---- */
+  {
+    static const uint8_t quotedBody[8] =
+      { 0x05, 0x7F, 0xFD, 0x01, 0x41, 0x00, 0x00, 0x00 };
+    static const uint8_t localBody[8] =
+      { 0x05, 0x7F, 0xF9, 0x01, 0x41, 0x00, 0x00, 0x00 };
+    uint8_t kqBody[8], klBody[8];
+
+    /* Compile : KQ XEQ 'A' ; */
+    forthOuterInterpret(": KQ XEQ 'A' ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: compile KQ error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      uint16_t bodyAddr = fdict.base != NULL
+        ? (uint16_t)(fdict.latest + TO_BLOCKS(6 + 2) * BYTES_PER_BLOCK)
+        : 0;
+      if (fdict.base == NULL || bodyAddr + 8 > fdict.here) {
+        printf("    [3] FAIL: KQ body address out of range\n");
+        fail = 1;
+      } else {
+        memcpy(kqBody, fdict.base + bodyAddr, 8);
+      }
+    }
+
+    /* Compile : KL XEQ :A: ; */
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": KL XEQ :A: ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: compile KL error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      uint16_t bodyAddr = fdict.base != NULL
+        ? (uint16_t)(fdict.latest + TO_BLOCKS(6 + 2) * BYTES_PER_BLOCK)
+        : 0;
+      if (fdict.base == NULL || bodyAddr + 8 > fdict.here) {
+        printf("    [3] FAIL: KL body address out of range\n");
+        fail = 1;
+      } else {
+        memcpy(klBody, fdict.base + bodyAddr, 8);
+      }
+    }
+
+    /* Exact body comparisons */
+    if (!fail) {
+      int i;
+      for (i = 0; i < 8; i++) {
+        if (kqBody[i] != quotedBody[i]) {
+          printf("    [3] FAIL: KQ byte %d: 0x%02x != 0x%02x\n", i, kqBody[i], quotedBody[i]);
+          fail = 1;
+          break;
+        }
+      }
+    }
+    if (!fail) {
+      int i;
+      for (i = 0; i < 8; i++) {
+        if (klBody[i] != localBody[i]) {
+          printf("    [3] FAIL: KL byte %d: 0x%02x != 0x%02x\n", i, klBody[i], localBody[i]);
+          fail = 1;
+          break;
+        }
+      }
+    }
+
+    /* Sole-difference check: index 2 must differ, all others match */
+    if (!fail) {
+      int i;
+      for (i = 0; i < 8; i++) {
+        if (i == 2) {
+          if (kqBody[i] == klBody[i]) {
+            printf("    [3] FAIL: byte 2 should differ (0xFD vs 0xF9)\n");
+            fail = 1;
+            break;
+          }
+        } else {
+          if (kqBody[i] != klBody[i]) {
+            printf("    [3] FAIL: byte %d should match: 0x%02x vs 0x%02x\n", i, kqBody[i], klBody[i]);
+            fail = 1;
+            break;
+          }
+        }
+      }
+    }
+
+     /* Run KQ: expect ERROR_LABEL_NOT_FOUND, X unchanged */
+     if (!fail) {
+       lastErrorCode = ERROR_NONE;
+       forthPushInt32(31);
+       lastErrorCode = ERROR_NONE;
+       forthOuterInterpret("KQ");
+      if (lastErrorCode != ERROR_LABEL_NOT_FOUND) {
+        printf("    [3] FAIL: KQ run: expected ERROR_LABEL_NOT_FOUND got %d\n", lastErrorCode);
+        fail = 1;
+      } else if (!x_is_longint(31)) {
+        printf("    [3] FAIL: KQ run: X != 31\n");
+        fail = 1;
+      }
+    }
+
+     /* Run KL: expect ERROR_LABEL_NOT_FOUND, X unchanged */
+     if (!fail) {
+       lastErrorCode = ERROR_NONE;
+       forthPushInt32(31);
+       lastErrorCode = ERROR_NONE;
+       forthOuterInterpret("KL");
+       if (lastErrorCode != ERROR_LABEL_NOT_FOUND) {
+        printf("    [3] FAIL: KL run: expected ERROR_LABEL_NOT_FOUND got %d\n", lastErrorCode);
+        fail = 1;
+       } else if (!x_is_longint(31)) {
+         printf("    [3] FAIL: KL run: X != 31\n");
+         fail = 1;
+       }
+     }
+
+     /* Malformed XI: FTOK_XEQN + bad kind byte 0xAA */
+    if (!fail) {
+      uint16_t xiOff = begin_word("XI", 2);
+      if (xiOff == FORTH_NULL) {
+        printf("    [3] FAIL: begin_word XI failed\n");
+        fail = 1;
+      } else {
+        static const uint8_t xiInline[4] = { 0xAA, 0x01, 0x41, 0x00 };
+        forthDictEmit(FTOK_XEQN);
+        forthDictEmitBytes(xiInline, 4);
+        end_word(xiOff);
+
+         lastErrorCode = ERROR_NONE;
+        forthPushInt32(31);
+        lastErrorCode = ERROR_NONE;
+        forthOuterInterpret("XI");
+        if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+          printf("    [3] FAIL: XI: expected ERROR_INVALID_CORRUPTED_DATA got %d\n", lastErrorCode);
+          fail = 1;
+        } else if (!x_is_longint(31)) {
+          printf("    [3] FAIL: XI: X != 31\n");
+          fail = 1;
+        }
+        lastErrorCode = ERROR_NONE;
+      }
+    }
+
+    /* Malformed XT: FTOK_XEQN + truncated operand (only 1 byte for kind+len) */
+    if (!fail) {
+      uint16_t truncBody, xtOff;
+      xtOff = begin_word("XT", 2);
+      if (xtOff == FORTH_NULL) {
+        printf("    [3] FAIL: begin_word XT failed\n");
+        fail = 1;
+      } else {
+        truncBody = fdict.here;
+        forthDictEmit(FTOK_XEQN);
+        forthDictEmit(STRING_LABEL_VARIABLE);
+        end_word(xtOff);
+
+        /* Truncate body: token (2 bytes) + 1 operand byte = 3 bytes */
+        fdict.here = (uint16_t)(truncBody + 3);
+
+        lastErrorCode = ERROR_NONE;
+        forthPushInt32(31);
+        lastErrorCode = ERROR_NONE;
+        forthOuterInterpret("XT");
+        if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+          printf("    [3] FAIL: XT: expected ERROR_INVALID_CORRUPTED_DATA got %d\n", lastErrorCode);
+          fail = 1;
+        } else if (!x_is_longint(31)) {
+          printf("    [3] FAIL: XT: X != 31\n");
+          fail = 1;
+        }
+        lastErrorCode = ERROR_NONE;
+      }
+    }
+
+    if (!fail) printf("    [3] PASS: XEQN kind round-trip is exact and malformed data cannot dispatch\n");
+    forthDictClear();
+  }
+
+  /* ---- Subcase 4: Bare names remain GLOBAL_LABELS-only ---- */
+  {
+    forthGDictClear();
+    testProg_t tp;
+    int sLbl, sLblLocal, sBody, sRtn, sEnd, sLblFoo, sBodyFoo, sEndFoo;
+    int ok = 1;
+    uint16_t savedSubLevel = currentSubroutineLevel;
+    uint16_t savedAllSubLevel = allSubroutineLevels.numberOfSubroutineLevels;
+
+    tpInit(&tp);
+    sLbl = tpLbl(&tp, "PIN");
+    if (sLbl < 0) { ok = 0; }
+    sLblLocal = tpLblLocal(&tp, "FOO");
+    if (sLblLocal < 0) { ok = 0; }
+    sBody = tpSrc(&tp, "99");
+    if (sBody < 0) { ok = 0; }
+    sRtn = tpRtn(&tp);
+    if (sRtn < 0) { ok = 0; }
+    sEnd = tpEnd(&tp);
+    if (sEnd < 0) { ok = 0; }
+    sLblFoo = tpLbl(&tp, "FOO");
+    if (sLblFoo < 0) { ok = 0; }
+    sBodyFoo = tpSrc(&tp, "44");
+    if (sBodyFoo < 0) { ok = 0; }
+    sEndFoo = tpEnd(&tp);
+    (void)sEndFoo;
+    if (sEndFoo < 0) { ok = 0; }
+
+    if (!ok) {
+      printf("    [4] FAIL: fixture build failed\n");
+      fail = 1;
+    } else if (!tpWrite(&tp)) {
+      printf("    [4] FAIL: tpWrite failed\n");
+      fail = 1;
+    } else {
+      firstDisplayedLocalStepNumber = 0;
+      forthRunGenBump();
+      programRunStop = PGM_STOPPED;
+      lastErrorCode = ERROR_NONE;
+
+      /* Bare name FOO should resolve to global label FOO (->44), not local :FOO: (->99) */
+      {
+        currentSubroutineLevel = 0;
+        allSubroutineLevels.numberOfSubroutineLevels = 0;
+        forthOuterInterpret("FOO");
+        currentSubroutineLevel = savedSubLevel;
+        allSubroutineLevels.numberOfSubroutineLevels = savedAllSubLevel;
+      }
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [4] FAIL: error %d\n", lastErrorCode);
+        fail = 1;
+      } else if (!x_is_longint(44)) {
+        printf("    [4] FAIL: X != 44 (got wrong label?)\n");
+        fail = 1;
+      }
+    }
+    if (!fail) printf("    [4] PASS: bare Forth name lookup ignores a colliding local label\n");
+    cleanupTestProgram();
+  }
+
+  forthDictClear();
+  cleanupTestProgram();
+  firstDisplayedLocalStepNumber = savedFirstDisplayedLocalStepNumber;
   programRunStop = savedRS;
   lastErrorCode = ERROR_NONE;
   return fail;
@@ -7329,6 +7766,36 @@ static int tpEnd(testProg_t *p)                            /* ITM_END separator 
   return tpAppend(p, s, 2, TP_STEP_OP1);
 }
 
+static int tpLblLocal(testProg_t *p, const char *name)     /* LBL :name: */
+{
+  uint8_t s[3 + 16];
+  size_t n;
+  if (name == NULL) { return tpReject(p, "tpLblLocal name"); }
+  n = strlen(name);
+  if (n == 0 || n > 16) { return tpReject(p, "tpLblLocal name"); }
+  s[0] = ITM_LBL; s[1] = LOCAL_LABEL_VARIABLE; s[2] = (uint8_t)n;
+  memcpy(s + 3, name, n);
+  return tpAppend(p, s, (uint16_t)(3 + n), TP_STEP_LBL);
+}
+
+static int tpXeqLocal(testProg_t *p, const char *name)     /* XEQ :name: */
+{
+  uint8_t s[3 + 16];
+  size_t n;
+  if (name == NULL) { return tpReject(p, "tpXeqLocal name"); }
+  n = strlen(name);
+  if (n == 0 || n > 16) { return tpReject(p, "tpXeqLocal name"); }
+  s[0] = ITM_XEQ; s[1] = LOCAL_LABEL_VARIABLE; s[2] = (uint8_t)n;
+  memcpy(s + 3, name, n);
+  return tpAppend(p, s, (uint16_t)(3 + n), TP_STEP_XEQ_NAME);
+}
+
+static int tpRtn(testProg_t *p)                           /* ITM_RTN = 0x04 */
+{
+  const uint8_t op = 0x04;
+  return tpAppend(p, &op, 1, TP_STEP_OP1);
+}
+
 static int tpRaw(testProg_t *p, const uint8_t *b, uint16_t n) /* deliberate malformation or encoding assertion ONLY */
 {
   return tpAppend(p, b, n, TP_STEP_RAW);
@@ -7359,6 +7826,29 @@ static uint8_t *tpStepAddr(const testProg_t *p, int idx)   /* valid after tpWrit
     return NULL;
   }
   return beginOfProgramMemory + p->stepOff[idx];
+}
+
+static bool tpSelectStep(const testProg_t *p, int idx)
+{
+  uint8_t *addr = tpStepAddr(p, idx);
+  if (addr == NULL) {
+    printf("    FIXTURE BUG: tpSelectStep could not locate captured step\n");
+    return false;
+  }
+  currentStep = addr;
+  defineCurrentProgramFromCurrentStep();
+  uint8_t *cur = beginOfCurrentProgram;
+  uint16_t stepNum = 0;
+  while (cur != NULL && cur < addr) {
+    cur = findNextStep(cur);
+    stepNum++;
+  }
+  if (cur == NULL || cur != addr) {
+    printf("    FIXTURE BUG: tpSelectStep could not locate captured step\n");
+    return false;
+  }
+  currentLocalStepNumber = stepNum + 1;
+  return true;
 }
 
 static uint8_t *tpSrcPayload(const testProg_t *p, int idx) /* -> the LENGTH byte (the forthProgramStep +3 contract) */
@@ -11482,6 +11972,8 @@ int forthDictSelfTest(void)
   fail |= test_xeq_item_lookup();
   printf("  [DEBUG] running test_xeqn...\n");
   fail |= test_xeqn();
+  printf("  [DEBUG] running test_xeqn_acceptance...\n");
+  fail |= test_xeqn_acceptance();
   printf("  [DEBUG] running test_fnforthcall_interactive...\n");
   fail |= test_fnforthcall_interactive();
   printf("  [DEBUG] running test_lblq_forth_name_not_local_label...\n");
