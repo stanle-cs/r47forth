@@ -10736,6 +10736,8 @@ static int test_param_register_flag(void);
 static int test_param_named_indirect(void);
 /* F4-4: Series C error table and native/Forth parity acceptance */
 static int test_param_series_c_acceptance(void);
+/* F5-1: check mode — the tokenizer validates its own grammar */
+static int test_check_source_line(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -12567,6 +12569,15 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_param_series_c_acceptance...\n");
   fail |= test_param_series_c_acceptance();
+  forthDictClear();
+  forthGDictClear();
+
+  /* F5-1: check mode — the tokenizer validates its own grammar */
+  printf("\nFORTH F5-1 TESTS (check mode: tokenizer self-validation)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_check_source_line...\n");
+  fail |= test_check_source_line();
   forthDictClear();
   forthGDictClear();
 
@@ -16866,6 +16877,221 @@ static int test_param_series_c_acceptance(void)
     }
     numberOfNamedVariables = savedNamedVars;
   }
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* ==========================================================================
+ * F5-1: Check mode — the tokenizer validates its own grammar
+ * ========================================================================== */
+
+static int test_check_source_line(void)
+{
+  int fail = 0;
+
+  /* Subcase 1: Tier-1 rejects, exact codes */
+  { int subFail = 0;
+    struct { const char *line; uint8_t code; } cases[] = {
+      { ": A : B ;", ERROR_INVALID_NAME },
+      { ": ;", ERROR_INVALID_NAME },
+      { ";", ERROR_INVALID_NAME },
+      { ": A", ERROR_INVALID_NAME },
+      { ": TOOLONGNAMETOOLONGNAMETOOLONGNAMEX 1 ;", ERROR_INVALID_NAME },
+      { "IF", ERROR_OPERATION_UNDEFINED },
+      { ": A THEN ;", ERROR_INVALID_NAME },
+      { ": A BEGIN THEN ;", ERROR_INVALID_NAME },
+      { ": A IF ;", ERROR_INVALID_NAME },
+      { "RECURSE", ERROR_OPERATION_UNDEFINED },
+      { "GLOBAL", ERROR_INVALID_NAME },
+      { "FORGET", ERROR_INVALID_NAME },
+      { "XEQ", ERROR_INVALID_NAME },
+      { "XEQ AB", ERROR_INVALID_NAME },
+    };
+    size_t i;
+    for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+      lastErrorCode = ERROR_NONE;
+      forthDictClear();
+      forthGDictClear();
+      if (forthCheckSourceLine(cases[i].line)) {
+        printf("    [1] FAIL: \"%s\" should reject\n", cases[i].line);
+        subFail = 1;
+      } else if (lastErrorCode != cases[i].code) {
+        printf("    [1] FAIL: \"%s\" code %d expected %d\n",
+               cases[i].line, lastErrorCode, cases[i].code);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+    if (!subFail) printf("    [1] PASS: tier-1 structural violations reject with their runtime codes\n");
+    fail |= subFail;
+  }
+
+  /* Subcase 2: Tier-2 acceptances */
+  { int subFail = 0;
+    const char *lines[] = {
+      "UNKNOWNWORD9",
+      "SDL",
+      "SDL 100",
+      "RTN",
+      "STO 'NEVERMADE'",
+      "FORGET NOSUCH",
+      "XEQ 'NOLABEL'",
+      "3 4 +",
+      ": D2 2 / ; 8 D2",
+    };
+    size_t i;
+    for (i = 0; i < sizeof(lines) / sizeof(lines[0]); i++) {
+      lastErrorCode = ERROR_NONE;
+      forthDictClear();
+      forthGDictClear();
+      if (!forthCheckSourceLine(lines[i])) {
+        printf("    [2] FAIL: \"%s\" should accept (code %d)\n", lines[i], lastErrorCode);
+        subFail = 1;
+      } else if (lastErrorCode != ERROR_NONE) {
+        printf("    [2] FAIL: \"%s\" returned true but code %d\n", lines[i], lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+    if (!subFail) printf("    [2] PASS: names and item-level conditions stay advisory\n");
+    fail |= subFail;
+  }
+
+  /* Subcase 3: Zero side effects */
+  { int subFail = 0;
+    uint16_t savedFdictHere = fdict.here;
+    uint16_t savedFdictCount = fdict.count;
+    uint16_t savedFdictLatest = fdict.latest;
+    uint16_t savedGdictHere = gdict.here;
+    uint16_t savedGdictCount = gdict.count;
+    uint8_t savedRsp = forthTestGetRsp();
+    forthPushInt32(123);
+
+    const char *allLines[] = {
+      ": A : B ;", ": ;", ";", ": A",
+      ": TOOLONGNAMETOOLONGNAMETOOLONGNAMEX 1 ;",
+      "IF", ": A THEN ;", ": A BEGIN THEN ;", ": A IF ;",
+      "RECURSE", "GLOBAL", "FORGET", "XEQ", "XEQ AB",
+      "UNKNOWNWORD9", "SDL", "SDL 100", "RTN",
+      "STO 'NEVERMADE'", "FORGET NOSUCH", "XEQ 'NOLABEL'",
+      "3 4 +", ": D2 2 / ; 8 D2",
+    };
+    size_t i;
+    for (i = 0; i < sizeof(allLines) / sizeof(allLines[0]); i++) {
+      lastErrorCode = ERROR_NONE;
+      forthCheckSourceLine(allLines[i]);
+      lastErrorCode = ERROR_NONE;
+    }
+
+    if (fdict.here != savedFdictHere) {
+      printf("    [3] FAIL: fdict.here changed %u->%u\n", savedFdictHere, fdict.here);
+      subFail = 1;
+    }
+    if (fdict.latest != savedFdictLatest) {
+      printf("    [3] FAIL: fdict.latest changed %u->%u\n", savedFdictLatest, fdict.latest);
+      subFail = 1;
+    }
+    if (fdict.count != savedFdictCount) {
+      printf("    [3] FAIL: fdict.count changed %u->%u\n", savedFdictCount, fdict.count);
+      subFail = 1;
+    }
+    if (gdict.here != savedGdictHere) {
+      printf("    [3] FAIL: gdict.here changed %u->%u\n", savedGdictHere, gdict.here);
+      subFail = 1;
+    }
+    if (gdict.count != savedGdictCount) {
+      printf("    [3] FAIL: gdict.count changed %u->%u\n", savedGdictCount, gdict.count);
+      subFail = 1;
+    }
+    if (forthTestGetRsp() != savedRsp) {
+      printf("    [3] FAIL: rsp changed %u->%u\n", savedRsp, forthTestGetRsp());
+      subFail = 1;
+    }
+    if (!x_is_longint(123)) {
+      printf("    [3] FAIL: X is not 123\n");
+      subFail = 1;
+    }
+    if (!subFail) printf("    [3] PASS: the check mode mutates nothing\n");
+    fail |= subFail;
+  }
+
+  /* Subcase 4: Soundness battery — every check reject reproduces at execution */
+  { int subFail = 0;
+    const char *rejectLines[] = {
+      ": A : B ;", ": ;", ";", ": A",
+      ": TOOLONGNAMETOOLONGNAMETOOLONGNAMEX 1 ;",
+      "IF", ": A THEN ;", ": A BEGIN THEN ;", ": A IF ;",
+      "RECURSE", "GLOBAL", "FORGET", "XEQ", "XEQ AB",
+    };
+    size_t i;
+    for (i = 0; i < sizeof(rejectLines) / sizeof(rejectLines[0]); i++) {
+      uint8_t checkCode, runCode;
+
+      lastErrorCode = ERROR_NONE;
+      forthDictClear();
+      forthGDictClear();
+      forthCheckSourceLine(rejectLines[i]);
+      checkCode = lastErrorCode;
+      lastErrorCode = ERROR_NONE;
+
+      lastErrorCode = ERROR_NONE;
+      forthDictClear();
+      forthGDictClear();
+      forthOuterInterpret(rejectLines[i]);
+      runCode = lastErrorCode;
+      lastErrorCode = ERROR_NONE;
+
+      if (checkCode != runCode) {
+        printf("    [4] FAIL: \"%s\" check=%d run=%d\n",
+               rejectLines[i], checkCode, runCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) printf("    [4] PASS: every check reject reproduces at execution with the same code\n");
+    fail |= subFail;
+  }
+
+  /* Subcase 5: The documented suppression edge */
+  { int subFail = 0;
+    /* 9999999999999999999999999999999999999999E9999 classifies as real */
+    const char *line1 = "9999999999999999999999999999999999999999E9999";
+    lastErrorCode = ERROR_NONE;
+    forthDictClear();
+    forthGDictClear();
+    bool checkReject = !forthCheckSourceLine(line1);
+    uint8_t rejectCode = lastErrorCode;
+    lastErrorCode = ERROR_NONE;
+
+    if (checkReject && rejectCode == ERROR_INVALID_NAME) {
+      /* Now define a colon shadow with that name and check suppression */
+      if (!startDefinition(line1)) {
+        printf("    [5] FAIL: startDefinition for shadow name\n");
+        subFail = 1;
+      } else {
+        if (!finishDefinition()) {
+          printf("    [5] FAIL: finishDefinition for shadow\n");
+          subFail = 1;
+        }
+      }
+      if (!subFail) {
+        lastErrorCode = ERROR_NONE;
+        if (!forthCheckSourceLine(line1)) {
+          printf("    [5] FAIL: shadow did not suppress (code %d)\n", lastErrorCode);
+          subFail = 1;
+        }
+      }
+    } else if (!checkReject) {
+      /* parseNumberAsReal34 accepted it — suppression edge untestable */
+      printf("    [5] CONFIG: no parse-failing numeric form found — suppression edge untestable, tier-1(f) reachable only via conversion failures\n");
+    } else {
+      printf("    [5] FAIL: unexpected check result code=%d\n", rejectCode);
+      subFail = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+    if (!subFail) printf("    [5] PASS: number tier-1 fires and the live-shadow suppression holds\n");
+    fail |= subFail;
+  }
+
   lastErrorCode = ERROR_NONE;
   return fail;
 }

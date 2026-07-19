@@ -26,7 +26,8 @@
 typedef enum {
   FORTH_OUTER_FULL      = 0,  /* compile and execute (interactive semantics) */
   FORTH_OUTER_DEFS_ONLY = 1,  /* pre-scan: compile definitions, skip ALL interpret-state tokens */
-  FORTH_OUTER_SKIP_DEFS = 2   /* step execution: skip ':'..';' regions, execute the rest */
+  FORTH_OUTER_SKIP_DEFS = 2,  /* step execution: skip ':'..';' regions, execute the rest */
+  FORTH_OUTER_CHECK   = 3     /* grammar check: side-effect-free validation */
 } forthOuterMode_t;
 
 #define FORTH_SOURCE_MAX 256
@@ -57,6 +58,19 @@ void     forthLatestClosedRefSet(uint16_t ref) { forthLatestClosedRef = ref; }
 typedef struct { uint16_t pos; uint8_t kind; } forthCtl_t;
 static forthCtl_t forthCstack[FORTH_CSTACK_DEPTH];
 static uint8_t forthCsp = 0;
+
+/* F5-1: PRIM_* indices from forth_prims.c (append-frozen, not exported) */
+#define PRIM_RECURSE   11
+#define PRIM_GLOBAL    12
+#define PRIM_IMMEDIATE 13
+#define PRIM_IF        14
+#define PRIM_ELSE      15
+#define PRIM_THEN      16
+#define PRIM_BEGIN     17
+#define PRIM_UNTIL     18
+#define PRIM_AGAIN     19
+#define PRIM_WHILE     20
+#define PRIM_REPEAT    21
 
 static bool ctlPush(uint16_t pos, uint8_t kind) {
   if (forthCsp >= FORTH_CSTACK_DEPTH) {
@@ -603,14 +617,46 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   forthLatestClosedRef = FORTH_NULL;
   forthTokenizerInit();
 
+  const bool checking = (mode == FORTH_OUTER_CHECK);
+
+  /* F5-1: simulation state — live only in check mode */
+  bool simOpen = false;
+  bool simClosedThisLine = false;
+  uint8_t simCsp = 0;
+  uint8_t simKind[FORTH_CSTACK_DEPTH];
+
   forthState_t state = STATE_INTERPRET;
   bool lineOK = true;
   char buf[FORTH_TOKEN_MAX + 1];
 
   while (lineOK && nextToken(buf)) {
+    bool colonHit = false;   /* F5-1: for §2(f) number suppression in check mode */
     /* ---- C-4: ':' colon matches the ':' character (B2) ---- */
     if (compareString(buf, ":", CMP_BINARY) == 0) {
-      if (mode == FORTH_OUTER_SKIP_DEFS) {
+       /* F5-1: check mode — structural simulation, no dictionary touch */
+       if (checking) {
+         if (simOpen) {
+           displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+           lineOK = false;
+         } else {
+           char name[FORTH_TOKEN_MAX + 1];
+           if (!nextToken(name)) {
+             displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+             lineOK = false;
+           } else {
+             uint8_t nlen = (uint8_t)strlen(name);
+             if (nlen == 0 || nlen > FORTH_NAME_MAX) {
+               displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+               lineOK = false;
+             } else {
+               simOpen = true;
+               simCsp = 0;
+             }
+           }
+         }
+         continue;
+       }
+       if (mode == FORTH_OUTER_SKIP_DEFS) {
         /* SKIP_DEFS (D-2b): definition was compiled by the pre-scan — consume
          * ':' <name> ... ';' without touching the dictionary. */
         char name[FORTH_TOKEN_MAX + 1];
@@ -655,9 +701,23 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
        continue;
      }
 
-     /* ---- C-4: ';' ---- */
-     if (strcmp(buf, ";") == 0) {
-       if (state == STATE_INTERPRET) {
+      /* ---- C-4: ';' ---- */
+      if (strcmp(buf, ";") == 0) {
+        /* F5-1: check mode — structural close simulation */
+        if (checking) {
+          if (!simOpen) {
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            lineOK = false;
+          } else if (simCsp != 0) {
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            lineOK = false;
+          } else {
+            simOpen = false;
+            simClosedThisLine = true;
+          }
+          continue;
+        }
+        if (state == STATE_INTERPRET) {
           if (mode == FORTH_OUTER_DEFS_ONLY) {
             continue;   /* stray ';' is an execution-time error, not a pre-scan one */
           }
@@ -684,6 +744,21 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
 
     /* F3-4: FORGET — structural, gdict-only */
     if (compareString(buf, "FORGET", CMP_BINARY) == 0) {
+      /* F5-1: check mode — consume name, no gdict consult (tier 2) */
+      if (checking) {
+        if (simOpen) {
+          displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          lineOK = false;
+        } else {
+          char fname[FORTH_TOKEN_MAX + 1];
+          if (!nextToken(fname)) {
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            lineOK = false;
+          }
+          /* else: name consumed, continue (tier 2 — no gdict consult) */
+        }
+        continue;
+      }
       char fname[FORTH_TOKEN_MAX + 1];
       if (state == STATE_COMPILE) {
         abortDefinition();
@@ -712,6 +787,21 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
 
     /* F3-6: XEQ — structural, deliberately unshadowable */
     if (compareString(buf, "XEQ", CMP_BINARY) == 0) {
+      /* F5-1: check mode — parse form, no emit/dispatch (tier 2) */
+      if (checking) {
+        char xtok[FORTH_TOKEN_MAX + 1];
+        char xname[FORTH_NAME_MAX + 1];
+        uint8_t xkind, xlen;
+        if (!nextToken(xtok)) {
+          displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          lineOK = false;
+        } else if (!forthParseXeqForm(xtok, &xkind, xname, &xlen)) {
+          displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          lineOK = false;
+        }
+        /* else: parsed OK, continue (no emit, no dispatch — resolution is tier 2) */
+        continue;
+      }
       char xtok[FORTH_TOKEN_MAX + 1];
       char xname[FORTH_NAME_MAX + 1];
       uint8_t xkind, xlen;
@@ -769,6 +859,107 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
     {
       uint16_t idx = forthFindPrim(buf);
       if (idx != FORTH_PRIM_NONE) {
+        /* F5-1: check mode — control-structure simulation, no emit/execute */
+        if (checking) {
+          bool stop = false;
+          if (idx >= PRIM_IF && idx <= PRIM_REPEAT) {
+            /* Control prim */
+            if (!simOpen) {
+              displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              stop = true;
+            } else {
+              switch (idx) {
+              case PRIM_IF:
+                if (simCsp >= FORTH_CSTACK_DEPTH) {
+                  displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                  stop = true;
+                } else {
+                  simKind[simCsp] = CTL_ORIG;
+                  simCsp++;
+                }
+                break;
+              case PRIM_THEN:
+                if (simCsp == 0 || simKind[simCsp - 1] != CTL_ORIG) {
+                  displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                  stop = true;
+                } else {
+                  simCsp--;
+                }
+                break;
+              case PRIM_ELSE:
+                if (simCsp == 0 || simKind[simCsp - 1] != CTL_ORIG) {
+                  displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                  stop = true;
+                } else if (simCsp >= FORTH_CSTACK_DEPTH) {
+                  displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                  stop = true;
+                } else {
+                  simCsp--;
+                  simKind[simCsp] = CTL_ORIG;
+                  simCsp++;
+                }
+                break;
+              case PRIM_BEGIN:
+                if (simCsp >= FORTH_CSTACK_DEPTH) {
+                  displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                  stop = true;
+                } else {
+                  simKind[simCsp] = CTL_DEST;
+                  simCsp++;
+                }
+                break;
+              case PRIM_UNTIL:
+              case PRIM_AGAIN:
+                if (simCsp == 0 || simKind[simCsp - 1] != CTL_DEST) {
+                  displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                  stop = true;
+                } else {
+                  simCsp--;
+                }
+                break;
+              case PRIM_WHILE:
+                if (simCsp == 0 || simKind[simCsp - 1] != CTL_DEST) {
+                  displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                  stop = true;
+                } else if (simCsp + 1 > FORTH_CSTACK_DEPTH) {
+                  displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                  stop = true;
+                } else {
+                  simCsp--;
+                  simKind[simCsp] = CTL_ORIG;
+                  simCsp++;
+                  simKind[simCsp] = CTL_DEST;
+                  simCsp++;
+                }
+                break;
+              case PRIM_REPEAT:
+                if (simCsp < 2) {
+                  displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                  stop = true;
+                } else if (simKind[simCsp - 1] != CTL_DEST || simKind[simCsp - 2] != CTL_ORIG) {
+                  displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                  stop = true;
+                } else {
+                  simCsp -= 2;
+                }
+                break;
+            }
+            }
+          } else if (idx == PRIM_RECURSE) {
+            if (!simOpen) {
+              displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              stop = true;
+            }
+          } else if (idx == PRIM_GLOBAL || idx == PRIM_IMMEDIATE) {
+            if (!simClosedThisLine) {
+              displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              stop = true;
+            }
+          }
+          /* every other prim: continue (legal in both states; nothing runs) */
+          if (stop) lineOK = false;
+          continue;
+        }
         if (state == STATE_COMPILE && !(forthPrims[idx].flags & FF_IMMEDIATE)) {
           if (!forthDictEmit((ftoken_t)(idx + FTOK_PRIM_BASE))) {
             abortDefinition();
@@ -789,7 +980,12 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
     /* ---- §4.1 step 2: colon-def lookup ---- */
     {
       uint16_t widx; uint8_t wflags;
-      if (forthFindColonRef(buf, &widx, &wflags)) {
+      colonHit = forthFindColonRef(buf, &widx, &wflags);
+      if (checking) {
+        /* F5-1: check mode — continue on hit or miss (tier 2), but colonHit
+         * is needed by the number branch for §2(f) suppression */
+        /* Fall through to number branch for suppression check */
+      } else if (colonHit) {
         if (state == STATE_COMPILE && !(wflags & FF_IMMEDIATE)) {
           if (!forthDictEmit(forthTokenFromRef(widx))) {
             abortDefinition();
@@ -804,23 +1000,62 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
         }
         continue;
       }
+      /* colonHit not set and not checking: fall through to number */
     }
 
     /* ---- §4.1 step 3: number (C-2: number BEFORE label, C-8 classify-gate) ---- */
-    if (classifyNumber(buf) != FORTH_NUM_NONE) {
-      if (!processNumber(buf, state == STATE_COMPILE)) {
-        /* Classified as number but processing failed — do NOT fall through */
-        if (isDefinitionOpen()) abortDefinition();
-        lineOK = false;
-        break;
+    /* F5-1: check mode — parse into locals, no push/emit; suppressed by colonHit (§2f) */
+    if (checking) {
+      forthNumType_t numType = classifyNumber(buf);
+      if (numType != FORTH_NUM_NONE && !colonHit) {
+        /* Parse into locals — no push, no emit */
+        bool numOK = false;
+        if (numType == FORTH_NUM_INT) {
+          int32_t v;
+          if (parseNumberAsInt32(buf, &v)) {
+            numOK = true;
+          } else {
+            /* Out of range int -> real34 fallback */
+            real34_t r;
+            if (parseNumberAsReal34(buf, &r)) {
+              numOK = true;
+            }
+          }
+        } else if (numType == FORTH_NUM_REAL) {
+          real34_t r;
+          if (parseNumberAsReal34(buf, &r)) {
+            numOK = true;
+          }
+        }
+        if (!numOK) {
+          displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          lineOK = false;
+        }
       }
-      if (lastErrorCode != ERROR_NONE) {
-        if (isDefinitionOpen()) abortDefinition();
-        lineOK = false;
-        break;
+      /* Success or suppressed -> continue */
+    } else {
+      if (classifyNumber(buf) != FORTH_NUM_NONE) {
+        if (!processNumber(buf, state == STATE_COMPILE)) {
+          /* Classified as number but processing failed — do NOT fall through */
+          if (isDefinitionOpen()) abortDefinition();
+          lineOK = false;
+          break;
+        }
+        if (lastErrorCode != ERROR_NONE) {
+          if (isDefinitionOpen()) abortDefinition();
+          lineOK = false;
+          break;
+        }
+        continue;
       }
-      continue;
     }
+
+    /* F5-1: check mode — item, parameterized-item, and label branches are
+     * SKIPPED ENTIRELY (tier 2). The parameterized-item's parameter token is
+     * NOT consumed: an unshadowed run would consume it, a shadowed run would
+     * not; consuming in check could mask a tier-1 violation in the next token. */
+    if (checking)
+      continue;
 
     /* ---- §4.1 step 4: C47 item (§4.1, forward lookup: CAT_FNCT + PTP_NONE only) ---- */
     {
@@ -1175,7 +1410,8 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
      }
 
     /* ---- §4.1 last resort: undefined word ---- */
-    {
+    /* F5-1: check mode — unknown = tier 2, continue */
+    if (!checking) {
       char defName[FORTH_TOKEN_MAX + 1];
       if (isDefinitionOpen() && openDefinitionName(defName, sizeof(defName))) {
         snprintf(errorMessage, ERROR_MESSAGE_LENGTH, "%s (in %s)", buf, defName);
@@ -1183,13 +1419,21 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
         snprintf(errorMessage, ERROR_MESSAGE_LENGTH, "%s", buf);
       }
     }
-    displayCalcErrorMessage(ERROR_FUNCTION_NOT_FOUND, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-    if (isDefinitionOpen()) abortDefinition();
-    lineOK = false;
+    if (!checking) {
+      displayCalcErrorMessage(ERROR_FUNCTION_NOT_FOUND, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+      if (isDefinitionOpen()) abortDefinition();
+      lineOK = false;
+    }
   }
 
   /* ---- End of line ---- */
-  if (state == STATE_COMPILE && isDefinitionOpen()) {
+  if (checking) {
+    /* F5-1: check mode — simOpen means unterminated definition; no abort
+     * (nothing was actually opened); NO ASLIFT write */
+    if (simOpen) {
+      displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    }
+  } else if (state == STATE_COMPILE && isDefinitionOpen()) {
     /* C-4: truly unterminated — abort always; display INVALID_NAME only if
      * no prior error was shown (never mask e.g. ERROR_INPUT_TOO_LONG). */
     abortDefinition();
@@ -1206,6 +1450,22 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   forthLatestClosedRef = ctx->savedLatestClosed;
   forthOuterDepth--;
   forthOuterCur = prevCtx;
+}
+
+/* ---- F5-1: check mode public API ---- */
+
+bool forthCheckSourceLine(const char *source)
+{
+  forthOuterCtx_t ctx;
+  size_t n = strlen(source);
+  if (n >= FORTH_SOURCE_MAX) {
+    displayCalcErrorMessage(ERROR_INPUT_TOO_LONG, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+  memcpy(ctx.source, source, n + 1);
+  lastErrorCode = ERROR_NONE;
+  forthOuterRun(&ctx, FORTH_OUTER_CHECK);
+  return lastErrorCode == ERROR_NONE;
 }
 
 /* ---- F3-6: XEQ source-form helpers ---- */

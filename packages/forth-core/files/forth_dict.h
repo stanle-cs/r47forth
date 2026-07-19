@@ -263,6 +263,7 @@ bool forthGDictForget(const char *name);
 
 /* Outer interpreter (§3.3) */
 void forthOuterInterpret(const char *source);
+bool forthCheckSourceLine(const char *source);
 
 /* §9.4 derived-state helpers (read-only, no persisted flag) */
 bool forthStepPayload(const uint8_t *step, uint8_t *lenOut);
