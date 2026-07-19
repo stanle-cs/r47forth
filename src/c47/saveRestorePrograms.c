@@ -6,6 +6,10 @@
 #define PROGRAM_VERSION                     01  // Original version
 #define EXPORT_VERSION                      03  // 02 Modified export version to indent LBL; 03 Add RTF method and revise fixed table
 #define OLDEST_COMPATIBLE_PROGRAM_VERSION   01  // Original version
+
+#define MAX_LABEL_NAME_LENGTH               14  // Longest label name the calculator can produce: TAM alpha entry is
+                                                // force-closed beyond 6 glyphs (maxLen in _tamProcessInput, ui/tam.c),
+                                                // so a name is at most 7 glyphs of at most 2 bytes each
 #define BACKUP_FORMAT                       00  // Same program format as in backup file
 #define TEXT_FORMAT                         01  // Text program format - for future use
 
@@ -59,6 +63,28 @@
       return false;
     }
     return true;
+  }
+
+
+  // A label name longer than MAX_LABEL_NAME_LENGTH cannot have been produced by the
+  // calculator and can only come from a corrupt or crafted program file. Such a name
+  // does not fit the fixed name buffers of its consumers (e.g. ASSIGN's
+  // argumentName[16] and tamBuffer[32]), so the file is refused as a whole rather
+  // than truncating the name, which could alias one program to another's name.
+  static bool_t _containsOverlongLabelName(uint8_t *step) {
+    while(programBytesAvailable(step, 2) && !isAtEndOfPrograms(step)) {
+      if(checkOpCodeOfStep(step, ITM_LBL)
+          && (*(step + 1) == STRING_LABEL_VARIABLE || *(step + 1) == LOCAL_LABEL_VARIABLE)
+          && programBytesAvailable(step, 3)
+          && *(step + 2) > MAX_LABEL_NAME_LENGTH) {
+        return true;
+      }
+      step = findNextStep(step);
+      if(step == NULL) { // malformed step: scanLabelsAndPrograms() has its own guard for this
+        break;
+      }
+    }
+    return false;
   }
 
 
@@ -582,6 +608,21 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
 
     *(firstFreeProgramByte    ) = 0xffu;
     *(firstFreeProgramByte + 1) = 0xffu;
+
+    if(_containsOverlongLabelName(startOfProgram)) {
+      // Refuse the file like an incompatible version is refused: reverse
+      // _addSpaceAfterPrograms(pgmSizeInByte) and restore the .END. terminator.
+      firstFreeProgramByte -= pgmSizeInByte;
+      freeProgramBytes     += pgmSizeInByte;
+      *(firstFreeProgramByte    ) = 0xffu;
+      *(firstFreeProgramByte + 1) = 0xffu;
+      scanLabelsAndPrograms();  // _addSpaceAfterPrograms may have moved program memory: the label list must be rebuilt
+      sprintf(tmpString, " \n   !!! A label name is too long !!!\nThe program file is corrupt\n \nIt will not be loaded.");
+      show_warning(tmpString);
+      ioFileClose();
+      return;
+    }
+
     scanLabelsAndPrograms();
 
     goToGlobalStep(programList[numberOfPrograms - 1].step);   // Set active program to the loaded program and display the first step

@@ -46,6 +46,7 @@ void covSolveRoot(uint16_t which);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
+void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
@@ -215,6 +216,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
+  {"fnLoadPgmLongLabelCov",  covLoadPgmLongLabel, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
@@ -917,6 +919,51 @@ void covLoadPgm(uint16_t unusedButMandatoryParameter) {
   };
   covWriteAndLoadPgm(pgmS, sizeof(pgmS));
   covWriteAndLoadPgm(pgmT, sizeof(pgmT));
+}
+
+void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter) {
+  // A program file can claim a label name longer than the calculator can produce (TAM caps a name at 7 glyphs
+  // of at most 2 bytes, MAX_LABEL_NAME_LENGTH in saveRestorePrograms.c); fnLoadProgram must refuse such a file
+  // as a whole. Load a file whose global label name claims 20 bytes and one whose named local label claims 20
+  // bytes and check that neither is loaded nor registers a label; then load a program with a full-length
+  // 14-byte name and check that it IS accepted.
+  static const uint8_t pgmBadGlobal[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 20, 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  static const uint8_t pgmBadLocal[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'V',
+    ITM_LBL, LOCAL_LABEL_VARIABLE, 20, 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  static const uint8_t pgmMaxName[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 14, 'W','X','Y','Z','W','X','Y','Z','W','X','Y','Z','W','X',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  uint16_t labelsBefore = numberOfLabels;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmBadGlobal, sizeof(pgmBadGlobal));
+  if(temporaryInformation == TI_PROGRAM_LOADED || numberOfLabels != labelsBefore) {
+    printf("\nfnLoadProgram accepted a program file with a 20-byte global label name\n");
+    abortTest();
+    return;
+  }
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmBadLocal, sizeof(pgmBadLocal));
+  if(temporaryInformation == TI_PROGRAM_LOADED || numberOfLabels != labelsBefore) {
+    printf("\nfnLoadProgram accepted a program file with a 20-byte local label name\n");
+    abortTest();
+    return;
+  }
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmMaxName, sizeof(pgmMaxName));
+  if(temporaryInformation != TI_PROGRAM_LOADED || numberOfLabels != labelsBefore + 1) {
+    printf("\nfnLoadProgram refused a program file with a legitimate 14-byte label name\n");
+    abortTest();
+  }
 }
 
 void covProgramFlow(uint16_t which) {
