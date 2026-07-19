@@ -114,18 +114,27 @@ and LOADST after.
 ## Calibration
 
 Calibration pairs one hardware run with one local run and stores a
-per-benchmark scale factor. With the eight hardware readings in hand:
+per-benchmark scale factor under a named power profile. With the eight
+hardware readings in hand:
 
 ```
 python3 tools/bench/benchreport.py \
     --calibrate "BMGTO=212,BMREG=384,BMVAR=291,BMRSV=426,BMARITH=193,BMTRIG=147,BMNQN=246,BMDISP=116" \
-    --device "DM42n (STM32U575)" --power "USB (160MHz)" --firmware "C47 00.109.03.03b0"
+    --profile usb-160mhz --power "USB (160MHz)" \
+    --device "DM42n (STM32U575)" --firmware "C47 00.109.03.03b0"
 ```
 
-This runs the suite locally, writes `tools/bench/calibration-dm42n.json`,
-and every later `make bench` prints predicted hardware seconds. The math
-is one line per benchmark: factor = hardware seconds divided by local
-seconds, prediction = local seconds times factor.
+This runs the suite locally, writes the profile into
+`tools/bench/calibration-dm42n.json` without touching other profiles, and
+every later `make bench` prints one predicted-seconds column per profile.
+The math is one line per benchmark: factor = hardware seconds divided by
+local seconds, prediction = local seconds times factor.
+
+Calibrate USB and battery separately. They are not the same machine: the
+clock halves on battery, but my unit measured battery-to-USB ratios from
+1.9x (BMREG, BMDISP) up to 3.2x (BMTRIG), so the compute-bound paths lose
+more than the clock ratio and no single scale factor could describe both
+states.
 
 The factors are per benchmark rather than one global number because the
 costs only hardware pays (the per-step keyboard poll, LCD writes, flash

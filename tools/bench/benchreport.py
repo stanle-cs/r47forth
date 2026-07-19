@@ -91,49 +91,81 @@ def summarize(results):
 
 
 def load_calibration():
+    # The file holds one or more power profiles (e.g. usb-160mhz,
+    # battery-80mhz), each pairing a hardware run with the local run it was
+    # calibrated against. A pre-profile flat file is migrated on read.
     if not CALIBRATION.exists():
         return None
     data = json.loads(CALIBRATION.read_text())
-    return data if data.get("benchmarks") else None
+    if "profiles" not in data and data.get("benchmarks"):
+        data = {
+            "device": data.get("device"),
+            "firmware": data.get("firmware"),
+            "local_host": data.get("local_host"),
+            "profiles": {
+                "usb-160mhz": {
+                    "power": data.get("power"),
+                    "date": data.get("date"),
+                    "benchmarks": data["benchmarks"],
+                },
+            },
+        }
+    return data if data.get("profiles") else None
+
+
+def profile_factors(profile):
+    factors = {}
+    for name, entry in profile["benchmarks"].items():
+        if entry.get("hw_ticks") and entry.get("local_s"):
+            factors[name] = (entry["hw_ticks"] / 10.0) / entry["local_s"]
+    return factors
 
 
 def report(rows, calib):
-    factors = {}
-    if calib:
-        for name, entry in calib["benchmarks"].items():
-            if entry.get("hw_ticks") and entry.get("local_s"):
-                factors[name] = (entry["hw_ticks"] / 10.0) / entry["local_s"]
+    profiles = list(calib["profiles"].items()) if calib else []
+    factors = {pname: profile_factors(p) for pname, p in profiles}
 
-    header = f"{'benchmark':<9} {'iters':>7} {'local s':>9} {'spread':>7} {'it/s':>12} {'DM42n s':>9}"
+    header = f"{'benchmark':<9} {'iters':>7} {'local s':>9} {'spread':>7} {'it/s':>12}"
+    for pname, _ in profiles:
+        header += f" {pname[:12]:>12}"
+    if not profiles:
+        header += f" {'DM42n s':>9}"
     print(header)
     print("-" * len(header))
     csv_rows = []
     for name in BENCHMARKS:
         r = rows[name]
         its = ITERATIONS[name] / r["median_s"]
-        if name in HW_ONLY:
-            pred = "hw-only"
-        elif name in factors:
-            pred = f"{r['median_s'] * factors[name]:9.1f}"
-        else:
-            pred = "uncal."
-        warn = " !" if r["spread"] > SPREAD_WARN else ""
-        print(f"{name:<9} {ITERATIONS[name]:>7} {r['median_s']:>9.4f} {r['spread']:>6.1%} {its:>12.0f} {pred:>9}{warn}")
-        csv_rows.append({
+        line = f"{name:<9} {ITERATIONS[name]:>7} {r['median_s']:>9.4f} {r['spread']:>6.1%} {its:>12.0f}"
+        csv_row = {
             "benchmark": name,
             "iterations": ITERATIONS[name],
             "local_median_s": f"{r['median_s']:.6f}",
             "spread": f"{r['spread']:.4f}",
             "iterations_per_s": f"{its:.1f}",
-            "predicted_dm42n_s": pred.strip(),
-        })
+        }
+        if profiles:
+            for pname, _ in profiles:
+                if name in HW_ONLY:
+                    pred = "hw-only"
+                elif name in factors[pname]:
+                    pred = f"{r['median_s'] * factors[pname][name]:12.1f}".strip()
+                else:
+                    pred = "uncal."
+                line += f" {pred:>12}"
+                csv_row[f"predicted_{pname}_s"] = pred
+        else:
+            line += f" {'uncal.':>9}"
+            csv_row["predicted_dm42n_s"] = "uncal."
+        warn = " !" if r["spread"] > SPREAD_WARN else ""
+        print(line + warn)
+        csv_rows.append(csv_row)
     if calib:
-        print(f"\ncalibration: {calib.get('device')} | {calib.get('power')} | "
-              f"firmware {calib.get('firmware')} | {calib.get('date')}")
-        spread_f = sorted(factors.values())
-        if len(spread_f) > 1:
-            print(f"hardware-tax factors span {spread_f[0]:.0f}x..{spread_f[-1]:.0f}x local time "
-                  f"(spread is the per-workload hardware cost profile)")
+        for pname, p in profiles:
+            f_span = sorted(profile_factors(p).values())
+            span = f", factors {f_span[0]:.0f}x..{f_span[-1]:.0f}x" if len(f_span) > 1 else ""
+            print(f"\n{pname}: {calib.get('device')} | {p.get('power')} | "
+                  f"firmware {calib.get('firmware')} | {p.get('date')}{span}")
     else:
         print("\nuncalibrated: no DM42n predictions. Run the suite on hardware "
               "(XEQ BENCH, read R80..R87) and pass --calibrate.")
@@ -147,7 +179,7 @@ def report(rows, calib):
     print(f"\nwrote {CSV_OUT}")
 
 
-def calibrate(spec, rows, device, power, firmware):
+def calibrate(spec, rows, profile, device, power, firmware):
     hw = {}
     for part in spec.split(","):
         name, _, ticks = part.partition("=")
@@ -158,19 +190,20 @@ def calibrate(spec, rows, device, power, firmware):
     missing = [n for n in BENCHMARKS if n not in hw and n not in HW_ONLY]
     if missing:
         print(f"note: no hardware ticks given for {' '.join(missing)}; they stay uncalibrated")
-    data = {
-        "device": device,
+    data = load_calibration() or {"profiles": {}}
+    data["device"] = device
+    data["firmware"] = firmware
+    data["local_host"] = f"{os.uname().sysname} {os.uname().machine}, build.sim.t47.bench (-Os, LTO)"
+    data["profiles"][profile] = {
         "power": power,
-        "firmware": firmware,
         "date": date.today().isoformat(),
-        "local_host": f"{os.uname().sysname} {os.uname().machine}, build.sim.t47.bench (-Os, LTO)",
         "benchmarks": {
             name: {"hw_ticks": hw[name], "local_s": round(rows[name]["median_s"], 6)}
             for name in hw
         },
     }
     CALIBRATION.write_text(json.dumps(data, indent=2) + "\n")
-    print(f"wrote {CALIBRATION}")
+    print(f"wrote {CALIBRATION} (profile {profile})")
 
 
 def main():
@@ -178,6 +211,8 @@ def main():
     parser.add_argument("--reps", type=int, default=5, help="repetitions per benchmark (default 5)")
     parser.add_argument("--calibrate", metavar="SPEC",
                         help='hardware ticks per benchmark, e.g. "BMGTO=245,BMREG=180"')
+    parser.add_argument("--profile", default="battery-80mhz",
+                        help="calibration profile name (e.g. usb-160mhz, battery-80mhz)")
     parser.add_argument("--device", default="DM42n (STM32U575)", help="calibration device label")
     parser.add_argument("--power", default="battery (80MHz)", help="calibration power state")
     parser.add_argument("--firmware", default="unspecified", help="calibration firmware version")
@@ -185,7 +220,7 @@ def main():
 
     rows = summarize(run_suite(args.reps))
     if args.calibrate:
-        calibrate(args.calibrate, rows, args.device, args.power, args.firmware)
+        calibrate(args.calibrate, rows, args.profile, args.device, args.power, args.firmware)
     report(rows, load_calibration())
 
 
