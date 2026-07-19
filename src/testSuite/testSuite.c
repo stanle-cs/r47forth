@@ -47,6 +47,7 @@ void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
 void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter);
+void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
@@ -217,6 +218,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
   {"fnLoadPgmLongLabelCov",  covLoadPgmLongLabel, 1 },
+  {"fnLoadStateLongLabelCov", covLoadStateLongLabel, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
@@ -923,10 +925,12 @@ void covLoadPgm(uint16_t unusedButMandatoryParameter) {
 
 void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter) {
   // A program file can claim a label name longer than the calculator can produce (TAM caps a name at 7 glyphs
-  // of at most 2 bytes, MAX_LABEL_NAME_LENGTH in saveRestorePrograms.c); fnLoadProgram must refuse such a file
-  // as a whole. Load a file whose global label name claims 20 bytes and one whose named local label claims 20
-  // bytes and check that neither is loaded nor registers a label; then load a program with a full-length
-  // 14-byte name and check that it IS accepted.
+  // of at most 2 bytes, MAX_LABEL_NAME_LENGTH in defines.h); fnLoadProgram screens the file in a first pass,
+  // before loading anything, and refuses it with ERROR_INVALID_CORRUPTED_DATA. Load a file whose global label
+  // name claims 20 bytes and one whose named local label claims 20 bytes: both must be refused with the error
+  // set, no label registered, and program memory untouched (the screen runs before the load, so there is
+  // nothing to roll back). Then check the screen's step walk does not false-positive: a program with a
+  // legitimate 20-byte alpha string literal must load, and so must a full-length 14-byte label name.
   static const uint8_t pgmBadGlobal[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 20, 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T',
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
@@ -936,34 +940,114 @@ void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter) {
     ITM_LBL, LOCAL_LABEL_VARIABLE, 20, 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t',
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
   };
+  static const uint8_t pgmStrLiteral[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'U',
+    ITM_LITERAL, STRING_LABEL_VARIABLE, 20, 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  // Bypass regression: the screen must refuse a non-item opcode (here
+  // LAST_ITEM itself) rather than quit silently, because the in-memory
+  // walker decodes it as a zero-parameter step and would register the
+  // overlong label hidden behind it.
+  static const uint8_t pgmBadOpcode[] = {
+    (uint8_t)((LAST_ITEM >> 8) | 0x80), (uint8_t)(LAST_ITEM & 0xff),
+    ITM_LBL, STRING_LABEL_VARIABLE, 20, 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
   static const uint8_t pgmMaxName[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 14, 'W','X','Y','Z','W','X','Y','Z','W','X','Y','Z','W','X',
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
   };
   uint16_t labelsBefore = numberOfLabels;
+  uint8_t *firstFreeBefore = firstFreeProgramByte;
 
   temporaryInformation = TI_NO_INFO;
   covWriteAndLoadPgm(pgmBadGlobal, sizeof(pgmBadGlobal));
-  if(temporaryInformation == TI_PROGRAM_LOADED || numberOfLabels != labelsBefore) {
-    printf("\nfnLoadProgram accepted a program file with a 20-byte global label name\n");
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || temporaryInformation == TI_PROGRAM_LOADED
+      || numberOfLabels != labelsBefore || firstFreeProgramByte != firstFreeBefore) {
+    printf("\nfnLoadProgram did not cleanly refuse a program file with a 20-byte global label name\n");
     abortTest();
     return;
   }
+  lastErrorCode = ERROR_NONE;
 
   temporaryInformation = TI_NO_INFO;
   covWriteAndLoadPgm(pgmBadLocal, sizeof(pgmBadLocal));
-  if(temporaryInformation == TI_PROGRAM_LOADED || numberOfLabels != labelsBefore) {
-    printf("\nfnLoadProgram accepted a program file with a 20-byte local label name\n");
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || temporaryInformation == TI_PROGRAM_LOADED
+      || numberOfLabels != labelsBefore || firstFreeProgramByte != firstFreeBefore) {
+    printf("\nfnLoadProgram did not cleanly refuse a program file with a 20-byte local label name\n");
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmBadOpcode, sizeof(pgmBadOpcode));
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || temporaryInformation == TI_PROGRAM_LOADED
+      || numberOfLabels != labelsBefore || firstFreeProgramByte != firstFreeBefore) {
+    printf("\nfnLoadProgram did not refuse a file hiding an overlong label behind a non-item opcode\n");
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmStrLiteral, sizeof(pgmStrLiteral));
+  if(temporaryInformation != TI_PROGRAM_LOADED || lastErrorCode != ERROR_NONE || numberOfLabels != labelsBefore + 1) {
+    printf("\nfnLoadProgram refused a program with a legitimate 20-byte alpha string literal\n");
     abortTest();
     return;
   }
 
   temporaryInformation = TI_NO_INFO;
   covWriteAndLoadPgm(pgmMaxName, sizeof(pgmMaxName));
-  if(temporaryInformation != TI_PROGRAM_LOADED || numberOfLabels != labelsBefore + 1) {
+  if(temporaryInformation != TI_PROGRAM_LOADED || lastErrorCode != ERROR_NONE || numberOfLabels != labelsBefore + 2) {
     printf("\nfnLoadProgram refused a program file with a legitimate 14-byte label name\n");
     abortTest();
   }
+}
+
+void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter) {
+  // The state loaders (LOAD, LOADP, LOADST) apply the PROGRAMS section in
+  // place, so doLoad screens program memory after the restore and, on an
+  // over-long label name, clears the program area and raises
+  // ERROR_INVALID_CORRUPTED_DATA. Build the corrupt state file honestly: load
+  // a valid program with a full-length name, bump its length byte in program
+  // memory past the limit, save the state, clear programs, and load the state
+  // back. The load must end with the error set and an empty program area.
+  // The six ITM_NULL padding steps keep the corrupted step decodable: the
+  // inflated length swallows exactly the padding, so the walk lands on the
+  // RTN and the overlong label registers instead of truncating the scan -
+  // the dangerous case the screen exists for.
+  static const uint8_t pgmVictim[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 14, 'S','T','A','T','E','B','A','D','L','B','L','X','Y','Z',
+    0, 0, 0, 0, 0, 0,
+    ITM_RTN,
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  covWriteAndLoadPgm(pgmVictim, sizeof(pgmVictim));
+  // The loader appended the victim, so its bytes end at firstFreeProgramByte;
+  // the label's claimed-length byte is at offset 2 of the program.
+  uint8_t *lengthByte = firstFreeProgramByte - sizeof(pgmVictim) + 2;
+  if(temporaryInformation != TI_PROGRAM_LOADED || *lengthByte != 14) {
+    printf("\ncovLoadStateLongLabel could not stage its victim program\n");
+    abortTest();
+    return;
+  }
+  *lengthByte = 20; // corrupt the claimed name length in program memory
+
+  fnSave(SM_MANUAL_SAVE);
+  fnClPAll(CONFIRMED);
+  lastErrorCode = ERROR_NONE;
+
+  fnLoad(LM_PROGRAMS);
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || numberOfLabels != 0) {
+    printf("\nfnLoad(LM_PROGRAMS) did not refuse a state file with a corrupt label name (EC=%u, labels=%u)\n",
+           lastErrorCode, numberOfLabels);
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
 }
 
 void covProgramFlow(uint16_t which) {
