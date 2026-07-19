@@ -96,7 +96,8 @@ void fnRecallPlusSkip(uint16_t regist) {
 
 
 
-void fnRecallAdd(uint16_t regist) {
+// Same fold as the store variants: one body, four dispatch tables.
+static void _recallOp(uint16_t regist, void (* const op[NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS][NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS])(void)) {
   if(regInRange(regist)) {
     if(programRunStop == PGM_RUNNING && regist == REGISTER_L) {
       copySourceRegisterToDestRegister(REGISTER_L, SAVED_REGISTER_L);
@@ -116,102 +117,36 @@ void fnRecallAdd(uint16_t regist) {
       *(REGISTER_SHORT_INTEGER_DATA(REGISTER_X)) &= shortIntegerMask;
     }
 
-    addition[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
+    op[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
 
     copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
 
     adjustResult(REGISTER_X, false, true, REGISTER_X, regist, -1);
   }
+}
+
+
+
+void fnRecallAdd(uint16_t regist) {
+  _recallOp(regist, addition);
 }
 
 
 
 void fnRecallSub(uint16_t regist) {
-  if(regInRange(regist)) {
-    if(programRunStop == PGM_RUNNING && regist == REGISTER_L) {
-      copySourceRegisterToDestRegister(REGISTER_L, SAVED_REGISTER_L);
-      if(lastErrorCode != ERROR_NONE) {
-        return;
-      }
-    }
-    if(!saveLastX()) {
-      return;
-    }
-    if(programRunStop == PGM_RUNNING) {
-      copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);
-    }
-    copySourceRegisterToDestRegister(REGISTER_X, REGISTER_Y);
-    copySourceRegisterToDestRegister(regist == REGISTER_Y ? SAVED_REGISTER_Y : regist == REGISTER_L ? SAVED_REGISTER_L : regist, REGISTER_X);
-    if(getRegisterDataType(REGISTER_X) == dtShortInteger) {
-      *(REGISTER_SHORT_INTEGER_DATA(REGISTER_X)) &= shortIntegerMask;
-    }
-
-    subtraction[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
-
-    copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
-
-    adjustResult(REGISTER_X, false, true, REGISTER_X, regist, -1);
-  }
+  _recallOp(regist, subtraction);
 }
 
 
 
 void fnRecallMult(uint16_t regist) {
-  if(regInRange(regist)) {
-    if(programRunStop == PGM_RUNNING && regist == REGISTER_L) {
-      copySourceRegisterToDestRegister(REGISTER_L, SAVED_REGISTER_L);
-      if(lastErrorCode != ERROR_NONE) {
-        return;
-      }
-    }
-    if(!saveLastX()) {
-      return;
-    }
-    if(programRunStop == PGM_RUNNING) {
-      copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);
-    }
-    copySourceRegisterToDestRegister(REGISTER_X, REGISTER_Y);
-    copySourceRegisterToDestRegister(regist == REGISTER_Y ? SAVED_REGISTER_Y : regist == REGISTER_L ? SAVED_REGISTER_L : regist, REGISTER_X);
-    if(getRegisterDataType(REGISTER_X) == dtShortInteger) {
-      *(REGISTER_SHORT_INTEGER_DATA(REGISTER_X)) &= shortIntegerMask;
-    }
-
-    multiplication[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
-
-    copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
-
-    adjustResult(REGISTER_X, false, true, REGISTER_X, regist, -1);
-  }
+  _recallOp(regist, multiplication);
 }
 
 
 
 void fnRecallDiv(uint16_t regist) {
-  if(regInRange(regist)) {
-    if(programRunStop == PGM_RUNNING && regist == REGISTER_L) {
-      copySourceRegisterToDestRegister(REGISTER_L, SAVED_REGISTER_L);
-      if(lastErrorCode != ERROR_NONE) {
-        return;
-      }
-    }
-    if(!saveLastX()) {
-      return;
-    }
-    if(programRunStop == PGM_RUNNING) {
-      copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);
-    }
-    copySourceRegisterToDestRegister(REGISTER_X, REGISTER_Y);
-    copySourceRegisterToDestRegister(regist == REGISTER_Y ? SAVED_REGISTER_Y : regist == REGISTER_L ? SAVED_REGISTER_L : regist, REGISTER_X);
-    if(getRegisterDataType(REGISTER_X) == dtShortInteger) {
-      *(REGISTER_SHORT_INTEGER_DATA(REGISTER_X)) &= shortIntegerMask;
-    }
-
-    division[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
-
-    copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
-
-    adjustResult(REGISTER_X, false, true, REGISTER_X, regist, -1);
-  }
+  _recallOp(regist, division);
 }
 
 
