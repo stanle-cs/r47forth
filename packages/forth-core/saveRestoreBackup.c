@@ -526,12 +526,12 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     ramPtr = TO_C47MEMPTR(programList);
     saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
 
-    ramPtr = TO_C47MEMPTR(fdict.base);
-    saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "forthDictBase",                  "c47Ptr");
-    saveStateValue(&fdict.sizeBlocks,               sizeof(fdict.sizeBlocks),                                    "forthDictSizeBlocks",            "uint16");
-    saveStateValue(&fdict.here,                     sizeof(fdict.here),                                          "forthDictHere",                  "uint16");
-    saveStateValue(&fdict.latest,                   sizeof(fdict.latest),                                        "forthDictLatest",                "uint16");
-    saveStateValue(&fdict.count,                    sizeof(fdict.count),                                         "forthDictCount",                 "uint16");
+    ramPtr = TO_C47MEMPTR(gdict.base);
+    saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "forthGDictBase",                 "c47Ptr");
+    saveStateValue(&gdict.sizeBlocks,               sizeof(gdict.sizeBlocks),                                    "forthGDictSizeBlocks",           "uint16");
+    saveStateValue(&gdict.here,                     sizeof(gdict.here),                                          "forthGDictHere",                 "uint16");
+    saveStateValue(&gdict.latest,                   sizeof(gdict.latest),                                        "forthGDictLatest",               "uint16");
+    saveStateValue(&gdict.count,                    sizeof(gdict.count),                                         "forthGDictCount",                "uint16");
 
     ramPtr = TO_C47MEMPTR(currentSubroutineLevelData);
     saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
@@ -859,19 +859,20 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
     programList = TO_PCMEMPTR(ramPtr);
 
-    ramPtr = C47_NULL;   /* default: old backup without Forth params -> empty dict */
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "forthDictBase",                  "c47Ptr");
-    fdict.base = TO_PCMEMPTR(ramPtr);
+    ramPtr = C47_NULL;   /* default: old backup without Forth params -> empty gdict */
+    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "forthGDictBase",                 "c47Ptr");
+    gdict.base = TO_PCMEMPTR(ramPtr);
     {
       uint16_t forthV;
-      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthDictSizeBlocks", "uint16"); fdict.sizeBlocks = forthV;
-      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthDictHere",       "uint16"); fdict.here       = forthV;
-      forthV = FORTH_NULL; restoreStateValue(&forthV, sizeof(forthV), "forthDictLatest",     "uint16"); fdict.latest     = forthV;
-      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthDictCount",      "uint16"); fdict.count      = forthV;
+      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthGDictSizeBlocks", "uint16"); gdict.sizeBlocks = forthV;
+      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthGDictHere",       "uint16"); gdict.here       = forthV;
+      forthV = FORTH_NULL; restoreStateValue(&forthV, sizeof(forthV), "forthGDictLatest",     "uint16"); gdict.latest     = forthV;
+      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthGDictCount",      "uint16"); gdict.count      = forthV;
      }
-     forthDictValidateRestored();
+      forthGDictValidateRestored();
+      forthDictInit();
 
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
+     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
     currentSubroutineLevelData = TO_PCMEMPTR(ramPtr);
 
     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentLocalFlags",              "c47Ptr");

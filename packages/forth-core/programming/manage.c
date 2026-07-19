@@ -1641,7 +1641,7 @@ void insertStepInProgram(const int16_t func) {
 
    if(func == ITM_FCALL) {
      char fname[FORTH_NAME_MAX + 1];
-     if(!tam.indirect && forthDictNameByIndex(tam.value, fname, sizeof(fname))) {
+      if(!tam.indirect && forthDictNameByRef(tam.value, fname, sizeof(fname))) {
        uint16_t nameLen = stringByteLength(fname);
        tmpString[0] = (ITM_FORTH >> 8) | 0x80;
        tmpString[1] =  ITM_FORTH       & 0xff;

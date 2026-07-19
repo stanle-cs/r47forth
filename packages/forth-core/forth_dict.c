@@ -10,6 +10,7 @@
 #include "forth_prims.h"
 
 #define FORTH_INITIAL_BLOCKS  64
+#define FORTH_GDICT_INITIAL_BLOCKS 16
 
 /* ---- §1.2 Dictionary control block (package BSS, NOT in the arena) ---- */
 
@@ -25,6 +26,14 @@ forthDict_t fdict = {
   .sizeBlocks = 0,
   .here       = 0,
   .latest     = FORTH_NULL,   // 0xFFFF end-of-chain sentinel
+  .count      = 0,
+};
+
+forthDict_t gdict = {
+  .base       = NULL,
+  .sizeBlocks = 0,
+  .here       = 0,
+  .latest     = FORTH_NULL,
   .count      = 0,
 };
 
@@ -59,6 +68,27 @@ void forthDictClear(void)
   forthScanTrackReset();
 }
 
+void forthGDictInit(void)
+{
+  gdict.base = NULL;
+  gdict.sizeBlocks = 0;
+  gdict.here = 0;
+  gdict.latest = FORTH_NULL;
+  gdict.count = 0;
+}
+
+void forthGDictClear(void)
+{
+  if (gdict.base) {
+    freeC47Blocks(gdict.base, gdict.sizeBlocks);
+  }
+  gdict.base = NULL;
+  gdict.sizeBlocks = 0;
+  gdict.here = 0;
+  gdict.latest = FORTH_NULL;
+  gdict.count = 0;
+}
+
 /* ---- §2.2 token constants (mirror forth_inner.c) — F1-5 validator ---- */
 #define FTOK_CALL_BASE    0x1000
 #define FTOK_LIT          0x7F00
@@ -67,8 +97,8 @@ void forthDictClear(void)
 #define FTOK_0BR          0x7F03
 #define FTOK_C47          0x7F04
 
-/* F1-5: validate one restored body, or (checkTarget != FORTH_NULL) prove
- * that checkTarget is a token boundary of this body at or before its EXIT.
+/* F1-5: validate one restored body in gdict, or (checkTarget != FORTH_NULL)
+ * prove that checkTarget is a token boundary of this body at or before EXIT.
  * limit is exclusive. Restore-time only; the per-branch boundary sub-walk
  * is O(body^2) and deliberately unoptimized. */
 static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
@@ -83,7 +113,7 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
       return false;                       /* ran out without EXIT / target */
     }
     ftoken_t tok;
-    memcpy(&tok, fdict.base + pos, 2);
+    memcpy(&tok, gdict.base + pos, 2);
     pos += 2;
 
     if (tok == FTOK_EXIT) {
@@ -92,8 +122,12 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
     else if (tok >= 0x0001 && tok <= 0x0FFF) {
       if ((uint16_t)(tok - 1) >= forthPrimCount) return false;
     }
-    else if (tok <= 0x7EFF) {             /* 0x1000..0x7EFF: FTOK_CALL */
-      if ((uint16_t)(tok - FTOK_CALL_BASE) > entryIdx) return false;
+    else if (tok < FORTH_GCALL_BASE) {
+      /* Transient call token in global body — illegal */
+      return false;
+    }
+    else if (tok <= 0x7EFF) {             /* FORTH_GCALL_BASE..0x7EFF: global FTOK_CALL */
+      if ((uint16_t)(tok - FORTH_GCALL_BASE) > entryIdx) return false;
     }
     else if (tok == FTOK_LIT) {
       if ((uint32_t)pos + 16u > limit) return false;
@@ -106,7 +140,7 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
     else if (tok == FTOK_BR || tok == FTOK_0BR) {
       if ((uint32_t)pos + 2u > limit) return false;
       int16_t delta;
-      memcpy(&delta, fdict.base + pos, 2);
+      memcpy(&delta, gdict.base + pos, 2);
       pos += 2;
       if (checkTarget == FORTH_NULL) {
         int32_t target = (int32_t)pos + (int32_t)delta * 2;
@@ -117,7 +151,7 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
     else if (tok == FTOK_C47) {
       if ((uint32_t)pos + 2u > limit) return false;
       uint16_t itemId;
-      memcpy(&itemId, fdict.base + pos, 2);
+      memcpy(&itemId, gdict.base + pos, 2);
       pos += 2;
       if (itemId == 0 || itemId >= LAST_ITEM) return false;
       uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
@@ -126,7 +160,7 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
       }
       else if (ptp == PTP_NUMBER_8) {
         if ((uint32_t)pos + 2u > limit) return false;
-        if (fdict.base[pos + 1] != 0) return false;   /* padded cell */
+        if (gdict.base[pos + 1] != 0) return false;   /* padded cell */
         pos += 2;
       }
       else if (ptp == PTP_NUMBER_16) {
@@ -143,138 +177,127 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
   }
 }
 
-/* H5 (§5.5): sanity-check fdict after a state restore. A torn or corrupt
- * backup must never leave fdict able to read/write out of bounds. */
-void forthDictValidateRestored(void)
+/* H5 (§5.5): sanity-check gdict after a state restore. A torn or corrupt
+ * backup must never leave gdict able to read/write out of bounds. */
+void forthGDictValidateRestored(void)
 {
-  /* F1-3: a restore is a lifetime seam — records never survive it. */
-  forthScanTrackReset();
-  if (fdict.base == NULL) {
+  if (gdict.base == NULL) {
     /* normalize scalars regardless of what the file said */
-    fdict.sizeBlocks = 0;
-    fdict.here = 0;
-    fdict.latest = FORTH_NULL;
-    fdict.count = 0;
+    gdict.sizeBlocks = 0;
+    gdict.here = 0;
+    gdict.latest = FORTH_NULL;
+    gdict.count = 0;
     return;
   }
 
-  uint32_t cap = (uint32_t)fdict.sizeBlocks * BYTES_PER_BLOCK;
-  /* Pinned by tests: sizeBlocks!=0 (T1.3b V1), here<=cap (T1.3 v1),
-   * nameLen bounds (T1.3b V2), n==count (T1.3 v2).
-   * Declared redundant (termination/robustness, shadowed by the checks
-   * above — do not remove without re-running the mutation analysis):
-   * latest<here (shadowed by walk's off+4 bound), off+4>here vs OOB reads,
-   * link strictly-decreasing (cycles are bounded by the n>count cap). */
-  bool ok = (fdict.sizeBlocks != 0) && (fdict.here <= cap)
-         && (fdict.latest == FORTH_NULL || fdict.latest < fdict.here);
+  uint32_t cap = (uint32_t)gdict.sizeBlocks * BYTES_PER_BLOCK;
+  bool ok = (gdict.sizeBlocks != 0) && (gdict.here <= cap)
+         && (gdict.latest == FORTH_NULL || gdict.latest < gdict.here);
 
   if (ok) {  /* walk the header chain: offsets must strictly decrease */
-    uint16_t off = fdict.latest;
+    uint16_t off = gdict.latest;
     uint16_t n = 0;
-    uint16_t succOff = fdict.here;
+    uint16_t succOff = gdict.here;
      while (off != FORTH_NULL) {
-        if ((uint32_t)off + 6 > fdict.here) { ok = false; break; }
-        forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+        if ((uint32_t)off + 6 > gdict.here) { ok = false; break; }
+        forthHeader_t *hdr = (forthHeader_t *)(gdict.base + off);
        if (hdr->nameLen == 0 || hdr->nameLen > FORTH_NAME_MAX) { ok = false; break; }
-       /* R4-3: off+4<=here (checked above) proves the HEADER fits, not the
-        * name that follows it. Probed: a valid ": VX 1 ;" entry with here
-        * force-set to latest+4 survived validation — the header fit, but its
-        * name read past the logical dictionary end. */
-        if ((uint32_t)off + 6u + hdr->nameLen > fdict.here) { ok = false; break; }
+        if ((uint32_t)off + 6u + hdr->nameLen > gdict.here) { ok = false; break; }
        if (hdr->link != FORTH_NULL && hdr->link >= off) { ok = false; break; }
-      /* F1-5: full threaded-code validation; bytes past EXIT (block padding, scan records) are inert and unchecked. */
       {
         uint16_t hdrSize = 6 + hdr->nameLen;
         uint16_t alignedHdr = (uint16_t)TO_BLOCKS(hdrSize) * BYTES_PER_BLOCK;
         uint16_t bodyStart = off + alignedHdr;
         uint16_t i;
-        if (hdr->flags != 0) { ok = false; break; }
-        if (hdr->owner != FORTH_OWNER_INTERACTIVE) { ok = false; break; }
+        if (hdr->flags & (uint8_t)~FF_IMMEDIATE) { ok = false; break; }
+        if (hdr->owner != FORTH_OWNER_GLOBAL) { ok = false; break; }
         for (i = off + 6 + hdr->nameLen; i < bodyStart; i++) {
-          if (fdict.base[i] != 0) { ok = false; break; }
+          if (gdict.base[i] != 0) { ok = false; break; }
         }
         if (!ok) break;
         if ((uint32_t)bodyStart + 2u > succOff) { ok = false; break; }
         if (!vBodyWalk(bodyStart, succOff,
-                       (uint16_t)(fdict.count - 1 - n), FORTH_NULL)) {
+                       (uint16_t)(gdict.count - 1 - n), FORTH_NULL)) {
           ok = false;
           break;
         }
       }
       succOff = off;
       off = hdr->link;
-      if (++n > fdict.count) { ok = false; break; }
+      if (++n > gdict.count) { ok = false; break; }
     }
-    if (ok && n != fdict.count) {
+    if (ok && n != gdict.count) {
       ok = false;
     }
   }
 
   if (!ok) {
 #if defined(PC_BUILD)
-    printf("forthDictValidateRestored: inconsistent dictionary in backup, resetting\n");
+    printf("forthGDictValidateRestored: inconsistent dictionary in backup, resetting\n");
 #endif
     /* Deliberate orphan: do NOT freeC47Blocks here — the restored allocation
      * tables are exactly what we just failed to trust (P-4 exception). */
-    forthDictInit();
+    forthGDictInit();
   }
 }
 
 /* ---- Region grow (§5.2) ---- */
 
-bool forthDictEnsure(uint16_t bytes)
+static bool dictEnsureOn(forthDict_t *d, uint16_t bytes, uint16_t initialBlocks)
 {
   /* 64 KB offset wrap (§3.3.8 C-10): reject before growing */
-  if ((uint32_t)fdict.here + bytes > 0xFFFEu) {
+  if ((uint32_t)d->here + bytes > 0xFFFEu) {
     displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
 
-  /* Lazy initial allocation (§5.2).
-   * R1-1 / R4-2 item 1 (reconciled — both named this branch): the configured
-   * initial block count was allocated unconditionally and reported success
-   * even when it did not cover `bytes`, so a first request larger than the
-   * initial region was reported safe while the caller could write past the
-   * allocation. fdict.base==NULL implies fdict.here==0 in every reachable
-   * path (forthDictInit, forthDictClear, forthDictValidateRestored's
-   * normalize branch), so `here + bytes` and `bytes` are the same quantity
-   * here; using here+bytes anyway costs nothing and does not depend on that
-   * invariant continuing to hold. */
-  if (!fdict.base) {
-    uint16_t initBlocks = FORTH_INITIAL_BLOCKS;
-#if defined(PC_BUILD)
-    if (testInitialBlocks > 0) initBlocks = testInitialBlocks;
-#endif
-    uint32_t need = (uint32_t)fdict.here + bytes;
+  /* Lazy initial allocation (§5.2). */
+  if (!d->base) {
+    uint32_t need = (uint32_t)d->here + bytes;
     uint32_t minBlocks = TO_BLOCKS(need);
-    if (minBlocks > initBlocks) {
-      initBlocks = (uint16_t)minBlocks;
+    uint16_t ib = initialBlocks;
+    if (minBlocks > ib) {
+      ib = (uint16_t)minBlocks;
     }
-    fdict.base = allocC47Blocks(initBlocks);
-    if (!fdict.base) {
+    d->base = allocC47Blocks(ib);
+    if (!d->base) {
       return false;
     }
-    fdict.sizeBlocks = initBlocks;
+    d->sizeBlocks = ib;
     return true;
   }
 
   /* Grow if needed (§5.2): max(sizeBlocks*2, TO_BLOCKS(here+bytes)) */
-  if (fdict.here + bytes > fdict.sizeBlocks * BYTES_PER_BLOCK) {
-    uint32_t need = (uint32_t)fdict.here + bytes;
-    uint32_t newSize = fdict.sizeBlocks * 2;
+  if (d->here + bytes > d->sizeBlocks * BYTES_PER_BLOCK) {
+    uint32_t need = (uint32_t)d->here + bytes;
+    uint32_t newSize = d->sizeBlocks * 2;
     uint32_t minSize = TO_BLOCKS(need);
     if (minSize > newSize) {
       newSize = minSize;
     }
-    void *newBase = reallocC47Blocks(fdict.base, fdict.sizeBlocks, (size_t)newSize);
+    void *newBase = reallocC47Blocks(d->base, d->sizeBlocks, (size_t)newSize);
     if (!newBase) {
       return false;
     }
-    fdict.base = newBase;
-    fdict.sizeBlocks = (uint16_t)newSize;
+    d->base = newBase;
+    d->sizeBlocks = (uint16_t)newSize;
   }
 
   return true;
+}
+
+bool forthDictEnsure(uint16_t bytes)
+{
+  uint16_t initBlocks = FORTH_INITIAL_BLOCKS;
+#if defined(PC_BUILD)
+  if (testInitialBlocks > 0) initBlocks = testInitialBlocks;
+#endif
+  return dictEnsureOn(&fdict, bytes, initBlocks);
+}
+
+bool forthGDictEnsure(uint16_t bytes)
+{
+  return dictEnsureOn(&gdict, bytes, FORTH_GDICT_INITIAL_BLOCKS);
 }
 
 /* ---- Allocate (§1.2, §5.2) ---- */
@@ -351,32 +374,56 @@ uint16_t forthFindPrim(const char *name)
   return FORTH_PRIM_NONE;
 }
 
-bool forthFindColon(const char *name, uint16_t *idx)
+bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags)
 {
-  /* Guard against uninitialized dict (e.g., production hw path). */
-  if (!fdict.base) return false;
-
-  uint16_t off = fdict.latest;
-  uint16_t n = 0;
   size_t queryLen = strlen(name);
 
-  while (off != FORTH_NULL) {
-    forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
-
-    if (!(hdr->flags & FF_SMUDGE)) {
-      if (hdr->nameLen > 0 &&
-          queryLen == hdr->nameLen &&
-          memcmp(fdict.base + off + 6, name, (size_t)hdr->nameLen) == 0) {
-        *idx = fdict.count - 1 - n;
-        return true;
+  /* Walk fdict newest-first, unfiltered. */
+  if (fdict.base) {
+    uint16_t off = fdict.latest;
+    uint16_t n = 0;
+    while (off != FORTH_NULL) {
+      forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+      if (!(hdr->flags & FF_SMUDGE)) {
+        if (hdr->nameLen > 0 &&
+            queryLen == hdr->nameLen &&
+            memcmp(fdict.base + off + 6, name, (size_t)hdr->nameLen) == 0) {
+          *ref = fdict.count - 1 - n;
+          if (flags) *flags = hdr->flags;
+          return true;
+        }
       }
+      off = hdr->link;
+      n++;
     }
+  }
 
-    off = hdr->link;
-    n++;
+  /* Walk gdict newest-first. */
+  if (gdict.base) {
+    uint16_t off = gdict.latest;
+    uint16_t n = 0;
+    while (off != FORTH_NULL) {
+      forthHeader_t *hdr = (forthHeader_t *)(gdict.base + off);
+      if (!(hdr->flags & FF_SMUDGE)) {
+        if (hdr->nameLen > 0 &&
+            queryLen == hdr->nameLen &&
+            memcmp(gdict.base + off + 6, name, (size_t)hdr->nameLen) == 0) {
+          *ref = FORTH_REF_GLOBAL | gdict.count - 1 - n;
+          if (flags) *flags = hdr->flags;
+          return true;
+        }
+      }
+      off = hdr->link;
+      n++;
+    }
   }
 
   return false;
+}
+
+bool forthFindColon(const char *name, uint16_t *ref)
+{
+  return forthFindColonRef(name, ref, NULL);
 }
 
 /* §4.1 step 4: forward (Forth-source) C47 item lookup.
@@ -457,7 +504,7 @@ bool startDefinition(const char *name)
     displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
-  if (fdict.count >= 0x6F00) {
+  if (fdict.count >= 0x6000) {
     displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
@@ -519,30 +566,52 @@ bool openDefinitionName(char *buf, int bufSize)
   return len > 0;
 }
 
-/* ---- Index → name reverse lookup (for FCALL redirect, C6) ---- */
+/* ---- Ref → name reverse lookup (for FCALL redirect, C6) ---- */
 
-bool forthDictNameByIndex(uint16_t idx, char *buf, int bufSize)
+bool forthDictNameByRef(uint16_t ref, char *buf, int bufSize)
 {
-  uint16_t off = fdict.latest;
-  uint16_t n = 0;
+  if (!buf || bufSize <= 0) return false;
 
-  if (idx >= fdict.count || !fdict.base || !buf || bufSize <= 0) {
-    return false;
-  }
-
-  while (off != FORTH_NULL) {
-    if (fdict.count - 1 - n == idx) {
-      forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
-      if (hdr->flags & FF_SMUDGE) return false;
-      uint8_t len = hdr->nameLen;
-      if (len >= (uint8_t)bufSize) len = (uint8_t)(bufSize - 1);
-      memcpy(buf, fdict.base + off + 6, (size_t)len);
-      buf[len] = '\0';
-      return true;
+  if (ref & FORTH_REF_GLOBAL) {
+    /* Global region */
+    uint16_t idx = ref & 0x7FFFu;
+    uint16_t off = gdict.latest;
+    uint16_t n = 0;
+    if (idx >= gdict.count || !gdict.base) return false;
+    while (off != FORTH_NULL) {
+      if (gdict.count - 1 - n == idx) {
+        forthHeader_t *hdr = (forthHeader_t *)(gdict.base + off);
+        if (hdr->flags & FF_SMUDGE) return false;
+        uint8_t len = hdr->nameLen;
+        if (len >= (uint8_t)bufSize) len = (uint8_t)(bufSize - 1);
+        memcpy(buf, gdict.base + off + 6, (size_t)len);
+        buf[len] = '\0';
+        return true;
+      }
+      forthHeader_t *hdr = (forthHeader_t *)(gdict.base + off);
+      off = hdr->link;
+      n++;
     }
-    forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
-    off = hdr->link;
-    n++;
+  } else {
+    /* Transient region */
+    uint16_t idx = ref;
+    uint16_t off = fdict.latest;
+    uint16_t n = 0;
+    if (idx >= fdict.count || !fdict.base) return false;
+    while (off != FORTH_NULL) {
+      if (fdict.count - 1 - n == idx) {
+        forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+        if (hdr->flags & FF_SMUDGE) return false;
+        uint8_t len = hdr->nameLen;
+        if (len >= (uint8_t)bufSize) len = (uint8_t)(bufSize - 1);
+        memcpy(buf, fdict.base + off + 6, (size_t)len);
+        buf[len] = '\0';
+        return true;
+      }
+      forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+      off = hdr->link;
+      n++;
+    }
   }
 
   return false;

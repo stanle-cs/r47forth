@@ -1,5 +1,5 @@
 diff --git a/src/c47/config.c b/src/c47/config.c
-index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..1d4f60bf1d9c7be98fc2d15038319ab6fd65e2af 100644
+index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..e59137f8df571c2c8e65aaf240b7cf5baf6cd357 100644
 --- a/src/c47/config.c
 +++ b/src/c47/config.c
 @@ -2,6 +2,7 @@
@@ -19,7 +19,7 @@ index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..1d4f60bf1d9c7be98fc2d15038319ab6
    // shortIntegerSignBit stay consistent with the word size.
    if(shortIntegerWordSize == 64) {
      shortIntegerMask    = -1;
-@@ -1950,6 +1951,29 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+@@ -1950,6 +1951,30 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
  
      fnClearFlag(FLAG_USER);
      fnRefreshState();
@@ -27,6 +27,7 @@ index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..1d4f60bf1d9c7be98fc2d15038319ab6
 +    /* Reset hook: reinitialize Forth dictionary.
 +     * (DESIGN.md §6 — clears stale base/here/latest after RAM clear.) */
 +    forthDictInit();
++    forthGDictInit();
 +
 +      #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
 +       {

@@ -407,7 +407,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       uint16_t widx;
       if (forthFindColon(buf, &widx)) {
         if (state == STATE_COMPILE) {
-          if (!forthDictEmit((ftoken_t)(FTOK_CALL_BASE + widx))) {
+          if (!forthDictEmit(forthTokenFromRef(widx))) {
             abortDefinition();
             lineOK = false;
           }

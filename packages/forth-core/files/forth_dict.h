@@ -46,6 +46,21 @@ typedef struct {
 } forthDict_t;
 
 extern forthDict_t fdict;
+extern forthDict_t gdict;
+
+/* ---- §3.3.3 Word refs and token space ---- */
+
+#define FORTH_GCALL_BASE  0x7000u
+#define FORTH_REF_GLOBAL  0x8000u
+
+static inline ftoken_t forthTokenFromRef(uint16_t ref) {
+  return (ref & FORTH_REF_GLOBAL) ? (ftoken_t)(FORTH_GCALL_BASE + (ref & 0x7FFFu))
+                                  : (ftoken_t)(0x1000u + ref);
+}
+static inline uint16_t forthRefFromToken(ftoken_t tok) {
+  return (tok >= FORTH_GCALL_BASE) ? (uint16_t)(FORTH_REF_GLOBAL | (tok - FORTH_GCALL_BASE))
+                                   : (uint16_t)(tok - 0x1000u);
+}
 
 /* ---- API prototypes ---- */
 
@@ -53,8 +68,8 @@ extern forthDict_t fdict;
 void forthDictInit(void);
 void forthDictClear(void);
 
-/* H5: sanity-check fdict after restoreCalc; resets to empty on corruption. */
-void forthDictValidateRestored(void);
+/* H5: sanity-check gdict after restoreCalc; resets to empty on corruption. */
+void forthGDictValidateRestored(void);
 
 /* Test-only: override initial block count to force early realloc (DESIGN.md §7) */
 #if defined(PC_BUILD)
@@ -63,6 +78,11 @@ void forthDictValidateRestored(void);
 
 /* Ensure at least `bytes` free; may realloc the region. Returns true on success. */
 bool forthDictEnsure(uint16_t bytes);
+
+/* gdict lifecycle & ensure */
+void forthGDictInit(void);
+void forthGDictClear(void);
+bool forthGDictEnsure(uint16_t bytes);
 
 /* Allocate a new entry: header (4 bytes) + nameLen bytes + padding to 4-byte boundary.
    Returns region-relative offset of the new header, or FORTH_NULL on failure. */
@@ -111,8 +131,11 @@ bool openDefinitionName(char *buf, int bufSize);
 uint16_t forthFindPrim(const char *name);
 
 /* Walk fdict.latest chain for name; skips FF_SMUDGE entries.
-   Returns true on hit, sets *idx to dictionary index. */
-bool forthFindColon(const char *name, uint16_t *idx);
+   Returns true on hit, sets *ref to word ref (bit 15 = global). */
+bool forthFindColon(const char *name, uint16_t *ref);
+
+/* Same as forthFindColon but also reports hdr->flags. */
+bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags);
 
 /* Forward (Forth-source) C47 item lookup: CAT_FNCT + PTP_NONE only (§4.1 step 4). */
 bool forthFindItem(const char *name, uint16_t *itemId);
@@ -156,8 +179,8 @@ bool forthInnerIsActive(void);
 void forthSetTestInnerDepth(uint8_t depth);
 #endif
 
-/* Index → name reverse lookup (for FCALL redirect, C6) */
-bool forthDictNameByIndex(uint16_t idx, char *buf, int bufSize);
+/* Ref → name reverse lookup (for FCALL redirect, C6) */
+bool forthDictNameByRef(uint16_t ref, char *buf, int bufSize);
 
 /* Outer interpreter (§3.3) */
 void forthOuterInterpret(const char *source);

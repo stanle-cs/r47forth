@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index a7a56a3e94203f6b85bcf1f837d17cd041078027..f497a7ab06019ca3a0c06b41ad49f6c1c7e2d6e5 100644
+index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b2177dd96 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,7 @@
@@ -261,7 +261,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..f497a7ab06019ca3a0c06b41ad49f6c1
  
 +   if(func == ITM_FCALL) {
 +     char fname[FORTH_NAME_MAX + 1];
-+     if(!tam.indirect && forthDictNameByIndex(tam.value, fname, sizeof(fname))) {
++      if(!tam.indirect && forthDictNameByRef(tam.value, fname, sizeof(fname))) {
 +       uint16_t nameLen = stringByteLength(fname);
 +       tmpString[0] = (ITM_FORTH >> 8) | 0x80;
 +       tmpString[1] =  ITM_FORTH       & 0xff;

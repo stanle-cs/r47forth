@@ -26,6 +26,7 @@
 
 static uint16_t rstack[FORTH_RSTACK_DEPTH];
 static uint8_t  rsp;
+static uint64_t rstackRegionBits;   /* bit i = region of rstack[i]'s ip (1 = gdict) */
 static uint8_t forthDepth = 0;   /* nested forthInner invocations */
 
 /* Active-frame predicate (§9.3, F1-1) */
@@ -125,25 +126,33 @@ static bool_t pollProgramInterrupt(void)
 }
 #endif
 
-/* ---- Dictionary body lookup: index → region-relative body offset ---- */
+/* ---- Region dispatch helpers (interpreter only) ---- */
 
-static uint16_t bodyOffsetOfIndex(uint16_t idx)
+static inline uint8_t *innerBase(bool g) { return g ? gdict.base : fdict.base; }
+static inline uint16_t innerHere(bool g) { return g ? gdict.here : fdict.here; }
+
+/* ---- Dictionary body lookup: ref → region-relative body offset ---- */
+
+static uint16_t bodyOffsetOfRef(uint16_t ref)
 {
-  uint16_t off = fdict.latest;
+  bool g = (ref & FORTH_REF_GLOBAL) != 0;
+  uint16_t idx = (uint16_t)(ref & 0x7FFFu);
+  forthDict_t *d = g ? &gdict : &fdict;
+  uint16_t off = d->latest;
   uint16_t n = 0;
 
-  if (idx >= fdict.count || !fdict.base) {
+  if (idx >= d->count || !d->base) {
     return FORTH_NULL;
   }
 
   while (off != FORTH_NULL) {
-    if (fdict.count - 1 - n == idx) {
-      forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+    if (d->count - 1 - n == idx) {
+      forthHeader_t *hdr = (forthHeader_t *)(d->base + off);
       uint16_t hdrSize = 6 + hdr->nameLen;
       uint16_t alignedHdr = (uint16_t)TO_BLOCKS(hdrSize) * BYTES_PER_BLOCK;
       return off + alignedHdr;
     }
-    forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+    forthHeader_t *hdr = (forthHeader_t *)(d->base + off);
     off = hdr->link;
     n++;
   }
@@ -153,39 +162,39 @@ static uint16_t bodyOffsetOfIndex(uint16_t idx)
 
 /* ---- Read a little-endian ftoken_t from dictionary ---- */
 
-static inline ftoken_t readToken(uint16_t ip)
+static inline ftoken_t readToken(bool g, uint16_t ip)
 {
-  uint8_t lo = fdict.base[ip];
-  uint8_t hi = fdict.base[ip + 1];
+  uint8_t *b = innerBase(g);
+  uint8_t lo = b[ip];
+  uint8_t hi = b[ip + 1];
   return (ftoken_t)((hi << 8) | lo);
 }
 
 /* R1-2: forthInner read the next token and every inline LIT/ILIT/branch/C47
- * operand directly from fdict.base with no proof the bytes lie below
- * fdict.here. A restored word whose logical end falls immediately after
- * FTOK_ILIT could read beyond the dictionary instead of raising
- * ERROR_INVALID_CORRUPTED_DATA. One guard, checked before every fixed-size
+ * operand directly from the active region base with no proof the bytes lie
+ * below the region's here. One guard, checked before every fixed-size
  * inline read; callers exit via INNER_LEAVE() on false so rsp/forthDepth
  * unwind (this function cannot call that macro itself — it is scoped to
  * forthInner's locals). */
-static inline bool boundedRead(uint16_t ip, uint16_t byteCount)
+static inline bool boundedRead(bool g, uint16_t ip, uint16_t byteCount)
 {
-  if ((uint32_t)ip + byteCount <= fdict.here) {
+  if ((uint32_t)ip + byteCount <= innerHere(g)) {
     return true;
   }
   lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
   displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
-                           ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                            ERR_REGISTER_LINE, NIM_REGISTER_LINE);
   return false;
 }
 
 /* ======================================================================
- *  §3.2 Inner interpreter: fetch-decode-dispatch
+ *  §3.2 Inner interpreter: fetch-decode-dispatch (cross-region)
  * ====================================================================== */
 
-void forthInner(uint16_t entryIndex, bool fromProgram)
+void forthInner(uint16_t wordRef, bool fromProgram)
 {
   uint32_t dispatches = 0;
+  bool curG = (wordRef & FORTH_REF_GLOBAL) != 0;
 
   /* Re-entrancy (§3.2, D-3): bounded nesting; rstack shared via watermark */
   if (forthDepth >= FORTH_NEST_MAX) {
@@ -199,7 +208,7 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
   #define INNER_LEAVE() do { rsp = rspBase; forthDepth--; return; } while (0)
 
   /* Resolve body start */
-  uint16_t ip = bodyOffsetOfIndex(entryIndex);
+  uint16_t ip = bodyOffsetOfRef(wordRef);
   if (ip == FORTH_NULL) {
     lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
         displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
@@ -229,10 +238,10 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
     }
 
     /* ---- FETCH ---- */
-    if (!boundedRead(ip, 2)) {
+    if (!boundedRead(curG, ip, 2)) {
       INNER_LEAVE();
     }
-    ftoken_t tok = readToken(ip);
+    ftoken_t tok = readToken(curG, ip);
     ip += 2;
 
     /* ---- DECODE / DISPATCH ---- */
@@ -244,7 +253,9 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         forthDepth--;
         return;
       }
-      ip = rstack[--rsp];
+      --rsp;
+      ip = rstack[rsp];
+      curG = (rstackRegionBits >> rsp) & 1;
       continue;
     }
 
@@ -257,26 +268,31 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
                                  ERR_REGISTER_LINE, NIM_REGISTER_LINE);
          INNER_LEAVE();
        }
-        forthPrims[primIdx].fn();
+       forthPrims[primIdx].fn();
        clearSystemFlag(FLAG_ASLIFT);
-        if (lastErrorCode != ERROR_NONE) {
-          INNER_LEAVE();
-        }
-        continue;
+       if (lastErrorCode != ERROR_NONE) {
+         INNER_LEAVE();
+       }
+       continue;
     }
 
     if (tok <= 0x7EFF) {
-      /* FTOK_CALL: colon def index = tok - 0x1000 */
+      /* FTOK_CALL: ref = forthRefFromToken(tok) */
       if (rsp >= FORTH_RSTACK_DEPTH) {
         lastErrorCode = ERROR_RAM_FULL;
         displayCalcErrorMessage(ERROR_RAM_FULL,
                                  ERR_REGISTER_LINE, NIM_REGISTER_LINE);
          INNER_LEAVE();
        }
-       rstack[rsp++] = ip;
-       ip = bodyOffsetOfIndex((uint16_t)(tok - FTOK_CALL_BASE));
-        if (ip == FORTH_NULL) {
-          lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+        uint16_t calleeRef = forthRefFromToken(tok);
+       rstack[rsp] = ip;
+       if (curG) rstackRegionBits |= (1ull << rsp);
+       else rstackRegionBits &= ~(1ull << rsp);
+       rsp++;
+       curG = (calleeRef & FORTH_REF_GLOBAL) != 0;
+       ip = bodyOffsetOfRef(calleeRef);
+       if (ip == FORTH_NULL) {
+         lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
          displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
                                    ERR_REGISTER_LINE, NIM_REGISTER_LINE);
            INNER_LEAVE();
@@ -287,11 +303,11 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
     switch (tok) {
       case FTOK_LIT: {
         /* Push 16-byte real34 literal (§2.2) */
-        if (!boundedRead(ip, (uint16_t)sizeof(real34_t))) {
+        if (!boundedRead(curG, ip, (uint16_t)sizeof(real34_t))) {
           INNER_LEAVE();
         }
         real34_t litVal;
-        memcpy(&litVal, fdict.base + ip, sizeof(real34_t));
+        memcpy(&litVal, innerBase(curG) + ip, sizeof(real34_t));
         ip += (uint16_t)sizeof(real34_t);
         forthPushReal34(&litVal);
         if (lastErrorCode != ERROR_NONE) {
@@ -303,11 +319,11 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         case FTOK_ILIT: {
           /* Push 4-byte int32 as dtLongInteger (§2.2, §3.3.5)
            * memcpy avoids sign-extension bug on byte 0 (fix #1). */
-          if (!boundedRead(ip, 4)) {
+          if (!boundedRead(curG, ip, 4)) {
             INNER_LEAVE();
           }
           int32_t v;
-          memcpy(&v, fdict.base + ip, 4);
+          memcpy(&v, innerBase(curG) + ip, 4);
           ip += 4;
           forthPushInt32(v);
           if (lastErrorCode != ERROR_NONE) {
@@ -319,11 +335,11 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         case FTOK_BR: {
          /* Unconditional branch: signed int16 delta in cells (§2.2)
           * memcpy avoids sign-extension bug on byte 0 (fix #16a). */
-         if (!boundedRead(ip, 2)) {
+         if (!boundedRead(curG, ip, 2)) {
            INNER_LEAVE();
          }
          int16_t delta;
-         memcpy(&delta, fdict.base + ip, 2);
+         memcpy(&delta, innerBase(curG) + ip, 2);
          ip += 2;
           ip += (int32_t)delta * 2;
           break;
@@ -332,11 +348,11 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
         case FTOK_0BR: {
           /* Conditional branch: pop X, branch if zero/false (§2.2, §3.2)
            * memcpy avoids sign-extension bug on byte 0 (fix #16b). */
-          if (!boundedRead(ip, 2)) {
+          if (!boundedRead(curG, ip, 2)) {
             INNER_LEAVE();
           }
           int16_t delta;
-          memcpy(&delta, fdict.base + ip, 2);
+          memcpy(&delta, innerBase(curG) + ip, 2);
           ip += 2;
           if (popIsFalse()) {
             ip += (int32_t)delta * 2;
@@ -349,11 +365,12 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
 
        case FTOK_C47: {
         /* §2.2: decode itemId, param per PTP class, dispatch to C47 handler */
-        if (!boundedRead(ip, 2)) {
+        if (!boundedRead(curG, ip, 2)) {
           INNER_LEAVE();
         }
-        uint16_t itemId = (uint16_t)(fdict.base[ip] |
-                                     ((uint16_t)fdict.base[ip + 1] << 8));
+        uint8_t *b = innerBase(curG);
+        uint16_t itemId = (uint16_t)(b[ip] |
+                                     ((uint16_t)b[ip + 1] << 8));
         ip += 2;
 
         /* Bounds-check: itemId must be a valid indexOfItems entry */
@@ -375,18 +392,18 @@ void forthInner(uint16_t entryIndex, bool fromProgram)
             break;
           case PTP_NUMBER_8:
             /* 1-byte value padded to a 2-byte cell (§2.2 resolved issue 1) */
-            if (!boundedRead(ip, 2)) {
+            if (!boundedRead(curG, ip, 2)) {
               INNER_LEAVE();
             }
-            param = (uint16_t)fdict.base[ip];
+            param = (uint16_t)b[ip];
             ip += 2;
             break;
           case PTP_NUMBER_16:
-            if (!boundedRead(ip, 2)) {
+            if (!boundedRead(curG, ip, 2)) {
               INNER_LEAVE();
             }
-            param = (uint16_t)(fdict.base[ip] |
-                               ((uint16_t)fdict.base[ip + 1] << 8));
+            param = (uint16_t)(b[ip] |
+                               ((uint16_t)b[ip + 1] << 8));
             ip += 2;
             break;
           default:

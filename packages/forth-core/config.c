@@ -1955,6 +1955,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     /* Reset hook: reinitialize Forth dictionary.
      * (DESIGN.md §6 — clears stale base/here/latest after RAM clear.) */
     forthDictInit();
+    forthGDictInit();
 
       #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
        {
