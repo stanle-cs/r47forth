@@ -2504,8 +2504,8 @@ void linkToRealMatrixRegister(calcRegister_t regist, real34Matrix_t *linkedMatri
   linkedMatrix->header.matrixRows    = REGISTER_MATRIX_HEADER(regist)->matrixRows;
   linkedMatrix->header.matrixColumns = REGISTER_MATRIX_HEADER(regist)->matrixColumns;
   linkedMatrix->header.mtag          = amNone;   // default; without it, a non-vector or non-X-T link leaves mtag uninitialised and displayVectorAngle reads it
-  if((REGISTER_X <= regist && regist <= REGISTER_T) && isMatrixVector(linkedMatrix->header.matrixRows, linkedMatrix->header.matrixColumns)) {
-    linkedMatrix->header.mtag        = globalRegister[regist].tag;  // Get directly from register; this is only used for display of X-T registers, so it is hard coded to globalregisters
+  if(isMatrixVector(linkedMatrix->header.matrixRows, linkedMatrix->header.matrixColumns)) {
+    linkedMatrix->header.mtag        = getRegisterTag(regist);   // any register class: SHOW and VIEW link registers outside X-T
   }
   linkedMatrix->matrixElements       = REGISTER_REAL34_MATRIX_ELEMENTS(regist);
 }
