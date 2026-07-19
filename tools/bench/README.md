@@ -44,11 +44,35 @@ fixed inside the programs and must never change without re-calibrating.
 each benchmark and copies its result to R80..R87. It stops early if any
 benchmark program is missing, so load *all* the files first.
 
-Harness register convention: R99 counter, R98 start ticks, R97 elapsed
-ticks, R96 loop canary, R80–R87 driver results, R10–R14 operands. The
-suite also allocates named variables (VV plus ten decoys and FV's value)
-— run it on a state you don't mind touching, or save/restore state
-around it.
+## Running state, completion and failure indication
+
+A hardware run takes many minutes and **any keypress halts a running
+program**, so the suite reports its state on the display:
+
+- before each benchmark starts, the driver shows the benchmark's name
+  for one second;
+- while a benchmark runs, the display counts a chunk counter (`R95:`)
+  down from 10 to 1 — if that number keeps stepping down, it is running,
+  leave it alone;
+- the suite ends with a BEEP and the string `DONE` in X.
+
+Failure/interrupt forensics: the driver pre-fills R80..R87 with the
+sentinel `999999` and keeps the index of the benchmark it is running in
+R89 (1..8 in suite order, 9 = completed). After an interrupted or failed
+run, any register still holding `999999` names a benchmark that never
+finished, and R89 names the one that was interrupted. The chunk-boundary
+display refreshes are inside the timed bracket by design (~1% of a
+hardware run, identical program structure on every platform).
+
+Harness register convention: R99 inner counter, R98 start ticks, R97
+elapsed ticks, R96 loop canary, R95 chunk countdown, R89 driver progress
+index, R80–R87 driver results, R10–R14 operands. The suite also
+allocates named variables (VV plus ten decoys and FV's value) — run it
+on a state you don't mind touching, or save/restore state around it.
+
+Reloading changed benchmark programs: READP *appends*; with duplicate
+labels the first-loaded copy wins. Delete the old copies first (CLR menu
+→ DELETE → DELP, then pick each label) before loading updated files.
 
 Derived diagnostics worth knowing: `(BMVAR − BMREG) / (BMRSV − BMREG)`
 isolates the name-lookup cost ratio between the linear user-variable scan
@@ -60,8 +84,10 @@ measurements in upstream issue #555).
 1. Copy `res/PROGRAMS/bench/*.p47` and `res/PROGRAMS/NQueens.p47` to the
    calculator (USB disk mode).
 2. READP NQueens.p47, then every `BM*.p47`, then `BENCHALL.p47`.
-3. `XEQ BENCH` and wait (a few minutes; the display is mostly idle while
-   the loops run).
+3. `XEQ BENCH` and wait without touching the keyboard — expect roughly
+   ten minutes on USB power and double that on battery. The display
+   shows each benchmark's name as it starts and a countdown while it
+   runs; the suite BEEPs and shows `DONE` when finished.
 4. Read R80..R87 — elapsed ticks (0.1 s) for BMGTO, BMREG, BMVAR, BMRSV,
    BMARITH, BMTRIG, BMNQN, BMDISP in that order.
 5. On the PC, pair those readings with a fresh local run:

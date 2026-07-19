@@ -33,13 +33,13 @@ CSV_OUT = REPO / "bench-results.csv"
 BENCHMARKS = ["BMGTO", "BMREG", "BMVAR", "BMRSV", "BMARITH", "BMTRIG", "BMNQN", "BMDISP"]
 # Iterations fixed in tools/bench/genbench.py; kept here only to report it/s.
 ITERATIONS = {
-    "BMGTO": 200000,
-    "BMREG": 20000,
-    "BMVAR": 20000,
-    "BMRSV": 20000,
-    "BMARITH": 20000,
-    "BMTRIG": 4000,
-    "BMNQN": 5,
+    "BMGTO": 20000,
+    "BMREG": 10000,
+    "BMVAR": 5000,
+    "BMRSV": 10000,
+    "BMARITH": 3000,
+    "BMTRIG": 500,
+    "BMNQN": 2,
     "BMDISP": 2000,
 }
 # The simulator's display path (GTK) does not model the hardware's DMA LCD
