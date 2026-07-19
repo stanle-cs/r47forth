@@ -19,6 +19,8 @@
 #define FF_IMMEDIATE    0x01        /* execute even in compile state */
 #define FF_SMUDGE       0x02        /* hidden: definition in progress / incomplete */
 #define FF_RESERVED     0xFC        /* must be 0 */
+#define FORTH_OWNER_INTERACTIVE 0xFFFFu
+#define FORTH_OWNER_GLOBAL      0xFFFEu
 #ifndef FTOK_EXIT
   #define FTOK_EXIT     0x0000u     /* end of colon definition body */
 #endif
@@ -27,7 +29,8 @@ typedef struct {                    /* stored in ram[], NEVER dereferenced as-is
   uint16_t link;                    /* region-relative offset of previous header, or FORTH_NULL */
   uint8_t  flags;                   /* FF_* bits */
   uint8_t  nameLen;                 /* 1..31, byte length of name */
-} forthHeader_t;                    /* fixed prefix = 4 bytes */
+  uint16_t owner;                   /* owner tag: FORTH_OWNER_* */
+} forthHeader_t;                    /* fixed prefix = 6 bytes */
 
 /* Token type for threaded code (§2.2) */
 typedef uint16_t ftoken_t;

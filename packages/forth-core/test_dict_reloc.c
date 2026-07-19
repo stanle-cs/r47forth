@@ -1396,9 +1396,9 @@ static int test_outer_item_lookup(void)
     printf("    FAIL: \": ISIN SIN ;\" compile error %d\n", lastErrorCode);
     fail = 1;
   } else {
-    /* ISIN is the latest word; body follows header(4) + name(4) = offset 8 */
+    /* ISIN is the latest word; body follows header(6) + name(4) = ceil4(10) = 12 */
     uint16_t hdr = fdict.latest;
-    uint8_t *body = fdict.base + hdr + 8;
+    uint8_t *body = fdict.base + hdr + 12;
     if (body[0] != 0x04 || body[1] != 0x7F) {
       printf("    FAIL: body[0..1] = 0x%02X%02X (expected 0x047F = T_C47)\n",
              body[1], body[0]);
@@ -4199,7 +4199,7 @@ static int test_recurse_compile_only(void)
     fail = 1;
   }
   else {
-    uint16_t bodyOff = fdict.latest + (uint16_t)TO_BLOCKS(4 + 5) * BYTES_PER_BLOCK;
+    uint16_t bodyOff = fdict.latest + (uint16_t)TO_BLOCKS(6 + 5) * BYTES_PER_BLOCK;
     ftoken_t toks[2];
     memcpy(toks, fdict.base + bodyOff, sizeof(toks));
     if (toks[0] != (ftoken_t)(0x1000 + idx)) {
@@ -4439,10 +4439,10 @@ static int test_validate_restored_bodies(void)
     } else {
       uint8_t *preBase = fdict.base;
       uint16_t preBlocks = fdict.sizeBlocks;
-      /* Body is at latest+8 (3-glyph name: "VB1" rounds to 4 blocks = 8).
-       * Body: ILIT(2) + int32(4) + EXIT(2) = 8 bytes. EXIT at offset latest+8+6. */
-      ftoken_t badTok = (ftoken_t)0x0001;  /* DUP */
-      memcpy(fdict.base + fdict.latest + 8 + 6, &badTok, 2);
+      /* Body is at latest+12 (3-glyph name: 6+3=9 rounds to 12).
+        * Body: ILIT(2) + int32(4) + EXIT(2) = 8 bytes. EXIT at offset latest+12+6. */
+       ftoken_t badTok = (ftoken_t)0x0001;  /* DUP */
+       memcpy(fdict.base + fdict.latest + 12 + 6, &badTok, 2);
       forthDictValidateRestored();
       if (fdict.base != NULL) {
         printf("    FAIL V-B1: missing EXIT survived\n"); fail = 1;
@@ -4467,10 +4467,10 @@ static int test_validate_restored_bodies(void)
       else {
         uint8_t *preBase = fdict.base;
         uint16_t preBlocks = fdict.sizeBlocks;
-        /* VB2 is latest, name "VB2" is 3, header rounds to 8. Body at latest+8.
+        /* VB2 is latest, name "VB2" is 3, 6+3=9 rounds to 12. Body at latest+12.
          * First token is call 0x1000 (VA2 at index 0). Patch to 0x1005. */
         ftoken_t badTok = (ftoken_t)0x1005;
-        memcpy(fdict.base + fdict.latest + 8, &badTok, 2);
+        memcpy(fdict.base + fdict.latest + 12, &badTok, 2);
         forthDictValidateRestored();
         if (fdict.base != NULL) {
           printf("    FAIL V-B2: bad call index survived\n"); fail = 1;
@@ -4563,9 +4563,9 @@ static int test_validate_restored_bodies(void)
     } else {
       uint8_t *preBase = fdict.base;
       uint16_t preBlocks = fdict.sizeBlocks;
-      /* Name "VB6" is 3 glyphs. Header: 4 + 3 = 7, rounds to 8.
-       * Padding byte at latest + 7 (between name end and aligned header end). */
-      fdict.base[fdict.latest + 7] = 0xAA;
+      /* Name "VB6" is 3 glyphs. Header: 6 + 3 = 9, rounds to 12.
+        * Padding bytes at latest + 9 .. latest + 11. */
+      fdict.base[fdict.latest + 9] = 0xAA;
       forthDictValidateRestored();
       if (fdict.base != NULL) {
         printf("    FAIL V-B6: nonzero padding survived\n"); fail = 1;
@@ -4578,11 +4578,69 @@ static int test_validate_restored_bodies(void)
     forthDictClear();
   }
 
-  /* ---- V-B7: C47 item out of range ---- */
+  /* ---- V-B7: foreign owner detected ---- */
+  {
+    forthDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": VB7 1 ;");
+    if (lastErrorCode != ERROR_NONE || !fdict.base) {
+      printf("    FAIL V-B7: setup failed\n");
+      fail = 1;
+    } else {
+      uint8_t *preBase = fdict.base;
+      uint16_t preBlocks = fdict.sizeBlocks;
+      ((forthHeader_t *)(fdict.base + fdict.latest))->owner = 0x1234;
+      forthDictValidateRestored();
+      if (fdict.base != NULL) {
+        printf("    FAIL V-B7: foreign owner survived\n"); fail = 1;
+        forthDictClear();
+      } else {
+        freeC47Blocks(preBase, preBlocks);
+        if (!fail) printf("    PASS V-B7: foreign owner detected\n");
+      }
+    }
+    forthDictClear();
+  }
+
+  /* ---- V-B8: allocate zeroed header padding over poisoned byte ---- */
+  {
+    forthDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": AAAA 1 ;");
+    if (lastErrorCode != ERROR_NONE || !fdict.base) {
+      printf("    FAIL V-B8: setup failed\n");
+      fail = 1;
+    } else {
+      /* Name "AAAA" is 4 glyphs. Next entry: 6+4=10, rounds to 12.
+       * Pads at fdict.here+10 .. fdict.here+11. */
+      if (fdict.here + 12 > fdict.sizeBlocks * BYTES_PER_BLOCK) {
+        printf("    FAIL V-B8: CONFIG poke target outside region\n");
+        fail = 1;
+        forthDictClear();
+      } else {
+        fdict.base[fdict.here + 9] = 0xAA;
+        forthOuterInterpret(": BBB 2 ;");
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    FAIL V-B8: BBB compile failed\n"); fail = 1;
+          forthDictClear();
+        } else if (!(fdict.base[fdict.latest + 9] == 0 &&
+                     fdict.base[fdict.latest + 10] == 0 &&
+                     fdict.base[fdict.latest + 11] == 0)) {
+          printf("    FAIL V-B8: padding not zeroed over poisoned byte\n"); fail = 1;
+          forthDictClear();
+        } else {
+          if (!fail) printf("    PASS V-B8: allocate zeroed header padding over poisoned byte\n");
+          forthDictClear();
+        }
+      }
+    }
+  }
+
+  /* ---- V-B9: C47 item out of range ---- */
   {
     forthDictClear();
     uint16_t w = begin_word("ITM7", 4);
-    if (w == FORTH_NULL) { printf("    FAIL V-B7: alloc\n"); return 1; }
+    if (w == FORTH_NULL) { printf("    FAIL V-B9: alloc\n"); return 1; }
     forthDictEmit(T_C47);
     { ftoken_t badId = (ftoken_t)0xFFFF; forthDictEmit(badId); }
     end_word(w);
@@ -4590,11 +4648,11 @@ static int test_validate_restored_bodies(void)
     uint16_t preBlocks = fdict.sizeBlocks;
     forthDictValidateRestored();
     if (fdict.base != NULL) {
-      printf("    FAIL V-B7: out-of-range C47 item survived\n"); fail = 1;
+      printf("    FAIL V-B9: out-of-range C47 item survived\n"); fail = 1;
       forthDictClear();
     } else {
       freeC47Blocks(preBase, preBlocks);
-      if (!fail) printf("    PASS V-B7: C47 item out of range detected\n");
+      if (!fail) printf("    PASS V-B9: C47 item out of range detected\n");
     }
     forthDictClear();
   }
@@ -9993,7 +10051,7 @@ static int test_restore_validation_clamps(void)
  * V3 (R4-3) must fail if the off+4+nameLen<=here extent check is removed: the
  * validator proved off+4<=here (the HEADER fits) and 1<=nameLen<=31, but never
  * proved the NAME that follows the header also fits inside here. Probed: a
- * valid ": VX 1 ;" entry with here force-set to latest+4 (header fits, name
+ * valid ": VX 1 ;" entry with here force-set to latest+6 (header fits, name
  * does not) survived validation before this fix. */
 static int test_validate_direct_corruption(void)
 {
@@ -10052,7 +10110,7 @@ static int test_validate_direct_corruption(void)
     }
     uint8_t *savedBase = fdict.base;
     uint16_t savedBlocks = fdict.sizeBlocks;
-    fdict.here = fdict.latest + 4;   /* header fits; nameLen bytes now run past here */
+    fdict.here = fdict.latest + 6;   /* header fits; nameLen bytes now run past here */
     forthDictValidateRestored();
     if (fdict.base != NULL) {
       printf("    FAIL: V3 header name extending past here survived validation\n");

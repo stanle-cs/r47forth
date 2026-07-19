@@ -139,7 +139,7 @@ static uint16_t bodyOffsetOfIndex(uint16_t idx)
   while (off != FORTH_NULL) {
     if (fdict.count - 1 - n == idx) {
       forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
-      uint16_t hdrSize = 4 + hdr->nameLen;
+      uint16_t hdrSize = 6 + hdr->nameLen;
       uint16_t alignedHdr = (uint16_t)TO_BLOCKS(hdrSize) * BYTES_PER_BLOCK;
       return off + alignedHdr;
     }

@@ -173,23 +173,24 @@ void forthDictValidateRestored(void)
     uint16_t n = 0;
     uint16_t succOff = fdict.here;
      while (off != FORTH_NULL) {
-       if ((uint32_t)off + 4 > fdict.here) { ok = false; break; }
+        if ((uint32_t)off + 6 > fdict.here) { ok = false; break; }
         forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
        if (hdr->nameLen == 0 || hdr->nameLen > FORTH_NAME_MAX) { ok = false; break; }
        /* R4-3: off+4<=here (checked above) proves the HEADER fits, not the
         * name that follows it. Probed: a valid ": VX 1 ;" entry with here
         * force-set to latest+4 survived validation — the header fit, but its
         * name read past the logical dictionary end. */
-       if ((uint32_t)off + 4u + hdr->nameLen > fdict.here) { ok = false; break; }
+        if ((uint32_t)off + 6u + hdr->nameLen > fdict.here) { ok = false; break; }
        if (hdr->link != FORTH_NULL && hdr->link >= off) { ok = false; break; }
       /* F1-5: full threaded-code validation; bytes past EXIT (block padding, scan records) are inert and unchecked. */
       {
-        uint16_t hdrSize = 4 + hdr->nameLen;
+        uint16_t hdrSize = 6 + hdr->nameLen;
         uint16_t alignedHdr = (uint16_t)TO_BLOCKS(hdrSize) * BYTES_PER_BLOCK;
         uint16_t bodyStart = off + alignedHdr;
         uint16_t i;
         if (hdr->flags != 0) { ok = false; break; }
-        for (i = off + 4 + hdr->nameLen; i < bodyStart; i++) {
+        if (hdr->owner != FORTH_OWNER_INTERACTIVE) { ok = false; break; }
+        for (i = off + 6 + hdr->nameLen; i < bodyStart; i++) {
           if (fdict.base[i] != 0) { ok = false; break; }
         }
         if (!ok) break;
@@ -286,7 +287,7 @@ uint16_t forthDictAllocate(uint8_t nameLen, uint16_t bodyBytes)
    * calls this with bodyBytes==0, so the wrap is unreachable in practice —
    * but the helper's own contract is checked here, not left as a false
    * promise for the first caller that uses bodyBytes for real. */
-  uint32_t hdrSize = 4u + nameLen;
+  uint32_t hdrSize = 6u + nameLen;
   uint32_t alignedHdr = (uint32_t)TO_BLOCKS(hdrSize) * BYTES_PER_BLOCK;
   uint32_t total = alignedHdr + bodyBytes;
 
@@ -308,6 +309,13 @@ uint16_t forthDictAllocate(uint8_t nameLen, uint16_t bodyBytes)
     hdr->link = fdict.latest;
     hdr->flags = FF_SMUDGE;
     hdr->nameLen = nameLen;
+    hdr->owner = FORTH_OWNER_INTERACTIVE;
+    {
+      uint32_t padFrom = (uint32_t)off + 6u + nameLen;
+      for (uint32_t i = padFrom; i < (uint32_t)off + alignedHdr; i++) {
+        fdict.base[i] = 0;
+      }
+    }
   }
   fdict.latest = off;
   fdict.count++;
@@ -326,7 +334,7 @@ void forthDictWriteName(uint16_t hdrOff, const char *name, uint8_t nameLen)
     copyLen = hdr->nameLen;
   }
   if (copyLen > 0) {
-    memcpy(fdict.base + hdrOff + 4, name, (size_t)copyLen);
+    memcpy(fdict.base + hdrOff + 6, name, (size_t)copyLen);
   }
 }
 
@@ -358,7 +366,7 @@ bool forthFindColon(const char *name, uint16_t *idx)
     if (!(hdr->flags & FF_SMUDGE)) {
       if (hdr->nameLen > 0 &&
           queryLen == hdr->nameLen &&
-          memcmp(fdict.base + off + 4, name, (size_t)hdr->nameLen) == 0) {
+          memcmp(fdict.base + off + 6, name, (size_t)hdr->nameLen) == 0) {
         *idx = fdict.count - 1 - n;
         return true;
       }
@@ -461,15 +469,6 @@ bool startDefinition(const char *name)
     return false;
   }
   forthDictWriteName(off, name, (uint8_t)nameLen);
-  {
-    uint16_t hdrSize = 4 + (uint16_t)nameLen;
-    uint16_t alignedHdr = (uint16_t)TO_BLOCKS(hdrSize) * BYTES_PER_BLOCK;
-    uint16_t bodyOff = off + alignedHdr;
-    uint16_t i;
-    for (i = off + 4 + (uint16_t)nameLen; i < bodyOff; i++) {
-      fdict.base[i] = 0;
-    }
-  }
   openDef.entryOff = off;
   openDef.open = true;
   return true;
@@ -515,7 +514,7 @@ bool openDefinitionName(char *buf, int bufSize)
   forthHeader_t *hdr = (forthHeader_t *)(fdict.base + openDef.entryOff);
   uint8_t len = hdr->nameLen;
   if (len >= (uint8_t)bufSize) len = (uint8_t)(bufSize - 1);
-  memcpy(buf, fdict.base + openDef.entryOff + 4, (size_t)len);
+  memcpy(buf, fdict.base + openDef.entryOff + 6, (size_t)len);
   buf[len] = '\0';
   return len > 0;
 }
@@ -537,7 +536,7 @@ bool forthDictNameByIndex(uint16_t idx, char *buf, int bufSize)
       if (hdr->flags & FF_SMUDGE) return false;
       uint8_t len = hdr->nameLen;
       if (len >= (uint8_t)bufSize) len = (uint8_t)(bufSize - 1);
-      memcpy(buf, fdict.base + off + 4, (size_t)len);
+      memcpy(buf, fdict.base + off + 6, (size_t)len);
       buf[len] = '\0';
       return true;
     }
