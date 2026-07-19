@@ -980,6 +980,12 @@ stopProgram:
   if(programRunStop != PGM_RUNNING) {
     entryStatus &= 0xfe;
   }
+  if(!nestedEngine) {
+    // Force a full statusbar repaint on every halt path and clear the one-time skip bit so the bar is current despite the cadence throttling in reallyRunFunction().
+    // A program-set manual statusbar mode is left as is.
+    forceSBupdate();
+    screenUpdatingMode &= ~SCRUPD_SKIP_STATUSBAR_ONE_TIME;
+  }
   if(!getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING) && !graphAccActive) {
     showHideHourGlass();
     if(temporaryInformation == TI_VIEW_REGISTER) {
