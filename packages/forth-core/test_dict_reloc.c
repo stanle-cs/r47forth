@@ -50,6 +50,7 @@ typedef enum {
   TP_STEP_SRC,
   TP_STEP_XEQ_NAME,
   TP_STEP_OP1,
+  TP_STEP_PARAM,
   TP_STEP_RAW
 } tpStepKind_t;
 
@@ -73,6 +74,7 @@ static int tpRtn(testProg_t *);
 static bool tpWrite(const testProg_t *);
 static uint8_t *tpStepAddr(const testProg_t *, int);
 static bool tpSelectStep(const testProg_t *, int);
+static int tpStepParam(testProg_t *, uint16_t func, const uint8_t *param, uint16_t nParam);
 
 /* ---- Primitive indices (mirror forth_prims.c) ---- */
 
@@ -7758,6 +7760,26 @@ static int tpOp1(testProg_t *p, uint8_t opByte)            /* one-byte opcode; n
   return tpAppend(p, &opByte, 1, TP_STEP_OP1);
 }
 
+/* Native parameterized step: opcode bytes (1 or 2 per the func<128 rule)
+ * followed by the given parameter bytes verbatim. */
+static int tpStepParam(testProg_t *p, uint16_t func,
+                       const uint8_t *param, uint16_t nParam)
+{
+  uint8_t s[2 + 40];
+  uint16_t n = 0;
+  if (param == NULL || nParam == 0 || nParam > 40) {
+    return tpReject(p, "tpStepParam param");
+  }
+  if (func < 128) {
+    s[n++] = (uint8_t)func;
+  } else {
+    s[n++] = (uint8_t)((func >> 8) | 0x80);
+    s[n++] = (uint8_t)(func & 0xff);
+  }
+  memcpy(s + n, param, nParam);
+  return tpAppend(p, s, (uint16_t)(n + nParam), TP_STEP_PARAM);
+}
+
 static int tpEnd(testProg_t *p)                            /* ITM_END separator */
 {
   uint8_t s[2];
@@ -10712,6 +10734,8 @@ static int test_param_textual_numeric(void);
 static int test_param_register_flag(void);
 /* F4-3: named, system-flag, and indirect parameter forms */
 static int test_param_named_indirect(void);
+/* F4-4: Series C error table and native/Forth parity acceptance */
+static int test_param_series_c_acceptance(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -12534,6 +12558,15 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_param_named_indirect...\n");
   fail |= test_param_named_indirect();
+  forthDictClear();
+  forthGDictClear();
+
+  /* F4-4: Series C error table and native/Forth parity acceptance */
+  printf("\nFORTH F4-4 TESTS (Series C error table and native/Forth parity)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_param_series_c_acceptance...\n");
+  fail |= test_param_series_c_acceptance();
   forthDictClear();
   forthGDictClear();
 
@@ -16049,6 +16082,787 @@ static int test_param_named_indirect(void)
       allNamedVariables = reallocC47Blocks(allNamedVariables,
                             TO_BLOCKS(sizeof(namedVariableHeader_t) * numberOfNamedVariables),
                             TO_BLOCKS(sizeof(namedVariableHeader_t) * savedNamedVars));
+    }
+    numberOfNamedVariables = savedNamedVars;
+  }
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* test_param_series_c_acceptance
+ * F4-4: Series C error table and native/Forth parity acceptance sweep.
+ * Closes stage F4. */
+static int test_param_series_c_acceptance(void)
+{
+  int fail = 0;
+  char sbuf[96];
+  uint16_t savedNamedVars = numberOfNamedVariables;
+  uint16_t namedVarsAfterCreate = savedNamedVars; /* updated after 'VS' creation in subcase 3 */
+
+  /* seedSweepState — push T=11, Z=22, Y=33, X=44 (each push lifts). */
+  /* The seed-assert checks all four registers plus CONFIG state. */
+  /* Helper inline: called before each half of a parity pair. */
+
+  /* Subcase 1: REGISTER parity, numbered + letter */
+  { int subFail = 0;
+    uint8_t rclType; int32_t rclVal;
+
+    /* Pair A: STO 05 / RCL 05 */
+    { /* Native half */
+      lastErrorCode = ERROR_NONE;
+      testProg_t tp; tpInit(&tp);
+      int sSto = tpStepParam(&tp, ITM_STO, (uint8_t[]){5}, 1);
+      if (sSto < 0 || !tpWrite(&tp)) {
+        printf("    [1] FAIL: fixture STO 05\n"); subFail = 1;
+      }
+      if (!subFail) {
+        forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(44);
+        lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+         { uint8_t tType; int32_t tVal;
+           read_reg_int32(REGISTER_X, &tType, &tVal);
+           if (tType != dtLongInteger || tVal != 44 || dynamicMenuItem != -1) {
+            printf("    [1] FAIL: seed-assert X=%d type=%d dyn=%d\n", tVal, tType, dynamicMenuItem);
+            subFail = 1;
+          }
+        }
+        if (!subFail) {
+          uint8_t *step = tpStepAddr(&tp, sSto);
+          if (step) { tpSelectStep(&tp, sSto); programRunStop = PGM_RUNNING; executeOneStep(step); }
+          if (lastErrorCode != ERROR_NONE) {
+            printf("    [1] FAIL: native STO 05 error %d\n", lastErrorCode); subFail = 1;
+          }
+        }
+      }
+      /* Native RCL 05 */
+      if (!subFail) {
+        lastErrorCode = ERROR_NONE;
+        testProg_t tp2; tpInit(&tp2);
+        int sRcl = tpStepParam(&tp2, ITM_RCL, (uint8_t[]){5}, 1);
+        if (sRcl < 0 || !tpWrite(&tp2)) { subFail = 1; }
+        if (!subFail) {
+          forthPushInt32(0);
+          lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+          uint8_t *step = tpStepAddr(&tp2, sRcl);
+          if (step) { tpSelectStep(&tp2, sRcl); programRunStop = PGM_RUNNING; executeOneStep(step); }
+          if (lastErrorCode != ERROR_NONE) { subFail = 1; }
+        }
+        if (!subFail) {
+          read_reg_int32(REGISTER_X, &rclType, &rclVal);
+        }
+      }
+      int32_t nativeRecall = rclVal;
+
+      /* Forth half */
+      if (!subFail) {
+        lastErrorCode = ERROR_NONE;
+        forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(44);
+        lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+        forthOuterInterpret("STO 05");
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [1] FAIL: Forth STO 05 error %d\n", lastErrorCode); subFail = 1;
+        }
+      }
+      /* Forth RCL 05 (native step to read back) */
+      if (!subFail) {
+        lastErrorCode = ERROR_NONE;
+        testProg_t tp3; tpInit(&tp3);
+        int sRcl = tpStepParam(&tp3, ITM_RCL, (uint8_t[]){5}, 1);
+        if (sRcl < 0 || !tpWrite(&tp3)) { subFail = 1; }
+        if (!subFail) {
+          forthPushInt32(0);
+          lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+          uint8_t *step = tpStepAddr(&tp3, sRcl);
+          if (step) { tpSelectStep(&tp3, sRcl); programRunStop = PGM_RUNNING; executeOneStep(step); }
+          if (lastErrorCode != ERROR_NONE) { subFail = 1; }
+        }
+        if (!subFail) {
+          read_reg_int32(REGISTER_X, &rclType, &rclVal);
+        }
+      }
+      int32_t forthRecall = rclVal;
+
+      if (!subFail) {
+        if (nativeRecall != forthRecall) {
+          printf("    [1] FAIL: register parity 05 (native=%d forth=%d)\n", nativeRecall, forthRecall);
+          subFail = 1;
+        }
+      }
+    }
+
+    /* Pair B: STO A / RCL A */
+    if (!subFail) {
+      uint8_t rclTypeB; int32_t rclValB;
+
+      /* Native half */
+      { lastErrorCode = ERROR_NONE;
+        testProg_t tp; tpInit(&tp);
+        int sSto = tpStepParam(&tp, ITM_STO, (uint8_t[]){104}, 1);
+        if (sSto < 0 || !tpWrite(&tp)) { subFail = 1; }
+        if (!subFail) {
+          forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(44);
+          lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+          uint8_t *step = tpStepAddr(&tp, sSto);
+          if (step) { tpSelectStep(&tp, sSto); programRunStop = PGM_RUNNING; executeOneStep(step); }
+          if (lastErrorCode != ERROR_NONE) {
+            printf("    [1] FAIL: native STO A error %d\n", lastErrorCode); subFail = 1;
+          }
+        }
+      }
+      if (!subFail) {
+        lastErrorCode = ERROR_NONE;
+        testProg_t tp2; tpInit(&tp2);
+        int sRcl = tpStepParam(&tp2, ITM_RCL, (uint8_t[]){104}, 1);
+        if (sRcl < 0 || !tpWrite(&tp2)) { subFail = 1; }
+        if (!subFail) {
+          forthPushInt32(0);
+          lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+          uint8_t *step = tpStepAddr(&tp2, sRcl);
+          if (step) { tpSelectStep(&tp2, sRcl); programRunStop = PGM_RUNNING; executeOneStep(step); }
+          if (lastErrorCode != ERROR_NONE) { subFail = 1; }
+        }
+        if (!subFail) {
+          read_reg_int32(REGISTER_X, &rclTypeB, &rclValB);
+        }
+      }
+      int32_t nativeRecallB = rclValB;
+
+      /* Forth half */
+      if (!subFail) {
+        lastErrorCode = ERROR_NONE;
+        forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(44);
+        lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+        forthOuterInterpret("STO A");
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [1] FAIL: Forth STO A error %d\n", lastErrorCode); subFail = 1;
+        }
+      }
+      if (!subFail) {
+        lastErrorCode = ERROR_NONE;
+        testProg_t tp3; tpInit(&tp3);
+        int sRcl = tpStepParam(&tp3, ITM_RCL, (uint8_t[]){104}, 1);
+        if (sRcl < 0 || !tpWrite(&tp3)) { subFail = 1; }
+        if (!subFail) {
+          forthPushInt32(0);
+          lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+          uint8_t *step = tpStepAddr(&tp3, sRcl);
+          if (step) { tpSelectStep(&tp3, sRcl); programRunStop = PGM_RUNNING; executeOneStep(step); }
+          if (lastErrorCode != ERROR_NONE) { subFail = 1; }
+        }
+        if (!subFail) {
+          read_reg_int32(REGISTER_X, &rclTypeB, &rclValB);
+        }
+      }
+      int32_t forthRecallB = rclValB;
+
+      if (!subFail) {
+        if (nativeRecallB != forthRecallB) {
+          printf("    [1] FAIL: register parity A (native=%d forth=%d)\n", nativeRecallB, forthRecallB);
+          subFail = 1;
+        }
+      }
+    }
+
+    if (!subFail) {
+      printf("    [1] PASS: register parameter parity (05, A)\n");
+    } else {
+      fail |= 1;
+    }
+  }
+
+  /* Subcase 2: NUMBER_8 boundary parity + over-range divergence */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    uint16_t sdlMax = (uint16_t)(indexOfItems[ITM_SDL].tamMinMax & TAM_MAX_MASK);
+
+    /* Independent oracle: sdlMax must be accepted FIRST */
+    if (!paramCoreValidateDirect(ITM_SDL, PTP_NUMBER_8, sdlMax)) {
+      printf("    [2] CONFIG FAIL: sdlMax %u rejected by paramCoreValidateDirect\n", sdlMax);
+      subFail = 1;
+    }
+
+    int32_t nativeX = 0, forthX = 0;
+    int nativeErr = ERROR_NONE, forthErr = ERROR_NONE;
+
+    if (!subFail) {
+      /* Native half */
+      { lastErrorCode = ERROR_NONE;
+        testProg_t tp; tpInit(&tp);
+        uint8_t pval = (uint8_t)sdlMax;
+        int sSdl = tpStepParam(&tp, ITM_SDL, &pval, 1);
+        if (sSdl < 0 || !tpWrite(&tp)) {
+          printf("    [2] FAIL: fixture SDL\n"); subFail = 1;
+        }
+        if (!subFail) {
+          forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(44);
+          lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+          uint8_t *step = tpStepAddr(&tp, sSdl);
+          if (step) {
+            tpSelectStep(&tp, sSdl);
+            programRunStop = PGM_RUNNING;
+            executeOneStep(step);
+          }
+          nativeErr = lastErrorCode;
+          if (lastErrorCode == ERROR_NONE) {
+            uint8_t tType; int32_t tVal;
+            read_reg_int32(REGISTER_X, &tType, &tVal);
+            nativeX = tVal;
+          }
+        }
+      }
+    }
+
+    if (!subFail) {
+      /* Forth half */
+      lastErrorCode = ERROR_NONE;
+      sprintf(sbuf, "SDL %u", sdlMax);
+      forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(44);
+      lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+      forthOuterInterpret(sbuf);
+      forthErr = lastErrorCode;
+      if (lastErrorCode == ERROR_NONE) {
+        uint8_t tType; int32_t tVal;
+        read_reg_int32(REGISTER_X, &tType, &tVal);
+        forthX = tVal;
+      }
+    }
+
+    if (!subFail) {
+      if (nativeErr != forthErr || nativeX != forthX) {
+        printf("    [2] FAIL: boundary parity (native err=%d X=%d, forth err=%d X=%d)\n",
+               nativeErr, nativeX, forthErr, forthX);
+        subFail = 1;
+      }
+    }
+
+    if (!subFail) {
+      /* Over-max Forth: must raise ERROR_OUT_OF_RANGE */
+      lastErrorCode = ERROR_NONE;
+      sprintf(sbuf, "SDL %u", sdlMax + 1);
+      forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(44);
+      lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+      forthOuterInterpret(sbuf);
+      int forthOverErr = lastErrorCode;
+
+      /* Over-max native (corrupt-step): cannot be built by TAM, silence expected */
+      lastErrorCode = ERROR_NONE;
+      testProg_t tp; tpInit(&tp);
+      uint8_t pval = (uint8_t)(sdlMax + 1);
+      int sSdl = tpStepParam(&tp, ITM_SDL, &pval, 1);
+      if (sSdl < 0 || !tpWrite(&tp)) { subFail = 1; }
+      if (!subFail) {
+        forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(44);
+        lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+        uint8_t *step = tpStepAddr(&tp, sSdl);
+        if (step) {
+          int32_t preX = 44;
+          tpSelectStep(&tp, sSdl);
+          programRunStop = PGM_RUNNING;
+          executeOneStep(step);
+        }
+        int nativeOverErr = lastErrorCode;
+        int32_t nativeOverX = 0;
+        { uint8_t tType; int32_t tVal;
+          read_reg_int32(REGISTER_X, &tType, &tVal);
+          nativeOverX = tVal;
+        }
+        /* DIVERGENCE: Forth parse reject vs native silence */
+        if (forthOverErr != ERROR_OUT_OF_RANGE) {
+          printf("    [2] FAIL: Forth over-range expected ERROR_OUT_OF_RANGE got %d\n", forthOverErr);
+          subFail = 1;
+        }
+        /* Native silence: no error, X unchanged */
+        if (!subFail && nativeOverErr != ERROR_NONE) {
+          printf("    [2] FAIL: native over-range expected silence got error %d\n", nativeOverErr);
+          subFail = 1;
+        }
+        if (!subFail && nativeOverX != 44) {
+          printf("    [2] FAIL: native over-range X changed to %d (expected 44)\n", nativeOverX);
+          subFail = 1;
+        }
+      }
+    }
+
+    if (!subFail) {
+      printf("    [2] PASS: NUMBER_8 boundary agrees; over-range diverges as designed (parse reject vs native silence)\n");
+    } else {
+      fail |= 1;
+    }
+  }
+
+  /* Subcase 3: Named variable parity */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+
+    /* Native half: STO 'VS' with X=44 */
+    { lastErrorCode = ERROR_NONE;
+      forthDictClear();
+      testProg_t tp; tpInit(&tp);
+      uint8_t pval[4] = {253, 2, 'V', 'S'};
+      int sSto = tpStepParam(&tp, ITM_STO, pval, 4);
+      if (sSto < 0 || !tpWrite(&tp)) {
+        printf("    [3] FAIL: fixture STO 'VS'\n"); subFail = 1;
+      }
+      if (!subFail) {
+        forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(44);
+        lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+        uint8_t *step = tpStepAddr(&tp, sSto);
+        if (step) {
+          tpSelectStep(&tp, sSto);
+          programRunStop = PGM_RUNNING;
+          executeOneStep(step);
+        }
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [3] FAIL: native STO 'VS' error %d\n", lastErrorCode);
+          subFail = 1;
+        }
+        namedVarsAfterCreate = numberOfNamedVariables; /* snapshot after 'VS' created */
+      }
+    }
+
+    /* RCL 'VS' -> 44 */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      testProg_t tpRcl; tpInit(&tpRcl);
+      uint8_t pRcl[4] = {253, 2, 'V', 'S'};
+      int sRcl = tpStepParam(&tpRcl, ITM_RCL, pRcl, 4);
+      if (sRcl < 0 || !tpWrite(&tpRcl)) { subFail = 1; }
+      if (!subFail) {
+        forthPushInt32(0);
+        lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+        uint8_t *step = tpStepAddr(&tpRcl, sRcl);
+        if (step) { tpSelectStep(&tpRcl, sRcl); programRunStop = PGM_RUNNING; executeOneStep(step); }
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [3] FAIL: RCL 'VS' after native (err=%d)\n", lastErrorCode);
+          subFail = 1;
+        } else {
+          uint8_t tType; int32_t tVal;
+          read_reg_int32(REGISTER_X, &tType, &tVal);
+          if (tVal != 44) {
+            printf("    [3] FAIL: RCL 'VS' after native X=%d (expected 44)\n", tVal);
+            subFail = 1;
+          }
+        }
+      }
+    }
+
+    /* Forth half: STO 'VS' with X=99 */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(99);
+      lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+      forthOuterInterpret("STO 'VS'");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [3] FAIL: Forth STO 'VS' error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+
+    /* RCL 'VS' -> 99 */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      testProg_t tpRcl2; tpInit(&tpRcl2);
+      uint8_t pRcl2[4] = {253, 2, 'V', 'S'};
+      int sRcl2 = tpStepParam(&tpRcl2, ITM_RCL, pRcl2, 4);
+      if (sRcl2 < 0 || !tpWrite(&tpRcl2)) { subFail = 1; }
+      if (!subFail) {
+        forthPushInt32(0);
+        lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+        uint8_t *step = tpStepAddr(&tpRcl2, sRcl2);
+        if (step) { tpSelectStep(&tpRcl2, sRcl2); programRunStop = PGM_RUNNING; executeOneStep(step); }
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [3] FAIL: RCL 'VS' after Forth (err=%d)\n", lastErrorCode);
+          subFail = 1;
+        } else {
+          uint8_t tType; int32_t tVal;
+          read_reg_int32(REGISTER_X, &tType, &tVal);
+          if (tVal != 99) {
+            printf("    [3] FAIL: RCL 'VS' after Forth X=%d (expected 99)\n", tVal);
+            subFail = 1;
+          }
+        }
+      }
+    }
+
+    if (!subFail) {
+      printf("    [3] PASS: named variable parameter reaches one variable from both engines\n");
+    } else {
+      fail |= 1;
+    }
+  }
+
+  /* Subcase 4: Indirect parity */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    int nativeOk = 0, forthOk = 0;
+
+    /* Native half: STO ->05 with X=99, reg 05 := 7 */
+    { lastErrorCode = ERROR_NONE;
+      forthPushInt32(7);
+      forthOuterInterpret("STO 05");
+      if (lastErrorCode != ERROR_NONE) { subFail = 1; }
+      if (!subFail) {
+        testProg_t tp; tpInit(&tp);
+        uint8_t pval[2] = {254, 5};
+        int sSto = tpStepParam(&tp, ITM_STO, pval, 2);
+        if (sSto < 0 || !tpWrite(&tp)) { subFail = 1; }
+        if (!subFail) {
+          forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(99);
+          lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+          uint8_t *step = tpStepAddr(&tp, sSto);
+          if (step) {
+            tpSelectStep(&tp, sSto);
+            programRunStop = PGM_RUNNING;
+            executeOneStep(step);
+          }
+          if (lastErrorCode != ERROR_NONE) {
+            printf("    [4] FAIL: native STO ->05 error %d\n", lastErrorCode);
+            subFail = 1;
+          }
+        }
+      }
+    }
+    if (!subFail) {
+      nativeOk = 1;
+      lastErrorCode = ERROR_NONE;
+      testProg_t tpRcl; tpInit(&tpRcl);
+      int sRcl = tpStepParam(&tpRcl, ITM_RCL, (uint8_t[]){7}, 1);
+      if (sRcl < 0 || !tpWrite(&tpRcl)) { subFail = 1; }
+      if (!subFail) {
+        forthPushInt32(0);
+        lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+        uint8_t *step = tpStepAddr(&tpRcl, sRcl);
+        if (step) { tpSelectStep(&tpRcl, sRcl); programRunStop = PGM_RUNNING; executeOneStep(step); }
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [4] FAIL: RCL 07 after native (err=%d)\n", lastErrorCode);
+          subFail = 1;
+        } else {
+          uint8_t tType; int32_t tVal;
+          read_reg_int32(REGISTER_X, &tType, &tVal);
+          if (tVal != 99) {
+            printf("    [4] FAIL: RCL 07 after native X=%d (expected 99)\n", tVal);
+            subFail = 1;
+          }
+        }
+      }
+    }
+
+    /* Forth half: STO ->05 with X=99, reg 05 := 7 */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthPushInt32(7);
+      forthOuterInterpret("STO 05");
+      if (lastErrorCode != ERROR_NONE) { subFail = 1; }
+      if (!subFail) {
+        sprintf(sbuf, "STO %s05", STD_RIGHT_ARROW);
+        forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(99);
+        lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+        forthOuterInterpret(sbuf);
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [4] FAIL: Forth STO ->05 error %d\n", lastErrorCode);
+          subFail = 1;
+        }
+      }
+    }
+    if (!subFail) {
+      forthOk = 1;
+      lastErrorCode = ERROR_NONE;
+      testProg_t tpRcl2; tpInit(&tpRcl2);
+      int sRcl2 = tpStepParam(&tpRcl2, ITM_RCL, (uint8_t[]){7}, 1);
+      if (sRcl2 < 0 || !tpWrite(&tpRcl2)) { subFail = 1; }
+      if (!subFail) {
+        forthPushInt32(0);
+        lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+        uint8_t *step = tpStepAddr(&tpRcl2, sRcl2);
+        if (step) { tpSelectStep(&tpRcl2, sRcl2); programRunStop = PGM_RUNNING; executeOneStep(step); }
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [4] FAIL: RCL 07 after Forth (err=%d)\n", lastErrorCode);
+          subFail = 1;
+        } else {
+          uint8_t tType; int32_t tVal;
+          read_reg_int32(REGISTER_X, &tType, &tVal);
+          if (tVal != 99) {
+            printf("    [4] FAIL: RCL 07 after Forth X=%d (expected 99)\n", tVal);
+            subFail = 1;
+          }
+        }
+      }
+    }
+
+    if (!subFail) {
+      if (!nativeOk || !forthOk) {
+        printf("    [4] FAIL: indirect parity\n");
+        subFail = 1;
+      }
+    }
+
+    if (!subFail) {
+      printf("    [4] PASS: indirect register parameter parity\n");
+    } else {
+      fail |= 1;
+    }
+  }
+
+  /* Subcase 5: Flow divergence table */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+
+    struct { uint16_t itemId; uint8_t param[4]; uint16_t nParam; const char *name; } flows[] = {
+      { ITM_RTN,  {0}, 1, "RTN" },
+      { ITM_STOP, {0}, 1, "STOP" },
+      { ITM_END,  {0}, 1, "END" },
+      { ITM_CASE, {5}, 1, "CASE" },
+      { ITM_GTO,  {253, 1, 'Q', 0}, 4, "GTO 'Q'" },
+    };
+    int nFlows = 5;
+    int i;
+
+    for (i = 0; i < nFlows && !subFail; i++) {
+      /* Native: must NOT raise ERROR_OPERATION_UNDEFINED */
+      { lastErrorCode = ERROR_NONE;
+        testProg_t tp; tpInit(&tp);
+        int sStep = tpStepParam(&tp, flows[i].itemId, flows[i].param, flows[i].nParam);
+        if (sStep < 0 || !tpWrite(&tp)) {
+          printf("    [5] FAIL: fixture %s\n", flows[i].name); subFail = 1;
+        }
+        if (!subFail) {
+          forthPushInt32(11); forthPushInt32(22); forthPushInt32(33); forthPushInt32(44);
+          lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
+          uint8_t *step = tpStepAddr(&tp, sStep);
+          if (step) {
+            tpSelectStep(&tp, sStep);
+            programRunStop = PGM_RUNNING;
+            executeOneStep(step);
+          }
+          if (lastErrorCode == ERROR_OPERATION_UNDEFINED) {
+            printf("    [5] FAIL: native %s raised OPERATION_UNDEFINED\n", flows[i].name);
+            subFail = 1;
+          }
+        }
+      }
+
+      /* Forth: MUST raise ERROR_OPERATION_UNDEFINED */
+      if (!subFail) {
+        lastErrorCode = ERROR_NONE;
+        forthOuterInterpret(flows[i].name);
+        if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
+          printf("    [5] FAIL: Forth %s expected OPERATION_UNDEFINED got %d\n",
+                 flows[i].name, lastErrorCode);
+          subFail = 1;
+        }
+        lastErrorCode = ERROR_NONE;
+      }
+    }
+
+    if (!subFail) {
+      printf("    [5] PASS: flow steps stay native-only; names reject with OPERATION UNDEFINED\n");
+    } else {
+      fail |= 1;
+    }
+  }
+
+  /* Subcase 6: Error-table sweep */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+
+    /* "RTN" -> OPERATION_UNDEFINED */
+    { lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("RTN");
+      if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
+        printf("    [6] FAIL: RTN expected OPERATION_UNDEFINED got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* "SDL" -> INVALID_NAME */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("SDL");
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [6] FAIL: SDL expected INVALID_NAME got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* "SDL 1X" -> INVALID_NAME */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("SDL 1X");
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [6] FAIL: SDL 1X expected INVALID_NAME got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* "SDL 100" -> OUT_OF_RANGE */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("SDL 100");
+      if (lastErrorCode != ERROR_OUT_OF_RANGE) {
+        printf("    [6] FAIL: SDL 100 expected OUT_OF_RANGE got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* "SF .32" -> OUT_OF_RANGE */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("SF .32");
+      if (lastErrorCode != ERROR_OUT_OF_RANGE) {
+        printf("    [6] FAIL: SF .32 expected OUT_OF_RANGE got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* "SDL 'X'" -> INVALID_NAME */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("SDL 'X'");
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [6] FAIL: SDL 'X' expected INVALID_NAME got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* N16-item + arrow -> INVALID_NAME */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      uint16_t n16Item = 0;
+      { uint16_t id;
+        for (id = 1; id < LAST_ITEM; id++) {
+          uint16_t st = indexOfItems[id].status;
+          if ((st & CAT_STATUS) != CAT_FNCT) continue;
+          if ((st & PTP_STATUS) == PTP_NUMBER_16 && !forthItemIsFlowReject(id)) {
+            n16Item = id;
+            break;
+          }
+        }
+      }
+      if (n16Item) {
+        sprintf(sbuf, "%s %s05", indexOfItems[n16Item].itemCatalogName, STD_RIGHT_ARROW);
+        forthOuterInterpret(sbuf);
+        if (lastErrorCode != ERROR_INVALID_NAME) {
+          printf("    [6] FAIL: N16-> expected INVALID_NAME got %d\n", lastErrorCode);
+          subFail = 1;
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* "RCL 'NOVAR9'" -> UNDEF_SOURCE_VAR */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("RCL 'NOVAR9'");
+      if (lastErrorCode != ERROR_UNDEF_SOURCE_VAR) {
+        printf("    [6] FAIL: RCL 'NOVAR9' expected UNDEF_SOURCE_VAR got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* "OPENM 'NOMENU9'" -> UNDEF_MENU */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      uint16_t menuItem = 0;
+      { uint16_t id;
+        for (id = 1; id < LAST_ITEM; id++) {
+          uint16_t st = indexOfItems[id].status;
+          if ((st & CAT_STATUS) != CAT_FNCT) continue;
+          if ((st & PTP_STATUS) == PTP_MENU) { menuItem = id; break; }
+        }
+      }
+      if (menuItem) {
+        sprintf(sbuf, "%s 'NOMENU9'", indexOfItems[menuItem].itemCatalogName);
+        forthOuterInterpret(sbuf);
+        if (lastErrorCode != ERROR_UNDEF_MENU) {
+          printf("    [6] FAIL: OPENM 'NOMENU9' expected UNDEF_MENU got %d\n", lastErrorCode);
+          subFail = 1;
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    /* Compile-state atomicity: ": EA SDL 100 ;" -> OUT_OF_RANGE, EA unfindable */
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthDictClear();
+      forthOuterInterpret(": EA SDL 100 ;");
+      if (lastErrorCode != ERROR_OUT_OF_RANGE) {
+        printf("    [6] FAIL: : EA SDL 100 ; expected OUT_OF_RANGE got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      if (!subFail) {
+        uint16_t idx;
+        if (forthFindColon("EA", &idx)) {
+          printf("    [6] FAIL: EA still findable after compile error\n");
+          subFail = 1;
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    if (!subFail) {
+      printf("    [6] PASS: the Series C error table holds row by row\n");
+    } else {
+      fail |= 1;
+    }
+  }
+
+  /* Subcase 7: Extra-token and stage-wide state hygiene */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("STO 05 7");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [7] FAIL: STO 05 7 error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      uint8_t tType7; int32_t tVal7;
+      read_reg_int32(REGISTER_X, &tType7, &tVal7);
+      if (tVal7 != 7) {
+        printf("    [7] FAIL: X != 7 after STO 05 7 (got %d)\n", tVal7);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      if (forthTestGetRsp() != 0) {
+        printf("    [7] FAIL: rsp=%u (expected 0)\n", forthTestGetRsp());
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      if (forthCurrentScopeGet() != FORTH_OWNER_INTERACTIVE) {
+        printf("    [7] FAIL: scope=0x%04X (expected 0x%04X)\n",
+               forthCurrentScopeGet(), FORTH_OWNER_INTERACTIVE);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      printf("    [7] PASS: one-token consumption and engine state hygiene hold\n");
+    } else {
+      fail |= 1;
+    }
+  }
+
+  /* Cleanup: unwind named variables from subcase 3 */
+  if (namedVarsAfterCreate > savedNamedVars) {
+    uint16_t i;
+    for (i = savedNamedVars; i < namedVarsAfterCreate; i++) {
+      freeRegisterData(FIRST_NAMED_VARIABLE + i);
+    }
+    if (savedNamedVars == 0) {
+      freeC47Blocks(allNamedVariables,
+                    TO_BLOCKS(sizeof(namedVariableHeader_t) * namedVarsAfterCreate));
+      allNamedVariables = NULL;
+    } else {
+      allNamedVariables = reallocC47Blocks(allNamedVariables,
+                        TO_BLOCKS(sizeof(namedVariableHeader_t) * namedVarsAfterCreate),
+                        TO_BLOCKS(sizeof(namedVariableHeader_t) * savedNamedVars));
     }
     numberOfNamedVariables = savedNamedVars;
   }
