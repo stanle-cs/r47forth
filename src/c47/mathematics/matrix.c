@@ -2500,6 +2500,7 @@ void copyComplexMatrix(const complex34Matrix_t *matrix, complex34Matrix_t *res) 
 void linkToRealMatrixRegister(calcRegister_t regist, real34Matrix_t *linkedMatrix) {
   linkedMatrix->header.matrixRows    = REGISTER_MATRIX_HEADER(regist)->matrixRows;
   linkedMatrix->header.matrixColumns = REGISTER_MATRIX_HEADER(regist)->matrixColumns;
+  linkedMatrix->header.mtag          = amNone;   // default; without it, a non-vector or non-X-T link leaves mtag uninitialised and displayVectorAngle reads it
   if((REGISTER_X <= regist && regist <= REGISTER_T) && isMatrixVector(linkedMatrix->header.matrixRows, linkedMatrix->header.matrixColumns)) {
     linkedMatrix->header.mtag        = globalRegister[regist].tag;  // Get directly from register; this is only used for display of X-T registers, so it is hard coded to globalregisters
   }
@@ -2511,6 +2512,7 @@ void linkToRealMatrixRegister(calcRegister_t regist, real34Matrix_t *linkedMatri
 void linkToComplexMatrixRegister(calcRegister_t regist, complex34Matrix_t *linkedMatrix) {
   linkedMatrix->header.matrixRows    = REGISTER_MATRIX_HEADER(regist)->matrixRows;
   linkedMatrix->header.matrixColumns = REGISTER_MATRIX_HEADER(regist)->matrixColumns;
+  linkedMatrix->header.mtag          = amNone;   // same as the real link: keep mtag defined for readers
   linkedMatrix->matrixElements       = REGISTER_COMPLEX34_MATRIX_ELEMENTS(regist);
 }
 
