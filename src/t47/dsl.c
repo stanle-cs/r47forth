@@ -748,7 +748,7 @@ static int readpCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
 
   if(temporaryInformation != TI_PROGRAM_LOADED) {
     const char *detail = (lastErrorCode != ERROR_NONE)
-        ? errorMessages[lastErrorCode]
+        ? errorMessageOf(lastErrorCode)
         : "unknown error";
     Jim_SetResultFormatted(interp, "readp: failed to load '%s': %s", filename, detail);
     return JIM_ERR;
@@ -789,7 +789,7 @@ static int xportpCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
   reallyRunFunction(ITM_EXPORTP, (uint16_t)label);
 
   if(lastErrorCode != ERROR_NONE) {
-    Jim_SetResultFormatted(interp, "xportp: export of '%s' failed: %s", labelName, errorMessages[lastErrorCode]);
+    Jim_SetResultFormatted(interp, "xportp: export of '%s' failed: %s", labelName, errorMessageOf(lastErrorCode));
     return JIM_ERR;
   }
 

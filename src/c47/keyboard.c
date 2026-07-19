@@ -4024,7 +4024,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
         systemFlags1 = sf1;
         fnClDrawMx(1);
         if(statMx[0]!='S') {
-          printStatus(0, errorMessages[RESTORING_STATS], force);
+          printStatus(0, errorMessageOf(RESTORING_STATS), force);
           restoreStats();
         }
         screenUpdatingMode = SCRUPD_AUTO;
