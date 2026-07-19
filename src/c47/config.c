@@ -1562,8 +1562,8 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
                                                                               // errorMessage     from    0 to (4095       )
        aimBuffer        = errorMessage + ERROR_MESSAGE_LENGTH;   // + 512     // aimBuffer        from  512 to (512  + 1024) or 1536
        nimBufferDisplay = aimBuffer + AIM_BUFFER_LENGTH;         // +1024     // nimBufferDisplay from 1536 to (1536 +  200) or 1736
-       tamBuffer        = nimBufferDisplay + NIM_BUFFER_LENGTH;  // + 200     // tamBuffer        from 1736 to (1736 +   32) or 1768
-                                          // TAM_BUFFER_LENGTH   // +  32
+       tamBuffer        = nimBufferDisplay + NIM_BUFFER_LENGTH;  // + 200     // tamBuffer        from 1736 to (1736 +   56) or 1792
+                                          // TAM_BUFFER_LENGTH   // +  56
 
        tmpStringLabelOrVariableName = tmpString + 1000;
     }

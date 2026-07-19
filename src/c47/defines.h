@@ -678,7 +678,9 @@
 #define NUMBER_OF_STANDARD_FONT_LINES_PER_SCREEN   8 // Used in the font browser application
 
 #define AIM_BUFFER_LENGTH                       1024 // WP=199 double byte glyphs + trailing 0 + 1 byte to round up to a 4 byte boundary; JM increase from WP43 to 512*2 so as to exceed the 508*2+extras;
-#define TAM_BUFFER_LENGTH                         32 // TODO: find the exact maximum needed
+#define TAM_BUFFER_LENGTH                         56 // Longest TAM prompt is ASSIGN of a conversion with a quoted key name, worst case 55 bytes:
+                                                     // "ASSIGN " 7 + name 26 + " " 1 + quotes 2+2 + 7 double byte glyphs 14 + cursor 2 + trailing 0 = 55.
+                                                     // Widest name kWh/100km STD_RIGHT_ARROW kWh/100mi: 20 bytes, 26 after compressBinary() expands 100k and 100m.
 #define NIM_BUFFER_LENGTH                        200 // TODO: find the exact maximum needed
 
 #if defined(PATH_MAX)
