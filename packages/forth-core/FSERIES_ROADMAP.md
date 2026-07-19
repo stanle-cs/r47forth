@@ -106,35 +106,50 @@ operation-first canonical RPN spelling for all native parameter types of
 eligible non-flow items; control/declarative steps stay rejected
 (`ERROR_OPERATION_UNDEFINED`); XEQ remains the sole control-flow bridge.
 
-**Architect pre-work:** trace the native RPN grammars and error table
-(exact spellings, ranges, create semantics, error codes) — the F4 packets
-carry the resulting grammar + error table verbatim. Builds directly on the
-F2 shared core; do not author until F2 lands.
+**Architect pre-work — DONE 2026-07-18:** the native grammar and error
+table are traced with file:line evidence in `QWEN_PROMPTS_F4_core.md`
+(KS-code map, canonical decode spellings, the 0x27 typeable quote, the
+upstream `funcIsProgramStopControl` flow set, tamMinMax min/max packing,
+the CNST-83 extension-cell fact, the FLAG `< FLAG_W` quirk, the
+indirect-NUMBER_16 encoding collision → documented exclusion).
 
-**Predicted packets (3-4):** grammar/tokenizer extension; numbered/dotted
-register forms; named/quoted forms + create semantics; error-table
-acceptance sweep.
+| Packet | Status |
+|---|---|
+| F4-1 classification + direct numeric params | AUTHORED, gate-locked on F3-7 — `QWEN_PROMPTS_F4_1_direct_numeric.md` |
+| F4-2 register/flag/shuffle direct forms | AUTHORED, gate-locked on F4-1 — `QWEN_PROMPTS_F4_2_register_flag.md` |
+| F4-3 named/system-flag/indirect + bounded core | AUTHORED, gate-locked on F4-2 — `QWEN_PROMPTS_F4_3_named_indirect.md` |
+| F4-4 error-table + parity acceptance | AUTHORED, gate-locked on F4-3 — `QWEN_PROMPTS_F4_4_acceptance.md` |
 
-**Risks:** grammar edge cases (dot forms, indirection) — every spelling in
-the packet must carry its traced file:line origin.
+**Execution risks:** F4-1 changes landed behavior for END/RTN/STOP/RTN+1
+(currently name-dispatchable; no test pins it — verified); the
+paramCoreDispatchDirect widening (F4-2) and the bounded-core threading
+(F4-3) touch F2-pinned code — their gates re-verify the F2 parity suite.
 
 ## Stage F5 — Series D commit validation (DESIGN §10.5, implements E9)
 
 **Goal:** lexical/structural validation at capture commit, two tiers:
 structural malformation rejects atomically (prior step preserved);
-unresolved names stay legal and advisory. Executes nothing, allocates
+unresolved names stay legal and advisory.  Executes nothing, allocates
 nothing, mutates no live state.
 
-**Architect pre-work:** enumerate the structural-reject grammar from the
-landed F3/F4 tokenizer (it IS the grammar — no second grammar may exist);
-define the advisory surface (how "unresolved name" is shown without error).
+**Architect pre-work — DONE 2026-07-18:** the commit seam is traced
+(pemAlpha ITM_ENTER → pemCloseAlphaInput) and the tier boundary is RULED
+in `QWEN_PROMPTS_F5_core.md`: tier 1 = violations invariant under every
+possible dictionary (structurals, prim placement/pairing, XEQ/FORGET
+form syntax, number-shaped parse failures with live-shadow suppression);
+item-level rules stay tier 2 because colon definitions shadow items and
+numbers (§4.1) — commit-time item rejects would be unsound.  Mechanism:
+FORTH_OUTER_CHECK woven into forthOuterRun (one grammar, side effects
+gated), soundness pinned by a check-implies-runtime battery.
 
-**Predicted packets (2-3):** the validator (pure function over source
-text); commit-path integration + atomic reject; acceptance tests (both
-tiers + the §8.4 E9 pins).
+| Packet | Status |
+|---|---|
+| F5-1 check mode + soundness battery | AUTHORED, gate-locked on F4-4 — `QWEN_PROMPTS_F5_1_check_mode.md` |
+| F5-2 commit gate + atomic reject | AUTHORED, gate-locked on F5-1 — `QWEN_PROMPTS_F5_2_commit_gate.md` |
 
-**Risks:** small stage; the main hazard is validator/tokenizer divergence —
-the packet must derive the validator FROM the tokenizer, not parallel it.
+**Execution risks:** the weave touches every forthOuterRun branch — the
+site inventory greps in F5-1's gate are the control; F5-2 rides the
+F15-2/F15-4 capture canaries.
 
 ## Stage F6 — capture as a PEM-shaped submode + word catalog (DESIGN §10.6)
 
@@ -148,6 +163,10 @@ F3 scopes.
 **HARD PRECONDITION (DESIGN):** a dedicated keyboard/PEM audit with
 hardware-derived tests BEFORE any packet is authored — Stan runs the
 hardware side; the architect writes the audit doc and derives fixtures.
+**The audit charter is AUTHORED (2026-07-18): `F6_KEYBOARD_PEM_AUDIT.md`**
+— T1-T7 architect traces, Blocks A-F hardware experiments, the fixture
+derivation map, and exit criteria.  F6 packets remain UNAUTHORED by
+design until `F6_AUDIT_RESULTS.md` exists and is folded.
 
 **Predicted packets (5-6):** managed source buffer + handle; submode key
 dispatch; suspend/restore state machine; catalog data source (F3 scopes);
@@ -168,15 +187,17 @@ starts with a new owner ruling.
 ## Sequencing summary
 
 ```
-F15-4 [QWEN now] → F15-5 [QWEN] → F1.5 close [A, docs]
-  → F2 trace [A] → F2-1..5 [author A, run QWEN]
-  → F3 rulings [S] + design pass [A] → F3-1..7 [A→QWEN]
-  → F4 trace [A] → F4-1..4 [A→QWEN]
-  → F5 grammar derivation [A] → F5-1..3 [A→QWEN]
-  → F6 keyboard/PEM audit [A+S] → F6-1..6 [A→QWEN]
+F1.5 ✔ → F2 ✔ (through F2-5)
+  → F3-1..7 [QWEN, authored + gate-locked]
+  → F4-1..4 [QWEN, authored + gate-locked]
+  → F5-1..2 [QWEN, authored + gate-locked]
+  → F6 bench audit [S+A, charter authored] → fold results [A]
+  → F6-1..6 [author A → QWEN]
   → closeout [A+S]
 ```
 
-Owner decision points (S): F3 rulings (globals spelling / FORGET / arena
-accounting) — needed before F3 packets, can be ruled any time; F6 hardware
-audit participation; flash-delta runs per stage.
+Everything author-able ahead of execution IS authored (13 gate-locked
+packets across F3/F4/F5); the sole remaining architect authoring is
+per-stage docs closes and the F6 packets, which are audit-gated by
+DESIGN.  Owner decision points (S): the F6 bench session
+(`F6_KEYBOARD_PEM_AUDIT.md` Blocks A-F); flash-delta runs per stage.

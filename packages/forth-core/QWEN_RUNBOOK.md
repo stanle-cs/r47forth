@@ -82,9 +82,16 @@ architect session first; the future-series packet has not been authored yet.
 | 8f | F3-5 compile-time control flow | **[GATE LOCKED]** on F3-4 | `QWEN_PROMPTS_F3_5_control_flow.md` |
 | 8g | F3-6 XEQ forms, FTOK_XEQN, and B3 | **[GATE LOCKED]** on F3-5 | `QWEN_PROMPTS_F3_6_xeqn.md` |
 | 8h | F3-7 §2.3 acceptance pins and final stage sweep | **[GATE LOCKED]** on F3-6 | `QWEN_PROMPTS_F3_7_acceptance.md` |
-| 9 | F4 — Series C textual parameters. Architect traces native grammar + error table, then packets. | **[ARCHITECT]** then [QWEN] | DESIGN §10.4 |
-| 10 | F5 — Series D commit validation (E9 two tiers). | **[ARCHITECT]** then [QWEN] | DESIGN §10.5 |
-| 11 | F6 — capture submode **+ dedicated Forth word catalog** (2026-07-16 fold). HARD PRECONDITION: its own keyboard/PEM audit with hardware-derived tests BEFORE any packet is authored. | **[ARCHITECT]** (audit + packets) then [QWEN] | DESIGN §10.6 |
+| 9a | F4 trace + ledger (grammar/error table traced 2026-07-18) | DONE (authored) | `QWEN_PROMPTS_F4_core.md` |
+| 9b | F4-1 flow classification + direct numeric params | **[GATE LOCKED]** on F3-7 | `QWEN_PROMPTS_F4_1_direct_numeric.md` |
+| 9c | F4-2 register/flag/shuffle direct forms | **[GATE LOCKED]** on F4-1 | `QWEN_PROMPTS_F4_2_register_flag.md` |
+| 9d | F4-3 named, system-flag, indirect forms | **[GATE LOCKED]** on F4-2 | `QWEN_PROMPTS_F4_3_named_indirect.md` |
+| 9e | F4-4 error-table + parity acceptance (stage close) | **[GATE LOCKED]** on F4-3 | `QWEN_PROMPTS_F4_4_acceptance.md` |
+| 10a | F5 ledger: commit seam + tier ruling (2026-07-18) | DONE (authored) | `QWEN_PROMPTS_F5_core.md` |
+| 10b | F5-1 check mode + soundness battery | **[GATE LOCKED]** on F4-4 | `QWEN_PROMPTS_F5_1_check_mode.md` |
+| 10c | F5-2 E9 commit gate (stage close) | **[GATE LOCKED]** on F5-1 | `QWEN_PROMPTS_F5_2_commit_gate.md` |
+| 11a | F6 audit charter (traces T1-T7 + bench Blocks A-F) | DONE (authored) — **bench session is [S]+[A]**, schedule any time after F5 | `F6_KEYBOARD_PEM_AUDIT.md` |
+| 11b | F6 packets — capture submode + word catalog | **[ARCHITECT]** after the audit results fold; then [QWEN] | DESIGN §10.6 + `F6_AUDIT_RESULTS.md` (future) |
 
 ## 3. After the series — no Qwen work
 
