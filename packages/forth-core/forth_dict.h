@@ -159,6 +159,14 @@ bool forthFindItem(const char *name, uint16_t *itemId);
    ITM_FORTH (PTP_REM) must keep resolving through the reverse path. */
 bool forthFindItemParameterized(const char *name, uint16_t *itemId);
 
+/* §10.4: control/declarative steps are not Forth-callable.  The PTP_NONE
+ * subset is upstream's own funcIsProgramStopControl set (items.c);
+ * CASE is flow inside PTP_REGISTER; FCALL's parameter is a Forth
+ * dictionary index (names-only invariant).  Class rejects: label
+ * declaration/target, step-relative jumps, skip-on-compare, key
+ * declarations. */
+bool forthItemIsFlowReject(uint16_t itemId);
+
 /* Reverse lookup: §4.2 resolution order (label > item > colon) */
 typedef enum {
   FORTH_XEQ_NONE = 0,

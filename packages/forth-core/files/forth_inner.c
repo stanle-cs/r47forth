@@ -460,6 +460,27 @@ void forthInner(uint16_t wordRef, bool fromProgram)
                                ((uint16_t)b[ip + 1] << 8));
             ip += 2;
             break;
+          case PTP_NUMBER_8_16: {
+            /* Bounded-read one cell; b0 = byte0; b0 <= 249 -> param = b0;
+             * b0 == 250 -> param = 250 + byte1; b0 >= 251 -> error. */
+            if (!boundedRead(curG, ip, 2)) {
+              INNER_LEAVE();
+            }
+            uint8_t b0 = b[ip];
+            uint8_t b1 = b[ip + 1];
+            ip += 2;
+            if (b0 <= 249) {
+              param = (uint16_t)b0;
+            } else if (b0 == 250) {
+              param = (uint16_t)(250 + b1);
+            } else {
+              lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
+              displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                                       ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              INNER_LEAVE();
+            }
+            break;
+          }
           default:
             /* PTP_LABEL, PTP_REGISTER, etc. not supported yet (C-1, §3.3.6) */
             lastErrorCode = ERROR_OPERATION_UNDEFINED;

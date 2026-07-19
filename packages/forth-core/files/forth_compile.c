@@ -242,6 +242,23 @@ static bool nextToken(char buf[FORTH_TOKEN_MAX + 1]) {
   return true;
 }
 
+/* §10.4 F4-1: Decimal, unsigned, leading-zero-insensitive (TAM parity).
+ * Returns false on any non-digit byte, empty token, or accumulated value
+ * above TAM_MAX_MASK. */
+static bool parseParamDigits(const char *tok, uint16_t *out)
+{
+  uint32_t v = 0;
+  int16_t i = 0;
+  if (tok[0] == 0) return false;
+  for (i = 0; tok[i] != 0; i++) {
+    if (tok[i] < '0' || tok[i] > '9') return false;
+    v = v * 10u + (uint32_t)(tok[i] - '0');
+    if (v > TAM_MAX_MASK) return false;
+  }
+  *out = (uint16_t)v;
+  return true;
+}
+
 /* ---- §3.3.5 Number grammar (C-8) ---- */
 
 typedef enum {
@@ -641,6 +658,12 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
     {
       uint16_t itemId;
       if (forthFindItem(buf, &itemId)) {
+        if (forthItemIsFlowReject(itemId)) {
+          displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          if (isDefinitionOpen()) abortDefinition();
+          lineOK = false;
+          continue;
+        }
         if (state == STATE_COMPILE) {
           if (!forthDictEmit(FTOK_C47)) {
             abortDefinition();
@@ -663,15 +686,109 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       }
     }
 
-    /* F3-6 B3 forward: bare parameterized item is an atomic syntax error.
-     * F4: this arm becomes the Series-C parameter-grammar entry. */
+    /* F4-1: Series-C parameter-grammar entry (replaces F3-6 blanket reject).
+     * DEFS_ONLY: in a tail, the interpret-state gate already skipped the item
+     * token before this arm; inside a definition the pre-scan compiles normally. */
     {
       uint16_t paramItemId;
       if (forthFindItemParameterized(buf, &paramItemId)) {
-        displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-        if (isDefinitionOpen()) abortDefinition();
-        lineOK = false;
-        continue;
+        if (forthItemIsFlowReject(paramItemId)) {
+          displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          if (isDefinitionOpen()) abortDefinition();
+          lineOK = false;
+          continue;
+        }
+        char ptok[FORTH_TOKEN_MAX + 1];
+        if (!nextToken(ptok)) {
+          displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          if (isDefinitionOpen()) abortDefinition();
+          lineOK = false;
+          continue;
+        }
+        uint16_t ptpClass = (uint16_t)(indexOfItems[paramItemId].status & PTP_STATUS);
+        if (ptpClass == PTP_NUMBER_8 || ptpClass == PTP_NUMBER_16 || ptpClass == PTP_NUMBER_8_16) {
+          uint16_t value;
+          if (!parseParamDigits(ptok, &value)) {
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          }
+          uint16_t min = (uint16_t)(indexOfItems[paramItemId].tamMinMax >> TAM_MAX_BITS);
+          uint16_t max = (uint16_t)(indexOfItems[paramItemId].tamMinMax & TAM_MAX_MASK);
+          if (value < min || value > max) {
+            displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            if (isDefinitionOpen()) abortDefinition();
+            lineOK = false;
+            continue;
+          }
+          if (state == STATE_COMPILE) {
+            if (!forthDictEmit(FTOK_C47)) {
+              abortDefinition();
+              lineOK = false;
+              continue;
+            }
+            if (!forthDictEmit((ftoken_t)paramItemId)) {
+              abortDefinition();
+              lineOK = false;
+              continue;
+            }
+            if (ptpClass == PTP_NUMBER_8) {
+              if (value > 0xFF) {
+                displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                abortDefinition();
+                lineOK = false;
+                continue;
+              }
+              if (!forthDictEmit((ftoken_t)value)) {
+                abortDefinition();
+                lineOK = false;
+                continue;
+              }
+            } else if (ptpClass == PTP_NUMBER_16) {
+              if (!forthDictEmit((ftoken_t)value)) {
+                abortDefinition();
+                lineOK = false;
+                continue;
+              }
+            } else {
+              /* PTP_NUMBER_8_16: value <= 249 -> [value][0]; 250..505 -> [250][value-250] */
+              if (value <= 249) {
+                if (!forthDictEmit((ftoken_t)value)) {
+                  abortDefinition();
+                  lineOK = false;
+                  continue;
+                }
+              } else {
+                uint16_t extCell = (uint16_t)(250 | ((uint16_t)(value - 250) << 8));
+                if (!forthDictEmit((ftoken_t)extCell)) {
+                  abortDefinition();
+                  lineOK = false;
+                  continue;
+                }
+              }
+            }
+          } else {
+            if (paramCoreValidateDirect(paramItemId, ptpClass, value)) {
+              uint8_t savedRunStop = programRunStop;
+              programRunStop = PGM_RUNNING;
+              paramCoreDispatchDirect(paramItemId, value);
+              if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
+            }
+            if (lastErrorCode != ERROR_NONE) {
+              if (isDefinitionOpen()) abortDefinition();
+              lineOK = false;
+              continue;
+            }
+          }
+          continue;
+        } else {
+          /* F4-2/F4-3: register, flag, shuffle, named, indirect forms */
+          displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          if (isDefinitionOpen()) abortDefinition();
+          lineOK = false;
+          continue;
+        }
       }
     }
 

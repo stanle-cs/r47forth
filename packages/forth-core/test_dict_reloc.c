@@ -10707,6 +10707,9 @@ static int test_c47_param_shared_dispatch(void);
 /* F2-4: native/Forth parameter parity acceptance sweep */
 static int test_param_parity_sweep(void);
 
+/* F4-1: parameter classification + direct numeric parameters */
+static int test_param_textual_numeric(void);
+
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
 
@@ -12504,6 +12507,14 @@ int forthDictSelfTest(void)
   fail |= test_control_flow();
   forthDictClear();
   forthGDictClear();
+
+  /* F4-1: parameter classification + direct numeric parameters */
+  printf("\nFORTH F4-1 TESTS (parameter classification + direct numeric)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_param_textual_numeric...\n");
+  fail |= test_param_textual_numeric();
+  forthDictClear();
 
   /* FIX-6: free-list integrity — LAST test, after all cleanup */
   printf("\nFORTH FIX-6 TESTS (free-list integrity + arena report)\n");
@@ -14729,6 +14740,194 @@ static int test_param_parity_sweep(void)
     forthDictClear();
   }
   programRunStop = savedRS;
+  return fail;
+}
+
+/* test_param_textual_numeric
+ * F4-1: parameter classification + direct numeric parameters.
+ * Subcase 1: NUMBER_8 compile path
+ * Subcase 2: NUMBER_8 execute path
+ * Subcase 3: NUMBER_16 compile path
+ * Subcase 4: NUMBER_8_16 compile path (short + extended)
+ * Subcase 5: Range error (value > max)
+ * Subcase 6: Invalid token (non-digit)
+ * Subcase 7: Flow reject (RTN)
+ *
+ * Escaping mutation 1: revert step-4 to blanket reject (F3-6) — subcases 1-4 fail.
+ * Escaping mutation 2: remove PTP_NUMBER_8_16 from paramCoreValidateDirect — subcase 4 fails.
+ * Escaping mutation 3: remove PTP_NUMBER_8_16 from forth_inner.c decode — runtime of W4 errors.
+ * Escaping mutation 4: omit forthItemIsFlowReject in step-4 — subcase 7 fails (RTN runs).
+ * Escaping mutation 5: remove TAM_MIN/MAX check — subcase 5 fails (no range error).
+ */
+static int test_param_textual_numeric(void)
+{
+  int fail = 0;
+
+  /* Subcase 1: NUMBER_8 compile path */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    x_set_string(": W1 RMODE 3 ;");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: compile RMODE 3 error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      printf("    [1] PASS: NUMBER_8 compile RMODE 3\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 2: NUMBER_8 execute path */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    x_set_string("RMODE 3");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [2] FAIL: execute RMODE 3 error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      printf("    [2] PASS: NUMBER_8 execute RMODE 3\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 3: NUMBER_16 compile path */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    x_set_string(": W2 BestF 100 ;");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: compile BestF 100 error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      printf("    [3] PASS: NUMBER_16 compile BestF 100\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 4: NUMBER_8_16 compile path (short) + extended decode + interpret */
+  { int subFail = 0;
+    /* Short form: compile CNST 10 (value 10 <= 249 -> [10][0]) */
+    lastErrorCode = ERROR_NONE;
+    x_set_string(": W3 CNST 10 ;");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [4] FAIL: compile CNST 10 error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    /* Interpret path: CNST 10 -> exercises paramCoreValidateDirect(PTP_NUMBER_8_16)
+     * X starts as dtLongInteger; CNST should set it to dtReal34.
+     * Mutation 2 (remove PTP_NUMBER_8_16 validation) skips dispatch -> X stays dtLongInteger. */
+    if (!subFail) {
+      forthPushInt32(0);
+      lastErrorCode = ERROR_NONE;
+      x_set_string("CNST 10");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [4] FAIL: interpret CNST 10 error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      if (getRegisterDataType(REGISTER_X) != dtReal34) {
+        printf("    [4] FAIL: CNST 10 did not set X to dtReal34 (type %u)\n",
+               getRegisterDataType(REGISTER_X));
+        subFail = 1;
+      }
+    }
+    /* Extended decode: hand-assemble [FTOK_C47][ITM_CNST][250][50][FTOK_EXIT]
+     * -> value = 250 + 50 = 300 (bypasses outer-interpreter range check,
+     * exercises the inner interpreter PTP_NUMBER_8_16 decoder) */
+    uint16_t w4 = 0;
+    if (!subFail) {
+      w4 = begin_word("W4", 3);
+      if (w4 == FORTH_NULL) {
+        printf("    [4] FAIL: begin_word W4\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      forthDictEmit(T_C47);
+      { uint16_t itemId = 207; forthDictEmitBytes(&itemId, 2); } /* ITM_CNST */
+      { uint8_t ext[2] = {250, 50}; forthDictEmitBytes(ext, 2); } /* extended: 250+50=300 */
+      end_word(w4);
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      bool err = run_word("W4");
+      if (err) {
+        printf("    [4] FAIL: extended decode W4 error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      printf("    [4] PASS: NUMBER_8_16 compile CNST 10 (short) + interpret + extended decode [250][50]=300\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 5: Range error (value > max) */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    x_set_string("RMODE 10");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_OUT_OF_RANGE) {
+      printf("    [5] FAIL: expected ERROR_OUT_OF_RANGE, got %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      printf("    [5] PASS: range error RMODE 10 -> ERROR_OUT_OF_RANGE\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 6: Invalid token (non-digit) */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    x_set_string("RMODE abc");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_INVALID_NAME) {
+      printf("    [6] FAIL: expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      printf("    [6] PASS: invalid token RMODE abc -> ERROR_INVALID_NAME\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
+  /* Subcase 7: Flow reject (RTN) */
+  { int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    x_set_string("RTN");
+    fnForthOuter(NOPARAM);
+    if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
+      printf("    [7] FAIL: expected ERROR_OPERATION_UNDEFINED, got %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      printf("    [7] PASS: flow reject RTN -> ERROR_OPERATION_UNDEFINED\n");
+    } else {
+      fail |= 1;
+    }
+    forthDictClear();
+  }
+
   return fail;
 }
 

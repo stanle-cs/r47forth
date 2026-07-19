@@ -167,6 +167,12 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
         if ((uint32_t)pos + 2u > limit) return false;
         pos += 2;
       }
+      else if (ptp == PTP_NUMBER_8_16) {
+        if ((uint32_t)pos + 2u > limit) return false;
+        uint8_t b0 = gdict.base[pos];
+        if (!(b0 <= 249 && gdict.base[pos + 1] == 0) && b0 != 250) return false;
+        pos += 2;
+      }
       else {
         return false;
       }
@@ -476,6 +482,24 @@ bool forthFindItemParameterized(const char *name, uint16_t *itemId)
   return false;
 }
 
+/* §10.4: control/declarative steps are not Forth-callable.  The PTP_NONE
+ * subset is upstream's own funcIsProgramStopControl set (items.c);
+ * CASE is flow inside PTP_REGISTER; FCALL's parameter is a Forth
+ * dictionary index (names-only invariant).  Class rejects: label
+ * declaration/target, step-relative jumps, skip-on-compare, key
+ * declarations. */
+bool forthItemIsFlowReject(uint16_t itemId)
+{
+  uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
+  if (itemId == ITM_END || itemId == ITM_RTN || itemId == ITM_STOP ||
+      itemId == ITM_RTNP1 || itemId == ITM_CASE || itemId == ITM_FCALL) {
+    return true;
+  }
+  return ptp == PTP_DECLARE_LABEL || ptp == PTP_LABEL ||
+         ptp == PTP_SKIP_BACK || ptp == PTP_COMPARE ||
+         ptp == PTP_KEYG_KEYX;
+}
+
 /* ---- Dict-emit API (§3.3.7) ---- */
 
 static struct { uint16_t here, latest, count, entryOff; bool open; } openDef;
@@ -717,6 +741,10 @@ static bool validateWalkOn(const uint8_t *base, uint16_t bodyStart, uint16_t lim
         if ((uint32_t)pos + 2u > limit) return false;
         pos += 2;
       }
+      else if (ptp == PTP_NUMBER_8_16) {
+        if ((uint32_t)pos + 2u > limit) return false;
+        pos += 2;
+      }
       else return false;
     }
     else return false;
@@ -768,7 +796,7 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
         memcpy(&itemId2, fdict.base + pos, 2);
         pos += 2;
         uint16_t ptp2 = (uint16_t)(indexOfItems[itemId2].status & PTP_STATUS);
-        if (ptp2 == PTP_NUMBER_8 || ptp2 == PTP_NUMBER_16) pos += 2;
+        if (ptp2 == PTP_NUMBER_8 || ptp2 == PTP_NUMBER_16 || ptp2 == PTP_NUMBER_8_16) pos += 2;
       }
       else if (tok == FTOK_XEQN) {
         uint8_t xk2 = fdict.base[pos];
@@ -818,7 +846,7 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
           memcpy(&itemId3, gdict.base + pos, 2);
           pos += 2;
           uint16_t ptp3 = (uint16_t)(indexOfItems[itemId3].status & PTP_STATUS);
-          if (ptp3 == PTP_NUMBER_8 || ptp3 == PTP_NUMBER_16) pos += 2;
+          if (ptp3 == PTP_NUMBER_8 || ptp3 == PTP_NUMBER_16 || ptp3 == PTP_NUMBER_8_16) pos += 2;
         }
         else if (tok == FTOK_XEQN) {
           uint8_t xk3 = gdict.base[pos];

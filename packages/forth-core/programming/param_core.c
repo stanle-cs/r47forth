@@ -351,6 +351,9 @@ bool paramCoreValidateDirect(uint16_t op, uint16_t ptpClass, uint16_t value) {
   else if (ptpClass == PTP_NUMBER_16) {
     return true;
   }
+  else if (ptpClass == PTP_NUMBER_8_16) {
+    return value <= (indexOfItems[op].tamMinMax & TAM_MAX_MASK);
+  }
   return false;
 }
 
