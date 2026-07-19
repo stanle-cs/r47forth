@@ -956,6 +956,7 @@ void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter) {
   };
   static const uint8_t pgmMaxName[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 14, 'W','X','Y','Z','W','X','Y','Z','W','X','Y','Z','W','X',
+    ITM_LITERAL, 1 /* BINARY_SHORT_INTEGER */, 2, 0,0,0,0,0,0,0,0, // fixed-tail literal through the screen
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
   };
   uint16_t labelsBefore = numberOfLabels;
@@ -1004,7 +1005,25 @@ void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter) {
   if(temporaryInformation != TI_PROGRAM_LOADED || lastErrorCode != ERROR_NONE || numberOfLabels != labelsBefore + 2) {
     printf("\nfnLoadProgram refused a program file with a legitimate 14-byte label name\n");
     abortTest();
+    return;
   }
+
+  // A file whose declared byte count cannot possibly fit is refused before any reservation.
+  temporaryInformation = TI_NO_INFO;
+  FILE *f = fopen("c47programTest.bin", "wb");
+  if(f == NULL) {
+    abortTest();
+    return;
+  }
+  fprintf(f, "PROGRAM_FILE_FORMAT\n0\nC47_program_file_version\n1\nPROGRAM\n100000000\n");
+  fclose(f);
+  fnLoadProgram(NOPARAM);
+  if(lastErrorCode != ERROR_RAM_FULL || temporaryInformation == TI_PROGRAM_LOADED || numberOfLabels != labelsBefore + 2) {
+    printf("\nfnLoadProgram did not refuse an impossibly large program file (EC=%d)\n", (int)lastErrorCode);
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
 }
 
 void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter) {

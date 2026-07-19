@@ -63,13 +63,11 @@
   }
 
 
-  // Streaming step walker over the program bytes of the open program file,
-  // used to screen a file BEFORE any of it is loaded into program memory.
-  // Mirrors the step grammar of findNextStep(), countOpBytes() and
-  // countLiteralBytes() in programming/nextStep.c - keep them in sync. A step
-  // the walker cannot decode ends the screening without refusing the file:
-  // after loading, scanLabelsAndPrograms() truncates the program area at the
-  // same point, so nothing beyond it can register a label.
+  // First-pass screen of a program file, before anything is loaded, using the same grammar tables as the in-memory walkers
+  // (paramTailBytes/literalTailBytes in programming/nextStep.c). Refuses a declared label name longer than
+  // MAX_LABEL_NAME_LENGTH and any non-item opcode: the in-memory walker decodes those as zero-parameter steps and walks on,
+  // so quitting silently there would let a crafted file smuggle an overlong label past the screen. A step the walker cannot
+  // otherwise decode ends the screening without refusing: after loading, scanLabelsAndPrograms() truncates there anyway.
 
   static bool_t _readFileProgramByte(uint32_t *remaining, uint8_t *value) {
     if(*remaining == 0) {
@@ -93,13 +91,13 @@
   }
 
 
-  // Consumes one step from the file. Returns false when the stream ends, the
-  // step cannot be decoded, or an over-long label name was found (reported
-  // through *overlong). allowKeyParam limits the embedded second parameter of
-  // KEY/42KEY to one level, exactly like findNextStep().
-  static bool_t _screenFileStep(uint32_t *remaining, bool_t *overlong, bool_t allowKeyParam) {
-    uint8_t byte, param, length;
+  // Consumes one step; returns false at end of stream, on an undecodable step, or with *refuse set. allowKeyParam limits
+  // the embedded second parameter of KEY/42KEY to one level, exactly like findNextStep().
+  static bool_t _screenFileStep(uint32_t *remaining, bool_t *refuse, bool_t allowKeyParam) {
+    uint8_t byte, length;
     uint16_t op;
+    int16_t tail;
+    bool_t declaredLabel = false;
 
     if(!_readFileProgramByte(remaining, &byte)) {
       return false;
@@ -111,220 +109,69 @@
       }
       op = (uint16_t)((op & 0x7f) << 8) | byte;
     }
-    if(op == 0x7fff) { // .END.: a clean end of the walk
+    if(op == 0x7fff) { // .END.
       return false;
     }
-    if(op >= LAST_ITEM) {
-      // A non-item opcode can never appear in a legitimate file, and the
-      // in-memory walker does NOT stop on it (LAST_ITEM itself decodes as a
-      // zero-parameter step there), so quitting silently here would let a
-      // crafted file smuggle an overlong label past the screen. Refuse.
-      *overlong = true;
+    if(op >= LAST_ITEM) { // non-item opcode: only a corrupt or crafted file contains one
+      *refuse = true;
       return false;
     }
 
-    switch(indexOfItems[op].status & PTP_STATUS) {
-      case PTP_NONE:
-      case PTP_DISABLED: {
-        return true;
+    uint16_t ptp = indexOfItems[op].status & PTP_STATUS;
+    if(ptp == PTP_NONE || ptp == PTP_DISABLED) {
+      tail = 0;
+    }
+    else if(ptp == PTP_LITERAL || ptp == PTP_REM) {
+      if(!_readFileProgramByte(remaining, &byte)) { // literal type
+        return false;
       }
-
-      case PTP_LITERAL:
-      case PTP_REM: {
-        if(!_readFileProgramByte(remaining, &byte)) { // literal type
+      tail = literalTailBytes(byte);
+      if(tail == PARAM_TAIL_BASE_LENGTH_PREFIXED) {
+        if(!_readFileProgramByte(remaining, &byte)) { // base
           return false;
         }
-        switch(byte) {
-          case BINARY_SHORT_INTEGER: {
-            return _skipFileProgramBytes(remaining, 9);
-          }
-          case BINARY_REAL34: {
-            return _skipFileProgramBytes(remaining, REAL34_SIZE_IN_BYTES);
-          }
-          case BINARY_COMPLEX34: {
-            return _skipFileProgramBytes(remaining, TO_BYTES(REAL34_SIZE_IN_BLOCKS * 2));
-          }
-          case STRING_SHORT_INTEGER: {
-            if(!_readFileProgramByte(remaining, &param)     // base
-                || !_readFileProgramByte(remaining, &length)) {
-              return false;
-            }
-            return _skipFileProgramBytes(remaining, length);
-          }
-          case STRING_LONG_INTEGER:
-          case STRING_REAL34:
-          case STRING_LABEL_VARIABLE:
-          case STRING_COMPLEX34:
-          case STRING_DATE:
-          case STRING_TIME:
-          case STRING_ANGLE_DMS:
-          case STRING_ANGLE_RADIAN:
-          case STRING_ANGLE_GRAD:
-          case STRING_ANGLE_DEGREE:
-          case STRING_ANGLE_MULTPI: {
-            if(!_readFileProgramByte(remaining, &length)) {
-              return false;
-            }
-            return _skipFileProgramBytes(remaining, length);
-          }
-          default: {
-            return false;
-          }
-        }
-      }
-
-      default: {
-        break;
+        tail = PARAM_TAIL_LENGTH_PREFIXED;
       }
     }
-
-    uint16_t paramMode = (indexOfItems[op].status & PTP_STATUS) == PTP_KEYG_KEYX
-                       ? PARAM_NUMBER_8
-                       : (indexOfItems[op].status & PTP_STATUS) >> 9;
-    if(!_readFileProgramByte(remaining, &param)) {
-      return false;
+    else {
+      uint16_t paramMode = (ptp == PTP_KEYG_KEYX) ? PARAM_NUMBER_8 : ptp >> 9;
+      if(!_readFileProgramByte(remaining, &byte)) { // first parameter byte
+        return false;
+      }
+      tail = paramTailBytes(paramMode, op, byte);
+      declaredLabel = (paramMode == PARAM_DECLARE_LABEL); // its length-prefixed tails are exactly the named-label forms
     }
 
     bool_t ok;
-    switch(paramMode) {
-      case PARAM_DECLARE_LABEL: {
-        if(param <= LAST_LOCAL_LABEL) {
-          ok = true;
-        }
-        else if(param == STRING_LABEL_VARIABLE || param == LOCAL_LABEL_VARIABLE) {
-          if(!_readFileProgramByte(remaining, &length)) {
-            return false;
-          }
-          if(length > MAX_LABEL_NAME_LENGTH) { // the check this walk exists for
-            *overlong = true;
-            return false;
-          }
-          ok = _skipFileProgramBytes(remaining, length);
-        }
-        else {
-          ok = false;
-        }
-        break;
-      }
-
-      case PARAM_LABEL: {
-        if(param <= LAST_LOCAL_LABEL) {
-          ok = true;
-        }
-        else if(param == STRING_LABEL_VARIABLE || param == INDIRECT_VARIABLE || param == LOCAL_LABEL_VARIABLE) {
-          ok = _readFileProgramByte(remaining, &length) && _skipFileProgramBytes(remaining, length);
-        }
-        else if(param == INDIRECT_REGISTER) {
-          ok = _readFileProgramByte(remaining, &byte);
-        }
-        else {
-          ok = false;
-        }
-        break;
-      }
-
-      case PARAM_REGISTER:
-      case PARAM_COMPARE: {
-        if(param <= LAST_SPARE_REGISTERS_IN_KS_CODE
-            || (paramMode == PARAM_COMPARE && (param == VALUE_0 || param == VALUE_1))) {
-          ok = true;
-        }
-        else if(param == STRING_LABEL_VARIABLE || param == INDIRECT_VARIABLE) {
-          ok = _readFileProgramByte(remaining, &length) && _skipFileProgramBytes(remaining, length);
-        }
-        else if(param == INDIRECT_REGISTER) {
-          ok = _readFileProgramByte(remaining, &byte);
-        }
-        else {
-          ok = false;
-        }
-        break;
-      }
-
-      case PARAM_FLAG: {
-        if(param <= LAST_LOCAL_FLAG || (FLAG_M <= param && param <= FLAG_W)) {
-          ok = true;
-        }
-        else if(param == INDIRECT_REGISTER || param == SYSTEM_FLAG_NUMBER) {
-          ok = _readFileProgramByte(remaining, &byte);
-        }
-        else if(param == INDIRECT_VARIABLE) {
-          ok = _readFileProgramByte(remaining, &length) && _skipFileProgramBytes(remaining, length);
-        }
-        else {
-          ok = false;
-        }
-        break;
-      }
-
-      case PARAM_NUMBER_8:
-      case PARAM_NUMBER_8_16: {
-        if(param <= 249) {
-          ok = true;
-        }
-        else if(param == INDIRECT_REGISTER || (paramMode == PARAM_NUMBER_8_16 && param == CNST_BEYOND_250)) {
-          ok = _readFileProgramByte(remaining, &byte);
-        }
-        else if(param == INDIRECT_VARIABLE) {
-          ok = _readFileProgramByte(remaining, &length) && _skipFileProgramBytes(remaining, length);
-        }
-        else {
-          ok = false;
-        }
-        break;
-      }
-
-      case PARAM_NUMBER_16: {
-        if(!isFunctionOldParam16(op) && param == INDIRECT_VARIABLE) {
-          ok = _readFileProgramByte(remaining, &length) && _skipFileProgramBytes(remaining, length);
-        }
-        else { // both the old little-endian and the new form carry one more byte
-          ok = _readFileProgramByte(remaining, &byte);
-        }
-        break;
-      }
-
-      case PARAM_SKIP_BACK:
-      case PARAM_SHUFFLE: {
-        ok = true;
-        break;
-      }
-
-      case PARAM_MENU: {
-        if(param == STRING_LABEL_VARIABLE || param == INDIRECT_VARIABLE) {
-          ok = _readFileProgramByte(remaining, &length) && _skipFileProgramBytes(remaining, length);
-        }
-        else if(param == INDIRECT_REGISTER) {
-          ok = _readFileProgramByte(remaining, &byte);
-        }
-        else {
-          ok = false;
-        }
-        break;
-      }
-
-      default: {
-        ok = false;
-        break;
-      }
+    if(tail == PARAM_TAIL_INVALID) {
+      return false;
     }
-
+    else if(tail == PARAM_TAIL_LENGTH_PREFIXED) {
+      if(!_readFileProgramByte(remaining, &length)) {
+        return false;
+      }
+      if(declaredLabel && length > MAX_LABEL_NAME_LENGTH) { // the check this screen exists for
+        *refuse = true;
+        return false;
+      }
+      ok = _skipFileProgramBytes(remaining, length);
+    }
+    else {
+      ok = _skipFileProgramBytes(remaining, (uint32_t)tail);
+    }
     if(ok && allowKeyParam && (op == ITM_KEY || op == ITM_42KEY)) {
-      return _screenFileStep(remaining, overlong, false);
+      return _screenFileStep(remaining, refuse, false);
     }
     return ok;
   }
 
 
-  // First-pass screen of a program file: reads through the program bytes
-  // checking every declared label's claimed name length, without loading
-  // anything. The caller rewinds the file afterwards.
-  static bool_t _programFileHasOverlongLabelName(uint32_t pgmSizeInByte) {
+  static bool_t _programFileRefused(uint32_t pgmSizeInByte) {
     uint32_t remaining = pgmSizeInByte;
-    bool_t overlong = false;
-    while(remaining > 0 && _screenFileStep(&remaining, &overlong, true)) {
+    bool_t refuse = false;
+    while(remaining > 0 && _screenFileStep(&remaining, &refuse, true)) {
     }
-    return overlong;
+    return refuse;
   }
 
 
@@ -830,10 +677,13 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
       return;
     }
 
-    // First pass: screen the file before loading anything, so a refusal
-    // needs no rollback. A file claiming a label name longer than the
-    // calculator can produce is corrupt and is refused whole.
-    if(_programFileHasOverlongLabelName(pgmSizeInByte)) {
+    if((uint64_t)pgmSizeInByte + 2 > (uint64_t)freeProgramBytes + getFreeRamMemory()) { // cannot possibly fit: refuse before reserving anything
+      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
+      ioFileClose();
+      return;
+    }
+    // First pass: screen the file before loading anything, so a refusal needs no rollback.
+    if(_programFileRefused(pgmSizeInByte)) {
       displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA, ERR_REGISTER_LINE, REGISTER_X);
       ioFileClose();
       return;
