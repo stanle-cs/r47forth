@@ -166,6 +166,11 @@ void fnForthOuter(uint16_t param);
 /* Program-step entry (P-2, §3.3.2) */
 void forthProgramStep(const uint8_t *payload);
 
+/* Scope variable (F3-3) */
+uint16_t forthCurrentScopeGet(void);
+uint16_t forthScopeEnterProgramStep(const uint8_t *anyPtrInProgram);
+void forthScopeRestore(uint16_t prev);
+
 /* Run-generation (§9.3) */
 void forthRunGenBump(void);
 

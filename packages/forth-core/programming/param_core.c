@@ -104,23 +104,37 @@ void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) 
           reallyRunFunction(op, label);
         }
         else if (forthFallbackEligible) {
-          uint16_t resolvedParam;
-          forthXEQType_t res = forthResolveXEQ(tmpStringLabelOrVariableName, &resolvedParam);
-          if (res == FORTH_XEQ_COLON) {
-            reallyRunFunction(ITM_FCALL, resolvedParam);
-            if(op == ITM_XEQP1 && programRunStop == PGM_RUNNING && lastErrorCode == ERROR_NONE) {
-              currentReturnLocalStep++;
-            }
-          }
-          else if (res == FORTH_XEQ_ITEM) {
-            reallyRunFunction(resolvedParam, NOPARAM);
+          /* F3-3A: this resolution acts for the step being executed — enter
+           * the owning program's scope (first touch included) so same-
+           * program words resolve and cross-scope words do not.  paramAddress
+           * points into the step; a non-program address (defensive) falls
+           * back to INTERACTIVE inside the helper.  Scope guards name
+           * resolution only: the FCALL dispatch below runs by ref and needs
+           * no scope of its own. */
+          uint16_t prevScope = forthScopeEnterProgramStep(paramAddress);
+          if(lastErrorCode != ERROR_NONE) {
+            forthScopeRestore(prevScope);   /* first-touch pre-scan failed: halt this step */
           }
           else {
-            displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
-            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-              sprintf(errorMessage, "string '%s' is not a named label", tmpStringLabelOrVariableName);
-              moreInfoOnError("In function _executeOp:", errorMessage, NULL, NULL);
-            #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+            uint16_t resolvedParam;
+            forthXEQType_t res = forthResolveXEQ(tmpStringLabelOrVariableName, &resolvedParam);
+            if(res == FORTH_XEQ_COLON) {
+              reallyRunFunction(ITM_FCALL, resolvedParam);
+              if(op == ITM_XEQP1 && programRunStop == PGM_RUNNING && lastErrorCode == ERROR_NONE) {
+                currentReturnLocalStep++;
+              }
+            }
+            else if(res == FORTH_XEQ_ITEM) {
+              reallyRunFunction(resolvedParam, NOPARAM);
+            }
+            else {
+              displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
+              #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+                sprintf(errorMessage, "string '%s' is not a named label", tmpStringLabelOrVariableName);
+                moreInfoOnError("In function _executeOp:", errorMessage, NULL, NULL);
+              #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+            }
+            forthScopeRestore(prevScope);
           }
         }
         else if (op == ITM_LBLQ) {

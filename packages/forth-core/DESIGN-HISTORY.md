@@ -714,3 +714,48 @@ end-to-end contracts. Closing findings:
   fixed; semantics byte-identical, gate-verified.
 - Stage ledger closed out. Next per `FSERIES_ROADMAP.md`: the F2 queue
   (F2-1..F2-4, authored and gate-locked).
+
+## 2026-07-18 — F3-3 packet defect: XEQ-name steps missed the scope model (amendment F3-3A)
+
+The F3-3 implementation run STOPPED correctly on a real packet
+contradiction: the packet required legacy tests to stay green while
+operationalizing "scope tracks program-step execution" as the `ITM_FORTH`
+source-step arm only.  An `XEQ 'name'` step executed from a running
+program therefore resolved in INTERACTIVE scope and could not see its own
+program's words — three param_core legacy tests red with
+`ERROR_LABEL_NOT_FOUND` (6) from the fallback arm, exactly at
+`paramCoreExecuteOp`'s forth-fallback site.  Two further legacy reds
+(`test_recurse_compile_only` [5], `test_accept_run_lifecycle` [3]) were
+harness-level `forthFindColon` introspection of program-owned words from
+INTERACTIVE scope — cross-scope reads the new contract deliberately
+rejects; their product assertions (RAM_FULL recursion; X==9 after resume)
+already carry each test's original purpose.
+
+Ruling (normative text added to §10.3): scope is a property of the
+executing step.  Every step arm that resolves Forth names on a step's
+behalf enters the owning program's scope through one shared primitive
+(`forthScopeEnterProgramStep`/`forthScopeRestore` — generation check +
+first-touch pre-scan + scan-record derivation, INTERACTIVE fallback for
+non-program addresses) and restores on exit.  Scope guards name→ref
+resolution only; by-ref execution (FCALL) and ref→name display stay
+scope-free.  The reported "contradiction" with mutation 3 dissolves: the
+per-source-step restore in `forthOuterRun` stays (mutation 3 intact), and
+the XEQ arm gets its own enter/restore in `param_core.c`.
+
+Amendment F3-3A (appended to `QWEN_PROMPTS_F3_3_scopes_live.md`) carries:
+the shared primitive + `forthProgramStep` refactor onto it; deletion of a
+tautological savedScope no-op the packet's item-3/item-4 ambiguity induced
+in `forthOuterRun`; the param_core fallback-arm hook (resolve AND colon
+dispatch inside the scope window, per the nested-evaluation-inherits
+rule); the two named legacy assertion flips to isolation pins; fixture
+step `sXeqA` + subcase 6 (cross-program XEQ-name rejection at the step
+surface, `ERROR_LABEL_NOT_FOUND`, scope restored on the error path); and
+mutation 5 (hook removal → `test_param_core_bounded_names` [1] RED — the
+legacy positive is the detector, since subcase 6 rejects either way).
+Consequences accepted: an XEQ-name step is now a first-touch site (a
+forward `XEQ 'W'` before any source step of its program executes resolves
+after pre-scan, matching §9.2's forward-reference promise); a program
+XEQ-name step can no longer resolve interactively-defined words (mutual
+invisibility, already pinned by subcase 3).  The §8.6 picker walk stays
+unfiltered as the documented interim until the F6 catalog lands the
+scope-aware listing.

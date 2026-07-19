@@ -378,13 +378,14 @@ bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags)
 {
   size_t queryLen = strlen(name);
 
-  /* Walk fdict newest-first, unfiltered. */
+  /* Walk fdict newest-first, filtered by owner (F3-3). */
   if (fdict.base) {
     uint16_t off = fdict.latest;
     uint16_t n = 0;
     while (off != FORTH_NULL) {
       forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
-      if (!(hdr->flags & FF_SMUDGE)) {
+       if (!(hdr->flags & FF_SMUDGE) &&
+           hdr->owner == forthCurrentScopeGet()) {
         if (hdr->nameLen > 0 &&
             queryLen == hdr->nameLen &&
             memcmp(fdict.base + off + 6, name, (size_t)hdr->nameLen) == 0) {
@@ -516,6 +517,7 @@ bool startDefinition(const char *name)
     return false;
   }
   forthDictWriteName(off, name, (uint8_t)nameLen);
+  ((forthHeader_t *)(fdict.base + off))->owner = forthCurrentScopeGet();
   openDef.entryOff = off;
   openDef.open = true;
   return true;

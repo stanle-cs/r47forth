@@ -31,6 +31,7 @@ typedef struct {
   char            source[FORTH_SOURCE_MAX];
   int16_t         pos;          /* tokenizer position */
   forthDefState_t savedDef;     /* outer level's open-definition snapshot */
+  uint16_t        savedScope;   /* outer level's scope snapshot (F3-3) */
 } forthOuterCtx_t;
 
 #define FORTH_OUTER_NEST_MAX 2
@@ -64,7 +65,7 @@ void forthScanTrackReset(void) {
   forthScanHead = FORTH_NULL;
 }
 
-static bool forthScanIsRecorded(const uint8_t *progStart) {
+static bool forthScanFindRecord(const uint8_t *progStart, uint16_t *recOff) {
   if (!fdict.base) {
     forthScanHead = FORTH_NULL;
     return false;
@@ -81,6 +82,7 @@ static bool forthScanIsRecorded(const uint8_t *progStart) {
     memcpy(&recKey, fdict.base + off, 4);
     memcpy(&prev, fdict.base + off + 4, 2);
     if (recKey == key) {
+      *recOff = off;
       return true;
     }
     if (prev != FORTH_NULL && prev >= off) { /* chain must strictly decrease */
@@ -90,6 +92,10 @@ static bool forthScanIsRecorded(const uint8_t *progStart) {
     off = prev;
   }
   return false;
+}
+
+static bool forthScanIsRecorded(const uint8_t *progStart) {
+  uint16_t t; return forthScanFindRecord(progStart, &t);
 }
 
 static bool forthScanRecord(const uint8_t *progStart) {
@@ -106,6 +112,10 @@ static bool forthScanRecord(const uint8_t *progStart) {
   forthScanHead = newOff;
   return true;
 }
+
+/* F3-3: scope variable -- current owner for definition stamping and filtered lookup */
+static uint16_t forthCurrentScope = FORTH_OWNER_INTERACTIVE;
+uint16_t forthCurrentScopeGet(void) { return forthCurrentScope; }
 
 static void forthRunGenCheckReset(void) {
   if (!forthResetPending || forthInnerIsActive()) {
@@ -534,6 +544,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
     setSystemFlag(FLAG_ASLIFT);
   }
 
+  forthCurrentScope = ctx->savedScope;
   forthDefStateRestore(&ctx->savedDef);
   forthOuterDepth--;
   forthOuterCur = prevCtx;
@@ -543,6 +554,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
 void forthOuterInterpret(const char *source)
 {
   forthOuterCtx_t ctx;
+  ctx.savedScope = forthCurrentScope;
   size_t n = strlen(source);
   if (n >= FORTH_SOURCE_MAX) {
     displayCalcErrorMessage(ERROR_INPUT_TOO_LONG, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -564,6 +576,7 @@ void fnForthOuter(uint16_t unused) {
     return;
   }
   forthOuterCtx_t ctx;
+  ctx.savedScope = forthCurrentScope;
   xcopy(ctx.source, REGISTER_STRING_DATA(REGISTER_X), len + 1);
   fnDrop(NOPARAM);   /* copy MUST precede drop: drop invalidates the string */
   forthOuterRun(&ctx, FORTH_OUTER_FULL);
@@ -605,8 +618,13 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
     return;
   }
 
+  /* F3-3: set scope to the new record's offset for definition stamping */
+  uint16_t savedScope = forthCurrentScope;
+  forthCurrentScope = forthScanHead;
+
   uint8_t *nextStart = forthNextProgramStart(progStart);
   forthOuterCtx_t ctx;
+  ctx.savedScope = forthCurrentScope;
   uint8_t *step = progStart;
   while (step && (nextStart == NULL || step < nextStart)) {
     uint8_t len;
@@ -620,6 +638,7 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
          fdict.latest = scanLatest;
          fdict.count  = scanCount;
          forthScanHead = scanHead;
+         forthCurrentScope = savedScope;
          return;
        }
     }
@@ -630,15 +649,44 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
     step = next;
   }
   /* Success: the record is already in place. */
+  forthCurrentScope = savedScope;
 }
 
+/* F3-3A: single scope-entry primitive for every scope-sensitive step arm
+ * (the ITM_FORTH source-step handler below; the XEQ/XEQP1 name fallback
+ * in param_core.c).  Generation check + first-touch pre-scan, then select
+ * the owning program's scope.  Returns the previous scope for
+ * forthScopeRestore.  On pre-scan error the scope is left unchanged and
+ * the caller halts its step. */
+uint16_t forthScopeEnterProgramStep(const uint8_t *anyPtrInProgram)
+{
+  uint16_t prev = forthCurrentScope;
+  forthRunGenCheckReset();
+  forthPreScanOwningProgram(anyPtrInProgram);
+  if (lastErrorCode != ERROR_NONE) {
+    return prev;
+  }
+  {
+    uint16_t recOff;
+    uint8_t *progStart = forthOwningProgramStart(anyPtrInProgram);
+    if (progStart && forthScanFindRecord(progStart, &recOff)) {
+      forthCurrentScope = recOff;
+    } else {
+      forthCurrentScope = FORTH_OWNER_INTERACTIVE;
+    }
+  }
+  return prev;
+}
+
+void forthScopeRestore(uint16_t prev) { forthCurrentScope = prev; }
+
 void forthProgramStep(const uint8_t *payload) {
-  forthRunGenCheckReset();                  /* generation first: may clear dict + scan list */
-  forthPreScanOwningProgram(payload);       /* payload sits inside the step, inside the program */
+  uint16_t prevScope = forthScopeEnterProgramStep(payload);
   if (lastErrorCode != ERROR_NONE) {
     return;                                 /* pre-scan error halts before executing this step */
   }
   forthOuterCtx_t ctx;
+  ctx.savedScope = prevScope;
   uint8_t len = *payload;
   xcopy(ctx.source, payload + 1, len);
   ctx.source[len] = 0;

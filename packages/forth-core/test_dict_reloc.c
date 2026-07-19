@@ -4337,8 +4337,8 @@ static int test_recurse_compile_only(void)
       printf("    FAIL [5]: expected ERROR_RAM_FULL, got %d\n", lastErrorCode);
       sub5Fail = 1;
     }
-    else if (!forthFindColon("PRW", &idx)) {
-      printf("    FAIL [5]: PRW not found after scan\n");
+    else if (forthFindColon("PRW", &idx)) {   /* F3-3: program-owned, invisible interactively */
+      printf("    FAIL [5]: PRW visible from interactive scope (F3-3 isolation)\n");
       sub5Fail = 1;
     }
   }
@@ -4918,8 +4918,8 @@ static int test_accept_run_lifecycle(void)
         printf("    [3] FAIL: X != 9 after resume (SQ not re-derived)\n");
         fail = 1;
       }
-      else if (!forthFindColon("SQ", &idx)) {
-        printf("    [3] FAIL: SQ not found after resume\n");
+      else if (forthFindColon("SQ", &idx)) {   /* F3-3: program-owned, invisible interactively */
+        printf("    [3] FAIL: SQ visible from interactive scope after resume (F3-3 isolation)\n");
         fail = 1;
       }
       else if (forthFindColon("PZW", &idx)) {
@@ -7022,6 +7022,14 @@ static int tpXeqName(testProg_t *p, const char *name)      /* XEQ 'name' step */
 static int tpOp1(testProg_t *p, uint8_t opByte)            /* one-byte opcode; new callers use named ITM_* constants */
 {
   return tpAppend(p, &opByte, 1, TP_STEP_OP1);
+}
+
+static int tpEnd(testProg_t *p)                            /* ITM_END separator */
+{
+  uint8_t s[2];
+  s[0] = (ITM_END >> 8) | 0x80;
+  s[1] =  ITM_END       & 0xff;
+  return tpAppend(p, s, 2, TP_STEP_OP1);
 }
 
 static int tpRaw(testProg_t *p, const uint8_t *b, uint16_t n) /* deliberate malformation or encoding assertion ONLY */
@@ -10251,6 +10259,243 @@ static int test_validate_direct_corruption(void)
   return fail;
 }
 
+/* test_scope_isolation
+ * F3-3: definitions are scope-owned and lookup honors the owner.
+ * Five subcases covering scope isolation, cross-program rejection,
+ * interactive/program mutual invisibility, scope restore, and global
+ * word visibility. */
+static int test_scope_isolation(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+
+  /* Build fixture: program A | program B */
+  testProg_t tp;
+  tpInit(&tp);
+  int sLblA  = tpLbl(&tp, "PA");
+  int sDefA  = tpSrc(&tp, ": WA 41 ;");
+  int sUseA  = tpSrc(&tp, "WA");
+  int sUseWI = tpSrc(&tp, "WI");
+  (void)tpEnd(&tp);
+  int sLblB  = tpLbl(&tp, "PB");
+  int sDefB  = tpSrc(&tp, ": WB 42 ;");
+  int sUseB  = tpSrc(&tp, "WA 1 +");
+  int sXeqA  = tpXeqName(&tp, "WA");
+  if (sLblA < 0 || sDefA < 0 || sUseA < 0 || sUseWI < 0 ||
+      sLblB < 0 || sDefB < 0 || sUseB < 0 || sXeqA < 0 || !tpWrite(&tp)) {
+    printf("    FAIL: fixture build/write failed\n");
+    programRunStop = savedRS;
+    return 1;
+  }
+
+  /* ---- Subcase 1: Program A derives and uses its own word ---- */
+  {
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    programRunStop = PGM_RUNNING;
+    forthRunGenBump();
+    currentStep = tpStepAddr(&tp, sDefA);
+    executeOneStep(currentStep);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: def step error %d\n", lastErrorCode);
+      fail = 1;
+    } else {
+      currentStep = tpStepAddr(&tp, sUseA);
+      executeOneStep(currentStep);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: use step error %d\n", lastErrorCode);
+        fail = 1;
+      } else if (!x_is_longint(41)) {
+        printf("    [1] FAIL: X != 41\n");
+        fail = 1;
+      } else {
+        printf("    [1] PASS: program word resolves in its own scope\n");
+      }
+    }
+  }
+
+  /* ---- Subcase 2: Program B cannot see A's word ---- */
+  {
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    programRunStop = PGM_RUNNING;
+    currentStep = tpStepAddr(&tp, sDefB);
+    executeOneStep(currentStep);
+    if (lastErrorCode == ERROR_NONE) {
+      forthPushInt32(77);
+      currentStep = tpStepAddr(&tp, sUseB);
+      executeOneStep(currentStep);
+      if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+        printf("    [2] FAIL: expected ERROR_FUNCTION_NOT_FOUND, got %d (X=%s)\n",
+               lastErrorCode, x_is_longint(77) ? "77" : "changed");
+        fail = 1;
+      } else if (!x_is_longint(77)) {
+        printf("    [2] FAIL: X changed from sentinel 77\n");
+        fail = 1;
+      } else {
+        printf("    [2] PASS: cross-program lookup rejected\n");
+      }
+    } else {
+      printf("    [2] FAIL: defB step error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    if (forthCurrentScopeGet() != FORTH_OWNER_INTERACTIVE) {
+      printf("    [2] FAIL: scope not restored after error drive (got %u)\n",
+             forthCurrentScopeGet());
+      fail = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* ---- Subcase 3: Interactive and program scopes are mutually invisible ---- */
+  {
+    int subFail = 0;
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": WI 7 ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: WI definition error %d\n", lastErrorCode);
+      subFail = 1;
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("WA");
+      if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+        printf("    [3a] FAIL: interactive saw WA (got %d)\n", lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      bool err = run_word("WI");
+      if (err || !x_is_longint(7)) {
+        printf("    [3b] FAIL: WI failed or X != 7\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      dynamicMenuItem = -1;
+      programRunStop = PGM_RUNNING;
+      currentStep = tpStepAddr(&tp, sUseWI);
+      executeOneStep(currentStep);
+      if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+        printf("    [3c] FAIL: program saw WI (got %d)\n", lastErrorCode);
+        subFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+    if (!subFail) {
+      printf("    [3] PASS: interactive and program scopes are mutually invisible\n");
+    } else {
+      fail = 1;
+    }
+  }
+
+  /* ---- Subcase 4: Scope restores to INTERACTIVE after every drive ---- */
+  {
+    if (forthCurrentScopeGet() != FORTH_OWNER_INTERACTIVE) {
+      printf("    [4] FAIL: scope not INTERACTIVE after all drives (got %u)\n",
+             forthCurrentScopeGet());
+      fail = 1;
+    } else {
+      printf("    [4] PASS: current scope restored to interactive\n");
+    }
+  }
+
+  /* ---- Subcase 5: Global word visible and callable from transient scope ---- */
+  {
+    int subFail = 0;
+    uint16_t gw = gbegin_word("GVIS", 4);
+    if (gw == FORTH_NULL) {
+      printf("    [5] FAIL: gbegin_word GVIS failed\n");
+      subFail = 1;
+    } else {
+      gemit(T_ILIT);
+      { int32_t v = 9;
+        if (!forthGDictEnsure(4)) {
+          printf("    [5] FAIL: forthGDictEnsure for int32\n");
+          subFail = 1;
+        } else {
+          memcpy(gdict.base + gdict.here, &v, 4);
+          gdict.here += 4;
+        }
+      }
+      if (!subFail) {
+        gemit(T_EXIT);
+        gdict.here = (uint16_t)TO_BLOCKS(gdict.here) * BYTES_PER_BLOCK;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret("GVIS");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [5] FAIL: GVIS error %d\n", lastErrorCode);
+        subFail = 1;
+      } else if (!x_is_longint(9)) {
+        printf("    [5] FAIL: X != 9 after GVIS\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret(": WG GVIS 1 + ;");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [5] FAIL: WG definition error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      lastErrorCode = ERROR_NONE;
+      bool err = run_word("WG");
+      if (err || !x_is_longint(10)) {
+        printf("    [5] FAIL: WG failed or X != 10\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      printf("    [5] PASS: global word visible and callable from transient scope\n");
+    } else {
+      fail = 1;
+    }
+  }
+
+  /* [6] cross-program XEQ-name step: B's XEQ 'WA' must reject in B's scope */
+  {
+    uint8_t savedRS6 = savedRS;
+    forthPushInt32(88);
+    lastErrorCode = ERROR_NONE;
+    dynamicMenuItem = -1;
+    programRunStop = PGM_RUNNING;
+    currentStep = tpStepAddr(&tp, sXeqA);
+    executeOneStep(currentStep);
+    programRunStop = savedRS6;
+    if (lastErrorCode != ERROR_LABEL_NOT_FOUND) {
+      printf("    [6] FAIL: expected ERROR_LABEL_NOT_FOUND, got %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(88)) {
+      printf("    [6] FAIL: X changed across rejected XEQ\n");
+      fail = 1;
+    }
+    else if (forthCurrentScopeGet() != FORTH_OWNER_INTERACTIVE) {
+      printf("    [6] FAIL: scope not restored after rejected XEQ step\n");
+      fail = 1;
+    }
+    else {
+      printf("    [6] PASS: cross-program XEQ-name step rejected in the step's scope\n");
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+  lastErrorCode = ERROR_NONE;
+  programRunStop = savedRS;
+  return fail;
+}
+
 int forthDictSelfTest(void)
 {
   int fail = 0;
@@ -10883,6 +11128,14 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_overlong_token_in_def_keeps_error...\n");
   fail |= test_overlong_token_in_def_keeps_error();
+  forthDictClear();
+
+  /* F3-3: scope isolation */
+  printf("\nFORTH F3-3 TESTS (scope isolation)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_scope_isolation...\n");
+  fail |= test_scope_isolation();
   forthDictClear();
 
   /* FIX-6: free-list integrity — LAST test, after all cleanup */
