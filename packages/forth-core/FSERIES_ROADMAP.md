@@ -1,4 +1,4 @@
-# F-series roadmap — the complete remaining plan (2026-07-17)
+# F-series roadmap — the complete remaining plan (2026-07-18)
 
 Authored per the owner's 2026-07-17 instruction: plan the ENTIRE remaining
 series now instead of stage-by-stage. Authority stays with DESIGN.md §10 and
@@ -6,14 +6,12 @@ the packet files; this roadmap is the architect's working plan — scope,
 pre-work, predicted packet decomposition, and risk register per stage. The
 operator still sequences sessions from `QWEN_RUNBOOK.md`.
 
-**Why F2..F6 packets do not exist yet (and must not):** each of those stages
-has a mandatory architect pre-work phase — native-path tracing or an owner
-ruling — that DESIGN.md names explicitly ("traced, not inferred"). A packet
-authored before its trace would repeat the F1-5 P0 defect at stage scale.
-The pacing instruction is honored where it is honorable: everything that CAN
-be authored against verified ground now IS (F1.5 is fully authored,
-F15-1..F15-5). For F2..F6 this roadmap fixes the pre-work checklists so each
-authoring pass is mechanical once its inputs exist.
+F1.5 and F2 are complete. F3's mandatory trace/design pass and all seven
+packets are authored; F3-1 is the next executable packet and F3-2..F3-7 are
+gate-locked in dependency order. F4..F6 retain mandatory architect pre-work —
+native-path tracing or an owner ruling — before their packets may be authored.
+A packet authored before its trace would repeat the F1-5 P0 defect at stage
+scale.
 
 ## Standing discipline (all stages)
 
@@ -26,24 +24,23 @@ authoring pass is mechanical once its inputs exist.
   stage commit (RULE-1, Stan runs `make dmcp5r47`).
 - A failed gate or a spec mismatch goes to the architect; Qwen never adapts.
 
-## Stage F1.5 — §8.9 acceptance harness (IN FLIGHT, fully authored)
+## Stage F1.5 — §8.9 acceptance harness (COMPLETE)
 
 | Packet | Status |
 |---|---|
 | F15-1 run lifecycle (items 1, 7, 9) | DONE `b773597bd` |
 | F15-2 entry state + power-off (item 2) | DONE `5a9e9ce2d` |
 | F15-3 display parity (item 4) | DONE `c8b87dfa8` |
-| F15-4 glyph + type parity (items 5, 6) | READY — `QWEN_PROMPTS_F15_4_glyph_type_parity.md` |
-| F15-5 XEQ-name step (item 10) | AUTHORED, gate-locked on F15-4 — `QWEN_PROMPTS_F15_5_xeq_name_step.md` |
+| F15-4 glyph + type parity (items 5, 6) | DONE (`6775252bf`, debugged) |
+| F15-5 XEQ-name step (item 10) | DONE (`546aa8b6c`) |
 
-Stage close (architect, docs-only): §8.9 coverage note flipped to
-"fully covered end-to-end", remaining §8.3-adjacent prose sweep, the
-`vBodyWalk` indentation nit in `forth_dict.c`, ledger closeout. Then the
-harness pins every later stage: F2..F6 packets inherit an acceptance
-backstop that fails loudly if they break lifecycle, entry state, display,
-parity, or name-faithfulness.
+Stage close is complete: §8.9 coverage is "fully covered end-to-end", the
+`vBodyWalk` nit was fixed, and the ledger was closed. The harness now pins
+every later stage: F2..F6 packets inherit an acceptance backstop that fails
+loudly if they break lifecycle, entry state, display, parity, or
+name-faithfulness.
 
-## Stage F2 — shared RPN parameter semantic core (DESIGN §10.2) — CORRECTION READY
+## Stage F2 — shared RPN parameter semantic core (DESIGN §10.2) — COMPLETE
 
 **Status 2026-07-17:** the pre-work is DONE and the packets exist. The PTP
 trace was performed against the tree (evidence recorded in
@@ -61,7 +58,8 @@ pins that silence.
 mutation stayed green because both engines used the same mutated validator.
 The same review found two bounded-reader defects plus last-match and state-
 isolation defects in the NUMBER_16 sweep. `QWEN_PROMPTS_F2_5_acceptance_correction.md`
-is the bounded correction; F3 is gate-locked until it commits green.
+was the bounded correction and committed green as `b5d794df4`; the F3-1 gate
+is now open.
 
 | Packet | Status |
 |---|---|
@@ -69,41 +67,37 @@ is the bounded correction; F3 is gate-locked until it commits green.
 | F2-2 bounded name reader | DONE (`69e594c71`) |
 | F2-3 shared dispatch + FTOK_C47 re-route | DONE (`06ce84b5a`) |
 | F2-4 parity acceptance sweep | LANDED (`176e0be0f`) — review found escapes |
-| F2-5 acceptance correction | READY TO EXECUTE — gates F3 |
+| F2-5 acceptance correction | DONE (`b5d794df4`) |
 
 **Risks (unchanged):** hidden `_executeOp` call sites or PTP consumers
 surfacing at execution → gates STOP, architect re-authors.
 
-## Stage F3 — vocabulary, scopes, XEQ + control flow + globals (DESIGN §10.3)
+## Stage F3 — vocabulary, scopes, XEQ + control flow + globals (DESIGN §10.3) — FULLY AUTHORED
 
 **Goal:** per-program scopes + interactive scope + global scope (2026-07-16
 fold), `XEQ 'NAME'`/`XEQ :NAME:` source forms, `FTOK_XEQN` with kind byte,
 control-flow words `IF/ELSE/THEN/BEGIN/UNTIL/AGAIN/WHILE/REPEAT` +
 `IMMEDIATE` (2026-07-16 fold), scope-aware reset.
 
-**Architect pre-work:**
-1. ~~Owner rulings~~ **RULED 2026-07-18** (§10.3, DESIGN-HISTORY): postfix
-   `GLOBAL` (latest-entry marker, IMMEDIATE mechanism); classic `FORGET`
-   truncating the global scope at the named word; same arena + same §5.4
-   ceiling with a split global/transient high-water report. Zero open
-   owner questions remain for F3.
-2. Trace the native label grammar (R4 C2) for `XEQ :NAME:` parity —
-   against the post-F2 tree.
-3. Settle control-flow compilation shapes against the traced stack
-   semantics (operand back-patching, compile-time control stack, §3.2
-   consuming-pop question) — design pass documented before packets.
-4. Extend the F1-5 validator spec with `FTOK_XEQN` kind/len/padding (the
-   reserved-token arm at `0x7F05..` was left for exactly this).
+**Architect pre-work — DONE 2026-07-18:** owner rulings, native label grammar
+trace, control-flow compilation shapes, two-region arena/persistence model,
+and the `FTOK_XEQN` validator extension are recorded in
+`QWEN_PROMPTS_F3_core.md`. Zero open design choices remain in F3.
 
-**Predicted packets (6-7):** scope headers + lookup order; scope-aware
-reset/lifetime integration; XEQN token + parser; XEQ dispatch matrix (B4);
-IMMEDIATE + control-flow words (possibly split 2 packets); validator
-extension + §2.3 acceptance tests.
+| Packet | Status |
+|---|---|
+| F3-1 owner-tagged headers | READY — `QWEN_PROMPTS_F3_1_owner_headers.md` |
+| F3-2 global region, refs, persistence, validator retarget | AUTHORED, gate-locked on F3-1 — `QWEN_PROMPTS_F3_2_global_region.md` |
+| F3-3 current scopes + filtered lookup | AUTHORED, gate-locked on F3-2 — `QWEN_PROMPTS_F3_3_scopes_live.md` |
+| F3-4 GLOBAL / IMMEDIATE / FORGET | AUTHORED, gate-locked on F3-3 — `QWEN_PROMPTS_F3_4_marks.md` |
+| F3-5 compile-time control flow | AUTHORED, gate-locked on F3-4 — `QWEN_PROMPTS_F3_5_control_flow.md` |
+| F3-6 XEQ forms + FTOK_XEQN + B3 | AUTHORED, gate-locked on F3-5 — `QWEN_PROMPTS_F3_6_xeqn.md` |
+| F3-7 §2.3 acceptance pins + stage sweep | AUTHORED, gate-locked on F3-6 — `QWEN_PROMPTS_F3_7_acceptance.md` |
 
-**Risks:** largest stage; the scope/lifetime interaction with F1 semantics
-must be re-verified against the landed tree at authoring time (the F1.5
-harness is the safety net); globals persistence interacts with F1-5's
-restore validation.
+**Execution risks:** this remains the largest stage. Each successor gate must
+be checked against the exact committed predecessor; the F1.5 harness guards
+lifecycle/PEM regressions, and the F3 packets independently pin the split
+dictionary, restore validation, scope filtering, branches, and XEQ dispatch.
 
 ## Stage F4 — Series C textual parameters (DESIGN §10.4)
 

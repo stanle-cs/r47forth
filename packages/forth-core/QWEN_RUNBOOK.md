@@ -50,9 +50,9 @@ accepted backlog is empty (DESIGN-HISTORY 2026-07-16 entry).
 ## 2. The queue
 
 Legend: **[QWEN]** = paste the named file and run it now.
-**[ARCHITECT]** = come back to the architect session (Claude) first —
-those packets do not exist yet by design (each is authored against the
-green tree its predecessor leaves behind).
+**[GATE LOCKED]** = the packet is authored, but its predecessor must commit
+green before its execution gate can open. **[ARCHITECT]** = come back to the
+architect session first; the future-series packet has not been authored yet.
 
 | # | Step | Who | Input |
 |---|---|---|---|
@@ -73,8 +73,15 @@ green tree its predecessor leaves behind).
 | 7c | F2-2 bounded name reader | DONE (`69e594c71`) | `QWEN_PROMPTS_F2_2_bounded_names.md` |
 | 7d | F2-3 shared direct dispatch + FTOK_C47 re-route | DONE (`06ce84b5a`) | `QWEN_PROMPTS_F2_3_shared_dispatch.md` |
 | 7e | F2-4 parity acceptance sweep (+ RULE-1 flash delta) | LANDED (`176e0be0f`) — post-stage review found acceptance escapes | `QWEN_PROMPTS_F2_4_parity_acceptance.md` |
-| 7f | F2-5 bounded-reader + parity-acceptance correction | **[QWEN]** — ONLY NEXT PACKET; F3 gate-locked | `QWEN_PROMPTS_F2_5_acceptance_correction.md` |
-| 8 | F3 — vocabulary/scopes/XEQ/XEQN **+ control-flow words & IMMEDIATE + global scope** (2026-07-16 folds). HARD PRECONDITION: F2-5 committed green. Architect design pass first: rule globals' entry spelling / FORGET / arena accounting; trace label grammar (R4 C2); settle control-flow compilation shapes; extend the F1-5 validator with XEQN. Then packets. | **[ARCHITECT]** then [QWEN] | DESIGN §10.3 |
+| 7f | F2-5 bounded-reader + parity-acceptance correction | DONE (`b5d794df4`) | `QWEN_PROMPTS_F2_5_acceptance_correction.md` |
+| 8a | F3 trace, design pass, and packet ledger | DONE (authored 2026-07-18) | `QWEN_PROMPTS_F3_core.md` |
+| 8b | F3-1 owner-tagged dictionary headers | **[QWEN]** — ONLY NEXT PACKET | `QWEN_PROMPTS_F3_1_owner_headers.md` |
+| 8c | F3-2 global region, refs, persistence swap, validator retarget | **[GATE LOCKED]** on F3-1 | `QWEN_PROMPTS_F3_2_global_region.md` |
+| 8d | F3-3 current scopes and filtered lookup | **[GATE LOCKED]** on F3-2 | `QWEN_PROMPTS_F3_3_scopes_live.md` |
+| 8e | F3-4 GLOBAL / IMMEDIATE / FORGET | **[GATE LOCKED]** on F3-3 | `QWEN_PROMPTS_F3_4_marks.md` |
+| 8f | F3-5 compile-time control flow | **[GATE LOCKED]** on F3-4 | `QWEN_PROMPTS_F3_5_control_flow.md` |
+| 8g | F3-6 XEQ forms, FTOK_XEQN, and B3 | **[GATE LOCKED]** on F3-5 | `QWEN_PROMPTS_F3_6_xeqn.md` |
+| 8h | F3-7 §2.3 acceptance pins and final stage sweep | **[GATE LOCKED]** on F3-6 | `QWEN_PROMPTS_F3_7_acceptance.md` |
 | 9 | F4 — Series C textual parameters. Architect traces native grammar + error table, then packets. | **[ARCHITECT]** then [QWEN] | DESIGN §10.4 |
 | 10 | F5 — Series D commit validation (E9 two tiers). | **[ARCHITECT]** then [QWEN] | DESIGN §10.5 |
 | 11 | F6 — capture submode **+ dedicated Forth word catalog** (2026-07-16 fold). HARD PRECONDITION: its own keyboard/PEM audit with hardware-derived tests BEFORE any packet is authored. | **[ARCHITECT]** (audit + packets) then [QWEN] | DESIGN §10.6 |
