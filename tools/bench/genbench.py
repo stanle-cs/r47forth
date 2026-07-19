@@ -12,9 +12,10 @@
 # here: hardware and simulator runs stay comparable only as long as N never
 # changes, so treat the N values as frozen once a calibration file has been
 # published (see tools/bench/README.md). The counts were sized from a real
-# DM42n measurement (BMGTO: 972 iterations/s on USB power) so that each
-# benchmark runs long enough for <1% TICKS quantization but the whole suite
-# stays in the ten-minute range on hardware.
+# DM42n measurement (BMGTO: ~950 iterations/s on USB power) so that each
+# benchmark runs long enough for <1% TICKS quantization (measured worst
+# case 116 ticks); the whole suite measured about 3.5 minutes on USB power
+# and 7.5 minutes on battery.
 #
 # Running state is visible on the calculator: every benchmark splits its
 # loop into CHUNKS outer chunks and VIEWs the chunk countdown (R95) at each
@@ -144,8 +145,9 @@ def repeated(body, times):
 
 
 # Iteration counts: frozen once a calibration is published. Sized from the
-# measured DM42n BMGTO rate (972 it/s, USB 160 MHz) with per-step cost
-# estimates for the others, targeting >=150 ticks each on hardware.
+# measured DM42n BMGTO rate (~950 it/s, USB 160 MHz) with per-step cost
+# estimates for the others; all landed at 116 ticks or more on hardware,
+# keeping TICKS quantization under 1%.
 ITERATIONS = {
     "BMGTO": 20000,
     "BMREG": 10000,
