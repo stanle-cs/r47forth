@@ -1,0 +1,207 @@
+LBL 'ALLTEST'
+  XEQ 'PLTROOT'
+  XEQ 'PLTINTG'
+  XEQ 'PLTINT3'
+    XEQ 'DBLINT'
+    XEQ 'TRPINT'
+    XEQ 'PLTDBL'
+  XEQ 'SLVINT'
+  XEQ 'SLVSLV'
+  XEQ 'SLVF2'
+  XEQ 'INTPI'
+
+  OPENM 'PLFUNC'
+RTN
+
+
+# TEST nesting for f(x) = x^2 - p*x - 2
+LBL 'FX'                   ; f(x) = x^2 - p*x - 2  (x is the variable; p an incoming parameter)
+  MVAR 'x'                 ; set up the variable if missing, and give a manual solve opportunity
+  MVAR 'p'                 ; set up the variable if missing, and give a manual solve opportunity
+  RCL 'x'
+  ENTER ×                  ; x^2
+  RCL 'x' RCL 'p' × -      ; - p*x
+  2 -                      ; - 2
+RTN
+
+
+# TEST PLOT(SOLVE): plot the root locus x*(p) over p; expect a curve
+LBL 'RT'                   ; for fixed p: solve f(x)=0, return the root x
+  PGMSLV 'FX'
+  0 8                      ; initial guesses: lo -> Y, hi -> X
+  SOLVE 'x'                ; root left in X
+RTN
+
+LBL 'PLTROOT'              ; outer: plot the locus over p
+  PGMPLT 'RT'
+  -5  5                    ; plot range for p
+  'PLOT(SOLVE): root locus' STO A DROPX
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+  PLTf 'p'
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+RTN
+
+
+# TEST PLOT(INT), fixed limits: plot INT(0..8) f dx over p; expect 1st order (linear in p)
+LBL 'IG'                   ; for fixed p: integrate f over x from 0 to 8, return the integral
+  PGMINT 'FX'
+  0 8                      ; integration limits: lower -> Y, upper -> X
+  ∫^𝑥_𝑦 'x'                ; INT(0..8) f dx left in X
+RTN
+
+LBL 'PLTINTG'              ; outer: plot the integral over p
+  PGMPLT 'IG'
+  -5  5                    ; plot range for p
+  'PLOT(INT): linear in p' STO A DROPX
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+  PLTf 'p'
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+RTN
+
+
+# TEST PLOT(INT) over a variable limit: plot INT(0..u) f dx over u; expect 3rd order (cubic)
+LBL 'IU'                   ; for fixed p: integrate f over x from 0 to u (the plot variable)
+  MVAR 'u'
+  PGMINT 'FX'
+  0 RCL 'u'                ; integration limits: lower 0 -> Y, upper u -> X
+  ∫^𝑥_𝑦 'x'                ; INT(0..u) f dx left in X
+RTN
+
+LBL 'PLTINT3'              ; outer: plot the running integral over u (cubic). p defaults to 0 via MVAR 'p' in FX, which gives a clean cubic.
+  PGMPLT 'IU'
+  -5  5                    ; plot range for u
+  'PLOT(INT): cubic in u' STO A DROPX
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+  PLTf 'u'
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+RTN
+
+
+# TEST INT(INT) double integral: XEQ 'DBLINT' -> expect 4/3 = 1.33333...
+# DBLINT = INT(0..2) [INT(0..x) t dt] dx = INT(0..2) (x^2/2) dx = 4/3   (outer over x, inner over t)
+LBL 'HT'                   ; innermost integrand: h(t) = t
+  MVAR 't'
+  RCL 't'
+RTN
+
+LBL 'IT'                   ; INT(0..x) t dt = x^2/2   (integrate t, upper limit x)
+  MVAR 'x'
+  PGMINT 'HT'
+  0 RCL 'x'                ; integration limits: lower 0 -> Y, upper x -> X
+  ∫^𝑥_𝑦 't'                ; INT(0..x) h dt left in X
+RTN
+
+LBL 'DBLINT'               ; double integral, fixed limits: INT(0..2) IT dx = 4/3   (stands alone)
+  PGMINT 'IT'
+  0 2                      ; integration limits: lower 0 -> Y, upper 2 -> X
+  ∫^𝑥_𝑦 'x'                ; INT(0..2) (x^2/2) dx left in X
+  'INT(INT) = 4/3' STO A DROPX
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+RTN
+
+
+# TEST INT(INT(INT)) coupled triple integral: XEQ 'TRPINT' -> expect 2/3 = 0.66667
+# TRPINT = INT(0..2) [INT(0..y) [INT(0..x) t dt] dx] dy = INT(0..2) (y^3/6) dy = 2/3
+# Coupled via the limits (t up to x, x up to y), so all three levels do real work. Reuses HT, IT.
+LBL 'IY'                   ; double integral, variable upper limit y: INT(0..y) IT dx = y^3/6
+  MVAR 'y'
+  PGMINT 'IT'
+  0 RCL 'y'                ; integration limits: lower 0 -> Y, upper y -> X
+  ∫^𝑥_𝑦 'x'                ; INT(0..y) (x^2/2) dx left in X
+RTN
+
+LBL 'TRPINT'               ; triple integral: INT(0..2) IY dy = 2/3
+  PGMINT 'IY'
+  0 2                      ; integration limits: lower 0 -> Y, upper 2 -> X
+  ∫^𝑥_𝑦 'y'                ; INT(0..2) (y^3/6) dy left in X
+  'INT(INT(INT)) = 2/3' STO A DROPX
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+RTN
+
+
+# TEST PLOT(INT(INT)): plot the double integral over y; expect 3rd order (cubic y^3/6). Reuses HT, IT, IY.
+LBL 'PLTDBL'               ; plot IY(y) = INT(0..y) (x^2/2) dx = y^3/6, over y
+  PGMPLT 'IY'
+  -5  5                    ; plot range for y
+  PLTf 'y'
+  'PLOT(INT(INT)): cubic' STO A DROPX
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+RTN
+
+
+# TEST SOLVE(INT): XEQ 'SLVINT' -> expect x = 2   (the original integral-nested-in-SOLVE)
+# solve SI(x) = INT(0..x) t dt - 2 = x^2/2 - 2 = 0  -> x = 2.  Reuses HT.
+LBL 'SI'                   ; SI(x) = INT(0..x) t dt - 2
+  MVAR 'x'
+  PGMINT 'HT'
+  0 RCL 'x'                ; integration limits: lower 0 -> Y, upper x -> X
+  ∫^𝑥_𝑦 't'                ; INT(0..x) t dt = x^2/2 left in X
+  2 -                      ; - 2
+RTN
+
+LBL 'SLVINT'               ; SOLVE(INT): solve SI(x)=0 -> x = 2
+  PGMSLV 'SI'
+  0 5                      ; guesses for x: lo -> Y, hi -> X
+  SOLVE 'x'                ; x = 2 left in X
+  'SOLVE(INT): x = 2' STO A DROPX
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+RTN
+
+
+# TEST SOLVE(SOLVE): XEQ 'SLVSLV' -> expect p = 1   (find the p that puts f's root at 2). Reuses FX, RT.
+# outer solves EQ(p) = [root of f(x)=x^2-p*x-2, from inner solve RT] - 2 = 0  ->  p = 1
+LBL 'EQ'                   ; outer equation: EQ(p) = root(p) - 2   (root from inner solve RT)
+  XEQ 'RT'                 ; inner solve -> root x in X
+  2 -                      ; - 2
+RTN
+
+LBL 'SLVSLV'               ; SOLVE(SOLVE): solve EQ(p)=0 -> p = 1
+  PGMSLV 'EQ'
+  -5  5                    ; guesses for p: lo -> Y, hi -> X
+  SOLVE 'p'                ; p = 1 left in X
+  'SOLVE(SOLVE): p = 1' STO A DROPX
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+RTN
+
+
+# Standalone SOLVE at full precision. XEQ 'SLVF2' -> sqrt(2) to full ~32 figures
+LBL 'F2'                   ; F2(x) = x^2 - 2
+  MVAR 'x'                 ; set up the variable if missing, and give a manual solve opportunity
+  RCL 'x'
+  ENTER ×
+  2 -
+RTN
+
+LBL 'SLVF2'                ; solve x^2 - 2 = 0 -> x = 1.41421356237309504880168872420970 (full precision)
+  PGMSLV 'F2'
+  0 2                      ; guesses: lo -> Y, hi -> X
+  SOLVE 'x'
+  'solve x^2 - 2 = 0' STO A DROPX
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+  PGMPLT 'F2'
+  -2 4
+  PLTf 'x'
+  SNAP PAUSE 12            ; snapshot the screen; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+RTN
+
+
+# Standalone INT at full precision. XEQ 'INTPI' -> pi to full ~32 figures
+LBL 'FP'                   ; FP(x) = 4 / (1 + x^2)
+  MVAR 'x'                 ; set up the variable if missing
+  4
+  RCL 'x' ENTER ×          ; x^2
+  1 +                      ; 1 + x^2
+  ÷                        ; 4 / (1 + x^2)
+RTN
+
+LBL 'INTPI'                ; INT(0..1) 4/(1+x^2) dx = pi (full precision)
+  PGMINT 'FP'
+  0 1                      ; integration limits: lower 0 -> Y, upper 1 -> X
+  ∫^𝑥_𝑦 'x'                ; = pi left in X
+  'INT 4/(1+x^2) = pi' STO A DROPX
+  SNAP                     ; snapshot the result; the PAUSE below waits 1.2 s so the auto SNAP filename advances
+  PAUSE 12
+RTN
+
+
+END
