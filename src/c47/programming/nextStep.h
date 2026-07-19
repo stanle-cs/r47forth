@@ -9,9 +9,8 @@
 
   bool_t   programBytesAvailable   (const uint8_t *address, uint16_t numberOfBytes);
 
-  // Shared parameter-tail grammar: a tail is a fixed byte count (>= 0), a length byte followed by that many bytes,
-  // for literals possibly a base byte before the length, or invalid. Used by the walkers here and by the
-  // program-file screening pass in saveRestorePrograms.c.
+  // Shared parameter-tail grammar: a tail is a fixed byte count (>= 0), a length byte followed by that many bytes, or for literals a base byte first, or invalid.
+  // Used by the walkers here and by the program-file screening pass in saveRestorePrograms.c.
   #define PARAM_TAIL_INVALID              (-1)
   #define PARAM_TAIL_LENGTH_PREFIXED      (-2)
   #define PARAM_TAIL_BASE_LENGTH_PREFIXED (-3)

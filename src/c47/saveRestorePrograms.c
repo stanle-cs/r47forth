@@ -63,11 +63,10 @@
   }
 
 
-  // First-pass screen of a program file, before anything is loaded, using the same grammar tables as the in-memory walkers
-  // (paramTailBytes/literalTailBytes in programming/nextStep.c). Refuses a declared label name longer than
-  // MAX_LABEL_NAME_LENGTH and any non-item opcode: the in-memory walker decodes those as zero-parameter steps and walks on,
-  // so quitting silently there would let a crafted file smuggle an overlong label past the screen. A step the walker cannot
-  // otherwise decode ends the screening without refusing: after loading, scanLabelsAndPrograms() truncates there anyway.
+  // First-pass screen of a program file, before anything is loaded, using the grammar tables paramTailBytes() and literalTailBytes() in programming/nextStep.c.
+  // It refuses a declared label name longer than MAX_LABEL_NAME_LENGTH, and any non-item opcode, which the in-memory walker decodes as a zero-parameter step,
+  // so quitting silently there would let a crafted file hide an overlong label behind one. A step the walker cannot otherwise decode ends the screening,
+  // without refusing, because scanLabelsAndPrograms() truncates the program area there anyway.
 
   static bool_t _readFileProgramByte(uint32_t *remaining, uint8_t *value) {
     if(*remaining == 0) {
@@ -91,8 +90,8 @@
   }
 
 
-  // Consumes one step; returns false at end of stream, on an undecodable step, or with *refuse set. allowKeyParam limits
-  // the embedded second parameter of KEY/42KEY to one level, exactly like findNextStep().
+  // Consumes one step; returns false at end of stream, on an undecodable step, or with *refuse set.
+  // allowKeyParam limits the embedded second parameter of KEY and 42KEY to one level, exactly like findNextStep().
   static bool_t _screenFileStep(uint32_t *remaining, bool_t *refuse, bool_t allowKeyParam) {
     uint8_t byte, length;
     uint16_t op;
@@ -618,6 +617,7 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
     uint8_t *startOfProgram;
     int ret;
 
+    temporaryInformation = TI_NO_INFO; // only a completed load sets TI_PROGRAM_LOADED, so a refusal cannot leave the previous load's value standing.
     path = ioPathLoadProgram;
     ret = ioFileOpen(path, ioModeRead);
 
@@ -677,7 +677,9 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
       return;
     }
 
-    if((uint64_t)pgmSizeInByte + 2 > (uint64_t)freeProgramBytes + getFreeRamMemory()) { // cannot possibly fit: refuse before reserving anything
+    // Refuse what cannot fit, before reserving anything. The second bound is the program area's own accounting: freeProgramBytes is a uint16_t,
+    // and _addSpaceAfterPrograms() takes a uint16_t size, so a larger claim would reserve only its low 16 bits while the read loop writes them all.
+    if((uint64_t)pgmSizeInByte + 2 > (uint64_t)freeProgramBytes + getFreeRamMemory() || (uint64_t)pgmSizeInByte + 2 > UINT16_MAX) {
       displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
       ioFileClose();
       return;

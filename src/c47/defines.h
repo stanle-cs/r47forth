@@ -1125,10 +1125,9 @@
 #define FIRST_LC_LOCAL_LABEL   112                             //   a (first lower case local label
 #define LAST_LOCAL_LABEL       123                             //   0 - 99, A to L and a to l
 
-#define MAX_LABEL_NAME_LENGTH   14                             // Longest label name the calculator can produce: TAM alpha entry is
-                                                               // force-closed beyond 6 glyphs (maxLen in _tamProcessInput, ui/tam.c),
-                                                               // so a name is at most 7 glyphs of at most 2 bytes each. A longer name
-                                                               // in a loaded file marks the file as corrupt.
+#define MAX_LABEL_NAME_LENGTH   14                             // Longest label name the calculator can produce: TAM alpha entry is force-closed beyond 6 glyphs,
+                                                               // maxLen in _tamProcessInput, ui/tam.c, so a name is at most 7 glyphs of at most 2 bytes each.
+                                                               // A longer name in a loaded file marks the file as corrupt.
 
 //Variable names
 #define VAR_NO_X        0

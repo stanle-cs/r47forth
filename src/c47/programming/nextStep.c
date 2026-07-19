@@ -18,10 +18,8 @@ bool_t programBytesAvailable(const uint8_t *address, uint16_t numberOfBytes) {
 }
 
 
-// Parameter-tail grammar shared by the in-memory step walkers below and the program-file
-// screening pass in saveRestorePrograms.c: given the parameter mode, the operation (needed
-// for PARAM_NUMBER_16 only) and the first parameter byte, the tail after that byte is a
-// fixed byte count, a length byte followed by that many bytes, or invalid.
+// Parameter-tail grammar shared by the in-memory step walkers below and the program-file screening pass in saveRestorePrograms.c: given the parameter mode,
+// the operation, needed for PARAM_NUMBER_16 only, and the first parameter byte, the tail is a fixed byte count, a length byte and that many bytes, or invalid.
 int16_t paramTailBytes(uint16_t paramMode, uint16_t op, uint8_t opParam) {
   switch(paramMode) {
     case PARAM_DECLARE_LABEL: {

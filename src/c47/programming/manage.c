@@ -99,13 +99,9 @@ uint8_t boundProgramNameLength(const uint8_t *nameStart, uint8_t claimedLength) 
 }
 
 
-// A label name longer than MAX_LABEL_NAME_LENGTH cannot have been produced by
-// the calculator and can only come from a corrupt or crafted file. Such a name
-// does not fit the fixed name buffers of its consumers (e.g. ASSIGN's
-// argumentName[16] and tamBuffer[32]), so the loaders use this walk to detect
-// and reject it. Walks from the given step to the end of program memory; a
-// step the walker cannot decode ends the walk, matching where
-// scanLabelsAndPrograms() truncates.
+// A label name longer than MAX_LABEL_NAME_LENGTH cannot have been produced by the calculator and can only come from a corrupt or crafted file.
+// Such a name does not fit the fixed name buffers of its consumers, ASSIGN's argumentName[16] and tamBuffer[32], so the loaders use this walk to reject it.
+// The walk runs from the given step to the end of program memory; a step the walker cannot decode ends it, where scanLabelsAndPrograms() truncates too.
 bool_t programMemoryHasOverlongLabelName(uint8_t *step) {
   while(programBytesAvailable(step, 2) && !isAtEndOfPrograms(step)) {
     if(checkOpCodeOfStep(step, ITM_LBL)
