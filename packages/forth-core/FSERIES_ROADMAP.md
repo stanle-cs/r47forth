@@ -177,6 +177,27 @@ canonical text (`..._F6_4_param_text.md`); F6-5 dictionary-backed word
 catalog (`..._F6_5_word_catalog.md`); F6-6 acceptance battery + lifecycle
 reset (`..._F6_6_acceptance.md`).
 
+**STAGE F6 PACKETS LANDED (2026-07-19/20)** — Qwen implementation stalled
+on F6-1 (owner ruling: architect finishes the series directly); F6-1
+through F6-6 all authored, implemented, gate-verified, and committed by
+the architect:
+
+| Packet | Status |
+|---|---|
+| F6-1 managed capture buffer | LANDED `7862b896b` |
+| F6-2 TAM suspend/resume | LANDED `a0b3fe7f8` |
+| F6-3 catalogs/menus during capture | LANDED `d1b6ac674` |
+| F6-4 parameter entry emits canonical text | LANDED `4ca4bfde4` |
+| F6-5 dictionary-backed word catalog | LANDED `f7375ef37` |
+| F6-6 acceptance battery + lifecycle reset | LANDED `d9b1e894b` |
+
+F6-6 surfaced two pre-existing save/restore-vs-allocator gaps in
+`saveRestoreBackup.c` (allocator tracking arrays restored wholesale,
+independent of Forth state) — logged in DESIGN-HISTORY.md 2026-07-20 for
+the post-series forth-core code audit, not fixed in F6 (out of a
+capture-lifecycle stage's scope). Only the stage-exit hardware bench
+(`F6_KEYBOARD_PEM_AUDIT.md` Blocks A-F) remains open for this stage.
+
 **Risks:** highest UI risk of the series; the risk controls are the
 traces (every fixture is PC-build-derivable — see the deferred-bench
 register in `F6_AUDIT_RESULTS.md`), the standing execution gates
@@ -202,15 +223,16 @@ starts with a new owner ruling.
 
 ```
 F1.5 ✔ → F2 ✔ (through F2-5)
-  → F3-1..7 [QWEN, authored + gate-locked]
-  → F4-1..4 [QWEN, authored + gate-locked]
-  → F5-1..2 [QWEN, authored + gate-locked]
-  → F6-1..6 [QWEN, authored + gate-locked]
+  → F3-1..7 ✔ [QWEN, landed]
+  → F4-1..4 ✔ [QWEN, landed]
+  → F5-1..2 ✔ [QWEN, landed]
+  → F6-1..6 ✔ [F6-1 stalled under QWEN; F6-1..6 landed by architect]
   → F6 stage-exit bench [S+A, Blocks A-F vs landed behavior] → closeout [A+S]
 ```
 
-Everything author-able ahead of execution IS authored (19 gate-locked
-packets across F3/F4/F5/F6); the sole remaining architect authoring is
-per-stage docs closes.  Owner decision points (S): the F6 stage-exit
-bench session (`F6_KEYBOARD_PEM_AUDIT.md` Blocks A-F, after F6-6);
-flash-delta runs per stage.
+All 19 gate-locked packets across F3/F4/F5/F6 are landed. Remaining:
+the F6 stage-exit hardware bench (S+A), then the test-suite and
+forth-core code audits (2026-07-20 owner instruction, no Qwen work),
+then closeout.  Owner decision points (S): the F6 stage-exit bench
+session (`F6_KEYBOARD_PEM_AUDIT.md` Blocks A-F, after F6-6); flash-delta
+runs per stage.

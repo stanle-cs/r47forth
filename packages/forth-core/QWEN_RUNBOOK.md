@@ -24,8 +24,11 @@ Every pre-F prompt set is complete (verified in
 | `custom_package/QWEN_PROMPTS_refresh-base-commit.md` (BP-1..7) | executed |
 | `custom_package/QWEN_IMPLEMENTATION_PROMPTS.md` | ARCHIVED — execution hazard, never run |
 
-The only remaining implementation work is the F series. After F6 the
-accepted backlog is empty (DESIGN-HISTORY 2026-07-16 entry).
+The F series (F1.5 through F6) is fully landed as of F6-6 (`d9b1e894b`,
+2026-07-20) — no Qwen packets remain queued. Open work is the F6
+stage-exit hardware bench (row 11i) plus two owner-directed audits (rows
+11j-11k, neither is Qwen work); after those the accepted backlog is
+empty (DESIGN-HISTORY 2026-07-16 entry).
 
 ## 1. Per-session procedure (identical for every packet)
 
@@ -75,13 +78,13 @@ architect session first; the future-series packet has not been authored yet.
 | 7e | F2-4 parity acceptance sweep (+ RULE-1 flash delta) | LANDED (`176e0be0f`) — post-stage review found acceptance escapes | `QWEN_PROMPTS_F2_4_parity_acceptance.md` |
 | 7f | F2-5 bounded-reader + parity-acceptance correction | DONE (`b5d794df4`) | `QWEN_PROMPTS_F2_5_acceptance_correction.md` |
 | 8a | F3 trace, design pass, and packet ledger | DONE (authored 2026-07-18) | `QWEN_PROMPTS_F3_core.md` |
-| 8b | F3-1 owner-tagged dictionary headers | **[QWEN]** — ONLY NEXT PACKET | `QWEN_PROMPTS_F3_1_owner_headers.md` |
-| 8c | F3-2 global region, refs, persistence swap, validator retarget | **[GATE LOCKED]** on F3-1 | `QWEN_PROMPTS_F3_2_global_region.md` |
-| 8d | F3-3 current scopes and filtered lookup | **[GATE LOCKED]** on F3-2 | `QWEN_PROMPTS_F3_3_scopes_live.md` |
-| 8e | F3-4 GLOBAL / IMMEDIATE / FORGET | **[GATE LOCKED]** on F3-3 | `QWEN_PROMPTS_F3_4_marks.md` |
-| 8f | F3-5 compile-time control flow | **[GATE LOCKED]** on F3-4 | `QWEN_PROMPTS_F3_5_control_flow.md` |
-| 8g | F3-6 XEQ forms, FTOK_XEQN, and B3 | **[GATE LOCKED]** on F3-5 | `QWEN_PROMPTS_F3_6_xeqn.md` |
-| 8h | F3-7 §2.3 acceptance pins and final stage sweep | **[GATE LOCKED]** on F3-6 | `QWEN_PROMPTS_F3_7_acceptance.md` |
+| 8b | F3-1 owner-tagged dictionary headers | **LANDED** `31e4acbde` | `QWEN_PROMPTS_F3_1_owner_headers.md` |
+| 8c | F3-2 global region, refs, persistence swap, validator retarget | **LANDED** `e8f1f16cd` (amendment F3-3/A `56f554673`) | `QWEN_PROMPTS_F3_2_global_region.md` |
+| 8d | F3-3 current scopes and filtered lookup | **LANDED** `8af819797` | `QWEN_PROMPTS_F3_3_scopes_live.md` |
+| 8e | F3-4 GLOBAL / IMMEDIATE / FORGET | **LANDED** `25ce96c25` | `QWEN_PROMPTS_F3_4_marks.md` |
+| 8f | F3-5 compile-time control flow | **LANDED** `faa8c32a3` | `QWEN_PROMPTS_F3_5_control_flow.md` |
+| 8g | F3-6 XEQ forms, FTOK_XEQN, and B3 | **LANDED** `2db8af231` | `QWEN_PROMPTS_F3_6_xeqn.md` |
+| 8h | F3-7 §2.3 acceptance pins and final stage sweep | **LANDED** `992f7e817` | `QWEN_PROMPTS_F3_7_acceptance.md` |
 | 9a | F4 trace + ledger (grammar/error table traced 2026-07-18) | DONE (authored) | `QWEN_PROMPTS_F4_core.md` |
 | 9b | F4-1 flow classification + direct numeric params | **LANDED** `f043c63e7` | `QWEN_PROMPTS_F4_1_direct_numeric.md` |
 | 9c | F4-2 register/flag/shuffle direct forms | **LANDED** `ac48f50a8` (sol debug; amendment F4-2A) | `QWEN_PROMPTS_F4_2_register_flag.md` |
@@ -92,12 +95,15 @@ architect session first; the future-series packet has not been authored yet.
 | 10c | F5-2 commit gate (stage close) | **LANDED** (sol debug; amendment F5-2A) | `QWEN_PROMPTS_F5_2_commit_gate.md` |
 | 11a | F6 audit — traces T1-T7 FOLDED (2026-07-19); bench Blocks A-F DEFERRED to stage-exit (owner ruling 2026-07-18) | DONE (traces) — **stage-exit bench is [S]+[A]**, after F6-6 | `F6_KEYBOARD_PEM_AUDIT.md` + `F6_AUDIT_RESULTS.md` |
 | 11b | F6 ledger: decomposition + design decisions | DONE (authored 2026-07-19) | `QWEN_PROMPTS_F6_core.md` |
-| 11c | F6-1 managed capture buffer | **[GATE LOCKED]** on F5-2 | `QWEN_PROMPTS_F6_1_capture_buffer.md` |
-| 11d | F6-2 TAM suspend/resume | **[GATE LOCKED]** on F6-1 | `QWEN_PROMPTS_F6_2_tam_suspend.md` |
-| 11e | F6-3 catalogs + menus during capture | **[GATE LOCKED]** on F6-2 | `QWEN_PROMPTS_F6_3_capture_menus.md` |
-| 11f | F6-4 parameter entry emits canonical text | **[GATE LOCKED]** on F6-3 | `QWEN_PROMPTS_F6_4_param_text.md` |
-| 11g | F6-5 dictionary-backed word catalog | **[GATE LOCKED]** on F6-4 | `QWEN_PROMPTS_F6_5_word_catalog.md` |
-| 11h | F6-6 acceptance battery (stage close) | **[GATE LOCKED]** on F6-5 | `QWEN_PROMPTS_F6_6_acceptance.md` |
+| 11c | F6-1 managed capture buffer | **LANDED** `7862b896b` — Qwen stalled (3 gate failures); architect finished it | `QWEN_PROMPTS_F6_1_capture_buffer.md` |
+| 11d | F6-2 TAM suspend/resume | **LANDED** `a0b3fe7f8` (architect) | `QWEN_PROMPTS_F6_2_tam_suspend.md` |
+| 11e | F6-3 catalogs + menus during capture | **LANDED** `d1b6ac674` (architect; mutation-2 packet defect fixed, DESIGN-HISTORY 2026-07-19) | `QWEN_PROMPTS_F6_3_capture_menus.md` |
+| 11f | F6-4 parameter entry emits canonical text | **LANDED** `4ca4bfde4` (architect) | `QWEN_PROMPTS_F6_4_param_text.md` |
+| 11g | F6-5 dictionary-backed word catalog | **LANDED** `f7375ef37` (architect; clean first-gate run) | `QWEN_PROMPTS_F6_5_word_catalog.md` |
+| 11h | F6-6 acceptance battery (stage close) | **LANDED** `d9b1e894b` (architect; 2 pre-existing save/restore-vs-allocator gaps found, logged for the code audit, not fixed here) | `QWEN_PROMPTS_F6_6_acceptance.md` |
+| 11i | F6 stage-exit hardware bench (Blocks A-F vs landed behavior) | **OPEN** — [S]+[A], DM42n required | `F6_KEYBOARD_PEM_AUDIT.md` |
+| 11j | Test-suite audit (toothless/bad-design test sweep) | **OPEN** (2026-07-20 owner instruction) | — |
+| 11k | forth-core code audit (production code) | **OPEN** (2026-07-20 owner instruction, after 11j) | — |
 
 ## 3. After the series — no Qwen work
 
