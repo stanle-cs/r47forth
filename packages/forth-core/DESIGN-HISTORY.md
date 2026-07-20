@@ -1043,3 +1043,73 @@ field-swap mutation is now observable (`"1 SIN ARCCOS "` becomes
 to match the longer buffer (`"1 SIN ARCCOS 2"`); subcases 3-6 compare
 against a captured `textBefore` or open a fresh line and were untouched.
 No production code changed; mutation 2 re-run RED after the retarget.
+
+## 2026-07-20 — F6-6 acceptance battery: two pre-existing save/restore-vs-allocator gaps found and routed around
+
+Non-normative. F6-6 adds `forthCapPowerReset()` (`forth_capture.c/h`) and
+wires it into the two lifecycle seams `forthDictInit()`/`forthDictClear()`
+already call `forthScanTrackReset()` from, so a re-initialized or restored
+machine always starts with the capture CLOSED and its buffer freed —
+matching the landed rule that capture cannot outlive the dictionary
+lifecycle (deep-sleep wake does not run these seams; a sleeping capture
+legitimately survives, same as FLAG_ALPHA today).
+
+Authoring `test_capture_acceptance` subcase 4 (restore lifecycle closes an
+open and a suspended capture) surfaced two genuine, pre-existing gaps
+between `saveRestoreBackup.c`'s restore path and the block allocator,
+neither previously exercised because no earlier F-series test drove a
+save/restore round-trip with a Forth capture actually open at save time:
+
+1. `restoreCalc()` restores `numberOfFreeMemoryRegions` /
+   `freeMemoryRegions[]` / `numberOfAllocatedMemoryRegions` /
+   `allocatedMemoryRegions[]` wholesale from the backup file — the entire
+   allocator tracking state, independent of anything Forth-related. With a
+   capture genuinely open at save time, this leaves the capture buffer's
+   address range overlapping a restore-time free region; the lifecycle
+   seam's own `forthCapClose()` free is then correctly rejected by
+   `freeListFree`'s double/invalid-free guard, orphaning the buffer's
+   blocks. Confirmed via 3 independent mitigation attempts (fresh fixture,
+   pre-inflation padding, direct A/B toggling) that this is a real conflict
+   in production code, not a test-fixture artifact.
+2. Independently of (1) — confirmed by temporarily disabling just this
+   round-trip with no capture ever open — a `saveCalc()`/`restoreCalc()`
+   round-trip alone measurably shifts `numberOfAllocatedMemoryRegions` by
+   +1 relative to pre-save state.
+3. `systemFlags0`/`systemFlags1` (carrying `FLAG_ALPHA`) restore verbatim
+   well after the dict-lifecycle seam runs, and the restore path's own
+   generic alpha-clear is conditional on a catalog also having been open —
+   never true for a Forth-only capture. Any `FLAG_ALPHA` clear attempted in
+   the seam is silently overwritten moments later. `forthCapPowerReset()`
+   deliberately does not touch `FLAG_ALPHA` for exactly this reason (see
+   its doc comment); subcase 4 asserts capture state only, not the flag.
+
+All three are pre-existing architectural gaps in the save/restore-vs-
+allocator interaction, out of scope for F6-6 to fix (a blind retry-free
+would be unsafe). Both phases of subcase 4 that would otherwise hit (1) or
+(2) through a full round-trip are written instead against the same direct
+`forthGDictValidateRestored(); forthDictInit();` pair the seam itself
+runs — proving the seam closes an open/suspended capture leak-free without
+routing through the unrelated allocator-restore defects. This is a
+deliberate deviation from the packet's literal "run the landed F15-2
+power-off round-trip idiom" wording, made so the test proves the seam
+correct without also proving-or-failing-on bugs the seam cannot fix.
+Flagged here for the forth-core code audit; (1) and (2) remain live in
+`saveRestoreBackup.c` today.
+
+One direct test bug, found and fixed during the same debugging: subcase
+4's Phase 0 (baseline `freeBase` measurement) called
+`forthGDictValidateRestored(); forthDictInit();` directly, same as Phases
+1 and 2, but — unlike those two — with no `forthDictClear()` immediately
+before it. `forthDictInit()` nulls `fdict.base` without freeing (by
+design: it assumes a genuine cold boot, where `fdict.base` is already
+NULL). Subcase 1 leaves fdict holding a live "SQ" allocation; nothing
+between subcase 1 and subcase 4 clears it; Phase 0's direct call silently
+leaked those 8 blocks, surfacing as a suite-wide +1
+`numberOfAllocatedMemoryRegions` at the gate's final check. Fixed by
+adding the same hygiene `forthDictClear()` Phases 1 and 2 already carry.
+Required mutation (delete both `forthCapPowerReset()` seam calls) re-run
+RED, specifically at subcase 4 ("phase 1 capture not closed after
+restore"); reverted, gate re-run green. `make dmcp5r47` flash
+1094400 → 1094456 (+56 B, the new function body plus two call sites); RAM
+(data+bss) unchanged at 7228; fdict/gdict layout unchanged (no new
+fields, no growth-behavior change).

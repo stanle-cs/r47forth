@@ -47,6 +47,24 @@ uint32_t forthCapSavedStepOffset(void) { return forthCap.savedStepOffset; }
 uint16_t forthCapSavedStepCount(void)  { return forthCap.savedStepCount; }
 void     forthCapAbandonSuspended(void){ if (forthCap.state == FCAP_SUSPENDED) forthCap.state = FCAP_CLOSED; }
 
+/* F6-6: capture cannot outlive the dictionary lifecycle.  forthCapClose
+ * already sets state = FCAP_CLOSED unconditionally (covers OPEN and
+ * SUSPENDED alike; SUSPENDED has buf == NULL already so the free is a
+ * no-op there) — forthCapAbandonSuspended is kept as the explicit,
+ * belt-and-suspenders call for the suspended state per the packet.
+ *
+ * FLAG_ALPHA is deliberately NOT touched here. saveRestoreBackup.c's
+ * restore sequence calls forthGDictValidateRestored()/forthDictInit()
+ * (this seam) well before it restores systemFlags0/1 verbatim from the
+ * backup file — any clear performed here would be silently overwritten
+ * moments later by that restore. Clearing FLAG_ALPHA for a closed
+ * capture, if ever wanted, belongs after the systemFlags restore, not
+ * in this seam (see the F6-6 commit for the traced call order). */
+void forthCapPowerReset(void) {
+  forthCapClose();              /* frees if open; flips SUSPENDED too */
+  forthCapAbandonSuspended();   /* explicit for the suspended state */
+}
+
 bool_t forthCapIsOpen(void)  { return forthCap.state == FCAP_OPEN; }
 uint8_t *forthCapBuf(void)   { return forthCap.state == FCAP_OPEN ? forthCap.buf : NULL; }
 bool_t forthCapTextNonEmpty(void) {

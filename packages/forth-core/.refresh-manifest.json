@@ -2,17 +2,17 @@
   "base_commit": "b8f79e486ae19b84af9b6db7230c9a6d1279cced",
   "files": {
     "forth_bridge.c": "ef6ad22f29a817d4a1ec9dedf93485e081909f754fb03bfd4c620bd2142eda9c",
-    "forth_capture.c": "35cafde895ac6b797fb49f7f2e53409128426b867dc9639fcc2c0c04df2988fb",
-    "forth_capture.h": "d6399e9feeb7aa56e656053b4311d3ad1af3aca991aceda1062a9b6e3c565ff9",
+    "forth_capture.c": "20d72e0e09a6dd74408912cc5eba0184a5b7f0135504e01572622f43c0122325",
+    "forth_capture.h": "5c62fe69c525a3f7d6e484057609ba6ca30729c4d1b1f3d39363898ce7be4d7e",
     "forth_compile.c": "29671f71a32418db66cef04fe110e39fdea021888b4378ca69bd89420482d81a",
-    "forth_dict.c": "276582216b1c30d66c2fe32ba43a7e404fe946e66ea2d62ddecf19ce8e3d4f21",
+    "forth_dict.c": "7fdcf55f8534ba4aacf2782458f73ea6f1450513afa685947c9c60efd3934469",
     "forth_dict.h": "4dd11071f4f08354b9a953abcbdf6de31d2e3db00eba43d31e3caf59779b218a",
     "forth_inner.c": "ae376e9cedba04e55b385992637567e6df1635849fd584423f60b1b567ed12cd",
     "forth_prims.c": "342b8c65302b7dace4d53bb949d25d90f5c2f8f6dc201ce7e96c4f918ec339e5",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
     "programming/param_core.c": "c21edaa539f7b5866c7612fbb3cabff07f0e29ed12e2228d03486b2db2fdd3b4",
     "programming/param_core.h": "83523da7c314e8dc285f557e295dc399813419e0cbb74b44cc49ddf6ea56fdee",
-    "test_dict_reloc.c": "4e6b968b0ff8e89dbca24ef43bfee2817307985b860659d2bcc3636e339f304f"
+    "test_dict_reloc.c": "55ad8e9d981867a5cb6c6c1cc79b67cddbcb8defc75ef0d8b5de55ff4b76d115"
   },
   "patches": {
     "010-config.c.patch": "dacd6d9f2f08c1318ac32e16982c3dea4cba0f68869c93173dc57a61ea020a6e",

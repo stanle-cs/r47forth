@@ -8,6 +8,7 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_prims.h"
+#include "forth_capture.h"
 
 #define FORTH_INITIAL_BLOCKS  64
 #define FORTH_GDICT_INITIAL_BLOCKS 16
@@ -53,6 +54,7 @@ void forthDictInit(void)
   fdict.latest = FORTH_NULL;
   fdict.count = 0;
   forthScanTrackReset();
+  forthCapPowerReset();
 }
 
 void forthDictClear(void)
@@ -66,6 +68,7 @@ void forthDictClear(void)
   fdict.latest = FORTH_NULL;
   fdict.count = 0;
   forthScanTrackReset();
+  forthCapPowerReset();
 }
 
 void forthGDictInit(void)

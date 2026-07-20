@@ -49,6 +49,14 @@ void     forthCaptureResume(void);
  * the cap constants' original site). */
 bool_t   forthCapInsertName(const char *name);
 
+/* F6-6: capture cannot outlive the dictionary lifecycle.  Called at the
+ * same seams as forthScanTrackReset (init / clear / restore
+ * validation): a restored or re-initialized machine starts with the
+ * capture CLOSED and the buffer freed.  Deep-sleep wake on hardware
+ * does NOT run these seams — a sleeping capture legitimately survives,
+ * matching the landed FLAG_ALPHA behavior. */
+void     forthCapPowerReset(void);
+
 #if defined(FORTH_DEBUG_SELFTEST)
 uint8_t     forthTestCapState(void);
 const char *forthTestCapText(void);   /* "" when not open */
