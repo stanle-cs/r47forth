@@ -3,6 +3,7 @@
 static forthCap_t forthCap;   /* zero-initialized: FCAP_CLOSED */
 
 void forthCapOpen(void) {
+  if (forthCap.state == FCAP_SUSPENDED) { forthCap.state = FCAP_CLOSED; }
   if (forthCap.state == FCAP_OPEN) {
     forthCap.buf[0] = 0;                    /* reopen = fresh line */
     return;
@@ -26,6 +27,23 @@ void forthCapClose(void) {
   forthCap.sizeBlocks = 0;
   forthCap.state = FCAP_CLOSED;
 }
+
+void forthCapSuspendState(uint16_t cursor, uint16_t localStep, uint32_t stepOffset) {
+  forthCap.savedCursor     = cursor;
+  forthCap.savedLocalStep  = localStep;
+  forthCap.savedStepOffset = stepOffset;
+  if (forthCap.buf != NULL) {
+    freeC47Blocks(forthCap.buf, forthCap.sizeBlocks);
+    forthCap.buf = NULL;
+  }
+  forthCap.sizeBlocks = 0;
+  forthCap.state = FCAP_SUSPENDED;
+}
+bool_t   forthCapIsSuspended(void)     { return forthCap.state == FCAP_SUSPENDED; }
+uint16_t forthCapSavedCursor(void)     { return forthCap.savedCursor; }
+uint16_t forthCapSavedLocalStep(void)  { return forthCap.savedLocalStep; }
+uint32_t forthCapSavedStepOffset(void) { return forthCap.savedStepOffset; }
+void     forthCapAbandonSuspended(void){ if (forthCap.state == FCAP_SUSPENDED) forthCap.state = FCAP_CLOSED; }
 
 bool_t forthCapIsOpen(void)  { return forthCap.state == FCAP_OPEN; }
 uint8_t *forthCapBuf(void)   { return forthCap.state == FCAP_OPEN ? forthCap.buf : NULL; }

@@ -1062,6 +1062,58 @@ void pemCloseAlphaInput(void) {
   tam.function = 0;
 }
 
+void forthCaptureSuspend(void) {
+  if (!forthCapIsOpen()) { return; }
+  uint16_t cursor    = T_cursorPos;
+  uint16_t localStep = currentLocalStepNumber;
+  uint32_t stepOff   = (uint32_t)(currentStep - beginOfProgramMemory);
+  /* currentStep stays ON the capture step: the landed commit-and-close
+   * nets to exactly that (pemCloseAlphaInput steps forward, the tam.c
+   * arm steps back), and TAM commits insert via
+   * addStepInProgram(tamOperation()), whose pre-move already places
+   * the new step AFTER the current one.  Moving here would shift the
+   * TAM insert one step too late.
+   * tam.function is NOT touched: tamEnterMode assigned the incoming
+   * TAM function before this seam; zeroing it would break the TAM
+   * session (the landed close's unconditional reset is the very
+   * behavior suspend replaces). */
+  clearSystemFlag(FLAG_ALPHA);
+  calcModeNormalGui();
+  _closeAlphaMenus();
+  forthCapSuspendState(cursor, localStep, stepOff);
+}
+
+void forthCaptureResume(void) {
+  if (!forthCapIsSuspended()) { return; }
+  uint8_t *p = beginOfProgramMemory + forthCapSavedStepOffset();
+  if (!(p < firstFreeProgramByte
+        && checkOpCodeOfStep(p, ITM_FORTH)
+        && p[2] == (uint8_t)STRING_LABEL_VARIABLE)) {
+    forthCapAbandonSuspended();             /* defensive canary — see test 5 */
+    #if defined(FORTH_DEBUG_SELFTEST)
+    printf("FORTH CANARY: suspended capture step falsified; suspension abandoned\n");
+    #endif
+    return;
+  }
+  forthCapOpen();                           /* SUSPENDED → orphan-flip → alloc */
+  if (!forthCapIsOpen()) { return; }        /* RAM_FULL shown; capture lost */
+  { uint8_t len = p[3];                     /* len 0 = empty line, legal */
+    if (len > 0) { xcopy(forthCapBuf(), p + 4, len); }
+    forthCapBuf()[len] = 0;
+    T_cursorPos = forthCapSavedCursor();
+    if (T_cursorPos > len) { T_cursorPos = len; }
+  }
+  currentLocalStepNumber = forthCapSavedLocalStep();
+  currentStep = p;
+  tam.function = ITM_FORTH;                 /* capture-era tam is exactly
+                                                {mode 0, function ITM_FORTH} */
+  resetShiftState();                        /* fresh-open parity */
+  setSystemFlag(FLAG_ALPHA);
+  calcModeAimGui();
+  showSoftmenu(-MNU_ALPHA);
+  pemCursorIsZerothStep = false;
+}
+
 
 void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
   if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {

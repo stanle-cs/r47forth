@@ -10884,6 +10884,8 @@ static int test_check_source_line(void);
 static int test_commit_gate(void);
 /* F6-1: managed capture buffer behind the capture object */
 static int test_capture_buffer(void);
+/* F6-2: TAM suspend/resume keeps capture alive */
+static int test_capture_suspend(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -12742,6 +12744,15 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_capture_buffer...\n");
   fail |= test_capture_buffer();
+  forthDictClear();
+  forthGDictClear();
+
+  /* F6-2: TAM suspend/resume keeps capture alive */
+  printf("\nFORTH F6-2 TESTS (TAM suspend/resume)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_capture_suspend...\n");
+  fail |= test_capture_suspend();
   forthDictClear();
   forthGDictClear();
 
@@ -17885,14 +17896,14 @@ static int test_capture_buffer(void)
       fail |= sc6;
     }
 
-    /* ---- Subcase 7: Interim TAM guard preserves commit-and-close ---- */
+    /* ---- Subcase 7: TAM entry suspends the capture (F6-2) ---- */
     { int sc7 = 0;
       if (!fail) {
         runFunction(ITM_AIM);
         runFunction(ITM_9);
         tamEnterMode(ITM_STO);
-        if (forthTestCapState() != FCAP_CLOSED) {
-          printf("    [7] FAIL: capture not closed after TAM entry (state=%d)\n", forthTestCapState());
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    [7] FAIL: capture not suspended after TAM entry (state=%d)\n", forthTestCapState());
           sc7 = 1;
         }
         else if (tam.mode == 0) {
@@ -17904,8 +17915,16 @@ static int test_capture_buffer(void)
         if (tam.mode != 0) {
           fnKeyExit(NOPARAM);
         }
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [7] FAIL: capture not resumed after TAM cancel (state=%d)\n", forthTestCapState());
+          sc7 = 1;
+        }
+        else if (strcmp(forthTestCapText(), "9") != 0) {
+          printf("    [7] FAIL: cap text = '%s', expected '9'\n", forthTestCapText());
+          sc7 = 1;
+        }
       }
-      if (!sc7) printf("    [7] PASS: TAM entry commits-and-closes the capture (F6-1 interim)\n");
+      if (!sc7) printf("    [7] PASS: TAM entry suspends the capture (F6-2)\n");
       lastErrorCode = ERROR_NONE;
       fail |= sc7;
     }
@@ -18026,6 +18045,395 @@ static int test_capture_buffer(void)
       lastErrorCode = ERROR_NONE;
       fail |= sc11;
     }
+  }
+
+  /* Cleanup */
+  forthCapClose();
+  cleanupTestProgram();
+  forthDictClear();
+  forthGDictClear();
+
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  showSoftmenu(savedMenu);
+  memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
+
+/* test_capture_suspend
+ * F6-2: TAM suspend/resume keeps capture alive. Six subcases verifying
+ * suspend-on-entry, resume-on-exit, tam.colon no-leak, empty-line
+ * uniformity, a falsified-step canary, and arena hygiene. */
+static int test_capture_suspend(void)
+{
+  int fail = 0;
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedMenu = currentMenu();
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void pemAlpha(int16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void tamEnterMode(int16_t);
+  extern void tamProcessInput(uint16_t);
+
+  /* Build fixture: LBL, marker (no RTN — the marker's region runs to
+   * .END., which isAtEndOfProgram already recognizes without needing
+   * the RTN-transparency fix). */
+  testProg_t p;
+  tpInit(&p);
+  tpLbl(&p, "F62");
+  tpMarker(&p);
+
+  if (!tpWrite(&p)) {
+    printf("    FIXTURE FAIL: tpWrite\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+
+  /* Position on the opening marker (step 2) */
+  fnGotoDot(2);
+
+  if (currentStep != tpStepAddr(&p, 1)) {
+    printf("    FIXTURE BUG: fnGotoDot(2) did not position on marker\n");
+    fail = 1;
+  }
+  else if (currentLocalStepNumber != 2) {
+    printf("    FIXTURE BUG: currentLocalStepNumber = %u, expected 2\n", currentLocalStepNumber);
+    fail = 1;
+  }
+  else {
+    runFunction(ITM_AIM);
+    if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+      printf("    FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    /* ---- Subcase 1: Commit round-trip ---- */
+    { int sc1 = 0;
+      const int16_t items[] = { ITM_5, ITM_SPACE, ITM_D, ITM_U, ITM_P };
+      int i;
+      for (i = 0; i < (int)(sizeof(items) / sizeof(items[0])); i++) {
+        runFunction(items[i]);
+      }
+      uint16_t stepNumBefore = currentLocalStepNumber;
+      uint16_t cursorBefore = T_cursorPos;
+      uint8_t *capStepBefore = currentStep;
+
+      tamEnterMode(ITM_STO);
+      if (forthTestCapState() != FCAP_SUSPENDED) {
+        printf("    [1] FAIL: capture not suspended after tamEnterMode (state=%d)\n",
+               forthTestCapState());
+        sc1 = 1;
+      }
+      else if (getSystemFlag(FLAG_ALPHA)) {
+        printf("    [1] FAIL: FLAG_ALPHA still set while suspended\n");
+        sc1 = 1;
+      }
+
+      if (!sc1) {
+        tamProcessInput(ITM_0);
+        tamProcessInput(ITM_5);   /* two digits auto-fire the STO commit */
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [1] FAIL: capture not resumed after commit (state=%d)\n",
+                 forthTestCapState());
+          sc1 = 1;
+        }
+        else if (strcmp(forthTestCapText(), "5 DUP") != 0) {
+          printf("    [1] FAIL: cap text = '%s', expected '5 DUP'\n", forthTestCapText());
+          sc1 = 1;
+        }
+        else if (T_cursorPos != cursorBefore) {
+          printf("    [1] FAIL: T_cursorPos = %d, expected %d\n", T_cursorPos, cursorBefore);
+          sc1 = 1;
+        }
+        else if (currentLocalStepNumber != stepNumBefore) {
+          printf("    [1] FAIL: currentLocalStepNumber = %u, expected %u\n",
+                 currentLocalStepNumber, stepNumBefore);
+          sc1 = 1;
+        }
+        else if (tam.mode != 0 || tam.function != ITM_FORTH) {
+          printf("    [1] FAIL: tam.mode=%d tam.function=%d, expected 0/ITM_FORTH\n",
+                 (int)tam.mode, (int)tam.function);
+          sc1 = 1;
+        }
+        else {
+          uint8_t *stoStep = findNextStep(currentStep);
+          if (currentStep != capStepBefore) {
+            printf("    [1] FAIL: currentStep moved off the capture line\n");
+            sc1 = 1;
+          }
+          else if (stoStep[0] != 0x2C || stoStep[1] != 0x05) {
+            printf("    [1] FAIL: STO step bytes = 0x%02X 0x%02X, expected 0x2C 0x05\n",
+                   stoStep[0], stoStep[1]);
+            sc1 = 1;
+          }
+        }
+      }
+      if (!sc1) printf("    [1] PASS: TAM commit suspends, inserts after the line, and resumes\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc1;
+    }
+
+    /* ---- Subcase 2: Cancel round-trip ---- */
+    { int sc2 = 0;
+      if (!fail) {
+        uint16_t stepsBefore = getNumberOfSteps();
+
+        tamEnterMode(ITM_STO);
+        fnKeyExit(NOPARAM);   /* cancel before any digit */
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [2] FAIL: capture not open after cancel (state=%d)\n", forthTestCapState());
+          sc2 = 1;
+        }
+        else if (strcmp(forthTestCapText(), "5 DUP") != 0) {
+          printf("    [2] FAIL: cap text = '%s', expected '5 DUP'\n", forthTestCapText());
+          sc2 = 1;
+        }
+        else if (getNumberOfSteps() != stepsBefore) {
+          printf("    [2] FAIL: step count changed %u -> %u (cancel inserted a step)\n",
+                 stepsBefore, getNumberOfSteps());
+          sc2 = 1;
+        }
+        else if (tam.mode != 0) {
+          printf("    [2] FAIL: tam.mode = %d, expected 0\n", (int)tam.mode);
+          sc2 = 1;
+        }
+      }
+      if (!sc2) printf("    [2] PASS: TAM cancel resumes with no inserted step\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc2;
+    }
+
+    /* ---- Subcase 3: tam.colon no-leak ---- */
+    { int sc3 = 0;
+      if (!fail) {
+        char preText[64];
+        xcopy(preText, forthTestCapText(), stringByteLength((char *)forthTestCapText()) + 1);
+
+        tamEnterMode(ITM_XEQ);
+        tamProcessInput(ITM_COLON);   /* the landed local-label gesture: sets tam.colon */
+
+        int guard;
+        for (guard = 0; tam.mode != 0 && guard < 4; guard++) {
+          fnKeyExit(NOPARAM);
+        }
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [3] FAIL: capture not open after cancel (state=%d)\n", forthTestCapState());
+          sc3 = 1;
+        }
+        else if (tam.colon) {
+          printf("    [3] FAIL: tam.colon leaked into the resumed capture\n");
+          sc3 = 1;
+        }
+        else {
+          runFunction(ITM_X);
+          char expected[66];
+          xcopy(expected, preText, stringByteLength(preText));
+          expected[stringByteLength(preText)] = 'X';
+          expected[stringByteLength(preText) + 1] = 0;
+          if (strcmp(forthTestCapText(), expected) != 0) {
+            printf("    [3] FAIL: cap text = '%s', expected '%s'\n", forthTestCapText(), expected);
+            sc3 = 1;
+          }
+        }
+      }
+      if (!sc3) printf("    [3] PASS: nested tam.colon state does not leak into resumed capture\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc3;
+    }
+
+    /* ---- Subcase 4: Empty-line suspension (edge unified) ---- */
+    { int sc4 = 0;
+      if (!fail) {
+        runFunction(ITM_ENTER);   /* commit + relock a fresh empty line */
+        uint16_t stepsBefore = getNumberOfSteps();
+
+        tamEnterMode(ITM_STO);
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    [4] FAIL: empty-line capture not suspended (state=%d)\n",
+                 forthTestCapState());
+          sc4 = 1;
+        }
+        fnKeyExit(NOPARAM);
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [4] FAIL: capture not open after cancel (state=%d)\n", forthTestCapState());
+          sc4 = 1;
+        }
+        else if (forthTestCapText()[0] != 0) {
+          printf("    [4] FAIL: cap text not empty\n");
+          sc4 = 1;
+        }
+        else if (getNumberOfSteps() != stepsBefore) {
+          printf("    [4] FAIL: step count changed %u -> %u\n", stepsBefore, getNumberOfSteps());
+          sc4 = 1;
+        }
+      }
+      if (!sc4) printf("    [4] PASS: empty-line TAM entry suspends uniformly\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc4;
+    }
+
+    /* ---- Subcase 5: Falsified-step canary ---- */
+    { int sc5 = 0;
+      if (!fail) {
+        tamEnterMode(ITM_STO);
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    [5] FAIL: capture not suspended before falsification (state=%d)\n",
+                 forthTestCapState());
+          sc5 = 1;
+        }
+        else {
+          /* Deliberate falsification: stomp the saved step's opcode byte
+           * with ITM_RTN so the resume-time structural check must reject
+           * it. */
+          uint8_t *savedStep = beginOfProgramMemory + forthCapSavedStepOffset();
+          savedStep[0] = 0x04;
+
+          fnKeyExit(NOPARAM);
+
+          if (forthTestCapState() != FCAP_CLOSED) {
+            printf("    [5] FAIL: capture not closed after falsified resume (state=%d)\n",
+                   forthTestCapState());
+            sc5 = 1;
+          }
+          else if (tam.mode != 0) {
+            printf("    [5] FAIL: tam.mode = %d, expected 0\n", (int)tam.mode);
+            sc5 = 1;
+          }
+        }
+      }
+      if (!sc5) printf("    [5] PASS: falsified suspension abandons safely\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc5;
+      /* Restore program memory: the falsification corrupted it. */
+      cleanupTestProgram();
+      forthDictClear();
+      forthGDictClear();
+      forthCapClose();
+    }
+  }
+
+  /* ---- Subcase 6: Arena equality (fresh fixture) ---- */
+  { int sc6 = 0;
+    testProg_t p6;
+    tpInit(&p6);
+    tpLbl(&p6, "F62B");
+    tpMarker(&p6);
+    if (!tpWrite(&p6)) {
+      printf("    [6] FAIL: tpWrite\n");
+      sc6 = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      clearSystemFlag(FLAG_ALPHA);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      uint32_t freeBefore6 = getFreeRamMemory();
+
+      fnGotoDot(2);
+      runFunction(ITM_AIM);
+      runFunction(ITM_1);
+
+      /* suspend -> cancel-resume, twice */
+      tamEnterMode(ITM_STO);
+      fnKeyExit(NOPARAM);
+      tamEnterMode(ITM_STO);
+      fnKeyExit(NOPARAM);
+
+      /* BACKSPACE-abort to close (empty the line first) */
+      if (forthTestCapState() == FCAP_OPEN) {
+        runFunction(ITM_CLA);
+        runFunction(ITM_BACKSPACE);
+      }
+
+      bool_t escapeValve = false;
+      if (forthTestCapState() != FCAP_CLOSED) {
+        printf("    [6] FAIL: capture not closed at end (state=%d)\n", forthTestCapState());
+        sc6 = 1;
+      }
+      else if (getFreeRamMemory() != freeBefore6) {
+        uint32_t after6 = getFreeRamMemory();
+        uint32_t delta = (freeBefore6 > after6) ? (freeBefore6 - after6) : (after6 - freeBefore6);
+        if (delta == BYTES_PER_BLOCK && freeBefore6 > after6) {
+          /* Escape valve (packet-anticipated): the FIRST ITM_AIM open
+           * inserted the capture placeholder before .END. with zero
+           * program-memory slack, growing the block allocation by one
+           * quantum; deleteStepsFromTo only ever adjusts
+           * firstFreeProgramByte/freeProgramBytes bookkeeping, it never
+           * calls resizeProgramMemory to shrink back. Pre-existing
+           * program-memory behavior, not a capture-buffer leak: the
+           * suspend/resume cycles themselves (the thing under test) are
+           * a separate 64-block allocation that free/alloc back to the
+           * same address every cycle (F6-1 established this). */
+          printf("    [6] PASS (escape valve): freeRam %u -> %u is one program-memory"
+                 " resize quantum (%u B), not a capture leak\n",
+                 (unsigned)freeBefore6, (unsigned)after6, (unsigned)BYTES_PER_BLOCK);
+          escapeValve = true;
+        } else {
+          printf("    [6] FAIL: freeRam changed %u -> %u\n",
+                 (unsigned)freeBefore6, (unsigned)after6);
+          sc6 = 1;
+        }
+      }
+      if (!sc6 && !escapeValve) printf("    [6] PASS: suspend/resume cycles leave zero arena residue\n");
+    }
+    lastErrorCode = ERROR_NONE;
+    fail |= sc6;
   }
 
   /* Cleanup */

@@ -1170,7 +1170,10 @@ printf("tam.value: %d\n", tam.value);
         closeNim();
       }
     }
-    else if(calcMode == CM_PEM && (aimBuffer[0] != 0 || forthCapTextNonEmpty())) {
+    else if(calcMode == CM_PEM && forthCapIsOpen()) {
+      forthCaptureSuspend();                /* F6-2: suspend, never close */
+    }
+    else if(calcMode == CM_PEM && aimBuffer[0] != 0) {
       if(getSystemFlag(FLAG_ALPHA)) {
         pemCloseAlphaInput();
       }
@@ -1395,6 +1398,7 @@ printf("tam.value: %d\n", tam.value);
 
     if(calcMode == CM_PEM) {
       hourGlassIconEnabled = false;
+      forthCaptureResume();                   /* no-op unless FCAP_SUSPENDED */
     }
   }
 

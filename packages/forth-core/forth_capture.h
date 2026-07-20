@@ -28,6 +28,19 @@ bool_t      forthCapIsOpen(void);     /* state == FCAP_OPEN */
 uint8_t    *forthCapBuf(void);        /* NULL unless FCAP_OPEN */
 bool_t      forthCapTextNonEmpty(void); /* open && buf[0] != 0 */
 
+/* F6-2: suspend/resume state ops */
+void     forthCapSuspendState(uint16_t cursor, uint16_t localStep, uint32_t stepOffset);
+bool_t   forthCapIsSuspended(void);
+uint16_t forthCapSavedCursor(void);
+uint16_t forthCapSavedLocalStep(void);
+uint32_t forthCapSavedStepOffset(void);
+void     forthCapAbandonSuspended(void);
+
+/* F6-2: orchestrators (programming/manage.c — need the file-static
+ * _closeAlphaMenus) */
+void     forthCaptureSuspend(void);
+void     forthCaptureResume(void);
+
 #if defined(FORTH_DEBUG_SELFTEST)
 uint8_t     forthTestCapState(void);
 const char *forthTestCapText(void);   /* "" when not open */
