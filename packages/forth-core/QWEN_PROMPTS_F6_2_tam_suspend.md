@@ -421,3 +421,13 @@ whether or not the body above repeats them.
    `test_check_source_line` subcase 6 and `poisonAutoFrame()` for the landed
    shape — the poison makes an uninitialized restore deterministic instead of
    luck-of-the-stack.
+
+**Working-area files (added 2026-07-19).** Every upstream file this packet
+names is already materialized in `packages/forth-core/` — edit it in place.
+Never `cp` a file out of `src/c47/`: patches are diffed against upstream **at
+the package's recorded base commit**, so a copy from the current tree bakes
+any post-base upstream change into your patch, and `refresh` does not detect
+that drift. If a file this packet names is missing from the working area,
+STOP and report a packet defect rather than materializing or copying on your
+own initiative. Brand-new files (no upstream counterpart) are the exception:
+create them in the working area and `refresh` classifies them into `files/`.
