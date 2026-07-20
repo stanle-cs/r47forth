@@ -996,6 +996,15 @@ gate PASS sets rather than by reading failure text.
 Cost: `make dmcp5r47` flash 1092216 → 1093016 (+800 bytes), RAM unchanged.
 The delta exceeds the call site because F5-1's check-mode code had been
 unreachable and LTO was dropping it; this is the true cost of E9 tier 1
-going live. Measurement note: `f=1` does not re-materialize the package
-shadow, so before/after size comparisons must use `CUSTOM_PKG_RECONFIGURE=1`
-(~509 targets rebuilt, not ~51) or they silently re-report the same tree.
+going live.
+
+Measurement note (corrected): the shadow tree symlinks upstream files AND
+`files/` entries, so edits to those are live; only PATCHED files are
+materialized copies, refreshed at `meson setup`. `build.dmcp5` is a plain
+directory target, so once it exists `make dmcp5r47` skips the setup recipe
+entirely — `f=1` is not the discriminator — and only a CUSTOM_PKG change or
+`CUSTOM_PKG_RECONFIGURE=1` forces a reconfigure. Rebuilding after swapping
+package sources therefore yields a chimera (live `files/` edit + stale
+patched copy), which is what produced two plausible-but-meaningless flash
+numbers here before the reconfigure was forced. `build-test.sh` always
+reconfigures, so the self-test gate is never affected.

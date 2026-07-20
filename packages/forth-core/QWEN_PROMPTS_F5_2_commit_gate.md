@@ -350,8 +350,19 @@ bytes**, RAM unchanged at 7188. The jump is larger than a six-line call site
 because F5-1's check-mode code was unreachable until now and LTO had been
 dropping it; this delta is the true cost of E9 tier 1 going live.
 
-**Build-measurement trap worth knowing:** `make dmcp5r47 ... f=1` does NOT
-re-materialize the package shadow, so a flash measurement taken after
-swapping package sources with `f=1` silently re-reports the previous tree's
-size. Use `CUSTOM_PKG_RECONFIGURE=1` for any before/after size comparison
-(the tell: ~509 targets rebuilt, not ~51).
+**Build-measurement trap worth knowing (corrected 2026-07-19).** In the
+build shadow, upstream files AND `files/` entries are symlinks — edits to
+them are live, ninja rebuilds normally. **Patched** files (anything under
+`patches/`, e.g. `programming/manage.c`) are materialized COPIES, produced by
+applying the patch at `meson setup` time. An existing `build.dmcp5` is never
+reconfigured by `make dmcp5r47`: `build.dmcp5` is a plain directory target,
+so once it exists the setup recipe does not run at all, with or without
+`f=1`; only a CUSTOM_PKG change or `CUSTOM_PKG_RECONFIGURE=1` forces it.
+Swapping package sources and rebuilding therefore produces a CHIMERA — live
+`files/` edits compiled against a stale patched copy — which is worse than a
+stale build because the number looks plausible. Use
+`CUSTOM_PKG_RECONFIGURE=1` for any before/after size comparison (tell: ~509
+targets rebuilt, not ~51), and reconfigure whenever a patch changed or a
+`files/*.c` was added or removed (the source list is also generated at
+configure time). The sim gate is immune: `build-test.sh` always runs
+`meson setup --reconfigure`.
