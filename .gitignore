@@ -50,6 +50,9 @@ c47plotTest*.bmp
 tags
 /PROGRAMS
 /SAVFILES
+# 'make repeattest' incremental markers, written to the repo root
+/src_files_stamp
+/testPgms_stamp
 /src/generated/*
 !/src/generated/constantsVerification.txt
 AGENTS.md
