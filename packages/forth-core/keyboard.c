@@ -3,6 +3,7 @@
 
 #include "c47.h"
 #include "forth_dict.h"
+#include "forth_capture.h"
 
 
 TO_QSPI static const char bugScreenNonexistentMenu[] = "In function determineFunctionKeyItem: nonexistent menu specified!";
@@ -17,12 +18,14 @@ bool_t pickerInsertName(void)
 {
   const char *pickName = dynmenuGetLabel(dynamicMenuItem);
   int32_t nameLen = stringByteLength(pickName);
-  int32_t bufLen = stringByteLength(aimBuffer);
-  if(bufLen + nameLen + 1 < 256 && stringGlyphLength(aimBuffer) + nameLen + 1 <= 196) {
-    xcopy(aimBuffer + T_cursorPos + nameLen + 1, aimBuffer + T_cursorPos,
-          stringByteLength(aimBuffer + T_cursorPos) + 1);
-    xcopy(aimBuffer + T_cursorPos, pickName, nameLen);
-    aimBuffer[T_cursorPos + nameLen] = ' ';
+  uint8_t *cap = forthCapBuf();
+  if(cap == NULL) { return false; }
+  int32_t bufLen = stringByteLength((char *)cap);
+  if(bufLen + nameLen + 1 < 256 && stringGlyphLength((char *)cap) + nameLen + 1 <= 196) {
+    xcopy((char *)cap + T_cursorPos + nameLen + 1, (char *)cap + T_cursorPos,
+          stringByteLength((char *)cap + T_cursorPos) + 1);
+    xcopy((char *)cap + T_cursorPos, pickName, nameLen);
+    cap[T_cursorPos + nameLen] = ' ';
     T_cursorPos += nameLen + 1;
     return true;
   }
@@ -3925,12 +3928,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
             break;
           }
         }
-        if(getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0 && !tam.mode) {
+        if(getSystemFlag(FLAG_ALPHA)
+           && (forthCapIsOpen() ? !forthCapTextNonEmpty() : aimBuffer[0] == 0)
+           && !tam.mode) {
           pemAlpha(ITM_BACKSPACE);
           fnBst(NOPARAM); // Set the PGM pointer to the original position
           break;
         }
-        if(aimBuffer[0] != 0 && !tam.mode) {
+        if((aimBuffer[0] != 0 || forthCapTextNonEmpty()) && !tam.mode) {
+          bool_t wasForthCap = forthCapTextNonEmpty();
           if(getSystemFlag(FLAG_ALPHA)) {
             pemCloseAlphaInput();
           }
@@ -3941,6 +3947,20 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
             pemCloseNumberInput();
           }
           aimBuffer[0] = 0;
+          if(wasForthCap) {
+            // forth-core: fnBst's own step-back-and-resync (below) only
+            // fires on aimBuffer[0] != 0; F6-1 moved Forth capture text
+            // off aimBuffer onto the managed capture buffer, so that guard
+            // no longer sees a just-closed Forth line and skips resyncing
+            // currentStep to currentLocalStepNumber. Replicate the same
+            // resync fnBst would have done, so it stays consistent before
+            // fnBst's own (aimBuffer-independent) second step-back below.
+            --currentLocalStepNumber;
+            currentStep = findPreviousStep(currentStep);
+            if(!programListEnd) {
+              scrollPemBackwards();
+            }
+          }
           fnBst(NOPARAM); // Set the PGM pointer to the original position
           break;
         }
@@ -4433,9 +4453,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
           return;
         }
         if(getSystemFlag(FLAG_ALPHA)) {
+          bool_t wasForthCapOpen = forthCapIsOpen();
           pemAlpha(ITM_BACKSPACE);
           if(aimBuffer[0] == 0 && !getSystemFlag(FLAG_ALPHA)) {
-            if(currentLocalStepNumber > 1) {
+            if(wasForthCapOpen) {
+              // forth-core: the Forth capture's empty-abort branch
+              // (pemAlpha's C4) deletes the placeholder IN PLACE, so the
+              // following step already occupies currentStep/
+              // currentLocalStepNumber unchanged — the step-back below
+              // (needed for the aimBuffer REM/LITERAL path, whose own
+              // abort leaves the cursor one position past where it should
+              // land) would overshoot onto the PRECEDING step for Forth
+              // and must be skipped.
+              if(!programListEnd) {
+                scrollPemBackwards();
+              }
+            }
+            else if(currentLocalStepNumber > 1) {
               --currentLocalStepNumber;
               defineCurrentStep();
               if(!programListEnd) {

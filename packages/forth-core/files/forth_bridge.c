@@ -146,7 +146,15 @@ bool forthEntryStateAtCursor(void)
  * from that predecessor. currentStep may sit past the pre-move of
  * addStepInProgram (manage.c) or past the committed line after ENTER
  * (pemCloseAlphaInput) — in both cases the predecessor is the step the spec's
- * "cursor lands on" language means. */
+ * "cursor lands on" language means.
+ *
+ * forth-core (F6-1): RTN does not itself close an open-ended (no closing
+ * »FORTH marker) region — a routine can be entirely Forth source with RTN
+ * as its sole terminator. When the predecessor is RTN, it is transparent:
+ * look through it to ITS predecessor instead of concluding RPN, so a
+ * capture that empties all the way back to RTN and reopens still resolves
+ * Forth. Bounded by progStart like the outer walk; only RTN specifically is
+ * looked through, so a genuine RPN predecessor is unaffected. */
 bool forthEntryStateAtInsertion(void)
 {
   if (pemCursorIsZerothStep) return false;
@@ -154,16 +162,25 @@ bool forthEntryStateAtInsertion(void)
   uint8_t *progStart = forthOwningProgramStart((const uint8_t *)currentStep);
   if (!progStart || progStart >= currentStep) return false;  /* top of program */
 
-  uint8_t *prev = progStart;                 /* find predecessor of currentStep */
+  uint8_t *scanEnd = (uint8_t *)currentStep;
   for (;;) {
-    uint8_t *next = findNextStep(prev);
-    if (!next || next <= prev) return false; /* defensive: malformed walk */
-    if (next >= currentStep) break;          /* prev is the predecessor */
-    prev = next;
-  }
+    uint8_t *prev = progStart;               /* find predecessor of scanEnd */
+    for (;;) {
+      uint8_t *next = findNextStep(prev);
+      if (!next || next <= prev) return false; /* defensive: malformed walk */
+      if (next >= scanEnd) break;            /* prev is the predecessor */
+      prev = next;
+    }
 
-  uint8_t len;
-  if (!forthStepPayload(prev, &len)) return false;  /* RPN step: RPN */
-  if (len > 0) return true;                          /* source step: Forth */
-  return forthMarkerTurnsOn(prev);                   /* marker: its direction */
+    uint8_t len;
+    if (!forthStepPayload(prev, &len)) {
+      if (checkOpCodeOfStep(prev, ITM_RTN) && prev > progStart) {
+        scanEnd = prev;
+        continue;
+      }
+      return false;                                     /* RPN step: RPN */
+    }
+    if (len > 0) return true;                            /* source step: Forth */
+    return forthMarkerTurnsOn(prev);                     /* marker: its direction */
+  }
 }

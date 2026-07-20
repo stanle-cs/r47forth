@@ -3,6 +3,7 @@
 
 #include "c47.h"
 #include "forth_dict.h"
+#include "forth_capture.h"
 
     TO_QSPI const int16_t StoOperations[][2] = {
       {ITM_ADD,      ITM_STOADD},
@@ -1169,7 +1170,7 @@ printf("tam.value: %d\n", tam.value);
         closeNim();
       }
     }
-    else if(calcMode == CM_PEM && aimBuffer[0] != 0) {
+    else if(calcMode == CM_PEM && (aimBuffer[0] != 0 || forthCapTextNonEmpty())) {
       if(getSystemFlag(FLAG_ALPHA)) {
         pemCloseAlphaInput();
       }

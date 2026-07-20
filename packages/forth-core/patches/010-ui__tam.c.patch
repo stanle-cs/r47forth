@@ -1,16 +1,17 @@
 diff --git a/src/c47/ui/tam.c b/src/c47/ui/tam.c
-index 97301df3e7f567f5458eb456b35859175c5a7e97..b67e61462ea18472102c83bcd774984bc2285801 100644
+index 97301df3e7f567f5458eb456b35859175c5a7e97..77c362ea1a82f5e1d7e22d3e445f575d192af405 100644
 --- a/src/c47/ui/tam.c
 +++ b/src/c47/ui/tam.c
-@@ -2,6 +2,7 @@
+@@ -2,6 +2,8 @@
  // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
  
  #include "c47.h"
 +#include "forth_dict.h"
++#include "forth_capture.h"
  
      TO_QSPI const int16_t StoOperations[][2] = {
        {ITM_ADD,      ITM_STOADD},
-@@ -974,6 +975,21 @@ printf("tam.value: %d\n", tam.value);
+@@ -974,6 +976,21 @@ printf("tam.value: %d\n", tam.value);
                  return;
                }
              }
@@ -32,3 +33,12 @@ index 97301df3e7f567f5458eb456b35859175c5a7e97..b67e61462ea18472102c83bcd774984b
            }
            if(calcMode != CM_PEM) {
              leaveTamModeIfEnabled();
+@@ -1153,7 +1170,7 @@ printf("tam.value: %d\n", tam.value);
+         closeNim();
+       }
+     }
+-    else if(calcMode == CM_PEM && aimBuffer[0] != 0) {
++    else if(calcMode == CM_PEM && (aimBuffer[0] != 0 || forthCapTextNonEmpty())) {
+       if(getSystemFlag(FLAG_ALPHA)) {
+         pemCloseAlphaInput();
+       }

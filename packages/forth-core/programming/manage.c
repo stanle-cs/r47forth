@@ -7,6 +7,7 @@
 
 #include "c47.h"
 #include "forth_dict.h"
+#include "forth_capture.h"
 
 // Structure of the program memory.
 // In this example the RAM is 16384 blocks (from 0 to 16383) of 4 bytes = 65536 bytes.
@@ -826,9 +827,11 @@ void pemAlpha(int16_t item) {
         aimBuffer[0] = 0;
         return;
       }
-      xcopy(aimBuffer, tmpString, ll);   // bare render: no name prefix, no quotes
-      aimBuffer[ll] = 0;
-      T_cursorPos = stringLastGlyph(aimBuffer) + 1;
+      forthCapOpen();
+      if(!forthCapIsOpen()) { aimBuffer[0] = 0; return; }   /* RAM_FULL shown */
+      xcopy(forthCapBuf(), tmpString, ll);   // bare render: no name prefix, no quotes
+      forthCapBuf()[ll] = 0;
+      T_cursorPos = stringLastGlyph((char *)forthCapBuf()) + 1;
       deleteStepsFromTo(currentStep, findNextStep(currentStep));
       tam.function = aimFunc;
       editCommand = true;
@@ -841,6 +844,10 @@ void pemAlpha(int16_t item) {
   }
 
   if(!getSystemFlag(FLAG_ALPHA)) {
+      if(tam.function == ITM_FORTH && !forthCapIsOpen()) {
+        forthCapOpen();
+        if(!forthCapIsOpen()) { return; }   /* RAM_FULL shown; nothing mutated */
+      }
       resetShiftState();
       displayAIMbufferoffset = 0;
       if(!editCommand) {
@@ -873,7 +880,8 @@ void pemAlpha(int16_t item) {
       currentStep = findPreviousStep(currentStep);
     }
     if(indexOfItems[item].func == addItemToBuffer) {
-      int32_t len = stringByteLength(aimBuffer);
+      char *sink = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
+      int32_t len = stringByteLength(sink);
       item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
       if(alphaCase == AC_LOWER) {
           if(ITM_A <= item && item <= ITM_Z) {
@@ -884,15 +892,15 @@ void pemAlpha(int16_t item) {
       if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
         item = convertItemToSubOrSup(item, nextChar);
         int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
-        if(len < (256 - inputCharLength) && stringGlyphLength(aimBuffer) < 196) {
-          xcopy(aimBuffer + T_cursorPos + inputCharLength, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
-          xcopy(aimBuffer + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
+        if(len < (256 - inputCharLength) && stringGlyphLength(sink) < 196) {
+          xcopy(sink + T_cursorPos + inputCharLength, sink + T_cursorPos, stringByteLength(sink + T_cursorPos) + 1);
+          xcopy(sink + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
           T_cursorPos += inputCharLength;
         }
       }
     }
     else if(item == ITM_BACKSPACE) {
-      if(aimBuffer[0] == 0) {
+      if((forthCapIsOpen() ? forthCapBuf()[0] : aimBuffer[0]) == 0) {
         deleteStepsFromTo(currentStep, findNextStep(currentStep));
         clearSystemFlag(FLAG_ALPHA);
         calcModeNormalGui();
@@ -905,6 +913,7 @@ void pemAlpha(int16_t item) {
         // initializer, static storage] and the documented invariant that
         // tam.mode, not tam.function, is the "in TAM" gate [VERIFIED:
         // src/c47/typeDefinitions.h:672-680].
+        forthCapClose();
         tam.function = 0;
         return;
       }
@@ -912,19 +921,21 @@ void pemAlpha(int16_t item) {
         return;
       }
       else {
-        char cursorByte = aimBuffer[T_cursorPos];
+        char *sink = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
+        char cursorByte = sink[T_cursorPos];
         int16_t lastGlyphPos;
-        aimBuffer[T_cursorPos] = 0;
-        lastGlyphPos = stringLastGlyph(aimBuffer);
-        aimBuffer[T_cursorPos] = cursorByte;
-        xcopy(aimBuffer + lastGlyphPos, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
+        sink[T_cursorPos] = 0;
+        lastGlyphPos = stringLastGlyph(sink);
+        sink[T_cursorPos] = cursorByte;
+        xcopy(sink + lastGlyphPos, sink + T_cursorPos, stringByteLength(sink + T_cursorPos) + 1);
         T_cursorPos = lastGlyphPos;
       }
     }
     else if(item == ITM_ENTER) {
       bool_t wasForth = (tam.function == ITM_FORTH);
-      bool_t hadText  = (aimBuffer[0] != 0);           // E5 locks on a NON-EMPTY line
-      if(wasForth && hadText && !forthCheckSourceLine(aimBuffer)) {
+      bool_t hadText  = (forthCapIsOpen() ? forthCapTextNonEmpty()
+                                          : (aimBuffer[0] != 0));  // E5 locks on a NON-EMPTY line
+      if(wasForth && hadText && !forthCheckSourceLine(forthCapIsOpen() ? (const char *)forthCapBuf() : aimBuffer)) {
         return;   /* E9 tier 1: commit refused atomically — capture stays
                      open, aimBuffer intact for correction, the error is
                      already displayed.  Tier 2 (names) never reaches here:
@@ -946,6 +957,7 @@ void pemAlpha(int16_t item) {
     }
     else if(item == ITM_CLA) { // JM addon
       aimBuffer[0] = 0;
+      if(forthCapIsOpen()) { forthCapBuf()[0] = 0; }
       T_cursorPos = 0;
       nextChar = NC_NORMAL;
     }
@@ -996,21 +1008,22 @@ void pemAlpha(int16_t item) {
       aimFunc |= currentStep[1];
     }
 
+    char *sink = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
     deleteStepsFromTo(currentStep, findNextStep(currentStep));
     if(aimFunc < 128) { // literal
       tmpString[0] = aimFunc;
       tmpString[1] = (char)STRING_LABEL_VARIABLE;
-      tmpString[2] = stringByteLength(aimBuffer);
-      xcopy(tmpString + 3, aimBuffer, stringByteLength(aimBuffer));
-      _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 3);
+      tmpString[2] = stringByteLength(sink);
+      xcopy(tmpString + 3, sink, stringByteLength(sink));
+      _insertInProgram((uint8_t *)tmpString, stringByteLength(sink) + 3);
     }
     else { // rem or 42str
       tmpString[0] = (aimFunc >> 8) | 0x80;
       tmpString[1] =  aimFunc       & 0xff;
       tmpString[2] = (char)STRING_LABEL_VARIABLE;
-      tmpString[3] = stringByteLength(aimBuffer);
-      xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
-      _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 4);
+      tmpString[3] = stringByteLength(sink);
+      xcopy(tmpString + 4, sink, stringByteLength(sink));
+      _insertInProgram((uint8_t *)tmpString, stringByteLength(sink) + 4);
     }
     --currentLocalStepNumber;
     currentStep = findPreviousStep(currentStep);
@@ -1020,17 +1033,19 @@ void pemAlpha(int16_t item) {
 }
 
 void pemCloseAlphaInput(void) {
-  if(tam.function == ITM_FORTH && aimBuffer[0] == 0) {
+  if(tam.function == ITM_FORTH && !forthCapTextNonEmpty()) {
     deleteStepsFromTo(currentStep, findNextStep(currentStep));
     clearSystemFlag(FLAG_ALPHA);
     calcModeNormalGui();
     _closeAlphaMenus();
     // Capture-close reset: see the identical rationale/citations at the
     // `ITM_BACKSPACE` empty-buffer arm above.
+    forthCapClose();
     tam.function = 0;
     return;
   }
   aimBuffer[0] = 0;
+  forthCapClose();
   clearSystemFlag(FLAG_ALPHA);
   calcModeNormalGui();
   ++currentLocalStepNumber;

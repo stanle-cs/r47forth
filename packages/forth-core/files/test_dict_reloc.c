@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include "c47.h"
 #include "forth_dict.h"
+#include "forth_capture.h"
 #include "programming/param_core.h"
 #include "saveRestoreBackup.h"
 
@@ -5973,8 +5974,8 @@ static int test_accept_entry_state_roundtrip(void)
                  (int)tam.function, ITM_FORTH);
           fail = 1;
         }
-        else if (aimBuffer[0] != '2' || aimBuffer[1] != 0) {
-          printf("    [2] FAIL: aimBuffer = '%s', expected '2'\n", aimBuffer);
+        else if (strcmp(forthTestCapText(), "2") != 0) {
+          printf("    [2] FAIL: cap text = '%s', expected '2'\n", forthTestCapText());
           fail = 1;
         }
         else {
@@ -5983,6 +5984,7 @@ static int test_accept_entry_state_roundtrip(void)
       }
 
       if (getSystemFlag(FLAG_ALPHA)) { pemAlpha(ITM_ENTER); }
+      forthCapClose();
     }
     cleanupTestProgram();
   }
@@ -6053,13 +6055,14 @@ static int test_accept_entry_state_roundtrip(void)
             printf("    [3] FAIL: opening tam.function = %d\n", (int)tam.function);
             sc3 = 1;
           }
-          else if (aimBuffer[0] != '2' || aimBuffer[1] != 0) {
-            printf("    [3] FAIL: opening aimBuffer = '%s'\n", aimBuffer);
+          else if (strcmp(forthTestCapText(), "2") != 0) {
+            printf("    [3] FAIL: opening cap text = '%s'\n", forthTestCapText());
             sc3 = 1;
           }
         }
 
         if (getSystemFlag(FLAG_ALPHA)) { pemAlpha(ITM_ENTER); }
+        forthCapClose();
       }
       cleanupTestProgram();
     }
@@ -6251,8 +6254,8 @@ static int test_accept_entry_state_roundtrip(void)
             printf("    [4] FAIL: post-restore tam.function = %d\n", (int)tam.function);
             fail = 1;
           }
-          else if (aimBuffer[0] != '2' || aimBuffer[1] != 0) {
-            printf("    [4] FAIL: post-restore aimBuffer = '%s'\n", aimBuffer);
+          else if (strcmp(forthTestCapText(), "2") != 0) {
+            printf("    [4] FAIL: post-restore cap text = '%s'\n", forthTestCapText());
             fail = 1;
           }
           else {
@@ -6262,6 +6265,7 @@ static int test_accept_entry_state_roundtrip(void)
       }
 
       if (getSystemFlag(FLAG_ALPHA)) { pemAlpha(ITM_ENTER); }
+      forthCapClose();
     }
     cleanupTestProgram();
   }
@@ -8615,8 +8619,9 @@ static int test_forth_edit_extracts_source(void)
   extern void pemAlpha(int16_t item);
   pemAlpha(ITM_EDIT);
 
-  if (strcmp(aimBuffer, ": SQ DUP * ;") != 0) {
-    printf("    FAIL: aimBuffer = '%s', expected ': SQ DUP * ;'\n", aimBuffer);
+  if (strcmp(forthTestCapText(), ": SQ DUP * ;") != 0) {
+    printf("    FAIL: cap text = '%s', expected ': SQ DUP * ;'\n", forthTestCapText());
+    forthCapClose();
     cleanupTestProgram();
     currentStep = savedCurrentStep;
     pemCursorIsZerothStep = savedZeroth;
@@ -8627,6 +8632,7 @@ static int test_forth_edit_extracts_source(void)
     return 1;
   }
 
+  forthCapClose();
   cleanupTestProgram();
   currentStep = savedCurrentStep;
   pemCursorIsZerothStep = savedZeroth;
@@ -9290,10 +9296,17 @@ static int test_picker_insert_at_cursor(void)
   const uint8_t *sqStep = beginOfProgramMemory + 4;
   uint8_t *savedCurrentStep = currentStep;
   uint16_t savedProgNum = currentProgramNumber;
-  char aimSaved[AIM_BUFFER_LENGTH];
   int16_t savedCursorPos = T_cursorPos;
   int16_t savedDynMenuItem = dynamicMenuItem;
   uint8_t savedSoftmenuStackId = softmenuStack[0].softmenuId;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedTamFunc = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedCatalog = catalog;
 
   currentProgramNumber = 1;
   currentStep = (uint8_t *)sqStep;
@@ -9302,33 +9315,66 @@ static int test_picker_insert_at_cursor(void)
 
   int fail = 0;
 
-  /* Set up for picker insert */
-  xcopy(aimSaved, aimBuffer, sizeof(aimSaved));
+  /* Open real capture per CAPTURE-DRIVE CONTRACT */
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
   aimBuffer[0] = 0;
-  T_cursorPos = 0;
-  softmenuStack[0].softmenuId = 22;  /* MNU_FORTH */
-  dynamicMenuItem = 0;               /* "SQ" is the first (sorted) entry */
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  clearSystemFlag(FLAG_ALPHA);
 
-  extern bool_t pickerInsertName(void);
-  if (!pickerInsertName()) {
-    printf("    FAIL: pickerInsertName returned false\n");
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+
+  extern void runFunction(int16_t);
+  runFunction(ITM_AIM);
+
+  if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+    printf("    FIXTURE BUG: ITM_AIM did not open Forth capture\n");
     fail = 1;
-  } else {
-    if (strcmp(aimBuffer, "SQ ") != 0) {
-      printf("    FAIL: aimBuffer = '%s', expected 'SQ '\n", aimBuffer);
+  }
+
+  if (!fail) {
+    /* Set up for picker insert */
+    T_cursorPos = 0;
+    softmenuStack[0].softmenuId = 22;
+    dynamicMenuItem = 0;
+
+    extern bool_t pickerInsertName(void);
+    if (!pickerInsertName()) {
+      printf("    FAIL: pickerInsertName returned false\n");
       fail = 1;
-    }
-    if (T_cursorPos != 3) {
-      printf("    FAIL: T_cursorPos = %d, expected 3\n", T_cursorPos);
-      fail = 1;
+    } else {
+      if (strcmp(forthTestCapText(), "SQ ") != 0) {
+        printf("    FAIL: cap text = '%s', expected 'SQ '\n", forthTestCapText());
+        fail = 1;
+      }
+      if (T_cursorPos != 3) {
+        printf("    FAIL: T_cursorPos = %d, expected 3\n", T_cursorPos);
+        fail = 1;
+      }
     }
   }
 
-  /* Cleanup */
-  xcopy(aimBuffer, aimSaved, sizeof(aimSaved));
+  /* Cleanup: close capture */
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = 0;
   T_cursorPos = savedCursorPos;
   dynamicMenuItem = savedDynMenuItem;
   softmenuStack[0].softmenuId = savedSoftmenuStackId;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  tam.function = savedTamFunc;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  catalog = savedCatalog;
   if (dynamicSoftmenu[22].menuContent) {
     free(dynamicSoftmenu[22].menuContent);
     dynamicSoftmenu[22].menuContent = NULL;
@@ -9368,10 +9414,17 @@ static int test_picker_insert_mid_line(void)
   const uint8_t *sqStep = beginOfProgramMemory + 4;
   uint8_t *savedCurrentStep = currentStep;
   uint16_t savedProgNum = currentProgramNumber;
-  char aimSaved[AIM_BUFFER_LENGTH];
   int16_t savedCursorPos = T_cursorPos;
   int16_t savedDynMenuItem = dynamicMenuItem;
   uint8_t savedSoftmenuStackId = softmenuStack[0].softmenuId;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedTamFunc = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedCatalog = catalog;
 
   currentProgramNumber = 1;
   currentStep = (uint8_t *)sqStep;
@@ -9380,33 +9433,73 @@ static int test_picker_insert_mid_line(void)
 
   int fail = 0;
 
-  /* Set up: "DUP " in buffer, cursor at 0 (before DUP) */
-  xcopy(aimSaved, aimBuffer, sizeof(aimSaved));
-  xcopy(aimBuffer, "DUP ", 4);
-  T_cursorPos = 0;
-  softmenuStack[0].softmenuId = 22;
-  dynamicMenuItem = 0;
+  /* Open real capture per CAPTURE-DRIVE CONTRACT */
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  clearSystemFlag(FLAG_ALPHA);
 
-  extern bool_t pickerInsertName(void);
-  if (!pickerInsertName()) {
-    printf("    FAIL: pickerInsertName returned false\n");
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+
+  extern void runFunction(int16_t);
+  runFunction(ITM_AIM);
+
+  if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+    printf("    FIXTURE BUG: ITM_AIM did not open Forth capture\n");
     fail = 1;
-  } else {
-    if (strcmp(aimBuffer, "SQ DUP ") != 0) {
-      printf("    FAIL: aimBuffer = '%s', expected 'SQ DUP '\n", aimBuffer);
-      fail = 1;
+  }
+
+  if (!fail) {
+    /* Type "DUP " via key idiom */
+    const int16_t preItems[] = { ITM_D, ITM_U, ITM_P, ITM_SPACE };
+    int i;
+    for (i = 0; i < (int)(sizeof(preItems) / sizeof(preItems[0])); i++) {
+      runFunction(preItems[i]);
     }
-    if (T_cursorPos != 3) {
-      printf("    FAIL: T_cursorPos = %d, expected 3\n", T_cursorPos);
+
+    /* Set cursor at 0 (before DUP) */
+    T_cursorPos = 0;
+    softmenuStack[0].softmenuId = 22;
+    dynamicMenuItem = 0;
+
+    extern bool_t pickerInsertName(void);
+    if (!pickerInsertName()) {
+      printf("    FAIL: pickerInsertName returned false\n");
       fail = 1;
+    } else {
+      if (strcmp(forthTestCapText(), "SQ DUP ") != 0) {
+        printf("    FAIL: cap text = '%s', expected 'SQ DUP '\n", forthTestCapText());
+        fail = 1;
+      }
+      if (T_cursorPos != 3) {
+        printf("    FAIL: T_cursorPos = %d, expected 3\n", T_cursorPos);
+        fail = 1;
+      }
     }
   }
 
-  /* Cleanup */
-  xcopy(aimBuffer, aimSaved, sizeof(aimSaved));
+  /* Cleanup: close capture */
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = 0;
   T_cursorPos = savedCursorPos;
   dynamicMenuItem = savedDynMenuItem;
   softmenuStack[0].softmenuId = savedSoftmenuStackId;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  tam.function = savedTamFunc;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  catalog = savedCatalog;
   if (dynamicSoftmenu[22].menuContent) {
     free(dynamicSoftmenu[22].menuContent);
     dynamicSoftmenu[22].menuContent = NULL;
@@ -9423,8 +9516,8 @@ static int test_picker_insert_mid_line(void)
 }
 
 /* test_picker_trailing_space
- * Build picker menu with "SQ". Set aimBuffer = "DUP ", cursor at end (4).
- * Insert "SQ"; assert aimBuffer == "DUP SQ " (trailing space present).
+ * Build picker menu with "SQ". Open capture, type "DUP ", cursor at end (4).
+ * Insert "SQ"; assert cap text == "DUP SQ " (trailing space present).
  * Escaping mutation: omitting trailing space — would produce "DUP SQ" */
 static int test_picker_trailing_space(void)
 {
@@ -9444,10 +9537,17 @@ static int test_picker_trailing_space(void)
   const uint8_t *sqStep = beginOfProgramMemory + 4;
   uint8_t *savedCurrentStep = currentStep;
   uint16_t savedProgNum = currentProgramNumber;
-  char aimSaved[AIM_BUFFER_LENGTH];
   int16_t savedCursorPos = T_cursorPos;
   int16_t savedDynMenuItem = dynamicMenuItem;
   uint8_t savedSoftmenuStackId = softmenuStack[0].softmenuId;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedTamFunc = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedCatalog = catalog;
 
   currentProgramNumber = 1;
   currentStep = (uint8_t *)sqStep;
@@ -9456,33 +9556,73 @@ static int test_picker_trailing_space(void)
 
   int fail = 0;
 
-  /* Set up: "DUP " in buffer, cursor at end */
-  xcopy(aimSaved, aimBuffer, sizeof(aimSaved));
-  xcopy(aimBuffer, "DUP ", 4);
-  T_cursorPos = 4;
-  softmenuStack[0].softmenuId = 22;
-  dynamicMenuItem = 0;
+  /* Open real capture per CAPTURE-DRIVE CONTRACT */
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  clearSystemFlag(FLAG_ALPHA);
 
-  extern bool_t pickerInsertName(void);
-  if (!pickerInsertName()) {
-    printf("    FAIL: pickerInsertName returned false\n");
+  currentStep = beginOfProgramMemory;
+  pemCursorIsZerothStep = false;
+  currentLocalStepNumber = 1;
+
+  extern void runFunction(int16_t);
+  runFunction(ITM_AIM);
+
+  if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+    printf("    FIXTURE BUG: ITM_AIM did not open Forth capture\n");
     fail = 1;
-  } else {
-    if (strcmp(aimBuffer, "DUP SQ ") != 0) {
-      printf("    FAIL: aimBuffer = '%s', expected 'DUP SQ '\n", aimBuffer);
-      fail = 1;
+  }
+
+  if (!fail) {
+    /* Type "DUP " via key idiom */
+    const int16_t preItems[] = { ITM_D, ITM_U, ITM_P, ITM_SPACE };
+    int i;
+    for (i = 0; i < (int)(sizeof(preItems) / sizeof(preItems[0])); i++) {
+      runFunction(preItems[i]);
     }
-    if (T_cursorPos != 7) {
-      printf("    FAIL: T_cursorPos = %d, expected 7\n", T_cursorPos);
+
+    /* Set cursor at end */
+    T_cursorPos = 4;
+    softmenuStack[0].softmenuId = 22;
+    dynamicMenuItem = 0;
+
+    extern bool_t pickerInsertName(void);
+    if (!pickerInsertName()) {
+      printf("    FAIL: pickerInsertName returned false\n");
       fail = 1;
+    } else {
+      if (strcmp(forthTestCapText(), "DUP SQ ") != 0) {
+        printf("    FAIL: cap text = '%s', expected 'DUP SQ '\n", forthTestCapText());
+        fail = 1;
+      }
+      if (T_cursorPos != 7) {
+        printf("    FAIL: T_cursorPos = %d, expected 7\n", T_cursorPos);
+        fail = 1;
+      }
     }
   }
 
-  /* Cleanup */
-  xcopy(aimBuffer, aimSaved, sizeof(aimSaved));
+  /* Cleanup: close capture */
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = 0;
   T_cursorPos = savedCursorPos;
   dynamicMenuItem = savedDynMenuItem;
   softmenuStack[0].softmenuId = savedSoftmenuStackId;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  tam.function = savedTamFunc;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  catalog = savedCatalog;
   if (dynamicSoftmenu[22].menuContent) {
     free(dynamicSoftmenu[22].menuContent);
     dynamicSoftmenu[22].menuContent = NULL;
@@ -10025,13 +10165,15 @@ static int test_e2_continuation_after_enter(void)
     fail = 1;
   }
 
-  /* Assert: aimBuffer contains "2" */
-  if (aimBuffer[0] != '2' || aimBuffer[1] != 0) {
-    printf("    FAIL: aimBuffer = '%s', expected '2'\n", aimBuffer);
+  /* Assert: capture buffer contains "2" */
+  if (strcmp(forthTestCapText(), "2") != 0) {
+    printf("    FAIL: cap text = '%s', expected '2'\n", forthTestCapText());
     fail = 1;
   }
 
-  /* Cleanup: close capture via pemAlpha(ITM_ENTER) to commit the step */
+  /* Cleanup: pemAlpha(ITM_ENTER) commits the step and closes capture itself;
+   * closing here first would misroute ENTER into the empty-abort branch and
+   * delete the step instead of committing it. */
   if (!fail) {
     extern void pemAlpha(int16_t item);
     pemAlpha(ITM_ENTER);
@@ -10740,6 +10882,8 @@ static int test_param_series_c_acceptance(void);
 static int test_check_source_line(void);
 /* F5-2: E9 commit gate — structural rejects at ENTER, advisory commits */
 static int test_commit_gate(void);
+/* F6-1: managed capture buffer behind the capture object */
+static int test_capture_buffer(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -12589,6 +12733,15 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_commit_gate...\n");
   fail |= test_commit_gate();
+  forthDictClear();
+  forthGDictClear();
+
+  /* F6-1: managed capture buffer behind the capture object */
+  printf("\nFORTH F6-1 TESTS (managed capture buffer)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_capture_buffer...\n");
+  fail |= test_capture_buffer();
   forthDictClear();
   forthGDictClear();
 
@@ -16950,6 +17103,7 @@ static int test_commit_gate(void)
   clearSystemFlag(FLAG_ALPHA);
   clearSystemFlag(FLAG_NUMLOCK);
   lastErrorCode = ERROR_NONE;
+  forthCapClose();
 
   /* Position on the opening marker (step 2) */
   fnGotoDot(2);
@@ -16998,8 +17152,8 @@ static int test_commit_gate(void)
           printf("    [1] FAIL: FLAG_ALPHA not set — capture should stay open\n");
           sc1 = 1;
         }
-        else if (compareString(aimBuffer, ": A IF ;", CMP_BINARY) != 0) {
-          printf("    [1] FAIL: aimBuffer = '%s', expected ': A IF ;'\n", aimBuffer);
+        else if (strcmp(forthTestCapText(), ": A IF ;") != 0) {
+          printf("    [1] FAIL: cap text = '%s', expected ': A IF ;'\n", forthTestCapText());
           sc1 = 1;
         }
         else if (getNumberOfSteps() != stepCountBefore) {
@@ -17490,6 +17644,411 @@ static int test_check_source_line(void)
   }
 
   lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* test_capture_buffer
+ * F6-1: managed capture buffer — Forth capture text moves off aimBuffer.
+ * Eleven subcases verifying the capture object lifecycle. */
+static int test_capture_buffer(void)
+{
+  int fail = 0;
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedMenu = currentMenu();
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void pemAlpha(int16_t);
+  extern void pemCloseAlphaInput(void);
+  extern void fnKeyExit(uint16_t);
+  extern void tamEnterMode(int16_t);
+
+  /* Build fixture: LBL, marker, RTN */
+  testProg_t p;
+  tpInit(&p);
+  tpLbl(&p, "F61");
+  tpMarker(&p);
+  tpRtn(&p);
+
+  if (!tpWrite(&p)) {
+    printf("    FIXTURE FAIL: tpWrite\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+
+  /* Position on the opening marker (step 2) */
+  fnGotoDot(2);
+
+  if (currentStep != tpStepAddr(&p, 1)) {
+    printf("    FIXTURE BUG: fnGotoDot(2) did not position on marker\n");
+    fail = 1;
+  }
+  else if (currentLocalStepNumber != 2) {
+    printf("    FIXTURE BUG: currentLocalStepNumber = %u, expected 2\n", currentLocalStepNumber);
+    fail = 1;
+  }
+  else {
+    /* ---- Subcase 1: Open state ---- */
+    { int sc1 = 0;
+      runFunction(ITM_AIM);
+      if (forthTestCapState() != FCAP_OPEN) {
+        printf("    [1] FAIL: capture not open (state=%d)\n", forthTestCapState());
+        sc1 = 1;
+      }
+      else if (!getSystemFlag(FLAG_ALPHA)) {
+        printf("    [1] FAIL: FLAG_ALPHA not set\n");
+        sc1 = 1;
+      }
+      else if (aimBuffer[0] != 0) {
+        printf("    [1] FAIL: aimBuffer not empty\n");
+        sc1 = 1;
+      }
+      if (!sc1) printf("    [1] PASS: capture opens with a managed buffer and an empty aimBuffer\n");
+      fail |= sc1;
+    }
+
+    /* ---- Subcase 2: Typing lands in the buffer and the step, never aimBuffer ---- */
+    { int sc2 = 0;
+      if (!fail) {
+        const int16_t items[] = {
+          ITM_1, ITM_SPACE, ITM_2, ITM_SPACE, ITM_PLUS
+        };
+        int i;
+        for (i = 0; i < (int)(sizeof(items) / sizeof(items[0])); i++) {
+          runFunction(items[i]);
+        }
+        if (strcmp(forthTestCapText(), "1 2 +") != 0) {
+          printf("    [2] FAIL: cap text = '%s', expected '1 2+'\n", forthTestCapText());
+          sc2 = 1;
+        }
+        else if (aimBuffer[0] != 0) {
+          printf("    [2] FAIL: aimBuffer not empty (should be 0)\n");
+          sc2 = 1;
+        }
+      }
+      if (!sc2) printf("    [2] PASS: sink is the managed buffer; step re-commits per key\n");
+      fail |= sc2;
+    }
+
+    /* ---- Subcase 3: ENTER multi-line relock ---- */
+    { int sc3 = 0;
+      if (!fail) {
+        lastErrorCode = ERROR_NONE;
+        runFunction(ITM_ENTER);
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [3] FAIL: ENTER error %d\n", lastErrorCode);
+          sc3 = 1;
+        }
+        else if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [3] FAIL: capture not open after ENTER relock (state=%d)\n", forthTestCapState());
+          sc3 = 1;
+        }
+        else if (forthTestCapText()[0] != 0) {
+          printf("    [3] FAIL: cap text not empty after relock\n");
+          sc3 = 1;
+        }
+      }
+      if (!sc3) printf("    [3] PASS: ENTER commits and relocks a fresh managed line\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc3;
+    }
+
+    /* ---- Subcase 4: Backspace + mid-line edit ---- */
+    { int sc4 = 0;
+      if (!fail) {
+        runFunction(ITM_A);
+        runFunction(ITM_B);
+        runFunction(ITM_BACKSPACE);
+        runFunction(ITM_C);
+        if (strcmp(forthTestCapText(), "AC") != 0) {
+          printf("    [4] FAIL: cap text = '%s', expected 'AC'\n", forthTestCapText());
+          sc4 = 1;
+        }
+      }
+      if (!sc4) printf("    [4] PASS: glyph edits operate on the managed buffer\n");
+      fail |= sc4;
+    }
+
+    /* ---- Subcase 5: Empty-line BACKSPACE closes and frees ---- */
+    { int sc5 = 0;
+      uint32_t freeBefore5;
+      if (!fail) {
+        /* Close any open line: clear buffer, then BACKSPACE to abort */
+        runFunction(ITM_CLA);
+        runFunction(ITM_BACKSPACE);
+        freeBefore5 = getFreeRamMemory();
+        /* Reopen */
+        runFunction(ITM_AIM);
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [5] FAIL: reopen failed\n");
+          sc5 = 1;
+        }
+        else {
+          /* Empty-line abort */
+          runFunction(ITM_BACKSPACE);
+          if (forthTestCapState() != FCAP_CLOSED) {
+            printf("    [5] FAIL: capture not closed (state=%d)\n", forthTestCapState());
+            sc5 = 1;
+          }
+          else if (getSystemFlag(FLAG_ALPHA)) {
+            printf("    [5] FAIL: FLAG_ALPHA still set\n");
+            sc5 = 1;
+          }
+          else if (getFreeRamMemory() != freeBefore5) {
+            printf("    [5] FAIL: freeRam changed %u -> %u\n",
+                   (unsigned)freeBefore5, (unsigned)getFreeRamMemory());
+            sc5 = 1;
+          }
+        }
+      }
+      if (!sc5) printf("    [5] PASS: abort closes capture and frees the buffer\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc5;
+    }
+
+    /* ---- Subcase 6: EDIT reopen refills from the step ---- */
+    { int sc6 = 0;
+      if (!fail) {
+        /* Reopen, type AB CD, ENTER, EXIT to close */
+        runFunction(ITM_AIM);
+        runFunction(ITM_A);
+        runFunction(ITM_B);
+        runFunction(ITM_SPACE);
+        runFunction(ITM_C);
+        runFunction(ITM_D);
+        runFunction(ITM_ENTER);
+        /* Now on fresh relock line; BACKSPACE aborts the empty placeholder,
+         * deleting it in place — currentStep/currentLocalStepNumber then
+         * name whatever slides into that address (structurally: .END.,
+         * since the aborted placeholder sat right before it), one step
+         * past the committed AB CD. Step back onto it directly (the same
+         * findPreviousStep/decrement pair pemAlpha's own insert paths use
+         * throughout this file) rather than a hardcoded fnGotoDot(N),
+         * which would require an absolute step count across five prior
+         * subcases' mutations — exactly the fragility the fixture-
+         * authoring rule forbids. */
+        runFunction(ITM_BACKSPACE);
+        currentStep = findPreviousStep(currentStep);
+        --currentLocalStepNumber;
+        calcMode = CM_PEM;
+        tam.mode = 0;
+        clearSystemFlag(FLAG_ALPHA);
+        tam.function = 0;
+        pemAlpha(ITM_EDIT);
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [6] FAIL: capture not open after EDIT\n");
+          sc6 = 1;
+        }
+        else if (strcmp(forthTestCapText(), "AB CD") != 0) {
+          printf("    [6] FAIL: cap text = '%s', expected 'AB CD'\n", forthTestCapText());
+          sc6 = 1;
+        }
+        else if (T_cursorPos != stringLastGlyph(forthTestCapText()) + 1) {
+          printf("    [6] FAIL: cursor not at end\n");
+          sc6 = 1;
+        }
+        /* Close via empty-abort */
+        runFunction(ITM_CLA);
+        runFunction(ITM_BACKSPACE);
+      }
+      if (!sc6) printf("    [6] PASS: EDIT refills the managed buffer from the step\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc6;
+    }
+
+    /* ---- Subcase 7: Interim TAM guard preserves commit-and-close ---- */
+    { int sc7 = 0;
+      if (!fail) {
+        runFunction(ITM_AIM);
+        runFunction(ITM_9);
+        tamEnterMode(ITM_STO);
+        if (forthTestCapState() != FCAP_CLOSED) {
+          printf("    [7] FAIL: capture not closed after TAM entry (state=%d)\n", forthTestCapState());
+          sc7 = 1;
+        }
+        else if (tam.mode == 0) {
+          printf("    [7] FAIL: TAM not open\n");
+          sc7 = 1;
+        }
+        /* Cancel TAM */
+        fnKeyExit(NOPARAM);
+        if (tam.mode != 0) {
+          fnKeyExit(NOPARAM);
+        }
+      }
+      if (!sc7) printf("    [7] PASS: TAM entry commits-and-closes the capture (F6-1 interim)\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc7;
+    }
+
+    /* ---- Subcase 8: 196-glyph cap ---- */
+    { int sc8 = 0;
+      if (!fail) {
+        runFunction(ITM_AIM);
+        int i;
+        for (i = 0; i < 98; i++) {
+          runFunction(ITM_X);
+          runFunction(ITM_SPACE);
+        }
+        if (stringGlyphLength(forthTestCapText()) != 196) {
+          printf("    [8] FAIL: glyph count = %d, expected 196\n",
+                 stringGlyphLength(forthTestCapText()));
+          sc8 = 1;
+        }
+        else {
+          int16_t lenBefore = stringGlyphLength(forthTestCapText());
+          runFunction(ITM_X);
+          if (stringGlyphLength(forthTestCapText()) != lenBefore) {
+            printf("    [8] FAIL: 197th glyph accepted\n");
+            sc8 = 1;
+          }
+        }
+        if (!sc8) {
+          runFunction(ITM_ENTER);
+          if (lastErrorCode != ERROR_NONE) {
+            printf("    [8] FAIL: ENTER error %d\n", lastErrorCode);
+            sc8 = 1;
+          }
+        }
+      }
+      if (!sc8) printf("    [8] PASS: 196-glyph cap holds on the managed buffer\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc8;
+    }
+
+    /* ---- Subcase 9: E9 composition ---- */
+    { int sc9 = 0;
+      if (!fail) {
+        lastErrorCode = ERROR_NONE;
+        const int16_t badItems[] = {
+          ITM_COLON, ITM_SPACE, ITM_A, ITM_SPACE,
+          ITM_I, ITM_F, ITM_SPACE,
+          ITM_SEMICOLON, ITM_ENTER
+        };
+        int i;
+        for (i = 0; i < (int)(sizeof(badItems) / sizeof(badItems[0])); i++) {
+          runFunction(badItems[i]);
+        }
+        if (lastErrorCode == ERROR_NONE) {
+          printf("    [9] FAIL: no error for malformed line\n");
+          sc9 = 1;
+        }
+        else if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [9] FAIL: capture not open after refusal (state=%d)\n", forthTestCapState());
+          sc9 = 1;
+        }
+        else if (strcmp(forthTestCapText(), ": A IF ;") != 0) {
+          printf("    [9] FAIL: cap text = '%s', expected ': A IF ;'\n", forthTestCapText());
+          sc9 = 1;
+        }
+        lastErrorCode = ERROR_NONE;
+        runFunction(ITM_CLA);
+        runFunction(ITM_BACKSPACE);
+      }
+      if (!sc9) printf("    [9] PASS: E9 refusal leaves the managed line intact\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc9;
+    }
+
+    /* ---- Subcase 10: EXIT with text commits and closes (ladder parity) ---- */
+    { int sc10 = 0;
+      uint32_t freeBefore10;
+      if (!fail) {
+        freeBefore10 = getFreeRamMemory();
+        runFunction(ITM_AIM);
+        runFunction(ITM_7);
+        fnKeyExit(NOPARAM);
+        if (forthTestCapState() != FCAP_CLOSED) {
+          printf("    [10] FAIL: capture not closed (state=%d)\n", forthTestCapState());
+          sc10 = 1;
+        }
+        else if (getSystemFlag(FLAG_ALPHA)) {
+          printf("    [10] FAIL: FLAG_ALPHA still set\n");
+          sc10 = 1;
+        }
+        else if (getFreeRamMemory() != freeBefore10) {
+          printf("    [10] FAIL: freeRam changed %u -> %u\n",
+                 (unsigned)freeBefore10, (unsigned)getFreeRamMemory());
+          sc10 = 1;
+        }
+      }
+      if (!sc10) printf("    [10] PASS: EXIT with text commits and closes (landed ladder)\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc10;
+    }
+
+    /* ---- Subcase 11: EXIT on empty aborts ---- */
+    { int sc11 = 0;
+      if (!fail) {
+        uint16_t stepsBefore = getNumberOfSteps();
+        runFunction(ITM_AIM);
+        fnKeyExit(NOPARAM);
+        if (forthTestCapState() != FCAP_CLOSED) {
+          printf("    [11] FAIL: capture not closed (state=%d)\n", forthTestCapState());
+          sc11 = 1;
+        }
+        else if (getNumberOfSteps() != stepsBefore) {
+          printf("    [11] FAIL: step count changed %u -> %u (placeholder not deleted)\n",
+                 stepsBefore, getNumberOfSteps());
+          sc11 = 1;
+        }
+      }
+      if (!sc11) printf("    [11] PASS: EXIT on empty aborts the placeholder\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc11;
+    }
+  }
+
+  /* Cleanup */
+  forthCapClose();
+  cleanupTestProgram();
+  forthDictClear();
+  forthGDictClear();
+
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  showSoftmenu(savedMenu);
+  memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+  lastErrorCode = ERROR_NONE;
+
   return fail;
 }
 #endif  // PC_BUILD
