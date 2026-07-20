@@ -244,7 +244,7 @@
   extern const reservedVariableHeader_t  allReservedVariables[];
   extern const reservedVariableDescStr_t varDescr[];
   extern const char                      commonBugScreenMessages[NUMBER_OF_BUG_SCREEN_MESSAGES][SIZE_OF_EACH_BUG_SCREEN_MESSAGE];
-  extern const char                      errorMessages[NUMBER_OF_ERROR_CODES][SIZE_OF_EACH_ERROR_MESSAGE];
+  const char *errorMessageOf(uint8_t errorCode);
   extern const calcKey_t                 kbd_std_C47[37];
   extern const calcKey_t                 kbd_std_DM42[37];
   extern const calcKey_t                 kbd_std_R47[37];
@@ -256,8 +256,13 @@
   #if defined(PC_BUILD)
     #define kbd_std                      (calcModel == USER_C47 ? kbd_std_C47 : calcModel == USER_DM42 ? kbd_std_DM42 : calcModel == USER_R47f_g ? kbd_std_R47f_g : calcModel == USER_R47bk_fg ? kbd_std_R47bk_fg : calcModel == USER_R47fg_bk ? kbd_std_R47fg_bk : calcModel == USER_R47fg_g ? kbd_std_R47fg_g : \
                                           calcModel == USER_E47 ? kbd_std_E47 : calcModel == USER_D47 ?  kbd_std_D47 :  calcModel == USER_V47 ? kbd_std_V47 : calcModel == USER_N47 ?     kbd_std_N47 : calcModel == USER_DM42 ?     kbd_std_DM42 :    kbd_std_C47)
-  #else //!PC_BUILD
-    #define kbd_std                      (calcModel == USER_C47 ? kbd_std_C47 : calcModel == USER_DM42 ? kbd_std_DM42 : calcModel == USER_R47f_g ? kbd_std_R47f_g : calcModel == USER_R47bk_fg ? kbd_std_R47bk_fg : calcModel == USER_R47fg_bk ? kbd_std_R47fg_bk : calcModel == USER_R47fg_g ? kbd_std_R47fg_g : kbd_std_C47)
+  #elif CALCMODEL == USER_R47
+    // A hardware build carries only its own personality's layouts: the backup writer refuses to persist a foreign
+    // model (saveRestoreBackup.c) and the state loader only applies one from a matching file (saveRestoreCalcState.c),
+    // so the other tables are unreachable there and gating the selector lets the linker drop them.
+    #define kbd_std                      (calcModel == USER_R47bk_fg ? kbd_std_R47bk_fg : calcModel == USER_R47fg_bk ? kbd_std_R47fg_bk : calcModel == USER_R47fg_g ? kbd_std_R47fg_g : kbd_std_R47f_g)
+  #else //!PC_BUILD && CALCMODEL != USER_R47
+    #define kbd_std                      (calcModel == USER_DM42 ? kbd_std_DM42 : kbd_std_C47)
   #endif //!PC_BUILD
 
   #if defined(PC_BUILD)

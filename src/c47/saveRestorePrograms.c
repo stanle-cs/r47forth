@@ -19,7 +19,7 @@
 //  +-----+---------------------------+
 //  |  1  |   "PROGRAM_FILE_FORMAT"   |
 //  |  2  |       <file format>       |
-//  |  3  |"WP43_program_file_version"|
+//  |  3  |"C47_program_file_version" |
 //  |  4  |   <program file version>  |
 //  |  5  |         "PROGRAM"         |
 //  |  6  |       <program size>      |

@@ -1,0 +1,43 @@
+# C47 benchmark suite runner.
+#
+# Executed by tools/bench/benchreport.py (or by hand) inside the optimized
+# headless simulator build:
+#
+#   ./t47bench --headless --snapskiprefresh --reset --script res/SCRIPTS/bench.t47
+#
+# Runs every program of tools/bench/PROGRAMS/ (see tools/bench/genbench.py),
+# each of which times itself with a TICKS bracket and leaves its elapsed
+# ticks in R97. This script wraps each run in Jim's microsecond `time` as
+# well, so every repetition reports both clocks. Machine-readable output on
+# stdout, one line per measurement:
+#
+#   BENCH|<name>|<rep>|<microseconds>|<elapsed ticks from R97>
+#   BENCH|CANARY|<R96 after BMGTO warm-up>        (loop-count self-check)
+#   BENCH|END
+#
+# BENCH_REPS in the environment overrides the repetition count (default 5).
+# The first execution of each benchmark is a discarded warm-up.
+
+set benchmarks {BMGTO BMREG BMVAR BMRSV BMARITH BMTRIG BMNQN BMDISP}
+set reps 5
+if {[info exists ::env(BENCH_REPS)]} {
+    set reps $::env(BENCH_REPS)
+}
+
+# BMNQN calls the stock NQueens program (label NQ), so load it first.
+readp res/PROGRAMS/NQueens.p47
+foreach bm $benchmarks {
+    readp tools/bench/PROGRAMS/$bm.p47
+}
+
+foreach bm $benchmarks {
+    xeq $bm                             ;# warm-up run, discarded
+    if {$bm eq "BMGTO"} {
+        puts "BENCH|CANARY|[reg 96]"
+    }
+    for {set i 0} {$i < $reps} {incr i} {
+        set us [lindex [time { xeq $bm } 1] 0]
+        puts "BENCH|$bm|$i|$us|[reg 97]"
+    }
+}
+puts "BENCH|END"

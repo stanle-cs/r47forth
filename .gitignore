@@ -1,6 +1,8 @@
 # C47 project specific files
 /build
-/build.sim
+/build.sim*
+/t47bench
+/bench-results.csv
 /dep/gmp-6.2.1
 /wp43
 /c47
