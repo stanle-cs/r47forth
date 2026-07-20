@@ -17,6 +17,9 @@ typedef struct {
   uint16_t    savedLocalStep; /* currentLocalStepNumber at suspend */
   uint32_t    savedStepOffset;/* capture step vs beginOfProgramMemory
                                  (offset: program memory may relocate) */
+  uint16_t    savedStepCount; /* F6-4: getNumberOfSteps() at suspend, so
+                                 resume can tell how many steps a TAM
+                                 commit inserted */
 } forthCap_t;
 
 void        forthCapOpen(void);       /* alloc+zero; on alloc failure:
@@ -29,11 +32,12 @@ uint8_t    *forthCapBuf(void);        /* NULL unless FCAP_OPEN */
 bool_t      forthCapTextNonEmpty(void); /* open && buf[0] != 0 */
 
 /* F6-2: suspend/resume state ops */
-void     forthCapSuspendState(uint16_t cursor, uint16_t localStep, uint32_t stepOffset);
+void     forthCapSuspendState(uint16_t cursor, uint16_t localStep, uint32_t stepOffset, uint16_t stepCount);
 bool_t   forthCapIsSuspended(void);
 uint16_t forthCapSavedCursor(void);
 uint16_t forthCapSavedLocalStep(void);
 uint32_t forthCapSavedStepOffset(void);
+uint16_t forthCapSavedStepCount(void);  /* F6-4 */
 void     forthCapAbandonSuspended(void);
 
 /* F6-2: orchestrators (programming/manage.c — need the file-static

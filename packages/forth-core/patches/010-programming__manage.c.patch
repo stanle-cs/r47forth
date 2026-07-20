@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484974b4662 100644
+index a7a56a3e94203f6b85bcf1f837d17cd041078027..d1c3ec71edfab99202ea8e1d4e3d60663b5dbc27 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,8 @@
@@ -233,7 +233,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -980,6 +1062,63 @@ void pemCloseAlphaInput(void) {
+@@ -980,6 +1062,85 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -262,7 +262,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484
 +  clearSystemFlag(FLAG_ALPHA);
 +  calcModeNormalGui();
 +  _closeAlphaMenus();
-+  forthCapSuspendState(cursor, localStep, stepOff);
++  forthCapSuspendState(cursor, localStep, stepOff, getNumberOfSteps());
 +}
 +
 +void forthCaptureResume(void) {
@@ -287,6 +287,28 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484
 +  }
 +  currentLocalStepNumber = forthCapSavedLocalStep();
 +  currentStep = p;
++  /* F6-4: steps the suspended TAM committed become canonical text.
++   * n is 0 (cancel) or 1 (one commit) today; the loop is defensive. */
++  { uint16_t n = getNumberOfSteps() - forthCapSavedStepCount();
++    while (n > 0) {
++      uint8_t *ins = findNextStep(currentStep);   /* first inserted step */
++      decodeOneStep(ins);                          /* canonical text → tmpString */
++      if (stringByteLength(tmpString) > 255) {
++        break;   /* defensive: keep the step rather than truncate text */
++      }
++      { char conv[258]; char *t = conv;            /* 1 + 255 + NUL */
++        if (T_cursorPos > 0 && forthCapBuf()[T_cursorPos - 1] != ' ') {
++          *t++ = ' ';        /* word separator when mid-text */
++        }
++        xcopy(t, tmpString, stringByteLength(tmpString) + 1);
++        if (!forthCapInsertName(conv)) {
++          break;   /* no room: keep this and later steps after the line */
++        }
++      }
++      deleteStepsFromTo(ins, findNextStep(ins));
++      --n;
++    }
++  }
 +  tam.function = ITM_FORTH;                 /* capture-era tam is exactly
 +                                                {mode 0, function ITM_FORTH} */
 +  resetShiftState();                        /* fresh-open parity */
@@ -297,7 +319,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484
  }
  
  
-@@ -995,7 +1134,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -995,7 +1156,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -306,7 +328,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1367,6 +1506,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1367,6 +1528,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -344,7 +366,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1377,12 +1547,18 @@ void insertStepInProgram(const int16_t func) {
+@@ -1377,12 +1569,18 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -365,7 +387,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1404,6 +1580,43 @@ void insertStepInProgram(const int16_t func) {
+@@ -1404,6 +1602,43 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -409,7 +431,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1415,6 +1628,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1415,6 +1650,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -425,7 +447,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1497,6 +1719,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1497,6 +1741,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -449,7 +471,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1792,7 +2031,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1792,7 +2053,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

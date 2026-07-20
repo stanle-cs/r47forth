@@ -2,8 +2,8 @@
   "base_commit": "b8f79e486ae19b84af9b6db7230c9a6d1279cced",
   "files": {
     "forth_bridge.c": "ef6ad22f29a817d4a1ec9dedf93485e081909f754fb03bfd4c620bd2142eda9c",
-    "forth_capture.c": "4c714f2226ebbfc2d732ff0a318cdbc8c1adf550a5c76118b22fefbcf643cf18",
-    "forth_capture.h": "ef59a9c27916d8561a3d2cb063cfa74fed4d56c253e967fcf68cc8d9a868b73c",
+    "forth_capture.c": "35cafde895ac6b797fb49f7f2e53409128426b867dc9639fcc2c0c04df2988fb",
+    "forth_capture.h": "d6399e9feeb7aa56e656053b4311d3ad1af3aca991aceda1062a9b6e3c565ff9",
     "forth_compile.c": "29671f71a32418db66cef04fe110e39fdea021888b4378ca69bd89420482d81a",
     "forth_dict.c": "a933109c13ff7f12a8dd7b8586e30c3fee3deb920ea0378b8dbdef0049013780",
     "forth_dict.h": "31b7809e7400e74f2dadc3df1953ee85688eeda32d552769320a1eeebebe6c17",
@@ -12,7 +12,7 @@
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
     "programming/param_core.c": "c21edaa539f7b5866c7612fbb3cabff07f0e29ed12e2228d03486b2db2fdd3b4",
     "programming/param_core.h": "83523da7c314e8dc285f557e295dc399813419e0cbb74b44cc49ddf6ea56fdee",
-    "test_dict_reloc.c": "0725bb53a3d09a0476265b9caa56c6a95ed80a9547c5b675a289589d756cf5fc"
+    "test_dict_reloc.c": "a52e2b1f6e34ab5907c83fe1c1e3c0e65b3c170bd4a637150d147dd51b6edde4"
   },
   "patches": {
     "010-config.c.patch": "dacd6d9f2f08c1318ac32e16982c3dea4cba0f68869c93173dc57a61ea020a6e",
@@ -24,7 +24,7 @@
     "010-keyboard.c.patch": "3d7d17967214c308cbd2d73bb2153fec2c9a9af0e0702e88eb469abc949e12fc",
     "010-programming__decode.c.patch": "8152a5fdb781ae00d12e7f0af40d72d2f615407463ac551f9ed097158668662f",
     "010-programming__lblGtoXeq.c.patch": "aaf040719b700018282d9047c712db1ab80e3ba5d21ab51c2722e1a9ff2f9724",
-    "010-programming__manage.c.patch": "650c40acb451799408b9ada41d05d217c1b2b4d00600452997b97d508abf39f0",
+    "010-programming__manage.c.patch": "e5f29ff0fe6749ca2920e9d7197c2cbabdc43b9bbd1e72d2c35363e1d3eec49d",
     "010-saveRestoreBackup.c.patch": "6139821ef026fcf79078dd447d5891bd48c7b41a00518dce18b06397de64b687",
     "010-screen.c.patch": "e7100fc0e708103a35c38852655340b335e86e1f98c8cda4596c3593ee569144",
     "010-softmenus.c.patch": "6e83a447767816aff57da03182259222fb89d143843f3b190f97bfc4cb8cae09",

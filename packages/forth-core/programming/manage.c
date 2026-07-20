@@ -1087,7 +1087,7 @@ void forthCaptureSuspend(void) {
   clearSystemFlag(FLAG_ALPHA);
   calcModeNormalGui();
   _closeAlphaMenus();
-  forthCapSuspendState(cursor, localStep, stepOff);
+  forthCapSuspendState(cursor, localStep, stepOff, getNumberOfSteps());
 }
 
 void forthCaptureResume(void) {
@@ -1112,6 +1112,28 @@ void forthCaptureResume(void) {
   }
   currentLocalStepNumber = forthCapSavedLocalStep();
   currentStep = p;
+  /* F6-4: steps the suspended TAM committed become canonical text.
+   * n is 0 (cancel) or 1 (one commit) today; the loop is defensive. */
+  { uint16_t n = getNumberOfSteps() - forthCapSavedStepCount();
+    while (n > 0) {
+      uint8_t *ins = findNextStep(currentStep);   /* first inserted step */
+      decodeOneStep(ins);                          /* canonical text → tmpString */
+      if (stringByteLength(tmpString) > 255) {
+        break;   /* defensive: keep the step rather than truncate text */
+      }
+      { char conv[258]; char *t = conv;            /* 1 + 255 + NUL */
+        if (T_cursorPos > 0 && forthCapBuf()[T_cursorPos - 1] != ' ') {
+          *t++ = ' ';        /* word separator when mid-text */
+        }
+        xcopy(t, tmpString, stringByteLength(tmpString) + 1);
+        if (!forthCapInsertName(conv)) {
+          break;   /* no room: keep this and later steps after the line */
+        }
+      }
+      deleteStepsFromTo(ins, findNextStep(ins));
+      --n;
+    }
+  }
   tam.function = ITM_FORTH;                 /* capture-era tam is exactly
                                                 {mode 0, function ITM_FORTH} */
   resetShiftState();                        /* fresh-open parity */
