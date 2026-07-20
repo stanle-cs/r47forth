@@ -14,22 +14,29 @@ static void executeFunction(const char *data, int16_t item_);
 /* pickerInsertName — insert dynmenuGetLabel(dynamicMenuItem) + trailing space
  * into aimBuffer at T_cursorPos (§9.6 P-H7).
  * Returns true on success, false if buffer would overflow. */
-bool_t pickerInsertName(void)
+/* Insert name + one trailing space into the open capture line at
+ * T_cursorPos.  Same 256-byte/196-glyph cap as typing; false = no room
+ * or capture not open.  §9.6 P-H7 discipline, generalized (F6-3). */
+bool_t forthCapInsertName(const char *name)
 {
-  const char *pickName = dynmenuGetLabel(dynamicMenuItem);
-  int32_t nameLen = stringByteLength(pickName);
+  int32_t nameLen = stringByteLength(name);
   uint8_t *cap = forthCapBuf();
   if(cap == NULL) { return false; }
   int32_t bufLen = stringByteLength((char *)cap);
   if(bufLen + nameLen + 1 < 256 && stringGlyphLength((char *)cap) + nameLen + 1 <= 196) {
     xcopy((char *)cap + T_cursorPos + nameLen + 1, (char *)cap + T_cursorPos,
           stringByteLength((char *)cap + T_cursorPos) + 1);
-    xcopy((char *)cap + T_cursorPos, pickName, nameLen);
+    xcopy((char *)cap + T_cursorPos, name, nameLen);
     cap[T_cursorPos + nameLen] = ' ';
     T_cursorPos += nameLen + 1;
     return true;
   }
   return false;
+}
+
+bool_t pickerInsertName(void)
+{
+  return forthCapInsertName(dynmenuGetLabel(dynamicMenuItem));
 }
 
 /* forthPickerGuard — guard for MNU_FORTH picker action in executeFunction (§9.6).
@@ -3948,18 +3955,20 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           }
           aimBuffer[0] = 0;
           if(wasForthCap) {
-            // forth-core: fnBst's own step-back-and-resync (below) only
-            // fires on aimBuffer[0] != 0; F6-1 moved Forth capture text
-            // off aimBuffer onto the managed capture buffer, so that guard
-            // no longer sees a just-closed Forth line and skips resyncing
-            // currentStep to currentLocalStepNumber. Replicate the same
-            // resync fnBst would have done, so it stays consistent before
-            // fnBst's own (aimBuffer-independent) second step-back below.
-            --currentLocalStepNumber;
+            // forth-core: aimBuffer[0] is already 0 on EVERY path into this
+            // branch (the line above, unconditionally) — fnBst's own
+            // "if(aimBuffer[0] != 0)" guard (below) is therefore always
+            // false here regardless of Forth vs REM/LITERAL, and the ONLY
+            // step-back this call site has ever applied is fnBst's bare
+            // _bstInPem(), a single currentLocalStepNumber-- with no
+            // currentStep update. For REM/LITERAL that leaves currentStep
+            // one step ahead of currentLocalStepNumber, tolerated because
+            // nothing reopens immediately after. A Forth capture's very
+            // next operation is typically another ITM_AIM, which DOES
+            // depend on currentStep, so only the pointer half needs
+            // resyncing here — NOT a second counter decrement, which
+            // would double-compensate against _bstInPem()'s own.
             currentStep = findPreviousStep(currentStep);
-            if(!programListEnd) {
-              scrollPemBackwards();
-            }
           }
           fnBst(NOPARAM); // Set the PGM pointer to the original position
           break;

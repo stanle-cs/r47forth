@@ -1000,6 +1000,13 @@ void pemAlpha(int16_t item) {
       fnT_ARROW(indexOfItems[item].param);
       return;
     }
+    else if(forthCapIsOpen()
+            && (indexOfItems[item].status & CAT_STATUS) == CAT_FNCT
+            && (indexOfItems[item].status & PTP_STATUS) == PTP_NONE
+            && item != ITM_AIM && item != ITM_FORTH) {
+      (void)forthCapInsertName(indexOfItems[item].itemCatalogName);
+      /* falls through to the re-commit tail: the step tracks the insert */
+    }
 
     int16_t aimFunc = currentStep[0];
     if(aimFunc & 0x80) {

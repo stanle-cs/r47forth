@@ -10886,6 +10886,8 @@ static int test_commit_gate(void);
 static int test_capture_buffer(void);
 /* F6-2: TAM suspend/resume keeps capture alive */
 static int test_capture_suspend(void);
+/* F6-3: catalogs and menus during capture */
+static int test_capture_menus(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -12753,6 +12755,15 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_capture_suspend...\n");
   fail |= test_capture_suspend();
+  forthDictClear();
+  forthGDictClear();
+
+  /* F6-3: catalogs and menus during capture */
+  printf("\nFORTH F6-3 TESTS (catalogs and menus during capture)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_capture_menus...\n");
+  fail |= test_capture_menus();
   forthDictClear();
   forthGDictClear();
 
@@ -18454,6 +18465,294 @@ static int test_capture_suspend(void)
   programRunStop = savedProgRunStop;
   dynamicMenuItem = savedDynamicMenu;
   showSoftmenu(savedMenu);
+  memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
+
+/* test_capture_menus
+ * F6-3: a catalog pick is a text insertion. Six subcases: item-pick
+ * insertion, glyph-arm precedence, EXIT-ladder pop/commit/abort, picker
+ * navigation, and cursor-position discipline. */
+static int test_capture_menus(void)
+{
+  int fail = 0;
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void showSoftmenu(int16_t);
+  extern void testInitVariableSoftmenu(int16_t);
+  extern bool_t isAlphaSubmenu(uint8_t);
+
+  /* Build fixture: LBL, marker (no colon-defs — the F6-5 stage owns
+   * section (a) content; this stage only needs a valid, poppable
+   * -MNU_FORTH picker on the stack). */
+  testProg_t p;
+  tpInit(&p);
+  tpLbl(&p, "F63");
+  tpMarker(&p);
+
+  if (!tpWrite(&p)) {
+    printf("    FIXTURE FAIL: tpWrite\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+
+  /* Position on the opening marker (step 2) */
+  fnGotoDot(2);
+
+  if (currentStep != tpStepAddr(&p, 1)) {
+    printf("    FIXTURE BUG: fnGotoDot(2) did not position on marker\n");
+    fail = 1;
+  }
+  else if (currentLocalStepNumber != 2) {
+    printf("    FIXTURE BUG: currentLocalStepNumber = %u, expected 2\n", currentLocalStepNumber);
+    fail = 1;
+  }
+  else {
+    runFunction(ITM_AIM);
+    if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+      printf("    FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    /* ---- Subcase 1: Item pick inserts its name ---- */
+    { int sc1 = 0;
+      runFunction(ITM_1);
+      runFunction(ITM_SPACE);
+      runFunction(ITM_sin);
+      if (strcmp(forthTestCapText(), "1 SIN ") != 0) {
+        printf("    [1] FAIL: cap text = '%s', expected '1 SIN '\n", forthTestCapText());
+        sc1 = 1;
+      }
+      else {
+        uint8_t len = currentStep[3];
+        int32_t textLen = stringByteLength((char *)forthTestCapText());
+        bool_t bytesMatch = true;
+        if (len == textLen) {
+          int32_t i;
+          for (i = 0; i < textLen; i++) {
+            if (currentStep[4 + i] != (uint8_t)forthTestCapText()[i]) { bytesMatch = false; break; }
+          }
+        } else {
+          bytesMatch = false;
+        }
+        if (!bytesMatch) {
+          printf("    [1] FAIL: step image does not track the insert (len=%u, expected %d)\n",
+                 len, textLen);
+          sc1 = 1;
+        }
+      }
+      /* itemCatalogName/itemSoftmenuName both read "SIN" for ITM_sin
+       * (items.c:1859), so a field-swap mutation is silent against SIN
+       * alone (F15-4/F15-5 precedent, DESIGN-HISTORY.md 2026-07-18).
+       * ARCCOS's two fields diverge ("ARCCOS" catalog vs "ACOS" softmenu,
+       * items.c:1864, ITM_arccos=81, same CAT_FNCT|PTP_NONE class) so a
+       * field swap is observable here. */
+      if (!sc1) {
+        runFunction(ITM_arccos);
+        if (strcmp(forthTestCapText(), "1 SIN ARCCOS ") != 0) {
+          printf("    [1] FAIL: cap text after ARCCOS pick = '%s', expected '1 SIN ARCCOS '\n",
+                 forthTestCapText());
+          sc1 = 1;
+        }
+      }
+      if (!sc1) printf("    [1] PASS: catalog item inserts its catalog name as text\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc1;
+    }
+
+    /* ---- Subcase 2: Glyph items still type ---- */
+    { int sc2 = 0;
+      if (!fail) {
+        runFunction(ITM_2);
+        if (strcmp(forthTestCapText(), "1 SIN ARCCOS 2") != 0) {
+          printf("    [2] FAIL: cap text = '%s', expected '1 SIN ARCCOS 2'\n", forthTestCapText());
+          sc2 = 1;
+        }
+      }
+      if (!sc2) printf("    [2] PASS: glyph keys unaffected by the item arm\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc2;
+    }
+
+    /* ---- Subcase 3: Picker pops to ALPHA, capture survives ---- */
+    { int sc3 = 0;
+      if (!fail) {
+        char textBefore[64];
+        xcopy(textBefore, forthTestCapText(), stringByteLength((char *)forthTestCapText()) + 1);
+
+        testInitVariableSoftmenu(22);
+        showSoftmenu(-MNU_FORTH);
+
+        if (currentMenu() != -MNU_FORTH) {
+          printf("    [3] FAIL: picker not on top after push (currentMenu=%d)\n", currentMenu());
+          sc3 = 1;
+        }
+        else {
+          fnKeyExit(NOPARAM);
+          if (currentMenu() == -MNU_FORTH) {
+            printf("    [3] FAIL: picker still on top after EXIT\n");
+            sc3 = 1;
+          }
+          else if (forthTestCapState() != FCAP_OPEN) {
+            printf("    [3] FAIL: capture not open after EXIT (state=%d)\n", forthTestCapState());
+            sc3 = 1;
+          }
+          else if (strcmp(forthTestCapText(), textBefore) != 0) {
+            printf("    [3] FAIL: cap text = '%s', expected '%s'\n", forthTestCapText(), textBefore);
+            sc3 = 1;
+          }
+        }
+      }
+      if (!sc3) printf("    [3] PASS: EXIT pops the picker back toward ALPHA\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc3;
+    }
+
+    /* ---- Subcase 4: Picker navigation leaks nothing ---- */
+    { int sc4 = 0;
+      if (!fail) {
+        char textBefore[64];
+        xcopy(textBefore, forthTestCapText(), stringByteLength((char *)forthTestCapText()) + 1);
+        int16_t cursorBefore = T_cursorPos;
+
+        testInitVariableSoftmenu(22);
+        showSoftmenu(-MNU_FORTH);
+        fnKeyExit(NOPARAM);   /* no page-navigation idiom on an empty picker; EXIT stands in */
+
+        if (strcmp(forthTestCapText(), textBefore) != 0) {
+          printf("    [4] FAIL: cap text = '%s', expected '%s'\n", forthTestCapText(), textBefore);
+          sc4 = 1;
+        }
+        else if (T_cursorPos != cursorBefore) {
+          printf("    [4] FAIL: T_cursorPos = %d, expected %d\n", T_cursorPos, cursorBefore);
+          sc4 = 1;
+        }
+      }
+      if (!sc4) printf("    [4] PASS: picker navigation leaves the capture line intact\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc4;
+    }
+
+    /* ---- Subcase 5: EXIT ladder end ---- */
+    { int sc5 = 0;
+      if (!fail) {
+        if (forthTestCapState() != FCAP_OPEN || forthTestCapText()[0] == 0) {
+          printf("    [5] FAIL: fixture bug — expected an open, non-empty line\n");
+          sc5 = 1;
+        }
+        else {
+          fnKeyExit(NOPARAM);   /* commit-with-text */
+          if (forthTestCapState() != FCAP_CLOSED) {
+            printf("    [5] FAIL: capture not closed after commit-EXIT (state=%d)\n",
+                   forthTestCapState());
+            sc5 = 1;
+          }
+          else {
+            uint16_t stepsBefore = getNumberOfSteps();
+            runFunction(ITM_AIM);   /* fresh empty line */
+            fnKeyExit(NOPARAM);     /* abort-when-empty */
+            if (forthTestCapState() != FCAP_CLOSED) {
+              printf("    [5] FAIL: capture not closed after abort-EXIT (state=%d)\n",
+                     forthTestCapState());
+              sc5 = 1;
+            }
+            else if (getNumberOfSteps() != stepsBefore) {
+              printf("    [5] FAIL: step count changed %u -> %u (placeholder not deleted)\n",
+                     stepsBefore, getNumberOfSteps());
+              sc5 = 1;
+            }
+          }
+        }
+      }
+      if (!sc5) printf("    [5] PASS: EXIT ladder ends in commit-with-text / abort-when-empty\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc5;
+    }
+
+    /* ---- Subcase 6: Insert-at-cursor discipline ---- */
+    { int sc6 = 0;
+      if (!fail) {
+        runFunction(ITM_AIM);
+        runFunction(ITM_A);
+        runFunction(ITM_B);
+        T_cursorPos = 0;
+        runFunction(ITM_sin);
+        if (strcmp(forthTestCapText(), "SIN AB") != 0) {
+          printf("    [6] FAIL: cap text = '%s', expected 'SIN AB'\n", forthTestCapText());
+          sc6 = 1;
+        }
+        else if (T_cursorPos != 4) {
+          printf("    [6] FAIL: T_cursorPos = %d, expected 4\n", T_cursorPos);
+          sc6 = 1;
+        }
+      }
+      if (!sc6) printf("    [6] PASS: item insert honors the cursor position\n");
+      lastErrorCode = ERROR_NONE;
+      fail |= sc6;
+    }
+  }
+
+  /* Cleanup */
+  forthCapClose();
+  cleanupTestProgram();
+  forthDictClear();
+  forthGDictClear();
+  if (dynamicSoftmenu[22].menuContent) {
+    free(dynamicSoftmenu[22].menuContent);
+    dynamicSoftmenu[22].menuContent = NULL;
+    dynamicSoftmenu[22].numItems = 0;
+  }
+
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
   memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
   lastErrorCode = ERROR_NONE;
 

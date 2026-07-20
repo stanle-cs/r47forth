@@ -1008,3 +1008,38 @@ package sources therefore yields a chimera (live `files/` edit + stale
 patched copy), which is what produced two plausible-but-meaningless flash
 numbers here before the reconfigure was forced. `build-test.sh` always
 reconfigures, so the self-test gate is never affected.
+
+## 2026-07-19 — F6-3 mutation execution: packet mutation 2 falsified for SIN (second occurrence of the F15-4 pattern)
+
+Non-normative. F6-3's item arm (`manage.c`, ALPHA-mode item dispatch) is
+correct as authored: it inserts `indexOfItems[item].itemCatalogName` for a
+catalog/menu pick made while a Forth capture line is open, gated to
+`CAT_FNCT | PTP_NONE` — the design choice traced and reviewed in the
+"F6 adversarial review" entry above (finding 3) and stated directly in the
+"F6 authored from traces" entry ("F6-3 catalog picks insert
+`itemCatalogName` text"). Nothing here changes that.
+
+The packet's required mutation 2 ("replace `itemCatalogName` with
+`itemSoftmenuName`; subcase 1 MUST go RED if the two spellings differ for
+SIN") stayed GREEN on first execution. Cause: `items.c:1859` gives
+`ITM_sin` identical catalog and softmenu spellings (`"SIN"`, `"SIN"`), so
+the field swap is a no-op for the item subcase 1 happens to drive — the two
+fields simply never diverge for this particular item, independent of which
+one the production code reads. This is the same failure shape as the
+§8.9 item 5 mutation the F15-4 entry above already documents (there,
+`PRIM_DIVGL` deletion escaped once R1-3 made the alias redundant; here, a
+field-selection mutation escapes because the probe item's fields coincide)
+— the packet itself flagged the risk in advance and required a STOP rather
+than a silent accept, exactly because this pattern had already been seen
+once.
+
+Fix, mirroring the F15-4 resolution (retarget the probe, not the
+production code): `test_capture_menus` subcase 1 now additionally drives
+`ITM_arccos` (81) after the SIN checks pass. `items.c:1864` gives it
+genuinely divergent fields — catalog `"ARCCOS"`, softmenu `"ACOS"` — under
+the identical `CAT_FNCT | PTP_NONE` classification SIN carries, so the
+field-swap mutation is now observable (`"1 SIN ARCCOS "` becomes
+`"1 SIN ACOS "` under the mutation). Subcase 2's expected string is updated
+to match the longer buffer (`"1 SIN ARCCOS 2"`); subcases 3-6 compare
+against a captured `textBefore` or open a fresh line and were untouched.
+No production code changed; mutation 2 re-run RED after the retarget.

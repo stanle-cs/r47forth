@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706aca0da7b2 100644
+index a7a56a3e94203f6b85bcf1f837d17cd041078027..02055319aa54ebaa5d3285b4d0c8c484974b4662 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,8 @@
@@ -170,7 +170,21 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706a
        T_cursorPos = 0;
        nextChar = NC_NORMAL;
      }
-@@ -946,21 +1008,22 @@ void pemAlpha(int16_t item) {
+@@ -938,6 +1000,13 @@ void pemAlpha(int16_t item) {
+       fnT_ARROW(indexOfItems[item].param);
+       return;
+     }
++    else if(forthCapIsOpen()
++            && (indexOfItems[item].status & CAT_STATUS) == CAT_FNCT
++            && (indexOfItems[item].status & PTP_STATUS) == PTP_NONE
++            && item != ITM_AIM && item != ITM_FORTH) {
++      (void)forthCapInsertName(indexOfItems[item].itemCatalogName);
++      /* falls through to the re-commit tail: the step tracks the insert */
++    }
+ 
+     int16_t aimFunc = currentStep[0];
+     if(aimFunc & 0x80) {
+@@ -946,21 +1015,22 @@ void pemAlpha(int16_t item) {
        aimFunc |= currentStep[1];
      }
  
@@ -199,7 +213,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706a
      }
      --currentLocalStepNumber;
      currentStep = findPreviousStep(currentStep);
-@@ -970,7 +1033,19 @@ void pemAlpha(int16_t item) {
+@@ -970,7 +1040,19 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -219,7 +233,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706a
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -980,6 +1055,63 @@ void pemCloseAlphaInput(void) {
+@@ -980,6 +1062,63 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -283,7 +297,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706a
  }
  
  
-@@ -995,7 +1127,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -995,7 +1134,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -292,7 +306,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706a
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1367,6 +1499,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1367,6 +1506,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -330,7 +344,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706a
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1377,12 +1540,18 @@ void insertStepInProgram(const int16_t func) {
+@@ -1377,12 +1547,18 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -351,7 +365,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706a
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1404,6 +1573,43 @@ void insertStepInProgram(const int16_t func) {
+@@ -1404,6 +1580,43 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -395,7 +409,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706a
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1415,6 +1621,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1415,6 +1628,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -411,7 +425,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706a
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1497,6 +1712,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1497,6 +1719,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -435,7 +449,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1e13d79949eb65768540e9a3f62c706a
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1792,7 +2024,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1792,7 +2031,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

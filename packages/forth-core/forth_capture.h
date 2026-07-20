@@ -41,6 +41,10 @@ void     forthCapAbandonSuspended(void);
 void     forthCaptureSuspend(void);
 void     forthCaptureResume(void);
 
+/* F6-3: shared inserter (implementation stays in keyboard.c — it owns
+ * the cap constants' original site). */
+bool_t   forthCapInsertName(const char *name);
+
 #if defined(FORTH_DEBUG_SELFTEST)
 uint8_t     forthTestCapState(void);
 const char *forthTestCapText(void);   /* "" when not open */
