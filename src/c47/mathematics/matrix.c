@@ -2247,7 +2247,7 @@ bool_t initMatrixRegister(calcRegister_t regist, uint16_t rows, uint16_t cols, b
   #if defined(PC_BUILD)
     if(lastErrorCode != ERROR_NONE) {
       errorf("initMatrixRegister(): Entered initMatrixRegister with pre-existing error.");
-      printf("  Error code: %d:%s\n", lastErrorCode, errorMessages[lastErrorCode]);
+      printf("  Error code: %d:%s\n", lastErrorCode, errorMessageOf(lastErrorCode));
     }
   #endif //PC_BUILD
 
@@ -2275,7 +2275,7 @@ bool_t initMatrixRegister(calcRegister_t regist, uint16_t rows, uint16_t cols, b
   }
   else {
     #if defined(PC_BUILD)
-      printf("  initMatrixRegister(): Error number %d:%s\n", lastErrorCode, errorMessages[lastErrorCode]);
+      printf("  initMatrixRegister(): Error number %d:%s\n", lastErrorCode, errorMessageOf(lastErrorCode));
     #endif //PC_BUILD
     return false;
   }

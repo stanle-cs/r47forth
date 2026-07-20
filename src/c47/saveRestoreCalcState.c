@@ -611,7 +611,7 @@ void fnSave(uint16_t saveMode) {
 }
 
 void doSave(uint16_t saveType) {
-  printStatus(0, errorMessages[SAVING_STATE_FILE], force);
+  printStatus(0, errorMessageOf(SAVING_STATE_FILE), force);
   ioFilePath_t path;
   char tmpString[3000];           //The concurrent use of the global tmpString
                                   //as target does not work while the source is at
@@ -2725,7 +2725,7 @@ void doLoad(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d, uint16_t load
 
 
 void fnLoad(uint16_t loadMode) {
-  printStatus(0, errorMessages[LOADING_STATE_FILE], force);
+  printStatus(0, errorMessageOf(LOADING_STATE_FILE), force);
   if(loadMode == LM_STATE_LOAD) {
     doLoad(LM_ALL, 0, 0, 0, stateLoad);
   }
