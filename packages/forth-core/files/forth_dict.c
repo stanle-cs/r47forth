@@ -995,7 +995,7 @@ bool forthDictSetImmediateByRef(uint16_t ref)
 bool forthGDictForget(const char *name)
 {
   if (!gdict.base) {
-    xcopy(errorMessage, name, ERROR_MESSAGE_LENGTH);
+    snprintf(errorMessage, ERROR_MESSAGE_LENGTH, "%s", name);
     displayCalcErrorMessage(ERROR_FUNCTION_NOT_FOUND, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
@@ -1019,7 +1019,7 @@ bool forthGDictForget(const char *name)
     n++;
   }
 
-  xcopy(errorMessage, name, ERROR_MESSAGE_LENGTH);
+  snprintf(errorMessage, ERROR_MESSAGE_LENGTH, "%s", name);
   displayCalcErrorMessage(ERROR_FUNCTION_NOT_FOUND, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
   return false;
 }
