@@ -220,6 +220,9 @@ static bool forthScanRecord(const uint8_t *progStart) {
 /* F3-3: scope variable -- current owner for definition stamping and filtered lookup */
 static uint16_t forthCurrentScope = FORTH_OWNER_INTERACTIVE;
 uint16_t forthCurrentScopeGet(void) { return forthCurrentScope; }
+#if defined(FORTH_DEBUG_SELFTEST)
+void forthTestScopeSet(uint16_t scope) { forthCurrentScope = scope; }
+#endif
 
 static void forthRunGenCheckReset(void) {
   if (!forthResetPending || forthInnerIsActive()) {
@@ -1463,6 +1466,13 @@ bool forthCheckSourceLine(const char *source)
     return false;
   }
   memcpy(ctx.source, source, n + 1);
+  /* forthOuterRun's epilogue restores forthCurrentScope FROM ctx.savedScope;
+   * the prologue fills savedDef/savedLatestClosed but NOT this field — every
+   * entry point must snapshot it, or the epilogue writes stack garbage into
+   * the live scope. Latent while only the F5-1 test called check mode (it
+   * never observed scope); poisoned the whole suite the moment F5-2 wired
+   * check mode into pemAlpha's commit seam. */
+  ctx.savedScope = forthCurrentScope;
   lastErrorCode = ERROR_NONE;
   forthOuterRun(&ctx, FORTH_OUTER_CHECK);
   return lastErrorCode == ERROR_NONE;

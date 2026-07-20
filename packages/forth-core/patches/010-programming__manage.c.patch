@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b2177dd96 100644
+index a7a56a3e94203f6b85bcf1f837d17cd041078027..69011477d320a52adff88c0055875078cf12d4a0 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,7 @@
@@ -75,7 +75,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
          return;
        }
        else if(T_cursorPos == 0) {
-@@ -884,11 +922,17 @@ void pemAlpha(int16_t item) {
+@@ -884,11 +922,23 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_ENTER) {
@@ -86,6 +86,12 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
 -      return;
 +      bool_t wasForth = (tam.function == ITM_FORTH);
 +      bool_t hadText  = (aimBuffer[0] != 0);           // E5 locks on a NON-EMPTY line
++      if(wasForth && hadText && !forthCheckSourceLine(aimBuffer)) {
++        return;   /* E9 tier 1: commit refused atomically — capture stays
++                     open, aimBuffer intact for correction, the error is
++                     already displayed.  Tier 2 (names) never reaches here:
++                     forthCheckSourceLine accepts them. */
++      }
 +      pemCloseAlphaInput();                            // only: an empty ENTER is the
 +      //--firstDisplayedLocalStepNumber;               // escape hatch (E3 deletes the
 +      defineFirstDisplayedStep();                      // placeholder and leaves the
@@ -98,7 +104,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
      }
      else if(item == ITM_USERMODE) {
        fnFlipFlag(FLAG_USER);
-@@ -970,6 +1014,16 @@ void pemAlpha(int16_t item) {
+@@ -970,6 +1020,16 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -115,7 +121,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
    aimBuffer[0] = 0;
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
-@@ -980,6 +1034,11 @@ void pemCloseAlphaInput(void) {
+@@ -980,6 +1040,11 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -127,7 +133,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
  }
  
  
-@@ -995,7 +1054,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -995,7 +1060,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -136,7 +142,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1367,6 +1426,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1367,6 +1432,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -174,7 +180,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1377,12 +1467,18 @@ void insertStepInProgram(const int16_t func) {
+@@ -1377,12 +1473,18 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -195,7 +201,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1404,6 +1500,43 @@ void insertStepInProgram(const int16_t func) {
+@@ -1404,6 +1506,43 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -239,7 +245,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1415,6 +1548,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1415,6 +1554,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -255,7 +261,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1497,6 +1639,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1497,6 +1645,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -279,7 +285,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..bea37b3d97e8e27ac3c0c5e9dbde154b
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1792,7 +1951,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1792,7 +1957,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

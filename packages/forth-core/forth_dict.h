@@ -301,4 +301,11 @@ void forthTestProgramStepCountReset(void);
 uint32_t forthTestProgramStepCountGet(void);
 #endif
 
+/* Test-only: scope override (F5-2) — lets a test prove that an outer-run
+   entry point restores the scope it found rather than writing whatever its
+   uninitialized ctx.savedScope happened to hold. */
+#ifdef FORTH_DEBUG_SELFTEST
+void forthTestScopeSet(uint16_t scope);
+#endif
+
 #endif /* FORTH_DICT_H */

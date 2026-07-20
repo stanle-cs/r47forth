@@ -2889,6 +2889,17 @@ structural malformation rejects atomically (prior step preserved), unresolved
 names stay legal and advisory. Executes nothing, allocates nothing, mutates
 no live state.
 
+**State neutrality is a testable contract, not a comment (landed F5-2).**
+"Mutates no live state" covers `forthCurrentScope`, the open-definition
+state, `rsp`, and both dictionary regions, and it is pinned directly by
+`test_check_source_line` subcase 6 from a NON-default scope over both an
+accepted and a rejected line. It has to be: `forthOuterRun`'s epilogue
+restores `forthCurrentScope` from `ctx->savedScope`, a field the prologue
+does not fill, so an entry point that forgets to snapshot it writes stack
+garbage into the live scope — which is exactly how F5-1 shipped, invisible
+until F5-2 gave check mode its second caller. Every entry point into
+`forthOuterRun` snapshots `savedScope`; any new one must, and must pin it.
+
 ### 10.6 F6 — Forth capture as a PEM-shaped submode
 
 Capture becomes a distinct PEM-style submode rather than a wrapper around the

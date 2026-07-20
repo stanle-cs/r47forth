@@ -118,7 +118,7 @@ indirect-NUMBER_16 encoding collision → documented exclusion).
 | F4-1 classification + direct numeric params | LANDED `f043c63e7` |
 | F4-2 register/flag/shuffle direct forms | LANDED `ac48f50a8` — amendment F4-2A (regInRange raises, not silent) |
 | F4-3 named/system-flag/indirect + bounded core | LANDED `fc0fabdad` — amendment F4-3A (one marker table + one cell-span function; +1920 B flash) |
-| F4-4 error-table + parity acceptance | NEXT — `QWEN_PROMPTS_F4_4_acceptance.md`, amendment F4-4A is binding |
+| F4-4 error-table + parity acceptance | LANDED `81d73cd6a` |
 
 **Execution risks:** F4-1 changes landed behavior for END/RTN/STOP/RTN+1
 (currently name-dispatchable; no test pins it — verified); the
@@ -144,8 +144,8 @@ gated), soundness pinned by a check-implies-runtime battery.
 
 | Packet | Status |
 |---|---|
-| F5-1 check mode + soundness battery | AUTHORED, gate-locked on F4-4 — `QWEN_PROMPTS_F5_1_check_mode.md` |
-| F5-2 commit gate + atomic reject | AUTHORED, gate-locked on F5-1 — `QWEN_PROMPTS_F5_2_commit_gate.md` |
+| F5-1 check mode + soundness battery | LANDED `ba304a3cf` — F5-2A added the missing state-neutrality pin |
+| F5-2 commit gate (stage close) | LANDED — amendment F5-2A (regression-triage + entry-point-contract rules) |
 
 **Execution risks:** the weave touches every forthOuterRun branch — the
 site inventory greps in F5-1's gate are the control; F5-2 rides the

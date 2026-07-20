@@ -924,6 +924,12 @@ void pemAlpha(int16_t item) {
     else if(item == ITM_ENTER) {
       bool_t wasForth = (tam.function == ITM_FORTH);
       bool_t hadText  = (aimBuffer[0] != 0);           // E5 locks on a NON-EMPTY line
+      if(wasForth && hadText && !forthCheckSourceLine(aimBuffer)) {
+        return;   /* E9 tier 1: commit refused atomically — capture stays
+                     open, aimBuffer intact for correction, the error is
+                     already displayed.  Tier 2 (names) never reaches here:
+                     forthCheckSourceLine accepts them. */
+      }
       pemCloseAlphaInput();                            // only: an empty ENTER is the
       //--firstDisplayedLocalStepNumber;               // escape hatch (E3 deletes the
       defineFirstDisplayedStep();                      // placeholder and leaves the

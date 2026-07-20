@@ -954,3 +954,48 @@ their packets, and the four fixture rules that cost red gates in F4-2/F4-3
 subcase error clearing, allocation teardown) are now repeated verbatim in
 F4-4, F5-1, F5-2, and F6-6 — packets are pasted standalone, so a shared
 reference would not have travelled.
+
+## 2026-07-19 — F5-2 debug: check mode restored the scope from an uninitialized field
+
+Non-normative. F5-2's production change — the six-line `forthCheckSourceLine`
+call in `pemAlpha`'s ITM_ENTER arm — was correct as authored. The gate went
+red in four tests the packet never touched (F3-3 scope isolation, the F4-4
+parity sweep, F5-2's own hygiene subcase), all reporting a nonsense
+`forthCurrentScope` such as `0x800E`.
+
+Root cause was landed in F5-1. `forthOuterRun`'s epilogue restores
+`forthCurrentScope = ctx->savedScope`; its prologue fills `savedDef` and
+`savedLatestClosed` but leaves `savedScope` to the caller, and every entry
+point snapshots it — `forthOuterInterpret`, `fnForthOuter`,
+`forthProgramStep`, the pre-scan — except `forthCheckSourceLine`, which set
+only `ctx.source`. Check mode therefore wrote an uninitialized stack word
+into the live scope on every call. Invisible while its only caller was
+F5-1's own test (which never observed scope); a suite-wide poison the moment
+check mode was wired into the commit seam. One line fixes it.
+
+The interesting part is why it was allowed to land. §10.5 states check mode
+"executes nothing, allocates nothing, mutates no live state" — a normative
+claim F5-1 shipped with no pin at all; its tests only read verdicts. The
+landed correction adds `test_check_source_line` subcase 6, which pins the
+CONTRACT: scope set to a non-default `0x1234`, both an accepted and a
+rejected line checked, then scope, open-definition state, rsp, and the
+dictionary asserted unchanged — with `poisonAutoFrame()` filling the callee's
+future stack frame with `0xAA` so an uninitialized restore reports a
+deterministic `43690` rather than whatever the previous call left behind.
+`forthTestScopeSet` (FORTH_DEBUG_SELFTEST only) exists for this pin.
+
+**Rule now binding on every packet:** an entry point whose specification
+includes a state-neutrality claim must pin that claim directly, from a
+non-default state, over both its accepting and its rejecting path. A verdict
+pin is not a contract pin. Two process rules were added alongside (recorded
+in amendment F5-2A and repeated verbatim in the remaining F6/FIX-6 packets):
+a red in a test the packet did not write is an immediate STOP with zero
+repair attempts, and the blast radius is named by diffing the pre-gate and
+gate PASS sets rather than by reading failure text.
+
+Cost: `make dmcp5r47` flash 1092216 → 1093016 (+800 bytes), RAM unchanged.
+The delta exceeds the call site because F5-1's check-mode code had been
+unreachable and LTO was dropping it; this is the true cost of E9 tier 1
+going live. Measurement note: `f=1` does not re-materialize the package
+shadow, so before/after size comparisons must use `CUSTOM_PKG_RECONFIGURE=1`
+(~509 targets rebuilt, not ~51) or they silently re-report the same tree.

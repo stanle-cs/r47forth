@@ -272,3 +272,86 @@ packet adds, whether or not the body above repeats them.
 5. **`compareString` is a C-string comparison returning 0 on equal.** A
    truthy test (`if (compareString(a, b, CMP_BINARY))`) reads as "not
    equal"; and any buffer you hand it must be NUL-terminated.
+
+---
+
+## AMENDMENT F5-2A (2026-07-19) — what actually went wrong, and the rules it changes
+
+The implementation of this packet was correct: the six-line call site above is
+exactly what landed. The gate went red anyway, in **four tests this packet
+never touched** (F3-3 scope isolation, the F4-4 parity sweep, and this
+packet's own subcase 5 — all reporting a bogus `forthCurrentScope`, e.g.
+`0x800E`). The implementer spent the session repairing its own correct code.
+
+**Root cause — a latent defect in F5-1, not in F5-2.**
+`forthOuterRun`'s epilogue restores `forthCurrentScope = ctx->savedScope`.
+The prologue fills `savedDef` and `savedLatestClosed` itself, but
+`savedScope` is the CALLER's to snapshot, and every entry point does it
+(`forthOuterInterpret`, `fnForthOuter`, `forthProgramStep`, the pre-scan) —
+except `forthCheckSourceLine`, which set only `ctx.source`. Check mode
+therefore wrote an uninitialized stack word into the live scope. It stayed
+invisible while only F5-1's own test called check mode (that test never
+observed scope); wiring check mode into `pemAlpha`'s commit seam made every
+PEM-driving test downstream inherit the garbage. The fix is one line in
+`forth_compile.c`:
+
+```c
+ctx.savedScope = forthCurrentScope;   /* the epilogue restores FROM this */
+```
+
+### Rules this changes (binding for every later packet)
+
+1. **REGRESSION TRIAGE — a red outside your diff is an immediate STOP.**
+   Rule 6 forbids *editing* another test; it did not say what to do. It does
+   now: if a test this packet did not write reddens, STOP at once and report
+   `[SOL DEBUGGER HANDOFF]` — **zero** repair attempts. The two-attempt
+   allowance applies only to a red in code or tests this packet authored.
+   Do not try to attribute the failure first: "my change cannot have caused
+   this" is the single most common wrong conclusion, and attribution is
+   exactly what the debugger handoff exists to do.
+2. **Diff the PASS sets, don't read the failures.** The pre-gate log
+   (`/tmp/forth-f5-N-pre.log`) is kept for exactly this:
+   `grep -c "PASS" pre.log` vs the failing gate, and
+   `diff <(grep -o "PASS: .*" pre.log | sort) <(grep -o "PASS: .*" gate.log | sort)`.
+   Newly-missing PASS lines in untouched tests name the blast radius in one
+   command. Report that diff with the handoff.
+3. **ENTRY-POINT CONTRACT PRE-FLIGHT.** Before wiring an existing function
+   into a new call site, enumerate the process-global state that function's
+   family saves and restores, and prove the callee does the same. Concretely:
+   grep every sibling entry point for the fields the shared epilogue restores
+   (here: `grep -n "savedScope\|savedDef\|savedLatestClosed"`), and STOP with
+   a packet-defect report if the function you are about to call is missing
+   one. A function that is correct in isolation can still be wrong the moment
+   a second caller exists.
+4. **Pin the contract, not just the verdict.** DESIGN §10.5 says check mode
+   "executes nothing, allocates nothing, mutates no live state" — a normative
+   claim that F5-1 shipped with no test at all, which is why the defect was
+   free to land. Any packet adding an entry point with a state-neutrality
+   claim MUST pin it directly: set the state to a NON-default value, call the
+   entry point on both an accepted and a rejected input, and assert the state
+   came back. `test_check_source_line` subcase 6 is the landed shape,
+   including `poisonAutoFrame()` — which fills the stack region the callee's
+   frame will occupy with `0xAA` so an uninitialized restore reports the
+   deterministic `43690` instead of luck-of-the-stack.
+
+### Landed additions beyond the packet body
+
+- `forth_compile.c`: the missing `ctx.savedScope` snapshot.
+- `forth_dict.h` / `forth_compile.c`: `forthTestScopeSet` (FORTH_DEBUG_SELFTEST
+  only) so a test can prove restoration from a non-default scope.
+- `test_dict_reloc.c`: `poisonAutoFrame()` + `test_check_source_line`
+  subcase 6 (scope, open-definition state, rsp, and dictionary neutrality).
+- Mutation 0 (beyond the packet's three): delete the `ctx.savedScope` line →
+  subcase 6 reds with `scope 43690 (expected 4660)`, and it names the defect
+  instead of scattering four unrelated reds.
+
+Measured cost (RULE-1): `make dmcp5r47` flash 1092216 → 1093016, **+800
+bytes**, RAM unchanged at 7188. The jump is larger than a six-line call site
+because F5-1's check-mode code was unreachable until now and LTO had been
+dropping it; this delta is the true cost of E9 tier 1 going live.
+
+**Build-measurement trap worth knowing:** `make dmcp5r47 ... f=1` does NOT
+re-materialize the package shadow, so a flash measurement taken after
+swapping package sources with `f=1` silently re-reports the previous tree's
+size. Use `CUSTOM_PKG_RECONFIGURE=1` for any before/after size comparison
+(the tell: ~509 targets rebuilt, not ~51).

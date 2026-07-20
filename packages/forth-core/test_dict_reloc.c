@@ -10738,6 +10738,8 @@ static int test_param_named_indirect(void);
 static int test_param_series_c_acceptance(void);
 /* F5-1: check mode — the tokenizer validates its own grammar */
 static int test_check_source_line(void);
+/* F5-2: E9 commit gate — structural rejects at ENTER, advisory commits */
+static int test_commit_gate(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -12578,6 +12580,15 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_check_source_line...\n");
   fail |= test_check_source_line();
+  forthDictClear();
+  forthGDictClear();
+
+  /* F5-2: E9 commit gate — structural rejects at ENTER, advisory commits */
+  printf("\nFORTH F5-2 TESTS (E9 commit gate)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_commit_gate...\n");
+  fail |= test_commit_gate();
   forthDictClear();
   forthGDictClear();
 
@@ -16885,6 +16896,333 @@ static int test_param_series_c_acceptance(void)
  * F5-1: Check mode — the tokenizer validates its own grammar
  * ========================================================================== */
 
+/* test_commit_gate
+ * F5-2: E9 commit gate — structural rejects at ENTER, advisory commits.
+ * Five subcases in one capture session. */
+static int test_commit_gate(void)
+{
+  int fail = 0;
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedMenu = currentMenu();
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void pemAlpha(int16_t);
+
+  /* Build fixture: LBL, marker, placeholder source, RTN */
+  testProg_t p;
+  tpInit(&p);
+  tpLbl(&p, "F5T");
+  tpMarker(&p);
+  tpSrc(&p, " ");  /* placeholder — replaced on commit */
+  tpRtn(&p);
+
+  if (!tpWrite(&p)) {
+    printf("    FIXTURE FAIL: tpWrite\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+
+  /* Position on the opening marker (step 2) */
+  fnGotoDot(2);
+
+  if (currentStep != tpStepAddr(&p, 1)) {
+    printf("    FIXTURE BUG: fnGotoDot(2) did not position on marker\n");
+    fail = 1;
+  }
+  else if (currentLocalStepNumber != 2) {
+    printf("    FIXTURE BUG: currentLocalStepNumber = %u, expected 2\n", currentLocalStepNumber);
+    fail = 1;
+  }
+  else {
+    /* Open Forth capture with the ALPHA gesture */
+    runFunction(ITM_AIM);
+
+    if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+      printf("    FIXTURE BUG: ITM_AIM did not open Forth capture (alpha=%d tam.function=%d)\n",
+             (int)getSystemFlag(FLAG_ALPHA), (int)tam.function);
+      fail = 1;
+    }
+    else {
+      uint16_t stepCountBefore = getNumberOfSteps();
+
+      /* ---- Subcase 1: Malformed line refuses atomically ---- */
+      { int sc1 = 0;
+        lastErrorCode = ERROR_NONE;
+        aimBuffer[0] = 0;
+
+        const int16_t badItems[] = {
+          ITM_COLON, ITM_SPACE, ITM_A, ITM_SPACE,
+          ITM_I, ITM_F, ITM_SPACE,
+          ITM_SEMICOLON, ITM_ENTER
+        };
+        int i;
+        for (i = 0; i < (int)(sizeof(badItems) / sizeof(badItems[0])); i++) {
+          runFunction(badItems[i]);
+        }
+
+        if (lastErrorCode != ERROR_INVALID_NAME) {
+          printf("    [1] FAIL: lastErrorCode = %d, expected ERROR_INVALID_NAME (%d)\n",
+                 lastErrorCode, ERROR_INVALID_NAME);
+          sc1 = 1;
+        }
+        else if (!getSystemFlag(FLAG_ALPHA)) {
+          printf("    [1] FAIL: FLAG_ALPHA not set — capture should stay open\n");
+          sc1 = 1;
+        }
+        else if (compareString(aimBuffer, ": A IF ;", CMP_BINARY) != 0) {
+          printf("    [1] FAIL: aimBuffer = '%s', expected ': A IF ;'\n", aimBuffer);
+          sc1 = 1;
+        }
+        else if (getNumberOfSteps() != stepCountBefore) {
+          printf("    [1] FAIL: step count changed %u -> %u\n",
+                 stepCountBefore, getNumberOfSteps());
+          sc1 = 1;
+        }
+        else {
+          printf("    [1] PASS: tier-1 line refused; capture and buffer intact\n");
+        }
+        lastErrorCode = ERROR_NONE;
+        fail |= sc1;
+      }
+
+      /* ---- Subcase 2: Correction commits ---- */
+      { int sc2 = 0;
+        lastErrorCode = ERROR_NONE;
+
+        /* Clear buffer and retype via CLA */
+        runFunction(ITM_CLA);
+
+        const int16_t goodItems[] = {
+          ITM_COLON, ITM_SPACE, ITM_A, ITM_SPACE,
+          ITM_1, ITM_SPACE, ITM_I, ITM_F, ITM_SPACE,
+          ITM_2, ITM_SPACE,
+          ITM_T, ITM_H, ITM_E, ITM_N, ITM_SPACE,
+          ITM_SEMICOLON, ITM_ENTER
+        };
+        int i;
+        for (i = 0; i < (int)(sizeof(goodItems) / sizeof(goodItems[0])); i++) {
+          runFunction(goodItems[i]);
+        }
+
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [2] FAIL: lastErrorCode = %d\n", lastErrorCode);
+          sc2 = 1;
+        }
+        else if (!getSystemFlag(FLAG_ALPHA)) {
+          printf("    [2] FAIL: FLAG_ALPHA not set (multi-line lock should hold)\n");
+          sc2 = 1;
+        }
+        else if (getNumberOfSteps() != stepCountBefore + 1) {
+          printf("    [2] FAIL: step count %u, expected %u\n",
+                 getNumberOfSteps(), stepCountBefore + 1);
+          sc2 = 1;
+        }
+        else {
+          printf("    [2] PASS: corrected line commits and the lock advances\n");
+        }
+        lastErrorCode = ERROR_NONE;
+        fail |= sc2;
+      }
+
+      /* ---- Subcase 3: Advisory line commits ---- */
+      { int sc3 = 0;
+        lastErrorCode = ERROR_NONE;
+
+        const int16_t advItems[] = {
+          ITM_F, ITM_U, ITM_T, ITM_U, ITM_R, ITM_E,
+          ITM_W, ITM_O, ITM_R, ITM_D,
+          ITM_SPACE, ITM_9, ITM_SPACE, ITM_PLUS,
+          ITM_ENTER
+        };
+        int i;
+        for (i = 0; i < (int)(sizeof(advItems) / sizeof(advItems[0])); i++) {
+          runFunction(advItems[i]);
+        }
+
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [3] FAIL: lastErrorCode = %d\n", lastErrorCode);
+          sc3 = 1;
+        }
+        else if (getNumberOfSteps() != stepCountBefore + 2) {
+          printf("    [3] FAIL: step count %u, expected %u\n",
+                 getNumberOfSteps(), stepCountBefore + 2);
+          sc3 = 1;
+        }
+        else {
+          printf("    [3] PASS: unresolved names commit untouched\n");
+        }
+        lastErrorCode = ERROR_NONE;
+        fail |= sc3;
+      }
+
+      /* ---- Subcase 4: Empty ENTER keeps E3 ---- */
+      { int sc4 = 0;
+        lastErrorCode = ERROR_NONE;
+        uint16_t stepsBeforeE3 = getNumberOfSteps();
+
+        pemAlpha(ITM_ENTER);
+
+        if (getSystemFlag(FLAG_ALPHA)) {
+          printf("    [4] FAIL: FLAG_ALPHA still set after E3\n");
+          sc4 = 1;
+        }
+        else if (tam.function == ITM_FORTH) {
+          printf("    [4] FAIL: tam.function == ITM_FORTH after E3\n");
+          sc4 = 1;
+        }
+        else if (getNumberOfSteps() != stepsBeforeE3 - 1) {
+          printf("    [4] FAIL: step count %u, expected %u (E3 deletes placeholder)\n",
+                 getNumberOfSteps(), stepsBeforeE3 - 1);
+          sc4 = 1;
+        }
+        else {
+          printf("    [4] PASS: empty ENTER unchanged (E3)\n");
+        }
+        lastErrorCode = ERROR_NONE;
+        fail |= sc4;
+      }
+
+      /* ---- Subcase 5: Run confirms the committed program ---- */
+      { int sc5 = 0;
+        lastErrorCode = ERROR_NONE;
+
+        /* After E3, program: LBL(1), marker(2), src1(3), src2(4), RTN(5).
+         * tpStepAddr is stale — offsets changed after commits rewrote the
+         * placeholder. Navigate live from the program start. */
+        uint8_t *cur = beginOfProgramMemory;
+        uint8_t *sDef = NULL, *sUse = NULL;
+        { int stepN = 0;
+          while (cur != NULL) {
+            stepN++;
+            if (stepN == 3) sDef = cur;
+            else if (stepN == 4) { sUse = cur; break; }
+            cur = findNextStep(cur);
+          }
+        }
+
+        if (sDef == NULL || sUse == NULL) {
+          printf("    [5] FAIL: could not locate committed steps\n");
+          sc5 = 1;
+        }
+        else {
+          programRunStop = PGM_RUNNING;
+
+          /* Execute definition step: : A 1 IF 2 THEN ; */
+          currentStep = sDef;
+          int16_t adv = executeOneStep(currentStep);
+          if (adv <= 0) {
+            printf("    [5] FAIL: executeOneStep(def) returned %d\n", adv);
+            sc5 = 1;
+          }
+          else if (lastErrorCode != ERROR_NONE) {
+            printf("    [5] FAIL: executeOneStep(def) error %d\n", lastErrorCode);
+            sc5 = 1;
+          }
+
+          if (sc5 == 0) {
+            /* Execute use step: FUTUREWORD 9 + */
+            currentStep = sUse;
+            lastErrorCode = ERROR_NONE;
+            adv = executeOneStep(currentStep);
+            if (adv <= 0) {
+              printf("    [5] FAIL: executeOneStep(use) returned %d\n", adv);
+              sc5 = 1;
+            }
+            /* FUTUREWORD is undefined — error expected, but mechanism must not crash */
+          }
+
+          lastErrorCode = ERROR_NONE;
+
+          /* State hygiene */
+          if (forthCurrentScopeGet() != FORTH_OWNER_INTERACTIVE) {
+            printf("    [5] FAIL: scope = %d, expected FORTH_OWNER_INTERACTIVE (%d)\n",
+                   forthCurrentScopeGet(), FORTH_OWNER_INTERACTIVE);
+            sc5 = 1;
+          }
+          else if (forthTestGetRsp() != 0) {
+            printf("    [5] FAIL: rsp = %u, expected 0\n", forthTestGetRsp());
+            sc5 = 1;
+          }
+        }
+
+        if (!sc5)
+          printf("    [5] PASS: the committed lines execute; state hygiene holds\n");
+        lastErrorCode = ERROR_NONE;
+        fail |= sc5;
+      }
+    }
+  }
+
+  cleanupTestProgram();
+  forthDictClear();
+  forthGDictClear();
+
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  showSoftmenu(savedMenu);
+  memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
+
+/* ==========================================================================
+ * F5-1: Check mode — the tokenizer validates its own grammar
+ * ========================================================================== */
+
+/* F5-2A: fill the stack region an about-to-be-called frame will occupy with
+ * 0xAA, so that a callee reading an uninitialized local sees a deterministic
+ * poison value instead of whatever the previous call left behind. volatile
+ * keeps the writes; the array is deliberately larger than the frames under
+ * test. */
+static void poisonAutoFrame(void)
+{
+  volatile uint8_t scratch[1024];
+  int i;
+  for (i = 0; i < (int)sizeof(scratch); i++) {
+    scratch[i] = 0xAA;
+  }
+  (void)scratch[0];
+}
+
 static int test_check_source_line(void)
 {
   int fail = 0;
@@ -17089,6 +17427,65 @@ static int test_check_source_line(void)
     }
     lastErrorCode = ERROR_NONE;
     if (!subFail) printf("    [5] PASS: number tier-1 fires and the live-shadow suppression holds\n");
+    fail |= subFail;
+  }
+
+  /* Subcase 6 (F5-2A): check mode is state-NEUTRAL. §10.5 says check mode
+   * "executes nothing, allocates nothing, mutates no live state", but the
+   * landed F5-1 pins only read the verdict — so forthCheckSourceLine could
+   * (and did) restore forthCurrentScope from an uninitialized ctx field
+   * without any test noticing. It stayed latent until F5-2 called check
+   * mode from pemAlpha's commit seam, where the garbage scope poisoned four
+   * unrelated tests. This subcase pins the contract itself, from a scope
+   * that is NOT the default, over both an accepted and a rejected line.
+   * poisonAutoFrame() fills the stack region the callee's frame will occupy
+   * with 0xAA, so an uninitialized restore is deterministic (0xAAAA), not
+   * luck-of-the-stack. */
+  { int subFail = 0;
+    const uint16_t probeScope = 0x1234;
+    lastErrorCode = ERROR_NONE;
+    forthDictClear();
+    forthGDictClear();
+    { uint16_t rspBefore = forthTestGetRsp();
+      forthDefState_t defBefore, defAfter;
+      forthDefStateSave(&defBefore);
+
+      forthTestScopeSet(probeScope);
+      poisonAutoFrame();
+      (void)forthCheckSourceLine("1 2 +");             /* accepted line */
+      if (forthCurrentScopeGet() != probeScope) {
+        printf("    [6] FAIL: accepted line left scope %u (expected %u)\n",
+               forthCurrentScopeGet(), probeScope);
+        subFail = 1;
+      }
+      if (!subFail) {
+        poisonAutoFrame();
+        (void)forthCheckSourceLine(": A IF ;");        /* rejected line */
+        if (forthCurrentScopeGet() != probeScope) {
+          printf("    [6] FAIL: rejected line left scope %u (expected %u)\n",
+                 forthCurrentScopeGet(), probeScope);
+          subFail = 1;
+        }
+      }
+      forthTestScopeSet(FORTH_OWNER_INTERACTIVE);
+      lastErrorCode = ERROR_NONE;
+
+      forthDefStateSave(&defAfter);
+      if (!subFail && memcmp(&defBefore, &defAfter, sizeof(defBefore)) != 0) {
+        printf("    [6] FAIL: check mode mutated the open-definition state\n");
+        subFail = 1;
+      }
+      if (!subFail && forthTestGetRsp() != rspBefore) {
+        printf("    [6] FAIL: check mode moved rsp (%u -> %u)\n", rspBefore, forthTestGetRsp());
+        subFail = 1;
+      }
+      if (!subFail && (fdict.count != 0 || fdict.here != 0)) {
+        printf("    [6] FAIL: check mode wrote the dictionary (count=%u here=%u)\n",
+               fdict.count, fdict.here);
+        subFail = 1;
+      }
+    }
+    if (!subFail) printf("    [6] PASS: check mode restores scope, def state, rsp, and writes nothing\n");
     fail |= subFail;
   }
 

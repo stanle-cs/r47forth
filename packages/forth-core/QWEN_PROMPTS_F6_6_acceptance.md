@@ -311,3 +311,36 @@ packet adds, whether or not the body above repeats them.
 5. **`compareString` is a C-string comparison returning 0 on equal.** A
    truthy test (`if (compareString(a, b, CMP_BINARY))`) reads as "not
    equal"; and any buffer you hand it must be NUL-terminated.
+
+---
+
+## REGRESSION + ENTRY-POINT RULES (binding, added 2026-07-19 after the F5-2 debug)
+
+These cost a full session at F5-2, where a correct six-line change was
+blamed for four red tests it never touched. They apply to this packet
+whether or not the body above repeats them.
+
+1. **A red outside your diff is an immediate STOP — zero repair attempts.**
+   The two-attempt allowance applies only to code or tests THIS packet
+   authored. If a test you did not write reddens, stop and report
+   `[SOL DEBUGGER HANDOFF]` at once. Do not first try to decide whether your
+   change could have caused it: "my change cannot have caused this" is the
+   most common wrong conclusion, and deciding it is the debugger's job.
+2. **Name the blast radius by diffing PASS sets, not by reading failures.**
+   Keep the pre-gate log. Then:
+   `diff <(grep -o "PASS: .*" /tmp/<pre>.log | sort) <(grep -o "PASS: .*" /tmp/<gate>.log | sort)`
+   Newly-missing PASS lines in untouched tests are the report.
+3. **Entry-point contract pre-flight.** Before wiring an existing function
+   into a new call site, prove it saves/restores the process-global state its
+   siblings do — grep the other entry points for the fields the shared
+   epilogue restores and compare. A function correct in isolation can be
+   wrong the moment a second caller exists. A mismatch is a packet defect:
+   STOP and report, do not patch around it.
+4. **Pin the contract, not just the verdict.** If this packet adds an entry
+   point whose spec claims state neutrality ("mutates no live state",
+   "restores the mode", "leaves the buffer untouched"), pin that claim
+   directly: set the state to a NON-default value, drive both the accepting
+   and the rejecting path, assert the state came back. See
+   `test_check_source_line` subcase 6 and `poisonAutoFrame()` for the landed
+   shape — the poison makes an uninitialized restore deterministic instead of
+   luck-of-the-stack.

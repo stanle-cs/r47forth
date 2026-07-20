@@ -86,10 +86,10 @@ architect session first; the future-series packet has not been authored yet.
 | 9b | F4-1 flow classification + direct numeric params | **LANDED** `f043c63e7` | `QWEN_PROMPTS_F4_1_direct_numeric.md` |
 | 9c | F4-2 register/flag/shuffle direct forms | **LANDED** `ac48f50a8` (sol debug; amendment F4-2A) | `QWEN_PROMPTS_F4_2_register_flag.md` |
 | 9d | F4-3 named, system-flag, indirect forms | **LANDED** `fc0fabdad` (sol rewrite+debug; amendment F4-3A) | `QWEN_PROMPTS_F4_3_named_indirect.md` |
-| 9e | F4-4 error-table + parity acceptance (stage close) | **[NEXT — QWEN]**, read amendment F4-4A first | `QWEN_PROMPTS_F4_4_acceptance.md` |
+| 9e | F4-4 error-table + parity acceptance (stage close) | **LANDED** `81d73cd6a` | `QWEN_PROMPTS_F4_4_acceptance.md` |
 | 10a | F5 ledger: commit seam + tier ruling (2026-07-18) | DONE (authored) | `QWEN_PROMPTS_F5_core.md` |
-| 10b | F5-1 check mode + soundness battery | **[GATE LOCKED]** on F4-4 | `QWEN_PROMPTS_F5_1_check_mode.md` |
-| 10c | F5-2 E9 commit gate (stage close) | **[GATE LOCKED]** on F5-1 | `QWEN_PROMPTS_F5_2_commit_gate.md` |
+| 10b | F5-1 check mode + soundness battery | **LANDED** `ba304a3cf` (state-neutrality pin added by F5-2A) | `QWEN_PROMPTS_F5_1_check_mode.md` |
+| 10c | F5-2 commit gate (stage close) | **LANDED** (sol debug; amendment F5-2A) | `QWEN_PROMPTS_F5_2_commit_gate.md` |
 | 11a | F6 audit — traces T1-T7 FOLDED (2026-07-19); bench Blocks A-F DEFERRED to stage-exit (owner ruling 2026-07-18) | DONE (traces) — **stage-exit bench is [S]+[A]**, after F6-6 | `F6_KEYBOARD_PEM_AUDIT.md` + `F6_AUDIT_RESULTS.md` |
 | 11b | F6 ledger: decomposition + design decisions | DONE (authored 2026-07-19) | `QWEN_PROMPTS_F6_core.md` |
 | 11c | F6-1 managed capture buffer | **[GATE LOCKED]** on F5-2 | `QWEN_PROMPTS_F6_1_capture_buffer.md` |
