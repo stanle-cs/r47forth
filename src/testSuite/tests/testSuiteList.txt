@@ -427,6 +427,7 @@ jacobi_audit
 LINPOL
 
 tempConv
+angleConv
 conversions
 conversionsSI
 constants

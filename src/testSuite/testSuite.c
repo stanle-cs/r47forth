@@ -2275,9 +2275,13 @@ var1:
         strcat(r, ":NONE");
       }
 
-      // separate real value and angular mode
+      // separate real value and angular mode; for a tagged value the closing
+      // quote of the register string ends up on the mode, strip it there
       r[i] = 0;
       strcpy(angMod, r + i + 1);
+      if(angMod[0] != 0 && angMod[strlen(angMod) - 1] == '"') {
+        angMod[strlen(angMod) - 1] = 0;
+      }
 
       if(strcmp(angMod, "DEG"   ) == 0) {
         am = amDegree;
@@ -2302,12 +2306,15 @@ var1:
         abortTest();
       }
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -2429,12 +2436,15 @@ var1:
       }
       am = amNone;
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -2450,12 +2460,15 @@ var1:
       }
     }
     else if(strcmp(l, "DATE") == 0) {
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -3504,9 +3517,13 @@ var2:
         strcat(r, ":NONE");
       }
 
-      // separate real value and angular mode
+      // separate real value and angular mode; for a tagged value the closing
+      // quote of the register string ends up on the mode, strip it there
       r[i] = 0;
       strcpy(angMod, r + i + 1);
+      if(angMod[0] != 0 && angMod[strlen(angMod) - 1] == '"') {
+        angMod[strlen(angMod) - 1] = 0;
+      }
 
            if(strcmp(angMod, "DEG"   ) == 0) am = amDegree;
       else if(strcmp(angMod, "DMS"   ) == 0) am = amDMS;
@@ -3520,12 +3537,15 @@ var2:
       }
 
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -3719,12 +3739,15 @@ var2:
       }
       am = amNone;
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -3746,12 +3769,15 @@ var2:
       }
     }
     else if(strcmp(l, "DATE") == 0) {
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
