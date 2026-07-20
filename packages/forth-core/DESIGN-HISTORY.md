@@ -1113,3 +1113,99 @@ restore"); reverted, gate re-run green. `make dmcp5r47` flash
 1094400 → 1094456 (+56 B, the new function body plus two call sites); RAM
 (data+bss) unchanged at 7228; fdict/gdict layout unchanged (no new
 fields, no growth-behavior change).
+
+## 2026-07-20 — Test-suite audit: a third pre-existing production bug, real user-facing data loss in TAM cancel
+
+Non-normative. Owner-directed audit of the entire forth-core test suite
+(after the F6 series landed): every `static int test_*` function in
+`test_dict_reloc.c` reviewed for toothless assertions, weak oracles, and
+bad design, in parallel by seven independent review passes covering
+disjoint line ranges plus a manual pass over the orchestrator and a
+handful of functions. Found and fixed ~14 genuine rigor defects (missing
+`fail = 1` before two `goto cleanup` sites in `test_accept_xeq_name_step`
+that let real FAIL-printf paths return pass; a `test_dict_space_full`
+assertion that checked "some error" instead of the specific
+`ERROR_RAM_FULL` its own name claims; `test_malformed_token`'s three
+subcases checking only "not the sentinel" instead of "the original
+value," so a third, unanticipated post-error value would pass;
+`test_div_zero_halt` similarly checked only "not the sentinel 999," and
+its own comment claimed the missing check should be "X == 42" — adding
+that literally FAILED the gate, because it was never true: traced
+through `src/c47/mathematics/division.c` (`divLonILonI` converts both
+operands to `dtReal34` in place before a zero-divisor ever raises
+`ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN`, in `divRealReal`, so X is left at
+its already-converted `real34` value, not restored to the original
+longint) and `registers.c`'s `adjustResult`/`undo()` (the restore-on-error
+path reads a `SAVED_REGISTER_X` checkpoint this Forth-driven call never
+populates via `saveForUndo()`, confirmed empirically rather than by
+tracing every `saveForUndo()` call site) — corrected to assert what's
+actually true and meaningful (X is real34 zero) instead of a stale,
+never-verified claim in a decade-old comment; a dead tautological
+`nativeOk`/`forthOk` check in
+`test_param_series_c_acceptance` removed; `test_check_source_line`
+subcase 3's state-neutrality pin extended to cover `gdict.latest`
+(previously only `gdict.here`/`count`, asymmetric with the `fdict` triple
+it mirrors); `test_param_register_flag` subcases 1 and 3 gained
+byte-image pins for the compiled parameter cell — subcase 3 (`STO M`)
+particularly, since a round-trip alone can't distinguish a correct
+`REGISTER_M_IN_KS_CODE` (211) from a transcription error in the
+hand-maintained `paramLetterKS[]` table that swaps two stat letters,
+because both STO and RCL read the same wrong row; `test_reentrancy`'s
+depth-cap check now primes a sentinel before the guarded call instead of
+coincidentally relying on whatever the previous test left in X;
+`test_c47_param_shared_dispatch` subcase 3 (PTP_NONE dispatch) now checks
+the result actually became `dtReal34` instead of only "no error," so a
+future regression that silently skips dispatch for parameterless
+functions can't hide behind "no error, no observable effect" either;
+`test_capture_menus` subcase 3's `!= -MNU_FORTH` check tightened to the
+specific `== -MNU_ALPHA` its own PASS message already claimed;
+`test_word_catalog` subcase 4 now confirms the three pre-existing catalog
+entries (PW/WI/GVIS) survive an over-long-name insert untouched, not just
+that the count stayed 3 and the truncated spelling is absent.
+
+One finding was NOT a test-rigor issue but a real, traced, production
+defect: `test_capture_suspend` subcase 2 ("Cancel round-trip") asserts
+`forthTestCapText() == "5 DUP"` after a TAM cancel that immediately
+follows subcase 1's TAM commit — but subcase 1 ends with the line reading
+`"5 DUP STO 05 "` (F6-4's fold-to-text landed that), and the F6-2 packet's
+own subcase 2 spec says "text intact," never updated after F6-4 changed
+what "intact" should mean. The literal was never a design choice; it is
+what `forthCaptureResume()` (`programming/manage.c:1093-1144`) actually
+produces, and that IS a bug: `forthCaptureSuspend()`
+(`programming/manage.c:1072-1091`) snapshots `stepOffset` assuming the
+on-disk step already mirrors `forthCapBuf()` — true after ordinary
+keystrokes, which recommit incrementally via `pemAlpha`'s glyph-editing
+tail (`manage.c:1011-1039`), but NOT true here: subcase 1's F6-4 fold
+wrote into `forthCapBuf()` via `forthCapInsertName()` without recommitting
+the on-disk step (the fold loop only calls `deleteStepsFromTo` on the
+now-redundant inserted step, never touches the capture step itself). The
+next suspend reads a stale on-disk snapshot and resume silently drops
+everything typed or folded since. Reproducible on real hardware: type
+text, do one TAM operation (STO/RCL/GTO/XEQ/...), then immediately start
+a second one and cancel it — the first operation's folded text vanishes
+from the line. Traced and confirmed by direct code reading (both
+`forthCaptureSuspend`/`forthCaptureResume` and the F6-2/F6-4 packet
+history), not left as a review agent's unverified claim.
+
+Not fixed here. A correct fix belongs in `forthCaptureSuspend()`
+(resync the on-disk step from `forthCapBuf()` before snapshotting the
+offset, so the invariant ordinary keystrokes maintain holds
+unconditionally) but requires first tracing `_insertInProgram`'s
+relocation/cursor-advance/rescan behavior (`manage.c:697-755` — it can
+trigger `resizeProgramMemory`, shifts the cursor forward past the
+inserted bytes, and the existing recommit call site steps back via
+`findPreviousStep` afterward to compensate) closely enough to reuse or
+mirror it safely. This is exactly the kind of deep, stateful pointer
+choreography the F6-6 entry above already flagged this general subsystem
+for twice; improvising a third fix here without that trace risks a worse
+regression than the one being fixed. `test_capture_suspend` subcase 2 is
+left asserting the current (buggy) value, with an in-code comment citing
+this entry, rather than asserting the correct value and reddening the
+gate without an accompanying fix — deliberately not the same resolution
+as the F6-6 findings (which routed the *test* around the bug); there is
+no way to route this test around it, since preserving text across a
+cancel is exactly what the subcase exists to verify. Flagged here as the
+highest-priority item for the forth-core code audit: unlike the two F6-6
+findings (self-inflicted by test fixtures never-before exercising a
+capture-open save/restore, arguably low real-world likelihood), this one
+is reachable from ordinary keyboard use with no test harness involved.

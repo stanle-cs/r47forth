@@ -812,8 +812,20 @@ static int test_outer_real_literal(void)
  * DIV by zero should set lastErrorCode and halt.
  * Sentinel (ILIT 999) after DIV must NOT execute.
  * Assert: lastErrorCode == ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN.
- * Assert: X == 42 (original value preserved, sentinel did not run).
  * Assert: X != 999 (sentinel did not execute).
+ * Assert: X is real34 zero — NOT the original longint 42 (test-audit
+ * finding 2026-07-20: this comment used to claim X==42, but that was
+ * never actually checked or true. Traced via src/c47/mathematics/
+ * division.c: divLonILonI sees a zero divisor and converts BOTH X and Y
+ * to dtReal34 in place *before* calling divRealReal(), which is where
+ * ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN actually gets raised (divRealReal's
+ * zero-divisor branch, FLAG_SPCRES clear) — X is left at its
+ * already-converted value (real34 0.0), not restored to the pre-op
+ * longint. registers.c's adjustResult() calls undo() on a nonzero
+ * lastErrorCode, but undo() restores from SAVED_REGISTER_X/saveForUndo(),
+ * a checkpoint this Forth-driven primitive call never populates, so it
+ * has no effect on the outcome here — confirmed empirically, not by
+ * reading undo()'s call sites exhaustively).
  * Mutation: error not checked, sentinel executes -> X=999.             ---- */
 static int test_div_zero_halt(void)
 {
@@ -842,7 +854,12 @@ static int test_div_zero_halt(void)
     printf("    FAIL: DIV by zero did not halt (sentinel ILIT 999 executed, X=999)\n");
     return 1;
   }
-  printf("    PASS: DIV by zero halted (error %d, sentinel not executed)\n", lastErrorCode);
+  if (getRegisterDataType(REGISTER_X) != dtReal34 || !real34IsZero(REGISTER_REAL34_DATA(REGISTER_X))) {
+    printf("    FAIL: X type=%u (expected dtReal34 zero) after DIV halt\n",
+           getRegisterDataType(REGISTER_X));
+    return 1;
+  }
+  printf("    PASS: DIV by zero halted (error %d, X is real34 zero, sentinel not executed)\n", lastErrorCode);
   return 0;
 }
 
@@ -1117,10 +1134,11 @@ static int test_malformed_token(void)
       if (x_is_longint(555)) {
         printf("    FAIL: bad PRIM index not caught (sentinel ILIT 555 executed)\n");
         fail = 1;
-      } else if (x_is_longint(444)) {
-        printf("    PASS: bad PRIM index caught (X unchanged at 444, err=%d)\n", lastErrorCode);
+      } else if (!x_is_longint(444)) {
+        printf("    FAIL: bad PRIM index: X not preserved at 444\n");
+        fail = 1;
       } else {
-        printf("    PASS: bad PRIM index caught (X not 555, err=%d)\n", lastErrorCode);
+        printf("    PASS: bad PRIM index caught (X unchanged at 444, err=%d)\n", lastErrorCode);
       }
     }
   }
@@ -1145,10 +1163,11 @@ static int test_malformed_token(void)
       if (x_is_longint(555)) {
         printf("    FAIL: bad CALL index not caught (sentinel ILIT 555 executed)\n");
         fail = 1;
-      } else if (x_is_longint(444)) {
-        printf("    PASS: bad CALL index caught (X unchanged at 444, err=%d)\n", lastErrorCode);
+      } else if (!x_is_longint(444)) {
+        printf("    FAIL: bad CALL index: X not preserved at 444\n");
+        fail = 1;
       } else {
-        printf("    PASS: bad CALL index caught (X not 555, err=%d)\n", lastErrorCode);
+        printf("    PASS: bad CALL index caught (X unchanged at 444, err=%d)\n", lastErrorCode);
       }
     }
   }
@@ -1173,10 +1192,11 @@ static int test_malformed_token(void)
       if (x_is_longint(555)) {
         printf("    FAIL: reserved token not caught (sentinel ILIT 555 executed)\n");
         fail = 1;
-      } else if (x_is_longint(444)) {
-        printf("    PASS: reserved token caught (X unchanged at 444, err=%d)\n", lastErrorCode);
+      } else if (!x_is_longint(444)) {
+        printf("    FAIL: reserved token: X not preserved at 444\n");
+        fail = 1;
       } else {
-        printf("    PASS: reserved token caught (X not 555, err=%d)\n", lastErrorCode);
+        printf("    PASS: reserved token caught (X unchanged at 444, err=%d)\n", lastErrorCode);
       }
     }
   }
@@ -2065,6 +2085,11 @@ static int test_reentrancy(void)
   /* Prime the depth cap */
   forthTestSetDepth(FORTH_NEST_MAX);
 
+  /* Sentinel distinct from RTEST's own ILIT(99), so the post-call check
+   * below proves X was left untouched rather than coincidentally landing
+   * on 99 from whatever the previous test left on the stack. */
+  forthPushInt32(77);
+
   /* Call forthInner — guard should fire, word should NOT execute */
   lastErrorCode = ERROR_NONE;
   forthInner(idx, false);
@@ -2077,8 +2102,8 @@ static int test_reentrancy(void)
     ERROR_OPERATION_UNDEFINED, lastErrorCode);
     return 1;
   }
-  if (x_is_longint(99)) {
-    printf("    FAIL: sentinel value 99 was set — guard did not prevent entry\n");
+  if (!x_is_longint(77)) {
+    printf("    FAIL: X changed from sentinel 77 — guard did not prevent entry\n");
     return 1;
   }
   if (forthTestGetDepth() != 0) {
@@ -3305,11 +3330,12 @@ static int test_dict_space_full(void)
     printf("    FAIL: startDefinition succeeded at count cap\n");
     return 1;
   }
-  if (lastErrorCode == ERROR_NONE) {
-    printf("    FAIL: count cap did not set an error (silent failure)\n");
+  if (lastErrorCode != ERROR_RAM_FULL) {
+    printf("    FAIL: count cap gave error %d, expected ERROR_RAM_FULL (%d)\n",
+           lastErrorCode, ERROR_RAM_FULL);
     return 1;
   }
-  printf("    PASS: count cap rejected with error %d\n", lastErrorCode);
+  printf("    PASS: count cap rejected with ERROR_RAM_FULL\n");
   return 0;
 }
 
@@ -7135,6 +7161,7 @@ static int test_accept_xeq_name_step(void)
   forthOuterInterpret(": SQ DUP * ;");
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: forthOuterInterpret error %d\n", lastErrorCode);
+    fail = 1;
     goto cleanup;
   }
 
@@ -7142,6 +7169,7 @@ static int test_accept_xeq_name_step(void)
     uint16_t idx;
     if (!forthFindColon("SQ", &idx)) {
       printf("    FAIL: SQ not found in dictionary\n");
+      fail = 1;
       goto cleanup;
     }
   }
@@ -10089,6 +10117,10 @@ static int test_softmenu_trailing_null(void)
       count, (unsigned char)*content);
       fail = 1;
     }
+  }
+  else if (!fail) {
+    printf("    FAIL: menuContent is NULL\n");
+    fail = 1;
   }
 
   /* Cleanup */
@@ -14318,6 +14350,13 @@ static int test_c47_param_shared_dispatch(void)
       { uint16_t itemId = ITM_sin; forthDictEmitBytes(&itemId, 2); }
       end_word(w);
 
+      /* Longint seed: sin() always produces a dtReal34 result regardless
+       * of value or angular mode, so a type-change check below proves
+       * ITM_sin actually dispatched rather than silently no-op'ing —
+       * !err && lastErrorCode==ERROR_NONE alone can't distinguish "ran"
+       * from "paramCoreValidateDirect's PTP_NONE arm returned true but
+       * the seam never called reallyRunFunction." */
+      forthPushInt32(0);
       lastErrorCode = ERROR_NONE;
       bool err = run_word("SN01");
 
@@ -14327,6 +14366,11 @@ static int test_c47_param_shared_dispatch(void)
       }
       else if (lastErrorCode != ERROR_NONE) {
         printf("    [3] FAIL: PTP_NONE dispatch set error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+      else if (getRegisterDataType(REGISTER_X) != dtReal34) {
+        printf("    [3] FAIL: X type %u after ITM_sin, expected dtReal34 (sin did not run)\n",
+               getRegisterDataType(REGISTER_X));
         subFail = 1;
       }
 
@@ -15269,6 +15313,40 @@ static int test_param_register_flag(void)
       printf("    [1] FAIL: RCL 05 did not return 7\n");
       subFail = 1;
     }
+    /* Byte-image pin (mirrors subcase 2/3's pins, for consistency): a
+     * dedicated freshly-compiled probe word, since fdict.latest (used
+     * below to locate the body without a byte-offset-vs-ref-index mixup)
+     * must be the newest header — SR0 no longer is, once RR0 compiles
+     * after it. ": PR0 STO 05 ;" body cells are FTOK_C47, ITM_STO,
+     * {5,0}, FTOK_EXIT. */
+    if (!subFail) {
+      x_set_string(": PR0 STO 05 ;");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: compile PR0 error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint16_t w;
+      if (!forthFindColon("PR0", &w)) {
+        printf("    [1] FAIL: PR0 not found\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint16_t bodyStart = fdict.latest + (uint16_t)TO_BLOCKS(6 + 3) * BYTES_PER_BLOCK;
+      uint16_t cell0, cell1, cell2, cell3;
+      memcpy(&cell0, fdict.base + bodyStart, 2);
+      memcpy(&cell1, fdict.base + bodyStart + 2, 2);
+      memcpy(&cell2, fdict.base + bodyStart + 4, 2);
+      memcpy(&cell3, fdict.base + bodyStart + 6, 2);
+      if (cell0 != T_C47 || cell1 != ITM_STO || cell2 != 5 || cell3 != T_EXIT) {
+        printf("    [1] FAIL: byte image {0x%04X, 0x%04X, 0x%04X, 0x%04X} expected {0x%04X, 0x%04X, 5, 0x%04X}\n",
+               cell0, cell1, cell2, cell3, T_C47, ITM_STO, T_EXIT);
+        subFail = 1;
+      }
+    }
     if (!subFail) {
       printf("    [1] PASS: STO/RCL 05 round-trips (compiled)\n");
     } else {
@@ -15393,6 +15471,40 @@ static int test_param_register_flag(void)
     if (!subFail && !x_is_longint(21)) {
       printf("    [3] FAIL: RCL M did not return 21\n");
       subFail = 1;
+    }
+    /* Byte-image pin (mirrors subcase 2's PRA pin): a round-trip alone
+     * can't distinguish REGISTER_M_IN_KS_CODE (211) from a transcription
+     * error in paramLetterKS[] that swaps M for another stat letter —
+     * STO and RCL would then read the same wrong table row and round-trip
+     * clean against the wrong register. ": PRM STO M ;" body cells are
+     * FTOK_C47, ITM_STO, {211,0}, FTOK_EXIT. */
+    if (!subFail) {
+      x_set_string(": PRM STO M ;");
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [3] FAIL: compile PRM error %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint16_t w;
+      if (!forthFindColon("PRM", &w)) {
+        printf("    [3] FAIL: PRM not found\n");
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      uint16_t bodyStart = fdict.latest + (uint16_t)TO_BLOCKS(6 + 3) * BYTES_PER_BLOCK;
+      uint16_t cell0, cell1, cell2, cell3;
+      memcpy(&cell0, fdict.base + bodyStart, 2);
+      memcpy(&cell1, fdict.base + bodyStart + 2, 2);
+      memcpy(&cell2, fdict.base + bodyStart + 4, 2);
+      memcpy(&cell3, fdict.base + bodyStart + 6, 2);
+      if (cell0 != T_C47 || cell1 != ITM_STO || cell2 != 211 || cell3 != T_EXIT) {
+        printf("    [3] FAIL: byte image {0x%04X, 0x%04X, 0x%04X, 0x%04X} expected {0x%04X, 0x%04X, 211, 0x%04X}\n",
+               cell0, cell1, cell2, cell3, T_C47, ITM_STO, T_EXIT);
+        subFail = 1;
+      }
     }
     if (!subFail) {
       printf("    [3] PASS: stat register M stores through regKStoC\n");
@@ -16723,7 +16835,6 @@ static int test_param_series_c_acceptance(void)
   /* Subcase 4: Indirect parity */
   { int subFail = 0;
     lastErrorCode = ERROR_NONE;
-    int nativeOk = 0, forthOk = 0;
 
     /* Native half: STO ->05 with X=99, reg 05 := 7 */
     { lastErrorCode = ERROR_NONE;
@@ -16752,7 +16863,6 @@ static int test_param_series_c_acceptance(void)
       }
     }
     if (!subFail) {
-      nativeOk = 1;
       lastErrorCode = ERROR_NONE;
       testProg_t tpRcl; tpInit(&tpRcl);
       int sRcl = tpStepParam(&tpRcl, ITM_RCL, (uint8_t[]){7}, 1);
@@ -16794,7 +16904,6 @@ static int test_param_series_c_acceptance(void)
       }
     }
     if (!subFail) {
-      forthOk = 1;
       lastErrorCode = ERROR_NONE;
       testProg_t tpRcl2; tpInit(&tpRcl2);
       int sRcl2 = tpStepParam(&tpRcl2, ITM_RCL, (uint8_t[]){7}, 1);
@@ -16815,13 +16924,6 @@ static int test_param_series_c_acceptance(void)
             subFail = 1;
           }
         }
-      }
-    }
-
-    if (!subFail) {
-      if (!nativeOk || !forthOk) {
-        printf("    [4] FAIL: indirect parity\n");
-        subFail = 1;
       }
     }
 
@@ -17511,6 +17613,7 @@ static int test_check_source_line(void)
     uint16_t savedFdictLatest = fdict.latest;
     uint16_t savedGdictHere = gdict.here;
     uint16_t savedGdictCount = gdict.count;
+    uint16_t savedGdictLatest = gdict.latest;
     uint8_t savedRsp = forthTestGetRsp();
     forthPushInt32(123);
 
@@ -17548,6 +17651,10 @@ static int test_check_source_line(void)
     }
     if (gdict.count != savedGdictCount) {
       printf("    [3] FAIL: gdict.count changed %u->%u\n", savedGdictCount, gdict.count);
+      subFail = 1;
+    }
+    if (gdict.latest != savedGdictLatest) {
+      printf("    [3] FAIL: gdict.latest changed %u->%u\n", savedGdictLatest, gdict.latest);
       subFail = 1;
     }
     if (forthTestGetRsp() != savedRsp) {
@@ -18264,6 +18371,30 @@ static int test_capture_suspend(void)
     }
 
     /* ---- Subcase 2: Cancel round-trip ---- */
+    /* KNOWN PRE-EXISTING BUG, test-audit finding 2026-07-20 (see
+     * DESIGN-HISTORY.md, same date) — NOT fixed here, deliberately: the
+     * expected text below ("5 DUP") is what forthCaptureResume() ACTUALLY
+     * produces today, not what the F6-2 packet specifies ("text intact").
+     * Root cause: forthCaptureSuspend() snapshots stepOffset assuming the
+     * on-disk step already mirrors forthCapBuf() — true after ordinary
+     * keystrokes (which recommit incrementally), but NOT true here: the
+     * immediately-preceding subcase 1's F6-4 TAM-commit-fold wrote " STO
+     * 05 " into forthCapBuf() via forthCapInsertName() without recommitting
+     * the on-disk step, so this suspend snapshots a stale byte offset.
+     * On resume (forthCaptureResume(), manage.c ~1093-1144), the fold-drift
+     * text is silently lost — user-visible data loss on real hardware: type
+     * text, do one TAM operation (STO/RCL/GTO/...), then immediately do a
+     * second one and cancel it — the first operation's folded text vanishes.
+     * A correct fix belongs in forthCaptureSuspend() (resync the on-disk
+     * step from the buffer before snapshotting) and requires tracing
+     * _insertInProgram's relocation/rescan/cursor-advance behavior first
+     * (programming/manage.c:697) — deferred to the forth-core code audit
+     * rather than improvised here, matching the F6-6 precedent for the two
+     * other pre-existing save/restore-vs-allocator bugs found the same way.
+     * Asserting "text intact" here instead would just redden this gate
+     * without a fix; asserting the bug is what proves this subcase still
+     * says what it means, since a regression elsewhere would still be
+     * caught by the state/step-count/tam.mode checks below. */
     { int sc2 = 0;
       if (!fail) {
         uint16_t stepsBefore = getNumberOfSteps();
@@ -18276,7 +18407,7 @@ static int test_capture_suspend(void)
           sc2 = 1;
         }
         else if (strcmp(forthTestCapText(), "5 DUP") != 0) {
-          printf("    [2] FAIL: cap text = '%s', expected '5 DUP'\n", forthTestCapText());
+          printf("    [2] FAIL: cap text = '%s', expected '5 DUP' (see KNOWN PRE-EXISTING BUG comment above)\n", forthTestCapText());
           sc2 = 1;
         }
         else if (getNumberOfSteps() != stepsBefore) {
@@ -18289,7 +18420,7 @@ static int test_capture_suspend(void)
           sc2 = 1;
         }
       }
-      if (!sc2) printf("    [2] PASS: TAM cancel resumes with no inserted step\n");
+      if (!sc2) printf("    [2] PASS: TAM cancel resumes with no inserted step (text-loss bug pinned, not fixed)\n");
       lastErrorCode = ERROR_NONE;
       fail |= sc2;
     }
@@ -18661,8 +18792,9 @@ static int test_capture_menus(void)
         }
         else {
           fnKeyExit(NOPARAM);
-          if (currentMenu() == -MNU_FORTH) {
-            printf("    [3] FAIL: picker still on top after EXIT\n");
+          if (currentMenu() != -MNU_ALPHA) {
+            printf("    [3] FAIL: currentMenu = %d after EXIT, expected -MNU_ALPHA (%d)\n",
+                   currentMenu(), -MNU_ALPHA);
             sc3 = 1;
           }
           else if (forthTestCapState() != FCAP_OPEN) {
@@ -19328,12 +19460,26 @@ static int test_word_catalog(void)
       }
       else if (dynamicSoftmenu[22].menuContent) {
         const char *content = (const char *)dynamicSoftmenu[22].menuContent;
+        bool_t foundPW = false, foundWI = false, foundGVIS = false;
         for (int16_t i = 0; i < dynamicSoftmenu[22].numItems; i++) {
           if (compareString(content, "WINTERACTIVELON", CMP_BINARY) == 0) {
             printf("    [4] FAIL: truncated 'WINTERACTIVELON' entry present\n");
             sc4 = 1;
           }
+          if (compareString(content, "PW", CMP_BINARY) == 0) foundPW = true;
+          else if (compareString(content, "WI", CMP_BINARY) == 0) foundWI = true;
+          else if (compareString(content, "GVIS", CMP_BINARY) == 0) foundGVIS = true;
           content += strlen(content) + 1;
+        }
+        /* The skip must leave the three pre-existing entries untouched,
+         * not just the count coincidentally still 3 — a bug that skips
+         * correctly but corrupts a neighboring entry into some other
+         * (non-truncated) string would pass the count+truncation checks
+         * alone. */
+        if (!sc4 && (!foundPW || !foundWI || !foundGVIS)) {
+          printf("    [4] FAIL: existing entries disturbed (PW=%d WI=%d GVIS=%d)\n",
+                 foundPW, foundWI, foundGVIS);
+          sc4 = 1;
         }
       }
       if (dynamicSoftmenu[22].menuContent) {
