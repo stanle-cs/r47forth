@@ -1955,6 +1955,54 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
           qsort(tmpString, nNames, 15, sortMenu);
         }
 
+        /* F6-5 section (b): interactive-scope dictionary words. */
+        { uint16_t bi = 0;
+          int16_t nB = 0;
+          char slot[15];
+          while (nNames < forthPickerMaxNames && forthDictBrowseName(bi, FORTH_OWNER_INTERACTIVE, slot)) {
+            int16_t dup = 0;
+            for (int16_t d = 0; d < nB; d++) {
+              if (compareString(tmpString + 15 * (nNames - nB + d), slot, CMP_BINARY) == 0) {
+                dup = 1;
+                break;
+              }
+            }
+            if (!dup) {
+              xcopy(tmpString + 15 * nNames, slot, stringByteLength(slot));
+              nNames++;
+              nB++;
+            }
+            bi++;
+          }
+          if (nB > 0) {
+            qsort(tmpString + 15 * (nNames - nB), nB, 15, sortMenu);
+          }
+        }
+
+        /* F6-5 section (c): global dictionary words. */
+        { uint16_t ci = 0;
+          int16_t nC = 0;
+          char slot[15];
+          while (nNames < forthPickerMaxNames && forthGDictBrowseName(ci, slot)) {
+            int16_t dup = 0;
+            for (int16_t d = 0; d < nC; d++) {
+              if (compareString(tmpString + 15 * (nNames - nC + d), slot, CMP_BINARY) == 0) {
+                dup = 1;
+                break;
+              }
+            }
+            if (!dup) {
+              xcopy(tmpString + 15 * nNames, slot, stringByteLength(slot));
+              nNames++;
+              nC++;
+            }
+            ci++;
+          }
+          if (nC > 0) {
+            qsort(tmpString + 15 * (nNames - nC), nC, 15, sortMenu);
+          }
+        }
+
         numberOfBytes = 1;
         for (i = 0; i < nNames; i++) {
           numberOfBytes += stringByteLength(tmpString + 15 * i) + 1;

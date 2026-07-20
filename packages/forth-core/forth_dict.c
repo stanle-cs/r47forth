@@ -524,6 +524,70 @@ bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags)
   return false;
 }
 
+/* F6-5 browse surface: newest-first walk, listable entries only. */
+bool_t forthDictBrowseName(uint16_t n, uint16_t owner, char *out)
+{
+  if (fdict.base) {
+    uint16_t off = fdict.latest;
+    uint16_t count = 0;
+    while (off != FORTH_NULL) {
+      forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+      if (!(hdr->flags & FF_SMUDGE) && hdr->owner == owner &&
+          hdr->nameLen >= 1 && hdr->nameLen <= 14) {
+        if (count == n) {
+          memcpy(out, fdict.base + off + 6, hdr->nameLen);
+          out[hdr->nameLen] = 0;
+          return true;
+        }
+        count++;
+      }
+      off = hdr->link;
+    }
+  }
+  return false;
+}
+
+bool_t forthGDictBrowseName(uint16_t n, char *out)
+{
+  if (gdict.base) {
+    uint16_t off = gdict.latest;
+    uint16_t count = 0;
+    while (off != FORTH_NULL) {
+      forthHeader_t *hdr = (forthHeader_t *)(gdict.base + off);
+      if (!(hdr->flags & FF_SMUDGE) &&
+          hdr->nameLen >= 1 && hdr->nameLen <= 14) {
+        if (count == n) {
+          memcpy(out, gdict.base + off + 6, hdr->nameLen);
+          out[hdr->nameLen] = 0;
+          return true;
+        }
+        count++;
+      }
+      off = hdr->link;
+    }
+  }
+  return false;
+}
+
+#if defined(FORTH_DEBUG_SELFTEST)
+void forthTestSmudgeSet(const char *name, bool_t on)
+{
+  size_t queryLen = strlen(name);
+  if (fdict.base) {
+    uint16_t off = fdict.latest;
+    while (off != FORTH_NULL) {
+      forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
+      if (hdr->nameLen > 0 && queryLen == hdr->nameLen &&
+          memcmp(fdict.base + off + 6, name, (size_t)hdr->nameLen) == 0) {
+        if (on) { hdr->flags |= FF_SMUDGE; } else { hdr->flags &= (uint8_t)~FF_SMUDGE; }
+        return;
+      }
+      off = hdr->link;
+    }
+  }
+}
+#endif
+
 bool forthFindColon(const char *name, uint16_t *ref)
 {
   return forthFindColonRef(name, ref, NULL);

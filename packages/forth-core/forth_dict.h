@@ -151,6 +151,22 @@ bool forthFindColon(const char *name, uint16_t *ref);
 /* Same as forthFindColon but also reports hdr->flags. */
 bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags);
 
+/* F6-5 browse surface: copy the name of the n-th listable entry
+ * (newest-first) into out (>= 15 bytes, NUL-terminated).  Listable =
+ * not FF_SMUDGE, nameLen 1..14, and (fdict variant) owner matches.
+ * Returns false when fewer than n+1 listable entries exist.  This is
+ * a BROWSE surface: it reads owners directly and never enters a
+ * program-step scope (F3-3A: scope entry is for execution only). */
+bool_t forthDictBrowseName(uint16_t n, uint16_t owner, char *out);
+bool_t forthGDictBrowseName(uint16_t n, char *out);
+
+#if defined(FORTH_DEBUG_SELFTEST)
+/* F6-5 test hook: newest-first fdict walk, FIRST name match regardless
+ * of owner or smudge state; set/clear FF_SMUDGE on that header.  No
+ * product surface. */
+void forthTestSmudgeSet(const char *name, bool_t on);
+#endif
+
 /* Forward (Forth-source) C47 item lookup: CAT_FNCT + PTP_NONE only (§4.1 step 4). */
 bool forthFindItem(const char *name, uint16_t *itemId);
 

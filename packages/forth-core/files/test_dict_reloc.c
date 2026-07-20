@@ -10890,6 +10890,8 @@ static int test_capture_suspend(void);
 static int test_capture_menus(void);
 /* F6-4: parameter entry emits canonical text */
 static int test_capture_param_text(void);
+/* F6-5: the dictionary-backed word catalog */
+static int test_word_catalog(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -12775,6 +12777,15 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_capture_param_text...\n");
   fail |= test_capture_param_text();
+  forthDictClear();
+  forthGDictClear();
+
+  /* F6-5: the dictionary-backed word catalog */
+  printf("\nFORTH F6-5 TESTS (dictionary-backed word catalog)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_word_catalog...\n");
+  fail |= test_word_catalog();
   forthDictClear();
   forthGDictClear();
 
@@ -19091,6 +19102,292 @@ static int test_capture_param_text(void)
   programRunStop = savedProgRunStop;
   dynamicMenuItem = savedDynamicMenu;
   memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
+
+/* test_word_catalog — F6-5: MNU_FORTH becomes the union catalog of the
+ * edited program's words (text scan), interactive-scope dictionary
+ * words, and global dictionary words. */
+static int test_word_catalog(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+  uint8_t *savedCurrentStep = currentStep;
+  uint16_t savedProgNum = currentProgramNumber;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+
+  dynamicMenuItem = -1;
+
+  testProg_t p;
+  tpInit(&p);
+  tpLbl(&p, "F65");
+  tpMarker(&p);
+  int sDef = tpSrc(&p, ": PW 1 ;");
+  int sClose = tpMarker(&p);
+  if (sDef < 0 || sClose < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    programRunStop = savedRS;
+    dynamicMenuItem = savedDynamicMenu;
+    return 1;
+  }
+
+  /* Drive sDef once (F3-3 drive discipline) so fdict holds a
+   * PROGRAM-owned PW entry — section (b) must not list it. */
+  lastErrorCode = ERROR_NONE;
+  programRunStop = PGM_RUNNING;
+  forthRunGenBump();
+  currentStep = tpStepAddr(&p, sDef);
+  executeOneStep(currentStep);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FIXTURE FAIL: PW def step error %d\n", lastErrorCode);
+    fail = 1;
+  }
+  programRunStop = savedRS;
+
+  /* Interactive WI. */
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": WI 7 ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    FIXTURE FAIL: WI def error %d\n", lastErrorCode);
+      fail = 1;
+    }
+  }
+
+  /* Global GVIS (F3-3 subcase-5 fixture shape, verbatim: FTOK_ILIT,
+   * int32 9, FTOK_EXIT). */
+  if (!fail) {
+    uint16_t gw = gbegin_word("GVIS", 4);
+    if (gw == FORTH_NULL) {
+      printf("    FIXTURE FAIL: gbegin_word GVIS\n");
+      fail = 1;
+    } else {
+      gemit(T_ILIT);
+      int32_t v = 9;
+      if (!forthGDictEnsure(4)) {
+        printf("    FIXTURE FAIL: forthGDictEnsure for int32\n");
+        fail = 1;
+      } else {
+        memcpy(gdict.base + gdict.here, &v, 4);
+        gdict.here += 4;
+        gemit(T_EXIT);
+        gdict.here = (uint16_t)TO_BLOCKS(gdict.here) * BYTES_PER_BLOCK;
+      }
+    }
+  }
+
+  if (!fail) {
+    currentProgramNumber = 1;
+    currentStep = tpStepAddr(&p, sClose);
+  }
+
+  if (!fail) {
+    /* ---- Subcase 1: Union content and section order ---- */
+    { int sc1 = 0;
+      testInitVariableSoftmenu(22);
+      if (dynamicSoftmenu[22].numItems != 3) {
+        printf("    [1] FAIL: numItems = %d, expected 3\n", dynamicSoftmenu[22].numItems);
+        sc1 = 1;
+      }
+      else if (dynamicSoftmenu[22].menuContent) {
+        const char *item0 = (const char *)dynamicSoftmenu[22].menuContent;
+        const char *item1 = item0 + strlen(item0) + 1;
+        const char *item2 = item1 + strlen(item1) + 1;
+        if (compareString(item0, "PW", CMP_BINARY) != 0) {
+          printf("    [1] FAIL: item 0 = '%s', expected 'PW'\n", item0);
+          sc1 = 1;
+        }
+        else if (compareString(item1, "WI", CMP_BINARY) != 0) {
+          printf("    [1] FAIL: item 1 = '%s', expected 'WI'\n", item1);
+          sc1 = 1;
+        }
+        else if (compareString(item2, "GVIS", CMP_BINARY) != 0) {
+          printf("    [1] FAIL: item 2 = '%s', expected 'GVIS'\n", item2);
+          sc1 = 1;
+        }
+      } else {
+        printf("    [1] FAIL: menuContent is NULL\n");
+        sc1 = 1;
+      }
+      if (dynamicSoftmenu[22].menuContent) {
+        free(dynamicSoftmenu[22].menuContent);
+        dynamicSoftmenu[22].menuContent = NULL;
+        dynamicSoftmenu[22].numItems = 0;
+      }
+      if (!sc1) printf("    [1] PASS: catalog lists program, interactive, and global sections\n");
+      fail |= sc1;
+    }
+
+    /* ---- Subcase 2: Program-owned dict entries stay out of section (b) ---- */
+    { int sc2 = 0;
+      testInitVariableSoftmenu(22);
+      if (dynamicSoftmenu[22].numItems != 3) {
+        printf("    [2] FAIL: numItems = %d, expected 3\n", dynamicSoftmenu[22].numItems);
+        sc2 = 1;
+      }
+      else if (dynamicSoftmenu[22].menuContent) {
+        const char *content = (const char *)dynamicSoftmenu[22].menuContent;
+        int pwCount = 0;
+        for (int16_t i = 0; i < dynamicSoftmenu[22].numItems; i++) {
+          if (compareString(content, "PW", CMP_BINARY) == 0) pwCount++;
+          content += strlen(content) + 1;
+        }
+        if (pwCount != 1) {
+          printf("    [2] FAIL: 'PW' appears %d times, expected 1\n", pwCount);
+          sc2 = 1;
+        }
+      } else {
+        printf("    [2] FAIL: menuContent is NULL\n");
+        sc2 = 1;
+      }
+      if (dynamicSoftmenu[22].menuContent) {
+        free(dynamicSoftmenu[22].menuContent);
+        dynamicSoftmenu[22].menuContent = NULL;
+        dynamicSoftmenu[22].numItems = 0;
+      }
+      if (!sc2) printf("    [2] PASS: program-owned dictionary entries are not double-listed\n");
+      fail |= sc2;
+    }
+
+    /* ---- Subcase 3: Smudged entries absent ---- */
+    { int sc3 = 0;
+      forthTestSmudgeSet("WI", true);
+      testInitVariableSoftmenu(22);
+      if (dynamicSoftmenu[22].numItems != 2) {
+        printf("    [3] FAIL: numItems = %d, expected 2 (WI smudged)\n", dynamicSoftmenu[22].numItems);
+        sc3 = 1;
+      }
+      else if (dynamicSoftmenu[22].menuContent) {
+        const char *content = (const char *)dynamicSoftmenu[22].menuContent;
+        for (int16_t i = 0; i < dynamicSoftmenu[22].numItems; i++) {
+          if (compareString(content, "WI", CMP_BINARY) == 0) {
+            printf("    [3] FAIL: smudged 'WI' still listed\n");
+            sc3 = 1;
+          }
+          content += strlen(content) + 1;
+        }
+      }
+      if (dynamicSoftmenu[22].menuContent) {
+        free(dynamicSoftmenu[22].menuContent);
+        dynamicSoftmenu[22].menuContent = NULL;
+        dynamicSoftmenu[22].numItems = 0;
+      }
+
+      forthTestSmudgeSet("WI", false);
+      testInitVariableSoftmenu(22);
+      if (dynamicSoftmenu[22].numItems != 3) {
+        printf("    [3] FAIL: numItems = %d, expected 3 (WI restored)\n", dynamicSoftmenu[22].numItems);
+        sc3 = 1;
+      }
+      else if (dynamicSoftmenu[22].menuContent) {
+        const char *content = (const char *)dynamicSoftmenu[22].menuContent;
+        bool_t foundWI = false;
+        for (int16_t i = 0; i < dynamicSoftmenu[22].numItems; i++) {
+          if (compareString(content, "WI", CMP_BINARY) == 0) foundWI = true;
+          content += strlen(content) + 1;
+        }
+        if (!foundWI) {
+          printf("    [3] FAIL: 'WI' missing after un-smudge\n");
+          sc3 = 1;
+        }
+      }
+      if (dynamicSoftmenu[22].menuContent) {
+        free(dynamicSoftmenu[22].menuContent);
+        dynamicSoftmenu[22].menuContent = NULL;
+        dynamicSoftmenu[22].numItems = 0;
+      }
+      if (!sc3) printf("    [3] PASS: smudged entries never list\n");
+      fail |= sc3;
+    }
+
+    /* ---- Subcase 4: Long names skipped, not truncated ---- */
+    { int sc4 = 0;
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret(": WINTERACTIVELONG 1 ;");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [4] FAIL: WINTERACTIVELONG def error %d\n", lastErrorCode);
+        sc4 = 1;
+      }
+      testInitVariableSoftmenu(22);
+      if (dynamicSoftmenu[22].numItems != 3) {
+        printf("    [4] FAIL: numItems = %d, expected 3 (unchanged)\n", dynamicSoftmenu[22].numItems);
+        sc4 = 1;
+      }
+      else if (dynamicSoftmenu[22].menuContent) {
+        const char *content = (const char *)dynamicSoftmenu[22].menuContent;
+        for (int16_t i = 0; i < dynamicSoftmenu[22].numItems; i++) {
+          if (compareString(content, "WINTERACTIVELON", CMP_BINARY) == 0) {
+            printf("    [4] FAIL: truncated 'WINTERACTIVELON' entry present\n");
+            sc4 = 1;
+          }
+          content += strlen(content) + 1;
+        }
+      }
+      if (dynamicSoftmenu[22].menuContent) {
+        free(dynamicSoftmenu[22].menuContent);
+        dynamicSoftmenu[22].menuContent = NULL;
+        dynamicSoftmenu[22].numItems = 0;
+      }
+      if (!sc4) printf("    [4] PASS: over-long names are skipped, not truncated\n");
+      fail |= sc4;
+    }
+
+    /* ---- Subcase 5: Cross-section duplicate shows per section ---- */
+    { int sc5 = 0;
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret(": PW 2 ;");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [5] FAIL: interactive PW def error %d\n", lastErrorCode);
+        sc5 = 1;
+      }
+      testInitVariableSoftmenu(22);
+      if (dynamicSoftmenu[22].numItems != 4) {
+        printf("    [5] FAIL: numItems = %d, expected 4\n", dynamicSoftmenu[22].numItems);
+        sc5 = 1;
+      }
+      else if (dynamicSoftmenu[22].menuContent) {
+        const char *content = (const char *)dynamicSoftmenu[22].menuContent;
+        int pwCount = 0;
+        bool_t firstIsPW = compareString(content, "PW", CMP_BINARY) == 0;
+        for (int16_t i = 0; i < dynamicSoftmenu[22].numItems; i++) {
+          if (compareString(content, "PW", CMP_BINARY) == 0) pwCount++;
+          content += strlen(content) + 1;
+        }
+        if (!firstIsPW) {
+          printf("    [5] FAIL: section-a position no longer 'PW'\n");
+          sc5 = 1;
+        }
+        else if (pwCount != 2) {
+          printf("    [5] FAIL: 'PW' appears %d times, expected 2 (section a + section b)\n", pwCount);
+          sc5 = 1;
+        }
+      }
+      if (dynamicSoftmenu[22].menuContent) {
+        free(dynamicSoftmenu[22].menuContent);
+        dynamicSoftmenu[22].menuContent = NULL;
+        dynamicSoftmenu[22].numItems = 0;
+      }
+      if (!sc5) printf("    [5] PASS: cross-section duplicates list once per provenance\n");
+      fail |= sc5;
+    }
+  }
+
+  /* Cleanup */
+  if (dynamicSoftmenu[22].menuContent) {
+    free(dynamicSoftmenu[22].menuContent);
+    dynamicSoftmenu[22].menuContent = NULL;
+    dynamicSoftmenu[22].numItems = 0;
+  }
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+
+  currentStep = savedCurrentStep;
+  currentProgramNumber = savedProgNum;
+  programRunStop = savedRS;
+  dynamicMenuItem = savedDynamicMenu;
   lastErrorCode = ERROR_NONE;
 
   return fail;

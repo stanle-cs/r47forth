@@ -1,5 +1,5 @@
 diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
-index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..055cca7e87a1d9f25160bcf4549e8267530d5772 100644
+index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..5343f1dace630fb4bbb9e1cba87d3b73d80260ab 100644
 --- a/src/c47/softmenus.c
 +++ b/src/c47/softmenus.c
 @@ -2,6 +2,7 @@
@@ -40,7 +40,7 @@ index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..055cca7e87a1d9f25160bcf4549e8267
  };
  
  
-@@ -1858,6 +1862,116 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
+@@ -1858,6 +1862,164 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
          break;
        }
  
@@ -137,6 +137,54 @@ index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..055cca7e87a1d9f25160bcf4549e8267
 +          qsort(tmpString, nNames, 15, sortMenu);
 +        }
 +
++        /* F6-5 section (b): interactive-scope dictionary words. */
++        { uint16_t bi = 0;
++          int16_t nB = 0;
++          char slot[15];
++          while (nNames < forthPickerMaxNames && forthDictBrowseName(bi, FORTH_OWNER_INTERACTIVE, slot)) {
++            int16_t dup = 0;
++            for (int16_t d = 0; d < nB; d++) {
++              if (compareString(tmpString + 15 * (nNames - nB + d), slot, CMP_BINARY) == 0) {
++                dup = 1;
++                break;
++              }
++            }
++            if (!dup) {
++              xcopy(tmpString + 15 * nNames, slot, stringByteLength(slot));
++              nNames++;
++              nB++;
++            }
++            bi++;
++          }
++          if (nB > 0) {
++            qsort(tmpString + 15 * (nNames - nB), nB, 15, sortMenu);
++          }
++        }
++
++        /* F6-5 section (c): global dictionary words. */
++        { uint16_t ci = 0;
++          int16_t nC = 0;
++          char slot[15];
++          while (nNames < forthPickerMaxNames && forthGDictBrowseName(ci, slot)) {
++            int16_t dup = 0;
++            for (int16_t d = 0; d < nC; d++) {
++              if (compareString(tmpString + 15 * (nNames - nC + d), slot, CMP_BINARY) == 0) {
++                dup = 1;
++                break;
++              }
++            }
++            if (!dup) {
++              xcopy(tmpString + 15 * nNames, slot, stringByteLength(slot));
++              nNames++;
++              nC++;
++            }
++            ci++;
++          }
++          if (nC > 0) {
++            qsort(tmpString + 15 * (nNames - nC), nC, 15, sortMenu);
++          }
++        }
++
 +        numberOfBytes = 1;
 +        for (i = 0; i < nNames; i++) {
 +          numberOfBytes += stringByteLength(tmpString + 15 * i) + 1;
@@ -157,7 +205,7 @@ index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..055cca7e87a1d9f25160bcf4549e8267
        default: {
          sprintf(errorMessage, "In function initVariableSoftmenu: unexpected variable softmenu %" PRId16 "!", (int16_t)(-dynamicSoftmenu[menu].menuItem));
          displayBugScreen(errorMessage);
-@@ -1865,6 +1979,11 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
+@@ -1865,6 +2027,11 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
      }
    }
  
@@ -169,7 +217,7 @@ index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..055cca7e87a1d9f25160bcf4549e8267
  
  static void showKey2(const char *label0, const char *label1, int16_t x1, int16_t x2, int16_t y1, int16_t y2, videoMode_t videoMode, bool_t topLine, bool_t bottomLine, int8_t showCb, int16_t showValue, const char *showText, bool_t doubleMidLine);
  static uint32_t trimSoftKeyName(uint16_t lim, char *l, int mode, int comp, bool_t withLeadingEmptyRows, bool_t withEndingEmptyRows);
-@@ -3062,7 +3181,7 @@ void showSoftmenuCurrentPart(void) {
+@@ -3062,7 +3229,7 @@ void showSoftmenuCurrentPart(void) {
        #if defined(PC_BUILD)
          //printf("Dynamic menu: m=%i cachedDynamicMenu=%i softmenu[m].menuItem= %i \n",m, cachedDynamicMenu, softmenu[m].menuItem);
        #endif // PC_BUILD
@@ -178,7 +226,7 @@ index 84edcbbd50d14636ba5e813600b3fdc7cb702c6b..055cca7e87a1d9f25160bcf4549e8267
          initVariableSoftmenu(m);
          cachedDynamicMenu = softmenu[m].menuItem;
        }
-@@ -3789,7 +3908,10 @@ void showSoftmenuCurrentPart(void) {
+@@ -3789,7 +3956,10 @@ void showSoftmenuCurrentPart(void) {
              menu(n) == -MNU_ALPHAMATH ||
              menu(n) == -MNU_ALPHAMISC ||
              menu(n) == -MNU_ALPHAINTL ||
