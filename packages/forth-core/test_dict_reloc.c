@@ -18371,30 +18371,13 @@ static int test_capture_suspend(void)
     }
 
     /* ---- Subcase 2: Cancel round-trip ---- */
-    /* KNOWN PRE-EXISTING BUG, test-audit finding 2026-07-20 (see
-     * DESIGN-HISTORY.md, same date) — NOT fixed here, deliberately: the
-     * expected text below ("5 DUP") is what forthCaptureResume() ACTUALLY
-     * produces today, not what the F6-2 packet specifies ("text intact").
-     * Root cause: forthCaptureSuspend() snapshots stepOffset assuming the
-     * on-disk step already mirrors forthCapBuf() — true after ordinary
-     * keystrokes (which recommit incrementally), but NOT true here: the
-     * immediately-preceding subcase 1's F6-4 TAM-commit-fold wrote " STO
-     * 05 " into forthCapBuf() via forthCapInsertName() without recommitting
-     * the on-disk step, so this suspend snapshots a stale byte offset.
-     * On resume (forthCaptureResume(), manage.c ~1093-1144), the fold-drift
-     * text is silently lost — user-visible data loss on real hardware: type
-     * text, do one TAM operation (STO/RCL/GTO/...), then immediately do a
-     * second one and cancel it — the first operation's folded text vanishes.
-     * A correct fix belongs in forthCaptureSuspend() (resync the on-disk
-     * step from the buffer before snapshotting) and requires tracing
-     * _insertInProgram's relocation/rescan/cursor-advance behavior first
-     * (programming/manage.c:697) — deferred to the forth-core code audit
-     * rather than improvised here, matching the F6-6 precedent for the two
-     * other pre-existing save/restore-vs-allocator bugs found the same way.
-     * Asserting "text intact" here instead would just redden this gate
-     * without a fix; asserting the bug is what proves this subcase still
-     * says what it means, since a regression elsewhere would still be
-     * caught by the state/step-count/tam.mode checks below. */
+    /* Text-loss bug fixed 2026-07-20 (code-audit finding, see
+     * DESIGN-HISTORY.md same date): expected text is now "5 DUP STO 05 "
+     * — subcase 1's F6-4 fold, preserved — matching the F6-2 packet's
+     * "text intact" requirement. forthCaptureSuspend() (manage.c) now
+     * recommits the buffer to the on-disk step before snapshotting its
+     * offset, so a suspend/resume with no intervening keystroke can no
+     * longer read a stale pre-fold snapshot. */
     { int sc2 = 0;
       if (!fail) {
         uint16_t stepsBefore = getNumberOfSteps();
@@ -18406,8 +18389,8 @@ static int test_capture_suspend(void)
           printf("    [2] FAIL: capture not open after cancel (state=%d)\n", forthTestCapState());
           sc2 = 1;
         }
-        else if (strcmp(forthTestCapText(), "5 DUP") != 0) {
-          printf("    [2] FAIL: cap text = '%s', expected '5 DUP' (see KNOWN PRE-EXISTING BUG comment above)\n", forthTestCapText());
+        else if (strcmp(forthTestCapText(), "5 DUP STO 05 ") != 0) {
+          printf("    [2] FAIL: cap text = '%s', expected '5 DUP STO 05 '\n", forthTestCapText());
           sc2 = 1;
         }
         else if (getNumberOfSteps() != stepsBefore) {
@@ -18420,7 +18403,7 @@ static int test_capture_suspend(void)
           sc2 = 1;
         }
       }
-      if (!sc2) printf("    [2] PASS: TAM cancel resumes with no inserted step (text-loss bug pinned, not fixed)\n");
+      if (!sc2) printf("    [2] PASS: TAM cancel resumes with text intact, no inserted step\n");
       lastErrorCode = ERROR_NONE;
       fail |= sc2;
     }

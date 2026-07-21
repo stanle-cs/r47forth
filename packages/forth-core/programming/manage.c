@@ -1071,6 +1071,34 @@ void pemCloseAlphaInput(void) {
 
 void forthCaptureSuspend(void) {
   if (!forthCapIsOpen()) { return; }
+  /* Recommit the buffer to the on-disk step before snapshotting its
+   * offset below — mirrors pemAlpha's own glyph-editing recommit tail
+   * (this file, the block ending in the `_insertInProgram` call reached
+   * from the CAT_FNCT/PTP_NONE item arm), which is what normally keeps
+   * the on-disk step in sync with forthCapBuf() after every keystroke.
+   * That invariant does NOT hold on entry here in one real case: a
+   * forthCaptureResume() that just folded a suspended TAM commit into
+   * text (F6-4) writes that text into forthCapBuf() via
+   * forthCapInsertName() without recommitting the on-disk step, so a
+   * suspend entered right after — with no intervening keystroke, e.g.
+   * a second TAM operation cancelled immediately — would otherwise
+   * snapshot a stale pre-fold offset and later resume would silently
+   * drop the folded text (test-audit finding 2026-07-20, DESIGN-HISTORY.md).
+   * currentStep is guaranteed ON the capture step here (see the comment
+   * below), and a capture step's opcode is always the 2-byte ITM_FORTH
+   * form, so this can skip the generic aimFunc branching the pemAlpha
+   * tail needs. */
+  {
+    deleteStepsFromTo(currentStep, findNextStep(currentStep));
+    tmpString[0] = (ITM_FORTH >> 8) | 0x80;
+    tmpString[1] =  ITM_FORTH       & 0xff;
+    tmpString[2] = (char)STRING_LABEL_VARIABLE;
+    tmpString[3] = stringByteLength((char *)forthCapBuf());
+    xcopy(tmpString + 4, forthCapBuf(), stringByteLength((char *)forthCapBuf()));
+    _insertInProgram((uint8_t *)tmpString, stringByteLength((char *)forthCapBuf()) + 4);
+    --currentLocalStepNumber;
+    currentStep = findPreviousStep(currentStep);
+  }
   uint16_t cursor    = T_cursorPos;
   uint16_t localStep = currentLocalStepNumber;
   uint32_t stepOff   = (uint32_t)(currentStep - beginOfProgramMemory);

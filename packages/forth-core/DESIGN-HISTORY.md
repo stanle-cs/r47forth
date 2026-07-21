@@ -1114,7 +1114,7 @@ restore"); reverted, gate re-run green. `make dmcp5r47` flash
 (data+bss) unchanged at 7228; fdict/gdict layout unchanged (no new
 fields, no growth-behavior change).
 
-## 2026-07-20 — Test-suite audit: a third pre-existing production bug, real user-facing data loss in TAM cancel
+## 2026-07-20 — Test-suite audit: a third pre-existing production bug, real user-facing data loss in TAM cancel (fixed)
 
 Non-normative. Owner-directed audit of the entire forth-core test suite
 (after the F6 series landed): every `static int test_*` function in
@@ -1187,25 +1187,50 @@ from the line. Traced and confirmed by direct code reading (both
 `forthCaptureSuspend`/`forthCaptureResume` and the F6-2/F6-4 packet
 history), not left as a review agent's unverified claim.
 
-Not fixed here. A correct fix belongs in `forthCaptureSuspend()`
-(resync the on-disk step from `forthCapBuf()` before snapshotting the
-offset, so the invariant ordinary keystrokes maintain holds
-unconditionally) but requires first tracing `_insertInProgram`'s
-relocation/cursor-advance/rescan behavior (`manage.c:697-755` — it can
-trigger `resizeProgramMemory`, shifts the cursor forward past the
-inserted bytes, and the existing recommit call site steps back via
-`findPreviousStep` afterward to compensate) closely enough to reuse or
-mirror it safely. This is exactly the kind of deep, stateful pointer
-choreography the F6-6 entry above already flagged this general subsystem
-for twice; improvising a third fix here without that trace risks a worse
-regression than the one being fixed. `test_capture_suspend` subcase 2 is
-left asserting the current (buggy) value, with an in-code comment citing
-this entry, rather than asserting the correct value and reddening the
-gate without an accompanying fix — deliberately not the same resolution
-as the F6-6 findings (which routed the *test* around the bug); there is
-no way to route this test around it, since preserving text across a
-cancel is exactly what the subcase exists to verify. Flagged here as the
-highest-priority item for the forth-core code audit: unlike the two F6-6
-findings (self-inflicted by test fixtures never-before exercising a
-capture-open save/restore, arguably low real-world likelihood), this one
-is reachable from ordinary keyboard use with no test harness involved.
+Originally left unfixed at test-audit time, deliberately: a correct fix
+requires resyncing the on-disk step from `forthCapBuf()` before
+snapshotting the offset in `forthCaptureSuspend()`, so the invariant
+ordinary keystrokes maintain holds unconditionally — but that first
+requires tracing `_insertInProgram`'s relocation/cursor-advance/rescan
+behavior (`manage.c:697-755` — it can trigger `resizeProgramMemory`,
+shifts the cursor forward past the inserted bytes, and the existing
+recommit call site steps back via `findPreviousStep` afterward to
+compensate) closely enough to reuse or mirror it safely. `test_capture_suspend`
+subcase 2 was left asserting the then-current (buggy) value, with an
+in-code comment citing this entry, rather than asserting the correct
+value and reddening the gate without an accompanying fix.
+
+Fixed as the opening item of the forth-core code audit that followed
+this test-suite audit, once the required `_insertInProgram` trace was
+done. `forthCaptureSuspend()` (`programming/manage.c`, now starting
+around line 1072) gained a recommit block at its top, mirroring
+`pemAlpha`'s own glyph-editing recommit tail (`manage.c:1011-1039`):
+`deleteStepsFromTo(currentStep, findNextStep(currentStep))` removes the
+stale on-disk capture step, a fresh `ITM_FORTH` step is built from the
+current `forthCapBuf()` contents and reinserted via `_insertInProgram`,
+and `--currentLocalStepNumber; currentStep = findPreviousStep(currentStep);`
+compensates for `_insertInProgram`'s internal cursor advance to land
+back on the refreshed step — the same idiom `pemAlpha` already uses,
+simplified because a capture step's opcode is always the 2-byte
+`ITM_FORTH` form, so the generic `aimFunc` branching `pemAlpha` needs
+can be skipped. This recommit runs unconditionally at the top of
+`forthCaptureSuspend()`, before the existing cursor/localStep/stepOffset
+snapshot, so the on-disk step is guaranteed current regardless of
+whether the caller path was an ordinary keystroke (already fine) or an
+F6-4 fold-to-text with no intervening keystroke (previously stale).
+
+`test_capture_suspend` subcase 2 now asserts the correct
+`"5 DUP STO 05 "` (matching subcase 1's post-fold text) instead of the
+buggy `"5 DUP"`. Mutation-tested: temporarily wrapping the new recommit
+block in a `/* MUTATION: ... */` comment (disabling it) reran the gate
+RED, specifically failing `test_capture_suspend` subcase 2 with the
+expected "text lost" symptom; reverting the mutation reran the gate
+GREEN. Unlike the two F6-6 findings (self-inflicted by test fixtures
+never-before exercising a capture-open save/restore, arguably low
+real-world likelihood), this bug was reachable from ordinary keyboard
+use with no test harness involved — type text, do one TAM operation
+(STO/RCL/GTO/XEQ/...), then immediately start a second one and cancel
+it, and the first operation's folded text would vanish from the line.
+That is now fixed. `make dmcp5r47` flash 1093608 → 1093744 (+136 B,
+text only, measured via `size` on `R47.elf` and confirmed by the
+identical delta on `R47_flash.bin`); RAM (data+bss) unchanged at 7228.
