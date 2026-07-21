@@ -441,7 +441,7 @@ int16_t stringPrevNumberGlyph(const char *str, int16_t pos) {
   do {
     pos2 = stringPrevGlyph(str, pos2);
 
-    if(('0' <= str[pos2] && str[pos2] <= '9') || str[pos] == '.' || str[pos] == ',') {
+    if(('0' <= str[pos2] && str[pos2] <= '9') || str[pos2] == '.' || str[pos2] == ',') {
       return pos2;
     }
   } while(pos2 != 0);
