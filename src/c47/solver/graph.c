@@ -2604,7 +2604,7 @@ static inline void powCplxNat(const cplx_t *base, const uint8_t *exp, cplx_t *re
 
 
   void fnComplexSolver(void) {
-    printStatus(1, errorMessages[COMPLEX_SOLVER], force);
+    printStatus(1, errorMessageOf(COMPLEX_SOLVER), force);
     saveForUndo();
                                         #if defined(VERBOSE_SOLVER00) || defined(VERBOSE_SOLVER0)
                                           real_t loXd, hiXd;

@@ -1,4 +1,4 @@
-.PHONY: all clean sim test test_asan dmcp dmcpr47 dmcp5 dmcp5r47 docs testPgms both_asan dist_windows dist_macos dist_linux dist_dmcp dist_dmcpr47 dist_dmcp5 dist_dmcp5r47 repeattest simc47 simr47 t47
+.PHONY: all clean sim test test_asan dmcp dmcpr47 dmcp5 dmcp5r47 docs testPgms both_asan dist_windows dist_macos dist_linux dist_dmcp dist_dmcpr47 dist_dmcp5 dist_dmcp5r47 repeattest simc47 simr47 t47 benchbin bench
 
 all: sim
 both: sim simr47
@@ -46,6 +46,19 @@ build.sim:
 
 build.sim.t47:
 	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Dc_args="-DT47"
+
+# Optimized headless build for the benchmark suite: mirrors the DMCP hardware
+# flags (-Os, LTO) as closely as a native build can, so that relative timings
+# track the calculator rather than an unoptimized debug build.
+build.sim.t47.bench:
+	meson setup build.sim.t47.bench --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Db_lto=true -Dc_args="-DT47 -Os"
+
+benchbin: build.sim.t47.bench
+	cd build.sim.t47.bench && ninja sim
+	cp build.sim.t47.bench/src/c47-gtk/c47$(EXE) ./t47bench$(EXE)
+
+bench: benchbin
+	python3 tools/bench/benchreport.py
 
 both_asan: clean
 ifeq ($(OS),Windows_NT)

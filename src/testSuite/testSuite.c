@@ -46,6 +46,9 @@ void covSolveRoot(uint16_t which);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
+void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter);
+void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter);
+void covIterationTi(uint16_t which);
 void covDerivPgm(uint16_t order);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
@@ -215,6 +218,9 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
+  {"fnLoadPgmLongLabelCov",  covLoadPgmLongLabel, 1 },
+  {"fnLoadStateLongLabelCov", covLoadStateLongLabel, 1 },
+  {"fnIterationTiCov",       covIterationTi, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
@@ -899,6 +905,24 @@ static void covWriteAndLoadPgm(const uint8_t *pgm, size_t n) {
   fnLoadProgram(NOPARAM);
 }
 
+void covIterationTi(uint16_t which) {
+  // Run one iteration op on the counter in R00 and leave 1 in X when it
+  // reports TI_TRUE (the decision a running program uses to skip the next
+  // step), else 0. The counter mutation itself is asserted through R00.
+  switch(which) {
+    case 0: fnIsz(0); break;
+    case 1: fnDsz(0); break;
+    case 2: fnIsg(0); break;
+    case 3: fnIse(0); break;
+    case 4: fnDse(0); break;
+    case 5: fnDsl(0); break;
+    default: break;
+  }
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(temporaryInformation == TI_TRUE ? 1 : 0, REGISTER_REAL34_DATA(REGISTER_X));
+  temporaryInformation = TI_NO_INFO;
+}
+
 void covLoadPgm(uint16_t unusedButMandatoryParameter) {
   // Build and import two labelled RPN programs: S = X^2 - 4 (root at X=2, derivative 2X) for the solver / differentiator / integrator / real summation,
   // and T = X^2 (which returns a long integer for a long-integer counter) for the indexed summation. Both reach the execProgram branches the formula corpus cannot.
@@ -917,6 +941,152 @@ void covLoadPgm(uint16_t unusedButMandatoryParameter) {
   };
   covWriteAndLoadPgm(pgmS, sizeof(pgmS));
   covWriteAndLoadPgm(pgmT, sizeof(pgmT));
+}
+
+void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter) {
+  // A program file can claim a label name longer than the calculator can produce (TAM caps a name at 7 glyphs
+  // of at most 2 bytes, MAX_LABEL_NAME_LENGTH in defines.h); fnLoadProgram screens the file in a first pass,
+  // before loading anything, and refuses it with ERROR_INVALID_CORRUPTED_DATA. Load a file whose global label
+  // name claims 20 bytes and one whose named local label claims 20 bytes: both must be refused with the error
+  // set, no label registered, and program memory untouched (the screen runs before the load, so there is
+  // nothing to roll back). Then check the screen's step walk does not false-positive: a program with a
+  // legitimate 20-byte alpha string literal must load, and so must a full-length 14-byte label name.
+  static const uint8_t pgmBadGlobal[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 20, 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  static const uint8_t pgmBadLocal[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'V',
+    ITM_LBL, LOCAL_LABEL_VARIABLE, 20, 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  static const uint8_t pgmStrLiteral[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'U',
+    ITM_LITERAL, STRING_LABEL_VARIABLE, 20, 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  // Bypass regression: the screen must refuse a non-item opcode (here
+  // LAST_ITEM itself) rather than quit silently, because the in-memory
+  // walker decodes it as a zero-parameter step and would register the
+  // overlong label hidden behind it.
+  static const uint8_t pgmBadOpcode[] = {
+    (uint8_t)((LAST_ITEM >> 8) | 0x80), (uint8_t)(LAST_ITEM & 0xff),
+    ITM_LBL, STRING_LABEL_VARIABLE, 20, 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  static const uint8_t pgmMaxName[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 14, 'W','X','Y','Z','W','X','Y','Z','W','X','Y','Z','W','X',
+    ITM_LITERAL, 1 /* BINARY_SHORT_INTEGER */, 2, 0,0,0,0,0,0,0,0, // fixed-tail literal through the screen
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  uint16_t labelsBefore = numberOfLabels;
+  uint8_t *firstFreeBefore = firstFreeProgramByte;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmBadGlobal, sizeof(pgmBadGlobal));
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || temporaryInformation == TI_PROGRAM_LOADED
+      || numberOfLabels != labelsBefore || firstFreeProgramByte != firstFreeBefore) {
+    printf("\nfnLoadProgram did not cleanly refuse a program file with a 20-byte global label name\n");
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmBadLocal, sizeof(pgmBadLocal));
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || temporaryInformation == TI_PROGRAM_LOADED
+      || numberOfLabels != labelsBefore || firstFreeProgramByte != firstFreeBefore) {
+    printf("\nfnLoadProgram did not cleanly refuse a program file with a 20-byte local label name\n");
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmBadOpcode, sizeof(pgmBadOpcode));
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || temporaryInformation == TI_PROGRAM_LOADED
+      || numberOfLabels != labelsBefore || firstFreeProgramByte != firstFreeBefore) {
+    printf("\nfnLoadProgram did not refuse a file hiding an overlong label behind a non-item opcode\n");
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmStrLiteral, sizeof(pgmStrLiteral));
+  if(temporaryInformation != TI_PROGRAM_LOADED || lastErrorCode != ERROR_NONE || numberOfLabels != labelsBefore + 1) {
+    printf("\nfnLoadProgram refused a program with a legitimate 20-byte alpha string literal\n");
+    abortTest();
+    return;
+  }
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmMaxName, sizeof(pgmMaxName));
+  if(temporaryInformation != TI_PROGRAM_LOADED || lastErrorCode != ERROR_NONE || numberOfLabels != labelsBefore + 2) {
+    printf("\nfnLoadProgram refused a program file with a legitimate 14-byte label name\n");
+    abortTest();
+    return;
+  }
+
+  // A file whose declared byte count cannot possibly fit is refused before any reservation.
+  temporaryInformation = TI_NO_INFO;
+  FILE *f = fopen("c47programTest.bin", "wb");
+  if(f == NULL) {
+    abortTest();
+    return;
+  }
+  fprintf(f, "PROGRAM_FILE_FORMAT\n0\nC47_program_file_version\n1\nPROGRAM\n100000000\n");
+  fclose(f);
+  fnLoadProgram(NOPARAM);
+  if(lastErrorCode != ERROR_RAM_FULL || temporaryInformation == TI_PROGRAM_LOADED || numberOfLabels != labelsBefore + 2) {
+    printf("\nfnLoadProgram did not refuse an impossibly large program file (EC=%d)\n", (int)lastErrorCode);
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
+}
+
+void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter) {
+  // The state loaders (LOAD, LOADP, LOADST) apply the PROGRAMS section in
+  // place, so doLoad screens program memory after the restore and, on an
+  // over-long label name, clears the program area and raises
+  // ERROR_INVALID_CORRUPTED_DATA. Build the corrupt state file honestly: load
+  // a valid program with a full-length name, bump its length byte in program
+  // memory past the limit, save the state, clear programs, and load the state
+  // back. The load must end with the error set and an empty program area.
+  // The six ITM_NULL padding steps keep the corrupted step decodable: the
+  // inflated length swallows exactly the padding, so the walk lands on the
+  // RTN and the overlong label registers instead of truncating the scan -
+  // the dangerous case the screen exists for.
+  static const uint8_t pgmVictim[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 14, 'S','T','A','T','E','B','A','D','L','B','L','X','Y','Z',
+    0, 0, 0, 0, 0, 0,
+    ITM_RTN,
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  covWriteAndLoadPgm(pgmVictim, sizeof(pgmVictim));
+  // The loader appended the victim, so its bytes end at firstFreeProgramByte;
+  // the label's claimed-length byte is at offset 2 of the program.
+  uint8_t *lengthByte = firstFreeProgramByte - sizeof(pgmVictim) + 2;
+  if(temporaryInformation != TI_PROGRAM_LOADED || *lengthByte != 14) {
+    printf("\ncovLoadStateLongLabel could not stage its victim program\n");
+    abortTest();
+    return;
+  }
+  *lengthByte = 20; // corrupt the claimed name length in program memory
+
+  fnSave(SM_MANUAL_SAVE);
+  fnClPAll(CONFIRMED);
+  lastErrorCode = ERROR_NONE;
+
+  fnLoad(LM_PROGRAMS);
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || numberOfLabels != 0) {
+    printf("\nfnLoad(LM_PROGRAMS) did not refuse a state file with a corrupt label name (EC=%u, labels=%u)\n",
+           lastErrorCode, numberOfLabels);
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
 }
 
 void covProgramFlow(uint16_t which) {
@@ -1930,9 +2100,25 @@ void setParameter(char *p) {
           setSystemFlag(FLAG_ENDPMT);
         }
       }
+      // Generic fallback: resolve any system flag by its CAT_SYFL catalog name (e.g. SIG0, ENGOVR, FRACT), as dslParseFlagArg does
       else {
-        printf("\nMalformed numbered flag setting. After FL_ there shall be a number from 0 to 111, a lettered, or a system flag.\n");
-        abortTest();
+        bool_t found = false;
+        for(int16_t i = 0; i < LAST_ITEM; i++) {
+          if((indexOfItems[i].status & CAT_STATUS) == CAT_SYFL && compareString(l + 3, (char *)indexOfItems[i].itemCatalogName, CMP_NAME) == 0) {
+            if(r[0] == '0') {
+              clearSystemFlag(indexOfItems[i].param);
+            }
+            else {
+              setSystemFlag(indexOfItems[i].param);
+            }
+            found = true;
+            break;
+          }
+        }
+        if(!found) {
+          printf("\nMalformed flag setting. After FL_ there shall be a number from 0 to 111, a lettered, or a system flag name.\n");
+          abortTest();
+        }
       }
     }
   }
@@ -2068,6 +2254,37 @@ void setParameter(char *p) {
     }
     else {
       printf("\nMalformed grouping gap setting. The rvalue must be a number from 0 to 15.\n");
+      abortTest();
+    }
+  }
+
+  //Setting display format, e.g. DSP=FIX2, DSP=SCI4, DSP=ENG3, DSP=ALL3, DSP=SIG5, DSP=UN3
+  else if(strcmp(l, "DSP") == 0) {
+    int16_t p = 0;
+    while(r[p] != 0 && !(r[p] >= '0' && r[p] <= '9')) {   //length of the alphabetic prefix (FIX..UNIT)
+      p++;
+    }
+    uint16_t n = atoi(r + p);
+    if(!strncmp(r, "FIX", 3)) {
+      fnDisplayFormatFix(n);
+    }
+    else if(!strncmp(r, "SCI", 3)) {
+      fnDisplayFormatSci(n);
+    }
+    else if(!strncmp(r, "ENG", 3)) {
+      fnDisplayFormatEng(n);
+    }
+    else if(!strncmp(r, "ALL", 3)) {
+      fnDisplayFormatAll(n);
+    }
+    else if(!strncmp(r, "SIG", 3)) {
+      fnDisplayFormatSigFig(n);
+    }
+    else if(!strncmp(r, "UN", 2)) {                        //UN or UNIT
+      fnDisplayFormatUnit(n);
+    }
+    else {
+      printf("\nMalformed display format setting. The rvalue must be FIX, SCI, ENG, ALL, SIG or UN followed by a digit count.\n");
       abortTest();
     }
   }
@@ -2228,9 +2445,13 @@ var1:
         strcat(r, ":NONE");
       }
 
-      // separate real value and angular mode
+      // separate real value and angular mode; for a tagged value the closing
+      // quote of the register string ends up on the mode, strip it there
       r[i] = 0;
       strcpy(angMod, r + i + 1);
+      if(angMod[0] != 0 && angMod[strlen(angMod) - 1] == '"') {
+        angMod[strlen(angMod) - 1] = 0;
+      }
 
       if(strcmp(angMod, "DEG"   ) == 0) {
         am = amDegree;
@@ -2255,12 +2476,15 @@ var1:
         abortTest();
       }
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -2382,12 +2606,15 @@ var1:
       }
       am = amNone;
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -2403,12 +2630,15 @@ var1:
       }
     }
     else if(strcmp(l, "DATE") == 0) {
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -3341,7 +3571,7 @@ void checkExpectedOutParameter(char *p) {
 
       if(ec <= NUMBER_OF_ERROR_CODES) {
         if(lastErrorCode != ec) {
-          printf("\nLast error code should be %u (%s) but it is %u (%s)!\n", ec, errorMessages[ec], lastErrorCode, errorMessages[lastErrorCode]);
+          printf("\nLast error code should be %u (%s) but it is %u (%s)!\n", ec, errorMessageOf(ec), lastErrorCode, errorMessageOf(lastErrorCode));
           abortTest();
         }
       }
@@ -3457,9 +3687,13 @@ var2:
         strcat(r, ":NONE");
       }
 
-      // separate real value and angular mode
+      // separate real value and angular mode; for a tagged value the closing
+      // quote of the register string ends up on the mode, strip it there
       r[i] = 0;
       strcpy(angMod, r + i + 1);
+      if(angMod[0] != 0 && angMod[strlen(angMod) - 1] == '"') {
+        angMod[strlen(angMod) - 1] = 0;
+      }
 
            if(strcmp(angMod, "DEG"   ) == 0) am = amDegree;
       else if(strcmp(angMod, "DMS"   ) == 0) am = amDMS;
@@ -3473,12 +3707,15 @@ var2:
       }
 
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -3672,12 +3909,15 @@ var2:
       }
       am = amNone;
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -3699,12 +3939,15 @@ var2:
       }
     }
     else if(strcmp(l, "DATE") == 0) {
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {

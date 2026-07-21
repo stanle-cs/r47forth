@@ -678,7 +678,9 @@
 #define NUMBER_OF_STANDARD_FONT_LINES_PER_SCREEN   8 // Used in the font browser application
 
 #define AIM_BUFFER_LENGTH                       1024 // WP=199 double byte glyphs + trailing 0 + 1 byte to round up to a 4 byte boundary; JM increase from WP43 to 512*2 so as to exceed the 508*2+extras;
-#define TAM_BUFFER_LENGTH                         32 // TODO: find the exact maximum needed
+#define TAM_BUFFER_LENGTH                         56 // Longest TAM prompt is ASSIGN of a conversion with a quoted key name, worst case 55 bytes:
+                                                     // "ASSIGN " 7 + name 26 + " " 1 + quotes 2+2 + 7 double byte glyphs 14 + cursor 2 + trailing 0 = 55.
+                                                     // Widest name kWh/100km STD_RIGHT_ARROW kWh/100mi: 20 bytes, 26 after compressBinary() expands 100k and 100m.
 #define NIM_BUFFER_LENGTH                        200 // TODO: find the exact maximum needed
 
 #if defined(PATH_MAX)
@@ -797,7 +799,7 @@
 
 
 #define NUMBER_OF_ERROR_CODES                    129
-#define SIZE_OF_EACH_ERROR_MESSAGE                48
+#define SIZE_OF_EACH_ERROR_MESSAGE                45  // longest message is 44 bytes plus the terminator
 
 #define NUMBER_OF_BUG_SCREEN_MESSAGES             10
 #define SIZE_OF_EACH_BUG_SCREEN_MESSAGE          100
@@ -1124,6 +1126,10 @@
 #define LAST_UC_LOCAL_LABEL    111                             //   L (last  upper case local label
 #define FIRST_LC_LOCAL_LABEL   112                             //   a (first lower case local label
 #define LAST_LOCAL_LABEL       123                             //   0 - 99, A to L and a to l
+
+#define MAX_LABEL_NAME_LENGTH   14                             // Longest label name the calculator can produce: TAM alpha entry is force-closed beyond 6 glyphs,
+                                                               // maxLen in _tamProcessInput, ui/tam.c, so a name is at most 7 glyphs of at most 2 bytes each.
+                                                               // A longer name in a loaded file marks the file as corrupt.
 
 //Variable names
 #define VAR_NO_X        0

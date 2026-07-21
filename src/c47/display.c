@@ -279,9 +279,15 @@ void real34ToDisplayString(const real34_t *real34, uint32_t tag, char *displaySt
 }
 
 
+// Mantissa trailing-zero handling for emitSciDigits: pad to the full digit count, or trim zeros to the digits actually carried.
+typedef enum {
+  KEEP_TRAILING_ZEROS  = 0,
+  STRIP_TRAILING_ZEROS = 1
+} trailingZeros_t;
+
 // emitSciDigits: the DF_SCI body lifted out, fed from a digit-per-byte bcd[] (MSD first) so a long real can supply up to digitsToDisplay digits.
 static void emitSciDigits(uint8_t *bcd, int16_t firstDigit, int16_t lastDigit, int16_t numDigits, int32_t exponent, bool_t sign,
-                          int16_t digitToRound, int16_t digitsToDisplay, bool_t frontSpace,
+                          int16_t digitToRound, int16_t digitsToDisplay, bool_t frontSpace, trailingZeros_t stripTrailingZeros,
                           char *displayString, char *displayValueX, bool_t updateDisplayValueX) {
   int32_t charIndex  = 0;
   int32_t valueIndex = 0;
@@ -306,6 +312,15 @@ static void emitSciDigits(uint8_t *bcd, int16_t firstDigit, int16_t lastDigit, i
     firstDigit--;
     numDigits = 1;
     exponent++;
+  }
+  // SIG no-zero: clamp to the significant digits (ignore noise past numDigits), then drop trailing zeros left by the value or by rounding
+  if(stripTrailingZeros) {
+    if(digitsToDisplay > numDigits - 1) {
+      digitsToDisplay = numDigits - 1;
+    }
+    while(digitsToDisplay > 0 && bcd[firstDigit + digitsToDisplay] == 0) {
+      digitsToDisplay--;
+    }
   }
   // Sign
   if(sign) {
@@ -573,7 +588,7 @@ overRange:
             }                                            //counter at first non-'0' or end, eg. 3.14159265358979E+15
             // printf("------- 004a >>>>%s|, %i, displayFormatDigits=%i\n",tmpString100, ii, displayFormatDigits);
 
-            if(tmpString100[ii] != 0) {
+            if(tmpString100[ii] != 0 && forceSigZeroes) {   //SIG0 clear keeps full precision for the FIX stage to round; only SIG0 set truncates here
               ii = ii + displayFormatDigits+1;           //2023-06-01 added 1 digit, giving FIX one extra digit for rounding. If it does not work properly, to do rounding here.
               int8_t jj = ii;
               //round here
@@ -1175,7 +1190,7 @@ overRange:
       digitsToDisplay = displayFormatDigits;
       digitToRound    = min(firstDigit + (int16_t)displayFormatDigits, lastDigit);
     }
-    emitSciDigits(bcd, firstDigit, lastDigit, numDigits, exponent, sign, digitToRound, digitsToDisplay, frontSpace, displayString, displayValueX, updateDisplayValueX);
+    emitSciDigits(bcd, firstDigit, lastDigit, numDigits, exponent, sign, digitToRound, digitsToDisplay, frontSpace, (displayFormat == DF_SF && !forceSigZeroes) ? STRIP_TRAILING_ZEROS : KEEP_TRAILING_ZEROS, displayString, displayValueX, updateDisplayValueX);
     return;
   }
 
@@ -1209,6 +1224,16 @@ overRange:
       firstDigit--;
       numDigits = 1;
       exponent++;
+    }
+
+    // SIG no-zero: clamp to the significant digits (ignore noise past numDigits), then drop trailing zeros left by the value or by rounding
+    if(displayFormat == DF_SF && !forceSigZeroes) {
+      if(digitsToDisplay > numDigits - 1) {
+        digitsToDisplay = numDigits - 1;
+      }
+      while(digitsToDisplay > 0 && bcd[firstDigit + digitsToDisplay] == 0) {
+        digitsToDisplay--;
+      }
     }
 
     // The sign
@@ -2420,7 +2445,7 @@ void realSCIToDisplayString(const real_t *work, char *displayString, int16_t dig
 
   digitToRound = min(firstDigit + digitsToDisplay, lastDigit);
 
-  emitSciDigits(bcd, firstDigit, lastDigit, numDigits, exponent, sign, digitToRound, digitsToDisplay, frontSpace, displayString, displayValueX, updateDisplayValueX);
+  emitSciDigits(bcd, firstDigit, lastDigit, numDigits, exponent, sign, digitToRound, digitsToDisplay, frontSpace, KEEP_TRAILING_ZEROS, displayString, displayValueX, updateDisplayValueX);
 }
 
 

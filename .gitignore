@@ -1,6 +1,8 @@
 # C47 project specific files
 /build
-/build.sim
+/build.sim*
+/t47bench
+/bench-results.csv
 /dep/gmp-6.2.1
 /wp43
 /c47
@@ -38,7 +40,8 @@ c47regdumpTest.txt
 *.s47
 *.zip
 !docs/appnotes/sources/
-!docs/appnotes/sources/*.zip
+!docs/appnotes/sources/*.*
+!docs/appnotes/sources/*/*.*
 !xfnToC47user.s47
 !xfnToR47user.s47
 20*.REGS.TSV
@@ -47,6 +50,9 @@ c47plotTest*.bmp
 tags
 /PROGRAMS
 /SAVFILES
+# 'make repeattest' incremental markers, written to the repo root
+/src_files_stamp
+/testPgms_stamp
 /src/generated/*
 !/src/generated/constantsVerification.txt
 AGENTS.md

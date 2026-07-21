@@ -1,16 +1,19 @@
-Scripted sim runs and screenshots (t47 / c47)
+Scripted sim runs and screenshots (t47 / c47): A short rundown of practical examples.
 
 Build:  make simc47 t47
         (exactly that; a bare "make t47" builds the R47-based t47 instead)
+        Alternate legal build, for R47 use: make simr47 t47
+        (the alternateive R47 build has a different key layout so the usage of the press command must be reviewed from this document, which is C47 flavoured)
 
 t47 and c47 are one build, two front ends: t47 forces headless (no GTK), c47 is the GTK twin. Same DSL except press, which needs GTK: c47 only.
 c47 chdirs to its own folder and reads res/ from there; Gdk-CRITICAL/XPC noise at start is harmless.
 
-Prefer the function's own name: bare commands are registered lowercase (m.dim 00, 42dim#, scatr), and xeq takes the catalog's own case (xeq SCATR).
-item <n> is the fallback, not the first choice: for a name xeq will not resolve, such as a constant (item 132 = c), and for a name that cannot be typed.
-PLT f is the case in point: its gap is no space at all but a U+2005 four-per-em, so the name must be copied out of the --dslcommands list, the reason that list exists.
-Pasted, it is one Jim word: xeq PLT f resolves, as do braces and double quotes; single quotes are not Jim quoting and fail.
+The legal and only accepted way to control, is to use commands, not item numbers. Bare commands are registered lowercase (m.dim 00, 42dim#, scatr), and xeq takes
+the catalog's own case (xeq SCATR). item <n> is the fallback ONLY, not the first choice: for a name xeq will not resolve, such as a constant (item 132 = c), and for a name
+that cannot be typed. PLT f is the case in point: its gap is no space at all but a U+2005 four-per-em, so the name must be copied out of the --dslcommands list, the
+reason that list exists. Pasted, it is one Jim word: xeq PLT f resolves, as do braces and double quotes; single quotes are not Jim quoting and fail.
 Without the paste item 2734 does the same job, at the clear cost of code nobody can read.
+
 A name taking a TAM argument (e.g. M.EDITN) is not scriptable at all: reach it with press.
 
 CAUTION, calculator state: the sim starts from backup.cfg (t47) or backupR47.cfg (R47-based t47) in the working folder.
@@ -55,10 +58,20 @@ Export a loaded program to RTF (GUI XPORTP needs a file chooser, the DSL does no
 Export / import a register data file (.d47) (GUI EXPreg / IMPORTr need a file chooser):
   ./t47 --reset --exec 'nim 3; nim 4; item 99; expreg X quot.d47'   (export register X)
   ./t47 --reset --exec 'impreg quot.d47; puts "X=[reg X]"'          (import, then read X)
+  ./t47 --reset --exec 'nim 7; sto 00; expnrg 100 regs.d47'       (export the block R00..R99, EXPnrg)
+  (expnrg <n> <file> exports R00..R(n-1), n up to 126; same filename-override rules as expreg.)
   (expreg <reg> <file>; impreg <file>; reg name as for reg, e.g. X, 00, A. The filename is verbatim, so the folder must exist; the GUI keeps .d47 in DATA/.)
+  (Headless there is no chooser to open, so a file function reached without a filename stops with a cannot-read/write error and a note on stderr. Always name the file.)
 
 Stat graph at 1E-50 (both axes scaled):
   ./t47 --snapskiprefresh --exec 'clΣ; nim 1e-50; nim 1e-50; xeq Σ+; nim 4e-50; nim 2e-50; xeq Σ+; nim 9e-50; nim 3e-50; xeq Σ+; nim 16e-50; nim 4e-50; xeq Σ+; nim 25e-50; nim 5e-50; xeq Σ+; xeq SCATR; snap'
+
+Jim Tcl scripting (the DSL is Jim: set/expr/while/if/puts all work; incr is a NO-OP, step with expr):
+  ./t47 --reset --exec 'set s 0; set n 0; while {$n < 5} {set n [expr {$n + 1}]; set s [expr {$s + $n}]}; puts "sum=$s"'   (sum=15)
+
+Register / named variable / flag write and read (complex values in braces; strings and more forms in values.t47):
+  ./t47 --reset --exec 'reg 05 3.5; var myv 2.5; flag SPCRES 1; puts "R05=[reg 05] myv=[var myv] SPCRES=[flag SPCRES]"'
+  ./t47 --reset --exec 'reg 10 {1 + ix2}; puts "R10=[reg 10]"'
 
 Range screening examples (error text appears on stdout):
   NaN/inf STO rejected:  ./t47 --exec 'flag SPCRES 1; nim 1; nim 0; item 99; item 2548'
@@ -74,7 +87,17 @@ State save/load and register assertions (savest/loadst take a filename):
    reg <name> reads a register's display string but returns <unsupported> for a matrix, so assert dimensions via 42DIM#.
    Register data also moves through hand-written .d47 files; format in AN0025.)
 
-Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key, single ASCII, ENTER, R/S. item and xeq call the function direct,
+SHOW (all-digit view). snap clears it, so headless run show TWICE (the 2nd call's refresh paints the 1st) and always --snapskiprefresh; one page per run:
+  long int, big font:    ./t47 --reset --snapskiprefresh --exec 'nim 123456789012345678901234567890; show; show; snap'
+  long int, small font:  ./t47 --reset --snapskiprefresh --exec 'nim 2; nim 1500; yˣ; show; show; snap'   (over 170 glyphs)
+  real, 34 digits:       ./t47 --reset --snapskiprefresh --exec 'nim 1; nim 3; ÷; show; show; snap'
+  XY+Z exact (XFN):      ./t47 --reset --snapskiprefresh --exec 'nim 1; nim 3; ÷; nim 7; nim 11; ÷; nim 13; nim 17; ÷; menu XFCNS; show; show; snap'
+  page 2 (c47):          ./c47 --reset --snapskiprefresh --exec 'nim 2; nim 1500; yˣ; show; press R/S; snap'
+  tiny font (c47):       ./c47 --reset --snapskiprefresh --exec 'nim 2; nim 1500; yˣ; show; press R/S; press R/S; snap'
+  other register (c47):  ./c47 --reset --snapskiprefresh --exec 'nim 7; nim 9; show; press "@k 17"; snap'   (up: Y, Z..; down "@k 22": numbered regs)
+  (R/S cycles small-font pages of 10 lines, then tiny, then back to page 1; a page count over 2 needs a longer number.)
+
+Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key (NN = 00..36), single ASCII, ENTER, R/S. item and xeq call the function direct,
 so TAM and softmenu decode need press. Matrix editor, cursor to 2;2:
   ./c47 --reset --exec 'nim 3; nim 3; item 1526 00; item 51 00; item 1529; press F6; press @f; press F6; snap'
   (1529 M.EDIT; M_EDIT F5/F6 = left/right, f-shifted = up/down; snap shows "2;2=".)
@@ -97,3 +120,7 @@ Notes:
   item <n>       fallback only, see the top note.
   --dslcommands  ./t47 --dslcommands writes t47-op-commands.txt: item number, command name, catalog name. Copy untypable names from it.
   markers        set a register before the run (reg 01 -1) and read it after, to tell "the step ran and did nothing" from "the step never ran".
+  snap <name>    writes <name>.bmp plus <name>.REGS.TSV.T47.TSV (stack as TSV) instead of the timestamp name.
+  menu <name>    opens the real softmenu headless, so menu-open side effects fire without keys (e.g. menu XFCNS above).
+  error mid-run  a calculator error no-ops every later step: put the step under test last, or markers lie.
+  tsvfn <file>   redirects TSV output; it APPENDS, delete the old .T47.TSV first.
