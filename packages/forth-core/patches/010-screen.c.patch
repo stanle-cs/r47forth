@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..c6866258b924a20bafdfcf16c622667f8ab02259 100644
+index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..a18052581e800460b08079470c4a0ae3d98d6d20 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -3,6 +3,7 @@
@@ -10,7 +10,7 @@ index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..c6866258b924a20bafdfcf16c622667f
  
  static void refreshRegisterLineRestoreT(void);
  static void _refreshPemScreen(void);
-@@ -819,6 +820,14 @@ void execTimerApp(uint16_t timerType) {
+@@ -819,6 +820,23 @@ void execTimerApp(uint16_t timerType) {
          }
        }
        else {
@@ -18,14 +18,23 @@ index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..c6866258b924a20bafdfcf16c622667f
 +        {
 +          uint16_t widx;
 +          if (forthFindColon(funcParam, &widx)) {
-+            reallyRunFunction(ITM_FCALL, widx);
++            /* code-audit 2026-07-20: must record a step, not execute live,
++             * when composing a program — mirrors the label arm above and
++             * DESIGN.md §4.2's "PEM recording of XEQ 'NAME'" contract
++             * (names persist, never widx). */
++            if(calcMode == CM_PEM) {  // Insert user program call in program
++              insertUserItemInProgram(item, funcParam);
++            }
++            else {                    // Execute item
++              reallyRunFunction(ITM_FCALL, widx);
++            }
 +            return;
 +          }
 +        }
          displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
              sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -3722,10 +3731,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -3722,10 +3740,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
  
          if(lastErrorCode != 0 && regist == errorMessageRegisterLine) {
            if(stringWidth(errorMessages[lastErrorCode], &standardFont, true, true) <= SCREEN_WIDTH - 1) {

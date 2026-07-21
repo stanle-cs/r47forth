@@ -689,10 +689,24 @@ bool_t isFunctionOldParam16(uint16_t func) {
             }
           }
           else if (res == FORTH_XEQ_COLON) {
-            reallyRunFunction(ITM_FCALL, resolvedParam);
+            /* code-audit 2026-07-20: must record a step, not execute live,
+             * when composing a program — mirrors the FORTH_XEQ_LABEL arm
+             * above and DESIGN.md §4.2's "PEM recording of XEQ 'NAME'"
+             * contract (names persist, never widx). */
+            if(calcMode == CM_PEM) {
+              insertUserItemInProgram(func, varCatalogItem);
+            }
+            else {
+              reallyRunFunction(ITM_FCALL, resolvedParam);
+            }
           }
           else if (res == FORTH_XEQ_ITEM) {
-            reallyRunFunction(resolvedParam, NOPARAM);
+            if(calcMode == CM_PEM) {
+              insertUserItemInProgram(func, varCatalogItem);
+            }
+            else {
+              reallyRunFunction(resolvedParam, NOPARAM);
+            }
           }
           else {
             displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);

@@ -1338,3 +1338,84 @@ what Forth actually still owns post-restore, and both are upstream-shaped
 changes bigger than this stage's scope (Owner ruling 2026-07-20: trace
 and write up for potential upstream reporting, do not attempt a local fix
 without further direction — same treatment as the FIX-6 precedent).
+
+## 2026-07-20 — Code audit #3: dynamic-menu/USER-key XEQ of a Forth word executed live in PEM instead of recording a step, three call sites
+
+Non-normative. Third code-audit item, found during the broader sweep of
+forth-core's patched (non-owned) production files after the save/restore
+items above were resolved.
+
+**The bug.** Three separate call sites implement "XEQ a name picked from
+elsewhere" against upstream's own established shape: resolve the name to
+a native label first; if that succeeds, branch on `calcMode == CM_PEM`
+— insert an `insertUserItemInProgram(item, name)` step while composing a
+program, or `reallyRunFunction(...)` immediately otherwise (this exact
+label-case shape predates forth-core; it's upstream's own pattern for
+"a name picked from a live UI surface"). forth-core's own H-hook additions
+at each site — the Forth-vocabulary fallback that runs when the name
+*isn't* a native label — copied the label case's dispatch call but not
+its PEM/execute branch, so a Forth colon word or plain item resolved via
+this fallback was **always executed immediately**, in every calcMode,
+including CM_PEM:
+
+- `items.c`, `runFunction()`'s dynamic-menu XEQ dispatch (`dynamicMenuItem
+  >= 0`, the MNU_FORTH-picker-driven path): `FORTH_XEQ_COLON` and
+  `FORTH_XEQ_ITEM` both called `reallyRunFunction(...)` unconditionally,
+  while the `FORTH_XEQ_LABEL` arm three lines above correctly checks
+  `calcMode == CM_PEM`.
+- `screen.c`, `_executeItem()`'s `FLAG_USER`-key XEQ dispatch: the H-hook
+  Forth fallback (`forthFindColon` → `reallyRunFunction(ITM_FCALL, widx)`)
+  ran unconditionally; the native-label branch immediately above it
+  correctly checks `calcMode == CM_PEM`.
+- `keyboard.c`, `btnReleased()`'s `FLAG_USER`/`Norm_Key_00_released`-key
+  XEQ dispatch: identical shape, identical gap.
+
+Net effect: editing a program (CM_PEM) and triggering any of these three
+XEQ paths against a name that resolves to a Forth colon word (all three
+sites) or a plain Forth-visible item (items.c only) executed that code
+live — mutating the stack/registers/flags mid-edit — instead of recording
+the intended `XEQ 'NAME'` program step. This directly violates DESIGN.md
+§4.2's own normative contract ("PEM recording of `XEQ 'NAME'`: names
+persist, never `widx`") — a contract the *canonical* TAM-typed entry path
+(`ui/tam.c:964`) already honors correctly; these three dynamic-menu/
+USER-key paths just never got the same treatment when the H-hooks were
+added. No test exercised any of the three (grepped `dynamicMenuItem` /
+`FLAG_USER` XEQ-adjacent test code — only defensive `dynamicMenuItem = -1`
+hygiene assignments in unrelated tests, nothing driving a real selection
+through this dispatch).
+
+**Fix.** All three sites gained the identical `if(calcMode == CM_PEM) {
+insertUserItemInProgram(...); } else { <original live-execute call>; }`
+wrapper around their Forth-fallback dispatch, mirroring the native-label
+arm immediately adjacent to each — same idiom, no new abstraction, three
+small near-identical edits rather than a shared helper (each site's
+surrounding variable names/control flow differ enough that factoring
+would cost more clarity than it saves for three call sites). Verified
+`insertUserItemInProgram(func, name)` records the same generic
+`[opcode][STRING_LABEL_VARIABLE][len][name]` step regardless of what
+`func` will resolve to later — confirming the fix doesn't need to know
+*which* Forth-fallback subtype (colon vs. item) it's handling, exactly
+like the pre-existing label arm doesn't need to know which label it
+resolved.
+
+**Regression test:** `test_pem_xeq_dynmenu_no_live_exec` (new,
+`test_dict_reloc.c`) drives the `items.c` site end-to-end — compiles `W7`
+interactively (fdict-resident), builds a real `MNU_FORTH` picker over a
+minimal program via `testInitVariableSoftmenu`/`showSoftmenu(-MNU_FORTH)`,
+selects it via `dynamicMenuItem`, calls `runFunction(ITM_XEQ)` with
+`calcMode == CM_PEM`, and asserts a step was recorded
+(`getNumberOfSteps()` +1) and a sentinel left in X survived untouched (no
+live execution). Mutation-tested: disabling the `calcMode == CM_PEM`
+check in `items.c`'s `FORTH_XEQ_COLON` arm reran the gate RED with the
+exact predicted symptom ("X changed — word executed live instead of being
+recorded"); reverting reran GREEN. The screen.c/keyboard.c sites were
+fixed by inspection/mirroring this one's verified shape and are not
+independently test-driven — both are `FLAG_USER`-key dispatch paths that
+would need a materially larger fixture (real key-assignment state) to
+drive through the actual UI entry point; the fix at each site is
+structurally identical to the tested one and reuses the exact same
+`insertUserItemInProgram` contract already proven correct in DESIGN.md's
+canonical TAM path and by this test.
+
+`make dmcp5r47` flash 1093728 → 1093776 (+48 B, three small conditional
+branches); RAM (data+bss) unchanged at 7228.

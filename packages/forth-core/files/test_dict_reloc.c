@@ -10926,6 +10926,8 @@ static int test_capture_param_text(void);
 static int test_word_catalog(void);
 /* F6-6: capture acceptance battery */
 static int test_capture_acceptance(void);
+/* code-audit: dynamic-menu XEQ of a Forth word/colon must insert in PEM, not execute live */
+static int test_pem_xeq_dynmenu_no_live_exec(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -12829,6 +12831,13 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_capture_acceptance...\n");
   fail |= test_capture_acceptance();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH CODE-AUDIT TESTS (PEM insert-vs-execute regression)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_pem_xeq_dynmenu_no_live_exec...\n");
+  fail |= test_pem_xeq_dynmenu_no_live_exec();
   forthDictClear();
   forthGDictClear();
 
@@ -20192,6 +20201,131 @@ static int test_capture_acceptance(void)
   dynamicMenuItem = savedDynamicMenu;
   lastErrorCode = ERROR_NONE;
 
+  return fail;
+}
+
+/* test_pem_xeq_dynmenu_no_live_exec — code-audit finding, 2026-07-20.
+ *
+ * items.c's runFunction() dispatches ITM_XEQ picked from a dynamic menu
+ * (dynamicMenuItem >= 0): a resolved native LABEL correctly branches on
+ * calcMode (insertUserItemInProgram in PEM, reallyRunFunction otherwise),
+ * but the forth-core-added FORTH_XEQ_COLON/FORTH_XEQ_ITEM branches used to
+ * skip that check entirely and always call reallyRunFunction — so picking
+ * a Forth word from the MNU_FORTH picker via XEQ while editing a program
+ * (CM_PEM) would execute it live instead of recording an "XEQ 'NAME'"
+ * step, corrupting register/stack state mid-edit instead of composing the
+ * program (violates DESIGN.md §4.2's "PEM recording of XEQ 'NAME': names
+ * persist, never widx" contract). The same missing-check pattern was found
+ * and fixed at two more call sites (screen.c's _executeItem, keyboard.c's
+ * btnReleased) — both FLAG_USER-key XEQ dispatch, not exercised by this
+ * test, fixed by inspection/mirroring this one's shape.
+ *
+ * Drive: compile W7 interactively (fdict-resident, F6-5's "interactive-
+ * scope dictionary words" catalog section), build a real MNU_FORTH picker
+ * over a minimal program, select W7 via dynamicMenuItem, call
+ * runFunction(ITM_XEQ) with calcMode == CM_PEM. Oracle: a step must be
+ * recorded (getNumberOfSteps() increases by exactly 1) and the sentinel
+ * left in X must survive untouched (no live execution).
+ * Escaping mutation: drop the calcMode == CM_PEM check in the
+ * FORTH_XEQ_COLON arm (items.c) — X becomes 7 (the word ran) and the step
+ * count stays unchanged, both caught below. */
+static int test_pem_xeq_dynmenu_no_live_exec(void)
+{
+  extern void showSoftmenu(int16_t menu);
+
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+  uint8_t *savedCurrentStep = currentStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  uint8_t savedCalcMode = calcMode;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+  uint8_t *savedMenuContent = dynamicSoftmenu[22].menuContent;
+  int16_t savedNumItems = dynamicSoftmenu[22].numItems;
+
+  dynamicMenuItem = -1;
+  forthDictClear();
+
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": W7 7 ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FIXTURE FAIL: W7 def error %d\n", lastErrorCode);
+    fail = 1;
+  }
+
+  testProg_t p;
+  int sMarker = -1;
+  if (!fail) {
+    tpInit(&p);
+    tpLbl(&p, "PXF");
+    sMarker = tpMarker(&p);
+    if (sMarker < 0 || !tpWrite(&p)) {
+      printf("    FIXTURE FAIL: build/write\n");
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    currentProgramNumber = 1;
+    currentStep = tpStepAddr(&p, sMarker);
+    testInitVariableSoftmenu(22);
+    showSoftmenu(-MNU_FORTH);
+
+    if (dynamicSoftmenu[22].numItems < 1 || !dynamicSoftmenu[22].menuContent ||
+        compareString((const char *)dynamicSoftmenu[22].menuContent, "W7", CMP_BINARY) != 0) {
+      printf("    FIXTURE FAIL: picker content = '%s' (numItems=%d), expected \"W7\" first\n",
+             dynamicSoftmenu[22].menuContent ? (const char *)dynamicSoftmenu[22].menuContent : "(null)",
+             dynamicSoftmenu[22].numItems);
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    dynamicMenuItem = 0;   /* "W7" */
+    calcMode = CM_PEM;
+    programRunStop = PGM_STOPPED;
+    lastErrorCode = ERROR_NONE;
+    forthPushInt32(999);   /* sentinel: must survive if XEQ only records a step */
+
+    uint16_t stepsBefore = getNumberOfSteps();
+    runFunction(ITM_XEQ);
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    FAIL: runFunction(ITM_XEQ) errored %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (!x_is_longint(999)) {
+      printf("    FAIL: X changed — word executed live instead of being recorded\n");
+      fail = 1;
+    }
+    else if (getNumberOfSteps() != stepsBefore + 1) {
+      printf("    FAIL: step count %u -> %u, expected +1 (no step recorded)\n",
+             (unsigned)stepsBefore, (unsigned)getNumberOfSteps());
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    printf("    PASS: PEM XEQ of a Forth word from the dynamic menu records a step, does not execute\n");
+  }
+
+  if (dynamicSoftmenu[22].menuContent) {
+    free(dynamicSoftmenu[22].menuContent);
+  }
+  dynamicSoftmenu[22].menuContent = savedMenuContent;
+  dynamicSoftmenu[22].numItems = savedNumItems;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  calcMode = savedCalcMode;
+  dynamicMenuItem = savedDynamicMenu;
+  currentStep = savedCurrentStep;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  programRunStop = savedRS;
+  lastErrorCode = ERROR_NONE;
+  forthDictClear();
+  cleanupTestProgram();
   return fail;
 }
 #endif  // PC_BUILD
