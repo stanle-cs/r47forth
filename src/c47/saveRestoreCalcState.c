@@ -2633,6 +2633,14 @@ void doLoad(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d, uint16_t load
   lastErrorCode = ERROR_NONE;
   previousErrorCode = lastErrorCode;
 
+  // The PROGRAMS section is applied in place, so a file claiming a label name longer than MAX_LABEL_NAME_LENGTH leaves nothing to roll back to.
+  // Clear the program area to an empty .END. and report the file as corrupt. fnClPAll also removes all XEQ key assignments, the right scope once every label is gone.
+  if(enableLoad && (loadMode == LM_ALL || loadMode == LM_PROGRAMS)
+      && programMemoryHasOverlongLabelName(beginOfProgramMemory)) {
+    fnClPAll(CONFIRMED);
+    displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA, ERR_REGISTER_LINE, REGISTER_X);
+  }
+
   ioFileClose();
 
     //-------------------------------------------------------------------------------------------------
