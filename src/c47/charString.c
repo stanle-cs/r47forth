@@ -737,7 +737,7 @@ void stringToUtf8(const char *str, uint8_t *utf8) {
 
 
 
-void utf8ToString(const uint8_t *utf8, char *str) {
+static void utf8ToStringToEnd(const uint8_t *utf8, char *str, const char *end) {  // end: last byte usable for output, NULL for no limit; a glyph crossing end stops the walk
   uint32_t codePoint;
 
   while(*utf8) {
@@ -751,6 +751,7 @@ void utf8ToString(const uint8_t *utf8, char *str) {
       default: break;
     }
     if(codePoint < 0x0080) {
+      if(end && str + 1 > end) break;
       *(str++) = codePoint;
     }
     else if((codePoint & 0x00FF) == 0) {
@@ -758,9 +759,11 @@ void utf8ToString(const uint8_t *utf8, char *str) {
       #if defined(PC_BUILD)
         printf("In function utf8ToString: code point U+%04X has a 0x00 second byte and was replaced with '?'\n", codePoint);
       #endif // PC_BUILD
+      if(end && str + 1 > end) break;
       *(str++) = '?';
     }
     else {
+      if(end && str + 2 > end) break; // a 2-byte glyph must fit whole
       codePoint |= 0x8000;
       *(str++) = codePoint >> 8;
       *(str++) = codePoint & 0x00FF;
@@ -770,40 +773,17 @@ void utf8ToString(const uint8_t *utf8, char *str) {
 }
 
 
-// utf8ToString, but never writes more than maxBytes bytes to str (the terminating NUL included),
-// stopping before a glyph that would not fit. For a fixed-size destination fed by an untrusted
-// source, where an over-long name would otherwise overrun it. Keep the body in sync with utf8ToString.
-void utf8ToStringWithLength(const uint8_t *utf8, char *str, size_t maxBytes) {
-  uint32_t codePoint;
+void utf8ToString(const uint8_t *utf8, char *str) {
+  utf8ToStringToEnd(utf8, str, NULL);
+}
 
+
+// utf8ToString into a fixed-size destination fed by a file-supplied source: at most maxBytes bytes written, the terminating NUL included.
+void utf8ToStringWithLength(const uint8_t *utf8, char *str, size_t maxBytes) {
   if(maxBytes == 0) {
     return;
   }
-  char *const end = str + maxBytes - 1;            // last byte reserved for the terminating NUL
-  while(*utf8) {
-    utf8 += utf8ToCodePoint(utf8, &codePoint);
-    switch(codePoint) {
-      case 0x0100: codePoint = 0x017F; break;
-      case 0x1D00: codePoint = 0x045A; break;
-      case 0x2200: codePoint = 0x2C6F; break;
-      default: break;
-    }
-    if(codePoint < 0x0080) {
-      if(str + 1 > end) break;
-      *(str++) = codePoint;
-    }
-    else if((codePoint & 0x00FF) == 0) {
-      if(str + 1 > end) break;
-      *(str++) = '?';
-    }
-    else {
-      if(str + 2 > end) break;                     // a 2-byte glyph must fit whole
-      codePoint |= 0x8000;
-      *(str++) = codePoint >> 8;
-      *(str++) = codePoint & 0x00FF;
-    }
-  }
-  *str = 0;
+  utf8ToStringToEnd(utf8, str, str + maxBytes - 1);
 }
 
 

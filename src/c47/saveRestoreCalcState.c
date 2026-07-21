@@ -1818,7 +1818,7 @@ int64_t stringToInt64(const char *str) {
           if(*str == ' ') {
             str = skip_space(str);
             if((*str != '\n') && (*str != 0)) {
-              utf8ToStringWithLength((uint8_t *)str, tmpString + TMP_STR_LENGTH / 2, TMP_STR_LENGTH / 2);   // an over-long name from a malformed file would overrun the upper half of tmpString
+              utf8ToStringWithLength((uint8_t *)str, tmpString + TMP_STR_LENGTH / 2, TMP_STR_LENGTH / 2);
               setUserKeyArgument(key, tmpString + TMP_STR_LENGTH / 2);
             }
           }
@@ -1844,7 +1844,7 @@ int64_t stringToInt64(const char *str) {
           if(*str == ' ') {
             str = skip_space(str);
             if((*str != '\n') && (*str != 0)) {
-              utf8ToStringWithLength((uint8_t *)str, userMenuItems[i].argumentName, sizeof(userMenuItems[i].argumentName));   // an over-long name from a malformed file would overrun the 16-byte field
+              utf8ToStringWithLength((uint8_t *)str, userMenuItems[i].argumentName, sizeof(userMenuItems[i].argumentName));
             }
           }
         }
@@ -2099,7 +2099,7 @@ int64_t stringToInt64(const char *str) {
               sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
               debugPrintf(15, "C", tmpString);
             #endif //LOADDEBUG
-            utf8ToStringWithLength((uint8_t *)tmpString, tmpString + TMP_STR_LENGTH / 2, TMP_STR_LENGTH / 2);   // a malformed formula longer than the calculator can hold would overrun the upper half of tmpString
+            utf8ToStringWithLength((uint8_t *)tmpString, tmpString + TMP_STR_LENGTH / 2, TMP_STR_LENGTH / 2);
             setEquation(i, tmpString + TMP_STR_LENGTH / 2);
           }
         }
