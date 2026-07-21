@@ -770,6 +770,43 @@ void utf8ToString(const uint8_t *utf8, char *str) {
 }
 
 
+// utf8ToString, but never writes more than maxBytes bytes to str (the terminating NUL included),
+// stopping before a glyph that would not fit. For a fixed-size destination fed by an untrusted
+// source, where an over-long name would otherwise overrun it. Keep the body in sync with utf8ToString.
+void utf8ToStringWithLength(const uint8_t *utf8, char *str, size_t maxBytes) {
+  uint32_t codePoint;
+
+  if(maxBytes == 0) {
+    return;
+  }
+  char *const end = str + maxBytes - 1;            // last byte reserved for the terminating NUL
+  while(*utf8) {
+    utf8 += utf8ToCodePoint(utf8, &codePoint);
+    switch(codePoint) {
+      case 0x0100: codePoint = 0x017F; break;
+      case 0x1D00: codePoint = 0x045A; break;
+      case 0x2200: codePoint = 0x2C6F; break;
+      default: break;
+    }
+    if(codePoint < 0x0080) {
+      if(str + 1 > end) break;
+      *(str++) = codePoint;
+    }
+    else if((codePoint & 0x00FF) == 0) {
+      if(str + 1 > end) break;
+      *(str++) = '?';
+    }
+    else {
+      if(str + 2 > end) break;                     // a 2-byte glyph must fit whole
+      codePoint |= 0x8000;
+      *(str++) = codePoint >> 8;
+      *(str++) = codePoint & 0x00FF;
+    }
+  }
+  *str = 0;
+}
+
+
 typedef struct {
   char     *item_in;            ///<
   char     *item_out;           ///<
