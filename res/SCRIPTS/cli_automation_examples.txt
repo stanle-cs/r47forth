@@ -58,6 +58,8 @@ Export a loaded program to RTF (GUI XPORTP needs a file chooser, the DSL does no
 Export / import a register data file (.d47) (GUI EXPreg / IMPORTr need a file chooser):
   ./t47 --reset --exec 'nim 3; nim 4; item 99; expreg X quot.d47'   (export register X)
   ./t47 --reset --exec 'impreg quot.d47; puts "X=[reg X]"'          (import, then read X)
+  ./t47 --reset --exec 'nim 7; sto 00; expnrg 100 regs.d47'       (export the block R00..R99, EXPnrg)
+  (expnrg <n> <file> exports R00..R(n-1), n up to 126; same filename-override rules as expreg.)
   (expreg <reg> <file>; impreg <file>; reg name as for reg, e.g. X, 00, A. The filename is verbatim, so the folder must exist; the GUI keeps .d47 in DATA/.)
   (Headless there is no chooser to open, so a file function reached without a filename stops with a cannot-read/write error and a note on stderr. Always name the file.)
 
