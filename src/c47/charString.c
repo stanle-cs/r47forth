@@ -576,12 +576,24 @@ uint32_t utf8ToCodePoint(const uint8_t *utf8, uint32_t *codePoint) { // C47 supp
   }
 
   else if((*utf8 & 0xE0) == 0xC0) {
+    if(*(utf8 + 1) == 0) {                     // truncated 2-byte sequence at the terminating NUL: emit a placeholder, do not consume the NUL
+      *codePoint = '?';
+      return 1;
+    }
     *codePoint =  (*utf8       & 0x1F) << 6;
     *codePoint |= (*(utf8 + 1) & 0x3F);
     return 2;
   }
 
   else /*if((*utf8 & 0xF0) == 0xE0)*/ {
+    if(*(utf8 + 1) == 0) {                     // truncated 3-byte sequence after the lead byte: stop on the NUL
+      *codePoint = '?';
+      return 1;
+    }
+    if(*(utf8 + 2) == 0) {                     // truncated after one continuation byte: stop on the NUL (do not read past it)
+      *codePoint = '?';
+      return 2;
+    }
     *codePoint =  (*utf8       & 0x0F) << 12;
     *codePoint |= (*(utf8 + 1) & 0x3F) <<  6;
     *codePoint |= (*(utf8 + 2) & 0x3F);
