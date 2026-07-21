@@ -1234,3 +1234,107 @@ it, and the first operation's folded text would vanish from the line.
 That is now fixed. `make dmcp5r47` flash 1093608 → 1093744 (+136 B,
 text only, measured via `size` on `R47.elf` and confirmed by the
 identical delta on `R47_flash.bin`); RAM (data+bss) unchanged at 7228.
+
+## 2026-07-20 — Code audit #2: doFnReset hook reorder fixes a false-positive double-free diagnostic; a deeper allocator-vs-restore leak remains open
+
+Non-normative. Second code-audit item, opened while investigating the two
+F6-6 save/restore-vs-allocator gaps flagged above. Traced further than the
+F6-6 entry's own hypothesis and found the actual mechanism differs from
+what was suspected there.
+
+**What was found and fixed.** `doFnReset()` (`config.c:1523`, upstream,
+called both by a plain user RESET via `fnReset()` and unconditionally as
+the first statement of `restoreCalc()`) wipes all allocator bookkeeping
+early in its body — `memset`s `ram[]`, collapses `freeMemoryRegions[]` to
+one giant free region, zeroes `numberOfAllocatedMemoryRegions` — and only
+~400 lines later called the Forth reset hook (`forthDictInit()`/
+`forthGDictInit()`, forth-core's own addition to this function, landed
+under DESIGN.md §6). `forthDictInit()` calls `forthCapPowerReset()` →
+`forthCapClose()` → `freeC47Blocks()` on a still-open capture buffer — but
+by the hook's original (late) position, the earlier wipe had already
+zeroed the bookkeeping and folded the capture's address range into one
+giant free region, so `freeListFree`'s (FIX-6) double-free guard rejected
+the free as a spurious overlap and printed an alarming
+"double/invalid free" diagnostic every time. Reproduced live: driving a
+direct `saveCalc()`/`restoreCalc()` round-trip with a capture open (no
+existing test exercised this — `test_capture_acceptance` subcase 4
+deliberately avoids the real round-trip, see the entry above) printed
+`64 blocks at address 715 overlap free region [715..809)`, decoded via
+`addr2line` on the actual crash backtrace to confirm the call site.
+
+Fixed by moving the `forthDictInit()`/`forthGDictInit()` calls in
+`doFnReset()` to before the RAM wipe instead of after (`config.c`, the
+`else` branch's opening statements). Verified safe by inspection: nothing
+between the function's entry and the wipe, or between the wipe and the
+hook's old position, reads or depends on fdict/gdict/capture state
+(grepped the ~400-line span for `forth`/`fdict`/`gdict`/`Capture` —
+nothing). Gate green; `make dmcp5r47` flash delta is **0 B** (text/data/bss
+all byte-identical before and after, confirmed via the stash-based A/B
+methodology) — expected, since this is a pure statement reorder, not new
+code.
+
+**What this fix does NOT do — a real leak remains, found while writing a
+regression test for the above.** The reorder is diagnostic-only, not a
+capacity fix. `doFnReset()`'s RAM wipe (`memset`/`freeMemoryRegions[0]`
+reset/`numberOfAllocatedMemoryRegions = 0`) runs unconditionally
+immediately after the hook regardless of which ordering is used, so by
+the time the wipe finishes, allocator state is identical either way —
+the free succeeding vs. being rejected only matters for the split second
+before the wipe overwrites everything, which is exactly why the fix has
+zero flash/behavior footprint beyond silencing the diagnostic. Later in
+the SAME `restoreCalc()` call, `restoreStateValue(numberOfAllocatedMemoryRegions/
+allocatedMemoryRegions, ...)` (`saveRestoreBackup.c` lines ~833-836)
+restores the allocator's allocated/free-region arrays **wholesale from
+the backup file** — and that file's own snapshot, taken at `saveCalc()`
+time while the capture was genuinely open, still marks the capture's
+blocks as allocated. That restore silently reintroduces a phantom
+"still allocated" entry that nothing will ever free again (`forthCap.buf`
+is already `NULL` by then, from the hook's earlier, now-successful free —
+`forthCapClose()` unconditionally nulls it regardless of whether the
+underlying `freeC47Blocks` succeeds), because the later seam call at
+`saveRestoreBackup.c:872-873` (`forthGDictValidateRestored();
+forthDictInit();`) finds `forthCap.buf == NULL` and no-ops.
+
+Confirmed via a real round-trip test (built during investigation, then
+reverted rather than committed — see below): `getFreeRamMemory()` before
+opening a capture vs. after a full `saveCalc()`/`restoreCalc()` round-trip
+differs by exactly 256 bytes (64 blocks, the capture's own size) in both
+the pre-fix and post-fix trees alike — this reorder changes nothing about
+that number. Also worth recording precisely, since it cost real
+investigation time: three unrelated "double/invalid free" diagnostics
+that appeared to coincide with this test's own restore call turned out,
+on `addr2line`-decoding their backtraces, to be the FIX-6
+`test_freelist_double_free_guarded`/`test_freelist_interior_double_free`/
+`test_freelist_no_mutation_on_oversize_free` tests' own *intentional*
+guard triggers, running later in the suite — their position in the
+captured log was a stdout/stderr buffering artifact (stdout is fully
+buffered once redirected to a file; stderr's `fflush` calls inside
+`freeListFree` are not), not a real finding. Lesson: when bisecting by log
+position across a mixed stdout/stderr capture, decode backtraces before
+trusting apparent ordering.
+
+**Root architectural gap (not fixed here, tracked separately for
+possible upstream reporting, similar treatment to the FIX-6 precedent):**
+`forthCap` is deliberately not part of the persisted save-file state (by
+design — a capture cannot survive a real save/restore, `forthCapPowerReset()`
+exists specifically to guarantee it's closed at the two dictionary
+lifecycle seams). But the save file's allocator-bookkeeping snapshot
+(`numberOfAllocatedMemoryRegions`/`allocatedMemoryRegions[]`, saved and
+restored wholesale, with no per-entry provenance) has no way to know that
+one of its "allocated" entries belongs to state that must NOT be treated
+as restored. Nothing today reconciles "ephemeral, intentionally-not-
+persisted allocation" against a wholesale bookkeeping-array restore for
+ANY such allocation, not just Forth's capture — this is a general gap in
+the save/restore-vs-allocator design, exposed by Forth because it is
+currently the only subsystem with an allocation of this shape. Net effect
+on real hardware: every power-off/power-on cycle (or explicit save/restore)
+performed while a Forth capture is open permanently leaks 256 B (64
+blocks) of RAM that can never be reclaimed without a full RESET. Given R47
+target RAM budgets, this is a real, if slow-accumulating, defect worth
+raising — deferred rather than fixed inline, since a correct fix likely
+needs either the save format to stop persisting ephemeral allocations at
+all, or the restore seam to reconcile stale bookkeeping entries against
+what Forth actually still owns post-restore, and both are upstream-shaped
+changes bigger than this stage's scope (Owner ruling 2026-07-20: trace
+and write up for potential upstream reporting, do not attempt a local fix
+without further direction — same treatment as the FIX-6 precedent).

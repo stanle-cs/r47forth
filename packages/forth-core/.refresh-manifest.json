@@ -15,7 +15,7 @@
     "test_dict_reloc.c": "f397826abb130248b90275f967333695f8e6e5e81063bff530971a0cbe82bcdb"
   },
   "patches": {
-    "010-config.c.patch": "dacd6d9f2f08c1318ac32e16982c3dea4cba0f68869c93173dc57a61ea020a6e",
+    "010-config.c.patch": "ad4724e22b3d60924fe31281e0c9f3a713761e7e91b802103c12a864abf337e5",
     "010-core__freeList.c.patch": "26242d8b3e4d7689dd98def3e1e90ffd54b6075db90f3894e2071db1b65cc052",
     "010-defines.h.patch": "66ce4faf35b1b614ec0e0d372a5413a9a823f1d23b3d1d5ae1722471c5863c01",
     "010-error.c.patch": "0bd332e0fdc05ee38c46bdfb428aa85523f40a7fde8cb57b93e71b9c96534223",
