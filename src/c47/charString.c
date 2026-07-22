@@ -778,12 +778,12 @@ void utf8ToString(const uint8_t *utf8, char *str) {
 }
 
 
-// utf8ToString into a fixed-size destination fed by a file-supplied source: at most maxBytes bytes written, the terminating NUL included.
+// utf8ToString into a fixed buffer fed by a file-supplied source: at most maxBytes bytes, the terminating NUL included, so an over-long name cannot overrun it.
 void utf8ToStringWithLength(const uint8_t *utf8, char *str, size_t maxBytes) {
   if(maxBytes == 0) {
     return;
   }
-  utf8ToStringToEnd(utf8, str, str + maxBytes - 1);
+  utf8ToStringToEnd(utf8, str, str + maxBytes - 1);  // maxBytes - 1 keeps the last byte for the terminating NUL
 }
 
 
