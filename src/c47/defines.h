@@ -553,6 +553,7 @@
 #define USE_MICHALSKI_MOSIG_TANH_SINH    1 // Set to 1 to use Michalski & Mosig tanh-sinh integration
 #define USE_NEW_DEI_INTEGRATION_CODE     2 // 0 - use prior code. 1 - use new code. 2 - use new code with split point code.
 #define ENABLE_INTEGRATOR_FILE_OUTPUT    0 // 1 for PRINTXY to be done after every evaluation of the formula; Or the complex solver for every iteration;
+#define MAX_INTEGRATOR_NESTING_DEPTH     5 // Cap on nested integrate() re-entry; a self-referential integrand aborts past this. INT(INT(INT)) is depth 3, so real use never nears it.
 #define ENABLE_COMPLEXSOLVER_FILE_OUTPUT 0 // 1 for PRINTXY to be done for the complex solver for every iteration; 2 to print the RPN function; Corrupts Reg_K
 #define INTEGRATION_TWO_STAGE_EXIT         // If set allows a level to complete before exiting the integrator
 #undef  INTEGRATION_TWO_STAGE_EXIT

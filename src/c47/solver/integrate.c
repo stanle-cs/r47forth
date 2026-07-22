@@ -11,8 +11,7 @@
 #undef  INTEGRATEDEBUG
 
 // Cap integrator re-entry before a self-integrating program overflows the C stack. Dedicated, not the shared
-// currentSolverNestingDepth (which the solver/isumprod can leave inflated).
-#define MAX_INTEGRATOR_NESTING_DEPTH 8
+// currentSolverNestingDepth (which the solver/isumprod can leave inflated). MAX_INTEGRATOR_NESTING_DEPTH is in defines.h.
 static uint16_t integratorNestingDepth = 0;
 
 void fnPgmInt(uint16_t label) {
