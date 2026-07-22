@@ -179,13 +179,13 @@
 //      All C47 / DM42 packages (common to 1–4): no 2D/3D VECTOR conversions (matrix functions stay), no number editing, no 1000-digit XFN math.
 
 // Compiled 2026-07-22 
-// dist_dmcp5...          flash   1059704   1441792    382088
-// dist_dmcp5r47...       flash   1061616   1441792    380176
-// dist_dmcpr47...        flash    675712    720896     45184
-// dist_dmcp...package 1: flash    712664    720896      8232
-// dist_dmcp...package 2: flash    715800    720896      5096
-// dist_dmcp...package 3: flash    715104    720896      5792
-// dist_dmcp...package 4: flash    675200    720896     45696
+// dist_dmcp5...          flash   1060632   1441792    381160
+// dist_dmcp5r47...       flash   1062544   1441792    379248
+// dist_dmcpr47...        flash    676680    720896     44216
+// dist_dmcp...package 1: flash    713624    720896      7272
+// dist_dmcp...package 2: flash    716752    720896      4144
+// dist_dmcp...package 3: flash    716024    720896      4872
+// dist_dmcp...package 4: flash    676152    720896     44744
 
   #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 6888) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
