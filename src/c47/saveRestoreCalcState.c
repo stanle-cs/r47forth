@@ -1552,7 +1552,8 @@ int64_t stringToInt64(const char *str) {
         regist = stringToRegisterNumber(tmpString);
         read2Lines(aimBuffer, AIM_BUFFER_LENGTH, tmpString, TMP_STR_LENGTH); // Register data type & Register value
 
-        if(loadMode == LM_ALL || (loadMode == LM_REGISTERS && regist < REGISTER_X) || (loadMode == LM_REGISTERS_PARTIAL && regist >= s && regist < (s + n))) {
+        if((regist >= 0 && regist <= LAST_GLOBAL_REGISTER) &&  // reject an out-of-range register number from a malformed state file
+            (loadMode == LM_ALL || (loadMode == LM_REGISTERS && regist < REGISTER_X) || (loadMode == LM_REGISTERS_PARTIAL && regist >= s && regist < (s + n)))) {
           #if defined(LOADDEBUG)
             sprintf(line, ", register=%i loadMode:%d, ['%s'] = %s", regist - s + d, loadMode, aimBuffer, tmpString);
             debugPrintf(1, "-", line);
@@ -1611,7 +1612,8 @@ int64_t stringToInt64(const char *str) {
           regist = toInt16(tmpString + 2) + FIRST_LOCAL_REGISTER;
           read2Lines(aimBuffer, AIM_BUFFER_LENGTH, tmpString, TMP_STR_LENGTH); // Register data type & Register value
 
-          if(loadMode == LM_ALL || loadMode == LM_REGISTERS) {
+          if((regist >= FIRST_LOCAL_REGISTER && regist < FIRST_LOCAL_REGISTER + currentNumberOfLocalRegisters) &&  // reject an out-of-range register number from a malformed state file
+             (loadMode == LM_ALL || loadMode == LM_REGISTERS)) {
             #if defined(LOADDEBUG)
               sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
               debugPrintf(3, "C", tmpString);
