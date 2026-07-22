@@ -737,7 +737,7 @@ void stringToUtf8(const char *str, uint8_t *utf8) {
 
 
 
-void utf8ToString(const uint8_t *utf8, char *str) {
+static void utf8ToStringToEnd(const uint8_t *utf8, char *str, const char *end) {  // end: last byte usable for output, NULL for no limit; a glyph crossing end stops the walk
   uint32_t codePoint;
 
   while(*utf8) {
@@ -751,6 +751,7 @@ void utf8ToString(const uint8_t *utf8, char *str) {
       default: break;
     }
     if(codePoint < 0x0080) {
+      if(end && str + 1 > end) break;
       *(str++) = codePoint;
     }
     else if((codePoint & 0x00FF) == 0) {
@@ -758,15 +759,31 @@ void utf8ToString(const uint8_t *utf8, char *str) {
       #if defined(PC_BUILD)
         printf("In function utf8ToString: code point U+%04X has a 0x00 second byte and was replaced with '?'\n", codePoint);
       #endif // PC_BUILD
+      if(end && str + 1 > end) break;
       *(str++) = '?';
     }
     else {
+      if(end && str + 2 > end) break; // a 2-byte glyph must fit whole
       codePoint |= 0x8000;
       *(str++) = codePoint >> 8;
       *(str++) = codePoint & 0x00FF;
     }
   }
   *str = 0;
+}
+
+
+void utf8ToString(const uint8_t *utf8, char *str) {
+  utf8ToStringToEnd(utf8, str, NULL);
+}
+
+
+// utf8ToString into a fixed buffer fed by a file-supplied source: at most maxBytes bytes, the terminating NUL included, so an over-long name cannot overrun it.
+void utf8ToStringWithLength(const uint8_t *utf8, char *str, size_t maxBytes) {
+  if(maxBytes == 0) {
+    return;
+  }
+  utf8ToStringToEnd(utf8, str, str + maxBytes - 1);  // maxBytes - 1 keeps the last byte for the terminating NUL
 }
 
 
