@@ -975,6 +975,19 @@ void fnDeleteVariable(uint16_t regist) {
     allNamedVariables[numberOfNamedVariables - 1].variableName[1] = 0;
     reduceC47Blocks(allNamedVariables, TO_BLOCKS(sizeof(namedVariableHeader_t) * numberOfNamedVariables), TO_BLOCKS(sizeof(namedVariableHeader_t) * (numberOfNamedVariables - 1)));
     numberOfNamedVariables -= 1;
+    // The table compacted: re-anchor the cached solver/plot variable so it keeps tracking the same variable.
+    if(currentSolverVariable == regist) {
+      currentSolverVariable = INVALID_VARIABLE;
+    }
+    else if(currentSolverVariable > regist && currentSolverVariable <= LAST_NAMED_VARIABLE) {
+      currentSolverVariable -= 1;
+    }
+    if(graphVariabl1 == regist) {
+      graphVariabl1 = 0;
+    }
+    else if(graphVariabl1 > regist && graphVariabl1 <= LAST_NAMED_VARIABLE) {
+      graphVariabl1 -= 1;
+    }
   }
   else if(regist >= FIRST_NAMED_VARIABLE && regist < LAST_NAMED_VARIABLE) {
     displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
