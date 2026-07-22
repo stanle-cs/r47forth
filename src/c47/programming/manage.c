@@ -137,7 +137,8 @@ void scanLabelsAndPrograms(void) {
     }
     nextStep = findNextStep(step);
     if(nextStep == NULL || nextStep <= step || nextStep >= programRegionEnd) {
-      break; // malformed program: a step runs past program memory
+      lastErrorCode = ERROR_UNDEFINED_OPCODE; // this step and everything after it are dropped
+      break;
     }
     if(isAtEndOfProgram(step)) { // END
       if(!isAtEndOfPrograms(nextStep)) { // .END. following END is not the start of a new program
@@ -170,7 +171,8 @@ void scanLabelsAndPrograms(void) {
   while(!isAtEndOfPrograms(step)) { // .END.
     nextStep = findNextStep(step);
     if(nextStep == NULL || nextStep <= step || nextStep >= programRegionEnd) {
-      break; // malformed program: stop before walking past program memory
+      lastErrorCode = ERROR_UNDEFINED_OPCODE; // the labels and programs past it are dropped
+      break;
     }
     if(checkOpCodeOfStep(step, ITM_LBL)) { // LBL
       labelList[numberOfLabels].program = numberOfPrograms;
