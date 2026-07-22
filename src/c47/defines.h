@@ -9,7 +9,7 @@
 // VARIOUS OPTIONS
 //*********************************
 
-#define VERSION1 "00.109.04.00b0.RC1"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
+#define VERSION1 "00.109.04.00b0.RC2"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
 
 // Version 00.109.02.07b11   Public Release C47 & R47
 // Version 00.109.02.07b12   Public Release C47 & R47 launch
