@@ -67,6 +67,7 @@ void covAmortNext(uint16_t which);
 void covEqSet(uint16_t which);
 void covEqClear(uint16_t unusedButMandatoryParameter);
 void covLoadGraphPgms(uint16_t unusedButMandatoryParameter);
+void covLoadNestedPgms(uint16_t unusedButMandatoryParameter);
 void covBmpName(uint16_t which);
 void covHashBmp(uint16_t which);
 
@@ -208,9 +209,11 @@ const funcTest_t funcTestNoParam[] = {
   {"fnBackupRoundtrip",      covBackupRoundtrip, 1 },
   {"covConvToSI",            covConvToSI, 1 },
   {"covConvFromSI",          covConvFromSI, 1 },
+  {"fnPlotReset",            fnPlotReset           },
   {"fnEqSetCov",             covEqSet, 1 },
   {"fnEqClearCov",           covEqClear, 1 },
   {"fnLoadGraphPgmsCov",     covLoadGraphPgms, 1 },
+  {"fnLoadNestedPgmsCov",    covLoadNestedPgms, 1 },
   {"fnBmpNameCov",           covBmpName, 1 },
   {"fnHashBmpCov",           covHashBmp, 1 },
   {"fnStateRoundtrip",       covStateRoundtrip, 1 },
@@ -1854,6 +1857,247 @@ void covHashBmp(uint16_t which) {
   reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(stringByteLength(hex) + 1), amNone);
   strcpy(REGISTER_STRING_DATA(REGISTER_X), hex);
   calcMode = CM_NORMAL; // leave the graph view so a reordered corpus is unaffected
+}
+
+// Nested SOLVE/INT/PLOT drivers (nested_cov.txt). The programs are the AN0022 nested examples (docs/appnotes/sources/AN0022/func.txt) without the
+// appnote's presentation steps (title STO A, SNAP, PAUSE); the numeric outers leave their result in X for the corpus to assert, the plot outers end
+// in SNAP for the c47plotTest11..14.bmp hash gates. Inner building blocks:
+//   FX: f(x) = x^2 - p*x - 2 (x the solve variable, p a parameter);  RT: root of f from guesses 0/8 (PGMSLV FX, SOLVE x);
+//   HT: h(t) = t;  IT: INT(0..x) t dt = x^2/2;  IY: INT(0..y) IT dx = y^3/6;  IG: INT(0..8) f dx;  IU: INT(0..u) f dx;
+//   SI: INT(0..x) t dt - 2;  EQ: RT(p) - 2;  F2: x^2 - 2;  FP: 4/(1+x^2).
+// Numeric outers: DBLINT = INT(0..2) IT dx = 4/3;  TRPINT = INT(0..2) IY dy = 2/3 (levels coupled through the limits);  SLVINT: SI(x)=0 -> x=2;
+// SLVSLV: EQ(p)=0 -> p=1 (solver inside solver);  SLVF2: x^2-2=0 -> sqrt(2);  INTPI = INT(0..1) 4/(1+x^2) dx = pi.
+// Plot outers: PLTROOT plots RT over p (root locus), PLTINTG plots IG over p (linear), PLTINT3 plots IU over u (cubic; p stored 0 in-program so the
+// render is immune to the p SLVSLV or a PLTf sweep leaves behind), PLTDBL plots IY over y (cubic). All plots run from the no-formula state
+// fnEqClearCov sets, so they gate the PGMPLT no-formula path.
+void covLoadNestedPgms(uint16_t unusedButMandatoryParameter) {
+  static const uint8_t pgmFX[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'F', 'X',    // LBL "FX"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR 'x'
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'p',   // MVAR 'p'
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // RCL 'x'
+    ITM_ENTER,                                      // ENTER
+    ITM_MULT,                                       // x^2
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // RCL 'x'
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'p',         // RCL 'p'
+    ITM_MULT,                                       // p*x
+    ITM_SUB,                                        // x^2 - p*x
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // 2
+    ITM_SUB,                                        // x^2 - p*x - 2
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmRT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'R', 'T',    // LBL "RT"
+    OP2(ITM_PGMSLV), STRING_LABEL_VARIABLE, 2, 'F', 'X', // PGMSLV 'FX'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // guess lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '8',       // guess hi
+    OP2(ITM_SOLVE), STRING_LABEL_VARIABLE, 1, 'x',  // SOLVE 'x'
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmHT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'H', 'T',    // LBL "HT"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 't',   // MVAR 't'
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 't',         // h(t) = t
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmIT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'I', 'T',    // LBL "IT"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR 'x'
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'H', 'T', // PGMINT 'HT'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // upper limit x
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 't', // INT(0..x) t dt
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmIY[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'I', 'Y',    // LBL "IY"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'y',   // MVAR 'y'
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'I', 'T', // PGMINT 'IT'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'y',         // upper limit y
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x', // INT(0..y) IT dx
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmIG[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'I', 'G',    // LBL "IG"
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'F', 'X', // PGMINT 'FX'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '8',       // upper limit
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x', // INT(0..8) f dx
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmIU[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'I', 'U',    // LBL "IU"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'u',   // MVAR 'u'
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'F', 'X', // PGMINT 'FX'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'u',         // upper limit u
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x', // INT(0..u) f dx
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmSI[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'S', 'I',    // LBL "SI"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR 'x'
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'H', 'T', // PGMINT 'HT'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // upper limit x
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 't', // INT(0..x) t dt = x^2/2
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // 2
+    ITM_SUB,                                        // x^2/2 - 2
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmEQ[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'E', 'Q',    // LBL "EQ"
+    ITM_XEQ, STRING_LABEL_VARIABLE, 2, 'R', 'T',    // XEQ 'RT' (inner solve -> root in X)
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // 2
+    ITM_SUB,                                        // root - 2
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmF2[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'F', '2',    // LBL "F2"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR 'x'
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // RCL 'x'
+    ITM_ENTER,                                      // ENTER
+    ITM_MULT,                                       // x^2
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // 2
+    ITM_SUB,                                        // x^2 - 2
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmFP[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'F', 'P',    // LBL "FP"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR 'x'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '4',       // 4
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // RCL 'x'
+    ITM_ENTER,                                      // ENTER
+    ITM_MULT,                                       // x^2
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',       // 1
+    ITM_ADD,                                        // 1 + x^2
+    ITM_DIV,                                        // 4 / (1 + x^2)
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmDBLINT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 6, 'D', 'B', 'L', 'I', 'N', 'T', // LBL "DBLINT"
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'I', 'T', // PGMINT 'IT'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // upper limit
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x', // INT(0..2) (x^2/2) dx = 4/3
+    OP2(ITM_END),                                   // END
+  };
+  // TRPINT and PLTDBL set ACC 1e-8 for their run and restore the 0 default before returning: three coupled integrator levels at the
+  // full-precision default take ~10 minutes (measured 2026-07-22), far past the suite timeout; at 1e-8 TRPINT runs in ~5 s. DBLINT
+  // stays at the full-precision default, so the 34-digit nested-integrator path keeps a gate.
+  static const uint8_t pgmTRPINT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 6, 'T', 'R', 'P', 'I', 'N', 'T', // LBL "TRPINT"
+    ITM_LITERAL, STRING_REAL34, 4, '1', 'e', '-', '8', // 1e-8
+    ITM_STO, STRING_LABEL_VARIABLE, 3, 'A', 'C', 'C', // STO 'ACC' (integrator convergence target)
+    ITM_DROP,                                       // DROP the 1e-8
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'I', 'Y', // PGMINT 'IY'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // upper limit
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'y', // INT(0..2) (y^3/6) dy = 2/3
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // 0
+    ITM_STO, STRING_LABEL_VARIABLE, 3, 'A', 'C', 'C', // STO 'ACC' (restore the full-precision default)
+    ITM_DROP,                                       // DROP the 0, result back in X
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmSLVINT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 6, 'S', 'L', 'V', 'I', 'N', 'T', // LBL "SLVINT"
+    OP2(ITM_PGMSLV), STRING_LABEL_VARIABLE, 2, 'S', 'I', // PGMSLV 'SI'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // guess lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // guess hi
+    OP2(ITM_SOLVE), STRING_LABEL_VARIABLE, 1, 'x',  // SOLVE 'x' -> x = 2
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmSLVSLV[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 6, 'S', 'L', 'V', 'S', 'L', 'V', // LBL "SLVSLV"
+    OP2(ITM_PGMSLV), STRING_LABEL_VARIABLE, 2, 'E', 'Q', // PGMSLV 'EQ'
+    ITM_LITERAL, STRING_LONG_INTEGER, 2, '-', '5',  // guess lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // guess hi
+    OP2(ITM_SOLVE), STRING_LABEL_VARIABLE, 1, 'p',  // SOLVE 'p' -> p = 1
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmSLVF2[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 5, 'S', 'L', 'V', 'F', '2', // LBL "SLVF2"
+    OP2(ITM_PGMSLV), STRING_LABEL_VARIABLE, 2, 'F', '2', // PGMSLV 'F2'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // guess lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // guess hi
+    OP2(ITM_SOLVE), STRING_LABEL_VARIABLE, 1, 'x',  // SOLVE 'x' -> sqrt(2)
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmINTPI[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 5, 'I', 'N', 'T', 'P', 'I', // LBL "INTPI"
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'F', 'P', // PGMINT 'FP'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',       // upper limit
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x', // INT(0..1) 4/(1+x^2) dx = pi
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmPLTROOT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 7, 'P', 'L', 'T', 'R', 'O', 'O', 'T', // LBL "PLTROOT"
+    OP2(ITM_PGMPLT), STRING_LABEL_VARIABLE, 2, 'R', 'T', // PGMPLT 'RT'
+    ITM_LITERAL, STRING_LONG_INTEGER, 2, '-', '5',  // plot range lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // plot range hi
+    OP2(ITM_PLTf), STRING_LABEL_VARIABLE, 1, 'p',   // PLTf 'p' (root locus over p)
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmPLTINTG[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 7, 'P', 'L', 'T', 'I', 'N', 'T', 'G', // LBL "PLTINTG"
+    OP2(ITM_PGMPLT), STRING_LABEL_VARIABLE, 2, 'I', 'G', // PGMPLT 'IG'
+    ITM_LITERAL, STRING_LONG_INTEGER, 2, '-', '5',  // plot range lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // plot range hi
+    OP2(ITM_PLTf), STRING_LABEL_VARIABLE, 1, 'p',   // PLTf 'p' (linear in p)
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmPLTINT3[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 7, 'P', 'L', 'T', 'I', 'N', 'T', '3', // LBL "PLTINT3"
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // 0
+    ITM_STO, STRING_LABEL_VARIABLE, 1, 'p',         // STO 'p' (clamp the FX parameter at 0 for a clean cubic)
+    ITM_DROP,                                       // DROP the 0
+    OP2(ITM_PGMPLT), STRING_LABEL_VARIABLE, 2, 'I', 'U', // PGMPLT 'IU'
+    ITM_LITERAL, STRING_LONG_INTEGER, 2, '-', '5',  // plot range lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // plot range hi
+    OP2(ITM_PLTf), STRING_LABEL_VARIABLE, 1, 'u',   // PLTf 'u' (cubic in u)
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmPLTDBL[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 6, 'P', 'L', 'T', 'D', 'B', 'L', // LBL "PLTDBL"
+    ITM_LITERAL, STRING_REAL34, 4, '1', 'e', '-', '8', // 1e-8
+    ITM_STO, STRING_LABEL_VARIABLE, 3, 'A', 'C', 'C', // STO 'ACC' (a double integral per plotted sample; see the TRPINT note)
+    ITM_DROP,                                       // DROP the 1e-8
+    OP2(ITM_PGMPLT), STRING_LABEL_VARIABLE, 2, 'I', 'Y', // PGMPLT 'IY'
+    ITM_LITERAL, STRING_LONG_INTEGER, 2, '-', '5',  // plot range lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // plot range hi
+    OP2(ITM_PLTf), STRING_LABEL_VARIABLE, 1, 'y',   // PLTf 'y' (cubic in y)
+    OP2(ITM_SNAP),                                  // SNAP
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // 0
+    ITM_STO, STRING_LABEL_VARIABLE, 3, 'A', 'C', 'C', // STO 'ACC' (restore the full-precision default; after SNAP so the capture is untouched)
+    ITM_DROP,                                       // DROP the 0
+    OP2(ITM_END),                                   // END
+  };
+  covWriteAndLoadPgm(pgmFX, sizeof(pgmFX));
+  covWriteAndLoadPgm(pgmRT, sizeof(pgmRT));
+  covWriteAndLoadPgm(pgmHT, sizeof(pgmHT));
+  covWriteAndLoadPgm(pgmIT, sizeof(pgmIT));
+  covWriteAndLoadPgm(pgmIY, sizeof(pgmIY));
+  covWriteAndLoadPgm(pgmIG, sizeof(pgmIG));
+  covWriteAndLoadPgm(pgmIU, sizeof(pgmIU));
+  covWriteAndLoadPgm(pgmSI, sizeof(pgmSI));
+  covWriteAndLoadPgm(pgmEQ, sizeof(pgmEQ));
+  covWriteAndLoadPgm(pgmF2, sizeof(pgmF2));
+  covWriteAndLoadPgm(pgmFP, sizeof(pgmFP));
+  covWriteAndLoadPgm(pgmDBLINT, sizeof(pgmDBLINT));
+  covWriteAndLoadPgm(pgmTRPINT, sizeof(pgmTRPINT));
+  covWriteAndLoadPgm(pgmSLVINT, sizeof(pgmSLVINT));
+  covWriteAndLoadPgm(pgmSLVSLV, sizeof(pgmSLVSLV));
+  covWriteAndLoadPgm(pgmSLVF2, sizeof(pgmSLVF2));
+  covWriteAndLoadPgm(pgmINTPI, sizeof(pgmINTPI));
+  covWriteAndLoadPgm(pgmPLTROOT, sizeof(pgmPLTROOT));
+  covWriteAndLoadPgm(pgmPLTINTG, sizeof(pgmPLTINTG));
+  covWriteAndLoadPgm(pgmPLTINT3, sizeof(pgmPLTINT3));
+  covWriteAndLoadPgm(pgmPLTDBL, sizeof(pgmPLTDBL));
 }
 
 
