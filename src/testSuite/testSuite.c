@@ -65,6 +65,7 @@ void covEffToI(uint16_t unusedButMandatoryParameter);
 void covAmort(uint16_t which);
 void covAmortNext(uint16_t which);
 void covEqSet(uint16_t which);
+void covEqClear(uint16_t unusedButMandatoryParameter);
 void covLoadGraphPgms(uint16_t unusedButMandatoryParameter);
 void covBmpName(uint16_t which);
 void covHashBmp(uint16_t which);
@@ -208,6 +209,7 @@ const funcTest_t funcTestNoParam[] = {
   {"covConvToSI",            covConvToSI, 1 },
   {"covConvFromSI",          covConvFromSI, 1 },
   {"fnEqSetCov",             covEqSet, 1 },
+  {"fnEqClearCov",           covEqClear, 1 },
   {"fnLoadGraphPgmsCov",     covLoadGraphPgms, 1 },
   {"fnBmpNameCov",           covBmpName, 1 },
   {"fnHashBmpCov",           covHashBmp, 1 },
@@ -1713,6 +1715,14 @@ void covEqSet(uint16_t which) {
   currentSolverVariable = findOrAllocateNamedVariable("X");
 }
 
+void covEqClear(uint16_t unusedButMandatoryParameter) {
+  // Delete every formula so a following program plot runs from a true no-equation state (numberOfFormulae 0, allFormulae NULL). A program plot needs no formula,
+  // so this exposes it to the no-equation guard in fnEqSolvGraph, which G2 masks by inheriting a formula from the equation plot before it. See graphs_cov.txt G2b.
+  while(numberOfFormulae > 0) {
+    deleteEquation(0);
+  }
+}
+
 // Two-byte program opcode: the high bit on the first byte marks that a second opcode byte follows (the decoder's (op & 0x80) convention).
 #define OP2(itm) (uint8_t)(((itm) >> 8) | 0x80), (uint8_t)((itm) & 0xff)
 
@@ -1817,6 +1827,8 @@ static void covPlotBmpName(char *out, uint16_t which) {
 void covBmpName(uint16_t which) {
   // Point the next SNAP capture at c47plotTest<FARG>.bmp; the override is consumed by one capture, so this runs before each XEQ of a graph program.
   covPlotBmpName(_ioFileNameOverride, which);
+  // Delete any stale copy first: a graph program that errors before its SNAP leaves no file, so covHashBmp fails instead of hashing an old bitmap - a false pass.
+  remove(_ioFileNameOverride);
 }
 
 void covHashBmp(uint16_t which) {
