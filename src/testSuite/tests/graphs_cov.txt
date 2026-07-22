@@ -56,6 +56,25 @@ Func: fnHashBmpCov
 In:  FARG=2
 Out: EC=0 RX=Stri:"708E9B6A67A0B9BA2EBBAAAE35E5BE0D2CF67379885C7C2994AADE6FA5115217"
 
+; program plot from a genuine NO-equation state (G2b): the regression gate. G2 above passes even
+; with a broken no-equation guard because it inherits G1's live formula. Here fnEqClearCov deletes
+; every formula first (numberOfFormulae==0, allFormulae==NULL), then the SAME G2 program plot runs.
+; A program plot drives execute_rpn_function via program S and needs no formula, so it must render
+; the identical bitmap as G2 (same hash). An over-broad guard aborts it with ERROR_NO_EQUATION_DEFINED
+; instead - nothing renders, a different bitmap, and the hash mismatches: the gate fires on the bug.
+Func: fnEqClearCov
+In:  FARG=0
+Out: EC=0
+Func: fnBmpNameCov
+In:  FARG=10
+Out: EC=0
+Func: fnExecute
+In:  FL_ASLIFT=1 R00=Stri:"S" RY=Real:"-5" RX=Real:"5" PGM="G2"
+Out: EC=0
+Func: fnHashBmpCov
+In:  FARG=10
+Out: EC=0 RX=Stri:"708E9B6A67A0B9BA2EBBAAAE35E5BE0D2CF67379885C7C2994AADE6FA5115217"
+
 ; statistics plots: seed five (Y,X) data points once, then plot the same data with PLSTAT (G3) and with SCATR (G4)
 Func: fnClSigma
 In:  FARG=0 RX=Real:"0"
