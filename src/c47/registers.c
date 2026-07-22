@@ -1013,11 +1013,11 @@ void fnClearAllVariables(uint16_t confirmation) {
   }
   else {
     for(uint16_t i = numberOfNamedVariables; i > 0; i--) {  // Clear all user variables
-      if((compareString((char *)(allNamedVariables[i].variableName + 1), "STATS", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "HISTO", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "Mat_A", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "Mat_B", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "Mat_X", CMP_NAME) != 0))
+      if((compareString((char *)(allNamedVariables[i-1].variableName + 1), "STATS", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "HISTO", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "Mat_A", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "Mat_B", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "Mat_X", CMP_NAME) != 0))
       clearRegister(FIRST_NAMED_VARIABLE + i -1);
     }
     fnClSigma(CONFIRMED);                // Clear and release the memory of all statistical sums
