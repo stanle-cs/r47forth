@@ -2661,7 +2661,19 @@ void fnEqSolvGraph (uint16_t func) {
   #if defined(OPTION_GRAPHICS)
       // No equation defined: error out before any stack or reserved-variable writes;
       // running these items without a formula crashed in parseEquation (NULL allFormulae).
-      if(currentFormula >= numberOfFormulae || allFormulae[currentFormula].pointerToFormulaData == C47_NULL) {
+      // Exempt a genuine RPN program plot: PGMPLT drives execute_rpn_function via a program and
+      // has no formula by design, so requiring a formula here wrongly aborted every program plot
+      // with ERROR_NO_EQUATION_DEFINED. It is a program plot only when this is a plot func, the
+      // RPN grapher is active (the same flag execute_rpn_function keys on to run the program
+      // instead of a formula), and a valid plot variable is set - fnMvarPlot sets these together.
+      // The valid variable is exactly what keeps this path away from the parseEquation fallback
+      // below (reached only when currentSolverVariable is invalid), so the crash Jaco guarded
+      // against still cannot occur, and the guard stays fully active for the solve items.
+      const bool_t rpnProgramPlot = (func == EQ_PLOT || func == EQ_PLOT_LU)
+                                    && (currentSolverStatus & SOLVER_STATUS_RPN_GRAPHER)
+                                    && currentSolverVariable >= FIRST_NAMED_VARIABLE
+                                    && currentSolverVariable <= LAST_NAMED_VARIABLE;
+      if(!rpnProgramPlot && (currentFormula >= numberOfFormulae || allFormulae[currentFormula].pointerToFormulaData == C47_NULL)) {
         calcMode = CM_NORMAL;
         displayCalcErrorMessage(ERROR_NO_EQUATION_DEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
         #if (EXTRA_INFO_ON_CALC_ERROR == 1)
