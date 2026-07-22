@@ -925,6 +925,12 @@ static int nimCmd(Jim_Interp *interp, int argc, Jim_Obj *const *argv) {
     Jim_SetResultString(interp, "nim: missing string argument", -1);
     return JIM_ERR;
   }
+  if(calcMode == CM_GRAPH) {  // incoming digits, change modes and go to the GRAPHS input page as the keyboard digit path does; addItemToNimBuffer opens NIM only from CM_NORMAL
+    calcMode = CM_NORMAL;
+    showSoftmenu(-MNU_GRAPHS);
+    screenUpdatingMode &= SCRUPD_MANUAL_MENU;
+    refreshScreen(212);                //dsl.c owns trace id range 210..219
+  }
   printf("NIM: ");  // NIM sequentially accepts numerals and - as typed. That means -4.5E-5 is to be entered as [4.5 - E5 -] and this is automated below
   const char *start = Jim_String(argv[1]);
   bool_t inExponent = FALSE;
