@@ -1582,11 +1582,8 @@ void covEqSet(uint16_t which) {
 }
 
 void covEqClear(uint16_t unusedButMandatoryParameter) {
-  // Delete every formula so a following program plot runs from a genuine no-equation state
-  // (numberOfFormulae == 0, allFormulae == NULL). A program plot needs no formula, but the
-  // no-equation guard in fnEqSolvGraph is gated on there being one; without this clear, a
-  // program-plot test that runs after an equation plot (G1) inherits a live formula and never
-  // exercises that guard - the gap that let the program-plot regression ship. See graphs_cov.txt G2b.
+  // Delete every formula so a following program plot runs from a true no-equation state (numberOfFormulae 0, allFormulae NULL). A program plot needs no formula,
+  // so this exposes it to the no-equation guard in fnEqSolvGraph, which G2 masks by inheriting a formula from the equation plot before it. See graphs_cov.txt G2b.
   while(numberOfFormulae > 0) {
     deleteEquation(0);
   }
@@ -1696,9 +1693,7 @@ static void covPlotBmpName(char *out, uint16_t which) {
 void covBmpName(uint16_t which) {
   // Point the next SNAP capture at c47plotTest<FARG>.bmp; the override is consumed by one capture, so this runs before each XEQ of a graph program.
   covPlotBmpName(_ioFileNameOverride, which);
-  // Delete any prior copy first: if the graph program errors before its SNAP, covHashBmp must find
-  // no file and fail, not silently hash a stale bitmap left by an earlier run (a false pass). This
-  // is what makes the G2b no-equation gate reliable across repeated in-place make test runs.
+  // Delete any stale copy first: a graph program that errors before its SNAP leaves no file, so covHashBmp fails instead of hashing an old bitmap - a false pass.
   remove(_ioFileNameOverride);
 }
 

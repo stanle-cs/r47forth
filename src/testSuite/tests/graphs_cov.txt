@@ -56,12 +56,9 @@ Func: fnHashBmpCov
 In:  FARG=2
 Out: EC=0 RX=Stri:"708E9B6A67A0B9BA2EBBAAAE35E5BE0D2CF67379885C7C2994AADE6FA5115217"
 
-; program plot from a genuine NO-equation state (G2b): the regression gate. G2 above passes even
-; with a broken no-equation guard because it inherits G1's live formula. Here fnEqClearCov deletes
-; every formula first (numberOfFormulae==0, allFormulae==NULL), then the SAME G2 program plot runs.
-; A program plot drives execute_rpn_function via program S and needs no formula, so it must render
-; the identical bitmap as G2 (same hash). An over-broad guard aborts it with ERROR_NO_EQUATION_DEFINED
-; instead - nothing renders, a different bitmap, and the hash mismatches: the gate fires on the bug.
+; program plot from a no-equation state (G2b): fnEqClearCov drops every formula, then the same G2 plot runs. A program plot needs no formula and renders the identical
+; bitmap, so it pins G2's hash, while an over-broad no-equation guard aborts it and the hash mismatches. G2 alone misses this because it inherits a formula from the
+; equation plot before it.
 Func: fnEqClearCov
 In:  FARG=0
 Out: EC=0
