@@ -483,5 +483,7 @@ serialize_cov
 
 graphs_cov
 
+nested_cov
+
 config_cov
 stack_cov
