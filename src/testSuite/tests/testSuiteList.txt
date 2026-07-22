@@ -464,6 +464,7 @@ tvm_cov
 matrix2_cov
 clcvar_cov
 named_variable_cov
+stats_register_cov
 serialize_state_cov
 pgm_solve_cov
 histo_cov
