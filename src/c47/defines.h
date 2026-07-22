@@ -135,49 +135,58 @@
 //THESE ARE DMCP COMPILE OPTIONS FOR TWO FILE QSPI
   #if defined(TWO_FILE_PGM) //---------THESE ARE THE EXCLUSIONS TO MAKE IT FIT INTO AVAILABLE FLASH EVEN WHILE USING QSPI
 
-  #undef PACKAGE1_NOBESSEL_NOORTHO
-  #undef PACKAGE2_NODISTR
-  #undef PACKAGE3_NOBESSEL_NOORTHO_NOFBR
-  #undef PACKAGE4_MINIMAL_MATH
+  #undef DMCP_PACKAGE1
+  #undef DMCP_PACKAGE2
+  #undef DMCP_PACKAGE3
+  #undef DMCP_PACKAGE4_NOOPT
 
   #if DMCP_PACKAGE == 1
-  #define PACKAGE1_NOBESSEL_NOORTHO
+  #define DMCP_PACKAGE1
   #elif DMCP_PACKAGE == 2
-  #define PACKAGE2_NODISTR
+  #define DMCP_PACKAGE2
   #elif DMCP_PACKAGE == 3
-  #define PACKAGE3_NOBESSEL_NOORTHO_NOFBR      //More aggressive removals in addition to package 1
+  #define DMCP_PACKAGE3
   #elif DMCP_PACKAGE == 4
-  #define PACKAGE4_MINIMAL_MATH                //Most aggressive removals to pass gitlab pipeline CI release compiles
+  #define DMCP_PACKAGE4_NOOPT    //aggressive removals to pass gitlab pipeline CI release compiles
   #endif
 
 
-//    Info 2026-07-17 00.109.03.04
+//    Info 2026-07-22 00.109.03.04
 //
 //       Pkg │ DIST    │ X.FN     │ FIN  │ EIGEN │ ELEC │ IR
 //      ─────┼─────────┼──────────┼──────┼───────┼──────┼────
-//        1  │ all     │ stripped │ fast │   ·   │  ·   │ ✓
-//        2  │ half    │ full     │ slow │   ·   │  ·   │ ·
-//        3  │ limited │ stripped │ slow │   ✓   │  ✓   │ ·
-//        4  │ none    │ stripped │ slow │   ·   │  ·   │ ✓
-//      Legend
-//      
+//        1  │ all     │ no ellip │ fast │   ❌  │  ✅  │ ✅
+//        2  │ all     │ full     │ slow │   ❌  │  ❌  │ ❌
+//        3  │ limited │ no ellip │ fast │   ✅  │  ✅  │ ✅
+//        4  │ none    │ no e-B-O │ slow │   ❌  │  ❌  │ ✅
+//
+//
 //      DIST   all      every distribution
-//             half     Normal, StdNormal, LogNormal, cauchy, chi, expo, logis, t, weibull
-//             limited  Normal, StdNormal, LogNormal only
+//             limited  Normal, StdNormal, LogNormal, gev, Pareto, Uniform, Discr Uniform
 //             none     no distributions
-//      X.FN   full     includes Elliptic, Bessel, Orthogonal
-//             stripped none of Elliptic, Bessel, Orthogonal
+//      X.FN   full     includes elliptic, Bessel, Orthogonal
+//             no ellip without elliptic
+//             no e-B-O none of elliptic, Bessel, Orthogonal
 //      FIN    fast     financial funcs at full precision/speed
 //             slow     financial funcs available, but lower precision and slower
-//      EIGEN  ✓        EIGVAL + EIGVEC (est. > 16 digits)
-//             ·        no EIGVAL, EIGVEC or MSQRT
-//      ELEC   ✓        Star/Delta, Impedance, phase-sequence, parallel funcs
-//             ·        none of the above
-//      IR     ✓        IR printing enabled
+//      EIGEN  ✅       EIGVAL + EIGVEC (est. > 16 digits) + MSQRT
+//             ❌       none of the above
+//      ELEC   ✅       Star/Delta, Impedance, phase-sequence, parallel funcs
+//             ❌       none of the above
+//      IR     ✅       IR printing
+//             ❌       no IR printing
 //      All C47 / DM42 packages (common to 1–4): no 2D/3D VECTOR conversions (matrix functions stay), no number editing, no 1000-digit XFN math.
 
+// Compiled 2026-07-22 
+// dist_dmcp5...          flash   1059704   1441792    382088
+// dist_dmcp5r47...       flash   1061616   1441792    380176
+// dist_dmcpr47...        flash    675712    720896     45184
+// dist_dmcp...package 1: flash    712664    720896      8232
+// dist_dmcp...package 2: flash    715800    720896      5096
+// dist_dmcp...package 3: flash    715104    720896      5792
+// dist_dmcp...package 4: flash    675200    720896     45696
 
-  #if defined(PACKAGE1_NOBESSEL_NOORTHO) // PACKAGE 1 (free 6888) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; IR PRINTING
+  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 6888) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
     #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
     #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -193,7 +202,7 @@
     #define OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(PACKAGE2_NODISTR)          // PACKAGE 2 (free 3744) // ALL DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; NO IR PRINTING
+  #if defined(DMCP_PACKAGE2)             // PACKAGE 2 (free 3744) // ALL DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; NO IR PRINTING
     #define OPTION_ELLIPTIC              // ✓ 13112 bytes // Without ELLIPTIC
     #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
     #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -209,7 +218,7 @@
             #undef  OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(PACKAGE3_NOBESSEL_NOORTHO_NOFBR) // PACKAGE 3 EXPERIMENTAL (free 4416) // Limited DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
+  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 EXPERIMENTAL (free 4416) // Limited DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
     #define  OPTION_BESSEL               // ✓  4968 bytes // Without X.FN BESSEL
     #define  OPTION_ORTHO                // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -230,7 +239,7 @@
             //  1    0       6240     26452   ELEC only
             //  1    1      15808     16884   both (ELEC+VECTOR share 3384)
 
-  #if defined(PACKAGE4_MINIMAL_MATH)       // PACKAGE 4 (free ✓32712) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
+  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free ✓32712) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
             #undef  OPTION_BESSEL        // ✓  4968 bytes // Without X.FN BESSEL
             #undef  OPTION_ORTHO         // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -274,7 +283,7 @@
             #undef  OPTION_VECTOR        // ✓ 13672 bytes // Vector 12952 saving if ELEC is not in; 9568 saving if ELEC is in
     #define OPTION_TVM_AMORT             // ✓  1648 bytes // Use additional AMORT in tvm
     #define OPTION_DATAFILE              // ✓  2112 bytes // Without register/variable .d47 export & import
-  
+
    // DECNUMBER_FASTMUL        // manually include or exclude this option in the Makefile, DECNUMBER_FASTMUL
   #endif // TWO_FILE_PGM
 #endif // DMCP_BUILD
