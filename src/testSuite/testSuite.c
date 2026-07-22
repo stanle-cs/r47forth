@@ -5374,8 +5374,7 @@ void itemToCall(char *itemSpec) {
     return;
   }
 
-  // A TAM item's param is a TM_* marker, not a value; passed through it reaches
-  // the function as a register index and segfaults. Reject as the DSL does (dsl.c:104).
+  // A TAM item's param is a TM_* marker, not a value; passed through it reaches the function as a register index and segfaults. Reject as the DSL does (dsl.c:104).
   if(TM_VALUE <= indexOfItems[itemNr].param && indexOfItems[itemNr].param <= TM_CMP) {
     printf("\nItem %d (%s) takes a TAM parameter, which Item: cannot supply: drive it with Func: and In: FARG=n\n", itemNr, itemSpec);
     caseSetupFailed = true;
@@ -5570,8 +5569,7 @@ void processLine(void) {
     successfulTests++;
     noFailForNow = true;
     if(caseSetupFailed) {
-      // Setup failed, so fnNop ran: fail-and-skip. The flag latches across this
-      // block's Out: lines; the next Func:/Item: and each file clear it.
+      // Setup failed, so fnNop ran: fail-and-skip. The flag latches across this block's Out: lines; the next Func:/Item: and each file clear it.
       abortTest();
     }
     else {
