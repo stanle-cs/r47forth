@@ -904,14 +904,10 @@ calcRegister_t findNamedVariable(const char *variableName) {
     printStatus(0, "findNamedVariable", force);
   #endif //VERBOSE_REGISTERS
   //printf("|%20s|%20s|\n",(char *)(allNamedVariables[0].variableName + 1), variableName);
-  // Fold the probed name once instead of letting compareString() re-walk and
-  // re-fold it for every candidate. Identical bytes fold identically, so the
-  // length+memcmp test is a pure fast path for the common exact reference; a
-  // miss still goes through the folded compare, because a name written with
-  // sub- or superscript glyphs legitimately matches its folded form.
+  // Exact-bytes fast path first; the second compare treats sub- and superscript glyphs as their plain form.
   const size_t nameByteLength = stringByteLength(variableName);
   uint16_t foldedName[7];
-  const int32_t foldedLength = foldNameToCharCodes(variableName, foldedName, 7); // 1..7 glyphs checked above; on the unreachable overflow (-1) every compare below misses, as on master
+  const int32_t foldedLength = foldNameToCharCodes(variableName, foldedName, 7); // 1..7 glyphs checked at entry; on overflow (-1) no candidate compares equal
   for(int i = 0; i < numberOfNamedVariables; i++) {
     const uint8_t *storedName = allNamedVariables[i].variableName;
     if((storedName[0] == nameByteLength && memcmp(storedName + 1, variableName, nameByteLength) == 0)
@@ -928,9 +924,7 @@ calcRegister_t findNamedVariable(const char *variableName) {
 
 
 
-// The allocate-on-miss half of findOrAllocateNamedVariable(), for callers
-// that have already established findNamedVariable() returned INVALID_VARIABLE
-// and must not pay for a second scan.
+// Allocate half of findOrAllocateNamedVariable(); call only after findNamedVariable() returned INVALID_VARIABLE.
 calcRegister_t allocateNamedVariableOnMiss(const char *variableName) {
   calcRegister_t regist = INVALID_VARIABLE;
   uint8_t len = stringGlyphLength(variableName);
