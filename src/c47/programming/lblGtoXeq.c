@@ -487,7 +487,11 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
         getStringLabelOrVariableName(paramAddress);
         calcRegister_t regist = findNamedVariable(tmpStringLabelOrVariableName);
         if(tryAllocate) {
-          reallyRunFunction(op, findOrAllocateNamedVariable(tmpStringLabelOrVariableName));
+          // Reuses the regist from findNamedVariable above; on a failed allocation regist stays INVALID_VARIABLE and is passed on.
+          if(regist == INVALID_VARIABLE) {
+            regist = allocateNamedVariableOnMiss(tmpStringLabelOrVariableName);
+          }
+          reallyRunFunction(op, regist);
         }
         else if(regist != INVALID_VARIABLE) {
           reallyRunFunction(op, regist);

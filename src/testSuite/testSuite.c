@@ -22,7 +22,7 @@ char line[100000], lastInParameters[10000], fileName[1000], *filePath, filePathN
 char testCaseName[1000], testCasePrefix[1000], testCaseSuffix[1000];
 int32_t lineNumber, numTestsFile, numTestsTotal, successfulTests, failedTests;
 int32_t functionIndex, funcType, correctSignificantDigits;
-bool_t noFailForNow;
+bool_t noFailForNow = true; // abortTest counts a failure only while set; starts true so the run's first test can fail
 
 uint16_t label, functionParameter;
 
@@ -49,6 +49,7 @@ void covLoadPgm(uint16_t unusedButMandatoryParameter);
 void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter);
 void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter);
 void covIterationTi(uint16_t which);
+void covNamedVariableFold(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
@@ -221,6 +222,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnLoadPgmLongLabelCov",  covLoadPgmLongLabel, 1 },
   {"fnLoadStateLongLabelCov", covLoadStateLongLabel, 1 },
   {"fnIterationTiCov",       covIterationTi, 1 },
+  {"fnNamedVarFoldCov",      covNamedVariableFold, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
@@ -921,6 +923,138 @@ void covIterationTi(uint16_t which) {
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
   int32ToReal34(temporaryInformation == TI_TRUE ? 1 : 0, REGISTER_REAL34_DATA(REGISTER_X));
   temporaryInformation = TI_NO_INFO;
+}
+
+void covNamedVariableFold(uint16_t unusedButMandatoryParameter) {
+  // The calculator treats subscript and superscript letters in a name as the plain letter, so both spellings must reach the same variable. These tests check for
+  // equivalence and non-equivalence, in both creation orders; the stored bytes are whichever spelling was created first.
+  uint16_t before = numberOfNamedVariables;
+  calcRegister_t sub = findOrAllocateNamedVariable(STD_SUB_a "q");   // subscript-a followed by q
+  calcRegister_t plainFind = findNamedVariable("aq");
+  calcRegister_t plainAlloc = findOrAllocateNamedVariable("aq");
+  if(sub == INVALID_VARIABLE || plainFind != sub || plainAlloc != sub || numberOfNamedVariables != before + 1) {
+    printf("\nfold-equivalent variable lookup broken: sub=%d find=%d alloc=%d vars %d->%d\n",
+           (int)sub, (int)plainFind, (int)plainAlloc, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Plain spelling created first; the subscript spelling must find it.
+  calcRegister_t plain = findOrAllocateNamedVariable("bk");
+  calcRegister_t subFind = findNamedVariable(STD_SUB_b "k");
+  calcRegister_t subAlloc = findOrAllocateNamedVariable(STD_SUB_b "k");
+  if(plain == INVALID_VARIABLE || subFind != plain || subAlloc != plain || numberOfNamedVariables != before + 2) {
+    printf("\nfold-cov 2 plain-created, sub probe: plain=%d find=%d alloc=%d vars %d->%d (all three must be one variable)\n",
+           (int)plain, (int)subFind, (int)subAlloc, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // A superscript letter is treated as the plain letter.
+  calcRegister_t supVar = findOrAllocateNamedVariable("m" STD_SUP_p);
+  if(supVar == INVALID_VARIABLE || findNamedVariable("mp") != supVar || findOrAllocateNamedVariable("mp") != supVar
+      || numberOfNamedVariables != before + 3) {
+    printf("\nfold-cov 3 superscript letter: supVar=%d find=%d vars %d->%d (probe of mp must hit supVar)\n",
+           (int)supVar, (int)findNamedVariable("mp"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Superscript 2 is a deliberate exception: x-squared and x2 stay distinct; superscript 3 is treated as plain 3.
+  calcRegister_t xSq = findOrAllocateNamedVariable("x" STD_SUP_2);
+  calcRegister_t x2 = findOrAllocateNamedVariable("x2");
+  if(xSq == INVALID_VARIABLE || x2 == INVALID_VARIABLE || x2 == xSq || numberOfNamedVariables != before + 5) {
+    printf("\nfold-cov 4 sup-2 excluded: xSq=%d x2=%d vars %d->%d (two distinct variables required)\n",
+           (int)xSq, (int)x2, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+  calcRegister_t x3 = findOrAllocateNamedVariable("x3");
+  if(x3 == INVALID_VARIABLE || findNamedVariable("x" STD_SUP_3) != x3 || numberOfNamedVariables != before + 6) {
+    printf("\nfold-cov 5 sup-3 folds: x3=%d find=%d vars %d->%d (probe of x-sup-3 must hit x3)\n",
+           (int)x3, (int)findNamedVariable("x" STD_SUP_3), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // A subscript digit is treated as the plain digit.
+  calcRegister_t d1 = findOrAllocateNamedVariable("d" STD_SUB_1);
+  if(d1 == INVALID_VARIABLE || findNamedVariable("d1") != d1 || numberOfNamedVariables != before + 7) {
+    printf("\nfold-cov 6 subscript digit: d1=%d find=%d vars %d->%d (probe of d1 must hit the sub-1 form)\n",
+           (int)d1, (int)findNamedVariable("d1"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Subscript alpha is treated as alpha: a two-byte glyph converting to another two-byte glyph.
+  calcRegister_t ga = findOrAllocateNamedVariable(STD_SUB_alpha "z");
+  if(ga == INVALID_VARIABLE || findNamedVariable(STD_alpha "z") != ga || numberOfNamedVariables != before + 8) {
+    printf("\nfold-cov 7 sub-alpha to alpha: ga=%d find=%d vars %d->%d (probe of alpha-z must hit ga)\n",
+           (int)ga, (int)findNamedVariable(STD_alpha "z"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // A 7-glyph name still matches by either spelling; an 8-glyph probe matches nothing and allocates nothing.
+  calcRegister_t seven = findOrAllocateNamedVariable("efghij" STD_SUB_9);
+  if(seven == INVALID_VARIABLE || findNamedVariable("efghij9") != seven || numberOfNamedVariables != before + 9) {
+    printf("\nfold-cov 8 7-glyph boundary: seven=%d find=%d vars %d->%d (probe of efghij9 must hit seven)\n",
+           (int)seven, (int)findNamedVariable("efghij9"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+  if(findNamedVariable("efghij99") != INVALID_VARIABLE || findOrAllocateNamedVariable("efghij99") != INVALID_VARIABLE
+      || numberOfNamedVariables != before + 9) {
+    printf("\nfold-cov 9 8-glyph name: find=%d vars %d->%d (must be INVALID_VARIABLE and allocate nothing)\n",
+           (int)findNamedVariable("efghij99"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // A shared prefix is not a match; the subscript probe hits the 2-glyph name only.
+  calcRegister_t pq = findOrAllocateNamedVariable("pq");
+  calcRegister_t pqr = findOrAllocateNamedVariable("pqr");
+  if(pq == INVALID_VARIABLE || pqr == INVALID_VARIABLE || pq == pqr
+      || findNamedVariable(STD_SUB_p "q") != pq || findNamedVariable("pqr") != pqr || numberOfNamedVariables != before + 11) {
+    printf("\nfold-cov 10 prefix: pq=%d pqr=%d subProbe=%d vars %d->%d (sub-p q must hit pq, never pqr)\n",
+           (int)pq, (int)pqr, (int)findNamedVariable(STD_SUB_p "q"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Upper and lower case stay distinct.
+  if(findNamedVariable("AQ") != INVALID_VARIABLE) {
+    printf("\nfold-cov 11 case: find(AQ)=%d (aq exists, AQ must stay INVALID_VARIABLE)\n", (int)findNamedVariable("AQ"));
+    abortTest();
+    return;
+  }
+
+  // Deleting a variable shifts the ones after it; lookups by either spelling must follow the shift.
+  fnDeleteVariable(sub);
+  calcRegister_t bkAfter = findNamedVariable("bk");
+  if(findNamedVariable("aq") != INVALID_VARIABLE || bkAfter == INVALID_VARIABLE
+      || findNamedVariable(STD_SUB_b "k") != bkAfter || numberOfNamedVariables != before + 10) {
+    printf("\nfold-cov 12 after delete: find(aq)=%d bk=%d subProbe=%d vars %d->%d (aq gone, bk still found both ways)\n",
+           (int)findNamedVariable("aq"), (int)bkAfter, (int)findNamedVariable(STD_SUB_b "k"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  const char *foldCovCleanup[] = {"bk", "mp", "x" STD_SUP_2, "x2", "x3", "d1", STD_alpha "z", "efghij9", "pq", "pqr"};
+  for(unsigned int i = 0; i < nbrOfElements(foldCovCleanup); i++) {
+    calcRegister_t regist = findNamedVariable(foldCovCleanup[i]);
+    if(regist == INVALID_VARIABLE) {
+      printf("\nfold-cov cleanup: %u not found\n", i);
+      abortTest();
+      return;
+    }
+    fnDeleteVariable(regist);
+  }
+  if(numberOfNamedVariables != before) {
+    printf("\nfold-cov cleanup: vars %d->%d (must return to the start count)\n", (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
 }
 
 void covLoadPgm(uint16_t unusedButMandatoryParameter) {
