@@ -447,7 +447,7 @@ void drawBattery(uint16_t voltage);
     bool_t textModeIconDisplay = ((plainTextMode || calcMode == CM_EIM || (catalog && catalog != CATALOG_MVAR) || (tam.mode != 0 && tam.alpha)));
     bool_t toSwitchOff         = !textModeIconDisplay && alphaOutput[0] != 0;
 
-    if(!(SBARUPD_AlphaMode) || calcMode == CM_GRAPH) {
+    if(!(SBARUPD_AlphaMode) || GRAPHMODE) {
       return;
     }
     bool_t SBchanged;
@@ -625,7 +625,7 @@ void drawBattery(uint16_t voltage);
 
 //sharing space with stopwatch, so ASM does not come when the stopwatch is on
   void light_ASB_icon(void) {
-    if(!(SBARUPD_AlphaMode) || calcMode == CM_GRAPH) {
+    if(!(SBARUPD_AlphaMode) || GRAPHMODE) {
       return;
     }
     #if (DEBUG_INSTEAD_STATUS_BAR == 1)
@@ -644,7 +644,7 @@ void drawBattery(uint16_t voltage);
 
 //sharing space with stopwatch, so ASM does not come when the stopwatch is on
   void kill_ASB_icon(void) {
-    if(!(SBARUPD_AlphaMode) || calcMode == CM_GRAPH) {
+    if(!(SBARUPD_AlphaMode) || GRAPHMODE) {
       return;
     }
     #if (DEBUG_INSTEAD_STATUS_BAR == 1)
