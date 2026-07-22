@@ -3401,7 +3401,7 @@ RELEASE_END:
 void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
   doRefreshSoftMenu = true;     //dr
     uint8_t effectiveCalcMode = calcMode;
-    if(calcMode == CM_GRAPH && programRunStop == PGM_RUNNING) {   // a program running under CM_GRAPH (e.g. plot(int) integrand) needs normal ENTER dup, not the empty interactive-graph case
+    if(GRAPHMODE && programRunStop == PGM_RUNNING) {   // a program running under CM_GRAPH or CM_PLOT_STAT (e.g. plot(int) integrand, programmed HPLOT) needs normal ENTER dup, not the empty interactive-graph case
       effectiveCalcMode = CM_NORMAL;
     }
     switch(effectiveCalcMode) {
