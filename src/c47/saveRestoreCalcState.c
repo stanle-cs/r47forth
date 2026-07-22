@@ -1612,7 +1612,7 @@ int64_t stringToInt64(const char *str) {
           regist = toInt16(tmpString + 2) + FIRST_LOCAL_REGISTER;
           read2Lines(aimBuffer, AIM_BUFFER_LENGTH, tmpString, TMP_STR_LENGTH); // Register data type & Register value
 
-          if((regist >= FIRST_LOCAL_REGISTER && regist <= LAST_LOCAL_REGISTER) &&  // reject an out-of-range register number from a malformed state file
+          if((regist >= FIRST_LOCAL_REGISTER && regist < FIRST_LOCAL_REGISTER + currentNumberOfLocalRegisters) &&  // reject an out-of-range register number from a malformed state file
              (loadMode == LM_ALL || loadMode == LM_REGISTERS)) {
             #if defined(LOADDEBUG)
               sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
