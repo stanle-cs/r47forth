@@ -900,6 +900,13 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
   lastErrorCode = ERROR_NONE;
   hourGlassIconEnabled = true;
   programRunStop = PGM_RUNNING;
+  #if defined(DMCP_BUILD)
+    // a top level run start is a fresh load step, so the first dispatches sample undelayed; solver and grapher evaluations re-enter per evaluation and keep the schedule
+    if(!nestedEngine && !singleStep && !getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING) && !graphAccActive) {
+      resetVbatSampleSchedule();
+    }
+  #endif // DMCP_BUILD
+
   if(!getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING) && !graphAccActive) {
     showHideHourGlass();
     screenUpdatingMode = SCRUPD_AUTO;

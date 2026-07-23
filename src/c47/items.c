@@ -610,7 +610,14 @@ bool_t isFunctionOldParam16(uint16_t func) {
 
 
     #if defined(DMCP_BUILD)
-      updateVbatIntegrated(false);              //Check the battery directly after a task so that the worst case voltage is recorded
+      int vbat = updateVbatIntegrated(false);   //Check the battery directly after a task so that the worst case voltage is recorded
+      // refreshLcd() does not run while a program runs, so checkBattery() cannot stop a run on a collapsing battery; below its 2100 shutdown threshold on battery power,
+      // the run stops resumably between steps like an R/S press and the calculator powers down in an orderly manner. Keep the threshold in sync with checkBattery().
+      if(programRunStop == PGM_RUNNING && (vbat < 2100 || vbatVIntegrated < 2100) && usb_powered() != 1) {
+        setSystemFlag(FLAG_LOWBAT);
+        programRunStop = PGM_WAITING;
+        SET_ST(STAT_PGM_END);
+      }
     #endif
 
 
