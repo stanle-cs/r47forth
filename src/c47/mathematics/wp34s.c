@@ -609,16 +609,28 @@ static bool_t doAtan(real_t *a, real_t *angle, real_t *a2, real_t *t, real_t *j,
 // ---------------------------------------------------------------------------
 // Generic cache helpers for 1-input and 2-input trig wrappers
 // ---------------------------------------------------------------------------
-typedef struct { bool_t valid; int32_t digits; real_t x, result;    } cache1_t;
-typedef struct { bool_t valid; int32_t digits; real_t y, x, result; } cache2_t;
+typedef struct { bool_t valid; int32_t digits; int32_t round; real_t x, result;    } cache1_t;
+typedef struct { bool_t valid; int32_t digits; int32_t round; real_t y, x, result; } cache2_t;
 
 static void cache_commit(bool_t *valid, real_t *cacheResult, const real_t *result) {
   if(!realIsSpecial(result)) { realCopy(result, cacheResult); *valid = true; }
 }
 
-static bool_t cache1_check(cache1_t *c, const real_t *x, real_t *result, realContext_t *ctx) {
-  if(c->valid && ctx->digits <= c->digits && realCompareEqual(&c->x, x)) {
-    realPlus(&c->result, result, ctx);
+// zero sign is part of the key
+static bool_t cacheKeyEqual(const real_t *a, const real_t *b) {
+  if(!realCompareEqual(a, b)) {
+    return false;
+  }
+  if(realIsZero(a) && (realIsNegative(a) != realIsNegative(b))) {
+    return false;
+  }
+  return true;
+}
+
+// digits is the effective compute precision, not the request
+static bool_t cache1_check(cache1_t *c, const real_t *x, real_t *result, int32_t digits, realContext_t *ctx) {
+  if(c->valid && digits == c->digits && (int32_t)ctx->round == c->round && cacheKeyEqual(&c->x, x)) {
+    realCopy(&c->result, result);
     #if defined(CACHE_DEBUG_DISP)
 //      print_linestr("QUICK asin/acos/atan",false);
     #endif //CACHE_DEBUG_DISP
@@ -626,15 +638,16 @@ static bool_t cache1_check(cache1_t *c, const real_t *x, real_t *result, realCon
   }
   return false;
 }
-static void cache1_prepare(cache1_t *c, const real_t *x, realContext_t *ctx) {
+static void cache1_prepare(cache1_t *c, const real_t *x, int32_t digits, realContext_t *ctx) {
   realCopy(x, &c->x);
-  c->digits = ctx->digits;
+  c->digits = digits;
+  c->round  = (int32_t)ctx->round;
   c->valid  = false;
 }
 
-static bool_t cache2_check(cache2_t *c, const real_t *y, const real_t *x, real_t *result, realContext_t *ctx) {
-  if(c->valid && ctx->digits <= c->digits && realCompareEqual(&c->y, y) && realCompareEqual(&c->x, x)) {
-    realPlus(&c->result, result, ctx);
+static bool_t cache2_check(cache2_t *c, const real_t *y, const real_t *x, real_t *result, int32_t digits, realContext_t *ctx) {
+  if(c->valid && digits == c->digits && (int32_t)ctx->round == c->round && cacheKeyEqual(&c->y, y) && cacheKeyEqual(&c->x, x)) {
+    realCopy(&c->result, result);
     #if defined(CACHE_DEBUG_DISP)
 //      print_linestr("QUICK atan2",false);
     #endif //CACHE_DEBUG_DISP
@@ -642,10 +655,11 @@ static bool_t cache2_check(cache2_t *c, const real_t *y, const real_t *x, real_t
   }
   return false;
 }
-static void cache2_prepare(cache2_t *c, const real_t *y, const real_t *x, realContext_t *ctx) {
+static void cache2_prepare(cache2_t *c, const real_t *y, const real_t *x, int32_t digits, realContext_t *ctx) {
   realCopy(y, &c->y);
   realCopy(x, &c->x);
-  c->digits = ctx->digits;
+  c->digits = digits;
+  c->round  = (int32_t)ctx->round;
   c->valid  = false;
 }
 
@@ -681,17 +695,17 @@ static void WP34S_Atan_75_helper_old(const real_t *x, real_t *angle, realContext
 }
 
 
-// Cached wrapper for WP34S_Atan. Skips computation if inputs and required precision
-// match the previous call. Cache is global; inputs are copied before the call
+// Cached wrapper for WP34S_Atan. Skips computation if inputs and required precision match the previous call. Cache is global; inputs are copied before the call
 // to prevent aliasing if the underlying function overwrites its input pointers.
 static cache1_t atanCache;
 static void WP34S_Atan_75_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   #if defined(CACHE_DEBUG)
     print_caller("WP34S_Atan_75_helper");
   #endif // CACHE_DEBUG
+  int32_t effDigits = (realContext->digits > 39) ? 75 : 39; //precision WP34S_Atan_75_helper_old forces, not the request
   real_t localX;
   realCopy(x, &localX);
-  if(cache1_check(&atanCache, &localX, angle, realContext)) {
+  if(cache1_check(&atanCache, &localX, angle, effDigits, realContext)) {
     #if defined(CACHE_DEBUG)
       printf("   WP34S_Atan_75_helper: quick return for repeated value\n");
     #endif // CACHE_DEBUG
@@ -700,8 +714,7 @@ static void WP34S_Atan_75_helper(const real_t *x, real_t *angle, realContext_t *
   #if defined(CACHE_DEBUG)
     printf("WP34S_Atan_75_helper: long process calc\n");
   #endif // CACHE_DEBUG
-  cache1_prepare(&atanCache, &localX, realContext);
-  atanCache.digits = (realContext->digits > 39) ? 75 : 39; //stamp the forced computing precision of WP34S_Atan_75_helper_old, not the request
+  cache1_prepare(&atanCache, &localX, effDigits, realContext);
   WP34S_Atan_75_helper_old(&localX, angle, realContext);
   cache_commit(&atanCache.valid, &atanCache.result, angle);
 }
@@ -869,18 +882,18 @@ static void WP34S_Atan2_75_helper_old(const real_t *y, const real_t *x, real_t *
 }
 
 
-// Cached wrapper for WP34S_Atan2. Skips computation if inputs and required precision
-// match the previous call. Cache is global; inputs are copied before the call
+// Cached wrapper for WP34S_Atan2. Skips computation if inputs and required precision match the previous call. Cache is global; inputs are copied before the call
 // to prevent aliasing if the underlying function overwrites its input pointers.
 static cache2_t atan2Cache;
 static void WP34S_Atan2_75_helper(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   #if defined(CACHE_DEBUG)
     print_caller("WP34S_Atan2_75_helper");
   #endif // CACHE_DEBUG
+  int32_t effDigits = (realContext->digits > 75) ? 75 : realContext->digits; //precision WP34S_Atan2_75_helper_old computes at
   real_t localY, localX;
   realCopy(y, &localY);
   realCopy(x, &localX);
-  if(cache2_check(&atan2Cache, &localY, &localX, atan, realContext)) {
+  if(cache2_check(&atan2Cache, &localY, &localX, atan, effDigits, realContext)) {
     #if defined(CACHE_DEBUG)
       printf("   WP34S_Atan2_75_helper: quick return for repeated value\n");
     #endif // CACHE_DEBUG
@@ -889,7 +902,7 @@ static void WP34S_Atan2_75_helper(const real_t *y, const real_t *x, real_t *atan
   #if defined(CACHE_DEBUG)
     printf("WP34S_Atan2_75_helper: long process calc\n");
   #endif // CACHE_DEBUG
-  cache2_prepare(&atan2Cache, &localY, &localX, realContext);
+  cache2_prepare(&atan2Cache, &localY, &localX, effDigits, realContext);
   WP34S_Atan2_75_helper_old(&localY, &localX, atan, realContext);
   cache_commit(&atan2Cache.valid, &atan2Cache.result, atan);
 }
@@ -952,17 +965,17 @@ static void WP34S_Asin_75_helper_old(const real_t *x, real_t *angle, realContext
 }
 
 
-// Cached wrapper for WP34S_Asin. Skips computation if inputs and required precision
-// match the previous call. Cache is global; inputs are copied before the call
+// Cached wrapper for WP34S_Asin. Skips computation if inputs and required precision match the previous call. Cache is global; inputs are copied before the call
 // to prevent aliasing if the underlying function overwrites its input pointers.
 static cache1_t asinCache;
 static void WP34S_Asin_75_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   #if defined(CACHE_DEBUG)
     print_caller("WP34S_Asin_75_helper");
   #endif // CACHE_DEBUG
+  int32_t effDigits = (realContext->digits > 75) ? 75 : realContext->digits; //precision WP34S_Asin_75_helper_old computes at
   real_t localX;
   realCopy(x, &localX);
-  if(cache1_check(&asinCache, &localX, angle, realContext)) {
+  if(cache1_check(&asinCache, &localX, angle, effDigits, realContext)) {
     #if defined(CACHE_DEBUG)
       printf("   WP34S_Asin_75_helper: quick return for repeated value\n");
     #endif // CACHE_DEBUG
@@ -971,7 +984,7 @@ static void WP34S_Asin_75_helper(const real_t *x, real_t *angle, realContext_t *
   #if defined(CACHE_DEBUG)
     printf("WP34S_Asin_75_helper: long process calc\n");
   #endif // CACHE_DEBUG
-  cache1_prepare(&asinCache, &localX, realContext);
+  cache1_prepare(&asinCache, &localX, effDigits, realContext);
   WP34S_Asin_75_helper_old(&localX, angle, realContext);
   cache_commit(&asinCache.valid, &asinCache.result, angle);
 }
@@ -1040,17 +1053,17 @@ static void WP34S_Acos_75_helper_old(const real_t *x, real_t *angle, realContext
 }
 
 
-// Cached wrapper for WP34S_Acos. Skips computation if inputs and required precision
-// match the previous call. Cache is global; inputs are copied before the call
+// Cached wrapper for WP34S_Acos. Skips computation if inputs and required precision match the previous call. Cache is global; inputs are copied before the call
 // to prevent aliasing if the underlying function overwrites its input pointers.
 static cache1_t acosCache;
 static void WP34S_Acos_75_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   #if defined(CACHE_DEBUG)
     print_caller("WP34S_Acos_75_helper");
   #endif // CACHE_DEBUG
+  int32_t effDigits = (realContext->digits > 75) ? 75 : realContext->digits; //precision WP34S_Acos_75_helper_old computes at
   real_t localX;
   realCopy(x, &localX);
-  if(cache1_check(&acosCache, &localX, angle, realContext)) {
+  if(cache1_check(&acosCache, &localX, angle, effDigits, realContext)) {
     #if defined(CACHE_DEBUG)
       printf("   WP34S_Acos_75_helper: quick return for repeated value\n");
     #endif // CACHE_DEBUG
@@ -1059,7 +1072,7 @@ static void WP34S_Acos_75_helper(const real_t *x, real_t *angle, realContext_t *
   #if defined(CACHE_DEBUG)
     printf("WP34S_Acos_75_helper: long process calc\n");
   #endif // CACHE_DEBUG
-  cache1_prepare(&acosCache, &localX, realContext);
+  cache1_prepare(&acosCache, &localX, effDigits, realContext);
   WP34S_Acos_75_helper_old(&localX, angle, realContext);
   cache_commit(&acosCache.valid, &acosCache.result, angle);
 }
