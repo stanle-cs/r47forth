@@ -888,6 +888,9 @@ void allocateNamedVariable(const char *variableName, dataType_t dataType, uint16
 
 
 
+static uint16_t lastFoundNamedVariables[2] = {UINT16_MAX, UINT16_MAX}; // indices of the last two scan hits; an entry is trusted only after its stored name re-matches the query, so table edits need no invalidation here
+static uint8_t  lastFoundNamedVariableInsert = 0;
+
 calcRegister_t findNamedVariable(const char *variableName) {
   calcRegister_t regist = INVALID_VARIABLE;
   uint8_t len = stringGlyphLength(variableName);
@@ -900,12 +903,22 @@ calcRegister_t findNamedVariable(const char *variableName) {
     return regist;
   }
 
+  const size_t nameByteLength = stringByteLength(variableName);
+  for(uint32_t c = 0; c < 2; c++) { // exact-bytes probe of the last two hits; a folded-form query misses here and takes the scan below
+    const uint16_t cached = lastFoundNamedVariables[c];
+    if(cached < numberOfNamedVariables) {
+      const uint8_t *storedName = allNamedVariables[cached].variableName;
+      if(storedName[0] == nameByteLength && memcmp(storedName + 1, variableName, nameByteLength) == 0) {
+        return cached + FIRST_NAMED_VARIABLE;
+      }
+    }
+  }
+
   #if defined(VERBOSE_REGISTERS)
     printStatus(0, "findNamedVariable", force);
   #endif //VERBOSE_REGISTERS
   //printf("|%20s|%20s|\n",(char *)(allNamedVariables[0].variableName + 1), variableName);
   // Exact-bytes fast path first; the second compare treats sub- and superscript glyphs as their plain form.
-  const size_t nameByteLength = stringByteLength(variableName);
   uint16_t foldedName[7];
   const int32_t foldedLength = foldNameToCharCodes(variableName, foldedName, 7); // 1..7 glyphs checked at entry; on overflow (-1) no candidate compares equal
   for(int i = 0; i < numberOfNamedVariables; i++) {
@@ -913,6 +926,8 @@ calcRegister_t findNamedVariable(const char *variableName) {
     if((storedName[0] == nameByteLength && memcmp(storedName + 1, variableName, nameByteLength) == 0)
         || nameEqualsPrefolded((const char *)(storedName + 1), foldedName, foldedLength)) {
       regist = i + FIRST_NAMED_VARIABLE;
+      lastFoundNamedVariables[lastFoundNamedVariableInsert] = (uint16_t)i;
+      lastFoundNamedVariableInsert ^= 1;
       break;
     }
   }

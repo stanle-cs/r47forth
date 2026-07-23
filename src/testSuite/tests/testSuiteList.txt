@@ -467,6 +467,7 @@ named_variable_cov
 serialize_state_cov
 pgm_solve_cov
 histo_cov
+named_variable_cache_cov
 clearvars_cov
 program_flow_cov
 
