@@ -1973,7 +1973,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
   // while a healthy battery barely moves. The first samples go undelayed to catch that surge for the orderly low battery stop in items.c before an uncontrolled crash,
   // then once the battery proves not to be in extreme flatness the spacing extends to a steady 2.5 s cadence, keeping the per dispatch ADC cost off healthy batteries.
   // A top level program run start (runProgram()) and the change over from USB to battery (checkBattery()) restart the schedule.
-  static const uint16_t vbatSampleDelay[] = {0, 0, 0, 50, 50, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 1000, 2500};
+  TO_QSPI static const uint16_t vbatSampleDelay[] = {0, 0, 0, 50, 50, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 1000, 2500};
   static uint8_t  vbatScheduleIdx = 0;
   static uint32_t vbatSampledAt   = 0;                                                   // 0 = never sampled
   static int      vbatSample      = 3100;
