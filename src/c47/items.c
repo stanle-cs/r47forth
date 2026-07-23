@@ -524,10 +524,6 @@ bool_t isFunctionOldParam16(uint16_t func) {
       bool_t inLocalRegisters =     (param >= FIRST_LOCAL_REGISTER && param < FIRST_LOCAL_REGISTER + currentNumberOfLocalRegisters);
       bool_t isMatrix = (func == ITM_RCL || func == ITM_STO) ? ((inRegisterRange || inReservedRange || inNameRegisterRange || inLocalRegisters) ? (getRegisterDataType(param) == dtReal34Matrix || getRegisterDataType(param) == dtComplex34Matrix) : false) : false;
       uint16_t rr;
-      calcRegister_t regStats = FAILED_INDIRECTION;
-      if(inNameRegisterRange) {
-        regStats = findNamedVariable("STATS");
-      }
 
       switch(func) {
         case VAR_UEST        : solverEstimatesUsed = true; break;
@@ -540,7 +536,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
         case ITM_RCL         : temporaryInformation = \
                                (param == REGISTER_I) && isMatrixIndexed() ? TI_I : \
                                (param == REGISTER_J) && isMatrixIndexed() ? TI_J : \
-                               (inNameRegisterRange) ? ((isStatsMatrixN(&rr, regStats) && param == regStats) ? TI_STATISTIC_SUMS : TI_STORCL) : \
+                               (inNameRegisterRange) ? ((namedVariableIsStats(param) && isStatsMatrixN(&rr, param)) ? TI_STATISTIC_SUMS : TI_STORCL) : \
                                (isMatrix) ? TI_STORCL : \
                                (inReservedRange || inRegisterRange || inLocalRegisters) ? TI_STORCL : TI_NO_INFO;
                                break;

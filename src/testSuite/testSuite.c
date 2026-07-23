@@ -50,6 +50,7 @@ void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter);
 void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter);
 void covIterationTi(uint16_t which);
 void covNamedVariableFold(uint16_t unusedButMandatoryParameter);
+void covStatsRegister(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
@@ -228,6 +229,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnLoadStateLongLabelCov", covLoadStateLongLabel, 1 },
   {"fnIterationTiCov",       covIterationTi, 1 },
   {"fnNamedVarFoldCov",      covNamedVariableFold, 1 },
+  {"fnStatsRegisterCov",     covStatsRegister, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
@@ -1059,6 +1061,43 @@ void covNamedVariableFold(uint16_t unusedButMandatoryParameter) {
     printf("\nfold-cov cleanup: vars %d->%d (must return to the start count)\n", (int)before, (int)numberOfNamedVariables);
     abortTest();
     return;
+  }
+}
+
+void covStatsRegister(uint16_t unusedButMandatoryParameter) {
+  // namedVariableIsStats(regist) must give the same answer as regist == findNamedVariable("STATS") for every register, without scanning the list.
+  // A reserved variable index is also >= FIRST_NAMED_VARIABLE, so the bound check - not the sign of the index - must reject it.
+  calcRegister_t createdStats = INVALID_VARIABLE;
+  if(findNamedVariable("STATS") == INVALID_VARIABLE) {
+    createdStats = findOrAllocateNamedVariable("STATS");
+    if(createdStats == INVALID_VARIABLE) {
+      printf("\nstats-cov: could not allocate STATS\n");
+      abortTest();
+      return;
+    }
+  }
+  const calcRegister_t statsReg = findNamedVariable("STATS");
+
+  const calcRegister_t probes[] = {REGISTER_X, FIRST_RESERVED_VARIABLE, LAST_RESERVED_VARIABLE, FIRST_NAMED_VARIABLE,
+                                   (calcRegister_t)(FIRST_NAMED_VARIABLE + numberOfNamedVariables), statsReg};
+  for(unsigned int i = 0; i < nbrOfElements(probes); i++) {
+    const bool_t expected = (probes[i] != INVALID_VARIABLE) && (probes[i] == statsReg);
+    if(namedVariableIsStats(probes[i]) != expected) {
+      printf("\nstats-cov probe %u reg=%d isStats=%d expected=%d statsReg=%d\n",
+             i, (int)probes[i], (int)namedVariableIsStats(probes[i]), (int)expected, (int)statsReg);
+      abortTest();
+      return;
+    }
+  }
+
+  // A STATS created here is the stats matrix, and stops being it once deleted.
+  if(createdStats != INVALID_VARIABLE) {
+    fnDeleteVariable(createdStats);
+    if(namedVariableIsStats(createdStats) || findNamedVariable("STATS") != INVALID_VARIABLE) {
+      printf("\nstats-cov: STATS still reported after delete (reg=%d)\n", (int)createdStats);
+      abortTest();
+      return;
+    }
   }
 }
 
