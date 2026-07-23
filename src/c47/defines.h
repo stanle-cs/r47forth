@@ -316,6 +316,11 @@
   #define    REFRESH_ON_SCREEN_MONITOR  //refresh debug on actual screen. Shows the refresh source number. Works on hardware and sim.
   #undef     REFRESH_ON_SCREEN_MONITOR
 
+  #define    TRACE_VECTOR               //Trace 3D Vector function hierarchy
+  #undef     TRACE_VECTOR
+  #define    CACHE_DEBUG                //Trace 3D vector trig cache
+  #undef     CACHE_DEBUG
+
   #define    DM42_KEYCLICK              //Add a 1 ms click after key presses and releases, for scope syncing
   #undef     DM42_KEYCLICK
   #define    DM42_POWERMARKS

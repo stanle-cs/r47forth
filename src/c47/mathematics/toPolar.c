@@ -5,6 +5,13 @@
  * \file toPolar.c
  ***********************************************/
 
+
+#if !defined PC_BUILD
+  #undef TRACE_VECTOR
+  #undef CACHE_DEBUG
+#endif //PC_BUILD
+
+
 #include "c47.h"
 static void fnToPolar(uint16_t unusedButMandatoryParameter);
 
@@ -36,6 +43,9 @@ static void fnToPolar(uint16_t unusedButMandatoryParameter);
 
 
 void fnToPolar2(uint16_t unusedButMandatoryParameter) {
+  #if (defined(TRACE_VECTOR) && defined(OPTION_VECTOR))
+    print_caller("fnToPolar2");
+  #endif //TRACE_VECTOR
   uint32_t dataTypeX, dataTypeY, dataAtagX, dataAtagY;
   if(getRegisterDataType(REGISTER_X) == dtComplex34  || getRegisterDataType(REGISTER_X) == dtComplex34Matrix) {
     setComplexRegisterPolarMode(REGISTER_X, amPolar);
@@ -164,6 +174,9 @@ static void fnToPolar(uint16_t unusedButMandatoryParameter) {
 
 // The theta34 output angle is in radian
 void real34RectangularToPolar(const real34_t *real34, const real34_t *imag34, real34_t *magnitude34, real34_t *theta34) {
+  #if defined(TRACE_VECTOR)
+    print_caller("real34RectangularToPolar 34!!");
+  #endif //TRACE_VECTOR
   real_t real, imag, magnitude, theta;
 
   real34ToReal(real34, &real);
@@ -175,6 +188,44 @@ void real34RectangularToPolar(const real34_t *real34, const real34_t *imag34, re
   realToReal34(&theta, theta34);
 }
 
+
+
+// Cached wrapper for realRectangularToPolar. Cache is caller-owned (rectToPolarCache_t)
+// and must be passed by pointer. Initialise with { .valid = false } in the scope that
+// spans all calls to be cached. Inputs are copied before the call to prevent
+// aliasing if the underlying function overwrites its input pointers.
+void realRectangularToPolarCached(const real_t *real, const real_t *imag, real_t *magnitude, real_t *theta, realContext_t *realContext, rectToPolarCache_t *cache) {
+  #if (defined(CACHE_DEBUG) || defined(TRACE_VECTOR))
+    print_caller("realRectangularToPolarCached");
+  #endif // CACHE_DEBUG
+  real_t localReal, localImag;
+  realCopy(real, &localReal);
+  realCopy(imag, &localImag);
+
+  if(cache->valid && realContext->digits <= cache->digits && realCompareEqual(&cache->real, &localReal) && realCompareEqual(&cache->imag, &localImag)) {
+    realCopy(&cache->mag,   magnitude);
+    realCopy(&cache->theta, theta);
+    #if defined(CACHE_DEBUG)
+      printf("realRectangularToPolar: quick return for repeated value\n");
+    #endif // CACHE_DEBUG
+    return;
+  }
+
+  realCopy(&localReal, &cache->real);
+  realCopy(&localImag, &cache->imag);
+  cache->digits = realContext->digits;
+  cache->valid  = false;
+
+  realRectangularToPolar(&localReal, &localImag, magnitude, theta, realContext);
+
+  if(!realIsSpecial(magnitude) && !realIsSpecial(theta)) {
+    realCopy(magnitude, &cache->mag);
+    realCopy(theta,     &cache->theta);
+    cache->valid = true;
+  } else {
+    cache->valid = false;
+  }
+}
 
 
 void realRectangularToPolar(const real_t *real, const real_t *imag, real_t *magnitude, real_t *theta, realContext_t *realContext) { // theta is in ]-pi, pi]
