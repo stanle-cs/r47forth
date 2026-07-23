@@ -951,7 +951,8 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
       break;
     }
     #if defined(DMCP_BUILD)
-      if(!nestedEngine) {
+      static uint8_t keyPollCadence = 0; // the DMCP key-buffer probe costs a few hundred cycles per step; every 16th step keeps R/S response within a few ms, and long operations self-poll via exitKeyWaiting()
+      if(!nestedEngine && (++keyPollCadence & 0x0F) == 0) {
           int key = C47PopKeyNoBuffer(DISPLAY_WAIT_FOR_RELEASE) + 1;
 //        int key = key_pop();
 //        key = convertKeyCode(key);
