@@ -10,6 +10,7 @@
   typedef struct {
     bool_t  valid;
     int32_t digits;
+    int32_t round;
     real_t  real, imag, mag, theta;
   } rectToPolarCache_t;
 
