@@ -888,7 +888,7 @@ void allocateNamedVariable(const char *variableName, dataType_t dataType, uint16
 
 
 
-static uint16_t lastFoundNamedVariables[2] = {UINT16_MAX, UINT16_MAX}; // indices of the last two scan hits; an entry is trusted only after its stored name re-matches the query, so table edits need no invalidation here
+static uint16_t lastFoundNamedVariables[3] = {UINT16_MAX, UINT16_MAX, UINT16_MAX}; // indices of the last three scan hits; an entry is trusted only after its stored name re-matches the query, so table edits need no invalidation here
 static uint8_t  lastFoundNamedVariableInsert = 0;
 
 calcRegister_t findNamedVariable(const char *variableName) {
@@ -904,7 +904,7 @@ calcRegister_t findNamedVariable(const char *variableName) {
   }
 
   const size_t nameByteLength = stringByteLength(variableName);
-  for(uint32_t c = 0; c < 2; c++) { // exact-bytes probe of the last two hits; a folded-form query misses here and takes the scan below
+  for(uint32_t c = 0; c < 3; c++) { // exact-bytes probe of the last three hits; a folded-form query misses here and takes the scan below
     const uint16_t cached = lastFoundNamedVariables[c];
     if(cached < numberOfNamedVariables) {
       const uint8_t *storedName = allNamedVariables[cached].variableName;
@@ -927,7 +927,7 @@ calcRegister_t findNamedVariable(const char *variableName) {
         || nameEqualsPrefolded((const char *)(storedName + 1), foldedName, foldedLength)) {
       regist = i + FIRST_NAMED_VARIABLE;
       lastFoundNamedVariables[lastFoundNamedVariableInsert] = (uint16_t)i;
-      lastFoundNamedVariableInsert ^= 1;
+      lastFoundNamedVariableInsert = (lastFoundNamedVariableInsert + 1) % 3;
       break;
     }
   }
