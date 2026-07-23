@@ -192,7 +192,7 @@ static void doWP34S_SinCosTanTaylor(real_t* angle, bool* sinNeg, bool* cosNeg, b
 // Called directly 75 digits max, by by agm, sin, sinc, cos, tan, multiple elliptic functions, exp (complex), fib, gd, tanh, WP34S_Zeta
 //
 // Have to be careful here to ensure that every function we call can handle the increased size of the numbers we're using.
-static void C47_WP34S_Cvt2RadSinCosTan_75temp(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
+static void C47_WP34S_Cvt2RadSinCosTan_75_helper(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
   #if defined(TRACE_VECTOR)
     print_caller("WP34S_Cvt2RadSinCosTan");
   #endif //TRACE_VECTOR
@@ -377,7 +377,7 @@ void C47_WP34S_SinCosTanTaylor_temp75(const real_t *a, bool_t swap, real_t *sinO
 
 
 //used only by XFN 1071
-static void C47_WP34S_Cvt2RadSinCosTan_1071temp(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
+static void C47_WP34S_Cvt2RadSinCosTan_1071_helper(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
   bool_t sinNeg = false, cosNeg = false, swap = false;
   REAL_T_PTR(angle, 1071);
 
@@ -406,10 +406,10 @@ static void C47_WP34S_Cvt2RadSinCosTan_1071temp(const real_t *an, angularMode_t 
 
 void C47_WP34S_Cvt2RadSinCosTan(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
   if(realContext->digits >= 1071) {
-    C47_WP34S_Cvt2RadSinCosTan_1071temp(an, angularMode, sinOut, cosOut, tanOut, realContext);
+    C47_WP34S_Cvt2RadSinCosTan_1071_helper(an, angularMode, sinOut, cosOut, tanOut, realContext);
   }
   else {
-    C47_WP34S_Cvt2RadSinCosTan_75temp(an, angularMode, sinOut, cosOut, tanOut, realContext);
+    C47_WP34S_Cvt2RadSinCosTan_75_helper(an, angularMode, sinOut, cosOut, tanOut, realContext);
   }
 }
 
@@ -618,7 +618,10 @@ static void cache_commit(bool_t *valid, real_t *cacheResult, const real_t *resul
 
 static bool_t cache1_check(cache1_t *c, const real_t *x, real_t *result, realContext_t *ctx) {
   if(c->valid && ctx->digits <= c->digits && realCompareEqual(&c->x, x)) {
-    realCopy(&c->result, result);
+    realPlus(&c->result, result, ctx);
+    #if defined(CACHE_DEBUG_DISP)
+//      print_linestr("QUICK asin/acos/atan",false);
+    #endif //CACHE_DEBUG_DISP
     return true;
   }
   return false;
@@ -631,7 +634,10 @@ static void cache1_prepare(cache1_t *c, const real_t *x, realContext_t *ctx) {
 
 static bool_t cache2_check(cache2_t *c, const real_t *y, const real_t *x, real_t *result, realContext_t *ctx) {
   if(c->valid && ctx->digits <= c->digits && realCompareEqual(&c->y, y) && realCompareEqual(&c->x, x)) {
-    realCopy(&c->result, result);
+    realPlus(&c->result, result, ctx);
+    #if defined(CACHE_DEBUG_DISP)
+//      print_linestr("QUICK atan2",false);
+    #endif //CACHE_DEBUG_DISP
     return true;
   }
   return false;
@@ -644,7 +650,7 @@ static void cache2_prepare(cache2_t *c, const real_t *y, const real_t *x, realCo
 }
 
 
-static void WP34S_Atan_75temp_old(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void WP34S_Atan_75_helper_old(const real_t *x, real_t *angle, realContext_t *realContext) {
   bool_t doEpsilon = false;
   real_t a, b, a2, t, j, z, last, epsilon; //-- added epsilon for convergence;
   int doubles = 0;
@@ -679,28 +685,29 @@ static void WP34S_Atan_75temp_old(const real_t *x, real_t *angle, realContext_t 
 // match the previous call. Cache is global; inputs are copied before the call
 // to prevent aliasing if the underlying function overwrites its input pointers.
 static cache1_t atanCache;
-static void WP34S_Atan_75temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void WP34S_Atan_75_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   #if defined(CACHE_DEBUG)
-    print_caller("WP34S_Atan_75temp");
+    print_caller("WP34S_Atan_75_helper");
   #endif // CACHE_DEBUG
   real_t localX;
   realCopy(x, &localX);
   if(cache1_check(&atanCache, &localX, angle, realContext)) {
     #if defined(CACHE_DEBUG)
-      printf("   WP34S_Atan_75temp: quick return for repeated value\n");
+      printf("   WP34S_Atan_75_helper: quick return for repeated value\n");
     #endif // CACHE_DEBUG
     return;
   }
   #if defined(CACHE_DEBUG)
-    printf("WP34S_Atan_75temp: long process calc\n");
+    printf("WP34S_Atan_75_helper: long process calc\n");
   #endif // CACHE_DEBUG
   cache1_prepare(&atanCache, &localX, realContext);
-  WP34S_Atan_75temp_old(&localX, angle, realContext);
+  atanCache.digits = (realContext->digits > 39) ? 75 : 39; //stamp the forced computing precision of WP34S_Atan_75_helper_old, not the request
+  WP34S_Atan_75_helper_old(&localX, angle, realContext);
   cache_commit(&atanCache.valid, &atanCache.result, angle);
 }
 
 
-static void C47do_WP34S_Atan_1071temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void C47do_WP34S_Atan_1071_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   REAL_T_PTR(a, 1071);
   REAL_T_PTR(b, 1071);
   REAL_T_PTR(a2, 1071);
@@ -719,10 +726,10 @@ static void C47do_WP34S_Atan_1071temp(const real_t *x, real_t *angle, realContex
 
 void C47_WP34S_Atan(const real_t *x, real_t *angle, realContext_t *realContext) {
   if(realContext->digits >= 1071) {
-    C47do_WP34S_Atan_1071temp(x, angle, realContext);
+    C47do_WP34S_Atan_1071_helper(x, angle, realContext);
   }
   else {
-    WP34S_Atan_75temp(x, angle, realContext);
+    WP34S_Atan_75_helper(x, angle, realContext);
   }
 }
 
@@ -848,7 +855,7 @@ static bool_t doAtan2(const real_t *y, const real_t *x, real_t *atan, real_t *r,
 }
 
 
-static void WP34S_Atan2_75temp_old(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
+static void WP34S_Atan2_75_helper_old(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   real_t r, t;
   int32_t savedContextDigits = realContext->digits;
   if(realContext->digits > 75) {
@@ -866,29 +873,29 @@ static void WP34S_Atan2_75temp_old(const real_t *y, const real_t *x, real_t *ata
 // match the previous call. Cache is global; inputs are copied before the call
 // to prevent aliasing if the underlying function overwrites its input pointers.
 static cache2_t atan2Cache;
-static void WP34S_Atan2_75temp(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
+static void WP34S_Atan2_75_helper(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   #if defined(CACHE_DEBUG)
-    print_caller("WP34S_Atan2_75temp");
+    print_caller("WP34S_Atan2_75_helper");
   #endif // CACHE_DEBUG
   real_t localY, localX;
   realCopy(y, &localY);
   realCopy(x, &localX);
   if(cache2_check(&atan2Cache, &localY, &localX, atan, realContext)) {
     #if defined(CACHE_DEBUG)
-      printf("   WP34S_Atan2_75temp: quick return for repeated value\n");
+      printf("   WP34S_Atan2_75_helper: quick return for repeated value\n");
     #endif // CACHE_DEBUG
     return;
   }
   #if defined(CACHE_DEBUG)
-    printf("WP34S_Atan2_75temp: long process calc\n");
+    printf("WP34S_Atan2_75_helper: long process calc\n");
   #endif // CACHE_DEBUG
   cache2_prepare(&atan2Cache, &localY, &localX, realContext);
-  WP34S_Atan2_75temp_old(&localY, &localX, atan, realContext);
+  WP34S_Atan2_75_helper_old(&localY, &localX, atan, realContext);
   cache_commit(&atan2Cache.valid, &atan2Cache.result, atan);
 }
 
 
-static void C47do_WP34S_Atan2_1071temp(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
+static void C47do_WP34S_Atan2_1071_helper(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   REAL_T_PTR(r, 1071);
   REAL_T_PTR(t, 1071);
   if(!doAtan2(y, x, atan, r, t, realContext)) {
@@ -898,10 +905,10 @@ static void C47do_WP34S_Atan2_1071temp(const real_t *y, const real_t *x, real_t 
 
 void C47_WP34S_Atan2(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   if(realContext->digits >= 1071) {
-    C47do_WP34S_Atan2_1071temp(y, x, atan, realContext);
+    C47do_WP34S_Atan2_1071_helper(y, x, atan, realContext);
   }
   else {
-    WP34S_Atan2_75temp(y, x, atan, realContext);
+    WP34S_Atan2_75_helper(y, x, atan, realContext);
   }
 }
 
@@ -931,7 +938,7 @@ static bool_t doAsin(const real_t *x, real_t *angle, real_t *abx, real_t *z, rea
 }
 
 
-static void WP34S_Asin_75temp_old(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void WP34S_Asin_75_helper_old(const real_t *x, real_t *angle, realContext_t *realContext) {
   real_t abx, z;
   int32_t savedContextDigits = realContext->digits;
   if(realContext->digits > 75) {
@@ -949,28 +956,28 @@ static void WP34S_Asin_75temp_old(const real_t *x, real_t *angle, realContext_t 
 // match the previous call. Cache is global; inputs are copied before the call
 // to prevent aliasing if the underlying function overwrites its input pointers.
 static cache1_t asinCache;
-static void WP34S_Asin_75temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void WP34S_Asin_75_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   #if defined(CACHE_DEBUG)
-    print_caller("WP34S_Asin_75temp");
+    print_caller("WP34S_Asin_75_helper");
   #endif // CACHE_DEBUG
   real_t localX;
   realCopy(x, &localX);
   if(cache1_check(&asinCache, &localX, angle, realContext)) {
     #if defined(CACHE_DEBUG)
-      printf("   WP34S_Asin_75temp: quick return for repeated value\n");
+      printf("   WP34S_Asin_75_helper: quick return for repeated value\n");
     #endif // CACHE_DEBUG
     return;
   }
   #if defined(CACHE_DEBUG)
-    printf("WP34S_Asin_75temp: long process calc\n");
+    printf("WP34S_Asin_75_helper: long process calc\n");
   #endif // CACHE_DEBUG
   cache1_prepare(&asinCache, &localX, realContext);
-  WP34S_Asin_75temp_old(&localX, angle, realContext);
+  WP34S_Asin_75_helper_old(&localX, angle, realContext);
   cache_commit(&asinCache.valid, &asinCache.result, angle);
 }
 
 
-static void C47do_WP34S_Asin_1071temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void C47do_WP34S_Asin_1071_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   REAL_T_PTR(abx, 1071);
   REAL_T_PTR(z, 1071);
   if(!doAsin(x, angle, abx, z, realContext)) {
@@ -980,10 +987,10 @@ static void C47do_WP34S_Asin_1071temp(const real_t *x, real_t *angle, realContex
 
 void C47_WP34S_Asin(const real_t *x, real_t *angle, realContext_t *realContext) {
   if(realContext->digits >= 1071) {
-    C47do_WP34S_Asin_1071temp(x, angle, realContext);
+    C47do_WP34S_Asin_1071_helper(x, angle, realContext);
   }
   else {
-    WP34S_Asin_75temp(x, angle, realContext);
+    WP34S_Asin_75_helper(x, angle, realContext);
   }
 }
 
@@ -1019,7 +1026,7 @@ static bool_t doAcos(const real_t *x, real_t *angle, real_t *abx, real_t *z, rea
 }
 
 
-static void WP34S_Acos_75temp_old(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void WP34S_Acos_75_helper_old(const real_t *x, real_t *angle, realContext_t *realContext) {
   real_t abx, z;
   int32_t savedContextDigits = realContext->digits;
   if(realContext->digits > 75) {
@@ -1037,28 +1044,28 @@ static void WP34S_Acos_75temp_old(const real_t *x, real_t *angle, realContext_t 
 // match the previous call. Cache is global; inputs are copied before the call
 // to prevent aliasing if the underlying function overwrites its input pointers.
 static cache1_t acosCache;
-static void WP34S_Acos_75temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void WP34S_Acos_75_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   #if defined(CACHE_DEBUG)
-    print_caller("WP34S_Acos_75temp");
+    print_caller("WP34S_Acos_75_helper");
   #endif // CACHE_DEBUG
   real_t localX;
   realCopy(x, &localX);
   if(cache1_check(&acosCache, &localX, angle, realContext)) {
     #if defined(CACHE_DEBUG)
-      printf("   WP34S_Acos_75temp: quick return for repeated value\n");
+      printf("   WP34S_Acos_75_helper: quick return for repeated value\n");
     #endif // CACHE_DEBUG
     return;
   }
   #if defined(CACHE_DEBUG)
-    printf("WP34S_Acos_75temp: long process calc\n");
+    printf("WP34S_Acos_75_helper: long process calc\n");
   #endif // CACHE_DEBUG
   cache1_prepare(&acosCache, &localX, realContext);
-  WP34S_Acos_75temp_old(&localX, angle, realContext);
+  WP34S_Acos_75_helper_old(&localX, angle, realContext);
   cache_commit(&acosCache.valid, &acosCache.result, angle);
 }
 
 
-static void C47do_WP34S_Acos_1071temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void C47do_WP34S_Acos_1071_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   REAL_T_PTR(abx, 1071);
   REAL_T_PTR(z, 1071);
   if(!doAcos(x, angle, abx, z, realContext)) {
@@ -1068,10 +1075,10 @@ static void C47do_WP34S_Acos_1071temp(const real_t *x, real_t *angle, realContex
 
 void C47_WP34S_Acos(const real_t *x, real_t *angle, realContext_t *realContext) {
   if(realContext->digits >= 1071) {
-    C47do_WP34S_Acos_1071temp(x, angle, realContext);
+    C47do_WP34S_Acos_1071_helper(x, angle, realContext);
   }
   else {
-    WP34S_Acos_75temp(x, angle, realContext);
+    WP34S_Acos_75_helper(x, angle, realContext);
   }
 }
 

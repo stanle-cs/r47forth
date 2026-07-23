@@ -320,6 +320,8 @@
   #undef     TRACE_VECTOR
   #define    CACHE_DEBUG                //Trace 3D vector trig cache
   #undef     CACHE_DEBUG
+  #define    CACHE_DEBUG_DISP           //Display on-screen
+  #undef     CACHE_DEBUG_DISP
 
   #define    DM42_KEYCLICK              //Add a 1 ms click after key presses and releases, for scope syncing
   #undef     DM42_KEYCLICK

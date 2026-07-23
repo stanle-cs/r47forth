@@ -197,30 +197,31 @@ void real34RectangularToPolar(const real34_t *real34, const real34_t *imag34, re
 void realRectangularToPolarCached(const real_t *real, const real_t *imag, real_t *magnitude, real_t *theta, realContext_t *realContext, rectToPolarCache_t *cache) {
   #if (defined(CACHE_DEBUG) || defined(TRACE_VECTOR))
     print_caller("realRectangularToPolarCached");
+    printf("   Context:%d\n",realContext->digits);
   #endif // CACHE_DEBUG
   real_t localReal, localImag;
-  realCopy(real, &localReal);
-  realCopy(imag, &localImag);
+  realPlus(real, &localReal, realContext);
+  realPlus(imag, &localImag, realContext);
 
   if(cache->valid && realContext->digits <= cache->digits && realCompareEqual(&cache->real, &localReal) && realCompareEqual(&cache->imag, &localImag)) {
-    realCopy(&cache->mag,   magnitude);
-    realCopy(&cache->theta, theta);
+    realPlus(&cache->mag,   magnitude, realContext);
+    realPlus(&cache->theta, theta, realContext);
     #if defined(CACHE_DEBUG)
       printf("realRectangularToPolar: quick return for repeated value\n");
     #endif // CACHE_DEBUG
     return;
   }
 
-  realCopy(&localReal, &cache->real);
-  realCopy(&localImag, &cache->imag);
+  realPlus(&localReal, &cache->real, realContext);
+  realPlus(&localImag, &cache->imag, realContext);
   cache->digits = realContext->digits;
   cache->valid  = false;
 
   realRectangularToPolar(&localReal, &localImag, magnitude, theta, realContext);
 
   if(!realIsSpecial(magnitude) && !realIsSpecial(theta)) {
-    realCopy(magnitude, &cache->mag);
-    realCopy(theta,     &cache->theta);
+    realPlus(magnitude, &cache->mag, realContext);
+    realPlus(theta,     &cache->theta, realContext);
     cache->valid = true;
   } else {
     cache->valid = false;
