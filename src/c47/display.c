@@ -1489,8 +1489,8 @@ static void complex34ToDisplayString2(const complex34_t *complex34, char *displa
     real34ToReal(VARIABLE_IMAG34_DATA(complex34), &imagIc);
 
     decContext c = ctxtReal39;
-//Repeat check: Remove c.digits changes
-c.digits = min(displayHasNDigits+2, (SHOWMODE ? 39 : 15+2));
+    //Repeat check: Remove c.digits changes
+    c.digits = min(displayHasNDigits+2, (SHOWMODE ? 39 : 15+2));
 //    int maxExponent = max(real.exponent + real.digits, imagIc.exponent + imagIc.digits);
 //    c.digits = min(displayHasNDigits+2, (SHOWMODE ? 39 : min(75,max(0,maxExponent) + NUMBER_OF_DISPLAY_REAL_CONTEXT_DIGITS + 2))); //add 2 guard digits for Taylor etc.
     realRectangularToPolarCached(&real, &imagIc, &real, &imagIc, &c, cache); // imagIc in radian
