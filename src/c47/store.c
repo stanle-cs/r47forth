@@ -170,9 +170,6 @@ static bool_t _checkReadOnlyVariable(uint16_t regist) {
 
 
 static void _storeValue(uint16_t regist) {
-  if(regist == RESERVED_VARIABLE_UY || regist == RESERVED_VARIABLE_LY) {
-    PLOT_ZMY = zoomOverride;  //PLOT EQN
-  }
   if(regist == RESERVED_VARIABLE_GRAMOD) {
     copySourceRegisterToDestRegister(REGISTER_X, TEMP_REGISTER_1);
     fnLint(NOPARAM);
@@ -196,8 +193,22 @@ static void _storeValue(uint16_t regist) {
     copySourceRegisterToDestRegister(REGISTER_X, TEMP_REGISTER_1);
     fnToReal(NOPARAM);
     if(lastErrorCode == ERROR_NONE) {
-      copySourceRegisterToDestRegister(REGISTER_X, regist);
-      copySourceRegisterToDestRegister(TEMP_REGISTER_1, REGISTER_X);
+      if((regist == RESERVED_VARIABLE_UX || regist == RESERVED_VARIABLE_LX || regist == RESERVED_VARIABLE_UY || regist == RESERVED_VARIABLE_LY)
+          && real34IsSpecial(REGISTER_REAL34_DATA(REGISTER_X))) { //screen the plot range at the door: NaN/infinite rejected, old value kept
+        copySourceRegisterToDestRegister(TEMP_REGISTER_1, REGISTER_X);
+        calcMode = CM_NORMAL;                          //the range STO items live in the plot menu; leave the graph screen so the error line renders
+        displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
+        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+          moreInfoOnError("In function _storeValue:", "plot range limits must be finite", NULL, NULL);
+        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      }
+      else {
+        copySourceRegisterToDestRegister(REGISTER_X, regist);
+        copySourceRegisterToDestRegister(TEMP_REGISTER_1, REGISTER_X);
+        if(regist == RESERVED_VARIABLE_UY || regist == RESERVED_VARIABLE_LY) {
+          PLOT_ZMY = zoomOverride;  //PLOT EQN; only on a successful store, a rejected store must leave no side effects
+        }
+      }
     }
   }
   else {
@@ -254,7 +265,9 @@ void fn3Sto(uint16_t regist) {
 }
 
 
-void fnStoreAdd(uint16_t regist) {
+// The four arithmetic store variants differ only by the operation dispatch table,
+// which the compiler cannot fold on its own (each body references a different symbol).
+static void _storeOp(uint16_t regist, void (* const op[NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS][NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS])(void)) {
   if(_checkReadOnlyVariable(regist) && regInRange(regist)) {
     if(programRunStop == PGM_RUNNING) {
       copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);
@@ -266,7 +279,7 @@ void fnStoreAdd(uint16_t regist) {
       *(REGISTER_SHORT_INTEGER_DATA(REGISTER_Y)) &= shortIntegerMask;
     }
 
-    addition[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
+    op[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
 
     copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
     _storeValue(regist);
@@ -280,96 +293,30 @@ void fnStoreAdd(uint16_t regist) {
       calcSigma(0);
     }
   }
+}
+
+
+
+void fnStoreAdd(uint16_t regist) {
+  _storeOp(regist, addition);
 }
 
 
 
 void fnStoreSub(uint16_t regist) {
-  if(_checkReadOnlyVariable(regist) && regInRange(regist)) {
-    if(programRunStop == PGM_RUNNING) {
-      copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);
-      copySourceRegisterToDestRegister(REGISTER_X, SAVED_REGISTER_X);
-    }
-
-    copySourceRegisterToDestRegister(regist, REGISTER_Y);
-    if(getRegisterDataType(REGISTER_Y) == dtShortInteger) {
-      *(REGISTER_SHORT_INTEGER_DATA(REGISTER_Y)) &= shortIntegerMask;
-    }
-
-    subtraction[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
-
-    copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
-    _storeValue(regist);
-    if(regist != REGISTER_X) {
-      copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);
-    }
-
-    adjustResult(REGISTER_X, false, true, REGISTER_X, regist, -1);
-    uint16_t rows = 1;
-    if(regist >= FIRST_NAMED_VARIABLE && isStatsMatrixN(&rows, regist) && regist == findNamedVariable("STATS")) {
-      calcSigma(0);
-    }
-  }
+  _storeOp(regist, subtraction);
 }
 
 
 
 void fnStoreMult(uint16_t regist) {
-  if(_checkReadOnlyVariable(regist) && regInRange(regist)) {
-    if(programRunStop == PGM_RUNNING) {
-      copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);
-      copySourceRegisterToDestRegister(REGISTER_X, SAVED_REGISTER_X);
-    }
-
-    copySourceRegisterToDestRegister(regist, REGISTER_Y);
-    if(getRegisterDataType(REGISTER_Y) == dtShortInteger) {
-      *(REGISTER_SHORT_INTEGER_DATA(REGISTER_Y)) &= shortIntegerMask;
-    }
-
-    multiplication[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
-
-    copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
-    _storeValue(regist);
-    if(regist != REGISTER_X) {
-      copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);
-    }
-
-    adjustResult(REGISTER_X, false, true, REGISTER_X, regist, -1);
-    uint16_t rows = 1;
-    if(regist >= FIRST_NAMED_VARIABLE && isStatsMatrixN(&rows, regist) && regist == findNamedVariable("STATS")) {
-      calcSigma(0);
-    }
-  }
+  _storeOp(regist, multiplication);
 }
 
 
 
 void fnStoreDiv(uint16_t regist) {
-  if(_checkReadOnlyVariable(regist) && regInRange(regist)) {
-    if(programRunStop == PGM_RUNNING) {
-      copySourceRegisterToDestRegister(REGISTER_Y, SAVED_REGISTER_Y);
-      copySourceRegisterToDestRegister(REGISTER_X, SAVED_REGISTER_X);
-    }
-
-    copySourceRegisterToDestRegister(regist, REGISTER_Y);
-    if(getRegisterDataType(REGISTER_Y) == dtShortInteger) {
-      *(REGISTER_SHORT_INTEGER_DATA(REGISTER_Y)) &= shortIntegerMask;
-    }
-
-    division[getRegisterDataType(REGISTER_X)][getRegisterDataType(REGISTER_Y)]();
-
-    copySourceRegisterToDestRegister(SAVED_REGISTER_Y, REGISTER_Y);
-    _storeValue(regist);
-    if(regist != REGISTER_X) {
-      copySourceRegisterToDestRegister(SAVED_REGISTER_X, REGISTER_X);
-    }
-
-    adjustResult(REGISTER_X, false, true, REGISTER_X, regist, -1);
-    uint16_t rows = 1;
-    if(regist >= FIRST_NAMED_VARIABLE && isStatsMatrixN(&rows, regist) && regist == findNamedVariable("STATS")) {
-      calcSigma(0);
-    }
-  }
+  _storeOp(regist, division);
 }
 
 
@@ -564,9 +511,6 @@ void fnStoreStack(uint16_t regist) {
 static void _fnStoreElement(bool_t stepForward);
 
 void fnStoreVElement(uint16_t ix) {
-  uint16_t matrixIndexBak = matrixIndex;
-  const int16_t iBak = getIRegisterAsInt(true);
-  const int16_t jBak = getJRegisterAsInt(true);
   real_t rx;
   uint16_t rows, cols;
   if(!getMatrixDims(REGISTER_Y, "In function fnStoreVElement:", &rows, &cols)) {
@@ -580,23 +524,22 @@ void fnStoreVElement(uint16_t ix) {
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
   }
+  matrixIndexState_t bak;
+  saveMatrixIndexState(&bak);
   setIRegisterAsInt(false, (ix-1) / cols+1);
   setJRegisterAsInt(false, (ix-1) % cols+1);
   matrixIndex = REGISTER_Y;
   _fnStoreElement(false);
-  setIRegisterAsInt(false, iBak);
-  setJRegisterAsInt(false, jBak);
-  matrixIndex = matrixIndexBak;
+  restoreMatrixIndexState(&bak);
 }
 
 void fnStoreVector(uint16_t regist) {
-  uint16_t matrixIndexBak = matrixIndex;
-  const int16_t iBak = getIRegisterAsInt(true);
-  const int16_t jBak = getJRegisterAsInt(true);
   uint16_t rows, cols;
   if(!getMatrixDims(REGISTER_X, "In function fnStoreVector:", &rows, &cols)) {
     return;
   }
+  matrixIndexState_t bak;
+  saveMatrixIndexState(&bak);
   copySourceRegisterToDestRegister(getStackTop(), TEMP_REGISTER_1);
   setSystemFlag(FLAG_ASLIFT);
   liftStack();
@@ -610,16 +553,14 @@ void fnStoreVector(uint16_t regist) {
       fnToReal(NOPARAM);
     }
     if(lastErrorCode != 0) {
-      return;
+      break;
     }
     _fnStoreElement(false);
     if(lastErrorCode != 0) {
-      return;
+      break;
     }
   }
-  setIRegisterAsInt(false, iBak);
-  setJRegisterAsInt(false, jBak);
-  matrixIndex = matrixIndexBak;
+  restoreMatrixIndexState(&bak);
   fnDrop(NOPARAM);
   copySourceRegisterToDestRegister(TEMP_REGISTER_1, getStackTop());
 }
@@ -673,4 +614,25 @@ void fnStoreIJ(uint16_t unusedButMandatoryParameter) {
         calcSigma(0);
       }
     }
+}
+
+void fn42AlphaStore(uint16_t regist) {
+  char *source;
+  char *dest;
+  if(regInRange(regist)) {
+    if(getRegisterDataType(alphaRegister) == dtString) {
+      source = REGISTER_STRING_DATA(alphaRegister);
+      reallocateRegister(regist, dtString, 7, amNone);
+      dest = REGISTER_STRING_DATA(regist);
+      for(uint16_t i=0; i < 6; i++) {
+        if(*source != 0) {
+          *dest++ = *source++;
+        }
+      }
+      *dest = 0;
+    }
+    else {
+      displayCalcErrorMessage(ERROR_NO_STRING_IN_ALPHA_REGISTER, ERR_REGISTER_LINE, REGISTER_T);
+    }
+  }
 }

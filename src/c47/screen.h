@@ -29,15 +29,16 @@
   void     fnSNAP                             (uint16_t unusedButMandatoryParameter);
 
 
-void       fnClLcd                            (uint16_t unusedButMandatoryParameter);
-void       fnPixel                            (uint16_t unusedButMandatoryParameter);
-void       fnPoint                            (uint16_t unusedButMandatoryParameter);
-void       fnAGraph                           (uint16_t regist);
-void       insertAlphaCursor                  (uint16_t startAt);
+  void       fnClLcd                          (uint16_t clear_mode);
+  void       fnClDisplay                      (uint16_t unusedButMandatoryParameter); //DL
+  void       fnPixel                          (uint16_t unusedButMandatoryParameter);
+  void       fnPoint                          (uint16_t unusedButMandatoryParameter);
+  void       fnAGraph                         (uint16_t regist);
+  void       insertAlphaCursor                (uint16_t startAt);
 
-void       drawSinglePixelFullWidthLine       (int y);
+  void       drawSinglePixelFullWidthLine     (int y);
 
-char       letteredRegisterName(calcRegister_t regist);
+  char       letteredRegisterName(calcRegister_t regist);
 
   #if defined(PC_BUILD)
   /**
@@ -93,11 +94,11 @@ char       letteredRegisterName(calcRegister_t regist);
   #if defined(MONITOR_CLRSCR)
     #define clearScreen(cnt)                        do { lcd_fill_rect(0,  0, SCREEN_WIDTH, 240, LCD_SET_VALUE); forceSBupdate(); printf("CLEARFULLSCREEN Macro %u\n",         (uint16_t)cnt);} while(0)  //set last to undefined to force first refresh condition to be true
     #define clearScreenExcludingStatusBar(cnt)      do { lcd_fill_rect(0, 20, SCREEN_WIDTH, 220, LCD_SET_VALUE);                  printf("CLEARFULLSCREEN EXCL SB Macro %u\n", (uint16_t)cnt);} while(0)  //set last to undefined to force first refresh condition to be true
-    #define clearScreenStatusBar(cnt)               do { lcd_fill_rect(0,  0, calcMode == CM_GRAPH ? widthGraphInfoBox : SCREEN_WIDTH, 20,  LCD_SET_VALUE); forceSBupdate(); printf("CLEARSB Macro %u\n", (uint16_t)cnt);} while(0)  //set last to undefined to force first refresh condition to be true
+    #define clearScreenStatusBar(cnt)               do { lcd_fill_rect(0,  0, GRAPHMODE ? widthGraphInfoBox : SCREEN_WIDTH, 20,  LCD_SET_VALUE); forceSBupdate(); printf("CLEARSB Macro %u\n", (uint16_t)cnt);} while(0)  //set last to undefined to force first refresh condition to be true
   #else //!MONITOR_CLRSCR
     #define clearScreen(cnt)                        do { lcd_fill_rect(0,  0, SCREEN_WIDTH, 240, LCD_SET_VALUE); forceSBupdate();} while(0)  //set last to undefined to force first refresh condition to be true
     #define clearScreenExcludingStatusBar(cnt)      do { lcd_fill_rect(0, 20, SCREEN_WIDTH, 220, LCD_SET_VALUE);                 } while(0)  //set last to undefined to force first refresh condition to be true
-    #define clearScreenStatusBar(cnt)               do { lcd_fill_rect(0,  0, calcMode == CM_GRAPH ? widthGraphInfoBox : SCREEN_WIDTH, 20,  LCD_SET_VALUE); forceSBupdate();} while(0)  //set last to undefined to force first refresh condition to be true
+    #define clearScreenStatusBar(cnt)               do { lcd_fill_rect(0,  0, GRAPHMODE ? widthGraphInfoBox : SCREEN_WIDTH, 20,  LCD_SET_VALUE); forceSBupdate();} while(0)  //set last to undefined to force first refresh condition to be true
   #endif //MONITOR_CLRSCR
 
 

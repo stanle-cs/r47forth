@@ -6,6 +6,7 @@
 #define PROGRAM_VERSION                     01  // Original version
 #define EXPORT_VERSION                      03  // 02 Modified export version to indent LBL; 03 Add RTF method and revise fixed table
 #define OLDEST_COMPATIBLE_PROGRAM_VERSION   01  // Original version
+
 #define BACKUP_FORMAT                       00  // Same program format as in backup file
 #define TEXT_FORMAT                         01  // Text program format - for future use
 
@@ -18,7 +19,7 @@
 //  +-----+---------------------------+
 //  |  1  |   "PROGRAM_FILE_FORMAT"   |
 //  |  2  |       <file format>       |
-//  |  3  |"WP43_program_file_version"|
+//  |  3  |"C47_program_file_version" |
 //  |  4  |   <program file version>  |
 //  |  5  |         "PROGRAM"         |
 //  |  6  |       <program size>      |
@@ -59,6 +60,117 @@
       return false;
     }
     return true;
+  }
+
+
+  // First-pass screen of a program file, before anything is loaded, using the grammar tables paramTailBytes() and literalTailBytes() in programming/nextStep.c.
+  // It refuses a declared label name longer than MAX_LABEL_NAME_LENGTH, and any non-item opcode, which the in-memory walker decodes as a zero-parameter step,
+  // so quitting silently there would let a crafted file hide an overlong label behind one. A step the walker cannot otherwise decode ends the screening,
+  // without refusing, because scanLabelsAndPrograms() truncates the program area there anyway.
+
+  static bool_t _readFileProgramByte(uint32_t *remaining, uint8_t *value) {
+    if(*remaining == 0) {
+      return false;
+    }
+    readLine(tmpString, TMP_STR_LENGTH);
+    *value = stringToUint8(tmpString);
+    (*remaining)--;
+    return true;
+  }
+
+
+  static bool_t _skipFileProgramBytes(uint32_t *remaining, uint32_t count) {
+    uint8_t value;
+    while(count-- > 0) {
+      if(!_readFileProgramByte(remaining, &value)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+
+  // Consumes one step; returns false at end of stream, on an undecodable step, or with *refuse set.
+  // allowKeyParam limits the embedded second parameter of KEY and 42KEY to one level, exactly like findNextStep().
+  static bool_t _screenFileStep(uint32_t *remaining, bool_t *refuse, bool_t allowKeyParam) {
+    uint8_t byte, length;
+    uint16_t op;
+    int16_t tail;
+    bool_t declaredLabel = false;
+
+    if(!_readFileProgramByte(remaining, &byte)) {
+      return false;
+    }
+    op = byte;
+    if(byte & 0x80) {
+      if(!_readFileProgramByte(remaining, &byte)) {
+        return false;
+      }
+      op = (uint16_t)((op & 0x7f) << 8) | byte;
+    }
+    if(op == 0x7fff) { // .END.
+      return false;
+    }
+    if(op >= LAST_ITEM) { // non-item opcode: only a corrupt or crafted file contains one
+      *refuse = true;
+      return false;
+    }
+
+    uint16_t ptp = indexOfItems[op].status & PTP_STATUS;
+    if(ptp == PTP_NONE || ptp == PTP_DISABLED) {
+      tail = 0;
+    }
+    else if(ptp == PTP_LITERAL || ptp == PTP_REM) {
+      if(!_readFileProgramByte(remaining, &byte)) { // literal type
+        return false;
+      }
+      tail = literalTailBytes(byte);
+      if(tail == PARAM_TAIL_BASE_LENGTH_PREFIXED) {
+        if(!_readFileProgramByte(remaining, &byte)) { // base
+          return false;
+        }
+        tail = PARAM_TAIL_LENGTH_PREFIXED;
+      }
+    }
+    else {
+      uint16_t paramMode = (ptp == PTP_KEYG_KEYX) ? PARAM_NUMBER_8 : ptp >> 9;
+      if(!_readFileProgramByte(remaining, &byte)) { // first parameter byte
+        return false;
+      }
+      tail = paramTailBytes(paramMode, op, byte);
+      declaredLabel = (paramMode == PARAM_DECLARE_LABEL); // its length-prefixed tails are exactly the named-label forms
+    }
+
+    bool_t ok;
+    if(tail == PARAM_TAIL_INVALID) {
+      return false;
+    }
+    else if(tail == PARAM_TAIL_LENGTH_PREFIXED) {
+      if(!_readFileProgramByte(remaining, &length)) {
+        return false;
+      }
+      if(declaredLabel && length > MAX_LABEL_NAME_LENGTH) { // the check this screen exists for
+        *refuse = true;
+        return false;
+      }
+      ok = _skipFileProgramBytes(remaining, length);
+    }
+    else {
+      ok = _skipFileProgramBytes(remaining, (uint32_t)tail);
+    }
+    if(ok && allowKeyParam && (op == ITM_KEY || op == ITM_42KEY)) {
+      return _screenFileStep(remaining, refuse, false);
+    }
+    return ok;
+  }
+
+
+  static bool_t _programFileRefused(uint32_t pgmSizeInByte) {
+    uint32_t remaining = pgmSizeInByte;
+    bool_t refuse = false;
+    while(remaining > 0 && _screenFileStep(&remaining, &refuse, true)) {
+    }
+    return refuse;
   }
 
 
@@ -121,7 +233,6 @@
 
 
 
-#if !defined(SAVE_SPACE_DM42_10)
   static bool_t subStrWildCardCompare(const char *in1, const char *in2) { //wild card is '*', active from the second character being compared
     int16_t i = 0;
     bool_t areEqual = true;
@@ -156,11 +267,9 @@ static int16_t findIndents(bool_t *newLine, int8_t *indent, int8_t *addnextLineI
         return jj;
       }
 
-#endif //SAVE_SPACE_DM42_10
 
 
 void fnPExport(void) {
-#if !defined(SAVE_SPACE_DM42_10)
     ///////////////////////////////////////////////////////////////////////////////////////
     // For details, see fnPem(). This is a modified copy.
     //
@@ -267,7 +376,6 @@ void fnPExport(void) {
       }
       step = nextStep;
     }
-#endif // !SAVE_SPACE_DM42_10
 }
 
 
@@ -331,8 +439,9 @@ static void _selectProgram(uint16_t label) {
         while(currentLabel < numberOfLabels) {
           if(labelList[currentLabel].step > 0) {  // global label
             // get current label name (to be used as default file name)
-            xcopy(tmpStringLabelOrVariableName, labelList[currentLabel].labelPointer + 1, *(labelList[currentLabel].labelPointer));
-            tmpStringLabelOrVariableName[*(labelList[currentLabel].labelPointer)] = 0;
+            uint8_t lblNameLen = boundProgramNameLength(labelList[currentLabel].labelPointer + 1, *(labelList[currentLabel].labelPointer));
+            xcopy(tmpStringLabelOrVariableName, labelList[currentLabel].labelPointer + 1, lblNameLen);
+            tmpStringLabelOrVariableName[lblNameLen] = 0;
             break;
           }
           currentLabel++;
@@ -342,8 +451,9 @@ static void _selectProgram(uint16_t label) {
     else if(label >= FIRST_LABEL && label <= LAST_LABEL) {
       fnGoto(label);
       // get current label name (to be used as default file name)
-      xcopy(tmpStringLabelOrVariableName, labelList[label - FIRST_LABEL].labelPointer + 1, *(labelList[label - FIRST_LABEL].labelPointer));
-      tmpStringLabelOrVariableName[*(labelList[label - FIRST_LABEL].labelPointer)] = 0;
+      uint8_t lblNameLen = boundProgramNameLength(labelList[label - FIRST_LABEL].labelPointer + 1, *(labelList[label - FIRST_LABEL].labelPointer));
+      xcopy(tmpStringLabelOrVariableName, labelList[label - FIRST_LABEL].labelPointer + 1, lblNameLen);
+      tmpStringLabelOrVariableName[lblNameLen] = 0;
     }
     // Invalid label
     else {
@@ -370,10 +480,10 @@ void _exportProgram(uint16_t label, ioFilePath_t path) {
 
     _selectProgram(label);
     if((getSystemFlag(FLAG_PRTACT)) && (lastFunc == ITM_PRINTERPROG)) {     // If printer active and command is to print program then print to IR printer
-    #if defined(IR_PRINTING)
+    #if defined(OPTION_IR_PRINTING)
       printProgram(PROG, 0);
       temporaryInformation = TI_PRINT_COMPLETE;
-    #endif //IR_PRINTING
+    #endif //OPTION_IR_PRINTING
     }
     else {                                                                  // else print to file
       _fnExportProgram(path);
@@ -467,23 +577,20 @@ void fnSaveAllPrograms(uint16_t unusedButMandatoryParameter) {
   #if defined(PC_BUILD)
     const uint16_t savedCurrentLocalStepNumber = currentLocalStepNumber;
     uint16_t savedCurrentProgramNumber = currentProgramNumber;
-    uint16_t oldCurrentProgramNumber;
+    uint16_t oldCurrentProgramNumber = 0;
 
     uint16_t label;
-    char labelName[16];
+    char labelName[256]; // a global label name is a 1-byte-length string, so up to 255 bytes
     char labelName1[500];
         for(int i=0; i<numberOfLabels; i++) {
           if(labelList[i].step > 0) { // Global label
-            xcopy(labelName, labelList[i].labelPointer + 1, labelList[i].labelPointer[0]);
-            labelName[labelList[i].labelPointer[0]]=0;
-            label = findNamedLabel(labelName);
-            //printf("#### labelnumber=%i, labelname=%s\n",label, labelName);
-            oldCurrentProgramNumber = currentProgramNumber;
-
+            uint8_t nameLength = boundProgramNameLength(labelList[i].labelPointer + 1, labelList[i].labelPointer[0]);
+            xcopy(labelName, labelList[i].labelPointer + 1, nameLength);
+            labelName[nameLength]=0;
+            label = findNamedLabel(labelName, GLOBAL_LABELS);
             _selectProgram(label);
-
             stringToASCII(labelName, labelName1);
-            //printf("----X %6u ? old=%6u name=%30s  ",currentProgramNumber, oldCurrentProgramNumber, labelName1);
+            //printf("#### labelNo=%5i, labelName=%11s, ----Pr no=%6u, old Pr no=%6u name=%30s,  ",label, labelName, currentProgramNumber, oldCurrentProgramNumber, labelName1);
             if(currentProgramNumber != oldCurrentProgramNumber) {
               printf("Export & saving labelnumber %5i in program number %5u: Files %s.p47 %s.rtf\n", label, currentProgramNumber, labelName1, labelName1);
               fflush(stdout);
@@ -494,6 +601,7 @@ void fnSaveAllPrograms(uint16_t unusedButMandatoryParameter) {
               printf("   Not saved: %s is not the first label in program %5u.\n", labelName1, currentProgramNumber);
               fflush(stdout);
             }
+            oldCurrentProgramNumber = currentProgramNumber;
           }
         }
     currentLocalStepNumber = savedCurrentLocalStepNumber;
@@ -509,6 +617,7 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
     uint8_t *startOfProgram;
     int ret;
 
+    temporaryInformation = TI_NO_INFO; // only a completed load sets TI_PROGRAM_LOADED, so a refusal cannot leave the previous load's value standing.
     path = ioPathLoadProgram;
     ret = ioFileOpen(path, ioModeRead);
 
@@ -524,9 +633,9 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
 
     //Check save file version
     uint32_t loadedVersion = 0;
-    readLine(tmpString);
+    readLine(tmpString, TMP_STR_LENGTH);
     if(strcmp(tmpString, "PROGRAM_FILE_FORMAT") == 0) {
-      readLine(aimBuffer); // Format of program instructions (ignore now, there is only one format)
+      readLine(aimBuffer, AIM_BUFFER_LENGTH); // Format of program instructions (ignore now, there is only one format)
     }
     else {
       sprintf(tmpString, " \nThis is not a C47 program\n\nIt will not be loaded.");
@@ -534,8 +643,8 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
       ioFileClose();
       return;
     }
-    readLine(aimBuffer); // param
-    readLine(tmpString); // value
+    readLine(aimBuffer, AIM_BUFFER_LENGTH); // param
+    readLine(tmpString, TMP_STR_LENGTH); // value
     if(strcmp(aimBuffer, "C47_program_file_version") == 0) {
       loadedVersion = stringToUint32(tmpString);
       if(loadedVersion < OLDEST_COMPATIBLE_PROGRAM_VERSION) { // Program incompatibility
@@ -558,14 +667,32 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
         return;
       }
     }
-    readLine(aimBuffer); // param
-    readLine(tmpString); // value
+    readLine(aimBuffer, AIM_BUFFER_LENGTH); // param
+    readLine(tmpString, TMP_STR_LENGTH); // value
     if(strcmp(aimBuffer, "PROGRAM") == 0) {
       pgmSizeInByte = stringToUint32(tmpString);
     }
     else {
       ioFileClose();
       return;
+    }
+
+    // Refuse what cannot fit, before reserving anything. The second bound is the program area's own accounting: freeProgramBytes is a uint16_t,
+    // and _addSpaceAfterPrograms() takes a uint16_t size, so a larger claim would reserve only its low 16 bits while the read loop writes them all.
+    if((uint64_t)pgmSizeInByte + 2 > (uint64_t)freeProgramBytes + getFreeRamMemory() || (uint64_t)pgmSizeInByte + 2 > UINT16_MAX) {
+      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
+      ioFileClose();
+      return;
+    }
+    // First pass: screen the file before loading anything, so a refusal needs no rollback.
+    if(_programFileRefused(pgmSizeInByte)) {
+      displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA, ERR_REGISTER_LINE, REGISTER_X);
+      ioFileClose();
+      return;
+    }
+    ioFileSeek(0);
+    for(i=0; i<6; i++) { // skip the header lines the screening pass already validated
+      readLine(tmpString, TMP_STR_LENGTH);
     }
 
     if(_addEndNeeded()) {
@@ -580,7 +707,7 @@ void fnLoadProgram(uint16_t unusedButMandatoryParameter) {
     _addSpaceAfterPrograms(pgmSizeInByte);
     startOfProgram = firstFreeProgramByte - pgmSizeInByte;
     for(i=0; i<pgmSizeInByte; i++) {
-      readLine(tmpString); // One byte
+      readLine(tmpString, TMP_STR_LENGTH); // One byte
       startOfProgram[i] = stringToUint8(tmpString);
     }
 

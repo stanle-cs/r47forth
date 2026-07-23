@@ -1,0 +1,111 @@
+;*************************************************************
+;** Coverage: ISG/DSE loop-counter ops (iteration.c). The     **
+;** counter register holds ccccc.llliss (counter, limit,      **
+;** step). Drive each op below, at and past its limit, plus   **
+;** the non-real register branch, asserting the incremented/   **
+;** decremented counter that comes back in the register.       **
+;** FARG selects the counter register (R00).                  **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+; --- ISG: increment by step, skip if greater than limit ---
+Func: fnIsg
+In:  FARG=0 R00=Real:"1.00500"
+Out: EC=0 R00=Real:"2.00500"
+Func: fnIsg
+In:  FARG=0 R00=Real:"5.00500"
+Out: EC=0 R00=Real:"6.00500"
+Func: fnIsg
+In:  FARG=0 R00=Real:"1.01002"
+Out: EC=0 R00=Real:"3.01002"
+; --- ISE: increment, skip if equal to limit ---
+Func: fnIse
+In:  FARG=0 R00=Real:"1.00500"
+Out: EC=0 R00=Real:"2.00500"
+Func: fnIse
+In:  FARG=0 R00=Real:"5.00500"
+Out: EC=0 R00=Real:"6.00500"
+; --- ISZ: increment, skip if zero ---
+Func: fnIsz
+In:  FARG=0 R00=Real:"1.00500"
+Out: EC=0 R00=Real:"2.00500"
+Func: fnIsz
+In:  FARG=0 R00=Real:"-1.00500"
+Out: EC=0 R00=Real:"-0.00500"
+; --- DSE: decrement by step, skip if equal-or-less ---
+Func: fnDse
+In:  FARG=0 R00=Real:"5.00100"
+Out: EC=0 R00=Real:"4.00100"
+Func: fnDse
+In:  FARG=0 R00=Real:"1.00100"
+Out: EC=0 R00=Real:"0.00100"
+; --- DSL: decrement, skip if less than limit ---
+Func: fnDsl
+In:  FARG=0 R00=Real:"5.00100"
+Out: EC=0 R00=Real:"4.00100"
+Func: fnDsl
+In:  FARG=0 R00=Real:"1.00100"
+Out: EC=0 R00=Real:"0.00100"
+; --- DSZ: decrement, skip if zero ---
+Func: fnDsz
+In:  FARG=0 R00=Real:"5.00100"
+Out: EC=0 R00=Real:"4.00100"
+Func: fnDsz
+In:  FARG=0 R00=Real:"1.00100"
+Out: EC=0 R00=Real:"0.00100"
+; --- non-real register branch (fp=0, target=0, step=1): plain +/-1 ---
+Func: fnIsg
+In:  FARG=0 R00=LonI:"3"
+Out: EC=0 R00=LonI:"4"
+Func: fnDse
+In:  FARG=0 R00=LonI:"3"
+Out: EC=0 R00=LonI:"2"
+
+; --- long-integer counters crossing zero: the register comes back mutated and
+; --- X holds 1 when the op reports TI_TRUE (the program skip decision), 0 when
+; --- TI_FALSE. FARG: 0=ISZ 1=DSZ 2=ISG 3=ISE 4=DSE 5=DSL.
+Func: fnIterationTiCov
+In:  FARG=1 R00=LonI:"2" RX=Real:"9"
+Out: EC=0 R00=LonI:"1" RX=Real:"1"
+Func: fnIterationTiCov
+In:  FARG=1 R00=LonI:"1" RX=Real:"9"
+Out: EC=0 R00=LonI:"0" RX=Real:"0"
+Func: fnIterationTiCov
+In:  FARG=1 R00=LonI:"0" RX=Real:"9"
+Out: EC=0 R00=LonI:"-1" RX=Real:"1"
+Func: fnIterationTiCov
+In:  FARG=0 R00=LonI:"-2" RX=Real:"9"
+Out: EC=0 R00=LonI:"-1" RX=Real:"1"
+Func: fnIterationTiCov
+In:  FARG=0 R00=LonI:"-1" RX=Real:"9"
+Out: EC=0 R00=LonI:"0" RX=Real:"0"
+Func: fnIterationTiCov
+In:  FARG=0 R00=LonI:"0" RX=Real:"9"
+Out: EC=0 R00=LonI:"1" RX=Real:"1"
+Func: fnIterationTiCov
+In:  FARG=2 R00=LonI:"-2" RX=Real:"9"
+Out: EC=0 R00=LonI:"-1" RX=Real:"1"
+Func: fnIterationTiCov
+In:  FARG=2 R00=LonI:"-1" RX=Real:"9"
+Out: EC=0 R00=LonI:"0" RX=Real:"1"
+Func: fnIterationTiCov
+In:  FARG=2 R00=LonI:"0" RX=Real:"9"
+Out: EC=0 R00=LonI:"1" RX=Real:"0"
+Func: fnIterationTiCov
+In:  FARG=3 R00=LonI:"-1" RX=Real:"9"
+Out: EC=0 R00=LonI:"0" RX=Real:"0"
+Func: fnIterationTiCov
+In:  FARG=3 R00=LonI:"0" RX=Real:"9"
+Out: EC=0 R00=LonI:"1" RX=Real:"0"
+Func: fnIterationTiCov
+In:  FARG=4 R00=LonI:"1" RX=Real:"9"
+Out: EC=0 R00=LonI:"0" RX=Real:"0"
+Func: fnIterationTiCov
+In:  FARG=4 R00=LonI:"0" RX=Real:"9"
+Out: EC=0 R00=LonI:"-1" RX=Real:"0"
+Func: fnIterationTiCov
+In:  FARG=5 R00=LonI:"1" RX=Real:"9"
+Out: EC=0 R00=LonI:"0" RX=Real:"1"
+Func: fnIterationTiCov
+In:  FARG=5 R00=LonI:"0" RX=Real:"9"
+Out: EC=0 R00=LonI:"-1" RX=Real:"0"

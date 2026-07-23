@@ -1,0 +1,126 @@
+Scripted sim runs and screenshots (t47 / c47): A short rundown of practical examples.
+
+Build:  make simc47 t47
+        (exactly that; a bare "make t47" builds the R47-based t47 instead)
+        Alternate legal build, for R47 use: make simr47 t47
+        (the alternateive R47 build has a different key layout so the usage of the press command must be reviewed from this document, which is C47 flavoured)
+
+t47 and c47 are one build, two front ends: t47 forces headless (no GTK), c47 is the GTK twin. Same DSL except press, which needs GTK: c47 only.
+c47 chdirs to its own folder and reads res/ from there; Gdk-CRITICAL/XPC noise at start is harmless.
+
+The legal and only accepted way to control, is to use commands, not item numbers. Bare commands are registered lowercase (m.dim 00, 42dim#, scatr), and xeq takes
+the catalog's own case (xeq SCATR). item <n> is the fallback ONLY, not the first choice: for a name xeq will not resolve, such as a constant (item 132 = c), and for a name
+that cannot be typed. PLT f is the case in point: its gap is no space at all but a U+2005 four-per-em, so the name must be copied out of the --dslcommands list, the
+reason that list exists. Pasted, it is one Jim word: xeq PLT f resolves, as do braces and double quotes; single quotes are not Jim quoting and fail.
+Without the paste item 2734 does the same job, at the clear cost of code nobody can read.
+
+A name taking a TAM argument (e.g. M.EDITN) is not scriptable at all: reach it with press.
+
+CAUTION, calculator state: the sim starts from backup.cfg (t47) or backupR47.cfg (R47-based t47) in the working folder.
+DSP, HIDE, grouping and profile change how numbers render in stack, menus and graph text, so bmp comparisons hold only against the same setup.
+--reset = factory defaults, cfg not loaded: produce reference bmps from a --reset run and they reproduce on any machine.
+A profile switch like --jm is not factory defaults (JM HIDE=31 renders below 1E-31 as 0).
+  ./t47 --reset --exec '...'
+
+Normal screen (stack, menus, status bar):
+  ./t47 --exec 'nim 2; nim 3; xeq +; snap'
+
+Graphic screen (PIXEL / POINT / plot), keep the drawn pixels:
+  ./t47 --snapskiprefresh --exec 'cllcd; nim 240; chs; nim 300; pixel; snap'
+
+Stat graph (SCATR / HISTOX / HISTOY): Σ+ the data, then plot. Plots render at once, so either snap mode captures them:
+  ./t47 --snapskiprefresh --exec 'clΣ; nim 1; nim 1; xeq Σ+; nim 4; nim 2; xeq Σ+; nim 9; nim 3; xeq Σ+; nim 16; nim 4; xeq Σ+; nim 25; nim 5; xeq Σ+; xeq SCATR; snap'
+
+Plot test suite examples:
+  ./t47 --exec 'readp ./docs/appnotes/sources/AN0022b_programs/func.p47; xeq PLTROOT'
+  ./t47 -e 'readp ./PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; item 2734 "xx"; snap'
+
+Programmed EQN solve and draw (cpxSlv and Draw as program steps; single-variable formulas only, the solve variable is picked up).
+Encode the listing with  ./rejig listing.txt -o eqndemo.p47 :
+    LBL 'CSLV'
+      'x^2+4' X.EDIT
+      1 5
+      cpxSlvˣʸ
+    RTN
+    LBL 'DRW'
+      'x^2-4' X.EDIT
+      -5 5
+      Draw_y^x
+    RTN
+  (X.EDIT loads the string in X as the formula and drops it; X.SWAP exchanges. cpxSlvˣʸ takes the two guesses from Y and X; Drawˣʸ the plot range.)
+  ./t47 --reset --exec 'readp eqndemo.p47; xeq CSLV; puts "X=[reg X]"'   (root 0-i2)
+  ./t47 --reset --exec 'readp eqndemo.p47; xeq DRW; snap'                (parabola, roots -2 and 2)
+
+Export a loaded program to RTF (GUI XPORTP needs a file chooser, the DSL does not):
+  ./t47 --reset --exec 'readp res/PROGRAMS/GudrmPL.p47; xportp GudrmPL res/PROGRAMS/GudrmPL.rtf'
+  (xportp <global label> <filename>.)
+
+Export / import a register data file (.d47) (GUI EXPreg / IMPORTr need a file chooser):
+  ./t47 --reset --exec 'nim 3; nim 4; item 99; expreg X quot.d47'   (export register X)
+  ./t47 --reset --exec 'impreg quot.d47; puts "X=[reg X]"'          (import, then read X)
+  ./t47 --reset --exec 'nim 7; sto 00; expnrg 100 regs.d47'       (export the block R00..R99, EXPnrg)
+  (expnrg <n> <file> exports R00..R(n-1), n up to 126; same filename-override rules as expreg.)
+  (expreg <reg> <file>; impreg <file>; reg name as for reg, e.g. X, 00, A. The filename is verbatim, so the folder must exist; the GUI keeps .d47 in DATA/.)
+  (Headless there is no chooser to open, so a file function reached without a filename stops with a cannot-read/write error and a note on stderr. Always name the file.)
+
+Stat graph at 1E-50 (both axes scaled):
+  ./t47 --snapskiprefresh --exec 'clΣ; nim 1e-50; nim 1e-50; xeq Σ+; nim 4e-50; nim 2e-50; xeq Σ+; nim 9e-50; nim 3e-50; xeq Σ+; nim 16e-50; nim 4e-50; xeq Σ+; nim 25e-50; nim 5e-50; xeq Σ+; xeq SCATR; snap'
+
+Jim Tcl scripting (the DSL is Jim: set/expr/while/if/puts all work; incr is a NO-OP, step with expr):
+  ./t47 --reset --exec 'set s 0; set n 0; while {$n < 5} {set n [expr {$n + 1}]; set s [expr {$s + $n}]}; puts "sum=$s"'   (sum=15)
+
+Register / named variable / flag write and read (complex values in braces; strings and more forms in values.t47):
+  ./t47 --reset --exec 'reg 05 3.5; var myv 2.5; flag SPCRES 1; puts "R05=[reg 05] myv=[var myv] SPCRES=[flag SPCRES]"'
+  ./t47 --reset --exec 'reg 10 {1 + ix2}; puts "R10=[reg 10]"'
+
+Range screening examples (error text appears on stdout):
+  NaN/inf STO rejected:  ./t47 --exec 'flag SPCRES 1; nim 1; nim 0; item 99; item 2548'
+  equal limits rejected: ./t47 --exec 'readp ./PROGRAMS/FFX.p47; pgmplt FFX; nim 5; nim 5; item 2734 "xx"'
+  out-of-domain range:   ./t47 --reset -e 'readp ./PROGRAMS/FFX.p47; pgmplt FFX; nim 1; nim 10; item 2734 "xx"'
+                         (every sample infinite -> "no plottable sample in the plot range")
+  (items: 2547 STO up-Y, 2548 STO down-Y, 99 divide, 2734 PLT f)
+
+State save/load and register assertions (savest/loadst take a filename):
+  save a state:    ./t47 --reset --exec 'nim 2; nim 2; item 1526 00; savest good.sav'
+  load and check:  ./t47 --reset --exec 'loadst good.sav; item 51 00; item 1527; puts "rows=[reg Y] cols=[reg X]"'
+  (items: 1526 M.DIM dims a register to Y x X reals, 51 RCL, 1527 42DIM# drops the X-matrix dimensions to Y=rows, X=cols.
+   reg <name> reads a register's display string but returns <unsupported> for a matrix, so assert dimensions via 42DIM#.
+   Register data also moves through hand-written .d47 files; format in AN0025.)
+
+SHOW (all-digit view). snap clears it, so headless run show TWICE (the 2nd call's refresh paints the 1st) and always --snapskiprefresh; one page per run:
+  long int, big font:    ./t47 --reset --snapskiprefresh --exec 'nim 123456789012345678901234567890; show; show; snap'
+  long int, small font:  ./t47 --reset --snapskiprefresh --exec 'nim 2; nim 1500; yˣ; show; show; snap'   (over 170 glyphs)
+  real, 34 digits:       ./t47 --reset --snapskiprefresh --exec 'nim 1; nim 3; ÷; show; show; snap'
+  XY+Z exact (XFN):      ./t47 --reset --snapskiprefresh --exec 'nim 1; nim 3; ÷; nim 7; nim 11; ÷; nim 13; nim 17; ÷; menu XFCNS; show; show; snap'
+  page 2 (c47):          ./c47 --reset --snapskiprefresh --exec 'nim 2; nim 1500; yˣ; show; press R/S; snap'
+  tiny font (c47):       ./c47 --reset --snapskiprefresh --exec 'nim 2; nim 1500; yˣ; show; press R/S; press R/S; snap'
+  other register (c47):  ./c47 --reset --snapskiprefresh --exec 'nim 7; nim 9; show; press "@k 17"; snap'   (up: Y, Z..; down "@k 22": numbered regs)
+  (R/S cycles small-font pages of 10 lines, then tiny, then back to page 1; a page count over 2 needs a longer number.)
+
+Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key (NN = 00..36), single ASCII, ENTER, R/S. item and xeq call the function direct,
+so TAM and softmenu decode need press. Matrix editor, cursor to 2;2:
+  ./c47 --reset --exec 'nim 3; nim 3; item 1526 00; item 51 00; item 1529; press F6; press @f; press F6; snap'
+  (1529 M.EDIT; M_EDIT F5/F6 = left/right, f-shifted = up/down; snap shows "2;2=".)
+  M.EDIT indexes X, so a later nim pushes the matrix out of X: index a numbered register instead where the test needs the stack. A program stops at M.EDIT.
+
+Power cycle (backup.cfg; savest above is a SAVE file, no calcMode in it):
+  ./c47 --reset --exec '<setup>; item 1543'   (1543 OFF: writes backup.cfg, exits)
+  ./c47 --exec 'snap'                         (no --reset: restores it)
+  Writes the exe folder's backup.cfg: to spare your own, copy c47 to a scratch dir and symlink res/ beside it.
+
+Output: newest ./YYYYMMDD-HHMMSS.bmp in cwd (time is the sim clock).
+
+Notes:
+  ;              separates commands.
+  negative num   type the value then  chs   (nim 240; chs -> -240).
+  stack order    first nim -> Y, second nim -> X.
+  script file    ./t47 --headless --script file.t47   (instead of --exec).
+  snap           saves a screenshot; default redraws the whole screen first.
+  --snapskiprefresh  snap saves the screen as-is, so drawn PIXEL/POINT/plot pixels are not wiped by the redraw.
+  item <n>       fallback only, see the top note.
+  --dslcommands  ./t47 --dslcommands writes t47-op-commands.txt: item number, command name, catalog name. Copy untypable names from it.
+  markers        set a register before the run (reg 01 -1) and read it after, to tell "the step ran and did nothing" from "the step never ran".
+  snap <name>    writes <name>.bmp plus <name>.REGS.TSV.T47.TSV (stack as TSV) instead of the timestamp name.
+  menu <name>    opens the real softmenu headless, so menu-open side effects fire without keys (e.g. menu XFCNS above).
+  error mid-run  a calculator error no-ops every later step: put the step under test last, or markers lie.
+  tsvfn <file>   redirects TSV output; it APPENDS, delete the old .T47.TSV first.

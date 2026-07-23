@@ -12,13 +12,13 @@ int32_t compareChar(const char *char1, const char *char2) {
 
 
 #define GLYPH_TO_CHAR_CODE(x) (((uint16_t)((uint8_t)(x[0])) << 8) + (uint8_t)(x[1]))
+#define UNSUBRANGE(a, b, c) { GLYPH_TO_CHAR_CODE(a), GLYPH_TO_CHAR_CODE(b) - GLYPH_TO_CHAR_CODE(a) + 1, c }
 
-static TO_QSPI struct {
+static TO_QSPI const struct {
   uint16_t low;
   uint8_t num;
   char base;
 } unSupSubRanges[] = {
-#define UNSUBRANGE(a, b, c) { GLYPH_TO_CHAR_CODE(a), GLYPH_TO_CHAR_CODE(b) - GLYPH_TO_CHAR_CODE(a) + 1, c }
   UNSUBRANGE(STD_SUP_A, STD_SUP_Z, 'A'),
   UNSUBRANGE(STD_SUP_a, STD_SUP_z, 'a'),
   UNSUBRANGE(STD_SUP_0, STD_SUP_1, '0'),
@@ -26,10 +26,11 @@ static TO_QSPI struct {
   UNSUBRANGE(STD_SUB_A, STD_SUB_Z, 'A'),
   UNSUBRANGE(STD_SUB_a, STD_SUB_z, 'a'),
   UNSUBRANGE(STD_SUB_0, STD_SUB_9, '0')
-#undef UNSUBRANGE
 };
 
-static TO_QSPI uint16_t unSupSubStruckTable[] = {
+#undef UNSUBRANGE
+
+static TO_QSPI const uint16_t unSupSubStruckTable[] = {
   GLYPH_TO_CHAR_CODE(STD_SUP_PLUS),     (uint16_t)'+',
   GLYPH_TO_CHAR_CODE(STD_SUP_MINUS),    (uint16_t)'-',
   GLYPH_TO_CHAR_CODE(STD_SUP_INFINITY), GLYPH_TO_CHAR_CODE(STD_INFINITY),
@@ -65,6 +66,57 @@ static uint16_t _charCodeUnSupSubStruck(uint16_t charCode) {
   return charCode;
 }
 #undef GLYPH_TO_CHAR_CODE
+
+// Converts a name to its CMP_NAME character codes, sub- and superscript glyphs replaced by their plain form: a high-bit byte combines with the following byte,
+// a truncated final glyph ends the walk. Returns the glyph count, or -1 when the name has more than maxGlyphs glyphs. Keep in sync with compareString().
+int32_t foldNameToCharCodes(const char *name, uint16_t *folded, int32_t maxGlyphs) {
+  int32_t count = 0;
+  int16_t pos = 0;
+  uint8_t byte;
+
+  while((byte = (uint8_t)name[pos]) != 0) {
+    if(count >= maxGlyphs) {
+      return -1;
+    }
+    uint16_t charCode = byte;
+    if(byte & 0x80) {
+      charCode = (charCode << 8) + (uint8_t)name[pos + 1];
+      pos += ((uint8_t)name[pos + 1] == 0) ? 1 : 2;
+    }
+    else {
+      pos += 1;
+    }
+    folded[count++] = _charCodeUnSupSubStruck(charCode);
+  }
+  return count;
+}
+
+
+// True exactly when compareString(candidate, original, CMP_NAME) == 0, with the original pre-converted by foldNameToCharCodes(). Keep in sync with compareString().
+bool_t nameEqualsPrefolded(const char *candidate, const uint16_t *folded, int32_t foldedLength) {
+  int32_t count = 0;
+  int16_t pos = 0;
+  uint8_t byte;
+
+  while((byte = (uint8_t)candidate[pos]) != 0) {
+    if(count >= foldedLength) {
+      return false;
+    }
+    uint16_t charCode = byte;
+    if(byte & 0x80) {
+      charCode = (charCode << 8) + (uint8_t)candidate[pos + 1];
+      pos += ((uint8_t)candidate[pos + 1] == 0) ? 1 : 2;
+    }
+    else {
+      pos += 1;
+    }
+    if(_charCodeUnSupSubStruck(charCode) != folded[count++]) {
+      return false;
+    }
+  }
+  return count == foldedLength;
+}
+
 
 int32_t compareString(const char *stra, const char *strb, int32_t comparisonType) {
   int32_t lga, lgb, i;

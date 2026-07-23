@@ -17,6 +17,7 @@
    *   * -1 when not found in the standard font
    *   * -2 when not found in the numeric font
    */
+  int16_t findGlyphExact       (const font_t *font, uint16_t charCode);
   int16_t findGlyph            (const font_t *font, uint16_t charCode);
 
   /**
@@ -758,11 +759,29 @@
 #define STD_SUB_X                     "\xa4\xe7"
 #define STD_SUB_Y                     "\xa4\xe8"
 #define STD_SUB_Z                     "\xa4\xe9"
-#define STD_BLACK_RIGHT_TRIANGLE      "\xa5\xb6"
 #define STD_CHECK_MARK                "\xa7\x13"
 #define STD_YX                        "\xa9\xf0"
 #define STD_fg                        "\xa9\xf1"
 #define STD_FOR_ALL                   "\xac\x6f" // was U+2200
-#define STD_RIGHT_DOUBLE_ARROW        "\xa1\xD2"    //JM
-#define STD_LEFT_RIGHT_DOUBLE_ARROW   "\xa1\xD4"    //JM
+#define STD_RIGHT_DOUBLE_ARROW        "\xa1\xD2"
+#define STD_LEFT_RIGHT_DOUBLE_ARROW   "\xa1\xD4"
+#define STD_EOT_PIC                   "\xa4\x04"
+#define STD_BLACK_RIGHTTRIANGLE       "\xa5\xb6"
+#define STD_LF_PIC                    "\xa4\x0a"
+#define STD_ESC_PIC                   "\xa4\x1b"
+#define STD_SMALL_SQUARE              "\xa5\xaa"
+#define STD_SMALLCAP_X                "\x84\x59"
+#define STD_SMALLCAP_Y                "\x82\x8f"
+#define STD_SMALLCAP_B                "\x82\x99"
+#define STD_SMALLCAP_L                "\x82\x9f"
+#define STD_SMALLCAP_A                "\x84\x5a"
+#define STD_SMALLCAP_C                "\x9d\x04"
+#define STD_SMALLCAP_D                "\x9d\x05"
+#define STD_SMALLCAP_T                "\x9d\x1b"
+#define STD_SMALLCAP_Z                "\x9d\x22"
+#define STD_CHECKERED                 "\xa5\x92"
+#define STD_WHITE_RIGHTTRIANGLE       "\xa5\xb7"
+#define STD_BLACK_RIGHTSMALLTRIANGLE  "\xa5\xb8"
+#define STD_WHITE_RIGHTSMALLTRIANGLE  "\xa5\xb9"
+
 #endif // !FONTS_H

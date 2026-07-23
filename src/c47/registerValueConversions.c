@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
 
 #include "c47.h"
+#include <float.h>
+#include <locale.h>
 
 static float fnRealToFloat(const real_t *r);
 
@@ -21,7 +23,14 @@ void convertLongIntegerRegisterToLongInteger(calcRegister_t regist, longInteger_
 
   xcopy(lgInt->_mp_d, REGISTER_LONG_INTEGER_DATA(regist), sizeInBytes);
 
-  if(getRegisterLongIntegerSign(regist) == LI_NEGATIVE) {
+  // Trim trailing zero limbs: GMP requires _mp_size = 0 for value zero,
+  // else mpz_sizeinbase returns 0 and callers underflow on (bits - 1).
+  // GRAMOD = 0 was checked to have _mp_size = 1, not 0
+  while(sizeInBytes >= LIMB_SIZE && lgInt->_mp_d[sizeInBytes/LIMB_SIZE - 1] == 0) {
+    sizeInBytes -= LIMB_SIZE;
+  }
+
+  if(sizeInBytes > 0 && getRegisterLongIntegerSign(regist) == LI_NEGATIVE) {
     lgInt->_mp_size = -(sizeInBytes / LIMB_SIZE);
   }
   else {
@@ -321,6 +330,16 @@ void convertRealToLongIntegerRegister(const real_t *real, calcRegister_t dest, e
   convertRealToLongInteger(real, lgInt, roundingMode);
   convertLongIntegerToLongIntegerRegister(lgInt, dest);
   longIntegerFree(lgInt);
+}
+
+
+
+void convertComplexRegisterToRealIfZeroImag(calcRegister_t regist) {
+  real_t b;
+  if(real34IsZero(REGISTER_IMAG34_DATA(regist))) {
+    real34ToReal(REGISTER_REAL34_DATA(regist), &b);
+    convertRealToResultRegister(&b, regist, amNone);
+  }
 }
 
 
@@ -641,6 +660,21 @@ void convertReal34MatrixRegisterToComplex34MatrixRegister(calcRegister_t source,
 }
 
 
+const char *doubleSpecialLabel(double value) {                                 // Returns "NaN", "+Inf" or "-Inf" for a special value, or NULL for a normal finite value.
+  if(value != value) {
+    return "NaN";
+  }
+  if(value > DBL_MAX) {
+    return "+Inf";
+  }
+  if(value < -DBL_MAX) {
+    return "-Inf";
+  }
+  return NULL;
+}
+
+
+
 void sci_fmt(char *buf, int n, double x) {
 /*
  * Usage:
@@ -649,8 +683,18 @@ void sci_fmt(char *buf, int n, double x) {
  *
  * Output format (if buffer allows):
  *   [-]d.dddddddddddddddde±dd\0 (up to 25–30 bytes depending on exponent digits)
+ *   eg. 2.5 -> "2.50000000000000e+00", -0.05 -> "-5.00000007450580e-02", 0 -> "0.00000000000000e+00"
+ *   NaN -> "nan", +Inf -> "inf", -Inf -> "-inf"; compatible with strtof
  */
     int exp = 0, i = 0;
+    if(isnan(x)) {
+      snprintf(buf, n, "nan");
+      return;
+    }
+    if(isinf(x)) {
+      snprintf(buf, n, x < 0 ? "-inf" : "inf");
+      return;
+    }
     if(x < 0) {
         buf[i++] = '-';
         x = -x;
@@ -691,6 +735,11 @@ void sci_fmt(char *buf, int n, double x) {
 
 
   void convertDoubleToString(double x, int16_t n, char *buff) { //Reformatting real strings that are formatted according to different locale settings
+    const char *special = doubleSpecialLabel(x);
+    if(special != NULL) {
+      snprintf(buff, n, "%s", special);  // "NaN", "+Inf" or "-Inf" for a special value
+      return;
+    }
     uint16_t i = 2;
     uint16_t j = 2;
     bool_t error = false;
@@ -852,6 +901,20 @@ void realToFloat(const real_t *vv, float *v) {
 }
 
 
+// Locale-free parse: accepts '.' or ',' regardless of the locale, so decNumber output (always '.') and files written under any region setting parse correctly. Buffer sized for a full 75-digit real string with exponent.
+double stringToDouble(const char *str) {
+  char buf[120];
+  const char radix = *localeconv()->decimal_point;
+  uint32_t i = 0;
+  while(str[i] != 0 && i < sizeof(buf) - 1) {
+    buf[i] = (str[i] == '.' || str[i] == ',') ? radix : str[i];
+    i++;
+  }
+  buf[i] = 0;
+  return strtod(buf, NULL);
+}
+
+
 static double fnRealToDouble(const real_t *r) {
   char buffer[100];
   if(realIsSpecial(r)) {
@@ -864,7 +927,7 @@ static double fnRealToDouble(const real_t *r) {
     return realIsPositive(r) ? 0.0 : -0.0;
   }
   decNumberToString((decNumber*)r, buffer);
-  return strtod(buffer, NULL);
+  return stringToDouble(buffer);
 }
 
 
@@ -1192,7 +1255,6 @@ int getRegisterAsLongIntQuiet(calcRegister_t reg, longInteger_t val, bool_t *fra
   real_t rval;
   bool_t frac = false;
 
-  longIntegerInit(val);
   switch(getRegisterDataType(reg)) {
     case dtLongInteger:
       convertLongIntegerRegisterToLongInteger(reg, val);
@@ -1205,6 +1267,7 @@ int getRegisterAsLongIntQuiet(calcRegister_t reg, longInteger_t val, bool_t *fra
     case dtComplex34:
     case dtReal34:
       if(getRegisterAsReal(reg, &rval)) {
+        longIntegerInit(val); // convertRealToLongInteger expects an initialised val
         if(realIsSpecial(&rval)) {
           return ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN;
         }
@@ -1218,6 +1281,7 @@ int getRegisterAsLongIntQuiet(calcRegister_t reg, longInteger_t val, bool_t *fra
       /* fall through */
 
     default:
+      longIntegerInit(val);
       return ERROR_INVALID_DATA_TYPE_FOR_OP;
   }
   if(fractional != NULL) {

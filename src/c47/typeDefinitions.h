@@ -10,6 +10,18 @@
 typedef bool bool_t;
 
 
+
+/**
+ * combined complex type, used in complex solver, and elec, and more new functions/conversions
+ */
+typedef struct {
+      real_t Real;
+      real_t Imag;
+} cplx_t;
+
+#define CPLX(x) &(x).Real, &(x).Imag
+
+
 /**
  * \enum multiplyDivide_t
    * Used for unit conversions.
@@ -29,6 +41,15 @@ typedef enum {
   trigSin,
   trigCos
 } trigType_t;
+
+
+/**
+ * \struct fInMim_t
+ * Item s allowed in bufferize, for MIMentry function tables.
+ */
+typedef struct {
+  uint16_t itemNr;
+} fInMim_t;
 
 
 /**
@@ -130,6 +151,14 @@ typedef struct {
   glyphMartelPrinter_t  glyphs[];       ///< Pointer to the glyph description structure
 } martelFont24_t;
 
+/**
+ * \struct upperLower_t
+ * Structure keeping the Upper case / Lower case character pairs.
+ */
+typedef struct {
+  char upper[3];         ///< Upper case Unicode code point
+  char lower[3];         ///< Lower case Unicode code point
+} upperLower_t;
 
 
 /**
@@ -662,6 +691,7 @@ typedef struct {
   bool_t     alpha;
   int16_t    currentOperation;
   bool_t     dot;
+  bool_t     colon;
   bool_t     indirect;
   int16_t    digitsSoFar;
   int16_t    value0;       // to store the initial value for indirection
@@ -689,6 +719,63 @@ typedef struct {
 } letteredFlagDisplay_t;
 
 
+typedef enum {
+  LI_ZERO     = 0, // Long integer sign 0
+  LI_NEGATIVE = 1, // Long integer sign -
+  LI_POSITIVE = 2  // Long integer sign +
+} longIntegerSign_t;
+
+
+/**
+ * \enum printArgument_t
+ *
+ */
+typedef enum {
+  PRINT_BYTE,
+  PRINT_CHAR,
+  PRINT_TAB,
+  PRINT_ALPHA,
+  PRINT_ALPHA_NOADV,
+  PRINT_ALPHA_JUST
+} printArgument_t;
+
+
+/**
+ * \enum printerModel_t
+ *
+ */
+typedef enum {
+  PRINTER_HP,
+  PRINTER_MARTEL,
+  PRINTER_OTHER
+} printerModel_t;
+
+
+/**
+ * \enum printModes_t
+ *
+ */
+typedef enum  {
+  PMODE_DEFAULT = 0,
+  PMODE_GRAPHICS = 1,
+  PMODE_SMALLGRAPHICS = 2,
+  PMODE_SERIAL = 3
+} printModes_t;
+
+
+/**
+ * \enum printArea_t
+ *
+ */
+typedef enum  {
+  LINE_FULL  = 0,
+  LINE_LEFT  = 1,
+  LINE_RIGHT = 2,
+  LINE_NOLF  = 3,
+  LINE_ASIS  = 4,
+} printArea_t;
+
+
 /**
  * \struct printerState_t
    * Structure keeping the printer status
@@ -697,10 +784,20 @@ typedef struct {
   bool_t         print_on;               ///< Printing on/off
   bool_t         trace_done;             ///< Printing on/off
   uint8_t        print_blank_line;       ///< Print space between lines
-  print_modes_t  print_mode;             ///< printer modes
+  printModes_t   print_mode;             ///< printer modes
   printerModel_t printer_model;          ///< printer model
   uint16_t       delay;                  ///< printer line delay
 } printerState_t;
+
+
+/**
+ * \enum namedLabels_t
+ */
+typedef enum {
+  GLOBAL_LABELS = STRING_LABEL_VARIABLE,    // Only global labels
+  LOCAL_LABELS  = LOCAL_LABEL_VARIABLE,     // Only local named labels
+  ALL_LABELS    = 0                         // Both global and local names lables
+} namedLabels_t;
 
 
   #if defined(PC_BUILD)

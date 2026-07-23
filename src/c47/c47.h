@@ -39,11 +39,17 @@
     #if defined(PC_BUILD)
       #include <gtk/gtk.h>
       #include <gdk/gdk.h>
+
+      #include <stdarg.h>
+
+      #if defined(__linux__) || defined(__APPLE__)
+        #include <dlfcn.h>
+        #include <execinfo.h>
+      #endif
+
     #endif // PC_BUILD
 
-    #if defined(WIN32)
-      #include <locale.h>
-    #endif // WIN32
+    #include <locale.h>
 
     #if defined(DMCP_BUILD)
       #define DBG_PRINT
@@ -107,6 +113,7 @@
     #include "registers.h"
     #include "registerValueConversions.h"
     #include "saveRestoreCalcState.h"
+    #include "saveRestoreBackup.h"
     #include "saveRestorePrograms.h"
     #include "screen.h"
     #include "softmenus.h"
@@ -173,9 +180,11 @@
 
     #include "mathematics/pcg_basic.h"
 
+    #if defined(__linux__) || defined(__APPLE__)
+      #include <execinfo.h>
+    #endif
     #include "realType.h"
     #include "typeDefinitions.h"
-
   #endif // GENERATE_CONSTANTS
 
   #if defined(GENERATE_TESTPGMS)
@@ -220,6 +229,10 @@
     extern int                  currentBezel; // 0=normal, 1=AIM, 2=TAM
   #endif //PC_BUILD
 
+  extern bool_t                headlessMode;
+  extern bool_t                snapSkipRefresh;
+  extern bool_t                loadTestPrograms;
+  extern bool_t                loadTestData;
 
   extern uint8_t calcModel;
 
@@ -231,7 +244,7 @@
   extern const reservedVariableHeader_t  allReservedVariables[];
   extern const reservedVariableDescStr_t varDescr[];
   extern const char                      commonBugScreenMessages[NUMBER_OF_BUG_SCREEN_MESSAGES][SIZE_OF_EACH_BUG_SCREEN_MESSAGE];
-  extern const char                      errorMessages[NUMBER_OF_ERROR_CODES][SIZE_OF_EACH_ERROR_MESSAGE];
+  const char *errorMessageOf(uint8_t errorCode);
   extern const calcKey_t                 kbd_std_C47[37];
   extern const calcKey_t                 kbd_std_DM42[37];
   extern const calcKey_t                 kbd_std_R47[37];
@@ -243,8 +256,13 @@
   #if defined(PC_BUILD)
     #define kbd_std                      (calcModel == USER_C47 ? kbd_std_C47 : calcModel == USER_DM42 ? kbd_std_DM42 : calcModel == USER_R47f_g ? kbd_std_R47f_g : calcModel == USER_R47bk_fg ? kbd_std_R47bk_fg : calcModel == USER_R47fg_bk ? kbd_std_R47fg_bk : calcModel == USER_R47fg_g ? kbd_std_R47fg_g : \
                                           calcModel == USER_E47 ? kbd_std_E47 : calcModel == USER_D47 ?  kbd_std_D47 :  calcModel == USER_V47 ? kbd_std_V47 : calcModel == USER_N47 ?     kbd_std_N47 : calcModel == USER_DM42 ?     kbd_std_DM42 :    kbd_std_C47)
-  #else //!PC_BUILD
-    #define kbd_std                      (calcModel == USER_C47 ? kbd_std_C47 : calcModel == USER_DM42 ? kbd_std_DM42 : calcModel == USER_R47f_g ? kbd_std_R47f_g : calcModel == USER_R47bk_fg ? kbd_std_R47bk_fg : calcModel == USER_R47fg_bk ? kbd_std_R47fg_bk : calcModel == USER_R47fg_g ? kbd_std_R47fg_g : kbd_std_C47)
+  #elif CALCMODEL == USER_R47
+    // A hardware build carries only its own personality's layouts: the backup writer refuses to persist a foreign
+    // model (saveRestoreBackup.c) and the state loader only applies one from a matching file (saveRestoreCalcState.c),
+    // so the other tables are unreachable there and gating the selector lets the linker drop them.
+    #define kbd_std                      (calcModel == USER_R47bk_fg ? kbd_std_R47bk_fg : calcModel == USER_R47fg_bk ? kbd_std_R47fg_bk : calcModel == USER_R47fg_g ? kbd_std_R47fg_g : kbd_std_R47f_g)
+  #else //!PC_BUILD && CALCMODEL != USER_R47
+    #define kbd_std                      (calcModel == USER_DM42 ? kbd_std_DM42 : kbd_std_C47)
   #endif //!PC_BUILD
 
   #if defined(PC_BUILD)
@@ -254,13 +272,14 @@
     extern const calcKey_t                 kbd_std_E47[37];
     extern const calcKey_t                 kbd_std_N47[37];
   #endif // PC_BUILD
-  extern const font_t                    standardFont, numericFont, tinyFont;
+  extern const font_t                    standardFont, numericFont, numericFontBold, tinyFont;
   extern const font_t                   *fontForShortInteger;
   extern const font_t                   *cursorFont;
   extern const char                      baseDigits[63];
   extern const char                      registerFlagLetters[27];
   extern any34Matrix_t                   openMatrixMIMPointer;
   extern uint16_t                        matrixIndex;
+  extern int16_t                         shadowI, shadowJ;
   extern void                            (* const addition[NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS][NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS])(void);
   extern void                            (* const subtraction[NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS][NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS])(void);
   extern void                            (* const multiplication[NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS][NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS])(void);
@@ -300,6 +319,7 @@
   extern bool_t                 refreshNIMdone;
   extern bool_t                 cleanupAfterShift;
   extern bool_t                 solverEstimatesUsed;
+  extern bool_t                 graphAccActive;
   extern bool_t                 updateOldConstants;
 
 
@@ -379,6 +399,7 @@
   extern uint16_t               lastCenturyHighUsed;
   extern uint8_t                numScreensStandardFont;
   extern uint8_t                numScreensNumericFont;
+  extern uint8_t                numScreensNumericFontBold;
   extern uint8_t                numScreensTinyFont;
   extern uint8_t                currentAsnScr;
   extern uint8_t                currentFntScr;
@@ -393,6 +414,7 @@
   extern uint8_t                fractionDigits;
   extern uint8_t                shortIntegerMode;
   extern uint8_t                previousCalcMode;
+  extern bool_t                 graphToRemainOnScreen;
   extern uint8_t                grpGroupingLeft;
   extern uint8_t                grpGroupingGr1LeftOverflow;
   extern uint8_t                grpGroupingGr1Left;
@@ -406,6 +428,7 @@
   extern uint8_t                scrLock;
   extern uint8_t                alphaCase;
   extern uint8_t                numLinesNumericFont;
+  extern uint8_t                numLinesNumericFontBold;
   extern uint8_t                numLinesStandardFont;
   extern uint8_t                numLinesTinyFont;
   extern uint8_t                cursorEnabled;
@@ -597,12 +620,15 @@
   extern uint8_t                firstDayOfWeek;
   extern uint8_t                firstWeekOfYearDay;
 
-  //#if defined(IR_PRINTING)
+  //#if defined(OPTION_IR_PRINTING)
     extern printerState_t         printerState;
     extern const printerFont_t    printerFont8;
     extern const martelFont24_t   martelFont24;
     extern uint16_t               printerColumn;
-  //#endif //IR_PRINTING
+  //#endif //OPTION_IR_PRINTING
+
+  extern uint16_t               alphaRegister;
+  extern bool_t                 varMenu42;
 
   #if defined(DMCP_BUILD)
     extern bool_t               backToDMCP;

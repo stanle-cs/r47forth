@@ -7,6 +7,13 @@
 
 #include "c47.h"
 
+#define INTEGRATEDEBUG // integrator debug prints
+#undef  INTEGRATEDEBUG
+
+// Cap integrator re-entry before a self-integrating program overflows the C stack. Dedicated, not the shared
+// currentSolverNestingDepth (which the solver/isumprod can leave inflated). MAX_INTEGRATOR_NESTING_DEPTH is in defines.h.
+static uint16_t integratorNestingDepth = 0;
+
 void fnPgmInt(uint16_t label) {
   if(FIRST_LABEL <= label && label <= LAST_LABEL) {
     currentSolverProgram = label - FIRST_LABEL;
@@ -17,7 +24,7 @@ void fnPgmInt(uint16_t label) {
     char buf[2];
     buf[0] = letteredRegisterName((calcRegister_t)label);
     buf[1] = 0;
-    label = findNamedLabel(buf);
+    label = findNamedLabel(buf, GLOBAL_LABELS);
     if(label == INVALID_VARIABLE) {
       displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
       #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -140,17 +147,18 @@ saveForUndo();
 #if defined(SPEEDUPEXPERIMENT)
     real_t digits;
     uint8_t significantDigitsMem = significantDigits;
+    int32_t s4 = ctxtReal4.digits, s34 = ctxtReal34.digits, s39 = ctxtReal39.digits, s51 = ctxtReal51.digits, s75 = ctxtReal75.digits; // save contexts for integration nesting
     int32_t digitsN = 0;
     WP34S_Ln(&acc, &digits, &ctxtReal39);
     realDivide(&digits, const39_ln10, &digits, &ctxtReal39);
     digitsN = max(min(-realToInt32C47(&digits, NULL), 34-3), 1);
-    #if defined(PC_BUILD)
-      printRealToConsole(&digits, "digits: ", "\n");
-      printf("----->>>> digitsN=%i, smallerEpsilon=%u\n", digitsN, smallerEpsilon);
-      printRealToConsole(&acc, "acc: ", "\n");
-      printRealToConsole(&llim, "llim: ", "\n");
-      printRealToConsole(&ulim, "ulim: ", "\n");
-    #endif // PC_BUILD
+    #if (defined PC_BUILD) && (defined INTEGRATEDEBUG)
+      printf("integrate: digitsN=%i smallerEpsilon=%u\n", digitsN, smallerEpsilon);
+      printRealToConsole(&digits, "  digits: ", "\n");
+      printRealToConsole(&acc,    "  acc:    ", "\n");
+      printRealToConsole(&llim,   "  llim:   ", "\n");
+      printRealToConsole(&ulim,   "  ulim:   ", "\n");
+    #endif // PC_BUILD && INTEGRATEDEBUG
 
     if(digitsN == 6) {
       #if defined(PC_BUILD)
@@ -173,11 +181,11 @@ saveForUndo();
         //int32ToReal(-digitsN, &tt);
         //realRescale(&res, &res, &tt, &ctxtReal4);
       significantDigits = significantDigitsMem;
-      ctxtReal4.digits  = 6;
-      ctxtReal34.digits = 34;
-      ctxtReal39.digits = 39;
-      ctxtReal51.digits = 51;
-      ctxtReal75.digits = 75;
+      ctxtReal4.digits  = s4;
+      ctxtReal34.digits = s34;
+      ctxtReal39.digits = s39;
+      ctxtReal51.digits = s51;
+      ctxtReal75.digits = s75;
     }
     else if(digitsN <= 10) {
       #if defined(PC_BUILD)
@@ -200,24 +208,22 @@ saveForUndo();
         //int32ToReal(-digitsN, &tt);
         //realRescale(&res, &res, &tt, &ctxtReal39);  or ose ACC. But best is to use N decimals. This does not work right
       significantDigits = significantDigitsMem;
-      ctxtReal4.digits  = 6;
-      ctxtReal34.digits = 34;
-      ctxtReal39.digits = 39;
-      ctxtReal51.digits = 51;
-      ctxtReal75.digits = 75;
+      ctxtReal4.digits  = s4;
+      ctxtReal34.digits = s34;
+      ctxtReal39.digits = s39;
+      ctxtReal51.digits = s51;
+      ctxtReal75.digits = s75;
     }
     else {
-    #if defined(PC_BUILD)
-      printf("Temporary Debugging info. Can be deleted once done.\n");
-      printRealToConsole(&llim, "llim:", "\n");
-      printRealToConsole(&ulim, "ulim:", "\n");
-      printRealToConsole(&acc, "acc:", "\n");
-    #endif // PC_BUILD
+    #if (defined PC_BUILD) && (defined INTEGRATEDEBUG)
+      printRealToConsole(&llim, "integrate in:  llim: ", "\n");
+      printRealToConsole(&ulim, "               ulim: ", "\n");
+      printRealToConsole(&acc,  "               acc:  ", "\n");
+    #endif // PC_BUILD && INTEGRATEDEBUG
     integrate(regist, &llim, &ulim, &acc, &res, smallerEpsilon ? &ctxtReal75 : &ctxtReal39);
-    #if defined(PC_BUILD)
-      printf("Temporary Debugging info. Can be deleted once done.\n");
-      printRealToConsole(&res, "res:", "\n");
-    #endif // PC_BUILD
+    #if (defined PC_BUILD) && (defined INTEGRATEDEBUG)
+      printRealToConsole(&res,  "integrate out: res:  ", "\n\n");
+    #endif // PC_BUILD && INTEGRATEDEBUG
     }
 #else // !SPEEDUPEXPERIMENT
     integrate(regist, &llim, &ulim, &acc, &res, smallerEpsilon ? &ctxtReal75 : &ctxtReal39);
@@ -226,12 +232,16 @@ saveForUndo();
 done:
     fnUndo(0);
     liftStack();
+    setSystemFlag(FLAG_ASLIFT);
     liftStack();
 
     convertRealToReal34ResultRegister(&res, REGISTER_X);
     convertRealToReal34ResultRegister(&acc, REGISTER_Y);
     if(lastErrorCode != ERROR_SOLVER_ABORT) {
       temporaryInformation = TI_INTEGRAL;
+    }
+    else {
+      programRunStop = PGM_WAITING;   // abort halts the program; PGM_WAITING lets an outer engine stop too (like fnSolve)
     }
     adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
   }
@@ -300,8 +310,11 @@ static void _integratorIteration(void) {
     parseEquation(currentFormula, EQUATION_PARSER_XEQ, tmpString, tmpString + AIM_BUFFER_LENGTH);
   }
   else {
+    uint16_t savedCurrentSolverProgram = currentSolverProgram;     // mirror of the solver's guard (Mihail, 9bb487e44 "Fix integral nested in SOLVE"); a nested program may repoint it. Enables INT(INT)
+    // No variable/flags stack here (unlike _executeSolver): not needed for SOLVE(INT), PLOT(INT), INT(INT) since the integrator has its own variable and a nested INTEG only clears USES_FORMULA. Only INT(SOLVE) would need it, and that is unsupported.
     dynamicMenuItem = -1;
     execProgram(currentSolverProgram + FIRST_LABEL);
+    currentSolverProgram = savedCurrentSolverProgram;
   }
                             if(ENABLE_INTEGRATOR_FILE_OUTPUT == 1) {
                               copySourceRegisterToDestRegister(TEMP_REGISTER_1, REGISTER_Y);
@@ -402,6 +415,8 @@ static void DEI_xeq_user(calcRegister_t regist, const real_t *x, real_t *res, re
     //clearSystemFlag(FLAG_SPCRES);
     reallocateRegister(regist, dtReal34, 0, amNone);
     realToReal34(x, REGISTER_REAL34_DATA(regist));
+    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);   // put the node's x value in REGISTER_X (like _executeSolver) so fnFillStack feeds the integrand its x, not a stale prior result.
+    realToReal34(x, REGISTER_REAL34_DATA(REGISTER_X));
     fnFillStack(NOPARAM);
     //printReal34ToConsole(REGISTER_REAL34_DATA(regist), "", " -> ");
     _integratorIteration();
@@ -614,6 +629,16 @@ static void _integrate(calcRegister_t regist, const real_t *a, const real_t *b, 
     do { // DEI_j_loop::
         char tmps[100];
         exitSignalled |= exitKeyWaiting();
+        if(programRunStop == PGM_WAITING) {   // nested engine aborted: stop at once (not via the half-second exit path)
+          displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          return;
+        }
+        #if !defined(INTEGRATION_TWO_STAGE_EXIT)
+          if(exitSignalled) {   // key caught: abort now; do not wait for the ~0.5s tick (a short nested integral finishes first and swallows the press)
+            displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            return;
+          }
+        #endif
         loop++;
         if(checkHalfSec()) {
           sprintf(tmps, "Level:  %i Iter: ", (int16_t)realToInt32C47(&lvl, NULL));
@@ -634,7 +659,8 @@ static void _integrate(calcRegister_t regist, const real_t *a, const real_t *b, 
               interruptedLoop = 1;
             }
             if(interruptedLoop) {
-              sprintf(tmps, "Level %i. %5.1fs or EXIT: Iter: ", (int16_t)k, (float)(40.0 - ((interruptedLoop++)/2.0)));
+              int16_t countdownTenths = 400 - 5 * (interruptedLoop++); //400 tenths = 40 s; counts down 0.5/1/2 s per loop pending setup
+              sprintf(tmps, "Level %i. %3d.%01ds or EXIT: Iter: ", (int16_t)k, countdownTenths / 10, countdownTenths % 10);
               radixProcess(tmps, tmps);
               progressHalfSecUpdate_Integer(force+1, tmps, loop, halfSec_clearZ, halfSec_clearT, halfSec_disp);
               if(exitSignalled || interruptedLoop >= 40) {      // Direct exit by exiting and simulating the end values
@@ -930,14 +956,11 @@ static void _integrate_mm(calcRegister_t regist, const real_t *llim, const real_
   // max level
   maxlevel = 7;
 
-  #if defined(PC_BUILD)
-    printf"Temporary Debugging info. Can be deleted once done.\n";
-    printRealToConsole(acc, "acc:", "\n");
-    printRealToConsole(&eps, "eps:", "\n");
-    printf("digits %i\n", realContext->digits);
-    printf("regist %u\n", regist);
-    printf("currentSolverStatus=%u, screenUpdatingMode=%u\n", currentSolverStatus, screenUpdatingMode);
-  #endif // PC_BUILD
+  #if (defined PC_BUILD) && (defined INTEGRATEDEBUG)
+    printRealToConsole(acc,  "integrate_mm: acc: ", "\n");
+    printRealToConsole(&eps, "              eps: ", "\n");
+    printf("              digits=%i regist=%u currentSolverStatus=%u screenUpdatingMode=%u\n", realContext->digits, regist, currentSolverStatus, screenUpdatingMode);
+  #endif // PC_BUILD && INTEGRATEDEBUG
 
   realSubtract(&b, &a, &bma2, realContext); // interval half-length
   realMultiply(&bma2, const_1on2, &bma2, realContext);
@@ -957,6 +980,16 @@ static void _integrate_mm(calcRegister_t regist, const real_t *llim, const real_
     do {
         char tmps[64];
         exitSignalled |= exitKeyWaiting();
+        if(programRunStop == PGM_WAITING) {   // nested engine aborted: stop at once (not via the half-second exit path)
+          displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+          return;
+        }
+        #if !defined(INTEGRATION_TWO_STAGE_EXIT)
+          if(exitSignalled) {   // key caught: abort now; do not wait for the ~0.5s tick (a short nested integral finishes first and swallows the press)
+            displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            return;
+          }
+        #endif
         loop++;
         if(checkHalfSec()) {
           sprintf(tmps, "Level: %i/%i Iter: ", (int16_t)k, (int16_t)maxlevel);
@@ -976,7 +1009,8 @@ static void _integrate_mm(calcRegister_t regist, const real_t *llim, const real_
               interruptedLoop = 1;
             }
             if(interruptedLoop) {
-              sprintf(tmps, "Level %i. %5.1fs or EXIT: Iter: ", (int16_t)k, (float)(40.0 - ((interruptedLoop++)/2.0)));
+              int16_t countdownTenths = 400 - 5 * (interruptedLoop++); //400 tenths = 40 s; counts down 0.5/1/2 s per loop pending setup
+              sprintf(tmps, "Level %i. %3d.%01ds or EXIT: Iter: ", (int16_t)k, countdownTenths / 10, countdownTenths % 10);
               radixProcess(tmps, tmps);
               progressHalfSecUpdate_Integer(force+1, tmps, loop, halfSec_clearZ, halfSec_clearT, halfSec_disp);
               if(exitSignalled || interruptedLoop >= 40) {      // Direct exit by exiting and simulating the end values
@@ -1049,6 +1083,17 @@ static void _integrate_mm(calcRegister_t regist, const real_t *llim, const real_
     realSetPositiveSign(&errval);
     realCopy(&ss, &sslast);
     ++k;
+    #if (defined PC_BUILD) && (defined INTEGRATEDEBUG)
+      {
+        float dbgErr;
+        char dbgBuf[16];
+        realToFloat(&errval, &dbgErr);
+        sprintf(dbgBuf, "%9.2e", (double)dbgErr);
+        for(char *cp = dbgBuf; *cp != 0; cp++) { if(*cp == ',') { *cp = '.'; } } // host locale may print a comma
+        printf("#%-2i evals=%-5i err=%s ", k, evals, dbgBuf);
+        printRealToConsole(&ss, "ss=", "\n");
+      }
+    #endif // PC_BUILD && INTEGRATEDEBUG
 
   } while(realCompareGreaterEqual(&errval, &tol) && k <= maxlevel);
   realMultiply(&ss, &bma2, res, realContext);
@@ -1316,6 +1361,16 @@ static void dbl_exp_int_new(calcRegister_t regist, const real_t *a, const real_t
         // only the loop counter changes each time.
           char tmps[64];
           exitSignalled |= exitKeyWaiting();
+          if(programRunStop == PGM_WAITING) {   // nested engine aborted: stop at once (not via the half-second exit path)
+            displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            return;
+          }
+          #if !defined(INTEGRATION_TWO_STAGE_EXIT)
+            if(exitSignalled) {   // key caught: abort now; do not wait for the ~0.5s tick (a short nested integral finishes first and swallows the press)
+              displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              return;
+            }
+          #endif
           loop++;
           if(checkHalfSec()) {
             sprintf(tmps, "Level: %i/%i Iter: ", (int16_t)k, (int16_t)maxlevel);
@@ -1335,7 +1390,8 @@ static void dbl_exp_int_new(calcRegister_t regist, const real_t *a, const real_t
                 interruptedLoop = 1;
               }
               if(interruptedLoop) {
-                sprintf(tmps, "Level %i. %5.1fs or EXIT: Iter: ", (int16_t)k, (float)(40.0 - ((interruptedLoop++)/2.0)));
+                int16_t countdownTenths = 400 - 5 * (interruptedLoop++); //400 tenths = 40 s; counts down 0.5/1/2 s per loop pending setup
+                sprintf(tmps, "Level %i. %3d.%01ds or EXIT: Iter: ", (int16_t)k, countdownTenths / 10, countdownTenths % 10);
                 radixProcess(tmps, tmps);
                 progressHalfSecUpdate_Integer(force+1, tmps, loop, halfSec_clearZ, halfSec_clearT, halfSec_disp);
                 if(exitSignalled || interruptedLoop >= 40) {      // Direct exit
@@ -1395,6 +1451,16 @@ static void dbl_exp_int_new(calcRegister_t regist, const real_t *a, const real_t
 
           char tmps[64];
           exitSignalled |= exitKeyWaiting();
+          if(programRunStop == PGM_WAITING) {   // nested engine aborted: stop at once (not via the half-second exit path)
+            displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            return;
+          }
+          #if !defined(INTEGRATION_TWO_STAGE_EXIT)
+            if(exitSignalled) {   // key caught: abort now; do not wait for the ~0.5s tick (a short nested integral finishes first and swallows the press)
+              displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              return;
+            }
+          #endif
           loop++;
           if(checkHalfSec()) {
             sprintf(tmps, "Level: %i/%i Iter: ", (int16_t)k, (int16_t)maxlevel);
@@ -1414,7 +1480,8 @@ static void dbl_exp_int_new(calcRegister_t regist, const real_t *a, const real_t
                 interruptedLoop = 1;
               }
               if(interruptedLoop) {
-                sprintf(tmps, "Level %i. %5.1fs or EXIT: Iter: ", (int16_t)k, (float)(40.0 - ((interruptedLoop++)/2.0)));
+                int16_t countdownTenths = 400 - 5 * (interruptedLoop++); //400 tenths = 40 s; counts down 0.5/1/2 s per loop pending setup
+                sprintf(tmps, "Level %i. %3d.%01ds or EXIT: Iter: ", (int16_t)k, countdownTenths / 10, countdownTenths % 10);
                 radixProcess(tmps, tmps);
                 progressHalfSecUpdate_Integer(force+1, tmps, loop, halfSec_clearZ, halfSec_clearT, halfSec_disp);
                 if(exitSignalled || interruptedLoop >= 40) {      // Direct exit
@@ -1491,6 +1558,17 @@ static void dbl_exp_int_new(calcRegister_t regist, const real_t *a, const real_t
     if(realIsNaN(error)) {
       realSetOne(error); // only happens when v, s both zero
     }
+    #if (defined PC_BUILD) && (defined INTEGRATEDEBUG)
+      {
+        float dbgErr;
+        char dbgBuf[16];
+        realToFloat(error, &dbgErr);
+        sprintf(dbgBuf, "%9.2e", (double)dbgErr);
+        for(char *cp = dbgBuf; *cp != 0; cp++) { if(*cp == ',') { *cp = '.'; } } // host locale may print a comma
+        printf("#%-2i mode=%i loop=%-6i err=%s ", k, mode, loop, dbgBuf);
+        printRealToConsole(result, "res=", "\n");
+      }
+    #endif // PC_BUILD && INTEGRATEDEBUG
   } while(realCompareGreaterThan( &s2, realMultiply(const_10, realMultiply(&eps, &s1, &s3, realContext), &s3, realContext)) && k <= maxlevel); // while abs(v) > 10*eps*abs(s)
   return;
 }
@@ -1502,6 +1580,11 @@ void integrate(calcRegister_t regist, const real_t *a, const real_t *b, real_t *
   ++currentSolverNestingDepth;
   setSystemFlag(FLAG_INTING);
   clearSystemFlag(FLAG_SOLVING);
+  if(++integratorNestingDepth > MAX_INTEGRATOR_NESTING_DEPTH) { // too deep: skip the heavy frame, abort via the integrator's own ERROR_SOLVER_ABORT unwind
+    realSetZero(res);
+    displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+  }
+  else {
   #if USE_NEW_DEI_INTEGRATION_CODE > 0
   if(realCompareLessThan(a, b)) {
     dbl_exp_int_new(regist, a, b, acc, res, 1, realContext);
@@ -1520,6 +1603,8 @@ void integrate(calcRegister_t regist, const real_t *a, const real_t *b, real_t *
       _integrate(regist, a, b, acc, res, realContext);
     }
   #endif // USE_NEW_DEI_INTEGRATION_CODE
+  }
+  --integratorNestingDepth;
   if((--currentSolverNestingDepth) == 0) {
     clearSystemFlag(FLAG_INTING);
   }

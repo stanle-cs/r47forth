@@ -852,9 +852,15 @@ static bool_t doAtan2(const real_t *y, const real_t *x, real_t *atan, real_t *r,
 
 static void WP34S_Atan2_75temp_old(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   real_t r, t;
+  int32_t savedContextDigits = realContext->digits;
+  if(realContext->digits > 75) {
+    realContext->digits = 75;
+  }
   if(!doAtan2(y, x, atan, &r, &t, realContext)) {
+    realContext->digits = savedContextDigits;
     return; //NaN
   }
+  realContext->digits = savedContextDigits;
 }
 
 
@@ -930,9 +936,15 @@ static bool_t doAsin(const real_t *x, real_t *angle, real_t *abx, real_t *z, rea
 
 static void WP34S_Asin_75temp_old(const real_t *x, real_t *angle, realContext_t *realContext) {
   real_t abx, z;
+  int32_t savedContextDigits = realContext->digits;
+  if(realContext->digits > 75) {
+    realContext->digits = 75;
+  }
   if(!doAsin(x, angle, &abx, &z, realContext)) {
+    realContext->digits = savedContextDigits;
     return; //NaN
   }
+  realContext->digits = savedContextDigits;
 }
 
 
@@ -1014,9 +1026,15 @@ static bool_t doAcos(const real_t *x, real_t *angle, real_t *abx, real_t *z, rea
 
 static void WP34S_Acos_75temp_old(const real_t *x, real_t *angle, realContext_t *realContext) {
   real_t abx, z;
+  int32_t savedContextDigits = realContext->digits;
+  if(realContext->digits > 75) {
+    realContext->digits = 75;
+  }
   if(!doAcos(x, angle, &abx, &z, realContext)) {
+    realContext->digits = savedContextDigits;
     return; //NaN
   }
+  realContext->digits = savedContextDigits;
 }
 
 
@@ -2385,7 +2403,7 @@ void WP34S_InverseComplexW(const real_t *xReal, const real_t *xImag, real_t *res
 
 // Orthogonal Polynomials, common function
 void WP34S_OrthoPoly(uint16_t kind, const real_t *rX, const real_t *rN, const real_t *rParam, real_t *res, realContext_t *realContext) {
-#if !defined(SAVE_SPACE_DM42_12ORTHO)
+#if defined(OPTION_ORTHO)
   real_t a, b, c, d, i;
   real_t rT0, rT1, incB;
   real_t p, q;
@@ -2499,5 +2517,5 @@ void WP34S_OrthoPoly(uint16_t kind, const real_t *rX, const real_t *rN, const re
     realAdd(&i, const_1, &i, realContext);
   }
   realCopy(&rT1, res);
-#endif //!defined(SAVE_SPACE_DM42_12ORTHO)
+#endif //defined(OPTION_ORTHO)
 }

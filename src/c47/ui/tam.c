@@ -96,7 +96,12 @@
     }
 
     if(tam.mode == TM_KEY) {
-      tbPtr = stringCopy(tbPtr, "KEY ");
+      if((tam.function == ITM_42KEYG) || (tam.function == ITM_42KEYX))  {
+        tbPtr = stringCopy(tbPtr, " 42KEY ");
+      }
+      else {
+        tbPtr = stringCopy(tbPtr, "KEY ");
+      }
       if(tam.keyInputFinished) {
         if(tam.keyIndirect) {
           tbPtr = stringCopy(tbPtr, STD_RIGHT_ARROW);
@@ -117,7 +122,7 @@
           }
           tbPtr += 2;
         }
-        if(tam.function == ITM_KEYX) {
+        if((tam.function == ITM_KEYX) || (tam.function == ITM_42KEYX))  {
           tbPtr = stringCopy(tbPtr, " XEQ ");
         }
         else {
@@ -153,8 +158,11 @@
       if(tam.dot) {
         tbPtr = stringCopy(tbPtr, ".");
       }
+      if(tam.colon) {
+        tbPtr = stringCopy(tbPtr, ":");
+      }
       if(tam.alpha) {
-        tbPtr = stringCopy(tbPtr, STD_LEFT_SINGLE_QUOTE);
+        tbPtr = stringCopy(tbPtr, (tam.colon ? "" : STD_LEFT_SINGLE_QUOTE));
         if(aimBuffer[0] == 0) {
           *(tbPtr++) = STD_CURSOR[0];
           *(tbPtr++) = STD_CURSOR[1];
@@ -163,7 +171,7 @@
         else {
           insertAlphaCursor(0);
           tbPtr = stringCopy(tbPtr, tmpString);
-          tbPtr = stringCopy(tbPtr, STD_RIGHT_SINGLE_QUOTE);
+          tbPtr = stringCopy(tbPtr, (tam.colon ? ":" : STD_RIGHT_SINGLE_QUOTE));
         }
       }
       else {
@@ -237,7 +245,7 @@
 
 
   static void _tamProcessInput(uint16_t item) {
-    int16_t min, max, min2, max2, dupNum;
+    int16_t min, max, min2, max2, dupNum, maxLen;
     bool_t forceTry = false, tryOoR = false;
     bool_t valueParameter = (tam.function == ITM_GTOP || isFunctionOldParam16(tam.function) || tam.function == ITM_SKIP || tam.function == ITM_BACK);
     char *forcedVar = NULL;
@@ -254,8 +262,9 @@
     max = (tam.dot ? ((tam.mode == TM_FLAGR || tam.mode == TM_FLAGW) ? NUMBER_OF_LOCAL_FLAGS - 1 : (calcMode == CM_PEM ? 98 : currentNumberOfLocalRegisters-1)) : tam.max);
     min2 = (tam.indirect ? 0 : min);
     max2 = (tam.indirect ? (tam.dot ? (calcMode == CM_PEM ? 98 : currentNumberOfLocalRegisters-1) : 99) : max);
+    maxLen = (tam.mode == TM_MENU ? 8 : tam.mode == TM_STRING ? (tam.function == ITM_42STRING ? 14 : 13) : 6);
     dupNum = 0;
-    if((item == ITM_ENTER && !(tam.function == ITM_toINT || tam.function == ITM_HASH_JM)) || (tam.alpha && stringGlyphLength(aimBuffer) > (tam.mode != TM_MENU ? 6 : 8))) {
+    if((item == ITM_ENTER && !(tam.function == ITM_toINT || tam.function == ITM_HASH_JM)) || (tam.alpha && stringGlyphLength(aimBuffer) > maxLen)) {
       forceTry = true;
       if(tam.alpha && calcMode == CM_ASSIGN) {
         assignLeaveAlpha();
@@ -306,6 +315,10 @@
             leaveTamModeIfEnabled();
             calcModeNormalGui();
           }
+          else if(tam.mode == TM_STRING) {
+            leaveTamModeIfEnabled();
+            scrollPemBackwards();
+          }
           else {
             calcModeTamGui();
           }
@@ -329,6 +342,13 @@
       }
       else if(tam.dot) {
         tam.dot = false;
+      }
+      else if(tam.colon) {
+        if(!catalog) {
+          tam.colon = false;
+        }
+        popSoftmenu();
+        --numberOfTamMenusToPop;
       }
       else if(tam.indirect) {
         tam.indirect = false;
@@ -359,11 +379,11 @@
         else if(tam.mode == TM_LABEL || (tam.mode == TM_KEY && tam.keyInputFinished)) {
           showSoftmenu(-MNU_TAMLABEL);
         }
-        else if(tam.mode == TM_LBLONLY || (tam.mode == TM_KEY && tam.keyInputFinished)) {
+        else if(tam.mode == TM_LBLONLY) {
           showSoftmenu(-MNU_TAMLBLONLY);
         }
         else if(tam.mode == TM_SOLVE) {
-          if(tam.function == ITM_SOLVE && calcMode == CM_PEM) {
+          if((tam.function == ITM_SOLVE || tam.function == ITM_PLTf) && calcMode == CM_PEM) {
             showSoftmenu(-MNU_TAMVARONLY);
           }
           else {
@@ -450,6 +470,7 @@
           case -MNU_TAMCMP      :
           case -MNU_TAMLABEL    :
           case -MNU_TAMLBLONLY  :
+          case -MNU_TAMLOCALLABEL:
           case -MNU_TAM         :
           case -MNU_TAMVARONLY  :
           case -MNU_TAMSTO      :
@@ -732,18 +753,39 @@ printf("tam.value: %d\n", tam.value);
         maxDigits = _tamMaxDigits(max2);
       }
     }
+    else if(item == ITM_COLON) {
+      if((tam.mode == TM_LABEL) || (tam.mode == TM_LBLONLY) || (tam.mode == TM_KEY) || ((tam.mode == TM_SOLVE) && (tam.function != ITM_SOLVE || calcMode != CM_PEM))) {
+        if(!tam.colon) {
+          showSoftmenu(-MNU_TAMLOCALLABEL);
+        }
+        tam.colon = true;
+        return;
+      }
+    }
     else if(item == ITM_PERIOD) {
       if(tam.function == ITM_LBL) {
         return;
       }
       else if(tam.function == ITM_GTOP) {
+        aimBuffer[0] = 0;  // [DL] to avoid crash in insertStepInProgram(ITM_END) if aimBuffer is not empty
         tam.value = programList[numberOfPrograms - 1].step;
         pemCursorIsZerothStep = true;
         reallyRunFunction(ITM_GTOP, tam.value);
-        if((*currentStep != 0xff) || (*(currentStep + 1) != 0xff)) {
-          currentStep = firstFreeProgramByte;
-          insertStepInProgram(ITM_END);
-          scanLabelsAndPrograms();
+        uint16_t currentOp = *currentStep;
+        if(currentOp & 0x80) {
+          currentOp &= 0x7f;
+          currentOp <<= 8;
+          currentOp |= *(currentStep + 1);
+        }
+        if((currentOp != 0x7fff) && (currentOp != ITM_END)) {    // Not .END. and not END
+          uint16_t initialNumberOfProgram = numberOfPrograms;
+          do {
+            tam.value = programList[numberOfPrograms - 1].step;
+            reallyRunFunction(ITM_GTOP, tam.value);
+            currentStep = firstFreeProgramByte;
+            insertStepInProgram(ITM_END);
+            scanLabelsAndPrograms();
+          } while(numberOfPrograms == initialNumberOfProgram);  // do until inserting ITM_END has added a new program
           tam.value = programList[numberOfPrograms - 1].step;
           reallyRunFunction(ITM_GTOP, tam.value);
         }
@@ -896,12 +938,13 @@ printf("tam.value: %d\n", tam.value);
       char *buffer = (forcedVar ? forcedVar : aimBuffer);
       bool_t tryAllocate = isFunctionAllowingNewVariable(tam.function);
       int16_t value, value2;
-      if(tam.mode == TM_NEWMENU) {
+
+      if((tam.mode == TM_NEWMENU) || (tam.mode == TM_STRING)) {
         value = 1;
       }
       else if(tam.mode == TM_LABEL || tam.mode == TM_LBLONLY || tam.mode == TM_SOLVE || (tam.mode == TM_KEY && tam.keyInputFinished) || (tam.mode == TM_DELITM && softmenu[softmenuStack[0].softmenuId].menuItem == -MNU_PROGS)) {
         if(!tam.indirect) {
-          value = findNamedLabelWithDuplicate(buffer, dupNum);
+          value = findNamedLabelWithDuplicate(buffer, dupNum, (tam.colon ? LOCAL_LABELS : GLOBAL_LABELS));
         }
         else {
           value = findNamedVariable(buffer);
@@ -914,10 +957,10 @@ printf("tam.value: %d\n", tam.value);
               value = (value2 != FAILED_INDIRECTION ? value2 : INVALID_VARIABLE);
             }
             else {
-              #if defined(IR_PRINTING)
+              #if defined(OPTION_IR_PRINTING)
                 sprintf(errorMessage, "'%s'", buffer);
                 printTraceErrorFunction(tam.function, errorMessage);
-              #endif //IR_PRINTING
+              #endif //OPTION_IR_PRINTING
 
               displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
               #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -928,7 +971,7 @@ printf("tam.value: %d\n", tam.value);
           }
         }
         if(value == INVALID_VARIABLE && ((tam.function == ITM_XEQ) || (tam.function == ITM_XEQP1))) {  // If no label found then look for XEQ 'function'
-          if(!tam.indirect) {                                                                          //  indirection (XEQ -> 'function') not supported
+          if(!tam.indirect && !tam.colon) {                                                                          //  indirection (XEQ -> 'function') not supported
             for(int i = 0; i < LAST_ITEM; ++i) {
               if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(buffer, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
                 leaveTamModeIfEnabled();
@@ -946,10 +989,10 @@ printf("tam.value: %d\n", tam.value);
           if(calcMode != CM_PEM) {
             leaveTamModeIfEnabled();
             if(!tam.indirect) {
-              #if defined(IR_PRINTING)
+              #if defined(OPTION_IR_PRINTING)
                 sprintf(errorMessage, "'%s'", buffer);
                 printTraceErrorFunction(tam.function, errorMessage);
-              #endif //IR_PRINTING
+              #endif //OPTION_IR_PRINTING
 
               displayCalcErrorMessage(ERROR_FUNCTION_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
               #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -968,11 +1011,11 @@ printf("tam.value: %d\n", tam.value);
               moreInfoOnError("In function _tamProcessInput:", errorMessage, "ignored since IGN1ER was set", NULL);
             #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
           }
-          else if((calcMode != CM_PEM || tam.function != ITM_GTO)){
-            #if defined(IR_PRINTING)
+          else if(calcMode != CM_PEM || (tam.function != ITM_GTO && tam.mode != TM_KEY)) {
+            #if defined(OPTION_IR_PRINTING)
               sprintf(errorMessage, "'%s'", buffer);
               printTraceErrorFunction(tam.function, errorMessage);
-            #endif //IR_PRINTING
+            #endif //OPTION_IR_PRINTING
             displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
             #if (EXTRA_INFO_ON_CALC_ERROR == 1)
               sprintf(errorMessage, "string '%s' is not a named label", buffer);
@@ -1005,10 +1048,10 @@ printf("tam.value: %d\n", tam.value);
             #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
           }
           else {
-            #if defined(IR_PRINTING)
+            #if defined(OPTION_IR_PRINTING)
               sprintf(errorMessage, "'%s'", buffer);
               printTraceErrorFunction(tam.function, errorMessage);
-            #endif //IR_PRINTING
+            #endif //OPTION_IR_PRINTING
 
             displayCalcErrorMessage(ERROR_UNDEF_MENU, ERR_REGISTER_LINE, REGISTER_X);
             #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -1030,10 +1073,10 @@ printf("tam.value: %d\n", tam.value);
             #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
           }
           else {
-            #if defined(IR_PRINTING)
+            #if defined(OPTION_IR_PRINTING)
               sprintf(errorMessage, "'%s'", buffer);
               printTraceErrorFunction(tam.function, errorMessage);
-            #endif //IR_PRINTING
+            #endif //OPTION_IR_PRINTING
 
             displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
             #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -1046,7 +1089,7 @@ printf("tam.value: %d\n", tam.value);
       if(calcMode == CM_PEM && tam.function != ITM_DELP && lastErrorCode == 0) { //do not add a step of any kind if an error occurred in the processing prior to adding the step. This solves the MVAR and STO of an identified variable name problem.
         addStepInProgram(tamOperation());
       }
-      if(tam.mode != TM_NEWMENU) {
+      if((tam.mode != TM_NEWMENU) && (tam.mode != TM_STRING)) {
         aimBuffer[0] = 0;
       }
       if(tam.indirect && value != INVALID_VARIABLE && calcMode != CM_PEM) {
@@ -1061,7 +1104,7 @@ printf("tam.value: %d\n", tam.value);
           mimRunFunction(tamOperation(), value);
         }
         else if(tam.function == ITM_GTOP) {
-          goToGlobalStep(labelList[value - FIRST_LABEL].step);
+          goToGlobalStep(abs(labelList[value - FIRST_LABEL].step));
         }
         else if(tam.function == ITM_DELP) {
           reallyRunFunction(ITM_DELP, value);
@@ -1145,6 +1188,7 @@ printf("tam.value: %d\n", tam.value);
     tam.currentOperation = tam.function;
     tam.digitsSoFar = 0;
     tam.dot = false;
+    tam.colon = false;
     tam.indirect = false;
     tam.value = 0;
 
@@ -1236,7 +1280,7 @@ printf("tam.value: %d\n", tam.value);
       }
 
       case TM_SOLVE: {
-        if(func == ITM_SOLVE && calcMode == CM_PEM) {
+        if((func == ITM_SOLVE || func == ITM_PLTf) && calcMode == CM_PEM) {
           showSoftmenu(-MNU_TAMVARONLY);
         }
         else {
@@ -1253,6 +1297,17 @@ printf("tam.value: %d\n", tam.value);
 
       case TM_DELITM: {
         showSoftmenu(-ITM_DELITM);
+        break;
+      }
+
+      case TM_STRING: {
+        tam.alpha = true;
+        setSystemFlag(FLAG_ALPHA);
+        aimBuffer[0] = 0;
+        alphaCursor = 0;
+        calcModeAim(NOPARAM);
+        showSoftmenu(-MNU_TAMALPHA);
+        screenUpdatingMode &= ~SCRUPD_MANUAL_MENU;
         break;
       }
 
@@ -1277,7 +1332,7 @@ printf("tam.value: %d\n", tam.value);
       }
     #endif // PC_BUILD
 
-    if(tam.mode == TM_NEWMENU) {
+    if((tam.mode == TM_NEWMENU) || (tam.mode == TM_STRING)) {
       setSystemFlag(FLAG_ALPHA);
       aimBuffer[0] = 0;
       calcModeAim(NOPARAM);

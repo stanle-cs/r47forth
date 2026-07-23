@@ -8,6 +8,9 @@
 
 #include "c47.h"
 
+// Drop stale interrupt keys at top-level program start (a leftover key prior to pgm run can trip us). 1 = on, 0 = off.
+#define CLEAR_KEYS_ON_PGM_START 0
+
 void fnGoto(uint16_t label) {
   if(tam.mode || calcMode != CM_PEM) {
     if(dynamicMenuItem >= 0) {
@@ -17,18 +20,41 @@ void fnGoto(uint16_t label) {
 
     // Local Label 00 to 99 and A to l
     if(label <= LAST_LOCAL_LABEL) {
-      // Search for local label
-      for(uint16_t lbl=0; lbl<numberOfLabels; lbl++) {
-        if(labelList[lbl].program == currentProgramNumber && labelList[lbl].step < 0 && *(labelList[lbl].labelPointer) == label) { // Is in the current program and is a local label and is the searched label
-          if(programRunStop == PGM_RUNNING) {
-            currentLocalStepNumber = (-labelList[lbl].step) - programList[currentProgramNumber - 1].step + 1;
-            currentStep = labelList[lbl].labelPointer - 1;
-          }
-          else {
-            goToGlobalStep(-labelList[lbl].step);
-          }
-          return;
+      // Search forwward for the the local label in the current program
+      bool_t labelFound = false;
+      uint16_t firstLabel = 0;
+      uint16_t nextLabel = 0;
+      uint16_t lbl;
+
+      for(lbl=0; lbl<numberOfLabels; lbl++) {
+        if(labelList[lbl].program > currentProgramNumber) {   // After the current program
+          break;
         }
+        if(labelList[lbl].program == currentProgramNumber) { // Within the current progrm
+          if(labelList[lbl].step < 0 && *(labelList[lbl].labelPointer) == label &&  *(labelList[lbl].labelPointer - 1) == ITM_LBL) { // Is a local label and is the searched label
+            if(!labelFound) {    // First label occurence in the current program
+              firstLabel = lbl;
+              labelFound = true;
+            }
+            uint16_t labelLocalStepNumber = (-labelList[lbl].step) - programList[currentProgramNumber - 1].step + 1;
+            if(labelLocalStepNumber > currentLocalStepNumber) {
+                nextLabel = lbl;  // First label occurence after the current program step
+                break;
+            }
+          }
+        }
+      }
+      // Goto local label found, if any
+      if(labelFound) {   // If a local label found in the program
+        lbl = (nextLabel != 0 ? nextLabel : firstLabel); // Will goto the first found label label after current program step or the first found label in teh program
+        if(programRunStop == PGM_RUNNING) {
+          currentLocalStepNumber = (-labelList[lbl].step) - programList[currentProgramNumber - 1].step + 1;
+          currentStep = labelList[lbl].labelPointer - 1;
+        }
+        else {
+          goToGlobalStep(-labelList[lbl].step);
+        }
+        return;
       }
 
       displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
@@ -42,9 +68,9 @@ void fnGoto(uint16_t label) {
         moreInfoOnError("In function fnGoto:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     }
-    else if(label >= FIRST_LABEL && label <= LAST_LABEL) { // Global named label
+    else if(label >= FIRST_LABEL && label <= LAST_LABEL) { // Global or local named label
       if((label - FIRST_LABEL) < numberOfLabels) {
-        goToGlobalStep((int16_t)labelList[label - FIRST_LABEL].step);
+        goToGlobalStep(abs((int16_t)labelList[label - FIRST_LABEL].step));
         return;
       }
       else {
@@ -73,7 +99,8 @@ void fnGoto(uint16_t label) {
 void goToGlobalStep(int32_t step) {
   if(dynamicMenuItem >= 0) {
     int16_t dupNum = 0;
-    uint8_t *labelName = (uint8_t *)dynmenuGetLabelWithDup(dynamicMenuItem, &dupNum);
+    bool_t localLabel = (softmenu[softmenuStack[1].softmenuId].menuItem == -MNU_TAMLOCALLABEL);
+    char *labelName = (char *)dynmenuGetLabelWithDup(dynamicMenuItem, &dupNum);
 
     if(*labelName == 0) {
       return;
@@ -81,28 +108,11 @@ void goToGlobalStep(int32_t step) {
     if((softmenu[softmenuStack[0].softmenuId].menuItem != -MNU_PROG) && (softmenu[softmenuStack[0].softmenuId].menuItem != -MNU_PROGS)) {  // Don't apply the dupNum logic in configurable menus
       dupNum = 0;
     }
-
-    int16_t c, len = stringByteLength((char *)labelName);
-    for(uint16_t lbl=0; lbl<numberOfLabels; lbl++) {
-      uint8_t *lblPtr;
-      lblPtr = labelList[lbl].labelPointer;
-      if(labelList[lbl].step > 0 && *lblPtr == len) { // It's a global label and the length is OK
-        for(c=0; c<len; c++) {
-          if(labelName[c] != lblPtr[c + 1]) {
-            break;
-          }
-        }
-        if(c == len) {
-          if(dupNum <= 0) {
-            step = labelList[lbl].step;
-            break;
-          }
-          else {
-            --dupNum;
-          }
-        }
-      }
+    uint16_t lbl = findNamedLabelWithDuplicate(labelName, dupNum, (localLabel ? LOCAL_LABELS : GLOBAL_LABELS));
+    if(lbl == INVALID_VARIABLE) {
+      return;
     }
+    step = abs(labelList[lbl - FIRST_LABEL].step);
   }
 
   defineCurrentProgramFromGlobalStepNumber(step);
@@ -254,7 +264,29 @@ void fnReturn(uint16_t skip) {
 
   /* Not in a subroutine */
   else {
-    goToPgmStep(currentProgramNumber, 1);
+    #if PGMPTR_TO_NEXT_AFTER_RTN
+      // Rest one step past this RTN, staying inside the current main program.
+      if(isAtEndOfProgram(currentStep)            || isAtEndOfPrograms(currentStep)              // ended via END (the main program terminator)
+      || isAtEndOfProgram(findNextStep(currentStep)) || isAtEndOfPrograms(findNextStep(currentStep))) {   // or the RTN's next step is that END
+        goToPgmStep(currentProgramNumber, 1);   // wrap to the start of the active main program (never cross into the next one)
+        pemCursorIsZerothStep = true;
+      }
+      else {
+        int32_t rtnGlobalStep = 1;
+        for(uint8_t *stepScan = beginOfProgramMemory; stepScan != NULL && stepScan < currentStep; stepScan = findNextStep(stepScan)) {
+          rtnGlobalStep++;
+        }
+        goToGlobalStep(rtnGlobalStep + 1);   // rest on the instruction after the RTN (next routine in the same main program)
+      }
+    #else
+      goToPgmStep(currentProgramNumber, 1);
+      pemCursorIsZerothStep = true;
+    #endif
+    cleanLocalFlagsAndRegisters();
+  }
+}
+
+void cleanLocalFlagsAndRegisters() {
     if(currentNumberOfLocalRegisters > 0) {
       allocateLocalRegisters(0);
     }
@@ -266,11 +298,7 @@ void fnReturn(uint16_t skip) {
     }
     currentLocalFlags = NULL;
     currentLocalRegisters = NULL;
-    pemCursorIsZerothStep = true;
-  }
 }
-
-
 
 void fnRunProgram(uint16_t unusedButMandatoryParameter) {
   if(currentInputVariable != INVALID_VARIABLE) {
@@ -294,12 +322,6 @@ void fnStopProgram(uint16_t unusedButMandatoryParameter) {
 
 
 
-static void _getStringLabelOrVariableName(uint8_t *stringAddress) {
-  uint8_t stringLength = *(uint8_t *)(stringAddress++);
-  xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
-  tmpStringLabelOrVariableName[stringLength] = 0;
-}
-
 static void _executeWithIndirectRegister(uint8_t *paramAddress, uint16_t op) {
   uint8_t opParam = *(uint8_t *)paramAddress;
   bool_t  tryAllocate = isFunctionAllowingNewVariable(op);
@@ -317,7 +339,7 @@ static void _executeWithIndirectRegister(uint8_t *paramAddress, uint16_t op) {
 static void _executeWithIndirectVariable(uint8_t *stringAddress, uint16_t op) {
   calcRegister_t regist;
   bool_t  tryAllocate = isFunctionAllowingNewVariable(op);
-  _getStringLabelOrVariableName(stringAddress);
+  getStringLabelOrVariableName(stringAddress);
   regist = findNamedVariable(tmpStringLabelOrVariableName);
   if(regist != INVALID_VARIABLE) {
       int16_t realParam = indirectAddressing(regist, indirectionType(op), indexOfItems[op].tamMinMax >> TAM_MAX_BITS, indexOfItems[op].tamMinMax & TAM_MAX_MASK, tryAllocate);
@@ -348,9 +370,9 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
       if(opParam <= LAST_LOCAL_LABEL) { // Local label from 00 to 99 or from A to l
         reallyRunFunction(op, opParam);
       }
-      else if(opParam == STRING_LABEL_VARIABLE) {
-        _getStringLabelOrVariableName(paramAddress);
-        calcRegister_t label = findNamedLabel(tmpStringLabelOrVariableName);
+      else if((opParam == STRING_LABEL_VARIABLE) || (opParam == LOCAL_LABEL_VARIABLE)) {
+        getStringLabelOrVariableName(paramAddress);
+        calcRegister_t label = findNamedLabel(tmpStringLabelOrVariableName,opParam);
         if(label != INVALID_VARIABLE || op == ITM_LBLQ) {
           reallyRunFunction(op, label);
         }
@@ -462,10 +484,14 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
         }
       }
       else if(opParam == STRING_LABEL_VARIABLE) {
-        _getStringLabelOrVariableName(paramAddress);
+        getStringLabelOrVariableName(paramAddress);
         calcRegister_t regist = findNamedVariable(tmpStringLabelOrVariableName);
         if(tryAllocate) {
-          reallyRunFunction(op, findOrAllocateNamedVariable(tmpStringLabelOrVariableName));
+          // Reuses the regist from findNamedVariable above; on a failed allocation regist stays INVALID_VARIABLE and is passed on.
+          if(regist == INVALID_VARIABLE) {
+            regist = allocateNamedVariableOnMiss(tmpStringLabelOrVariableName);
+          }
+          reallyRunFunction(op, regist);
         }
         else if(regist != INVALID_VARIABLE) {
           reallyRunFunction(op, regist);
@@ -502,7 +528,7 @@ static void _executeOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
 
     case PARAM_MENU: {
       if(opParam == STRING_LABEL_VARIABLE) {
-        _getStringLabelOrVariableName(paramAddress);
+        getStringLabelOrVariableName(paramAddress);
         int16_t menu_id = findMenu(tmpStringLabelOrVariableName);
         if(tryAllocate) {
           reallyRunFunction(op, findOrAllocateNamedVariable(tmpStringLabelOrVariableName));
@@ -590,7 +616,7 @@ static void _putLiteral(uint8_t *literalAddress) {
         longInteger_t val;
         longIntegerInit(val);
 
-        _getStringLabelOrVariableName(literalAddress + 1);
+        getStringLabelOrVariableName(literalAddress + 1);
         stringToLongInteger(tmpStringLabelOrVariableName, base, val);
         liftStack();
         setSystemFlag(FLAG_ASLIFT);
@@ -604,7 +630,7 @@ static void _putLiteral(uint8_t *literalAddress) {
         longInteger_t val;
         longIntegerInit(val);
 
-        _getStringLabelOrVariableName(literalAddress);
+        getStringLabelOrVariableName(literalAddress);
         stringToLongInteger(tmpStringLabelOrVariableName, 10, val);
         liftStack();
         setSystemFlag(FLAG_ASLIFT);
@@ -615,7 +641,7 @@ static void _putLiteral(uint8_t *literalAddress) {
       }
 
       case STRING_REAL34: {
-      _getStringLabelOrVariableName(literalAddress);
+      getStringLabelOrVariableName(literalAddress);
       liftStack();
       setSystemFlag(FLAG_ASLIFT);
       reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
@@ -629,7 +655,7 @@ static void _putLiteral(uint8_t *literalAddress) {
       case STRING_ANGLE_GRAD:
       case STRING_ANGLE_DEGREE:
       case STRING_ANGLE_MULTPI: {
-        _getStringLabelOrVariableName(literalAddress);
+        getStringLabelOrVariableName(literalAddress);
         liftStack();
         setSystemFlag(FLAG_ASLIFT);
         reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
@@ -649,7 +675,7 @@ static void _putLiteral(uint8_t *literalAddress) {
 
       case STRING_COMPLEX34: {
         char *imag = tmpStringLabelOrVariableName;
-        _getStringLabelOrVariableName(literalAddress);
+        getStringLabelOrVariableName(literalAddress);
         while(*imag != 'i' && *imag != 0) {
           ++imag;
         }
@@ -676,7 +702,7 @@ static void _putLiteral(uint8_t *literalAddress) {
       }
 
       case STRING_LABEL_VARIABLE: {
-      _getStringLabelOrVariableName(literalAddress);
+      getStringLabelOrVariableName(literalAddress);
       liftStack();
       setSystemFlag(FLAG_ASLIFT);
       reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(stringByteLength(tmpStringLabelOrVariableName) + 1), amNone);
@@ -685,7 +711,7 @@ static void _putLiteral(uint8_t *literalAddress) {
       }
 
       case STRING_DATE: {
-      _getStringLabelOrVariableName(literalAddress);
+      getStringLabelOrVariableName(literalAddress);
       liftStack();
       setSystemFlag(FLAG_ASLIFT);
       reallocateRegister(REGISTER_X, dtDate, 0, amNone);
@@ -695,7 +721,7 @@ static void _putLiteral(uint8_t *literalAddress) {
       }
 
       case STRING_TIME: {
-      _getStringLabelOrVariableName(literalAddress);
+      getStringLabelOrVariableName(literalAddress);
       liftStack();
       setSystemFlag(FLAG_ASLIFT);
       reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
@@ -705,7 +731,7 @@ static void _putLiteral(uint8_t *literalAddress) {
       }
 
       case STRING_ANGLE_DMS: {
-      _getStringLabelOrVariableName(literalAddress);
+      getStringLabelOrVariableName(literalAddress);
       liftStack();
       setSystemFlag(FLAG_ASLIFT);
       reallocateRegister(REGISTER_X, dtReal34, 0, amDMS);
@@ -735,9 +761,15 @@ int16_t executeOneStep(uint8_t *step) {
     op |= *(step++);
   }
 
-  #if defined(IR_PRINTING)
+  // Stop before the trace below and the switch, both of which index indexOfItems[op].
+  if(op >= LAST_ITEM && op != 0x7fff) { // 0x7fff is .END., handled by its own case
+    displayCalcErrorMessage(ERROR_UNDEFINED_OPCODE, ERR_REGISTER_LINE, REGISTER_X);
+    return 0;
+  }
+
+  #if defined(OPTION_IR_PRINTING)
     printTrace(op, NOPARAM);
-  #endif //IR_PRINTING
+  #endif //OPTION_IR_PRINTING
 
     #if defined(PC_BUILD) && defined(DEBUG_EXECUTE)
       printf("   >>>  executeOneStep: §%i§%s§%s§\n", op, indexOfItems[(op)].itemCatalogName, indexOfItems[(op)].itemSoftmenuName);
@@ -773,6 +805,9 @@ int16_t executeOneStep(uint8_t *step) {
       currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
       _executeOp(step, op, PARAM_REGISTER);
       if(temporaryInformation == TI_SOLVER_FAILED) {
+        if(lastErrorCode == ERROR_SOLVER_ABORT) {   // abort: keep the error so the loop halts on the SOLVE step (like INT); no not-found skip
+          return 0;
+        }
         lastErrorCode = ERROR_NONE;
         return 2;
       }
@@ -806,7 +841,29 @@ int16_t executeOneStep(uint8_t *step) {
         }
 
         case PTP_REM: {
-          // just ignore it
+          if(op == ITM_42STRING) {
+            if(*step++ == STRING_LABEL_VARIABLE) {
+              getStringLabelOrVariableName(step);
+              fn42Alpha(NOPARAM);
+            }
+          }
+          else if(op == ITM_42APPEND) {
+            if(*step++ == STRING_LABEL_VARIABLE) {
+              if(getRegisterDataType(alphaRegister) != dtString) {
+                displayCalcErrorMessage(ERROR_NO_STRING_IN_ALPHA_REGISTER, ERR_REGISTER_LINE, REGISTER_T);
+                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+                  sprintf(errorMessage, "cannot use 42append on %s", getRegisterDataTypeName(alphaRegister, true, false));
+                  moreInfoOnError("In function executeOneStep:", errorMessage, NULL, NULL);
+                #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+                return 0;
+              }
+              getStringLabelOrVariableName(step);
+              fn42Append(NOPARAM);
+            }
+          }
+          else {  // REM
+                  // just ignore it
+          }
           return 1;
         }
 
@@ -819,11 +876,11 @@ int16_t executeOneStep(uint8_t *step) {
           _executeOp(step, op, (indexOfItems[op].status & PTP_STATUS) >> 9);
         }
       }
-      #if defined(IR_PRINTING)
+      #if defined(OPTION_IR_PRINTING)
       //  if(getSystemFlag(FLAG_TRACE) && (indexOfItems[op].status & RESULT_IN_X)) {  // Trace X if function returns result in X
       //    printTraceX(LINE_FULL);
       //  }
-      #endif //IR_PRINTING
+      #endif //OPTION_IR_PRINTING
       return temporaryInformation == TI_FALSE ? 2 : 1;
     }
   }
@@ -834,10 +891,16 @@ int16_t executeOneStep(uint8_t *step) {
 void runProgram(bool_t singleStep, uint16_t menuLabel) {
   bool_t nestedEngine = (programRunStop == PGM_RUNNING);
   uint16_t startingSubLevel = (nestedEngine && menuLabel == INVALID_VARIABLE) ? currentSubroutineLevel : 0;
+  #if defined(DMCP_BUILD) && CLEAR_KEYS_ON_PGM_START
+    if(!nestedEngine && !singleStep) {   // top-level run start: drop stale keys so the per-step keys buffers start clean
+      key_pop_all();
+      clearKeyBuffer();
+    }
+  #endif
   lastErrorCode = ERROR_NONE;
   hourGlassIconEnabled = true;
   programRunStop = PGM_RUNNING;
-  if(!getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING)) {
+  if(!getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING) && !graphAccActive) {
     showHideHourGlass();
     screenUpdatingMode = SCRUPD_AUTO;
     screenUpdatingMode |= SCRUPD_SKIP_STATUSBAR_ONE_TIME;
@@ -927,10 +990,19 @@ stopProgram:
   if(programRunStop != PGM_RUNNING) {
     entryStatus &= 0xfe;
   }
-  if(!getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING)) {
+  if(!nestedEngine) {
+    // Force a full statusbar repaint on every halt path and clear the one-time skip bit so the bar is current despite the cadence throttling in reallyRunFunction().
+    // A program-set manual statusbar mode is left as is.
+    forceSBupdate();
+    screenUpdatingMode &= ~SCRUPD_SKIP_STATUSBAR_ONE_TIME;
+  }
+  if(!getSystemFlag(FLAG_INTING) && !getSystemFlag(FLAG_SOLVING) && !graphAccActive) {
     showHideHourGlass();
     if(temporaryInformation == TI_VIEW_REGISTER) {
       screenUpdatingMode |= SCRUPD_SKIP_STACK_ONE_TIME;
+    }
+    if(graphToRemainOnScreen && calcMode == CM_NORMAL) {
+      calcMode = CM_GRAPH;
     }
     if(screenUpdatingMode == SCRUPD_AUTO && !singleStep) {
       refreshScreen(4);
@@ -943,11 +1015,13 @@ stopProgram:
 
 void execProgram(uint16_t label) {
   uint16_t origLocalStepNumber = currentLocalStepNumber;
+  uint16_t origProgramNumber = currentProgramNumber;   // the nested run repoints to the function's program; restore it too so the caller (and the final return to the system) stays in the right program
   uint8_t *origStep = currentStep;
   fnExecute(label);
-  if(programRunStop == PGM_RUNNING && (getSystemFlag(FLAG_INTING) || getSystemFlag(FLAG_SOLVING))) {
+  if(programRunStop == PGM_RUNNING && (getSystemFlag(FLAG_INTING) || getSystemFlag(FLAG_SOLVING) || (currentSolverStatus & SOLVER_STATUS_RPN_GRAPHER))) {
     runProgram(false, INVALID_VARIABLE);
     currentLocalStepNumber = origLocalStepNumber;
+    currentProgramNumber = origProgramNumber;
     currentStep = origStep;
   }
 }
@@ -956,14 +1030,14 @@ void execProgram(uint16_t label) {
 
 void fnCheckLabel(uint16_t label) {
   if(dynamicMenuItem >= 0) {
-    label = findNamedLabel(dynmenuGetLabel(dynamicMenuItem));
+    label = findNamedLabel(dynmenuGetLabel(dynamicMenuItem),ALL_LABELS);
   }
-
+  
   // Local Label 00 to 99 and A to l
   if(label <= LAST_LOCAL_LABEL) {
     // Search for local label
     for(uint16_t lbl=0; lbl<numberOfLabels; lbl++) {
-      if(labelList[lbl].program == currentProgramNumber && labelList[lbl].step < 0 && *(labelList[lbl].labelPointer) == label) { // Is in the current program and is a local label and is the searched label
+      if(labelList[lbl].program == currentProgramNumber && labelList[lbl].step < 0 && *(labelList[lbl].labelPointer) == label &&  *(labelList[lbl].labelPointer - 1) == ITM_LBL) { // Is in the current program and is a local label and is the searched label
         temporaryInformation = TI_TRUE;
         return;
       }

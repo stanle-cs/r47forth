@@ -19,14 +19,53 @@ void fnInput(uint16_t regist) {
     #else // !DMCP_BUILD
       refreshLcd(NULL);
     #endif // DMCP_BUILD
+    #if defined(OPTION_IR_PRINTING)
+      printInputPrompt(ITM_INPUT, regist);
+    #endif //OPTION_IR_PRINTING
   }
 }
 
 
 
+static bool_t _isVarMenu(uint16_t label) {
+    uint8_t *step;
+    step = labelList[label - FIRST_LABEL].instructionPointer;
+    while(checkOpCodeOfStep(step, ITM_REM)) {
+      step = findNextStep(step);
+    }
+    return (checkOpCodeOfStep(step, ITM_MVAR));
+}
+
+
 void fnVarMnu(uint16_t label) {
-  currentMvarLabel = label;
-  showSoftmenu(-MNU_MVAR);
+  if(!_isVarMenu(label)) {
+    displayCalcErrorMessage(ERROR_NO_MVAR_FOUND, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "No MVAR menu variable instruction after the label");
+      moreInfoOnError("In function fnVarMnu:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
+  }
+  else {
+    currentMvarLabel = label;
+    varMenu42 = false;
+    showSoftmenu(-MNU_MVAR);
+  }
+}
+
+
+void fn42VarMnu(uint16_t label) {
+  if(!_isVarMenu(label)) {
+    displayCalcErrorMessage(ERROR_NO_MVAR_FOUND, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "No MVAR menu variable instruction after the label");
+      moreInfoOnError("In function fn42VarMnu:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1
+  }
+  else {
+    currentMvarLabel = label;
+    varMenu42 = true;
+    showSoftmenu(-MNU_MVAR);
+  }
 }
 
 
@@ -139,6 +178,9 @@ void fnPause(uint16_t dur) {
   }
 
     uint8_t previousProgramRunStop = programRunStop;
+    if(previousProgramRunStop == PGM_RUNNING) {
+      refreshStatusBar();               // the run-mode statusbar cadence can leave the bar stale; paint it once so the pause shows the current state
+    }
     programRunStop = PGM_PAUSED;
 
 
@@ -301,8 +343,10 @@ void fnKey(uint16_t regist) {
   if(lastKeyCode == 0) {
     temporaryInformation = TI_TRUE;
     #if defined(PC_BUILD)
-      while(gtk_events_pending()) {
-        gtk_main_iteration();
+      if(!headlessMode) {
+        while(gtk_events_pending()) {
+          gtk_main_iteration();
+        }
       }
     #elif defined(DMCP_BUILD)
       dmcpResetAutoOff(); //prevent auto off occurring within a GTO loop with KEY?, which causes an unrecoverable sleep and impossibility to switch calculator back on
@@ -354,14 +398,26 @@ void fnKeyType(uint16_t regist) {
     case 83: uInt32ToLongInteger(10u, kt); break;
 
     case 35:
-    case 36: uInt32ToLongInteger(11u, kt); break;
+    case 36:
+      #if (CALCMODEL == USER_R47)
+        uInt32ToLongInteger(11u, kt); break;
+      #else
+        uInt32ToLongInteger(12u, kt); break;
+      #endif
+
+    case 71:
+      #if (CALCMODEL == USER_R47)
+        uInt32ToLongInteger(12u, kt); break;
+      #else
+        uInt32ToLongInteger(11u, kt); break;
+      #endif
 
     case 11:
     case 12:
     case 13:
     case 14:
     case 15:
-    case 16: uInt32ToLongInteger(12u, kt); break;
+    case 16: uInt32ToLongInteger(13u, kt); break;
 
     case 21:
     case 22:
@@ -380,11 +436,10 @@ void fnKeyType(uint16_t regist) {
     case 55:
     case 61:
     case 65:
-    case 71:
     case 75:
     case 81:
     case 84:
-    case 85: uInt32ToLongInteger(13u, kt); break;
+    case 85: uInt32ToLongInteger(12u, kt); break;
 
     default: {
       displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);

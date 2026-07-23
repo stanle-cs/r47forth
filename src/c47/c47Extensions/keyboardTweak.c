@@ -201,9 +201,9 @@ void resetKeytimers(void) {
           }
           if(getSystemFlag(FLAG_USER)) {    // USER mode
             if((calcMode != CM_AIM) && (calcMode != CM_EIM) && (item > 0)) {
-              #if defined(LONGPRESS_CFG)   // only when allowed by LONGPRESS_CFG
+              #if defined(OPTION_LONGPRESS_CFG)   // only when allowed by OPTION_LONGPRESS_CFG
                 _executeItem(item, keyCode);
-              #endif // LONGPRESS_CFG
+              #endif // OPTION_LONGPRESS_CFG
 
               screenUpdatingMode = SCRUPD_AUTO;
               refreshScreen(1000);
@@ -1399,6 +1399,20 @@ bool_t emptyKeyBuffer(void) {
 
 void clearKeyBuffer(void) {
   buffer.read = buffer.write;
+}
+
+// EXIT = 33 or R/S = 36 sitting in the C47 ring buffer? 
+// A refresh's keyBuffer_pop can move a key out of the DMCP SDK buffer into here, where C47PopKeyNoBuffer (which only reads the SDK buffer) would miss it
+// EXIT and RUN map to themselves through convertKeyCode, so the raw codes are correct on both C47 and R47
+bool_t interruptKeyInBuffer(void) {
+  uint8_t i = buffer.read;
+  while(i != buffer.write) {
+    if(buffer.data[i] == 33 || buffer.data[i] == 36) {
+      return true;
+    }
+    i = (i + 1) & BUFFER_MASK;
+  }
+  return false;
 }
 #endif // DMCP_BUILD                                                    //^^
 

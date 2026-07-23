@@ -30,16 +30,7 @@ All the below: because both Last x and savestack does not work due to multiple s
  Check for savestack in jm.c
 */
 
-#if !defined(SAVE_SPACE_DM42_23_EDIT2)
-  static void _getStringLabelOrVariableName(uint8_t *stringAddress) {
-    uint8_t stringLength = *(uint8_t *)(stringAddress++);
-    xcopy(tmpStringLabelOrVariableName, stringAddress, stringLength);
-    tmpStringLabelOrVariableName[stringLength] = 0;
-  }
-#endif // !SAVE_SPACE_DM42_23_EDIT2
-
-
-#if !defined(SAVE_SPACE_DM42_22_EDIT1)
+#if defined(OPTION_EDIT_X)
 void _fractionToString(calcRegister_t regist, char *displayString, int16_t *lessEqualGreater) {
   int16_t  sign;
   uint64_t intPart, numer, denom;
@@ -286,22 +277,22 @@ static void _real34ToNim(const real34_t *real34, char *nimInput, char *nimDispla
 // nimDisplay : used to fill nimBufferDisplay
 
 //}
-#endif // !SAVE_SPACE_DM42_22_EDIT1
+#endif // !OPTION_EDIT_X
 
 
 void fnEdit (uint16_t unusedParamButMandatory) {
   //fnEdit: this is simply the stub with the currently working edit routines, linked via ITM_EDIT, which is also located on long press Backspace.
   //All might have to be changed have a propoer generic EDIT function.
-    #if !defined(SAVE_SPACE_DM42_22_EDIT1) || !defined(SAVE_SPACE_DM42_23_EDIT2)
+    #if defined(OPTION_EDIT_X) || defined(OPTION_EDIT_PEM)
       int16_t index;
-    #endif //!defined(SAVE_SPACE_DM42_22_EDIT1) || !defined(SAVE_SPACE_DM42_23_EDIT2)
+    #endif //defined(OPTION_EDIT_X) || defined(OPTION_EDIT_PEM)
 
-    #if !defined(SAVE_SPACE_DM42_22_EDIT1) || !defined(SAVE_SPACE_DM42_23_EDIT2)
+    #if defined(OPTION_EDIT_X) || defined(OPTION_EDIT_PEM)
       uint8_t grpGroupingLeftOld;
       uint8_t grpGroupingRightOld;
     #endif
-    #if !defined(SAVE_SPACE_DM42_23_EDIT2)
-      char    varOrLblName[8];
+    #if defined(OPTION_EDIT_PEM)
+      char    varOrLblName[32];
     #endif
 
     if(tam.mode != 0) {
@@ -316,7 +307,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
         }
         else {
           switch(getRegisterDataType(REGISTER_X)) {
-#if !defined(SAVE_SPACE_DM42_22_EDIT1)
+#if defined(OPTION_EDIT_X)
             case dtLongInteger: {
               #define NIM_BUFFER_EXTENDED_LENGTH    1400      // provision for very long integers (up to 1000 digits + separators)
               memset(nimBufferDisplay, 0, NIM_BUFFER_EXTENDED_LENGTH);
@@ -528,8 +519,10 @@ void fnEdit (uint16_t unusedParamButMandatory) {
                   }
                 }
               }
-              printf("**[DL]** dtComplex34 aimBuffer %s nimBufferDisplay %s\n", aimBuffer, nimBufferDisplay);
-              fflush(stdout);
+              #if defined(PC_BUILD)
+                printf("**[DL]** dtComplex34 aimBuffer %s nimBufferDisplay %s\n", aimBuffer, nimBufferDisplay);
+                fflush(stdout);
+              #endif //PC_BUILD
 
               exponentSignLocation = realExponentSignLocation;
               calcMode = CM_NIM;
@@ -561,7 +554,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
               goto edit_dtReal34;
               break;
             }
-#endif // !SAVE_SPACE_DM42_22_EDIT1
+#endif // !OPTION_EDIT_X
 
             case dtString: {
               setSystemFlag(FLAG_ASLIFT);
@@ -583,7 +576,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
               break;
             }
 
-#if !defined(SAVE_SPACE_DM42_22_EDIT1)
+#if defined(OPTION_EDIT_X)
             case dtShortInteger: {
               uint16_t i;
               grpGroupingLeftOld  = grpGroupingLeft;
@@ -634,7 +627,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
               cursorFont = &numericFont;
               break;
             }
-#endif // !SAVE_SPACE_DM42_22_EDIT1
+#endif // !OPTION_EDIT_X
 
             // case dtConfig: Not relevant for EDIT
             default: {
@@ -662,7 +655,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
           func |= currentStep[i++];
         }
         uint8_t opParam  = currentStep[i++];
-        #if !defined(SAVE_SPACE_DM42_23_EDIT2)
+        #if defined(OPTION_EDIT_PEM)
           uint8_t opParam2 = currentStep[i++];
           uint8_t opParam3 = currentStep[i];
         #endif
@@ -670,13 +663,13 @@ void fnEdit (uint16_t unusedParamButMandatory) {
         //printf("**[DL]** fnEdit cmPem func %d opParam %d opParam2 %d decodedLiteralType %d\n", func, opParam, opParam2, decodedLiteralType);
         //fflush(stdout);
 
-        if((func == ITM_LITERAL || func == ITM_REM)) {
+        if((func == ITM_LITERAL) || (func == ITM_REM)) {
           memset(aimBuffer, 0, AIM_BUFFER_LENGTH);
 
           if(opParam == STRING_LABEL_VARIABLE) {
             pemAlphaEdit(NOPARAM);
           }
-#if !defined(SAVE_SPACE_DM42_23_EDIT2)
+#if defined(OPTION_EDIT_PEM)
           else if((opParam == BINARY_SHORT_INTEGER) || (opParam == STRING_SHORT_INTEGER) || (opParam == STRING_LONG_INTEGER) ||
                   (opParam == BINARY_REAL34)        || (opParam == STRING_REAL34)        ||
                   (opParam == BINARY_COMPLEX34)     || (opParam == STRING_COMPLEX34)     ||
@@ -688,7 +681,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
             bool isDate = (opParam == STRING_DATE ? true : false);
 
             if((opParam == STRING_REAL34)|| (opParam == STRING_COMPLEX34))  {
-              _getStringLabelOrVariableName(&currentStep[2]);
+              getStringLabelOrVariableName(&currentStep[2]);
               strcpy(tempBuffer, tmpStringLabelOrVariableName);
             }
             else {
@@ -878,18 +871,27 @@ void fnEdit (uint16_t unusedParamButMandatory) {
             //printf("**[DL]** fnEdit editingLiteralType %d aimBuffer %s\n", editingLiteralType, aimBuffer);
             //fflush(stdout);
           }
-#endif // !SAVE_SPACE_DM42_23_EDIT2
+#endif // !OPTION_EDIT_PEM
           else {
             ;
           }
         }
-#if !defined(SAVE_SPACE_DM42_23_EDIT2)
+#if defined(OPTION_EDIT_PEM)
         else {
           uint16_t regNumber;
           uint16_t paramMode = (indexOfItems[func].status & PTP_STATUS) >> 9;
-          if((opParam == STRING_LABEL_VARIABLE) || (opParam == INDIRECT_VARIABLE)) {
-            for(index = 0;  index < opParam2; index++) {
-              varOrLblName[index] = currentStep[i++];
+          if((opParam == STRING_LABEL_VARIABLE) || (opParam == LOCAL_LABEL_VARIABLE) || (opParam == INDIRECT_VARIABLE)) {
+            // opParam2 is a name length read from the step; a corrupt or imported
+            // step can make it exceed varOrLblName, so clamp the copy and the
+            // terminator to the buffer while still consuming opParam2 bytes.
+            for(index = 0; index < opParam2; index++) {
+              if(index < (int16_t)(sizeof(varOrLblName) - 1)) {
+                varOrLblName[index] = currentStep[i];
+              }
+              i++;
+            }
+            if(index > (int16_t)(sizeof(varOrLblName) - 1)) {
+              index = (int16_t)(sizeof(varOrLblName) - 1);
             }
             varOrLblName[index] = 0;
           }
@@ -994,28 +996,55 @@ void fnEdit (uint16_t unusedParamButMandatory) {
               //fflush(stdout);
               tamProcessInput(func);
               //scrollPemBackwards();
-              if(opParam == STRING_LABEL_VARIABLE) {      // Variable name : Label or  edit name string
+              if((opParam == STRING_LABEL_VARIABLE) || (opParam == LOCAL_LABEL_VARIABLE)) {      // Variable name : Label or  edit name string
+                if(opParam == LOCAL_LABEL_VARIABLE) {
+                  tamProcessInput(ITM_COLON);
+                }
                 tamProcessInput(ITM_alpha);
-                varOrLblName[6] = 0;  // Ensure name is 6 characters maximum
+                if(stringGlyphLength(varOrLblName) == 7) {
+                  varOrLblName[stringLastGlyph(varOrLblName)] = 0;  // Ensure name is 6 characters maximum
+                }
                 strcpy(aimBuffer, varOrLblName);
-                alphaCursor = strlen(varOrLblName);
+                alphaCursor = stringGlyphLength(varOrLblName);
                 tamProcessInput(ITM_NOP);                 // to insert the resulting string in program
               }
 
               break;
             }
 
+            case PARAM_REM: {
+              memset(aimBuffer, 0, AIM_BUFFER_LENGTH);
+              deleteStepsFromTo(currentStep, findNextStep(currentStep));
+              if(!pemCursorIsZerothStep) {
+                fnBst(NOPARAM);
+              }
+              tamEnterMode(func);
+              if(stringGlyphLength(varOrLblName) == (func == ITM_42STRING ? 15 : 14)) {
+                varOrLblName[stringLastGlyph(varOrLblName)] = 0;  // Ensure name is 14 (42STRING) or 13 (42APPEND) characters maximum
+              }
+              strcpy(aimBuffer, varOrLblName);
+              alphaCursor = stringGlyphLength(varOrLblName);
+              tamProcessInput(ITM_NOP);                 // to insert the resulting string in program
+              break;
+            }
 
             case PARAM_KEYG_KEYX: {                            // Key Goto or Key eXecute
-              func = (opParam2 == ITM_GTO ? ITM_KEYG : ITM_KEYX);
+              if(func == ITM_KEY) {
+                func = (opParam2 == ITM_GTO ? ITM_KEYG : ITM_KEYX);
+              }
+              else {  // ITM_42KEY
+                func = (opParam2 == ITM_GTO ? ITM_42KEYG : ITM_42KEYX);
+              }
               deleteStepsFromTo(currentStep, findNextStep(currentStep));
+              if(!pemCursorIsZerothStep) {
+                fnBst(NOPARAM);
+              }
               runFunction(func);
               tamProcessInput(ITM_0 + opParam/10);
               tamProcessInput(ITM_0 + (opParam % 10));
               if((opParam3 == INDIRECT_REGISTER) || (opParam3 == INDIRECT_VARIABLE)) {
                 tamProcessInput(ITM_INDIRECTION);
               }
-              scrollPemBackwards();
               break;
             }
 
@@ -1024,7 +1053,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
             }
           }
         }
-#endif // !SAVE_SPACE_DM42_23_EDIT2
+#endif // !OPTION_EDIT_PEM
         break;
       }
 
@@ -1069,17 +1098,27 @@ bool_t anyKeyWaiting(void) {
 
 
 
+// EXIT (32) or R/S (35) both stop a long computation (solver, integrator, grapher, prime, matrix, ...)
 bool_t exitKeyWaiting(void) {
   #if defined(DMCP_BUILD)
-    bool_t checkKey = C47PopKeyNoBuffer(DISPLAY_WAIT_FOR_RELEASE) == 32;
+    int interruptKey = C47PopKeyNoBuffer(DISPLAY_WAIT_FOR_RELEASE);                   // drains and checks the DMCP SDK buffer (EXIT/R/S priority)
+    bool_t ringInterrupt = interruptKeyInBuffer();                                    // EXIT (33) / R/S (36) that a refresh's keyBuffer_pop parked in the C47 ring buffer, where C47PopKeyNoBuffer (SDK buffer only) cannot see it
+    bool_t checkKey = (interruptKey == 32 || interruptKey == 35) || ringInterrupt;    // 32 = EXIT, 35 = R/S (SDK buffer, in the -1 scheme, C47PopKeyNoBuffer returns)
     if(!checkKey) {
       key_pop_all();
       clearKeyBuffer();
     }
+    else if(ringInterrupt) {
+      clearKeyBuffer();                  // consume the ring-buffer interrupt key so a queued R/S cannot later relaunch fnRunProgram; the original EXIT-in-SDK path is left untouched
+    }
     return checkKey;
   #elif defined(PC_BUILD) // !DMCP_BUILD
     //printf("KeyWaiting keyCode=%u", currentKeyCode);
-    return currentKeyCode == 32; //EXIT1 / EXIT key //Do not us gtk_events_pending() as it triggers for timers too
+    if(currentKeyCode == 35) {           // R/S: interrupt, and consume the key (R/S is a run/stop toggle; a surviving press was being re-read as "run" and relaunched the operation)
+      currentKeyCode = 255;
+      return true;
+    }
+    return currentKeyCode == 32;         // EXIT1 / EXIT key //Do not us gtk_events_pending() as it triggers for timers too
   #endif // PC_BUILD
   return false;
 }
@@ -1176,17 +1215,17 @@ void fnFrom_ymd(uint16_t unusedButMandatoryParameter){
 //=-=-=-=-=-=-==-=-
 //input is time or DMS
 //output is sexagesima coded decimal ddd.mmsssssss in the form of a normal decimal
-void fnFrom_ms(uint16_t unusedButMandatoryParameter){
+void fnFrom_msRegister(calcRegister_t regist){
     char tmpString100[100];
     char tmpString100_OUT[100];
     tmpString100[0] = 0;
     tmpString100_OUT[0] = 0;
 
-    if(getRegisterDataType(REGISTER_X) == dtTime) {
+    if(getRegisterDataType(regist) == dtTime) {
       temporaryInformation = TI_FROM_MS_TIME;
     }
-    else if(getRegisterDataType(REGISTER_X) == dtReal34 && getRegisterAngularMode(REGISTER_X) != amNone) {
-      if(getRegisterAngularMode(REGISTER_X) != amDMS) {
+    else if(getRegisterDataType(regist) == dtReal34 && getRegisterAngularMode(regist) != amNone) {
+      if(getRegisterAngularMode(regist) != amDMS) {
         fnAngularModeJM(amDMS);
       }
       temporaryInformation = TI_FROM_MS_DEG;
@@ -1197,10 +1236,10 @@ void fnFrom_ms(uint16_t unusedButMandatoryParameter){
 
     if(temporaryInformation != TI_NO_INFO) {
       if(temporaryInformation == TI_FROM_MS_TIME) {
-        copyRegisterToClipboardString2(REGISTER_X, tmpString100);
+        timeToDisplayString(regist, tmpString100, true);
       }
       if(temporaryInformation == TI_FROM_MS_DEG) {
-        real34ToDisplayString(REGISTER_REAL34_DATA(REGISTER_X), getRegisterAngularMode(REGISTER_X), tmpString100, &standardFont, SCREEN_WIDTH, NUMBER_OF_DISPLAY_DIGITS, !LIMITEXP, FRONTSPACE, NOIRFRAC);
+        real34ToDisplayString(REGISTER_REAL34_DATA(regist), getRegisterAngularMode(regist), tmpString100, &standardFont, SCREEN_WIDTH, NUMBER_OF_DISPLAY_DIGITS, !LIMITEXP, FRONTSPACE, NOIRFRAC);
         int16_t tmp_i = 0;
         while(tmpString100[tmp_i] != 0 && tmpString100[tmp_i+1] != 0) { //pre-condition the dd.mmssss to replaxce spaces with zeroes
           //printf("%c %d", tmpString100[tmp_i], tmpString100[tmp_i]);
@@ -1264,15 +1303,20 @@ void fnFrom_ms(uint16_t unusedButMandatoryParameter){
       }
 
       if(tmpString100_OUT[0] != 0) {
-        reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-        stringToReal34(tmpString100_OUT, REGISTER_REAL34_DATA(REGISTER_X));
-        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        reallocateRegister(regist, dtReal34, 0, amNone);
+        stringToReal34(tmpString100_OUT, REGISTER_REAL34_DATA(regist));
+        #if (EXTRA_INFO_ON_CALC_ERROR == 1) && defined(PC_BUILD)
           printf("\n ------- 003 >>>%s<<<\n", tmpString100_OUT);
-        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1) && PC_BUILD
       }
     }
 
     //stringToReal(tmpString100, &value, &ctxtReal39);
+}
+
+
+void fnFrom_ms(uint16_t unusedButMandatoryParameter){
+  fnFrom_msRegister(REGISTER_X);
 }
 
 
@@ -2442,6 +2486,19 @@ void fnStrInputLongint(char inp1[]) { // CONVERT STRING to Longint X      //DONE
 }
 
 
+void fnIntInputLongint(int32_t inp1) { // CONVERT integer to Longint X      //DONE
+  //setSystemFlag(FLAG_ASLIFT);
+  liftStack();
+
+  longInteger_t lgInt;
+  longIntegerInit(lgInt);
+  int32ToLongInteger(inp1, lgInt);
+  convertLongIntegerToLongIntegerRegister(lgInt, REGISTER_X);
+  longIntegerFree(lgInt);
+  setSystemFlag(FLAG_ASLIFT);
+}
+
+
 void fnRCL(int16_t inp) { //DONE
   setSystemFlag(FLAG_ASLIFT);
   if(inp == TEMP_REGISTER_1) {
@@ -2468,7 +2525,7 @@ double convert_to_double(calcRegister_t regist) { //Convert from X register to d
       return 0;
   }
   realToString(&tmpy, tmpString);
-  y = strtof(tmpString, NULL);
+  y = (float)stringToDouble(tmpString);
   return y;
 }
 
@@ -2486,7 +2543,7 @@ void timeToReal34(uint16_t hms) { //always 24 hour time;
   // Pre-rounding
   int32ToReal34(10, &value34);
   for(bDigits = 0; bDigits < (isValid12hTime ? 14 : 16); ++bDigits) {
-    if(real34CompareAbsLessThan(&h34, &value34)) {
+    if(real34CompareAbsLessThan(&real34, &value34)) {
       break;
     }
     real34Multiply(&value34, const34_10, &value34);
@@ -2508,13 +2565,14 @@ void timeToReal34(uint16_t hms) { //always 24 hour time;
     //total seconds
     reallocateRegister(regist, dtReal34, 0, amNone);
     real34Copy(&real34, REGISTER_REAL34_DATA(regist));
+    if(sign) {
+      real34ChangeSign(REGISTER_REAL34_DATA(regist));
+    }
     return;
   }
 
   // Seconds
-  //real34ToIntegralValue(&real34, &s34, DEC_ROUND_DOWN);
   real34Copy(&real34, &s34);
-  real34Subtract(&real34, &s34, &real34); // Fractional part
   // Minutes
   real34Divide(&s34, const34_60, &m34);
   real34ToIntegralValue(&m34, &m34, DEC_ROUND_DOWN);

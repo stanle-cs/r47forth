@@ -128,7 +128,7 @@ void expandConversionName(char *msg1) {   // 2x16+1 character limit, rounded up 
   xcopy(inStr, msg1, min(50, stringByteLength(msg1)+1));
   inStr[50] = 0;
   msg1[0] = 0;
-  while(inStr[i] != 0) { //replace /U with /kWh; U/ with kWh/; hkm with 100km
+  while(inStr[i] != 0) { //replace /E with /kWh; E/ with kWh/; hkm with 100km
     if('h' == inStr[i] && 'k' == inStr[i+1] && 'm' == inStr[i+2]) {    //test beyond end of string is ok, it will not test positive
       msg1[jj++] = '1';
       i++;
@@ -163,6 +163,43 @@ void expandConversionName(char *msg1) {   // 2x16+1 character limit, rounded up 
 }
 
 
+static bool_t compressBinary(const char *in, char *out, int16_t *jjPtr) {
+  if('1' == in[0] && '0' == in[1] && '0' == in[2] && ('k' == in[3] || 'm' == in[3])) {
+    int16_t jj = *jjPtr;
+    out[jj++] = STD_BINARY_ONE[0];
+    out[jj++] = STD_BINARY_ONE[1];
+    out[jj++] = STD_BINARY_ZERO[0];
+    out[jj++] = STD_BINARY_ZERO[1];
+    out[jj++] = STD_BINARY_ZERO[0];
+    out[jj++] = STD_BINARY_ZERO[1];
+    out[jj++] = in[3];          //k or m for km or mile
+    *jjPtr = jj;
+    return true;
+  }
+  return false;
+}
+
+
+void expandAbbreviations(char *msg1) {
+  expandConversionName(msg1);
+  int16_t i = 0;
+  int16_t jj = 0;
+  char inStr[51];
+  xcopy(inStr, msg1, min(50, stringByteLength(msg1)+1));
+  inStr[50] = 0;
+  msg1[0] = 0;
+  while(inStr[i] != 0) { //replace 100k with |ook; 100m with |oom
+    if(compressBinary(inStr + i, msg1, &jj)) {    //test beyond end of string is ok, it will not test positive
+      i += 4;
+    }
+    else {
+      msg1[jj++] = inStr[i++];
+    }
+  }
+  msg1[jj++] = 0;
+}
+
+
 void compressConversionName(char *msg1) {   // 2x16+1 character limit, rounded up to 50
   int16_t i = 0;
   int16_t jj = 0;
@@ -171,14 +208,7 @@ void compressConversionName(char *msg1) {   // 2x16+1 character limit, rounded u
   inStr[50] = 0;
   msg1[0] = 0;
   while(inStr[i] != 0) { //replace 100k with |ook; 100m with |oom; /kWh with /U; kWh/ with U/
-    if('1' == inStr[i] && '0' == inStr[i+1] && '0' == inStr[i+2] && ('k' == inStr[i+3] || 'm' == inStr[i+3])) {    //test beyond end of string is ok, it will not test positive
-      msg1[jj++] = STD_BINARY_ONE[0];
-      msg1[jj++] = STD_BINARY_ONE[1];
-      msg1[jj++] = STD_BINARY_ZERO[0];
-      msg1[jj++] = STD_BINARY_ZERO[1];
-      msg1[jj++] = STD_BINARY_ZERO[0];
-      msg1[jj++] = STD_BINARY_ZERO[1];
-      msg1[jj++] = inStr[i+3];          //k or m for km or mile
+    if(compressBinary(inStr + i, msg1, &jj)) {    //test beyond end of string is ok, it will not test positive
       i += 4;
     }
     else if('/' == inStr[i] && 'k' == inStr[i+1] && 'W' == inStr[i+2] && 'h' == inStr[i+3]) {
@@ -411,7 +441,7 @@ int16_t stringPrevNumberGlyph(const char *str, int16_t pos) {
   do {
     pos2 = stringPrevGlyph(str, pos2);
 
-    if(('0' <= str[pos2] && str[pos2] <= '9') || str[pos] == '.' || str[pos] == ',') {
+    if(('0' <= str[pos2] && str[pos2] <= '9') || str[pos2] == '.' || str[pos2] == ',') {
       return pos2;
     }
   } while(pos2 != 0);
@@ -546,12 +576,24 @@ uint32_t utf8ToCodePoint(const uint8_t *utf8, uint32_t *codePoint) { // C47 supp
   }
 
   else if((*utf8 & 0xE0) == 0xC0) {
+    if(*(utf8 + 1) == 0) {                     // truncated 2-byte sequence at the terminating NUL: emit a placeholder, do not consume the NUL
+      *codePoint = '?';
+      return 1;
+    }
     *codePoint =  (*utf8       & 0x1F) << 6;
     *codePoint |= (*(utf8 + 1) & 0x3F);
     return 2;
   }
 
   else /*if((*utf8 & 0xF0) == 0xE0)*/ {
+    if(*(utf8 + 1) == 0) {                     // truncated 3-byte sequence after the lead byte: stop on the NUL
+      *codePoint = '?';
+      return 1;
+    }
+    if(*(utf8 + 2) == 0) {                     // truncated after one continuation byte: stop on the NUL (do not read past it)
+      *codePoint = '?';
+      return 2;
+    }
     *codePoint =  (*utf8       & 0x0F) << 12;
     *codePoint |= (*(utf8 + 1) & 0x3F) <<  6;
     *codePoint |= (*(utf8 + 2) & 0x3F);
@@ -589,6 +631,7 @@ uint32_t utf8ToCodePoint(const uint8_t *utf8, uint32_t *codePoint) { // C47 supp
 }
 
 
+#if defined(PC_BUILD)
 void debug_utf8_string(const char *label, const uint8_t *str, size_t max_len) {
   printf("%s:", label);
   printf("  Hex:   ");
@@ -614,6 +657,7 @@ void debug_utf8_string(const char *label, const uint8_t *str, size_t max_len) {
   }
   printf("\n");
 }
+#endif //PC_BUILD
 
 
 void stringToUtf8(const char *str, uint8_t *utf8) {
@@ -693,21 +737,53 @@ void stringToUtf8(const char *str, uint8_t *utf8) {
 
 
 
-void utf8ToString(const uint8_t *utf8, char *str) {
+static void utf8ToStringToEnd(const uint8_t *utf8, char *str, const char *end) {  // end: last byte usable for output, NULL for no limit; a glyph crossing end stops the walk
   uint32_t codePoint;
 
   while(*utf8) {
     utf8 += utf8ToCodePoint(utf8, &codePoint);
+    // Glyphs with low byte is 0x00 (forbidden in C47, as a 0x00 second byte terminates C strings early).
+    // Relocate each incoming real Unicode point to its relocated internal slot with no 0x00, mapped to the loan code point used for this glyph.
+    switch(codePoint) {
+      case 0x0100: codePoint = 0x017F; break; // STD_A_MACRON: latin capital A with macron (was U+0100)
+      case 0x1D00: codePoint = 0x045A; break; // STD_SMALLCAP_A: latin letter small capital A (was U+1D00)
+      case 0x2200: codePoint = 0x2C6F; break; // STD_FOR_ALL: for all (was U+2200)
+      default: break;
+    }
     if(codePoint < 0x0080) {
+      if(end && str + 1 > end) break;
       *(str++) = codePoint;
     }
+    else if((codePoint & 0x00FF) == 0) {
+      // Any other code point whose low byte is 0x00 substituted a placeholder ? to prevent crash
+      #if defined(PC_BUILD)
+        printf("In function utf8ToString: code point U+%04X has a 0x00 second byte and was replaced with '?'\n", codePoint);
+      #endif // PC_BUILD
+      if(end && str + 1 > end) break;
+      *(str++) = '?';
+    }
     else {
+      if(end && str + 2 > end) break; // a 2-byte glyph must fit whole
       codePoint |= 0x8000;
       *(str++) = codePoint >> 8;
       *(str++) = codePoint & 0x00FF;
     }
   }
   *str = 0;
+}
+
+
+void utf8ToString(const uint8_t *utf8, char *str) {
+  utf8ToStringToEnd(utf8, str, NULL);
+}
+
+
+// utf8ToString into a fixed buffer fed by a file-supplied source: at most maxBytes bytes, the terminating NUL included, so an over-long name cannot overrun it.
+void utf8ToStringWithLength(const uint8_t *utf8, char *str, size_t maxBytes) {
+  if(maxBytes == 0) {
+    return;
+  }
+  utf8ToStringToEnd(utf8, str, str + maxBytes - 1);  // maxBytes - 1 keeps the last byte for the terminating NUL
 }
 
 
@@ -1079,7 +1155,9 @@ void stringToASCII(const char *str, char *ascii) {
 }
 
 
-void stringToFileNameChars(const char *str, char *ascii) {
+// distinctQuotes == 0 preserves the legacy mapping `"` -> `'` (used by --dumpMenus1/2). distinctQuotes == 1 maps `"` -> `''` so
+// that MNU_1STDERIV ("f'") and MNU_2NDDERIV ("f\"") yield distinct filenames `f'` and `f''` under --dumpMenusAll (RefDB47 superset).
+void stringToFileNameChars(const char *str, char *ascii, uint8_t distinctQuotes) {
   int16_t len;
   len = stringGlyphLength(str);
 
@@ -1107,8 +1185,12 @@ void stringToFileNameChars(const char *str, char *ascii) {
     }
     else if(*str == '\"') {
       *ascii = '\'';
-      str++;
       ascii++;
+      if(distinctQuotes) {
+        *ascii = '\'';
+        ascii++;
+      }
+      str++;
     }
     else {
       *ascii = *str;
@@ -1201,4 +1283,26 @@ bool_t findTwoChars(const char *tmpString, uint8_t char1, uint8_t char2, uint16_
     }
   }
   return false;
+}
+
+
+void truncateAtString(char *label, const char *search) {
+  int16_t i = 0;
+  while(label[i+1] != 0) {
+    if(search[0] == label[i] && search[1] == label[i+1]) {
+      label[i] = 0;
+      break;
+    }
+    i++;
+  }
+}
+
+void truncateAtArrow(char *label) {
+  char sample[4];
+
+  stringCopy(sample, STD_RIGHT_ARROW);
+  truncateAtString(label, sample);
+
+  stringCopy(sample, STD_LEFT_ARROW);
+  truncateAtString(label, sample);
 }

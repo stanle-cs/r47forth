@@ -32,11 +32,11 @@ TO_QSPI const reservedVariableDescStr_t varDescr[] = {
 /*  VAR_NO_U       23 */ { ""},
 /*  VAR_NO_V       24 */ { ""},
 /*  VAR_NO_W       25 */ { ""},
-/*  VAR_NO_ADM     26 */ { ""},
-/*  VAR_NO_DENMAX  27 */ { ""},
-/*  VAR_NO_ISM     28 */ { ""},
-/*  VAR_NO_REALDF  29 */ { ""},
-/*  VAR_NO_NDEC    30 */ { ""},
+/*  VAR_NO_SPARE1  26 */ { ""},
+/*  VAR_NO_SPARE2  27 */ { ""},
+/*  VAR_NO_SPARE3  28 */ { ""},
+/*  VAR_NO_SPARE4  29 */ { ""},
+/*  VAR_NO_SPARE5  30 */ { ""},
 /*  VAR_NO_ACC     31 */ { ""},
 /*  VAR_NO_ULIM    32 */ { ""},
 /*  VAR_NO_LLIM    33 */ { ""},
@@ -85,11 +85,11 @@ TO_QSPI const reservedVariableHeader_t allReservedVariables[] = { // MUST be in 
 /*  VAR_NO_U       23 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 0}, .reservedVariableName = {1, 'U',  0,   0,   0,   0,   0,   0} },
 /*  VAR_NO_V       24 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 0}, .reservedVariableName = {1, 'V',  0,   0,   0,   0,   0,   0} },
 /*  VAR_NO_W       25 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 0}, .reservedVariableName = {1, 'W',  0,   0,   0,   0,   0,   0} },
-/*  VAR_NO_ADM     26 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = dtLongInteger, .tag = LI_POSITIVE, .readOnly = 1, .notUsed = 0}, .reservedVariableName = {3, 'A', 'D', 'M',  0,   0,   0,   0} },
-/*  VAR_NO_DENMAX  27 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = dtLongInteger, .tag = LI_POSITIVE, .readOnly = 1, .notUsed = 0}, .reservedVariableName = {5, 'D', '.', 'M', 'A', 'X',  0,   0} },
-/*  VAR_NO_ISM     28 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = dtLongInteger, .tag = LI_POSITIVE, .readOnly = 1, .notUsed = 0}, .reservedVariableName = {3, 'I', 'S', 'M',  0,   0,   0,   0} },
-/*  VAR_NO_REALDF  29 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = dtLongInteger, .tag = LI_POSITIVE, .readOnly = 1, .notUsed = 0}, .reservedVariableName = {6, 'R', 'E', 'A', 'L', 'D', 'F',  0} },
-/*  VAR_NO_NDEC    30 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = dtLongInteger, .tag = LI_POSITIVE, .readOnly = 1, .notUsed = 0}, .reservedVariableName = {4, '#', 'D', 'E', 'C',  0,   0,   0} },
+/*  VAR_NO_SPARE1  26 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 1}, .reservedVariableName = {0,   0,  0,   0,   0,   0,   0,   0} },   // Removed, spare
+/*  VAR_NO_SPARE2  27 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 1}, .reservedVariableName = {0,   0,  0,   0,   0,   0,   0,   0} },   // Removed, spare
+/*  VAR_NO_SPARE3  28 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 1}, .reservedVariableName = {0,   0,  0,   0,   0,   0,   0,   0} },   // Removed, spare
+/*  VAR_NO_SPARE4  29 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 1}, .reservedVariableName = {0,   0,  0,   0,   0,   0,   0,   0} },   // Removed, spare
+/*  VAR_NO_SPARE5  30 */  { .header = {.pointerToRegisterData = C47_NULL,   .dataType = 0,             .tag = 0,           .readOnly = 0, .notUsed = 1}, .reservedVariableName = {0,   0,  0,   0,   0,   0,   0,   0} },   // Removed, spare
 /*  VAR_NO_ACC     31 */  { .header = {.pointerToRegisterData = 0,          .dataType = dtReal34,      .tag = amNone,      .readOnly = 0, .notUsed = 0}, .reservedVariableName = {3, 'A', 'C', 'C',  0,   0,   0,   0} },
 /*  VAR_NO_ULIM    32 */  { .header = {.pointerToRegisterData = 4,          .dataType = dtReal34,      .tag = amNone,      .readOnly = 0, .notUsed = 0}, .reservedVariableName = {5, 161, 145, 'L', 'i', 'm',  0,   0} },
 /*  VAR_NO_LLIM    33 */  { .header = {.pointerToRegisterData = 8,          .dataType = dtReal34,      .tag = amNone,      .readOnly = 0, .notUsed = 0}, .reservedVariableName = {5, 161, 147, 'L', 'i', 'm',  0,   0} },
@@ -180,6 +180,31 @@ uint32_t getRegisterDataType(calcRegister_t regist) {
   }
 
   return 31u; // non-existent data type
+}
+
+
+
+void clampShortIntegerRegistersToWordSize(void) {
+  // Mask every short-integer register down to the current word size. Used after a restore so short integers written by an older build -
+  // one that let a bit escape the word - or raw bytes reloaded without checking cannot keep out-of-range bits. Covers all register classes that can hold a
+  // short integer: the whole global block (numbered, stack, stat, spare, saved-stack, temp) plus the allocated named variables and local registers.
+  for(calcRegister_t regist = FIRST_GLOBAL_REGISTER; regist <= LAST_GLOBAL_REGISTER; regist++) {
+    if(getRegisterDataType(regist) == dtShortInteger) {
+      *(REGISTER_SHORT_INTEGER_DATA(regist)) &= shortIntegerMask;
+    }
+  }
+  for(uint16_t i = 0; i < numberOfNamedVariables; i++) {
+    const calcRegister_t regist = FIRST_NAMED_VARIABLE + i;
+    if(getRegisterDataType(regist) == dtShortInteger) {
+      *(REGISTER_SHORT_INTEGER_DATA(regist)) &= shortIntegerMask;
+    }
+  }
+  for(uint8_t i = 0; i < currentNumberOfLocalRegisters; i++) {
+    const calcRegister_t regist = FIRST_LOCAL_REGISTER + i;
+    if(getRegisterDataType(regist) == dtShortInteger) {
+      *(REGISTER_SHORT_INTEGER_DATA(regist)) &= shortIntegerMask;
+    }
+  }
 }
 
 
@@ -572,7 +597,7 @@ void allocateLocalRegisters(uint16_t numberOfRegistersToAllocate) {
         if(initLocalRegisters(r)) {
           // Not enough memory!
           for(uint16_t rr = FIRST_LOCAL_REGISTER; rr < r; rr++) {
-            freeRegisterData(FIRST_LOCAL_REGISTER + rr);
+            freeRegisterData(rr); // rr already is the register number; do not add FIRST_LOCAL_REGISTER again
           }
           reduceC47Blocks(currentSubroutineLevelData,
                           TO_BLOCKS(sizeof(subroutineLevelHeader_t) + sizeof(localFlags_t) + numberOfRegistersToAllocate*sizeof(registerHeader_t)),
@@ -613,7 +638,7 @@ void allocateLocalRegisters(uint16_t numberOfRegistersToAllocate) {
           if(initLocalRegisters(r)) {
             // Not enough memory!
             for(uint16_t rr = FIRST_LOCAL_REGISTER + oldNumberOfLocalRegisters; rr < r; rr++) {
-              freeRegisterData(FIRST_LOCAL_REGISTER + rr);
+              freeRegisterData(rr); // rr already is the register number; do not add FIRST_LOCAL_REGISTER again
             }
             reduceC47Blocks(currentSubroutineLevelData,
                             TO_BLOCKS(sizeof(subroutineLevelHeader_t) + sizeof(localFlags_t) + numberOfRegistersToAllocate*sizeof(registerHeader_t)),
@@ -678,13 +703,13 @@ bool_t validateName(const char *name) {
   }
 
   // Check for the 1st character
-  if(                                          compareChar(name, STD_A                   ) < 0) {
+  if(                                          compareChar(name, STD_A                   ) < 0) {    //    \x41
     return false;
   }
-  if(compareChar(name, STD_Z          ) > 0 && compareChar(name, STD_a                   ) < 0) {
+  if(compareChar(name, STD_Z          ) > 0 && compareChar(name, STD_a                   ) < 0) {    //    \x5a      \x61
     return false;
   }
-  if(compareChar(name, STD_z          ) > 0 && compareChar(name, STD_A_GRAVE             ) < 0) {
+  if(compareChar(name, STD_z          ) > 0 && compareChar(name, STD_A_GRAVE             ) < 0) {    //    \x7a      \x80\xc0
     return false;
   }
   if(                                          compareChar(name, STD_CROSS               ) ==0) {
@@ -693,16 +718,16 @@ bool_t validateName(const char *name) {
   if(                                          compareChar(name, STD_DIVIDE              ) ==0) {
     return false;
   }
-  if(compareChar(name, STD_z_CARON    ) > 0 && compareChar(name, STD_iota_DIALYTIKA_TONOS) < 0) {
+  if(compareChar(name, STD_z_CARON    ) > 0 && compareChar(name, STD_iota_DIALYTIKA_TONOS) < 0) {     //   \x81\x7e   \x83\x90
     return false;
   }
   if(compareChar(name, STD_sampi      ) > 0 && compareChar(name, STD_SUB_alpha           ) < 0) {
     return false;
   }
-  if(compareChar(name, STD_SUB_mu     ) > 0 && compareChar(name, STD_SUP_a               ) < 0) {
+  if(compareChar(name, STD_SUB_mu     ) > 0 && compareChar(name, STD_SUP_a               ) < 0) {     //   \xa2\x98   \xa4\x82
     return false;
   }
-  if(compareChar(name, STD_SUB_Z      ) > 0                                                   ) {
+  if(compareChar(name, STD_SUB_Z      ) > 0                                                   ) {     //   \xa4\xe9
     return false;
   }
 
@@ -766,7 +791,7 @@ static calcRegister_t _findReservedVariable(const char *variableName) {
     printStatus(0, "_findReservedVariable", force);
   #endif //VERBOSE_REGISTERS
 
-  uint8_t len = stringGlyphLength(variableName);
+  uint8_t len = stringByteLength(variableName); // gperf hash keys on byte 2 (-k'1-3'); pass byte length, not glyph count.
   const struct reservedRegister *reg = lookupReservedVariableName(variableName, len);
 
   if(reg != NULL) {
@@ -879,8 +904,14 @@ calcRegister_t findNamedVariable(const char *variableName) {
     printStatus(0, "findNamedVariable", force);
   #endif //VERBOSE_REGISTERS
   //printf("|%20s|%20s|\n",(char *)(allNamedVariables[0].variableName + 1), variableName);
+  // Exact-bytes fast path first; the second compare treats sub- and superscript glyphs as their plain form.
+  const size_t nameByteLength = stringByteLength(variableName);
+  uint16_t foldedName[7];
+  const int32_t foldedLength = foldNameToCharCodes(variableName, foldedName, 7); // 1..7 glyphs checked at entry; on overflow (-1) no candidate compares equal
   for(int i = 0; i < numberOfNamedVariables; i++) {
-    if(compareString((char *)(allNamedVariables[i].variableName + 1), variableName, CMP_NAME) == 0) {
+    const uint8_t *storedName = allNamedVariables[i].variableName;
+    if((storedName[0] == nameByteLength && memcmp(storedName + 1, variableName, nameByteLength) == 0)
+        || nameEqualsPrefolded((const char *)(storedName + 1), foldedName, foldedLength)) {
       regist = i + FIRST_NAMED_VARIABLE;
       break;
     }
@@ -893,14 +924,14 @@ calcRegister_t findNamedVariable(const char *variableName) {
 
 
 
-calcRegister_t findOrAllocateNamedVariable(const char *variableName) {
+// Allocate half of findOrAllocateNamedVariable(); call only after findNamedVariable() returned INVALID_VARIABLE.
+calcRegister_t allocateNamedVariableOnMiss(const char *variableName) {
   calcRegister_t regist = INVALID_VARIABLE;
   uint8_t len = stringGlyphLength(variableName);
   if(len < 1 || len > 7) {
     return regist;
   }
-  regist = findNamedVariable(variableName);
-  if(regist == INVALID_VARIABLE && numberOfNamedVariables <= (LAST_NAMED_VARIABLE - FIRST_NAMED_VARIABLE)) {
+  if(numberOfNamedVariables <= (LAST_NAMED_VARIABLE - FIRST_NAMED_VARIABLE)) {
     allocateNamedVariable(variableName, dtReal34, REAL34_SIZE_IN_BLOCKS);
     if(lastErrorCode == ERROR_NONE) {
       // New variables are zero by default - although this might be immediately overridden, it might require an
@@ -913,6 +944,16 @@ calcRegister_t findOrAllocateNamedVariable(const char *variableName) {
       // It is impossible to reach the limitation of number of named variables.
       return INVALID_VARIABLE;
     }
+  }
+  return regist;
+}
+
+
+
+calcRegister_t findOrAllocateNamedVariable(const char *variableName) {
+  calcRegister_t regist = findNamedVariable(variableName);
+  if(regist == INVALID_VARIABLE) {
+    regist = allocateNamedVariableOnMiss(variableName);
   }
   return regist;
 }
@@ -934,6 +975,19 @@ void fnDeleteVariable(uint16_t regist) {
     allNamedVariables[numberOfNamedVariables - 1].variableName[1] = 0;
     reduceC47Blocks(allNamedVariables, TO_BLOCKS(sizeof(namedVariableHeader_t) * numberOfNamedVariables), TO_BLOCKS(sizeof(namedVariableHeader_t) * (numberOfNamedVariables - 1)));
     numberOfNamedVariables -= 1;
+    // The table compacted: re-anchor the cached solver/plot variable so it keeps tracking the same variable.
+    if(currentSolverVariable == regist) {
+      currentSolverVariable = INVALID_VARIABLE;
+    }
+    else if(currentSolverVariable > regist && currentSolverVariable <= LAST_NAMED_VARIABLE) {
+      currentSolverVariable -= 1;
+    }
+    if(graphVariabl1 == regist) {
+      graphVariabl1 = 0;
+    }
+    else if(graphVariabl1 > regist && graphVariabl1 <= LAST_NAMED_VARIABLE) {
+      graphVariabl1 -= 1;
+    }
   }
   else if(regist >= FIRST_NAMED_VARIABLE && regist < LAST_NAMED_VARIABLE) {
     displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -972,11 +1026,11 @@ void fnClearAllVariables(uint16_t confirmation) {
   }
   else {
     for(uint16_t i = numberOfNamedVariables; i > 0; i--) {  // Clear all user variables
-      if((compareString((char *)(allNamedVariables[i].variableName + 1), "STATS", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "HISTO", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "Mat_A", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "Mat_B", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "Mat_X", CMP_NAME) != 0))
+      if((compareString((char *)(allNamedVariables[i-1].variableName + 1), "STATS", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "HISTO", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "Mat_A", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "Mat_B", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "Mat_X", CMP_NAME) != 0))
       clearRegister(FIRST_NAMED_VARIABLE + i -1);
     }
     fnClSigma(CONFIRMED);                // Clear and release the memory of all statistical sums
@@ -1420,67 +1474,6 @@ void copySourceRegisterToDestRegister(calcRegister_t sourceRegister, calcRegiste
   if(FIRST_RESERVED_VARIABLE <= sourceRegister && sourceRegister < FIRST_NAMED_RESERVED_VARIABLE) {
     sourceRegister = sourceRegister - FIRST_RESERVED_VARIABLE + REGISTER_X;
   }
-  else if(sourceRegister == RESERVED_VARIABLE_ADM) {
-    longInteger_t longIntVar;
-    longIntegerInit(longIntVar);
-    switch(currentAngularMode) {
-      case amDMS: {
-        uInt32ToLongInteger(1u, longIntVar);
-        break;
-      }
-      case amRadian: {
-        uInt32ToLongInteger(2u, longIntVar);
-        break;
-      }
-      case amMultPi: {
-        uInt32ToLongInteger(3u, longIntVar);
-        break;
-      }
-      case amGrad: {
-        uInt32ToLongInteger(4u, longIntVar);
-        break;
-      }
-      default: {
-        uInt32ToLongInteger(0u, longIntVar);
-        break;
-      }
-    }
-    convertLongIntegerToLongIntegerRegister(longIntVar, destRegister);
-    longIntegerFree(longIntVar);
-    return;
-  }
-  else if(sourceRegister == RESERVED_VARIABLE_DENMAX) {
-    longInteger_t longIntVar;
-    longIntegerInit(longIntVar);
-    uInt32ToLongInteger(denMax, longIntVar);
-    convertLongIntegerToLongIntegerRegister(longIntVar, destRegister);
-    longIntegerFree(longIntVar);
-    return;
-  }
-  else if(sourceRegister == RESERVED_VARIABLE_ISM) {
-    longInteger_t longIntVar;
-    longIntegerInit(longIntVar);
-    int32ToLongInteger((shortIntegerMode==SIM_2COMPL ? 2 : (shortIntegerMode==SIM_1COMPL ? 1 : (shortIntegerMode==SIM_UNSIGN ? 0 : -1))), longIntVar);
-    convertLongIntegerToLongIntegerRegister(longIntVar, destRegister);
-    longIntegerFree(longIntVar);
-    return;
-  }
-  else if(sourceRegister == RESERVED_VARIABLE_REALDF) {
-    longInteger_t longIntVar;
-    longIntegerInit(longIntVar);
-    uInt32ToLongInteger(displayFormat, longIntVar);
-    convertLongIntegerToLongIntegerRegister(longIntVar, destRegister);
-    longIntegerFree(longIntVar);
-    return;
-  }
-  else if(sourceRegister == RESERVED_VARIABLE_NDEC) {
-    longInteger_t longIntVar;
-    longIntegerInit(longIntVar);
-    uInt32ToLongInteger(displayFormatDigits, longIntVar);
-    convertLongIntegerToLongIntegerRegister(longIntVar, destRegister);
-    longIntegerFree(longIntVar);
-    return;
-  }
 
   if(   getRegisterDataType(destRegister) != getRegisterDataType(sourceRegister) || getRegisterFullSizeInBlocks(destRegister) != getRegisterFullSizeInBlocks(sourceRegister)) {
     uint32_t sizeInBlocks;
@@ -1641,8 +1634,10 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
   }
 
   else if(getRegisterDataType(regist) == dtString && parameterType == INDPM_LABEL) {
-    value = findNamedLabel(REGISTER_STRING_DATA(regist));
+    value = findNamedLabel(REGISTER_STRING_DATA(regist), ALL_LABELS);
     isValidAlpha = true;
+  /* [DL] remove error here to allow INVARIABLE_VARIABLE to be passed to LBL?
+          INVARIABLE_VARIABLE error is handled in the LBL, GTO, XEQ ...  
     if(value == INVALID_VARIABLE) {
       displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
       #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -1651,6 +1646,7 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
       return FAILED_INDIRECTION;
     }
+*/
   }
 
   else if(getRegisterDataType(regist) == dtString && parameterType == INDPM_MENU) {
@@ -1793,8 +1789,8 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
         for(c = 0; c < mat.header.matrixColumns; ++c) {
           real_t tmpr;
           char str[100];
-          uint32_t offset = (r * mat.header.matrixRows + c) * 2;
-          real34ToReal(mat.matrixElements + offset, &tmpr);
+          complex34_t *element = mat.matrixElements + (r * mat.header.matrixColumns + c);
+          real34ToReal(VARIABLE_REAL34_DATA(element), &tmpr);
           realPlus(&tmpr, &tmpr, &ctxtReal4);       // Real part
           if(realGetExponent(&tmpr) < -50) {
             printf("[≈0 ");
@@ -1816,7 +1812,7 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
             }
             printf("[%s", str);
           }
-          real34ToReal(mat.matrixElements + offset + 1, &tmpr);
+          real34ToReal(VARIABLE_IMAG34_DATA(element), &tmpr);
           realPlus(&tmpr, &tmpr, &ctxtReal4);       // Imag part
           if(realGetExponent(&tmpr) < -50) {
             printf(" i≈0] ");
@@ -1877,6 +1873,48 @@ int16_t indirectAddressing(calcRegister_t regist, uint16_t parameterType, int16_
     printf("%s", after);
   }
 
+
+  // A single byte less than 0x80 is a single ASCII character. A byte of 0x80 or more is the first of a 2-byte character:
+  //   Mask off the high bit and the two bytes give the Unicode code point as 16-bit value. Example: 0xA1 0x92 -> 0x21 0x92 -> U+2192 (right arrow).
+  void printC47ShortStringToConsole(const char *s, const char *prefix, const char *suffix) {
+    #if defined(PC_BUILD)
+      const uint8_t *p = (const uint8_t *)s;
+      int cp = 0;
+      int n;
+      char text[80];
+      char hex[256];
+      int tx = 0;
+      int hx = 0;
+
+      // Readable representation: printable ASCII as-is, anything else as '.'
+      text[tx++] = '"';
+      while(*p && cp < 30) {
+        uint8_t b = *p;
+        n = (b & 0x80) ? 2 : 1;
+        if(n == 2 && p[1] == 0) {
+          n = 1;
+        }
+        text[tx++] = (n == 1 && b >= 0x20 && b < 0x7F) ? (char)b : '.';
+        for(int j = 0; j < n; j++) {
+          hx += sprintf(hex + hx, "%02X", p[j]);
+        }
+        hex[hx++] = ' ';
+        p += n;
+        cp++;
+      }
+      text[tx++] = '"';
+      text[tx] = 0;
+      hex[hx] = 0;
+
+      if(prefix) {
+        printf("%s", prefix);
+      }
+      printf("%-20s  %-60s  (%2d cp, %2d bytes)", text, hex, cp, (int)((const char *)p - s));
+      if(suffix) {
+        printf("%s", suffix);
+      }
+    #endif // PC_BUILD
+  }
 
 
   void printReal34ToConsole(const real34_t *value, const char *before, const char *after) {
@@ -2387,6 +2425,7 @@ bool_t isFunctionAllowingNewVariable(uint16_t op) {
     case ITM_M_DIM:
     case ITM_MVAR:
     case ITM_SOLVE:
+    case ITM_PLTf:
     case ITM_STOCFG:
     case ITM_STOMAX:
     case ITM_STOMIN:
@@ -2396,6 +2435,7 @@ bool_t isFunctionAllowingNewVariable(uint16_t op) {
     case ITM_Zex:
     case ITM_Tex:
     case ITM_INTEGRAL:
+    case ITM_INTEGRAL_YX:
       return true;
 
     default:

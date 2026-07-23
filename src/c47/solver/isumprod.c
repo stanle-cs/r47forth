@@ -31,11 +31,10 @@
     int16_t       finished = 0;
     longInteger_t resultLi, xLi;
     longInteger_t loopStep, loopTo, iCounter, iLoop;
-    longIntegerInit(loopStep);
-    longIntegerInit(loopTo);
-    longIntegerInit(iCounter);
     longIntegerInit(iLoop);
     longIntegerInit(resultLi);
+    // loopTo/loopStep/iCounter are initialised by the converters below; do not
+    // pre-init them or that first allocation is orphaned (a long-integer leak).
     convertLongIntegerRegisterToLongInteger(REGISTER_Y, loopTo);
     convertLongIntegerRegisterToLongInteger(REGISTER_X, loopStep);
     convertLongIntegerRegisterToLongInteger(REGISTER_Z, iCounter); //Loopfrom counter initial value = From
@@ -192,7 +191,7 @@ static void _checkiArgument(uint16_t label, bool_t prod) {
       char buf[2];
       buf[0] = letteredRegisterName((calcRegister_t)label);
       buf[1] = 0;
-      label = findNamedLabel(buf);
+      label = findNamedLabel(buf, GLOBAL_LABELS);
       if(label == INVALID_VARIABLE) {
         displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
         #if (EXTRA_INFO_ON_CALC_ERROR == 1)

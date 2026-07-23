@@ -6,7 +6,6 @@
  ***********************************************/
 
 #include "c47.h"
-#include "finite_differences.h"
 
 
 #if 0
@@ -56,7 +55,7 @@ static void derivativeCommon(uint16_t label, uint16_t order, uint8_t ti) {
     // Interactive mode
     buf[0] = letteredRegisterName((calcRegister_t)label);
     buf[1] = 0;
-    label = findNamedLabel(buf);
+    label = findNamedLabel(buf, GLOBAL_LABELS);
     if(label == INVALID_VARIABLE) {
       displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
       #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -138,7 +137,7 @@ static void deriv_default_h(real_t *h) {
 
   dynamicMenuItem = -1;
   for(i=0; i<nbrOfElements(lbls); i++) {
-    if((deltaX = findNamedLabel(lbls[i])) != INVALID_VARIABLE) {
+    if((deltaX = findNamedLabel(lbls[i], ALL_LABELS)) != INVALID_VARIABLE) {
       deriv_found_lbl(deltaX, h);
       undo();
       return;
@@ -178,7 +177,7 @@ static bool_t calcOneDeriv(const FINITE_DIFF_COEFF *stencil, const real_t fxIn[]
                            const real_t *h, real_t *r, realContext_t *realContext) {
   uint16_t i, maxi = 2*stencil->n+1;
   real_t t, s;
-  const real_t *const fx = fxIn + MAX_ORDER - stencil->n;
+  const real_t * const fx = fxIn + MAX_ORDER - stencil->n;
 
   // Check if all f(x) are defined or not
   for(i=0; i<maxi; i++) {

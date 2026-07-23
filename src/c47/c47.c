@@ -3,19 +3,8 @@
 
 #include "c47.h"
 
-#include "c47Extensions/addons.h"
-#include "longIntegerType.h"
-#include "saveRestoreCalcState.h"
-#include "statusBar.h"
-
 //#define JMSHOWCODES
 //#define BUFFER_CLICK_DETECTION
-
-#if defined(DMCP_BUILD)
-  #include "c47Extensions/inlineTest.h"
-  #include "c47Extensions/jm.h"
-  #include "c47Extensions/keyboardTweak.h"
-#endif
 
 uint16_t              lastI = 0;
 uint16_t              lastJ = 0;
@@ -30,6 +19,10 @@ char                  lastTemp[16];
   bool_t              swapCtrlCode = false;
 #endif // PC_BUILD
 
+bool_t                headlessMode = false;
+bool_t                snapSkipRefresh = false;
+bool_t                loadTestPrograms = false;
+bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;
 const font_t          *cursorFont;
 TO_QSPI const char     baseDigits[63] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -70,6 +63,7 @@ bool_t                 reDraw = true;
 bool_t                 refreshNIMdone = false;
 bool_t                 cleanupAfterShift = false;
 bool_t                 solverEstimatesUsed = false;
+bool_t                 graphAccActive = false;
 bool_t                 updateOldConstants;
 
 
@@ -144,6 +138,7 @@ uint16_t               lastCenturyHighUsed = 0;
 uint8_t               *lcd_buffer;
 uint8_t                numScreensStandardFont;
 uint8_t                numScreensNumericFont;
+uint8_t                numScreensNumericFontBold;
 uint8_t                numScreensTinyFont;
 uint8_t                currentAsnScr;
 uint8_t                currentFntScr;
@@ -158,6 +153,7 @@ uint8_t                dispBase;
 uint8_t                fractionDigits;
 uint8_t                shortIntegerMode;
 uint8_t                previousCalcMode;
+bool_t                 graphToRemainOnScreen;
 uint8_t                grpGroupingLeft;
 uint8_t                grpGroupingGr1LeftOverflow;
 uint8_t                grpGroupingGr1Left;
@@ -169,6 +165,7 @@ uint8_t                displayStack;
 uint8_t                cachedDisplayStack;
 uint8_t                alphaCase;
 uint8_t                numLinesNumericFont;
+uint8_t                numLinesNumericFontBold;
 uint8_t                numLinesStandardFont;
 uint8_t                numLinesTinyFont;
 uint8_t                cursorEnabled;
@@ -259,7 +256,7 @@ int16_t                imaginaryDenominatorLocation;
 int16_t                exponentLimit;
 int16_t                exponentHideLimit;
 int16_t                showFunctionNameCounter;
-int16_t                dynamicMenuItem;
+int16_t                dynamicMenuItem = -1; // -1: no dynamic menu item is selected. fnGoto and goToGlobalStep divert to a dynamic menu label when this is >= 0
 int16_t               *menu_RAM;
 int16_t                numberOfTamMenusToPop;
 int16_t                itemToBeAssigned;
@@ -363,20 +360,23 @@ bool_t                 cancelFilename;
 uint8_t                firstDayOfWeek = 1;     // Monday
 uint8_t                firstWeekOfYearDay = 4; // Thursday
 
-//#if defined(IR_PRINTING)
+//#if defined(OPTION_IR_PRINTING)
   printerState_t         printerState;
   /*
    *  Where will the next data be printed?
    *  Columns are in pixel units from 0 to 165 for the HP-82240 and 0 to 383 for the Martel graphic mode
    */
   uint16_t               printerColumn;
-//#endif //IR_PRINTING
+//#endif //OPTION_IR_PRINTING
+
+uint16_t                 alphaRegister;
+bool_t                   varMenu42;
 
 
 #if defined(DMCP_BUILD)
 
 #if (CALCMODEL == USER_C47) && (HARDWARE_MODEL == HWM_DM42) // include DM42 QSPI
-  IMPORT_BIN(".qspi_dm42", "../c47-dmcp/DM42_qspi_3.x.bin", DM42_qspi);
+  IMPORT_BIN(".qspi_dm42", DM42_QSPI_BIN, DM42_qspi);
 #endif  // include DM42 QSPI
 
   #if defined(JMSHOWCODES)                                        //JM Test

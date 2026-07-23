@@ -14,6 +14,7 @@
    * \return Data type
    */
   uint32_t       getRegisterDataType             (calcRegister_t regist);
+  void           clampShortIntegerRegistersToWordSize(void);
 
   /**
    * Returns the data pointer of a register.
@@ -156,6 +157,14 @@
    */
   calcRegister_t findOrAllocateNamedVariable     (const char *variableName);
 
+  /********************************************//**
+   * \brief Allocates a new named variable; call only after findNamedVariable() returned INVALID_VARIABLE. The new variable is a real34 zero.
+   *
+   * \param[in] variableName const char* name of the variable
+   * \return calcRegister_t the new register, or INVALID_VARIABLE
+   ***********************************************/
+  calcRegister_t allocateNamedVariableOnMiss     (const char *variableName);
+
   /**
    * Returns the full data size of a register in blocks.
    *
@@ -237,6 +246,7 @@
   void           fnToReal                        (uint16_t unusedButMandatoryParameter);
 
   void           printStringToConsole            (const char *str, const char *before, const char *after);
+  void           printC47ShortStringToConsole    (const char *s, const char *prefix, const char *suffix);
   void           printReal34ToConsole            (const real34_t *value, const char *before, const char *after);
   void           printRealToConsole              (const real_t *value, const char *before, const char *after);
   void           printRealInfoToConsole          (const real_t *value, const char *name);

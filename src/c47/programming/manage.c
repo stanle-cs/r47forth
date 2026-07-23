@@ -7,10 +7,6 @@
 
 #include "c47.h"
 
-#if defined(PC_BUILD) && defined(DEBUG_PGM)
-  #include <execinfo.h>
-#endif //PC_BUILD
-
 // Structure of the program memory.
 // In this example the RAM is 16384 blocks (from 0 to 16383) of 4 bytes = 65536 bytes.
 // The program memory occupies the end of the RAM area.
@@ -84,10 +80,51 @@ bool_t checkOpCodeOfStep(const uint8_t *step, uint16_t op) {
 
 
 
+// A label or variable name stored in a program step is preceded by a one-byte
+// length that is taken from program memory on trust. A corrupt or crafted program
+// - a restored state file or imported program - can claim a name longer than the
+// bytes that remain. Clamp the claimed length to the span before
+// firstFreeProgramByte so a name read can never run past the program region.
+// When the name would start at or past firstFreeProgramByte there are no valid
+// bytes left (the scan can register a label in the gap up to the RAM end), so
+// return 0 rather than skipping the clamp and leaving the length unbounded.
+uint8_t boundProgramNameLength(const uint8_t *nameStart, uint8_t claimedLength) {
+  if(nameStart >= firstFreeProgramByte) {
+    return 0;
+  }
+  if(claimedLength > firstFreeProgramByte - nameStart) {
+    return (uint8_t)(firstFreeProgramByte - nameStart);
+  }
+  return claimedLength;
+}
+
+
+// A label name longer than MAX_LABEL_NAME_LENGTH cannot have been produced by the calculator and can only come from a corrupt or crafted file.
+// Such a name does not fit the fixed name buffers of its consumers, ASSIGN's argumentName[16] and tamBuffer[32], so the loaders use this walk to reject it.
+// The walk runs from the given step to the end of program memory; a step the walker cannot decode ends it, where scanLabelsAndPrograms() truncates too.
+bool_t programMemoryHasOverlongLabelName(uint8_t *step) {
+  while(programBytesAvailable(step, 2) && !isAtEndOfPrograms(step)) {
+    if(checkOpCodeOfStep(step, ITM_LBL)
+        && (*(step + 1) == STRING_LABEL_VARIABLE || *(step + 1) == LOCAL_LABEL_VARIABLE)
+        && programBytesAvailable(step, 3)
+        && *(step + 2) > MAX_LABEL_NAME_LENGTH) {
+      return true;
+    }
+    step = findNextStep(step);
+    if(step == NULL) {
+      break;
+    }
+  }
+  return false;
+}
+
+
 void scanLabelsAndPrograms(void) {
-#if !defined(SAVE_SPACE_DM42_10)
   uint32_t stepNumber = 0;
   uint8_t *nextStep, *step = beginOfProgramMemory;
+  // Hard upper bound of the program region; a step that would advance past it has
+  // a corrupt length and must not be walked, or findNextStep reads out of bounds.
+  uint8_t * const programRegionEnd = (uint8_t *)(ram + RAM_SIZE_IN_BLOCKS);
 
   freeC47Blocks(labelList, TO_BLOCKS(sizeof(labelList_t)) * numberOfLabels);
   freeC47Blocks(programList, TO_BLOCKS(sizeof(programList_t)) * numberOfPrograms);
@@ -98,13 +135,17 @@ void scanLabelsAndPrograms(void) {
     if(*step == ITM_LBL) { // LBL
       numberOfLabels++;
     }
+    nextStep = findNextStep(step);
+    if(nextStep == NULL || nextStep <= step || nextStep >= programRegionEnd) {
+      lastErrorCode = ERROR_UNDEFINED_OPCODE; // this step and everything after it are dropped
+      break;
+    }
     if(isAtEndOfProgram(step)) { // END
-      nextStep = findNextStep(step);
       if(!isAtEndOfPrograms(nextStep)) { // .END. following END is not the start of a new program
         numberOfPrograms++;
       }
     }
-    step = findNextStep(step);
+    step = nextStep;
   }
 
   labelList = allocC47Blocks(TO_BLOCKS(sizeof(labelList_t)) * numberOfLabels);
@@ -129,11 +170,19 @@ void scanLabelsAndPrograms(void) {
   stepNumber = 1;
   while(!isAtEndOfPrograms(step)) { // .END.
     nextStep = findNextStep(step);
+    if(nextStep == NULL || nextStep <= step || nextStep >= programRegionEnd) {
+      lastErrorCode = ERROR_UNDEFINED_OPCODE; // the labels and programs past it are dropped
+      break;
+    }
     if(checkOpCodeOfStep(step, ITM_LBL)) { // LBL
       labelList[numberOfLabels].program = numberOfPrograms;
       if(*(step + 1) <= LAST_LOCAL_LABEL) { // Local label
         labelList[numberOfLabels].step = -stepNumber;
         labelList[numberOfLabels].labelPointer = step + 1;
+      }
+      else if(*(step + 1) == LOCAL_LABEL_VARIABLE) { // Local named label
+        labelList[numberOfLabels].step = -stepNumber;
+        labelList[numberOfLabels].labelPointer = step + 2;
       }
       else { // Global label
         labelList[numberOfLabels].step = stepNumber;
@@ -162,7 +211,6 @@ void scanLabelsAndPrograms(void) {
 
   defineCurrentProgramFromCurrentStep();
   defineFirstDisplayedStep();
-#endif // !SAVE_SPACE_DM42_10
 }
 
 
@@ -180,12 +228,12 @@ void deleteStepsFromTo(uint8_t *from, uint8_t *to) {
 
 static void _removeLabelsAssignments() {
   int16_t i;
-  char label[15];
+  char label[256]; // a global label name is a 1-byte-length string, so up to 255 bytes
   uint8_t labelLength;
   for(i=0; i<numberOfLabels; i++) {
     if((labelList[i].program == currentProgramNumber) && (labelList[i].step > 0)) {
-      labelLength = labelList[i].labelPointer[0];
-      xcopy(label, labelList[i].labelPointer + 1, labelList[i].labelPointer[0]);
+      labelLength = boundProgramNameLength(labelList[i].labelPointer + 1, labelList[i].labelPointer[0]);
+      xcopy(label, labelList[i].labelPointer + 1, labelLength);
       label[labelLength]=0;
       removeUserItemAssignments(ITM_XEQ, label);   // Remove label assignments
     }
@@ -327,7 +375,7 @@ void fnClP(uint16_t label) {
 uint32_t _getProgramSize(void) {
   if(currentProgramNumber == numberOfPrograms) {
     uint8_t *step = programList[currentProgramNumber - 1].instructionPointer;
-    while(!isAtEndOfPrograms(step)) { // .END.
+    while(!(isAtEndOfProgram(step) || isAtEndOfPrograms(step))) { // END or .END.
       step = findNextStep(step);
     }
     return (uint32_t)(step - programList[currentProgramNumber - 1].instructionPointer + 2);
@@ -428,7 +476,6 @@ static bool_t _isAngleType(uint8_t literalType) {
 
 
 void fnPem(uint16_t unusedButMandatoryParameter) {
-#if !defined(SAVE_SPACE_DM42_10)
     ///////////////////////////////////////////////////////////////////////////////////////
     // For this function to work properly we need the following variables set properly:
     //  - currentProgramNumber
@@ -543,7 +590,7 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
         if(getSystemFlag(FLAG_ALPHA)) {
           char tmpChar = tmpString[4];
           tmpString[4] = 0;
-          int16_t cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : T_cursorPos);
+          int16_t cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
           tmpString[4] = tmpChar;
           xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
           tmpString[2 + cursorInString    ] = STD_CURSOR[0];
@@ -644,7 +691,6 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
       showSoftmenuCurrentPart();
       fnPem(NOPARAM);
     }
-#endif // !SAVE_SPACE_DM42_10
 }
 
 
@@ -768,7 +814,7 @@ void pemAlpha(int16_t item) {
       editCommand = true;
       item = 0;
     }
-    else if(aimFunc == ITM_REM)  { // REM
+    else if(aimFunc == ITM_REM)   { // REM
       xcopy(aimBuffer, tmpString + 6, ll);        //purposely overshoot aimbuffer, as there is sufficient space
       aimBuffer[ll - 2 - 6] = 0;
       T_cursorPos = stringLastGlyph(aimBuffer) + 1;
@@ -805,9 +851,9 @@ void pemAlpha(int16_t item) {
         tmpString[2] = 0;
         _insertInProgram((uint8_t *)tmpString, 3);
       }
-      else { // rem
+      else { // rem or 42str
         tmpString[0] = (tam.function >> 8) | 0x80;
-        tmpString[1] =  tam.function       & 0x7f;
+        tmpString[1] =  tam.function       & 0xff;
         tmpString[2] = (char)STRING_LABEL_VARIABLE;
         tmpString[3] = 0;
         _insertInProgram((uint8_t *)tmpString, 4);
@@ -836,7 +882,7 @@ void pemAlpha(int16_t item) {
     }
     else if(item == ITM_BACKSPACE) {
       if(aimBuffer[0] == 0) {
-          deleteStepsFromTo(currentStep, findNextStep(currentStep));
+        deleteStepsFromTo(currentStep, findNextStep(currentStep));
         clearSystemFlag(FLAG_ALPHA);
         calcModeNormalGui();
         _closeAlphaMenus();
@@ -926,9 +972,9 @@ void pemAlpha(int16_t item) {
       xcopy(tmpString + 3, aimBuffer, stringByteLength(aimBuffer));
       _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 3);
     }
-    else { // rem
+    else { // rem or 42str
       tmpString[0] = (aimFunc >> 8) | 0x80;
-      tmpString[1] =  aimFunc       & 0x7f;
+      tmpString[1] =  aimFunc       & 0xff;
       tmpString[2] = (char)STRING_LABEL_VARIABLE;
       tmpString[3] = stringByteLength(aimBuffer);
       xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
@@ -947,8 +993,10 @@ void pemCloseAlphaInput(void) {
   calcModeNormalGui();
   ++currentLocalStepNumber;
   currentStep = findNextStep(currentStep);
-  ++firstDisplayedLocalStepNumber;
-  firstDisplayedStep = findNextStep(firstDisplayedStep);
+  if((getNumberOfSteps() - currentLocalStepNumber) > 4) {
+    ++firstDisplayedLocalStepNumber;
+    firstDisplayedStep = findNextStep(firstDisplayedStep);
+  }
   _closeAlphaMenus();
 }
 
@@ -1341,7 +1389,6 @@ void insertStepInProgram(const int16_t func) {
                                 #if defined(DEBUG_PGM)
                                   print_caller(NULL);
                                 #endif
-
   uint32_t opBytes = (func >= 128) ? 2 : 1;
 
   if(func == ITM_END) {
@@ -1358,7 +1405,7 @@ void insertStepInProgram(const int16_t func) {
     pemCursorIsZerothStep = false;
     return;
   }
-  else if(func == ITM_REM || (!tam.mode && getSystemFlag(FLAG_ALPHA))) {
+  else if(func == ITM_REM) {
     if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
       pemCloseNumberInput();
       aimBuffer[0] = 0;
@@ -1366,12 +1413,26 @@ void insertStepInProgram(const int16_t func) {
     if(catalog) {      // If called from a catalog such as FNCS, exit catalog and Asm Mode
       leaveAsmMode();
       popSoftmenu();
+      if(currentMenu() == -MNU_CATALOG) {   // drop the CAT menu too
+        popSoftmenu();
+      }
     }
-    tam.function = ITM_REM;
+    tam.function = func;
     pemAlpha(func);
     pemCursorIsZerothStep = false;
     return;
   }
+  else if(func == ITM_42STRING || func == ITM_42APPEND) {
+    tmpString[0] = (func >> 8) | 0x80;
+    tmpString[1] =  func  & 0xff;
+    tmpString[2] = (char)STRING_LABEL_VARIABLE;
+    tmpString[3] = stringByteLength(aimBuffer);
+    xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
+    _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 4);
+    aimBuffer[0] = 0;
+    return;
+  }
+
   if(   indexOfItems[func].func == addItemToBuffer
      || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                             || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
@@ -1458,10 +1519,19 @@ void insertStepInProgram(const int16_t func) {
     case PTP_DISABLED: {
       switch(func) {
         case ITM_KEYG:           // 1498
-        case ITM_KEYX: {         // 1499
+        case ITM_KEYX:           // 1499
+        case ITM_42KEYG:         // 2795
+        case ITM_42KEYX: {       // 2796
             int opLen;
-            tmpString[0] = (char)((ITM_KEY >> 8) | 0x80);
-            tmpString[1] = (char)( ITM_KEY       & 0xff);
+            uint16_t keyFunc;
+            if((func == ITM_42KEYG) || (func == ITM_42KEYX)) {
+              keyFunc = ITM_42KEY;
+            }
+            else {
+              keyFunc = ITM_KEY;
+            }
+            tmpString[0] = (char)((keyFunc >> 8) | 0x80);
+            tmpString[1] = (char)( keyFunc       & 0xff);
             if(tam.keyAlpha) {
               uint16_t nameLength = stringByteLength(aimBuffer + AIM_BUFFER_LENGTH / 2);
               tmpString[2] = (char)INDIRECT_VARIABLE;
@@ -1479,10 +1549,10 @@ void insertStepInProgram(const int16_t func) {
               opLen = 3;
             }
 
-            tmpString[opLen + 0] = (func == ITM_KEYX ? ITM_XEQ : ITM_GTO);
+            tmpString[opLen + 0] = (((func == ITM_KEYX) || (func == ITM_42KEYX)) ? ITM_XEQ : ITM_GTO);
             if(tam.alpha) {
               uint16_t nameLength = stringByteLength(aimBuffer);
-              tmpString[opLen + 1] = (char)(tam.indirect ? INDIRECT_VARIABLE : STRING_LABEL_VARIABLE);
+              tmpString[opLen + 1] = (char)(tam.indirect ? INDIRECT_VARIABLE : tam.colon ? LOCAL_LABEL_VARIABLE : STRING_LABEL_VARIABLE);
               tmpString[opLen + 2] = nameLength;
               xcopy(tmpString + opLen + 3, aimBuffer, nameLength);
               _insertInProgram((uint8_t *)tmpString, nameLength + opLen + 3);
@@ -1704,7 +1774,7 @@ void insertStepInProgram(const int16_t func) {
       }
       else if(tam.alpha) {
         uint16_t nameLength = stringByteLength(aimBuffer);
-        tmpString[opBytes    ] = (char)(tam.indirect ? INDIRECT_VARIABLE : STRING_LABEL_VARIABLE);
+        tmpString[opBytes    ] = (char)(tam.indirect ? INDIRECT_VARIABLE : tam.colon ? LOCAL_LABEL_VARIABLE : STRING_LABEL_VARIABLE);
         tmpString[opBytes + 1] = nameLength;
         xcopy(tmpString + opBytes + 2, aimBuffer, nameLength);
         _insertInProgram((uint8_t *)tmpString, nameLength + opBytes + 2);
@@ -1758,10 +1828,6 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
   }
 }
 
-#if defined(PC_BUILD) && defined(DEBUG_PGM)
-  #include <execinfo.h>
-#endif // PC_BUILD &&MONITOR_CLRSCR
-
 void addStepInProgram(int16_t func) {
                                 #if defined(DEBUG_PGM)
                                   print_caller(NULL);
@@ -1793,6 +1859,8 @@ void addStepInProgram(int16_t func) {
         case ITM_GTOP:           // 1482
         case ITM_KEYG:           // 1498
         case ITM_KEYX:           // 1499
+        case ITM_42KEYG:         // 2795
+        case ITM_42KEYX:         // 2796
         case ITM_BST:            // 1734
         case ITM_SST: {          // 1736
           break;
@@ -1810,23 +1878,61 @@ void addStepInProgram(int16_t func) {
 
 
 
-calcRegister_t findNamedLabel(const char *labelName) {
-  return findNamedLabelWithDuplicate(labelName, 0);
+calcRegister_t findNamedLabel(const char *labelName, uint8_t labelType) {
+  return findNamedLabelWithDuplicate(labelName, 0, labelType);
 }
 
 
 
-calcRegister_t findNamedLabelWithDuplicate(const char *labelName, int16_t dupNum) {
-  for(uint16_t lbl = 0; lbl < numberOfLabels; lbl++) {
-    if(labelList[lbl].step > 0) {
-      xcopy(tmpString, labelList[lbl].labelPointer + 1, *(labelList[lbl].labelPointer));
-      tmpString[*(labelList[lbl].labelPointer)] = 0;
-      if(compareString(tmpString, labelName, CMP_BINARY) == 0) {
-        if(dupNum <= 0) {
-          return lbl + FIRST_LABEL;
+calcRegister_t findNamedLabelWithDuplicate(const char *labelName, int16_t dupNum, uint8_t labelType) {
+  if((labelType == ALL_LABELS) || (labelType == LOCAL_LABELS)) {       // Start searching for local named labels
+    bool_t labelFound = false;
+    uint16_t firstLabel = 0;
+    uint16_t nextLabel = 0;
+    uint16_t lbl;
+
+    for(lbl=0; lbl<numberOfLabels; lbl++) {
+      if(labelList[lbl].program > currentProgramNumber) {   // After the current program
+        break;
+      }
+      if(labelList[lbl].program == currentProgramNumber) { // Within the current progrm
+        if(labelList[lbl].step < 0 &&  *(labelList[lbl].labelPointer - 1) == LOCAL_LABEL_VARIABLE) { // Is a named local label
+          uint8_t lblNameLen = boundProgramNameLength(labelList[lbl].labelPointer + 1, *(labelList[lbl].labelPointer));
+          xcopy(tmpString, labelList[lbl].labelPointer + 1, lblNameLen);
+          tmpString[lblNameLen] = 0;
+          if(compareString(tmpString, labelName, CMP_BINARY) == 0) {   // Label name match
+            if(!labelFound) {    // First label occurence in the current program
+              firstLabel = lbl;
+              labelFound = true;
+            }
+            uint16_t labelLocalStepNumber = (-labelList[lbl].step) - programList[currentProgramNumber - 1].step + 1;
+            if(labelLocalStepNumber > currentLocalStepNumber) {
+              nextLabel = lbl;  // First label occurence after the current program step
+              break;
+            }
+          }
         }
-        else {
-          --dupNum;
+      }
+    }
+    // return local label found, if any
+    if(labelFound) {   // If a local label found in the program
+      lbl = (nextLabel != 0 ? nextLabel : firstLabel); // First found label label after current program step or the first found label in the program
+      return lbl + FIRST_LABEL;
+    }
+  }
+  if((labelType == ALL_LABELS) || (labelType == GLOBAL_LABELS)) {      // then search global labels
+    for(uint16_t lbl = 0; lbl < numberOfLabels; lbl++) {
+      if(labelList[lbl].step > 0) {
+        uint8_t lblNameLen = boundProgramNameLength(labelList[lbl].labelPointer + 1, *(labelList[lbl].labelPointer));
+        xcopy(tmpString, labelList[lbl].labelPointer + 1, lblNameLen);
+        tmpString[lblNameLen] = 0;
+        if(compareString(tmpString, labelName, CMP_BINARY) == 0) {
+          if(dupNum <= 0) {
+            return lbl + FIRST_LABEL;
+          }
+          else {
+            --dupNum;
+          }
         }
       }
     }
@@ -1840,7 +1946,7 @@ uint16_t getNumberOfSteps(void) {
   if(currentProgramNumber == numberOfPrograms) {
     uint16_t numberOfSteps = 1;
     uint8_t *step = programList[currentProgramNumber - 1].instructionPointer;
-    while(!isAtEndOfPrograms(step)) { // .END.
+    while(!(isAtEndOfProgram(step) || isAtEndOfPrograms(step))) { // END or .END.
       ++numberOfSteps;
       step = findNextStep(step);
     }

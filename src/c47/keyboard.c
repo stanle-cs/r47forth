@@ -268,9 +268,9 @@ static void executeFunction(const char *data, int16_t item_);
         case MNU_PROGS: {
                     #if defined(VERBOSEKEYS)
                     printf("0096a PROG or PROGS: registerno:%s\n", (char *)getNthString(dynamicSoftmenu[menuId].menuContent, dynamicMenuItem) );
-                    printf("0096b %d %d %d\n", findNamedLabel((char *)getNthString(dynamicSoftmenu[menuId].menuContent, dynamicMenuItem)), - FIRST_LABEL, + ASSIGN_LABELS);
+                    printf("0096b %d %d %d\n", findNamedLabel((char *)getNthString(dynamicSoftmenu[menuId].menuContent, dynamicMenuItem), STRING_LABEL_VARIABLE), - FIRST_LABEL, + ASSIGN_LABELS);
                     #endif //VERBOSEKEYS
-          return findNamedLabel((char *)getNthString(dynamicSoftmenu[menuId].menuContent, dynamicMenuItem)) - FIRST_LABEL + ASSIGN_LABELS;
+          return findNamedLabel((char *)getNthString(dynamicSoftmenu[menuId].menuContent, dynamicMenuItem), GLOBAL_LABELS) - FIRST_LABEL + ASSIGN_LABELS;
         }
 
         case MNU_VAR:
@@ -454,6 +454,7 @@ static void executeFunction(const char *data, int16_t item_);
           case MNU_TAMSHUFFLE:
           case MNU_TAMLABEL:
           case MNU_TAMLBLONLY:
+          case MNU_TAMLOCALLABEL:
           case ITM_DELITM: {
             // TAM menus are processed elsewhere
             break;
@@ -1139,7 +1140,9 @@ endReturnTrue:
                 processAimInput(item); // sets keyActionProcessed
                 if(tam.mode) {
                   //printf("cccc tam.mode=%i tam.f=%i Popping menu\n",tam.mode, tam.function);
+                  //This section to auto-drop out of a catalog
                   popSoftmenu();
+                  numberOfTamMenusToPop--;
                 }
               }
               else {
@@ -1281,7 +1284,7 @@ endReturnTrue:
               }
             }
             if(tam.alpha && calcMode != CM_ASSIGN && tam.mode != TM_NEWMENU &&
-              !( (tam.mode==TM_STORCL || tam.mode==TM_LABEL || tam.mode == TM_LBLONLY || tam.mode == TM_SOLVE || tam.mode == TM_KEY || tam.mode == TM_M_DIM || tam.mode == TM_REGISTER || tam.mode == TM_CMP)
+              !( (tam.mode==TM_STORCL || tam.mode==TM_LABEL || tam.mode == TM_LBLONLY || tam.mode == TM_SOLVE || tam.mode == TM_KEY || tam.mode == TM_M_DIM || tam.mode == TM_REGISTER || tam.mode == TM_CMP || tam.mode == TM_STRING)
                   && (item == CHR_num || item == CHR_case || item == ITM_SCR || item == ITM_USERMODE) )
               ) {
               if(calcMode != CM_PEM || item != ITM_NOP) { // Here we left TAM in the context of issue #454
@@ -1327,7 +1330,7 @@ endReturnTrue:
                   if(item == ITM_XEQ && dynamicMenuItem > -1) {
                     char *varCatalogItem = dynmenuGetLabel(dynamicMenuItem);
                     if(strcmp(varCatalogItem, "XEQ") != 0) {
-                      calcRegister_t regist = findNamedLabel(varCatalogItem);
+                      calcRegister_t regist = findNamedLabel(varCatalogItem, GLOBAL_LABELS);
                       if(regist != INVALID_VARIABLE) {
                         item = regist - FIRST_LABEL + ASSIGN_LABELS;
                       }
@@ -1377,6 +1380,25 @@ endReturnTrue:
                     #endif //VERBOSEKEYS
 
                 runFunction(item);
+
+
+                // Double execution when a custom conversion: additional to the runfunction which operated the 'normal' conversion
+                if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode != CM_PEM && item > 0 && isItemConversion(item)) {
+                  int16_t itemNrPair;
+                  executionConversionPartner(item, &itemNrPair, NULL);
+                  if(itemNrPair != 0) {                                                                                                            // non-zero = custom non-standard pair needing the round-trip via SI
+                    if(!getSystemFlag(FLAG_HPCONV)) { //normal CONV_HP clear
+                      runConversionToSI(item);
+                      runConversionFromSI(itemNrPair);
+                    } else { //flipped CONV_HP set
+                      runFunction(conversionPartner(item, NULL, NULL, NULL));
+                      runConversionToSI(itemNrPair);
+                      runConversionFromSI(conversionPartner(item, NULL, NULL, NULL));
+                    }
+                    temporaryInformation = TI_CONV_MENU_STR;
+                  }
+                }
+
 
                 if(calcMode == CM_EIM && !tam.mode) {
                   if(isAlphaSubmenu(0)) {
@@ -1849,12 +1871,14 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
             screenUpdatingMode &= !(SCRUPD_MANUAL_STATUSBAR | SCRUPD_SKIP_STATUSBAR_ONE_TIME);
             programRunStop = PGM_WAITING;
             showFunctionNameItem = 0;
-            #if defined(IR_PRINTING)
-              printf("**[DL]** STOP program\n");
-              fflush(stdout);
+            #if defined(OPTION_IR_PRINTING)
+              #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
+                printf("**[DL]** STOP program\n");
+                fflush(stdout);
+              #endif //MONITOR_IRPRINT
               refreshStatusBar();
               printTrace(ITM_STOP, NOPARAM);   // STOP program
-            #endif //IR_PRINTING
+            #endif //OPTION_IR_PRINTING
           }
           else if(programRunStop == PGM_PAUSED) {
             programRunStop = PGM_KEY_PRESSED_WHILE_PAUSED;
@@ -2202,7 +2226,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
             }
           }
           else if(item == ITM_XEQ && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
-            calcRegister_t label = findNamedLabel(funcParam);
+            calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
             if(label != INVALID_VARIABLE) {
               if(calcMode == CM_PEM) {  // Insert user program call in program
                 #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
@@ -3146,7 +3170,7 @@ RELEASE_END:
                     if(item == ITM_XEQ && tmpString[0] != 0 && (getSystemFlag(FLAG_USER) || ((currentKeyCode == Norm_Key_00_key) && (keyStateCode == 0) && Norm_Key_00.used))) {
                       char label[15];
                       xcopy(label, tmpString, stringByteLength(tmpString) + 1);
-                      calcRegister_t regist = findNamedLabel(label);
+                      calcRegister_t regist = findNamedLabel(label, GLOBAL_LABELS);
                       if(regist != INVALID_VARIABLE) {
                         item = regist - FIRST_LABEL + ASSIGN_LABELS;
                       }
@@ -3376,7 +3400,11 @@ RELEASE_END:
 
 void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
   doRefreshSoftMenu = true;     //dr
-    switch(calcMode) {
+    uint8_t effectiveCalcMode = calcMode;
+    if(GRAPHMODE && programRunStop == PGM_RUNNING) {   // a program running under CM_GRAPH or CM_PLOT_STAT (e.g. plot(int) integrand, programmed HPLOT) needs normal ENTER dup, not the empty interactive-graph case
+      effectiveCalcMode = CM_NORMAL;
+    }
+    switch(effectiveCalcMode) {
       case CM_NORMAL: {
 
         if(!getSystemFlag(FLAG_ERPN) || (!nimWhenButtonPressed && programRunStop != PGM_RUNNING) || (getSystemFlag(FLAG_ERPN) && programRunStop == PGM_RUNNING )) {     //vv PHM eRPN 2021-07;   JM corrected eRPN on 2024-03-19 on master 86fd2a5
@@ -3431,13 +3459,13 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
           reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(lenInBytes), amNone);
           xcopy(REGISTER_STRING_DATA(REGISTER_X), aimBuffer, lenInBytes);
 
-          #if defined(IR_PRINTING)
-            #if defined(PC_BUILD)
+          #if defined(OPTION_IR_PRINTING)
+            #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
               printf("**[DL]** fnKeyEnter printTraceX\n");
               fflush(stdout);
             #endif //PC_BUILD
             printTraceX(LINE_FULL);
-          #endif //IR_PRINTING
+          #endif //OPTION_IR_PRINTING
 
           if(!getSystemFlag(FLAG_ERPN)) {                                  //PHM eRPN 2021-07
                     #if defined(DEBUGUNDO)
@@ -3669,6 +3697,10 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           }*/
 
       if((numberOfTamMenusToPop > 1) && (currentMenu() != -MNU_TAMALPHA)) {
+        if(tam.colon && !catalog ) {
+          tam.colon = false;
+          tamProcessInput(ITM_NOP); // to update the tam buffer
+        }
         popSoftmenu();
         numberOfTamMenusToPop--;
       }
@@ -3965,6 +3997,9 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
             popSoftmenu();
           }
           popSoftmenu();
+          if(-currentMenu() == MNU_SHOW) { // this would be after programmed plot
+            popSoftmenu();
+          }
         }
 
         if(currentMenu() == -MNU_TIMERF) {
@@ -3989,7 +4024,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
         systemFlags1 = sf1;
         fnClDrawMx(1);
         if(statMx[0]!='S') {
-          printStatus(0, errorMessages[RESTORING_STATS], force);
+          printStatus(0, errorMessageOf(RESTORING_STATS), force);
           restoreStats();
         }
         screenUpdatingMode = SCRUPD_AUTO;
@@ -4176,9 +4211,7 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
 
 void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
     uint16_t lg;
-  #if !defined(SAVE_SPACE_DM42_10)
     uint8_t *nextStep;
-  #endif //SAVE_SPACE_DM42_10
 
     if(tam.mode) {
       tamProcessInput(ITM_BACKSPACE);
@@ -4321,18 +4354,12 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_PEM: {
-        #if !defined(SAVE_SPACE_DM42_10)
-
         if(lastErrorCode != 0) {
           lastErrorCode = 0;
           return;
         }
         if(getSystemFlag(FLAG_ALPHA)) {
           pemAlpha(ITM_BACKSPACE);
-          if(aimBuffer[0] == 0 && getSystemFlag(FLAG_ALPHA)) {
-            // close if no characters left
-            pemAlpha(ITM_BACKSPACE);
-          }
           if(aimBuffer[0] == 0 && !getSystemFlag(FLAG_ALPHA)) {
             if(currentLocalStepNumber > 1) {
               --currentLocalStepNumber;
@@ -4375,7 +4402,6 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
             }
           }
         }
-        #endif // !SAVE_SPACE_DM42_10
         break;
       }
 
@@ -4803,7 +4829,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_FONT_BROWSER: {
-        if(currentFntScr < numScreensNumericFont + numScreensStandardFont + numScreensTinyFont) {
+        if(currentFntScr < numScreensNumericFont + numScreensNumericFontBold + numScreensStandardFont + numScreensTinyFont) {
           currentFntScr++;
         }
         break;
