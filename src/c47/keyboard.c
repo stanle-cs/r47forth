@@ -3660,7 +3660,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
                     lastErrorCode = 0;
                 }
                 else {
-                    if(currentMenu() == -MNU_SYSFL) {                                                       //JM auto recover out of SYSFL
+                    if(tam.mode && currentMenu() == -MNU_SYSFL) {                                           //JM auto recover out of SYSFL in the CFLG TAM flow; a plain catalog SYS.FL exits via the standard path below
                       numberOfTamMenusToPop = 2;                                                   //JM
                       leaveTamModeIfEnabled();                                                     //JM
                       return;                                                                      //JM
@@ -4689,18 +4689,6 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
 
 void fnKeyDown(uint16_t unusedButMandatoryParameter) {
     int16_t menuId = softmenuStack[0].softmenuId; //JM
-
-//--     if(SHOWMODE && currentMenu() != -MNU_EQN && !tam.mode) { //JMSHOW vv
-//--       if(temporaryInformation == TI_SHOW_REGISTER_TINY) {
-//--         fnShow_SCROLL(12);
-//--       }
-//--       else {
-//--         fnShow_SCROLL(2);
-//-- //      refreshScreen(133);
-//--       }
-//--       return;
-//--     }                             //JMSHOW ^^
-
 
     if(tam.mode && tam.alpha && currentMenu() == -MNU_TAMALPHA) {
       fnAlphaCursorEnd(NOPARAM);
