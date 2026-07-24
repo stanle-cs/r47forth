@@ -51,6 +51,7 @@ void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter);
 void covIterationTi(uint16_t which);
 void covNamedVariableFold(uint16_t unusedButMandatoryParameter);
 void covStatsRegister(uint16_t unusedButMandatoryParameter);
+void covPolarDisplayCap(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
@@ -230,6 +231,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnIterationTiCov",       covIterationTi, 1 },
   {"fnNamedVarFoldCov",      covNamedVariableFold, 1 },
   {"fnStatsRegisterCov",     covStatsRegister, 1 },
+  {"fnPolarDisplayCapCov",   covPolarDisplayCap, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
@@ -1095,6 +1097,48 @@ void covStatsRegister(uint16_t unusedButMandatoryParameter) {
     fnDeleteVariable(createdStats);
     if(namedVariableIsStats(createdStats) || findNamedVariable("STATS") != INVALID_VARIABLE) {
       printf("\nstats-cov: STATS still reported after delete (reg=%d)\n", (int)createdStats);
+      abortTest();
+      return;
+    }
+  }
+}
+
+void covPolarDisplayCap(uint16_t unusedButMandatoryParameter) {
+  // The polar stack display computes rect->polar at POLAR_DISPLAY_COMPUTE_DIGITS
+  // (complex34ToDisplayString2, MR !1615) instead of a precision scaled by the
+  // operands' exponent. Assert that cap reproduces the full-precision (75-digit)
+  // magnitude and angle to 15 displayed significant figures across adversarial
+  // operands - wide exponent spread, near-axis, near-45deg, tiny, huge and a
+  // zero angle - so a later narrowing of the cap that would drop a shown digit
+  // fails here rather than silently changing the display.
+  static const char * const probes[][2] = {
+    {"3", "4"}, {"1", "1"}, {"1e20", "1"}, {"1", "1e-20"}, {"-1e15", "1"},
+    {"1", "-1e15"}, {"1.000000000000001", "1"}, {"1e300", "1e-300"},
+    {"1e-30", "1e-30"}, {"123456.789", "987654.321"}, {"0.35", "99999"}, {"7", "0"},
+  };
+  for(unsigned int i = 0; i < nbrOfElements(probes); i++) {
+    decContext cCap = ctxtReal39; cCap.digits = POLAR_DISPLAY_COMPUTE_DIGITS;
+    decContext cRef = ctxtReal39; cRef.digits = 75; // full-precision reference
+    decContext c15  = ctxtReal39; c15.digits  = 15; // the displayed significant figures compared
+    real_t re, im, magCap, thCap, magRef, thRef, roundCap, roundRef;
+    stringToReal(probes[i][0], &re, &cRef);
+    stringToReal(probes[i][1], &im, &cRef);
+    realRectangularToPolar(&re, &im, &magCap, &thCap, &cCap);
+    realRectangularToPolar(&re, &im, &magRef, &thRef, &cRef);
+
+    realPlus(&magCap, &roundCap, &c15);
+    realPlus(&magRef, &roundRef, &c15);
+    const bool_t magOk = realCompareEqual(&roundCap, &roundRef);
+    realPlus(&thCap, &roundCap, &c15);
+    realPlus(&thRef, &roundRef, &c15);
+    const bool_t angOk = realCompareEqual(&roundCap, &roundRef);
+
+    if(!magOk || !angOk) {
+      char bc[240], br[240];
+      realToString(magOk ? &thCap : &magCap, bc);
+      realToString(magOk ? &thRef : &magRef, br);
+      printf("\npolar-cap probe %u (%s, %s): magOk=%d angOk=%d cap=%s ref=%s\n",
+             i, probes[i][0], probes[i][1], (int)magOk, (int)angOk, bc, br);
       abortTest();
       return;
     }

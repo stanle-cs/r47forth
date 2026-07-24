@@ -1,0 +1,12 @@
+;******************************************************************************************************************************
+;** Coverage: polar display precision cap (POLAR_DISPLAY_COMPUTE_DIGITS, complex34ToDisplayString2). The polar stack display   **
+;** computes rect->polar at a fixed display precision instead of one scaled by the operands' exponent. fnPolarDisplayCapCov    **
+;** asserts that cap reproduces the full-precision (75-digit) magnitude and angle to 15 displayed significant figures across    **
+;** adversarial operands (wide exponent spread, near-axis, near-45deg, tiny, huge, zero angle), so a later narrowing of the    **
+;** cap that would drop a shown digit fails here instead of silently changing the display. Reads nothing back; self-contained. **
+;******************************************************************************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+Func: fnPolarDisplayCapCov
+In:  FARG=0
+Out: EC=0
