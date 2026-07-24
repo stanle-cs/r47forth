@@ -951,10 +951,13 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
       break;
     }
     #if defined(DMCP_BUILD)
-      static uint8_t keyPollUptimeBit = 0; // probe the key buffer when bit 7 of the ms uptime flips (~128 ms): the ~1500-cycle probe is skipped in fast loops for a ~94-cycle uptime read, heavy steps keep per-step R/S response, and long operations self-poll via exitKeyWaiting()
-      const uint8_t uptimeBit = (uint8_t)((getUptimeMs() >> 7) & 1);
-      if(!nestedEngine && uptimeBit != keyPollUptimeBit) {
-        keyPollUptimeBit = uptimeBit;
+      static uint32_t keyPollUptimeSlot = 0; // probe the key buffer when the ~128 ms uptime slot changes: the ~1500-cycle probe is skipped in fast loops for a
+      // ~94-cycle uptime read, heavy steps keep per-step R/S response, and long operations self-poll via exitKeyWaiting(); the full 32-bit slot compare costs the
+      // same as a one-bit flip test (the M4 barrel shifter folds the >>7 into the compare) and has no alias period: a one-bit test goes blind on any step near an
+      // even multiple of 256 ms (a 256/512/1024 ms step never flips bit 7) and then never probes at all
+      const uint32_t uptimeSlot = getUptimeMs() >> 7;
+      if(!nestedEngine && uptimeSlot != keyPollUptimeSlot) {
+        keyPollUptimeSlot = uptimeSlot;
           int key = C47PopKeyNoBuffer(DISPLAY_WAIT_FOR_RELEASE) + 1;
 //        int key = key_pop();
 //        key = convertKeyCode(key);
