@@ -1489,12 +1489,15 @@ static void complex34ToDisplayString2(const complex34_t *complex34, char *displa
     real34ToReal(VARIABLE_IMAG34_DATA(complex34), &imagIc);
 
     decContext c = ctxtReal39;
-    //Repeat check: Remove c.digits changes
-    c.digits = min(displayHasNDigits+2, (SHOWMODE ? 39 : 17+2));
-//    int maxExponent = max(real.exponent + real.digits, imagIc.exponent + imagIc.digits);
-//    c.digits = min(displayHasNDigits+2, (SHOWMODE ? 39 : min(75,max(0,maxExponent) + NUMBER_OF_DISPLAY_REAL_CONTEXT_DIGITS + 2))); //add 2 guard digits for Taylor etc.
+    // Compute the polar form at a fixed display precision (POLAR_DISPLAY_COMPUTE_DIGITS),
+    // not at a precision scaled by the operands' exponent: hypot and atan2 are
+    // well conditioned, so this reproduces the display exactly for all magnitudes
+    // (MR !1615; gated by polar_display_cov) while the repeated-input calls hit
+    // the trig cache. SHOW keeps its full 39 digits.
+    c.digits = min(displayHasNDigits + 2, (SHOWMODE ? 39 : POLAR_DISPLAY_COMPUTE_DIGITS));
     realRectangularToPolarCached(&real, &imagIc, &real, &imagIc, &c, cache); // imagIc in radian
-//    c.digits = (SHOWMODE ? 39 : 3 + NUMBER_OF_DISPLAY_REAL_CONTEXT_DIGITS); //converting from radians to grad is the worst, i.e. x 2E2 / pi, which requires 3 digits accuarcy more
+    // convertAngleFromTo runs at the same c.digits; radian->grad (x 200/pi) is
+    // the worst case for the conversion and stays inside that precision.
     convertAngleFromTo(&imagIc, amRadian, tagAngle == amNone ? currentAngularMode : tagAngle, &c);
 
     realToReal34(&real, &real34);
