@@ -5,6 +5,8 @@
  * \file ui/matrixEditor.c
  ***********************************************/
 
+
+
 #include "c47.h"
 
 #define addFlag true
@@ -1438,8 +1440,10 @@ int16_t getRealMatrixColumnWidths(const real34Matrix_t *matrix, int16_t prefixWi
 
         uint8_t toBeAngle = amNone;
         displayVectorAngle(matrix, j, rows, cols, &toBeAngle);
-        uint16_t calcDigits = displayFormat == DF_ALL ? k : 15;
+
+        uint16_t calcDigits = 15; //Repeat check: fix the digit width to make sure the repeated Atan2 values get a fast return.
         extractVectorElement34(matrix, j, (i+sRow)*cols+j+sCol, rows, cols, &r34Val, &toBeAngle, calcDigits, &aa, &bb, &cc);
+        calcDigits = displayFormat == DF_ALL ? k : 15;  //Repeat check: Restore the correct lower decimal value for ALL
 
         bool_t r34sign = real34IsNegative(&r34Val);
         real34SetPositiveSign(&r34Val);

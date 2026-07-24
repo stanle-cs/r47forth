@@ -6,7 +6,7 @@
 #define isComplex true
 #define isReal    false
 static void real34ToDisplayString2(const real34_t *real34, char *displayString, int16_t displayHasNDigits, bool_t limitExponent, bool_t noFix, bool_t frontSpace, bool_t complex, irfracOption_t limitIrfrac);
-static void complex34ToDisplayString2(const complex34_t *complex34, char *displayString, int16_t displayHasNDigits, bool_t limitExponent, bool_t frontSpace, const uint16_t tagAngle, const bool_t tagPolar, irfracOption_t limitIrfrac);
+static void complex34ToDisplayString2(const complex34_t *complex34, char *displayString, int16_t displayHasNDigits, bool_t limitExponent, bool_t frontSpace, const uint16_t tagAngle, const bool_t tagPolar, irfracOption_t limitIrfrac, rectToPolarCache_t *cache);
 static void insertSepsIntoIntegerText(char *displayString);
 
 
@@ -1368,6 +1368,7 @@ overRange:
 
 
 void complex34ToDisplayString(const complex34_t *complex34, char *displayString, const font_t *font, int16_t maxWidth, int16_t displayHasNDigits, bool_t limitExponent, bool_t frontSpace, irfracOption_t limitIrfrac, const uint16_t tagAngle, const bool_t tagPolar) {
+  rectToPolarCache_t cache = { .valid = false };
   uint8_t savedDisplayFormatDigits = displayFormatDigits;
   uint8_t saveddisplayFormat       = displayFormat;
 
@@ -1377,7 +1378,7 @@ void complex34ToDisplayString(const complex34_t *complex34, char *displayString,
     displayValueX[0] = 0;
   }
 
-  complex34ToDisplayString2(complex34, displayString, displayHasNDigits, limitExponent, frontSpace, tagAngle, tagPolar, limitIrfrac);
+  complex34ToDisplayString2(complex34, displayString, displayHasNDigits, limitExponent, frontSpace, tagAngle, tagPolar, limitIrfrac, &cache);
   bool noFix = false;
   // bool overflown = false;
   int16_t overflow = stringWidth(displayString, font, true, true) - maxWidth;
@@ -1418,7 +1419,7 @@ void complex34ToDisplayString(const complex34_t *complex34, char *displayString,
       displayValueX[0] = 0;
     }
 
-    complex34ToDisplayString2(complex34, displayString, displayHasNDigits, limitExponent, frontSpace, tagAngle, tagPolar, limitIrfrac);
+    complex34ToDisplayString2(complex34, displayString, displayHasNDigits, limitExponent, frontSpace, tagAngle, tagPolar, limitIrfrac, &cache);
     overflow = stringWidth(displayString, font, true, true) - maxWidth;
   }
   // if(overflown && overflow < -3 * digitWidth) {
@@ -1478,7 +1479,7 @@ void strPrepend(char*dest, char*prefix) {
   }
 #endif //PC_BUILD_TELLTALE
 
-static void complex34ToDisplayString2(const complex34_t *complex34, char *displayString, int16_t displayHasNDigits, bool_t limitExponent, bool_t frontSpace, const uint16_t tagAngle, const bool_t tagPolar, irfracOption_t limitIrfrac) {
+static void complex34ToDisplayString2(const complex34_t *complex34, char *displayString, int16_t displayHasNDigits, bool_t limitExponent, bool_t frontSpace, const uint16_t tagAngle, const bool_t tagPolar, irfracOption_t limitIrfrac, rectToPolarCache_t *cache) {
   int16_t imagOffset = 100;
   real34_t real34, imag34, absimag34;
   real_t real, imagIc;
@@ -1488,10 +1489,15 @@ static void complex34ToDisplayString2(const complex34_t *complex34, char *displa
     real34ToReal(VARIABLE_IMAG34_DATA(complex34), &imagIc);
 
     decContext c = ctxtReal39;
-    int maxExponent = max(real.exponent + real.digits, imagIc.exponent + imagIc.digits);
-    c.digits = (SHOWMODE ? 39 : min(75, max(0, maxExponent) + NUMBER_OF_DISPLAY_REAL_CONTEXT_DIGITS + 2)); //add 2 guard digits for Taylor etc.
-    realRectangularToPolar(&real, &imagIc, &real, &imagIc, &c); // imagIc in radian
-    c.digits = (SHOWMODE ? 39 : 3 + NUMBER_OF_DISPLAY_REAL_CONTEXT_DIGITS); //converting from radians to grad is the worst, i.e. x 2E2 / pi, which requires 3 digits accuarcy more
+    // Compute the polar form at a fixed display precision (POLAR_DISPLAY_COMPUTE_DIGITS),
+    // not at a precision scaled by the operands' exponent: hypot and atan2 are
+    // well conditioned, so this reproduces the display exactly for all magnitudes
+    // (MR !1615; gated by polar_display_cov) while the repeated-input calls hit
+    // the trig cache. SHOW keeps its full 39 digits.
+    c.digits = min(displayHasNDigits + 2, (SHOWMODE ? 39 : POLAR_DISPLAY_COMPUTE_DIGITS));
+    realRectangularToPolarCached(&real, &imagIc, &real, &imagIc, &c, cache); // imagIc in radian
+    // convertAngleFromTo runs at the same c.digits; radian->grad (x 200/pi) is
+    // the worst case for the conversion and stays inside that precision.
     convertAngleFromTo(&imagIc, amRadian, tagAngle == amNone ? currentAngularMode : tagAngle, &c);
 
     realToReal34(&real, &real34);
