@@ -1,0 +1,82 @@
+A while back I posted about a [url=https://forum.swissmicros.com/viewtopic.php?f=46&t=4876]Forth extension for C47[/url]. At that point it was the first stage and you entered one line as a string in X, then ran FORTH on it.
+
+I've kept working on it and it is quite a bit further along now. The main difference is that Forth source can now be part of a normal R47 program instead of only being sent through X.
+
+In PEM you insert FORTH and it opens an alpha editor for the source. It also inserts the closing FORTH marker automatically, so the region is balanced from the start. ENTER stores the current line and starts another one before the closing marker. EXIT closes the editor, and EDIT can be used later to reopen a line.
+
+The original method with a string in X still works too.
+
+For example, a program can contain:
+
+[code]: ?DUP DUP IF DUP THEN ;
+: TWICE DUP + ; GLOBAL[/code]
+
+The first definition belongs to the program it is in. The second one is moved to the global dictionary because of GLOBAL, and it will survive power-off and backup/restore.
+
+I wanted program definitions to be local because I don't want one program to change another program just because they happen to use the same name. Definitions are scanned before the program runs, so they can be called before the line where they are defined. Global definitions are separate and are available everywhere.
+
+This is also the general rule I am trying to follow with the project: R47 convention first, and if Forth and R47 disagree then R47 wins. I'm not really interested in putting a pure Forth system next to the calculator. I view Forth as a natural extension of the existing RPN programming system.
+
+Control flow is implemented now. The source words are IF/ELSE/THEN and BEGIN/UNTIL/AGAIN/WHILE/REPEAT. RECURSE, IMMEDIATE and FORGET are also implemented.
+
+Forth source can call C47 functions with parameters now, using the same parameter handling as the normal calculator. This includes direct numbers and registers, named registers, flags and the indirect forms. I didn't want to make a second version of all that logic for Forth because it would eventually behave differently from the normal UI. Both paths use the same validation and execution code.
+
+XEQ can resolve C47 labels, C47 functions and Forth words. A name stored in a compiled Forth definition is resolved when it runs. There is also a dynamic FWRD menu which shows the Forth words visible from the current program. During editing it inserts the selected name at the cursor.
+
+Before a source line is saved in PEM it is checked without executing it. This checks the source structure and parameter forms, but does not change the dictionary. If it is invalid the original program step is left alone.
+
+A lot of the work since the last post was not adding language features, but making the editor and normal program functions work correctly with the Forth source buffer. The original R47 alpha editor uses aimBuffer, while the Forth editor uses a managed buffer because the source can be longer. There were still several paths where cursor movement, Up/Down, BST/SST and the display code used aimBuffer directly.
+
+Backup restore also needed some handling. The Forth capture buffer is local to the running process, but the normal PEM and ALPHA state is saved in a backup. Restoring a backup made while the Forth editor was open could therefore restore the UI state without restoring the buffer behind it. That state is cleared now and the program step itself is not changed.
+
+I found another case where XEQ of a Forth word from a program completed correctly but left the program pointer on the same XEQ step, so it would run it again. There were also some bounds problems with truncated C47 parameter data and with moving a definition to the global dictionary. These now report corrupted data instead of reading past the end or saving a malformed definition.
+
+The self-test suite has tests for these cases. I also went through the older tests and found 14 which did not test exactly what their name claimed, or would still pass with the old broken behavior. Those have been corrected. The build script refreshes the package patches, builds the simulator, runs the headless tests and requires the final success message.
+
+The package still uses CUSTOM_PKG and does not modify the upstream source tree. Build the firmware with:
+
+[code]make dist_dmcp5r47 CUSTOM_PKG=packages/forth-core[/code]
+
+For the simulator and self-tests:
+
+[code]./packages/forth-core/build-test.sh[/code]
+
+[b]What is in the current version:[/b]
+
+[list]
+[*]Forth source lines stored inside normal R47 programs
+[*]Automatic opening and closing FORTH markers in PEM
+[*]Program-local definitions and a persistent global dictionary
+[*]GLOBAL, IMMEDIATE, FORGET and RECURSE
+[*]IF/ELSE/THEN and BEGIN/UNTIL/AGAIN/WHILE/REPEAT
+[*]XEQ support for C47 labels, functions and Forth words
+[*]C47 functions with their normal direct, named and indirect parameters
+[*]Dynamic FWRD menu for the words visible to the current program
+[*]A check-only pass before an edited source line is saved
+[*]Dictionary relocation and restore validation
+[*]R/S interruption and guards against runaway or re-entrant execution
+[/list]
+
+[b]Compiler and structural words:[/b]
+
+[list]
+[*][b]RECURSE[/b] - compile a call to the definition currently being built
+[*][b]GLOBAL[/b] - move the most recently completed definition on the line to the global dictionary
+[*][b]IMMEDIATE[/b] - mark the most recently completed definition on the line as immediate
+[*][b]FORGET name[/b] - remove the named global word and the global words after it
+[*][b]IF ELSE THEN[/b] - conditional structure (ELSE is optional)
+[*][b]BEGIN UNTIL[/b] - loop until true
+[*][b]BEGIN AGAIN[/b] - unconditional loop
+[*][b]BEGIN WHILE REPEAT[/b] - loop with a condition in the middle
+[*][b]XEQ 'NAME'[/b] - global label, C47 function or Forth word
+[*][b]XEQ :NAME:[/b] - local C47 label
+[/list]
+
+This is still not intended to be a complete ANS Forth. There is no CREATE/DOES>, VARIABLE, CONSTANT, vocabulary system or separate Forth terminal. Source is stored as R47 program steps and the C47 catalog supplies most of the calculator functions.
+
+If someday normal mode can act like an interactive terminal for this version of R47 Forth, that would be cool. For now I want to make the program integration solid and keep it as an external package.
+
+As before, this is a hobby project modifying calculator firmware, so keep a backup and flash at your own risk.
+
+Cheers,
+Stan

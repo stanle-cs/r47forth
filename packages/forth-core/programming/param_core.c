@@ -36,8 +36,23 @@ static void paramCoreReadName(const uint8_t *stringAddress, const uint8_t *end) 
   tmpStringLabelOrVariableName[stringLength] = 0;
 }
 
-static void _executeWithIndirectRegister(uint8_t *paramAddress, uint16_t op) {
-  uint8_t opParam = *(uint8_t *)paramAddress;
+/* A bounded entry must also bound its fixed-width cells.  Name reads already
+ * clamp by contract; a missing structural byte is corrupted encoded data. */
+static bool paramCoreReadByte(const uint8_t *address, const uint8_t *end,
+                              uint8_t *value) {
+  if(address >= end) {
+    displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
+                            ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+  *value = *address;
+  return true;
+}
+
+static void _executeWithIndirectRegister(uint8_t *paramAddress,
+                                         const uint8_t *end, uint16_t op) {
+  uint8_t opParam;
+  if(!paramCoreReadByte(paramAddress, end, &opParam)) return;
   bool_t  tryAllocate = isFunctionAllowingNewVariable(op);
   if(opParam <= LAST_SPARE_REGISTERS_IN_KS_CODE) { // Local register from .00 to .98
       int16_t realParam = indirectAddressing(regKStoC(opParam), indirectionType(op), indexOfItems[op].tamMinMax >> TAM_MAX_BITS, indexOfItems[op].tamMinMax & TAM_MAX_MASK, tryAllocate);
@@ -71,7 +86,9 @@ static void _executeWithIndirectVariable(uint8_t *stringAddress, const uint8_t *
 }
 
 void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16_t op, uint16_t paramMode) {
-  uint8_t opParam = *(uint8_t *)(paramAddress++);
+  uint8_t opParam;
+  if(!paramCoreReadByte(paramAddress, end, &opParam)) return;
+  paramAddress++;
   bool_t tryAllocate = isFunctionAllowingNewVariable(op);
 
   switch(paramMode) {
@@ -149,7 +166,7 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
         }
       }
       else if(opParam == INDIRECT_REGISTER) {
-        _executeWithIndirectRegister(paramAddress, op);
+        _executeWithIndirectRegister(paramAddress, end, op);
       }
       else if(opParam == INDIRECT_VARIABLE) {
         _executeWithIndirectVariable(paramAddress, end, op);
@@ -168,15 +185,17 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
          reallyRunFunction(op, opParam);
       }
       else if(opParam == SYSTEM_FLAG_NUMBER) {
-        if(*paramAddress < 64) { // first 64 system flags
-          reallyRunFunction(op, indexOfItems[(*paramAddress) + SFL_TDM24].param);
+        uint8_t systemFlag;
+        if(!paramCoreReadByte(paramAddress, end, &systemFlag)) break;
+        if(systemFlag < 64) { // first 64 system flags
+          reallyRunFunction(op, indexOfItems[systemFlag + SFL_TDM24].param);
         }
         else { // other system flags
-          reallyRunFunction(op, indexOfItems[((*paramAddress) & 0x3f) + SFL_MONIT].param);
+          reallyRunFunction(op, indexOfItems[(systemFlag & 0x3f) + SFL_MONIT].param);
         }
       }
       else if(opParam == INDIRECT_REGISTER) {
-        _executeWithIndirectRegister(paramAddress, op);
+        _executeWithIndirectRegister(paramAddress, end, op);
       }
       else if(opParam == INDIRECT_VARIABLE) {
         _executeWithIndirectVariable(paramAddress, end, op);
@@ -192,7 +211,7 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
         paramCoreDispatchDirect(op, PTP_NUMBER_8, opParam);
       }
       else if(opParam == INDIRECT_REGISTER) {
-        _executeWithIndirectRegister(paramAddress, op);
+        _executeWithIndirectRegister(paramAddress, end, op);
       }
       else if(opParam == INDIRECT_VARIABLE) {
         _executeWithIndirectVariable(paramAddress, end, op);
@@ -208,10 +227,12 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
           reallyRunFunction(op, opParam);
         }
         else if(opParam == CNST_BEYOND_250) { // Value from 250 to 499
-          reallyRunFunction(op, 250 + *(paramAddress));
+          uint8_t extension;
+          if(!paramCoreReadByte(paramAddress, end, &extension)) break;
+          reallyRunFunction(op, 250 + extension);
         }
         else if(opParam == INDIRECT_REGISTER) {
-          _executeWithIndirectRegister(paramAddress, op);
+          _executeWithIndirectRegister(paramAddress, end, op);
         }
         else if(opParam == INDIRECT_VARIABLE) {
           _executeWithIndirectVariable(paramAddress, end, op);
@@ -224,20 +245,24 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
 
     case PARAM_NUMBER_16: {
         if(isFunctionOldParam16(op)) {  // original Param16 functions without indirection support (little endian parameter)
-          uint16_t val = opParam + 256 * *(paramAddress);
+          uint8_t byte1;
+          if(!paramCoreReadByte(paramAddress, end, &byte1)) break;
+          uint16_t val = opParam + 256 * byte1;
           if (paramCoreValidateDirect(op, PTP_NUMBER_16, val)) {
             paramCoreDispatchDirect(op, PTP_NUMBER_16, val);
           }
         }
         else {                        // new Param16 functions with indirection support (big endian parameter)
           if(opParam == INDIRECT_REGISTER) {
-            _executeWithIndirectRegister(paramAddress, op);
+            _executeWithIndirectRegister(paramAddress, end, op);
           }
           else if(opParam == INDIRECT_VARIABLE) {
             _executeWithIndirectVariable(paramAddress, end, op);
           }
           else {
-            uint16_t val = (opParam * 256) + *(paramAddress);
+            uint8_t byte1;
+            if(!paramCoreReadByte(paramAddress, end, &byte1)) break;
+            uint16_t val = (opParam * 256) + byte1;
             if (paramCoreValidateDirect(op, PTP_NUMBER_16, val)) {
               paramCoreDispatchDirect(op, PTP_NUMBER_16, val);
             }
@@ -284,7 +309,7 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
         reallyRunFunction(op, TEMP_REGISTER_1);
       }
       else if(opParam == INDIRECT_REGISTER) {
-        _executeWithIndirectRegister(paramAddress, op);
+        _executeWithIndirectRegister(paramAddress, end, op);
       }
       else if(opParam == INDIRECT_VARIABLE) {
         _executeWithIndirectVariable(paramAddress, end, op);
@@ -314,7 +339,7 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
         }
       }
       else if(opParam == INDIRECT_REGISTER) {
-        _executeWithIndirectRegister(paramAddress, op);
+        _executeWithIndirectRegister(paramAddress, end, op);
       }
       else if(opParam == INDIRECT_VARIABLE) {
         _executeWithIndirectVariable(paramAddress, end, op);

@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df33fab55e 100644
+index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b48476cb2 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,8 @@
@@ -40,7 +40,51 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
            xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
            tmpString[2 + cursorInString    ] = STD_CURSOR[0];
            tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
-@@ -805,6 +822,21 @@ void pemAlpha(int16_t item) {
+@@ -649,7 +666,13 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
+       refreshRegisterLine(errorMessageRegisterLine);
+     }
+ 
+-    if(aimBuffer[0] != 0 && linesOfCurrentStep > 4) { // Limited to 4 lines so as not to cause crash or freeze
++    // forth-core code-audit 2026-07-21: the "trim the edited step until it
++    // fits in 4 display lines" crash/freeze guard must consult the capture
++    // buffer when a Forth line is open — F6-1 moved Forth edit text off
++    // aimBuffer onto forthCapBuf(), so a long Forth source line left this
++    // guard reading an empty aimBuffer and never fired (same forthCapIsOpen()
++    // ? forthCapBuf() : aimBuffer idiom used throughout pemAlpha).
++    if((forthCapIsOpen() ? forthCapBuf()[0] != 0 : aimBuffer[0] != 0) && linesOfCurrentStep > 4) { // Limited to 4 lines so as not to cause crash or freeze
+       if(getSystemFlag(FLAG_ALPHA)) {
+         pemAlpha(ITM_BACKSPACE);
+       }
+@@ -774,6 +797,28 @@ static void _closeAlphaMenus(void) {
+   }
+ }
+ 
++void forthCaptureSanitizeRestoredUi(void) {
++  /* forthCap is deliberately process-local and is reset before restoreCalc()
++   * reloads the persisted UI fields.  An older backup can therefore restore
++   * CM_PEM + ALPHA + ITM_FORTH around a CLOSED capture, leaving cursor keys
++   * operating on aimBuffer with offsets that belonged to the lost managed
++   * buffer.  Match the normal capture-close state without touching the
++   * already mirrored program step; the user can reopen that step with EDIT. */
++  if(calcMode != CM_PEM
++     || tam.function != ITM_FORTH
++     || forthCapIsOpen()) {
++    return;
++  }
++
++  aimBuffer[0] = 0;
++  T_cursorPos = 0;
++  displayAIMbufferoffset = 0;
++  clearSystemFlag(FLAG_ALPHA);
++  calcModeNormalGui();
++  _closeAlphaMenus();
++  tam.function = 0;
++}
++
+ void pemAlpha(int16_t item) {
+   bool_t editCommand = false;
+   if(item == ITM_EDIT) {
+@@ -805,6 +850,21 @@ void pemAlpha(int16_t item) {
        editCommand = true;
        item = aimFunc;
      }
@@ -62,7 +106,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
      else {
        aimBuffer[0] = 0;
        return;
-@@ -812,6 +844,10 @@ void pemAlpha(int16_t item) {
+@@ -812,6 +872,10 @@ void pemAlpha(int16_t item) {
    }
  
    if(!getSystemFlag(FLAG_ALPHA)) {
@@ -73,7 +117,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
        resetShiftState();
        displayAIMbufferoffset = 0;
        if(!editCommand) {
-@@ -844,7 +880,8 @@ void pemAlpha(int16_t item) {
+@@ -844,7 +908,8 @@ void pemAlpha(int16_t item) {
        currentStep = findPreviousStep(currentStep);
      }
      if(indexOfItems[item].func == addItemToBuffer) {
@@ -83,7 +127,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
        item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
        if(alphaCase == AC_LOWER) {
            if(ITM_A <= item && item <= ITM_Z) {
-@@ -855,40 +892,64 @@ void pemAlpha(int16_t item) {
+@@ -855,40 +920,64 @@ void pemAlpha(int16_t item) {
        if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
          item = convertItemToSubOrSup(item, nextChar);
          int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
@@ -162,7 +206,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
      }
      else if(item == ITM_USERMODE) {
        fnFlipFlag(FLAG_USER);
-@@ -896,6 +957,7 @@ void pemAlpha(int16_t item) {
+@@ -896,6 +985,7 @@ void pemAlpha(int16_t item) {
      }
      else if(item == ITM_CLA) { // JM addon
        aimBuffer[0] = 0;
@@ -170,7 +214,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
        T_cursorPos = 0;
        nextChar = NC_NORMAL;
      }
-@@ -938,6 +1000,13 @@ void pemAlpha(int16_t item) {
+@@ -938,6 +1028,13 @@ void pemAlpha(int16_t item) {
        fnT_ARROW(indexOfItems[item].param);
        return;
      }
@@ -184,7 +228,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
  
      int16_t aimFunc = currentStep[0];
      if(aimFunc & 0x80) {
-@@ -946,21 +1015,22 @@ void pemAlpha(int16_t item) {
+@@ -946,21 +1043,22 @@ void pemAlpha(int16_t item) {
        aimFunc |= currentStep[1];
      }
  
@@ -213,7 +257,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
      }
      --currentLocalStepNumber;
      currentStep = findPreviousStep(currentStep);
-@@ -970,7 +1040,19 @@ void pemAlpha(int16_t item) {
+@@ -970,7 +1068,22 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -230,10 +274,13 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
 +  }
    aimBuffer[0] = 0;
 +  forthCapClose();
++  if(tam.function == ITM_FORTH) {
++    tam.function = 0;
++  }
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -980,6 +1062,113 @@ void pemCloseAlphaInput(void) {
+@@ -980,6 +1093,113 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -347,7 +394,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
  }
  
  
-@@ -995,7 +1184,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -995,7 +1215,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -356,7 +403,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1367,6 +1556,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1367,6 +1587,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -394,7 +441,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1377,12 +1597,18 @@ void insertStepInProgram(const int16_t func) {
+@@ -1377,12 +1628,18 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -415,7 +462,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1404,6 +1630,43 @@ void insertStepInProgram(const int16_t func) {
+@@ -1404,6 +1661,53 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -439,6 +486,16 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
 +    tmpString[3] = 0;
 +    _insertInProgram((uint8_t *)tmpString, 4);
 +    if(!wasOn) {
++      /* A new Forth region is a complete bracket from its first line onward.
++       * Insert the closing marker now, then step back onto it so pemAlpha()
++       * places the editable placeholder immediately before that marker.
++       * ENTER commits the current line and uses the same insertion point to
++       * add an explicit next line inside the already-balanced bracket. */
++      _insertInProgram((uint8_t *)tmpString, 4);
++      currentStep = findPreviousStep(currentStep);
++      if(currentLocalStepNumber > 1) {
++        --currentLocalStepNumber;
++      }
 +      tam.function = ITM_FORTH;
 +      pemAlpha(ITM_FORTH);
 +    } else {
@@ -459,7 +516,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1415,6 +1678,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1415,6 +1719,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -475,7 +532,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1497,6 +1769,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1497,6 +1810,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -499,7 +556,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..1841716eda66b76756d246ccd800e4df
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1792,7 +2081,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1792,7 +2122,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

@@ -513,6 +513,7 @@ void paramCorePutLiteral(uint8_t *literalAddress) {
 
 int16_t executeOneStep(uint8_t *step) {
   uint16_t op;
+  uint8_t *currentStepBefore = currentStep;
 
   op = *(step++);
   if(op & 0x80) {
@@ -539,6 +540,13 @@ int16_t executeOneStep(uint8_t *step) {
       uint8_t previousErrorCodeMeM = previousErrorCode;
       paramCoreExecuteOp(step, op, (indexOfItems[op].status & PTP_STATUS) >> 9);
       previousErrorCode = previousErrorCodeMeM;
+      /* A native GTO/XEQ/BACK/CASE/SKIP moves currentStep itself.  The
+       * Forth name fallback for XEQ runs synchronously and deliberately
+       * leaves currentStep on the calling instruction, so the outer engine
+       * must advance once instead of executing that XEQ forever. */
+      if(op == ITM_XEQ && currentStep == currentStepBefore) {
+        return 1;
+      }
       return -1;
       }
 

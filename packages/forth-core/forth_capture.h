@@ -44,6 +44,7 @@ void     forthCapAbandonSuspended(void);
  * _closeAlphaMenus) */
 void     forthCaptureSuspend(void);
 void     forthCaptureResume(void);
+void     forthCaptureSanitizeRestoredUi(void);
 
 /* F6-3: shared inserter (implementation stays in keyboard.c — it owns
  * the cap constants' original site). */

@@ -1,5 +1,5 @@
 diff --git a/src/c47/config.c b/src/c47/config.c
-index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..0dee701db7a9dcd8aeec1f6f7e25af1de12b61ed 100644
+index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..a16fe5dab505ed7f7361f8cba6f7f33813c1bc99 100644
 --- a/src/c47/config.c
 +++ b/src/c47/config.c
 @@ -2,6 +2,7 @@
@@ -62,7 +62,20 @@ index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..0dee701db7a9dcd8aeec1f6f7e25af1d
      if(ram == NULL) {
        ram = (uint32_t *)malloc(TO_BYTES(RAM_SIZE_IN_BLOCKS));
      }
-@@ -1950,6 +1987,25 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+@@ -1620,10 +1657,8 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+       real34SetZero((real34_t *)TO_PCMEMPTR(allReservedVariables[i].header.pointerToRegisterData));
+     }
+ 
+-    // initialize the global registers
+-    #if defined(DMCP_BUILD) && defined(OLD_HW)
+-      memset(globalRegister, 0, sizeof(globalRegister));
+-    #endif // DMCP_BUILD && OLD_HW
++    // initialize the global registers, including reserved header bits
++    memset(globalRegister, 0, sizeof(registerHeader_t) * NUMBER_OF_GLOBAL_REGISTERS);
+     for(calcRegister_t regist=FIRST_GLOBAL_REGISTER; regist<=LAST_GLOBAL_REGISTER; regist++) {
+       setRegisterDataType(regist, dtReal34, amNone);
+       memPtr = allocC47Blocks(REAL34_SIZE_IN_BLOCKS);
+@@ -1950,6 +1985,28 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
  
      fnClearFlag(FLAG_USER);
      fnRefreshState();
@@ -72,7 +85,10 @@ index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..0dee701db7a9dcd8aeec1f6f7e25af1d
 +         /* Run-once: tests call restoreCalc, which calls doFnReset — without
 +          * this guard the suite would recursively re-enter itself. */
 +         static bool forthSelfTestRan = false;
-+         if(!forthSelfTestRan) {
++         /* The harness is PC-only and contains C47-model assumptions.  Run it
++          * only for the explicit headless gate, leaving GUI simulators such as
++          * r47 available for manual keyboard/PEM audit work. */
++         if(headlessMode && !forthSelfTestRan) {
 +           forthSelfTestRan = true;
 +           extern int forthDictSelfTest(void);
 +           if(forthDictSelfTest()) {

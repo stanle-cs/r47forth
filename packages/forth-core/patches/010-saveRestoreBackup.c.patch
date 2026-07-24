@@ -1,16 +1,17 @@
 diff --git a/src/c47/saveRestoreBackup.c b/src/c47/saveRestoreBackup.c
-index b86ac55c82f30de2ffd02e5b65928e626eebc6c8..98e74b2f89e75baa0957088fb522e4e9138f4494 100644
+index b86ac55c82f30de2ffd02e5b65928e626eebc6c8..944cec04de313e7344f407408aa53f8fe500b046 100644
 --- a/src/c47/saveRestoreBackup.c
 +++ b/src/c47/saveRestoreBackup.c
-@@ -8,6 +8,7 @@
+@@ -8,6 +8,8 @@
   */
  
  #include "c47.h"
++#include "forth_capture.h"
 +#include "forth_dict.h"
  
  // This is used for the backup.cfg simulator backup file
  // The variable backupVersion is used in the connection
-@@ -525,6 +526,13 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+@@ -525,6 +527,13 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
      ramPtr = TO_C47MEMPTR(programList);
      saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
  
@@ -24,7 +25,7 @@ index b86ac55c82f30de2ffd02e5b65928e626eebc6c8..98e74b2f89e75baa0957088fb522e4e9
      ramPtr = TO_C47MEMPTR(currentSubroutineLevelData);
      saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
  
-@@ -851,7 +859,20 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+@@ -851,7 +860,20 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
      restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
      programList = TO_PCMEMPTR(ramPtr);
  
@@ -46,3 +47,14 @@ index b86ac55c82f30de2ffd02e5b65928e626eebc6c8..98e74b2f89e75baa0957088fb522e4e9
      currentSubroutineLevelData = TO_PCMEMPTR(ramPtr);
  
      restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentLocalFlags",              "c47Ptr");
+@@ -1403,6 +1425,10 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+     // register (all classes, not just the global block) to the word size so stale bits cannot survive.
+     clampShortIntegerRegistersToWordSize();
+ 
++    /* The managed Forth capture is process-local and was reset by doFnReset(),
++     * while the surrounding PEM/ALPHA fields were just restored from disk. */
++    forthCaptureSanitizeRestoredUi();
++
+     printf("End of calc's restoration\n");
+     fflush(stdout);
+ 

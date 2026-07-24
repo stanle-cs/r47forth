@@ -1,16 +1,17 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..a18052581e800460b08079470c4a0ae3d98d6d20 100644
+index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..ac3cf81f8c5e333d9292bdd2db5dd5ca1ad28c14 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
-@@ -3,6 +3,7 @@
+@@ -3,6 +3,8 @@
  
  #include "c47.h"
  #include "version.h"
++#include "forth_capture.h"
 +#include "forth_dict.h"
  
  static void refreshRegisterLineRestoreT(void);
  static void _refreshPemScreen(void);
-@@ -819,6 +820,23 @@ void execTimerApp(uint16_t timerType) {
+@@ -819,6 +821,23 @@ void execTimerApp(uint16_t timerType) {
          }
        }
        else {
@@ -34,7 +35,39 @@ index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..a18052581e800460b08079470c4a0ae3
          displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
              sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -3722,10 +3740,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -1772,23 +1791,25 @@ return res;
+ 
+ 
+   void findOffset(void) {             //C47 JM
+-    int32_t strWidth = (int32_t)stringWidthC47(aimBuffer, combinationFonts, nocompress, true, true);
++    char *cursorBuffer = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
++    int32_t strWidth = (int32_t)stringWidthC47(cursorBuffer, combinationFonts, nocompress, true, true);
+     strWidth -= SCREEN_WIDTH * multiEdLines - 45;
+     if(strWidth < 0) {
+       strWidth = 0;
+     }
+-    char *offset = stringAfterPixelsC47(aimBuffer, combinationFonts, nocompress, strWidth, true, true);
+-    displayAIMbufferoffset = offset - aimBuffer;
++    char *offset = stringAfterPixelsC47(cursorBuffer, combinationFonts, nocompress, strWidth, true, true);
++    displayAIMbufferoffset = offset - cursorBuffer;
+     incOffset();
+   }
+ 
+ 
+   void incOffset(void) {             //C47 JM
+-    if((int32_t)stringWidthC47(aimBuffer + displayAIMbufferoffset, combinationFonts, nocompress, true, true) -
+-       (int32_t)stringWidthC47(aimBuffer + T_cursorPos, combinationFonts, nocompress, true, true)
++    char *cursorBuffer = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
++    if((int32_t)stringWidthC47(cursorBuffer + displayAIMbufferoffset, combinationFonts, nocompress, true, true) -
++       (int32_t)stringWidthC47(cursorBuffer + T_cursorPos, combinationFonts, nocompress, true, true)
+         > SCREEN_WIDTH * multiEdLines - 45
+       ) {
+-      displayAIMbufferoffset = stringNextGlyph(aimBuffer, displayAIMbufferoffset);
++      displayAIMbufferoffset = stringNextGlyph(cursorBuffer, displayAIMbufferoffset);
+     }
+   }
+ 
+@@ -3722,10 +3743,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
  
          if(lastErrorCode != 0 && regist == errorMessageRegisterLine) {
            if(stringWidth(errorMessages[lastErrorCode], &standardFont, true, true) <= SCREEN_WIDTH - 1) {

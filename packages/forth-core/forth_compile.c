@@ -20,7 +20,6 @@
 #define FTOK_C47          0x7F04
 #define FTOK_BR           0x7F02
 #define FTOK_0BR          0x7F03
-#define FTOK_XEQN         0x7F05
 
 /* ---- §3.3.2 / D-3: per-invocation context; idle BSS = one ptr + 2 bytes ---- */
 typedef enum {
@@ -1104,7 +1103,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           lineOK = false;
           continue;
         }
-        char ptok[FORTH_TOKEN_MAX + 1];
+        char ptok[FORTH_TOKEN_MAX + 1] = {0};
         if (!nextToken(ptok)) {
           displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
           if (isDefinitionOpen()) abortDefinition();
@@ -1433,7 +1432,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   if (checking) {
     /* F5-1: check mode — simOpen means unterminated definition; no abort
      * (nothing was actually opened); NO ASLIFT write */
-    if (simOpen) {
+    if (simOpen && lastErrorCode == ERROR_NONE) {
       displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     }
   } else if (state == STATE_COMPILE && isDefinitionOpen()) {

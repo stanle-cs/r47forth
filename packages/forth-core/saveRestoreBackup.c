@@ -8,6 +8,7 @@
  */
 
 #include "c47.h"
+#include "forth_capture.h"
 #include "forth_dict.h"
 
 // This is used for the backup.cfg simulator backup file
@@ -1423,6 +1424,10 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     // carry values wider than the word size. The mask and sign bit were restored above; clamp every short-integer
     // register (all classes, not just the global block) to the word size so stale bits cannot survive.
     clampShortIntegerRegistersToWordSize();
+
+    /* The managed Forth capture is process-local and was reset by doFnReset(),
+     * while the surrounding PEM/ALPHA fields were just restored from disk. */
+    forthCaptureSanitizeRestoredUi();
 
     printf("End of calc's restoration\n");
     fflush(stdout);

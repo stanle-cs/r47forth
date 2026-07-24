@@ -18,7 +18,6 @@
 #define FTOK_BR           0x7F02
 #define FTOK_0BR          0x7F03
 #define FTOK_C47          0x7F04
-#define FTOK_XEQN         0x7F05
 
 /* ---- §3.2 Return stack & guards ---- */
 
@@ -260,7 +259,7 @@ typedef enum { FORTH_MARK_NONE, FORTH_MARK_OK, FORTH_MARK_BAD } forthMarkResult_
 
 /* F4-3: decode one marker parameter cell group at ip into nbuf.
  * NONE = the leading byte is not a marker legal for this class (the caller
- * decodes its own direct form); OK = decoded, *used/*advance set;
+ * decodes its own direct form); OK = decoded, *used and *advance set;
  * BAD = malformed encoding, ERROR_INVALID_CORRUPTED_DATA already raised.
  * Legality comes from forthParamMarkerMask, and the cell grammar from
  * forthParamCellSpan — the same two functions the validator walks use, so a

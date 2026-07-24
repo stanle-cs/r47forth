@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/lblGtoXeq.c b/src/c47/programming/lblGtoXeq.c
-index 88523f072b5ce0ee346b1d78ad1b2851913643dd..009c9867be4ba680122f06ed85bca0dd49aa0ba3 100644
+index 88523f072b5ce0ee346b1d78ad1b2851913643dd..589b21749bfb9c987b641cc543404f669b7bcd66 100644
 --- a/src/c47/programming/lblGtoXeq.c
 +++ b/src/c47/programming/lblGtoXeq.c
 @@ -7,6 +7,8 @@
@@ -269,7 +269,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..009c9867be4ba680122f06ed85bca0dd
  static void _putLiteral(uint8_t *literalAddress) {
    switch(*(literalAddress++)) {
        case BINARY_SHORT_INTEGER: {
-@@ -745,6 +505,10 @@ static void _putLiteral(uint8_t *literalAddress) {
+@@ -745,10 +505,15 @@ static void _putLiteral(uint8_t *literalAddress) {
    }
  }
  
@@ -280,16 +280,29 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..009c9867be4ba680122f06ed85bca0dd
  
  
  int16_t executeOneStep(uint8_t *step) {
-@@ -773,7 +537,7 @@ int16_t executeOneStep(uint8_t *step) {
+   uint16_t op;
++  uint8_t *currentStepBefore = currentStep;
+ 
+   op = *(step++);
+   if(op & 0x80) {
+@@ -773,8 +538,15 @@ int16_t executeOneStep(uint8_t *step) {
      case ITM_CASE:        //  1418
      case ITM_SKIP: {      //  1603
        uint8_t previousErrorCodeMeM = previousErrorCode;
 -      _executeOp(step, op, (indexOfItems[op].status & PTP_STATUS) >> 9);
 +      paramCoreExecuteOp(step, op, (indexOfItems[op].status & PTP_STATUS) >> 9);
        previousErrorCode = previousErrorCodeMeM;
++      /* A native GTO/XEQ/BACK/CASE/SKIP moves currentStep itself.  The
++       * Forth name fallback for XEQ runs synchronously and deliberately
++       * leaves currentStep on the calling instruction, so the outer engine
++       * must advance once instead of executing that XEQ forever. */
++      if(op == ITM_XEQ && currentStep == currentStepBefore) {
++        return 1;
++      }
        return -1;
        }
-@@ -793,7 +557,7 @@ int16_t executeOneStep(uint8_t *step) {
+ 
+@@ -793,7 +565,7 @@ int16_t executeOneStep(uint8_t *step) {
  
      case ITM_SOLVE: {     //  1608
        currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
@@ -298,7 +311,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..009c9867be4ba680122f06ed85bca0dd
        if(temporaryInformation == TI_SOLVER_FAILED) {
          if(lastErrorCode == ERROR_SOLVER_ABORT) {   // abort: keep the error so the loop halts on the SOLVE step (like INT); no not-found skip
            return 0;
-@@ -851,6 +615,14 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -851,6 +623,14 @@ int16_t executeOneStep(uint8_t *step) {
                fn42Append(NOPARAM);
              }
            }
@@ -313,7 +326,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..009c9867be4ba680122f06ed85bca0dd
            else {  // REM
                    // just ignore it
            }
-@@ -858,12 +630,12 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -858,12 +638,12 @@ int16_t executeOneStep(uint8_t *step) {
          }
  
          case PTP_KEYG_KEYX: {
@@ -328,7 +341,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..009c9867be4ba680122f06ed85bca0dd
          }
        }
        #if defined(IR_PRINTING)
-@@ -887,6 +659,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
+@@ -887,6 +667,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
        clearKeyBuffer();
      }
    #endif
@@ -336,7 +349,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..009c9867be4ba680122f06ed85bca0dd
    lastErrorCode = ERROR_NONE;
    hourGlassIconEnabled = true;
    programRunStop = PGM_RUNNING;
-@@ -1016,7 +789,7 @@ void fnCheckLabel(uint16_t label) {
+@@ -1016,7 +797,7 @@ void fnCheckLabel(uint16_t label) {
    if(dynamicMenuItem >= 0) {
      label = findNamedLabel(dynmenuGetLabel(dynamicMenuItem),ALL_LABELS);
    }

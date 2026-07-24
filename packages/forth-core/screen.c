@@ -3,6 +3,7 @@
 
 #include "c47.h"
 #include "version.h"
+#include "forth_capture.h"
 #include "forth_dict.h"
 
 static void refreshRegisterLineRestoreT(void);
@@ -1790,23 +1791,25 @@ return res;
 
 
   void findOffset(void) {             //C47 JM
-    int32_t strWidth = (int32_t)stringWidthC47(aimBuffer, combinationFonts, nocompress, true, true);
+    char *cursorBuffer = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
+    int32_t strWidth = (int32_t)stringWidthC47(cursorBuffer, combinationFonts, nocompress, true, true);
     strWidth -= SCREEN_WIDTH * multiEdLines - 45;
     if(strWidth < 0) {
       strWidth = 0;
     }
-    char *offset = stringAfterPixelsC47(aimBuffer, combinationFonts, nocompress, strWidth, true, true);
-    displayAIMbufferoffset = offset - aimBuffer;
+    char *offset = stringAfterPixelsC47(cursorBuffer, combinationFonts, nocompress, strWidth, true, true);
+    displayAIMbufferoffset = offset - cursorBuffer;
     incOffset();
   }
 
 
   void incOffset(void) {             //C47 JM
-    if((int32_t)stringWidthC47(aimBuffer + displayAIMbufferoffset, combinationFonts, nocompress, true, true) -
-       (int32_t)stringWidthC47(aimBuffer + T_cursorPos, combinationFonts, nocompress, true, true)
+    char *cursorBuffer = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
+    if((int32_t)stringWidthC47(cursorBuffer + displayAIMbufferoffset, combinationFonts, nocompress, true, true) -
+       (int32_t)stringWidthC47(cursorBuffer + T_cursorPos, combinationFonts, nocompress, true, true)
         > SCREEN_WIDTH * multiEdLines - 45
       ) {
-      displayAIMbufferoffset = stringNextGlyph(aimBuffer, displayAIMbufferoffset);
+      displayAIMbufferoffset = stringNextGlyph(cursorBuffer, displayAIMbufferoffset);
     }
   }
 

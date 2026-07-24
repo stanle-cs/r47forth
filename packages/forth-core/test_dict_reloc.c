@@ -15,7 +15,7 @@
  * Cross-target (DMCP) must not include fork/waitpid/printf or the
  * PC_BUILD-only test helpers (forthDictSetTestInitialBlocks,
  * forthTestSetDepth/GetDepth). */
-#if defined(PC_BUILD)
+#if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
 
 #include <string.h>
 #include <signal.h>   /* SIGALRM: the fork test turns a child hang into a signal */
@@ -3247,6 +3247,12 @@ static int test_lifecycle_real_reset_hook(void)
       _exit(20);
     }
 
+    /* Poison the header bits that the field setters do not touch.  Reset must
+     * initialize them before saveCalc serializes the whole descriptor. */
+    for (uint16_t i = 0; i < NUMBER_OF_GLOBAL_REGISTERS; i++) {
+      globalRegister[i].descriptor |= 0xFE000000u;
+    }
+
     doFnReset(CONFIRMED, doNotLoadAutoSav);
 
     bool foundPost = forthFindColon("SQ", &idx);
@@ -3264,6 +3270,11 @@ static int test_lifecycle_real_reset_hook(void)
     }
     if (fdict.latest != FORTH_NULL) {
       _exit(70);
+    }
+    for (uint16_t i = 0; i < NUMBER_OF_GLOBAL_REGISTERS; i++) {
+      if ((globalRegister[i].descriptor & 0xFE000000u) != 0) {
+        _exit(80);
+      }
     }
     _exit(0);
   }
@@ -8063,10 +8074,12 @@ static int test_entry_state_derivation(void)
 /* ---- COMMIT 6: manage.c override — toggle, in-region, FCALL redirect ---- */
 
 /* test_toggle_inserts_marker
- * Tests both opening and closing of Forth capture via addStepInProgram(ITM_FORTH).
+ * Tests a new Forth capture's automatic opening/closing marker pair, plus
+ * backward-compatible manual closing of an old open-ended region.
  *
  * Opening case: program [RPN][ITM_END][.END.], cursor on ITM_END.
- *   Pre-move skipped (isAtEndOfProgram), predecessor = RPN → wasOn=false → capture opens.
+ *   Pre-move skipped (isAtEndOfProgram), predecessor = RPN → wasOn=false →
+ *   capture opens on an empty source placeholder between a marker pair.
  *
  * Closing case: program [marker][source(: SQ ...)][ITM_END][.END.], cursor on ITM_END.
  *   Pre-move skipped, predecessor = source step → wasOn=true → capture closes.
@@ -8096,6 +8109,7 @@ static int test_toggle_inserts_marker(void)
     uint16_t savedLocalStep = currentLocalStepNumber;
     bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
     int16_t savedTamFunc = tam.function;
+    uint8_t savedCalcMode = calcMode;
 
     /* Cursor on ITM_END (offset 1) — pre-move skipped */
     currentStep = beginOfProgramMemory + 1;
@@ -8105,6 +8119,7 @@ static int test_toggle_inserts_marker(void)
     aimBuffer[0] = 0;
     tam.mode = 0;
     tam.function = 0;
+    calcMode = CM_PEM;
     clearSystemFlag(FLAG_ALPHA);
 
     extern void addStepInProgram(int16_t func);
@@ -8123,15 +8138,31 @@ static int test_toggle_inserts_marker(void)
       fail = 1;
     }
 
-    /* Check: marker inserted before ITM_END */
+    /* Check: opening marker, editable placeholder, and automatic closing
+     * marker were inserted before ITM_END. */
     uint8_t *marker = beginOfProgramMemory + 1;
+    uint8_t *placeholder = marker + 4;
+    uint8_t *autoClose = placeholder + 4;
     if (*(marker + 0) != 0x8B || *(marker + 1) != 0x1A ||
     *(marker + 2) != 0xFD || *(marker + 3) != 0x00) {
       printf("    FAIL: opening marker not found (got 0x%02X 0x%02X 0x%02X 0x%02X)\n",
       *(marker+0), *(marker+1), *(marker+2), *(marker+3));
       fail = 1;
     }
+    else if (placeholder[0] != 0x8B || placeholder[1] != 0x1A ||
+             placeholder[2] != 0xFD || placeholder[3] != 0x00 ||
+             currentStep != placeholder) {
+      printf("    FAIL: editable placeholder not between marker pair\n");
+      fail = 1;
+    }
+    else if (autoClose[0] != 0x8B || autoClose[1] != 0x1A ||
+             autoClose[2] != 0xFD || autoClose[3] != 0x00) {
+      printf("    FAIL: automatic closing marker not after first-line placeholder\n");
+      fail = 1;
+    }
 
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
     cleanupTestProgram();
     currentStep = savedCurrentStep;
     pemCursorIsZerothStep = savedZeroth;
@@ -8139,6 +8170,7 @@ static int test_toggle_inserts_marker(void)
     currentLocalStepNumber = savedLocalStep;
     if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
     tam.function = savedTamFunc;
+    calcMode = savedCalcMode;
   }
 
   /* ---- Closing case: source step → wasOn=true → FLAG_ALPHA clear ---- */
@@ -8204,16 +8236,16 @@ static int test_toggle_inserts_marker(void)
   }
 
   if (!fail) {
-    printf("    PASS: toggle inserts marker, opens/closes capture correctly\n");
+    printf("    PASS: new capture auto-brackets one line; legacy open region still toggles closed\n");
   }
   return fail;
 }
 
 /* test_forth_toggle_close_resets_sentinel
- * R2 finding 5, ruled: DESIGN.md's §8.4 intro says the transient alpha state
- * (FLAG_ALPHA, aimBuffer, tam.function) is cleared when capture closes; the
- * toggle-close arm of insertStepInProgram's ITM_FORTH case only cleared
- * FLAG_ALPHA, leaving tam.function stale at ITM_FORTH.
+ * The transient alpha state (FLAG_ALPHA, aimBuffer, tam.function) must be
+ * cleared when capture closes. A new region now owns its closing marker, so
+ * committing its one source line with EXIT must clear that state without a
+ * second FORTH toggle.
  * Probed and confirmed live, not just theoretical: after a normal open+close,
  * a SUBSEQUENT, unrelated plain alpha capture (func == ITM_AIM, structurally
  * outside any Forth region) got silently mislabeled — insertStepInProgram's
@@ -8221,9 +8253,8 @@ static int test_toggle_inserts_marker(void)
  * the assignment when the sentinel is already (stale-)true, so the new
  * capture inherits ITM_FORTH. That then misroutes R3-1's cursor-offset math,
  * which is keyed on tam.function, not the step's real type.
- * Escaping mutation: remove the `tam.function = 0;` added to the toggle-close
- * arm — this test's second assertion (post-close) and third assertion
- * (post-AIM) both fail. */
+ * Escaping mutation: remove the non-empty Forth close reset in
+ * pemCloseAlphaInput — this test's post-close and post-AIM assertions fail. */
 static int test_forth_toggle_close_resets_sentinel(void)
 {
   int fail = 0;
@@ -8243,6 +8274,7 @@ static int test_forth_toggle_close_resets_sentinel(void)
   uint16_t savedLocalStep = currentLocalStepNumber;
   bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
   int16_t savedTamFunc = tam.function;
+  uint8_t savedCalcMode = calcMode;
 
   currentStep = beginOfProgramMemory + 1;
   pemCursorIsZerothStep = false;
@@ -8251,10 +8283,13 @@ static int test_forth_toggle_close_resets_sentinel(void)
   aimBuffer[0] = 0;
   tam.mode = 0;
   tam.function = 0;
+  calcMode = CM_PEM;
   clearSystemFlag(FLAG_ALPHA);
 
   extern void addStepInProgram(int16_t func);
   extern void insertStepInProgram(const int16_t func);
+  extern void runFunction(int16_t);
+  extern void fnKeyExit(uint16_t);
 
   addStepInProgram(ITM_FORTH);   /* open */
   if (tam.function != ITM_FORTH) {
@@ -8263,10 +8298,29 @@ static int test_forth_toggle_close_resets_sentinel(void)
     fail = 1;
   }
 
-  addStepInProgram(ITM_FORTH);   /* close (toggle again) */
-  if (tam.function != 0) {
-    printf("    FAIL: tam.function = %d after toggle-close, expected 0 (stale sentinel)\n",
-           tam.function);
+  runFunction(ITM_3);
+  fnKeyExit(NOPARAM);
+  if (forthCapIsOpen() && getSystemFlag(FLAG_ALPHA)) {
+    /* A digit can leave an Alpha sub-menu on top.  EXIT intentionally pops
+     * that menu first; the next EXIT commits the auto-paired one-line entry. */
+    fnKeyExit(NOPARAM);
+  }
+  uint8_t *marker = beginOfProgramMemory + 1;
+  uint8_t *source = marker + 4;
+  uint8_t *autoClose = source + 5;
+  if (forthCapIsOpen() || getSystemFlag(FLAG_ALPHA) || tam.function != 0) {
+    printf("    FAIL: one-line EXIT left capture=%d alpha=%d tam.function=%d\n",
+           forthCapIsOpen(), getSystemFlag(FLAG_ALPHA), tam.function);
+    fail = 1;
+  }
+  else if (source[0] != 0x8B || source[1] != 0x1A ||
+           source[2] != 0xFD || source[3] != 1 || source[4] != '3') {
+    printf("    FAIL: first source line was not committed as FORTH \"3\"\n");
+    fail = 1;
+  }
+  else if (autoClose[0] != 0x8B || autoClose[1] != 0x1A ||
+           autoClose[2] != 0xFD || autoClose[3] != 0x00) {
+    printf("    FAIL: automatic closing marker did not survive one-line EXIT\n");
     fail = 1;
   }
 
@@ -8292,9 +8346,10 @@ static int test_forth_toggle_close_resets_sentinel(void)
   currentLocalStepNumber = savedLocalStep;
   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
   tam.function = savedTamFunc;
+  calcMode = savedCalcMode;
 
   if (!fail) {
-    printf("    PASS: toggle-close resets tam.function; a later plain capture is not mislabeled\n");
+    printf("    PASS: auto-paired one-line EXIT resets tam.function; later plain capture is not mislabeled\n");
   }
   return fail;
 }
@@ -8508,8 +8563,8 @@ static int test_fcall_redirect_rejects_stale(void)
 /* test_forth_empty_enter_leaves_no_step
  * Open capture via insertStepInProgram(ITM_FORTH) (opening toggle), then
  * pemAlpha(ITM_ENTER) with empty aimBuffer; assert program step count
- * returned to exactly one marker (no phantom second marker) and FLAG_ALPHA
- * clear (§8.9 acceptance 8b).
+ * returned to exactly the automatic marker pair (no phantom source step) and
+ * FLAG_ALPHA clear.
  * Escaping mutation: dropping E3 — the empty placeholder commits and
  * COMMIT 5's test_marker_parity invariant would flip downstream. */
 static int test_forth_empty_enter_leaves_no_step(void)
@@ -8572,12 +8627,9 @@ static int test_forth_empty_enter_leaves_no_step(void)
     return 1;
   }
 
-  /* The empty ENTER is the escape hatch, and the only close path that must
-   * clear the sentinel: the opening marker survives, so the cursor is still
-   * inside an open region and a leaked ITM_FORTH would make the next
-   * keystroke behave as if capture were still up. (E5's lock deliberately
-   * KEEPS the sentinel on the non-empty path — see
-   * test_forth_multiline_lock_holds.) */
+  /* The empty ENTER is the escape hatch. The balanced marker pair survives,
+   * but the capture sentinel must not: a leaked ITM_FORTH would make the next
+   * unrelated keystroke behave as if capture were still up. */
   if (tam.function == ITM_FORTH) {
     printf("    FAIL: tam.function == ITM_FORTH after empty ENTER (stale sentinel "
            "survived the escape hatch)\n");
@@ -8590,9 +8642,9 @@ static int test_forth_empty_enter_leaves_no_step(void)
   }
 
   int stepsAfter = getNumberOfSteps();
-  if (stepsAfter != stepsBefore + 1) {
-    printf("    FAIL: step count = %d, expected %d (only opening marker remains)\n",
-    stepsAfter, stepsBefore + 1);
+  if (stepsAfter != stepsBefore + 2) {
+    printf("    FAIL: step count = %d, expected %d (only automatic marker pair remains)\n",
+    stepsAfter, stepsBefore + 2);
     cleanupTestProgram();
     currentStep = savedCurrentStep;
     pemCursorIsZerothStep = savedZeroth;
@@ -10612,7 +10664,8 @@ static int test_useritem_xeqp1_decodes(void)
  * Program: RPN step, marker(»), source, marker(«), END, .END.
  * Cursor ON the RPN step (predecessor semantics: insertion follows it,
  * before the »). addStepInProgram(ITM_FORTH) — E1 fires, predecessor = RPN
- * step → wasOn = false → opening marker inserted, capture opens.
+ * step → wasOn = false → a balanced marker pair and placeholder are inserted,
+ * with capture open on the placeholder.
  * Escaping mutation: the at-cursor derivation (state from the old » = true)
  * suppresses the capture — assertion fails. */
 static int test_e1_direction_mid_program(void)
@@ -10662,14 +10715,28 @@ static int test_e1_direction_mid_program(void)
     fail = 1;
   }
 
-  /* Assert: new marker inserted between RPN step and old marker */
+  /* Assert: new bracket and placeholder inserted between RPN and old marker. */
   scanLabelsAndPrograms();
-  /* After insertion: RPN(1) + newMarker(4) + oldMarker(4) + source(16) + marker2(4) + END(2) + .END.(2) */
+  /* After insertion: RPN(1) + newOpen(4) + placeholder(4) + newClose(4)
+   * + oldMarker(4) + source(16) + marker2(4) + END(2) + .END.(2). */
   uint8_t *newMarker = beginOfProgramMemory + 1;  /* right after ITM_sin */
+  uint8_t *placeholder = newMarker + 4;
+  uint8_t *autoClose = placeholder + 4;
   if (*(newMarker + 0) != 0x8B || *(newMarker + 1) != 0x1A ||
   *(newMarker + 2) != 0xFD || *(newMarker + 3) != 0x00) {
     printf("    FAIL: new marker not at expected position (got 0x%02X 0x%02X 0x%02X 0x%02X)\n",
     *(newMarker+0), *(newMarker+1), *(newMarker+2), *(newMarker+3));
+    fail = 1;
+  }
+  else if (currentStep != placeholder || placeholder[0] != 0x8B ||
+           placeholder[1] != 0x1A || placeholder[2] != 0xFD ||
+           placeholder[3] != 0x00) {
+    printf("    FAIL: new bracket placeholder not selected\n");
+    fail = 1;
+  }
+  else if (autoClose[0] != 0x8B || autoClose[1] != 0x1A ||
+           autoClose[2] != 0xFD || autoClose[3] != 0x00) {
+    printf("    FAIL: automatic close missing before old marker\n");
     fail = 1;
   }
 
@@ -10691,7 +10758,7 @@ static int test_e1_direction_mid_program(void)
   memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
 
   if (!fail) {
-    printf("    PASS: E1 direction mid-program — opening marker inserted, capture opened\n");
+    printf("    PASS: E1 direction mid-program — balanced bracket inserted, capture opened inside it\n");
   }
   return fail;
 }
@@ -10928,6 +10995,10 @@ static int test_word_catalog(void);
 static int test_capture_acceptance(void);
 /* code-audit: dynamic-menu XEQ of a Forth word/colon must insert in PEM, not execute live */
 static int test_pem_xeq_dynmenu_no_live_exec(void);
+/* code-audit (adversarial): edit an existing Forth line, MODIFY it, re-commit via ENTER */
+static int test_forth_edit_modify_commit(void);
+/* code-audit: PEM Up/Down must commit the managed Forth sink before moving */
+static int test_forth_capture_navigation(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -11083,6 +11154,85 @@ static int test_save_restore_roundtrip(void)
       if (lastErrorCode != ERROR_NONE) { printf("    FAIL: GW2 raised %d\n", lastErrorCode); fail = 1; }
       else if (!x_is_longint(35))      { printf("    FAIL: X != 35 after GW2\n"); fail = 1; }
     }
+  }
+
+  /* A5 / backupR47.cfg regression: forthCap is deliberately not persisted,
+   * but older backups do persist the surrounding PEM + ALPHA + ITM_FORTH UI
+   * and its cursor.  Restore must close that split state before the exact
+   * reported RRRLLLRRL sequence reaches the text cursor. */
+  {
+    uint8_t savedCalcMode = calcMode;
+    int16_t savedTamFunction = tam.function;
+    bool_t savedAlphaUi = getSystemFlag(FLAG_ALPHA);
+    int16_t savedCursor = T_cursorPos;
+    int16_t savedDisplayOffset = displayAIMbufferoffset;
+    softmenuStack_t savedUiStack[SOFTMENU_STACK_SIZE];
+    char savedAimBuffer[AIM_BUFFER_LENGTH];
+    static const uint16_t restoredArrows[] = {
+      ITM_T_RIGHT_ARROW, ITM_T_RIGHT_ARROW, ITM_T_RIGHT_ARROW,
+      ITM_T_LEFT_ARROW,  ITM_T_LEFT_ARROW,  ITM_T_LEFT_ARROW,
+      ITM_T_RIGHT_ARROW, ITM_T_RIGHT_ARROW, ITM_T_LEFT_ARROW
+    };
+    uint_fast16_t i;
+
+    xcopy(savedUiStack, softmenuStack, sizeof(savedUiStack));
+    xcopy(savedAimBuffer, aimBuffer, sizeof(savedAimBuffer));
+
+    forthCapPowerReset();
+    calcMode = CM_PEM;
+    showSoftmenu(-MNU_ALPHA);
+    setSystemFlag(FLAG_ALPHA);
+    tam.function = ITM_FORTH;
+    aimBuffer[0] = 0;
+    T_cursorPos = 2;
+    displayAIMbufferoffset = 0;
+    saveCalc();
+
+    calcMode = CM_NORMAL;
+    clearSystemFlag(FLAG_ALPHA);
+    tam.function = 0;
+    T_cursorPos = 0;
+    {
+      bool_t savedLoad = loadTestPrograms;
+      loadTestPrograms = false;
+      restoreCalc();
+      loadTestPrograms = savedLoad;
+    }
+
+    if (calcMode != CM_PEM
+        || getSystemFlag(FLAG_ALPHA)
+        || tam.function != 0
+        || forthCapIsOpen()
+        || forthCapIsSuspended()
+        || T_cursorPos != 0
+        || displayAIMbufferoffset != 0
+        || currentMenu() == -MNU_ALPHA
+        || isAlphaSubmenu(0)) {
+      printf("    FAIL: stale restored capture UI survived "
+             "(mode=%u alpha=%d tam=%d state=%d cursor=%d off=%d menu=%d)\n",
+             calcMode, getSystemFlag(FLAG_ALPHA), tam.function,
+             forthTestCapState(), T_cursorPos, displayAIMbufferoffset,
+             currentMenu());
+      fail = 1;
+    }
+
+    for (i = 0; i < nbrOfElements(restoredArrows); ++i) {
+      fnT_ARROW(restoredArrows[i]);
+    }
+    if (T_cursorPos != 0 || displayAIMbufferoffset != 0) {
+      printf("    FAIL: restored arrow replay moved empty cursor "
+             "(cursor=%d off=%d)\n", T_cursorPos, displayAIMbufferoffset);
+      fail = 1;
+    }
+
+    forthCapPowerReset();
+    calcMode = savedCalcMode;
+    tam.function = savedTamFunction;
+    if (savedAlphaUi) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    T_cursorPos = savedCursor;
+    displayAIMbufferoffset = savedDisplayOffset;
+    xcopy(softmenuStack, savedUiStack, sizeof(savedUiStack));
+    xcopy(aimBuffer, savedAimBuffer, sizeof(savedAimBuffer));
   }
 
   /* Release the restored gdict region (restore allocated fresh memory) */
@@ -11507,9 +11657,11 @@ static int test_scope_isolation(void)
 
 /* test_global_marks
  * F3-4: GLOBAL/IMMEDIATE/FORGET with same-line mark discipline.
- * Eight subcases covering GLOBAL move, same-line discipline, transient-call
+ * Eleven subcases covering GLOBAL move, same-line discipline, transient-call
  * rejection, RECURSE rewrite, IMMEDIATE compile-time execution, FORGET
- * truncation, pre-scan IMMEDIATE carve-out, and global+IMMEDIATE persistence. */
+ * truncation, pre-scan IMMEDIATE carve-out, global+IMMEDIATE persistence,
+ * a variable-width native cell before a promoted self-call, and strict
+ * rejection of malformed inline parameter cells, and persistent ITM_NULL. */
 static int test_global_marks(void)
 {
   int fail = 0;
@@ -11792,6 +11944,163 @@ static int test_global_marks(void)
         if (rBase) freeC47Blocks(rBase, rBlocks);
       }
     }
+  }
+
+  /* [9] Promotion walks across a complete variable-width native parameter.
+   * The payload is deliberately changed to the FTOK_EXIT byte image: it is
+   * data inside the named parameter and must never terminate the token walk. */
+  {
+    uint16_t ref = 0, gref = 0;
+    forthDictClear();
+    forthGDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": GP STO 'AA' RECURSE ;");
+    if (lastErrorCode != ERROR_NONE || !forthFindColon("GP", &ref) ||
+        (ref & FORTH_REF_GLOBAL)) {
+      printf("    [9] FAIL: fixture definition failed (error=%d ref=0x%04X)\n",
+             lastErrorCode, ref);
+      fail = 1;
+    } else {
+      uint16_t off = fdict.latest;
+      forthHeader_t *h = (forthHeader_t *)(fdict.base + off);
+      uint16_t pos = off + (uint16_t)TO_BLOCKS(6 + h->nameLen) * BYTES_PER_BLOCK;
+      ftoken_t tok = 0;
+      uint16_t item = 0, span = 0;
+      memcpy(&tok, fdict.base + pos, 2);
+      pos += 2;
+      memcpy(&item, fdict.base + pos, 2);
+      pos += 2;
+      if (tok != T_C47 || item == 0 || item >= LAST_ITEM ||
+          !forthParamCellSpan(fdict.base, pos, fdict.here,
+                              (uint16_t)(indexOfItems[item].status & PTP_STATUS),
+                              true, &span) ||
+          span < 4 || fdict.base[pos] != STRING_LABEL_VARIABLE ||
+          fdict.base[pos + 1] != 2) {
+        printf("    [9] FAIL: fixture native parameter layout is invalid\n");
+        fail = 1;
+      } else {
+        uint16_t selfPos = (uint16_t)(pos + span);
+        ftoken_t selfTok = 0, promotedTok = 0;
+        memcpy(&selfTok, fdict.base + selfPos, 2);
+        fdict.base[pos + 2] = 0;
+        fdict.base[pos + 3] = 0;
+        lastErrorCode = ERROR_NONE;
+        if (selfTok != (ftoken_t)(0x1000u + ref) ||
+            !forthDictMakeLatestGlobal(ref, &gref)) {
+          printf("    [9] FAIL: promotion failed (self=0x%04X error=%d)\n",
+                 selfTok, lastErrorCode);
+          fail = 1;
+        } else {
+          uint16_t gBody = gdict.latest +
+              (uint16_t)TO_BLOCKS(6 + h->nameLen) * BYTES_PER_BLOCK;
+          memcpy(&promotedTok, gdict.base + gBody + (selfPos -
+                 (off + (uint16_t)TO_BLOCKS(6 + h->nameLen) * BYTES_PER_BLOCK)), 2);
+          if (promotedTok !=
+              (ftoken_t)(FORTH_GCALL_BASE + (gref & 0x7FFFu))) {
+            printf("    [9] FAIL: self-call after named parameter not rewritten "
+                   "(tok=0x%04X)\n", promotedTok);
+            fail = 1;
+          } else {
+            printf("    [9] PASS: promotion skipped named payload and rewrote "
+                   "the following self-call\n");
+          }
+        }
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [10] Promotion must reject a malformed named-cell pad rather than
+   * copying it to persistent gdict and walking its payload as tokens. */
+  {
+    uint16_t ref = 0, gref = 0;
+    forthDictClear();
+    forthGDictClear();
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": GQ STO 'ABC' RECURSE ;");
+    if (lastErrorCode != ERROR_NONE || !forthFindColon("GQ", &ref) ||
+        (ref & FORTH_REF_GLOBAL)) {
+      printf("    [10] FAIL: fixture definition failed (error=%d ref=0x%04X)\n",
+             lastErrorCode, ref);
+      fail = 1;
+    } else {
+      uint16_t off = fdict.latest;
+      forthHeader_t *h = (forthHeader_t *)(fdict.base + off);
+      uint16_t pos = off + (uint16_t)TO_BLOCKS(6 + h->nameLen) * BYTES_PER_BLOCK;
+      uint16_t item = 0, span = 0;
+      pos += 2;                              /* FTOK_C47 */
+      memcpy(&item, fdict.base + pos, 2);
+      pos += 2;
+      if (item == 0 || item >= LAST_ITEM ||
+          !forthParamCellSpan(fdict.base, pos, fdict.here,
+                              (uint16_t)(indexOfItems[item].status & PTP_STATUS),
+                              true, &span) ||
+          span < 6) {
+        printf("    [10] FAIL: fixture named-cell layout is invalid\n");
+        fail = 1;
+      } else {
+        uint16_t oldFCount = fdict.count;
+        fdict.base[pos + span - 1] = 1;       /* corrupt the odd-name pad */
+        lastErrorCode = ERROR_NONE;
+        if (forthDictMakeLatestGlobal(ref, &gref) ||
+            lastErrorCode != ERROR_INVALID_NAME ||
+            gdict.count != 0 || fdict.count != oldFCount) {
+          printf("    [10] FAIL: malformed pad promotion result "
+                 "(error=%d fcount=%u gcount=%u)\n",
+                 lastErrorCode, fdict.count, gdict.count);
+          fail = 1;
+        } else {
+          printf("    [10] PASS: malformed named-cell pad rejected before promotion\n");
+        }
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  /* [11] Item ID zero is ITM_NULL/PTP_NONE, not a corrupt sentinel.  Both
+   * promotion and restore validation must accept the same body the runtime
+   * has historically executed. */
+  {
+    uint16_t ref = 0, gref = 0;
+    uint16_t w;
+    forthDictClear();
+    forthGDictClear();
+    lastErrorCode = ERROR_NONE;
+    w = begin_word("G0", 2);
+    if (w == FORTH_NULL) {
+      printf("    [11] FAIL: fixture allocation failed\n");
+      fail = 1;
+    } else {
+      uint16_t itemId = ITM_NULL;
+      forthDictEmit(T_C47);
+      forthDictEmitBytes(&itemId, 2);
+      forthDictEmit(T_ILIT);
+      emit_int32(55);
+      end_word(w);
+      if (!forthFindColon("G0", &ref) ||
+          !forthDictMakeLatestGlobal(ref, &gref)) {
+        printf("    [11] FAIL: ITM_NULL body promotion failed (error=%d)\n",
+               lastErrorCode);
+        fail = 1;
+      } else {
+        forthGDictValidateRestored();
+        if (lastErrorCode != ERROR_NONE || gdict.base == NULL ||
+            !(gref & FORTH_REF_GLOBAL)) {
+          printf("    [11] FAIL: ITM_NULL global failed validation (error=%d)\n",
+                 lastErrorCode);
+          fail = 1;
+        } else {
+          lastErrorCode = ERROR_NONE;
+          if (run_word("G0") || !x_is_longint(55)) {
+            printf("    [11] FAIL: validated ITM_NULL global did not run\n");
+            fail = 1;
+          } else {
+            printf("    [11] PASS: ITM_NULL survives promotion and restore validation\n");
+          }
+        }
+      }
+    }
+    lastErrorCode = ERROR_NONE;
   }
 
   forthDictClear();
@@ -12841,6 +13150,16 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
+  printf("  [DEBUG] running test_forth_edit_modify_commit...\n");
+  fail |= test_forth_edit_modify_commit();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_forth_capture_navigation...\n");
+  fail |= test_forth_capture_navigation();
+  forthDictClear();
+  forthGDictClear();
+
   /* FIX-6: free-list integrity — LAST test, after all cleanup */
   printf("\nFORTH FIX-6 TESTS (free-list integrity + arena report)\n");
   printf("  [DEBUG] running test_freelist_consistent...\n");
@@ -13844,7 +14163,7 @@ static int test_param_core_extraction(void)
     cleanupTestProgram();
   }
 
-  /* ---- Subcase 2: relocated Forth XEQ fallback still resolves ---- */
+  /* ---- Subcase 2: relocated Forth XEQ fallback resolves and advances ---- */
   {
     uint8_t prog[] = {
       0x01, 0xFD, 0x03, 'F', '2', 'F',                       /* LBL 'F2F' */
@@ -13880,13 +14199,19 @@ static int test_param_core_extraction(void)
     programRunStop = PGM_RUNNING;
     currentStep = beginOfProgramMemory + 10;  /* source step */
     executeOneStep(currentStep);
+    int16_t xeqAdvance = -1;
     if (lastErrorCode == ERROR_NONE) {
       currentStep = beginOfProgramMemory + 26;  /* XEQ 'W7' */
-      executeOneStep(currentStep);
+      xeqAdvance = executeOneStep(currentStep);
     }
 
     if (lastErrorCode != ERROR_NONE) {
       printf("    [2] FAIL: executeOneStep error %d\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (xeqAdvance != 1) {
+      printf("    [2] FAIL: synchronous XEQ 'W7' returned advance %d (expected 1)\n",
+             xeqAdvance);
       fail = 1;
     }
     else if (!x_is_longint(7)) {
@@ -13894,7 +14219,31 @@ static int test_param_core_extraction(void)
       fail = 1;
     }
     else {
-      printf("    [2] PASS: XEQ 'W7' through relocated fallback yields X=7\n");
+      /* F2 audit regression: before executeOneStep distinguished a
+       * synchronous Forth-name fallback from a native label branch, it
+       * returned -1 here and the real run loop repeated this XEQ forever.
+       * The direct return-value guard above keeps that mutation from
+       * hanging the suite; now prove the complete engine drive terminates. */
+      programRunStop = PGM_STOPPED;
+      lastErrorCode = ERROR_NONE;
+      dynamicMenuItem = -1;
+      fnExecute(lbl);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [2] FAIL: full fnExecute drive error %d\n", lastErrorCode);
+        fail = 1;
+      }
+      else if (programRunStop != PGM_STOPPED) {
+        printf("    [2] FAIL: full fnExecute drive did not stop (state=%u)\n",
+               programRunStop);
+        fail = 1;
+      }
+      else if (!x_is_longint(7)) {
+        printf("    [2] FAIL: full fnExecute drive did not leave X=7\n");
+        fail = 1;
+      }
+      else {
+        printf("    [2] PASS: XEQ 'W7' returns advance 1 and the full run terminates with X=7\n");
+      }
     }
 
     forthDictClear();
@@ -13907,7 +14256,8 @@ static int test_param_core_extraction(void)
 
 /* test_param_core_bounded_names
  * F2-2: verify the bounded name reader (paramCoreReadName) in
- * param_core.c clamps reads to firstFreeProgramByte. */
+ * param_core.c clamps reads to firstFreeProgramByte.
+ * F4 audit: fixed-width structural bytes honor the same exclusive bound. */
 static int test_param_core_bounded_names(void)
 {
   int fail = 0;
@@ -14072,6 +14422,98 @@ static int test_param_core_bounded_names(void)
     lastErrorCode = ERROR_NONE;
   }
 #endif
+
+  /* ---- Subcase 5: every fixed-width structural read is bounded ---- */
+  {
+    uint16_t old16 = LAST_ITEM, new16 = LAST_ITEM;
+    uint16_t i;
+    uint8_t cell[1];
+    int subFail = 0;
+
+    for (i = 1; i < LAST_ITEM; i++) {
+      if ((indexOfItems[i].status & PTP_STATUS) == PTP_NUMBER_16) {
+        if (old16 == LAST_ITEM && isFunctionOldParam16(i)) old16 = i;
+        if (new16 == LAST_ITEM && !isFunctionOldParam16(i)) new16 = i;
+      }
+    }
+    if (old16 == LAST_ITEM || new16 == LAST_ITEM) {
+      printf("    [5] CONFIG FAIL: missing old/new NUMBER_16 probe item\n");
+      subFail = 1;
+    }
+
+    /* No leading parameter byte. */
+    if (!subFail) {
+      cell[0] = 0;
+      lastErrorCode = ERROR_NONE;
+      paramCoreExecuteOpBounded(cell, cell, ITM_GTO, PARAM_LABEL);
+      if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+        printf("    [5] FAIL: empty parameter did not report corrupted data "
+               "(got %d)\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+
+    /* Marker forms whose required second byte is missing. */
+    if (!subFail) {
+      cell[0] = INDIRECT_REGISTER;
+      lastErrorCode = ERROR_NONE;
+      paramCoreExecuteOpBounded(cell, cell + 1, ITM_STO, PARAM_REGISTER);
+      if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+        printf("    [5] FAIL: truncated indirect-register cell got %d\n",
+               lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      cell[0] = SYSTEM_FLAG_NUMBER;
+      lastErrorCode = ERROR_NONE;
+      paramCoreExecuteOpBounded(cell, cell + 1, ITM_SF, PARAM_FLAG);
+      if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+        printf("    [5] FAIL: truncated system-flag cell got %d\n",
+               lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      cell[0] = CNST_BEYOND_250;
+      lastErrorCode = ERROR_NONE;
+      paramCoreExecuteOpBounded(cell, cell + 1, ITM_CNST, PARAM_NUMBER_8_16);
+      if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+        printf("    [5] FAIL: truncated extended-number cell got %d\n",
+               lastErrorCode);
+        subFail = 1;
+      }
+    }
+
+    /* Both byte orders of PTP_NUMBER_16 require the second byte. */
+    if (!subFail) {
+      cell[0] = 1;
+      lastErrorCode = ERROR_NONE;
+      paramCoreExecuteOpBounded(cell, cell + 1, old16, PARAM_NUMBER_16);
+      if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+        printf("    [5] FAIL: truncated old NUMBER_16 cell got %d\n",
+               lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      cell[0] = 1;
+      lastErrorCode = ERROR_NONE;
+      paramCoreExecuteOpBounded(cell, cell + 1, new16, PARAM_NUMBER_16);
+      if (lastErrorCode != ERROR_INVALID_CORRUPTED_DATA) {
+        printf("    [5] FAIL: truncated new NUMBER_16 cell got %d\n",
+               lastErrorCode);
+        subFail = 1;
+      }
+    }
+
+    if (!subFail) {
+      printf("    [5] PASS: bounded core rejects every truncated fixed-width cell\n");
+    } else {
+      fail = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+  }
 
   programRunStop = savedRS;
   return fail;
@@ -15781,9 +16223,19 @@ static int test_param_register_flag(void)
     }
     /* Malformed */
     if (!subFail) {
-      char bad1[64], bad2[64];
+      char bad0[64];
+      sprintf(bad0, "%s y", indexOfItems[1694].itemCatalogName);
+      lastErrorCode = ERROR_NONE;
+      x_set_string(bad0);
+      fnForthOuter(NOPARAM);
+      if (lastErrorCode != ERROR_INVALID_NAME) {
+        printf("    [6] FAIL: y expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
+        subFail = 1;
+      }
+    }
+    if (!subFail) {
+      char bad1[64];
       sprintf(bad1, "%s yxz", indexOfItems[1694].itemCatalogName);
-      sprintf(bad2, "%s yxzq", indexOfItems[1694].itemCatalogName);
       lastErrorCode = ERROR_NONE;
       x_set_string(bad1);
       fnForthOuter(NOPARAM);
@@ -17220,6 +17672,8 @@ static int test_param_series_c_acceptance(void)
  * Five subcases in one capture session. */
 static int test_commit_gate(void)
 {
+  extern void pemAlpha(int16_t);
+
   int fail = 0;
 
   uint8_t *savedCurrentStep = currentStep;
@@ -17239,7 +17693,6 @@ static int test_commit_gate(void)
 
   extern void fnGotoDot(uint16_t);
   extern void runFunction(int16_t);
-  extern void pemAlpha(int16_t);
 
   /* Build fixture: LBL, marker, placeholder source, RTN */
   testProg_t p;
@@ -17559,6 +18012,7 @@ static int test_check_source_line(void)
       { ": A THEN ;", ERROR_INVALID_NAME },
       { ": A BEGIN THEN ;", ERROR_INVALID_NAME },
       { ": A IF ;", ERROR_INVALID_NAME },
+      { ": CE5 IF IF IF IF IF IF IF IF IF 1 ;", ERROR_RAM_FULL },
       { "RECURSE", ERROR_OPERATION_UNDEFINED },
       { "GLOBAL", ERROR_INVALID_NAME },
       { "FORGET", ERROR_INVALID_NAME },
@@ -17630,6 +18084,7 @@ static int test_check_source_line(void)
       ": A : B ;", ": ;", ";", ": A",
       ": TOOLONGNAMETOOLONGNAMETOOLONGNAMEX 1 ;",
       "IF", ": A THEN ;", ": A BEGIN THEN ;", ": A IF ;",
+      ": CE5 IF IF IF IF IF IF IF IF IF 1 ;",
       "RECURSE", "GLOBAL", "FORGET", "XEQ", "XEQ AB",
       "UNKNOWNWORD9", "SDL", "SDL 100", "RTN",
       "STO 'NEVERMADE'", "FORGET NOSUCH", "XEQ 'NOLABEL'",
@@ -17684,6 +18139,7 @@ static int test_check_source_line(void)
       ": A : B ;", ": ;", ";", ": A",
       ": TOOLONGNAMETOOLONGNAMETOOLONGNAMEX 1 ;",
       "IF", ": A THEN ;", ": A BEGIN THEN ;", ": A IF ;",
+      ": CE5 IF IF IF IF IF IF IF IF IF 1 ;",
       "RECURSE", "GLOBAL", "FORGET", "XEQ", "XEQ AB",
     };
     size_t i;
@@ -17796,8 +18252,16 @@ static int test_check_source_line(void)
       lastErrorCode = ERROR_NONE;
 
       forthDefStateSave(&defAfter);
-      if (!subFail && memcmp(&defBefore, &defAfter, sizeof(defBefore)) != 0) {
-        printf("    [6] FAIL: check mode mutated the open-definition state\n");
+      if (!subFail && (defBefore.here != defAfter.here ||
+                       defBefore.latest != defAfter.latest ||
+                       defBefore.count != defAfter.count ||
+                       defBefore.entryOff != defAfter.entryOff ||
+                       defBefore.open != defAfter.open)) {
+        printf("    [6] FAIL: check mode mutated the open-definition state "
+               "(h %u/%u l %u/%u c %u/%u e %u/%u o %d/%d)\n",
+               defBefore.here, defAfter.here, defBefore.latest, defAfter.latest,
+               defBefore.count, defAfter.count, defBefore.entryOff, defAfter.entryOff,
+               defBefore.open, defAfter.open);
         subFail = 1;
       }
       if (!subFail && forthTestGetRsp() != rspBefore) {
@@ -17911,14 +18375,14 @@ static int test_capture_buffer(void)
     { int sc2 = 0;
       if (!fail) {
         const int16_t items[] = {
-          ITM_1, ITM_SPACE, ITM_2, ITM_SPACE, ITM_PLUS
+          ITM_3, ITM_SPACE, ITM_4, ITM_SPACE, ITM_PLUS
         };
         int i;
         for (i = 0; i < (int)(sizeof(items) / sizeof(items[0])); i++) {
           runFunction(items[i]);
         }
-        if (strcmp(forthTestCapText(), "1 2 +") != 0) {
-          printf("    [2] FAIL: cap text = '%s', expected '1 2+'\n", forthTestCapText());
+        if (strcmp(forthTestCapText(), "3 4 +") != 0) {
+          printf("    [2] FAIL: cap text = '%s', expected '3 4 +'\n", forthTestCapText());
           sc2 = 1;
         }
         else if (aimBuffer[0] != 0) {
@@ -17953,7 +18417,7 @@ static int test_capture_buffer(void)
       fail |= sc3;
     }
 
-    /* ---- Subcase 4: Backspace + mid-line edit ---- */
+    /* ---- Subcase 4: Backspace + mid-line edit + two-byte glyph ---- */
     { int sc4 = 0;
       if (!fail) {
         runFunction(ITM_A);
@@ -17964,8 +18428,25 @@ static int test_capture_buffer(void)
           printf("    [4] FAIL: cap text = '%s', expected 'AC'\n", forthTestCapText());
           sc4 = 1;
         }
+        if (!sc4) {
+          runFunction(ITM_CLA);
+          runFunction(ITM_CROSS);
+          if (strcmp(forthTestCapText(), STD_CROSS) != 0 ||
+              stringByteLength((char *)forthTestCapText()) != 2 ||
+              stringGlyphLength((char *)forthTestCapText()) != 1) {
+            printf("    [4] FAIL: two-byte cross fixture is not one glyph\n");
+            sc4 = 1;
+          }
+          else {
+            runFunction(ITM_BACKSPACE);
+            if (forthTestCapText()[0] != 0 || T_cursorPos != 0) {
+              printf("    [4] FAIL: one BACKSPACE did not remove the whole cross glyph\n");
+              sc4 = 1;
+            }
+          }
+        }
       }
-      if (!sc4) printf("    [4] PASS: glyph edits operate on the managed buffer\n");
+      if (!sc4) printf("    [4] PASS: glyph edits and two-byte BACKSPACE operate on the managed buffer\n");
       fail |= sc4;
     }
 
@@ -18061,7 +18542,7 @@ static int test_capture_buffer(void)
       if (!fail) {
         runFunction(ITM_AIM);
         runFunction(ITM_9);
-        tamEnterMode(ITM_STO);
+        runFunction(ITM_STO);
         if (forthTestCapState() != FCAP_SUSPENDED) {
           printf("    [7] FAIL: capture not suspended after TAM entry (state=%d)\n", forthTestCapState());
           sc7 = 1;
@@ -18179,8 +18660,24 @@ static int test_capture_buffer(void)
                  (unsigned)freeBefore10, (unsigned)getFreeRamMemory());
           sc10 = 1;
         }
+        else {
+          calcMode = CM_PEM;
+          tam.mode = 0;
+          tam.function = 0;
+          clearSystemFlag(FLAG_ALPHA);
+          runFunction(ITM_EDIT);
+          if (forthTestCapState() != FCAP_OPEN ||
+              strcmp(forthTestCapText(), "7") != 0) {
+            printf("    [10] FAIL: reopened half-line = '%s', state=%d\n",
+                   forthTestCapText(), forthTestCapState());
+            sc10 = 1;
+          }
+          if (forthTestCapState() == FCAP_OPEN) {
+            fnKeyExit(NOPARAM);
+          }
+        }
       }
-      if (!sc10) printf("    [10] PASS: EXIT with text commits and closes (landed ladder)\n");
+      if (!sc10) printf("    [10] PASS: EXIT with text commits, closes, and survives reopen\n");
       lastErrorCode = ERROR_NONE;
       fail |= sc10;
     }
@@ -18323,7 +18820,7 @@ static int test_capture_suspend(void)
       uint8_t *nextStepBefore = findNextStep(currentStep);
       uint16_t stepsBeforeSTO = getNumberOfSteps();
 
-      tamEnterMode(ITM_STO);
+      runFunction(ITM_STO);
       if (forthTestCapState() != FCAP_SUSPENDED) {
         printf("    [1] FAIL: capture not suspended after tamEnterMode (state=%d)\n",
                forthTestCapState());
@@ -18391,7 +18888,7 @@ static int test_capture_suspend(void)
       if (!fail) {
         uint16_t stepsBefore = getNumberOfSteps();
 
-        tamEnterMode(ITM_STO);
+        runFunction(ITM_STO);
         fnKeyExit(NOPARAM);   /* cancel before any digit */
 
         if (forthTestCapState() != FCAP_OPEN) {
@@ -18411,8 +18908,48 @@ static int test_capture_suspend(void)
           printf("    [2] FAIL: tam.mode = %d, expected 0\n", (int)tam.mode);
           sc2 = 1;
         }
+        if (!sc2) {
+          char preText[64];
+          int16_t cursorBefore = T_cursorPos;
+          xcopy(preText, forthTestCapText(),
+                stringByteLength((char *)forthTestCapText()) + 1);
+
+          runFunction(ITM_XEQ);
+          if (forthTestCapState() != FCAP_SUSPENDED) {
+            printf("    [2] FAIL: XEQ did not suspend capture (state=%d)\n",
+                   forthTestCapState());
+            sc2 = 1;
+          }
+          else {
+            tamProcessInput(ITM_alpha);
+            runFunction(ITM_W);
+            runFunction(ITM_A);
+
+            int guard;
+            for (guard = 0; tam.mode != 0 && guard < 4; guard++) {
+              fnKeyExit(NOPARAM);
+            }
+
+            if (forthTestCapState() != FCAP_OPEN || tam.mode != 0) {
+              printf("    [2] FAIL: named XEQ cancel did not resume capture (state=%d tam.mode=%d)\n",
+                     forthTestCapState(), (int)tam.mode);
+              sc2 = 1;
+            }
+            else if (strcmp(forthTestCapText(), preText) != 0 ||
+                     T_cursorPos != cursorBefore) {
+              printf("    [2] FAIL: named XEQ cancel changed text/cursor ('%s', %d; expected '%s', %d)\n",
+                     forthTestCapText(), T_cursorPos, preText, cursorBefore);
+              sc2 = 1;
+            }
+            else if (getNumberOfSteps() != stepsBefore) {
+              printf("    [2] FAIL: named XEQ cancel changed step count %u -> %u\n",
+                     stepsBefore, getNumberOfSteps());
+              sc2 = 1;
+            }
+          }
+        }
       }
-      if (!sc2) printf("    [2] PASS: TAM cancel resumes with text intact, no inserted step\n");
+      if (!sc2) printf("    [2] PASS: STO and named XEQ cancels resume with text/cursor intact, no inserted step\n");
       lastErrorCode = ERROR_NONE;
       fail |= sc2;
     }
@@ -18423,7 +18960,7 @@ static int test_capture_suspend(void)
         char preText[64];
         xcopy(preText, forthTestCapText(), stringByteLength((char *)forthTestCapText()) + 1);
 
-        tamEnterMode(ITM_XEQ);
+        runFunction(ITM_XEQ);
         tamProcessInput(ITM_COLON);   /* the landed local-label gesture: sets tam.colon */
 
         int guard;
@@ -18462,7 +18999,7 @@ static int test_capture_suspend(void)
         runFunction(ITM_ENTER);   /* commit + relock a fresh empty line */
         uint16_t stepsBefore = getNumberOfSteps();
 
-        tamEnterMode(ITM_STO);
+        runFunction(ITM_STO);
         if (forthTestCapState() != FCAP_SUSPENDED) {
           printf("    [4] FAIL: empty-line capture not suspended (state=%d)\n",
                  forthTestCapState());
@@ -18470,20 +19007,39 @@ static int test_capture_suspend(void)
         }
         fnKeyExit(NOPARAM);
 
-        if (forthTestCapState() != FCAP_OPEN) {
-          printf("    [4] FAIL: capture not open after cancel (state=%d)\n", forthTestCapState());
+        if (!sc4 && (forthTestCapState() != FCAP_OPEN ||
+                     forthTestCapText()[0] != 0 ||
+                     getNumberOfSteps() != stepsBefore)) {
+          printf("    [4] FAIL: empty-line STO cancel changed state/text/steps\n");
           sc4 = 1;
         }
-        else if (forthTestCapText()[0] != 0) {
-          printf("    [4] FAIL: cap text not empty\n");
-          sc4 = 1;
+
+        if (!sc4) {
+          runFunction(ITM_STO);
+          if (forthTestCapState() != FCAP_SUSPENDED) {
+            printf("    [4] FAIL: local-form capture not suspended (state=%d)\n",
+                   forthTestCapState());
+            sc4 = 1;
+          }
         }
-        else if (getNumberOfSteps() != stepsBefore) {
-          printf("    [4] FAIL: step count changed %u -> %u\n", stepsBefore, getNumberOfSteps());
-          sc4 = 1;
+        if (!sc4) {
+          tamProcessInput(ITM_PERIOD);
+          tamProcessInput(ITM_0);
+          tamProcessInput(ITM_5);
+          if (forthTestCapState() != FCAP_OPEN ||
+              strcmp(forthTestCapText(), "STO .05 ") != 0) {
+            printf("    [4] FAIL: local-form text = '%s', state=%d\n",
+                   forthTestCapText(), forthTestCapState());
+            sc4 = 1;
+          }
+          else if (getNumberOfSteps() != stepsBefore) {
+            printf("    [4] FAIL: local STO left a residual step (%u -> %u)\n",
+                   stepsBefore, getNumberOfSteps());
+            sc4 = 1;
+          }
         }
       }
-      if (!sc4) printf("    [4] PASS: empty-line TAM entry suspends uniformly\n");
+      if (!sc4) printf("    [4] PASS: STO .05 converts and empty-line STO cancel resumes uniformly\n");
       lastErrorCode = ERROR_NONE;
       fail |= sc4;
     }
@@ -18491,7 +19047,7 @@ static int test_capture_suspend(void)
     /* ---- Subcase 5: Falsified-step canary ---- */
     { int sc5 = 0;
       if (!fail) {
-        tamEnterMode(ITM_STO);
+        runFunction(ITM_STO);
         if (forthTestCapState() != FCAP_SUSPENDED) {
           printf("    [5] FAIL: capture not suspended before falsification (state=%d)\n",
                  forthTestCapState());
@@ -18558,9 +19114,9 @@ static int test_capture_suspend(void)
       runFunction(ITM_1);
 
       /* suspend -> cancel-resume, twice */
-      tamEnterMode(ITM_STO);
+      runFunction(ITM_STO);
       fnKeyExit(NOPARAM);
-      tamEnterMode(ITM_STO);
+      runFunction(ITM_STO);
       fnKeyExit(NOPARAM);
 
       /* BACKSPACE-abort to close (empty the line first) */
@@ -18647,6 +19203,7 @@ static int test_capture_menus(void)
   int16_t savedTamMode = tam.mode;
   uint8_t savedProgRunStop = programRunStop;
   int16_t savedDynamicMenu = dynamicMenuItem;
+  bool_t savedFnKeyInCatalog = fnKeyInCatalog;
   softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
   xcopy(savedStack, softmenuStack, sizeof(savedStack));
   char aimBufSave[256];
@@ -18658,6 +19215,7 @@ static int test_capture_menus(void)
   extern void showSoftmenu(int16_t);
   extern void testInitVariableSoftmenu(int16_t);
   extern bool_t isAlphaSubmenu(uint8_t);
+  extern void _closeCatalog(void);
 
   /* Build fixture: LBL, marker (no colon-defs — the F6-5 stage owns
    * section (a) content; this stage only needs a valid, poppable
@@ -18713,9 +19271,29 @@ static int test_capture_menus(void)
     { int sc1 = 0;
       runFunction(ITM_1);
       runFunction(ITM_SPACE);
+
+      /* Reproduce the keyboard.c catalog-dispatch order: menu setup first,
+       * then arm fnKeyInCatalog for the selected FCNS item, dispatch it, and
+       * drain the catalog stack. */
+      showSoftmenu(-MNU_CATALOG);
+      showSoftmenu(-MNU_FCNS);
+      fnKeyInCatalog = 1;
       runFunction(ITM_sin);
+      _closeCatalog();
+      fnKeyInCatalog = savedFnKeyInCatalog;
+
       if (strcmp(forthTestCapText(), "1 SIN ") != 0) {
         printf("    [1] FAIL: cap text = '%s', expected '1 SIN '\n", forthTestCapText());
+        sc1 = 1;
+      }
+      else if (currentMenu() != -MNU_CATALOG) {
+        printf("    [1] FAIL: currentMenu = %d after FCNS pick, expected -MNU_CATALOG (%d)\n",
+               currentMenu(), -MNU_CATALOG);
+        sc1 = 1;
+      }
+      else if (forthTestCapState() != FCAP_OPEN) {
+        printf("    [1] FAIL: capture not open after FCNS pick (state=%d)\n",
+               forthTestCapState());
         sc1 = 1;
       }
       else {
@@ -18750,7 +19328,21 @@ static int test_capture_menus(void)
           sc1 = 1;
         }
       }
-      if (!sc1) printf("    [1] PASS: catalog item inserts its catalog name as text\n");
+      if (currentMenu() == -MNU_CATALOG) {
+        /* Fixture teardown only: after a real FCNS pick the selector closes
+         * while its CATALOG root remains displayed.  A physical EXIT here
+         * belongs to the capture EXIT ladder, not to B4. */
+        popSoftmenu();
+      }
+      if (!sc1 && (currentMenu() != -MNU_ALPHA ||
+                   forthTestCapState() != FCAP_OPEN)) {
+        printf("    [1] FAIL: catalog fixture teardown did not restore open ALPHA capture "
+               "(menu=%d state=%d)\n", currentMenu(), forthTestCapState());
+        sc1 = 1;
+      }
+      if (!sc1) {
+        printf("    [1] PASS: FCNS pick inserts catalog text and returns to CATALOG root\n");
+      }
       lastErrorCode = ERROR_NONE;
       fail |= sc1;
     }
@@ -18910,6 +19502,7 @@ static int test_capture_menus(void)
   tam.mode = savedTamMode;
   programRunStop = savedProgRunStop;
   dynamicMenuItem = savedDynamicMenu;
+  fnKeyInCatalog = savedFnKeyInCatalog;
   xcopy(softmenuStack, savedStack, sizeof(savedStack));
   memcpy(aimBuffer, aimBufSave, sizeof(aimBufSave));
   lastErrorCode = ERROR_NONE;
@@ -18996,7 +19589,7 @@ static int test_capture_param_text(void)
       uint16_t stepsBefore = getNumberOfSteps();
 
       runFunction(ITM_1);
-      tamEnterMode(ITM_STO);
+      runFunction(ITM_STO);
       fnKeyExit(NOPARAM);   /* cancel before any digit */
 
       if (forthTestCapState() != FCAP_OPEN) {
@@ -19031,7 +19624,7 @@ static int test_capture_param_text(void)
         runFunction(ITM_SPACE);
         uint16_t stepsBefore = getNumberOfSteps();
 
-        tamEnterMode(ITM_XEQ);
+        runFunction(ITM_XEQ);
         tamProcessInput(ITM_alpha);
         runFunction(ITM_W);
         runFunction(ITM_A);
@@ -19085,7 +19678,7 @@ static int test_capture_param_text(void)
           xcopy(textBefore, forthTestCapText(), stringByteLength((char *)forthTestCapText()) + 1);
           uint8_t *capStep = currentStep;
 
-          tamEnterMode(ITM_STO);
+          runFunction(ITM_STO);
           tamProcessInput(ITM_0);
           tamProcessInput(ITM_5);   /* two digits auto-fire the STO commit */
 
@@ -19152,11 +19745,11 @@ static int test_capture_param_text(void)
 
         /* Two convert cycles */
         runFunction(ITM_1);
-        tamEnterMode(ITM_STO);
+        runFunction(ITM_STO);
         tamProcessInput(ITM_0);
         tamProcessInput(ITM_5);
         runFunction(ITM_2);
-        tamEnterMode(ITM_STO);
+        runFunction(ITM_STO);
         tamProcessInput(ITM_0);
         tamProcessInput(ITM_6);
 
@@ -19647,7 +20240,8 @@ static int test_capture_acceptance(void)
         uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
         uint8_t *sDef1 = sMarker ? findNextStep(sMarker) : NULL;
         uint8_t *sDef2 = sDef1 ? findNextStep(sDef1) : NULL;
-        if (!sMarker || !sDef1 || !sDef2) {
+        uint8_t *sClose = sDef2 ? findNextStep(sDef2) : NULL;
+        if (!sMarker || !sDef1 || !sDef2 || !sClose) {
           printf("    [1] FAIL: structural walk from LBL came up short\n");
           sc1 = 1;
         }
@@ -19669,6 +20263,11 @@ static int test_capture_acceptance(void)
         }
         else if (memcmp(sDef2 + 4, "3 SQ", 4) != 0) {
           printf("    [1] FAIL: def2 payload mismatch\n");
+          sc1 = 1;
+        }
+        else if (sClose[0] != 0x8B || sClose[1] != 0x1A ||
+                 sClose[2] != 0xFD || sClose[3] != 0) {
+          printf("    [1] FAIL: automatic closing marker missing after explicit second line\n");
           sc1 = 1;
         }
       }
@@ -19787,10 +20386,10 @@ static int test_capture_acceptance(void)
       fail |= sc2;
     }
 
-    /* ---- Subcase 3: Marker rules ---- */
+    /* ---- Subcase 3: Automatic marker-pair rules ---- */
     { int sc3 = 0;
       if (!fail) {
-        fnGotoDot(2);   /* the opening marker, which subcase 2's abort left behind */
+        fnGotoDot(2);   /* opening marker; subcase 2's abort kept the bracket */
         if (currentLocalStepNumber != 2) {
           printf("    [3] FAIL: fnGotoDot(2) landed on step %u\n", currentLocalStepNumber);
           sc3 = 1;
@@ -19800,30 +20399,35 @@ static int test_capture_acceptance(void)
           sc3 = 1;
         }
         else {
-          addStepInProgram(ITM_FORTH);   /* toggle-off from ON the marker */
-          if (forthCapIsOpen() || getSystemFlag(FLAG_ALPHA)) {
-            printf("    [3] FAIL: capture still open after toggle-close on marker\n");
+          int markerCount = 0;
+          uint8_t *closingMarker = NULL;
+          uint8_t *walk = tpStepAddr(&p, sLbl);
+          while (walk) {
+            if (walk[0] == 0x8B && walk[1] == 0x1A &&
+                walk[2] == 0xFD && walk[3] == 0x00) {
+              markerCount++;
+              closingMarker = walk;
+            }
+            uint8_t *next = findNextStep(walk);
+            if (!next || next <= walk) break;
+            walk = next;
+          }
+          if (markerCount != 2 || !closingMarker) {
+            printf("    [3] FAIL: automatic marker occurrences = %d, expected 2\n",
+                   markerCount);
             sc3 = 1;
           }
           else {
-            int markerCount = 0;
-            uint8_t *walk = tpStepAddr(&p, sLbl);
-            while (walk) {
-              if (walk[0] == 0x8B && walk[1] == 0x1A && walk[2] == 0xFD && walk[3] == 0x00) {
-                markerCount++;
-              }
-              uint8_t *next = findNextStep(walk);
-              if (!next || next <= walk) break;
-              walk = next;
-            }
-            if (markerCount != 2) {
-              printf("    [3] FAIL: marker occurrences = %d, expected 2\n", markerCount);
+            currentStep = closingMarker;
+            pemCursorIsZerothStep = false;
+            if (forthEntryStateAtCursor()) {
+              printf("    [3] FAIL: automatic closing marker does not restore RPN state\n");
               sc3 = 1;
             }
           }
         }
       }
-      if (!fail && !sc3) printf("    [3] PASS: abort keeps the region; toggle-off commits the closing marker\n");
+      if (!fail && !sc3) printf("    [3] PASS: abort keeps the automatic balanced region; close restores RPN\n");
       lastErrorCode = ERROR_NONE;
       fail |= sc3;
     }
@@ -20016,7 +20620,7 @@ static int test_capture_acceptance(void)
           fnGotoDot(2);
           runFunction(ITM_AIM);
           runFunction(ITM_5);
-          tamEnterMode(ITM_STO);   /* suspends — buffer already freed */
+          runFunction(ITM_STO);    /* suspends — buffer already freed */
           if (!forthCapIsSuspended()) {
             printf("    [4] FAIL: phase 2 capture not suspended before drive\n");
             sc4 = 1;
@@ -20129,7 +20733,7 @@ static int test_capture_acceptance(void)
           fnGotoDot(2);
           runFunction(ITM_AIM);
           runFunction(ITM_1);
-          tamEnterMode(ITM_STO);
+          runFunction(ITM_STO);
           if (forthTestCapState() != FCAP_SUSPENDED) {
             printf("    [6] FAIL: cycle %d not suspended (state=%d)\n", cycle, forthTestCapState());
             sc6 = 1;
@@ -20229,6 +20833,337 @@ static int test_capture_acceptance(void)
  * Escaping mutation: drop the calcMode == CM_PEM check in the
  * FORTH_XEQ_COLON arm (items.c) — X becomes 7 (the word ran) and the step
  * count stays unchanged, both caught below. */
+/* test_forth_edit_modify_commit  (adversarial code-audit reproduction)
+ * The existing capture tests DEFINE a Forth line via keystrokes, and reopen
+ * an existing line via EDIT (subcase 6 / acceptance subcase 2) — but none
+ * EDIT an existing line, MODIFY the text, and re-commit it via ENTER through
+ * the E9 check gate.  That is exactly the "edit a forth line" gesture.  This
+ * drives it end to end and asserts no spurious error and a correct rewrite. */
+static int test_forth_edit_modify_commit(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void addStepInProgram(int16_t func);
+
+  int fail = 0;
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t   savedZeroth      = pemCursorIsZerothStep;
+  uint16_t savedLocalStep   = currentLocalStepNumber;
+  uint16_t savedProgNum     = currentProgramNumber;
+  bool_t   savedAlpha       = getSystemFlag(FLAG_ALPHA);
+  uint8_t  savedCalcMode    = calcMode;
+  int16_t  savedTamFunction = tam.function;
+  int16_t  savedTamMode     = tam.mode;
+  uint8_t  savedProgRunStop = programRunStop;
+  int16_t  savedDynamicMenu = dynamicMenuItem;
+
+  /* Fresh program: LBL only; the toggle inserts the opening marker. */
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "EDT");
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(1);
+
+  /* Build: LBL | <<marker>> | ": SQ DUP * ;" (def1) | "3 SQ" (def2) */
+  addStepInProgram(ITM_FORTH);
+  if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH || !forthCapIsOpen()) {
+    printf("    FAIL: toggle-open did not open Forth capture\n");
+    fail = 1;
+    goto done;
+  }
+  { const char *l1 = ": SQ DUP * ;";
+    int16_t keys1[] = { ITM_COLON, ITM_SPACE, ITM_S, ITM_Q, ITM_SPACE, ITM_D,
+                        ITM_U, ITM_P, ITM_SPACE, ITM_ASTERISK, ITM_SPACE, ITM_SEMICOLON };
+    (void)l1;
+    for (unsigned i = 0; i < sizeof(keys1)/sizeof(keys1[0]); i++) runFunction(keys1[i]);
+  }
+  runFunction(ITM_ENTER);          /* commit line 1, line 2 stays open */
+  runFunction(ITM_3);
+  runFunction(ITM_SPACE);
+  runFunction(ITM_S);
+  runFunction(ITM_Q);
+  fnKeyExit(NOPARAM);              /* commit-and-close */
+  if (forthCapIsOpen() || getSystemFlag(FLAG_ALPHA)) {
+    printf("    FAIL: capture still open after initial build EXIT\n");
+    fail = 1;
+    goto done;
+  }
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: error %d after initial build\n", lastErrorCode);
+    fail = 1;
+    goto done;
+  }
+
+  /* ---- Scenario A: EDIT def1, ENTER unchanged -> must not error ---- */
+  { int sc = 0;
+    calcMode = CM_PEM; tam.mode = 0; tam.function = 0;
+    clearSystemFlag(FLAG_ALPHA);
+    lastErrorCode = ERROR_NONE;
+    fnGotoDot(3);                  /* def1 = ": SQ DUP * ;" */
+    runFunction(ITM_EDIT);
+    if (!forthCapIsOpen()) {
+      printf("    [A] FAIL: EDIT did not open capture\n"); sc = 1;
+    } else if (strcmp(forthTestCapText(), ": SQ DUP * ;") != 0) {
+      printf("    [A] FAIL: EDIT text = '%s'\n", forthTestCapText()); sc = 1;
+    } else {
+      runFunction(ITM_ENTER);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [A] FAIL: ENTER on unchanged line raised error %d\n", lastErrorCode);
+        sc = 1;
+      }
+    }
+    /* ENTER inside a region drops to the next Forth line and reopens; close it. */
+    if (forthCapIsOpen() || getSystemFlag(FLAG_ALPHA)) { fnKeyExit(NOPARAM); }
+    if (forthCapIsOpen()) { runFunction(ITM_CLA); runFunction(ITM_BACKSPACE); }
+    if (!sc) printf("    [A] PASS: edit + ENTER unchanged does not error\n");
+    lastErrorCode = ERROR_NONE;
+    fail |= sc;
+  }
+
+  /* ---- Scenario B: EDIT def1, LEFT twice, INSERT SPACE, ENTER -> rewrites ---- */
+  if (!fail) { int sc = 0;
+    calcMode = CM_PEM; tam.mode = 0; tam.function = 0;
+    clearSystemFlag(FLAG_ALPHA);
+    lastErrorCode = ERROR_NONE;
+    fnGotoDot(3);
+    runFunction(ITM_EDIT);
+    if (!forthCapIsOpen()) {
+      printf("    [B] FAIL: EDIT did not open capture\n"); sc = 1;
+    } else {
+      runFunction(ITM_T_LEFT_ARROW);
+      runFunction(ITM_T_LEFT_ARROW);
+      if (T_cursorPos != stringByteLength(": SQ DUP * ;") - 2) {
+        printf("    [B] FAIL: two LEFT presses left cursor at %u\n", T_cursorPos);
+        sc = 1;
+      } else {
+        runFunction(ITM_SPACE);
+      }
+      if (!sc && lastErrorCode != ERROR_NONE) {
+        printf("    [B] FAIL: typing raised error %d\n", lastErrorCode); sc = 1;
+      } else if (!sc && strcmp(forthTestCapText(), ": SQ DUP *  ;") != 0) {
+        printf("    [B] FAIL: modified text = '%s'\n", forthTestCapText()); sc = 1;
+      } else if (!sc) {
+        runFunction(ITM_ENTER);
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [B] FAIL: ENTER on modified line raised error %d\n", lastErrorCode);
+          sc = 1;
+        }
+      }
+    }
+    if (forthCapIsOpen() || getSystemFlag(FLAG_ALPHA)) { fnKeyExit(NOPARAM); }
+    if (forthCapIsOpen()) { runFunction(ITM_CLA); runFunction(ITM_BACKSPACE); }
+    /* Verify the on-disk step really carries the new text. */
+    if (!sc) {
+      uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+      uint8_t *sDef1   = sMarker ? findNextStep(sMarker) : NULL;
+      if (!sDef1 || sDef1[0] != 0x8B || sDef1[1] != 0x1A || sDef1[2] != 0xFD ||
+          sDef1[3] != 13 || memcmp(sDef1 + 4, ": SQ DUP *  ;", 13) != 0) {
+        printf("    [B] FAIL: def1 not rewritten (len=%u)\n", sDef1 ? sDef1[3] : 0);
+        sc = 1;
+      }
+    }
+    if (!sc) printf("    [B] PASS: edit + two LEFT + mid-line insert + ENTER rewrites\n");
+    lastErrorCode = ERROR_NONE;
+    fail |= sc;
+  }
+
+done:
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* A Forth capture lives in forthCapBuf(), while the inherited PEM
+ * navigation paths historically decided whether to close/commit alpha input
+ * by looking only at aimBuffer.  On a non-scrolling alpha submenu, Up or
+ * Down would therefore backspace the managed line, navigate with capture
+ * still open, and leave later edits aimed at a different program step.
+ * Exercise both key paths and require the complete text to be committed
+ * before navigation. */
+static int test_forth_capture_navigation(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void fnKeyUp(uint16_t);
+  extern void fnKeyDown(uint16_t);
+  extern void pemAlpha(int16_t);
+  extern void showSoftmenu(int16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  uint8_t savedAlphaCase = alphaCase;
+  int16_t savedForthMenuItems = dynamicSoftmenu[22].numItems;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "NAV");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    fail = 1;
+  }
+
+  /* Up from a non-scrolling alpha submenu must commit "7" intact. */
+  if (!fail) {
+    int sc1 = 0;
+    runFunction(ITM_7);
+    dynamicSoftmenu[22].numItems = 0;
+    showSoftmenu(-MNU_FORTH);
+    alphaCase = AC_UPPER;
+    fnKeyUp(NOPARAM);
+
+    uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+    uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
+    if (forthCapIsOpen() || getSystemFlag(FLAG_ALPHA)) {
+      printf("    [1] FAIL: Up navigated with capture still open\n");
+      sc1 = 1;
+    }
+    else if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A ||
+             sSource[2] != 0xFD || sSource[3] != 1 ||
+             memcmp(sSource + 4, "7", 1) != 0) {
+      printf("    [1] FAIL: Up did not commit the complete source line\n");
+      sc1 = 1;
+    }
+    if (!sc1) {
+      printf("    [1] PASS: Up commits managed Forth text before navigation\n");
+    }
+    fail |= sc1;
+  }
+
+  /* Re-edit that source; Down must commit the appended "8" intact. */
+  if (!fail) {
+    int sc2 = 0;
+    fnGotoDot(3);
+    calcMode = CM_PEM;
+    tam.mode = 0;
+    tam.function = 0;
+    clearSystemFlag(FLAG_ALPHA);
+    pemAlpha(ITM_EDIT);
+    if (!forthCapIsOpen() || strcmp(forthTestCapText(), "7") != 0) {
+      printf("    [2] FAIL: EDIT did not reopen source text \"7\"\n");
+      sc2 = 1;
+    }
+    else {
+      runFunction(ITM_8);
+      dynamicSoftmenu[22].numItems = 0;
+      showSoftmenu(-MNU_FORTH);
+      alphaCase = AC_LOWER;
+      fnKeyDown(NOPARAM);
+
+      uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+      uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
+      if (forthCapIsOpen() || getSystemFlag(FLAG_ALPHA)) {
+        printf("    [2] FAIL: Down navigated with capture still open\n");
+        sc2 = 1;
+      }
+      else if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A ||
+               sSource[2] != 0xFD || sSource[3] != 2 ||
+               memcmp(sSource + 4, "78", 2) != 0) {
+        printf("    [2] FAIL: Down did not commit the complete modified line\n");
+        sc2 = 1;
+      }
+    }
+    if (!sc2) {
+      printf("    [2] PASS: Down commits managed Forth text before navigation\n");
+    }
+    fail |= sc2;
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  alphaCase = savedAlphaCase;
+  dynamicSoftmenu[22].numItems = savedForthMenuItems;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
 static int test_pem_xeq_dynmenu_no_live_exec(void)
 {
   extern void showSoftmenu(int16_t menu);
@@ -20328,4 +21263,4 @@ static int test_pem_xeq_dynmenu_no_live_exec(void)
   cleanupTestProgram();
   return fail;
 }
-#endif  // PC_BUILD
+#endif  // PC_BUILD && FORTH_DEBUG_SELFTEST

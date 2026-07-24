@@ -222,10 +222,9 @@ uint8_t forthParamMarkerBit(uint8_t firstParamByte);
 
 /* F4-3: byte span of ONE FTOK_C47 inline parameter group starting at `pos`
    (the first parameter cell; `limit` is exclusive). `strict` enforces byte
-   legality and the pad-zero rule — the two structural walks pass true; the
-   restore validator passes false and checks extent only, exactly as it
-   already does for every other operand shape. Returns false when the group
-   is malformed or would run past `limit`. */
+   legality and the pad-zero rule. Runtime, restore, and promotion walks pass
+   true so malformed parameter data cannot become executable or persistent.
+   Returns false when the group is malformed or would run past `limit`. */
 bool forthParamCellSpan(const uint8_t *base, uint16_t pos, uint16_t limit,
                         uint16_t ptpClass, bool strict, uint16_t *spanOut);
 

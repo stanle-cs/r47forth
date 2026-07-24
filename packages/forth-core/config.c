@@ -1657,10 +1657,8 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
       real34SetZero((real34_t *)TO_PCMEMPTR(allReservedVariables[i].header.pointerToRegisterData));
     }
 
-    // initialize the global registers
-    #if defined(DMCP_BUILD) && defined(OLD_HW)
-      memset(globalRegister, 0, sizeof(globalRegister));
-    #endif // DMCP_BUILD && OLD_HW
+    // initialize the global registers, including reserved header bits
+    memset(globalRegister, 0, sizeof(registerHeader_t) * NUMBER_OF_GLOBAL_REGISTERS);
     for(calcRegister_t regist=FIRST_GLOBAL_REGISTER; regist<=LAST_GLOBAL_REGISTER; regist++) {
       setRegisterDataType(regist, dtReal34, amNone);
       memPtr = allocC47Blocks(REAL34_SIZE_IN_BLOCKS);
@@ -1993,7 +1991,10 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
          /* Run-once: tests call restoreCalc, which calls doFnReset — without
           * this guard the suite would recursively re-enter itself. */
          static bool forthSelfTestRan = false;
-         if(!forthSelfTestRan) {
+         /* The harness is PC-only and contains C47-model assumptions.  Run it
+          * only for the explicit headless gate, leaving GUI simulators such as
+          * r47 available for manual keyboard/PEM audit work. */
+         if(headlessMode && !forthSelfTestRan) {
            forthSelfTestRan = true;
            extern int forthDictSelfTest(void);
            if(forthDictSelfTest()) {

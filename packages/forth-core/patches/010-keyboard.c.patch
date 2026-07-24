@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..8f078a0f23b0411b81121bd67ae216b47d4159c8 100644
+index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..33f4385df6b2e8f9dc1b2cd8662ab955d09a8132 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,6 +2,8 @@
@@ -201,3 +201,25 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..8f078a0f23b0411b81121bd67ae216b4
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
+@@ -4622,7 +4744,9 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+           menuUp();
+         }
+         else {
+-          if(getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0 && !tam.mode) {
++          if(getSystemFlag(FLAG_ALPHA)
++             && (forthCapIsOpen() ? !forthCapTextNonEmpty() : aimBuffer[0] == 0)
++             && !tam.mode) {
+             pemAlpha(ITM_BACKSPACE);
+           }
+           fnBst(NOPARAM);
+@@ -4852,7 +4976,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+           menuDown();
+         }
+         else {
+-          if(getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0 && !tam.mode) {
++          if(getSystemFlag(FLAG_ALPHA)
++             && (forthCapIsOpen() ? !forthCapTextNonEmpty() : aimBuffer[0] == 0)
++             && !tam.mode) {
+             pemAlpha(ITM_BACKSPACE);
+             fnBst(NOPARAM); // Set the PGM pointer to the original position
+           }

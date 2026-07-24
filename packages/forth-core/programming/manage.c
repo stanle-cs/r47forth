@@ -666,7 +666,13 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
       refreshRegisterLine(errorMessageRegisterLine);
     }
 
-    if(aimBuffer[0] != 0 && linesOfCurrentStep > 4) { // Limited to 4 lines so as not to cause crash or freeze
+    // forth-core code-audit 2026-07-21: the "trim the edited step until it
+    // fits in 4 display lines" crash/freeze guard must consult the capture
+    // buffer when a Forth line is open — F6-1 moved Forth edit text off
+    // aimBuffer onto forthCapBuf(), so a long Forth source line left this
+    // guard reading an empty aimBuffer and never fired (same forthCapIsOpen()
+    // ? forthCapBuf() : aimBuffer idiom used throughout pemAlpha).
+    if((forthCapIsOpen() ? forthCapBuf()[0] != 0 : aimBuffer[0] != 0) && linesOfCurrentStep > 4) { // Limited to 4 lines so as not to cause crash or freeze
       if(getSystemFlag(FLAG_ALPHA)) {
         pemAlpha(ITM_BACKSPACE);
       }
@@ -789,6 +795,28 @@ static void _closeAlphaMenus(void) {
   for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
     softmenuStack[i].softmenuId = 0; // MyMenu
   }
+}
+
+void forthCaptureSanitizeRestoredUi(void) {
+  /* forthCap is deliberately process-local and is reset before restoreCalc()
+   * reloads the persisted UI fields.  An older backup can therefore restore
+   * CM_PEM + ALPHA + ITM_FORTH around a CLOSED capture, leaving cursor keys
+   * operating on aimBuffer with offsets that belonged to the lost managed
+   * buffer.  Match the normal capture-close state without touching the
+   * already mirrored program step; the user can reopen that step with EDIT. */
+  if(calcMode != CM_PEM
+     || tam.function != ITM_FORTH
+     || forthCapIsOpen()) {
+    return;
+  }
+
+  aimBuffer[0] = 0;
+  T_cursorPos = 0;
+  displayAIMbufferoffset = 0;
+  clearSystemFlag(FLAG_ALPHA);
+  calcModeNormalGui();
+  _closeAlphaMenus();
+  tam.function = 0;
 }
 
 void pemAlpha(int16_t item) {
@@ -1053,6 +1081,9 @@ void pemCloseAlphaInput(void) {
   }
   aimBuffer[0] = 0;
   forthCapClose();
+  if(tam.function == ITM_FORTH) {
+    tam.function = 0;
+  }
   clearSystemFlag(FLAG_ALPHA);
   calcModeNormalGui();
   ++currentLocalStepNumber;
@@ -1650,6 +1681,16 @@ void insertStepInProgram(const int16_t func) {
     tmpString[3] = 0;
     _insertInProgram((uint8_t *)tmpString, 4);
     if(!wasOn) {
+      /* A new Forth region is a complete bracket from its first line onward.
+       * Insert the closing marker now, then step back onto it so pemAlpha()
+       * places the editable placeholder immediately before that marker.
+       * ENTER commits the current line and uses the same insertion point to
+       * add an explicit next line inside the already-balanced bracket. */
+      _insertInProgram((uint8_t *)tmpString, 4);
+      currentStep = findPreviousStep(currentStep);
+      if(currentLocalStepNumber > 1) {
+        --currentLocalStepNumber;
+      }
       tam.function = ITM_FORTH;
       pemAlpha(ITM_FORTH);
     } else {

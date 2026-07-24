@@ -16,6 +16,9 @@
 
 void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end,
                                uint16_t op, uint16_t paramMode);
+/* `end` is exclusive. Missing fixed-width structural bytes raise
+ * ERROR_INVALID_CORRUPTED_DATA; bounded names retain their documented
+ * clamp-to-available behavior. */
 void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode);
 void paramCorePutLiteral(uint8_t *literalAddress);
 

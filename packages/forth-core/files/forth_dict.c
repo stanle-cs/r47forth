@@ -256,7 +256,7 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
       uint16_t itemId;
       memcpy(&itemId, gdict.base + pos, 2);
       pos += 2;
-      if (itemId == 0 || itemId >= LAST_ITEM) return false;
+      if (itemId >= LAST_ITEM) return false;
       { uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
         uint16_t span;
         if (!forthParamCellSpan(gdict.base, pos, limit, ptp, true, &span)) return false;
@@ -877,10 +877,14 @@ static bool validateWalkOn(const uint8_t *base, uint16_t bodyStart, uint16_t lim
       uint16_t itemId;
       memcpy(&itemId, base + pos, 2);
       pos += 2;
-      if (itemId == 0 || itemId >= LAST_ITEM) return false;
+      if (itemId >= LAST_ITEM) return false;
       { uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
         uint16_t span;
-        if (!forthParamCellSpan(base, pos, limit, ptp, false, &span)) return false;
+        /* Promotion accepts only a body that the strict runtime/restore
+         * grammar will accept.  Otherwise a malformed pad or direct cell can
+         * be copied into persistent gdict and the later rewrite walk can
+         * parse parameter payload bytes as tokens. */
+        if (!forthParamCellSpan(base, pos, limit, ptp, true, &span)) return false;
         pos += span; }
     }
     else return false;
@@ -935,11 +939,13 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
           uint16_t span2;
           /* F4-3: same grammar as the validator — a named/indirect cell is
            * wider than one cell, so a plain +2 would mis-walk the body. */
-          if (forthParamCellSpan(fdict.base, pos, fdict.here, ptp2, true, &span2)) pos += span2;
-          else pos += 2; }
+          if (!forthParamCellSpan(fdict.base, pos, fdict.here, ptp2, true, &span2)) {
+            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            return false;
+          }
+          pos += span2; }
       }
       else if (tok == FTOK_XEQN) {
-        uint8_t xk2 = fdict.base[pos];
         uint8_t xl2 = fdict.base[pos + 1];
         uint16_t xi2 = (uint16_t)(2 + xl2);
         uint16_t xp2 = (uint16_t)((xi2 + 1) & ~1u);
@@ -956,6 +962,7 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
 
     /* Step 5: copy to gdict */
     uint16_t goff = gdict.here;
+    uint16_t gEntryEnd = (uint16_t)(goff + entryBytes);
     memcpy(gdict.base + goff, fdict.base + off, entryBytes);
 
     /* Patch link and owner in the copy */
@@ -987,11 +994,17 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
           pos += 2;
           { uint16_t ptp3 = (uint16_t)(indexOfItems[itemId3].status & PTP_STATUS);
             uint16_t span3;
-            if (forthParamCellSpan(gdict.base, pos, gdict.here, ptp3, true, &span3)) pos += span3;
-            else pos += 2; }
+            /* gdict.here is still `goff` until the commit below.  Bound this
+             * walk by the exclusive end of the copy, or every variable-width
+             * parameter appears truncated and its payload is parsed as Forth
+             * tokens. */
+            if (!forthParamCellSpan(gdict.base, pos, gEntryEnd, ptp3, true, &span3)) {
+              displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              return false;
+            }
+            pos += span3; }
         }
         else if (tok == FTOK_XEQN) {
-          uint8_t xk3 = gdict.base[pos];
           uint8_t xl3 = gdict.base[pos + 1];
           uint16_t xi3 = (uint16_t)(2 + xl3);
           uint16_t xp3 = (uint16_t)((xi3 + 1) & ~1u);
