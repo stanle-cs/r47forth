@@ -44,7 +44,6 @@ static void complexEigenvectors(const complex34Matrix_t *matrix, complex34Matrix
     #undef EIGENDEBUGMINIMAL  //comment this undef to switch eigenvalue debug on
     #undef EIGEN_TESTOUT      //comment this undef to switch eigenvalue debug on
   #else
-    #undef TRACE_VECTOR
     #define maxEigenIter 10000
     #undef EIGENDEBUG
     #undef EIGENDEBUG1
@@ -9034,9 +9033,6 @@ void callByIndexedMatrix(bool_t (*real_f)(real34Matrix_t *), bool_t (*complex_f)
 
 #if defined(OPTION_VECTOR)
   void convert3DtoSPH(const real34Matrix_t *matrix, real_t *r, real_t *th1, real_t *th2, uint8_t am, decContext *ctxtRealDisplay) {
-    #if defined(TRACE_VECTOR)
-      print_caller("--convert3DtoSPH");
-    #endif //TRACE_VECTOR
     real_t x, y, z;
     _euclideanNormRealMatrix(matrix, 2, r, &ctxtReal39);
 
@@ -9068,9 +9064,6 @@ SPH_ret1:
 
 
   void convertSPHto3D(real_t *r, real_t *th1, real_t *th2, uint8_t am, real34Matrix_t *matrix, decContext *ctxtRealDisplay) {
-    #if defined(TRACE_VECTOR)
-      print_caller("--convertSPHto3D");
-    #endif //TRACE_VECTOR
     real_t x, y, z, theta1, theta2, sinTh2;
 
     realCopy(th1, &theta1);
@@ -9096,9 +9089,6 @@ SPH_ret1:
 
 
   void convert3DtoCYL(const real34Matrix_t *matrix, real_t *r, real_t *th1, real_t *z, uint8_t am, decContext *ctxtRealDisplay) {
-    #if defined(TRACE_VECTOR)
-      print_caller("--convert3DtoCYL");
-    #endif //TRACE_VECTOR
     real_t x, y, t;
     real34ToReal(matrix->matrixElements, &x);
     real34ToReal(matrix->matrixElements + 1, &y);
@@ -9119,9 +9109,6 @@ SPH_ret1:
 
 
   void convertCYLto3D(real_t *r, real_t *th1, real_t *z, uint8_t am, real34Matrix_t *matrix, decContext *ctxtRealDisplay) {
-    #if defined(TRACE_VECTOR)
-      print_caller("--convertCYLto3D");
-    #endif //TRACE_VECTOR
     real_t x, y, theta1;
 
     realCopy(th1, &theta1);
@@ -9140,9 +9127,6 @@ SPH_ret1:
 
 
   void convert2DtoPOL(const real34Matrix_t *matrix, real_t *r, real_t *th1, uint8_t am, decContext *ctxtRealDisplay) {
-    #if defined(TRACE_VECTOR)
-      print_caller("--convert2DtoPOL");
-    #endif //TRACE_VECTOR
       real_t x, y;
       _euclideanNormRealMatrix(matrix, 2, r, ctxtRealDisplay);
 
@@ -9157,9 +9141,6 @@ SPH_ret1:
   }
 
   void convertPOLto2D(real_t *r, real_t *th1, uint8_t am, real34Matrix_t *matrix, decContext *ctxtRealDisplay) {
-    #if defined(TRACE_VECTOR)
-      print_caller("--convertPOLto2D");
-    #endif //TRACE_VECTOR
     real_t x, y, theta1;
     realCopy(th1, &theta1);
     convertAngleFromTo(&theta1, am, amRadian, ctxtRealDisplay);

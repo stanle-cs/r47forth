@@ -5,9 +5,6 @@
  * \file ui/matrixEditor.c
  ***********************************************/
 
-#if !defined PC_BUILD
-  #undef TRACE_VECTOR
-#endif //PC_BUILD
 
 
 #include "c47.h"
@@ -1055,9 +1052,6 @@ static void displayVectorAngle(const real34Matrix_t *matrix, int j, int rows, in
 
 static void extractVectorElement34(const real34Matrix_t *matrix, int j, int ii, int rows, int cols, real34_t *element, uint8_t *toBeAngle, uint16_t digits, real_t *aa, real_t *bb, real_t *cc) {
 #if defined(OPTION_VECTOR)
-  #if defined(TRACE_VECTOR)
-    print_caller("--extractVectorElement34");
-  #endif //TRACE_VECTOR
   bool_t is2d    = isMatrix2dVector(rows, cols);
   bool_t is3d    = isMatrix3dVector(rows, cols);
   if(!is2d && !is3d) {
