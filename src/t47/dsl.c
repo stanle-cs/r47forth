@@ -255,7 +255,8 @@ static int runCatalogFunctionByName(Jim_Interp *interp, const char *fnName, int 
   for(int i = 0; i < LAST_ITEM; ++i) {
     item_t item = indexOfItems[i];
     const char *catName = item.itemCatalogName;
-    if((item.status & CAT_STATUS) == CAT_FNCT && compareString(internalName, catName, CMP_NAME) == 0) {  //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
+    // Match strictness: CMP_NAME strict (exact spelling & space), CMP_COMMAND relax (exact spelling, any space), CMP_CLEANED_STRING_ONLY loose (rank1 equiv., beware not tested)
+    if((item.status & CAT_STATUS) == CAT_FNCT && compareString(internalName, catName, CMP_COMMAND) == 0) {
       return runCatalogItem(interp, (int16_t)i, argArgc, argArgv, cmdName) == JIM_OK ? CATFN_OK : CATFN_ERROR;
     }
   }

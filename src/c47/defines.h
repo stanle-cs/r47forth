@@ -1919,6 +1919,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define CMP_CLEANED_STRING_ONLY                    1
 #define CMP_EXTENSIVE                              2
 #define CMP_NAME                                   3
+#define CMP_COMMAND                                4
 
 // Indirect parameter mode
 #define INDPM_PARAM                                0

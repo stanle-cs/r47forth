@@ -149,6 +149,14 @@
   calcRegister_t findNamedVariable               (const char *variableName);
 
   /**
+   * Whether regist is the named variable STATS, matching findNamedVariable("STATS") on the single register without scanning the list.
+   *
+   * \param[in] regist Register number
+   * \return true when regist is the STATS matrix variable
+   */
+  bool_t         namedVariableIsStats            (calcRegister_t regist);
+
+  /**
    * Retrieves the register number for the named variable, allocating it if it doesn't exist.
    *
    * \param[in] variableName Register name

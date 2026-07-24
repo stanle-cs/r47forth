@@ -924,6 +924,20 @@ calcRegister_t findNamedVariable(const char *variableName) {
 
 
 
+// Whether regist is the named variable STATS, the register findNamedVariable("STATS") returns, decided from regist alone without a list scan.
+bool_t namedVariableIsStats(calcRegister_t regist) {
+  if(regist < FIRST_NAMED_VARIABLE || regist >= (FIRST_NAMED_VARIABLE + numberOfNamedVariables)) {
+    return false;
+  }
+  const uint8_t *storedName = allNamedVariables[regist - FIRST_NAMED_VARIABLE].variableName;
+  uint16_t foldedName[5];
+  const int32_t foldedLength = foldNameToCharCodes("STATS", foldedName, 5);
+  return (storedName[0] == 5 && memcmp(storedName + 1, "STATS", 5) == 0)
+      || nameEqualsPrefolded((const char *)(storedName + 1), foldedName, foldedLength);
+}
+
+
+
 // Allocate half of findOrAllocateNamedVariable(); call only after findNamedVariable() returned INVALID_VARIABLE.
 calcRegister_t allocateNamedVariableOnMiss(const char *variableName) {
   calcRegister_t regist = INVALID_VARIABLE;
