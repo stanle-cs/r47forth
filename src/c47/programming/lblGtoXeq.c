@@ -951,8 +951,10 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
       break;
     }
     #if defined(DMCP_BUILD)
-      static uint8_t keyPollCadence = 0; // the DMCP key-buffer probe costs a few hundred cycles per step; every 16th step keeps R/S response within a few ms, and long operations self-poll via exitKeyWaiting()
-      if(!nestedEngine && (++keyPollCadence & 0x0F) == 0) {
+      static uint8_t keyPollUptimeBit = 0; // probe the key buffer when bit 7 of the ms uptime flips (~128 ms): the ~1500-cycle probe is skipped in fast loops for a ~94-cycle uptime read, heavy steps keep per-step R/S response, and long operations self-poll via exitKeyWaiting()
+      const uint8_t uptimeBit = (uint8_t)((getUptimeMs() >> 7) & 1);
+      if(!nestedEngine && uptimeBit != keyPollUptimeBit) {
+        keyPollUptimeBit = uptimeBit;
           int key = C47PopKeyNoBuffer(DISPLAY_WAIT_FOR_RELEASE) + 1;
 //        int key = key_pop();
 //        key = convertKeyCode(key);
