@@ -14,8 +14,6 @@ the catalog's own case (xeq SCATR). item <n> is the fallback ONLY, not the first
 reason that list exists. Pasted, it is one Jim word: xeq PLT f resolves, as do braces and double quotes; single quotes are not Jim quoting and fail.
 Without the paste item 2734 does the same job, at the clear cost of code nobody can read.
 
-A name taking a TAM argument (e.g. M.EDITN) is not scriptable at all: reach it with press.
-
 CAUTION, calculator state: the sim starts from backup.cfg (t47) or backupR47.cfg (R47-based t47) in the working folder.
 DSP, HIDE, grouping and profile change how numbers render in stack, menus and graph text, so bmp comparisons hold only against the same setup.
 --reset = factory defaults, cfg not loaded: produce reference bmps from a --reset run and they reproduce on any machine.
@@ -33,11 +31,11 @@ Stat graph (SCATR / HISTOX / HISTOY): Σ+ the data, then plot. Plots render at o
 
 Plot test suite examples:
   ./t47 --exec 'readp ./docs/appnotes/sources/AN0022/func.p47; xeq PLTROOT'
-  ./t47 -e 'readp ./res/PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; xeq PLT f "xx"; snap'
+  ./t47 -e 'readp ./res/PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; xeq "PLT f" "xx"; snap'
   (PLTf from the --exec line captures the graph with a trailing snap, but the axis operand must be a fresh variable name, here "xx": give PLTf the function's MVAR name
    and nothing plots, so the snap grabs the stack instead. Wrapping PLTf and SNAP in a program, the way PLTROOT does, works too.)
-  ./c47 --reset --headless --snapskiprefresh -e 'readp ./res/PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; xeq PLT f "xx"; snap'
-  ./t47 --reset -e 'readp ./res/PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; xeq PLT f 'x'; snap'
+  ./c47 --reset --headless --snapskiprefresh -e 'readp ./res/PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; xeq "PLT f" "xx"; snap'
+  ./t47 --reset -e 'readp ./res/PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; xeq "PLT f" "x"; snap'
 
 Programmed EQN solve and draw (cpxSlv and Draw as program steps; single-variable formulas only, the solve variable is picked up).
 Encode the listing with  ./rejig listing.txt -o eqndemo.p47 :
@@ -66,6 +64,13 @@ Named variable as a program operand:
   Unsure how an operand should be written? Decode a shipped program and copy the glyphs it prints:  ./rejig docs/appnotes/sources/AN0022/func.p47 -o out.txt  (look for
   lines such as  RCL ‘x’).
 
+A plain space finds a built-in command name that displays with a fancy gap:
+  Some built-in command names carry a narrow gap that is not a plain space: PLT f has a four-per-em (U+2005). Type a plain space and it is found anyway, so you never
+  need an exotic space. The plain space and the em, three-per-em, four-per-em, six-per-em, figure, punctuation and hair spaces all count as one space, but only when a
+  built-in command name is matched. A name you create yourself is untouched: a label or variable is matched exactly as written, so one stored with a four-per-em is a
+  different name from one with a plain space. Example, PLT f driven with a plain space:
+  ./t47 --reset --exec 'readp res/PROGRAMS/FFX.p47; pgmplt FFX; nim 1e-50; nim 2e-50; xeq "PLT f" xx; snap'
+
 Export a loaded program to RTF (GUI XPORTP needs a file chooser, the DSL does not):
   ./t47 --reset --exec 'readp res/PROGRAMS/GudrmPL.p47; xportp GudrmPL res/PROGRAMS/GudrmPL.rtf'
   (xportp <global label> <filename>.)
@@ -90,8 +95,8 @@ Register / named variable / flag write and read (complex values in braces; strin
 
 Range screening examples (error text appears on stdout):
   NaN/inf STO rejected:  ./t47 --exec 'flag SPCRES 1; nim 1; nim 0; ÷; sto "↓Y"'
-  equal limits rejected: ./t47 --exec 'readp ./res/PROGRAMS/FFX.p47; pgmplt FFX; nim 5; nim 5; xeq PLT f "xx"'
-  out-of-domain range:   ./t47 --reset -e 'readp ./res/PROGRAMS/FFX.p47; pgmplt FFX; nim 1; nim 10; xeq PLT f "xx"'
+  equal limits rejected: ./t47 --exec 'readp ./res/PROGRAMS/FFX.p47; pgmplt FFX; nim 5; nim 5; xeq "PLT f" "xx"'
+  out-of-domain range:   ./t47 --reset -e 'readp ./res/PROGRAMS/FFX.p47; pgmplt FFX; nim 1; nim 10; xeq "PLT f" "xx"'
                          (every sample infinite -> "no plottable sample in the plot range")
   (↑Y and ↓Y are the plot y-limit reserved vars, set by quoted STO such as  sto "↓Y";  ÷ is divide.)
 
@@ -102,6 +107,23 @@ State save/load and register assertions (savest/loadst take a filename):
    reg <name> reads a register's display string but returns <unsupported> for a matrix, so assert dimensions via 42DIM#.
    Register data also moves through hand-written .d47 files; format in AN0025.)
 
+Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key (NN = 00..36), single ASCII, ENTER, R/S. Bare commands and xeq call the function direct,
+so TAM and softmenu decode need press. Matrix editor, cursor to 2;2:
+
+  A name taking a TAM argument (e.g. M.EDITN) is not scriptable at all: reach it with press.
+
+  ./c47 --reset --exec 'nim 3; nim 3; m.dim 00; rcl 00; m.edit; press F6; press @f; press F6; snap'
+  (m.edit; M_EDIT F5/F6 = left/right, f-shifted = up/down; snap shows "2;2=".)
+  M.EDIT indexes X, so a later nim pushes the matrix out of X: index a numbered register instead where the test needs the stack. A program stops at M.EDIT.
+
+  XEQ a function by name from the keyboard: press XEQ, then alpha, type the letters, Enter. Alpha is f-shift on the XEQ key and raises the ' name prompt.
+  ./c47 --reset --exec 'nim 30; press "@k 05"; press @f; press "@k 05"; press "@k 21"; press "@k 08"; press "@k 14"; press ENTER; snap'
+  (@k 05 = XEQ; @f @k 05 = alpha; then @k NN types that key's letter, here 21 8 14 = S I N = SIN, so 30deg -> 0.5. Lowercase = @f first.)
+
+  A name with a special glyph takes it from an alpha softmenu. i ℂ (set complex input) needs ℂ off the αMath number-sets page:
+  ./c47 --reset --exec 'press "@k 05"; press @f; press "@k 05"; press @f; press "@k 08"; press " "; press F2; press "@k 22"; press "@k 22"; press "@k 22"; press @g; press F1; press ENTER; press 1; press ENTER'
+  (lowercase i = @f @k 08; F2 opens αMath, @k 22 x3 pages to the ℂ ℐ ℕ ℚ ℝ ℤ row, @g F1 = ℂ. After i ℂ a typed 1 is complex; ℝ = @g F5 for i ℝ.)
+
 SHOW (all-digit view). snap clears it, so headless run show TWICE (the 2nd call's refresh paints the 1st) and always --snapskiprefresh; one page per run:
   long int, big font:    ./t47 --reset --snapskiprefresh --exec 'nim 123456789012345678901234567890; show; show; snap'
   long int, small font:  ./t47 --reset --snapskiprefresh --exec 'nim 2; nim 1500; yˣ; show; show; snap'   (over 170 glyphs)
@@ -111,12 +133,6 @@ SHOW (all-digit view). snap clears it, so headless run show TWICE (the 2nd call'
   tiny font (c47):       ./c47 --reset --snapskiprefresh --exec 'nim 2; nim 1500; yˣ; show; press R/S; press R/S; snap'
   other register (c47):  ./c47 --reset --snapskiprefresh --exec 'nim 7; nim 9; show; press "@k 17"; snap'   (up: Y, Z..; down "@k 22": numbered regs)
   (R/S cycles small-font pages of 10 lines, then tiny, then back to page 1; a page count over 2 needs a longer number.)
-
-Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key (NN = 00..36), single ASCII, ENTER, R/S. Bare commands and xeq call the function direct,
-so TAM and softmenu decode need press. Matrix editor, cursor to 2;2:
-  ./c47 --reset --exec 'nim 3; nim 3; m.dim 00; rcl 00; m.edit; press F6; press @f; press F6; snap'
-  (m.edit; M_EDIT F5/F6 = left/right, f-shifted = up/down; snap shows "2;2=".)
-  M.EDIT indexes X, so a later nim pushes the matrix out of X: index a numbered register instead where the test needs the stack. A program stops at M.EDIT.
 
 Power cycle (backup.cfg; savest above is a SAVE file, no calcMode in it):
   ./c47 --reset --exec '<setup>; off'   (off: writes backup.cfg, exits)

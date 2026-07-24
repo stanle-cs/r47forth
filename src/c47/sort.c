@@ -51,6 +51,26 @@ static TO_QSPI const uint16_t unSupSubStruckTable[] = {
   GLYPH_TO_CHAR_CODE(STD_RIGHT_ARROW), (uint16_t)'>',
 };
 
+// Space-like glyphs folded to a plain space so a name matches whichever space kind it was typed or stored with. Extend as needed.
+static TO_QSPI const uint16_t spaceLikeChars[] = {
+  GLYPH_TO_CHAR_CODE(STD_SPACE_EM),
+  GLYPH_TO_CHAR_CODE(STD_SPACE_3_PER_EM),
+  GLYPH_TO_CHAR_CODE(STD_SPACE_4_PER_EM),
+  GLYPH_TO_CHAR_CODE(STD_SPACE_6_PER_EM),
+  GLYPH_TO_CHAR_CODE(STD_SPACE_FIGURE),
+  GLYPH_TO_CHAR_CODE(STD_SPACE_PUNCTUATION),
+  GLYPH_TO_CHAR_CODE(STD_SPACE_HAIR)
+};
+
+static uint16_t _charCodeFoldSpace(uint16_t charCode) {
+  for(unsigned int i = 0; i < nbrOfElements(spaceLikeChars); i++) {
+    if(charCode == spaceLikeChars[i]) {
+      return (uint16_t)' ';
+    }
+  }
+  return charCode;
+}
+
 static uint16_t _charCodeUnSupSubStruck(uint16_t charCode) {
   for(unsigned int i = 0; i < nbrOfElements(unSupSubRanges); i++) {
     if(charCode >= unSupSubRanges[i].low && charCode < unSupSubRanges[i].low + unSupSubRanges[i].num) {
@@ -123,7 +143,7 @@ int32_t compareString(const char *stra, const char *strb, int32_t comparisonType
   lgb = stringGlyphLength(strb);
 
   // Compare the string using charCode only
-  if(comparisonType == CMP_BINARY || comparisonType == CMP_NAME) {
+  if(comparisonType == CMP_BINARY || comparisonType == CMP_NAME || comparisonType == CMP_COMMAND) {
     posa = 0;
     posb = 0;
     for(i=0; i<min(lga, lgb); i++) {
@@ -131,8 +151,11 @@ int32_t compareString(const char *stra, const char *strb, int32_t comparisonType
       if(charCode >= 0x80) {
         charCode = (charCode << 8) + (uint8_t)stra[posa + 1];
       }
-      if(comparisonType == CMP_NAME) {
+      if(comparisonType == CMP_NAME || comparisonType == CMP_COMMAND) {
         charCode = _charCodeUnSupSubStruck(charCode);
+      }
+      if(comparisonType == CMP_COMMAND) {
+        charCode = _charCodeFoldSpace(charCode);
       }
       ranka = charCode;
 
@@ -140,8 +163,11 @@ int32_t compareString(const char *stra, const char *strb, int32_t comparisonType
       if(charCode >= 0x80) {
         charCode = (charCode << 8) + (uint8_t)strb[posb + 1];
       }
-      if(comparisonType == CMP_NAME) {
+      if(comparisonType == CMP_NAME || comparisonType == CMP_COMMAND) {
         charCode = _charCodeUnSupSubStruck(charCode);
+      }
+      if(comparisonType == CMP_COMMAND) {
+        charCode = _charCodeFoldSpace(charCode);
       }
       rankb = charCode;
 
