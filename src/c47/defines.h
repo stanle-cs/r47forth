@@ -316,12 +316,8 @@
   #define    REFRESH_ON_SCREEN_MONITOR  //refresh debug on actual screen. Shows the refresh source number. Works on hardware and sim.
   #undef     REFRESH_ON_SCREEN_MONITOR
 
-  #define    TRACE_VECTOR               //Trace 3D Vector function hierarchy
-  #undef     TRACE_VECTOR
   #define    CACHE_DEBUG                //Trace 3D vector trig cache
   #undef     CACHE_DEBUG
-  #define    CACHE_DEBUG_DISP           //Display on-screen
-  #undef     CACHE_DEBUG_DISP
   #define    CACHE_VERIFY               //Recompute every trig-cache hit and abort on any mismatch (proves the key is complete)
   #undef     CACHE_VERIFY
 
