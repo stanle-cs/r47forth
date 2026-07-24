@@ -15,16 +15,20 @@ the same physical key path as a finger.
 ## Contents
 
 - `vbat-walk-monitor.patch` - the `MONITOR_VBAT_SCHEDULE` instrumentation:
-  a 700 event capture buffer recording every ADC conversion (schedule index,
+  a 48 event capture buffer recording every ADC conversion (schedule index,
   ms since the previous conversion, vbat) and every schedule reset (tagged
-  run start vs USB changeover), a driver that injects R/S after each program
-  stop (idle gaps cycling 0.5 s / 2 s / 5 s) for 20 run cycles, and a dump
-  of `VBATWALK.CSV` to the FAT root when cycle 20 stops ("BWALK DONE" in X).
+  run start vs USB changeover vs minute pulse), a driver that injects R/S
+  after each program stop (idle gaps cycling 0.5 s / 2 s / 5 s) for 20 run
+  cycles, and a per stop append of the buffer to `/VBATWALK.CSV` on the FAT
+  root. After cycle 20 the trailer line is written and "BWALK DONE" lands in
+  X ("BWALK IOERR" if the final file open failed; failed opens are counted
+  in the trailer and retried at the next stop).
 - `genbwalk.py` - generates `PROGRAMS/BWALK.p47` (encoder reused from
   tools/bench/genbench.py). BWALK is one run cycle: a 10000 iteration
-  DSZ/GTO loop (~14 s on a battery powered DM42n, comfortably past the ~7 s
+  DSZ/GTO loop (~9 s on a battery powered DM42, comfortably past the ~7 s
   the schedule needs to saturate), then STOP; the injected R/S resumes at
-  the trailing GTO 'BWALK' so every cycle is a genuine top level run start.
+  the trailing GTO 'BWALK' so every cycle is a genuine top level run start
+  through fnRunProgram() and the reset at the runProgram() entry.
 - `analyze_vbatwalk.py` - verifies the CSV cycle by cycle (index marches
   1..16 and holds, every delta at or above its gate) and prints the
   aggregate per position table. Exit 0 only if every cycle proves the walk.
@@ -47,48 +51,75 @@ make dmcp      # DM42:  build.dmcp.p4/src/c47-dmcp/C47.pgm + C47_qspi.bin
 make dmcp5     # DM42n: build.dmcp5/src/c47-dmcp5/C47.pg5
 ```
 
-1. Copy the firmware to the calculator (USB disk mode) and flash via the
-   DMCP loader. On the DM42 both `C47.pgm` and `C47_qspi.bin` are needed:
-   the QSPI image changed in this MR (the delay table is TO_QSPI). The
-   DM42n build keeps everything in flash, so `C47.pg5` alone suffices.
+1. Copy the firmware to the calculator (USB disk mode) in one folder with
+   the canonical names and flash BOTH files: [4] QSPI, then [3] program.
+   Never flash the pgm alone, even when no prompt asks for the QSPI: the
+   QSPI image embeds function pointers into internal flash, so ANY code
+   change alters its content while size and forced CRC stay identical - the
+   loader cannot detect the stale pair and the mix hard faults at the first
+   shifted dispatch. On the DM42n `C47.pg5` alone suffices (no QSPI split).
 2. Copy `PROGRAMS/BWALK.p47` into the calculator's PROGRAMS directory and
-   load it (LOADP). Run on battery power: the schedule is identical on USB,
-   but battery reproduces the MR's scenario and arms the low battery stop.
-   Optional: start plugged into USB and unplug while idle before starting -
-   the capture preamble then shows the USB changeover reset as well.
+   load it (LOADP). Run on battery power: on USB the CPU runs ~3.3x faster
+   and each cycle stops before the 1000/2500 tail of the table can gate a
+   conversion inside the run. Optional: start plugged into USB and unplug
+   while idle before starting - the capture preamble then shows the USB
+   changeover reset and an idle paced walk as well.
 3. `XEQ 'BWALK'` once and walk away. The calculator runs 20 cycles by
-   itself (~6 to 10 minutes depending on model and supply) and shows
-   "BWALK DONE" in X when finished.
-4. USB disk mode again, copy `VBATWALK.CSV` off the FAT root, then:
+   itself (~5 minutes) and shows "BWALK DONE" in X when finished.
+4. USB disk mode again, copy `VBATWALK.CSV` from the FAT root, then:
 
 ```
 python3 tools/hwtest/vbat-walk/analyze_vbatwalk.py VBATWALK.CSV
 ```
 
-## What a pass looks like
+## Result (DM42, battery, 2026-07-24, results/vbatwalk-dm42-2026-07-24.csv)
 
-Per cycle the delta column reproduces the table entry by entry: samples 2
-and 3 arrive undelayed (the 0 ms gates), then two at ~50 ms, ten at
-~100 ms, one at ~1000 ms, then ~2500 ms repeating with the index pegged at
-16. Cycle 1 is the manual XEQ; cycles 2..20 are injected R/S resumes, each
-a genuine top level run start through fnRunProgram(), so the reset at
-lblGtoXeq.c is exercised twenty times through the real key path. Deltas sit
-a few ms above their gate during a run (dispatch granularity) and up to
-~160 ms above it for samples that land in the idle gaps (main loop wake
-cadence). Minute pulse conversions bypass the gate by design and are tagged
-`sample_minute`, excluded from the gate check.
+417 events, 20/20 cycles PASS, zero drops, zero IO errors, one USB
+changeover reset captured in the preamble:
 
-## Results
+```
+pos  gate_ms      min   median      max   n
+  2        0        0        1        1   20
+  3        0        0        0       10   20
+  4       50       50       50       55   20
+  5       50       50       50       55   20
+  6      100      100      100      104   20
+  7      100      100      100      103   20
+  8      100      100      100      104   20
+  9..15   100      100      100      100   20   (all exactly 100)
+ 16     1000     1000     1000     1000   20
+ 17     2500     2500     2500     2500   20
+ 18     2500     2500     2500     2500   20   saturated
+ 19     2500     2527     2595     2695   13   saturated, idle gap
+ 20     2500     2542     2583     2583    6   saturated, idle gap
+```
 
-- (pending hardware run)
+The delta column reproduces the table entry by entry, the index pegs at 16,
+overshoot during a run is bounded by dispatch granularity (max 10 ms), and
+idle gap samples ride the main loop wake cadence. The vbat column shows the
+per cycle load sag and recovery (2708 -> 2644 -> 2684) that motivates the
+undelayed first samples. The build carries the TO_QSPI table (0b88661d), so
+the same data proves the QSPI resident table reads correctly.
 
-## Notes
+## Hard won DM42 lessons baked into this rig
 
-- The proof run doubles as a check that the TO_QSPI move of the table
-  (0b88661d) reads correctly from QSPI: a wrong table would show up
-  directly as wrong gates.
-- If key injection ever misbehaves on a future DMCP release, the AUTXEQ
-  precedent in c47.c (`runFunction(ITM_RS)`) is the sanctioned programmatic
-  fallback; swap it into monitorVbatDriverTick().
-- The capture buffer caps at 700 events (~450 expected); the CSV trailer
-  line reports `dropped=` so truncation is visible, never silent.
+- SRAM2 has an undocumented ceiling below the linker script's 16 K: a
+  5.6 KB capture buffer (.bss 13312/16384) hard faulted at boot before the
+  first paint; at .bss ~8.1 KB the same code boots fine. Hence the 48 event
+  buffer with a per stop flush instead of one big buffer.
+- Bare string literals compile into `.rodata.str1.1`, which the DM42 ld
+  script routes to QSPI - they shift the QSPI layout. All harness strings
+  are named `static const char[]` arrays, which land in `.rodata.<name>`
+  sections and fall through to internal flash.
+- A program run executes entirely inside the key handler: the main loop
+  never iterates while PGM_RUNNING (the same starvation that keeps
+  checkBattery() out of a run - the finding behind this MR's items.c stop).
+  A driver in the main loop can therefore never observe a running->stopped
+  transition; this one counts run starts (via the reset hook on the real
+  runProgram() path) against runs flushed while idle instead.
+- The CSV path is rooted ("/VBATWALK.CSV"): file selection screens move the
+  FatFS working directory, so a bare filename lands in the last browsed
+  directory.
+- If the calculator is still idle 10 s after an injected R/S the driver
+  pushes the key again, turning a lost key into a hiccup instead of a
+  stalled sequence.
