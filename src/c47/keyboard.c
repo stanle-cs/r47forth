@@ -3660,7 +3660,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
                     lastErrorCode = 0;
                 }
                 else {
-                    if(currentMenu() == -MNU_SYSFL) {                                                       //JM auto recover out of SYSFL
+                    if(tam.mode && currentMenu() == -MNU_SYSFL) {                                           //JM auto recover out of SYSFL in the CFLG TAM flow; a plain catalog SYS.FL exits via the standard path below
                       numberOfTamMenusToPop = 2;                                                   //JM
                       leaveTamModeIfEnabled();                                                     //JM
                       return;                                                                      //JM
