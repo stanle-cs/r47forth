@@ -2056,7 +2056,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
 
       int tmpVbat = updateVbatIntegrated(false);
 
-      if(tmpVbat < 2100 || vbatVIntegrated < 2100) { //shutdown from the new integrator system. The indicator uses the integrator.
+      if(tmpVbat < BAT_MINIMUM || vbatVIntegrated < BAT_MINIMUM) { //shutdown from the new integrator system. The indicator uses the integrator.
         if(!getSystemFlag(FLAG_LOWBAT)) {
           setSystemFlag(FLAG_LOWBAT);
           showHideUsbLowBattery();
