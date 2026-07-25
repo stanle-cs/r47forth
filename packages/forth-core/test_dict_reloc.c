@@ -42,8 +42,8 @@
 
 /* ---- Program-fixture builder types (needed early by test_xeqn) ---- */
 
-#define TP_MAX_BYTES 192
-#define TP_MAX_STEPS 24
+#define TP_MAX_BYTES 1536
+#define TP_MAX_STEPS 64
 
 typedef enum {
   TP_STEP_LBL,
@@ -10999,6 +10999,8 @@ static int test_pem_xeq_dynmenu_no_live_exec(void);
 static int test_forth_edit_modify_commit(void);
 /* code-audit: PEM Up/Down must commit the managed Forth sink before moving */
 static int test_forth_capture_navigation(void);
+/* complete user-facing language showcase from FORTH_SHOWCASE_PROGRAM.txt */
+static int test_showcase_program(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -13157,6 +13159,14 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_forth_capture_navigation...\n");
   fail |= test_forth_capture_navigation();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH SHOWCASE PROGRAM (complete user-facing language example)\n");
+  forthDictInit();
+  forthGDictInit();
+  printf("  [DEBUG] running test_showcase_program...\n");
+  fail |= test_showcase_program();
   forthDictClear();
   forthGDictClear();
 
@@ -21260,6 +21270,210 @@ static int test_pem_xeq_dynmenu_no_live_exec(void)
   programRunStop = savedRS;
   lastErrorCode = ERROR_NONE;
   forthDictClear();
+  cleanupTestProgram();
+  return fail;
+}
+
+/* Exact simulator drive for FORTH_SHOWCASE_PROGRAM.txt. The fixture uses the
+ * same program-step encodings as PEM and leaves its results in registers
+ * 00..16 so the text example has observable outputs instead of only compiling. */
+static int test_showcase_program(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  uint16_t savedNamedVars = numberOfNamedVariables;
+  bool_t savedFlag10 = getFlag(10);
+  testProg_t p;
+  char indirectRegister[64];
+  char indirectNamed[64];
+  calcRegister_t lbl;
+  int i;
+
+  tpInit(&p);
+  snprintf(indirectRegister, sizeof(indirectRegister),
+           "18 STO 09 77 STO %s09 RCL 18 STO 10", STD_RIGHT_ARROW);
+  snprintf(indirectNamed, sizeof(indirectNamed),
+           "19 STO 'PTR' 88 STO %s'PTR' RCL 19 STO 11", STD_RIGHT_ARROW);
+
+  if (tpLbl(&p, "FDEMO") < 0 ||
+      tpMarker(&p) < 0 ||
+      tpSrc(&p, ": SUMDOWN DUP IF DUP 1 - RECURSE + THEN ;") < 0 ||
+      tpSrc(&p, ": COUNTDOWN BEGIN DUP WHILE 1 - REPEAT ;") < 0 ||
+      tpSrc(&p, ": UNTIL1 BEGIN 1 - DUP UNTIL DROP ;") < 0 ||
+      tpSrc(&p, ": CHOOSE IF 111 ELSE 222 THEN ;") < 0 ||
+      tpSrc(&p, ": SPIN BEGIN AGAIN ;") < 0 ||
+      tpSrc(&p, ": PLUS10 10 + ; GLOBAL") < 0 ||
+      tpSrc(&p, ": GONE1 1 ; GLOBAL") < 0 ||
+      tpSrc(&p, ": GONE2 2 ; GLOBAL") < 0 ||
+      tpSrc(&p, ": IMM3 3 ; IMMEDIATE") < 0 ||
+      tpSrc(&p, ": EMPTY IMM3 ;") < 0 ||
+      tpSrc(&p, ": CALLWORD XEQ 'PLUS10' ;") < 0 ||
+      tpSrc(&p, ": CLEAR XEQ 'CLSTK' ;") < 0 ||
+      tpSrc(&p, "CLEAR") < 0 ||
+      tpSrc(&p, "5 SUMDOWN STO 00") < 0 ||
+      tpSrc(&p, "5 COUNTDOWN STO 01") < 0 ||
+      tpSrc(&p, "99 1 UNTIL1 STO 02") < 0 ||
+      tpSrc(&p, "1 CHOOSE STO 03") < 0 ||
+      tpSrc(&p, "0 CHOOSE STO 04") < 0 ||
+      tpSrc(&p, "7 CALLWORD STO 05") < 0 ||
+      tpSrc(&p, "42 STO 'DEMO' RCL 'DEMO' STO 06") < 0 ||
+      tpSrc(&p, "CNST 10") < 0 ||
+      tpSrc(&p, "10 STO 07") < 0 ||
+      tpSrc(&p, "SF 10") < 0 ||
+      tpSrc(&p, indirectRegister) < 0 ||
+      tpSrc(&p, indirectNamed) < 0 ||
+      tpSrc(&p, "XEQ :GET0:") < 0 ||
+      tpSrc(&p, "STO 12") < 0 ||
+      tpSrc(&p, "2") < 0 ||
+      tpSrc(&p, "XEQ 'NATADD'") < 0 ||
+      tpSrc(&p, "STO 13") < 0 ||
+      tpSrc(&p, "5 LATER STO 14") < 0 ||
+      tpSrc(&p, "99 EMPTY STO 15") < 0 ||
+      tpSrc(&p, "1 2 CLEAR 9 STO 16") < 0 ||
+      tpSrc(&p, "FORGET GONE1") < 0 ||
+      tpSrc(&p, ": LATER 2 * ;") < 0 ||
+      tpMarker(&p) < 0 ||
+      tpRtn(&p) < 0 ||
+      tpLblLocal(&p, "GET0") < 0 ||
+      tpStepParam(&p, ITM_RCL, (uint8_t[]){0}, 1) < 0 ||
+      tpRtn(&p) < 0 ||
+      tpEnd(&p) < 0 ||
+      tpLbl(&p, "NATADD") < 0 ||
+      tpMarker(&p) < 0 ||
+      tpSrc(&p, "100 +") < 0 ||
+      tpMarker(&p) < 0 ||
+      tpRtn(&p) < 0 ||
+      tpEnd(&p) < 0 ||
+      !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: showcase program build/write\n");
+    fail = 1;
+    goto cleanup;
+  }
+
+  lbl = findNamedLabel("FDEMO", GLOBAL_LABELS);
+  if (lbl == INVALID_VARIABLE) {
+    printf("    FIXTURE FAIL: FDEMO label not found\n");
+    fail = 1;
+    goto cleanup;
+  }
+
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  lastErrorCode = ERROR_NONE;
+  fnExecute(lbl);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: FDEMO run error %d\n", lastErrorCode);
+    fail = 1;
+    goto cleanup;
+  }
+
+  {
+    static const struct {
+      uint8_t reg;
+      int32_t expected;
+    } results[] = {
+      {0, 15}, {1, 0}, {2, 99}, {3, 111}, {4, 222},
+      {5, 17}, {6, 42}, {7, 10}, {9, 18}, {10, 77}, {11, 88},
+      {12, 15}, {13, 102}, {14, 10}, {15, 99}, {16, 9}
+    };
+    for (i = 0; i < (int)(sizeof(results) / sizeof(results[0])); i++) {
+      char rcl[16];
+      snprintf(rcl, sizeof(rcl), "RCL %02u", results[i].reg);
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret(rcl);
+      if (lastErrorCode != ERROR_NONE || !x_is_longint(results[i].expected)) {
+        int32_t actual = 0;
+        uint16_t actualType = getRegisterDataType(REGISTER_X);
+        if (actualType == dtLongInteger) {
+          longInteger_t li;
+          longIntegerInit(li);
+          convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+          longIntegerToInt32(li, actual);
+          longIntegerFree(li);
+        }
+        printf("    FAIL: R%02u expected %ld, got %ld type %u (error %d)\n",
+               results[i].reg, (long)results[i].expected, (long)actual,
+               actualType, lastErrorCode);
+        fail = 1;
+        break;
+      }
+    }
+  }
+
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("RCL 'DEMO'");
+    if (lastErrorCode != ERROR_NONE || !x_is_longint(42)) {
+      printf("    FAIL: named variable DEMO expected 42 (error %d)\n",
+             lastErrorCode);
+      fail = 1;
+    }
+  }
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("RCL 'PTR'");
+    if (lastErrorCode != ERROR_NONE || !x_is_longint(19)) {
+      printf("    FAIL: named variable PTR expected 19 (error %d)\n",
+             lastErrorCode);
+      fail = 1;
+    }
+  }
+  if (!fail && !getFlag(10)) {
+    printf("    FAIL: flag 10 was not set\n");
+    fail = 1;
+  }
+
+  if (!fail) {
+    uint16_t ref;
+    if (!forthFindColon("PLUS10", &ref) || !(ref & FORTH_REF_GLOBAL)) {
+      printf("    FAIL: PLUS10 is not global\n");
+      fail = 1;
+    } else if (forthFindColon("GONE1", &ref) || forthFindColon("GONE2", &ref)) {
+      printf("    FAIL: FORGET GONE1 left GONE1 or GONE2 visible\n");
+      fail = 1;
+    } else {
+      forthPushInt32(5);
+      lastErrorCode = ERROR_NONE;
+      if (run_word("PLUS10") || !x_is_longint(15)) {
+        printf("    FAIL: global PLUS10 did not leave X=15\n");
+        fail = 1;
+      }
+    }
+  }
+
+  if (!fail) {
+    printf("    PASS: FDEMO produced every documented register, flag, named-variable, scope, XEQ, control-flow, and FORGET result\n");
+  }
+
+cleanup:
+  if (numberOfNamedVariables > savedNamedVars) {
+    uint16_t n;
+    for (n = savedNamedVars; n < numberOfNamedVariables; n++) {
+      freeRegisterData(FIRST_NAMED_VARIABLE + n);
+    }
+    if (savedNamedVars == 0) {
+      freeC47Blocks(allNamedVariables,
+                    TO_BLOCKS(sizeof(namedVariableHeader_t) * numberOfNamedVariables));
+      allNamedVariables = NULL;
+    } else {
+      allNamedVariables = reallocC47Blocks(
+          allNamedVariables,
+          TO_BLOCKS(sizeof(namedVariableHeader_t) * numberOfNamedVariables),
+          TO_BLOCKS(sizeof(namedVariableHeader_t) * savedNamedVars));
+    }
+    numberOfNamedVariables = savedNamedVars;
+  }
+  if (savedFlag10) {
+    fnSetFlag(10);
+  } else {
+    fnClearFlag(10);
+  }
+  programRunStop = savedRS;
+  dynamicMenuItem = savedDynamicMenu;
+  lastErrorCode = ERROR_NONE;
+  forthDictClear();
+  forthGDictClear();
   cleanupTestProgram();
   return fail;
 }
