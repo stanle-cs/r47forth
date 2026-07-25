@@ -166,7 +166,7 @@ void fnGotoDot(uint16_t globalStepNumber) {
 
 
 
- void fnExecute(uint16_t label) {
+void fnExecute(uint16_t label) {
   if(programRunStop == PGM_RUNNING) {
     subroutineLevelHeader_t *oldCurrentSubroutineLevelData = currentSubroutineLevelData;
     allSubroutineLevels.numberOfSubroutineLevels += 1;
@@ -797,7 +797,7 @@ void fnCheckLabel(uint16_t label) {
   if(dynamicMenuItem >= 0) {
     label = findNamedLabel(dynmenuGetLabel(dynamicMenuItem),ALL_LABELS);
   }
-
+  
   // Local Label 00 to 99 and A to l
   if(label <= LAST_LOCAL_LABEL) {
     // Search for local label

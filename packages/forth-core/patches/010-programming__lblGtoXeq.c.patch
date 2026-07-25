@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/lblGtoXeq.c b/src/c47/programming/lblGtoXeq.c
-index 88523f072b5ce0ee346b1d78ad1b2851913643dd..589b21749bfb9c987b641cc543404f669b7bcd66 100644
+index 88523f072b5ce0ee346b1d78ad1b2851913643dd..fa9ff997b707026511ecc6e958b99f9677d7562f 100644
 --- a/src/c47/programming/lblGtoXeq.c
 +++ b/src/c47/programming/lblGtoXeq.c
 @@ -7,6 +7,8 @@
@@ -11,15 +11,6 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..589b21749bfb9c987b641cc543404f66
  
  // Drop stale interrupt keys at top-level program start (a leftover key prior to pgm run can trip us). 1 = on, 0 = off.
  #define CLEAR_KEYS_ON_PGM_START 0
-@@ -164,7 +166,7 @@ void fnGotoDot(uint16_t globalStepNumber) {
- 
- 
- 
--void fnExecute(uint16_t label) {
-+ void fnExecute(uint16_t label) {
-   if(programRunStop == PGM_RUNNING) {
-     subroutineLevelHeader_t *oldCurrentSubroutineLevelData = currentSubroutineLevelData;
-     allSubroutineLevels.numberOfSubroutineLevels += 1;
 @@ -322,248 +324,6 @@ void fnStopProgram(uint16_t unusedButMandatoryParameter) {
  
  
@@ -349,12 +340,3 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..589b21749bfb9c987b641cc543404f66
    lastErrorCode = ERROR_NONE;
    hourGlassIconEnabled = true;
    programRunStop = PGM_RUNNING;
-@@ -1016,7 +797,7 @@ void fnCheckLabel(uint16_t label) {
-   if(dynamicMenuItem >= 0) {
-     label = findNamedLabel(dynmenuGetLabel(dynamicMenuItem),ALL_LABELS);
-   }
--  
-+
-   // Local Label 00 to 99 and A to l
-   if(label <= LAST_LOCAL_LABEL) {
-     // Search for local label

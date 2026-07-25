@@ -1798,8 +1798,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
          // Helper macro for multiplicative unit conversions.
          // Add two UNIT_CONV lines at the correct new item numbers, one per direction: Best to copy and edit two prior pairs to ensure spacing is standard.
          // UNIT_CONV(constFactor<Xxx>, multiply, ...) converts the left unit to the right one
-         // (result = X x factor); the partner line uses divide with the SAME factor. Both name fields hold only
-         //   the LEFT unit plus the arrow ("mph" STD_RIGHT_ARROW is a complete name)
+         // (result = X x factor); the partner line uses divide with the SAME factor. Both name fields hold only 
+         //   the LEFT unit plus the arrow ("mph" STD_RIGHT_ARROW is a complete name) 
          //   the right-hand side is rebuilt at runtime from the partner item, fullConvSoftMenuItemName-InclHPCONV().
          // Next Step: CONV step 6/6 in src/c47/softmenus.c.
 //==============================================================================

@@ -12,24 +12,23 @@
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
     "programming/param_core.c": "b7c958a993ea3955b442e373fbd60f01fa1b6a15478537dff7df378c96967bbd",
     "programming/param_core.h": "ff4c3dec1227ced41df291faa66572894042302eb9fe86ce3f8c12e45d463d31",
-    "test_dict_reloc.c": "91f6a3c08a539dfa58cb2bf38a9f3a0436574afba83818e252e6ee4aff49bea4"
+    "test_dict_reloc.c": "0f6d0659743dc7fcb2252eb0bb0cf44614ddbf7e956d3078c079db1d8ab07f1b"
   },
   "patches": {
-    "010-c47Extensions__addons.c.patch": "d0c5fc48f09f4db69d455d07f0168d3fa7d43f7d332c04e3f5913ca44660d2a7",
+    "010-c47Extensions__addons.c.patch": "e018487d35b5a5b156eb29c75dab0933514f56cfcec290760e9bddd88fa777bd",
     "010-c47Extensions__keyboardTweak.c.patch": "68baea98bc544737ea6f6c13e3a3c85d9d59a6c4655c0f39ea6cf845da487edd",
-    "010-config.c.patch": "200f8c49de2ce39f9b1aaf1bc7483cca8b6008a11bfeb6b2e7798239df42810d",
+    "010-config.c.patch": "3fd216e4f1e19238d9a10720d0c9709ac38c91833a5152a7896d2ad7c4f029ec",
     "010-core__freeList.c.patch": "26242d8b3e4d7689dd98def3e1e90ffd54b6075db90f3894e2071db1b65cc052",
     "010-defines.h.patch": "66ce4faf35b1b614ec0e0d372a5413a9a823f1d23b3d1d5ae1722471c5863c01",
-    "010-error.c.patch": "0bd332e0fdc05ee38c46bdfb428aa85523f40a7fde8cb57b93e71b9c96534223",
-    "010-items.c.patch": "49ba4b279a8191314869878b7322a0b5183423cc879c2bcb5e1b0daf00ef47fe",
+    "010-items.c.patch": "0cd885e12fa16d299a7447b27a297f9810f43d0d60d0141e60aa42c0f097333e",
     "010-items.h.patch": "2bae0c1c4edd77ae5f5a4d73bf2097a270c870b39774147747f008a1387f8e23",
     "010-keyboard.c.patch": "4f0944f8f9a39c8131ec59f79b7e6dc71999e98d33f713ccc0b114f8d43c6e1a",
     "010-programming__decode.c.patch": "8152a5fdb781ae00d12e7f0af40d72d2f615407463ac551f9ed097158668662f",
-    "010-programming__lblGtoXeq.c.patch": "bb3838048c396395882693b1aadba3666ca90cc01abb0e08931f07d6fdd7dd9a",
+    "010-programming__lblGtoXeq.c.patch": "c7447a4d7f5b0107c7da373ff8784696fefbcef6e11bd54db96b0d4b1d706e4b",
     "010-programming__manage.c.patch": "436af6ba1dd4783e643f2f3789e4a45846610f84994d5f499a09a3a54d0060f1",
     "010-programming__nextStep.c.patch": "e3c8b593021c066e1bc09a3c81e597a8f87d003e754dcce1626ecc17d5f0a2e2",
     "010-saveRestoreBackup.c.patch": "b01a8654f88f21038023834a8ef724e73a007365317bb0ec3b7ec9118abed2ca",
-    "010-screen.c.patch": "0cc431c0f387c420ac175ab4a8ca2536b12f976cc469201235f37ae2ef8515a5",
+    "010-screen.c.patch": "62f14a244328fcc415bdd27442ca5867c3162e43c7fb194daa51b397577fd0be",
     "010-softmenus.c.patch": "c1d3d38a68367a938c709a556ab9d9ccbce13139377aa268886eb2e0379c703f",
     "010-ui__tam.c.patch": "697d78e1c36ca7e4cf9ff491e3e5a6c63e5e9474b116fb433b3edffd2a705211"
   }

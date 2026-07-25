@@ -698,7 +698,7 @@ void fnGetWordSize(uint16_t unusedButMandatoryParameter) {
 
 void updateShortIntegerMasks(void) {
   // Derive the word-size-dependent short-integer bit masks from the current shortIntegerWordSize. fnSetWordSize uses this when the size changes interactively;
-  // code that assigns shortIntegerWordSize directly (state-file restore, which stores neither mask) must call it too, so that shortIntegerMask and
+  // code that assigns shortIntegerWordSize directly (state-file restore, which stores neither mask) must call it too, so that shortIntegerMask and 
   // shortIntegerSignBit stay consistent with the word size.
   if(shortIntegerWordSize == 64) {
     shortIntegerMask    = -1;
@@ -1657,8 +1657,10 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
       real34SetZero((real34_t *)TO_PCMEMPTR(allReservedVariables[i].header.pointerToRegisterData));
     }
 
-    // initialize the global registers, including reserved header bits
-    memset(globalRegister, 0, sizeof(registerHeader_t) * NUMBER_OF_GLOBAL_REGISTERS);
+    // initialize the global registers
+    #if defined(DMCP_BUILD) && defined(OLD_HW)
+      memset(globalRegister, 0, sizeof(globalRegister));
+    #endif // DMCP_BUILD && OLD_HW
     for(calcRegister_t regist=FIRST_GLOBAL_REGISTER; regist<=LAST_GLOBAL_REGISTER; regist++) {
       setRegisterDataType(regist, dtReal34, amNone);
       memPtr = allocC47Blocks(REAL34_SIZE_IN_BLOCKS);

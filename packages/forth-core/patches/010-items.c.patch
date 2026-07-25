@@ -1,5 +1,5 @@
 diff --git a/src/c47/items.c b/src/c47/items.c
-index 5ad07b399a632c9a7ff2231da3259dbf04ef8e8e..871c49502550a89815c0045920259aed26117964 100644
+index 5ad07b399a632c9a7ff2231da3259dbf04ef8e8e..c578966bd4038ba5efae3060dfde51b642ec5555 100644
 --- a/src/c47/items.c
 +++ b/src/c47/items.c
 @@ -2,6 +2,11 @@
@@ -67,17 +67,6 @@ index 5ad07b399a632c9a7ff2231da3259dbf04ef8e8e..871c49502550a89815c0045920259aed
  
  
  #endif // GENERATE_CATALOGS || defined(GENERATE_TESTPGMS)
-@@ -1764,8 +1798,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
-          // Helper macro for multiplicative unit conversions.
-          // Add two UNIT_CONV lines at the correct new item numbers, one per direction: Best to copy and edit two prior pairs to ensure spacing is standard.
-          // UNIT_CONV(constFactor<Xxx>, multiply, ...) converts the left unit to the right one
--         // (result = X x factor); the partner line uses divide with the SAME factor. Both name fields hold only 
--         //   the LEFT unit plus the arrow ("mph" STD_RIGHT_ARROW is a complete name) 
-+         // (result = X x factor); the partner line uses divide with the SAME factor. Both name fields hold only
-+         //   the LEFT unit plus the arrow ("mph" STD_RIGHT_ARROW is a complete name)
-          //   the right-hand side is rebuilt at runtime from the partner item, fullConvSoftMenuItemName-InclHPCONV().
-          // Next Step: CONV step 6/6 in src/c47/softmenus.c.
- //==============================================================================
 @@ -1997,7 +2031,7 @@ TO_QSPI const item_t indexOfItems[] = {
  /*  210 */  { fnConstant,                      81,                          STD_mu STD_SUB_G,                              "c.gerver",                                    (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
  /*  211 */  { fnConstant,                      82,                          STD_tau,                                       "c.circle",                                    (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },

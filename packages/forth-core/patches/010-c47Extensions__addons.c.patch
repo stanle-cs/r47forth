@@ -1,5 +1,5 @@
 diff --git a/src/c47/c47Extensions/addons.c b/src/c47/c47Extensions/addons.c
-index 5c191c470be694f6b1819cbb4e55105814bd5821..e0e022e04a2ffb0ad36a007a13e378d6f5d8d0a4 100644
+index 5c191c470be694f6b1819cbb4e55105814bd5821..5aaee169efe875a883c286d2d4de3338ee87f2d9 100644
 --- a/src/c47/c47Extensions/addons.c
 +++ b/src/c47/c47Extensions/addons.c
 @@ -663,7 +663,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
@@ -11,9 +11,3 @@ index 5c191c470be694f6b1819cbb4e55105814bd5821..e0e022e04a2ffb0ad36a007a13e378d6
            memset(aimBuffer, 0, AIM_BUFFER_LENGTH);
  
            if(opParam == STRING_LABEL_VARIABLE) {
-@@ -3713,5 +3713,3 @@ void fnLongPressSwitches (uint16_t option) {
-       LongPressF = RBX_F124;
-   }
- }
--
--

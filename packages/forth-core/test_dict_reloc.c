@@ -3247,12 +3247,6 @@ static int test_lifecycle_real_reset_hook(void)
       _exit(20);
     }
 
-    /* Poison the header bits that the field setters do not touch.  Reset must
-     * initialize them before saveCalc serializes the whole descriptor. */
-    for (uint16_t i = 0; i < NUMBER_OF_GLOBAL_REGISTERS; i++) {
-      globalRegister[i].descriptor |= 0xFE000000u;
-    }
-
     doFnReset(CONFIRMED, doNotLoadAutoSav);
 
     bool foundPost = forthFindColon("SQ", &idx);
@@ -3270,11 +3264,6 @@ static int test_lifecycle_real_reset_hook(void)
     }
     if (fdict.latest != FORTH_NULL) {
       _exit(70);
-    }
-    for (uint16_t i = 0; i < NUMBER_OF_GLOBAL_REGISTERS; i++) {
-      if ((globalRegister[i].descriptor & 0xFE000000u) != 0) {
-        _exit(80);
-      }
     }
     _exit(0);
   }

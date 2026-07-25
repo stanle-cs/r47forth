@@ -3743,14 +3743,10 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
 
         if(lastErrorCode != 0 && regist == errorMessageRegisterLine) {
           if(stringWidth(errorMessages[lastErrorCode], &standardFont, true, true) <= SCREEN_WIDTH - 1) {
-            if((lastErrorCode == ERROR_RESERVED_VARIABLE_NAME || lastErrorCode == ERROR_FUNCTION_NOT_FOUND) && errorMessage[0]) {
+            if(lastErrorCode == ERROR_RESERVED_VARIABLE_NAME) {
               sprintf(tmpString, "%s: %s", errorMessages[lastErrorCode], errorMessage);
-              if(stringWidth(tmpString, &standardFont, true, true) <= SCREEN_WIDTH - 1) {
-                showString(tmpString, &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - REGISTER_LINE_HEIGHT*(regist - REGISTER_X) + 6, vmNormal, true, true);
-              }
-              else {
-                showString(errorMessages[lastErrorCode], &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - REGISTER_LINE_HEIGHT*(regist - REGISTER_X) + 6, vmNormal, true, true);
-              }
+
+              showString(tmpString, &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - REGISTER_LINE_HEIGHT*(regist - REGISTER_X) + 6, vmNormal, true, true);
             }
             else {
               showString(errorMessages[lastErrorCode], &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - REGISTER_LINE_HEIGHT*(regist - REGISTER_X) + 6, vmNormal, true, true);
