@@ -1,0 +1,76 @@
+[b]custom package v0.3[/b]
+
+Overrides are diffs against upstream now, instead of whole-file copies.
+
+In v0.2, touching an upstream file meant shipping a complete copy of it. A
+two-line hook change went out as a 4000-line file, a package's actual delta was
+not visible without diffing by hand, and two packages touching the same file
+meant one of them was silently discarded. Overrides are now plain git diffs, and
+patches from different packages against the same file compose in order.
+
+The other change is that a package declares nothing. No meson.build, no file
+lists. The working area is flat and mirrors upstream paths:
+
+[code]packages/my-pkg/
+    keyboard.c      edited copy of an upstream file
+    my_module.c     new source, no upstream counterpart[/code]
+
+[code]python3 tools/pkg_patch_refresh.py packages/my-pkg[/code]
+
+Refresh classifies each file by whether its mirrored path exists under src/c47/.
+If it does, the file becomes a patch; if not, it is copied in whole. You do not
+write patches by hand or decide where anything goes.
+
+[b][size=120]tools/pkg_patch_refresh.py[/size][/b]
+
+[list]
+[*] [b]--materialize <file>[/b] — pulls an upstream file into the working area, so edits are made to real source with full compiler and LSP context
+[*] [b]Base commit pinning[/b] — the package records the upstream commit it was authored against and always diffs against that, so pulling new upstream commits does not change existing patches
+[*] [b]--rebase-base[/b] — moves the package onto current upstream. Unedited files fast-forward; real overlaps leave standard conflict markers in the working copy, and refresh will not run until they are resolved
+[*] [b]Drift detection[/b] — a manifest records the hash of every generated entry. A hand-edited patches/ or files/ entry produces a warning naming it, then is overwritten
+[*] [b].pkgignore[/b] — excludes design docs and dev scripts from classification. Without it they are treated as new sources and shipped inside the firmware
+[/list]
+
+[b][size=120]Composition[/size][/b]
+
+[list]
+[*] Patches are ordered by a numeric filename prefix, with ties broken by position in the CUSTOM_PKG list
+[*] Upstream is materialized once, then each patch applies with git apply -3 against the previous patch's output, so the stack is cumulative rather than last-wins
+[*] Two packages editing different parts of the same function compose. Editing the same lines is a fatal configure error naming the patch
+[*] The result is scanned for conflict markers after every application regardless of git apply's exit status, since it can exit 0 having written a conflicted file
+[*] Patch filename and the +++ b/ header inside the diff must agree on the target, and the target must exist. Either check failing is a named configure error
+[*] Two packages providing the same new file is caught before either reaches the shadow tree
+[/list]
+
+[b][size=120]make pkg_build PKG=<dir>[/size][/b]
+
+Cleans, runs the test suite with the package active, refreshes, and zips
+patches/ and files/ into pkg_dist/. A failing suite produces no artifact. The
+zip is size-checked against PKG_MAX_SIZE, 200KB by default, and deleted if it
+exceeds it.
+
+[b]Two things to know[/b]
+
+The build reads the generated patches/ and files/ directories, never the working
+area. Editing a source without refreshing produces a successful build, with no
+error or warning, containing the previous version of that code. A package whose
+patches are missing entirely configures and builds and contains none of that
+package. Run refresh before building; the forth-core build script does it as its
+first step.
+
+Everything in a package directory is now tracked in git, including the working
+area. In v0.2 it was gitignored as regenerable scratch, which it is not: refresh
+treats a missing working file as an instruction to delete its generated output,
+so a fresh clone deleted the compiler-visible source on its first refresh. The
+cost of tracking both is committed redundancy between a working file and its
+generated counterpart.
+
+forth-core is the package this is used for, currently 14 patches against
+upstream files plus 13 new sources.
+
+The system and that package are both on a
+[url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release
+branch[/url], built against upstream c43 b8f79e486. The resolver and the refresh
+tool are four files under tools/, plus changes to Makefile, meson.build and
+meson_options.txt. Nothing else in there, so you can see the whole thing at
+once.

@@ -1,0 +1,202 @@
+Stage 2 of the Forth package is done.
+
+Stage 1 was line-at-a-time: alpha-enter a line so it lands in X as a string,
+then XEQ FORTH. That still works. The difference is that Forth source can now be
+part of a normal R47 program, stored as program steps.
+
+In PEM you insert FORTH and an alpha editor opens on the source. The closing
+marker is inserted at the same time, so the region is balanced from the start.
+ENTER stores the line and opens the next one inside the pair, EXIT closes the
+editor, EDIT reopens a line later.
+
+[code]: SQ2 DUP × ;
+: TWICE DUP + ; GLOBAL[/code]
+
+SQ2 is private to the program it sits in. TWICE has GLOBAL after it, so it moves
+to the global dictionary, survives power-off and backup/restore, and can be
+called from the keyboard. Program-local is the default because two programs that
+both define SQ2 should not affect each other. Definitions are scanned before the
+program runs, so a word can be used above the line that defines it.
+
+Control flow from source is IF/ELSE/THEN, BEGIN/UNTIL, BEGIN/AGAIN and
+BEGIN/WHILE/REPEAT. RECURSE, IMMEDIATE and FORGET are also in.
+
+Forth can call C47 functions with the normal parameter forms: direct numbers and
+registers, named registers, flags, and the indirect forms. This runs through the
+same validation and dispatch code the keyboard uses rather than a separate
+implementation. XEQ resolves C47 labels, C47 functions and Forth words, and R47
+programs can XEQ Forth words. FWRD is a menu of the words visible from the
+current program; picking one inserts it at the cursor.
+
+A source line is checked before it is stored. Structure and parameter forms
+only, with no dictionary side effects. If the line is invalid the original
+program step is left as it was.
+
+Where Forth convention and R47 convention disagree, R47 wins. This is meant as
+an extension of the existing programming system, not a separate Forth alongside
+it.
+
+[b]Sample program[/b]
+
+Two normal R47 programs. FDEMO is the main one; NATADD is a global label called
+from Forth. The right arrow is the calculator's arrow glyph, not - followed by >.
+
+[code]LBL 'FDEMO'
+»FORTH
+: SUMDOWN DUP IF DUP 1 - RECURSE + THEN ;
+: COUNTDOWN BEGIN DUP WHILE 1 - REPEAT ;
+: UNTIL1 BEGIN 1 - DUP UNTIL DROP ;
+: CHOOSE IF 111 ELSE 222 THEN ;
+: SPIN BEGIN AGAIN ;
+: PLUS10 10 + ; GLOBAL
+: GONE1 1 ; GLOBAL
+: GONE2 2 ; GLOBAL
+: IMM3 3 ; IMMEDIATE
+: EMPTY IMM3 ;
+: CALLWORD XEQ 'PLUS10' ;
+: CLEAR XEQ 'CLSTK' ;
+CLEAR
+5 SUMDOWN STO 00
+5 COUNTDOWN STO 01
+99 1 UNTIL1 STO 02
+1 CHOOSE STO 03
+0 CHOOSE STO 04
+7 CALLWORD STO 05
+42 STO 'DEMO' RCL 'DEMO' STO 06
+CNST 10
+10 STO 07
+SF 10
+18 STO 09 77 STO →09 RCL 18 STO 10
+19 STO 'PTR' 88 STO →'PTR' RCL 19 STO 11
+XEQ :GET0:
+STO 12
+2
+XEQ 'NATADD'
+STO 13
+5 LATER STO 14
+99 EMPTY STO 15
+1 2 CLEAR 9 STO 16
+FORGET GONE1
+: LATER 2 * ;
+FORTH«
+RTN
+LBL :GET0:
+RCL 00
+RTN
+END[/code]
+
+[code]LBL 'NATADD'
+»FORTH
+100 +
+FORTH«
+RTN
+END[/code]
+
+XEQ 'FDEMO' gives:
+
+[code]R00 = 15   SUMDOWN, IF and RECURSE (5+4+3+2+1)
+R01 = 0    COUNTDOWN, BEGIN/WHILE/REPEAT
+R02 = 99   UNTIL1, BEGIN/UNTIL, leaves the lower value
+R03 = 111  true arm of IF/ELSE/THEN
+R04 = 222  false arm of IF/ELSE/THEN
+R05 = 17   compiled XEQ of the global Forth word PLUS10
+R06 = 42   named variable STO/RCL through 'DEMO'
+R07 = 10   execution continued past the direct numeric CNST parameter
+R09 = 18   register holding the indirect target number
+R10 = 77   STO →09 reached register 18, RCL brought it back
+R11 = 88   STO →'PTR' reached register 19 through the named pointer
+R12 = 15   XEQ :GET0: called the local R47 label
+R13 = 102  XEQ 'NATADD' called the global R47 label
+R14 = 10   LATER used before the line that defines it
+R15 = 99   IMM3 ran while EMPTY compiled, so EMPTY has no runtime body
+R16 = 9    XEQ 'CLSTK' resolved a normal C47 item and cleared the stack[/code]
+
+This wants the 8-level stack. The Forth data stack is the calculator's own RPN
+stack, so a recursive word holds one operand per level, and SUMDOWN needs about
+six of them. Set to 4 levels it reports a full stack instead of returning 15.
+
+Flag 10 ends up set, with DEMO and PTR holding 42 and 19. After a power cycle
+PLUS10 is still callable from the keyboard and SUMDOWN is not, since it belongs
+to FDEMO. FORGET GONE1 removes GONE1 and every global defined after it, so GONE2
+goes with it.
+
+A native C47 item called from Forth does not push its result back onto the Forth
+stack when the step ends, which is why R07 checks the literal on the next line
+instead of the CNST result. SPIN is compiled but not run, since running it
+reaches the runaway guard; R/S interrupts it on hardware.
+
+FWRD and the pre-store check don't show up in the registers. To see them, EDIT
+one of the Forth lines and open FWRD, then delete THEN from CHOOSE and press
+ENTER, which should reject the line and leave the step unchanged.
+
+[b]A second program[/b]
+
+FDEMO exercises features one at a time. This one is closer to something you
+would keep on the machine: it writes a six-period compound interest schedule
+into R00 to R05 and leaves the closing balance in R22. GROW is promoted with
+GLOBAL, so it stays on the calculator after the program has finished.
+
+[code]LBL 'SAVE'
+»FORTH
+: GROW 1.05 * ; GLOBAL
+: PUT STO →20 ;
+: BUMP RCL 20 1 + STO 20 DROP ;
+: TALLY RCL 19 1 - STO 19 DROP ;
+: STEP GROW PUT BUMP TALLY ;
+: RUN BEGIN RCL 19 WHILE STEP REPEAT ;
+0 STO 20 DROP
+6 STO 19 DROP
+1000 RUN STO 22
+FORTH«
+RTN
+END[/code]
+
+The balance rides the stack the whole way through. R20 is the slot to write
+next, R19 the periods left to run, and PUT stores through the indirect form
+without popping, so the balance is still there for the next period. XEQ 'SAVE'
+gives:
+
+[code]R00 = 1050
+R01 = 1102.5
+R02 = 1157.625
+R03 = 1215.50625
+R04 = 1276.2815625
+R05 = 1340.095640625
+R22 = 1340.095640625[/code]
+
+GROW is still there afterwards. Key 200, then XEQ GROW twice, and you get 220.5.
+Change the 1.05 and you have a different rate; change the 6 and you get a longer
+schedule, up to whatever register you want to fill.
+
+Writing this program turned up two bugs, both now fixed. RCL was overwriting X
+instead of lifting onto it, so a value could not survive on the stack across an
+RCL. The first version of this program kept the balance on the stack exactly as
+it does above, and wrote six zeros without reporting anything. Forth pushes were
+leaving C47's auto-lift flag clear, so the next native item took the overwrite
+path. Every dispatch that leaves a value in X now sets it, the way the
+calculator's own dispatcher does.
+
+The other one: recursion deeper than the stack used to run off the top and keep
+going. The data stack is the calculator's own RPN stack, 8 levels with SSIZE8,
+so a recursive word holding one operand per level runs out at 6 or 7. A
+factorial word returned 4320 for 7! instead of 5040, and never raised anything.
+That now reports a full stack rather than handing back a plausible wrong number.
+
+[b]Not implemented[/b]
+
+CREATE/DOES>, VARIABLE, CONSTANT, vocabularies, and a separate Forth terminal.
+Source is stored as R47 program steps and the C47 catalog supplies most of the
+functions, so this is still not a complete ANS Forth.
+
+Everything you need is on a
+[url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release
+branch[/url]: the package system, the package itself as 14 diffs plus 13 new
+sources, and install notes. No history or design documents in there, just the
+build tree. It is built against upstream c43 b8f79e486. Clone upstream at that
+commit, copy the files over, then:
+
+[code]make dist_dmcp5r47 CUSTOM_PKG=packages/forth-core[/code]
+
+No upstream file is modified. Building without the flag gives vanilla firmware.
+Tested on the simulator and on my R47. This is a hobby project modifying
+calculator firmware, so keep a backup of your state and flash at your own risk.
