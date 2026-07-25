@@ -151,6 +151,13 @@ bool forthFindColon(const char *name, uint16_t *ref);
 /* Same as forthFindColon but also reports hdr->flags. */
 bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags);
 
+/* §4.2 executable-name resolution (forth_bridge.c).  forthTryColonFallback
+ * is the whole "resolve then act" fallback used after a native label miss;
+ * forthDispatchColon is just its action half, for callers that must do
+ * something (leaveTamModeIfEnabled) between the two. */
+void   forthDispatchColon(int16_t item, char *name, uint16_t widx);
+bool_t forthTryColonFallback(int16_t item, char *name);
+
 /* F6-5 browse surface: copy the name of the n-th listable entry
  * (newest-first) into out (>= 15 bytes, NUL-terminated).  Listable =
  * not FF_SMUDGE, nameLen 1..14, and (fdict variant) owner matches.

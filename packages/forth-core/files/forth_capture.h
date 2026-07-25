@@ -46,9 +46,8 @@ void     forthCaptureSuspend(void);
 void     forthCaptureResume(void);
 void     forthCaptureSanitizeRestoredUi(void);
 
-/* F6-3: shared inserter (implementation stays in keyboard.c — it owns
- * the cap constants' original site). */
-bool_t   forthCapInsertName(const char *name);
+/* F6-3's shared inserter forthCapInsertName() now lives in forth_menu.h
+ * alongside the picker that is its main caller (S2). */
 
 /* F6-6: capture cannot outlive the dictionary lifecycle.  Called at the
  * same seams as forthScanTrackReset (init / clear / restore

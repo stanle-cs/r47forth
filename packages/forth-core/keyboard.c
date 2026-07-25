@@ -4,55 +4,13 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_capture.h"
+#include "forth_menu.h"
 
 
 TO_QSPI static const char bugScreenNonexistentMenu[] = "In function determineFunctionKeyItem: nonexistent menu specified!";
 TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineItem: item was not determined!";
 
 static void executeFunction(const char *data, int16_t item_);
-
-/* pickerInsertName — insert dynmenuGetLabel(dynamicMenuItem) + trailing space
- * into aimBuffer at T_cursorPos (§9.6 P-H7).
- * Returns true on success, false if buffer would overflow. */
-/* Insert name + one trailing space into the open capture line at
- * T_cursorPos.  Same 256-byte/196-glyph cap as typing; false = no room
- * or capture not open.  §9.6 P-H7 discipline, generalized (F6-3). */
-bool_t forthCapInsertName(const char *name)
-{
-  int32_t nameLen = stringByteLength(name);
-  uint8_t *cap = forthCapBuf();
-  if(cap == NULL) { return false; }
-  int32_t bufLen = stringByteLength((char *)cap);
-  if(bufLen + nameLen + 1 < 256 && stringGlyphLength((char *)cap) + nameLen + 1 <= 196) {
-    xcopy((char *)cap + T_cursorPos + nameLen + 1, (char *)cap + T_cursorPos,
-          stringByteLength((char *)cap + T_cursorPos) + 1);
-    xcopy((char *)cap + T_cursorPos, name, nameLen);
-    cap[T_cursorPos + nameLen] = ' ';
-    T_cursorPos += nameLen + 1;
-    return true;
-  }
-  return false;
-}
-
-bool_t pickerInsertName(void)
-{
-  return forthCapInsertName(dynmenuGetLabel(dynamicMenuItem));
-}
-
-/* forthPickerGuard — guard for MNU_FORTH picker action in executeFunction (§9.6).
- * Returns true only when all Forth-capture conjuncts hold AND the current
- * softmenu is actually MNU_FORTH (menu-identity check, placed before any
- * dynamicSoftmenu[] indexing to prevent OOB access on wrong menu). */
-bool_t forthPickerGuard(int16_t item)
-{
-  if(softmenu[softmenuStack[0].softmenuId].menuItem != -MNU_FORTH) return false;
-  return (calcMode == CM_PEM
-      && getSystemFlag(FLAG_ALPHA)
-      && tam.function == ITM_FORTH
-      && item == ITM_NOP
-      && dynamicMenuItem >= 0
-      && dynamicMenuItem < dynamicSoftmenu[softmenuStack[0].softmenuId].numItems);
-}
 
   int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
     int16_t item = ITM_NOP;
@@ -2315,21 +2273,8 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
             }
             else {
               /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
-              {
-                uint16_t widx;
-                if (forthFindColon(funcParam, &widx)) {
-                  /* code-audit 2026-07-20: must record a step, not execute
-                   * live, when composing a program — mirrors the label arm
-                   * above and DESIGN.md §4.2's "PEM recording of XEQ 'NAME'"
-                   * contract (names persist, never widx). */
-                  if(calcMode == CM_PEM) {  // Insert user program call in program
-                    insertUserItemInProgram(item, funcParam);
-                  }
-                  else {                    // Execute item
-                    reallyRunFunction(ITM_FCALL, widx);
-                  }
-                  return;
-                }
+              if(forthTryColonFallback(item, funcParam)) {
+                return;
               }
               displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
               #if (EXTRA_INFO_ON_CALC_ERROR == 1)

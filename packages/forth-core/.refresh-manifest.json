@@ -1,13 +1,15 @@
 {
   "base_commit": "b8f79e486ae19b84af9b6db7230c9a6d1279cced",
   "files": {
-    "forth_bridge.c": "ef6ad22f29a817d4a1ec9dedf93485e081909f754fb03bfd4c620bd2142eda9c",
+    "forth_bridge.c": "3fba1ded755df5cea7281e8a7db094b7736e8ebbef8edfe0054ff4dd9d697ef7",
     "forth_capture.c": "20d72e0e09a6dd74408912cc5eba0184a5b7f0135504e01572622f43c0122325",
-    "forth_capture.h": "3b55ad3ff353017ac96bde3166163301c6525366a71a468fb21fed96c2972dc0",
+    "forth_capture.h": "36a359ff1644099426efb72ec0fc6d0d13cb84d4113aecf18f837daca332d6db",
     "forth_compile.c": "b4e8eaa075fa60d61e40a54d1a21ccaa82cb65feeeeb8e406f5731fa29832b61",
     "forth_dict.c": "7e67d54a6676da6a8167dce86c287d6176476b9cb25d0d48792b894a21450ccc",
-    "forth_dict.h": "b89563c5d161b1a737b344f3995a0a93b5b851c0cda12335d5e60f4f0b14b7e9",
+    "forth_dict.h": "0ed072e613d552b7002d3f6b885756ee49a32fc257a7726b4753ac5e3f9e0959",
     "forth_inner.c": "ab038a6f96fd737cb1497a8566b999dd48099b1df99936a1a1ed40e38c787d2f",
+    "forth_menu.c": "ff383932ce15eb9ec02b9e5ecd289544a2969a4c7edf3a883bab89fba4e4cd96",
+    "forth_menu.h": "f8138cfe2d2768cb57ec67ccb888c05f398e7225920fc4e7d5db2d1a24445ca5",
     "forth_prims.c": "342b8c65302b7dace4d53bb949d25d90f5c2f8f6dc201ce7e96c4f918ec339e5",
     "forth_prims.h": "f7581df587a7f9d287e144b42845a84ec9466637ea16e2330ac62548d3b84d97",
     "programming/param_core.c": "b7c958a993ea3955b442e373fbd60f01fa1b6a15478537dff7df378c96967bbd",
@@ -22,14 +24,14 @@
     "010-defines.h.patch": "66ce4faf35b1b614ec0e0d372a5413a9a823f1d23b3d1d5ae1722471c5863c01",
     "010-items.c.patch": "0cd885e12fa16d299a7447b27a297f9810f43d0d60d0141e60aa42c0f097333e",
     "010-items.h.patch": "2bae0c1c4edd77ae5f5a4d73bf2097a270c870b39774147747f008a1387f8e23",
-    "010-keyboard.c.patch": "4f0944f8f9a39c8131ec59f79b7e6dc71999e98d33f713ccc0b114f8d43c6e1a",
+    "010-keyboard.c.patch": "b57d266519b7a267a1f250ada90ec057d7c8380a119b824ad93f1a8414a99875",
     "010-programming__decode.c.patch": "8152a5fdb781ae00d12e7f0af40d72d2f615407463ac551f9ed097158668662f",
     "010-programming__lblGtoXeq.c.patch": "c7447a4d7f5b0107c7da373ff8784696fefbcef6e11bd54db96b0d4b1d706e4b",
     "010-programming__manage.c.patch": "436af6ba1dd4783e643f2f3789e4a45846610f84994d5f499a09a3a54d0060f1",
     "010-programming__nextStep.c.patch": "e3c8b593021c066e1bc09a3c81e597a8f87d003e754dcce1626ecc17d5f0a2e2",
     "010-saveRestoreBackup.c.patch": "b01a8654f88f21038023834a8ef724e73a007365317bb0ec3b7ec9118abed2ca",
-    "010-screen.c.patch": "62f14a244328fcc415bdd27442ca5867c3162e43c7fb194daa51b397577fd0be",
-    "010-softmenus.c.patch": "c1d3d38a68367a938c709a556ab9d9ccbce13139377aa268886eb2e0379c703f",
-    "010-ui__tam.c.patch": "697d78e1c36ca7e4cf9ff491e3e5a6c63e5e9474b116fb433b3edffd2a705211"
+    "010-screen.c.patch": "975b9dc586fb35f49833a08e1148d28b19f800177ba651b8dbbfa8774b8da520",
+    "010-softmenus.c.patch": "c961e7fafdf22a605a9e0b175b9f76d3e021ff8b670ab82634132e146632751d",
+    "010-ui__tam.c.patch": "9bbd09dee680573bd69c9c7604a205ba9e192151cf86b7c7be8855824ef9bd00"
   }
 }

@@ -1,67 +1,18 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..33f4385df6b2e8f9dc1b2cd8662ab955d09a8132 100644
+index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..153656aedae94af659e91a5c5c4a897e3ad1b566 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
-@@ -2,6 +2,8 @@
+@@ -2,6 +2,9 @@
  // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
  
  #include "c47.h"
 +#include "forth_dict.h"
 +#include "forth_capture.h"
++#include "forth_menu.h"
  
  
  TO_QSPI static const char bugScreenNonexistentMenu[] = "In function determineFunctionKeyItem: nonexistent menu specified!";
-@@ -9,6 +11,49 @@ TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineI
- 
- static void executeFunction(const char *data, int16_t item_);
- 
-+/* pickerInsertName — insert dynmenuGetLabel(dynamicMenuItem) + trailing space
-+ * into aimBuffer at T_cursorPos (§9.6 P-H7).
-+ * Returns true on success, false if buffer would overflow. */
-+/* Insert name + one trailing space into the open capture line at
-+ * T_cursorPos.  Same 256-byte/196-glyph cap as typing; false = no room
-+ * or capture not open.  §9.6 P-H7 discipline, generalized (F6-3). */
-+bool_t forthCapInsertName(const char *name)
-+{
-+  int32_t nameLen = stringByteLength(name);
-+  uint8_t *cap = forthCapBuf();
-+  if(cap == NULL) { return false; }
-+  int32_t bufLen = stringByteLength((char *)cap);
-+  if(bufLen + nameLen + 1 < 256 && stringGlyphLength((char *)cap) + nameLen + 1 <= 196) {
-+    xcopy((char *)cap + T_cursorPos + nameLen + 1, (char *)cap + T_cursorPos,
-+          stringByteLength((char *)cap + T_cursorPos) + 1);
-+    xcopy((char *)cap + T_cursorPos, name, nameLen);
-+    cap[T_cursorPos + nameLen] = ' ';
-+    T_cursorPos += nameLen + 1;
-+    return true;
-+  }
-+  return false;
-+}
-+
-+bool_t pickerInsertName(void)
-+{
-+  return forthCapInsertName(dynmenuGetLabel(dynamicMenuItem));
-+}
-+
-+/* forthPickerGuard — guard for MNU_FORTH picker action in executeFunction (§9.6).
-+ * Returns true only when all Forth-capture conjuncts hold AND the current
-+ * softmenu is actually MNU_FORTH (menu-identity check, placed before any
-+ * dynamicSoftmenu[] indexing to prevent OOB access on wrong menu). */
-+bool_t forthPickerGuard(int16_t item)
-+{
-+  if(softmenu[softmenuStack[0].softmenuId].menuItem != -MNU_FORTH) return false;
-+  return (calcMode == CM_PEM
-+      && getSystemFlag(FLAG_ALPHA)
-+      && tam.function == ITM_FORTH
-+      && item == ITM_NOP
-+      && dynamicMenuItem >= 0
-+      && dynamicMenuItem < dynamicSoftmenu[softmenuStack[0].softmenuId].numItems);
-+}
-+
-   int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
-     int16_t item = ITM_NOP;
-     dynamicMenuItem = -1;
-@@ -75,6 +120,12 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -75,6 +78,12 @@ static void executeFunction(const char *data, int16_t item_);
          break;
        }
  
@@ -74,7 +25,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..33f4385df6b2e8f9dc1b2cd8662ab955
        case MNU_VAR: {
          dynamicMenuItem = firstItem + itemShift + fn;
          item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : MNU_DYNAMIC);
-@@ -434,7 +485,20 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -434,7 +443,20 @@ static void executeFunction(const char *data, int16_t item_);
      }
  
  
@@ -96,7 +47,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..33f4385df6b2e8f9dc1b2cd8662ab955
        bool_t inCatalog = false;
        for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
          if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {
-@@ -958,6 +1022,14 @@ endReturnTrue:
+@@ -958,6 +980,14 @@ endReturnTrue:
  
  
          lastKeyItemDetermined = item;
@@ -111,31 +62,18 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..33f4385df6b2e8f9dc1b2cd8662ab955
        }
  
        // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
-@@ -2242,6 +2314,23 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2242,6 +2272,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
                }
              }
              else {
 +              /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
-+              {
-+                uint16_t widx;
-+                if (forthFindColon(funcParam, &widx)) {
-+                  /* code-audit 2026-07-20: must record a step, not execute
-+                   * live, when composing a program — mirrors the label arm
-+                   * above and DESIGN.md §4.2's "PEM recording of XEQ 'NAME'"
-+                   * contract (names persist, never widx). */
-+                  if(calcMode == CM_PEM) {  // Insert user program call in program
-+                    insertUserItemInProgram(item, funcParam);
-+                  }
-+                  else {                    // Execute item
-+                    reallyRunFunction(ITM_FCALL, widx);
-+                  }
-+                  return;
-+                }
++              if(forthTryColonFallback(item, funcParam)) {
++                return;
 +              }
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -3855,12 +3944,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3855,12 +3889,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              break;
            }
          }
@@ -153,7 +91,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..33f4385df6b2e8f9dc1b2cd8662ab955
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3871,6 +3963,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3871,6 +3908,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -176,7 +114,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..33f4385df6b2e8f9dc1b2cd8662ab955
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4363,9 +4471,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4363,9 +4416,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -201,7 +139,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..33f4385df6b2e8f9dc1b2cd8662ab955
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
-@@ -4622,7 +4744,9 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4622,7 +4689,9 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
            menuUp();
          }
          else {
@@ -212,7 +150,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..33f4385df6b2e8f9dc1b2cd8662ab955
              pemAlpha(ITM_BACKSPACE);
            }
            fnBst(NOPARAM);
-@@ -4852,7 +4976,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4852,7 +4921,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
            menuDown();
          }
          else {

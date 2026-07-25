@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..957888115c3b15abec239287931e7a3db5b7f9c4 100644
+index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..f8496f336de2daa97342f71e04c3c2eaee29511b 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -3,6 +3,8 @@
@@ -11,31 +11,18 @@ index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..957888115c3b15abec239287931e7a3d
  
  static void refreshRegisterLineRestoreT(void);
  static void _refreshPemScreen(void);
-@@ -819,6 +821,23 @@ void execTimerApp(uint16_t timerType) {
+@@ -819,6 +821,10 @@ void execTimerApp(uint16_t timerType) {
          }
        }
        else {
 +        /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
-+        {
-+          uint16_t widx;
-+          if (forthFindColon(funcParam, &widx)) {
-+            /* code-audit 2026-07-20: must record a step, not execute live,
-+             * when composing a program — mirrors the label arm above and
-+             * DESIGN.md §4.2's "PEM recording of XEQ 'NAME'" contract
-+             * (names persist, never widx). */
-+            if(calcMode == CM_PEM) {  // Insert user program call in program
-+              insertUserItemInProgram(item, funcParam);
-+            }
-+            else {                    // Execute item
-+              reallyRunFunction(ITM_FCALL, widx);
-+            }
-+            return;
-+          }
++        if(forthTryColonFallback(item, funcParam)) {
++          return;
 +        }
          displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
              sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -1772,23 +1791,25 @@ return res;
+@@ -1772,23 +1778,25 @@ return res;
  
  
    void findOffset(void) {             //C47 JM

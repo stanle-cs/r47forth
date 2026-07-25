@@ -982,12 +982,7 @@ printf("tam.value: %d\n", tam.value);
               uint16_t widx;
               if (!tam.colon && forthFindColon(buffer, &widx)) {
                 leaveTamModeIfEnabled();
-                if(calcMode == CM_PEM) {
-                  insertUserItemInProgram(tam.function, buffer);
-                }
-                else {
-                  reallyRunFunction(ITM_FCALL, widx);
-                }
+                forthDispatchColon(tam.function, buffer, widx);
                 return;
               }
             }

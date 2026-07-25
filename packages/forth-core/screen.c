@@ -822,21 +822,8 @@ void execTimerApp(uint16_t timerType) {
       }
       else {
         /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
-        {
-          uint16_t widx;
-          if (forthFindColon(funcParam, &widx)) {
-            /* code-audit 2026-07-20: must record a step, not execute live,
-             * when composing a program — mirrors the label arm above and
-             * DESIGN.md §4.2's "PEM recording of XEQ 'NAME'" contract
-             * (names persist, never widx). */
-            if(calcMode == CM_PEM) {  // Insert user program call in program
-              insertUserItemInProgram(item, funcParam);
-            }
-            else {                    // Execute item
-              reallyRunFunction(ITM_FCALL, widx);
-            }
-            return;
-          }
+        if(forthTryColonFallback(item, funcParam)) {
+          return;
         }
         displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
           #if (EXTRA_INFO_ON_CALC_ERROR == 1)

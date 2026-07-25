@@ -1,5 +1,5 @@
 diff --git a/src/c47/ui/tam.c b/src/c47/ui/tam.c
-index 97301df3e7f567f5458eb456b35859175c5a7e97..7a743998dfdf459d11fbdc0b2f218a21bfb7f5d5 100644
+index 97301df3e7f567f5458eb456b35859175c5a7e97..7d21e51c262c412d69fca88fdeda1f53446199a4 100644
 --- a/src/c47/ui/tam.c
 +++ b/src/c47/ui/tam.c
 @@ -2,6 +2,8 @@
@@ -11,7 +11,7 @@ index 97301df3e7f567f5458eb456b35859175c5a7e97..7a743998dfdf459d11fbdc0b2f218a21
  
      TO_QSPI const int16_t StoOperations[][2] = {
        {ITM_ADD,      ITM_STOADD},
-@@ -974,6 +976,21 @@ printf("tam.value: %d\n", tam.value);
+@@ -974,6 +976,16 @@ printf("tam.value: %d\n", tam.value);
                  return;
                }
              }
@@ -21,19 +21,14 @@ index 97301df3e7f567f5458eb456b35859175c5a7e97..7a743998dfdf459d11fbdc0b2f218a21
 +              uint16_t widx;
 +              if (!tam.colon && forthFindColon(buffer, &widx)) {
 +                leaveTamModeIfEnabled();
-+                if(calcMode == CM_PEM) {
-+                  insertUserItemInProgram(tam.function, buffer);
-+                }
-+                else {
-+                  reallyRunFunction(ITM_FCALL, widx);
-+                }
++                forthDispatchColon(tam.function, buffer, widx);
 +                return;
 +              }
 +            }
            }
            if(calcMode != CM_PEM) {
              leaveTamModeIfEnabled();
-@@ -1153,6 +1170,9 @@ printf("tam.value: %d\n", tam.value);
+@@ -1153,6 +1165,9 @@ printf("tam.value: %d\n", tam.value);
          closeNim();
        }
      }
@@ -43,7 +38,7 @@ index 97301df3e7f567f5458eb456b35859175c5a7e97..7a743998dfdf459d11fbdc0b2f218a21
      else if(calcMode == CM_PEM && aimBuffer[0] != 0) {
        if(getSystemFlag(FLAG_ALPHA)) {
          pemCloseAlphaInput();
-@@ -1378,6 +1398,7 @@ printf("tam.value: %d\n", tam.value);
+@@ -1378,6 +1393,7 @@ printf("tam.value: %d\n", tam.value);
  
      if(calcMode == CM_PEM) {
        hourGlassIconEnabled = false;

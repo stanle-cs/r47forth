@@ -13,6 +13,45 @@ void fnForthCall(uint16_t param)
     forthInner(param, programRunStop == PGM_RUNNING);
 }
 
+/* ---- §4.2 executable-name resolution ---- */
+
+/* Dispatch a name that forthFindColon() has already resolved to colon word
+ * `widx`: record a step when composing a program, execute it otherwise.
+ *
+ * code-audit 2026-07-20: PEM must RECORD a step, not execute live — this
+ * mirrors the native label arm at every call site and honours DESIGN.md
+ * §4.2's "PEM recording of XEQ 'NAME'" contract (the NAME persists in the
+ * program, never the dictionary index, which is not stable across edits).
+ *
+ * Split from forthTryColonFallback() because ui/tam.c must run
+ * leaveTamModeIfEnabled() between the lookup and the dispatch. */
+void forthDispatchColon(int16_t item, char *name, uint16_t widx)
+{
+    if (calcMode == CM_PEM) {   // Insert user program call in program
+        insertUserItemInProgram(item, name);
+    }
+    else {                      // Execute item
+        reallyRunFunction(ITM_FCALL, widx);
+    }
+}
+
+/* Forth fallback after a native label miss (DESIGN.md §4.2): resolve `name`
+ * as a colon word and dispatch it.  Returns false without side effects when
+ * it is not one, so the caller falls through to its own not-found handling.
+ *
+ * Shared by the two identical call sites in keyboard.c (determineItem's XEQ
+ * arm) and screen.c (execTimerApp); ui/tam.c uses the two halves separately
+ * because of its TAM-exit ordering and its !tam.colon guard. */
+bool_t forthTryColonFallback(int16_t item, char *name)
+{
+    uint16_t widx;
+    if (!forthFindColon(name, &widx)) {
+        return false;
+    }
+    forthDispatchColon(item, name, widx);
+    return true;
+}
+
 /* ---- §9.4 derived-state helpers ---- */
 
 /* Returns true if step is an ITM_FORTH step with STRING_LABEL_VARIABLE param.
