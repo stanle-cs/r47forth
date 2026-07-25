@@ -740,6 +740,51 @@ typedef struct {
 #define MIN_GAP_WIDTH_RATIO 0.001   // Minimum gap width as ratio of x-range
 #define ASYMPTOTE_SAMPLE_POINTS 5   // Points to sample on each side
 
+// graph_eqn's 36 real_t working buffers and its 10 asymptote records, held in one heap block instead of on the stack. Each buffer is the storage REAL_T_PTR would
+// have declared: 24 bytes at PLOT_DIGITS 16, addressed through a real_t pointer. 36 x 24 = 864, plus 10 x 76 = 760, so 1624 bytes leave the frame; measured with
+// arm-none-eabi-gcc the graph_eqn plus fnEqSolvGraph frame falls from 3408 to 1904 bytes, 1504 less stack. The DM42 program stack is 6 kB and this frame overran it.
+typedef struct {
+  uint32_t xData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t x01Data[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t y01Data[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t y02Data[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t y00Data[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t dyData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t dx0Data[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t dxData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t grad2Data[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t grad1Data[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t grad0Data[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t prevDxData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t yAvgData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t x_min_rData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t x_max_rData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t y_min_rData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t y_max_rData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t jumpBackStartXData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t jumpBackStartYData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t jumpBackXData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t jumpBackDxData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t jbYData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t discontinuityThresholdData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t maxCurvatureChangeData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t linearSlopeData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t interpolationErrorData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t curvatureChangeData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t newDxData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t improvementRatioData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t highResStartXData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t cumulativeCurvatureChangeData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t baselineCurvatureChangeData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t savedXBeforeHighresData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t savedDxBeforeHighresData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t tmpAData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  uint32_t tmpBData[REAL_SIZE_IN_BYTES(PLOT_DIGITS) / 4];
+  AsymptoteInfo asymptotes[MAX_ASYMPTOTES];
+} graphWork_t;
+
+static graphWork_t *graphWork = NULL;
+
 
 bool_t detectAndCharacterizeAsymptote(const real_t *xLeft, const real_t *yLeft, const real_t *xRight, const real_t *yRight, const real_t *xGap, const real_t *gapWidth, const real_t *xMin, const real_t *xMax, const real_t *yMin, const real_t *yMax, AsymptoteInfo *asymptote) {
   #if defined(GRAPHDEBUG)
@@ -1057,6 +1102,13 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       print_caller(NULL);
     #endif //GRAPHDEBUG_MIN
     bool_t plotAborted = false;   // R/S/EXIT or a nested-engine abort: skip the draw and exit dead, do not enter the graph view
+    if(graphWork == NULL) {
+      graphWork = malloc(sizeof(graphWork_t));
+      if(graphWork == NULL) {
+        displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
+        return;
+      }
+    }
     currentKeyCode = 255;
     calcMode = CM_GRAPH;
     saveForUndo();
@@ -1065,42 +1117,42 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     // Configure the graph-local context: 14 working digits, full ctxtReal39 settings otherwise.
     ctxtGraphsLocal = ctxtReal39;
     ctxtGraphsLocal.digits = GRAPH_WORKING_DIGITS;
-    REAL_T_PTR(x, PLOT_DIGITS);
-    REAL_T_PTR(x01, PLOT_DIGITS);
-    REAL_T_PTR(y01, PLOT_DIGITS);
-    REAL_T_PTR(y02, PLOT_DIGITS);
-    REAL_T_PTR(y00, PLOT_DIGITS);                          // Add y00 for improved discontinuity detection
-    REAL_T_PTR(dy, PLOT_DIGITS);
-    REAL_T_PTR(dx0, PLOT_DIGITS);
-    REAL_T_PTR(dx, PLOT_DIGITS);
-    REAL_T_PTR(grad2, PLOT_DIGITS);
-    REAL_T_PTR(grad1, PLOT_DIGITS);
-    REAL_T_PTR(grad0, PLOT_DIGITS);
-    REAL_T_PTR(prevDx, PLOT_DIGITS);                       // Track previous step size
-    REAL_T_PTR(yAvg, PLOT_DIGITS);
-    REAL_T_PTR(x_min_r, PLOT_DIGITS);                      // real_t copy of external double x_min
-    REAL_T_PTR(x_max_r, PLOT_DIGITS);                      // real_t copy of external double x_max
-    REAL_T_PTR(y_min_r, PLOT_DIGITS);                      // real_t copy of external double y_min
-    REAL_T_PTR(y_max_r, PLOT_DIGITS);                      // real_t copy of external double y_max
-    REAL_T_PTR(jumpBackStartX, PLOT_DIGITS);
-    REAL_T_PTR(jumpBackStartY, PLOT_DIGITS);
-    REAL_T_PTR(jumpBackX, PLOT_DIGITS);
-    REAL_T_PTR(jumpBackDx, PLOT_DIGITS);
-    REAL_T_PTR(jbY, PLOT_DIGITS);
-    REAL_T_PTR(discontinuityThreshold, PLOT_DIGITS);
-    REAL_T_PTR(maxCurvatureChange, PLOT_DIGITS);
-    REAL_T_PTR(linearSlope, PLOT_DIGITS);
-    REAL_T_PTR(interpolationError, PLOT_DIGITS);
-    REAL_T_PTR(curvatureChange, PLOT_DIGITS);
-    REAL_T_PTR(newDx, PLOT_DIGITS);
-    REAL_T_PTR(improvementRatio, PLOT_DIGITS);
-    REAL_T_PTR(highResStartX, PLOT_DIGITS);
-    REAL_T_PTR(cumulativeCurvatureChange, PLOT_DIGITS);
-    REAL_T_PTR(baselineCurvatureChange, PLOT_DIGITS);
-    REAL_T_PTR(savedXBeforeHighres, PLOT_DIGITS);
-    REAL_T_PTR(savedDxBeforeHighres, PLOT_DIGITS);
-    REAL_T_PTR(tmpA, PLOT_DIGITS);
-    REAL_T_PTR(tmpB, PLOT_DIGITS);
+    real_t *const x = (real_t *)graphWork->xData;
+    real_t *const x01 = (real_t *)graphWork->x01Data;
+    real_t *const y01 = (real_t *)graphWork->y01Data;
+    real_t *const y02 = (real_t *)graphWork->y02Data;
+    real_t *const y00 = (real_t *)graphWork->y00Data;                          // Add y00 for improved discontinuity detection
+    real_t *const dy = (real_t *)graphWork->dyData;
+    real_t *const dx0 = (real_t *)graphWork->dx0Data;
+    real_t *const dx = (real_t *)graphWork->dxData;
+    real_t *const grad2 = (real_t *)graphWork->grad2Data;
+    real_t *const grad1 = (real_t *)graphWork->grad1Data;
+    real_t *const grad0 = (real_t *)graphWork->grad0Data;
+    real_t *const prevDx = (real_t *)graphWork->prevDxData;                       // Track previous step size
+    real_t *const yAvg = (real_t *)graphWork->yAvgData;
+    real_t *const x_min_r = (real_t *)graphWork->x_min_rData;                      // real_t copy of external double x_min
+    real_t *const x_max_r = (real_t *)graphWork->x_max_rData;                      // real_t copy of external double x_max
+    real_t *const y_min_r = (real_t *)graphWork->y_min_rData;                      // real_t copy of external double y_min
+    real_t *const y_max_r = (real_t *)graphWork->y_max_rData;                      // real_t copy of external double y_max
+    real_t *const jumpBackStartX = (real_t *)graphWork->jumpBackStartXData;
+    real_t *const jumpBackStartY = (real_t *)graphWork->jumpBackStartYData;
+    real_t *const jumpBackX = (real_t *)graphWork->jumpBackXData;
+    real_t *const jumpBackDx = (real_t *)graphWork->jumpBackDxData;
+    real_t *const jbY = (real_t *)graphWork->jbYData;
+    real_t *const discontinuityThreshold = (real_t *)graphWork->discontinuityThresholdData;
+    real_t *const maxCurvatureChange = (real_t *)graphWork->maxCurvatureChangeData;
+    real_t *const linearSlope = (real_t *)graphWork->linearSlopeData;
+    real_t *const interpolationError = (real_t *)graphWork->interpolationErrorData;
+    real_t *const curvatureChange = (real_t *)graphWork->curvatureChangeData;
+    real_t *const newDx = (real_t *)graphWork->newDxData;
+    real_t *const improvementRatio = (real_t *)graphWork->improvementRatioData;
+    real_t *const highResStartX = (real_t *)graphWork->highResStartXData;
+    real_t *const cumulativeCurvatureChange = (real_t *)graphWork->cumulativeCurvatureChangeData;
+    real_t *const baselineCurvatureChange = (real_t *)graphWork->baselineCurvatureChangeData;
+    real_t *const savedXBeforeHighres = (real_t *)graphWork->savedXBeforeHighresData;
+    real_t *const savedDxBeforeHighres = (real_t *)graphWork->savedDxBeforeHighresData;
+    real_t *const tmpA = (real_t *)graphWork->tmpAData;
+    real_t *const tmpB = (real_t *)graphWork->tmpBData;
     int16_t count = 0;
     int16_t ss0 = 0;
     int16_t ss1 = 0;
@@ -1109,7 +1161,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
     bool_t  grad2IncreaseDetected = false;
     int loop = 0;
     bool_t jumpedBack = false;
-    AsymptoteInfo asymptotes[MAX_ASYMPTOTES];
+    AsymptoteInfo *const asymptotes = graphWork->asymptotes;
     int asymptoteCount = 0;
   #if defined(GRAPHDEBUG)
     char strBuf1[42], strBuf2[42], strBuf3[42], strBuf4[42], strBuf5[42], strBuf6[42];
