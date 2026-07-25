@@ -1,0 +1,13 @@
+diff --git a/src/c47/c47Extensions/addons.c b/src/c47/c47Extensions/addons.c
+index 5c191c470be694f6b1819cbb4e55105814bd5821..5aaee169efe875a883c286d2d4de3338ee87f2d9 100644
+--- a/src/c47/c47Extensions/addons.c
++++ b/src/c47/c47Extensions/addons.c
+@@ -663,7 +663,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {
+         //printf("**[DL]** fnEdit cmPem func %d opParam %d opParam2 %d decodedLiteralType %d\n", func, opParam, opParam2, decodedLiteralType);
+         //fflush(stdout);
+ 
+-        if((func == ITM_LITERAL) || (func == ITM_REM)) {
++        if((func == ITM_LITERAL) || (func == ITM_REM) || (func == ITM_FORTH)) {
+           memset(aimBuffer, 0, AIM_BUFFER_LENGTH);
+ 
+           if(opParam == STRING_LABEL_VARIABLE) {

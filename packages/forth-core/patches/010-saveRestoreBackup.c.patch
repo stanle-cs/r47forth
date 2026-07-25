@@ -1,0 +1,60 @@
+diff --git a/src/c47/saveRestoreBackup.c b/src/c47/saveRestoreBackup.c
+index b86ac55c82f30de2ffd02e5b65928e626eebc6c8..944cec04de313e7344f407408aa53f8fe500b046 100644
+--- a/src/c47/saveRestoreBackup.c
++++ b/src/c47/saveRestoreBackup.c
+@@ -8,6 +8,8 @@
+  */
+ 
+ #include "c47.h"
++#include "forth_capture.h"
++#include "forth_dict.h"
+ 
+ // This is used for the backup.cfg simulator backup file
+ // The variable backupVersion is used in the connection
+@@ -525,6 +527,13 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+     ramPtr = TO_C47MEMPTR(programList);
+     saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
+ 
++    ramPtr = TO_C47MEMPTR(gdict.base);
++    saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "forthGDictBase",                 "c47Ptr");
++    saveStateValue(&gdict.sizeBlocks,               sizeof(gdict.sizeBlocks),                                    "forthGDictSizeBlocks",           "uint16");
++    saveStateValue(&gdict.here,                     sizeof(gdict.here),                                          "forthGDictHere",                 "uint16");
++    saveStateValue(&gdict.latest,                   sizeof(gdict.latest),                                        "forthGDictLatest",               "uint16");
++    saveStateValue(&gdict.count,                    sizeof(gdict.count),                                         "forthGDictCount",                "uint16");
++
+     ramPtr = TO_C47MEMPTR(currentSubroutineLevelData);
+     saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
+ 
+@@ -851,7 +860,20 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
+     programList = TO_PCMEMPTR(ramPtr);
+ 
+-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
++    ramPtr = C47_NULL;   /* default: old backup without Forth params -> empty gdict */
++    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "forthGDictBase",                 "c47Ptr");
++    gdict.base = TO_PCMEMPTR(ramPtr);
++    {
++      uint16_t forthV;
++      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthGDictSizeBlocks", "uint16"); gdict.sizeBlocks = forthV;
++      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthGDictHere",       "uint16"); gdict.here       = forthV;
++      forthV = FORTH_NULL; restoreStateValue(&forthV, sizeof(forthV), "forthGDictLatest",     "uint16"); gdict.latest     = forthV;
++      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthGDictCount",      "uint16"); gdict.count      = forthV;
++     }
++      forthGDictValidateRestored();
++      forthDictInit();
++
++     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
+     currentSubroutineLevelData = TO_PCMEMPTR(ramPtr);
+ 
+     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentLocalFlags",              "c47Ptr");
+@@ -1403,6 +1425,10 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+     // register (all classes, not just the global block) to the word size so stale bits cannot survive.
+     clampShortIntegerRegistersToWordSize();
+ 
++    /* The managed Forth capture is process-local and was reset by doFnReset(),
++     * while the surrounding PEM/ALPHA fields were just restored from disk. */
++    forthCaptureSanitizeRestoredUi();
++
+     printf("End of calc's restoration\n");
+     fflush(stdout);
+ 

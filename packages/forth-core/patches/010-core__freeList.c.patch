@@ -1,0 +1,44 @@
+diff --git a/src/c47/core/freeList.c b/src/c47/core/freeList.c
+index 2e545127a0976dee72f7dbd076597f1d7e468fac..8eb351cc0bcf07e461bff7a07a3fd5cf630c92d4 100644
+--- a/src/c47/core/freeList.c
++++ b/src/c47/core/freeList.c
+@@ -201,7 +201,39 @@ void freeListFree(void *pcMemPtr, size_t sizeInBlocks) {
+   if(sizeInBlocks == 0) {
+     sizeInBlocks = 1;
+   }
++
+   C47RamPtr = TO_C47MEMPTR(pcMemPtr);
++
++  // Double-free / invalid-free guard (FIX-6): reject any free whose range
++  // overlaps an existing free region. Runs unconditionally so device builds
++  // (DMCP, diagnostics compiled out) cannot insert a duplicate/overlapping
++  // region and corrupt the list. Never mutates the list: a double free is
++  // always a caller bug and the free list must survive it unchanged.
++  for(i=0; i<numberOfFreeMemoryRegions; i++) {
++    uint32_t rStart = (uint32_t)freeMemoryRegions[i].blockAddress;
++    uint32_t rEnd   = rStart + (uint32_t)freeMemoryRegions[i].sizeInBlocks;
++    if((uint32_t)C47RamPtr < rEnd && (uint32_t)C47RamPtr + (uint32_t)sizeInBlocks > rStart) {
++      #if !defined(DMCP_BUILD)
++        errorf("---->Memory freeing C (double/invalid free):");
++        fprintf(stderr, "%zd blocks at address %" PRIu16 " overlap free region [%" PRIu32 "..%" PRIu32 ")\n",
++                sizeInBlocks, C47RamPtr, rStart, rEnd);
++        #if !defined(WIN32)
++          { void *callstack[128];
++            int frames = backtrace(callstack, 128);
++            char **strs = backtrace_symbols(callstack, frames);
++            printf("%30s%42s%s\n\n\n", "", "freeListFree called from: ", strs[1]);
++            for(int f = 1; f < frames; f++) {
++              printf("%30s%42d: %s\n", "", f, strs[f]);
++            }
++            free(strs);
++          }
++        #endif
++        fflush(stderr);
++      #endif
++      return;
++    }
++  }
++
+   #if !defined(DMCP_BUILD)
+     //printf("Freeing %zd bytes\n", TO_BYTES(sizeInBlocks));
+     int region;

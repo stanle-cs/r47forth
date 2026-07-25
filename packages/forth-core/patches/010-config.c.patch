@@ -1,0 +1,58 @@
+diff --git a/src/c47/config.c b/src/c47/config.c
+index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..01bf742a1537c04a85e319ac0d459a0e004c526c 100644
+--- a/src/c47/config.c
++++ b/src/c47/config.c
+@@ -2,6 +2,7 @@
+ // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
+ 
+ #include "c47.h"
++#include "forth_dict.h"  // for forthDictInit()
+ 
+ //C47 defaults (used in both settings arrays)
+ #define _gapl   ITM_SPACE_PUNCTUATION
+@@ -1529,6 +1530,16 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+   else {
+     void *memPtr;
+ 
++    /* Reset hook (DESIGN.md §6): null the Forth dictionary descriptors
++     * (they would otherwise dangle into the wiped ram[]) and close the
++     * capture.
++     * Position note: running BEFORE the wipe is now inert, not
++     * load-bearing — nothing in this hook frees any more. See
++     * DESIGN-HISTORY.md 2026-07-25 (design audit) for the two expired
++     * justifications this replaces; do not re-derive a third. */
++    forthDictInit();
++    forthGDictInit();
++
+     if(ram == NULL) {
+       ram = (uint32_t *)malloc(TO_BYTES(RAM_SIZE_IN_BLOCKS));
+     }
+@@ -1950,6 +1961,28 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+ 
+     fnClearFlag(FLAG_USER);
+     fnRefreshState();
++
++      #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
++       {
++         /* Run-once: tests call restoreCalc, which calls doFnReset — without
++          * this guard the suite would recursively re-enter itself. */
++         static bool forthSelfTestRan = false;
++         /* The harness is PC-only and contains C47-model assumptions.  Run it
++          * only for the explicit headless gate, leaving GUI simulators such as
++          * r47 available for manual keyboard/PEM audit work. */
++         if(headlessMode && !forthSelfTestRan) {
++           forthSelfTestRan = true;
++           extern int forthDictSelfTest(void);
++           if(forthDictSelfTest()) {
++             fprintf(stderr, "FORTH DICT SELF-TEST FAILED\n");
++             exit(1);
++           }
++           if(headlessMode) {
++             exit(0);
++           }
++         }
++       }
++     #endif
+   }
+ }
+ 

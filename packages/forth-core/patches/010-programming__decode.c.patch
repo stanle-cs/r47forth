@@ -1,0 +1,41 @@
+diff --git a/src/c47/programming/decode.c b/src/c47/programming/decode.c
+index c56fea944eed6247b872fce5b866f2480086e682..bd75669d621a9ec0200acf0b579bf53f10091a6f 100644
+--- a/src/c47/programming/decode.c
++++ b/src/c47/programming/decode.c
+@@ -6,6 +6,7 @@
+  ***********************************************/
+ 
+ #include "c47.h"
++#include "forth_dict.h"
+ 
+ TO_QSPI const char shuffleReg[4] = {'x', 'y', 'z', 't'};
+ TO_QSPI const char supDigit[24] = STD_SUP_0 STD_SUP_1 STD_SUP_2 STD_SUP_3 STD_SUP_4 STD_SUP_5 STD_SUP_6 STD_SUP_7 STD_SUP_8 STD_SUP_9;
+@@ -826,6 +827,28 @@ static void decodeLiteral(uint8_t *literalAddress) {
+ 
+ 
+ static void decodeRem(uint8_t *literalAddress, uint16_t op) {
++  if (op == ITM_FORTH && *(uint8_t *)literalAddress == STRING_LABEL_VARIABLE) {
++    uint8_t len = *(uint8_t *)(literalAddress + 1);
++    if (len == 0) {
++      uint8_t *opcodeStart = literalAddress - 2;
++      if (opcodeStart == currentStep && getSystemFlag(FLAG_ALPHA) && tam.function == ITM_FORTH) {
++        tmpString[0] = 0;
++        return;
++      } else {
++        if (forthMarkerTurnsOn(opcodeStart)) {
++          strcpy(tmpString, STD_RIGHT_DOUBLE_ANGLE "FORTH");
++        } else {
++          strcpy(tmpString, "FORTH" STD_LEFT_DOUBLE_ANGLE);
++        }
++        return;
++      }
++    } else {
++      getStringLabelOrVariableName(literalAddress + 1);
++      stringCopy(tmpString, tmpStringLabelOrVariableName);
++      return;
++    }
++  }
++
+   if(*(uint8_t *)(literalAddress++) == STRING_LABEL_VARIABLE) {
+     char *str = tmpString;
+     getStringLabelOrVariableName(literalAddress);

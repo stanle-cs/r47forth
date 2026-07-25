@@ -1,0 +1,23 @@
+diff --git a/src/c47/screen.c b/src/c47/screen.c
+index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..1cc87e1462742e844c93be87b9eec3b78d7b577e 100644
+--- a/src/c47/screen.c
++++ b/src/c47/screen.c
+@@ -3,6 +3,7 @@
+ 
+ #include "c47.h"
+ #include "version.h"
++#include "forth_dict.h"
+ 
+ static void refreshRegisterLineRestoreT(void);
+ static void _refreshPemScreen(void);
+@@ -819,6 +820,10 @@ void execTimerApp(uint16_t timerType) {
+         }
+       }
+       else {
++        /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
++        if(forthTryColonFallback(item, funcParam)) {
++          return;
++        }
+         displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
+           #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+             sprintf(errorMessage, "string '%s' is not a named label", funcParam);

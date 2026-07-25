@@ -1,0 +1,131 @@
+diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
+index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..87ab6e6306ccee0fd4281b117ea8ce6bffed2154 100644
+--- a/src/c47/keyboard.c
++++ b/src/c47/keyboard.c
+@@ -2,6 +2,9 @@
+ // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
+ 
+ #include "c47.h"
++#include "forth_dict.h"
++#include "forth_capture.h"
++#include "forth_menu.h"
+ 
+ 
+ TO_QSPI static const char bugScreenNonexistentMenu[] = "In function determineFunctionKeyItem: nonexistent menu specified!";
+@@ -75,6 +78,12 @@ static void executeFunction(const char *data, int16_t item_);
+         break;
+       }
+ 
++      case MNU_FORTH: {
++        dynamicMenuItem = firstItem + itemShift + fn;
++        item = ITM_NOP; // always ITM_NOP: press handled in executeFunction (§9.6 P-H7)
++        break;
++      }
++
+       case MNU_VAR: {
+         dynamicMenuItem = firstItem + itemShift + fn;
+         item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : MNU_DYNAMIC);
+@@ -434,7 +443,20 @@ static void executeFunction(const char *data, int16_t item_);
+     }
+ 
+ 
+-    static void _closeCatalog(void) {
++    // forth-core: the self-test suite drives the real CAT->FORTH chain, which is
++    // runFunction() immediately followed by _closeCatalog() (see the PEM catalog
++    // arm's runFunction(item) / _closeCatalog() pair below).
++    // Both that call and executeFunction() are file-static, so a test can only
++    // reach the teardown by hand-rolling a pop sequence — which diverges from
++    // this function and silently tests the wrong thing. Export it for the suite
++    // only; production linkage is unchanged.
++    #if defined(FORTH_DEBUG_SELFTEST)
++      #define FORTH_SELFTEST_EXPORT
++    #else
++      #define FORTH_SELFTEST_EXPORT static
++    #endif
++
++    FORTH_SELFTEST_EXPORT void _closeCatalog(void) {
+       bool_t inCatalog = false;
+       for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
+         if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {
+@@ -958,6 +980,14 @@ endReturnTrue:
+ 
+ 
+         lastKeyItemDetermined = item;
++
++        // MNU_FORTH picker: insert name at cursor during Forth capture (§9.6 P-H7)
++        if(forthPickerGuard(item)) {
++          if(pickerInsertName()) {
++            pemAlpha(ITM_NOP);
++          }
++          return;
++        }
+       }
+ 
+       // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
+@@ -2242,6 +2272,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+               }
+             }
+             else {
++              /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
++              if(forthTryColonFallback(item, funcParam)) {
++                return;
++              }
+               displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
+               #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+                 sprintf(errorMessage, "string '%s' is not a named label", funcParam);
+@@ -3861,6 +3895,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+           break;
+         }
+         if(aimBuffer[0] != 0 && !tam.mode) {
++          bool_t wasForthCap = forthCapTextNonEmpty();
+           if(getSystemFlag(FLAG_ALPHA)) {
+             pemCloseAlphaInput();
+           }
+@@ -3871,6 +3906,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+             pemCloseNumberInput();
+           }
+           aimBuffer[0] = 0;
++          if(wasForthCap) {
++            // forth-core: aimBuffer[0] is already 0 on EVERY path into this
++            // branch (the line above, unconditionally) — fnBst's own
++            // "if(aimBuffer[0] != 0)" guard (below) is therefore always
++            // false here regardless of Forth vs REM/LITERAL, and the ONLY
++            // step-back this call site has ever applied is fnBst's bare
++            // _bstInPem(), a single currentLocalStepNumber-- with no
++            // currentStep update. For REM/LITERAL that leaves currentStep
++            // one step ahead of currentLocalStepNumber, tolerated because
++            // nothing reopens immediately after. A Forth capture's very
++            // next operation is typically another ITM_AIM, which DOES
++            // depend on currentStep, so only the pointer half needs
++            // resyncing here — NOT a second counter decrement, which
++            // would double-compensate against _bstInPem()'s own.
++            currentStep = findPreviousStep(currentStep);
++          }
+           fnBst(NOPARAM); // Set the PGM pointer to the original position
+           break;
+         }
+@@ -4363,9 +4414,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+           return;
+         }
+         if(getSystemFlag(FLAG_ALPHA)) {
++          bool_t wasForthCapOpen = forthCapIsOpen();
+           pemAlpha(ITM_BACKSPACE);
+           if(aimBuffer[0] == 0 && !getSystemFlag(FLAG_ALPHA)) {
+-            if(currentLocalStepNumber > 1) {
++            if(wasForthCapOpen) {
++              // forth-core: the Forth capture's empty-abort branch
++              // (pemAlpha's C4) deletes the placeholder IN PLACE, so the
++              // following step already occupies currentStep/
++              // currentLocalStepNumber unchanged — the step-back below
++              // (needed for the aimBuffer REM/LITERAL path, whose own
++              // abort leaves the cursor one position past where it should
++              // land) would overshoot onto the PRECEDING step for Forth
++              // and must be skipped.
++              if(!programListEnd) {
++                scrollPemBackwards();
++              }
++            }
++            else if(currentLocalStepNumber > 1) {
+               --currentLocalStepNumber;
+               defineCurrentStep();
+               if(!programListEnd) {

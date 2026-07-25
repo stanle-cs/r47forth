@@ -1,0 +1,48 @@
+diff --git a/src/c47/ui/tam.c b/src/c47/ui/tam.c
+index 97301df3e7f567f5458eb456b35859175c5a7e97..7d21e51c262c412d69fca88fdeda1f53446199a4 100644
+--- a/src/c47/ui/tam.c
++++ b/src/c47/ui/tam.c
+@@ -2,6 +2,8 @@
+ // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
+ 
+ #include "c47.h"
++#include "forth_dict.h"
++#include "forth_capture.h"
+ 
+     TO_QSPI const int16_t StoOperations[][2] = {
+       {ITM_ADD,      ITM_STOADD},
+@@ -974,6 +976,16 @@ printf("tam.value: %d\n", tam.value);
+                 return;
+               }
+             }
++            /* forth-core H-hook: Forth fallback after GLOBAL label miss — never for a
++             * tam.colon (LOCAL) request (DESIGN.md §0.3/§4.2 label-kind pins) */
++            {
++              uint16_t widx;
++              if (!tam.colon && forthFindColon(buffer, &widx)) {
++                leaveTamModeIfEnabled();
++                forthDispatchColon(tam.function, buffer, widx);
++                return;
++              }
++            }
+           }
+           if(calcMode != CM_PEM) {
+             leaveTamModeIfEnabled();
+@@ -1153,6 +1165,9 @@ printf("tam.value: %d\n", tam.value);
+         closeNim();
+       }
+     }
++    else if(calcMode == CM_PEM && forthCapIsOpen()) {
++      forthCaptureSuspend();                /* F6-2: suspend, never close */
++    }
+     else if(calcMode == CM_PEM && aimBuffer[0] != 0) {
+       if(getSystemFlag(FLAG_ALPHA)) {
+         pemCloseAlphaInput();
+@@ -1378,6 +1393,7 @@ printf("tam.value: %d\n", tam.value);
+ 
+     if(calcMode == CM_PEM) {
+       hourGlassIconEnabled = false;
++      forthCaptureResume();                   /* no-op unless FCAP_SUSPENDED */
+     }
+   }
+ 

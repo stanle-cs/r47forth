@@ -1,0 +1,490 @@
+diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
+index a7a56a3e94203f6b85bcf1f837d17cd041078027..b81727a7a06c1a84af195021b29c15034869dda1 100644
+--- a/src/c47/programming/manage.c
++++ b/src/c47/programming/manage.c
+@@ -6,6 +6,8 @@
+  ***********************************************/
+ 
+ #include "c47.h"
++#include "forth_dict.h"
++#include "forth_capture.h"
+ 
+ // Structure of the program memory.
+ // In this example the RAM is 16384 blocks (from 0 to 16383) of 4 bytes = 65536 bytes.
+@@ -569,10 +571,25 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
+       decodeOneStep(step);
+       if(firstDisplayedStepNumber + line - lineOffset == currentStepNumber && !tam.mode) {
+         if(getSystemFlag(FLAG_ALPHA)) {
+-          char tmpChar = tmpString[4];
++          char tmpChar4 = tmpString[4];
++          char tmpChar6 = tmpString[6];
++          int16_t cursorInString;
++          tmpString[6] = 0;
+           tmpString[4] = 0;
+-          int16_t cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
+-          tmpString[4] = tmpChar;
++          if(tam.function == ITM_FORTH) {
++            /* R3-1: a non-empty ITM_FORTH source step is decoded BARE
++             * (decodeRem, §8.5) — no two-byte opening quote to skip. The
++             * ordinary-literal/REM/42-string branches below all assume that
++             * quote and are followed by an unconditional +2; give Forth a
++             * zero-byte prefix so cursorInString+2 lands before the first
++             * real payload byte instead of on top of the second one. */
++            cursorInString = T_cursorPos - 2;
++          }
++          else {
++            cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
++          }
++          tmpString[4] = tmpChar4;
++          tmpString[6] = tmpChar6;
+           xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
+           tmpString[2 + cursorInString    ] = STD_CURSOR[0];
+           tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
+@@ -774,6 +791,34 @@ static void _closeAlphaMenus(void) {
+   }
+ }
+ 
++void forthCaptureSanitizeRestoredUi(void) {
++  /* forthCap.state is process-local and is reset before restoreCalc()
++   * reloads the persisted UI fields, so a backup taken mid-capture restores
++   * CM_PEM + ALPHA + tam.function == ITM_FORTH around a CLOSED capture.
++   * Force that to a clean closed state; the source step is already committed
++   * (per-keystroke recommit), so nothing is lost — the user reopens the line
++   * with EDIT.
++   *
++   * Premise note: post-S3 every ingredient of the capture IS persisted
++   * except this one process-local flag, so this discards recoverable
++   * state rather than repairing broken state.  Resuming intact instead
++   * would change the §8 A5 power-off contract and awaits an owner
++   * ruling — see DESIGN-HISTORY.md 2026-07-25 (design audit). */
++  if(calcMode != CM_PEM
++     || tam.function != ITM_FORTH
++     || forthCapIsOpen()) {
++    return;
++  }
++
++  aimBuffer[0] = 0;
++  T_cursorPos = 0;
++  displayAIMbufferoffset = 0;
++  clearSystemFlag(FLAG_ALPHA);
++  calcModeNormalGui();
++  _closeAlphaMenus();
++  tam.function = 0;
++}
++
+ void pemAlpha(int16_t item) {
+   bool_t editCommand = false;
+   if(item == ITM_EDIT) {
+@@ -805,6 +850,20 @@ void pemAlpha(int16_t item) {
+       editCommand = true;
+       item = aimFunc;
+     }
++    else if(aimFunc == ITM_FORTH) { // FORTH
++      if(currentStep[3] == 0) {
++        aimBuffer[0] = 0;
++        return;
++      }
++      forthCapOpen();                    // cannot fail: nothing is allocated
++      xcopy(aimBuffer, tmpString, ll);   // bare render: no name prefix, no quotes
++      aimBuffer[ll] = 0;
++      T_cursorPos = stringLastGlyph(aimBuffer) + 1;
++      deleteStepsFromTo(currentStep, findNextStep(currentStep));
++      tam.function = aimFunc;
++      editCommand = true;
++      item = aimFunc;
++    }
+     else {
+       aimBuffer[0] = 0;
+       return;
+@@ -812,6 +871,9 @@ void pemAlpha(int16_t item) {
+   }
+ 
+   if(!getSystemFlag(FLAG_ALPHA)) {
++      if(tam.function == ITM_FORTH && !forthCapIsOpen()) {
++        forthCapOpen();
++      }
+       resetShiftState();
+       displayAIMbufferoffset = 0;
+       if(!editCommand) {
+@@ -863,18 +925,28 @@ void pemAlpha(int16_t item) {
+       }
+     }
+     else if(item == ITM_BACKSPACE) {
+-      if(aimBuffer[0] == 0) {
++      if((aimBuffer[0]) == 0) {
+         deleteStepsFromTo(currentStep, findNextStep(currentStep));
+         clearSystemFlag(FLAG_ALPHA);
+         calcModeNormalGui();
+         _closeAlphaMenus();
++        // Capture-abort reset: tam.function is set by the Forth capture open
++        // paths (the `func == ITM_AIM` and `func == ITM_FORTH` arms in
++        // `insertStepInProgram`) and never reset by upstream on
++        // this backspace-abort exit. Idle value 0 matches the global `tam`'s
++        // zero-initialized boot state [VERIFIED: src/c47/c47.c:190 — no
++        // initializer, static storage] and the documented invariant that
++        // tam.mode, not tam.function, is the "in TAM" gate [VERIFIED:
++        // src/c47/typeDefinitions.h:672-680].
++        forthCapClose();
++        tam.function = 0;
+         return;
+       }
+       else if(T_cursorPos == 0) {
+         return;
+       }
+       else {
+-        char cursorByte = aimBuffer[T_cursorPos];
++          char cursorByte = aimBuffer[T_cursorPos];
+         int16_t lastGlyphPos;
+         aimBuffer[T_cursorPos] = 0;
+         lastGlyphPos = stringLastGlyph(aimBuffer);
+@@ -884,11 +956,23 @@ void pemAlpha(int16_t item) {
+       }
+     }
+     else if(item == ITM_ENTER) {
+-      pemCloseAlphaInput();
+-      //--firstDisplayedLocalStepNumber;
+-      defineFirstDisplayedStep();
+-        _closeAlphaMenus();
+-      return;
++      bool_t wasForth = (tam.function == ITM_FORTH);
++      bool_t hadText  = (aimBuffer[0] != 0);   // E5 locks on a NON-EMPTY line
++      if(wasForth && hadText && !forthCheckSourceLine(aimBuffer)) {
++        return;   /* E9 tier 1: commit refused atomically — capture stays
++                     open, aimBuffer intact for correction, the error is
++                     already displayed.  Tier 2 (names) never reaches here:
++                     forthCheckSourceLine accepts them. */
++      }
++      pemCloseAlphaInput();                            // only: an empty ENTER is the
++      //--firstDisplayedLocalStepNumber;               // escape hatch (E3 deletes the
++      defineFirstDisplayedStep();                      // placeholder and leaves the
++      _closeAlphaMenus();                              // region open behind it).
++      if(wasForth && hadText && forthEntryStateAtInsertion()) {   // forth-core: multi-line lock.
++        tam.function = ITM_FORTH;                      // State is DERIVED from the
++        pemAlpha(0);                                   // program bytes at the cursor —
++      }                                                // never stored. ENTER just drops
++      return;                                          // to the next Forth line.
+     }
+     else if(item == ITM_USERMODE) {
+       fnFlipFlag(FLAG_USER);
+@@ -938,6 +1022,13 @@ void pemAlpha(int16_t item) {
+       fnT_ARROW(indexOfItems[item].param);
+       return;
+     }
++    else if(forthCapIsOpen()
++            && (indexOfItems[item].status & CAT_STATUS) == CAT_FNCT
++            && (indexOfItems[item].status & PTP_STATUS) == PTP_NONE
++            && item != ITM_AIM && item != ITM_FORTH) {
++      (void)forthCapInsertName(indexOfItems[item].itemCatalogName);
++      /* falls through to the re-commit tail: the step tracks the insert */
++    }
+ 
+     int16_t aimFunc = currentStep[0];
+     if(aimFunc & 0x80) {
+@@ -970,7 +1061,22 @@ void pemAlpha(int16_t item) {
+ }
+ 
+ void pemCloseAlphaInput(void) {
++  if(tam.function == ITM_FORTH && !forthCapTextNonEmpty()) {
++    deleteStepsFromTo(currentStep, findNextStep(currentStep));
++    clearSystemFlag(FLAG_ALPHA);
++    calcModeNormalGui();
++    _closeAlphaMenus();
++    // Capture-close reset: see the identical rationale/citations at the
++    // `ITM_BACKSPACE` empty-buffer arm above.
++    forthCapClose();
++    tam.function = 0;
++    return;
++  }
+   aimBuffer[0] = 0;
++  forthCapClose();
++  if(tam.function == ITM_FORTH) {
++    tam.function = 0;
++  }
+   clearSystemFlag(FLAG_ALPHA);
+   calcModeNormalGui();
+   ++currentLocalStepNumber;
+@@ -980,6 +1086,113 @@ void pemCloseAlphaInput(void) {
+     firstDisplayedStep = findNextStep(firstDisplayedStep);
+   }
+   _closeAlphaMenus();
++  // Capture-close reset: see the identical rationale/citations at the
++  // `ITM_BACKSPACE` empty-buffer arm above. This branch commits
++  // REM/LITERAL/non-empty-FORTH source lines alike, so the reset must be
++  // unconditional here too, not just gated on tam.function == ITM_FORTH.
++  tam.function = 0;
++}
++
++void forthCaptureSuspend(void) {
++  if (!forthCapIsOpen()) { return; }
++  /* Recommit the buffer to the on-disk step before snapshotting its
++   * offset below — mirrors pemAlpha's own glyph-editing recommit tail
++   * (this file, the block ending in the `_insertInProgram` call reached
++   * from the CAT_FNCT/PTP_NONE item arm), which is what normally keeps
++   * the on-disk step in sync with aimBuffer after every keystroke.
++   * That invariant does NOT hold on entry here in one real case: a
++   * forthCaptureResume() that just folded a suspended TAM commit into
++   * text (F6-4) writes that text into aimBuffer via
++   * forthCapInsertName() without recommitting the on-disk step, so a
++   * suspend entered right after — with no intervening keystroke, e.g.
++   * a second TAM operation cancelled immediately — would otherwise
++   * snapshot a stale pre-fold offset and later resume would silently
++   * drop the folded text (test-audit finding 2026-07-20, DESIGN-HISTORY.md).
++   * currentStep is guaranteed ON the capture step here (see the comment
++   * below), and a capture step's opcode is always the 2-byte ITM_FORTH
++   * form, so this can skip the generic aimFunc branching the pemAlpha
++   * tail needs. */
++  {
++    deleteStepsFromTo(currentStep, findNextStep(currentStep));
++    tmpString[0] = (ITM_FORTH >> 8) | 0x80;
++    tmpString[1] =  ITM_FORTH       & 0xff;
++    tmpString[2] = (char)STRING_LABEL_VARIABLE;
++    tmpString[3] = stringByteLength(aimBuffer);
++    xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
++    _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 4);
++    --currentLocalStepNumber;
++    currentStep = findPreviousStep(currentStep);
++  }
++  uint16_t cursor    = T_cursorPos;
++  uint16_t localStep = currentLocalStepNumber;
++  uint32_t stepOff   = (uint32_t)(currentStep - beginOfProgramMemory);
++  /* currentStep stays ON the capture step: the landed commit-and-close
++   * nets to exactly that (pemCloseAlphaInput steps forward, the tam.c
++   * arm steps back), and TAM commits insert via
++   * addStepInProgram(tamOperation()), whose pre-move already places
++   * the new step AFTER the current one.  Moving here would shift the
++   * TAM insert one step too late.
++   * tam.function is NOT touched: tamEnterMode assigned the incoming
++   * TAM function before this seam; zeroing it would break the TAM
++   * session (the landed close's unconditional reset is the very
++   * behavior suspend replaces). */
++  clearSystemFlag(FLAG_ALPHA);
++  calcModeNormalGui();
++  _closeAlphaMenus();
++  forthCapSuspendState(cursor, localStep, stepOff, getNumberOfSteps());
++}
++
++void forthCaptureResume(void) {
++  if (!forthCapIsSuspended()) { return; }
++  uint8_t *p = beginOfProgramMemory + forthCapSavedStepOffset();
++  if (!(p < firstFreeProgramByte
++        && checkOpCodeOfStep(p, ITM_FORTH)
++        && p[2] == (uint8_t)STRING_LABEL_VARIABLE)) {
++    forthCapAbandonSuspended();             /* defensive canary — see test 5 */
++    #if defined(FORTH_DEBUG_SELFTEST)
++    printf("FORTH CANARY: suspended capture step falsified; suspension abandoned\n");
++    #endif
++    return;
++  }
++  forthCapOpen();                           /* SUSPENDED → OPEN; clears aimBuffer,
++                                               which TAM may have used meanwhile */
++  { uint8_t len = p[3];                     /* len 0 = empty line, legal */
++    if (len > 0) { xcopy(aimBuffer, p + 4, len); }
++    aimBuffer[len] = 0;
++    T_cursorPos = forthCapSavedCursor();
++    if (T_cursorPos > len) { T_cursorPos = len; }
++  }
++  currentLocalStepNumber = forthCapSavedLocalStep();
++  currentStep = p;
++  /* F6-4: steps the suspended TAM committed become canonical text.
++   * n is 0 (cancel) or 1 (one commit) today; the loop is defensive. */
++  { uint16_t n = getNumberOfSteps() - forthCapSavedStepCount();
++    while (n > 0) {
++      uint8_t *ins = findNextStep(currentStep);   /* first inserted step */
++      decodeOneStep(ins);                          /* canonical text → tmpString */
++      if (stringByteLength(tmpString) > 255) {
++        break;   /* defensive: keep the step rather than truncate text */
++      }
++      { char conv[258]; char *t = conv;            /* 1 + 255 + NUL */
++        if (T_cursorPos > 0 && aimBuffer[T_cursorPos - 1] != ' ') {
++          *t++ = ' ';        /* word separator when mid-text */
++        }
++        xcopy(t, tmpString, stringByteLength(tmpString) + 1);
++        if (!forthCapInsertName(conv)) {
++          break;   /* no room: keep this and later steps after the line */
++        }
++      }
++      deleteStepsFromTo(ins, findNextStep(ins));
++      --n;
++    }
++  }
++  tam.function = ITM_FORTH;                 /* capture-era tam is exactly
++                                                {mode 0, function ITM_FORTH} */
++  resetShiftState();                        /* fresh-open parity */
++  setSystemFlag(FLAG_ALPHA);
++  calcModeAimGui();
++  showSoftmenu(-MNU_ALPHA);
++  pemCursorIsZerothStep = false;
+ }
+ 
+ 
+@@ -995,7 +1208,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+     func <<= 8;
+     func |= currentStep[1];
+   }
+-  if((func == ITM_LITERAL || func == ITM_REM)) {
++  if((func == ITM_LITERAL || func == ITM_REM || func == ITM_FORTH)) {
+     pemAlpha(ITM_EDIT);
+   }
+   hourGlassIconEnabled = false;
+@@ -1367,6 +1580,37 @@ static void _pemCloseAngleInput(int item) {
+   }
+ }
+ 
++/* forth-core: helpers for the ITM_FORTH catalog drain.
++ *
++ * _closeCatalog() (keyboard.c) runs immediately after runFunction() returns and
++ * decides "are we in the catalog" by scanning the ENTIRE softmenu stack for
++ * MNU_CATALOG; if it finds one it pops the current menu when that menu is
++ * listed in CatalogMenus[] — and MNU_ALPHA is on that list. So any MNU_CATALOG
++ * surviving anywhere beneath us costs us the alpha menu pemAlpha() is about to
++ * push, even if the top of the stack is already clean. The drain must therefore
++ * use the same stack-wide predicate _closeCatalog() uses, not a top-of-stack
++ * test. Reachable case: a non-catalog menu opened over a catalog (which leaves
++ * `catalog` set, since enterAsmModeIfMenuIsACatalog() only ever sets it) with
++ * ITM_FORTH pressed from that menu. */
++static bool_t _forthCatalogBuriedOnStack(void) {
++  for(int i = 0; i < SOFTMENU_STACK_SIZE; i++) {
++    if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {
++      return true;
++    }
++  }
++  return false;
++}
++
++/* Tidy teardown of the catalog menus themselves, kept from the original drain:
++ * without it a catalog submenu reached directly (no MNU_CATALOG beneath it)
++ * would stay buried under the alpha menu. */
++static bool_t _forthCatalogMenuOnTop(void) {
++  const int16_t m = currentMenu();
++  return m == -MNU_CATALOG || m == -MNU_FCNS  || m == -MNU_CONST
++      || m == -MNU_CHARS   || m == -MNU_PROGS || m == -MNU_VARS
++      || m == -MNU_MENUS;
++}
++
+ void insertStepInProgram(const int16_t func) {
+                                 #if defined(DEBUG_PGM)
+                                   print_caller(NULL);
+@@ -1377,12 +1621,18 @@ void insertStepInProgram(const int16_t func) {
+     firstDisplayedLocalStepNumber = 0;
+   }
+ 
+-  if(func == ITM_AIM || (!tam.mode && getSystemFlag(FLAG_ALPHA))) {
++  if(func == ITM_AIM || (!tam.mode && getSystemFlag(FLAG_ALPHA) && func != ITM_FORTH)) {
+     if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
+       pemCloseNumberInput();
+       aimBuffer[0] = 0;
+     }
+-    tam.function = ITM_LITERAL;
++    if(func == ITM_AIM && forthEntryStateAtInsertion()) {
++      tam.function = ITM_FORTH;         // forth-core: ALPHA inside a Forth region
++    }                                   // resumes Forth capture, not a string literal
++    else if(tam.function != ITM_FORTH) { // forth-core: preserve an open Forth capture;
++      tam.function = ITM_LITERAL;        // upstream forced ITM_LITERAL unconditionally,
++    }                                    // which killed the empty-commit rule, the FWRD
++                                         // picker guard and the toggle-off gesture
+     pemAlpha(func);
+     pemCursorIsZerothStep = false;
+     return;
+@@ -1404,6 +1654,53 @@ void insertStepInProgram(const int16_t func) {
+     pemCursorIsZerothStep = false;
+     return;
+   }
++  else if(func == ITM_FORTH) {
++    if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
++      pemCloseNumberInput(); aimBuffer[0] = 0;
++    }
++    if(catalog) {   // forth-core: NOT the REM arm's single popSoftmenu() — see
++      leaveAsmMode();                    // _forthCatalogBuriedOnStack() above.
++      // Bounded: popSoftmenu() can re-push HOME, so never spin on it.
++      for(int i = 0; i < SOFTMENU_STACK_SIZE
++                     && (_forthCatalogMenuOnTop() || _forthCatalogBuriedOnStack());
++          i++) {
++        popSoftmenu();
++      }
++    }
++    bool_t wasOn = forthEntryStateAtInsertion();
++    tmpString[0] = (ITM_FORTH >> 8) | 0x80;
++    tmpString[1] =  ITM_FORTH       & 0xff;
++    tmpString[2] = (char)STRING_LABEL_VARIABLE;
++    tmpString[3] = 0;
++    _insertInProgram((uint8_t *)tmpString, 4);
++    if(!wasOn) {
++      /* A new Forth region is a complete bracket from its first line onward.
++       * Insert the closing marker now, then step back onto it so pemAlpha()
++       * places the editable placeholder immediately before that marker.
++       * ENTER commits the current line and uses the same insertion point to
++       * add an explicit next line inside the already-balanced bracket. */
++      _insertInProgram((uint8_t *)tmpString, 4);
++      currentStep = findPreviousStep(currentStep);
++      if(currentLocalStepNumber > 1) {
++        --currentLocalStepNumber;
++      }
++      tam.function = ITM_FORTH;
++      pemAlpha(ITM_FORTH);
++    } else {
++      clearSystemFlag(FLAG_ALPHA);
++      // Capture-close reset: see the identical rationale/citations at the
++      // `ITM_BACKSPACE` empty-buffer arm above. Without this, a stale
++      // tam.function == ITM_FORTH survives a normal toggle-close and can
++      // mislabel the NEXT, unrelated alpha capture: insertStepInProgram's
++      // `func == ITM_AIM` arm only sets tam.function = ITM_LITERAL when
++      // `tam.function != ITM_FORTH` — a plain literal entry opened while the
++      // sentinel is stale skips that assignment and inherits ITM_FORTH,
++      // silently misrouting cursor-offset math keyed on tam.function (R3-1).
++      tam.function = 0;
++    }
++    pemCursorIsZerothStep = false;
++    return;
++  }
+   else if(func == ITM_42STRING || func == ITM_42APPEND) {
+     tmpString[0] = (func >> 8) | 0x80;
+     tmpString[1] =  func  & 0xff;
+@@ -1415,6 +1712,15 @@ void insertStepInProgram(const int16_t func) {
+     return;
+   }
+ 
++  if(!tam.mode && !getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0
++      && indexOfItems[func].func == addItemToBuffer
++      && forthEntryStateAtInsertion()) {
++    tam.function = ITM_FORTH;
++    pemAlpha(func);
++    pemCursorIsZerothStep = false;
++    return;
++  }
++
+   if(   indexOfItems[func].func == addItemToBuffer
+      || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
+                                             || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
+@@ -1497,6 +1803,23 @@ void insertStepInProgram(const int16_t func) {
+     tmpString[1] =  func       & 0xff;
+   }
+ 
++   if(func == ITM_FCALL) {
++     char fname[FORTH_NAME_MAX + 1];
++      if(!tam.indirect && forthDictNameByRef(tam.value, fname, sizeof(fname))) {
++       uint16_t nameLen = stringByteLength(fname);
++       tmpString[0] = (ITM_FORTH >> 8) | 0x80;
++       tmpString[1] =  ITM_FORTH       & 0xff;
++       tmpString[2] = (char)STRING_LABEL_VARIABLE;
++       tmpString[3] = (char)nameLen;
++       xcopy(tmpString + 4, fname, nameLen);
++       _insertInProgram((uint8_t *)tmpString, nameLen + 4);
++     }
++     else {
++       displayCalcErrorMessage(ERROR_NON_PROGRAMMABLE_COMMAND, ERR_REGISTER_LINE, REGISTER_X);
++     }
++     return;
++   }
++
+    switch(indexOfItems[func].status & PTP_STATUS) {
+     case PTP_DISABLED: {
+       switch(func) {
+@@ -1792,7 +2115,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+   }
+   else {
+     tmpString[opBytes++] = (func >> 8) | 0x80;
+-    tmpString[opBytes++] =  func       & 0x7f;
++    tmpString[opBytes++] =  func       & 0xff;  // audit F4: 0x7f masked low bytes >= 0x80 (e.g. ITM_XEQP1=0x08AF) — §9.10 item 4 resolved
+   }
+ 
+   tmpString[opBytes    ] = (char)STRING_LABEL_VARIABLE;
