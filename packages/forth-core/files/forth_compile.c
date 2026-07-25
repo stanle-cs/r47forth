@@ -436,6 +436,7 @@ static bool emitOrRunMarkerForm(bool compiling, uint16_t itemId, uint16_t ptpCla
     return true;
   }
   forthParamMarkerDispatch(itemId, ptpClass, nbuf, used);
+  forthDataDepthResync();   /* native item: resync the count (D2) */
   if (lastErrorCode != ERROR_NONE) {
     if (isDefinitionOpen()) abortDefinition();
     return false;
@@ -847,7 +848,8 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       { uint16_t pidx = forthFindPrim(buf);
         if (pidx != FORTH_PRIM_NONE && (forthPrims[pidx].flags & FF_DEFMARK)) {
           forthPrims[pidx].fn();
-          clearSystemFlag(FLAG_ASLIFT);
+          /* GLOBAL/IMMEDIATE touch no stack: SLS_UNCHANGED, so leave ASLIFT
+           * exactly as the last value-producing dispatch left it. D1. */
           if (lastErrorCode != ERROR_NONE) {
             lineOK = false;
           }
@@ -967,9 +969,12 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
             abortDefinition();
             lineOK = false;
           }
+        } else if (!forthDataDepthApply(forthPrims[idx].stackEffect)) {
+          if (isDefinitionOpen()) abortDefinition();
+          lineOK = false;
         } else {
           forthPrims[idx].fn();
-          clearSystemFlag(FLAG_ASLIFT);
+          setSystemFlag(FLAG_ASLIFT);   /* SLS_ENABLED, mirrors forth_inner.c. D1 */
           if (lastErrorCode != ERROR_NONE) {
             if (isDefinitionOpen()) abortDefinition();
             lineOK = false;
@@ -1081,6 +1086,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           uint8_t savedRunStop = programRunStop;
           programRunStop = PGM_RUNNING;
           reallyRunFunction((int16_t)itemId, NOPARAM);
+          forthDataDepthResync();   /* native item: resync the count (D2) */
           if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
           if (lastErrorCode != ERROR_NONE) {
             if (isDefinitionOpen()) abortDefinition();
@@ -1189,6 +1195,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
               uint8_t savedRunStop = programRunStop;
               programRunStop = PGM_RUNNING;
               paramCoreDispatchDirect(paramItemId, ptpClass, value);
+              forthDataDepthResync();   /* native item: resync the count (D2) */
               if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
             }
             if (lastErrorCode != ERROR_NONE) {
@@ -1239,6 +1246,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
               uint8_t savedRunStop = programRunStop;
               programRunStop = PGM_RUNNING;
               paramCoreDispatchDirect(paramItemId, ptpClass, regKS);
+              forthDataDepthResync();   /* native item: resync the count (D2) */
               if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
             }
             if (lastErrorCode != ERROR_NONE) {
@@ -1293,6 +1301,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
               uint8_t savedRunStop = programRunStop;
               programRunStop = PGM_RUNNING;
               paramCoreDispatchDirect(paramItemId, ptpClass, flagByte);
+              forthDataDepthResync();   /* native item: resync the count (D2) */
               if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
             }
             if (lastErrorCode != ERROR_NONE) {
@@ -1334,6 +1343,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
                 uint8_t savedRunStop = programRunStop;
                 programRunStop = PGM_RUNNING;
                 paramCoreDispatchDirect(paramItemId, ptpClass, packed);
+              forthDataDepthResync();   /* native item: resync the count (D2) */
                 if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
               }
               if (lastErrorCode != ERROR_NONE) {
@@ -1402,6 +1412,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
              * AFTER fnGoto — too late for a name-resolved, non-menu call. */
              dynamicMenuItem = -1;
              fnExecute((uint16_t)label);
+             forthDataDepthResync();   /* R47 label body: resync the count (D2) */
             if (lastErrorCode != ERROR_NONE) {
              if (isDefinitionOpen()) abortDefinition();
              lineOK = false;
@@ -1530,7 +1541,9 @@ void forthOuterInterpret(const char *source)
     return;
   }
   memcpy(ctx.source, source, n + 1);
+  forthDataDepthEnterOuter();
   forthOuterRun(&ctx, FORTH_OUTER_FULL);
+  forthDataDepthLeaveOuter();
 }
 
 /* fnForthOuter — ITM_FORTH entry point (§3.3.2) */

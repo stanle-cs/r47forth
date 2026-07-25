@@ -242,6 +242,14 @@ void forthInner(uint16_t entryIndex, bool fromProgram);
 void forthPushReal34(const real34_t *val);
 void forthPushInt32(int32_t val);
 
+/* D2 data-stack overflow guard (forth_inner.c). The outer interpreter brackets
+ * each line so the count starts clean and nested forthInner calls inherit it. */
+void    forthDataDepthEnterOuter(void);
+void    forthDataDepthLeaveOuter(void);
+void    forthDataDepthResync(void);
+bool_t  forthDataDepthApply(int16_t net);
+int16_t forthTestGetDataDepth(void);
+
 /* Bridge functions (§6) */
 void fnForthCall(uint16_t param);
 void fnForthOuter(uint16_t param);

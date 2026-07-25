@@ -716,8 +716,57 @@ at all. When entered via `ITM_FCALL`, the item's `SLS_ENABLED` (§0.2) makes
 the epilogue agree redundantly. **IMPLEMENTED:** `forthInner` sets
 `FLAG_ASLIFT` at the normal `rsp == rspBase` exit [VERIFIED:
 packages/forth-core/forth_inner.c:231], and `test_stack_aslift` asserts it.
-The *internal* scrub (each push forcing its own lift, clearing after) is
-correct and unchanged.
+
+**CORRECTED 2026-07-25 (D1).** This section previously ended "the *internal*
+scrub (each push forcing its own lift, clearing after) is correct and
+unchanged." That was wrong, and wrong in the direction this very section
+argues against. The scrub was reasoned about only for Forth-internal
+sequencing, but it also governed the Forth→native boundary: leaving `ASLIFT`
+clear after each push and each primitive made the next native item take
+`liftStack()`'s else-branch (`src/c47/stack.c:20`) and **overwrite** X instead
+of lifting onto it. `1000 RCL 19` left Y=0 where R47 leaves Y=1000. By this
+section's own rule — "after `3 SQ` leaves 9 in X, the next digit entry must
+*lift* onto 9, not overwrite it" — the scrub was a defect.
+
+The rule is now uniform: **every dispatch that leaves a value in X sets
+`FLAG_ASLIFT`**, mirroring `reallyRunFunction()`'s epilogue, because every
+prim-equivalent item upstream (`fnAdd`, `fnDrop`, `fnSwapXY`, `fnMultiply`)
+carries `SLS_ENABLED`. Pushes leave it set; primitives set it; the definition
+marks (`GLOBAL`/`IMMEDIATE`) touch no stack and so leave it alone
+(`SLS_UNCHANGED`). Pinned by `test_native_lift_after_forth`.
+
+**Data-stack overflow guard (DECIDED 2026-07-25, D2).** The Forth data stack
+*is* the C47 RPN stack — the primitives are one-line delegations (`pDup` →
+`fnDupN(1)`, `pPlus` → `fnAdd`) and pushes go through `liftStack()` into
+`REGISTER_X`. Depth is therefore 4 or 8 (`FLAG_SSIZE8`), and a push past the
+top silently discards the bottom entry. For a user keying values that is
+ordinary RPN behaviour; for a recursive word overrunning its own operands it is
+silent corruption — `7 FACT` returned `720*6 = 4320` instead of `5040` with
+`lastErrorCode` 0 throughout, and `6 2 NCR` returned 1 instead of 15 because
+`FACT` ran with two values already beneath it.
+
+`forthDataDepth` (forth_inner.c) counts values Forth has pushed and not yet
+consumed since the current line began, driven by a new `stackEffect` column in
+`forthPrims[]` (runtime words only; the compile-time words are 0). Growth past
+`getStackTop() - REGISTER_X + 1` raises `ERROR_RAM_FULL`, joining the return-
+stack depth guard and the runaway cap as a loud resource failure.
+
+Two deliberate properties, both chosen so the guard can never fire on a correct
+program:
+
+- **It is only ever an underestimate.** A native item's stack effect is not
+  knowable from the dispatcher, so running one *resyncs* the count to 0 rather
+  than abandoning it. 0 is never above the true depth, so the guard can fire
+  late but never falsely. (Resync also happens to be exact after the common
+  `XEQ 'CLSTK'` prefix.)
+- **It applies only while Forth is executing.** `forthPushInt32`/
+  `forthPushReal34` are public helpers used to seed the RPN stack outside any
+  Forth line; counting those accumulated a stale depth that refused a later
+  legitimate push (caught by `test_param_series_c_acceptance` during
+  implementation).
+
+Pinned by `test_data_stack_overflow_guard`: `6 FACT` still exact, `7 FACT`
+raises, and a long-but-shallow `1 2 + 3 + …` chain is untouched.
 
 **Why nesting must be bounded, not merely allowed.** The path
 `FTOK_C47` → `reallyRunFunction()` → item dispatch → a Forth item (`ITM_FCALL`,

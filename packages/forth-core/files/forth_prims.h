@@ -14,6 +14,11 @@ typedef struct {
   const char  *name;                        /* ASCII/C47 name, NUL-terminated */
   uint8_t      flags;                        /* FF_IMMEDIATE etc. */
   forthPrim_t  fn;
+  int8_t       stackEffect;                 /* net data-stack change at RUNTIME.
+                                             * Compile-time words (RECURSE, the
+                                             * defmarks, IF..REPEAT) are 0: they
+                                             * emit tokens, they do not run.
+                                             * Used by the D2 overflow guard. */
 } forthPrimDef_t;
 
 extern const forthPrimDef_t forthPrims[];   /* forth_prims.c, index-stable, append-only */

@@ -1597,3 +1597,65 @@ one-line pointers here.
 
 Footprint: 14 override files, 625 added lines (unchanged by this audit).
 Gate green: FORTH SELF-TEST: ALL PASSED, 342 PASS.
+
+---
+
+## 2026-07-25 — D1/D2: stack semantics corrected against R47
+
+Owner ruling that prompted this: **anything that behaves differently from R47 is
+a bug.** Both defects were found while writing a second showcase program, not by
+review, and both produced wrong numbers with `lastErrorCode == 0`. Full writeup
+in `DEFECTS_stack_semantics.md`; this entry records what changed and why the
+design text was wrong.
+
+**D1 — the ASLIFT scrub was backwards at the Forth→native boundary.**
+`forthPushInt32`/`forthPushReal34` forced `FLAG_ASLIFT` on for their own lift and
+then cleared it, and the same clear followed every primitive dispatch. Upstream
+`liftStack()` (`src/c47/stack.c:20`) only lifts when that flag is set and
+otherwise *overwrites* X, so any native item following a Forth value destroyed
+it: `1000 RCL 19` left Y=0 where R47 leaves Y=1000.
+
+The design text is what makes this a genuine miss rather than an oversight.
+§3.2's ASLIFT section argues the correct rule at length — "after `3 SQ` leaves 9
+in X, the next digit entry must *lift* onto 9, not overwrite it" — and then
+closes by asserting "the *internal* scrub ... is correct and unchanged." The
+scrub had been reasoned about only for Forth-internal sequencing; nobody asked
+what it did to the boundary the same paragraph was about. That sentence is now
+corrected in DESIGN.md rather than deleted, because the wrong claim is the
+instructive part.
+
+Fixed at six sites (`forth_inner.c`, `forth_compile.c`) to one uniform rule:
+every dispatch leaving a value in X sets `FLAG_ASLIFT`, mirroring
+`reallyRunFunction()`'s epilogue, since every prim-equivalent item upstream
+carries `SLS_ENABLED`. The definition marks (`GLOBAL`/`IMMEDIATE`) touch no
+stack and now leave the flag alone (`SLS_UNCHANGED`).
+
+**D2 — recursion ran off the top of the data stack in silence.** The data stack
+is the RPN stack, 8 levels under `SSIZE8`, and a recursive word holds one live
+operand per level. `7 FACT` returned `720*6 = 4320` instead of 5040; `6 2 NCR`
+returned 1 instead of 15 because `FACT` ran with two values already beneath it.
+`forthDataDepth` now tracks Forth-owned depth via a new `stackEffect` column in
+`forthPrims[]` and raises `ERROR_RAM_FULL` on growth past capacity, joining the
+return-stack guard and runaway cap.
+
+Two properties, both chosen so the guard cannot fire on a correct program: it is
+only ever an *underestimate* (a native item resyncs the count to 0 rather than
+abandoning it — 0 is never above the truth, and is exact after the usual
+`XEQ 'CLSTK'`), and it applies only while Forth is executing (the public push
+helpers are also used to seed the stack outside any Forth line; counting those
+accumulated a stale depth that refused a legitimate push — caught by
+`test_param_series_c_acceptance`, not by review).
+
+Deliberately NOT changed: a *user* keying more values than the stack holds still
+loses the bottom one silently. That is what R47 does, and the ruling cuts both
+ways.
+
+New pins: `test_native_lift_after_forth`, `test_data_stack_overflow_guard`, and
+`test_savings_program` (the SAVE showcase, which now carries its balance on the
+stack across `RCL` — impossible before D1).
+
+Gate green: FORTH SELF-TEST: ALL PASSED, 173 checks.
+`make dmcp5r47` flash 1094536 -> 1094824 (+288 B), measured with
+`CUSTOM_PKG_RECONFIGURE=1`. The cost is the `stackEffect` column (22 entries,
+struct padding) plus the guard itself; justified by two classes of silent wrong
+answer.

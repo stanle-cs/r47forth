@@ -10990,6 +10990,9 @@ static int test_forth_edit_modify_commit(void);
 static int test_forth_capture_navigation(void);
 /* complete user-facing language showcase from FORTH_SHOWCASE_PROGRAM.txt */
 static int test_showcase_program(void);
+static int test_savings_program(void);
+static int test_native_lift_after_forth(void);
+static int test_data_stack_overflow_guard(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -13156,6 +13159,19 @@ int forthDictSelfTest(void)
   forthGDictInit();
   printf("  [DEBUG] running test_showcase_program...\n");
   fail |= test_showcase_program();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_data_stack_overflow_guard...\n");
+  fail |= test_data_stack_overflow_guard();
+
+  printf("  [DEBUG] running test_native_lift_after_forth...\n");
+  fail |= test_native_lift_after_forth();
+
+  printf("  [DEBUG] running test_savings_program...\n");
+  forthDictInit();
+  forthGDictInit();
+  fail |= test_savings_program();
   forthDictClear();
   forthGDictClear();
 
@@ -21464,6 +21480,329 @@ cleanup:
   }
   programRunStop = savedRS;
   dynamicMenuItem = savedDynamicMenu;
+  lastErrorCode = ERROR_NONE;
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+  return fail;
+}
+
+/* ---- Second showcase program: SAVE (compound savings schedule) ----
+ * Companion to test_showcase_program. Where FDEMO exercises every language
+ * feature in isolation, SAVE is a program someone would actually keep: it
+ * writes a six-period compound-interest schedule into R00..R05 and leaves the
+ * closing balance in R22, using a GLOBAL word (GROW) that stays callable from
+ * the keyboard afterwards.
+ *
+ * Register-based by necessity, and that is the point of the fixture: RCL
+ * inside compiled Forth overwrites X rather than lifting the Forth stack, so
+ * a working value CANNOT be parked on the stack across an RCL. The schedule
+ * therefore carries its state in R19 (countdown), R20 (slot index) and R21
+ * (running balance). An earlier draft that kept the balance on the stack
+ * stored six zeros and passed nothing. */
+static int forthExprIsZero(const char *src)
+{
+  uint32_t t;
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(src);
+  if (lastErrorCode != ERROR_NONE) {
+    return 0;
+  }
+  t = getRegisterDataType(REGISTER_X);
+  if (t == dtReal34) {
+    return real34IsZero(REGISTER_REAL34_DATA(REGISTER_X)) ? 1 : 0;
+  }
+  if (t == dtLongInteger) {
+    longInteger_t li;
+    int isZero;
+    longIntegerInit(li);
+    convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+    isZero = (mpz_cmp_ui(li, 0) == 0);
+    longIntegerFree(li);
+    return isZero;
+  }
+  return 0;
+}
+
+/* ---- D2: recursion past the data stack must ERROR, not corrupt ----
+ * The Forth data stack is the RPN stack (8 levels here), and a recursive word
+ * holds one live operand per level. FACT used to run off the top silently and
+ * return 720*6 = 4320 for 7!, with lastErrorCode 0. It must now refuse.
+ * Mutation: drop the forthDataDepthApply() call at the FTOK_PRIM dispatch ->
+ * 7 FACT returns 4320 again and subcase 2 fails. ---- */
+static int test_data_stack_overflow_guard(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+  uint8_t tType;
+  int32_t tVal;
+
+  programRunStop = PGM_STOPPED;
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": FACT DUP IF DUP 1 - RECURSE * ELSE DROP 1 THEN ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: could not define FACT (%d)\n", lastErrorCode);
+    programRunStop = savedRS;
+    return 1;
+  }
+
+  /* Subcase 1: what fits must still compute exactly. */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("XEQ 'CLSTK' 6 FACT");
+  read_reg_int32(REGISTER_X, &tType, &tVal);
+  if (lastErrorCode != ERROR_NONE || tType != dtLongInteger || tVal != 720) {
+    printf("    FAIL: 6 FACT should be 720, got %ld type %u (error %d)\n",
+           (long)tVal, tType, lastErrorCode);
+    fail = 1;
+  }
+
+  /* Subcase 2: what does not fit must raise, not return a plausible number. */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("XEQ 'CLSTK' 7 FACT");
+  if (lastErrorCode == ERROR_NONE) {
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    printf("    FAIL: 7 FACT overran the data stack silently and returned %ld\n",
+           (long)tVal);
+    fail = 1;
+  }
+  else if (lastErrorCode != ERROR_RAM_FULL) {
+    printf("    FAIL: 7 FACT raised %d, expected ERROR_RAM_FULL (%d)\n",
+           lastErrorCode, ERROR_RAM_FULL);
+    fail = 1;
+  }
+
+  /* Subcase 3: the guard must not fire on a long but shallow computation. */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("XEQ 'CLSTK' 1 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 +");
+  read_reg_int32(REGISTER_X, &tType, &tVal);
+  if (lastErrorCode != ERROR_NONE || tType != dtLongInteger || tVal != 45) {
+    printf("    FAIL: shallow chained adds should give 45, got %ld type %u (error %d)\n",
+           (long)tVal, tType, lastErrorCode);
+    fail = 1;
+  }
+
+  /* Subcase 4: the budget follows getStackTop(), so a 4-level stack must refuse
+   * what an 8-level one accepts. FDEMO's SUMDOWN is the same recursive shape. */
+  {
+    bool_t saved8 = getSystemFlag(FLAG_SSIZE8);
+    int    err4Fact, err4Sum;
+
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret(": SUMDOWN DUP IF DUP 1 - RECURSE + THEN ;");
+
+    clearSystemFlag(FLAG_SSIZE8);
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'CLSTK' 6 FACT");
+    err4Fact = lastErrorCode;
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'CLSTK' 5 SUMDOWN");
+    err4Sum = lastErrorCode;
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    printf("    NOTE: on a 4-level stack, 6 FACT -> error %d, 5 SUMDOWN -> error %d (X=%ld)\n",
+           err4Fact, err4Sum, (long)tVal);
+    if (saved8) { setSystemFlag(FLAG_SSIZE8); } else { clearSystemFlag(FLAG_SSIZE8); }
+
+    if (err4Fact == ERROR_NONE) {
+      printf("    FAIL: 6 FACT fitted a 4-level stack; the budget is not tracking getStackTop()\n");
+      fail = 1;
+    }
+
+    /* and the 8-level budget is intact again afterwards */
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'CLSTK' 6 FACT");
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (lastErrorCode != ERROR_NONE || tVal != 720) {
+      printf("    FAIL: 6 FACT broken after restoring the 8-level stack (%ld, error %d)\n",
+             (long)tVal, lastErrorCode);
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    printf("    PASS: data-stack overflow raises instead of returning a corrupted result\n");
+  }
+
+  programRunStop = savedRS;
+  lastErrorCode = ERROR_NONE;
+  forthDictClear();      /* FACT was defined here: release its region */
+  forthGDictClear();
+  return fail;
+}
+
+/* ---- D1: a native item after a Forth value must LIFT, not clobber X ----
+ * Upstream's dispatcher epilogue sets FLAG_ASLIFT after every SLS_ENABLED item,
+ * and every prim-equivalent (fnAdd, fnDrop, fnSwapXY, fnMultiply) carries it.
+ * forth-core used to scrub the flag after each push and each prim, so the next
+ * native item took liftStack()'s else-branch and overwrote X.
+ * Mutation: restore clearSystemFlag(FLAG_ASLIFT) at either site -> Y is not the
+ * Forth value and both subcases fail. ---- */
+static int test_native_lift_after_forth(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+  uint8_t tType;
+  int32_t tVal;
+
+  programRunStop = PGM_STOPPED;
+
+  /* Subcase 1: literal push then RCL. R47 keeps the literal in Y. */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("XEQ 'CLSTK' 7 STO 19");
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("XEQ 'CLSTK' 1000 RCL 19");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: \"1000 RCL 19\" errored (%d)\n", lastErrorCode);
+    fail = 1;
+  }
+  else {
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 7) {
+      printf("    FAIL: RCL 19 should leave 7 in X, got %ld type %u\n",
+             (long)tVal, tType);
+      fail = 1;
+    }
+    read_reg_int32(REGISTER_Y, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 1000) {
+      printf("    FAIL: RCL 19 clobbered X instead of lifting; Y=%ld type %u, expected 1000\n",
+             (long)tVal, tType);
+      fail = 1;
+    }
+  }
+
+  /* Subcase 2: same, but the value in X came from a primitive, not a literal.
+   * fnAdd is SLS_ENABLED upstream, so the following RCL must still lift. */
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'CLSTK' 5 3 + RCL 19");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    FAIL: \"5 3 + RCL 19\" errored (%d)\n", lastErrorCode);
+      fail = 1;
+    }
+    else {
+      read_reg_int32(REGISTER_Y, &tType, &tVal);
+      if (tType != dtLongInteger || tVal != 8) {
+        printf("    FAIL: RCL after + clobbered the sum; Y=%ld type %u, expected 8\n",
+               (long)tVal, tType);
+        fail = 1;
+      }
+    }
+  }
+
+  if (!fail) {
+    printf("    PASS: native items lift onto a Forth value instead of overwriting it\n");
+  }
+
+  programRunStop = savedRS;
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+static int test_savings_program(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+  testProg_t p;
+  calcRegister_t lbl;
+  char tickLine[96];
+  int i;
+
+  /* Each entry subtracts the documented balance from its register: an exact
+   * schedule leaves zero, so a drifted value fails without string compares. */
+  static const char *schedule[] = {
+    "RCL 00 1050 -",
+    "RCL 01 1102.5 -",
+    "RCL 02 1157.625 -",
+    "RCL 03 1215.50625 -",
+    "RCL 04 1276.2815625 -",
+    "RCL 05 1340.095640625 -",
+    "RCL 22 1340.095640625 -"
+  };
+
+  tpInit(&p);
+  snprintf(tickLine, sizeof(tickLine),
+           ": PUT STO %s20 ;", STD_RIGHT_ARROW);
+
+  if (tpLbl(&p, "SAVE") < 0 ||
+      tpMarker(&p) < 0 ||
+      tpSrc(&p, ": GROW 1.05 * ; GLOBAL") < 0 ||
+      tpSrc(&p, tickLine) < 0 ||
+      tpSrc(&p, ": BUMP RCL 20 1 + STO 20 DROP ;") < 0 ||
+      tpSrc(&p, ": TALLY RCL 19 1 - STO 19 DROP ;") < 0 ||
+      tpSrc(&p, ": STEP GROW PUT BUMP TALLY ;") < 0 ||
+      tpSrc(&p, ": RUN BEGIN RCL 19 WHILE STEP REPEAT ;") < 0 ||
+      tpSrc(&p, "0 STO 20 DROP") < 0 ||
+      tpSrc(&p, "6 STO 19 DROP") < 0 ||
+      tpSrc(&p, "1000 RUN STO 22") < 0 ||
+      tpMarker(&p) < 0 ||
+      tpRtn(&p) < 0 ||
+      tpEnd(&p) < 0 ||
+      !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: SAVE program build/write\n");
+    fail = 1;
+    goto cleanup;
+  }
+
+  lbl = findNamedLabel("SAVE", GLOBAL_LABELS);
+  if (lbl == INVALID_VARIABLE) {
+    printf("    FIXTURE FAIL: SAVE label not found\n");
+    fail = 1;
+    goto cleanup;
+  }
+
+  programRunStop = PGM_STOPPED;
+  lastErrorCode = ERROR_NONE;
+  fnExecute(lbl);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: SAVE run error %d\n", lastErrorCode);
+    fail = 1;
+    goto cleanup;
+  }
+
+  for (i = 0; i < (int)(sizeof(schedule) / sizeof(schedule[0])); i++) {
+    if (!forthExprIsZero(schedule[i])) {
+      printf("    FAIL: schedule check \"%s\" did not come out zero (error %d)\n",
+             schedule[i], lastErrorCode);
+      fail = 1;
+    }
+  }
+
+  /* The loop ran exactly six times: countdown drained, slot index advanced. */
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("RCL 19");
+    if (lastErrorCode != ERROR_NONE || !x_is_longint(0)) {
+      printf("    FAIL: R19 countdown did not reach 0\n");
+      fail = 1;
+    }
+  }
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("RCL 20");
+    if (lastErrorCode != ERROR_NONE || !x_is_longint(6)) {
+      printf("    FAIL: R20 slot index did not reach 6\n");
+      fail = 1;
+    }
+  }
+
+  /* GROW was promoted, so it survives the program and composes standalone. */
+  if (!fail) {
+    uint16_t ref;
+    if (!forthFindColon("GROW", &ref) || !(ref & FORTH_REF_GLOBAL)) {
+      printf("    FAIL: GROW is not global\n");
+      fail = 1;
+    }
+    else if (!forthExprIsZero("XEQ 'CLSTK' 200 GROW GROW 220.5 -")) {
+      printf("    FAIL: global GROW GROW on 200 did not give 220.5\n");
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    printf("    PASS: SAVE wrote the six-period schedule, drained its counters, and left GROW global\n");
+  }
+
+cleanup:
+  programRunStop = savedRS;
   lastErrorCode = ERROR_NONE;
   forthDictClear();
   forthGDictClear();

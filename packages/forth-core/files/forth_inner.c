@@ -42,11 +42,88 @@ void forthSetTestInnerDepth(uint8_t depth) {
 
 /* ---- Push helpers (stack discipline per §3.2) ---- */
 
+/* ---- D2: data-stack overflow guard ----
+ * The Forth data stack IS the C47 RPN stack (4 or 8 levels, FLAG_SSIZE8), so a
+ * push past the top silently discards the bottom-most entry. For a user keying
+ * values that is ordinary RPN behaviour, but a recursive word overrunning its
+ * OWN operands is silent corruption: 7 FACT used to return 4320 instead of
+ * 5040, with lastErrorCode 0 throughout.
+ *
+ * forthDataDepth counts values Forth has pushed and not yet consumed since the
+ * current line began. It is only ever <= the true depth, so the guard can fail
+ * to fire but can never fire falsely -- a spurious "stack full" on a correct
+ * program would be worse than the silence it replaces. */
+static int16_t forthDataDepth   = 0;
+static bool_t  forthOuterActive = false;
+
+static int16_t forthStackCapacity(void)
+{
+  return (int16_t)(getStackTop() - REGISTER_X + 1);
+}
+
+void forthDataDepthEnterOuter(void)
+{
+  forthOuterActive = true;
+  forthDataDepth   = 0;
+}
+
+void forthDataDepthLeaveOuter(void)
+{
+  forthOuterActive = false;
+}
+
+/* A native item ran and its stack effect is not knowable from here. Restart the
+ * count from a conservative floor rather than abandoning it: 0 is never ABOVE
+ * the true depth, so the guard can only fire late, never falsely. Abandoning it
+ * (the first design) left the guard disabled for the rest of any line
+ * containing a native item -- including the usual `XEQ 'CLSTK'` prefix, after
+ * which 0 happens to be exactly right. */
+void forthDataDepthResync(void)
+{
+  forthDataDepth = 0;
+}
+
+/* Apply a known net effect. Consumption never fails; growth is refused when it
+ * would push a live Forth value off the top. */
+bool_t forthDataDepthApply(int16_t net)
+{
+  /* Only meaningful while Forth is executing. forthPushInt32/forthPushReal34
+   * are public helpers that callers (and the self-test harness) use to seed the
+   * RPN stack outside any Forth line; counting those would accumulate a stale
+   * depth and refuse a later legitimate push. */
+  if (!forthOuterActive && forthDepth == 0) {
+    return true;
+  }
+  if (net > 0 && forthDataDepth + net > forthStackCapacity()) {
+    lastErrorCode = ERROR_RAM_FULL;
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+  forthDataDepth += net;
+  if (forthDataDepth < 0) {
+    forthDataDepth = 0;       /* consumed inherited values, not Forth's own */
+  }
+  return true;
+}
+
+int16_t forthTestGetDataDepth(void)
+{
+  return forthDataDepth;
+}
+
+/* ASLIFT is left SET after a push: a value now sits in X, and upstream's
+ * SLS_ENABLED convention says whatever runs next must lift onto it rather than
+ * overwrite it. Clearing it here made a following native item (RCL, and any
+ * other result-producing item) clobber X instead of lifting -- see
+ * DEFECTS_stack_semantics.md D1. Each push sets the flag on entry for its own
+ * lift, so nothing depends on it being clear. */
 void forthPushReal34(const real34_t *r)
 {
+  if (!forthDataDepthApply(+1)) {
+    return;
+  }
   setSystemFlag(FLAG_ASLIFT);
   liftStack();
-  clearSystemFlag(FLAG_ASLIFT);
   if (lastErrorCode == ERROR_NONE) {
     real34Copy(r, REGISTER_REAL34_DATA(REGISTER_X));
   }
@@ -54,9 +131,11 @@ void forthPushReal34(const real34_t *r)
 
 void forthPushInt32(int32_t v)
 {
+  if (!forthDataDepthApply(+1)) {
+    return;
+  }
   setSystemFlag(FLAG_ASLIFT);
   liftStack();
-  clearSystemFlag(FLAG_ASLIFT);
   if (lastErrorCode == ERROR_NONE) {
     longInteger_t lgInt;
     longIntegerInit(lgInt);
@@ -107,6 +186,7 @@ static bool_t popIsFalse(void)
      zero/false test.  IF compiles a DUP before 0BR precisely because
      0BR pops the tested value. */
   fnDrop(NOPARAM);
+  (void)forthDataDepthApply(-1);
   return isZero;
 }
 
@@ -135,6 +215,7 @@ forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *co
   if (label != INVALID_VARIABLE) {
     dynamicMenuItem = -1;
     fnExecute((uint16_t)label);
+    forthDataDepthResync();   /* R47 label body: resync the count (D2) */
     if (lastErrorCode != ERROR_NONE) return FORTH_XEQN_ERR;
     return FORTH_XEQN_DONE;
   }
@@ -149,8 +230,11 @@ forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *co
   {
     uint16_t pidx = forthFindPrim(name);
     if (pidx != FORTH_PRIM_NONE) {
+      if (!forthDataDepthApply(forthPrims[pidx].stackEffect)) {
+        return FORTH_XEQN_ERR;
+      }
       forthPrims[pidx].fn();
-      clearSystemFlag(FLAG_ASLIFT);
+      setSystemFlag(FLAG_ASLIFT);   /* SLS_ENABLED, as upstream's epilogue does */
       if (lastErrorCode != ERROR_NONE) return FORTH_XEQN_ERR;
       return FORTH_XEQN_DONE;
     }
@@ -169,6 +253,7 @@ forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *co
       uint8_t savedRunStop = programRunStop;
       programRunStop = PGM_RUNNING;
       reallyRunFunction((int16_t)itemId, NOPARAM);
+      forthDataDepthResync();   /* native item: resync the count (D2) */
       if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
       if (lastErrorCode != ERROR_NONE) return FORTH_XEQN_ERR;
       return FORTH_XEQN_DONE;
@@ -311,6 +396,9 @@ void forthInner(uint16_t wordRef, bool fromProgram)
                             ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return;
   }
+  if (forthDepth == 0 && !forthOuterActive) {
+    forthDataDepth = 0;       /* direct entry (XEQ, ITM_FCALL, harness) */
+  }
   forthDepth++;
   uint8_t rspBase = rsp;   /* watermark: this level's rstack floor */
   #define INNER_LEAVE() do { rsp = rspBase; forthDepth--; return; } while (0)
@@ -376,8 +464,14 @@ void forthInner(uint16_t wordRef, bool fromProgram)
                                  ERR_REGISTER_LINE, NIM_REGISTER_LINE);
          INNER_LEAVE();
        }
+       if (!forthDataDepthApply(forthPrims[primIdx].stackEffect)) {
+         INNER_LEAVE();
+       }
        forthPrims[primIdx].fn();
-       clearSystemFlag(FLAG_ASLIFT);
+       /* SLS_ENABLED: every prim-equivalent item upstream (fnAdd, fnDrop,
+        * fnSwapXY, fnMultiply ...) carries it, so the epilogue sets ASLIFT.
+        * Prims bypass reallyRunFunction(), so mirror it here. D1. */
+       setSystemFlag(FLAG_ASLIFT);
        if (lastErrorCode != ERROR_NONE) {
          INNER_LEAVE();
        }
@@ -637,6 +731,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
           INNER_LEAVE();
         }
         c47_done:
+        forthDataDepthResync();   /* native stack effect is opaque */
         break;
       }
 
