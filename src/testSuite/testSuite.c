@@ -1102,9 +1102,10 @@ void covStatsRegister(uint16_t unusedButMandatoryParameter) {
 }
 
 void covLoadPgm(uint16_t unusedButMandatoryParameter) {
-  // Build and import two labelled RPN programs: S = X^2 - 4 (root at X=2, derivative 2X) for the solver / differentiator / integrator / real summation,
-  // and T = X^2 (which returns a long integer for a long-integer counter) for the indexed summation. Both reach the execProgram branches the formula corpus cannot.
-  // Bytes: LBL name / X^2 / [literal 4 / SUB] / END.
+  // Build and import three labelled RPN programs: S = X^2 - 4 (root at X=2, derivative 2X) for the solver / differentiator / integrator / real summation,
+  // T = X^2 (which returns a long integer for a long-integer counter) for the indexed summation, and M = X^2 behind a leading MVAR "A" so the interactive
+  // integrator accepts it (fnIntegrateErrCov FARG=3). All reach the execProgram branches the formula corpus cannot.
+  // Bytes: LBL name / [MVAR name] / X^2 / [literal 4 / SUB] / END.
   static const uint8_t pgmS[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 1, 'S',            // LBL "S"
     ITM_SQUARE,                                        // X^2
@@ -1117,8 +1118,15 @@ void covLoadPgm(uint16_t unusedButMandatoryParameter) {
     ITM_SQUARE,                                        // X^2
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
   };
+  static const uint8_t pgmM[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'M',            // LBL "M"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'A', // MVAR "A"
+    ITM_SQUARE,                                        // X^2
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
+  };
   covWriteAndLoadPgm(pgmS, sizeof(pgmS));
   covWriteAndLoadPgm(pgmT, sizeof(pgmT));
+  covWriteAndLoadPgm(pgmM, sizeof(pgmM));
 }
 
 void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter) {
@@ -1440,15 +1448,29 @@ void covIntegrate(uint16_t which) {
 }
 
 void covIntegrateErr(uint16_t which) {
-  // Drive the dispatch error branches of the integrator (_fnIntegrate / fnPgmInt in integrate.c). which=0: a stack register whose letter names no program label ->
-  // ERROR_LABEL_NOT_FOUND; otherwise a named variable with no program specified -> ERROR_NO_PROGRAM_SPECIFIED.
+  // Drive the dispatch branches of the integrator (_fnIntegrate / fnPgmInt in integrate.c). which=0: a stack register whose letter names no program label ->
+  // ERROR_LABEL_NOT_FOUND; which=1: a named variable with no program specified -> ERROR_NO_PROGRAM_SPECIFIED; which=2: interactive selection of the loaded
+  // no-MVAR program T -> ERROR_NO_MVAR_FOUND; which=3: interactive selection of the loaded program M (leading MVAR) is accepted. 2 and 3 need the programs
+  // staged, so they run from pgm_solve_cov; 0 needs the letter T to name no label, so it runs from integrate_cov.
   if(which == 0) {
     fnIntegrate(REGISTER_T);
   }
-  else {
+  else if(which == 1) {
     currentSolverStatus = 0;
     currentSolverProgram = 9999;   // >= numberOfLabels: no program specified
     fnIntegrate(FIRST_NAMED_VARIABLE);
+  }
+  else {
+    const char *name = which == 2 ? "T" : "M";
+    const calcRegister_t label = findNamedLabel(name, GLOBAL_LABELS);
+    if(label == INVALID_VARIABLE) {
+      printf("\nUnknown global label: %s\n", name);
+      abortTest();
+      return;
+    }
+    currentSolverStatus = 0;
+    fnIntegrate(label);
+    currentSolverStatus = 0;   // disarm the interactive integrator a successful selection leaves armed
   }
 }
 

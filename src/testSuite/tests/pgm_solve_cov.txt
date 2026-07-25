@@ -35,6 +35,16 @@ Func: fnIntegratePgmCov
 In:  FARG=0 RY=Real:"0" RX=Real:"3"
 Out: EC=0 RX=Real:"-3"
 
+; interactive selection (Integral f d) of the no-MVAR program T is refused with No-MVAR-found; the programmable
+; PGMINT + integral-yx path above still accepts such programs
+Func: fnIntegrateErrCov
+In:  FARG=2 RX=Real:"0"
+Out: EC=25
+; interactive selection of program M (leading MVAR) is accepted
+Func: fnIntegrateErrCov
+In:  FARG=3 RX=Real:"0"
+Out: EC=0
+
 ; program summation Sum(n^2-4) for n=3..5 (from=3,to=5,step=1) = 5+12+21 = 38
 Func: fnSumProdCov
 In:  FARG=0 RZ=Real:"3" RY=Real:"5" RX=Real:"1"
