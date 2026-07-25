@@ -1074,14 +1074,19 @@ err:
   void standardScreenDump(void) {
   resetShiftState();                  //JM To avoid f or g top left of the screen, clear to make sure
   int32_t vol = 0;
+  char *savedBuffers = malloc(ERROR_MESSAGE_LENGTH + AIM_BUFFER_LENGTH + NIM_BUFFER_LENGTH + TAM_BUFFER_LENGTH);          // on the heap: tmpString is DMCP's own aux buffer, so it is not a safe place to hold a backup across create_screenshot
+  if(savedBuffers == NULL) {
+    return;
+  }
   vol = getBeepVolume();
   fnSetVolume(11);
   _Buzz(100, 5);
-  xcopy(tmpString, errorMessage, ERROR_MESSAGE_LENGTH + AIM_BUFFER_LENGTH + NIM_BUFFER_LENGTH + TAM_BUFFER_LENGTH);       //backup portion of the "message buffer" area in DMCP used by ERROR..AIM..NIM buffers, to the tmpstring area in DMCP. DMCP uses this area during create_screenshot.
+  xcopy(savedBuffers, errorMessage, ERROR_MESSAGE_LENGTH + AIM_BUFFER_LENGTH + NIM_BUFFER_LENGTH + TAM_BUFFER_LENGTH);    //backup portion of the "message buffer" area in DMCP used by ERROR..AIM..NIM buffers. DMCP uses this area during create_screenshot.
   create_screenshot(0);      //Screen dump
-  xcopy(errorMessage, tmpString, ERROR_MESSAGE_LENGTH + AIM_BUFFER_LENGTH + NIM_BUFFER_LENGTH + TAM_BUFFER_LENGTH);        //   This total area must be less than the tmpString storage area, which it is.
+  xcopy(errorMessage, savedBuffers, ERROR_MESSAGE_LENGTH + AIM_BUFFER_LENGTH + NIM_BUFFER_LENGTH + TAM_BUFFER_LENGTH);
   _Buzz(100, 5);
   fnSetVolume((uint16_t)vol);
+  free(savedBuffers);
 }
 #endif // DMCP_BUILD
 
