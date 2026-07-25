@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b48476cb2 100644
+index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a0ae04363 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,8 @@
@@ -40,22 +40,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
            xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
            tmpString[2 + cursorInString    ] = STD_CURSOR[0];
            tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
-@@ -649,7 +666,13 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
-       refreshRegisterLine(errorMessageRegisterLine);
-     }
- 
--    if(aimBuffer[0] != 0 && linesOfCurrentStep > 4) { // Limited to 4 lines so as not to cause crash or freeze
-+    // forth-core code-audit 2026-07-21: the "trim the edited step until it
-+    // fits in 4 display lines" crash/freeze guard must consult the capture
-+    // buffer when a Forth line is open — F6-1 moved Forth edit text off
-+    // aimBuffer onto forthCapBuf(), so a long Forth source line left this
-+    // guard reading an empty aimBuffer and never fired (same forthCapIsOpen()
-+    // ? forthCapBuf() : aimBuffer idiom used throughout pemAlpha).
-+    if((forthCapIsOpen() ? forthCapBuf()[0] != 0 : aimBuffer[0] != 0) && linesOfCurrentStep > 4) { // Limited to 4 lines so as not to cause crash or freeze
-       if(getSystemFlag(FLAG_ALPHA)) {
-         pemAlpha(ITM_BACKSPACE);
-       }
-@@ -774,6 +797,28 @@ static void _closeAlphaMenus(void) {
+@@ -774,6 +791,28 @@ static void _closeAlphaMenus(void) {
    }
  }
  
@@ -84,7 +69,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
  void pemAlpha(int16_t item) {
    bool_t editCommand = false;
    if(item == ITM_EDIT) {
-@@ -805,6 +850,21 @@ void pemAlpha(int16_t item) {
+@@ -805,6 +844,20 @@ void pemAlpha(int16_t item) {
        editCommand = true;
        item = aimFunc;
      }
@@ -93,11 +78,10 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
 +        aimBuffer[0] = 0;
 +        return;
 +      }
-+      forthCapOpen();
-+      if(!forthCapIsOpen()) { aimBuffer[0] = 0; return; }   /* RAM_FULL shown */
-+      xcopy(forthCapBuf(), tmpString, ll);   // bare render: no name prefix, no quotes
-+      forthCapBuf()[ll] = 0;
-+      T_cursorPos = stringLastGlyph((char *)forthCapBuf()) + 1;
++      forthCapOpen();                    // cannot fail: nothing is allocated
++      xcopy(aimBuffer, tmpString, ll);   // bare render: no name prefix, no quotes
++      aimBuffer[ll] = 0;
++      T_cursorPos = stringLastGlyph(aimBuffer) + 1;
 +      deleteStepsFromTo(currentStep, findNextStep(currentStep));
 +      tam.function = aimFunc;
 +      editCommand = true;
@@ -106,44 +90,22 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
      else {
        aimBuffer[0] = 0;
        return;
-@@ -812,6 +872,10 @@ void pemAlpha(int16_t item) {
+@@ -812,6 +865,9 @@ void pemAlpha(int16_t item) {
    }
  
    if(!getSystemFlag(FLAG_ALPHA)) {
 +      if(tam.function == ITM_FORTH && !forthCapIsOpen()) {
 +        forthCapOpen();
-+        if(!forthCapIsOpen()) { return; }   /* RAM_FULL shown; nothing mutated */
 +      }
        resetShiftState();
        displayAIMbufferoffset = 0;
        if(!editCommand) {
-@@ -844,7 +908,8 @@ void pemAlpha(int16_t item) {
-       currentStep = findPreviousStep(currentStep);
-     }
-     if(indexOfItems[item].func == addItemToBuffer) {
--      int32_t len = stringByteLength(aimBuffer);
-+      char *sink = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
-+      int32_t len = stringByteLength(sink);
-       item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
-       if(alphaCase == AC_LOWER) {
-           if(ITM_A <= item && item <= ITM_Z) {
-@@ -855,40 +920,64 @@ void pemAlpha(int16_t item) {
-       if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
-         item = convertItemToSubOrSup(item, nextChar);
-         int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
--        if(len < (256 - inputCharLength) && stringGlyphLength(aimBuffer) < 196) {
--          xcopy(aimBuffer + T_cursorPos + inputCharLength, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
--          xcopy(aimBuffer + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
-+        if(len < (256 - inputCharLength) && stringGlyphLength(sink) < 196) {
-+          xcopy(sink + T_cursorPos + inputCharLength, sink + T_cursorPos, stringByteLength(sink + T_cursorPos) + 1);
-+          xcopy(sink + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
-           T_cursorPos += inputCharLength;
-         }
+@@ -863,18 +919,28 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_BACKSPACE) {
 -      if(aimBuffer[0] == 0) {
-+      if((forthCapIsOpen() ? forthCapBuf()[0] : aimBuffer[0]) == 0) {
++      if((aimBuffer[0]) == 0) {
          deleteStepsFromTo(currentStep, findNextStep(currentStep));
          clearSystemFlag(FLAG_ALPHA);
          calcModeNormalGui();
@@ -165,18 +127,11 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
        }
        else {
 -        char cursorByte = aimBuffer[T_cursorPos];
-+        char *sink = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
-+        char cursorByte = sink[T_cursorPos];
++          char cursorByte = aimBuffer[T_cursorPos];
          int16_t lastGlyphPos;
--        aimBuffer[T_cursorPos] = 0;
--        lastGlyphPos = stringLastGlyph(aimBuffer);
--        aimBuffer[T_cursorPos] = cursorByte;
--        xcopy(aimBuffer + lastGlyphPos, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
-+        sink[T_cursorPos] = 0;
-+        lastGlyphPos = stringLastGlyph(sink);
-+        sink[T_cursorPos] = cursorByte;
-+        xcopy(sink + lastGlyphPos, sink + T_cursorPos, stringByteLength(sink + T_cursorPos) + 1);
-         T_cursorPos = lastGlyphPos;
+         aimBuffer[T_cursorPos] = 0;
+         lastGlyphPos = stringLastGlyph(aimBuffer);
+@@ -884,11 +950,23 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_ENTER) {
@@ -186,9 +141,8 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
 -        _closeAlphaMenus();
 -      return;
 +      bool_t wasForth = (tam.function == ITM_FORTH);
-+      bool_t hadText  = (forthCapIsOpen() ? forthCapTextNonEmpty()
-+                                          : (aimBuffer[0] != 0));  // E5 locks on a NON-EMPTY line
-+      if(wasForth && hadText && !forthCheckSourceLine(forthCapIsOpen() ? (const char *)forthCapBuf() : aimBuffer)) {
++      bool_t hadText  = (aimBuffer[0] != 0);   // E5 locks on a NON-EMPTY line
++      if(wasForth && hadText && !forthCheckSourceLine(aimBuffer)) {
 +        return;   /* E9 tier 1: commit refused atomically — capture stays
 +                     open, aimBuffer intact for correction, the error is
 +                     already displayed.  Tier 2 (names) never reaches here:
@@ -206,15 +160,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
      }
      else if(item == ITM_USERMODE) {
        fnFlipFlag(FLAG_USER);
-@@ -896,6 +985,7 @@ void pemAlpha(int16_t item) {
-     }
-     else if(item == ITM_CLA) { // JM addon
-       aimBuffer[0] = 0;
-+      if(forthCapIsOpen()) { forthCapBuf()[0] = 0; }
-       T_cursorPos = 0;
-       nextChar = NC_NORMAL;
-     }
-@@ -938,6 +1028,13 @@ void pemAlpha(int16_t item) {
+@@ -938,6 +1016,13 @@ void pemAlpha(int16_t item) {
        fnT_ARROW(indexOfItems[item].param);
        return;
      }
@@ -228,36 +174,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
  
      int16_t aimFunc = currentStep[0];
      if(aimFunc & 0x80) {
-@@ -946,21 +1043,22 @@ void pemAlpha(int16_t item) {
-       aimFunc |= currentStep[1];
-     }
- 
-+    char *sink = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
-     deleteStepsFromTo(currentStep, findNextStep(currentStep));
-     if(aimFunc < 128) { // literal
-       tmpString[0] = aimFunc;
-       tmpString[1] = (char)STRING_LABEL_VARIABLE;
--      tmpString[2] = stringByteLength(aimBuffer);
--      xcopy(tmpString + 3, aimBuffer, stringByteLength(aimBuffer));
--      _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 3);
-+      tmpString[2] = stringByteLength(sink);
-+      xcopy(tmpString + 3, sink, stringByteLength(sink));
-+      _insertInProgram((uint8_t *)tmpString, stringByteLength(sink) + 3);
-     }
-     else { // rem or 42str
-       tmpString[0] = (aimFunc >> 8) | 0x80;
-       tmpString[1] =  aimFunc       & 0xff;
-       tmpString[2] = (char)STRING_LABEL_VARIABLE;
--      tmpString[3] = stringByteLength(aimBuffer);
--      xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
--      _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 4);
-+      tmpString[3] = stringByteLength(sink);
-+      xcopy(tmpString + 4, sink, stringByteLength(sink));
-+      _insertInProgram((uint8_t *)tmpString, stringByteLength(sink) + 4);
-     }
-     --currentLocalStepNumber;
-     currentStep = findPreviousStep(currentStep);
-@@ -970,7 +1068,22 @@ void pemAlpha(int16_t item) {
+@@ -970,7 +1055,22 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -280,7 +197,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -980,6 +1093,113 @@ void pemCloseAlphaInput(void) {
+@@ -980,6 +1080,113 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -297,10 +214,10 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
 +   * offset below — mirrors pemAlpha's own glyph-editing recommit tail
 +   * (this file, the block ending in the `_insertInProgram` call reached
 +   * from the CAT_FNCT/PTP_NONE item arm), which is what normally keeps
-+   * the on-disk step in sync with forthCapBuf() after every keystroke.
++   * the on-disk step in sync with aimBuffer after every keystroke.
 +   * That invariant does NOT hold on entry here in one real case: a
 +   * forthCaptureResume() that just folded a suspended TAM commit into
-+   * text (F6-4) writes that text into forthCapBuf() via
++   * text (F6-4) writes that text into aimBuffer via
 +   * forthCapInsertName() without recommitting the on-disk step, so a
 +   * suspend entered right after — with no intervening keystroke, e.g.
 +   * a second TAM operation cancelled immediately — would otherwise
@@ -315,9 +232,9 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
 +    tmpString[0] = (ITM_FORTH >> 8) | 0x80;
 +    tmpString[1] =  ITM_FORTH       & 0xff;
 +    tmpString[2] = (char)STRING_LABEL_VARIABLE;
-+    tmpString[3] = stringByteLength((char *)forthCapBuf());
-+    xcopy(tmpString + 4, forthCapBuf(), stringByteLength((char *)forthCapBuf()));
-+    _insertInProgram((uint8_t *)tmpString, stringByteLength((char *)forthCapBuf()) + 4);
++    tmpString[3] = stringByteLength(aimBuffer);
++    xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
++    _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 4);
 +    --currentLocalStepNumber;
 +    currentStep = findPreviousStep(currentStep);
 +  }
@@ -352,11 +269,11 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
 +    #endif
 +    return;
 +  }
-+  forthCapOpen();                           /* SUSPENDED → orphan-flip → alloc */
-+  if (!forthCapIsOpen()) { return; }        /* RAM_FULL shown; capture lost */
++  forthCapOpen();                           /* SUSPENDED → OPEN; clears aimBuffer,
++                                               which TAM may have used meanwhile */
 +  { uint8_t len = p[3];                     /* len 0 = empty line, legal */
-+    if (len > 0) { xcopy(forthCapBuf(), p + 4, len); }
-+    forthCapBuf()[len] = 0;
++    if (len > 0) { xcopy(aimBuffer, p + 4, len); }
++    aimBuffer[len] = 0;
 +    T_cursorPos = forthCapSavedCursor();
 +    if (T_cursorPos > len) { T_cursorPos = len; }
 +  }
@@ -372,7 +289,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
 +        break;   /* defensive: keep the step rather than truncate text */
 +      }
 +      { char conv[258]; char *t = conv;            /* 1 + 255 + NUL */
-+        if (T_cursorPos > 0 && forthCapBuf()[T_cursorPos - 1] != ' ') {
++        if (T_cursorPos > 0 && aimBuffer[T_cursorPos - 1] != ' ') {
 +          *t++ = ' ';        /* word separator when mid-text */
 +        }
 +        xcopy(t, tmpString, stringByteLength(tmpString) + 1);
@@ -394,7 +311,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
  }
  
  
-@@ -995,7 +1215,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -995,7 +1202,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -403,7 +320,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1367,6 +1587,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1367,6 +1574,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -441,7 +358,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1377,12 +1628,18 @@ void insertStepInProgram(const int16_t func) {
+@@ -1377,12 +1615,18 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -462,7 +379,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1404,6 +1661,53 @@ void insertStepInProgram(const int16_t func) {
+@@ -1404,6 +1648,53 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -516,7 +433,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1415,6 +1719,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1415,6 +1706,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -532,7 +449,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1497,6 +1810,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1497,6 +1797,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -556,7 +473,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..36588c2f8a7e789cdaf0e09a6ba6377b
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1792,7 +2122,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1792,7 +2109,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

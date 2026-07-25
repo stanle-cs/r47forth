@@ -3890,13 +3890,13 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           }
         }
         if(getSystemFlag(FLAG_ALPHA)
-           && (forthCapIsOpen() ? !forthCapTextNonEmpty() : aimBuffer[0] == 0)
+           && aimBuffer[0] == 0
            && !tam.mode) {
           pemAlpha(ITM_BACKSPACE);
           fnBst(NOPARAM); // Set the PGM pointer to the original position
           break;
         }
-        if((aimBuffer[0] != 0 || forthCapTextNonEmpty()) && !tam.mode) {
+        if(aimBuffer[0] != 0 && !tam.mode) {
           bool_t wasForthCap = forthCapTextNonEmpty();
           if(getSystemFlag(FLAG_ALPHA)) {
             pemCloseAlphaInput();
@@ -4690,7 +4690,7 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
         }
         else {
           if(getSystemFlag(FLAG_ALPHA)
-             && (forthCapIsOpen() ? !forthCapTextNonEmpty() : aimBuffer[0] == 0)
+             && aimBuffer[0] == 0
              && !tam.mode) {
             pemAlpha(ITM_BACKSPACE);
           }
@@ -4922,7 +4922,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
         }
         else {
           if(getSystemFlag(FLAG_ALPHA)
-             && (forthCapIsOpen() ? !forthCapTextNonEmpty() : aimBuffer[0] == 0)
+             && aimBuffer[0] == 0
              && !tam.mode) {
             pemAlpha(ITM_BACKSPACE);
             fnBst(NOPARAM); // Set the PGM pointer to the original position

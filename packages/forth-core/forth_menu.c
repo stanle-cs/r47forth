@@ -28,14 +28,13 @@ static int forthSortMenu(void const *a, void const *b) {
 bool_t forthCapInsertName(const char *name)
 {
   int32_t nameLen = stringByteLength(name);
-  uint8_t *cap = forthCapBuf();
-  if(cap == NULL) { return false; }
-  int32_t bufLen = stringByteLength((char *)cap);
-  if(bufLen + nameLen + 1 < 256 && stringGlyphLength((char *)cap) + nameLen + 1 <= 196) {
-    xcopy((char *)cap + T_cursorPos + nameLen + 1, (char *)cap + T_cursorPos,
-          stringByteLength((char *)cap + T_cursorPos) + 1);
-    xcopy((char *)cap + T_cursorPos, name, nameLen);
-    cap[T_cursorPos + nameLen] = ' ';
+  if(!forthCapIsOpen()) { return false; }
+  int32_t bufLen = stringByteLength(aimBuffer);
+  if(bufLen + nameLen + 1 < 256 && stringGlyphLength(aimBuffer) + nameLen + 1 <= 196) {
+    xcopy(aimBuffer + T_cursorPos + nameLen + 1, aimBuffer + T_cursorPos,
+          stringByteLength(aimBuffer + T_cursorPos) + 1);
+    xcopy(aimBuffer + T_cursorPos, name, nameLen);
+    aimBuffer[T_cursorPos + nameLen] = ' ';
     T_cursorPos += nameLen + 1;
     return true;
   }

@@ -1419,3 +1419,93 @@ canonical TAM path and by this test.
 
 `make dmcp5r47` flash 1093728 → 1093776 (+48 B, three small conditional
 branches); RAM (data+bss) unchanged at 7228.
+
+---
+
+## 2026-07-25 — Simplification pass S1/S2/S3: the separate capture buffer was a vestige and is gone
+
+Three stages reducing this package's coupling to upstream, prompted by an
+audit of the whole override set rather than of any one defect. No Forth
+feature was removed. Upstream override files 17 → 13 (the resolver work
+also left `screen.c` a 2-hunk shell); patch added-lines 937 → 634.
+
+**S1 — evict what was never forth-core's.** The enhanced
+missing-function error text (`error.c` in full, plus its `screen.c`
+branch) is dropped on owner ruling: the error still raises and the
+offending name is still written to `errorMessage`, only the on-screen
+rendering of the name is gone. `config.c`'s unconditional
+global-register descriptor memset is a generic upstream fix and moved to
+`UPSTREAM_REPORTS_globalRegister_reset.md`;
+`test_lifecycle_real_reset_hook` drops the poison/assert pair that
+pinned it. Six lines of gratuitous whitespace churn reverted.
+
+**S2 — move package logic out of upstream files.** The 157-line
+`MNU_FORTH` picker builder (inside `softmenus.c`) and the
+insert/guard helpers (inside `keyboard.c`) became package-owned
+`forth_menu.c/h`; the three copies of the Forth name fallback became
+`forthTryColonFallback()`/`forthDispatchColon()` in `forth_bridge.c`.
+Pure code motion — the `dmcp5r47` flash figure was byte-identical
+across the stage, which is the evidence.
+
+**S3 — the capture line moves back onto `aimBuffer`.** This reverses
+F6-1's central decision, and the reason is that F6-1's premise expired.
+F6-1 moved the text off `aimBuffer` because TAM-cancel zeroes
+`aimBuffer` in PEM, destroying a suspended capture line. F6-2 then made
+the on-disk step the single source of truth (suspend frees the buffer,
+resume refills from the step payload), and code audit #1 made that
+recommit unconditional. From that point the text was always recoverable
+from the step, TAM clobbering `aimBuffer` no longer mattered, and the
+separate allocation was pure cost: a `forthCapIsOpen() ? forthCapBuf() :
+aimBuffer` ternary at 13 sink/cursor/render sites, an allocator lifetime
+to get wrong, and — per code audit #2 and
+`UPSTREAM_REPORTS_976b864b5.md` — a genuine orphaned-bookkeeping leak on
+every save/restore round-trip taken with a capture open. That leak is
+now gone by construction: forth-core no longer has any allocation whose
+lifetime is shorter than a save/restore cycle. The upstream report
+stands as a general observation.
+
+What survived, and why the state object did not simply disappear: the
+capture *state* (CLOSED/OPEN/SUSPENDED plus the suspend snapshot) is
+still explicit. Deriving it from `calcMode`/`FLAG_ALPHA`/`tam.function`
+was tried first and is wrong — `tamEnterMode` assigns the incoming TAM
+function *before* the CM_PEM suspend seam fires, so `tam.function` is
+already the TAM op, not `ITM_FORTH`, at the one place suspend must
+recognise an open capture. What went is the storage, not the state.
+
+Consequences: `c47Extensions/keyboardTweak.c` and
+`programming/nextStep.c` leave the override set entirely — every hunk in
+both was the ternary or a `|| forthCapTextNonEmpty()` disjunction that
+is now literally upstream's own expression. `screen.c`'s
+`findOffset`/`incOffset`, and `keyboard.c`'s `fnKeyUp`/`fnKeyDown`/
+`fnKeyExit` guards, likewise revert to upstream verbatim. The two real
+behaviours hiding among that ternary noise were kept: `fnKeyExit`'s
+`currentStep` resync after a Forth commit, and `fnKeyBackspace`'s
+empty-abort branch (Forth deletes its placeholder in place, REM/LITERAL
+does not). The 256-byte/196-glyph cap is unaffected — it is enforced in
+code at the insertion sites, not by the buffer's size, and `aimBuffer`
+is 1024 bytes.
+
+`test_capture_buffer` subcase 2 is re-pinned: it asserted that typing
+left `aimBuffer` empty while text accumulated in the managed buffer, and
+now asserts that `aimBuffer` holds the typed line. The arena-residue
+subcases still run; they can no longer catch a capture leak (there is
+nothing to leak) and now serve as regression guards on the surrounding
+step insert/delete churn.
+
+Not done, deliberately: `core/freeList.c` stays. FIX-6B — the fail-loud
+`displayBugScreen` rework agreed with upstream in
+`UPSTREAM_REPORTS_b8f79e486.md` §3 — is still unlanded, and the guard is
+what caught code audit #2. It should be revisited with that rework, not
+opportunistically here. The `_executeOp` → `param_core.c` extraction
+also stays: it is the package's largest single patch (−233 lines from
+`lblGtoXeq.c`) and its highest rebase risk, but it is a genuine
+architectural need (`paramCoreExecuteOpBounded` and the direct
+validate/dispatch split are new capability, not a move), so shrinking it
+requires a design decision rather than a cleanup.
+
+Gate green at every stage: `FORTH SELF-TEST: ALL PASSED`, 342 PASS
+throughout. `make dmcp5r47` flash 1095048 → 1094536 (−512 B) across the
+three stages, measured with `CUSTOM_PKG_RECONFIGURE=1` — note that
+`build.dmcp5`'s stamp tracks only the `CUSTOM_PKG` *value*, so
+package-content edits do not trigger a reconfigure and a measurement
+without that flag silently reads a stale shadow.

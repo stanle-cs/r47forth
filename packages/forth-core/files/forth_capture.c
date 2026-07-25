@@ -3,28 +3,13 @@
 static forthCap_t forthCap;   /* zero-initialized: FCAP_CLOSED */
 
 void forthCapOpen(void) {
-  if (forthCap.state == FCAP_SUSPENDED) { forthCap.state = FCAP_CLOSED; }
-  if (forthCap.state == FCAP_OPEN) {
-    forthCap.buf[0] = 0;                    /* reopen = fresh line */
-    return;
-  }
-  forthCap.sizeBlocks = TO_BLOCKS(FORTH_CAP_BYTES);
-  forthCap.buf = allocC47Blocks(forthCap.sizeBlocks);
-  if (forthCap.buf == NULL) {
-    forthCap.sizeBlocks = 0;
-    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-    return;
-  }
-  forthCap.buf[0] = 0;
+  /* A still-SUSPENDED object is an orphan here (exotic mode changes that
+   * skip the resume choke point); the assignment below drops it. */
+  aimBuffer[0] = 0;                         /* reopen = fresh line */
   forthCap.state = FCAP_OPEN;
 }
 
 void forthCapClose(void) {
-  if (forthCap.buf != NULL) {
-    freeC47Blocks(forthCap.buf, forthCap.sizeBlocks);
-    forthCap.buf = NULL;
-  }
-  forthCap.sizeBlocks = 0;
   forthCap.state = FCAP_CLOSED;
 }
 
@@ -33,11 +18,10 @@ void forthCapSuspendState(uint16_t cursor, uint16_t localStep, uint32_t stepOffs
   forthCap.savedLocalStep  = localStep;
   forthCap.savedStepOffset = stepOffset;
   forthCap.savedStepCount  = stepCount;
-  if (forthCap.buf != NULL) {
-    freeC47Blocks(forthCap.buf, forthCap.sizeBlocks);
-    forthCap.buf = NULL;
-  }
-  forthCap.sizeBlocks = 0;
+  /* The line is NOT carried across the suspension: the on-disk step is
+   * the single source of truth (F6-2), and forthCaptureSuspend() has
+   * just recommitted it.  TAM is free to use aimBuffer for its own name
+   * entry while we are suspended; resume refills from the step. */
   forthCap.state = FCAP_SUSPENDED;
 }
 bool_t   forthCapIsSuspended(void)     { return forthCap.state == FCAP_SUSPENDED; }
@@ -47,11 +31,11 @@ uint32_t forthCapSavedStepOffset(void) { return forthCap.savedStepOffset; }
 uint16_t forthCapSavedStepCount(void)  { return forthCap.savedStepCount; }
 void     forthCapAbandonSuspended(void){ if (forthCap.state == FCAP_SUSPENDED) forthCap.state = FCAP_CLOSED; }
 
-/* F6-6: capture cannot outlive the dictionary lifecycle.  forthCapClose
- * already sets state = FCAP_CLOSED unconditionally (covers OPEN and
- * SUSPENDED alike; SUSPENDED has buf == NULL already so the free is a
- * no-op there) — forthCapAbandonSuspended is kept as the explicit,
- * belt-and-suspenders call for the suspended state per the packet.
+/* F6-6: capture state cannot outlive the dictionary lifecycle.
+ * forthCapClose already sets FCAP_CLOSED unconditionally (covering OPEN
+ * and SUSPENDED alike) — forthCapAbandonSuspended is kept as the
+ * explicit, belt-and-suspenders call for the suspended state per the
+ * packet.
  *
  * FLAG_ALPHA is deliberately NOT touched here. saveRestoreBackup.c's
  * restore sequence calls forthGDictValidateRestored()/forthDictInit()
@@ -59,21 +43,21 @@ void     forthCapAbandonSuspended(void){ if (forthCap.state == FCAP_SUSPENDED) f
  * backup file — any clear performed here would be silently overwritten
  * moments later by that restore. Clearing FLAG_ALPHA for a closed
  * capture, if ever wanted, belongs after the systemFlags restore, not
- * in this seam (see the F6-6 commit for the traced call order). */
+ * in this seam (see the F6-6 commit for the traced call order); that is
+ * exactly what forthCaptureSanitizeRestoredUi() does. */
 void forthCapPowerReset(void) {
-  forthCapClose();              /* frees if open; flips SUSPENDED too */
+  forthCapClose();              /* flips OPEN and SUSPENDED alike */
   forthCapAbandonSuspended();   /* explicit for the suspended state */
 }
 
 bool_t forthCapIsOpen(void)  { return forthCap.state == FCAP_OPEN; }
-uint8_t *forthCapBuf(void)   { return forthCap.state == FCAP_OPEN ? forthCap.buf : NULL; }
 bool_t forthCapTextNonEmpty(void) {
-  return forthCap.state == FCAP_OPEN && forthCap.buf[0] != 0;
+  return forthCap.state == FCAP_OPEN && aimBuffer[0] != 0;
 }
 
 #if defined(FORTH_DEBUG_SELFTEST)
 uint8_t forthTestCapState(void) { return forthCap.state; }
 const char *forthTestCapText(void) {
-  return forthCap.state == FCAP_OPEN ? (const char *)forthCap.buf : "";
+  return forthCap.state == FCAP_OPEN ? (const char *)aimBuffer : "";
 }
 #endif

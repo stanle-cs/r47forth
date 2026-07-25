@@ -1,17 +1,16 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..f8496f336de2daa97342f71e04c3c2eaee29511b 100644
+index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..1cc87e1462742e844c93be87b9eec3b78d7b577e 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
-@@ -3,6 +3,8 @@
+@@ -3,6 +3,7 @@
  
  #include "c47.h"
  #include "version.h"
-+#include "forth_capture.h"
 +#include "forth_dict.h"
  
  static void refreshRegisterLineRestoreT(void);
  static void _refreshPemScreen(void);
-@@ -819,6 +821,10 @@ void execTimerApp(uint16_t timerType) {
+@@ -819,6 +820,10 @@ void execTimerApp(uint16_t timerType) {
          }
        }
        else {
@@ -22,35 +21,3 @@ index 17b8ab011f57fc9862f5c3999596b0fc38d2abe4..f8496f336de2daa97342f71e04c3c2ea
          displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
              sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -1772,23 +1778,25 @@ return res;
- 
- 
-   void findOffset(void) {             //C47 JM
--    int32_t strWidth = (int32_t)stringWidthC47(aimBuffer, combinationFonts, nocompress, true, true);
-+    char *cursorBuffer = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
-+    int32_t strWidth = (int32_t)stringWidthC47(cursorBuffer, combinationFonts, nocompress, true, true);
-     strWidth -= SCREEN_WIDTH * multiEdLines - 45;
-     if(strWidth < 0) {
-       strWidth = 0;
-     }
--    char *offset = stringAfterPixelsC47(aimBuffer, combinationFonts, nocompress, strWidth, true, true);
--    displayAIMbufferoffset = offset - aimBuffer;
-+    char *offset = stringAfterPixelsC47(cursorBuffer, combinationFonts, nocompress, strWidth, true, true);
-+    displayAIMbufferoffset = offset - cursorBuffer;
-     incOffset();
-   }
- 
- 
-   void incOffset(void) {             //C47 JM
--    if((int32_t)stringWidthC47(aimBuffer + displayAIMbufferoffset, combinationFonts, nocompress, true, true) -
--       (int32_t)stringWidthC47(aimBuffer + T_cursorPos, combinationFonts, nocompress, true, true)
-+    char *cursorBuffer = forthCapIsOpen() ? (char *)forthCapBuf() : aimBuffer;
-+    if((int32_t)stringWidthC47(cursorBuffer + displayAIMbufferoffset, combinationFonts, nocompress, true, true) -
-+       (int32_t)stringWidthC47(cursorBuffer + T_cursorPos, combinationFonts, nocompress, true, true)
-         > SCREEN_WIDTH * multiEdLines - 45
-       ) {
--      displayAIMbufferoffset = stringNextGlyph(aimBuffer, displayAIMbufferoffset);
-+      displayAIMbufferoffset = stringNextGlyph(cursorBuffer, displayAIMbufferoffset);
-     }
-   }
- 

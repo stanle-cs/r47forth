@@ -18366,11 +18366,14 @@ static int test_capture_buffer(void)
         printf("    [1] FAIL: aimBuffer not empty\n");
         sc1 = 1;
       }
-      if (!sc1) printf("    [1] PASS: capture opens with a managed buffer and an empty aimBuffer\n");
+      if (!sc1) printf("    [1] PASS: capture opens OPEN, in ALPHA, on an empty aimBuffer\n");
       fail |= sc1;
     }
 
-    /* ---- Subcase 2: Typing lands in the buffer and the step, never aimBuffer ---- */
+    /* ---- Subcase 2: Typing lands in aimBuffer and the step ----
+     * S3 re-pin: the capture sink IS aimBuffer now (see forth_capture.h).
+     * Before S3 this asserted the opposite — that aimBuffer stayed empty
+     * while the text accumulated in a separately allocated buffer. */
     { int sc2 = 0;
       if (!fail) {
         const int16_t items[] = {
@@ -18384,12 +18387,13 @@ static int test_capture_buffer(void)
           printf("    [2] FAIL: cap text = '%s', expected '3 4 +'\n", forthTestCapText());
           sc2 = 1;
         }
-        else if (aimBuffer[0] != 0) {
-          printf("    [2] FAIL: aimBuffer not empty (should be 0)\n");
+        else if (strcmp(aimBuffer, "3 4 +") != 0) {
+          printf("    [2] FAIL: aimBuffer = '%s', expected '3 4 +' (aimBuffer IS the sink)\n",
+                 aimBuffer);
           sc2 = 1;
         }
       }
-      if (!sc2) printf("    [2] PASS: sink is the managed buffer; step re-commits per key\n");
+      if (!sc2) printf("    [2] PASS: sink is aimBuffer; step re-commits per key\n");
       fail |= sc2;
     }
 

@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..153656aedae94af659e91a5c5c4a897e3ad1b566 100644
+index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..181d4ed99fa43e535032c0d2277c03251b07e8b5 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,6 +2,9 @@
@@ -79,14 +79,13 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..153656aedae94af659e91a5c5c4a897e
          }
 -        if(getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0 && !tam.mode) {
 +        if(getSystemFlag(FLAG_ALPHA)
-+           && (forthCapIsOpen() ? !forthCapTextNonEmpty() : aimBuffer[0] == 0)
++           && aimBuffer[0] == 0
 +           && !tam.mode) {
            pemAlpha(ITM_BACKSPACE);
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
--        if(aimBuffer[0] != 0 && !tam.mode) {
-+        if((aimBuffer[0] != 0 || forthCapTextNonEmpty()) && !tam.mode) {
+         if(aimBuffer[0] != 0 && !tam.mode) {
 +          bool_t wasForthCap = forthCapTextNonEmpty();
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
@@ -145,7 +144,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..153656aedae94af659e91a5c5c4a897e
          else {
 -          if(getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0 && !tam.mode) {
 +          if(getSystemFlag(FLAG_ALPHA)
-+             && (forthCapIsOpen() ? !forthCapTextNonEmpty() : aimBuffer[0] == 0)
++             && aimBuffer[0] == 0
 +             && !tam.mode) {
              pemAlpha(ITM_BACKSPACE);
            }
@@ -156,7 +155,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..153656aedae94af659e91a5c5c4a897e
          else {
 -          if(getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0 && !tam.mode) {
 +          if(getSystemFlag(FLAG_ALPHA)
-+             && (forthCapIsOpen() ? !forthCapTextNonEmpty() : aimBuffer[0] == 0)
++             && aimBuffer[0] == 0
 +             && !tam.mode) {
              pemAlpha(ITM_BACKSPACE);
              fnBst(NOPARAM); // Set the PGM pointer to the original position
