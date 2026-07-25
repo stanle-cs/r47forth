@@ -2516,11 +2516,14 @@ All Forth errors surface through the existing C47 protocol at the
   only advances when `lastErrorCode == ERROR_NONE` [VERIFIED:
   packages/forth-core/programming/lblGtoXeq.c:925-947].
 - Unknown word: `ERROR_FUNCTION_NOT_FOUND` with the offending token (and
-  `(in WORD)` when a definition was open) in `errorMessage`; the display
-  layer concatenates for this code — the extension is live in the
-  package [VERIFIED: packages/forth-core/error.c:288,
-  packages/forth-core/screen.c:3734] — so the user sees
-  `No such function: TOKEN`, not a misleading generic C47 error.
+  `(in WORD)` when a definition was open) in `errorMessage` [VERIFIED:
+  packages/forth-core/forth_dict.c:1079, 1103]. The on-screen line shows
+  the generic message text only; the token reaches PC diagnostics
+  (`EXTRA_INFO_ON_CALC_ERROR`) and the self-tests, which assert on the
+  buffer. An earlier package extension concatenated the token into the
+  displayed line — that was dropped in S1 (owner ruling: not worth two
+  upstream overrides for it), which is why `error.c` is no longer an
+  override and `screen.c` carries no display change.
 - Malformed definition (nested `:`, stray `;`, `:` with no name, unterminated
   line): `ERROR_INVALID_NAME` + `abortDefinition()` (; [VERIFIED:
   packages/forth-core/forth_compile.c:212-244, 333-336]) — the smudged

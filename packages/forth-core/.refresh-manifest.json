@@ -18,7 +18,7 @@
   },
   "patches": {
     "010-c47Extensions__addons.c.patch": "e018487d35b5a5b156eb29c75dab0933514f56cfcec290760e9bddd88fa777bd",
-    "010-config.c.patch": "3508e6e2c914a76034300d1268d26b464f30e003793f8d4f73df5018b6e9f0df",
+    "010-config.c.patch": "7f5bd2844925914af826d00787e033cfb110f84016e2e7c444f49258729e7863",
     "010-core__freeList.c.patch": "26242d8b3e4d7689dd98def3e1e90ffd54b6075db90f3894e2071db1b65cc052",
     "010-defines.h.patch": "66ce4faf35b1b614ec0e0d372a5413a9a823f1d23b3d1d5ae1722471c5863c01",
     "010-items.c.patch": "0cd885e12fa16d299a7447b27a297f9810f43d0d60d0141e60aa42c0f097333e",
@@ -26,7 +26,7 @@
     "010-keyboard.c.patch": "7b275227f372bb5d38d170f3bf8b58eb081edc378cb23279ba71e13461553e1a",
     "010-programming__decode.c.patch": "8152a5fdb781ae00d12e7f0af40d72d2f615407463ac551f9ed097158668662f",
     "010-programming__lblGtoXeq.c.patch": "c7447a4d7f5b0107c7da373ff8784696fefbcef6e11bd54db96b0d4b1d706e4b",
-    "010-programming__manage.c.patch": "4e83d21e433df64b21b7b6e655ef0ea5aa8cb6034ce8b937528e5664509dca50",
+    "010-programming__manage.c.patch": "7829937dc5a897137f840710b89769c44601c4c450a0fe2978607c5c534f0acc",
     "010-saveRestoreBackup.c.patch": "b01a8654f88f21038023834a8ef724e73a007365317bb0ec3b7ec9118abed2ca",
     "010-screen.c.patch": "ed4c242e71c827808853d117b9940473d9ae9c80d054f55bee037389222756d6",
     "010-softmenus.c.patch": "c961e7fafdf22a605a9e0b175b9f76d3e021ff8b670ab82634132e146632751d",

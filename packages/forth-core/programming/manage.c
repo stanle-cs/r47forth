@@ -792,12 +792,18 @@ static void _closeAlphaMenus(void) {
 }
 
 void forthCaptureSanitizeRestoredUi(void) {
-  /* forthCap is deliberately process-local and is reset before restoreCalc()
-   * reloads the persisted UI fields.  An older backup can therefore restore
-   * CM_PEM + ALPHA + ITM_FORTH around a CLOSED capture, leaving cursor keys
-   * operating on aimBuffer with offsets that belonged to the lost managed
-   * buffer.  Match the normal capture-close state without touching the
-   * already mirrored program step; the user can reopen that step with EDIT. */
+  /* forthCap.state is process-local and is reset before restoreCalc()
+   * reloads the persisted UI fields, so a backup taken mid-capture restores
+   * CM_PEM + ALPHA + tam.function == ITM_FORTH around a CLOSED capture.
+   * Force that to a clean closed state; the source step is already committed
+   * (per-keystroke recommit), so nothing is lost — the user reopens the line
+   * with EDIT.
+   *
+   * Premise note: post-S3 every ingredient of the capture IS persisted
+   * except this one process-local flag, so this discards recoverable
+   * state rather than repairing broken state.  Resuming intact instead
+   * would change the §8 A5 power-off contract and awaits an owner
+   * ruling — see DESIGN-HISTORY.md 2026-07-25 (design audit). */
   if(calcMode != CM_PEM
      || tam.function != ITM_FORTH
      || forthCapIsOpen()) {

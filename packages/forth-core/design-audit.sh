@@ -214,6 +214,37 @@ else
   note "none"
 fi
 
+# --- H. DESIGN.md citations still resolve (HARD) -----------------------------
+# DESIGN.md is authoritative and cites source with [VERIFIED: path:line].
+# A citation to a file this package no longer overrides means the doc is
+# describing code that is gone. This is how the audit found DESIGN.md still
+# claiming the dropped error-text extension was live, one stage after S1
+# removed it.
+head2 "H. DESIGN.md source citations"
+h_out=$(python3 - "${PKG}" <<'PYEOF'
+import re, sys, os
+pkg = sys.argv[1]
+root = os.path.abspath(os.path.join(pkg, '..', '..'))
+txt = open(os.path.join(pkg, 'DESIGN.md'), errors='replace').read()
+# Require a real extension; excludes prose like "forth_dict.c/.h".
+cites = re.findall(r'((?:src/c47|packages/forth-core)/[A-Za-z0-9_/]+\.[ch])\b', txt)
+seen, bad = set(), []
+for p in cites:
+    if p in seen: continue
+    seen.add(p)
+    if not os.path.exists(os.path.join(root, p)):
+        bad.append(p)
+for p in sorted(bad):
+    print(f"{p}  — cited in DESIGN.md, file does not exist")
+PYEOF
+)
+if [[ -n "${h_out}" ]]; then
+  echo "${h_out}" | sed 's/^/  /'
+  flag "DESIGN.md cites source that is gone — the authoritative doc describes code that no longer exists"
+else
+  note "all cited paths resolve"
+fi
+
 # --- accept / summary --------------------------------------------------------
 if [[ "${ACCEPT}" -eq 1 ]]; then
   cat > "${BASELINE}" <<EOF

@@ -1530,33 +1530,13 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
   else {
     void *memPtr;
 
-    /* Reset hook (DESIGN.md §6): reinitialize the Forth dictionaries
-     * BEFORE the RAM wipe below discards all allocator bookkeeping.
-     * forthDictInit()/forthGDictInit() free the previous dictionary
-     * regions; run after the wipe (their original position, right before
-     * the self-test trigger further down) those frees are rejected by
-     * freeListFree's double-free guard, because the wipe has already
-     * zeroed numberOfAllocatedMemoryRegions and folded their address
-     * ranges into one giant free region, so each free looks like an
-     * overlap (code-audit finding 2026-07-20; restoreCalc() calls
-     * doFnReset() unconditionally as its first step, so a save/restore
-     * round-trip reproduces it directly). Running them here, while the
-     * bookkeeping is still valid, lets the frees succeed normally.
-     *
-     * Diagnostic-only, not a leak fix: the wipe immediately below zeroes
-     * ram[]/freeMemoryRegions[]/numberOfAllocatedMemoryRegions either
-     * way, so both orderings converge to identical allocator state.
-     * Nothing between here and the wipe, or between the wipe and the
-     * hook's old position, touches fdict/gdict state.
-     *
-     * The capture used to be freed here too, and carried the companion
-     * save/restore leak described in UPSTREAM_REPORTS_976b864b5.md (its
-     * blocks stayed marked allocated in the backup file, orphaned on
-     * restore). S3 removed the capture's allocation entirely — it lives
-     * in aimBuffer now — so that instance of the leak is gone. The
-     * upstream report stands as a general observation about any
-     * allocation whose lifetime is shorter than a save/restore cycle;
-     * forth-core no longer has one. */
+    /* Reset hook (DESIGN.md §6): null the Forth dictionary descriptors
+     * (they would otherwise dangle into the wiped ram[]) and close the
+     * capture.
+     * Position note: running BEFORE the wipe is now inert, not
+     * load-bearing — nothing in this hook frees any more. See
+     * DESIGN-HISTORY.md 2026-07-25 (design audit) for the two expired
+     * justifications this replaces; do not re-derive a third. */
     forthDictInit();
     forthGDictInit();
 

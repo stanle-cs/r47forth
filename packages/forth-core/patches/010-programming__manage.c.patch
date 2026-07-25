@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a0ae04363 100644
+index a7a56a3e94203f6b85bcf1f837d17cd041078027..b81727a7a06c1a84af195021b29c15034869dda1 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,8 @@
@@ -40,17 +40,23 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
            xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
            tmpString[2 + cursorInString    ] = STD_CURSOR[0];
            tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
-@@ -774,6 +791,28 @@ static void _closeAlphaMenus(void) {
+@@ -774,6 +791,34 @@ static void _closeAlphaMenus(void) {
    }
  }
  
 +void forthCaptureSanitizeRestoredUi(void) {
-+  /* forthCap is deliberately process-local and is reset before restoreCalc()
-+   * reloads the persisted UI fields.  An older backup can therefore restore
-+   * CM_PEM + ALPHA + ITM_FORTH around a CLOSED capture, leaving cursor keys
-+   * operating on aimBuffer with offsets that belonged to the lost managed
-+   * buffer.  Match the normal capture-close state without touching the
-+   * already mirrored program step; the user can reopen that step with EDIT. */
++  /* forthCap.state is process-local and is reset before restoreCalc()
++   * reloads the persisted UI fields, so a backup taken mid-capture restores
++   * CM_PEM + ALPHA + tam.function == ITM_FORTH around a CLOSED capture.
++   * Force that to a clean closed state; the source step is already committed
++   * (per-keystroke recommit), so nothing is lost — the user reopens the line
++   * with EDIT.
++   *
++   * Premise note: post-S3 every ingredient of the capture IS persisted
++   * except this one process-local flag, so this discards recoverable
++   * state rather than repairing broken state.  Resuming intact instead
++   * would change the §8 A5 power-off contract and awaits an owner
++   * ruling — see DESIGN-HISTORY.md 2026-07-25 (design audit). */
 +  if(calcMode != CM_PEM
 +     || tam.function != ITM_FORTH
 +     || forthCapIsOpen()) {
@@ -69,7 +75,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
  void pemAlpha(int16_t item) {
    bool_t editCommand = false;
    if(item == ITM_EDIT) {
-@@ -805,6 +844,20 @@ void pemAlpha(int16_t item) {
+@@ -805,6 +850,20 @@ void pemAlpha(int16_t item) {
        editCommand = true;
        item = aimFunc;
      }
@@ -90,7 +96,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
      else {
        aimBuffer[0] = 0;
        return;
-@@ -812,6 +865,9 @@ void pemAlpha(int16_t item) {
+@@ -812,6 +871,9 @@ void pemAlpha(int16_t item) {
    }
  
    if(!getSystemFlag(FLAG_ALPHA)) {
@@ -100,7 +106,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
        resetShiftState();
        displayAIMbufferoffset = 0;
        if(!editCommand) {
-@@ -863,18 +919,28 @@ void pemAlpha(int16_t item) {
+@@ -863,18 +925,28 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_BACKSPACE) {
@@ -131,7 +137,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
          int16_t lastGlyphPos;
          aimBuffer[T_cursorPos] = 0;
          lastGlyphPos = stringLastGlyph(aimBuffer);
-@@ -884,11 +950,23 @@ void pemAlpha(int16_t item) {
+@@ -884,11 +956,23 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_ENTER) {
@@ -160,7 +166,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
      }
      else if(item == ITM_USERMODE) {
        fnFlipFlag(FLAG_USER);
-@@ -938,6 +1016,13 @@ void pemAlpha(int16_t item) {
+@@ -938,6 +1022,13 @@ void pemAlpha(int16_t item) {
        fnT_ARROW(indexOfItems[item].param);
        return;
      }
@@ -174,7 +180,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
  
      int16_t aimFunc = currentStep[0];
      if(aimFunc & 0x80) {
-@@ -970,7 +1055,22 @@ void pemAlpha(int16_t item) {
+@@ -970,7 +1061,22 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -197,7 +203,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -980,6 +1080,113 @@ void pemCloseAlphaInput(void) {
+@@ -980,6 +1086,113 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -311,7 +317,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
  }
  
  
-@@ -995,7 +1202,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -995,7 +1208,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -320,7 +326,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1367,6 +1574,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1367,6 +1580,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -358,7 +364,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1377,12 +1615,18 @@ void insertStepInProgram(const int16_t func) {
+@@ -1377,12 +1621,18 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -379,7 +385,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1404,6 +1648,53 @@ void insertStepInProgram(const int16_t func) {
+@@ -1404,6 +1654,53 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -433,7 +439,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1415,6 +1706,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1415,6 +1712,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -449,7 +455,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1497,6 +1797,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1497,6 +1803,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -473,7 +479,7 @@ index a7a56a3e94203f6b85bcf1f837d17cd041078027..977f7df5e2b6bba81c7f8ad8c9018b3a
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1792,7 +2109,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1792,7 +2115,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

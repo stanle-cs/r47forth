@@ -1,5 +1,5 @@
 diff --git a/src/c47/config.c b/src/c47/config.c
-index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..cc99c7d82bfa758128d9cf5d92a7375a3ee65fd0 100644
+index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..01bf742a1537c04a85e319ac0d459a0e004c526c 100644
 --- a/src/c47/config.c
 +++ b/src/c47/config.c
 @@ -2,6 +2,7 @@
@@ -10,44 +10,24 @@ index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..cc99c7d82bfa758128d9cf5d92a7375a
  
  //C47 defaults (used in both settings arrays)
  #define _gapl   ITM_SPACE_PUNCTUATION
-@@ -1529,6 +1530,36 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+@@ -1529,6 +1530,16 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
    else {
      void *memPtr;
  
-+    /* Reset hook (DESIGN.md §6): reinitialize the Forth dictionaries
-+     * BEFORE the RAM wipe below discards all allocator bookkeeping.
-+     * forthDictInit()/forthGDictInit() free the previous dictionary
-+     * regions; run after the wipe (their original position, right before
-+     * the self-test trigger further down) those frees are rejected by
-+     * freeListFree's double-free guard, because the wipe has already
-+     * zeroed numberOfAllocatedMemoryRegions and folded their address
-+     * ranges into one giant free region, so each free looks like an
-+     * overlap (code-audit finding 2026-07-20; restoreCalc() calls
-+     * doFnReset() unconditionally as its first step, so a save/restore
-+     * round-trip reproduces it directly). Running them here, while the
-+     * bookkeeping is still valid, lets the frees succeed normally.
-+     *
-+     * Diagnostic-only, not a leak fix: the wipe immediately below zeroes
-+     * ram[]/freeMemoryRegions[]/numberOfAllocatedMemoryRegions either
-+     * way, so both orderings converge to identical allocator state.
-+     * Nothing between here and the wipe, or between the wipe and the
-+     * hook's old position, touches fdict/gdict state.
-+     *
-+     * The capture used to be freed here too, and carried the companion
-+     * save/restore leak described in UPSTREAM_REPORTS_976b864b5.md (its
-+     * blocks stayed marked allocated in the backup file, orphaned on
-+     * restore). S3 removed the capture's allocation entirely — it lives
-+     * in aimBuffer now — so that instance of the leak is gone. The
-+     * upstream report stands as a general observation about any
-+     * allocation whose lifetime is shorter than a save/restore cycle;
-+     * forth-core no longer has one. */
++    /* Reset hook (DESIGN.md §6): null the Forth dictionary descriptors
++     * (they would otherwise dangle into the wiped ram[]) and close the
++     * capture.
++     * Position note: running BEFORE the wipe is now inert, not
++     * load-bearing — nothing in this hook frees any more. See
++     * DESIGN-HISTORY.md 2026-07-25 (design audit) for the two expired
++     * justifications this replaces; do not re-derive a third. */
 +    forthDictInit();
 +    forthGDictInit();
 +
      if(ram == NULL) {
        ram = (uint32_t *)malloc(TO_BYTES(RAM_SIZE_IN_BLOCKS));
      }
-@@ -1950,6 +1981,28 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+@@ -1950,6 +1961,28 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
  
      fnClearFlag(FLAG_USER);
      fnRefreshState();

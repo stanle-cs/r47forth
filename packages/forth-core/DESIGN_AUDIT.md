@@ -58,11 +58,26 @@ past `.design-audit-baseline`:**
 | **D. contiguous added blocks ≥ 12 lines** | Package logic is being written *into* an upstream file instead of a package-owned `.c`. This is what S2 unwound. `manage.c` is the standing exception — see Part 2.1. |
 | **E. package-owned allocations** | Listed every run, never auto-flagged. Each one needs an answer to Part 2.5. |
 
+| **H. DESIGN.md citations** | A `[VERIFIED: path:line]` citation points at a file that no longer exists, so the authoritative document is describing code that is gone. Added after the first audit, which is how it was found that DESIGN.md still cited `error.c` and still claimed the dropped error-text extension was live, one stage after S1 removed both. |
+
 Re-baseline only deliberately:
 
 ```bash
 ./packages/forth-core/design-audit.sh --accept
 ```
+
+**The baseline suppresses growth alarms, not the obligation to justify what is
+already there.** On a first run, after any `--accept`, and every few audits
+regardless, read the REVIEW lists on their merits rather than checking that the
+counts match. The counts matching means nothing got worse; it does not mean
+what is there is right.
+
+**Run check D *before* planning a move-out stage, not only after.** S2's whole
+purpose was moving package logic out of upstream files, and it missed the
+single largest instance — ~129 lines of capture orchestrators in `manage.c` —
+because it worked from hunks already catalogued by hand instead of enumerating
+them. Check D lists them in one command. Use the mechanical half as an input to
+planning, not just as verification afterwards.
 
 ---
 
@@ -165,6 +180,21 @@ Spot-check, do not re-audit wholesale:
 changed a decision, one entry lands in the trail and `DESIGN.md` is corrected —
 not annotated.
 
+Check H automates the cheap half (do cited paths exist). The expensive half is
+not automatable, so sample it: take the two or three DESIGN.md sections
+covering whatever changed most recently and read them against the code.
+
+This is worth real suspicion. The first audit found that DESIGN.md described
+the capture as living in `aimBuffer` throughout — correct before F6-1, wrong
+for the entire F6 series after it moved the text to a managed buffer, and
+accidentally correct again once S3 moved it back. **The authoritative document
+silently disagreed with the code for a whole stage series and nothing caught
+it.** A citation check would not have found that one; only reading would.
+
+A useful tell: a claim written as `[VERIFIED: ...]` is evidence about the tree
+*at the time it was written*, not a standing guarantee. Treat an old VERIFIED
+tag on recently-changed code as unverified.
+
 ### 2.9 Are the measurements recorded?
 
 Binding per CLAUDE.md: report arena high-water with any dictionary change, and
@@ -224,6 +254,16 @@ Rotation list — mechanisms with a stated premise worth re-testing:
 A mechanism that survives the sweep should get a one-line note in
 `DESIGN-HISTORY.md` saying it was re-tested and why it stays. That is what
 stops the next audit re-deriving it from scratch.
+
+**When a premise expires, fix the comment even if you keep the code.** A stale
+justification is worse than none: it will be believed. The first audit found
+two of these on the same mechanism — `forthCaptureSanitizeRestoredUi` still
+described repairing offsets into a buffer that no longer exists, and the
+`doFnReset` reorder claimed to be preventing rejected frees by functions that
+do not free at all. The second was written *during S3, by the person correcting
+the first*, which is the lesson: a rewritten justification is a new claim and
+needs checking like any other, not inheriting the credibility of the comment it
+replaced.
 
 ---
 

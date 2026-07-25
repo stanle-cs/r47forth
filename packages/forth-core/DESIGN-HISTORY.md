@@ -1509,3 +1509,91 @@ three stages, measured with `CUSTOM_PKG_RECONFIGURE=1` — note that
 `build.dmcp5`'s stamp tracks only the `CUSTOM_PKG` *value*, so
 package-content edits do not trigger a reconfigure and a measurement
 without that flag silently reads a stale shadow.
+
+---
+
+## 2026-07-25 — design audit #1 (first run of DESIGN_AUDIT.md)
+
+Mechanical: 1 finding — check H (added during the run) caught DESIGN.md citing
+`packages/forth-core/error.c`, removed in S1. Checks A/C/D/F/G clean; B and E
+examined on merits rather than for growth, since the baseline was recorded the
+same day and a matching count proves nothing on a first run.
+
+**Philosophy (Part 2), only what changed:**
+
+*2.3 names not indices* — all four `reallyRunFunction(ITM_FCALL, …)` sites are
+live-execution paths (`forthDispatchColon`'s non-PEM arm, `param_core.c`'s
+running-program step arm, `items.c`'s dynamic-menu arm). Clean; the code-audit
+#3 regression has not returned.
+
+*2.8 DESIGN.md vs code* — two findings, one benign and one instructive.
+DESIGN.md still asserted the user sees `No such function: TOKEN` and cited
+`error.c` as live in the package; S1 dropped both. Corrected: the token still
+reaches `errorMessage` (self-tests assert on it, `EXTRA_INFO_ON_CALC_ERROR`
+consumes it), only the on-screen concatenation is gone.
+
+The instructive one: DESIGN.md describes the capture as living in `aimBuffer`
+throughout (§P-H7, §8, §9.6). That was correct before F6-1, **wrong for the
+entire F6 series**, and accidentally correct again after S3 moved the text
+back. The authoritative document silently disagreed with the code for a whole
+stage series and nothing detected it — F6-1 changed the code and never folded
+the change into DESIGN.md. No correction is needed now, which is precisely why
+it is worth recording: the agreement is luck, not process.
+
+**Expired-premise sweep (Part 3) — three mechanisms:**
+
+1. `forthCaptureSanitizeRestoredUi` — **premise fully expired.** It was written
+   to repair `T_cursorPos`/`displayAIMbufferoffset` restored pointing into a
+   managed buffer that no longer existed. Post-S3 the sink IS `aimBuffer`, and
+   `aimBuffer`, `T_cursorPos`, `displayAIMbufferoffset`, `calcMode`,
+   `FLAG_ALPHA` and `tam.function` are ALL persisted
+   (`saveRestoreBackup.c:285/469/481/333/390/304`). Every ingredient of a
+   capture survives a save/restore except the one process-local `forthCap.state`
+   flag — which is derivable at this seam, unlike at the suspend seam. So the
+   function now destroys recoverable state instead of repairing broken state.
+   Kept for now (closing is conservative and loses nothing — the step is
+   committed per keystroke); making the capture RESUME intact is a user-visible
+   change to the §8 A5 power-off contract and is listed as an open decision.
+
+2. The `doFnReset` hook reorder — **premise fully expired, and its S3
+   replacement was false.** Code audit #2 moved the hook before the RAM wipe
+   because `forthCapPowerReset()` freed a live capture buffer and the wipe made
+   that free look like a double free. S3 removed the allocation, killing that
+   reason, and I rewrote the comment to claim the reorder was still needed
+   because `forthDictInit()`/`forthGDictInit()` free the old dictionary
+   regions. **They do not** — both only NULL their descriptors;
+   `forthDictClear()` is what frees. Nothing in the hook frees any more, so the
+   placement is inert. Kept (inert-and-correct beats an unmotivated move);
+   reverting it wants its own trace and is listed as a recommendation.
+
+3. The 196-glyph / <256-byte capture cap — **premise intact, survives.** It
+   derives from the step encoding's 1-byte `len` field (§8, `len` 0..255), not
+   from the old buffer's size, so moving the sink to a 1024-byte `aimBuffer`
+   does not loosen it. Recorded so the next sweep does not re-derive it.
+
+**Procedure changes made to DESIGN_AUDIT.md as a result:**
+
+- Added check H (DESIGN.md source citations resolve) — it found finding 1.
+- Stated that a baseline suppresses growth alarms, not the obligation to
+  justify what is already there; REVIEW lists get read on merits on a first
+  run, after any `--accept`, and periodically.
+- Stated that check D belongs *before* planning a move-out stage. S2's entire
+  purpose was moving package logic out of upstream files and it missed the
+  largest instance (~129 lines of capture orchestrators in `manage.c`) because
+  it worked from hand-catalogued hunks; check D lists them in one command.
+- Part 2.8 now says to sample-read the sections covering recent changes, and
+  that a `[VERIFIED:]` tag is evidence about the tree when written, not a
+  standing guarantee.
+- Part 3 now says to fix the comment even when the code stays: a stale
+  justification is worse than none because it will be believed — and a
+  *rewritten* justification is a new claim needing its own check, not an heir
+  to the credibility of the comment it replaced. Finding 2 is the worked
+  example, having been introduced by the same person correcting finding 1.
+
+The audit's own findings were first written as long comments in `config.c` and
+`manage.c`; check A then flagged the footprint growth (+17 lines), which was
+correct — narrative belongs in this file, and those comments are now
+one-line pointers here.
+
+Footprint: 14 override files, 625 added lines (unchanged by this audit).
+Gate green: FORTH SELF-TEST: ALL PASSED, 342 PASS.
