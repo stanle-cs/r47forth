@@ -177,7 +177,11 @@ TO_QSPI static const char *nameOfWday_pt[8] = {"dia inv" STD_a_ACUTE "lido da se
     longInteger_t lgInt;
     int16_t base, sign, n;
     uint64_t shortInt;
-    char string[CLIPSTR];
+    char *string = malloc(CLIPSTR);                           // off the stack: this runs under stackregister_csv_out, and the pair overran the DM42 stack grant
+    if(string == NULL) {
+      clipboardString[0] = 0;
+      return;
+    }
 
     switch(getRegisterDataType(regist)) {
       case dtLongInteger:
@@ -358,6 +362,7 @@ TO_QSPI static const char *nameOfWday_pt[8] = {"dia inv" STD_a_ACUTE "lido da se
     else {
       stringToUtf8(string, (uint8_t *)clipboardString);
     }
+    free(string);
   }
 #endif // PC_BUILD || DMCP_BUILD                              //JMCSV
 
