@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..181d4ed99fa43e535032c0d2277c03251b07e8b5 100644
+index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..87ab6e6306ccee0fd4281b117ea8ce6bffed2154 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,6 +2,9 @@
@@ -73,16 +73,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..181d4ed99fa43e535032c0d2277c0325
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -3855,12 +3889,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
-             break;
-           }
-         }
--        if(getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0 && !tam.mode) {
-+        if(getSystemFlag(FLAG_ALPHA)
-+           && aimBuffer[0] == 0
-+           && !tam.mode) {
-           pemAlpha(ITM_BACKSPACE);
-           fnBst(NOPARAM); // Set the PGM pointer to the original position
+@@ -3861,6 +3895,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -90,7 +81,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..181d4ed99fa43e535032c0d2277c0325
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3871,6 +3908,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3871,6 +3906,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -113,7 +104,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..181d4ed99fa43e535032c0d2277c0325
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4363,9 +4416,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4363,9 +4414,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -138,25 +129,3 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..181d4ed99fa43e535032c0d2277c0325
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
-@@ -4622,7 +4689,9 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
-           menuUp();
-         }
-         else {
--          if(getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0 && !tam.mode) {
-+          if(getSystemFlag(FLAG_ALPHA)
-+             && aimBuffer[0] == 0
-+             && !tam.mode) {
-             pemAlpha(ITM_BACKSPACE);
-           }
-           fnBst(NOPARAM);
-@@ -4852,7 +4921,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
-           menuDown();
-         }
-         else {
--          if(getSystemFlag(FLAG_ALPHA) && aimBuffer[0] == 0 && !tam.mode) {
-+          if(getSystemFlag(FLAG_ALPHA)
-+             && aimBuffer[0] == 0
-+             && !tam.mode) {
-             pemAlpha(ITM_BACKSPACE);
-             fnBst(NOPARAM); // Set the PGM pointer to the original position
-           }

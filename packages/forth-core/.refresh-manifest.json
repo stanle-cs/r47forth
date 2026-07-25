@@ -23,7 +23,7 @@
     "010-defines.h.patch": "66ce4faf35b1b614ec0e0d372a5413a9a823f1d23b3d1d5ae1722471c5863c01",
     "010-items.c.patch": "0cd885e12fa16d299a7447b27a297f9810f43d0d60d0141e60aa42c0f097333e",
     "010-items.h.patch": "2bae0c1c4edd77ae5f5a4d73bf2097a270c870b39774147747f008a1387f8e23",
-    "010-keyboard.c.patch": "13961a87aeab37e62732251eb3e13d0cc9e89c2645fb749144cd2ee20c64b7e8",
+    "010-keyboard.c.patch": "7b275227f372bb5d38d170f3bf8b58eb081edc378cb23279ba71e13461553e1a",
     "010-programming__decode.c.patch": "8152a5fdb781ae00d12e7f0af40d72d2f615407463ac551f9ed097158668662f",
     "010-programming__lblGtoXeq.c.patch": "c7447a4d7f5b0107c7da373ff8784696fefbcef6e11bd54db96b0d4b1d706e4b",
     "010-programming__manage.c.patch": "4e83d21e433df64b21b7b6e655ef0ea5aa8cb6034ce8b937528e5664509dca50",

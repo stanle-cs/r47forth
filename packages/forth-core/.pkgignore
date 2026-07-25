@@ -23,3 +23,9 @@
 # The gate runner. Invoked from the working area as
 # ./packages/forth-core/build-test.sh; the firmware never reads it.
 build-test.sh
+
+# The design-audit runner and its recorded baseline (DESIGN_AUDIT.md).
+# Dev tooling, not firmware. NB: the audit's own check G is what caught
+# design-audit.sh shipping as package content before this line existed.
+design-audit.sh
+.design-audit-baseline
