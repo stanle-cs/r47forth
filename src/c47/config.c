@@ -1965,11 +1965,35 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
 
   int16_t loop=0;
   int16_t loop2=0;
+
+  // Vbat sampling schedule: entry n gates sample n as the minimum ms since the previous get_vbat() ADC conversion, advancing per sample and saturating on the last entry.
+  // An expended battery has a high internal impedance, so the load of a starting run pulls the terminal voltage sharply down within seconds (decay curves in #154),
+  // while a healthy battery barely moves. The first samples go undelayed to catch that surge for the orderly low battery stop in items.c before an uncontrolled crash,
+  // then once the battery proves not to be in extreme flatness the spacing extends to a steady 2.5 s cadence, keeping the per dispatch ADC cost off healthy batteries.
+  // A top level program run start (runProgram()) and the change over from USB to battery (checkBattery()) restart the schedule.
+  TO_QSPI static const uint16_t vbatSampleDelay[] = {0, 0, 0, 50, 50, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 1000, 2500};
+  static uint8_t  vbatScheduleIdx = 0;
+  static uint32_t vbatSampledAt   = 0;                                                   // 0 = never sampled
+  static int      vbatSample      = 3100;
+
+  void resetVbatSampleSchedule(void) {
+    vbatScheduleIdx = 0;
+  }
+
   int updateVbatIntegrated(bool_t minutePulse) {
-    if(getSystemFlag(FLAG_USB)) {
-        return 3100;
+    // The minute pulse always converts, keeping the integrator creep cadence; every other caller follows vbatSampleDelay. Vbat is measured on USB power too,
+    // so BATT? and the integrator stay live while plugged; checkBattery() and the items.c stop both skip USB power, so USB never trips LOWBAT.
+    const uint32_t now = (uint32_t)sys_current_ms();
+    if(!minutePulse && vbatSampledAt != 0 && (now - vbatSampledAt) < vbatSampleDelay[vbatScheduleIdx]) {
+      return vbatSample;
     }
+    if(vbatScheduleIdx < nbrOfElements(vbatSampleDelay) - 1) {
+      vbatScheduleIdx++;
+    }
+    vbatSampledAt = now;
+
     int tmpVbat = get_vbat();
+    vbatSample = tmpVbat;
     if(tmpVbat > 1500 && tmpVbat < 3100) {
       if(tmpVbat < vbatVIntegrated) {
         vbatVIntegrated = tmpVbat;                                                        //immediately assume the lowest possibe value measured
@@ -2025,11 +2049,12 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
       if(getSystemFlag(FLAG_USB)) {
         clearSystemFlag(FLAG_USB);
         showHideUsbLowBattery();
+        resetVbatSampleSchedule();                                                       // the change over to battery is a fresh load step; resample undelayed
       }
 
       int tmpVbat = updateVbatIntegrated(false);
 
-      if(tmpVbat < 2100 || vbatVIntegrated < 2100) { //shutdown from the new integrator system. The indicator uses the integrator.
+      if(tmpVbat < BAT_MINIMUM || vbatVIntegrated < BAT_MINIMUM) { //shutdown from the new integrator system. The indicator uses the integrator.
         if(!getSystemFlag(FLAG_LOWBAT)) {
           setSystemFlag(FLAG_LOWBAT);
           showHideUsbLowBattery();

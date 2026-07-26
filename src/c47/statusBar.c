@@ -23,6 +23,7 @@ void drawBattery(uint16_t voltage);
 
   uint8_t  SBlastIntegerBaseShown = 0xFF;
   uint16_t SBAlphaModeLastShown = 0xFFFF;
+  uint16_t SBbatteryLastShown = 0xFFFF;        // drawn battery bar level, not the raw voltage
   char     SBhourglassShown[2];
   char     alphaOutput[3];
   bool_t   reInstateIntegerModeDisplay;
@@ -35,6 +36,7 @@ void drawBattery(uint16_t voltage);
     setAllSystemFlagChanged();
     SBlastIntegerBaseShown = 0xFF;
     SBAlphaModeLastShown = 0xFFFF;
+    SBbatteryLastShown = 0xFFFF;
     SBhourglassShown[0]  = 0xFF;
     SBhourglassShown[1]  = 0xFF;               // note terminating 0 never used. Byte comparison done on content only.
     oldTime[0] = 0;
@@ -705,13 +707,19 @@ void drawBattery(uint16_t voltage);
   }
 
 
-//todo make it check the last voltage plotted, and bypass if nothing has changed
 void drawBattery(uint16_t voltage) {
   #if (DEBUG_INSTEAD_STATUS_BAR == 1)
     return;
   #endif // (DEBUG_INSTEAD_STATUS_BAR == 1)
-  lcd_fill_rect(X_BATTERY, 0, 11, 20, LCD_SET_VALUE);
   uint16_t vv = (uint16_t)(min(max(voltage - 2000, 0), 3100) / (float)(((float)3100 - 2000.0f)/(float)(DY_BATTERY))); //draw a battery, full at 3.1V empty at 2V
+
+  const uint16_t drawnState = vv | (voltage > 2750 ? 0x100 : 0);    // the drawn pixels depend on the bar level and the 2750 threshold only
+  if(drawnState == SBbatteryLastShown) {
+    return;
+  }
+  SBbatteryLastShown = drawnState;
+
+  lcd_fill_rect(X_BATTERY, 0, 11, 20, LCD_SET_VALUE);
   for(uint16_t ii = min(vv-1, DY_BATTERY-1); ii <= DY_BATTERY-1; ii++) {
     if(ii%2 == 0) { //draw outline
       setBlackPixel(ii < DY_BATTERY-3 ?  X_BATTERY + 0 : X_BATTERY + 2                           , (DY_BATTERY-1)-ii);
@@ -734,21 +742,25 @@ void drawBattery(uint16_t voltage) {
       if(!(SBARUPD_Battery)) {
         // Clear the space used by the USB / LOWBAT glyph
         lcd_fill_rect(X_BATTERY, 0, 11, 20, LCD_SET_VALUE);
+        SBbatteryLastShown = 0xFFFF;                                                  // the area holds a glyph or is blank, so the next gauge draw repaints
         return;
       }
       if(getSystemFlag(FLAG_USB)) {
         showGlyph(STD_USB_SYMBOL, &standardFont, X_BATTERY, 0, vmNormal, true, false, false); // is 0+9+2 pixel wide
+        SBbatteryLastShown = 0xFFFF;
       }
       else {
         if(SBARUPD_BatVoltage) {
-          drawBattery(min(get_vbat(), vbatVIntegrated));
+          drawBattery(min(updateVbatIntegrated(false), vbatVIntegrated));             // the rate limited reading, so the gauge adds no ADC conversion of its own
         }
         else if(getSystemFlag(FLAG_LOWBAT)) {
           showGlyph(STD_BATTERY, &standardFont, X_BATTERY, 0, vmNormal, true, false, false); // is 0+10+1 pixel wide
+          SBbatteryLastShown = 0xFFFF;
         }
         else {
           // Clear the space used by the USB / LOWBAT glyph
           lcd_fill_rect(X_BATTERY, 0, 11, 20, LCD_SET_VALUE);
+          SBbatteryLastShown = 0xFFFF;
         }
       }
     }
