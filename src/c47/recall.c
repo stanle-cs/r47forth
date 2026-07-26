@@ -245,6 +245,7 @@ void fnRecallConfig(uint16_t regist) {
 
     recallFromDtConfigDescriptor(shortIntegerMode);
     recallFromDtConfigDescriptor(shortIntegerWordSize);
+    shortIntegerWordSize = boundShortIntegerWordSize(shortIntegerWordSize);
     recallFromDtConfigDescriptor(displayFormat);
     recallFromDtConfigDescriptor(displayFormatDigits);
     recallFromDtConfigDescriptor(gapItemLeft);

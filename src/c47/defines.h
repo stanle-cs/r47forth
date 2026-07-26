@@ -2048,6 +2048,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 
 
 #define MAX_DENMAX                              9999 // Biggest denominator in fraction display mode selector, and annunciator.
+#define MAX_SHORT_INTEGER_WORD_SIZE               64 // Widest short integer word. Shifts by the word size, and by one less, are undefined beyond it.
                                                      // The value 0 gets converted to MAX_INTERNAL_DENMAX
 #define MAX_INTERNAL_DENMAX                    32500 // Biggest denominator in fraction display mode
 

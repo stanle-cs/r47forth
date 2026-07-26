@@ -695,6 +695,16 @@ void fnGetWordSize(uint16_t unusedButMandatoryParameter) {
 
 
 
+// Bound a short integer word size arriving from a file. WSIZE's tamMinMax bounds the interactive path; the state file, backup.cfg and a config register supply it raw,
+// and every consumer shifts by it or by one less: config.c below, rotateBits.c:166, :223 and :313, mask.c:36. 0 already spells the widest word.
+uint8_t boundShortIntegerWordSize(uint8_t wordSize) {
+  if(wordSize < 1 || wordSize > MAX_SHORT_INTEGER_WORD_SIZE) {
+    return MAX_SHORT_INTEGER_WORD_SIZE;
+  }
+  return wordSize;
+}
+
+
 void updateShortIntegerMasks(void) {
   // Derive the word-size-dependent short-integer bit masks from the current shortIntegerWordSize. fnSetWordSize uses this when the size changes interactively;
   // code that assigns shortIntegerWordSize directly (state-file restore, which stores neither mask) must call it too, so that shortIntegerMask and 
