@@ -34,9 +34,11 @@ mechanisms stay mutually exclusive per file.
 
 That design achieved its stated goal — avoiding spurious conflicts between
 packages editing unrelated functions in the same file — but the actual
-motivating constraint for this whole redesign is **package size** (DM42-class
-flash/RAM budget; small, reviewable diffs), not merge-conflict avoidance
-specifically. Function-boundary splitting bought conflict precision at a
+motivating constraint for this whole redesign is **package size** (small,
+reviewable diffs), not merge-conflict avoidance specifically. (This
+originally read "DM42-class flash/RAM budget"; the target is R47
+specifically — ruled 2026-07-25 — so the reviewability half is the part
+that still holds.) Function-boundary splitting bought conflict precision at a
 real cost: a new build-time dependency (libclang) that had to be walled off
 from the build path with its own enforcement machinery, a second storage
 convention (whole-file override) that existed solely to catch what
@@ -217,8 +219,10 @@ change) is what was actually missing and is implemented fresh.
 A new Makefile target, `pkg_build PKG=<dir>`, is the only sanctioned way to
 produce a distributable package artifact. It is test-gated (a package whose
 `make test CUSTOM_PKG=$(PKG)` fails produces no artifact, full stop) and
-enforces a size limit (`PKG_MAX_SIZE`, default 200KB) against the actual
-assembled zip, not an estimate. Full recipe in `Makefile`/§ below.
+enforces a size limit (`PKG_MAX_SIZE`, default 1MB — raised from 200KB on
+2026-07-25, see `README.md`) against the actual assembled zip, not an
+estimate. The limit is a tripwire against a package that has swallowed a
+build directory, not a firmware budget; flash cost is measured separately. Full recipe in `Makefile`/§ below.
 
 ### 6. Fatal-at-configure: patch/file target must (not) exist upstream
 
