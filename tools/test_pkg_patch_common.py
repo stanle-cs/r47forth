@@ -20,10 +20,6 @@ from pkg_patch_common import (
     validate_patch_declaration,
 )
 
-# Resolve the repo root (two levels up from tools/)
-REPO_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-
 
 class TestDecodePatchFilename(unittest.TestCase):
     """Tests for decode_patch_filename — filename encoding/decoding."""
@@ -216,7 +212,21 @@ class TestValidatePatchDeclaration(unittest.TestCase):
     """
 
     def setUp(self):
+        # Self-contained project root. validate_patch_declaration only ever
+        # asks whether project_root/src/c47/<rel> exists, so a stand-in file
+        # is a complete fixture -- no dependency on the ambient checkout.
+        #
+        # These tests used to run against REPO_ROOT: they needed the real
+        # src/c47/keyboard.c to be present, and they created scratch package
+        # directories inside the working tree, removing them in a finally.
+        # That made the suite fail on any tree without upstream sources (the
+        # overlay-only release branch, for one) and left litter behind on a
+        # crash. setUp already built a tmpdir; it was simply never used.
         self.tmpdir = tempfile.mkdtemp()
+        self.upstream = os.path.join(self.tmpdir, 'src', 'c47')
+        os.makedirs(self.upstream, exist_ok=True)
+        with open(os.path.join(self.upstream, 'keyboard.c'), 'w') as f:
+            f.write('/* stand-in for the upstream file under test */\n')
 
     def tearDown(self):
         import shutil
@@ -226,17 +236,12 @@ class TestValidatePatchDeclaration(unittest.TestCase):
         """Bug: when filename and header agree on a real upstream file,
         validate must succeed and return the rel path.
         """
-        pkgdir = os.path.join(REPO_ROOT, 'test-pkg-agrees')
-        os.makedirs(os.path.join(pkgdir, 'patches'), exist_ok=True)
+        pkgdir = os.path.join(self.tmpdir, 'test-pkg-agrees')
         self._create_patch_at(pkgdir, '010-keyboard.c.patch',
                               'keyboard.c')
-        try:
-            result = validate_patch_declaration(
-                'test-pkg-agrees', '010-keyboard.c.patch', REPO_ROOT)
-            self.assertEqual(result, 'keyboard.c')
-        finally:
-            import shutil
-            shutil.rmtree(pkgdir, ignore_errors=True)
+        result = validate_patch_declaration(
+            'test-pkg-agrees', '010-keyboard.c.patch', self.tmpdir)
+        self.assertEqual(result, 'keyboard.c')
 
     def _create_patch_at(self, pkgdir, filename, header_target):
         """Create a minimal patch file at the given pkgdir."""
@@ -260,7 +265,7 @@ class TestValidatePatchDeclaration(unittest.TestCase):
         Mutation: if the header-vs-filename comparison is removed/commented
         out, this test will silently pass (accept the mismatch).
         """
-        pkgdir = os.path.join(REPO_ROOT, 'test-pkg-mismatch')
+        pkgdir = os.path.join(self.tmpdir, 'test-pkg-mismatch')
         os.makedirs(os.path.join(pkgdir, 'patches'), exist_ok=True)
         # Filename says keyboard.c, but header says screen.c
         patch_path = os.path.join(pkgdir, 'patches', '010-keyboard.c.patch')
@@ -270,36 +275,30 @@ class TestValidatePatchDeclaration(unittest.TestCase):
             f.write('@@ -1 +1 @@\n')
             f.write('- old\n')
             f.write('+ new\n')
-        try:
-            with self.assertRaises(ValueError) as cm:
-                validate_patch_declaration(
-                    'test-pkg-mismatch', '010-keyboard.c.patch', REPO_ROOT)
-            err = str(cm.exception)
-            self.assertIn('keyboard.c', err)
-            self.assertIn('screen.c', err)
-        finally:
-            import shutil
-            shutil.rmtree(pkgdir, ignore_errors=True)
+        with self.assertRaises(ValueError) as cm:
+            validate_patch_declaration(
+                'test-pkg-mismatch', '010-keyboard.c.patch', self.tmpdir)
+        err = str(cm.exception)
+        self.assertIn('keyboard.c', err)
+        self.assertIn('screen.c', err)
 
     def test_validate_patch_declaration_catches_no_upstream_match(self):
         """Bug: both signals agree on a rel that doesn't exist under
         src/c47/ -> raises ValueError, does NOT silently fall through
         to 'treat as new file'.
         """
-        pkgdir = os.path.join(REPO_ROOT, 'test-pkg-noexist')
-        os.makedirs(os.path.join(pkgdir, 'patches'), exist_ok=True)
+        pkgdir = os.path.join(self.tmpdir, 'test-pkg-noexist')
         self._create_patch_at(pkgdir, '010-nonexistent_file.c.patch',
                               'nonexistent_file.c')
-        try:
-            with self.assertRaises(ValueError) as cm:
-                validate_patch_declaration(
-                    'test-pkg-noexist', '010-nonexistent_file.c.patch',
-                    REPO_ROOT)
-            err = str(cm.exception)
-            self.assertIn('nonexistent_file.c', err)
-        finally:
-            import shutil
-            shutil.rmtree(pkgdir, ignore_errors=True)
+        # Deterministic by construction: the fixture root contains only
+        # keyboard.c, so absence is arranged rather than assumed of the
+        # ambient tree.
+        with self.assertRaises(ValueError) as cm:
+            validate_patch_declaration(
+                'test-pkg-noexist', '010-nonexistent_file.c.patch',
+                self.tmpdir)
+        err = str(cm.exception)
+        self.assertIn('nonexistent_file.c', err)
 
 
 if __name__ == '__main__':
