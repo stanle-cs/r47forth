@@ -88,17 +88,7 @@ void _fnIntegrate(uint16_t labelOrVariable, bool_t XY) {
     // Interactive mode
     fnPgmInt(labelOrVariable);
     if(lastErrorCode == ERROR_NONE) {
-      // interactive flow continues into the MVAR menu, so a no-MVAR program is a dead end; PGMINT plus integral-yx still accepts it
-      if(!isVarMenu(currentSolverProgram + FIRST_LABEL)) {
-        displayCalcErrorMessage(ERROR_NO_MVAR_FOUND, ERR_REGISTER_LINE, REGISTER_X);
-        #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-          sprintf(errorMessage, "No MVAR menu variable instruction after the label");
-          moreInfoOnError("In function _fnIntegrate:", errorMessage, NULL, NULL);
-        #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-      }
-      else {
-        currentSolverStatus = SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_EQUATION_INTEGRATE;
-      }
+      currentSolverStatus = SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_EQUATION_INTEGRATE;
     }
   }
   else if(!XY && (labelOrVariable == RESERVED_VARIABLE_ACC || labelOrVariable == RESERVED_VARIABLE_ULIM || labelOrVariable == RESERVED_VARIABLE_LLIM)) {

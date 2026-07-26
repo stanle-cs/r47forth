@@ -27,7 +27,7 @@ void fnInput(uint16_t regist) {
 
 
 
-bool_t isVarMenu(uint16_t label) {
+static bool_t _isVarMenu(uint16_t label) {
     uint8_t *step;
     step = labelList[label - FIRST_LABEL].instructionPointer;
     while(checkOpCodeOfStep(step, ITM_REM)) {
@@ -38,7 +38,7 @@ bool_t isVarMenu(uint16_t label) {
 
 
 void fnVarMnu(uint16_t label) {
-  if(!isVarMenu(label)) {
+  if(!_isVarMenu(label)) {
     displayCalcErrorMessage(ERROR_NO_MVAR_FOUND, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
       sprintf(errorMessage, "No MVAR menu variable instruction after the label");
@@ -54,7 +54,7 @@ void fnVarMnu(uint16_t label) {
 
 
 void fn42VarMnu(uint16_t label) {
-  if(!isVarMenu(label)) {
+  if(!_isVarMenu(label)) {
     displayCalcErrorMessage(ERROR_NO_MVAR_FOUND, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
       sprintf(errorMessage, "No MVAR menu variable instruction after the label");

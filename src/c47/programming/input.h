@@ -8,10 +8,6 @@
   #define INPUT_H
 
   void fnInput   (uint16_t regist);
-  /**
-   * Reports whether the program at a global label starts with MVAR, skipping leading REM steps.
-   */
-  bool_t isVarMenu  (uint16_t label);
   void fnVarMnu  (uint16_t label);
   void fn42VarMnu(uint16_t label);
   void fnPause   (uint16_t duration);
