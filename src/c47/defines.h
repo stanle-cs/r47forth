@@ -2192,7 +2192,14 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #if !defined(DMCP_BUILD)
   #define TO_QSPI
 #else // DMCP_BUILD
-  #define beep(frequence, length)            do { while(get_beep_volume() < 11) beep_volume_up(); start_buzzer_freq(frequence * 1000); sys_delay(length); stop_buzzer(); } while(0)
+  #define    OUT_VOL_MAX                       //Sound output raises the volume to 11 and puts the user's setting back afterwards. Undefine to sound everything at the user's own volume
+  #undef     OUT_VOL_MAX
+
+  #if defined(OUT_VOL_MAX)
+    #define beep(frequence, length)          do { if(!getSystemFlag(FLAG_QUIET)) { uint16_t beepVol = getBeepVolume(); fnSetVolume(11); start_buzzer_freq(frequence * 1000); sys_delay(length); stop_buzzer(); fnSetVolume(beepVol); } } while(0)
+  #else // !OUT_VOL_MAX
+    #define beep(frequence, length)          do { if(!getSystemFlag(FLAG_QUIET)) { start_buzzer_freq(frequence * 1000); sys_delay(length); stop_buzzer(); } } while(0)
+  #endif // OUT_VOL_MAX
   #undef TO_QSPI
   #if defined(TWO_FILE_PGM)
     #define TO_QSPI                          __attribute__ ((section(".qspi_data")))
