@@ -308,9 +308,6 @@
   extern bool_t                 lastProgramListEnd;
   extern bool_t                 programListEnd;
   extern bool_t                 pemCursorIsZerothStep;
-  extern bool_t                 secTick1;
-  extern bool_t                 halfSecTick2;
-  extern bool_t                 halfSecTick3;
   extern bool_t                 skippedStackLines;
   extern bool_t                 iterations;
   extern bool_t                 explicitTaylorIterVisibilitySelection;
