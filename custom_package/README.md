@@ -507,10 +507,23 @@ ships is `refresh`'s *output*, which the test step never saw — run
 shipped states match exactly.
 
 The resulting zip's **actual size** is checked against `PKG_MAX_SIZE`
-(default 200000 bytes / ~200KB) — exceeding it is a fatal error naming the
+(default 1000000 bytes / ~1MB) — exceeding it is a fatal error naming the
 real size and the limit, and the oversized zip is deleted, not left behind
 as a false-positive artifact. Override with
-`make pkg_build PKG=packages/my-pkg PKG_MAX_SIZE=500000`.
+`make pkg_build PKG=packages/my-pkg PKG_MAX_SIZE=2000000`.
+
+> **The cap is a tripwire, not a firmware budget** (raised from 200000,
+> 2026-07-25). The original figure came from a "DM42-class flash/RAM"
+> rationale; the target is R47 specifically, so that rationale is void.
+> Zip bytes were never flash bytes in any case — forth-core's payload is
+> ~75% `test_dict_reloc.c`, the self-test suite, which compiles to nothing
+> on device (`PC_BUILD && FORTH_DEBUG_SELFTEST`); real flash cost is measured
+> per stage with `make dmcp5r47` and recorded in the stage commit. At 200000
+> the check had been failing for forth-core since before anyone ran it (the
+> package was already 223KB), which is what a threshold set 15% under the
+> real value buys you. What remains worth catching is a package that has
+> swallowed a build directory or a binary — an order of magnitude out, not
+> a sliver.
 
 **Note:** `PKG` is also used elsewhere in this Makefile for the numbered
 DMCP build-variant targets (`dmcp_pkg1`/`2`/`3`, unrelated to `CUSTOM_PKG`
