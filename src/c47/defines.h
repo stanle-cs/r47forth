@@ -152,7 +152,7 @@
   #endif
 
 
-//    Info 2026-07-22 00.109.04.00b0.RC1
+//    Info 2026-07-22 00.109.03.04
 //
 //       Pkg │ DIST    │ X.FN     │ FIN  │ EIGEN │ ELEC │ IR
 //      ─────┼─────────┼──────────┼──────┼───────┼──────┼────
@@ -163,7 +163,8 @@
 //
 //
 //      DIST   all      every distribution
-//             limited  Normal, StdNormal, LogNormal, gev, Pareto, Uniform, Discr Uniform
+//             limA     Normal, StdNormal, LogNormal
+//             limB     Normal, StdNormal, LogNormal, cauchy, chi, expo, logis, t, weibull
 //             none     no distributions
 //      X.FN   full     includes elliptic, Bessel, Orthogonal
 //             no ellip without elliptic
@@ -178,14 +179,6 @@
 //             ❌       no IR printing
 //      All C47 / DM42 packages (common to 1–4): no 2D/3D VECTOR conversions (matrix functions stay), no number editing, no 1000-digit XFN math.
 
-// Compiled 2026-07-22 
-// dist_dmcp5...          flash   1060632   1441792    381160
-// dist_dmcp5r47...       flash   1062544   1441792    379248
-// dist_dmcpr47...        flash    676680    720896     44216
-// dist_dmcp...package 1: flash    713624    720896      7272
-// dist_dmcp...package 2: flash    716752    720896      4144
-// dist_dmcp...package 3: flash    716024    720896      4872
-// dist_dmcp...package 4: flash    676152    720896     44744
 
   #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 6888) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
@@ -200,7 +193,7 @@
     #define OPTION_TVM_NEWTON            // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
     #define OPTION_ELEC                  // ✓  6816 bytes // ELEC   6240 saving if VECTOR is not in; 2856 saving if VECTOR is in
             #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
+            #undef  OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
   #if defined(DMCP_PACKAGE2)             // PACKAGE 2 (free 3744) // ALL DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; NO IR PRINTING
@@ -210,13 +203,13 @@
     #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
     #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
     #define OPTION_DIST_2                // ✓  7136 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
-    #define OPTION_DIST_1                // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
-    #define OPTION_DIST_3                // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
+            #undef  OPTION_DIST_1        // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
+            #undef  OPTION_DIST_3        // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
             #undef  OPTION_TVM_FORMULAS  // ✓  2744 bytes // Use TVM analytical formulas where possible
             #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
             #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   see below
             #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-            #undef  OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
+    #define OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
   #if defined(DMCP_PACKAGE3)             // PACKAGE 3 EXPERIMENTAL (free 4416) // Limited DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
@@ -227,12 +220,12 @@
     #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
             #undef  OPTION_DIST_2        // ✓  7136 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
             #undef  OPTION_DIST_1        // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
-    #define OPTION_DIST_3                // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
+            #undef  OPTION_DIST_3        // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
     #define OPTION_TVM_FORMULAS          // ✓  2744 bytes // Use TVM analytical formulas where possible
     #define OPTION_TVM_NEWTON            // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
     #define OPTION_ELEC                  // ✓  6816 bytes // ELEC   see below
     #define OPTION_EIGEN                 // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
+            #undef OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
             // ELEC VECT  FLASH cost   free   (pkg4, 720896 total)
             //  0    0          0     32692
