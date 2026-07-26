@@ -1017,10 +1017,14 @@ void print_inlinestr(const char *line1, bool_t endline) {  //prints with or with
 
 
 void print_Register_line(calcRegister_t regist, char *before, char *after, bool_t line_init) {
-  char str[TMP_STR_LENGTH];
+  char *str = malloc(TMP_STR_LENGTH);              // off the stack: this calls copyRegisterToClipboardString, which holds another CLIPSTR buffer
+  if(str == NULL) {
+    return;
+  }
 
   copyRegisterToClipboardString2(regist, str);
   addStrBothSides(str, before, after);
 
   print_numberstr(str, line_init);
+  free(str);
 }

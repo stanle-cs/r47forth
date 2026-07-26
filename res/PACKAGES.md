@@ -1,4 +1,4 @@
-Which of the  files (PACKAGE 1 ... PACKAGE 4 or dmcp5) do I load?
+Which of the 5 files (PACKAGE 1 ... PACKAGE 4 or dmcp5) do I load?
 
 ## Short answer
 
@@ -10,7 +10,7 @@ Which of the  files (PACKAGE 1 ... PACKAGE 4 or dmcp5) do I load?
 On the DM42n there is sufficient flash storage, so there is no package choice to make: all functions are always available.  
 **dmcp5** is the full C47 firmware and is the correct and only option. It does not fit on the original DM42.
 
-On the original DM42, flash space is constrained. To make C47 fit, the firmware is built in two mutually exclusive variants:
+On the original DM42, flash space is constrained. To make C47 fit, the firmware is built in four mutually exclusive variants:
 
 - **PACKAGE 1** retains all distributions, Bessel and Orthogonal polynomial functions, fast financial functions, ELEC functions and IR printing; omits Elliptic and eigenvalue functions.
 - **PACKAGE 2** retains all distributions and the full X.FN menu (Elliptic, Bessel, Orthogonal); financial functions are slower and lower precision; omits eigenvalues, eigenvectors, matrix sqrt, ELEC functions and IR printing.
@@ -18,7 +18,7 @@ On the original DM42, flash space is constrained. To make C47 fit, the firmware 
 - **PACKAGE 4** has no distributions; omits Elliptic, Bessel and Orthogonal polynomial, eigenvalue and ELEC functions; financial functions are slower and lower precision; includes IR printing.
 
 
-Apart from these exclusions, the packages are functionally identical. Neither is “better”; each simply trades one feature set for another to meet the memory limit.
+Apart from these exclusions, the packages are functionally identical. None is “better”; each simply trades one feature set for another to meet the memory limit.
 
 If you have two original DM42 units converted to C47, installing different packages could make sense and effectively gives you access to the complete function set across the two machines.
 
