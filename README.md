@@ -15,9 +15,19 @@ Makefile  meson.build  meson_options.txt     modified upstream build files
 tools/resolve_c47_src.py                     configure-time overlay resolver
 tools/pkg_patch_refresh.py                   authoring tool: working area -> patches/+files/
 tools/pkg_patch_apply.py  pkg_patch_common.py
+tools/test_pkg_patch_{common,refresh,resolver}.py
 custom_package/README.md                     the package system, in full
 packages/forth-core/patches/                 14 diffs against upstream files
 packages/forth-core/files/                   13 new sources
+```
+
+The three `test_pkg_patch_*.py` files are required, not extras: `meson.build`
+declares them as tests unconditionally, so without them `make test` fails on a
+missing file — and `make pkg_build` runs `make test`. They double as a check
+that the overlay machinery survived the copy:
+
+```
+meson test -C build.sim pkg_patch_common pkg_patch_refresh pkg_patch_resolver
 ```
 
 The two halves are independent. `tools/` + the three build files are the
