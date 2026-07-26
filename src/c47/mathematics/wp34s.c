@@ -322,7 +322,20 @@ static void doTaylorIterations(const real_t *a, real_t* angle, real_t* a2, real_
 void C47_WP34S_SinCosTanTaylor_temp75(const real_t *a, bool_t swap, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) { // a in radian
   bool_t doEpsilon = false;
   int   epsilonDigits;
-  real_t angle, a2, t, j, z, sin, cos, epsilonOrCompare;
+  // The eight working reals come from the heap, not the frame: eight decNumbers at 60 bytes is 480 of this function's 672 byte frame, and it sits on the integrand path
+  // of a plotted integral. The 1071 digit twin below is untouched.
+  REAL_T_ALLOC(angle,            75);
+  REAL_T_ALLOC(a2,               75);
+  REAL_T_ALLOC(t,                75);
+  REAL_T_ALLOC(j,                75);
+  REAL_T_ALLOC(z,                75);
+  REAL_T_ALLOC(sin,              75);
+  REAL_T_ALLOC(cos,              75);
+  REAL_T_ALLOC(epsilonOrCompare, 75);
+  if(angle == NULL || a2 == NULL || t == NULL || j == NULL || z == NULL || sin == NULL || cos == NULL || epsilonOrCompare == NULL) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
+    goto freeWork;
+  }
 
   int32_t savedContextDigits = realContext->digits;
 
@@ -337,16 +350,16 @@ void C47_WP34S_SinCosTanTaylor_temp75(const real_t *a, bool_t swap, real_t *sinO
     doEpsilon = false;            //stay compaitble with the old Taylor
   }
 
-  doTaylorIterations(a, &angle, &a2, &t, &j, &z, &sin, &cos, sinOut, cosOut, &epsilonOrCompare, doEpsilon, epsilonDigits, realContext);
+  doTaylorIterations(a, angle, a2, t, j, z, sin, cos, sinOut, cosOut, epsilonOrCompare, doEpsilon, epsilonDigits, realContext);
 
   realContext->digits = savedContextDigits;
 
   if(sinOut != NULL) {
-    realPlus(&sin, sinOut, realContext);
+    realPlus(sin, sinOut, realContext);
   }
 
   if(cosOut != NULL) {
-    realPlus(&cos, cosOut, realContext);
+    realPlus(cos, cosOut, realContext);
   }
 
   if(tanOut != NULL) {
@@ -355,13 +368,23 @@ void C47_WP34S_SinCosTanTaylor_temp75(const real_t *a, bool_t swap, real_t *sinO
     }
     else {
       if(swap) {
-        realDivide(&cos, &sin, tanOut, realContext);
+        realDivide(cos, sin, tanOut, realContext);
       }
       else {
-        realDivide(&sin, &cos, tanOut, realContext);
+        realDivide(sin, cos, tanOut, realContext);
       }
     }
   }
+
+freeWork:
+  REAL_T_FREE(angle,            75);
+  REAL_T_FREE(a2,               75);
+  REAL_T_FREE(t,                75);
+  REAL_T_FREE(j,                75);
+  REAL_T_FREE(z,                75);
+  REAL_T_FREE(sin,              75);
+  REAL_T_FREE(cos,              75);
+  REAL_T_FREE(epsilonOrCompare, 75);
 }
 
 
@@ -602,7 +625,16 @@ static bool_t doAtan(real_t *a, real_t *angle, real_t *a2, real_t *t, real_t *j,
 
 static void WP34S_Atan_75temp(const real_t *x, real_t *angle, realContext_t *realContext) {
   bool_t doEpsilon = false;
-  real_t a, b, a2, t, j, z, last, epsilon; //-- added epsilon for convergence;
+  // The eight working reals come from the heap, not the frame: 480 of this function's 656 bytes, on the integrand path of a plotted integral. The 1071 digit twin below
+  // keeps its stack buffers untouched.
+  REAL_T_ALLOC(a,       75);
+  REAL_T_ALLOC(b,       75);
+  REAL_T_ALLOC(a2,      75);
+  REAL_T_ALLOC(t,       75);
+  REAL_T_ALLOC(j,       75);
+  REAL_T_ALLOC(z,       75);
+  REAL_T_ALLOC(last,    75);
+  REAL_T_ALLOC(epsilon, 75);   //-- added epsilon for convergence;
   int doubles = 0;
   int invert;
   int neg;
@@ -620,14 +652,30 @@ static void WP34S_Atan_75temp(const real_t *x, real_t *angle, realContext_t *rea
     doEpsilon = false;            //stay compaitble with the old Taylor
   }
 
-  if(!doAtan( &a, angle, &a2, &t, &j, &z, x, &b, &epsilon, &last,
+  if(a == NULL || b == NULL || a2 == NULL || t == NULL || j == NULL || z == NULL || last == NULL || epsilon == NULL) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
+    realContext->digits = savedContextDigits;
+    goto freeWork;
+  }
+
+  if(!doAtan( a, angle, a2, t, j, z, x, b, epsilon, last,
               doEpsilon, epsilonDigits,
               &doubles, &invert, &neg,
               realContext)) {
     realContext->digits = savedContextDigits;
-    return; //NaN
+    goto freeWork; //NaN
   }
   realContext->digits = savedContextDigits;
+
+freeWork:
+  REAL_T_FREE(a,       75);
+  REAL_T_FREE(b,       75);
+  REAL_T_FREE(a2,      75);
+  REAL_T_FREE(t,       75);
+  REAL_T_FREE(j,       75);
+  REAL_T_FREE(z,       75);
+  REAL_T_FREE(last,    75);
+  REAL_T_FREE(epsilon, 75);
 }
 
 
