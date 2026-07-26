@@ -1,12 +1,12 @@
 # R47 Forth release tree
 
 The build tree only: the package system, the Forth package, and how to install
-both. No design documents, no development history.
+both. Design documents and development history stay in the working repo.
 
 Built against upstream c43 `b8f79e486`. Newer upstream will often work, but the
-patches were generated against that commit and the resolver checks every target
-before it applies anything, so if a file has moved you get a configure error and
-not a bad build.
+patches were generated against that commit. The resolver checks every target
+before it applies anything. If a file has moved you get a configure error at
+that point, well before anything is built.
 
 ## What is here
 
@@ -26,11 +26,11 @@ custom package system (v0.3) and will carry any package. `packages/forth-core/`
 is one package that happens to use it.
 
 Keep the `test_pkg_patch_*.py` files. `meson.build` declares them as tests
-unconditionally, so without them `make test` dies on a missing file, and
+unconditionally. Without them `make test` dies on a missing file, and
 `make pkg_build` runs `make test`.
 
-They don't need an upstream tree, so you can run them straight from this branch
-and know the download arrived intact:
+They don't need an upstream tree. Run them straight from this branch and you
+know the download arrived intact:
 
 ```
 python3 tools/test_pkg_patch_common.py
@@ -68,8 +68,8 @@ won't bite until you edit something. After that, run
 python3 tools/pkg_patch_refresh.py packages/forth-core
 ```
 
-first, or the build succeeds with no error and quietly compiles the previous
-version of your code.
+first, or the build succeeds without complaint and quietly compiles the
+previous version of your code.
 
 ## Notes
 
