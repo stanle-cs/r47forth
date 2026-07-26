@@ -8,8 +8,8 @@ not visible without diffing by hand, and two packages touching the same file
 meant one of them was silently discarded. Overrides are now plain git diffs, and
 patches from different packages against the same file compose in order.
 
-The other change is that a package declares nothing. No meson.build, no file
-lists. The working area is flat and mirrors upstream paths:
+The other change is that a package declares nothing. It has no meson.build of
+its own. The working area is flat and mirrors upstream paths:
 
 [code]packages/my-pkg/
     keyboard.c      edited copy of an upstream file
@@ -60,9 +60,9 @@ first step.
 [b]What is tracked in git[/b]
 
 Everything in a package directory, including the working area. In v0.2 it was
-gitignored as regenerable scratch, which it isn't: refresh
-treats a missing working file as an instruction to delete its generated output,
-so a fresh clone deleted the compiler-visible source on its first refresh. The
+gitignored as regenerable scratch, which it isn't. Refresh treats a missing
+working file as an instruction to delete its generated output. A fresh clone
+therefore deleted the compiler-visible source on its first refresh. The
 cost of tracking both is committed redundancy between a working file and its
 generated counterpart.
 
@@ -73,5 +73,5 @@ The system and that package are both on a
 [url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release
 branch[/url], built against upstream c43 b8f79e486. The resolver and the refresh
 tool are four files under tools/, plus changes to Makefile, meson.build and
-meson_options.txt. Nothing else in there, so you can see the whole thing at
-once.
+meson_options.txt. Nothing else in there. You can read the whole thing in one
+sitting.

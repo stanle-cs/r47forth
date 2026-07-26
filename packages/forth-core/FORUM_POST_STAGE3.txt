@@ -5,25 +5,25 @@ then XEQ FORTH. That still works. The difference is that Forth source can now be
 part of a normal R47 program, stored as program steps.
 
 In PEM you insert FORTH and an alpha editor opens on the source. The closing
-marker is inserted at the same time, so the region is balanced from the start.
+marker goes in at the same time and the region stays balanced from the start.
 ENTER stores the line and opens the next one inside the pair. EXIT closes the
 editor. EDIT reopens a line later.
 
 [code]: SQ2 DUP × ;
 : TWICE DUP + ; GLOBAL[/code]
 
-SQ2 is private to the program it sits in. TWICE has GLOBAL after it, so it moves
-to the global dictionary, survives power-off and backup/restore, and can be
-called from the keyboard. Program-local is the default because two programs that
-both define SQ2 should not affect each other. Definitions are scanned before the
-program runs, so a word can be used above the line that defines it.
+SQ2 is private to the program it sits in. TWICE has GLOBAL after it. That moves
+it to the global dictionary, where it survives power-off and backup/restore and
+can be called from the keyboard. Program-local is the default because two
+programs that both define SQ2 should not affect each other. Definitions are scanned before the
+program runs. A word can be used above the line that defines it.
 
 Control flow from source is IF/ELSE/THEN, BEGIN/UNTIL, BEGIN/AGAIN and
 BEGIN/WHILE/REPEAT. RECURSE, IMMEDIATE and FORGET are also in.
 
 Forth can call C47 functions with the normal parameter forms: direct numbers and
 registers, named registers, flags, and the indirect forms. It goes through the
-calculator's own validation and dispatch code. One implementation, so the two
+calculator's own validation and dispatch code. One implementation means the two
 paths cannot drift apart. XEQ resolves C47 labels, C47 functions and Forth
 words, and R47 programs can XEQ Forth words back. FWRD lists the words the
 current program can see, and picking one inserts it at the cursor.
@@ -112,12 +112,12 @@ R15 = 99   IMM3 ran while EMPTY compiled, so EMPTY has no runtime body
 R16 = 9    XEQ 'CLSTK' resolved a normal C47 item and cleared the stack[/code]
 
 This wants the 8-level stack. The Forth data stack is the calculator's own RPN
-stack, so a recursive word holds one operand per level, and SUMDOWN needs about
+stack. A recursive word holds one operand per level, and SUMDOWN needs about
 six. Set to 4 levels it reports a full stack.
 
 Flag 10 ends up set, with DEMO and PTR holding 42 and 19. After a power cycle
 PLUS10 is still callable from the keyboard and SUMDOWN is not, since it belongs
-to FDEMO. FORGET GONE1 removes GONE1 and every global defined after it, so GONE2
+to FDEMO. FORGET GONE1 removes GONE1 and every global defined after it. GONE2
 goes with it.
 
 A native C47 item called from Forth does not push its result back onto the Forth
@@ -134,7 +134,7 @@ ENTER, which should reject the line and leave the step unchanged.
 FDEMO exercises features one at a time. This one is closer to something you
 would keep on the machine: it writes a six-period compound interest schedule
 into R00 to R05 and leaves the closing balance in R22. GROW is promoted with
-GLOBAL, so it stays on the calculator after the program has finished.
+GLOBAL and stays on the calculator once the program has finished.
 
 [code]LBL 'SAVE'
 »FORTH
