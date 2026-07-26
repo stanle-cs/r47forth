@@ -75,7 +75,7 @@ version of your code.
 
 The Forth data stack is the calculator's own RPN stack, so it's 4 or 8 levels
 deep depending on the stack size setting. Recursive words hold one operand per
-level and want 8. At 4 they report a full stack, which is at least visible.
+level and want 8. At 4 they report a full stack.
 
 Hobby project that replaces the firmware on your calculator. Keep a backup of
 your state and flash at your own risk.
