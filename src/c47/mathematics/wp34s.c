@@ -28,7 +28,9 @@
   #undef DEBUGTAYLOR
 #endif
 static void C47_WP34S_SinCosTanTaylor_temp75   (const real_t *angle, bool_t swap, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext); // angle in radian
-static void C47_WP34S_SinCosTanTaylor_temp1071 (const real_t *angle, bool_t swap, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext); // angle in radian
+#if defined(OPTION_XFN_1000)
+  static void C47_WP34S_SinCosTanTaylor_temp1071 (const real_t *angle, bool_t swap, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext); // angle in radian
+#endif // OPTION_XFN_1000
 
 
 void reduceAngleToRange(real_t* angle, const real_t** angle45, const real_t** angle90, const real_t** angle180, angularMode_t* angularMode, int32_t savedContextDigits, realContext_t* realContext) {
@@ -140,10 +142,13 @@ static void doWP34S_SinCosTanTaylor(real_t* angle, bool* sinNeg, bool* cosNeg, b
       *swap = !(*swap);
     }
     convertAngleFromTo(angle, angularMode, amRadian, realContext);
-    if(savedContextDigits >= 1071) {
-      C47_WP34S_SinCosTanTaylor_temp1071(angle, *swap, (*swap) ? cosOut : sinOut, (*swap) ? sinOut : cosOut, tanOut, realContext); // angle in radian
-    }
-    else {
+    #if defined(OPTION_XFN_1000)
+      if(savedContextDigits >= 1071) {
+        C47_WP34S_SinCosTanTaylor_temp1071(angle, *swap, (*swap) ? cosOut : sinOut, (*swap) ? sinOut : cosOut, tanOut, realContext); // angle in radian
+      }
+      else
+    #endif // OPTION_XFN_1000
+    {
       C47_WP34S_SinCosTanTaylor_temp75(angle, *swap, (*swap) ? cosOut : sinOut, (*swap) ? sinOut : cosOut, tanOut, realContext); // angle in radian
     }
   }
@@ -364,6 +369,7 @@ void C47_WP34S_SinCosTanTaylor_temp75(const real_t *a, bool_t swap, real_t *sinO
 }
 
 
+#if defined(OPTION_XFN_1000)
 //used only by XFN 1071
 static void C47_WP34S_Cvt2RadSinCosTan_1071_helper(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
   bool_t sinNeg = false, cosNeg = false, swap = false;
@@ -390,18 +396,23 @@ static void C47_WP34S_Cvt2RadSinCosTan_1071_helper(const real_t *an, angularMode
   doWP34S_SinCosTanTaylor(angle, &sinNeg, &cosNeg, &swap, sinOut, cosOut, tanOut, angularMode, savedContextDigits, realContext);
 
   }
+#endif // OPTION_XFN_1000
 
 
 void C47_WP34S_Cvt2RadSinCosTan(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
-  if(realContext->digits >= 1071) {
-    C47_WP34S_Cvt2RadSinCosTan_1071_helper(an, angularMode, sinOut, cosOut, tanOut, realContext);
-  }
-  else {
+  #if defined(OPTION_XFN_1000)
+    if(realContext->digits >= 1071) {
+      C47_WP34S_Cvt2RadSinCosTan_1071_helper(an, angularMode, sinOut, cosOut, tanOut, realContext);
+    }
+    else
+  #endif // OPTION_XFN_1000
+  {
     C47_WP34S_Cvt2RadSinCosTan_75_helper(an, angularMode, sinOut, cosOut, tanOut, realContext);
   }
 }
 
 
+#if defined(OPTION_XFN_1000)
 //Used by normal C47 TRIG as well as XFN
 // Calculate sin, cos by Taylor series and tan by division, for 1071 contexts
 void C47_WP34S_SinCosTanTaylor_temp1071(const real_t *a, bool_t swap, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) { // a in radian
@@ -437,14 +448,17 @@ void C47_WP34S_SinCosTanTaylor_temp1071(const real_t *a, bool_t swap, real_t *si
     }
   }
 }
-
+#endif // OPTION_XFN_1000
 
 
 void C47_WP34S_SinCosTanTaylor(const real_t *a, bool_t swap, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) { // a in radian
-  if(realContext->digits >= 1071) {
-    C47_WP34S_SinCosTanTaylor_temp1071(a, swap, sinOut, cosOut, tanOut, realContext); // a in radian
-  }
-  else {
+  #if defined(OPTION_XFN_1000)
+    if(realContext->digits >= 1071) {
+      C47_WP34S_SinCosTanTaylor_temp1071(a, swap, sinOut, cosOut, tanOut, realContext); // a in radian
+    }
+    else
+  #endif // OPTION_XFN_1000
+  {
     C47_WP34S_SinCosTanTaylor_temp75(a, swap, sinOut, cosOut, tanOut, realContext); // a in radian
   }
 }
@@ -771,6 +785,7 @@ static void WP34S_Atan_75_helper(const real_t *x, real_t *angle, realContext_t *
 }
 
 
+#if defined(OPTION_XFN_1000)
 static void C47do_WP34S_Atan_1071_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   REAL_T_PTR(a, 1071);
   REAL_T_PTR(b, 1071);
@@ -787,12 +802,17 @@ static void C47do_WP34S_Atan_1071_helper(const real_t *x, real_t *angle, realCon
     return; //NaN
   }
 }
+#endif // OPTION_XFN_1000
+
 
 void C47_WP34S_Atan(const real_t *x, real_t *angle, realContext_t *realContext) {
-  if(realContext->digits >= 1071) {
-    C47do_WP34S_Atan_1071_helper(x, angle, realContext);
-  }
-  else {
+  #if defined(OPTION_XFN_1000)
+    if(realContext->digits >= 1071) {
+      C47do_WP34S_Atan_1071_helper(x, angle, realContext);
+    }
+    else
+  #endif // OPTION_XFN_1000
+  {
     WP34S_Atan_75_helper(x, angle, realContext);
   }
 }
@@ -942,6 +962,7 @@ static void WP34S_Atan2_75_helper(const real_t *y, const real_t *x, real_t *atan
 }
 
 
+#if defined(OPTION_XFN_1000)
 static void C47do_WP34S_Atan2_1071_helper(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   REAL_T_PTR(r, 1071);
   REAL_T_PTR(t, 1071);
@@ -949,12 +970,17 @@ static void C47do_WP34S_Atan2_1071_helper(const real_t *y, const real_t *x, real
     return; //NaN
   }
 }
+#endif // OPTION_XFN_1000
+
 
 void C47_WP34S_Atan2(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
-  if(realContext->digits >= 1071) {
-    C47do_WP34S_Atan2_1071_helper(y, x, atan, realContext);
-  }
-  else {
+  #if defined(OPTION_XFN_1000)
+    if(realContext->digits >= 1071) {
+      C47do_WP34S_Atan2_1071_helper(y, x, atan, realContext);
+    }
+    else
+  #endif // OPTION_XFN_1000
+  {
     WP34S_Atan2_75_helper(y, x, atan, realContext);
   }
 }
@@ -1007,6 +1033,7 @@ static void WP34S_Asin_75_helper(const real_t *x, real_t *angle, realContext_t *
 }
 
 
+#if defined(OPTION_XFN_1000)
 static void C47do_WP34S_Asin_1071_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   REAL_T_PTR(abx, 1071);
   REAL_T_PTR(z, 1071);
@@ -1014,12 +1041,17 @@ static void C47do_WP34S_Asin_1071_helper(const real_t *x, real_t *angle, realCon
     return; //NaN
   }
 }
+#endif // OPTION_XFN_1000
+
 
 void C47_WP34S_Asin(const real_t *x, real_t *angle, realContext_t *realContext) {
-  if(realContext->digits >= 1071) {
-    C47do_WP34S_Asin_1071_helper(x, angle, realContext);
-  }
-  else {
+  #if defined(OPTION_XFN_1000)
+    if(realContext->digits >= 1071) {
+      C47do_WP34S_Asin_1071_helper(x, angle, realContext);
+    }
+    else
+  #endif // OPTION_XFN_1000
+  {
     WP34S_Asin_75_helper(x, angle, realContext);
   }
 }
@@ -1078,6 +1110,7 @@ static void WP34S_Acos_75_helper(const real_t *x, real_t *angle, realContext_t *
 }
 
 
+#if defined(OPTION_XFN_1000)
 static void C47do_WP34S_Acos_1071_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   REAL_T_PTR(abx, 1071);
   REAL_T_PTR(z, 1071);
@@ -1085,12 +1118,17 @@ static void C47do_WP34S_Acos_1071_helper(const real_t *x, real_t *angle, realCon
     return; //NaN
   }
 }
+#endif // OPTION_XFN_1000
+
 
 void C47_WP34S_Acos(const real_t *x, real_t *angle, realContext_t *realContext) {
-  if(realContext->digits >= 1071) {
-    C47do_WP34S_Acos_1071_helper(x, angle, realContext);
-  }
-  else {
+  #if defined(OPTION_XFN_1000)
+    if(realContext->digits >= 1071) {
+      C47do_WP34S_Acos_1071_helper(x, angle, realContext);
+    }
+    else
+  #endif // OPTION_XFN_1000
+  {
     WP34S_Acos_75_helper(x, angle, realContext);
   }
 }
