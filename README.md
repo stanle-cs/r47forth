@@ -3,10 +3,10 @@
 The build tree only: the package system, the Forth package, and how to install
 both. Design documents and development history stay in the working repo.
 
-Built against upstream c43 `b8f79e486`. Newer upstream will often work, but the
-patches were generated against that commit. The resolver checks every target
-before it applies anything. If a file has moved you get a configure error at
-that point, well before anything is built.
+Built against upstream c43 `b8f79e486`. Newer upstream will often work, but
+the patches were generated against that commit, and the resolver checks every
+target before it applies anything. If a file has moved, configure stops with
+an error.
 
 ## What is here
 
@@ -25,12 +25,12 @@ The two halves are independent. `tools/` and the three build files are the
 custom package system (v0.3) and will carry any package. `packages/forth-core/`
 is one package that happens to use it.
 
-Keep the `test_pkg_patch_*.py` files. `meson.build` declares them as tests
-unconditionally. Without them `make test` dies on a missing file, and
+Keep the `test_pkg_patch_*.py` files: `meson.build` declares them as tests
+unconditionally, so without them `make test` dies on a missing file, and
 `make pkg_build` runs `make test`.
 
-They don't need an upstream tree. Run them straight from this branch and you
-know the download arrived intact:
+They don't need an upstream tree, so you can check the machinery straight
+from this branch before touching anything else:
 
 ```
 python3 tools/test_pkg_patch_common.py
@@ -60,16 +60,16 @@ firmware back, byte for byte. For the simulator it's
 
 ## Refresh before you build
 
-The build reads `packages/forth-core/patches/` and `files/`, never the flat
-working area next to them. This tree already ships the generated output, so it
-won't bite until you edit something. After that, run
+The build compiles from `packages/forth-core/patches/` and `files/`. The flat
+working area next to them is never read. This tree already ships the generated
+output, so nothing bites until you edit something. After that, run
 
 ```
 python3 tools/pkg_patch_refresh.py packages/forth-core
 ```
 
-first, or the build succeeds without complaint and quietly compiles the
-previous version of your code.
+first, or the build will cheerfully compile the version from before your
+edit.
 
 ## Notes
 
