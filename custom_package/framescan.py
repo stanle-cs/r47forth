@@ -105,6 +105,41 @@ def scan(paths):
     if not found:
         print("  none")
 
+    # --- single-negation contrast tails: ", not X" / ", never X" / ", just X" --
+    print("\n== contrast tails (', not/never/just ...' appositives) ==")
+    ct = 0
+    for src, s in sents:
+        m = re.search(r',\s+(not|never|just)\s+[^,.;]+[.;]?\s*$', s)
+        if m:
+            print(f"  {src}: ...{s[-90:]}")
+            ct += 1
+    if not ct:
+        print("  none")
+
+    # --- cross-document duplication: 6-word shingles shared between files -----
+    print("\n== cross-document repetition (6-word shingles in 2+ files) ==")
+    sh = collections.defaultdict(set)
+    sh_ex = {}
+    for src, s in sents:
+        ws = [w.lower() for w in re.findall(r"[a-z']+", s, re.I)]
+        for i in range(len(ws) - 5):
+            g = ' '.join(ws[i:i + 6])
+            sh[g].add(src)
+            sh_ex.setdefault(g, s)
+    dups = sorted((g for g, f in sh.items() if len(f) >= 2), key=lambda g: -len(sh[g]))
+    reported = set()
+    cnt = 0
+    for g in dups:
+        if any(g[8:] in r or r[8:] in g for r in reported):
+            continue
+        reported.add(g)
+        print(f"  [{len(sh[g])} files] \"{g}\"  ({', '.join(sorted(sh[g]))})")
+        cnt += 1
+        if cnt >= 10:
+            break
+    if not cnt:
+        print("  none")
+
     print("\n== other shape counts ==")
     body = ' '.join(s for _, s in sents)
     print(f"  colon-explanations  : {len(re.findall(r'[a-z]\s*:\s+[a-z]', body))}")

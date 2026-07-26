@@ -3,8 +3,8 @@
 Overrides are diffs against upstream now, instead of whole-file copies.
 
 In v0.2, touching an upstream file meant shipping a complete copy of it. A
-two-line hook change went out as a 4000-line file, a package's actual delta was
-not visible without diffing by hand, and two packages touching the same file
+two-line hook change went out as a 4000-line file, a package's actual delta
+wasn't visible without diffing by hand, and two packages touching the same file
 meant one of them was silently discarded. Overrides are now plain git diffs, and
 patches from different packages against the same file compose in order.
 
@@ -17,16 +17,17 @@ its own. The working area is flat and mirrors upstream paths:
 
 [code]python3 tools/pkg_patch_refresh.py packages/my-pkg[/code]
 
-Refresh classifies each file by whether its mirrored path exists under src/c47/.
-If it does, the file becomes a patch; if not, it is copied in whole. You never write a patch by hand.
+Refresh classifies each file by whether its mirrored path exists under
+src/c47/. If it does, the file becomes a patch. Anything without an upstream
+counterpart is copied in whole. Either way you never write a patch by hand.
 
 [b][size=120]tools/pkg_patch_refresh.py[/size][/b]
 
 [list]
 [*] --materialize <file> pulls an upstream file into the working area, so you edit real source with full compiler and LSP context
-[*] The package records the upstream commit it was authored against and always diffs against that, so pulling new upstream commits leaves existing patches alone
+[*] The package records the upstream commit it was authored against and always diffs against that. Pulling new upstream commits leaves existing patches alone
 [*] --rebase-base moves the package onto current upstream. Unedited files fast-forward. Real overlaps leave standard conflict markers in the working copy, and refresh will not run until they are resolved
-[*] A manifest records the hash of every generated entry, so a hand-edited patches/ or files/ entry produces a warning naming it, then gets overwritten
+[*] A manifest records the hash of every generated entry. Hand-edit a patches/ or files/ entry and refresh warns, names it, and overwrites it
 [*] .pkgignore keeps design docs and dev scripts out of classification. Without it they are treated as new sources and shipped inside the firmware
 [/list]
 
@@ -50,19 +51,19 @@ exceeds it.
 
 [b]Refresh before you build[/b]
 
-The build reads the generated patches/ and files/ directories, never the working
-area. Editing a source without refreshing produces a successful build, with no
-error or warning, containing the previous version of that code. A package whose
-patches are missing entirely configures and builds and contains none of that
-package. Run refresh before building; the forth-core build script does it as its
-first step.
+The build never reads the working area, only the generated patches/ and files/
+directories. Editing a source without refreshing gets you a successful build
+that still contains the previous version of that code. A package whose patches
+are missing entirely configures and builds and contains none of that package.
+Run refresh before building. I put it at the top of the forth-core build script
+after getting burned by exactly this.
 
 [b]What is tracked in git[/b]
 
 Everything in a package directory, including the working area. In v0.2 it was
 gitignored as regenerable scratch, which it isn't. Refresh treats a missing
-working file as an instruction to delete its generated output. A fresh clone
-therefore deleted the compiler-visible source on its first refresh. The
+working file as an instruction to delete its generated output, so the first
+refresh on a fresh clone deleted the compiler-visible source. The
 cost of tracking both is committed redundancy between a working file and its
 generated counterpart.
 
