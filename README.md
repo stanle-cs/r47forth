@@ -23,12 +23,18 @@ packages/forth-core/files/                   13 new sources
 
 The three `test_pkg_patch_*.py` files are required, not extras: `meson.build`
 declares them as tests unconditionally, so without them `make test` fails on a
-missing file — and `make pkg_build` runs `make test`. They double as a check
-that the overlay machinery survived the copy:
+missing file — and `make pkg_build` runs `make test`.
+
+They are self-contained, so you can check the overlay machinery straight out of
+this branch, before copying anything anywhere and without an upstream tree:
 
 ```
-meson test -C build.sim pkg_patch_common pkg_patch_refresh pkg_patch_resolver
+python3 tools/test_pkg_patch_common.py
+python3 tools/test_pkg_patch_refresh.py
+python3 tools/test_pkg_patch_resolver.py
 ```
+
+Three passes means the resolver, the refresh tool and the patch stack all work.
 
 The two halves are independent. `tools/` + the three build files are the
 **custom package system** (v0.3) and will carry any package. `packages/forth-core/`
