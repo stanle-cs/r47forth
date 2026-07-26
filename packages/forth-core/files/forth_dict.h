@@ -248,7 +248,6 @@ void    forthDataDepthEnterOuter(void);
 void    forthDataDepthLeaveOuter(void);
 void    forthDataDepthResync(void);
 bool_t  forthDataDepthApply(int16_t net);
-int16_t forthTestGetDataDepth(void);
 
 /* Bridge functions (§6) */
 void fnForthCall(uint16_t param);

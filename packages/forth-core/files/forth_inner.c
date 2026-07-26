@@ -106,11 +106,6 @@ bool_t forthDataDepthApply(int16_t net)
   return true;
 }
 
-int16_t forthTestGetDataDepth(void)
-{
-  return forthDataDepth;
-}
-
 /* ASLIFT is left SET after a push: a value now sits in X, and upstream's
  * SLS_ENABLED convention says whatever runs next must lift onto it rather than
  * overwrite it. Clearing it here made a following native item (RCL, and any
