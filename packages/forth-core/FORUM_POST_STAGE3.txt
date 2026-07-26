@@ -6,8 +6,8 @@ part of a normal R47 program, stored as program steps.
 
 In PEM you insert FORTH and an alpha editor opens on the source. The closing
 marker is inserted at the same time, so the region is balanced from the start.
-ENTER stores the line and opens the next one inside the pair, EXIT closes the
-editor, EDIT reopens a line later.
+ENTER stores the line and opens the next one inside the pair. EXIT closes the
+editor. EDIT reopens a line later.
 
 [code]: SQ2 DUP × ;
 : TWICE DUP + ; GLOBAL[/code]
@@ -22,15 +22,15 @@ Control flow from source is IF/ELSE/THEN, BEGIN/UNTIL, BEGIN/AGAIN and
 BEGIN/WHILE/REPEAT. RECURSE, IMMEDIATE and FORGET are also in.
 
 Forth can call C47 functions with the normal parameter forms: direct numbers and
-registers, named registers, flags, and the indirect forms. This runs through the
-same validation and dispatch code the keyboard uses rather than a separate
-implementation. XEQ resolves C47 labels, C47 functions and Forth words, and R47
-programs can XEQ Forth words. FWRD is a menu of the words visible from the
-current program; picking one inserts it at the cursor.
+registers, named registers, flags, and the indirect forms. It goes through the
+calculator's own validation and dispatch code. One implementation, so the two
+paths cannot drift apart. XEQ resolves C47 labels, C47 functions and Forth
+words, and R47 programs can XEQ Forth words back. FWRD lists the words the
+current program can see, and picking one inserts it at the cursor.
 
-A source line is checked before it is stored. Structure and parameter forms
-only, with no dictionary side effects. If the line is invalid the original
-program step is left as it was.
+A source line gets checked before it is stored. Structure and parameter forms
+only. Nothing touches the dictionary, and a bad line leaves the original program
+step alone.
 
 Where Forth convention and R47 convention disagree, R47 wins. This is meant as
 an extension of the existing programming system, not a separate Forth alongside
@@ -113,7 +113,7 @@ R16 = 9    XEQ 'CLSTK' resolved a normal C47 item and cleared the stack[/code]
 
 This wants the 8-level stack. The Forth data stack is the calculator's own RPN
 stack, so a recursive word holds one operand per level, and SUMDOWN needs about
-six of them. Set to 4 levels it reports a full stack instead of returning 15.
+six. Set to 4 levels it reports a full stack.
 
 Flag 10 ends up set, with DEMO and PTR holding 42 and 19. After a power cycle
 PLUS10 is still callable from the keyboard and SUMDOWN is not, since it belongs
@@ -121,9 +121,9 @@ to FDEMO. FORGET GONE1 removes GONE1 and every global defined after it, so GONE2
 goes with it.
 
 A native C47 item called from Forth does not push its result back onto the Forth
-stack when the step ends, which is why R07 checks the literal on the next line
-instead of the CNST result. SPIN is compiled but not run, since running it
-reaches the runaway guard; R/S interrupts it on hardware.
+stack when the step ends. So R07 checks the literal on the next line. SPIN is
+compiled but never run: running it reaches the runaway guard. R/S gets you out
+on hardware.
 
 FWRD and the pre-store check don't show up in the registers. To see them, EDIT
 one of the Forth lines and open FWRD, then delete THEN from CHOOSE and press
@@ -180,7 +180,7 @@ The other one: recursion deeper than the stack used to run off the top and keep
 going. The data stack is the calculator's own RPN stack, 8 levels with SSIZE8,
 so a recursive word holding one operand per level runs out at 6 or 7. A
 factorial word returned 4320 for 7! instead of 5040, and never raised anything.
-That now reports a full stack rather than handing back a plausible wrong number.
+Now it reports a full stack.
 
 [b]Not implemented[/b]
 

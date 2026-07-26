@@ -18,17 +18,16 @@ lists. The working area is flat and mirrors upstream paths:
 [code]python3 tools/pkg_patch_refresh.py packages/my-pkg[/code]
 
 Refresh classifies each file by whether its mirrored path exists under src/c47/.
-If it does, the file becomes a patch; if not, it is copied in whole. You do not
-write patches by hand or decide where anything goes.
+If it does, the file becomes a patch; if not, it is copied in whole. You never write a patch by hand.
 
 [b][size=120]tools/pkg_patch_refresh.py[/size][/b]
 
 [list]
-[*] [b]--materialize <file>[/b] — pulls an upstream file into the working area, so edits are made to real source with full compiler and LSP context
-[*] [b]Base commit pinning[/b] — the package records the upstream commit it was authored against and always diffs against that, so pulling new upstream commits does not change existing patches
-[*] [b]--rebase-base[/b] — moves the package onto current upstream. Unedited files fast-forward; real overlaps leave standard conflict markers in the working copy, and refresh will not run until they are resolved
-[*] [b]Drift detection[/b] — a manifest records the hash of every generated entry. A hand-edited patches/ or files/ entry produces a warning naming it, then is overwritten
-[*] [b].pkgignore[/b] — excludes design docs and dev scripts from classification. Without it they are treated as new sources and shipped inside the firmware
+[*] --materialize <file> pulls an upstream file into the working area, so you edit real source with full compiler and LSP context
+[*] The package records the upstream commit it was authored against and always diffs against that, so pulling new upstream commits leaves existing patches alone
+[*] --rebase-base moves the package onto current upstream. Unedited files fast-forward. Real overlaps leave standard conflict markers in the working copy, and refresh will not run until they are resolved
+[*] A manifest records the hash of every generated entry, so a hand-edited patches/ or files/ entry produces a warning naming it, then gets overwritten
+[*] .pkgignore keeps design docs and dev scripts out of classification. Without it they are treated as new sources and shipped inside the firmware
 [/list]
 
 [b][size=120]Composition[/size][/b]
@@ -46,10 +45,10 @@ write patches by hand or decide where anything goes.
 
 Cleans, runs the test suite with the package active, refreshes, and zips
 patches/ and files/ into pkg_dist/. A failing suite produces no artifact. The
-zip is size-checked against PKG_MAX_SIZE, 200KB by default, and deleted if it
+zip is size-checked against PKG_MAX_SIZE, 1MB by default, and deleted if it
 exceeds it.
 
-[b]Two things to know[/b]
+[b]Refresh before you build[/b]
 
 The build reads the generated patches/ and files/ directories, never the working
 area. Editing a source without refreshing produces a successful build, with no
@@ -58,8 +57,10 @@ patches are missing entirely configures and builds and contains none of that
 package. Run refresh before building; the forth-core build script does it as its
 first step.
 
-Everything in a package directory is now tracked in git, including the working
-area. In v0.2 it was gitignored as regenerable scratch, which it is not: refresh
+[b]What is tracked in git[/b]
+
+Everything in a package directory, including the working area. In v0.2 it was
+gitignored as regenerable scratch, which it isn't: refresh
 treats a missing working file as an instruction to delete its generated output,
 so a fresh clone deleted the compiler-visible source on its first refresh. The
 cost of tracking both is committed redundancy between a working file and its
