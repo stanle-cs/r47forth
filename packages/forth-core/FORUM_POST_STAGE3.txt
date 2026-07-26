@@ -16,7 +16,8 @@ SQ2 is private to the program it sits in. TWICE has GLOBAL after it. That moves
 it to the global dictionary, where it survives power-off and backup/restore and
 can be called from the keyboard. Program-local is the default because two
 programs that both define SQ2 should not affect each other. Definitions are
-scanned before the program runs. A word can be used above the line that defines it.
+scanned before the program runs. A word can be used above the line that defines
+it.
 
 Control flow from source is IF/ELSE/THEN, BEGIN/UNTIL, BEGIN/AGAIN and
 BEGIN/WHILE/REPEAT. RECURSE, IMMEDIATE and FORGET are also in.
@@ -39,7 +40,8 @@ it.
 [b]Sample program[/b]
 
 Two normal R47 programs. FDEMO is the main one; NATADD is a global label called
-from Forth. The right arrow is the calculator's arrow glyph, not - followed by >.
+from Forth. The right arrow is the calculator's arrow glyph, not - followed by
+>.
 
 [code]LBL 'FDEMO'
 »FORTH
