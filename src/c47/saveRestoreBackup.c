@@ -570,6 +570,31 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
   }
 
 
+  // A memory region count read from backup.cfg says how many entries of freeMemoryRegions or allocatedMemoryRegions freeList.c may walk, and neither table can
+  // pass its ceiling while the calculator runs. A count outside 0..ceiling therefore says the file's allocator image cannot describe its own tables, and there
+  // is no value to clamp it to that leaves a usable calculator - the ceiling itself is the state freeList.c exit(-2)s on. Report it and let the caller refuse
+  // the file, as it already does for a wrong RAM size. This is a coherence check, not the bound on the restore: those writes are bounded by the destination.
+  static bool_t restoredRegionCountIsUsable(int32_t count, int32_t ceiling, const char *valueName) {
+    if(count < 0 || count > ceiling) {
+      printf("Cannot restore calc's memory from file %s! %s is %" PRId32 ", outside 0 to %" PRId32 "\n", backupFileName, valueName, count, ceiling);
+      return false;
+    }
+    return true;
+  }
+
+
+  // Release the parameter list read out of the file. Every path that gives up on a file after building the list has to come through here.
+  static void freeConfigFileParams(void) {
+    paramCurrent = paramHead;
+    while(paramHead) {
+      paramHead = paramHead->next;
+      free(paramCurrent->param);
+      free(paramCurrent);
+      paramCurrent = paramHead;
+    }
+  }
+
+
   static void restoreStateValue(const void *buffer, uint32_t size, const char *valueName, const char *valueType) {
     char value[200], *typePtr, *valuePtr;
 
@@ -807,6 +832,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
       printf("       Backup file      Program\n");
       printf("ramSize blocks %6u           %6d\n", ramSizeInBlocks, RAM_SIZE_IN_BLOCKS);
       printf("ramSize bytes  %6u           %6d\n", TO_BYTES(ramSizeInBlocks), TO_BYTES(RAM_SIZE_IN_BLOCKS));
+      freeConfigFileParams();
       return;
     }
     else if(backupVersion == 0 || backupVersion < 1011) {
@@ -816,6 +842,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
       sprintf(ss, "Cannot restore calc's memory from file %s! File %s has a too low version number.", backupFileName, backupFileName);
       userAbortf(ss);
       userAbortf("It is proposed that you save a state file from a prior simulator version and import said state file into this version.\n");
+      freeConfigFileParams();
       return;
     }
 
@@ -823,13 +850,28 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
 
     // The order in which parameters are restored doesn't matter
     // When a parameter is removed, simply remove the corresponding saveStateValue(...) and restoreStateValue(...) lines.
+    // Both region counts are read into locals and checked before anything is committed, and ahead of the ram hexDump so that a file refused here leaves the
+    // calculator doFnReset() has already put in a good state rather than one with half a pool in it. A parameter the file omits leaves its local at the live
+    // value, as for any other field.
+    int32_t restoredFreeRegions      = numberOfFreeMemoryRegions;
+    int32_t restoredAllocatedRegions = numberOfAllocatedMemoryRegions;
+    restoreStateValue(&restoredFreeRegions,            sizeof(restoredFreeRegions),                                 "numberOfFreeMemoryRegions",      "int32");
+    restoreStateValue(&restoredAllocatedRegions,       sizeof(restoredAllocatedRegions),                            "numberOfAllocatedMemoryRegions", "int32");
+    if(!restoredRegionCountIsUsable(restoredFreeRegions,      MAX_FREE_REGIONS,      "numberOfFreeMemoryRegions"     ) ||
+       !restoredRegionCountIsUsable(restoredAllocatedRegions, MAX_ALLOCATED_REGIONS, "numberOfAllocatedMemoryRegions")) {
+      refreshScreen(92);
+      printf("Performing RESET\n");
+      freeConfigFileParams();
+      return;
+    }
+    numberOfFreeMemoryRegions      = restoredFreeRegions;
+    numberOfAllocatedMemoryRegions = restoredAllocatedRegions;
+
     restoreStateValue(ram,                             TO_BYTES(RAM_SIZE_IN_BLOCKS),                                "ram",                            "hexDump");
-    restoreStateValue(&numberOfFreeMemoryRegions,      sizeof(numberOfFreeMemoryRegions),                           "numberOfFreeMemoryRegions",      "int32");
     // The size argument is what stops the hexDump reader writing off the end, so it has to be the room the destination actually has, the way every other call
     // here passes a sizeof(). It used to be the file's own region count multiplied out, which made the bound the file's to choose; these writes now cannot
     // leave their table whatever any count says.
     restoreStateValue(freeMemoryRegions,               sizeof(*freeMemoryRegions) * MAX_FREE_REGIONS,               "freeMemoryRegions",              "hexDump"); // as config.c allocates it
-    restoreStateValue(&numberOfAllocatedMemoryRegions, sizeof(numberOfAllocatedMemoryRegions),                      "numberOfAllocatedMemoryRegions", "int32");
     restoreStateValue(allocatedMemoryRegions,          sizeof(allocatedMemoryRegions),                              "allocatedMemoryRegions",         "hexDump");
 
     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "allNamedVariables",              "c47Ptr");
@@ -1399,13 +1441,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
 
 
     // Freeing the space occupied by all the configuration parameters
-    paramCurrent = paramHead;
-    while(paramHead) {
-      paramHead = paramHead->next;
-      free(paramCurrent->param);
-      free(paramCurrent);
-      paramCurrent = paramHead;
-    }
+    freeConfigFileParams();
 
     // Sanitise restored short integers: the backup restores raw register bytes, so a file written by an older build can
     // carry values wider than the word size. The mask and sign bit were restored above; clamp every short-integer
