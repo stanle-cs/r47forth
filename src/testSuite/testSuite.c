@@ -55,6 +55,7 @@ void covDerivPgm(uint16_t order);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
 void covIntegrateErr(uint16_t which);
+void covMvarKey(uint16_t which);
 void covIntegratePgm(uint16_t unusedButMandatoryParameter);
 void covSumProd(uint16_t which);
 void covISumProd(uint16_t which);
@@ -234,6 +235,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
   {"fnIntegrateErrCov",      covIntegrateErr, 1 },
+  {"fnMvarKeyCov",           covMvarKey, 1 },
   {"fnIntegratePgmCov",      covIntegratePgm, 1 },
   {"fnSumProdCov",           covSumProd, 1 },
   {"fnISumProdCov",          covISumProd, 1 },
@@ -1450,6 +1452,69 @@ void covIntegrateErr(uint16_t which) {
     currentSolverProgram = 9999;   // >= numberOfLabels: no program specified
     fnIntegrate(FIRST_NAMED_VARIABLE);
   }
+}
+
+static int16_t covMvarKeyClass(uint16_t key) {
+  // Decode one unshifted MVAR softkey (1..6) exactly as the keyboard does and classify it: 1 selects the menu variable, 2 opens the integral TOOL menu,
+  // 3 is integral y to x, 0 is no operation, 9 is anything else. Classifying keeps the corpus off the item numbers, which move as items are added.
+  char data[2] = {(char)('0' + key), 0};
+  const int16_t item = determineFunctionKeyItem_C47(data, false, false);
+  switch(item) {
+    case ITM_Sfdx_VAR:     return 1;
+    case -MNU_Sf_TOOL:     return 2;
+    case ITM_INTEGRAL_YX:  return 3;
+    case ITM_NOP:          return 0;
+    default:               return 9;
+  }
+}
+
+void covMvarKey(uint16_t which) {
+  // Classify one softkey of the integrator's MVAR menu into X. which 1..6: the menu of a 6-MVAR program armed by the interactive integrator, where every key selects
+  // its variable. which 11..16: the same keys over the formula A+B+C, where parseEquation reserves items 4 and 5 for the TOOL and integral-y-to-x action keys and pads
+  // the slots between with empty names.
+  static const uint8_t pgmV[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'V',            // LBL "V"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'A', // MVAR "A"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'B',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'C',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'D',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'E',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'F',
+    ITM_SQUARE,                                        // X^2
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
+  };
+  int16_t keyClass;
+
+  currentSolverStatus = 0;
+  currentMvarLabel = INVALID_VARIABLE;
+  if(which <= 6) {
+    if(findNamedLabel("V", GLOBAL_LABELS) == INVALID_VARIABLE) {
+      covWriteAndLoadPgm(pgmV, sizeof(pgmV));
+    }
+    const calcRegister_t label = findNamedLabel("V", GLOBAL_LABELS);
+    if(label == INVALID_VARIABLE) {
+      printf("\nUnknown global label: V\n");
+      abortTest();
+      return;
+    }
+    fnIntegrate(label);            // interactive selection, as Integral f d makes it
+    showSoftmenu(-MNU_MVAR);
+    showSoftmenuCurrentPart();     // the draw that fills the menu content, as a screen refresh does
+    keyClass = covMvarKeyClass(which);
+  }
+  else {
+    if(numberOfFormulae == 0) {
+      fnEqNew(NOPARAM);
+    }
+    setEquation(currentFormula, "A+B+C");
+    showSoftmenu(-MNU_Sf);         // the formula integrator opens its MVAR menu through here
+    showSoftmenuCurrentPart();
+    keyClass = covMvarKeyClass(which - 10);
+  }
+  popSoftmenu();
+  currentSolverStatus = 0;
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(keyClass, REGISTER_REAL34_DATA(REGISTER_X));
 }
 
 void covIntegratePgm(uint16_t unusedButMandatoryParameter) {

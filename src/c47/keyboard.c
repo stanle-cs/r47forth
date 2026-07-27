@@ -137,13 +137,13 @@ static void executeFunction(const char *data, int16_t item_);
           item = MNU_DYNAMIC;
         }
 
-//integral MNU_Sf
-        else if((IS_EQN_INTEGRATE) && dynamicMenuItem == 4) {
+//integral MNU_Sf: items 4 and 5 are the two action keys only in the formula menu, where parseEquation reserves them; a program's MVAR list puts its own variables there
+        else if((currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && (IS_EQN_INTEGRATE) && dynamicMenuItem == 4) {
           item = -MNU_Sf_TOOL;
         }
 
 //integral y to x
-        else if((IS_EQN_INTEGRATE) && dynamicMenuItem == 5) {
+        else if((currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && (IS_EQN_INTEGRATE) && dynamicMenuItem == 5) {
           item = ITM_INTEGRAL_YX;
         }
 

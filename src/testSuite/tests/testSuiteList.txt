@@ -452,7 +452,8 @@ tvm_cov
 ; clear - clcvar_cov clears the loaded sample programs' local variables,
 ; matrix2_cov leaves the indexed-matrix pointer set, serialize_state_cov saves
 ; the loaded programs and reloads the whole state from file, pgm_solve_cov
-; appends a program to memory, histo_cov builds a HISTO matrix from the
+; appends a program to memory, mvarmenu_cov appends one and leaves a formula in
+; the pool, histo_cov builds a HISTO matrix from the
 ; statistical accumulator, clearvars_cov deletes named variables, and
 ; program_flow_cov appends programs and then clears them all - so they must run
 ; after programs.txt (which consumes the pristine sample-program fixture), not
@@ -467,6 +468,7 @@ named_variable_cov
 stats_register_cov
 serialize_state_cov
 pgm_solve_cov
+mvarmenu_cov
 histo_cov
 clearvars_cov
 program_flow_cov
