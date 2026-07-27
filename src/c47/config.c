@@ -1651,6 +1651,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     // allocate space for the named variable list
     numberOfNamedVariables = 0;
     allNamedVariables = NULL;
+    invalidateNamedVariableCache();             // the table is gone: nothing findNamedVariable() remembers describes it any more
 
     initSimEqMatABX();
 

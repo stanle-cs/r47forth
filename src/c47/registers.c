@@ -888,6 +888,17 @@ void allocateNamedVariable(const char *variableName, dataType_t dataType, uint16
 
 
 
+static uint16_t lastFoundNamedVariables[3] = {UINT16_MAX, UINT16_MAX, UINT16_MAX}; // indices of the last three scan hits, trusted only after the entry's stored name re-matches the query
+static uint8_t  lastFoundNamedVariableInsert = 0;
+
+
+void invalidateNamedVariableCache(void) {
+  lastFoundNamedVariables[0] = UINT16_MAX;
+  lastFoundNamedVariables[1] = UINT16_MAX;
+  lastFoundNamedVariables[2] = UINT16_MAX;
+}
+
+
 calcRegister_t findNamedVariable(const char *variableName) {
   calcRegister_t regist = INVALID_VARIABLE;
   uint8_t len = stringGlyphLength(variableName);
@@ -900,12 +911,22 @@ calcRegister_t findNamedVariable(const char *variableName) {
     return regist;
   }
 
+  const size_t nameByteLength = stringByteLength(variableName);
+  for(uint32_t c = 0; c < 3; c++) { // exact-bytes probe of the last three hits; a folded-form query misses here and takes the scan below
+    const uint16_t cached = lastFoundNamedVariables[c];
+    if(cached < numberOfNamedVariables) {
+      const uint8_t *storedName = allNamedVariables[cached].variableName;
+      if(storedName[0] == nameByteLength && memcmp(storedName + 1, variableName, nameByteLength) == 0) {
+        return cached + FIRST_NAMED_VARIABLE;
+      }
+    }
+  }
+
   #if defined(VERBOSE_REGISTERS)
     printStatus(0, "findNamedVariable", force);
   #endif //VERBOSE_REGISTERS
   //printf("|%20s|%20s|\n",(char *)(allNamedVariables[0].variableName + 1), variableName);
   // Exact-bytes fast path first; the second compare treats sub- and superscript glyphs as their plain form.
-  const size_t nameByteLength = stringByteLength(variableName);
   uint16_t foldedName[7];
   const int32_t foldedLength = foldNameToCharCodes(variableName, foldedName, 7); // 1..7 glyphs checked at entry; on overflow (-1) no candidate compares equal
   for(int i = 0; i < numberOfNamedVariables; i++) {
@@ -913,6 +934,8 @@ calcRegister_t findNamedVariable(const char *variableName) {
     if((storedName[0] == nameByteLength && memcmp(storedName + 1, variableName, nameByteLength) == 0)
         || nameEqualsPrefolded((const char *)(storedName + 1), foldedName, foldedLength)) {
       regist = i + FIRST_NAMED_VARIABLE;
+      lastFoundNamedVariables[lastFoundNamedVariableInsert] = (uint16_t)i;
+      lastFoundNamedVariableInsert = (lastFoundNamedVariableInsert + 1) % 3;
       break;
     }
   }
@@ -989,6 +1012,7 @@ void fnDeleteVariable(uint16_t regist) {
     allNamedVariables[numberOfNamedVariables - 1].variableName[1] = 0;
     reduceC47Blocks(allNamedVariables, TO_BLOCKS(sizeof(namedVariableHeader_t) * numberOfNamedVariables), TO_BLOCKS(sizeof(namedVariableHeader_t) * (numberOfNamedVariables - 1)));
     numberOfNamedVariables -= 1;
+    invalidateNamedVariableCache();             // one entry gone and the ones after it shifted: no remembered index still describes the table
     // The table compacted: re-anchor the cached solver/plot variable so it keeps tracking the same variable.
     if(currentSolverVariable == regist) {
       currentSolverVariable = INVALID_VARIABLE;
