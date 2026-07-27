@@ -604,6 +604,7 @@ int convertKeyCode(int key) {
 
                                                   //uint32_t now, previousRefresh, nextAutoRepeat = 0;      // removed autorepeat stuff
 
+    stackWatermarkAnchor();                                    // the shallowest frame of the run: everything the watermark reports is measured below this
     c47MemInBlocks = 0;
     gmpMemInBytes = 0;
     mp_set_memory_functions(allocGmp, reallocGmp, freeGmp);
