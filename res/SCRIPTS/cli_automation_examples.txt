@@ -59,6 +59,8 @@ Named variable as a program operand:
   encode, rejig reads the word as a register name and rejects it (invalid register: cva);  STO A  is the lettered register A, never a variable of that name.
   Reserved variables follow the same quoting rule:  STO '↓Lim'  and  RCL '↓Lim'  reach the integration lower limit (↑Lim, ACC and the rest likewise), while a bare
   STO ↓Lim  fails like any bare name. This is how to set the ∫f d limits from a program:  2 STO '↑Lim'  0 STO '↓Lim'  then  ∫fd 'x'  integrates the named variable x.
+  ACC has no other route: as a command it is not programmable and a program carrying it stops at that step with "non-programmable function ACC", so the quoted store is
+  how the integration accuracy is set from a program:  1E-4 STO 'ACC'.  A loose accuracy is what makes a nested integral finish in a usable time.
   There is no plain command to delete a variable. CLV (also spelt DELITM) needs a TAM argument, so it only works as a program step, not on the --exec line. Delete one
   from inside a short program, the step being  CLV 'cvb'  between an  LBL 'DEL'  and its  RTN.
   Unsure how an operand should be written? Decode a shipped program and copy the glyphs it prints:  ./rejig docs/appnotes/sources/AN0022/func.p47 -o out.txt  (look for
@@ -82,6 +84,15 @@ Export / import a register data file (.d47) (GUI EXPreg / IMPORTr need a file ch
   (expnrg <n> <file> exports R00..R(n-1), n up to 126; same filename-override rules as expreg.)
   (expreg <reg> <file>; impreg <file>; reg name as for reg, e.g. X, 00, A. The filename is verbatim, so the folder must exist; the GUI keeps .d47 in DATA/.)
   (Headless there is no chooser to open, so a file function reached without a filename stops with a cannot-read/write error and a note on stderr. Always name the file.)
+
+Write your own TSV from a running program (PRINTXY, printer flag clear):
+  With the printer flag clear  PRINTXY  writes one tab separated line to a dated  DATA\*.REGS.TSV  instead of printing it: register X in the first column, register Y in
+  the second. Push the value first and the label second, so the label lands in X:  RCL 00 'MY CASE' PRINTXY DROPX DROPX.  A running program can therefore log a row per
+  step of a long test and you read the file afterwards.
+  The file is opened, written and closed for each line, so a row already written survives whatever a later step does. Nothing is written while the calculator is on the
+  graph screen, so a program that has just plotted needs  CLSTK  first, which leaves the graph without stopping the run (CLRMOD and EXIT leave it too but both stop the
+  program, and EXITALL only closes menus).
+  A real is written through the display format, which can shorten 7080 to 7.08E+3 even under FIX 00. Store a count as a long integer and it is written as its digits.
 
 Stat graph at 1E-50 (both axes scaled):
   ./t47 --snapskiprefresh --exec 'clΣ; nim 1e-50; nim 1e-50; xeq Σ+; nim 4e-50; nim 2e-50; xeq Σ+; nim 9e-50; nim 3e-50; xeq Σ+; nim 16e-50; nim 4e-50; xeq Σ+; nim 25e-50; nim 5e-50; xeq Σ+; xeq SCATR; snap'

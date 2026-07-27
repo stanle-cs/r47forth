@@ -556,13 +556,24 @@
 #define USE_NEW_DEI_INTEGRATION_CODE     2 // 0 - use prior code. 1 - use new code. 2 - use new code with split point code.
 #define ENABLE_INTEGRATOR_FILE_OUTPUT    0 // 1 for PRINTXY to be done after every evaluation of the formula; Or the complex solver for every iteration;
 // Total PLOT, INT and SOLVE engines that may run at once, in any combination, counted by engineNestingDepth. Not levels below the first: at 3 INT(INT(INT)) runs and a
-// fourth engine is refused, at 2 INT(INT) runs and INT(INT(INT)) is refused. PLOT counts the same but runs only as the outermost. A self-referential program aborts
-// past the cap instead of overflowing the C stack. The DM42 stack carries one level less than the simulator.
-#if defined(DMCP_BUILD)
+// fourth engine is refused, at 2 INT(INT) runs and INT(INT(INT)) is refused. PLOT counts the same, and runs only as the outermost. Past the cap the program stops with
+// ERROR_NESTING_TOO_DEEP instead of overflowing the C stack. One level each way: the DM42's measured stack use leaves it the least room, the DM42n has more, and the
+// simulator runs on a host stack. This gates on OLD_HW and NEW_HW, not on DMCP_BUILD, which both calculators define.
+#if defined(OLD_HW)
   #define MAX_ENGINE_NESTING_DEPTH       2
-#else // !DMCP_BUILD
+#elif defined(NEW_HW)
   #define MAX_ENGINE_NESTING_DEPTH       3
-#endif // DMCP_BUILD
+#else // !OLD_HW && !NEW_HW
+  #define MAX_ENGINE_NESTING_DEPTH       4
+#endif // OLD_HW
+// Whether INT or SOLVE may run inside a plot. Measured: on the DM42 a plot alone takes 6932 bytes and INT inside INT takes 7684, the deepest it survives, while
+// a plot with an integral inside it hangs. The DM42n runs that same case and it takes 12020, well past what the DM42 has, so the hang is the overrun. Refused
+// there ahead of the count above. The DM42n has the room, so this gates on OLD_HW.
+#if defined(OLD_HW)
+  #define PLOT_NESTING_ALLOWED           0
+#else // !OLD_HW
+  #define PLOT_NESTING_ALLOWED           1
+#endif // OLD_HW
 #define ENABLE_COMPLEXSOLVER_FILE_OUTPUT 0 // 1 for PRINTXY to be done for the complex solver for every iteration; 2 to print the RPN function; Corrupts Reg_K
 #define INTEGRATION_TWO_STAGE_EXIT         // If set allows a level to complete before exiting the integrator
 #undef  INTEGRATION_TWO_STAGE_EXIT
@@ -770,7 +781,8 @@
 #define ERROR_PRINTING_DISABLED                   63
 #define ERROR_NO_STRING_IN_ALPHA_REGISTER         64
 #define ERROR_NO_EQUATION_DEFINED                 65
-#define LAST_ERROR_MESSAGE                        65
+#define ERROR_NESTING_TOO_DEEP                    66
+#define LAST_ERROR_MESSAGE                        66
 
 //Status output messages for time consuming tasks, to keep user informed
 #define LOADING_STATE_FILE                       100
