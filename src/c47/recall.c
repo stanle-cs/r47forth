@@ -282,6 +282,7 @@ void fnRecallConfig(uint16_t regist) {
     recallFromDtConfigDescriptor(compatibility_float2);   //spare
     recallFromDtConfigDescriptor(Norm_Key_00.func);
     xcopy(Norm_Key_00.funcParam, configToRecall->Norm_Key_00.funcParam, sizeof(Norm_Key_00.funcParam));
+    Norm_Key_00.funcParam[sizeof(Norm_Key_00.funcParam) - 1] = 0;             // the descriptor is a raw byte image, so a crafted register can arrive unterminated
     recallFromDtConfigDescriptor(Norm_Key_00.used);
     recallFromDtConfigDescriptor(    compatibility_byte2);
     recallFromDtConfigDescriptor(    compatibility_byte3);
