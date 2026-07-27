@@ -467,6 +467,12 @@ named_variable_cov
 stats_register_cov
 serialize_state_cov
 pgm_solve_cov
+
+; deriv_mvar_cov loads a program and creates the named variables x and p, so it
+; belongs with pgm_solve_cov after programs.txt and before the resetting
+; serialize_cov.
+deriv_mvar_cov
+
 histo_cov
 named_variable_cache_cov
 clearvars_cov
