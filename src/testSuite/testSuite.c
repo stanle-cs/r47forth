@@ -1140,7 +1140,29 @@ void covNamedVariableCache(uint16_t unusedButMandatoryParameter) {
     return;
   }
 
-  const char *cacheCovCleanup[] = {"cva", "cvb", "cvc", "cvd"};
+  // Delete the tail variable with the cache warm on it: its name must miss, and the survivors must be unaffected.
+  fnDeleteVariable(sub);
+  if(findNamedVariable("cvd") != INVALID_VARIABLE || findNamedVariable(STD_SUB_c "vd") != INVALID_VARIABLE
+      || findNamedVariable("cva") != cvaAfter || findNamedVariable("cvc") != cvcAfter || findNamedVariable("cvb") != cvbNew
+      || numberOfNamedVariables != before + 3) {
+    printf("\ncache-cov 6 delete tail: find(cvd)=%d find(sub-c vd)=%d vars %d->%d (both spellings of the deleted tail must miss)\n",
+           (int)findNamedVariable("cvd"), (int)findNamedVariable(STD_SUB_c "vd"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Re-use of the freed index by a different name: the deleted name must still miss, and the new name must own that index alone.
+  calcRegister_t cve = findOrAllocateNamedVariable("cve");
+  int32ToReal34(105, REGISTER_REAL34_DATA(cve));
+  if(cve != sub || findNamedVariable("cvd") != INVALID_VARIABLE || findNamedVariable("cve") != cve
+      || real34ToInt32(REGISTER_REAL34_DATA(findNamedVariable("cve"))) != 105) {
+    printf("\ncache-cov 7 index re-use: cve=%d (freed index %d), find(cvd)=%d find(cve)=%d (cvd must not answer with cve's register)\n",
+           (int)cve, (int)sub, (int)findNamedVariable("cvd"), (int)findNamedVariable("cve"));
+    abortTest();
+    return;
+  }
+
+  const char *cacheCovCleanup[] = {"cva", "cvb", "cvc", "cve"};
   for(unsigned int i = 0; i < nbrOfElements(cacheCovCleanup); i++) {
     calcRegister_t regist = findNamedVariable(cacheCovCleanup[i]);
     if(regist == INVALID_VARIABLE) {

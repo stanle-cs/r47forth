@@ -831,6 +831,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
 
     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "allNamedVariables",              "c47Ptr");
     allNamedVariables = TO_PCMEMPTR(ramPtr);
+    invalidateNamedVariableCache();             // the whole table arrives from the backup image: nothing findNamedVariable() remembers describes it any more
 
     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "allFormulae",                    "c47Ptr");
     allFormulae = TO_PCMEMPTR(ramPtr);

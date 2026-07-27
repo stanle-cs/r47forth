@@ -888,8 +888,16 @@ void allocateNamedVariable(const char *variableName, dataType_t dataType, uint16
 
 
 
-static uint16_t lastFoundNamedVariables[3] = {UINT16_MAX, UINT16_MAX, UINT16_MAX}; // indices of the last three scan hits; an entry is trusted only after its stored name re-matches the query, so table edits need no invalidation here
+static uint16_t lastFoundNamedVariables[3] = {UINT16_MAX, UINT16_MAX, UINT16_MAX}; // indices of the last three scan hits, trusted only after the entry's stored name re-matches the query
 static uint8_t  lastFoundNamedVariableInsert = 0;
+
+
+void invalidateNamedVariableCache(void) {
+  lastFoundNamedVariables[0] = UINT16_MAX;
+  lastFoundNamedVariables[1] = UINT16_MAX;
+  lastFoundNamedVariables[2] = UINT16_MAX;
+}
+
 
 calcRegister_t findNamedVariable(const char *variableName) {
   calcRegister_t regist = INVALID_VARIABLE;
@@ -990,6 +998,7 @@ void fnDeleteVariable(uint16_t regist) {
     allNamedVariables[numberOfNamedVariables - 1].variableName[1] = 0;
     reduceC47Blocks(allNamedVariables, TO_BLOCKS(sizeof(namedVariableHeader_t) * numberOfNamedVariables), TO_BLOCKS(sizeof(namedVariableHeader_t) * (numberOfNamedVariables - 1)));
     numberOfNamedVariables -= 1;
+    invalidateNamedVariableCache();             // one entry gone and the ones after it shifted: no remembered index still describes the table
     // The table compacted: re-anchor the cached solver/plot variable so it keeps tracking the same variable.
     if(currentSolverVariable == regist) {
       currentSolverVariable = INVALID_VARIABLE;
