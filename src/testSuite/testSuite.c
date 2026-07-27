@@ -18,6 +18,7 @@ extern const int16_t menu_alpha_INTL[];
 extern const int16_t menu_alpha_intl[];
 extern const int16_t menu_REGIST[];
 extern const softmenu_t softmenu[];
+const char *_ioFileNameFromFilePath(ioFilePath_t path); // the suite's own HAL (hal/io.c); no public header declares it
 char line[100000], lastInParameters[10000], fileName[1000], *filePath, filePathName[2000], registerExpectedAndValue[2400], realString[2400];
 char testCaseName[1000], testCasePrefix[1000], testCaseSuffix[1000];
 int32_t lineNumber, numTestsFile, numTestsTotal, successfulTests, failedTests;
@@ -36,6 +37,7 @@ bool_t          screenChange;
 void (*funcToTest)(uint16_t);
 void runPgm(uint16_t unusedButMandatoryParameter);
 void covBackupRoundtrip(uint16_t unusedButMandatoryParameter);
+void covBackupCorruptRegionCount(uint16_t which);
 void covConvToSI(uint16_t itemNr);
 void covConvFromSI(uint16_t itemNr);
 void covStateRoundtrip(uint16_t unusedButMandatoryParameter);
@@ -212,6 +214,7 @@ const funcTest_t funcTestNoParam[] = {
   // Backup serializer round-trip: save the whole calculator state to backup.cfg and restore it. Exercises both directions of saveRestoreBackup.c.
   // Resets the calculator, so its corpus test must run last.
   {"fnBackupRoundtrip",      covBackupRoundtrip, 1 },
+  {"fnBackupBadRegionCount", covBackupCorruptRegionCount, 1 },
   {"covConvToSI",            covConvToSI, 1 },
   {"covConvFromSI",          covConvFromSI, 1 },
   {"fnPlotReset",            fnPlotReset           },
@@ -745,6 +748,72 @@ void covBackupRoundtrip(uint16_t unusedButMandatoryParameter) {
   loadTestPrograms = false;
   saveCalc();
   restoreCalc();
+}
+
+// Put one parameter line at the front of the backup file that saveCalc() has just written. restoreStateValue() takes the first line whose name matches and stops,
+// so a line prepended here shadows the genuine one further down while the rest of the file - including the hexDump bodies, which are found by walking on from
+// their own header line - stays byte for byte what the calculator wrote. That is the smallest way to hand the parser one corrupt field and nothing else.
+static void covShadowBackupLine(const char *shadowLine) {
+  const char *backupPath = _ioFileNameFromFilePath(ioPathBackup);   // not fileName: the suite has a global of that name
+  FILE       *f          = fopen(backupPath, "rb");
+  long        fileSize;
+  size_t      bytesRead;
+  char       *body;
+
+  if(f == NULL) {
+    return;
+  }
+  fseek(f, 0, SEEK_END);
+  fileSize = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  if(fileSize <= 0) {
+    fclose(f);
+    return;
+  }
+  body = malloc((size_t)fileSize);
+  if(body == NULL) {
+    fclose(f);
+    return;
+  }
+  bytesRead = fread(body, 1, (size_t)fileSize, f);
+  fclose(f);
+
+  f = fopen(backupPath, "wb");
+  if(f != NULL) {
+    fprintf(f, "%s\n", shadowLine);
+    fwrite(body, 1, bytesRead, f);
+    fclose(f);
+  }
+  free(body);
+}
+
+void covBackupCorruptRegionCount(uint16_t which) {
+  // Regression: a memory region count read from backup.cfg is checked before it is trusted. restoreCalc() multiplies the count by sizeof(freeMemoryRegion_t) to
+  // get the byte count the hexDump reader fills freeMemoryRegions or allocatedMemoryRegions with, and freeList.c then walks the same table that many entries
+  // deep. Neither table can pass its ceiling while the calculator runs, so a count outside 0..ceiling can only come from a corrupt file, and restoring it puts
+  // the writes and the walks past the end of a fixed-size table.
+  //
+  // Save a genuine backup, shadow one count line with an out-of-range value (which: 0 free regions, 1 allocated regions), and restore. The case reports 1 only
+  // if both counts are inside their tables afterwards, which they are when the loader refuses the file and leaves the reset calculator alone; without the check
+  // the file's count is live and the case reports 0.
+  //
+  // restoreCalc() bails when the sample programs are loaded, so clear that flag first, as covBackupRoundtrip does.
+  loadTestPrograms = false;
+  saveCalc();
+  covShadowBackupLine(which == 0 ? "numberOfFreeMemoryRegions:int32:100000" : "numberOfAllocatedMemoryRegions:int32:100000");
+  restoreCalc();
+
+  // Read the invariant off the globals before anything allocates: on a build without the check the tables are the file's, and the next allocation walks past them.
+  const bool_t regionCountsAreInsideTheirTables = (numberOfFreeMemoryRegions      >= 0 && numberOfFreeMemoryRegions      <= MAX_FREE_REGIONS     ) &&
+                                                  (numberOfAllocatedMemoryRegions >= 0 && numberOfAllocatedMemoryRegions <= MAX_ALLOCATED_REGIONS);
+
+  fnReset(CONFIRMED); // back onto a region table the allocator owns before a register is allocated for the result
+
+  longInteger_t li;
+  longIntegerInit(li);
+  uInt32ToLongInteger(regionCountsAreInsideTheirTables ? 1u : 0u, li);
+  convertLongIntegerToLongIntegerRegister(li, REGISTER_X);
+  longIntegerFree(li);
 }
 
 static void covStoTvm(int32_t value, uint16_t reg) {
