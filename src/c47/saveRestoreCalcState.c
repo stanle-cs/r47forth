@@ -1772,7 +1772,9 @@ int64_t stringToInt64(const char *str) {
       numberOfRegs = toInt16(tmpString);
       for(i=0; i<numberOfRegs; i++) {
         readLine(tmpString, TMP_STR_LENGTH); // key
-        if(allowUserKeys && (loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE)) { // Restore Keyboard Assignments only if they were save on the same calc model (C47->C47 or R47->R47)
+        // Restore Keyboard Assignments only if they were save on the same calc model (C47->C47 or R47->R47). The count is the file's, so the index is bounded here and
+        // not on the loop, which must still read a line per claimed entry to stay aligned with the stream.
+        if(allowUserKeys && i < (int16_t)nbrOfElements(kbd_usr) && (loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE)) {
           #if defined(LOADDEBUG)
             sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
             debugPrintf(8, "-", tmpString);
@@ -1814,13 +1816,17 @@ int64_t stringToInt64(const char *str) {
           #endif //LOADDEBUG
           str = tmpString;
           uint16_t key = toUint16(str);
-          userMenuItems[i].argumentName[0] = 0;
+          // The count is key/state slots, of which the save side writes up to 37*6, so it runs far past userMenuItems; MYMENU restores that array in its own section.
+          if(i < (int16_t)nbrOfElements(userMenuItems)) {
+            userMenuItems[i].argumentName[0] = 0;
+          }
 
           str = skip_to_space_newline(str);
           if(*str == ' ') {
             str = skip_space(str);
-            if((*str != '\n') && (*str != 0)) {
-              utf8ToStringWithLength((uint8_t *)str, tmpString + TMP_STR_LENGTH / 2, sizeof(userMenuItems[i].argumentName));
+            // 37*6 is the ceiling userKeyLabel is allocated to above, and the one setUserKeyArgument walks to; the key comes from the file.
+            if((*str != '\n') && (*str != 0) && key < 37/*keys*/ * 6/*states*/) {
+              utf8ToStringWithLength((uint8_t *)str, tmpString + TMP_STR_LENGTH / 2, sizeof(userMenuItems[0].argumentName));
               setUserKeyArgument(key, tmpString + TMP_STR_LENGTH / 2);
             }
           }
