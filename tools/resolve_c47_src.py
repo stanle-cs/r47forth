@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
 """Resolve c47_src with source overrides, or build a shadow tree for custom packages.
 
 Source mode (default):

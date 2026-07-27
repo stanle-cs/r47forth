@@ -3,6 +3,9 @@
 The build tree only: the package system, the Forth package, and how to install
 both. Design documents and development history stay in the working repo.
 
+Licence: GPL-3.0-only, same as c43. Full text in `COPYING` at the root of this
+branch.
+
 Built against upstream c43 `b8f79e486`. Newer upstream will often work, but
 the patches were generated against that commit, and the resolver checks every
 target before it applies anything. If a file has moved, configure stops with
@@ -17,6 +20,7 @@ tools/pkg_patch_refresh.py                   authoring: working area -> patches/
 tools/pkg_patch_apply.py  pkg_patch_common.py
 tools/test_pkg_patch_{common,refresh,resolver}.py
 custom_package/README.md                     the package system, in full
+COPYING                                      GPL-3.0 licence text
 packages/forth-core/patches/                 14 diffs against upstream files
 packages/forth-core/files/                   13 new sources
 ```
