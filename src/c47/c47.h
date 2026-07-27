@@ -542,6 +542,7 @@
   extern uint16_t               currentSolverProgram;
   extern uint16_t               currentSolverVariable;
   extern uint16_t               currentSolverNestingDepth;
+  extern uint16_t               engineNestingDepth;              // PLOT, INT and SOLVE combined, capped at MAX_ENGINE_NESTING_DEPTH; PLOT only at level 1
   extern uint16_t               numberOfFormulae;
   extern uint16_t               currentFormula;
   extern uint16_t               numberOfUserMenus;

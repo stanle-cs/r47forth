@@ -2659,6 +2659,12 @@ void graphRangeGuard(real_t *lo, real_t *hi) {
 //-----------------------------------------------------//-----------------------------------------------------
 void fnEqSolvGraph (uint16_t func) {
   #if defined(OPTION_GRAPHICS)
+      // Ahead of the first switch below, which reallocates the reserved UX/LX registers and reassigns graphVariabl1. fnMvarPlot refuses a programmed PLTf earlier,
+      // this covers the menu entries.
+      if((func == EQ_PLOT || func == EQ_PLOT_LU) && engineNestingRefused(true)) {
+        return;
+      }
+
       // No equation defined: error out before any stack or reserved-variable writes;
       // running these items without a formula crashed in parseEquation (NULL allFormulae).
       // A program plot has no formula by design (execute_rpn_function runs its program), so exempt it from the guard when the func is a plot func, RPN_GRAPHER is set,
@@ -2832,7 +2838,9 @@ void fnEqSolvGraph (uint16_t func) {
           #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
 
           initialize_function();
+          ++engineNestingDepth;                                // one engine level for the whole sweep
           graph_eqn(noInitDrwMx);
+          --engineNestingDepth;
 
           if(!getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
             setSystemFlag(FLAG_PLINE);
