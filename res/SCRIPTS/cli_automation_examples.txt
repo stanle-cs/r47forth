@@ -85,9 +85,9 @@ Export / import a register data file (.d47) (GUI EXPreg / IMPORTr need a file ch
   (expreg <reg> <file>; impreg <file>; reg name as for reg, e.g. X, 00, A. The filename is verbatim, so the folder must exist; the GUI keeps .d47 in DATA/.)
   (Headless there is no chooser to open, so a file function reached without a filename stops with a cannot-read/write error and a note on stderr. Always name the file.)
 
-Write your own TSV from a running program (PRINTXY, printer flag clear):
-  With the printer flag clear  PRINTXY  writes one tab separated line to a dated  DATA\*.REGS.TSV  instead of printing it: register X in the first column, register Y in
-  the second. Push the value first and the label second, so the label lands in X:  RCL 00 'MY CASE' PRINTXY DROPX DROPX.  A running program can therefore log a row per
+Write your own TSV from a running program (🖨xy, flag 🖨ACT clear):
+  With the system flag  🖨ACT  clear,  🖨xy  writes one tab separated line to a dated  DATA\*.REGS.TSV  instead of printing it: register X in the first column, register Y in
+  the second. Push the value first and the label second, so the label lands in X:  RCL 00 'MY CASE' 🖨xy DROPX DROPX.  A running program can therefore log a row per
   step of a long test and you read the file afterwards.
   The file is opened, written and closed for each line, so a row already written survives whatever a later step does. Nothing is written while the calculator is on the
   graph screen, so a program that has just plotted needs  CLSTK  first, which leaves the graph without stopping the run (CLRMOD and EXIT leave it too but both stop the

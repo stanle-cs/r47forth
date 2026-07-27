@@ -581,6 +581,8 @@
 #else // !OLD_HW
   #define PLOT_NESTING_ALLOWED           1
 #endif // OLD_HW
+#define STACK_WATERMARK                    // stack high-water mark into the named variables STCKGO, STCKSPN, STCKHI, STCKST, STCKHWM and STCKSPU; see memory.c
+#undef  STACK_WATERMARK
 #define ENABLE_COMPLEXSOLVER_FILE_OUTPUT 0 // 1 for PRINTXY to be done for the complex solver for every iteration; 2 to print the RPN function; Corrupts Reg_K
 #define INTEGRATION_TWO_STAGE_EXIT         // If set allows a level to complete before exiting the integrator
 #undef  INTEGRATION_TWO_STAGE_EXIT
@@ -622,6 +624,7 @@
   #undef FULLUPDATE
   #undef BUFFER_CLICK_DETECTION
   #undef JMSHOWCODES_KB3
+  #undef STACK_WATERMARK
 
   #undef  VERBOSE_LEVEL
   #define VERBOSE_LEVEL -1

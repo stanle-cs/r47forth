@@ -405,7 +405,9 @@ bool_t isFunctionOldParam16(uint16_t func) {
 
     //**RunFunction
     if(!itemNotAvail(func)) {
+      stackWatermarkBeforeDispatch();
       indexOfItems[func].func(param);
+      stackWatermarkAfterDispatch();
 
       #if defined(OPTION_IR_PRINTING)
         printTraceTI();
