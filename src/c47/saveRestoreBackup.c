@@ -583,6 +583,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
   }
 
 
+
   // Release the parameter list read out of the file. Every path that gives up on a file after building the list has to come through here.
   static void freeConfigFileParams(void) {
     paramCurrent = paramHead;
@@ -752,6 +753,48 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
   }
 
 
+  // Restore one c47Ptr - a block index into ram - together with the byte offset saveCalc() stored beside it where the field has one, and build the pointer from
+  // the two integers. TO_PCMEMPTR() is ram + p and has no range of its own, so ram + p is already undefined for a p the file chose, long before anything
+  // dereferences it; a pointer that never leaves the pool cannot be handed to scanLabelsAndPrograms() or the register walk as a way out of it.
+  //
+  // `current` is what the field holds now, and is what a file that omits the parameter leaves it holding. restoreStateValue() writes nothing when it finds no
+  // match, so a scratch variable shared across the fields hands an omitted one whichever pointer was restored before it: dropping the allFormulae line from a
+  // backup was measured leaving allFormulae bit-identical to allNamedVariables, two globals over one pool block - a double free waiting inside the pool, where
+  // neither ASan nor Valgrind can see it. Seeding from the field itself makes that unrepresentable rather than guarded against.
+  //
+  // Out of range clears *inThePool, which makes the caller refuse the file, and returns NULL rather than a pointer the caller might still use. C47_NULL is the
+  // file's own null and stays legal.
+  static void *restoredPoolPointer(void *current, const char *valueName, const char *offsetValueName, bool_t *inThePool) {
+    uint32_t blockAddress = TO_C47MEMPTR(current);
+    uint32_t byteOffset   = (current == NULL) ? 0 : (uint32_t)((uint8_t *)current - (uint8_t *)TO_PCMEMPTR(blockAddress));
+
+    restoreStateValue(&blockAddress, sizeof(blockAddress), valueName, "c47Ptr");
+    if(offsetValueName != NULL) {
+      restoreStateValue(&byteOffset, sizeof(byteOffset), offsetValueName, "uint32");
+    }
+
+    if(blockAddress == C47_NULL && byteOffset == 0) {
+      return NULL;
+    }
+    // Bound each number against what the format lets the writer produce, not against the pool as a whole. saveCalc() splits a pointer with TO_C47MEMPTR(),
+    // which divides by the block size, and stores the remainder as the offset, so an offset is never TO_BYTES(1) or more - bounding it by the pool instead
+    // would admit 65534 times the offsets the writer can emit. Both tests are against a constant, so the sum below cannot overflow and neither a reader nor a
+    // static analyser has to carry a relation between two file-supplied numbers to see it.
+    //
+    // The result is required to be strictly inside the pool. A block index of RAM_SIZE_IN_BLOCKS would be the one-past-the-end position, which C defines as a
+    // pointer and which firstFreeProgramByte could in principle hold on a full pool - but every consumer here dereferences what it is given, and letting one
+    // through was measured to walk isAtEndOfPrograms() off the end. No saved file has been seen to carry it, so the file is refused rather than the pointer
+    // admitted: a refusal says so loudly, where the alternative is an out-of-bounds read.
+    if(blockAddress >= RAM_SIZE_IN_BLOCKS || byteOffset >= TO_BYTES(1)) {
+      printf("Cannot restore calc's memory from file %s! %s is block %" PRIu32 " + %" PRIu32 " bytes, outside the %" PRIu32 "-byte pool\n",
+             backupFileName, valueName, blockAddress, byteOffset, TO_BYTES(RAM_SIZE_IN_BLOCKS));
+      *inThePool = false;
+      return NULL;
+    }
+    return (uint8_t *)ram + TO_BYTES(blockAddress) + byteOffset;   // strictly inside: block <= RAM_SIZE_IN_BLOCKS-1 and offset <= TO_BYTES(1)-1
+  }
+
+
   //One-time migration of a pre-1016 float parameter into its new real or double variable.
   //Not an error: the old value is converted and reported, and the next save writes the new type.
   static void migrateFloatValue(void *buffer, const char *valueName, const char *newType) {
@@ -785,7 +828,8 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
 
   void restoreCalc(void) {
     printf("RestoreCalc\n");
-    uint32_t ramSizeInBlocks = 0, ramPtr = 0, backupVersion = 0;
+    uint32_t ramSizeInBlocks = 0, backupVersion = 0;
+    bool_t   poolPointersInRange = true;
     int ret;
     //save and restore screenData is not mandatory
     //uint8_t *loadedScreen = malloc(SCREEN_WIDTH * SCREEN_HEIGHT / 8);
@@ -881,63 +925,40 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     restoreStateValue(freeMemoryRegions,               sizeof(*freeMemoryRegions) * MAX_FREE_REGIONS,               "freeMemoryRegions",              "hexDump"); // as config.c allocates it
     restoreStateValue(allocatedMemoryRegions,          sizeof(allocatedMemoryRegions),                              "allocatedMemoryRegions",         "hexDump");
 
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "allNamedVariables",              "c47Ptr");
-    allNamedVariables = TO_PCMEMPTR(ramPtr);
+    allNamedVariables = restoredPoolPointer(allNamedVariables, "allNamedVariables", NULL, &poolPointersInRange);
     invalidateNamedVariableCache();             // the whole table arrives from the backup image: nothing findNamedVariable() remembers describes it any more
+    allFormulae = restoredPoolPointer(allFormulae, "allFormulae", NULL, &poolPointersInRange);
+    userMenus = restoredPoolPointer(userMenus, "userMenus", NULL, &poolPointersInRange);
+    userKeyLabel = restoredPoolPointer(userKeyLabel, "userKeyLabel", NULL, &poolPointersInRange);
+    statisticalSumsPointer = restoredPoolPointer(statisticalSumsPointer, "statisticalSumsPointer", NULL, &poolPointersInRange);
+    savedStatisticalSumsPointer = restoredPoolPointer(savedStatisticalSumsPointer, "savedStatisticalSumsPointer", NULL, &poolPointersInRange);
+    labelList = restoredPoolPointer(labelList, "labelList", NULL, &poolPointersInRange);
+    programList = restoredPoolPointer(programList, "programList", NULL, &poolPointersInRange);
+    currentSubroutineLevelData = restoredPoolPointer(currentSubroutineLevelData, "currentSubroutineLevelData", NULL, &poolPointersInRange);
+    currentLocalFlags = restoredPoolPointer(currentLocalFlags, "currentLocalFlags", NULL, &poolPointersInRange);
+    currentLocalRegisters = restoredPoolPointer(currentLocalRegisters, "currentLocalRegisters", NULL, &poolPointersInRange);
 
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "allFormulae",                    "c47Ptr");
-    allFormulae = TO_PCMEMPTR(ramPtr);
+    beginOfProgramMemory = restoredPoolPointer(beginOfProgramMemory, "beginOfProgramMemory", "beginOfProgramMemoryOffset", &poolPointersInRange);
+    firstFreeProgramByte = restoredPoolPointer(firstFreeProgramByte, "firstFreeProgramByte", "firstFreeProgramByteOffset", &poolPointersInRange);
+    firstDisplayedStep = restoredPoolPointer(firstDisplayedStep, "firstDisplayedStep", "firstDisplayedStepOffset", &poolPointersInRange);
+    currentStep = restoredPoolPointer(currentStep, "currentStep", "currentStepOffset", &poolPointersInRange);
 
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "userMenus",                      "c47Ptr");
-    userMenus = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "userKeyLabel",                   "c47Ptr");
-    userKeyLabel = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "statisticalSumsPointer",         "c47Ptr");
-    statisticalSumsPointer = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "savedStatisticalSumsPointer",    "c47Ptr");
-    savedStatisticalSumsPointer = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "labelList",                      "c47Ptr");
-    labelList = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
-    programList = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
-    currentSubroutineLevelData = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentLocalFlags",              "c47Ptr");
-    currentLocalFlags = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentLocalRegisters",          "c47Ptr");
-    currentLocalRegisters = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "beginOfProgramMemory",           "c47Ptr"); // beginOfProgramMemory pointer to block
-    beginOfProgramMemory = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "beginOfProgramMemoryOffset",     "uint32"); // beginOfProgramMemory offset within block
-    beginOfProgramMemory += ramPtr;
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "firstFreeProgramByte",           "c47Ptr"); // firstFreeProgramByte pointer to block
-    firstFreeProgramByte = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "firstFreeProgramByteOffset",     "uint32"); // firstFreeProgramByte offset within block
-    firstFreeProgramByte += ramPtr;
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "firstDisplayedStep",             "c47Ptr"); // firstDisplayedStep pointer to block
-    firstDisplayedStep = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "firstDisplayedStepOffset",       "uint32"); // firstDisplayedStep offset within block
-    firstDisplayedStep += ramPtr;
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentStep",                    "c47Ptr"); // currentStep pointer to block
-    currentStep = TO_PCMEMPTR(ramPtr);
-
-    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentStepOffset",              "uint32"); // currentStep offset within block
-    currentStep += ramPtr;
+    // Every field above is restored before this is tested, so one file reports every pointer it got wrong rather than only the first. A file that describes
+    // pointers into some other pool is refused for the same reason as one whose region counts cannot describe its tables: nothing here can repair it, and the
+    // next thing to run is scanLabelsAndPrograms() walking program memory through exactly these pointers.
+    //
+    // Unlike the region-count check above, this one cannot simply return. That one runs before anything is committed, so the calculator doFnReset() built at
+    // entry is still intact; by here ram holds the file's bytes, the region counts are the file's, and every pointer that passed has been assigned - while the
+    // one that failed was assigned the NULL restoredPoolPointer() returns. Leaving that mixture behind was measured: beginOfProgramMemory came out NULL against
+    // a pool full of file data, surviving only because isAtEndOfPrograms() happens to test for NULL, where defineCurrentProgramFromGlobalStepNumber() offsets
+    // programList without asking. So perform the reset this path has always claimed to.
+    if(!poolPointersInRange) {
+      refreshScreen(92);
+      printf("Performing RESET\n");
+      freeConfigFileParams();
+      doFnReset(CONFIRMED, loadAutoSav);
+      return;
+    }
 
     restoreStateValue(globalFlags,                     sizeof(globalFlags),                                         "globalFlags",                    "hexDump");
     restoreStateValue(errorMessage,                    ERROR_MESSAGE_LENGTH,                                        "errorMessage",                   "hexDump");
@@ -1419,7 +1440,6 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
 
 
     clearScreen(210); // implicit forceSBupdate();
-
 
 
     if(backupVersion < 1009) {                           //register header is already loaded with 32 bits
