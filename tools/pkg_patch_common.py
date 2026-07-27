@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
 """Shared parsing / validation helpers for patch-based package overlays
 (plain-diff design, PROPOSED_SPEC_CHANGES.md revision 2).
 

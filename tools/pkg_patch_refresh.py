@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
 """Patch-generation (`refresh`) tool for the plain-diff package overlay
 system (PROPOSED_SPEC_CHANGES.md, revision 2; automatic classification and
 the flat working directory added in a later revision — see the "Automatic

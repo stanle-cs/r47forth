@@ -276,6 +276,9 @@ pkg_build:
 	@cd $(PKG) && zip -r -q "$(CURDIR)/pkg_dist/$(notdir $(PKG)).zip" \
 		$(if $(wildcard $(PKG)/patches),patches) \
 		$(if $(wildcard $(PKG)/files),files)
+	@# GPL-3 sec.4/5: a conveyed copy must carry the licence. The zip leaves the
+	@# repo behind, so COPYING has to travel inside it.
+	@cd "$(CURDIR)" && zip -q -g "$(CURDIR)/pkg_dist/$(notdir $(PKG)).zip" COPYING
 	@ZIP="$(CURDIR)/pkg_dist/$(notdir $(PKG)).zip"; \
 	if [ ! -f "$$ZIP" ]; then \
 		echo "ERROR: pkg_build: $$ZIP was not created (package has neither patches/ nor files/?)" >&2; \
