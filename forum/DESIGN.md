@@ -5,7 +5,7 @@ Standing specification for every forum post published to
 any post, README or INSTALL text. It exists because five separate drafts were
 rejected for reading like a machine wrote them.
 
-Companion tooling lives beside this file: `aiaudit.py`, `framescan.py`.
+Companion tooling lives beside this file: `aiaudit.py`, `framescan.py` (same folder).
 
 ---
 
@@ -69,8 +69,8 @@ This is a constraint on the writing, not a polish pass at the end.
 Run both over every document before publishing:
 
 ```
-python3 custom_package/aiaudit.py    <files...>
-python3 custom_package/framescan.py  <files...>
+python3 forum/aiaudit.py    <files...>
+python3 forum/framescan.py  <files...>
 ```
 
 - `aiaudit.py` — phrase patterns from Wikipedia:Signs_of_AI_writing, formatting
@@ -99,6 +99,10 @@ the final gate; no scanner can tell whether it sounds like him.
 1. A download link that resolves.
 2. No claim that has not been verified. Hardware claims need real hardware.
 3. Correct thread attribution.
+4. Every distributed artifact carries `COPYING`. GPL-3 sections 4 and 5 require
+   a conveyed copy to ship the licence, and a download leaves the repo behind.
+   The release branch and both zips each lacked it until 2026-07-25; the repo
+   having `COPYING` at its root is not sufficient.
 
 **Tier 2 — the reader cannot act without**
 
@@ -110,7 +114,9 @@ the final gate; no scanner can tell whether it sounds like him.
 **Tier 3 — obligation**
 
 8. Backup and flash-at-your-own-risk disclaimer.
-9. GPL-3.0 provenance as a c43 derivative.
+9. GPL-3.0-only stated in the post and in the shipped README or INSTALL. The
+   licence is inherited from c43, not chosen: forth-core patches c43 sources and
+   links into the same binary.
 
 **Tier 4 — honest limits.** Every known behaviour that will surprise someone.
 
@@ -130,6 +136,8 @@ the final gate; no scanner can tell whether it sounds like him.
    `FORTH_NAME_MAX` is 31 (63 is `FORTH_TOKEN_MAX`, a different limit).
 4. Program listings byte-identical to the passing test fixtures.
 5. BBCode tags balanced; prose wrapped at 79 columns.
+6. `COPYING` present in the release branch and inside every zip. `pkg_build`
+   appends it automatically; hand-assembled artifacts need it added.
 
 ---
 

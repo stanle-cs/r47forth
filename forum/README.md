@@ -1,0 +1,42 @@
+# forum/
+
+Everything for writing and publishing forum posts to forum.swissmicros.com.
+
+```
+DESIGN.md            the specification. Read this first, always
+PROMPT_WRITE.md      paste into ChatGPT to draft a post
+PROMPT_AUDIT.md      paste into ChatGPT to audit a draft
+aiaudit.py           phrase patterns, formatting tells, sentence-length stylometry
+framescan.py         recurring frames, contrast tails, cross-document repetition
+drafts/              current post drafts
+```
+
+## Order of work
+
+1. Read `DESIGN.md`. It carries the locked decisions, the voice rules, the
+   content inventories and the publication gates.
+2. Draft with `PROMPT_WRITE.md`, or by hand against the spec.
+3. Run both scanners:
+
+   ```
+   python3 forum/aiaudit.py   forum/drafts/<post>.txt
+   python3 forum/framescan.py forum/drafts/<post>.txt
+   ```
+
+   Judge the flags. Roughly a third are factual enumerations that must not be
+   rewritten. Driving the count to zero makes the text worse.
+4. Audit with `PROMPT_AUDIT.md` in a fresh session of a **different** model
+   from the one that drafted. This is the step that finds what the scanners and
+   the author both miss.
+5. Check the publication gates in `DESIGN.md` section 5 before posting.
+
+## Why the prompts exist
+
+A model auditing its own output shares its blind spots. Rotating the reader is
+the only thing that has reliably surfaced new classes of tell: a fresh pass
+found five that repeated self-audits never saw, including damage left behind by
+the previous round of fixes.
+
+The scanners cover what can be checked mechanically. The prompts cover what
+needs a reader. Neither can tell whether it sounds like you, which is why the
+last gate is reading it yourself.
