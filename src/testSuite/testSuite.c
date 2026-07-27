@@ -1449,9 +1449,9 @@ void covIntegrate(uint16_t which) {
 
 void covIntegrateErr(uint16_t which) {
   // Drive the dispatch branches of the integrator (_fnIntegrate / fnPgmInt in integrate.c). which=0: a stack register whose letter names no program label ->
-  // ERROR_LABEL_NOT_FOUND; which=1: a named variable with no program specified -> ERROR_NO_PROGRAM_SPECIFIED; which=2: interactive selection of the loaded
-  // no-MVAR program T -> ERROR_NO_MVAR_FOUND; which=3: interactive selection of the loaded program M (leading MVAR) is accepted. 2 and 3 need the programs
-  // staged, so they run from pgm_solve_cov; 0 needs the letter T to name no label, so it runs from integrate_cov.
+  // ERROR_LABEL_NOT_FOUND; which=1: a named variable with no program specified -> ERROR_NO_PROGRAM_SPECIFIED; which=2 and 3: interactive selection of the loaded
+  // programs T (no MVAR, empty menu) and M (leading MVAR), each opening the MVAR menu the selection leads to so the list terminator write is covered (#500, #579).
+  // 2 and 3 need the programs staged, so they run from pgm_solve_cov; 0 needs the letter T to name no label, so it runs from integrate_cov.
   if(which == 0) {
     fnIntegrate(REGISTER_T);
   }
@@ -1469,7 +1469,10 @@ void covIntegrateErr(uint16_t which) {
       return;
     }
     currentSolverStatus = 0;
+    currentMvarLabel = INVALID_VARIABLE;   // take the menu from currentSolverProgram, as the interactive selection does
     fnIntegrate(label);
+    showSoftmenu(-MNU_MVAR);
+    popSoftmenu();
     currentSolverStatus = 0;   // disarm the interactive integrator a successful selection leaves armed
   }
 }
