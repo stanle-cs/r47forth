@@ -825,9 +825,12 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     // When a parameter is removed, simply remove the corresponding saveStateValue(...) and restoreStateValue(...) lines.
     restoreStateValue(ram,                             TO_BYTES(RAM_SIZE_IN_BLOCKS),                                "ram",                            "hexDump");
     restoreStateValue(&numberOfFreeMemoryRegions,      sizeof(numberOfFreeMemoryRegions),                           "numberOfFreeMemoryRegions",      "int32");
-    restoreStateValue(freeMemoryRegions,               sizeof(freeMemoryRegion_t) * numberOfFreeMemoryRegions,      "freeMemoryRegions",              "hexDump");
+    // The size argument is what stops the hexDump reader writing off the end, so it has to be the room the destination actually has, the way every other call
+    // here passes a sizeof(). It used to be the file's own region count multiplied out, which made the bound the file's to choose; these writes now cannot
+    // leave their table whatever any count says.
+    restoreStateValue(freeMemoryRegions,               sizeof(*freeMemoryRegions) * MAX_FREE_REGIONS,               "freeMemoryRegions",              "hexDump"); // as config.c allocates it
     restoreStateValue(&numberOfAllocatedMemoryRegions, sizeof(numberOfAllocatedMemoryRegions),                      "numberOfAllocatedMemoryRegions", "int32");
-    restoreStateValue(allocatedMemoryRegions,          sizeof(freeMemoryRegion_t) * numberOfAllocatedMemoryRegions, "allocatedMemoryRegions",         "hexDump");
+    restoreStateValue(allocatedMemoryRegions,          sizeof(allocatedMemoryRegions),                              "allocatedMemoryRegions",         "hexDump");
 
     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "allNamedVariables",              "c47Ptr");
     allNamedVariables = TO_PCMEMPTR(ramPtr);
