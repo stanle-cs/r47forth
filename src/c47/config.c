@@ -1882,6 +1882,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     currentSolverProgram = 0xffffu;
     currentSolverVariable = INVALID_VARIABLE;
     currentSolverNestingDepth = 0;
+    engineNestingDepth = 0;
     graphAccActive = false;
 
     graphVariabl1 = 0;

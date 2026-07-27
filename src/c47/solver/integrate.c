@@ -10,10 +10,6 @@
 #define INTEGRATEDEBUG // integrator debug prints
 #undef  INTEGRATEDEBUG
 
-// Cap integrator re-entry before a self-integrating program overflows the C stack. Dedicated, not the shared
-// currentSolverNestingDepth (which the solver/isumprod can leave inflated). MAX_INTEGRATOR_NESTING_DEPTH is in defines.h.
-static uint16_t integratorNestingDepth = 0;
-
 void fnPgmInt(uint16_t label) {
   if(FIRST_LABEL <= label && label <= LAST_LABEL) {
     currentSolverProgram = label - FIRST_LABEL;
@@ -122,6 +118,9 @@ void _fnIntegrate(uint16_t labelOrVariable, bool_t XY) {
   else if(FIRST_NAMED_VARIABLE <= labelOrVariable && labelOrVariable <= LAST_NAMED_VARIABLE) {
     real_t acc, ulim, llim, res;
     bool_t smallerEpsilon = false;
+    if(engineNestingRefused(false)) {
+      return;
+    }
     real34ToReal(REGISTER_REAL34_DATA(RESERVED_VARIABLE_ACC),  &acc);
     real34ToReal(REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM), &ulim);
     real34ToReal(REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM), &llim);
@@ -1580,9 +1579,10 @@ void integrate(calcRegister_t regist, const real_t *a, const real_t *b, real_t *
   ++currentSolverNestingDepth;
   setSystemFlag(FLAG_INTING);
   clearSystemFlag(FLAG_SOLVING);
-  if(++integratorNestingDepth > MAX_INTEGRATOR_NESTING_DEPTH) { // too deep: skip the heavy frame, abort via the integrator's own ERROR_SOLVER_ABORT unwind
+  if(++engineNestingDepth > MAX_ENGINE_NESTING_DEPTH) {          // too deep: skip the heavy frame. _fnIntegrate refuses on the same terms at entry
     realSetZero(res);
-    displayCalcErrorMessage(ERROR_SOLVER_ABORT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    programRunStop = PGM_WAITING;
+    thereIsSomethingToUndo = false;
   }
   else {
   #if USE_NEW_DEI_INTEGRATION_CODE > 0
@@ -1604,7 +1604,7 @@ void integrate(calcRegister_t regist, const real_t *a, const real_t *b, real_t *
     }
   #endif // USE_NEW_DEI_INTEGRATION_CODE
   }
-  --integratorNestingDepth;
+  --engineNestingDepth;
   if((--currentSolverNestingDepth) == 0) {
     clearSystemFlag(FLAG_INTING);
   }
