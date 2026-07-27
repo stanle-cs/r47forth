@@ -831,6 +831,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
 
     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "allNamedVariables",              "c47Ptr");
     allNamedVariables = TO_PCMEMPTR(ramPtr);
+    invalidateNamedVariableCache();             // the whole table arrives from the backup image: nothing findNamedVariable() remembers describes it any more
 
     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "allFormulae",                    "c47Ptr");
     allFormulae = TO_PCMEMPTR(ramPtr);
@@ -932,6 +933,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
     restoreStateValue(&displayFormatDigits,            sizeof(displayFormatDigits),                                 "displayFormatDigits",            "uint8");
     restoreStateValue(&timeDisplayFormatDigits,        sizeof(timeDisplayFormatDigits),                             "timeDisplayFormatDigits",        "uint8");
     restoreStateValue(&shortIntegerWordSize,           sizeof(shortIntegerWordSize),                                "shortIntegerWordSize",           "uint8");
+    shortIntegerWordSize = boundShortIntegerWordSize(shortIntegerWordSize);
     updateShortIntegerMasks();  // rederive shortIntegerMask and shortIntegerSignBit from the word size just restored; the file copies (older backups) are ignored
     restoreStateValue(&significantDigits,              sizeof(significantDigits),                                   "significantDigits",              "uint8");
     fractionDigits = 34;

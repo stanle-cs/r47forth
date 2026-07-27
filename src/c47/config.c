@@ -526,7 +526,9 @@ void fnClrMod(uint16_t unusedButMandatoryParameter) {        //clear input buffe
     clearSystemFlag(FLAG_IRFRAC);
     clearSystemFlag(FLAG_INTING);
     clearSystemFlag(FLAG_SOLVING);
-    programRunStop = PGM_STOPPED;
+    if(programRunStop != PGM_RUNNING) {                         // as a program step this leaves the graph and carries on; from the keyboard it still stops a halted run
+      programRunStop = PGM_STOPPED;
+    }
 
     if(calcMode == CM_NIM) {
       strcpy(aimBuffer, "+");
@@ -693,6 +695,16 @@ void fnGetWordSize(uint16_t unusedButMandatoryParameter) {
   temporaryInformation = TI_BITS;
 }
 
+
+
+// Bound a short integer word size arriving from a file. WSIZE's tamMinMax bounds the interactive path; the state file, backup.cfg and a config register supply it raw,
+// and every consumer shifts by it or by one less: config.c below, rotateBits.c:166, :223 and :313, mask.c:36. 0 already spells the widest word.
+uint8_t boundShortIntegerWordSize(uint8_t wordSize) {
+  if(wordSize < 1 || wordSize > MAX_SHORT_INTEGER_WORD_SIZE) {
+    return MAX_SHORT_INTEGER_WORD_SIZE;
+  }
+  return wordSize;
+}
 
 
 void updateShortIntegerMasks(void) {
@@ -1651,6 +1663,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     // allocate space for the named variable list
     numberOfNamedVariables = 0;
     allNamedVariables = NULL;
+    invalidateNamedVariableCache();             // the table is gone: nothing findNamedVariable() remembers describes it any more
 
     initSimEqMatABX();
 
@@ -1882,6 +1895,8 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     currentSolverProgram = 0xffffu;
     currentSolverVariable = INVALID_VARIABLE;
     currentSolverNestingDepth = 0;
+    engineNestingDepth = 0;
+    plotEngineActive = 0;
     graphAccActive = false;
 
     graphVariabl1 = 0;

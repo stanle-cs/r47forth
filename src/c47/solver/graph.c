@@ -1210,7 +1210,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       if(realCompareGreaterThan(x, x_max_r)) break;
 
       if(lastErrorCode == ERROR_SOLVER_ABORT || programRunStop == PGM_WAITING || exitKeyWaiting()) {   // R/S/EXIT or a nested-engine abort stops the plot (PGM_WAITING survives, lastErrorCode does not)
-        lastErrorCode = ERROR_SOLVER_ABORT;
+        lastErrorCode = engineNestingWasRefused ? ERROR_NESTING_TOO_DEEP : ERROR_SOLVER_ABORT;   // a refusal names itself
         if(programRunStop == PGM_RUNNING) {   // halt the outer program too (a plain plot does not otherwise set this); interactive plot left untouched
           programRunStop = PGM_WAITING;
         }
@@ -1234,7 +1234,7 @@ bool_t detectTrueDiscontinuityWithAsymptote(const real_t *y0, const real_t *y1, 
       execute_rpn_function_graphAcc();
 
       if(lastErrorCode == ERROR_SOLVER_ABORT || programRunStop == PGM_WAITING || exitKeyWaiting()) {   // catch the interrupt in the thin window, before this point is stored and x advanced
-        lastErrorCode = ERROR_SOLVER_ABORT;
+        lastErrorCode = engineNestingWasRefused ? ERROR_NESTING_TOO_DEEP : ERROR_SOLVER_ABORT;   // a refusal names itself
         if(programRunStop == PGM_RUNNING) { programRunStop = PGM_WAITING; }
         plotAborted = true;
         break;
@@ -2708,6 +2708,12 @@ void graphRangeGuard(real_t *lo, real_t *hi) {
 //-----------------------------------------------------//-----------------------------------------------------
 void fnEqSolvGraph (uint16_t func) {
   #if defined(OPTION_GRAPHICS)
+      // Ahead of the first switch below, which reallocates the reserved UX/LX registers and reassigns graphVariabl1. fnMvarPlot refuses a programmed PLTf earlier,
+      // this covers the menu entries.
+      if((func == EQ_PLOT || func == EQ_PLOT_LU) && engineNestingRefused(true)) {
+        return;
+      }
+
       // No equation defined: error out before any stack or reserved-variable writes;
       // running these items without a formula crashed in parseEquation (NULL allFormulae).
       // A program plot has no formula by design (execute_rpn_function runs its program), so exempt it from the guard when the func is a plot func, RPN_GRAPHER is set,
@@ -2881,7 +2887,11 @@ void fnEqSolvGraph (uint16_t func) {
           #endif // VERBOSE_SOLVER00 || VERBOSE_SOLVER0
 
           initialize_function();
+          ++engineNestingDepth;                                // one engine level for the whole sweep
+          ++plotEngineActive;
           graph_eqn(noInitDrwMx);
+          --plotEngineActive;
+          --engineNestingDepth;
 
           if(!getSystemFlag(FLAG_PCROS) && !getSystemFlag(FLAG_PBOX) && !getSystemFlag(FLAG_PPLUS)) {
             setSystemFlag(FLAG_PLINE);

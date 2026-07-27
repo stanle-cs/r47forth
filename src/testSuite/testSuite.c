@@ -57,6 +57,7 @@ void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
 void covIntegrateErr(uint16_t which);
 void covIntegratePgm(uint16_t unusedButMandatoryParameter);
+void covNamedVariableCache(uint16_t unusedButMandatoryParameter);
 void covSumProd(uint16_t which);
 void covISumProd(uint16_t which);
 void covProgramFlow(uint16_t which);
@@ -138,6 +139,8 @@ const funcTest_t funcTestNoParam[] = {
   {"fnRecallDiv",            fnRecallDiv           },
   {"fnRecallMax",            fnRecallMax           },
   {"fnRecallMin",            fnRecallMin           },
+  {"fnStoreConfig",          fnStoreConfig         },
+  {"fnRecallConfig",         fnRecallConfig        },
   {"fn2Sto",                 fn2Sto                },
   {"fn3Sto",                 fn3Sto                },
   {"fn2Rcl",                 fn2Rcl                },
@@ -237,6 +240,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnIntegrateCov",         covIntegrate, 1 },
   {"fnIntegrateErrCov",      covIntegrateErr, 1 },
   {"fnIntegratePgmCov",      covIntegratePgm, 1 },
+  {"fnNamedVarCacheCov",     covNamedVariableCache, 1 },
   {"fnSumProdCov",           covSumProd, 1 },
   {"fnISumProdCov",          covISumProd, 1 },
   {"fnProgramFlowCov",       covProgramFlow, 1 },
@@ -623,6 +627,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnResetTVM",             fnResetTVM            },
   {"fnSetADM",               fnSetADM              },
   {"fnSetDMX",               fnSetDMX              },
+  {"fnSetWordSize",          fnSetWordSize         },
   {"fnSetISM",               fnSetISM              },
   {"fnSetNDEC",              fnSetNDEC             },
   {"fnSetBaseNr",            fnSetBaseNr           },
@@ -1163,6 +1168,101 @@ void covLoadPgm(uint16_t unusedButMandatoryParameter) {
   };
   covWriteAndLoadPgm(pgmS, sizeof(pgmS));
   covWriteAndLoadPgm(pgmT, sizeof(pgmT));
+}
+
+void covNamedVariableCache(uint16_t unusedButMandatoryParameter) {
+  // findNamedVariable() keeps the indices of its last two scan hits and trusts one only after re-matching its stored name, so a lookup stays correct across
+  // creates, deletes that compact the list, and re-creates, with the cache warm at every step. Identity is asserted through a value stored in each variable.
+  uint16_t before = numberOfNamedVariables;
+  calcRegister_t cva = findOrAllocateNamedVariable("cva");
+  calcRegister_t cvb = findOrAllocateNamedVariable("cvb");
+  calcRegister_t cvc = findOrAllocateNamedVariable("cvc");
+  if(cva == INVALID_VARIABLE || cvb == INVALID_VARIABLE || cvc == INVALID_VARIABLE || numberOfNamedVariables != before + 3) {
+    printf("\ncache-cov 1 create: cva=%d cvb=%d cvc=%d vars %d->%d\n", (int)cva, (int)cvb, (int)cvc, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+  int32ToReal34(101, REGISTER_REAL34_DATA(cva));
+  int32ToReal34(102, REGISTER_REAL34_DATA(cvb));
+  int32ToReal34(103, REGISTER_REAL34_DATA(cvc));
+
+  // Repeated and alternating lookups return the same register every time; a third name in rotation must not disturb the other two.
+  for(int i = 0; i < 4; i++) {
+    if(findNamedVariable("cva") != cva || findNamedVariable("cvb") != cvb || findNamedVariable("cvc") != cvc || findNamedVariable("cva") != cva) {
+      printf("\ncache-cov 2 rotation %d: find returned a different register for an unchanged name\n", i);
+      abortTest();
+      return;
+    }
+  }
+
+  // Delete the middle variable with lookups warm on all three: the deleted name must miss, the survivors must follow the compaction, values prove identity.
+  fnDeleteVariable(cvb);
+  calcRegister_t cvaAfter = findNamedVariable("cva");
+  calcRegister_t cvcAfter = findNamedVariable("cvc");
+  if(findNamedVariable("cvb") != INVALID_VARIABLE || cvaAfter == INVALID_VARIABLE || cvcAfter == INVALID_VARIABLE
+      || real34ToInt32(REGISTER_REAL34_DATA(cvaAfter)) != 101 || real34ToInt32(REGISTER_REAL34_DATA(cvcAfter)) != 103
+      || numberOfNamedVariables != before + 2) {
+    printf("\ncache-cov 3 after delete: cvb=%d cva=%d cvc=%d vars %d->%d (cvb gone, survivors keep their values)\n",
+           (int)findNamedVariable("cvb"), (int)cvaAfter, (int)cvcAfter, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Re-create the deleted name: a fresh register, zeroed, and the survivors still resolve to their own values.
+  calcRegister_t cvbNew = findOrAllocateNamedVariable("cvb");
+  if(cvbNew == INVALID_VARIABLE || real34ToInt32(REGISTER_REAL34_DATA(cvbNew)) != 0
+      || findNamedVariable("cva") != cvaAfter || findNamedVariable("cvc") != cvcAfter || numberOfNamedVariables != before + 3) {
+    printf("\ncache-cov 4 re-create: cvbNew=%d cva=%d cvc=%d vars %d->%d (cvb zeroed, survivors unchanged)\n",
+           (int)cvbNew, (int)findNamedVariable("cva"), (int)findNamedVariable("cvc"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // A folded spelling and the stored spelling alternate onto the same variable.
+  calcRegister_t sub = findOrAllocateNamedVariable(STD_SUB_c "vd");
+  if(sub == INVALID_VARIABLE || findNamedVariable("cvd") != sub || findNamedVariable(STD_SUB_c "vd") != sub || findNamedVariable("cvd") != sub) {
+    printf("\ncache-cov 5 folded alternation: sub=%d plain=%d (both spellings must reach one variable)\n", (int)sub, (int)findNamedVariable("cvd"));
+    abortTest();
+    return;
+  }
+
+  // Delete the tail variable with the cache warm on it: its name must miss, and the survivors must be unaffected.
+  fnDeleteVariable(sub);
+  if(findNamedVariable("cvd") != INVALID_VARIABLE || findNamedVariable(STD_SUB_c "vd") != INVALID_VARIABLE
+      || findNamedVariable("cva") != cvaAfter || findNamedVariable("cvc") != cvcAfter || findNamedVariable("cvb") != cvbNew
+      || numberOfNamedVariables != before + 3) {
+    printf("\ncache-cov 6 delete tail: find(cvd)=%d find(sub-c vd)=%d vars %d->%d (both spellings of the deleted tail must miss)\n",
+           (int)findNamedVariable("cvd"), (int)findNamedVariable(STD_SUB_c "vd"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Re-use of the freed index by a different name: the deleted name must still miss, and the new name must own that index alone.
+  calcRegister_t cve = findOrAllocateNamedVariable("cve");
+  int32ToReal34(105, REGISTER_REAL34_DATA(cve));
+  if(cve != sub || findNamedVariable("cvd") != INVALID_VARIABLE || findNamedVariable("cve") != cve
+      || real34ToInt32(REGISTER_REAL34_DATA(findNamedVariable("cve"))) != 105) {
+    printf("\ncache-cov 7 index re-use: cve=%d (freed index %d), find(cvd)=%d find(cve)=%d (cvd must not answer with cve's register)\n",
+           (int)cve, (int)sub, (int)findNamedVariable("cvd"), (int)findNamedVariable("cve"));
+    abortTest();
+    return;
+  }
+
+  const char *cacheCovCleanup[] = {"cva", "cvb", "cvc", "cve"};
+  for(unsigned int i = 0; i < nbrOfElements(cacheCovCleanup); i++) {
+    calcRegister_t regist = findNamedVariable(cacheCovCleanup[i]);
+    if(regist == INVALID_VARIABLE) {
+      printf("\ncache-cov cleanup: %u not found\n", i);
+      abortTest();
+      return;
+    }
+    fnDeleteVariable(regist);
+  }
+  if(numberOfNamedVariables != before) {
+    printf("\ncache-cov cleanup: vars %d->%d (must return to the start count)\n", (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
 }
 
 void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter) {
