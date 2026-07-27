@@ -1730,9 +1730,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     shiftG = false;
     lastshiftF = false;
     lastshiftG = false;
-    secTick1 = false;
-    halfSecTick2 = false;
-    halfSecTick3 = false;
+    resetHalfSecTicks();
     skippedStackLines = false;
     iterations = false;
     explicitTaylorIterVisibilitySelection = false;
