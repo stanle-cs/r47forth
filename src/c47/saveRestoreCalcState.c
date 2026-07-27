@@ -1820,7 +1820,7 @@ int64_t stringToInt64(const char *str) {
           if(*str == ' ') {
             str = skip_space(str);
             if((*str != '\n') && (*str != 0)) {
-              utf8ToStringWithLength((uint8_t *)str, tmpString + TMP_STR_LENGTH / 2, TMP_STR_LENGTH / 2);
+              utf8ToStringWithLength((uint8_t *)str, tmpString + TMP_STR_LENGTH / 2, sizeof(userMenuItems[i].argumentName));
               setUserKeyArgument(key, tmpString + TMP_STR_LENGTH / 2);
             }
           }
@@ -2267,7 +2267,10 @@ int64_t stringToInt64(const char *str) {
               Norm_Key_00.funcParam[0]=0;                                           //  - if the code word for a blank string, blank the string.
             }
             else if(allowUserKeys) {                                                //  - New state files will have 'NoNormKeyParamDef' if no NRM+ XEQ paramater is present.
-              strcpy(Norm_Key_00.funcParam, tmpString);                             //Otherwise proceed and use the data as normal
+              Norm_Key_00.funcParam[0] = 0;                                         //  - a name the field cannot hold comes only from a corrupt file, so leave it empty
+              if(stringByteLength(tmpString) < (int32_t)sizeof(Norm_Key_00.funcParam)) {
+                strcpy(Norm_Key_00.funcParam, tmpString);                           //Otherwise proceed and use the data as normal
+              }
             }
           }
           else if(allowUserKeys && strcmp(aimBuffer, "Norm_Key_00.used") == 0) {
