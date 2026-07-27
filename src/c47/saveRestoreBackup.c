@@ -704,20 +704,27 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
         numberOfBytes = size;
       }
       uint8_t hi, lo, *buf = (uint8_t *)buffer;
-      uint8_t *v;
+      const uint8_t *dumpLine = NULL;
+      size_t dumpLineLength = 0, digit = 0;
       for(uint32_t count=0; count < numberOfBytes; count++, buf++) {
         if(count % 32 == 0) {
           paramCurrent = paramCurrent->next;
           if(paramCurrent == NULL) {
             break;
           }
-          v = (uint8_t *)paramCurrent->param + 7;
+          // The two hex digits of byte b sit at offset 7 + 3*b of a dump line saveStateValue() wrote. A line in the file need not be that long, so index it
+          // against its own length. Offsets rather than pointers: a line shorter than 7 has no such position to point at, one-past-the-end or otherwise.
+          dumpLine       = (const uint8_t *)paramCurrent->param;
+          dumpLineLength = strlen(paramCurrent->param);
+          digit          = 7;
         }
 
-        hi = *v - (*v <= '9' ? '0' : 'a' - 10);
-        v++;
-        lo = *v - (*v <= '9' ? '0' : 'a' - 10);
-        v += 2;
+        if(digit + 1 >= dumpLineLength) {   // the line ends before the digit pair this byte needs: stop, as for a parameter list that runs out above
+          break;
+        }
+        hi = dumpLine[digit]     - (dumpLine[digit]     <= '9' ? '0' : 'a' - 10);
+        lo = dumpLine[digit + 1] - (dumpLine[digit + 1] <= '9' ? '0' : 'a' - 10);
+        digit += 3;
         *buf = (hi << 4) | lo;
       }
     }
