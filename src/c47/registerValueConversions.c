@@ -1406,6 +1406,53 @@ bool_t getRegisterAsRealAngle(calcRegister_t reg, real_t *val, angularMode_t *xA
   return true;
 }
 
+void saveRegisterSnapshot(calcRegister_t reg, snap_t *s) {
+  switch(s->t = getRegisterDataType(reg)) {
+    case dtComplex34:
+      real34Copy(REGISTER_REAL34_DATA(reg), &s->r);
+      real34Copy(REGISTER_IMAG34_DATA(reg), &s->i);
+      break;
+    case dtReal34:
+    case dtTime:
+      real34Copy(REGISTER_REAL34_DATA(reg), &s->r);
+      real34SetZero(&s->i);
+      break;
+    case dtLongInteger:
+      getRegisterAsLongInt(reg, s->li, NULL);
+      break;
+    case dtShortInteger:
+      getRegisterAsRawShortInt(reg, &s->siVal, &s->siBase);
+      break;
+  }
+  s->tag = getRegisterTag(reg);
+}
+
+// reg may hold a different type (hence allocation size) than the snapshot, so reallocate to s->t before writing back
+void restoreRegisterSnapshot(calcRegister_t reg, snap_t *s) {
+  switch(s->t) {
+    case dtComplex34:
+      reallocateRegister(reg, dtComplex34, COMPLEX34_SIZE_IN_BLOCKS, s->tag);
+      real34Copy(&s->i, REGISTER_IMAG34_DATA(reg));
+      real34Copy(&s->r, REGISTER_REAL34_DATA(reg));
+      break;
+    case dtReal34:
+    case dtTime:
+      reallocateRegister(reg, s->t, REAL34_SIZE_IN_BLOCKS, s->tag);
+      real34Copy(&s->r, REGISTER_REAL34_DATA(reg));
+      break;
+    case dtLongInteger:
+      convertLongIntegerToLongIntegerRegister(s->li, reg);
+      longIntegerFree(s->li);
+      break;
+    case dtShortInteger:
+      reallocateRegister(reg, dtShortInteger, SHORT_INTEGER_SIZE_IN_BLOCKS, s->siBase);
+      *(REGISTER_SHORT_INTEGER_DATA(reg))=s->siVal;
+      setRegisterShortIntegerBase(reg, s->siBase);
+      break;
+  }
+  setRegisterDataType(reg, s->t, s->tag);
+}
+
 void processRealComplexMonadicFunction(void (*realf)(void), void (*complexf)(void)) {
   processIntRealComplexMonadicFunction(realf, complexf, NULL, NULL);
 }

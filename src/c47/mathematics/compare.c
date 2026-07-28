@@ -599,11 +599,11 @@ static void almostEqualMatrix(uint16_t regist) {
 }
 
 static void almostEqualScalar(uint16_t regist, const uint16_t test) {
-  snap_t snap1, snap2;   // SNAPVAL/RESTOREVAL are in registerValueConversions.h
+  snap_t snap1, snap2;   // saveRegisterSnapshot/restoreRegisterSnapshot are in registerValueConversions.h
 
   // Snapshot real values before rounding
-  SNAPVAL(REGISTER_X, snap1);
-  SNAPVAL(regist, snap2);
+  saveRegisterSnapshot(REGISTER_X, &snap1);
+  saveRegisterSnapshot(regist, &snap2);
 
   switch(test) {
     case type_pair_u8(dtComplex34, dtComplex34):
@@ -742,11 +742,8 @@ static void almostEqualScalar(uint16_t regist, const uint16_t test) {
 
   compareRegisters(regist, COMPARE_MODE_EQUAL);
 
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
-  RESTOREVAL(REGISTER_X, snap1);
-  RESTOREVAL(regist, snap2);
-  #pragma GCC diagnostic pop
+  restoreRegisterSnapshot(REGISTER_X, &snap1);
+  restoreRegisterSnapshot(regist, &snap2);
 }
 
 

@@ -315,7 +315,7 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
         // Kept here rather than in a register: the user program runs between the save and the restore and every temporary register is scratch to something it can
         // call, RCL of a stack register among them. The snapshot carries the type and the tag, so the value comes back as itself and not as the real34 the
         // sampling stored. getRegisterAsRealQuiet above has already turned away everything the snapshot does not cover.
-        SNAPVAL(variable, savedRegister);
+        saveRegisterSnapshot(variable, &savedRegister);
       }
     }
 
@@ -327,7 +327,7 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
     calcFuncValues(label, variable, &x, fx, &h, &ctxtReal39);
     undo();
     if(variable != INVALID_VARIABLE) {   // undo() rolls back the stack only, so the sampled variable is put back here
-      RESTOREVAL(variable, savedRegister);
+      restoreRegisterSnapshot(variable, &savedRegister);
     }
 
 #if 0
