@@ -7,7 +7,7 @@
 
 #include "c47.h"
 
-#define DERIV_FIRST_SHIFT       2   // h starts at x/100, where the widest stencil's truncation is already below the noise of a 34 digit sample
+#define DERIV_FIRST_SHIFT       1   // h starts at x/10, the coarsest step a 15 point stencil is worth taking
 #define DERIV_LAST_SHIFT       16   // and stops at x*1e-16, the step this engine used for every stencil before the ladder
 #define DERIV_TOLERANCE_DIGITS 32   // digits a sample carries, less one for the coefficient sum, which is what two estimates are compared against
 
@@ -212,17 +212,18 @@ static bool_t deriv_default_h(real_t *h, int shift) {
 
 // Do two estimates of the same derivative, taken a factor of ten apart in h, agree to better than the cancellation the finer one suffers? A sample carries 34 digits
 // and the points are h apart, so differencing them loses the digits they share and the error is about 1e-DERIV_TOLERANCE_DIGITS times ten to the shift, for each
-// order of the derivative. Agreement means the truncation of the coarser estimate is already below that, so the coarser one is the better of the two.
-static bool_t deriv_agrees(const real_t *coarse, const real_t *fine, int shift, uint8_t order) {
-  real_t difference, tolerance;
+// order of the derivative. Agreement means the truncation of the coarser estimate is already below that, so the coarser one is the better of the two. The gap
+// between the pair is handed back for the caller to rank the pairs by, whether they agreed or not.
+static bool_t deriv_agrees(const real_t *coarse, const real_t *fine, int shift, uint8_t order, real_t *difference) {
+  real_t tolerance;
 
-  realSubtract(fine, coarse, &difference, &ctxtReal39);
-  if(realIsZero(&difference)) {
+  realSubtract(fine, coarse, difference, &ctxtReal39);
+  if(realIsZero(difference)) {
     return true;
   }
   realCopyAbs(fine, &tolerance);
   tolerance.exponent += shift * order - DERIV_TOLERANCE_DIGITS;
-  return realCompareAbsLessThan(&difference, &tolerance);
+  return realCompareAbsLessThan(difference, &tolerance);
 }
 
 
@@ -356,11 +357,11 @@ static void calcFuncValues(calcRegister_t label, calcRegister_t variable, const 
 
 // Evaluate the function at stencil points and compute "best" estimate
 static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finDiff) {
-  real_t x, h, probeValue, estimate, coarse, fx[MAX_F_EVAL];
+  real_t x, h, probeValue, estimate, coarse, gap, best, bestGap, fx[MAX_F_EVAL];
   snap_t savedRegister;
   calcRegister_t variable = INVALID_VARIABLE;
   bool_t userStep = false;
-  int i, shift, stencil, coarseStencil = -1, coarseShift = 0;
+  int i, shift, stencil, coarseStencil = -1, coarseShift = 0, bestShift = 0;
 
   if(!getRegisterAsReal(REGISTER_X, &x)) {
     return;
@@ -437,8 +438,17 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
         realCopy(&estimate, &x);
         goto found;
       }
-      if(stencil == coarseStencil && deriv_agrees(&coarse, &estimate, shift, finDiff[stencil]->order)) {
-        goto settled;
+      if(stencil == coarseStencil) {
+        if(deriv_agrees(&coarse, &estimate, shift, finDiff[stencil]->order, &gap)) {
+          goto settled;
+        }
+        // The two are a decade apart, so the gap between them is smallest where the truncation of the coarser one and the cancellation of the finer one balance.
+        // The coarser member of the closest pair is therefore the best the ladder saw, and it is what the answer falls back to when no pair ever agrees.
+        if(bestShift == 0 || realCompareAbsLessThan(&gap, &bestGap)) {
+          realCopy(&coarse, &best);
+          realCopy(&gap, &bestGap);
+          bestShift = coarseShift;
+        }
       }
       realCopy(&estimate, &coarse);
       coarseStencil = stencil;
@@ -446,6 +456,10 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
     }
     if(coarseStencil < 0) {   // no step gave a usable set of samples
       goto noResult;
+    }
+    if(bestShift != 0) {   // the ladder ran out without a pair ever agreeing, so the closest pair is as near as this function gets
+      realCopy(&best, &coarse);
+      coarseShift = bestShift;
     }
 
 settled:                      // the coarser of the two estimates is the answer, and its own step is what the display reports
