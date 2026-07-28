@@ -52,6 +52,7 @@ void covIterationTi(uint16_t which);
 void covNamedVariableFold(uint16_t unusedButMandatoryParameter);
 void covStatsRegister(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
+void covDerivMvarPgm(uint16_t which);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
 void covIntegrateErr(uint16_t which);
@@ -235,6 +236,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnNamedVarFoldCov",      covNamedVariableFold, 1 },
   {"fnStatsRegisterCov",     covStatsRegister, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
+  {"fnDerivMvarPgmCov",      covDerivMvarPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
   {"fnIntegrateErrCov",      covIntegrateErr, 1 },
@@ -1496,6 +1498,85 @@ void covDerivPgm(uint16_t order) {
   }
   currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
   if(order == 2) {
+    fn2ndDeriv(label);
+  }
+  else {
+    fn1stDeriv(label);
+  }
+}
+
+static void covSeedMvarVariable(const char *name, int32_t value) {
+  const calcRegister_t regist = findOrAllocateNamedVariable(name);
+
+  if(regist == INVALID_VARIABLE) {
+    printf("\nCannot allocate named variable %s\n", name);
+    abortTest();
+    return;
+  }
+  reallocateRegister(regist, dtReal34, 0, amNone);
+  int32ToReal34(value, REGISTER_REAL34_DATA(regist));
+}
+
+void covDerivMvarPgm(uint16_t which) {
+  // Program M declares MVAR x and MVAR p and recalls both from named storage, so its stencil samples only move when the differentiator stores each point in the
+  // variable it differentiates with respect to. Program S of covDerivPgm takes its argument off the stack instead and cannot reach that path.
+  // Bytes: LBL name / MVAR name / RCL name / ENTER / MULT / SUB / literal / END.
+  static const uint8_t pgmM[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'M',                       // LBL "M"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR "x"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'p',   // MVAR "p"
+    ITM_RCL, REGISTER_Y_IN_KS_CODE,                               // RCL Y, then drop it: recalling a stack register writes TEMP_REGISTER_1 (recall.c), so a
+    ITM_DROP,                                                     // sampled variable parked there would come back holding this instead of its own value
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',                       // RCL "x"
+    ITM_ENTER,                                                    // x x
+    ITM_MULT,                                                     // x^2
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',                       // RCL "x"
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'p',                       // RCL "p"
+    ITM_MULT,                                                     // p*x
+    ITM_SUB,                                                      // x^2 - p*x
+    ITM_LITERAL, STRING_REAL34, 1, '2',                           // 2
+    ITM_SUB,                                                      // x^2 - p*x - 2
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
+  };
+  calcRegister_t label;
+
+  if(which == 0) {
+    covWriteAndLoadPgm(pgmM, sizeof(pgmM));
+    covSeedMvarVariable("x", 5);
+    covSeedMvarVariable("p", 0);
+    return;
+  }
+  if(which == 6 || which == 7) {   // read an input back to prove sampling restored it
+    reallyRunFunction(ITM_RCL, findOrAllocateNamedVariable(which == 6 ? "x" : "p"));
+    return;
+  }
+  if(which == 9) {   // reseed x as a long integer: restoring through a real34 would silently retype it
+    longInteger_t li;
+
+    longIntegerInit(li);
+    uInt32ToLongInteger(5, li);
+    convertLongIntegerToLongIntegerRegister(li, findOrAllocateNamedVariable("x"));
+    longIntegerFree(li);
+    return;
+  }
+
+  label = findNamedLabel("M", GLOBAL_LABELS);
+  if(label == INVALID_VARIABLE) {
+    printf("\nUnknown global label: M\n");
+    abortTest();
+    return;
+  }
+  if(which == 3) {
+    covSeedMvarVariable("p", 1);   // p leaves zero, so a wrong reading of p stops canceling and shows up in the derivative
+  }
+  currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
+  switch(which) {
+    case 4:  currentSolverVariable = findOrAllocateNamedVariable("p");    break;
+    case 5:  currentSolverVariable = INVALID_VARIABLE;                    break;   // nothing selected: the first declaration is the argument
+    case 8:  currentSolverVariable = findOrAllocateNamedVariable("zzz");  break;   // selected but not declared by M: falls back to the first declaration
+    default: currentSolverVariable = findOrAllocateNamedVariable("x");    break;
+  }
+  if(which == 2) {
     fn2ndDeriv(label);
   }
   else {
