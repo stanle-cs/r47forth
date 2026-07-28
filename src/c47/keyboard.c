@@ -118,7 +118,7 @@ static void executeFunction(const char *data, int16_t item_);
           item = ITM_FPHERE;
         }
         else if(IS_EQN_1STDER && dynamicMenuItem == 4) {
-          item = -MNU_GRAPHS;
+          item = ITM_SOLVE_VAR;   // the step key: parseEquation named that slot delta, and the MVAR key handler stores into it
         }
 
 //f''
@@ -126,7 +126,7 @@ static void executeFunction(const char *data, int16_t item_);
           item = ITM_FPPHERE;
         }
         else if(IS_EQN_2NDDER && dynamicMenuItem == 4) {
-          item = -MNU_GRAPHS;
+          item = ITM_SOLVE_VAR;   // the step key, as above
         }
 
 

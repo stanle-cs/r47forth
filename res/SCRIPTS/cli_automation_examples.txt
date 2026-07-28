@@ -13,6 +13,8 @@ the catalog's own case (xeq SCATR). item <n> is the fallback ONLY, not the first
 <n>, e.g.  cnst 4  = c. PLT f is the case in point: its gap is no space at all but a U+2005 four-per-em, so the name must be copied out of the --dslcommands list, the
 reason that list exists. Pasted, it is one Jim word: xeq PLT f resolves, as do braces and double quotes; single quotes are not Jim quoting and fail.
 Without the paste item 2734 does the same job, at the clear cost of code nobody can read.
+A name carrying a bracket is not a fallback case either. It is missing from --dslcommands because a bracket breaks Jim parsing, so it is never registered as a bare
+command, and xeq and catfn still reach it by its catalog name. Braces protect the quote in it:  xeq {f'(x)} MC  and  xeq {f"(x)} MC  differentiate the program MC.
 
 CAUTION, calculator state: the sim starts from backup.cfg (t47) or backupR47.cfg (R47-based t47) in the working folder.
 DSP, HIDE, grouping and profile change how numbers render in stack, menus and graph text, so bmp comparisons hold only against the same setup.
@@ -92,6 +94,9 @@ Jim Tcl scripting (the DSL is Jim: set/expr/while/if/puts all work; incr is a NO
 Register / named variable / flag write and read (complex values in braces; strings and more forms in values.t47):
   ./t47 --reset --exec 'reg 05 3.5; var myv 2.5; flag SPCRES 1; puts "R05=[reg 05] myv=[var myv] SPCRES=[flag SPCRES]"'
   ./t47 --reset --exec 'reg 10 {1 + ix2}; puts "R10=[reg 10]"'
+  A one-letter name given to var is the lettered register, not a variable of that name:  var x 5  writes stack register X, the same rule as  STO A  in a program. Name
+  a variable with two letters or more and it is unambiguous. The single letter reads as the named variable on the solver and integrator operands only, so  xeq SOLVE x
+  and  ∫f d x  do reach a variable called x.
 
 Progress-monitor paths (MONIT) under a multi-second load, with a marker telling "ran and returned" from "hung" (markers: see Notes):
   ./t47 --reset --exec 'flag MONIT 1; reg 01 -1; nim 2000000000000095000000000000777; xeq FACTORS; reg 01 1; puts "R01=[reg 01]"'
@@ -111,6 +116,25 @@ State save/load and register assertions (savest/loadst take a filename):
   (m.dim dims a register to Y x X reals, rcl recalls it, 42dim# drops the X-matrix dimensions to Y=rows, X=cols.
    reg <name> reads a register's display string but returns <unsupported> for a matrix, so assert dimensions via 42DIM#.
    Register data also moves through hand-written .d47 files; format in AN0025.)
+
+A function a softmenu starts, headless and without a key press (the equation derivative):
+  menu <name> is the real showSoftmenu, so a menu that acts as it opens acts headless too. The f' menu opened on a one-variable formula stores X into the variable and
+  runs the equation derivative, so  menu {f'}  is the whole call. Braces because an apostrophe is not Jim quoting, and a script file because that same apostrophe would
+  close an --exec wrapper. Running the item behind the menu instead skips the menu state and reads "In function regInRange: generic is not defined!".
+  Encode the formula loader with  ./rejig listing.txt -o eqr.p47 :
+    LBL 'EQR'
+      '1/vv' X.EDIT
+    RTN
+  and the script, run as  ./t47 --reset --script deriv.t47 :
+    readp eqr.p47
+    xeq EQR
+    nim 1
+    menu {f'}
+    puts "deriv=[reg X]"
+  (d/dvv of 1/vv at vv = 1 is -1. A one-variable formula is the case that runs on its own; with more variables the menu waits for the variable key.)
+  f'(x) and f"(x) open that same menu themselves when the label they are given declares MVARs, since the answer depends on which variable is meant. One MVAR runs at
+  once, as above. Several wait for the key, which a script cannot press, so a script reaches those as a program step instead:  f'(x) 'FX'  inside a program, run with
+  xeq, takes the point off the stack and differentiates with respect to the selected variable, or the program's first MVAR when nothing is selected.
 
 Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key (NN = 00..36), single ASCII, ENTER, R/S. Bare commands and xeq call the function direct,
 so TAM and softmenu decode need press. Matrix editor, cursor to 2;2:

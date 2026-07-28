@@ -290,9 +290,34 @@ void fnSolveVar(uint16_t unusedButMandatoryParameter) {
       }
     }
     else if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE || (currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_2ND_DERIVATIVE) {
+      if(compareString(var, STD_delta, CMP_NAME) == 0) {   // the step key: it takes a value like any other, but it is not what the derivative is taken against
+        real_t given;
+
+        if(getRegisterAsRealQuiet(REGISTER_X, &given) && realIsInfinite(&given)) {
+          entryStatus &= 0xfe;
+          fnDeleteVariable(regist);   // an infinite step is no step: the variable goes, which is the only way to be rid of it, and the engine picks the step again
+        }
+        else if(entryStatus & 0x01) {
+          entryStatus &= 0xfe;
+          reallyRunFunction(ITM_STO, regist);
+        }
+        temporaryInformation = TI_SOLVER_VARIABLE;
+        return;
+      }
       currentSolverVariable = regist;
-      reallyRunFunction(ITM_STO, regist);
-      temporaryInformation = TI_SOLVER_VARIABLE;
+      if(entryStatus & 0x01) { // MVAR menu key pressed after a user entry: save the value in the variable
+        entryStatus &= 0xfe;
+        reallyRunFunction(ITM_STO, regist);
+        temporaryInformation = TI_SOLVER_VARIABLE;
+      }
+      else { // MVAR menu key pressed without a user entry: the value stands, so differentiate with respect to this variable
+        if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE) {
+          fn1stDerivEq(NOPARAM);
+        }
+        else {
+          fn2ndDerivEq(NOPARAM);
+        }
+      }
     }
     else if(currentSolverStatus & SOLVER_STATUS_READY_TO_EXECUTE) {
       if(currentSolverStatus & SOLVER_STATUS_RPN_GRAPHER) {
