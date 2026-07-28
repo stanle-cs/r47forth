@@ -610,6 +610,19 @@ void fnSave(uint16_t saveMode) {
   }
 }
 
+// True when equation 'id' has text a state file can carry. A formula with none is either fresh from fnEqNew(), whose pointerToFormulaData is C47_NULL, or
+// the empty string a restore leaves when its count outran the file. See the EQUATIONS section of doSave() for why neither can be written.
+static bool_t formulaHasText(uint16_t id) {
+  const char *text;
+
+  if(allFormulae[id].pointerToFormulaData == C47_NULL) {
+    return false;
+  }
+  text = (const char *)TO_PCMEMPTR(allFormulae[id].pointerToFormulaData);
+  return text[0] != 0;
+}
+
+
 void doSave(uint16_t saveType) {
   printStatus(0, errorMessageOf(SAVING_STATE_FILE), force);
   ioFilePath_t path;
@@ -845,11 +858,24 @@ void doSave(uint16_t saveType) {
     save(tmpString, strlen(tmpString));
   }
 
-  // Equations
-  sprintf(tmpString, "EQUATIONS\n%" PRIu16 "\n", numberOfFormulae);
+  // Equations. A formula can hold no text in two ways, and this section can represent neither. fnEqNew() leaves pointerToFormulaData at C47_NULL until
+  // something is typed in, and TO_PCMEMPTR() turns that into the NULL stringToUtf8() dereferences; a restore whose count outran the file leaves empty
+  // strings instead, and writing those as blank lines is no better, because readLine() skips blank lines and the reader would take the next section
+  // header for the formula's text. Both are the same thing to a reader - a formula with nothing in it - so the section holds the ones that have text and
+  // the count says how many that is.
+  uint16_t formulaeWithText = 0;
+  for(i=0; i<numberOfFormulae; i++) {
+    if(formulaHasText(i)) {
+      formulaeWithText++;
+    }
+  }
+  sprintf(tmpString, "EQUATIONS\n%" PRIu16 "\n", formulaeWithText);
   save(tmpString, strlen(tmpString));
 
   for(i=0; i<numberOfFormulae; i++) {
+    if(!formulaHasText(i)) {
+      continue;
+    }
     stringToUtf8(TO_PCMEMPTR(allFormulae[i].pointerToFormulaData), (uint8_t *)tmpString);
     strcat(tmpString, "\n");
     save(tmpString, strlen(tmpString));
