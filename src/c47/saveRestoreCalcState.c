@@ -2045,23 +2045,30 @@ int64_t stringToInt64(const char *str) {
 
       readLine(tmpString, TMP_STR_LENGTH); // Number of blocks
       numberOfBlocks = toUint16(tmpString);
-      if(loadMode == LM_ALL) {
+      // Program memory always holds at least the one block that carries the empty .END.: that is the block config.c reserves when it forms the pool
+      // (":- 1: one block for an empty program"), and the save side writes that 1 for an empty program area. A count of zero therefore means the section
+      // is not really there - and a section that ran out reads as zero too, because an empty read converts to zero. Resizing to zero blocks moves
+      // beginOfProgramMemory one past the pool, and scanLabelsAndPrograms() reads it there through isAtEndOfPrograms() (programming/manage.c:67).
+      // Everything this branch does is keyed on the load mode, so such a section is neutralised by giving the branch a mode that matches neither LM_ALL
+      // nor LM_PROGRAMS. The readLine() calls still run, so the parser stays aligned with the stream, and program memory keeps what it already had.
+      const uint16_t programsLoadMode = (numberOfBlocks == 0) ? LM_SYSTEM_STATE : loadMode;
+      if(programsLoadMode == LM_ALL) {
         resizeProgramMemory(numberOfBlocks);
       }
-      else if(loadMode == LM_PROGRAMS) {
+      else if(programsLoadMode == LM_PROGRAMS) {
         resizeProgramMemory(oldSizeInBlocks + numberOfBlocks);
         oldFirstFreeProgramByte = beginOfProgramMemory + TO_BYTES(oldSizeInBlocks) - oldFreeProgramBytes - 2;
       }
 
       readLine(tmpString, TMP_STR_LENGTH); // currentStep (pointer to block)
-      if(loadMode == LM_ALL) {
+      if(programsLoadMode == LM_ALL) {
         currentStep = TO_PCMEMPTR(toUint32(tmpString));
       }
       readLine(tmpString, TMP_STR_LENGTH); // currentStep (offset in bytes within block)
-      if(loadMode == LM_ALL) {
+      if(programsLoadMode == LM_ALL) {
         currentStep += toUint32(tmpString);
       }
-      else if(loadMode == LM_PROGRAMS) {
+      else if(programsLoadMode == LM_PROGRAMS) {
         if(programList[currentProgramNumber - 1].step > 0) {
           currentStep           -= TO_BYTES(numberOfBlocks);
           firstDisplayedStep    -= TO_BYTES(numberOfBlocks);
@@ -2071,16 +2078,16 @@ int64_t stringToInt64(const char *str) {
       }
 
       readLine(tmpString, TMP_STR_LENGTH); // firstFreeProgramByte (pointer to block)
-      if(loadMode == LM_ALL || loadMode == LM_PROGRAMS) {
+      if(programsLoadMode == LM_ALL || programsLoadMode == LM_PROGRAMS) {
         firstFreeProgramByte = TO_PCMEMPTR(toUint32(tmpString));
       }
       readLine(tmpString, TMP_STR_LENGTH); // firstFreeProgramByte (offset in bytes within block)
-      if(loadMode == LM_ALL || loadMode == LM_PROGRAMS) {
+      if(programsLoadMode == LM_ALL || programsLoadMode == LM_PROGRAMS) {
         firstFreeProgramByte += toUint32(tmpString);
       }
 
       readLine(tmpString, TMP_STR_LENGTH); // freeProgramBytes
-      if(loadMode == LM_ALL || loadMode == LM_PROGRAMS) {
+      if(programsLoadMode == LM_ALL || programsLoadMode == LM_PROGRAMS) {
         freeProgramBytes = toUint16(tmpString);
       }
 
@@ -2100,7 +2107,7 @@ int64_t stringToInt64(const char *str) {
         #endif
       }
 
-      if(loadMode == LM_PROGRAMS) { // .END. to END
+      if(programsLoadMode == LM_PROGRAMS) { // .END. to END
         freeProgramBytes += oldFreeProgramBytes;
         if((oldFirstFreeProgramByte >= (beginOfProgramMemory + 2)) && isAtEndOfProgram(oldFirstFreeProgramByte - 2)) {
         }
@@ -2125,7 +2132,7 @@ int64_t stringToInt64(const char *str) {
       }
 
       #if defined(LOADDEBUG)
-        if(loadMode == LM_ALL || loadMode == LM_PROGRAMS) {
+        if(programsLoadMode == LM_ALL || programsLoadMode == LM_PROGRAMS) {
           printf("Before loading programs:\n");
           printf("  beginOfProgramMemory    = *8b %4u %16p\n", *beginOfProgramMemory,    (void*)(((uint32_t *)(beginOfProgramMemory)) ));
           printf("  firstFreeProgramByte    = *8b %4u %16p\n", *firstFreeProgramByte,    (void*)(((uint32_t *)(firstFreeProgramByte)) ));
@@ -2144,17 +2151,17 @@ int64_t stringToInt64(const char *str) {
         readLine(tmpString, TMP_STR_LENGTH); // One block
         // No end-of-file break here, on purpose: this loop writes into memory resizeProgramMemory() sized from the same count, and stopping short would leave
         // the tail of program memory holding whatever the resize left. The empty reads past end of file zero it instead, which is the safer of the two.
-        if(loadMode == LM_ALL) {
+        if(programsLoadMode == LM_ALL) {
           *(((uint32_t *)(beginOfProgramMemory)) + i) = toUint32(tmpString);
         }
-        else if(loadMode == LM_PROGRAMS) {
+        else if(programsLoadMode == LM_PROGRAMS) {
           uint32_t tmpBlock = toUint32(tmpString);
           xcopy(oldFirstFreeProgramByte + TO_BYTES(i), (uint8_t *)(&tmpBlock), 4);
         }
       }
 
       #if defined(LOADDEBUG)
-        if(loadMode == LM_ALL || loadMode == LM_PROGRAMS) {
+        if(programsLoadMode == LM_ALL || programsLoadMode == LM_PROGRAMS) {
           printf("\n");
           printf("After loading programs:\n");
           printf("  beginOfProgramMemory    = *8b %4u %16p\n", *beginOfProgramMemory,    (void*)(((uint32_t *)(beginOfProgramMemory)) ));
@@ -2163,7 +2170,7 @@ int64_t stringToInt64(const char *str) {
         }
       #endif // LOADDEBUG
 
-      if(loadMode == LM_ALL || loadMode == LM_PROGRAMS) {
+      if(programsLoadMode == LM_ALL || programsLoadMode == LM_PROGRAMS) {
         scanLabelsAndPrograms();
       }
     }
