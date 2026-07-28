@@ -292,6 +292,7 @@ static void calcFuncValues(calcRegister_t label, calcRegister_t variable, const 
 // Evaluate the function at stencil points and compute "best" estimate
 static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finDiff) {
   real_t x, h, savedVariable, fx[MAX_F_EVAL];
+  snap_t savedRegister;
   calcRegister_t variable = INVALID_VARIABLE;
   int i;
 
@@ -310,10 +311,10 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
         variable = INVALID_VARIABLE;   // differentiate only with respect to something numeric
       }
       if(variable != INVALID_VARIABLE) {
-        // The whole register, not the real read above: an MVAR may hold a long or short integer, or an angle, and a real34 round trip would silently retype it.
-        // TEMP_REGISTER_1 survives because _storeValue only claims it for reserved variables and an MVAR resolves to a named one, and because undo() copies
-        // only the stack window.
-        copySourceRegisterToDestRegister(variable, TEMP_REGISTER_1);
+        // Kept here rather than in a register: the user program runs between the save and the restore and every temporary register is scratch to something it can
+        // call, RCL of a stack register among them. The snapshot carries the type and the tag, so the value comes back as itself and not as the real34 the
+        // sampling stored. getRegisterAsRealQuiet above has already turned away everything the snapshot does not cover.
+        SNAPVAL(variable, savedRegister);
       }
     }
 
@@ -325,7 +326,7 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
     calcFuncValues(label, variable, &x, fx, &h, &ctxtReal39);
     undo();
     if(variable != INVALID_VARIABLE) {   // undo() rolls back the stack only, so the sampled variable is put back here
-      copySourceRegisterToDestRegister(TEMP_REGISTER_1, variable);
+      RESTOREVAL(variable, savedRegister);
     }
 
 #if 0
