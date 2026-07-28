@@ -1565,6 +1565,9 @@ int64_t stringToInt64(const char *str) {
       numberOfRegs = toInt16(tmpString);
       for(i=0; i<numberOfRegs; i++) {
         readLineSkippingComments(tmpString, TMP_STR_LENGTH); // Register number, skipping any comments
+        if(tmpString[0] == 0) {                                                  // the section ran out: readLine() skips blank lines, so an empty read is end of file and the count was a lie
+          break;
+        }
         regist = stringToRegisterNumber(tmpString);
         read2Lines(aimBuffer, AIM_BUFFER_LENGTH, tmpString, TMP_STR_LENGTH); // Register data type & Register value
 
@@ -1625,6 +1628,9 @@ int64_t stringToInt64(const char *str) {
         #endif //LOADDEBUG
         for(i=0; i<numberOfRegs; i++) {
           readLine(tmpString, TMP_STR_LENGTH); // Register number
+          if(tmpString[0] == 0) {                                                // end of file: the count was a lie, see GLOBAL_REGISTERS
+            break;
+          }
           regist = toInt16(tmpString + 2) + FIRST_LOCAL_REGISTER;
           read2Lines(aimBuffer, AIM_BUFFER_LENGTH, tmpString, TMP_STR_LENGTH); // Register data type & Register value
 
@@ -1668,6 +1674,9 @@ int64_t stringToInt64(const char *str) {
       numberOfRegs = toInt16(tmpString);
       for(i=0; i<numberOfRegs; i++) {
         readLine(errorMessage, ERROR_MESSAGE_LENGTH); // Variable name
+        if(errorMessage[0] == 0) {                                               // end of file: the count was a lie, see GLOBAL_REGISTERS
+          break;
+        }
         read2Lines(aimBuffer, AIM_BUFFER_LENGTH, tmpString, TMP_STR_LENGTH); // Variable data type & Variable value
 
         if(( loadMode == LM_ALL ||
@@ -1717,6 +1726,9 @@ int64_t stringToInt64(const char *str) {
 
         for(i=0; i<numberOfRegs; i++) {
           readLine(tmpString, TMP_STR_LENGTH); // statistical sum
+          if(tmpString[0] == 0) {                                                // end of file: the count was a lie, see GLOBAL_REGISTERS
+            break;
+          }
           if(statisticalSumsPointer) { // likely
             if(loadMode == LM_ALL || loadMode == LM_SUMS) {
               #if defined(LOADDEBUG)
@@ -1788,6 +1800,9 @@ int64_t stringToInt64(const char *str) {
       numberOfRegs = toInt16(tmpString);
       for(i=0; i<numberOfRegs; i++) {
         readLine(tmpString, TMP_STR_LENGTH); // key
+        if(tmpString[0] == 0) {                                                  // end of file: the count was a lie, see GLOBAL_REGISTERS
+          break;
+        }
         // Restore Keyboard Assignments only if they were save on the same calc model (C47->C47 or R47->R47). The count is the file's, so the index is bounded here and
         // not on the loop, which must still read a line per claimed entry to stay aligned with the stream.
         if(allowUserKeys && i < (int16_t)nbrOfElements(kbd_usr) && (loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE)) {
@@ -1824,6 +1839,9 @@ int64_t stringToInt64(const char *str) {
 
       for(i=0; i<numberOfRegs; i++) {
         readLine(tmpString, TMP_STR_LENGTH); // key
+        if(tmpString[0] == 0) {                                                  // end of file: the count was a lie, see GLOBAL_REGISTERS
+          break;
+        }
         // Restore Keyboard Arguments only if they were save on the same calc model (C47->C47 or R47->R47)
         if(allowUserKeys && (loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE)) {
           #if defined(LOADDEBUG)
@@ -1855,6 +1873,9 @@ int64_t stringToInt64(const char *str) {
       numberOfRegs = toInt16(tmpString);
       for(i=0; i<numberOfRegs; i++) {
         readLine(tmpString, TMP_STR_LENGTH); // key
+        if(tmpString[0] == 0) {                                                  // end of file: the count was a lie, see GLOBAL_REGISTERS
+          break;
+        }
         if(loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE) {
           #if defined(LOADDEBUG)
             sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
@@ -1880,6 +1901,9 @@ int64_t stringToInt64(const char *str) {
       numberOfRegs = toInt16(tmpString);
       for(i=0; i<numberOfRegs; i++) {
         readLine(tmpString, TMP_STR_LENGTH); // key
+        if(tmpString[0] == 0) {                                                  // end of file: the count was a lie, see GLOBAL_REGISTERS
+          break;
+        }
         if(loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE) {
           #if defined(LOADDEBUG)
             sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
@@ -1905,6 +1929,9 @@ int64_t stringToInt64(const char *str) {
       int16_t numberOfMenus = toInt16(tmpString);
       for(int32_t j=0; j<numberOfMenus; j++) {
         readLine(tmpString, TMP_STR_LENGTH);
+        if(tmpString[0] == 0) {                                                  // end of file: the count was a lie, see GLOBAL_REGISTERS
+          break;
+        }
         int16_t target = -1;
         if(loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE) {
           #if defined(LOADDEBUG)
@@ -1927,6 +1954,9 @@ int64_t stringToInt64(const char *str) {
         numberOfRegs = toInt16(tmpString);
         for(i=0; i<numberOfRegs; i++) {
           readLine(tmpString, TMP_STR_LENGTH); // key
+          if(tmpString[0] == 0) {                                                // end of file: the count was a lie, see GLOBAL_REGISTERS
+            break;
+          }
           if(loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE) {
             #if defined(LOADDEBUG)
               sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
@@ -2059,6 +2089,8 @@ int64_t stringToInt64(const char *str) {
         #endif // LOADDEBUG
 
         readLine(tmpString, TMP_STR_LENGTH); // One block
+        // No end-of-file break here, on purpose: this loop writes into memory resizeProgramMemory() sized from the same count, and stopping short would leave
+        // the tail of program memory holding whatever the resize left. The empty reads past end of file zero it instead, which is the safer of the two.
         if(loadMode == LM_ALL) {
           *(((uint32_t *)(beginOfProgramMemory)) + i) = toUint32(tmpString);
         }
@@ -2118,6 +2150,8 @@ int64_t stringToInt64(const char *str) {
 
         for(i = 0; i < formulae; i++) {
           readLine(tmpString, TMP_STR_LENGTH); // One formula
+          // No end-of-file break here, on purpose: see the PROGRAMS block loop. The empty reads give every remaining formula an empty string, which every
+          // reader of the text handles; breaking would leave them at the C47_NULL the loop above sets, and not every reader of that pointer tests it.
           if(loadMode == LM_ALL || loadMode == LM_PROGRAMS) {
             #if defined(LOADDEBUG)
               sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
@@ -2634,7 +2668,9 @@ void doLoad(uint16_t loadMode, uint16_t s, uint16_t n, uint16_t d, uint16_t load
     #elif CALCMODEL == USER_R47
       allowUserKeys = (savedCalcModel == USER_R47);
     #endif  // CALCMODEL
-    while(restoreOneSection(loadMode, s, n, d, allowUserKeys)) {
+    // restoreOneSection() only returns false at END_CONFIG, which a file that stops short - truncated, or with a count that swallowed its last section - never
+    // reaches: every further call then reads an empty section name, matches nothing and returns true. Loop on ioEof() as well, as doLoadDataFile() does.
+    while(!ioEof() && restoreOneSection(loadMode, s, n, d, allowUserKeys)) {
     }
 
     // Set the user primary functions for the R47 yellow and blue shift keys to their standard default value
