@@ -1583,10 +1583,24 @@ void covDerivMvarPgm(uint16_t which) {
     ITM_SUB,                                                      // x^2 - p*x - 2
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
   };
+  // D1 and D2 differentiate MD as a program step, which is the path a running program takes: no menu can be opened there, so the derivative is taken at once with
+  // respect to the selected variable, or the first declaration when the selection is not one of MD's.
+  static const uint8_t pgmD1[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'D', '1',                  // LBL "D1"
+    (uint8_t)((ITM_FQX >> 8) | 0x80), (uint8_t)(ITM_FQX & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',    // f'(x) "MD"
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
+  };
+  static const uint8_t pgmD2[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'D', '2',                  // LBL "D2"
+    (uint8_t)((ITM_FDQX >> 8) | 0x80), (uint8_t)(ITM_FDQX & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',  // f"(x) "MD"
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
+  };
   calcRegister_t label;
 
   if(which == 0) {
     covWriteAndLoadPgm(pgmM, sizeof(pgmM));
+    covWriteAndLoadPgm(pgmD1, sizeof(pgmD1));
+    covWriteAndLoadPgm(pgmD2, sizeof(pgmD2));
     covSeedMvarVariable("x", 5);
     covSeedMvarVariable("p", 0);
     return;
@@ -1615,17 +1629,28 @@ void covDerivMvarPgm(uint16_t which) {
     covSeedMvarVariable("p", 1);   // p leaves zero, so a wrong reading of p stops canceling and shows up in the derivative
   }
   currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
+  currentSolverProgram = label - FIRST_LABEL;
   switch(which) {
     case 4:  currentSolverVariable = findOrAllocateNamedVariable("p");    break;
     case 5:  currentSolverVariable = INVALID_VARIABLE;                    break;   // nothing selected: the first declaration is the argument
     case 8:  currentSolverVariable = findOrAllocateNamedVariable("zzz");  break;   // selected but not declared by M: falls back to the first declaration
     default: currentSolverVariable = findOrAllocateNamedVariable("x");    break;
   }
+
+  if(which >= 5) {   // as a program step: the point comes off the stack and the variable is only borrowed for the sampling
+    fnExecute(findNamedLabel(which == 11 ? "D2" : "D1", GLOBAL_LABELS));
+    programRunStop = PGM_STOPPED;
+    calcMode = CM_NORMAL;
+    return;
+  }
+
+  // Through the MVAR menu: its variable key stores the point in the variable and selects it, then the last softkey runs the derivative on the selected program.
+  reallyRunFunction(ITM_STO, currentSolverVariable);
   if(which == 2) {
-    fn2ndDeriv(label);
+    fn2ndDerivEq(NOPARAM);
   }
   else {
-    fn1stDeriv(label);
+    fn1stDerivEq(NOPARAM);
   }
 }
 

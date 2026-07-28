@@ -7,6 +7,10 @@
 
 #include "c47.h"
 
+#define DERIV_FIRST_SHIFT       2   // h starts at x/100, where the widest stencil's truncation is already below the noise of a 34 digit sample
+#define DERIV_LAST_SHIFT       16   // and stops at x*1e-16, the step this engine used for every stencil before the ladder
+#define DERIV_TOLERANCE_DIGITS 32   // digits a sample carries, less one for the coefficient sum, which is what two estimates are compared against
+
 
 #if 0
 // All of the above finite differences combined into a single array */
@@ -36,9 +40,30 @@ TO_QSPI static const FINITE_DIFF_COEFF *const all_second_derivatives[] = {
 #endif
 
 static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finDiff);
+static calcRegister_t deriv_pgm_variable(calcRegister_t label);
 
 static void calcDerivOfOrder(uint16_t label, int order) {
   calcDeriv(label, finite_difference_table[order]);
+}
+
+
+// A program that declares MVARs has more than one thing it could be differentiated with respect to, and the answer depends on which, so the MVAR menu is opened for
+// the user to say, the way the solver and the integrator do. The variable key stores the point and takes the selection, and f' on the last softkey runs it. Inside a
+// running program, or under another engine, there is nobody to press a key: the derivative is taken there and then, with respect to the selected variable.
+static bool_t deriv_open_mvar_menu(uint16_t label, uint16_t order, bool_t solving) {
+  if(programRunStop == PGM_RUNNING || solving || getSystemFlag(FLAG_INTING)) {
+    return false;
+  }
+  if(deriv_pgm_variable(label) == INVALID_VARIABLE) {
+    return false;
+  }
+  currentSolverProgram = label - FIRST_LABEL;
+  currentMvarLabel = INVALID_VARIABLE;   // the menu builds from currentSolverProgram, and its variable key acts for the solver rather than for VARMNU
+  currentSolverStatus &= ~SOLVER_STATUS_EQUATION_MODE;
+  currentSolverStatus |= (order == DERIVATIVE_FIRST_CENTRAL ? SOLVER_STATUS_EQUATION_1ST_DERIVATIVE : SOLVER_STATUS_EQUATION_2ND_DERIVATIVE);
+  currentSolverStatus |= SOLVER_STATUS_INTERACTIVE;
+  showSoftmenu(-MNU_MVAR);
+  return true;
 }
 
 static void derivativeCommon(uint16_t label, uint16_t order, uint8_t ti) {
@@ -46,6 +71,9 @@ static void derivativeCommon(uint16_t label, uint16_t order, uint8_t ti) {
   bool_t solving = getSystemFlag(FLAG_SOLVING);
   char buf[2];
 
+  if(label >= FIRST_LABEL && label <= LAST_LABEL && deriv_open_mvar_menu(label, order, solving)) {
+    return;
+  }
   setSystemFlag(FLAG_SOLVING);
   if(label >= FIRST_LABEL && label <= LAST_LABEL) {
     calcDerivOfOrder(label, order);
@@ -63,7 +91,7 @@ static void derivativeCommon(uint16_t label, uint16_t order, uint8_t ti) {
         moreInfoOnError("In function derivativeCommon:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     }
-    else {
+    else if(!deriv_open_mvar_menu(label, order, solving)) {
       calcDerivOfOrder(label, order);
       temporaryInformation = ti;
     }
@@ -92,16 +120,29 @@ static void derivativeEquation(uint16_t order, uint8_t ti) {
   // FLAG_SOLVING suppresses the per-item undo snapshot, so the one calcDeriv takes before sampling survives to be restored, and it is what lets execProgram run a
   // body at all, which a user delta-x label needs.
   bool_t solving = getSystemFlag(FLAG_SOLVING);
+  real_t probeValue;
+  snap_t savedRegister;
+  bool_t restore;
 
   setSystemFlag(FLAG_SOLVING);
   //new method to maintain solver variable
   reallyRunFunction(ITM_RCL, currentSolverVariable);
-  copySourceRegisterToDestRegister(REGISTER_X, TEMP_REGISTER_1);
-  currentSolverStatus |= SOLVER_STATUS_USES_FORMULA;
-  calcDerivOfOrder(INVALID_VARIABLE, order);
-  reallyRunFunction(ITM_RCL, TEMP_REGISTER_1);
-  reallyRunFunction(ITM_STO, currentSolverVariable);
-  fnDrop(NOPARAM);
+  // The sampling stores each point in the variable, so its own value is kept here and put back after. A register cannot hold it: for a program the user's code runs
+  // in between and reaches every temporary register, which is what used to hand the variable back holding a number out of that program.
+  restore = (currentSolverVariable != INVALID_VARIABLE) && getRegisterAsRealQuiet(currentSolverVariable, &probeValue);
+  if(restore) {
+    saveRegisterSnapshot(currentSolverVariable, &savedRegister);
+  }
+  if(!(currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && currentSolverProgram < numberOfLabels) {
+    calcDerivOfOrder(currentSolverProgram + FIRST_LABEL, order);   // the MVAR menu was opened on a program, so that is what this key differentiates
+  }
+  else {
+    currentSolverStatus |= SOLVER_STATUS_USES_FORMULA;
+    calcDerivOfOrder(INVALID_VARIABLE, order);
+  }
+  if(restore) {
+    restoreRegisterSnapshot(currentSolverVariable, &savedRegister);
+  }
   temporaryInformation = ti;
   if(!solving) {
     clearSystemFlag(FLAG_SOLVING);
@@ -130,13 +171,22 @@ static void deriv_found_lbl(calcRegister_t deltaX, real_t *h) {
   }
 }
 
-static void deriv_default_h(real_t *h) {
+static bool_t deriv_default_h(real_t *h, int shift) {
   calcRegister_t deltaX;
   unsigned int i;
   TO_QSPI static const char *const lbls[] = {
     STD_delta "x",  STD_delta "X",
     STD_DELTA "x",  STD_DELTA "X",
   };
+
+  {   // the step the user set on the menu key or stored in the variable itself: it is used as it stands, and no ladder is walked
+    real_t given;
+
+    if((deltaX = findNamedVariable(STD_delta)) != INVALID_VARIABLE && getRegisterAsRealQuiet(deltaX, &given) && !realIsZero(&given) && !realIsSpecial(&given)) {
+      realCopy(&given, h);
+      return true;
+    }
+  }
 
   saveForUndo();
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
@@ -148,14 +198,31 @@ static void deriv_default_h(real_t *h) {
     if((deltaX = findNamedLabel(lbls[i], ALL_LABELS)) != INVALID_VARIABLE) {
       deriv_found_lbl(deltaX, h);
       undo();
-      return;
+      return true;
     }
   }
   undo();
   if(realIsZero(h)) {   // the step is relative to x, so at x=0 it collapses and the weighted sum is divided by zero
     realCopy(const_1, h);
   }
-  h->exponent -= 16;
+  h->exponent -= shift;
+  return false;
+}
+
+
+// Do two estimates of the same derivative, taken a factor of ten apart in h, agree to better than the cancellation the finer one suffers? A sample carries 34 digits
+// and the points are h apart, so differencing them loses the digits they share and the error is about 1e-DERIV_TOLERANCE_DIGITS times ten to the shift, for each
+// order of the derivative. Agreement means the truncation of the coarser estimate is already below that, so the coarser one is the better of the two.
+static bool_t deriv_agrees(const real_t *coarse, const real_t *fine, int shift, uint8_t order) {
+  real_t difference, tolerance;
+
+  realSubtract(fine, coarse, &difference, &ctxtReal39);
+  if(realIsZero(&difference)) {
+    return true;
+  }
+  realCopyAbs(fine, &tolerance);
+  tolerance.exponent += shift * order - DERIV_TOLERANCE_DIGITS;
+  return realCompareAbsLessThan(&difference, &tolerance);
 }
 
 
@@ -289,10 +356,11 @@ static void calcFuncValues(calcRegister_t label, calcRegister_t variable, const 
 
 // Evaluate the function at stencil points and compute "best" estimate
 static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finDiff) {
-  real_t x, h, probeValue, fx[MAX_F_EVAL];
+  real_t x, h, probeValue, estimate, coarse, fx[MAX_F_EVAL];
   snap_t savedRegister;
   calcRegister_t variable = INVALID_VARIABLE;
-  int i;
+  bool_t userStep = false;
+  int i, shift, stencil, coarseStencil = -1, coarseShift = 0;
 
   if(!getRegisterAsReal(REGISTER_X, &x)) {
     return;
@@ -311,23 +379,6 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
       if(variable != INVALID_VARIABLE && !getRegisterAsRealQuiet(variable, &probeValue)) {
         variable = INVALID_VARIABLE;   // differentiate only with respect to something numeric
       }
-      if(variable != INVALID_VARIABLE) {
-        // Kept here rather than in a register: the user program runs between the save and the restore and every temporary register is scratch to something it can
-        // call, RCL of a stack register among them. The snapshot carries the type and the tag, so the value comes back as itself and not as the real34 the
-        // sampling stored. getRegisterAsRealQuiet above has already turned away everything the snapshot does not cover.
-        saveRegisterSnapshot(variable, &savedRegister);
-      }
-    }
-
-    realCopy(&x, &h);   // Pass X into the h determination code to allow relative steps
-    deriv_default_h(&h);
-
-    // Compute the function at the finite difference points
-    saveForUndo();
-    calcFuncValues(label, variable, &x, fx, &h, &ctxtReal39);
-    undo();
-    if(variable != INVALID_VARIABLE) {   // undo() rolls back the stack only, so the sampled variable is put back here
-      restoreRegisterSnapshot(variable, &savedRegister);
     }
 
 #if 0
@@ -346,21 +397,82 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
       }
     }
 #endif
-    // Try finite differences until we get a result
-    for(i=0; finDiff[i] != NULL; i++) {
-      if(calcOneDeriv(finDiff[i], fx, &h, &x, &ctxtReal39)) {
-        //Add string, for display at TI
-        decContext c = ctxtReal4;
-        c.digits = 2;
-        real_t hh;
-        realPlus(&h, &hh, &c);
-        strcpy(errorMessage, STD_delta "=");
-        decNumberToString(&hh, errorMessage + stringByteLength(errorMessage));
-        strcat(errorMessage, "; ");
-        goto finish;
+    // Walk the step down a decade at a time. Each step gives one estimate, and two estimates from the same stencil that agree say the coarser step's truncation is
+    // already lost in the noise, so the coarser one is taken: it is the one that threw away the fewest digits. A user delta-x label sets the step itself and is
+    // taken as it stands.
+    for(shift = DERIV_FIRST_SHIFT; shift <= DERIV_LAST_SHIFT; shift++) {
+      if(variable != INVALID_VARIABLE) {
+        // Kept here rather than in a register: the user program runs between the save and the restore and every temporary register is scratch to something it can
+        // call, RCL of a stack register among them. The snapshot carries the type and the tag, so the value comes back as itself and not as the real34 the sampling
+        // stored. It is taken again for each step, because the restore hands back the long integer it holds. getRegisterAsRealQuiet has already turned away
+        // everything the snapshot does not cover.
+        saveRegisterSnapshot(variable, &savedRegister);
       }
+      realCopy(&x, &h);   // Pass X into the h determination code to allow relative steps
+      userStep = deriv_default_h(&h, shift);
+
+      // Compute the function at the finite difference points
+      saveForUndo();
+      calcFuncValues(label, variable, &x, fx, &h, &ctxtReal39);
+      undo();
+      if(variable != INVALID_VARIABLE) {   // undo() rolls back the stack only, so the sampled variable is put back here
+        restoreRegisterSnapshot(variable, &savedRegister);
+      }
+      if(lastErrorCode == ERROR_SOLVER_ABORT) {
+        break;
+      }
+
+      // Try finite differences until we get a result
+      stencil = -1;
+      for(i=0; finDiff[i] != NULL; i++) {
+        if(calcOneDeriv(finDiff[i], fx, &h, &estimate, &ctxtReal39)) {
+          stencil = i;
+          break;
+        }
+      }
+      if(stencil < 0) {   // every stencil rejected this step's samples, so take the points closer in
+        continue;
+      }
+      if(userStep) {
+        realCopy(&estimate, &x);
+        goto found;
+      }
+      if(stencil == coarseStencil && deriv_agrees(&coarse, &estimate, shift, finDiff[stencil]->order)) {
+        goto settled;
+      }
+      realCopy(&estimate, &coarse);
+      coarseStencil = stencil;
+      coarseShift = shift;
     }
+    if(coarseStencil < 0) {   // no step gave a usable set of samples
+      goto noResult;
+    }
+
+settled:                      // the coarser of the two estimates is the answer, and its own step is what the display reports
+    realCopy(&x, &h);
+    if(realIsZero(&h)) {
+      realCopy(const_1, &h);
+    }
+    h.exponent -= coarseShift;
+    realCopy(&coarse, &x);
+    goto found;
   }
+  goto noResult;
+
+found:
+  {
+    //Add string, for display at TI
+    decContext c = ctxtReal4;
+    c.digits = 2;
+    real_t hh;
+    realPlus(&h, &hh, &c);
+    strcpy(errorMessage, STD_delta "=");
+    decNumberToString(&hh, errorMessage + stringByteLength(errorMessage));
+    strcat(errorMessage, "; ");
+    goto finish;
+  }
+
+noResult:;
   // No estimate possible
   realSetNaN(&x);
   //Add string, for display at TI
