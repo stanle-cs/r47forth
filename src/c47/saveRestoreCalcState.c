@@ -2209,25 +2209,39 @@ int64_t stringToInt64(const char *str) {
           sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
           debugPrintf(15, "B", tmpString);
         #endif //LOADDEBUG
+        // The count is the file's, so the size of this allocation is too, and allocC47Blocks() answers NULL when the pool cannot hold it - a state file
+        // claiming 65535 formulae asks for 256 KiB of a 256 KiB pool. The loop below writes through that pointer, so take no equations rather than write
+        // through NULL; the rest of the section still reads its lines and discards them, which keeps the parser aligned with the stream.
         allFormulae = allocC47Blocks(TO_BLOCKS(sizeof(formulaHeader_t)) * formulae);
-        numberOfFormulae = formulae;
-        currentFormula = 0;
-        for(i = 0; i < formulae; i++) {
-          allFormulae[i].pointerToFormulaData = C47_NULL;
-          allFormulae[i].sizeInBlocks = 0;
+        if(allFormulae == NULL) {
+          numberOfFormulae = 0;
+          currentFormula = 0;
+          displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
+        }
+        else {
+          numberOfFormulae = formulae;
+          currentFormula = 0;
+          // The index is wider than the count on purpose: formulae is a uint16_t and the section's own i is an int16_t, so a file claiming more than
+          // 32767 formulae would run i past INT16_MAX and the loop would never end.
+          for(uint32_t f = 0; f < formulae; f++) {
+            allFormulae[f].pointerToFormulaData = C47_NULL;
+            allFormulae[f].sizeInBlocks = 0;
+          }
         }
 
-        for(i = 0; i < formulae; i++) {
+        for(uint32_t f = 0; f < formulae; f++) {                                  // uint32_t, as above: an int16_t index never reaches a count above 32767
           readLine(tmpString, TMP_STR_LENGTH); // One formula
           // No end-of-file break here, on purpose: see the PROGRAMS block loop. The empty reads give every remaining formula an empty string, which every
           // reader of the text handles; breaking would leave them at the C47_NULL the loop above sets, and not every reader of that pointer tests it.
-          if(loadMode == LM_ALL || loadMode == LM_PROGRAMS) {
+          // allFormulae is NULL when the allocation above was refused, and setEquation() indexes it. The line is still read, so a refused section costs
+          // the equations and nothing else.
+          if(allFormulae != NULL && (loadMode == LM_ALL || loadMode == LM_PROGRAMS)) {
             #if defined(LOADDEBUG)
               sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
               debugPrintf(15, "C", tmpString);
             #endif //LOADDEBUG
             utf8ToStringWithLength((uint8_t *)tmpString, tmpString + TMP_STR_LENGTH / 2, TMP_STR_LENGTH / 2);
-            setEquation(i, tmpString + TMP_STR_LENGTH / 2);
+            setEquation((uint16_t)f, tmpString + TMP_STR_LENGTH / 2);
           }
         }
         if(loadedVersion < 10000021) {  // Old constant format, need to update constants in equation with # prefix
