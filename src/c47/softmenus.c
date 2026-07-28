@@ -1618,8 +1618,9 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
       }
     }
 
-    dynamicSoftmenu[menu].menuContent = malloc(numberOfBytes);
+    dynamicSoftmenu[menu].menuContent = malloc(numberOfBytes + 1);          // +1 for the terminator showSoftmenu writes after the last name; avoids malloc(0)
     xcopy(dynamicSoftmenu[menu].menuContent, tmpString, numberOfBytes);
+    dynamicSoftmenu[menu].menuContent[numberOfBytes] = 0;
     dynamicSoftmenu[menu].numItems = numberOfVars;
   }
 
@@ -4030,7 +4031,9 @@ void showSoftmenuCurrentPart(void) {
           if(softmenu[m].menuItem == -MNU_MVAR) {
             initVariableSoftmenu(m);
             varList = dynamicSoftmenu[m].menuContent;
-            (getNthString(varList, dynamicSoftmenu[m].numItems))[0] = 0;
+            if(varList != NULL) {
+              (getNthString(varList, dynamicSoftmenu[m].numItems))[0] = 0;  // lands in the extra byte _dynmenuConstructMVars allocates
+            }
             break;
           }
         }
@@ -4065,7 +4068,8 @@ void showSoftmenuCurrentPart(void) {
         currentSolverVariable = findOrAllocateNamedVariable((char *)getNthString(varList, 0));
       }
       else if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE || (currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_2ND_DERIVATIVE) {
-        if((getNthString(varList, 1))[0] == 0) {
+        // One variable and nothing to choose, so it runs at once. The step key sits after the variables and is not one of them, so it does not make this a choice.
+        if((getNthString(varList, 1))[0] == 0 || compareString((char *)getNthString(varList, 1), STD_delta, CMP_NAME) == 0) {
           currentSolverVariable = findOrAllocateNamedVariable((char *)getNthString(varList, 0));
           reallyRunFunction(ITM_STO, currentSolverVariable);
           saveForUndo();

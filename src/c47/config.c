@@ -526,7 +526,9 @@ void fnClrMod(uint16_t unusedButMandatoryParameter) {        //clear input buffe
     clearSystemFlag(FLAG_IRFRAC);
     clearSystemFlag(FLAG_INTING);
     clearSystemFlag(FLAG_SOLVING);
-    programRunStop = PGM_STOPPED;
+    if(programRunStop != PGM_RUNNING) {                         // as a program step this leaves the graph and carries on; from the keyboard it still stops a halted run
+      programRunStop = PGM_STOPPED;
+    }
 
     if(calcMode == CM_NIM) {
       strcpy(aimBuffer, "+");
@@ -1894,6 +1896,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     currentSolverVariable = INVALID_VARIABLE;
     currentSolverNestingDepth = 0;
     engineNestingDepth = 0;
+    plotEngineActive = 0;
     graphAccActive = false;
 
     graphVariabl1 = 0;

@@ -131,7 +131,7 @@ static void derivativeEquation(uint16_t order, uint8_t ti) {
   // in between and reaches every temporary register, which is what used to hand the variable back holding a number out of that program.
   restore = (currentSolverVariable != INVALID_VARIABLE) && getRegisterAsRealQuiet(currentSolverVariable, &probeValue);
   if(restore) {
-    SNAPVAL(currentSolverVariable, savedRegister);
+    saveRegisterSnapshot(currentSolverVariable, &savedRegister);
   }
   if(!(currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && currentSolverProgram < numberOfLabels) {
     calcDerivOfOrder(currentSolverProgram + FIRST_LABEL, order);   // the MVAR menu was opened on a program, so that is what this key differentiates
@@ -141,7 +141,7 @@ static void derivativeEquation(uint16_t order, uint8_t ti) {
     calcDerivOfOrder(INVALID_VARIABLE, order);
   }
   if(restore) {
-    RESTOREVAL(currentSolverVariable, savedRegister);
+    restoreRegisterSnapshot(currentSolverVariable, &savedRegister);
   }
   temporaryInformation = ti;
   if(!solving) {
@@ -404,9 +404,9 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
       if(variable != INVALID_VARIABLE) {
         // Kept here rather than in a register: the user program runs between the save and the restore and every temporary register is scratch to something it can
         // call, RCL of a stack register among them. The snapshot carries the type and the tag, so the value comes back as itself and not as the real34 the sampling
-        // stored. It is taken again for each step, because RESTOREVAL hands back the long integer it holds. getRegisterAsRealQuiet has already turned away
+        // stored. It is taken again for each step, because the restore hands back the long integer it holds. getRegisterAsRealQuiet has already turned away
         // everything the snapshot does not cover.
-        SNAPVAL(variable, savedRegister);
+        saveRegisterSnapshot(variable, &savedRegister);
       }
       realCopy(&x, &h);   // Pass X into the h determination code to allow relative steps
       userStep = deriv_default_h(&h, shift);
@@ -416,7 +416,7 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
       calcFuncValues(label, variable, &x, fx, &h, &ctxtReal39);
       undo();
       if(variable != INVALID_VARIABLE) {   // undo() rolls back the stack only, so the sampled variable is put back here
-        RESTOREVAL(variable, savedRegister);
+        restoreRegisterSnapshot(variable, &savedRegister);
       }
       if(lastErrorCode == ERROR_SOLVER_ABORT) {
         break;

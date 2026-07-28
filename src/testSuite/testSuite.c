@@ -56,6 +56,7 @@ void covDerivMvarPgm(uint16_t which);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
 void covIntegrateErr(uint16_t which);
+void covMvarKey(uint16_t which);
 void covIntegratePgm(uint16_t unusedButMandatoryParameter);
 void covNamedVariableCache(uint16_t unusedButMandatoryParameter);
 void covSumProd(uint16_t which);
@@ -239,6 +240,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
   {"fnIntegrateErrCov",      covIntegrateErr, 1 },
+  {"fnMvarKeyCov",           covMvarKey, 1 },
   {"fnIntegratePgmCov",      covIntegratePgm, 1 },
   {"fnNamedVarCacheCov",     covNamedVariableCache, 1 },
   {"fnSumProdCov",           covSumProd, 1 },
@@ -1109,9 +1111,10 @@ void covStatsRegister(uint16_t unusedButMandatoryParameter) {
 }
 
 void covLoadPgm(uint16_t unusedButMandatoryParameter) {
-  // Build and import two labelled RPN programs: S = X^2 - 4 (root at X=2, derivative 2X) for the solver / differentiator / integrator / real summation,
-  // and T = X^2 (which returns a long integer for a long-integer counter) for the indexed summation. Both reach the execProgram branches the formula corpus cannot.
-  // Bytes: LBL name / X^2 / [literal 4 / SUB] / END.
+  // Build and import three labelled RPN programs: S = X^2 - 4 (root at X=2, derivative 2X) for the solver / differentiator / integrator / real summation,
+  // T = X^2 (which returns a long integer for a long-integer counter) for the indexed summation, and M = X^2 behind a leading MVAR "A" so the interactive
+  // integrator accepts it (fnIntegrateErrCov FARG=3). All reach the execProgram branches the formula corpus cannot.
+  // Bytes: LBL name / [MVAR name] / X^2 / [literal 4 / SUB] / END.
   static const uint8_t pgmS[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 1, 'S',            // LBL "S"
     ITM_SQUARE,                                        // X^2
@@ -1124,8 +1127,15 @@ void covLoadPgm(uint16_t unusedButMandatoryParameter) {
     ITM_SQUARE,                                        // X^2
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
   };
+  static const uint8_t pgmM[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'M',            // LBL "M"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'A', // MVAR "A"
+    ITM_SQUARE,                                        // X^2
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
+  };
   covWriteAndLoadPgm(pgmS, sizeof(pgmS));
   covWriteAndLoadPgm(pgmT, sizeof(pgmT));
+  covWriteAndLoadPgm(pgmM, sizeof(pgmM));
 }
 
 void covNamedVariableCache(uint16_t unusedButMandatoryParameter) {
@@ -1508,13 +1518,16 @@ static void covSeedMvarVariable(const char *name, int32_t value) {
 }
 
 void covDerivMvarPgm(uint16_t which) {
-  // Program M declares MVAR x and MVAR p and recalls both from named storage, so its stencil samples only move when the differentiator stores each point in the
-  // variable it differentiates with respect to. Program S of covDerivPgm takes its argument off the stack instead and cannot reach that path.
+  // Program MD declares MVAR x and MVAR p and recalls both from named storage, so its stencil samples only move when the differentiator stores each point in the
+  // variable it differentiates with respect to. Program S of covDerivPgm takes its argument off the stack instead and cannot reach that path. The name is MD and
+  // not M because covLoadPgm has already loaded an M, X squared behind an MVAR A, and findNamedLabel hands back the first of two same-named programs.
   // Bytes: LBL name / MVAR name / RCL name / ENTER / MULT / SUB / literal / END.
   static const uint8_t pgmM[] = {
-    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'M',                       // LBL "M"
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'M', 'D',                  // LBL "MD"
     (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR "x"
     (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'p',   // MVAR "p"
+    ITM_RCL, REGISTER_Y_IN_KS_CODE,                               // RCL Y, then drop it: recalling a stack register writes TEMP_REGISTER_1 (recall.c), so a
+    ITM_DROP,                                                     // sampled variable parked there would come back holding this instead of its own value
     ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',                       // RCL "x"
     ITM_ENTER,                                                    // x x
     ITM_MULT,                                                     // x^2
@@ -1526,16 +1539,16 @@ void covDerivMvarPgm(uint16_t which) {
     ITM_SUB,                                                      // x^2 - p*x - 2
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
   };
-  // D1 and D2 differentiate M as a program step, which is the path a running program takes: no menu can be opened there, so the derivative is taken at once with
-  // respect to the selected variable, or the first declaration when the selection is not one of M's.
+  // D1 and D2 differentiate MD as a program step, which is the path a running program takes: no menu can be opened there, so the derivative is taken at once with
+  // respect to the selected variable, or the first declaration when the selection is not one of MD's.
   static const uint8_t pgmD1[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 2, 'D', '1',                  // LBL "D1"
-    (uint8_t)((ITM_FQX >> 8) | 0x80), (uint8_t)(ITM_FQX & 0xff), STRING_LABEL_VARIABLE, 1, 'M',    // f'(x) "M"
+    (uint8_t)((ITM_FQX >> 8) | 0x80), (uint8_t)(ITM_FQX & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',    // f'(x) "MD"
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
   };
   static const uint8_t pgmD2[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 2, 'D', '2',                  // LBL "D2"
-    (uint8_t)((ITM_FDQX >> 8) | 0x80), (uint8_t)(ITM_FDQX & 0xff), STRING_LABEL_VARIABLE, 1, 'M',  // f"(x) "M"
+    (uint8_t)((ITM_FDQX >> 8) | 0x80), (uint8_t)(ITM_FDQX & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',  // f"(x) "MD"
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
   };
   calcRegister_t label;
@@ -1562,9 +1575,9 @@ void covDerivMvarPgm(uint16_t which) {
     return;
   }
 
-  label = findNamedLabel("M", GLOBAL_LABELS);
+  label = findNamedLabel("MD", GLOBAL_LABELS);
   if(label == INVALID_VARIABLE) {
-    printf("\nUnknown global label: M\n");
+    printf("\nUnknown global label: MD\n");
     abortTest();
     return;
   }
@@ -1644,16 +1657,96 @@ void covIntegrate(uint16_t which) {
 }
 
 void covIntegrateErr(uint16_t which) {
-  // Drive the dispatch error branches of the integrator (_fnIntegrate / fnPgmInt in integrate.c). which=0: a stack register whose letter names no program label ->
-  // ERROR_LABEL_NOT_FOUND; otherwise a named variable with no program specified -> ERROR_NO_PROGRAM_SPECIFIED.
+  // Drive the dispatch branches of the integrator (_fnIntegrate / fnPgmInt in integrate.c). which=0: a stack register whose letter names no program label ->
+  // ERROR_LABEL_NOT_FOUND; which=1: a named variable with no program specified -> ERROR_NO_PROGRAM_SPECIFIED; which=2 and 3: interactive selection of the loaded
+  // programs T (no MVAR, empty menu) and M (leading MVAR), each opening the MVAR menu the selection leads to so the list terminator write is covered (#500, #579).
+  // 2 and 3 need the programs staged, so they run from pgm_solve_cov; 0 needs the letter T to name no label, so it runs from integrate_cov.
   if(which == 0) {
     fnIntegrate(REGISTER_T);
   }
-  else {
+  else if(which == 1) {
     currentSolverStatus = 0;
     currentSolverProgram = 9999;   // >= numberOfLabels: no program specified
     fnIntegrate(FIRST_NAMED_VARIABLE);
   }
+  else {
+    const char *name = which == 2 ? "T" : "M";
+    const calcRegister_t label = findNamedLabel(name, GLOBAL_LABELS);
+    if(label == INVALID_VARIABLE) {
+      printf("\nUnknown global label: %s\n", name);
+      abortTest();
+      return;
+    }
+    currentSolverStatus = 0;
+    currentMvarLabel = INVALID_VARIABLE;   // take the menu from currentSolverProgram, as the interactive selection does
+    fnIntegrate(label);
+    showSoftmenu(-MNU_MVAR);
+    popSoftmenu();
+    currentSolverStatus = 0;   // disarm the interactive integrator a successful selection leaves armed
+  }
+}
+
+static int16_t covMvarKeyClass(uint16_t key) {
+  // Decode one unshifted MVAR softkey (1..6) exactly as the keyboard does and classify it: 1 selects the menu variable, 2 opens the integral TOOL menu,
+  // 3 is integral y to x, 0 is no operation, 9 is anything else. Classifying keeps the corpus off the item numbers, which move as items are added.
+  char data[2] = {(char)('0' + key), 0};
+  const int16_t item = determineFunctionKeyItem_C47(data, false, false);
+  switch(item) {
+    case ITM_Sfdx_VAR:     return 1;
+    case -MNU_Sf_TOOL:     return 2;
+    case ITM_INTEGRAL_YX:  return 3;
+    case ITM_NOP:          return 0;
+    default:               return 9;
+  }
+}
+
+void covMvarKey(uint16_t which) {
+  // Classify one softkey of the integrator's MVAR menu into X. which 1..6: the menu of a 6-MVAR program armed by the interactive integrator, where every key selects
+  // its variable. which 11..16: the same keys over the formula A+B+C, where parseEquation reserves items 4 and 5 for the TOOL and integral-y-to-x action keys and pads
+  // the slots between with empty names.
+  static const uint8_t pgmV[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'V',            // LBL "V"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'A', // MVAR "A"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'B',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'C',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'D',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'E',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'F',
+    ITM_SQUARE,                                        // X^2
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
+  };
+  int16_t keyClass;
+
+  currentSolverStatus = 0;
+  currentMvarLabel = INVALID_VARIABLE;
+  if(which <= 6) {
+    if(findNamedLabel("V", GLOBAL_LABELS) == INVALID_VARIABLE) {
+      covWriteAndLoadPgm(pgmV, sizeof(pgmV));
+    }
+    const calcRegister_t label = findNamedLabel("V", GLOBAL_LABELS);
+    if(label == INVALID_VARIABLE) {
+      printf("\nUnknown global label: V\n");
+      abortTest();
+      return;
+    }
+    fnIntegrate(label);            // interactive selection, as Integral f d makes it
+    showSoftmenu(-MNU_MVAR);
+    showSoftmenuCurrentPart();     // the draw that fills the menu content, as a screen refresh does
+    keyClass = covMvarKeyClass(which);
+  }
+  else {
+    if(numberOfFormulae == 0) {
+      fnEqNew(NOPARAM);
+    }
+    setEquation(currentFormula, "A+B+C");
+    showSoftmenu(-MNU_Sf);         // the formula integrator opens its MVAR menu through here
+    showSoftmenuCurrentPart();
+    keyClass = covMvarKeyClass(which - 10);
+  }
+  popSoftmenu();
+  currentSolverStatus = 0;
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(keyClass, REGISTER_REAL34_DATA(REGISTER_X));
 }
 
 void covIntegratePgm(uint16_t unusedButMandatoryParameter) {

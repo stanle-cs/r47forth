@@ -1,6 +1,6 @@
 ;******************************************************************************************************************************
-;** Coverage: derivative of a program that declares MVARs. covDerivMvarPgm builds and loads M (f(x,p) = x^2 - p*x - 2 with   **
-;** MVAR x and MVAR p) and differentiates it both ways it can be reached. M recalls its arguments from named storage, so     **
+;** Coverage: derivative of a program that declares MVARs. covDerivMvarPgm builds and loads MD (f(x,p) = x^2 - p*x - 2 with  **
+;** MVAR x and MVAR p) and differentiates it both ways it can be reached. MD recalls its arguments from named storage, so    **
 ;** unlike the stack-reading program S of pgm_solve_cov it only moves when the differentiator stores each stencil point in   **
 ;** the variable it differentiates with respect to (differentiate.c). Without that the stencil samples are all equal and the **
 ;** stencil coefficients, which sum to zero, cancel it exactly.                                                              **
@@ -16,7 +16,7 @@
 ;******************************************************************************************************************************
 In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
 
-; build and load M, D1 and D2, then seed x = 5 and p = 0
+; build and load MD, D1 and D2, then seed x = 5 and p = 0
 Func: fnDerivMvarPgmCov
 In:  FARG=0
 Out: EC=0
@@ -46,7 +46,7 @@ Func: fnDerivMvarPgmCov
 In:  FARG=5 RX=Real:"3"
 Out: EC=0 RX=Real:"5"
 
-; a selected variable M does not declare falls back to the first declaration in the same way
+; a selected variable MD does not declare falls back to the first declaration in the same way
 Func: fnDerivMvarPgmCov
 In:  FARG=8 RX=Real:"3"
 Out: EC=0 RX=Real:"5"

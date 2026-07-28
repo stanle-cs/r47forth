@@ -34,16 +34,21 @@
 
 
 
-// True when a further PLOT, INT or SOLVE may not start. INT and SOLVE nest to MAX_ENGINE_NESTING_DEPTH. PLOT runs only as the outermost engine: the draw matrix DrwMX,
-// its register regStatsXY and the screen are single. Each engine calls this at its entry, ahead of that engine's own saveForUndo. PGM_WAITING is the whole signal and
-// the engine one level out raises ERROR_SOLVER_ABORT as it unwinds. No error is raised here and the standing undo image is disarmed: adjustResult replays that image on
-// any error code, and it predates the outer engine's working registers.
+// True when a further PLOT, INT or SOLVE may not start. INT and SOLVE nest to MAX_ENGINE_NESTING_DEPTH. PLOT runs only as the outermost engine, because the draw
+// matrix DrwMX, its register regStatsXY and the screen are single, and where PLOT_NESTING_ALLOWED is 0 nothing at all runs inside a plot. Each engine calls this at
+// its entry, ahead of that engine's own saveForUndo: the undo buffer is one global, and an engine refused after saving over it leaves the engine one level out
+// restoring an image that no longer matches its registers. PGM_WAITING carries the stop across the unwind and engineNestingWasRefused carries the reason, both of
+// them durable where lastErrorCode is not: FLAG_IGN1ER wipes it, so an error raised here never reaches the engine that reports the abort. The standing undo image
+// is disarmed because adjustResult replays that image on any error code.
 bool_t engineNestingRefused(bool_t isPlot) {
-  if(isPlot ? (engineNestingDepth == 0) : (engineNestingDepth < MAX_ENGINE_NESTING_DEPTH)) {
+  if(isPlot ? (engineNestingDepth == 0)
+            : (engineNestingDepth < MAX_ENGINE_NESTING_DEPTH && (PLOT_NESTING_ALLOWED || plotEngineActive == 0))) {
+    engineNestingWasRefused = false;
     return false;
   }
   programRunStop = PGM_WAITING;
   thereIsSomethingToUndo = false;
+  engineNestingWasRefused = true;
   return true;
 }
 

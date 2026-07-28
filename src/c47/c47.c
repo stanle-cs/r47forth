@@ -280,6 +280,8 @@ uint16_t               currentSolverProgram;
 uint16_t               currentSolverVariable;
 uint16_t               currentSolverNestingDepth;
 uint16_t               engineNestingDepth;
+uint16_t               plotEngineActive;
+bool_t                 engineNestingWasRefused;
 uint16_t               numberOfFormulae;
 uint16_t               currentFormula;
 uint16_t               numberOfUserMenus;

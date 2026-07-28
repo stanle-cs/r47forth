@@ -125,8 +125,9 @@
   /* returns error code or ERROR_NONE if okay */
   int getRegisterAsLongIntQuiet(calcRegister_t reg, longInteger_t val, bool_t *fractional);
 
-  // Snapshot of a register's value, type and tag, for code that has to put a register back the way it found it. SNAPVAL takes the copy and RESTOREVAL writes it back
-  // and frees the long integer it owns, so the pair is used once. Types outside the switch are not captured, so screen the register before taking a snapshot.
+  // Snapshot of a register's value, type and tag, for code that has to put a register back the way it found it. saveRegisterSnapshot takes the copy and
+  // restoreRegisterSnapshot writes it back and frees the long integer it owns, so the pair is used once. Types outside the switch are not captured, so screen the
+  // register before taking a snapshot.
   typedef struct {
     uint8_t t;
     real34_t r, i;
@@ -136,54 +137,8 @@
     uint32_t tag;
   } snap_t;
 
-  #define SNAPVAL(reg, s)                                          \
-    do {                                                             \
-    switch(s.t = getRegisterDataType(reg)) {                       \
-      case dtComplex34:                                            \
-        real34Copy(REGISTER_REAL34_DATA(reg), &s.r);               \
-        real34Copy(REGISTER_IMAG34_DATA(reg), &s.i);               \
-        break;                                                     \
-      case dtReal34:                                               \
-        case dtTime:                                                 \
-        real34Copy(REGISTER_REAL34_DATA(reg), &s.r);               \
-        real34SetZero(&s.i);                                       \
-        break;                                                     \
-      case dtLongInteger:                                          \
-        getRegisterAsLongInt(reg, s.li, NULL);                     \
-        break;                                                     \
-      case dtShortInteger:                                         \
-        getRegisterAsRawShortInt(reg, &s.siVal, &s.siBase);        \
-        break;                                                     \
-      }                                                              \
-      s.tag = getRegisterTag(reg);                                   \
-    } while(0)
-
-  // reg may hold a different type (hence allocation size) than the snapshot, so reallocate to s.t before writing back
-  #define RESTOREVAL(reg, s)                                                   \
-    do {                                                                       \
-    switch(s.t) {                                                            \
-      case dtComplex34:                                                      \
-        reallocateRegister(reg, dtComplex34, COMPLEX34_SIZE_IN_BLOCKS, s.tag); \
-        real34Copy(&s.i, REGISTER_IMAG34_DATA(reg));                         \
-        real34Copy(&s.r, REGISTER_REAL34_DATA(reg));                         \
-        break;                                                               \
-      case dtReal34:                                                         \
-        case dtTime:                                                           \
-        reallocateRegister(reg, s.t, REAL34_SIZE_IN_BLOCKS, s.tag);          \
-        real34Copy(&s.r, REGISTER_REAL34_DATA(reg));                         \
-        break;                                                               \
-      case dtLongInteger:                                                    \
-        convertLongIntegerToLongIntegerRegister(s.li, reg);                  \
-        longIntegerFree(s.li);                                               \
-        break;                                                               \
-      case dtShortInteger:                                                   \
-        reallocateRegister(reg, dtShortInteger, SHORT_INTEGER_SIZE_IN_BLOCKS, s.siBase); \
-        *(REGISTER_SHORT_INTEGER_DATA(reg))=s.siVal;                         \
-        setRegisterShortIntegerBase(reg, s.siBase);                          \
-        break;                                                               \
-      }                                                                        \
-      setRegisterDataType(reg, s.t, s.tag);                                    \
-    } while(0)
+  void saveRegisterSnapshot(calcRegister_t reg, snap_t *s);
+  void restoreRegisterSnapshot(calcRegister_t reg, snap_t *s);
 
   void processRealComplexMonadicFunction(void (*realf)(void), void (*complexf)(void));
   void processIntRealComplexMonadicFunction(void (*realf)(void), void (*complexf)(void), void (*shortintf)(void), void (*longintf)(void));
