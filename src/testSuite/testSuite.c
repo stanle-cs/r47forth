@@ -1515,6 +1515,8 @@ void covDerivMvarPgm(uint16_t which) {
     ITM_LBL, STRING_LABEL_VARIABLE, 1, 'M',                       // LBL "M"
     (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR "x"
     (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'p',   // MVAR "p"
+    ITM_RCL, REGISTER_Y_IN_KS_CODE,                               // RCL Y, then drop it: recalling a stack register writes TEMP_REGISTER_1 (recall.c), so a
+    ITM_DROP,                                                     // sampled variable parked there would come back holding this instead of its own value
     ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',                       // RCL "x"
     ITM_ENTER,                                                    // x x
     ITM_MULT,                                                     // x^2
