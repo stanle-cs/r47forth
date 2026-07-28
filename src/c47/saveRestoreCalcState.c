@@ -1876,7 +1876,13 @@ int64_t stringToInt64(const char *str) {
         freeC47Blocks(userKeyLabel, TO_BLOCKS(userKeyLabelSize));
         userKeyLabelSize = 37/*keys*/ * 6/*states*/ * 1/*byte terminator*/ + 1/*byte sentinel*/;
         userKeyLabel = allocC47Blocks(TO_BLOCKS(userKeyLabelSize));
-        memset(userKeyLabel,   0, TO_BYTES(TO_BLOCKS(userKeyLabelSize)));
+        if(userKeyLabel == NULL) {                                              // the memset below writes through this pointer, and this section's entries then walk it
+          userKeyLabelSize = 0;
+          displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
+        }
+        else {
+          memset(userKeyLabel,   0, TO_BYTES(TO_BLOCKS(userKeyLabelSize)));
+        }
       }
 
       for(i=0; i<numberOfRegs; i++) {
