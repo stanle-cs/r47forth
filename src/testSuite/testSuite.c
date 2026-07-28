@@ -1518,11 +1518,12 @@ static void covSeedMvarVariable(const char *name, int32_t value) {
 }
 
 void covDerivMvarPgm(uint16_t which) {
-  // Program M declares MVAR x and MVAR p and recalls both from named storage, so its stencil samples only move when the differentiator stores each point in the
-  // variable it differentiates with respect to. Program S of covDerivPgm takes its argument off the stack instead and cannot reach that path.
+  // Program MD declares MVAR x and MVAR p and recalls both from named storage, so its stencil samples only move when the differentiator stores each point in the
+  // variable it differentiates with respect to. Program S of covDerivPgm takes its argument off the stack instead and cannot reach that path. The name is MD and
+  // not M because covLoadPgm has already loaded an M, X squared behind an MVAR A, and findNamedLabel hands back the first of two same-named programs.
   // Bytes: LBL name / MVAR name / RCL name / ENTER / MULT / SUB / literal / END.
   static const uint8_t pgmM[] = {
-    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'M',                       // LBL "M"
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'M', 'D',                  // LBL "MD"
     (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR "x"
     (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'p',   // MVAR "p"
     ITM_RCL, REGISTER_Y_IN_KS_CODE,                               // RCL Y, then drop it: recalling a stack register writes TEMP_REGISTER_1 (recall.c), so a
@@ -1560,9 +1561,9 @@ void covDerivMvarPgm(uint16_t which) {
     return;
   }
 
-  label = findNamedLabel("M", GLOBAL_LABELS);
+  label = findNamedLabel("MD", GLOBAL_LABELS);
   if(label == INVALID_VARIABLE) {
-    printf("\nUnknown global label: M\n");
+    printf("\nUnknown global label: MD\n");
     abortTest();
     return;
   }
