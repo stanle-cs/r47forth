@@ -1065,16 +1065,29 @@ int64_t stringToInt64(const char *str) {
   }
 
 
+  #define STANDARDISED_COMPLEX_LENGTH 200  // one size for standardiseComplex()'s buffers and for every caller's output buffer
+
   // Function to standardize new input to the old state file format, any new complex, into the old "re im" form.
   // Accepts (3-i4) | 3-i4 | +3+i4 | -3-i4 | (+3+i4) | (-3-i4) | 3 -4 | 3 4 | -2.5 1e3 | -2.5e-3+i4 | (-2.5e-3-i4) | i4 | (i4) |
   //         ( 3 - i4 ) | (1.5e2-i2.5e-3) | 0+i0 | -7+i0 | (3 -i4) | 3 -i4 | +3 +i4 | -3 -i4 | ( 3 - i 4 ) | +3 + i4 | 3 - i 4 | (-2.5e-3 - i 4)
   //         (parentheses optional, leading sign optional)
   // as well as the state file form  "3 -4"  (backward compatibility). Form and free white space is enabled by 'i' (which can never occur in a real number string).
+  // 'dest' must be STANDARDISED_COMPLEX_LENGTH bytes: the caller's buffer and the work buffer below are one size, and the length check
+  // at the head of the function is what keeps every write inside both of them.
   static void standardiseComplex(const char *src, char *dest) {
-    char work[200];
+    char work[STANDARDISED_COMPLEX_LENGTH];
     char *w = work;
     char *iPos;
     bool_t isIform = (strchr(src, 'i') != NULL);
+
+    // A data file line is up to TMP_STR_LENGTH bytes and lands here unmeasured, while a complex this calculator can hold is far shorter: a real34 carries
+    // 34 significant digits, so the widest legal element - both parts signed, with a radix mark and a four digit exponent - is well under 100 bytes. An
+    // element that does not fit is not a number that could be restored, and truncating it would silently change its value, so it is read as zero instead.
+    // The 4 covers the "0 +" that the leading 'i' form prepends and the terminator, the widest expansion any branch below performs.
+    if(stringByteLength(src) + 4 > (int32_t)sizeof(work)) {
+      strcpy(dest, "0 0");
+      return;
+    }
 
     // Copy src into a writable buffer, dropping parentheses. For the 'i' form drop all whitespace too; for the stock
     // space form keep internal whitespace (it is the real/imaginary separator) and only trim the ends below.
@@ -1114,7 +1127,7 @@ int64_t stringToInt64(const char *str) {
       char imSign = *(iPos - 1);                                                 // the character right before 'i' is the imaginary sign
       char *imMag = iPos + 1;                                                    // the imaginary magnitude follows the 'i'
       size_t realLen = (size_t)(iPos - 1 - work);                                // the real part is everything before that sign
-      char realStr[200];
+      char realStr[STANDARDISED_COMPLEX_LENGTH];
 
       if(imSign != '+' && imSign != '-') {                                       // malformed: treat the char before 'i' as part of the real and assume '+'
         imSign = '+';
@@ -1130,16 +1143,22 @@ int64_t stringToInt64(const char *str) {
   // Read the next whitespace-delimited token from the open file, skipping any leading whitespace (spaces, tabs, CR,
   // LF). Used by the data-file matrix reader so that matrix element layout (one per line, all on one line, or any
   // mix) is irrelevant. NotE: readLine()'s use of restore()/ioEof().
-  static char *readToken(char *tok) {
+  static char *readToken(char *tok, size_t maxLen) {
     char *p = tok;
+    char *const end = (maxLen == 0) ? tok : tok + maxLen - 1;                    // last writable slot; reserve one byte for '\0'
 
-    if(!ioEof()) {
+    if(maxLen != 0 && !ioEof()) {
       restore(p, 1);
       while((*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') && !ioEof()) {
         restore(p, 1);
       }
-      while(*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && !ioEof()) {
+      while(p < end && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && !ioEof()) {
         restore(++p, 1);
+      }
+      while(*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && !ioEof()) {    // token longer than the buffer: drain to the separator so the next read resyncs, as readLine() does
+        if(restore(p, 1) == 0) {                                                 // a read that returns nothing cannot make progress, and ioEof() stays false on an I/O error
+          break;
+        }
       }
     }
     *p = 0;
@@ -1150,25 +1169,36 @@ int64_t stringToInt64(const char *str) {
   // Read the next complex matrix element token, skipping leading whitespace. A complex element is either a
   // parenthesised group "( ... )" (read up to and including the closing parenthesis, may span newlines) or a bare
   // whitespace-free 'i' form token.
-  static char *readComplexToken(char *tok) {
+  static char *readComplexToken(char *tok, size_t maxLen) {
     char *p = tok;
+    char *const end = (maxLen == 0) ? tok : tok + maxLen - 1;                    // last writable slot; reserve one byte for '\0'
 
-    if(!ioEof()) {
+    if(maxLen != 0 && !ioEof()) {
       restore(p, 1);
       while((*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') && !ioEof()) {
         restore(p, 1);
       }
       if(*p == '(') {
-        while(*p != ')' && !ioEof()) {
+        while(p < end && *p != ')' && !ioEof()) {
           restore(++p, 1);
         }
-        if(*p == ')') {
+        while(*p != ')' && !ioEof()) {                                           // group longer than the buffer: drain to the closing parenthesis so the next read resyncs
+          if(restore(p, 1) == 0) {                                               // see readToken(): no progress, and ioEof() stays false on an I/O error
+            break;
+          }
+        }
+        if(*p == ')' && p < end) {
           p++;
         }
       }
       else {
-        while(*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && !ioEof()) {
+        while(p < end && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && !ioEof()) {
           restore(++p, 1);
+        }
+        while(*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && !ioEof()) {  // token longer than the buffer: drain to the separator
+          if(restore(p, 1) == 0) {                                               // see readToken()
+            break;
+          }
         }
       }
     }
@@ -1336,7 +1366,7 @@ int64_t stringToInt64(const char *str) {
 
     else if(strcmp(type, "Cplx") == 0) {
       char *imaginaryPart;
-      char stdTmp[200];
+      char stdTmp[STANDARDISED_COMPLEX_LENGTH];
 
       reallocateRegister(regist, dtComplex34, 0, tag);
       if(dataFileMode) {
@@ -1423,7 +1453,7 @@ int64_t stringToInt64(const char *str) {
 
       for(i = 0; i < rows * cols; ++i) {
         if(dataFileMode) {
-          readToken(tmpString);                                                  // any whitespace (spaces and/or newlines) separates elements
+          readToken(tmpString, TMP_STR_LENGTH);                                // any whitespace (spaces and/or newlines) separates elements
           dataFileCommaToPeriod(tmpString);
         }
         else {
@@ -1441,9 +1471,9 @@ int64_t stringToInt64(const char *str) {
         char *imaginaryPart;
 
         if(dataFileMode) {
-          char stdTmp[200];
+          char stdTmp[STANDARDISED_COMPLEX_LENGTH];
 
-          readComplexToken(tmpString);                                           // one parenthesised "(re-iIM)" group (or bare i form) per element, free-form whitespace between elements
+          readComplexToken(tmpString, TMP_STR_LENGTH);                         // one parenthesised "(re-iIM)" group (or bare i form) per element, free-form whitespace between elements
           standardiseComplex(tmpString, stdTmp);
           dataFileCommaToPeriod(stdTmp);
           strcpy(tmpString, stdTmp);
@@ -1484,10 +1514,10 @@ int64_t stringToInt64(const char *str) {
       for(i = 0; i < rows * cols; ++i) {
         if(dataFileMode) {
           if(strcmp(type, "Cxma") == 0) {                                        // skip exactly as restoreMatrixData() reads, or the file position desyncs
-            readComplexToken(tmpString);
+            readComplexToken(tmpString, TMP_STR_LENGTH);
           }
           else {
-            readToken(tmpString);
+            readToken(tmpString, TMP_STR_LENGTH);
           }
         }
         else {
