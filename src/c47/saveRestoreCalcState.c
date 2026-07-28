@@ -1860,7 +1860,9 @@ int64_t stringToInt64(const char *str) {
         if(tmpString[0] == 0) {                                                  // end of file: the count was a lie, see GLOBAL_REGISTERS
           break;
         }
-        if(loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE) {
+        // 18 is what MYMENU can hold and what the save side writes; the count is the file's. Bound the writes and not the loop, which must still
+        // read a line per claimed entry to stay aligned with the stream.
+        if((loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE) && i < (int16_t)nbrOfElements(userMenuItems)) {
           #if defined(LOADDEBUG)
             sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
             debugPrintf(10, "-", tmpString);
@@ -1888,7 +1890,8 @@ int64_t stringToInt64(const char *str) {
         if(tmpString[0] == 0) {                                                  // end of file: the count was a lie, see GLOBAL_REGISTERS
           break;
         }
-        if(loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE) {
+        // Same bound as MYMENU above, on the array MYALPHA owns.
+        if((loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE) && i < (int16_t)nbrOfElements(userAlphaItems)) {
           #if defined(LOADDEBUG)
             sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
             debugPrintf(11, "-", tmpString);
@@ -1929,8 +1932,14 @@ int64_t stringToInt64(const char *str) {
             }
           }
           if(target == -1) {
-            createMenu(tmpString + TMP_STR_LENGTH / 2);
-            target = numberOfUserMenus - 1;
+            uint16_t menusBefore = numberOfUserMenus;                            // createMenu() refuses a name the file made invalid, and then numberOfUserMenus - 1 is
+            createMenu(tmpString + TMP_STR_LENGTH / 2);                          //   either -1, with userMenus still NULL, or an unrelated menu that would silently take
+            if(numberOfUserMenus <= menusBefore) {                               //   this one's items. Leave target at -1 and drop the menu instead.
+              target = -1;
+            }
+            else {
+              target = numberOfUserMenus - 1;
+            }
           }
         }
 
@@ -1941,7 +1950,9 @@ int64_t stringToInt64(const char *str) {
           if(tmpString[0] == 0) {                                                // end of file: the count was a lie, see GLOBAL_REGISTERS
             break;
           }
-          if(loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE) {
+          // A user menu holds 18 items, as MYMENU and MYALPHA do; the count and the menu name are the file's. userMenus is ONE pool block holding every menu,
+          // so an unbounded index writes over the menus that follow this one and, past the last of them, out of the block.
+          if((loadMode == LM_ALL || loadMode == LM_SYSTEM_STATE) && target >= 0 && i < (int16_t)nbrOfElements(userMenus[target].menuItem)) {
             #if defined(LOADDEBUG)
               sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
               debugPrintf(13, "-", tmpString);
