@@ -4083,17 +4083,10 @@ void showSoftmenuCurrentPart(void) {
         currentSolverVariable = findOrAllocateNamedVariable((char *)getNthString(varList, 0));
       }
       else if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE || (currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_2ND_DERIVATIVE) {
-        // One variable and nothing to choose, so it runs at once. The step key sits after the variables and is not one of them, so it does not make this a choice.
+        // One variable and nothing to choose, so it is selected here. The derivative is not taken: the step ladder costs up to 16 passes of the formula and the
+        // user has not asked for it yet. The step key sits after the variables and is not one of them, so it does not make this a choice.
         if((getNthString(varList, 1))[0] == 0 || compareString((char *)getNthString(varList, 1), STD_delta, CMP_NAME) == 0) {
           currentSolverVariable = findOrAllocateNamedVariable((char *)getNthString(varList, 0));
-          reallyRunFunction(ITM_STO, currentSolverVariable);
-          saveForUndo();
-          if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE) {
-            fn1stDerivEq(NOPARAM);
-          }
-          else {
-            fn2ndDerivEq(NOPARAM);
-          }
         }
       }
 

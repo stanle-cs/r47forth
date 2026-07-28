@@ -128,10 +128,10 @@ State save/load and register assertions (savest/loadst take a filename):
    reg <name> reads a register's display string but returns <unsupported> for a matrix, so assert dimensions via 42DIM#.
    Register data also moves through hand-written .d47 files; format in AN0025.)
 
-A function a softmenu starts, headless and without a key press (the equation derivative):
-  menu <name> is the real showSoftmenu, so a menu that acts as it opens acts headless too. The f' menu opened on a one-variable formula stores X into the variable and
-  runs the equation derivative, so  menu {f'}  is the whole call. Braces because an apostrophe is not Jim quoting, and a script file because that same apostrophe would
-  close an --exec wrapper. Running the item behind the menu instead skips the menu state and reads "In function regInRange: generic is not defined!".
+A function a softmenu starts, headless (the equation derivative):
+  menu <name> is the real showSoftmenu, so a menu that acts as it opens acts headless too. Braces because an apostrophe is not Jim quoting, and a script file because
+  that same apostrophe would close an --exec wrapper. Running the item behind the menu without opening the menu first skips the menu state and reads "In function
+  regInRange: generic is not defined!".
   Encode the formula loader with  ./rejig listing.txt -o eqr.p47 :
     LBL 'EQR'
       '1/vv' X.EDIT
@@ -139,13 +139,16 @@ A function a softmenu starts, headless and without a key press (the equation der
   and the script, run as  ./t47 --reset --script deriv.t47 :
     readp eqr.p47
     xeq EQR
-    nim 1
     menu {f'}
+    var vv 1
+    item 2377
     puts "deriv=[reg X]"
-  (d/dvv of 1/vv at vv = 1 is -1. A one-variable formula is the case that runs on its own; with more variables the menu waits for the variable key.)
-  f'(x) and f"(x) open that same menu themselves when the label they are given declares MVARs, since the answer depends on which variable is meant. One MVAR runs at
-  once, as above. Several wait for the key, which a script cannot press, so a script reaches those as a program step instead:  f'(x) 'FX'  inside a program, run with
-  xeq, takes the point off the stack and differentiates with respect to the selected variable, or the program's first MVAR when nothing is selected.
+  (d/dvv of 1/vv at vv = 1 is -1. Opening the menu selects the single variable and stops there, so put the point in that variable and then run the Calc f' softkey.
+   That key is item 2377 and has no name xeq will take, which is what item <n> is the fallback for.)
+  f'(x) and f"(x) open that same menu themselves when the label they are given declares MVARs, since the answer depends on which variable is meant. A label that
+  declares none has nothing to choose and differentiates on the spot:  xeq {f'(x)} EG  returns the answer, while  xeq {f'(x)} MC  opens the menu and leaves X alone.
+  From there it is the variable key, which the keyboard path below presses. As a program step,  f'(x) 'FX'  run with xeq takes the point off the stack and
+  differentiates with respect to the selected variable, or the program's first MVAR when nothing is selected.
 
 Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key (NN = 00..36), single ASCII, ENTER, R/S. Bare commands and xeq call the function direct,
 so TAM and softmenu decode need press. Matrix editor, cursor to 2;2:
@@ -155,6 +158,11 @@ so TAM and softmenu decode need press. Matrix editor, cursor to 2;2:
   ./c47 --reset --exec 'nim 3; nim 3; m.dim 00; rcl 00; m.edit; press F6; press @f; press F6; snap'
   (m.edit; M_EDIT F5/F6 = left/right, f-shifted = up/down; snap shows "2;2=".)
   M.EDIT indexes X, so a later nim pushes the matrix out of X: index a numbered register instead where the test needs the stack. A program stops at M.EDIT.
+
+  The MVAR menu a program derivative opens, driven to an answer. MX is vv squared with vv as its MVAR, so f' at 14 is 28:
+  ./c47 --reset -e "readp mc.p47; nim 14; xeq {f'(x)} MX; press F1; press F1"
+  (double quotes so the apostrophe in f'(x) survives the shell. The first F1 stores what was typed into the variable, the second differentiates with respect to it.
+   The same two presses serve a program with several MVARs: F1..F6 are its variables in declaration order, and the last softkey is the step.)
 
   XEQ a function by name from the keyboard: press XEQ, then alpha, type the letters, Enter. Alpha is f-shift on the XEQ key and raises the ' name prompt.
   ./c47 --reset --exec 'nim 30; press "@k 05"; press @f; press "@k 05"; press "@k 21"; press "@k 08"; press "@k 14"; press ENTER; snap'
