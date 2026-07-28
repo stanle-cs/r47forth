@@ -7,8 +7,6 @@
 
 #include "c47.h"
 
-#define MAX_MVAR_DECLARATIONS 18   // a program declares at most this many solver variables, as the MVAR softmenu assumes
-
 
 #if 0
 // All of the above finite differences combined into a single array */
@@ -291,7 +289,7 @@ static void calcFuncValues(calcRegister_t label, calcRegister_t variable, const 
 
 // Evaluate the function at stencil points and compute "best" estimate
 static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finDiff) {
-  real_t x, h, savedVariable, fx[MAX_F_EVAL];
+  real_t x, h, probeValue, fx[MAX_F_EVAL];
   snap_t savedRegister;
   calcRegister_t variable = INVALID_VARIABLE;
   int i;
@@ -306,8 +304,11 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
 
       lastErrorCode = ERROR_NONE;
       variable = deriv_pgm_variable(label);
+      if(lastErrorCode != ERROR_NONE) {   // no room for the MVAR: the user is told, rather than given the wrong answer a fall back to the stack would return
+        return;
+      }
       lastErrorCode = probeError;
-      if(variable != INVALID_VARIABLE && !getRegisterAsRealQuiet(variable, &savedVariable)) {
+      if(variable != INVALID_VARIABLE && !getRegisterAsRealQuiet(variable, &probeValue)) {
         variable = INVALID_VARIABLE;   // differentiate only with respect to something numeric
       }
       if(variable != INVALID_VARIABLE) {

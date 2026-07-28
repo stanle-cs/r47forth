@@ -1141,6 +1141,8 @@
                                                                // maxLen in _tamProcessInput, ui/tam.c, so a name is at most 7 glyphs of at most 2 bytes each.
                                                                // A longer name in a loaded file marks the file as corrupt.
 
+#define MAX_MVAR_DECLARATIONS   18                             // Solver variables a program may declare, which is the MVAR softmenu's own limit.
+
 //Variable names
 #define VAR_NO_X        0
 #define VAR_NO_Y        1

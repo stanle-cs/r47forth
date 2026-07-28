@@ -1565,7 +1565,7 @@ void fnGetMenu(uint16_t funusedButMandatoryParameter) {
 static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfBytes, uint16_t *numberOfVars) {
     uint8_t *step;
     step = labelList[label].instructionPointer;
-    while(*numberOfVars < 18) {
+    while(*numberOfVars < MAX_MVAR_DECLARATIONS) {
       // Skip any user REM to not stop the MVAR count. REM before an MVAR is transparent. Otherwise REM and all others still quite the MVAR count. Also before an .END.
       while(checkOpCodeOfStep(step, ITM_REM)) {
         step = findNextStep(step);
