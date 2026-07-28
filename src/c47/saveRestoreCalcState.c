@@ -1729,7 +1729,9 @@ int64_t stringToInt64(const char *str) {
           if(tmpString[0] == 0) {                                                // end of file: the count was a lie, see GLOBAL_REGISTERS
             break;
           }
-          if(statisticalSumsPointer) { // likely
+          // statisticalSumsPointer is one pool block of NUMBER_OF_STATISTICAL_SUMS reals and the save side always writes exactly that many; the count is the
+          // file's. Bound the write, not the loop, which must still read a line per claimed entry to stay aligned with the stream.
+          if(statisticalSumsPointer && i < (int16_t)NUMBER_OF_STATISTICAL_SUMS) { // likely
             if(loadMode == LM_ALL || loadMode == LM_SUMS) {
               #if defined(LOADDEBUG)
                 sprintf(line, ", loadMode:%d, %s\n", loadMode, tmpString);
