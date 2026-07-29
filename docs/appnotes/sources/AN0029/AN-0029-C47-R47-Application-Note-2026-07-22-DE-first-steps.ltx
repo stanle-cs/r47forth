@@ -1,0 +1,578 @@
+% SPDX-License-Identifier: GFDL-1.3-or-later
+% Copyright The WP43 and C47 Authors
+%
+% AN0029 -- First steps with the C47/R47 calculator. Beginner setup guide and feature tour.
+% Compiled with lualatex. JuliaMono supplies the display face used inside the screen and program
+% boxes, which reproduce the calculator display and need its glyphs literally.
+
+\documentclass[canadian]{article}
+\usepackage{amsmath, amssymb, graphics, setspace, tikz, url, parskip, fancyhdr, datetime2}
+\usepackage{lastpage, xcolor}
+\usepackage{graphicx}
+\usepackage{needspace}
+\usepackage{microtype}
+\usetikzlibrary{calc}
+\usepackage{fontspec}
+\setmonofont{JuliaMono}[Scale=0.82]
+\usepackage[hidelinks]{hyperref}
+
+% ---- palette ----
+\definecolor{keyink}{HTML}{1B1B1B}
+\definecolor{fcol}{HTML}{DE6E10}      % f shift, orange
+\definecolor{gcol}{HTML}{2C6DB5}      % g shift, blue
+\definecolor{menufill}{HTML}{E9E7E2}
+\definecolor{lcdbg}{HTML}{F2F3EA}
+\definecolor{soft}{HTML}{6B6A65}
+
+% ---- inline keyboxes (HP-manual style, C47 colors); every element shares one fixed height ----
+\tikzset{keybase/.style={rounded corners=1.5pt, minimum height=3.6mm, inner ysep=0pt,
+  inner xsep=2.6pt, font=\sffamily\footnotesize}}
+\newcommand{\kbx}[3]{\tikz[baseline=(n.base)]{\node[keybase, draw=#1, line width=0.55pt,
+  fill=white, text=#2] (n) {\strut #3};}}
+\newcommand{\shsq}[2]{\tikz[baseline=(s.base)]{\node[keybase, inner xsep=2.2pt, draw=#1,
+  line width=0.55pt, fill=#1, text=white, font=\sffamily\footnotesize\bfseries] (s) {\strut #2};}}
+\newcommand{\key}[1]{\kbx{keyink}{keyink}{#1}}
+\newcommand{\fkey}[1]{\shsq{fcol}{f}\hspace{1.3pt}\kbx{fcol}{fcol}{#1}}
+\newcommand{\gkey}[1]{\shsq{gcol}{g}\hspace{1.3pt}\kbx{gcol}{gcol}{#1}}
+\newcommand{\mkey}[1]{\tikz[baseline=(n.base)]{\node[keybase, draw=keyink, line width=0.5pt,
+  fill=menufill, text=keyink] (n) {\strut #1};}}
+\newcommand{\screen}[1]{\tikz[baseline=(n.base)]{\node[draw=keyink!55, line width=0.5pt, rounded corners=2pt,
+  fill=lcdbg, inner xsep=6pt, inner ysep=3pt, font=\ttfamily\small] (n) {\strut #1};}}
+% a keystroke line with a result; wraps at the gaps between keys when the sequence is long
+\newcommand{\seq}[2]{\par\smallskip\noindent\hspace*{1.2em}%
+  \begin{minipage}{\dimexpr\linewidth-1.2em\relax}\raggedright
+  #1\quad\raisebox{0.15ex}{$\rightarrow$}\quad\screen{#2}%
+  \end{minipage}\par\smallskip}
+% a multi-line program listing in the display font
+\newcommand{\prog}[1]{\par\smallskip\noindent\hspace*{1.2em}\tikz{\node[draw=keyink!55, line width=0.5pt,
+  rounded corners=2pt, fill=lcdbg, inner xsep=7pt, inner ysep=5pt, font=\ttfamily\footnotesize,
+  align=left] {#1};}\par\smallskip}
+% a screen capture with a caption: \shot{file}{caption}
+\newlength{\shotwidth}\setlength{\shotwidth}{0.58\textwidth}
+\newcommand{\shot}[2]{\par\medskip\needspace{5\baselineskip}%
+  \begin{center}%
+  \setlength{\fboxsep}{0pt}\setlength{\fboxrule}{0.5pt}%
+  {\color{keyink!55}\fbox{\includegraphics[width=\shotwidth]{screens/#1}}}\\[4pt]%
+  \parbox{\shotwidth}{\color{soft}\footnotesize\raggedright #2\par}%
+  \end{center}\par\medskip}
+
+% ---- full keyboard-map cell: \kc{xmm}{ymm}{wmm}{f}{primary}{g} ----
+\tikzset{kbcell/.style={draw=keyink, line width=0.6pt, rounded corners=2pt, fill=white,
+  minimum height=8mm, inner sep=1pt, font=\sffamily\small\bfseries, text=keyink}}
+\newcommand{\kc}[6]{%
+  \node[kbcell, minimum width=#3 mm] at (#1 mm,#2 mm) {#5};%
+  \node[font=\sffamily\fontsize{6.3}{7}\selectfont, text=fcol, anchor=south] at (#1 mm,#2 mm+5.1mm) {#4};%
+  \node[font=\sffamily\fontsize{6.3}{7}\selectfont, text=gcol, anchor=north] at (#1 mm,#2 mm-5.1mm) {#6};}
+\newcommand{\shiftcell}[4]{% #1 x #2 y #3 w #4 label(color-set)
+  \node[kbcell, minimum width=#3 mm] at (#1 mm,#2 mm) {#4};}
+
+% ---- running header/footer ----
+\fancyhf{}
+\fancyhead[L]{\fontsize{8}{10} \selectfont \color{blue}C47/R47 Appnote 029}
+\fancyhead[C]{\fontsize{8}{10} \selectfont \color{blue}First Steps}
+\fancyhead[R]{\fontsize{8}{10} \selectfont \color{blue}2026-07-22}
+\fancyfoot[L]{\fontsize{8}{10} \selectfont \color{blue}Page \thepage \ of \pageref{LastPage}}
+\fancyfoot[C]{\fontsize{8}{10} \selectfont \color{blue}C47/R47 Application Note 029}
+\pagestyle{fancy}
+
+\hyphenpenalty=1200
+
+\begin{document}
+
+{\LARGE \textbf{Application note 029: First Steps}}
+
+\vspace{1em}
+
+This note is for someone who has just picked up a C47 or R47 and wants to get comfortable with it.
+It goes from the very first keystroke, through the settings most people like to make, and then on a
+short tour of what the calculator can really do: complex numbers, the equation solver, function
+graphing, statistics, and keystroke programming. It closes with two practical skills, saving your
+work and building a menu of your own. No prior calculator experience is assumed, and we teach the RPN
+way of entering numbers from scratch.
+
+The C47 and R47 run the same firmware and work in almost exactly the same way. C47 is the firmware
+for the SwissMicros DM42 and DM42n; a C47 bezel, sold separately, relabels a DM42n's keys to match.
+The R47 is a separate SwissMicros calculator with its own keyboard, running the same firmware family.
+Because the firmware is shared, everything about how numbers, menus, and functions behave is
+identical; only the placement of a few keys differs. This note gives keystrokes for the C47, and a
+full map of each keyboard appears on pages~\pageref{fig:ckbd} and~\pageref{fig:rkbd}.
+
+A word on notation. A keystroke drawn as \key{5} means press that key. A first-shifted function is
+drawn with an orange marker, as in \fkey{MODE}: on the C47 you press the yellow shift key once, then
+the key whose orange label is MODE. A second-shifted function is drawn in blue, as in \gkey{CLK}: on
+the C47 you press the yellow shift key twice. The R47 has two physical shift keys instead, a yellow
+f and a blue g, so you press the matching one. The six keys under the display are soft keys; the
+screen prints a label above each, and a menu choice is drawn as a shaded key, \mkey{DEG}. To back out
+of anything, press \key{EXIT}.
+
+The pictures of the screen throughout are captures from the desktop simulator, taken at factory
+settings by running the very keystrokes printed beside them, so what you see should match what you
+get. One difference is worth knowing before it puzzles you: the tiny \textsf{S} above \textsf{L} in
+the top right corner is the simulator's stack-lift indicator, and on real hardware that corner carries
+the battery gauge instead.
+
+\setcounter{tocdepth}{2}
+\tableofcontents
+
+\vspace{2em}
+
+\begin{table}[ht]
+    \centering
+    \begin{tabular}{l l p{7.4cm}}
+        \hline\hline
+        Revision & Date & Description \\
+        \hline
+        0.1 & 2026-07-22 & First draft against firmware 0.109.03.04, circulated for comment. \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\section{First switch-on}
+
+Turn the calculator on with \key{EXIT}, which doubles as the ON key. The desktop simulator opens to
+the same screen. Loading the firmware onto real hardware is covered in Application Note~0
+\cite{AN0000}; here we assume the calculator is already running C47 or R47.
+
+The display has three parts. The top line is the status bar. On a new calculator it carries the date,
+a right-angle mark for rectangular complex mode, a degree sign for the angle unit, the largest
+fraction denominator, the integer word size and base, and a small f or g when a shift is pending.
+Nearly every one of those is switchable, so yours may show more or fewer of them. The middle shows the
+stack, where your numbers live. The bottom line, when a menu is open, shows the six soft-key labels;
+with no menu open it shows MyMenu, which we come back to at the end.
+
+\shot{01-home}{A new calculator, straight out of a reset: an empty stack and MyMenu along the bottom.}
+
+Two keys rescue you at any time. \key{EXIT} backs out of a menu or an entry, and the backspace key,
+\key{$\leftarrow$}, rubs out the last digit; when you are not typing it clears the number in the
+display. If you feel lost, press \key{EXIT} a few times to get back to the plain stack.
+
+\section{The RPN way}
+
+The C47 and R47 use RPN, Reverse Polish Notation. There is no equals key. You put numbers on a small
+stack of registers and then press an operation, which acts on the numbers already there. It feels
+unusual for about ten minutes and then feels faster than anything else.
+
+The stack holds eight numbers out of the box, and the bottom four, named \textsf{X}, \textsf{Y},
+\textsf{Z}, and \textsf{T} from the bottom up, do nearly all the work. \textsf{X} is the number in
+the display. The \key{ENTER} key pushes a copy of
+\textsf{X} up into \textsf{Y} so you can type a second number without the two running together. To
+add three and four: type \key{3}, press \key{ENTER} to lock it in, type \key{4}, then press \key{+}.
+
+\seq{\key{3}\quad\key{ENTER}\quad\key{4}\quad\key{+}}{X:\ \ 7}
+
+\shot{02-rpn}{Three plus four, the RPN way. The answer lands in \textsf{X}, the bottom line.}
+
+The plus takes the two numbers and leaves their sum in \textsf{X}. You never said where the answer
+should go; it just appeared. The stack shines when a calculation has several steps, because
+intermediate results wait on it and are used automatically. To add 2, 3, and 4:
+
+\seq{\key{2}\ \key{ENTER}\ \key{3}\ \key{ENTER}\ \key{4}\ \key{+}\ \key{+}}{X:\ \ 9}
+
+The first plus makes 7 from 3 and 4; the second adds that to the 2 waiting underneath. A few more
+keys finish everyday arithmetic. The change-sign key, \key{+/$-$}, flips the sign of \textsf{X}. The
+square-root key works in place:
+
+\seq{\key{2}\quad\key{$\sqrt{x}$}}{X:\ \ 1.414213562$\ldots$}
+
+The \key{x$\rightleftarrows$y} key swaps \textsf{X} and \textsf{Y} when you enter two numbers in the
+wrong order, and \fkey{LASTx} brings back the value that was in \textsf{X} before the last operation,
+which rescues you after a slip. That is the whole idea: type a number, press \key{ENTER} only when
+you must separate it from the next, and press operations as you go.
+
+\section{Settings worth making first}
+
+Almost everything is adjustable, and the defaults are sensible, so change as little or as much as you
+like. The settings below are the ones most people reach for on day one. The full tour of
+configurability is Application Note~28 \cite{AN0028}, and saving a bundle of settings to recall later
+is Application Note~15 \cite{AN0015}. You need not save anything by hand for ordinary use: the
+calculator writes its state to a backup file at power-off and restores it at power-on.
+
+The single most useful first step is to set your region. Open the display menu with \fkey{DISP} and
+page to the third page, where you will find \mkey{CHINA}, \mkey{EUROP}, \mkey{INDIA}, \mkey{JAPAN},
+\mkey{UK}, and \mkey{USA}; the shifted row above them holds \mkey{DEFLT}, the factory choice. The menu
+has three pages and the paging wraps, so a single press of the down-arrow, \key{$\downarrow$}, is the
+quickest way there. One press of a region key retunes the regional conventions together, the decimal
+mark and the digit grouping among them; Application Note~28 \cite{AN0028} lists everything it touches
+and why the conventions differ.
+
+\shot{03-region}{The third page of \fkey{DISP}: one press retunes the regional conventions together.}
+
+Next, choose how many digits you see. Still under \fkey{DISP}, the first row offers \mkey{FIX},
+\mkey{SCI}, \mkey{ENG}, \mkey{UNIT}, \mkey{SIG}, and \mkey{ALL}. \textsf{FIX} shows a fixed number of
+decimals: press \mkey{FIX} then a digit, so \mkey{FIX}\,\key{4} shows four places and displays $\pi$
+as \texttt{3.141 6}, the space being the digit grouping you chose above.
+\textsf{SCI} is scientific notation, \textsf{ENG} is engineering notation in powers of a thousand, and
+\textsf{ALL} shows every significant figure.
+
+Pick your angle unit before any trigonometry. Open the mode menu with \fkey{MODE} and choose
+\mkey{DEG}, \mkey{RAD}, or \mkey{GRAD}; the small circle beside each label is filled in on the one in
+force. It matters at once: in degrees, the sine of 30 is exactly one half.
+
+\shot{04-mode}{The first page of \fkey{MODE}, with \mkey{DEG} in force. A label with a line struck
+through it, like \textsf{DMCP} and \textsf{ActUSB} here, is a function the build you are running does
+not offer; these two need real hardware, so the simulator crosses them out.} Degrees-minutes-seconds and multiples of $\pi$ live on the trig menu, \gkey{TRG}. The date and
+time formats are on the second page of the clock menu, \gkey{CLK}: page to it and pick \mkey{DMY},
+\mkey{MDY}, or \mkey{YMD}, and \mkey{CLK24} or \mkey{CLK12}. Two more that some people like: the
+second page of \fkey{MODE} switches between the eight-level stack you start with, \mkey{SSIZE8}, and
+the classic four-level stack, \mkey{SSIZE4}, and if you work in electronics and prefer $j$ for the
+imaginary unit, the second page of \fkey{DISP} offers \mkey{CPXi} and \mkey{CPXj}.
+
+\section{Finding your way around the menus}
+
+There are more functions than keys, so most functions live in menus. A menu fills the bottom of the
+screen with up to six labels, one above each soft key; press the soft key to run it. Many menus run
+to several pages, and the up and down arrows page through them. Each label can carry a shifted
+function too, shown on the lines above it and reached with a shift before the soft key.
+
+When you cannot remember where something is, the catalog finds it. \fkey{CAT}\ opens alphabetical
+catalogs of every function, menu, variable, and program: \mkey{FCNS} for functions, \mkey{CNST} for
+physical constants, \mkey{CHARS} for characters, \mkey{PROGS} for your own programs, \mkey{VARS} for
+your variables, and \mkey{MENUS} for the menus themselves. Pick a group and read down the list.
+Selecting an item runs it, or, while you are typing a program, inserts it.
+
+\shot{06-catalog}{\fkey{CAT} and its six groups. Everything the calculator can do is in here somewhere.} The complete keyboard, key
+by key, is mapped on pages~\pageref{fig:ckbd} and~\pageref{fig:rkbd}, and Application Note~18
+\cite{AN0018} covers it in detail.
+
+\section{A short tour}
+
+The next few pages show things a plain calculator cannot do. Try them in order.
+
+\subsection{Complex numbers}
+
+The calculator treats complex numbers as ordinary values. A switch called \textsf{CPXRES} decides
+whether a real function that would leave the real line returns a complex number instead of an error.
+It is already on when the calculator is new; if you ever find it turned off, put it back with
+\fkey{MODE}, second page, \mkey{CPXRES}. The quickest way to see which way the switch is set is simply
+to use it. Take the square root of minus one:
+
+\seq{\key{1}\quad\key{+/$-$}\quad\key{$\sqrt{x}$}}{X:\ \ 1.i}
+
+That is $i$, the imaginary unit, which no real-only calculator will give you; a pure imaginary is
+shown as \texttt{1.i}, with no real part written. To type a complex
+number directly, enter the real part, press the \key{i} operator (the blue function on the sine key),
+and enter the imaginary part. Multiplying $(1+2i)$ by $(3+4i)$:
+
+\seq{\key{1}\ \key{i}\ \key{2}\quad\key{ENTER}\quad\key{3}\ \key{i}\ \key{4}\quad\key{$\times$}}{X:\ \ -5.+10.i}
+
+\shot{05-cplx}{$(1+2i)(3+4i)$ worked out on the stack. Complex values sit in the registers exactly as
+real ones do.}
+
+which is right, since $(1+2i)(3+4i) = 3 + 10i + 8i^{2} = -5 + 10i$. There is also a \fkey{COMPLEX} key
+that joins two stack numbers into one complex value, and a whole \gkey{CPX} menu of complex tools.
+Complex numbers, rectangular and polar, are the subject of Application Notes~1 and~10
+\cite{AN0001, AN0010}.
+
+\subsection{The equation solver}
+
+The solver finds the value of a variable that makes an equation true, that is, it finds roots. You
+give the calculator your function as a short program, hand the solver two guesses, and it hunts down
+the answer. Let us solve $x^{2} + 2x - 2 = 0$.
+
+First write the function as a program named FUNC. Declaring the variable with \mkey{MVAR} is what lets
+the solver later ask you for it, and lets the grapher plot it.
+
+\prog{0001: LBL 'FUNC'\\0002: \ \ MVAR 'x'\\0003: \ \ RCL 'x'\\0004: \ \ ENTER\\0005: \ \ x²\\0006: \ \ x⇄y\\0007: \ \ 2\\0008: \ \ ×\\0009: \ \ +\\0010: \ \ 2\\0011: \ \ −\\0012: END}
+
+To key it in, open a new program with \key{XEQ}\,\key{.}\,\key{.} and switch to program-entry mode with
+\fkey{PRGM}. Start the label with \gkey{LBL}, then \fkey{$\alpha$}, type \key{F}\,\key{U}\,\key{N}\,\key{C},
+and \key{ENTER}. Declare the variable next. MVAR lives two pages into the program-functions menu that
+is now on the screen: press \mkey{P.FN1}, then \mkey{P.FN2}, then \mkey{MVAR}, and type
+\fkey{$\alpha$}\,\key{x}\,\key{ENTER}. Now key the function: \key{RCL}\,\fkey{$\alpha$}\,\key{x}\,\key{ENTER}, then
+\key{ENTER}, \fkey{$x^{2}$}, \key{x$\rightleftarrows$y}, \key{2}, \key{$\times$}, \key{+}, \key{2},
+\key{$-$}. Leave program-entry mode with \fkey{PRGM}.
+
+While you are still in program-entry mode the screen lists what you have typed, so you can check it
+against the listing above before you leave. The up and down arrows walk the listing.
+
+\shot{07-func}{FUNC keyed in, seen from the top. The header line counts the bytes and the steps.}
+
+Now solve it. Open \fkey{ADV}, choose \mkey{SOLVE}, and name the program with
+\fkey{$\alpha$}\,\key{F}\,\key{U}\,\key{N}\,\key{C}\,\key{ENTER}. The variable \textsf{x} now appears as
+a menu key, and it is the only one, because FUNC declared only that one \mkey{MVAR}.
+
+\shot{08-mvar}{After naming the program, its variable appears as a soft key. This one menu key does
+all three jobs: it takes the first guess, the second, and then the solve.}
+
+Give a guess below the root and one above it, pressing the \textsf{x} key after each, then
+press it once more, with nothing typed ahead of it, to solve:
+
+\seq{\key{2}\,\key{+/$-$}\ \ \mkey{x}\ \ \key{2}\ \ \mkey{x}\ \ \mkey{x}}{x:\ \ 0.732050807568877$\ldots$}
+
+\shot{09-solve}{The root, found. The star on the menu key marks the variable that was solved for.}
+
+which is $-1+\sqrt{3}$, one of the two roots. Guide it toward the other with more negative guesses, say
+$-11$ and $-10$, and it returns $-2.732050807568877\ldots$, which is $-1-\sqrt{3}$. Each solve returns one root;
+you steer it to the next by changing the guesses, exactly as on the classic HP machines. Full worked
+examples, including the algebraic \fkey{EQN} route where you type the formula as on paper, are in
+Application Notes~11 and~22 \cite{AN0011, AN0022}.
+
+\subsection{Graphing a function}
+
+The calculator draws graphs on its own screen, and it is worth seeing it do something beautiful. Let
+us plot a wave packet, $f(x) = \sin(5x)\,e^{-x^{2}/8}$: a burst of oscillation held inside a smooth
+bell-shaped envelope, the shape of a pulse of light or a plucked string fading to silence. It is a
+handful of keystrokes and it shows off the screen.
+
+Switch to radians first with \fkey{MODE}, \mkey{RAD}. Then enter the function as a program, the same
+way you built FUNC:
+
+\prog{0001: LBL 'WAVE'\\0002: \ \ MVAR 'x'\\0003: \ \ RCL 'x'\\0004: \ \ 5\\0005: \ \ ×\\0006: \ \ SIN\\0007: \ \ RCL 'x'\\0008: \ \ x²\\0009: \ \ 8\\0010: \ \ ÷\\0011: \ \ CHS\\0012: \ \ e\textasciicircum x\\0013: \ \ ×\\0014: END}
+
+To key it in, open a new program with \key{XEQ}\,\key{.}\,\key{.}, \fkey{PRGM}, then \gkey{LBL}
+\fkey{$\alpha$}\,\key{W}\,\key{A}\,\key{V}\,\key{E}\,\key{ENTER}, and declare the variable as before:
+\mkey{P.FN1}, \mkey{P.FN2}, \mkey{MVAR}, then \fkey{$\alpha$}\,\key{x}\,\key{ENTER}. Then key the
+function: \key{RCL}\,\fkey{$\alpha$}\,\key{x}\,\key{ENTER}, \key{5}, \key{$\times$}, \key{SIN}, then
+\key{RCL}\,\fkey{$\alpha$}\,\key{x}\,\key{ENTER}, \fkey{$x^{2}$}, \key{8}, \key{$\div$}, \key{+/$-$},
+\fkey{$e^{x}$}, \key{$\times$}. Leave with \fkey{PRGM}. Now plot it: \fkey{ADV}, \mkey{PLT\,f}, name it
+\fkey{$\alpha$}\,\key{W}\,\key{A}\,\key{V}\,\key{E}\,\key{ENTER}, and the variable \textsf{x} appears
+as a menu key, just as it did for the solver. Give it the two ends of the range, pressing the
+\textsf{x} key after each, then press it once more to draw:
+
+\seq{\key{5}\,\key{+/$-$}\ \ \mkey{x}\ \ \key{5}\ \ \mkey{x}\ \ \mkey{x}}{plots WAVE, $-5 \le x \le 5$}
+
+The screen fills with a train of waves swelling to a peak in the middle and dying away smoothly to
+each side, with a zoom menu below. Press \key{EXIT} when you are done looking.
+
+\shot{10-wave}{$\sin(5x)\,e^{-x^{2}/8}$ over $-5 \le x \le 5$. The corners give the range covered, the
+tick spacing, and where the axes cross. The menu underneath zooms in and out, forces a square aspect,
+and resets the plot.} Change the \key{5} to
+a larger number for faster wiggles, or the \key{8} for a wider envelope, and plot again. Plotting, including scatter plots of data and curves in the complex plane,
+is covered in Application Notes~3, 13, and~22 \cite{AN0003, AN0013, AN0022}.
+
+\subsection{Fitting a line to data}
+
+The calculator is a quietly powerful statistics machine. Suppose you measured a quantity $y$ at five
+settings of $x$ and recorded the pairs $(1,3)$, $(2,5)$, $(3,7)$, $(4,9)$, $(5,11)$. Enter each pair
+with the \key{$\Sigma$+} key at the top left: key the $y$ value, \key{ENTER}, the $x$ value, then
+\key{$\Sigma$+}.
+
+\seq{\key{3}\,\key{ENTER}\,\key{1}\,\key{$\Sigma$+}\ \ \ \key{5}\,\key{ENTER}\,\key{2}\,\key{$\Sigma$+}\ \ \ \dots\ \ \ \key{11}\,\key{ENTER}\,\key{5}\,\key{$\Sigma$+}}{5 points}
+
+Now open the statistics menu, \fkey{STAT}, and read your data off it. \mkey{$\bar{x}$} gives the mean
+of the $x$ values, $3$, with the mean of the $y$ values just above in \textsf{Y}, and \mkey{s} gives
+the sample standard deviation, $1.5811$; the \mkey{$\sigma$} key beside it gives the population
+version, $1.4142$.
+
+\shot{11-stat}{\fkey{STAT} with the five pairs entered. The last four $y$ values are still on the
+stack behind the menu.}
+
+Open the regression submenu: press the shift key twice, then the \mkey{REGR} soft
+key. There \mkey{r} reports the correlation, $1$: the points lie on a perfect straight line. Its
+intercept and slope sit on the blue row of the same menu, so press shift twice before each:
+\mkey{LR:a0} is $1$ and \mkey{LR:a1} is $2$, so the line is
+$y = 2x + 1$. Best of all, you can predict. Key a new $x$ and press \mkey{$\hat{y}$}; at $x = 6$ the
+fitted line gives
+
+\seq{\key{6}\ \ \mkey{$\hat{y}$}}{y:\ \ 13}
+
+\shot{12-yhat}{The regression menu, and the line's prediction at $x = 6$.}
+
+Real data is rarely this tidy, and that is where the rest of the menu earns its keep: the correlation
+tells you how well a line fits, and a \mkey{MODEL} choice fits curves, logarithms, exponentials, and
+powers just as easily. Curve fitting and statistical plots are covered in Application Notes~3 and~13
+\cite{AN0003, AN0013}.
+
+\subsection{Writing a small program}
+
+A program is a recorded sequence of keystrokes with a name, and writing one is just doing the
+calculation by hand in program-entry mode. Let us make a program \textsf{S} that squares \textsf{X}.
+Open a fresh program with \key{XEQ}\,\key{.}\,\key{.} as before, press \fkey{PRGM} to enter
+program-entry mode, key the label and the one step that does the work, then press \fkey{PRGM} again
+to leave. The \gkey{LBL} key starts a label, the \fkey{$\alpha$} key switches to letter entry so you
+can type the name, and \key{ENTER} finishes the name.
+
+\seq{\key{XEQ}\,\key{.}\,\key{.}\quad\fkey{PRGM}\quad\gkey{LBL}\ \fkey{$\alpha$}\ \key{S}\ \key{ENTER}\ \fkey{$x^{2}$}\ \fkey{PRGM}}{0001: LBL 'S'}
+
+\shot{13-prgm}{The whole program: a name, one step of work, and the \textsf{END} the calculator adds
+for you.}
+
+Now put a number in \textsf{X} and run the program by name:
+
+\seq{\key{5}\quad\key{XEQ}\ \fkey{$\alpha$}\ \key{S}\ \key{ENTER}}{X:\ \ 25}
+
+The program squared 5 to give 25. Anything you can do by hand you can record this way and replay it,
+or assign it to a key so it runs with one press. Programs can also loop and decide, which turns the
+calculator into a small computer: the \mkey{$\Sigma$n} function on the \fkey{ADV} menu runs a labeled
+program once per term and adds the results, so summing the squares from 1 to 3 gives $1 + 4 + 9 = 14$.
+Programmed sums are the subject of Application Notes~8 and~9 \cite{AN0008, AN0009}.
+
+\section{Saving and restoring your work}
+
+Your work is safe without any effort on your part. When you switch the calculator off it writes its
+whole state, the stack, your variables, your programs, and every setting, to a backup file, and reads
+it all back when you switch on. You never lose your place, even across a battery change.
+
+You can also take a named snapshot to keep, which is worth doing before a big experiment. Open the
+input and output menu with \gkey{I/O} and press \mkey{SAVEST}; the calculator opens its file screen,
+where you give the snapshot a name such as MYWORK and confirm with \key{ENTER}. The whole state is
+written to a file of that name. Now tinker as freely as you like; when you want it all back, open
+\gkey{I/O} again, press the shift key once and then \mkey{LOADST}, which sits on the orange row just
+above \mkey{SAVEST}, and choose your file. Everything returns exactly as it was, down to the number in
+\textsf{X}.
+
+\shot{14-io}{The \gkey{I/O} menu. \mkey{SAVEST} writes a state file and \mkey{LOADST}, directly above
+it on the orange row, reads one back.}
+
+\section{Making the calculator your own}
+
+You can gather the functions and programs you use most into a menu of your own, called MyMenu, so they
+are always a press away instead of buried in a catalog. You have seen MyMenu already: it is the menu
+sitting at the bottom of the screen whenever nothing else is open, stocked from the factory with six
+starters, DRG, $y^{x}$, $x^{2}$, $10^{x}$, $e^{x}$, and the polar $i$. Press \key{EXIT} until the
+other menus close and it reappears. Those starters are yours to overwrite.
+
+Say you want your squaring program \textsf{S} and the sine function on it. Press \fkey{ASN}, which is
+the yellow shift then the \key{1} key, to begin an assignment. Choose what to assign: for the program,
+open the catalog with \fkey{CAT}, choose \mkey{PROGS}, and pick \mkey{S}; for a plain function like
+\key{SIN}, just press its key. Then press \fkey{USER}, which folds the menus away and brings MyMenu
+back, and press the soft key where you want the item to sit. Repeat for each one. From then on, those
+soft keys run your chosen items.
+
+A long press of the yellow shift key opens the HOME menu of common functions; on the third page of
+\fkey{MODE} you can point that long press at MyMenu instead, and choose which of the two greets you as
+the resting menu. The same \fkey{ASN} command assigns anything, a function, a
+program, a variable, or a whole menu, to any key you like, so you can shape the entire keyboard around
+your work. Assignments, the four editable menus, and the ready-made ribbons of common functions are
+covered in Application Note~18 \cite{AN0018}.
+
+\section{Where to go next}
+
+You now have the essentials: RPN entry, the settings that make the calculator yours, the menu system,
+and a first look at complex numbers, solving, graphing, and programming. Application Note~18
+\cite{AN0018} is the full keyboard reference, Application Note~28 \cite{AN0028} tours everything you
+can configure, and if you come from an HP-42S, Application Note~26 \cite{AN0026} explains what is
+compatible and what is new. The complete function reference lives at 47calc.com \cite{Ref47},
+alongside the project wikis \cite{Wiki1, Wiki2}. Most of all, experiment: the backup keeps your state
+safe, \key{EXIT} always backs you out, and nothing you press survives a fresh start.
+
+% ================= KEYBOARD MAPS =================
+\clearpage
+\section*{The C47 keyboard}\label{fig:ckbd}
+\phantomsection
+{\color{soft}\small Primary function on the key; \textcolor{fcol}{orange = f} (shift once) above;
+\textcolor{gcol}{blue = g} (shift twice) below.}
+\vspace{4mm}
+
+\begin{center}\resizebox{\textwidth}{!}{\begin{tikzpicture}[x=1mm,y=1mm]
+\kc{12}{0}{22}{$\rightarrow$I}{$\Sigma$+}{a b/c}
+\kc{36}{0}{22}{$y^{x}$}{$1/x$}{\#}
+\kc{60}{0}{22}{$x^{2}$}{$\sqrt{x}$}{.ms}
+\kc{84}{0}{22}{$10^{x}$}{LOG}{.d}
+\kc{108}{0}{22}{$e^{x}$}{LN}{LBL}
+\kc{132}{0}{22}{$\alpha$}{XEQ}{GTO}
+\kc{12}{-21}{22}{$|x|$}{STO}{$\measuredangle$}
+\kc{36}{-21}{22}{\%}{RCL}{$\Delta$\%}
+\kc{60}{-21}{22}{$\pi$}{R$\downarrow$}{$\sqrt[x]{y}$}
+\kc{84}{-21}{22}{ASIN}{SIN}{\textit{i}}
+\kc{108}{-21}{22}{ACOS}{COS}{$\rightarrow$R}
+\kc{132}{-21}{22}{ATAN}{TAN}{$\rightarrow$P}
+\kc{24}{-42}{46}{COMPLEX}{ENTER}{CPX}
+\kc{60}{-42}{22}{LASTx}{x$\rightleftarrows$y}{STK}
+\kc{84}{-42}{22}{MODE}{+/$-$}{TRG}
+\kc{108}{-42}{22}{DISP}{EEX}{EXP}
+\kc{132}{-42}{22}{UNDO}{$\leftarrow$}{CLR}
+\kc{14.4}{-63}{27}{BST}{$\uparrow$}{REGS}
+\kc{43.2}{-63}{27}{EQN}{7}{HOME}
+\kc{72}{-63}{27}{ADV}{8}{FIN}
+\kc{100.8}{-63}{27}{MATX}{9}{X.FN}
+\kc{129.6}{-63}{27}{STAT}{$\div$}{PLOT}
+\kc{14.4}{-84}{27}{SST}{$\downarrow$}{FLGS}
+\kc{43.2}{-84}{27}{BASE}{4}{BITS}
+\kc{72}{-84}{27}{CONV}{5}{CLK}
+\kc{100.8}{-84}{27}{FLAG}{6}{REAL}
+\kc{129.6}{-84}{27}{PROB}{$\times$}{INTS}
+\shiftcell{14.4}{-105}{27}{\textcolor{fcol}{f}\,/\,\textcolor{gcol}{g}}
+\kc{43.2}{-105}{27}{ASN}{1}{KEYS}
+\kc{72}{-105}{27}{USER}{2}{$\alpha$.FN}
+\kc{100.8}{-105}{27}{P.FN}{3}{LOOP}
+\kc{129.6}{-105}{27}{PRINT}{$-$}{I/O}
+\kc{14.4}{-126}{27}{OFF}{EXIT}{SNAP}
+\kc{43.2}{-126}{27}{VIEW}{0}{STOPW}
+\kc{72}{-126}{27}{SHOW}{.}{INFO}
+\kc{100.8}{-126}{27}{PRGM}{R/S}{TEST}
+\kc{129.6}{-126}{27}{CAT}{+}{CNST}
+\end{tikzpicture}}
+\end{center}
+
+\clearpage
+\section*{The R47 keyboard}\label{fig:rkbd}
+\phantomsection
+{\color{soft}\small The R47 has two shift keys: a yellow \textcolor{fcol}{f} and a blue
+\textcolor{gcol}{g}. Primary on the key; f above, g below.}
+\vspace{4mm}
+
+\begin{center}\resizebox{\textwidth}{!}{\begin{tikzpicture}[x=1mm,y=1mm]
+\kc{12}{0}{22}{\textit{i}}{$x^{2}$}{$\rightarrow$R}
+\kc{36}{0}{22}{\textit{i}$_{\odot}$}{$\sqrt{x}$}{$\rightarrow$P}
+\kc{60}{0}{22}{$x!$}{$1/x$}{.ms}
+\kc{84}{0}{22}{$\sqrt[x]{y}$}{$y^{x}$}{.d}
+\kc{108}{0}{22}{$10^{x}$}{LOG}{$\rightarrow$I}
+\kc{132}{0}{22}{$e^{x}$}{LN}{\#}
+\kc{12}{-21}{22}{$|x|$}{STO}{$\measuredangle$}
+\kc{36}{-21}{22}{\%}{RCL}{$\Delta$\%}
+\kc{60}{-21}{22}{$\pi$}{R$\downarrow$}{R$\uparrow$}
+\kc{84}{-21}{22}{USER}{DRG}{ASN}
+\shiftcell{108}{-21}{22}{\textcolor{fcol}{f}}
+\shiftcell{132}{-21}{22}{\textcolor{gcol}{g}}
+\kc{24}{-42}{46}{COMPLEX}{ENTER}{CPX}
+\kc{60}{-42}{22}{LASTx}{x$\rightleftarrows$y}{STK}
+\kc{84}{-42}{22}{DISP}{+/$-$}{TRG}
+\kc{108}{-42}{22}{PFX}{EEX}{EXP}
+\kc{132}{-42}{22}{UNDO}{$\leftarrow$}{CLR}
+\kc{14.4}{-63}{27}{$\alpha$}{XEQ}{GTO}
+\kc{43.2}{-63}{27}{SIN}{7}{ASIN}
+\kc{72}{-63}{27}{COS}{8}{ACOS}
+\kc{100.8}{-63}{27}{TAN}{9}{ATAN}
+\kc{129.6}{-63}{27}{STAT}{$\div$}{PLOT}
+\kc{14.4}{-84}{27}{BST}{$\uparrow$}{REGS}
+\kc{43.2}{-84}{27}{BASE}{4}{BITS}
+\kc{72}{-84}{27}{INTS}{5}{REAL}
+\kc{100.8}{-84}{27}{MATX}{6}{X.FN}
+\kc{129.6}{-84}{27}{EQN}{$\times$}{ADV}
+\kc{14.4}{-105}{27}{SST}{$\downarrow$}{FLGS}
+\kc{43.2}{-105}{27}{PREF}{1}{KEYS}
+\kc{72}{-105}{27}{CONV}{2}{CLK}
+\kc{100.8}{-105}{27}{FLAG}{3}{$\alpha$.FN}
+\kc{129.6}{-105}{27}{PROB}{$-$}{FIN}
+\kc{14.4}{-126}{27}{OFF}{EXIT}{INFO}
+\kc{43.2}{-126}{27}{VIEW}{0}{I/O}
+\kc{72}{-126}{27}{SHOW}{.}{a b/c}
+\kc{100.8}{-126}{27}{PRGM}{R/S}{P.FN}
+\kc{129.6}{-126}{27}{CAT}{+}{CNST}
+\end{tikzpicture}}
+\end{center}
+
+% ===== REFERENCES =================
+\clearpage
+\begingroup
+\small
+\begin{thebibliography}{99}
+\bibitem{AN0000} C47/R47 Application Note 000, \emph{Installation}.
+\bibitem{AN0001} C47/R47 Application Note 001, \emph{Complex number engineering example}.
+\bibitem{AN0003} C47/R47 Application Note 003, \emph{Graphing}.
+\bibitem{AN0008} C47/R47 Application Note 008, \emph{Programmed Sums 1}.
+\bibitem{AN0009} C47/R47 Application Note 009, \emph{Programmed Sums 2}.
+\bibitem{AN0010} C47/R47 Application Note 010, \emph{Complex solver continued}.
+\bibitem{AN0011} C47/R47 Application Note 011, \emph{EQN and ADV menu, solver and integrator}.
+\bibitem{AN0013} C47/R47 Application Note 013, \emph{Graphs}.
+\bibitem{AN0015} C47/R47 Application Note 015, \emph{Write and Read Setting Groups}.
+\bibitem{AN0018} C47/R47 Application Note 018, \emph{Keyboard}.
+\bibitem{AN0022} C47/R47 Application Note 022, \emph{RPN solve, integration and plot}.
+\bibitem{AN0026} C47/R47 Application Note 026, \emph{42S Compatibility}.
+\bibitem{AN0028} C47/R47 Application Note 028, \emph{Configurability Tour}.
+\bibitem{Ref47} C47/R47 function reference. \url{https://47calc.com/documentation}
+\bibitem{Wiki1} C47 developer wiki. \url{https://gitlab.com/rpncalculators/c43/-/wikis/home}
+\bibitem{Wiki2} C47 community wiki. \url{https://gitlab.com/h2x/c47-wiki}
+\end{thebibliography}
+\endgroup
+
+\hfill \break
+
+\subsection*{Author} David Emerson \\ \\
+Copyright (C) 2026 The C47 Development Team. Permission is granted to copy, distribute and/or modify
+this document under the terms of the GNU Free Documentation License, Version 1.3 or any later version
+published by the Free Software Foundation; with no Invariant Sections, no Front-Cover Texts, and no
+Back-Cover Texts. A copy of the license can be downloaded from gnu.org.
+
+\end{document}
