@@ -1604,7 +1604,7 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
       }
       lastErrorCode = errorCode;
     }
-    else {
+    else if(currentSolverProgram < numberOfLabels) {   // no PGMSLV parks this at 0xffff, which would index labelList far past its block and walk whatever came back
       _dynmenuConstructMVarsFromPgm(currentSolverProgram, &numberOfBytes, &numberOfVars);
     }
 

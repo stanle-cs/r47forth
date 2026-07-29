@@ -56,6 +56,7 @@ void covStatsRegister(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covDerivMvarPgm(uint16_t which);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
+void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
 void covIntegrateErr(uint16_t which);
 void covMvarKey(uint16_t which);
@@ -233,6 +234,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
+  {"fnMvarPageNoPgmCov",     covMvarPageNoProgram, 1 },
   {"fnLoadPgmLongLabelCov",  covLoadPgmLongLabel, 1 },
   {"fnLoadStateLongLabelCov", covLoadStateLongLabel, 1 },
   {"fnIterationTiCov",       covIterationTi, 1 },
@@ -1669,6 +1671,27 @@ void covSolvePgm(uint16_t unusedButMandatoryParameter) {
   currentSolverStatus = 0;
   fnPgmSlv(label);
   fnSolve(findOrAllocateNamedVariable("X"));
+}
+
+void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter) {
+  // Regression for the MVAR page built while no program is selected. doFnReset parks currentSolverProgram at 0xffff, and _dynmenuConstructMVars handed that
+  // straight to the label walker: labelList[0xffff] reads far past the end of the label block, and the walker then follows whatever came back, so the page is
+  // built from arena bytes that have nothing to do with any program. solve.c and integrate.c already gate the same variable with currentSolverProgram >=
+  // numberOfLabels; this is the same gate on the menu path. A program is loaded first so the walker has real material to find past the label block, which is
+  // what turns the out of bounds read into a wrong page rather than a benign zero.
+  //
+  // The corpus asserts a page of no variables: with no model selected there are no MVARs to show.
+  int16_t m;
+
+  currentMvarLabel     = INVALID_VARIABLE;
+  currentSolverStatus  = 0;         // not a formula model, so the walker branch is the one taken
+  currentSolverProgram = 0xffffu;   // and no PGMSLV has named a label
+
+  fnOpenMenu(MNU_MVAR);
+
+  for(m = 0; softmenu[m].menuItem != 0 && softmenu[m].menuItem != -MNU_MVAR; m++) {}
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34((int32_t)dynamicSoftmenu[m].numItems, REGISTER_REAL34_DATA(REGISTER_X));
 }
 
 void covIntegrate(uint16_t which) {
