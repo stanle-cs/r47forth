@@ -1,0 +1,14 @@
+# AN0029 first program: XEQ . .  f PRGM  g LBL  f alpha  S  ENTER  f x2
+press "@k 05"; press "@k 34"; press "@k 34"
+press @f; press "@k 35"
+press @g; press "@k 04"
+press @f; press "@k 05"
+press "@k 21"
+press ENTER
+press @f; press "@k 02"
+snap p1list
+# leave PEM, then 5 XEQ f alpha S ENTER
+press @f; press "@k 35"
+press "@k 24"
+press "@k 05"; press @f; press "@k 05"; press "@k 21"; press ENTER
+snap p2run

@@ -1,0 +1,27 @@
+# AN0029 solver example: key in FUNC exactly as the note tells the reader to.
+# XEQ . .   f PRGM
+press "@k 05"; press "@k 34"; press "@k 34"
+press @f; press "@k 35"
+# g LBL  f alpha  F U N C  ENTER
+press @g; press "@k 04"
+press @f; press "@k 05"
+press "@k 05"; press "@k 24"; press "@k 14"; press "@k 02"
+press ENTER
+# P.FN1  P.FN2  MVAR   f alpha  x  ENTER
+press F6; press F6; press F4
+press @f; press "@k 05"
+press "@k 28"
+press ENTER
+# RCL f alpha x ENTER
+press "@k 07"; press @f; press "@k 05"; press "@k 28"; press ENTER
+# ENTER  f x2  x<>y  2  x  +  2  -
+press "@k 12"
+press @f; press "@k 02"
+press "@k 13"
+press "@k 29"
+press "@k 26"
+press "@k 36"
+press "@k 29"
+press "@k 31"
+press "@k 17"; press "@k 17"; press "@k 17"; press "@k 17"; press "@k 17"; press "@k 17"; press "@k 17"; press "@k 17"; press "@k 17"; press "@k 17"; press "@k 17"
+snap s08func
