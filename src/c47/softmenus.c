@@ -1564,6 +1564,9 @@ void fnGetMenu(uint16_t funusedButMandatoryParameter) {
 
 static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfBytes, uint16_t *numberOfVars) {
     uint8_t *step;
+    if(label >= numberOfLabels) {                              // no PGMSLV parks currentSolverProgram at 0xffff, and a deleted program leaves currentMvarLabel stale
+      return;
+    }
     step = labelList[label].instructionPointer;
     while(*numberOfVars < MAX_MVAR_DECLARATIONS) {
       // Skip any user REM to not stop the MVAR count. REM before an MVAR is transparent. Otherwise REM and all others still quite the MVAR count. Also before an .END.
@@ -1604,7 +1607,7 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
       }
       lastErrorCode = errorCode;
     }
-    else if(currentSolverProgram < numberOfLabels) {   // no PGMSLV parks this at 0xffff, which would index labelList far past its block and walk whatever came back
+    else {
       _dynmenuConstructMVarsFromPgm(currentSolverProgram, &numberOfBytes, &numberOfVars);
     }
 

@@ -1674,24 +1674,21 @@ void covSolvePgm(uint16_t unusedButMandatoryParameter) {
 }
 
 void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter) {
-  // Regression for the MVAR page built while no program is selected. doFnReset parks currentSolverProgram at 0xffff, and _dynmenuConstructMVars handed that
-  // straight to the label walker: labelList[0xffff] reads far past the end of the label block, and the walker then follows whatever came back, so the page is
-  // built from arena bytes that have nothing to do with any program. solve.c and integrate.c already gate the same variable with currentSolverProgram >=
-  // numberOfLabels; this is the same gate on the menu path. A program is loaded first so the walker has real material to find past the label block, which is
-  // what turns the out of bounds read into a wrong page rather than a benign zero.
-  //
-  // The corpus asserts a page of no variables: with no model selected there are no MVARs to show.
+  // Build the MVAR page with no model selected: no VARMNU label, no formula, and currentSolverProgram at the 0xffff doFnReset leaves. _dynmenuConstructMVarsFromPgm
+  // (softmenus.c) bounds the label index against numberOfLabels, so the page holds no variables, which is the count this puts in X. Program S is loaded by this
+  // point in the corpus, so the label block has program material after it and an unbounded index reads a page rather than zeros.
   int16_t m;
 
   currentMvarLabel     = INVALID_VARIABLE;
-  currentSolverStatus  = 0;         // not a formula model, so the walker branch is the one taken
-  currentSolverProgram = 0xffffu;   // and no PGMSLV has named a label
+  currentSolverStatus  = 0;         // not a formula model: the program branch is the one taken
+  currentSolverProgram = 0xffffu;   // the value doFnReset leaves when no PGMSLV has named a label
 
   fnOpenMenu(MNU_MVAR);
 
-  for(m = 0; softmenu[m].menuItem != 0 && softmenu[m].menuItem != -MNU_MVAR; m++) {}
+  for(m = 0; m < NUMBER_OF_DYNAMIC_SOFTMENUS && softmenu[m].menuItem != -MNU_MVAR; m++) {}
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-  int32ToReal34((int32_t)dynamicSoftmenu[m].numItems, REGISTER_REAL34_DATA(REGISTER_X));
+  int32ToReal34(m < NUMBER_OF_DYNAMIC_SOFTMENUS ? (int32_t)dynamicSoftmenu[m].numItems : -1, REGISTER_REAL34_DATA(REGISTER_X));   // -1: MVAR outside the dynamic block
+  popSoftmenu();
 }
 
 void covIntegrate(uint16_t which) {

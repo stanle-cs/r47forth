@@ -63,12 +63,8 @@ Func: fnISumProdCov
 In:  FARG=1 RZ=LonI:"1" RY=LonI:"5" RX=LonI:"2"
 Out: EC=0 RX=LonI:"225"
 
-; The MVAR page with no program selected. doFnReset parks currentSolverProgram
-; at 0xffff; unguarded, the label walker indexes labelList at 65535, reads past
-; the end of the label block and builds a page out of whatever it finds. Program
-; S is already loaded by this point in the corpus, so there is real material for
-; it to find. With the bound check the page is empty, which is the right answer:
-; no model is selected, so there are no MVARs.
+; the MVAR page with no model selected: no VARMNU label, no formula, and currentSolverProgram at the 0xffff doFnReset leaves. The label index is bounded against
+; numberOfLabels, so the page holds no variables. Program S is loaded by this point in the corpus, so the label block has program material after it
 Func: fnMvarPageNoPgmCov
 In:  FARG=0
 Out: EC=0 RX=Real:"0"
