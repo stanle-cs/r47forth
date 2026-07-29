@@ -231,6 +231,7 @@
 
   extern bool_t                headlessMode;
   extern bool_t                snapSkipRefresh;
+  extern bool_t                screenHoldsDrawnPixels;   // CLLCD, PIXEL, POINT or AGRAPH painted the screen and no refresh has repainted over it since
   extern bool_t                loadTestPrograms;
   extern bool_t                loadTestData;
 

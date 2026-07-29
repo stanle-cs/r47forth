@@ -1802,6 +1802,9 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
   #if defined(DMCP_BUILD)
     void btnPressed(void *data) {
   #endif //DMCP_BUILD
+      if(SHOWMODE || currentMenu() == -MNU_SHOW) {
+        closeShowMenu();
+      }
 
       reDraw = false;
       nimWhenButtonPressed = (calcMode == CM_NIM);                  //PHM eRPN 2021-07
