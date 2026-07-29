@@ -56,6 +56,7 @@ void covStatsRegister(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covDerivMvarPgm(uint16_t which);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
+void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
 void covIntegrateErr(uint16_t which);
 void covMvarKey(uint16_t which);
@@ -233,6 +234,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
+  {"fnMvarPageNoPgmCov",     covMvarPageNoProgram, 1 },
   {"fnLoadPgmLongLabelCov",  covLoadPgmLongLabel, 1 },
   {"fnLoadStateLongLabelCov", covLoadStateLongLabel, 1 },
   {"fnIterationTiCov",       covIterationTi, 1 },
@@ -1669,6 +1671,24 @@ void covSolvePgm(uint16_t unusedButMandatoryParameter) {
   currentSolverStatus = 0;
   fnPgmSlv(label);
   fnSolve(findOrAllocateNamedVariable("X"));
+}
+
+void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter) {
+  // Build the MVAR page with no model selected: no VARMNU label, no formula, and currentSolverProgram at the 0xffff doFnReset leaves. _dynmenuConstructMVarsFromPgm
+  // (softmenus.c) bounds the label index against numberOfLabels, so the page holds no variables, which is the count this puts in X. Program S is loaded by this
+  // point in the corpus, so the label block has program material after it and an unbounded index reads a page rather than zeros.
+  int16_t m;
+
+  currentMvarLabel     = INVALID_VARIABLE;
+  currentSolverStatus  = 0;         // not a formula model: the program branch is the one taken
+  currentSolverProgram = 0xffffu;   // the value doFnReset leaves when no PGMSLV has named a label
+
+  fnOpenMenu(MNU_MVAR);
+
+  for(m = 0; m < NUMBER_OF_DYNAMIC_SOFTMENUS && softmenu[m].menuItem != -MNU_MVAR; m++) {}
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(m < NUMBER_OF_DYNAMIC_SOFTMENUS ? (int32_t)dynamicSoftmenu[m].numItems : -1, REGISTER_REAL34_DATA(REGISTER_X));   // -1: MVAR outside the dynamic block
+  popSoftmenu();
 }
 
 void covIntegrate(uint16_t which) {
