@@ -2703,6 +2703,7 @@ void setParameter(char *p) {
   if(p[i] == 0) {
     printf("\nMalformed parameter setting. Missing equal sign, remember that no space is allowed around the equal sign.\n");
     abortTest();
+    return;
   }
 
   p[i] = 0;
@@ -3964,6 +3965,7 @@ void checkExpectedOutParameter(char *p) {
   if(p[i] == 0) {
     printf("\nMalformed out parameter. Missing equal sign, remember that no space is allowed around the equal sign.\n");
     abortTest();
+    return;
   }
 
   p[i] = 0;
