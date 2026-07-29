@@ -605,7 +605,7 @@ void removeUserItemAssignments(int16_t userItem, char *userItemName) {
     kc[1] = (i % 10) + '0';
     kc[2] = 0;
     if(key->primary == userItem) {
-      stringToUtf8((char *)getNthString((uint8_t *)userKeyLabel, i*6), (uint8_t *)lbl);
+      stringToUtf8((char *)getUserKeyLabelString(i*6), (uint8_t *)lbl);
       if((lbl[0] != 0) && (deleteAllItems || (compareString(lbl, userItemName, CMP_NAME) == 0))) {
         shiftF = false;
         shiftG = false;
@@ -616,7 +616,7 @@ void removeUserItemAssignments(int16_t userItem, char *userItemName) {
       }
     }
     if(key->fShifted == userItem) {
-      stringToUtf8((char *)getNthString((uint8_t *)userKeyLabel, i*6+1), (uint8_t *)lbl);
+      stringToUtf8((char *)getUserKeyLabelString(i*6+1), (uint8_t *)lbl);
       if((lbl[0] != 0) && (deleteAllItems || (compareString(lbl, userItemName, CMP_NAME) == 0))) {
         shiftF = true;
         shiftG = false;
@@ -624,7 +624,7 @@ void removeUserItemAssignments(int16_t userItem, char *userItemName) {
       }
     }
     if(key->gShifted == userItem) {
-      stringToUtf8((char *)getNthString((uint8_t *)userKeyLabel, i*6+2), (uint8_t *)lbl);
+      stringToUtf8((char *)getUserKeyLabelString(i*6+2), (uint8_t *)lbl);
       if((lbl[0] != 0) && (deleteAllItems || (compareString(lbl, userItemName, CMP_NAME) == 0))) {
         shiftF = false;
         shiftG = true;
@@ -1059,6 +1059,15 @@ void initUserKeyArgument(void) {
 }
 
 
+uint8_t *getUserKeyLabelString(int16_t n) {
+  static const uint8_t emptyString[1] = {0};
+  if(userKeyLabel == NULL) {                                                    // initUserKeyArgument()/setUserKeyArgument() refused to allocate; every slot
+    return (uint8_t *)emptyString;                                              //   reads back as if it were an unassigned key, same as an empty label always did
+  }
+  return getNthString((uint8_t *)userKeyLabel, n);
+}
+
+
 void setUserKeyArgument(uint16_t position, const char *name) {
   if(userKeyLabel == NULL) {                                                    // an earlier allocation was refused, so there is no table to walk or to rewrite
     return;
@@ -1253,7 +1262,7 @@ static bool_t _assignToKey(int16_t keyFunc) {
         case 1: kf = key->fShifted;    break;
         case 0: kf = key->primary;     break;
       }
-      if(keyFunc == kf && (!getSystemFlag(FLAG_USER) || *getNthString((uint8_t *)userKeyLabel, j * 6 + keyStateCode + i) == 0)) {
+      if(keyFunc == kf && (!getSystemFlag(FLAG_USER) || *getUserKeyLabelString(j * 6 + keyStateCode + i) == 0)) {
         char kc[4] = {};
         kc[0] = (j / 10) + '0';
         kc[1] = (j % 10) + '0';
