@@ -1896,7 +1896,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
 
       keyStateCode = (getSystemFlag(FLAG_ALPHA) ? 3 : 0) + (g ? 2 : f ? 1 : 0);
       if(getSystemFlag(FLAG_USER)) {
-        funcParam = (char *)getNthString((uint8_t *)userKeyLabel, keyCode * 6 + keyStateCode);
+        funcParam = (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode);
         xcopy(tmpString, funcParam, stringByteLength(funcParam) + 1);
       }
       else if((keyCode == Norm_Key_00_key) && (keyStateCode == 0) && Norm_Key_00.used && !(lastIntegerBase >= 2 && getSystemFlag(FLAG_TOPHEX))) {
@@ -2156,7 +2156,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
 
         bool_t Norm_Key_00_released = !getSystemFlag(FLAG_USER) && (keyStateCode == 0) && (keyCode == Norm_Key_00_key) && Norm_Key_00.used && (!(lastIntegerBase >= 2 && getSystemFlag(FLAG_TOPHEX)));
 
-        char *funcParam = (Norm_Key_00_released ? Norm_Key_00.funcParam : (char *)getNthString((uint8_t *)userKeyLabel, keyCode * 6 + keyStateCode));
+        char *funcParam = (Norm_Key_00_released ? Norm_Key_00.funcParam : (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode));
                     #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
                       printf("**[DL]** btnReleased1 - item %d showFunctionNameArg %s funcParam %s\n", item, showFunctionNameArg, funcParam);
                     #endif //VERBOSE_DETERMINEITEM

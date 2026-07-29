@@ -794,7 +794,7 @@ void execTimerApp(uint16_t timerType) {
     char *funcParam = "";
 
     keyStateCode = (getSystemFlag(FLAG_ALPHA) ? 3 : 0) + 2;
-    funcParam = (char *)getNthString((uint8_t *)userKeyLabel, keyCode * 6 + keyStateCode);
+    funcParam = (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode);
     if(item == ITM_RCL && getSystemFlag(FLAG_USER) && funcParam[0] != 0) {
       calcRegister_t var = findNamedVariable(funcParam);
       if(var != INVALID_VARIABLE) {
@@ -896,7 +896,7 @@ void execTimerApp(uint16_t timerType) {
               clearShiftTemporaryIndications(shiftG || shiftF);
               char *funcParam = "";
               keyStateCode = (getSystemFlag(FLAG_ALPHA) ? 3 : 0) + 2;
-              funcParam = (char *)getNthString((uint8_t *)userKeyLabel, keyCode * 6 + keyStateCode);
+              funcParam = (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode);
               setCurrentUserMenu(item, funcParam);
               if(shiftF) {
                 if(getSystemFlag(FLAG_ALPHA) && ((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu())) {
@@ -1016,7 +1016,7 @@ void execTimerApp(uint16_t timerType) {
       if(JM_auto_longpress_enabled != 0) {
         char *funcParam;
         int keyStateCode = (getSystemFlag(FLAG_ALPHA) ? 3 : 0) + ((LongPressM == RBX_M124) ? 1 : longpressDelayedkey3 ? 1 : 2);
-        funcParam = (char *)getNthString((uint8_t *)userKeyLabel, currentKeyCode * 6 + keyStateCode);
+        funcParam = (char *)getUserKeyLabelString(currentKeyCode * 6 + keyStateCode);
 
         if(calcMode == CM_NORMAL && programRunStop == PGM_STOPPED && (isArrowUp(currentKeyCode))) {
           aimBuffer[0] = 0;

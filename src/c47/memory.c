@@ -156,6 +156,12 @@ void freeGmp(void *pcMemPtr, size_t sizeInBytes) {
 
 
 void resizeProgramMemory(uint16_t newSizeInBlocks) {
+  // The program area always holds at least the block that carries the empty .END. - config.c reserves exactly that when it forms the pool. At zero blocks
+  // beginOfProgramMemory sits one past the pool, and every reader that starts there, isAtEndOfPrograms() first, reads out of bounds.
+  if(newSizeInBlocks == 0) {
+    newSizeInBlocks = 1;
+  }
+
   uint16_t currentSizeInBlocks = RAM_SIZE_IN_BLOCKS - TO_C47MEMPTR(beginOfProgramMemory);
   uint16_t deltaBlocks, blocksToMove = 0;
   uint8_t *newProgramMemoryPointer = NULL;
