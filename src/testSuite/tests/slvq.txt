@@ -223,3 +223,52 @@ In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"0" RZ=Cplx:"0.0 i 0.0" ...
 Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RL=Cplx:"0.0 i 1.0"  ...
                                 RY=Cplx:"NaN i NaN" ...
                                 RX=Cplx:"0.0 i -1.0"
+
+
+;=======================================================================================================================
+; MATRIX Domain: a coefficient vector in X, highest degree first; the element count picks the solver
+;=======================================================================================================================
+
+; x^2 + 2x - 3 = 0 from a row vector; roots ordered as the stack form orders X, Y; the rest of the stack stays put
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RZ=LonI:"7" RY=LonI:"8" RX=ReMa:"M1,3[1,2,-3]"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M1,3[1,2,-3]" RZ=LonI:"7" RY=LonI:"8" RX=ReMa:"M1,2[-3,1]"
+
+; the same from a column vector
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M3,1[1,2,-3]"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M3,1[1,2,-3]" RX=ReMa:"M1,2[-3,1]"
+
+; 4*x^2 + 1 = 0: complex roots from a real vector
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,3[4,0,1]"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RL=ReMa:"M1,3[4,0,1]" RX=CxMa:"M1,2[0i-0.5,0i0.5]"
+
+; complex storage, real content: the roots are real, so the result downgrades to a real matrix
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=CxMa:"M1,3[1i0,2i0,-3i0]"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=CxMa:"M1,3[1i0,2i0,-3i0]" RX=ReMa:"M1,2[-3,1]"
+
+; x^2 - i = 0
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=CxMa:"M1,3[1,0,0i-1]"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RL=CxMa:"M1,3[1,0,0i-1]" ...
+     RX=CxMa:"M1,2[0.70710678118654752440084436210484903928483593768847403658833987i0.70710678118654752440084436210484903928483593768847403658833987,-0.70710678118654752440084436210484903928483593768847403658833987i-0.70710678118654752440084436210484903928483593768847403658833987]"
+
+; x + 6 = 0 inside the vector: a leading 0 solves the linear form, NaN fills the second root as the stack form does
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,3[0,1,6]"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M1,3[0,1,6]" RX=ReMa:"M1,2[-6,NaN]"
+
+; 4 elements redirect to the cubic: (x-1)(x-2)(x-3)
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,4[1,-6,11,-6]"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M1,4[1,-6,11,-6]" RX=ReMa:"M1,3[1,2,3]"
+
+; Error case: not a vector
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M2,3[1,2,3,4,5,6]"
+Out: EC=21 FL_CPXRES=0 FL_ASLIFT=0 RL=LonI:"852" RX=ReMa:"M2,3[1,2,3,4,5,6]"
+
+; Error case: too short and too long for either solver
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,2[1,2]"
+Out: EC=21 FL_CPXRES=0 FL_ASLIFT=0 RL=LonI:"852" RX=ReMa:"M1,2[1,2]"
+
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,5[1,2,3,4,5]"
+Out: EC=21 FL_CPXRES=0 FL_ASLIFT=0 RL=LonI:"852" RX=ReMa:"M1,5[1,2,3,4,5]"
+
+; Error case: only the constant term is nonzero
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,3[0,0,5]"
+Out: EC=1 FL_CPXRES=0 FL_ASLIFT=0 RL=LonI:"852" RX=ReMa:"M1,3[0,0,5]"
