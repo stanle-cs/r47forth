@@ -15,7 +15,7 @@
   uint16_t              tmpRow;
   uint16_t              matrixIndex = INVALID_VARIABLE;
 
-  // Keep scrollColumn inside the shape the matrix has now: the callers derive maxCols from cols - sCol on unsigned, and a reshape leaves the offset naming a column that is gone.
+  // Callers derive maxCols from cols - sCol on unsigned.
   static uint16_t boundScrollColumn(bool_t forEditor, uint16_t sCol, uint16_t cols) {
     if(forEditor && sCol >= cols) {
       scrollColumn = 0;
