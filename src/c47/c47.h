@@ -497,7 +497,6 @@
   extern int16_t                JM_auto_doublepress_autodrop_enabled;  //JM TIMER CLRDROP //drop
   extern int16_t                JM_auto_longpress_enabled;    //JM TIMER CLRDROP //clstk
   extern uint8_t                JM_SHIFT_HOME_TIMER1;         //Local to keyboard.c, but defined here
-  extern bool_t                 ULFL, ULGL;                   //JM Underline
   extern int16_t                FN_key_pressed, FN_key_pressed_last; //JM LONGPRESS FN
   extern bool_t                 FN_timeouts_in_progress;      //JM LONGPRESS FN
   extern bool_t                 Shft_timeouts;                //JM SHIFT NEW FN
@@ -575,8 +574,6 @@
   extern uint32_t               timerValue;
   extern uint32_t               timerStartTime;
   extern uint32_t               timerTotalTime;
-  extern uint32_t               pointerOfFlashPgmLibrary;
-  extern uint32_t               sizeOfFlashPgmLibrary;
 
   extern uint64_t               shortIntegerMask;
   extern uint64_t               shortIntegerSignBit;

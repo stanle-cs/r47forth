@@ -64,14 +64,15 @@ bool_t blockMonitoring = false;
                                        "RJvM" spc "NL," spc1
                                        "Walter" spc "DE.";
 
-  TO_QSPI static const char whoStr2[] = "Jaco Mostert" spc "3928," spc1 "Martin Lorang" spc "1382," spc1 "MihailJP" spc "1093," spc1 "Ralf Ahlbrink" spc "459," spc1
-                                       "Paul Dale" spc "449," spc1 "Didier Lachieze" spc "277," spc1 "Walter Bonin" spc "270," spc1 "Benjamin Titmus" spc "215," spc1
-                                       "Hartmut Bromkamp" spc "187," spc1 "Pasquale Pigazzini" spc "135," spc1 "Mike Leffel" spc "107," spc1 "Warren Young" spc "68," spc1
-                                       "David Emerson" spc "50," spc1 "Bj" STD_o_DIARESIS "rn Jadelius" spc "47," spc1 "Philippe Martens" spc "46," spc1 "Marcel Dan" spc "37," spc1
-                                       "H" STD_a_RING "kon Hansen" spc "36," spc1 "Gert Menke" spc "31," spc1 "John Boydon" spc "29," spc1 "Michael Peter" spc "28," spc1
-                                       "Ian Abbott" spc "21," spc1 "R" STD_e_ACUTE "my Trotin" spc "19," spc1 "fridlmue" spc "17," spc1 "A. Vosough" spc "16," spc1
-                                       "Robbert Jan" spc "12," spc1 "Dani Rau" spc "9," spc1 "Harald Overbeek" spc "9," spc1 "Will Rutherdale" spc "6," spc1
-                                       "Nigel Dowrick" spc "4" spc1 "\n(commits 30Jul2026)";
+  TO_QSPI static const char whoStr2[] = "Jaco Mostert" spc "(3928)," spc1 "Martin Lorang" spc "(1382)," spc1 "Robbert Jan van Meenen" spc "(doc)," spc1
+                                       "MihailJP" spc "(1093)," spc1 "Ralf Ahlbrink" spc "(459)," spc1 "Paul Dale" spc "(449)," spc1 "Didier Lachieze" spc "(277)," spc1
+                                       "Walter Bonin" spc "(270)," spc1 "Benjamin Titmus" spc "(215)," spc1 "Hartmut Bromkamp" spc "(187)," spc1
+                                       "Pasquale Pigazzini" spc "(135)," spc1 "Mike Leffel" spc "(107)," spc1 "Warren Young" spc "(68)," spc1 "David Emerson" spc "(50)," spc1
+                                       "Bj" STD_o_DIARESIS "rn Jadelius" spc "(47)," spc1 "Philippe Martens" spc "(46)," spc1 "Marcel Dan" spc "(37)," spc1
+                                       "H" STD_a_RING "kon Hansen" spc "(36)," spc1 "Gert Menke" spc "(31)," spc1 "John Boydon" spc "(29)," spc1 "Michael Peter" spc "(28)," spc1
+                                       "Ian Abbott" spc "(21)," spc1 "R" STD_e_ACUTE "my Trotin" spc "(19)," spc1 "fridlmue" spc "(17)," spc1 "A. Vosough" spc "(16)," spc1
+                                       "Dani Rau" spc "(9)," spc1 "Harald Overbeek" spc "(9)," spc1 "Will Rutherdale" spc "(6)," spc1 "Nigel Dowrick" spc "(4)"
+                                       spc1 "\n(commits 30Jul2026)";
 
 
 
@@ -3319,8 +3320,8 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
 
       else if(temporaryInformation == TI_WHO) {
         if(regist == REGISTER_X) {
+          clearScreenOld(!clrStatusBar, clrRegisterLines, clrSoftkeys);   //clear before the blank menu goes up: the MNU_SHOW guards in _selectiveClearScreen skip the graph rects
           showSoftmenu(-MNU_SHOW);
-          clearScreenOld(!clrStatusBar, clrRegisterLines, clrSoftkeys);
           showStringEnhanced(whoStr1, &standardFont, 1, Y_POSITION_OF_REGISTER_T_LINE +30 - 3, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
           showStringEnhanced(whoStr2, &tinyFont,     1, Y_POSITION_OF_REGISTER_X_LINE +50 -27, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
           screenUpdatingMode |=  SCRUPD_MANUAL_MENU;
