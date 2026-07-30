@@ -390,7 +390,7 @@ freeWork:
 
 #if defined(OPTION_XFN_1000)
 //used only by XFN 1071
-static void C47_WP34S_Cvt2RadSinCosTan_1071temp(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
+static void C47_WP34S_Cvt2RadSinCosTan_1071_helper(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
   bool_t sinNeg = false, cosNeg = false, swap = false;
   // One 1071 digit decNumber at 724 bytes, of this function's 752 byte frame. Freed on both exits through freeWork.
   REAL_T_ALLOC(angle, 1071);
@@ -427,7 +427,7 @@ freeWork:
 void C47_WP34S_Cvt2RadSinCosTan(const real_t *an, angularMode_t angularMode, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) {
   #if defined(OPTION_XFN_1000)
     if(realContext->digits >= 1071) {
-      C47_WP34S_Cvt2RadSinCosTan_1071temp(an, angularMode, sinOut, cosOut, tanOut, realContext);
+      C47_WP34S_Cvt2RadSinCosTan_1071_helper(an, angularMode, sinOut, cosOut, tanOut, realContext);
     }
     else
   #endif // OPTION_XFN_1000
@@ -441,6 +441,7 @@ void C47_WP34S_Cvt2RadSinCosTan(const real_t *an, angularMode_t angularMode, rea
 //Used by normal C47 TRIG as well as XFN
 // Calculate sin, cos by Taylor series and tan by division, for 1071 contexts
 void C47_WP34S_SinCosTanTaylor_temp1071(const real_t *a, bool_t swap, real_t *sinOut, real_t *cosOut, real_t *tanOut, realContext_t *realContext) { // a in radian
+
   // The eight working reals come from the heap, not the frame: eight 1071 digit decNumbers at 724 bytes is 5792 of this function's 5832 byte frame, on an arm build with
   // OPTION_XFN_1000 forced on. That frame is the stack reason XFN 1000 is kept off the DM42, defines.h:36.
   REAL_T_ALLOC(angle,            1071);
@@ -702,7 +703,7 @@ freeWork:
 
 
 #if defined(OPTION_XFN_1000)
-static void C47do_WP34S_Atan_1071temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void C47do_WP34S_Atan_1071_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   // The eight working reals come from the heap, not the frame: eight 1071 digit decNumbers at 724 bytes is 5792 of this function's 5864 byte frame, the largest frame in
   // the build. Freed on both exits through freeWork.
   REAL_T_ALLOC(a,       1071);
@@ -740,7 +741,7 @@ freeWork:
 void C47_WP34S_Atan(const real_t *x, real_t *angle, realContext_t *realContext) {
   #if defined(OPTION_XFN_1000)
     if(realContext->digits >= 1071) {
-      C47do_WP34S_Atan_1071temp(x, angle, realContext);
+      C47do_WP34S_Atan_1071_helper(x, angle, realContext);
     }
     else
   #endif // OPTION_XFN_1000
@@ -882,7 +883,7 @@ static void WP34S_Atan2_75temp(const real_t *y, const real_t *x, real_t *atan, r
 }
 
 #if defined(OPTION_XFN_1000)
-static void C47do_WP34S_Atan2_1071temp(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
+static void C47do_WP34S_Atan2_1071_helper(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   // Two 1071 digit decNumbers at 724 bytes is 1448 of this function's 1464 byte frame. Freed on both exits through freeWork.
   REAL_T_ALLOC(r, 1071);
   REAL_T_ALLOC(t, 1071);
@@ -904,7 +905,7 @@ freeWork:
 void C47_WP34S_Atan2(const real_t *y, const real_t *x, real_t *atan, realContext_t *realContext) {
   #if defined(OPTION_XFN_1000)
     if(realContext->digits >= 1071) {
-      C47do_WP34S_Atan2_1071temp(y, x, atan, realContext);
+      C47do_WP34S_Atan2_1071_helper(y, x, atan, realContext);
     }
     else
   #endif // OPTION_XFN_1000
@@ -950,7 +951,7 @@ static void WP34S_Asin_75temp(const real_t *x, real_t *angle, realContext_t *rea
 }
 
 #if defined(OPTION_XFN_1000)
-static void C47do_WP34S_Asin_1071temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void C47do_WP34S_Asin_1071_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   // Two 1071 digit decNumbers at 724 bytes is 1448 of this function's 1464 byte frame. Freed on both exits through freeWork.
   REAL_T_ALLOC(abx, 1071);
   REAL_T_ALLOC(z,   1071);
@@ -972,7 +973,7 @@ freeWork:
 void C47_WP34S_Asin(const real_t *x, real_t *angle, realContext_t *realContext) {
   #if defined(OPTION_XFN_1000)
     if(realContext->digits >= 1071) {
-      C47do_WP34S_Asin_1071temp(x, angle, realContext);
+      C47do_WP34S_Asin_1071_helper(x, angle, realContext);
     }
     else
   #endif // OPTION_XFN_1000
@@ -1024,7 +1025,7 @@ static void WP34S_Acos_75temp(const real_t *x, real_t *angle, realContext_t *rea
 }
 
 #if defined(OPTION_XFN_1000)
-static void C47do_WP34S_Acos_1071temp(const real_t *x, real_t *angle, realContext_t *realContext) {
+static void C47do_WP34S_Acos_1071_helper(const real_t *x, real_t *angle, realContext_t *realContext) {
   // Two 1071 digit decNumbers at 724 bytes is 1448 of this function's 1464 byte frame. Freed on both exits through freeWork.
   REAL_T_ALLOC(abx, 1071);
   REAL_T_ALLOC(z,   1071);
@@ -1046,7 +1047,7 @@ freeWork:
 void C47_WP34S_Acos(const real_t *x, real_t *angle, realContext_t *realContext) {
   #if defined(OPTION_XFN_1000)
     if(realContext->digits >= 1071) {
-      C47do_WP34S_Acos_1071temp(x, angle, realContext);
+      C47do_WP34S_Acos_1071_helper(x, angle, realContext);
     }
     else
   #endif // OPTION_XFN_1000
