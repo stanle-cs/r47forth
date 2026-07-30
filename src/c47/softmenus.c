@@ -1615,7 +1615,7 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
         // not a reserved one, and an empty or zero delta is what leaves the step to the engine.
         uint8_t *slot = getNthString((uint8_t *)tmpString, 5);   // the sixth name, or the zeroed space past the end where the program declares fewer
         const uint16_t at = (uint16_t)((char *)slot - tmpString);
-        const uint16_t deltaBytes = stringByteLength(STD_delta) + 1;
+        const uint16_t deltaBytes = stringByteLength(STD_delta STD_SUB_d) + 1;
 
         if(at > numberOfBytes) {           // fewer than six names: the gap is zeroed already, so those keys draw blank
           numberOfVars += at - numberOfBytes;
@@ -1624,7 +1624,7 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
         else if(at < numberOfBytes) {      // six or more: make room, and the sixth variable is the one that moves up a row
           xcopy(tmpString + at + deltaBytes, tmpString + at, numberOfBytes - at);
         }
-        stringCopy(tmpString + at, STD_delta);
+        stringCopy(tmpString + at, STD_delta STD_SUB_d);
         numberOfBytes += deltaBytes;
         numberOfVars++;
       }
@@ -3282,8 +3282,8 @@ void showSoftmenuCurrentPart(void) {
                        strcpy(itemName, figlabel((char *)getNthString(dynamicSoftmenu[m].menuContent, x+6*y), "", fnItemShowValue(ITM_SETSIG2)));
                     }
 
-                    if(!compareString((char *)getNthString(dynamicSoftmenu[m].menuContent, x+6*y), STD_delta, CMP_NAME)) {   // the step key carries its value, as ACC does on the integral menu
-                      const calcRegister_t deltaReg = findNamedVariable(STD_delta);
+                    if(!compareString((char *)getNthString(dynamicSoftmenu[m].menuContent, x+6*y), STD_delta STD_SUB_d, CMP_NAME)) {   // the step key carries its value, as ACC does on the integral menu
+                      const calcRegister_t deltaReg = findNamedVariable(STD_delta STD_SUB_d);
                       char deltaText[30];
                       real_t deltaValue;
 
@@ -3296,7 +3296,7 @@ void showSoftmenuCurrentPart(void) {
                         realToReal34(&deltaValue, &deltaReal34);
                         stringCopy(deltaText, formatDoubleWidth(&deltaReal34, 4, itemName, &convertedRealPerfectly, 400 / 6 - 2 - 4, tmpBuf, 60));
                       }
-                      strcpy(itemName, figlabel(STD_delta, deltaText, NOVAL));
+                      strcpy(itemName, figlabel(STD_delta STD_SUB_d, deltaText, NOVAL));
                     }
 //CHECKNOW not needed in this place anymore??
 
@@ -4085,7 +4085,7 @@ void showSoftmenuCurrentPart(void) {
       else if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE || (currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_2ND_DERIVATIVE) {
         // One variable and nothing to choose, so it is selected here. The derivative is not taken: the step ladder costs up to 16 passes of the formula and the
         // user has not asked for it yet. The step key sits after the variables and is not one of them, so it does not make this a choice.
-        if((getNthString(varList, 1))[0] == 0 || compareString((char *)getNthString(varList, 1), STD_delta, CMP_NAME) == 0) {
+        if((getNthString(varList, 1))[0] == 0 || compareString((char *)getNthString(varList, 1), STD_delta STD_SUB_d, CMP_NAME) == 0) {
           currentSolverVariable = findOrAllocateNamedVariable((char *)getNthString(varList, 0));
         }
       }

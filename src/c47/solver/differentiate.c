@@ -182,7 +182,7 @@ static bool_t deriv_default_h(real_t *h, int shift) {
   {   // the step the user set on the menu key or stored in the variable itself: it is used as it stands, and no ladder is walked
     real_t given;
 
-    if((deltaX = findNamedVariable(STD_delta)) != INVALID_VARIABLE && getRegisterAsRealQuiet(deltaX, &given) && !realIsZero(&given) && !realIsSpecial(&given)) {
+    if((deltaX = findNamedVariable(STD_delta STD_SUB_d)) != INVALID_VARIABLE && getRegisterAsRealQuiet(deltaX, &given) && !realIsZero(&given) && !realIsSpecial(&given)) {
       realCopy(&given, h);
       return true;
     }
