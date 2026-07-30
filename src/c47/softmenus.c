@@ -4167,6 +4167,7 @@ char *dynmenuGetLabel(int16_t menuitem) {
 
 
 
+// softmenuStack[].softmenuId ranks in softmenu[] and in dynamicSoftmenu[]; only the first NUMBER_OF_DYNAMIC_SOFTMENUS ranks agree.
 dynamicSoftmenu_t *currentDynamicSoftmenu(void) {
   const int16_t id = softmenuStack[0].softmenuId;
   return (0 <= id && id < NUMBER_OF_DYNAMIC_SOFTMENUS) ? &dynamicSoftmenu[id] : NULL;

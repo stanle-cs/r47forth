@@ -76,12 +76,7 @@ bool_t    isAlphabeticSoftmenu   (void);
 bool_t    isJMAlphaSoftmenu      (int16_t menuId);
 bool_t    isJMAlphaOnlySoftmenu  (void);
 char *    dynmenuGetLabel        (int16_t menuitem);
-  /**
-   * Dynamic softmenu currently on top of the stack, or NULL when that menu is a static one.
-   * softmenuStack[].softmenuId is a rank in softmenu[], and the variable softmenus hold the same ranks in dynamicSoftmenu[] (softmenus.c:1034); above
-   * NUMBER_OF_DYNAMIC_SOFTMENUS the two tables part company, so an id must be tested before it is used to read dynamic content.
-   */
-  dynamicSoftmenu_t *currentDynamicSoftmenu(void);
+dynamicSoftmenu_t * currentDynamicSoftmenu (void); // Top of the softmenu stack while it is a dynamic softmenu, NULL while it is a static one
 char *    dynmenuGetLabelWithDup (int16_t menuitem, int16_t *dupNum);
 bool_t    maxfgLines             (int16_t y);
 
