@@ -319,6 +319,7 @@
   extern bool_t                 solverEstimatesUsed;
   extern bool_t                 graphAccActive;
   extern bool_t                 updateOldConstants;
+  extern bool_t                 eqnDrawLhsOnly;
 
 
   extern realContext_t          ctxtReal4;    //   Limited digits: used for high speed internal calcs

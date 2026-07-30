@@ -1510,6 +1510,12 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
           ++strPtr;
         }
         _parseWord(buffer, parseMode, PARSER_HINT_OPERATOR, mvarBuffer, pointerInFormula);
+        if(buffer[0] == '=' && eqnDrawLhsOnly && parseMode == EQUATION_PARSER_XEQ) {   //Draw takes its value from the left hand side: return it as the result and skip the right hand side
+          _pushNumericStack(mvarBuffer, PARSER_LEFT_VALUE_REAL, PARSER_LEFT_VALUE_IMAG);
+          real34SetZero(PARSER_LEFT_VALUE_REAL);
+          real34SetZero(PARSER_LEFT_VALUE_IMAG);
+          strPtr += stringByteLength(strPtr);
+        }
         bufPtr = buffer;
         buffer[0] = 0;
         pointerInFormula = strPtr;

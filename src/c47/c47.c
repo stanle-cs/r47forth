@@ -63,6 +63,7 @@ bool_t                 cleanupAfterShift = false;
 bool_t                 solverEstimatesUsed = false;
 bool_t                 graphAccActive = false;
 bool_t                 updateOldConstants;
+bool_t                 eqnDrawLhsOnly = false;
 
 
 realContext_t          ctxtReal4;    //   limited digits: used for higher speed internal real calcs
