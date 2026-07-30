@@ -21,6 +21,7 @@ char                  lastTemp[16];
 
 bool_t                headlessMode = false;
 bool_t                snapSkipRefresh = false;
+bool_t                screenHoldsDrawnPixels = false;
 bool_t                loadTestPrograms = false;
 bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;
@@ -62,6 +63,7 @@ bool_t                 cleanupAfterShift = false;
 bool_t                 solverEstimatesUsed = false;
 bool_t                 graphAccActive = false;
 bool_t                 updateOldConstants;
+bool_t                 eqnDrawLhsOnly = false;
 
 
 realContext_t          ctxtReal4;    //   limited digits: used for higher speed internal real calcs

@@ -792,7 +792,7 @@ void doSave(uint16_t saveType) {
 
   uint32_t num = 0;
   for(i = 0; i < 37 * 6; ++i) {
-    if(*(getNthString((uint8_t *)userKeyLabel, i)) != 0) {
+    if(*(getUserKeyLabelString(i)) != 0) {
       ++num;
     }
   }
@@ -800,9 +800,9 @@ void doSave(uint16_t saveType) {
   save(tmpString, strlen(tmpString));
 
   for(i = 0; i < 37 * 6; ++i) {
-    if(*(getNthString((uint8_t *)userKeyLabel, i)) != 0) {
+    if(*(getUserKeyLabelString(i)) != 0) {
       sprintf(tmpString, "%" PRIu32 " ", i);
-      stringToUtf8((char *)getNthString((uint8_t *)userKeyLabel, i), (uint8_t *)tmpString + strlen(tmpString));
+      stringToUtf8((char *)getUserKeyLabelString(i), (uint8_t *)tmpString + strlen(tmpString));
       strcat(tmpString, "\n");
       save(tmpString, strlen(tmpString));
     }

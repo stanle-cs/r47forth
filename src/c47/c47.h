@@ -231,6 +231,7 @@
 
   extern bool_t                headlessMode;
   extern bool_t                snapSkipRefresh;
+  extern bool_t                screenHoldsDrawnPixels;   // CLLCD, PIXEL, POINT or AGRAPH painted the screen and no refresh has repainted over it since
   extern bool_t                loadTestPrograms;
   extern bool_t                loadTestData;
 
@@ -318,6 +319,7 @@
   extern bool_t                 solverEstimatesUsed;
   extern bool_t                 graphAccActive;
   extern bool_t                 updateOldConstants;
+  extern bool_t                 eqnDrawLhsOnly;
 
 
   extern realContext_t          ctxtReal4;    //   Limited digits: used for high speed internal calcs
