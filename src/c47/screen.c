@@ -3806,7 +3806,10 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           else if(aimBuffer[0] != 0 && aimBuffer[strlen(aimBuffer)-1]=='/') {
             char *lb = lastBase;
 
-            uint32_t iDigit = pow(10, (int)log10(lastDenominator) + 1);
+            uint32_t iDigit = 1;                     // smallest power of ten above lastDenominator, as pow(10, log10+1) computed it, without libm
+            while(iDigit <= lastDenominator) {
+              iDigit *= 10;
+            }
             uint32_t iDigit1;
             while(iDigit >= 10) {
               iDigit1 = iDigit / 10;
