@@ -4170,14 +4170,22 @@ char *dynmenuGetLabel(int16_t menuitem) {
 
 
 
+// softmenuStack[].softmenuId ranks in softmenu[] and in dynamicSoftmenu[]; only the first NUMBER_OF_DYNAMIC_SOFTMENUS ranks agree.
+dynamicSoftmenu_t *currentDynamicSoftmenu(void) {
+  const int16_t id = softmenuStack[0].softmenuId;
+  return (0 <= id && id < NUMBER_OF_DYNAMIC_SOFTMENUS) ? &dynamicSoftmenu[id] : NULL;
+}
+
+
 char *dynmenuGetLabelWithDup(int16_t menuitem, int16_t *dupNum) {
+  const dynamicSoftmenu_t *dynamic = currentDynamicSoftmenu();
   if(dupNum) {
     *dupNum = 0;
   }
-  if(menuitem < 0 || menuitem >= dynamicSoftmenu[softmenuStack[0].softmenuId].numItems) {
+  if(dynamic == NULL || menuitem < 0 || menuitem >= dynamic->numItems) {
     return "";
   }
-  char *labelName = (char *)dynamicSoftmenu[softmenuStack[0].softmenuId].menuContent;
+  char *labelName = (char *)dynamic->menuContent;
   char *prevLabelName = labelName;
   while(menuitem > 0) {
     labelName += stringByteLength(labelName) + 1;
