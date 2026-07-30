@@ -22,9 +22,10 @@
 
     \cmd{SLVP} takes the coefficients of a polynomial of any degree from a vector in \reg{X} and returns
     every root, real and complex, in one keystroke.  It completes a family: \cmd{SLVQ} solves the quadratic
-    and \cmd{SLVC} the cubic, both from stack registers, and until now degree four was where the calculator
-    stopped.  HP\,50g owners will recognise the shape of the function as \cmd{PROOT}, which has been the
-    workhorse of control engineers and filter designers on that machine for twenty years.
+    and \cmd{SLVC} the cubic, from stack registers or from the same highest-degree-first coefficient
+    vector this note uses, and until now degree four was where the calculator stopped.  HP\,50g owners
+    will recognise the shape of the function as \cmd{PROOT}, which has been the workhorse of control
+    engineers and filter designers on that machine for twenty years.
 
     The first half of this note is about using the function: what it takes, what it returns, and six worked
     examples ending with an internal rate of return.  The second half is about what happens behind the
@@ -50,6 +51,8 @@
 
 \begin{revisions}
     \revision{0.1}{2026-07-30}{First draft, written alongside the implementation.}
+    \revision{0.2}{2026-07-30}{\cmd{SLVQ}/\cmd{SLVC} gained the coefficient-vector form (!1678); the
+        family description follows.}
 \end{revisions}
 
 % ===================================================================================================
