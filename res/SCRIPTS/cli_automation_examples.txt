@@ -14,6 +14,10 @@ the catalog's own case (xeq SCATR). item <n> is the fallback ONLY, not the first
 reason that list exists. Pasted, it is one Jim word: xeq PLT f resolves, as do braces and double quotes; single quotes are not Jim quoting and fail.
 Without the paste item 2734 does the same job, at the clear cost of code nobody can read.
 
+WARNING: no item whose name is written >NNNN< is free to use. Those are legacy entries, kept only so an old program still decodes, and they must not be used for
+anything: not in a script, not in a program, not as a stand-in for a name you cannot type. If you meet one in the catalogue or the --dslcommands list, look for the
+current name instead.
+
 CAUTION, calculator state: the sim starts from backup.cfg (t47) or backupR47.cfg (R47-based t47) in the working folder.
 DSP, HIDE, grouping and profile change how numbers render in stack, menus and graph text, so bmp comparisons hold only against the same setup.
 --reset = factory defaults, cfg not loaded: produce reference bmps from a --reset run and they reproduce on any machine.
@@ -85,9 +89,9 @@ Export / import a register data file (.d47) (GUI EXPreg / IMPORTr need a file ch
   (expreg <reg> <file>; impreg <file>; reg name as for reg, e.g. X, 00, A. The filename is verbatim, so the folder must exist; the GUI keeps .d47 in DATA/.)
   (Headless there is no chooser to open, so a file function reached without a filename stops with a cannot-read/write error and a note on stderr. Always name the file.)
 
-Write your own TSV from a running program (PRINTXY, printer flag clear):
-  With the printer flag clear  PRINTXY  writes one tab separated line to a dated  DATA\*.REGS.TSV  instead of printing it: register X in the first column, register Y in
-  the second. Push the value first and the label second, so the label lands in X:  RCL 00 'MY CASE' PRINTXY DROPX DROPX.  A running program can therefore log a row per
+Write your own TSV from a running program (🖨xy, flag 🖨ACT clear):
+  With the system flag  🖨ACT  clear,  🖨xy  writes one tab separated line to a dated  DATA\*.REGS.TSV  instead of printing it: register X in the first column, register Y in
+  the second. Push the value first and the label second, so the label lands in X:  RCL 00 'MY CASE' 🖨xy DROPX DROPX.  A running program can therefore log a row per
   step of a long test and you read the file afterwards.
   The file is opened, written and closed for each line, so a row already written survives whatever a later step does. Nothing is written while the calculator is on the
   graph screen, so a program that has just plotted needs  CLSTK  first, which leaves the graph without stopping the run (CLRMOD and EXIT leave it too but both stop the
@@ -149,6 +153,13 @@ SHOW (all-digit view). snap clears it, so headless run show TWICE (the 2nd call'
   tiny font (c47):       ./c47 --reset --snapskiprefresh --exec 'nim 2; nim 1500; yˣ; show; press R/S; press R/S; snap'
   other register (c47):  ./c47 --reset --snapskiprefresh --exec 'nim 7; nim 9; show; press "@k 17"; snap'   (up: Y, Z..; down "@k 22": numbered regs)
   (R/S cycles small-font pages of 10 lines, then tiny, then back to page 1; a page count over 2 needs a longer number.)
+
+Temporary information screens (WHO, VERS, STO/RCL and the rest of the TI_ set): fnSNAP clears temporaryInformation before it refreshes, so a plain snap never captures
+one, it saves the stack instead. Use --snapskiprefresh and put one more command after the one under test: that next command's refresh paints the screen, and snap
+then saves it as-is. The extra command can be anything harmless.
+  ./t47 --reset --snapskiprefresh --exec 'who; nim 1; snap'
+  (drop the trailing nim and the capture holds the start-up splash, because nothing ever painted. --snapskiprefresh does not clear either, so splash text stays visible
+   under a TI screen shorter than the one it replaced; read the capture with that in mind.)
 
 Power cycle (backup.cfg; savest above is a SAVE file, no calcMode in it):
   ./c47 --reset --exec '<setup>; off'   (off: writes backup.cfg, exits)

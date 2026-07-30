@@ -863,7 +863,7 @@ TO_QSPI const int16_t menu_Eim[]         = {
                                              ITM_NULL,                      ITM_NULL,                  ITM_NULL,                  ITM_NULL,              ITM_NULL,                    ITM_NULL,
 
                                              ITM_EXCLAMATION_MARK,          ITM_poly_SIGN,             ITM_XEDIT,                 ITM_XSWAP,             ITM_EQ_LEFT,                 ITM_EQ_RIGHT,
-                                             ITM_NULL,                      ITM_NULL,                  ITM_NULL,                  ITM_NULL,              ITM_NULL,                    ITM_NULL
+                                             ITM_EQUAL,                     ITM_NULL,                  ITM_NULL,                  ITM_NULL,              ITM_NULL,                    ITM_NULL
 
                                             };
 
@@ -3081,7 +3081,9 @@ void showSoftmenuCurrentPart(void) {
   setScreenUpdateFromMenu(softmenu[m].menuItem, openMenu);
 
   if((!IS_BASEBLANK_(m) || BASE_OVERRIDEONCE) && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_REGISTER_BROWSER && calcMode != CM_BUG_ON_SCREEN) {           //JM: Added exclusions, as this procedure is not only called from refreshScreen, but from various places due to underline
-    clearScreenOld(false, false, true); //JM, added to ensure the f/g underlines are deleted
+    if(currentMenu() != -MNU_SHOW) {                                                                //the blank menu carries no softkeys or underlines, and the screen owner has already painted over the menu area
+      clearScreenOld(false, false, true); //JM, added to ensure the f/g underlines are deleted
+    }
     // clear_ul();
     BASE_OVERRIDEONCE = false;
     if(tam.mode == TM_KEY && !tam.keyInputFinished) {

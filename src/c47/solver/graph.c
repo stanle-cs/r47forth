@@ -2926,7 +2926,9 @@ void fnEqSolvGraph (uint16_t func) {
           initialize_function();
           ++engineNestingDepth;                                // one engine level for the whole sweep
           ++plotEngineActive;
+          eqnDrawLhsOnly = true;                               // Draw on an equation plots its left hand side; an expression has no = and plots unchanged
           graph_eqn(noInitDrwMx);
+          eqnDrawLhsOnly = false;
           --plotEngineActive;
           --engineNestingDepth;
 
