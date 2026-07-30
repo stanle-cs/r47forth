@@ -1893,6 +1893,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define TI_AMORT_P2                              141
 #define TI_DATA_LOADED                           142
 #define TI_DATA_SAVED                            143
+#define TI_DERIV_STEP                            144
 
 #define SET_TI_TRUE_FALSE(condition)               do { temporaryInformation = TI_FALSE + (condition); } while(0) // TI_TRUE must be TI_FALSE + 1
 

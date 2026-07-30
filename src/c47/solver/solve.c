@@ -306,7 +306,7 @@ void fnSolveVar(uint16_t unusedButMandatoryParameter) {
           entryStatus &= 0xfe;
           reallyRunFunction(ITM_STO, regist);
         }
-        temporaryInformation = TI_SOLVER_VARIABLE;
+        temporaryInformation = TI_DERIV_STEP;   // names the step itself: the selection is untouched, so TI_SOLVER_VARIABLE would name the variable last chosen
         return;
       }
       currentSolverVariable = regist;
