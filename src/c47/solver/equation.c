@@ -955,7 +955,9 @@ static void _processOperator(uint16_t func, char *mvarBuffer) {
           break;
         }
         case PARSER_OPERATOR_ITM_EQUAL: {
-          fnToReal(NOPARAM);
+          if(getRegisterDataType(REGISTER_X) != dtComplex34) {   //a complex left hand side cannot convert: the complex solver leaves one in X
+            fnToReal(NOPARAM);
+          }
           _popNumericStack(mvarBuffer, PARSER_LEFT_VALUE_REAL, PARSER_LEFT_VALUE_IMAG);
           break;
         }
