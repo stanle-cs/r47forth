@@ -560,7 +560,7 @@
 // ERROR_NESTING_TOO_DEEP instead of overflowing the C stack. One level each way: the DM42's measured stack use leaves it the least room, the DM42n has more, and the
 // simulator runs on a host stack. This gates on OLD_HW and NEW_HW, not on DMCP_BUILD, which both calculators define.
 #if defined(OLD_HW)
-  #define MAX_ENGINE_NESTING_DEPTH       2
+  #define MAX_ENGINE_NESTING_DEPTH       1
 #elif defined(NEW_HW)
   #define MAX_ENGINE_NESTING_DEPTH       3
 #else // !OLD_HW && !NEW_HW
