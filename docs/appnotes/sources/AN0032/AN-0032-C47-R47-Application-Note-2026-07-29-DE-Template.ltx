@@ -119,7 +119,7 @@ PDF      docs/appnotes/
             JM  & Jaco Mostert    & The bulk of the collection \\
             DL  & Didier Lachieze & AN0021 Printing, AN0026 42S Compatibility \\
             DA  & David Abram     & AN0027 Structural conversions \\
-            WGR & Walter          & AN0023 Elliptic integrals \\
+            WGR & William Gordon Rutherdale & AN0023 Elliptic integrals \\
             NUK & Nigel UK        & AN0000 Installation \\
             DE  & David Emerson   & AN0029 First Steps, AN0030 Uncertainty, AN0031 Algebraic Numbers \\
             \bottomrule
@@ -132,8 +132,24 @@ PDF      docs/appnotes/
     filename; check who wrote that one first.
     \end{warning}
 
+    A publication with more than one contributor carries every contributor's initials, in the order their
+    work appears in it.  AN0023 is published as \file{AN0023 2026-04-17 C47 R47 WGR JM Elliptic Incl
+    Anx1.pdf} because Annex 1 is Jaco Mostert's and the note it is bound behind is
+    William Gordon Rutherdale's.  The source file keeps only the initials of the author of that source,
+    so \file{AN-0023-...-WGR-elliptic.ltx} is right even though the PDF built from it says \cmd{WGR JM}.
+    The two names disagreeing is not a mistake; the PDF is a bundle and the source is one part of it.
+    Credit the same people, saying who wrote what, in \cmd{authors} at the back: Section
+    \ref{backmatter}.
+
     The date in both names is the date of the revision being published, not the date the note was started.
     Bump it when you publish, and add a row to the revision table at the same time.
+
+    \begin{warning}
+    Never let the date come from \cmd{today}.  A note whose masthead is built from the build clock says
+    something different every time anyone compiles it, and the published PDF then disagrees with its own
+    filename.  AN0023 was published this way and its source carried a date four days off the PDF's until
+    the note was moved onto this template.  \cmd{notedate} is the one place the date belongs.
+    \end{warning}
 
     \subsection{Building}
 
@@ -841,6 +857,27 @@ static real_t centralDifference(real_t (*f)(real_t), real_t x) {
     The author block is \lit|\authorblock{name}{site}{email}| and carries the GFDL notice with it.  Every note
     in the collection is under the GNU Free Documentation License, and both the SPDX line at the top of the
     source and this block at the bottom are required.
+
+    The site and the email are each optional.  Leave one or both empty and the block prints what it was
+    given, so an author who has published neither is named and nothing more, which is how AN0023 credits
+    its author.  Never fill either field in on somebody's behalf: a contact detail in a published document
+    is theirs to offer.
+
+    A note with more than one contributor uses \cmd{authors} instead, one \cmd{contributor} per line, in
+    the order the work appears in the document.  The fourth argument is the part that is theirs, and it is
+    not optional: attribution that does not say who wrote what leaves every reader guessing, and it is the
+    one thing a reader cannot work out for themselves.
+
+\begin{lstlisting}
+\authors{
+    \contributor{William Gordon Rutherdale}{}{}{This note}
+    \contributor{Jaco Mostert}{}{}{Annex 1, the worked tutorial}
+}
+\end{lstlisting}
+
+    Reach for it whenever the published PDF has more than one hand in it, including the case where the
+    \file{.ltx} is one author's and an annex bound behind it is another's.  The initials in the PDF
+    filename and the lines in this block have to name the same people: Section \ref{filename}.
 
     \begin{note}
     The first two lines of every source file are the SPDX identifier and the copyright line, then a comment

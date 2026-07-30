@@ -591,19 +591,62 @@
   \bottomrule
   \end{tabular}\end{center}}
 
-% \authorblock{name}{site}{email}
-\newcommand{\authorblock}[3]{%
+% \authorblock{name}{site}{email}                                        one author
+% \authors{\contributor{name}{site}{email}{what they wrote} ...}         two or more
+%
+% Site and email are each optional in both forms. Leave one or both empty and the block prints what it
+% was given: an author who has published neither is named and nothing more, which is how AN0023
+% credits its author. Never fill either field in on an author's behalf.
+%
+% A note with more than one contributor uses \authors, and every contributor gets a line saying which
+% part is theirs. Attribution that does not say who wrote what is not attribution. A published PDF
+% that bundles an annex has more than one author even when the .ltx has one, so the credit here and
+% the initials in the filename have to agree; AN0032 gives the filename rule.
+\ExplSyntaxOn
+\NewDocumentCommand \canauthorline { m m m }
+  {
+    \tl_if_blank:nTF {#2} { #1 } { \href {#2} {#1} }
+    \tl_if_blank:nF {#3} { ,~\href { mailto:#3 } {#3} }
+  }
+\ExplSyntaxOff
+
+% The 1pt rule that opens the block, and the licence that closes it. Both forms share them, so the
+% two never drift apart.
+\newcommand{\can@authoropen}{%
   \par\bigskip
   \noindent{\color{keyink}\rule{\textwidth}{1pt}}\par
-  \vspace{5pt}
-  \noindent{\fontsize{7.4}{9}\selectfont\color{soft}\lsc{Author}}\quad
-  \href{#2}{#1}, \href{mailto:#3}{#3}\par
+  \vspace{5pt}}
+\newcommand{\can@authorclose}{%
   \vspace{6pt}
   \noindent{\color{soft}\fontsize{8}{10.5}\selectfont
   Copyright (C) 2026 The C47 Development Team. Permission is granted to copy, distribute and/or modify
   this document under the terms of the GNU Free Documentation License, Version 1.3 or any later version
   published by the Free Software Foundation; with no Invariant Sections, no Front-Cover Texts, and no
   Back-Cover Texts. A copy of the license can be downloaded from gnu.org.\par}}
+\newcommand{\can@authorlabel}[1]{%
+  \noindent{\fontsize{7.4}{9}\selectfont\color{soft}\lsc{#1}}}
+
+\newcommand{\authorblock}[3]{%
+  \can@authoropen
+  \can@authorlabel{Author}\quad
+  \canauthorline{#1}{#2}{#3}\par
+  \can@authorclose}
+
+% \contributor belongs inside \authors, one per line, in the order the work appears in the document.
+% Two boxes rather than a tabular: \makebox sits on the running baseline and \parbox[t] puts its first
+% line on the same one, so the name and what it is credited with start level however long either runs.
+\newlength{\can@namewidth}\setlength{\can@namewidth}{0.44\textwidth}
+\newcommand{\contributor}[4]{%
+  \par\noindent
+  \makebox[\can@namewidth][l]{\canauthorline{#1}{#2}{#3}}%
+  {\color{soft}\parbox[t]{\dimexpr\textwidth-\can@namewidth\relax}{\raggedright #4}}%
+  \par\smallskip}
+\newcommand{\authors}[1]{%
+  \can@authoropen
+  \can@authorlabel{Authors}\par
+  \vspace{5pt}
+  #1
+  \can@authorclose}
 
 % ---------------------------------------------------------------------------------------------------
 % Keyboard maps

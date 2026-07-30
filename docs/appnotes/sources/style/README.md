@@ -69,7 +69,27 @@ published name, `AN00NN YYYY-MM-DD C47 R47 XX Short Title.pdf`.
 | Charts | `nchart`, styles `canaxis` `canA` `canB` `canC` `canaccent` `canpoints` `canbars` `canemph` `canrest` |
 | Markup | `\cmd` `\vr` `\reg` `\menu` `\file` `\lsc` `\swatch` `\HW` `\TODO` |
 | Front matter | `\notenumber` `\noteshorttitle` `\notedate` `\notetitle` `\notehead`, `revisions` + `\revision` |
-| Back matter | `\colophon`, `\authorblock`, `\keyboardappendix`, `\ckeyboard` `\rkeyboard`, `\kc` `\shiftcell` |
+| Back matter | `\colophon`, `\authorblock`, `\authors` + `\contributor`, `\keyboardappendix`, `\ckeyboard` `\rkeyboard`, `\kc` `\shiftcell` |
+
+## Credit
+
+`\authorblock{name}{site}{email}` for one author. The site and the email are each optional; leave one
+or both empty and the block prints what it was given. Never fill either in on somebody's behalf.
+
+For two or more contributors use `\authors`, one `\contributor{name}{site}{email}{what they wrote}` per
+line, in the order the work appears in the document. The fourth argument is required: attribution that
+does not say who wrote what is not attribution.
+
+```latex
+\authors{
+    \contributor{William Gordon Rutherdale}{}{}{This note}
+    \contributor{Jaco Mostert}{}{}{Annex 1, the worked tutorial}
+}
+```
+
+This covers the case where the `.ltx` is one author's and an annex bound behind it in the published PDF
+is another's, which is how AN0023 comes out as `WGR JM` in its PDF filename and `WGR` in its source
+filename. The initials in the filename and the lines in the block have to name the same people.
 
 ## Colours
 
