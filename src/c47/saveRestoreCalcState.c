@@ -53,7 +53,6 @@ Current version defaults all non-loaded settings from previous version files cor
 #undef LOADDEBUG
 
 
-uint16_t flushBufferCnt = 0;
 #define START_REGISTER_VALUE 860  // 2025/09/06 [DL] reduced fromm 1000 to provide enougth room in tmpRegisterString for config data (840 bytes):
                                   //                 tmpRegisterString is a part of the global tmpString which is 2560 bytes (aux_buf_ptr buffer provided by DMCP)
                                   //                 config string length is 1680 bytes (840 x 2) so tmpRegisterString should start at max at 880 (2560 - 1680)
