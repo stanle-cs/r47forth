@@ -21,6 +21,7 @@ char                  lastTemp[16];
 
 bool_t                headlessMode = false;
 bool_t                snapSkipRefresh = false;
+bool_t                screenHoldsDrawnPixels = false;
 bool_t                loadTestPrograms = false;
 bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;
@@ -601,6 +602,7 @@ int convertKeyCode(int key) {
 
                                                   //uint32_t now, previousRefresh, nextAutoRepeat = 0;      // removed autorepeat stuff
 
+    stackWatermarkAnchor();                                    // the shallowest frame of the run: everything the watermark reports is measured below this
     c47MemInBlocks = 0;
     gmpMemInBytes = 0;
     mp_set_memory_functions(allocGmp, reallocGmp, freeGmp);
