@@ -299,7 +299,7 @@ void fnSolveVar(uint16_t unusedButMandatoryParameter) {
       }
     }
     else if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE || (currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_2ND_DERIVATIVE) {
-      if(compareString(var, STD_delta, CMP_NAME) == 0) {   // the step key: it takes a value like any other, but it is not what the derivative is taken against
+      if(compareString(var, STD_delta STD_SUB_d, CMP_NAME) == 0) {   // the step key: it takes a value like any other, but it is not what the derivative is taken against
         real_t given;
 
         if(getRegisterAsRealQuiet(REGISTER_X, &given) && realIsInfinite(&given)) {
@@ -310,7 +310,7 @@ void fnSolveVar(uint16_t unusedButMandatoryParameter) {
           entryStatus &= 0xfe;
           reallyRunFunction(ITM_STO, regist);
         }
-        temporaryInformation = TI_SOLVER_VARIABLE;
+        temporaryInformation = TI_DERIV_STEP;   // names the step itself: the selection is untouched, so TI_SOLVER_VARIABLE would name the variable last chosen
         return;
       }
       currentSolverVariable = regist;

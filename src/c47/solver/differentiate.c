@@ -40,7 +40,7 @@ TO_QSPI static const FINITE_DIFF_COEFF *const all_second_derivatives[] = {
 #endif
 
 static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finDiff);
-static calcRegister_t deriv_pgm_variable(calcRegister_t label);
+static calcRegister_t deriv_pgm_variable(calcRegister_t label, bool_t *usesDelta);
 
 static void calcDerivOfOrder(uint16_t label, int order) {
   calcDeriv(label, finite_difference_table[order]);
@@ -54,7 +54,7 @@ static bool_t deriv_open_mvar_menu(uint16_t label, uint16_t order, bool_t solvin
   if(programRunStop == PGM_RUNNING || solving || getSystemFlag(FLAG_INTING)) {
     return false;
   }
-  if(deriv_pgm_variable(label) == INVALID_VARIABLE) {
+  if(deriv_pgm_variable(label, NULL) == INVALID_VARIABLE) {
     return false;
   }
   currentSolverProgram = label - FIRST_LABEL;
@@ -189,26 +189,43 @@ static void deriv_found_lbl(calcRegister_t deltaX, real_t *h) {
   }
 }
 
-static bool_t deriv_default_h(real_t *h, int shift) {
+// Is the step variable one of the current formula's own variables? A function that uses it writes to it while it is being sampled, so it cannot also be the step.
+// The list searched here is the same parse the MVAR menu is built from. The program side of the same question is answered by deriv_pgm_variable, which reports a
+// declaration of the name while it is already walking them.
+static bool_t deriv_formula_uses_delta(void) {
+  uint16_t i;
+
+  parseEquation(currentFormula, EQUATION_PARSER_MVAR, tmpString + TMP_STR_LENGTH - AIM_BUFFER_LENGTH, tmpString);
+  for(i = 0; (getNthString((uint8_t *)tmpString, i))[0] != 0; i++) {
+    if(compareString((char *)getNthString((uint8_t *)tmpString, i), STD_delta STD_SUB_d, CMP_NAME) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+// The step the user set, in the order it is looked for: the step variable, then a delta-x label program run for what it returns. Either one is taken as it stands
+// and the ladder is not walked at all. False means neither was there, h is left alone, and the caller scales it per pass. Asked once per derivative, since none of
+// this can change while the ladder runs.
+static bool_t deriv_user_step(real_t *h, const real_t *x, bool_t usesDelta) {
   calcRegister_t deltaX;
   unsigned int i;
+  real_t given;
   TO_QSPI static const char *const lbls[] = {
     STD_delta "x",  STD_delta "X",
     STD_DELTA "x",  STD_DELTA "X",
   };
 
-  {   // the step the user set on the menu key or stored in the variable itself: it is used as it stands, and no ladder is walked
-    real_t given;
-
-    if((deltaX = findNamedVariable(STD_delta)) != INVALID_VARIABLE && getRegisterAsRealQuiet(deltaX, &given) && !realIsZero(&given) && !realIsSpecial(&given)) {
-      realCopy(&given, h);
-      return true;
-    }
+  if(!usesDelta && (deltaX = findNamedVariable(STD_delta STD_SUB_d)) != INVALID_VARIABLE &&
+     getRegisterAsRealQuiet(deltaX, &given) && !realIsZero(&given) && !realIsSpecial(&given)) {
+    realCopy(&given, h);
+    return true;
   }
 
   saveForUndo();
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-  realToReal34(h, REGISTER_REAL34_DATA(REGISTER_X));
+  realToReal34(x, REGISTER_REAL34_DATA(REGISTER_X));
   fnFillStack(NOPARAM);
 
   dynamicMenuItem = -1;
@@ -220,10 +237,6 @@ static bool_t deriv_default_h(real_t *h, int shift) {
     }
   }
   undo();
-  if(realIsZero(h)) {   // the step is relative to x, so at x=0 it collapses and the weighted sum is divided by zero
-    realCopy(const_1, h);
-  }
-  h->exponent -= shift;
   return false;
 }
 
@@ -249,7 +262,7 @@ static bool_t deriv_agrees(const real_t *coarse, const real_t *fine, int shift, 
 // recall it. Return the variable to perturb, or INVALID_VARIABLE for a program that declares none and therefore reads the stack. Among several MVARs the caller's
 // selection wins whenever the program declares it, matching what the MVAR softmenu and the equation derivative differentiate with respect to; otherwise the first
 // declaration, which is the argument by convention and the leftmost key of the MVAR menu.
-static calcRegister_t deriv_pgm_variable(calcRegister_t label) {
+static calcRegister_t deriv_pgm_variable(calcRegister_t label, bool_t *usesDelta) {
   uint8_t *step;
   char name[MAX_LABEL_NAME_LENGTH + 1];
   calcRegister_t first = INVALID_VARIABLE;
@@ -273,6 +286,9 @@ static calcRegister_t deriv_pgm_variable(calcRegister_t label) {
     }
     xcopy(name, step + 4, nameLength);
     name[nameLength] = 0;
+    if(usesDelta != NULL && compareString(name, STD_delta STD_SUB_d, CMP_NAME) == 0) {   // the program declares the step variable, so it writes it and it is no step
+      *usesDelta = true;
+    }
     calcRegister_t variable = findOrAllocateNamedVariable(name);
     if(variable != INVALID_VARIABLE) {
       if((uint16_t)variable == currentSolverVariable) {
@@ -378,7 +394,7 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
   real_t x, h, probeValue, estimate, coarse, gap, best, bestGap, fx[MAX_F_EVAL];
   snap_t savedRegister;
   calcRegister_t variable = INVALID_VARIABLE;
-  bool_t userStep = false;
+  bool_t userStep = false, usesDelta = false;
   int i, shift, stencil, coarseStencil = -1, coarseShift = 0, bestShift = 0;
 
   if(!getRegisterAsReal(REGISTER_X, &x)) {
@@ -386,11 +402,14 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
   }
 
   if(!realIsSpecial(&x)) {
-    if(!(currentSolverStatus & SOLVER_STATUS_USES_FORMULA)) {
+    if(currentSolverStatus & SOLVER_STATUS_USES_FORMULA) {
+      usesDelta = deriv_formula_uses_delta();
+    }
+    else {
       uint8_t probeError = lastErrorCode;   // an MVAR name the variable allocator rejects raises here, before any sampling the caller asked for
 
       lastErrorCode = ERROR_NONE;
-      variable = deriv_pgm_variable(label);
+      variable = deriv_pgm_variable(label, &usesDelta);
       if(lastErrorCode != ERROR_NONE) {   // no room for the MVAR: the user is told, rather than given the wrong answer a fall back to the stack would return
         return;
       }
@@ -416,9 +435,11 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
       }
     }
 #endif
+    userStep = deriv_user_step(&h, &x, usesDelta);
+
     // Walk the step down a decade at a time. Each step gives one estimate, and two estimates from the same stencil that agree say the coarser step's truncation is
-    // already lost in the noise, so the coarser one is taken: it is the one that threw away the fewest digits. A user delta-x label sets the step itself and is
-    // taken as it stands.
+    // already lost in the noise, so the coarser one is taken: it is the one that threw away the fewest digits. A step the user set is taken as it stands, so the
+    // first pass is the only one.
     for(shift = DERIV_FIRST_SHIFT; shift <= DERIV_LAST_SHIFT; shift++) {
       if(variable != INVALID_VARIABLE) {
         // Kept here rather than in a register: the user program runs between the save and the restore and every temporary register is scratch to something it can
@@ -427,8 +448,13 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
         // everything the snapshot does not cover.
         saveRegisterSnapshot(variable, &savedRegister);
       }
-      realCopy(&x, &h);   // Pass X into the h determination code to allow relative steps
-      userStep = deriv_default_h(&h, shift);
+      if(!userStep) {
+        realCopy(&x, &h);   // the step is relative to x, and at x = 0 it collapses and the weighted sum would be divided by zero
+        if(realIsZero(&h)) {
+          realCopy(const_1, &h);
+        }
+        h.exponent -= shift;
+      }
 
       // Compute the function at the finite difference points
       saveForUndo();
@@ -449,7 +475,10 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
           break;
         }
       }
-      if(stencil < 0) {   // every stencil rejected this step's samples, so take the points closer in
+      if(stencil < 0) {   // every stencil rejected this step's samples, so take the points closer in. A step the user set does not move, so there is nothing to retry
+        if(userStep) {
+          break;
+        }
         continue;
       }
       if(userStep) {

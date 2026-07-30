@@ -666,8 +666,8 @@ void showEquation(uint16_t equationId, uint16_t startAt, uint16_t cursorAt, bool
 
 // The derivative's step key. It carries a name rather than an item because it is a named variable, which is what the MVAR menu's own key handler stores into.
 static void _deltaMenuItem(char *bufPtr) {
-  xcopy(bufPtr, STD_delta, stringByteLength(STD_delta) + 1);
-  bufPtr[stringByteLength(STD_delta) + 1] = 0;
+  xcopy(bufPtr, STD_delta STD_SUB_d, stringByteLength(STD_delta STD_SUB_d) + 1);
+  bufPtr[stringByteLength(STD_delta STD_SUB_d) + 1] = 0;
 }
 
 static void _menuItem(int16_t item, char *bufPtr) {
