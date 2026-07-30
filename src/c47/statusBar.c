@@ -344,11 +344,11 @@ void drawBattery(uint16_t voltage);
        //printf("%s ### x=%u y=%i dx=%u dy=%u   xx=%u dd=%i \n", str, x, y, dx, dy, xx, x+dx -xx);
      }
      //clear slither below lifted text
-     if(y < 0) {
+     if(y < 0 && (uint64_t)x + dx <= SCREEN_WIDTH) {                // a caller whose x1 sits left of x0 passes the negative width as a wrapped dx; 64 bit so the sum cannot wrap back on screen
        lcd_fill_rect(x, (row + y), dx, dx - row, LCD_SET_VALUE);
      }
      //clear slither above dropped text
-     else if(y > 0) {
+     else if(y > 0 && (uint64_t)x + dx <= SCREEN_WIDTH) {
        lcd_fill_rect(x, 0, dx, y-0, LCD_SET_VALUE);
      }
                                 #if defined(ANALYSE_REFRESH)

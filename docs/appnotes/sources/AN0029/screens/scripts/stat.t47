@@ -1,0 +1,12 @@
+# AN0029 stats example: five (x,y) pairs keyed y ENTER x SIGMA+
+press "@k 30"; press "@k 12"; press "@k 28"; press "@k 00"
+press "@k 24"; press "@k 12"; press "@k 29"; press "@k 00"
+press "@k 18"; press "@k 12"; press "@k 30"; press "@k 00"
+press "@k 20"; press "@k 12"; press "@k 23"; press "@k 00"
+press "@k 28"; press "@k 28"; press "@k 12"; press "@k 24"; press "@k 00"
+# f STAT
+press @f; press "@k 21"
+snap t1menu
+# xbar (F2)
+press F2
+snap t2xbar

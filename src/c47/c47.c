@@ -21,6 +21,7 @@ char                  lastTemp[16];
 
 bool_t                headlessMode = false;
 bool_t                snapSkipRefresh = false;
+bool_t                screenHoldsDrawnPixels = false;
 bool_t                loadTestPrograms = false;
 bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;
@@ -52,9 +53,6 @@ bool_t                 thereIsSomethingToUndo;
 bool_t                 lastProgramListEnd;
 bool_t                 programListEnd;
 bool_t                 pemCursorIsZerothStep;
-bool_t                 secTick1;
-bool_t                 halfSecTick2;
-bool_t                 halfSecTick3;
 bool_t                 skippedStackLines = false;
 bool_t                 iterations = false;
 bool_t                 explicitTaylorIterVisibilitySelection = false;

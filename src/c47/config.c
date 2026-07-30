@@ -697,6 +697,16 @@ void fnGetWordSize(uint16_t unusedButMandatoryParameter) {
 
 
 
+// Bound a short integer word size arriving from a file. WSIZE's tamMinMax bounds the interactive path; the state file, backup.cfg and a config register supply it raw,
+// and every consumer shifts by it or by one less: config.c below, rotateBits.c:166, :223 and :313, mask.c:36. 0 already spells the widest word.
+uint8_t boundShortIntegerWordSize(uint8_t wordSize) {
+  if(wordSize < 1 || wordSize > MAX_SHORT_INTEGER_WORD_SIZE) {
+    return MAX_SHORT_INTEGER_WORD_SIZE;
+  }
+  return wordSize;
+}
+
+
 void updateShortIntegerMasks(void) {
   // Derive the word-size-dependent short-integer bit masks from the current shortIntegerWordSize. fnSetWordSize uses this when the size changes interactively;
   // code that assigns shortIntegerWordSize directly (state-file restore, which stores neither mask) must call it too, so that shortIntegerMask and 
@@ -1653,6 +1663,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     // allocate space for the named variable list
     numberOfNamedVariables = 0;
     allNamedVariables = NULL;
+    invalidateNamedVariableCache();             // the table is gone: nothing findNamedVariable() remembers describes it any more
 
     initSimEqMatABX();
 
@@ -1732,9 +1743,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     shiftG = false;
     lastshiftF = false;
     lastshiftG = false;
-    secTick1 = false;
-    halfSecTick2 = false;
-    halfSecTick3 = false;
+    resetHalfSecTicks();
     skippedStackLines = false;
     iterations = false;
     explicitTaylorIterVisibilitySelection = false;
@@ -2165,9 +2174,9 @@ void fnKeysManagement(uint16_t choice) {
         Norm_Key_00.func = kbd_usr[Norm_Key_00_key].primary;
         Norm_Key_00.funcParam[0] = 0;
         Norm_Key_00.used = Norm_Key_00.func != kbd_std[Norm_Key_00_key].primary;
-        char *funcParam = (char *)getNthString((uint8_t *)userKeyLabel, Norm_Key_00_key * 6);
+        char *funcParam = (char *)getUserKeyLabelString(Norm_Key_00_key * 6);
         if((funcParam[0] != 0) && ((Norm_Key_00.func == -MNU_DYNAMIC)|| (Norm_Key_00.func == ITM_XEQ) || (Norm_Key_00.func == ITM_RCL)))  {
-          strcpy(Norm_Key_00.funcParam, (char *)getNthString((uint8_t *)userKeyLabel, Norm_Key_00_key * 6));       // name of a user menu, program or variable assigned to the Norm key
+          strcpy(Norm_Key_00.funcParam, (char *)getUserKeyLabelString(Norm_Key_00_key * 6));       // name of a user menu, program or variable assigned to the Norm key
         }
         fnRefreshState();
         fnClearFlag(FLAG_USER);

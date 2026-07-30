@@ -231,6 +231,7 @@
 
   extern bool_t                headlessMode;
   extern bool_t                snapSkipRefresh;
+  extern bool_t                screenHoldsDrawnPixels;   // CLLCD, PIXEL, POINT or AGRAPH painted the screen and no refresh has repainted over it since
   extern bool_t                loadTestPrograms;
   extern bool_t                loadTestData;
 
@@ -308,9 +309,6 @@
   extern bool_t                 lastProgramListEnd;
   extern bool_t                 programListEnd;
   extern bool_t                 pemCursorIsZerothStep;
-  extern bool_t                 secTick1;
-  extern bool_t                 halfSecTick2;
-  extern bool_t                 halfSecTick3;
   extern bool_t                 skippedStackLines;
   extern bool_t                 iterations;
   extern bool_t                 explicitTaylorIterVisibilitySelection;

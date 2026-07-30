@@ -155,14 +155,15 @@
 //
 //       Pkg │ DIST    │ X.FN     │ FIN  │ EIGEN │ ELEC │ IR
 //      ─────┼─────────┼──────────┼──────┼───────┼──────┼────
-//        1  │ all     │ no ellip │ fast │   ❌  │  ✅  │ ✅
-//        2  │ all     │ full     │ slow │   ❌  │  ❌  │ ❌
-//        3  │ limited │ no ellip │ fast │   ✅  │  ✅  │ ✅
+//        1  │ all     │ no ellip │ fast │   ❌  │  ✅  │ ❌
+//        2  │ limB    │ full     │ slow │   ❌  │  ❌  │ ✅
+//        3  │ limA    │ no ellip │ fast │   ✅  │  ✅  │ ❌
 //        4  │ none    │ no e-B-O │ slow │   ❌  │  ❌  │ ✅
 //
 //
 //      DIST   all      every distribution
-//             limited  Normal, StdNormal, LogNormal, gev, Pareto, Uniform, Discr Uniform
+//             limA     Normal, StdNormal, LogNormal
+//             limB     Normal, StdNormal, LogNormal, cauchy, chi, expo, logis, t, weibull
 //             none     no distributions
 //      X.FN   full     includes elliptic, Bessel, Orthogonal
 //             no ellip without elliptic
@@ -177,16 +178,8 @@
 //             ❌       no IR printing
 //      All C47 / DM42 packages (common to 1–4): no 2D/3D VECTOR conversions (matrix functions stay), no number editing, no 1000-digit XFN math.
 
-// Compiled 2026-07-22 
-// dist_dmcp5...          flash   1059704   1441792    382088
-// dist_dmcp5r47...       flash   1061616   1441792    380176
-// dist_dmcpr47...        flash    675712    720896     45184
-// dist_dmcp...package 1: flash    712664    720896      8232
-// dist_dmcp...package 2: flash    715800    720896      5096
-// dist_dmcp...package 3: flash    715104    720896      5792
-// dist_dmcp...package 4: flash    675200    720896     45696
 
-  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 6888) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; IR PRINTING
+  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 1016) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; NO IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
     #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
     #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -199,26 +192,26 @@
     #define OPTION_TVM_NEWTON            // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
     #define OPTION_ELEC                  // ✓  6816 bytes // ELEC   6240 saving if VECTOR is not in; 2856 saving if VECTOR is in
             #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
+            #undef  OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(DMCP_PACKAGE2)             // PACKAGE 2 (free 3744) // ALL DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; NO IR PRINTING
+  #if defined(DMCP_PACKAGE2)             // PACKAGE 2 (free 2032) // Limited2 DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; IR PRINTING
     #define OPTION_ELLIPTIC              // ✓ 13112 bytes // Without ELLIPTIC
     #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
     #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
     #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
     #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
     #define OPTION_DIST_2                // ✓  7136 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
-    #define OPTION_DIST_1                // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
-    #define OPTION_DIST_3                // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
+            #undef  OPTION_DIST_1        // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
+            #undef  OPTION_DIST_3        // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
             #undef  OPTION_TVM_FORMULAS  // ✓  2744 bytes // Use TVM analytical formulas where possible
             #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
             #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   see below
             #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-            #undef  OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
+    #define OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 EXPERIMENTAL (free 4416) // Limited DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
+  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 (free 3280) // Limited0 DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
     #define  OPTION_BESSEL               // ✓  4968 bytes // Without X.FN BESSEL
     #define  OPTION_ORTHO                // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -226,12 +219,12 @@
     #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
             #undef  OPTION_DIST_2        // ✓  7136 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
             #undef  OPTION_DIST_1        // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
-    #define OPTION_DIST_3                // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
+            #undef  OPTION_DIST_3        // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
     #define OPTION_TVM_FORMULAS          // ✓  2744 bytes // Use TVM analytical formulas where possible
     #define OPTION_TVM_NEWTON            // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
     #define OPTION_ELEC                  // ✓  6816 bytes // ELEC   see below
     #define OPTION_EIGEN                 // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
+            #undef OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
             // ELEC VECT  FLASH cost   free   (pkg4, 720896 total)
             //  0    0          0     32692
@@ -239,7 +232,7 @@
             //  1    0       6240     26452   ELEC only
             //  1    1      15808     16884   both (ELEC+VECTOR share 3384)
 
-  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free ✓32712) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
+  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free 30472) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
             #undef  OPTION_BESSEL        // ✓  4968 bytes // Without X.FN BESSEL
             #undef  OPTION_ORTHO         // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -1163,6 +1156,8 @@
                                                                // maxLen in _tamProcessInput, ui/tam.c, so a name is at most 7 glyphs of at most 2 bytes each.
                                                                // A longer name in a loaded file marks the file as corrupt.
 
+#define MAX_MVAR_DECLARATIONS   18                             // Solver variables a program may declare, which is the MVAR softmenu's own limit.
+
 //Variable names
 #define VAR_NO_X        0
 #define VAR_NO_Y        1
@@ -2071,6 +2066,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 
 #define MAX_DENMAX                              9999 // Biggest denominator in fraction display mode selector, and annunciator.
                                                      // The value 0 gets converted to MAX_INTERNAL_DENMAX
+#define MAX_SHORT_INTEGER_WORD_SIZE               64 // Widest short integer word. Shifts by the word size, and by one less, are undefined beyond it.
 #define MAX_INTERNAL_DENMAX                    32500 // Biggest denominator in fraction display mode
 
 #if defined(DMCP_BUILD)

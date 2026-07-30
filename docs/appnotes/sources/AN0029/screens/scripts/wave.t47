@@ -1,0 +1,36 @@
+# AN0029 graphing example: radians, key in WAVE, then PLT f over -5..5.
+# f MODE, RAD
+press @f; press "@k 14"; press F2; press "@k 32"
+# XEQ . .   f PRGM
+press "@k 05"; press "@k 34"; press "@k 34"
+press @f; press "@k 35"
+# g LBL  f alpha  W A V E  ENTER
+press @g; press "@k 04"
+press @f; press "@k 05"
+press "@k 26"; press "@k 00"; press "@k 25"; press "@k 04"
+press ENTER
+# P.FN1  P.FN2  MVAR   f alpha  x  ENTER
+press F6; press F6; press F4
+press @f; press "@k 05"; press "@k 28"; press ENTER
+# RCL x, 5, x, SIN
+press "@k 07"; press @f; press "@k 05"; press "@k 28"; press ENTER
+press "@k 24"; press "@k 26"; press "@k 09"
+# RCL x, x2, 8, /, +/-, e^x, x
+press "@k 07"; press @f; press "@k 05"; press "@k 28"; press ENTER
+press @f; press "@k 02"
+press "@k 19"; press "@k 21"; press "@k 14"
+press @f; press "@k 04"
+press "@k 26"
+# leave program entry
+press @f; press "@k 35"
+# f ADV, PLT f (F4), name it WAVE
+press @f; press "@k 19"
+press F4
+press @f; press "@k 05"
+press "@k 26"; press "@k 00"; press "@k 25"; press "@k 04"
+press ENTER
+# range -5 .. 5, then draw
+press "@k 24"; press "@k 14"; press F1
+press "@k 24"; press F1
+press F1
+snap s11wave
