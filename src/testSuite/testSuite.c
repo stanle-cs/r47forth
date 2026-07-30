@@ -24,8 +24,10 @@ char testCaseName[1000], testCasePrefix[1000], testCaseSuffix[1000];
 int32_t lineNumber, numTestsFile, numTestsTotal, successfulTests, failedTests;
 int32_t functionIndex, funcType, correctSignificantDigits;
 bool_t noFailForNow = true; // abortTest counts a failure only while set; starts true so the run's first test can fail
-// A Func:/Item: setup line that failed to resolve; the Out: handler fails the case.
+// Set by every rejection path in functionToCall() and itemToCall(); the Out: handler fails the case, and the next setup line or the end of the file clears it.
 bool_t caseSetupFailed;
+// Set when an Out: line has already failed the case, so countUnreportedSetupFailure() does not count that same rejection again when the file or the block ends.
+bool_t caseSetupReported;
 
 uint16_t label, functionParameter;
 
@@ -5213,9 +5215,24 @@ void callFunction(void) {
 
 
 
+// Count a rejection that no Out: line consumed, before the next setup line overwrites it or the file ends; both flags clear here, so the next block starts clean.
+static void countUnreportedSetupFailure(void) {
+  if(caseSetupFailed && !caseSetupReported) {
+    numTestsTotal++;
+    successfulTests++;
+    noFailForNow = true;
+    abortTest();
+  }
+  caseSetupFailed   = false;
+  caseSetupReported = false;
+}
+
+
+
 void functionToCall(char *functionName) {
   int32_t function;
 
+  countUnreportedSetupFailure();
   functionParameter = NOPARAM;
   // Default to NOP so a failed Func: does not rerun the previous block's function.
   functionIndex = ITM_NOP;
@@ -5334,6 +5351,7 @@ static int32_t lookupItemName(const char *name) {
 void itemToCall(char *itemSpec) {
   int32_t itemNr;
 
+  countUnreportedSetupFailure();
   // Default to a NOP so a following Out: after a failed Item: does not rerun the previous function
   functionIndex = ITM_NOP;
   funcToTest    = fnNop;
@@ -5374,7 +5392,7 @@ void itemToCall(char *itemSpec) {
     return;
   }
 
-  // A TAM item's param is a TM_* marker, not a value; passed through it reaches the function as a register index and segfaults. Reject as the DSL does (dsl.c:104).
+  // A TAM item's param is a TM_* marker, not a value; passed through it reaches the function as a register index and reads out of range. Reject as the DSL does.
   if(TM_VALUE <= indexOfItems[itemNr].param && indexOfItems[itemNr].param <= TM_CMP) {
     printf("\nItem %d (%s) takes a TAM parameter, which Item: cannot supply: drive it with Func: and In: FARG=n\n", itemNr, itemSpec);
     caseSetupFailed = true;
@@ -5569,8 +5587,9 @@ void processLine(void) {
     successfulTests++;
     noFailForNow = true;
     if(caseSetupFailed) {
-      // Setup failed, so fnNop ran: fail-and-skip. The flag latches across this block's Out: lines; the next Func:/Item: and each file clear it.
+      // The setup line failed, so fnNop ran and the case fails here. The flag latches across this block's Out: lines, and the next setup line or the file end clears it.
       abortTest();
+      caseSetupReported = true;
     }
     else {
       outParameters(line + 5);
@@ -5589,8 +5608,6 @@ void processOneFile(void) {
   FILE *testSuite;
 
   numTestsFile = 0;
-  // Clear per file: a rejected line at a file's end has no Out: to consume the flag.
-  caseSetupFailed = false;
 
   strcpy(fileName, line);
   strcat(fileName, ".txt");
@@ -5626,6 +5643,8 @@ void processOneFile(void) {
     ignoreReturnedValue(fgets(line, 9999, testSuite));
     lineNumber++;
   }
+
+  countUnreportedSetupFailure();
 
   fclose(testSuite);
 
