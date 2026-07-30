@@ -2784,67 +2784,6 @@ void fnTimeTo(uint16_t unusedButMandatoryParameter) {
 }
 
 
-/********************************************//**
- * \brief Check if time is valid (e.g. 10:61:61 is invalid)
- *
- * \param[in] hour real34_t*
- * \param[in] minute real34_t*
- * \param[in] second real34_t*
- * \return bool_t true if valid
- ***********************************************/
-bool_t isValidTime(const real34_t *hour, const real34_t *minute, const real34_t *second) {
-  real34_t val;
-
-  // second
-  real34ToIntegralValue(second, &val, DEC_ROUND_FLOOR);
-  real34Subtract(second, &val, &val);
-  if(!real34IsZero(&val)) {
-    return false;
-  }
-
-  if(real34CompareLessThan(second, const34_0)) {
-    return false;
-  }
-
-  if(real34CompareGreaterEqual(second, const34_60)) {
-    return false;
-  }
-
-  // minute
-  real34ToIntegralValue(minute, &val, DEC_ROUND_FLOOR);
-  real34Subtract(minute, &val, &val);
-  if(!real34IsZero(&val)) {
-    return false;
-  }
-
-  if(real34CompareLessThan(minute, const34_0)) {
-    return false;
-  }
-
-  if(real34CompareGreaterEqual(minute, const34_60)) {
-    return false;
-  }
-
-  // hour
-  real34ToIntegralValue(hour, &val, DEC_ROUND_FLOOR);
-  real34Subtract(hour, &val, &val);
-  if(!real34IsZero(&val)) {
-    return false;
-  }
-
-  if(real34CompareLessThan(hour, const34_0)) {
-    return false;
-  }
-
-  if(real34CompareGreaterEqual(hour, const34_24)) {
-    return false;
-  }
-
-  // Valid time
-  return true;
-}
-
-
 TO_QSPI const calcRegister_t toTimeParamReg[3] = {REGISTER_Z, REGISTER_Y, REGISTER_X};
 void fnToTime(uint16_t unusedButMandatoryParameter) {
   real34_t hr, m, s;
