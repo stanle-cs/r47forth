@@ -3,6 +3,8 @@
 
     python3 plotfnkind.py
 
+The file is named charts-<date>_<time>.pdf, so a chart already drawn is never overwritten.
+
 Forty groups, one per case, with a bar per run in the order the runs were taken. Speed is on a
 logarithmic scale because the cases span seven orders of magnitude, from a stack roll to a solve.
 Depth is linear and only the runs from a STACK_WATERMARK build have it.
@@ -12,6 +14,7 @@ chart needs are written straight into the file. Nothing here is generated from a
 runs themselves.
 """
 
+import datetime
 import math
 import os
 import sys
@@ -19,7 +22,9 @@ import sys
 import checkfnkind as ck
 
 PAGE_W, PAGE_H = 1190.0, 842.0                       # A3 landscape, points
-MARGIN_L, MARGIN_R, MARGIN_T, MARGIN_B = 62.0, 24.0, 86.0, 132.0
+MARGIN_L, MARGIN_R, MARGIN_T, MARGIN_B = 84.0, 24.0, 118.0, 176.0
+TYPE = 1.5    # every type size below is multiplied by this
+MEMORY_SPAN = (2000.0, 20000.0)   # one scale for every memory page, so the pages compare by eye
 
 # The runs are found, not listed: every run folder is grouped by the calculator its folder name
 # names, and ordered by the clock stamp the calculator itself put on the file. One page of speed and
@@ -32,6 +37,20 @@ SHADES = [(0.72, 0.80, 0.90), (0.45, 0.62, 0.82), (0.22, 0.42, 0.68), (0.09, 0.2
           (0.06, 0.14, 0.30)]
 
 SPEED_FLOOR = 0.01          # ms: below this a reading is the tick resolution, not a measurement
+
+
+def wrap(text, width):
+    """Break a line of prose to fit, on spaces."""
+    lines, line = [], ""
+    for word in text.split():
+        if line and len(line) + 1 + len(word) > width:
+            lines.append(line)
+            line = word
+        else:
+            line = (line + " " + word).strip()
+    if line:
+        lines.append(line)
+    return lines
 
 
 def escape(text):
@@ -136,7 +155,7 @@ def gather(folders, value_of):
     return series, names
 
 
-def chart(title, subtitle, series, names, logarithmic, unit, floor=None):
+def chart(title, subtitle, series, names, logarithmic, unit, floor=None, span=None):
     c = Canvas()
     numbers = sorted(names)
     plot_w = PAGE_W - MARGIN_L - MARGIN_R
@@ -160,18 +179,17 @@ def chart(title, subtitle, series, names, logarithmic, unit, floor=None):
         to_y = lambda v: y0 + plot_h * (math.log10(max(v, floor)) - lo) / (hi - lo)
         ticks = [(10.0 ** e, "%g" % (10.0 ** e)) for e in range(int(lo), int(hi) + 1)]
     else:
-        hi = max(everything) * 1.05
-        lo = 0.0
+        lo, hi = span if span else (0.0, max(everything) * 1.05)
         to_y = lambda v: y0 + plot_h * (v - lo) / (hi - lo)
         step = 2000
-        ticks = [(t, "%d" % t) for t in range(0, int(hi) + step, step)]
+        ticks = [(t, "%d" % t) for t in range(int(lo), int(hi) + step, step)]
 
     for value, label in ticks:                                     # gridlines and the scale
         y = to_y(value)
-        if y > y0 + plot_h:
+        if y > y0 + plot_h + 1 or y < y0 - 1:
             continue
         c.line(x0, y, x0 + plot_w, y, grey=0.82, width=0.4)
-        c.text(x0 - 6 - 5.0 * len(label), y - 3, label, size=8, grey=0.35)
+        c.text(x0 - 8 - 5.0 * TYPE * len(label), y - 4, label, size=8 * TYPE, grey=0.35)
 
     group_w = plot_w / len(numbers)
     bar_w = group_w * 0.78 / len(series)
@@ -190,35 +208,44 @@ def chart(title, subtitle, series, names, logarithmic, unit, floor=None):
             c.rect(bx, y0, bar_w * 0.88, to_y(v) - y0, colour)
         label = "%s %s" % (number, names[number])
         # Turned text advances upward, so start low enough that it ends just under the axis.
-        c.text(gx + group_w / 2 - 3, y0 - 9 - 4.0 * len(label), label, size=7.4,
+        c.text(gx + group_w / 2 - 4, y0 - 11 - 4.0 * TYPE * len(label), label, size=7.4 * TYPE,
                grey=0.15, turned=True)
 
     c.line(x0, y0, x0 + plot_w, y0, grey=0.2, width=0.8)
     c.line(x0, y0, x0, y0 + plot_h, grey=0.2, width=0.8)
 
-    c.text(MARGIN_L, PAGE_H - 34, title, size=15)
-    c.text(MARGIN_L, PAGE_H - 50, subtitle, size=9, grey=0.35)
-    c.text(MARGIN_L - 46, y0 + plot_h + 8, unit, size=8, grey=0.35)
-
+    # The header is stacked from the top down, so a long title or note cannot land on the key.
+    y = PAGE_H - 20
+    for line in wrap(title, 92):
+        y -= 15 * TYPE + 4
+        c.text(MARGIN_L, y, line, size=15 * TYPE)
+    for line in wrap(subtitle, 122):
+        y -= 9 * TYPE + 3
+        c.text(MARGIN_L, y, line, size=9 * TYPE, grey=0.35)
     if dropped:
-        c.text(MARGIN_L, PAGE_H - 62,
+        y -= 8 * TYPE + 3
+        c.text(MARGIN_L, y,
                "%d bar left out: that case number named a different case in an older run" % dropped
                if dropped == 1 else
                "%d bars left out: those case numbers named different cases in older runs" % dropped,
-               size=8, grey=0.45)
+               size=8 * TYPE, grey=0.45)
 
-    kx = MARGIN_L                                                  # the key, along the top
+    y -= 8 * TYPE + 12
+    kx = MARGIN_L                                                  # the key, under the header
     for label, colour, _values in series:
-        c.rect(kx, PAGE_H - 80, 9, 9, colour)
-        c.text(kx + 13, PAGE_H - 78, label, size=8.5, grey=0.15)
-        kx += 22 + 4.9 * len(label)
+        c.rect(kx, y - 2, 12, 12, colour)
+        c.text(kx + 17, y + 1, label, size=8.5 * TYPE, grey=0.15)
+        kx += 26 + 4.9 * TYPE * len(label)
+
+    c.text(MARGIN_L - 46, y0 + plot_h + 8, unit, size=8 * TYPE, grey=0.35)
+
     return c.stream()
 
 
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     grouped = runs_by_machine()
-    pages, made = [], []
+    pages, made, memory_pages = [], [], []
 
     for machine in MACHINES:
         folders = grouped.get(machine, [])
@@ -241,15 +268,25 @@ def main():
         depth = [x for x in depth if x[2]]
         if depth:
             pages.append(chart(
-                "%s, working memory used" % machine,
+                "%s estimate working memory (stack) used, including overhead for probe and base loading "
+                "of ca. 2000 bytes." % machine,
                 "One bar per run, oldest on the left, marked with the time it was taken. Bytes below the "
                 "reference point, from one call. Only a reading with STCKST 0 is drawn, so a missing bar is "
-                "a case that run could not resolve.",
-                depth, dnames, False, "bytes"))
+                "a case that run could not resolve, being no deeper than the probe itself.",
+                depth, dnames, False, "bytes", span=MEMORY_SPAN))
             made.append("%s memory, %d runs" % (machine, len(depth)))
+            if machine != "SIM":
+                memory_pages.append(pages[-1])
 
-    write_pdf(os.path.join(here, "charts.pdf"), pages)
-    print("wrote charts.pdf, %d pages" % len(pages))
+    # Stamped, never a fixed name: a chart already drawn is evidence and must not be overwritten.
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+    name = "charts-%s.pdf" % stamp
+    write_pdf(os.path.join(here, name), pages)
+    print("wrote %s, %d pages" % (name, len(pages)))
+    if memory_pages:
+        short = "charts-%s_m.pdf" % stamp
+        write_pdf(os.path.join(here, short), memory_pages)
+        print("wrote %s, %d pages, the calculator memory charts alone" % (short, len(memory_pages)))
     for line in made:
         print("  %s" % line)
     return 0
