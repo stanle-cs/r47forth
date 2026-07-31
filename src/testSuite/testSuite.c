@@ -50,6 +50,7 @@ void covEqCalc(uint16_t unusedButMandatoryParameter);
 void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t which);
 void covCpxSolveRoot(uint16_t which);
+void covEqSolveDispatch(uint16_t which);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
@@ -237,6 +238,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDerivEqCov",           covDerivEq, 1 },
   {"fnSolveRootCov",         covSolveRoot, 1 },
   {"fnCpxSolveRootCov",      covCpxSolveRoot, 1 },
+  {"fnEqSolveDispatchCov",   covEqSolveDispatch, 1 },
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
@@ -987,6 +989,43 @@ void covCpxSolveRoot(uint16_t which) {
   // FLAG_CPXRES is set on entry to complexSolver but is clear again by the time it returns, so it needs no restore.
   const angularMode_t savedAngularMode = currentAngularMode;
   fnEqSolvGraph(EQ_CPXSOLVE);
+  currentAngularMode = savedAngularMode;
+}
+
+void covEqSolveDispatch(uint16_t which) {
+  // The solve arms of fnEqSolvGraph's switch (solver/graph.c) that EQ_CPXSOLVE does not reach. Roots are exact, so the expected value is the algebra.
+  //   0  EQ_REALSOLVE     f(X)=X^2-4, roots +/-2,  guesses off the stack
+  //   1  EQ_CPXSOLVE_LU   f(X)=X^4+4, roots +/-1+/-i, guesses from LEST/UEST
+  //   2  EQ_REALSOLVE_LU  f(X)=X^2-4, roots +/-2,  guesses from LEST/UEST
+  // The _LU arms read RESERVED_VARIABLE_LEST/UEST and ignore the stack, so their cases seed the stack with -5 and -1 and the estimates with 1 and 5, chosen
+  // because the two pairs land on different roots: measured, X^2-4 gives -2 from the stack pair and +2 from the estimates, and X^4+4 gives -1-i from the
+  // stack pair and 1+i from the estimates. A build that read the stack therefore returns the wrong root and the case fails. Two seeds that look adequate
+  // and are not: a degenerate 0 and 0 still converges on +2, and X^2+4 lands on -2i from every guess pair tried, so neither can tell the two paths apart.
+  const bool_t isLu = (which >= 1);
+  if(which > 2) {
+    return;
+  }
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, which == 1 ? "X^4+4" : "X^2-4");
+  const uint16_t var = findOrAllocateNamedVariable("X");
+  currentSolverVariable = var;
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+
+  if(isLu) {
+    // Seed the estimates the way the non-LU arm does, so the LU arm has something to read.
+    real_t lower, upper;
+    int32ToReal(1, &lower);
+    int32ToReal(5, &upper);
+    reallocateRegister(RESERVED_VARIABLE_LEST, dtReal34, 0, amNone);
+    reallocateRegister(RESERVED_VARIABLE_UEST, dtReal34, 0, amNone);
+    realToReal34(&lower, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LEST));
+    realToReal34(&upper, REGISTER_REAL34_DATA(RESERVED_VARIABLE_UEST));
+  }
+
+  const angularMode_t savedAngularMode = currentAngularMode;
+  fnEqSolvGraph(which == 0 ? EQ_REALSOLVE : (which == 1 ? EQ_CPXSOLVE_LU : EQ_REALSOLVE_LU));
   currentAngularMode = savedAngularMode;
 }
 

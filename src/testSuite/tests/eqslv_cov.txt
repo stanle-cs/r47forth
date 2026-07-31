@@ -1,0 +1,26 @@
+;*************************************************************
+;**    Coverage: the solve arms of fnEqSolvGraph that       **
+;**    cpxSlv does not reach - EQ_REALSOLVE, and the        **
+;**    EQ_*_LU pair that reads the LEST/UEST estimates.     **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+; EQ_REALSOLVE, f(X)=X^2-4, guesses off the stack
+Func: fnEqSolveDispatchCov
+In:  FARG=0 RY=Real:"1" RX=Real:"5"
+Out: EC=0 RX=Real:"2"
+
+; the same arm from the other side of the bracket
+Func: fnEqSolveDispatchCov
+In:  FARG=0 RY=Real:"-5" RX=Real:"-1"
+Out: EC=0 RX=Real:"-2"
+
+; EQ_CPXSOLVE_LU, f(X)=X^4+4: the estimates reach 1+i, the stack pair -1-i
+Func: fnEqSolveDispatchCov
+In:  FARG=1 RY=Real:"-5" RX=Real:"-1"
+Out: EC=0 RX=Cplx:"1 i 1"
+
+; EQ_REALSOLVE_LU, f(X)=X^2-4: estimates give +2, the stack pair would give -2
+Func: fnEqSolveDispatchCov
+In:  FARG=2 RY=Real:"-5" RX=Real:"-1"
+Out: EC=0 RX=Real:"2"
