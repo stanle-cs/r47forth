@@ -18,11 +18,16 @@ extern const int16_t menu_alpha_INTL[];
 extern const int16_t menu_alpha_intl[];
 extern const int16_t menu_REGIST[];
 extern const softmenu_t softmenu[];
+const char *_ioFileNameFromFilePath(ioFilePath_t path); // the suite's own HAL (hal/io.c); no public header declares it
 char line[100000], lastInParameters[10000], fileName[1000], *filePath, filePathName[2000], registerExpectedAndValue[2400], realString[2400];
 char testCaseName[1000], testCasePrefix[1000], testCaseSuffix[1000];
 int32_t lineNumber, numTestsFile, numTestsTotal, successfulTests, failedTests;
 int32_t functionIndex, funcType, correctSignificantDigits;
 bool_t noFailForNow = true; // abortTest counts a failure only while set; starts true so the run's first test can fail
+// Set by every rejection path in functionToCall() and itemToCall(); the Out: handler fails the case, and the next setup line or the end of the file clears it.
+bool_t caseSetupFailed;
+// Set when an Out: line has already failed the case, so countUnreportedSetupFailure() does not count that same rejection again when the file or the block ends.
+bool_t caseSetupReported;
 
 uint16_t label, functionParameter;
 
@@ -36,6 +41,7 @@ bool_t          screenChange;
 void (*funcToTest)(uint16_t);
 void runPgm(uint16_t unusedButMandatoryParameter);
 void covBackupRoundtrip(uint16_t unusedButMandatoryParameter);
+void covBackupCorruptRegionCount(uint16_t which);
 void covConvToSI(uint16_t itemNr);
 void covConvFromSI(uint16_t itemNr);
 void covStateRoundtrip(uint16_t unusedButMandatoryParameter);
@@ -55,6 +61,7 @@ void covDerivPgm(uint16_t order);
 void covDerivMvarPgm(uint16_t which);
 void covDerivAccPgm(uint16_t which);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
+void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
 void covIntegrateErr(uint16_t which);
 void covMvarKey(uint16_t which);
@@ -214,6 +221,7 @@ const funcTest_t funcTestNoParam[] = {
   // Backup serializer round-trip: save the whole calculator state to backup.cfg and restore it. Exercises both directions of saveRestoreBackup.c.
   // Resets the calculator, so its corpus test must run last.
   {"fnBackupRoundtrip",      covBackupRoundtrip, 1 },
+  {"fnBackupBadRegionCount", covBackupCorruptRegionCount, 1 },
   {"covConvToSI",            covConvToSI, 1 },
   {"covConvFromSI",          covConvFromSI, 1 },
   {"fnPlotReset",            fnPlotReset           },
@@ -231,6 +239,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
+  {"fnMvarPageNoPgmCov",     covMvarPageNoProgram, 1 },
   {"fnLoadPgmLongLabelCov",  covLoadPgmLongLabel, 1 },
   {"fnLoadStateLongLabelCov", covLoadStateLongLabel, 1 },
   {"fnIterationTiCov",       covIterationTi, 1 },
@@ -749,6 +758,72 @@ void covBackupRoundtrip(uint16_t unusedButMandatoryParameter) {
   loadTestPrograms = false;
   saveCalc();
   restoreCalc();
+}
+
+// Put one parameter line at the front of the backup file that saveCalc() has just written. restoreStateValue() takes the first line whose name matches and stops,
+// so a line prepended here shadows the genuine one further down while the rest of the file - including the hexDump bodies, which are found by walking on from
+// their own header line - stays byte for byte what the calculator wrote. That is the smallest way to hand the parser one corrupt field and nothing else.
+static void covShadowBackupLine(const char *shadowLine) {
+  const char *backupPath = _ioFileNameFromFilePath(ioPathBackup);   // not fileName: the suite has a global of that name
+  FILE       *f          = fopen(backupPath, "rb");
+  long        fileSize;
+  size_t      bytesRead;
+  char       *body;
+
+  if(f == NULL) {
+    return;
+  }
+  fseek(f, 0, SEEK_END);
+  fileSize = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  if(fileSize <= 0) {
+    fclose(f);
+    return;
+  }
+  body = malloc((size_t)fileSize);
+  if(body == NULL) {
+    fclose(f);
+    return;
+  }
+  bytesRead = fread(body, 1, (size_t)fileSize, f);
+  fclose(f);
+
+  f = fopen(backupPath, "wb");
+  if(f != NULL) {
+    fprintf(f, "%s\n", shadowLine);
+    fwrite(body, 1, bytesRead, f);
+    fclose(f);
+  }
+  free(body);
+}
+
+void covBackupCorruptRegionCount(uint16_t which) {
+  // Regression: a memory region count read from backup.cfg is checked before it is trusted. restoreCalc() multiplies the count by sizeof(freeMemoryRegion_t) to
+  // get the byte count the hexDump reader fills freeMemoryRegions or allocatedMemoryRegions with, and freeList.c then walks the same table that many entries
+  // deep. Neither table can pass its ceiling while the calculator runs, so a count outside 0..ceiling can only come from a corrupt file, and restoring it puts
+  // the writes and the walks past the end of a fixed-size table.
+  //
+  // Save a genuine backup, shadow one count line with an out-of-range value (which: 0 free regions, 1 allocated regions), and restore. The case reports 1 only
+  // if both counts are inside their tables afterwards, which they are when the loader refuses the file and leaves the reset calculator alone; without the check
+  // the file's count is live and the case reports 0.
+  //
+  // restoreCalc() bails when the sample programs are loaded, so clear that flag first, as covBackupRoundtrip does.
+  loadTestPrograms = false;
+  saveCalc();
+  covShadowBackupLine(which == 0 ? "numberOfFreeMemoryRegions:int32:100000" : "numberOfAllocatedMemoryRegions:int32:100000");
+  restoreCalc();
+
+  // Read the invariant off the globals before anything allocates: on a build without the check the tables are the file's, and the next allocation walks past them.
+  const bool_t regionCountsAreInsideTheirTables = (numberOfFreeMemoryRegions      >= 0 && numberOfFreeMemoryRegions      <= MAX_FREE_REGIONS     ) &&
+                                                  (numberOfAllocatedMemoryRegions >= 0 && numberOfAllocatedMemoryRegions <= MAX_ALLOCATED_REGIONS);
+
+  fnReset(CONFIRMED); // back onto a region table the allocator owns before a register is allocated for the result
+
+  longInteger_t li;
+  longIntegerInit(li);
+  uInt32ToLongInteger(regionCountsAreInsideTheirTables ? 1u : 0u, li);
+  convertLongIntegerToLongIntegerRegister(li, REGISTER_X);
+  longIntegerFree(li);
 }
 
 static void covStoTvm(int32_t value, uint16_t reg) {
@@ -1668,6 +1743,24 @@ void covSolvePgm(uint16_t unusedButMandatoryParameter) {
   currentSolverStatus = 0;
   fnPgmSlv(label);
   fnSolve(findOrAllocateNamedVariable("X"));
+}
+
+void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter) {
+  // Build the MVAR page with no model selected: no VARMNU label, no formula, and currentSolverProgram at the 0xffff doFnReset leaves. _dynmenuConstructMVarsFromPgm
+  // (softmenus.c) bounds the label index against numberOfLabels, so the page holds no variables, which is the count this puts in X. Program S is loaded by this
+  // point in the corpus, so the label block has program material after it and an unbounded index reads a page rather than zeros.
+  int16_t m;
+
+  currentMvarLabel     = INVALID_VARIABLE;
+  currentSolverStatus  = 0;         // not a formula model: the program branch is the one taken
+  currentSolverProgram = 0xffffu;   // the value doFnReset leaves when no PGMSLV has named a label
+
+  fnOpenMenu(MNU_MVAR);
+
+  for(m = 0; m < NUMBER_OF_DYNAMIC_SOFTMENUS && softmenu[m].menuItem != -MNU_MVAR; m++) {}
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(m < NUMBER_OF_DYNAMIC_SOFTMENUS ? (int32_t)dynamicSoftmenu[m].numItems : -1, REGISTER_REAL34_DATA(REGISTER_X));   // -1: MVAR outside the dynamic block
+  popSoftmenu();
 }
 
 void covIntegrate(uint16_t which) {
@@ -2702,6 +2795,7 @@ void setParameter(char *p) {
   if(p[i] == 0) {
     printf("\nMalformed parameter setting. Missing equal sign, remember that no space is allowed around the equal sign.\n");
     abortTest();
+    return;
   }
 
   p[i] = 0;
@@ -3963,6 +4057,7 @@ void checkExpectedOutParameter(char *p) {
   if(p[i] == 0) {
     printf("\nMalformed out parameter. Missing equal sign, remember that no space is allowed around the equal sign.\n");
     abortTest();
+    return;
   }
 
   p[i] = 0;
@@ -5210,15 +5305,36 @@ void callFunction(void) {
 
 
 
+// Count a rejection that no Out: line consumed, before the next setup line overwrites it or the file ends; both flags clear here, so the next block starts clean.
+static void countUnreportedSetupFailure(void) {
+  if(caseSetupFailed && !caseSetupReported) {
+    numTestsTotal++;
+    successfulTests++;
+    noFailForNow = true;
+    abortTest();
+  }
+  caseSetupFailed   = false;
+  caseSetupReported = false;
+}
+
+
+
 void functionToCall(char *functionName) {
   int32_t function;
 
+  countUnreportedSetupFailure();
   functionParameter = NOPARAM;
+  // Default to NOP so a failed Func: does not rerun the previous block's function.
+  functionIndex = ITM_NOP;
+  funcToTest    = fnNop;
+  funcType      = FUNC_TO_TEST;
+
   char *openParenthesis = strchr(functionName, '(');
   char *closeParenthesis = strchr(functionName, ')');
   if((openParenthesis && !closeParenthesis) || (!openParenthesis && closeParenthesis)) {
     printf("\nParameter parenthesis do not match!\n");
-    abortTest();
+    caseSetupFailed = true;
+    return;
   }
   else if(openParenthesis && closeParenthesis) {
     *closeParenthesis = 0;
@@ -5251,15 +5367,17 @@ void functionToCall(char *functionName) {
 
     if(functionIndex >= LAST_ITEM) {
       printf("\nThe function %s must be somewhere in the indexOfItems array!\n", functionName);
-      abortTest();
+      caseSetupFailed = true;
+      return;
     }
 
     //printf("%s=%d\n", functionName, functionIndex);
+    caseSetupFailed = false;
     return;
   }
 
   printf("\nCannot find the function to test: check spelling of the function name and remember the name is case sensitive\n");
-  abortTest();
+  caseSetupFailed = true;
 }
 
 
@@ -5323,6 +5441,7 @@ static int32_t lookupItemName(const char *name) {
 void itemToCall(char *itemSpec) {
   int32_t itemNr;
 
+  countUnreportedSetupFailure();
   // Default to a NOP so a following Out: after a failed Item: does not rerun the previous function
   functionIndex = ITM_NOP;
   funcToTest    = fnNop;
@@ -5332,7 +5451,7 @@ void itemToCall(char *itemSpec) {
     itemNr = lookupItemName(itemSpec);
     if(itemNr < 0) {
       printf("\nCannot find %s in items.h: check spelling of the item name and remember the name is case sensitive\n", itemSpec);
-      abortTest();
+      caseSetupFailed = true;
       return;
     }
   }
@@ -5341,30 +5460,38 @@ void itemToCall(char *itemSpec) {
     itemNr = (int32_t)strtol(itemSpec, &end, 10);
     if(*end != 0) {
       printf("\nItem number has trailing characters: %s\n", itemSpec);
-      abortTest();
+      caseSetupFailed = true;
       return;
     }
   }
   else {
     printf("\nItem must be an ITM_ name or an item number: %s\n", itemSpec);
-    abortTest();
+    caseSetupFailed = true;
     return;
   }
 
   if(itemNr <= 0 || itemNr >= LAST_ITEM) {
     printf("\nItem number %d is out of range (1..%d)\n", itemNr, LAST_ITEM - 1);
-    abortTest();
+    caseSetupFailed = true;
     return;
   }
 
   if(indexOfItems[itemNr].func == itemToBeCoded) {
     printf("\nItem %d (%s) is not an implemented function\n", itemNr, itemSpec);
-    abortTest();
+    caseSetupFailed = true;
     return;
   }
 
-  functionIndex = itemNr;
-  funcType      = FUNC_ITEM;
+  // A TAM item's param is a TM_* marker, not a value; passed through it reaches the function as a register index and reads out of range. Reject as the DSL does.
+  if(TM_VALUE <= indexOfItems[itemNr].param && indexOfItems[itemNr].param <= TM_CMP) {
+    printf("\nItem %d (%s) takes a TAM parameter, which Item: cannot supply: drive it with Func: and In: FARG=n\n", itemNr, itemSpec);
+    caseSetupFailed = true;
+    return;
+  }
+
+  functionIndex   = itemNr;
+  funcType        = FUNC_ITEM;
+  caseSetupFailed = false;
 }
 
 
@@ -5549,7 +5676,14 @@ void processLine(void) {
     numTestsTotal++;
     successfulTests++;
     noFailForNow = true;
-    outParameters(line + 5);
+    if(caseSetupFailed) {
+      // The setup line failed, so fnNop ran and the case fails here. The flag latches across this block's Out: lines, and the next setup line or the file end clears it.
+      abortTest();
+      caseSetupReported = true;
+    }
+    else {
+      outParameters(line + 5);
+    }
   }
 
   else if(line[0] != 0) {
@@ -5599,6 +5733,8 @@ void processOneFile(void) {
     ignoreReturnedValue(fgets(line, 9999, testSuite));
     lineNumber++;
   }
+
+  countUnreportedSetupFailure();
 
   fclose(testSuite);
 

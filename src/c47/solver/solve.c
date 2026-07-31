@@ -271,7 +271,11 @@ void fnMvarPlot(uint16_t labelOrVariable) {
 
 void fnSolveVar(uint16_t unusedButMandatoryParameter) {
     printStatus(1, errorMessageOf(REAL_SOLVER), force);
-    const char *var = (char *)getNthString(dynamicSoftmenu[softmenuStack[0].softmenuId].menuContent, dynamicMenuItem);
+    const dynamicSoftmenu_t *dynamic = currentDynamicSoftmenu();
+    if(dynamic == NULL || dynamicMenuItem < 0 || dynamicMenuItem >= dynamic->numItems) {
+      return;
+    }
+    const char *var = (char *)getNthString(dynamic->menuContent, dynamicMenuItem);
     const uint16_t regist = findOrAllocateNamedVariable(var);
     const uint16_t nameLength = stringByteLength(var) + 1;
     if(currentMvarLabel != INVALID_VARIABLE) {
