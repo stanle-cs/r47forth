@@ -245,8 +245,13 @@ void drawBattery(uint16_t voltage);
       return;
     }
 
-    if(didSystemFlagChange(FLAG_FRACT)  | didSystemFlagChange(FLAG_IRFRAC) | didSystemFlagChange(FLAG_PROPFR) | 
-       didSystemFlagChange(SETTING_DMX) | didSystemFlagChange(FLAG_DENFIX) | didSystemFlagChange(FLAG_DENANY)) {  // changed to | not || : didSystemFlagChange clears on reading and the short circuiting of || causes each didSystemFlagChange to clear in a following refresh.
+    bool_t aa = didSystemFlagChange(FLAG_FRACT);     // note, read separately, not || : didSystemFlagChange clears on reading and the short circuiting of || causes each didSystemFlagChange to clear in a following refresh.
+    bool_t bb = didSystemFlagChange(FLAG_IRFRAC);
+    bool_t cc = didSystemFlagChange(FLAG_PROPFR);
+    bool_t dd = didSystemFlagChange(SETTING_DMX);
+    bool_t ee = didSystemFlagChange(FLAG_DENFIX);
+    bool_t ff = didSystemFlagChange(FLAG_DENANY);
+    if(aa || bb || cc || dd || ee || ff) {
       char statusMessage[20];
       uint32_t x = X_FRAC_MODE;
 
