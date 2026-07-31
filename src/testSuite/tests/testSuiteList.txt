@@ -446,6 +446,7 @@ programs
 eq_cov
 deriv_cov
 solve_cov
+cpxslv_cov
 integrate_cov
 tvm_cov
 

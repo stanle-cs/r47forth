@@ -49,6 +49,7 @@ void covShortIntWordSizeRestore(uint16_t unusedButMandatoryParameter);
 void covEqCalc(uint16_t unusedButMandatoryParameter);
 void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t which);
+void covCpxSolveRoot(uint16_t which);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
@@ -235,6 +236,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnEqCalcCov",            covEqCalc, 1 },
   {"fnDerivEqCov",           covDerivEq, 1 },
   {"fnSolveRootCov",         covSolveRoot, 1 },
+  {"fnCpxSolveRootCov",      covCpxSolveRoot, 1 },
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
@@ -959,6 +961,19 @@ void covSolveRoot(uint16_t which) {
   // solver's convergence, so assign rather than OR.
   currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
   fnSolve(var);
+}
+
+void covCpxSolveRoot(uint16_t which) {
+  // Complex root solver (fnEqSolvGraph(EQ_CPXSOLVE) -> complexSolver() in graph.c). Same formula fixture as covSolveRoot: the two guesses come from Y and X, the
+  // root lands in X. which=0 uses f(X)=X^2+4, whose roots +/-2i have no real part, so the real solver cannot find them; which=1 uses f(X)=X^2-4 (real roots +/-2).
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, which == 0 ? "X^2+4" : (which == 1 ? "X^2-4" : "X^3-1"));
+  const uint16_t var = findOrAllocateNamedVariable("X");
+  currentSolverVariable = var;
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+  fnEqSolvGraph(EQ_CPXSOLVE);
 }
 
 void covDerivErr(uint16_t which) {
