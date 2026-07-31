@@ -1693,7 +1693,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
 #define V_4     STD_v_BAR STD_SUB_4
 #define V_3     STD_v_BAR STD_SUB_3
 #define V_2     STD_v_BAR STD_SUB_2
-#define S_RAR_S S4EM STD_RIGHT_SHORT_ARROW S6EM
+#define S_RAR_S S6EM STD_RIGHT_ARROW S6EM
 
 #if defined(USECURVES)
   #define conditionalPCURVE fnPcurve
