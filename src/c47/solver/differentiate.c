@@ -322,11 +322,16 @@ static void _differentiatorIteration(calcRegister_t label, calcRegister_t variab
     fnToReal(NOPARAM);
   }
 
-  if(getRegisterDataType(REGISTER_X) == dtReal34) {
+  if(lastErrorCode == ERROR_NONE && getRegisterDataType(REGISTER_X) == dtReal34) {
     real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), r0);
   }
   else {
-    lastErrorCode = ERROR_NONE;
+    // The function is not defined at this point, maybe outside its domain, so the sample is made a NaN and the stencil that reads it is refused, which makes the
+    // ladder take its points closer in. The error must be cleared: left standing, the next sample's fnExecute takes it for its own goto having failed, steps the
+    // caller back onto this derivative and restarts it, endlessly.
+    if(lastErrorCode != ERROR_SOLVER_ABORT) {   // an abort is the one error that stays: calcFuncValues reads it to stop the sampling and the caller to stop the run
+      lastErrorCode = ERROR_NONE;
+    }
     realSetNaN(r0);
   }
 }

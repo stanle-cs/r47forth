@@ -60,6 +60,7 @@ void covStatsRegister(uint16_t unusedButMandatoryParameter);
 void covPolarDisplayCap(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covDerivMvarPgm(uint16_t which);
+void covDerivAccPgm(uint16_t which);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
@@ -248,6 +249,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnPolarDisplayCapCov",   covPolarDisplayCap, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
   {"fnDerivMvarPgmCov",      covDerivMvarPgm, 1 },
+  {"fnDerivAccPgm",          covDerivAccPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
   {"fnIntegrateErrCov",      covIntegrateErr, 1 },
@@ -1727,6 +1729,47 @@ void covDerivMvarPgm(uint16_t which) {
   else {
     fn1stDerivEq(NOPARAM);
   }
+}
+
+void covDerivAccPgm(uint16_t unusedButMandatoryParameter) {
+  // Load the fixtures the derivative accuracy tests differentiate. Seven functions, each reading its argument off the stack, and for each of them a first and a
+  // second derivative wrapper, so every case is an ordinary program run: Func fnExecute with PGM="Xa" and the point in X. The functions are chosen for what they
+  // do to the step: e^x is the smooth reference, ln and 1/x have exact rational derivatives at the points used, arcsin is taken beside the end of its domain
+  // where a wide stencil samples outside it, tan is taken near its pole, sin is taken 159 periods out where a step relative to x spans many of them, and the
+  // last is e^x lifted by 1E20, where the offset takes 21 of the 34 digits of every sample before they are differenced.
+  // Bytes: LBL name / function / RTN, then LBL name / derivative of a named label / RTN, and one END for the file.
+  #define LBL2(a, b)   ITM_LBL, STRING_LABEL_VARIABLE, 2, (a), (b)
+  #define DER1(a, b)   (uint8_t)((ITM_FQX  >> 8) | 0x80), (uint8_t)(ITM_FQX  & 0xff), STRING_LABEL_VARIABLE, 2, (a), (b)
+  #define DER2(a, b)   (uint8_t)((ITM_FDQX >> 8) | 0x80), (uint8_t)(ITM_FDQX & 0xff), STRING_LABEL_VARIABLE, 2, (a), (b)
+  static const uint8_t pgmK[] = {
+    LBL2('K', 'a'), ITM_EXP,    ITM_RTN,                                        // e^x
+    LBL2('K', 'b'), ITM_LN,     ITM_RTN,                                        // ln x
+    LBL2('K', 'c'), ITM_1ONX,   ITM_RTN,                                        // 1/x
+    LBL2('K', 'd'), ITM_arcsin, ITM_RTN,                                        // arcsin x
+    LBL2('K', 'e'), ITM_tan,    ITM_RTN,                                        // tan x
+    LBL2('K', 'f'), ITM_sin,    ITM_RTN,                                        // sin x
+    LBL2('K', 'g'), ITM_EXP, ITM_LITERAL, STRING_REAL34, 4, '1', 'E', '2', '0', ITM_ADD, ITM_RTN,   // e^x + 1E20
+    LBL2('X', 'a'), DER1('K', 'a'), ITM_RTN,
+    LBL2('X', 'b'), DER1('K', 'b'), ITM_RTN,
+    LBL2('X', 'c'), DER1('K', 'c'), ITM_RTN,
+    LBL2('X', 'd'), DER1('K', 'd'), ITM_RTN,
+    LBL2('X', 'e'), DER1('K', 'e'), ITM_RTN,
+    LBL2('X', 'f'), DER1('K', 'f'), ITM_RTN,
+    LBL2('X', 'g'), DER1('K', 'g'), ITM_RTN,
+    LBL2('Y', 'a'), DER2('K', 'a'), ITM_RTN,
+    LBL2('Y', 'b'), DER2('K', 'b'), ITM_RTN,
+    LBL2('Y', 'c'), DER2('K', 'c'), ITM_RTN,
+    LBL2('Y', 'd'), DER2('K', 'd'), ITM_RTN,
+    LBL2('Y', 'e'), DER2('K', 'e'), ITM_RTN,
+    LBL2('Y', 'f'), DER2('K', 'f'), ITM_RTN,
+    LBL2('Y', 'g'), DER2('K', 'g'), ITM_RTN,
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  #undef LBL2
+  #undef DER1
+  #undef DER2
+
+  covWriteAndLoadPgm(pgmK, sizeof(pgmK));
 }
 
 void covSolvePgm(uint16_t unusedButMandatoryParameter) {
