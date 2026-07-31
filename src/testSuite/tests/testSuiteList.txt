@@ -473,6 +473,10 @@ mvarmenu_cov
 ; belongs with pgm_solve_cov after programs.txt and before the resetting serialize_cov.
 deriv_mvar_cov
 
+; deriv_accuracy loads its own seven functions and their derivative wrappers, so it
+; belongs in the same place.
+deriv_accuracy
+
 histo_cov
 named_variable_cache_cov
 clearvars_cov
