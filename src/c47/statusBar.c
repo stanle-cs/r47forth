@@ -876,6 +876,9 @@ void drawBattery(uint16_t voltage) {
 
   #if !defined(DMCP_BUILD)
     void showHideStackLift(void) {
+      if(programRunStop == PGM_RUNNING) {
+        return;
+      }
 
       #if defined(BATTERYTEST)
         drawBattery(exponentLimit); //test battery indicator
