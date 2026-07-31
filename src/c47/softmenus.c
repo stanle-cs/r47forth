@@ -142,24 +142,16 @@ TO_QSPI const int16_t menu_LOOP[]        = { ITM_DSE,                       ITM_
 /*                                          <---------------------------------------------------------------------- 6 f shifted functions ------------------------------------------------------------------------->  */
 /*                                          <---------------------------------------------------------------------- 6 g shifted functions ------------------------------------------------------------------------->  */
 
-#if (defined(OPTION_VECTOR) && (CALCMODEL == USER_R47))
-  #define Mp1F6    -MNU_VECT
-  #define Mp2F6    -MNU_VECT
+#if ((defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL == USER_R47))
   #define VF5      -MNU_VECCONV
   #define VF6      ITM_CLSTK
-#elif (!defined(OPTION_VECTOR) && (CALCMODEL == USER_R47))
-  #define Mp1F6    ITM_NULL
-  #define Mp2F6    ITM_CLSTK
+#elif (!(defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL == USER_R47))
   #define VF5      ITM_NULL
   #define VF6      ITM_CLSTK
-#elif (defined(OPTION_VECTOR) && (CALCMODEL != USER_R47))
-  #define Mp1F6    -MNU_VECT
-  #define Mp2F6    -MNU_VECT
+#elif ((defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL != USER_R47))
   #define VF5      -MNU_VECCONV
   #define VF6      ITM_DRG
-#elif (!defined(OPTION_VECTOR) && (CALCMODEL != USER_R47))
-  #define Mp1F6    ITM_NULL
-  #define Mp2F6    ITM_DRG
+#elif (!(defined(OPTION_VECTOR)|| defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL != USER_R47))
   #define VF5      ITM_NULL
   #define VF6      ITM_DRG
 #endif
@@ -177,11 +169,11 @@ TO_QSPI const int16_t menu_LOOP[]        = { ITM_DSE,                       ITM_
   #define EIG_QR   ITM_NULL
 #endif // OPTION_EIGEN
 TO_QSPI const int16_t menu_MATX[]        = {
-                                             ITM_M_NEW,                     ITM_M_TRANSP,               ITM_M_EDI,                ITM_M_EDIN,            ITM_SIM_EQ,                  Mp1F6,
+                                             ITM_M_NEW,                     ITM_M_TRANSP,               ITM_M_EDI,                ITM_M_EDIN,            ITM_SIM_EQ,                  -MNU_VECT,
                                              ITM_MIDENT,                    ITM_M_DIM,                  ITM_M_DIM_GR,             ITM_M_DIMNQ,           ITM_M_CONCATB,               ITM_M_CONCATR,
                                              ITM_REGtoVEC,                  ITM_VECtoREG,               ITM_STOVEL,               ITM_RCLVEL,            ITM_NULL,                    ITM_NULL,
 
-                                             ITM_M_INV,                     EIG_SQRT,                   ITM_RSUM,                 ITM_CSUM,              ITM_M_DET,                   Mp2F6,
+                                             ITM_M_INV,                     EIG_SQRT,                   ITM_RSUM,                 ITM_CSUM,              ITM_M_DET,                   -MNU_VECT,
                                              ITM_PNORM,                     ITM_UNITV,                  ITM_M_TRANSP,             ITM_VANGLE,            ITM_DOT_PROD,                ITM_CROSS_PROD,
                                              ITM_NULL,                      ITM_NULL,                   EIG_VEC,                  EIG_VAL,               ITM_M_LU,                    EIG_QR,
 
@@ -202,9 +194,9 @@ TO_QSPI const int16_t menu_VECT[]        = {
 
 
 TO_QSPI const int16_t menu_VECCONV[]     = {
-                                             ITM_STKtoV2,                   ITM_V2toSTK,                ITM_VECtoREG,             ITM_REGtoVEC,          ITM_STKtoV3,                 ITM_V3toSTK,
-                                             ITM_NULL,                      ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
-                                             ITM_CPXtoV,                    ITM_VtoCPX,                 ITM_NULL,                 ITM_NULL,              ITM_3DPHYS,                  ITM_3DXYZ
+                                             ITM_STKtoV2,                   ITM_V2toSTK,                ITM_STKtoV3,              ITM_V3toSTK,           ITM_STKtoV4,                 ITM_V4toSTK,
+                                             ITM_stkexV2,                   ITM_NULL,                   ITM_stkexV3,              ITM_NULL,              ITM_stkexV4,                 ITM_NULL,              
+                                             ITM_CPXtoV,                    ITM_VtoCPX,                 ITM_VECtoREG,             ITM_REGtoVEC,          ITM_3DPHYS,                  ITM_3DXYZ
                                            };
 
 
@@ -2830,17 +2822,38 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
     #if !(defined(OPTION_VECTOR) || defined(OPTION_ELEC))
       case ITM_STKTO3x1   :
       case ITM_3x1TOSTK   :
-    #endif
+    #endif //OPTION_VECTOR; OPTION_ELEC
+
+
+    #if !(defined(OPTION_SLV_ZETA_BETA))
+      case ITM_SLVC:
+      case ITM_SLVQ:
+    #endif //OPTION_SLV_ZETA_BETA
+
+
+    #if !(defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA))
+      case ITM_stkexV2:
+      case ITM_stkexV3:
+      case ITM_stkexV4:
+      case ITM_STKtoV2:
+      case ITM_V2toSTK:
+      case ITM_STKtoV3:
+      case ITM_V3toSTK:
+      case ITM_STKtoV4:
+      case ITM_V4toSTK:
+    #endif // !OPTION_VECTOR
 
 
     #if !defined(OPTION_VECTOR)
+      case ITM_CPXtoV :
+      case ITM_VtoCPX :
+  //    case ITM_VECtoREG: still needed in matrix ops
+  //    case ITM_REGtoVEC: still needed in matrix ops
       case ITM_CPXexV :
-      case ITM_stkexV2:
       case ITM_V10    :
       case ITM_V01    :
       case ITM_V3toSPH:
       case ITM_V3toCYL:
-      case ITM_stkexV3:
       case ITM_V100   :
       case ITM_V010   :
       case ITM_V001   :

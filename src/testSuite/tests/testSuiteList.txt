@@ -256,6 +256,7 @@ unitVector
 
 slvc
 slvq
+stkexV4
 agm
 
 decomp
