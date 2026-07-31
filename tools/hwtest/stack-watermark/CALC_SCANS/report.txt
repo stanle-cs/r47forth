@@ -281,6 +281,200 @@ A single call of these is at or past the window, which is a result in itself; le
 window in the table only if you want the count resolved: 33 SNAP (1), 37 SOLVE (2)
 
 ================================================================================================
+RUN  2027-07-30_001 DM42n RC2+
+================================================================================================
+nr  kind          stack status     span tenths      calls    ms/call
+01  NULL              0 9             0     10         60      0.000
+02  STK               0 9             0     10         56      1.190
+03  REG               0 9             0     10         56      1.190
+04  VAR               0 9             0     10         57      0.877
+05  ARITH             0 9             0     10         55      1.515
+06  TRIG              0 9             0     10         41      7.724
+07  LOGEXP            0 9             0     10         40      8.333
+08  POWER             0 9             0     10         37     10.360
+09  SPECIAL           0 9             0     10         18     38.889
+10  CONST             0 9             0     10         54      1.852
+11  RANDOM            0 9             0     10         52      2.564
+12  FLAGTEST          0 9             0     10         52      2.564
+13  DISPMODE          0 9             0     10         18     38.889
+14  ANGLE             0 9             0     10         52      2.564
+15  UNITCONV          0 9             0     10         54      1.852
+16  TIME              0 9             0     10         50      3.333
+17  DATE              0 9             0     10         51      2.941
+18  COMBIN            0 9             0     10         49      3.741
+19  NUMTH             0 9             0     10         52      2.564
+20  FRACT             0 9             0     10         51      2.941
+21  SHORTINT          0 9             0     10         50      3.333
+22  BITS              0 9             0     10         50      3.333
+23  LONGINT           0 9             0     10         51      2.941
+24  CPX               0 9             0     10         51      2.941
+25  MATRIX            0 9             0     10         26     21.795
+26  STRING            0 9             0     10         48      4.167
+27  STAT              0 9             0     11          5    203.333
+28  CURVEFIT          0 9             0     10          4    233.333
+29  STATPLT           0 9             0     12          5    223.333
+30  PROBDIST          0 9             0     10          4    233.333
+31  FIN               0 9             0     10         33     13.636
+32  GRAPHICS          0 9             0     10         45      5.556
+33  SNAP              0 9             0     11          1   1083.333
+34  EQN               0 9             0     11          4    258.333
+35  DERIV             0 9             0     13          2    633.333
+36  INT               0 9             0     10          3    316.667
+37  SOLVE             0 9             0    192          1  19183.333
+38  PLOT              0 9             0     11          3    350.000
+39  VECTOR            0 9             0     10         46      5.072
+40  HYPERB            0 9             0     10         29     17.816
+
+loop and call overhead, from case 01: 16.667 ms per call
+captures: 6
+  20260731-02202023.bmp  12610 bytes  2d6adaf59d0d7fbc
+  20260731-02202733.bmp  12610 bytes  08b99076996fe11f
+  20260731-02202836.bmp  12610 bytes  f282d27183f8d360
+  20260731-02203008.bmp  12610 bytes  f282d27183f8d360
+  20260731-02212149.bmp  12610 bytes  7c91c043db8ad51a
+  20260731-02212685.bmp  12610 bytes  8567fecb4e010507
+STACK FIGURE IS NOT A MEASUREMENT: 01 NULL, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 02 STK, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 03 REG, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 04 VAR, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 05 ARITH, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 06 TRIG, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 07 LOGEXP, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 08 POWER, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 09 SPECIAL, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 10 CONST, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 11 RANDOM, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 12 FLAGTEST, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 13 DISPMODE, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 14 ANGLE, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 15 UNITCONV, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 16 TIME, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 17 DATE, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 18 COMBIN, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 19 NUMTH, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 20 FRACT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 21 SHORTINT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 22 BITS, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 23 LONGINT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 24 CPX, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 25 MATRIX, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 26 STRING, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 27 STAT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 28 CURVEFIT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 29 STATPLT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 30 PROBDIST, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 31 FIN, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 32 GRAPHICS, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 33 SNAP, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 34 EQN, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 35 DERIV, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 36 INT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 37 SOLVE, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 38 PLOT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 39 VECTOR, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 40 HYPERB, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+fewer than 20 calls fitted the window, so one call either way is worth over 5 per cent.
+A single call of these is at or past the window, which is a result in itself; lengthen the
+window in the table only if you want the count resolved: 09 SPECIAL (18), 13 DISPMODE (18), 27 STAT (5), 28 CURVEFIT (4), 29 STATPLT (5), 30 PROBDIST (4), 33 SNAP (1), 34 EQN (4), 35 DERIV (2), 36 INT (3), 37 SOLVE (1), 38 PLOT (3)
+
+================================================================================================
+RUN  2027-07-30_001 DM42 RC2+
+================================================================================================
+nr  kind          stack status     span tenths      calls    ms/call
+01  NULL              0 9             0     10         24      0.000
+02  STK               0 9             0     10         24      0.000
+03  REG               0 9             0     10         22      3.788
+04  VAR               0 9             0     10         24      0.000
+05  ARITH             0 9             0     10         23      1.812
+06  TRIG              0 9             0     10         18     13.889
+07  LOGEXP            0 9             0     10         15     25.000
+08  POWER             0 9             0     10         15     25.000
+09  SPECIAL           0 9             0     10          8     83.333
+10  CONST             0 9             0     10         22      3.788
+11  RANDOM            0 9             0     10         21      5.952
+12  FLAGTEST          0 9             0     10         21      5.952
+13  DISPMODE          0 9             0     10         14     29.762
+14  ANGLE             0 9             0     10         21      5.952
+15  UNITCONV          0 9             0     10         23      1.812
+16  TIME              0 9             0     10         21      5.952
+17  DATE              0 9             0     10         21      5.952
+18  COMBIN            0 9             0     10         22      3.788
+19  NUMTH             0 9             0     10         22      3.788
+20  FRACT             0 9             0     10         21      5.952
+21  SHORTINT          0 9             0     10         20      8.333
+22  BITS              0 9             0     10         21      5.952
+23  LONGINT           0 9             0     10         22      3.788
+24  CPX               0 9             0     10         20      8.333
+25  MATRIX            0 9             0     10         11     49.242
+26  STRING            0 9             0     10         20      8.333
+27  STAT              0 9             0     14          3    425.000
+28  CURVEFIT          0 9             0     11          2    508.333
+29  STATPLT           0 9             0     10          2    458.333
+30  PROBDIST          0 9             0     10         20      8.333
+31  FIN               0 9             0     10          8     83.333
+32  GRAPHICS          0 9             0     10         19     10.965
+33  SNAP              0 9             0     12          1   1158.333
+34  EQN               0 9             0     14          3    425.000
+35  DERIV             0 9             0     16          1   1558.333
+36  INT               0 9             0     16          2    758.333
+37  SOLVE             0 9             0    333          1  33258.333
+38  PLOT              0 9             0     10          1    958.333
+39  VECTOR            0 9             0     10         19     10.965
+40  HYPERB            0 9             0     10         12     41.667
+
+loop and call overhead, from case 01: 41.667 ms per call
+captures: 6
+  20260731-02353123.bmp  12610 bytes  2d6adaf59d0d7fbc
+  20260731-02353746.bmp  12610 bytes  08b99076996fe11f
+  20260731-02353859.bmp  12610 bytes  f282d27183f8d360
+  20260731-02354044.bmp  12610 bytes  f282d27183f8d360
+  20260731-02370471.bmp  12610 bytes  a6c294878e92faf1
+  20260731-02371008.bmp  12610 bytes  9788007b93e3e88a
+STACK FIGURE IS NOT A MEASUREMENT: 01 NULL, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 02 STK, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 03 REG, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 04 VAR, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 05 ARITH, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 06 TRIG, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 07 LOGEXP, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 08 POWER, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 09 SPECIAL, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 10 CONST, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 11 RANDOM, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 12 FLAGTEST, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 13 DISPMODE, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 14 ANGLE, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 15 UNITCONV, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 16 TIME, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 17 DATE, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 18 COMBIN, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 19 NUMTH, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 20 FRACT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 21 SHORTINT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 22 BITS, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 23 LONGINT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 24 CPX, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 25 MATRIX, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 26 STRING, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 27 STAT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 28 CURVEFIT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 29 STATPLT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 30 PROBDIST, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 31 FIN, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 32 GRAPHICS, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 33 SNAP, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 34 EQN, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 35 DERIV, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 36 INT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 37 SOLVE, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 38 PLOT, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 39 VECTOR, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+STACK FIGURE IS NOT A MEASUREMENT: 40 HYPERB, STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored
+fewer than 20 calls fitted the window, so one call either way is worth over 5 per cent.
+A single call of these is at or past the window, which is a result in itself; lengthen the
+window in the table only if you want the count resolved: 06 TRIG (18), 07 LOGEXP (15), 08 POWER (15), 09 SPECIAL (8), 13 DISPMODE (14), 25 MATRIX (11), 27 STAT (3), 28 CURVEFIT (2), 29 STATPLT (2), 31 FIN (8), 32 GRAPHICS (19), 33 SNAP (1), 34 EQN (3), 35 DERIV (1), 36 INT (2), 37 SOLVE (1), 38 PLOT (1), 39 VECTOR (19), 40 HYPERB (12)
+
+================================================================================================
 CHANGES  2027-07-29_001 DM42n RC2/2  against  2027-07-29_001 DM42n RC2/1
 ================================================================================================
 case 04 VAR: STCKST 2, nothing disturbed, so its stack figure is not a measurement
@@ -320,4 +514,80 @@ case 40 is XFN in the first and HYPERB in the second
 case 40 HYPERB: stack 4516 against 8792, -4276 bytes
 
 9 differences
+
+================================================================================================
+CHANGES  2027-07-30_001 DM42 RC2+  against  2027-07-30_001 DM42n RC2+
+================================================================================================
+case 01 NULL: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 01 NULL: 24 calls against 60, -60 per cent
+case 02 STK: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 02 STK: 24 calls against 56, -57 per cent
+case 03 REG: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 03 REG: 22 calls against 56, -61 per cent
+case 04 VAR: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 04 VAR: 24 calls against 57, -58 per cent
+case 05 ARITH: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 05 ARITH: 23 calls against 55, -58 per cent
+case 06 TRIG: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 06 TRIG: 18 calls against 41, -56 per cent
+case 07 LOGEXP: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 07 LOGEXP: 15 calls against 40, -62 per cent
+case 08 POWER: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 08 POWER: 15 calls against 37, -59 per cent
+case 09 SPECIAL: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 10 CONST: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 10 CONST: 22 calls against 54, -59 per cent
+case 11 RANDOM: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 11 RANDOM: 21 calls against 52, -60 per cent
+case 12 FLAGTEST: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 12 FLAGTEST: 21 calls against 52, -60 per cent
+case 13 DISPMODE: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 14 ANGLE: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 14 ANGLE: 21 calls against 52, -60 per cent
+case 15 UNITCONV: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 15 UNITCONV: 23 calls against 54, -57 per cent
+case 16 TIME: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 16 TIME: 21 calls against 50, -58 per cent
+case 17 DATE: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 17 DATE: 21 calls against 51, -59 per cent
+case 18 COMBIN: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 18 COMBIN: 22 calls against 49, -55 per cent
+case 19 NUMTH: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 19 NUMTH: 22 calls against 52, -58 per cent
+case 20 FRACT: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 20 FRACT: 21 calls against 51, -59 per cent
+case 21 SHORTINT: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 21 SHORTINT: 20 calls against 50, -60 per cent
+case 22 BITS: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 22 BITS: 21 calls against 50, -58 per cent
+case 23 LONGINT: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 23 LONGINT: 22 calls against 51, -57 per cent
+case 24 CPX: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 24 CPX: 20 calls against 51, -61 per cent
+case 25 MATRIX: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 25 MATRIX: 11 calls against 26, -58 per cent
+case 26 STRING: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 26 STRING: 20 calls against 48, -58 per cent
+case 27 STAT: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 28 CURVEFIT: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 29 STATPLT: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 30 PROBDIST: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 31 FIN: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 31 FIN: 8 calls against 33, -76 per cent
+case 32 GRAPHICS: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 32 GRAPHICS: 19 calls against 45, -58 per cent
+case 33 SNAP: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 34 EQN: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 35 DERIV: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 36 INT: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 37 SOLVE: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 38 PLOT: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 39 VECTOR: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 39 VECTOR: 19 calls against 46, -59 per cent
+case 40 HYPERB: STCKST 9, the build has no stack tool, so nothing wrote over what KSET stored, so its stack figure is not a measurement
+case 40 HYPERB: 12 calls against 29, -59 per cent
+capture 5 differs: 20260731-02370471.bmp against 20260731-02212149.bmp
+capture 6 differs: 20260731-02371008.bmp against 20260731-02212685.bmp
+
+70 differences
 
