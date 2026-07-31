@@ -373,6 +373,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDropY",                fnDropY               },
   {"fnEigenvalues",          fnEigenvalues         },
   {"fnEigenvectors",         fnEigenvectors        },
+  {"fnExchangeStkToMx",      fnExchangeStkToMx     },
   {"fnEllipticE",            fnEllipticE           },
   {"fnEllipticEphi",         fnEllipticEphi        },
   {"fnEllipticFphi",         fnEllipticFphi        },

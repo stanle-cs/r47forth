@@ -89,13 +89,31 @@ static int cmplxSortCompare(const void *v1, const void *v2) {
   }
   return 0;
 }
+
+
+// a x^3 + b x^2 + c x + d = 0: a leading zero degrades to the quadratic at 75 digits with a NaN third root; b, c, d are consumed and the roots come back sorted
+static void solveGeneralCubic(const real_t *aReal, const real_t *aImag, real_t *bReal, real_t *bImag, real_t *cReal, real_t *cImag, real_t *dReal, real_t *dImag, real_t *rReal, real_t *rImag, struct cmplxPair x[3]) {
+  if(realIsZero(aReal) && realIsZero(aImag)) {
+    solveQuadraticEquation(bReal, bImag, cReal, cImag, dReal, dImag, rReal, rImag, &x[0].r, &x[0].i, &x[1].r, &x[1].i, &ctxtReal75);
+    realSetNaN(&x[2].r);
+    realSetNaN(&x[2].i);
+  }
+  else {
+    divComplexComplex(bReal, bImag, aReal, aImag, bReal, bImag, &ctxtReal75);
+    divComplexComplex(cReal, cImag, aReal, aImag, cReal, cImag, &ctxtReal75);
+    divComplexComplex(dReal, dImag, aReal, aImag, dReal, dImag, &ctxtReal75);
+
+    solveCubic(bReal, bImag, cReal, cImag, dReal, dImag, rReal, rImag, &x[0].r, &x[0].i, &x[1].r, &x[1].i, &x[2].r, &x[2].i);
+  }
+  qsort(x, 3, sizeof(x[0]), &cmplxSortCompare);
+}
 #endif //OPTION_SLV_ZETA_BETA
 
 
 /********************************************//**
  * \brief (d, c, b, a) ==> (x1, x2, r) c ==> regL
  * enables stack lift and refreshes the stack
- * A coefficient vector in X (highest degree first, 3 or 4 elements) returns all roots as a row vector in X instead.
+ * A coefficient vector in X (highest degree first, 2 to 4 elements) returns all roots as a row vector in X instead.
  *
  * \param[in] unusedButMandatoryParameter uint16_t
  * \return void
@@ -135,20 +153,8 @@ void fnSlvc(uint16_t unusedButMandatoryParameter) {
   }
 
 
-  if(realIsZero(&aReal) && realIsZero(&aImag)) {
-    solveQuadraticEquation(&bReal, &bImag, &cReal, &cImag, &dReal, &dImag, &rReal, &rImag, &x[0].r, &x[0].i, &x[1].r, &x[1].i, &ctxtReal75);
-    realSetNaN(&x[2].r);
-    realSetNaN(&x[2].i);
-  }
-  else {
-    divComplexComplex(&bReal, &bImag, &aReal, &aImag, &bReal, &bImag, &ctxtReal75);
-    divComplexComplex(&cReal, &cImag, &aReal, &aImag, &cReal, &cImag, &ctxtReal75);
-    divComplexComplex(&dReal, &dImag, &aReal, &aImag, &dReal, &dImag, &ctxtReal75);
+  solveGeneralCubic(&aReal, &aImag, &bReal, &bImag, &cReal, &cImag, &dReal, &dImag, &rReal, &rImag, x);
 
-    solveCubic(&bReal, &bImag, &cReal, &cImag, &dReal, &dImag, &rReal, &rImag, &x[0].r, &x[0].i, &x[1].r, &x[1].i, &x[2].r, &x[2].i);
-  }
-
-  qsort(x, 3, sizeof(x[0]), &cmplxSortCompare);
   for(int i = 0; i < 3; i++) {
     if(realIsZero(&x[i].i) || (realIsNaN(&x[i].r) && realIsNaN(&x[i].i))) {
       convertRealToResultRegister(&x[i].r, REGISTER_X + i, amNone);
@@ -176,12 +182,12 @@ void fnSlvc(uint16_t unusedButMandatoryParameter) {
 
 
 #if defined(OPTION_SLV_ZETA_BETA)
-// X = a 1 x m or m x 1 coefficient vector, highest degree first: the element count picks the solver, 3 the quadratic and 4 the cubic,
+// X = a 1 x m or m x 1 coefficient vector, highest degree first: the element count picks the solver, 2 the linear, 3 the quadratic and 4 the cubic,
 // from either command. All roots come back as a row vector replacing X, real when every root is real; the rest of the stack is not consumed.
 void solveCoefficientVector(void) {
   real34Matrix_t xr;
   complex34Matrix_t xc;
-  bool_t complexInput, resultIsComplex;
+  bool_t complexInput, resultIsComplex, allZero;
   uint16_t rows, cols, nRoots;
   uint32_t m, j;
   real_t co[4][2];                                       // [j][0] real, [j][1] imaginary, co[0] the leading coefficient
@@ -202,10 +208,10 @@ void solveCoefficientVector(void) {
   }
 
   m = (uint32_t)rows * cols;
-  if((rows != 1 && cols != 1) || (m != 3 && m != 4)) {
+  if((rows != 1 && cols != 1) || m < 2 || m > 4) {
     displayCalcErrorMessage(ERROR_MATRIX_MISMATCH, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "a coefficient vector holds 3 or 4 elements, not (%d" STD_CROSS "%d)", rows, cols);
+      sprintf(errorMessage, "a coefficient vector holds 2 to 4 elements, not (%d" STD_CROSS "%d)", rows, cols);
       moreInfoOnError("In function solveCoefficientVector:", errorMessage, NULL, NULL);
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
@@ -222,9 +228,11 @@ void solveCoefficientVector(void) {
     }
   }
 
-  if(   realIsZero(&co[0][0]) && realIsZero(&co[0][1])   // the stack forms' refusal: the constant term alone is no equation
-     && realIsZero(&co[1][0]) && realIsZero(&co[1][1])
-     && (m == 3 || (realIsZero(&co[2][0]) && realIsZero(&co[2][1])))) {
+  allZero = true;                                        // the stack forms' refusal: the constant term alone is no equation
+  for(j = 0; j + 1 < m; j++) {
+    allZero = allZero && realIsZero(&co[j][0]) && realIsZero(&co[j][1]);
+  }
+  if(allZero) {
     displayCalcErrorMessage(ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
       moreInfoOnError("In function solveCoefficientVector:", "every coefficient above the constant term is 0", NULL, NULL);
@@ -232,23 +240,17 @@ void solveCoefficientVector(void) {
     return;
   }
 
-  if(m == 3) {
+  if(m == 2) {                                           // the trivial linear case keeps the family symmetrical: the single root is -b/a, as SLVP delivers it
+    divComplexComplex(&co[1][0], &co[1][1], &co[0][0], &co[0][1], &x[0].r, &x[0].i, &ctxtReal75);
+    chsComplex(&x[0].r, &x[0].i);
+    nRoots = 1;
+  }
+  else if(m == 3) {
     solveQuadratic(&co[0][0], &co[0][1], &co[1][0], &co[1][1], &co[2][0], &co[2][1], &rReal, &rImag, &x[0].r, &x[0].i, &x[1].r, &x[1].i);
     nRoots = 2;
   }
   else {
-    if(realIsZero(&co[0][0]) && realIsZero(&co[0][1])) { // the stack form's degrade: a leading 0 solves the quadratic at 75 digits and reports NaN for the third root
-      solveQuadraticEquation(&co[1][0], &co[1][1], &co[2][0], &co[2][1], &co[3][0], &co[3][1], &rReal, &rImag, &x[0].r, &x[0].i, &x[1].r, &x[1].i, &ctxtReal75);
-      realSetNaN(&x[2].r);
-      realSetNaN(&x[2].i);
-    }
-    else {
-      divComplexComplex(&co[1][0], &co[1][1], &co[0][0], &co[0][1], &co[1][0], &co[1][1], &ctxtReal75);
-      divComplexComplex(&co[2][0], &co[2][1], &co[0][0], &co[0][1], &co[2][0], &co[2][1], &ctxtReal75);
-      divComplexComplex(&co[3][0], &co[3][1], &co[0][0], &co[0][1], &co[3][0], &co[3][1], &ctxtReal75);
-      solveCubic(&co[1][0], &co[1][1], &co[2][0], &co[2][1], &co[3][0], &co[3][1], &rReal, &rImag, &x[0].r, &x[0].i, &x[1].r, &x[1].i, &x[2].r, &x[2].i);
-    }
-    qsort(x, 3, sizeof(x[0]), &cmplxSortCompare);
+    solveGeneralCubic(&co[0][0], &co[0][1], &co[1][0], &co[1][1], &co[2][0], &co[2][1], &co[3][0], &co[3][1], &rReal, &rImag, x);
     nRoots = 3;
   }
 

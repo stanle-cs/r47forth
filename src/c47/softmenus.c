@@ -203,7 +203,7 @@ TO_QSPI const int16_t menu_VECT[]        = {
 
 TO_QSPI const int16_t menu_VECCONV[]     = {
                                              ITM_STKtoV2,                   ITM_V2toSTK,                ITM_VECtoREG,             ITM_REGtoVEC,          ITM_STKtoV3,                 ITM_V3toSTK,
-                                             ITM_NULL,                      ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
+                                             ITM_NULL,                      ITM_NULL,                   ITM_stkexV4,              ITM_NULL,              ITM_STKtoV4,                 ITM_V4toSTK,
                                              ITM_CPXtoV,                    ITM_VtoCPX,                 ITM_NULL,                 ITM_NULL,              ITM_3DPHYS,                  ITM_3DXYZ
                                            };
 

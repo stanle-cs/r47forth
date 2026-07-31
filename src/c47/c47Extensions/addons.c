@@ -1664,9 +1664,144 @@ TO_QSPI static const struct {
 #endif //OPTION_VECTOR || OPTION_ELEC
 
 
+#if defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)
+// T Z Y X pack into a 1x4 row vector with T first: the highest-degree-first coefficient order SLVC, SLVQ and SLVP take, which Rnn->V fills the other way round
+static void stkToV4(void) {
+  bool_t complexCoefs = false;
+  struct cmplxPair x[4];
+  uint32_t j;
+
+  if(!(getRegisterAsComplexOrReal(REGISTER_X, &x[3].r, &x[3].i, &complexCoefs) &&
+       getRegisterAsComplexOrReal(REGISTER_Y, &x[2].r, &x[2].i, &complexCoefs) &&
+       getRegisterAsComplexOrReal(REGISTER_Z, &x[1].r, &x[1].i, &complexCoefs) &&
+       getRegisterAsComplexOrReal(REGISTER_T, &x[0].r, &x[0].i, &complexCoefs))) {
+    return;
+  }
+
+  if(complexCoefs) {                                     // the result vector is allocated, then L, then the stack moves: every failure leaves the stack untouched
+    complex34Matrix_t res;
+    if(!complexMatrixInit(&res, 1, 4)) {
+      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        moreInfoOnError("In function stkToV4:", "Ram full", NULL, NULL);
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      return;
+    }
+    if(!saveLastX()) {
+      complexMatrixFree(&res);
+      return;
+    }
+    for(j = 0; j < 4; j++) {
+      realToReal34(&x[j].r, VARIABLE_REAL34_DATA(res.matrixElements + j));
+      realToReal34(&x[j].i, VARIABLE_IMAG34_DATA(res.matrixElements + j));
+    }
+    fnDrop(NOPARAM);
+    fnDrop(NOPARAM);
+    fnDrop(NOPARAM);
+    convertComplex34MatrixToComplex34MatrixRegister(&res, REGISTER_X);
+    complexMatrixFree(&res);
+  }
+  else {
+    real34Matrix_t res;
+    if(!realMatrixInit(&res, 1, 4)) {
+      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        moreInfoOnError("In function stkToV4:", "Ram full", NULL, NULL);
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      return;
+    }
+    if(!saveLastX()) {
+      realMatrixFree(&res);
+      return;
+    }
+    for(j = 0; j < 4; j++) {
+      realToReal34(&x[j].r, res.matrixElements + j);
+    }
+    fnDrop(NOPARAM);
+    fnDrop(NOPARAM);
+    fnDrop(NOPARAM);
+    convertReal34MatrixToReal34MatrixRegister(&res, REGISTER_X);
+    realMatrixFree(&res);
+  }
+
+  adjustResult(REGISTER_X, false, true, REGISTER_X, -1, -1);
+}
+
+
+// the inverse: a 4-element vector in X, row or column, unpacks to T Z Y X with the first element in T
+static void v4ToStk(void) {
+  real34Matrix_t xr;
+  complex34Matrix_t xc;
+  bool_t complexInput;
+  uint16_t rows, cols;
+  uint32_t j;
+  struct cmplxPair x[4];
+
+  if(getRegisterDataType(REGISTER_X) == dtComplex34Matrix) {
+    complexInput = true;
+    linkToComplexMatrixRegister(REGISTER_X, &xc);
+    rows = xc.header.matrixRows;
+    cols = xc.header.matrixColumns;
+  }
+  else if(getRegisterDataType(REGISTER_X) == dtReal34Matrix) {
+    complexInput = false;
+    linkToRealMatrixRegister(REGISTER_X, &xr);
+    rows = xr.header.matrixRows;
+    cols = xr.header.matrixColumns;
+  }
+  else {
+    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "invalid data type %s", getRegisterDataTypeName(REGISTER_X, true, false));
+      moreInfoOnError("In function v4ToStk:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    return;
+  }
+
+  if((rows != 1 && cols != 1) || (uint32_t)rows * cols != 4) {
+    displayCalcErrorMessage(ERROR_MATRIX_MISMATCH, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "a 4-element vector is needed, not (%d" STD_CROSS "%d)", rows, cols);
+      moreInfoOnError("In function v4ToStk:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+    return;
+  }
+
+  for(j = 0; j < 4; j++) {
+    if(complexInput) {
+      real34ToReal(VARIABLE_REAL34_DATA(xc.matrixElements + j), &x[j].r);
+      real34ToReal(VARIABLE_IMAG34_DATA(xc.matrixElements + j), &x[j].i);
+    }
+    else {
+      real34ToReal(xr.matrixElements + j, &x[j].r);
+    }
+  }
+
+  if(!saveLastX()) {
+    return;
+  }
+
+  for(j = 0; j < 4; j++) {                               // writing X then lifting three times walks element 0 up to T and leaves element 3 in X
+    if(j > 0) {
+      setSystemFlag(FLAG_ASLIFT);
+      liftStack();
+    }
+    if(complexInput) {
+      convertComplexToResultRegister(&x[j].r, &x[j].i, REGISTER_X);
+    }
+    else {
+      convertRealToResultRegister(&x[j].r, REGISTER_X, amNone);
+    }
+    adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
+  }
+}
+#endif //OPTION_VECTOR || OPTION_SLV_ZETA_BETA
+
+
 void fnExchangeStkToMx(uint16_t opType) {
-#if defined(OPTION_VECTOR)
+#if defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)
   switch(opType) {
+#if defined(OPTION_VECTOR)
     case ITM_stkexV2:{
       if(isRegisterMatrix2dVector(REGISTER_X)) {
         fnConvertMxToStk(indexOfItems[ITM_V2toSTK].param);
@@ -1706,9 +1841,29 @@ void fnExchangeStkToMx(uint16_t opType) {
       }
       break;
     }
+#endif //OPTION_VECTOR
+
+    case ITM_STKtoV4:
+      stkToV4();
+      break;
+
+    case ITM_V4toSTK:
+      v4ToStk();
+      break;
+
+    case ITM_stkexV4:{                                   // a matrix in X unpacks; anything else packs and the register read raises the type error
+      if(getRegisterDataType(REGISTER_X) == dtReal34Matrix || getRegisterDataType(REGISTER_X) == dtComplex34Matrix) {
+        v4ToStk();
+      }
+      else {
+        stkToV4();
+      }
+      break;
+    }
+
     default:break;
   }
-#endif //OPTION_VECTOR
+#endif //OPTION_VECTOR || OPTION_SLV_ZETA_BETA
 }
 
 

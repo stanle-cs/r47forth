@@ -254,20 +254,52 @@ Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RL=CxMa:"M1,3[1,0,0i-1]" ...
 In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,3[0,1,6]"
 Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M1,3[0,1,6]" RX=ReMa:"M1,2[-6,NaN]"
 
+; 2 elements solve the linear equation: x + 2 = 0
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,2[1,2]"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M1,2[1,2]" RX=ReMa:"M1,1[-2]"
+
+; the same from a column vector: 2x - 6 = 0
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M2,1[2,-6]"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M2,1[2,-6]" RX=ReMa:"M1,1[3]"
+
+; i*x + 1 = 0: the complex linear root
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=CxMa:"M1,2[0i1,1i0]"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RL=CxMa:"M1,2[0i1,1i0]" RX=CxMa:"M1,1[0i1]"
+
 ; 4 elements redirect to the cubic: (x-1)(x-2)(x-3)
 In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,4[1,-6,11,-6]"
 Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M1,4[1,-6,11,-6]" RX=ReMa:"M1,3[1,2,3]"
+
+;=======================================================================================================================
+; MATRIX Domain: the register stress tests through the vector path, confirming the full digit accuracy end to end
+;=======================================================================================================================
+
+; x^2 - (1e33 + 1)x + 1 = 0: the roots as the stack form orders X, Y
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,3[1,-1000000000000000000000000000000001,1]"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M1,3[1,-1000000000000000000000000000000001,1]" RX=ReMa:"M1,2[1000000000000000000000000000000001,9.99999999999999999999999999999999E-34]"
+
+; x^2 - (1e33 + 1)x + 1e-33 = 0: extreme magnitude spread
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,3[1,-1000000000000000000000000000000001,1E-33]"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M1,3[1,-1000000000000000000000000000000001,1E-33]" RX=ReMa:"M1,2[1000000000000000000000000000000001,9.999999999999999999999999999999990E-67]"
+
+; the 159-digit stress cubic redirects to the cubic path: x^3 - 10000000001.0000000001x^2 + 10000000001.0000000001x - 1 = 0
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,4[1,-10000000001.0000000001,10000000001.0000000001,-1]"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=ReMa:"M1,4[1,-10000000001.0000000001,10000000001.0000000001,-1]" RX=ReMa:"M1,3[1E-10,1,1E10]"
 
 ; Error case: not a vector
 In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M2,3[1,2,3,4,5,6]"
 Out: EC=21 FL_CPXRES=0 FL_ASLIFT=0 RL=LonI:"852" RX=ReMa:"M2,3[1,2,3,4,5,6]"
 
-; Error case: too short and too long for either solver
-In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,2[1,2]"
-Out: EC=21 FL_CPXRES=0 FL_ASLIFT=0 RL=LonI:"852" RX=ReMa:"M1,2[1,2]"
+; Error case: too short and too long for any solver
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,1[1]"
+Out: EC=21 FL_CPXRES=0 FL_ASLIFT=0 RL=LonI:"852" RX=ReMa:"M1,1[1]"
 
 In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,5[1,2,3,4,5]"
 Out: EC=21 FL_CPXRES=0 FL_ASLIFT=0 RL=LonI:"852" RX=ReMa:"M1,5[1,2,3,4,5]"
+
+; Error case: the linear form with a zero slope
+In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,2[0,5]"
+Out: EC=1 FL_CPXRES=0 FL_ASLIFT=0 RL=LonI:"852" RX=ReMa:"M1,2[0,5]"
 
 ; Error case: only the constant term is nonzero
 In:  FL_ASLIFT=0 FL_CPXRES=0 RL=LonI:"852" RX=ReMa:"M1,3[0,0,5]"

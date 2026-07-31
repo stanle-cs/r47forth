@@ -12,7 +12,7 @@
 /********************************************//**
  * \brief (c, b, a) ==> (x1, x2, r) c ==> regL
  * enables stack lift and refreshes the stack
- * A coefficient vector in X (highest degree first, 3 or 4 elements) returns all roots as a row vector in X instead.
+ * A coefficient vector in X (highest degree first, 2 to 4 elements) returns all roots as a row vector in X instead.
  *
  * \param[in] unusedButMandatoryParameter uint16_t
  * \return void
