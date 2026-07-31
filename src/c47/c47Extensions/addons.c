@@ -1619,33 +1619,36 @@ void fn_cnst_op_A(uint16_t option) {
 
 
 
-#if defined(OPTION_VECTOR) || defined(OPTION_ELEC)
+#if defined(OPTION_VECTOR) || defined(OPTION_ELEC) || defined(OPTION_SLV_ZETA_BETA)
 TO_QSPI static const struct {
     unsigned rows  : 2;
-    unsigned cols  : 2;
+    unsigned cols  : 3;
     unsigned x     : 2;
     unsigned y     : 2;
     unsigned z     : 2;
+    unsigned t     : 2;
     unsigned xdef  : 2;
     unsigned ydef  : 2;
     unsigned zdef  : 2;
+    unsigned tdef  : 2;
 } vecCreate[] = {
 
-//            type          r  c   x   y   z     xdef      ydef      zdef
-/* 1 */ [ VECT_CR_zxy ] = { 1, 3,  0,  1,  2,   V_COPY,   V_COPY,   V_COPY },     // 1x3 vector created from zyx FOR MATX menu, when converting internally, xy swapped, PHYS STYLE
-/* 2 */ [ VECT_CR_zyx ] = { 1, 3,  0,  1,  2,   V_COPY,   V_COPY,   V_COPY },     // 1x3 vector created from zyx FOR MATX menu
-/* 3 */ [ VECT_CR_100 ] = { 1, 3,  0,  1,  2,   V_D0  ,   V_D0  ,   V_D1   },     // V_DEF1x3 unity vectors 100
-/* 4 */ [ VECT_CR_010 ] = { 1, 3,  0,  1,  2,   V_D0  ,   V_D1  ,   V_D0   },     // V_DEF1x3 unity vectors 010
-/* 5 */ [ VECT_CR_001 ] = { 1, 3,  0,  1,  2,   V_D1  ,   V_D0  ,   V_D0   },     // V_DEF1x3 unity vectors 001
-/* 6 */ [ VECT_CR_yx  ] = { 1, 2,  0,  1,  3,   V_COPY,   V_COPY,   V_NANA },     // 1x2 vector created from yx
-/* 7 */ [ VECT_CR_10  ] = { 1, 2,  0,  1,  3,   V_D0  ,   V_D1  ,   V_NANA },     // V_DEF1x2 unity vectors 10
-/* 8 */ [ VECT_CR_01  ] = { 1, 2,  0,  1,  3,   V_D1  ,   V_D0  ,   V_NANA }      // V_DEF1x2 unity vectors 01
+//            type          r  c   x   y   z   t     xdef      ydef      zdef      tdef
+/* 1 */ [ VECT_CR_zxy ] = { 1, 3,  0,  1,  2,  3,   V_COPY,   V_COPY,   V_COPY,   V_NANA },     // 1x3 vector created from zyx FOR MATX menu, when converting internally, xy swapped, PHYS STYLE
+/* 2 */ [ VECT_CR_zyx ] = { 1, 3,  0,  1,  2,  3,   V_COPY,   V_COPY,   V_COPY,   V_NANA },     // 1x3 vector created from zyx FOR MATX menu
+/* 3 */ [ VECT_CR_100 ] = { 1, 3,  0,  1,  2,  3,   V_D0  ,   V_D0  ,   V_D1  ,   V_NANA },     // V_DEF1x3 unity vectors 100
+/* 4 */ [ VECT_CR_010 ] = { 1, 3,  0,  1,  2,  3,   V_D0  ,   V_D1  ,   V_D0  ,   V_NANA },     // V_DEF1x3 unity vectors 010
+/* 5 */ [ VECT_CR_001 ] = { 1, 3,  0,  1,  2,  3,   V_D1  ,   V_D0  ,   V_D0  ,   V_NANA },     // V_DEF1x3 unity vectors 001
+/* 6 */ [ VECT_CR_yx  ] = { 1, 2,  0,  1,  3,  3,   V_COPY,   V_COPY,   V_NANA,   V_NANA },     // 1x2 vector created from yx
+/* 7 */ [ VECT_CR_10  ] = { 1, 2,  0,  1,  3,  3,   V_D0  ,   V_D1  ,   V_NANA,   V_NANA },     // V_DEF1x2 unity vectors 10
+/* 8 */ [ VECT_CR_01  ] = { 1, 2,  0,  1,  3,  3,   V_D1  ,   V_D0  ,   V_NANA,   V_NANA },     // V_DEF1x2 unity vectors 01
+/* 9 */ [ VECT_CR_tzyx] = { 1, 4,  0,  1,  2,  3,   V_COPY,   V_COPY,   V_COPY,   V_COPY }      // 1x4 vector created from tzyx, T first: the highest-degree-first coefficient order SLVC, SLVQ and SLVP take
 
     // r c is the size of the matrix to be created, eg. 1x3 or 2x1 etc.
-    // x y z are the matrix element number mapping to the register name, eg. x=2 means x register goes to internal matrix element 2; 3 means not copied
-    // xdef/ydef/zdef
+    // x y z t are the matrix element number mapping to the register name, eg. x=2 means x register goes to internal matrix element 2; 3 means not copied (except t=3 in a 1x4)
+    // xdef/ydef/zdef/tdef
     //   = 1/0 : the value to be pre-loaded into the matrix element
-    //   = 2   : the value is copied from register X, Y or Z to the specified matrix element
+    //   = 2   : the value is copied from register X, Y, Z or T to the specified matrix element
     //   = 3   : not copied
   };
 
@@ -1661,141 +1664,7 @@ TO_QSPI static const struct {
     }
     return true;
   }
-#endif //OPTION_VECTOR || OPTION_ELEC
-
-
-#if defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)
-// T Z Y X pack into a 1x4 row vector with T first: the highest-degree-first coefficient order SLVC, SLVQ and SLVP take, which Rnn->V fills the other way round
-static void stkToV4(void) {
-  bool_t complexCoefs = false;
-  struct cmplxPair x[4];
-  uint32_t j;
-
-  if(!(getRegisterAsComplexOrReal(REGISTER_X, &x[3].r, &x[3].i, &complexCoefs) &&
-       getRegisterAsComplexOrReal(REGISTER_Y, &x[2].r, &x[2].i, &complexCoefs) &&
-       getRegisterAsComplexOrReal(REGISTER_Z, &x[1].r, &x[1].i, &complexCoefs) &&
-       getRegisterAsComplexOrReal(REGISTER_T, &x[0].r, &x[0].i, &complexCoefs))) {
-    return;
-  }
-
-  if(complexCoefs) {                                     // the result vector is allocated, then L, then the stack moves: every failure leaves the stack untouched
-    complex34Matrix_t res;
-    if(!complexMatrixInit(&res, 1, 4)) {
-      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-        moreInfoOnError("In function stkToV4:", "Ram full", NULL, NULL);
-      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-      return;
-    }
-    if(!saveLastX()) {
-      complexMatrixFree(&res);
-      return;
-    }
-    for(j = 0; j < 4; j++) {
-      realToReal34(&x[j].r, VARIABLE_REAL34_DATA(res.matrixElements + j));
-      realToReal34(&x[j].i, VARIABLE_IMAG34_DATA(res.matrixElements + j));
-    }
-    fnDrop(NOPARAM);
-    fnDrop(NOPARAM);
-    fnDrop(NOPARAM);
-    convertComplex34MatrixToComplex34MatrixRegister(&res, REGISTER_X);
-    complexMatrixFree(&res);
-  }
-  else {
-    real34Matrix_t res;
-    if(!realMatrixInit(&res, 1, 4)) {
-      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-        moreInfoOnError("In function stkToV4:", "Ram full", NULL, NULL);
-      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-      return;
-    }
-    if(!saveLastX()) {
-      realMatrixFree(&res);
-      return;
-    }
-    for(j = 0; j < 4; j++) {
-      realToReal34(&x[j].r, res.matrixElements + j);
-    }
-    fnDrop(NOPARAM);
-    fnDrop(NOPARAM);
-    fnDrop(NOPARAM);
-    convertReal34MatrixToReal34MatrixRegister(&res, REGISTER_X);
-    realMatrixFree(&res);
-  }
-
-  adjustResult(REGISTER_X, false, true, REGISTER_X, -1, -1);
-}
-
-
-// the inverse: a 4-element vector in X, row or column, unpacks to T Z Y X with the first element in T
-static void v4ToStk(void) {
-  real34Matrix_t xr;
-  complex34Matrix_t xc;
-  bool_t complexInput;
-  uint16_t rows, cols;
-  uint32_t j;
-  struct cmplxPair x[4];
-
-  if(getRegisterDataType(REGISTER_X) == dtComplex34Matrix) {
-    complexInput = true;
-    linkToComplexMatrixRegister(REGISTER_X, &xc);
-    rows = xc.header.matrixRows;
-    cols = xc.header.matrixColumns;
-  }
-  else if(getRegisterDataType(REGISTER_X) == dtReal34Matrix) {
-    complexInput = false;
-    linkToRealMatrixRegister(REGISTER_X, &xr);
-    rows = xr.header.matrixRows;
-    cols = xr.header.matrixColumns;
-  }
-  else {
-    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
-    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "invalid data type %s", getRegisterDataTypeName(REGISTER_X, true, false));
-      moreInfoOnError("In function v4ToStk:", errorMessage, NULL, NULL);
-    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-    return;
-  }
-
-  if((rows != 1 && cols != 1) || (uint32_t)rows * cols != 4) {
-    displayCalcErrorMessage(ERROR_MATRIX_MISMATCH, ERR_REGISTER_LINE, REGISTER_X);
-    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "a 4-element vector is needed, not (%d" STD_CROSS "%d)", rows, cols);
-      moreInfoOnError("In function v4ToStk:", errorMessage, NULL, NULL);
-    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-    return;
-  }
-
-  for(j = 0; j < 4; j++) {
-    if(complexInput) {
-      real34ToReal(VARIABLE_REAL34_DATA(xc.matrixElements + j), &x[j].r);
-      real34ToReal(VARIABLE_IMAG34_DATA(xc.matrixElements + j), &x[j].i);
-    }
-    else {
-      real34ToReal(xr.matrixElements + j, &x[j].r);
-    }
-  }
-
-  if(!saveLastX()) {
-    return;
-  }
-
-  for(j = 0; j < 4; j++) {                               // writing X then lifting three times walks element 0 up to T and leaves element 3 in X
-    if(j > 0) {
-      setSystemFlag(FLAG_ASLIFT);
-      liftStack();
-    }
-    if(complexInput) {
-      convertComplexToResultRegister(&x[j].r, &x[j].i, REGISTER_X);
-    }
-    else {
-      convertRealToResultRegister(&x[j].r, REGISTER_X, amNone);
-    }
-    adjustResult(REGISTER_X, false, false, REGISTER_X, -1, -1);
-  }
-}
-#endif //OPTION_VECTOR || OPTION_SLV_ZETA_BETA
+#endif //OPTION_VECTOR || OPTION_ELEC || OPTION_SLV_ZETA_BETA
 
 
 void fnExchangeStkToMx(uint16_t opType) {
@@ -1843,20 +1712,12 @@ void fnExchangeStkToMx(uint16_t opType) {
     }
 #endif //OPTION_VECTOR
 
-    case ITM_STKtoV4:
-      stkToV4();
-      break;
-
-    case ITM_V4toSTK:
-      v4ToStk();
-      break;
-
     case ITM_stkexV4:{                                   // a matrix in X unpacks; anything else packs and the register read raises the type error
       if(getRegisterDataType(REGISTER_X) == dtReal34Matrix || getRegisterDataType(REGISTER_X) == dtComplex34Matrix) {
-        v4ToStk();
+        fnConvertMxToStk(VECT_CR_tzyx);
       }
       else {
-        stkToV4();
+        fnConvertStkToMx(VECT_CR_tzyx);
       }
       break;
     }
@@ -1868,9 +1729,9 @@ void fnExchangeStkToMx(uint16_t opType) {
 
 
 void fnConvertStkToMx(uint16_t constVector1) {
-#if defined(OPTION_VECTOR) || defined(OPTION_ELEC)
+#if defined(OPTION_VECTOR) || defined(OPTION_ELEC) || defined(OPTION_SLV_ZETA_BETA)
   bool_t complexCoefs = false;
-  struct cmplxPair x[3];
+  struct cmplxPair x[4];
   real34Matrix_t matrix;
   complex34Matrix_t matrixC;
   uint16_t elements;
@@ -1900,12 +1761,15 @@ void fnConvertStkToMx(uint16_t constVector1) {
   if(!processDefaultVector(REGISTER_Y, vecCreate[constVector].y, vecCreate[constVector].ydef, x, &complexCoefs)) return;   //if not successful register input, return
   if(max(vecCreate[constVector].z, vecCreate[constVector].zdef) != V_NANA &&
      !processDefaultVector(REGISTER_Z, vecCreate[constVector].z, vecCreate[constVector].zdef, x, &complexCoefs)) return;   //if not successful register input, return
+  if(vecCreate[constVector].tdef != V_NANA &&
+     !processDefaultVector(REGISTER_T, vecCreate[constVector].t, vecCreate[constVector].tdef, x, &complexCoefs)) return;   //if not successful register input, return
 
   if(!saveLastX()) {
     return;
   }
 
 
+#if defined(OPTION_VECTOR) || defined(OPTION_ELEC)
   uint32_t ang2Dx, ang2Dy, ang3Dx, ang3Dy, ang3Dz;
   bool_t validPolarInput, valid2DRInput, validSPHInput, validCYLInput, valid3DRInput;
 
@@ -1947,6 +1811,7 @@ void fnConvertStkToMx(uint16_t constVector1) {
   else if(validCYLInput) {
     convertAngleFromTo(&x[vecCreate[constVector].y].r, ang3Dy, amRadian, &ctxtReal39);
   }
+#endif //OPTION_VECTOR || OPTION_ELEC
 
 
 
@@ -1957,6 +1822,9 @@ void fnConvertStkToMx(uint16_t constVector1) {
   else {
     fnDrop(NOPARAM);
     if(elements > 2) {
+      fnDrop(NOPARAM);
+    }
+    if(elements > 3) {
       fnDrop(NOPARAM);
     }
   }
@@ -1985,6 +1853,7 @@ void fnConvertStkToMx(uint16_t constVector1) {
   else {
     linkToRealMatrixRegister(REGISTER_X,  &matrix);
 
+#if defined(OPTION_VECTOR) || defined(OPTION_ELEC)
     if(ang2Dx != amNone && ang2Dy == amNone && constVector == VECT_CR_yx) {
       convertPOLto2D(&x[1].r, &x[0].r, amRadian, &matrix, &ctxtReal39);
       matrixRegisterLoaded = true;
@@ -2002,6 +1871,7 @@ void fnConvertStkToMx(uint16_t constVector1) {
       convertCYLto3D(&x[2].r, &x[1].r, &x[0].r, amRadian, &matrix, &ctxtReal39);
       matrixRegisterLoaded = true;
     }
+#endif //OPTION_VECTOR || OPTION_ELEC
   }
 
 
@@ -2019,6 +1889,7 @@ void fnConvertStkToMx(uint16_t constVector1) {
 
   adjustResult(REGISTER_X, false, true, REGISTER_X, -1, -1);
 
+#if defined(OPTION_VECTOR) || defined(OPTION_ELEC)
   if(validPolarInput) {
     setVectorRegisterAngularMode(REGISTER_X, ang2Dx);
     setVectorRegisterPolarMode(REGISTER_X, amPolar);
@@ -2035,23 +1906,22 @@ void fnConvertStkToMx(uint16_t constVector1) {
     temporaryInformation = TI_VECTOR;
   }
 #endif //OPTION_VECTOR || OPTION_ELEC
+#endif //OPTION_VECTOR || OPTION_ELEC || OPTION_SLV_ZETA_BETA
 }
 
 
 void fnConvertMxToStk(uint16_t param1) { //first try the vector type in lower nibble, then try the vector type in higher nibble unless high nibble = 0
-#if defined(OPTION_VECTOR) || defined(OPTION_ELEC)
+#if defined(OPTION_VECTOR) || defined(OPTION_ELEC) || defined(OPTION_SLV_ZETA_BETA)
   real34Matrix_t matrix;
   complex34Matrix_t matrixC;
   uint16_t Xrows, Xcols;
 
   if(!(getRegisterDataType(REGISTER_X) == dtReal34Matrix || getRegisterDataType(REGISTER_X) == dtComplex34Matrix)) {
-    #if !defined(TESTSUITE_BUILD)
-      displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-        sprintf(errorMessage, "invalid data type %s and %s", getRegisterDataTypeName(REGISTER_Y, true, false), getRegisterDataTypeName(REGISTER_X, true, false));
-        moreInfoOnError("In function fnConvertMxToStk:", errorMessage, NULL, NULL);
-      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
-    #endif // !TESTSUITE_BUILD
+    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "invalid data type %s and %s", getRegisterDataTypeName(REGISTER_Y, true, false), getRegisterDataTypeName(REGISTER_X, true, false));
+      moreInfoOnError("In function fnConvertMxToStk:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;
   }
 
@@ -2107,6 +1977,11 @@ void fnConvertMxToStk(uint16_t param1) { //first try the vector type in lower ni
   if(!((Xrows == vecCreate[constVector].rows && Xcols == vecCreate[constVector].cols) || (Xrows == vecCreate[constVector].cols && Xcols == vecCreate[constVector].rows))) {
     constVector = (param & 0xF0) >> 4; //vector type in higher nibble
     if(constVector == 0 || !((Xrows == vecCreate[constVector].rows && Xcols == vecCreate[constVector].cols) || (Xrows == vecCreate[constVector].cols && Xcols == vecCreate[constVector].rows))) {
+      displayCalcErrorMessage(ERROR_MATRIX_MISMATCH, ERR_REGISTER_LINE, REGISTER_X);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        sprintf(errorMessage, "a vector is needed, not (%" PRIu16 STD_CROSS "%" PRIu16 ")", Xrows, Xcols);
+        moreInfoOnError("In function fnConvertMxToStk:", errorMessage, NULL, NULL);
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
       return;
     }
   }
@@ -2117,34 +1992,22 @@ void fnConvertMxToStk(uint16_t param1) { //first try the vector type in lower ni
     return;
   }
 
-  //can only be 2 or 3 elements
-  //assuming 2 elements, clearing X and preparing Y
+  //2, 3 or 4 elements: clear X, then lift and clear once per further element
 
-  if(getRegisterDataType(TEMP_REGISTER_1) == dtReal34Matrix) {
-    convertRealToResultRegister(const_0, REGISTER_X, amNone);
-    setSystemFlag(FLAG_ASLIFT);
-    liftStack();
-    convertRealToResultRegister(const_0, REGISTER_X, amNone);
-  }
-  else {
-    convertComplexToResultRegisterRPangle(const_0, const_0, REGISTER_X, amNone, !amPolar);
-    setSystemFlag(FLAG_ASLIFT);
-    liftStack();
-    convertComplexToResultRegisterRPangle(const_0, const_0, REGISTER_X, amNone, !amPolar);
-  }
-  if(elements > 2) {
-    if(getRegisterDataType(TEMP_REGISTER_1) == dtReal34Matrix) {
+  for(uint16_t e = 0; e < elements; e++) {
+    if(e > 0) {
       setSystemFlag(FLAG_ASLIFT);
       liftStack();
+    }
+    if(getRegisterDataType(TEMP_REGISTER_1) == dtReal34Matrix) {
       convertRealToResultRegister(const_0, REGISTER_X, amNone);
     }
     else {
-      setSystemFlag(FLAG_ASLIFT);
-      liftStack();
       convertComplexToResultRegisterRPangle(const_0, const_0, REGISTER_X, amNone, !amPolar);
     }
   }
 
+#if defined(OPTION_VECTOR) || defined(OPTION_ELEC)
   if(constVector == VECT_CR_yx && ang2Dx != amNone) {
     real_t theta, magnitude;
     real34ToReal(&matrix.matrixElements[0], &magnitude);
@@ -2176,11 +2039,13 @@ void fnConvertMxToStk(uint16_t param1) { //first try the vector type in lower ni
       realToReal34(&theta , &matrix.matrixElements[1]);
     }
   }
+#endif //OPTION_VECTOR || OPTION_ELEC
 
   for(int i = 0; i < elements; i++) {
     uint16_t rg = vecCreate[constVector].x == elements-1-i ? REGISTER_X : \
                   vecCreate[constVector].y == elements-1-i ? REGISTER_Y : \
-                  vecCreate[constVector].z == elements-1-i ? REGISTER_Z : 0;
+                  vecCreate[constVector].z == elements-1-i ? REGISTER_Z : \
+                  vecCreate[constVector].t == elements-1-i ? REGISTER_T : 0;
     if(getRegisterDataType(TEMP_REGISTER_1) == dtComplex34Matrix) {
       real34Copy(VARIABLE_REAL34_DATA(&matrixC.matrixElements[i]), REGISTER_REAL34_DATA(rg));
       real34Copy(VARIABLE_IMAG34_DATA(&matrixC.matrixElements[i]), REGISTER_IMAG34_DATA(rg));
@@ -2212,7 +2077,7 @@ void fnConvertMxToStk(uint16_t param1) { //first try the vector type in lower ni
     setRegisterAngularMode(REGISTER_Y, ang3Dy);
     temporaryInformation = TI_VECTORCOMP_3DRECT;
   }
-#endif //OPTION_VECTOR || OPTION_ELEC
+#endif //OPTION_VECTOR || OPTION_ELEC || OPTION_SLV_ZETA_BETA
 }
 
 

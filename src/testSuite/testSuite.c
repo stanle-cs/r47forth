@@ -371,6 +371,8 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDot",                  fnDot                 },
   {"fnDrop",                 fnDrop                },
   {"fnDropY",                fnDropY               },
+  {"fnConvertMxToStk",       fnConvertMxToStk      },
+  {"fnConvertStkToMx",       fnConvertStkToMx      },
   {"fnEigenvalues",          fnEigenvalues         },
   {"fnEigenvectors",         fnEigenvectors        },
   {"fnExchangeStkToMx",      fnExchangeStkToMx     },
