@@ -966,15 +966,14 @@ void covSolveRoot(uint16_t which) {
 }
 
 void covCpxSolveRoot(uint16_t which) {
-  // Complex root solver (fnEqSolvGraph(EQ_CPXSOLVE) -> complexSolver() in graph.c). Same formula fixture as covSolveRoot: the two guesses come from Y and X, the
-  // root lands in X. Every root below is exact, so the expected value is the algebra, not this build's output. which selects the formula:
-  //   0  X^2+4  roots +/-2i        purely imaginary
-  //   1  X^2-4  roots +/-2         real, reached through the complex solver
+  // Find a root of the current formula with the complex solver, fnEqSolvGraph(EQ_CPXSOLVE) -> complexSolver() in solver/graph.c. The guesses come from Y and X, the
+  // root lands in X. which selects the formula, and every root is exact:
+  //   0  X^2+4  roots +/-2i
+  //   1  X^2-4  roots +/-2, reached through the complex solver
   //   2  X^3-1  roots 1, -1/2+/-(sqrt3/2)i
-  //   3  X^2+1  roots +/-i         purely imaginary, unit modulus
-  //   4  X^4+4  roots +/-1+/-i     the only ones with BOTH parts non-zero
-  //   5  5      no root at all      the ERROR_NO_ROOT_FOUND branch
-  // Multiplication in a formula is STD_CROSS, not '*'; a '*' does not tokenise and the solve ends ERROR_NO_ROOT_FOUND with the guess left in X.
+  //   3  X^2+1  roots +/-i
+  //   4  X^4+4  roots +/-1+/-i, the only roots with a non-zero real part
+  //   5  5      no root, ERROR_NO_ROOT_FOUND
   static const char * const cpxFormulae[] = {"X^2+4", "X^2-4", "X^3-1", "X^2+1", "X^4+4", "5"};
   if(which >= sizeof(cpxFormulae) / sizeof(cpxFormulae[0])) {
     return;
@@ -986,23 +985,20 @@ void covCpxSolveRoot(uint16_t which) {
   const uint16_t var = findOrAllocateNamedVariable("X");
   currentSolverVariable = var;
   currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
-  // Measured: the solve leaves currentAngularMode changed (RAD in, DEG out), so put it back - rule 6.6, restore every non-default mode a driver sets.
-  // FLAG_CPXRES is set on entry to complexSolver but is clear again by the time it returns, so it needs no restore.
+  // Restore the angular mode: the solve enters RAD and returns DEG. FLAG_CPXRES is clear on return and needs no restore.
   const angularMode_t savedAngularMode = currentAngularMode;
   fnEqSolvGraph(EQ_CPXSOLVE);
   currentAngularMode = savedAngularMode;
 }
 
 void covEqSolveDispatch(uint16_t which) {
-  // The solve arms of fnEqSolvGraph's switch (solver/graph.c) that EQ_CPXSOLVE does not reach. Roots are exact, so the expected value is the algebra.
-  //   0  EQ_REALSOLVE     f(X)=X^2-4, roots +/-2,  guesses off the stack
-  //   1  EQ_CPXSOLVE_LU   f(X)=X^4+4, roots +/-1+/-i, guesses from LEST/UEST
-  //   2  EQ_REALSOLVE_LU  f(X)=X^2-4, roots +/-2,  guesses from LEST/UEST
-  //   3  EQ_REALSOLVE     f(X)=5, no root: the ERROR_NO_ROOT_FOUND branch
-  // The _LU arms read RESERVED_VARIABLE_LEST/UEST and ignore the stack, so their cases seed the stack with -5 and -1 and the estimates with 1 and 5, chosen
-  // because the two pairs land on different roots: measured, X^2-4 gives -2 from the stack pair and +2 from the estimates, and X^4+4 gives -1-i from the
-  // stack pair and 1+i from the estimates. A build that read the stack therefore returns the wrong root and the case fails. Two seeds that look adequate
-  // and are not: a degenerate 0 and 0 still converges on +2, and X^2+4 lands on -2i from every guess pair tried, so neither can tell the two paths apart.
+  // Drive the solve arms of fnEqSolvGraph (solver/graph.c) that EQ_CPXSOLVE does not reach. which selects the arm and the formula, and every root is exact:
+  //   0  EQ_REALSOLVE     X^2-4, roots +/-2       guesses off the stack
+  //   1  EQ_CPXSOLVE_LU   X^4+4, roots +/-1+/-i   guesses from LEST/UEST
+  //   2  EQ_REALSOLVE_LU  X^2-4, roots +/-2       guesses from LEST/UEST
+  //   3  EQ_REALSOLVE     5, no root              ERROR_NO_ROOT_FOUND
+  // The _LU arms read RESERVED_VARIABLE_LEST/UEST and ignore the stack, so the stack pair and the estimate pair reach different roots: -5 and -1 on the stack reach
+  // -2 and -1-i, 1 and 5 in the estimates reach +2 and 1+i. A build reading the stack returns the wrong root.
   const bool_t isLu = (which == 1 || which == 2);
   if(which > 3) {
     return;
@@ -1016,7 +1012,7 @@ void covEqSolveDispatch(uint16_t which) {
   currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
 
   if(isLu) {
-    // Seed the estimates the way the non-LU arm does, so the LU arm has something to read.
+    // Seed the estimates as the non-LU arm does at solver/graph.c:2802.
     real_t lower, upper;
     int32ToReal(1, &lower);
     int32ToReal(5, &upper);
