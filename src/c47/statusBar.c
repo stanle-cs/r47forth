@@ -205,8 +205,9 @@ void drawBattery(uint16_t voltage);
     }
 
     bool_t  SBchanged = false;
-    if(lastIntegerBase + ((lastIntegerBase >= 2 && didSystemFlagChange(FLAG_TOPHEX)) ? 0x40 : 0) != SBlastIntegerBaseShown) {
-      SBlastIntegerBaseShown = lastIntegerBase + ((lastIntegerBase >= 2 && didSystemFlagChange(FLAG_TOPHEX)) ? 0x40 : 0);
+    bool_t  topHexChanged = (lastIntegerBase >= 2 && didSystemFlagChange(FLAG_TOPHEX));  // note, read once: didSystemFlagChange clears on reading;
+    if(lastIntegerBase + (topHexChanged ? 0x40 : 0) != SBlastIntegerBaseShown) {
+      SBlastIntegerBaseShown = lastIntegerBase;
       SBchanged = true;
     }
 
