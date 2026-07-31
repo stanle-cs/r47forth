@@ -30,12 +30,9 @@ Out:  EC=0 FL_CPXRES=0 RX=Real:"-6.2465e-29":DEG
 ;*************************************************************
 ;*************************************************************
 ;**                                                         **
-;**   Argument reduction of a huge angle: WP34S_Mod and     **
-;**   WP34S_BigMod (wp34s.c). Both take a multi-kilobyte    **
-;**   working buffer, and the #if 0 block above             **
-;**   WP34S_Mod_Pauli records that allocating that buffer   **
-;**   once made these two cases return -NaN. Nothing else   **
-;**   in the suite reduces an angle this large.             **
+;**      Argument reduction of an angle far past 2pi:       **
+;**      WP34S_Mod and WP34S_BigMod (wp34s.c), reached      **
+;**      through mod2Pi and longIntegerAngleReduction.      **
 ;**                                                         **
 ;*************************************************************
 ;*************************************************************
