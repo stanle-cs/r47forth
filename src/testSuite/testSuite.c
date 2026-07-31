@@ -973,8 +973,9 @@ void covCpxSolveRoot(uint16_t which) {
   //   2  X^3-1  roots 1, -1/2+/-(sqrt3/2)i
   //   3  X^2+1  roots +/-i         purely imaginary, unit modulus
   //   4  X^4+4  roots +/-1+/-i     the only ones with BOTH parts non-zero
+  //   5  5      no root at all      the ERROR_NO_ROOT_FOUND branch
   // Multiplication in a formula is STD_CROSS, not '*'; a '*' does not tokenise and the solve ends ERROR_NO_ROOT_FOUND with the guess left in X.
-  static const char * const cpxFormulae[] = {"X^2+4", "X^2-4", "X^3-1", "X^2+1", "X^4+4"};
+  static const char * const cpxFormulae[] = {"X^2+4", "X^2-4", "X^3-1", "X^2+1", "X^4+4", "5"};
   if(which >= sizeof(cpxFormulae) / sizeof(cpxFormulae[0])) {
     return;
   }
@@ -997,18 +998,19 @@ void covEqSolveDispatch(uint16_t which) {
   //   0  EQ_REALSOLVE     f(X)=X^2-4, roots +/-2,  guesses off the stack
   //   1  EQ_CPXSOLVE_LU   f(X)=X^4+4, roots +/-1+/-i, guesses from LEST/UEST
   //   2  EQ_REALSOLVE_LU  f(X)=X^2-4, roots +/-2,  guesses from LEST/UEST
+  //   3  EQ_REALSOLVE     f(X)=5, no root: the ERROR_NO_ROOT_FOUND branch
   // The _LU arms read RESERVED_VARIABLE_LEST/UEST and ignore the stack, so their cases seed the stack with -5 and -1 and the estimates with 1 and 5, chosen
   // because the two pairs land on different roots: measured, X^2-4 gives -2 from the stack pair and +2 from the estimates, and X^4+4 gives -1-i from the
   // stack pair and 1+i from the estimates. A build that read the stack therefore returns the wrong root and the case fails. Two seeds that look adequate
   // and are not: a degenerate 0 and 0 still converges on +2, and X^2+4 lands on -2i from every guess pair tried, so neither can tell the two paths apart.
-  const bool_t isLu = (which >= 1);
-  if(which > 2) {
+  const bool_t isLu = (which == 1 || which == 2);
+  if(which > 3) {
     return;
   }
   if(numberOfFormulae == 0) {
     fnEqNew(NOPARAM);
   }
-  setEquation(currentFormula, which == 1 ? "X^4+4" : "X^2-4");
+  setEquation(currentFormula, which == 1 ? "X^4+4" : (which == 3 ? "5" : "X^2-4"));
   const uint16_t var = findOrAllocateNamedVariable("X");
   currentSolverVariable = var;
   currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
@@ -1025,7 +1027,7 @@ void covEqSolveDispatch(uint16_t which) {
   }
 
   const angularMode_t savedAngularMode = currentAngularMode;
-  fnEqSolvGraph(which == 0 ? EQ_REALSOLVE : (which == 1 ? EQ_CPXSOLVE_LU : EQ_REALSOLVE_LU));
+  fnEqSolvGraph(which == 1 ? EQ_CPXSOLVE_LU : (which == 2 ? EQ_REALSOLVE_LU : EQ_REALSOLVE));
   currentAngularMode = savedAngularMode;
 }
 
