@@ -106,6 +106,57 @@ Func: fnMimRowColCov
 In:  FARG=0 RX=Real:"7" RI=Real:"1" RJ=Real:"1"
 Out: EC=24 RX=Real:"7"
 
+; --- each operation refuses outside CM_MIM. fnGoToRow and fnGoToColumn take
+; the line number in FARG.
+Func: fnInsRow
+In:  RX=Real:"7"
+Out: EC=13 RX=Real:"7"
+Func: fnAddRow
+In:  RX=Real:"7"
+Out: EC=13 RX=Real:"7"
+Func: fnInsCol
+In:  RX=Real:"7"
+Out: EC=13 RX=Real:"7"
+Func: fnAddCol
+In:  RX=Real:"7"
+Out: EC=13 RX=Real:"7"
+Func: fnDelRow
+In:  RX=Real:"7"
+Out: EC=13 RX=Real:"7"
+Func: fnDelCol
+In:  RX=Real:"7"
+Out: EC=13 RX=Real:"7"
+Func: fnGoToRow
+In:  FARG=2 RX=Real:"7"
+Out: EC=13 RX=Real:"7"
+Func: fnGoToColumn
+In:  FARG=2 RX=Real:"7"
+Out: EC=13 RX=Real:"7"
+
+; --- M.OLD and M.GOTO refuse outside CM_MIM; the mode check is the only arm of
+; either that a case reaches ---
+Func: fnOldMatrix
+In:  RX=Real:"7"
+Out: EC=13 RX=Real:"7"
+Func: fnGoToElement
+In:  RX=Real:"7"
+Out: EC=13 RX=Real:"7"
+
+; --- fnEditMatrix refuses a vector held in polar form before it looks at the
+; type. POLAR tags the vector in X; the editor then declines to open it.
+Func: fnToPolar2
+In:  RX=ReMa:"M1,2[3,4]" AM=RAD
+Out: EC=0
+Func: fnMimRowColCov
+In:  FARG=0 RI=Real:"1" RJ=Real:"1"
+Out: EC=24
+Func: fnToPolar2
+In:  RX=ReMa:"M1,3[3,4,5]" AM=RAD
+Out: EC=0
+Func: fnMimRowColCov
+In:  FARG=0 RI=Real:"1" RJ=Real:"1"
+Out: EC=24
+
 ; --- a fixture, not an assertion: hand I and J back as the real 0 they arrive
 ; as, which programs.txt's SPIRAL reads as data ---
 Func: fnNop

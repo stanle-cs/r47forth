@@ -164,8 +164,18 @@ const funcTest_t funcTestNoParam[] = {
   // column, so they need no INDEX and leave I, J and the indexed matrix as they found them.
   // Matrix creation and dimensions (FARG = register number where one is taken).
   // The two editor entries whose only corpus-reachable arm is the mode guard: both work in CM_MIM and refuse elsewhere, and the corpus is always elsewhere.
+  {"fnOldMatrix",            fnOldMatrix           },
+  {"fnGoToElement",          fnGoToElement         },
   // The row and column operations, reached without the editor driver so the corpus takes the arm each one runs outside CM_MIM. fnGoToRow and fnGoToColumn take
   // the line number in FARG.
+  {"fnInsRow",               fnInsRow              },
+  {"fnAddRow",               fnAddRow              },
+  {"fnInsCol",               fnInsCol              },
+  {"fnAddCol",               fnAddCol              },
+  {"fnDelRow",               fnDelRow              },
+  {"fnDelCol",               fnDelCol              },
+  {"fnGoToRow",              fnGoToRow             },
+  {"fnGoToColumn",           fnGoToColumn          },
   // Value/type predicates and small math ops.
   {"fnCheckType",            fnCheckType           },
   {"fnIse",                  fnIse                 },
