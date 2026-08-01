@@ -13,8 +13,8 @@ the catalog's own case (xeq SCATR). item <n> is the fallback ONLY, not the first
 <n>, e.g.  cnst 4  = c. PLT f is the case in point: its gap is no space at all but a U+2005 four-per-em, so the name must be copied out of the --dslcommands list, the
 reason that list exists. Pasted, it is one Jim word: xeq PLT f resolves, as do braces and double quotes; single quotes are not Jim quoting and fail.
 Without the paste item 2734 does the same job, at the clear cost of code nobody can read.
-A name carrying a bracket is not a fallback case either. It is missing from --dslcommands because a bracket breaks Jim parsing, so it is never registered as a bare
-command, and xeq and catfn still reach it by its catalog name. Braces protect the quote in it:  xeq {f'(x)} MC  and  xeq {f"(x)} MC  differentiate the program MC.
+A name carrying a bracket or a quote is not a fallback case either. It is missing from --dslcommands because either one breaks Jim parsing, so it is never registered
+as a bare command, and xeq and catfn still reach it by its catalog name. Braces protect it:  xeq {f'} vv  and  xeq {f"} vv  differentiate against the variable vv.
 
 WARNING: no item whose name is written >NNNN< is free to use. Those are legacy entries, kept only so an old program still decodes, and they must not be used for
 anything: not in a script, not in a program, not as a stand-in for a name you cannot type. If you meet one in the catalogue or the --dslcommands list, look for the
@@ -155,10 +155,10 @@ A function a softmenu starts, headless (the equation derivative):
     puts "deriv=[reg X]"
   (d/dvv of 1/vv at vv = 1 is -1. Opening the menu selects the single variable and stops there, so put the point in that variable and then run the Calc f' softkey.
    That key is item 2377 and has no name xeq will take, which is what item <n> is the fallback for.)
-  f'(x) and f"(x) open that same menu themselves when the label they are given declares MVARs, since the answer depends on which variable is meant. A label that
-  declares none has nothing to choose and differentiates on the spot:  xeq {f'(x)} EG  returns the answer, while  xeq {f'(x)} MC  opens the menu and leaves X alone.
-  From there it is the variable key, which the keyboard path below presses. As a program step,  f'(x) 'FX'  run with xeq takes the point off the stack and
-  differentiates with respect to the selected variable, or the program's first MVAR when nothing is selected.
+  A PROGRAM derivative is driven like SOLVE and ∫f d: PGMDRV names the program, then f' or f" names the variable. The point comes off the stack and the answer
+  replaces it, MVAR or no MVAR:  nim 3; xeq PGMDRV FX; xeq {f'} zz. The legacy >f'(x)< and >f"(x)< take a program label there instead.
+  A script cannot open a program's MVAR menu: f' takes a variable, so a program name given to it becomes a variable and the run stops with "No program specified".
+  That prompt is on the keyboard only. The equation form does open its menu headless, which is the menu {f'} example above.
 
 Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key (NN = 00..36), single ASCII, ENTER, R/S. Bare commands and xeq call the function direct,
 so TAM and softmenu decode need press. Matrix editor, cursor to 2;2:
@@ -173,10 +173,8 @@ hand in the GUI. SHOW paging runs on the press and scripts fine; the R/S fault t
   (m.edit; M_EDIT F5/F6 = left/right, f-shifted = up/down; snap shows "2;2=".)
   M.EDIT indexes X, so a later nim pushes the matrix out of X: index a numbered register instead where the test needs the stack. A program stops at M.EDIT.
 
-  The MVAR menu a program derivative opens, driven to an answer. MX is vv squared with vv as its MVAR, so f' at 14 is 28:
-  ./c47 --reset -e "readp mc.p47; nim 14; xeq {f'(x)} MX; press F1; press F1"
-  (double quotes so the apostrophe in f'(x) survives the shell. The first F1 stores what was typed into the variable, the second differentiates with respect to it.
-   The same two presses serve a program with several MVARs: F1..F6 are its variables in declaration order, and the last softkey is the step.)
+  A program derivative's MVAR menu is not scriptable: f' asks for the program at a TAM prompt. By hand it is f', the program name, ENTER, then the variable key to
+  store the point and the same key again to differentiate. F1..F6 are the variables in declaration order and the last softkey is the step.
 
   XEQ a function by name from the keyboard: press XEQ, then alpha, type the letters, Enter. Alpha is f-shift on the XEQ key and raises the ' name prompt.
   ./c47 --reset --exec 'nim 30; press "@k 05"; press @f; press "@k 05"; press "@k 21"; press "@k 08"; press "@k 14"; press ENTER; snap'
