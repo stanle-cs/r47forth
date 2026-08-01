@@ -10,10 +10,13 @@
 #define DERIV_FIRST_SHIFT       1   // h starts at x/10, the coarsest step a 15 point stencil is worth taking
 #define DERIV_LAST_SHIFT       16   // and stops at x*1e-16, the step this engine used for every stencil before the ladder
 #define DERIV_TOLERANCE_DIGITS 32   // digits a sample carries, less one for the coefficient sum, which is what two estimates are compared against
-#define DERIV_DELTA_X_LABELS    1   // 1 lets >f'(x)< and >f"(x)< take their step from a global label named delta-x, in any of its four spellings, as WP34s did.
-                                    // Only those two look for it. 0 drops the support and its code
-#define DERIV_LEGACY_ITEM    true   // which door the derivative came in by, which is what decides whether the delta-x labels above are looked for at all
+#define DERIV_DELTA_X_LABELS    0   // 1 lets the new f' and f" look for a global label named delta-x too, in any of its four spellings, after the delta variable and
+                                    // before the ladder. The delta variable always wins, whatever this says. >f'(x)< and >f"(x)< look for those labels whatever
+                                    // this says as well: programs written before PGMDRV depend on them, so that is compatibility and not a build choice
+#define DERIV_LEGACY_ITEM    true   // which items the derivative came in by, which is what decides whether the delta-x labels are looked for
 #define DERIV_NEW_ITEM      false
+#define DERIV_MVAR_NEEDED    true   // >f'(x)< answers on the spot when the program declares no MVAR, so its menu only opens when there is one to show
+#define DERIV_MVAR_OPTIONAL false   // f' and f" open the menu either way, as SOLVE does: no MVAR simply means no variable in it
 
 
 #if 0
@@ -56,11 +59,11 @@ static void calcDerivOfOrder(uint16_t label, int order, bool_t legacy) {
 // A program that declares MVARs has more than one thing it could be differentiated with respect to, and the answer depends on which, so the MVAR menu is opened for
 // the user to say, the way the solver and the integrator do. The variable key stores the point and takes the selection, and f' on the last softkey runs it. Inside a
 // running program, or under another engine, there is nobody to press a key: the derivative is taken there and then, with respect to the selected variable.
-static bool_t deriv_open_mvar_menu(uint16_t label, uint16_t order, bool_t solving) {
+static bool_t deriv_open_mvar_menu(uint16_t label, uint16_t order, bool_t solving, bool_t mvarNeeded) {
   if(programRunStop == PGM_RUNNING || solving || getSystemFlag(FLAG_INTING)) {
     return false;
   }
-  if(deriv_pgm_variable(label, NULL) == INVALID_VARIABLE) {
+  if(mvarNeeded && deriv_pgm_variable(label, NULL) == INVALID_VARIABLE) {
     return false;
   }
   currentSolverProgram = label - FIRST_LABEL;
@@ -77,7 +80,7 @@ static void derivativeCommon(uint16_t label, uint16_t order, uint8_t ti) {
   bool_t solving = getSystemFlag(FLAG_SOLVING);
   char buf[2];
 
-  if(label >= FIRST_LABEL && label <= LAST_LABEL && deriv_open_mvar_menu(label, order, solving)) {
+  if(label >= FIRST_LABEL && label <= LAST_LABEL && deriv_open_mvar_menu(label, order, solving, DERIV_MVAR_NEEDED)) {
     return;
   }
   setSystemFlag(FLAG_SOLVING);
@@ -97,7 +100,7 @@ static void derivativeCommon(uint16_t label, uint16_t order, uint8_t ti) {
         moreInfoOnError("In function derivativeCommon:", errorMessage, NULL, NULL);
       #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     }
-    else if(!deriv_open_mvar_menu(label, order, solving)) {
+    else if(!deriv_open_mvar_menu(label, order, solving, DERIV_MVAR_NEEDED)) {
       calcDerivOfOrder(label, order, DERIV_LEGACY_ITEM);
       temporaryInformation = ti;
     }
@@ -206,14 +209,22 @@ void fnPgmDrv(uint16_t label) {
 }
 
 
-// f' and f" in the SOLVE form: the operand is the variable to differentiate with respect to, and the program is the one PGMDRV named. The point is the value that
-// variable already holds, which is what the solver and the integrator do with theirs.
+// f' and f" in the SOLVE form: From the keyboard the operand is a program and the MVAR menu opens on it, so the variable is picked off a softkey.
+// As a program step the operand is a variable, the program is the one PGMDRV named and the variable is the parameter.
 static void derivativeVariable(uint16_t variable, uint16_t order, uint8_t ti) {
   bool_t solving;
   real_t probeValue;
   snap_t savedRegister;
   bool_t restore;
 
+  if((FIRST_LABEL <= variable && variable <= LAST_LABEL) || (REGISTER_X <= variable && variable <= REGISTER_T)) {
+    currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;   // a formula left in play would otherwise build the menu from its variables rather than the program's
+    fnPgmDrv(variable);
+    if(lastErrorCode == ERROR_NONE) {
+      deriv_open_mvar_menu(currentDerivProgram + FIRST_LABEL, order, getSystemFlag(FLAG_SOLVING), DERIV_MVAR_OPTIONAL);
+    }
+    return;
+  }
   if(!(FIRST_NAMED_VARIABLE <= variable && variable <= LAST_NAMED_VARIABLE)) {
     displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -268,19 +279,17 @@ void fn2ndDerivEq(uint16_t unusedButMandatoryParameter) {
 
 /* The following routines are ported from WP34s. */
 
-#if(DERIV_DELTA_X_LABELS == 1)
-  static void deriv_found_lbl(calcRegister_t deltaX, real_t *h) {
-    execProgram(deltaX);
-    fnToReal(NOPARAM);
-    if(getRegisterDataType(REGISTER_X) == dtReal34) {
-      real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), h);
-    }
-    else {
-      lastErrorCode = ERROR_NONE;
-      realCopy(const_1on10, h);
-    }
+static void deriv_found_lbl(calcRegister_t deltaX, real_t *h) {
+  execProgram(deltaX);
+  fnToReal(NOPARAM);
+  if(getRegisterDataType(REGISTER_X) == dtReal34) {
+    real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), h);
   }
-#endif // DERIV_DELTA_X_LABELS == 1
+  else {
+    lastErrorCode = ERROR_NONE;
+    realCopy(const_1on10, h);
+  }
+}
 
 // Is the step variable one of the current formula's own variables? A function that uses it writes to it while it is being sampled, so it cannot also be the step.
 // The list searched here is the same parse the MVAR menu is built from. The program side of the same question is answered by deriv_pgm_variable, which reports a
@@ -298,19 +307,17 @@ static bool_t deriv_formula_uses_delta(void) {
 }
 
 
-// The step the user set, in the order it is looked for: the step variable, then, for a legacy call only, a delta-x label program run for what it returns. Either one
-// is taken as it stands and the ladder is not walked at all. False means neither was there, h is left alone, and the caller scales it per pass. Asked once per
-// derivative, since none of this can change while the ladder runs.
+// The step the user set, in the order it is looked for: the step variable, then a delta-x label program run for what it returns, which a legacy call always looks for
+// and a new one only when DERIV_DELTA_X_LABELS says so. Either one is taken as it stands and the ladder is not walked at all. False means neither was there, h is
+// left alone, and the caller scales it per pass. Asked once per derivative, since none of this can change while the ladder runs.
 static bool_t deriv_user_step(real_t *h, const real_t *x, bool_t usesDelta, bool_t legacy) {
   calcRegister_t deltaX;
   real_t given;
-  #if(DERIV_DELTA_X_LABELS == 1)
-    unsigned int i;
-    TO_QSPI static const char *const lbls[] = {
-      STD_delta "x",  STD_delta "X",
-      STD_DELTA "x",  STD_DELTA "X",
-    };
-  #endif // DERIV_DELTA_X_LABELS == 1
+  unsigned int i;
+  TO_QSPI static const char *const lbls[] = {
+    STD_delta "x",  STD_delta "X",
+    STD_DELTA "x",  STD_DELTA "X",
+  };
 
   if(!usesDelta && (deltaX = findNamedVariable(STD_delta STD_SUB_d)) != INVALID_VARIABLE &&
      getRegisterAsRealQuiet(deltaX, &given) && !realIsZero(&given) && !realIsSpecial(&given)) {
@@ -318,27 +325,22 @@ static bool_t deriv_user_step(real_t *h, const real_t *x, bool_t usesDelta, bool
     return true;
   }
 
-  #if(DERIV_DELTA_X_LABELS == 1)
-    if(legacy) {
-      saveForUndo();
-      reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
-      realToReal34(x, REGISTER_REAL34_DATA(REGISTER_X));
-      fnFillStack(NOPARAM);
+  if(legacy || DERIV_DELTA_X_LABELS) {
+    saveForUndo();
+    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+    realToReal34(x, REGISTER_REAL34_DATA(REGISTER_X));
+    fnFillStack(NOPARAM);
 
-      dynamicMenuItem = -1;
-      for(i=0; i<nbrOfElements(lbls); i++) {
-        if((deltaX = findNamedLabel(lbls[i], ALL_LABELS)) != INVALID_VARIABLE) {
-          deriv_found_lbl(deltaX, h);
-          undo();
-          return true;
-        }
+    dynamicMenuItem = -1;
+    for(i=0; i<nbrOfElements(lbls); i++) {
+      if((deltaX = findNamedLabel(lbls[i], ALL_LABELS)) != INVALID_VARIABLE) {
+        deriv_found_lbl(deltaX, h);
+        undo();
+        return true;
       }
-      undo();
     }
-  #else // DERIV_DELTA_X_LABELS != 1
-    (void)x;
-    (void)legacy;
-  #endif // DERIV_DELTA_X_LABELS == 1
+    undo();
+  }
   return false;
 }
 
