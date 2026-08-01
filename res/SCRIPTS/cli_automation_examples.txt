@@ -64,6 +64,8 @@ Loading a formula from the command line, with no program at all:
   The swap leaves the old formula in X, an empty string for a formula just created, which is why the line ends with a fresh ENTER. From there the engines are reachable by
   name or by menu: menu {f'} opens the derivative on that formula, and its softkeys are the formula's variables. Without the EQ.NEW, X.EDIT stores into whichever
   formula happens to be current, or into none at all.
+  Multiply is × and never *. A star is stored and displayed as typed, no error, but the parser stops there and the rest is dropped:  f' on  aa*3  answers 1, the
+  slope of aa alone, while  aa×3  answers 3. Suspect the glyph whenever a formula answers for a shorter formula than the one on the screen.
 
 Named variable as a program operand:
   To store to or recall from a named variable, put the name in quotes:  STO 'cva'  or  RCL 'cva'.  rejig accepts plain quotes ('cva') or curly quotes (‘cva’) and always
