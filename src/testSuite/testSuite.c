@@ -52,6 +52,7 @@ void covSolveRoot(uint16_t which);
 void covCpxSolveRoot(uint16_t which);
 void covEqSolveDispatch(uint16_t which);
 void covMimRowCol(uint16_t op);
+void covIndexedElement(uint16_t op);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
@@ -163,6 +164,8 @@ const funcTest_t funcTestNoParam[] = {
   // Rnn>V / V>Rnn walking the whole matrix from the register in FARG - and park the walking index in the shadow row and
   // column, so they need no INDEX and leave I, J and the indexed matrix as they found them.
   // Matrix creation and dimensions (FARG = register number where one is taken).
+  // M.GROW and M.WRAP are this one function, the flag arriving as the parameter: ON from M.GROW, OFF from M.WRAP.
+  {"fnSetGrowMode",          fnSetGrowMode         },
   // The two editor entries whose only corpus-reachable arm is the mode guard: both work in CM_MIM and refuse elsewhere, and the corpus is always elsewhere.
   {"fnOldMatrix",            fnOldMatrix           },
   {"fnGoToElement",          fnGoToElement         },
@@ -258,6 +261,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnCpxSolveRootCov",      covCpxSolveRoot, 1 },
   {"fnEqSolveDispatchCov",   covEqSolveDispatch, 1 },
   {"fnMimRowColCov",         covMimRowCol, 1 },
+  {"fnIndexedElementCov",    covIndexedElement, 1 },
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
@@ -1048,6 +1052,42 @@ void covMimRowCol(uint16_t op) {
   calcModeNormal();
 }
 
+
+void covIndexedElement(uint16_t op) {
+  // Run one operation on the INDEXed matrix, the element value going to and coming from X. None of them indexes a matrix, so index R00 with fnIndexMatrix - the
+  // handler behind INDEX - and put back the cursor it homes to (1,1).
+  //   0 STOEL   store X at the cursor            4 M.GETM    recall the submatrix, Y rows by X columns    8 I-
+  //   1 RCLEL   recall the cursor cell to X      5 M.PUTM    write the matrix in X in at the cursor       9 J+
+  //   2 STOSEQ  store X, then step J             6 M.FIND  search X and move the cursor onto a hit     10 J-
+  //   3 RCLSEQ  recall to X, then step J         7 I+
+  const int16_t row = getIRegisterAsInt(false);
+  const int16_t col = getJRegisterAsInt(false);
+
+  fnIndexMatrix(FIRST_GLOBAL_REGISTER); // R00
+  if(matrixIndex != FIRST_GLOBAL_REGISTER) {
+    // Leave a refusal to the case, dropping the index it left in place: fnIndexMatrix raises and the case asserts the code.
+    matrixIndex = INVALID_VARIABLE;
+    return;
+  }
+  covRestoreMatrixCursor(row, col);
+
+  switch(op) {
+    case 0:  fnStoreElement(NOPARAM);     break;
+    case 1:  fnRecallElement(NOPARAM);    break;
+    case 2:  fnStoreElementPlus(NOPARAM); break;
+    case 3:  fnRecallElementPlus(NOPARAM); break;
+    case 4:  fnGetMatrix(NOPARAM);        break;
+    case 5:  fnPutMatrix(NOPARAM);        break;
+    case 6:  fnMatrixFind(NOPARAM);       break;
+    case 7:  fnIncDecI(INC_FLAG);         break;
+    case 8:  fnIncDecI(DEC_FLAG);         break;
+    case 9:  fnIncDecJ(INC_FLAG);         break;
+    default: fnIncDecJ(DEC_FLAG);         break;
+  }
+
+  // Drop the index: it outlives the function that set it, and the corpus carries it into the next file.
+  matrixIndex = INVALID_VARIABLE;
+}
 
 void covEqSolveDispatch(uint16_t which) {
   // Drive the solve arms of fnEqSolvGraph (solver/graph.c) that EQ_CPXSOLVE does not reach. which selects the arm and the formula, and every root is exact:
