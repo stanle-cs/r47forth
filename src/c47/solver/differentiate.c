@@ -135,11 +135,13 @@ static void derivativeEquation(uint16_t order, uint8_t ti) {
 
   setSystemFlag(FLAG_SOLVING);
   if(!(currentSolverVariable >= FIRST_NAMED_VARIABLE && currentSolverVariable <= LAST_NAMED_VARIABLE)) {
-    // No variable assigned, as after a programmed X.EDIT: auto-assign like fnEqSolvGraph does when the formula holds exactly one variable. The MVAR scratch area is
-    // the tail of tmpString, as in softmenus.c, to leave aimBuffer be.
-    parseEquation(currentFormula, EQUATION_PARSER_MVAR, tmpString + TMP_STR_LENGTH - AIM_BUFFER_LENGTH, tmpString);
-    if(tmpString[0] != 0 && (getNthString((uint8_t *)tmpString, 1))[0] == 0) {
-      currentSolverVariable = findOrAllocateNamedVariable(tmpString);
+    // Nothing selected. A formula with exactly one variable leaves no choice, so take it, as fnEqSolvGraph does. A program is excluded: its variables are its MVAR
+    // declarations, and a formula in the pool is not one of them. Parsed into the tail of tmpString, as softmenus.c does, to leave aimBuffer alone.
+    if(currentSolverStatus & SOLVER_STATUS_USES_FORMULA) {
+      parseEquation(currentFormula, EQUATION_PARSER_MVAR, tmpString + TMP_STR_LENGTH - AIM_BUFFER_LENGTH, tmpString);
+      if(tmpString[0] != 0 && (getNthString((uint8_t *)tmpString, 1))[0] == 0) {
+        currentSolverVariable = findOrAllocateNamedVariable(tmpString);
+      }
     }
     if(!(currentSolverVariable >= FIRST_NAMED_VARIABLE && currentSolverVariable <= LAST_NAMED_VARIABLE)) {
       if(!solving) {
@@ -245,8 +247,8 @@ static void derivativeVariable(uint16_t variable, uint16_t order, uint8_t ti) {
   setSystemFlag(FLAG_SOLVING);
   currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
   currentSolverVariable = variable;
-  reallyRunFunction(ITM_RCL, currentSolverVariable);   // the point is what the variable holds, and calcDeriv reads it from X
-  // The sampling stores each point in the variable, so its own value is kept here and put back after, as the menu route does.
+  reallyRunFunction(ITM_STO, currentSolverVariable);   // the point comes off the stack, as SOLVE takes its guesses and ∫ its limits, and calcDeriv reads it from X
+  // The sampling stores each point in the variable, so the given point is kept here and put back after, leaving the variable on the value it was differentiated at.
   restore = getRegisterAsRealQuiet(currentSolverVariable, &probeValue);
   if(restore) {
     saveRegisterSnapshot(currentSolverVariable, &savedRegister);
