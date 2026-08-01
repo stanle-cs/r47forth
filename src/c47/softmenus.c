@@ -721,8 +721,8 @@ TO_QSPI const int16_t menu_EQN[]         = { ITM_EQ_NEW,                    ITM_
                                              ITM_EQ_DEL,                    ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_Grapher               };
 
 TO_QSPI const int16_t menu_ADV[]         = { ITM_PIn,                       ITM_SIGMAn,                   ITM_PLTf,                    -MNU_Sfdx,                     ITM_SOLVE,                    ITM_F1DRV,
-                                             ITM_iPIn,                      ITM_iSIGMAn,                  ITM_PGMPLT,                   ITM_PGMINT,                   ITM_PGMSLV,                   ITM_F2DRV,
-                                             ITM_SLVQ,                      ITM_SLVC,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_PGMDRV                };
+                                             ITM_iPIn,                      ITM_iSIGMAn,                  ITM_PGMPLT,                   ITM_PGMINT,                   ITM_PGMSLV,                   ITM_PGMDRV,
+                                             ITM_SLVQ,                      ITM_SLVC,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_F2DRV                 };
 
 TO_QSPI const int16_t menu_1stDeriv[]    = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_FPHERE                };
 //note: the items in here are dynamically assigned, including the static ones. Only the entry count is read: showSoftmenu turns this menu into MNU_MVAR and the six
