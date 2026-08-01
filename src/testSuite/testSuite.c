@@ -49,6 +49,8 @@ void covShortIntWordSizeRestore(uint16_t unusedButMandatoryParameter);
 void covEqCalc(uint16_t unusedButMandatoryParameter);
 void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t which);
+void covCpxSolveRoot(uint16_t which);
+void covEqSolveDispatch(uint16_t which);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
@@ -235,6 +237,8 @@ const funcTest_t funcTestNoParam[] = {
   {"fnEqCalcCov",            covEqCalc, 1 },
   {"fnDerivEqCov",           covDerivEq, 1 },
   {"fnSolveRootCov",         covSolveRoot, 1 },
+  {"fnCpxSolveRootCov",      covCpxSolveRoot, 1 },
+  {"fnEqSolveDispatchCov",   covEqSolveDispatch, 1 },
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
@@ -959,6 +963,69 @@ void covSolveRoot(uint16_t which) {
   // solver's convergence, so assign rather than OR.
   currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
   fnSolve(var);
+}
+
+void covCpxSolveRoot(uint16_t which) {
+  // Find a root of the current formula with the complex solver, fnEqSolvGraph(EQ_CPXSOLVE) -> complexSolver() in solver/graph.c. The guesses come from Y and X, the
+  // root lands in X. which selects the formula, and every root is exact:
+  //   0  X^2+4  roots +/-2i
+  //   1  X^2-4  roots +/-2, reached through the complex solver
+  //   2  X^3-1  roots 1, -1/2+/-(sqrt3/2)i
+  //   3  X^2+1  roots +/-i
+  //   4  X^4+4  roots +/-1+/-i, the only roots with a non-zero real part
+  //   5  5      no root, ERROR_NO_ROOT_FOUND
+  static const char * const cpxFormulae[] = {"X^2+4", "X^2-4", "X^3-1", "X^2+1", "X^4+4", "5"};
+  if(which >= sizeof(cpxFormulae) / sizeof(cpxFormulae[0])) {
+    return;
+  }
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, cpxFormulae[which]);
+  const uint16_t var = findOrAllocateNamedVariable("X");
+  currentSolverVariable = var;
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+  // Restore the angular mode: complexSolver runs ITM_RAD and never puts it back, so the solve returns in RAD whatever mode it was called in. FLAG_CPXRES is set there
+  // too, but undo restores the system flags, so it is clear on return and needs no restore.
+  const angularMode_t savedAngularMode = currentAngularMode;
+  fnEqSolvGraph(EQ_CPXSOLVE);
+  currentAngularMode = savedAngularMode;
+}
+
+void covEqSolveDispatch(uint16_t which) {
+  // Drive the solve arms of fnEqSolvGraph (solver/graph.c) that EQ_CPXSOLVE does not reach. which selects the arm and the formula, and every root is exact:
+  //   0  EQ_REALSOLVE     X^2-4, roots +/-2       guesses off the stack
+  //   1  EQ_CPXSOLVE_LU   X^4+4, roots +/-1+/-i   guesses from LEST/UEST
+  //   2  EQ_REALSOLVE_LU  X^2-4, roots +/-2       guesses from LEST/UEST
+  //   3  EQ_REALSOLVE     5, no root              ERROR_NO_ROOT_FOUND
+  // The _LU arms read RESERVED_VARIABLE_LEST/UEST and ignore the stack, so the stack pair and the estimate pair reach different roots: -5 and -1 on the stack reach
+  // -2 and -1-i, 1 and 5 in the estimates reach +2 and 1+i. A build reading the stack returns the wrong root.
+  const bool_t isLu = (which == 1 || which == 2);
+  if(which > 3) {
+    return;
+  }
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, which == 1 ? "X^4+4" : (which == 3 ? "5" : "X^2-4"));
+  const uint16_t var = findOrAllocateNamedVariable("X");
+  currentSolverVariable = var;
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+
+  if(isLu) {
+    // Seed the estimates as the non-LU arm does at solver/graph.c:2802.
+    real_t lower, upper;
+    int32ToReal(1, &lower);
+    int32ToReal(5, &upper);
+    reallocateRegister(RESERVED_VARIABLE_LEST, dtReal34, 0, amNone);
+    reallocateRegister(RESERVED_VARIABLE_UEST, dtReal34, 0, amNone);
+    realToReal34(&lower, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LEST));
+    realToReal34(&upper, REGISTER_REAL34_DATA(RESERVED_VARIABLE_UEST));
+  }
+
+  const angularMode_t savedAngularMode = currentAngularMode;
+  fnEqSolvGraph(which == 1 ? EQ_CPXSOLVE_LU : (which == 2 ? EQ_REALSOLVE_LU : EQ_REALSOLVE));
+  currentAngularMode = savedAngularMode;
 }
 
 void covDerivErr(uint16_t which) {
