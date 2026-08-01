@@ -1,0 +1,113 @@
+;*************************************************************
+;** Coverage: the matrix editor's row and column operations **
+;** - M.INSR, M.ROW+1, M.INSC, M.COL+1, M.DELR and M.DELC - **
+;** in ui/matrixEditor.c, over insRowRealMatrix and         **
+;** insColRealMatrix in mathematics/matrix.c.               **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+
+; fnMimRowColCov opens the matrix in X in the editor, restores the cursor from I
+; and J, runs the operation and leaves the result in X. FARG selects it:
+;   0 M.INSR   1 M.ROW+1   2 M.INSC   3 M.COL+1   4 M.DELR   5 M.DELC
+
+; --- M.INSR inserts a zero row at the cursor row ---
+Func: fnMimRowColCov
+In:  FARG=0 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"2" RJ=Real:"2"
+Out: EC=0 RX=ReMa:"M4,3[1,2,3,0,0,0,4,5,6,7,8,9]"
+Func: fnMimRowColCov
+In:  FARG=0 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=ReMa:"M4,3[0,0,0,1,2,3,4,5,6,7,8,9]"
+
+; --- M.ROW+1 appends a zero row last, whatever the cursor holds ---
+Func: fnMimRowColCov
+In:  FARG=1 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"2" RJ=Real:"2"
+Out: EC=0 RX=ReMa:"M4,3[1,2,3,4,5,6,7,8,9,0,0,0]"
+Func: fnMimRowColCov
+In:  FARG=1 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=ReMa:"M4,3[1,2,3,4,5,6,7,8,9,0,0,0]"
+
+; --- M.INSC inserts a zero column at the cursor column, at column 2 and at
+; column 1 ---
+Func: fnMimRowColCov
+In:  FARG=2 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"2" RJ=Real:"2"
+Out: EC=0 RX=ReMa:"M3,4[1,0,2,3,4,0,5,6,7,0,8,9]"
+Func: fnMimRowColCov
+In:  FARG=2 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=ReMa:"M3,4[0,1,2,3,0,4,5,6,0,7,8,9]"
+
+; --- M.COL+1 appends a zero column last, whatever the cursor holds ---
+Func: fnMimRowColCov
+In:  FARG=3 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"2" RJ=Real:"2"
+Out: EC=0 RX=ReMa:"M3,4[1,2,3,0,4,5,6,0,7,8,9,0]"
+
+; --- M.DELR removes the cursor row, M.DELC the cursor column ---
+Func: fnMimRowColCov
+In:  FARG=4 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"2" RJ=Real:"2"
+Out: EC=0 RX=ReMa:"M2,3[1,2,3,7,8,9]"
+Func: fnMimRowColCov
+In:  FARG=4 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"3" RJ=Real:"1"
+Out: EC=0 RX=ReMa:"M2,3[1,2,3,4,5,6]"
+Func: fnMimRowColCov
+In:  FARG=5 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"2" RJ=Real:"2"
+Out: EC=0 RX=ReMa:"M3,2[1,3,4,6,7,9]"
+Func: fnMimRowColCov
+In:  FARG=5 RX=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RI=Real:"1" RJ=Real:"3"
+Out: EC=0 RX=ReMa:"M3,2[1,2,4,5,7,8]"
+
+; --- fnDelRow keeps the last row and fnDelCol the last column; the other axis
+; on the same matrix still deletes ---
+Func: fnMimRowColCov
+In:  FARG=4 RX=ReMa:"M1,3[1,2,3]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=ReMa:"M1,3[1,2,3]"
+Func: fnMimRowColCov
+In:  FARG=5 RX=ReMa:"M1,3[1,2,3]" RI=Real:"1" RJ=Real:"2"
+Out: EC=0 RX=ReMa:"M1,2[1,3]"
+Func: fnMimRowColCov
+In:  FARG=5 RX=ReMa:"M3,1[1,2,3]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=ReMa:"M3,1[1,2,3]"
+Func: fnMimRowColCov
+In:  FARG=4 RX=ReMa:"M3,1[1,2,3]" RI=Real:"2" RJ=Real:"1"
+Out: EC=0 RX=ReMa:"M2,1[1,3]"
+
+; --- the complex arms - insRowComplexMatrix, insColComplexMatrix,
+; delRowComplexMatrix, delColComplexMatrix - fill inserted cells with 0i0 ---
+Func: fnMimRowColCov
+In:  FARG=0 RX=CxMa:"M2,2[1i1,2i2,3i3,4i4]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=CxMa:"M3,2[0i0,0i0,1i1,2i2,3i3,4i4]"
+Func: fnMimRowColCov
+In:  FARG=1 RX=CxMa:"M2,2[1i1,2i2,3i3,4i4]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=CxMa:"M3,2[1i1,2i2,3i3,4i4,0i0,0i0]"
+Func: fnMimRowColCov
+In:  FARG=2 RX=CxMa:"M2,2[1i1,2i2,3i3,4i4]" RI=Real:"1" RJ=Real:"2"
+Out: EC=0 RX=CxMa:"M2,3[1i1,0i0,2i2,3i3,0i0,4i4]"
+Func: fnMimRowColCov
+In:  FARG=2 RX=CxMa:"M2,2[1i1,2i2,3i3,4i4]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=CxMa:"M2,3[0i0,1i1,2i2,0i0,3i3,4i4]"
+Func: fnMimRowColCov
+In:  FARG=3 RX=CxMa:"M2,2[1i1,2i2,3i3,4i4]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=CxMa:"M2,3[1i1,2i2,0i0,3i3,4i4,0i0]"
+Func: fnMimRowColCov
+In:  FARG=4 RX=CxMa:"M2,2[1i1,2i2,3i3,4i4]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=CxMa:"M1,2[3i3,4i4]"
+Func: fnMimRowColCov
+In:  FARG=5 RX=CxMa:"M2,2[1i1,2i2,3i3,4i4]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=CxMa:"M2,1[2i2,4i4]"
+
+; --- deleting a line other than the first ---
+Func: fnMimRowColCov
+In:  FARG=5 RX=CxMa:"M2,3[1i1,2i2,3i3,4i4,5i5,6i6]" RI=Real:"1" RJ=Real:"2"
+Out: EC=0 RX=CxMa:"M2,2[1i1,3i3,4i4,6i6]"
+Func: fnMimRowColCov
+In:  FARG=4 RX=CxMa:"M3,2[1i1,2i2,3i3,4i4,5i5,6i6]" RI=Real:"2" RJ=Real:"1"
+Out: EC=0 RX=CxMa:"M2,2[1i1,2i2,5i5,6i6]"
+
+; --- fnEditMatrix refuses a register holding no matrix ---
+Func: fnMimRowColCov
+In:  FARG=0 RX=Real:"7" RI=Real:"1" RJ=Real:"1"
+Out: EC=24 RX=Real:"7"
+
+; --- a fixture, not an assertion: hand I and J back as the real 0 they arrive
+; as, which programs.txt's SPIRAL reads as data ---
+Func: fnNop
+In:  RI=Real:"0" RJ=Real:"0"
+Out: EC=0

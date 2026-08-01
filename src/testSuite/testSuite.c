@@ -51,6 +51,7 @@ void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t which);
 void covCpxSolveRoot(uint16_t which);
 void covEqSolveDispatch(uint16_t which);
+void covMimRowCol(uint16_t op);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
@@ -158,6 +159,13 @@ const funcTest_t funcTestNoParam[] = {
   {"fnLastX",                fnLastX               },
   {"fnStoreStack",           fnStoreStack          },
   {"fnRecallStack",          fnRecallStack         },
+  // Vector store / recall. These index the matrix themselves - STOVEL/RCLVEL from the linear element number in FARG,
+  // Rnn>V / V>Rnn walking the whole matrix from the register in FARG - and park the walking index in the shadow row and
+  // column, so they need no INDEX and leave I, J and the indexed matrix as they found them.
+  // Matrix creation and dimensions (FARG = register number where one is taken).
+  // The two editor entries whose only corpus-reachable arm is the mode guard: both work in CM_MIM and refuse elsewhere, and the corpus is always elsewhere.
+  // The row and column operations, reached without the editor driver so the corpus takes the arm each one runs outside CM_MIM. fnGoToRow and fnGoToColumn take
+  // the line number in FARG.
   // Value/type predicates and small math ops.
   {"fnCheckType",            fnCheckType           },
   {"fnIse",                  fnIse                 },
@@ -239,6 +247,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnSolveRootCov",         covSolveRoot, 1 },
   {"fnCpxSolveRootCov",      covCpxSolveRoot, 1 },
   {"fnEqSolveDispatchCov",   covEqSolveDispatch, 1 },
+  {"fnMimRowColCov",         covMimRowCol, 1 },
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
@@ -992,6 +1001,43 @@ void covCpxSolveRoot(uint16_t which) {
   fnEqSolvGraph(EQ_CPXSOLVE);
   currentAngularMode = savedAngularMode;
 }
+
+// Put back the cursor a case states in I and J. fnEditMatrix and fnIndexMatrix both home it to (1,1). Both accessors take the 1-based value the user sees.
+static void covRestoreMatrixCursor(int16_t row, int16_t col) {
+  setIRegisterAsInt(false, row);
+  setJRegisterAsInt(false, col);
+}
+
+void covMimRowCol(uint16_t op) {
+  // Run one row or column operation of the matrix editor on the matrix in X and leave the result there. Each runs in CM_MIM only and ends in mimEnter(true).
+  // Read I and J before opening: ijIsShadowed() is calcMode == CM_MIM || ijShadowActive, so they address the registers here and the editor's shadow afterwards.
+  //   0 M.INSR   insert a row at the cursor row      3 M.COL+1  append a column last
+  //   1 M.ROW+1  append a row last                   4 M.DELR   delete the cursor row
+  //   2 M.INSC   insert a column at the cursor       5 M.DELC   delete the cursor column
+  const int16_t row = getIRegisterAsInt(false);
+  const int16_t col = getJRegisterAsInt(false);
+
+  fnEditMatrix(NOPARAM);
+  if(calcMode != CM_MIM) {
+    return; // Leave a refusal to the case: fnEditMatrix raises and stays out of CM_MIM, and the case asserts the code
+  }
+  covRestoreMatrixCursor(row, col);
+
+  switch(op) {
+    case 0:  fnInsRow(NOPARAM); break;
+    case 1:  fnAddRow(NOPARAM); break;
+    case 2:  fnInsCol(NOPARAM); break;
+    case 3:  fnAddCol(NOPARAM); break;
+    case 4:  fnDelRow(NOPARAM); break;
+    default: fnDelCol(NOPARAM); break;
+  }
+
+  // Close the editor the way fnKeyExit does in its CM_MIM branch (src/c47/keyboard.c), so no matrix stays open. mimEnter commits a digit buffer no case types
+  // into, and updateMatrixHeightCache is display state.
+  mimFinalize();
+  calcModeNormal();
+}
+
 
 void covEqSolveDispatch(uint16_t which) {
   // Drive the solve arms of fnEqSolvGraph (solver/graph.c) that EQ_CPXSOLVE does not reach. which selects the arm and the formula, and every root is exact:
