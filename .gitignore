@@ -25,7 +25,8 @@ c47.dat
 *.s47
 *.zip
 !docs/appnotes/sources/
-!docs/appnotes/sources/*.zip
+!docs/appnotes/sources/*.*
+!docs/appnotes/sources/*/*.*
 !xfnToC47user.s47
 !xfnToR47user.s47
 20*.REGS.TSV
