@@ -63,6 +63,7 @@ void covPolarDisplayCap(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
 void covDerivMvarPgm(uint16_t which);
 void covDerivAccPgm(uint16_t which);
+void covDerivUi(uint16_t which);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
 void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
@@ -254,6 +255,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDerivPgmCov",          covDerivPgm, 1 },
   {"fnDerivMvarPgmCov",      covDerivMvarPgm, 1 },
   {"fnDerivAccPgm",          covDerivAccPgm, 1 },
+  {"fnDerivUiCov",           covDerivUi, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
   {"fnIntegrateErrCov",      covIntegrateErr, 1 },
@@ -1807,10 +1809,13 @@ void covDerivAccPgm(uint16_t unusedButMandatoryParameter) {
   // do to the step: e^x is the smooth reference, ln and 1/x have exact rational derivatives at the points used, arcsin is taken beside the end of its domain
   // where a wide stencil samples outside it, tan is taken near its pole, sin is taken 159 periods out where a step relative to x spans many of them, and the
   // last is e^x lifted by 1E20, where the offset takes 21 of the 34 digits of every sample before they are differenced.
-  // Bytes: LBL name / function / RTN, then LBL name / derivative of a named label / RTN, and one END for the file.
+  // Each wrapper is the programmed form of the derivative: park the point the caller left in X in the variable zz, name the function with PGMDRV, then take the
+  // derivative with respect to zz. Bytes: LBL name / function / RTN for each function, then LBL name / STO zz / PGMDRV name / f' zz / RTN, and one END for the file.
   #define LBL2(a, b)   ITM_LBL, STRING_LABEL_VARIABLE, 2, (a), (b)
-  #define DER1(a, b)   (uint8_t)((ITM_FQX  >> 8) | 0x80), (uint8_t)(ITM_FQX  & 0xff), STRING_LABEL_VARIABLE, 2, (a), (b)
-  #define DER2(a, b)   (uint8_t)((ITM_FDQX >> 8) | 0x80), (uint8_t)(ITM_FDQX & 0xff), STRING_LABEL_VARIABLE, 2, (a), (b)
+  #define PGMD(a, b)   ITM_STO, STRING_LABEL_VARIABLE, 2, 'z', 'z',                                                                                                  \
+                       (uint8_t)((ITM_PGMDRV >> 8) | 0x80), (uint8_t)(ITM_PGMDRV & 0xff), STRING_LABEL_VARIABLE, 2, (a), (b)
+  #define DER1(a, b)   PGMD((a), (b)), (uint8_t)((ITM_F1DRV >> 8) | 0x80), (uint8_t)(ITM_F1DRV & 0xff), STRING_LABEL_VARIABLE, 2, 'z', 'z'
+  #define DER2(a, b)   PGMD((a), (b)), (uint8_t)((ITM_F2DRV >> 8) | 0x80), (uint8_t)(ITM_F2DRV & 0xff), STRING_LABEL_VARIABLE, 2, 'z', 'z'
   static const uint8_t pgmK[] = {
     LBL2('K', 'a'), ITM_EXP,    ITM_RTN,                                        // e^x
     LBL2('K', 'b'), ITM_LN,     ITM_RTN,                                        // ln x
@@ -1819,6 +1824,8 @@ void covDerivAccPgm(uint16_t unusedButMandatoryParameter) {
     LBL2('K', 'e'), ITM_tan,    ITM_RTN,                                        // tan x
     LBL2('K', 'f'), ITM_sin,    ITM_RTN,                                        // sin x
     LBL2('K', 'g'), ITM_EXP, ITM_LITERAL, STRING_REAL34, 4, '1', 'E', '2', '0', ITM_ADD, ITM_RTN,   // e^x + 1E20
+    LBL2('K', 'm'), (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 2, 'z', 'z',                                              \
+                    ITM_RCL, STRING_LABEL_VARIABLE, 2, 'z', 'z', ITM_ENTER, ITM_MULT, ITM_RTN,   // zz squared behind MVAR zz, the one fixture that declares one
     LBL2('X', 'a'), DER1('K', 'a'), ITM_RTN,
     LBL2('X', 'b'), DER1('K', 'b'), ITM_RTN,
     LBL2('X', 'c'), DER1('K', 'c'), ITM_RTN,
@@ -1833,13 +1840,48 @@ void covDerivAccPgm(uint16_t unusedButMandatoryParameter) {
     LBL2('Y', 'e'), DER2('K', 'e'), ITM_RTN,
     LBL2('Y', 'f'), DER2('K', 'f'), ITM_RTN,
     LBL2('Y', 'g'), DER2('K', 'g'), ITM_RTN,
+    LBL2('X', 'm'), DER1('K', 'm'), ITM_RTN,
+    LBL2('Y', 'm'), DER2('K', 'm'), ITM_RTN,
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
   };
   #undef LBL2
+  #undef PGMD
   #undef DER1
   #undef DER2
 
   covWriteAndLoadPgm(pgmK, sizeof(pgmK));
+}
+
+void covDerivUi(uint16_t which) {
+  // The keyboard route of the new f' and f": the operand is a program, which is named for the derivative and opens the MVAR menu on it. A program step cannot reach
+  // this, so it is driven here the way a key press would. which 1 and 2 are the two shapes of program, one that declares an MVAR and one that reads the stack; 3 is
+  // the action key the menu carries, which is what finishes either of them.
+  const calcRegister_t label = findNamedLabel(which == 2 ? "Ka" : "Km", GLOBAL_LABELS);
+
+  if(which == 3) {
+    fn1stDerivEq(NOPARAM);
+    return;
+  }
+  if(label == INVALID_VARIABLE) {
+    printf("\nUnknown global label: %s\n", which == 2 ? "Ka" : "Km");
+    abortTest();
+    return;
+  }
+  // A key press starts from an idle calculator. An earlier corpus can leave the solver status or either engine flag set, and the menu declines to open under any of
+  // them, which would leave the action key pointed at whatever program ran last. Assign rather than clear a bit, as covSolveRoot does for the same reason.
+  currentSolverStatus = 0;
+  clearSystemFlag(FLAG_SOLVING);
+  clearSystemFlag(FLAG_INTING);
+  fn1stDerivVar(label);
+  // The menu is open. Its variable key is what selects and stores the point, and no corpus can press it, so it is done here: the declaration for a program that has
+  // one, and nothing at all for a program that has none, which is the empty menu the action key then has to refuse.
+  if(which == 2) {
+    currentSolverVariable = INVALID_VARIABLE;
+  }
+  else {
+    currentSolverVariable = findOrAllocateNamedVariable("zz");
+    reallyRunFunction(ITM_STO, currentSolverVariable);
+  }
 }
 
 void covSolvePgm(uint16_t unusedButMandatoryParameter) {

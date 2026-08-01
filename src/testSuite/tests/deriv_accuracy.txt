@@ -170,3 +170,36 @@ Out: EC=0 RX=Real:"1576948.220797081858921262372054096"
 In:  FL_ASLIFT=1 AM=RAD RX=Real:"1.57" PGM="Ye"
 Out: EC=0 RX=Real:"3960554630.510421453562233721431568"
 ;Accurate          3960554630.5104214535622337208792578541457552341360740945271   15 points at x/10^6
+
+;=======================================================================================================================
+; The four routes into the new f' and f". Every case above is one of them, a program step on a function that declares no
+; MVAR, so the other three are here. Km is the one fixture that declares one, MVAR zz holding zz squared, and Xm and Ym
+; are its program-step wrappers. fnDerivUiCov drives the keyboard route, where the operand is a program rather than a
+; variable: FARG 1 and 2 hand f' a program, which names it for the derivative and opens the MVAR menu on it, and FARG 3
+; is the action key that menu carries.
+;=======================================================================================================================
+
+; a program step on a program that does declare an MVAR. d/dzz of zz squared at 5 is 10, and the second derivative is 2.
+In:  FL_ASLIFT=1 RX=Real:"5" PGM="Xm"
+Out: EC=0 RX=Real:"10"
+
+In:  FL_ASLIFT=1 RX=Real:"5" PGM="Ym"
+Out: EC=0 RX=Real:"2"
+
+Func: fnDerivUiCov
+
+; the keyboard route on a program that declares an MVAR: the menu opens on Km, the point in X goes into the declaration
+; the way the variable key would put it there, and the action key then differentiates with respect to it. 2 times 5.
+In:  FARG=1 RX=Real:"5"
+Out: EC=0
+
+In:  FARG=3
+Out: EC=0 RX=Real:"10"
+
+; the keyboard route on a program that declares none: the menu still opens, as SOLVE's does, but with no variable on it.
+; Pressing the action key then has nothing to differentiate against and says so, error 57.
+In:  FARG=2 RX=Real:"5"
+Out: EC=0
+
+In:  FARG=3
+Out: EC=57
