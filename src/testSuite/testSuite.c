@@ -985,7 +985,8 @@ void covCpxSolveRoot(uint16_t which) {
   const uint16_t var = findOrAllocateNamedVariable("X");
   currentSolverVariable = var;
   currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
-  // Restore the angular mode: the solve enters RAD and returns DEG. FLAG_CPXRES is clear on return and needs no restore.
+  // Restore the angular mode: complexSolver runs ITM_RAD and never puts it back, so the solve returns in RAD whatever mode it was called in. FLAG_CPXRES is set there
+  // too, but undo restores the system flags, so it is clear on return and needs no restore.
   const angularMode_t savedAngularMode = currentAngularMode;
   fnEqSolvGraph(EQ_CPXSOLVE);
   currentAngularMode = savedAngularMode;
