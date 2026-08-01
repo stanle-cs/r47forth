@@ -163,7 +163,15 @@ const funcTest_t funcTestNoParam[] = {
   // Vector store / recall. These index the matrix themselves - STOVEL/RCLVEL from the linear element number in FARG,
   // Rnn>V / V>Rnn walking the whole matrix from the register in FARG - and park the walking index in the shadow row and
   // column, so they need no INDEX and leave I, J and the indexed matrix as they found them.
+  {"fnStoreVElement",        fnStoreVElement       },
+  {"fnRecallVElement",       fnRecallVElement      },
+  {"fnStoreVector",          fnStoreVector         },
+  {"fnRecallVector",         fnRecallVector        },
   // Matrix creation and dimensions (FARG = register number where one is taken).
+  {"fnNewMatrix",            fnNewMatrix           },
+  {"fnGetMatrixDimensions",  fnGetMatrixDimensions },
+  {"fnGetMatrixDimensions42", fnGetMatrixDimensions42},
+  {"fnSetMatrixDimensionsGr", fnSetMatrixDimensionsGr},
   // M.GROW and M.WRAP are this one function, the flag arriving as the parameter: ON from M.GROW, OFF from M.WRAP.
   {"fnSetGrowMode",          fnSetGrowMode         },
   // The two editor entries whose only corpus-reachable arm is the mode guard: both work in CM_MIM and refuse elsewhere, and the corpus is always elsewhere.
