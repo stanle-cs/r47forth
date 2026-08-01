@@ -1693,10 +1693,13 @@ void covDerivAccPgm(uint16_t unusedButMandatoryParameter) {
   // do to the step: e^x is the smooth reference, ln and 1/x have exact rational derivatives at the points used, arcsin is taken beside the end of its domain
   // where a wide stencil samples outside it, tan is taken near its pole, sin is taken 159 periods out where a step relative to x spans many of them, and the
   // last is e^x lifted by 1E20, where the offset takes 21 of the 34 digits of every sample before they are differenced.
-  // Bytes: LBL name / function / RTN, then LBL name / derivative of a named label / RTN, and one END for the file.
+  // Each wrapper is the programmed form of the derivative: park the point the caller left in X in the variable zz, name the function with PGMDRV, then take the
+  // derivative with respect to zz. Bytes: LBL name / function / RTN for each function, then LBL name / STO zz / PGMDRV name / f' zz / RTN, and one END for the file.
   #define LBL2(a, b)   ITM_LBL, STRING_LABEL_VARIABLE, 2, (a), (b)
-  #define DER1(a, b)   (uint8_t)((ITM_FQX  >> 8) | 0x80), (uint8_t)(ITM_FQX  & 0xff), STRING_LABEL_VARIABLE, 2, (a), (b)
-  #define DER2(a, b)   (uint8_t)((ITM_FDQX >> 8) | 0x80), (uint8_t)(ITM_FDQX & 0xff), STRING_LABEL_VARIABLE, 2, (a), (b)
+  #define PGMD(a, b)   ITM_STO, STRING_LABEL_VARIABLE, 2, 'z', 'z',                                                                                                  \
+                       (uint8_t)((ITM_PGMDRV >> 8) | 0x80), (uint8_t)(ITM_PGMDRV & 0xff), STRING_LABEL_VARIABLE, 2, (a), (b)
+  #define DER1(a, b)   PGMD((a), (b)), (uint8_t)((ITM_F1DRV >> 8) | 0x80), (uint8_t)(ITM_F1DRV & 0xff), STRING_LABEL_VARIABLE, 2, 'z', 'z'
+  #define DER2(a, b)   PGMD((a), (b)), (uint8_t)((ITM_F2DRV >> 8) | 0x80), (uint8_t)(ITM_F2DRV & 0xff), STRING_LABEL_VARIABLE, 2, 'z', 'z'
   static const uint8_t pgmK[] = {
     LBL2('K', 'a'), ITM_EXP,    ITM_RTN,                                        // e^x
     LBL2('K', 'b'), ITM_LN,     ITM_RTN,                                        // ln x
@@ -1722,6 +1725,7 @@ void covDerivAccPgm(uint16_t unusedButMandatoryParameter) {
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
   };
   #undef LBL2
+  #undef PGMD
   #undef DER1
   #undef DER2
 

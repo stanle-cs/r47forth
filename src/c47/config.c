@@ -1893,6 +1893,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
 
     currentSolverStatus = 0;
     currentSolverProgram = 0xffffu;
+    currentDerivProgram = 0xffffu;
     currentSolverVariable = INVALID_VARIABLE;
     currentSolverNestingDepth = 0;
     engineNestingDepth = 0;

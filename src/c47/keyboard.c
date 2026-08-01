@@ -1986,7 +1986,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
       for(int i=0; i<43; i++) {
         xMin = calcKeyboard[i].x;
         yMin = calcKeyboard[i].y;
-        if(i == 10 && currentBezel == 2 && (tam.mode == TM_LABEL || tam.mode == TM_LBLONLY || (tam.mode == TM_SOLVE && (tam.function != ITM_SOLVE || calcMode != CM_PEM)) || (tam.mode == TM_KEY && tam.keyInputFinished))) {
+        if(i == 10 && currentBezel == 2 && (tam.mode == TM_LABEL || tam.mode == TM_LBLONLY || (tam.mode == TM_SOLVE && ((tam.function != ITM_SOLVE && tam.function != ITM_F1DRV && tam.function != ITM_F2DRV) || calcMode != CM_PEM)) || (tam.mode == TM_KEY && tam.keyInputFinished))) {
           xMax = xMin + calcKeyboard[10].width[3];
           yMax = yMin + calcKeyboard[10].height[3];
         }
