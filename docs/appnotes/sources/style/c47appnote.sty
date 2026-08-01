@@ -296,6 +296,19 @@
   \tikz{\node[draw=keyink!55, line width=0.5pt, rounded corners=1pt, fill=lcdbg,
   inner xsep=7pt, inner ysep=5pt, font=\ttfamily\footnotesize, align=left] {#1};}\par\smallskip}
 
+% \begin{keying} \step{keys}{what they accomplish} ... \end{keying}
+% A keystroke sequence too long to read as prose: one action per row, the keys on the left, what
+% they accomplish on the right. \keys stays right for a few keystrokes inside a sentence; this
+% block is for keying in a whole program or a long setup, where inline keycaps clutter the
+% paragraph. The right column is set small and soft so the keys stay the thing being read.
+\newenvironment{keying}{%
+  \par\medskip\needspace{3\baselineskip}\noindent\hspace*{1.2em}%
+  \begin{minipage}{\dimexpr\linewidth-1.2em\relax}
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.46\linewidth}@{\hspace{1em}}>{\raggedright\arraybackslash}p{0.48\linewidth}@{}}
+}{%
+  \end{tabular}\end{minipage}\par\medskip}
+\newcommand{\step}[2]{#1 & {\color{soft}\small #2} \\[3pt]}
+
 % ---------------------------------------------------------------------------------------------------
 % Screen captures
 %
