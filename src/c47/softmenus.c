@@ -2868,16 +2868,12 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_EE_STO_V_Z :
       case ITM_EE_STO_V_I :
       case ITM_EE_X2BAL   :
-      case ITM_EE_RCL_V   :
-      case ITM_EE_RCL_I   :
-      case ITM_EE_RCL_Z   :
       case ITM_EE_Y2D     :
       case ITM_EE_D2Y     :
-      case ITM_EE_STO_V   :
-      case ITM_EE_STO_I   :
-      case ITM_EE_STO_Z   :
       case ITM_EE_A2S     :
       case ITM_EE_S2A     :
+      case ITM_3R3P       :
+  //  ITM_EE_RCL_V/I/Z and ITM_EE_STO_V/I/Z stay live: they run fn3Rcl and fn3Sto, which carry no gate and are needed by the X.FN and stack menus
     #endif // !OPTION_ELEC
 
 
