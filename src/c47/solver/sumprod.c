@@ -51,8 +51,27 @@
   }
 
 
-  static void _programmableSumProd(uint16_t label, bool_t prod) {
+  // Early abort, reached through the infinity sum only: the passes still to come cannot reach the
+  // last digit of the answer, so the run stops. Real sums only.
+  #define EARLY_ABORT_WATCH_FROM  10   //first iteration whose term is judged; anything before it is ignored
+  #define EARLY_ABORT_NOT_BEFORE  50   //earliest iteration a run may stop on
+  #define EARLY_ABORT_IN_COMPLEX  false//the test needs a magnitude, so a complex run counts to the end
+
+  #define SUMMING     false            //what _checkArgument and _programmableSumProd do with each term
+  #define MULTIPLYING true
+  #define RUNALL      NULL             //no early stop state, so every iteration the caller asked for
+
+  typedef struct {                     //only the infinity sum carries this, on its own frame
+    real_t   previousTerm, term, remaining, allowance, scale;
+    bool_t   haveTerm, falling;
+    uint32_t pass;
+  } earlyAbort_t;
+
+
+  static void _programmableSumProd(uint16_t label, bool_t prod, earlyAbort_t *early) {
     currentKeyCode = 255;
+    const bool_t  inf = (early != NULL);
+    const bool_t  cpxAllowed = getFlag(FLAG_CPXRES);        //read once: the term program itself can set CPXRES
     int32_t       loop = 0;
     int16_t       finished = 0;
     real_t        resultX, resultXi, resultR, resultRi;
@@ -95,6 +114,15 @@
       ++currentSolverNestingDepth;
       setSystemFlag(FLAG_SOLVING);
 
+      if(inf) {
+        realSetZero(&early->previousTerm);
+        early->haveTerm = false;
+        early->falling  = true;
+        early->pass     = 0;
+        int32ToReal(significantDigits == 0 ? 34 : significantDigits, &early->scale);
+        realPower(const_10, &early->scale, &early->scale, &ctxtReal75);       //10^SDIGS, fixed for the run
+      }
+
       while(lastErrorCode == ERROR_NONE) {
 
         loop--;
@@ -124,8 +152,22 @@
           break;
         }
 
-        if(getFlag(FLAG_CPXRES) && (getRegisterDataType(REGISTER_X) == dtComplex34 || !realIsZero(&resultRi))) {
+        if(getRegisterDataType(REGISTER_X) == dtComplex34 || !realIsZero(&resultRi)) {
+          if(cpxAllowed) {
             changedOverToComplex = true;     //Only latch over to complex operation if CPXRES is true, as well as either sum or new f(n) is complex
+          }
+          else {
+            displayCalcErrorMessage(ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN, ERR_REGISTER_LINE, REGISTER_X);
+            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+              sprintf(errorMessage, "f(n) returned a complex value while flag I is not set!");
+              moreInfoOnError("In function _programmableSumProd:", errorMessage, NULL, NULL);
+            #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+            break;
+          }
+        }
+
+        if(inf && early->pass < UINT32_MAX) {               //counted for the complex branch too, and saturates
+          early->pass++;
         }
 
         if(!changedOverToComplex) {
@@ -139,9 +181,35 @@
           }
           else {
             realAdd(&resultR, &resultX, &resultR, &ctxtReal75);
+            if(inf) {
+              realCopy(&resultX, &early->term);             //the term itself, which outlives a saturated total
+              realSetPositiveSign(&early->term);
+              if(!realIsZero(&early->term)) {               //a term of zero says nothing about the terms after it
+                if(early->haveTerm && early->pass >= EARLY_ABORT_WATCH_FROM
+                                   && realCompareGreaterThan(&early->term, &early->previousTerm)) {
+                  early->falling = false;                   //one rise after the watch point disqualifies the run
+                }
+                if(early->falling && early->pass >= EARLY_ABORT_NOT_BEFORE) {
+                  real34Subtract(&loopTo, &counter, &rLoop);             //iterations still to come, no integer count
+                  if(!real34IsZero(&loopStep)) {
+                    real34Divide(&rLoop, &loopStep, &rLoop);
+                  }
+                  real34ToReal(&rLoop, &early->remaining);
+                  realSetPositiveSign(&early->remaining);
+                  realDivide(&resultR, &early->scale, &early->allowance, &ctxtReal75);  //one last digit of the answer
+                  realSetPositiveSign(&early->allowance);
+                  realDivide(&early->allowance, &early->term, &early->allowance, &ctxtReal75); //iterations it is worth
+                  if(realCompareLessThan(&early->remaining, &early->allowance)) {
+                    break;
+                  }
+                }
+                realCopy(&early->term, &early->previousTerm);
+                early->haveTerm = true;
+              }
+            }
           }
         }
-        else { //dtComplex34
+        else { //dtComplex34, and EARLY_ABORT_IN_COMPLEX is false, so this branch always runs the full count
           real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), &resultX);  //Result accumulated
           real34ToReal(REGISTER_IMAG34_DATA(REGISTER_X), &resultXi); //Result accumulated
           if(prod) {
@@ -178,6 +246,13 @@
 
 
       if(lastErrorCode == ERROR_NONE) {
+        if(inf) {                                           //iterations actually run, so a short run is visible
+          longInteger_t iPass;
+          longIntegerInit(iPass);
+          uInt32ToLongInteger(early->pass, iPass);
+          convertLongIntegerToLongIntegerRegister(iPass, REGISTER_Y);
+          longIntegerFree(iPass);
+        }
         if(!changedOverToComplex) {
           if(getRegisterDataType(REGISTER_X) != dtReal34) {
             reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
@@ -214,9 +289,9 @@
 
 
 
-  static void _checkArgument(uint16_t label, bool_t prod) {
+  static void _checkArgument(uint16_t label, bool_t prod, earlyAbort_t *early) {
     if(FIRST_LABEL <= label && label <= LAST_LABEL) {
-      _programmableSumProd(label, prod);
+      _programmableSumProd(label, prod, early);
     }
     else if(REGISTER_X <= label && label <= REGISTER_T) {
       // Interactive mode
@@ -232,7 +307,7 @@
         #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
       }
       else {
-        _programmableSumProd(label, prod);
+        _programmableSumProd(label, prod, early);
       }
     }
     else {
@@ -245,9 +320,14 @@
   }
 
 void fnProgrammableSum(uint16_t label) {
-  _checkArgument(label, false);
+  _checkArgument(label, SUMMING, RUNALL);
+}
+
+void fnProgrammableSumInf(uint16_t label) {
+  earlyAbort_t earlyAbort;                                  //this frame carries the early stop state
+  _checkArgument(label, SUMMING, &earlyAbort);
 }
 
 void fnProgrammableProduct(uint16_t label) {
-  _checkArgument(label, true);
+  _checkArgument(label, MULTIPLYING, RUNALL);
 }

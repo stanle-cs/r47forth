@@ -1,0 +1,246 @@
+% SPDX-License-Identifier: GFDL-1.3-or-later
+% Copyright The WP43 and C47 Authors
+%
+% AN0005 -- Programmed sums: whether the counting direction changes the answer.
+% Compiled with lualatex. Build from this directory with:
+%
+%   TEXINPUTS=../style: lualatex AN-0005-C47-R47-Application-Note-2026-08-02-JM-programmed-sums_rev1.ltx
+%
+% Run it twice so the page count and the cross references settle.
+
+\documentclass[canadian]{article}
+\usepackage{c47appnote}
+
+\notenumber{005}
+\noteshorttitle{Programmed sums: infinity?}
+\notedate{2026-08-02}
+\notetitle{Programmed sums to infinity?}
+
+% red bold for a single character the prose points at, in the shared palette's warnink
+\newcommand{\redb}[1]{\textcolor{warnink}{\textbf{#1}}}
+
+\begin{document}
+
+\notehead
+
+    A reader wrote in with two points about the programmed sums. First, that a sum whose terms get smaller, such as $1/i^2$, should be added from the
+    last term to the first, so the small ones are not lost in a large running total. Second, a statement or maybe question that stopping when the total stops changing is not safe.
+    On most calculators the first point is right.
+
+    On the C47/R47, for most series's the sequence changes nothing, as long as \cmd{Σₙ} does the adding. It matters as soon as your own program keeps the
+    running total.
+
+    Section \ref{stopping} answers the second point. A new function came out of it.
+
+\begin{revisions}
+    \revision{0.1}{2026-08-02}{JM. First issue.}
+\end{revisions}
+
+% ===================================================================================================
+\section{Why the direction makes no difference}
+\label{why}
+
+    A register holds 34 digits. The running total inside \cmd{Σₙ} holds 75. Your program is handed the counter, works out one term and leaves it in
+    \reg{X}. The engine takes it from there and adds it to that 75 digit total (spoiler, this is the secret). Your program never sees the total. Only the finished answer comes back
+    to a register, rounded to the 34 digits a register holds.
+
+    Forty one spare digits sit under the answer while the sum runs, so no term can be lost in the total, however small it has become (realistically) and in whatever
+    order the terms arrive. Adding the small ones first would protect digits that were never at risk, the 41 that you never see.
+
+    Using \cmd{iΣₙ} loses no digits either. Long integers are exact at any size, up to the 1000 digit limit.
+
+    The direction of counting is determined by the start, end and step parameters: \cmd{Σₙ} starts at \reg{Z}, steps by \reg{X} and stops at \reg{Y}, so counting down is a larger start, a smaller
+    finish and a negative step. The engine reorders nothing.
+
+% ===================================================================================================
+\section{When it does matter}
+\label{matters}
+
+    The other way to do a sum is to manually add the term to a variable yourself, in a loop or within the term program, with \cmd{RCL}, \cmd{+} and
+    \cmd{STO}. People do that to watch the total build, to stop on a condition, or to use the interim values. The running total is then an ordinary register of 34 digits, or shorter
+    if \cmd{SDIGS} has been reduced, and the 75 digit total of Section \ref{why} is not involved.
+
+    \begin{ntable}{@{}l l l@{}}{Sum of $1/n^2$ for $n = 1$ to $10000$. The four sums ran at \cmd{SDIGS} 7; the true value is given in full.}{tab:results}
+        \hd{} & \hd{How the sum was made} & \hd{Result} \\ \midrule
+        a. & True value                      & 1.644834071848059769806081833310311 \\
+        \addlinespace
+        b. & \cmd{Σₙ}, counting up           & 1.644834 \\
+        c. & \cmd{Σₙ}, counting down         & 1.644834 \\
+        d. & \cmd{+} into a variable, up     & 1.644332 \\
+        e. & \cmd{+} into a variable, down   & 1.644834 \\
+    \end{ntable}
+
+    The adding internally, at 34 digits, against externally, at 75, is illustrated in Table \ref{tab:results}. The \cmd{Σₙ} examples agree with each
+    other and with the rounded true value to every digit they show. The manual \cmd{+} lines do not agree with each other: counting up gives $1.644332$, wrong
+    in the fourth decimal, counting down gives $1.644834$, right.
+
+    \subsection{Why the upward \cmd{+} line is wrong}
+
+    Consider one term's addition in the \cmd{+} up count, line (d) above. The counter has reached $n = 2000$, so the term is $1/2000^2$, and the running
+    total has grown to about $1.644834$.
+
+    \begin{ntable}{@{}l l l@{}}{The term at $n = 2000$ added to the running total of the upward sum, at \cmd{SDIGS} 7.}{tab:up}
+        \hd{} & \hd{Value} & \hd{} \\ \midrule
+        running total       & 1.644834    & seven digits, so the last one is worth 0.000001 \\
+        the term at 2000    & 0.00000025  & smaller than that last digit \\
+        \cmd{+} gives back  & 1.644834    & the term is gone \\
+    \end{ntable}
+
+    Every term from $n = 1414$ onwards is smaller than the last digit of that total, so the upward sum spends its final eight and a half thousand
+    iterations adding nothing. Those lost terms are worth $0.0005$ between them, which is the gap between the fourth line and the true value.
+
+    \subsection{Why counting down saves it}
+
+    Now the same term in line (e) above. Counting down, $n = 2000$ comes near the end of the run, and the running total holds only the terms from
+    $10000$ down to $2001$, so it is still small.
+
+    \begin{ntable}{@{}l l l@{}}{The same term at $n = 2000$ added to the running total of the downward sum, at \cmd{SDIGS} 7.}{tab:down}
+        \hd{} & \hd{Value} & \hd{} \\ \midrule
+        running total       & 0.0003998800 & seven digits, so the last one is worth 0.0000000001 \\
+        the term at 2000    & 0.00000025   & two thousand times larger than that last digit \\
+        \cmd{+} gives back  & 0.0004001300 & the term is in, with room to spare \\
+    \end{ntable}
+
+    Seven digits are counted from the first digit that is not zero, not from the decimal point. A small total carries its seven digits further to the
+    right, so it can still take a small term. The large terms arrive last, when the total has grown to meet them, and by then every small one is
+    already inside it. That is the letter's first point, and on this route it holds.
+
+    \subsection{Why the \cmd{Σₙ} lines were never at risk}
+
+    Lines (b) and (c) are correct to all seven digits they show, and \cmd{SDIGS} 7 is rounding just as hard there. It rounds in different
+    places. Each term is rounded to seven digits on its way out of your program, and the finished answer is rounded to seven on its way back to
+    \reg{X}. The additions in between are not rounded at all.
+
+    Put numbers on it. Say your program hands the engine $f(n) = 9.8 \times 10^{35}$ on one iteration and $f(n+1) = 1.2 \times 10^{-35}$ on the next.
+    Written out, the total is
+
+    \prog{\ \ 9.8E35\\+ 1.2E-35\\= \redb{9}80000000000000000000000000000000000.00000000000000000000000000000000001\redb{2}}
+
+    which runs 72 digits from that first \redb{9} to that last \redb{2}. The engine holds 75, so both terms are in the total, whole and unrounded. A
+    register could not have taken it: at 34 digits the small term falls off the end and is gone.
+
+    That is where the limit sits, and you can find it before writing the program. Take the largest total the run will reach, and the smallest term it
+    will ever add. If $\log_{10}$ of the one divided by the other comes out above 75, terms are being lost inside the engine, and you should do the
+    adding yourself in rising order of size: the smallest $f(n)$ first, which for a series that dies away means starting at the largest $n$.
+
+    The 75 digits give you no more digits in the answer, since the answer is a register and \cmd{SDIGS} has the last word on it. What they do is stop
+    the ten thousand additions in between from costing you anything.
+
+% ===================================================================================================
+\section{Stopping early, safely}
+\label{stopping}
+
+    Adding terms until the total stops changing looks like a safe rule but is not always safe. The terms that no longer move the total are still worth something
+    between them.
+
+    Section \ref{matters} has already shown it happening. In the upward \cmd{+} sum at \cmd{SDIGS} 7 the total stopped changing at $n = 1414$, and the
+    eight and a half thousand terms after that were worth $0.0005$ together, five hundred times the last digit that had still been moving. A rule
+    watching the total would have stopped there and been wrong in the fourth decimal.
+
+    \cmd{Σₙ} carries no such rule. It counts from \reg{Z} to \reg{Y} in steps of \reg{X} and stops when the count is done, and it stays that way.
+
+    Such a function in C47/R47 did not exist and was created for this interesting typical case. \cmd{∞Σₙ} takes the same three numbers and the same program as
+    \cmd{Σₙ}, and counts the same way, but stops when it deems further change to be unachievable. The test is short,
+    because the run is finite. Write $m$ for the iteration just done, $N$ for the last iteration the run would make, $f(m)$ for the term that
+    iteration added, and $\Sigma(m)$ for the total after it. The run stops when both of these hold:
+
+    \begin{equation}
+        \bigl| f(m) \bigr| < \bigl| f(m-1) \bigr|
+        \label{eq:falling}
+    \end{equation}
+    \begin{equation}
+        \bigl| f(m) \bigr| \times (N - m) < \frac{\bigl| \Sigma(m) \bigr|}{10^{\mathrm{SDIGS}}}
+        \label{eq:bound}
+    \end{equation}
+
+    with two arbitrary limits defined in firmware:
+
+    \begin{equation}
+        \mathrm{Ignore\ initial\ settling:}\quad m \ge 10
+        \label{eq:watch}
+    \end{equation}
+    \begin{equation}
+        \mathrm{Only\ when\ diminishing:}\quad m \ge 50
+        \label{eq:earliest}
+    \end{equation}
+
+    Formula \ref{eq:falling} has to hold at every iteration, not merely at the one in hand, and it is judged only from the iteration given by Formula
+    \ref{eq:watch}. From the tenth iteration on, any increase in the term disqualifies the early stop. Formula \ref{eq:bound} monitors the possible
+    rise. A term of exactly zero is skipped instead: it says nothing about the terms after it, so a function with a root at a whole number keeps
+    counting.
+
+    Essentially, nothing left in the run is deemed capable of changing the current sum, so the programmed sum can stop at $m$. \cmd{∞Σₙ} leaves the
+    number of iterations it ran in \reg{Y}, so a run that stopped early and one that counted to the end can be told apart. A complex sum always
+    counts to the end and \reg{Y} says so: the test needs the size of a term, and the size of a complex number is not free.
+
+    Formula \ref{eq:earliest} forces a measure of certainty that the run's terms are diminishing enough to deem future convergence, provided it diminishes until below the threshold. Note that it is
+    deemed, which means it could be wrong. The C47/R47 has no crystal ball. The machine bets that the unseen tail of the function keeps
+    diminishing, enough that it could not add the difference. That is a lot of words saying it guesses the tail will die out. It remains the user's
+    choice whether to use the normal \cmd{Σₙ} or the \cmd{∞Σₙ} version.
+
+    \begin{ntable}{@{}l l l l l@{}}{Six runs of \cmd{∞Σₙ}, each asked for ten thousand iterations. Every answer is identical to the one \cmd{Σₙ} gives for the same run.}{tab:abort}
+        \hd{} & \hd{Series} & \hd{SDIGS} & \hd{Iterations} & \hd{Answer} \\ \midrule
+        p. & $1/(n-1)!$, giving $e$ & 34 & 50    & 2.718281828459045235360287471352663 \\
+        q. & $n^2/2^n$              & 34 & 138   & 6 \\
+        \addlinespace
+        r. & $1/n^2$                & 34 & 10000 & 1.644834071848059769806081833310311 \\
+        s. & $1/n^2$                & 7  & 9984  & 1.644834 \\
+        t. & $1/n$                  & 7  & 10000 & 9.787606 \\
+        u. & $n^2/1.1^n$            & 34 & 10000 & 2310 \\
+    \end{ntable}
+
+    The factorial series (p) completes at the fiftieth iteration, the earliest it may stop, and $n^2/2^n$ (q) at the hundred and thirty eighth iteration.
+    Both (p) and (q) grow a bit before they fall, and $n^2/2^n$ (q) peaks at its third term, which is before the watch point being 10.
+
+    The four rows (r) to (u) show the rule declining to stop, each for its own reason. At 34 digits the $1/n^2$ series (r, s) never satisfies Formula
+    \ref{eq:bound}: its terms fall as $1/m^2$ while the iterations left fall only as $N - m$, so the product stays above the last digit of the total until
+    the count runs out. At seven digits (s) the same product crosses the line at $m = 9984$ and the last sixteen iterations are dropped. The harmonic
+    series (t) fails that test more heavily still, its terms falling only as $1/m$. And $n^2/1.1^n$ (u) fails Formula \ref{eq:falling} instead: it
+    climbs until about its twenty first iteration, which is after the watch point, so the run is disqualified and counts to the end even though it decays
+    steadily from there.
+
+% ===================================================================================================
+\section{A typical program}
+
+    Every sum in Table \ref{tab:results} was made with the program below, which is in \file{programs/sums.p47}. It is the sum of that table: $1/n^2$
+    for $n = 1$ to $10000$.
+
+    \cmd{FSQ} is the term. The engine calls it once per count with $n$ in \reg{X}, and it leaves $1/n^2$ there for the engine to collect. \cmd{EUP} is
+    the run: the three numbers, then the engine, naming \cmd{FSQ} as the term to call.
+
+    \prog{LBL 'FSQ'\\\ \ 1/𝑥\\\ \ 𝑥²\\RTN\\\\LBL 'EUP'\\\ \ 1\\\ \ 10000\\\ \ 1\\\ \ Σₙ 'FSQ'\\RTN}
+
+    From the keyboard it is the same three numbers, then \cmd{Σₙ} on the second soft key of \fkey{ADV}, then the program name at the prompt. Read the
+    line as: from 1, to 10000, in steps of 1, do the sum.
+
+    \keys{\key{1}\quad\key{ENTER}\quad\key{1}\key{0}\key{0}\key{0}\key{0}\quad\key{ENTER}\quad\key{1}\quad\fkey{ADV}\quad\mkey{Σₙ}\quad\vr{FSQ}}
+
+    Counting down is the same three numbers the other way about, with the step made negative:
+
+    \keys{\key{1}\key{0}\key{0}\key{0}\key{0}\quad\key{ENTER}\quad\key{1}\quad\key{ENTER}\quad\key{1}\quad\key{CHS}\quad\fkey{ADV}\quad\mkey{Σₙ}\quad\vr{FSQ}}
+
+    The two \cmd{+} lines of Table \ref{tab:results} came from the same program with the end of \cmd{FSQ} changed. Instead of leaving the term for the
+    engine, it adds the term to a variable of its own and hands the engine a zero, so the running total is \vr{SS} and the engine's 75 digits are
+    never used:
+
+    \prog{LBL 'CSQ'\\\ \ 1/𝑥\\\ \ 𝑥²\\\ \ RCL 'SS'\\\ \ +\\\ \ STO 'SS'\\\ \ 0\\RTN}
+
+    The \cmd{CSQ} term program is a hack, using the looping of \cmd{Σₙ} but a register for every addition. It is not the usual way to write a sum. It
+    is here to illustrate the loss of digits in a 34 digit run.
+
+    Clear \vr{SS} before the run and read it afterwards. This is the version whose counting direction matters.
+
+% ===================================================================================================
+\section{In summary}
+
+    \begin{itemize}
+        \item Let \cmd{Σₙ} do the adding using a programmed sum, not a manual \cmd{STO+} or similar.
+        \item \cmd{Σₙ} never stops early. Positive and negative count directions are both possible, both with fixed terms.
+        \item \cmd{∞Σₙ} stops as soon as it is deemed the last digit cannot change any more, and counts up or down as \cmd{Σₙ} above.
+    \end{itemize}
+
+\colophon{00.109.04.00b0}
+
+\authorblock{Jaco Mostert}{}{}
+
+\end{document}
