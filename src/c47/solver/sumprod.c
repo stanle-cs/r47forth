@@ -53,6 +53,7 @@
 
   static void _programmableSumProd(uint16_t label, bool_t prod) {
     currentKeyCode = 255;
+    const bool_t  cpxAllowed = getFlag(FLAG_CPXRES);        //read once: the term program itself can set CPXRES
     int32_t       loop = 0;
     int16_t       finished = 0;
     real_t        resultX, resultXi, resultR, resultRi;
@@ -124,8 +125,19 @@
           break;
         }
 
-        if(getFlag(FLAG_CPXRES) && (getRegisterDataType(REGISTER_X) == dtComplex34 || !realIsZero(&resultRi))) {
+        if(getRegisterDataType(REGISTER_X) == dtComplex34 || !realIsZero(&resultRi)) {
+          if(cpxAllowed) {
             changedOverToComplex = true;     //Only latch over to complex operation if CPXRES is true, as well as either sum or new f(n) is complex
+          }
+          else {
+            displayCalcErrorMessage(ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN, ERR_REGISTER_LINE, REGISTER_X);
+            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+              sprintf(errorMessage, "f(n) returned a complex value while flag I is not set!");
+              moreInfoOnError("In function _programmableSumProd:", errorMessage, NULL, NULL);
+            #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+            break;
+          }
+        }
         }
 
         if(!changedOverToComplex) {
