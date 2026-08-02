@@ -1364,8 +1364,6 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnIntegrate                 (uint16_t unusedButMandatoryParameter) {}
   void fnIntegrateYX               (uint16_t unusedButMandatoryParameter) {}
   void fnIntVar                    (uint16_t unusedButMandatoryParameter) {}
-  void fn1stDeriv                  (uint16_t unusedButMandatoryParameter) {}
-  void fn2ndDeriv                  (uint16_t unusedButMandatoryParameter) {}
   void fnPgmDrv                    (uint16_t unusedButMandatoryParameter) {}
   void fn1stDerivVar               (uint16_t unusedButMandatoryParameter) {}
   void fn2ndDerivVar               (uint16_t unusedButMandatoryParameter) {}
@@ -3303,8 +3301,8 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 1472 */  { fnFib,                           NOPARAM,                     "FIB",                                         "FIB",                                         (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_ENABLED  | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /* 1473 */  { fnDisplayFormatFix,              TM_VALUE,                    "FIX",                                         "FIX",                                         (0 << TAM_MAX_BITS) |DSP_MAX, CAT_FNCT| SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NUMBER_8     | HG_ENABLED         },
 /* 1474 */  { fnDiskInfo,                      NOPARAM,                     "DISK",                                        "DISK",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
-/* 1475 */  { fn1stDeriv,                      TM_LBLONLY,                  ">f'(x)<",                                     ">f'(x)<",                                     (0 << TAM_MAX_BITS) |    99, CAT_NONE | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },//Old item, replaced by f' 2883
-/* 1476 */  { fn2ndDeriv,                      TM_LBLONLY,                  ">f\"(x)<",                                    ">f\"(x)<",                                    (0 << TAM_MAX_BITS) |    99, CAT_NONE | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },//Old item, replaced by f\" 2884
+/* 1475 */  { fnOldItemError,                  NOPARAM,                     ">f'(x)<",                                     ">f'(x)<",                                     (0 << TAM_MAX_BITS) |    99, CAT_NONE | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },//Old item, replaced by f' 2883
+/* 1476 */  { fnOldItemError,                  NOPARAM,                     ">f\"(x)<",                                    ">f\"(x)<",                                    (0 << TAM_MAX_BITS) |    99, CAT_NONE | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },//Old item, replaced by f\" 2884
 /* 1477 */  { fnPrimeFactors,                  NOPARAM,                     "FACTORS",                                     "FACTORS",                                     (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /* 1478 */  { fnGd,                            NOPARAM,                     "g" STD_SUB_d,                                 "g" STD_SUB_d,                                 (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_ENABLED  | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /* 1479 */  { fnInvGd,                         NOPARAM,                     "g" STD_D_MINUS1,                              "g" STD_D_MINUS1,                              (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_ENABLED  | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
