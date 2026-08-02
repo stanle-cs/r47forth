@@ -1036,13 +1036,13 @@ void covEqSolveDispatch(uint16_t which) {
 }
 
 void covDerivErr(uint16_t which) {
-  // Drive the error/dispatch branches of the program-based derivative entry (derivativeCommon in differentiate.c), which the formula path covDerivEq does not reach.
+  // Drive the error/dispatch branches of the program-based derivative entry (derivativeVariable in differentiate.c), which the formula path covDerivEq does not reach.
   // which=0: a stack register whose letter names no program label -> ERROR_LABEL_NOT_FOUND; otherwise an out-of-range parameter -> ERROR_OUT_OF_RANGE.
   if(which == 0) {
-    fn1stDeriv(REGISTER_T);            // letter 'T' names no program label
+    fn1stDerivVar(REGISTER_T);               // letter 'T' names no program label
   }
   else {
-    fn1stDeriv(FIRST_NAMED_VARIABLE);  // outside [FIRST_LABEL,LAST_LABEL] and [X,T]
+    fn1stDerivVar(FIRST_RESERVED_VARIABLE);  // outside [FIRST_LABEL,LAST_LABEL], [X,T] and the named variables
   }
 }
 
@@ -1682,8 +1682,9 @@ void covProgramFlow(uint16_t which) {
 }
 
 void covDerivPgm(uint16_t order) {
-  // Program-based derivative: differentiate the loaded program S (f(X)=X^2-4) at the point in X through derivativeCommon -> calcDeriv -> execProgram (differentiate.c)
-  // - the program branch covDerivEq (formula) does not reach. f'(X)=2X, so the first derivative at X=3 is 6.
+  // Program-based derivative: differentiate the loaded program S (f(X)=X^2-4) at the point in X through derivativeVariable -> calcDeriv -> execProgram
+  // (differentiate.c) - the program branch covDerivEq (formula) does not reach. PGMDRV names the program and the operand names the variable, as a program step
+  // does. f'(X)=2X, so the first derivative at X=3 is 6.
   const calcRegister_t label = findNamedLabel("S", GLOBAL_LABELS);
   if(label == INVALID_VARIABLE) {
     printf("\nUnknown global label: S\n");
@@ -1691,11 +1692,13 @@ void covDerivPgm(uint16_t order) {
     return;
   }
   currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
+  fnPgmDrv(label);
+  const calcRegister_t variable = findOrAllocateNamedVariable("zs");
   if(order == 2) {
-    fn2ndDeriv(label);
+    fn2ndDerivVar(variable);
   }
   else {
-    fn1stDeriv(label);
+    fn1stDerivVar(variable);
   }
 }
 
@@ -1733,16 +1736,18 @@ void covDerivMvarPgm(uint16_t which) {
     ITM_SUB,                                                      // x^2 - p*x - 2
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
   };
-  // D1 and D2 differentiate MD as a program step, which is the path a running program takes: no menu can be opened there, so the derivative is taken at once with
-  // respect to the selected variable, or the first declaration when the selection is not one of MD's.
+  // D1 and D2 differentiate MD as a program step, which is the path a running program takes: PGMDRV names the program, the operand names the variable and the
+  // point comes off the stack. No menu can be opened there.
   static const uint8_t pgmD1[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 2, 'D', '1',                  // LBL "D1"
-    (uint8_t)((ITM_FQX >> 8) | 0x80), (uint8_t)(ITM_FQX & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',    // f'(x) "MD"
+    (uint8_t)((ITM_PGMDRV >> 8) | 0x80), (uint8_t)(ITM_PGMDRV & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',  // PGMDRV "MD"
+    (uint8_t)((ITM_F1DRV >> 8) | 0x80), (uint8_t)(ITM_F1DRV & 0xff), STRING_LABEL_VARIABLE, 1, 'x',         // f' "x"
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
   };
   static const uint8_t pgmD2[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 2, 'D', '2',                  // LBL "D2"
-    (uint8_t)((ITM_FDQX >> 8) | 0x80), (uint8_t)(ITM_FDQX & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',  // f"(x) "MD"
+    (uint8_t)((ITM_PGMDRV >> 8) | 0x80), (uint8_t)(ITM_PGMDRV & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',  // PGMDRV "MD"
+    (uint8_t)((ITM_F2DRV >> 8) | 0x80), (uint8_t)(ITM_F2DRV & 0xff), STRING_LABEL_VARIABLE, 1, 'x',         // f" "x"
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
   };
   calcRegister_t label;
@@ -1782,9 +1787,12 @@ void covDerivMvarPgm(uint16_t which) {
   currentSolverProgram = label - FIRST_LABEL;
   switch(which) {
     case 4:  currentSolverVariable = findOrAllocateNamedVariable("p");    break;
-    case 5:  currentSolverVariable = INVALID_VARIABLE;                    break;   // nothing selected: the first declaration is the argument
-    case 8:  currentSolverVariable = findOrAllocateNamedVariable("zzz");  break;   // selected but not declared by M: falls back to the first declaration
     default: currentSolverVariable = findOrAllocateNamedVariable("x");    break;
+  }
+
+  if(which == 12) {   // the menu route with nothing keyed in: the variable stands as it is, so the point is the value it holds and its type is what the sampling
+    fn1stDerivEq(NOPARAM);   // has to put back
+    return;
   }
 
   if(which >= 5) {   // as a program step: the point comes off the stack and the variable is only borrowed for the sampling

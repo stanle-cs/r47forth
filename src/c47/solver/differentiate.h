@@ -10,8 +10,6 @@
   enum {
     DERIVATIVE_FIRST_CENTRAL,   DERIVATIVE_SECOND_CENTRAL,
   };
-  void fn1stDeriv      (uint16_t label);   // >f'(x)<, kept for programs written before PGMDRV
-  void fn2ndDeriv      (uint16_t label);   // >f"(x)<, the same
   void fnPgmDrv        (uint16_t label);
   void fn1stDerivVar   (uint16_t variable);
   void fn2ndDerivVar   (uint16_t variable);
