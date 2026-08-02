@@ -1,8 +1,8 @@
 Stage 2 of the Forth package is done.
 
-Stage 1 was line-at-a-time: alpha-enter a line so it lands in X as a string,
-then XEQ FORTH. That still works. The difference is that Forth source can now be
-part of a normal R47 program, stored as program steps.
+Stage 1 accepted one line at a time. Alpha-enter a line so it lands in X as a
+string, then XEQ FORTH. That still works. Forth source can now be part of a
+normal R47 program, stored as program steps.
 
 In PEM you insert FORTH and an alpha editor opens on the source. The closing
 marker goes in at the same time and the region stays balanced from the start.
@@ -30,18 +30,17 @@ and R47 programs can XEQ Forth words back. FWRD lists the words the current
 program can see, and picking one inserts it at the cursor.
 
 A source line gets checked before it is stored. Structure and parameter forms
-only. Nothing touches the dictionary, and a bad line leaves the original program
-step alone.
+only. Nothing touches the dictionary, and a bad line leaves the original
+program step alone.
 
-Where Forth convention and R47 convention disagree, R47 wins. I'm not trying
-to park a separate Forth next to the calculator. The point is to extend the
-programming system that's already there.
+Where Forth convention and R47 convention disagree, R47 wins. Forth extends
+the programming system that's already there.
 
 [b]Sample program[/b]
 
 Two normal R47 programs. FDEMO is the main one; NATADD is a global label called
-from Forth. The right arrow is the calculator's arrow glyph, not - followed by
->.
+from Forth. Use the calculator's right-arrow glyph. The two ASCII characters
+-> won't work.
 
 [code]LBL 'FDEMO'
 »FORTH
@@ -131,7 +130,7 @@ FWRD and the pre-store check don't show up in the registers. To see them, EDIT
 one of the Forth lines and open FWRD, then delete THEN from CHOOSE and press
 ENTER, which should reject the line and leave the step unchanged.
 
-[b]A second program[/b]
+[b]Compound-interest program[/b]
 
 FDEMO exercises features one at a time. This one is closer to something you'd
 actually keep on the machine: it writes a six-period compound interest schedule
@@ -166,29 +165,108 @@ R04 = 1276.2815625
 R05 = 1340.095640625
 R22 = 1340.095640625[/code]
 
-GROW is still there afterwards. Key 200, then XEQ GROW twice, and you get 220.5.
-Change the 1.05 for a different rate, or bump the 6 to run the schedule further
-up the registers.
+GROW is still there afterwards. Key 200, then XEQ GROW twice, and you get
+220.5. Change the 1.05 for a different rate, or bump the 6 to run the schedule
+further up the registers.
 
-Writing it turned up two real bugs. Both are fixed now. RCL was overwriting X
-instead of lifting onto it, so a value couldn't survive on the stack across an
-RCL. The first version of this program kept the balance on the stack exactly as
-it does above, and wrote six zeros without reporting anything. Forth pushes were
-leaving C47's auto-lift flag clear, so the next native item took the overwrite
-path. Every dispatch that leaves a value in X now sets it, the way the
-calculator's own dispatcher does.
+RCL now lifts onto a Forth value. Stage 1 overwrote X, so a value couldn't
+survive on the stack across RCL. Every dispatch that leaves a value in X now
+sets C47's auto-lift flag.
 
-The other one: recursion deeper than the stack used to run off the top and keep
-going. With 8 levels and one operand held per level, a recursive word runs out
-at 6 or 7. A
-factorial word returned 4320 for 7! instead of 5040, and never raised anything.
-Now it reports a full stack.
+Recursion past the data stack now reports a full stack. With 8 levels and one
+operand held per level, a recursive word runs out at 6 or 7. A factorial word
+returned 4320 for 7! instead of 5040.
 
-[b]Not implemented[/b]
+[b]Core dictionary[/b]
+
+[list]
+[*][b]DUP[/b] ( x -- x x )
+[*][b]DROP[/b] ( x -- )
+[*][b]SWAP[/b] ( x y -- y x )
+[*][b]OVER[/b] ( x y -- x y x )
+[*][b]+[/b] ( x y -- x+y )
+[*][b]-[/b] ( x y -- x-y )
+[*][b]*[/b] ( x y -- x*y )
+[*][b]/[/b] ( x y -- x/y )
+[*][b]×[/b] multiplication glyph alias
+[*][b]·[/b] multiplication glyph alias
+[*][b]÷[/b] division glyph alias
+[*][b]: name ... ;[/b] define a word
+[*][b]RECURSE[/b] compile a call to the definition being built
+[*][b]GLOBAL[/b] promote the last definition completed on this line
+[*][b]IMMEDIATE[/b] mark the last definition completed on this line
+[*][b]FORGET name[/b] remove a global word and the globals after it
+[*][b]XEQ 'NAME'[/b] resolve a global C47 label, C47 function or visible Forth word
+[*][b]XEQ :NAME:[/b] resolve a local C47 label
+[*][b]IF ELSE THEN[/b] conditional structure, with ELSE optional
+[*][b]BEGIN UNTIL[/b] loop until X is true
+[*][b]BEGIN AGAIN[/b] unconditional loop
+[*][b]BEGIN WHILE REPEAT[/b] loop with a condition in the middle
+[/list]
+
+[b]C47 parameter forms[/b]
+
+[list]
+[*][b]Direct numeric[/b] CNST 10
+[*][b]Direct register[/b] NN, .NN or a register letter
+[*][b]Named register[/b] 'NAME'
+[*][b]System flag[/b] a flag name from the C47 catalog
+[*][b]Indirect register[/b] →nn
+[*][b]Indirect named register[/b] →'NAME'
+[/list]
+
+[b]Compiled tokens[/b]
+
+[list]
+[*][b]0x0000 FTOK_EXIT[/b] end of a colon body
+[*][b]0x0001..0x0fff FTOK_PRIM[/b] primitive call
+[*][b]0x1000..0x6fff FTOK_CALL[/b] program-local colon call
+[*][b]0x7000..0x7eff FTOK_CALL[/b] global colon call
+[*][b]0x7f00 FTOK_LIT[/b] real literal
+[*][b]0x7f01 FTOK_ILIT[/b] 32-bit integer literal
+[*][b]0x7f02 FTOK_BR[/b] unconditional relative branch
+[*][b]0x7f03 FTOK_0BR[/b] branch when X is zero
+[*][b]0x7f04 FTOK_C47[/b] C47 item and its inline parameter
+[*][b]0x7f05 FTOK_XEQN[/b] XEQ name and label kind
+[/list]
+
+[b]Source-name precedence[/b]
+
+[list]
+[*] Forth primitive
+[*] Visible Forth definition, current program first and globals second
+[*] Number
+[*] C47 function
+[*] Global C47 label
+[/list]
+
+XEQ has the calculator's existing order: C47 label, C47 function, then a
+visible Forth definition. R47 programs also fall through to visible Forth
+words.
+
+[b]Limits[/b]
+
+[list]
+[*] Return stack: 64 calls
+[*] Runaway guard: 4096 dispatches
+[*] Source buffer: 256 bytes
+[*] Word name: 31 characters
+[*] Token: 63 characters
+[*] Nested inner interpreters: 4
+[*] Data stack: the calculator's 4- or 8-level stack
+[/list]
+
+Stage 1 printed 63 as the name limit. That was the token limit. Names stop at
+31.
+
+IF checks X for zero. Any non-numeric type counts as true. A string or matrix
+takes the true branch.
+
+[b]Current language limits[/b]
 
 CREATE/DOES>, VARIABLE, CONSTANT, vocabularies, and a separate Forth terminal.
 Source is stored as R47 program steps and the C47 catalog supplies most of the
-functions, so this still isn't a complete ANS Forth.
+functions. This still isn't a complete ANS Forth.
 
 Everything you need is on a
 [url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release
@@ -199,7 +277,10 @@ then:
 
 [code]make dist_dmcp5r47 CUSTOM_PKG=packages/forth-core[/code]
 
-It doesn't modify any upstream file, and building without the flag gives you
-the stock firmware back.
+forth-core needs the custom package v0.3 resolver. Target is R47/C47 on the
+DM42n under DMCP5. Building without CUSTOM_PKG gives you the stock firmware.
+
+The code is GPL-3.0-only. The release branch and forth-core.zip carry COPYING.
+
 Tested on the simulator and on my R47. This is a hobby project modifying
-calculator firmware, so keep a backup of your state and flash at your own risk.
+calculator firmware. Keep a backup of your state and flash at your own risk.

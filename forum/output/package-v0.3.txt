@@ -1,12 +1,13 @@
 [b]custom package v0.3[/b]
 
-Overrides are diffs against upstream now, instead of whole-file copies.
+Overrides now ship as diffs against upstream.
 
 In v0.2, touching an upstream file meant shipping a complete copy of it. A
 two-line hook change went out as a 4000-line file, a package's actual delta
-wasn't visible without diffing by hand, and two packages touching the same file
-meant one of them was silently discarded. Overrides are now plain git diffs, and
-patches from different packages against the same file compose in order.
+wasn't visible without diffing by hand, and two packages touching the same
+file meant one of them was silently discarded. Overrides are now plain git
+diffs, and patches from different packages against the same file compose in
+order.
 
 The other change is that a package declares nothing. It has no meson.build of
 its own. The working area is flat and mirrors upstream paths:
@@ -35,7 +36,7 @@ counterpart is copied in whole. Either way you never write a patch by hand.
 
 [list]
 [*] Patches are ordered by a numeric filename prefix, with ties broken by position in the CUSTOM_PKG list
-[*] Upstream is materialized once, then each patch applies with git apply -3 against the previous patch's output, so the stack is cumulative rather than last-wins
+[*] Upstream is materialized once. Each patch applies with git apply -3 against the previous patch's output, making the stack cumulative
 [*] Two packages editing different parts of the same function compose. Editing the same lines is a fatal configure error naming the patch
 [*] The result is scanned for conflict markers after every application regardless of git apply's exit status, since it can exit 0 having written a conflicted file
 [*] Patch filename and the +++ b/ header inside the diff must agree on the target, and the target must exist. Either check failing is a named configure error
@@ -47,7 +48,7 @@ counterpart is copied in whole. Either way you never write a patch by hand.
 Cleans, runs the test suite with the package active, refreshes, and zips
 patches/ and files/ into pkg_dist/. A failing suite produces no artifact. The
 zip is size-checked against PKG_MAX_SIZE, 1MB by default, and deleted if it
-exceeds it.
+exceeds it. pkg_build also adds COPYING to every zip.
 
 [b]Refresh before you build[/b]
 
@@ -55,8 +56,7 @@ The build never reads the working area, only the generated patches/ and files/
 directories. Editing a source without refreshing gets you a successful build
 that still contains the previous version of that code. A package whose patches
 are missing entirely configures and builds and contains none of that package.
-Run refresh before building. I put it at the top of the forth-core build script
-after getting burned by exactly this.
+Run refresh before building. The forth-core build script runs it first.
 
 [b]What is tracked in git[/b]
 
@@ -68,11 +68,16 @@ cost of tracking both is committed redundancy between a working file and its
 generated counterpart.
 
 forth-core is the package this is used for, currently 14 patches against
-upstream files plus 13 new sources.
+upstream files plus 13 new sources. The package base is c43 commit b8f79e486.
 
-The system and that package are both on a
+It builds C47 and R47 firmware for the DM42n under DMCP5. This work inherits
+GPL-3.0-only from c43.
+
+The package system and forth-core are both on a
 [url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release
-branch[/url], built against upstream c43 b8f79e486. The resolver and the refresh
-tool are four files under tools/, plus changes to Makefile, meson.build and
-meson_options.txt. Nothing else in there. You can read the whole thing in one
-sitting.
+branch[/url]. The resolver and the refresh tool are four files under tools/,
+plus changes to Makefile, meson.build and meson_options.txt. The release branch
+carries COPYING.
+
+Make a calculator backup before flashing. You take responsibility for the
+risk.
