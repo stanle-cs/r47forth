@@ -8,6 +8,7 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_capture.h"
+#include "forth_menu.h"
 
 // Structure of the program memory.
 // In this example the RAM is 16384 blocks (from 0 to 16383) of 4 bytes = 65536 bytes.
