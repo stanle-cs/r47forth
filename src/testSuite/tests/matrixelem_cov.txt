@@ -153,6 +153,18 @@ Func: fnIndexedElementCov
 In:  FARG=6 R00=CxMa:"M2,2[1i0,2i0,3i0,4i0]" RX=Real:"3" RI=Real:"1" RJ=Real:"1"
 Out: EC=0 RI=LonI:"2" RJ=LonI:"1"
 
+; --- the searches that never run. Each value is present in the matrix away from
+; the cursor, so a search that ran would move the cursor onto it.
+Func: fnIndexedElementCov
+In:  FARG=6 R00=ReMa:"M2,3[1,2,3,4,5,6]" RX=Real:"5:DEG" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RI=LonI:"1" RJ=LonI:"1"
+Func: fnIndexedElementCov
+In:  FARG=6 R00=ReMa:"M2,3[1,2,3,4,5,6]" RX=Cplx:"5i1" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RI=LonI:"1" RJ=LonI:"1"
+Func: fnIndexedElementCov
+In:  FARG=6 R00=CxMa:"M2,2[1i0,2i0,3i0,4i0]" RX=Real:"3:DEG" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RI=LonI:"1" RJ=LonI:"1"
+
 ; --- the cursor steps I+, I-, J+ and J- over a 2x3. wrapIJ carries a row step
 ; off the last row into the next column and a column step off the last column
 ; into the next row, and folds both directions at the ends.
@@ -332,7 +344,7 @@ In:  FARG=0 R00=ReMa:"M3,3[1,2,3,4,5,6,7,8,9]" RY=Real:"2" RX=Real:"2"
 Out: EC=0 R00=ReMa:"M2,2[1,2,4,5]"
 
 ; --- a fixture, not an assertion: hand I, J and FLAG_GROW back, the first two
-; of which programs.txt's SPIRAL reads as data ---
+; of which programs.txt's SPIRAL reads as data, and free the R00 matrix ---
 Func: fnNop
-In:  FL_GROW=0 RI=Real:"0" RJ=Real:"0"
+In:  FL_GROW=0 R00=Real:"0" RI=Real:"0" RJ=Real:"0"
 Out: EC=0

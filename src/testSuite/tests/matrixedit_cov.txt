@@ -143,7 +143,12 @@ In:  RX=Real:"7"
 Out: EC=13 RX=Real:"7"
 
 ; --- fnEditMatrix refuses a vector held in polar form before it looks at the
-; type. POLAR tags the vector in X; the editor then declines to open it.
+; type. POLAR tags the vector in X; the editor then declines to open it. The
+; control opens the same vector untagged, so EC=24 reports the tag and not the
+; contents of X.
+Func: fnMimRowColCov
+In:  FARG=0 RX=ReMa:"M1,2[3,4]" RI=Real:"1" RJ=Real:"1"
+Out: EC=0 RX=ReMa:"M2,2[0,0,3,4]"
 Func: fnToPolar2
 In:  RX=ReMa:"M1,2[3,4]" AM=RAD
 Out: EC=0
@@ -158,7 +163,7 @@ In:  FARG=0 RI=Real:"1" RJ=Real:"1"
 Out: EC=24
 
 ; --- a fixture, not an assertion: hand I and J back as the real 0 they arrive
-; as, which programs.txt's SPIRAL reads as data ---
+; as, which programs.txt's SPIRAL reads as data, and free the X matrix ---
 Func: fnNop
-In:  RI=Real:"0" RJ=Real:"0"
+In:  RX=Real:"0" RI=Real:"0" RJ=Real:"0"
 Out: EC=0

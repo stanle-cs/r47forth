@@ -1041,7 +1041,9 @@ void covMimRowCol(uint16_t op) {
 
   fnEditMatrix(NOPARAM);
   if(calcMode != CM_MIM) {
-    return; // Leave a refusal to the case: fnEditMatrix raises and stays out of CM_MIM, and the case asserts the code
+    // Leave a refusal to the case, dropping any index an earlier file left: fnEditMatrix raises and stays out of CM_MIM, and the case asserts the code.
+    matrixIndex = INVALID_VARIABLE;
+    return;
   }
   covRestoreMatrixCursor(row, col);
 
@@ -1059,7 +1061,6 @@ void covMimRowCol(uint16_t op) {
   mimFinalize();
   calcModeNormal();
 }
-
 
 void covIndexedElement(uint16_t op) {
   // Run one operation on the INDEXed matrix, the element value going to and coming from X. None of them indexes a matrix, so index R00 with fnIndexMatrix - the
