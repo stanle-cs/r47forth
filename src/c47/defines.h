@@ -292,8 +292,10 @@
 #endif
 
 // OPTION_SLVP_POLY (polynomial roots) requires OPTION_EIGEN (it feeds the companion matrix to the QR eigensolver): never leave SLVP on without EIGEN
+// OPTION_EIGEN_159 is the eigen 159 digit path: without EIGEN its only callers go, leaving solveQuadraticEquation159 and solveCubicEquation159 in flash unused
 #if !defined(OPTION_EIGEN)
   #undef OPTION_SLVP_POLY
+  #undef OPTION_EIGEN_159
 #endif
 
 // OPTION_DIST_C requires OPTION_DIST_B: its discrete distributions take their argument check, checkRegisterNoFP, from chi2.c
