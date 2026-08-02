@@ -168,6 +168,12 @@ TO_QSPI const int16_t menu_LOOP[]        = { ITM_DSE,                       ITM_
   #define EIG_VAL  ITM_NULL
   #define EIG_QR   ITM_NULL
 #endif // OPTION_EIGEN
+
+#if defined(OPTION_SLVP)
+  #define ADV_SLVP ITM_SLVP
+#else // OPTION_SLVP: blank SLVP (SLVQ SLVC stay)
+  #define ADV_SLVP ITM_NULL
+#endif // OPTION_SLVP
 TO_QSPI const int16_t menu_MATX[]        = {
                                              ITM_M_NEW,                     ITM_M_TRANSP,               ITM_M_EDI,                ITM_M_EDIN,            ITM_SIM_EQ,                  -MNU_VECT,
                                              ITM_MIDENT,                    ITM_M_DIM,                  ITM_M_DIM_GR,             ITM_M_DIMNQ,           ITM_M_CONCATB,               ITM_M_CONCATR,
@@ -2798,6 +2804,10 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_M_QR  :
       case ITM_M_SQRT:
     #endif // !OPTION_EIGEN
+
+    #if !defined(OPTION_SLVP)
+      case ITM_SLVP:
+    #endif // !OPTION_SLVP
 
     #if !defined(OPTION_ELLIPTIC)
       case -MNU_ELLIPT:
