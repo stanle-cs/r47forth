@@ -54,8 +54,9 @@
 #define OPTION_ASNBROWSER              //                   // Assign Browser
 #define OPTION_FONTBROWSER             //                   // Font Browsers
 #define OPTION_SHOW                    //                   // SHOW (alternative to VIEW)
-#define OPTION_SLV_ZETA_BETA           //                   // SLVC, SLVQ, ZETA, BETA
-#define OPTION_SLVP                    //                   // SLVP general polynomial roots (companion matrix through the EIGEN QR solver; requires OPTION_EIGEN)
+#define OPTION_ZETA_BETA               //                   // ZETA, BETA, LNBETA
+#define OPTION_SLVQ_SLVC               //                   // SLVQ, SLVC quadratic and cubic roots
+#define OPTION_SLVP_POLY               //                   // SLVP general polynomial roots (companion matrix through the EIGEN QR solver; requires OPTION_EIGEN)
 #define OPTION_ELLIPTIC                //                   // Elliptic functions
 #define OPTION_BESSEL                  //                   // Bessel functions
 #define OPTION_ORTHO                   //                   // Orthogonal-polynomials menu (ORTHO)
@@ -101,7 +102,8 @@
       #undef OPTION_ASNBROWSER     //  1704 bytes // Assign Browser
       #undef OPTION_FONTBROWSER       //  1216 bytes // Font Browsers
       #undef OPTION_SHOW        //  6712 bytes // SHOW (use either old SHOW or VIEW, change in code)
-      #undef OPTION_SLV_ZETA_BETA       //  3288 bytes // SLVC, SLVQ, ZETA, BETA
+      #undef OPTION_ZETA_BETA       //  3288 bytes // ZETA, BETA, LNBETA
+      #undef OPTION_SLVQ_SLVC       //       bytes // SLVQ, SLVC quadratic and cubic roots
       #undef OPTION_ELLIPTIC  //       bytes // ELLIPTIC
       #undef  OPTION_PRIME             // 27208 bytes // Without ISPRIME, NEXTPRIME, FACTORS, EULPHI, MATXFACTOR
       #undef OPTION_BESSEL //  5129 bytes // Without BESSEL
@@ -256,7 +258,8 @@
     #define OPTION_FLAGBROWSER           // ✓  2088 bytes // Without Flag Browsers
     #define OPTION_ASNBROWSER            // ✓  1936 bytes // Without Assign Browser
     #define OPTION_SHOW                  // ✓  6496 bytes // Without SHOW use VIEW
-    #define OPTION_SLV_ZETA_BETA         // ✓  5440 bytes // SLVC, SLVQ, ZETA, BETA
+    #define OPTION_ZETA_BETA             // ✓  5440 bytes // ZETA, BETA, LNBETA
+    #define OPTION_SLVQ_SLVC             // ?       bytes // SLVQ, SLVC quadratic and cubic roots
     #define OPTION_ASTRING               // ✓  1024 bytes // Without alpha string functions aMID aLEFT aRIGHT aTRIM aREV aLOWER aUPPER
     #define OPTION_PRIME                 // ✓ 31712 bytes // Without ISPRIME, NEXTPRIME (primality; undef also forces OPTION_FACTOR off)
     #define OPTION_FACTOR                // ✓  7120 bytes // Without FACTORS, M.FACT, EULPHI, SIGMA, NumTh menu (GMP factorisation; keeps primality)
@@ -275,7 +278,7 @@
             #undef  OPTION_EIGEN_159     // ✓  2568 bytes // C47 EINEN function is 159 digits internally; note both OPTION_SQUARE_159 & OPTION_CUBIC_159 used by OPTION_EIGEN_159
             #undef  OPTION_XFN_1000      // ✓  5224 bytes // XFN extended 1000 digit math Functionality
             #undef  OPTION_VECTOR        // ✓ 13672 bytes // Vector 12952 saving if ELEC is not in; 9568 saving if ELEC is in
-            #undef  OPTION_SLVP          // ✓  2024 bytes // SLVP general polynomial roots (companion matrix through the EIGEN QR solver)
+            #undef  OPTION_SLVP_POLY     // ✓  2024 bytes // SLVP general polynomial roots (companion matrix through the EIGEN QR solver)
     #define OPTION_TVM_AMORT             // ✓  1648 bytes // Use additional AMORT in tvm
     #define OPTION_DATAFILE              // ✓  2112 bytes // Without register/variable .d47 export & import
 
@@ -288,9 +291,9 @@
   #undef OPTION_FACTOR
 #endif
 
-// OPTION_SLVP (polynomial roots) requires OPTION_EIGEN (it feeds the companion matrix to the QR eigensolver): never leave SLVP on without EIGEN
+// OPTION_SLVP_POLY (polynomial roots) requires OPTION_EIGEN (it feeds the companion matrix to the QR eigensolver): never leave SLVP on without EIGEN
 #if !defined(OPTION_EIGEN)
-  #undef OPTION_SLVP
+  #undef OPTION_SLVP_POLY
 #endif
 
 

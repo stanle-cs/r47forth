@@ -169,11 +169,19 @@ TO_QSPI const int16_t menu_LOOP[]        = { ITM_DSE,                       ITM_
   #define EIG_QR   ITM_NULL
 #endif // OPTION_EIGEN
 
-#if defined(OPTION_SLVP)
+#if defined(OPTION_SLVP_POLY)
   #define ADV_SLVP ITM_SLVP
-#else // OPTION_SLVP: blank SLVP (SLVQ SLVC stay)
+#else // OPTION_SLVP_POLY: blank SLVP
   #define ADV_SLVP ITM_NULL
-#endif // OPTION_SLVP
+#endif // OPTION_SLVP_POLY
+
+#if defined(OPTION_SLVQ_SLVC)
+  #define ADV_SLVQ ITM_SLVQ
+  #define ADV_SLVC ITM_SLVC
+#else // OPTION_SLVQ_SLVC: blank SLVQ and SLVC
+  #define ADV_SLVQ ITM_NULL
+  #define ADV_SLVC ITM_NULL
+#endif // OPTION_SLVQ_SLVC
 TO_QSPI const int16_t menu_MATX[]        = {
                                              ITM_M_NEW,                     ITM_M_TRANSP,               ITM_M_EDI,                ITM_M_EDIN,            ITM_SIM_EQ,                  -MNU_VECT,
                                              ITM_MIDENT,                    ITM_M_DIM,                  ITM_M_DIM_GR,             ITM_M_DIMNQ,           ITM_M_CONCATB,               ITM_M_CONCATR,
@@ -720,7 +728,7 @@ TO_QSPI const int16_t menu_EQN[]         = { ITM_EQ_NEW,                    ITM_
 
 TO_QSPI const int16_t menu_ADV[]         = { ITM_PIn,                       ITM_SIGMAn,                   ITM_FQX,                      ITM_PLTf,                    -MNU_Sfdx,                     ITM_SOLVE,
                                              ITM_iPIn,                      ITM_iSIGMAn,                  ITM_FDQX,                     ITM_PGMPLT,                   ITM_PGMINT,                   ITM_PGMSLV,
-                                             ITM_SLVQ,                      ITM_SLVC,                     ADV_SLVP,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL                  };
+                                             ADV_SLVQ,                      ADV_SLVC,                     ADV_SLVP,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL                  };
 
 TO_QSPI const int16_t menu_1stDeriv[]    = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_GRAPHS,                   ITM_FPHERE                };
 //note: the items in here are dynamically assigned, including the static ones
@@ -2783,9 +2791,9 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_M_SQRT:
     #endif // !OPTION_EIGEN
 
-    #if !defined(OPTION_SLVP)
+    #if !defined(OPTION_SLVP_POLY)
       case ITM_SLVP:
-    #endif // !OPTION_SLVP
+    #endif // !OPTION_SLVP_POLY
 
     #if !defined(OPTION_ELLIPTIC)
       case -MNU_ELLIPT:
@@ -2813,10 +2821,17 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
     #endif //OPTION_VECTOR; OPTION_ELEC
 
 
-    #if !(defined(OPTION_SLV_ZETA_BETA))
+    #if !(defined(OPTION_SLVQ_SLVC))
       case ITM_SLVC:
       case ITM_SLVQ:
-    #endif //OPTION_SLV_ZETA_BETA
+    #endif //OPTION_SLVQ_SLVC
+
+
+    #if !defined(OPTION_ZETA_BETA)
+      case ITM_zetaX :
+      case ITM_BETAXY:
+      case ITM_LNBETA:
+    #endif // !OPTION_ZETA_BETA
 
 
     #if !defined(OPTION_VECTOR)
