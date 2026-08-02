@@ -61,16 +61,24 @@
   #define MULTIPLYING true
   #define RUNALL      NULL             //no early stop state, so every iteration the caller asked for
 
+  #if defined(OPTION_INFSUMS)
   typedef struct {                     //only the infinity sum carries this, on its own frame
     real_t   previousTerm, term, remaining, allowance, scale;
     bool_t   haveTerm, falling;
     uint32_t pass;
   } earlyAbort_t;
+  #else // OPTION_INFSUMS
+  typedef void earlyAbort_t;           //no early stop state exists, so every caller passes RUNALL
+  #endif // OPTION_INFSUMS
 
 
   static void _programmableSumProd(uint16_t label, bool_t prod, earlyAbort_t *early) {
     currentKeyCode = 255;
+    #if defined(OPTION_INFSUMS)
     const bool_t  inf = (early != NULL);
+    #else // OPTION_INFSUMS
+    (void)early;
+    #endif // OPTION_INFSUMS
     const bool_t  cpxAllowed = getFlag(FLAG_CPXRES);        //read once: the term program itself can set CPXRES
     int32_t       loop = 0;
     int16_t       finished = 0;
@@ -114,6 +122,7 @@
       ++currentSolverNestingDepth;
       setSystemFlag(FLAG_SOLVING);
 
+      #if defined(OPTION_INFSUMS)
       if(inf) {
         realSetZero(&early->previousTerm);
         early->haveTerm = false;
@@ -122,6 +131,7 @@
         int32ToReal(significantDigits == 0 ? 34 : significantDigits, &early->scale);
         realPower(const_10, &early->scale, &early->scale, &ctxtReal75);       //10^SDIGS, fixed for the run
       }
+      #endif // OPTION_INFSUMS
 
       while(lastErrorCode == ERROR_NONE) {
 
@@ -166,9 +176,11 @@
           }
         }
 
+        #if defined(OPTION_INFSUMS)
         if(inf && early->pass < UINT32_MAX) {               //counted for the complex branch too, and saturates
           early->pass++;
         }
+        #endif // OPTION_INFSUMS
 
         if(!changedOverToComplex) {
           fnToReal(NOPARAM);
@@ -181,6 +193,7 @@
           }
           else {
             realAdd(&resultR, &resultX, &resultR, &ctxtReal75);
+            #if defined(OPTION_INFSUMS)
             if(inf) {
               realCopy(&resultX, &early->term);             //the term itself, which outlives a saturated total
               realSetPositiveSign(&early->term);
@@ -207,6 +220,7 @@
                 early->haveTerm = true;
               }
             }
+            #endif // OPTION_INFSUMS
           }
         }
         else { //dtComplex34, and EARLY_ABORT_IN_COMPLEX is false, so this branch always runs the full count
@@ -246,6 +260,7 @@
 
 
       if(lastErrorCode == ERROR_NONE) {
+        #if defined(OPTION_INFSUMS)
         if(inf) {                                           //iterations actually run, so a short run is visible
           longInteger_t iPass;
           longIntegerInit(iPass);
@@ -253,6 +268,7 @@
           convertLongIntegerToLongIntegerRegister(iPass, REGISTER_Y);
           longIntegerFree(iPass);
         }
+        #endif // OPTION_INFSUMS
         if(!changedOverToComplex) {
           if(getRegisterDataType(REGISTER_X) != dtReal34) {
             reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
@@ -323,10 +339,12 @@ void fnProgrammableSum(uint16_t label) {
   _checkArgument(label, SUMMING, RUNALL);
 }
 
+#if defined(OPTION_INFSUMS)
 void fnProgrammableSumInf(uint16_t label) {
   earlyAbort_t earlyAbort;                                  //this frame carries the early stop state
   _checkArgument(label, SUMMING, &earlyAbort);
 }
+#endif // OPTION_INFSUMS
 
 void fnProgrammableProduct(uint16_t label) {
   _checkArgument(label, MULTIPLYING, RUNALL);
