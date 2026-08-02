@@ -112,6 +112,98 @@ _EXCLUDED_TOP_FILES = ('meson.build', MANIFEST_NAME, PKGIGNORE_NAME)
 _CONFLICT_MARKER_RE = re.compile(r'^(<{7}|={7}|>{7})', re.MULTILINE)
 
 
+def check_rebase_preflight(project_root, target_ref):
+    """Check whether the caller's src/c47 is buildable at *target_ref*.
+
+    Resolves ``target_ref^{commit}``, compares the Git tree objects
+    ``HEAD:src/c47`` and ``target_ref:src/c47``, and detects tracked or
+    untracked changes under the caller's ``src/c47``.
+
+    Returns a dict::
+
+        {
+            'target_sha': '<40-char SHA>',
+            'head_sha': '<40-char SHA>',
+            'src_c47_tree_matches': True|False,
+            'src_c47_dirty': True|False,
+            'buildable': True|False,
+            'issues': [list of human-readable issue strings],
+        }
+
+    *buildable* is ``True`` only when ``src_c47_tree_matches`` is ``True``
+    AND ``src_c47_dirty`` is ``False``.  The check is read-only — it never
+    mutates the working tree or index.
+    """
+    # Resolve target ref.
+    r = run(['git', 'rev-parse', f'{target_ref}^{{commit}}'],
+            cwd=project_root)
+    if r.returncode != 0 or not r.stdout.strip():
+        raise RuntimeError(
+            f'cannot resolve {target_ref!r} as a commit in '
+            f'{project_root!r}')
+    target_sha = r.stdout.strip()
+
+    # Resolve HEAD.
+    r = run(['git', 'rev-parse', 'HEAD'], cwd=project_root)
+    if r.returncode != 0 or not r.stdout.strip():
+        raise RuntimeError(
+            f'cannot resolve HEAD in {project_root!r}')
+    head_sha = r.stdout.strip()
+
+    issues = []
+    src_c47_tree_matches = True
+    src_c47_dirty = False
+
+    # Compare tree objects HEAD:src/c47 and target:src/c47.
+    r_head = run(['git', 'rev-parse', f'{head_sha}^{{tree}}:src/c47'],
+                  cwd=project_root)
+    r_target = run(['git', 'rev-parse', f'{target_sha}^{{tree}}:src/c47'],
+                    cwd=project_root)
+
+    if r_head.returncode == 0 and r_target.returncode == 0:
+        head_tree = r_head.stdout.strip()
+        target_tree = r_target.stdout.strip()
+        if head_tree != target_tree:
+            src_c47_tree_matches = False
+            issues.append(
+                f'src/c47 tree at HEAD ({head_sha[:12]}) differs from '
+                f'target {target_ref} ({target_sha[:12]})')
+    elif r_head.returncode != 0 and r_target.returncode != 0:
+        # Neither has src/c47 — that's fine, they match.
+        pass
+    else:
+        src_c47_tree_matches = False
+        if r_head.returncode != 0:
+            issues.append(f'src/c47 does not exist at HEAD ({head_sha[:12]})')
+        if r_target.returncode != 0:
+            issues.append(
+                f'src/c47 does not exist at target {target_ref} '
+                f'({target_sha[:12]})')
+
+    # Check for tracked/untracked changes under src/c47.
+    r_status = run(['git', 'status', '--porcelain', '--', 'src/c47'],
+                   cwd=project_root)
+    if r_status.returncode == 0 and r_status.stdout.strip():
+        src_c47_dirty = True
+        status_lines = [
+            line for line in r_status.stdout.splitlines() if line.strip()
+        ]
+        issues.append(
+            f'src/c47 has local changes ({len(status_lines)} file(s)): '
+            + '; '.join(status_lines[:5]))
+
+    buildable = src_c47_tree_matches and not src_c47_dirty
+
+    return {
+        'target_sha': target_sha,
+        'head_sha': head_sha,
+        'src_c47_tree_matches': src_c47_tree_matches,
+        'src_c47_dirty': src_c47_dirty,
+        'buildable': buildable,
+        'issues': issues,
+    }
+
+
 def _working_file_marker_lines(path):
     """1-indexed line numbers of column-0 conflict-marker lines
     (<<<<<<< / ======= / >>>>>>>) in the text file at *path*.

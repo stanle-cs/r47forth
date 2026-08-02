@@ -2277,5 +2277,142 @@ class TestAtomicSaveManifest(unittest.TestCase):
             self.assertEqual(tmp_files, [])
 
 
+# ---------------------------------------------------------------------------
+# Rebase preflight: check_rebase_preflight
+# ---------------------------------------------------------------------------
+
+class TestRebasePreflight(unittest.TestCase):
+
+    def test_tree_differs_returns_not_buildable(self):
+        """When HEAD:src/c47 and target:src/c47 have different tree objects,
+        check_rebase_preflight should report src_c47_tree_matches=False."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+            old_sha = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'], cwd=p.tmpdir,
+                capture_output=True, text=True).stdout.strip()
+
+            # Make a second commit so HEAD differs from old commit
+            p.write_upstream('a.c', UPSTREAM_A.replace('1', '5'))
+            subprocess.run(
+                ['git', 'commit', '-m', 'change a.c'], cwd=p.tmpdir,
+                capture_output=True, text=True)
+
+            from pkg_patch_refresh import check_rebase_preflight
+            result = check_rebase_preflight(p.tmpdir, old_sha)
+
+            self.assertFalse(result['src_c47_tree_matches'])
+            self.assertFalse(result['buildable'])
+            self.assertEqual(len(result['issues']), 1)
+            self.assertIn('differs', result['issues'][0])
+
+    def test_tree_same_is_buildable(self):
+        """When HEAD:src/c47 and target:src/c47 have the same tree object,
+        and src/c47 is clean, check_rebase_preflight should report buildable."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+
+            from pkg_patch_refresh import check_rebase_preflight
+            result = check_rebase_preflight(p.tmpdir, 'HEAD')
+
+            self.assertTrue(result['src_c47_tree_matches'])
+            self.assertFalse(result['src_c47_dirty'])
+            self.assertTrue(result['buildable'])
+            self.assertEqual(result['issues'], [])
+
+    def test_dirty_src_c47_not_buildable(self):
+        """When src/c47 has uncommitted changes, check_rebase_preflight
+        should report src_c47_dirty=True and buildable=False."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+            # Create uncommitted change
+            a_path = os.path.join(p.src_c47, 'a.c')
+            with open(a_path, 'w') as f:
+                f.write(UPSTREAM_A.replace('1', '5'))
+
+            from pkg_patch_refresh import check_rebase_preflight
+            result = check_rebase_preflight(p.tmpdir, 'HEAD')
+
+            self.assertTrue(result['src_c47_dirty'])
+            self.assertFalse(result['buildable'])
+            self.assertTrue(any('local changes' in issue
+                                for issue in result['issues']))
+
+    def test_untracked_file_counts_as_dirty(self):
+        """An untracked file under src/c47 should count as dirty."""
+        with _TempProject() as p:
+            p.write_upstream('a.c', UPSTREAM_A)
+            # Create untracked file
+            new_path = os.path.join(p.src_c47, 'new_file.c')
+            with open(new_path, 'w') as f:
+                f.write('int new(void) { return 0; }\n')
+
+            from pkg_patch_refresh import check_rebase_preflight
+            result = check_rebase_preflight(p.tmpdir, 'HEAD')
+
+            self.assertTrue(result['src_c47_dirty'])
+            self.assertFalse(result['buildable'])
+
+
+# ---------------------------------------------------------------------------
+# _working_file_marker_lines: conflict marker detection
+# ---------------------------------------------------------------------------
+
+class TestWorkingFileMarkerLines(unittest.TestCase):
+
+    def test_detects_marker_at_column_zero(self):
+        """_working_file_marker_lines should return line numbers of conflict
+        markers at column 0."""
+        from pkg_patch_refresh import _working_file_marker_lines
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.c',
+                                          delete=False)
+        try:
+            tmp.write('<<<<<<< HEAD\nint a(void) { return 1; }\n=======\n')
+            tmp.close()
+            result = _working_file_marker_lines(tmp.name)
+            self.assertEqual(result, [1, 3])
+        finally:
+            os.unlink(tmp.name)
+
+    def test_detects_marker_at_line_two(self):
+        """Should detect ======= at line 2."""
+        from pkg_patch_refresh import _working_file_marker_lines
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.c',
+                                          delete=False)
+        try:
+            tmp.write('int a(void) {\n=======\n    return 1;\n}\n')
+            tmp.close()
+            result = _working_file_marker_lines(tmp.name)
+            self.assertEqual(result, [2])
+        finally:
+            os.unlink(tmp.name)
+
+    def test_no_marker_returns_empty_list(self):
+        """A clean file should return an empty list."""
+        from pkg_patch_refresh import _working_file_marker_lines
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.c',
+                                          delete=False)
+        try:
+            tmp.write('int a(void) { return 1; }\n')
+            tmp.close()
+            result = _working_file_marker_lines(tmp.name)
+            self.assertEqual(result, [])
+        finally:
+            os.unlink(tmp.name)
+
+    def test_marker_midline_is_not_detected(self):
+        """A <<<<<<< not at column 0 should be ignored."""
+        from pkg_patch_refresh import _working_file_marker_lines
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.c',
+                                          delete=False)
+        try:
+            tmp.write('    const char *s = "<<<<<<< not a marker";\n')
+            tmp.close()
+            result = _working_file_marker_lines(tmp.name)
+            self.assertEqual(result, [])
+        finally:
+            os.unlink(tmp.name)
+
+
 if __name__ == '__main__':
     unittest.main()

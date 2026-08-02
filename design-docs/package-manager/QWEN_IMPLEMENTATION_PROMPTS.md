@@ -5,14 +5,14 @@
 > libclang/function-boundary design (see Prompt 2) that was implemented and
 > then **reverted** on this branch (preserved at
 > `checkpoint/pre-plain-diff-revert-20260712-1541`).
-> `custom_package/PROPOSED_SPEC_CHANGES.md` is now **revision 2**
+> `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` is now **revision 2**
 > (plain-diff), which supersedes the spec these prompts were written
 > against; the implemented revision-2 system is documented in
-> `custom_package/README.md` and `custom_package/IMPLEMENTATION_REPORT.md`.
+> `design-docs/package-manager/README.md` and `design-docs/package-manager/IMPLEMENTATION_REPORT.md`.
 > Running any prompt below would begin rebuilding the reverted design on top
 > of the live one. Historical record only.
 
-Source spec: `custom_package/PROPOSED_SPEC_CHANGES.md` (approved). Branch:
+Source spec: `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` (approved). Branch:
 `package-manager/patch-based-overlay`. Run prompts **in order** — each
 assumes the previous one landed and the tree is green.
 
@@ -34,7 +34,7 @@ You are implementing ONE step of a planned series that builds the
 tooling — in the repo at `/home/stan/c43`, on branch
 `package-manager/patch-based-overlay` (already checked out — stay on it).
 This is package-manager tooling work: Python tools under `tools/`, the
-top-level `meson.build` overlay wiring, and `custom_package/` documentation.
+top-level `meson.build` overlay wiring, and `design-docs/package-manager/` documentation.
 It is not C firmware work and not Forth work. Rules, non-negotiable:
 
 1. **SCOPE.** Implement exactly what this prompt specifies. Nothing else. If
@@ -62,8 +62,8 @@ It is not C firmware work and not Forth work. Rules, non-negotiable:
    fine; writing there, even as a temporary scratch step, is never
    permitted.
 
-3. **AUTHORITY.** `custom_package/PROPOSED_SPEC_CHANGES.md` is the single
-   authority for this series — no `custom_package/DESIGN.md` exists yet;
+3. **AUTHORITY.** `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` is the single
+   authority for this series — no `design-docs/package-manager/DESIGN.md` exists yet;
    that spec document is what would eventually seed one. Read the § slice
    named in the prompt BEFORE coding. Do not relitigate anything marked
    `[RATIFIED]`. The spec is written only by the design/review side; as an
@@ -168,7 +168,7 @@ path-mirroring alone).
   by both the build-time resolver and the future authoring tool.
 - `tools/resolve_c47_src.py` — import and use the new validation helper; do
   not otherwise change its shadow-tree logic yet (that's Prompt 7).
-- `custom_package/README.md` — document the new convention (add a section,
+- `design-docs/package-manager/README.md` — document the new convention (add a section,
   do not remove existing whole-file-override documentation — that mechanism
   still exists per §8).
 
@@ -521,9 +521,9 @@ check below needs to be honest about.)
    honestly.)
 
 Write the real outcome — not an assumption — into a new file
-`custom_package/PATCH_ANCESTRY_FINDINGS.md`, and reference it from
+`design-docs/package-manager/PATCH_ANCESTRY_FINDINGS.md`, and reference it from
 `PROPOSED_SPEC_CHANGES.md` §5 by changing `[VERIFIED: pending]` to
-`[VERIFIED: custom_package/PATCH_ANCESTRY_FINDINGS.md]`.
+`[VERIFIED: design-docs/package-manager/PATCH_ANCESTRY_FINDINGS.md]`.
 
 **Mutation-test requirement:**
 - `test_apply_patch_catches_conflict_markers` — construct a patch and a
@@ -697,21 +697,21 @@ unless the gate below surfaces a regression.
 2. Confirm the **vanilla** build (no `CUSTOM_PKG`) is still byte-for-byte
    unaffected: configure `build.sim` fresh with `CUSTOM_PKG` unset, build,
    run tests, confirm no diff in behavior from before this branch existed
-   — this is the invariant from `custom_package/README.md:5-7` and it must
+   — this is the invariant from `design-docs/package-manager/README.md:5-7` and it must
    still hold.
 3. Confirm the existing forth-core package
    (`packages/forth-core/meson.build`, whole-file overrides only, no
    patches) still builds and tests clean under the new resolver code —
    this is the regression check for "did Prompt 7 break the mechanism it
    didn't touch."
-4. Produce `custom_package/IMPLEMENTATION_REPORT.md` listing:
+4. Produce `design-docs/package-manager/IMPLEMENTATION_REPORT.md` listing:
    - Every `[DECISION NEEDED]` raised across Prompts 1–7, with its
      resolution (or, if unresolved, flagged clearly for human follow-up —
      do not resolve it yourself if a prompt told you to stop and report).
    - Every `[GAP]` noted (should be none, per SCOPE LOCK — but report
      honestly if any code you touched revealed one).
    - The real answer from Prompt 4's empirical blob-ancestry check
-     (`custom_package/PATCH_ANCESTRY_FINDINGS.md`), summarized in 2-3
+     (`design-docs/package-manager/PATCH_ANCESTRY_FINDINGS.md`), summarized in 2-3
      sentences here, not re-litigated.
    - Confirmation, with command output, that `meson test -C build.sim`
      passes and the vanilla build is unaffected.

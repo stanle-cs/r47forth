@@ -26,7 +26,7 @@ WHAT IS IN HERE
   tools/test_pkg_patch_refresh.py     |  keep these, see below
   tools/test_pkg_patch_resolver.py   /
 
-  custom_package/README.md      the full documentation
+  design-docs/package-manager/README.md      the full documentation
   COPYING                       GPL-3.0 licence text
 
 Keep the test files. meson.build declares them as tests unconditionally, so
@@ -97,4 +97,4 @@ sources:
 
   https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2
 
-Full documentation is in custom_package/README.md.
+Full documentation is in design-docs/package-manager/README.md.

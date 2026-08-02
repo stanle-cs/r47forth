@@ -1,8 +1,7 @@
 # Qwen Implementation Prompts — Refresh Base Pinning
 
 Task: make `refresh` diff against a package's **recorded base commit**
-instead of live upstream (design record: `custom_package/
-PROPOSED_SPEC_CHANGES.md`, section "Refresh Base Pinning — diff against
+instead of live upstream (design record: `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md`, section "Refresh Base Pinning — diff against
 the recorded base commit", decisions BP-1 … BP-8, APPROVED 2026-07-14).
 
 Execute the prompts below **in order, one at a time, each as a fresh
@@ -25,7 +24,7 @@ You are working in `/home/stan/c43`. First run
 if it prints anything else, STOP and report, touch nothing.
 
 Read, in this order:
-1. `custom_package/PROPOSED_SPEC_CHANGES.md` — only the section titled
+1. `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` — only the section titled
    "Refresh Base Pinning — diff against the recorded base commit",
    specifically decisions **BP-1** and **BP-3**.
 2. `tools/pkg_patch_refresh.py` — whole file (~430 lines).
@@ -140,7 +139,7 @@ Context from prior work (already on this branch, do not redo):
 called at the top of `refresh()`, initialized to HEAD on first run.
 
 Read, in this order:
-1. `custom_package/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
+1. `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
    Pinning", decisions **BP-2** and the "Root cause" subsection; also the
    older "Application Mechanism" section for background on why the
    pre-image blob SHA matters.
@@ -276,7 +275,7 @@ patch-classification arm currently contains a temporary fallback marked
 `# TEMPORARY bridge, replaced by BP-4 epoch checks in the next step.`
 
 Read, in this order:
-1. `custom_package/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
+1. `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
    Pinning", decision **BP-4** (including the 2026-07-14 amendment: the
    upstream-deleted case is a fatal stop by explicit human direction).
 2. `tools/pkg_patch_refresh.py` — `refresh()` in full.
@@ -373,7 +372,7 @@ decision table (fatal on added-live/deleted-live epoch mismatches) and
 diffs patch-classified files against recorded-base content.
 
 Read:
-1. `custom_package/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
+1. `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
    Pinning", decision **BP-7**.
 2. `tools/pkg_patch_refresh.py` — `refresh()` and `generate_patch()`.
 3. `tools/pkg_patch_apply.py` — ONLY the `_CONFLICT_MARKER_RE` regex and
@@ -456,7 +455,7 @@ BP-7 marker guard. Its CLI is still the original bare
 `pkg_patch_refresh.py <pkgdir>`.
 
 Read:
-1. `custom_package/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
+1. `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
    Pinning", decisions **BP-5** and **BP-3**.
 2. `tools/pkg_patch_refresh.py` — `main()`, `refresh()`, and the
    manifest helpers.
@@ -575,7 +574,7 @@ argparse `main()` with `--materialize REL` (BP-5), and helpers
 `load_manifest`, `save_manifest`, `list_working_files`.
 
 Read:
-1. `custom_package/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
+1. `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
    Pinning", decision **BP-6** (note: `--set-base` was explicitly
    rejected at review — do not add it) and **BP-4** (the two fatal
    epoch cases, which rebase must pre-scan for).
@@ -738,18 +737,18 @@ named errors; working files containing conflict markers make refresh
 refuse; the CLI grew `--materialize REL` and `--rebase-base [COMMIT]`.
 
 Read:
-1. `custom_package/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
+1. `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` — section "Refresh Base
    Pinning", ALL of it, especially **BP-8** (amended: the workflow
    documentation must be simple and accurate — this is a reviewed human
    requirement, not a style preference).
-2. `custom_package/README.md` — whole file.
+2. `design-docs/package-manager/README.md` — whole file.
 3. `tools/pkg_patch_refresh.py` — `main()`'s argparse block and the
    docstrings of `materialize`, `rebase_base`, `refresh` (to quote exact
    CLI behavior, not remembered behavior).
 
 ### What to implement (BP-8 only)
 
-File to touch: `custom_package/README.md`. Nothing else. Do not touch
+File to touch: `design-docs/package-manager/README.md`. Nothing else. Do not touch
 `PROPOSED_SPEC_CHANGES.md`, any `tools/` file, the `Makefile`, or
 anything under `src/`.
 
@@ -820,10 +819,10 @@ You are working in `/home/stan/c43`. First run
 if not, STOP and report.
 
 This is the closing bookkeeping prompt for the "Refresh Base Pinning"
-sequence (design record: `custom_package/PROPOSED_SPEC_CHANGES.md`,
+sequence (design record: `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md`,
 section "Refresh Base Pinning — diff against the recorded base commit",
 BP-1 … BP-8). The prior prompts changed `tools/pkg_patch_refresh.py`,
-`tools/test_pkg_patch_refresh.py`, and `custom_package/README.md` — run
+`tools/test_pkg_patch_refresh.py`, and `design-docs/package-manager/README.md` — run
 `git status --porcelain` and `git diff --stat` to see exactly what is on
 the branch; that output, not this paragraph, is the authority on what
 was implemented.
@@ -837,7 +836,7 @@ was implemented.
    All must pass.
 2. Run `make test`. It must be green. If anything fails at steps 1–2,
    STOP: report the failure verbatim; do not modify code in this prompt.
-3. Update `custom_package/IMPLEMENTATION_REPORT.md` (it exists — append
+3. Update `design-docs/package-manager/IMPLEMENTATION_REPORT.md` (it exists — append
    a new dated section, do not rewrite prior content) titled
    "Refresh Base Pinning (branch pkgmgr/refresh-base-commit)":
    - one paragraph on the bug (refresh diffed against live upstream;

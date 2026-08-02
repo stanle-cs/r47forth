@@ -1,6 +1,6 @@
 # C47 firmware — Forth package project
 - Upstream: gitlab.com/rpncalculators/c43. Do not modify upstream files;
-  all work goes through the external package system (see custom_package/README.md).
+  all work goes through the external package system (see design-docs/package-manager/README.md).
 - Packages are a flat working area mirroring upstream paths; no meson.build,
   nothing to declare. `tools/pkg_patch_refresh.py` regenerates patches/+files/,
   which are generated output — the build reads ONLY those, never your edits

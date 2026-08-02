@@ -32,7 +32,7 @@ Fix. Make both "not found in package" and "does not exist in src/c47" fatal (sys
 F5 — HIGH: make test_asan silently drops the package (and is likely broken outright)
 
 Mechanism. Makefile:147–148: test_asan: clean testPgms then a bare meson setup $(BUILD_PC) — no $(CUSTOM_PKG_FLAG), no buildtype — followed by a second flagged meson setup (151/153) on a now-already-configured dir, which modern meson refuses without --reconfigure. Either make aborts, or (older meson) the unflagged configure wins and the ASan test run is package-less.
-Failure scenario. make test_asan CUSTOM_PKG=packages/forth-core → tests run without Forth compiled in; ASan coverage of the package is zero while appearing to pass. custom_package/README.md's target table (line 97) documents test_asan as propagating — false.
+Failure scenario. make test_asan CUSTOM_PKG=packages/forth-core → tests run without Forth compiled in; ASan coverage of the package is zero while appearing to pass. design-docs/package-manager/README.md's target table (line 97) documents test_asan as propagating — false.
 Fix. Delete line 148 (or fold flags + --reconfigure into one invocation matching siblings). Makefile is package-manager surface (README lists it as such), not upstream-source.
 
 F6 — HIGH, systemic: the test corpus is generated-from-upstream and copied into the shared source tree
@@ -50,7 +50,7 @@ Fix. F1's fix resolves this as a side effect only if implemented by remapping so
 F8 — MEDIUM: the stub problem is ad hoc, and forth-core hits it the moment F1 lands
 
 Mechanism. Generator builds of items.c stub every referenced handler inside #if GENERATE_CATALOGS || GENERATE_TESTPGMS (upstream items.c:775–1665, void fnXxx(uint16_t){} each). The forth override adds extern fnForthOuter/fnForthCall (lines 7–8) + table rows (4701–4702) but no stubs in that section (verified). After F1's remap, generateCatalogs fails to link: undefined fnForthOuter/fnForthCall. Loud, at least — but it must land in the same series, and the rule is nowhere documented.
-Fix. Add the two stubs to the forth override's generator section; document in custom_package/README.md: "an items.c override that adds rows must add matching stubs inside the GENERATE_* block." (A pkg_generator_stubs mechanism is unnecessary — the whole-file override already owns that section. runFunction/forthResolveXEQ at items.c:683 is inside the !GENERATE_* region, so only the two pointers need stubs.)
+Fix. Add the two stubs to the forth override's generator section; document in design-docs/package-manager/README.md: "an items.c override that adds rows must add matching stubs inside the GENERATE_* block." (A pkg_generator_stubs mechanism is unnecessary — the whole-file override already owns that section. runFunction/forthResolveXEQ at items.c:683 is inside the !GENERATE_* region, so only the two pointers need stubs.)
 
 F9 — MEDIUM: rmtree(ignore_errors=True) + os.path.exists → stale shadow entries survive removal, silently
 
@@ -88,7 +88,7 @@ A byte-identical override (exactly what forth-core's placeholders were until H1)
 
 F16 — LOW: README's rebuild guidance is wrong in both directions
 
-custom_package/README.md:218–225 claims meson configure won't re-run resolution (changing -DCUSTOM_PKG dirties coredata → next ninja regen re-executes the full meson.build including run_command, rebuilding the shadow) while prescribing rm -rf of all build dirs — cargo-cult that masks the actual staleness rule (F3: copy mode; plus structural upstream changes not reflected in any tracked meson.build, where a new upstream header is served by the -Isrc/c47 fallback until the next reconfigure — benign until that file is later overridden). Fix: rewrite that section with the true rules once F3's warning lands. Verify the regen claim empirically during implementation; if some meson version does skip it, escalate F3's sync option.
+design-docs/package-manager/README.md:218–225 claims meson configure won't re-run resolution (changing -DCUSTOM_PKG dirties coredata → next ninja regen re-executes the full meson.build including run_command, rebuilding the shadow) while prescribing rm -rf of all build dirs — cargo-cult that masks the actual staleness rule (F3: copy mode; plus structural upstream changes not reflected in any tracked meson.build, where a new upstream header is served by the -Isrc/c47 fallback until the next reconfigure — benign until that file is later overridden). Fix: rewrite that section with the true rules once F3's warning lands. Verify the regen claim empirically during implementation; if some meson version does skip it, escalate F3's sync option.
 
 What's genuinely correct (verified, for calibration, not reassurance): runtime + testSuite c47_src remapping works (softmenus.c compiles from the shadow); custom sources are compiled from the package dir and tracked directly by ninja (no staleness); precedence is deterministic last-wins matching the README; on Linux/symlink mode, content edits to overrides and upstream propagate correctly to bare ninja.
 
@@ -115,7 +115,7 @@ File: Makefile. Delete the bare meson setup $(BUILD_PC) at line 148 (the flagged
 Verify: make -n test_asan CUSTOM_PKG=packages/forth-core | grep "meson setup" → every setup line carries -DCUSTOM_PKG; make -n testPgms CUSTOM_PKG=packages/forth-core | grep -c "cp .*res/testPgms" → 0.
 
 Step 5 — docs (F8, F3, F12, F14, F16).
-File: custom_package/README.md. Add: the items.c-override stub rule; the copy-mode staleness rule ("symlink mode: edits propagate to bare ninja; copy mode: reconfigure required — the resolver warns when copy mode is active"); the shadow-is-write-through warning naming compile_commands.json; correct the Rebuilding section (drop the rm -rf ritual, state when reconfigure is actually needed); note the docs-target limitation.
+File: design-docs/package-manager/README.md. Add: the items.c-override stub rule; the copy-mode staleness rule ("symlink mode: edits propagate to bare ninja; copy mode: reconfigure required — the resolver warns when copy mode is active"); the shadow-is-write-through warning naming compile_commands.json; correct the Rebuilding section (drop the rm -rf ritual, state when reconfigure is actually needed); note the docs-target limitation.
 Verify: proofread; ./packages/forth-core/build-test.sh still green (docs-only).
 
 Order matters: Step 1 before Step 3 (else generateCatalogs link-fails with forth-core active); Step 2 before Step 3 (meson consumes the new flag). Steps 4–5 are independent. After Step 3, rerun the whole verification battery once with CUSTOM_PKG unset (make sim) to confirm the vanilla build is untouched — that's the no-op guarantee the upstream invariant demands.

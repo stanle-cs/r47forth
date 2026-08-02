@@ -37,7 +37,7 @@ This branch's package-manager work happened in two passes:
   precision the actual constraint (package size) didn't require, at a real
   cost — a build-adjacent libclang dependency, a second storage convention,
   a cross-mechanism exclusivity check, and authoring friction. See
-  `custom_package/PROPOSED_SPEC_CHANGES.md`'s "Why revision 2" section for
+  `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md`'s "Why revision 2" section for
   the full rationale and the explicitly accepted trade-off (two packages
   editing *different lines* of the same function still compose; *same-line*
   edits now conflict, where function-boundary splitting would have composed
@@ -54,11 +54,11 @@ itself a decision worth a reviewer's attention.
 
 | Unit | Commit | Implements |
 |------|--------------|------------|
-| 1 | `b81055d28` | Spec revision: `custom_package/PROPOSED_SPEC_CHANGES.md` rewritten — SUPERSEDED section (dual-signal classification, libclang granularity, mechanism mutual-exclusivity) with why each is overturned; KEPT section (materialize/refresh, `.patch` format, cumulative ordering, `git apply -3` + marker scan, loud conflicts, whole-new-file storage) with both empirical findings (blob ancestry, `-U3` vs `-U10`) carried forward verbatim; New Decisions 1–7. Docs only. |
+| 1 | `b81055d28` | Spec revision: `design-docs/package-manager/PROPOSED_SPEC_CHANGES.md` rewritten — SUPERSEDED section (dual-signal classification, libclang granularity, mechanism mutual-exclusivity) with why each is overturned; KEPT section (materialize/refresh, `.patch` format, cumulative ordering, `git apply -3` + marker scan, loud conflicts, whole-new-file storage) with both empirical findings (blob ancestry, `-U3` vs `-U10`) carried forward verbatim; New Decisions 1–7. Docs only. |
 | 2 | `47ff9e11c` | Removal: deleted `tools/pkg_patch_extract.py` (libclang extractor) + its test/fixtures; deleted `tools/pkg_patch_refresh.py` (function-boundary version) + its test; removed `assert_mutually_exclusive` from `pkg_patch_apply.py`; deleted `test_pkg_patch_apply.py`/`test_pkg_patch_resolver.py` (built on removed machinery); stripped the `--patches` CLI and patch-application block from `resolve_c47_src.py`, returning it to whole-file-override-only pending Unit 4. Confirmed no dead imports via fresh-interpreter smoke tests. |
 | 3 | `b32499a4e` | `tools/pkg_patch_refresh.py` rewritten: `refresh(pkgdir, project_root)` scans a whole package directory (not one file), whole-file `git diff --no-index --full-index` per changed file (any kind of change, no restriction), ordinal reuse (including manual renames), stale-patch deletion on revert, new-file detection/reporting. 16 tests. |
 | 4 | `5c5af5f5d` | Resolver auto-discovery: `collect_patch_stacks`/`collect_new_files` (glob-based, no declarations) in `pkg_patch_apply.py`; `resolve_c47_src.py do_shadow()` rewritten to take a package-directory list and apply patches/copy new files with the same F9/F10/F11/F12/F15 guards; `meson.build` Phase 1 no longer calls `subdir(pkg)` at all (no per-package `-I`, no declaration reading); `resolver_safety_test.sh` updated for the new CLI, 9/9 still pass. 14 tests. |
-| 5 | `fb602b307` | Makefile: verified (not re-implemented) `CUSTOM_PKG=` already threaded through all 10 named targets; new `check-custom-pkg-{sim,dmcp,dmcp5}` phony targets fixing a real, empirically-reproduced bug (switching `CUSTOM_PKG` against an existing build dir silently reused the stale shadow tree — Make's directory-existence-gated target semantics meant `meson setup` never re-ran); `pkg_build PKG=<dir>` (clean → test-gated → refresh → size-checked zip at `pkg_dist/`, not `dist/` — collided with an existing upstream `dist` script, caught by the first real run). `custom_package/README.md` rewritten for revision 2. |
+| 5 | `fb602b307` | Makefile: verified (not re-implemented) `CUSTOM_PKG=` already threaded through all 10 named targets; new `check-custom-pkg-{sim,dmcp,dmcp5}` phony targets fixing a real, empirically-reproduced bug (switching `CUSTOM_PKG` against an existing build dir silently reused the stale shadow tree — Make's directory-existence-gated target semantics meant `meson setup` never re-ran); `pkg_build PKG=<dir>` (clean → test-gated → refresh → size-checked zip at `pkg_dist/`, not `dist/` — collided with an existing upstream `dist` script, caught by the first real run). `design-docs/package-manager/README.md` rewritten for revision 2. |
 | 6 | `a7f7c47eb` | Same-line two-package conflict verified through the real build path: automated test (`test_pkg_patch_resolver.py`, 2 new tests — conflict case + different-lines-compose contrast case) plus a real, since-deleted `meson setup` run against two scratch packages, confirming the exact same failure message the automated test asserts. |
 
 All existing sentinel-gate delete-safety and symlink-escape containment
@@ -427,8 +427,8 @@ corrupted patches from being written to disk.
 `pkgmgr/refresh-base-commit`):
 
 ```
-custom_package/PROPOSED_SPEC_CHANGES.md | 181 ++++++++
-custom_package/README.md                |  52 ++-
+design-docs/package-manager/PROPOSED_SPEC_CHANGES.md | 181 ++++++++
+design-docs/package-manager/README.md                |  52 ++-
 res/testPgms/testPgms.bin               | Bin 22189 -> 22197 bytes
 tools/pkg_patch_refresh.py              | 449 ++++++++++++++++---
 tools/test_pkg_patch_refresh.py         | 770 ++++++++++++++++++++++++++++++-

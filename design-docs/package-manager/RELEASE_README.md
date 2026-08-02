@@ -19,7 +19,7 @@ tools/resolve_c47_src.py                     configure-time overlay resolver
 tools/pkg_patch_refresh.py                   authoring: working area -> patches/+files/
 tools/pkg_patch_apply.py  pkg_patch_common.py
 tools/test_pkg_patch_{common,refresh,resolver}.py
-custom_package/README.md                     the package system, in full
+design-docs/package-manager/README.md                     the package system, in full
 COPYING                                      GPL-3.0 licence text
 packages/forth-core/patches/                 14 diffs against upstream files
 packages/forth-core/files/                   13 new sources

@@ -1,14 +1,14 @@
 # Proposed Spec Changes — Plain-Diff Package Overlay System
 
 **Status:** revision 2, supersedes revision 1's libclang/function-boundary
-design. No `custom_package/DESIGN.md` exists today; this document is written
+design. No `design-docs/package-manager/DESIGN.md` exists today; this document is written
 so it could later seed one, but formalizing it is a human decision.
-`custom_package/README.md` is the sole existing authority on current
-behavior — `packages/forth-core/DESIGN.md` governs forth-core's own Forth
+`design-docs/package-manager/README.md` is the sole existing authority on current
+behavior — `design-docs/forth-core/DESIGN.md` governs forth-core's own Forth
 logic only and is not cited here.
 
 **Scope:** package overlay/manager machinery only — `tools/resolve_c47_src.py`
-and the `tools/pkg_patch_*.py` tooling, `custom_package/README.md`,
+and the `tools/pkg_patch_*.py` tooling, `design-docs/package-manager/README.md`,
 `Makefile`, top-level `meson.build`. Does not touch forth-core's Stage-2
 Forth work, `freeList.c`, `labelList`/`programList`, or any other
 audit-backlog item.
@@ -544,7 +544,7 @@ base commit, producing wrong patches for packages whose upstream has since
 moved.
 
 **Scope:** `tools/pkg_patch_refresh.py`, `tools/test_pkg_patch_refresh.py`,
-`custom_package/README.md`, this document. **Zero apply-side changes**
+`design-docs/package-manager/README.md`, this document. **Zero apply-side changes**
 (`pkg_patch_apply.py`, `resolve_c47_src.py`, `Makefile` untouched — the
 `refresh` CLI signature at the `pkg_build` call site
 [VERIFIED: Makefile:248] is unchanged). Zero-touch upstream holds.
@@ -660,7 +660,7 @@ the base per BP-3 if unset). If the recorded base commit is unavailable,
 materialize fails before attempting extraction. Fatal if `<rel>` doesn't
 exist at base; fatal
 if the working file already exists (no silent clobber of edits). The
-README's raw-`cp`-from-live instruction [VERIFIED: custom_package/README.md:181]
+README's raw-`cp`-from-live instruction [VERIFIED: design-docs/package-manager/README.md:181]
 is replaced. Rationale: once a base is pinned, copying from the *live*
 tree bakes upstream's own base→live changes into the next patch as if the
 developer authored them — the mirror image of the main bug — so the
@@ -694,7 +694,7 @@ Scope deliberately excludes `files/`-classified working files — they never
 pass through `merge-file` (no base counterpart) and could conceivably
 contain marker-shaped content legitimately.
 
-**BP-8. Documentation.** `custom_package/README.md` Authoring Workflow and
+**BP-8. Documentation.** `design-docs/package-manager/README.md` Authoring Workflow and
 Version Control sections updated: base concept, `--materialize`,
 `--rebase-base`, the BP-3 legacy-initialization warning. This spec entry is
 the design record. [AMENDED at review, 2026-07-14] hard requirement: the
@@ -735,7 +735,7 @@ patches-and-files-only convention (New Decision 3 explicitly states a
 package directory contains nothing else, and no per-package `meson.build`
 is read). This is out of scope for this revision (forth-core migration is
 explicitly excluded — see Known Migration Gap in
-`custom_package/IMPLEMENTATION_REPORT.md`) and is flagged here as a
+`design-docs/package-manager/IMPLEMENTATION_REPORT.md`) and is flagged here as a
 `[DECISION NEEDED]` for whoever migrates forth-core: either such flags move
 to the top-level `meson_options.txt` (one of the three files the package
 manager itself owns) with the package selecting them by name somehow, or
