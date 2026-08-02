@@ -546,6 +546,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnSinh",                 fnSinh                },
   {"fnSl",                   fnSl                  },
   {"fnSlvc",                 fnSlvc                },
+  {"fnSlvp",                 fnSlvp                },
   {"fnSlvq",                 fnSlvq                },
   {"fnSquare",               fnSquare              },
   {"fnSr",                   fnSr                  },
