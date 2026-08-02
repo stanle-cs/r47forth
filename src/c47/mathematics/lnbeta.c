@@ -163,6 +163,9 @@ static bool_t _lnBetaReal(real_t *xReal, real_t *yReal, real_t *rReal, real_t *r
 }
 
 
+// Deliberately outside OPTION_ZETA_BETA, which gates only the LN-beta key: the F distribution calls this from f.c, and WP34S_betai in wp34s.c calls it too.
+// Gating it would leave both calling an empty function, the way erfc did before it went with OPTION_DIST_NORMAL. _lnBetaReal and the LnGamma helpers it
+// reaches stay outside for the same reason. Only _lnBetaComplex, which nothing but the key uses, sits inside the option.
 void LnBeta(const real_t *x, const real_t *y, real_t *res, realContext_t *realContext) {
   real_t rReal, rImag;
   real_t xx, yy;

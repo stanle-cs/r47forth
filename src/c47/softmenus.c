@@ -2900,7 +2900,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
     #endif // !OPTION_XFN_1000
 
 
-    #if !defined(OPTION_DIST_2)    // cauchy, chi, expo, logis, t, weibull
+    #if !defined(OPTION_DIST_B)    // cauchy, chi, expo, logis, t, weibull
       case  -MNU_CAUCH   :
       case  ITM_CAUCHP  :
       case  ITM_CAUCH   :
@@ -2931,10 +2931,10 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case  ITM_TX      :
       case  ITM_TUX     :
       case  ITM_TM1P    :
-    #endif // !OPTION_DIST_2
+    #endif // !OPTION_DIST_B
 
 
-    #if !defined(OPTION_DIST_3)   // Gev, Pareto, Uniform, Discr Uniform
+    #if !defined(OPTION_DIST_D)   // Gev, Pareto, Uniform, Discr Uniform
       case -MNU_GEV       :
       case ITM_GEVP      :
       case ITM_GEV       :
@@ -2959,7 +2959,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_DISUNIFORML:
       case ITM_DISUNIFORMU:
       case ITM_DISUNIFORMI:
-    #endif // !OPTION_DIST_3
+    #endif // !OPTION_DIST_D
 
     #if !defined(OPTION_DIST_NORMAL)
       case -MNU_NORML :
@@ -2970,9 +2970,10 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_STDNORML  :
       case ITM_STDNORMLU :
       case ITM_STDNORMLM1:
+      case ITM_ERFC      :   // erfc is the normal CDF in disguise, so it goes with this option
     #endif // !OPTION_DIST_NORMAL
 
-    #if !defined(OPTION_DIST_1)
+    #if !defined(OPTION_DIST_C)
       case -MNU_F: case -MNU_BINOM: case -MNU_HYPER: case -MNU_POISS: case -MNU_GEOM:
       case ITM_FPX:      case ITM_FX:      case ITM_FUX:      case ITM_FM1P:
       case ITM_BINOMP:   case ITM_BINOM:   case ITM_BINOMU:   case ITM_BINOMM1:
@@ -2980,7 +2981,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_HYPERP:   case ITM_HYPER:   case ITM_HYPERU:   case ITM_HYPERM1:
       case ITM_POISSP:   case ITM_POISS:   case ITM_POISSU:   case ITM_POISSM1:
       case ITM_GEOMP:    case ITM_GEOM:    case ITM_GEOMU:    case ITM_GEOMM1 :
-    #endif // !OPTION_DIST_1
+    #endif // !OPTION_DIST_C
 
     case 9999: return true;  break;
     default:   return false; break;
