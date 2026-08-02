@@ -142,16 +142,16 @@ TO_QSPI const int16_t menu_LOOP[]        = { ITM_DSE,                       ITM_
 /*                                          <---------------------------------------------------------------------- 6 f shifted functions ------------------------------------------------------------------------->  */
 /*                                          <---------------------------------------------------------------------- 6 g shifted functions ------------------------------------------------------------------------->  */
 
-#if ((defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL == USER_R47))
+#if (defined(OPTION_VECTOR) && (CALCMODEL == USER_R47))
   #define VF5      -MNU_VECCONV
   #define VF6      ITM_CLSTK
-#elif (!(defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL == USER_R47))
+#elif (!defined(OPTION_VECTOR) && (CALCMODEL == USER_R47))
   #define VF5      ITM_NULL
   #define VF6      ITM_CLSTK
-#elif ((defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL != USER_R47))
+#elif (defined(OPTION_VECTOR) && (CALCMODEL != USER_R47))
   #define VF5      -MNU_VECCONV
   #define VF6      ITM_DRG
-#elif (!(defined(OPTION_VECTOR)|| defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL != USER_R47))
+#elif (!defined(OPTION_VECTOR) && (CALCMODEL != USER_R47))
   #define VF5      ITM_NULL
   #define VF6      ITM_DRG
 #endif
@@ -2819,7 +2819,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
     #endif //OPTION_SLV_ZETA_BETA
 
 
-    #if !(defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA))
+    #if !defined(OPTION_VECTOR)
       case ITM_stkexV2:
       case ITM_stkexV3:
       case ITM_stkexV4:
