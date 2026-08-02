@@ -280,4 +280,4 @@ comparison words raise `ERROR_INVALID_DATA_TYPE_FOR_OP` on non-numeric operands.
 
 The standard's own answer to values that do not fit the data stack is
 segregation onto a separate stack. That is a precedent for the parked hybrid
-spill design in `packages/forth-core/DEFECTS_stack_semantics.md` D3.
+spill design in `design-docs/forth-core/DEFECTS_stack_semantics.md` D3.

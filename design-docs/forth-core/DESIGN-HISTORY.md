@@ -1,0 +1,1661 @@
+# forth-core — DESIGN-HISTORY.md
+
+**Non-normative.** This file is the amendment trail for `DESIGN.md`. It records
+*how* decisions were reached, what they superseded, and why — so `DESIGN.md`
+can state only what is true **now**, in one voice, with no amendment scaffolding
+interleaved with the specification.
+
+Rules:
+
+- `DESIGN.md` is authoritative. Where it speaks, nothing else does.
+- Nothing here is normative. If this file and `DESIGN.md` disagree,
+  `DESIGN.md` wins and this file has a bug.
+- Entries are append-only and dated. Do not rewrite history to match a later
+  decision; add a superseding entry instead.
+- When an amendment is folded into `DESIGN.md`, its scaffolding
+  (`STAGE 2 AMENDMENT`, `[SUPERSEDED]`, `[AMENDMENT PENDING RATIFICATION]`,
+  `C-n` / `P-n` / `D-n` inline tags) is **removed** from `DESIGN.md` and its
+  narrative lands here.
+
+---
+
+## Tag glossary
+
+Historic amendment series. These tags no longer appear in `DESIGN.md`; they are
+retained here so old commit messages, review notes, and test names remain
+readable.
+
+| series | date | scope |
+|--------|------|-------|
+| `C-1`..`C-14` | 2026-07-07 | Sub-phase C compiler pre-build audit |
+| `P-1`..`P-10` | 2026-07-10 | PEM-native entry stage (§9) |
+| `P-H1`..`P-H7` | 2026-07-10 | PEM-native entry hook points (§6) |
+| `H1`..`H10` | 2026-07-05..06 | Stage-1 hook points (§6) |
+| `T1-1`..`T1-4` | 2026-07-06 | Pre-H1 conformance fixes |
+| `D-2`, `D-3` | 2026-07-13 | Stage 2 rulings (pre-scan, re-entrancy) |
+| `F1`..`F4` | 2026-07-11 | PEM audit fixes |
+| `V-1`..`V-7` | 2026-07-14 | Extension-principle series (this rewrite) |
+
+Note: the §6 hook IDs and the §4.2 call-site-map H-numbers were independent
+numbering schemes. An H-number in the §4.2 table never corresponded to the
+hook of the same ID in §6. This collision is one reason the tags were retired.
+
+---
+
+## 2026-07-08 — §3.3-C consolidation (C-1..C-13)
+
+The sub-phase C amendment set (compiler pre-build audit, 2026-07-07) was merged
+into `DESIGN.md` in place; every piece of base text it superseded was removed.
+The trailing patch-sections — "Stage 1 — Resolution Clarifications", the §3.3
+tokenizer NOTE, and the §2.2 `FTOK_LIT`-size correction — were folded at their
+sites (§4.1/§1.3, §3.3.3, and the §2 token table + §3.2 pseudocode + §5.4 cost
+formula respectively).
+
+Amendment tags `C-1..C-13` were **retained inline** at each merge site for
+traceability. That decision is reversed by the 2026-07-14 rewrite: the tags are
+now here and `DESIGN.md` reads as one voice.
+
+Substantive corrections in that set, for the record:
+
+- **C-2** — resolution order: number tried **before** C47 label, not after. A
+  user program labelled `3` must never hijack the numeric literal `3` inside
+  Forth source. The converse loss (a digits-only program name is uncallable
+  from Forth by bare name) was accepted as trivial.
+- **C-3** — `forthFindPrim` returns `uint16_t` with miss = `FORTH_PRIM_NONE`
+  (0xFFFF). The draft's `idx >= 0` test is always true on an unsigned; every
+  unknown word would have dispatched `forthPrims[0xFFFE].fn()`.
+- **C-12** — nested-entry error code: doc said `ERROR_RAM_FULL`, code raised
+  `ERROR_OPERATION_UNDEFINED`. Resolved **in code's favour**; the doc was
+  wrong and the tests were right.
+- **C-13** — arena cost formula: the earlier `2*(tokenCount + 1)` form
+  undercounted every inline payload. Superseded by the per-token-class formula
+  now in §5.4.
+- **C-14** — error context display: `ERROR_FUNCTION_NOT_FOUND` concatenates the
+  offending token, so the user sees `No such function: TOKEN` rather than a
+  bare generic error.
+
+## 2026-07-10 — PEM-native entry stage (P-1..P-10)
+
+§9 merged with tags `P-1..P-10`; `P-1..P-4` amended §0.1/§0.2, §2.1,
+§3.1/§3.3.1, §3.3.2, §4.2 and §6/§6.2 in place.
+
+- **P-1 — `ITM_FORTH` becomes `PTP_REM`, superseding `PTP_NONE`.** The step
+  carries an inline `STRING_LABEL_VARIABLE` payload (the source line, or a
+  zero-length payload = the toggle marker). `PTP_REM` was chosen because every
+  upstream consumer already handles it generically: step length via
+  `countLiteralBytes`, listing render via `decodeRem`, variable-scan skip, and
+  the `insertStepInProgram` PTP switch treating it as "nothing to do".
+  **Breaking encode change:** a step recorded under the old `PTP_NONE` two-byte
+  encoding is unreadable after this change. No migration was provided; the
+  representation predated any release.
+- **P-3 — names persist, `widx` never does.** Program↔Forth crossings are name
+  strings resolved at run time. This is the invariant the whole design rests on.
+- **P-6 — entry-only toggle, no runtime flag.** Keypad state is *derived* from
+  the program bytes at the cursor, never stored.
+
+## 2026-07-11 — PEM audit fixes (F1..F4)
+
+- **F1** — `forthEntryStateAtInsertion()` added alongside
+  `forthEntryStateAtCursor()`. An insertion derives from the step *before*
+  `currentStep`, not `currentStep` itself.
+- **F3** — `forthFallbackOp` gates the Forth XEQ fallback to
+  `ITM_XEQ`/`ITM_XEQP1` only. `LBL?` on a name that resolves only in the Forth
+  dictionary reports label-not-found (its own negative result), not an error
+  halt.
+- **F4** — `insertUserItemInProgram` wrote the opcode low byte as `func & 0x7f`,
+  corrupting any item whose low byte ≥ 0x80 (e.g. `ITM_XEQP1` = 0x08AF →
+  0x88 0x2F). Fixed to `func & 0xff`. **Blast radius exceeds forth-core:** the
+  fix changes encoding for *all* user items with low byte ≥ 0x80 inserted via
+  this helper.
+
+## 2026-07-11 — FCALL reject-and-redirect (ratified)
+
+A PEM gesture that would record `ITM_FCALL` + `widx` is rewritten to the stored
+source-step form carrying the word's **name** (reverse lookup via
+`forthDictNameByIndex`). An unresolvable or indirect `widx` is rejected with
+`ERROR_NON_PROGRAMMABLE_COMMAND`. Implemented in the `manage.c` override's
+`insertStepInProgram` FCALL arm; verified by `test_fcall_redirect_records_name`
+/ `test_fcall_redirect_rejects_stale`.
+
+This closed the "known hole" §4.2 described (a user hand-entering `FCALL nn` in
+PEM to persist a raw index). **§4.2's hole text was left stale for three days**
+and contradicted the resolution until the 2026-07-14 audit caught it.
+
+## 2026-07-13 — H5: dictionary save/restore
+
+The `saveRestoreBackup.c` package patch carries the five `forthDict*`
+parameters; restored state is validated (`forthDictValidateRestored`) and
+pre-H5 backups default to an empty dictionary. The dictionary round-trips the
+simulator backup. Run-scoping still governs its lifetime across runs, so this
+buys crash-safety and cross-session inspection, not durability of words.
+
+## 2026-07-13 — D-2: Architecture 2 (run-start pre-scan) supersedes execute-in-place
+
+**Superseded:** Architecture 1 — "the runner interprets each `ITM_FORTH` source
+step as it reaches it", with the documented consequence that a `GTO` jumping
+over `: SQ … ;` left `SQ` undefined at the call site.
+
+**Now:** `forthProgramStep` runs `forthRunGenCheckReset()`, then a first-touch
+pre-scan of the owning program (`forthPreScanOwningProgram`: every source step
+interpreted in `DEFS_ONLY` mode), then executes the current payload in
+`SKIP_DEFS` mode.
+
+- **D-2a** — definitions compile, interpret-state tokens are skipped during the
+  scan: no early tail execution.
+- **D-2b** — `:`…`;` regions are consumed without touching the dictionary during
+  execution: no recompilation.
+- **D-2c** — scope is exactly the owning program, resolved via
+  `forthOwningProgramStart` / `forthNextProgramStart`.
+
+Tracking: `forthScannedProgs[FORTH_SCAN_MAX=8]` + `forthScannedCount`, reset
+with the dictionary at the generation seam. **The stored representation did not
+change** — that was the point of source-as-truth.
+
+Gained: interpret-state (tail) references resolve against any definition in the
+same program, earlier or later. The Architecture 1 "reachability constraint" is
+gone.
+
+Retained limitations, documented rather than fixed:
+
+1. Definition-BODY forward references (def → later def) still error at pre-scan
+   time, at the referencing step. Standard Forth define-before-use.
+2. A pre-scan error halts the run at the triggering step *before* its tail
+   executes, and the program stays unrecorded, so a fixed program re-scans.
+3. Scan-list overflow (>8 Forth-bearing programs per run) re-scans and
+   recompiles on later touches. Shadowing keeps lookups correct at the cost of
+   dictionary bytes.
+4. Editing programs between single-steps leaves dictionary and scan list stale
+   until the next generation bump. Recorded pointers are only compared, never
+   dereferenced.
+
+## 2026-07-13 — D-3: full re-entrancy for both interpreters
+
+**Superseded:** the single-level `forthRunning` guard (inner) and
+`forthOuterActive` + `static forthSource[256]` model (outer). Both refused
+nested entry with `ERROR_OPERATION_UNDEFINED`.
+
+**Now, inner (`forthInner`):** re-entrant to `FORTH_NEST_MAX` (4) via a depth
+counter plus an `rsp` watermark. `uint8_t forthDepth` replaces `forthRunning`;
+entry at the cap raises the same error; each invocation records
+`rspBase = rsp` instead of zeroing `rsp`; `FTOK_EXIT` returns at
+`rsp == rspBase`; every exit path unwinds via `rsp = rspBase; forthDepth--`
+through one `INNER_LEAVE()` macro. A leaked entry would otherwise be silently
+absorbed as the next invocation's floor, shrinking capacity — `rstack[64]`
+stays one shared static partitioned by watermarks, so zero BSS growth, and the
+`FTOK_CALL` overflow check naturally bounds the sum of all levels.
+`forthTestGetRsp() == 0` at rest pins the unwind in every path.
+
+**Now, outer (`forthOuterInterpret`):** each interpret carries a
+per-invocation `forthOuterCtx_t` (source[256], tokenizer position, `openDef`
+snapshot) on the **caller's C stack**, chained through one static
+`forthOuterCur` pointer. `forthOuterDepth` caps nesting at
+`FORTH_OUTER_NEST_MAX` (2). The tokenizer statics moved into the context;
+`openDef` is snapshot/restored around nesting via `forthDefStateSave` /
+`forthDefStateRestore`, so a nested line can never close or abort the outer
+line's definition. Idle BSS: ~255 B reclaimed.
+
+Nesting deeper than 2 is unreachable by construction — a label XEQ from a
+program-context Forth step is continuation-style (`fnExecute`'s nested branch
+pushes a level and defers stepping to the enclosing `runProgram` loop), so
+interpreter frames never stack past typed-line → program-step. The cap is a
+backstop, pinned by a hook-primed test (T3.6 phase A).
+
+The copy discipline (copy the X string **before** `fnDrop`) was unchanged and
+remains normative.
+
+## 2026-07-13 — C-1 label-arm dispatch: `fnExecute`, not a `PGM_RUNNING` wrap
+
+**Superseded:** §3.3.6 prescribed dispatching interpret-state C47-label calls
+via `reallyRunFunction(ITM_XEQ, label)` inside the same PGM_RUNNING
+save/set/restore wrap as the `FTOK_C47` arm.
+
+That DECIDED text was **defective for `ITM_XEQ` specifically**, first exercised
+end-to-end by test T3.5:
+
+1. **The program never ran.** Under a forced `PGM_RUNNING`, `fnExecute` takes
+   its nested branch: it allocates a 3-block subroutine level, `fnGoto`s, and
+   defers stepping to an *enclosing* `runProgram` loop. From an interactive
+   Forth line no such loop exists — the XEQ was a silent no-op that leaked the
+   subroutine level (3 blocks per call).
+2. **Run-generation bump site A was suppressed.** Forcing `PGM_RUNNING` made
+   `fnExecute` skip the bump, so a program run started from a Forth line
+   carried a stale dictionary generation.
+3. The livelock the wrap defended against lives in `items.c`'s NORMAL-MODE
+   dispatch (`refreshStatusBar()` → GTK pump), which calling `fnExecute`
+   directly bypasses entirely.
+
+**Now:** the label arm clears `dynamicMenuItem = -1` (its `>= 0` menu branch in
+`fnGoto` reinterprets the label ID as a global step number — leftover menu
+state sent `goToGlobalStep` off the end of program memory; `fnExecute` resets it
+only *after* `fnGoto`, too late for a name-resolved call), then calls
+`fnExecute(label)` directly.
+
+The `PGM_RUNNING` wrap **remains correct and normative for the `FTOK_C47` arm**,
+where the dispatched items are ordinary functions, not the run-loop driver.
+
+## 2026-07-13 — Range-overlap double-free guard in `freeListFree`
+
+Unconditional range-overlap double-free rejection, `core/freeList.c`. Promoted
+to `DESIGN.md` §5.6 and hook H10. Upstream MR to the c47 firmware repository
+remains **pending** — this is the one package change that is a candidate to go
+upstream rather than live here forever.
+
+---
+
+## 2026-07-14 — Extension-principle series (V-1..V-7)
+
+Origin: hardware testing on a real R47 surfaced four PEM entry defects. Root
+causing them exposed a deeper question — *is Forth a separate system or an
+extension of RPN?* — which was settled explicitly:
+
+> **Forth is an extension of RPN, not a new system. That is the design core.**
+
+Everything below follows from that ruling. The four field defects and their
+root causes are recorded in the PEM entry section of this file.
+
+### V-1 — resolution order gains C47 items, placed **before** label
+
+**Superseded:** prim → colon → number → label → error.
+**Now:** prim → colon → number → **item** → label → error.
+
+The first proposal placed items *after* label, reasoning "preserve existing
+programs' behaviour exactly". That reasoning was **wrong and was withdrawn**:
+it imported a constraint from the reverse direction (§4.2, where existing RPN
+programs doing `XEQ 'NAME'` genuinely must keep working) into the forward
+direction, where no Forth source exists yet to preserve.
+
+Settled on §4.1's own precedent instead — C-2 put number before label because
+*"a user program labeled `3` must never hijack the numeric literal `3` inside
+Forth source."* A user program labelled `SIN` must not hijack the builtin `SIN`
+by the identical argument. And the extension principle says it directly: in
+RPN, `SIN` means the builtin.
+
+Accepted cost: a program named e.g. `MEAN` is uncallable from Forth by bare
+name. C-2 accepted precisely this trade for digit-named programs. The escape
+hatch is `XEQ 'MEAN'`, which V-3 makes reachable from inside Forth.
+
+### V-2 — compile-state item calls allowed; `FTOK_C47` emitted at last
+
+`FTOK_C47` (token 0x7F04) existed from the original §2.2 as *"the bridge that
+lets Forth call the entire C47 command set"*, with a complete runtime decoder,
+and was never emitted by the compiler — §2.2 said so: *"until stage-2 work
+lands this token is exercised only by hand-assembled test bodies."* This is
+that work.
+
+§3.3.6's two reasons for deferring compile-state C47 calls were examined and
+found to be **label-specific**:
+
+1. `FTOK_C47` cannot decode `PTP_LABEL` — but items used here are `PTP_NONE`,
+   which the decoder already handles.
+2. A compiled label ID goes stale because `labelList[]` renumbers — but item
+   ids are compile-time constants in `indexOfItems[]` and never renumber.
+
+Neither transfers. The block is lifted **for items only**; it stands for labels
+until V-3.
+
+Safety filter: `CAT_FNCT && PTP_NONE`. Checked at the boundary rather than
+assumed — `SIN` (76) resolves; `EXIT` (1737, `CAT_NONE | PTP_DISABLED`) and
+`ALPHA` (1740, `CAT_NONE`) are excluded. `OFF` (1543, `CAT_FNCT | PTP_NONE`)
+resolves, and that is correct: `PTP_DISABLED` means "not programmable", so
+passing the filter means the item is legal as a program step. `OFF` in a Forth
+word is exactly as dangerous as `OFF` in a keystroke program — not a new hole,
+and a principled filter beats a hand-maintained blacklist.
+
+### V-3 — `FTOK_XEQN`: the staleness fix for compile-state label calls
+
+The problem `DESIGN.md` §3.3.6 named but did not solve. `findNamedLabel`
+returns an index into `labelList[]`; `scanLabelsAndPrograms` **frees and
+reallocates** that array, resets `numberOfLabels = 0`, and rebuilds it by
+walking program memory in address order — on **every edit**. Indices are
+positional. Insert a `LBL` earlier in memory and every later index shifts.
+A compiled label ID then calls the wrong program: no error, no crash, just
+wrong.
+
+C47 itself never stores label indices — a program's `XEQ 'NAME'` step stores an
+inline name string and resolves it at run time. `FTOK_XEQN` does the same, and
+reuses `forthResolveXEQ`, which already existed.
+
+**Principle established** (state it once, it settles every future case):
+
+> **Bake ids that are stable; name-resolve ids that aren't.**
+
+| id | stable? | mechanism |
+|----|---------|-----------|
+| item id (`indexOfItems[]`) | compile-time constant | bake → `FTOK_C47` |
+| colon index (`FTOK_CALL`) | stable within a dictionary generation | bake |
+| label id (`labelList[]`) | **renumbers on every edit** | name-resolve → `FTOK_XEQN` |
+
+`FTOK_XEQN` also supplies the inline-string machinery that parameterised items
+(`STO 'VAR'`) need later. Built once, used twice.
+
+### V-4 — parameterised items follow C47 convention
+
+Ruling: *"we always go with C47's convention; this forth version is an
+extension of RPN not a completely new system."*
+
+C47 binds a parameter to its opcode inline: `STO 05` is one step. Carried into
+Forth source, `STO` consumes the **next source token** as its parameter — a
+parsing word, legitimate in Forth (`."`, `S"` do this) though not
+stack-idiomatic.
+
+**Decided: `STO 05`. Rejected: `5 STO`.** They are mutually exclusive.
+
+The parameter grammar belongs to the parsing word, **not** to the §3.3.5 number
+rule — `.05` means local register 5, which the number grammar would otherwise
+read as the real 0.05. Consuming the raw next token before the number rule sees
+it avoids the collision by construction.
+
+Phased: (1) `PTP_NONE` — no grammar, ships on the existing decoder;
+(2) `PTP_REGISTER` + `PTP_NUMBER_8/16` direct params; (3) named/indirect
+(`STO 'VAR'`, `STO IND 05`) on V-3's inline strings.
+
+### V-5 — primitives are an alias layer, not a vocabulary
+
+Observation forced by V-1: every one of the 11 primitives is a thin wrapper over
+an existing C47 handler (`pDup`→`fnDupN(1)`, `pSwap`→`fnSwapXY`,
+`pPlus`→`fnAdd`, …). Once items resolve, all of them are reachable through the
+item table too.
+
+So the prim table was never a separate vocabulary — it is Forth-idiomatic
+**naming** for C47 operations the item table names differently (`SWAP` for
+`x<>y`), plus a faster 2-byte token.
+
+This is recorded as a **guardrail**, not trivia: without it, the natural
+instinct after V-1 is to keep adding prims (`SIN`, `SQRT`, `MOD`), rebuilding
+the disjoint system V-1 removes, one well-intentioned commit at a time.
+
+### V-6 — source-as-truth reaffirmed; entry-time validation added instead
+
+Challenged during review: *"why is a Forth line source text resolved at run
+time when an RPN step is a compiled dispatch?"*
+
+The framing was **conceded to be misleading** — an RPN step was never compiled
+from anything. You pressed a key and the item was recorded; the byte *is* the
+canonical form and decode is a bijection. RPN entry is selection from a finite
+set; Forth entry is typing. There is no "RPN convention for storing typed text"
+to follow.
+
+Compile-at-entry was then examined properly and rejected on two concrete
+grounds:
+
+- **Into the arena, persistent dictionary:** the arena would have to hold every
+  definition of every stored program simultaneously across power-off, against a
+  ≤ 2 KB high-water ceiling on the 64 KB part — and it contradicts run-scoping,
+  whose entire purpose is that runs are deterministic and words do not
+  accumulate.
+- **Into program memory, tokens in the step:** calls must be name-resolved
+  anyway; a call still has to *find* its definition, which is the pre-scan
+  again, walking tokens instead of text. All the run-time machinery is kept and
+  the source is thrown away — and `EDIT` then needs a full decompiler, a second
+  body of code in flash, on a flash-constrained target.
+
+The loss-of-source argument was **weaker than first claimed** and is recorded
+honestly: the prim aliases (`*`, `×`, `·`) are distinct token indices and would
+decompile correctly. What is actually lost is whitespace, number formatting
+(`2.50` → `2.5`), and comments if ever added. The real reasons are the two
+above, plus `PTP_REM` buying every upstream consumer for free.
+
+What the challenge correctly identified is that RPN has a property Forth lacked:
+*you cannot enter a broken step*. Addressed by **entry-time validation** —
+check the line on commit, no storage change. Advisory for not-yet-authored
+forward references, since the pre-scan makes those legal.
+
+### V-7 — Forth source lines render bare
+
+**Superseded:** `FORTH 'source'` (the generic `decodeRem` form).
+**Also rejected, having first been recommended:** `'source'` (quotes, no prefix).
+
+The quotes recommendation was **withdrawn after being shown backwards**. A
+string-literal step already renders `'text'` *with* quotes, so `'source'` is
+what collides with a literal. Rendering **bare** collides with nothing: RPN
+steps render as `SIN` / `STO 05`, and a Forth line reading `SIN` renders `SIN`
+and — post V-1/V-2 — *does the same thing*. Where Forth genuinely differs
+(`: SQ DUP * ;`, multi-word lines) it looks different because it is different.
+
+Markers keep their directional render (`»FORTH` / `FORTH«`); only source lines
+go bare.
+
+Consequential simplification: the `pemAlphaEdit` extraction offset drops 8 → 0,
+and the `"FORTH "` branch in the fnPem cursor-offset hack becomes dead code —
+the existing default handles bare text, identically to `ITM_LITERAL`.
+
+### PEM entry defects found on hardware, 2026-07-14
+
+Four field reports, root-caused. All four had **passing tests** — recorded here
+because the *reason* they passed is the durable lesson.
+
+1. **Alpha menu never appeared; user stranded in the CAT menu.** `pemAlpha`
+   pushes `-MNU_ALPHA`, then `_closeCatalog()` runs *after* `runFunction`
+   returns and pops it, because `MNU_ALPHA` is itself listed in
+   `CatalogMenus[]`. Double-pop: the toggle arm popped FCNS, `_closeCatalog`
+   popped again and ate ALPHA. Inherited from the `ITM_REM` arm it was modelled
+   on, which has the same latent flaw and never noticed — REM needs no menu.
+2. **EXIT killed alpha input instead of escaping the menu.** A *consequence* of
+   (1): `fnKeyExit`'s CM_PEM arm tries `isAlphaSubmenu(0)` first, but the
+   current menu was the catalog, so it fell through to `pemAlpha(ITM_BACKSPACE)`.
+   Fixing (1) exposes a second, independent bug: `isAlphaSubmenu` does not list
+   `MNU_FORTH`, so EXIT from the FWRD picker would kill the capture too.
+3. **`tam.function` clobbered on every keystroke.** `insertStepInProgram`'s
+   first arm (inherited verbatim from upstream) fires whenever `FLAG_ALPHA` is
+   set and unconditionally sets `tam.function = ITM_LITERAL` — before the
+   `ITM_FORTH` arm is ever reached. Killed the empty-commit rule, the
+   `forthPickerGuard`, and the decode transient-capture exception. Also meant
+   toggling *off* during capture was swallowed and never reached the toggle.
+4. **ENTER dropped out of capture with no way back.** The design said
+   re-entering capture after ENTER was the in-region capture route's job, firing
+   on the next printable key. But `FLAG_ALPHA` is what selects the alpha
+   keyboard layout — with it cleared, letter keys produce `ITM_SIN` etc., not
+   `ITM_A`. Only digits could satisfy the route. There was no keystroke that
+   re-opened a Forth *text* line.
+
+**Why every test passed:** the tests call `addStepInProgram` /
+`pemCloseAlphaInput` directly, with `catalog = CATALOG_NONE` and `tam.function`
+hand-set — bypassing the exact `keyboard.c` dispatch chain that breaks them.
+`test_alpha_menu_on_top_during_capture` asserts `currentMenu() == -MNU_ALPHA` at
+the one instant it is still true.
+
+**Durable lesson, and the reason this paragraph exists:** a test that primes the
+state its subject is supposed to derive proves nothing about the path that
+derives it. Entry-layer tests must drive `runFunction` with `catalog` set.
+
+### Audit findings, 2026-07-14
+
+Corrections to `DESIGN.md`'s own gap list, made as part of this rewrite:
+
+- **Text export/import "[GAP]" was a phantom.** It gated a feature on verifying
+  that "the import parser round-trips these". There is no import parser — no
+  text-parsing import path exists in the tree. `fnPExport`/`_exportProgram` is
+  one-way text export for *every* step type, RPN included; the round-trip path
+  is `_saveProgram`/`fnLoadProgram`, a **binary** format (header lines then raw
+  program bytes) through which Forth steps pass as opaque bytes. Closed as not
+  applicable.
+- **§4.2's "known hole" contradicted the FCALL resolution** (see 2026-07-11).
+  Two sections of the authoritative document disagreed about whether the
+  design's central invariant had a hole in it. §4.2's text was stale; removed.
+- **Cross-program word reuse is untested.** Nested `XEQ` under `PGM_RUNNING`
+  does not bump the run generation, and the pre-scan tracks up to 8 programs, so
+  program A doing `XEQ 'LIB'` *may* leave LIB's words resolvable in A's later
+  Forth lines. Reasoned through, **not verified**. Either a documented feature
+  or an accident that breaks later; one test settles it. Recorded as an open
+  question, not a claim.
+
+### Deferred, deliberately
+
+- **Forth words in catalogs / assignable to keys.** RPN programs appear in the
+  PROG catalog and can be `ASSIGN`ed; Forth words can neither. Real asymmetry,
+  purely additive, no format impact.
+- **Interactive `FORTH` requires a string in X.** `fnForthOuter` errors with
+  `ERROR_INVALID_DATA_TYPE_FOR_OP` unless X already holds a string, so the same
+  item is an entry-mode toggle in PEM and a string-consuming function outside
+  it. Extension-consistent would be: pressing FORTH interactively opens the same
+  capture PEM gives you. Same entry-layer surface as the PEM fixes, so cheapest
+  to do alongside them — but it is an addition, not a correction.
+- **Words are program-local; RPN labels are global.** Not classified as a
+  violation: RPN's unit of shared code *is* the labelled program, and V-3 makes
+  any keystroke program callable from inside a Forth definition. Forth words are
+  local helpers; RPN programs are the sharing unit. Nothing is durable-at-risk
+  because the source is the truth and lives in program memory; the dictionary is
+  a cache the pre-scan rebuilds. The rationale now lives in `DESIGN.md` so this
+  is not re-litigated.
+
+---
+
+## 2026-07-15 — R6 audit fold: stage-F architecture, platform retarget, local labels
+
+Origin: the Fable pre-execution audit (`FOR_THE_ARCHITECT_R6_preexecution_audit.md`,
+verdict NO-GO) plus its upstream-delta addendum R6.1, the R4 architecture
+interview's accepted decisions (recorded 2026-07-15, commit `2cc6b1d03`), and
+three owner rulings the same day (`R6_RESOLUTION_PLAN.md` §1). This entry
+records what the amendment pass changed and what it superseded.
+
+**New DESIGN.md §10 (Stage F).** The R4 accepted architecture is now in the
+authoritative document as DECIDED-unimplemented target state: F1 lifetime
+foundations (pending-reset flag replaces generation-equality as the truth
+predicate; active-frame guard; PEM single-step = fresh generation; dynamic
+scan tracking; RECURSE; restore-time validator), F2 shared native parameter
+decoder, F3 vocabulary/scopes/XEQ (supersedes the withdrawn Qwen prompt
+R1-4), F4 textual parameters, F5 commit validation (E9's implementation), F6
+capture submode. §9 was left unassigned — pre-renumber artifacts cite "§9.x"
+meaning today's §8.x, and reusing the number would collide.
+
+**Platform retarget (RULE-1).** Target is the R47 on DM42n (DMCP5); DM42 is
+best-effort. Flash ceases to be a design veto — stages record the measured
+`make dmcp5r47` delta instead. Knock-ons: `boundedRead` stays permanently
+alongside the future restore validator (old Q2); the `FORTH ARENA:` suite
+line is blessed as the §5.4 reporting mechanism and `bench/hwm.fs` demoted to
+optional (old Q3). CLAUDE.md's target line updated to match.
+
+**Named local labels (Q8 ruling).** Upstream b8f79e486 introduced named LOCAL
+labels (kind byte 249 vs 253, `findNamedLabel(name, labelType)`,
+position-sensitive in-program resolution, TAM `:` syntax). Ruled: Forth
+incorporates them by **mimicking upstream** — `XEQ :NAME:` source form at
+stage F3, `FTOK_XEQN` inline data adopts upstream's `[kind][len][name]`
+payload with the kind byte passed verbatim to the native resolver, bare names
+stay global-only, and a local request never falls through to Forth
+vocabulary. §0.3, §2.2, §3.3.6, §4.1/§4.2 amended. The audit's AUD-U1 (the
+tam.c hook predates `tam.colon` and lacks the gate) is scheduled as a code
+fix. The per-program word scopes of F3 deliberately mirror the
+`labelList[].program` pattern so both "local name" systems share one model.
+
+**Falsified/stale text corrected (superseded wordings, for the record):**
+
+- §8.4 E7 / §6 P-H2 claimed the fnPem cursor default "is already correct —
+  delete any FORTH branch as dead code." Falsified by hardware: bare renders
+  lack the two-byte quote the shared `+2` path assumes; the landed R3-1
+  branch (`tam.function == ITM_FORTH` → `cursorInString = T_cursorPos - 2`)
+  is now the documented contract. The old text would have deleted a live fix.
+- Stale "required change / does not exist" claims rewritten as implemented
+  invariants (R4's list): the prim-count `_Static_assert` (forth_prims.c:51),
+  ASLIFT-on-exit, public push helpers, `forthPushInt32`'s long-integer store,
+  the §3.3.7 emit/start/finish/abort API, the 0x6F00 count cap,
+  `forthDictWriteName`'s clamped 3-arg form, the §5.4 BSS-vs-stack accounting.
+- §3.2 pseudocode's two bare `return`s (prim-error, rstack guard) →
+  `INNER_LEAVE()`; the committed code always did this correctly.
+- §8.3's "generation wrap is harmless" — falsified by R4-E2's executed probe
+  (65,536 bumps alias); annotated as a known bounded defect until F1.
+- §8.4 E1's "do not fix REM by symmetry" rationale — upstream fixed REM
+  itself in b8f79e486 (shallower two-pop); both fixes coexist, not unified.
+  The E1 drain pseudocode now shows the landed bounded stack-wide form
+  (59f58dbe3) instead of the unbounded `while(anyCatalogMenuOnStack())` that
+  could spin when `popSoftmenu()` re-pushes HOME.
+- §3.3 error-table row "C47 label in compile state → INVALID_NAME" annotated
+  stage-interim (the §3.3.6/§4.1 FTOK_XEQN emission is the F3 target — the
+  R6 audit's AUD-H3 fork resolved by marking which text is current vs target).
+- §8.9 reworded per the Q1 ruling: unit analogs vs planned end-to-end paths
+  made explicit; the harness is scheduled immediately after F1.
+- §8.10 item 1 (cross-program visibility) closed as SUPERSEDED by F3 scopes;
+  the "run-scoped, not program-local" paragraph now separates implementation
+  (generation-global today) from contract (program-local under F3).
+- §4.2 gained the Q4 interim ruling (NOPARAM dispatch of parameterized items
+  via XEQ-by-name is documented behavior until F3's atomic-error rule) and
+  the label-kind pins (GLOBAL_LABELS everywhere; AUD-U1 gate scheduled).
+- §8.5 gained the Q5 ruling: the bare listing is deliberately contextual and
+  non-injective; markers are the only type cue.
+- R3-A2 (malformed-opcode walker) closed per Q6: upstream's
+  `programBytesAvailable()` guards (including the computed-end check over
+  PTP_REM payloads) cover the demonstrated class; no package-side renderer
+  bound is added without new evidence.
+- Post-migration citation refresh: LAST_ITEM 2860→2870, ITM_FORTH row
+  4707→4722, REM row 3374→3391, slot 213 = MNU_FORTH (spares 214-219),
+  `forthResolveXEQ` at forth_dict.c:420-456, config reset hook at :1957,
+  scanLabelsAndPrograms 102-194/:734, EXIT/ALPHA/OFF rows, tam hook range.
+  The §4.2 call-site map's numbers are marked drifted-by-design (anchors are
+  the durable content).
+
+**Also corrected in this pass, other documents:** CLAUDE.md target line;
+`PROPOSED_SPEC_CHANGES.md` item 2 marked RATIFIED (it was folded into §3.3.6
+on 2026-07-13 but still said PROPOSED); `Stage1.md` given a SUPERSEDED banner
+(it still described the obsolete `forthArena`); `design-docs/package-manager/README.md`'s
+stale "no package uses this system yet" limitation removed. **Correction to
+this file's own 2026-07-14 entry:** it called `_saveProgram`/`fnLoadProgram`
+a "binary" format; the format is textual (one decimal byte value per line) —
+DESIGN.md §8.10 has been right about this since the R1 fold; the semantic
+point (payload bytes opaque, lossless round-trip) was and is correct.
+
+**Deferral bookkeeping (Q7):** PEM_FIX deferrals F8 (reject-path cursor
+drift) and F9.1 (phantom marker on power-off mid-capture) are carried into
+the Step-2 prompt backlog as bounded verify-then-fix-or-close tasks; they had
+fallen out of all current tracking.
+
+## 2026-07-16 — Stage-F roadmap completion: control flow, globals, and the word catalog get stages
+
+Owner rulings (Stan, 2026-07-16), folded into §10 as class-2 amendments:
+
+- **Control-flow words + `IMMEDIATE` → F3 (§10.3).** They had fallen through
+  the stage numbering: §3.3.9 and §2.2 called them "future work / stage 2"
+  (pre-F-series numbering), but §10's F1-F6 never claimed them, leaving
+  `RECURSE` (F1-4) without conditionals to terminate on. Ruled into F3: the
+  runtime tokens (`FTOK_BR`/`FTOK_0BR`) already exist and the F1-5 validator
+  already covers their emissions; compilation shapes are settled at the F3
+  design pass.
+- **Global Forth words → F3 (§10.3), superseding §10.3's own "remain
+  deferred".** Designed as the third reserved scope with the other two:
+  searched after the current scope, survives top-level resets, persists with
+  the validated save. Entry spelling, FORGET-class deletion, and §5.4
+  arena-ceiling accounting are named as F3-design-pass sub-questions.
+- **Dedicated Forth word catalog → F6 (§10.6),** closing §4.3's "future
+  stage" pointer. Lands with the capture submode because its contents come
+  from F3's scopes and its UI must integrate with the final capture entry
+  model, not the interim alpha wrapper.
+
+Status notes recorded in the same pass (`R6_RESOLUTION_PLAN.md`): the
+report-only probes R6-4/R6-5 are complete (owner-confirmed; no tree change by
+design — they were characterization probes). With these folds the accepted
+implementation backlog is exactly F1→F6 (plus the F1.5 §8.9 harness); the
+only post-series work is Step 8 housekeeping (freeList upstream MR, optional
+upstream reports) and documentation reconciliation as stages land.
+
+## 2026-07-17 — Stage F1 landed; §8.3 rewritten to the landed lifecycle; §8.9 item 9 reconciled
+
+Stage F1 executed in full (commits `1834901d3` F1-1, `542972b32` F1-2,
+`ecbd6bcce` F1-3, `2940a0f4f` F1-4, `04006089f` F1-5; ledger closeout
+`10c04af4b`). Documentation reconciliation, first tranche:
+
+- **§8.3 rewritten** from the pre-F1 interim (generation-equality truth, two
+  scattered bump sites in `fnExecute`/`runProgram`, fixed 8-slot scan array,
+  "resume keeps the generation", known-wrap defect) to the landed mechanism:
+  pending-reset event as the sole truth, one `!nestedEngine`-gated signal
+  site at `runProgram` entry, active-frame deferral on both signal and
+  consumption, arena-backed first-touch records, R/S resume and SST as fresh
+  lifetimes. The interim text survives in git history and in this file's
+  earlier entries; the wrap defect is closed (executable proof
+  `test_pending_reset_lifetime`).
+- **§8.9 item 9(b) reconciled** to F1 semantics per the Q1 scheduling ruling
+  (2026-07-15): same observable (`X == 9` after STOP + R/S), new pinned
+  mechanism (fresh lifetime + first-touch re-derivation), a sharpened
+  assertion (a word defined interactively during the pause is dropped), and
+  a replacement mutation — the old "bump in `fnRunProgram` too" mutation is
+  meaningless now that `fnRunProgram` reaches the sole signal site.
+- §8.9 coverage note now points at the F1.5 stage ledger
+  (`QWEN_PROMPTS_F15_harness.md`). Remaining §8.3-adjacent prose sweeps
+  happen at F1.5 stage close.
+
+## 2026-07-18 — F3 global-scope sub-questions ruled; F2 authored ahead
+
+Owner rulings (Stan, 2026-07-18), folded into §10.3 as class-2 amendments,
+closing the three design-pass blockers named in the 2026-07-16 fold:
+
+- **Entry spelling:** postfix `GLOBAL` — an immediate-style word marking
+  the latest closed definition as global, reusing the exact latest-entry
+  mechanism F3 builds for `IMMEDIATE`. No new grammar.
+- **Deletion:** classic `FORGET <name>`, truncating the global scope at
+  the named word; not-a-global is an error.
+- **Arena accounting:** same arena, same §5.4 ceiling; definition-time
+  exhaustion is ordinary dictionary-full; the §5.4 report splits global
+  vs transient high-water.
+
+Same pass (owner pacing instruction): stage F2 was fully authored ahead of
+execution — trace + ledger (`QWEN_PROMPTS_F2_core.md`) and four
+gate-locked packets — and the F1.5 harness packet list was completed
+(F15-5). F3's remaining pre-work before packets: the control-flow
+compilation-shape design pass, the R4-C2 label-grammar trace, and the
+F1-5 validator XEQN extension spec, all against the post-F2 tree.
+
+## 2026-07-18 — F15-4 debug: capture-drive contract pinned; §8.9 item 5 mutation replaced
+
+The F15-4 run exposed two spec-side defects, both fixed in the landed test
+(`6775252bf`) and reconciled here:
+
+- **Capture-drive contract (now explicit):** typing into a Forth region in
+  a test drive requires the ALPHA gesture (`runFunction(ITM_AIM)`) as the
+  FIRST key, cursor on the OPENING marker, `pemCursorIsZerothStep` owned by
+  the fixture. Mechanism: only the ALPHA arm of `insertStepInProgram`
+  consults `forthEntryStateAtInsertion()` after `addStepInProgram`'s
+  pre-move (governing predecessor = the opening marker); leading digits or
+  `':'` consult it without the pre-move, see the RPN predecessor, and open
+  number entry — behavior the landed F15-2 subcases pin as correct.
+- **§8.9 item 5's mutation was falsified empirically** (mutation escape,
+  gate stayed green): the pre-R1-3 assumption "no prim alias → ÷ is
+  FUNCTION NOT FOUND" no longer holds — the §4.1 step 4 item fallback
+  resolves the glyph to the native divide item. Item 5's mutation is
+  replaced by the capture-store mutation (manage.c `itemSoftmenuName` →
+  `itemCatalogName`). This closes the stale-§8.9-mutation sweep started
+  with item 9(b): items 2/3/4/8 mutations are live in landed tests, 9(b)
+  and 5 are reconciled, and no §8.9-derived mutation remains unexecuted.
+
+## 2026-07-18 — Stage F1.5 COMPLETE; §8.9 item 10 mutation reconciled; double-guard recorded
+
+All ten §8.9 items are now covered end-to-end (F15-1 `b773597bd`, F15-2
+`5a9e9ce2d`, F15-3 `c8b87dfa8`, F15-4 `6775252bf`, F15-5 `546aa8b6c`); the
+§8.9 coverage note is flipped to COMPLETE and a green gate certifies the
+end-to-end contracts. Closing findings:
+
+- **Item 10's mutation consequence was falsified in execution** (the third
+  and last stale §8.9 mutation, after 9(b) and 5): re-routing the tam PEM
+  branch to `insertStepInProgram(ITM_FCALL)` cannot put `0x8B 0x1B` in
+  program memory because insertStepInProgram's own ITM_FCALL arm resolves
+  the index back to a name and records an `ITM_FORTH` source step (or
+  rejects). Name-faithful recording is therefore DOUBLY guarded — the tam
+  H-hook records names directly, and the step inserter converts any
+  index-bearing insertion back to a name. The re-route mutation is still
+  detected by the name-step probe (F15-5 subcase 1 RED). The "no raw
+  FCALL opcode" probe is declared-redundant defense in depth.
+- The `vBodyWalk` BR/0BR-arm indentation nit (F1-5 cosmetic carry-over) is
+  fixed; semantics byte-identical, gate-verified.
+- Stage ledger closed out. Next per `FSERIES_ROADMAP.md`: the F2 queue
+  (F2-1..F2-4, authored and gate-locked).
+
+## 2026-07-18 — F3-3 packet defect: XEQ-name steps missed the scope model (amendment F3-3A)
+
+The F3-3 implementation run STOPPED correctly on a real packet
+contradiction: the packet required legacy tests to stay green while
+operationalizing "scope tracks program-step execution" as the `ITM_FORTH`
+source-step arm only.  An `XEQ 'name'` step executed from a running
+program therefore resolved in INTERACTIVE scope and could not see its own
+program's words — three param_core legacy tests red with
+`ERROR_LABEL_NOT_FOUND` (6) from the fallback arm, exactly at
+`paramCoreExecuteOp`'s forth-fallback site.  Two further legacy reds
+(`test_recurse_compile_only` [5], `test_accept_run_lifecycle` [3]) were
+harness-level `forthFindColon` introspection of program-owned words from
+INTERACTIVE scope — cross-scope reads the new contract deliberately
+rejects; their product assertions (RAM_FULL recursion; X==9 after resume)
+already carry each test's original purpose.
+
+Ruling (normative text added to §10.3): scope is a property of the
+executing step.  Every step arm that resolves Forth names on a step's
+behalf enters the owning program's scope through one shared primitive
+(`forthScopeEnterProgramStep`/`forthScopeRestore` — generation check +
+first-touch pre-scan + scan-record derivation, INTERACTIVE fallback for
+non-program addresses) and restores on exit.  Scope guards name→ref
+resolution only; by-ref execution (FCALL) and ref→name display stay
+scope-free.  The reported "contradiction" with mutation 3 dissolves: the
+per-source-step restore in `forthOuterRun` stays (mutation 3 intact), and
+the XEQ arm gets its own enter/restore in `param_core.c`.
+
+Amendment F3-3A (appended to `QWEN_PROMPTS_F3_3_scopes_live.md`) carries:
+the shared primitive + `forthProgramStep` refactor onto it; deletion of a
+tautological savedScope no-op the packet's item-3/item-4 ambiguity induced
+in `forthOuterRun`; the param_core fallback-arm hook (resolve AND colon
+dispatch inside the scope window, per the nested-evaluation-inherits
+rule); the two named legacy assertion flips to isolation pins; fixture
+step `sXeqA` + subcase 6 (cross-program XEQ-name rejection at the step
+surface, `ERROR_LABEL_NOT_FOUND`, scope restored on the error path); and
+mutation 5 (hook removal → `test_param_core_bounded_names` [1] RED — the
+legacy positive is the detector, since subcase 6 rejects either way).
+Consequences accepted: an XEQ-name step is now a first-touch site (a
+forward `XEQ 'W'` before any source step of its program executes resolves
+after pre-scan, matching §9.2's forward-reference promise); a program
+XEQ-name step can no longer resolve interactively-defined words (mutual
+invisibility, already pinned by subcase 3).  The §8.6 picker walk stays
+unfiltered as the documented interim until the F6 catalog lands the
+scope-aware listing.
+
+## 2026-07-19 — F6 authored from traces; hardware bench deferred to stage-exit (owner ruling 2026-07-18)
+
+Owner ruling (2026-07-18, "author the F6 packet without the hardware test
+for now"): §10.6's audit precondition is split — the ARCHITECT half
+(traces T1-T7) remains the authoring gate and was performed and folded
+into `F6_AUDIT_RESULTS.md`; the HARDWARE half (`F6_KEYBOARD_PEM_AUDIT.md`
+Blocks A-F) moves from authoring precondition to STAGE-EXIT confirmation,
+re-run on the DM42n against the LANDED F6 behavior before the stage may
+close.  §10.6 amended accordingly.  Rationale recorded with the traces:
+every planned fixture is PC-build-derivable (the self-test is the gate);
+the bench's unique value is DMCP-hardware divergence (key timing, deep
+sleep, save timing), which a post-landing re-run still catches.  The
+deferred-bench register (audit results, bottom table) maps each charter
+experiment to its interim trace-derived substitute and residual risk.
+
+Trace findings that shaped the design (full evidence in
+`F6_AUDIT_RESULTS.md`): the landed capture wrapper re-commits the source
+step after EVERY key (pemAlpha's fall-through tail), so the program step
+always holds the typed text — power-off loses only cursor/open-flag, and
+F5-2's commit gate already builds on this; `tamEnterMode` commits-and-
+closes a non-empty capture line at its CM_PEM arm and TAM teardown
+scrubs `FLAG_ALPHA` and zeroes `aimBuffer` in PEM — three independent
+proofs the capture text cannot stay in `aimBuffer`; `tamEnterMode`
+clobbers `tam.mode/function` BEFORE that arm, so suspend snapshots no tam
+state (capture-era tam is deterministically {mode 0, function ITM_FORTH});
+no screen.c site reads `aimBuffer` during PEM capture (the listing
+renders the committed step), so the buffer move has zero display surface;
+`fnKeyExit`'s CM_PEM arms pick abort-vs-commit by `aimBuffer[0]` and must
+follow the sink (F6-1 Change D2 — found by trace, would have been a
+regression); the §8.6 picker is dictionary-blind (text scan), pinning the
+F6-5 delta.
+
+Stage F6 authored 2026-07-19 as six gate-locked packets on the F5-2
+commit (`QWEN_PROMPTS_F6_core.md` ledger; F6-1 capture object + managed
+256-byte buffer, uniform alloc-on-open/free-on-close, interim TAM guard;
+F6-2 TAM suspend/resume — suspension frees the buffer and resumes by
+refilling from the step, offset-based step reference, single resume
+choke point in `leaveTamModeIfEnabled`, uniform even for empty lines
+(kills the landed TAM-over-open-capture edge); F6-3 catalog picks insert
+`itemCatalogName` text (CAT_FNCT class = the §4.2 callable class); F6-4
+suspended TAM commits convert to canonical text THROUGH THE LANDED
+DECODER (mimicry = F4 parity), no-room keeps the step; F6-5 MNU_FORTH
+becomes the union catalog — landed text-scan section + interactive fdict
++ gdict, browse surface reads owners directly per F3-3A, cross-section
+duplicates show provenance; F6-6 acceptance battery + capture lifecycle
+reset at the two `forthScanTrackReset` seams — deep-sleep wake
+legitimately keeps capture open, matching landed `FLAG_ALPHA` behavior).
+Authoring-base discipline: authored on the F3-2 tree four stages ahead;
+of all files F6 touches, only `manage.c` is modified by the pending
+F3-4..F5-2 queue (F5-2's single E9 line, which F6-1 re-points), so the
+anchor-stability risk is one known line; every packet's execution gate
+re-greps its anchors and the standing re-author-on-deviation rule
+applies.
+
+## 2026-07-19 — F6 adversarial review (pre-execution): five substantive defects fixed
+
+An adversarial pass over the six authored F6 packets (owner-requested)
+before any execution.  Substantive findings, all fixed in place:
+
+1. **Suspend moved the cursor and would have displaced the TAM commit.**
+   F6-2's `forthCaptureSuspend` stepped forward "so TAM's insert lands
+   after the capture line" — but TAM commits insert via
+   `addStepInProgram(tamOperation())` (traced: tam.c:217/552/587/896/918/
+   1095), whose pre-move already places the insert after the current
+   step; stepping forward would land the committed step one position too
+   late.  Fixed: suspend does not move `currentStep` (the landed
+   commit-and-close nets to cursor-on-the-line); position restore at
+   resume retained; the retargeted mutation now deletes the resume's
+   position-restore lines.
+2. **Suspend zeroed `tam.function` and would have broken the TAM
+   session.**  `tamEnterMode` assigns the incoming TAM function BEFORE
+   the CM_PEM seam; the "capture-close reset parity" line would have
+   clobbered it (the landed `pemCloseAlphaInput` reset at that seam is
+   precisely the behavior suspend replaces).  Fixed: suspend leaves
+   `tam` untouched.
+3. **F6-3's item arm conflicted with F6-4 for parameterized items.**
+   Inserting a bare name for a `PTP_*`-parameterized item would create a
+   second entry UX beside F6-4's TAM path.  Fixed: the arm requires
+   `PTP_NONE` (SIN traced `CAT_FNCT | PTP_NONE`, items.c:1879);
+   parameterized items stay inert in `pemAlpha` — their capture UX is
+   the suspend+convert path.
+4. **F6-4's converted text lacked a word separator** when the cursor did
+   not follow a space (`5 DUP` + STO → `5 DUPSTO 05`).  Fixed: the
+   conversion prefixes one space when the byte before the cursor is
+   neither space nor line start, plus a 255-byte decode clamp
+   (keep-the-step fallback).
+5. **Unsound free-RAM oracles.**  Whole-session `getFreeRamMemory()`
+   equality asserts would red on program-memory growth (committed steps,
+   and the restore path's own inherent footprint — the landed arena line
+   records `freeRamDelta=64` post-restore).  Fixed: buffer-lifecycle
+   equalities are scoped to net-zero-program-delta windows with a
+   resize-quantum escape valve; the F6-6 restore subcase is differential
+   against a no-capture restore baseline.
+
+Fidelity corrections in the same pass: the F6-1 gate grepped a
+nonexistent test name (`test_forth_picker*` — the tree's picker tests are
+located by their quoted asserts instead); every "drive STO/XEQ/EXIT"
+became the landed idioms (`tamEnterMode(...)` direct, `fnKeyExit(NOPARAM)`,
+`addStepInProgram(ITM_FORTH)` for the toggle, `pemAlphaEdit(0)` for EDIT);
+the 196-glyph fixtures type alternating `X`/space (a single 196-glyph
+token could trip the E9 structural tier); F6-5's smudge fixture uses a
+new `forthTestSmudgeSet` FORTH_DEBUG_SELFTEST hook instead of an assumed
+header-poke idiom; F6-1's mutation 2 covers both `forthCapClose` sites
+with subcase-10 co-red; leftover authoring artifacts (a thinking-aloud
+mutation note, an imprecise C6 site count, reopen ambiguity between
+subcases) cleaned.  Core-ledger decision 6 and the affected packet
+rationales were rewritten to match; `F6_AUDIT_RESULTS.md` already carried
+the correct trace facts.
+
+## 2026-07-19 — F4-2 debug: `regInRange` is not silent (packet amendment F4-2A)
+
+Non-normative. The F4-2 packet carried the traced claim that the native
+`PARAM_REGISTER` arm's range gate is *silent* on a miss ("out-of-range is
+SILENT"), and pinned it as subcase 4 (`STO .05` with no local registers
+allocated → `ERROR_NONE`, X untouched).  The trace was wrong in its
+consequence.  `regInRange()` (`src/c47/store.c:17-72`) is **not** a pure
+predicate: on a miss it classifies the register and calls
+`displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ...)` itself before returning
+false (under `EXTRA_INFO_ON_CALC_ERROR` it also emits the
+"In function regInRange: … is not defined!" info line).  The native arm's
+`if(regInRange(regKStoC(opParam)))` therefore raises on a miss and merely
+declines to *dispatch* — silence applies to the caller, not to the user.
+
+Ruling: mirror the native call chain exactly.  `paramCoreValidateDirect`
+keeps `regInRange(regKStoC(value))` for `PTP_REGISTER`, and the class is
+the documented exception to the "validate sets no error" contract in
+`param_core.h`.  Behavior pinned by the landed subcase 4: an unallocated
+local raises `ERROR_OUT_OF_RANGE` and performs no store (X unchanged).
+The traced-silence parity in §10.4 continues to hold where it was
+actually traced — the `PTP_NUMBER_8` out-of-range arm — not here.
+
+Two authoring defects in the same packet, found in the same debug pass:
+the acceptance test's stack seeding, and its byte-image addressing.
+`x_set_string` overwrites REGISTER_X with the source string and
+`fnForthOuter` drops it, so any stack seeded by `forthPushInt32` before
+the call is shifted one level before the line runs — a shuffle fixture
+must ride its seed in the source line (`"11 22 33 44 <glyph> yxzt"`).
+And `forthFindColon` yields a **ref index**, not a byte offset; byte-image
+pins must walk from `fdict.latest` (the ref-as-offset error is invisible
+for the first word defined after a clear, where both are 0 — which is
+exactly why three of the five image pins passed and two did not).
+
+## 2026-07-19 — F4-3 landed after a rewrite: one marker table, one cell-span, one decode body
+
+Non-normative. F4-3's implementation pass produced a working but
+structurally unsound shape — the marker grammar restated per class, seven
+copies of the 253/255 decoder in `forthInner` (one of them defined *inside*
+the switch as a GCC nested function), six copies of the emit block in the
+compiler, and the same grammar spelled a fourth and fifth time in the two
+`forthDictMakeLatestGlobal` walks. It was rewritten around two functions
+before landing, and §10.4 now records the invariant: `forthParamMarkerMask`
+is the only statement of which markers a class accepts, and
+`forthParamCellSpan` the only statement of the cell grammar. Everything else
+— `decodeMarkerCell` + `forthParamMarkerDispatch` (runtime),
+`parseMarkerForm` + `emitOrRunMarkerForm` (compiler), all three walks — reads
+them. Net effect beyond hygiene: the compiler, the runtime, and the validator
+cannot drift, which is exactly the drift F2-3 was created to close.
+
+Four substantive defects fixed in the same pass:
+
+1. **Invented surface.** The interim implementation accepted an ASCII `->`
+   spelling, an `→RNN` register form, and a `.NNN` three-digit system-flag
+   form — none of them traced, all of them contradicting the packet's V4
+   non-goal (the typeable surface is exactly the arrow glyph `\xa1\x92` and
+   the ASCII quote `0x27`). Removed.
+2. **`compareString` used as a truthiness test.** It returns 0 on equal
+   (sort.c:70), so the system-flag reverse map matched every name except the
+   right one. Compounded by `parseQuotedName` not NUL-terminating its output
+   — the map compared a name against unterminated stack bytes.
+3. **NUMBER_8 / NUMBER_8_16 indirection never reached the parser**: the
+   numeric arm rejected any non-digit token before the marker forms were
+   tried. The arm now falls through to `parseMarkerForm`.
+4. **An unsound acceptance pin.** The packet asked the validator to reject a
+   `{254, 5}` cell on a NUMBER_16 item. It cannot: for that class the cell IS
+   the legal value 1534. The exclusion is a compile-time rule and is pinned
+   there; the validator subcase pins what walks really enforce (len 0,
+   non-zero pad, name extent past the body) plus one well-formed ACCEPT so
+   the RESET pins are not vacuous.
+
+Also recorded: the acceptance test as first written papered over its own
+named-variable leak by assigning `numberOfAllocatedMemoryRegions` back to its
+start value. The landed test unwinds what it allocated instead (data block
+per variable plus the header table, back to the pre-test count) — upstream
+has no delete-named-variable API, so the teardown is explicit. Never satisfy
+a gate by writing to the counter it reads.
+
+Cost: `make dmcp5r47` flash 1090256 → 1092176 (+1920 bytes), RAM unchanged
+at 7188, Forth arena unchanged from the F4-2 baseline. All five packet
+mutations verified RED and restored; amendments F4-3A and F4-4A appended to
+their packets, and the four fixture rules that cost red gates in F4-2/F4-3
+(x_set_string vs seeded stacks, forthFindColon returning a ref index, per-
+subcase error clearing, allocation teardown) are now repeated verbatim in
+F4-4, F5-1, F5-2, and F6-6 — packets are pasted standalone, so a shared
+reference would not have travelled.
+
+## 2026-07-19 — F5-2 debug: check mode restored the scope from an uninitialized field
+
+Non-normative. F5-2's production change — the six-line `forthCheckSourceLine`
+call in `pemAlpha`'s ITM_ENTER arm — was correct as authored. The gate went
+red in four tests the packet never touched (F3-3 scope isolation, the F4-4
+parity sweep, F5-2's own hygiene subcase), all reporting a nonsense
+`forthCurrentScope` such as `0x800E`.
+
+Root cause was landed in F5-1. `forthOuterRun`'s epilogue restores
+`forthCurrentScope = ctx->savedScope`; its prologue fills `savedDef` and
+`savedLatestClosed` but leaves `savedScope` to the caller, and every entry
+point snapshots it — `forthOuterInterpret`, `fnForthOuter`,
+`forthProgramStep`, the pre-scan — except `forthCheckSourceLine`, which set
+only `ctx.source`. Check mode therefore wrote an uninitialized stack word
+into the live scope on every call. Invisible while its only caller was
+F5-1's own test (which never observed scope); a suite-wide poison the moment
+check mode was wired into the commit seam. One line fixes it.
+
+The interesting part is why it was allowed to land. §10.5 states check mode
+"executes nothing, allocates nothing, mutates no live state" — a normative
+claim F5-1 shipped with no pin at all; its tests only read verdicts. The
+landed correction adds `test_check_source_line` subcase 6, which pins the
+CONTRACT: scope set to a non-default `0x1234`, both an accepted and a
+rejected line checked, then scope, open-definition state, rsp, and the
+dictionary asserted unchanged — with `poisonAutoFrame()` filling the callee's
+future stack frame with `0xAA` so an uninitialized restore reports a
+deterministic `43690` rather than whatever the previous call left behind.
+`forthTestScopeSet` (FORTH_DEBUG_SELFTEST only) exists for this pin.
+
+**Rule now binding on every packet:** an entry point whose specification
+includes a state-neutrality claim must pin that claim directly, from a
+non-default state, over both its accepting and its rejecting path. A verdict
+pin is not a contract pin. Two process rules were added alongside (recorded
+in amendment F5-2A and repeated verbatim in the remaining F6/FIX-6 packets):
+a red in a test the packet did not write is an immediate STOP with zero
+repair attempts, and the blast radius is named by diffing the pre-gate and
+gate PASS sets rather than by reading failure text.
+
+Cost: `make dmcp5r47` flash 1092216 → 1093016 (+800 bytes), RAM unchanged.
+The delta exceeds the call site because F5-1's check-mode code had been
+unreachable and LTO was dropping it; this is the true cost of E9 tier 1
+going live.
+
+Measurement note (corrected): the shadow tree symlinks upstream files AND
+`files/` entries, so edits to those are live; only PATCHED files are
+materialized copies, refreshed at `meson setup`. `build.dmcp5` is a plain
+directory target, so once it exists `make dmcp5r47` skips the setup recipe
+entirely — `f=1` is not the discriminator — and only a CUSTOM_PKG change or
+`CUSTOM_PKG_RECONFIGURE=1` forces a reconfigure. Rebuilding after swapping
+package sources therefore yields a chimera (live `files/` edit + stale
+patched copy), which is what produced two plausible-but-meaningless flash
+numbers here before the reconfigure was forced. `build-test.sh` always
+reconfigures, so the self-test gate is never affected.
+
+## 2026-07-19 — F6-3 mutation execution: packet mutation 2 falsified for SIN (second occurrence of the F15-4 pattern)
+
+Non-normative. F6-3's item arm (`manage.c`, ALPHA-mode item dispatch) is
+correct as authored: it inserts `indexOfItems[item].itemCatalogName` for a
+catalog/menu pick made while a Forth capture line is open, gated to
+`CAT_FNCT | PTP_NONE` — the design choice traced and reviewed in the
+"F6 adversarial review" entry above (finding 3) and stated directly in the
+"F6 authored from traces" entry ("F6-3 catalog picks insert
+`itemCatalogName` text"). Nothing here changes that.
+
+The packet's required mutation 2 ("replace `itemCatalogName` with
+`itemSoftmenuName`; subcase 1 MUST go RED if the two spellings differ for
+SIN") stayed GREEN on first execution. Cause: `items.c:1859` gives
+`ITM_sin` identical catalog and softmenu spellings (`"SIN"`, `"SIN"`), so
+the field swap is a no-op for the item subcase 1 happens to drive — the two
+fields simply never diverge for this particular item, independent of which
+one the production code reads. This is the same failure shape as the
+§8.9 item 5 mutation the F15-4 entry above already documents (there,
+`PRIM_DIVGL` deletion escaped once R1-3 made the alias redundant; here, a
+field-selection mutation escapes because the probe item's fields coincide)
+— the packet itself flagged the risk in advance and required a STOP rather
+than a silent accept, exactly because this pattern had already been seen
+once.
+
+Fix, mirroring the F15-4 resolution (retarget the probe, not the
+production code): `test_capture_menus` subcase 1 now additionally drives
+`ITM_arccos` (81) after the SIN checks pass. `items.c:1864` gives it
+genuinely divergent fields — catalog `"ARCCOS"`, softmenu `"ACOS"` — under
+the identical `CAT_FNCT | PTP_NONE` classification SIN carries, so the
+field-swap mutation is now observable (`"1 SIN ARCCOS "` becomes
+`"1 SIN ACOS "` under the mutation). Subcase 2's expected string is updated
+to match the longer buffer (`"1 SIN ARCCOS 2"`); subcases 3-6 compare
+against a captured `textBefore` or open a fresh line and were untouched.
+No production code changed; mutation 2 re-run RED after the retarget.
+
+## 2026-07-20 — F6-6 acceptance battery: two pre-existing save/restore-vs-allocator gaps found and routed around
+
+Non-normative. F6-6 adds `forthCapPowerReset()` (`forth_capture.c/h`) and
+wires it into the two lifecycle seams `forthDictInit()`/`forthDictClear()`
+already call `forthScanTrackReset()` from, so a re-initialized or restored
+machine always starts with the capture CLOSED and its buffer freed —
+matching the landed rule that capture cannot outlive the dictionary
+lifecycle (deep-sleep wake does not run these seams; a sleeping capture
+legitimately survives, same as FLAG_ALPHA today).
+
+Authoring `test_capture_acceptance` subcase 4 (restore lifecycle closes an
+open and a suspended capture) surfaced two genuine, pre-existing gaps
+between `saveRestoreBackup.c`'s restore path and the block allocator,
+neither previously exercised because no earlier F-series test drove a
+save/restore round-trip with a Forth capture actually open at save time:
+
+1. `restoreCalc()` restores `numberOfFreeMemoryRegions` /
+   `freeMemoryRegions[]` / `numberOfAllocatedMemoryRegions` /
+   `allocatedMemoryRegions[]` wholesale from the backup file — the entire
+   allocator tracking state, independent of anything Forth-related. With a
+   capture genuinely open at save time, this leaves the capture buffer's
+   address range overlapping a restore-time free region; the lifecycle
+   seam's own `forthCapClose()` free is then correctly rejected by
+   `freeListFree`'s double/invalid-free guard, orphaning the buffer's
+   blocks. Confirmed via 3 independent mitigation attempts (fresh fixture,
+   pre-inflation padding, direct A/B toggling) that this is a real conflict
+   in production code, not a test-fixture artifact.
+2. Independently of (1) — confirmed by temporarily disabling just this
+   round-trip with no capture ever open — a `saveCalc()`/`restoreCalc()`
+   round-trip alone measurably shifts `numberOfAllocatedMemoryRegions` by
+   +1 relative to pre-save state.
+3. `systemFlags0`/`systemFlags1` (carrying `FLAG_ALPHA`) restore verbatim
+   well after the dict-lifecycle seam runs, and the restore path's own
+   generic alpha-clear is conditional on a catalog also having been open —
+   never true for a Forth-only capture. Any `FLAG_ALPHA` clear attempted in
+   the seam is silently overwritten moments later. `forthCapPowerReset()`
+   deliberately does not touch `FLAG_ALPHA` for exactly this reason (see
+   its doc comment); subcase 4 asserts capture state only, not the flag.
+
+All three are pre-existing architectural gaps in the save/restore-vs-
+allocator interaction, out of scope for F6-6 to fix (a blind retry-free
+would be unsafe). Both phases of subcase 4 that would otherwise hit (1) or
+(2) through a full round-trip are written instead against the same direct
+`forthGDictValidateRestored(); forthDictInit();` pair the seam itself
+runs — proving the seam closes an open/suspended capture leak-free without
+routing through the unrelated allocator-restore defects. This is a
+deliberate deviation from the packet's literal "run the landed F15-2
+power-off round-trip idiom" wording, made so the test proves the seam
+correct without also proving-or-failing-on bugs the seam cannot fix.
+Flagged here for the forth-core code audit; (1) and (2) remain live in
+`saveRestoreBackup.c` today.
+
+One direct test bug, found and fixed during the same debugging: subcase
+4's Phase 0 (baseline `freeBase` measurement) called
+`forthGDictValidateRestored(); forthDictInit();` directly, same as Phases
+1 and 2, but — unlike those two — with no `forthDictClear()` immediately
+before it. `forthDictInit()` nulls `fdict.base` without freeing (by
+design: it assumes a genuine cold boot, where `fdict.base` is already
+NULL). Subcase 1 leaves fdict holding a live "SQ" allocation; nothing
+between subcase 1 and subcase 4 clears it; Phase 0's direct call silently
+leaked those 8 blocks, surfacing as a suite-wide +1
+`numberOfAllocatedMemoryRegions` at the gate's final check. Fixed by
+adding the same hygiene `forthDictClear()` Phases 1 and 2 already carry.
+Required mutation (delete both `forthCapPowerReset()` seam calls) re-run
+RED, specifically at subcase 4 ("phase 1 capture not closed after
+restore"); reverted, gate re-run green. `make dmcp5r47` flash
+1094400 → 1094456 (+56 B, the new function body plus two call sites); RAM
+(data+bss) unchanged at 7228; fdict/gdict layout unchanged (no new
+fields, no growth-behavior change).
+
+## 2026-07-20 — Test-suite audit: a third pre-existing production bug, real user-facing data loss in TAM cancel (fixed)
+
+Non-normative. Owner-directed audit of the entire forth-core test suite
+(after the F6 series landed): every `static int test_*` function in
+`test_dict_reloc.c` reviewed for toothless assertions, weak oracles, and
+bad design, in parallel by seven independent review passes covering
+disjoint line ranges plus a manual pass over the orchestrator and a
+handful of functions. Found and fixed ~14 genuine rigor defects (missing
+`fail = 1` before two `goto cleanup` sites in `test_accept_xeq_name_step`
+that let real FAIL-printf paths return pass; a `test_dict_space_full`
+assertion that checked "some error" instead of the specific
+`ERROR_RAM_FULL` its own name claims; `test_malformed_token`'s three
+subcases checking only "not the sentinel" instead of "the original
+value," so a third, unanticipated post-error value would pass;
+`test_div_zero_halt` similarly checked only "not the sentinel 999," and
+its own comment claimed the missing check should be "X == 42" — adding
+that literally FAILED the gate, because it was never true: traced
+through `src/c47/mathematics/division.c` (`divLonILonI` converts both
+operands to `dtReal34` in place before a zero-divisor ever raises
+`ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN`, in `divRealReal`, so X is left at
+its already-converted `real34` value, not restored to the original
+longint) and `registers.c`'s `adjustResult`/`undo()` (the restore-on-error
+path reads a `SAVED_REGISTER_X` checkpoint this Forth-driven call never
+populates via `saveForUndo()`, confirmed empirically rather than by
+tracing every `saveForUndo()` call site) — corrected to assert what's
+actually true and meaningful (X is real34 zero) instead of a stale,
+never-verified claim in a decade-old comment; a dead tautological
+`nativeOk`/`forthOk` check in
+`test_param_series_c_acceptance` removed; `test_check_source_line`
+subcase 3's state-neutrality pin extended to cover `gdict.latest`
+(previously only `gdict.here`/`count`, asymmetric with the `fdict` triple
+it mirrors); `test_param_register_flag` subcases 1 and 3 gained
+byte-image pins for the compiled parameter cell — subcase 3 (`STO M`)
+particularly, since a round-trip alone can't distinguish a correct
+`REGISTER_M_IN_KS_CODE` (211) from a transcription error in the
+hand-maintained `paramLetterKS[]` table that swaps two stat letters,
+because both STO and RCL read the same wrong row; `test_reentrancy`'s
+depth-cap check now primes a sentinel before the guarded call instead of
+coincidentally relying on whatever the previous test left in X;
+`test_c47_param_shared_dispatch` subcase 3 (PTP_NONE dispatch) now checks
+the result actually became `dtReal34` instead of only "no error," so a
+future regression that silently skips dispatch for parameterless
+functions can't hide behind "no error, no observable effect" either;
+`test_capture_menus` subcase 3's `!= -MNU_FORTH` check tightened to the
+specific `== -MNU_ALPHA` its own PASS message already claimed;
+`test_word_catalog` subcase 4 now confirms the three pre-existing catalog
+entries (PW/WI/GVIS) survive an over-long-name insert untouched, not just
+that the count stayed 3 and the truncated spelling is absent.
+
+One finding was NOT a test-rigor issue but a real, traced, production
+defect: `test_capture_suspend` subcase 2 ("Cancel round-trip") asserts
+`forthTestCapText() == "5 DUP"` after a TAM cancel that immediately
+follows subcase 1's TAM commit — but subcase 1 ends with the line reading
+`"5 DUP STO 05 "` (F6-4's fold-to-text landed that), and the F6-2 packet's
+own subcase 2 spec says "text intact," never updated after F6-4 changed
+what "intact" should mean. The literal was never a design choice; it is
+what `forthCaptureResume()` (`programming/manage.c:1093-1144`) actually
+produces, and that IS a bug: `forthCaptureSuspend()`
+(`programming/manage.c:1072-1091`) snapshots `stepOffset` assuming the
+on-disk step already mirrors `forthCapBuf()` — true after ordinary
+keystrokes, which recommit incrementally via `pemAlpha`'s glyph-editing
+tail (`manage.c:1011-1039`), but NOT true here: subcase 1's F6-4 fold
+wrote into `forthCapBuf()` via `forthCapInsertName()` without recommitting
+the on-disk step (the fold loop only calls `deleteStepsFromTo` on the
+now-redundant inserted step, never touches the capture step itself). The
+next suspend reads a stale on-disk snapshot and resume silently drops
+everything typed or folded since. Reproducible on real hardware: type
+text, do one TAM operation (STO/RCL/GTO/XEQ/...), then immediately start
+a second one and cancel it — the first operation's folded text vanishes
+from the line. Traced and confirmed by direct code reading (both
+`forthCaptureSuspend`/`forthCaptureResume` and the F6-2/F6-4 packet
+history), not left as a review agent's unverified claim.
+
+Originally left unfixed at test-audit time, deliberately: a correct fix
+requires resyncing the on-disk step from `forthCapBuf()` before
+snapshotting the offset in `forthCaptureSuspend()`, so the invariant
+ordinary keystrokes maintain holds unconditionally — but that first
+requires tracing `_insertInProgram`'s relocation/cursor-advance/rescan
+behavior (`manage.c:697-755` — it can trigger `resizeProgramMemory`,
+shifts the cursor forward past the inserted bytes, and the existing
+recommit call site steps back via `findPreviousStep` afterward to
+compensate) closely enough to reuse or mirror it safely. `test_capture_suspend`
+subcase 2 was left asserting the then-current (buggy) value, with an
+in-code comment citing this entry, rather than asserting the correct
+value and reddening the gate without an accompanying fix.
+
+Fixed as the opening item of the forth-core code audit that followed
+this test-suite audit, once the required `_insertInProgram` trace was
+done. `forthCaptureSuspend()` (`programming/manage.c`, now starting
+around line 1072) gained a recommit block at its top, mirroring
+`pemAlpha`'s own glyph-editing recommit tail (`manage.c:1011-1039`):
+`deleteStepsFromTo(currentStep, findNextStep(currentStep))` removes the
+stale on-disk capture step, a fresh `ITM_FORTH` step is built from the
+current `forthCapBuf()` contents and reinserted via `_insertInProgram`,
+and `--currentLocalStepNumber; currentStep = findPreviousStep(currentStep);`
+compensates for `_insertInProgram`'s internal cursor advance to land
+back on the refreshed step — the same idiom `pemAlpha` already uses,
+simplified because a capture step's opcode is always the 2-byte
+`ITM_FORTH` form, so the generic `aimFunc` branching `pemAlpha` needs
+can be skipped. This recommit runs unconditionally at the top of
+`forthCaptureSuspend()`, before the existing cursor/localStep/stepOffset
+snapshot, so the on-disk step is guaranteed current regardless of
+whether the caller path was an ordinary keystroke (already fine) or an
+F6-4 fold-to-text with no intervening keystroke (previously stale).
+
+`test_capture_suspend` subcase 2 now asserts the correct
+`"5 DUP STO 05 "` (matching subcase 1's post-fold text) instead of the
+buggy `"5 DUP"`. Mutation-tested: temporarily wrapping the new recommit
+block in a `/* MUTATION: ... */` comment (disabling it) reran the gate
+RED, specifically failing `test_capture_suspend` subcase 2 with the
+expected "text lost" symptom; reverting the mutation reran the gate
+GREEN. Unlike the two F6-6 findings (self-inflicted by test fixtures
+never-before exercising a capture-open save/restore, arguably low
+real-world likelihood), this bug was reachable from ordinary keyboard
+use with no test harness involved — type text, do one TAM operation
+(STO/RCL/GTO/XEQ/...), then immediately start a second one and cancel
+it, and the first operation's folded text would vanish from the line.
+That is now fixed. `make dmcp5r47` flash 1093608 → 1093744 (+136 B,
+text only, measured via `size` on `R47.elf` and confirmed by the
+identical delta on `R47_flash.bin`); RAM (data+bss) unchanged at 7228.
+
+## 2026-07-20 — Code audit #2: doFnReset hook reorder fixes a false-positive double-free diagnostic; a deeper allocator-vs-restore leak remains open
+
+Non-normative. Second code-audit item, opened while investigating the two
+F6-6 save/restore-vs-allocator gaps flagged above. Traced further than the
+F6-6 entry's own hypothesis and found the actual mechanism differs from
+what was suspected there.
+
+**What was found and fixed.** `doFnReset()` (`config.c:1523`, upstream,
+called both by a plain user RESET via `fnReset()` and unconditionally as
+the first statement of `restoreCalc()`) wipes all allocator bookkeeping
+early in its body — `memset`s `ram[]`, collapses `freeMemoryRegions[]` to
+one giant free region, zeroes `numberOfAllocatedMemoryRegions` — and only
+~400 lines later called the Forth reset hook (`forthDictInit()`/
+`forthGDictInit()`, forth-core's own addition to this function, landed
+under DESIGN.md §6). `forthDictInit()` calls `forthCapPowerReset()` →
+`forthCapClose()` → `freeC47Blocks()` on a still-open capture buffer — but
+by the hook's original (late) position, the earlier wipe had already
+zeroed the bookkeeping and folded the capture's address range into one
+giant free region, so `freeListFree`'s (FIX-6) double-free guard rejected
+the free as a spurious overlap and printed an alarming
+"double/invalid free" diagnostic every time. Reproduced live: driving a
+direct `saveCalc()`/`restoreCalc()` round-trip with a capture open (no
+existing test exercised this — `test_capture_acceptance` subcase 4
+deliberately avoids the real round-trip, see the entry above) printed
+`64 blocks at address 715 overlap free region [715..809)`, decoded via
+`addr2line` on the actual crash backtrace to confirm the call site.
+
+Fixed by moving the `forthDictInit()`/`forthGDictInit()` calls in
+`doFnReset()` to before the RAM wipe instead of after (`config.c`, the
+`else` branch's opening statements). Verified safe by inspection: nothing
+between the function's entry and the wipe, or between the wipe and the
+hook's old position, reads or depends on fdict/gdict/capture state
+(grepped the ~400-line span for `forth`/`fdict`/`gdict`/`Capture` —
+nothing). Gate green; `make dmcp5r47` flash delta is **0 B** (text/data/bss
+all byte-identical before and after, confirmed via the stash-based A/B
+methodology) — expected, since this is a pure statement reorder, not new
+code.
+
+**What this fix does NOT do — a real leak remains, found while writing a
+regression test for the above.** The reorder is diagnostic-only, not a
+capacity fix. `doFnReset()`'s RAM wipe (`memset`/`freeMemoryRegions[0]`
+reset/`numberOfAllocatedMemoryRegions = 0`) runs unconditionally
+immediately after the hook regardless of which ordering is used, so by
+the time the wipe finishes, allocator state is identical either way —
+the free succeeding vs. being rejected only matters for the split second
+before the wipe overwrites everything, which is exactly why the fix has
+zero flash/behavior footprint beyond silencing the diagnostic. Later in
+the SAME `restoreCalc()` call, `restoreStateValue(numberOfAllocatedMemoryRegions/
+allocatedMemoryRegions, ...)` (`saveRestoreBackup.c` lines ~833-836)
+restores the allocator's allocated/free-region arrays **wholesale from
+the backup file** — and that file's own snapshot, taken at `saveCalc()`
+time while the capture was genuinely open, still marks the capture's
+blocks as allocated. That restore silently reintroduces a phantom
+"still allocated" entry that nothing will ever free again (`forthCap.buf`
+is already `NULL` by then, from the hook's earlier, now-successful free —
+`forthCapClose()` unconditionally nulls it regardless of whether the
+underlying `freeC47Blocks` succeeds), because the later seam call at
+`saveRestoreBackup.c:872-873` (`forthGDictValidateRestored();
+forthDictInit();`) finds `forthCap.buf == NULL` and no-ops.
+
+Confirmed via a real round-trip test (built during investigation, then
+reverted rather than committed — see below): `getFreeRamMemory()` before
+opening a capture vs. after a full `saveCalc()`/`restoreCalc()` round-trip
+differs by exactly 256 bytes (64 blocks, the capture's own size) in both
+the pre-fix and post-fix trees alike — this reorder changes nothing about
+that number. Also worth recording precisely, since it cost real
+investigation time: three unrelated "double/invalid free" diagnostics
+that appeared to coincide with this test's own restore call turned out,
+on `addr2line`-decoding their backtraces, to be the FIX-6
+`test_freelist_double_free_guarded`/`test_freelist_interior_double_free`/
+`test_freelist_no_mutation_on_oversize_free` tests' own *intentional*
+guard triggers, running later in the suite — their position in the
+captured log was a stdout/stderr buffering artifact (stdout is fully
+buffered once redirected to a file; stderr's `fflush` calls inside
+`freeListFree` are not), not a real finding. Lesson: when bisecting by log
+position across a mixed stdout/stderr capture, decode backtraces before
+trusting apparent ordering.
+
+**Root architectural gap (not fixed here, tracked separately for
+possible upstream reporting, similar treatment to the FIX-6 precedent):**
+`forthCap` is deliberately not part of the persisted save-file state (by
+design — a capture cannot survive a real save/restore, `forthCapPowerReset()`
+exists specifically to guarantee it's closed at the two dictionary
+lifecycle seams). But the save file's allocator-bookkeeping snapshot
+(`numberOfAllocatedMemoryRegions`/`allocatedMemoryRegions[]`, saved and
+restored wholesale, with no per-entry provenance) has no way to know that
+one of its "allocated" entries belongs to state that must NOT be treated
+as restored. Nothing today reconciles "ephemeral, intentionally-not-
+persisted allocation" against a wholesale bookkeeping-array restore for
+ANY such allocation, not just Forth's capture — this is a general gap in
+the save/restore-vs-allocator design, exposed by Forth because it is
+currently the only subsystem with an allocation of this shape. Net effect
+on real hardware: every power-off/power-on cycle (or explicit save/restore)
+performed while a Forth capture is open permanently leaks 256 B (64
+blocks) of RAM that can never be reclaimed without a full RESET. Given R47
+target RAM budgets, this is a real, if slow-accumulating, defect worth
+raising — deferred rather than fixed inline, since a correct fix likely
+needs either the save format to stop persisting ephemeral allocations at
+all, or the restore seam to reconcile stale bookkeeping entries against
+what Forth actually still owns post-restore, and both are upstream-shaped
+changes bigger than this stage's scope (Owner ruling 2026-07-20: trace
+and write up for potential upstream reporting, do not attempt a local fix
+without further direction — same treatment as the FIX-6 precedent).
+
+## 2026-07-20 — Code audit #3: dynamic-menu/USER-key XEQ of a Forth word executed live in PEM instead of recording a step, three call sites
+
+Non-normative. Third code-audit item, found during the broader sweep of
+forth-core's patched (non-owned) production files after the save/restore
+items above were resolved.
+
+**The bug.** Three separate call sites implement "XEQ a name picked from
+elsewhere" against upstream's own established shape: resolve the name to
+a native label first; if that succeeds, branch on `calcMode == CM_PEM`
+— insert an `insertUserItemInProgram(item, name)` step while composing a
+program, or `reallyRunFunction(...)` immediately otherwise (this exact
+label-case shape predates forth-core; it's upstream's own pattern for
+"a name picked from a live UI surface"). forth-core's own H-hook additions
+at each site — the Forth-vocabulary fallback that runs when the name
+*isn't* a native label — copied the label case's dispatch call but not
+its PEM/execute branch, so a Forth colon word or plain item resolved via
+this fallback was **always executed immediately**, in every calcMode,
+including CM_PEM:
+
+- `items.c`, `runFunction()`'s dynamic-menu XEQ dispatch (`dynamicMenuItem
+  >= 0`, the MNU_FORTH-picker-driven path): `FORTH_XEQ_COLON` and
+  `FORTH_XEQ_ITEM` both called `reallyRunFunction(...)` unconditionally,
+  while the `FORTH_XEQ_LABEL` arm three lines above correctly checks
+  `calcMode == CM_PEM`.
+- `screen.c`, `_executeItem()`'s `FLAG_USER`-key XEQ dispatch: the H-hook
+  Forth fallback (`forthFindColon` → `reallyRunFunction(ITM_FCALL, widx)`)
+  ran unconditionally; the native-label branch immediately above it
+  correctly checks `calcMode == CM_PEM`.
+- `keyboard.c`, `btnReleased()`'s `FLAG_USER`/`Norm_Key_00_released`-key
+  XEQ dispatch: identical shape, identical gap.
+
+Net effect: editing a program (CM_PEM) and triggering any of these three
+XEQ paths against a name that resolves to a Forth colon word (all three
+sites) or a plain Forth-visible item (items.c only) executed that code
+live — mutating the stack/registers/flags mid-edit — instead of recording
+the intended `XEQ 'NAME'` program step. This directly violates DESIGN.md
+§4.2's own normative contract ("PEM recording of `XEQ 'NAME'`: names
+persist, never `widx`") — a contract the *canonical* TAM-typed entry path
+(`ui/tam.c:964`) already honors correctly; these three dynamic-menu/
+USER-key paths just never got the same treatment when the H-hooks were
+added. No test exercised any of the three (grepped `dynamicMenuItem` /
+`FLAG_USER` XEQ-adjacent test code — only defensive `dynamicMenuItem = -1`
+hygiene assignments in unrelated tests, nothing driving a real selection
+through this dispatch).
+
+**Fix.** All three sites gained the identical `if(calcMode == CM_PEM) {
+insertUserItemInProgram(...); } else { <original live-execute call>; }`
+wrapper around their Forth-fallback dispatch, mirroring the native-label
+arm immediately adjacent to each — same idiom, no new abstraction, three
+small near-identical edits rather than a shared helper (each site's
+surrounding variable names/control flow differ enough that factoring
+would cost more clarity than it saves for three call sites). Verified
+`insertUserItemInProgram(func, name)` records the same generic
+`[opcode][STRING_LABEL_VARIABLE][len][name]` step regardless of what
+`func` will resolve to later — confirming the fix doesn't need to know
+*which* Forth-fallback subtype (colon vs. item) it's handling, exactly
+like the pre-existing label arm doesn't need to know which label it
+resolved.
+
+**Regression test:** `test_pem_xeq_dynmenu_no_live_exec` (new,
+`test_dict_reloc.c`) drives the `items.c` site end-to-end — compiles `W7`
+interactively (fdict-resident), builds a real `MNU_FORTH` picker over a
+minimal program via `testInitVariableSoftmenu`/`showSoftmenu(-MNU_FORTH)`,
+selects it via `dynamicMenuItem`, calls `runFunction(ITM_XEQ)` with
+`calcMode == CM_PEM`, and asserts a step was recorded
+(`getNumberOfSteps()` +1) and a sentinel left in X survived untouched (no
+live execution). Mutation-tested: disabling the `calcMode == CM_PEM`
+check in `items.c`'s `FORTH_XEQ_COLON` arm reran the gate RED with the
+exact predicted symptom ("X changed — word executed live instead of being
+recorded"); reverting reran GREEN. The screen.c/keyboard.c sites were
+fixed by inspection/mirroring this one's verified shape and are not
+independently test-driven — both are `FLAG_USER`-key dispatch paths that
+would need a materially larger fixture (real key-assignment state) to
+drive through the actual UI entry point; the fix at each site is
+structurally identical to the tested one and reuses the exact same
+`insertUserItemInProgram` contract already proven correct in DESIGN.md's
+canonical TAM path and by this test.
+
+`make dmcp5r47` flash 1093728 → 1093776 (+48 B, three small conditional
+branches); RAM (data+bss) unchanged at 7228.
+
+---
+
+## 2026-07-25 — Simplification pass S1/S2/S3: the separate capture buffer was a vestige and is gone
+
+Three stages reducing this package's coupling to upstream, prompted by an
+audit of the whole override set rather than of any one defect. No Forth
+feature was removed. Upstream override files 17 → 13 (the resolver work
+also left `screen.c` a 2-hunk shell); patch added-lines 937 → 634.
+
+**S1 — evict what was never forth-core's.** The enhanced
+missing-function error text (`error.c` in full, plus its `screen.c`
+branch) is dropped on owner ruling: the error still raises and the
+offending name is still written to `errorMessage`, only the on-screen
+rendering of the name is gone. `config.c`'s unconditional
+global-register descriptor memset is a generic upstream fix and moved to
+`UPSTREAM_REPORTS_globalRegister_reset.md`;
+`test_lifecycle_real_reset_hook` drops the poison/assert pair that
+pinned it. Six lines of gratuitous whitespace churn reverted.
+
+**S2 — move package logic out of upstream files.** The 157-line
+`MNU_FORTH` picker builder (inside `softmenus.c`) and the
+insert/guard helpers (inside `keyboard.c`) became package-owned
+`forth_menu.c/h`; the three copies of the Forth name fallback became
+`forthTryColonFallback()`/`forthDispatchColon()` in `forth_bridge.c`.
+Pure code motion — the `dmcp5r47` flash figure was byte-identical
+across the stage, which is the evidence.
+
+**S3 — the capture line moves back onto `aimBuffer`.** This reverses
+F6-1's central decision, and the reason is that F6-1's premise expired.
+F6-1 moved the text off `aimBuffer` because TAM-cancel zeroes
+`aimBuffer` in PEM, destroying a suspended capture line. F6-2 then made
+the on-disk step the single source of truth (suspend frees the buffer,
+resume refills from the step payload), and code audit #1 made that
+recommit unconditional. From that point the text was always recoverable
+from the step, TAM clobbering `aimBuffer` no longer mattered, and the
+separate allocation was pure cost: a `forthCapIsOpen() ? forthCapBuf() :
+aimBuffer` ternary at 13 sink/cursor/render sites, an allocator lifetime
+to get wrong, and — per code audit #2 and
+`UPSTREAM_REPORTS_976b864b5.md` — a genuine orphaned-bookkeeping leak on
+every save/restore round-trip taken with a capture open. That leak is
+now gone by construction: forth-core no longer has any allocation whose
+lifetime is shorter than a save/restore cycle. The upstream report
+stands as a general observation.
+
+What survived, and why the state object did not simply disappear: the
+capture *state* (CLOSED/OPEN/SUSPENDED plus the suspend snapshot) is
+still explicit. Deriving it from `calcMode`/`FLAG_ALPHA`/`tam.function`
+was tried first and is wrong — `tamEnterMode` assigns the incoming TAM
+function *before* the CM_PEM suspend seam fires, so `tam.function` is
+already the TAM op, not `ITM_FORTH`, at the one place suspend must
+recognise an open capture. What went is the storage, not the state.
+
+Consequences: `c47Extensions/keyboardTweak.c` and
+`programming/nextStep.c` leave the override set entirely — every hunk in
+both was the ternary or a `|| forthCapTextNonEmpty()` disjunction that
+is now literally upstream's own expression. `screen.c`'s
+`findOffset`/`incOffset`, and `keyboard.c`'s `fnKeyUp`/`fnKeyDown`/
+`fnKeyExit` guards, likewise revert to upstream verbatim. The two real
+behaviours hiding among that ternary noise were kept: `fnKeyExit`'s
+`currentStep` resync after a Forth commit, and `fnKeyBackspace`'s
+empty-abort branch (Forth deletes its placeholder in place, REM/LITERAL
+does not). The 256-byte/196-glyph cap is unaffected — it is enforced in
+code at the insertion sites, not by the buffer's size, and `aimBuffer`
+is 1024 bytes.
+
+`test_capture_buffer` subcase 2 is re-pinned: it asserted that typing
+left `aimBuffer` empty while text accumulated in the managed buffer, and
+now asserts that `aimBuffer` holds the typed line. The arena-residue
+subcases still run; they can no longer catch a capture leak (there is
+nothing to leak) and now serve as regression guards on the surrounding
+step insert/delete churn.
+
+Not done, deliberately: `core/freeList.c` stays. FIX-6B — the fail-loud
+`displayBugScreen` rework agreed with upstream in
+`UPSTREAM_REPORTS_b8f79e486.md` §3 — is still unlanded, and the guard is
+what caught code audit #2. It should be revisited with that rework, not
+opportunistically here. The `_executeOp` → `param_core.c` extraction
+also stays: it is the package's largest single patch (−233 lines from
+`lblGtoXeq.c`) and its highest rebase risk, but it is a genuine
+architectural need (`paramCoreExecuteOpBounded` and the direct
+validate/dispatch split are new capability, not a move), so shrinking it
+requires a design decision rather than a cleanup.
+
+Gate green at every stage: `FORTH SELF-TEST: ALL PASSED`, 342 PASS
+throughout. `make dmcp5r47` flash 1095048 → 1094536 (−512 B) across the
+three stages, measured with `CUSTOM_PKG_RECONFIGURE=1` — note that
+`build.dmcp5`'s stamp tracks only the `CUSTOM_PKG` *value*, so
+package-content edits do not trigger a reconfigure and a measurement
+without that flag silently reads a stale shadow.
+
+---
+
+## 2026-07-25 — design audit #1 (first run of DESIGN_AUDIT.md)
+
+Mechanical: 1 finding — check H (added during the run) caught DESIGN.md citing
+`packages/forth-core/error.c`, removed in S1. Checks A/C/D/F/G clean; B and E
+examined on merits rather than for growth, since the baseline was recorded the
+same day and a matching count proves nothing on a first run.
+
+**Philosophy (Part 2), only what changed:**
+
+*2.3 names not indices* — all four `reallyRunFunction(ITM_FCALL, …)` sites are
+live-execution paths (`forthDispatchColon`'s non-PEM arm, `param_core.c`'s
+running-program step arm, `items.c`'s dynamic-menu arm). Clean; the code-audit
+#3 regression has not returned.
+
+*2.8 DESIGN.md vs code* — two findings, one benign and one instructive.
+DESIGN.md still asserted the user sees `No such function: TOKEN` and cited
+`error.c` as live in the package; S1 dropped both. Corrected: the token still
+reaches `errorMessage` (self-tests assert on it, `EXTRA_INFO_ON_CALC_ERROR`
+consumes it), only the on-screen concatenation is gone.
+
+The instructive one: DESIGN.md describes the capture as living in `aimBuffer`
+throughout (§P-H7, §8, §9.6). That was correct before F6-1, **wrong for the
+entire F6 series**, and accidentally correct again after S3 moved the text
+back. The authoritative document silently disagreed with the code for a whole
+stage series and nothing detected it — F6-1 changed the code and never folded
+the change into DESIGN.md. No correction is needed now, which is precisely why
+it is worth recording: the agreement is luck, not process.
+
+**Expired-premise sweep (Part 3) — three mechanisms:**
+
+1. `forthCaptureSanitizeRestoredUi` — **premise fully expired.** It was written
+   to repair `T_cursorPos`/`displayAIMbufferoffset` restored pointing into a
+   managed buffer that no longer existed. Post-S3 the sink IS `aimBuffer`, and
+   `aimBuffer`, `T_cursorPos`, `displayAIMbufferoffset`, `calcMode`,
+   `FLAG_ALPHA` and `tam.function` are ALL persisted
+   (`saveRestoreBackup.c:285/469/481/333/390/304`). Every ingredient of a
+   capture survives a save/restore except the one process-local `forthCap.state`
+   flag — which is derivable at this seam, unlike at the suspend seam. So the
+   function now destroys recoverable state instead of repairing broken state.
+   Kept for now (closing is conservative and loses nothing — the step is
+   committed per keystroke); making the capture RESUME intact is a user-visible
+   change to the §8 A5 power-off contract and is listed as an open decision.
+
+2. The `doFnReset` hook reorder — **premise fully expired, and its S3
+   replacement was false.** Code audit #2 moved the hook before the RAM wipe
+   because `forthCapPowerReset()` freed a live capture buffer and the wipe made
+   that free look like a double free. S3 removed the allocation, killing that
+   reason, and I rewrote the comment to claim the reorder was still needed
+   because `forthDictInit()`/`forthGDictInit()` free the old dictionary
+   regions. **They do not** — both only NULL their descriptors;
+   `forthDictClear()` is what frees. Nothing in the hook frees any more, so the
+   placement is inert. Kept (inert-and-correct beats an unmotivated move);
+   reverting it wants its own trace and is listed as a recommendation.
+
+3. The 196-glyph / <256-byte capture cap — **premise intact, survives.** It
+   derives from the step encoding's 1-byte `len` field (§8, `len` 0..255), not
+   from the old buffer's size, so moving the sink to a 1024-byte `aimBuffer`
+   does not loosen it. Recorded so the next sweep does not re-derive it.
+
+**Procedure changes made to DESIGN_AUDIT.md as a result:**
+
+- Added check H (DESIGN.md source citations resolve) — it found finding 1.
+- Stated that a baseline suppresses growth alarms, not the obligation to
+  justify what is already there; REVIEW lists get read on merits on a first
+  run, after any `--accept`, and periodically.
+- Stated that check D belongs *before* planning a move-out stage. S2's entire
+  purpose was moving package logic out of upstream files and it missed the
+  largest instance (~129 lines of capture orchestrators in `manage.c`) because
+  it worked from hand-catalogued hunks; check D lists them in one command.
+- Part 2.8 now says to sample-read the sections covering recent changes, and
+  that a `[VERIFIED:]` tag is evidence about the tree when written, not a
+  standing guarantee.
+- Part 3 now says to fix the comment even when the code stays: a stale
+  justification is worse than none because it will be believed — and a
+  *rewritten* justification is a new claim needing its own check, not an heir
+  to the credibility of the comment it replaced. Finding 2 is the worked
+  example, having been introduced by the same person correcting finding 1.
+
+The audit's own findings were first written as long comments in `config.c` and
+`manage.c`; check A then flagged the footprint growth (+17 lines), which was
+correct — narrative belongs in this file, and those comments are now
+one-line pointers here.
+
+Footprint: 14 override files, 625 added lines (unchanged by this audit).
+Gate green: FORTH SELF-TEST: ALL PASSED, 342 PASS.
+
+---
+
+## 2026-07-25 — D1/D2: stack semantics corrected against R47
+
+Owner ruling that prompted this: **anything that behaves differently from R47 is
+a bug.** Both defects were found while writing a second showcase program, not by
+review, and both produced wrong numbers with `lastErrorCode == 0`. Full writeup
+in `DEFECTS_stack_semantics.md`; this entry records what changed and why the
+design text was wrong.
+
+**D1 — the ASLIFT scrub was backwards at the Forth→native boundary.**
+`forthPushInt32`/`forthPushReal34` forced `FLAG_ASLIFT` on for their own lift and
+then cleared it, and the same clear followed every primitive dispatch. Upstream
+`liftStack()` (`src/c47/stack.c:20`) only lifts when that flag is set and
+otherwise *overwrites* X, so any native item following a Forth value destroyed
+it: `1000 RCL 19` left Y=0 where R47 leaves Y=1000.
+
+The design text is what makes this a genuine miss rather than an oversight.
+§3.2's ASLIFT section argues the correct rule at length — "after `3 SQ` leaves 9
+in X, the next digit entry must *lift* onto 9, not overwrite it" — and then
+closes by asserting "the *internal* scrub ... is correct and unchanged." The
+scrub had been reasoned about only for Forth-internal sequencing; nobody asked
+what it did to the boundary the same paragraph was about. That sentence is now
+corrected in DESIGN.md rather than deleted, because the wrong claim is the
+instructive part.
+
+Fixed at six sites (`forth_inner.c`, `forth_compile.c`) to one uniform rule:
+every dispatch leaving a value in X sets `FLAG_ASLIFT`, mirroring
+`reallyRunFunction()`'s epilogue, since every prim-equivalent item upstream
+carries `SLS_ENABLED`. The definition marks (`GLOBAL`/`IMMEDIATE`) touch no
+stack and now leave the flag alone (`SLS_UNCHANGED`).
+
+**D2 — recursion ran off the top of the data stack in silence.** The data stack
+is the RPN stack, 8 levels under `SSIZE8`, and a recursive word holds one live
+operand per level. `7 FACT` returned `720*6 = 4320` instead of 5040; `6 2 NCR`
+returned 1 instead of 15 because `FACT` ran with two values already beneath it.
+`forthDataDepth` now tracks Forth-owned depth via a new `stackEffect` column in
+`forthPrims[]` and raises `ERROR_RAM_FULL` on growth past capacity, joining the
+return-stack guard and runaway cap.
+
+Two properties, both chosen so the guard cannot fire on a correct program: it is
+only ever an *underestimate* (a native item resyncs the count to 0 rather than
+abandoning it — 0 is never above the truth, and is exact after the usual
+`XEQ 'CLSTK'`), and it applies only while Forth is executing (the public push
+helpers are also used to seed the stack outside any Forth line; counting those
+accumulated a stale depth that refused a legitimate push — caught by
+`test_param_series_c_acceptance`, not by review).
+
+Deliberately NOT changed: a *user* keying more values than the stack holds still
+loses the bottom one silently. That is what R47 does, and the ruling cuts both
+ways.
+
+New pins: `test_native_lift_after_forth`, `test_data_stack_overflow_guard`, and
+`test_savings_program` (the SAVE showcase, which now carries its balance on the
+stack across `RCL` — impossible before D1).
+
+Gate green: FORTH SELF-TEST: ALL PASSED, 173 checks.
+`make dmcp5r47` flash 1094536 -> 1094824 (+288 B), measured with
+`CUSTOM_PKG_RECONFIGURE=1`. The cost is the `stackEffect` column (22 entries,
+struct padding) plus the guard itself; justified by two classes of silent wrong
+answer.

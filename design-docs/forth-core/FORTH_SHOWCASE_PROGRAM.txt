@@ -1,0 +1,131 @@
+R47 FORTH SHOWCASE PROGRAM
+==========================
+
+This is one sample split into two normal R47 programs. FDEMO is the main
+program. NATADD is a small global-label subroutine called by Forth so the
+XEQ bridge can be seen working in both directions.
+
+Enter the right-arrow character below with the calculator's arrow glyph.
+Do not type the two ASCII characters "->".
+
+
+PROGRAM 1: FDEMO
+----------------
+
+LBL 'FDEMO'
+»FORTH
+: SUMDOWN DUP IF DUP 1 - RECURSE + THEN ;
+: COUNTDOWN BEGIN DUP WHILE 1 - REPEAT ;
+: UNTIL1 BEGIN 1 - DUP UNTIL DROP ;
+: CHOOSE IF 111 ELSE 222 THEN ;
+: SPIN BEGIN AGAIN ;
+: PLUS10 10 + ; GLOBAL
+: GONE1 1 ; GLOBAL
+: GONE2 2 ; GLOBAL
+: IMM3 3 ; IMMEDIATE
+: EMPTY IMM3 ;
+: CALLWORD XEQ 'PLUS10' ;
+: CLEAR XEQ 'CLSTK' ;
+CLEAR
+5 SUMDOWN STO 00
+5 COUNTDOWN STO 01
+99 1 UNTIL1 STO 02
+1 CHOOSE STO 03
+0 CHOOSE STO 04
+7 CALLWORD STO 05
+42 STO 'DEMO' RCL 'DEMO' STO 06
+CNST 10
+10 STO 07
+SF 10
+18 STO 09 77 STO →09 RCL 18 STO 10
+19 STO 'PTR' 88 STO →'PTR' RCL 19 STO 11
+XEQ :GET0:
+STO 12
+2
+XEQ 'NATADD'
+STO 13
+5 LATER STO 14
+99 EMPTY STO 15
+1 2 CLEAR 9 STO 16
+FORGET GONE1
+: LATER 2 * ;
+FORTH«
+RTN
+LBL :GET0:
+RCL 00
+RTN
+END
+
+
+PROGRAM 2: NATADD
+-----------------
+
+LBL 'NATADD'
+»FORTH
+100 +
+FORTH«
+RTN
+END
+
+
+RUNNING IT
+----------
+
+Run XEQ 'FDEMO'. The expected results are:
+
+  R00 = 15   SUMDOWN uses IF and RECURSE (5+4+3+2+1)
+  R01 = 0    COUNTDOWN uses BEGIN/WHILE/REPEAT
+  R02 = 99   UNTIL1 uses BEGIN/UNTIL and leaves the lower value
+  R03 = 111  true arm of IF/ELSE/THEN
+  R04 = 222  false arm of IF/ELSE/THEN
+  R05 = 17   compiled XEQ of the global Forth word PLUS10
+  R06 = 42   named variable STO/RCL through 'DEMO'
+  R07 = 10   execution continued after the direct numeric CNST parameter
+  R09 = 18   register holding the indirect target number
+  R10 = 77   STO →09 reached register 18, then RCL returned it
+  R11 = 88   STO →'PTR' reached register 19 through the named pointer
+  R12 = 15   XEQ :GET0: called the local R47 label
+  R13 = 102  XEQ 'NATADD' called the global R47 label
+  R14 = 10   LATER was used before its definition line
+  R15 = 99   IMM3 ran while EMPTY compiled, so EMPTY has no runtime body
+  R16 = 9    XEQ 'CLSTK' resolved a normal C47 item and cleared the stack
+
+Flag 10 should be set. Named variables DEMO and PTR should contain 42 and
+19. PLUS10 should still exist, while GONE1 and GONE2 should not because
+FORGET GONE1 removes that word and the global words after it.
+
+CNST 10 is included to exercise direct numeric parameter parsing. In this
+build, a result produced by a native item inside a Forth source step is not
+imported back into the Forth data stack when the step ends, so the following
+literal is used as the visible R07 checkpoint.
+
+SPIN is compiled to demonstrate BEGIN/AGAIN but is intentionally not run
+by FDEMO. Running it will reach the runaway guard. On hardware, R/S can
+also interrupt a running Forth word.
+
+
+MANUAL UI CHECKS
+----------------
+
+The following features are editor or persistence behavior, so they are not
+visible only by looking at the result registers:
+
+1. In PEM, EDIT one of the Forth source lines and open FWRD. The program
+   words should be listed and selecting one should insert it at the cursor.
+
+2. Remove THEN from the CHOOSE definition and press ENTER. The check-only
+   pass should report the error without replacing the original program step.
+
+3. Insert a new FORTH instruction somewhere else in PEM. The closing marker
+   should be inserted immediately. ENTER adds another line inside the pair
+   and EXIT leaves a balanced region.
+
+4. Save a backup or power-cycle the simulator, then execute 5 followed by
+   XEQ 'PLUS10'. The result should be 15 because PLUS10 is global. SUMDOWN
+   should not be available interactively because it belongs to FDEMO.
+
+5. The original line-at-a-time entry still works. Put the string
+   "5 PLUS10" in X and run FORTH; X should become 15.
+
+6. Create a second program and try to use SUMDOWN there. It should not see
+   the definition owned by FDEMO.
