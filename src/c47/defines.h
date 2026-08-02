@@ -55,8 +55,9 @@
 #define OPTION_ASNBROWSER              //                   // Assign Browser
 #define OPTION_FONTBROWSER             //                   // Font Browsers
 #define OPTION_SHOW                    //                   // SHOW (alternative to VIEW)
-#define OPTION_SLV_ZETA_BETA           //                   // SLVC, SLVQ, ZETA, BETA
-#define OPTION_SLVP                    //                   // SLVP general polynomial roots (companion matrix through the EIGEN QR solver; requires OPTION_EIGEN)
+#define OPTION_ZETA_BETA               //                   // ZETA, BETA, LNBETA
+#define OPTION_SLVQ_SLVC               //                   // SLVQ, SLVC quadratic and cubic roots
+#define OPTION_SLVP_POLY               //                   // SLVP general polynomial roots (companion matrix through the EIGEN QR solver; requires OPTION_EIGEN)
 #define OPTION_INFSUMS                 // TEMPORARY         // Infinity sum with the early stop; the plain programmable sum and product stay
 #define OPTION_ELLIPTIC                //                   // Elliptic functions
 #define OPTION_BESSEL                  //                   // Bessel functions
@@ -103,7 +104,8 @@
       #undef OPTION_ASNBROWSER     //  1704 bytes // Assign Browser
       #undef OPTION_FONTBROWSER       //  1216 bytes // Font Browsers
       #undef OPTION_SHOW        //  6712 bytes // SHOW (use either old SHOW or VIEW, change in code)
-      #undef OPTION_SLV_ZETA_BETA       //  3288 bytes // SLVC, SLVQ, ZETA, BETA
+      #undef OPTION_ZETA_BETA       //  3288 bytes // ZETA, BETA, LNBETA
+      #undef OPTION_SLVQ_SLVC       //       bytes // SLVQ, SLVC quadratic and cubic roots
       #undef OPTION_ELLIPTIC  //       bytes // ELLIPTIC
       #undef  OPTION_PRIME             // 27208 bytes // Without ISPRIME, NEXTPRIME, FACTORS, EULPHI, MATXFACTOR
       #undef OPTION_BESSEL //  5129 bytes // Without BESSEL
@@ -158,9 +160,9 @@
 //
 //       Pkg │ DIST    │ X.FN     │ FIN  │ EIGEN │ ELEC │ IR
 //      ─────┼─────────┼──────────┼──────┼───────┼──────┼────
-//        1  │ all     │ no ellip │ fast │   ❌  │  ✅  │ ✅
-//        2  │ all     │ full     │ slow │   ❌  │  ❌  │ ❌
-//        3  │ limited │ no ellip │ fast │   ✅  │  ✅  │ ✅
+//        1  │ all     │ no ellip │ fast │   ❌  │  ✅  │ ❌
+//        2  │ limB    │ full     │ slow │   ❌  │  ❌  │ ✅
+//        3  │ limA    │ no ellip │ fast │   ✅  │  ✅  │ ❌
 //        4  │ none    │ no e-B-O │ slow │   ❌  │  ❌  │ ✅
 //
 //
@@ -182,7 +184,7 @@
 //      All C47 / DM42 packages (common to 1–4): no 2D/3D VECTOR conversions (matrix functions stay), no number editing, no 1000-digit XFN math.
 
 
-  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 6888) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; IR PRINTING
+  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 1016) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; NO IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
     #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
     #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -198,7 +200,7 @@
             #undef  OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(DMCP_PACKAGE2)             // PACKAGE 2 (free 3744) // ALL DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; NO IR PRINTING
+  #if defined(DMCP_PACKAGE2)             // PACKAGE 2 (free 2032) // Limited2 DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; IR PRINTING
     #define OPTION_ELLIPTIC              // ✓ 13112 bytes // Without ELLIPTIC
     #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
     #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -214,7 +216,7 @@
     #define OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 EXPERIMENTAL (free 4416) // Limited DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
+  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 (free 3280) // Limited0 DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
     #define  OPTION_BESSEL               // ✓  4968 bytes // Without X.FN BESSEL
     #define  OPTION_ORTHO                // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -235,7 +237,7 @@
             //  1    0       6240     26452   ELEC only
             //  1    1      15808     16884   both (ELEC+VECTOR share 3384)
 
-  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free ✓32712) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
+  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free 30472) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
             #undef  OPTION_BESSEL        // ✓  4968 bytes // Without X.FN BESSEL
             #undef  OPTION_ORTHO         // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -258,7 +260,8 @@
     #define OPTION_FLAGBROWSER           // ✓  2088 bytes // Without Flag Browsers
     #define OPTION_ASNBROWSER            // ✓  1936 bytes // Without Assign Browser
     #define OPTION_SHOW                  // ✓  6496 bytes // Without SHOW use VIEW
-    #define OPTION_SLV_ZETA_BETA         // ✓  5440 bytes // SLVC, SLVQ, ZETA, BETA
+    #define OPTION_ZETA_BETA             // ✓  5440 bytes // ZETA, BETA, LNBETA
+    #define OPTION_SLVQ_SLVC             // ?       bytes // SLVQ, SLVC quadratic and cubic roots
     #define OPTION_ASTRING               // ✓  1024 bytes // Without alpha string functions aMID aLEFT aRIGHT aTRIM aREV aLOWER aUPPER
     #define OPTION_PRIME                 // ✓ 31712 bytes // Without ISPRIME, NEXTPRIME (primality; undef also forces OPTION_FACTOR off)
     #define OPTION_FACTOR                // ✓  7120 bytes // Without FACTORS, M.FACT, EULPHI, SIGMA, NumTh menu (GMP factorisation; keeps primality)
@@ -277,7 +280,7 @@
             #undef  OPTION_EIGEN_159     // ✓  2568 bytes // C47 EINEN function is 159 digits internally; note both OPTION_SQUARE_159 & OPTION_CUBIC_159 used by OPTION_EIGEN_159
             #undef  OPTION_XFN_1000      // ✓  5224 bytes // XFN extended 1000 digit math Functionality
             #undef  OPTION_VECTOR        // ✓ 13672 bytes // Vector 12952 saving if ELEC is not in; 9568 saving if ELEC is in
-            #undef  OPTION_SLVP          // ✓  2024 bytes // SLVP general polynomial roots (companion matrix through the EIGEN QR solver)
+            #undef  OPTION_SLVP_POLY     // ✓  2024 bytes // SLVP general polynomial roots (companion matrix through the EIGEN QR solver)
             #undef  OPTION_INFSUMS       // ?   400 bytes // Infinity sum with the early stop; the plain programmable sum and product stay
     #define OPTION_TVM_AMORT             // ✓  1648 bytes // Use additional AMORT in tvm
     #define OPTION_DATAFILE              // ✓  2112 bytes // Without register/variable .d47 export & import
@@ -293,7 +296,7 @@
 
 // OPTION_SLVP (polynomial roots) requires OPTION_EIGEN (it feeds the companion matrix to the QR eigensolver): never leave SLVP on without EIGEN
 #if !defined(OPTION_EIGEN)
-  #undef OPTION_SLVP
+  #undef OPTION_SLVP_POLY
 #endif
 
 

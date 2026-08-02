@@ -142,16 +142,16 @@ TO_QSPI const int16_t menu_LOOP[]        = { ITM_DSE,                       ITM_
 /*                                          <---------------------------------------------------------------------- 6 f shifted functions ------------------------------------------------------------------------->  */
 /*                                          <---------------------------------------------------------------------- 6 g shifted functions ------------------------------------------------------------------------->  */
 
-#if ((defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL == USER_R47))
+#if (defined(OPTION_VECTOR) && (CALCMODEL == USER_R47))
   #define VF5      -MNU_VECCONV
   #define VF6      ITM_CLSTK
-#elif (!(defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL == USER_R47))
+#elif (!defined(OPTION_VECTOR) && (CALCMODEL == USER_R47))
   #define VF5      ITM_NULL
   #define VF6      ITM_CLSTK
-#elif ((defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL != USER_R47))
+#elif (defined(OPTION_VECTOR) && (CALCMODEL != USER_R47))
   #define VF5      -MNU_VECCONV
   #define VF6      ITM_DRG
-#elif (!(defined(OPTION_VECTOR)|| defined(OPTION_SLV_ZETA_BETA)) && (CALCMODEL != USER_R47))
+#elif (!defined(OPTION_VECTOR) && (CALCMODEL != USER_R47))
   #define VF5      ITM_NULL
   #define VF6      ITM_DRG
 #endif
@@ -169,11 +169,19 @@ TO_QSPI const int16_t menu_LOOP[]        = { ITM_DSE,                       ITM_
   #define EIG_QR   ITM_NULL
 #endif // OPTION_EIGEN
 
-#if defined(OPTION_SLVP)
+#if defined(OPTION_SLVP_POLY)
   #define ADV_SLVP ITM_SLVP
 #else // OPTION_SLVP: blank SLVP (SLVQ SLVC stay)
   #define ADV_SLVP ITM_NULL
-#endif // OPTION_SLVP
+#endif // OPTION_SLVP_POLY
+
+#if defined(OPTION_SLVQ_SLVC)
+  #define ADV_SLVQ ITM_SLVQ
+  #define ADV_SLVC ITM_SLVC
+#else // OPTION_SLVQ_SLVC: blank SLVQ and SLVC
+  #define ADV_SLVQ ITM_NULL
+  #define ADV_SLVC ITM_NULL
+#endif // OPTION_SLVQ_SLVC
 TO_QSPI const int16_t menu_MATX[]        = {
                                              ITM_M_NEW,                     ITM_M_TRANSP,               ITM_M_EDI,                ITM_M_EDIN,            ITM_SIM_EQ,                  -MNU_VECT,
                                              ITM_MIDENT,                    ITM_M_DIM,                  ITM_M_DIM_GR,             ITM_M_DIMNQ,           ITM_M_CONCATB,               ITM_M_CONCATR,
@@ -2805,7 +2813,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
       case ITM_M_SQRT:
     #endif // !OPTION_EIGEN
 
-    #if !defined(OPTION_SLVP)
+    #if !defined(OPTION_SLVP_POLY)
       case ITM_SLVP:
     #endif // !OPTION_SLVP
 
@@ -2835,13 +2843,20 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
     #endif //OPTION_VECTOR; OPTION_ELEC
 
 
-    #if !(defined(OPTION_SLV_ZETA_BETA))
+    #if !(defined(OPTION_SLVQ_SLVC))
       case ITM_SLVC:
       case ITM_SLVQ:
     #endif //OPTION_SLV_ZETA_BETA
 
 
-    #if !(defined(OPTION_VECTOR) || defined(OPTION_SLV_ZETA_BETA))
+    #if !defined(OPTION_ZETA_BETA)
+      case ITM_zetaX :
+      case ITM_BETAXY:
+      case ITM_LNBETA:
+    #endif // !OPTION_ZETA_BETA
+
+
+    #if !defined(OPTION_VECTOR)
       case ITM_stkexV2:
       case ITM_stkexV3:
       case ITM_stkexV4:
