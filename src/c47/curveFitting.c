@@ -1030,6 +1030,13 @@ void processCurvefitSelectionAll(uint16_t selection, real_t *RR_, real_t *MX, re
 }
 
 
+// b^e through expf/logf. The fast forecast path below narrows its result to float either way, so float
+// transcendentals suffice, and the double pow/exp/log trio (7.3 kB of libm) leaves the link. b <= 0
+// yields NaN or the 0/inf limits exactly as pow does for a fractional exponent.
+static double fastPowF(double b, double e) {
+  return (double)expf((float)e * logf((float)b));
+}
+
 void yIsFnx(uint8_t USEFLOAT, uint16_t selection, double x, double *y, double a0, double a1, double a2, real_t *XX, real_t *YY, real_t *RR, real_t *SMI, real_t *aa0, real_t *aa1, real_t *aa2){
   *y = 0;
   float yf;
@@ -1060,7 +1067,7 @@ void yIsFnx(uint8_t USEFLOAT, uint16_t selection, double x, double *y, double a0
     }
     case CF_EXPONENTIAL_FITTING: {
       if(USEFLOAT == 0) {
-        *y = a0 * exp(a1 * x);
+        *y = a0 * (double)expf((float)(a1 * x));
       }
       else {
         realMultiply(XX,  aa1, &UU, realContextForecast);
@@ -1073,7 +1080,7 @@ void yIsFnx(uint8_t USEFLOAT, uint16_t selection, double x, double *y, double a0
     }
     case CF_LOGARITHMIC_FITTING: {
       if(USEFLOAT == 0) {
-        *y = a0 + a1*log(x);
+        *y = a0 + a1*(double)logf((float)x);
       }
       else {
         WP34S_Ln    (XX,  &SS,       realContextForecast);
@@ -1086,7 +1093,7 @@ void yIsFnx(uint8_t USEFLOAT, uint16_t selection, double x, double *y, double a0
     }
     case CF_POWER_FITTING: {
       if(USEFLOAT == 0) {
-        *y = a0 * pow(x, a1);
+        *y = a0 * fastPowF(x, a1);
       }
       else {
         realPower   (XX,  aa1, &SS, realContextForecast);
@@ -1098,7 +1105,7 @@ void yIsFnx(uint8_t USEFLOAT, uint16_t selection, double x, double *y, double a0
     }
     case CF_ROOT_FITTING: {
       if(USEFLOAT == 0) {
-        *y = a0 * pow(a1, 1/x);
+        *y = a0 * fastPowF(a1, 1/x);
       }
       else {
         realDivide  (const_1, XX,  &SS, realContextForecast);
@@ -1139,7 +1146,7 @@ void yIsFnx(uint8_t USEFLOAT, uint16_t selection, double x, double *y, double a0
     }
     case CF_GAUSS_FITTING: {
       if(USEFLOAT == 0) {
-        *y = a0 * exp( (x-a1)*(x-a1)/a2 );
+        *y = a0 * (double)expf((float)((x-a1)*(x-a1)/a2));
       }
       else {
         realSubtract(XX,  aa1, &TT, realContextForecast);
