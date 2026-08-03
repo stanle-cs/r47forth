@@ -48,7 +48,7 @@
 #define OPTION_DISTRIBUTIONS           //                   // the DIST menu top-level link; the subsets below carry the code
 #define OPTION_DIST_NORMAL             //                   // Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
 #define OPTION_DIST_C                  //                   // F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
-#define OPTION_DIST_B                  //                   // Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+#define OPTION_DIST_B                  //                   // Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T; +DIST_C
 #define OPTION_DIST_D                  //                   // GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
 #define OPTION_REGBROWSER              //                   // Register Browser
 #define OPTION_FLAGBROWSER             //                   // Flag Browsers
@@ -116,7 +116,7 @@
       #undef OPTION_DISTRIBUTIONS       // 17592 bytes // Without the DIST menu top-level link; the subsets below carry the code
       #undef OPTION_DIST_NORMAL       //  2168 bytes // Without Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
       #undef OPTION_DIST_C          //     ? bytes // Without F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
-      #undef OPTION_DIST_B          //     ? bytes // Without Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+      #undef OPTION_DIST_B          //     ? bytes // Without Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T; +DIST_C
       #undef OPTION_DIST_D          //     ? bytes // Without GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
       #undef OPTION_STOPWATCH //  1232 bytes // Without STOPW
       #undef OPTION_HP35  //   200 bytes // Without config file activations only. Not complete removal.
@@ -184,51 +184,51 @@
 //      All C47 / DM42 packages (common to 1–4): no 2D/3D VECTOR conversions (matrix functions stay), no number editing, no 1000-digit XFN math.
 
 
-  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 1016) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; NO IR PRINTING
+  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 3544 ☑) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; NO IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
-    #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
-    #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
+    #define OPTION_BESSEL                // ☑  5000 bytes // Without X.FN BESSEL
+    #define OPTION_ORTHO                 // ☑   504 bytes // Without X.FN ORTHO MENU
     #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without the DIST menu top-level link; the subsets below carry the code
-    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // (1) Without Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
-    #define OPTION_DIST_B                // ✓  7136 bytes // (2) Without Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
-    #define OPTION_DIST_C                // ✓  9624 bytes // (3) Without F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
-    #define OPTION_DIST_D                // ✓  3280 bytes // (4) Without GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
-    #define OPTION_TVM_FORMULAS          // ✓  2744 bytes // Use TVM analytical formulas where possible
-    #define OPTION_TVM_NEWTON            // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
-    #define OPTION_ELEC                  // ✓  6816 bytes // ELEC   6240 saving if VECTOR is not in; 2856 saving if VECTOR is in
+    #define OPTION_DIST_NORMAL           // ☑ 22096 bytes // (1) Without Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
+    #define OPTION_DIST_B                // ☑ 16648 bytes // (2) Without Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T; +DIST_C
+    #define OPTION_DIST_C                // ☑  9568 bytes // (3) Without F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
+    #define OPTION_DIST_D                // ☑  3256 bytes // (4) Without GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
+    #define OPTION_TVM_FORMULAS          // ☑  2744 bytes // Use TVM analytical formulas where possible
+    #define OPTION_TVM_NEWTON            // ☑  2128 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
+    #define OPTION_ELEC                  // ☑  6856 bytes // ELEC   6240 saving if VECTOR is not in; 2856 saving if VECTOR is in
             #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
             #undef  OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(DMCP_PACKAGE2)             // PACKAGE 2 (free 2032) // Limited2 DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; IR PRINTING
-    #define OPTION_ELLIPTIC              // ✓ 13112 bytes // Without ELLIPTIC
-    #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
-    #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
+  #if defined(DMCP_PACKAGE2)             // PACKAGE 2 (free 4624 ☑) // Limited2 DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; IR PRINTING
+    #define OPTION_ELLIPTIC              // ☑ 13192 bytes // Without ELLIPTIC
+    #define OPTION_BESSEL                // ☑  4984 bytes // Without X.FN BESSEL
+    #define OPTION_ORTHO                 // ☑   696 bytes // Without X.FN ORTHO MENU
     #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without the DIST menu top-level link; the subsets below carry the code
-    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
-    #define OPTION_DIST_B                // ✓  7136 bytes // Without (2) Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+    #define OPTION_DIST_NORMAL           // ☑  9264 bytes // Without (1) Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
+    #define OPTION_DIST_B                // ☑  7080 bytes // Without (2) Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T; +DIST_C
             #undef  OPTION_DIST_C        // ✓  9624 bytes // Without (3) F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
             #undef  OPTION_DIST_D        // ✓  3280 bytes // Without (4) GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
             #undef  OPTION_TVM_FORMULAS  // ✓  2744 bytes // Use TVM analytical formulas where possible
             #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
             #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   see below
             #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
+    #define OPTION_IR_PRINTING   // ☑ 10064 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 (free 3280) // Limited0 DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
+  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 (free 5800 ☑) // Limited0 DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
-    #define  OPTION_BESSEL               // ✓  4968 bytes // Without X.FN BESSEL
-    #define  OPTION_ORTHO                // ✓   656 bytes // Without X.FN ORTHO MENU
+    #define OPTION_BESSEL               // ☑  5008 bytes // Without X.FN BESSEL
+    #define OPTION_ORTHO                // ☑   696 bytes // Without X.FN ORTHO MENU
     #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without the DIST menu top-level link; the subsets below carry the code
-    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
-            #undef  OPTION_DIST_B        // ✓  7136 bytes // Without (2) Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+    #define OPTION_DIST_NORMAL           // ☑  2200 bytes // Without (1) Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
+            #undef  OPTION_DIST_B        // ✓  7136 bytes // Without (2) Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T; +DIST_C
             #undef  OPTION_DIST_C        // ✓  9624 bytes // Without (3) F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
             #undef  OPTION_DIST_D        // ✓  3280 bytes // Without (4) GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
-    #define OPTION_TVM_FORMULAS          // ✓  2744 bytes // Use TVM analytical formulas where possible
-    #define OPTION_TVM_NEWTON            // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
-    #define OPTION_ELEC                  // ✓  6816 bytes // ELEC   see below
-    #define OPTION_EIGEN                 // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
+    #define OPTION_TVM_FORMULAS          // ☑  2744 bytes // Use TVM analytical formulas where possible
+    #define OPTION_TVM_NEWTON            // ☑  2088 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
+    #define OPTION_ELEC                  // ☑  6824 bytes // ELEC   see below
+    #define OPTION_EIGEN                 // ☑ 17464 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
             #undef OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
             // ELEC VECT  FLASH cost   free   (pkg4, 720896 total)
@@ -237,20 +237,20 @@
             //  1    0       6240     26452   ELEC only
             //  1    1      15808     16884   both (ELEC+VECTOR share 3384)
 
-  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free 30472) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
+  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free 32744 ☑) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
             #undef  OPTION_BESSEL        // ✓  4968 bytes // Without X.FN BESSEL
             #undef  OPTION_ORTHO         // ✓   656 bytes // Without X.FN ORTHO MENU
             #undef  OPTION_DISTRIBUTIONS // ✓     0 bytes // Without the DIST menu top-level link; the subsets below carry the code
             #undef  OPTION_DIST_NORMAL   // ✓  2000 bytes // Without (1) Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
-            #undef  OPTION_DIST_B        // ✓  7136 bytes // Without (2) Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+            #undef  OPTION_DIST_B        // ✓  7136 bytes // Without (2) Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T; +DIST_C
             #undef  OPTION_DIST_C        // ✓  9624 bytes // Without (3) F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
             #undef  OPTION_DIST_D        // ✓  3280 bytes // Without (4) GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
             #undef  OPTION_TVM_FORMULAS  // ✓  2744 bytes // Use TVM analytical formulas where possible
             #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
             #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   6240 saving if VECTOR is not in; 2856 saving if VECTOR is in
             #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
+    #define OPTION_IR_PRINTING           // ☑ 10064 bytes // Remove IR printing for old hardware
   #endif
 
 
