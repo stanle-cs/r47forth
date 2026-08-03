@@ -209,3 +209,29 @@ The stage, if ruled:
 4. Fixtures are structural; no hand-computed addresses.
 5. Flash numbers only with `CUSTOM_PKG_RECONFIGURE=1`; arena high-water with
    any dictionary change.
+
+
+**T6 — upstream-style migration pilot (RULED 2026-08-03; corrects the
+hygiene batch's too-broad "tabular resolved" record).** The in-C tables
+were indeed already done, but migrating cases to UPSTREAM'S OWN format
+is a distinct, real item — and one class fits it exactly:
+interpret-state Forth lines are pure function+state→registers cases
+(`In:` X = the source STRING, `Func: fnForthOuter`, expect registers),
+and upstream's .txt format already handles string registers (see
+addition_string.txt). Plan:
+
+1. Build glue: the runner reads `tests/` from the SOURCE tree at
+   runtime (workdir = project root), so package-provided .txt cases
+   need the test() invocation remapped — extend the resolver's SIBSRC
+   protocol with a `SIBLIST:` line and the src/testSuite/meson.build
+   hook with a `custom_pkg_testSuite_list` variable (same pattern as
+   the source-list override).
+2. Package content: `testSuite/tests/forth_interp.txt` (new file via
+   the sibling root) with the pilot cases — stack arithmetic, literals,
+   dup/swap/drop chains, a deep-spill line — plus a patched
+   `testSuiteList.txt` adding it.
+3. Gate: the forth cases then run under upstream's own runner inside
+   the T1 gate step, counted in its 12k+ total.
+
+What does NOT migrate remains what the C battery exists for: anything
+needing program-step context, key flows, relocation, or capture seams.

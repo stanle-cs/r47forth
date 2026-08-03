@@ -2060,3 +2060,15 @@ sections — a careful de-duplication pass over ~290 lines of decision
 records — goes to its own fresh docs session; both sections already
 carry LANDED headers and main-sections-win rules, so no reader can be
 misled meanwhile.
+
+## 2026-08-03 — editorial fold done; tabular record corrected; T6 ruled
+
+The §10+§11 fold landed: normative spill content moved to §3.4/§5.7,
+both decision records compacted to stubs, DESIGN.md 3,066 → 2,843
+lines, audit check H green. Owner challenge corrected the hygiene
+batch's record: "tabular resolved" covered only in-C tables — migrating
+the interpret-state class to upstream's .txt format is real, newly
+possible on the T2-A rails, and now planned as T6 (TESTING.md): a
+SIBLIST resolver extension, a package-provided forth_interp.txt, and
+the cases running under upstream's own runner. T6 is the next work
+unit.
