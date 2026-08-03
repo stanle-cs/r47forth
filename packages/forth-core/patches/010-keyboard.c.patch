@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..87ab6e6306ccee0fd4281b117ea8ce6bffed2154 100644
+index 4e12158435137669a4bd87c16c4d71bc8e46befa..14f936686b6cc65ac9679a825b71b8549233992e 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,6 +2,9 @@
@@ -47,7 +47,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..87ab6e6306ccee0fd4281b117ea8ce6b
        bool_t inCatalog = false;
        for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
          if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {
-@@ -958,6 +980,14 @@ endReturnTrue:
+@@ -961,6 +983,14 @@ endReturnTrue:
  
  
          lastKeyItemDetermined = item;
@@ -62,7 +62,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..87ab6e6306ccee0fd4281b117ea8ce6b
        }
  
        // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
-@@ -2242,6 +2272,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2249,6 +2279,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
                }
              }
              else {
@@ -73,7 +73,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..87ab6e6306ccee0fd4281b117ea8ce6b
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -3861,6 +3895,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +3902,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -81,7 +81,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..87ab6e6306ccee0fd4281b117ea8ce6b
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3871,6 +3906,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +3913,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -104,7 +104,7 @@ index 0b2a6ab8caa971bb1fd4106393f028d1af16b811..87ab6e6306ccee0fd4281b117ea8ce6b
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4363,9 +4414,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4417,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {

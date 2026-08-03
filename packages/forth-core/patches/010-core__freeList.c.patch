@@ -1,8 +1,8 @@
 diff --git a/src/c47/core/freeList.c b/src/c47/core/freeList.c
-index 2e545127a0976dee72f7dbd076597f1d7e468fac..9764c0485980373c1d15b785e8eb473613549550 100644
+index a5f39cfdebcad142f39f9a65dd553f0dfe4465a4..2f44fdace1b0a5061ff6583c1475191320cb90e2 100644
 --- a/src/c47/core/freeList.c
 +++ b/src/c47/core/freeList.c
-@@ -201,7 +201,26 @@ void freeListFree(void *pcMemPtr, size_t sizeInBlocks) {
+@@ -208,7 +208,26 @@ void freeListFree(void *pcMemPtr, size_t sizeInBlocks) {
    if(sizeInBlocks == 0) {
      sizeInBlocks = 1;
    }

@@ -1,16 +1,16 @@
 diff --git a/src/testSuite/testSuite.c b/src/testSuite/testSuite.c
-index 8c13ef1a15f284b4615162afd99aae5e113cd0d7..e8adb6d52b47d9ad6e46b6eb441724995e3291da 100644
+index 09694f2922cebfce79903b40253f408153229ca4..229e408bccecd0171c607c682673621ba9c509de 100644
 --- a/src/testSuite/testSuite.c
 +++ b/src/testSuite/testSuite.c
-@@ -64,6 +64,7 @@ void covEqSet(uint16_t which);
- void covLoadGraphPgms(uint16_t unusedButMandatoryParameter);
+@@ -86,6 +86,7 @@ void covLoadGraphPgms(uint16_t unusedButMandatoryParameter);
+ void covLoadNestedPgms(uint16_t unusedButMandatoryParameter);
  void covBmpName(uint16_t which);
  void covHashBmp(uint16_t which);
 +void fnForthOuter(uint16_t unused);
  
  static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
  
-@@ -633,6 +634,8 @@ const funcTest_t funcTestNoParam[] = {
+@@ -707,6 +708,8 @@ const funcTest_t funcTestNoParam[] = {
    {"fnClAll",                fnClAll               },
    {"fnWho",                  fnWho                 },
  

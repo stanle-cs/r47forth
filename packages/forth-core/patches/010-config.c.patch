@@ -1,5 +1,5 @@
 diff --git a/src/c47/config.c b/src/c47/config.c
-index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..01bf742a1537c04a85e319ac0d459a0e004c526c 100644
+index 0829673346e2869694d2d6ea3a3cd19ac70cafe2..0356be918abf20002145d3993a77cfc7b157ba98 100644
 --- a/src/c47/config.c
 +++ b/src/c47/config.c
 @@ -2,6 +2,7 @@
@@ -10,7 +10,7 @@ index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..01bf742a1537c04a85e319ac0d459a0e
  
  //C47 defaults (used in both settings arrays)
  #define _gapl   ITM_SPACE_PUNCTUATION
-@@ -1529,6 +1530,16 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+@@ -1541,6 +1542,16 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
    else {
      void *memPtr;
  
@@ -27,7 +27,7 @@ index 36da3d929ad965b98bdf85de0fa3a8d601ef5bef..01bf742a1537c04a85e319ac0d459a0e
      if(ram == NULL) {
        ram = (uint32_t *)malloc(TO_BYTES(RAM_SIZE_IN_BLOCKS));
      }
-@@ -1950,6 +1961,28 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+@@ -1963,6 +1974,28 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
  
      fnClearFlag(FLAG_USER);
      fnRefreshState();

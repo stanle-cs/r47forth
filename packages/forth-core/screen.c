@@ -65,6 +65,22 @@ bool_t blockMonitoring = false;
                                        "RJvM" spc "NL," spc1
                                        "Walter" spc "DE.";
 
+  //Recount: non-merge commits only, author aliases merged per person, Robbert Jan is doc-only and carries no count.
+  //  code   git rev-list --no-merges <base>, plus Over_score alone from live origin branches not in <base>, less any whose git patch-id is already in <base>.
+  //  manual GitLab h2x/c47-wiki repo, every branch, unique by commit id.
+  //  pages  GitLab h2x/c47-wiki project events, target_type WikiPage::Meta, by author.
+  //  Each total is the sum of the three.
+  //non-merge commits: c43 00.109.04.00b0.RC2 2563e080 plus Martin's unmerged branches, c47-wiki manual repo, c47-wiki page edits
+  TO_QSPI static const char whoStr2[] = "Jaco Mostert" spc "(3996)," spc1 "Martin Lorang" spc "(1382)," spc1 "Robbert Jan van Meenen" spc "(doc)," spc1
+                                       "MihailJP" spc "(1093)," spc1 "Ralf Ahlbrink" spc "(459)," spc1 "Paul Dale" spc "(449)," spc1 "Didier Lachieze" spc "(277)," spc1
+                                       "Walter Bonin" spc "(270)," spc1 "Benjamin Titmus" spc "(215)," spc1 "Hartmut Bromkamp" spc "(187)," spc1
+                                       "Pasquale Pigazzini" spc "(161)," spc1 "Mike Leffel" spc "(107)," spc1 "David Emerson" spc "(69)," spc1 "Warren Young" spc "(68)," spc1
+                                       "Bj" STD_o_DIARESIS "rn Jadelius" spc "(47)," spc1 "Philippe Martens" spc "(46)," spc1 "Marcel Dan" spc "(37)," spc1
+                                       "H" STD_a_RING "kon Hansen" spc "(36)," spc1 "Gert Menke" spc "(31)," spc1 "John Boydon" spc "(29)," spc1 "Michael Peter" spc "(28)," spc1
+                                       "Ian Abbott" spc "(21)," spc1 "R" STD_e_ACUTE "my Trotin" spc "(19)," spc1 "fridlmue" spc "(17)," spc1 "A. Vosough" spc "(16)," spc1
+                                       "Dani Rau" spc "(9)," spc1 "Harald Overbeek" spc "(9)," spc1 "Will Rutherdale" spc "(6)," spc1 "Nigel Dowrick" spc "(4)"
+                                       spc1 "\n(commits 02Aug2026)";
+
 
 
    TO_QSPI static const char disclaimerStr[]     = "  " MODELTEXT " firmware is free, open source and \n  neither provided nor supported by \n  SwissMicros. Press a key to continue.";
@@ -178,7 +194,11 @@ TO_QSPI static const char *nameOfWday_pt[8] = {"dia inv" STD_a_ACUTE "lido da se
     longInteger_t lgInt;
     int16_t base, sign, n;
     uint64_t shortInt;
-    char string[CLIPSTR];
+    char *string = malloc(CLIPSTR);                           // off the stack: this runs under stackregister_csv_out, and the pair overran the DM42 stack grant
+    if(string == NULL) {
+      clipboardString[0] = 0;
+      return;
+    }
 
     switch(getRegisterDataType(regist)) {
       case dtLongInteger:
@@ -359,6 +379,7 @@ TO_QSPI static const char *nameOfWday_pt[8] = {"dia inv" STD_a_ACUTE "lido da se
     else {
       stringToUtf8(string, (uint8_t *)clipboardString);
     }
+    free(string);
   }
 #endif // PC_BUILD || DMCP_BUILD                              //JMCSV
 
@@ -770,7 +791,7 @@ void execTimerApp(uint16_t timerType) {
   }
 
 
-#if defined(LONGPRESS_CFG)   // only when allowed by LONGPRESS_CFG
+#if defined(OPTION_LONGPRESS_CFG)   // only when allowed by OPTION_LONGPRESS_CFG
   static void _assignLongPressKey(int keyCode) {
     char kc[4] = {};
     kc[0] = (keyCode / 10) + '0';
@@ -790,7 +811,7 @@ void execTimerApp(uint16_t timerType) {
     char *funcParam = "";
 
     keyStateCode = (getSystemFlag(FLAG_ALPHA) ? 3 : 0) + 2;
-    funcParam = (char *)getNthString((uint8_t *)userKeyLabel, keyCode * 6 + keyStateCode);
+    funcParam = (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode);
     if(item == ITM_RCL && getSystemFlag(FLAG_USER) && funcParam[0] != 0) {
       calcRegister_t var = findNamedVariable(funcParam);
       if(var != INVALID_VARIABLE) {
@@ -835,7 +856,7 @@ void execTimerApp(uint16_t timerType) {
       runFunction(item);
     }
   }
-#endif // LONGPRESS_CFG
+#endif // OPTION_LONGPRESS_CFG
 
 
   static void clearShiftTemporaryIndications(bool_t condition) {
@@ -852,7 +873,7 @@ void execTimerApp(uint16_t timerType) {
         Shft_LongPress_f_g = false;
         fnTimerStop(TO_3S_CTFF);
         fnTimerStop(TO_FG_LONG);
-      #if defined(LONGPRESS_CFG)   // only when allowed by LONGPRESS_CFG
+      #if defined(OPTION_LONGPRESS_CFG)   // only when allowed by OPTION_LONGPRESS_CFG
         int keyCode;
 
         int16_t item;
@@ -896,7 +917,7 @@ void execTimerApp(uint16_t timerType) {
               clearShiftTemporaryIndications(shiftG || shiftF);
               char *funcParam = "";
               keyStateCode = (getSystemFlag(FLAG_ALPHA) ? 3 : 0) + 2;
-              funcParam = (char *)getNthString((uint8_t *)userKeyLabel, keyCode * 6 + keyStateCode);
+              funcParam = (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode);
               setCurrentUserMenu(item, funcParam);
               if(shiftF) {
                 if(getSystemFlag(FLAG_ALPHA) && ((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu())) {
@@ -950,7 +971,7 @@ void execTimerApp(uint16_t timerType) {
           screenUpdatingMode = SCRUPD_AUTO;
           refreshScreen(23);
         }
-      #endif // LONGPRESS_CFG
+      #endif // OPTION_LONGPRESS_CFG
         shiftF = 0;
         shiftG = 0;
         showShiftState();
@@ -978,13 +999,13 @@ void execTimerApp(uint16_t timerType) {
           Shft_timeouts = false;
           resetShiftState();                                       //force into no shift state, i.e. to wait
           if((calcMode == CM_ASSIGN) && (itemToBeAssigned !=0)) {
-            #if defined(LONGPRESS_CFG)   // only when allowed by LONGPRESS_CFG
+            #if defined(OPTION_LONGPRESS_CFG)   // only when allowed by OPTION_LONGPRESS_CFG
               int keyCode = (calcModel == USER_R47bk_fg) ? 11 : (calcModel == USER_R47fg_bk || calcModel == USER_R47fg_g) ? 10 : (calcModel == USER_C47 || calcModel == USER_DM42) ? 27 : 9999;
               //shiftF = 1;
               if(previousCalcMode != CM_AIM) {   // No long press assignments in AIM
                 _assignLongPressKey(keyCode);
               }
-            #endif // LONGPRESS_CFG
+            #endif // OPTION_LONGPRESS_CFG
             shiftF = 0;
             shiftG = 0;
             screenUpdatingMode = SCRUPD_AUTO;
@@ -1016,7 +1037,7 @@ void execTimerApp(uint16_t timerType) {
       if(JM_auto_longpress_enabled != 0) {
         char *funcParam;
         int keyStateCode = (getSystemFlag(FLAG_ALPHA) ? 3 : 0) + ((LongPressM == RBX_M124) ? 1 : longpressDelayedkey3 ? 1 : 2);
-        funcParam = (char *)getNthString((uint8_t *)userKeyLabel, currentKeyCode * 6 + keyStateCode);
+        funcParam = (char *)getUserKeyLabelString(currentKeyCode * 6 + keyStateCode);
 
         if(calcMode == CM_NORMAL && programRunStop == PGM_STOPPED && (isArrowUp(currentKeyCode))) {
           aimBuffer[0] = 0;
@@ -1800,17 +1821,30 @@ return res;
 
 #define blockForcedRefreshes false
 
+  // 1.024 s slot anchors, owned by the three functions below; RESET zeroes them through resetHalfSecTicks()
+  static uint32_t secTick1 = 0;
+  static uint32_t halfSecTick2 = 0;
+  static uint32_t halfSecTick3 = 0;
+
+  void resetHalfSecTicks(void) {
+    secTick1 = 0;
+    halfSecTick2 = 0;
+    halfSecTick3 = 0;
+  }
+
   static bool_t _force_refresh(uint8_t mode) {
     #if defined(ANALYSE_REFRESH) && defined(PC_BUILD)
       printf("# force = %i", mode == force);
     #endif //ANALYSE_REFRESH
-    uint16_t now = 0;
+    uint32_t nowMs = 0;
     bool_t itIsTime = false;
     if(mode != force || blockForcedRefreshes) {
-      now = (uint16_t)(getUptimeMs() >> 4);           // ms/16
-      itIsTime = ((now >> 6) & 0x0001) == secTick1;     // ms/1024, that is every second, flips secTick1
+      nowMs = getUptimeMs();
+      // the 32-bit slot compare costs the same as the old one-bit flip test (the M4 barrel shifter folds the >>10 into the compare) and has no alias period:
+      // the bit test went blind on any loop body near an even multiple of 2048 ms and then never fired
+      itIsTime = (nowMs >> 10) != secTick1;             // ms/1024 slot number, any change is a crossing, so a slot skipped is still caught
       if(itIsTime) {
-        secTick1 = !secTick1;
+        secTick1 = nowMs >> 10;
       }
     }
 
@@ -1823,7 +1857,7 @@ return res;
 
     else {
       #if defined(ANALYSE_REFRESH) && defined(PC_BUILD)
-        printf("not updated =%i %i\n", now, itIsTime);
+        printf("not updated =%i %i\n", (uint16_t)(nowMs >> 4), itIsTime);
       #endif //ANALYSE_REFRESH
     }
     return false;
@@ -1877,8 +1911,10 @@ return res;
     char tmps[100];
     bool_t ret_value = false;
 
-    if((mode != timed && !blockForcedRefreshes) || ((((uint16_t)(getUptimeMs()) >> 10) & 0x0001)) == halfSecTick3) { //1.024 second refresh interval
-      halfSecTick3 = !halfSecTick3;
+    // the 32-bit slot compare costs the same as the old one-bit flip test (the M4 barrel shifter folds the >>10 into the compare) and has no alias period:
+    // the bit test went blind on any loop body near an even multiple of 2048 ms and then never fired
+    if((mode != timed && !blockForcedRefreshes) || (getUptimeMs() >> 10) != halfSecTick3) { //1.024 second refresh interval; slot compare catches skipped slots
+      halfSecTick3 = getUptimeMs() >> 10;
       ret_value = true;
       #if defined(DMCP_BUILD)
         dmcpResetAutoOff();
@@ -1924,8 +1960,11 @@ return res;
     if(!getSystemFlag(FLAG_MONIT)) {
       return false;
     }
-    if(((((uint16_t)(getUptimeMs()) >> 10) & 0x0001)) == halfSecTick2) { //1.024 second refresh interval
-      halfSecTick2 = !halfSecTick2;
+    // the 32-bit slot compare costs the same as the old one-bit flip test (the M4 barrel shifter folds the >>10 into the compare) and has no alias period:
+    // the bit test went blind on any loop body near an even multiple of 2048 ms and then never fired
+    const uint32_t halfSecSlot = getUptimeMs() >> 10;
+    if(halfSecSlot != halfSecTick2) { //1.024 second refresh interval; slot compare catches skipped slots
+      halfSecTick2 = halfSecSlot;
       #if defined(DMCP_BUILD)
         dmcpResetAutoOff();
       #endif //DMCP_BUILD
@@ -3258,7 +3297,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           }
           #if (EXTRA_INFO_ON_CALC_ERROR == 1)
             sprintf(errorMessage, "BestF is set, but will not work until REAL data points are used.");
-            moreInfoOnError("In function _refreshRegisterLine:", errorMessage, errorMessages[ERROR_INVALID_DATA_TYPE_FOR_OP], NULL);
+            moreInfoOnError("In function _refreshRegisterLine:", errorMessage, errorMessageOf(ERROR_INVALID_DATA_TYPE_FOR_OP), NULL);
           #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
           w = stringWidth(tmpString, &standardFont, true, true);
           showString(tmpString, &standardFont, SCREEN_WIDTH - w, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
@@ -3284,9 +3323,22 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         showString(confirmationTI[id].string, &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
       }
 
+//      else if(temporaryInformation == TI_WHO) {
+//        if(regist == REGISTER_Z || regist == REGISTER_Y || regist == REGISTER_X) { //Force repainting it 3 times to get it painted properly over three lines
+//          showStringEnhanced(whoStr1, &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - REGISTER_LINE_HEIGHT*2 + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
+//        }
+//      }
+
       else if(temporaryInformation == TI_WHO) {
-        if(regist == REGISTER_Z || regist == REGISTER_Y || regist == REGISTER_X) { //Force repainting it 3 times to get it painted properly over three lines
-          showStringEnhanced(whoStr1, &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - REGISTER_LINE_HEIGHT*2 + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
+        if(regist == REGISTER_X) {
+          clearScreenOld(!clrStatusBar, clrRegisterLines, clrSoftkeys);   //clear before the blank menu goes up: the MNU_SHOW guards in _selectiveClearScreen skip the graph rects
+          showSoftmenu(-MNU_SHOW);
+          showStringEnhanced(whoStr1, &standardFont, 1, Y_POSITION_OF_REGISTER_T_LINE +30 - 3, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
+          showStringEnhanced(whoStr2, &tinyFont,     1, Y_POSITION_OF_REGISTER_X_LINE +50 -27, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
+          screenUpdatingMode |=  SCRUPD_MANUAL_MENU;
+        } 
+        if(regist == REGISTER_T || regist == REGISTER_Z || regist == REGISTER_Y || regist == REGISTER_X) {
+          return;
         }
       }
 
@@ -3354,7 +3406,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
       }
 
       else if(temporaryInformation == TI_RESET && regist == REGISTER_X) {
-        sprintf(tmpString, "%s", errorMessages[TI_All_data_prgms_cleared]);
+        sprintf(tmpString, "%s", errorMessageOf(TI_All_data_prgms_cleared));
         w = stringWidth(tmpString, &standardFont, true, true);
         showString(tmpString, &standardFont, SCREEN_WIDTH - w, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
       }
@@ -3364,57 +3416,57 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         displayTemporaryInformationOnX(prefix);
       }
 
-    #if defined(IR_PRINTING)
+    #if defined(OPTION_IR_PRINTING)
       else if(temporaryInformation == TI_PRINT_COMPLETE && regist == REGISTER_X) {
         sprintf(prefix, "Print completed");
         displayTemporaryInformationOnX(prefix);
       }
-    #endif //IR_PRINTING
+    #endif //OPTION_IR_PRINTING
 
       else if(temporaryInformation == TI_DEL_ALL_PRGMS && regist == REGISTER_X) {
-        sprintf(tmpString, "%s", errorMessages[TI_All_user_prgms_deleted]);
+        sprintf(tmpString, "%s", errorMessageOf(TI_All_user_prgms_deleted));
         w = stringWidth(tmpString, &standardFont, true, true);
         showString(tmpString, &standardFont, SCREEN_WIDTH - w, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
       }
 
       else if(temporaryInformation == TI_CLEAR_ALL_FLAGS && regist == REGISTER_X) {
-        sprintf(tmpString, "%s", errorMessages[TI_All_user_flags_cleared]);
+        sprintf(tmpString, "%s", errorMessageOf(TI_All_user_flags_cleared));
         w = stringWidth(tmpString, &standardFont, true, true);
         showString(tmpString, &standardFont, SCREEN_WIDTH - w, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
       }
 
       else if(temporaryInformation == TI_CLEAR_ALL_MENUS && regist == REGISTER_X) {
-        sprintf(tmpString, "%s", errorMessages[TI_All_user_menus_cleared]);
+        sprintf(tmpString, "%s", errorMessageOf(TI_All_user_menus_cleared));
         w = stringWidth(tmpString, &standardFont, true, true);
         showString(tmpString, &standardFont, SCREEN_WIDTH - w, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
       }
 
       else if(temporaryInformation == TI_CLEAR_ALL_VARIABLES && regist == REGISTER_X) {
-        sprintf(tmpString, "%s", errorMessages[TI_All_user_vars_cleared]);
+        sprintf(tmpString, "%s", errorMessageOf(TI_All_user_vars_cleared));
         w = stringWidth(tmpString, &standardFont, true, true);
         showString(tmpString, &standardFont, SCREEN_WIDTH - w, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
       }
 
       else if(temporaryInformation == TI_DEL_ALL_MENUS && regist == REGISTER_X) {
-        sprintf(tmpString, "%s", errorMessages[TI_All_user_menus_deleted]);
+        sprintf(tmpString, "%s", errorMessageOf(TI_All_user_menus_deleted));
         w = stringWidth(tmpString, &standardFont, true, true);
         showString(tmpString, &standardFont, SCREEN_WIDTH - w, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
       }
 
       else if(temporaryInformation == TI_DEL_ALL_VARIABLES && regist == REGISTER_X) {
-        sprintf(tmpString, "%s", errorMessages[TI_All_user_vars_deleted]);
+        sprintf(tmpString, "%s", errorMessageOf(TI_All_user_vars_deleted));
         w = stringWidth(tmpString, &standardFont, true, true);
         showString(tmpString, &standardFont, SCREEN_WIDTH - w, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
       }
 
       #if defined(PC_BUILD)
       else if(temporaryInformation == TI_NOT_AVAILABLE && regist == REGISTER_X) {
-        sprintf(prefix, "%s", errorMessages[TI_Not_on_simulator]);
+        sprintf(prefix, "%s", errorMessageOf(TI_Not_on_simulator));
         displayTemporaryInformationOnX(prefix);
       }
       #elif defined(DMCP_BUILD)
       else if(temporaryInformation == TI_NOT_AVAILABLE && regist == REGISTER_X) {
-        sprintf(prefix, "%s", errorMessages[TI_Only_on_simulator]);
+        sprintf(prefix, "%s", errorMessageOf(TI_Only_on_simulator));
         displayTemporaryInformationOnX(prefix);
       }
       #endif // PC_BUILD/DMCP_BUILD
@@ -3424,67 +3476,67 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         clearRegisterLine(REGISTER_Y, true, true);
         clearRegisterLine(REGISTER_Z, true, true);
         clearRegisterLine(REGISTER_T, true, true);
-        showString(errorMessages[TI_Backup_restored], &standardFont, 1, Y_POSITION_OF_REGISTER_Z_LINE + 6, vmNormal, true, true);
+        showString(errorMessageOf(TI_Backup_restored), &standardFont, 1, Y_POSITION_OF_REGISTER_Z_LINE + 6, vmNormal, true, true);
         showStringEnhanced(versionStr,  &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
         sprintf(prefix, "%s%s", versionStr2, versionDateStr);
         showStringEnhanced(prefix,      &standardFont, 1, Y_POSITION_OF_REGISTER_Y_LINE + 6, vmNormal, true, true, NO_compress, NO_raise, DO_Show, NO_Bold, DO_LF);
       }
 
       else if(temporaryInformation == TI_STATEFILE_RESTORED && regist == REGISTER_X) {
-        sprintf(prefix, "%s", errorMessages[TI_State_file_restored]);
+        sprintf(prefix, "%s", errorMessageOf(TI_State_file_restored));
         displayTemporaryInformationOnX(prefix);
       }
 
       else if(temporaryInformation == TI_PROGRAMS_RESTORED && regist == REGISTER_X) {
         sprintf(prefix, "                                ");
         displayTemporaryInformationOnX(prefix);
-        sprintf(prefix, "%s", errorMessages[TI_Saved_programs_and_equations]);
+        sprintf(prefix, "%s", errorMessageOf(TI_Saved_programs_and_equations));
         showString(prefix, &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - 3, vmNormal, true, true);
-        sprintf(prefix, "%s", errorMessages[TI_appended]);
+        sprintf(prefix, "%s", errorMessageOf(TI_appended));
         showString(prefix, &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE + 17, vmNormal, true, true);
      }
 
       else if(temporaryInformation == TI_REGISTERS_RESTORED && regist == REGISTER_X) {
         sprintf(prefix, "                                  ");
         displayTemporaryInformationOnX(prefix);
-        sprintf(prefix, "%s", errorMessages[TI_Saved_global_and_local_registers]);
+        sprintf(prefix, "%s", errorMessageOf(TI_Saved_global_and_local_registers));
         showString(prefix, &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - 3, vmNormal, true, true);
-        sprintf(prefix, "%s", errorMessages[TI_w_local_flags_restored]);
+        sprintf(prefix, "%s", errorMessageOf(TI_w_local_flags_restored));
         showString(prefix, &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE + 17, vmNormal, true, true);
       }
 
       else if(temporaryInformation == TI_SETTINGS_RESTORED && regist == REGISTER_X) {
-        sprintf(prefix, "%s", errorMessages[TI_Saved_system_settings_restored]);
+        sprintf(prefix, "%s", errorMessageOf(TI_Saved_system_settings_restored));
         displayTemporaryInformationOnX(prefix);
       }
 
       else if(temporaryInformation == TI_SUMS_RESTORED && regist == REGISTER_X) {
-        sprintf(prefix, "%s", errorMessages[TI_Saved_statistic_data_restored]);
+        sprintf(prefix, "%s", errorMessageOf(TI_Saved_statistic_data_restored));
         displayTemporaryInformationOnX(prefix);
       }
 
       else if(temporaryInformation == TI_VARIABLES_RESTORED && regist == REGISTER_X) {
-        sprintf(prefix, "%s", errorMessages[TI_Saved_user_variables_restored]);
+        sprintf(prefix, "%s", errorMessageOf(TI_Saved_user_variables_restored));
         displayTemporaryInformationOnX(prefix);
       }
 
       else if(temporaryInformation == TI_PROGRAM_LOADED && regist == REGISTER_X) {
-        sprintf(prefix, "%s", errorMessages[TI_Program_file_loaded]);
+        sprintf(prefix, "%s", errorMessageOf(TI_Program_file_loaded));
         displayTemporaryInformationOnX(prefix);
       }
 
       else if(temporaryInformation == TI_DATA_SAVED && regist == REGISTER_X) {
-        sprintf(prefix, "%s", errorMessages[TI_Data_file_saved]);
+        sprintf(prefix, "%s", errorMessageOf(TI_Data_file_saved));
         displayTemporaryInformationOnX(prefix);
       }
 
       else if(temporaryInformation == TI_DATA_LOADED && regist == REGISTER_X) {
-        sprintf(prefix, "%s", errorMessages[TI_Data_file_loaded]);
+        sprintf(prefix, "%s", errorMessageOf(TI_Data_file_loaded));
         displayTemporaryInformationOnX(prefix);
       }
 
       else if(temporaryInformation == TI_UNDO_DISABLED && regist == REGISTER_X) {
-        showString(errorMessages[ERROR_TI_UNDO_FAILED], &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
+        showString(errorMessageOf(ERROR_TI_UNDO_FAILED), &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE + 6, vmNormal, true, true);
       }
 
 
@@ -3695,7 +3747,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
                 tmpString[0] = 0;
                 real34ToDisplayString(&tmp3, angle, tmpString, &standardFont, SCREEN_WIDTH - (isShiftOffset ? 20 : 0) - xx, 34, LIMITEXP, FRONTSPACE, NOIRFRAC);
               } else {
-                sprintf(tmpString, "%s ", errorMessages[ERROR_INVALID_TYPE_XFN]);
+                sprintf(tmpString, "%s ", errorMessageOf(ERROR_INVALID_TYPE_XFN));
               }
               showString(tmpString, &standardFont, SCREEN_WIDTH - stringWidth(tmpString, &standardFont, false, true), tmpY + FMA_X, vmNormal, false, true);
           }
@@ -3706,7 +3758,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
                 tmpString[0] = 0;
                 real34ToDisplayString(&tmp3, angle, tmpString, &standardFont, SCREEN_WIDTH - (isShiftOffset ? 20 : 0) - xx, 34, LIMITEXP, FRONTSPACE, NOIRFRAC);
               } else {
-                sprintf(tmpString, "%s ", errorMessages[ERROR_INVALID_TYPE_XFN]);
+                sprintf(tmpString, "%s ", errorMessageOf(ERROR_INVALID_TYPE_XFN));
               }
               showString(tmpString, &standardFont, SCREEN_WIDTH - stringWidth(tmpString, &standardFont, false, true), tmpY + FMA_T , vmNormal, false, true);
           }
@@ -3726,20 +3778,20 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
 
 
         if(lastErrorCode != 0 && regist == errorMessageRegisterLine) {
-          if(stringWidth(errorMessages[lastErrorCode], &standardFont, true, true) <= SCREEN_WIDTH - 1) {
+          if(stringWidth(errorMessageOf(lastErrorCode), &standardFont, true, true) <= SCREEN_WIDTH - 1) {
             if(lastErrorCode == ERROR_RESERVED_VARIABLE_NAME) {
-              sprintf(tmpString, "%s: %s", errorMessages[lastErrorCode], errorMessage);
+              sprintf(tmpString, "%s: %s", errorMessageOf(lastErrorCode), errorMessage);
 
               showString(tmpString, &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - REGISTER_LINE_HEIGHT*(regist - REGISTER_X) + 6, vmNormal, true, true);
             }
             else {
-              showString(errorMessages[lastErrorCode], &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - REGISTER_LINE_HEIGHT*(regist - REGISTER_X) + 6, vmNormal, true, true);
+              showString(errorMessageOf(lastErrorCode), &standardFont, 1, Y_POSITION_OF_REGISTER_X_LINE - REGISTER_LINE_HEIGHT*(regist - REGISTER_X) + 6, vmNormal, true, true);
             }
           }
           else {
             #if (EXTRA_INFO_ON_CALC_ERROR == 1)
               sprintf(errorMessage, "Error message %" PRIu8 " is too wide!", lastErrorCode);
-              moreInfoOnError("In function _refreshRegisterLine:", errorMessage, errorMessages[lastErrorCode], NULL);
+              moreInfoOnError("In function _refreshRegisterLine:", errorMessage, errorMessageOf(lastErrorCode), NULL);
             #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
             sprintf(tmpString, "Error message %" PRIu8 " is too wide!", lastErrorCode);
             w = stringWidth(tmpString, &standardFont, true, true);
@@ -3765,7 +3817,10 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           else if(aimBuffer[0] != 0 && aimBuffer[strlen(aimBuffer)-1]=='/') {
             char *lb = lastBase;
 
-            uint32_t iDigit = pow(10, (int)log10(lastDenominator) + 1);
+            uint32_t iDigit = 1;                     // smallest power of ten above lastDenominator, as pow(10, log10+1) computed it, without libm
+            while(iDigit <= lastDenominator) {
+              iDigit *= 10;
+            }
             uint32_t iDigit1;
             while(iDigit >= 10) {
               iDigit1 = iDigit / 10;
@@ -5635,10 +5690,10 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           printf("   >>> _selectiveClearScreen: lcd_fill_rect SCRUPD_MANUAL_MENU | SCRUPD_SKIP_MENU_ONE_TIME\n");
         #endif // PC_BUILD && MONITOR_CLRSCR
         lcd_fill_rect(  LeftGraphInfoX,    topLeftMenuInclBorderY,     widthGraphInfoBox,    menuHeightInclBorder, LCD_SET_VALUE);
-        if(!GRAPHMODE || menu(0) == -MNU_PLOT_FUNC) {                                                                                      // not in GRAPHMODE, clear the little triangle area indicating more menus
+        if((!GRAPHMODE || menu(0) == -MNU_PLOT_FUNC) && currentMenu() != -MNU_SHOW) {                                                                                      // not in GRAPHMODE, clear the little triangle area indicating more menus
           lcd_fill_rect(LeftGraphInfoX,    topLeftMenuInclBorderY - 3, 20,                   6,                    LCD_SET_VALUE);
         }
-        if(!GRAPHMODE) {                                                                                                                   // in GRAPHMODE, protect the square graph area
+        if(!GRAPHMODE && currentMenu() != -MNU_SHOW) {                                                                                                                   // in GRAPHMODE, protect the square graph area
           lcd_fill_rect(widthGraphInfoBox, topLeftMenuInclBorderY,     widthGraphInclBorder, menuHeightInclBorder, LCD_SET_VALUE);
         }
       }
@@ -5996,6 +6051,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
   int16_t refreshScreenCounter = 0;        //JM
 
   void refreshScreen(uint16_t source) {
+    screenHoldsDrawnPixels = false;   // this repaint is what destroys anything CLLCD, PIXEL, POINT or AGRAPH drew
                               #if defined(ANALYSE_REFRESH)
                                 print_caller(NULL);
                               #endif
@@ -6228,7 +6284,7 @@ void fnSNAP(uint16_t unusedButMandatoryParameter) {
   #endif // PC_BUILD
   resetShiftState();                  //JM To avoid f or g top left of the screen, clear to make sure
   temporaryInformation = TI_NO_INFO;
-  if(!snapSkipRefresh) {              //--snapskiprefresh keeps the raw graphic screen
+  if(!snapSkipRefresh && !screenHoldsDrawnPixels) {   //--snapskiprefresh, or a screen a program drew, keeps the raw graphic screen
     screenUpdatingMode = SCRUPD_AUTO;
     refreshScreen(80);
   }
@@ -6463,6 +6519,7 @@ void fnClLcd(uint16_t clear_mode) {
     }
     if(lastErrorCode == ERROR_NONE) {
       screenUpdatingMode |= SCRUPD_MANUAL_STATUSBAR | SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
+      screenHoldsDrawnPixels = true;
       lcd_fill_rect(x, 0, SCREEN_WIDTH - x, SCREEN_HEIGHT - y, LCD_SET_VALUE);
     }
     #if defined(REFRESH_ON_SCREEN_MONITOR)
@@ -6485,6 +6542,7 @@ void fnPixel(uint16_t unusedButMandatoryParameter) {
     getPixelPos(&x, &y);
     if(lastErrorCode == ERROR_NONE) {
       screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
+      screenHoldsDrawnPixels = true;
       if((SCREEN_HEIGHT - abs(y) - 1) <= Y_POSITION_OF_REGISTER_T_LINE) {
         screenUpdatingMode |= SCRUPD_MANUAL_STATUSBAR;
       }
@@ -6508,6 +6566,7 @@ void fnPoint(uint16_t unusedButMandatoryParameter) {
     getPixelPos(&x, &y);
     if(lastErrorCode == ERROR_NONE) {
       screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
+      screenHoldsDrawnPixels = true;
       if((SCREEN_HEIGHT - y - 2) <= Y_POSITION_OF_REGISTER_T_LINE) {
         screenUpdatingMode |= SCRUPD_MANUAL_STATUSBAR;
       }
@@ -6547,6 +6606,7 @@ void fnAGraph(uint16_t regist) {
         const uint8_t savedShortIntegerMode = shortIntegerMode;
 
         screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
+        screenHoldsDrawnPixels = true;
         if((SCREEN_HEIGHT - y - 1 - (int)shortIntegerWordSize) <= Y_POSITION_OF_REGISTER_T_LINE) {
           screenUpdatingMode |= SCRUPD_MANUAL_STATUSBAR;
         }
