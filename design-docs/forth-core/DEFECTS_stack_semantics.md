@@ -143,9 +143,11 @@ that is what R47 does.
 
 ---
 
-## D3 — Parked: can the Forth data stack be deeper than 8?
+## D3 — RULED 2026-08-03: hybrid spill stack (design: DESIGN.md §11)
 
-**Not a defect. Design question, parked for a future stage.**
+**Not a defect. Owner-approved stage; the decided design lives in
+DESIGN.md §11 and the queue in QWEN_RUNBOOK §2. The analysis below is
+the historical record that scoped it.**
 
 The Forth data stack is not a separate structure — it is the calculator's RPN
 stack. The primitives are one-line delegations:

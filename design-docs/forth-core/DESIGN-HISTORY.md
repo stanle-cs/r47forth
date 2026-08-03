@@ -1929,3 +1929,17 @@ the difference.
 Queued from T5: core-area split part; legacy hand-offset burn-down
 (99 sites, opportunistic); tabular sweep migration (in-C tables, then
 upstream .txt via the T2 hook).
+
+## 2026-08-03 — D3 opened by owner ruling; design decided (DESIGN.md §11)
+
+The parked deeper-stack question becomes a stage. Decided shape: hybrid
+spill — visible stack and native view stay exactly R47's; a Forth push at
+capacity catches the falling (necessarily Forth-owned) topmost value into
+an arena-backed, per-execution spill; primitive consumption refills LIFO.
+No per-primitive wrappers: D2's stackEffect dispatch bracket
+(forth_compile.c:972) is the single hook, which is what un-parked the
+design. User-native boundary (the resync sites) with a non-empty spill is
+a loud stop pending its own ruling. Spill is never persisted
+(per-execution seams; audit §2.5 pattern). Queue: D3-1..D3-4 (runbook
+§2b); D3-1 starts with the §11.4 traces. The D2 guard tests re-pin to the
+new contract at D3-2 — 7 FACT = 5040 becomes the flagship.

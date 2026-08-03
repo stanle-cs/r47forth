@@ -2982,3 +2982,85 @@ recordable). Placed in F6 because the catalog must integrate with the final
 capture entry model rather than the interim alpha wrapper, and because its
 contents are defined by F3's scopes. Exact menu placement and keying are
 traced from native catalog behavior during this stage's PEM audit.
+
+---
+
+## 11. Stage D3 — the hybrid spill stack (DECIDED 2026-08-03, unimplemented)
+
+Provenance: `DEFECTS_stack_semantics.md` D3 (parked 2026-07-25), opened by
+owner ruling 2026-08-03. Everything here is DECIDED; the trace obligations
+named in §11.4 are D3-1 pre-work, not open design. Divergence-from-R47
+notice (core principle, §preamble): a deeper-than-native Forth stack is a
+sanctioned divergence — the reason, stated here at the point of
+divergence, is that 8 levels shared with the user's own values is not
+usable working room for recursive words, and D2 currently converts that
+shortage into a loud stop. The divergence is bounded: the VISIBLE stack
+and every native item's view remain exactly R47's.
+
+### 11.1 The model
+
+X..top remain the only stack native items and the user ever see. When a
+Forth push would grow `forthDataDepth` past `forthStackCapacity()`, the
+value that upstream `liftStack()` would silently destroy — the one in the
+TOPMOST stack register, which at that moment is necessarily Forth-owned —
+is caught into a package-owned SPILL region first. When a primitive's
+negative `stackEffect` frees room, the most recently spilled value refills
+the vacated topmost register. LIFO both ways; the spill is invisible
+except that deep recursion now works.
+
+The spill engages ONLY when the falling value is Forth-owned
+(`forthDataDepth == forthStackCapacity()` at the push). A user who
+hand-keys more values than the stack holds still loses the bottom one
+silently — that is R47's own behavior and stays (D2 ruling).
+
+### 11.2 Where it hooks (all verified against the tree, 2026-08-03)
+
+- **One dispatch bracket, no per-primitive wrappers** (the cost that
+  parked D3 is gone — D2 built the hook): the sole
+  `forthDataDepthApply(forthPrims[idx].stackEffect)` site
+  [VERIFIED: packages/forth-core/forth_compile.c:972] brackets every
+  primitive, including the fnAdd/fnDrop delegations. Spill-on-push and
+  refill-on-consume live inside `forthDataDepthApply` (forth_inner.c),
+  replacing the `ERROR_RAM_FULL` capacity branch [VERIFIED:
+  packages/forth-core/forth_inner.c:97]. Arena exhaustion while growing
+  the spill raises `ERROR_RAM_FULL` — same class, later and honest.
+- **User-native boundary**: the seven `forthDataDepthResync()` sites
+  (FTOK_C47 arms, XEQ/R47-label bodies) are where arbitrary-arity native
+  code runs. RULE: a resync with a NON-EMPTY spill raises
+  `ERROR_RAM_FULL`-class loud stop (message names the spill) — an
+  arbitrary native cannot be allowed to consume through the visible
+  window while Forth values hide below it. Primitive-delegated natives
+  are unaffected (their arity is the `stackEffect` column). Relaxing
+  this is future work and needs its own ruling.
+- **Lifetime**: the spill region is arena-backed, per-execution, reset at
+  `forthDataDepthEnterOuter/LeaveOuter` — the documented-seams pattern
+  (audit §2.5); it is NEVER persisted: power-off mid-execution already
+  abandons execution state, and restoreCalc sees no spill.
+
+### 11.3 Representation
+
+A spill slot preserves the full register value: {dataType, dataSize,
+payload bytes}, copied with the same register-image discipline
+saveRestoreBackup uses for stack registers. Slots live in one
+arena-backed, dynamically-grown block (F1-3 record pattern). No second
+numeric representation: a slot is a byte-faithful register image.
+
+### 11.4 D3-1 trace obligations (pre-work, F-series discipline)
+
+1. The exact topmost-stack-register id for SSIZE4/SSIZE8 and the exact
+   upstream lift path that destroys it (anchor the catch point).
+2. The register-image copy helpers' real names/signatures (the
+   saveRestoreBackup stack-register path) — the packet states them as
+   literals, per runbook §4a-1.
+3. The refill mechanics on consume: which register ids vacate for each
+   negative stackEffect shape, against the landed fnDrop/fnAdd behavior.
+
+### 11.5 Predicted decomposition (runbook queue owns the truth)
+
+- **D3-1** spill region + accessors + traces folded (no behavior change).
+- **D3-2** spill/refill inside forthDataDepthApply; retire the capacity
+  error for primitives; `7 FACT` = 5040 and `6 2 NCR` = 15 become the
+  flagship pins (today's guard tests re-pin to the new contract).
+- **D3-3** boundary rule at the resync sites + tests.
+- **D3-4** acceptance: parity sweep (visible-window unchanged), showcase
+  update, docs fold into §3.2/§5.
