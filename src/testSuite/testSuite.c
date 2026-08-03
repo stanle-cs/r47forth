@@ -49,6 +49,10 @@ void covShortIntWordSizeRestore(uint16_t unusedButMandatoryParameter);
 void covEqCalc(uint16_t unusedButMandatoryParameter);
 void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t which);
+void covCpxSolveRoot(uint16_t which);
+void covEqSolveDispatch(uint16_t which);
+void covMimRowCol(uint16_t op);
+void covIndexedElement(uint16_t op);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
@@ -66,6 +70,7 @@ void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
 void covIntegrateErr(uint16_t which);
 void covMvarKey(uint16_t which);
+void covMatrixEditorScroll(uint16_t which);
 void covIntegratePgm(uint16_t unusedButMandatoryParameter);
 void covNamedVariableCache(uint16_t unusedButMandatoryParameter);
 void covSumProd(uint16_t which);
@@ -158,6 +163,33 @@ const funcTest_t funcTestNoParam[] = {
   {"fnLastX",                fnLastX               },
   {"fnStoreStack",           fnStoreStack          },
   {"fnRecallStack",          fnRecallStack         },
+  // Vector store / recall. These index the matrix themselves - STOVEL/RCLVEL from the linear element number in FARG,
+  // Rnn>V / V>Rnn walking the whole matrix from the register in FARG - and park the walking index in the shadow row and
+  // column, so they need no INDEX and leave I, J and the indexed matrix as they found them.
+  {"fnStoreVElement",        fnStoreVElement       },
+  {"fnRecallVElement",       fnRecallVElement      },
+  {"fnStoreVector",          fnStoreVector         },
+  {"fnRecallVector",         fnRecallVector        },
+  // Matrix creation and dimensions (FARG = register number where one is taken).
+  {"fnNewMatrix",            fnNewMatrix           },
+  {"fnGetMatrixDimensions",  fnGetMatrixDimensions },
+  {"fnGetMatrixDimensions42", fnGetMatrixDimensions42},
+  {"fnSetMatrixDimensionsGr", fnSetMatrixDimensionsGr},
+  // M.GROW and M.WRAP are this one function, the flag arriving as the parameter: ON from M.GROW, OFF from M.WRAP.
+  {"fnSetGrowMode",          fnSetGrowMode         },
+  // The two editor entries whose only corpus-reachable arm is the mode guard: both work in CM_MIM and refuse elsewhere, and the corpus is always elsewhere.
+  {"fnOldMatrix",            fnOldMatrix           },
+  {"fnGoToElement",          fnGoToElement         },
+  // The row and column operations, reached without the editor driver so the corpus takes the arm each one runs outside CM_MIM. fnGoToRow and fnGoToColumn take
+  // the line number in FARG.
+  {"fnInsRow",               fnInsRow              },
+  {"fnAddRow",               fnAddRow              },
+  {"fnInsCol",               fnInsCol              },
+  {"fnAddCol",               fnAddCol              },
+  {"fnDelRow",               fnDelRow              },
+  {"fnDelCol",               fnDelCol              },
+  {"fnGoToRow",              fnGoToRow             },
+  {"fnGoToColumn",           fnGoToColumn          },
   // Value/type predicates and small math ops.
   {"fnCheckType",            fnCheckType           },
   {"fnIse",                  fnIse                 },
@@ -237,6 +269,10 @@ const funcTest_t funcTestNoParam[] = {
   {"fnEqCalcCov",            covEqCalc, 1 },
   {"fnDerivEqCov",           covDerivEq, 1 },
   {"fnSolveRootCov",         covSolveRoot, 1 },
+  {"fnCpxSolveRootCov",      covCpxSolveRoot, 1 },
+  {"fnEqSolveDispatchCov",   covEqSolveDispatch, 1 },
+  {"fnMimRowColCov",         covMimRowCol, 1 },
+  {"fnIndexedElementCov",    covIndexedElement, 1 },
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
@@ -254,6 +290,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnIntegrateCov",         covIntegrate, 1 },
   {"fnIntegrateErrCov",      covIntegrateErr, 1 },
   {"fnMvarKeyCov",           covMvarKey, 1 },
+  {"fnMatEditScrollCov",     covMatrixEditorScroll, 1 },
   {"fnIntegratePgmCov",      covIntegratePgm, 1 },
   {"fnNamedVarCacheCov",     covNamedVariableCache, 1 },
   {"fnSumProdCov",           covSumProd, 1 },
@@ -375,8 +412,11 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDot",                  fnDot                 },
   {"fnDrop",                 fnDrop                },
   {"fnDropY",                fnDropY               },
+  {"fnConvertMxToStk",       fnConvertMxToStk      },
+  {"fnConvertStkToMx",       fnConvertStkToMx      },
   {"fnEigenvalues",          fnEigenvalues         },
   {"fnEigenvectors",         fnEigenvectors        },
+  {"fnExchangeStkToMx",      fnExchangeStkToMx     },
   {"fnEllipticE",            fnEllipticE           },
   {"fnEllipticEphi",         fnEllipticEphi        },
   {"fnEllipticFphi",         fnEllipticFphi        },
@@ -543,6 +583,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnSinh",                 fnSinh                },
   {"fnSl",                   fnSl                  },
   {"fnSlvc",                 fnSlvc                },
+  {"fnSlvp",                 fnSlvp                },
   {"fnSlvq",                 fnSlvq                },
   {"fnSquare",               fnSquare              },
   {"fnSr",                   fnSr                  },
@@ -960,6 +1001,143 @@ void covSolveRoot(uint16_t which) {
   // solver's convergence, so assign rather than OR.
   currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
   fnSolve(var);
+}
+
+void covCpxSolveRoot(uint16_t which) {
+  // Find a root of the current formula with the complex solver, fnEqSolvGraph(EQ_CPXSOLVE) -> complexSolver() in solver/graph.c. The guesses come from Y and X, the
+  // root lands in X. which selects the formula, and every root is exact:
+  //   0  X^2+4  roots +/-2i
+  //   1  X^2-4  roots +/-2, reached through the complex solver
+  //   2  X^3-1  roots 1, -1/2+/-(sqrt3/2)i
+  //   3  X^2+1  roots +/-i
+  //   4  X^4+4  roots +/-1+/-i, the only roots with a non-zero real part
+  //   5  5      no root, ERROR_NO_ROOT_FOUND
+  static const char * const cpxFormulae[] = {"X^2+4", "X^2-4", "X^3-1", "X^2+1", "X^4+4", "5"};
+  if(which >= sizeof(cpxFormulae) / sizeof(cpxFormulae[0])) {
+    return;
+  }
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, cpxFormulae[which]);
+  const uint16_t var = findOrAllocateNamedVariable("X");
+  currentSolverVariable = var;
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+  // Restore the angular mode: complexSolver runs ITM_RAD and never puts it back, so the solve returns in RAD whatever mode it was called in. FLAG_CPXRES is set there
+  // too, but undo restores the system flags, so it is clear on return and needs no restore.
+  const angularMode_t savedAngularMode = currentAngularMode;
+  fnEqSolvGraph(EQ_CPXSOLVE);
+  currentAngularMode = savedAngularMode;
+}
+
+// Put back the cursor a case states in I and J. fnEditMatrix and fnIndexMatrix both home it to (1,1). Both accessors take the 1-based value the user sees.
+static void covRestoreMatrixCursor(int16_t row, int16_t col) {
+  setIRegisterAsInt(false, row);
+  setJRegisterAsInt(false, col);
+}
+
+void covMimRowCol(uint16_t op) {
+  // Run one row or column operation of the matrix editor on the matrix in X and leave the result there. Each runs in CM_MIM only and ends in mimEnter(true).
+  // Read I and J before opening: ijIsShadowed() is calcMode == CM_MIM || ijShadowActive, so they address the registers here and the editor's shadow afterwards.
+  //   0 M.INSR   insert a row at the cursor row      3 M.COL+1  append a column last
+  //   1 M.ROW+1  append a row last                   4 M.DELR   delete the cursor row
+  //   2 M.INSC   insert a column at the cursor       5 M.DELC   delete the cursor column
+  const int16_t row = getIRegisterAsInt(false);
+  const int16_t col = getJRegisterAsInt(false);
+
+  fnEditMatrix(NOPARAM);
+  if(calcMode != CM_MIM) {
+    // Leave a refusal to the case, dropping any index an earlier file left: fnEditMatrix raises and stays out of CM_MIM, and the case asserts the code.
+    matrixIndex = INVALID_VARIABLE;
+    return;
+  }
+  covRestoreMatrixCursor(row, col);
+
+  switch(op) {
+    case 0:  fnInsRow(NOPARAM); break;
+    case 1:  fnAddRow(NOPARAM); break;
+    case 2:  fnInsCol(NOPARAM); break;
+    case 3:  fnAddCol(NOPARAM); break;
+    case 4:  fnDelRow(NOPARAM); break;
+    default: fnDelCol(NOPARAM); break;
+  }
+
+  // Close the editor the way fnKeyExit does in its CM_MIM branch (src/c47/keyboard.c), so no matrix stays open. mimEnter commits a digit buffer no case types
+  // into, and updateMatrixHeightCache is display state.
+  mimFinalize();
+  calcModeNormal();
+}
+
+void covIndexedElement(uint16_t op) {
+  // Run one operation on the INDEXed matrix, the element value going to and coming from X. None of them indexes a matrix, so index R00 with fnIndexMatrix - the
+  // handler behind INDEX - and put back the cursor it homes to (1,1).
+  //   0 STOEL   store X at the cursor            4 M.GETM    recall the submatrix, Y rows by X columns    8 I-
+  //   1 RCLEL   recall the cursor cell to X      5 M.PUTM    write the matrix in X in at the cursor       9 J+
+  //   2 STOSEQ  store X, then step J             6 M.FIND  search X and move the cursor onto a hit     10 J-
+  //   3 RCLSEQ  recall to X, then step J         7 I+
+  const int16_t row = getIRegisterAsInt(false);
+  const int16_t col = getJRegisterAsInt(false);
+
+  fnIndexMatrix(FIRST_GLOBAL_REGISTER); // R00
+  if(matrixIndex != FIRST_GLOBAL_REGISTER) {
+    // Leave a refusal to the case, dropping the index it left in place: fnIndexMatrix raises and the case asserts the code.
+    matrixIndex = INVALID_VARIABLE;
+    return;
+  }
+  covRestoreMatrixCursor(row, col);
+
+  switch(op) {
+    case 0:  fnStoreElement(NOPARAM);     break;
+    case 1:  fnRecallElement(NOPARAM);    break;
+    case 2:  fnStoreElementPlus(NOPARAM); break;
+    case 3:  fnRecallElementPlus(NOPARAM); break;
+    case 4:  fnGetMatrix(NOPARAM);        break;
+    case 5:  fnPutMatrix(NOPARAM);        break;
+    case 6:  fnMatrixFind(NOPARAM);       break;
+    case 7:  fnIncDecI(INC_FLAG);         break;
+    case 8:  fnIncDecI(DEC_FLAG);         break;
+    case 9:  fnIncDecJ(INC_FLAG);         break;
+    default: fnIncDecJ(DEC_FLAG);         break;
+  }
+
+  // Drop the index: it outlives the function that set it, and the corpus carries it into the next file.
+  matrixIndex = INVALID_VARIABLE;
+}
+
+void covEqSolveDispatch(uint16_t which) {
+  // Drive the solve arms of fnEqSolvGraph (solver/graph.c) that EQ_CPXSOLVE does not reach. which selects the arm and the formula, and every root is exact:
+  //   0  EQ_REALSOLVE     X^2-4, roots +/-2       guesses off the stack
+  //   1  EQ_CPXSOLVE_LU   X^4+4, roots +/-1+/-i   guesses from LEST/UEST
+  //   2  EQ_REALSOLVE_LU  X^2-4, roots +/-2       guesses from LEST/UEST
+  //   3  EQ_REALSOLVE     5, no root              ERROR_NO_ROOT_FOUND
+  // The _LU arms read RESERVED_VARIABLE_LEST/UEST and ignore the stack, so the stack pair and the estimate pair reach different roots: -5 and -1 on the stack reach
+  // -2 and -1-i, 1 and 5 in the estimates reach +2 and 1+i. A build reading the stack returns the wrong root.
+  const bool_t isLu = (which == 1 || which == 2);
+  if(which > 3) {
+    return;
+  }
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, which == 1 ? "X^4+4" : (which == 3 ? "5" : "X^2-4"));
+  const uint16_t var = findOrAllocateNamedVariable("X");
+  currentSolverVariable = var;
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+
+  if(isLu) {
+    // Seed the estimates as the non-LU arm does at solver/graph.c:2802.
+    real_t lower, upper;
+    int32ToReal(1, &lower);
+    int32ToReal(5, &upper);
+    reallocateRegister(RESERVED_VARIABLE_LEST, dtReal34, 0, amNone);
+    reallocateRegister(RESERVED_VARIABLE_UEST, dtReal34, 0, amNone);
+    realToReal34(&lower, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LEST));
+    realToReal34(&upper, REGISTER_REAL34_DATA(RESERVED_VARIABLE_UEST));
+  }
+
+  const angularMode_t savedAngularMode = currentAngularMode;
+  fnEqSolvGraph(which == 1 ? EQ_CPXSOLVE_LU : (which == 2 ? EQ_REALSOLVE_LU : EQ_REALSOLVE));
+  currentAngularMode = savedAngularMode;
 }
 
 void covDerivErr(uint16_t which) {
@@ -1933,6 +2111,75 @@ void covMvarKey(uint16_t which) {
   currentSolverStatus = 0;
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
   int32ToReal34(keyClass, REGISTER_REAL34_DATA(REGISTER_X));
+}
+
+extern uint16_t scrollColumn;
+
+static uint16_t covMatrixEditorColumns(void) {
+  // showRealMatrix() displays a column vector transposed.
+  const uint16_t rows = openMatrixMIMPointer.header.matrixRows;
+  const uint16_t cols = openMatrixMIMPointer.header.matrixColumns;
+  return (cols == 1 && rows > 1) ? rows : cols;
+}
+
+void covMatrixEditorScroll(uint16_t which) {
+  // which is SNN: NN down-arrow presses, S what is reported - 0 scrolled, 1 the offset
+  // after M.COL+1 widens to two columns, 2 whether it is past the widened matrix, 3 the
+  // offset when widened to the offset itself, 4 whether that made the two equal.
+  const uint16_t select  = which / 100;
+  const uint16_t presses = which % 100;
+  uint16_t offset;
+  int32_t reported;
+
+  if(select > 4 || presses > 20 || (getRegisterDataType(REGISTER_X) != dtReal34Matrix && getRegisterDataType(REGISTER_X) != dtComplex34Matrix)) {
+    printf("\nUnknown matrix editor scroll selector: %u\n", which);
+    abortTest();
+    return;
+  }
+
+  fnEditMatrix(REGISTER_X);
+  if(calcMode != CM_MIM) {
+    printf("\nThe matrix editor did not open\n");
+    abortTest();
+    return;
+  }
+
+  for(uint16_t i = 0; i < presses; i++) {
+    addItemToBuffer(ITM_DOWN_ARROW);
+  }
+  offset = scrollColumn;
+
+  if(select == 0) {
+    reported = (offset > 0) ? 1 : 0;
+  }
+  else if(select >= 3 && offset < 2) {
+    printf("\nThe presses left an offset of %u, which no reshape can make the column count equal\n", offset);
+    abortTest();
+    return;
+  }
+  else {
+    const uint16_t widenTo = (select >= 3) ? offset : 2;
+    for(uint16_t c = 1; c < widenTo; c++) {
+      fnAddCol(NOPARAM);
+    }
+    if(select == 1 || select == 3) {
+      showMatrixEditor();
+      reported = scrollColumn;
+    }
+    else if(select == 2) {
+      reported = (scrollColumn > covMatrixEditorColumns()) ? 1 : 0;
+    }
+    else {
+      reported = (scrollColumn == covMatrixEditorColumns()) ? 1 : 0;
+    }
+  }
+
+  mimEnter(true);
+  mimFinalize();
+  calcModeNormal();
+  popSoftmenu();
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(reported, REGISTER_REAL34_DATA(REGISTER_X));
 }
 
 void covIntegratePgm(uint16_t unusedButMandatoryParameter) {

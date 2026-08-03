@@ -43,10 +43,14 @@
 \vspace{2em}
 
 \begin{revisions}
-    \revision{0.1}{2026-07-29}{First draft.  Consolidates the keypress and screen notation of AN0029,
+    \revision{0.1}{2026-07-29}{DE.  First draft.  Consolidates the keypress and screen notation of AN0029,
                                AN0030 and AN0031 into \file{style/c47appnote.sty}, moves the body to
                                Helvetica, and adds callout blocks, listing styles and the shared
                                keyboard maps.}
+    \revision{0.2}{2026-08-01}{DE.  The \cmd{keying} block: a keystroke sequence too long for prose, set
+                               one action per row (issue \#632).  Program entry re-set in it as the
+                               demonstration.  Revision rows now open with the reviser's initials, as
+                               this table does.}
 \end{revisions}
 
 % ===================================================================================================
@@ -331,6 +335,31 @@ TEXINPUTS=../style: lualatex AN-00NN-...-slug.ltx
     Use \cmd{screen} for a display line quoted inside a sentence, like \screen{X:\ \ 7}, and keep it to one
     line.  Anything taller belongs in a \cmd{prog} block.
 
+    \subsection{When prose stops working: the keying block}
+    \label{keying}
+
+    The inline forms above are the HP-42S manual's own style, and up to a handful of keys inside a sentence
+    they are the most readable notation there is.  They stop working when the sequence is a whole program or
+    a long setup: a paragraph with thirty keycaps in it reads as clutter, however carefully it is written.
+    Past that length, set the sequence one action per row in a \cmd{keying} block, the keys on the left and
+    what they accomplish on the right:
+
+\begin{lstlisting}
+\begin{keying}
+    \step{\key{XEQ}\,\key{.}\,\key{.}}{open a new program}
+    \step{\fkey{PRGM}}{enter program-entry mode}
+\end{keying}
+\end{lstlisting}
+
+    \begin{keying}
+        \step{\key{XEQ}\,\key{.}\,\key{.}}{open a new program}
+        \step{\fkey{PRGM}}{enter program-entry mode}
+    \end{keying}
+
+    An empty right cell is fine where a step needs no comment.  Keep the comments to a phrase: the keys are
+    the thing being read, which is why the column is set small and soft.  Section \ref{progentry} shows a
+    complete program keyed in this way.
+
 % ===================================================================================================
 \section{A Worked Tutorial}
 \label{tutorial}
@@ -384,11 +413,19 @@ TEXINPUTS=../style: lualatex AN-00NN-...-slug.ltx
 
     \prog{0001: LBL 'HYP'\\0002: \ \ MVAR 'a'\\0003: \ \ MVAR 'b'\\0004: \ \ RCL 'a'\\0005: \ \ x²\\0006: \ \ RCL 'b'\\0007: \ \ x²\\0008: \ \ +\\0009: \ \ √x\\0010: END}
 
-    Then the keystrokes.  Open a new program with \key{XEQ}\,\key{.}\,\key{.} and switch to program-entry
-    mode with \fkey{PRGM}.  Start the label with \gkey{LBL}, then \fkey{$\alpha$}, type
-    \key{H}\,\key{Y}\,\key{P}, and \key{ENTER}.  \cmd{MVAR} is two pages into the program-functions menu now
-    on screen: \mkey{P.FN1}, then \mkey{P.FN2}, then \mkey{MVAR}, then \fkey{$\alpha$}\,\key{a}\,\key{ENTER},
-    and again for \key{b}.  Key the body, then leave program-entry mode with \fkey{PRGM}.
+    Then the keystrokes, in a \cmd{keying} block (Section \ref{keying}), since a program keyed in is
+    exactly the sequence prose cannot carry:
+
+    \begin{keying}
+        \step{\key{XEQ}\,\key{.}\,\key{.}}{open a new program}
+        \step{\fkey{PRGM}}{enter program-entry mode}
+        \step{\gkey{LBL}\,\fkey{$\alpha$}\,\key{H}\,\key{Y}\,\key{P}\,\key{ENTER}}{the label}
+        \step{\mkey{P.FN1}\ \mkey{P.FN2}\ \mkey{MVAR}\,\fkey{$\alpha$}\,\key{a}\,\key{ENTER}}{declare the
+            first variable; the menu stays on \menu{P.FN2}}
+        \step{\mkey{MVAR}\,\fkey{$\alpha$}\,\key{b}\,\key{ENTER}}{and the second}
+        \step{\ldots}{the body, straight from the listing}
+        \step{\fkey{PRGM}}{leave program-entry mode}
+    \end{keying}
 
     \begin{note}
     \cmd{MVAR} is not on \fkey{ADV}, which is where readers look for it.  In program-entry mode press
