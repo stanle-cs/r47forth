@@ -1,0 +1,142 @@
+NOP ; Summation order tests for AN0005. Six sums of 1/n² for n = 1 to 10000, run up and down by three different means.
+NOP ; EUP and EDN use the built in Σₙ. HUP and HDN accumulate with STO+. CUP and CDN accumulate through the + function.
+NOP ; Build: make simc47 t47. Run: set SDIGS first, that is the point of the test, then readp sums.p47 and xeq the label.
+# Sum order tests
+
+LBL 'FSQ'
+  # f(n) = 1/n²
+  1/𝑥
+  𝑥²
+RTN
+
+LBL 'EUP'
+  # Engine sum, 1 to 10000
+  1
+  10000
+  1
+  Σₙ 'FSQ'
+  STO 'Eup'
+RTN
+
+LBL 'EDN'
+  # Engine sum, 10000 to 1
+  10000
+  1
+  1
+  CHS
+  Σₙ 'FSQ'
+  STO 'Edn'
+RTN
+
+LBL 'HSQ'
+  # STO+ into SS, returns 0
+  1/𝑥
+  𝑥²
+  STO+ 'SS'
+  0
+RTN
+
+LBL 'HUP'
+  # STO+ sum, 1 to 10000
+  0.
+  STO 'SS'
+  1
+  10000
+  1
+  Σₙ 'HSQ'
+  RCL 'SS'
+  STO 'Hup'
+RTN
+
+LBL 'HDN'
+  # STO+ sum, 10000 to 1
+  0.
+  STO 'SS'
+  10000
+  1
+  1
+  CHS
+  Σₙ 'HSQ'
+  RCL 'SS'
+  STO 'Hdn'
+RTN
+
+LBL 'CSQ'
+  # + into SS, returns 0
+  1/𝑥
+  𝑥²
+  RCL 'SS'
+  +
+  STO 'SS'
+  0
+RTN
+
+LBL 'CUP'
+  # + sum, 1 to 10000
+  0.
+  STO 'SS'
+  1
+  10000
+  1
+  Σₙ 'CSQ'
+  RCL 'SS'
+  STO 'Cup'
+RTN
+
+LBL 'CDN'
+  # + sum, 10000 to 1
+  0.
+  STO 'SS'
+  10000
+  1
+  1
+  CHS
+  Σₙ 'CSQ'
+  RCL 'SS'
+  STO 'Cdn'
+RTN
+
+LBL 'PSQ'
+  # + into SS, alternating term
+  1/𝑥
+  𝑥²
+  𝑥⇄𝑦
+  (-1)ˣ
+  CHS
+  ×
+  RCL 'SS'
+  +
+  STO 'SS'
+  0
+RTN
+
+LBL 'PUP'
+  # alternating + sum, 1 to 10000
+  0.
+  STO 'SS'
+  1
+  10000
+  1
+  Σₙ 'PSQ'
+  RCL 'SS'
+  12
+  ×
+  √𝑥
+  STO 'Pup'
+RTN
+
+LBL 'PDN'
+  # alternating + sum, 10000 to 1
+  0.
+  STO 'SS'
+  10000
+  1
+  1
+  CHS
+  Σₙ 'PSQ'
+  RCL 'SS'
+  12
+  ×
+  √𝑥
+  STO 'Pdn'
+RTN

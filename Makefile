@@ -1,4 +1,4 @@
-.PHONY: all clean sim test test_asan dmcp dmcpr47 dmcp5 dmcp5r47 docs testPgms both_asan dist_windows dist_macos dist_linux dist_dmcp dist_dmcpr47 dist_dmcp5 dist_dmcp5r47 repeattest simc47 simr47 t47 check-custom-pkg-sim check-custom-pkg-dmcp check-custom-pkg-dmcp5 pkg_build
+.PHONY: all clean sim test test_asan dmcp dmcpr47 dmcp5 dmcp5r47 docs testPgms both_asan dist_windows dist_macos dist_linux dist_dmcp dist_dmcpr47 dist_dmcp5 dist_dmcp5r47 repeattest simc47 simr47 t47 benchbin bench check-custom-pkg-sim check-custom-pkg-dmcp check-custom-pkg-dmcp5 pkg_build
 
 all: sim
 both: sim simr47
@@ -6,6 +6,13 @@ both: sim simr47
 EXE =
 ifeq ($(OS),Windows_NT)
   EXE = .exe
+endif
+
+# Silence meson reconfigure output, except on Windows/MSYS2 where
+# redirecting to /dev/null deadlocks the gmp external subproject.
+DEVNULL = >/dev/null
+ifeq ($(OS),Windows_NT)
+  DEVNULL =
 endif
 
 BUILD_PC = build.sim
@@ -90,6 +97,19 @@ check-custom-pkg-sim:
 build.sim.t47:
 	meson setup $(BUILD_PC) --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Dc_args="-DT47"
 
+# Optimized headless build for the benchmark suite: mirrors the DMCP hardware
+# flags (-Os, LTO) as closely as a native build can, so that relative timings
+# track the calculator rather than an unoptimized debug build.
+build.sim.t47.bench:
+	meson setup build.sim.t47.bench --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Db_lto=true -Dc_args="-DT47 -Os"
+
+benchbin: build.sim.t47.bench
+	cd build.sim.t47.bench && ninja sim
+	cp build.sim.t47.bench/src/c47-gtk/c47$(EXE) ./t47bench$(EXE)
+
+bench: benchbin
+	python3 tools/bench/benchreport.py
+
 both_asan: clean
 ifeq ($(OS),Windows_NT)
 	@echo "Warning: AddressSanitizer not supported on Windows MinGW, building without ASAN"
@@ -132,7 +152,7 @@ MESON_SETUP_DMCP  = meson setup build.dmcp.p$(DMCP_PACKAGE) --cross-file=src/c47
 MESON_SETUP_DMCP5 = meson setup build.dmcp5 --cross-file=src/c47-dmcp5/cross_arm_gcc.build -DDMCPVERSION=dmcp5 -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DCUSTOM_PKG=$(CUSTOM_PKG)
 
 build.dmcp:
-	$(if $(f),test -d build.dmcp.p$(DMCP_PACKAGE) ||,rm -rf build.dmcp.p$(DMCP_PACKAGE);) meson setup build.dmcp.p$(DMCP_PACKAGE)  --cross-file=src/c47-dmcp/cross_arm_gcc.build  -DDMCPVERSION=dmcp  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DDMCP_PACKAGE=$(DMCP_PACKAGE) -DCUSTOM_PKG=$(CUSTOM_PKG)
+	$(if $(f),test -d build.dmcp.p$(DMCP_PACKAGE) ||,rm -rf build.dmcp.p$(DMCP_PACKAGE);) meson setup build.dmcp.p$(DMCP_PACKAGE)  --cross-file=src/c47-dmcp/cross_arm_gcc.build  -DDMCPVERSION=dmcp  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) -DDECNUMBER_FASTMUL=true -DDMCP_PACKAGE=$(DMCP_PACKAGE) -DCUSTOM_PKG=$(CUSTOM_PKG) -Dmem=$(if $(filter-out 0,$(Mem)),true,false)
 	@echo "$(CUSTOM_PKG)" > build.dmcp.p$(DMCP_PACKAGE)/.custom_pkg_stamp
 
 build.dmcp5:
@@ -212,6 +232,7 @@ t47:
 endif
 
 dmcp: check-custom-pkg-dmcp build.dmcp
+	meson setup --reconfigure build.dmcp.p$(DMCP_PACKAGE) -Dmem=$(if $(filter-out 0,$(Mem)),true,false) $(DEVNULL)
 	cd build.dmcp.p$(DMCP_PACKAGE) && ninja dmcp
 
 dmcpr47: check-custom-pkg-dmcp build.dmcp
@@ -481,9 +502,11 @@ build.dmcp.p$(PKG):
 	  -DCI_COMMIT_TAG=$(CI_COMMIT_TAG) \
 	  -DDECNUMBER_FASTMUL=true \
 	  -DDMCP_PACKAGE=$(PKG) \
-	  -DCUSTOM_PKG=$(CUSTOM_PKG)
+	  -DCUSTOM_PKG=$(CUSTOM_PKG) \
+	  -Dmem=$(if $(filter-out 0,$(Mem)),true,false)
 
 dmcp_pkg$(PKG): build.dmcp.p$(PKG)
+	meson setup --reconfigure build.dmcp.p$(PKG) -Dmem=$(if $(filter-out 0,$(Mem)),true,false) $(DEVNULL)
 	cd build.dmcp.p$(PKG) && ninja dmcp
 
 dist_dmcp_pkg$(PKG): dmcp_pkg$(PKG)

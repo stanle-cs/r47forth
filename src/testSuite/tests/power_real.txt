@@ -37,6 +37,52 @@ Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=Real:"2" RX=Real:"0.25"
 In:  FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-0.5" RX=Real:"3"
 Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=Real:"3" RX=Real:"-0.125"
 
+;=======================================
+; Infinite base  (inf ^ x)
+; A negative exponent must give 0, not infinity; a positive exponent
+; gives an infinity whose sign is that of the base raised to an odd
+; integer power (infinite results only checked via EC, not by value).
+;=======================================
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"inf" RX=Real:"-2"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"0"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"inf" RX=Real:"-1"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"0"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-inf" RX=Real:"-2"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"0"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-inf" RX=Real:"-3"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"-0"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"inf" RX=Real:"0"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"NaN"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"inf" RX=Real:"NaN"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"NaN"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-inf" RX=Real:"NaN"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"NaN"
+
+; ReM p.202: (y != 0) ^ inf is inf, (y != 0) ^ -inf is 0
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"inf" RX=Real:"inf"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"inf"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"inf" RX=Real:"-inf"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"0"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-inf" RX=Real:"inf"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"inf"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-inf" RX=Real:"-inf"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"0"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"inf" RX=Real:"3"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-inf" RX=Real:"2"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1
+
 In:  AM=DEG FL_CPXRES=0 FL_ASLIFT=0 RY=Real:"2" RX=Real:"123.4":DEG
 Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RL=Real:"123.4":DEG RX=Real:"14031414845271966722579997222050159552.088081736449456307453811"
 
@@ -287,6 +333,30 @@ In:  AM=DEG FL_CPXRES=1 FL_ASLIFT=0 FL_SPCRES=0 RY=Real:"0" RX=Real:"1"
 Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RL=Real:"1" RX=Real:"0"
 
 
+;=========================================================
+; Finite negative base, infinite exponent
+; ReM p.202: (y != 0) ^ inf is inf, (y != 0) ^ -inf is 0, by |y| against 1.
+; An infinite exponent is neither odd nor even, so the base sign is not carried.
+;=========================================================
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-2" RX=Real:"inf"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"inf"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-2" RX=Real:"-inf"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"0"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-0.5" RX=Real:"inf"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"0"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-0.5" RX=Real:"-inf"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"inf"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-1" RX=Real:"inf"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"NaN"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=0 RY=Real:"-1" RX=Real:"-inf"
+Out: EC=0 FL_CPXRES=0 FL_ASLIFT=1 RX=Real:"NaN"
+
+
 ;=======================================
 ; Real ^ Complex --> Complex
 ;=======================================
@@ -304,3 +374,43 @@ Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RL=Real:"1.254" RX=Cplx:"419.32206511002553136
 
 In:  FL_ASLIFT=0 FL_CPXRES=0 RY=Cplx:"1.23456 i -6.78" RX=Real:"1.254":DEG
 Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RL=Real:"1.254":DEG RX=Cplx:"-1.9382712381619504996777309908652991321175519153316073251293241 i -11.084177900742122954570030539978654932210674382128852817280235"
+
+
+;=========================================================
+; y^(1/n) as a root. The exponent is the 34-digit real34
+; the machine stores for 1/n, so the literal below is what
+; 3 1/x leaves in X. A power takes the principal root at
+; every operand type, unlike the root keys.
+;=========================================================
+In:  FL_ASLIFT=0 FL_CPXRES=1 RY=LonI:"8" RX=Real:"0.3333333333333333333333333333333333"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Real:"2"
+
+In:  FL_ASLIFT=0 FL_CPXRES=1 RY=Real:"-8.0" RX=Real:"0.3333333333333333333333333333333333"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Cplx:"1 i 1.732050807568877293527446341505872"
+
+In:  FL_ASLIFT=0 FL_CPXRES=1 RY=LonI:"-8" RX=Real:"0.3333333333333333333333333333333333"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Cplx:"1 i 1.732050807568877293527446341505872"
+
+In:  FL_ASLIFT=0 FL_CPXRES=1 RY=ShoI:"-8#10" RX=Real:"0.3333333333333333333333333333333333"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Cplx:"1 i 1.732050807568877293527446341505872"
+
+In:  FL_ASLIFT=0 FL_CPXRES=1 RY=ShoI:"-27#10" RX=Real:"0.3333333333333333333333333333333333"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Cplx:"1.5 i 2.598076211353315940291169512258808"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=1 RY=Real:"inf" RX=Real:"0.3333333333333333333333333333333333"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Real:"inf"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=1 RY=Real:"-inf" RX=Real:"0.3333333333333333333333333333333333"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Cplx:"inf i inf"
+
+In:  FL_ASLIFT=0 FL_CPXRES=1 RY=LonI:"4" RX=Real:"0.5"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Real:"2"
+
+In:  FL_ASLIFT=0 FL_CPXRES=1 RY=ShoI:"9#10" RX=Real:"0.5"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Real:"3"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=1 RY=Real:"inf" RX=Real:"0.5"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Real:"inf"
+
+In:  FL_SPCRES=1 FL_ASLIFT=0 FL_CPXRES=1 RY=Real:"-inf" RX=Real:"0.5"
+Out: EC=0 FL_CPXRES=1 FL_ASLIFT=1 RX=Cplx:"0 i inf"

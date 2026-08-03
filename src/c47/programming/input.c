@@ -19,9 +19,9 @@ void fnInput(uint16_t regist) {
     #else // !DMCP_BUILD
       refreshLcd(NULL);
     #endif // DMCP_BUILD
-    #if defined(IR_PRINTING)
+    #if defined(OPTION_IR_PRINTING)
       printInputPrompt(ITM_INPUT, regist);
-    #endif //IR_PRINTING
+    #endif //OPTION_IR_PRINTING
   }
 }
 
@@ -178,6 +178,9 @@ void fnPause(uint16_t dur) {
   }
 
     uint8_t previousProgramRunStop = programRunStop;
+    if(previousProgramRunStop == PGM_RUNNING) {
+      refreshStatusBar();               // with the 256-step refresh cadence the bar can be out of date here; refresh it once so the pause shows the current state
+    }
     programRunStop = PGM_PAUSED;
 
 

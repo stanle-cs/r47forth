@@ -359,11 +359,7 @@ void setRegisterDataType(calcRegister_t regist, uint16_t dataType, const uint32_
   }
 
   else if(regist <= LAST_RESERVED_VARIABLE) { // System named variable
-    regist -= FIRST_RESERVED_VARIABLE;
-    if(allReservedVariables[regist].header.pointerToRegisterData != C47_NULL && allReservedVariables[regist].header.readOnly == 0) {
-      allNamedVariables[regist].header.dataType = dataType;
-      allNamedVariables[regist].header.tag = tag;
-    }
+    // Nothing to do, as in setRegisterDataPointer(): allReservedVariables[] is const, so a reserved variable's type and tag are fixed.
   }
 
   else if(regist <= LAST_LOCAL_REGISTER) { // Local register
@@ -597,7 +593,7 @@ void allocateLocalRegisters(uint16_t numberOfRegistersToAllocate) {
         if(initLocalRegisters(r)) {
           // Not enough memory!
           for(uint16_t rr = FIRST_LOCAL_REGISTER; rr < r; rr++) {
-            freeRegisterData(FIRST_LOCAL_REGISTER + rr);
+            freeRegisterData(rr); // rr already is the register number; do not add FIRST_LOCAL_REGISTER again
           }
           reduceC47Blocks(currentSubroutineLevelData,
                           TO_BLOCKS(sizeof(subroutineLevelHeader_t) + sizeof(localFlags_t) + numberOfRegistersToAllocate*sizeof(registerHeader_t)),
@@ -638,7 +634,7 @@ void allocateLocalRegisters(uint16_t numberOfRegistersToAllocate) {
           if(initLocalRegisters(r)) {
             // Not enough memory!
             for(uint16_t rr = FIRST_LOCAL_REGISTER + oldNumberOfLocalRegisters; rr < r; rr++) {
-              freeRegisterData(FIRST_LOCAL_REGISTER + rr);
+              freeRegisterData(rr); // rr already is the register number; do not add FIRST_LOCAL_REGISTER again
             }
             reduceC47Blocks(currentSubroutineLevelData,
                             TO_BLOCKS(sizeof(subroutineLevelHeader_t) + sizeof(localFlags_t) + numberOfRegistersToAllocate*sizeof(registerHeader_t)),
@@ -888,6 +884,17 @@ void allocateNamedVariable(const char *variableName, dataType_t dataType, uint16
 
 
 
+static uint16_t lastFoundNamedVariables[3] = {UINT16_MAX, UINT16_MAX, UINT16_MAX}; // indices of the last three scan hits, trusted only after the entry's stored name re-matches the query
+static uint8_t  lastFoundNamedVariableInsert = 0;
+
+
+void invalidateNamedVariableCache(void) {
+  lastFoundNamedVariables[0] = UINT16_MAX;
+  lastFoundNamedVariables[1] = UINT16_MAX;
+  lastFoundNamedVariables[2] = UINT16_MAX;
+}
+
+
 calcRegister_t findNamedVariable(const char *variableName) {
   calcRegister_t regist = INVALID_VARIABLE;
   uint8_t len = stringGlyphLength(variableName);
@@ -900,13 +907,31 @@ calcRegister_t findNamedVariable(const char *variableName) {
     return regist;
   }
 
+  const size_t nameByteLength = stringByteLength(variableName);
+  for(uint32_t c = 0; c < 3; c++) { // exact-bytes probe of the last three hits; a folded-form query misses here and takes the scan below
+    const uint16_t cached = lastFoundNamedVariables[c];
+    if(cached < numberOfNamedVariables) {
+      const uint8_t *storedName = allNamedVariables[cached].variableName;
+      if(storedName[0] == nameByteLength && memcmp(storedName + 1, variableName, nameByteLength) == 0) {
+        return cached + FIRST_NAMED_VARIABLE;
+      }
+    }
+  }
+
   #if defined(VERBOSE_REGISTERS)
     printStatus(0, "findNamedVariable", force);
   #endif //VERBOSE_REGISTERS
   //printf("|%20s|%20s|\n",(char *)(allNamedVariables[0].variableName + 1), variableName);
+  // Exact-bytes fast path first; the second compare treats sub- and superscript glyphs as their plain form.
+  uint16_t foldedName[7];
+  const int32_t foldedLength = foldNameToCharCodes(variableName, foldedName, 7); // 1..7 glyphs checked at entry; on overflow (-1) no candidate compares equal
   for(int i = 0; i < numberOfNamedVariables; i++) {
-    if(compareString((char *)(allNamedVariables[i].variableName + 1), variableName, CMP_NAME) == 0) {
+    const uint8_t *storedName = allNamedVariables[i].variableName;
+    if((storedName[0] == nameByteLength && memcmp(storedName + 1, variableName, nameByteLength) == 0)
+        || nameEqualsPrefolded((const char *)(storedName + 1), foldedName, foldedLength)) {
       regist = i + FIRST_NAMED_VARIABLE;
+      lastFoundNamedVariables[lastFoundNamedVariableInsert] = (uint16_t)i;
+      lastFoundNamedVariableInsert = (lastFoundNamedVariableInsert + 1) % 3;
       break;
     }
   }
@@ -918,14 +943,28 @@ calcRegister_t findNamedVariable(const char *variableName) {
 
 
 
-calcRegister_t findOrAllocateNamedVariable(const char *variableName) {
+// Whether regist is the named variable STATS, the register findNamedVariable("STATS") returns, decided from regist alone without a list scan.
+bool_t namedVariableIsStats(calcRegister_t regist) {
+  if(regist < FIRST_NAMED_VARIABLE || regist >= (FIRST_NAMED_VARIABLE + numberOfNamedVariables)) {
+    return false;
+  }
+  const uint8_t *storedName = allNamedVariables[regist - FIRST_NAMED_VARIABLE].variableName;
+  uint16_t foldedName[5];
+  const int32_t foldedLength = foldNameToCharCodes("STATS", foldedName, 5);
+  return (storedName[0] == 5 && memcmp(storedName + 1, "STATS", 5) == 0)
+      || nameEqualsPrefolded((const char *)(storedName + 1), foldedName, foldedLength);
+}
+
+
+
+// Allocate half of findOrAllocateNamedVariable(); call only after findNamedVariable() returned INVALID_VARIABLE.
+calcRegister_t allocateNamedVariableOnMiss(const char *variableName) {
   calcRegister_t regist = INVALID_VARIABLE;
   uint8_t len = stringGlyphLength(variableName);
   if(len < 1 || len > 7) {
     return regist;
   }
-  regist = findNamedVariable(variableName);
-  if(regist == INVALID_VARIABLE && numberOfNamedVariables <= (LAST_NAMED_VARIABLE - FIRST_NAMED_VARIABLE)) {
+  if(numberOfNamedVariables <= (LAST_NAMED_VARIABLE - FIRST_NAMED_VARIABLE)) {
     allocateNamedVariable(variableName, dtReal34, REAL34_SIZE_IN_BLOCKS);
     if(lastErrorCode == ERROR_NONE) {
       // New variables are zero by default - although this might be immediately overridden, it might require an
@@ -938,6 +977,16 @@ calcRegister_t findOrAllocateNamedVariable(const char *variableName) {
       // It is impossible to reach the limitation of number of named variables.
       return INVALID_VARIABLE;
     }
+  }
+  return regist;
+}
+
+
+
+calcRegister_t findOrAllocateNamedVariable(const char *variableName) {
+  calcRegister_t regist = findNamedVariable(variableName);
+  if(regist == INVALID_VARIABLE) {
+    regist = allocateNamedVariableOnMiss(variableName);
   }
   return regist;
 }
@@ -959,6 +1008,20 @@ void fnDeleteVariable(uint16_t regist) {
     allNamedVariables[numberOfNamedVariables - 1].variableName[1] = 0;
     reduceC47Blocks(allNamedVariables, TO_BLOCKS(sizeof(namedVariableHeader_t) * numberOfNamedVariables), TO_BLOCKS(sizeof(namedVariableHeader_t) * (numberOfNamedVariables - 1)));
     numberOfNamedVariables -= 1;
+    invalidateNamedVariableCache();             // one entry gone and the ones after it shifted: no remembered index still describes the table
+    // The table compacted: re-anchor the cached solver/plot variable so it keeps tracking the same variable.
+    if(currentSolverVariable == regist) {
+      currentSolverVariable = INVALID_VARIABLE;
+    }
+    else if(currentSolverVariable > regist && currentSolverVariable <= LAST_NAMED_VARIABLE) {
+      currentSolverVariable -= 1;
+    }
+    if(graphVariabl1 == regist) {
+      graphVariabl1 = 0;
+    }
+    else if(graphVariabl1 > regist && graphVariabl1 <= LAST_NAMED_VARIABLE) {
+      graphVariabl1 -= 1;
+    }
   }
   else if(regist >= FIRST_NAMED_VARIABLE && regist < LAST_NAMED_VARIABLE) {
     displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -997,11 +1060,11 @@ void fnClearAllVariables(uint16_t confirmation) {
   }
   else {
     for(uint16_t i = numberOfNamedVariables; i > 0; i--) {  // Clear all user variables
-      if((compareString((char *)(allNamedVariables[i].variableName + 1), "STATS", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "HISTO", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "Mat_A", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "Mat_B", CMP_NAME) != 0) &&
-         (compareString((char *)(allNamedVariables[i].variableName + 1), "Mat_X", CMP_NAME) != 0))
+      if((compareString((char *)(allNamedVariables[i-1].variableName + 1), "STATS", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "HISTO", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "Mat_A", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "Mat_B", CMP_NAME) != 0) &&
+         (compareString((char *)(allNamedVariables[i-1].variableName + 1), "Mat_X", CMP_NAME) != 0))
       clearRegister(FIRST_NAMED_VARIABLE + i -1);
     }
     fnClSigma(CONFIRMED);                // Clear and release the memory of all statistical sums
@@ -2019,6 +2082,16 @@ void reallocateRegister(calcRegister_t regist, uint32_t dataType, uint16_t dataS
   }
 
   if(getRegisterDataType(regist) != dataType || ((getRegisterDataType(regist) == dtString || getRegisterDataType(regist) == dtLongInteger || getRegisterDataType(regist) == dtReal34Matrix || getRegisterDataType(regist) == dtComplex34Matrix) && getRegisterMaxDataLengthInBlocks(regist) != dataSizeWithoutDataLenBlocks)) {
+    if(FIRST_RESERVED_VARIABLE <= regist && regist <= LAST_RESERVED_VARIABLE) {
+      // A reserved variable owns a fixed block named by a const header: there is nothing here to free, allocate or retype.
+      displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
+      #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+        sprintf(errorMessage, "reserved variable %s", allReservedVariables[regist - FIRST_RESERVED_VARIABLE].reservedVariableName + 1);
+        moreInfoOnError("In function reallocateRegister:", errorMessage, "keeps the data type it was declared with!", NULL);
+      #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+      return;
+    }
+
     if(!isMemoryBlockAvailable(dataSizeWithDataLenBlocks, 2, 0.1f)) {
       #if defined(PC_BUILD)
         printf("In function reallocateRegister: required %" PRIu16 " blocks for register #%" PRId16 " but no data blocks with enough size are available!\n", dataSizeWithoutDataLenBlocks, regist);
