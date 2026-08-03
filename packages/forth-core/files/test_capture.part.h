@@ -1077,6 +1077,329 @@ cleanup_guard:
   return fail;
 }
 
+/* test_picker_key_mapping — G1: the softkey -> word mapping.
+ *
+ * Every other picker test in this file assigns dynamicMenuItem by hand, so
+ * index 0 on page 1 unshifted was the only softkey the suite had ever
+ * pressed. The real derivation is
+ *
+ *   case MNU_FORTH: dynamicMenuItem = firstItem + itemShift + fn;
+ *
+ * in determineFunctionKeyItem_C47, with itemShift = shiftF ? 6 : shiftG ? 12
+ * : 0 and fn = data[0] - '0' - 1. Unlike the MNU_VAR/MNU_PROG arms beside
+ * it, that arm does NOT clamp against numItems: the only bound is the
+ * dynamicMenuItem < numItems conjunct inside forthPickerGuard, and behind it
+ * dynmenuGetLabel() returns "" out of range, which forthCapInsertName("")
+ * would turn into a bare space inserted into the user's line. Subcase 5 is
+ * that conjunct.
+ *
+ * One 20-name picker (N000..N019, already in sort order, so picker index i
+ * holds "N0ii") spans four pages of six with a partial last page — indices
+ * 18 and 19 live, 20..23 blank.
+ *
+ * Subcase 1 runs BEFORE the capture is opened and with currentStep at the
+ * closing marker: showSoftmenuCurrentPart() REBUILDS MNU_FORTH on every
+ * display, so it must see the same program tail that built the 20 names.
+ * Subcases 2-5 never touch a rebuilding path, so the content they index is
+ * the content subcase 1 left. */
+static int test_picker_key_mapping(void)
+{
+  const int      totalDefs = 20;
+  const int      stepBytes = 14;                 /* header(4) + ": NNNN 1 ;"(10) */
+  const uint16_t progLen   = (uint16_t)(4 + totalDefs * stepBytes + 4);
+
+  uint8_t *prog = (uint8_t *)malloc(progLen);
+  if (!prog) {
+    printf("    FAIL: malloc failed\n");
+    return 1;
+  }
+
+  uint8_t *p = prog;
+  *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 0x00;   /* marker (opening) */
+  for (int i = 0; i < totalDefs; i++) {
+    char name[5];
+    sprintf(name, "N%03d", i);                          /* N000 .. N019 */
+    *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 10;   /* len=10: ": NNNN 1 ;" */
+    *p++ = ':'; *p++ = ' ';
+    *p++ = (uint8_t)name[0]; *p++ = (uint8_t)name[1];
+    *p++ = (uint8_t)name[2]; *p++ = (uint8_t)name[3];
+    *p++ = ' '; *p++ = '1'; *p++ = ' '; *p++ = ';';
+  }
+  *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 0x00;   /* marker (closing) */
+
+  if ((p - prog) != progLen || !writeTestProgram(prog, progLen)) {
+    printf("    FAIL: writeTestProgram failed\n");
+    free(prog);
+    return 1;
+  }
+  free(prog);
+
+  uint8_t *closingMarker = beginOfProgramMemory + (progLen - 4);
+
+  uint8_t          *savedCurrentStep = currentStep;
+  uint16_t          savedProgNum     = currentProgramNumber;
+  softmenuStack_t   savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+  int16_t  savedCachedDynamicMenu = cachedDynamicMenu;
+  uint8_t *savedMenuContent       = dynamicSoftmenu[22].menuContent;
+  int16_t  savedNumItems          = dynamicSoftmenu[22].numItems;
+  int16_t  savedCursorPos         = T_cursorPos;
+  int16_t  savedDynMenuItem       = dynamicMenuItem;
+  bool_t   savedZeroth            = pemCursorIsZerothStep;
+  uint16_t savedLocalStep         = currentLocalStepNumber;
+  bool_t   savedAlpha             = getSystemFlag(FLAG_ALPHA);
+  uint8_t  savedCalcMode          = calcMode;
+  int16_t  savedTamFunc           = tam.function;
+  int16_t  savedTamMode           = tam.mode;
+  uint8_t  savedProgRunStop       = programRunStop;
+  int16_t  savedCatalog           = catalog;
+
+  dynamicSoftmenu[22].menuContent = NULL;
+  dynamicSoftmenu[22].numItems    = 0;
+
+  extern void     showSoftmenu(int16_t menu);
+  extern void     showSoftmenuCurrentPart(void);
+  extern char    *dynmenuGetLabel(int16_t menuitem);
+  extern int16_t  determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG);
+  extern bool_t   forthPickerGuard(int16_t item);
+  extern bool_t   pickerInsertName(void);
+  extern void     runFunction(int16_t);
+
+  currentProgramNumber = 1;
+  currentStep          = closingMarker;
+
+  int fail = 0;
+
+  /* ---- Subcase 1: the draw path at every page ---- */
+  { int sc1 = 0;
+    const int16_t pages[4] = {0, 6, 12, 18};
+
+    showSoftmenu(-MNU_FORTH);
+
+    for (int pi = 0; pi < 4 && !sc1; pi++) {
+      char expected[8];
+      softmenuStack[0].firstItem = pages[pi];
+      showSoftmenuCurrentPart();
+
+      if (dynamicSoftmenu[22].numItems != totalDefs) {
+        printf("    [1] FAIL: after draw at firstItem=%d, numItems=%d, expected %d\n",
+               pages[pi], dynamicSoftmenu[22].numItems, totalDefs);
+        sc1 = 1;
+        break;
+      }
+      if (dynamicSoftmenu[22].menuContent == NULL) {
+        printf("    [1] FAIL: menuContent is NULL after draw at firstItem=%d\n", pages[pi]);
+        sc1 = 1;
+        break;
+      }
+      sprintf(expected, "N%03d", pages[pi]);
+      if (compareString(dynmenuGetLabel(pages[pi]), expected, CMP_BINARY) != 0) {
+        printf("    [1] FAIL: first label of page starting %d is '%s', expected '%s'\n",
+               pages[pi], dynmenuGetLabel(pages[pi]), expected);
+        sc1 = 1;
+        break;
+      }
+    }
+    if (!sc1) {
+      printf("    [1] PASS: draw path survives every page; first label of each page is correct\n");
+    }
+    fail |= sc1;
+  }
+
+  /* Open the real capture per the CAPTURE-DRIVE CONTRACT (drive slice copied
+   * from test_picker_insert_at_cursor). The picker content built above is a
+   * separate allocation and survives this. */
+  if (!fail) {
+    calcMode              = CM_PEM;
+    catalog               = CATALOG_NONE;
+    tam.mode              = 0;
+    tam.function          = 0;
+    aimBuffer[0]          = 0;
+    programRunStop        = PGM_STOPPED;
+    dynamicMenuItem       = -1;
+    pemCursorIsZerothStep = false;
+    clearSystemFlag(FLAG_ALPHA);
+
+    currentStep            = beginOfProgramMemory;
+    currentLocalStepNumber = 1;
+
+    runFunction(ITM_AIM);
+
+    if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+      printf("    FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+      fail = 1;
+    }
+    if (!fail && dynamicSoftmenu[22].numItems != totalDefs) {
+      printf("    FIXTURE BUG: picker has %d names after capture open, expected %d\n",
+             dynamicSoftmenu[22].numItems, totalDefs);
+      fail = 1;
+    }
+  }
+
+  /* One softkey press, start to finish: set the page, press the key, route
+   * the returned item through the guard exactly as executeFunction does.
+   * Returns the item the mapping produced; the caller checks the line. */
+  int16_t pressedItem = ITM_NOP;
+  bool_t  guardFired  = false;
+  #define G1_PRESS(page_, key_, shiftF_, shiftG_)                        \
+    do {                                                                 \
+      softmenuStack[0].softmenuId = 22;                                  \
+      softmenuStack[0].firstItem  = (page_);                             \
+      pressedItem = determineFunctionKeyItem_C47((key_), (shiftF_), (shiftG_)); \
+      guardFired  = forthPickerGuard(pressedItem);                       \
+      if (guardFired) { pickerInsertName(); }                            \
+    } while (0)
+
+  #define G1_CLEAR_LINE()  do { aimBuffer[0] = 0; T_cursorPos = 0; } while (0)
+
+  /* ---- Subcase 2: index >= 1 on the first page ---- */
+  if (!fail) {
+    int sc2 = 0;
+    G1_CLEAR_LINE();
+    G1_PRESS(0, "3", false, false);
+    if (pressedItem != ITM_NOP) {
+      printf("    [2] FAIL: mapping returned item %d, expected ITM_NOP (%d)\n", pressedItem, ITM_NOP);
+      sc2 = 1;
+    }
+    if (dynamicMenuItem != 2) {
+      printf("    [2] FAIL: dynamicMenuItem = %d, expected 2\n", dynamicMenuItem);
+      sc2 = 1;
+    }
+    if (!sc2 && strcmp(forthTestCapText(), "N002 ") != 0) {
+      printf("    [2] FAIL: cap text = '%s', expected 'N002 '\n", forthTestCapText());
+      sc2 = 1;
+    }
+    if (!sc2) {
+      printf("    [2] PASS: unshifted key 3 on page 1 selects index 2 and inserts N002\n");
+    }
+    fail |= sc2;
+  }
+
+  /* ---- Subcase 3: the shift rows ---- */
+  if (!fail) {
+    int sc3 = 0;
+    G1_CLEAR_LINE();
+    G1_PRESS(0, "1", true, false);
+    if (dynamicMenuItem != 6) {
+      printf("    [3] FAIL: f-shift key 1 gave dynamicMenuItem %d, expected 6\n", dynamicMenuItem);
+      sc3 = 1;
+    }
+    if (!sc3 && strcmp(forthTestCapText(), "N006 ") != 0) {
+      printf("    [3] FAIL: f-shift cap text = '%s', expected 'N006 '\n", forthTestCapText());
+      sc3 = 1;
+    }
+    if (!sc3) {
+      G1_CLEAR_LINE();
+      G1_PRESS(0, "2", false, true);
+      if (dynamicMenuItem != 13) {
+        printf("    [3] FAIL: g-shift key 2 gave dynamicMenuItem %d, expected 13\n", dynamicMenuItem);
+        sc3 = 1;
+      }
+      if (!sc3 && strcmp(forthTestCapText(), "N013 ") != 0) {
+        printf("    [3] FAIL: g-shift cap text = '%s', expected 'N013 '\n", forthTestCapText());
+        sc3 = 1;
+      }
+    }
+    if (!sc3) {
+      printf("    [3] PASS: f-shift adds 6 and g-shift adds 12 to the selected index\n");
+    }
+    fail |= sc3;
+  }
+
+  /* ---- Subcase 4: paging ---- */
+  if (!fail) {
+    int sc4 = 0;
+    G1_CLEAR_LINE();
+    G1_PRESS(6, "1", false, false);
+    if (dynamicMenuItem != 6) {
+      printf("    [4] FAIL: firstItem=6 key 1 gave dynamicMenuItem %d, expected 6\n", dynamicMenuItem);
+      sc4 = 1;
+    }
+    if (!sc4 && strcmp(forthTestCapText(), "N006 ") != 0) {
+      printf("    [4] FAIL: cap text = '%s', expected 'N006 '\n", forthTestCapText());
+      sc4 = 1;
+    }
+    if (!sc4) {
+      G1_CLEAR_LINE();
+      G1_PRESS(12, "6", false, false);
+      if (dynamicMenuItem != 17) {
+        printf("    [4] FAIL: firstItem=12 key 6 gave dynamicMenuItem %d, expected 17\n", dynamicMenuItem);
+        sc4 = 1;
+      }
+      if (!sc4 && strcmp(forthTestCapText(), "N017 ") != 0) {
+        printf("    [4] FAIL: cap text = '%s', expected 'N017 '\n", forthTestCapText());
+        sc4 = 1;
+      }
+    }
+    if (!sc4) {
+      printf("    [4] PASS: firstItem pages the selection — 6+0 and 12+5 resolve to N006 and N017\n");
+    }
+    fail |= sc4;
+  }
+
+  /* ---- Subcase 5: the blank key on the partial last page ---- */
+  if (!fail) {
+    int sc5 = 0;
+    G1_CLEAR_LINE();
+    G1_PRESS(18, "1", false, false);                 /* index 18: live */
+    if (strcmp(forthTestCapText(), "N018 ") != 0 || T_cursorPos != 5) {
+      printf("    [5] FAIL: setup press — cap text '%s' cursor %d, expected 'N018 ' and 5\n",
+             forthTestCapText(), T_cursorPos);
+      sc5 = 1;
+    }
+    if (!sc5) {
+      G1_PRESS(18, "5", false, false);               /* index 22: past numItems=20 */
+      if (dynamicMenuItem != 22) {
+        printf("    [5] FAIL: dynamicMenuItem = %d, expected 22 (the arm does not clamp)\n",
+               dynamicMenuItem);
+        sc5 = 1;
+      }
+      if (guardFired) {
+        printf("    [5] FAIL: forthPickerGuard true for index 22 against numItems %d\n",
+               dynamicSoftmenu[22].numItems);
+        sc5 = 1;
+      }
+      if (strcmp(forthTestCapText(), "N018 ") != 0 || T_cursorPos != 5) {
+        printf("    [5] FAIL: blank key changed the line — cap text '%s' cursor %d, "
+               "expected 'N018 ' and 5\n", forthTestCapText(), T_cursorPos);
+        sc5 = 1;
+      }
+    }
+    if (!sc5) {
+      printf("    [5] PASS: blank key past numItems refuses — guard false, line unchanged\n");
+    }
+    fail |= sc5;
+  }
+
+  #undef G1_PRESS
+  #undef G1_CLEAR_LINE
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  if (dynamicSoftmenu[22].menuContent) {
+    free(dynamicSoftmenu[22].menuContent);
+  }
+  dynamicSoftmenu[22].menuContent = savedMenuContent;
+  dynamicSoftmenu[22].numItems    = savedNumItems;
+  cachedDynamicMenu               = savedCachedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  T_cursorPos            = savedCursorPos;
+  dynamicMenuItem        = savedDynMenuItem;
+  pemCursorIsZerothStep  = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  calcMode          = savedCalcMode;
+  tam.function      = savedTamFunc;
+  tam.mode          = savedTamMode;
+  programRunStop    = savedProgRunStop;
+  catalog           = savedCatalog;
+  currentStep       = savedCurrentStep;
+  currentProgramNumber = savedProgNum;
+  cleanupTestProgram();
+
+  return fail;
+}
+
 /* test_picker_glyph_tokenize
  * Source step: ": A<a2><20>B DUP ;" — name contains STD_ANGLE ("\xa2\x20").
  * Build the menu; assert menuContent contains the 4-byte name "A\xa2\x20B"

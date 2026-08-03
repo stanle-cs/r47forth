@@ -1086,6 +1086,7 @@ static int test_picker_rebuilds_same_menu(void);
 static int test_picker_capacity_boundary(void);
 static int test_picker_dedupes(void);
 static int test_picker_insert_at_cursor(void);
+static int test_picker_key_mapping(void);
 static int test_picker_insert_mid_line(void);
 static int test_picker_trailing_space(void);
 static int test_picker_guard_menu_identity(void);
@@ -1738,6 +1739,9 @@ int forthDictSelfTest(void)
   /* COMMIT 12: picker insert at cursor tests */
   printf("  [DEBUG] running test_picker_insert_at_cursor...\n");
   fail |= test_picker_insert_at_cursor();
+
+  printf("  [DEBUG] running test_picker_key_mapping...\n");
+  fail |= test_picker_key_mapping();
   forthDictClear();
 
   printf("  [DEBUG] running test_picker_insert_mid_line...\n");
