@@ -6260,3 +6260,150 @@ static int test_pem_xeq_dynmenu_no_live_exec(void)
   return fail;
 }
 
+
+/* test_picker_renders_labels — G3: the picker's label reaches the LCD.
+ *
+ * Everything else in stage G stops at the content array or at
+ * dynmenuGetLabel(). This one reads the framebuffer back. lcd_buffer is
+ * filled by the software blitter whether or not a GTK window exists — the
+ * headlessMode guard in the c47-gtk HAL only skips
+ * gtk_widget_queue_draw_area — and lcd_buffer_pixel_on() is declared in
+ * src/c47/hal/lcd.h for every non-DMCP build, so it links in the sim binary
+ * and in the upstream testSuite binary alike. (lcd_clear_buf() does NOT
+ * exist in the testSuite HAL; nothing here may call it.)
+ *
+ * Three renders of ONE softkey cell, in DECREASING label length, asserting
+ * a strict decrease in lit pixels:
+ *
+ *   14-byte name  >  2-byte name  >  empty picker (chrome only)
+ *
+ * Decreasing order is deliberate. Nothing clears the buffer between
+ * renders, so if showSoftkey did not fully repaint its cell, the leftovers
+ * of a longer label would keep the later counts high and break the
+ * assertion rather than flatter it.
+ *
+ * No pixel count is hard-coded: upstream owns the font and the cell
+ * layout, and a legitimate change there must not turn this red. What is
+ * pinned is that the label is drawn at all, that a longer name draws more
+ * of it, and that the pixels counted belong to the label rather than to
+ * the border — which is what the empty-picker floor establishes.
+ *
+ * Geometry: softkey rows are y1 = 217 - SOFTMENU_HEIGHT * row with
+ * SOFTMENU_HEIGHT = 23 (softmenus.c), so the three rows span y >= 171; the
+ * six cells divide SCREEN_WIDTH, so the first is x < SCREEN_WIDTH / 6. */
+static int test_picker_renders_labels(void)
+{
+  extern void showSoftmenu(int16_t menu);
+  extern void showSoftmenuCurrentPart(void);
+
+  static const char *const labels[3] = {"ABCDEFGHIJKLMN", "AB", NULL};   /* NULL = no definition */
+  int32_t litInFirstCell[3] = {0, 0, 0};
+
+  uint8_t         *savedCurrentStep = currentStep;
+  uint16_t         savedProgNum     = currentProgramNumber;
+  softmenuStack_t  savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+  int16_t  savedCachedDynamicMenu = cachedDynamicMenu;
+  uint8_t *savedMenuContent       = dynamicSoftmenu[22].menuContent;
+  int16_t  savedNumItems          = dynamicSoftmenu[22].numItems;
+
+  dynamicSoftmenu[22].menuContent = NULL;
+  dynamicSoftmenu[22].numItems    = 0;
+
+  int fail = 0;
+
+  for (int k = 0; k < 3 && !fail; k++) {
+    const char *name    = labels[k];
+    const int   nameLen = (name == NULL) ? 0 : (int)strlen(name);
+    /* With a name: marker, ": <name> 1 ;", marker. Without: the two markers
+     * alone, which is a syntactically fine program that defines nothing. */
+    const int      bodyLen = (name == NULL) ? 0 : (2 + nameLen + 4);
+    const uint16_t progLen = (uint16_t)(4 + (name == NULL ? 0 : 4 + bodyLen) + 4);
+
+    uint8_t *prog = (uint8_t *)malloc(progLen);
+    if (!prog) {
+      printf("    FAIL: malloc failed\n");
+      fail = 1;
+      break;
+    }
+    uint8_t *p = prog;
+    *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 0x00;          /* marker (opening) */
+    if (name != NULL) {
+      *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = (uint8_t)bodyLen;
+      *p++ = ':'; *p++ = ' ';
+      for (int c = 0; c < nameLen; c++) {
+        *p++ = (uint8_t)name[c];
+      }
+      *p++ = ' '; *p++ = '1'; *p++ = ' '; *p++ = ';';
+    }
+    *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 0x00;          /* marker (closing) */
+
+    if ((p - prog) != progLen || !writeTestProgram(prog, progLen)) {
+      printf("    FAIL: writeTestProgram failed for label '%s'\n", name ? name : "(none)");
+      free(prog);
+      fail = 1;
+      break;
+    }
+    free(prog);
+
+    currentProgramNumber = 1;
+    currentStep          = beginOfProgramMemory + (progLen - 4);
+
+    showSoftmenu(-MNU_FORTH);
+    showSoftmenuCurrentPart();
+
+    const int16_t expectItems = (name == NULL) ? 0 : 1;
+    if (dynamicSoftmenu[22].numItems != expectItems) {
+      printf("    FIXTURE BUG: picker has %d names for label '%s', expected %d\n",
+             dynamicSoftmenu[22].numItems, name ? name : "(none)", expectItems);
+      fail = 1;
+    }
+
+    if (!fail) {
+      for (uint32_t y = 171; y < SCREEN_HEIGHT; y++) {
+        for (uint32_t x = 0; x < SCREEN_WIDTH / 6; x++) {
+          if (lcd_buffer_pixel_on(x, y)) {
+            litInFirstCell[k]++;
+          }
+        }
+      }
+    }
+
+    if (dynamicSoftmenu[22].menuContent) {
+      free(dynamicSoftmenu[22].menuContent);
+      dynamicSoftmenu[22].menuContent = NULL;
+    }
+    dynamicSoftmenu[22].numItems = 0;
+    cleanupTestProgram();
+  }
+
+  if (!fail && litInFirstCell[2] <= 0) {
+    printf("    FAIL: empty picker drew nothing in the first softkey cell — "
+           "the draw path is not reaching lcd_buffer at all\n");
+    fail = 1;
+  }
+  if (!fail && litInFirstCell[1] <= litInFirstCell[2]) {
+    printf("    FAIL: 'AB' lit %d pixels against %d for an empty picker — "
+           "the label is not drawn\n", litInFirstCell[1], litInFirstCell[2]);
+    fail = 1;
+  }
+  if (!fail && litInFirstCell[0] <= litInFirstCell[1]) {
+    printf("    FAIL: the 14-byte name lit %d pixels against %d for 'AB' — "
+           "a maximal name is not rendered in full\n",
+           litInFirstCell[0], litInFirstCell[1]);
+    fail = 1;
+  }
+
+  dynamicSoftmenu[22].menuContent = savedMenuContent;
+  dynamicSoftmenu[22].numItems    = savedNumItems;
+  cachedDynamicMenu               = savedCachedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  currentStep          = savedCurrentStep;
+  currentProgramNumber = savedProgNum;
+
+  if (!fail) {
+    printf("    PASS: picker labels reach lcd_buffer — %d px (14-byte) > %d px (2-byte) > %d px (chrome only)\n",
+           litInFirstCell[0], litInFirstCell[1], litInFirstCell[2]);
+  }
+  return fail;
+}
