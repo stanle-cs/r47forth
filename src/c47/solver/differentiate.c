@@ -250,6 +250,18 @@ static bool_t deriv_user_step(real_t *h, bool_t usesDelta) {
 }
 
 
+// Digits a sample is good for, and how far the step is worth shrinking. Normally 34. While a graph is drawn the calculator works to the SDIGS setting instead, so
+// two estimates can never match to 34 digits, the step shrinks all the way down and the samples cancel to nothing. The solver reads the same setting for its own
+// tolerance.
+static int32_t deriv_tolerance_digits(void) {
+  return graphAccActive ? max(significantDigitsForEqnGraphs - 2, 4) : DERIV_TOLERANCE_DIGITS;
+}
+
+static int32_t deriv_last_shift(void) {
+  return graphAccActive ? deriv_tolerance_digits() / 2 : DERIV_LAST_SHIFT;
+}
+
+
 // Do two estimates of the same derivative, taken a factor of ten apart in h, agree to better than the cancellation the finer one suffers? A sample carries 34 digits
 // and the points are h apart, so differencing them loses the digits they share and the error is about 1e-DERIV_TOLERANCE_DIGITS times ten to the shift, for each
 // order of the derivative. Agreement means the truncation of the coarser estimate is already below that, so the coarser one is the better of the two. The gap
@@ -262,7 +274,7 @@ static bool_t deriv_agrees(const real_t *coarse, const real_t *fine, int shift, 
     return true;
   }
   realCopyAbs(fine, &tolerance);
-  tolerance.exponent += shift * order - DERIV_TOLERANCE_DIGITS;
+  tolerance.exponent += shift * order - deriv_tolerance_digits();
   return realCompareAbsLessThan(difference, &tolerance);
 }
 
@@ -409,7 +421,7 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
   snap_t savedRegister;
   calcRegister_t variable = INVALID_VARIABLE;
   bool_t userStep = false, usesDelta = false;
-  int i, shift, stencil, coarseStencil = -1, coarseShift = 0, bestShift = 0;
+  int i, shift, stencil, coarseStencil = -1, coarseShift = 0, bestShift = 0, lastShift = deriv_last_shift();
 
   if(!getRegisterAsReal(REGISTER_X, &x)) {
     return;
@@ -454,7 +466,7 @@ static void calcDeriv(calcRegister_t label, const FINITE_DIFF_COEFF *const *finD
     // Walk the step down a decade at a time. Each step gives one estimate, and two estimates from the same stencil that agree say the coarser step's truncation is
     // already lost in the noise, so the coarser one is taken: it is the one that threw away the fewest digits. A step the user set is taken as it stands, so the
     // first pass is the only one.
-    for(shift = DERIV_FIRST_SHIFT; shift <= DERIV_LAST_SHIFT; shift++) {
+    for(shift = DERIV_FIRST_SHIFT; shift <= lastShift; shift++) {
       if(variable != INVALID_VARIABLE) {
         // Kept here rather than in a register: the user program runs between the save and the restore and every temporary register is scratch to something it can
         // call, RCL of a stack register among them. The snapshot carries the type and the tag, so the value comes back as itself and not as the real34 the sampling

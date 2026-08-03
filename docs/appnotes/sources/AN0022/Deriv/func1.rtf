@@ -1,0 +1,440 @@
+{\rtf1\ansi\ansicpg1252\deff0\nouicompat{\fonttbl{\f0\fnil\fcharset0 C47__StandardFont;}}{\pard\sl240\slmult1\f0\fs24\lang9\f0\loch
+C47 Program file export: Export format version 3, C47 program version 1.
+ \par
+0000: { Prgm #2/2: 3953 bytes / 399 steps } \par
+\par
+0001:  LBL \u8216?ALLTEST\u8217?\par
+0002:  XEQ \u8216?PLTROOT\u8217?\par
+0003:  XEQ \u8216?PLTINTG\u8217?\par
+0004:  XEQ \u8216?PLTINT3\u8217?\par
+0005:  XEQ \u8216?DBLINT\u8217?\par
+0006:  XEQ \u8216?TRPINT\u8217?\par
+0007:  XEQ \u8216?PLTDBL\u8217?\par
+0008:  XEQ \u8216?PLTDRV\u8217?\par
+0009:  XEQ \u8216?PLTCUB\u8217?\par
+0010:  XEQ \u8216?PLTDV1\u8217?\par
+0011:  XEQ \u8216?PLTDV2\u8217?\par
+0012:  XEQ \u8216?PLTDV3\u8217?\par
+0013:  XEQ \u8216?PLTDI\u8217?\par
+0014:  XEQ \u8216?SLVDD\u8217?\par
+0015:  XEQ \u8216?SLVINT\u8217?\par
+0016:  XEQ \u8216?SLVSLV\u8217?\par
+0017:  XEQ \u8216?SLVF2\u8217?\par
+0018:  XEQ \u8216?INTPI\u8217?\par
+0019:    OPENM \u8216?PLFUNC\u8217?\par
+0020:  RTN\par
+0021:    REM \u8216?TEST nesting for f(x) = x^2 - p*x - 2\u8217?\par
+\par
+0022:  LBL \u8216?FX\u8217?\par
+0023:    MVAR \u8216?x\u8217?\par
+0024:    MVAR \u8216?p\u8217?\par
+0025:    RCL \u8216?x\u8217?\par
+0026:    ENTER\par
+0027:    \u215?\par
+0028:    RCL \u8216?x\u8217?\par
+0029:    RCL \u8216?p\u8217?\par
+0030:    \u215?\par
+0031:    -\par
+0032:    2\par
+0033:    -\par
+0034:  RTN\par
+0035:    REM \u8216?TEST PLOT(SOLVE): plot the root locus x*(p) over p; expect a curve\u8217?\par
+\par
+0036:  LBL \u8216?RT\u8217?\par
+0037:    PGMSLV \u8216?FX\u8217?\par
+0038:    0\par
+0039:    8\par
+0040:    SOLVE \u8216?x\u8217?\par
+0041:  RTN\par
+\par
+0042:  LBL \u8216?PLTROOT\u8217?\par
+0043:    PGMPLT \u8216?RT\u8217?\par
+0044:    -5\par
+0045:    5\par
+0046:    \u8216?PLOT(SOLVE): root locus\u8217?\par
+0047:    STO A\par
+0048:    DROPx\par
+0049:    SNAP\par
+0050:    PAUSE 12\par
+0051:    PLT\u8197?f \u8216?p\u8217?\par
+0052:    SNAP\par
+0053:    PAUSE 12\par
+0054:  RTN\par
+0055:    REM \u8216?TEST PLOT(INT), fixed limits: plot INT(0..8) f dx over p; expect 1st order (linear in p)\u8217?\par
+\par
+0056:  LBL \u8216?IG\u8217?\par
+0057:    PGMINT \u8216?FX\u8217?\par
+0058:    0\par
+0059:    8\par
+0060:    \u8747?\u10736? \u8216?x\u8217?\par
+0061:  RTN\par
+\par
+0062:  LBL \u8216?PLTINTG\u8217?\par
+0063:    PGMPLT \u8216?IG\u8217?\par
+0064:    -5\par
+0065:    5\par
+0066:    \u8216?PLOT(INT): linear in p\u8217?\par
+0067:    STO A\par
+0068:    DROPx\par
+0069:    SNAP\par
+0070:    PAUSE 12\par
+0071:    PLT\u8197?f \u8216?p\u8217?\par
+0072:    SNAP\par
+0073:    PAUSE 12\par
+0074:  RTN\par
+0075:    REM \u8216?TEST PLOT(INT) over a variable limit: plot INT(0..u) f dx over u; expect 3rd order (cubic)\u8217?\par
+\par
+0076:  LBL \u8216?IU\u8217?\par
+0077:    MVAR \u8216?u\u8217?\par
+0078:    PGMINT \u8216?FX\u8217?\par
+0079:    0\par
+0080:    RCL \u8216?u\u8217?\par
+0081:    \u8747?\u10736? \u8216?x\u8217?\par
+0082:  RTN\par
+\par
+0083:  LBL \u8216?PLTINT3\u8217?\par
+0084:    PGMPLT \u8216?IU\u8217?\par
+0085:    -5\par
+0086:    5\par
+0087:    \u8216?PLOT(INT): cubic in u\u8217?\par
+0088:    STO A\par
+0089:    DROPx\par
+0090:    SNAP\par
+0091:    PAUSE 12\par
+0092:    PLT\u8197?f \u8216?u\u8217?\par
+0093:    SNAP\par
+0094:    PAUSE 12\par
+0095:  RTN\par
+0096:    REM \u8216?TEST INT(INT) double integral: XEQ 'DBLINT' -> expect 4/3 = 1.33333...\u8217?\par
+0097:    REM \u8216?DBLINT = INT(0..2) [INT(0..x) t dt] dx = INT(0..2) (x^2/2) dx = 4/3   (outer over x, inner over t)\u8217?\par
+\par
+0098:  LBL \u8216?HT\u8217?\par
+0099:    MVAR \u8216?t\u8217?\par
+0100:    RCL \u8216?t\u8217?\par
+0101:  RTN\par
+\par
+0102:  LBL \u8216?IT\u8217?\par
+0103:    MVAR \u8216?x\u8217?\par
+0104:    PGMINT \u8216?HT\u8217?\par
+0105:    0\par
+0106:    RCL \u8216?x\u8217?\par
+0107:    \u8747?\u10736? \u8216?t\u8217?\par
+0108:  RTN\par
+\par
+0109:  LBL \u8216?DBLINT\u8217?\par
+0110:    PGMINT \u8216?IT\u8217?\par
+0111:    0\par
+0112:    2\par
+0113:    \u8747?\u10736? \u8216?x\u8217?\par
+0114:    \u8216?INT(INT) = 4/3\u8217?\par
+0115:    STO A\par
+0116:    DROPx\par
+0117:    SNAP\par
+0118:    PAUSE 12\par
+0119:  RTN\par
+0120:    REM \u8216?TEST INT(INT(INT)) coupled triple integral: XEQ 'TRPINT' -> expect 2/3 = 0.66667\u8217?\par
+0121:    REM \u8216?TRPINT = INT(0..2) [INT(0..y) [INT(0..x) t dt] dx] dy = INT(0..2) (y^3/6) dy = 2/3\u8217?\par
+0122:    REM \u8216?Coupled via the limits (t up to x, x up to y), so all three levels do real work. Reuses HT, IT.\u8217?\par
+\par
+0123:  LBL \u8216?IY\u8217?\par
+0124:    MVAR \u8216?y\u8217?\par
+0125:    PGMINT \u8216?IT\u8217?\par
+0126:    0\par
+0127:    RCL \u8216?y\u8217?\par
+0128:    \u8747?\u10736? \u8216?x\u8217?\par
+0129:  RTN\par
+\par
+0130:  LBL \u8216?TRPINT\u8217?\par
+0131:    PGMINT \u8216?IY\u8217?\par
+0132:    0\par
+0133:    2\par
+0134:    \u8747?\u10736? \u8216?y\u8217?\par
+0135:    \u8216?INT(INT(INT)) = 2/3\u8217?\par
+0136:    STO A\par
+0137:    DROPx\par
+0138:    SNAP\par
+0139:    PAUSE 12\par
+0140:  RTN\par
+0141:    REM \u8216?TEST PLOT(INT(INT)): plot the double integral over y; expect 3rd order (cubic y^3/6). Reuses HT, IT, IY.\u8217?\par
+\par
+0142:  LBL \u8216?PLTDBL\u8217?\par
+0143:    PGMPLT \u8216?IY\u8217?\par
+0144:    -5\par
+0145:    5\par
+0146:    PLT\u8197?f \u8216?y\u8217?\par
+0147:    \u8216?PLOT(INT(INT)): cubic\u8217?\par
+0148:    STO A\par
+0149:    DROPx\par
+0150:    SNAP\par
+0151:    PAUSE 12\par
+0152:  RTN\par
+0153:    REM \u8216?TEST SOLVE(INT): XEQ 'SLVINT' -> expect x = 2   (the original integral-nested-in-SOLVE)\u8217?\par
+0154:    REM \u8216?solve SI(x) = INT(0..x) t dt - 2 = x^2/2 - 2 = 0  -> x = 2.  Reuses HT.\u8217?\par
+\par
+0155:  LBL \u8216?SI\u8217?\par
+0156:    MVAR \u8216?x\u8217?\par
+0157:    PGMINT \u8216?HT\u8217?\par
+0158:    0\par
+0159:    RCL \u8216?x\u8217?\par
+0160:    \u8747?\u10736? \u8216?t\u8217?\par
+0161:    2\par
+0162:    -\par
+0163:  RTN\par
+\par
+0164:  LBL \u8216?SLVINT\u8217?\par
+0165:    PGMSLV \u8216?SI\u8217?\par
+0166:    0\par
+0167:    5\par
+0168:    SOLVE \u8216?x\u8217?\par
+0169:    \u8216?SOLVE(INT): x = 2\u8217?\par
+0170:    STO A\par
+0171:    DROPx\par
+0172:    SNAP\par
+0173:    PAUSE 12\par
+0174:  RTN\par
+0175:    REM \u8216?TEST SOLVE(SOLVE): XEQ 'SLVSLV' -> expect p = 1   (find the p that puts f's root at 2). Reuses FX, RT.\u8217?\par
+0176:    REM \u8216?outer solves EQ(p) = [root of f(x)=x^2-p*x-2, from inner solve RT] - 2 = 0  ->  p = 1\u8217?\par
+\par
+0177:  LBL \u8216?EQ\u8217?\par
+0178:  XEQ \u8216?RT\u8217?\par
+0179:    2\par
+0180:    -\par
+0181:  RTN\par
+\par
+0182:  LBL \u8216?SLVSLV\u8217?\par
+0183:    PGMSLV \u8216?EQ\u8217?\par
+0184:    -5\par
+0185:    5\par
+0186:    SOLVE \u8216?p\u8217?\par
+0187:    \u8216?SOLVE(SOLVE): p = 1\u8217?\par
+0188:    STO A\par
+0189:    DROPx\par
+0190:    SNAP\par
+0191:    PAUSE 12\par
+0192:  RTN\par
+0193:    REM \u8216?Standalone SOLVE at full precision. XEQ 'SLVF2' -> sqrt(2) to full ~32 figures\u8217?\par
+\par
+0194:  LBL \u8216?F2\u8217?\par
+0195:    MVAR \u8216?x\u8217?\par
+0196:    RCL \u8216?x\u8217?\par
+0197:    ENTER\par
+0198:    \u215?\par
+0199:    2\par
+0200:    -\par
+0201:  RTN\par
+\par
+0202:  LBL \u8216?SLVF2\u8217?\par
+0203:    PGMSLV \u8216?F2\u8217?\par
+0204:    0\par
+0205:    2\par
+0206:    SOLVE \u8216?x\u8217?\par
+0207:    \u8216?solve x^2 - 2 = 0\u8217?\par
+0208:    STO A\par
+0209:    DROPx\par
+0210:    SNAP\par
+0211:    PAUSE 12\par
+0212:    PGMPLT \u8216?F2\u8217?\par
+0213:    -2\par
+0214:    4\par
+0215:    PLT\u8197?f \u8216?x\u8217?\par
+0216:    SNAP\par
+0217:    PAUSE 12\par
+0218:  RTN\par
+0219:    REM \u8216?Standalone INT at full precision. XEQ 'INTPI' -> pi to full ~32 figures\u8217?\par
+\par
+0220:  LBL \u8216?FP\u8217?\par
+0221:    MVAR \u8216?x\u8217?\par
+0222:    4\par
+0223:    RCL \u8216?x\u8217?\par
+0224:    ENTER\par
+0225:    \u215?\par
+0226:    1\par
+0227:    +\par
+0228:    \u247?\par
+0229:  RTN\par
+\par
+0230:  LBL \u8216?INTPI\u8217?\par
+0231:    PGMINT \u8216?FP\u8217?\par
+0232:    0\par
+0233:    1\par
+0234:    \u8747?\u10736? \u8216?x\u8217?\par
+0235:    \u8216?INT 4/(1+x^2) = pi\u8217?\par
+0236:    STO A\par
+0237:    DROPx\par
+0238:    SNAP\par
+0239:    PAUSE 12\par
+0240:  RTN\par
+0241:    REM \u8216?TEST PLOT(f'): plot d/dx f(x) at x = w over w; expect the straight line 2w (p defaults to 0 via MVAR 'p' in FX)\u8217?\par
+0242:    NOP\par
+0243:    NOP\par
+\par
+0244:  LBL \u8216?DR\u8217?\par
+0245:    MVAR \u8216?w\u8217?\par
+0246:    PGMDRV \u8216?FX\u8217?\par
+0247:    RCL \u8216?w\u8217?\par
+0248:    f' \u8216?x\u8217?\par
+0249:  RTN\par
+\par
+0250:  LBL \u8216?PLTDRV\u8217?\par
+0251:    PGMPLT \u8216?DR\u8217?\par
+0252:    -5\par
+0253:    5\par
+0254:    \u8216?PLOT(DERIV): line 2w\u8217?\par
+0255:    STO A\par
+0256:    DROPx\par
+0257:    SNAP\par
+0258:    PAUSE 12\par
+0259:    PLT\u8197?f \u8216?w\u8217?\par
+0260:    SNAP\par
+0261:    PAUSE 12\par
+0262:  RTN\par
+0263:    REM \u8216?TEST PLOT(f'), one to three engines deep on one cubic. The four plots drop a degree each time: CU is x^3 - 3x^2 a cubic, D1 is 3v^2 - 6v a parabola, D2 is\u8217?\par
+0264:    REM \u8216?6u - 6 a straight line crossing the axis at 1, D3 is 6 a flat line. The 3x^2 term is there to put that crossing somewhere other than the origin.\u8217?\par
+0265:    NOP\par
+\par
+0266:  LBL \u8216?CU\u8217?\par
+0267:    MVAR \u8216?x\u8217?\par
+0268:    RCL \u8216?x\u8217?\par
+0269:    ENTER\par
+0270:    \u215?\par
+0271:    RCL \u8216?x\u8217?\par
+0272:    \u215?\par
+0273:    RCL \u8216?x\u8217?\par
+0274:    ENTER\par
+0275:    \u215?\par
+0276:    3\par
+0277:    \u215?\par
+0278:    -\par
+0279:  RTN\par
+\par
+0280:  LBL \u8216?D1\u8217?\par
+0281:    MVAR \u8216?v\u8217?\par
+0282:    PGMDRV \u8216?CU\u8217?\par
+0283:    RCL \u8216?v\u8217?\par
+0284:    f' \u8216?x\u8217?\par
+0285:  RTN\par
+\par
+0286:  LBL \u8216?D2\u8217?\par
+0287:    MVAR \u8216?u\u8217?\par
+0288:    PGMDRV \u8216?D1\u8217?\par
+0289:    RCL \u8216?u\u8217?\par
+0290:    f' \u8216?v\u8217?\par
+0291:  RTN\par
+\par
+0292:  LBL \u8216?D3\u8217?\par
+0293:    MVAR \u8216?w\u8217?\par
+0294:    PGMDRV \u8216?D2\u8217?\par
+0295:    RCL \u8216?w\u8217?\par
+0296:    f' \u8216?u\u8217?\par
+0297:  RTN\par
+\par
+0298:  LBL \u8216?PLTCUB\u8217?\par
+0299:    PGMPLT \u8216?CU\u8217?\par
+0300:    -5\par
+0301:    5\par
+0302:    \u8216?PLOT: x^3-3x^2, cubic\u8217?\par
+0303:    STO A\par
+0304:    DROPx\par
+0305:    SNAP\par
+0306:    PAUSE 12\par
+0307:    PLT\u8197?f \u8216?x\u8217?\par
+0308:    SNAP\par
+0309:    PAUSE 12\par
+0310:  RTN\par
+\par
+0311:  LBL \u8216?PLTDV1\u8217?\par
+0312:    PGMPLT \u8216?D1\u8217?\par
+0313:    -5\par
+0314:    5\par
+0315:    \u8216?PLOT(DERIV): 3v^2-6v, parabola\u8217?\par
+0316:    STO A\par
+0317:    DROPx\par
+0318:    SNAP\par
+0319:    PAUSE 12\par
+0320:    PLT\u8197?f \u8216?v\u8217?\par
+0321:    SNAP\par
+0322:    PAUSE 12\par
+0323:  RTN\par
+\par
+0324:  LBL \u8216?PLTDV2\u8217?\par
+0325:    PGMPLT \u8216?D2\u8217?\par
+0326:    -5\par
+0327:    5\par
+0328:    \u8216?PLOT(DERIV(DERIV)): 6u-6, line\u8217?\par
+0329:    STO A\par
+0330:    DROPx\par
+0331:    SNAP\par
+0332:    PAUSE 12\par
+0333:    PLT\u8197?f \u8216?u\u8217?\par
+0334:    SNAP\par
+0335:    PAUSE 12\par
+0336:  RTN\par
+\par
+0337:  LBL \u8216?PLTDV3\u8217?\par
+0338:    PGMPLT \u8216?D3\u8217?\par
+0339:    0\par
+0340:    STO \u8216?\u8595?Y\u8217?\par
+0341:    12\par
+0342:    STO \u8216?\u8593?Y\u8217?\par
+0343:    REM \u8216?scales to that wobble and draws nothing\u8217?\par
+0344:    -5\par
+0345:    5\par
+0346:    \u8216?PLOT(DERIV(DERIV(DERIV))): 6\u8217?\par
+0347:    STO A\par
+0348:    DROPx\par
+0349:    SNAP\par
+0350:    PAUSE 12\par
+0351:    PLT\u8197?f \u8216?w\u8217?\par
+0352:    SNAP\par
+0353:    PAUSE 12\par
+0354:    PLTRST\par
+0355:  RTN\par
+0356:    REM \u8216?TEST PLOT(f'(INT)): differentiate an integral and plot that. INT(0..y) x^3 dx is y^4/4, so its derivative is the cubic again and PLTDI draws what PLTCUB draws.\u8217?\par
+0357:    NOP\par
+\par
+0358:  LBL \u8216?IC\u8217?\par
+0359:    MVAR \u8216?y\u8217?\par
+0360:    PGMINT \u8216?CU\u8217?\par
+0361:    0\par
+0362:    RCL \u8216?y\u8217?\par
+0363:    \u8747?\u10736? \u8216?x\u8217?\par
+0364:  RTN\par
+\par
+0365:  LBL \u8216?DI\u8217?\par
+0366:    MVAR \u8216?w\u8217?\par
+0367:    PGMDRV \u8216?IC\u8217?\par
+0368:    RCL \u8216?w\u8217?\par
+0369:    f' \u8216?y\u8217?\par
+0370:  RTN\par
+\par
+0371:  LBL \u8216?PLTDI\u8217?\par
+0372:    PGMPLT \u8216?DI\u8217?\par
+0373:    1E.\par
+0374:    STO \u8216?ACC\u8217?\par
+0375:    DROPx\par
+0376:    -5\par
+0377:    5\par
+0378:    \u8216?PLOT(DERIV(INT)): x^3-3x^2\u8217?\par
+0379:    STO A\par
+0380:    DROPx\par
+0381:    SNAP\par
+0382:    PAUSE 12\par
+0383:    PLT\u8197?f \u8216?w\u8217?\par
+0384:    SNAP\par
+0385:    PAUSE 12\par
+0386:  RTN\par
+0387:    REM \u8216?TEST SOLVE(f'(f')): solve the second derivative for zero. D2 is 6u - 6, so the root is u = 1, which is where the PLTDV2 line crosses the axis.\u8217?\par
+\par
+0388:  LBL \u8216?SLVDD\u8217?\par
+0389:    PGMSLV \u8216?D2\u8217?\par
+0390:    -5\par
+0391:    5\par
+0392:    SOLVE \u8216?u\u8217?\par
+0393:    \u8216?SOLVE(DERIV(DERIV)): u = 1\u8217?\par
+0394:    STO A\par
+0395:    DROPx\par
+0396:    SNAP\par
+0397:    PAUSE 12\par
+0398:  RTN\par
+0399:  END\par
+}}
