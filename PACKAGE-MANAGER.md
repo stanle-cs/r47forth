@@ -17,6 +17,15 @@ package touches costs nothing. Keep `SIBLING_ROOTS` short: every entry
 widens the surface the package system can touch, and sibling roots are
 meant for dev-only trees (the test driver), never shipped firmware.
 
+**Known deviation (DESIGN_AUDIT.md §2.10).** This mapping is asymmetric:
+the c47 root is implicit, sibling roots are explicit — two rules in one
+namespace, kept because the uniform alternative (working area rooted at
+`src/`, every existing rel gaining a `c47/` prefix) costs a package-wide
+rename and a DESIGN.md citation sweep. The asymmetry is single-sourced in
+`upstream_repo_rel()`. **Do not add a second sibling root** — that is the
+trigger for doing the uniform `src/` mirror refactor instead of extending
+the whitelist.
+
 ## Commands
 
 ### `./package refresh PACKAGE`

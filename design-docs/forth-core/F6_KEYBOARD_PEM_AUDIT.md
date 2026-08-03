@@ -1,7 +1,8 @@
 # F6 keyboard/PEM audit — the charter (HARD PRECONDITION of DESIGN §10.6)
 
 Status: **TRACES FOLDED (T1-T7) → `F6_AUDIT_RESULTS.md` 2026-07-19;
-BENCH (Blocks A-F) DEFERRED to stage-exit by owner ruling 2026-07-18.**
+BENCH (Blocks A-F) converted from hardware to an AUTOMATED SIM BENCH by
+owner ruling 2026-08-02 — derivation in §6 below, packets SB-1/SB-2.**
 The F6 packets are AUTHORED from the traces (`QWEN_PROMPTS_F6_core.md`
 + F6-1..F6-6); §10.6 was amended to record the split precondition.  The
 bench below remains QUEUED: it runs on the DM42n AFTER F6-6 lands,
@@ -168,3 +169,54 @@ been triaged (design amendment vs upstream report vs F6 scope).  Then —
 and only then — the F6 packets are authored against the post-F5 tree,
 under the same binding rules (`QWEN_PROMPTS_F3_core.md` §0) as every
 other stage.
+
+## 6. Sim-bench derivation (owner ruling 2026-08-02 — replaces the hardware run)
+
+The bench's purpose was to validate, end to end and key by key, what the
+T1-T7 traces could only claim from source. The deferred-bench register
+(`F6_AUDIT_RESULTS.md`) records the residual hardware risk per row: it is
+"none" for every row except DMCP display timing (A1/A2) and DMCP save
+timing (A5) — the sim runs the same C on every other axis. The owner
+therefore converts the bench to headless self-test subcases that drive the
+**key-dispatch layer** (`pemAlpha`, `fnKeyExit`, `tamEnterMode`,
+`showSoftmenu`, catalog paths) with `testProg_t` fixtures and byte-image
+golden asserts — the same idiom as `test_capture_acceptance`. Overlap with
+the landed seam-level batteries is intentional (the bench pins the
+*sequence through the keys*, not the seam), never a reason to skip a row.
+
+**Row disposition.** COVERED = a landed test already pins the row's
+observable at key level; the packet's EXECUTION GATE greps the named
+assertion so the claim is machine-checked at run time, not trusted. NEW =
+a bench subcase to author (packet named).
+
+| Row | Disposition |
+|---|---|
+| A1 open/type/commit/exit | COVERED — `test_capture_acceptance` subcase 1 (gate-grep) |
+| A2 reopen, cursor ×2 left, mid-line insert, ENTER | **NEW → SB-1** (byte golden) |
+| A3 backspace across a two-byte glyph | **NEW → SB-1** |
+| A4 196-glyph cap; 197th press; ENTER of full line | **NEW → SB-1** (also re-tests the cap premise, DESIGN_AUDIT Part 3 rotation) |
+| A5 half-typed line, save/restore round trip | **NEW → SB-1**; text survives (committed per key, T1 arm 7), cursor/open-flag loss asserted as the contract. DMCP save timing stays HARDWARE-ONLY |
+| A6 EXIT with half-typed line, reopen | **NEW → SB-1** |
+| B1 TAM open + cancel back, line/cursor intact | **NEW → SB-2** (thin sequence assert over `test_capture_suspend`'s seam pins) |
+| B2 tam.colon set + cancel — no leak into capture keys | **NEW → SB-2** |
+| B3 XEQ 'NAME' committed from inside capture — step placement | **NEW → SB-2** (byte golden) |
+| B4 FCNS catalog pick during capture | COVERED — `test_capture_menus` + `test_pem_xeq_dynmenu_no_live_exec` (gate-grep) |
+| C1 STO 0 5 during capture → canonical text | COVERED — `test_capture_param_text` (gate-grep) |
+| C2 STO . 0 5 local form; STO cancel path | **NEW → SB-2** |
+| C3 native STO →05 / STO 'VAR' byte images | COVERED — F4 parity tests (`test_param_register_flag`, parity sweep; gate-grep) |
+| D1 FWRD pick mid-capture, buffer+cursor after | COVERED — `test_picker_insert_at_cursor` (gate-grep) |
+| D2 picker open, up/down navigation — no capture-line leak | **NEW → SB-2** |
+| D3 menu transitions, which menu on top | COVERED — `test_alpha_menu_on_top_during_capture`, `test_forth_toggle_from_catalog_leaves_alpha_menu` (gate-grep) |
+| E1 FWRD contents dictionary-backed, scope-aware | COVERED — `test_word_catalog` (gate-grep) |
+| F1 full EXIT ladder, one level per press (§8.4 E8 table) | **NEW → SB-1** |
+| F2 backspace on empty capture line, before/after commits | **NEW → SB-1** |
+
+**HARDWARE-ONLY (leaves the binding queue; best-effort on device, DM42
+stance):** DMCP display timing (A1/A2 residual), DMCP power/save timing
+(A5 residual), physical keyboard reachability (T7's f-shift CAPS/NUM lock
+on real keys). Nothing else.
+
+**Packets:** `QWEN_PROMPTS_SB_1_capture_mechanics.md` (A2-A6, F1, F2 — 7
+subcases) and `QWEN_PROMPTS_SB_2_nesting_param_menus.md` (B1-B3, C2, D2 —
+5 subcases). Exit criteria for row 11i: both packets landed green with
+their mutations RED, and the COVERED gate-greps all matched.

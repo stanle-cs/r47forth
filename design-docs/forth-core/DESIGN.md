@@ -431,7 +431,7 @@ Notes:
   is always 6 bytes total (token 2 + itemId 2 + param 1 + pad 1) and every token
   and inline datum stays cell-aligned. Emitter writes the pad byte as 0; decoder
   advances `ip` by 2 after reading the param byte.
-- `FTOK_XEQN` (stage F3 — DECIDED, unimplemented; §10) is the bridge that
+- `FTOK_XEQN` (landed, F3-6 `2db8af231`) is the bridge that
   lets Forth call a C47 keystroke program by **name**, and it exists because
   `labelList[]` indices renumber on every program edit — baking one calls the
   wrong program silently (§3.3.6). Inline data is `[kind][len][name bytes]`
@@ -1201,12 +1201,11 @@ therefore calls the *wrong program* — no error, no crash, just wrong. Upstream
 never stores one: a program's `XEQ 'NAME'` step stores an inline name string
 resolved at run time [VERIFIED: src/c47/programming/lblGtoXeq.c:365-368].
 
-- *Compile state (stage F3 — DECIDED, unimplemented; §10):* emit() `FTOK_XEQN`
+- *Compile state (landed, F3-6 `2db8af231`):* emit() `FTOK_XEQN`
   + kind byte 253 + the inline name (§2.2). Resolution happens at run time,
   fresh on every execution — the same guarantee upstream's `PARAM_LABEL` arm
   gives, reusing the same resolver. `: F MYPROG ;` compiles and stays correct
-  across edits forever. *Committed interim:* a label in compile state raises
-  `ERROR_INVALID_NAME` and aborts (error table, §3.3) until F3 lands.
+  across edits forever.
 - *Interpret state (IMPLEMENTED):* `dynamicMenuItem = -1; fnExecute(label);` —
   a **direct** `fnExecute`, deliberately **not** the PGM_RUNNING wrap used for
   items. (Upstream has since adopted the same `dynamicMenuItem = -1` default
@@ -1990,12 +1989,12 @@ are skipped, so nothing in the tail executes early), then executes the current
 payload in `SKIP_DEFS` mode (`:`…`;` regions are consumed without touching the
 dictionary, so nothing recompiles). Scope is **exactly the owning program**,
 resolved via `forthOwningProgramStart` / `forthNextProgramStart`
-(forth_bridge.c). Tracking: `forthScannedProgs[FORTH_SCAN_MAX=8]` +
-`forthScannedCount`, reset with the dictionary at the generation seam
-*(implemented interim — the accepted stage-F1 architecture replaces the fixed
-array with capacity-bounded dynamic tracking in the arena, so capacity failure
-becomes ordinary dictionary exhaustion, never a program-count cliff; R4-E1,
-§10)*. Interactive `fnForthOuter` keeps `FULL` (compile-and-execute-in-place)
+(forth_bridge.c). Tracking (landed, F1-3 `ecbd6bcce`): dynamic 8-byte records
+inside the dictionary region, newest at `forthScanHead`
+(`forthScanTrackReset` / `forthScanIsRecorded` [VERIFIED:
+packages/forth-core/forth_compile.c]) — capacity failure is ordinary
+dictionary exhaustion, never a program-count cliff (R4-E1).
+Interactive `fnForthOuter` keeps `FULL` (compile-and-execute-in-place)
 semantics.
 
 **Why a pre-scan at all.** Without it, a definition exists only after execution
@@ -2399,8 +2398,9 @@ E8. *The EXIT ladder.* EXIT unwinds exactly one level per press:
     §8.4's invariant already permits RPN steps mid-region; this is the gesture
     that reaches them.
 
-E9. *Entry-time validation (stage F5 — DECIDED per the accepted D ruling,
-    unimplemented; §10).* RPN's strongest property is that a malformed step
+E9. *Entry-time validation (landed, stage F5 — F5-1 `ba304a3cf` check
+    mode, F5-2 commit gate; per the accepted D ruling).* RPN's strongest
+    property is that a malformed step
     cannot be entered — you select from a menu. Forth entry gets the nearest
     equivalent, in two tiers with **different strengths**:
 
@@ -2773,7 +2773,7 @@ verify.
 
 ---
 
-## 10. Stage F — accepted target architecture (DECIDED, unimplemented)
+## 10. Stage F — accepted target architecture (LANDED 2026-07-20; decision record)
 
 *(§9 is intentionally left unassigned: artifacts written before the
 2026-07-14 renumbering cite "§9.x" meaning today's §8.x — see the
@@ -2783,14 +2783,18 @@ references.)*
 Provenance: the R4 architecture interview (recorded 2026-07-15, commit
 `2cc6b1d03`, `FOR_THE_ARCHITECT_R4.md` "Accepted R4 architecture") plus the
 2026-07-15 rulings in `R6_RESOLUTION_PLAN.md` §1 (platform, RULE-1) and §2
-(named local labels, Q8). Everything in this section is **DECIDED** — the
-implementer makes no design choices — and **none of it is implemented**.
-Nothing here may be built from this summary alone: each stage gets its own
-prompt set with authoritative excerpts, traced native behavior, bounded file
-lists, old-contract test migrations, and executed RED mutations. Stages run
-strictly in order; each needs a green gate baseline. Every stage reports the
-arena line (§5.4) and, when it adds flash, the measured `make dmcp5r47` delta
-(RULE-1).
+(named local labels, Q8). Everything in this section was **DECIDED** here and
+has since **LANDED** — the full F series (F1..F6 plus F1.5) closed 2026-07-20
+(commit table: QWEN_RUNBOOK §2). This section remains as the decision record;
+where its prose and a main section disagree, the main section is the current
+truth (folding §10 into the main sections is the remaining docs-reconciliation
+work, queued in QWEN_RUNBOOK §3). The stage discipline it defined stands:
+each stage got its own prompt set with authoritative excerpts, traced native
+behavior, bounded file lists, old-contract test migrations, and executed RED
+mutations. Stages ran
+strictly in order, each from a green gate baseline, and every stage reported
+the arena line (§5.4) and, where it added flash, the measured `make dmcp5r47`
+delta (RULE-1).
 
 ### 10.1 F1 — engine lifetime foundations
 

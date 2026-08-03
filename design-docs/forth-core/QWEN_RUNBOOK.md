@@ -102,7 +102,7 @@ architect session first; the future-series packet has not been authored yet.
 | 11f | F6-4 parameter entry emits canonical text | **LANDED** `4ca4bfde4` (architect) | `QWEN_PROMPTS_F6_4_param_text.md` |
 | 11g | F6-5 dictionary-backed word catalog | **LANDED** `f7375ef37` (architect; clean first-gate run) | `QWEN_PROMPTS_F6_5_word_catalog.md` |
 | 11h | F6-6 acceptance battery (stage close) | **LANDED** `d9b1e894b` (architect; 2 pre-existing save/restore-vs-allocator gaps found, logged for the code audit, not fixed here) | `QWEN_PROMPTS_F6_6_acceptance.md` |
-| 11i | F6 stage-exit bench, Blocks A-F — **converted to an automated sim-run bench** (owner ruling 2026-08-02; rows needing physical hardware get marked HARDWARE-ONLY and leave the binding queue) | **OPEN** — plan `TESTING.md` §5 T3; T2 decided+implemented same day (sibling roots), so T3 subcase derivation is the next architect step | `F6_KEYBOARD_PEM_AUDIT.md` + `TESTING.md` |
+| 11i | F6 stage-exit bench, Blocks A-F — **converted to an automated sim-run bench** (owner ruling 2026-08-02; HARDWARE-ONLY residuals listed in `F6_KEYBOARD_PEM_AUDIT.md` §6) | **[QWEN]** SB-1 now; SB-2 [GATE LOCKED] on SB-1. Derivation done (§6); COVERED rows machine-checked by the packets' gates | `QWEN_PROMPTS_SB_1_capture_mechanics.md`, then `QWEN_PROMPTS_SB_2_nesting_param_menus.md` |
 | 11j | Test-suite audit (toothless/bad-design test sweep) | DONE `cbd285e09` (14 rigor fixes; 1 pre-existing production bug logged) | — |
 | 11k | forth-core code audit (production code) | DONE — code audits #1-#4 (`88a2b5f85`, `976b864b5`, `434b79612`, `0e959574a`), S1-S3 cleanup series, design audit #1 (`8f3c3db7c`) | — |
 
