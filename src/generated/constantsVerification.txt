@@ -1,15 +1,15 @@
 ** AUDIT CERTIFICATE of the C47/R47 conversion constants comprising INDEPENDENT sources and calculations.             **
-** Generated:   2026-07-20 (UTC date; the input hashes below pin the exact audited state)                             **
-** Commit:      bdf20c9f30c51e0ce041010b8666d27633029893 (working tree had uncommitted changes)                       **
+** Generated:   2026-08-03 (UTC date; the input hashes below pin the exact audited state)                             **
+** Commit:      801f287639f7071f71ce0ca0a6f5b61e2cf47583 (working tree had uncommitted changes)                       **
 ** Note:        Regenerated at every testSuite run; re-written only when the parts between the ruled lines change.    **
 **              For a clean Commit line above: make test, commit, then make test again and re-commit the certificate. **
 ========================================================================================================================
 ** Project:     C47/R47, community firmware for DM42-class scientific calculators (this repository)                   **
-** Repository:  git@gitlab.com:rpncalculators/c43.git                                                                 **
+** Repository:  https://github.com/stanle-cs/r47forth.git                                                             **
 **              (note: the committed copy of this file is at least one commit ahead of the recorded hash; more        **
 **              when the certified content has been stable across multiple commits)                                   **
 ** Input:       src/generateConstants/generateConstants.c                                                             **
-**              SHA-256 aa7cdcdc994e4b8c3fde58ecab126e77b0df3ace87e82a600f30164740802634                              **
+**              SHA-256 610bdb41459304c33f1e547b8119589e34f3d29ab47884021e80f98c8570c5ed                              **
 ** Input:       src/c47/defines.h - only the defines consulted for #if branch selection (form "#if (NAME == n)"):     **
 **              MMHG_PA_133_3224 = 1                                                                                  **
 **              SHA-256 of the list above: b6120bb810c1e19b4cd94046ec907e1f38eef9ad01cbd689f759ff469396126d           **
@@ -845,4 +845,4 @@ const_ZhangToM
   verdict    Correct to 1 verified digit as the RECIPROCAL (assumption A2)
 
 ========================================================================================================================
-END OF RECORD - 140 entries; SHA-256 of the lines between the ruled lines (both excluded, LF-joined, no trailing newline): 1b7ff57476c4a63ef0d85cbd8412dea9cf3636da65763151b07b1bed76f02d23
+END OF RECORD - 140 entries; SHA-256 of the lines between the ruled lines (both excluded, LF-joined, no trailing newline): 9265ead29f0f583b8e1ead50dce8c1f8b2a6e2a8be5bc9a8f39f2ec40a2dc0b4
