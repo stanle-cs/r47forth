@@ -2253,3 +2253,41 @@ Coverage of the picker now runs from the program text through the
 content array, the index walk, the key mapping and the guard. Pixel-level
 rendering stays out, recorded as residual in the runbook — G1's first
 subcase pins the label the renderer is handed and stops there.
+
+## 2026-08-03 — G3: the harness I said did not exist
+
+Stage G shipped with pixel-level rendering recorded as residual, twice,
+on my claim that closing it needed an LCD read-back harness and a new
+owner ruling. One question — is one available? — was enough to show the
+claim was never checked.
+
+`lcd_buffer_pixel_on()` is declared in `src/c47/hal/lcd.h` for every
+non-DMCP build and implemented in both HALs, `src/c47-gtk/hal/lcd.c` and
+`src/testSuite/hal/lcd.c`. The software blitter writes `lcd_buffer`
+whether or not a window exists: the `headlessMode` guard skips
+`gtk_widget_queue_draw_area` and nothing else. Upstream has been using
+the same facility for years — the plot regressions in `graphs_cov.txt`
+pin a SHA-256 of a SNAP capture. The tooling was there, in this
+repository, reachable from the battery that was declaring it unreachable.
+
+G3 (`00c5cf2d3`) closes it. Three renders of the first softkey cell in
+decreasing label length, strict decrease asserted: 414 px for the maximal
+14-byte name, 150 px for a 2-byte name, 33 px for an empty picker. That
+last number is the floor that makes the other two mean something — it is
+the cell border with no label in it, so the pixels being counted are the
+label's. Nothing is hard-coded: upstream owns the font and the cell
+geometry, and a change there must not turn this red.
+
+Two constraints worth carrying. `lcd_clear_buf()` exists only in the
+c47-gtk HAL, and `test_dict_reloc.c` compiles into both binaries, so a
+pixel test cannot clear the buffer between renders — hence the decreasing
+order. A cell that stopped repainting would break that assertion, not
+hide behind it. And the link error that taught me this was a link error in the
+testSuite build, not the sim: the battery has two consumers and only one
+of them has the full HAL.
+
+The lesson is not about pixels. Three times in this stage a limit was
+asserted from reading the code, never from trying it: the fixture that pinned
+the wrong cap, the constant that pinned nothing, and a harness declared
+absent without a grep. The first two were caught by mutations. This one
+needed someone to ask.

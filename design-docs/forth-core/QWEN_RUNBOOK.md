@@ -151,11 +151,26 @@ wrong and both stayed green under mutation:
 Neither was visible from the code or from a green gate. Both came out of
 running the mutations, which is the argument for running them.
 
-Residual after G1+G2, recorded so it is not mistaken for covered:
-pixel-level softkey rendering (`showSoftkey`, the combined-key
-`trimSoftKeyName` path) stays unpinned. G1 subcase 5 pins the label the
-renderer is handed, not what it draws. Closing that needs an LCD
-read-back harness — a new owner ruling, not a packet.
+**G3 (`00c5cf2d3`) — the residual above was wrong and is now closed.**
+Stage G was authored recording pixel-level rendering as out of reach
+without "an LCD read-back harness" that was said not to exist. It does
+exist and always did: `lcd_buffer_pixel_on()` is declared in
+`src/c47/hal/lcd.h` for every non-DMCP build and implemented in both the
+c47-gtk and testSuite HALs, and the software blitter fills `lcd_buffer`
+whether or not a window exists — `headlessMode` only gates
+`gtk_widget_queue_draw_area`. G3 reads the framebuffer back and pins the
+picker's label at the pixel: 414 px for a maximal 14-byte name > 150 px
+for a 2-byte name > 33 px for an empty picker.
+
+The one real constraint, for anyone extending this: `lcd_clear_buf()` is
+c47-gtk-only and absent from the testSuite HAL, and `test_dict_reloc.c`
+compiles into BOTH binaries — so a pixel test may not clear the buffer.
+G3 renders in decreasing label length and asserts a strict decrease
+instead, which fails rather than flatters if a cell ever stops
+repainting.
+
+Genuinely residual after G1-G3: the combined-key `trimSoftKeyName` path,
+which serves two-name keys and is not how the picker draws.
 
 ## 3. After the series — no Qwen work
 
