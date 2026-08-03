@@ -8847,6 +8847,7 @@ static int test_savings_program(void);
 static int test_native_lift_after_forth(void);
 static int test_data_stack_overflow_guard(void);
 static int test_deep_recursion_spill(void);
+static int test_spill_native_boundary(void);
 static int test_spill_region(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
@@ -11256,6 +11257,9 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_deep_recursion_spill...\n");
   fail |= test_deep_recursion_spill();
 
+  printf("  [DEBUG] running test_spill_native_boundary...\n");
+  fail |= test_spill_native_boundary();
+
   printf("  [DEBUG] running test_spill_region...\n");
   fail |= test_spill_region();
 
@@ -13329,6 +13333,79 @@ static int test_deep_recursion_spill(void)
   lastErrorCode = ERROR_NONE;
   forthDictClear();
   forthGDictClear();
+  return fail;
+}
+
+/* ---- D3-3: spill boundary rule — named message + tests ----
+ * Blocked side: a native item cannot run while spilled values exist.
+ * Allowed side: draining spilled values back below capacity permits the call. ---- */
+static int test_spill_native_boundary(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+  testProg_t p;
+  uint8_t tType;
+  int32_t tVal;
+
+  programRunStop = PGM_STOPPED;
+
+  /* Build fixture: label T1 storing 999 to R19, then RTN */
+  tpInit(&p);
+  if (tpLbl(&p, "T1") < 0 ||
+      tpSrc(&p, "999 STO 19 DROP") < 0 ||
+      tpRtn(&p) < 0 ||
+      tpEnd(&p) < 0 ||
+      !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: T1 program build/write\n");
+    programRunStop = savedRS;
+    return 1;
+  }
+
+  /* Subcase 1 (blocked): push capacity+2 values, spill non-empty, invoke native */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("XEQ 'CLSTK' 1 2 3 4 5 6 7 8 9 10 T1");
+  if (lastErrorCode != ERROR_RAM_FULL) {
+    printf("    FAIL: blocked side expected ERROR_RAM_FULL, got %d\n", lastErrorCode);
+    fail = 1;
+  }
+  if (forthSpillCount() != 0) {
+    printf("    FAIL: blocked side spill not reset (count=%u)\n", (unsigned)forthSpillCount());
+    fail = 1;
+  }
+
+  /* Verify clean state after error */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("XEQ 'CLSTK' 1 2 +");
+  read_reg_int32(REGISTER_X, &tType, &tVal);
+  if (lastErrorCode != ERROR_NONE || tType != dtLongInteger || tVal != 3) {
+    printf("    FAIL: post-error state not clean (err=%d X=%ld type=%u)\n",
+           lastErrorCode, (long)tVal, tType);
+    fail = 1;
+  }
+
+  /* Subcase 2 (allowed): push capacity+2 values, drain with + back below capacity,
+   * then invoke native — should succeed with T1 storing 999 to R19 */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("XEQ 'CLSTK' 1 2 3 4 5 6 7 8 9 10 + + + + + + T1");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: allowed side errored (%d)\n", lastErrorCode);
+    fail = 1;
+  } else {
+    read_reg_int32((calcRegister_t)19, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 999) {
+      printf("    FAIL: allowed side — T1 did not execute (R19=%ld type=%u, expected 999)\n",
+             (long)tVal, tType);
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    printf("    PASS: spill boundary rule — native blocked with spill, allowed after drain\n");
+  }
+
+  cleanupTestProgram();
+  programRunStop = savedRS;
+  lastErrorCode = ERROR_NONE;
   return fail;
 }
 
