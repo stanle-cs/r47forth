@@ -106,6 +106,15 @@ architect session first; the future-series packet has not been authored yet.
 | 11j | Test-suite audit (toothless/bad-design test sweep) | DONE `cbd285e09` (14 rigor fixes; 1 pre-existing production bug logged) | — |
 | 11k | forth-core code audit (production code) | DONE — code audits #1-#4 (`88a2b5f85`, `976b864b5`, `434b79612`, `0e959574a`), S1-S3 cleanup series, design audit #1 (`8f3c3db7c`) | — |
 
+## 2b. Stage D3 — hybrid spill stack (owner ruling 2026-08-03; design DESIGN.md §11)
+
+| # | Step | Who | Input |
+|---|---|---|---|
+| D3-1 | traces (§11.4) + spill region + accessors, no behavior change | [ARCHITECT traces, then QWEN packet] | packet to author |
+| D3-2 | spill/refill in forthDataDepthApply; 7 FACT = 5040 flagship | [GATE LOCKED on D3-1] | packet to author |
+| D3-3 | user-native boundary rule at the resync sites | [GATE LOCKED on D3-2] | packet to author |
+| D3-4 | acceptance + showcase + docs fold | [GATE LOCKED on D3-3] | packet to author |
+
 ## 3. After the series — no Qwen work
 
 Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),
