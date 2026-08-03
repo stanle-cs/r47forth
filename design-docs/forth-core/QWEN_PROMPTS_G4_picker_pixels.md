@@ -23,8 +23,8 @@ file, no header, no `src/`.
 
 1. `git branch --show-current` → `upstream/migrate-2026-08-03`.
    `git status --short` shows only the two `.opencode-*` files.
-2. `git log --oneline -1` names `docs: register the LCD-capture recipe as
-   a run-sim skill`.
+2. `git log --oneline -1` names `docs: G4 packet — pin what the FWRD
+   picker looks like` (this packet's own commit).
 3. `grep -c "lcd_buffer_pixel_on" packages/forth-core/test_capture.part.h`
    → exactly 2, at lines 6270 (a mention in G3's header comment) and 6365
    (G3's counting loop). You are adding the third occurrence.
@@ -42,6 +42,14 @@ program-fixture bytes (`0x8B 0x1A 0xFD <len>` header, `": <NAME> 1 ;"`
 body), `writeTestProgram`/`cleanupTestProgram`, the
 `showSoftmenu(-MNU_FORTH)` + `showSoftmenuCurrentPart()` render, and the
 pixel-counting loop. Read it first and copy those parts verbatim.
+
+In particular the fixture is built by `writeTestProgram(prog, progLen)`
+on a malloc'd byte array — the donor's exact idiom, and it works for any
+number of definitions. Do NOT hand-roll `firstFreeProgramByte`,
+`freeProgramBytes` or `scanLabelsAndPrograms()`, and do not reach for the
+`tp*`/`testProg_t` builders: if your fixture reports the wrong name
+count, the cause is the render ordering below, not the byte-array
+approach.
 
 **Geometry (do not re-derive):** the softkey band is `y >= 171`. The six
 cells divide `SCREEN_WIDTH` (400), so cell `c` (0-based, left to right)
@@ -90,10 +98,22 @@ six long ones on page 2:
 - six names `B1CCCCCCCCCCCC`, `B2CCCCCCCCCCCC`, … `B6CCCCCCCCCCCC`
   (14 bytes each — the maximum the picker admits).
 
-One definition step per name, in that order. Assert
-`dynamicSoftmenu[22].numItems == 12` before any act; if it is not 12 the
-fixture is wrong — print `FIXTURE BUG:` and STOP the subcase. Do not
-adjust anything to make it 12.
+One definition step per name, in that order.
+
+**Ordering — this is the trap.** `dynamicSoftmenu[22].numItems` is 0 until
+a render builds the content: `showSoftmenu(-MNU_FORTH)` +
+`showSoftmenuCurrentPart()` is what calls the builder. So writing the
+program does NOT populate it. Every subcase runs in exactly this order:
+
+1. build the fixture program (`writeTestProgram`, then set
+   `currentProgramNumber = 1` and `currentStep` to the closing marker);
+2. render once at the `firstItem` the subcase starts from;
+3. **then** assert the expected `numItems`;
+4. then measure pixels.
+
+If the count is wrong at step 3 the fixture is wrong — print
+`FIXTURE BUG:` and STOP the subcase. Do not adjust anything to make the
+number come out. If it reads 0, you asserted before the render.
 
 **Fixture PARTIAL — 8 names**, `N000`..`N007`, one definition step each,
 exactly as the donor builds them.
@@ -101,16 +121,16 @@ exactly as the donor builds them.
 ## Subcases — three
 
 **[1] Turning the page changes the picture.** Fixture LONGPAGE.
-Render with `softmenuStack[0].firstItem = 0`, sum `g4CellPixels(c)` over
-`c = 0..5` into `page1`. Render again with `firstItem = 6`, sum into
-`page2`. Assert `page2 > page1` — page 2 holds six 14-byte names against
+Render with `softmenuStack[0].firstItem = 0`, assert `numItems == 12`,
+then sum `g4CellPixels(c)` over `c = 0..5` into `page1`. Render again
+with `firstItem = 6`, sum into `page2`. Assert `page2 > page1` — page 2 holds six 14-byte names against
 page 1's six 2-byte names, so it must light strictly more.
 PASS line, exact text:
 `    [1] PASS: paging changes what is drawn — page 2 lights more than page 1`
 
 **[2] The blank cells of a partial page are blank.** Fixture PARTIAL,
 `firstItem = 6`, so indices 6 and 7 are live (cells 0 and 1) and cells
-2..5 have no item behind them. One render, then:
+2..5 have no item behind them. Render, assert `numItems == 8`, then:
 - assert `g4CellPixels(0) > g4CellPixels(5)` — a live cell against an
   empty one;
 - assert `g4CellPixels(2) == g4CellPixels(3)` and
@@ -123,7 +143,8 @@ PASS line:
 
 **[3] A maximal name stays in its cell.** Build a THIRD fixture: one
 definition only, the 14-byte name `ABCDEFGHIJKLMN`. Render at
-`firstItem = 0`. Cell 0 is the only one with an item.
+`firstItem = 0`, assert `numItems == 1`. Cell 0 is the only one with an
+item.
 - assert `g4CellPixels(0) > g4CellPixels(1)` — the label is drawn;
 - assert `g4CellPixels(1) == g4CellPixels(2)` — cell 1 is no different
   from a cell further away, so nothing bled out of cell 0 into it.
