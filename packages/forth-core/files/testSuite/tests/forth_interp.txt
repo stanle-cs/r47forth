@@ -1,0 +1,27 @@
+;*************************************************************
+;**  forth-core interpret-state cases (T6 pilot)            **
+;**  X carries the source line; fnForthOuter executes it.   **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+Func: fnForthOuter
+
+In:  SS=8 FL_ASLIFT=1 RX=Stri:"1 2 3 4 5 6 7 8 9 10 11 + + + + + + + + + +"
+Out: EC=0 RX=LonI:"66"
+
+In:  FL_ASLIFT=1 RX=Stri:"1 2 +"
+Out: EC=0 RX=LonI:"3"
+
+In:  FL_ASLIFT=1 RX=Stri:"7 3 -"
+Out: EC=0 RX=LonI:"4"
+
+In:  FL_ASLIFT=1 RX=Stri:"2 3 * 4 +"
+Out: EC=0 RX=LonI:"10"
+
+In:  FL_ASLIFT=1 RX=Stri:"5 DUP +"
+Out: EC=0 RX=LonI:"10"
+
+In:  FL_ASLIFT=1 RX=Stri:"1 2 SWAP DROP"
+Out: EC=0 RX=LonI:"2"
+
+In:  FL_ASLIFT=1 RX=Stri:"1 2 3 4 5 6 7 8 9 10 11 + + + + + + + + + +"
+Out: EC=0 RX=LonI:"66"

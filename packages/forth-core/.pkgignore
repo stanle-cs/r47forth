@@ -19,9 +19,6 @@
 # Docs live in design-docs/forth-core/; fence against strays.
 *.md
 
-# Superseded design notes (moved with the docs); fence against strays.
-*.txt
-
 # The gate runner. Invoked from the working area as
 # ./packages/forth-core/build-test.sh; the firmware never reads it.
 build-test.sh

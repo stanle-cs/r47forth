@@ -143,7 +143,7 @@ if custom_pkg_list != []
   src_lines = []
   idx = 0
   foreach line : lines
-    if idx > 0 and line.substring(0, 7) != 'GENCAT:' and line.substring(0, 7) != 'GENTST:' and line.substring(0, 7) != 'SIBSRC:'
+    if idx > 0 and line.substring(0, 7) != 'GENCAT:' and line.substring(0, 7) != 'GENTST:' and line.substring(0, 7) != 'SIBSRC:' and line.substring(0, 8) != 'SIBLIST:'
       src_lines += line
     endif
     idx += 1
@@ -156,6 +156,11 @@ if custom_pkg_list != []
   foreach line : lines
     if line.substring(0, 17) == 'SIBSRC:testSuite:'
       sib_testsuite_srcs += line.substring(17)
+    endif
+    if line.substring(0, 18) == 'SIBLIST:testSuite:'
+      # T6: the runner's case list comes from the shadow when a package
+      # patches src/testSuite (see src/testSuite/meson.build).
+      set_variable('custom_pkg_testSuite_list', line.substring(18))
     endif
   endforeach
   if sib_testsuite_srcs != []

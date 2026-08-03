@@ -255,6 +255,15 @@ def do_shadow(meson_build, project_root, shadow_dir, pkg_list,
                 rel = os.path.relpath(os.path.join(root, fname), sib_dir)
                 link_or_copy(os.path.join(sib_dir, rel),
                              os.path.join(shadow_dir, sib, rel))
+        if sib == 'testSuite':
+            # T6: the runner resolves case files relative to the LIST's
+            # directory and reads ../../c47/items.h from there (the lazy
+            # Item: table). The shadow's c47 files live FLAT at the
+            # shadow root, so a self-link makes
+            # shadow/testSuite/tests/../../c47/X resolve to shadow/X.
+            c47_compat = os.path.join(shadow_dir, 'c47')
+            if not os.path.lexists(c47_compat):
+                os.symlink('.', c47_compat)
 
     # --- Apply patch stacks (cumulative, ordered) ---------------------------
     for rel in sorted(patch_stacks):
@@ -357,6 +366,13 @@ def do_shadow(meson_build, project_root, shadow_dir, pkg_list,
         for rel in sorted(r for r in sib_new_rels
                           if r.split('/', 1)[0] == sib):
             print(f'SIBSRC:{sib}:' + os.path.join(shadow_dir, rel))
+        if sib == 'testSuite':
+            # T6: hand the runner the SHADOW list — patched entries and
+            # package-new case files resolve beside it; upstream case
+            # files are sibling-walk symlinks in the same directory.
+            print('SIBLIST:testSuite:'
+                  + os.path.join(shadow_dir, 'testSuite', 'tests',
+                                 'testSuiteList.txt'))
 
     # --- F1: Emit generator source lists if --gen-lists flag is set ---
     if gen_lists:

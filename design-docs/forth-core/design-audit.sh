@@ -351,6 +351,9 @@ for root, dirs, files in os.walk(pkg):
         if fn.startswith('.'): continue
         rel = os.path.relpath(os.path.join(root, fn), pkg)
         if ignored(rel): continue
+        if rel.split('/', 1)[0] in ('testSuite',):
+            continue   # sibling-root content is dev-only (the testSuite
+                       # binary), never firmware — T6, 2026-08-03
         if not os.path.exists(upath(rel)) and not fn.endswith(('.c', '.h')):
             print(f"{rel}  (no upstream counterpart, not .c/.h, not .pkgignore'd)")
 PYEOF

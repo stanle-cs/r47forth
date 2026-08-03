@@ -210,8 +210,6 @@ bool_t forthDataDepthApply(int16_t net)
   if (!forthOuterActive && forthDepth == 0) {
     return true;
   }
-  fprintf(stderr, "DEBUG depth: outerActive=%d depth=%d net=%d cap=%d\n",
-          forthOuterActive, (int)forthDataDepth, (int)net, (int)forthStackCapacity());
   if (net > 0 && forthDataDepth + net > forthStackCapacity()) {
     /* D3-2 (DESIGN.md §11): the falling values are Forth-owned — catch
      * them into the spill, deepest first, BEFORE the primitive's lifts

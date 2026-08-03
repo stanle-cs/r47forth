@@ -493,8 +493,8 @@ class TestSiblingRootShadow(unittest.TestCase):
             ]))
             # ...and none of them leak into the c47_src lines.
             c47_lines = [ln for ln in r.stdout.splitlines()[1:]
-                         if not ln.startswith(('SIBSRC:', 'GENCAT:',
-                                               'GENTST:'))]
+                         if not ln.startswith(('SIBSRC:', 'SIBLIST:',
+                                               'GENCAT:', 'GENTST:'))]
             for ln in c47_lines:
                 self.assertNotIn('testSuite', ln)
 

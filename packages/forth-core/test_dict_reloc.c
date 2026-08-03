@@ -1233,6 +1233,7 @@ static int test_data_stack_overflow_guard(void);
 static int test_deep_recursion_spill(void);
 static int test_spill_native_boundary(void);
 static int test_spill_window_parity(void);
+static int test_fnforthouter_brackets(void);
 static int test_native_lift_after_forth(void);
 static int test_savings_program(void);
 
@@ -2051,6 +2052,9 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_spill_window_parity...\n");
   fail |= test_spill_window_parity();
+
+  printf("  [DEBUG] running test_fnforthouter_brackets...\n");
+  fail |= test_fnforthouter_brackets();
 
   printf("  [DEBUG] running test_spill_region...\n");
   fail |= test_spill_region();

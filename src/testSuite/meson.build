@@ -23,10 +23,19 @@ testSuite = executable('testSuite',
   native              : true
 )
 
+# CUSTOM_PKG (fork infrastructure, T6): when a package patches under
+# src/testSuite, the case list comes from the shadow tree so patched
+# list entries and package-new case files resolve beside it.
+if get_variable('custom_pkg_testSuite_list', '') != ''
+  testSuite_list_arg = get_variable('custom_pkg_testSuite_list')
+else
+  testSuite_list_arg = files('tests/testSuiteList.txt')
+endif
+
 test(
   'testSuite',
   testSuite,
-  args    : [files('tests/testSuiteList.txt')],
+  args    : [testSuite_list_arg],
   workdir : meson.project_source_root(),
   timeout : 800
 )
