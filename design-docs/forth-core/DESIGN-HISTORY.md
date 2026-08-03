@@ -2119,3 +2119,50 @@ answer; the packet gains materialize-first instructions instead. (2)
 Architect verification always includes a FULL-TREE `git status` — the
 narrow `git add` lists in commit sessions are exactly how a stray src/
 edit could hide.
+
+## 2026-08-03 — upstream migration: 418 commits crossed, one real seam
+
+Base moved 44dc5a705 → 801f28763 (upstream/master `26ec91634`), the
+first upstream move since 2026-07-15. Three tree conflicts, all in build
+files. Upstream's new `Mem=1` no-LTO measurement build lands on the same
+`.PHONY` line and the same `build.dmcp` setup lines our `CUSTOM_PKG`
+plumbing sits on; both were unioned, so `-Dmem=` and `-DCUSTOM_PKG=` now
+travel together and `meson_options.txt` carries all three options. The
+constants certificate came over from upstream and the first gate run
+regenerated it.
+
+`--rebase-base` then merged fourteen of the sixteen patched working
+copies with nothing to decide, across heavy upstream churn: `defines.h`
+431 lines, `softmenus.c` 241, `screen.c` 172. Every regenerated patch
+came back byte-for-byte the same size as before, one excepted. That is
+the measurement to trust here. It says the package's delta crossed 418
+commits intact and was not quietly re-derived by hand.
+
+**The one real seam** was `saveRestoreBackup.c`, and it is the good
+kind. Upstream has hardened `restoreCalc()` along the lines our own
+review wanted: region counts read into locals and the file refused
+before `ram` is touched, every pool pointer through
+`restoredPoolPointer()`, which bounds block and offset against the
+format and trips `poolPointersInRange`. A file naming a pointer outside
+the pool is now refused and reset. Merging the Forth block around all
+that would have left `gdict.base` the one unchecked pointer among
+sixteen. So it was re-seated. The base restores WITH the pool pointers
+and inherits upstream's gate — `forthGDictValidateRestored()` walks the
+header chain through `gdict.base` and has no range test of its own — and
+the four scalars plus validate/init moved BELOW the gate, so a refused
+file never reaches the walk. The seed is NULL, not the live base. That
+is what keeps a pre-Forth backup meaning "empty dictionary": on entry
+`gdict.base` describes a pool the `ram` restore has just overwritten.
+
+Gate green first try, both harnesses. Upstream suite 12,078 → 12,983
+passes under the overlay, `stack_cov` among the new cases; the package
+list carries it next to `forth_interp`. Flash `make dmcp5r47
+CUSTOM_PKG=packages/forth-core` 1095584 → 1105360 (+9776 B), ram 7224 →
+7228. None of it is ours. Pristine at the same base measures 1088088 /
+6956, so forth-core costs +17272 B flash and +272 B ram, and the growth
+belongs to upstream's 418 commits.
+
+The lesson worth keeping: when upstream restructures the code a patch
+sits in, resolve to upstream's STRUCTURE and re-seat the addition into
+it. Merging the addition around the old shape is the other option the
+conflict markers offer, and it compiles. That is why it needs a rule.
