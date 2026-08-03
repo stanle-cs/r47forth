@@ -10982,6 +10982,9 @@ static int test_capture_param_text(void);
 static int test_word_catalog(void);
 /* F6-6: capture acceptance battery */
 static int test_capture_acceptance(void);
+/* SB-1: sim bench, capture mechanics + cancel edges (charter A2-A6, F1, F2) */
+static int test_sim_bench_capture(void);
+static int test_sim_bench_nesting(void);
 /* code-audit: dynamic-menu XEQ of a Forth word/colon must insert in PEM, not execute live */
 static int test_pem_xeq_dynmenu_no_live_exec(void);
 /* code-audit (adversarial): edit an existing Forth line, MODIFY it, re-commit via ENTER */
@@ -13134,6 +13137,12 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_capture_acceptance...\n");
   fail |= test_capture_acceptance();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_sim_bench_capture...\n");
+  fail |= test_sim_bench_capture();
+  fail |= test_sim_bench_nesting();
   forthDictClear();
   forthGDictClear();
 
@@ -21207,6 +21216,1421 @@ static int test_forth_capture_navigation(void)
   dynamicMenuItem = savedDynamicMenu;
   alphaCase = savedAlphaCase;
   dynamicSoftmenu[22].numItems = savedForthMenuItems;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* SB-1: sim bench, capture mechanics + cancel edges (charter A2-A6, F1, F2) */
+static int test_sim_bench_capture(void)
+{
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+  uint8_t savedAlphaCase = alphaCase;
+
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void tamEnterMode(int16_t);
+  extern void showSoftmenu(int16_t);
+  extern void addStepInProgram(int16_t func);
+  extern void pemAlpha(int16_t);
+  extern void pemCloseAlphaInput(void);
+  extern int16_t currentMenu(void);
+
+  /* SB-A2: reopen + mid-line edit */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "F66");
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    SB-A2 FIXTURE FAIL: build/write\n");
+      sc = 1;
+    }
+
+    if (!sc) {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      currentProgramNumber = 1;
+
+      fnGotoDot(1);
+      if (currentStep != tpStepAddr(&p, sLbl) || currentLocalStepNumber != 1) {
+        printf("    SB-A2 FIXTURE BUG: fnGotoDot(1) did not position on LBL\n");
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      /* Commit a line "3 4 +" */
+      addStepInProgram(ITM_FORTH);
+      if (!forthCapIsOpen()) {
+        printf("    SB-A2 FAIL: toggle-open did not open capture\n");
+        sc = 1;
+      }
+    }
+    if (!sc) {
+      pemAlpha(ITM_3);
+      pemAlpha(ITM_SPACE);
+      pemAlpha(ITM_4);
+      pemAlpha(ITM_SPACE);
+      pemAlpha(ITM_PLUS);
+      pemAlpha(ITM_ENTER);
+      /* Line committed, region stays open with empty tail */
+    }
+    if (!sc) {
+      /* Close the region with EXIT */
+      fnKeyExit(NOPARAM);
+      if (forthCapIsOpen()) {
+        printf("    SB-A2 FAIL: capture still open after EXIT on empty line\n");
+        sc = 1;
+      }
+    }
+    if (!sc) {
+      /* Reopen with edit gesture on the source step */
+      uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+      uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
+      if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A || sSource[2] != 0xFD) {
+        printf("    SB-A2 FAIL: could not locate source step\n");
+        sc = 1;
+      } else {
+        currentStep = sSource;
+        pemAlpha(ITM_EDIT);
+        if (!forthCapIsOpen()) {
+          printf("    SB-A2 FAIL: edit gesture did not reopen capture\n");
+          sc = 1;
+        }
+      }
+    }
+    if (!sc) {
+      /* Reopen places cursor at line end (T5 trace) */
+      int32_t expectedPos = stringByteLength(aimBuffer);
+      if (T_cursorPos != expectedPos) {
+        printf("    SB-A2 FAIL: cursor at %d, expected %d (line end)\n",
+               T_cursorPos, expectedPos);
+        sc = 1;
+      }
+    }
+    if (!sc) {
+      /* Move cursor left twice, insert '2', ENTER */
+      T_cursorPos -= 2;  /* position before trailing " +" -> before "4 +" */
+      pemAlpha(ITM_2);
+      pemAlpha(ITM_ENTER);
+      /* Locate the source step and assert payload is "3 42 +" */
+      uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+      uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
+      if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A || sSource[2] != 0xFD) {
+        printf("    SB-A2 FAIL: source step not found after edit\n");
+        sc = 1;
+      } else if (sSource[3] != 6 || memcmp(sSource + 4, "3 42 +", 6) != 0) {
+        printf("    SB-A2 FAIL: payload wrong (len=%u)\n", sSource[3]);
+        sc = 1;
+      }
+    }
+    if (!sc) {
+      printf("    SB-A2 PASS: reopen + mid-line edit\n");
+    }
+    fail |= sc;
+
+    pemAlpha(ITM_BACKSPACE);  /* clean up empty tail if open */
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+  }
+
+  /* SB-A3: two-byte glyph backspace */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "F66");
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    SB-A3 FIXTURE FAIL: build/write\n");
+      sc = 1;
+    }
+
+    if (!sc) {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      currentProgramNumber = 1;
+
+      fnGotoDot(1);
+      if (currentStep != tpStepAddr(&p, sLbl) || currentLocalStepNumber != 1) {
+        printf("    SB-A3 FIXTURE BUG: fnGotoDot(1) did not position on LBL\n");
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      addStepInProgram(ITM_FORTH);
+      if (!forthCapIsOpen()) {
+        printf("    SB-A3 FAIL: toggle-open did not open capture\n");
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      /* Record pre-glyph state */
+      int32_t glyphsBefore = stringGlyphLength(aimBuffer);
+      int32_t bytesBefore = stringByteLength(aimBuffer);
+
+      /* Type the two-byte glyph */
+      pemAlpha(ITM_CROSS);
+
+      int32_t glyphsAfter = stringGlyphLength(aimBuffer);
+      int32_t bytesAfter = stringByteLength(aimBuffer);
+
+      if (glyphsAfter != glyphsBefore + 1) {
+        printf("    SB-A3 FAIL: glyph count %ld, expected %ld\n",
+               (long)glyphsAfter, (long)(glyphsBefore + 1));
+        sc = 1;
+      } else if (bytesAfter - bytesBefore < 1) {
+        printf("    SB-A3 FAIL: byte length did not increase\n");
+        sc = 1;
+      }
+
+      /* One backspace should remove the whole glyph */
+      pemAlpha(ITM_BACKSPACE);
+
+      int32_t glyphsAfterBS = stringGlyphLength(aimBuffer);
+      int32_t bytesAfterBS = stringByteLength(aimBuffer);
+
+      if (glyphsAfterBS != glyphsBefore) {
+        printf("    SB-A3 FAIL: glyph count after BS %ld, expected %ld\n",
+               (long)glyphsAfterBS, (long)glyphsBefore);
+        sc = 1;
+      } else if (bytesAfterBS != bytesBefore) {
+        printf("    SB-A3 FAIL: byte length after BS %ld, expected %ld (whole-glyph removal)\n",
+               (long)bytesAfterBS, (long)bytesBefore);
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      printf("    SB-A3 PASS: two-byte glyph backspace\n");
+    }
+    fail |= sc;
+
+    pemAlpha(ITM_BACKSPACE);  /* clean up */
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+  }
+
+  /* SB-A4: the 196-glyph cap */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "F66");
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    SB-A4 FIXTURE FAIL: build/write\n");
+      sc = 1;
+    }
+
+    if (!sc) {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      currentProgramNumber = 1;
+
+      fnGotoDot(1);
+      if (currentStep != tpStepAddr(&p, sLbl) || currentLocalStepNumber != 1) {
+        printf("    SB-A4 FIXTURE BUG: fnGotoDot(1) did not position on LBL\n");
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      addStepInProgram(ITM_FORTH);
+      if (!forthCapIsOpen()) {
+        printf("    SB-A4 FAIL: toggle-open did not open capture\n");
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      /* Drive 196 glyphs (single-byte '1' keys) */
+      int32_t i;
+      for (i = 0; i < 196; i++) {
+        pemAlpha(ITM_1);
+      }
+      if (stringGlyphLength(aimBuffer) != 196) {
+        printf("    SB-A4 FAIL: glyph count %ld, expected 196\n",
+               (long)stringGlyphLength(aimBuffer));
+        sc = 1;
+      }
+
+      /* Press 197th key - should be silently ignored */
+      int32_t lenBefore = stringGlyphLength(aimBuffer);
+      pemAlpha(ITM_1);
+      if (stringGlyphLength(aimBuffer) != lenBefore) {
+        printf("    SB-A4 FAIL: 197th glyph appended (len %ld)\n",
+               (long)stringGlyphLength(aimBuffer));
+        sc = 1;
+      }
+
+      /* ENTER - assert committed step carries all 196 glyphs */
+      pemAlpha(ITM_ENTER);
+
+      uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+      uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
+      if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A || sSource[2] != 0xFD) {
+        printf("    SB-A4 FAIL: source step not found\n");
+        sc = 1;
+      } else if (sSource[3] != 196) {
+        printf("    SB-A4 FAIL: committed step len=%u, expected 196\n", sSource[3]);
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      printf("    SB-A4 PASS: 196-glyph cap enforced\n");
+    }
+    fail |= sc;
+
+    pemAlpha(ITM_BACKSPACE);  /* clean up empty tail */
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+  }
+
+  /* SB-A5: save/restore with a half-typed line */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "F66");
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    SB-A5 FIXTURE FAIL: build/write\n");
+      sc = 1;
+    }
+
+    if (!sc) {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      currentProgramNumber = 1;
+
+      fnGotoDot(1);
+      if (currentStep != tpStepAddr(&p, sLbl) || currentLocalStepNumber != 1) {
+        printf("    SB-A5 FIXTURE BUG: fnGotoDot(1) did not position on LBL\n");
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      addStepInProgram(ITM_FORTH);
+    }
+
+    if (!sc) {
+      /* Type a line, commit it, then type a half-line */
+      pemAlpha(ITM_3);
+      pemAlpha(ITM_SPACE);
+      pemAlpha(ITM_4);
+      pemAlpha(ITM_SPACE);
+      pemAlpha(ITM_PLUS);
+      pemAlpha(ITM_ENTER);  /* commit "3 4 +" */
+
+      /* Type half line (do NOT commit) */
+      pemAlpha(ITM_7);
+      pemAlpha(ITM_8);
+    }
+
+    if (!sc) {
+      /* Verify committed text survives in step */
+      uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+      uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
+      if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A || sSource[2] != 0xFD) {
+        printf("    SB-A5 FAIL: committed source step not found\n");
+        sc = 1;
+      } else if (sSource[3] != 5 || memcmp(sSource + 4, "3 4 +", 5) != 0) {
+        printf("    SB-A5 FAIL: committed text wrong (len=%u)\n", sSource[3]);
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      /* Model power-off teardown before saving — test_accept_entry_state_roundtrip
+       * refuses to save while capture is open; the device tears down entry UI first. */
+      aimBuffer[0] = 0;
+      clearSystemFlag(FLAG_ALPHA);
+      tam.function = 0;
+
+      saveCalc();
+
+      {
+        bool_t savedLoad = loadTestPrograms;
+        loadTestPrograms = false;
+        restoreCalc();
+        loadTestPrograms = savedLoad;
+      }
+
+      /* After restore: all pre-save pointers are stale — re-derive from beginOfProgramMemory.
+       * Walk: LBL -> opening marker -> source step 1 ("3 4 +") -> source step 2 ("78").
+       * Assert the half-line step text '78' survived and forthCapIsOpen() is false
+       * — the open-flag loss IS the contract. */
+      { uint8_t *step = beginOfProgramMemory;
+        step = findNextStep(step);    /* opening marker */
+        step = findNextStep(step);    /* source step 1 ("3 4 +") */
+        step = findNextStep(step);    /* source step 2 ("78") */
+        if (step[0] != 0x8B || step[1] != 0x1A || step[2] != 0xFD) {
+          printf("    SB-A5 FAIL: half-line source step not found after restore\n");
+          sc = 1;
+        } else if (step[3] != 2 || memcmp(step + 4, "78", 2) != 0) {
+          printf("    SB-A5 FAIL: half-line text wrong (len=%u)\n", step[3]);
+          sc = 1;
+        } else if (forthCapIsOpen()) {
+          printf("    SB-A5 FAIL: capture still open after restore\n");
+          sc = 1;
+        }
+      }
+    }
+
+    if (!sc) {
+      printf("    SB-A5 PASS: save/restore with half-typed line\n");
+    }
+    fail |= sc;
+
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+  }
+
+  /* SB-A6: EXIT with a half-typed line */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "F66");
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    SB-A6 FIXTURE FAIL: build/write\n");
+      sc = 1;
+    }
+
+    if (!sc) {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      currentProgramNumber = 1;
+
+      fnGotoDot(1);
+      if (currentStep != tpStepAddr(&p, sLbl) || currentLocalStepNumber != 1) {
+        printf("    SB-A6 FIXTURE BUG: fnGotoDot(1) did not position on LBL\n");
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      addStepInProgram(ITM_FORTH);
+    }
+
+    if (!sc) {
+      /* Type a half line */
+      pemAlpha(ITM_7);
+      pemAlpha(ITM_8);
+      int32_t typedLen = stringByteLength(aimBuffer);
+      char typedText[256];
+      xcopy(typedText, aimBuffer, typedLen + 1);
+
+      /* Press EXIT once - drops alpha keypad (E8 middle row) */
+      fnKeyExit(NOPARAM);
+
+      /* Reopen the line with edit gesture */
+      uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+      uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
+      if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A || sSource[2] != 0xFD) {
+        printf("    SB-A6 FAIL: source step not found after EXIT\n");
+        sc = 1;
+      } else {
+        /* Assert text present equals what was typed (committed per key) */
+        if (sSource[3] != typedLen || memcmp(sSource + 4, typedText, typedLen) != 0) {
+          printf("    SB-A6 FAIL: text not preserved after EXIT\n");
+          sc = 1;
+        } else {
+          /* Reopen and verify */
+          currentStep = sSource;
+          pemAlpha(ITM_EDIT);
+          if (!forthCapIsOpen()) {
+            printf("    SB-A6 FAIL: edit did not reopen capture\n");
+            sc = 1;
+          } else if (stringByteLength(aimBuffer) != typedLen) {
+            printf("    SB-A6 FAIL: reopened text length wrong\n");
+            sc = 1;
+          }
+        }
+      }
+    }
+
+    if (!sc) {
+      printf("    SB-A6 PASS: EXIT with half-typed line preserves text\n");
+    }
+    fail |= sc;
+
+    pemAlpha(ITM_BACKSPACE);  /* clean up */
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+  }
+
+  /* SB-F1: the EXIT ladder */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "F66");
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    SB-F1 FIXTURE FAIL: build/write\n");
+      sc = 1;
+    }
+
+    if (!sc) {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      currentProgramNumber = 1;
+
+      fnGotoDot(1);
+      if (currentStep != tpStepAddr(&p, sLbl) || currentLocalStepNumber != 1) {
+        printf("    SB-F1 FIXTURE BUG: fnGotoDot(1) did not position on LBL\n");
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      /* Open capture, type content, then open FWRD picker above ALPHA menu */
+      addStepInProgram(ITM_FORTH);
+      pemAlpha(ITM_3);
+      pemAlpha(ITM_SPACE);
+      pemAlpha(ITM_4);
+      showSoftmenu(-MNU_FORTH);  /* drive FWRD picker open above ALPHA menu */
+    }
+
+    if (!sc) {
+      /* Assert precondition: FWRD picker current, FLAG_ALPHA set */
+      if (!getSystemFlag(FLAG_ALPHA)) {
+        printf("    SB-F1 FIXTURE BUG: FLAG_ALPHA not set before EXIT (menu=%d)\n",
+               currentMenu());
+        sc = 1;
+      } else if (currentMenu() != -MNU_FORTH) {
+        printf("    SB-F1 FIXTURE BUG: menu=%d, expected -MNU_FORTH\n",
+               currentMenu());
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      /* First EXIT: with FWRD picker current above open capture,
+       * pops to ALPHA menu */
+      fnKeyExit(NOPARAM);
+
+      /* After first EXIT: the alpha keypad should be active,
+       * softmenu stack top should be -MNU_ALPHA */
+      if (getSystemFlag(FLAG_ALPHA) && currentMenu() == -MNU_ALPHA) {
+        /* Good - first EXIT popped to ALPHA menu */
+        /* Second EXIT: drops alpha keypad, region markers survive, cursor stays */
+        int savedStep = currentLocalStepNumber;
+        fnKeyExit(NOPARAM);
+
+        if (getSystemFlag(FLAG_ALPHA)) {
+          printf("    SB-F1 FAIL: FLAG_ALPHA still set after second EXIT\n");
+          sc = 1;
+        } else if (calcMode != CM_PEM) {
+          printf("    SB-F1 FAIL: not in PEM after second EXIT\n");
+          sc = 1;
+        } else if (currentLocalStepNumber != savedStep) {
+          printf("    SB-F1 FAIL: cursor moved after second EXIT (step=%d, was=%d)\n",
+                 currentLocalStepNumber, savedStep);
+          sc = 1;
+        } else {
+          /* Region markers still exist — re-walk steps and assert marker present */
+          uint8_t *mkr = beginOfProgramMemory;
+          mkr = findNextStep(mkr);  /* opening marker */
+          if (mkr[0] != 0x8B || mkr[1] != 0x1A || mkr[2] != 0xFD || mkr[3] != 0x00) {
+            printf("    SB-F1 FAIL: opening marker gone after second EXIT\n");
+            sc = 1;
+          } else {
+            /* Third EXIT: leaves PEM */
+            fnKeyExit(NOPARAM);
+
+            if (calcMode == CM_PEM) {
+              printf("    SB-F1 FAIL: still in PEM after third EXIT\n");
+              sc = 1;
+            }
+          }
+        }
+      } else {
+        printf("    SB-F1 FAIL: first EXIT did not pop to ALPHA menu (menu=%d, alpha=%d)\n",
+               currentMenu(), getSystemFlag(FLAG_ALPHA));
+        sc = 1;
+      }
+    }
+
+    if (!sc) {
+      printf("    SB-F1 PASS: EXIT ladder\n");
+    }
+    fail |= sc;
+
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+  }
+
+  /* SB-F2: empty-line backspace */
+  { int sc = 0;
+
+    /* (a) Region with no committed lines - backspace deletes region */
+    { int sc_a = 0;
+      testProg_t p;
+      tpInit(&p);
+      int sLbl = tpLbl(&p, "F66");
+      if (sLbl < 0 || !tpWrite(&p)) {
+        printf("    SB-F2(a) FIXTURE FAIL: build/write\n");
+        sc_a = 1;
+      }
+
+      if (!sc_a) {
+        calcMode = CM_PEM;
+        catalog = CATALOG_NONE;
+        tam.mode = 0;
+        tam.function = 0;
+        aimBuffer[0] = 0;
+        programRunStop = PGM_STOPPED;
+        dynamicMenuItem = -1;
+        pemCursorIsZerothStep = false;
+        alphaCase = AC_UPPER;
+        nextChar = NC_NORMAL;
+        shiftF = false;
+        shiftG = false;
+        clearSystemFlag(FLAG_ALPHA);
+        clearSystemFlag(FLAG_NUMLOCK);
+        lastErrorCode = ERROR_NONE;
+        forthCapClose();
+        currentProgramNumber = 1;
+
+        fnGotoDot(1);
+        if (currentStep != tpStepAddr(&p, sLbl) || currentLocalStepNumber != 1) {
+          printf("    SB-F2(a) FIXTURE BUG: fnGotoDot(1)\n");
+          sc_a = 1;
+        }
+      }
+
+      if (!sc_a) {
+        addStepInProgram(ITM_FORTH);
+        /* Capture open, empty line */
+        uint8_t *sMarkerBefore = findNextStep(tpStepAddr(&p, sLbl));
+        if (!sMarkerBefore) {
+          printf("    SB-F2(a) FAIL: no marker after open\n");
+          sc_a = 1;
+        } else {
+          /* Backspace on empty line - should delete region */
+          pemAlpha(ITM_BACKSPACE);
+
+          /* Assert markers removed, capture closed */
+          if (forthCapIsOpen()) {
+            printf("    SB-F2(a) FAIL: capture still open after backspace\n");
+            sc_a = 1;
+          }
+        }
+      }
+
+      if (!sc_a) {
+        printf("    SB-F2(a) PASS: empty-line backspace deletes region (no committed lines)\n");
+      }
+      sc |= sc_a;
+
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+
+    /* (b) After one committed line - assert committed line NOT destroyed */
+    { int sc_b = 0;
+      testProg_t p;
+      tpInit(&p);
+      int sLbl = tpLbl(&p, "F66");
+      if (sLbl < 0 || !tpWrite(&p)) {
+        printf("    SB-F2(b) FIXTURE FAIL: build/write\n");
+        sc_b = 1;
+      }
+
+      if (!sc_b) {
+        calcMode = CM_PEM;
+        catalog = CATALOG_NONE;
+        tam.mode = 0;
+        tam.function = 0;
+        aimBuffer[0] = 0;
+        programRunStop = PGM_STOPPED;
+        dynamicMenuItem = -1;
+        pemCursorIsZerothStep = false;
+        alphaCase = AC_UPPER;
+        nextChar = NC_NORMAL;
+        shiftF = false;
+        shiftG = false;
+        clearSystemFlag(FLAG_ALPHA);
+        clearSystemFlag(FLAG_NUMLOCK);
+        lastErrorCode = ERROR_NONE;
+        forthCapClose();
+        currentProgramNumber = 1;
+
+        fnGotoDot(1);
+        if (currentStep != tpStepAddr(&p, sLbl) || currentLocalStepNumber != 1) {
+          printf("    SB-F2(b) FIXTURE BUG: fnGotoDot(1)\n");
+          sc_b = 1;
+        }
+      }
+
+      if (!sc_b) {
+        addStepInProgram(ITM_FORTH);
+        /* Commit one line */
+        pemAlpha(ITM_3);
+        pemAlpha(ITM_SPACE);
+        pemAlpha(ITM_4);
+        pemAlpha(ITM_ENTER);  /* commit "3 4" */
+
+        /* Backspace on empty tail - should close empty tail, NOT destroy committed line */
+        pemAlpha(ITM_BACKSPACE);
+
+        /* Assert committed line still exists */
+        uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+        uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
+        if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A || sSource[2] != 0xFD) {
+          printf("    SB-F2(b) FAIL: committed source step destroyed\n");
+          sc_b = 1;
+        } else if (sSource[3] != 3 || memcmp(sSource + 4, "3 4", 3) != 0) {
+          printf("    SB-F2(b) FAIL: committed text wrong (len=%u)\n", sSource[3]);
+          sc_b = 1;
+        }
+      }
+
+      if (!sc_b) {
+        printf("    SB-F2(b) PASS: empty-line backspace preserves committed line\n");
+      }
+      sc |= sc_b;
+
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+
+    fail |= sc;
+  }
+
+  /* Epilogue */
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  alphaCase = savedAlphaCase;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+static int test_sim_bench_nesting(void)
+{
+  int fail = 0;
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedMenu = currentMenu();
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+  uint8_t savedAlphaCase = alphaCase;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void pemAlpha(int16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void tamEnterMode(int16_t);
+  extern void tamProcessInput(uint16_t);
+  extern void showSoftmenu(int16_t menu);
+
+  /* ---- SB-B1: TAM cancel keeps the line ---- */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    tpLbl(&p, "F65");
+    tpMarker(&p);
+
+    if (!tpWrite(&p)) {
+      printf("    SB-B1 FIXTURE FAIL: tpWrite\n");
+      fail = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      fnGotoDot(2);
+
+      if (currentStep != tpStepAddr(&p, 1) || currentLocalStepNumber != 2) {
+        printf("    SB-B1 FIXTURE BUG: fnGotoDot(2)\n");
+        sc = 1;
+      }
+      else {
+        runFunction(ITM_AIM);
+        if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+          printf("    SB-B1 FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+          sc = 1;
+        }
+      }
+
+      char preText[64];
+      int16_t cursorBefore;
+
+      if (!sc) {
+        /* Type "text" in capture line */
+        runFunction(ITM_T);
+        runFunction(ITM_E);
+        runFunction(ITM_X);
+        runFunction(ITM_T);
+
+        /* Record state before TAM */
+        cursorBefore = T_cursorPos;
+        xcopy(preText, forthTestCapText(),
+              stringByteLength((char *)forthTestCapText()) + 1);
+
+        /* Open TAM via XEQ path (as test_capture_suspend drives it) */
+        runFunction(ITM_XEQ);
+
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    SB-B1 FAIL: XEQ did not suspend capture (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Type two name glyphs WITHOUT completing */
+        tamProcessInput(ITM_alpha);
+        runFunction(ITM_W);
+        runFunction(ITM_O);
+
+        /* Cancel back with EXIT */
+        int guard;
+        for (guard = 0; tam.mode != 0 && guard < 4; guard++) {
+          fnKeyExit(NOPARAM);
+        }
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    SB-B1 FAIL: capture not open after cancel (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+        else if (tam.mode != 0) {
+          printf("    SB-B1 FAIL: tam.mode = %d, expected 0\n", (int)tam.mode);
+          sc = 1;
+        }
+        else if (strcmp(forthTestCapText(), preText) != 0) {
+          printf("    SB-B1 FAIL: capture text changed: '%s' vs '%s'\n",
+                 forthTestCapText(), preText);
+          sc = 1;
+        }
+        else if (T_cursorPos != cursorBefore) {
+          printf("    SB-B1 FAIL: cursor moved: %d vs %d\n",
+                 T_cursorPos, cursorBefore);
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        printf("    SB-B1 PASS: TAM cancel keeps the line\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+    fail |= sc;
+  }
+
+  /* ---- SB-B2: no tam.colon leak ---- */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    tpLbl(&p, "F66");
+    tpMarker(&p);
+
+    if (!tpWrite(&p)) {
+      printf("    SB-B2 FIXTURE FAIL: tpWrite\n");
+      fail = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      fnGotoDot(2);
+
+      if (currentStep != tpStepAddr(&p, 1) || currentLocalStepNumber != 2) {
+        printf("    SB-B2 FIXTURE BUG: fnGotoDot(2)\n");
+        sc = 1;
+      }
+      else {
+        runFunction(ITM_AIM);
+        if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+          printf("    SB-B2 FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Type "abc" in capture line */
+        runFunction(ITM_A);
+        runFunction(ITM_B);
+        runFunction(ITM_C);
+
+        /* Open TAM via XEQ path */
+        runFunction(ITM_XEQ);
+
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    SB-B2 FAIL: XEQ did not suspend capture (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Press the TAM : key so tam.colon becomes true */
+        tamProcessInput(ITM_COLON);
+        tamProcessInput(ITM_alpha);
+        if (!tam.colon) {
+          printf("    SB-B2 FIXTURE BUG: tam.colon not set after COLON\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Cancel */
+        int guard;
+        for (guard = 0; tam.mode != 0 && guard < 4; guard++) {
+          fnKeyExit(NOPARAM);
+        }
+
+        /* Press a plain glyph — assert no colon artifact in capture text */
+        runFunction(ITM_D);
+
+        if (strcmp(forthTestCapText(), "ABCD") != 0) {
+          printf("    SB-B2 FAIL: text = '%s', expected 'ABCD' (colon artifact)\n",
+                 forthTestCapText());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Re-enter TAM — assert tamEnterMode re-initializes tam.colon to false */
+        extern void tamEnterMode(int16_t);
+        tamEnterMode(ITM_XEQ);
+        if (tam.colon) {
+          printf("    SB-B2 FAIL: tam.colon not re-initialized on TAM entry\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Cancel back out */
+        int guard;
+        for (guard = 0; tam.mode != 0 && guard < 4; guard++) {
+          fnKeyExit(NOPARAM);
+        }
+      }
+
+      if (!sc) {
+        printf("    SB-B2 PASS: no colon leak into capture keys; re-init pinned\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+    fail |= sc;
+  }
+
+  /* ---- SB-B3: committed XEQ from capture ---- */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    tpLbl(&p, "F67");
+    tpMarker(&p);
+    tpLbl(&p, "TGT");   /* target label for XEQ */
+    tpRtn(&p);
+
+    if (!tpWrite(&p)) {
+      printf("    SB-B3 FIXTURE FAIL: tpWrite\n");
+      fail = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      fnGotoDot(2);
+
+      if (currentStep != tpStepAddr(&p, 1) || currentLocalStepNumber != 2) {
+        printf("    SB-B3 FIXTURE BUG: fnGotoDot(2)\n");
+        sc = 1;
+      }
+      else {
+        runFunction(ITM_AIM);
+        if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+          printf("    SB-B3 FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Complete a full XEQ 'TGT' TAM entry */
+        runFunction(ITM_XEQ);
+
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    SB-B3 FAIL: XEQ did not suspend capture (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Type name "TGT" */
+        tamProcessInput(ITM_alpha);
+        runFunction(ITM_T);
+        runFunction(ITM_G);
+        runFunction(ITM_T);
+
+        /* Commit with ENTER (not EXIT which cancels) */
+        tamProcessInput(ITM_ENTER);
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    SB-B3 FAIL: capture not open after XEQ commit (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Verify: capture line survives intact */
+        uint8_t *capStep = currentStep;
+        if (capStep[0] != 0x8B || capStep[1] != 0x1A || capStep[2] != 0xFD) {
+          printf("    SB-B3 FAIL: capture step is not a Forth source step\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Verify: XEQ name converted to text in capture line */
+        const char *text = forthTestCapText();
+        int hasXeq = 0;
+        const char *s = text;
+        while (*s) {
+          if (s[0] == 'X' && s[1] == 'E' && s[2] == 'Q') {
+            hasXeq = 1;
+            break;
+          }
+          s++;
+        }
+        if (!hasXeq) {
+          printf("    SB-B3 FAIL: capture text missing XEQ form: '%s'\n",
+                 forthTestCapText());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        printf("    SB-B3 PASS: committed XEQ from capture\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+    fail |= sc;
+  }
+
+  /* ---- SB-C2: local-register form and cancel ---- */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    tpLbl(&p, "F68");
+    tpMarker(&p);
+
+    if (!tpWrite(&p)) {
+      printf("    SB-C2 FIXTURE FAIL: tpWrite\n");
+      fail = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      fnGotoDot(2);
+
+      if (currentStep != tpStepAddr(&p, 1) || currentLocalStepNumber != 2) {
+        printf("    SB-C2 FIXTURE BUG: fnGotoDot(2)\n");
+        sc = 1;
+      }
+      else {
+        runFunction(ITM_AIM);
+        if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+          printf("    SB-C2 FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Press STO then . 0 5 (the local form) */
+        runFunction(ITM_STO);
+
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    SB-C2 FAIL: STO did not suspend capture (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Type . 0 5 for local register L05 */
+        tamProcessInput(ITM_PERIOD);
+        tamProcessInput(ITM_0);
+        tamProcessInput(ITM_5);   /* three digits should auto-fire commit */
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    SB-C2 FAIL: capture not open after local commit (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Assert canonical text landed in capture line */
+        const char *text = forthTestCapText();
+        int hasSto05 = 0;
+        const char *s = text;
+        while (*s) {
+          if (s[0] == 'S' && s[1] == 'T' && s[2] == 'O' &&
+               s[3] == ' ' && s[4] == '.' && s[5] == '0' && s[6] == '5') {
+             hasSto05 = 1;
+            break;
+          }
+          s++;
+        }
+        if (!hasSto05) {
+           printf("    SB-C2 FAIL: canonical text missing STO .05 form: '%s'\n",
+                 forthTestCapText());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Now press STO and cancel out (EXIT before any digit) */
+        char beforeCancel[64];
+        xcopy(beforeCancel, forthTestCapText(),
+              stringByteLength((char *)forthTestCapText()) + 1);
+
+        runFunction(ITM_STO);
+        fnKeyExit(NOPARAM);   /* cancel before any digit */
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    SB-C2 FAIL: capture not open after STO cancel (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+        else if (strcmp(forthTestCapText(), beforeCancel) != 0) {
+          printf("    SB-C2 FAIL: line changed after STO cancel: '%s'\n",
+                 forthTestCapText());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        printf("    SB-C2 PASS: local-register form and cancel\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+    fail |= sc;
+  }
+
+  /* ---- SB-D2: picker navigation leaks nothing ---- */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    tpLbl(&p, "F69");
+    tpMarker(&p);
+    tpLbl(&p, "ONE");
+    tpRtn(&p);
+    tpLbl(&p, "TWO");
+    tpRtn(&p);
+
+    if (!tpWrite(&p)) {
+      printf("    SB-D2 FIXTURE FAIL: tpWrite\n");
+      fail = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      fnGotoDot(2);
+
+      if (currentStep != tpStepAddr(&p, 1) || currentLocalStepNumber != 2) {
+        printf("    SB-D2 FIXTURE BUG: fnGotoDot(2)\n");
+        sc = 1;
+      }
+      else {
+        runFunction(ITM_AIM);
+        if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+          printf("    SB-D2 FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+          sc = 1;
+        }
+      }
+
+      char preText[64];
+      int16_t cursorBefore;
+
+      if (!sc) {
+        /* Type "text" in capture line */
+        runFunction(ITM_T);
+        runFunction(ITM_E);
+        runFunction(ITM_X);
+        runFunction(ITM_T);
+
+        /* Record state before picker open */
+        cursorBefore = T_cursorPos;
+        xcopy(preText, forthTestCapText(),
+              stringByteLength((char *)forthTestCapText()) + 1);
+
+        /* Open the FWRD picker (menu overlay, does not suspend capture) */
+        showSoftmenu(-MNU_FORTH);
+
+        if (currentMenu() != -MNU_FORTH) {
+          printf("    SB-D2 FIXTURE BUG: menu=%d, expected -MNU_FORTH\n",
+                 currentMenu());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* EXIT closes the picker */
+        fnKeyExit(NOPARAM);
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    SB-D2 FAIL: capture not open after picker cancel (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+        else if (strcmp(forthTestCapText(), preText) != 0) {
+          printf("    SB-D2 FAIL: capture text changed: '%s' vs '%s'\n",
+                 forthTestCapText(), preText);
+          sc = 1;
+        }
+        else if (T_cursorPos != cursorBefore) {
+          printf("    SB-D2 FAIL: cursor moved: %d vs %d\n",
+                 T_cursorPos, cursorBefore);
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        printf("    SB-D2 PASS: picker navigation leaks nothing\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+    fail |= sc;
+  }
+
+  /* Epilogue */
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  alphaCase = savedAlphaCase;
   xcopy(softmenuStack, savedStack, sizeof(savedStack));
   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
   lastErrorCode = ERROR_NONE;

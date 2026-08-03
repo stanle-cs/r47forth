@@ -1848,3 +1848,51 @@ header/provenance (now "LANDED 2026-07-20; decision record", main
 sections win on disagreement). The full §10 fold into the main sections
 remains queued — it is a rewrite, not a marker fix. Audit check H green
 after the edits.
+
+
+## 2026-08-03 — sim bench landed (SB-1 `9aa57e93e`, SB-2 `833513bb4`); row 11i closed
+
+Both packets were IMPLEMENTED BY THE LOCAL MODEL (qwen3.6-27b via
+opencode, headless, --auto) with the architect supervising by monitors and
+issuing corrections — the first full trial of the owner's everything-by-
+Qwen ruling. Verified independently: 13 bench PASS lines, six mutations
+RED on exactly their named tests with green restores, arena at baseline
+every run, upstream testSuite green throughout, flash 1094912 → 1094904
+(−8 B; the battery compiles out of firmware).
+
+Bench findings (the reason the bench exists):
+
+- **tam.colon cancel-path leak — triaged NOT a defect.** leaveTamModeIfEnabled
+  clears alpha/mode but not colon; tamEnterMode re-initializes colon=false
+  on every entry, so the lingering value is dead state. Ruled contract:
+  "no observable effect + re-init pinned" (SB-B2 asserts both). The raw
+  flag may legitimately stay set between cancel and the next entry.
+- **SB-C2 fixture+assert defect caught by its own mutation.** The dot
+  press used ITM_DOT where the TAM machine listens for ITM_PERIOD (the
+  same drive-path class as the B2 colon press: runFunction vs
+  tamProcessInput), and the assert scanned the GLOBAL spelling "STO 05",
+  which cannot distinguish the forms. A mutation that refused to go red
+  exposed both; corrected to ITM_PERIOD + the "STO .05" seven-char scan,
+  then proven RED under a four-arm dot-encoding mutation.
+
+Process record (feeds the efficiency ledger):
+
+- Implementation phase: strong — the model wrote 1,400+ lines of subcases
+  across two packets, self-repairing compile errors; architect corrections
+  were needed for guessed byte-layout facts, wrong seams
+  (fnSaveProgram vs saveCalc), fixture ordering, and drive paths — every
+  correction lands best as ONE item per message.
+- Sequencing phase: the model cannot self-drive multi-step mutation
+  choreography (loops on the last command; context poisoning after long
+  correction chains). Cure: fresh sessions with ONE mechanical block of
+  exact apply/verify/gate/revert commands per session — after which all
+  six mutation blocks ran essentially clean.
+- Rig notes: the loop-guard plugin fired usefully; the lessons plugin
+  steered gate logs to the PREVIOUS packet's names (now countered by an
+  AGENTS.md rule); one session died to a GUI-side LM Studio model unload
+  (double-27B accident, not the rig).
+
+Remaining from the bench conversion: the HARDWARE-ONLY residue
+(F6_KEYBOARD_PEM_AUDIT §6) stays best-effort on device. TESTING.md gains
+the PROPOSED T5 test-corpus restructure stage (megafile split, reader-side
+accessors, tabular migration) — awaiting owner ruling.

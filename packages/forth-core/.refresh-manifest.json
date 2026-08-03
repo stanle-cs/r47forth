@@ -14,7 +14,7 @@
     "forth_prims.h": "32461d3bf02df6f455464822b112ef9d57e7197ff60637938b407e1c4395854d",
     "programming/param_core.c": "a346aa8de0b6424214bef39940d84ad3947e998b316e08b73734c66fb82fe887",
     "programming/param_core.h": "ff4c3dec1227ced41df291faa66572894042302eb9fe86ce3f8c12e45d463d31",
-    "test_dict_reloc.c": "4d8ee4d24635faef2f933a1443967918b6b2e9be058372a1c00c8d0bfdfbe3f2"
+    "test_dict_reloc.c": "ca6f5524ce8da7a6b532476c4a0fca81a2d6fbf18d7202f356486846e5a9751b"
   },
   "patches": {
     "010-c47Extensions__addons.c.patch": "e018487d35b5a5b156eb29c75dab0933514f56cfcec290760e9bddd88fa777bd",
