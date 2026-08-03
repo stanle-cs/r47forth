@@ -103,6 +103,7 @@ uint8_t DXR = 0, DYR = 0, DXI = 0, DYI = 0;
                                     #if defined(GRAPHDEBUG_MIN)
                                       printRealToConsole(&resReal,"resReal:","\n");
                                     #endif //GRAPHDEBUG_MIN
+      reallocateRegister(REGISTER_X, dtReal34, 0, amNone);   // a program may leave any type in X;
       realToReal34(&resReal, REGISTER_REAL34_DATA(REGISTER_X));
     } else {
       parseEquation(currentFormula, EQUATION_PARSER_XEQ, tmpString, tmpString + AIM_BUFFER_LENGTH);
