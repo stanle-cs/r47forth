@@ -3015,15 +3015,18 @@ silently — that is R47's own behavior and stays (D2 ruling).
 
 ### 11.2 Where it hooks (all verified against the tree, 2026-08-03)
 
-- **One dispatch bracket, no per-primitive wrappers** (the cost that
-  parked D3 is gone — D2 built the hook): the sole
-  `forthDataDepthApply(forthPrims[idx].stackEffect)` site
-  [VERIFIED: packages/forth-core/forth_compile.c:972] brackets every
-  primitive, including the fnAdd/fnDrop delegations. Spill-on-push and
-  refill-on-consume live inside `forthDataDepthApply` (forth_inner.c),
-  replacing the `ERROR_RAM_FULL` capacity branch [VERIFIED:
-  packages/forth-core/forth_inner.c:97]. Arena exhaustion while growing
-  the spill raises `ERROR_RAM_FULL` — same class, later and honest.
+- **One invocation wrapper, no per-primitive wrappers** *(amended
+  2026-08-03 during D3-2: the original "sole bracket" claim was wrong —
+  primitives are invoked from FOUR sites (outer dispatch, inner loop,
+  XEQN chain, compile-state path), which the first D3-2 gate exposed as
+  `7 FACT = 4320` returning: catches without refills on the inner path)*:
+  a single `forthPrimInvoke(idx)` in forth_inner.c performs
+  Apply(stackEffect) → fn() → ASLIFT → `forthSpillSettle()`, and all four
+  sites call it. The two direct `fnDrop` consumes (0BR, the compile-state
+  string consume) settle explicitly after their Apply(-1).
+  Spill-on-push lives inside `forthDataDepthApply`, replacing the
+  `ERROR_RAM_FULL` capacity branch. Arena exhaustion while growing the
+  spill raises `ERROR_RAM_FULL` — same class, later and honest.
 - **User-native boundary**: the seven `forthDataDepthResync()` sites
   (FTOK_C47 arms, XEQ/R47-label bodies) are where arbitrary-arity native
   code runs. RULE: a resync with a NON-EMPTY spill raises
@@ -3036,6 +3039,11 @@ silently — that is R47's own behavior and stays (D2 ruling).
   `forthDataDepthEnterOuter/LeaveOuter` — the documented-seams pattern
   (audit §2.5); it is NEVER persisted: power-off mid-execution already
   abandons execution state, and restoreCalc sees no spill.
+  *(Amended 2026-08-03:)* a line that COMPLETES with the spill still
+  non-empty has produced more values than the visible stack can hold —
+  that is a loud `ERROR_RAM_FULL`-class stop at LeaveOuter (then reset),
+  never a silent discard. The visible stack is the only legal carrier of
+  values across lines.
 
 ### 11.3 Representation
 
