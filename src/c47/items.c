@@ -1365,8 +1365,6 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnIntegrate                 (uint16_t unusedButMandatoryParameter) {}
   void fnIntegrateYX               (uint16_t unusedButMandatoryParameter) {}
   void fnIntVar                    (uint16_t unusedButMandatoryParameter) {}
-  void fn1stDeriv                  (uint16_t unusedButMandatoryParameter) {}
-  void fn2ndDeriv                  (uint16_t unusedButMandatoryParameter) {}
   void fnPgmDrv                    (uint16_t unusedButMandatoryParameter) {}
   void fn1stDerivVar               (uint16_t unusedButMandatoryParameter) {}
   void fn2ndDerivVar               (uint16_t unusedButMandatoryParameter) {}
@@ -1778,6 +1776,16 @@ bool_t isFunctionOldParam16(uint16_t func) {
   #define S18_fnXXfn_RDP     itemToBeCoded
   #define S18_fnXXfn_RSD     itemToBeCoded
 #endif //OPTION_XFN_1000
+
+#if defined(OPTION_INFSUMS)
+  #define INF_fnSumInf       fnProgrammableSumInf
+  #define INF_FNCT           CAT_FNCT
+  #define INF_TM             TM_LBLONLY
+#else //OPTION_INFSUMS
+  #define INF_fnSumInf       itemToBeCoded
+  #define INF_FNCT           CAT_NONE
+  #define INF_TM             NOPARAM
+#endif //OPTION_INFSUMS
 
 
 
@@ -3312,8 +3320,8 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 1472 */  { fnFib,                           NOPARAM,                     "FIB",                                         "FIB",                                         (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_ENABLED  | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /* 1473 */  { fnDisplayFormatFix,              TM_VALUE,                    "FIX",                                         "FIX",                                         (0 << TAM_MAX_BITS) |DSP_MAX, CAT_FNCT| SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NUMBER_8     | HG_ENABLED         },
 /* 1474 */  { fnDiskInfo,                      NOPARAM,                     "DISK",                                        "DISK",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
-/* 1475 */  { fn1stDeriv,                      TM_LBLONLY,                  ">f'(x)<",                                     ">f'(x)<",                                     (0 << TAM_MAX_BITS) |    99, CAT_NONE | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },//Old item, replaced by f' 2883
-/* 1476 */  { fn2ndDeriv,                      TM_LBLONLY,                  ">f\"(x)<",                                    ">f\"(x)<",                                    (0 << TAM_MAX_BITS) |    99, CAT_NONE | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },//Old item, replaced by f\" 2884
+/* 1475 */  { fnOldItemError,                  NOPARAM,                     ">f'(x)<",                                     ">f'(x)<",                                     (0 << TAM_MAX_BITS) |    99, CAT_NONE | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },//Old item, replaced by f' 2883
+/* 1476 */  { fnOldItemError,                  NOPARAM,                     ">f\"(x)<",                                    ">f\"(x)<",                                    (0 << TAM_MAX_BITS) |    99, CAT_NONE | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },//Old item, replaced by f\" 2884
 /* 1477 */  { fnPrimeFactors,                  NOPARAM,                     "FACTORS",                                     "FACTORS",                                     (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /* 1478 */  { fnGd,                            NOPARAM,                     "g" STD_SUB_d,                                 "g" STD_SUB_d,                                 (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_ENABLED  | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /* 1479 */  { fnInvGd,                         NOPARAM,                     "g" STD_D_MINUS1,                              "g" STD_D_MINUS1,                              (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_ENABLED  | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
@@ -4629,7 +4637,7 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2753 */  UNIT_CONV(constFactorTonneKg     , multiply         ,            "tonne"                              STD_RIGHT_ARROW                                                ,            "tonne"                              STD_RIGHT_ARROW                                                ),
 /* 2754 */  UNIT_CONV(constFactorTonneKg     , divide           ,            "kg"                                 STD_RIGHT_ARROW                                                ,            "kg"                                 STD_RIGHT_ARROW                                                ),
 
-/* 2755 */  { fnProgrammableSumInf,            TM_LBLONLY,                  STD_INFINITY STD_SUM STD_SUB_n,                STD_INFINITY STD_SUM STD_SUB_n,                (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },
+/* 2755 */  { INF_fnSumInf,                     INF_TM,                     STD_INFINITY STD_SUM STD_SUB_n,                STD_INFINITY STD_SUM STD_SUB_n,                (0 << TAM_MAX_BITS) |    99, INF_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },
 
 /* 2756 */  { itemToBeCoded,                   NOPARAM,                     "2756",   /*reserved export d47 data*/         "2756",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2757 */  { fnSaveXFNRegister,               NOPARAM,                     "EXPxfnx",                                     "EXPxfnx",                                     (0 << TAM_MAX_BITS) |    97, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },

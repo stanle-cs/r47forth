@@ -51,6 +51,8 @@ void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t which);
 void covCpxSolveRoot(uint16_t which);
 void covEqSolveDispatch(uint16_t which);
+void covMimRowCol(uint16_t op);
+void covIndexedElement(uint16_t op);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
@@ -161,6 +163,33 @@ const funcTest_t funcTestNoParam[] = {
   {"fnLastX",                fnLastX               },
   {"fnStoreStack",           fnStoreStack          },
   {"fnRecallStack",          fnRecallStack         },
+  // Vector store / recall. These index the matrix themselves - STOVEL/RCLVEL from the linear element number in FARG,
+  // Rnn>V / V>Rnn walking the whole matrix from the register in FARG - and park the walking index in the shadow row and
+  // column, so they need no INDEX and leave I, J and the indexed matrix as they found them.
+  {"fnStoreVElement",        fnStoreVElement       },
+  {"fnRecallVElement",       fnRecallVElement      },
+  {"fnStoreVector",          fnStoreVector         },
+  {"fnRecallVector",         fnRecallVector        },
+  // Matrix creation and dimensions (FARG = register number where one is taken).
+  {"fnNewMatrix",            fnNewMatrix           },
+  {"fnGetMatrixDimensions",  fnGetMatrixDimensions },
+  {"fnGetMatrixDimensions42", fnGetMatrixDimensions42},
+  {"fnSetMatrixDimensionsGr", fnSetMatrixDimensionsGr},
+  // M.GROW and M.WRAP are this one function, the flag arriving as the parameter: ON from M.GROW, OFF from M.WRAP.
+  {"fnSetGrowMode",          fnSetGrowMode         },
+  // The two editor entries whose only corpus-reachable arm is the mode guard: both work in CM_MIM and refuse elsewhere, and the corpus is always elsewhere.
+  {"fnOldMatrix",            fnOldMatrix           },
+  {"fnGoToElement",          fnGoToElement         },
+  // The row and column operations, reached without the editor driver so the corpus takes the arm each one runs outside CM_MIM. fnGoToRow and fnGoToColumn take
+  // the line number in FARG.
+  {"fnInsRow",               fnInsRow              },
+  {"fnAddRow",               fnAddRow              },
+  {"fnInsCol",               fnInsCol              },
+  {"fnAddCol",               fnAddCol              },
+  {"fnDelRow",               fnDelRow              },
+  {"fnDelCol",               fnDelCol              },
+  {"fnGoToRow",              fnGoToRow             },
+  {"fnGoToColumn",           fnGoToColumn          },
   // Value/type predicates and small math ops.
   {"fnCheckType",            fnCheckType           },
   {"fnIse",                  fnIse                 },
@@ -242,6 +271,8 @@ const funcTest_t funcTestNoParam[] = {
   {"fnSolveRootCov",         covSolveRoot, 1 },
   {"fnCpxSolveRootCov",      covCpxSolveRoot, 1 },
   {"fnEqSolveDispatchCov",   covEqSolveDispatch, 1 },
+  {"fnMimRowColCov",         covMimRowCol, 1 },
+  {"fnIndexedElementCov",    covIndexedElement, 1 },
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
@@ -999,6 +1030,80 @@ void covCpxSolveRoot(uint16_t which) {
   currentAngularMode = savedAngularMode;
 }
 
+// Put back the cursor a case states in I and J. fnEditMatrix and fnIndexMatrix both home it to (1,1). Both accessors take the 1-based value the user sees.
+static void covRestoreMatrixCursor(int16_t row, int16_t col) {
+  setIRegisterAsInt(false, row);
+  setJRegisterAsInt(false, col);
+}
+
+void covMimRowCol(uint16_t op) {
+  // Run one row or column operation of the matrix editor on the matrix in X and leave the result there. Each runs in CM_MIM only and ends in mimEnter(true).
+  // Read I and J before opening: ijIsShadowed() is calcMode == CM_MIM || ijShadowActive, so they address the registers here and the editor's shadow afterwards.
+  //   0 M.INSR   insert a row at the cursor row      3 M.COL+1  append a column last
+  //   1 M.ROW+1  append a row last                   4 M.DELR   delete the cursor row
+  //   2 M.INSC   insert a column at the cursor       5 M.DELC   delete the cursor column
+  const int16_t row = getIRegisterAsInt(false);
+  const int16_t col = getJRegisterAsInt(false);
+
+  fnEditMatrix(NOPARAM);
+  if(calcMode != CM_MIM) {
+    // Leave a refusal to the case, dropping any index an earlier file left: fnEditMatrix raises and stays out of CM_MIM, and the case asserts the code.
+    matrixIndex = INVALID_VARIABLE;
+    return;
+  }
+  covRestoreMatrixCursor(row, col);
+
+  switch(op) {
+    case 0:  fnInsRow(NOPARAM); break;
+    case 1:  fnAddRow(NOPARAM); break;
+    case 2:  fnInsCol(NOPARAM); break;
+    case 3:  fnAddCol(NOPARAM); break;
+    case 4:  fnDelRow(NOPARAM); break;
+    default: fnDelCol(NOPARAM); break;
+  }
+
+  // Close the editor the way fnKeyExit does in its CM_MIM branch (src/c47/keyboard.c), so no matrix stays open. mimEnter commits a digit buffer no case types
+  // into, and updateMatrixHeightCache is display state.
+  mimFinalize();
+  calcModeNormal();
+}
+
+void covIndexedElement(uint16_t op) {
+  // Run one operation on the INDEXed matrix, the element value going to and coming from X. None of them indexes a matrix, so index R00 with fnIndexMatrix - the
+  // handler behind INDEX - and put back the cursor it homes to (1,1).
+  //   0 STOEL   store X at the cursor            4 M.GETM    recall the submatrix, Y rows by X columns    8 I-
+  //   1 RCLEL   recall the cursor cell to X      5 M.PUTM    write the matrix in X in at the cursor       9 J+
+  //   2 STOSEQ  store X, then step J             6 M.FIND  search X and move the cursor onto a hit     10 J-
+  //   3 RCLSEQ  recall to X, then step J         7 I+
+  const int16_t row = getIRegisterAsInt(false);
+  const int16_t col = getJRegisterAsInt(false);
+
+  fnIndexMatrix(FIRST_GLOBAL_REGISTER); // R00
+  if(matrixIndex != FIRST_GLOBAL_REGISTER) {
+    // Leave a refusal to the case, dropping the index it left in place: fnIndexMatrix raises and the case asserts the code.
+    matrixIndex = INVALID_VARIABLE;
+    return;
+  }
+  covRestoreMatrixCursor(row, col);
+
+  switch(op) {
+    case 0:  fnStoreElement(NOPARAM);     break;
+    case 1:  fnRecallElement(NOPARAM);    break;
+    case 2:  fnStoreElementPlus(NOPARAM); break;
+    case 3:  fnRecallElementPlus(NOPARAM); break;
+    case 4:  fnGetMatrix(NOPARAM);        break;
+    case 5:  fnPutMatrix(NOPARAM);        break;
+    case 6:  fnMatrixFind(NOPARAM);       break;
+    case 7:  fnIncDecI(INC_FLAG);         break;
+    case 8:  fnIncDecI(DEC_FLAG);         break;
+    case 9:  fnIncDecJ(INC_FLAG);         break;
+    default: fnIncDecJ(DEC_FLAG);         break;
+  }
+
+  // Drop the index: it outlives the function that set it, and the corpus carries it into the next file.
+  matrixIndex = INVALID_VARIABLE;
+}
+
 void covEqSolveDispatch(uint16_t which) {
   // Drive the solve arms of fnEqSolvGraph (solver/graph.c) that EQ_CPXSOLVE does not reach. which selects the arm and the formula, and every root is exact:
   //   0  EQ_REALSOLVE     X^2-4, roots +/-2       guesses off the stack
@@ -1036,13 +1141,13 @@ void covEqSolveDispatch(uint16_t which) {
 }
 
 void covDerivErr(uint16_t which) {
-  // Drive the error/dispatch branches of the program-based derivative entry (derivativeCommon in differentiate.c), which the formula path covDerivEq does not reach.
+  // Drive the error/dispatch branches of the program-based derivative entry (derivativeVariable in differentiate.c), which the formula path covDerivEq does not reach.
   // which=0: a stack register whose letter names no program label -> ERROR_LABEL_NOT_FOUND; otherwise an out-of-range parameter -> ERROR_OUT_OF_RANGE.
   if(which == 0) {
-    fn1stDeriv(REGISTER_T);            // letter 'T' names no program label
+    fn1stDerivVar(REGISTER_T);               // letter 'T' names no program label
   }
   else {
-    fn1stDeriv(FIRST_NAMED_VARIABLE);  // outside [FIRST_LABEL,LAST_LABEL] and [X,T]
+    fn1stDerivVar(FIRST_RESERVED_VARIABLE);  // outside [FIRST_LABEL,LAST_LABEL], [X,T] and the named variables
   }
 }
 
@@ -1682,8 +1787,9 @@ void covProgramFlow(uint16_t which) {
 }
 
 void covDerivPgm(uint16_t order) {
-  // Program-based derivative: differentiate the loaded program S (f(X)=X^2-4) at the point in X through derivativeCommon -> calcDeriv -> execProgram (differentiate.c)
-  // - the program branch covDerivEq (formula) does not reach. f'(X)=2X, so the first derivative at X=3 is 6.
+  // Program-based derivative: differentiate the loaded program S (f(X)=X^2-4) at the point in X through derivativeVariable -> calcDeriv -> execProgram
+  // (differentiate.c) - the program branch covDerivEq (formula) does not reach. PGMDRV names the program and the operand names the variable, as a program step
+  // does. f'(X)=2X, so the first derivative at X=3 is 6.
   const calcRegister_t label = findNamedLabel("S", GLOBAL_LABELS);
   if(label == INVALID_VARIABLE) {
     printf("\nUnknown global label: S\n");
@@ -1691,11 +1797,13 @@ void covDerivPgm(uint16_t order) {
     return;
   }
   currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
+  fnPgmDrv(label);
+  const calcRegister_t variable = findOrAllocateNamedVariable("zs");
   if(order == 2) {
-    fn2ndDeriv(label);
+    fn2ndDerivVar(variable);
   }
   else {
-    fn1stDeriv(label);
+    fn1stDerivVar(variable);
   }
 }
 
@@ -1733,16 +1841,18 @@ void covDerivMvarPgm(uint16_t which) {
     ITM_SUB,                                                      // x^2 - p*x - 2
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
   };
-  // D1 and D2 differentiate MD as a program step, which is the path a running program takes: no menu can be opened there, so the derivative is taken at once with
-  // respect to the selected variable, or the first declaration when the selection is not one of MD's.
+  // D1 and D2 differentiate MD as a program step, which is the path a running program takes: PGMDRV names the program, the operand names the variable and the
+  // point comes off the stack. No menu can be opened there.
   static const uint8_t pgmD1[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 2, 'D', '1',                  // LBL "D1"
-    (uint8_t)((ITM_FQX >> 8) | 0x80), (uint8_t)(ITM_FQX & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',    // f'(x) "MD"
+    (uint8_t)((ITM_PGMDRV >> 8) | 0x80), (uint8_t)(ITM_PGMDRV & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',  // PGMDRV "MD"
+    (uint8_t)((ITM_F1DRV >> 8) | 0x80), (uint8_t)(ITM_F1DRV & 0xff), STRING_LABEL_VARIABLE, 1, 'x',         // f' "x"
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
   };
   static const uint8_t pgmD2[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 2, 'D', '2',                  // LBL "D2"
-    (uint8_t)((ITM_FDQX >> 8) | 0x80), (uint8_t)(ITM_FDQX & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',  // f"(x) "MD"
+    (uint8_t)((ITM_PGMDRV >> 8) | 0x80), (uint8_t)(ITM_PGMDRV & 0xff), STRING_LABEL_VARIABLE, 2, 'M', 'D',  // PGMDRV "MD"
+    (uint8_t)((ITM_F2DRV >> 8) | 0x80), (uint8_t)(ITM_F2DRV & 0xff), STRING_LABEL_VARIABLE, 1, 'x',         // f" "x"
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
   };
   calcRegister_t label;
@@ -1782,9 +1892,12 @@ void covDerivMvarPgm(uint16_t which) {
   currentSolverProgram = label - FIRST_LABEL;
   switch(which) {
     case 4:  currentSolverVariable = findOrAllocateNamedVariable("p");    break;
-    case 5:  currentSolverVariable = INVALID_VARIABLE;                    break;   // nothing selected: the first declaration is the argument
-    case 8:  currentSolverVariable = findOrAllocateNamedVariable("zzz");  break;   // selected but not declared by M: falls back to the first declaration
     default: currentSolverVariable = findOrAllocateNamedVariable("x");    break;
+  }
+
+  if(which == 12) {   // the menu route with nothing keyed in: the variable stands as it is, so the point is the value it holds and its type is what the sampling
+    fn1stDerivEq(NOPARAM);   // has to put back
+    return;
   }
 
   if(which >= 5) {   // as a program step: the point comes off the stack and the variable is only borrowed for the sampling

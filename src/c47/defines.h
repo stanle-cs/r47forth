@@ -45,18 +45,20 @@
 #define OPTION_PRIME                   //                   // ISPRIME, NEXTPRIME (primality tests)
 #define OPTION_FACTOR                  //                   // FACTORS, M.FACT, EULPHI, SIGMA, NumTh menu (GMP factorisation; requires OPTION_PRIME)
 #define OPTION_EIGEN                   //                   // EIGVAL, EIGVEC, M.QR, MSQRT (eigen/QR/matrix-sqrt; keeps LU/determinant/inverse)
-#define OPTION_DISTRIBUTIONS           //                   // DIST menu top-level link (menu only; the subsets below carry the code)
-#define OPTION_DIST_NORMAL             //                   // Norml, StdNrmal & LogNrml distributions
-#define OPTION_DIST_1                  //                   // Poisson, Hyper, Binomial, Geometrical, f distributions
-#define OPTION_DIST_2                  //                   // cauchy, chi, expo, logis, t, weibull distributions
-#define OPTION_DIST_3                  //                   // gev, Pareto, Uniform, Discr Uniform distributions
+#define OPTION_DISTRIBUTIONS           //                   // the DIST menu top-level link; the subsets below carry the code
+#define OPTION_DIST_NORMAL             //                   // Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
+#define OPTION_DIST_C                  //                   // F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
+#define OPTION_DIST_B                  //                   // Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+#define OPTION_DIST_D                  //                   // GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
 #define OPTION_REGBROWSER              //                   // Register Browser
 #define OPTION_FLAGBROWSER             //                   // Flag Browsers
 #define OPTION_ASNBROWSER              //                   // Assign Browser
 #define OPTION_FONTBROWSER             //                   // Font Browsers
 #define OPTION_SHOW                    //                   // SHOW (alternative to VIEW)
-#define OPTION_SLV_ZETA_BETA           //                   // SLVC, SLVQ, ZETA, BETA
-#define OPTION_SLVP                    //                   // SLVP general polynomial roots (companion matrix through the EIGEN QR solver; requires OPTION_EIGEN)
+#define OPTION_ZETA_BETA               //                   // ZETA, BETA, LNBETA
+#define OPTION_SLVQ_SLVC               //                   // SLVQ, SLVC quadratic and cubic roots
+#define OPTION_SLVP_POLY               //                   // SLVP general polynomial roots (companion matrix through the EIGEN QR solver; requires OPTION_EIGEN)
+#define OPTION_INFSUMS                 // TEMPORARY         // Infinity sum with the early stop; the plain programmable sum and product stay
 #define OPTION_ELLIPTIC                //                   // Elliptic functions
 #define OPTION_BESSEL                  //                   // Bessel functions
 #define OPTION_ORTHO                   //                   // Orthogonal-polynomials menu (ORTHO)
@@ -102,7 +104,8 @@
       #undef OPTION_ASNBROWSER     //  1704 bytes // Assign Browser
       #undef OPTION_FONTBROWSER       //  1216 bytes // Font Browsers
       #undef OPTION_SHOW        //  6712 bytes // SHOW (use either old SHOW or VIEW, change in code)
-      #undef OPTION_SLV_ZETA_BETA       //  3288 bytes // SLVC, SLVQ, ZETA, BETA
+      #undef OPTION_ZETA_BETA       //  3288 bytes // ZETA, BETA, LNBETA
+      #undef OPTION_SLVQ_SLVC       //       bytes // SLVQ, SLVC quadratic and cubic roots
       #undef OPTION_ELLIPTIC  //       bytes // ELLIPTIC
       #undef  OPTION_PRIME             // 27208 bytes // Without ISPRIME, NEXTPRIME, FACTORS, EULPHI, MATXFACTOR
       #undef OPTION_BESSEL //  5129 bytes // Without BESSEL
@@ -110,11 +113,11 @@
       #undef OPTION_GRAPHICS    // 17472 bytes // Solver & graphics & stat graphics
       #undef OPTION_MOREGRAPHICS //  7520 bytes // More graphics
       #undef OPTION_SAMPLEPGMS       //   184 bytes // Load programming sample programs testPgms
-      #undef OPTION_DISTRIBUTIONS       // 17592 bytes // Without all distributions, i.e. binomial, cauchy, chi
-      #undef OPTION_DIST_NORMAL       //  2168 bytes // Without Norml distribution
-      #undef OPTION_DIST_1
-      #undef OPTION_DIST_2
-      #undef OPTION_DIST_3
+      #undef OPTION_DISTRIBUTIONS       // 17592 bytes // Without the DIST menu top-level link; the subsets below carry the code
+      #undef OPTION_DIST_NORMAL       //  2168 bytes // Without Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
+      #undef OPTION_DIST_C          //     ? bytes // Without F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
+      #undef OPTION_DIST_B          //     ? bytes // Without Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+      #undef OPTION_DIST_D          //     ? bytes // Without GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
       #undef OPTION_STOPWATCH //  1232 bytes // Without STOPW
       #undef OPTION_HP35  //   200 bytes // Without config file activations only. Not complete removal.
       #undef OPTION_EDIT_X //  3256 bytes // Without number editing in X-register. Not complete EDIT removal.
@@ -157,9 +160,9 @@
 //
 //       Pkg │ DIST    │ X.FN     │ FIN  │ EIGEN │ ELEC │ IR
 //      ─────┼─────────┼──────────┼──────┼───────┼──────┼────
-//        1  │ all     │ no ellip │ fast │   ❌  │  ✅  │ ✅
-//        2  │ all     │ full     │ slow │   ❌  │  ❌  │ ❌
-//        3  │ limited │ no ellip │ fast │   ✅  │  ✅  │ ✅
+//        1  │ all     │ no ellip │ fast │   ❌  │  ✅  │ ❌
+//        2  │ limB    │ full     │ slow │   ❌  │  ❌  │ ✅
+//        3  │ limA    │ no ellip │ fast │   ✅  │  ✅  │ ❌
 //        4  │ none    │ no e-B-O │ slow │   ❌  │  ❌  │ ✅
 //
 //
@@ -181,15 +184,15 @@
 //      All C47 / DM42 packages (common to 1–4): no 2D/3D VECTOR conversions (matrix functions stay), no number editing, no 1000-digit XFN math.
 
 
-  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 6888) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; IR PRINTING
+  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 1016) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; NO IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
     #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
     #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
-    #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
-    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // (1) Without Norml, StdNrmal & LogNrml distributions
-    #define OPTION_DIST_2                // ✓  7136 bytes // (2) Without cauchy, chi, expo, logis, t, weibull
-    #define OPTION_DIST_1                // ✓  9624 bytes // (3) Without Poisson/Hyper/Binomial/Geometrical/f distributions
-    #define OPTION_DIST_3                // ✓  3280 bytes // (4) Without gev, Pareto, Uniform, Discr Uniform
+    #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without the DIST menu top-level link; the subsets below carry the code
+    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // (1) Without Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
+    #define OPTION_DIST_B                // ✓  7136 bytes // (2) Without Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+    #define OPTION_DIST_C                // ✓  9624 bytes // (3) Without F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
+    #define OPTION_DIST_D                // ✓  3280 bytes // (4) Without GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
     #define OPTION_TVM_FORMULAS          // ✓  2744 bytes // Use TVM analytical formulas where possible
     #define OPTION_TVM_NEWTON            // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
     #define OPTION_ELEC                  // ✓  6816 bytes // ELEC   6240 saving if VECTOR is not in; 2856 saving if VECTOR is in
@@ -197,15 +200,15 @@
             #undef  OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(DMCP_PACKAGE2)             // PACKAGE 2 (free 3744) // ALL DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; NO IR PRINTING
+  #if defined(DMCP_PACKAGE2)             // PACKAGE 2 (free 2032) // Limited2 DIST; Full X.FN menu; NO EIGEN; NO ELEC; SLOW FIN; IR PRINTING
     #define OPTION_ELLIPTIC              // ✓ 13112 bytes // Without ELLIPTIC
     #define OPTION_BESSEL                // ✓  4968 bytes // Without X.FN BESSEL
     #define OPTION_ORTHO                 // ✓   656 bytes // Without X.FN ORTHO MENU
-    #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
-    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
-    #define OPTION_DIST_2                // ✓  7136 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
-            #undef  OPTION_DIST_1        // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
-            #undef  OPTION_DIST_3        // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
+    #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without the DIST menu top-level link; the subsets below carry the code
+    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
+    #define OPTION_DIST_B                // ✓  7136 bytes // Without (2) Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+            #undef  OPTION_DIST_C        // ✓  9624 bytes // Without (3) F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
+            #undef  OPTION_DIST_D        // ✓  3280 bytes // Without (4) GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
             #undef  OPTION_TVM_FORMULAS  // ✓  2744 bytes // Use TVM analytical formulas where possible
             #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
             #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   see below
@@ -213,15 +216,15 @@
     #define OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 EXPERIMENTAL (free 4416) // Limited DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
+  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 (free 3280) // Limited0 DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
     #define  OPTION_BESSEL               // ✓  4968 bytes // Without X.FN BESSEL
     #define  OPTION_ORTHO                // ✓   656 bytes // Without X.FN ORTHO MENU
-    #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
-    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
-            #undef  OPTION_DIST_2        // ✓  7136 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
-            #undef  OPTION_DIST_1        // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
-            #undef  OPTION_DIST_3        // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
+    #define OPTION_DISTRIBUTIONS         // ✓     0 bytes // Without the DIST menu top-level link; the subsets below carry the code
+    #define OPTION_DIST_NORMAL           // ✓  2000 bytes // Without (1) Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
+            #undef  OPTION_DIST_B        // ✓  7136 bytes // Without (2) Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+            #undef  OPTION_DIST_C        // ✓  9624 bytes // Without (3) F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
+            #undef  OPTION_DIST_D        // ✓  3280 bytes // Without (4) GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
     #define OPTION_TVM_FORMULAS          // ✓  2744 bytes // Use TVM analytical formulas where possible
     #define OPTION_TVM_NEWTON            // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
     #define OPTION_ELEC                  // ✓  6816 bytes // ELEC   see below
@@ -234,15 +237,15 @@
             //  1    0       6240     26452   ELEC only
             //  1    1      15808     16884   both (ELEC+VECTOR share 3384)
 
-  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free ✓32712) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
+  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free 30472) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
             #undef  OPTION_BESSEL        // ✓  4968 bytes // Without X.FN BESSEL
             #undef  OPTION_ORTHO         // ✓   656 bytes // Without X.FN ORTHO MENU
-            #undef  OPTION_DISTRIBUTIONS // ✓     0 bytes // Without all distributions, i.e. , cauchy, chi, expo, logis, t, weibull
-            #undef  OPTION_DIST_NORMAL   // ✓  2000 bytes // Without (1) Norml, StdNrmal & LogNrml distributions
-            #undef  OPTION_DIST_2        // ✓  7136 bytes // Without (2) cauchy, chi, expo, logis, t, weibull
-            #undef  OPTION_DIST_1        // ✓  9624 bytes // Without (3) Poisson/Hyper/Binomial/Geometrical/f distributions
-            #undef  OPTION_DIST_3        // ✓  3280 bytes // Without (4) gev, Pareto, Uniform, Discr Uniform
+            #undef  OPTION_DISTRIBUTIONS // ✓     0 bytes // Without the DIST menu top-level link; the subsets below carry the code
+            #undef  OPTION_DIST_NORMAL   // ✓  2000 bytes // Without (1) Norml, LgNrm, StdNorml: 12 items, submenus NORML STDNORML; base set, undefines DIST_B/C/D
+            #undef  OPTION_DIST_B        // ✓  7136 bytes // Without (2) Cauch, chi2, Expon, Weibl, Logis, t: 24 items, submenus CAUCH CHI2 EXPON WEIBL LOGIS T
+            #undef  OPTION_DIST_C        // ✓  9624 bytes // Without (3) F, Binom, NBin, Hyper, Poiss, Geom: 24 items, submenus F BINOM HYPER POISS GEOM
+            #undef  OPTION_DIST_D        // ✓  3280 bytes // Without (4) GEV, Prto, Prto2, Unfm, DisU: 20 items, submenus GEV PARETO UNIFORM DISUNIFORM
             #undef  OPTION_TVM_FORMULAS  // ✓  2744 bytes // Use TVM analytical formulas where possible
             #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
             #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   6240 saving if VECTOR is not in; 2856 saving if VECTOR is in
@@ -257,7 +260,8 @@
     #define OPTION_FLAGBROWSER           // ✓  2088 bytes // Without Flag Browsers
     #define OPTION_ASNBROWSER            // ✓  1936 bytes // Without Assign Browser
     #define OPTION_SHOW                  // ✓  6496 bytes // Without SHOW use VIEW
-    #define OPTION_SLV_ZETA_BETA         // ✓  5440 bytes // SLVC, SLVQ, ZETA, BETA
+    #define OPTION_ZETA_BETA             // ✓  5440 bytes // ZETA, BETA, LNBETA
+    #define OPTION_SLVQ_SLVC             // ?       bytes // SLVQ, SLVC quadratic and cubic roots
     #define OPTION_ASTRING               // ✓  1024 bytes // Without alpha string functions aMID aLEFT aRIGHT aTRIM aREV aLOWER aUPPER
     #define OPTION_PRIME                 // ✓ 31712 bytes // Without ISPRIME, NEXTPRIME (primality; undef also forces OPTION_FACTOR off)
     #define OPTION_FACTOR                // ✓  7120 bytes // Without FACTORS, M.FACT, EULPHI, SIGMA, NumTh menu (GMP factorisation; keeps primality)
@@ -276,7 +280,8 @@
             #undef  OPTION_EIGEN_159     // ✓  2568 bytes // C47 EINEN function is 159 digits internally; note both OPTION_SQUARE_159 & OPTION_CUBIC_159 used by OPTION_EIGEN_159
             #undef  OPTION_XFN_1000      // ✓  5224 bytes // XFN extended 1000 digit math Functionality
             #undef  OPTION_VECTOR        // ✓ 13672 bytes // Vector 12952 saving if ELEC is not in; 9568 saving if ELEC is in
-            #undef  OPTION_SLVP          // ✓  2024 bytes // SLVP general polynomial roots (companion matrix through the EIGEN QR solver)
+            #undef  OPTION_SLVP_POLY     // ✓  2024 bytes // SLVP general polynomial roots (companion matrix through the EIGEN QR solver)
+            #undef  OPTION_INFSUMS       // ?   400 bytes // Infinity sum with the early stop; the plain programmable sum and product stay
     #define OPTION_TVM_AMORT             // ✓  1648 bytes // Use additional AMORT in tvm
     #define OPTION_DATAFILE              // ✓  2112 bytes // Without register/variable .d47 export & import
 
@@ -289,9 +294,24 @@
   #undef OPTION_FACTOR
 #endif
 
-// OPTION_SLVP (polynomial roots) requires OPTION_EIGEN (it feeds the companion matrix to the QR eigensolver): never leave SLVP on without EIGEN
+// OPTION_SLVP_POLY (polynomial roots) requires OPTION_EIGEN (it feeds the companion matrix to the QR eigensolver): never leave SLVP on without EIGEN
+// OPTION_EIGEN_159 is the eigen 159 digit path: without EIGEN its only callers go, leaving solveQuadraticEquation159 and solveCubicEquation159 in flash unused
 #if !defined(OPTION_EIGEN)
-  #undef OPTION_SLVP
+  #undef OPTION_SLVP_POLY
+  #undef OPTION_EIGEN_159
+#endif
+
+// OPTION_DIST_C requires OPTION_DIST_B: its discrete distributions take their argument check, checkRegisterNoFP, from chi2.c
+#if !defined(OPTION_DIST_B)
+  #undef OPTION_DIST_C
+#endif
+
+// OPTION_DIST_NORMAL is the base set: without it there are no distributions at all. DIST_B and DIST_C also need it in code, since poisson, f, chi2 and t
+// start their quantile solvers from WP34S_qf_q_est in normal.c; DIST_D has no such call and is undefined here as a product rule, not a code dependency.
+#if !defined(OPTION_DIST_NORMAL)
+  #undef OPTION_DIST_C
+  #undef OPTION_DIST_B
+  #undef OPTION_DIST_D
 #endif
 
 

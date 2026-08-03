@@ -29,7 +29,7 @@ Func: fnDerivEqCov
 In:  FARG=1 RX=Real:"0"
 Out: EC=0 RX=Real:"0"
 
-; program-derivative entry error paths (derivativeCommon): unknown label letter
+; program-derivative entry error paths (derivativeVariable): unknown label letter
 ; -> LABEL_NOT_FOUND (6), out-of-range parameter -> OUT_OF_RANGE (8)
 Func: fnDerivErrCov
 In:  FARG=0 RX=Real:"2"
