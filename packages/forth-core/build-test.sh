@@ -106,6 +106,31 @@ if [[ "${DO_RUN}" -eq 1 ]]; then
     echo "==> ERROR: suite did not run or did not report success (missing 'FORTH SELF-TEST: ALL PASSED' banner)" >&2
     exit 1
   fi
+
+  # --- T1 (TESTING.md §5): upstream testSuite under the overlay ------------
+  # The forth battery cannot see a package-induced NATIVE regression;
+  # upstream's own suite can. Runs after the forth battery (fail fast on
+  # forth), gated the same way as everything else: exit status AND banner,
+  # both required. The testSuite target is TESTSUITE_BUILD-recompiled on
+  # the first run and cached after.
+  echo "==> meson test testSuite (upstream suite under the overlay)"
+  set +e
+  meson test -C "${BUILD_DIR}" testSuite
+  suite_status=$?
+  set -e
+  echo "==> upstream testSuite EXIT STATUS: ${suite_status}"
+  if [[ "${suite_status}" -ne 0 ]]; then
+    echo "==> UPSTREAM TESTSUITE FAILED — a native regression under the overlay. See ${BUILD_DIR}/meson-logs/testlog.txt" >&2
+    exit "${suite_status}"
+  fi
+  if ! grep -q "TESTS PASSED SUCCESSFULLY" "${BUILD_DIR}/meson-logs/testlog.txt"; then
+    echo "==> ERROR: upstream testSuite did not report its success banner (wrong binary or truncated run?)" >&2
+    exit 1
+  fi
+  echo "==> upstream testSuite: GREEN"
+  # The historical banner below is a CONTRACT — every packet greps for this
+  # exact line. It stays last and now certifies the forth battery AND the
+  # upstream suite (T1): it prints only when both passed.
   echo "==> BUILD + SELF-TEST GREEN."
 else
   echo "==> build only (--build); skipped self-test run."

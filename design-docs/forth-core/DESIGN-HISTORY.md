@@ -1808,3 +1808,43 @@ upstream testSuite 1/1 Ok under the modified meson; design audit
 mechanical half CLEAN. No package content under testSuite/ yet — the
 capability lands ahead of T3's subcase derivation, the hook itself
 deliberately unbuilt (DESIGN_AUDIT Part 3 discipline).
+
+
+## 2026-08-02 — T1 + sim-bench packets + §2.10 idiomatic rule + DESIGN.md markers
+
+**T1 (landed).** `build-test.sh` now runs upstream's testSuite after the
+forth battery — status AND banner both required, fail-fast on forth. The
+historical `==> BUILD + SELF-TEST GREEN.` banner stays the last line as a
+contract (every packet greps it) and now certifies both suites. Verified:
+gate exit 0, upstream suite green.
+
+**§2.10 (owner rule).** DESIGN_AUDIT Part 2 gains "Is the design
+idiomatic, or fragmented?" — one concept one rule; retained deviations
+must be single-sourced, documented, and carry a named removal trigger.
+Standing accepted instance: the working-area path mapping (implicit c47
+root vs explicit sibling roots); trigger for the uniform src/ mirror
+refactor is a SECOND sibling root. PACKAGE-MANAGER.md carries the same
+warning.
+
+**T3/T4 (11i is now executable).** The F6 bench derivation is folded into
+`F6_KEYBOARD_PEM_AUDIT.md` §6: 12 rows become NEW key-driven sim
+subcases, 7 are COVERED by landed tests (each COVERED claim
+machine-checked by a packet gate-grep, never trusted), and the
+HARDWARE-ONLY residue is exactly DMCP display/save timing plus physical
+keyboard reachability. Packets authored:
+`QWEN_PROMPTS_SB_1_capture_mechanics.md` (A2-A6, F1, F2; mutations: cap
+removal, isAlphaSubmenu -MNU_FORTH removal, glyph-shuffle break) and
+`QWEN_PROMPTS_SB_2_nesting_param_menus.md` (B1-B3, C2, D2; mutations:
+tam.colon cancel-reset, cursor-restore, local-form canonical text).
+Queued in the runbook; SB-2 gate-locked on SB-1.
+
+**DESIGN.md stale markers reconciled** (the bounded pass queued in
+runbook §3): five interim/unimplemented markers contradicted by the
+landed tree are corrected in place — FTOK_XEQN (×2, F3-6 `2db8af231`),
+the F1-3 scan-tracking paragraph (fixed forthScannedProgs array text
+replaced by the landed forthScanHead dynamic records, verified against
+forth_compile.c), E9 entry-time validation (F5 landed), and the §10
+header/provenance (now "LANDED 2026-07-20; decision record", main
+sections win on disagreement). The full §10 fold into the main sections
+remains queued — it is a rewrite, not a marker fix. Audit check H green
+after the edits.

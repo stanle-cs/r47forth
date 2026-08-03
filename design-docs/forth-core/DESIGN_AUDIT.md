@@ -208,6 +208,34 @@ make dmcp5r47 CUSTOM_PKG=packages/forth-core CUSTOM_PKG_RECONFIGURE=1 2>&1 | gre
 the `CUSTOM_PKG` *value*, not package content, so a measurement without it
 silently reads a stale shadow and reports the previous tree's size.
 
+### 2.10 Is the design idiomatic, or fragmented?
+
+Owner rule (2026-08-02): **a design must be idiomatic — it must not cause
+confusion or deviations because it is fragmented.** One concept gets one
+rule; a namespace does not carry two implicit conventions; a mechanism that
+works one way in one place must not work a subtly different way in another.
+When extending an existing mechanism, the extension either follows the
+existing idiom exactly or replaces the idiom wholesale — a special case
+bolted onto a general rule is the finding.
+
+Where a deviation is nevertheless retained deliberately (compatibility,
+churn cost), it must be (a) single-sourced — one function or one constant
+that every consumer goes through, never re-derived at call sites, (b)
+documented at its definition with the reason, and (c) recorded here with a
+**named trigger** for removing it. An undocumented or multi-sourced
+deviation is always a finding.
+
+Standing accepted instance: the working-area path mapping. Bare rels mean
+`src/c47/<rel>` (implicit root) while a `SIBLING_ROOTS` first segment means
+`src/<rel>` (explicit root) — two rules in one namespace, accepted 2026-08-02
+because the uniform alternative (rooting the working area at `src/`, i.e.
+`c47/keyboard.c`) costs a full package rename, regenerating every patch
+under new names, and rewriting every `[VERIFIED: packages/forth-core/...]`
+citation in DESIGN.md. Single-sourced in `upstream_repo_rel()`
+(`tools/pkg_patch_common.py`); documented in PACKAGE-MANAGER.md. **Trigger:
+a second sibling root.** The moment one is proposed, do not extend the
+whitelist — do the uniform `src/` mirror refactor instead.
+
 ---
 
 ## Part 3 — the expired-premise sweep
