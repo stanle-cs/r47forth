@@ -190,6 +190,10 @@ void forthDataDepthResync(void)
      * while Forth values hide below the visible window. Loud stop. */
     lastErrorCode = ERROR_RAM_FULL;
     displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "a native item cannot run while %u Forth value(s) are spilled below the visible stack", (unsigned)forthSpillCount());
+      moreInfoOnError("In function forthDataDepthResync:", errorMessage, NULL, NULL);
+    #endif
     forthSpillReset();
   }
   forthDataDepth = 0;
