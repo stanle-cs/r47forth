@@ -5,8 +5,9 @@
   nothing to declare. `tools/pkg_patch_refresh.py` regenerates patches/+files/,
   which are generated output — the build reads ONLY those, never your edits
   directly. Gate: ./packages/forth-core/build-test.sh (it refreshes first).
-- Forth work lives in packages/forth-core/. DESIGN.md there is authoritative;
-  DESIGN-HISTORY.md is its non-normative amendment trail.
+- Forth sources live in packages/forth-core/; the docs live in
+  design-docs/forth-core/ — DESIGN.md there is authoritative, DESIGN-HISTORY.md
+  is its non-normative amendment trail, TESTING.md covers both test harnesses.
 - Build: BUILD.md details all the builds. compile_commands.json exists; respect it.
 - Target: R47 on DM42n (DMCP5). DM42 compatibility is best-effort, never
   design-binding (ruled 2026-07-15). RAM/arena discipline is binding — report

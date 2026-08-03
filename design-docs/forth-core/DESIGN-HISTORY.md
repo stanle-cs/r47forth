@@ -1678,8 +1678,10 @@ Philosophy — answers that changed:
   `cbd285e09`, code audits #1–#4) — flip to DONE in the same pass.
 - **2.9** — no measured flash delta recorded for the base-rebase commit
   (`395c912f7`), and it retains upstream's now-dead `_executeOp` block in
-  `lblGtoXeq.c`, so elimination is worth confirming. **Queued:** Stan runs
-  `make dmcp5r47 CUSTOM_PKG_RECONFIGURE=1` and the number is recorded here.
+  `lblGtoXeq.c`, so elimination is worth confirming. **Resolved same day:**
+  `make dmcp5r47 CUSTOM_PKG_RECONFIGURE=1` → flash 1094824 -> 1094832
+  (+8 B). The optimizer eliminates the dead block; the rebase is
+  flash-neutral.
 
 Expired-premise sweep (three mechanisms):
 
@@ -1707,3 +1709,47 @@ unmeasured (queued above).
 Actions: docs-reconciliation commit queued (duplicates + `.pkgignore` +
 runbook rows); FIX-6B is the next executable packet, then Stan opens the
 upstream MR; 11i hardware bench and posting `forum/output/` remain with Stan.
+
+
+## 2026-08-02 — owner rulings: sim bench, testing reconciliation; docs move completed
+
+Owner rulings (this date):
+
+1. **Row 11i converts from a hardware bench to an automated sim-run
+   bench.** The sim catches most of the targeted bug classes and can run on
+   every gate; block rows that genuinely need the physical DM42n get marked
+   HARDWARE-ONLY and leave the design-binding queue (mirroring the DM42
+   best-effort stance). Prerequisite: reconcile the package harness with
+   upstream's `src/testSuite/` framework. `TESTING.md` is the new authority
+   for both harnesses and carries the staged plan (T1 single entry point,
+   T2 coverage-boundary decision, T3 the sim bench, T4 packetization).
+2. **Flash measurements are architect-run** from now on (was S).
+3. **Posting `forum/output/` is an owner option, not a queue item.**
+4. **FIX-6B executes today by the architect**, with two recorded packet
+   amendments (below).
+
+Evidence gathered for TESTING.md (base `44dc5a705`): upstream `testSuite`
+**links** under `CUSTOM_PKG=packages/forth-core` (the 2026-07-27
+integrate-worktree link failure does not reproduce) and **runs green —
+12,071 tests, 0 failures, 93.5 s** (`meson test -C build.sim testSuite`).
+The overlay causes zero native regressions visible to upstream's suite.
+
+Docs move completed: the superseded doc copies under `packages/forth-core/`
+(84 md/txt plus `design-audit.sh` and `.design-audit-baseline`) are removed;
+`design-docs/` is the single voice, restoring the DESIGN.md preamble rule
+flagged by this morning's audit (finding 2.8). `.pkgignore` keeps the doc
+patterns as a defensive fence with corrected comments; CLAUDE.md pointers
+updated.
+
+FIX-6B packet amendments (architect, gate mismatches examined per
+discipline):
+
+- Gate item 1 named the retired operating branch
+  `forth-core/pem-entry-fixes`; amended to the current operating branch
+  (`forth-core/stack-semantics-d1-d2`).
+- Gate item 3 expected exactly ONE `backtrace(callstack` match in
+  `core/freeList.c`; the current tree has THREE. The two extra matches
+  (lines ~248, ~272) are **upstream's own pre-existing "Memory freeing
+  A/B" diagnostics**, outside the guard hunk and untouched by the packet's
+  RULE LIFT. Change A deletes only the guard's block (~line 222). The
+  packet's identity checks on the guard itself (G2) match exactly.

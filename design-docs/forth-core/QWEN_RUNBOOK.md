@@ -25,10 +25,11 @@ Every pre-F prompt set is complete (verified in
 | `design-docs/package-manager/QWEN_IMPLEMENTATION_PROMPTS.md` | ARCHIVED — execution hazard, never run |
 
 The F series (F1.5 through F6) is fully landed as of F6-6 (`d9b1e894b`,
-2026-07-20) — no Qwen packets remain queued. Open work is the F6
-stage-exit hardware bench (row 11i) plus two owner-directed audits (rows
-11j-11k, neither is Qwen work); after those the accepted backlog is
-empty (DESIGN-HISTORY 2026-07-16 entry).
+2026-07-20) — no Qwen packets remain queued. Both owner-directed audits
+landed (rows 11j-11k). Remaining open work is row 11i, converted by owner
+ruling 2026-08-02 from a hardware bench to an automated sim-run bench —
+plan and packet decomposition in `TESTING.md` §5 (stages T1-T4); after
+that the accepted backlog is empty.
 
 ## 1. Per-session procedure (identical for every packet)
 
@@ -101,9 +102,9 @@ architect session first; the future-series packet has not been authored yet.
 | 11f | F6-4 parameter entry emits canonical text | **LANDED** `4ca4bfde4` (architect) | `QWEN_PROMPTS_F6_4_param_text.md` |
 | 11g | F6-5 dictionary-backed word catalog | **LANDED** `f7375ef37` (architect; clean first-gate run) | `QWEN_PROMPTS_F6_5_word_catalog.md` |
 | 11h | F6-6 acceptance battery (stage close) | **LANDED** `d9b1e894b` (architect; 2 pre-existing save/restore-vs-allocator gaps found, logged for the code audit, not fixed here) | `QWEN_PROMPTS_F6_6_acceptance.md` |
-| 11i | F6 stage-exit hardware bench (Blocks A-F vs landed behavior) | **OPEN** — [S]+[A], DM42n required | `F6_KEYBOARD_PEM_AUDIT.md` |
-| 11j | Test-suite audit (toothless/bad-design test sweep) | **OPEN** (2026-07-20 owner instruction) | — |
-| 11k | forth-core code audit (production code) | **OPEN** (2026-07-20 owner instruction, after 11j) | — |
+| 11i | F6 stage-exit bench, Blocks A-F — **converted to an automated sim-run bench** (owner ruling 2026-08-02; rows needing physical hardware get marked HARDWARE-ONLY and leave the binding queue) | **OPEN** — plan `TESTING.md` §5 T3, packets to author after the T2 decision | `F6_KEYBOARD_PEM_AUDIT.md` + `TESTING.md` |
+| 11j | Test-suite audit (toothless/bad-design test sweep) | DONE `cbd285e09` (14 rigor fixes; 1 pre-existing production bug logged) | — |
+| 11k | forth-core code audit (production code) | DONE — code audits #1-#4 (`88a2b5f85`, `976b864b5`, `434b79612`, `0e959574a`), S1-S3 cleanup series, design audit #1 (`8f3c3db7c`) | — |
 
 ## 3. After the series — no Qwen work
 
@@ -124,8 +125,8 @@ Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),
   the `UPSTREAM_BUG_REM_alpha_menu.md` style, **S** files them.
 - Final docs reconciliation pass (DESIGN.md stale/interim prose,
   DESIGN-HISTORY, ledger closeout) — **A**, docs-only commits.
-- Flash baseline/deltas (`make dmcp5r47`, RULE-1) — **S** runs, **A**
-  records.
+- Flash baseline/deltas (`make dmcp5r47`, RULE-1) — **A** runs and records
+  (owner ruling 2026-08-02; was S).
 - Then the accepted implementation backlog is **empty**; anything further
   starts with a new owner ruling (**S**).
 
