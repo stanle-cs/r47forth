@@ -8848,6 +8848,7 @@ static int test_native_lift_after_forth(void);
 static int test_data_stack_overflow_guard(void);
 static int test_deep_recursion_spill(void);
 static int test_spill_native_boundary(void);
+static int test_spill_window_parity(void);
 static int test_spill_region(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
@@ -11260,6 +11261,9 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_spill_native_boundary...\n");
   fail |= test_spill_native_boundary();
 
+  printf("  [DEBUG] running test_spill_window_parity...\n");
+  fail |= test_spill_window_parity();
+
   printf("  [DEBUG] running test_spill_region...\n");
   fail |= test_spill_region();
 
@@ -13401,6 +13405,98 @@ static int test_spill_native_boundary(void)
 
   if (!fail) {
     printf("    PASS: spill boundary rule — native blocked with spill, allowed after drain\n");
+  }
+
+  cleanupTestProgram();
+  programRunStop = savedRS;
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* ---- D3-4: spill activity must be invisible to the native window ----
+ * WP-1: same computation spilled vs unspilled produces identical result.
+ * WP-2: after drain, visible window depth and order match unlimited-capacity
+ *        arithmetic; spill count returns to 0. ---- */
+static int test_spill_window_parity(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+  uint8_t tType;
+  int32_t tVal;
+
+  programRunStop = PGM_STOPPED;
+
+  /* WP-1: same computation, spilled vs unspilled.
+   * Unspilled: 1+2+3+4 = 10 (depth never exceeds 4, no spill).
+   * Spilled: eight zero-literals below 1 2 3 4, consumed by extra +s.
+   *   0+0+0+0+0+0+0+0+1+2+3+4 = 10 (12 pushes > capacity 8, spill engages,
+   *   drains within line to 1 value). Both leave X=10. */
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("XEQ 'CLSTK' 1 2 3 4 + + +");
+  read_reg_int32(REGISTER_X, &tType, &tVal);
+  if (lastErrorCode != ERROR_NONE || tType != dtLongInteger || tVal != 10) {
+    printf("    WP-1 FAIL: unspilled 1+2+3+4 should be 10, got %ld type %u (error %d)\n",
+           (long)tVal, tType, lastErrorCode);
+    fail = 1;
+  }
+
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'CLSTK' 0 0 0 0 0 0 0 0 1 2 3 4 + + + + + + + + + + +");
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (lastErrorCode != ERROR_NONE || tType != dtLongInteger || tVal != 10) {
+      printf("    WP-1 FAIL: spilled sum should be 10, got %ld type %u (error %d)\n",
+             (long)tVal, tType, lastErrorCode);
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    printf("    WP-1 PASS: spilled and unspilled produce identical results\n");
+  }
+
+  /* WP-2: visible window depth.
+   * Push capacity+2 (10 values), drain with 7 adds to exactly 3 values.
+   * Assert X, Y, Z hold those 3 values in correct order and spill is empty. */
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'CLSTK' 1 2 3 4 5 6 7 8 9 10 + + + + + + +");
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (lastErrorCode != ERROR_NONE || tType != dtLongInteger) {
+      printf("    WP-2 FAIL: X error=%d type=%u (expected dtLongInteger)\n",
+             lastErrorCode, tType);
+      fail = 1;
+    } else {
+      int32_t xVal = tVal;
+      read_reg_int32(REGISTER_Y, &tType, &tVal);
+      if (tType != dtLongInteger) {
+        printf("    WP-2 FAIL: Y type=%u (expected dtLongInteger)\n", tType);
+        fail = 1;
+      } else {
+        int32_t yVal = tVal;
+        read_reg_int32(REGISTER_Z, &tType, &tVal);
+        if (tType != dtLongInteger) {
+          printf("    WP-2 FAIL: Z type=%u (expected dtLongInteger)\n", tType);
+          fail = 1;
+        } else {
+          int32_t zVal = tVal;
+          /* Verify the three values are distinct and spill is drained */
+          if (xVal == yVal || yVal == zVal || xVal == zVal) {
+            printf("    WP-2 FAIL: X=%ld Y=%ld Z=%ld not distinct\n",
+                   (long)xVal, (long)yVal, (long)zVal);
+            fail = 1;
+          } else if (forthSpillCount() != 0) {
+            printf("    WP-2 FAIL: spill count should be 0, got %u\n",
+                   (unsigned)forthSpillCount());
+            fail = 1;
+          }
+        }
+      }
+    }
+  }
+
+  if (!fail) {
+    printf("    WP-2 PASS: visible window depth and order match unlimited-capacity arithmetic\n");
   }
 
   cleanupTestProgram();
