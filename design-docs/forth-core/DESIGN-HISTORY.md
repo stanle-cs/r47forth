@@ -1896,3 +1896,36 @@ Remaining from the bench conversion: the HARDWARE-ONLY residue
 (F6_KEYBOARD_PEM_AUDIT §6) stays best-effort on device. TESTING.md gains
 the PROPOSED T5 test-corpus restructure stage (megafile split, reader-side
 accessors, tabular migration) — awaiting owner ruling.
+
+## 2026-08-03 — T5 ruled and largely landed (T5-1 `08b241a23`, T5-2 `0aba84b2d`)
+
+Owner ruling: proceed with the TESTING.md T5 test-corpus restructure.
+Both packets implemented by the local model under the new runbook §4a
+authoring rules — and §4a validated immediately: T5-2's Part A (three
+accessors + nine site conversions) landed in ONE session with ZERO
+architect corrections, versus SB-1's six correction cycles for comparable
+scope. Stated layout facts + unique anchors + explicit STOP boundary is
+the difference.
+
+- **T5-1 — include-part split.** `test_dict_reloc.c` 23,266 → 13,283
+  lines; 61 functions moved to `test_capture.part.h` (31) and
+  `test_params.part.h` (30) by the deterministic
+  `tools/split_test_corpus.py` (line-accounting validated; gate green;
+  320 PASS). Landed as a §2.10-recorded deviation from the proposal:
+  include-parts keep ONE compilation unit — no extern surgery, no
+  build/audit/citation churn — at the cost of no per-area compile
+  parallelism (irrelevant here). Core area (113 functions) queued for a
+  later part.
+- **T5-2 — reader-side accessors.** `stepIsForthStep` / `stepIsMarker` /
+  `stepSrcTextEq` join `tpSrcPayload`; the sim-bench hand-index sites
+  converted; PROGRAM-FIXTURE RULE gains the inspection clause (runbook
+  §4). Mutations: accessor-lie on the payload offset reds SB-A2/A5/F2(b)
+  exactly as required; accessor-lie on the signature reds the suite via
+  SIGSEGV (exit 139) before asserts print — valid proof the accessor is
+  load-bearing, and a noted hardening item: one bench flow proceeds
+  unsafely when the signature check lies. Restores verified, final gate
+  green, 13/13 bench lines.
+
+Queued from T5: core-area split part; legacy hand-offset burn-down
+(99 sites, opportunistic); tabular sweep migration (in-C tables, then
+upstream .txt via the T2 hook).
