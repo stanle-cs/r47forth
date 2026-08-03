@@ -56,6 +56,7 @@
 #define OPTION_SHOW                    //                   // SHOW (alternative to VIEW)
 #define OPTION_SLV_ZETA_BETA           //                   // SLVC, SLVQ, ZETA, BETA
 #define OPTION_SLVP                    //                   // SLVP general polynomial roots (companion matrix through the EIGEN QR solver; requires OPTION_EIGEN)
+#define OPTION_INFSUMS                 // TEMPORARY         // Infinity sum with the early stop; the plain programmable sum and product stay
 #define OPTION_ELLIPTIC                //                   // Elliptic functions
 #define OPTION_BESSEL                  //                   // Bessel functions
 #define OPTION_ORTHO                   //                   // Orthogonal-polynomials menu (ORTHO)
@@ -276,6 +277,7 @@
             #undef  OPTION_XFN_1000      // ✓  5224 bytes // XFN extended 1000 digit math Functionality
             #undef  OPTION_VECTOR        // ✓ 13672 bytes // Vector 12952 saving if ELEC is not in; 9568 saving if ELEC is in
             #undef  OPTION_SLVP          // ✓  2024 bytes // SLVP general polynomial roots (companion matrix through the EIGEN QR solver)
+            #undef  OPTION_INFSUMS       // ?   400 bytes // Infinity sum with the early stop; the plain programmable sum and product stay
     #define OPTION_TVM_AMORT             // ✓  1648 bytes // Use additional AMORT in tvm
     #define OPTION_DATAFILE              // ✓  2112 bytes // Without register/variable .d47 export & import
 

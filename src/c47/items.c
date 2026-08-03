@@ -1376,6 +1376,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnEqCursorRight             (uint16_t unusedButMandatoryParameter) {}
   void fnEqCalc                    (uint16_t unusedButMandatoryParameter) {}
   void fnProgrammableSum           (uint16_t unusedButMandatoryParameter) {}
+  void fnProgrammableSumInf        (uint16_t unusedButMandatoryParameter) {}
   void fnProgrammableProduct       (uint16_t unusedButMandatoryParameter) {}
   void fnProgrammableiSum          (uint16_t unusedButMandatoryParameter) {}
   void fnProgrammableiProduct      (uint16_t unusedButMandatoryParameter) {}
@@ -1774,6 +1775,16 @@ bool_t isFunctionOldParam16(uint16_t func) {
   #define S18_fnXXfn_RDP     itemToBeCoded
   #define S18_fnXXfn_RSD     itemToBeCoded
 #endif //OPTION_XFN_1000
+
+#if defined(OPTION_INFSUMS)
+  #define INF_fnSumInf       fnProgrammableSumInf
+  #define INF_FNCT           CAT_FNCT
+  #define INF_TM             TM_LBLONLY
+#else //OPTION_INFSUMS
+  #define INF_fnSumInf       itemToBeCoded
+  #define INF_FNCT           CAT_NONE
+  #define INF_TM             NOPARAM
+#endif //OPTION_INFSUMS
 
 
 
@@ -4625,9 +4636,9 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2753 */  UNIT_CONV(constFactorTonneKg     , multiply         ,            "tonne"                              STD_RIGHT_ARROW                                                ,            "tonne"                              STD_RIGHT_ARROW                                                ),
 /* 2754 */  UNIT_CONV(constFactorTonneKg     , divide           ,            "kg"                                 STD_RIGHT_ARROW                                                ,            "kg"                                 STD_RIGHT_ARROW                                                ),
 
-/* 2755 */  { itemToBeCoded,                NOPARAM,                     "2755",                                           "2755",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
-/* 2756 */  { itemToBeCoded,                NOPARAM,                     "2756",                                           "2756",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2755 */  { INF_fnSumInf,                     INF_TM,                     STD_INFINITY STD_SUM STD_SUB_n,                STD_INFINITY STD_SUM STD_SUB_n,                (0 << TAM_MAX_BITS) |    99, INF_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         | RESULT_IN_X },
 
+/* 2756 */  { itemToBeCoded,                   NOPARAM,                     "2756",   /*reserved export d47 data*/         "2756",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /* 2757 */  { fnSaveXFNRegister,               NOPARAM,                     "EXPxfnx",                                     "EXPxfnx",                                     (0 << TAM_MAX_BITS) |    97, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
 /* 2758 */  { fnSaveLetteredRegisters,         NOPARAM,                     "EXPltr",                                      "EXPltr",                                      (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
 /* 2759 */  { fnSaveStackRegisters,            NOPARAM,                     "EXPstk",                                      "EXPstk",                                      (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },
