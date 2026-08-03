@@ -283,6 +283,7 @@ mathspecial_cov
 checkval_cov
 matrixops_cov
 matrixedit_cov
+mateditscroll_cov
 matrixelem_cov
 prime_cov
 disterr_cov
