@@ -125,8 +125,31 @@ reasoning: DESIGN-HISTORY 2026-08-03 (the migration entry's successor).
 
 | # | Step | Who | Input |
 |---|---|---|---|
-| G1 | softkey→word mapping: index ≥ 1, f/g shift rows, `firstItem` paging, the blank-key refusal, draw path per page | **[QWEN]** | `QWEN_PROMPTS_G1_picker_key_mapping.md` |
-| G2 | scan cut-off named + pinned; content allocation guarded | **[GATE LOCKED]** on G1 | `QWEN_PROMPTS_G2_picker_scan_alloc.md` |
+| G1 | softkey→word mapping: index ≥ 1, f/g shift rows, `firstItem` paging, the blank-key refusal, draw path per page | **DONE** `78e32af30` (architect-implemented; 5 mutations RED) | `QWEN_PROMPTS_G1_picker_key_mapping.md` |
+| G2 | scan cut-off named + pinned; content allocation guarded | **DONE** `2f378c911` (architect-implemented; 3 mutations RED after two fixture rewrites) | `QWEN_PROMPTS_G2_picker_scan_alloc.md` |
+
+Both were implemented in the architect session rather than handed to the
+local model (FIX-6B precedent). The packets stay on disk as the authored
+record; anyone re-running them should read the commit messages first,
+since G2's subcase 1 fixture is NOT the one the packet specifies — see
+below.
+
+**What the mutation runs changed (binding for anyone authoring a
+cut-off pin).** G2's packet specified a fixture of one definition per
+step, sized from `FORTH_PICKER_MAX_SCAN_STEPS`. Both properties were
+wrong and both stayed green under mutation:
+
+1. Sizing the fixture from the constant makes it immune to a change in
+   the constant, and therefore blind to one. A constant that changes
+   calculator behaviour is pinned as a literal, beside the mechanism.
+2. One definition per step means the picker's 170-name cap
+   (`TMP_STR_LENGTH/15`) bites at step 170 and the step cut-off never
+   acts. The fixture was measuring the name cap. A cut-off pin needs
+   steps the other limit cannot reach — here, two definitions separated
+   by 1000 non-defining filler steps.
+
+Neither was visible from the code or from a green gate. Both came out of
+running the mutations, which is the argument for running them.
 
 Residual after G1+G2, recorded so it is not mistaken for covered:
 pixel-level softkey rendering (`showSoftkey`, the combined-key

@@ -2209,3 +2209,47 @@ G1's fifth subcase pins the label the renderer is handed. That is the
 honest limit of what the C battery can assert without an LCD read-back
 harness. Calling it covered would be the decoration the 2026-07-21 audit
 removed fourteen cases for.
+
+## 2026-08-03 — G1 and G2 landed; the mutations rewrote one test twice
+
+Both stage-G packets are in (`78e32af30`, `2f378c911`), implemented in
+the architect session on the FIX-6B precedent, not handed to the local
+model. Gate green, both harnesses, arena unchanged, flash
+1105360 -> 1105360.
+
+G1 pins the softkey path five ways on one 20-name picker, every subcase
+driving `determineFunctionKeyItem_C47` with a real key string and routing
+the result through `forthPickerGuard`. The mutation that matters is the
+fifth: delete the `dynamicMenuItem < numItems` conjunct and the blank key
+on the partial last page inserts `dynmenuGetLabel()`'s out-of-range `""`
+plus a space, so the line reads `N018  ` at cursor 6. The corruption that
+conjunct exists to prevent, reproduced on demand. That conjunct had
+carried the whole load since F6-3 with nothing watching it.
+
+**G2 is the entry worth keeping, and not for what it pins.** Its first
+subcase was written exactly as the packet specified. It went green, and
+it was wrong twice over. Both mutations caught it.
+
+Raising `FORTH_PICKER_MAX_SCAN_STEPS` from 1000 to 2000 left it green.
+The fixture sized itself from the constant, so both sides of the
+comparison moved together: a fixture derived from the number under test
+is immune to a change in it, and therefore blind to one. A constant that
+changes what the calculator does is now pinned as a literal, beside the
+mechanism it governs.
+
+Then deleting the break left it green too. The fixture used one
+definition per step, and the picker's 170-name cap (`TMP_STR_LENGTH/15`)
+bites at step 170 — a thousand steps before the step cut-off can act. The
+test had been measuring the name cap the whole time and reporting it as
+the scan limit. Rebuilt with two definitions, a near one and a far one
+past step 1000, separated by a thousand non-defining filler steps, so the
+only limit that can keep the far name out is the one under test.
+
+Neither defect was visible in the code, in review, or in a green gate.
+Both fell out of running the mutations. That is the argument for the
+rule that every packet lands with them.
+
+Coverage of the picker now runs from the program text through the
+content array, the index walk, the key mapping and the guard. Pixel-level
+rendering stays out, recorded as residual in the runbook — G1's first
+subcase pins the label the renderer is handed and stops there.
