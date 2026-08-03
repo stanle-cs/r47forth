@@ -1753,3 +1753,28 @@ discipline):
   A/B" diagnostics**, outside the guard hunk and untouched by the packet's
   RULE LIFT. Change A deletes only the guard's block (~line 222). The
   packet's identity checks on the guard itself (G2) match exactly.
+
+
+## 2026-08-02 — FIX-6B landed (`5c2e7109a`)
+
+Executed by the architect under the two gate amendments above. Full gate
+green before and after; the three required mutations each went RED on
+exactly the named test (screen-drop → bug-screen assertion ×3;
+exact-match-only detection → interior double free slips through, list
+mutates 13→14; size-grow escape → "a free region grew"). Blast radius
+verified by PASS-set diff: only the three renamed PASS lines (plus ASLR
+address noise). Arena unchanged. Generated mirror equal.
+
+**Flash 1094832 → 1094912 (+80 B) — the packet's predicted net reduction
+was wrong.** The deleted backtrace/print block sat inside
+`#if !defined(DMCP_BUILD)` and never reached the device build, so its
+removal saved nothing on hardware; the +80 B is the new unconditional
+`displayBugScreen` call and message string. That cost is the feature:
+before this commit the device build detected the overlap and silently
+continued; now it halts loudly. Lesson for future packets: a flash
+prediction must check which side of `DMCP_BUILD` the deleted code lives
+on.
+
+The `core/freeList.c` no-touch rule resumes. Next: **S** forks/pushes and
+opens the upstream MR with the fail-loud patch (UPSTREAM_REPORTS §3
+carries the one open call-context question for upstream).

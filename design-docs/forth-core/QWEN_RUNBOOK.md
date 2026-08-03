@@ -116,9 +116,10 @@ Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),
   reworked to raise `displayBugScreen` (fail-loud) rather than
   silently-refuse-and-continue; detection scan unchanged. Reworked as
   `QWEN_PROMPTS_FIX6_bugscreen.md` (FIX-6B) — the SOLE packet allowed to
-  touch `freeList.c` (it lifts the no-touch rule for that one hunk);
-  independent of the F-series, runnable any time on a clean tree. Run it,
-  then **S** forks/pushes/opens the MR with the fail-loud patch; the reply
+  touch `freeList.c` (it lifts the no-touch rule for that one hunk).
+  **EXECUTED 2026-08-02 (`5c2e7109a`, architect; two gate amendments and
+  the +80 B flash correction recorded in DESIGN-HISTORY).** Remaining:
+  **S** forks/pushes/opens the MR with the fail-loud patch; the reply
   (in UPSTREAM_REPORTS §3) flags one open call-context question (immediate
   vs. latched raise) for upstream to finalize. Optional upstream reports
   (tam.c item-scan colon gap; decode.c renderer indexing) — **A** drafts in
