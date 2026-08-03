@@ -728,7 +728,7 @@ TO_QSPI const int16_t menu_EQN[]         = { ITM_EQ_NEW,                    ITM_
 
 TO_QSPI const int16_t menu_ADV[]         = { ITM_SIGMAn,                    ITM_PIn,                       ITM_FQX,                      ITM_PLTf,                    -MNU_Sfdx,                     ITM_SOLVE,
                                              ITM_iSIGMAn,                   ITM_iPIn,                      ITM_FDQX,                     ITM_PGMPLT,                   ITM_PGMINT,                   ITM_PGMSLV,
-                                             ITM_SIGMAnINF,                 ITM_SLVQ,                      ITM_SLVC,                     ADV_SLVP,                     ITM_NULL,                     ITM_NULL                 };
+                                             ITM_SIGMAnINF,                 ADV_SLVQ,                      ADV_SLVC,                     ADV_SLVP,                     ITM_NULL,                     ITM_NULL                 };
 
 TO_QSPI const int16_t menu_1stDeriv[]    = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_GRAPHS,                   ITM_FPHERE                };
 //note: the items in here are dynamically assigned, including the static ones
