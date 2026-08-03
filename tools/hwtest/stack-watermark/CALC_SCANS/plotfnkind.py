@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Draw the runs as bar charts into one PDF: a page for the speed and a page for the depth.
 
-    python3 plotfnkind.py
+    python3 plotfnkind.py                 every machine, speed and memory
+    python3 plotfnkind.py DM42            that machine only
+    python3 plotfnkind.py DM42 speed      that machine's speed page alone
+    python3 plotfnkind.py DM42 speed 06-08 08-03_002    only the runs whose folder matches
 
-The file is named charts-<date>_<time>.pdf, so a chart already drawn is never overwritten.
+The file is named charts-<date>_<time>.pdf, with the chosen machine and metric in the name, so a
+chart already drawn is never overwritten.
 
 Forty groups, one per case, with a bar per run in the order the runs were taken. Speed is on a
 logarithmic scale because the cases span seven orders of magnitude, from a stack roll to a solve.
@@ -37,6 +41,13 @@ SHADES = [(0.72, 0.80, 0.90), (0.45, 0.62, 0.82), (0.22, 0.42, 0.68), (0.09, 0.2
           (0.06, 0.14, 0.30)]
 
 SPEED_FLOOR = 0.01          # ms: below this a reading is the tick resolution, not a measurement
+
+# Readings the run wrote but that measure nothing: the function was not in that firmware, so the case
+# timed whatever stands in for it. The TSV cannot show this, since the case ran and returned, so it has
+# to be said here. Each entry is part of a run folder, the case number, and why.
+BLANK = [
+    ("03.00b", "26", "the alpha function is not in this firmware, so the case timed a NOP"),
+]
 
 
 def wrap(text, width):
@@ -121,12 +132,31 @@ def machine_of(folder):
 
 
 def stamp_of(folder):
-    """The clock stamp the calculator wrote on the file, as the date and time it was taken."""
+    """The clock stamp the calculator wrote on the file, as the time it was taken."""
     names = sorted(n for n in os.listdir(folder) if n.endswith(".REGS.TSV"))
     raw = names[0].split(".")[0] if names else ""
     if len(raw) >= 13 and raw[8] == "-":
-        return "%s-%s-%s %s:%s" % (raw[0:4], raw[4:6], raw[6:8], raw[9:11], raw[11:13])
+        return "%s:%s" % (raw[9:11], raw[11:13])
     return raw
+
+
+def order_of(folder):
+    """What decides the order of the bars: the run folder first, then the file time within it. The
+    folder name opens with the date and a sequence number, which is the order the runs are meant to be
+    read in; the calculator's own clock decides only between files inside one folder."""
+    root = os.path.dirname(os.path.abspath(__file__))
+    return (os.path.relpath(folder, root), stamp_of(folder))
+
+
+def label_of(folder):
+    """What the key says: enough of the folder to tell the runs apart, then the time on the file."""
+    root = os.path.dirname(os.path.abspath(__file__))
+    rel = os.path.relpath(folder, root)
+    head, _, tail = rel.partition(os.sep)
+    name = " ".join(w for w in head.split() if w not in MACHINES)
+    if len(name) > 5 and name[:4].isdigit():
+        name = name[5:]                                   # the year is the same on every run so far
+    return "%s%s  %s" % (name, "/" + tail if tail else "", stamp_of(folder))
 
 
 def runs_by_machine():
@@ -135,8 +165,16 @@ def runs_by_machine():
     for folder in ck.all_runs():
         grouped.setdefault(machine_of(folder), []).append(folder)
     for machine in grouped:
-        grouped[machine].sort(key=stamp_of)
+        grouped[machine].sort(key=order_of)
     return grouped
+
+
+def blanked(folder, number):
+    """Whether this run's reading of this case measures nothing, and is to be left off the chart."""
+    for where, case, _why in BLANK:
+        if where.lower() in folder.lower() and case == number:
+            return True
+    return False
 
 
 def gather(folders, value_of):
@@ -149,9 +187,9 @@ def gather(folders, value_of):
         for case in run["cases"]:
             names[case["number"]] = case["name"]          # the newest run wins, being processed last
             v = value_of(case, base)
-            if v is not None:
+            if v is not None and not blanked(folder, case["number"]):
                 values[case["number"]] = (v, case["name"])
-        series.append((stamp_of(folder), SHADES[index % len(SHADES)], values))
+        series.append((label_of(folder), SHADES[index % len(SHADES)], values))
     return series, names
 
 
@@ -219,7 +257,7 @@ def chart(title, subtitle, series, names, logarithmic, unit, floor=None, span=No
     for line in wrap(title, 92):
         y -= 15 * TYPE + 4
         c.text(MARGIN_L, y, line, size=15 * TYPE)
-    for line in wrap(subtitle, 122):
+    for line in wrap(subtitle + "  Scale: " + unit + ".", 122):
         y -= 9 * TYPE + 3
         c.text(MARGIN_L, y, line, size=9 * TYPE, grey=0.35)
     if dropped:
@@ -229,6 +267,11 @@ def chart(title, subtitle, series, names, logarithmic, unit, floor=None, span=No
                if dropped == 1 else
                "%d bars left out: those case numbers named different cases in older runs" % dropped,
                size=8 * TYPE, grey=0.45)
+    for where, case, why in BLANK:
+        if any(where.lower() in label.lower() for label, _c, _v in series) and case in names:
+            y -= 8 * TYPE + 3
+            c.text(MARGIN_L, y, "case %s %s left off %s: %s" % (case, names[case], where, why),
+                   size=8 * TYPE, grey=0.45)
 
     y -= 8 * TYPE + 12
     kx = MARGIN_L                                                  # the key, under the header
@@ -236,8 +279,6 @@ def chart(title, subtitle, series, names, logarithmic, unit, floor=None, span=No
         c.rect(kx, y - 2, 12, 12, colour)
         c.text(kx + 17, y + 1, label, size=8.5 * TYPE, grey=0.15)
         kx += 26 + 4.9 * TYPE * len(label)
-
-    c.text(MARGIN_L - 46, y0 + plot_h + 8, unit, size=8 * TYPE, grey=0.35)
 
     return c.stream()
 
@@ -247,14 +288,32 @@ def main():
     grouped = runs_by_machine()
     pages, made, memory_pages = [], [], []
 
+    # A machine name and a metric may be named, in either order, to draw one page instead of them all.
+    want = [a.lower() for a in sys.argv[1:]]
+    only_machine = next((m for m in MACHINES if m.lower() in want), None)
+    only_metric = next((k for k in ("speed", "memory") if k in want), None)
+    # Anything else names a run: any part of its folder will do. Given none, every run is drawn.
+    picked = [a for a in want if a not in [m.lower() for m in MACHINES] + ["speed", "memory"]]
+
+    if picked:
+        for machine in grouped:
+            grouped[machine] = [f for f in grouped[machine]
+                                if any(w in os.path.relpath(f, here).lower() for w in picked)]
+        if not sum(len(v) for v in grouped.values()):
+            raise SystemExit("no run matches %s. Try one of:\n  %s"
+                             % (", ".join(picked),
+                                "\n  ".join(sorted(os.path.relpath(f, here) for f in ck.all_runs()))))
+
     for machine in MACHINES:
+        if only_machine and machine != only_machine:
+            continue
         folders = grouped.get(machine, [])
         if not folders:
             continue
 
         speed, names = gather(folders, lambda case, base: ck.per_call_ms(case, base))
         speed = [x for x in speed if x[2]]
-        if speed:
+        if speed and only_metric != "memory":
             pages.append(chart(
                 "%s, time per call" % machine,
                 "One bar per run, oldest on the left, marked with the time it was taken. Logarithmic. A bar "
@@ -266,7 +325,7 @@ def main():
         depth, dnames = gather(
             folders, lambda case, base: case["stack"] if case["status"] == ck.STATUS_MEASURED else None)
         depth = [x for x in depth if x[2]]
-        if depth:
+        if depth and only_metric != "speed":
             pages.append(chart(
                 "%s estimate working memory (stack) used, including overhead for probe and base loading "
                 "of ca. 2000 bytes." % machine,
@@ -279,11 +338,16 @@ def main():
                 memory_pages.append(pages[-1])
 
     # Stamped, never a fixed name: a chart already drawn is evidence and must not be overwritten.
+    if not pages:
+        raise SystemExit("nothing to draw for that choice")
     stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
-    name = "charts-%s.pdf" % stamp
+    tag = "".join("_" + x for x in (only_machine, only_metric) if x)
+    if picked:
+        tag += "_%druns" % sum(len(v) for v in grouped.values())
+    name = "charts-%s%s.pdf" % (stamp, tag)
     write_pdf(os.path.join(here, name), pages)
     print("wrote %s, %d pages" % (name, len(pages)))
-    if memory_pages:
+    if memory_pages and not (only_machine or only_metric):
         short = "charts-%s_m.pdf" % stamp
         write_pdf(os.path.join(here, short), memory_pages)
         print("wrote %s, %d pages, the calculator memory charts alone" % (short, len(memory_pages)))
