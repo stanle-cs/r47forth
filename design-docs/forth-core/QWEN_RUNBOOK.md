@@ -131,6 +131,68 @@ Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),
 - Then the accepted implementation backlog is **empty**; anything further
   starts with a new owner ruling (**S**).
 
+## 4a. Packet authoring for the local implementer (BINDING, from the 2026-08-03 sim-bench trial)
+
+The SB-1/SB-2 trial (DESIGN-HISTORY 2026-08-03) measured exactly where the
+27B succeeds and fails. Every future packet is authored against these
+rules; a packet that violates one is a packet defect.
+
+**Split every packet into two parts with different shapes.**
+
+- **Part A — implementation** (the model is genuinely good at this): the
+  subcases/spec, sized to **at most 5-7 subcases per session** (SB-2's
+  session died mid-body on a larger scope; SB-1's 7 fit). Delegating
+  reads ("grep X, copy its idiom") is fine — the tool-using implementer
+  handles it — but see the exactness rules below for what may NOT be
+  delegated.
+- **Part B — mechanical choreography** (the model CANNOT self-sequence
+  this): mutations, restore chains, commits. Authored as EXACT command
+  blocks — apply sed, verify grep, gate to a named log, required RED
+  line, revert sed, green gate — and run **one block per FRESH session**,
+  nothing else in the prompt. The architect derives Part B's line numbers
+  AFTER Part A lands (they shift), never at packet-authoring time.
+
+**Exactness rules — what the model will otherwise guess wrong:**
+
+1. **Byte-layout facts are stated or grep-directed, never derivable.**
+   Length-byte conventions, marker signatures, payload offsets: either
+   write the literal in the packet or direct a grep at a NAMED existing
+   assert. Left open, the model invents constants (the 0x85B2/ITM_END
+   incident) or conventions (len 6 vs 5).
+2. **Drive paths name the exact call, not the gesture.** "Press the TAM
+   colon" is under-specified — the model picks the wrong dispatcher
+   (runFunction(ITM_COLON) reaches nothing; tamProcessInput(ITM_COLON)
+   is the machine; ITM_DOT is not ITM_PERIOD). Every key drive names
+   function AND item, or names the landed test whose drive slice to copy
+   verbatim.
+3. **Every fixture asserts its armed state before the act** (picker
+   current, flag set, colon armed) — and forcing the state to satisfy the
+   assert is forbidden and named as such (the setSystemFlag hack): if the
+   precondition fails, the fixture is wrong; STOP.
+4. **Expected mutation REDs quote the exact FAIL line text.** A mutation
+   that stays green is a finding about the TEST (it caught C2's
+   form-blind assert) — the session STOPs and reports it, never
+   "fixes" the mutation.
+5. **Edit anchors are unique strings** (subcase printf text), never
+   structural boilerplate — 41% of historical edit failures came from
+   `if (!sc) {`-class anchors.
+6. **Log paths are named per packet and declared to override any
+   remembered form** (the lessons plugin steers commands toward the
+   previous packet's log names).
+
+**Session management (operator/architect side):**
+
+- Corrections carry **exactly ONE item per message** — the model applies
+  one change per cycle and silently drops the rest of a list.
+- After ~2 corrections on one session, or on ANY command loop (same
+  command twice with no edit between), kill and start a FRESH session
+  with only the remaining work — long correction chains poison the
+  context and the model replays its last pattern. Kill by recorded PID
+  only (a pkill pattern once matched the monitoring itself).
+- The gate-grep EXECUTION GATE discipline stays: stale branch names,
+  counts, and line citations rot between authoring and execution — no
+  bare `file:line` in a packet without a grep+expected-count beside it.
+
 ## 4. Standing rules that survive every step
 
 - Packets are written for a ~100k-context Qwen: log-captured gate runs,
