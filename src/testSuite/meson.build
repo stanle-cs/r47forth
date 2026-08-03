@@ -6,6 +6,14 @@ testSuite_src = files(
   'hal/io.c',
   'hal/print_ir.c')
 
+# CUSTOM_PKG (fork infrastructure, T2-A): when a package patches under
+# src/testSuite, root meson.build phase 2 sets custom_pkg_testSuite_src
+# to the shadow-tree source list; compile from the shadow so the package
+# patch is visible, exactly as c47_src already does. Unset otherwise.
+if get_variable('custom_pkg_testSuite_src', []) != []
+  testSuite_src = custom_pkg_testSuite_src
+endif
+
 testSuite = executable('testSuite',
   build_by_default    : false,
   sources             : decNumber_src + c47_src + testSuite_src + [rasterFontsData_c, softmenuCatalogs_h, constantPointers_ch, conversionsTests_stamp],

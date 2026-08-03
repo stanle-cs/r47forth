@@ -84,10 +84,11 @@ Registered as a meson `test()` (workdir repo root, timeout 800 s):
 *every* target, so testSuite's `c47_src` compile picks up the package —
 including, in a build dir configured by the gate, `FORTH_DEBUG_SELFTEST`
 (harmless there: the suite's trigger needs `headlessMode`, which is the sim
-binary's flag). The overlay mirror root is **strictly `src/c47/`**
-(`pkg_patch_common.py` strips that prefix at three sites), so the package
-cannot patch `src/testSuite/` or register meson tests — every integration
-below must respect or change that boundary explicitly.
+binary's flag). The overlay mirror root is `src/c47/` plus the sibling
+roots in `SIBLING_ROOTS` (`pkg_patch_common.py`) — since T2-A
+(2026-08-02) a `testSuite/…` rel patches `src/testSuite/…`, shadowed and
+compiled exactly like c47 sources (see T2 below). Meson `test()`
+registration remains outside the package's reach.
 
 ## 3. Evidence (2026-08-02, base 44dc5a705)
 
@@ -122,26 +123,28 @@ build state; first run pays the TESTSUITE_BUILD recompile, cached after.
 Gate additions: require meson's `Ok:` summary line for testSuite, same
 status+banner double-check as the forth battery.
 
-**T2 — coverage boundary decision (owner + architect, before any T2 code).**
-Forth-visible native parity cases (e.g. the D1 boundary: a native item after
-a Forth push must lift) need either upstream's script format — which cannot
-drive program-step context — or a `cov*`-style C hook in `testSuite.c`,
-which lives **outside** the overlay's `src/c47/` mirror root. The options,
-in preference order:
+**T2 — coverage boundary: DECIDED and IMPLEMENTED (owner ruling
+2026-08-02, option 1).** The overlay now recognizes **sibling upstream
+roots**: a working-area rel whose first segment is in `SIBLING_ROOTS`
+(`tools/pkg_patch_common.py` — today only `testSuite`) maps to `src/<rel>`
+instead of `src/c47/<rel>`. All commands apply the mapping (refresh,
+materialize, rebase/integrate preflights, audit, status); the resolver
+shadows an active sibling root exactly like `src/c47` and emits `SIBSRC:`
+lines that the root `meson.build` turns into `custom_pkg_testSuite_src`,
+which `src/testSuite/meson.build` consumes in place of its `files()` list
+(fork-infrastructure hunk, same pattern as the existing `c47_src`
+override). An untouched sibling root costs nothing — verified by test.
+Mapping/classification/shadow behavior is pinned by 10 dedicated cases in
+the tooling suites (224 total green). The package can now carry a
+`testSuite.c` patch adding a `cov*`-style hook when T3 produces cases that
+need it — the *capability* exists; the hook itself is deliberately NOT
+pre-built (DESIGN_AUDIT Part 3 discipline).
 
-1. Extend the overlay mirror root to `src/` (mechanical: the three
-   `src/c47/` prefix sites in `pkg_patch_common.py`, plus audit scope), so
-   the package can carry a `testSuite.c` patch adding one generic
-   `covCustomPkg` hook. Footprint: one new upstream file touched, one hunk.
-2. Upstream MR adding a permanent package-test hook to `testSuite.c`
-   (config.c-hook precedent). Cleaner long-term, blocked on upstream
-   cadence.
-3. Keep suites disjoint (T1 only) and express parity pins only in the forth
-   battery. No new coupling, but native-side regressions stay invisible to
-   the scripts.
-
-Decide when T3 lands and the real need is measurable; do not pre-build the
-mechanism (that is how the capture buffer happened — see DESIGN_AUDIT Part 3).
+The discarded alternatives, for the record: an upstream MR adding a
+permanent package-test hook (cleaner long-term, blocked on upstream
+cadence — can still be proposed later and would let the sibling patch
+retire), and keeping the suites disjoint (rejected by owner: parity cases
+should be expressible in the upstream driver).
 
 **T3 — the 11i sim bench (replaces the hardware bench).** Convert
 `F6_KEYBOARD_PEM_AUDIT.md` §3 Blocks A–F from hardware experiments into

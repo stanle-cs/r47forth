@@ -443,5 +443,72 @@ class TestResolverNoLibclangDependency(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
 
 
+class TestSiblingRootShadow(unittest.TestCase):
+    """T2-A: a package patch under testSuite/ shadows src/testSuite and
+    emits SIBSRC: lines for the sibling target's source list; an
+    untouched sibling root costs nothing."""
+
+    @staticmethod
+    def _add_sibling(p):
+        sib = os.path.join(p.root, 'src', 'testSuite')
+        os.makedirs(os.path.join(sib, 'hal'), exist_ok=True)
+        with open(os.path.join(sib, 'testSuite.c'), 'w') as f:
+            f.write('int suite(void) {\n    return 0;\n}\n')
+        with open(os.path.join(sib, 'hal', 'gui.c'), 'w') as f:
+            f.write('int gui;\n')
+        with open(os.path.join(sib, 'meson.build'), 'w') as f:
+            f.write("testSuite_src = files(\n"
+                    "  'testSuite.c',\n"
+                    "  'hal/gui.c')\n")
+        subprocess.run(['git', 'add', '-A'], cwd=p.root,
+                       capture_output=True)
+        subprocess.run(['git', 'commit', '-q', '-m', 'sibling'],
+                       cwd=p.root, capture_output=True)
+
+    def test_sibling_patch_shadows_root_and_emits_sibsrc(self):
+        with _MiniProject() as p:
+            self._add_sibling(p)
+            edited = 'int suite(void) {\n    return 42;\n}\n'
+            p.refresh_pkg('packages/pkg-sib', 'testSuite/testSuite.c',
+                          edited)
+            r = p.run_resolver(['packages/pkg-sib'])
+            self.assertEqual(r.returncode, 0, r.stderr)
+
+            # Patched content lands in the shadow under its root prefix.
+            with open(os.path.join(p.shadow, 'testSuite',
+                                   'testSuite.c')) as f:
+                self.assertEqual(f.read(), edited)
+            # Untouched sibling files are shadowed too.
+            self.assertTrue(os.path.exists(
+                os.path.join(p.shadow, 'testSuite', 'hal', 'gui.c')))
+
+            # SIBSRC lines: one per testSuite_src entry, shadow paths.
+            sib_lines = [ln for ln in r.stdout.splitlines()
+                         if ln.startswith('SIBSRC:testSuite:')]
+            sib_paths = sorted(
+                ln[len('SIBSRC:testSuite:'):] for ln in sib_lines)
+            self.assertEqual(sib_paths, sorted([
+                os.path.join(p.shadow, 'testSuite', 'testSuite.c'),
+                os.path.join(p.shadow, 'testSuite', 'hal/gui.c'),
+            ]))
+            # ...and none of them leak into the c47_src lines.
+            c47_lines = [ln for ln in r.stdout.splitlines()[1:]
+                         if not ln.startswith(('SIBSRC:', 'GENCAT:',
+                                               'GENTST:'))]
+            for ln in c47_lines:
+                self.assertNotIn('testSuite', ln)
+
+    def test_inactive_sibling_root_costs_nothing(self):
+        with _MiniProject() as p:
+            self._add_sibling(p)
+            edited = UPSTREAM_TEST_C.replace('return 1;', 'return 9;')
+            p.refresh_pkg('packages/pkg-a', 'test.c', edited)
+            r = p.run_resolver(['packages/pkg-a'])
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertNotIn('SIBSRC:', r.stdout)
+            self.assertFalse(os.path.exists(
+                os.path.join(p.shadow, 'testSuite')))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -101,7 +101,12 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from pkg_patch_common import decode_patch_filename
+from pkg_patch_common import (
+    SIBLING_ROOTS,
+    decode_patch_filename,
+    upstream_abs_path,
+    upstream_repo_rel,
+)
 
 DEFAULT_ORDINAL = 10
 _EXCLUDED_TOP_DIRS = ('patches', 'files')
@@ -113,11 +118,13 @@ _CONFLICT_MARKER_RE = re.compile(r'^(<{7}|={7}|>{7})', re.MULTILINE)
 
 
 def check_rebase_preflight(project_root, target_ref):
-    """Check whether the caller's src/c47 is buildable at *target_ref*.
+    """Check whether the caller's upstream roots are buildable at
+    *target_ref*.
 
-    Resolves ``target_ref^{commit}``, compares the Git tree objects
-    ``HEAD:src/c47`` and ``target_ref:src/c47``, and detects tracked or
-    untracked changes under the caller's ``src/c47``.
+    Resolves ``target_ref^{commit}``, compares the Git tree objects of
+    every package-reachable upstream root (``src/c47`` plus the
+    SIBLING_ROOTS) between HEAD and the target, and detects tracked or
+    untracked changes under those roots.
 
     Returns a dict::
 
@@ -154,34 +161,42 @@ def check_rebase_preflight(project_root, target_ref):
     src_c47_tree_matches = True
     src_c47_dirty = False
 
-    # Compare tree objects HEAD:src/c47 and target:src/c47.
-    r_head = run(['git', 'rev-parse', f'{head_sha}^{{tree}}:src/c47'],
-                  cwd=project_root)
-    r_target = run(['git', 'rev-parse', f'{target_sha}^{{tree}}:src/c47'],
-                    cwd=project_root)
+    # Compare tree objects HEAD:<root> and target:<root> for every root
+    # the package system can touch: src/c47 plus the sibling roots
+    # (T2-A). The dict keys keep their historical src_c47 names; they
+    # now mean "every package-reachable upstream root".
+    upstream_roots = ['src/c47'] + [f'src/{r}' for r in SIBLING_ROOTS]
 
-    if r_head.returncode == 0 and r_target.returncode == 0:
-        head_tree = r_head.stdout.strip()
-        target_tree = r_target.stdout.strip()
-        if head_tree != target_tree:
+    for root_path in upstream_roots:
+        r_head = run(['git', 'rev-parse', f'{head_sha}^{{tree}}:{root_path}'],
+                      cwd=project_root)
+        r_target = run(['git', 'rev-parse',
+                        f'{target_sha}^{{tree}}:{root_path}'],
+                        cwd=project_root)
+
+        if r_head.returncode == 0 and r_target.returncode == 0:
+            head_tree = r_head.stdout.strip()
+            target_tree = r_target.stdout.strip()
+            if head_tree != target_tree:
+                src_c47_tree_matches = False
+                issues.append(
+                    f'{root_path} tree at HEAD ({head_sha[:12]}) differs '
+                    f'from target {target_ref} ({target_sha[:12]})')
+        elif r_head.returncode != 0 and r_target.returncode != 0:
+            # Neither has this root — that's fine, they match.
+            pass
+        else:
             src_c47_tree_matches = False
-            issues.append(
-                f'src/c47 tree at HEAD ({head_sha[:12]}) differs from '
-                f'target {target_ref} ({target_sha[:12]})')
-    elif r_head.returncode != 0 and r_target.returncode != 0:
-        # Neither has src/c47 — that's fine, they match.
-        pass
-    else:
-        src_c47_tree_matches = False
-        if r_head.returncode != 0:
-            issues.append(f'src/c47 does not exist at HEAD ({head_sha[:12]})')
-        if r_target.returncode != 0:
-            issues.append(
-                f'src/c47 does not exist at target {target_ref} '
-                f'({target_sha[:12]})')
+            if r_head.returncode != 0:
+                issues.append(
+                    f'{root_path} does not exist at HEAD ({head_sha[:12]})')
+            if r_target.returncode != 0:
+                issues.append(
+                    f'{root_path} does not exist at target {target_ref} '
+                    f'({target_sha[:12]})')
 
-    # Check for tracked/untracked changes under src/c47.
-    r_status = run(['git', 'status', '--porcelain', '--', 'src/c47'],
+    # Check for tracked/untracked changes under every reachable root.
+    r_status = run(['git', 'status', '--porcelain', '--'] + upstream_roots,
                    cwd=project_root)
     if r_status.returncode == 0 and r_status.stdout.strip():
         src_c47_dirty = True
@@ -189,7 +204,8 @@ def check_rebase_preflight(project_root, target_ref):
             line for line in r_status.stdout.splitlines() if line.strip()
         ]
         issues.append(
-            f'src/c47 has local changes ({len(status_lines)} file(s)): '
+            f'{"/".join(upstream_roots)} has local changes '
+            f'({len(status_lines)} file(s)): '
             + '; '.join(status_lines[:5]))
 
     buildable = src_c47_tree_matches and not src_c47_dirty
@@ -363,8 +379,9 @@ def base_file_content(project_root, base_commit, rel):
     match (BP-2). Caller must validate base_commit first (the commit
     must exist in the repo). Any git error other than path absence
     raises RuntimeError."""
+    repo_rel = upstream_repo_rel(rel)
     r = subprocess.run(
-        ['git', 'show', f'{base_commit}:src/c47/{rel}'],
+        ['git', 'show', f'{base_commit}:{repo_rel}'],
         capture_output=True, cwd=project_root)
     if r.returncode == 0:
         return r.stdout
@@ -373,7 +390,7 @@ def base_file_content(project_root, base_commit, rel):
             or 'but not in' in stderr_text):
         return None
     raise RuntimeError(
-        f'failed to extract src/c47/{rel} at base {base_commit[:12]}: '
+        f'failed to extract {repo_rel} at base {base_commit[:12]}: '
         f'{stderr_text.strip()}')
 
 
@@ -622,15 +639,16 @@ def generate_patch(base_bytes, materialized_path, rel, project_root,
                 f'or a bogus recorded base '
                 f'(PROPOSED_SPEC_CHANGES.md, BP-2).')
 
+        repo_rel = upstream_repo_rel(rel)
         out_lines = []
         for line in raw.split('\n'):
             if line.startswith('diff --git '):
                 out_lines.append(
-                    f'diff --git a/src/c47/{rel} b/src/c47/{rel}')
+                    f'diff --git a/{repo_rel} b/{repo_rel}')
             elif line.startswith('--- a/'):
-                out_lines.append(f'--- a/src/c47/{rel}')
+                out_lines.append(f'--- a/{repo_rel}')
             elif line.startswith('+++ b/'):
-                out_lines.append(f'+++ b/src/c47/{rel}')
+                out_lines.append(f'+++ b/{repo_rel}')
             else:
                 out_lines.append(line)
 
@@ -680,7 +698,6 @@ def refresh(pkgdir, project_root, context=3):
     pkgdir_abs = os.path.join(project_root, pkgdir)
     patches_dir = os.path.join(pkgdir_abs, 'patches')
     files_dir = os.path.join(pkgdir_abs, 'files')
-    src_c47_dir = os.path.join(project_root, 'src', 'c47')
 
     manifest = load_manifest(pkgdir_abs)
     warnings = []
@@ -697,7 +714,7 @@ def refresh(pkgdir, project_root, context=3):
 
     for rel in list_working_files(pkgdir_abs):
         working_path = os.path.join(pkgdir_abs, *rel.split('/'))
-        upstream_path = os.path.join(src_c47_dir, *rel.split('/'))
+        upstream_path = upstream_abs_path(project_root, rel)
 
         live_exists = os.path.isfile(upstream_path)
         base_bytes = base_file_content(project_root, base_commit, rel)
@@ -815,9 +832,10 @@ def refresh(pkgdir, project_root, context=3):
 
 
 def materialize(pkgdir, rel, project_root):
-    """BP-5: write src/c47/<rel> AS OF THE RECORDED BASE COMMIT into
-    the flat working area at <pkgdir>/<rel>. Initializes the base to
-    HEAD (BP-3) if the package has none yet — saving the manifest in
+    """BP-5: write the upstream file <rel> maps to (src/c47/<rel>, or
+    src/<rel> for a SIBLING_ROOTS rel) AS OF THE RECORDED BASE COMMIT
+    into the flat working area at <pkgdir>/<rel>. Initializes the base
+    to HEAD (BP-3) if the package has none yet — saving the manifest in
     that case. Returns the base commit used."""
     pkgdir_abs = os.path.join(project_root, pkgdir)
     os.makedirs(pkgdir_abs, exist_ok=True)

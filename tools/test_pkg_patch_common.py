@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pkg_patch_common import (
     decode_patch_filename,
     parse_patch_target,
+    upstream_repo_rel,
     validate_patch_declaration,
 )
 
@@ -299,6 +300,57 @@ class TestValidatePatchDeclaration(unittest.TestCase):
                 self.tmpdir)
         err = str(cm.exception)
         self.assertIn('nonexistent_file.c', err)
+
+
+class TestSiblingRootMapping(unittest.TestCase):
+    """T2-A: a rel whose first segment is a SIBLING_ROOTS entry maps to
+    src/<rel>; everything else maps to src/c47/<rel>."""
+
+    def test_default_rel_maps_to_src_c47(self):
+        self.assertEqual(upstream_repo_rel('keyboard.c'),
+                         'src/c47/keyboard.c')
+        self.assertEqual(upstream_repo_rel('programming/manage.c'),
+                         'src/c47/programming/manage.c')
+
+    def test_sibling_rel_maps_to_src(self):
+        self.assertEqual(upstream_repo_rel('testSuite/testSuite.c'),
+                         'src/testSuite/testSuite.c')
+        self.assertEqual(upstream_repo_rel('testSuite/hal/gui.c'),
+                         'src/testSuite/hal/gui.c')
+
+    def test_sibling_name_deeper_than_first_segment_is_not_special(self):
+        # Only the FIRST segment selects a sibling root.
+        self.assertEqual(upstream_repo_rel('programming/testSuite.c'),
+                         'src/c47/programming/testSuite.c')
+
+    def test_parse_patch_target_strips_sibling_src_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            patch_path = os.path.join(tmp, '010-testSuite__testSuite.c.patch')
+            with open(patch_path, 'w') as f:
+                f.write('diff --git a/src/testSuite/testSuite.c '
+                        'b/src/testSuite/testSuite.c\n'
+                        '--- a/src/testSuite/testSuite.c\n'
+                        '+++ b/src/testSuite/testSuite.c\n'
+                        '@@ -1 +1 @@\n-int a;\n+int b;\n')
+            self.assertEqual(parse_patch_target(patch_path),
+                             'testSuite/testSuite.c')
+
+    def test_validate_sibling_patch_declaration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sib = os.path.join(tmp, 'src', 'testSuite')
+            os.makedirs(sib)
+            with open(os.path.join(sib, 'testSuite.c'), 'w') as f:
+                f.write('int a;\n')
+            patches = os.path.join(tmp, 'pkg', 'patches')
+            os.makedirs(patches)
+            fname = '010-testSuite__testSuite.c.patch'
+            with open(os.path.join(patches, fname), 'w') as f:
+                f.write('--- a/src/testSuite/testSuite.c\n'
+                        '+++ b/src/testSuite/testSuite.c\n'
+                        '@@ -1 +1 @@\n-int a;\n+int b;\n')
+            self.assertEqual(
+                validate_patch_declaration('pkg', fname, tmp),
+                'testSuite/testSuite.c')
 
 
 if __name__ == '__main__':

@@ -1,5 +1,22 @@
 # Package Manager — Command Reference & Integration Lifecycle
 
+## Path mapping — where a working-area rel points upstream
+
+The working area is a flat mirror rooted at `src/c47/`: a rel path
+`programming/manage.c` means `src/c47/programming/manage.c`. One deliberate
+extension (T2-A, 2026-08-02): a rel whose **first segment** names a sibling
+root maps to `src/<rel>` instead. The recognized sibling roots live in
+`SIBLING_ROOTS` in `tools/pkg_patch_common.py` — today only `testSuite`, so
+`testSuite/testSuite.c` means `src/testSuite/testSuite.c`. The namespaces
+cannot collide (`src/c47` has no directory named like a sibling root), and
+every command below — refresh, materialize, rebase, build, audit, status,
+integrate — applies the same mapping. At build time the resolver shadows an
+active sibling root exactly like `src/c47` and hands its target the shadow
+source list (`SIBSRC:` lines consumed by the root `meson.build`); a root no
+package touches costs nothing. Keep `SIBLING_ROOTS` short: every entry
+widens the surface the package system can touch, and sibling roots are
+meant for dev-only trees (the test driver), never shipped firmware.
+
 ## Commands
 
 ### `./package refresh PACKAGE`

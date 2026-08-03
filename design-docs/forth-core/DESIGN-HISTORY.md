@@ -1778,3 +1778,33 @@ on.
 The `core/freeList.c` no-touch rule resumes. Next: **S** forks/pushes and
 opens the upstream MR with the fail-loud patch (UPSTREAM_REPORTS §3
 carries the one open call-context question for upstream).
+
+
+## 2026-08-02 — T2-A landed: sibling upstream roots (owner ruling, same day)
+
+Owner rulings: the freeList upstream MR is parked alongside the forum
+posts (owner options, not queue items), and TESTING.md's T2 boundary
+question is decided as **option 1 — extend the overlay's reach** rather
+than wait on upstream or keep the suites disjoint.
+
+Implementation: the working-area mapping gains **sibling roots** — a rel
+whose first segment is in `SIBLING_ROOTS` (`tools/pkg_patch_common.py`,
+today only `testSuite`) maps to `src/<rel>`; everything else keeps
+meaning `src/c47/<rel>`. One mapping helper feeds every consumer:
+refresh classification, base extraction, patch headers, materialize,
+apply/collect, the rebase and status preflights (which now tree-compare
+and dirty-check all reachable roots), the design audit (base
+materialization archives sibling roots present at base; the three
+heredocs map rels), and the resolver — which shadows an active sibling
+root exactly like src/c47 and emits `SIBSRC:` lines that root
+meson.build turns into `custom_pkg_testSuite_src`, consumed by a guarded
+fork-infrastructure hunk in `src/testSuite/meson.build` (same variable-
+override pattern as `c47_src`). An untouched sibling root costs nothing.
+
+Verification: 224 tooling tests green (10 new sibling cases: mapping,
+patch headers, files/ classification, materialize, shadow + SIBSRC
+emission, inactive-root no-op); real-tree gate BUILD + SELF-TEST GREEN;
+upstream testSuite 1/1 Ok under the modified meson; design audit
+mechanical half CLEAN. No package content under testSuite/ yet — the
+capability lands ahead of T3's subcase derivation, the hook itself
+deliberately unbuilt (DESIGN_AUDIT Part 3 discipline).

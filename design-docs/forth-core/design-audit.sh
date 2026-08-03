@@ -39,7 +39,16 @@ cleanup_audit_upstream() {
   find "${AUDIT_UPSTREAM_TMP}" -depth -delete
 }
 trap cleanup_audit_upstream EXIT
-if ! git archive "${BASE_COMMIT}" src/c47 | tar -x -C "${AUDIT_UPSTREAM_TMP}"; then
+# src/c47 plus the sibling roots the package system may touch (T2-A;
+# keep in sync with SIBLING_ROOTS in tools/pkg_patch_common.py). A sibling
+# root is archived only when it exists at the base (scratch/test repos and
+# very old bases may not have one).
+AUDIT_ROOTS="src/c47"
+if git rev-parse --verify -q "${BASE_COMMIT}:src/testSuite" >/dev/null; then
+  AUDIT_ROOTS="${AUDIT_ROOTS} src/testSuite"
+fi
+# shellcheck disable=SC2086  # AUDIT_ROOTS is a deliberate word list
+if ! git archive "${BASE_COMMIT}" ${AUDIT_ROOTS} | tar -x -C "${AUDIT_UPSTREAM_TMP}"; then
   printf 'error: cannot materialize package base %s\n' "${BASE_COMMIT}" >&2
   exit 1
 fi
@@ -107,12 +116,17 @@ head2 "C. Whitespace / blank-line churn against upstream"
 c_out=$(python3 - "${PKG}" "${UPSTREAM}" <<'PYEOF'
 import sys, os, difflib
 pkg, up = sys.argv[1], sys.argv[2]
+def upath(rel):
+    # sibling-root rel (T2-A): src/<rel> beside src/c47
+    if rel.split('/', 1)[0] in ('testSuite',):
+        return os.path.join(os.path.dirname(up), rel)
+    return os.path.join(up, rel)
 for root, dirs, files in os.walk(pkg):
     dirs[:] = [d for d in dirs if d not in ('patches', 'files')]
     for fn in files:
         if not fn.endswith(('.c', '.h')): continue
         rel = os.path.relpath(os.path.join(root, fn), pkg)
-        u = os.path.join(up, rel)
+        u = upath(rel)
         if not os.path.exists(u): continue
         A = open(u, errors='replace').read().split('\n')
         B = open(os.path.join(pkg, rel), errors='replace').read().split('\n')
@@ -163,13 +177,18 @@ head2 "E. Allocations in PACKAGE-OWNED sources"
 e_out=$(python3 - "${PKG}" "${UPSTREAM}" <<'PYEOF'
 import sys, os, re
 pkg, up = sys.argv[1], sys.argv[2]
+def upath(rel):
+    # sibling-root rel (T2-A): src/<rel> beside src/c47
+    if rel.split('/', 1)[0] in ('testSuite',):
+        return os.path.join(os.path.dirname(up), rel)
+    return os.path.join(up, rel)
 pat = re.compile(r'\b(alloc|free|realloc)C47Blocks\b')
 for root, dirs, files in os.walk(pkg):
     dirs[:] = [d for d in dirs if d not in ('patches', 'files')]
     for fn in sorted(files):
         if not fn.endswith('.c') or fn == 'test_dict_reloc.c': continue
         rel = os.path.relpath(os.path.join(root, fn), pkg)
-        if os.path.exists(os.path.join(up, rel)):   # upstream file: not ours
+        if os.path.exists(upath(rel)):   # upstream file: not ours
             continue
         for i, line in enumerate(open(os.path.join(pkg, rel), errors='replace'), 1):
             if pat.search(line) and not line.lstrip().startswith(('*', '/*', '//')):
@@ -308,6 +327,11 @@ head2 "G. Working-area files that would ship as firmware"
 g_out=$(python3 - "${PKG}" "${UPSTREAM}" <<'PYEOF'
 import sys, os, fnmatch
 pkg, up = sys.argv[1], sys.argv[2]
+def upath(rel):
+    # sibling-root rel (T2-A): src/<rel> beside src/c47
+    if rel.split('/', 1)[0] in ('testSuite',):
+        return os.path.join(os.path.dirname(up), rel)
+    return os.path.join(up, rel)
 pats = []
 pi = os.path.join(pkg, '.pkgignore')
 if os.path.exists(pi):
@@ -327,7 +351,7 @@ for root, dirs, files in os.walk(pkg):
         if fn.startswith('.'): continue
         rel = os.path.relpath(os.path.join(root, fn), pkg)
         if ignored(rel): continue
-        if not os.path.exists(os.path.join(up, rel)) and not fn.endswith(('.c', '.h')):
+        if not os.path.exists(upath(rel)) and not fn.endswith(('.c', '.h')):
             print(f"{rel}  (no upstream counterpart, not .c/.h, not .pkgignore'd)")
 PYEOF
 )
