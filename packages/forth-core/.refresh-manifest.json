@@ -15,8 +15,8 @@
     "programming/param_core.c": "a346aa8de0b6424214bef39940d84ad3947e998b316e08b73734c66fb82fe887",
     "programming/param_core.h": "ff4c3dec1227ced41df291faa66572894042302eb9fe86ce3f8c12e45d463d31",
     "testSuite/tests/forth_interp.txt": "2aa9984e1efea4f6ab3d2af667562be3e0ae31ade9b0a0834f7cd0b5a6499fcc",
-    "test_capture.part.h": "e786511a08e8f84c551fadc62c9aa3b56e31c006eb87612d6506c6e73309adc2",
-    "test_dict_reloc.c": "90bf5fe6d953c787610bd363f4dae47c9d8e5f4352653676c003d1b38c0aa4c0",
+    "test_capture.part.h": "cfeceed9a206edc3ce44cbb9516101bd628a82c8a698bde360687f4fe42e7569",
+    "test_dict_reloc.c": "b78d2d33240f9a7def8a70667953ec9d049faac25abd73be6c178925bd7fb64d",
     "test_engine.part.h": "845d885abda1a62b63978b8d8988f3e0e95ebbb662b47f01f839a33fdf2ccb34",
     "test_params.part.h": "affbe10adf3396e97c2612eaa3f7230670500e933406c145cc3498fbf1c80500",
     "test_persist.part.h": "b79ee400755dfedd50260e6a05b8389eca32572c256e6861ba36bb3f4b467cd0"

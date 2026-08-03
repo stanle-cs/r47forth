@@ -1090,6 +1090,7 @@ static int test_picker_insert_at_cursor(void);
 static int test_picker_key_mapping(void);
 static int test_picker_scan_and_alloc(void);
 static int test_picker_renders_labels(void);
+static int test_picker_pixel_layout(void);
 static int test_picker_insert_mid_line(void);
 static int test_picker_trailing_space(void);
 static int test_picker_guard_menu_identity(void);
@@ -1751,6 +1752,9 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_picker_renders_labels...\n");
   fail |= test_picker_renders_labels();
+
+  printf("  [DEBUG] running test_picker_pixel_layout...\n");
+  fail |= test_picker_pixel_layout();
   forthDictClear();
 
   printf("  [DEBUG] running test_picker_insert_mid_line...\n");
