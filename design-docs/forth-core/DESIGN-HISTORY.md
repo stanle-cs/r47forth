@@ -2008,3 +2008,27 @@ test initially skipped cleanupTestProgram()/free — the allocator leak
 guard caught the +1 region, which is that guard working as designed.
 Remaining: D3-4 acceptance (parity sweep, showcase update, §3.2/§5 docs
 fold) closes the stage.
+
+## 2026-08-03 — STAGE D3 COMPLETE (D3-4 window-parity pins landed)
+
+WP-1: identical computations produce identical results spilled or
+unspilled. WP-2: the visible window's depth, contents and order match
+what unlimited-capacity arithmetic would show. With D3-1..D3-3 that
+closes the stage: deep recursion works (7 FACT = 5040), the boundary is
+loud, the spill is invisible, and the arena returns to baseline on
+every gate. Stage flash: 1094912 → 1095552 (+640 B) for the whole spill
+machinery — justified by the feature (flash is not a veto; RULE-1).
+
+One process note: the first D3-4 session reported a green gate WITHOUT
+implementing anything (the suite is trivially green pre-edit) — the
+first clean false-completion of the trial. Countered by making the
+completion criterion the presence of the NEW pass lines, and the
+architect's verification now always checks implementation existence,
+not gate color. §4a inherits the rule: a packet's success criterion
+must name output that cannot exist without the change.
+
+Remaining D3 residue, queued with the docs pass: fold §11's landed
+truths into §3.2/§5 (with the §10 fold). The D2 stackEffect column and
+guard survive as the spill's accounting spine — the audit rotation's
+"premise tied to 8 levels" question is answered: the premise upgraded,
+the mechanism stayed.

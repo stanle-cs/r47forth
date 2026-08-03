@@ -110,10 +110,10 @@ architect session first; the future-series packet has not been authored yet.
 
 | # | Step | Who | Input |
 |---|---|---|---|
-| D3-1 | traces (§11.4) + spill region + accessors, no behavior change | [ARCHITECT traces, then QWEN packet] | packet to author |
-| D3-2 | spill/refill in forthDataDepthApply; 7 FACT = 5040 flagship | [GATE LOCKED on D3-1] | packet to author |
-| D3-3 | user-native boundary rule at the resync sites | [GATE LOCKED on D3-2] | packet to author |
-| D3-4 | acceptance + showcase + docs fold | [GATE LOCKED on D3-3] | packet to author |
+| D3-1 | spill region + accessors | **DONE** `30d29d7e8` | `QWEN_PROMPTS_D3_1_spill_region.md` |
+| D3-2 | spill live via forthPrimInvoke; 7 FACT = 5040 | **DONE** `540977271` (+ amendment D3-2A) | `QWEN_PROMPTS_D3_2_spill_wiring.md` |
+| D3-3 | boundary rule, named message, both-sides pins | **DONE** `3c44cc58d` | `QWEN_PROMPTS_D3_3_boundary_rule.md` |
+| D3-4 | window-parity acceptance (WP-1/WP-2) | **DONE** (2026-08-03; docs fold queued with the §10 fold) | `QWEN_PROMPTS_D3_4_acceptance.md` |
 
 ## 3. After the series — no Qwen work
 

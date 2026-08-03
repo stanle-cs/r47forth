@@ -2985,7 +2985,7 @@ traced from native catalog behavior during this stage's PEM audit.
 
 ---
 
-## 11. Stage D3 — the hybrid spill stack (DECIDED 2026-08-03, unimplemented)
+## 11. Stage D3 — the hybrid spill stack (LANDED 2026-08-03; decision record)
 
 Provenance: `DEFECTS_stack_semantics.md` D3 (parked 2026-07-25), opened by
 owner ruling 2026-08-03. Everything here is DECIDED; the trace obligations
