@@ -115,6 +115,25 @@ architect session first; the future-series packet has not been authored yet.
 | D3-3 | boundary rule, named message, both-sides pins | **DONE** `3c44cc58d` | `QWEN_PROMPTS_D3_3_boundary_rule.md` |
 | D3-4 | window-parity acceptance (WP-1/WP-2) | **DONE** (2026-08-03; docs fold queued with the §10 fold) | `QWEN_PROMPTS_D3_4_acceptance.md` |
 
+## 2c. Stage G — GUI coverage gaps (post-migration review 2026-08-03)
+
+The upstream migration to `26ec91634` prompted a coverage review of the
+package's GUI surface. Content, capture lifecycle, TAM suspend/resume
+and the EXIT ladder are pinned to standard; everything downstream of the
+picker's content array is not. Two packets close it. Findings and
+reasoning: DESIGN-HISTORY 2026-08-03 (the migration entry's successor).
+
+| # | Step | Who | Input |
+|---|---|---|---|
+| G1 | softkey→word mapping: index ≥ 1, f/g shift rows, `firstItem` paging, the blank-key refusal, draw path per page | **[QWEN]** | `QWEN_PROMPTS_G1_picker_key_mapping.md` |
+| G2 | scan cut-off named + pinned; content allocation guarded | **[GATE LOCKED]** on G1 | `QWEN_PROMPTS_G2_picker_scan_alloc.md` |
+
+Residual after G1+G2, recorded so it is not mistaken for covered:
+pixel-level softkey rendering (`showSoftkey`, the combined-key
+`trimSoftKeyName` path) stays unpinned. G1 subcase 5 pins the label the
+renderer is handed, not what it draws. Closing that needs an LCD
+read-back harness — a new owner ruling, not a packet.
+
 ## 3. After the series — no Qwen work
 
 Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),

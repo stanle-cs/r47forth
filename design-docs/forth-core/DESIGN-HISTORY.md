@@ -2166,3 +2166,46 @@ The lesson worth keeping: when upstream restructures the code a patch
 sits in, resolve to upstream's STRUCTURE and re-seat the addition into
 it. Merging the addition around the old shape is the other option the
 conflict markers offer, and it compiles. That is why it needs a rule.
+
+## 2026-08-03 — GUI coverage review: the picker is pinned up to the softkey, and no further
+
+Prompted by the migration. The FWRD picker's CONTENT is pinned the way
+this project pins things — section order, dedup per provenance, smudged
+entries out, the 14-byte name filter, the 170 cap, the glyph tokenizer,
+rebuild-on-every-display. Downstream of the content array there was
+nothing.
+
+Every landed insert test assigns `dynamicMenuItem = 0` by hand. Index 0,
+page 1, unshifted is the only softkey the suite has ever pressed. The
+real derivation is `firstItem + itemShift + fn` in
+`determineFunctionKeyItem_C47`'s `MNU_FORTH` arm, and unlike the
+`MNU_VAR`/`MNU_PROG` arms beside it, that arm does not clamp against
+`numItems`. The only bound is one conjunct inside `forthPickerGuard`,
+and behind it `dynmenuGetLabel()` returns `""` out of range, which
+`forthCapInsertName("")` turns into a bare space in the user's line. So
+the single unpinned conjunct is what stands between pressing a blank key
+on a partial page and silently corrupting a Forth definition. Nothing
+crashes — the draw loop bounds itself and the guard does hold — which is
+exactly why the suite could stay green over it.
+
+This is D3-5 one layer up. There the battery drove the wrapper and the
+real item entry went unaccounted; here it drives the helper with the
+index preset and the real key path goes unexercised. The rule earned
+then is the rule now: every entry point a user can reach needs a pin
+through that exact entry.
+
+Two packets authored, G1 and G2 (runbook §2c). G1 takes the mapping —
+index ≥ 1, both shift rows, `firstItem` paging, the blank-key refusal,
+and the draw path at every page boundary. G2 takes the two unpinned
+behaviours in `forthBuildWordPicker`: the 1000-step scan cut-off, which
+was documented in §9.6 and in the source and pinned nowhere, and the
+content `calloc` that was stored into `menuContent` and written through
+on the next line with no NULL test. That last one matches upstream's own
+habit — six unchecked `malloc`s for `menuContent` in softmenus.c — so
+the pattern is as much theirs as ours. Ours is the one we own.
+
+Recorded as residual, not closed: pixel-level rendering stays unpinned.
+G1's fifth subcase pins the label the renderer is handed. That is the
+honest limit of what the C battery can assert without an LCD read-back
+harness. Calling it covered would be the decoration the 2026-07-21 audit
+removed fourteen cases for.
