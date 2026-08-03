@@ -6,8 +6,8 @@
     "forth_capture.h": "65706f814d13988d6e731db59f162f9563797fb27c77bba4cf9d390f0daf6933",
     "forth_compile.c": "34d40e860814a01371011f4c6627461efb9d4539bd28384b6c80e336d63237c8",
     "forth_dict.c": "7e67d54a6676da6a8167dce86c287d6176476b9cb25d0d48792b894a21450ccc",
-    "forth_dict.h": "73e0ee04832bb26fa6e5076a8884e07429286761f69f8dbe47531d8f742ffba3",
-    "forth_inner.c": "19c77b5d454b9dfe0970ad6a8a9c118e29902dc3408bb669c4a2e0933d825d04",
+    "forth_dict.h": "30408dd4abb3b10a2e4a0c60583c6082793e637e460bed31c472d68ec96033fb",
+    "forth_inner.c": "184e3ec4fbb04e247f5186178bdbd4b0462b58df2b3375cf2da6bbfe2ce499df",
     "forth_menu.c": "29ef0add70569d864b65e96805b53e090d8e56195650557856b7e412cd247cbb",
     "forth_menu.h": "f8138cfe2d2768cb57ec67ccb888c05f398e7225920fc4e7d5db2d1a24445ca5",
     "forth_prims.c": "5fdd53403055dd84f05008139b9c12194895495d2d6a22cdb2862e3733fb0ff5",
@@ -15,7 +15,7 @@
     "programming/param_core.c": "a346aa8de0b6424214bef39940d84ad3947e998b316e08b73734c66fb82fe887",
     "programming/param_core.h": "ff4c3dec1227ced41df291faa66572894042302eb9fe86ce3f8c12e45d463d31",
     "test_capture.part.h": "23fc5d674a835a9f2218958aa18d3e293f97e50107831bfef2e1941ed3cc7e77",
-    "test_dict_reloc.c": "73e8633402911cded3b164753642b54e68a1646198f0f9c8ba50231ff9314f85",
+    "test_dict_reloc.c": "decba52cab0747981aade856c0edb9bd9ddbd6c0201d679f1f815a81fafa6313",
     "test_params.part.h": "affbe10adf3396e97c2612eaa3f7230670500e933406c145cc3498fbf1c80500"
   },
   "patches": {
