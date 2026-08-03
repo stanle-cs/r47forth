@@ -68,6 +68,7 @@ void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
 void covIntegrateErr(uint16_t which);
 void covMvarKey(uint16_t which);
+void covMatrixEditorScroll(uint16_t which);
 void covIntegratePgm(uint16_t unusedButMandatoryParameter);
 void covNamedVariableCache(uint16_t unusedButMandatoryParameter);
 void covSumProd(uint16_t which);
@@ -285,6 +286,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnIntegrateCov",         covIntegrate, 1 },
   {"fnIntegrateErrCov",      covIntegrateErr, 1 },
   {"fnMvarKeyCov",           covMvarKey, 1 },
+  {"fnMatEditScrollCov",     covMatrixEditorScroll, 1 },
   {"fnIntegratePgmCov",      covIntegratePgm, 1 },
   {"fnNamedVarCacheCov",     covNamedVariableCache, 1 },
   {"fnSumProdCov",           covSumProd, 1 },
@@ -1991,6 +1993,75 @@ void covMvarKey(uint16_t which) {
   currentSolverStatus = 0;
   reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
   int32ToReal34(keyClass, REGISTER_REAL34_DATA(REGISTER_X));
+}
+
+extern uint16_t scrollColumn;
+
+static uint16_t covMatrixEditorColumns(void) {
+  // showRealMatrix() displays a column vector transposed.
+  const uint16_t rows = openMatrixMIMPointer.header.matrixRows;
+  const uint16_t cols = openMatrixMIMPointer.header.matrixColumns;
+  return (cols == 1 && rows > 1) ? rows : cols;
+}
+
+void covMatrixEditorScroll(uint16_t which) {
+  // which is SNN: NN down-arrow presses, S what is reported - 0 scrolled, 1 the offset
+  // after M.COL+1 widens to two columns, 2 whether it is past the widened matrix, 3 the
+  // offset when widened to the offset itself, 4 whether that made the two equal.
+  const uint16_t select  = which / 100;
+  const uint16_t presses = which % 100;
+  uint16_t offset;
+  int32_t reported;
+
+  if(select > 4 || presses > 20 || (getRegisterDataType(REGISTER_X) != dtReal34Matrix && getRegisterDataType(REGISTER_X) != dtComplex34Matrix)) {
+    printf("\nUnknown matrix editor scroll selector: %u\n", which);
+    abortTest();
+    return;
+  }
+
+  fnEditMatrix(REGISTER_X);
+  if(calcMode != CM_MIM) {
+    printf("\nThe matrix editor did not open\n");
+    abortTest();
+    return;
+  }
+
+  for(uint16_t i = 0; i < presses; i++) {
+    addItemToBuffer(ITM_DOWN_ARROW);
+  }
+  offset = scrollColumn;
+
+  if(select == 0) {
+    reported = (offset > 0) ? 1 : 0;
+  }
+  else if(select >= 3 && offset < 2) {
+    printf("\nThe presses left an offset of %u, which no reshape can make the column count equal\n", offset);
+    abortTest();
+    return;
+  }
+  else {
+    const uint16_t widenTo = (select >= 3) ? offset : 2;
+    for(uint16_t c = 1; c < widenTo; c++) {
+      fnAddCol(NOPARAM);
+    }
+    if(select == 1 || select == 3) {
+      showMatrixEditor();
+      reported = scrollColumn;
+    }
+    else if(select == 2) {
+      reported = (scrollColumn > covMatrixEditorColumns()) ? 1 : 0;
+    }
+    else {
+      reported = (scrollColumn == covMatrixEditorColumns()) ? 1 : 0;
+    }
+  }
+
+  mimEnter(true);
+  mimFinalize();
+  calcModeNormal();
+  popSoftmenu();
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(reported, REGISTER_REAL34_DATA(REGISTER_X));
 }
 
 void covIntegratePgm(uint16_t unusedButMandatoryParameter) {
