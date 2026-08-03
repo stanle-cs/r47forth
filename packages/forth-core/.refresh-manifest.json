@@ -15,8 +15,10 @@
     "programming/param_core.c": "a346aa8de0b6424214bef39940d84ad3947e998b316e08b73734c66fb82fe887",
     "programming/param_core.h": "ff4c3dec1227ced41df291faa66572894042302eb9fe86ce3f8c12e45d463d31",
     "test_capture.part.h": "23fc5d674a835a9f2218958aa18d3e293f97e50107831bfef2e1941ed3cc7e77",
-    "test_dict_reloc.c": "e8186e43eb8e305f0e9808458b560770a700f6a2c7a75cc9ad2f40ca4e76e25e",
-    "test_params.part.h": "affbe10adf3396e97c2612eaa3f7230670500e933406c145cc3498fbf1c80500"
+    "test_dict_reloc.c": "cafe9edeae8d3c0697c18d788f520fd25a5d13ca1562d0131118cf5172709347",
+    "test_engine.part.h": "845d885abda1a62b63978b8d8988f3e0e95ebbb662b47f01f839a33fdf2ccb34",
+    "test_params.part.h": "affbe10adf3396e97c2612eaa3f7230670500e933406c145cc3498fbf1c80500",
+    "test_persist.part.h": "d85efee131459f7f769a8e68b4f766ff1644f9be85d2b82bab5812e6b5163787"
   },
   "patches": {
     "010-c47Extensions__addons.c.patch": "e018487d35b5a5b156eb29c75dab0933514f56cfcec290760e9bddd88fa777bd",
