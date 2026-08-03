@@ -1363,6 +1363,25 @@ flags bit is already reserved and stored).
 
 ---
 
+
+### 3.4 Primitive invocation and the spill bracket (landed, stage D3)
+
+`forthPrimInvoke(idx)` is the ONLY way a primitive runs, from all four
+dispatch sites (outer, inner loop, XEQN chain, compile-state path):
+Apply the declared `stackEffect` — catching overflow into the spill
+(§5.7), deepest register first via `getStackTop()` — then `fn()`, then
+the ASLIFT convention, then `forthSpillSettle()` refills vacated deepest
+slots LIFO. The two direct `fnDrop` consumes (0BR; the compile-state
+string consume has no accounting by design — it eats the user's input
+string) settle explicitly. Depth saturates at `forthStackCapacity()`;
+the spill count carries the excess; only arena exhaustion errors.
+
+Boundary: `forthDataDepthResync()` (every user-native seam) with a
+non-empty spill is a loud `ERROR_RAM_FULL` stop naming the spilled
+count, then reset — an arbitrary-arity native may not run over hidden
+values. Acceptance pins: `7 FACT` = 5040; spilled and unspilled
+computations produce identical results and window contents (WP-1/2).
+
 ## 4. Lookup order change
 
 C47 today resolves an XEQ name through exactly one table: `findNamedLabel()`
@@ -1763,6 +1782,19 @@ the free list is byte-for-byte unchanged and that `test_freelist_consistent()`
 still passes afterward.
 
 ---
+
+
+### 5.7 The spill region (landed, stage D3)
+
+One arena block (`allocC47Blocks`/`reallocC47Blocks`), LIFO records
+`[uint32 dataType][uint16 sizeInBlocks][payload]` — byte-faithful
+register images, no second numeric representation. Per-execution
+lifetime: reset at both `forthDataDepthEnterOuter/LeaveOuter` seams,
+NEVER persisted (power-off abandons execution state; restoreCalc sees
+no spill). A line that completes with a non-empty spill is a loud
+`ERROR_RAM_FULL` stop before the reset — the visible stack is the only
+legal carrier of values across lines. The arena high-water discipline
+(§5.4) applies: every gate proves the spill frees everything it took.
 
 ## 6. Exact hook points (file:line)
 
@@ -2773,302 +2805,39 @@ verify.
 
 ---
 
-## 10. Stage F — accepted target architecture (LANDED 2026-07-20; decision record)
+## 10. Stage F — landed architecture (decision record, folded 2026-08-03)
 
-*(§9 is intentionally left unassigned: artifacts written before the
-2026-07-14 renumbering cite "§9.x" meaning today's §8.x — see the
-DESIGN-HISTORY tag glossary — and reusing the number would collide with those
-references.)*
+*(§9 intentionally unassigned — pre-2026-07-14 artifacts cite "§9.x"
+meaning today's §8.x; reusing the number would collide.)*
 
-Provenance: the R4 architecture interview (recorded 2026-07-15, commit
-`2cc6b1d03`, `FOR_THE_ARCHITECT_R4.md` "Accepted R4 architecture") plus the
-2026-07-15 rulings in `R6_RESOLUTION_PLAN.md` §1 (platform, RULE-1) and §2
-(named local labels, Q8). Everything in this section was **DECIDED** here and
-has since **LANDED** — the full F series (F1..F6 plus F1.5) closed 2026-07-20
-(commit table: QWEN_RUNBOOK §2). This section remains as the decision record;
-where its prose and a main section disagree, the main section is the current
-truth (folding §10 into the main sections is the remaining docs-reconciliation
-work, queued in QWEN_RUNBOOK §3). The stage discipline it defined stands:
-each stage got its own prompt set with authoritative excerpts, traced native
-behavior, bounded file lists, old-contract test migrations, and executed RED
-mutations. Stages ran
-strictly in order, each from a green gate baseline, and every stage reported
-the arena line (§5.4) and, where it added flash, the measured `make dmcp5r47`
-delta (RULE-1).
+The full F series is LANDED (F1..F6 + F1.5, closed 2026-07-20; commit
+table in QWEN_RUNBOOK §2). Normative content lives in the main sections;
+the decision rationale lives in DESIGN-HISTORY and the per-stage packet
+ledgers. Stage summaries:
 
-### 10.1 F1 — engine lifetime foundations
+- **F1 engine lifetime** — pending-reset truth, runProgram as the sole
+  lifetime signal, dynamic arena-backed scan tracking (§3.2), compile-only
+  RECURSE, restore-time threaded-code validator.
+- **F1.5 §8.9 acceptance harness** — the end-to-end battery every later
+  stage inherits.
+- **F2 shared parameter core** — `param_core.c` extraction, bounded name
+  reader, shared direct dispatch (§0.2/§3.3).
+- **F3 vocabulary & scopes** — owner-tagged headers, global region,
+  filtered lookup, GLOBAL/IMMEDIATE/FORGET, compile-time control flow,
+  FTOK_XEQN (§1, §2.2, §4).
+- **F4 textual parameters** — canonical spellings, full parameter-form
+  grammar, error table (§8).
+- **F5 commit validation** — check mode + commit gate implementing §8's E9.
+- **F6 capture submode** — real key paths, managed→aimBuffer capture
+  (S3), suspend/restore incl. tam snapshot, word catalog (§8.4-8.6).
 
-- **Truth predicate:** a Forth-private **pending-reset event/flag** replaces
-  the §8.3 generation-equality comparison. A true top-level RPN run start
-  marks it; the first safe Forth entry consumes it. A nested RPN launch from
-  active Forth does **not** mark it. Counters may remain as diagnostics only
-  (the uint16 wrap defect, §8.3, dies with the comparison).
-- **Active-frame lifetime guard:** a C47 program started from an active Forth
-  interpreter frame is nested in that Forth generation; it must never clear
-  or replace the dictionary a suspended `forthInner` is executing from. A
-  pending top-level reset defers until no active Forth frame can be
-  invalidated. (This is the precondition for FTOK_XEQN — the B1 hazard.)
-- **PEM single-step:** every PEM single-step is also a fresh Forth
-  generation; the current `!singleStep` bump exclusion (§8.3 site 2) changes
-  accordingly.
-- **Scan tracking:** the fixed `forthScannedProgs[8]` array is replaced by
-  compact, capacity-bounded dynamic tracking in the managed arena. Capacity
-  failure is ordinary dictionary exhaustion, never a program-count cliff.
-- **`RECURSE`:** standard compile-only immediate word; the open definition
-  stays smudged until `;`; `RECURSE` emits a call to the definition under
-  construction without making its name visible.
-- **Restore-time validation:** one full validator on restore — header/name
-  extents, body and cell alignment, token and operand extents, colon indices,
-  XEQN kind/length/padding, reserved ranges, legal branch targets,
-  termination. Invalid → clear only the Forth dictionary, preserve the RPN
-  save, rebuild definitions from source. `boundedRead` (§3.2) **stays** as
-  defense-in-depth (RULE-1).
-- **Follow-on:** the §8.9 end-to-end acceptance harness is built immediately
-  after F1 (Q1 ruling), so its lifecycle tests pin F1 semantics.
+## 11. Stage D3 — hybrid spill stack (decision record, folded 2026-08-03)
 
-### 10.2 F2 — shared RPN parameter semantic core
-
-One factored, bounded native parameter decoder that both native step
-execution and `FTOK_C47` feed, ending at `reallyRunFunction()` — Forth can
-never drift from RPN register conversion, name handling, or errors. The
-upstream boundary is not currently clean (`_executeOp` is file-static;
-`executeOneStep` owns traversal); factoring may add upstream override files —
-acceptable under RULE-1. A generalized string-name reader takes explicit
-start/end bounds. Every supported native PTP path is traced, not inferred.
-
-### 10.3 F3 — vocabulary, scopes, and XEQ (supersedes withdrawn prompt R1-4)
-
-- **Per-program scopes:** colon definitions are local to their owning RPN
-  program; nested entry selects the callee's scope, return restores the
-  caller's; definitions coexist in one arena/generation and already-compiled
-  `FTOK_CALL` tokens stay valid, but lookup never sees another owner's
-  definitions. Interactive definitions occupy one reserved interactive-local
-  scope, cleared by a top-level reset. Scope is a property of the
-  *executing step*, not of the source-step handler alone (ruled 2026-07-18,
-  F3-3A): every step arm that resolves Forth names on a step's behalf —
-  the `ITM_FORTH` source-step handler and the XEQ/XEQP1 global-name
-  fallback — enters the owning program's scope through one shared
-  enter/restore primitive (first-touch pre-scan included) and restores on
-  exit; keyboard/tam/catalog surfaces stay INTERACTIVE. Scope guards
-  name→ref resolution only; by-ref execution (`FCALL`) and ref→name
-  display (`forthDictNameByRef`) are scope-free. Implementation mirrors upstream's
-  `labelList[].program` pattern (§0.3) — one mental model for both "local
-  name" systems. Global Forth words join this stage (2026-07-16 ruling —
-  see the global-scope bullet below; the earlier deferral is superseded).
-- **`XEQ` source forms** (the §4.1 collision escape hatch, B2): `XEQ 'NAME'`
-  requests the native **global** label meaning; on miss it falls back to an
-  ordinary callable Forth target (prim → same-scope colon → item; a number is
-  never callable). `XEQ :NAME:` requests the native **local** label meaning
-  (§0.3 position-sensitive resolution, inherited by delegation) and has **no
-  fallback**. Interpretation and compilation share the rule.
-- **`FTOK_XEQN`** per §2.2: inline `[kind][len][name]`, kind ∈ {253, 249}
-  passed verbatim to `findNamedLabel(name, kind)` at run time, fresh every
-  execution. Dispatch matrix (B4): resolved label (either kind) → native XEQ
-  path (`dynamicMenuItem = -1; fnExecute`, §3.3.6 — never wrapped); item →
-  `reallyRunFunction` under the PGM_RUNNING wrap (§2.2); colon → current
-  Forth execution context, **never** a synthesized PGM_RUNNING.
-- **Parameterized items at the boundary:** forward lookup admits the native
-  parameter types Series C implements; a bare parameterized item with no
-  parameter becomes an **atomic syntax error** (B3) — replacing the §4.2
-  documented interim (NOPARAM dispatch), whose `test_xeq_item_lookup` rows
-  migrate here.
-- **Control-flow words + `IMMEDIATE` (folded in, ruled 2026-07-16):** the
-  standard compiling words `IF`/`ELSE`/`THEN` and
-  `BEGIN`/`UNTIL`/`AGAIN`/`WHILE`/`REPEAT` land in this stage as immediate
-  primitives emitting the existing `FTOK_BR`/`FTOK_0BR` runtime tokens
-  (§2.2 — the runtime side is already implemented, and the F1-5 restore
-  validator's branch-target rules already cover everything these words can
-  emit). The §3.3.9 "stage 2" machinery lands with them: an `IMMEDIATE`
-  word setting `FF_IMMEDIATE` on `fdict.latest`, plus the colon-immediacy
-  flags lookup the compiler needs to honor it. Placement rationale:
-  `RECURSE` (F1-4) is unusable without conditionals, and F3's XEQ-bearing
-  programs are the first real consumers. Exact compilation shapes (operand
-  back-patching, compile-time control-stack discipline, whether `IF`
-  duplicates before `0BR` per §3.2's consuming-pop semantics) are settled
-  in the F3 design pass against the traced stack behavior, not inferred.
-- **Global scope (folded in, ruled 2026-07-16 — supersedes the earlier
-  "remain deferred"):** a third reserved scope alongside per-program and
-  interactive. Its words are visible from every lookup context, searched
-  after the current scope (innermost first); they survive top-level
-  lifetime resets (the scope-aware reset clears only program/interactive
-  scopes) and persist with the saved dictionary — acceptable only now that
-  the F1-5 validator makes restored bodies trustworthy. The three
-  sub-questions are RULED (Stan, 2026-07-18): **entry spelling** — postfix
-  `GLOBAL`, an immediate-style word marking the LATEST closed definition
-  as global (the same latest-entry mechanism as `IMMEDIATE`; no new
-  grammar); **deletion** — classic `FORGET <name>` truncating the global
-  scope at the named word (it and everything defined after it in that
-  scope), error if the name is not global; **arena accounting** — globals
-  live in the same dictionary arena under the same §5.4 ceiling,
-  exhaustion at definition time is ordinary dictionary-full (F1-3
-  consistency), and the §5.4 report line splits global vs transient
-  high-water.
-- Acceptance anchors: the §2.3 tests of `R6_RESOLUTION_PLAN.md` (mimicry pin
-  against an RPN `XEQ :T:` step at the same position; kind-faithful no-fallback;
-  kind-byte round-trip; bare-name-stays-global mutation). Control-flow and
-  global-scope acceptance tests are authored at stage time with the traced
-  semantics.
-
-### 10.4 F4 — Series C: textual parameters
-
-`STO 05`, `STO .05`, `STO X`, quoted named forms — operation-first canonical
-RPN spelling, no invented aliases; all native parameter types used by
-eligible non-flow items. Exact spellings, ranges, create semantics, and error
-codes come from tracing the native RPN paths (never inferred from examples);
-the F4 prompt carries the resulting grammar and error table. RPN
-control/declarative steps (GTO, RTN, STOP, BACK, SKIP, CASE, …) stay rejected
-in Forth with `ERROR_OPERATION_UNDEFINED`; XEQ is the sole control-flow
-bridge.
-
-**Marker grammar, single-sourced (landed F4-3).** The named/system-flag/
-indirect forms encode as marker cells — `[253][len][name…]` (`'NAME'`),
-`[250][index]` (system flag), `[254][ks]` (`→register`), `[255][len][name…]`
-(`→'NAME'`), names zero-padded to whole cells. Which markers a PTP class
-accepts is stated **once**, in `forthParamMarkerMask`, and the cell grammar
-**once**, in `forthParamCellSpan`; the compiler, the runtime decode, and all
-three dictionary walks read those two functions. A class can therefore never
-accept a form in one place and reject it in another, and a body that
-validates always decodes. `PTP_NUMBER_16` has an empty mask — a `[254][ks]`
-cell is indistinguishable from a legal little-endian value with low byte 254,
-so indirection there is excluded at the COMPILER, the only place it can be
-enforced; no walk can police it. For the NUMBER classes a legal direct value
-wins over the marker reading, mirroring the native arms' order. Marker forms
-dispatch through `paramCoreExecuteOpBounded` — the extracted native tail with
-an explicit end pointer — so create semantics, `ERROR_UNDEF_SOURCE_VAR`,
-`ERROR_UNDEF_MENU`, and indirection resolution are inherited, never
-re-implemented.
-
-### 10.5 F5 — Series D: commit validation (implements E9)
-
-Lexical and structural validation on commit per §8.4 E9's two tiers:
-structural malformation rejects atomically (prior step preserved), unresolved
-names stay legal and advisory. Executes nothing, allocates nothing, mutates
-no live state.
-
-**State neutrality is a testable contract, not a comment (landed F5-2).**
-"Mutates no live state" covers `forthCurrentScope`, the open-definition
-state, `rsp`, and both dictionary regions, and it is pinned directly by
-`test_check_source_line` subcase 6 from a NON-default scope over both an
-accepted and a rejected line. It has to be: `forthOuterRun`'s epilogue
-restores `forthCurrentScope` from `ctx->savedScope`, a field the prologue
-does not fill, so an entry point that forgets to snapshot it writes stack
-garbage into the live scope — which is exactly how F5-1 shipped, invisible
-until F5-2 gave check mode its second caller. Every entry point into
-`forthOuterRun` snapshots `savedScope`; any new one must, and must pin it.
-
-### 10.6 F6 — Forth capture as a PEM-shaped submode
-
-Capture becomes a distinct PEM-style submode rather than a wrapper around the
-alpha state machine: real PEM paths for keys, catalogs, parameter entry,
-cancel, cursor, softmenus, alpha transitions; the sole semantic difference is
-the sink (source text instead of an RPN instruction). Its source buffer is a
-managed allocation held only while capture is active, addressed through a
-relocation-safe handle; nested ordinary alpha capture suspends and restores
-the full capture state — **including `tam.colon`**, which joined the `tam`
-struct in b8f79e486. Requires its own keyboard/PEM audit before prompting
-*(amended by owner ruling 2026-07-18: the audit's architect traces T1-T7,
-folded in `F6_AUDIT_RESULTS.md`, satisfy the authoring precondition; the
-hardware bench of `F6_KEYBOARD_PEM_AUDIT.md` Blocks A-F is deferred to
-stage-exit confirmation on the DM42n, re-run against the landed F6
-behavior before the stage closes)*.
-
-**Dedicated Forth word catalog (folded in, ruled 2026-07-16):** the §4.3
-"future stage" dynamic catalog lands here, on the same softmenu machinery as
-the §8.6 picker: it lists callable colon words per the F3 scope rules
-(current program's scope, interactive, global) for browsing and insertion
-during capture, and for `FCALL`/XEQ access outside it (the `ITM_FCALL`
-name-redirect bridge, §4.2, already makes picked words executable and
-recordable). Placed in F6 because the catalog must integrate with the final
-capture entry model rather than the interim alpha wrapper, and because its
-contents are defined by F3's scopes. Exact menu placement and keying are
-traced from native catalog behavior during this stage's PEM audit.
-
----
-
-## 11. Stage D3 — the hybrid spill stack (LANDED 2026-08-03; decision record)
-
-Provenance: `DEFECTS_stack_semantics.md` D3 (parked 2026-07-25), opened by
-owner ruling 2026-08-03. Everything here is DECIDED; the trace obligations
-named in §11.4 are D3-1 pre-work, not open design. Divergence-from-R47
-notice (core principle, §preamble): a deeper-than-native Forth stack is a
-sanctioned divergence — the reason, stated here at the point of
-divergence, is that 8 levels shared with the user's own values is not
-usable working room for recursive words, and D2 currently converts that
-shortage into a loud stop. The divergence is bounded: the VISIBLE stack
-and every native item's view remain exactly R47's.
-
-### 11.1 The model
-
-X..top remain the only stack native items and the user ever see. When a
-Forth push would grow `forthDataDepth` past `forthStackCapacity()`, the
-value that upstream `liftStack()` would silently destroy — the one in the
-TOPMOST stack register, which at that moment is necessarily Forth-owned —
-is caught into a package-owned SPILL region first. When a primitive's
-negative `stackEffect` frees room, the most recently spilled value refills
-the vacated topmost register. LIFO both ways; the spill is invisible
-except that deep recursion now works.
-
-The spill engages ONLY when the falling value is Forth-owned
-(`forthDataDepth == forthStackCapacity()` at the push). A user who
-hand-keys more values than the stack holds still loses the bottom one
-silently — that is R47's own behavior and stays (D2 ruling).
-
-### 11.2 Where it hooks (all verified against the tree, 2026-08-03)
-
-- **One invocation wrapper, no per-primitive wrappers** *(amended
-  2026-08-03 during D3-2: the original "sole bracket" claim was wrong —
-  primitives are invoked from FOUR sites (outer dispatch, inner loop,
-  XEQN chain, compile-state path), which the first D3-2 gate exposed as
-  `7 FACT = 4320` returning: catches without refills on the inner path)*:
-  a single `forthPrimInvoke(idx)` in forth_inner.c performs
-  Apply(stackEffect) → fn() → ASLIFT → `forthSpillSettle()`, and all four
-  sites call it. The two direct `fnDrop` consumes (0BR, the compile-state
-  string consume) settle explicitly after their Apply(-1).
-  Spill-on-push lives inside `forthDataDepthApply`, replacing the
-  `ERROR_RAM_FULL` capacity branch. Arena exhaustion while growing the
-  spill raises `ERROR_RAM_FULL` — same class, later and honest.
-- **User-native boundary**: the seven `forthDataDepthResync()` sites
-  (FTOK_C47 arms, XEQ/R47-label bodies) are where arbitrary-arity native
-  code runs. RULE: a resync with a NON-EMPTY spill raises
-  `ERROR_RAM_FULL`-class loud stop (message names the spill) — an
-  arbitrary native cannot be allowed to consume through the visible
-  window while Forth values hide below it. Primitive-delegated natives
-  are unaffected (their arity is the `stackEffect` column). Relaxing
-  this is future work and needs its own ruling.
-- **Lifetime**: the spill region is arena-backed, per-execution, reset at
-  `forthDataDepthEnterOuter/LeaveOuter` — the documented-seams pattern
-  (audit §2.5); it is NEVER persisted: power-off mid-execution already
-  abandons execution state, and restoreCalc sees no spill.
-  *(Amended 2026-08-03:)* a line that COMPLETES with the spill still
-  non-empty has produced more values than the visible stack can hold —
-  that is a loud `ERROR_RAM_FULL`-class stop at LeaveOuter (then reset),
-  never a silent discard. The visible stack is the only legal carrier of
-  values across lines.
-
-### 11.3 Representation
-
-A spill slot preserves the full register value: {dataType, dataSize,
-payload bytes}, copied with the same register-image discipline
-saveRestoreBackup uses for stack registers. Slots live in one
-arena-backed, dynamically-grown block (F1-3 record pattern). No second
-numeric representation: a slot is a byte-faithful register image.
-
-### 11.4 D3-1 trace obligations (pre-work, F-series discipline)
-
-1. The exact topmost-stack-register id for SSIZE4/SSIZE8 and the exact
-   upstream lift path that destroys it (anchor the catch point).
-2. The register-image copy helpers' real names/signatures (the
-   saveRestoreBackup stack-register path) — the packet states them as
-   literals, per runbook §4a-1.
-3. The refill mechanics on consume: which register ids vacate for each
-   negative stackEffect shape, against the landed fnDrop/fnAdd behavior.
-
-### 11.5 Predicted decomposition (runbook queue owns the truth)
-
-- **D3-1** spill region + accessors + traces folded (no behavior change).
-- **D3-2** spill/refill inside forthDataDepthApply; retire the capacity
-  error for primitives; `7 FACT` = 5040 and `6 2 NCR` = 15 become the
-  flagship pins (today's guard tests re-pin to the new contract).
-- **D3-3** boundary rule at the resync sites + tests.
-- **D3-4** acceptance: parity sweep (visible-window unchanged), showcase
-  update, docs fold into §3.2/§5.
+LANDED 2026-08-03 (D3-1..D3-4; DESIGN-HISTORY entries of that date).
+Normative content now lives in §3.4 (invocation bracket, boundary rule,
+acceptance pins) and §5.7 (spill region, lifetime, line-end contract).
+Sanctioned divergence from R47 recorded here: depth beyond the visible
+stack, bounded so the visible window and every native's view remain
+exactly R47's. Two design errors were caught by the stage's own gates
+and amended (four invocation sites, not one; line-end discard made
+loud) — the ledger carries both.
