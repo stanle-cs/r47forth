@@ -184,7 +184,7 @@
 //      All C47 / DM42 packages (common to 1–4): no 2D/3D VECTOR conversions (matrix functions stay), no number editing, no 1000-digit XFN math.
 
 
-  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 3544 ☑) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; NO IR PRINTING
+  #if defined(DMCP_PACKAGE1)             // PACKAGE 1 (free 1016) // ALL DIST, Stripped ELLIPSE X.FN menu; NO EIGEN; ELEC; FAST FIN; NO IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
     #define OPTION_BESSEL                // ☑  5000 bytes // Without X.FN BESSEL
     #define OPTION_ORTHO                 // ☑   504 bytes // Without X.FN ORTHO MENU
@@ -213,10 +213,10 @@
             #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
             #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   see below
             #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_IR_PRINTING   // ☑ 10064 bytes // Remove IR printing for old hardware
+    #define OPTION_IR_PRINTING   // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
-  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 (free 5800 ☑) // Limited0 DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
+  #if defined(DMCP_PACKAGE3)             // PACKAGE 3 (free 3280) // Limited0 DIST, Stripped ELLIPSE X.FN menu; EIGEN; ELEC; FAST FIN; IR PRINTING
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
     #define OPTION_BESSEL               // ☑  5008 bytes // Without X.FN BESSEL
     #define OPTION_ORTHO                // ☑   696 bytes // Without X.FN ORTHO MENU
@@ -237,7 +237,7 @@
             //  1    0       6240     26452   ELEC only
             //  1    1      15808     16884   both (ELEC+VECTOR share 3384)
 
-  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free 32744 ☑) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
+  #if defined(DMCP_PACKAGE4_NOOPT)       // PACKAGE 4 (free 30472) // Minimal, no math options included, IR PRINTING; FOR GITLAB PIPELINE COMPILE
             #undef  OPTION_ELLIPTIC      // ✓ 13112 bytes // Without ELLIPTIC
             #undef  OPTION_BESSEL        // ✓  4968 bytes // Without X.FN BESSEL
             #undef  OPTION_ORTHO         // ✓   656 bytes // Without X.FN ORTHO MENU
@@ -250,7 +250,7 @@
             #undef  OPTION_TVM_NEWTON    // ✓  2032 bytes // Use TVM additional newton raphson in the brent solver for tvm where possible
             #undef  OPTION_ELEC          // ✓  6816 bytes // ELEC   6240 saving if VECTOR is not in; 2856 saving if VECTOR is in
             #undef  OPTION_EIGEN         // ✓ 17440 bytes // Without EIGVAL, EIGVEC, M.QR, MSQRT
-    #define OPTION_IR_PRINTING           // ☑ 10064 bytes // Remove IR printing for old hardware
+    #define OPTION_IR_PRINTING           // ✓ 10040 bytes // Remove IR printing for old hardware
   #endif
 
 

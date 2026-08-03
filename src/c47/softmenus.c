@@ -171,7 +171,7 @@ TO_QSPI const int16_t menu_LOOP[]        = { ITM_DSE,                       ITM_
 
 #if defined(OPTION_SLVP_POLY)
   #define ADV_SLVP ITM_SLVP
-#else // OPTION_SLVP: blank SLVP (SLVQ SLVC stay)
+#else // OPTION_SLVP_POLY: blank SLVP
   #define ADV_SLVP ITM_NULL
 #endif // OPTION_SLVP_POLY
 
@@ -728,7 +728,7 @@ TO_QSPI const int16_t menu_EQN[]         = { ITM_EQ_NEW,                    ITM_
 
 TO_QSPI const int16_t menu_ADV[]         = { ITM_SIGMAn,                    ITM_PIn,                       ITM_PLTf,                   -MNU_Sfdx,                     ITM_SOLVE,                    ITM_F1DRV,
                                              ITM_iSIGMAn,                   ITM_iPIn,                      ITM_PGMPLT,                  ITM_PGMINT,                   ITM_PGMSLV,                   ITM_PGMDRV,
-                                             ITM_SIGMAnINF,                 ITM_SLVQ,                      ITM_SLVC,                    ADV_SLVP,                     ITM_NULL,                     ITM_F2DRV                 };
+                                             ITM_SIGMAnINF,                 ADV_SLVQ,                      ADV_SLVC,                    ADV_SLVP,                     ITM_NULL,                     ITM_F2DRV                 };
 
 TO_QSPI const int16_t menu_1stDeriv[]    = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_FPHERE                };
 //note: the items in here are dynamically assigned, including the static ones. Only the entry count is read: showSoftmenu turns this menu into MNU_MVAR and the six
@@ -2815,7 +2815,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
 
     #if !defined(OPTION_SLVP_POLY)
       case ITM_SLVP:
-    #endif // !OPTION_SLVP
+    #endif // !OPTION_SLVP_POLY
 
     #if !defined(OPTION_ELLIPTIC)
       case -MNU_ELLIPT:
@@ -2846,7 +2846,7 @@ bool_t savedspace(int16_t itemNr) {  //strike out all SAVED_SPACE items
     #if !(defined(OPTION_SLVQ_SLVC))
       case ITM_SLVC:
       case ITM_SLVQ:
-    #endif //OPTION_SLV_ZETA_BETA
+    #endif //OPTION_SLVQ_SLVC
 
 
     #if !defined(OPTION_ZETA_BETA)

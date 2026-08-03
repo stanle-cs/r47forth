@@ -121,6 +121,15 @@ Register / named variable / flag write and read (complex values in braces; strin
   a variable with two letters or more and it is unambiguous. The single letter reads as the named variable on the solver and integrator operands only, so  xeq SOLVE x
   and  ∫f d x  do reach a variable called x.
 
+Distribution functions take their parameters from the stat registers, not from the stack:
+  Only the value goes in X. The Weibull pdf reads the shape from Q and the scale from S, so a scripted call writes those two with reg and keys in the value alone.
+  The normal pdf reads the mean from M and the standard deviation from S. Which registers a distribution uses differs from one distribution to the next.
+  ./t47 --reset --exec 'reg S 1.5; reg Q 2.5; nim 2; weibl⒫; puts "f=[reg X]"'      (0.3294099600746249339120285341074746)
+  ./t47 --reset --exec 'reg S 1; reg Q 0.5; nim 1e-30; weibl⒫; puts "f=[reg X]"'    (499999999999999.5000000000000002500)
+  ./t47 --reset --exec 'reg M 10; reg S 2; nim 12; norml⒫; puts "f=[reg X]"'        (0.1209853622595716748989150964677803)
+  The p in Weibl⒫ is a parenthesised letter that no keyboard types, so copy the name out of --dslcommands the way PLT f is copied; typed with a subscript p the run stops
+  at invalid command name. reg X returns all 34 digits of the result, which is what a comparison against an independently computed value needs.
+
 Progress-monitor paths (MONIT) under a multi-second load, with a marker telling "ran and returned" from "hung" (markers: see Notes):
   ./t47 --reset --exec 'flag MONIT 1; reg 01 -1; nim 2000000000000095000000000000777; xeq FACTORS; reg 01 1; puts "R01=[reg 01]"'
   (the 31-digit semiprime = 1000000000000037 x 2000000000000021 runs tens of seconds in the sim, so the 1.024 s monitor tick fires throughout; R01=1 proves
