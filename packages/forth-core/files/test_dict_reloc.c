@@ -9981,7 +9981,7 @@ static int test_picker_long_token_skipped(void)
 /* test_program_memory_no_overlap
  * Mutation: writeTestProgram directly manipulates freeMemoryRegions[0].sizeInBlocks
  * instead of using resizeProgramMemory, creating free-list fragments that overlap
- * with region 0 and trigger the overlap warning in freeListFree().
+ * with region 0 and trigger the firmware-bug screen in freeListFree() (FIX-6B).
  * (§memory refactor: allocator consistency) */
 static int test_program_memory_no_overlap(void)
 {
@@ -10038,7 +10038,7 @@ static int test_program_memory_no_overlap(void)
 /* test_cleanup_no_overlap
  * Mutation: dict is freed AFTER restoreTestProgram collapses free regions,
  * so the dict's allocation falls inside restored region 0 and triggers
- * the overlap warning in freeListFree().
+ * the firmware-bug screen in freeListFree() (FIX-6B).
  * (§memory refactor: cleanup order) */
 static int test_cleanup_no_overlap(void)
 {
@@ -13850,7 +13850,17 @@ static int test_freelist_double_free_guarded(void)
   freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
   memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
 
+  uint8_t savedCalcMode = calcMode;
+  calcMode = CM_NORMAL;   /* ensure displayBugScreen's guard can fire */
   freeC47Blocks(blk, blocks); /* double free — must be a no-op */
+
+  if (calcMode != CM_BUG_ON_SCREEN) {
+    printf("    FAIL: overlapping free did not raise the firmware-bug screen\n");
+    fail = 1;
+  }
+  calcMode = savedCalcMode;
+  clearScreen(0);   /* wipe the bug-screen pixels so later display tests
+                       start clean; harmless if unused elsewhere */
 
   if (numberOfFreeMemoryRegions != countBefore) {
     printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after double free\n",
@@ -13868,7 +13878,7 @@ static int test_freelist_double_free_guarded(void)
   }
 
   if (!fail) {
-    printf("    PASS: exact-match double free rejected, free list unchanged\n");
+    printf("    PASS: exact-match double free raises bug screen, free list unchanged\n");
   }
   return fail;
 }
@@ -13947,7 +13957,17 @@ static int test_freelist_interior_double_free(void)
   /* second's address is now interior to the coalesced region, not equal to
    * its blockAddress (which is first's address, or lower after merging
    * with surrounding free space). */
+  uint8_t savedCalcMode = calcMode;
+  calcMode = CM_NORMAL;   /* ensure displayBugScreen's guard can fire */
   freeC47Blocks(second, secondSize); /* interior double free — must be a no-op */
+
+  if (calcMode != CM_BUG_ON_SCREEN) {
+    printf("    FAIL: overlapping free did not raise the firmware-bug screen\n");
+    fail = 1;
+  }
+  calcMode = savedCalcMode;
+  clearScreen(0);   /* wipe the bug-screen pixels so later display tests
+                       start clean; harmless if unused elsewhere */
 
   if (numberOfFreeMemoryRegions != countBefore) {
     printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after interior double free\n",
@@ -13965,7 +13985,7 @@ static int test_freelist_interior_double_free(void)
   }
 
   if (!fail) {
-    printf("    PASS: interior double free rejected, free list unchanged\n");
+    printf("    PASS: interior double free raises bug screen, free list unchanged\n");
   }
   return fail;
 }
@@ -13994,7 +14014,17 @@ static int test_freelist_no_mutation_on_oversize_free(void)
   freeMemoryRegion_t snapshot[MAX_FREE_REGIONS];
   memcpy(snapshot, freeMemoryRegions, (size_t)countBefore * sizeof(freeMemoryRegion_t));
 
+  uint8_t savedCalcMode = calcMode;
+  calcMode = CM_NORMAL;   /* ensure displayBugScreen's guard can fire */
   freeC47Blocks(blk, oversizeBlocks); /* oversize double free — must be a no-op */
+
+  if (calcMode != CM_BUG_ON_SCREEN) {
+    printf("    FAIL: overlapping free did not raise the firmware-bug screen\n");
+    fail = 1;
+  }
+  calcMode = savedCalcMode;
+  clearScreen(0);   /* wipe the bug-screen pixels so later display tests
+                       start clean; harmless if unused elsewhere */
 
   if (numberOfFreeMemoryRegions != countBefore) {
     printf("    FAIL: numberOfFreeMemoryRegions changed %ld -> %ld after oversize double free\n",
@@ -14012,7 +14042,7 @@ static int test_freelist_no_mutation_on_oversize_free(void)
   }
 
   if (!fail) {
-    printf("    PASS: oversize double free rejected, no region grew\n");
+    printf("    PASS: oversize double free raises bug screen, no region grew\n");
   }
   return fail;
 }
