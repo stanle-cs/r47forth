@@ -255,7 +255,9 @@ argument
 unitVector
 
 slvc
+slvp
 slvq
+stkexV4
 agm
 
 decomp
@@ -280,7 +282,8 @@ compare_cov
 mathspecial_cov
 checkval_cov
 matrixops_cov
-mateditscroll_cov
+matrixedit_cov
+matrixelem_cov
 prime_cov
 disterr_cov
 iteration_cov
@@ -437,7 +440,7 @@ elec
 
 programs
 
-; eq_cov/deriv_cov/solve_cov/integrate_cov/tvm_cov mutate shared state the
+; eq_cov/deriv_cov/solve_cov/cpxslv_cov/eqslv_cov/integrate_cov/tvm_cov mutate shared state the
 ; per-test In: reset does not clear - a formula in the pool, the named variables
 ; A and X, and the reserved TVM registers - so they run after programs.txt, not
 ; before it. They also run before pgm_solve_cov: their error cases assert that
@@ -446,6 +449,8 @@ programs
 eq_cov
 deriv_cov
 solve_cov
+cpxslv_cov
+eqslv_cov
 integrate_cov
 tvm_cov
 

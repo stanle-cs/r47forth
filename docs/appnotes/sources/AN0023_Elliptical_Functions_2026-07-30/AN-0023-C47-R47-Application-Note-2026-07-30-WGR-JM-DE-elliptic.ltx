@@ -5,7 +5,7 @@
 % modulus convention that makes the same calculation look like two different answers.
 % Compiled with lualatex, and with the shared design language in ../style/c47appnote.sty. Build with
 %
-%   TEXINPUTS=../style: lualatex AN-0023-C47-R47-Application-Note-2026-04-17-WGR-elliptic.ltx
+%   TEXINPUTS=../style: lualatex AN-0023-C47-R47-Application-Note-2026-07-30-WGR-JM-DE-elliptic.ltx
 %
 % twice, so the table of contents, the page count and the cross references settle.
 
@@ -16,9 +16,10 @@
 % package loads only calc, since no other note draws a geometric construction.
 \usetikzlibrary{angles,quotes}
 
-% \mo marks the modulus parameter under discussion, which is the whole subject of the note. The
-% circulated draft marked it in red; the accent is reserved for warnings, so the emphasis is weight.
-\newcommand{\mo}[1]{\symbf{#1}}
+% \mo marks the modulus parameter under discussion, which is the whole subject of the note, in the
+% red of the original edition with the weight kept: bold alone lost the effect (issue #632). The
+% red is the shared palette's warnink rather than pure red, so it prints like the rest of the house.
+\newcommand{\mo}[1]{\textcolor{warnink}{\symbf{#1}}}
 
 \notenumber{023}
 \noteshorttitle{Elliptic Functions}
@@ -75,9 +76,10 @@
 \vspace{2em}
 
 \begin{revisions}
-    \revision{1.0}{2026-04-17}{First published, against firmware 0.109.03.02, with Annex 1, a
-                               worked tutorial by Jaco Mostert, appended to the published PDF.}
-    \revision{1.1}{2026-07-30}{Moved to the shared design language in
+    \revision{1.0}{2026-04-17}{WGR, JM.  First published, against firmware 0.109.03.02, with
+                               Annex 1, a worked tutorial by Jaco Mostert, appended to the
+                               published PDF.}
+    \revision{1.1}{2026-07-30}{DE.  Moved to the shared design language in
                                \file{sources/style/c47appnote.sty}, and the date pinned rather than
                                taken from the build clock.  Keystrokes are drawn in the house
                                notation and every one of them was replayed against the simulator:
@@ -85,6 +87,12 @@
                                menu paging key, the repeat of \cmd{MVAR}, and the angular mode the
                                $\phi$ examples need.  Every numerical result in the note was
                                reproduced unchanged.}
+    \revision{1.2}{2026-08-01}{DE.  The modulus marker is red again, in the shared palette's red
+                               and keeping the weight; bold alone had lost the effect of the
+                               original edition (issue \#632).  The \cmd{EllE} entry sequence is
+                               re-set one action per line in the new \cmd{keying} block, after
+                               review found the prose form too dense to follow.  Revision authors
+                               named, here and in the author list.}
 \end{revisions}
 
 % ===================================================================================================
@@ -328,18 +336,24 @@ FindRoot[EllipticE[x, .96] == .19872, {x, .5}]
 
     \prog{0001: LBL 'EllE'\\0002: \ \ MVAR 'x'\\0003: \ \ MVAR 'm'\\0004: \ \ MVAR 'u'\\0005: \ \ RCL 'm'\\0006: \ \ RCL 'x'\\0007: \ \ E($\phi$,m)\\0008: \ \ RCL− 'u'\\0009: END}
 
-    To key it in, open a new program with \key{XEQ}\,\key{.}\,\key{.} and switch to program-entry
-    mode with \fkey{PRGM}.  Start the label with \gkey{LBL}, then \fkey{$\alpha$}, type
-    \key{E}\,\key{l}\,\key{l}\,\key{E}, and \key{ENTER}.  Declare the first variable next:
-    \mkey{P.FN1}, then \mkey{P.FN2}, then \mkey{MVAR}, then \fkey{$\alpha$}\,\key{x}\,\key{ENTER}.
-    The menu stays on \menu{P.FN2} afterwards, so the second and third variables are just
-    \mkey{MVAR}\,\fkey{$\alpha$}\,\key{m}\,\key{ENTER} and \mkey{MVAR}\,\fkey{$\alpha$}\,\key{u}\,\key{ENTER}.
-    Then key the body: \key{RCL}\,\fkey{$\alpha$}\,\key{m}\,\key{ENTER},
-    \key{RCL}\,\fkey{$\alpha$}\,\key{x}\,\key{ENTER}, then \gkey{X.FN}\,\key{$\uparrow$} to reach
-    the second page of the extended-functions menu, \gmkey{Ellipt}, \fmkey{E($\phi$,m)}, and finally
-    \key{RCL}\,\key{$-$}\,\fkey{$\alpha$}\,\key{u}\,\key{ENTER}.  Leave program-entry mode with
-    \fkey{PRGM}.  Application Note~29 \cite{AN0029} walks through program entry from the beginning
-    if any of that is unfamiliar.
+    To key it in, one action per line:
+
+    \begin{keying}
+        \step{\key{XEQ}\,\key{.}\,\key{.}}{open a new program}
+        \step{\fkey{PRGM}}{enter program-entry mode}
+        \step{\gkey{LBL}\,\fkey{$\alpha$}\,\key{E}\,\key{l}\,\key{l}\,\key{E}\,\key{ENTER}}{the label \cmd{EllE}}
+        \step{\mkey{P.FN1}\ \mkey{P.FN2}\ \mkey{MVAR}\,\fkey{$\alpha$}\,\key{x}\,\key{ENTER}}{declare the first variable; the menu stays on \menu{P.FN2}}
+        \step{\mkey{MVAR}\,\fkey{$\alpha$}\,\key{m}\,\key{ENTER}}{the second variable}
+        \step{\mkey{MVAR}\,\fkey{$\alpha$}\,\key{u}\,\key{ENTER}}{the third}
+        \step{\key{RCL}\,\fkey{$\alpha$}\,\key{m}\,\key{ENTER}}{begin the body}
+        \step{\key{RCL}\,\fkey{$\alpha$}\,\key{x}\,\key{ENTER}}{}
+        \step{\gkey{X.FN}\,\key{$\uparrow$}\ \gmkey{Ellipt}\ \fmkey{E($\phi$,m)}}{the incomplete integral, from the second page of the extended-functions menu}
+        \step{\key{RCL}\,\key{$-$}\,\fkey{$\alpha$}\,\key{u}\,\key{ENTER}}{}
+        \step{\fkey{PRGM}}{leave program-entry mode}
+    \end{keying}
+
+    Application Note~29 \cite{AN0029} walks through program entry from the beginning if any of that
+    is unfamiliar.
 
     \shot{04-elle}{\cmd{EllE} keyed in, seen from the top: nine steps in 38 bytes.  The listing
     continues past \cmd{RCL} \vr{x} with \fmkey{E($\phi$,m)} and \cmd{RCL$-$} \vr{u}, and the
@@ -634,11 +648,13 @@ JacobiDN[u,m]
 \end{thebibliography}
 \endgroup
 
-% Two contributors, because the published PDF bundles Annex 1: see the filename, which carries both
-% sets of initials. The .ltx here is the note alone.
+% Three contributors, matching the three sets of initials in the filename. The .ltx here is the
+% note alone; Annex 1 rides in the published PDF.
 \authors{
     \contributor{William Gordon Rutherdale}{}{}{This note}
     \contributor{Jaco Mostert}{}{}{Annex 1, the worked tutorial appended to the published PDF}
+    \contributor{David Emerson}{}{}{The 2026 editions: the house notation and design language,
+        the simulator-verified keystrokes and screen captures, and the added tips}
 }
 
 \end{document}

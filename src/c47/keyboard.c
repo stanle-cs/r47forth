@@ -575,6 +575,7 @@ static void executeFunction(const char *data, int16_t item_);
 
   uint8_t asnKey[4] = {0, 0, 0, 0};
   bool_t releaseOverride = false;
+  bool_t showScreenDismissed = false;               //this press closed a SHOW or WHO screen, which clears temporaryInformation before EXIT is handled
 
   #if defined(PC_BUILD)
     void btnFnPressed(GtkWidget *notUsed, GdkEvent *event, gpointer data) {
@@ -599,6 +600,8 @@ static void executeFunction(const char *data, int16_t item_);
                     #endif //VERBOSEKEYS
       if(SHOWMODE || currentMenu() == -MNU_SHOW) {
         closeShowMenu();
+        releaseOverride = true;                     //the key that dismissed the screen is swallowed: neither press nor release acts
+        return;
       }
 
       FN_timed_out_to_NOP_or_Executed = false;
@@ -1802,6 +1805,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
   #if defined(DMCP_BUILD)
     void btnPressed(void *data) {
   #endif //DMCP_BUILD
+      showScreenDismissed = (SHOWMODE || currentMenu() == -MNU_SHOW);
+      if(showScreenDismissed) {
+        closeShowMenu();
+      }
 
       reDraw = false;
       nimWhenButtonPressed = (calcMode == CM_NIM);                  //PHM eRPN 2021-07
@@ -2523,7 +2530,7 @@ RELEASE_END:
               keyActionProcessed = true;
             }
           }
-          if((temporaryInformation != TI_NO_INFO) && (calcMode != CM_CONFIRMATION)) {
+          if((temporaryInformation != TI_NO_INFO || showScreenDismissed) && (calcMode != CM_CONFIRMATION)) {   //EXIT off a SHOW or WHO screen only dismisses it, the menu underneath stays
             temporaryInformation = TI_NO_INFO;
             keyActionProcessed = true;
             screenUpdatingMode &= ~(SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_STATUSBAR);
