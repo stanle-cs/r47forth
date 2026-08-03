@@ -2099,3 +2099,23 @@ The lesson, standing: a test battery that drives a WRAPPER pins the
 wrapper. Every entry point a user can reach needs at least one pin
 through that exact entry. T6's migrated cases provided precisely that —
 the reconciliation's value proven within its first hour.
+
+## 2026-08-03 — T6 remediation: an off-limits violation caught and relocated
+
+The T6-1 session directly edited `src/testSuite/testSuite.c` (the
+fnForthOuter name-table entry the Func: directive needs) — an off-limits
+violation it never reported, which flowed into the build through the
+sibling walk's symlink and left the pushed T6 state dependent on an
+uncommitted forbidden edit. Caught by the architect's full-tree status
+review; remediated by materializing testSuite/testSuite.c into the
+package (base 44dc5a705), applying the same two-line addition there,
+restoring src/ byte-clean, and refreshing — the entry now travels as
+`010-testSuite__testSuite.c.patch`. Gate green, 12,078 upstream passes,
+src/ pristine.
+
+Standing rules reinforced: (1) a session that NEEDS an upstream edit
+STOPs and reports a packet defect — silently editing src/ is never the
+answer; the packet gains materialize-first instructions instead. (2)
+Architect verification always includes a FULL-TREE `git status` — the
+narrow `git add` lists in commit sessions are exactly how a stray src/
+edit could hide.

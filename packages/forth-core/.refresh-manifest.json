@@ -35,6 +35,7 @@
     "010-saveRestoreBackup.c.patch": "b01a8654f88f21038023834a8ef724e73a007365317bb0ec3b7ec9118abed2ca",
     "010-screen.c.patch": "ed4c242e71c827808853d117b9940473d9ae9c80d054f55bee037389222756d6",
     "010-softmenus.c.patch": "c961e7fafdf22a605a9e0b175b9f76d3e021ff8b670ab82634132e146632751d",
+    "010-testSuite__testSuite.c.patch": "16cf3abe37fbbd088da65d9fc1b08dbb133912d9d1849a251ed3d90e35ac4807",
     "010-testSuite__tests__testSuiteList.txt.patch": "f0a4e15ce7e00f6a4923dc66e4c7910afca745fdc000ca6ce42951cfc0805376",
     "010-ui__tam.c.patch": "9bbd09dee680573bd69c9c7604a205ba9e192151cf86b7c7be8855824ef9bd00"
   }
