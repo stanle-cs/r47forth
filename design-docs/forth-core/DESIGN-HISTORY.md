@@ -1943,3 +1943,19 @@ a loud stop pending its own ruling. Spill is never persisted
 (per-execution seams; audit §2.5 pattern). Queue: D3-1..D3-4 (runbook
 §2b); D3-1 starts with the §11.4 traces. The D2 guard tests re-pin to the
 new contract at D3-2 — 7 FACT = 5040 becomes the flagship.
+
+
+## 2026-08-03 — D3-1 landed (`30d29d7e8`)
+
+Spill region + accessors (forthSpillCount/Reset/Catch/Refill) in
+forth_inner.c, reset at both outer seams; five SP unit subcases; arena
+returns to baseline every run (the §2.5 lifetime proof). Implemented by
+the local model under §4a — one architect correction (an inverted assert
+that fired on correct values). Mutations: FIFO-break reds SP-2/SP-4,
+type-lie reds SP-1; restores green. One recorded adaptation: the packet's
+setRegisterDataType(reg, type, amNone) three-arg form needed a uint16_t
+cast on type — the implementer adapted correctly instead of stopping;
+the packet's STOP rule should have named the cast, noted for §4a
+authoring hygiene. Next: D3-2 wires the spill into forthDataDepthApply's
+bracket (catch pre-fn at capacity, refill post-fn), retires the primitive
+capacity error, and re-pins the D2 guard tests — 7 FACT = 5040.

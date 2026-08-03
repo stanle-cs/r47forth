@@ -56,6 +56,74 @@ void forthSetTestInnerDepth(uint8_t depth) {
 static int16_t forthDataDepth   = 0;
 static bool_t  forthOuterActive = false;
 
+/* D3-1 spill region (DESIGN.md §11): arena-backed, per-execution, LIFO.
+ * Unused by product paths until D3-2 wires forthDataDepthApply to it.
+ * Slot: [uint32 dataType][uint16 sizeInBlocks][payload]. */
+static void    *forthSpillBase   = NULL;   /* arena block, or NULL */
+static uint16_t forthSpillBlocks = 0;      /* allocated size in blocks */
+static uint32_t forthSpillTop    = 0;      /* byte offset one past last slot */
+static uint16_t forthSpillSlots  = 0;      /* live slot count */
+
+uint16_t forthSpillCount(void) { return forthSpillSlots; }
+
+void forthSpillReset(void)
+{
+  if (forthSpillBase) {
+    freeC47Blocks(forthSpillBase, forthSpillBlocks);
+  }
+  forthSpillBase = NULL; forthSpillBlocks = 0;
+  forthSpillTop = 0; forthSpillSlots = 0;
+}
+
+bool_t forthSpillCatch(calcRegister_t reg)
+{
+  uint32_t type   = getRegisterDataType(reg);
+  uint16_t blocks = getRegisterFullSizeInBlocks(reg);
+  uint32_t need   = forthSpillTop + 6u + (uint32_t)blocks * 4u;
+  if (forthSpillBase == NULL || need > (uint32_t)forthSpillBlocks * 4u) {
+    uint16_t newBlocks = (uint16_t)((need + 63u) / 4u + 16u);
+    void *nb = forthSpillBase
+      ? reallocC47Blocks(forthSpillBase, forthSpillBlocks, newBlocks)
+      : allocC47Blocks(newBlocks);
+    if (nb == NULL) { return false; }          /* arena exhausted: caller errors */
+    forthSpillBase = nb; forthSpillBlocks = newBlocks;
+  }
+  { uint8_t *p = (uint8_t *)forthSpillBase + forthSpillTop;
+    xcopy(p, &type, 4);
+    xcopy(p + 4, &blocks, 2);
+    xcopy(p + 6, getRegisterDataPointer(reg), (uint32_t)blocks * 4u);
+  }
+  forthSpillTop += 6u + (uint32_t)blocks * 4u;
+  forthSpillSlots++;
+  return true;
+}
+
+bool_t forthSpillRefill(calcRegister_t reg)
+{
+  if (forthSpillSlots == 0) { return false; }
+  { /* walk from the base to find the LAST slot's offset */
+    uint32_t off = 0, prev = 0; uint16_t n = forthSpillSlots;
+    while (n-- > 0) {
+      uint16_t blocks; prev = off;
+      xcopy(&blocks, (uint8_t *)forthSpillBase + off + 4, 2);
+      off += 6u + (uint32_t)blocks * 4u;
+    }
+    { uint8_t *p = (uint8_t *)forthSpillBase + prev;
+      uint32_t type; uint16_t blocks;
+      xcopy(&type, p, 4);
+      xcopy(&blocks, p + 4, 2);
+      freeRegisterData(reg);
+      setRegisterDataPointer(reg, allocC47Blocks(blocks));
+      if (getRegisterDataPointer(reg) == NULL) { return false; }
+      setRegisterDataType(reg, (uint16_t)type, amNone);
+      xcopy(getRegisterDataPointer(reg), p + 6, (uint32_t)blocks * 4u);
+      forthSpillTop = prev;
+      forthSpillSlots--;
+    }
+  }
+  return true;
+}
+
 static int16_t forthStackCapacity(void)
 {
   return (int16_t)(getStackTop() - REGISTER_X + 1);
@@ -63,12 +131,14 @@ static int16_t forthStackCapacity(void)
 
 void forthDataDepthEnterOuter(void)
 {
+  forthSpillReset();
   forthOuterActive = true;
   forthDataDepth   = 0;
 }
 
 void forthDataDepthLeaveOuter(void)
 {
+  forthSpillReset();
   forthOuterActive = false;
 }
 

@@ -8846,6 +8846,7 @@ static int test_showcase_program(void);
 static int test_savings_program(void);
 static int test_native_lift_after_forth(void);
 static int test_data_stack_overflow_guard(void);
+static int test_spill_region(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
@@ -10191,6 +10192,194 @@ static bool_t stepSrcTextEq(const uint8_t *step, const char *expected) {
       && memcmp(step + 4, expected, len) == 0;
 }
 
+static int test_spill_region(void)
+{
+  int fail = 0;
+
+  /* SP-1: round trip preserves type+payload */
+  {
+    real34_t seed, origPayload;
+    int32ToReal34(42, &seed);
+    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+    real34Copy(&seed, REGISTER_REAL34_DATA(REGISTER_X));
+    real34Copy(REGISTER_REAL34_DATA(REGISTER_X), &origPayload);
+    forthSpillReset();
+    if (!forthSpillCatch(REGISTER_X)) {
+      printf("  SP-1 FAIL: catch returned false\n");
+      fail = 1;
+    } else {
+      real34_t altered;
+      int32ToReal34(99, &altered);
+      real34Copy(&altered, REGISTER_REAL34_DATA(REGISTER_X));
+      if (!forthSpillRefill(REGISTER_Y)) {
+        printf("  SP-1 FAIL: refill returned false\n");
+        fail = 1;
+      } else if (getRegisterDataType(REGISTER_Y) != dtReal34 ||
+                 memcmp(getRegisterDataPointer(REGISTER_Y),
+                        &origPayload,
+                        (size_t)getRegisterFullSizeInBlocks(REGISTER_Y) * 4u) != 0) {
+        printf("  SP-1 FAIL: Y type=%u blocks=%u (expected dtReal34)\n",
+               getRegisterDataType(REGISTER_Y),
+               getRegisterFullSizeInBlocks(REGISTER_Y));
+        fail = 1;
+      } else {
+        real34_t yVal;
+        real34Copy(REGISTER_REAL34_DATA(REGISTER_Y), &yVal);
+        int32_t v = real34ToInt32(&yVal);
+        if (v != 42) {
+          printf("  SP-1 FAIL: Y value=%ld (expected 42)\n", (long)v);
+          fail = 1;
+        } else {
+          printf("  SP-1 PASS\n");
+        }
+      }
+    }
+  }
+
+  /* SP-2: LIFO over three values */
+  {
+    real34_t s1, s2, s3; int32_t r1, r2, r3;
+    forthSpillReset();
+    int32ToReal34(100, &s1);
+    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+    real34Copy(&s1, REGISTER_REAL34_DATA(REGISTER_X));
+    forthSpillCatch(REGISTER_X);
+    int32ToReal34(200, &s2);
+    real34Copy(&s2, REGISTER_REAL34_DATA(REGISTER_X));
+    forthSpillCatch(REGISTER_X);
+    int32ToReal34(300, &s3);
+    real34Copy(&s3, REGISTER_REAL34_DATA(REGISTER_X));
+    forthSpillCatch(REGISTER_X);
+    if (forthSpillCount() != 3) {
+      printf("  SP-2 FAIL: count=%u after 3 catches\n", forthSpillCount());
+      fail = 1;
+    } else {
+      reallocateRegister(REGISTER_Y, dtReal34, 0, amNone);
+      forthSpillRefill(REGISTER_Y);
+      r1 = real34ToInt32(REGISTER_REAL34_DATA(REGISTER_Y));
+      forthSpillRefill(REGISTER_Y);
+      r2 = real34ToInt32(REGISTER_REAL34_DATA(REGISTER_Y));
+      forthSpillRefill(REGISTER_Y);
+      r3 = real34ToInt32(REGISTER_REAL34_DATA(REGISTER_Y));
+      if (r1 != 300 || r2 != 200 || r3 != 100) {
+        printf("  SP-2 FAIL: got %ld,%ld,%ld (expected 300,200,100)\n",
+               (long)r1, (long)r2, (long)r3);
+        fail = 1;
+      } else {
+        printf("  SP-2 PASS\n");
+      }
+    }
+  }
+
+  /* SP-3: reset frees */
+  {
+    real34_t s1, s2;
+    forthSpillReset();
+    if (forthSpillCount() != 0) {
+      printf("  SP-3 FAIL: count=%u after reset\n", forthSpillCount());
+      fail = 1;
+    } else {
+      int32ToReal34(1, &s1);
+      reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+      real34Copy(&s1, REGISTER_REAL34_DATA(REGISTER_X));
+      forthSpillCatch(REGISTER_X);
+      int32ToReal34(2, &s2);
+      real34Copy(&s2, REGISTER_REAL34_DATA(REGISTER_X));
+      forthSpillCatch(REGISTER_X);
+      forthSpillReset();
+      if (forthSpillCount() != 0) {
+        printf("  SP-3 FAIL: count=%u after reset\n", forthSpillCount());
+        fail = 1;
+      } else if (forthSpillRefill(REGISTER_Y)) {
+        printf("  SP-3 FAIL: refill returned true on empty spill\n");
+        fail = 1;
+      } else {
+        printf("  SP-3 PASS\n");
+      }
+    }
+  }
+
+  /* SP-4: growth */
+  {
+    real34_t firstSeed;
+    int32_t firstVal, lastVal;
+    forthSpillReset();
+    int32ToReal34(1, &firstSeed);
+    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+    real34Copy(&firstSeed, REGISTER_REAL34_DATA(REGISTER_X));
+    { uint16_t i;
+      for (i = 0; i < 40; i++) {
+        int32ToReal34((int32_t)(i + 1), &firstSeed);
+        real34Copy(&firstSeed, REGISTER_REAL34_DATA(REGISTER_X));
+        if (!forthSpillCatch(REGISTER_X)) {
+          printf("  SP-4 FAIL: catch %u returned false\n", i);
+          fail = 1;
+          break;
+        }
+      }
+    }
+    if (forthSpillCount() == 40) {
+      reallocateRegister(REGISTER_Y, dtReal34, 0, amNone);
+      { uint16_t i;
+        for (i = 0; i < 40; i++) {
+          if (!forthSpillRefill(REGISTER_Y)) {
+            printf("  SP-4 FAIL: refill %u returned false\n", i);
+            fail = 1;
+            break;
+          }
+        }
+      }
+      if (forthSpillCount() != 0) {
+        printf("  SP-4 FAIL: count=%u after 40 refills\n", forthSpillCount());
+        fail = 1;
+      } else {
+        lastVal = real34ToInt32(REGISTER_REAL34_DATA(REGISTER_Y));
+        reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+        int32ToReal34(1, &firstSeed);
+        real34Copy(&firstSeed, REGISTER_REAL34_DATA(REGISTER_X));
+        firstVal = real34ToInt32(REGISTER_REAL34_DATA(REGISTER_X));
+        if (lastVal != 1 || firstVal != 1) {
+          printf("  SP-4 FAIL: lastRefill=%ld firstCaught=%ld\n",
+                 (long)lastVal, (long)firstVal);
+          fail = 1;
+        } else {
+          printf("  SP-4 PASS\n");
+        }
+      }
+    } else if (forthSpillCount() != 0) {
+      printf("  SP-4 FAIL: count=%u after 40 catches\n", forthSpillCount());
+      fail = 1;
+    }
+  }
+
+  /* SP-5: empty refill is false */
+  {
+    real34_t seed;
+    int32_t yBefore, yAfter;
+    forthSpillReset();
+    int32ToReal34(777, &seed);
+    reallocateRegister(REGISTER_Y, dtReal34, 0, amNone);
+    real34Copy(&seed, REGISTER_REAL34_DATA(REGISTER_Y));
+    yBefore = real34ToInt32(REGISTER_REAL34_DATA(REGISTER_Y));
+    if (forthSpillRefill(REGISTER_Y)) {
+      printf("  SP-5 FAIL: refill returned true on empty spill\n");
+      fail = 1;
+    } else {
+      yAfter = real34ToInt32(REGISTER_REAL34_DATA(REGISTER_Y));
+      if (yBefore != yAfter || yAfter != 777) {
+        printf("  SP-5 FAIL: Y changed from %ld to %ld\n",
+               (long)yBefore, (long)yAfter);
+        fail = 1;
+      } else {
+        printf("  SP-5 PASS\n");
+      }
+    }
+  }
+
+  forthSpillReset();
+  return fail;
+}
+
 
 /* T5 split: forward declarations for the tests that now live in the
  * .part.h include-parts (see the parts' banner comments). */
@@ -11062,6 +11251,9 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_data_stack_overflow_guard...\n");
   fail |= test_data_stack_overflow_guard();
+
+  printf("  [DEBUG] running test_spill_region...\n");
+  fail |= test_spill_region();
 
   printf("  [DEBUG] running test_native_lift_after_forth...\n");
   fail |= test_native_lift_after_forth();
