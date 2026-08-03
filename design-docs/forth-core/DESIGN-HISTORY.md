@@ -1959,3 +1959,40 @@ the packet's STOP rule should have named the cast, noted for §4a
 authoring hygiene. Next: D3-2 wires the spill into forthDataDepthApply's
 bracket (catch pre-fn at capacity, refill post-fn), retires the primitive
 capacity error, and re-pins the D2 guard tests — 7 FACT = 5040.
+
+
+## 2026-08-03 — D3-2 landed (`540977271`): the spill is live; 7 FACT = 5040
+
+The flagship holds: deep recursion on the 8-level visible stack computes
+correctly (`7 FACT` = 5040, `deep push spills, drains back in order`),
+arena at baseline, upstream suite green, 321 PASS.
+
+**Two architect design errors, caught by the stage's own first gate and
+amended in §11:** (1) the "sole dispatch bracket" claim was false —
+primitives are invoked from FOUR sites; the fix is the single
+`forthPrimInvoke()` wrapper (Apply → fn → ASLIFT → Settle) that §2.10
+would have demanded from the start. The first gate showed exactly the
+predicted failure class: catches without refills on the inner path
+resurrected the D2-era `7 FACT = 4320` silent wrong answer. (2) A line
+completing with a non-empty spill silently discarded values at the
+LeaveOuter reset; the amended contract makes it a loud stop — the
+visible stack is the only legal carrier of values across lines. One
+implementer finding ruled during the work: the fnForthOuter entry drop
+consumes the USER'S input string before accounting starts — no Apply,
+no Settle, correct as-is.
+
+Mutations: both Settle sites removed → `7 FACT errored (11)` (the refill
+machinery is load-bearing; note the first, single-site mutation attempt
+was self-healed by the 0BR site's redundant settle — mutation scope must
+cover ALL redundant paths); line-end contract disabled → its test REDs.
+Restores green.
+
+**Binding §4a addendum (from an architect near-miss, caught before
+execution):** a mechanical command block may NEVER contain
+tree-reverting git commands (`checkout --`/`restore`) as a "restore"
+step — with uncommitted stage work in the same file it destroys the
+stage. Restores are always explicit inverse edits. The runbook carries
+the rule.
+
+D3-3 (boundary rule at the resync sites, replacing the D3-2 interim
+stop) is next; then D3-4 acceptance.

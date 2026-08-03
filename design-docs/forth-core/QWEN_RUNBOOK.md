@@ -198,6 +198,12 @@ rules; a packet that violates one is a packet defect.
   with only the remaining work — long correction chains poison the
   context and the model replays its last pattern. Kill by recorded PID
   only (a pkill pattern once matched the monitoring itself).
+- A mechanical block NEVER contains tree-reverting git commands
+  (`checkout --`, `restore`) as a "restore" step — with uncommitted
+  stage work in the file, that destroys the stage (2026-08-03
+  near-miss). Restores are always explicit inverse edits, and a
+  mutation must cover ALL redundant code paths of the mechanism it
+  breaks, or a parallel path self-heals the RED.
 - The gate-grep EXECUTION GATE discipline stays: stale branch names,
   counts, and line citations rot between authoring and execution — no
   bare `file:line` in a packet without a grep+expected-count beside it.

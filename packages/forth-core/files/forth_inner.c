@@ -129,6 +129,35 @@ static int16_t forthStackCapacity(void)
   return (int16_t)(getStackTop() - REGISTER_X + 1);
 }
 
+/* D3-2: after a primitive consumed values, pull spilled values back into
+ * the vacated deepest slots. Called from the dispatch bracket only. */
+void forthSpillSettle(void)
+{
+  while (forthSpillCount() > 0
+         && forthDataDepth < forthStackCapacity()) {
+    if (!forthSpillRefill(getStackTop())) {
+      break;   /* allocation failure: value stays spilled, count intact */
+    }
+    forthDataDepth++;
+  }
+}
+
+/* D3-2A (DESIGN.md §11): the ONLY way to invoke a primitive. Applies the
+ * declared stack effect (catching overflow into the spill), runs it,
+ * restores ASLIFT convention, then refills vacated slots. Returns false
+ * when the depth/spill accounting refused the invocation; callers keep
+ * their own lastErrorCode handling after fn(). */
+bool_t forthPrimInvoke(uint16_t idx)
+{
+  if (!forthDataDepthApply(forthPrims[idx].stackEffect)) {
+    return false;
+  }
+  forthPrims[idx].fn();
+  setSystemFlag(FLAG_ASLIFT);
+  forthSpillSettle();
+  return true;
+}
+
 void forthDataDepthEnterOuter(void)
 {
   forthSpillReset();
@@ -138,6 +167,12 @@ void forthDataDepthEnterOuter(void)
 
 void forthDataDepthLeaveOuter(void)
 {
+  if (forthSpillCount() > 0) {
+    /* D3-2A (§11): a completed line may not leave values beyond the
+     * visible stack — loud stop, then the reset below discards. */
+    lastErrorCode = ERROR_RAM_FULL;
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+  }
   forthSpillReset();
   forthOuterActive = false;
 }
@@ -150,6 +185,13 @@ void forthDataDepthLeaveOuter(void)
  * which 0 happens to be exactly right. */
 void forthDataDepthResync(void)
 {
+  if (forthSpillCount() > 0) {
+    /* D3-2 interim, refined by D3-3: an arbitrary native cannot run
+     * while Forth values hide below the visible window. Loud stop. */
+    lastErrorCode = ERROR_RAM_FULL;
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    forthSpillReset();
+  }
   forthDataDepth = 0;
 }
 
@@ -164,12 +206,27 @@ bool_t forthDataDepthApply(int16_t net)
   if (!forthOuterActive && forthDepth == 0) {
     return true;
   }
+  fprintf(stderr, "DEBUG depth: outerActive=%d depth=%d net=%d cap=%d\n",
+          forthOuterActive, (int)forthDataDepth, (int)net, (int)forthStackCapacity());
   if (net > 0 && forthDataDepth + net > forthStackCapacity()) {
-    lastErrorCode = ERROR_RAM_FULL;
-    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-    return false;
+    /* D3-2 (DESIGN.md §11): the falling values are Forth-owned — catch
+     * them into the spill, deepest first, BEFORE the primitive's lifts
+     * destroy them. LIFO refill in forthSpillSettle() restores the
+     * shallowest spilled value first. Depth saturates at capacity; the
+     * spill count carries the excess. Only arena exhaustion errors. */
+    int16_t overflow = (int16_t)(forthDataDepth + net - forthStackCapacity());
+    int16_t k;
+    for (k = 0; k < overflow; k++) {
+      if (!forthSpillCatch((calcRegister_t)(getStackTop() - k))) {
+        lastErrorCode = ERROR_RAM_FULL;
+        displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+        return false;
+      }
+    }
+    forthDataDepth = forthStackCapacity();
+  } else {
+    forthDataDepth += net;
   }
-  forthDataDepth += net;
   if (forthDataDepth < 0) {
     forthDataDepth = 0;       /* consumed inherited values, not Forth's own */
   }
@@ -250,9 +307,10 @@ static bool_t popIsFalse(void)
   /* FTOK_0BR CONSUMES its operand (DESIGN.md §2.2): pops X after the
      zero/false test.  IF compiles a DUP before 0BR precisely because
      0BR pops the tested value. */
-  fnDrop(NOPARAM);
-  (void)forthDataDepthApply(-1);
-  return isZero;
+   fnDrop(NOPARAM);
+   (void)forthDataDepthApply(-1);
+   forthSpillSettle();
+   return isZero;
 }
 
 /* ---- DMCP key poll: R/S (36) or EXIT (33) interrupt (§3.2) ---- */
@@ -295,11 +353,9 @@ forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *co
   {
     uint16_t pidx = forthFindPrim(name);
     if (pidx != FORTH_PRIM_NONE) {
-      if (!forthDataDepthApply(forthPrims[pidx].stackEffect)) {
+      if (!forthPrimInvoke(pidx)) {
         return FORTH_XEQN_ERR;
       }
-      forthPrims[pidx].fn();
-      setSystemFlag(FLAG_ASLIFT);   /* SLS_ENABLED, as upstream's epilogue does */
       if (lastErrorCode != ERROR_NONE) return FORTH_XEQN_ERR;
       return FORTH_XEQN_DONE;
     }
@@ -529,18 +585,13 @@ void forthInner(uint16_t wordRef, bool fromProgram)
                                  ERR_REGISTER_LINE, NIM_REGISTER_LINE);
          INNER_LEAVE();
        }
-       if (!forthDataDepthApply(forthPrims[primIdx].stackEffect)) {
-         INNER_LEAVE();
-       }
-       forthPrims[primIdx].fn();
-       /* SLS_ENABLED: every prim-equivalent item upstream (fnAdd, fnDrop,
-        * fnSwapXY, fnMultiply ...) carries it, so the epilogue sets ASLIFT.
-        * Prims bypass reallyRunFunction(), so mirror it here. D1. */
-       setSystemFlag(FLAG_ASLIFT);
-       if (lastErrorCode != ERROR_NONE) {
-         INNER_LEAVE();
-       }
-       continue;
+        if (!forthPrimInvoke(primIdx)) {
+          INNER_LEAVE();
+        }
+        if (lastErrorCode != ERROR_NONE) {
+          INNER_LEAVE();
+        }
+        continue;
     }
 
     if (tok <= 0x7EFF) {
