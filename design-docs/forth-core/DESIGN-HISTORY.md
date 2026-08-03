@@ -2032,3 +2032,31 @@ truths into §3.2/§5 (with the §10 fold). The D2 stackEffect column and
 guard survive as the spill's accounting spine — the audit rotation's
 "premise tied to 8 levels" question is answered: the premise upgraded,
 the mechanism stayed.
+
+## 2026-08-03 — hygiene batch: split v2 landed; tabular and burn-down resolved
+
+**Split v2** (see commit): the remaining 112 tests moved to
+`test_engine.part.h` (101) and `test_persist.part.h` (11);
+`test_dict_reloc.c` is now 2,286 lines — helpers, fixtures, accessors,
+forward decls and the runner only (23,266 at T5's start). Two splitter
+bugs surfaced on the real run and are fixed in
+`tools/split_test_corpus.py`: the include stanza duplicated prior-split
+includes (caught in dry-run), and the write loop clobbered zero-move
+areas' landed part files with bare banners (caught by the gate's link
+errors; v1 parts restored byte-exact from HEAD). Lesson recorded: a
+rerunnable generator must be a no-op for everything it is not
+regenerating.
+
+**Tabular migration — resolved as already-tabular.** The params corpus
+already drives its sweeps from case tables (struct flows[], byte-array
+cases); a migration packet would be make-work. Remaining conversions are
+opportunistic at next touch — the same standing rule as the 99-site
+hand-offset burn-down, which is NOT mechanically packet-able (each site
+needs per-fixture judgment) and is prevented from growing by the
+fixture rule's inspection clause.
+
+**Deferred with a name:** the §10+§11 editorial fold into the main
+sections — a careful de-duplication pass over ~290 lines of decision
+records — goes to its own fresh docs session; both sections already
+carry LANDED headers and main-sections-win rules, so no reader can be
+misled meanwhile.
