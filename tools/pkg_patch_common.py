@@ -12,6 +12,35 @@ import re
 
 
 # ---------------------------------------------------------------------------
+# Upstream-root mapping  (T2-A, 2026-08-02)
+# ---------------------------------------------------------------------------
+# The working area is a flat mirror rooted at src/c47/ — with one deliberate
+# extension: a rel path whose FIRST segment names a sibling root below maps
+# to src/<rel> instead. This lets a package patch dev-only trees that sit
+# beside src/c47 (today: the upstream test driver in src/testSuite/) without
+# changing the meaning of any existing rel — src/c47 has no directory named
+# like a sibling root, and validate_patch_declaration would reject one.
+# Keep this tuple SHORT and deliberate: every entry widens the surface the
+# package system can touch.
+
+SIBLING_ROOTS = ('testSuite',)
+
+
+def upstream_repo_rel(rel):
+    """Map a working-area/patch rel path to its repo-relative upstream
+    path: 'testSuite/x.c' -> 'src/testSuite/x.c'; anything else ->
+    'src/c47/<rel>'."""
+    if rel.split('/', 1)[0] in SIBLING_ROOTS:
+        return 'src/' + rel
+    return 'src/c47/' + rel
+
+
+def upstream_abs_path(project_root, rel):
+    """Absolute filesystem path of the upstream file *rel* maps to."""
+    return os.path.join(project_root, *upstream_repo_rel(rel).split('/'))
+
+
+# ---------------------------------------------------------------------------
 # Filename encoding / decoding  (§1 – Storage Format)
 # ---------------------------------------------------------------------------
 
@@ -45,10 +74,11 @@ def decode_patch_filename(filename):
     rel = rel_encoded.replace('__', '/')
 
     # Containment at the source: a decoded rel must be a plain relative
-    # path strictly below src/c47/. '..' segments, absolute paths (a
-    # leading '__' would decode to '/...' and os.path.join would then
-    # DISCARD the src/c47 prefix entirely), '.' segments and empty
-    # segments are all fatal here, before any path is ever built.
+    # path strictly below its upstream root (src/c47/, or src/<root>/ for
+    # a SIBLING_ROOTS rel). '..' segments, absolute paths (a leading '__'
+    # would decode to '/...' and os.path.join would then DISCARD the
+    # upstream prefix entirely), '.' segments and empty segments are all
+    # fatal here, before any path is ever built.
     parts = rel.split('/')
     if any(p in ('', '.', '..') for p in parts):
         raise ValueError(
@@ -87,6 +117,13 @@ def parse_patch_target(patch_file_path):
                 target = m.group(1).split('\t')[0]
                 if target.startswith('src/c47/'):
                     target = target[len('src/c47/'):]
+                elif (target.startswith('src/')
+                      and target[len('src/'):].split('/', 1)[0]
+                      in SIBLING_ROOTS):
+                    # Sibling-root patch (T2-A): rel keeps its root prefix,
+                    # e.g. '+++ b/src/testSuite/testSuite.c' ->
+                    # 'testSuite/testSuite.c'.
+                    target = target[len('src/'):]
                 targets.append(target)
     if not targets:
         raise ValueError(
@@ -122,10 +159,10 @@ def validate_patch_declaration(pkgdir, patch_filename, project_root):
             f'filename declares {rel_from_name!r}, '
             f'+++ header declares {rel_from_header!r}')
 
-    upstream_file = os.path.join(project_root, 'src', 'c47', rel_from_name)
+    upstream_file = upstream_abs_path(project_root, rel_from_name)
     if not os.path.isfile(upstream_file):
         raise ValueError(
-            f'patch targets {rel_from_name!r} which does not exist in '
-            f'src/c47/ ({upstream_file})')
+            f'patch targets {rel_from_name!r} which does not exist '
+            f'upstream ({upstream_file})')
 
     return rel_from_name

@@ -15,6 +15,7 @@ _REPO_ROOT = os.path.abspath(
 # Ensure sibling modules in tools/ are importable.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import pkg_patch_common  # noqa: E402
 import pkg_patch_refresh  # noqa: E402
 import pkg_patch_integrate  # noqa: E402
 
@@ -261,38 +262,60 @@ def _cmd_status(args):
             sys.exit(1)
         target_sha = r.stdout.strip()
 
-    # Check manifest-base src/c47 == caller HEAD:src/c47.
-    # Use git ls-tree to get the tree object for src/c47 at each commit.
-    # Note: git ls-tree returns exit 0 even for missing paths (empty stdout).
+    # Check manifest-base upstream roots == caller HEAD's (src/c47 plus
+    # the SIBLING_ROOTS, T2-A). git ls-tree per root at each commit.
+    # Note: git ls-tree returns exit 0 even for missing paths (empty
+    # stdout); src/c47 is required to exist, a sibling root missing at
+    # BOTH commits counts as matching.
+    upstream_roots = ['src/c47'] + [
+        f'src/{r}' for r in pkg_patch_common.SIBLING_ROOTS]
     base_tree_matches_head = False
     if base_sha:
-        r_base = subprocess.run(
-            ['git', 'ls-tree', base_sha, 'src/c47'],
-            capture_output=True, text=True, cwd=_REPO_ROOT)
-        r_head = subprocess.run(
-            ['git', 'ls-tree', head_sha, 'src/c47'],
-            capture_output=True, text=True, cwd=_REPO_ROOT)
-        if r_base.returncode != 0 or not r_base.stdout.strip():
-            print(f'error: failed probe: git ls-tree '
-                  f'{base_sha} src/c47: {r_base.stderr.strip() or "path not found"}',
-                  file=sys.stderr)
-            sys.exit(1)
-        if r_head.returncode != 0 or not r_head.stdout.strip():
-            print(f'error: failed probe: git ls-tree '
-                  f'{head_sha} src/c47: {r_head.stderr.strip() or "path not found"}',
-                  file=sys.stderr)
-            sys.exit(1)
-        # Extract tree SHA from "040000 tree <sha>\t<name>"
-        base_tree = r_base.stdout.split()[2]
-        head_tree = r_head.stdout.split()[2]
-        base_tree_matches_head = base_tree == head_tree
+        base_tree_matches_head = True
+        for root_path in upstream_roots:
+            r_base = subprocess.run(
+                ['git', 'ls-tree', base_sha, root_path],
+                capture_output=True, text=True, cwd=_REPO_ROOT)
+            r_head = subprocess.run(
+                ['git', 'ls-tree', head_sha, root_path],
+                capture_output=True, text=True, cwd=_REPO_ROOT)
+            if r_base.returncode != 0 or r_head.returncode != 0:
+                print(f'error: failed probe: git ls-tree {root_path}: '
+                      f'{(r_base.stderr or r_head.stderr).strip()}',
+                      file=sys.stderr)
+                sys.exit(1)
+            base_out = r_base.stdout.strip()
+            head_out = r_head.stdout.strip()
+            if root_path == 'src/c47':
+                # src/c47 is required on both sides — a base or HEAD
+                # without it is a broken state, not a mismatch.
+                if not base_out:
+                    print(f'error: failed probe: git ls-tree '
+                          f'{base_sha} src/c47: path not found',
+                          file=sys.stderr)
+                    sys.exit(1)
+                if not head_out:
+                    print(f'error: failed probe: git ls-tree '
+                          f'{head_sha} src/c47: path not found',
+                          file=sys.stderr)
+                    sys.exit(1)
+            else:
+                if not base_out and not head_out:
+                    continue  # sibling absent at both commits: matches
+                if not base_out or not head_out:
+                    base_tree_matches_head = False
+                    continue
+            # Extract tree SHA from "040000 tree <sha>\t<name>"
+            if base_out.split()[2] != head_out.split()[2]:
+                base_tree_matches_head = False
 
-    # Check caller src/c47 is dirty.
+    # Check caller upstream roots are dirty.
     r_status = subprocess.run(
-        ['git', 'status', '--porcelain', '--', 'src/c47'],
+        ['git', 'status', '--porcelain', '--'] + upstream_roots,
         capture_output=True, text=True, cwd=_REPO_ROOT)
     if r_status.returncode != 0:
-        print(f'error: failed probe: git status --porcelain src/c47: '
+        print(f'error: failed probe: git status --porcelain '
+              f'{" ".join(upstream_roots)}: '
               f'{r_status.stderr.strip()}', file=sys.stderr)
         sys.exit(1)
     src_c47_dirty = bool(r_status.stdout.strip())
@@ -328,9 +351,10 @@ def _cmd_status(args):
     print(f'caller HEAD: {head_sha[:12]}')
     if target_sha:
         print(f'target: {args.onto} ({target_sha[:12]})')
-    print(f'manifest-base src/c47 == caller HEAD:src/c47: '
+    print(f'manifest-base upstream roots == caller HEAD\'s: '
           f'{"yes" if base_tree_matches_head else "no"}')
-    print(f'caller src/c47 dirty: {"yes" if src_c47_dirty else "no"}')
+    print(f'caller upstream roots dirty: '
+          f'{"yes" if src_c47_dirty else "no"}')
     print(f'generated patches/ or files/ differ in Git: '
           f'{"yes" if generated_dirty else "no"}')
     if conflict_files:
@@ -366,7 +390,8 @@ def main(argv=None):
         help='Materialize an upstream file at the package base commit',
     )
     sp.add_argument('package', help='Package name or packages/<name>')
-    sp.add_argument('rel', help='Relative path under src/c47/')
+    sp.add_argument('rel', help='Relative path under src/c47/ (or a '
+                    'sibling-root path like testSuite/testSuite.c)')
     sp.set_defaults(func=_cmd_materialize)
 
     sp = subs.add_parser('rebase', help='Rebase package base to a new commit')

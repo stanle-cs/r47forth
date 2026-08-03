@@ -354,8 +354,9 @@ class TestStatusCommand(unittest.TestCase):
         self.assertIn('package: forth-core', r.stdout)
         self.assertIn('manifest base:', r.stdout)
         self.assertIn('caller HEAD:', r.stdout)
-        self.assertIn('manifest-base src/c47 == caller HEAD:src/c47:', r.stdout)
-        self.assertIn('caller src/c47 dirty:', r.stdout)
+        self.assertIn("manifest-base upstream roots == caller HEAD's:",
+                      r.stdout)
+        self.assertIn('caller upstream roots dirty:', r.stdout)
         self.assertIn('generated patches/ or files/ differ in Git:', r.stdout)
         self.assertIn('conflict markers in working files:', r.stdout)
         self.assertIn('locally buildable:', r.stdout)

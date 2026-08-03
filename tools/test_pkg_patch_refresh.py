@@ -2414,5 +2414,52 @@ class TestWorkingFileMarkerLines(unittest.TestCase):
             os.unlink(tmp.name)
 
 
+class TestSiblingRootsT2A(unittest.TestCase):
+    """T2-A: rel paths whose first segment is in SIBLING_ROOTS classify
+    against src/<rel> (today: testSuite/) instead of src/c47/<rel>."""
+
+    @staticmethod
+    def _write_sibling_upstream(t, rel, content):
+        path = os.path.join(t.tmpdir, 'src', *rel.split('/'))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(content)
+        subprocess.run(['git', 'add', '-A'], cwd=t.tmpdir,
+                       capture_output=True)
+        subprocess.run(['git', 'commit', '-q', '-m', 'sibling upstream'],
+                       cwd=t.tmpdir, capture_output=True)
+
+    def test_sibling_edit_becomes_patch_with_src_prefixed_headers(self):
+        with _TempProject() as t:
+            base = 'int drive(void) {\n    return 0;\n}\n'
+            self._write_sibling_upstream(t, 'testSuite/testSuite.c', base)
+            t.write_working('testSuite/testSuite.c',
+                            base.replace('return 0;', 'return 7;'))
+            result = t.refresh()
+            self.assertIn('010-testSuite__testSuite.c.patch',
+                          result['written'])
+            text = t.patch_content('010-testSuite__testSuite.c.patch')
+            self.assertIn('--- a/src/testSuite/testSuite.c', text)
+            self.assertIn('+++ b/src/testSuite/testSuite.c', text)
+            self.assertNotIn('src/c47/testSuite', text)
+
+    def test_sibling_new_file_with_no_upstream_goes_to_files(self):
+        with _TempProject() as t:
+            t.write_working('testSuite/extra.c', 'int extra;\n')
+            result = t.refresh()
+            self.assertIn('testSuite/extra.c', result['files_written'])
+            self.assertEqual(t.file_content('testSuite/extra.c'),
+                             'int extra;\n')
+
+    def test_materialize_sibling_rel_uses_src_root(self):
+        with _TempProject() as t:
+            base = 'int suite_main(void) { return 3; }\n'
+            self._write_sibling_upstream(t, 'testSuite/driver.c', base)
+            materialize(t.pkgdir, 'testSuite/driver.c', t.tmpdir)
+            with open(os.path.join(t.pkg_abs, 'testSuite',
+                                   'driver.c')) as f:
+                self.assertEqual(f.read(), base)
+
+
 if __name__ == '__main__':
     unittest.main()
