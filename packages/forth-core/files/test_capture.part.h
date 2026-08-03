@@ -4302,7 +4302,7 @@ static int test_sim_bench_capture(void)
       /* Reopen with edit gesture on the source step */
       uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
       uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
-      if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A || sSource[2] != 0xFD) {
+      if (!stepIsForthStep(sSource)) {
         printf("    SB-A2 FAIL: could not locate source step\n");
         sc = 1;
       } else {
@@ -4331,10 +4331,10 @@ static int test_sim_bench_capture(void)
       /* Locate the source step and assert payload is "3 42 +" */
       uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
       uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
-      if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A || sSource[2] != 0xFD) {
+      if (!stepIsForthStep(sSource)) {
         printf("    SB-A2 FAIL: source step not found after edit\n");
         sc = 1;
-      } else if (sSource[3] != 6 || memcmp(sSource + 4, "3 42 +", 6) != 0) {
+      } else if (!stepSrcTextEq(sSource, "3 42 +")) {
         printf("    SB-A2 FAIL: payload wrong (len=%u)\n", sSource[3]);
         sc = 1;
       }
@@ -4590,10 +4590,10 @@ static int test_sim_bench_capture(void)
       /* Verify committed text survives in step */
       uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
       uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
-      if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A || sSource[2] != 0xFD) {
+      if (!stepIsForthStep(sSource)) {
         printf("    SB-A5 FAIL: committed source step not found\n");
         sc = 1;
-      } else if (sSource[3] != 5 || memcmp(sSource + 4, "3 4 +", 5) != 0) {
+      } else if (!stepSrcTextEq(sSource, "3 4 +")) {
         printf("    SB-A5 FAIL: committed text wrong (len=%u)\n", sSource[3]);
         sc = 1;
       }
@@ -4623,10 +4623,10 @@ static int test_sim_bench_capture(void)
         step = findNextStep(step);    /* opening marker */
         step = findNextStep(step);    /* source step 1 ("3 4 +") */
         step = findNextStep(step);    /* source step 2 ("78") */
-        if (step[0] != 0x8B || step[1] != 0x1A || step[2] != 0xFD) {
+        if (!stepIsForthStep(step)) {
           printf("    SB-A5 FAIL: half-line source step not found after restore\n");
           sc = 1;
-        } else if (step[3] != 2 || memcmp(step + 4, "78", 2) != 0) {
+        } else if (!stepSrcTextEq(step, "78")) {
           printf("    SB-A5 FAIL: half-line text wrong (len=%u)\n", step[3]);
           sc = 1;
         } else if (forthCapIsOpen()) {
@@ -4819,7 +4819,7 @@ static int test_sim_bench_capture(void)
           /* Region markers still exist — re-walk steps and assert marker present */
           uint8_t *mkr = beginOfProgramMemory;
           mkr = findNextStep(mkr);  /* opening marker */
-          if (mkr[0] != 0x8B || mkr[1] != 0x1A || mkr[2] != 0xFD || mkr[3] != 0x00) {
+          if (!stepIsMarker(mkr)) {
             printf("    SB-F1 FAIL: opening marker gone after second EXIT\n");
             sc = 1;
           } else {
@@ -4967,10 +4967,10 @@ static int test_sim_bench_capture(void)
         /* Assert committed line still exists */
         uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
         uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
-        if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A || sSource[2] != 0xFD) {
+        if (!stepIsForthStep(sSource)) {
           printf("    SB-F2(b) FAIL: committed source step destroyed\n");
           sc_b = 1;
-        } else if (sSource[3] != 3 || memcmp(sSource + 4, "3 4", 3) != 0) {
+        } else if (!stepSrcTextEq(sSource, "3 4")) {
           printf("    SB-F2(b) FAIL: committed text wrong (len=%u)\n", sSource[3]);
           sc_b = 1;
         }

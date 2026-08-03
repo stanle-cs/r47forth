@@ -10174,6 +10174,23 @@ static int test_control_flow(void)
   return fail;
 }
 
+/* T5-2 reader-side step accessors (PROGRAM-FIXTURE RULE, inspection
+ * clause): tests never hand-index step bytes — layout facts live here
+ * and in tpSrcPayload only. */
+static bool_t stepIsForthStep(const uint8_t *step) {
+  return step && step[0] == 0x8B && step[1] == 0x1A && step[2] == 0xFD;
+}
+
+static bool_t stepIsMarker(const uint8_t *step) {
+  return stepIsForthStep(step) && step[3] == 0;
+}
+
+static bool_t stepSrcTextEq(const uint8_t *step, const char *expected) {
+  uint8_t len = (uint8_t)strlen(expected);
+  return stepIsForthStep(step) && step[3] == len
+      && memcmp(step + 4, expected, len) == 0;
+}
+
 
 /* T5 split: forward declarations for the tests that now live in the
  * .part.h include-parts (see the parts' banner comments). */
