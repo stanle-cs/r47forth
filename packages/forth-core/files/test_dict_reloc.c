@@ -8846,6 +8846,7 @@ static int test_showcase_program(void);
 static int test_savings_program(void);
 static int test_native_lift_after_forth(void);
 static int test_data_stack_overflow_guard(void);
+static int test_deep_recursion_spill(void);
 static int test_spill_region(void);
 
 /* ---- Pillar 1 (H5) backup-file helpers ---- */
@@ -11252,6 +11253,9 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_data_stack_overflow_guard...\n");
   fail |= test_data_stack_overflow_guard();
 
+  printf("  [DEBUG] running test_deep_recursion_spill...\n");
+  fail |= test_deep_recursion_spill();
+
   printf("  [DEBUG] running test_spill_region...\n");
   fail |= test_spill_region();
 
@@ -13198,7 +13202,7 @@ static int forthExprIsZero(const char *src)
   return 0;
 }
 
-/* ---- D2: recursion past the data stack must ERROR, not corrupt ----
+/* ---- D3-2: recursion past the data stack spills, drains in order ----
  * The Forth data stack is the RPN stack (8 levels here), and a recursive word
  * holds one live operand per level. FACT used to run off the top silently and
  * return 720*6 = 4320 for 7!, with lastErrorCode 0. It must now refuse.
@@ -13230,22 +13234,42 @@ static int test_data_stack_overflow_guard(void)
     fail = 1;
   }
 
-  /* Subcase 2: what does not fit must raise, not return a plausible number. */
-  lastErrorCode = ERROR_NONE;
-  forthOuterInterpret("XEQ 'CLSTK' 7 FACT");
-  if (lastErrorCode == ERROR_NONE) {
+  /* Subcase 2a: D3-2A — push capacity+3 values and consume back in the same line.
+   * Eleven literals then ten + drains to one value: sum(1..11) = 66. */
+  {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'CLSTK' 1 2 3 4 5 6 7 8 9 10 11 + + + + + + + + + +");
     read_reg_int32(REGISTER_X, &tType, &tVal);
-    printf("    FAIL: 7 FACT overran the data stack silently and returned %ld\n",
-           (long)tVal);
-    fail = 1;
-  }
-  else if (lastErrorCode != ERROR_RAM_FULL) {
-    printf("    FAIL: 7 FACT raised %d, expected ERROR_RAM_FULL (%d)\n",
-           lastErrorCode, ERROR_RAM_FULL);
-    fail = 1;
+    if (lastErrorCode != ERROR_NONE || tType != dtLongInteger || tVal != 66) {
+      printf("    FAIL: same-line drain should give 66, got %ld type %u (error %d)\n",
+             (long)tVal, tType, lastErrorCode);
+      fail = 1;
+    }
   }
 
-  /* Subcase 3: the guard must not fire on a long but shallow computation. */
+  /* Subcase 2b: D3-2A — push capacity+3 and end line: line-end contract triggers
+   * ERROR_RAM_FULL. Then verify a following ordinary line still works. */
+  {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'CLSTK' 1 2 3 4 5 6 7 8 9 10 11");
+    if (lastErrorCode != ERROR_RAM_FULL) {
+      printf("    FAIL: line-end spill should give ERROR_RAM_FULL, got error %d\n",
+             lastErrorCode);
+      fail = 1;
+    }
+
+    /* Recovery: next ordinary line must work */
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'CLSTK' 42");
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (lastErrorCode != ERROR_NONE || tType != dtLongInteger || tVal != 42) {
+      printf("    FAIL: post-error line should give 42, got %ld type %u (error %d)\n",
+             (long)tVal, tType, lastErrorCode);
+      fail = 1;
+    }
+  }
+
+  /* Subcase 3: shallow computation must still work. */
   lastErrorCode = ERROR_NONE;
   forthOuterInterpret("XEQ 'CLSTK' 1 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 +");
   read_reg_int32(REGISTER_X, &tType, &tVal);
@@ -13255,50 +13279,55 @@ static int test_data_stack_overflow_guard(void)
     fail = 1;
   }
 
-  /* Subcase 4: the budget follows getStackTop(), so a 4-level stack must refuse
-   * what an 8-level one accepts. FDEMO's SUMDOWN is the same recursive shape. */
-  {
-    bool_t saved8 = getSystemFlag(FLAG_SSIZE8);
-    int    err4Fact, err4Sum;
-
-    lastErrorCode = ERROR_NONE;
-    forthOuterInterpret(": SUMDOWN DUP IF DUP 1 - RECURSE + THEN ;");
-
-    clearSystemFlag(FLAG_SSIZE8);
-    lastErrorCode = ERROR_NONE;
-    forthOuterInterpret("XEQ 'CLSTK' 6 FACT");
-    err4Fact = lastErrorCode;
-    lastErrorCode = ERROR_NONE;
-    forthOuterInterpret("XEQ 'CLSTK' 5 SUMDOWN");
-    err4Sum = lastErrorCode;
-    read_reg_int32(REGISTER_X, &tType, &tVal);
-    printf("    NOTE: on a 4-level stack, 6 FACT -> error %d, 5 SUMDOWN -> error %d (X=%ld)\n",
-           err4Fact, err4Sum, (long)tVal);
-    if (saved8) { setSystemFlag(FLAG_SSIZE8); } else { clearSystemFlag(FLAG_SSIZE8); }
-
-    if (err4Fact == ERROR_NONE) {
-      printf("    FAIL: 6 FACT fitted a 4-level stack; the budget is not tracking getStackTop()\n");
-      fail = 1;
-    }
-
-    /* and the 8-level budget is intact again afterwards */
-    lastErrorCode = ERROR_NONE;
-    forthOuterInterpret("XEQ 'CLSTK' 6 FACT");
-    read_reg_int32(REGISTER_X, &tType, &tVal);
-    if (lastErrorCode != ERROR_NONE || tVal != 720) {
-      printf("    FAIL: 6 FACT broken after restoring the 8-level stack (%ld, error %d)\n",
-             (long)tVal, lastErrorCode);
-      fail = 1;
-    }
-  }
-
   if (!fail) {
-    printf("    PASS: data-stack overflow raises instead of returning a corrupted result\n");
+    printf("    PASS: deep push spills, drains back in order\n");
   }
 
   programRunStop = savedRS;
   lastErrorCode = ERROR_NONE;
   forthDictClear();      /* FACT was defined here: release its region */
+  forthGDictClear();
+  return fail;
+}
+
+/* ---- D3-2: deep recursion with spill should compute 7 FACT = 5040 ----
+ * Without spilling, 7 FACT overflows the visible stack and returns garbage.
+ * With D3-2 spilling, the intermediate values spill and refill correctly. ---- */
+static int test_deep_recursion_spill(void)
+{
+  int fail = 0;
+  uint8_t savedRS = programRunStop;
+  uint8_t tType;
+  int32_t tVal;
+
+  programRunStop = PGM_STOPPED;
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": FACT DUP IF DUP 1 - RECURSE * ELSE DROP 1 THEN ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: could not define FACT (%d)\n", lastErrorCode);
+    programRunStop = savedRS;
+    return 1;
+  }
+
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret("XEQ 'CLSTK' 7 FACT");
+  read_reg_int32(REGISTER_X, &tType, &tVal);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: 7 FACT errored (%d)\n", lastErrorCode);
+    fail = 1;
+  } else if (tType != dtLongInteger || tVal != 5040) {
+    printf("    FAIL: 7 FACT = %ld type=%u, expected 5040\n",
+           (long)tVal, tType);
+    fail = 1;
+  }
+
+  if (!fail) {
+    printf("    PASS: 7 FACT deep recursion = 5040\n");
+  }
+
+  programRunStop = savedRS;
+  lastErrorCode = ERROR_NONE;
+  forthDictClear();
   forthGDictClear();
   return fail;
 }

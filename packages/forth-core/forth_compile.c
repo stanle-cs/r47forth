@@ -847,9 +847,9 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
        * On the execution pass the marks re-apply as idempotent no-ops. */
       { uint16_t pidx = forthFindPrim(buf);
         if (pidx != FORTH_PRIM_NONE && (forthPrims[pidx].flags & FF_DEFMARK)) {
-          forthPrims[pidx].fn();
-          /* GLOBAL/IMMEDIATE touch no stack: SLS_UNCHANGED, so leave ASLIFT
-           * exactly as the last value-producing dispatch left it. D1. */
+          if (!forthPrimInvoke(pidx)) {
+            lineOK = false;
+          }
           if (lastErrorCode != ERROR_NONE) {
             lineOK = false;
           }
@@ -969,16 +969,13 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
             abortDefinition();
             lineOK = false;
           }
-        } else if (!forthDataDepthApply(forthPrims[idx].stackEffect)) {
+        } else if (!forthPrimInvoke(idx)) {
           if (isDefinitionOpen()) abortDefinition();
           lineOK = false;
-        } else {
-          forthPrims[idx].fn();
-          setSystemFlag(FLAG_ASLIFT);   /* SLS_ENABLED, mirrors forth_inner.c. D1 */
-          if (lastErrorCode != ERROR_NONE) {
-            if (isDefinitionOpen()) abortDefinition();
-            lineOK = false;
-          }
+        }
+        if (lastErrorCode != ERROR_NONE) {
+          if (isDefinitionOpen()) abortDefinition();
+          lineOK = false;
         }
         continue;
       }
