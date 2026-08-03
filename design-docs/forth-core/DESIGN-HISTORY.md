@@ -1996,3 +1996,15 @@ the rule.
 
 D3-3 (boundary rule at the resync sites, replacing the D3-2 interim
 stop) is next; then D3-4 acceptance.
+
+## 2026-08-03 — D3-3 landed: the spill-native boundary rule
+
+Named message at the resync stop (count reported before reset); pinned
+from both sides in one test: a native invoked with a non-empty spill
+raises ERROR_RAM_FULL and resets cleanly; the same native runs fine
+after primitive arithmetic drains the spill below capacity. Mutation
+(stop disabled) reds the blocked side exactly. One correction: the new
+test initially skipped cleanupTestProgram()/free — the allocator leak
+guard caught the +1 region, which is that guard working as designed.
+Remaining: D3-4 acceptance (parity sweep, showcase update, §3.2/§5 docs
+fold) closes the stage.
