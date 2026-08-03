@@ -24,10 +24,18 @@ import sys
 
 MAIN = 'packages/forth-core/test_dict_reloc.c'
 PARTS = {
+    # v1 (T5-1, landed): capture + params. v2 (2026-08-03): persist +
+    # engine catch-all — after v2 the main file holds only helpers,
+    # fixtures, accessors, forward decls and the runner. Order matters:
+    # first matching area wins, so the catch-all is LAST.
     'capture': ('packages/forth-core/test_capture.part.h',
                 re.compile(r'capture|alpha|menu|picker|softmenu|pem|tam|aim|sim_bench')),
     'params':  ('packages/forth-core/test_params.part.h',
                 re.compile(r'param|glyph|outer|literal|number')),
+    'persist': ('packages/forth-core/test_persist.part.h',
+                re.compile(r'freelist|restore|backup|save|reloc|gdict|dirty|spill')),
+    'engine':  ('packages/forth-core/test_engine.part.h',
+                re.compile(r'.')),
 }
 DEF_RE = re.compile(r'^static int (test_[a-z0-9_]+)\(void\)$')
 RUNNER = 'int forthDictSelfTest(void)'
@@ -132,7 +140,9 @@ def main():
               'visible to them; forward decls before the '
               'runner cover all call sites. */\n']
     for a, (path, _rx) in PARTS.items():
-        stanza.append(f'#include "{os.path.basename(path)}"\n')
+        if a in counts:   # only areas that moved blocks THIS run — a
+            # rerun must not duplicate includes landed by a prior split
+            stanza.append(f'#include "{os.path.basename(path)}"\n')
     stanza.append('\n')
     generated = decls + stanza
 
@@ -167,6 +177,11 @@ def main():
     with open(dest(MAIN), 'w') as f:
         f.write(joined)
     for a, (path, _rx) in PARTS.items():
+        if a not in counts:
+            # An area with no moved blocks this run is a PRIOR split's
+            # landed part file — writing it here would clobber it with
+            # a bare banner (the 2026-08-03 v2 incident).
+            continue
         with open(dest(path), 'w') as f:
             f.write(PART_BANNER.format(path=path))
             f.write(''.join(part_lines[a]))
