@@ -1,0 +1,10 @@
+diff --git a/src/testSuite/tests/testSuiteList.txt b/src/testSuite/tests/testSuiteList.txt
+index c4f2eae6cad355663ebc47fa56e5d3b42745ab34..11d1e635c65d7372ff2810bf0a5a0400ea4cfc05 100644
+--- a/src/testSuite/tests/testSuiteList.txt
++++ b/src/testSuite/tests/testSuiteList.txt
+@@ -478,3 +478,5 @@ serialize_cov
+ graphs_cov
+ 
+ config_cov
++
++forth_interp

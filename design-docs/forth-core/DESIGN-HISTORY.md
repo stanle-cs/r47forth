@@ -2072,3 +2072,30 @@ possible on the T2-A rails, and now planned as T6 (TESTING.md): a
 SIBLIST resolver extension, a package-provided forth_interp.txt, and
 the cases running under upstream's own runner. T6 is the next work
 unit.
+
+## 2026-08-03 — T6 landed; and it found a first-order defect on day one (D3-5)
+
+**T6**: Forth interpret-state cases now run under UPSTREAM'S OWN runner
+— `forth_interp.txt` via the sibling root, a SIBLIST resolver line, a
+list-override hook in src/testSuite/meson.build, and a shadow `c47`
+compat self-link for the runner's lazy Item: table. Upstream count:
+12,071 → 12,078. The `*.txt` pkgignore fence was removed (required for
+.txt package content — a session made the change silently; noted) and
+audit check G gained the sibling-root dev-only exemption.
+
+**The find (D3-5)**: the first spill case computed 72/94, and the trace
+showed depth accounting NEVER RAN on the real item entry —
+`fnForthOuter` called `forthOuterRun` unbracketed, while the sim
+battery's `x_set_string` path went through the bracketed
+`forthOuterInterpret` wrapper. D2's guard and D3's spill were dead on
+the keyboard path; 12,000+ existing tests could not see it because they
+all drove the wrapper. Fix: the bracket lives INSIDE `forthOuterRun`
+(nesting-aware; wrapper deduplicated) — every mode and caller accounts.
+New pin drives fnForthOuter itself (deep line = 66, spill drained).
+Architect debug probes added and removed during triage; a stray
+unguarded fprintf left by a D3-2 session was found and removed.
+
+The lesson, standing: a test battery that drives a WRAPPER pins the
+wrapper. Every entry point a user can reach needs at least one pin
+through that exact entry. T6's migrated cases provided precisely that —
+the reconciliation's value proven within its first hour.
