@@ -163,7 +163,15 @@ is derived from the audit file; author packets per the standing rules
 (QWEN_RUNBOOK §4) after the T2 decision is recorded. The runbook carries the
 queue; this file carries the why.
 
-**T5 — test-corpus restructure (PROPOSED, awaiting owner ruling).**
+**T5 — test-corpus restructure (RULED 2026-08-03; items 1-2 LANDED same
+day — T5-1 include-part split, T5-2 accessors; item 3 queued).**
+Landed deviation, recorded per DESIGN_AUDIT §2.10: item 1 shipped as an
+INCLUDE-PART split (`test_capture.part.h` / `test_params.part.h`,
+#included once at the end of `test_dict_reloc.c`) rather than separate
+TUs — same edit-hotspot/navigation win, zero extern surgery, build/audit/
+citations untouched; the full multi-TU split remains available if compile
+parallelism ever matters. The core-area split (113 remaining functions)
+and the tabular migration are the queued remainder. Original proposal:
 Evidence, 2026-08-03: `test_dict_reloc.c` is 22.6k lines and drew 41% of
 all editor failures across 327 archived implementer sessions (low-entropy
 anchors on repeated scaffolds); it still carries 99 legacy

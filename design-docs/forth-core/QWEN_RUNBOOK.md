@@ -222,6 +222,14 @@ names that migration as its task.
 > Never add `beginOfProgramMemory + <numeric literal>`, a numeric argument to
 > `tpStepAddr`, or arithmetic derived from preceding payload lengths. Packet
 > authors must identify steps by role (for example `sSource` or `sXeq`) and
+>
+> **Inspection clause (T5-2, 2026-08-03):** the same applies to READING
+> steps. Tests never hand-index step bytes (signatures, length bytes,
+> payload offsets) — they use the reader-side accessors in
+> `test_dict_reloc.c` (`stepIsForthStep`, `stepIsMarker`,
+> `stepSrcTextEq`, `tpSrcPayload`). A new layout fact means a new
+> accessor, never an inline byte index. Legacy hand-index sites are
+> burned down opportunistically as tests are touched.
 > must not publish a calculated byte offset as a normative literal. If a
 > packet contains such an offset, stop with `[SOL DEBUGGER HANDOFF]` and report
 > the packet defect; do not repair its arithmetic locally.
