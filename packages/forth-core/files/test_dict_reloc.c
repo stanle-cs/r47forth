@@ -25,6 +25,7 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_capture.h"
+#include "forth_menu.h"
 #include "programming/param_core.h"
 #include "saveRestoreBackup.h"
 
@@ -1087,6 +1088,7 @@ static int test_picker_capacity_boundary(void);
 static int test_picker_dedupes(void);
 static int test_picker_insert_at_cursor(void);
 static int test_picker_key_mapping(void);
+static int test_picker_scan_and_alloc(void);
 static int test_picker_insert_mid_line(void);
 static int test_picker_trailing_space(void);
 static int test_picker_guard_menu_identity(void);
@@ -1742,6 +1744,9 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_picker_key_mapping...\n");
   fail |= test_picker_key_mapping();
+
+  printf("  [DEBUG] running test_picker_scan_and_alloc...\n");
+  fail |= test_picker_scan_and_alloc();
   forthDictClear();
 
   printf("  [DEBUG] running test_picker_insert_mid_line...\n");

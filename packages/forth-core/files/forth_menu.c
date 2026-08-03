@@ -14,6 +14,7 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_capture.h"
+#include "forth_menu.h"
 
 /* Name-slot comparator.  softmenus.c's own sortMenu is file-static, so
  * the picker carries its own — same comparison, same 15-byte slot
@@ -100,7 +101,7 @@ void forthBuildWordPicker(int16_t menu)
     int16_t stepCount = 0;
     while (step && step <= currentStep) {
       stepCount++;
-      if (stepCount > 1000) break; /* behavioral limit: programs with >1000 steps are not fully scanned (§9.6 documented deviation) */
+      if (stepCount > FORTH_PICKER_MAX_SCAN_STEPS) break; /* §9.6 documented deviation */
       uint8_t *next = findNextStep(step);
       if (checkOpCodeOfStep(step, ITM_FORTH) && step[2] == STRING_LABEL_VARIABLE) {
         uint8_t len = step[3];
@@ -220,6 +221,14 @@ void forthBuildWordPicker(int16_t menu)
   }
 
   ptr = calloc(1, numberOfBytes);
+  if (ptr == NULL) {
+    /* Out of heap: leave the menu empty rather than writing through NULL.
+     * An empty picker is a menu with no keys, which showSoftmenuCurrentPart
+     * already renders (its numberOfItems == 0 arm blanks all six). */
+    dynamicSoftmenu[menu].menuContent = NULL;
+    dynamicSoftmenu[menu].numItems = 0;
+    return;
+  }
   dynamicSoftmenu[menu].menuContent = ptr;
   for (i = 0; i < nNames; i++) {
     int16_t len = stringByteLength(tmpString + 15 * i) + 1;

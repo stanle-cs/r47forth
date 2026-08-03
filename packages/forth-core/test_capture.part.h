@@ -1400,6 +1400,220 @@ static int test_picker_key_mapping(void)
   return fail;
 }
 
+/* test_picker_scan_and_alloc — G2: the two behaviours in
+ * forthBuildWordPicker that were documented and pinned nowhere.
+ *
+ * [1] The program-text pass stops after FORTH_PICKER_MAX_SCAN_STEPS steps
+ *     (§9.6 documented deviation). Dropping the break, or changing the
+ *     number, passed the whole gate before this.
+ * [2] The content allocation. numberOfBytes starts at 1, so even an empty
+ *     picker allocates its terminator; the menu must come back as a
+ *     well-formed empty menu rather than a NULL with a stale count. The
+ *     NULL-return branch beside it is not reachable from this battery
+ *     without an allocator hook, and this test does not add one. */
+static int test_picker_scan_and_alloc(void)
+{
+  uint8_t        *savedCurrentStep = currentStep;
+  uint16_t        savedProgNum     = currentProgramNumber;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+  int16_t  savedCachedDynamicMenu = cachedDynamicMenu;
+  uint8_t *savedMenuContent       = dynamicSoftmenu[22].menuContent;
+  int16_t  savedNumItems          = dynamicSoftmenu[22].numItems;
+
+  dynamicSoftmenu[22].menuContent = NULL;
+  dynamicSoftmenu[22].numItems    = 0;
+
+  extern void  showSoftmenuCurrentPart(void);
+  extern char *dynmenuGetLabel(int16_t menuitem);
+
+  int fail = 0;
+
+  /* ---- Subcase 1: the scan cut-off ---- */
+  { int sc1 = 0;
+    /* The number itself is asserted before the mechanism is. The fixture
+     * below sizes itself from FORTH_PICKER_MAX_SCAN_STEPS so it always
+     * overruns whatever the constant says — which makes the fixture immune
+     * to a change in the constant, and therefore blind to one. Changing 1000
+     * changes what the calculator does, so it is pinned here as a literal.
+     * (Found by mutation: raising the constant to 2000 left the mechanism
+     * asserts green, because they scaled with it.) */
+    if (FORTH_PICKER_MAX_SCAN_STEPS != 1000) {
+      printf("    [1] FAIL: FORTH_PICKER_MAX_SCAN_STEPS is %d, documented as 1000 (§9.6)\n",
+             FORTH_PICKER_MAX_SCAN_STEPS);
+      sc1 = 1;
+    }
+
+    /* Filler steps are the point. With one DEFINITION per step the picker's
+     * 170-name cap (TMP_STR_LENGTH/15) bites at step 170 and the step
+     * cut-off never gets to act — a fixture built that way stays green with
+     * the break deleted, which is how this one was found. So: two
+     * definitions only, a near one at step 2 and a far one past the
+     * cut-off, with non-defining Forth source steps ("1") in between. Two
+     * names is nowhere near the name cap, so the only thing that can keep
+     * the far one out is the step cut-off itself.
+     *
+     * Steps: 1 = opening marker, 2 = ": A000 1 ;", 3..(2+FILLERS) = filler,
+     * then ": B004 1 ;" at step 3+FILLERS, then the closing marker. With
+     * FILLERS = FORTH_PICKER_MAX_SCAN_STEPS the far definition sits at step
+     * 1003, and the scan breaks after step 1000. */
+    const int      fillers   = FORTH_PICKER_MAX_SCAN_STEPS;
+    const uint16_t progLen   = (uint16_t)(4              /* opening marker  */
+                                        + 14             /* ": A000 1 ;"    */
+                                        + fillers * 5    /* header(4) + "1" */
+                                        + 14             /* ": B004 1 ;"    */
+                                        + 4);            /* closing marker  */
+
+    uint8_t *prog = sc1 ? NULL : (uint8_t *)malloc(progLen);
+    if (!prog) {
+      if (!sc1) {
+        printf("    [1] FAIL: malloc failed\n");
+        sc1 = 1;
+      }
+    }
+    else {
+      uint8_t *p = prog;
+      *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 0x00;      /* marker (opening) */
+
+      *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 10;        /* ": A000 1 ;" */
+      *p++ = ':'; *p++ = ' '; *p++ = 'A'; *p++ = '0'; *p++ = '0'; *p++ = '0';
+      *p++ = ' '; *p++ = '1'; *p++ = ' '; *p++ = ';';
+
+      for (int i = 0; i < fillers; i++) {
+        *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 1;       /* body "1": defines nothing */
+        *p++ = '1';
+      }
+
+      *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 10;        /* ": B004 1 ;" */
+      *p++ = ':'; *p++ = ' '; *p++ = 'B'; *p++ = '0'; *p++ = '0'; *p++ = '4';
+      *p++ = ' '; *p++ = '1'; *p++ = ' '; *p++ = ';';
+
+      *p++ = 0x8B; *p++ = 0x1A; *p++ = 0xFD; *p++ = 0x00;      /* marker (closing) */
+
+      if ((p - prog) != progLen || !writeTestProgram(prog, progLen)) {
+        printf("    [1] FAIL: writeTestProgram failed\n");
+        sc1 = 1;
+      }
+      free(prog);
+    }
+
+    if (!sc1) {
+      currentProgramNumber = 1;
+      currentStep          = beginOfProgramMemory + (progLen - 4);   /* closing marker */
+
+      testInitVariableSoftmenu(22);
+
+      int foundNear = 0, foundFar = 0;
+      if (dynamicSoftmenu[22].menuContent) {
+        const char *content = (const char *)dynamicSoftmenu[22].menuContent;
+        while (*content) {
+          if (compareString(content, "A000", CMP_BINARY) == 0) foundNear = 1;
+          if (compareString(content, "B004", CMP_BINARY) == 0) foundFar  = 1;
+          content += strlen(content) + 1;
+        }
+      }
+      else {
+        printf("    [1] FAIL: menuContent is NULL\n");
+        sc1 = 1;
+      }
+
+      if (!sc1 && !foundNear) {
+        printf("    [1] FAIL: 'A000' (step 2, well inside the cut-off) missing\n");
+        sc1 = 1;
+      }
+      if (!sc1 && foundFar) {
+        printf("    [1] FAIL: 'B004' (past step %d) listed — the scan did not stop\n",
+               FORTH_PICKER_MAX_SCAN_STEPS);
+        sc1 = 1;
+      }
+      if (!sc1 && dynamicSoftmenu[22].numItems != 1) {
+        printf("    [1] FAIL: numItems = %d, expected exactly 1 (only the near definition)\n",
+               dynamicSoftmenu[22].numItems);
+        sc1 = 1;
+      }
+
+      if (dynamicSoftmenu[22].menuContent) {
+        free(dynamicSoftmenu[22].menuContent);
+        dynamicSoftmenu[22].menuContent = NULL;
+      }
+      dynamicSoftmenu[22].numItems = 0;
+      cleanupTestProgram();
+    }
+
+    if (!sc1) {
+      printf("    [1] PASS: scan stops at the documented cut-off — near definition listed, far one absent\n");
+    }
+    fail |= sc1;
+  }
+
+  /* ---- Subcase 2: the empty picker ---- */
+  { int sc2 = 0;
+    currentProgramNumber = 1;
+    currentStep          = beginOfProgramMemory;
+
+    testInitVariableSoftmenu(22);
+
+    if (dynamicSoftmenu[22].numItems != 0) {
+      printf("    [2] FAIL: empty picker numItems = %d, expected 0\n",
+             dynamicSoftmenu[22].numItems);
+      sc2 = 1;
+    }
+    if (dynamicSoftmenu[22].menuContent == NULL) {
+      printf("    [2] FAIL: empty picker menuContent is NULL, expected the terminator blob\n");
+      sc2 = 1;
+    }
+    else if (((uint8_t *)dynamicSoftmenu[22].menuContent)[0] != 0) {
+      printf("    [2] FAIL: empty picker content does not start with the terminator\n");
+      sc2 = 1;
+    }
+
+    if (!sc2) {
+      softmenuStack[0].softmenuId = 22;
+      softmenuStack[0].firstItem  = 0;
+      if (compareString(dynmenuGetLabel(0), "", CMP_BINARY) != 0) {
+        printf("    [2] FAIL: dynmenuGetLabel(0) = '%s' on an empty picker, expected \"\"\n",
+               dynmenuGetLabel(0));
+        sc2 = 1;
+      }
+    }
+
+    if (!sc2) {
+      uint8_t *contentBeforeDraw = dynamicSoftmenu[22].menuContent;
+      showSoftmenuCurrentPart();
+      if (dynamicSoftmenu[22].numItems != 0) {
+        printf("    [2] FAIL: draw changed numItems to %d on an empty picker\n",
+               dynamicSoftmenu[22].numItems);
+        sc2 = 1;
+      }
+      if (dynamicSoftmenu[22].menuContent == NULL) {
+        printf("    [2] FAIL: draw left menuContent NULL on an empty picker\n");
+        sc2 = 1;
+      }
+      (void)contentBeforeDraw;   /* the draw rebuilds MNU_FORTH, so the pointer may move */
+    }
+
+    if (dynamicSoftmenu[22].menuContent) {
+      free(dynamicSoftmenu[22].menuContent);
+      dynamicSoftmenu[22].menuContent = NULL;
+    }
+    dynamicSoftmenu[22].numItems = 0;
+
+    if (!sc2) {
+      printf("    [2] PASS: empty picker is a well-formed empty menu, not a NULL with a count\n");
+    }
+    fail |= sc2;
+  }
+
+  dynamicSoftmenu[22].menuContent = savedMenuContent;
+  dynamicSoftmenu[22].numItems    = savedNumItems;
+  cachedDynamicMenu               = savedCachedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  currentStep          = savedCurrentStep;
+  currentProgramNumber = savedProgNum;
+
+  return fail;
+}
+
 /* test_picker_glyph_tokenize
  * Source step: ": A<a2><20>B DUP ;" — name contains STD_ANGLE ("\xa2\x20").
  * Build the menu; assert menuContent contains the 4-byte name "A\xa2\x20B"
