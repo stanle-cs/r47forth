@@ -220,3 +220,9 @@ on real keys). Nothing else.
 subcases) and `QWEN_PROMPTS_SB_2_nesting_param_menus.md` (B1-B3, C2, D2 —
 5 subcases). Exit criteria for row 11i: both packets landed green with
 their mutations RED, and the COVERED gate-greps all matched.
+
+**EXECUTED 2026-08-03 — row 11i CLOSED.** SB-1 `9aa57e93e`, SB-2
+`833513bb4`; 13 PASS lines, 6 mutations RED, arena at baseline. The B2
+assert was re-ruled to the observable contract (tam.colon re-init pinned,
+not cancel-path clearing) and C2's fixture/assert were corrected after a
+mutation exposed them — details in DESIGN-HISTORY 2026-08-03.

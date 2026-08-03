@@ -163,6 +163,33 @@ is derived from the audit file; author packets per the standing rules
 (QWEN_RUNBOOK §4) after the T2 decision is recorded. The runbook carries the
 queue; this file carries the why.
 
+**T5 — test-corpus restructure (PROPOSED, awaiting owner ruling).**
+Evidence, 2026-08-03: `test_dict_reloc.c` is 22.6k lines and drew 41% of
+all editor failures across 327 archived implementer sessions (low-entropy
+anchors on repeated scaffolds); it still carries 99 legacy
+`beginOfProgramMemory + N` hand offsets — the pre-fixture-rule pattern —
+and the mutation phase of the sim bench caught one weak assert (SB-C2's
+form-insensitive scan) that better structure would have made obvious.
+The stage, if ruled:
+
+1. **Split the battery into per-area TUs** — `test_dict.c`,
+   `test_capture.c`, `test_params.c`, `test_bench.c`, plus one shared
+   `test_common.h` for the `tp*` fixtures and drive idioms. The overlay's
+   `files/` mechanism already compiles multiple new sources; the suite
+   runner keeps one `forthDictSelfTest()` entry calling per-area suites.
+   Mechanical, packet-able, kills the megafile hotspot.
+2. **Reader-side accessor API + fixture-rule extension.** Promote
+   step-INSPECTION helpers (`tpSrcPayload` exists, unused) so tests never
+   hand-walk `findNextStep` chains or hand-index payload bytes, and extend
+   the PROGRAM-FIXTURE RULE to cover reading: layout facts come from the
+   accessor, never re-derived. Burn down the 99 legacy hand offsets
+   opportunistically as tests move.
+3. **Migrate the genuinely tabular subsets** (parameter parity sweeps,
+   glyph/outer cases, error tables) to in-C case tables now; upstream's
+   `.txt` script format later via the T2 cov hook where a case is pure
+   function+state→registers. Sequence-shaped tests stay C — that is where
+   this codebase's real defects live (D1/D2 came from showcase programs).
+
 ## 6. What any future change to the harness must preserve
 
 1. A gate that can go green without compiling the change under test is the
