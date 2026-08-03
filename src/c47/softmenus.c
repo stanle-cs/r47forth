@@ -728,15 +728,13 @@ TO_QSPI const int16_t menu_EQN[]         = { ITM_EQ_NEW,                    ITM_
 
 TO_QSPI const int16_t menu_ADV[]         = { ITM_SIGMAn,                    ITM_PIn,                       ITM_PLTf,                    -MNU_Sfdx,                     ITM_SOLVE,                    ITM_F1DRV,
                                              ITM_iSIGMAn,                   ITM_iPIn,                      ITM_PGMPLT,                   ITM_PGMINT,                   ITM_PGMSLV,                   ITM_PGMDRV,
-                                             ITM_SIGMAnINF,                 ITM_SLVQ,                      ITM_SLVC,                     ITM_SLVP,                     ITM_NULL,                     ITM_F2DRV                };
+                                             ITM_SIGMAnINF,                 ADV_SLVQ,                      ADV_SLVC,                     ADV_SLVP,                     ITM_NULL,                     ITM_F2DRV                };
 
-TO_QSPI const int16_t menu_1stDeriv[]    = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_FPHERE                };
-//note: the items in here are dynamically assigned, including the static ones. Only the entry count is read: showSoftmenu turns this menu into MNU_MVAR and the six
-//keys come from the variable list, where _parseWord in equation.c writes the step key and the calc key. The fifth entry is NULL rather than the graph menu it used
-//to name, which was never what that key did.
+TO_QSPI const int16_t menu_1stDeriv[]    = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_GRAPHS,                   ITM_FPHERE                };
+//note: the items in here are dynamically assigned, including the static ones
 
-TO_QSPI const int16_t menu_2ndDeriv[]    = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_FPPHERE               };
-//note: the items in here are dynamically assigned, including the static ones. Entry count only, as for menu_1stDeriv above.
+TO_QSPI const int16_t menu_2ndDeriv[]    = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_GRAPHS,                   ITM_FPPHERE               };
+//note: the items in here are dynamically assigned, including the static ones
 
 TO_QSPI const int16_t menu_Sf[]          = { ITM_NULL,                      ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL                  };
 //note: the items in here are dynamically assigned, including the static ones (original population was NULL)
@@ -1617,26 +1615,6 @@ static void _dynmenuConstructMVarsFromPgm(uint16_t label, uint16_t *numberOfByte
     }
     else {
       _dynmenuConstructMVarsFromPgm(currentSolverProgram, &numberOfBytes, &numberOfVars);
-      if(((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE) ||
-         ((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_2ND_DERIVATIVE)) {
-        // The step the derivative samples with, on the last key of the bottom row, which is where the formula menu carries it too: the key is in the same place
-        // whatever the program declares. The variables fill the keys before it, and a sixth one and any after it move up a row. It is a named variable like them,
-        // not a reserved one, and an empty or zero delta is what leaves the step to the engine.
-        uint8_t *slot = getNthString((uint8_t *)tmpString, 5);   // the sixth name, or the zeroed space past the end where the program declares fewer
-        const uint16_t at = (uint16_t)((char *)slot - tmpString);
-        const uint16_t deltaBytes = stringByteLength(STD_delta STD_SUB_d) + 1;
-
-        if(at > numberOfBytes) {           // fewer than six names: the gap is zeroed already, so those keys draw blank
-          numberOfVars += at - numberOfBytes;
-          numberOfBytes = at;
-        }
-        else if(at < numberOfBytes) {      // six or more: make room, and the sixth variable is the one that moves up a row
-          xcopy(tmpString + at + deltaBytes, tmpString + at, numberOfBytes - at);
-        }
-        stringCopy(tmpString + at, STD_delta STD_SUB_d);
-        numberOfBytes += deltaBytes;
-        numberOfVars++;
-      }
     }
 
     dynamicSoftmenu[menu].menuContent = malloc(numberOfBytes + 1);          // +1 for the terminator showSoftmenu writes after the last name; avoids malloc(0)
@@ -3321,23 +3299,6 @@ void showSoftmenuCurrentPart(void) {
                     if(!compareString((char *)getNthString(dynamicSoftmenu[m].menuContent, x+6*y), indexOfItems[ITM_SETSIG2].itemSoftmenuName, CMP_NAME)) {
                        strcpy(itemName, figlabel((char *)getNthString(dynamicSoftmenu[m].menuContent, x+6*y), "", fnItemShowValue(ITM_SETSIG2)));
                     }
-
-                    if(!compareString((char *)getNthString(dynamicSoftmenu[m].menuContent, x+6*y), STD_delta STD_SUB_d, CMP_NAME)) {   // the step key carries its value, as ACC does on the integral menu
-                      const calcRegister_t deltaReg = findNamedVariable(STD_delta STD_SUB_d);
-                      char deltaText[30];
-                      real_t deltaValue;
-
-                      deltaText[0] = 0;
-                      if(deltaReg != INVALID_VARIABLE && getRegisterAsRealQuiet(deltaReg, &deltaValue) && !realIsZero(&deltaValue)) {   // read the way the step itself is read, so a long integer shows too
-                        bool_t convertedRealPerfectly;
-                        char tmpBuf[100];
-                        real34_t deltaReal34;
-
-                        realToReal34(&deltaValue, &deltaReal34);
-                        stringCopy(deltaText, formatDoubleWidth(&deltaReal34, 4, itemName, &convertedRealPerfectly, 400 / 6 - 2 - 4, tmpBuf, 60));
-                      }
-                      strcpy(itemName, figlabel(STD_delta STD_SUB_d, deltaText, NOVAL));
-                    }
 //CHECKNOW not needed in this place anymore??
 
                     char tmpC[16];
@@ -4039,10 +4000,7 @@ void showSoftmenuCurrentPart(void) {
                id == -MNU_1STDERIV    ||
                id == -MNU_2NDDERIV) && numberOfFormulae >= 1)
                ||
-              (id == -MNU_MVAR && (currentSolverStatus & SOLVER_STATUS_INTERACTIVE) && !(currentSolverStatus & SOLVER_STATUS_USES_FORMULA) &&    // a program picked with PGMINT or with f'(x)
-                                 (((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_INTEGRATE)      ||
-                                  ((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE) ||
-                                  ((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_2ND_DERIVATIVE)))
+              (id == -MNU_MVAR && (currentSolverStatus & SOLVER_STATUS_INTERACTIVE) && !(currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && (currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_INTEGRATE)
            ) {
 
       int32_t numberOfVars = -1;
@@ -4123,10 +4081,16 @@ void showSoftmenuCurrentPart(void) {
         currentSolverVariable = findOrAllocateNamedVariable((char *)getNthString(varList, 0));
       }
       else if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE || (currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_2ND_DERIVATIVE) {
-        // One variable and nothing to choose, so it is selected here. The derivative is not taken: the step ladder costs up to 16 passes of the formula and the
-        // user has not asked for it yet. The step key sits after the variables and is not one of them, so it does not make this a choice.
-        if((getNthString(varList, 1))[0] == 0 || compareString((char *)getNthString(varList, 1), STD_delta STD_SUB_d, CMP_NAME) == 0) {
+        if((getNthString(varList, 1))[0] == 0) {
           currentSolverVariable = findOrAllocateNamedVariable((char *)getNthString(varList, 0));
+          reallyRunFunction(ITM_STO, currentSolverVariable);
+          saveForUndo();
+          if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE) {
+            fn1stDerivEq(NOPARAM);
+          }
+          else {
+            fn2ndDerivEq(NOPARAM);
+          }
         }
       }
 
