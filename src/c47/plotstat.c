@@ -1634,6 +1634,7 @@ void graphDrawLRline(uint16_t selection) {
     char ss[100], tt[100];
 
     real_t XX, YY;
+    realSetZero(&XX);                                //XX is written only by the USEFLOATING real branches below
     if(!selection) {
       return;
     }
