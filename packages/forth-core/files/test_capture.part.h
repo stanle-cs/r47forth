@@ -6448,13 +6448,31 @@ static int test_picker_pixel_layout(void)
   {
     int sc1 = 0;
 
-    /* LONGPAGE: 12 names — A1..A6 (2-byte), B1CCCCCCCCCCCC..B6CCCCCCCCCCCC (14-byte). */
-    static const char *const longpageNames[12] = {
-      "A1", "A2", "A3", "A4", "A5", "A6",
-      "B1CCCCCCCCCCCC", "B2CCCCCCCCCCCC", "B3CCCCCCCCCCCC",
-      "B4CCCCCCCCCCCC", "B5CCCCCCCCCCCC", "B6CCCCCCCCCCCC"
+    /* LONGPAGE: 36 names — 18 short then 18 long.
+     *
+     * A VISIBLE PAGE IS 18 ITEMS, NOT 6. showSoftmenuCurrentPart draws
+     * three rows of six (softmenus.c: `for(y=0; y<3; y++) for(x=0; x<6; x++)`
+     * guarded by `x + 6*y + currentFirstItem < numberOfItems`), and
+     * g4CellPixels sums a whole column, all three rows. A 12-name fixture
+     * paged by 6 therefore draws 12 names at firstItem=0 and 6 at
+     * firstItem=6, so page 1 wins on item COUNT and the comparison says
+     * nothing about what changed. That was this subcase's original defect.
+     *
+     * 36 names paged by 18 puts an equal count on both pages and lets the
+     * only difference be the label width: A00..A17 are 3 bytes, B00 + 11
+     * filler are 14 — the maximum the picker admits. They sort A before B,
+     * so page 1 is the short set and page 2 the long one. */
+    static const char *const longpageNames[36] = {
+      "A00", "A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08",
+      "A09", "A10", "A11", "A12", "A13", "A14", "A15", "A16", "A17",
+      "B00CCCCCCCCCCC", "B01CCCCCCCCCCC", "B02CCCCCCCCCCC",
+      "B03CCCCCCCCCCC", "B04CCCCCCCCCCC", "B05CCCCCCCCCCC",
+      "B06CCCCCCCCCCC", "B07CCCCCCCCCCC", "B08CCCCCCCCCCC",
+      "B09CCCCCCCCCCC", "B10CCCCCCCCCCC", "B11CCCCCCCCCCC",
+      "B12CCCCCCCCCCC", "B13CCCCCCCCCCC", "B14CCCCCCCCCCC",
+      "B15CCCCCCCCCCC", "B16CCCCCCCCCCC", "B17CCCCCCCCCCC"
     };
-    const int longpageCount = 12;
+    const int longpageCount = 36;
 
     uint16_t progLen = 8;
     for (int i = 0; i < longpageCount; i++) {
@@ -6493,8 +6511,8 @@ static int test_picker_pixel_layout(void)
       softmenuStack[0].firstItem = 0;
       showSoftmenuCurrentPart();
 
-      if (dynamicSoftmenu[22].numItems != 12) {
-        printf("    [1] FIXTURE BUG: expected 12 names, got %d\n", dynamicSoftmenu[22].numItems);
+      if (dynamicSoftmenu[22].numItems != 36) {
+        printf("    [1] FIXTURE BUG: expected 36 names, got %d\n", dynamicSoftmenu[22].numItems);
         sc1 = 1;
       }
     }
@@ -6503,14 +6521,15 @@ static int test_picker_pixel_layout(void)
       int32_t page1 = 0;
       for (int c = 0; c < 6; c++) page1 += g4CellPixels(c);
 
-      softmenuStack[0].firstItem = 6;
+      softmenuStack[0].firstItem = 18;         /* one full page of three rows */
       showSoftmenuCurrentPart();
 
       int32_t page2 = 0;
       for (int c = 0; c < 6; c++) page2 += g4CellPixels(c);
 
-      if (page1 <= page2) {
-        printf("    [1] FAIL: page 1 (%d px) should exceed page 2 (%d px)\n", page1, page2);
+      if (page2 <= page1) {
+        printf("    [1] FAIL: page 2 (%d px) should exceed page 1 (%d px) — "
+               "same item count, longer labels\n", page2, page1);
         sc1 = 1;
       }
     }
@@ -6523,7 +6542,7 @@ static int test_picker_pixel_layout(void)
     cleanupTestProgram();
 
     if (!sc1) {
-      printf("    [1] PASS: paging changes what is drawn — page 1 lights more than page 2\n");
+      printf("    [1] PASS: paging changes what is drawn — page 2 lights more than page 1\n");
     }
     fail |= sc1;
   }
