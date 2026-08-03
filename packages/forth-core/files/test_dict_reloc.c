@@ -10984,6 +10984,7 @@ static int test_word_catalog(void);
 static int test_capture_acceptance(void);
 /* SB-1: sim bench, capture mechanics + cancel edges (charter A2-A6, F1, F2) */
 static int test_sim_bench_capture(void);
+static int test_sim_bench_nesting(void);
 /* code-audit: dynamic-menu XEQ of a Forth word/colon must insert in PEM, not execute live */
 static int test_pem_xeq_dynmenu_no_live_exec(void);
 /* code-audit (adversarial): edit an existing Forth line, MODIFY it, re-commit via ENTER */
@@ -13141,6 +13142,7 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_sim_bench_capture...\n");
   fail |= test_sim_bench_capture();
+  fail |= test_sim_bench_nesting();
   forthDictClear();
   forthGDictClear();
 
@@ -21998,6 +22000,619 @@ static int test_sim_bench_capture(void)
       cleanupTestProgram();
     }
 
+    fail |= sc;
+  }
+
+  /* Epilogue */
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  alphaCase = savedAlphaCase;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+static int test_sim_bench_nesting(void)
+{
+  int fail = 0;
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedMenu = currentMenu();
+  char aimBufSave[256];
+  memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
+  uint8_t savedAlphaCase = alphaCase;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void pemAlpha(int16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void tamEnterMode(int16_t);
+  extern void tamProcessInput(uint16_t);
+  extern void showSoftmenu(int16_t menu);
+
+  /* ---- SB-B1: TAM cancel keeps the line ---- */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    tpLbl(&p, "F65");
+    tpMarker(&p);
+
+    if (!tpWrite(&p)) {
+      printf("    SB-B1 FIXTURE FAIL: tpWrite\n");
+      fail = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      fnGotoDot(2);
+
+      if (currentStep != tpStepAddr(&p, 1) || currentLocalStepNumber != 2) {
+        printf("    SB-B1 FIXTURE BUG: fnGotoDot(2)\n");
+        sc = 1;
+      }
+      else {
+        runFunction(ITM_AIM);
+        if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+          printf("    SB-B1 FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+          sc = 1;
+        }
+      }
+
+      char preText[64];
+      int16_t cursorBefore;
+
+      if (!sc) {
+        /* Type "text" in capture line */
+        runFunction(ITM_T);
+        runFunction(ITM_E);
+        runFunction(ITM_X);
+        runFunction(ITM_T);
+
+        /* Record state before TAM */
+        cursorBefore = T_cursorPos;
+        xcopy(preText, forthTestCapText(),
+              stringByteLength((char *)forthTestCapText()) + 1);
+
+        /* Open TAM via XEQ path (as test_capture_suspend drives it) */
+        runFunction(ITM_XEQ);
+
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    SB-B1 FAIL: XEQ did not suspend capture (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Type two name glyphs WITHOUT completing */
+        tamProcessInput(ITM_alpha);
+        runFunction(ITM_W);
+        runFunction(ITM_O);
+
+        /* Cancel back with EXIT */
+        int guard;
+        for (guard = 0; tam.mode != 0 && guard < 4; guard++) {
+          fnKeyExit(NOPARAM);
+        }
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    SB-B1 FAIL: capture not open after cancel (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+        else if (tam.mode != 0) {
+          printf("    SB-B1 FAIL: tam.mode = %d, expected 0\n", (int)tam.mode);
+          sc = 1;
+        }
+        else if (strcmp(forthTestCapText(), preText) != 0) {
+          printf("    SB-B1 FAIL: capture text changed: '%s' vs '%s'\n",
+                 forthTestCapText(), preText);
+          sc = 1;
+        }
+        else if (T_cursorPos != cursorBefore) {
+          printf("    SB-B1 FAIL: cursor moved: %d vs %d\n",
+                 T_cursorPos, cursorBefore);
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        printf("    SB-B1 PASS: TAM cancel keeps the line\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+    fail |= sc;
+  }
+
+  /* ---- SB-B2: no tam.colon leak ---- */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    tpLbl(&p, "F66");
+    tpMarker(&p);
+
+    if (!tpWrite(&p)) {
+      printf("    SB-B2 FIXTURE FAIL: tpWrite\n");
+      fail = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      fnGotoDot(2);
+
+      if (currentStep != tpStepAddr(&p, 1) || currentLocalStepNumber != 2) {
+        printf("    SB-B2 FIXTURE BUG: fnGotoDot(2)\n");
+        sc = 1;
+      }
+      else {
+        runFunction(ITM_AIM);
+        if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+          printf("    SB-B2 FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Type "abc" in capture line */
+        runFunction(ITM_A);
+        runFunction(ITM_B);
+        runFunction(ITM_C);
+
+        /* Open TAM via XEQ path */
+        runFunction(ITM_XEQ);
+
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    SB-B2 FAIL: XEQ did not suspend capture (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Press the TAM : key so tam.colon becomes true */
+        tamProcessInput(ITM_COLON);
+        tamProcessInput(ITM_alpha);
+        if (!tam.colon) {
+          printf("    SB-B2 FIXTURE BUG: tam.colon not set after COLON\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Cancel */
+        int guard;
+        for (guard = 0; tam.mode != 0 && guard < 4; guard++) {
+          fnKeyExit(NOPARAM);
+        }
+
+        /* Press a plain glyph — assert no colon artifact in capture text */
+        runFunction(ITM_D);
+
+        if (strcmp(forthTestCapText(), "ABCD") != 0) {
+          printf("    SB-B2 FAIL: text = '%s', expected 'ABCD' (colon artifact)\n",
+                 forthTestCapText());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Re-enter TAM — assert tamEnterMode re-initializes tam.colon to false */
+        extern void tamEnterMode(int16_t);
+        tamEnterMode(ITM_XEQ);
+        if (tam.colon) {
+          printf("    SB-B2 FAIL: tam.colon not re-initialized on TAM entry\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Cancel back out */
+        int guard;
+        for (guard = 0; tam.mode != 0 && guard < 4; guard++) {
+          fnKeyExit(NOPARAM);
+        }
+      }
+
+      if (!sc) {
+        printf("    SB-B2 PASS: no colon leak into capture keys; re-init pinned\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+    fail |= sc;
+  }
+
+  /* ---- SB-B3: committed XEQ from capture ---- */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    tpLbl(&p, "F67");
+    tpMarker(&p);
+    tpLbl(&p, "TGT");   /* target label for XEQ */
+    tpRtn(&p);
+
+    if (!tpWrite(&p)) {
+      printf("    SB-B3 FIXTURE FAIL: tpWrite\n");
+      fail = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      fnGotoDot(2);
+
+      if (currentStep != tpStepAddr(&p, 1) || currentLocalStepNumber != 2) {
+        printf("    SB-B3 FIXTURE BUG: fnGotoDot(2)\n");
+        sc = 1;
+      }
+      else {
+        runFunction(ITM_AIM);
+        if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+          printf("    SB-B3 FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Complete a full XEQ 'TGT' TAM entry */
+        runFunction(ITM_XEQ);
+
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    SB-B3 FAIL: XEQ did not suspend capture (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Type name "TGT" */
+        tamProcessInput(ITM_alpha);
+        runFunction(ITM_T);
+        runFunction(ITM_G);
+        runFunction(ITM_T);
+
+        /* Commit with ENTER (not EXIT which cancels) */
+        tamProcessInput(ITM_ENTER);
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    SB-B3 FAIL: capture not open after XEQ commit (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Verify: capture line survives intact */
+        uint8_t *capStep = currentStep;
+        if (capStep[0] != 0x8B || capStep[1] != 0x1A || capStep[2] != 0xFD) {
+          printf("    SB-B3 FAIL: capture step is not a Forth source step\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Verify: XEQ name converted to text in capture line */
+        const char *text = forthTestCapText();
+        int hasXeq = 0;
+        const char *s = text;
+        while (*s) {
+          if (s[0] == 'X' && s[1] == 'E' && s[2] == 'Q') {
+            hasXeq = 1;
+            break;
+          }
+          s++;
+        }
+        if (!hasXeq) {
+          printf("    SB-B3 FAIL: capture text missing XEQ form: '%s'\n",
+                 forthTestCapText());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        printf("    SB-B3 PASS: committed XEQ from capture\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+    fail |= sc;
+  }
+
+  /* ---- SB-C2: local-register form and cancel ---- */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    tpLbl(&p, "F68");
+    tpMarker(&p);
+
+    if (!tpWrite(&p)) {
+      printf("    SB-C2 FIXTURE FAIL: tpWrite\n");
+      fail = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      fnGotoDot(2);
+
+      if (currentStep != tpStepAddr(&p, 1) || currentLocalStepNumber != 2) {
+        printf("    SB-C2 FIXTURE BUG: fnGotoDot(2)\n");
+        sc = 1;
+      }
+      else {
+        runFunction(ITM_AIM);
+        if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+          printf("    SB-C2 FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Press STO then . 0 5 (the local form) */
+        runFunction(ITM_STO);
+
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    SB-C2 FAIL: STO did not suspend capture (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Type . 0 5 for local register L05 */
+        tamProcessInput(ITM_PERIOD);
+        tamProcessInput(ITM_0);
+        tamProcessInput(ITM_5);   /* three digits should auto-fire commit */
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    SB-C2 FAIL: capture not open after local commit (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Assert canonical text landed in capture line */
+        const char *text = forthTestCapText();
+        int hasSto05 = 0;
+        const char *s = text;
+        while (*s) {
+          if (s[0] == 'S' && s[1] == 'T' && s[2] == 'O' &&
+               s[3] == ' ' && s[4] == '.' && s[5] == '0' && s[6] == '5') {
+             hasSto05 = 1;
+            break;
+          }
+          s++;
+        }
+        if (!hasSto05) {
+           printf("    SB-C2 FAIL: canonical text missing STO .05 form: '%s'\n",
+                 forthTestCapText());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* Now press STO and cancel out (EXIT before any digit) */
+        char beforeCancel[64];
+        xcopy(beforeCancel, forthTestCapText(),
+              stringByteLength((char *)forthTestCapText()) + 1);
+
+        runFunction(ITM_STO);
+        fnKeyExit(NOPARAM);   /* cancel before any digit */
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    SB-C2 FAIL: capture not open after STO cancel (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+        else if (strcmp(forthTestCapText(), beforeCancel) != 0) {
+          printf("    SB-C2 FAIL: line changed after STO cancel: '%s'\n",
+                 forthTestCapText());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        printf("    SB-C2 PASS: local-register form and cancel\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+    fail |= sc;
+  }
+
+  /* ---- SB-D2: picker navigation leaks nothing ---- */
+  { int sc = 0;
+    testProg_t p;
+    tpInit(&p);
+    tpLbl(&p, "F69");
+    tpMarker(&p);
+    tpLbl(&p, "ONE");
+    tpRtn(&p);
+    tpLbl(&p, "TWO");
+    tpRtn(&p);
+
+    if (!tpWrite(&p)) {
+      printf("    SB-D2 FIXTURE FAIL: tpWrite\n");
+      fail = 1;
+    }
+    else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      shiftF = false;
+      shiftG = false;
+      clearSystemFlag(FLAG_ALPHA);
+      clearSystemFlag(FLAG_NUMLOCK);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+
+      fnGotoDot(2);
+
+      if (currentStep != tpStepAddr(&p, 1) || currentLocalStepNumber != 2) {
+        printf("    SB-D2 FIXTURE BUG: fnGotoDot(2)\n");
+        sc = 1;
+      }
+      else {
+        runFunction(ITM_AIM);
+        if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+          printf("    SB-D2 FIXTURE BUG: ITM_AIM did not open Forth capture\n");
+          sc = 1;
+        }
+      }
+
+      char preText[64];
+      int16_t cursorBefore;
+
+      if (!sc) {
+        /* Type "text" in capture line */
+        runFunction(ITM_T);
+        runFunction(ITM_E);
+        runFunction(ITM_X);
+        runFunction(ITM_T);
+
+        /* Record state before picker open */
+        cursorBefore = T_cursorPos;
+        xcopy(preText, forthTestCapText(),
+              stringByteLength((char *)forthTestCapText()) + 1);
+
+        /* Open the FWRD picker (menu overlay, does not suspend capture) */
+        showSoftmenu(-MNU_FORTH);
+
+        if (currentMenu() != -MNU_FORTH) {
+          printf("    SB-D2 FIXTURE BUG: menu=%d, expected -MNU_FORTH\n",
+                 currentMenu());
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        /* EXIT closes the picker */
+        fnKeyExit(NOPARAM);
+
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    SB-D2 FAIL: capture not open after picker cancel (state=%d)\n",
+                 forthTestCapState());
+          sc = 1;
+        }
+        else if (strcmp(forthTestCapText(), preText) != 0) {
+          printf("    SB-D2 FAIL: capture text changed: '%s' vs '%s'\n",
+                 forthTestCapText(), preText);
+          sc = 1;
+        }
+        else if (T_cursorPos != cursorBefore) {
+          printf("    SB-D2 FAIL: cursor moved: %d vs %d\n",
+                 T_cursorPos, cursorBefore);
+          sc = 1;
+        }
+      }
+
+      if (!sc) {
+        printf("    SB-D2 PASS: picker navigation leaks nothing\n");
+      }
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
     fail |= sc;
   }
 
