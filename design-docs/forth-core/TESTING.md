@@ -1,0 +1,173 @@
+# forth-core — TESTING.md (the two harnesses and their reconciliation)
+
+Owner ruling (2026-08-02): the F6 stage-exit **hardware** bench (runbook row
+11i) converts to an **automated sim-run check** — the sim catches most of the
+bug classes the bench targeted and can run on every gate. The prerequisite is
+reconciling the package's testing framework with the one upstream uses. This
+document records how both harnesses actually work (so the knowledge survives),
+the evidence gathered on 2026-08-02, and the staged plan. Posting the forum
+material stays an owner option, not a queue item.
+
+---
+
+## 1. The package harness — in-sim self-test battery
+
+**What.** `packages/forth-core/test_dict_reloc.c` — 173 checks: dictionary
+relocation/persistence, capture seams, parameter parity, stack semantics
+(D1/D2 pins), the F1.5 §8.9 acceptance battery, and the F6 capture battery.
+
+**How it is compiled in.** Only when `FORTH_DEBUG_SELFTEST` is defined. Under
+the patch-based overlay the resolver never reads a package `meson.build`, so
+the `meson_options.txt` option is consumed by nothing — the define is injected
+by the gate script via `meson configure -Dc_args=-DFORTH_DEBUG_SELFTEST`
+(`meson setup --reconfigure -Dc_args=...` does **not** reliably apply to an
+existing build dir). Without the injection the suite silently compiles out and
+the gate is vacuous green.
+
+**How it runs.** The `010-config.c.patch` hook in the `doFnReset` path:
+`PC_BUILD && FORTH_DEBUG_SELFTEST && headlessMode`, guarded run-once (tests
+call `restoreCalc` → `doFnReset`, which would recurse into the suite), calls
+`forthDictSelfTest()` and `exit(0)`/`exit(1)`. The binary is the real GTK sim
+(`build.sim/src/c47-gtk/c47`) launched `--headless`.
+
+**The gate.** `./packages/forth-core/build-test.sh` — canonical, never
+re-derive the meson/ninja flags by hand:
+
+1. `tools/pkg_patch_refresh.py` — the resolver builds the shadow tree from
+   **generated** `patches/` + `files/` and never reads the flat working area;
+   an unrefreshed edit is invisible to the compiler and the gate would pass
+   for code it did not build (verified by marker injection).
+2. `meson setup --reconfigure` (re-shadows), then the `c_args` injection
+   above, then `ninja`.
+3. Run `--headless`; green requires exit 0 **and** the exact banner
+   `FORTH SELF-TEST: ALL PASSED` **and** `==> BUILD + SELF-TEST GREEN.` —
+   status and banner together, so a wrong-binary run cannot pass.
+
+**Disciplines that make the suite mean something** (binding for any future
+harness work):
+
+- **Mutation pins.** Every packet lands with named mutations that MUST go
+  red, run separately, gate green between restores. A test that stays green
+  under every named mutation is decoration — the 2026-07-21 test-suite audit
+  (`cbd285e09`) removed 14 such cases and this is the check that keeps them
+  out.
+- **Structural fixtures.** The PROGRAM-FIXTURE AUTHORING RULE
+  (QWEN_RUNBOOK §4): programs are built with `testProg_t`/`tp*` helpers and
+  role-addressed step handles; never `beginOfProgramMemory + <literal>` or
+  payload-length arithmetic.
+- **Blast radius by PASS-set diff**, not by reading failures: keep the
+  pre-gate log, `diff` the sorted `PASS:` lines.
+- **Measurements.** Arena high-water with any dictionary change; flash via
+  `make dmcp5r47 CUSTOM_PKG=packages/forth-core CUSTOM_PKG_RECONFIGURE=1`
+  (the build stamp tracks the *variable*, not package content — without
+  `CUSTOM_PKG_RECONFIGURE=1` the number is the previous tree's).
+
+## 2. The upstream harness — `src/testSuite/`
+
+A separate **native** executable (`build_by_default: false`): all of
+`c47_src` + decNumber recompiled with `-DTESTSUITE_BUILD` plus HAL stubs
+(`hal/{audio,gui,lcd,io,print_ir}.c`) and the 4.7k-line driver
+`testSuite.c`. Two test styles:
+
+- **Script-driven:** `tests/testSuiteList.txt` names the case files
+  (`tests/*.txt`); each file sets machine state (`In: FL_CPXRES=0 SD=0 ...`),
+  names a function (`Func: fnAdd`), and lists register expectations, compared
+  to 34 significant digits.
+- **C coverage hooks:** `cov*` functions in `testSuite.c` (program flow,
+  backup round-trip, solver/integrator paths...) for behavior the line
+  format cannot express — the precedent for anything Forth would add there.
+
+Registered as a meson `test()` (workdir repo root, timeout 800 s):
+`meson test -C build.sim testSuite`.
+
+**Overlay interaction.** The package shadow replaces `src/c47` sources for
+*every* target, so testSuite's `c47_src` compile picks up the package —
+including, in a build dir configured by the gate, `FORTH_DEBUG_SELFTEST`
+(harmless there: the suite's trigger needs `headlessMode`, which is the sim
+binary's flag). The overlay mirror root is **strictly `src/c47/`**
+(`pkg_patch_common.py` strips that prefix at three sites), so the package
+cannot patch `src/testSuite/` or register meson tests — every integration
+below must respect or change that boundary explicitly.
+
+## 3. Evidence (2026-08-02, base 44dc5a705)
+
+- `ninja -C build.sim src/testSuite/testSuite` under
+  `CUSTOM_PKG=packages/forth-core`: **links and builds green** (exit 0). The
+  2026-07-27 integrate-worktree link failure does not reproduce on the
+  current tree; treat it as environment-specific until it recurs.
+- First `meson test -C build.sim testSuite` against the package-patched
+  core: **GREEN — 12,071 tests passed, 0 failed, 93.5 s.** The overlay
+  currently causes zero native regressions visible to upstream's suite,
+  and T1 costs nothing but the recompile.
+- Flash at this base: 1,094,832 B (+8 B vs the D1/D2 measurement) — the
+  optimizer eliminates the dead upstream `_executeOp` block retained by the
+  rebase.
+
+## 4. Why reconcile
+
+The 2026-07-25 parity ruling — anything that behaves differently from R47 is
+a bug — is *exactly what upstream's suite pins*. Running testSuite under the
+overlay turns every package-induced native regression into a red test the
+forth battery cannot see (it only looks at Forth). Conversely the forth
+battery pins what upstream's line format cannot express (relocation, capture
+seams, PEM key flows). The two are complementary; the reconciliation is about
+one entry point and shared coverage, not about replacing either.
+
+## 5. The plan
+
+**T1 — one entry point (packet-sized, no upstream diff).** Extend
+`build-test.sh` to also run `meson test -C build.sim testSuite` after the
+forth battery and require both green. The gate stays the single writer of
+build state; first run pays the TESTSUITE_BUILD recompile, cached after.
+Gate additions: require meson's `Ok:` summary line for testSuite, same
+status+banner double-check as the forth battery.
+
+**T2 — coverage boundary decision (owner + architect, before any T2 code).**
+Forth-visible native parity cases (e.g. the D1 boundary: a native item after
+a Forth push must lift) need either upstream's script format — which cannot
+drive program-step context — or a `cov*`-style C hook in `testSuite.c`,
+which lives **outside** the overlay's `src/c47/` mirror root. The options,
+in preference order:
+
+1. Extend the overlay mirror root to `src/` (mechanical: the three
+   `src/c47/` prefix sites in `pkg_patch_common.py`, plus audit scope), so
+   the package can carry a `testSuite.c` patch adding one generic
+   `covCustomPkg` hook. Footprint: one new upstream file touched, one hunk.
+2. Upstream MR adding a permanent package-test hook to `testSuite.c`
+   (config.c-hook precedent). Cleaner long-term, blocked on upstream
+   cadence.
+3. Keep suites disjoint (T1 only) and express parity pins only in the forth
+   battery. No new coupling, but native-side regressions stay invisible to
+   the scripts.
+
+Decide when T3 lands and the real need is measurable; do not pre-build the
+mechanism (that is how the capture buffer happened — see DESIGN_AUDIT Part 3).
+
+**T3 — the 11i sim bench (replaces the hardware bench).** Convert
+`F6_KEYBOARD_PEM_AUDIT.md` §3 Blocks A–F from hardware experiments into
+self-test subcases that drive the real key paths headlessly — `pemAlpha`,
+`fnKeyEnter`/`fnKeyExit`/`fnKeyBackspace`, TAM entry/suspend, catalog open —
+the same in-sim key-flow precedent the F6-6 acceptance battery established.
+One subcase per block row, each with a mutation pin. Rows that genuinely
+require hardware (physical key bounce, DMCP power-off path, display
+persistence across battery pull) are marked **HARDWARE-ONLY** in the audit
+file and leave the design-binding queue — best-effort on device, mirroring
+the DM42 stance. §5's exit criteria are met when every block row is either a
+green sim subcase or explicitly HARDWARE-ONLY with a reason.
+
+**T4 — packetize.** T1 and T3 are Qwen-packet-sized once T3's subcase list
+is derived from the audit file; author packets per the standing rules
+(QWEN_RUNBOOK §4) after the T2 decision is recorded. The runbook carries the
+queue; this file carries the why.
+
+## 6. What any future change to the harness must preserve
+
+1. A gate that can go green without compiling the change under test is the
+   cardinal failure mode. Both landed instances are documented in
+   `build-test.sh` (refresh trap, `c_args` trap) — keep the comments there
+   and the explanation here.
+2. Green = exit status **and** exact banner, per suite.
+3. New behavior lands with a mutation that proves the test can fail.
+4. Fixtures are structural; no hand-computed addresses.
+5. Flash numbers only with `CUSTOM_PKG_RECONFIGURE=1`; arena high-water with
+   any dictionary change.

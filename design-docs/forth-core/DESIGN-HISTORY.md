@@ -1659,3 +1659,122 @@ Gate green: FORTH SELF-TEST: ALL PASSED, 173 checks.
 `CUSTOM_PKG_RECONFIGURE=1`. The cost is the `stackEffect` column (22 entries,
 struct padding) plus the guard itself; justified by two classes of silent wrong
 answer.
+
+
+## 2026-08-02 — design audit
+
+Mechanical: CLEAN (16 override files, baselines 16/16; run after the base
+rebase to 44dc5a705, sim build + self-test green the same day).
+
+Philosophy — answers that changed:
+
+- **2.8** — the doc set moved to `design-docs/forth-core/` and the superseded
+  tracked copies under `packages/forth-core/` now break the single-voice rule
+  ("Where this document speaks, nothing else does"): the stale copy still
+  cites `custom_package/README.md`, which no longer exists, and check H only
+  runs against the new location. **Fix queued:** remove the duplicates and
+  correct the `.pkgignore` comment that still claims the docs live there.
+  QWEN_RUNBOOK rows 11j/11k are likewise stale (both audits landed:
+  `cbd285e09`, code audits #1–#4) — flip to DONE in the same pass.
+- **2.9** — no measured flash delta recorded for the base-rebase commit
+  (`395c912f7`), and it retains upstream's now-dead `_executeOp` block in
+  `lblGtoXeq.c`, so elimination is worth confirming. **Resolved same day:**
+  `make dmcp5r47 CUSTOM_PKG_RECONFIGURE=1` → flash 1094824 -> 1094832
+  (+8 B). The optimizer eliminates the dead block; the rebase is
+  flash-neutral.
+
+Expired-premise sweep (three mechanisms):
+
+- `core/freeList.c` guard -> **keep, defer named FIX-6B** (agreed upstream,
+  unlanded; the packet is executable now on the clean tree).
+- `param_core.c` bounded reader -> **keep, premise live.** Re-derived: the
+  hazard is a malformed length byte reading past program memory (the reader
+  clamps to `end - stringAddress`); over-allocating the synthetic destination
+  buffer would not remove source-side overrun, so `end` threading stays.
+- 256-byte / 196-glyph capture cap -> **keep, premise migrated.** The storage
+  reason expired with S3 (sink is 1024-byte `aimBuffer`); what it buys now is
+  the step-payload contract — a committed step's size envelope stays stable
+  across the buffer collapse. The `forth_capture.h` comment already states
+  the cap contract is deliberately unchanged; lifting it is an owner decision,
+  not a vestige removal.
+
+New rotation candidate: the retained dead `_executeOp` block in
+`lblGtoXeq.c` (premise: −250 patch lines of upstream footprint beats
+dead-code hygiene in an override file; re-test when upstream touches that
+block or if the queued flash measurement shows it survives optimization).
+
+Footprint: 16 files, patch set ~250 lines smaller than pre-rebase; flash
+unmeasured (queued above).
+
+Actions: docs-reconciliation commit queued (duplicates + `.pkgignore` +
+runbook rows); FIX-6B is the next executable packet, then Stan opens the
+upstream MR; 11i hardware bench and posting `forum/output/` remain with Stan.
+
+
+## 2026-08-02 — owner rulings: sim bench, testing reconciliation; docs move completed
+
+Owner rulings (this date):
+
+1. **Row 11i converts from a hardware bench to an automated sim-run
+   bench.** The sim catches most of the targeted bug classes and can run on
+   every gate; block rows that genuinely need the physical DM42n get marked
+   HARDWARE-ONLY and leave the design-binding queue (mirroring the DM42
+   best-effort stance). Prerequisite: reconcile the package harness with
+   upstream's `src/testSuite/` framework. `TESTING.md` is the new authority
+   for both harnesses and carries the staged plan (T1 single entry point,
+   T2 coverage-boundary decision, T3 the sim bench, T4 packetization).
+2. **Flash measurements are architect-run** from now on (was S).
+3. **Posting `forum/output/` is an owner option, not a queue item.**
+4. **FIX-6B executes today by the architect**, with two recorded packet
+   amendments (below).
+
+Evidence gathered for TESTING.md (base `44dc5a705`): upstream `testSuite`
+**links** under `CUSTOM_PKG=packages/forth-core` (the 2026-07-27
+integrate-worktree link failure does not reproduce) and **runs green —
+12,071 tests, 0 failures, 93.5 s** (`meson test -C build.sim testSuite`).
+The overlay causes zero native regressions visible to upstream's suite.
+
+Docs move completed: the superseded doc copies under `packages/forth-core/`
+(84 md/txt plus `design-audit.sh` and `.design-audit-baseline`) are removed;
+`design-docs/` is the single voice, restoring the DESIGN.md preamble rule
+flagged by this morning's audit (finding 2.8). `.pkgignore` keeps the doc
+patterns as a defensive fence with corrected comments; CLAUDE.md pointers
+updated.
+
+FIX-6B packet amendments (architect, gate mismatches examined per
+discipline):
+
+- Gate item 1 named the retired operating branch
+  `forth-core/pem-entry-fixes`; amended to the current operating branch
+  (`forth-core/stack-semantics-d1-d2`).
+- Gate item 3 expected exactly ONE `backtrace(callstack` match in
+  `core/freeList.c`; the current tree has THREE. The two extra matches
+  (lines ~248, ~272) are **upstream's own pre-existing "Memory freeing
+  A/B" diagnostics**, outside the guard hunk and untouched by the packet's
+  RULE LIFT. Change A deletes only the guard's block (~line 222). The
+  packet's identity checks on the guard itself (G2) match exactly.
+
+
+## 2026-08-02 — FIX-6B landed (`5c2e7109a`)
+
+Executed by the architect under the two gate amendments above. Full gate
+green before and after; the three required mutations each went RED on
+exactly the named test (screen-drop → bug-screen assertion ×3;
+exact-match-only detection → interior double free slips through, list
+mutates 13→14; size-grow escape → "a free region grew"). Blast radius
+verified by PASS-set diff: only the three renamed PASS lines (plus ASLR
+address noise). Arena unchanged. Generated mirror equal.
+
+**Flash 1094832 → 1094912 (+80 B) — the packet's predicted net reduction
+was wrong.** The deleted backtrace/print block sat inside
+`#if !defined(DMCP_BUILD)` and never reached the device build, so its
+removal saved nothing on hardware; the +80 B is the new unconditional
+`displayBugScreen` call and message string. That cost is the feature:
+before this commit the device build detected the overlap and silently
+continued; now it halts loudly. Lesson for future packets: a flash
+prediction must check which side of `DMCP_BUILD` the deleted code lives
+on.
+
+The `core/freeList.c` no-touch rule resumes. Next: **S** forks/pushes and
+opens the upstream MR with the fail-loud patch (UPSTREAM_REPORTS §3
+carries the one open call-context question for upstream).

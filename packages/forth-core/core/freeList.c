@@ -204,32 +204,19 @@ void freeListFree(void *pcMemPtr, size_t sizeInBlocks) {
 
   C47RamPtr = TO_C47MEMPTR(pcMemPtr);
 
-  // Double-free / invalid-free guard (FIX-6): reject any free whose range
-  // overlaps an existing free region. Runs unconditionally so device builds
-  // (DMCP, diagnostics compiled out) cannot insert a duplicate/overlapping
-  // region and corrupt the list. Never mutates the list: a double free is
-  // always a caller bug and the free list must survive it unchanged.
+  // Double-free / invalid-free guard (FIX-6B): reject any free whose range
+  // overlaps an existing free region. Runs unconditionally (device + PC).
+  // An overlap means an earlier invariant already broke and memory is no
+  // longer trustworthy; per upstream doctrine we HALT rather than continue.
+  // The list is left unmutated (return precedes all insert/merge logic) and
+  // the firmware-bug screen is raised so the user can hardware-reset and
+  // report. displayBugScreen is upstream's own internal-fault mechanism and
+  // is non-blocking (draws + sets calcMode, returns).
   for(i=0; i<numberOfFreeMemoryRegions; i++) {
     uint32_t rStart = (uint32_t)freeMemoryRegions[i].blockAddress;
     uint32_t rEnd   = rStart + (uint32_t)freeMemoryRegions[i].sizeInBlocks;
     if((uint32_t)C47RamPtr < rEnd && (uint32_t)C47RamPtr + (uint32_t)sizeInBlocks > rStart) {
-      #if !defined(DMCP_BUILD)
-        errorf("---->Memory freeing C (double/invalid free):");
-        fprintf(stderr, "%zd blocks at address %" PRIu16 " overlap free region [%" PRIu32 "..%" PRIu32 ")\n",
-                sizeInBlocks, C47RamPtr, rStart, rEnd);
-        #if !defined(WIN32)
-          { void *callstack[128];
-            int frames = backtrace(callstack, 128);
-            char **strs = backtrace_symbols(callstack, frames);
-            printf("%30s%42s%s\n\n\n", "", "freeListFree called from: ", strs[1]);
-            for(int f = 1; f < frames; f++) {
-              printf("%30s%42d: %s\n", "", f, strs[f]);
-            }
-            free(strs);
-          }
-        #endif
-        fflush(stderr);
-      #endif
+      displayBugScreen("Memory management fault: an overlapping or double free was detected.");
       return;
     }
   }

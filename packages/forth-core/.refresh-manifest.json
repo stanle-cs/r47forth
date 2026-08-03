@@ -14,12 +14,12 @@
     "forth_prims.h": "32461d3bf02df6f455464822b112ef9d57e7197ff60637938b407e1c4395854d",
     "programming/param_core.c": "a346aa8de0b6424214bef39940d84ad3947e998b316e08b73734c66fb82fe887",
     "programming/param_core.h": "ff4c3dec1227ced41df291faa66572894042302eb9fe86ce3f8c12e45d463d31",
-    "test_dict_reloc.c": "990901b70247c0f2cad77c54598b9167b75d896e209ab7469f42eba84ee7d9ea"
+    "test_dict_reloc.c": "4d8ee4d24635faef2f933a1443967918b6b2e9be058372a1c00c8d0bfdfbe3f2"
   },
   "patches": {
     "010-c47Extensions__addons.c.patch": "e018487d35b5a5b156eb29c75dab0933514f56cfcec290760e9bddd88fa777bd",
     "010-config.c.patch": "7f5bd2844925914af826d00787e033cfb110f84016e2e7c444f49258729e7863",
-    "010-core__freeList.c.patch": "26242d8b3e4d7689dd98def3e1e90ffd54b6075db90f3894e2071db1b65cc052",
+    "010-core__freeList.c.patch": "364a9e5380491d54181e871deccd7e944e520734c79581f491b84b8c7fef6627",
     "010-defines.h.patch": "66ce4faf35b1b614ec0e0d372a5413a9a823f1d23b3d1d5ae1722471c5863c01",
     "010-items.c.patch": "0cd885e12fa16d299a7447b27a297f9810f43d0d60d0141e60aa42c0f097333e",
     "010-items.h.patch": "2bae0c1c4edd77ae5f5a4d73bf2097a270c870b39774147747f008a1387f8e23",
