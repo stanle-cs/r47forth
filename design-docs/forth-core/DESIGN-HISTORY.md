@@ -1659,3 +1659,51 @@ Gate green: FORTH SELF-TEST: ALL PASSED, 173 checks.
 `CUSTOM_PKG_RECONFIGURE=1`. The cost is the `stackEffect` column (22 entries,
 struct padding) plus the guard itself; justified by two classes of silent wrong
 answer.
+
+
+## 2026-08-02 — design audit
+
+Mechanical: CLEAN (16 override files, baselines 16/16; run after the base
+rebase to 44dc5a705, sim build + self-test green the same day).
+
+Philosophy — answers that changed:
+
+- **2.8** — the doc set moved to `design-docs/forth-core/` and the superseded
+  tracked copies under `packages/forth-core/` now break the single-voice rule
+  ("Where this document speaks, nothing else does"): the stale copy still
+  cites `custom_package/README.md`, which no longer exists, and check H only
+  runs against the new location. **Fix queued:** remove the duplicates and
+  correct the `.pkgignore` comment that still claims the docs live there.
+  QWEN_RUNBOOK rows 11j/11k are likewise stale (both audits landed:
+  `cbd285e09`, code audits #1–#4) — flip to DONE in the same pass.
+- **2.9** — no measured flash delta recorded for the base-rebase commit
+  (`395c912f7`), and it retains upstream's now-dead `_executeOp` block in
+  `lblGtoXeq.c`, so elimination is worth confirming. **Queued:** Stan runs
+  `make dmcp5r47 CUSTOM_PKG_RECONFIGURE=1` and the number is recorded here.
+
+Expired-premise sweep (three mechanisms):
+
+- `core/freeList.c` guard -> **keep, defer named FIX-6B** (agreed upstream,
+  unlanded; the packet is executable now on the clean tree).
+- `param_core.c` bounded reader -> **keep, premise live.** Re-derived: the
+  hazard is a malformed length byte reading past program memory (the reader
+  clamps to `end - stringAddress`); over-allocating the synthetic destination
+  buffer would not remove source-side overrun, so `end` threading stays.
+- 256-byte / 196-glyph capture cap -> **keep, premise migrated.** The storage
+  reason expired with S3 (sink is 1024-byte `aimBuffer`); what it buys now is
+  the step-payload contract — a committed step's size envelope stays stable
+  across the buffer collapse. The `forth_capture.h` comment already states
+  the cap contract is deliberately unchanged; lifting it is an owner decision,
+  not a vestige removal.
+
+New rotation candidate: the retained dead `_executeOp` block in
+`lblGtoXeq.c` (premise: −250 patch lines of upstream footprint beats
+dead-code hygiene in an override file; re-test when upstream touches that
+block or if the queued flash measurement shows it survives optimization).
+
+Footprint: 16 files, patch set ~250 lines smaller than pre-rebase; flash
+unmeasured (queued above).
+
+Actions: docs-reconciliation commit queued (duplicates + `.pkgignore` +
+runbook rows); FIX-6B is the next executable packet, then Stan opens the
+upstream MR; 11i hardware bench and posting `forum/output/` remain with Stan.
