@@ -243,7 +243,9 @@ permanently link his Reddit history to this identity. Uses:
 
 ---
 
-## 6. Post A content — custom package (v0.3)
+## 6. Post A content — custom package (v0.4; Stan re-versioned
+2026-08-03 — v0.3 was the July snapshot already shipped under that
+name, and this rewrite is a new version)
 
 **Structure ruling (2026-08-03, Stan's content review of the first
 pipeline draft).** The numbered inventory below still binds as facts,

@@ -28,7 +28,7 @@ packages/forth-core/files/                   19 new sources
 ```
 
 The package system and the Forth package don't depend on each other.
-The build files plus tools/ are the package system, v0.3, and any
+The build files plus tools/ are the package system, v0.4, and any
 package can ride on them. packages/forth-core/ is the one I built with
 it.
 

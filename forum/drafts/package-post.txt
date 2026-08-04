@@ -1,9 +1,9 @@
-Custom package v0.3 is up. It's the same idea as before, you build the C47/R47 firmware with your own changes layered on top and nothing under src/ gets touched, but I ended up rewriting most of the internals this round so I'll walk through what changed.
+Custom package v0.4 is up. It's the same idea as before, you build the C47/R47 firmware with your own changes layered on top and nothing under src/ gets touched, but I ended up rewriting most of the internals this round so I'll walk through what changed.
 
-[b]What changed from v0.2[/b]
+[b]Updates[/b]
 
 [list]
-[*]Overrides are git diffs now. v0.2 shipped whole edited files, and there was no way to see what a package changed without diffing by hand. Now I just open a file in patches/ and read it.
+[*]Overrides are git diffs now. Earlier versions shipped whole edited files, and there was no way to see what a package changed without diffing by hand. Now I just open a file in patches/ and read it.
 [*]A package is a flat directory that mirrors upstream paths. The tooling works out the rest. You drop new files in, pull upstream ones with materialize, run a refresh, and the patches come out on the other side.
 [*]When two packages patch the same upstream file, the patches stack in filename order (the NNN prefix), each on top of the previous result. They can even land in different parts of one function. But if they hit the same lines, configure fails and shows you which patch collided.
 [*]There's one ./package entry point for the whole workflow now. Everything below goes through it.
@@ -81,4 +81,3 @@ Target is R47/C47 on the DM42n (DMCP5 hardware). I built everything against upst
 Download: [url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release branch[/url] with the zip beside it. Run the four test_pkg_patch tests from the extracted zip before anything else, they check the tooling and don't need an upstream tree.
 
 My Forth package for the R47 runs on this system, 16 patches against upstream files plus 19 new sources. I'll write about that one separately.
-

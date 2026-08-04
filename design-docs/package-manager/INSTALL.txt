@@ -1,4 +1,4 @@
-custom package v0.3 - external package overlay for C47 / R47
+custom package v0.4 - external package overlay for C47 / R47
 ============================================================
 
 This builds the firmware with your changes layered on top. Nothing under
