@@ -10,7 +10,7 @@
 #define AsnDispShortForm (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM || tam.alpha)
 #define AsnDisplayUSER   (fnAsnDisplayUSER ^ (AsnDispShortForm & !getSystemFlag(FLAG_USER)))
 
-  #if !defined(SAVE_SPACE_DM42_8ASN)
+  #if defined(OPTION_ASNBROWSER)
   TO_QSPI const int16_t KEY_X_5[6] = {-1, 80, 160, 240, 320, 400};
   static void fnAsnDisplay(uint8_t page) {                // Heavily modified by JM from the original fnShow
   #define YOFF 32
@@ -94,9 +94,9 @@
         }
       }
       else {
-        char *funcParam = (char *)getNthString((uint8_t *)userKeyLabel, key * 6 + (page-1));
+        char *funcParam = (char *)getUserKeyLabelString(key * 6 + (page-1));
         if((funcParam[0] != 0) && ((strcmp(Name, "DYNMNU") == 0) || (strcmp(Name, "XEQ") == 0) || (strcmp(Name, "RCL") == 0)))  {
-          strcpy(Name, (char *)getNthString((uint8_t *)userKeyLabel, key * 6 + (page-1)));       // name of a user menu, program or variable assigned to a key
+          strcpy(Name, (char *)getUserKeyLabelString(key * 6 + (page-1)));       // name of a user menu, program or variable assigned to a key
         }
       }
 
@@ -134,11 +134,11 @@
 
     temporaryInformation = TI_NO_INFO;
   }
-  #endif // !SAVE_SPACE_DM42_8ASN
+  #endif // !OPTION_ASNBROWSER
 
 
 void fnAsnViewer(uint16_t unusedButMandatoryParameter) {
-  #if !defined(SAVE_SPACE_DM42_8ASN)
+  #if defined(OPTION_ASNBROWSER)
     hourGlassIconEnabled = false;
     if(calcMode != CM_ASN_BROWSER) {
       previousCalcMode = calcMode;
@@ -148,5 +148,5 @@ void fnAsnViewer(uint16_t unusedButMandatoryParameter) {
       return;
     }
   fnAsnDisplay(currentAsnScr);
-  #endif // !SAVE_SPACE_DM42_8ASN
+  #endif // !OPTION_ASNBROWSER
 }

@@ -231,6 +231,7 @@
 
   extern bool_t                headlessMode;
   extern bool_t                snapSkipRefresh;
+  extern bool_t                screenHoldsDrawnPixels;   // CLLCD, PIXEL, POINT or AGRAPH painted the screen and no refresh has repainted over it since
   extern bool_t                loadTestPrograms;
   extern bool_t                loadTestData;
 
@@ -244,7 +245,7 @@
   extern const reservedVariableHeader_t  allReservedVariables[];
   extern const reservedVariableDescStr_t varDescr[];
   extern const char                      commonBugScreenMessages[NUMBER_OF_BUG_SCREEN_MESSAGES][SIZE_OF_EACH_BUG_SCREEN_MESSAGE];
-  extern const char                      errorMessages[NUMBER_OF_ERROR_CODES][SIZE_OF_EACH_ERROR_MESSAGE];
+  const char *errorMessageOf(uint8_t errorCode);
   extern const calcKey_t                 kbd_std_C47[37];
   extern const calcKey_t                 kbd_std_DM42[37];
   extern const calcKey_t                 kbd_std_R47[37];
@@ -256,8 +257,13 @@
   #if defined(PC_BUILD)
     #define kbd_std                      (calcModel == USER_C47 ? kbd_std_C47 : calcModel == USER_DM42 ? kbd_std_DM42 : calcModel == USER_R47f_g ? kbd_std_R47f_g : calcModel == USER_R47bk_fg ? kbd_std_R47bk_fg : calcModel == USER_R47fg_bk ? kbd_std_R47fg_bk : calcModel == USER_R47fg_g ? kbd_std_R47fg_g : \
                                           calcModel == USER_E47 ? kbd_std_E47 : calcModel == USER_D47 ?  kbd_std_D47 :  calcModel == USER_V47 ? kbd_std_V47 : calcModel == USER_N47 ?     kbd_std_N47 : calcModel == USER_DM42 ?     kbd_std_DM42 :    kbd_std_C47)
-  #else //!PC_BUILD
-    #define kbd_std                      (calcModel == USER_C47 ? kbd_std_C47 : calcModel == USER_DM42 ? kbd_std_DM42 : calcModel == USER_R47f_g ? kbd_std_R47f_g : calcModel == USER_R47bk_fg ? kbd_std_R47bk_fg : calcModel == USER_R47fg_bk ? kbd_std_R47fg_bk : calcModel == USER_R47fg_g ? kbd_std_R47fg_g : kbd_std_C47)
+  #elif CALCMODEL == USER_R47
+    // A hardware build carries only its own personality's layouts: the backup writer refuses to persist a foreign
+    // model (saveRestoreBackup.c) and the state loader only applies one from a matching file (saveRestoreCalcState.c),
+    // so the other tables are unreachable there and gating the selector lets the linker drop them.
+    #define kbd_std                      (calcModel == USER_R47bk_fg ? kbd_std_R47bk_fg : calcModel == USER_R47fg_bk ? kbd_std_R47fg_bk : calcModel == USER_R47fg_g ? kbd_std_R47fg_g : kbd_std_R47f_g)
+  #else //!PC_BUILD && CALCMODEL != USER_R47
+    #define kbd_std                      (calcModel == USER_DM42 ? kbd_std_DM42 : kbd_std_C47)
   #endif //!PC_BUILD
 
   #if defined(PC_BUILD)
@@ -274,6 +280,7 @@
   extern const char                      registerFlagLetters[27];
   extern any34Matrix_t                   openMatrixMIMPointer;
   extern uint16_t                        matrixIndex;
+  extern int16_t                         shadowI, shadowJ;
   extern void                            (* const addition[NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS][NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS])(void);
   extern void                            (* const subtraction[NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS][NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS])(void);
   extern void                            (* const multiplication[NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS][NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS])(void);
@@ -302,9 +309,6 @@
   extern bool_t                 lastProgramListEnd;
   extern bool_t                 programListEnd;
   extern bool_t                 pemCursorIsZerothStep;
-  extern bool_t                 secTick1;
-  extern bool_t                 halfSecTick2;
-  extern bool_t                 halfSecTick3;
   extern bool_t                 skippedStackLines;
   extern bool_t                 iterations;
   extern bool_t                 explicitTaylorIterVisibilitySelection;
@@ -315,6 +319,7 @@
   extern bool_t                 solverEstimatesUsed;
   extern bool_t                 graphAccActive;
   extern bool_t                 updateOldConstants;
+  extern bool_t                 eqnDrawLhsOnly;
 
 
   extern realContext_t          ctxtReal4;    //   Limited digits: used for high speed internal calcs
@@ -492,7 +497,6 @@
   extern int16_t                JM_auto_doublepress_autodrop_enabled;  //JM TIMER CLRDROP //drop
   extern int16_t                JM_auto_longpress_enabled;    //JM TIMER CLRDROP //clstk
   extern uint8_t                JM_SHIFT_HOME_TIMER1;         //Local to keyboard.c, but defined here
-  extern bool_t                 ULFL, ULGL;                   //JM Underline
   extern int16_t                FN_key_pressed, FN_key_pressed_last; //JM LONGPRESS FN
   extern bool_t                 FN_timeouts_in_progress;      //JM LONGPRESS FN
   extern bool_t                 Shft_timeouts;                //JM SHIFT NEW FN
@@ -536,6 +540,9 @@
   extern uint16_t               currentSolverProgram;
   extern uint16_t               currentSolverVariable;
   extern uint16_t               currentSolverNestingDepth;
+  extern uint16_t               engineNestingDepth;              // PLOT, INT and SOLVE combined, capped at MAX_ENGINE_NESTING_DEPTH; PLOT only at level 1
+  extern uint16_t               plotEngineActive;                // non-zero while a plot sweep runs, so PLOT_NESTING_ALLOWED can refuse an engine inside it
+  extern bool_t                 engineNestingWasRefused;         // why the run stopped, durable across the unwind where lastErrorCode is not: FLAG_IGN1ER wipes that
   extern uint16_t               numberOfFormulae;
   extern uint16_t               currentFormula;
   extern uint16_t               numberOfUserMenus;
@@ -567,8 +574,6 @@
   extern uint32_t               timerValue;
   extern uint32_t               timerStartTime;
   extern uint32_t               timerTotalTime;
-  extern uint32_t               pointerOfFlashPgmLibrary;
-  extern uint32_t               sizeOfFlashPgmLibrary;
 
   extern uint64_t               shortIntegerMask;
   extern uint64_t               shortIntegerSignBit;
@@ -614,12 +619,12 @@
   extern uint8_t                firstDayOfWeek;
   extern uint8_t                firstWeekOfYearDay;
 
-  //#if defined(IR_PRINTING)
+  //#if defined(OPTION_IR_PRINTING)
     extern printerState_t         printerState;
     extern const printerFont_t    printerFont8;
     extern const martelFont24_t   martelFont24;
     extern uint16_t               printerColumn;
-  //#endif //IR_PRINTING
+  //#endif //OPTION_IR_PRINTING
 
   extern uint16_t               alphaRegister;
   extern bool_t                 varMenu42;

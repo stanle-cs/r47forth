@@ -2015,10 +2015,10 @@
 #define ITM_USER_N47                1962
 #define ITM_USER_E47                1963
 #define ITM_USER_R47                1964
-#define ITM_1965                    1965
-#define ITM_1966                    1966
-#define ITM_1967                    1967
-#define ITM_1968                    1968
+#define ITM_SLVP                    1965
+#define ITM_STKtoV4                 1966
+#define ITM_V4toSTK                 1967
+#define ITM_stkexV4                 1968
 #define ITM_1969                    1969
 #define ITM_1970                    1970
 #define ITM_1971                    1971
@@ -2853,8 +2853,8 @@
 #define ITM_KGtoBLOB                2752
 #define ITM_TONNEtoKG               2753
 #define ITM_KGtoTONNE               2754
-#define ITM_2755                    2755
-#define ITM_2756                    2756 // XFN spares
+#define ITM_SIGMAnINF               2755
+#define ITM_2756                    2756 /*reserved export d47 data*/
 #define ITM_XEXPORT                 2757
 #define ITM_EXPATOW                 2758
 #define ITM_EXPSTK                  2759

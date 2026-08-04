@@ -407,7 +407,7 @@ void Sett(int16_t grp) {
 
 
   void fnSetHP35(uint16_t unusedButMandatoryParameter) {
-    #if !defined(SAVE_SPACE_DM42_21_HP35) && !defined(SAVE_SPACE_DM42_24_PROFILES)
+    #if defined(OPTION_HP35) && defined(OPTION_DEVPROFILES)
       getDateString(lastStateFileOpened);
       strcat(lastStateFileOpened, ": HP35 defaults");
       fnKeyExit(0);                            //Clear pending key input
@@ -423,12 +423,12 @@ void Sett(int16_t grp) {
       fnRefreshState();
       screenUpdatingMode = SCRUPD_AUTO;
       refreshScreen(160);
-    #endif //SAVE_SPACE_DM42_21_HP35
+    #endif //OPTION_HP35
   }
 
 
   void fnSetJM(uint16_t unusedButMandatoryParameter){
-  #if !defined(SAVE_SPACE_DM42_24_PROFILES)
+  #if defined(OPTION_DEVPROFILES)
     fnDrop(NOPARAM);
     resetOtherConfigurationStuff(true);
     getDateString(lastStateFileOpened);
@@ -462,12 +462,12 @@ void Sett(int16_t grp) {
     fnRefreshState();
     screenUpdatingMode = SCRUPD_AUTO;
     refreshScreen(161);
-  #endif //#!SAVE_SPACE_DM42_24_PROFILES
+  #endif //#!OPTION_DEVPROFILES
   }
 
 
   void fnSetRJ(uint16_t unusedButMandatoryParameter){
-  #if !defined(SAVE_SPACE_DM42_24_PROFILES)
+  #if defined(OPTION_DEVPROFILES)
     resetOtherConfigurationStuff(true);
     getDateString(lastStateFileOpened);
     strcat(lastStateFileOpened, ": RJvM defaults");
@@ -480,7 +480,7 @@ void Sett(int16_t grp) {
     fnRefreshState();
     screenUpdatingMode = SCRUPD_AUTO;
     refreshScreen(165);
-  #endif //!SAVE_SPACE_DM42_24_PROFILES
+  #endif //!OPTION_DEVPROFILES
   }
 
 
@@ -526,7 +526,9 @@ void fnClrMod(uint16_t unusedButMandatoryParameter) {        //clear input buffe
     clearSystemFlag(FLAG_IRFRAC);
     clearSystemFlag(FLAG_INTING);
     clearSystemFlag(FLAG_SOLVING);
-    programRunStop = PGM_STOPPED;
+    if(programRunStop != PGM_RUNNING) {                         // as a program step this leaves the graph and carries on; from the keyboard it still stops a halted run
+      programRunStop = PGM_STOPPED;
+    }
 
     if(calcMode == CM_NIM) {
       strcpy(aimBuffer, "+");
@@ -693,6 +695,16 @@ void fnGetWordSize(uint16_t unusedButMandatoryParameter) {
   temporaryInformation = TI_BITS;
 }
 
+
+
+// Bound a short integer word size arriving from a file. WSIZE's tamMinMax bounds the interactive path; the state file, backup.cfg and a config register supply it raw,
+// and every consumer shifts by it or by one less: config.c below, rotateBits.c:166, :223 and :313, mask.c:36. 0 already spells the widest word.
+uint8_t boundShortIntegerWordSize(uint8_t wordSize) {
+  if(wordSize < 1 || wordSize > MAX_SHORT_INTEGER_WORD_SIZE) {
+    return MAX_SHORT_INTEGER_WORD_SIZE;
+  }
+  return wordSize;
+}
 
 
 void updateShortIntegerMasks(void) {
@@ -1562,8 +1574,8 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
                                                                               // errorMessage     from    0 to (4095       )
        aimBuffer        = errorMessage + ERROR_MESSAGE_LENGTH;   // + 512     // aimBuffer        from  512 to (512  + 1024) or 1536
        nimBufferDisplay = aimBuffer + AIM_BUFFER_LENGTH;         // +1024     // nimBufferDisplay from 1536 to (1536 +  200) or 1736
-       tamBuffer        = nimBufferDisplay + NIM_BUFFER_LENGTH;  // + 200     // tamBuffer        from 1736 to (1736 +   32) or 1768
-                                          // TAM_BUFFER_LENGTH   // +  32
+       tamBuffer        = nimBufferDisplay + NIM_BUFFER_LENGTH;  // + 200     // tamBuffer        from 1736 to (1736 +   56) or 1792
+                                          // TAM_BUFFER_LENGTH   // +  56
 
        tmpStringLabelOrVariableName = tmpString + 1000;
     }
@@ -1651,6 +1663,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     // allocate space for the named variable list
     numberOfNamedVariables = 0;
     allNamedVariables = NULL;
+    invalidateNamedVariableCache();             // the table is gone: nothing findNamedVariable() remembers describes it any more
 
     initSimEqMatABX();
 
@@ -1730,9 +1743,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     shiftG = false;
     lastshiftF = false;
     lastshiftG = false;
-    secTick1 = false;
-    halfSecTick2 = false;
-    halfSecTick3 = false;
+    resetHalfSecTicks();
     skippedStackLines = false;
     iterations = false;
     explicitTaylorIterVisibilitySelection = false;
@@ -1866,14 +1877,14 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     // The following lines are test data
     #if defined(TESTSUITE_BUILD)
         addTestPrograms();
-    #elif !defined(SAVE_SPACE_DM42_14)
+    #elif defined(OPTION_SAMPLEPGMS)
                                    #if defined(PC_BUILD) && (VERBOSE_LEVEL > -1)
                                      printf("addTestPrograms\n");
                                    #endif
       if(loadTestPrograms) {
         addTestPrograms();
       }
-    #endif // !SAVE_SPACE_DM42_14
+    #endif // !OPTION_SAMPLEPGMS
 
     // Equation formulae
     allFormulae = NULL;
@@ -1884,6 +1895,8 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     currentSolverProgram = 0xffffu;
     currentSolverVariable = INVALID_VARIABLE;
     currentSolverNestingDepth = 0;
+    engineNestingDepth = 0;
+    plotEngineActive = 0;
     graphAccActive = false;
 
     graphVariabl1 = 0;
@@ -1919,13 +1932,13 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     }
 
     //Initialize Printer status
-    #if defined(IR_PRINTING)
+    #if defined(OPTION_IR_PRINTING)
       printerState.print_on         = false;          ///< Printing off
       printerState.print_blank_line = 0;              ///< Print space between lines
       printerState.print_mode       = PMODE_DEFAULT;  ///< printer modes;
       printerState.printer_model    = PRINTER_HP;     ///< printer modes;
       printerState.delay            = getLineDelay(); ///< printer line delay
-    #endif //IR_PRINTING
+    #endif //OPTION_IR_PRINTING
 
                                    #if defined(PC_BUILD) && (VERBOSE_LEVEL > -1)
                                      printf("version\n");
@@ -1967,11 +1980,35 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
 
   int16_t loop=0;
   int16_t loop2=0;
+
+  // Vbat sampling schedule: entry n gates sample n as the minimum ms since the previous get_vbat() ADC conversion, advancing per sample and saturating on the last entry.
+  // An expended battery has a high internal impedance, so the load of a starting run pulls the terminal voltage sharply down within seconds (decay curves in #154),
+  // while a healthy battery barely moves. The first samples go undelayed to catch that surge for the orderly low battery stop in items.c before an uncontrolled crash,
+  // then once the battery proves not to be in extreme flatness the spacing extends to a steady 2.5 s cadence, keeping the per dispatch ADC cost off healthy batteries.
+  // A top level program run start (runProgram()) and the change over from USB to battery (checkBattery()) restart the schedule.
+  TO_QSPI static const uint16_t vbatSampleDelay[] = {0, 0, 0, 50, 50, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 1000, 2500};
+  static uint8_t  vbatScheduleIdx = 0;
+  static uint32_t vbatSampledAt   = 0;                                                   // 0 = never sampled
+  static int      vbatSample      = 3100;
+
+  void resetVbatSampleSchedule(void) {
+    vbatScheduleIdx = 0;
+  }
+
   int updateVbatIntegrated(bool_t minutePulse) {
-    if(getSystemFlag(FLAG_USB)) {
-        return 3100;
+    // The minute pulse always converts, keeping the integrator creep cadence; every other caller follows vbatSampleDelay. Vbat is measured on USB power too,
+    // so BATT? and the integrator stay live while plugged; checkBattery() and the items.c stop both skip USB power, so USB never trips LOWBAT.
+    const uint32_t now = (uint32_t)sys_current_ms();
+    if(!minutePulse && vbatSampledAt != 0 && (now - vbatSampledAt) < vbatSampleDelay[vbatScheduleIdx]) {
+      return vbatSample;
     }
+    if(vbatScheduleIdx < nbrOfElements(vbatSampleDelay) - 1) {
+      vbatScheduleIdx++;
+    }
+    vbatSampledAt = now;
+
     int tmpVbat = get_vbat();
+    vbatSample = tmpVbat;
     if(tmpVbat > 1500 && tmpVbat < 3100) {
       if(tmpVbat < vbatVIntegrated) {
         vbatVIntegrated = tmpVbat;                                                        //immediately assume the lowest possibe value measured
@@ -2027,11 +2064,12 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
       if(getSystemFlag(FLAG_USB)) {
         clearSystemFlag(FLAG_USB);
         showHideUsbLowBattery();
+        resetVbatSampleSchedule();                                                       // the change over to battery is a fresh load step; resample undelayed
       }
 
       int tmpVbat = updateVbatIntegrated(false);
 
-      if(tmpVbat < 2100 || vbatVIntegrated < 2100) { //shutdown from the new integrator system. The indicator uses the integrator.
+      if(tmpVbat < BAT_MINIMUM || vbatVIntegrated < BAT_MINIMUM) { //shutdown from the new integrator system. The indicator uses the integrator.
         if(!getSystemFlag(FLAG_LOWBAT)) {
           setSystemFlag(FLAG_LOWBAT);
           showHideUsbLowBattery();
@@ -2136,9 +2174,9 @@ void fnKeysManagement(uint16_t choice) {
         Norm_Key_00.func = kbd_usr[Norm_Key_00_key].primary;
         Norm_Key_00.funcParam[0] = 0;
         Norm_Key_00.used = Norm_Key_00.func != kbd_std[Norm_Key_00_key].primary;
-        char *funcParam = (char *)getNthString((uint8_t *)userKeyLabel, Norm_Key_00_key * 6);
+        char *funcParam = (char *)getUserKeyLabelString(Norm_Key_00_key * 6);
         if((funcParam[0] != 0) && ((Norm_Key_00.func == -MNU_DYNAMIC)|| (Norm_Key_00.func == ITM_XEQ) || (Norm_Key_00.func == ITM_RCL)))  {
-          strcpy(Norm_Key_00.funcParam, (char *)getNthString((uint8_t *)userKeyLabel, Norm_Key_00_key * 6));       // name of a user menu, program or variable assigned to the Norm key
+          strcpy(Norm_Key_00.funcParam, (char *)getUserKeyLabelString(Norm_Key_00_key * 6));       // name of a user menu, program or variable assigned to the Norm key
         }
         fnRefreshState();
         fnClearFlag(FLAG_USER);

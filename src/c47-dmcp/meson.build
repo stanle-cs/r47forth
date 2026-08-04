@@ -7,14 +7,14 @@ dmcp_cargs = [
   '-fno-exceptions',                 # Added this line
   '-fno-unwind-tables',              # Added this line
   '-fno-asynchronous-unwind-tables', # Added this line
-  '-ffunction-sections',             # needed so prog_info lands in .rodata.prog_info (KEEP'd at offset 0); LTO otherwise merges .rodata and breaks the loader magic
+  '-ffunction-sections',             # needed so prog_info lands in .rodata.prog_info (KEEP'd at offset 0)
   '-fdata-sections',                 # ditto - matches the DMCP SDK reference build flags
-  '-flto',
 ]
 
 dmcp_linkargs = [
   '--specs=nano.specs',              # Reduces target size
   '--specs=nosys.specs',
+  '-u', '_realloc_r',                # keep it linked, newlib sprintf helper __ssputs_r needs it
 #  '-u', '_printf_float',             # Enable float printf
 #  '-u', '_scanf_float',              # Enable float scanf
   '-lc',                             # Link C standard library
@@ -26,10 +26,12 @@ dmcp_linkargs = [
   '-T' + meson.current_source_dir() + '/stm32_program.ld',
 #  '-Wl,--strip-all',                 # Add this line, try to reduce target size, more options to try later
   '-Wl,-u,prog_info',
-  '-ffunction-sections',             # passed at link too so the LTO code-gen (LTRANS) pass emits per-symbol sections
+  '-ffunction-sections',             # passed at link too so the linker emits per-symbol sections
   '-fdata-sections',
-  '-flto',
 ]
+
+# -flto is not used. Link time optimisation re-optimises the whole program, which costs about 14 kB more FLASH to drop but makes per-feature sizes readable and keeps the
+# generated code close to the source. get_option('mem') is left in place and now changes nothing here.
 
 gmp_build_dir = meson.project_build_root() / 'subprojects' / 'gmp-6.2.1' / 'build'
 gmp_lib_dir = meson.project_build_root() / 'subprojects' / 'gmp-6.2.1' / 'build' / '.libs'
@@ -43,6 +45,8 @@ arm_gmp_dep = declare_dependency(
 #
 # C47 Build : standard build for the DM42 board with the C47 bezel
 #
+
+console_src = files('hal/console.c') # linked as a direct ELF object so its stubs win over newlib's stdio
 
 c47_dmcp_src = files(
   'hal/audio.c',
@@ -63,7 +67,7 @@ c47_lib = static_library('libc47',
 # First pass building the ELF to get the size of the QSPI
 c47_pre_elf = executable('C47_pre.elf',
   build_by_default    : false,
-  sources             : dmcp_src + [vcs_h, version_h],
+  sources             : dmcp_src + console_src + [vcs_h, version_h],
   c_args              : dmcp_cargs,
   link_args           : dmcp_linkargs,
   dependencies        : arm_gmp_dep,
@@ -100,7 +104,7 @@ generated_qspi_crc_h = custom_target(
 # Second pass building the ELF including the correct qspi_crc.h
 c47_elf = executable('C47.elf',
   build_by_default    : false,
-  sources             : dmcp_src + [vcs_h, version_h, generated_qspi_crc_h],
+  sources             : dmcp_src + console_src + [vcs_h, version_h, generated_qspi_crc_h],
   c_args              : dmcp_cargs + ['-DUSE_GEN_QSPI_CRC'],
   link_args           : dmcp_linkargs,
   dependencies        : arm_gmp_dep,
@@ -182,7 +186,7 @@ r47_lib = static_library('libr47',
 # First pass building the ELF to get the size of the QSPI
 r47_pre_elf = executable('R47_pre.elf',
   build_by_default    : false,
-  sources             : dmcp_src + [vcs_h, version_h],
+  sources             : dmcp_src + console_src + [vcs_h, version_h],
   c_args              : dmcp_cargs + ['-DCALCMODEL=USER_R47'],
   link_args           : dmcp_linkargs,
   dependencies        : arm_gmp_dep,
@@ -219,7 +223,7 @@ generated_r47_qspi_crc_h = custom_target(
 # Second pass building the ELF including the correct qspi_crc.h
 r47_elf = executable('R47.elf',
   build_by_default    : false,
-  sources             : dmcp_src + [vcs_h, version_h, generated_r47_qspi_crc_h],
+  sources             : dmcp_src + console_src + [vcs_h, version_h, generated_r47_qspi_crc_h],
   c_args              : dmcp_cargs + ['-DUSE_GEN_R47_QSPI_CRC'] + ['-DCALCMODEL=USER_R47'],
   link_args           : dmcp_linkargs,
   dependencies        : arm_gmp_dep,

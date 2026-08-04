@@ -13,6 +13,7 @@ void fnClearStack(uint16_t unusedButMandatoryParameter) {
   for(calcRegister_t regist=REGISTER_X; regist<=getStackTop(); regist++) {
     clearRegister(regist);
   }
+  calcModeNormal();                                            // a cleared stack is only visible on the normal screen; nothing here halts a running program
 }
 
 
@@ -341,7 +342,7 @@ void undo(void) {
     printf(">>> Undoing, calcMode = %i ...", calcMode);
   #endif // DEBUGUNDO
                                         #if defined(DEBUGUNDO)
-                                          printf("Pre-existing error code: Error number %d:%s\n", lastErrorCode, errorMessages[lastErrorCode]);
+                                          printf("Pre-existing error code: Error number %d:%s\n", lastErrorCode, errorMessageOf(lastErrorCode));
                                           print_caller(NULL);
                                         #endif // DEBUGUNDO
 

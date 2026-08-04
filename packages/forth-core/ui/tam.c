@@ -773,10 +773,21 @@ printf("tam.value: %d\n", tam.value);
         tam.value = programList[numberOfPrograms - 1].step;
         pemCursorIsZerothStep = true;
         reallyRunFunction(ITM_GTOP, tam.value);
-        if((*currentStep != 0xff) || (*(currentStep + 1) != 0xff)) {
-          currentStep = firstFreeProgramByte;
-          insertStepInProgram(ITM_END);
-          scanLabelsAndPrograms();
+        uint16_t currentOp = *currentStep;
+        if(currentOp & 0x80) {
+          currentOp &= 0x7f;
+          currentOp <<= 8;
+          currentOp |= *(currentStep + 1);
+        }
+        if((currentOp != 0x7fff) && (currentOp != ITM_END)) {    // Not .END. and not END
+          uint16_t initialNumberOfProgram = numberOfPrograms;
+          do {
+            tam.value = programList[numberOfPrograms - 1].step;
+            reallyRunFunction(ITM_GTOP, tam.value);
+            currentStep = firstFreeProgramByte;
+            insertStepInProgram(ITM_END);
+            scanLabelsAndPrograms();
+          } while(numberOfPrograms == initialNumberOfProgram);  // do until inserting ITM_END has added a new program
           tam.value = programList[numberOfPrograms - 1].step;
           reallyRunFunction(ITM_GTOP, tam.value);
         }
@@ -948,10 +959,10 @@ printf("tam.value: %d\n", tam.value);
               value = (value2 != FAILED_INDIRECTION ? value2 : INVALID_VARIABLE);
             }
             else {
-              #if defined(IR_PRINTING)
+              #if defined(OPTION_IR_PRINTING)
                 sprintf(errorMessage, "'%s'", buffer);
                 printTraceErrorFunction(tam.function, errorMessage);
-              #endif //IR_PRINTING
+              #endif //OPTION_IR_PRINTING
 
               displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
               #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -962,9 +973,10 @@ printf("tam.value: %d\n", tam.value);
           }
         }
         if(value == INVALID_VARIABLE && ((tam.function == ITM_XEQ) || (tam.function == ITM_XEQP1))) {  // If no label found then look for XEQ 'function'
-          if(!tam.indirect) {                                                                          //  indirection (XEQ -> 'function') not supported
+          if(!tam.indirect && !tam.colon) {                                                                          //  indirection (XEQ -> 'function') not supported
             for(int i = 0; i < LAST_ITEM; ++i) {
-              if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(buffer, indexOfItems[i].itemCatalogName, CMP_NAME) == 0) { //change here to slacken the character check for commands: CMP_CLEANED_STRING_ONLY
+              // Match strictness: CMP_NAME strict (exact spelling & space), CMP_COMMAND relax (exact spelling, any space), CMP_CLEANED_STRING_ONLY loose (rank1 equiv., beware not tested)
+              if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(buffer, indexOfItems[i].itemCatalogName, CMP_COMMAND) == 0) {
                 leaveTamModeIfEnabled();
                 if(calcMode == CM_PEM) {
                   aimBuffer[0] = 0;
@@ -990,10 +1002,10 @@ printf("tam.value: %d\n", tam.value);
           if(calcMode != CM_PEM) {
             leaveTamModeIfEnabled();
             if(!tam.indirect) {
-              #if defined(IR_PRINTING)
+              #if defined(OPTION_IR_PRINTING)
                 sprintf(errorMessage, "'%s'", buffer);
                 printTraceErrorFunction(tam.function, errorMessage);
-              #endif //IR_PRINTING
+              #endif //OPTION_IR_PRINTING
 
               displayCalcErrorMessage(ERROR_FUNCTION_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
               #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -1013,10 +1025,10 @@ printf("tam.value: %d\n", tam.value);
             #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
           }
           else if(calcMode != CM_PEM || (tam.function != ITM_GTO && tam.mode != TM_KEY)) {
-            #if defined(IR_PRINTING)
+            #if defined(OPTION_IR_PRINTING)
               sprintf(errorMessage, "'%s'", buffer);
               printTraceErrorFunction(tam.function, errorMessage);
-            #endif //IR_PRINTING
+            #endif //OPTION_IR_PRINTING
             displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
             #if (EXTRA_INFO_ON_CALC_ERROR == 1)
               sprintf(errorMessage, "string '%s' is not a named label", buffer);
@@ -1049,10 +1061,10 @@ printf("tam.value: %d\n", tam.value);
             #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
           }
           else {
-            #if defined(IR_PRINTING)
+            #if defined(OPTION_IR_PRINTING)
               sprintf(errorMessage, "'%s'", buffer);
               printTraceErrorFunction(tam.function, errorMessage);
-            #endif //IR_PRINTING
+            #endif //OPTION_IR_PRINTING
 
             displayCalcErrorMessage(ERROR_UNDEF_MENU, ERR_REGISTER_LINE, REGISTER_X);
             #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -1074,10 +1086,10 @@ printf("tam.value: %d\n", tam.value);
             #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
           }
           else {
-            #if defined(IR_PRINTING)
+            #if defined(OPTION_IR_PRINTING)
               sprintf(errorMessage, "'%s'", buffer);
               printTraceErrorFunction(tam.function, errorMessage);
-            #endif //IR_PRINTING
+            #endif //OPTION_IR_PRINTING
 
             displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
             #if (EXTRA_INFO_ON_CALC_ERROR == 1)

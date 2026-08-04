@@ -7,13 +7,22 @@
 
 #include "c47.h"
 
+#if !defined(OPTION_EIGEN)                                                    // stubs for the eigen suite (real code is guarded below): EIGVAL EIGVEC M.QR MSQRT
+  void fnMatrixSquareRoot(uint16_t unusedParamButMandatory) {}
+  void fnQrDecomposition (uint16_t unusedParamButMandatory) {}
+  void fnEigenvalues     (uint16_t unusedParamButMandatory) {}
+  void fnEigenvectors    (uint16_t unusedParamButMandatory) {}
+#endif // !OPTION_EIGEN
 
+
+#if defined(OPTION_EIGEN)
 static void sqrtRealMatrix     (const real34Matrix_t *matrix, real34Matrix_t *res);
 static void sqrtComplexMatrix  (const complex34Matrix_t *matrix, complex34Matrix_t *res);
 static void realEigenvalues    (const real34Matrix_t *matrix, real34Matrix_t *res, real34Matrix_t *ires);
 static void complexEigenvalues (const complex34Matrix_t *matrix, complex34Matrix_t *res);
 static void realEigenvectors   (const real34Matrix_t *matrix, real34Matrix_t *res, real34Matrix_t *ires);
 static void complexEigenvectors(const complex34Matrix_t *matrix, complex34Matrix_t *res);
+#endif // OPTION_EIGEN
 
 
 // Eigenvalue setup
@@ -955,6 +964,7 @@ void fnInvertMatrix(uint16_t unusedParamButMandatory) {
 }
 
 
+#if defined(OPTION_EIGEN)
 void fnMatrixSquareRoot(uint16_t unusedParamButMandatory) {
   if(!saveLastX()) {
     return;
@@ -1094,6 +1104,9 @@ void fnMatrixSquareRoot(uint16_t unusedParamButMandatory) {
 }
 
 
+#endif // OPTION_EIGEN
+
+
 static void _fnEuclideanNorm(uint16_t pParam) {
   if(getRegisterDataType(REGISTER_X) == dtReal34Matrix) {
     real34Matrix_t matrix;
@@ -1128,13 +1141,6 @@ static void _fnEuclideanNorm(uint16_t pParam) {
   }
 
   adjustResult(REGISTER_X, false, true, REGISTER_X, -1, -1);
-}
-
-
-void fnEuclideanNorm(uint16_t unusedParamButMandatory) {
-  if(saveLastX()) {
-    _fnEuclideanNorm(NOPARAM);
-  }
 }
 
 
@@ -1531,6 +1537,7 @@ void fnEditLinearEquationMatrixX(uint16_t unusedParamButMandatory) {
 }
 
 
+#if defined(OPTION_EIGEN)
 void fnQrDecomposition(uint16_t unusedParamButMandatory) {
   if(!saveLastX()) {
     return;
@@ -1981,9 +1988,13 @@ return;
 }
 
 
+#endif // OPTION_EIGEN
+
+
 bool_t realMatrixInit(real34Matrix_t *matrix, uint16_t rows, uint16_t cols) {
   //Allocate Memory for Matrix
   const size_t neededSize = rows * cols * REAL34_SIZE_IN_BLOCKS;
+  matrix->header.mtag = amNone;
   if(!isMemoryBlockAvailable(neededSize, 2, 0.1f)) {
     matrix->header.matrixColumns = matrix->header.matrixRows = 0;
     matrix->matrixElements = NULL;
@@ -2093,6 +2104,7 @@ void realMatrixRedim(real34Matrix_t *matrix, uint16_t rows, uint16_t cols) {
 bool_t complexMatrixInit(complex34Matrix_t *matrix, uint16_t rows, uint16_t cols) {
   //Allocate Memory for Matrix
   const size_t neededSize = rows * cols * COMPLEX34_SIZE_IN_BLOCKS;
+  matrix->header.mtag = amNone;
   if(!isMemoryBlockAvailable(neededSize, 2, 0.1f)) {
     matrix->header.matrixColumns = matrix->header.matrixRows = 0;
     matrix->matrixElements = NULL;
@@ -2228,7 +2240,7 @@ bool_t initMatrixRegister(calcRegister_t regist, uint16_t rows, uint16_t cols, b
   #if defined(PC_BUILD)
     if(lastErrorCode != ERROR_NONE) {
       errorf("initMatrixRegister(): Entered initMatrixRegister with pre-existing error.");
-      printf("  Error code: %d:%s\n", lastErrorCode, errorMessages[lastErrorCode]);
+      printf("  Error code: %d:%s\n", lastErrorCode, errorMessageOf(lastErrorCode));
     }
   #endif //PC_BUILD
 
@@ -2240,6 +2252,7 @@ bool_t initMatrixRegister(calcRegister_t regist, uint16_t rows, uint16_t cols, b
   else if(lastErrorCode == ERROR_NONE) {
     REGISTER_MATRIX_HEADER(regist)->matrixRows    = rows;
     REGISTER_MATRIX_HEADER(regist)->matrixColumns = cols;
+    REGISTER_MATRIX_HEADER(regist)->mtag          = amNone;
     if(complex) {
       for(uint16_t i = 0; i < rows * cols; ++i) {
         real34SetZero(VARIABLE_REAL34_DATA(REGISTER_COMPLEX34_MATRIX_ELEMENTS(regist) + i));
@@ -2255,7 +2268,7 @@ bool_t initMatrixRegister(calcRegister_t regist, uint16_t rows, uint16_t cols, b
   }
   else {
     #if defined(PC_BUILD)
-      printf("  initMatrixRegister(): Error number %d:%s\n", lastErrorCode, errorMessages[lastErrorCode]);
+      printf("  initMatrixRegister(): Error number %d:%s\n", lastErrorCode, errorMessageOf(lastErrorCode));
     #endif //PC_BUILD
     return false;
   }
@@ -2483,8 +2496,9 @@ void copyComplexMatrix(const complex34Matrix_t *matrix, complex34Matrix_t *res) 
 void linkToRealMatrixRegister(calcRegister_t regist, real34Matrix_t *linkedMatrix) {
   linkedMatrix->header.matrixRows    = REGISTER_MATRIX_HEADER(regist)->matrixRows;
   linkedMatrix->header.matrixColumns = REGISTER_MATRIX_HEADER(regist)->matrixColumns;
-  if((REGISTER_X <= regist && regist <= REGISTER_T) && isMatrixVector(linkedMatrix->header.matrixRows, linkedMatrix->header.matrixColumns)) {
-    linkedMatrix->header.mtag        = globalRegister[regist].tag;  // Get directly from register; this is only used for display of X-T registers, so it is hard coded to globalregisters
+  linkedMatrix->header.mtag          = amNone;   // default; without it, a non-vector or non-X-T link leaves mtag uninitialised and displayVectorAngle reads it
+  if(isMatrixVector(linkedMatrix->header.matrixRows, linkedMatrix->header.matrixColumns)) {
+    linkedMatrix->header.mtag        = getRegisterTag(regist);   // any register class: SHOW and VIEW link registers outside X-T
   }
   linkedMatrix->matrixElements       = REGISTER_REAL34_MATRIX_ELEMENTS(regist);
 }
@@ -2494,6 +2508,7 @@ void linkToRealMatrixRegister(calcRegister_t regist, real34Matrix_t *linkedMatri
 void linkToComplexMatrixRegister(calcRegister_t regist, complex34Matrix_t *linkedMatrix) {
   linkedMatrix->header.matrixRows    = REGISTER_MATRIX_HEADER(regist)->matrixRows;
   linkedMatrix->header.matrixColumns = REGISTER_MATRIX_HEADER(regist)->matrixColumns;
+  linkedMatrix->header.mtag          = amNone;   // same as the real link: keep mtag defined for readers
   linkedMatrix->matrixElements       = REGISTER_COMPLEX34_MATRIX_ELEMENTS(regist);
 }
 
@@ -2513,7 +2528,7 @@ void insRowRealMatrix(real34Matrix_t *matrix, uint16_t beforeRowNo, bool_t add) 
       real34Copy(matrix->matrixElements + i, newMat.matrixElements + i);
     }
     for(i = 0; i < cols; ++i) {
-      real34Copy(const34_0, newMat.matrixElements + (beforeRowNo * cols + i));
+      real34SetZero(newMat.matrixElements + (beforeRowNo * cols + i));
     }
     for(i = beforeRowNo * cols; i < cols * rows; ++i) {
       real34Copy(matrix->matrixElements + i, newMat.matrixElements + (i + cols));
@@ -2550,7 +2565,7 @@ void insColRealMatrix(real34Matrix_t *matrix, uint16_t beforeColNo, bool_t add) 
       }
     }
     for(i = 0; i < rows; ++i) {
-      real34Copy(const34_0, newMat.matrixElements + (beforeColNo + i*(cols+1)));
+      real34SetZero(newMat.matrixElements + (beforeColNo + i*(cols+1)));
     }
     for(j = beforeColNo; j < cols; ++j) {
       for( i = 0; i < rows; i++) {
@@ -2587,8 +2602,8 @@ void insRowComplexMatrix(complex34Matrix_t *matrix, uint16_t beforeRowNo, bool_t
       complex34Copy(matrix->matrixElements + i, newMat.matrixElements + i);
     }
     for(i = 0; i < cols; ++i) {
-      real34Copy(const34_0, VARIABLE_REAL34_DATA(newMat.matrixElements + (beforeRowNo * cols + i)));
-      real34Copy(const34_0, VARIABLE_IMAG34_DATA(newMat.matrixElements + (beforeRowNo * cols + i)));
+      real34SetZero(VARIABLE_REAL34_DATA(newMat.matrixElements + (beforeRowNo * cols + i)));
+      real34SetZero(VARIABLE_IMAG34_DATA(newMat.matrixElements + (beforeRowNo * cols + i)));
     }
     for(i = beforeRowNo * cols; i < cols * rows; ++i) {
       complex34Copy(matrix->matrixElements + i, newMat.matrixElements + (i + cols));
@@ -2625,8 +2640,8 @@ void insColComplexMatrix(complex34Matrix_t *matrix, uint16_t beforeColNo, bool_t
       }
     }
     for(i = 0; i < rows; ++i) {
-      real34Copy(const34_0, VARIABLE_REAL34_DATA(newMat.matrixElements + (beforeColNo + i*(cols+1))));
-      real34Copy(const34_0, VARIABLE_IMAG34_DATA(newMat.matrixElements + (beforeColNo + i*(cols+1))));
+      real34SetZero(VARIABLE_REAL34_DATA(newMat.matrixElements + (beforeColNo + i*(cols+1))));
+      real34SetZero(VARIABLE_IMAG34_DATA(newMat.matrixElements + (beforeColNo + i*(cols+1))));
     }
     for(j = beforeColNo; j < cols; ++j) {
       for( i = 0; i < rows; i++) {
@@ -4102,6 +4117,7 @@ static void halfSumRealMatrices(const real34Matrix_t *a, const real34Matrix_t *b
 #endif //MATRIX_SQRT_USE_EIGEN
 
 
+#if defined(OPTION_EIGEN)
 static bool_t isRealMatrixDiagonal(const real34Matrix_t *matrix) {
   const uint16_t rows = matrix->header.matrixRows;
   const uint16_t cols = matrix->header.matrixColumns;
@@ -4702,6 +4718,8 @@ fail:
   res->header.matrixRows = res->header.matrixColumns = 0;
 }
 
+
+#endif // OPTION_EIGEN
 
 void invertComplexMatrix(const complex34Matrix_t *matrix, complex34Matrix_t *res) {
   const uint16_t n = matrix->header.matrixColumns;
@@ -5331,6 +5349,7 @@ static void cpxLinearEqn(const real_t *a, const real_t *b, real_t *r, uint16_t s
 
 
 /* Routines for calculating eigenpairs */
+#if defined(OPTION_EIGEN)
 static void adjCpxMat(const real_t *x, uint16_t size, real_t *res) {
   int32_t i, j;
   for(i = 0; i < size; ++i) {
@@ -6546,7 +6565,10 @@ static void solveEigenBlock(real_t *a, real_t *eig, uint16_t size, int first_unc
 
 
 
-static void calculateEigenvalues(real_t *a, real_t *q, real_t *r, real_t *eig, real_t *previousDiagonal, uint16_t size, bool_t shifted, bool_t reducedSignificantDigits, realContext_t *realContext) {
+#if !defined(OPTION_SLVP_POLY)                                                                     // SLVP feeds its companion matrix through here; without it the engine stays file-local
+static
+#endif // !OPTION_SLVP_POLY
+void calculateEigenvalues(real_t *a, real_t *q, real_t *r, real_t *eig, real_t *previousDiagonal, uint16_t size, bool_t shifted, bool_t reducedSignificantDigits, realContext_t *realContext) {
   real_t SumTolerance, changeDiagonalSum, previousChangeDiagonalSum;
 
   real_t progress_indicator;
@@ -6659,6 +6681,11 @@ static void calculateEigenvalues(real_t *a, real_t *q, real_t *r, real_t *eig, r
   #if defined(EIGENDEBUGMINIMAL) || defined(EIGENDEBUG)
     printf("START, looking for easy analytic solves\n");
   #endif //EIGENDEBUGMINIMAL) || defined(EIGENDEBUG)
+
+  currentKeyCode = 255;
+  ++currentSolverNestingDepth;                                                                // the epilogue decrement runs on every path: increment here too, not in the QR branch only,
+  setSystemFlag(FLAG_SOLVING);                                                                // or each analytic 2x2/3x3 solve underflows the depth and FLAG_SOLVING never clears
+
   if(size == 2) {
     calculateEigenvalues22(a, size, eig, eig + 1, eig + 6, eig + 7, is_real_symmetric, realContext);
     sortEigenvalues(eig, size, 0, (size + 1) / 2, size - 1, realContext);
@@ -6712,10 +6739,6 @@ static void calculateEigenvalues(real_t *a, real_t *q, real_t *r, real_t *eig, r
       }
       converged = true;
     }
-
-    currentKeyCode = 255;
-    ++currentSolverNestingDepth;
-    setSystemFlag(FLAG_SOLVING);
 
 
 
@@ -8222,6 +8245,9 @@ static void complexEigenvectors(const complex34Matrix_t *matrix, complex34Matrix
     }
   }
 }
+
+
+#endif // OPTION_EIGEN
 
 
 static void elementwiseRemaGetResult(bool_t *complex, real34Matrix_t *x, complex34Matrix_t *xc, int i) {

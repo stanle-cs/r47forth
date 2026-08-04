@@ -62,12 +62,6 @@
   void       fnInvertMatrix                 (uint16_t unusedParamButMandatory);
   void       fnMatrixSquareRoot             (uint16_t unusedParamButMandatory);
 
-  /**
-   * Euclidean norm of matrix X.
-   *
-   * \param[in] unusedParamButMandatory
-   */
-
   void       fnPNorm                        (uint16_t unusedParamButMandatory);
   void       fnVectorDist                   (uint16_t unusedParamButMandatory);
   void       convert3DtoSPH                 (const real34Matrix_t *matrix, real_t *r, real_t *th1, real_t *th2, uint8_t am, decContext *ctxtRealDisplay);
@@ -150,6 +144,14 @@
   void       fnEigenvalues                  (uint16_t unusedParamButMandatory);
 
   void       fnEigenvectors                 (uint16_t unusedParamButMandatory);
+
+  #if defined(OPTION_SLVP_POLY)
+  /**
+   * Eigenvalues of a size x size matrix held as caller-allocated interleaved re/im real_t arrays; results land on the diagonal of eig.
+   * SLVP feeds its companion matrix through here; on builds without SLVP the engine stays file-local.
+   */
+  void       calculateEigenvalues           (real_t *a, real_t *q, real_t *r, real_t *eig, real_t *previousDiagonal, uint16_t size, bool_t shifted, bool_t reducedSignificantDigits, realContext_t *realContext);
+  #endif // OPTION_SLVP_POLY
 
   /**
    * Saves the STATS matrix if STATS is available.

@@ -18,11 +18,16 @@ extern const int16_t menu_alpha_INTL[];
 extern const int16_t menu_alpha_intl[];
 extern const int16_t menu_REGIST[];
 extern const softmenu_t softmenu[];
+const char *_ioFileNameFromFilePath(ioFilePath_t path); // the suite's own HAL (hal/io.c); no public header declares it
 char line[100000], lastInParameters[10000], fileName[1000], *filePath, filePathName[2000], registerExpectedAndValue[2400], realString[2400];
 char testCaseName[1000], testCasePrefix[1000], testCaseSuffix[1000];
 int32_t lineNumber, numTestsFile, numTestsTotal, successfulTests, failedTests;
 int32_t functionIndex, funcType, correctSignificantDigits;
-bool_t noFailForNow;
+bool_t noFailForNow = true; // abortTest counts a failure only while set; starts true so the run's first test can fail
+// Set by every rejection path in functionToCall() and itemToCall(); the Out: handler fails the case, and the next setup line or the end of the file clears it.
+bool_t caseSetupFailed;
+// Set when an Out: line has already failed the case, so countUnreportedSetupFailure() does not count that same rejection again when the file or the block ends.
+bool_t caseSetupReported;
 
 uint16_t label, functionParameter;
 
@@ -36,6 +41,7 @@ bool_t          screenChange;
 void (*funcToTest)(uint16_t);
 void runPgm(uint16_t unusedButMandatoryParameter);
 void covBackupRoundtrip(uint16_t unusedButMandatoryParameter);
+void covBackupCorruptRegionCount(uint16_t which);
 void covConvToSI(uint16_t itemNr);
 void covConvFromSI(uint16_t itemNr);
 void covStateRoundtrip(uint16_t unusedButMandatoryParameter);
@@ -43,14 +49,28 @@ void covShortIntWordSizeRestore(uint16_t unusedButMandatoryParameter);
 void covEqCalc(uint16_t unusedButMandatoryParameter);
 void covDerivEq(uint16_t order);
 void covSolveRoot(uint16_t which);
+void covCpxSolveRoot(uint16_t which);
+void covEqSolveDispatch(uint16_t which);
+void covMimRowCol(uint16_t op);
+void covIndexedElement(uint16_t op);
 void covDerivErr(uint16_t which);
 void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
+void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter);
+void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter);
+void covIterationTi(uint16_t which);
+void covNamedVariableFold(uint16_t unusedButMandatoryParameter);
+void covStatsRegister(uint16_t unusedButMandatoryParameter);
 void covDerivPgm(uint16_t order);
+void covDerivMvarPgm(uint16_t which);
 void covSolvePgm(uint16_t unusedButMandatoryParameter);
+void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter);
 void covIntegrate(uint16_t which);
 void covIntegrateErr(uint16_t which);
+void covMvarKey(uint16_t which);
+void covMatrixEditorScroll(uint16_t which);
 void covIntegratePgm(uint16_t unusedButMandatoryParameter);
+void covNamedVariableCache(uint16_t unusedButMandatoryParameter);
 void covSumProd(uint16_t which);
 void covISumProd(uint16_t which);
 void covProgramFlow(uint16_t which);
@@ -61,7 +81,9 @@ void covEffToI(uint16_t unusedButMandatoryParameter);
 void covAmort(uint16_t which);
 void covAmortNext(uint16_t which);
 void covEqSet(uint16_t which);
+void covEqClear(uint16_t unusedButMandatoryParameter);
 void covLoadGraphPgms(uint16_t unusedButMandatoryParameter);
+void covLoadNestedPgms(uint16_t unusedButMandatoryParameter);
 void covBmpName(uint16_t which);
 void covHashBmp(uint16_t which);
 
@@ -130,6 +152,8 @@ const funcTest_t funcTestNoParam[] = {
   {"fnRecallDiv",            fnRecallDiv           },
   {"fnRecallMax",            fnRecallMax           },
   {"fnRecallMin",            fnRecallMin           },
+  {"fnStoreConfig",          fnStoreConfig         },
+  {"fnRecallConfig",         fnRecallConfig        },
   {"fn2Sto",                 fn2Sto                },
   {"fn3Sto",                 fn3Sto                },
   {"fn2Rcl",                 fn2Rcl                },
@@ -137,6 +161,33 @@ const funcTest_t funcTestNoParam[] = {
   {"fnLastX",                fnLastX               },
   {"fnStoreStack",           fnStoreStack          },
   {"fnRecallStack",          fnRecallStack         },
+  // Vector store / recall. These index the matrix themselves - STOVEL/RCLVEL from the linear element number in FARG,
+  // Rnn>V / V>Rnn walking the whole matrix from the register in FARG - and park the walking index in the shadow row and
+  // column, so they need no INDEX and leave I, J and the indexed matrix as they found them.
+  {"fnStoreVElement",        fnStoreVElement       },
+  {"fnRecallVElement",       fnRecallVElement      },
+  {"fnStoreVector",          fnStoreVector         },
+  {"fnRecallVector",         fnRecallVector        },
+  // Matrix creation and dimensions (FARG = register number where one is taken).
+  {"fnNewMatrix",            fnNewMatrix           },
+  {"fnGetMatrixDimensions",  fnGetMatrixDimensions },
+  {"fnGetMatrixDimensions42", fnGetMatrixDimensions42},
+  {"fnSetMatrixDimensionsGr", fnSetMatrixDimensionsGr},
+  // M.GROW and M.WRAP are this one function, the flag arriving as the parameter: ON from M.GROW, OFF from M.WRAP.
+  {"fnSetGrowMode",          fnSetGrowMode         },
+  // The two editor entries whose only corpus-reachable arm is the mode guard: both work in CM_MIM and refuse elsewhere, and the corpus is always elsewhere.
+  {"fnOldMatrix",            fnOldMatrix           },
+  {"fnGoToElement",          fnGoToElement         },
+  // The row and column operations, reached without the editor driver so the corpus takes the arm each one runs outside CM_MIM. fnGoToRow and fnGoToColumn take
+  // the line number in FARG.
+  {"fnInsRow",               fnInsRow              },
+  {"fnAddRow",               fnAddRow              },
+  {"fnInsCol",               fnInsCol              },
+  {"fnAddCol",               fnAddCol              },
+  {"fnDelRow",               fnDelRow              },
+  {"fnDelCol",               fnDelCol              },
+  {"fnGoToRow",              fnGoToRow             },
+  {"fnGoToColumn",           fnGoToColumn          },
   // Value/type predicates and small math ops.
   {"fnCheckType",            fnCheckType           },
   {"fnIse",                  fnIse                 },
@@ -201,10 +252,14 @@ const funcTest_t funcTestNoParam[] = {
   // Backup serializer round-trip: save the whole calculator state to backup.cfg and restore it. Exercises both directions of saveRestoreBackup.c.
   // Resets the calculator, so its corpus test must run last.
   {"fnBackupRoundtrip",      covBackupRoundtrip, 1 },
+  {"fnBackupBadRegionCount", covBackupCorruptRegionCount, 1 },
   {"covConvToSI",            covConvToSI, 1 },
   {"covConvFromSI",          covConvFromSI, 1 },
+  {"fnPlotReset",            fnPlotReset           },
   {"fnEqSetCov",             covEqSet, 1 },
+  {"fnEqClearCov",           covEqClear, 1 },
   {"fnLoadGraphPgmsCov",     covLoadGraphPgms, 1 },
+  {"fnLoadNestedPgmsCov",    covLoadNestedPgms, 1 },
   {"fnBmpNameCov",           covBmpName, 1 },
   {"fnHashBmpCov",           covHashBmp, 1 },
   {"fnStateRoundtrip",       covStateRoundtrip, 1 },
@@ -212,14 +267,28 @@ const funcTest_t funcTestNoParam[] = {
   {"fnEqCalcCov",            covEqCalc, 1 },
   {"fnDerivEqCov",           covDerivEq, 1 },
   {"fnSolveRootCov",         covSolveRoot, 1 },
+  {"fnCpxSolveRootCov",      covCpxSolveRoot, 1 },
+  {"fnEqSolveDispatchCov",   covEqSolveDispatch, 1 },
+  {"fnMimRowColCov",         covMimRowCol, 1 },
+  {"fnIndexedElementCov",    covIndexedElement, 1 },
   {"fnDerivErrCov",          covDerivErr, 1 },
   {"fnSolveErrCov",          covSolveErr, 1 },
   {"fnLoadPgmCov",           covLoadPgm, 1 },
+  {"fnMvarPageNoPgmCov",     covMvarPageNoProgram, 1 },
+  {"fnLoadPgmLongLabelCov",  covLoadPgmLongLabel, 1 },
+  {"fnLoadStateLongLabelCov", covLoadStateLongLabel, 1 },
+  {"fnIterationTiCov",       covIterationTi, 1 },
+  {"fnNamedVarFoldCov",      covNamedVariableFold, 1 },
+  {"fnStatsRegisterCov",     covStatsRegister, 1 },
   {"fnDerivPgmCov",          covDerivPgm, 1 },
+  {"fnDerivMvarPgmCov",      covDerivMvarPgm, 1 },
   {"fnSolvePgmCov",          covSolvePgm, 1 },
   {"fnIntegrateCov",         covIntegrate, 1 },
   {"fnIntegrateErrCov",      covIntegrateErr, 1 },
+  {"fnMvarKeyCov",           covMvarKey, 1 },
+  {"fnMatEditScrollCov",     covMatrixEditorScroll, 1 },
   {"fnIntegratePgmCov",      covIntegratePgm, 1 },
+  {"fnNamedVarCacheCov",     covNamedVariableCache, 1 },
   {"fnSumProdCov",           covSumProd, 1 },
   {"fnISumProdCov",          covISumProd, 1 },
   {"fnProgramFlowCov",       covProgramFlow, 1 },
@@ -339,8 +408,11 @@ const funcTest_t funcTestNoParam[] = {
   {"fnDot",                  fnDot                 },
   {"fnDrop",                 fnDrop                },
   {"fnDropY",                fnDropY               },
+  {"fnConvertMxToStk",       fnConvertMxToStk      },
+  {"fnConvertStkToMx",       fnConvertStkToMx      },
   {"fnEigenvalues",          fnEigenvalues         },
   {"fnEigenvectors",         fnEigenvectors        },
+  {"fnExchangeStkToMx",      fnExchangeStkToMx     },
   {"fnEllipticE",            fnEllipticE           },
   {"fnEllipticEphi",         fnEllipticEphi        },
   {"fnEllipticFphi",         fnEllipticFphi        },
@@ -507,6 +579,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnSinh",                 fnSinh                },
   {"fnSl",                   fnSl                  },
   {"fnSlvc",                 fnSlvc                },
+  {"fnSlvp",                 fnSlvp                },
   {"fnSlvq",                 fnSlvq                },
   {"fnSquare",               fnSquare              },
   {"fnSr",                   fnSr                  },
@@ -606,6 +679,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnResetTVM",             fnResetTVM            },
   {"fnSetADM",               fnSetADM              },
   {"fnSetDMX",               fnSetDMX              },
+  {"fnSetWordSize",          fnSetWordSize         },
   {"fnSetISM",               fnSetISM              },
   {"fnSetNDEC",              fnSetNDEC             },
   {"fnSetBaseNr",            fnSetBaseNr           },
@@ -723,6 +797,72 @@ void covBackupRoundtrip(uint16_t unusedButMandatoryParameter) {
   loadTestPrograms = false;
   saveCalc();
   restoreCalc();
+}
+
+// Put one parameter line at the front of the backup file that saveCalc() has just written. restoreStateValue() takes the first line whose name matches and stops,
+// so a line prepended here shadows the genuine one further down while the rest of the file - including the hexDump bodies, which are found by walking on from
+// their own header line - stays byte for byte what the calculator wrote. That is the smallest way to hand the parser one corrupt field and nothing else.
+static void covShadowBackupLine(const char *shadowLine) {
+  const char *backupPath = _ioFileNameFromFilePath(ioPathBackup);   // not fileName: the suite has a global of that name
+  FILE       *f          = fopen(backupPath, "rb");
+  long        fileSize;
+  size_t      bytesRead;
+  char       *body;
+
+  if(f == NULL) {
+    return;
+  }
+  fseek(f, 0, SEEK_END);
+  fileSize = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  if(fileSize <= 0) {
+    fclose(f);
+    return;
+  }
+  body = malloc((size_t)fileSize);
+  if(body == NULL) {
+    fclose(f);
+    return;
+  }
+  bytesRead = fread(body, 1, (size_t)fileSize, f);
+  fclose(f);
+
+  f = fopen(backupPath, "wb");
+  if(f != NULL) {
+    fprintf(f, "%s\n", shadowLine);
+    fwrite(body, 1, bytesRead, f);
+    fclose(f);
+  }
+  free(body);
+}
+
+void covBackupCorruptRegionCount(uint16_t which) {
+  // Regression: a memory region count read from backup.cfg is checked before it is trusted. restoreCalc() multiplies the count by sizeof(freeMemoryRegion_t) to
+  // get the byte count the hexDump reader fills freeMemoryRegions or allocatedMemoryRegions with, and freeList.c then walks the same table that many entries
+  // deep. Neither table can pass its ceiling while the calculator runs, so a count outside 0..ceiling can only come from a corrupt file, and restoring it puts
+  // the writes and the walks past the end of a fixed-size table.
+  //
+  // Save a genuine backup, shadow one count line with an out-of-range value (which: 0 free regions, 1 allocated regions), and restore. The case reports 1 only
+  // if both counts are inside their tables afterwards, which they are when the loader refuses the file and leaves the reset calculator alone; without the check
+  // the file's count is live and the case reports 0.
+  //
+  // restoreCalc() bails when the sample programs are loaded, so clear that flag first, as covBackupRoundtrip does.
+  loadTestPrograms = false;
+  saveCalc();
+  covShadowBackupLine(which == 0 ? "numberOfFreeMemoryRegions:int32:100000" : "numberOfAllocatedMemoryRegions:int32:100000");
+  restoreCalc();
+
+  // Read the invariant off the globals before anything allocates: on a build without the check the tables are the file's, and the next allocation walks past them.
+  const bool_t regionCountsAreInsideTheirTables = (numberOfFreeMemoryRegions      >= 0 && numberOfFreeMemoryRegions      <= MAX_FREE_REGIONS     ) &&
+                                                  (numberOfAllocatedMemoryRegions >= 0 && numberOfAllocatedMemoryRegions <= MAX_ALLOCATED_REGIONS);
+
+  fnReset(CONFIRMED); // back onto a region table the allocator owns before a register is allocated for the result
+
+  longInteger_t li;
+  longIntegerInit(li);
+  uInt32ToLongInteger(regionCountsAreInsideTheirTables ? 1u : 0u, li);
+  convertLongIntegerToLongIntegerRegister(li, REGISTER_X);
+  longIntegerFree(li);
 }
 
 static void covStoTvm(int32_t value, uint16_t reg) {
@@ -859,6 +999,143 @@ void covSolveRoot(uint16_t which) {
   fnSolve(var);
 }
 
+void covCpxSolveRoot(uint16_t which) {
+  // Find a root of the current formula with the complex solver, fnEqSolvGraph(EQ_CPXSOLVE) -> complexSolver() in solver/graph.c. The guesses come from Y and X, the
+  // root lands in X. which selects the formula, and every root is exact:
+  //   0  X^2+4  roots +/-2i
+  //   1  X^2-4  roots +/-2, reached through the complex solver
+  //   2  X^3-1  roots 1, -1/2+/-(sqrt3/2)i
+  //   3  X^2+1  roots +/-i
+  //   4  X^4+4  roots +/-1+/-i, the only roots with a non-zero real part
+  //   5  5      no root, ERROR_NO_ROOT_FOUND
+  static const char * const cpxFormulae[] = {"X^2+4", "X^2-4", "X^3-1", "X^2+1", "X^4+4", "5"};
+  if(which >= sizeof(cpxFormulae) / sizeof(cpxFormulae[0])) {
+    return;
+  }
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, cpxFormulae[which]);
+  const uint16_t var = findOrAllocateNamedVariable("X");
+  currentSolverVariable = var;
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+  // Restore the angular mode: complexSolver runs ITM_RAD and never puts it back, so the solve returns in RAD whatever mode it was called in. FLAG_CPXRES is set there
+  // too, but undo restores the system flags, so it is clear on return and needs no restore.
+  const angularMode_t savedAngularMode = currentAngularMode;
+  fnEqSolvGraph(EQ_CPXSOLVE);
+  currentAngularMode = savedAngularMode;
+}
+
+// Put back the cursor a case states in I and J. fnEditMatrix and fnIndexMatrix both home it to (1,1). Both accessors take the 1-based value the user sees.
+static void covRestoreMatrixCursor(int16_t row, int16_t col) {
+  setIRegisterAsInt(false, row);
+  setJRegisterAsInt(false, col);
+}
+
+void covMimRowCol(uint16_t op) {
+  // Run one row or column operation of the matrix editor on the matrix in X and leave the result there. Each runs in CM_MIM only and ends in mimEnter(true).
+  // Read I and J before opening: ijIsShadowed() is calcMode == CM_MIM || ijShadowActive, so they address the registers here and the editor's shadow afterwards.
+  //   0 M.INSR   insert a row at the cursor row      3 M.COL+1  append a column last
+  //   1 M.ROW+1  append a row last                   4 M.DELR   delete the cursor row
+  //   2 M.INSC   insert a column at the cursor       5 M.DELC   delete the cursor column
+  const int16_t row = getIRegisterAsInt(false);
+  const int16_t col = getJRegisterAsInt(false);
+
+  fnEditMatrix(NOPARAM);
+  if(calcMode != CM_MIM) {
+    // Leave a refusal to the case, dropping any index an earlier file left: fnEditMatrix raises and stays out of CM_MIM, and the case asserts the code.
+    matrixIndex = INVALID_VARIABLE;
+    return;
+  }
+  covRestoreMatrixCursor(row, col);
+
+  switch(op) {
+    case 0:  fnInsRow(NOPARAM); break;
+    case 1:  fnAddRow(NOPARAM); break;
+    case 2:  fnInsCol(NOPARAM); break;
+    case 3:  fnAddCol(NOPARAM); break;
+    case 4:  fnDelRow(NOPARAM); break;
+    default: fnDelCol(NOPARAM); break;
+  }
+
+  // Close the editor the way fnKeyExit does in its CM_MIM branch (src/c47/keyboard.c), so no matrix stays open. mimEnter commits a digit buffer no case types
+  // into, and updateMatrixHeightCache is display state.
+  mimFinalize();
+  calcModeNormal();
+}
+
+void covIndexedElement(uint16_t op) {
+  // Run one operation on the INDEXed matrix, the element value going to and coming from X. None of them indexes a matrix, so index R00 with fnIndexMatrix - the
+  // handler behind INDEX - and put back the cursor it homes to (1,1).
+  //   0 STOEL   store X at the cursor            4 M.GETM    recall the submatrix, Y rows by X columns    8 I-
+  //   1 RCLEL   recall the cursor cell to X      5 M.PUTM    write the matrix in X in at the cursor       9 J+
+  //   2 STOSEQ  store X, then step J             6 M.FIND  search X and move the cursor onto a hit     10 J-
+  //   3 RCLSEQ  recall to X, then step J         7 I+
+  const int16_t row = getIRegisterAsInt(false);
+  const int16_t col = getJRegisterAsInt(false);
+
+  fnIndexMatrix(FIRST_GLOBAL_REGISTER); // R00
+  if(matrixIndex != FIRST_GLOBAL_REGISTER) {
+    // Leave a refusal to the case, dropping the index it left in place: fnIndexMatrix raises and the case asserts the code.
+    matrixIndex = INVALID_VARIABLE;
+    return;
+  }
+  covRestoreMatrixCursor(row, col);
+
+  switch(op) {
+    case 0:  fnStoreElement(NOPARAM);     break;
+    case 1:  fnRecallElement(NOPARAM);    break;
+    case 2:  fnStoreElementPlus(NOPARAM); break;
+    case 3:  fnRecallElementPlus(NOPARAM); break;
+    case 4:  fnGetMatrix(NOPARAM);        break;
+    case 5:  fnPutMatrix(NOPARAM);        break;
+    case 6:  fnMatrixFind(NOPARAM);       break;
+    case 7:  fnIncDecI(INC_FLAG);         break;
+    case 8:  fnIncDecI(DEC_FLAG);         break;
+    case 9:  fnIncDecJ(INC_FLAG);         break;
+    default: fnIncDecJ(DEC_FLAG);         break;
+  }
+
+  // Drop the index: it outlives the function that set it, and the corpus carries it into the next file.
+  matrixIndex = INVALID_VARIABLE;
+}
+
+void covEqSolveDispatch(uint16_t which) {
+  // Drive the solve arms of fnEqSolvGraph (solver/graph.c) that EQ_CPXSOLVE does not reach. which selects the arm and the formula, and every root is exact:
+  //   0  EQ_REALSOLVE     X^2-4, roots +/-2       guesses off the stack
+  //   1  EQ_CPXSOLVE_LU   X^4+4, roots +/-1+/-i   guesses from LEST/UEST
+  //   2  EQ_REALSOLVE_LU  X^2-4, roots +/-2       guesses from LEST/UEST
+  //   3  EQ_REALSOLVE     5, no root              ERROR_NO_ROOT_FOUND
+  // The _LU arms read RESERVED_VARIABLE_LEST/UEST and ignore the stack, so the stack pair and the estimate pair reach different roots: -5 and -1 on the stack reach
+  // -2 and -1-i, 1 and 5 in the estimates reach +2 and 1+i. A build reading the stack returns the wrong root.
+  const bool_t isLu = (which == 1 || which == 2);
+  if(which > 3) {
+    return;
+  }
+  if(numberOfFormulae == 0) {
+    fnEqNew(NOPARAM);
+  }
+  setEquation(currentFormula, which == 1 ? "X^4+4" : (which == 3 ? "5" : "X^2-4"));
+  const uint16_t var = findOrAllocateNamedVariable("X");
+  currentSolverVariable = var;
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+
+  if(isLu) {
+    // Seed the estimates as the non-LU arm does at solver/graph.c:2802.
+    real_t lower, upper;
+    int32ToReal(1, &lower);
+    int32ToReal(5, &upper);
+    reallocateRegister(RESERVED_VARIABLE_LEST, dtReal34, 0, amNone);
+    reallocateRegister(RESERVED_VARIABLE_UEST, dtReal34, 0, amNone);
+    realToReal34(&lower, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LEST));
+    realToReal34(&upper, REGISTER_REAL34_DATA(RESERVED_VARIABLE_UEST));
+  }
+
+  const angularMode_t savedAngularMode = currentAngularMode;
+  fnEqSolvGraph(which == 1 ? EQ_CPXSOLVE_LU : (which == 2 ? EQ_REALSOLVE_LU : EQ_REALSOLVE));
+  currentAngularMode = savedAngularMode;
+}
+
 void covDerivErr(uint16_t which) {
   // Drive the error/dispatch branches of the program-based derivative entry (derivativeCommon in differentiate.c), which the formula path covDerivEq does not reach.
   // which=0: a stack register whose letter names no program label -> ERROR_LABEL_NOT_FOUND; otherwise an out-of-range parameter -> ERROR_OUT_OF_RANGE.
@@ -899,10 +1176,198 @@ static void covWriteAndLoadPgm(const uint8_t *pgm, size_t n) {
   fnLoadProgram(NOPARAM);
 }
 
+void covIterationTi(uint16_t which) {
+  // Run one iteration op on the counter in R00 and leave 1 in X when it
+  // reports TI_TRUE (the decision a running program uses to skip the next
+  // step), else 0. The counter mutation itself is asserted through R00.
+  switch(which) {
+    case 0: fnIsz(0); break;
+    case 1: fnDsz(0); break;
+    case 2: fnIsg(0); break;
+    case 3: fnIse(0); break;
+    case 4: fnDse(0); break;
+    case 5: fnDsl(0); break;
+    default: break;
+  }
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(temporaryInformation == TI_TRUE ? 1 : 0, REGISTER_REAL34_DATA(REGISTER_X));
+  temporaryInformation = TI_NO_INFO;
+}
+
+void covNamedVariableFold(uint16_t unusedButMandatoryParameter) {
+  // The calculator treats subscript and superscript letters in a name as the plain letter, so both spellings must reach the same variable. These tests check for
+  // equivalence and non-equivalence, in both creation orders; the stored bytes are whichever spelling was created first.
+  uint16_t before = numberOfNamedVariables;
+  calcRegister_t sub = findOrAllocateNamedVariable(STD_SUB_a "q");   // subscript-a followed by q
+  calcRegister_t plainFind = findNamedVariable("aq");
+  calcRegister_t plainAlloc = findOrAllocateNamedVariable("aq");
+  if(sub == INVALID_VARIABLE || plainFind != sub || plainAlloc != sub || numberOfNamedVariables != before + 1) {
+    printf("\nfold-equivalent variable lookup broken: sub=%d find=%d alloc=%d vars %d->%d\n",
+           (int)sub, (int)plainFind, (int)plainAlloc, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Plain spelling created first; the subscript spelling must find it.
+  calcRegister_t plain = findOrAllocateNamedVariable("bk");
+  calcRegister_t subFind = findNamedVariable(STD_SUB_b "k");
+  calcRegister_t subAlloc = findOrAllocateNamedVariable(STD_SUB_b "k");
+  if(plain == INVALID_VARIABLE || subFind != plain || subAlloc != plain || numberOfNamedVariables != before + 2) {
+    printf("\nfold-cov 2 plain-created, sub probe: plain=%d find=%d alloc=%d vars %d->%d (all three must be one variable)\n",
+           (int)plain, (int)subFind, (int)subAlloc, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // A superscript letter is treated as the plain letter.
+  calcRegister_t supVar = findOrAllocateNamedVariable("m" STD_SUP_p);
+  if(supVar == INVALID_VARIABLE || findNamedVariable("mp") != supVar || findOrAllocateNamedVariable("mp") != supVar
+      || numberOfNamedVariables != before + 3) {
+    printf("\nfold-cov 3 superscript letter: supVar=%d find=%d vars %d->%d (probe of mp must hit supVar)\n",
+           (int)supVar, (int)findNamedVariable("mp"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Superscript 2 is a deliberate exception: x-squared and x2 stay distinct; superscript 3 is treated as plain 3.
+  calcRegister_t xSq = findOrAllocateNamedVariable("x" STD_SUP_2);
+  calcRegister_t x2 = findOrAllocateNamedVariable("x2");
+  if(xSq == INVALID_VARIABLE || x2 == INVALID_VARIABLE || x2 == xSq || numberOfNamedVariables != before + 5) {
+    printf("\nfold-cov 4 sup-2 excluded: xSq=%d x2=%d vars %d->%d (two distinct variables required)\n",
+           (int)xSq, (int)x2, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+  calcRegister_t x3 = findOrAllocateNamedVariable("x3");
+  if(x3 == INVALID_VARIABLE || findNamedVariable("x" STD_SUP_3) != x3 || numberOfNamedVariables != before + 6) {
+    printf("\nfold-cov 5 sup-3 folds: x3=%d find=%d vars %d->%d (probe of x-sup-3 must hit x3)\n",
+           (int)x3, (int)findNamedVariable("x" STD_SUP_3), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // A subscript digit is treated as the plain digit.
+  calcRegister_t d1 = findOrAllocateNamedVariable("d" STD_SUB_1);
+  if(d1 == INVALID_VARIABLE || findNamedVariable("d1") != d1 || numberOfNamedVariables != before + 7) {
+    printf("\nfold-cov 6 subscript digit: d1=%d find=%d vars %d->%d (probe of d1 must hit the sub-1 form)\n",
+           (int)d1, (int)findNamedVariable("d1"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Subscript alpha is treated as alpha: a two-byte glyph converting to another two-byte glyph.
+  calcRegister_t ga = findOrAllocateNamedVariable(STD_SUB_alpha "z");
+  if(ga == INVALID_VARIABLE || findNamedVariable(STD_alpha "z") != ga || numberOfNamedVariables != before + 8) {
+    printf("\nfold-cov 7 sub-alpha to alpha: ga=%d find=%d vars %d->%d (probe of alpha-z must hit ga)\n",
+           (int)ga, (int)findNamedVariable(STD_alpha "z"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // A 7-glyph name still matches by either spelling; an 8-glyph probe matches nothing and allocates nothing.
+  calcRegister_t seven = findOrAllocateNamedVariable("efghij" STD_SUB_9);
+  if(seven == INVALID_VARIABLE || findNamedVariable("efghij9") != seven || numberOfNamedVariables != before + 9) {
+    printf("\nfold-cov 8 7-glyph boundary: seven=%d find=%d vars %d->%d (probe of efghij9 must hit seven)\n",
+           (int)seven, (int)findNamedVariable("efghij9"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+  if(findNamedVariable("efghij99") != INVALID_VARIABLE || findOrAllocateNamedVariable("efghij99") != INVALID_VARIABLE
+      || numberOfNamedVariables != before + 9) {
+    printf("\nfold-cov 9 8-glyph name: find=%d vars %d->%d (must be INVALID_VARIABLE and allocate nothing)\n",
+           (int)findNamedVariable("efghij99"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // A shared prefix is not a match; the subscript probe hits the 2-glyph name only.
+  calcRegister_t pq = findOrAllocateNamedVariable("pq");
+  calcRegister_t pqr = findOrAllocateNamedVariable("pqr");
+  if(pq == INVALID_VARIABLE || pqr == INVALID_VARIABLE || pq == pqr
+      || findNamedVariable(STD_SUB_p "q") != pq || findNamedVariable("pqr") != pqr || numberOfNamedVariables != before + 11) {
+    printf("\nfold-cov 10 prefix: pq=%d pqr=%d subProbe=%d vars %d->%d (sub-p q must hit pq, never pqr)\n",
+           (int)pq, (int)pqr, (int)findNamedVariable(STD_SUB_p "q"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Upper and lower case stay distinct.
+  if(findNamedVariable("AQ") != INVALID_VARIABLE) {
+    printf("\nfold-cov 11 case: find(AQ)=%d (aq exists, AQ must stay INVALID_VARIABLE)\n", (int)findNamedVariable("AQ"));
+    abortTest();
+    return;
+  }
+
+  // Deleting a variable shifts the ones after it; lookups by either spelling must follow the shift.
+  fnDeleteVariable(sub);
+  calcRegister_t bkAfter = findNamedVariable("bk");
+  if(findNamedVariable("aq") != INVALID_VARIABLE || bkAfter == INVALID_VARIABLE
+      || findNamedVariable(STD_SUB_b "k") != bkAfter || numberOfNamedVariables != before + 10) {
+    printf("\nfold-cov 12 after delete: find(aq)=%d bk=%d subProbe=%d vars %d->%d (aq gone, bk still found both ways)\n",
+           (int)findNamedVariable("aq"), (int)bkAfter, (int)findNamedVariable(STD_SUB_b "k"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  const char *foldCovCleanup[] = {"bk", "mp", "x" STD_SUP_2, "x2", "x3", "d1", STD_alpha "z", "efghij9", "pq", "pqr"};
+  for(unsigned int i = 0; i < nbrOfElements(foldCovCleanup); i++) {
+    calcRegister_t regist = findNamedVariable(foldCovCleanup[i]);
+    if(regist == INVALID_VARIABLE) {
+      printf("\nfold-cov cleanup: %u not found\n", i);
+      abortTest();
+      return;
+    }
+    fnDeleteVariable(regist);
+  }
+  if(numberOfNamedVariables != before) {
+    printf("\nfold-cov cleanup: vars %d->%d (must return to the start count)\n", (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+}
+
+void covStatsRegister(uint16_t unusedButMandatoryParameter) {
+  // namedVariableIsStats(regist) must give the same answer as regist == findNamedVariable("STATS") for every register, without scanning the list.
+  // A reserved variable index is also >= FIRST_NAMED_VARIABLE, so the bound check - not the sign of the index - must reject it.
+  calcRegister_t createdStats = INVALID_VARIABLE;
+  if(findNamedVariable("STATS") == INVALID_VARIABLE) {
+    createdStats = findOrAllocateNamedVariable("STATS");
+    if(createdStats == INVALID_VARIABLE) {
+      printf("\nstats-cov: could not allocate STATS\n");
+      abortTest();
+      return;
+    }
+  }
+  const calcRegister_t statsReg = findNamedVariable("STATS");
+
+  const calcRegister_t probes[] = {REGISTER_X, FIRST_RESERVED_VARIABLE, LAST_RESERVED_VARIABLE, FIRST_NAMED_VARIABLE,
+                                   (calcRegister_t)(FIRST_NAMED_VARIABLE + numberOfNamedVariables), statsReg};
+  for(unsigned int i = 0; i < nbrOfElements(probes); i++) {
+    const bool_t expected = (probes[i] != INVALID_VARIABLE) && (probes[i] == statsReg);
+    if(namedVariableIsStats(probes[i]) != expected) {
+      printf("\nstats-cov probe %u reg=%d isStats=%d expected=%d statsReg=%d\n",
+             i, (int)probes[i], (int)namedVariableIsStats(probes[i]), (int)expected, (int)statsReg);
+      abortTest();
+      return;
+    }
+  }
+
+  // A STATS created here is the stats matrix, and stops being it once deleted.
+  if(createdStats != INVALID_VARIABLE) {
+    fnDeleteVariable(createdStats);
+    if(namedVariableIsStats(createdStats) || findNamedVariable("STATS") != INVALID_VARIABLE) {
+      printf("\nstats-cov: STATS still reported after delete (reg=%d)\n", (int)createdStats);
+      abortTest();
+      return;
+    }
+  }
+}
+
 void covLoadPgm(uint16_t unusedButMandatoryParameter) {
-  // Build and import two labelled RPN programs: S = X^2 - 4 (root at X=2, derivative 2X) for the solver / differentiator / integrator / real summation,
-  // and T = X^2 (which returns a long integer for a long-integer counter) for the indexed summation. Both reach the execProgram branches the formula corpus cannot.
-  // Bytes: LBL name / X^2 / [literal 4 / SUB] / END.
+  // Build and import three labelled RPN programs: S = X^2 - 4 (root at X=2, derivative 2X) for the solver / differentiator / integrator / real summation,
+  // T = X^2 (which returns a long integer for a long-integer counter) for the indexed summation, and M = X^2 behind a leading MVAR "A" so the interactive
+  // integrator accepts it (fnIntegrateErrCov FARG=3). All reach the execProgram branches the formula corpus cannot.
+  // Bytes: LBL name / [MVAR name] / X^2 / [literal 4 / SUB] / END.
   static const uint8_t pgmS[] = {
     ITM_LBL, STRING_LABEL_VARIABLE, 1, 'S',            // LBL "S"
     ITM_SQUARE,                                        // X^2
@@ -915,8 +1380,256 @@ void covLoadPgm(uint16_t unusedButMandatoryParameter) {
     ITM_SQUARE,                                        // X^2
     (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
   };
+  static const uint8_t pgmM[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'M',            // LBL "M"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'A', // MVAR "A"
+    ITM_SQUARE,                                        // X^2
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
+  };
   covWriteAndLoadPgm(pgmS, sizeof(pgmS));
   covWriteAndLoadPgm(pgmT, sizeof(pgmT));
+  covWriteAndLoadPgm(pgmM, sizeof(pgmM));
+}
+
+void covNamedVariableCache(uint16_t unusedButMandatoryParameter) {
+  // findNamedVariable() keeps the indices of its last two scan hits and trusts one only after re-matching its stored name, so a lookup stays correct across
+  // creates, deletes that compact the list, and re-creates, with the cache warm at every step. Identity is asserted through a value stored in each variable.
+  uint16_t before = numberOfNamedVariables;
+  calcRegister_t cva = findOrAllocateNamedVariable("cva");
+  calcRegister_t cvb = findOrAllocateNamedVariable("cvb");
+  calcRegister_t cvc = findOrAllocateNamedVariable("cvc");
+  if(cva == INVALID_VARIABLE || cvb == INVALID_VARIABLE || cvc == INVALID_VARIABLE || numberOfNamedVariables != before + 3) {
+    printf("\ncache-cov 1 create: cva=%d cvb=%d cvc=%d vars %d->%d\n", (int)cva, (int)cvb, (int)cvc, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+  int32ToReal34(101, REGISTER_REAL34_DATA(cva));
+  int32ToReal34(102, REGISTER_REAL34_DATA(cvb));
+  int32ToReal34(103, REGISTER_REAL34_DATA(cvc));
+
+  // Repeated and alternating lookups return the same register every time; a third name in rotation must not disturb the other two.
+  for(int i = 0; i < 4; i++) {
+    if(findNamedVariable("cva") != cva || findNamedVariable("cvb") != cvb || findNamedVariable("cvc") != cvc || findNamedVariable("cva") != cva) {
+      printf("\ncache-cov 2 rotation %d: find returned a different register for an unchanged name\n", i);
+      abortTest();
+      return;
+    }
+  }
+
+  // Delete the middle variable with lookups warm on all three: the deleted name must miss, the survivors must follow the compaction, values prove identity.
+  fnDeleteVariable(cvb);
+  calcRegister_t cvaAfter = findNamedVariable("cva");
+  calcRegister_t cvcAfter = findNamedVariable("cvc");
+  if(findNamedVariable("cvb") != INVALID_VARIABLE || cvaAfter == INVALID_VARIABLE || cvcAfter == INVALID_VARIABLE
+      || real34ToInt32(REGISTER_REAL34_DATA(cvaAfter)) != 101 || real34ToInt32(REGISTER_REAL34_DATA(cvcAfter)) != 103
+      || numberOfNamedVariables != before + 2) {
+    printf("\ncache-cov 3 after delete: cvb=%d cva=%d cvc=%d vars %d->%d (cvb gone, survivors keep their values)\n",
+           (int)findNamedVariable("cvb"), (int)cvaAfter, (int)cvcAfter, (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Re-create the deleted name: a fresh register, zeroed, and the survivors still resolve to their own values.
+  calcRegister_t cvbNew = findOrAllocateNamedVariable("cvb");
+  if(cvbNew == INVALID_VARIABLE || real34ToInt32(REGISTER_REAL34_DATA(cvbNew)) != 0
+      || findNamedVariable("cva") != cvaAfter || findNamedVariable("cvc") != cvcAfter || numberOfNamedVariables != before + 3) {
+    printf("\ncache-cov 4 re-create: cvbNew=%d cva=%d cvc=%d vars %d->%d (cvb zeroed, survivors unchanged)\n",
+           (int)cvbNew, (int)findNamedVariable("cva"), (int)findNamedVariable("cvc"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // A folded spelling and the stored spelling alternate onto the same variable.
+  calcRegister_t sub = findOrAllocateNamedVariable(STD_SUB_c "vd");
+  if(sub == INVALID_VARIABLE || findNamedVariable("cvd") != sub || findNamedVariable(STD_SUB_c "vd") != sub || findNamedVariable("cvd") != sub) {
+    printf("\ncache-cov 5 folded alternation: sub=%d plain=%d (both spellings must reach one variable)\n", (int)sub, (int)findNamedVariable("cvd"));
+    abortTest();
+    return;
+  }
+
+  // Delete the tail variable with the cache warm on it: its name must miss, and the survivors must be unaffected.
+  fnDeleteVariable(sub);
+  if(findNamedVariable("cvd") != INVALID_VARIABLE || findNamedVariable(STD_SUB_c "vd") != INVALID_VARIABLE
+      || findNamedVariable("cva") != cvaAfter || findNamedVariable("cvc") != cvcAfter || findNamedVariable("cvb") != cvbNew
+      || numberOfNamedVariables != before + 3) {
+    printf("\ncache-cov 6 delete tail: find(cvd)=%d find(sub-c vd)=%d vars %d->%d (both spellings of the deleted tail must miss)\n",
+           (int)findNamedVariable("cvd"), (int)findNamedVariable(STD_SUB_c "vd"), (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+
+  // Re-use of the freed index by a different name: the deleted name must still miss, and the new name must own that index alone.
+  calcRegister_t cve = findOrAllocateNamedVariable("cve");
+  int32ToReal34(105, REGISTER_REAL34_DATA(cve));
+  if(cve != sub || findNamedVariable("cvd") != INVALID_VARIABLE || findNamedVariable("cve") != cve
+      || real34ToInt32(REGISTER_REAL34_DATA(findNamedVariable("cve"))) != 105) {
+    printf("\ncache-cov 7 index re-use: cve=%d (freed index %d), find(cvd)=%d find(cve)=%d (cvd must not answer with cve's register)\n",
+           (int)cve, (int)sub, (int)findNamedVariable("cvd"), (int)findNamedVariable("cve"));
+    abortTest();
+    return;
+  }
+
+  const char *cacheCovCleanup[] = {"cva", "cvb", "cvc", "cve"};
+  for(unsigned int i = 0; i < nbrOfElements(cacheCovCleanup); i++) {
+    calcRegister_t regist = findNamedVariable(cacheCovCleanup[i]);
+    if(regist == INVALID_VARIABLE) {
+      printf("\ncache-cov cleanup: %u not found\n", i);
+      abortTest();
+      return;
+    }
+    fnDeleteVariable(regist);
+  }
+  if(numberOfNamedVariables != before) {
+    printf("\ncache-cov cleanup: vars %d->%d (must return to the start count)\n", (int)before, (int)numberOfNamedVariables);
+    abortTest();
+    return;
+  }
+}
+
+void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter) {
+  // A program file can claim a label name longer than the calculator can produce (TAM caps a name at 7 glyphs
+  // of at most 2 bytes, MAX_LABEL_NAME_LENGTH in defines.h); fnLoadProgram screens the file in a first pass,
+  // before loading anything, and refuses it with ERROR_INVALID_CORRUPTED_DATA. Load a file whose global label
+  // name claims 20 bytes and one whose named local label claims 20 bytes: both must be refused with the error
+  // set, no label registered, and program memory untouched (the screen runs before the load, so there is
+  // nothing to roll back). Then check the screen's step walk does not false-positive: a program with a
+  // legitimate 20-byte alpha string literal must load, and so must a full-length 14-byte label name.
+  static const uint8_t pgmBadGlobal[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 20, 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  static const uint8_t pgmBadLocal[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'V',
+    ITM_LBL, LOCAL_LABEL_VARIABLE, 20, 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  static const uint8_t pgmStrLiteral[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'U',
+    ITM_LITERAL, STRING_LABEL_VARIABLE, 20, 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  // Bypass regression: the screen must refuse a non-item opcode (here
+  // LAST_ITEM itself) rather than quit silently, because the in-memory
+  // walker decodes it as a zero-parameter step and would register the
+  // overlong label hidden behind it.
+  static const uint8_t pgmBadOpcode[] = {
+    (uint8_t)((LAST_ITEM >> 8) | 0x80), (uint8_t)(LAST_ITEM & 0xff),
+    ITM_LBL, STRING_LABEL_VARIABLE, 20, 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T',
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  static const uint8_t pgmMaxName[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 14, 'W','X','Y','Z','W','X','Y','Z','W','X','Y','Z','W','X',
+    ITM_LITERAL, 1 /* BINARY_SHORT_INTEGER */, 2, 0,0,0,0,0,0,0,0, // fixed-tail literal through the screen
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  uint16_t labelsBefore = numberOfLabels;
+  uint8_t *firstFreeBefore = firstFreeProgramByte;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmBadGlobal, sizeof(pgmBadGlobal));
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || temporaryInformation == TI_PROGRAM_LOADED
+      || numberOfLabels != labelsBefore || firstFreeProgramByte != firstFreeBefore) {
+    printf("\nfnLoadProgram did not cleanly refuse a program file with a 20-byte global label name\n");
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmBadLocal, sizeof(pgmBadLocal));
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || temporaryInformation == TI_PROGRAM_LOADED
+      || numberOfLabels != labelsBefore || firstFreeProgramByte != firstFreeBefore) {
+    printf("\nfnLoadProgram did not cleanly refuse a program file with a 20-byte local label name\n");
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmBadOpcode, sizeof(pgmBadOpcode));
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || temporaryInformation == TI_PROGRAM_LOADED
+      || numberOfLabels != labelsBefore || firstFreeProgramByte != firstFreeBefore) {
+    printf("\nfnLoadProgram did not refuse a file hiding an overlong label behind a non-item opcode\n");
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmStrLiteral, sizeof(pgmStrLiteral));
+  if(temporaryInformation != TI_PROGRAM_LOADED || lastErrorCode != ERROR_NONE || numberOfLabels != labelsBefore + 1) {
+    printf("\nfnLoadProgram refused a program with a legitimate 20-byte alpha string literal\n");
+    abortTest();
+    return;
+  }
+
+  temporaryInformation = TI_NO_INFO;
+  covWriteAndLoadPgm(pgmMaxName, sizeof(pgmMaxName));
+  if(temporaryInformation != TI_PROGRAM_LOADED || lastErrorCode != ERROR_NONE || numberOfLabels != labelsBefore + 2) {
+    printf("\nfnLoadProgram refused a program file with a legitimate 14-byte label name\n");
+    abortTest();
+    return;
+  }
+
+  // A file whose declared byte count cannot possibly fit is refused before any reservation.
+  temporaryInformation = TI_NO_INFO;
+  FILE *f = fopen("c47programTest.bin", "wb");
+  if(f == NULL) {
+    abortTest();
+    return;
+  }
+  fprintf(f, "PROGRAM_FILE_FORMAT\n0\nC47_program_file_version\n1\nPROGRAM\n100000000\n");
+  fclose(f);
+  fnLoadProgram(NOPARAM);
+  if(lastErrorCode != ERROR_RAM_FULL || temporaryInformation == TI_PROGRAM_LOADED || numberOfLabels != labelsBefore + 2) {
+    printf("\nfnLoadProgram did not refuse an impossibly large program file (EC=%d)\n", (int)lastErrorCode);
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
+}
+
+void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter) {
+  // The state loaders (LOAD, LOADP, LOADST) apply the PROGRAMS section in
+  // place, so doLoad screens program memory after the restore and, on an
+  // over-long label name, clears the program area and raises
+  // ERROR_INVALID_CORRUPTED_DATA. Build the corrupt state file honestly: load
+  // a valid program with a full-length name, bump its length byte in program
+  // memory past the limit, save the state, clear programs, and load the state
+  // back. The load must end with the error set and an empty program area.
+  // The six ITM_NULL padding steps keep the corrupted step decodable: the
+  // inflated length swallows exactly the padding, so the walk lands on the
+  // RTN and the overlong label registers instead of truncating the scan -
+  // the dangerous case the screen exists for.
+  static const uint8_t pgmVictim[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 14, 'S','T','A','T','E','B','A','D','L','B','L','X','Y','Z',
+    0, 0, 0, 0, 0, 0,
+    ITM_RTN,
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  covWriteAndLoadPgm(pgmVictim, sizeof(pgmVictim));
+  // The loader appended the victim, so its bytes end at firstFreeProgramByte;
+  // the label's claimed-length byte is at offset 2 of the program.
+  uint8_t *lengthByte = firstFreeProgramByte - sizeof(pgmVictim) + 2;
+  if(temporaryInformation != TI_PROGRAM_LOADED || *lengthByte != 14) {
+    printf("\ncovLoadStateLongLabel could not stage its victim program\n");
+    abortTest();
+    return;
+  }
+  *lengthByte = 20; // corrupt the claimed name length in program memory
+
+  fnSave(SM_MANUAL_SAVE);
+  fnClPAll(CONFIRMED);
+  lastErrorCode = ERROR_NONE;
+
+  fnLoad(LM_PROGRAMS);
+  if(lastErrorCode != ERROR_INVALID_CORRUPTED_DATA || numberOfLabels != 0) {
+    printf("\nfnLoad(LM_PROGRAMS) did not refuse a state file with a corrupt label name (EC=%u, labels=%u)\n",
+           lastErrorCode, numberOfLabels);
+    abortTest();
+    return;
+  }
+  lastErrorCode = ERROR_NONE;
 }
 
 void covProgramFlow(uint16_t which) {
@@ -1045,6 +1758,86 @@ void covDerivPgm(uint16_t order) {
   }
 }
 
+static void covSeedMvarVariable(const char *name, int32_t value) {
+  const calcRegister_t regist = findOrAllocateNamedVariable(name);
+
+  if(regist == INVALID_VARIABLE) {
+    printf("\nCannot allocate named variable %s\n", name);
+    abortTest();
+    return;
+  }
+  reallocateRegister(regist, dtReal34, 0, amNone);
+  int32ToReal34(value, REGISTER_REAL34_DATA(regist));
+}
+
+void covDerivMvarPgm(uint16_t which) {
+  // Program MD declares MVAR x and MVAR p and recalls both from named storage, so its stencil samples only move when the differentiator stores each point in the
+  // variable it differentiates with respect to. Program S of covDerivPgm takes its argument off the stack instead and cannot reach that path. The name is MD and
+  // not M because covLoadPgm has already loaded an M, X squared behind an MVAR A, and findNamedLabel hands back the first of two same-named programs.
+  // Bytes: LBL name / MVAR name / RCL name / ENTER / MULT / SUB / literal / END.
+  static const uint8_t pgmM[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'M', 'D',                  // LBL "MD"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR "x"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'p',   // MVAR "p"
+    ITM_RCL, REGISTER_Y_IN_KS_CODE,                               // RCL Y, then drop it: recalling a stack register writes TEMP_REGISTER_1 (recall.c), so a
+    ITM_DROP,                                                     // sampled variable parked there would come back holding this instead of its own value
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',                       // RCL "x"
+    ITM_ENTER,                                                    // x x
+    ITM_MULT,                                                     // x^2
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',                       // RCL "x"
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'p',                       // RCL "p"
+    ITM_MULT,                                                     // p*x
+    ITM_SUB,                                                      // x^2 - p*x
+    ITM_LITERAL, STRING_REAL34, 1, '2',                           // 2
+    ITM_SUB,                                                      // x^2 - p*x - 2
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),  // END
+  };
+  calcRegister_t label;
+
+  if(which == 0) {
+    covWriteAndLoadPgm(pgmM, sizeof(pgmM));
+    covSeedMvarVariable("x", 5);
+    covSeedMvarVariable("p", 0);
+    return;
+  }
+  if(which == 6 || which == 7) {   // read an input back to prove sampling restored it
+    reallyRunFunction(ITM_RCL, findOrAllocateNamedVariable(which == 6 ? "x" : "p"));
+    return;
+  }
+  if(which == 9) {   // reseed x as a long integer: restoring through a real34 would silently retype it
+    longInteger_t li;
+
+    longIntegerInit(li);
+    uInt32ToLongInteger(5, li);
+    convertLongIntegerToLongIntegerRegister(li, findOrAllocateNamedVariable("x"));
+    longIntegerFree(li);
+    return;
+  }
+
+  label = findNamedLabel("MD", GLOBAL_LABELS);
+  if(label == INVALID_VARIABLE) {
+    printf("\nUnknown global label: MD\n");
+    abortTest();
+    return;
+  }
+  if(which == 3) {
+    covSeedMvarVariable("p", 1);   // p leaves zero, so a wrong reading of p stops canceling and shows up in the derivative
+  }
+  currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
+  switch(which) {
+    case 4:  currentSolverVariable = findOrAllocateNamedVariable("p");    break;
+    case 5:  currentSolverVariable = INVALID_VARIABLE;                    break;   // nothing selected: the first declaration is the argument
+    case 8:  currentSolverVariable = findOrAllocateNamedVariable("zzz");  break;   // selected but not declared by M: falls back to the first declaration
+    default: currentSolverVariable = findOrAllocateNamedVariable("x");    break;
+  }
+  if(which == 2) {
+    fn2ndDeriv(label);
+  }
+  else {
+    fn1stDeriv(label);
+  }
+}
+
 void covSolvePgm(uint16_t unusedButMandatoryParameter) {
   // Program-based root solve: find a root of the loaded program S (f(X)=X^2-4) with fnSolve -> solver() over the program (execProgram each iteration in solve.c) - the
   // program branch covSolveRoot (formula) does not reach. The two guesses come from Y and X on the stack; the positive root is 2. fnPgmSlv selects the program,
@@ -1060,6 +1853,24 @@ void covSolvePgm(uint16_t unusedButMandatoryParameter) {
   currentSolverStatus = 0;
   fnPgmSlv(label);
   fnSolve(findOrAllocateNamedVariable("X"));
+}
+
+void covMvarPageNoProgram(uint16_t unusedButMandatoryParameter) {
+  // Build the MVAR page with no model selected: no VARMNU label, no formula, and currentSolverProgram at the 0xffff doFnReset leaves. _dynmenuConstructMVarsFromPgm
+  // (softmenus.c) bounds the label index against numberOfLabels, so the page holds no variables, which is the count this puts in X. Program S is loaded by this
+  // point in the corpus, so the label block has program material after it and an unbounded index reads a page rather than zeros.
+  int16_t m;
+
+  currentMvarLabel     = INVALID_VARIABLE;
+  currentSolverStatus  = 0;         // not a formula model: the program branch is the one taken
+  currentSolverProgram = 0xffffu;   // the value doFnReset leaves when no PGMSLV has named a label
+
+  fnOpenMenu(MNU_MVAR);
+
+  for(m = 0; m < NUMBER_OF_DYNAMIC_SOFTMENUS && softmenu[m].menuItem != -MNU_MVAR; m++) {}
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(m < NUMBER_OF_DYNAMIC_SOFTMENUS ? (int32_t)dynamicSoftmenu[m].numItems : -1, REGISTER_REAL34_DATA(REGISTER_X));   // -1: MVAR outside the dynamic block
+  popSoftmenu();
 }
 
 void covIntegrate(uint16_t which) {
@@ -1092,16 +1903,165 @@ void covIntegrate(uint16_t which) {
 }
 
 void covIntegrateErr(uint16_t which) {
-  // Drive the dispatch error branches of the integrator (_fnIntegrate / fnPgmInt in integrate.c). which=0: a stack register whose letter names no program label ->
-  // ERROR_LABEL_NOT_FOUND; otherwise a named variable with no program specified -> ERROR_NO_PROGRAM_SPECIFIED.
+  // Drive the dispatch branches of the integrator (_fnIntegrate / fnPgmInt in integrate.c). which=0: a stack register whose letter names no program label ->
+  // ERROR_LABEL_NOT_FOUND; which=1: a named variable with no program specified -> ERROR_NO_PROGRAM_SPECIFIED; which=2 and 3: interactive selection of the loaded
+  // programs T (no MVAR, empty menu) and M (leading MVAR), each opening the MVAR menu the selection leads to so the list terminator write is covered (#500, #579).
+  // 2 and 3 need the programs staged, so they run from pgm_solve_cov; 0 needs the letter T to name no label, so it runs from integrate_cov.
   if(which == 0) {
     fnIntegrate(REGISTER_T);
   }
-  else {
+  else if(which == 1) {
     currentSolverStatus = 0;
     currentSolverProgram = 9999;   // >= numberOfLabels: no program specified
     fnIntegrate(FIRST_NAMED_VARIABLE);
   }
+  else {
+    const char *name = which == 2 ? "T" : "M";
+    const calcRegister_t label = findNamedLabel(name, GLOBAL_LABELS);
+    if(label == INVALID_VARIABLE) {
+      printf("\nUnknown global label: %s\n", name);
+      abortTest();
+      return;
+    }
+    currentSolverStatus = 0;
+    currentMvarLabel = INVALID_VARIABLE;   // take the menu from currentSolverProgram, as the interactive selection does
+    fnIntegrate(label);
+    showSoftmenu(-MNU_MVAR);
+    popSoftmenu();
+    currentSolverStatus = 0;   // disarm the interactive integrator a successful selection leaves armed
+  }
+}
+
+static int16_t covMvarKeyClass(uint16_t key) {
+  // Decode one unshifted MVAR softkey (1..6) exactly as the keyboard does and classify it: 1 selects the menu variable, 2 opens the integral TOOL menu,
+  // 3 is integral y to x, 0 is no operation, 9 is anything else. Classifying keeps the corpus off the item numbers, which move as items are added.
+  char data[2] = {(char)('0' + key), 0};
+  const int16_t item = determineFunctionKeyItem_C47(data, false, false);
+  switch(item) {
+    case ITM_Sfdx_VAR:     return 1;
+    case -MNU_Sf_TOOL:     return 2;
+    case ITM_INTEGRAL_YX:  return 3;
+    case ITM_NOP:          return 0;
+    default:               return 9;
+  }
+}
+
+void covMvarKey(uint16_t which) {
+  // Classify one softkey of the integrator's MVAR menu into X. which 1..6: the menu of a 6-MVAR program armed by the interactive integrator, where every key selects
+  // its variable. which 11..16: the same keys over the formula A+B+C, where parseEquation reserves items 4 and 5 for the TOOL and integral-y-to-x action keys and pads
+  // the slots between with empty names.
+  static const uint8_t pgmV[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 1, 'V',            // LBL "V"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'A', // MVAR "A"
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'B',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'C',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'D',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'E',
+    (uint8_t)((ITM_MVAR >> 8) | 0x80), (uint8_t)(ITM_MVAR & 0xff), STRING_LABEL_VARIABLE, 1, 'F',
+    ITM_SQUARE,                                        // X^2
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff), // END
+  };
+  int16_t keyClass;
+
+  currentSolverStatus = 0;
+  currentMvarLabel = INVALID_VARIABLE;
+  if(which <= 6) {
+    if(findNamedLabel("V", GLOBAL_LABELS) == INVALID_VARIABLE) {
+      covWriteAndLoadPgm(pgmV, sizeof(pgmV));
+    }
+    const calcRegister_t label = findNamedLabel("V", GLOBAL_LABELS);
+    if(label == INVALID_VARIABLE) {
+      printf("\nUnknown global label: V\n");
+      abortTest();
+      return;
+    }
+    fnIntegrate(label);            // interactive selection, as Integral f d makes it
+    showSoftmenu(-MNU_MVAR);
+    showSoftmenuCurrentPart();     // the draw that fills the menu content, as a screen refresh does
+    keyClass = covMvarKeyClass(which);
+  }
+  else {
+    if(numberOfFormulae == 0) {
+      fnEqNew(NOPARAM);
+    }
+    setEquation(currentFormula, "A+B+C");
+    showSoftmenu(-MNU_Sf);         // the formula integrator opens its MVAR menu through here
+    showSoftmenuCurrentPart();
+    keyClass = covMvarKeyClass(which - 10);
+  }
+  popSoftmenu();
+  currentSolverStatus = 0;
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(keyClass, REGISTER_REAL34_DATA(REGISTER_X));
+}
+
+extern uint16_t scrollColumn;
+
+static uint16_t covMatrixEditorColumns(void) {
+  // showRealMatrix() displays a column vector transposed.
+  const uint16_t rows = openMatrixMIMPointer.header.matrixRows;
+  const uint16_t cols = openMatrixMIMPointer.header.matrixColumns;
+  return (cols == 1 && rows > 1) ? rows : cols;
+}
+
+void covMatrixEditorScroll(uint16_t which) {
+  // which is SNN: NN down-arrow presses, S what is reported - 0 scrolled, 1 the offset
+  // after M.COL+1 widens to two columns, 2 whether it is past the widened matrix, 3 the
+  // offset when widened to the offset itself, 4 whether that made the two equal.
+  const uint16_t select  = which / 100;
+  const uint16_t presses = which % 100;
+  uint16_t offset;
+  int32_t reported;
+
+  if(select > 4 || presses > 20 || (getRegisterDataType(REGISTER_X) != dtReal34Matrix && getRegisterDataType(REGISTER_X) != dtComplex34Matrix)) {
+    printf("\nUnknown matrix editor scroll selector: %u\n", which);
+    abortTest();
+    return;
+  }
+
+  fnEditMatrix(REGISTER_X);
+  if(calcMode != CM_MIM) {
+    printf("\nThe matrix editor did not open\n");
+    abortTest();
+    return;
+  }
+
+  for(uint16_t i = 0; i < presses; i++) {
+    addItemToBuffer(ITM_DOWN_ARROW);
+  }
+  offset = scrollColumn;
+
+  if(select == 0) {
+    reported = (offset > 0) ? 1 : 0;
+  }
+  else if(select >= 3 && offset < 2) {
+    printf("\nThe presses left an offset of %u, which no reshape can make the column count equal\n", offset);
+    abortTest();
+    return;
+  }
+  else {
+    const uint16_t widenTo = (select >= 3) ? offset : 2;
+    for(uint16_t c = 1; c < widenTo; c++) {
+      fnAddCol(NOPARAM);
+    }
+    if(select == 1 || select == 3) {
+      showMatrixEditor();
+      reported = scrollColumn;
+    }
+    else if(select == 2) {
+      reported = (scrollColumn > covMatrixEditorColumns()) ? 1 : 0;
+    }
+    else {
+      reported = (scrollColumn == covMatrixEditorColumns()) ? 1 : 0;
+    }
+  }
+
+  mimEnter(true);
+  mimFinalize();
+  calcModeNormal();
+  popSoftmenu();
+  reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+  int32ToReal34(reported, REGISTER_REAL34_DATA(REGISTER_X));
 }
 
 void covIntegratePgm(uint16_t unusedButMandatoryParameter) {
@@ -1409,6 +2369,14 @@ void covEqSet(uint16_t which) {
   currentSolverVariable = findOrAllocateNamedVariable("X");
 }
 
+void covEqClear(uint16_t unusedButMandatoryParameter) {
+  // Delete every formula so a following program plot runs from a true no-equation state (numberOfFormulae 0, allFormulae NULL). A program plot needs no formula,
+  // so this exposes it to the no-equation guard in fnEqSolvGraph, which G2 masks by inheriting a formula from the equation plot before it. See graphs_cov.txt G2b.
+  while(numberOfFormulae > 0) {
+    deleteEquation(0);
+  }
+}
+
 // Two-byte program opcode: the high bit on the first byte marks that a second opcode byte follows (the decoder's (op & 0x80) convention).
 #define OP2(itm) (uint8_t)(((itm) >> 8) | 0x80), (uint8_t)((itm) & 0xff)
 
@@ -1513,6 +2481,8 @@ static void covPlotBmpName(char *out, uint16_t which) {
 void covBmpName(uint16_t which) {
   // Point the next SNAP capture at c47plotTest<FARG>.bmp; the override is consumed by one capture, so this runs before each XEQ of a graph program.
   covPlotBmpName(_ioFileNameOverride, which);
+  // Delete any stale copy first: a graph program that errors before its SNAP leaves no file, so covHashBmp fails instead of hashing an old bitmap - a false pass.
+  remove(_ioFileNameOverride);
 }
 
 void covHashBmp(uint16_t which) {
@@ -1538,6 +2508,247 @@ void covHashBmp(uint16_t which) {
   reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(stringByteLength(hex) + 1), amNone);
   strcpy(REGISTER_STRING_DATA(REGISTER_X), hex);
   calcMode = CM_NORMAL; // leave the graph view so a reordered corpus is unaffected
+}
+
+// Nested SOLVE/INT/PLOT drivers (nested_cov.txt). The programs are the AN0022 nested examples (docs/appnotes/sources/AN0022/func.txt) without the
+// appnote's presentation steps (title STO A, SNAP, PAUSE); the numeric outers leave their result in X for the corpus to assert, the plot outers end
+// in SNAP for the c47plotTest11..14.bmp hash gates. Inner building blocks:
+//   FX: f(x) = x^2 - p*x - 2 (x the solve variable, p a parameter);  RT: root of f from guesses 0/8 (PGMSLV FX, SOLVE x);
+//   HT: h(t) = t;  IT: INT(0..x) t dt = x^2/2;  IY: INT(0..y) IT dx = y^3/6;  IG: INT(0..8) f dx;  IU: INT(0..u) f dx;
+//   SI: INT(0..x) t dt - 2;  EQ: RT(p) - 2;  F2: x^2 - 2;  FP: 4/(1+x^2).
+// Numeric outers: DBLINT = INT(0..2) IT dx = 4/3;  TRPINT = INT(0..2) IY dy = 2/3 (levels coupled through the limits);  SLVINT: SI(x)=0 -> x=2;
+// SLVSLV: EQ(p)=0 -> p=1 (solver inside solver);  SLVF2: x^2-2=0 -> sqrt(2);  INTPI = INT(0..1) 4/(1+x^2) dx = pi.
+// Plot outers: PLTROOT plots RT over p (root locus), PLTINTG plots IG over p (linear), PLTINT3 plots IU over u (cubic; p stored 0 in-program so the
+// render is immune to the p SLVSLV or a PLTf sweep leaves behind), PLTDBL plots IY over y (cubic). All plots run from the no-formula state
+// fnEqClearCov sets, so they gate the PGMPLT no-formula path.
+void covLoadNestedPgms(uint16_t unusedButMandatoryParameter) {
+  static const uint8_t pgmFX[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'F', 'X',    // LBL "FX"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR 'x'
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'p',   // MVAR 'p'
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // RCL 'x'
+    ITM_ENTER,                                      // ENTER
+    ITM_MULT,                                       // x^2
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // RCL 'x'
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'p',         // RCL 'p'
+    ITM_MULT,                                       // p*x
+    ITM_SUB,                                        // x^2 - p*x
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // 2
+    ITM_SUB,                                        // x^2 - p*x - 2
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmRT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'R', 'T',    // LBL "RT"
+    OP2(ITM_PGMSLV), STRING_LABEL_VARIABLE, 2, 'F', 'X', // PGMSLV 'FX'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // guess lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '8',       // guess hi
+    OP2(ITM_SOLVE), STRING_LABEL_VARIABLE, 1, 'x',  // SOLVE 'x'
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmHT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'H', 'T',    // LBL "HT"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 't',   // MVAR 't'
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 't',         // h(t) = t
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmIT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'I', 'T',    // LBL "IT"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR 'x'
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'H', 'T', // PGMINT 'HT'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // upper limit x
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 't', // INT(0..x) t dt
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmIY[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'I', 'Y',    // LBL "IY"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'y',   // MVAR 'y'
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'I', 'T', // PGMINT 'IT'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'y',         // upper limit y
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x', // INT(0..y) IT dx
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmIG[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'I', 'G',    // LBL "IG"
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'F', 'X', // PGMINT 'FX'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '8',       // upper limit
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x', // INT(0..8) f dx
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmIU[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'I', 'U',    // LBL "IU"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'u',   // MVAR 'u'
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'F', 'X', // PGMINT 'FX'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'u',         // upper limit u
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x', // INT(0..u) f dx
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmSI[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'S', 'I',    // LBL "SI"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR 'x'
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'H', 'T', // PGMINT 'HT'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // upper limit x
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 't', // INT(0..x) t dt = x^2/2
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // 2
+    ITM_SUB,                                        // x^2/2 - 2
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmEQ[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'E', 'Q',    // LBL "EQ"
+    ITM_XEQ, STRING_LABEL_VARIABLE, 2, 'R', 'T',    // XEQ 'RT' (inner solve -> root in X)
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // 2
+    ITM_SUB,                                        // root - 2
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmF2[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'F', '2',    // LBL "F2"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR 'x'
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // RCL 'x'
+    ITM_ENTER,                                      // ENTER
+    ITM_MULT,                                       // x^2
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // 2
+    ITM_SUB,                                        // x^2 - 2
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmFP[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 2, 'F', 'P',    // LBL "FP"
+    OP2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',   // MVAR 'x'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '4',       // 4
+    ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',         // RCL 'x'
+    ITM_ENTER,                                      // ENTER
+    ITM_MULT,                                       // x^2
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',       // 1
+    ITM_ADD,                                        // 1 + x^2
+    ITM_DIV,                                        // 4 / (1 + x^2)
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmDBLINT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 6, 'D', 'B', 'L', 'I', 'N', 'T', // LBL "DBLINT"
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'I', 'T', // PGMINT 'IT'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // upper limit
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x', // INT(0..2) (x^2/2) dx = 4/3
+    OP2(ITM_END),                                   // END
+  };
+  // TRPINT and PLTDBL set ACC 1e-8 for their run and restore the 0 default before returning: three coupled integrator levels at the
+  // full-precision default take ~10 minutes (measured 2026-07-22), far past the suite timeout; at 1e-8 TRPINT runs in ~5 s. DBLINT
+  // stays at the full-precision default, so the 34-digit nested-integrator path keeps a gate.
+  static const uint8_t pgmTRPINT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 6, 'T', 'R', 'P', 'I', 'N', 'T', // LBL "TRPINT"
+    ITM_LITERAL, STRING_REAL34, 4, '1', 'e', '-', '8', // 1e-8
+    ITM_STO, STRING_LABEL_VARIABLE, 3, 'A', 'C', 'C', // STO 'ACC' (integrator convergence target)
+    ITM_DROP,                                       // DROP the 1e-8
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'I', 'Y', // PGMINT 'IY'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // upper limit
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'y', // INT(0..2) (y^3/6) dy = 2/3
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // 0
+    ITM_STO, STRING_LABEL_VARIABLE, 3, 'A', 'C', 'C', // STO 'ACC' (restore the full-precision default)
+    ITM_DROP,                                       // DROP the 0, result back in X
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmSLVINT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 6, 'S', 'L', 'V', 'I', 'N', 'T', // LBL "SLVINT"
+    OP2(ITM_PGMSLV), STRING_LABEL_VARIABLE, 2, 'S', 'I', // PGMSLV 'SI'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // guess lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // guess hi
+    OP2(ITM_SOLVE), STRING_LABEL_VARIABLE, 1, 'x',  // SOLVE 'x' -> x = 2
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmSLVSLV[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 6, 'S', 'L', 'V', 'S', 'L', 'V', // LBL "SLVSLV"
+    OP2(ITM_PGMSLV), STRING_LABEL_VARIABLE, 2, 'E', 'Q', // PGMSLV 'EQ'
+    ITM_LITERAL, STRING_LONG_INTEGER, 2, '-', '5',  // guess lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // guess hi
+    OP2(ITM_SOLVE), STRING_LABEL_VARIABLE, 1, 'p',  // SOLVE 'p' -> p = 1
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmSLVF2[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 5, 'S', 'L', 'V', 'F', '2', // LBL "SLVF2"
+    OP2(ITM_PGMSLV), STRING_LABEL_VARIABLE, 2, 'F', '2', // PGMSLV 'F2'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // guess lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',       // guess hi
+    OP2(ITM_SOLVE), STRING_LABEL_VARIABLE, 1, 'x',  // SOLVE 'x' -> sqrt(2)
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmINTPI[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 5, 'I', 'N', 'T', 'P', 'I', // LBL "INTPI"
+    OP2(ITM_PGMINT), STRING_LABEL_VARIABLE, 2, 'F', 'P', // PGMINT 'FP'
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // lower limit
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',       // upper limit
+    OP2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x', // INT(0..1) 4/(1+x^2) dx = pi
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmPLTROOT[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 7, 'P', 'L', 'T', 'R', 'O', 'O', 'T', // LBL "PLTROOT"
+    OP2(ITM_PGMPLT), STRING_LABEL_VARIABLE, 2, 'R', 'T', // PGMPLT 'RT'
+    ITM_LITERAL, STRING_LONG_INTEGER, 2, '-', '5',  // plot range lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // plot range hi
+    OP2(ITM_PLTf), STRING_LABEL_VARIABLE, 1, 'p',   // PLTf 'p' (root locus over p)
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmPLTINTG[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 7, 'P', 'L', 'T', 'I', 'N', 'T', 'G', // LBL "PLTINTG"
+    OP2(ITM_PGMPLT), STRING_LABEL_VARIABLE, 2, 'I', 'G', // PGMPLT 'IG'
+    ITM_LITERAL, STRING_LONG_INTEGER, 2, '-', '5',  // plot range lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // plot range hi
+    OP2(ITM_PLTf), STRING_LABEL_VARIABLE, 1, 'p',   // PLTf 'p' (linear in p)
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmPLTINT3[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 7, 'P', 'L', 'T', 'I', 'N', 'T', '3', // LBL "PLTINT3"
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // 0
+    ITM_STO, STRING_LABEL_VARIABLE, 1, 'p',         // STO 'p' (clamp the FX parameter at 0 for a clean cubic)
+    ITM_DROP,                                       // DROP the 0
+    OP2(ITM_PGMPLT), STRING_LABEL_VARIABLE, 2, 'I', 'U', // PGMPLT 'IU'
+    ITM_LITERAL, STRING_LONG_INTEGER, 2, '-', '5',  // plot range lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // plot range hi
+    OP2(ITM_PLTf), STRING_LABEL_VARIABLE, 1, 'u',   // PLTf 'u' (cubic in u)
+    OP2(ITM_SNAP),                                  // SNAP
+    OP2(ITM_END),                                   // END
+  };
+  static const uint8_t pgmPLTDBL[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 6, 'P', 'L', 'T', 'D', 'B', 'L', // LBL "PLTDBL"
+    ITM_LITERAL, STRING_REAL34, 4, '1', 'e', '-', '8', // 1e-8
+    ITM_STO, STRING_LABEL_VARIABLE, 3, 'A', 'C', 'C', // STO 'ACC' (a double integral per plotted sample; see the TRPINT note)
+    ITM_DROP,                                       // DROP the 1e-8
+    OP2(ITM_PGMPLT), STRING_LABEL_VARIABLE, 2, 'I', 'Y', // PGMPLT 'IY'
+    ITM_LITERAL, STRING_LONG_INTEGER, 2, '-', '5',  // plot range lo
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',       // plot range hi
+    OP2(ITM_PLTf), STRING_LABEL_VARIABLE, 1, 'y',   // PLTf 'y' (cubic in y)
+    OP2(ITM_SNAP),                                  // SNAP
+    ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',       // 0
+    ITM_STO, STRING_LABEL_VARIABLE, 3, 'A', 'C', 'C', // STO 'ACC' (restore the full-precision default; after SNAP so the capture is untouched)
+    ITM_DROP,                                       // DROP the 0
+    OP2(ITM_END),                                   // END
+  };
+  covWriteAndLoadPgm(pgmFX, sizeof(pgmFX));
+  covWriteAndLoadPgm(pgmRT, sizeof(pgmRT));
+  covWriteAndLoadPgm(pgmHT, sizeof(pgmHT));
+  covWriteAndLoadPgm(pgmIT, sizeof(pgmIT));
+  covWriteAndLoadPgm(pgmIY, sizeof(pgmIY));
+  covWriteAndLoadPgm(pgmIG, sizeof(pgmIG));
+  covWriteAndLoadPgm(pgmIU, sizeof(pgmIU));
+  covWriteAndLoadPgm(pgmSI, sizeof(pgmSI));
+  covWriteAndLoadPgm(pgmEQ, sizeof(pgmEQ));
+  covWriteAndLoadPgm(pgmF2, sizeof(pgmF2));
+  covWriteAndLoadPgm(pgmFP, sizeof(pgmFP));
+  covWriteAndLoadPgm(pgmDBLINT, sizeof(pgmDBLINT));
+  covWriteAndLoadPgm(pgmTRPINT, sizeof(pgmTRPINT));
+  covWriteAndLoadPgm(pgmSLVINT, sizeof(pgmSLVINT));
+  covWriteAndLoadPgm(pgmSLVSLV, sizeof(pgmSLVSLV));
+  covWriteAndLoadPgm(pgmSLVF2, sizeof(pgmSLVF2));
+  covWriteAndLoadPgm(pgmINTPI, sizeof(pgmINTPI));
+  covWriteAndLoadPgm(pgmPLTROOT, sizeof(pgmPLTROOT));
+  covWriteAndLoadPgm(pgmPLTINTG, sizeof(pgmPLTINTG));
+  covWriteAndLoadPgm(pgmPLTINT3, sizeof(pgmPLTINT3));
+  covWriteAndLoadPgm(pgmPLTDBL, sizeof(pgmPLTDBL));
 }
 
 
@@ -1763,6 +2974,7 @@ void setParameter(char *p) {
   if(p[i] == 0) {
     printf("\nMalformed parameter setting. Missing equal sign, remember that no space is allowed around the equal sign.\n");
     abortTest();
+    return;
   }
 
   p[i] = 0;
@@ -1930,9 +3142,25 @@ void setParameter(char *p) {
           setSystemFlag(FLAG_ENDPMT);
         }
       }
+      // Generic fallback: resolve any system flag by its CAT_SYFL catalog name (e.g. SIG0, ENGOVR, FRACT), as dslParseFlagArg does
       else {
-        printf("\nMalformed numbered flag setting. After FL_ there shall be a number from 0 to 111, a lettered, or a system flag.\n");
-        abortTest();
+        bool_t found = false;
+        for(int16_t i = 0; i < LAST_ITEM; i++) {
+          if((indexOfItems[i].status & CAT_STATUS) == CAT_SYFL && compareString(l + 3, (char *)indexOfItems[i].itemCatalogName, CMP_NAME) == 0) {
+            if(r[0] == '0') {
+              clearSystemFlag(indexOfItems[i].param);
+            }
+            else {
+              setSystemFlag(indexOfItems[i].param);
+            }
+            found = true;
+            break;
+          }
+        }
+        if(!found) {
+          printf("\nMalformed flag setting. After FL_ there shall be a number from 0 to 111, a lettered, or a system flag name.\n");
+          abortTest();
+        }
       }
     }
   }
@@ -2068,6 +3296,37 @@ void setParameter(char *p) {
     }
     else {
       printf("\nMalformed grouping gap setting. The rvalue must be a number from 0 to 15.\n");
+      abortTest();
+    }
+  }
+
+  //Setting display format, e.g. DSP=FIX2, DSP=SCI4, DSP=ENG3, DSP=ALL3, DSP=SIG5, DSP=UN3
+  else if(strcmp(l, "DSP") == 0) {
+    int16_t p = 0;
+    while(r[p] != 0 && !(r[p] >= '0' && r[p] <= '9')) {   //length of the alphabetic prefix (FIX..UNIT)
+      p++;
+    }
+    uint16_t n = atoi(r + p);
+    if(!strncmp(r, "FIX", 3)) {
+      fnDisplayFormatFix(n);
+    }
+    else if(!strncmp(r, "SCI", 3)) {
+      fnDisplayFormatSci(n);
+    }
+    else if(!strncmp(r, "ENG", 3)) {
+      fnDisplayFormatEng(n);
+    }
+    else if(!strncmp(r, "ALL", 3)) {
+      fnDisplayFormatAll(n);
+    }
+    else if(!strncmp(r, "SIG", 3)) {
+      fnDisplayFormatSigFig(n);
+    }
+    else if(!strncmp(r, "UN", 2)) {                        //UN or UNIT
+      fnDisplayFormatUnit(n);
+    }
+    else {
+      printf("\nMalformed display format setting. The rvalue must be FIX, SCI, ENG, ALL, SIG or UN followed by a digit count.\n");
       abortTest();
     }
   }
@@ -2228,9 +3487,13 @@ var1:
         strcat(r, ":NONE");
       }
 
-      // separate real value and angular mode
+      // separate real value and angular mode; for a tagged value the closing
+      // quote of the register string ends up on the mode, strip it there
       r[i] = 0;
       strcpy(angMod, r + i + 1);
+      if(angMod[0] != 0 && angMod[strlen(angMod) - 1] == '"') {
+        angMod[strlen(angMod) - 1] = 0;
+      }
 
       if(strcmp(angMod, "DEG"   ) == 0) {
         am = amDegree;
@@ -2255,12 +3518,15 @@ var1:
         abortTest();
       }
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -2382,12 +3648,15 @@ var1:
       }
       am = amNone;
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -2403,12 +3672,15 @@ var1:
       }
     }
     else if(strcmp(l, "DATE") == 0) {
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -2964,6 +4236,7 @@ void checkExpectedOutParameter(char *p) {
   if(p[i] == 0) {
     printf("\nMalformed out parameter. Missing equal sign, remember that no space is allowed around the equal sign.\n");
     abortTest();
+    return;
   }
 
   p[i] = 0;
@@ -3341,7 +4614,7 @@ void checkExpectedOutParameter(char *p) {
 
       if(ec <= NUMBER_OF_ERROR_CODES) {
         if(lastErrorCode != ec) {
-          printf("\nLast error code should be %u (%s) but it is %u (%s)!\n", ec, errorMessages[ec], lastErrorCode, errorMessages[lastErrorCode]);
+          printf("\nLast error code should be %u (%s) but it is %u (%s)!\n", ec, errorMessageOf(ec), lastErrorCode, errorMessageOf(lastErrorCode));
           abortTest();
         }
       }
@@ -3457,9 +4730,13 @@ var2:
         strcat(r, ":NONE");
       }
 
-      // separate real value and angular mode
+      // separate real value and angular mode; for a tagged value the closing
+      // quote of the register string ends up on the mode, strip it there
       r[i] = 0;
       strcpy(angMod, r + i + 1);
+      if(angMod[0] != 0 && angMod[strlen(angMod) - 1] == '"') {
+        angMod[strlen(angMod) - 1] = 0;
+      }
 
            if(strcmp(angMod, "DEG"   ) == 0) am = amDegree;
       else if(strcmp(angMod, "DMS"   ) == 0) am = amDMS;
@@ -3473,12 +4750,15 @@ var2:
       }
 
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -3672,12 +4952,15 @@ var2:
       }
       am = amNone;
 
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -3699,12 +4982,15 @@ var2:
       }
     }
     else if(strcmp(l, "DATE") == 0) {
-      // remove beginning and ending " and removing leading spaces
+      // remove beginning and ending " and removing leading spaces; a tagged
+      // value has already lost its closing quote to the mode split above
       xcopy(r, r + 1, strlen(r));
       while(r[0] == ' ') {
         xcopy(r, r + 1, strlen(r));
       }
-      r[strlen(r) - 1] = 0;
+      if(r[0] != 0 && r[strlen(r) - 1] == '"') {
+        r[strlen(r) - 1] = 0;
+      }
 
       // replace , with .
       for(i=0; i<(int)strlen(r); i++) {
@@ -4198,15 +5484,36 @@ void callFunction(void) {
 
 
 
+// Count a rejection that no Out: line consumed, before the next setup line overwrites it or the file ends; both flags clear here, so the next block starts clean.
+static void countUnreportedSetupFailure(void) {
+  if(caseSetupFailed && !caseSetupReported) {
+    numTestsTotal++;
+    successfulTests++;
+    noFailForNow = true;
+    abortTest();
+  }
+  caseSetupFailed   = false;
+  caseSetupReported = false;
+}
+
+
+
 void functionToCall(char *functionName) {
   int32_t function;
 
+  countUnreportedSetupFailure();
   functionParameter = NOPARAM;
+  // Default to NOP so a failed Func: does not rerun the previous block's function.
+  functionIndex = ITM_NOP;
+  funcToTest    = fnNop;
+  funcType      = FUNC_TO_TEST;
+
   char *openParenthesis = strchr(functionName, '(');
   char *closeParenthesis = strchr(functionName, ')');
   if((openParenthesis && !closeParenthesis) || (!openParenthesis && closeParenthesis)) {
     printf("\nParameter parenthesis do not match!\n");
-    abortTest();
+    caseSetupFailed = true;
+    return;
   }
   else if(openParenthesis && closeParenthesis) {
     *closeParenthesis = 0;
@@ -4239,15 +5546,17 @@ void functionToCall(char *functionName) {
 
     if(functionIndex >= LAST_ITEM) {
       printf("\nThe function %s must be somewhere in the indexOfItems array!\n", functionName);
-      abortTest();
+      caseSetupFailed = true;
+      return;
     }
 
     //printf("%s=%d\n", functionName, functionIndex);
+    caseSetupFailed = false;
     return;
   }
 
   printf("\nCannot find the function to test: check spelling of the function name and remember the name is case sensitive\n");
-  abortTest();
+  caseSetupFailed = true;
 }
 
 
@@ -4311,6 +5620,7 @@ static int32_t lookupItemName(const char *name) {
 void itemToCall(char *itemSpec) {
   int32_t itemNr;
 
+  countUnreportedSetupFailure();
   // Default to a NOP so a following Out: after a failed Item: does not rerun the previous function
   functionIndex = ITM_NOP;
   funcToTest    = fnNop;
@@ -4320,7 +5630,7 @@ void itemToCall(char *itemSpec) {
     itemNr = lookupItemName(itemSpec);
     if(itemNr < 0) {
       printf("\nCannot find %s in items.h: check spelling of the item name and remember the name is case sensitive\n", itemSpec);
-      abortTest();
+      caseSetupFailed = true;
       return;
     }
   }
@@ -4329,30 +5639,38 @@ void itemToCall(char *itemSpec) {
     itemNr = (int32_t)strtol(itemSpec, &end, 10);
     if(*end != 0) {
       printf("\nItem number has trailing characters: %s\n", itemSpec);
-      abortTest();
+      caseSetupFailed = true;
       return;
     }
   }
   else {
     printf("\nItem must be an ITM_ name or an item number: %s\n", itemSpec);
-    abortTest();
+    caseSetupFailed = true;
     return;
   }
 
   if(itemNr <= 0 || itemNr >= LAST_ITEM) {
     printf("\nItem number %d is out of range (1..%d)\n", itemNr, LAST_ITEM - 1);
-    abortTest();
+    caseSetupFailed = true;
     return;
   }
 
   if(indexOfItems[itemNr].func == itemToBeCoded) {
     printf("\nItem %d (%s) is not an implemented function\n", itemNr, itemSpec);
-    abortTest();
+    caseSetupFailed = true;
     return;
   }
 
-  functionIndex = itemNr;
-  funcType      = FUNC_ITEM;
+  // A TAM item's param is a TM_* marker, not a value; passed through it reaches the function as a register index and reads out of range. Reject as the DSL does.
+  if(TM_VALUE <= indexOfItems[itemNr].param && indexOfItems[itemNr].param <= TM_CMP) {
+    printf("\nItem %d (%s) takes a TAM parameter, which Item: cannot supply: drive it with Func: and In: FARG=n\n", itemNr, itemSpec);
+    caseSetupFailed = true;
+    return;
+  }
+
+  functionIndex   = itemNr;
+  funcType        = FUNC_ITEM;
+  caseSetupFailed = false;
 }
 
 
@@ -4537,7 +5855,14 @@ void processLine(void) {
     numTestsTotal++;
     successfulTests++;
     noFailForNow = true;
-    outParameters(line + 5);
+    if(caseSetupFailed) {
+      // The setup line failed, so fnNop ran and the case fails here. The flag latches across this block's Out: lines, and the next setup line or the file end clears it.
+      abortTest();
+      caseSetupReported = true;
+    }
+    else {
+      outParameters(line + 5);
+    }
   }
 
   else if(line[0] != 0) {
@@ -4587,6 +5912,8 @@ void processOneFile(void) {
     ignoreReturnedValue(fgets(line, 9999, testSuite));
     lineNumber++;
   }
+
+  countUnreportedSetupFailure();
 
   fclose(testSuite);
 

@@ -25,15 +25,23 @@ void fnSHIFTfg(uint16_t unusedButMandatoryParameter) {
 
 
 //Length in ms, frequency in Hz
-void _keyClick(uint8_t lengthMs, uint32_t f) {  //Debugging on scope, a millisecond input pulse length after every key edge. !!!!! Destroys the prior volume setting
+void _keyClick(uint8_t lengthMs, uint32_t f) {  //Debugging on scope, a millisecond input pulse length after every key edge. The prior volume setting is saved and put back
   #if defined(DMCP_BUILD)
     #if (defined(DM42_KEYCLICK) || defined(CLICK_REFRESHSCR) || defined(DM42_POWERMARKS) || defined(DM42_POWERMARK_KEYPRESS))
-      while(get_beep_volume() < 11) {
-        beep_volume_up();
+      if(getSystemFlag(FLAG_QUIET)) {                              // QUIET silences every sound the calculator makes, without exception
+        return;
       }
+      #if defined(OUT_VOL_MAX)
+        uint16_t savedVolume = getBeepVolume();
+
+        fnSetVolume(11);
+      #endif // OUT_VOL_MAX
       start_buzzer_freq(f*1000); //Click 1kHz for 1 ms
       sys_delay((uint32_t)lengthMs);
       stop_buzzer();
+      #if defined(OUT_VOL_MAX)
+        fnSetVolume(savedVolume);
+      #endif // OUT_VOL_MAX
     #endif // DM42_KEYCLICK
   #endif // DMCP_BUILD
 }
@@ -201,9 +209,9 @@ void resetKeytimers(void) {
           }
           if(getSystemFlag(FLAG_USER)) {    // USER mode
             if((calcMode != CM_AIM) && (calcMode != CM_EIM) && (item > 0)) {
-              #if defined(LONGPRESS_CFG)   // only when allowed by LONGPRESS_CFG
+              #if defined(OPTION_LONGPRESS_CFG)   // only when allowed by OPTION_LONGPRESS_CFG
                 _executeItem(item, keyCode);
-              #endif // LONGPRESS_CFG
+              #endif // OPTION_LONGPRESS_CFG
 
               screenUpdatingMode = SCRUPD_AUTO;
               refreshScreen(1000);
@@ -211,7 +219,7 @@ void resetKeytimers(void) {
             else {;
               if(item < 0) {
                 if(item == -MNU_DYNAMIC) {
-                  char *funcParam = (char *)getNthString((uint8_t *)userKeyLabel, keyCode * 6 + 1);
+                  char *funcParam = (char *)getUserKeyLabelString(keyCode * 6 + 1);
                   setCurrentUserMenu(item, funcParam);
                 }
                 target_HOME = ((item == -MNU_HOME) && getSystemFlag(FLAG_MYM_TRIPLE) ? -MNU_MyMenu : item);
@@ -419,7 +427,7 @@ void resetKeytimers(void) {
       }
     }
 
-    char *funcParam = (char *)getNthString((uint8_t *)userKeyLabel, key_no); //keyCode * 6 + g ? 2 : f ? 1 : 0);
+    char *funcParam = (char *)getUserKeyLabelString(key_no); //keyCode * 6 + g ? 2 : f ? 1 : 0);
     //printf("\n\n >>>> ## result=%i key_no=%i *funcParam=%s  [0]=%u\n", *result, key_no, (char*)funcParam, ((char*)funcParam)[0]);
 
     if(calcMode == CM_NORMAL && *result == ITM_RS) {

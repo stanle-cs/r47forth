@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/lblGtoXeq.c b/src/c47/programming/lblGtoXeq.c
-index 88523f072b5ce0ee346b1d78ad1b2851913643dd..b6c163daa6867ee89ec81985db7edf3193e6279f 100644
+index 94207fce7e1f2ff2ac4957e5aaf4e4d03ff4bf9b..14468b88d4cc75265fa791eabe644849bf0235af 100644
 --- a/src/c47/programming/lblGtoXeq.c
 +++ b/src/c47/programming/lblGtoXeq.c
 @@ -7,6 +7,8 @@
@@ -11,7 +11,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..b6c163daa6867ee89ec81985db7edf31
  
  // Drop stale interrupt keys at top-level program start (a leftover key prior to pgm run can trip us). 1 = on, 0 = off.
  #define CLEAR_KEYS_ON_PGM_START 0
-@@ -745,10 +747,15 @@ static void _putLiteral(uint8_t *literalAddress) {
+@@ -749,10 +751,15 @@ static void _putLiteral(uint8_t *literalAddress) {
    }
  }
  
@@ -27,7 +27,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..b6c163daa6867ee89ec81985db7edf31
  
    op = *(step++);
    if(op & 0x80) {
-@@ -773,8 +780,15 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -783,8 +790,15 @@ int16_t executeOneStep(uint8_t *step) {
      case ITM_CASE:        //  1418
      case ITM_SKIP: {      //  1603
        uint8_t previousErrorCodeMeM = previousErrorCode;
@@ -44,7 +44,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..b6c163daa6867ee89ec81985db7edf31
        return -1;
        }
  
-@@ -793,7 +807,7 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -803,7 +817,7 @@ int16_t executeOneStep(uint8_t *step) {
  
      case ITM_SOLVE: {     //  1608
        currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
@@ -53,7 +53,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..b6c163daa6867ee89ec81985db7edf31
        if(temporaryInformation == TI_SOLVER_FAILED) {
          if(lastErrorCode == ERROR_SOLVER_ABORT) {   // abort: keep the error so the loop halts on the SOLVE step (like INT); no not-found skip
            return 0;
-@@ -851,6 +865,14 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -861,6 +875,14 @@ int16_t executeOneStep(uint8_t *step) {
                fn42Append(NOPARAM);
              }
            }
@@ -68,7 +68,7 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..b6c163daa6867ee89ec81985db7edf31
            else {  // REM
                    // just ignore it
            }
-@@ -858,12 +880,12 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -868,12 +890,12 @@ int16_t executeOneStep(uint8_t *step) {
          }
  
          case PTP_KEYG_KEYX: {
@@ -82,8 +82,8 @@ index 88523f072b5ce0ee346b1d78ad1b2851913643dd..b6c163daa6867ee89ec81985db7edf31
 +          paramCoreExecuteOp(step, op, (indexOfItems[op].status & PTP_STATUS) >> 9);
          }
        }
-       #if defined(IR_PRINTING)
-@@ -887,6 +909,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
+       #if defined(OPTION_IR_PRINTING)
+@@ -897,6 +919,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
        clearKeyBuffer();
      }
    #endif

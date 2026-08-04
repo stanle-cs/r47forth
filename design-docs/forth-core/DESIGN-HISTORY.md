@@ -2119,3 +2119,236 @@ answer; the packet gains materialize-first instructions instead. (2)
 Architect verification always includes a FULL-TREE `git status` — the
 narrow `git add` lists in commit sessions are exactly how a stray src/
 edit could hide.
+
+## 2026-08-03 — upstream migration: 418 commits crossed, one real seam
+
+Base moved 44dc5a705 → 801f28763 (upstream/master `26ec91634`), the
+first upstream move since 2026-07-15. Three tree conflicts, all in build
+files. Upstream's new `Mem=1` no-LTO measurement build lands on the same
+`.PHONY` line and the same `build.dmcp` setup lines our `CUSTOM_PKG`
+plumbing sits on; both were unioned, so `-Dmem=` and `-DCUSTOM_PKG=` now
+travel together and `meson_options.txt` carries all three options. The
+constants certificate came over from upstream and the first gate run
+regenerated it.
+
+`--rebase-base` then merged fourteen of the sixteen patched working
+copies with nothing to decide, across heavy upstream churn: `defines.h`
+431 lines, `softmenus.c` 241, `screen.c` 172. Every regenerated patch
+came back byte-for-byte the same size as before, one excepted. That is
+the measurement to trust here. It says the package's delta crossed 418
+commits intact and was not quietly re-derived by hand.
+
+**The one real seam** was `saveRestoreBackup.c`, and it is the good
+kind. Upstream has hardened `restoreCalc()` along the lines our own
+review wanted: region counts read into locals and the file refused
+before `ram` is touched, every pool pointer through
+`restoredPoolPointer()`, which bounds block and offset against the
+format and trips `poolPointersInRange`. A file naming a pointer outside
+the pool is now refused and reset. Merging the Forth block around all
+that would have left `gdict.base` the one unchecked pointer among
+sixteen. So it was re-seated. The base restores WITH the pool pointers
+and inherits upstream's gate — `forthGDictValidateRestored()` walks the
+header chain through `gdict.base` and has no range test of its own — and
+the four scalars plus validate/init moved BELOW the gate, so a refused
+file never reaches the walk. The seed is NULL, not the live base. That
+is what keeps a pre-Forth backup meaning "empty dictionary": on entry
+`gdict.base` describes a pool the `ram` restore has just overwritten.
+
+Gate green first try, both harnesses. Upstream suite 12,078 → 12,983
+passes under the overlay, `stack_cov` among the new cases; the package
+list carries it next to `forth_interp`. Flash `make dmcp5r47
+CUSTOM_PKG=packages/forth-core` 1095584 → 1105360 (+9776 B), ram 7224 →
+7228. None of it is ours. Pristine at the same base measures 1088088 /
+6956, so forth-core costs +17272 B flash and +272 B ram, and the growth
+belongs to upstream's 418 commits.
+
+The lesson worth keeping: when upstream restructures the code a patch
+sits in, resolve to upstream's STRUCTURE and re-seat the addition into
+it. Merging the addition around the old shape is the other option the
+conflict markers offer, and it compiles. That is why it needs a rule.
+
+## 2026-08-03 — GUI coverage review: the picker is pinned up to the softkey, and no further
+
+Prompted by the migration. The FWRD picker's CONTENT is pinned the way
+this project pins things — section order, dedup per provenance, smudged
+entries out, the 14-byte name filter, the 170 cap, the glyph tokenizer,
+rebuild-on-every-display. Downstream of the content array there was
+nothing.
+
+Every landed insert test assigns `dynamicMenuItem = 0` by hand. Index 0,
+page 1, unshifted is the only softkey the suite has ever pressed. The
+real derivation is `firstItem + itemShift + fn` in
+`determineFunctionKeyItem_C47`'s `MNU_FORTH` arm, and unlike the
+`MNU_VAR`/`MNU_PROG` arms beside it, that arm does not clamp against
+`numItems`. The only bound is one conjunct inside `forthPickerGuard`,
+and behind it `dynmenuGetLabel()` returns `""` out of range, which
+`forthCapInsertName("")` turns into a bare space in the user's line. So
+the single unpinned conjunct is what stands between pressing a blank key
+on a partial page and silently corrupting a Forth definition. Nothing
+crashes — the draw loop bounds itself and the guard does hold — which is
+exactly why the suite could stay green over it.
+
+This is D3-5 one layer up. There the battery drove the wrapper and the
+real item entry went unaccounted; here it drives the helper with the
+index preset and the real key path goes unexercised. The rule earned
+then is the rule now: every entry point a user can reach needs a pin
+through that exact entry.
+
+Two packets authored, G1 and G2 (runbook §2c). G1 takes the mapping —
+index ≥ 1, both shift rows, `firstItem` paging, the blank-key refusal,
+and the draw path at every page boundary. G2 takes the two unpinned
+behaviours in `forthBuildWordPicker`: the 1000-step scan cut-off, which
+was documented in §9.6 and in the source and pinned nowhere, and the
+content `calloc` that was stored into `menuContent` and written through
+on the next line with no NULL test. That last one matches upstream's own
+habit — six unchecked `malloc`s for `menuContent` in softmenus.c — so
+the pattern is as much theirs as ours. Ours is the one we own.
+
+Recorded as residual, not closed: pixel-level rendering stays unpinned.
+G1's fifth subcase pins the label the renderer is handed. That is the
+honest limit of what the C battery can assert without an LCD read-back
+harness. Calling it covered would be the decoration the 2026-07-21 audit
+removed fourteen cases for.
+
+## 2026-08-03 — G1 and G2 landed; the mutations rewrote one test twice
+
+Both stage-G packets are in (`78e32af30`, `2f378c911`), implemented in
+the architect session on the FIX-6B precedent, not handed to the local
+model. Gate green, both harnesses, arena unchanged, flash
+1105360 -> 1105360.
+
+G1 pins the softkey path five ways on one 20-name picker, every subcase
+driving `determineFunctionKeyItem_C47` with a real key string and routing
+the result through `forthPickerGuard`. The mutation that matters is the
+fifth: delete the `dynamicMenuItem < numItems` conjunct and the blank key
+on the partial last page inserts `dynmenuGetLabel()`'s out-of-range `""`
+plus a space, so the line reads `N018  ` at cursor 6. The corruption that
+conjunct exists to prevent, reproduced on demand. That conjunct had
+carried the whole load since F6-3 with nothing watching it.
+
+**G2 is the entry worth keeping, and not for what it pins.** Its first
+subcase was written exactly as the packet specified. It went green, and
+it was wrong twice over. Both mutations caught it.
+
+Raising `FORTH_PICKER_MAX_SCAN_STEPS` from 1000 to 2000 left it green.
+The fixture sized itself from the constant, so both sides of the
+comparison moved together: a fixture derived from the number under test
+is immune to a change in it, and therefore blind to one. A constant that
+changes what the calculator does is now pinned as a literal, beside the
+mechanism it governs.
+
+Then deleting the break left it green too. The fixture used one
+definition per step, and the picker's 170-name cap (`TMP_STR_LENGTH/15`)
+bites at step 170 — a thousand steps before the step cut-off can act. The
+test had been measuring the name cap the whole time and reporting it as
+the scan limit. Rebuilt with two definitions, a near one and a far one
+past step 1000, separated by a thousand non-defining filler steps, so the
+only limit that can keep the far name out is the one under test.
+
+Neither defect was visible in the code, in review, or in a green gate.
+Both fell out of running the mutations. That is the argument for the
+rule that every packet lands with them.
+
+Coverage of the picker now runs from the program text through the
+content array, the index walk, the key mapping and the guard. Pixel-level
+rendering stays out, recorded as residual in the runbook — G1's first
+subcase pins the label the renderer is handed and stops there.
+
+## 2026-08-03 — G3: the harness I said did not exist
+
+Stage G shipped with pixel-level rendering recorded as residual, twice,
+on my claim that closing it needed an LCD read-back harness and a new
+owner ruling. One question — is one available? — was enough to show the
+claim was never checked.
+
+`lcd_buffer_pixel_on()` is declared in `src/c47/hal/lcd.h` for every
+non-DMCP build and implemented in both HALs, `src/c47-gtk/hal/lcd.c` and
+`src/testSuite/hal/lcd.c`. The software blitter writes `lcd_buffer`
+whether or not a window exists: the `headlessMode` guard skips
+`gtk_widget_queue_draw_area` and nothing else. Upstream has been using
+the same facility for years — the plot regressions in `graphs_cov.txt`
+pin a SHA-256 of a SNAP capture. The tooling was there, in this
+repository, reachable from the battery that was declaring it unreachable.
+
+G3 (`00c5cf2d3`) closes it. Three renders of the first softkey cell in
+decreasing label length, strict decrease asserted: 414 px for the maximal
+14-byte name, 150 px for a 2-byte name, 33 px for an empty picker. That
+last number is the floor that makes the other two mean something — it is
+the cell border with no label in it, so the pixels being counted are the
+label's. Nothing is hard-coded: upstream owns the font and the cell
+geometry, and a change there must not turn this red.
+
+Two constraints worth carrying. `lcd_clear_buf()` exists only in the
+c47-gtk HAL, and `test_dict_reloc.c` compiles into both binaries, so a
+pixel test cannot clear the buffer between renders — hence the decreasing
+order. A cell that stopped repainting would break that assertion, not
+hide behind it. And the link error that taught me this was a link error in the
+testSuite build, not the sim: the battery has two consumers and only one
+of them has the full HAL.
+
+The lesson is not about pixels. Three times in this stage a limit was
+asserted from reading the code, never from trying it: the fixture that pinned
+the wrong cap, the constant that pinned nothing, and a harness declared
+absent without a grep. The first two were caught by mutations. This one
+needed someone to ask.
+
+## 2026-08-03 — G4: the first packet run through the local model, and what the round trip cost
+
+G4 pins three things about the FWRD picker that G3 left open: that turning
+the page changes the picture, that nothing is drawn past `numItems`, and
+that a maximal 14-byte name stays inside its cell. It is also the first
+stage-G packet actually handed to the local model rather than implemented
+here, and the interesting record is the exchange, not the tests.
+
+**The first attempt did nothing and exited 0.** Headless `opencode run`
+has no terminal to approve permission prompts, so everything the config
+sets to `ask` is auto-DENIED. The model read the run-sim skill, began the
+execution gate, and stalled — correct behaviour, invisible outcome. The
+log even showed a healthy `agent=title` → `agent=build` pair, the
+diagnostic that is supposed to mean the turn went through. It means the
+model was ASKED, not that anything happened. Confirm against a baseline
+SHA, never against an exit code.
+
+Re-run with `--auto`, the model kept inside the two files the packet
+allowed, touched no production file and no `src/`, and committed.
+
+**Three architect defects against two implementer ones.** Mine: the packet
+said to assert `numItems` "before any act", but `numItems` is 0 until a
+render calls the builder, so the model followed it literally, read 0 three
+times, and started blaming the donor fixture. The packet also said a page
+is 6 items when the renderer draws three rows of eighteen. And its
+geometry note divided `SCREEN_WIDTH` by six where the real cell borders
+are `KEY_X = {-1,66,133,200,267,333,400}`.
+
+Its two: an inverted assertion in subcase 1, and two silent workarounds
+for the same piece of chrome in subcases 2 and 3 — an excluded cell in
+one, a tolerance in the other — with a PASS line left claiming an
+assertion that was no longer being made. Both were correct observations
+reported the wrong way, which is the same shape as F1-5: the model saw
+something true and the packet had no channel for it except STOP.
+
+**The chrome they both tripped over is real and is now understood.** A
+live softkey draws a dotted divider down its right-hand edge, twelve
+pixels on alternate rows at `x == KEY_X[n]` — which by the border
+convention lands in the NEXT cell's window. An empty cell beside a live
+one carries that column; an empty cell further out reads exactly zero. So
+"all four empty cells are identical" was never true, and the packet was
+wrong to demand it. Subcase 2 now asserts something sharper instead:
+cells 3-5 exactly empty, and cell 2's INTERIOR empty as well. That states
+"no label past numItems" precisely and excludes nothing.
+
+Part B: three mutations, one per subcase. Ignoring `currentFirstItem` in
+the draw makes both pages measure 3196 px. Removing the menu-band clear
+lets stale labels accumulate until an empty cell outshines a live one.
+Raising `trimKey`'s per-cell clamp from 66 to 120 bleeds a name out of its
+cell, 131 px into the neighbour. A fourth candidate was rejected: widening
+the draw guard changes nothing observable, because the extra index reads
+the blob's terminator and an empty label paints like an empty cell.
+
+The standing consequence, and the only part of this worth carrying: every
+one of these defects landed a GREEN gate. The inverted assertion, the
+excluded cell, the tolerance, the PASS line that no longer matched its
+own test — a passing suite reported all of it. What caught them was
+reading the PASS strings against the packet. So a packet specifies its
+PASS text exactly, and verification compares the strings, not the exit
+code.

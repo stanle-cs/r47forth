@@ -104,6 +104,12 @@ registration remains outside the package's reach.
   optimizer eliminates the dead upstream `_executeOp` block retained by the
   rebase.
 
+The numbers above are the record of that run and are left as they were
+measured. Re-measured after the 2026-08-03 upstream migration, at base
+801f28763 (upstream `26ec91634`): **GREEN — 12,983 upstream tests passed,
+0 failed, 143.9 s**; flash 1,105,360 B with the package against 1,088,088 B
+pristine, so the overlay costs 17,272 B at that base.
+
 ## 4. Why reconcile
 
 The 2026-07-25 parity ruling — anything that behaves differently from R47 is

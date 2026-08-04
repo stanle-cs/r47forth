@@ -5,6 +5,8 @@
 ;** commented out if an upstream change legitimately alters the render.                                                       **
 ;*******************************************************************************************************************************
 In: AM=RAD FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+; Set the display state the axis-label render depends on, so an upstream test leaking a display setting cannot change the plot bitmap:
+In: DSP=ALL3 FL_SIG0=1 FL_ENGOVR=0 FL_FRACT=0 GAP=3
 
 ; stage program S (f(X)=X^2-4; serialize_cov's reset wiped program memory) and the graph programs G1..G9
 Func: fnLoadPgmCov
@@ -52,6 +54,22 @@ In:  FL_ASLIFT=1 R00=Stri:"S" RY=Real:"-5" RX=Real:"5" PGM="G2"
 Out: EC=0
 Func: fnHashBmpCov
 In:  FARG=2
+Out: EC=0 RX=Stri:"708E9B6A67A0B9BA2EBBAAAE35E5BE0D2CF67379885C7C2994AADE6FA5115217"
+
+; program plot from a no-equation state (G2b): fnEqClearCov drops every formula, then the same G2 plot runs. A program plot needs no formula and renders the identical
+; bitmap, so it pins G2's hash, while an over-broad no-equation guard aborts it and the hash mismatches. G2 alone misses this because it inherits a formula from the
+; equation plot before it.
+Func: fnEqClearCov
+In:  FARG=0
+Out: EC=0
+Func: fnBmpNameCov
+In:  FARG=10
+Out: EC=0
+Func: fnExecute
+In:  FL_ASLIFT=1 R00=Stri:"S" RY=Real:"-5" RX=Real:"5" PGM="G2"
+Out: EC=0
+Func: fnHashBmpCov
+In:  FARG=10
 Out: EC=0 RX=Stri:"708E9B6A67A0B9BA2EBBAAAE35E5BE0D2CF67379885C7C2994AADE6FA5115217"
 
 ; statistics plots: seed five (Y,X) data points once, then plot the same data with PLSTAT (G3) and with SCATR (G4)
@@ -183,7 +201,7 @@ In:  FL_ASLIFT=1 PGM="G6"
 Out: EC=0
 Func: fnHashBmpCov
 In:  FARG=6
-Out: EC=0 RX=Stri:"15FD5C5BF124AA48F6BCC1E822A0CCF1AF46150764D5E5D0B564C0E753F54777"
+Out: EC=0 RX=Stri:"CE7BF22B3FD0536D6BB65A0AE851F53800E2CF7A83568AE8E9C1F4ECF662DAD7"
 
 ; histogram with normal fit (G8: HISTOX builds the HISTO matrix, HNORM overlays
 ; the Gauss fit). The window auto-ranges to the fitted bell (x to a1 +- 3 sigma,
@@ -198,7 +216,7 @@ In:  FL_ASLIFT=1 PGM="G8"
 Out: EC=0
 Func: fnHashBmpCov
 In:  FARG=8
-Out: EC=0 RX=Stri:"16AFB6FB03F7353ECB5DCF58B8333DF5031C5BF96EAC5594428269CA611A2D3A"
+Out: EC=0 RX=Stri:"2B09956B925D466A747A3711F5B0BB33D710B4F8CFC5B71C882AA4F897470775"
 
 ; clear the statistical sums so they do not leak past this file
 Func: fnClSigma

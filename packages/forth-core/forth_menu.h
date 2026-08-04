@@ -21,6 +21,12 @@ bool_t pickerInsertName(void);
  * pick rather than as its own item (§9.6). */
 bool_t forthPickerGuard(int16_t item);
 
+/* Scan cut-off for the picker's program-text pass (§9.6 documented
+ * deviation): programs with more steps than this before the cursor are not
+ * fully scanned. Declared here, not in forth_menu.c, so the pin in the test
+ * battery references the same number the builder uses. */
+#define FORTH_PICKER_MAX_SCAN_STEPS 1000
+
 /* Build dynamicSoftmenu[menu]'s content for MNU_FORTH (§9.6, F6-5).
  * The caller has already freed the previous menuContent. */
 void forthBuildWordPicker(int16_t menu);

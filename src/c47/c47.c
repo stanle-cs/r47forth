@@ -21,6 +21,7 @@ char                  lastTemp[16];
 
 bool_t                headlessMode = false;
 bool_t                snapSkipRefresh = false;
+bool_t                screenHoldsDrawnPixels = false;
 bool_t                loadTestPrograms = false;
 bool_t                loadTestData = false;
 const font_t          *fontForShortInteger;
@@ -52,9 +53,6 @@ bool_t                 thereIsSomethingToUndo;
 bool_t                 lastProgramListEnd;
 bool_t                 programListEnd;
 bool_t                 pemCursorIsZerothStep;
-bool_t                 secTick1;
-bool_t                 halfSecTick2;
-bool_t                 halfSecTick3;
 bool_t                 skippedStackLines = false;
 bool_t                 iterations = false;
 bool_t                 explicitTaylorIterVisibilitySelection = false;
@@ -65,6 +63,7 @@ bool_t                 cleanupAfterShift = false;
 bool_t                 solverEstimatesUsed = false;
 bool_t                 graphAccActive = false;
 bool_t                 updateOldConstants;
+bool_t                 eqnDrawLhsOnly = false;
 
 
 realContext_t          ctxtReal4;    //   limited digits: used for higher speed internal real calcs
@@ -231,7 +230,6 @@ int16_t                ListXYposition;               //JMSHOW
 int16_t                JM_auto_doublepress_autodrop_enabled;  //JM TIMER CLRDROP //drop
 int16_t                JM_auto_longpress_enabled;    //JM TIMER CLRDROP //clstk
 uint8_t                JM_SHIFT_HOME_TIMER1;         //Local to keyboard.c, but defined here
-bool_t                 ULFL, ULGL;                   //JM Underline
 int16_t                FN_key_pressed, FN_key_pressed_last; //JM LONGPRESS FN
 bool_t                 FN_timeouts_in_progress;      //JM LONGPRESS FN
 bool_t                 Shft_timeouts;                //JM SHIFT NEW FN
@@ -282,6 +280,9 @@ uint16_t               currentSolverStatus;
 uint16_t               currentSolverProgram;
 uint16_t               currentSolverVariable;
 uint16_t               currentSolverNestingDepth;
+uint16_t               engineNestingDepth;
+uint16_t               plotEngineActive;
+bool_t                 engineNestingWasRefused;
 uint16_t               numberOfFormulae;
 uint16_t               currentFormula;
 uint16_t               numberOfUserMenus;
@@ -313,8 +314,6 @@ uint32_t               tamOverPemYPos;
 uint32_t               timerValue;
 uint32_t               timerStartTime = TIMER_APP_STOPPED;
 uint32_t               timerTotalTime;
-uint32_t               pointerOfFlashPgmLibrary;
-uint32_t               sizeOfFlashPgmLibrary;
 
 uint64_t               shortIntegerMask;
 uint64_t               shortIntegerSignBit;
@@ -360,14 +359,14 @@ bool_t                 cancelFilename;
 uint8_t                firstDayOfWeek = 1;     // Monday
 uint8_t                firstWeekOfYearDay = 4; // Thursday
 
-//#if defined(IR_PRINTING)
+//#if defined(OPTION_IR_PRINTING)
   printerState_t         printerState;
   /*
    *  Where will the next data be printed?
    *  Columns are in pixel units from 0 to 165 for the HP-82240 and 0 to 383 for the Martel graphic mode
    */
   uint16_t               printerColumn;
-//#endif //IR_PRINTING
+//#endif //OPTION_IR_PRINTING
 
 uint16_t                 alphaRegister;
 bool_t                   varMenu42;
@@ -604,6 +603,7 @@ int convertKeyCode(int key) {
 
                                                   //uint32_t now, previousRefresh, nextAutoRepeat = 0;      // removed autorepeat stuff
 
+    stackWatermarkAnchor();                                    // the shallowest frame of the run: everything the watermark reports is measured below this
     c47MemInBlocks = 0;
     gmpMemInBytes = 0;
     mp_set_memory_functions(allocGmp, reallocGmp, freeGmp);

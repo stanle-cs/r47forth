@@ -299,11 +299,11 @@ void plotrect(int16_t a, int16_t b, int16_t c, int16_t d) {                // Pl
 }
 
 
-#if !defined(SAVE_SPACE_DM42_13GRF)
+#if defined(OPTION_GRAPHICS)
   static void plotHisto_coln(int16_t x, int16_t y, int16_t y_min, int16_t y_wid, int16_t colw) {  //x is 0..(n-1)
     plotrect(max((int16_t)x - colw, 0), y_min + y_wid,  x + colw, y);
     }
-#endif //SAVE_SPACE_DM42_13GRF
+#endif //OPTION_GRAPHICS
 
 
 
@@ -572,7 +572,7 @@ void pixelline(int16_t xo, int16_t yo, int16_t xn, int16_t yn, bool_t vmNormal) 
 
 
 void graphAxisDraw (void){
-#if !defined(SAVE_SPACE_DM42_13GRF)
+#if defined(OPTION_GRAPHICS)
   if(realIsSpecial(x_min) || realIsSpecial(x_max) || realIsSpecial(y_min) || realIsSpecial(y_max)
      || realCompareGreaterEqual(x_min, x_max) || realCompareGreaterEqual(y_min, y_max)) {   //rejects NaN/infinite, reversed, empty and never-autoscaled ranges (the +-1E38 seeds); any magnitude is drawable
     return;
@@ -758,12 +758,12 @@ void graphAxisDraw (void){
   //printf("PLOT_ZMY=%i tick_int_x=%f, tick_int_y=%f\n",PLOT_ZMY, tick_int_x, tick_int_y);
   force_refresh(timed);
 //  #endif
-#endif //SAVE_SPACE_DM42_13GRF
+#endif //OPTION_GRAPHICS
 }
 
 
 double auto_tick(double tick_int_f) {
-  #if !defined(SAVE_SPACE_DM42_13GRF)
+  #if defined(OPTION_GRAPHICS)
     if(!roundedTicks) {
       return tick_int_f;
     }
@@ -772,18 +772,8 @@ double auto_tick(double tick_int_f) {
     double tick_m = fabs((double)tick_int_f);
     double tick_mult = 1.0;
     if(tick_m > 0) {
-#if 1  //log10/pow live in libm (-lm) which nano.specs does not strip, pow is already in use in graphs.c
-      tick_mult = pow(10.0, floor(log10(tick_m)));   //decade of the value
-      tick_m /= tick_mult;                           //mantissa, 1 <= m < 10 up to one step of log10/pow rounding, corrected below
-      if(tick_m < 1.0) {
-        tick_m *= 10.0;
-        tick_mult /= 10.0;
-      }
-      if(tick_m >= 10.0) {
-        tick_m /= 10.0;
-        tick_mult *= 10.0;
-      }
-#else  //The loop version is kept deliberately, to reconsider when the newlib nano situation is settled (it iterates once per decade, e.g. ~300x for 1E-300)
+      //One iteration per decade of the value; this is the loop the log10/pow version replaced, restored
+      //so the last double log10/pow leaves the link
       while(tick_m < 1.0) {
         tick_m *= 10.0;
         tick_mult /= 10.0;
@@ -792,8 +782,7 @@ double auto_tick(double tick_int_f) {
         tick_m /= 10.0;
         tick_mult *= 10.0;
       }
-#endif
-      tick_m = floor(tick_m * 10.0 + 0.5) / 10.0; //round mantissa to 1 decimal as "%.1e" did
+      tick_m = (double)(int32_t)(tick_m * 10.0 + 0.5) / 10.0; //round mantissa to 1 decimal as "%.1e" did; 10 <= argument < 101 so the cast is the floor
       if(tick_m >= 10.0) {
         tick_m /= 10.0;
         tick_mult *= 10.0;
@@ -833,14 +822,14 @@ double auto_tick(double tick_int_f) {
     tick_int_f *= tick_int_f_mult;
 
     //printf("tick2 %f\n",tick_int_f);
-  #endif // !SAVE_SPACE_DM42_13GRF
+  #endif // !OPTION_GRAPHICS
 
 return tick_int_f;
 }
 
 
 void graph_axis (void){
-#if !defined(SAVE_SPACE_DM42_13GRF)
+#if defined(OPTION_GRAPHICS)
     graph_dx = 0; //XXX override manual setting from GRAPH to auto, temporarily. Can program these to fixed values.
     graph_dy = 0;
 
@@ -870,7 +859,7 @@ void graph_axis (void){
 
 
   graphAxisDraw();
-#endif //SAVE_SPACE_DM42_13GRF
+#endif //OPTION_GRAPHICS
 }
 
 
@@ -1251,7 +1240,7 @@ void plotPointGeneric(int16_t xn, int16_t yn, int16_t xo, int16_t yo, bool_t PLO
 
 void graphPlotstat(uint16_t selection){
 currentKeyCode = 255;
-#if !defined(SAVE_SPACE_DM42_13GRF)
+#if defined(OPTION_GRAPHICS)
   #if defined(STATDEBUG) && defined(PC_BUILD)
     printf("#####>>> graphPlotstat: selection:%u:%s  lastplotmode:%u  lrSelection:%u lrChosen:%u\n", selection, getCurveFitModeName(selection), lastPlotMode, lrSelection, lrChosen);
   #endif // STATDEBUG && PC_BUILD
@@ -1401,10 +1390,12 @@ currentKeyCode = 255;
       printf("Axis3c: x: %f -> %f y: %f -> %f   \n", dbl(x_min), dbl(x_max), dbl(y_min), dbl(y_max));
       #endif // STATDEBUG && PC_BUILD
 
-      grf_x_r(1, &yr);                                 //yr and xr hold the first two x values just for the column width
-      int16_t colw = (int16_t) (
-                                 (  (screen_window_x_r(x_min, &yr, x_max) - screen_window_x_r(x_min, &xr, x_max))  / 2.0f  )
-                                ) - 1;
+      grf_x_r(numberOfPlotPoints - 1, &yr);            //yr and xr hold the last and first x values for the bar pitch
+      int16_t xLast = screen_window_x_r(x_min, &yr, x_max);
+      int16_t barPitch = (int16_t)(  (float)(xLast - xn)
+                                   / (float)(numberOfPlotPoints > 1 ? numberOfPlotPoints - 1 : 1) + 0.5f);   //centre-to-centre bar spacing, one integer for all bars
+      int16_t barX0 = (int16_t)((xn + xLast - (numberOfPlotPoints - 1) * barPitch + 1) / 2);   //bars go on the integer grid barX0 + ix*barPitch, anchored mid-span so drift splits between both ends
+      int16_t colw = (int16_t)(barPitch / 2.0f) - 1;   //half bar width; bar width 2*colw+1 and gap barPitch-2*colw-1 are constant across the plot
         //#################################################### vvv MAIN GRAPH LOOP vvv #########################
       for(ix = 0; (ix < numberOfPlotPoints); ++ix) {
         grf_x_r(ix, &xr);
@@ -1413,6 +1404,9 @@ currentKeyCode = 255;
         yo = yN;
         xN = screen_window_x_r(x_min, &xr, x_max);
         yN = screen_window_y_r(y_min, &yr, y_max);
+        if(drawHistogram != 0) {
+          xN = (int16_t)(barX0 + ix * barPitch);       //rounding each bin centre separately varied the gaps between bars
+        }
 
         #if defined(STATDEBUG) && defined(PC_BUILD)
           printf("plotting graph table[%d] = x:%f y:%f xN:%d yN:%d drawHistogram:%d ", ix, grf_x(ix), grf_y(ix), xN, yN, drawHistogram);
@@ -1561,7 +1555,7 @@ currentKeyCode = 255;
   #endif
 
 
-#endif //SAVE_SPACE_DM42_13GRF
+#endif //OPTION_GRAPHICS
 }
 
 
@@ -1607,7 +1601,7 @@ void graphDrawLRline(uint16_t selection) {
 
 
  static void drawline(uint16_t selection, real_t *RR, real_t *SMI, real_t *aa0, real_t *aa1, real_t *aa2, real_t *sa0, real_t *sa1) {
-#if !defined(SAVE_SPACE_DM42_13GRF)
+#if defined(OPTION_GRAPHICS)
     int32_t n = 0;
     uint16_t NN;
     char tmpbuf[PLOT_TMP_BUF_SIZE];
@@ -1640,6 +1634,7 @@ void graphDrawLRline(uint16_t selection) {
     char ss[100], tt[100];
 
     real_t XX, YY;
+    realSetZero(&XX);                                //XX is written only by the USEFLOATING real branches below
     if(!selection) {
       return;
     }
@@ -1894,7 +1889,7 @@ void graphDrawLRline(uint16_t selection) {
         showString("L.R. error", &standardFont, horOffset, Y_POSITION_OF_REGISTER_Z_LINE + autoinc * index++ -7+2 +autoshift, vmNormal, false, false);
     }
   }
-#endif // !SAVE_SPACE_DM42_13GRF
+#endif // !OPTION_GRAPHICS
   }
 
 
@@ -1912,7 +1907,7 @@ void fnPlotCloseSmi(uint16_t unusedButMandatoryParameter){
 //** plotSelection = 0 means that no curve fit is plotted
 //
 void fnPlotStat(uint16_t plotMode){
-#if !defined(SAVE_SPACE_DM42_13GRF)
+#if defined(OPTION_GRAPHICS)
   if(plotMode != PLOT_NXT && plotMode != PLOT_REV && statMx[0] != 'S') {
     restoreStats();                   // a new plot starts from restored stats after an HNORM takeover, as EXIT does
   }
@@ -2061,12 +2056,12 @@ void fnPlotStat(uint16_t plotMode){
       moreInfoOnError("In function fnPlotStat:", errorMessage, NULL, NULL);
     #endif
   }
-#endif // SAVE_SPACE_DM42_13GRF
+#endif // OPTION_GRAPHICS
 }
 
 
 void fnPlotRegressionLine(uint16_t plotMode){
-#if !defined(SAVE_SPACE_DM42_13GRF)
+#if defined(OPTION_GRAPHICS)
   #if defined(STATDEBUG) && defined(PC_BUILD)
     printf("fnPlotRegressionLine: plotSelection = %u; Plotmode=%u\n", plotSelection, plotMode);
   #endif // STATDEBUG && PC_BUILD
@@ -2140,7 +2135,7 @@ void fnPlotRegressionLine(uint16_t plotMode){
       break;
     }
   }
-#endif // !SAVE_SPACE_DM42_13GRF
+#endif // !OPTION_GRAPHICS
 }
 
 

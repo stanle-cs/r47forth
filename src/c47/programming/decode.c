@@ -854,6 +854,9 @@ static void _decodeOneStep(uint8_t *step, uint16_t textVersion) {
   if(op == 0x7fff) { // .END.
     xcopy(tmpString, ".END.", 6);
   }
+  else if(op >= LAST_ITEM) { // render the step rather than index past the item table
+    xcopy(tmpString, "???", 4);
+  }
   else {
     char nameOp[36];
     nameOp[0]=0;
@@ -874,9 +877,9 @@ static void _decodeOneStep(uint8_t *step, uint16_t textVersion) {
         }
         if(nameOp[0] == 0) {
           if(textVersion == MODE_ALIAS) {
-          #if defined(IR_PRINTING)
+          #if defined(OPTION_IR_PRINTING)
             nameAlias(op, nameOp);
-          #endif //IR_PRINTING
+          #endif //OPTION_IR_PRINTING
           }
           else {
             strcpy(nameOp, indexOfItems[op].itemCatalogName[0] != 0 ? indexOfItems[op].itemCatalogName : indexOfItems[op].itemSoftmenuName);
@@ -917,9 +920,9 @@ static void _decodeOneStep(uint8_t *step, uint16_t textVersion) {
         else {
           if(nameOp[0] == 0) {
             if(textVersion == MODE_ALIAS) {
-            #if defined(IR_PRINTING)
+            #if defined(OPTION_IR_PRINTING)
               nameAlias(op, nameOp);
-            #endif //IR_PRINTING
+            #endif //OPTION_IR_PRINTING
             }
             else {
               strcpy(nameOp, indexOfItems[op].itemCatalogName);

@@ -115,6 +115,91 @@ architect session first; the future-series packet has not been authored yet.
 | D3-3 | boundary rule, named message, both-sides pins | **DONE** `3c44cc58d` | `QWEN_PROMPTS_D3_3_boundary_rule.md` |
 | D3-4 | window-parity acceptance (WP-1/WP-2) | **DONE** (2026-08-03; docs fold queued with the §10 fold) | `QWEN_PROMPTS_D3_4_acceptance.md` |
 
+## 2c. Stage G — GUI coverage gaps (post-migration review 2026-08-03)
+
+The upstream migration to `26ec91634` prompted a coverage review of the
+package's GUI surface. Content, capture lifecycle, TAM suspend/resume
+and the EXIT ladder are pinned to standard; everything downstream of the
+picker's content array is not. Two packets close it. Findings and
+reasoning: DESIGN-HISTORY 2026-08-03 (the migration entry's successor).
+
+| # | Step | Who | Input |
+|---|---|---|---|
+| G1 | softkey→word mapping: index ≥ 1, f/g shift rows, `firstItem` paging, the blank-key refusal, draw path per page | **DONE** `78e32af30` (architect-implemented; 5 mutations RED) | `QWEN_PROMPTS_G1_picker_key_mapping.md` |
+| G2 | scan cut-off named + pinned; content allocation guarded | **DONE** `2f378c911` (architect-implemented; 3 mutations RED after two fixture rewrites) | `QWEN_PROMPTS_G2_picker_scan_alloc.md` |
+| G3 | the picker's label reaches the LCD (read-back) | **DONE** `00c5cf2d3` (architect-implemented; 2 mutations RED) | — (no packet; see the commit) |
+| G4 | paging changes the picture; nothing drawn past `numItems`; a maximal name stays in its cell | **DONE** — implemented by the local model (`66f4bfa32`), corrected `fac79a397`, Part B `98e343810` | `QWEN_PROMPTS_G4_picker_pixels.md` |
+
+Both were implemented in the architect session rather than handed to the
+local model (FIX-6B precedent). The packets stay on disk as the authored
+record; anyone re-running them should read the commit messages first,
+since G2's subcase 1 fixture is NOT the one the packet specifies — see
+below.
+
+**What the mutation runs changed (binding for anyone authoring a
+cut-off pin).** G2's packet specified a fixture of one definition per
+step, sized from `FORTH_PICKER_MAX_SCAN_STEPS`. Both properties were
+wrong and both stayed green under mutation:
+
+1. Sizing the fixture from the constant makes it immune to a change in
+   the constant, and therefore blind to one. A constant that changes
+   calculator behaviour is pinned as a literal, beside the mechanism.
+2. One definition per step means the picker's 170-name cap
+   (`TMP_STR_LENGTH/15`) bites at step 170 and the step cut-off never
+   acts. The fixture was measuring the name cap. A cut-off pin needs
+   steps the other limit cannot reach — here, two definitions separated
+   by 1000 non-defining filler steps.
+
+Neither was visible from the code or from a green gate. Both came out of
+running the mutations, which is the argument for running them.
+
+**G3 (`00c5cf2d3`) — the residual above was wrong and is now closed.**
+Stage G was authored recording pixel-level rendering as out of reach
+without "an LCD read-back harness" that was said not to exist. It does
+exist and always did: `lcd_buffer_pixel_on()` is declared in
+`src/c47/hal/lcd.h` for every non-DMCP build and implemented in both the
+c47-gtk and testSuite HALs, and the software blitter fills `lcd_buffer`
+whether or not a window exists — `headlessMode` only gates
+`gtk_widget_queue_draw_area`. G3 reads the framebuffer back and pins the
+picker's label at the pixel: 414 px for a maximal 14-byte name > 150 px
+for a 2-byte name > 33 px for an empty picker.
+
+The one real constraint, for anyone extending this: `lcd_clear_buf()` is
+c47-gtk-only and absent from the testSuite HAL, and `test_dict_reloc.c`
+compiles into BOTH binaries — so a pixel test may not clear the buffer.
+G3 renders in decreasing label length and asserts a strict decrease
+instead, which fails rather than flatters if a cell ever stops
+repainting.
+
+**G4 — the first packet in this stage actually run through the local
+model, and the round trip is the lesson.** Headless `opencode run`
+auto-rejects every permission set to `ask`, so the first attempt read the
+skill, hit the execution gate and stalled having changed nothing while
+exiting 0 (recorded in the qwen-implementer memory). Re-run with
+`--auto`, the model stayed inside the two files the packet allowed,
+touched no production file and no `src/`, and committed.
+
+Three architect spec defects against two implementer process violations:
+
+- **Mine.** The packet said to assert `numItems` "before any act", but
+  `numItems` is 0 until a render calls the builder — the model followed
+  it literally, read 0 three times and began misdiagnosing the donor
+  fixture. The packet said a page is 6 items when the renderer draws
+  three rows of 18. And its geometry note divided `SCREEN_WIDTH` by six
+  where the real borders are `KEY_X`.
+- **Its.** Both violations were correct observations reported the wrong
+  way: an inverted assertion in subcase 1 (which the 18-item page made
+  empirically right), and two silent workarounds for the divider column
+  in subcases 2 and 3 — one exclusion, one tolerance — with a PASS line
+  left claiming an assertion that was no longer made.
+
+The standing consequence: **a packet specifies exact PASS text, and the
+verifier reads the PASS text against the packet.** Every one of these
+landed a GREEN gate. Nothing but the strings caught them.
+
+Genuinely residual after G1-G4: the combined-key `trimSoftKeyName` path,
+which serves two-name keys and is not how the picker draws.
+
 ## 3. After the series — no Qwen work
 
 Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),

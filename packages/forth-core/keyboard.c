@@ -118,7 +118,7 @@ static void executeFunction(const char *data, int16_t item_);
         else if((currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && (currentSolverStatus & SOLVER_STATUS_INTERACTIVE) && ((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_SOLVER) && dynamicMenuItem == 4) {
           item = -MNU_Solver_TOOL;
         }
-        else if((currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && (currentSolverStatus & SOLVER_STATUS_INTERACTIVE) && *getNthString(dynamicSoftmenu[softmenuStack[0].softmenuId].menuContent, dynamicMenuItem) == 0) {
+        else if((currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && (currentSolverStatus & SOLVER_STATUS_INTERACTIVE) && (dynamicMenuItem >= dynamicSoftmenu[softmenuStack[0].softmenuId].numItems || *getNthString(dynamicSoftmenu[softmenuStack[0].softmenuId].menuContent, dynamicMenuItem) == 0)) {
           item = ITM_NOP;
         }
 
@@ -146,13 +146,13 @@ static void executeFunction(const char *data, int16_t item_);
           item = MNU_DYNAMIC;
         }
 
-//integral MNU_Sf
-        else if((IS_EQN_INTEGRATE) && dynamicMenuItem == 4) {
+//integral MNU_Sf: items 4 and 5 are the two action keys only in the formula menu, where parseEquation reserves them; a program's MVAR list puts its own variables there
+        else if((currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && (IS_EQN_INTEGRATE) && dynamicMenuItem == 4) {
           item = -MNU_Sf_TOOL;
         }
 
 //integral y to x
-        else if((IS_EQN_INTEGRATE) && dynamicMenuItem == 5) {
+        else if((currentSolverStatus & SOLVER_STATUS_USES_FORMULA) && (IS_EQN_INTEGRATE) && dynamicMenuItem == 5) {
           item = ITM_INTEGRAL_YX;
         }
 
@@ -597,6 +597,7 @@ static void executeFunction(const char *data, int16_t item_);
 
   uint8_t asnKey[4] = {0, 0, 0, 0};
   bool_t releaseOverride = false;
+  bool_t showScreenDismissed = false;               //this press closed a SHOW or WHO screen, which clears temporaryInformation before EXIT is handled
 
   #if defined(PC_BUILD)
     void btnFnPressed(GtkWidget *notUsed, GdkEvent *event, gpointer data) {
@@ -621,6 +622,8 @@ static void executeFunction(const char *data, int16_t item_);
                     #endif //VERBOSEKEYS
       if(SHOWMODE || currentMenu() == -MNU_SHOW) {
         closeShowMenu();
+        releaseOverride = true;                     //the key that dismissed the screen is swallowed: neither press nor release acts
+        return;
       }
 
       FN_timed_out_to_NOP_or_Executed = false;
@@ -1832,6 +1835,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
   #if defined(DMCP_BUILD)
     void btnPressed(void *data) {
   #endif //DMCP_BUILD
+      showScreenDismissed = (SHOWMODE || currentMenu() == -MNU_SHOW);
+      if(showScreenDismissed) {
+        closeShowMenu();
+      }
 
       reDraw = false;
       nimWhenButtonPressed = (calcMode == CM_NIM);                  //PHM eRPN 2021-07
@@ -1901,14 +1908,14 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
             screenUpdatingMode &= !(SCRUPD_MANUAL_STATUSBAR | SCRUPD_SKIP_STATUSBAR_ONE_TIME);
             programRunStop = PGM_WAITING;
             showFunctionNameItem = 0;
-            #if defined(IR_PRINTING)
+            #if defined(OPTION_IR_PRINTING)
               #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
                 printf("**[DL]** STOP program\n");
                 fflush(stdout);
               #endif //MONITOR_IRPRINT
               refreshStatusBar();
               printTrace(ITM_STOP, NOPARAM);   // STOP program
-            #endif //IR_PRINTING
+            #endif //OPTION_IR_PRINTING
           }
           else if(programRunStop == PGM_PAUSED) {
             programRunStop = PGM_KEY_PRESSED_WHILE_PAUSED;
@@ -1926,7 +1933,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
 
       keyStateCode = (getSystemFlag(FLAG_ALPHA) ? 3 : 0) + (g ? 2 : f ? 1 : 0);
       if(getSystemFlag(FLAG_USER)) {
-        funcParam = (char *)getNthString((uint8_t *)userKeyLabel, keyCode * 6 + keyStateCode);
+        funcParam = (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode);
         xcopy(tmpString, funcParam, stringByteLength(funcParam) + 1);
       }
       else if((keyCode == Norm_Key_00_key) && (keyStateCode == 0) && Norm_Key_00.used && !(lastIntegerBase >= 2 && getSystemFlag(FLAG_TOPHEX))) {
@@ -2186,7 +2193,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
 
         bool_t Norm_Key_00_released = !getSystemFlag(FLAG_USER) && (keyStateCode == 0) && (keyCode == Norm_Key_00_key) && Norm_Key_00.used && (!(lastIntegerBase >= 2 && getSystemFlag(FLAG_TOPHEX)));
 
-        char *funcParam = (Norm_Key_00_released ? Norm_Key_00.funcParam : (char *)getNthString((uint8_t *)userKeyLabel, keyCode * 6 + keyStateCode));
+        char *funcParam = (Norm_Key_00_released ? Norm_Key_00.funcParam : (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode));
                     #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
                       printf("**[DL]** btnReleased1 - item %d showFunctionNameArg %s funcParam %s\n", item, showFunctionNameArg, funcParam);
                     #endif //VERBOSE_DETERMINEITEM
@@ -2557,7 +2564,7 @@ RELEASE_END:
               keyActionProcessed = true;
             }
           }
-          if((temporaryInformation != TI_NO_INFO) && (calcMode != CM_CONFIRMATION)) {
+          if((temporaryInformation != TI_NO_INFO || showScreenDismissed) && (calcMode != CM_CONFIRMATION)) {   //EXIT off a SHOW or WHO screen only dismisses it, the menu underneath stays
             temporaryInformation = TI_NO_INFO;
             keyActionProcessed = true;
             screenUpdatingMode &= ~(SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_STATUSBAR);
@@ -3435,7 +3442,7 @@ RELEASE_END:
 void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
   doRefreshSoftMenu = true;     //dr
     uint8_t effectiveCalcMode = calcMode;
-    if(calcMode == CM_GRAPH && programRunStop == PGM_RUNNING) {   // a program running under CM_GRAPH (e.g. plot(int) integrand) needs normal ENTER dup, not the empty interactive-graph case
+    if(GRAPHMODE && programRunStop == PGM_RUNNING) {   // a program running under CM_GRAPH or CM_PLOT_STAT (e.g. plot(int) integrand, programmed HPLOT) needs normal ENTER dup, not the empty interactive-graph case
       effectiveCalcMode = CM_NORMAL;
     }
     switch(effectiveCalcMode) {
@@ -3493,13 +3500,13 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
           reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(lenInBytes), amNone);
           xcopy(REGISTER_STRING_DATA(REGISTER_X), aimBuffer, lenInBytes);
 
-          #if defined(IR_PRINTING)
+          #if defined(OPTION_IR_PRINTING)
             #if defined(PC_BUILD) && defined(MONITOR_IRPRINT)
               printf("**[DL]** fnKeyEnter printTraceX\n");
               fflush(stdout);
             #endif //PC_BUILD
             printTraceX(LINE_FULL);
-          #endif //IR_PRINTING
+          #endif //OPTION_IR_PRINTING
 
           if(!getSystemFlag(FLAG_ERPN)) {                                  //PHM eRPN 2021-07
                     #if defined(DEBUGUNDO)
@@ -3694,7 +3701,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
                     lastErrorCode = 0;
                 }
                 else {
-                    if(currentMenu() == -MNU_SYSFL) {                                                       //JM auto recover out of SYSFL
+                    if(tam.mode && currentMenu() == -MNU_SYSFL) {                                           //JM auto recover out of SYSFL in the CFLG TAM flow; a plain catalog SYS.FL exits via the standard path below
                       numberOfTamMenusToPop = 2;                                                   //JM
                       leaveTamModeIfEnabled();                                                     //JM
                       return;                                                                      //JM
@@ -4075,7 +4082,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
         systemFlags1 = sf1;
         fnClDrawMx(1);
         if(statMx[0]!='S') {
-          printStatus(0, errorMessages[RESTORING_STATS], force);
+          printStatus(0, errorMessageOf(RESTORING_STATS), force);
           restoreStats();
         }
         screenUpdatingMode = SCRUPD_AUTO;
@@ -4262,9 +4269,7 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
 
 void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
     uint16_t lg;
-  #if !defined(SAVE_SPACE_DM42_10)
     uint8_t *nextStep;
-  #endif //SAVE_SPACE_DM42_10
 
     if(tam.mode) {
       tamProcessInput(ITM_BACKSPACE);
@@ -4407,8 +4412,6 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_PEM: {
-        #if !defined(SAVE_SPACE_DM42_10)
-
         if(lastErrorCode != 0) {
           lastErrorCode = 0;
           return;
@@ -4471,7 +4474,6 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
             }
           }
         }
-        #endif // !SAVE_SPACE_DM42_10
         break;
       }
 
@@ -4759,18 +4761,6 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
 
 void fnKeyDown(uint16_t unusedButMandatoryParameter) {
     int16_t menuId = softmenuStack[0].softmenuId; //JM
-
-//--     if(SHOWMODE && currentMenu() != -MNU_EQN && !tam.mode) { //JMSHOW vv
-//--       if(temporaryInformation == TI_SHOW_REGISTER_TINY) {
-//--         fnShow_SCROLL(12);
-//--       }
-//--       else {
-//--         fnShow_SCROLL(2);
-//-- //      refreshScreen(133);
-//--       }
-//--       return;
-//--     }                             //JMSHOW ^^
-
 
     if(tam.mode && tam.alpha && currentMenu() == -MNU_TAMALPHA) {
       fnAlphaCursorEnd(NOPARAM);
