@@ -12,7 +12,7 @@ The old way still works, put the source in X as a string and XEQ 'FORTH' runs it
 
 Definitions are local to the program that defines them. Why? Two programs should be able to use the same word name without wrecking each other. By default they can't see each other's words. The dictionary gets rebuilt by a pre-scan the first time a run touches it. That's also why a word works above the line that defines it.
 
-GLOBAL promotes the latest word. A global survives power off and backup and restore, and you can call it straight from the keyboard. FORGET drops a global when you're done with it.
+GLOBAL promotes the latest word. A global survives power off and backup and restore, and you can run it from the keyboard, XEQ then the name spelled out in alpha. It won't appear on the XEQ label picker or in the PROG catalog though, those only list labels. FORGET drops a global when you're done with it.
 
 [b]The language[/b]
 

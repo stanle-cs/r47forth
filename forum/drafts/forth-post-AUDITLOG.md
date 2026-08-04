@@ -49,3 +49,12 @@ zero, banned shapes zero, 6 judged-factual flags.
 - At posting: upload shot1..shot6 in order, then r47-dmcp5.zip
   (rebuilt 2026-08-03 at 00.109.04.00b0) to the release branch; §5
   gates; the Forth thread per the locked threading decision.
+
+## Stan's review, round one (2026-08-03)
+
+The GLOBAL keyboard claim was imprecise and he caught it. Verified:
+typed XEQ + alpha name runs a global (tam.c fallback, :997); the XEQ
+label picker and PROG catalog are labelList-only and forth-core never
+touches labelList — the spec's open item 1 records the invisibility as
+a known deferred asymmetry. The paragraph now says both halves: runs
+by typed name, won't appear on the picker or in PROG.
