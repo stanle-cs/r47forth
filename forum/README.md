@@ -15,7 +15,9 @@ drafts/              current post drafts
 
 1. Read `DESIGN.md`. It carries the locked decisions, the voice rules, the
    content inventories and the publication gates.
-2. Draft with `PROMPT_WRITE.md`, or by hand against the spec.
+2. Draft. Ruled 2026-08-03: Fable (Claude) drafts in a repo-connected,
+   deep-effort session against the spec's content inventory.
+   `PROMPT_WRITE.md` is the fallback for drafting outside that setup.
 3. Run both scanners:
 
    ```
@@ -26,8 +28,9 @@ drafts/              current post drafts
    Judge the flags. Roughly a third are factual enumerations that must not be
    rewritten. Driving the count to zero makes the text worse.
 4. Audit with `PROMPT_AUDIT.md` in a fresh session of a **different** model
-   from the one that drafted. This is the step that finds what the scanners and
-   the author both miss.
+   from the one that drafted. Ruled 2026-08-03: the pool is ChatGPT and
+   Gemini, one pass each, either order. This is the step that finds what
+   the scanners and the author both miss.
 5. Repeat step 4 until two consecutive audits by two different non-drafting
    models come back with no real findings. A real finding resets the count.
    The full exit criterion, the reply rule, the screenshot rules and what

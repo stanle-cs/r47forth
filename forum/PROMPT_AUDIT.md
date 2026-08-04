@@ -1,6 +1,7 @@
 # Prompt: audit a post for AI writing
 
-Paste everything between the rules into ChatGPT, then paste the post underneath.
+Paste everything between the rules into ChatGPT or Gemini (the ruled audit
+pool, one pass each), then paste the post underneath.
 
 Use this on a post written by a *different* model than the one auditing. A model
 reviewing its own output shares its blind spots, and that is the whole reason

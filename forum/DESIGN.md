@@ -131,6 +131,14 @@ BBCode fixes are exempt. A new paragraph re-enters the loop at step 2.
 encoded before the next draft cycle: a pattern in `aiaudit.py` or
 `framescan.py` where it is mechanical, a §2 rule where it is not.
 
+**Model assignment (ruled 2026-08-03).** Fable (Claude) drafts, in one
+deep-effort session with repository access — drafting is one writer's job,
+and a multi-agent fan-out produces as many voices as agents. The audit
+pool is ChatGPT and Gemini: one pass each, either order, both through
+`PROMPT_AUDIT.md` in fresh sessions. The drafter exclusion applies at the
+model-family level, so Claude never audits a Claude draft; if the drafter
+ever changes, the exclusion travels with it.
+
 ---
 
 ## 4. Required in every post
