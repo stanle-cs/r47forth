@@ -2898,8 +2898,6 @@ static int test_capture_suspend(void)
         runFunction(items[i]);
       }
       uint16_t stepNumBefore = currentLocalStepNumber;
-      uint8_t *capStepBefore = currentStep;
-      uint8_t *nextStepBefore = findNextStep(currentStep);
       uint16_t stepsBeforeSTO = getNumberOfSteps();
 
       runFunction(ITM_STO);
@@ -2939,12 +2937,16 @@ static int test_capture_suspend(void)
                  (int)tam.mode, (int)tam.function);
           sc1 = 1;
         }
-        else if (currentStep != capStepBefore) {
-          printf("    [1] FAIL: currentStep moved off the capture line\n");
-          sc1 = 1;
-        }
-        else if (findNextStep(currentStep) != nextStepBefore) {
-          printf("    [1] FAIL: a step remains after the capture step\n");
+        /* FIX-7b re-pin: the fold now recommits the on-disk step, which may
+         * legally relocate program memory (resize), so raw-pointer identity
+         * with the pre-STO capture step is no longer the right oracle.  The
+         * stronger post-fix pin is the recommit invariant itself: currentStep
+         * is ON an ITM_FORTH step whose payload mirrors aimBuffer verbatim. */
+        else if (currentStep[0] != 0x8B || currentStep[1] != 0x1A ||
+                 currentStep[2] != 0xFD ||
+                 currentStep[3] != stringByteLength(aimBuffer) ||
+                 memcmp(currentStep + 4, aimBuffer, currentStep[3]) != 0) {
+          printf("    [1] FAIL: on-disk step does not mirror the folded line\n");
           sc1 = 1;
         }
         else if (getNumberOfSteps() != stepsBeforeSTO) {
@@ -3873,9 +3875,12 @@ static int test_capture_param_text(void)
            * restored under direct measurement confirm this is
            * allocator quantization, not a leak, so a bounded,
            * block-aligned, growth-only residue is tolerated instead of
-           * an unbounded one. */
+           * an unbounded one.  FIX-7b adds one recommit (delete +
+           * re-insert of a now-longer step) per convert cycle, so the
+           * bound widens from 4 to 6 quanta — still block-aligned,
+           * still growth-only, still bounded. */
           if (delta4 > 0 && delta4 % BYTES_PER_BLOCK == 0
-              && delta4 <= 4 * BYTES_PER_BLOCK && freeBefore4 > after4) {
+              && delta4 <= 6 * BYTES_PER_BLOCK && freeBefore4 > after4) {
             printf("    [4] PASS (escape valve): freeRam %u -> %u is %u program-memory"
                    " resize quantum(s) (%u B each), not a conversion leak\n",
                    (unsigned)freeBefore4, (unsigned)after4,
@@ -7041,6 +7046,274 @@ static int test_capture_close_paths_reset_tuple(void)
   dynamicSoftmenu[22].numItems = savedForthMenuItems;
   xcopy(softmenuStack, savedStack, sizeof(savedStack));
   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* FIX-7 (D-C1) reproducer: the F6-4 fold's committed text must survive its
+ * own ENTER commit. decodeOneStep renders quoted names with the directional
+ * glyphs STD_LEFT/RIGHT_SINGLE_QUOTE; before the fix the compiler accepted
+ * only ASCII 0x27, so the folded "2 XEQ <glyph>WA<glyph>" line — the exact
+ * text the landed test_capture_param_text subcase 2 pins — was REFUSED at
+ * ENTER by forthCheckSourceLine's XEQ arm (E9 tier 1). Non-XEQ named forms
+ * were worse: check mode skips item branches, so they committed silently and
+ * failed at run (class test below).
+ *
+ * Escaping mutation: revert the quote-glyph acceptance in parseQuotedName /
+ * forthParseXeqForm — ENTER refuses again and the assertions fail.
+ */
+static int test_forth_fold_commit_recompiles(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void tamProcessInput(uint16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "F7R");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    fail = 1;
+  }
+
+  if (!fail) {
+    /* The landed F6-4 drive: type "2 ", fold XEQ 'WA' through real TAM. */
+    runFunction(ITM_2);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_XEQ);
+    tamProcessInput(ITM_alpha);
+    runFunction(ITM_W);
+    runFunction(ITM_A);
+    tamProcessInput(ITM_ENTER);
+
+    const char *expect = "2 XEQ " STD_LEFT_SINGLE_QUOTE "WA" STD_RIGHT_SINGLE_QUOTE " ";
+    if (forthTestCapState() != FCAP_OPEN || strcmp(forthTestCapText(), expect) != 0) {
+      printf("    FIXTURE FAIL: fold text '%s' (state=%d)\n",
+             forthTestCapText(), forthTestCapState());
+      fail = 1;
+    }
+
+    if (!fail) {
+      lastErrorCode = ERROR_NONE;
+      runFunction(ITM_ENTER);
+
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    FAIL: ENTER refused the folded line (error %d)\n", lastErrorCode);
+        fail = 1;
+      }
+      if (forthTestCapState() != FCAP_OPEN || forthTestCapText()[0] != 0) {
+        printf("    FAIL: no fresh relocked line after commit (state=%d text='%s')\n",
+               forthTestCapState(), forthTestCapText());
+        fail = 1;
+      }
+      /* The committed step must hold the glyph-quoted text verbatim. */
+      uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+      uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
+      size_t elen = strlen(expect);
+      if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A ||
+          sSource[2] != 0xFD || sSource[3] != (uint8_t)elen ||
+          memcmp(sSource + 4, expect, elen) != 0) {
+        printf("    FAIL: committed step does not hold the folded text\n");
+        fail = 1;
+      }
+    }
+
+    /* Abort the relocked capture line (CLA + BACKSPACE idiom). */
+    runFunction(ITM_CLA);
+    runFunction(ITM_BACKSPACE);
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+
+  if (!fail) {
+    printf("    PASS: F6-4 folded line commits and relocks cleanly\n");
+  }
+  return fail;
+}
+
+/* FIX-7 class test: emit/accept quote parity. The class (bug-fix testing
+ * rule): every glyph-quoted spelling decodeOneStep can render — named form
+ * 253, indirect variable 255, system flag 250, XEQ name — must be accepted
+ * by the compiler exactly as its ASCII-0x27 twin is, emitting the identical
+ * marker encoding. Sweeps every quoted form in forthParamMarkerMask's
+ * repertoire plus the structural XEQ, compile-state (interpret shares the
+ * one bounded-core dispatch body, DESIGN-HISTORY 2026-07-19). A negative
+ * subcase pins that an unbalanced glyph quote still errors.
+ */
+static int test_quote_glyph_accept_parity(void)
+{
+  int fail = 0;
+  int16_t savedTamFunction = tam.function;
+  uint8_t savedCalcMode = calcMode;
+
+  calcMode = CM_NORMAL;
+  tam.function = 0;
+  lastErrorCode = ERROR_NONE;
+
+  /* scanCount: occurrences of pat[0..plen) in the interactive dictionary */
+  #define Q7_SCAN(pat, plen, wantCount, scTag)                                 \
+    do {                                                                       \
+      int found = 0;                                                           \
+      uint16_t limit = fdict.here;                                             \
+      for (uint16_t i = 0; i + (plen) <= limit; i++) {                         \
+        if (memcmp(fdict.base + i, (pat), (plen)) == 0) found++;               \
+      }                                                                        \
+      if (found != (wantCount)) {                                              \
+        printf("    [%s] FAIL: marker pattern found %d times, expected %d\n",  \
+               scTag, found, (wantCount));                                     \
+        sc = 1;                                                                \
+      }                                                                        \
+    } while(0)
+
+  /* ---- [1] XEQ 'WA' : ASCII vs glyph emit the same XEQN payload ---- */
+  { int sc = 0;
+    forthOuterInterpret(": Q7A XEQ 'WA' ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: ASCII XEQ form errored (%d)\n", lastErrorCode);
+      sc = 1; lastErrorCode = ERROR_NONE;
+    }
+    forthOuterInterpret(": Q7B XEQ " STD_LEFT_SINGLE_QUOTE "WA" STD_RIGHT_SINGLE_QUOTE " ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: glyph XEQ form errored (%d)\n", lastErrorCode);
+      sc = 1; lastErrorCode = ERROR_NONE;
+    }
+    if (!sc) {
+      const uint8_t pat[] = { 253, 2, 'W', 'A' };
+      Q7_SCAN(pat, 4, 2, "1");
+    }
+    if (!sc) printf("    [1] PASS: XEQ glyph quotes emit the ASCII form's payload\n");
+    fail |= sc;
+  }
+
+  /* ---- [2] RCL 'AB' : named-variable marker 253 ---- */
+  { int sc = 0;
+    forthOuterInterpret(": Q7C RCL 'AB' ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [2] FAIL: ASCII named form errored (%d)\n", lastErrorCode);
+      sc = 1; lastErrorCode = ERROR_NONE;
+    }
+    forthOuterInterpret(": Q7D RCL " STD_LEFT_SINGLE_QUOTE "AB" STD_RIGHT_SINGLE_QUOTE " ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [2] FAIL: glyph named form errored (%d)\n", lastErrorCode);
+      sc = 1; lastErrorCode = ERROR_NONE;
+    }
+    if (!sc) {
+      const uint8_t pat[] = { 253, 2, 'A', 'B' };
+      Q7_SCAN(pat, 4, 2, "2");
+    }
+    if (!sc) printf("    [2] PASS: named-variable glyph quotes match ASCII\n");
+    fail |= sc;
+  }
+
+  /* ---- [3] STO ->'CD' : indirect-variable marker 255 ---- */
+  { int sc = 0;
+    forthOuterInterpret(": Q7E STO " STD_RIGHT_ARROW "'CD' ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: ASCII indirect form errored (%d)\n", lastErrorCode);
+      sc = 1; lastErrorCode = ERROR_NONE;
+    }
+    forthOuterInterpret(": Q7F STO " STD_RIGHT_ARROW STD_LEFT_SINGLE_QUOTE "CD" STD_RIGHT_SINGLE_QUOTE " ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [3] FAIL: glyph indirect form errored (%d)\n", lastErrorCode);
+      sc = 1; lastErrorCode = ERROR_NONE;
+    }
+    if (!sc) {
+      const uint8_t pat[] = { 255, 2, 'C', 'D' };
+      Q7_SCAN(pat, 4, 2, "3");
+    }
+    if (!sc) printf("    [3] PASS: indirect-variable glyph quotes match ASCII\n");
+    fail |= sc;
+  }
+
+  /* ---- [4] SF 'TDM24' : system-flag marker 250 ---- */
+  { int sc = 0;
+    forthOuterInterpret(": Q7G SF 'TDM24' ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [4] FAIL: ASCII sysflag form errored (%d)\n", lastErrorCode);
+      sc = 1; lastErrorCode = ERROR_NONE;
+    }
+    forthOuterInterpret(": Q7H SF " STD_LEFT_SINGLE_QUOTE "TDM24" STD_RIGHT_SINGLE_QUOTE " ;");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [4] FAIL: glyph sysflag form errored (%d)\n", lastErrorCode);
+      sc = 1; lastErrorCode = ERROR_NONE;
+    }
+    if (!sc) {
+      const uint8_t pat[] = { 250, 0 };   /* TDM24 is bit 0 of the SFL range */
+      Q7_SCAN(pat, 2, 2, "4");
+    }
+    if (!sc) printf("    [4] PASS: system-flag glyph quotes match ASCII\n");
+    fail |= sc;
+  }
+
+  /* ---- [5] Unbalanced glyph quote still errors (no over-acceptance) ---- */
+  { int sc = 0;
+    forthOuterInterpret(": Q7I XEQ " STD_LEFT_SINGLE_QUOTE "WA ;");
+    if (lastErrorCode == ERROR_NONE) {
+      printf("    [5] FAIL: unbalanced glyph quote accepted\n");
+      sc = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+    if (!sc) printf("    [5] PASS: unbalanced glyph quote still refused\n");
+    fail |= sc;
+  }
+  #undef Q7_SCAN
+
+  calcMode = savedCalcMode;
+  tam.function = savedTamFunction;
   lastErrorCode = ERROR_NONE;
   return fail;
 }

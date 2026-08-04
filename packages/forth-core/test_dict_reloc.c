@@ -1123,6 +1123,8 @@ static int test_sim_bench_nesting(void);
 static int test_pem_xeq_dynmenu_no_live_exec(void);
 static int test_forth_toggle_close_with_open_capture(void);   /* FIX-8 */
 static int test_capture_close_paths_reset_tuple(void);        /* FIX-8 class */
+static int test_forth_fold_commit_recompiles(void);           /* FIX-7 */
+static int test_quote_glyph_accept_parity(void);              /* FIX-7 class */
 
 
 /* T5 split: forward declarations for the tests that now live in the
@@ -2061,6 +2063,18 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_capture_close_paths_reset_tuple...\n");
   fail |= test_capture_close_paths_reset_tuple();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH FIX-7 TESTS (emit/accept quote parity)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_forth_fold_commit_recompiles...\n");
+  fail |= test_forth_fold_commit_recompiles();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_quote_glyph_accept_parity...\n");
+  fail |= test_quote_glyph_accept_parity();
   forthDictClear();
   forthGDictClear();
 

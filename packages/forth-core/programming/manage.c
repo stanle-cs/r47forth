@@ -1112,36 +1112,32 @@ void pemCloseAlphaInput(void) {
   tam.function = 0;
 }
 
+/* FIX-7b: re-establish the per-key recommit invariant — the on-disk capture
+ * step mirrors aimBuffer.  Mirrors pemAlpha's own glyph-editing recommit
+ * tail; callers guarantee currentStep is ON the capture step, and a capture
+ * step's opcode is always the 2-byte ITM_FORTH form, so this skips the
+ * generic aimFunc branching the pemAlpha tail needs. */
+static void forthCapRecommitStep(void) {
+  deleteStepsFromTo(currentStep, findNextStep(currentStep));
+  tmpString[0] = (ITM_FORTH >> 8) | 0x80;
+  tmpString[1] =  ITM_FORTH       & 0xff;
+  tmpString[2] = (char)STRING_LABEL_VARIABLE;
+  tmpString[3] = stringByteLength(aimBuffer);
+  xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
+  _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 4);
+  --currentLocalStepNumber;
+  currentStep = findPreviousStep(currentStep);
+}
+
 void forthCaptureSuspend(void) {
   if (!forthCapIsOpen()) { return; }
-  /* Recommit the buffer to the on-disk step before snapshotting its
-   * offset below — mirrors pemAlpha's own glyph-editing recommit tail
-   * (this file, the block ending in the `_insertInProgram` call reached
-   * from the CAT_FNCT/PTP_NONE item arm), which is what normally keeps
-   * the on-disk step in sync with aimBuffer after every keystroke.
-   * That invariant does NOT hold on entry here in one real case: a
-   * forthCaptureResume() that just folded a suspended TAM commit into
-   * text (F6-4) writes that text into aimBuffer via
-   * forthCapInsertName() without recommitting the on-disk step, so a
-   * suspend entered right after — with no intervening keystroke, e.g.
-   * a second TAM operation cancelled immediately — would otherwise
-   * snapshot a stale pre-fold offset and later resume would silently
-   * drop the folded text (test-audit finding 2026-07-20, DESIGN-HISTORY.md).
-   * currentStep is guaranteed ON the capture step here (see the comment
-   * below), and a capture step's opcode is always the 2-byte ITM_FORTH
-   * form, so this can skip the generic aimFunc branching the pemAlpha
-   * tail needs. */
-  {
-    deleteStepsFromTo(currentStep, findNextStep(currentStep));
-    tmpString[0] = (ITM_FORTH >> 8) | 0x80;
-    tmpString[1] =  ITM_FORTH       & 0xff;
-    tmpString[2] = (char)STRING_LABEL_VARIABLE;
-    tmpString[3] = stringByteLength(aimBuffer);
-    xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
-    _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 4);
-    --currentLocalStepNumber;
-    currentStep = findPreviousStep(currentStep);
-  }
+  /* Recommit before snapshotting the step offset below.  Since FIX-7b the
+   * F6-4 fold recommits at its own tail, so the per-key invariant holds on
+   * every entry here; this call stays as defense-in-depth — the audit-#1
+   * data-loss bug (test-audit finding 2026-07-20, DESIGN-HISTORY.md) showed
+   * what a stale snapshot costs, and a redundant recommit of an in-sync
+   * step is byte-neutral. */
+  forthCapRecommitStep();
   uint16_t cursor    = T_cursorPos;
   uint16_t localStep = currentLocalStepNumber;
   uint32_t stepOff   = (uint32_t)(currentStep - beginOfProgramMemory);
@@ -1186,6 +1182,7 @@ void forthCaptureResume(void) {
   /* F6-4: steps the suspended TAM committed become canonical text.
    * n is 0 (cancel) or 1 (one commit) today; the loop is defensive. */
   { uint16_t n = getNumberOfSteps() - forthCapSavedStepCount();
+    bool_t folded = false;
     while (n > 0) {
       uint8_t *ins = findNextStep(currentStep);   /* first inserted step */
       decodeOneStep(ins);                          /* canonical text → tmpString */
@@ -1202,7 +1199,17 @@ void forthCaptureResume(void) {
         }
       }
       deleteStepsFromTo(ins, findNextStep(ins));
+      folded = true;
       --n;
+    }
+    if (folded) {
+      /* FIX-7b: forthCapInsertName wrote into aimBuffer only — recommit so
+       * the on-disk step holds the folded text.  Without this, a commit
+       * path entered with NO intervening keystroke (ENTER, EXIT, Up/Down —
+       * all of which trust the per-key invariant) silently committed the
+       * PRE-fold text: audit #1 patched the suspend consumer, this closes
+       * the breach at its source. */
+      forthCapRecommitStep();
     }
   }
   tam.function = ITM_FORTH;                 /* capture-era tam is exactly

@@ -285,25 +285,50 @@ static const char *checkArrowPrefix(const char *tok)
   return NULL;
 }
 
-/* F4-3: 'NAME' with ASCII 0x27 delimiters; the closing quote must be the
- * LAST GLYPH (glyph-wise walk — a two-byte glyph's second byte that
+/* FIX-7: quote delimiters are ASCII 0x27 (the typeable canonical spelling,
+ * V4) OR the directional glyph pair STD_LEFT/RIGHT_SINGLE_QUOTE
+ * (\xa0\x18 / \xa0\x19) that decodeOneStep renders and the F6-4 fold
+ * writes into capture lines — before this, the fold emitted committed
+ * source its own compiler refused (D-C1). Open/close are matched
+ * independently (decode always emits the glyph pair, typing always
+ * produces 0x27; a mixed pair is harmless). Content bytes pass through
+ * raw either way; a mid-token right-glyph stays content — only the LAST
+ * glyph closes. No number-grammar collision: any byte >= 0x80 already
+ * disqualifies a token as a number (classifyNumber). */
+static uint8_t quoteOpenLen(const char *tok)   /* 0 = not an opening quote */
+{
+  if (tok[0] == 0x27) return 1;
+  if ((uint8_t)tok[0] == 0xa0 && (uint8_t)tok[1] == 0x18) return 2;
+  return 0;
+}
+static uint8_t quoteCloseLen(const char *tok)  /* close AND last glyph, else 0 */
+{
+  if (tok[0] == 0x27 && tok[1] == 0) return 1;
+  if ((uint8_t)tok[0] == 0xa0 && (uint8_t)tok[1] == 0x19 && tok[2] == 0) return 2;
+  return 0;
+}
+
+/* F4-3: 'NAME' — delimiters per quoteOpenLen/quoteCloseLen (FIX-7); the
+ * closing quote must be the LAST GLYPH (a two-byte glyph's second byte that
  * equals 0x27 is not a close).  Twin of forthParseXeqForm's quote arm
  * (F3-6); kept separate so the landed XEQ parser stays untouched. */
 static bool parseQuotedName(const char *tok, char *name, uint8_t *lenOut)
 {
   uint8_t len = 0;
-  if (tok[0] != 0x27) return false;
-  tok++;
+  uint8_t open = quoteOpenLen(tok);
+  bool closed = false;
+  if (open == 0) return false;
+  tok += open;
   while (*tok) {
-    if (*tok == 0x27) {
-      /* closing quote must be the last character */
-      if (tok[1] != 0) return false;
+    if (quoteCloseLen(tok)) {
+      closed = true;
       break;
     }
+    if (*tok == 0x27) return false;  /* mid-token ASCII quote: malformed (unchanged) */
     if (len >= FORTH_NAME_MAX) return false;
     name[len++] = *tok++;
   }
-  if (*tok != 0x27 || len == 0) return false;
+  if (!closed || len == 0) return false;
   name[len] = 0;                 /* callers compare it as a C string */
   *lenOut = len;
   return true;
@@ -1507,26 +1532,45 @@ bool forthCheckSourceLine(const char *source)
 /* 'NAME' -> kind 253; :NAME: -> kind 249.  The closing delimiter must be
  * the LAST GLYPH (a two-byte glyph whose second byte merely equals the
  * delimiter is not a close).  Name bytes pass through raw (C47 glyphs
- * legal; 0x20 is inexpressible in a token by construction). */
+ * legal; 0x20 is inexpressible in a token by construction).  FIX-7: the
+ * quote spelling also accepts the directional glyph pair the F6-4 fold
+ * emits (see quoteOpenLen/quoteCloseLen above); :NAME: is unchanged. */
 static bool forthParseXeqForm(const char *tok, uint8_t *kind,
                               char *name, uint8_t *lenOut)
 {
   int16_t len = (int16_t)strlen(tok);
-  char delim = tok[0];
-  if (len < 3 || (delim != '\'' && delim != ':')) return false;
+  bool isColon = (tok[0] == ':');
+  uint8_t open = isColon ? 1 : quoteOpenLen(tok);
+  int16_t closeLen, last;
+  if (open == 0 || len < open + 2) return false;
   {
-    int16_t p = 0, last = 0;
-    while (tok[p] != 0) { last = p; p = stringNextGlyph((char *)tok, p); }
-    if (last != len - 1 || tok[last] != delim) return false;
+    int16_t pp = 0;
+    last = 0;
+    while (tok[pp] != 0) { last = pp; pp = stringNextGlyph((char *)tok, pp); }
+  }
+  if (last < open) return false;             /* close must not be the open */
+  if (isColon) {
+    if (tok[last] != ':' || last != len - 1) return false;
+    closeLen = 1;
+  }
+  else if (tok[last] == 0x27 && last == len - 1) {
+    closeLen = 1;
+  }
+  else if ((uint8_t)tok[last] == 0xa0 && (uint8_t)tok[last + 1] == 0x19 &&
+           last == len - 2) {
+    closeLen = 2;
+  }
+  else {
+    return false;
   }
   {
-    int16_t nlen = len - 2;
+    int16_t nlen = len - open - closeLen;
     if (nlen < 1 || nlen > FORTH_NAME_MAX) return false;
-    memcpy(name, tok + 1, (size_t)nlen);
+    memcpy(name, tok + open, (size_t)nlen);
     name[nlen] = 0;
     *lenOut = (uint8_t)nlen;
   }
-  *kind = (delim == ':') ? LOCAL_LABEL_VARIABLE : STRING_LABEL_VARIABLE;
+  *kind = isColon ? LOCAL_LABEL_VARIABLE : STRING_LABEL_VARIABLE;
   return true;
 }
 

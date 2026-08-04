@@ -2472,3 +2472,47 @@ close paths through their real entry points — BACKSPACE-abort, ENTER on
 empty, navigation commit, FORTH toggle-close — and is the sweep Stage K's
 E14 sites extend. Reproducer red run recorded (state 1, aimBuffer "2",
 line lost); the unfixed tree is the revert-mutation evidence.
+
+## 2026-08-04 — FIX-7: the F6-4 fold emitted text its own compiler refused; FIX-7b: and its commit dropped the fold
+
+D-C1 (DEFECTS_capture_roundtrip.md), confirmed by trace T5 and worse than
+suspected. decodeOneStep renders quoted parameters with the directional
+glyphs STD_LEFT/RIGHT_SINGLE_QUOTE; the compiler's two quoted-name parsers
+accepted only ASCII 0x27. Because E9's check mode skips the item branches,
+a folded GTO/STO/SF named form COMMITTED SILENTLY and failed only when
+that step executed; the folded XEQ was refused at ENTER purely because the
+structural XEQ keyword shares its ASCII spelling — same bug, opposite
+user-visible behavior, decided by a naming accident.
+
+Fix (7a): quoteOpenLen/quoteCloseLen accept the glyph pair as delimiters in
+parseQuotedName (the single choke point for named 253 / sysflag 250 /
+indirect-variable 255 forms) and forthParseXeqForm (quote spelling only;
+:NAME: untouched). Open/close matched independently; content bytes raw; a
+mid-token right-glyph stays content (only the last glyph closes); no
+number-grammar collision (>=0x80 disqualifies numbers).
+
+**FIX-7b, found by FIX-7's own reproducer:** the fold writes into aimBuffer
+via forthCapInsertName WITHOUT recommitting the on-disk step — audit #1
+(2026-07-20) patched the SUSPEND consumer of that breach; the reproducer's
+ENTER-after-fold showed the COMMIT consumers (ENTER/EXIT/Up/Down all trust
+the per-key invariant) silently committing the pre-fold text. Fix at the
+source: forthCapRecommitStep() (factored from suspend's block) now runs at
+the fold's tail; suspend's call stays as byte-neutral defense-in-depth.
+Two landed pins updated to post-fix truth: the suspend test's raw-pointer
+identity became the stronger on-disk-mirrors-aimBuffer content pin (the
+recommit may legally relocate program memory), and the conversion-residue
+escape valve widened 4 → 6 resize quanta (one extra delete+insert per
+convert cycle), still block-aligned/growth-only/bounded.
+
+**Named classes (bug-fix testing rule):**
+- FIX-7: emit/accept parity — every spelling decodeOneStep can render must
+  compile to the identical encoding as its typeable twin. Class test
+  test_quote_glyph_accept_parity sweeps all four quoted forms in
+  forthParamMarkerMask's repertoire plus structural XEQ, ASCII-vs-glyph,
+  asserting identical marker payloads in the dictionary, plus an
+  unbalanced-quote negative pin.
+- FIX-7b: recommit invariant — after ANY mutation of the capture line, the
+  on-disk step mirrors aimBuffer before control returns to key dispatch.
+  Pinned end-to-end by test_forth_fold_commit_recompiles (fold → ENTER →
+  committed step holds the folded text verbatim; red on the unfixed tree
+  as "error 48" + pre-fold bytes).
