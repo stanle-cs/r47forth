@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..33593314a217b49097a9dfb6fef61c5e83b54ec3 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8b63385d8 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,9 @@
@@ -204,7 +204,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..33593314a217b49097a9dfb6fef61c5e
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,6 +1105,120 @@ void pemCloseAlphaInput(void) {
+@@ -998,6 +1105,137 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -214,6 +214,11 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..33593314a217b49097a9dfb6fef61c5e
 +  // unconditional here too, not just gated on tam.function == ITM_FORTH.
 +  tam.function = 0;
 +}
++
++/* FIX-9: the E1 catalog-drain helpers are defined further down (above
++ * insertStepInProgram); forthCaptureResume needs them too. */
++static bool_t _forthCatalogBuriedOnStack(void);
++static bool_t _forthCatalogMenuOnTop(void);
 +
 +/* FIX-7b: re-establish the per-key recommit invariant — the on-disk capture
 + * step mirrors aimBuffer.  Mirrors pemAlpha's own glyph-editing recommit
@@ -320,12 +325,24 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..33593314a217b49097a9dfb6fef61c5e
 +  resetShiftState();                        /* fresh-open parity */
 +  setSystemFlag(FLAG_ALPHA);
 +  calcModeAimGui();
++  /* FIX-9 (D-C3): a catalog-initiated TAM buried its catalog menus under
++   * the TAM menu (_closeCatalog declines to pop there), and
++   * leaveTamModeIfEnabled pops only the TAM menu — so without a drain the
++   * NEXT softkey dispatch's _closeCatalog() finds the buried MNU_CATALOG,
++   * sees the -MNU_ALPHA we are about to push (itself on CatalogMenus[]),
++   * and eats it.  Same stack-wide predicate + bounded loop as the E1 arm:
++   * popSoftmenu() can re-push HOME, so never spin on the predicate. */
++  for(int i = 0; i < SOFTMENU_STACK_SIZE
++                 && (_forthCatalogMenuOnTop() || _forthCatalogBuriedOnStack());
++      i++) {
++    popSoftmenu();
++  }
 +  showSoftmenu(-MNU_ALPHA);
 +  pemCursorIsZerothStep = false;
  }
  
  
-@@ -1013,7 +1234,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +1251,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -334,7 +351,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..33593314a217b49097a9dfb6fef61c5e
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +1606,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +1623,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -372,7 +389,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..33593314a217b49097a9dfb6fef61c5e
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +1647,18 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +1664,18 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -393,7 +410,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..33593314a217b49097a9dfb6fef61c5e
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +1680,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +1697,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -461,7 +478,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..33593314a217b49097a9dfb6fef61c5e
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +1752,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +1769,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -477,7 +494,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..33593314a217b49097a9dfb6fef61c5e
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +1843,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +1860,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -501,7 +518,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..33593314a217b49097a9dfb6fef61c5e
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2155,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2172,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

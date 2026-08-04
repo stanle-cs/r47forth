@@ -7317,3 +7317,175 @@ static int test_quote_glyph_accept_parity(void)
   lastErrorCode = ERROR_NONE;
   return fail;
 }
+
+/* FIX-9 (D-C3) reproducer + class test: softmenu-stack reconciliation across
+ * TAM suspend/resume. A catalog-initiated TAM during capture necessarily has
+ * a catalog-family menu on the stack when tamEnterMode pushes the TAM menu;
+ * _closeCatalog declines to pop under a TAM menu, leaveTamModeIfEnabled pops
+ * only the TAM menu, and (pre-fix) forthCaptureResume pushed -MNU_ALPHA with
+ * no stack-wide check — leaving -MNU_CATALOG buried. The NEXT softkey
+ * dispatch's _closeCatalog() then scans the whole stack, finds the buried
+ * entry, sees -MNU_ALPHA on top — which is itself on CatalogMenus[]
+ * (keyboard.c) — and pops the capture's menu out from under it. Trap-#6's
+ * exact shape; the E1 arm got the bounded drain, the resume seam had none.
+ * Structural/defensive today (FCNS is not reachable mid-capture from the
+ * standard alpha keyboard); Stage K's column swap makes it a real key path.
+ *
+ * Subcase 1 is the reproducer (red pre-fix at the post-_closeCatalog menu
+ * check); subcase 2 is the negative control — a plain (non-catalog) STO
+ * round-trip must be unaffected by the drain.
+ *
+ * Escaping mutation: revert the drain loop in forthCaptureResume — subcase 1
+ * loses -MNU_ALPHA after _closeCatalog and fails.
+ */
+static int test_resume_drains_buried_catalog(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void tamProcessInput(uint16_t);
+  extern void showSoftmenu(int16_t);
+  extern void _closeCatalog(void);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  bool_t savedFnKeyInCatalog = fnKeyInCatalog;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  for (int sc = 1; sc <= 2 && !fail; sc++) {
+    int scFail = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "F9R");
+    tpMarker(&p);
+    tpRtn(&p);
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    [%d] FIXTURE FAIL: build/write\n", sc);
+      fail = 1;
+      break;
+    }
+
+    calcMode = CM_PEM;
+    catalog = CATALOG_NONE;
+    tam.mode = 0;
+    tam.function = 0;
+    aimBuffer[0] = 0;
+    programRunStop = PGM_STOPPED;
+    dynamicMenuItem = -1;
+    pemCursorIsZerothStep = false;
+    alphaCase = AC_UPPER;
+    nextChar = NC_NORMAL;
+    shiftF = false;
+    shiftG = false;
+    clearSystemFlag(FLAG_ALPHA);
+    clearSystemFlag(FLAG_NUMLOCK);
+    lastErrorCode = ERROR_NONE;
+    forthCapClose();
+    currentProgramNumber = 1;
+
+    fnGotoDot(2);
+    runFunction(ITM_AIM);
+    if (!forthCapIsOpen()) {
+      printf("    [%d] FIXTURE FAIL: ITM_AIM did not open capture\n", sc);
+      fail = 1;
+      break;
+    }
+
+    if (sc == 1) {
+      /* Catalog-shaped STO: CAT -> FCNS on the stack, then the pick, then
+       * the _closeCatalog the keyboard runs right after runFunction —
+       * which declines under the TAM menu, leaving the catalog buried. */
+      catalog = CATALOG_FCNS;
+      showSoftmenu(-MNU_CATALOG);
+      showSoftmenu(-MNU_FCNS);
+      fnKeyInCatalog = 1;
+      runFunction(ITM_STO);
+      _closeCatalog();
+      fnKeyInCatalog = 0;
+    }
+    else {
+      runFunction(ITM_STO);       /* plain physical-shaped TAM entry */
+    }
+
+    if (forthTestCapState() != FCAP_SUSPENDED) {
+      printf("    [%d] FAIL: capture not suspended after STO (state=%d)\n",
+             sc, forthTestCapState());
+      scFail = 1;
+    }
+    else {
+      tamProcessInput(ITM_0);
+      tamProcessInput(ITM_5);     /* two digits auto-fire the STO commit */
+
+      if (forthTestCapState() != FCAP_OPEN ||
+          strcmp(forthTestCapText(), "STO 05 ") != 0) {
+        printf("    [%d] FAIL: resume state=%d text='%s'\n",
+               sc, forthTestCapState(), forthTestCapText());
+        scFail = 1;
+      }
+      else if (currentMenu() != -MNU_ALPHA) {
+        printf("    [%d] FAIL: currentMenu() = %d after resume, expected -MNU_ALPHA\n",
+               sc, currentMenu());
+        scFail = 1;
+      }
+      else {
+        /* The next softkey dispatch runs _closeCatalog() — the capture's
+         * menu must survive it. */
+        _closeCatalog();
+        if (currentMenu() != -MNU_ALPHA) {
+          printf("    [%d] FAIL: _closeCatalog ate the ALPHA menu (currentMenu=%d)\n",
+                 sc, currentMenu());
+          scFail = 1;
+        }
+        else if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [%d] FAIL: capture no longer open (state=%d)\n",
+                 sc, forthTestCapState());
+          scFail = 1;
+        }
+      }
+    }
+
+    if (!scFail) {
+      printf("    [%d] PASS: %s\n", sc,
+             sc == 1 ? "buried catalog drained; ALPHA menu survives the next dispatch"
+                     : "plain TAM round-trip unaffected by the drain");
+    }
+    fail |= scFail;
+
+    /* Abort the open line and clean up for the next subcase. */
+    runFunction(ITM_CLA);
+    runFunction(ITM_BACKSPACE);
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+    xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  fnKeyInCatalog = savedFnKeyInCatalog;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}

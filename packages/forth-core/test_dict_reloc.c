@@ -1125,6 +1125,7 @@ static int test_forth_toggle_close_with_open_capture(void);   /* FIX-8 */
 static int test_capture_close_paths_reset_tuple(void);        /* FIX-8 class */
 static int test_forth_fold_commit_recompiles(void);           /* FIX-7 */
 static int test_quote_glyph_accept_parity(void);              /* FIX-7 class */
+static int test_resume_drains_buried_catalog(void);           /* FIX-9 */
 
 
 /* T5 split: forward declarations for the tests that now live in the
@@ -2075,6 +2076,13 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_quote_glyph_accept_parity...\n");
   fail |= test_quote_glyph_accept_parity();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH FIX-9 TESTS (resume drains buried catalog menus)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_resume_drains_buried_catalog...\n");
+  fail |= test_resume_drains_buried_catalog();
   forthDictClear();
   forthGDictClear();
 

@@ -2516,3 +2516,30 @@ convert cycle), still block-aligned/growth-only/bounded.
   Pinned end-to-end by test_forth_fold_commit_recompiles (fold → ENTER →
   committed step holds the folded text verbatim; red on the unfixed tree
   as "error 48" + pre-fold bytes).
+
+## 2026-08-04 — FIX-9: resume now drains buried catalog menus (trap #6, second instance)
+
+D-C3, found by trace T2 and CONFIRMED structurally by the reproducer: a
+catalog-initiated TAM during capture buries its catalog menus under the TAM
+menu (_closeCatalog declines to pop there), leaveTamModeIfEnabled pops only
+the TAM menu, and resume pushed -MNU_ALPHA over the leftovers. The next
+softkey dispatch's _closeCatalog() scans the whole stack, finds the buried
+MNU_CATALOG, and — since MNU_ALPHA is itself on CatalogMenus[] — pops the
+capture's menu (reproducer: currentMenu ended -1330). Key-unreachable
+today (FCNS is invisible mid-capture from the alpha keyboard); Stage K
+makes it a real path — same activation profile as FIX-8.
+
+Fix: forthCaptureResume runs the E1 arm's exact bounded drain
+(_forthCatalogMenuOnTop || _forthCatalogBuriedOnStack, bounded loop, never
+spin-on-predicate) before pushing -MNU_ALPHA. Forward declarations added
+for the two file-static helpers (defined below insertStepInProgram).
+
+**Named class (bug-fix testing rule): softmenu-stack reconciliation — any
+seam that re-establishes the capture UI must leave no catalog-family entry
+buried beneath the menu it pushes.** Both instances of the class are now
+guarded (E1 arm since F6; resume seam here) and both are pinned:
+test_resume_drains_buried_catalog subcase 1 drives the real
+catalog→STO→TAM→resume→_closeCatalog chain; subcase 2 is the negative
+control (plain TAM round-trip unaffected). The physical-key TAM route
+Stage K adds never buries a menu (T2), so keys mode inherits the clean
+path by construction.

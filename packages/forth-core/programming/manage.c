@@ -1112,6 +1112,11 @@ void pemCloseAlphaInput(void) {
   tam.function = 0;
 }
 
+/* FIX-9: the E1 catalog-drain helpers are defined further down (above
+ * insertStepInProgram); forthCaptureResume needs them too. */
+static bool_t _forthCatalogBuriedOnStack(void);
+static bool_t _forthCatalogMenuOnTop(void);
+
 /* FIX-7b: re-establish the per-key recommit invariant — the on-disk capture
  * step mirrors aimBuffer.  Mirrors pemAlpha's own glyph-editing recommit
  * tail; callers guarantee currentStep is ON the capture step, and a capture
@@ -1217,6 +1222,18 @@ void forthCaptureResume(void) {
   resetShiftState();                        /* fresh-open parity */
   setSystemFlag(FLAG_ALPHA);
   calcModeAimGui();
+  /* FIX-9 (D-C3): a catalog-initiated TAM buried its catalog menus under
+   * the TAM menu (_closeCatalog declines to pop there), and
+   * leaveTamModeIfEnabled pops only the TAM menu — so without a drain the
+   * NEXT softkey dispatch's _closeCatalog() finds the buried MNU_CATALOG,
+   * sees the -MNU_ALPHA we are about to push (itself on CatalogMenus[]),
+   * and eats it.  Same stack-wide predicate + bounded loop as the E1 arm:
+   * popSoftmenu() can re-push HOME, so never spin on the predicate. */
+  for(int i = 0; i < SOFTMENU_STACK_SIZE
+                 && (_forthCatalogMenuOnTop() || _forthCatalogBuriedOnStack());
+      i++) {
+    popSoftmenu();
+  }
   showSoftmenu(-MNU_ALPHA);
   pemCursorIsZerothStep = false;
 }
