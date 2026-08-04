@@ -48,8 +48,10 @@ download arrived intact:
   python3 tools/test_pkg_patch_common.py
   python3 tools/test_pkg_patch_refresh.py
   python3 tools/test_pkg_patch_resolver.py
+  python3 tools/test_pkg_patch_integrate.py
 
-Three passes means the resolver, the refresh tool and the patch stack all work.
+Four passes means the resolver, the refresh tool, the patch stack and the
+integration sessions all work.
 
 Then get upstream, copy these files over it keeping the directory layout, and
 apply the build-system diff:
