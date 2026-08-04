@@ -10,8 +10,9 @@ round so I'll walk through what changed.
 there was no way to see what a package changed without diffing by hand.
 Now I just open a file in patches/ and read it.
 [*]A package is a flat directory that mirrors upstream paths, and the
-tooling works out the rest. You drop your files in, run a refresh, and
-the patches come out on the other side.
+tooling works out the rest. You drop new files in, pull upstream ones
+with materialize, run a refresh, and the patches come out on the other
+side.
 [*]When two packages patch the same upstream file, the patches stack in
 filename order (the NNN prefix), each on top of the previous result.
 They can even land in different parts of one function. But if they hit
@@ -31,18 +32,20 @@ packages/my-pkg/
     my_module.c     a new source with no upstream counterpart
 [/code]
 
-For editing an upstream file, don't copy it out of your checked-out
-tree. Your tree has probably moved past the commit the package is based
-on, so the copy would drag along upstream changes you never made, and
-the patch ends up carrying drift instead of just your edits. That's
-what materialize is for:
+For editing an upstream file, use materialize instead of copying it
+out of your checked-out tree. If you just copy the file, there's a
+chance your tree is on a different version than the package base, and
+then the patch picks up upstream's changes as if they were yours:
 
 [code]
 ./package materialize my-pkg keyboard.c
 [/code]
 
-It pulls the file as it was at the package's recorded base commit, so
-when you edit it, the diff is exactly your changes. Then:
+This pulls the file as it was at the package's recorded base commit,
+so when you edit it, the diff is just your changes. Refresh always
+diffs against the base version either way, so if your tree happens to
+be sitting exactly at the base, a straight copy works out the same.
+Then:
 
 [code]
 ./package refresh my-pkg

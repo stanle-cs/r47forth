@@ -163,3 +163,16 @@ after the post's shape settles.
 The lesson for the pipeline: the model audits and scanners police
 voice and tells; they never noticed the post taught the wrong
 interface. Content review is a distinct gate and stays human.
+
+## Second human review round (2026-08-03)
+
+Two more from Stan's read. First, a technical question the post now
+answers inline: refresh diffs against the base-commit version always
+(verified at pkg_patch_refresh.py generate_patch, base_bytes is the
+file at base_commit), so a straight copy is harmless exactly when the
+tree sits at the base, and polluted exactly when upstream touched the
+file in between. Second, the materialize explanation was rewritten in
+his own offered sentence shape ("if you just copy the file, there's a
+chance your tree is on a different version..."), fact-checked true
+before adoption. The drop-files-in bullet no longer implies bare
+copying covers upstream files.
