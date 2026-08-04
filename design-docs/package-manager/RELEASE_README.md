@@ -81,9 +81,11 @@ before every build, or your edit won't be in the firmware you flash.
 
 ## Notes
 
-The Forth data stack is the calculator's own RPN stack, so it runs 4 or
-8 levels deep depending on the stack setting. A recursive word holds one
-operand per level and wants 8. At 4 it reports a full stack early.
+The Forth data stack is the calculator's own RPN stack, 4 or 8 levels
+depending on your stack setting. Anything deeper spills to memory and
+drains back as the word unwinds, so deep recursion works at either
+setting. A native C47 function can't run while values are spilled, the
+line stops with a full-stack message instead.
 
 This is a hobby project that replaces the firmware on your calculator.
 Back up your state first, and flash at your own risk.

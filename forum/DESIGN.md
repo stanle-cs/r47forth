@@ -340,15 +340,20 @@ and none of it definitional.
 **Samples**
 
 16. FDEMO listing and its 16 documented registers
-17. FDEMO needs the 8-level stack
+17. [SUPERSEDED by D3, corrected 2026-08-03 — was "FDEMO needs the
+    8-level stack"; the spill makes depth work at either window, and no
+    pin covers FDEMO-at-4 specifically, so the post makes no such claim]
 18. SAVE listing and its 7 documented registers
 19. `GROW` remains keyboard-callable after the run
 
 **Behaviour changes since Stage 1**
 
 20. `RCL` lifts onto a Forth value instead of overwriting it
-21. Recursion past the stack reports a full stack instead of returning a wrong
-    number; with 8 levels it runs out at 6 or 7
+21. [CORRECTED 2026-08-03, D3 landed after this inventory was authored]
+    Values past the visible stack spill to memory and drain back as the
+    word unwinds; `7 FACT` = 5040 is the pinned acceptance. A native
+    C47 function will not run while values are spilled (loud stop with
+    a named message), and a finished line may not leave spilled values.
 
 **Limitations**
 

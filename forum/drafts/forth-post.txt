@@ -1,0 +1,90 @@
+The Forth package for the R47 is up. You write Forth inside normal calculator programs, the words compile into a dictionary in memory, and everything the machine already does stays reachable from your code. I built it on the custom package system from the post above.
+
+[b]Forth lives inside your programs[/b]
+
+A Forth block sits between »FORTH and FORTH« markers, and every line between them is an ordinary program step holding source text. Insert FORTH in the program editor and the alpha editor opens with the closing marker already placed. ENTER stores the line and opens the next one inside the pair. EXIT closes the block. EDIT reopens a line.
+
+[attachment=5]shot1-pem-listing.png[/attachment]
+
+The old way still works, put the source in X as a string and XEQ 'FORTH' runs it.
+
+[b]Where words live[/b]
+
+Definitions are local to the program that defines them. Why? Two programs should be able to use the same word name without wrecking each other. By default they can't see each other's words. The dictionary gets rebuilt by a pre-scan the first time a run touches it. That's also why a word works above the line that defines it.
+
+GLOBAL promotes the latest word. A global survives power off and backup and restore, and you can call it straight from the keyboard. FORGET drops a global when you're done with it.
+
+[b]The language[/b]
+
+The core dictionary is 19 words:
+
+[code]
+DUP DROP SWAP OVER    + - * /
+IF ELSE THEN    BEGIN UNTIL    BEGIN AGAIN    BEGIN WHILE REPEAT
+RECURSE GLOBAL IMMEDIATE
+[/code]
+
+Everything else is the calculator itself. Any C47 function goes into a definition by name with the machine's own parameter grammar, STO 05, RCL 'TOTAL', STO →09, SF 10, the same forms you'd key in a program. The × and ÷ keys work too, they resolve to the native items. XEQ 'NAME' reaches programs, functions and Forth words from inside Forth, and your R47 programs can XEQ a Forth word right back.
+
+Every line is checked before it stores. A line that doesn't parse leaves the step alone, and that means a Forth block can't hold source that won't compile. And where Forth and R47 disagree about anything, R47 wins. That's the design rule the whole package follows.
+
+FWRD lists the words visible to the current program on the softkeys and inserts at the cursor:
+
+[attachment=4]shot2-picker.png[/attachment]
+
+[b]The sample programs[/b]
+
+My FDEMO program exercises the whole language, recursion, all four loop shapes, GLOBAL and IMMEDIATE and FORGET, named variables, indirect stores, and both XEQ directions. It fills registers 00 through 16 with documented values, here's the stack after recalling three of them:
+
+[attachment=3]shot3-fdemo-results.png[/attachment]
+
+[code]
+R00 15    5 SUMDOWN, recursive sum
+R02 99    BEGIN UNTIL countdown result
+R03 111   1 CHOOSE, the true branch
+R04 222   0 CHOOSE, the false branch
+R05 17    CALLWORD through the global PLUS10
+R06 42    named variable round-trip
+R13 102   2 XEQ 'NATADD', a keystroke program called from Forth
+[/code]
+
+SAVE is a compounding savings schedule, six periods at 5% on 1000. It defines GROW, PUT, BUMP, TALLY, STEP and RUN, runs the loop, and writes the balance of each period to registers 00 through 05 with the final 1340.095640625 in R22:
+
+[attachment=1]shot5-save-listing.png[/attachment]
+
+[attachment=2]shot4-save-balance.png[/attachment]
+
+I promoted GROW to global in the listing, so after the run it's still there. Put 200 in X, XEQ 'GROW', and you get 210.
+
+[attachment=0]shot6-save-picker.png[/attachment]
+
+[b]Stack depth and recursion[/b]
+
+The Forth data stack is the calculator's own RPN stack, 4 or 8 levels depending on your stack setting. So what happens when a word goes deeper than the window? Values past it spill to memory and drain back as the word unwinds. Deep recursion works fine, 7 FACT gives 5040.
+
+Two rules come with the spill. A native C47 function won't run while values are spilled, the line stops with a full-stack message instead. And a finished line can't leave spilled values behind, that stops loudly too. One more change, RCL lifts onto a Forth value now instead of overwriting it.
+
+[b]Rough edges[/b]
+
+A native function's result lands on the RPN stack. That's the Forth stack too, so you keep computing with it. But Forth doesn't track what a native did, so a word like : SPIN BEGIN AGAIN ; runs until the dispatch guard stops it at 4096. R/S is wired as the interrupt for hardware. I've run all of this in the simulator, I haven't flashed this exact build to my DM42n yet, so treat it accordingly.
+
+IF tests X for zero. A non-numeric value in X counts as true, a string or a matrix takes the true branch. The standard has untyped cells and our stack is typed, and R47 wins settles it.
+
+Not implemented: CREATE/DOES>, VARIABLE, CONSTANT, vocabularies, a Forth terminal.
+
+The limits:
+
+[code]
+name length      31 glyphs
+source line      256 bytes
+return stack     64 levels
+dispatch guard   4096 per run
+[/code]
+
+[b]Where to get it[/b]
+
+Target hardware is the DM42n running R47/C47 (DMCP5). Same GPL-3.0-only licence as c43, full text in COPYING. The base is upstream c43 release 00.109.04.00b0.
+
+Download: the flashable zip and the source are on the [url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release branch[/url]. To build it yourself, get the package post's tooling and run make dist_dmcp5r47 CUSTOM_PKG=packages/forth-core.
+
+This replaces the firmware on your calculator. Back up your state first and flash at your own risk.
