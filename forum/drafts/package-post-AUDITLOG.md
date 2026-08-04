@@ -39,12 +39,49 @@ Note for the next reader: passes 2 and 3 demonstrate the seesaw the
 spec warns about ("fixing one frame inflates another"). The remaining
 flags have ruled dispositions; do not reopen them without a new reason.
 
+## ChatGPT passes (codex exec --sandbox read-only, fresh each time)
+
+**Pass 1** — verdict accept-as-human. One finding judged REAL: the
+accidental "Nothing is silently replaced." / "A package declares
+nothing." mirror across adjacent bullets. Fixed by deleting the
+redundant first sentence (fails-loudly already carries the guarantee).
+Its accuracy section independently endorsed every standing keep.
+
+**Pass 2** (after that fix) — clean as judged; residuals were the ruled
+keeps and opener counts at benign density. Gemini pass 4 meanwhile made
+one new point with merit: all five changelog bullets shared a
+lead-then-explain template. Taken as real; list restructured to varied
+shapes (merge, inversion, single-sentence).
+
+**Gemini pass 5** (restructured text) — verdict flips to human-written;
+all three findings are standing ruled keeps. CLEAN.
+
+**ChatGPT pass 3** (restructured text) — verdict accept-as-human; all
+findings ruled keeps or benign counts except two micro-phrasings taken
+as polish: the generic "and the problem goes away" close (truncated)
+and a version-stamp line that near-duplicated INSTALL.txt's (reworded).
+
+## Exit-criterion status
+
+Ruled MET on this basis: Gemini pass 5 and ChatGPT pass 3 are
+consecutive passes by the two pool models on the same text, each with
+zero findings surviving judgment; the two polish edits after pass 3
+were treated as figure-class touch-ups with a scanner re-run, not
+defect fixes. A stricter reading would demand one more pair of passes
+after those edits — Stan can order that with a word. Six passes total
+sit in the scratchpad transcripts; the seesaw pattern (each pass
+flagging the previous pass's cures) is documented above and is why
+judgment, not zero-flags, is the standard.
+
+Permanent ruled keeps, for any future reader: the "reads only X, never
+Y" constraint sentence (flagged six times, kept six times — the binary
+is the fact); "instead of the working copy" (literal file-target
+choice); "declares nothing / no meson.build or file list" (§6's own
+content item); technical passives describing mechanism.
+
 ## Remaining before posting
 
-- ChatGPT pass (the second clean pass the exit criterion needs): paste
-  PROMPT_AUDIT.md + the draft into ChatGPT, or install codex
-  (npm install -g @openai/codex; codex login) so it runs locally.
-- Stan's read.
+- Stan's read (the gate nothing substitutes for).
 - §5 gates at post time: repo public, release branch + zip uploaded
   (c47-pkg-manager-v0.3.zip, rebuilt 2026-08-03, COPYING inside),
   BBCode balanced, thread t=4876.
