@@ -9,6 +9,8 @@ PROMPT_AUDIT.md      paste into ChatGPT to audit a draft
 aiaudit.py           phrase patterns, formatting tells, sentence-length stylometry
 framescan.py         recurring frames, contrast tails, cross-document repetition
 drafts/              current post drafts
+screenshots/         sim LCD captures for the posts, with provenance README
+reference/           voice reference corpus (LOCAL-ONLY, gitignored — see DESIGN.md §3)
 ```
 
 ## Order of work

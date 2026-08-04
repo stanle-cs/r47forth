@@ -203,3 +203,4 @@ docs/appnotes/sources/**/*.log
 docs/appnotes/sources/**/*.out
 docs/appnotes/sources/**/*.toc
 docs/appnotes/sources/**/*.pdf
+forum/reference/

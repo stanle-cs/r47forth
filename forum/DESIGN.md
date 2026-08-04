@@ -139,6 +139,26 @@ pool is ChatGPT and Gemini: one pass each, either order, both through
 model-family level, so Claude never audits a Claude draft; if the drafter
 ever changes, the exclusion travels with it.
 
+**Voice reference (added 2026-08-03).** `forum/reference/reddit-trungdle.md`
+holds eleven years of Stan's public Reddit writing (1696 comments, 80
+submissions, collected from the RSS listings, deduplicated). It is
+LOCAL-ONLY and gitignored: the repo is public and the corpus would
+permanently link his Reddit history to this identity. Uses:
+
+- The drafter reads a sample before drafting; the auditors may be given
+  excerpts as "this is how the author actually writes".
+- Measured baseline over 2488 sentences: mean 22.5 words, CV 0.83, 352
+  sentences under 8 words. The §2 floor (CV >= 0.5) is conservative;
+  aim near his real variance, not at the floor.
+- His own prose trips 596 scanner flags. That is the proof of "judge the
+  flags": a human writer uses rule-of-three and dashes freely; the
+  scanners locate candidates, they do not define his voice.
+- Never lift a sentence from the corpus into a post. It is public text
+  under his name, and reuse is detectable. `framescan.py` run across a
+  draft PLUS the corpus will surface accidental shingle reuse.
+- After a fresh clone, re-collect via the RSS listings or restore from a
+  local copy; the file does not travel with the repo.
+
 ---
 
 ## 4. Required in every post
