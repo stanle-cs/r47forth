@@ -13,6 +13,8 @@ the catalog's own case (xeq SCATR). item <n> is the fallback ONLY, not the first
 <n>, e.g.  cnst 4  = c. PLT f is the case in point: its gap is no space at all but a U+2005 four-per-em, so the name must be copied out of the --dslcommands list, the
 reason that list exists. Pasted, it is one Jim word: xeq PLT f resolves, as do braces and double quotes; single quotes are not Jim quoting and fail.
 Without the paste item 2734 does the same job, at the clear cost of code nobody can read.
+A name carrying a bracket or a quote is not a fallback case either. It is missing from --dslcommands because either one breaks Jim parsing, so it is never registered
+as a bare command, and xeq and catfn still reach it by its catalog name. Braces protect it:  xeq {f'} vv  and  xeq {f"} vv  differentiate against the variable vv.
 
 WARNING: no item whose name is written >NNNN< is free to use. Those are legacy entries, kept only so an old program still decodes, and they must not be used for
 anything: not in a script, not in a program, not as a stand-in for a name you cannot type. If you meet one in the catalogue or the --dslcommands list, look for the
@@ -56,6 +58,14 @@ Encode the listing with  ./rejig listing.txt -o eqndemo.p47 :
   (X.EDIT loads the string in X as the formula and drops it; X.SWAP exchanges. cpxSlvˣʸ takes the two guesses from Y and X; Drawˣʸ the plot range.)
   ./t47 --reset --exec 'readp eqndemo.p47; xeq CSLV; puts "X=[reg X]"'   (root 0-i2)
   ./t47 --reset --exec 'readp eqndemo.p47; xeq DRW; snap'                (parabola, roots -2 and 2)
+
+Loading a formula from the command line, with no program at all:
+  Put the text in X as a string, make an empty formula with EQ.NEW, then swap the two: ./t47 --reset --exec 'reg X "aa+bb+cc+dd"; eq.new; x.swap; enter; openm EQN; snap'
+  The swap leaves the old formula in X, an empty string for a formula just created, which is why the line ends with a fresh ENTER. From there the engines are reachable by
+  name or by menu: menu {f'} opens the derivative on that formula, and its softkeys are the formula's variables. Without the EQ.NEW, X.EDIT stores into whichever
+  formula happens to be current, or into none at all.
+  Multiply is × and never *. A star is stored and displayed as typed, no error, but the parser stops there and the rest is dropped:  f' on  aa*3  answers 1, the
+  slope of aa alone, while  aa×3  answers 3. Suspect the glyph whenever a formula answers for a shorter formula than the one on the screen.
 
 Named variable as a program operand:
   To store to or recall from a named variable, put the name in quotes:  STO 'cva'  or  RCL 'cva'.  rejig accepts plain quotes ('cva') or curly quotes (‘cva’) and always
@@ -107,6 +117,18 @@ Jim Tcl scripting (the DSL is Jim: set/expr/while/if/puts all work; incr is a NO
 Register / named variable / flag write and read (complex values in braces; strings and more forms in values.t47):
   ./t47 --reset --exec 'reg 05 3.5; var myv 2.5; flag SPCRES 1; puts "R05=[reg 05] myv=[var myv] SPCRES=[flag SPCRES]"'
   ./t47 --reset --exec 'reg 10 {1 + ix2}; puts "R10=[reg 10]"'
+  A one-letter name given to var is the lettered register, not a variable of that name:  var x 5  writes stack register X, the same rule as  STO A  in a program. Name
+  a variable with two letters or more and it is unambiguous. The single letter reads as the named variable on the solver and integrator operands only, so  xeq SOLVE x
+  and  ∫f d x  do reach a variable called x.
+
+Distribution functions take their parameters from the stat registers, not from the stack:
+  Only the value goes in X. The Weibull pdf reads the shape from Q and the scale from S, so a scripted call writes those two with reg and keys in the value alone.
+  The normal pdf reads the mean from M and the standard deviation from S. Which registers a distribution uses differs from one distribution to the next.
+  ./t47 --reset --exec 'reg S 1.5; reg Q 2.5; nim 2; weibl⒫; puts "f=[reg X]"'      (0.3294099600746249339120285341074746)
+  ./t47 --reset --exec 'reg S 1; reg Q 0.5; nim 1e-30; weibl⒫; puts "f=[reg X]"'    (499999999999999.5000000000000002500)
+  ./t47 --reset --exec 'reg M 10; reg S 2; nim 12; norml⒫; puts "f=[reg X]"'        (0.1209853622595716748989150964677803)
+  The p in Weibl⒫ is a parenthesised letter that no keyboard types, so copy the name out of --dslcommands the way PLT f is copied; typed with a subscript p the run stops
+  at invalid command name. reg X returns all 34 digits of the result, which is what a comparison against an independently computed value needs.
 
 Progress-monitor paths (MONIT) under a multi-second load, with a marker telling "ran and returned" from "hung" (markers: see Notes):
   ./t47 --reset --exec 'flag MONIT 1; reg 01 -1; nim 2000000000000095000000000000777; xeq FACTORS; reg 01 1; puts "R01=[reg 01]"'
@@ -127,14 +149,43 @@ State save/load and register assertions (savest/loadst take a filename):
    reg <name> reads a register's display string but returns <unsupported> for a matrix, so assert dimensions via 42DIM#.
    Register data also moves through hand-written .d47 files; format in AN0025.)
 
+A function a softmenu starts, headless (the equation derivative):
+  menu <name> is the real showSoftmenu, so a menu that acts as it opens acts headless too. Braces because an apostrophe is not Jim quoting, and a script file because
+  that same apostrophe would close an --exec wrapper. Running the item behind the menu without opening the menu first skips the menu state and reads "In function
+  regInRange: generic is not defined!".
+  Encode the formula loader with  ./rejig listing.txt -o eqr.p47 :
+    LBL 'EQR'
+      '1/vv' X.EDIT
+    RTN
+  and the script, run as  ./t47 --reset --script deriv.t47 :
+    readp eqr.p47
+    xeq EQR
+    menu {f'}
+    var vv 1
+    item 2377
+    puts "deriv=[reg X]"
+  (d/dvv of 1/vv at vv = 1 is -1. Opening the menu selects the single variable and stops there, so put the point in that variable and then run the Calc f' softkey.
+   That key is item 2377 and has no name xeq will take, which is what item <n> is the fallback for.)
+  A PROGRAM derivative is driven like SOLVE and ∫f d: PGMDRV names the program, then f' or f" names the variable. The point comes off the stack and the answer
+  replaces it, MVAR or no MVAR:  nim 3; xeq PGMDRV FX; xeq {f'} zz. The legacy >f'(x)< and >f"(x)< take a program label there instead.
+  A script cannot open a program's MVAR menu: f' takes a variable, so a program name given to it becomes a variable and the run stops with "No program specified".
+  That prompt is on the keyboard only. The equation form does open its menu headless, which is the menu {f'} example above.
+
 Keyboard path (press; c47 only): F1..F6 softkeys, @f/@g shifts, @k NN physical key (NN = 00..36), single ASCII, ENTER, R/S. Bare commands and xeq call the function direct,
 so TAM and softmenu decode need press. Matrix editor, cursor to 2;2:
+
+press never reaches the key release code. F1..F6 and @k NN call the button press handler direct, and R/S, ENTER and a single ASCII char go in as Gtk key events, which
+the sim answers on the press alone. Only a mouse click on an on-screen button raises a release, so anything a key does when it is let go cannot be scripted: check it by
+hand in the GUI. SHOW paging runs on the press and scripts fine; the R/S fault that blanked SHOW's top line (issue #560) ran on the release and does not.
 
   A name taking a TAM argument (e.g. M.EDITN) is not scriptable at all: reach it with press.
 
   ./c47 --reset --exec 'nim 3; nim 3; m.dim 00; rcl 00; m.edit; press F6; press @f; press F6; snap'
   (m.edit; M_EDIT F5/F6 = left/right, f-shifted = up/down; snap shows "2;2=".)
   M.EDIT indexes X, so a later nim pushes the matrix out of X: index a numbered register instead where the test needs the stack. A program stops at M.EDIT.
+
+  A program derivative's MVAR menu is not scriptable: f' asks for the program at a TAM prompt. By hand it is f', the program name, ENTER, then the variable key to
+  store the point and the same key again to differentiate. F1..F6 are the variables in declaration order and the last softkey is the step.
 
   XEQ a function by name from the keyboard: press XEQ, then alpha, type the letters, Enter. Alpha is f-shift on the XEQ key and raises the ' name prompt.
   ./c47 --reset --exec 'nim 30; press "@k 05"; press @f; press "@k 05"; press "@k 21"; press "@k 08"; press "@k 14"; press ENTER; snap'

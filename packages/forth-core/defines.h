@@ -9,7 +9,7 @@
 // VARIOUS OPTIONS
 //*********************************
 
-#define VERSION1 "00.109.03.04a0.int"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
+#define VERSION1 "00.109.04.00b0"       // major release . minor release . tracked build . internal OR un/tracked OR subrelease : Alpha / Beta / RC1
 
 // Version 00.109.02.07b11   Public Release C47 & R47
 // Version 00.109.02.07b12   Public Release C47 & R47 launch
@@ -24,6 +24,7 @@
 // Version 00.109.03.02a0    Public C47 & R47 ALPHA version test vectors only
 // Version 00.109.03.02b0    Public C47 & R47
 // Version 00.109.03.03b0    Public C47 & R47
+// Version 00.109.04.00b0    Public C47 & R47
 
 #if !defined(CALCMODEL)
   #define CALCMODEL USER_C47               // USER_C47 or USER_R47
@@ -335,6 +336,11 @@
 
   #define    REFRESH_ON_SCREEN_MONITOR  //refresh debug on actual screen. Shows the refresh source number. Works on hardware and sim.
   #undef     REFRESH_ON_SCREEN_MONITOR
+
+  #define    CACHE_DEBUG                //Trace 3D vector trig cache
+  #undef     CACHE_DEBUG
+  #define    CACHE_VERIFY               //Recompute every trig-cache hit and abort on any mismatch (proves the key is complete)
+  #undef     CACHE_VERIFY
 
   #define    DM42_KEYCLICK              //Add a 1 ms click after key presses and releases, for scope syncing
   #undef     DM42_KEYCLICK
@@ -1616,6 +1622,11 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 
 #define NUMBER_OF_DISPLAY_REAL_CONTEXT_DIGITS     ((displayFormat == DF_ALL || getSystemFlag(FLAG_2TO10)) ? NUMBER_OF_DISPLAY_DIGITS + 1 : displayFormatDigits + 2) //used for time consuming functions, divides, etc.
 #define NUMBER_OF_DISPLAY_DIGITS                  20
+// rect->polar compute precision for the (non-SHOW) polar stack display: 17
+// significant display figures + 2 Taylor guard digits. hypot/atan2 are well
+// conditioned, so this fixed width reproduces the display exactly for every
+// operand magnitude (MR !1615). polar_display_cov gates any narrowing of it.
+#define POLAR_DISPLAY_COMPUTE_DIGITS              (17 + 2)
 #define NUMBER_OF_DATA_TYPES_FOR_CALCULATIONS     10
 
 #if defined(DMCP_BUILD) && defined(OLD_HW) // The old HW has about 64Kb for user usable RAM
@@ -1923,6 +1934,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define TI_AMORT_P2                              141
 #define TI_DATA_LOADED                           142
 #define TI_DATA_SAVED                            143
+#define TI_DERIV_STEP                            144
 
 #define SET_TI_TRUE_FALSE(condition)               do { temporaryInformation = TI_FALSE + (condition); } while(0) // TI_TRUE must be TI_FALSE + 1
 

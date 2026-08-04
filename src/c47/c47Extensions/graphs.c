@@ -679,6 +679,10 @@ void graph_Include0(bool_t mode, uint16_t statnum) {
     realSubtract(y_max, const_1, y_min, &ctxtReal39);  // y_min = y_max - 1
     realSubtract(y_max, y_min, &dy, &ctxtReal39);      // dy = y_max - y_min
   }
+  else {
+    graphRangeGuard(y_min, y_max);                     //a range below the graph working precision compresses it: widen as per  Ylo/Yhi
+    realSubtract(y_max, y_min, &dy, &ctxtReal39);      // dy = y_max - y_min
+  }
   if(realIsZero(&dx)) {                                // dx == 0: manufacture a 1-wide window around the value
     realAdd(x_min, const_1on2, x_max, &ctxtReal39);    // x_max = x_min + 0.5
     realSubtract(x_max, const_1, x_min, &ctxtReal39);  // x_min = x_max - 1

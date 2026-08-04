@@ -1,5 +1,5 @@
 diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
-index 178b94966cca449b0ef915c60098139a2573cf8b..06036e08ad292eb60c8cf431c419f4de337a2a9a 100644
+index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..62defb2a0807bf447d04e3928b57f024ee459e28 100644
 --- a/src/c47/softmenus.c
 +++ b/src/c47/softmenus.c
 @@ -2,6 +2,7 @@

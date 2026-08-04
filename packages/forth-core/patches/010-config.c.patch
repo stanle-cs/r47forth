@@ -1,5 +1,5 @@
 diff --git a/src/c47/config.c b/src/c47/config.c
-index 0829673346e2869694d2d6ea3a3cd19ac70cafe2..0356be918abf20002145d3993a77cfc7b157ba98 100644
+index b4b65f5207e0939215616d0258fdbf2e1a91dc15..1f79d094d374decbdac9c01319a36bc1940ab596 100644
 --- a/src/c47/config.c
 +++ b/src/c47/config.c
 @@ -2,6 +2,7 @@
@@ -27,7 +27,7 @@ index 0829673346e2869694d2d6ea3a3cd19ac70cafe2..0356be918abf20002145d3993a77cfc7
      if(ram == NULL) {
        ram = (uint32_t *)malloc(TO_BYTES(RAM_SIZE_IN_BLOCKS));
      }
-@@ -1963,6 +1974,28 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+@@ -1964,6 +1975,28 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
  
      fnClearFlag(FLAG_USER);
      fnRefreshState();
