@@ -1,83 +1,87 @@
-Custom package v0.3 is up. Same idea as before: build C47/R47 firmware with
-your own changes layered on top, and never touch a file under src/. This
-round the internals changed enough that I'll walk through them.
+Custom package v0.3 is up. It's the same idea as before, you build the
+C47/R47 firmware with your own changes layered on top and nothing under
+src/ gets touched, but I ended up rewriting most of the internals this
+round so I'll walk through what changed.
 
 [b]What changed from v0.2[/b]
 
 [list]
-[*]Overrides are git diffs now. v0.2 shipped whole edited files, and you
-couldn't tell what a package changed without diffing by hand. Open any
-file in patches/ and the delta is just there.
+[*]Overrides are git diffs now. v0.2 shipped whole edited files, and
+honestly you couldn't tell what a package changed without diffing by
+hand. Now I just open a file in patches/ and read it.
 [*]When two packages patch the same upstream file, the patches stack in
-filename order (the NNN prefix), each applying on top of the previous
-result. They can even land in different parts of one function. If they hit
-the same lines, configure fails loudly and names the patch that collided.
-[*]A package is a flat directory that mirrors upstream paths. It declares
-nothing, and there's no meson.build or file list to keep up.
-[*]Sorting your files is the refresh tool's job: paths that exist under
-src/c47/ become patches against upstream, and anything else is copied in
-whole as a new source.
+filename order (the NNN prefix), each on top of the previous result.
+They can even land in different parts of one function. But if they hit
+the same lines, configure fails and names the patch that collided.
+[*]A package is a flat directory that mirrors upstream paths. It
+declares nothing, and there's no meson.build or file list to keep up.
+[*]The refresh tool sorts your files for you: paths that exist under
+src/c47/ become patches, anything else is copied in whole as a new
+source.
 [/list]
 
 [b]Tooling[/b]
 
 [list]
-[*]--materialize pulls an upstream file into your working area when you want
-to start editing it.
-[*]The package records the upstream commit it was generated against, so the
-patches always have a known base.
-[*]--rebase-base moves a package forward to a newer upstream. Conflicts land
-in your working copies as ordinary conflict markers and you resolve them
-there.
-[*]Content hashes in a per-package manifest catch drift. If you hand-edit
-a generated patch instead of the working copy, refresh warns you and
+[*]--materialize pulls an upstream file into your working area when you
+want to start editing it.
+[*]The package records the upstream commit it was generated against, so
+the patches always have a known base.
+[*]--rebase-base moves a package to a newer upstream. Conflicts land in
+your working copies as ordinary conflict markers. You fix them there.
+[*]Content hashes in a per-package manifest catch drift. Hand-edit a
+generated patch instead of the working copy and refresh warns you, then
 overwrites it.
-[*]A .pkgignore file keeps docs and dev scripts out of the generated output.
+[*].pkgignore keeps docs and dev scripts out of the generated output.
 [/list]
 
-There's also a small ./package entry point that wraps the common commands,
-so the tool paths stop mattering.
+There's also a small ./package entry point that wraps the common
+commands so I don't have to remember tool paths. Probably you won't
+either.
 
 [b]How composition works[/b]
 
 The resolver materializes the upstream file once, then applies each
-package's patch in order with git apply -3. Order is the numeric filename
-prefix; ties go by position in your CUSTOM_PKG list. After every
-application it scans for conflict markers no matter what the exit status
-said. A patch whose filename disagrees with its own +++ header is refused,
-and so is a patch whose target doesn't exist. Configure also catches two
-packages providing the same new file, before any shadow tree gets built.
+package's patch in order with git apply -3. Order is the numeric
+filename prefix; ties go by position in your CUSTOM_PKG list. After
+every application it scans for conflict markers no matter what the exit
+status said. A patch whose filename disagrees with its own +++ header is
+refused, and so is a patch whose target doesn't exist. Two packages
+providing the same new file? Caught before the shadow tree is built.
 
 [b]pkg_build[/b]
 
 make pkg_build PKG=packages/my-pkg cleans, runs the test suite with the
-package active, refreshes, and zips the package. A failing suite produces
-no artifact. There's a size gate too, PKG_MAX_SIZE, 1 MB by default.
+package active, refreshes, and zips the package. A failing suite
+produces no artifact. There's a size gate too, PKG_MAX_SIZE, 1 MB by
+default.
 
 [b]Refresh before you build[/b]
 
-The build reads only the generated patches/ and files/ directories, never
-your flat working area. Edit a source, skip the refresh, and what you get
-is a clean build of your old code. Run the refresh first in your build
-script.
+The build reads only the generated patches/ and files/ directories,
+never your flat working area. Edit a source, skip the refresh, and what
+you get is a clean build of your old code. I just run the refresh at
+the top of my build script.
 
 Everything in a package directory is tracked in git, working area
-included. The generated output is the build input, and it's tracked with
-everything else.
+included. The generated output is the build input, and it's tracked
+with everything else.
 
 [b]Where to get it[/b]
 
-Target is R47/C47 on the DM42n (DMCP5 hardware). Licence is GPL-3.0-only,
-inherited from c43; the full text ships in COPYING inside the zip and on
-the release branch. Everything was generated against upstream c43 at
-commit 26ec91634.
+Target is R47/C47 on the DM42n (DMCP5 hardware). Licence is
+GPL-3.0-only, inherited from c43; the full text ships in COPYING inside
+the zip and on the release branch. Everything's generated against
+upstream c43 at commit 26ec91634. A newer upstream might still work,
+though. The resolver checks every target before it applies anything,
+and if a file moved, configure stops and tells you which one.
 
 Download:
 [url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release branch[/url]
 with the zip beside it. Run the four test_pkg_patch tests from the
-extracted zip before anything else; they check the tooling with no
-upstream tree needed.
+extracted zip before anything else, they check the tooling and don't
+need an upstream tree.
 
 For a worked example, my Forth package for the R47 runs on this: 16
-patches against upstream files plus 19 new sources. That one gets its own
-post.
+patches against upstream files plus 19 new sources. But that one gets
+its own post.

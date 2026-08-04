@@ -85,3 +85,22 @@ content item); technical passives describing mechanism.
 - §5 gates at post time: repo public, release branch + zip uploaded
   (c47-pkg-manager-v0.3.zip, rebuilt 2026-08-03, COPYING inside),
   BBCode balanced, thread t=4876.
+
+## Register rejection and rewrite (2026-08-03, after the audit passes)
+
+Stan's first read rejected the audited draft: "does not sound like me at
+all." The model audits measured human-vs-machine, never Stan-vs-not-Stan
+— a pipeline gap, now closed with voicematch.py (step 3b) and the §2
+register ruling. The numbers that proved his read: first person 0.52 vs
+his 3.84 per 100 words, "but" 0.00 vs 0.65, contractions at half his
+rate, zero questions against his 11%.
+
+Rewritten between his two measured registers (Reddit corpus and his
+INSTALL.txt technical voice): first person 1.30, contractions 2.11,
+but/though/probably/honestly present, one mid-post question, CV 0.58.
+The facts and §6 coverage are unchanged.
+
+The rewrite is a full prose change, so the two model lanes need a fresh
+pair of passes AFTER Stan settles the register — auditing prose he may
+still re-cut is wasted motion. Current state: awaiting his read of the
+rewrite; then one Gemini + one ChatGPT pass on whatever he approves.

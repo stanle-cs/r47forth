@@ -33,6 +33,15 @@ This is a constraint on the writing, not a polish pass at the end.
 **Hard rules**
 
 - Write as Stan. First person where he has a stake. Contractions throughout.
+- Register ruling (2026-08-03, after the first pipeline draft failed his
+  read): technical writing is either cut and dry, or explained in his
+  style. The polished-technical-writer middle register is the failure
+  mode — crafted contrasts, tidy mid-length sentences, no person. His two
+  real registers are measurable: the Reddit corpus (first person 3.8/100w,
+  contractions 3.5, questions 11%) and his INSTALL.txt register (long
+  flowing sentences mixed with short ones, CV 0.9, dry asides, little
+  first person). A draft should sit at one of them, or between them —
+  never outside on the polished side. `voicematch.py` measures this.
 - No em dashes. Use a comma or a full stop.
 - No rhetorical antithesis: `X rather than Y`, `not X but Y`, `no X, no Y`,
   trailing `, not Z`. Keep only where the contrast **is** the fact
@@ -113,6 +122,12 @@ these steps, in order:
    `PROMPT_WRITE.md`. Record which model drafted.
 2. Self-check against §2; fix what you can see.
 3. Run both scanners; judge the flags.
+3b. Run `voicematch.py` against the reference corpus (added 2026-08-03
+   after the first pipeline draft passed both model audits and still
+   failed Stan's read — the audits measure "human", not "Stan"). Compare
+   the draft's numbers against the two register anchors in §2; a draft
+   on the polished side of both goes back to step 2, whatever the
+   auditors said.
 4. Cross-model audit via `PROMPT_AUDIT.md`, by a model that did not write
    the draft. The auditor reports; the fixing is done on our side.
 5. Exit criterion: scanners clean as judged, AND two consecutive audits by
