@@ -58,3 +58,16 @@ label picker and PROG catalog are labelList-only and forth-core never
 touches labelList — the spec's open item 1 records the invisibility as
 a known deferred asymmetry. The paragraph now says both halves: runs
 by typed name, won't appear on the picker or in PROG.
+
+## Release published (2026-08-03)
+
+release/forth-core-stage2 pushed to e6839d018: the v0.4 tree (55
+files) with both zips beside it. Publicly verified anonymous: repo
+200, COPYING 200, c47-pkg-manager-v0.4.zip 200, r47-dmcp5.zip
+downloads complete and byte-identical to the local build (4,571,733
+bytes), README serving the rewritten text, ./package present. Every
+download link both posts make is now real, and §5 gate 1 is satisfied
+before posting instead of at it. Left for Stan: paste both posts,
+upload the three images in order. Note: origin/main sits at the
+migration commit, about fifteen commits behind local main — pushing
+main stays his call.
