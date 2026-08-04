@@ -2863,6 +2863,14 @@ void createSubstrings(uint8_t number) {
     }
   }
 
+  // The derivative's step key. It stores into its own variable and leaves the selection alone, so the line names the step and not currentSolverVariable.
+  void _displayDerivStep(calcRegister_t regist, char *prefix, int16_t *prefixWidth) {
+    if(regist == REGISTER_X) {
+      strcpy(prefix, STD_delta STD_SUB_d " =");
+      *prefixWidth = stringWidth(prefix, &standardFont, true, true) + 1;
+    }
+  }
+
   #define noLine false
   static void _displaySigmaPlus(calcRegister_t regist, char *prefix, int16_t *prefixWidth, bool_t doLine) {
     int32_t w = realToInt32C47(SIGMA_N, NULL);
@@ -4555,6 +4563,9 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           else if(temporaryInformation == TI_SOLVER_VARIABLE) {
             _displaySolverInput(regist, prefix, &prefixWidth);
           }
+          else if(temporaryInformation == TI_DERIV_STEP) {
+            _displayDerivStep(regist, prefix, &prefixWidth);
+          }
 
           else if(temporaryInformation == TI_ELLIPSE_K) {
             if(regist == REGISTER_X) {
@@ -4812,6 +4823,9 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           }
           else if(temporaryInformation == TI_SOLVER_VARIABLE) {
             _displaySolverInput(regist, prefix, &prefixWidth);
+          }
+          else if(temporaryInformation == TI_DERIV_STEP) {
+            _displayDerivStep(regist, prefix, &prefixWidth);
           }
           else if(temporaryInformation == TI_VIEW_REGISTER && origRegist == REGISTER_T) {
               viewRegName(prefix, &prefixWidth);
@@ -5085,6 +5099,9 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
 
           else if(temporaryInformation == TI_SOLVER_VARIABLE) {
             _displaySolverInput(regist, prefix, &prefixWidth);
+          }
+          else if(temporaryInformation == TI_DERIV_STEP) {
+            _displayDerivStep(regist, prefix, &prefixWidth);
           }
           else if((regist == REGISTER_X && (temporaryInformation == TI_MIJ || temporaryInformation == TI_MIJEQ)) || ((regist == REGISTER_X || regist == REGISTER_Y) && temporaryInformation == TI_IJ) || (regist == REGISTER_X && (temporaryInformation == TI_I || temporaryInformation == TI_J))) {
             _displayIJ(regist, prefix, &prefixWidth);
