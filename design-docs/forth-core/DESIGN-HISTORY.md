@@ -2291,3 +2291,64 @@ asserted from reading the code, never from trying it: the fixture that pinned
 the wrong cap, the constant that pinned nothing, and a harness declared
 absent without a grep. The first two were caught by mutations. This one
 needed someone to ask.
+
+## 2026-08-03 — G4: the first packet run through the local model, and what the round trip cost
+
+G4 pins three things about the FWRD picker that G3 left open: that turning
+the page changes the picture, that nothing is drawn past `numItems`, and
+that a maximal 14-byte name stays inside its cell. It is also the first
+stage-G packet actually handed to the local model rather than implemented
+here, and the interesting record is the exchange, not the tests.
+
+**The first attempt did nothing and exited 0.** Headless `opencode run`
+has no terminal to approve permission prompts, so everything the config
+sets to `ask` is auto-DENIED. The model read the run-sim skill, began the
+execution gate, and stalled — correct behaviour, invisible outcome. The
+log even showed a healthy `agent=title` → `agent=build` pair, the
+diagnostic that is supposed to mean the turn went through. It means the
+model was ASKED, not that anything happened. Confirm against a baseline
+SHA, never against an exit code.
+
+Re-run with `--auto`, the model kept inside the two files the packet
+allowed, touched no production file and no `src/`, and committed.
+
+**Three architect defects against two implementer ones.** Mine: the packet
+said to assert `numItems` "before any act", but `numItems` is 0 until a
+render calls the builder, so the model followed it literally, read 0 three
+times, and started blaming the donor fixture. The packet also said a page
+is 6 items when the renderer draws three rows of eighteen. And its
+geometry note divided `SCREEN_WIDTH` by six where the real cell borders
+are `KEY_X = {-1,66,133,200,267,333,400}`.
+
+Its two: an inverted assertion in subcase 1, and two silent workarounds
+for the same piece of chrome in subcases 2 and 3 — an excluded cell in
+one, a tolerance in the other — with a PASS line left claiming an
+assertion that was no longer being made. Both were correct observations
+reported the wrong way, which is the same shape as F1-5: the model saw
+something true and the packet had no channel for it except STOP.
+
+**The chrome they both tripped over is real and is now understood.** A
+live softkey draws a dotted divider down its right-hand edge, twelve
+pixels on alternate rows at `x == KEY_X[n]` — which by the border
+convention lands in the NEXT cell's window. An empty cell beside a live
+one carries that column; an empty cell further out reads exactly zero. So
+"all four empty cells are identical" was never true, and the packet was
+wrong to demand it. Subcase 2 now asserts something sharper instead:
+cells 3-5 exactly empty, and cell 2's INTERIOR empty as well. That states
+"no label past numItems" precisely and excludes nothing.
+
+Part B: three mutations, one per subcase. Ignoring `currentFirstItem` in
+the draw makes both pages measure 3196 px. Removing the menu-band clear
+lets stale labels accumulate until an empty cell outshines a live one.
+Raising `trimKey`'s per-cell clamp from 66 to 120 bleeds a name out of its
+cell, 131 px into the neighbour. A fourth candidate was rejected: widening
+the draw guard changes nothing observable, because the extra index reads
+the blob's terminator and an empty label paints like an empty cell.
+
+The standing consequence, and the only part of this worth carrying: every
+one of these defects landed a GREEN gate. The inverted assertion, the
+excluded cell, the tolerance, the PASS line that no longer matched its
+own test — a passing suite reported all of it. What caught them was
+reading the PASS strings against the packet. So a packet specifies its
+PASS text exactly, and verification compares the strings, not the exit
+code.
