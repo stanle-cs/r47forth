@@ -85,7 +85,7 @@ A Forth line opens in alpha for typing word names. If you want the calculator ke
 
 R/S ends the line and puts a STOP step after it. EXIT goes back one step at a time, keys to letters to menus, then it closes the line.
 
-Mostly it saves keys. SIN is one press instead of three letters, and x² is one press instead of numlock, the superscript arrow, then the 2.
+Mostly it saves keys. SIN is one press instead of three letters. By hand x² needs numlock and the superscript arrow before the 2. The key is one press.
 
 ## Notes
 
