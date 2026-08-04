@@ -120,10 +120,31 @@ Three facts that make this work headless:
 
 ## Geometry reference
 
-Softkey rows are `y1 = 217 - SOFTMENU_HEIGHT * row` with `SOFTMENU_HEIGHT`
-23 ([src/c47/softmenus.c](../../../src/c47/softmenus.c)), so the three rows
-span `y >= 171`. Six cells divide `SCREEN_WIDTH` (400), so the first cell is
-`x < SCREEN_WIDTH / 6`. Screen is 400x240.
+Screen is 400x240. Softkey rows are `y1 = 217 - SOFTMENU_HEIGHT * row` with
+`SOFTMENU_HEIGHT` 23 ([src/c47/softmenus.c](../../../src/c47/softmenus.c)),
+so the three rows span `y >= 171`.
+
+**Cell borders come from `KEY_X`, not from arithmetic.**
+`const int KEY_X[7] = {-1, 66, 133, 200, 267, 333, 400}`
+([src/c47/c47.c:32](../../../src/c47/c47.c)) — cell `c` is
+`[KEY_X[c], KEY_X[c+1])`, clamping `KEY_X[0]`'s `-1` to 0. Dividing
+`SCREEN_WIDTH` by six gives 66 where the real border is 133, and that
+one-pixel disagreement puts a neighbouring cell's frame column in the wrong
+cell. Cost a debugging round in G4.
+
+**A visible page is 18 items, not 6.** The draw loop is
+`for(y=0; y<3; y++) for(x=0; x<6; x++)` guarded by
+`x + 6*y + currentFirstItem < numberOfItems`, and `numberOfItems <= 18` is
+the renderer's own "fits on one screen" test. A test that pages by 6 changes
+the item COUNT on screen, not just which items — so a pixel comparison
+between "pages" measures the count, not the paging. Page by 18.
+
+**An empty cell next to a live one is not blank.** A live key draws a dotted
+divider down its right-hand edge at `x == KEY_X[n]`, 12 px on alternate
+rows — which by the convention above belongs to the NEXT cell's window. An
+empty cell further out reads exactly 0. Assert on a cell's interior
+(`KEY_X[c]+1` onward) when you mean "no label here", or compare only cells
+with no live neighbour.
 
 ## Appendix — the implementer's copy (restore after a fresh clone)
 
