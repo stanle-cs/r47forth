@@ -23,6 +23,19 @@ scale.
 - Arena high-water reported every packet (§5.4); flash deltas recorded per
   stage commit (RULE-1, Stan runs `make dmcp5r47`).
 - A failed gate or a spec mismatch goes to the architect; Qwen never adapts.
+- **Bug-fix testing rule (owner-proposed, ruled 2026-08-04).** Every bug fix
+  lands with: (1) a REPRODUCER — a test red on the unfixed tree, green
+  after, with the red run recorded in the fix commit (the mutation
+  discipline's mirror: mutations prove a test can fail, the reproducer
+  proves the bug existed); (2) a NAMED CLASS — one sentence in
+  DESIGN-HISTORY stating the violated invariant, generalized past the
+  instance; (3) where the class is mechanically enumerable, a CLASS TEST
+  pinning the invariant across all its sites, not just the found instance
+  (e.g. FIX-7's class test is an emit/accept round-trip sweep over every
+  decodable parameter form; FIX-8/D-C2's is the poison-every-close-site
+  sweep). (4) "If possible" carries the audit standard: when no class test
+  is feasible, the fix records why and names the fallback pin — "later" is
+  not a name. Instance-only regression tests satisfy (1) but not the rule.
 
 ## Stage F1.5 — §8.9 acceptance harness (COMPLETE)
 
