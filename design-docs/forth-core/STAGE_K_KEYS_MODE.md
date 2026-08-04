@@ -1,7 +1,12 @@
 # Stage K — keys mode inside Forth capture (design, pre-packet)
 
-**Status: K1 LANDED 2026-08-04 (branch forth-core/stage-k; opus bench diff
-adopted, amendment K1-A). K2-K4 pending.** Authority: DESIGN.md §8.4 rules E0–E9 stay normative and
+**Status: STAGE COMPLETE 2026-08-04. K1-K4 all landed on forth-core/stage-k
+(eb6c36faf, 4358f832e, 1ac2f6653, b3f83e562 + packet commits); E10-E15
+folded into DESIGN.md 8.4.1; flash 1108000 -> 1108360 (+360 B for the
+stage; +584 B including the pre-K FIX series); arena unchanged. Every
+packet implemented by opus subagents, zero architect rescues; amendments
+K1-A..K4-A record the four architect spec defects the implementers
+caught. Branch unmerged/unpushed — owner's call.** Authority: DESIGN.md §8.4 rules E0–E9 stay normative and
 unchanged; this stage adds rules E10–E15 (drafted here, folded into §8.4 at
 landing). Amendment trail goes to DESIGN-HISTORY.md as usual.
 

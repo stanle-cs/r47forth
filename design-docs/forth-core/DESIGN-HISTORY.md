@@ -2543,3 +2543,20 @@ catalog→STO→TAM→resume→_closeCatalog chain; subcase 2 is the negative
 control (plain TAM round-trip unaffected). The physical-key TAM route
 Stage K adds never buries a menu (T2), so keys mode inherits the clean
 path by construction.
+
+## 2026-08-04 — Stage K complete: keys mode inside Forth capture
+
+K1-K4 landed on forth-core/stage-k in one day, owner-ruled in the morning
+(K-R1..K-R4), pre-work traced by six sonnet tracers, implemented by opus
+subagents (28.4 + 28.1 + 17.9 + 43.6 min; zero architect rescues across
+four packets — the F-series Qwen baseline was ~30% rescue rate). Four
+architect spec defects were caught by implementers and recorded as
+amendments K1-A..K4-A; the notable ones: the processKeyAction export
+instruction would have broken the production link (sim-invisible), and
+K3's acceptance clause contradicted its own C1. The K4 battery also
+surfaced a run-order sensitivity: acceptance program runs ahead of the
+FIX-6 group shift the free-list shape into the interior-double-free
+test's defensive SKIP — resolved by registering K4 after that group, and
+worth remembering as a fixture-shape trap (trap-#9 family). E10-E15 are
+normative in DESIGN.md 8.4.1; the stage doc and packets are the ledger.
+Flash: 1108000 -> 1108360 (+360 B). Arena: unchanged at every commit.

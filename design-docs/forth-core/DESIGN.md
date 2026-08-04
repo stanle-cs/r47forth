@@ -2458,6 +2458,43 @@ field in `tam`, no persisted byte anywhere recording "entry is in Forth
 mode". If a future edit appears to need one, STOP: it violates this
 section's invariant and must come back as a design change.
 
+#### 8.4.1 Keys mode (Stage K, landed 2026-08-04)
+
+A second input sub-mode inside an open capture. `forthCap.keysMode`
+(transient, never persisted, dies with the capture) makes `determineItem`
+resolve physical keys through the NORMAL columns while FLAG_ALPHA stays
+set — so resolved items flow down the unchanged E0 dispatch into the
+landed F6-3/F6-4/picker text sinks. Rules:
+
+- **E10/E11 (toggle).** Inside an open capture the ALPHA gesture (the row
+  whose normal-column `fShifted` is ITM_AIM — layout-independent) toggles
+  the sub-mode: alpha→keys closes the alpha menus (the underlying menu
+  row IS the mode indicator, K-R3); keys→alpha restores `-MNU_ALPHA`.
+  E6 (re-entry with the capture closed) is untouched; a fresh capture
+  always opens in alpha input, including the E5 relock (pinned by the K4
+  battery as the default, not a ruling).
+- **E12 (keys-mode routing).** Direct CAT_FNCT|PTP_NONE items insert
+  their `itemCatalogName` as text; parameterized items take the F6-2/F6-4
+  suspend-and-fold; digits/period insert as characters; EEX inserts the
+  grammar's `e`; numlock translation is guarded off. SST/BST commit (or
+  empty-abort) before navigating; R/S commits the line then records a
+  native STOP step; ENTER/BACKSPACE keep capture semantics. EXIT gains a
+  first ladder rung (keys→alpha), extending E8 one level.
+- **E13 (TAM round-trip).** The sub-mode persists across a TAM
+  suspension: keyed-from-keys resumes in keys mode (resume pushes
+  `-MNU_ALPHA` only for alpha); an abandoned suspension clears the bit.
+- **E14 (reset).** The bit clears at every capture close (one choke
+  point: `forthCapClose`, which every close path reaches since FIX-8),
+  at fresh open, power reset, and abandon — poison-swept by the close-
+  paths class test.
+- **Token boundaries (K2).** `forthCapInsertName` lands every name as its
+  own token: one trailing space always, one leading separator when the
+  cursor follows a non-space. The F6-4 fold relies on this (its own
+  wrapper was removed as redundant).
+
+Stage record: STAGE_K_KEYS_MODE.md (rulings K-R1..K-R4, traces T1-T6);
+packets PACKET_K1..K4 with amendments K1-A..K4-A are the ledger.
+
 ### 8.5 Symmetric display — `»FORTH` / `FORTH«` at render time
 
 The same single item renders directionally, computed from scan parity at
