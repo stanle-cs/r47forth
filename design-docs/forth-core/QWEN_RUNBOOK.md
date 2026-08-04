@@ -197,8 +197,22 @@ The standing consequence: **a packet specifies exact PASS text, and the
 verifier reads the PASS text against the packet.** Every one of these
 landed a GREEN gate. Nothing but the strings caught them.
 
-Genuinely residual after G1-G4: the combined-key `trimSoftKeyName` path,
-which serves two-name keys and is not how the picker draws.
+**Nothing residual after G1-G4 — the last item on that list was traced
+and is not ours.** Stage G carried "the combined-key `trimSoftKeyName`
+path" as an open gap through three closeouts. It is not a gap: that path
+is unreachable from anything forth-core draws. `showSoftkey2`/`showKey2`,
+the only callers of the `trimSoftKeyName` at softmenus.c:2077-2078, sit
+inside `if(convUserMenu)`, and `convUserMenu` is set true only in
+`case MNU_MyMenu` and the user-menu case (softmenus.c:3251, 3270).
+`MNU_FORTH` is neither, so the picker always takes the
+`else // fall through for non-user menus` branch: plain `showSoftkey` ->
+`showKey` -> `trimKey`. That is the clamp G4 subcase 3 pins by raising
+`lim` from 66 to 120.
+
+It was listed as residual because it was named from reading a grep of
+call sites, never traced to a caller — the same mistake as declaring the
+read-back harness absent. A gap is only a gap once you have shown
+something of ours reaches it.
 
 ## 3. After the series — no Qwen work
 

@@ -2352,3 +2352,29 @@ own test — a passing suite reported all of it. What caught them was
 reading the PASS strings against the packet. So a packet specifies its
 PASS text exactly, and verification compares the strings, not the exit
 code.
+
+## 2026-08-03 — the last "residual" was not one
+
+Stage G closed carrying one open item: the combined-key
+`trimSoftKeyName` path, listed as residual in the runbook and repeated
+through three closeouts. Asked to make sure nothing was left, I traced it
+instead of repeating it, and there is nothing there.
+
+`trimSoftKeyName` at softmenus.c:2077-2078 has exactly two callers,
+`showSoftkey2` and `showKey2`, and both sit inside `if(convUserMenu)`.
+`convUserMenu` is set true in two places only — `case MNU_MyMenu` and the
+user-menu case (softmenus.c:3251, 3270) — for unit-conversion pairs.
+`MNU_FORTH` is neither, so every label the picker draws takes the
+`else // fall through for non-user menus` branch: plain `showSoftkey` ->
+`showKey` -> `trimKey`, whose per-cell clamp G4 subcase 3 already pins.
+
+So the picker's rendering has no uncovered path, and stage G has no
+residual.
+
+How it got listed: I named it from a grep of call sites and never traced
+one to a caller. That is the same error as declaring the LCD read-back
+harness absent — a claim about reachability made from reading rather than
+from following the code. The rule it earns: **a gap is not a gap until
+you have shown something of ours reaches it.** Anything else is a guess
+wearing the word "residual", and it survives review precisely because it
+sounds like diligence.
