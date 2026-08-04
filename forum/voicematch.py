@@ -77,8 +77,50 @@ def show(name, a, b):
         if ca > 0.02 or cb > 0.02:
             print(f"  {k:12} {ca:6.2f}  {cb:6.2f}")
 
+# ---- attestation mode: --attest ----
+# For each draft sentence, which pairings of corpus-common words never
+# occur in the corpus? Technical tokens (rare in corpus) are excluded:
+# the signal is ordinary words combined in ways the author never combines
+# them, which is where "writerly" register hides.
+
+def tokens_of(t):
+    return re.findall(r"[a-z][a-z']*", t.lower())
+
+def attest(draft_path, corpus_path):
+    ct = tokens_of(prose_of(corpus_path, is_corpus=True))
+    freq = {}
+    for w in ct:
+        freq[w] = freq.get(w, 0) + 1
+    bigrams = set(zip(ct, ct[1:]))
+    s = sentences(prose_of(draft_path))
+    rows = []
+    for x in s:
+        tw = tokens_of(x)
+        pairs = list(zip(tw, tw[1:]))
+        common = [p for p in pairs if freq.get(p[0], 0) >= 5 and freq.get(p[1], 0) >= 5]
+        if not common:
+            continue
+        miss = [p for p in common if p not in bigrams]
+        rows.append((len(miss) / len(common), miss, x))
+    rows.sort(key=lambda r: -r[0])
+    print(f"attestation over {len(rows)} sentences "
+          f"(corpus: {len(ct)} tokens, {len(bigrams)} distinct bigrams)")
+    print("least-attested sentences first; unattested common-word pairings shown:\n")
+    for ratio, miss, x in rows:
+        if ratio == 0:
+            continue
+        print(f"  [{ratio:4.0%}] {x[:90]}")
+        print(f"         never combined: {', '.join('+'.join(p) for p in miss[:6])}")
+    ok = sum(1 for r in rows if r[0] == 0)
+    print(f"\nfully attested sentences: {ok}/{len(rows)}")
+
+if len(sys.argv) > 1 and sys.argv[1] == '--attest':
+    attest(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else CORPUS_DEFAULT)
+    sys.exit(0)
+
 if __name__ == '__main__':
     draft = sys.argv[1]
     corpus = sys.argv[2] if len(sys.argv) > 2 else CORPUS_DEFAULT
     show(draft, profile(prose_of(corpus, is_corpus=True)),
          profile(prose_of(draft)))
+

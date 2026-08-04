@@ -36,12 +36,17 @@ This is a constraint on the writing, not a polish pass at the end.
 - Register ruling (2026-08-03, after the first pipeline draft failed his
   read): technical writing is either cut and dry, or explained in his
   style. The polished-technical-writer middle register is the failure
-  mode — crafted contrasts, tidy mid-length sentences, no person. His two
-  real registers are measurable: the Reddit corpus (first person 3.8/100w,
-  contractions 3.5, questions 11%) and his INSTALL.txt register (long
-  flowing sentences mixed with short ones, CV 0.9, dry asides, little
-  first person). A draft should sit at one of them, or between them —
-  never outside on the polished side. `voicematch.py` measures this.
+  mode — crafted contrasts, tidy mid-length sentences, no person.
+  The ONLY authentic voice anchor is the Reddit corpus (first person
+  3.8/100w, contractions 3.5, questions 11%). "Cut and dry" means plain
+  and terse — short factual sentences, ordinary verbs, no flourish — it
+  is a mode, not a document to imitate. Stan's correction of the same
+  day: INSTALL.txt, RELEASE_README.md and every other project-authored
+  doc are ALSO AI-generated and carry no voice authority; do not use
+  them as register anchors, style donors, or reuse-comparison baselines.
+  They are facts-only references until rewritten through this pipeline.
+  `voicematch.py` measures a draft against the corpus; `--attest` checks
+  phrase-level support.
 - No em dashes. Use a comma or a full stop.
 - No rhetorical antithesis: `X rather than Y`, `not X but Y`, `no X, no Y`,
   trailing `, not Z`. Keep only where the contrast **is** the fact

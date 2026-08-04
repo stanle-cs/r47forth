@@ -1,13 +1,14 @@
 custom package v0.3 - external package overlay for C47 / R47
 ============================================================
 
-Build the firmware with your own changes layered on top, without touching
-anything under src/. Leave CUSTOM_PKG unset and you get byte for byte the same
-firmware as before.
+This builds the firmware with your changes layered on top. Nothing under
+src/ gets modified. If you leave CUSTOM_PKG unset, the firmware comes out
+byte for byte the same as stock.
 
-Generated against upstream c43 26ec91634.
+I generated everything here against upstream c43 26ec91634.
 
-Licence: GPL-3.0-only, same as c43. Full text in COPYING beside this file.
+Licence: GPL-3.0-only, same as c43. Full text is in COPYING beside this
+file.
 
 
 WHAT IS IN HERE
@@ -24,37 +25,34 @@ WHAT IS IN HERE
   tools/pkg_patch_integrate.py  integration sessions against a new upstream
   package                       thin entry-point for the commands above
 
-  tools/test_pkg_patch_common.py     \
-  tools/test_pkg_patch_refresh.py     |  keep these, see below
-  tools/test_pkg_patch_resolver.py   /
-  tools/test_pkg_patch_integrate.py  standalone check of integration sessions
+  tools/test_pkg_patch_common.py
+  tools/test_pkg_patch_refresh.py
+  tools/test_pkg_patch_resolver.py
+  tools/test_pkg_patch_integrate.py
 
   design-docs/package-manager/README.md      the full documentation
   packages/.gitignore           keeps generated output tracked, junk out
   COPYING                       GPL-3.0 licence text
 
-Keep the test files. meson.build declares them as tests unconditionally, so
-leaving them out makes `make test` die on a missing file, and `make pkg_build`
-runs `make test`. If you'd rather not have them, take the test() blocks out of
-meson.build as well.
+Don't delete the test files. meson.build declares the first three as
+tests, and make pkg_build runs make test, so a missing file kills the
+build. If you really don't want them, take the test() blocks out of
+meson.build too.
 
 
 INSTALL
 -------
 
-The tests don't need an upstream tree, so run them here first and you know the
-download arrived intact:
+Run the tests right here first. They don't need an upstream tree, and if
+all four pass, the tooling survived the download:
 
   python3 tools/test_pkg_patch_common.py
   python3 tools/test_pkg_patch_refresh.py
   python3 tools/test_pkg_patch_resolver.py
   python3 tools/test_pkg_patch_integrate.py
 
-Four passes means the resolver, the refresh tool, the patch stack and the
-integration sessions all work.
-
-Then get upstream, copy these files over it keeping the directory layout, and
-apply the build-system diff:
+Then get upstream, copy these files over it with the directory layout
+kept, and apply the build-system diff:
 
   git clone https://gitlab.com/rpncalculators/c43.git
   cd c43
@@ -65,15 +63,16 @@ apply the build-system diff:
 USING IT
 --------
 
-A package is a flat directory mirroring upstream paths, with nothing to declare
-and no meson.build of its own:
+A package is one flat directory laid out the same way as upstream, and
+there's nothing to declare inside it:
 
   packages/my-pkg/
       keyboard.c      your edited copy of an existing upstream file
       my_module.c     a new source with no upstream counterpart
 
-Run refresh and it sorts out which is which. If the path exists upstream you get
-a patch against it; if it doesn't, the whole file is copied in:
+Run refresh and it works out which is which. If the path exists upstream
+you get a patch against it, and if it doesn't, the file gets copied in
+whole:
 
   python3 tools/pkg_patch_refresh.py packages/my-pkg
 
@@ -82,27 +81,28 @@ Then build with the package active:
   make sim CUSTOM_PKG=packages/my-pkg
   make dist_dmcp5r47 CUSTOM_PKG=packages/my-pkg
 
-CUSTOM_PKG takes a comma-separated list. When two packages patch the same file,
-the patches stack in order instead of one silently replacing the other. Two
-packages editing different parts of the same function merge fine. If they hit
-the same lines, configure fails and names the patch.
+CUSTOM_PKG takes a comma-separated list. When two packages patch the
+same file, the patches stack in NNN filename order instead of one
+replacing the other. Two packages editing different parts of one
+function is fine. If both touch the same lines, configure fails and
+tells you which patch did it.
 
 
 REFRESH BEFORE YOU BUILD
 ------------------------
 
-The build reads the generated patches/ and files/ directories and ignores your
-flat working area. Edit a source, forget to refresh, and the build succeeds
-while still carrying the previous version of your code. Put the refresh at the
-top of whatever script you build with.
+The build compiles from the generated patches/ and files/ directories
+and never looks at your flat working area. Edit a source without
+refreshing and you'll flash a build that doesn't have your change in
+it. Mine runs first thing in the build script.
 
 
 A PACKAGE THAT USES IT
 ----------------------
 
-The Forth package for R47, 16 patches against upstream files plus 19 new
-sources:
+My Forth package for the R47 runs on this system, 16 patches against
+upstream files plus 19 new sources:
 
   https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2
 
-Full documentation is in design-docs/package-manager/README.md.
+The full documentation is in design-docs/package-manager/README.md.

@@ -104,3 +104,33 @@ The rewrite is a full prose change, so the two model lanes need a fresh
 pair of passes AFTER Stan settles the register — auditing prose he may
 still re-cut is wasted motion. Current state: awaiting his read of the
 rewrite; then one Gemini + one ChatGPT pass on whatever he approves.
+
+## Corpus-mechanical pass and corpus-grounded audits (2026-08-03, late)
+
+Stan's second correction: INSTALL.txt and every project doc are ALSO
+AI-generated. The §2 ruling was rewritten — the Reddit corpus is the
+only voice anchor; "cut and dry" is a mode, not a file to imitate.
+
+voicematch gained --attest (phrase-level: which ordinary-word pairings
+never occur in his 47k corpus tokens). Five unattested constructions
+fixed in the post (honestly-you-couldn't, fronted Probably, might-still-
+work-though, worked-example, the fronted question fragment).
+
+Both audit lanes then ran WITH an 8k corpus sample in the prompt,
+instructed to flag voice deviations, terseness excluded. Their converged
+real findings: documentation register in the mechanism paragraphs
+(materializes, catch drift, produces no artifact, size gate) — all
+replaced with plain verbs; agency added where he has a stake (I
+generated everything against...). Their Reddit-costume suggestions
+(smilies, Sup guys, self-deprecation) were ruled out: between his
+registers, not parody.
+
+INSTALL.txt and RELEASE_README.md were rewritten fresh through the same
+process (facts identical, sentences differentiated from the post per
+never-reuse), and the zip rebuilt with the new INSTALL.
+
+Final tri-document pair: ChatGPT accepts all three; its residues (two
+RELEASE_README wordings, one INSTALL pairing) were fixed. Gemini's
+verdict text says no but its six findings are all settled dispositions
+(the never-tail's seventh flag, the true first-person intro, the locked
+list format). POST: clean pair as judged. Stan's read remains the gate.
