@@ -9380,3 +9380,1015 @@ static int test_abandon_clears_keys_bit(void)
   lastErrorCode = ERROR_NONE;
   return fail;
 }
+
+/* ==================================================================
+ * K4 (Stage K packet 4) — stage acceptance battery.
+ *
+ * K1 proved the bit and the column swap, K2 the token boundaries and
+ * the ladder rung, K3 the TAM round-trip.  K4 asserts nothing new about
+ * the production code: it drives the LANDED behavior end to end, the
+ * way a user meets it — a definition typed half in alpha and half on
+ * the physical keys, a keys-only line folded through TAM, the sub-mode
+ * the relock hands back, the whole EXIT ladder rung by rung, and an
+ * arena sweep over three complete open-to-closed cycles.
+ *
+ * Every drive here is a real entry point (runFunction, determineItem,
+ * fnKeyExit, addStepInProgram, tamProcessInput, fnExecute); nothing
+ * primes the state under test.
+ * ================================================================== */
+
+/* Read a numbered global register as a long integer — the register-side
+ * twin of x_is_longint, so A2 can assert what the RUN stored rather than
+ * what the interpreter happens to leave in X. */
+static int k4_reg_is_longint(calcRegister_t reg, int32_t val)
+{
+  if (getRegisterDataType(reg) != dtLongInteger) {
+    return 0;
+  }
+  longInteger_t li;
+  longIntegerInit(li);
+  convertLongIntegerRegisterToLongInteger(reg, li);
+  int32_t v;
+  longIntegerToInt32(li, v);
+  longIntegerFree(li);
+  return v == val;
+}
+
+/* A1 — the stage's headline story, driven end to end.
+ *
+ * ": SQ DUP " is typed on the alpha keyboard; the multiply is pressed on
+ * the PHYSICAL key (located differentially in kbd_std by its normal
+ * primary column, resolved through determineItem, dispatched through
+ * runFunction); " ;" is typed back in alpha; ENTER relocks; "4 SQ" is
+ * typed on the relocked line; EXIT commits and closes; the label is then
+ * XEQ'd and X must be 16.
+ *
+ * One assertion chain covers mixed-sub-mode entry, the K2 token
+ * boundary, glyph-name resolution of the keys-inserted multiply (the
+ * item's name is STD_CROSS, which is also the Forth primitive's name),
+ * the commit, and execution.  Nothing here is layout-dependent: the key
+ * row is found by table search, not by key number.
+ *
+ * Escaping mutation: disable K1's toggle arm (M1) — the ALPHA gesture
+ * stops toggling, the multiply key types a letter instead, and the
+ * definition never compiles. */
+static int test_k4_mixed_input_definition(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void fnExecute(uint16_t);
+  extern int16_t determineItem(const char *);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  bool_t savedUser = getSystemFlag(FLAG_USER);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  /* Locate the multiply row once, from the live table (K1 T1's idiom). */
+  int mIdx = -1;
+  for (int i = 0; i < 37; i++) {
+    if (kbd_std[i].primary == ITM_MULT) { mIdx = i; break; }
+  }
+  if (mIdx < 0) {
+    printf("    FIXTURE FAIL: no kbd_std row carries primary == ITM_MULT\n");
+    return 1;
+  }
+  char kb[3];
+  sprintf(kb, "%02d", mIdx);
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K4A");
+  tpMarker(&p);                                 /* opening marker */
+  tpMarker(&p);                                 /* closing marker: an empty region */
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  clearSystemFlag(FLAG_USER);                   /* resolution must read kbd_std */
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);                                 /* onto the opening marker */
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+
+  /* ---- alpha sub-mode: ": SQ DUP " ---- */
+  runFunction(ITM_COLON);
+  runFunction(ITM_SPACE);
+  runFunction(ITM_S);
+  runFunction(ITM_Q);
+  runFunction(ITM_SPACE);
+  runFunction(ITM_D);
+  runFunction(ITM_U);
+  runFunction(ITM_P);
+  runFunction(ITM_SPACE);
+
+  /* ---- toggle to keys and press the physical multiply key ---- */
+  runFunction(ITM_AIM);
+  if (!forthCapKeysMode()) {
+    printf("    [1] FAIL: the ALPHA gesture did not switch to keys mode\n");
+    fail = 1;
+  }
+  else {
+    shiftF = false;
+    int16_t mItem = determineItem(kb);
+    shiftF = false;
+    if (mItem != ITM_MULT) {
+      printf("    [1] FAIL: the multiply key resolved to %d, expected ITM_MULT (%d)\n",
+             mItem, ITM_MULT);
+      fail = 1;
+    }
+    else {
+      runFunction(mItem);                       /* the resolved item, dispatched */
+    }
+  }
+
+  /* ---- toggle back to alpha and finish the definition ---- */
+  if (!fail) {
+    runFunction(ITM_AIM);
+    if (forthCapKeysMode()) {
+      printf("    [1] FAIL: the ALPHA gesture did not switch back to alpha input\n");
+      fail = 1;
+    }
+    else {
+      runFunction(ITM_SPACE);
+      runFunction(ITM_SEMICOLON);
+    }
+  }
+
+  /* The keys-mode insert brought its own trailing space (K2's token
+   * boundary guard), and the packet's script then types one more before
+   * the ';' — two spaces between the operator and the terminator, which
+   * the C-6 tokenizer skips (delimiter runs are not tokens). */
+  if (!fail) {
+    const char *want = ": SQ DUP " STD_CROSS "  ;";
+    if (strcmp(forthTestCapText(), want) != 0) {
+      printf("    [1] FAIL: line text = '%s', expected '%s'\n",
+             forthTestCapText(), want);
+      fail = 1;
+    }
+  }
+
+  /* ---- ENTER relocks; the second line is typed on the relocked line ---- */
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    runFunction(ITM_ENTER);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: lastErrorCode %u after ENTER — the definition was refused\n",
+             lastErrorCode);
+      fail = 1;
+    }
+    else if (forthTestCapState() != FCAP_OPEN) {
+      printf("    [1] FAIL: capture state %d after ENTER, expected FCAP_OPEN (relock)\n",
+             forthTestCapState());
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    runFunction(ITM_4);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_S);
+    runFunction(ITM_Q);
+    fnKeyExit(NOPARAM);                         /* commit-and-close */
+
+    if (forthCapIsOpen() || getSystemFlag(FLAG_ALPHA)) {
+      printf("    [1] FAIL: capture still open after the committing EXIT\n");
+      fail = 1;
+    }
+  }
+
+  /* ---- the committed image, walked structurally from the LBL ---- */
+  if (!fail) {
+    const char *def1 = ": SQ DUP " STD_CROSS "  ;";
+    uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+    uint8_t *sDef1   = sMarker ? findNextStep(sMarker) : NULL;
+    uint8_t *sDef2   = sDef1   ? findNextStep(sDef1)   : NULL;
+    size_t   n1      = strlen(def1);
+
+    if (!sMarker || !sDef1 || !sDef2) {
+      printf("    [1] FAIL: structural walk from the LBL came up short\n");
+      fail = 1;
+    }
+    else if (sDef1[0] != 0x8B || sDef1[1] != 0x1A || sDef1[2] != 0xFD ||
+             sDef1[3] != (uint8_t)n1 || memcmp(sDef1 + 4, def1, n1) != 0) {
+      printf("    [1] FAIL: the committed definition step is not the typed line\n");
+      fail = 1;
+    }
+    else if (sDef2[0] != 0x8B || sDef2[1] != 0x1A || sDef2[2] != 0xFD ||
+             sDef2[3] != 4 || memcmp(sDef2 + 4, "4 SQ", 4) != 0) {
+      printf("    [1] FAIL: the committed call step is not \"4 SQ\"\n");
+      fail = 1;
+    }
+  }
+
+  /* ---- run it by label (the F15/showcase idiom) ---- */
+  if (!fail) {
+    dynamicMenuItem = -1;
+    calcRegister_t lbl = findNamedLabel("K4A", GLOBAL_LABELS);
+    if (lbl == INVALID_VARIABLE) {
+      printf("    [1] FAIL: findNamedLabel(K4A) failed\n");
+      fail = 1;
+    }
+    else {
+      programRunStop = PGM_STOPPED;
+      lastErrorCode = ERROR_NONE;
+      fnExecute(lbl);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: run error %d\n", lastErrorCode);
+        fail = 1;
+      }
+      else if (!x_is_longint(16)) {
+        printf("    [1] FAIL: X != 16 after the run\n");
+        fail = 1;
+      }
+      else {
+        printf("    [1] PASS: alpha \": SQ DUP \" + the physical " STD_CROSS
+               " key + alpha \" ;\" defines SQ; \"4 SQ\" runs to 16\n");
+      }
+    }
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  forthDictClear();
+  forthGDictClear();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  shiftF = false;
+  shiftG = false;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  if (savedUser) setSystemFlag(FLAG_USER); else clearSystemFlag(FLAG_USER);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* A2 — a line entered entirely on the physical keys.
+ *
+ * 4, 2, STO, then the TAM digits 0 and 0.  The fold has to put the K2
+ * separator between the digits and the folded name ("42 STO 00 ", never
+ * "42STO 00 "), the line has to commit, and the program has to actually
+ * store 42 into R00 when it runs.
+ *
+ * Escaping mutation: force K2's `lead` to 0 (M2) — the fold glues the
+ * name to the digits and the committed line stops being a program. */
+static int test_k4_keys_only_line(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void fnExecute(uint16_t);
+  extern void tamProcessInput(uint16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  /* R00 must not be able to pass on a value an earlier test left there.
+   * Cleared BEFORE the fixture is written: clearRegister reallocates in
+   * the same RAM pool program memory lives in, and a reallocation after
+   * tpWrite moves the program out from under the addresses
+   * scanLabelsAndPrograms recorded — findNamedLabel then resolves to a
+   * stale image and the run is a silent no-op (observed: R00 stayed the
+   * cleared real34 zero while lastErrorCode stayed ERROR_NONE). */
+  clearRegister(0);
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K4B");
+  tpMarker(&p);
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+
+  runFunction(ITM_AIM);                         /* the real toggle to keys */
+  if (!forthCapKeysMode()) {
+    printf("    [1] FIXTURE FAIL: toggle did not set keys mode\n");
+    fail = 1;
+  }
+
+  if (!fail) {
+    runFunction(ITM_4);
+    runFunction(ITM_2);
+    runFunction(ITM_STO);                       /* physical-shaped TAM entry */
+    if (forthTestCapState() != FCAP_SUSPENDED) {
+      printf("    [1] FAIL: capture state %d after STO, expected FCAP_SUSPENDED\n",
+             forthTestCapState());
+      fail = 1;
+    }
+    else {
+      tamProcessInput(ITM_0);
+      tamProcessInput(ITM_0);                   /* two digits auto-fire the commit */
+      if (forthTestCapState() != FCAP_OPEN) {
+        printf("    [1] FAIL: capture state %d after the TAM commit, expected FCAP_OPEN\n",
+               forthTestCapState());
+        fail = 1;
+      }
+      else if (strcmp(forthTestCapText(), "42 STO 00 ") != 0) {
+        printf("    [1] FAIL: line text = '%s', expected '42 STO 00 '\n",
+               forthTestCapText());
+        fail = 1;
+      }
+    }
+  }
+
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    runFunction(ITM_ENTER);                     /* commit; a relock line opens */
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: lastErrorCode %u after ENTER — the line was refused\n",
+             lastErrorCode);
+      fail = 1;
+    }
+    else {
+      /* Close the capture so the program can run: the relock line is
+       * empty, so one BACKSPACE aborts it (the landed idiom). */
+      runFunction(ITM_BACKSPACE);
+      if (forthTestCapState() != FCAP_CLOSED) {
+        printf("    [1] FAIL: capture state %d after the relock-line abort, expected FCAP_CLOSED\n",
+               forthTestCapState());
+        fail = 1;
+      }
+    }
+  }
+
+  if (!fail) {
+    uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+    uint8_t *sSrc    = sMarker ? findNextStep(sMarker) : NULL;
+    static const uint8_t wantSrc[14] = { 0x8B, 0x1A, 0xFD, 10,
+                                         '4', '2', ' ', 'S', 'T', 'O', ' ', '0', '0', ' ' };
+    if (sSrc == NULL || memcmp(sSrc, wantSrc, sizeof(wantSrc)) != 0) {
+      printf("    [1] FAIL: the committed step is not the source line \"42 STO 00 \"\n");
+      fail = 1;
+    }
+  }
+
+  /* Leave program-entry mode before running, the way the user does — EXIT
+   * off the end of the ladder.  This is not cosmetic: a native
+   * parameterized word executed while calcMode is still CM_PEM takes the
+   * E0 insert divert instead of running, so the program's own "STO 00"
+   * would record a step rather than store (observed: a GTO step appearing
+   * after the source line and R00 untouched, with lastErrorCode clean). */
+  if (!fail) {
+    for (int press = 0; press < 4 && calcMode == CM_PEM; press++) {
+      fnKeyExit(NOPARAM);
+    }
+    if (calcMode == CM_PEM) {
+      printf("    [1] FAIL: still in CM_PEM after four EXIT presses\n");
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    dynamicMenuItem = -1;
+    calcRegister_t lbl = findNamedLabel("K4B", GLOBAL_LABELS);
+    if (lbl == INVALID_VARIABLE) {
+      printf("    [1] FAIL: findNamedLabel(K4B) failed\n");
+      fail = 1;
+    }
+    else {
+      programRunStop = PGM_STOPPED;
+      lastErrorCode = ERROR_NONE;
+      fnExecute(lbl);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: run error %d\n", lastErrorCode);
+        fail = 1;
+      }
+      else if (!k4_reg_is_longint(0, 42)) {
+        printf("    [1] FAIL: R00 does not hold 42 after the run (R00 type=%u)\n",
+               getRegisterDataType(0));
+        fail = 1;
+      }
+      else {
+        printf("    [1] PASS: 4 2 STO 0 0 on the physical keys commits as"
+               " \"42 STO 00 \" and stores 42 in R00\n");
+      }
+    }
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  forthDictClear();
+  forthGDictClear();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* A3 — the sub-mode the relock hands back.
+ *
+ * THIS TEST PINS THE CURRENT DEFAULT, NOT A RULING.  ENTER's commit runs
+ * the close sweep, which clears the keys-mode bit (K1/E14), and the
+ * relock then opens a FRESH capture line, whose owner-ruled default is
+ * alpha input.  So a keys-mode line hands the next line back in alpha
+ * with the ALPHA menu on top.
+ *
+ * A future refinement may decide the sub-mode should persist across the
+ * relock the way K3 made it persist across a TAM round-trip.  That is a
+ * deliberate flip of this pin, not a regression: whoever makes it must
+ * change these two assertions on purpose and say so in the packet. */
+static int test_k4_relock_submode(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K4C");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+
+  runFunction(ITM_AIM);                         /* the real toggle to keys */
+  if (!forthCapKeysMode()) {
+    printf("    [1] FIXTURE FAIL: toggle did not set keys mode\n");
+    fail = 1;
+  }
+  else {
+    runFunction(ITM_4);
+    runFunction(ITM_2);
+    lastErrorCode = ERROR_NONE;
+    runFunction(ITM_ENTER);                     /* commit + relock */
+
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: lastErrorCode %u after ENTER\n", lastErrorCode);
+      fail = 1;
+    }
+    else if (forthTestCapState() != FCAP_OPEN) {
+      printf("    [1] FAIL: capture state %d after ENTER, expected FCAP_OPEN (relock)\n",
+             forthTestCapState());
+      fail = 1;
+    }
+    else if (forthCapKeysMode()) {
+      printf("    [1] FAIL: the relocked line kept keys mode (the pinned default is alpha)\n");
+      fail = 1;
+    }
+    else if (currentMenu() != -MNU_ALPHA) {
+      printf("    [1] FAIL: currentMenu() = %d after the relock, expected -MNU_ALPHA\n",
+             currentMenu());
+      fail = 1;
+    }
+    else {
+      printf("    [1] PASS: the relock after a keys-mode line opens in alpha input"
+             " (pinned K1 default, not a ruling)\n");
+    }
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* A4 — the full ladder, one rung per press (E8 + E12.4).
+ *
+ * Keys mode has no alpha menus, so the FWRD picker is not even reachable
+ * from it — that is the precondition, asserted rather than assumed.
+ * Press 1 buys alpha input back; the picker is then pushed the way the
+ * landed picker tests push it; press 2 pops the picker and no more;
+ * press 3 aborts the (still empty) line.  Each press is followed by the
+ * whole state tuple, so a rung that swallows a level or does two things
+ * at once fails here even if the end state happens to be right. */
+static int test_k4_ladder_full_unwind(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void showSoftmenu(int16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  uint8_t savedTemporaryInfo = temporaryInformation;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K4L");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  temporaryInformation = TI_NO_INFO;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  uint16_t stepsFixture = getNumberOfSteps();
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+
+  runFunction(ITM_AIM);                         /* the real toggle to keys */
+
+  /* rung 0 — the precondition: keys mode, no alpha menu, line open. */
+  if (!forthCapKeysMode() || forthTestCapState() != FCAP_OPEN ||
+      currentMenu() == -MNU_ALPHA) {
+    printf("    [1] FAIL: rung 0 tuple wrong (keys=%d state=%d menu=%d)\n",
+           (int)forthCapKeysMode(), forthTestCapState(), currentMenu());
+    fail = 1;
+  }
+
+  /* rung 1 — EXIT returns alpha input and the ALPHA menu, nothing else. */
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    fnKeyExit(NOPARAM);
+    if (forthCapKeysMode() || forthTestCapState() != FCAP_OPEN ||
+        currentMenu() != -MNU_ALPHA || !getSystemFlag(FLAG_ALPHA)) {
+      printf("    [1] FAIL: rung 1 tuple wrong (keys=%d state=%d menu=%d alpha=%d)\n",
+             (int)forthCapKeysMode(), forthTestCapState(), currentMenu(),
+             (int)getSystemFlag(FLAG_ALPHA));
+      fail = 1;
+    }
+  }
+
+  /* Now — and only now — the FWRD picker is reachable. */
+  if (!fail) {
+    showSoftmenu(-MNU_FORTH);
+    if (currentMenu() != -MNU_FORTH) {
+      printf("    [1] FIXTURE FAIL: picker not on top (menu=%d)\n", currentMenu());
+      fail = 1;
+    }
+  }
+
+  /* rung 2 — EXIT pops the picker back to the ALPHA menu and no further. */
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    fnKeyExit(NOPARAM);
+    if (forthCapKeysMode() || forthTestCapState() != FCAP_OPEN ||
+        currentMenu() != -MNU_ALPHA || !getSystemFlag(FLAG_ALPHA)) {
+      printf("    [1] FAIL: rung 2 tuple wrong (keys=%d state=%d menu=%d alpha=%d)\n",
+             (int)forthCapKeysMode(), forthTestCapState(), currentMenu(),
+             (int)getSystemFlag(FLAG_ALPHA));
+      fail = 1;
+    }
+  }
+
+  /* rung 3 — EXIT on the still-empty line aborts it. */
+  if (!fail) {
+    lastErrorCode = ERROR_NONE;
+    fnKeyExit(NOPARAM);
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    [1] FAIL: rung 3 state %d, expected FCAP_CLOSED\n",
+             forthTestCapState());
+      fail = 1;
+    }
+    else if (forthCapKeysMode()) {
+      printf("    [1] FAIL: rung 3 left the keys-mode bit set\n");
+      fail = 1;
+    }
+    else if (getNumberOfSteps() != stepsFixture) {
+      printf("    [1] FAIL: %u steps after the empty abort, expected the fixture's %u\n",
+             getNumberOfSteps(), stepsFixture);
+      fail = 1;
+    }
+    else {
+      printf("    [1] PASS: keys -> alpha -> picker pop -> abort, one ladder level per EXIT\n");
+    }
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  temporaryInformation = savedTemporaryInfo;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* A5 — three complete cycles, and what they leave behind.
+ *
+ * One cycle: open on the marker, toggle to keys, key "42" and fold STO
+ * 00 through TAM, ENTER to commit, abort the relock line, reopen with
+ * the E2 in-region route (a printable key with the capture closed),
+ * toggle to keys again, and unwind with EXIT until the capture is gone.
+ * The two lines the cycle commits are then removed through the real
+ * EDIT/CLA/BACKSPACE path, so the region genuinely returns to its
+ * fixture image and each cycle starts from the same place.
+ *
+ * freeRam is allowed the K2/F6 escape valve and nothing else: any
+ * residue must be a whole number of program-memory resize quanta and it
+ * must be growth (freeRam falling), which is the region growing, not a
+ * capture leaking.  Three cycles are bounded at 8 quanta. */
+static int test_k4_arena_sweep(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void tamProcessInput(uint16_t);
+  extern void addStepInProgram(int16_t);
+  extern void pemAlpha(int16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  uint8_t savedTemporaryInfo = temporaryInformation;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K4S");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  temporaryInformation = TI_NO_INFO;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  uint16_t stepsFixture = getNumberOfSteps();
+  uint32_t freeBeforeCycles = getFreeRamMemory();
+
+  for (int cycle = 0; cycle < 3 && !fail; cycle++) {
+    /* ---- open on the marker, toggle, key a folded line, commit ---- */
+    fnGotoDot(2);
+    runFunction(ITM_AIM);
+    if (!forthCapIsOpen()) {
+      printf("    [1] FAIL: cycle %d did not open\n", cycle);
+      fail = 1;
+      break;
+    }
+    runFunction(ITM_AIM);
+    runFunction(ITM_4);
+    runFunction(ITM_2);
+    runFunction(ITM_STO);
+    if (forthTestCapState() != FCAP_SUSPENDED) {
+      printf("    [1] FAIL: cycle %d not suspended (state=%d)\n", cycle, forthTestCapState());
+      fail = 1;
+      break;
+    }
+    tamProcessInput(ITM_0);
+    tamProcessInput(ITM_0);
+    if (forthTestCapState() != FCAP_OPEN || !forthCapKeysMode()) {
+      printf("    [1] FAIL: cycle %d fold did not resume in keys mode (state=%d keys=%d)\n",
+             cycle, forthTestCapState(), (int)forthCapKeysMode());
+      fail = 1;
+      break;
+    }
+    runFunction(ITM_ENTER);                     /* commit; relock line opens */
+    runFunction(ITM_BACKSPACE);                 /* the relock line is empty: abort it */
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    [1] FAIL: cycle %d relock line not aborted (state=%d)\n",
+             cycle, forthTestCapState());
+      fail = 1;
+      break;
+    }
+
+    /* ---- reopen with the E2 in-region route, toggle, EXIT-unwind ---- */
+    addStepInProgram(ITM_1);
+    if (!forthCapIsOpen() || tam.function != ITM_FORTH) {
+      printf("    [1] FAIL: cycle %d E2 reopen failed (open=%d tam=0x%04X)\n",
+             cycle, (int)forthCapIsOpen(), tam.function);
+      fail = 1;
+      break;
+    }
+    runFunction(ITM_AIM);
+    if (!forthCapKeysMode()) {
+      printf("    [1] FAIL: cycle %d second toggle failed\n", cycle);
+      fail = 1;
+      break;
+    }
+    fnKeyExit(NOPARAM);                         /* rung 1: keys -> alpha */
+    if (forthCapKeysMode() || forthTestCapState() != FCAP_OPEN) {
+      printf("    [1] FAIL: cycle %d unwind rung 1 wrong (keys=%d state=%d)\n",
+             cycle, (int)forthCapKeysMode(), forthTestCapState());
+      fail = 1;
+      break;
+    }
+    fnKeyExit(NOPARAM);                         /* rung 2: commit-and-close */
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    [1] FAIL: cycle %d unwind did not close (state=%d)\n",
+             cycle, forthTestCapState());
+      fail = 1;
+      break;
+    }
+
+    /* ---- take the two committed lines back out, the way a user would ---- */
+    for (int line = 0; line < 2 && !fail; line++) {
+      uint8_t *sMarker = findNextStep(beginOfProgramMemory);   /* past the LBL */
+      uint8_t *sSrc    = sMarker ? findNextStep(sMarker) : NULL;
+      if (sSrc == NULL) {
+        printf("    [1] FAIL: cycle %d cleanup walk came up short\n", cycle);
+        fail = 1;
+        break;
+      }
+      currentStep = sSrc;
+      currentLocalStepNumber = 3;
+      calcMode = CM_PEM;
+      tam.mode = 0;
+      clearSystemFlag(FLAG_ALPHA);
+      tam.function = 0;
+      pemAlpha(ITM_EDIT);                       /* reopens the line, deletes the step */
+      runFunction(ITM_CLA);
+      runFunction(ITM_BACKSPACE);               /* empty line: abort, nothing recommitted */
+      if (forthTestCapState() != FCAP_CLOSED) {
+        printf("    [1] FAIL: cycle %d cleanup left the capture open (state=%d)\n",
+               cycle, forthTestCapState());
+        fail = 1;
+      }
+    }
+    if (fail) break;
+
+    if (getNumberOfSteps() != stepsFixture) {
+      printf("    [1] FAIL: %u steps after cycle %d, expected the fixture's %u\n",
+             getNumberOfSteps(), cycle, stepsFixture);
+      fail = 1;
+      break;
+    }
+  }
+
+  if (!fail) {
+    uint32_t afterCycles = getFreeRamMemory();
+    if (afterCycles == freeBeforeCycles) {
+      printf("    [1] PASS: three full keys-mode cycles leave zero arena residue\n");
+    }
+    else {
+      uint32_t delta = (freeBeforeCycles > afterCycles)
+                       ? (freeBeforeCycles - afterCycles)
+                       : (afterCycles - freeBeforeCycles);
+      /* The K2/F6 escape valve, verbatim in shape: block-aligned,
+       * growth-only, bounded — program-memory resize quanta, not a
+       * capture leak.  Three cycles are allowed 8. */
+      if (freeBeforeCycles > afterCycles && delta % BYTES_PER_BLOCK == 0
+          && delta <= 8 * BYTES_PER_BLOCK) {
+        printf("    [1] PASS (escape valve): freeRam %u -> %u is %u program-memory"
+               " resize quantum(s) (%u B each) after three cycles, not a capture leak\n",
+               (unsigned)freeBeforeCycles, (unsigned)afterCycles,
+               (unsigned)(delta / BYTES_PER_BLOCK), (unsigned)BYTES_PER_BLOCK);
+      }
+      else {
+        printf("    [1] FAIL: freeRam changed %u -> %u (delta %u, block %u)\n",
+               (unsigned)freeBeforeCycles, (unsigned)afterCycles,
+               (unsigned)delta, (unsigned)BYTES_PER_BLOCK);
+        fail = 1;
+      }
+    }
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  temporaryInformation = savedTemporaryInfo;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}

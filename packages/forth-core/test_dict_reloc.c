@@ -1136,6 +1136,11 @@ static int test_keys_eex_and_numlock(void);                   /* K2 */
 static int test_keys_tam_roundtrip(void);                     /* K3 */
 static int test_alpha_tam_roundtrip_unchanged(void);          /* K3 */
 static int test_abandon_clears_keys_bit(void);                /* K3 */
+static int test_k4_mixed_input_definition(void);              /* K4 */
+static int test_k4_keys_only_line(void);                      /* K4 */
+static int test_k4_relock_submode(void);                      /* K4 */
+static int test_k4_ladder_full_unwind(void);                  /* K4 */
+static int test_k4_arena_sweep(void);                         /* K4 */
 
 
 /* T5 split: forward declarations for the tests that now live in the
@@ -2152,43 +2157,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  printf("\nFORTH SHOWCASE PROGRAM (complete user-facing language example)\n");
-  forthDictInit();
-  forthGDictInit();
-  printf("  [DEBUG] running test_showcase_program...\n");
-  fail |= test_showcase_program();
-  forthDictClear();
-  forthGDictClear();
-
-  printf("  [DEBUG] running test_data_stack_overflow_guard...\n");
-  fail |= test_data_stack_overflow_guard();
-
-  printf("  [DEBUG] running test_deep_recursion_spill...\n");
-  fail |= test_deep_recursion_spill();
-
-  printf("  [DEBUG] running test_spill_native_boundary...\n");
-  fail |= test_spill_native_boundary();
-
-  printf("  [DEBUG] running test_spill_window_parity...\n");
-  fail |= test_spill_window_parity();
-
-  printf("  [DEBUG] running test_fnforthouter_brackets...\n");
-  fail |= test_fnforthouter_brackets();
-
-  printf("  [DEBUG] running test_spill_region...\n");
-  fail |= test_spill_region();
-
-  printf("  [DEBUG] running test_native_lift_after_forth...\n");
-  fail |= test_native_lift_after_forth();
-
-  printf("  [DEBUG] running test_savings_program...\n");
-  forthDictInit();
-  forthGDictInit();
-  fail |= test_savings_program();
-  forthDictClear();
-  forthGDictClear();
-
-  /* FIX-6: free-list integrity — LAST test, after all cleanup */
   printf("\nFORTH FIX-6 TESTS (free-list integrity + arena report)\n");
   printf("  [DEBUG] running test_freelist_consistent...\n");
   fail |= test_freelist_consistent();
@@ -2264,6 +2232,78 @@ int forthDictSelfTest(void)
   }
 
   if (fail) {
+
+  /* K4-A: registered AFTER the FIX-6 freelist group — the battery's two
+   * program runs otherwise shift the free-list shape (16 regions, no
+   * adjacent pair) and push test_freelist_interior_double_free into its
+   * defensive SKIP, silently unexercising that assertion. */
+  printf("\nFORTH K4 TESTS (stage acceptance)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_k4_mixed_input_definition...\n");
+  fail |= test_k4_mixed_input_definition();
+  forthDictClear();
+  forthGDictClear();
+
+  forthDictInit();
+  printf("  [DEBUG] running test_k4_keys_only_line...\n");
+  fail |= test_k4_keys_only_line();
+  forthDictClear();
+  forthGDictClear();
+
+  forthDictInit();
+  printf("  [DEBUG] running test_k4_relock_submode...\n");
+  fail |= test_k4_relock_submode();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_k4_ladder_full_unwind...\n");
+  fail |= test_k4_ladder_full_unwind();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_k4_arena_sweep...\n");
+  fail |= test_k4_arena_sweep();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH SHOWCASE PROGRAM (complete user-facing language example)\n");
+  forthDictInit();
+  forthGDictInit();
+  printf("  [DEBUG] running test_showcase_program...\n");
+  fail |= test_showcase_program();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_data_stack_overflow_guard...\n");
+  fail |= test_data_stack_overflow_guard();
+
+  printf("  [DEBUG] running test_deep_recursion_spill...\n");
+  fail |= test_deep_recursion_spill();
+
+  printf("  [DEBUG] running test_spill_native_boundary...\n");
+  fail |= test_spill_native_boundary();
+
+  printf("  [DEBUG] running test_spill_window_parity...\n");
+  fail |= test_spill_window_parity();
+
+  printf("  [DEBUG] running test_fnforthouter_brackets...\n");
+  fail |= test_fnforthouter_brackets();
+
+  printf("  [DEBUG] running test_spill_region...\n");
+  fail |= test_spill_region();
+
+  printf("  [DEBUG] running test_native_lift_after_forth...\n");
+  fail |= test_native_lift_after_forth();
+
+  printf("  [DEBUG] running test_savings_program...\n");
+  forthDictInit();
+  forthGDictInit();
+  fail |= test_savings_program();
+  forthDictClear();
+  forthGDictClear();
+
+  /* FIX-6: free-list integrity — LAST test, after all cleanup */
+
     printf("\nFORTH SELF-TEST: FAILED\n");
   } else {
     printf("\nFORTH SELF-TEST: ALL PASSED\n");

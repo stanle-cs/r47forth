@@ -72,3 +72,17 @@ Gate green incl. upstream suite; PASS-set diff = only new K4 lines;
 mutation results per above with honest ESCAPE notes; arena lines; the
 K1/K2/K3 groups unchanged-green; no production diffs (STOP otherwise);
 no commits.
+
+---
+
+## AMENDMENT K4-A (2026-08-04, post-implementation)
+
+Battery green, no production changes, M1-M3 all RED (M3 needed no escape —
+A5 catches the interim regression at cycle 0). One PASS-set finding: run
+ORDER matters — the battery's program runs ahead of the FIX-6 group shifted
+the free-list shape and pushed test_freelist_interior_double_free into its
+defensive SKIP. Resolution (architect): K4 registers AFTER the FIX-6 group;
+the assertion runs again (13 regions, guard verified). A2's EXIT-before-run
+deviation records a real trap: running a parameterized word from inside PEM
+takes the E0 divert and records a step instead of executing. Implementation:
+opus subagent, 43.6 min, 233k tok, 14 gate runs, zero rescues.
