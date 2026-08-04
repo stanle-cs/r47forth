@@ -36,3 +36,12 @@ shape): plain verbs, direct you-instructions, sequences instead of
 parallels, no closers. One "so" dropped to land the connector rate.
 aiaudit 0 flags on the rewrite; model lanes deliberately NOT re-run
 (seesaw risk — they endorsed the failed version). Awaiting his re-read.
+
+Round 5 (STAN'S READ, fact challenge): "is it true that you can't type
+superscript? sounds wrong." He was right. convertItemToSubOrSup
+(bufferize.c) maps digits to SUP digits under the up-arrow latch and
+pemAlpha applies it — x² IS typeable in alpha (numlock + superscript
+arrow + 2). The T6 trace had only grepped item/softmenu rows and marked
+the conversion path an open question; the README asserted past the open
+question. Facts-first violation, caught only by his read. Claim replaced
+with the true one: keys mode saves presses. Scanners stay at 0 flags.

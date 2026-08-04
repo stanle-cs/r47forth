@@ -85,7 +85,7 @@ A Forth line opens in alpha for typing word names. If you want the calculator ke
 
 R/S ends the line and puts a STOP step after it. EXIT goes back one step at a time, keys to letters to menus, then it closes the line.
 
-Some names you can only get this way. x² has a superscript 2 in it and there's no way to type that with the letter keys, so just press the key.
+Mostly it saves keys. SIN is one press instead of three letters, and x² is one press instead of numlock, the superscript arrow, then the 2.
 
 ## Notes
 
