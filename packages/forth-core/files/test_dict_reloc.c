@@ -2219,24 +2219,11 @@ int forthDictSelfTest(void)
     fail = 1;
   }
 
-  /* Stale-list tripwire (probeListPtrs): any labelList/programList pointer
-   * observed inside a free region during the run fails the suite. */
-  if (probeListPtrsViolation) {
-    printf("  FAIL: stale labelList/programList pointer observed (see [PROBE] lines)\n");
-    fail = 1;
-  }
-
-  if (suiteEntryCount != 1) {
-    printf("  FAIL: suite entered %d times (run-once guard in config.c broken)\n", suiteEntryCount);
-    fail = 1;
-  }
-
-  if (fail) {
-
   /* K4-A: registered AFTER the FIX-6 freelist group — the battery's two
    * program runs otherwise shift the free-list shape (16 regions, no
    * adjacent pair) and push test_freelist_interior_double_free into its
    * defensive SKIP, silently unexercising that assertion. */
+
   printf("\nFORTH K4 TESTS (stage acceptance)\n");
   forthDictInit();
   printf("  [DEBUG] running test_k4_mixed_input_definition...\n");
@@ -2303,6 +2290,20 @@ int forthDictSelfTest(void)
   forthGDictClear();
 
   /* FIX-6: free-list integrity — LAST test, after all cleanup */
+
+  /* Stale-list tripwire (probeListPtrs): any labelList/programList pointer
+   * observed inside a free region during the run fails the suite. */
+  if (probeListPtrsViolation) {
+    printf("  FAIL: stale labelList/programList pointer observed (see [PROBE] lines)\n");
+    fail = 1;
+  }
+
+  if (suiteEntryCount != 1) {
+    printf("  FAIL: suite entered %d times (run-once guard in config.c broken)\n", suiteEntryCount);
+    fail = 1;
+  }
+
+  if (fail) {
 
     printf("\nFORTH SELF-TEST: FAILED\n");
   } else {

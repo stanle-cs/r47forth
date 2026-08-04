@@ -2560,3 +2560,19 @@ test's defensive SKIP — resolved by registering K4 after that group, and
 worth remembering as a fixture-shape trap (trap-#9 family). E10-E15 are
 normative in DESIGN.md 8.4.1; the stage doc and packets are the ledger.
 Flash: 1108000 -> 1108360 (+360 B). Arena: unchanged at every commit.
+
+## 2026-08-04 — runner-surgery defect: the K4 group was unreachable at its own landing
+
+The K4-A reorder (registering K4 after the FIX-6 group) was done by
+line-surgery that planted the block INSIDE the suite's `if (fail)` verdict
+branch — so the K4 landing gate was green with the K4 tests never
+executing. Found by the LCD-verification session's driver (its banner
+never printed); fixed by moving the block before the stale-list tripwire,
+outside the verdict. First true K4 run: all five tests green, the
+freelist interior-double-free assertion still exercised. **Named class
+(bug-fix rule): a runner-structure edit is not landed until the next gate
+log SHOWS the moved group's banner — silence is not-run, not pass.** Rule
+appended to the standing discipline. The LCD session also confirmed on
+screen: keys-mode line "42 STO 05 SIN" typed entirely from calculator
+keys, and x-superscript-2 typed in alpha via the latch (Stan's catch —
+the README claim that it was untypeable was wrong and is deleted).

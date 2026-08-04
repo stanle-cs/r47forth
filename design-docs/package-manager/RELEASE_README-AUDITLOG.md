@@ -45,3 +45,11 @@ arrow + 2). The T6 trace had only grepped item/softmenu rows and marked
 the conversion path an open question; the README asserted past the open
 question. Facts-first violation, caught only by his read. Claim replaced
 with the true one: keys mode saves presses. Scanners stay at 0 flags.
+
+Round 6 (Stan's ruling: sim-verify, then delete if nothing impossible):
+LCD captures confirmed every section claim on screen — the keys-typed
+"42 STO 05 SIN" line and an alpha-typed x-superscript-2 (latch + 2), and
+"3 x²" interprets clean. Nothing is alpha-impossible, so the closing
+justification paragraph is deleted per the ruling. Side finding: the
+capture driver exposed that the K4 test group had been unreachable since
+the K4-A reorder (see DESIGN-HISTORY 2026-08-04, runner-surgery defect).
