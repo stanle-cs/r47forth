@@ -4,8 +4,6 @@ The Forth package for the R47 is up. You write Forth inside normal calculator pr
 
 A Forth block sits between »FORTH and FORTH« markers, and every line between them is an ordinary program step holding source text. Insert FORTH in the program editor and the alpha editor opens with the closing marker already placed. ENTER stores the line and opens the next one inside the pair. EXIT closes the block. EDIT reopens a line.
 
-[attachment=5]shot1-pem-listing.png[/attachment]
-
 The old way still works, put the source in X as a string and XEQ 'FORTH' runs it.
 
 [b]Where words live[/b]
@@ -28,15 +26,15 @@ Everything else is the calculator itself. Any C47 function goes into a definitio
 
 Every line is checked before it stores. A line that doesn't parse leaves the step alone, and that means a Forth block can't hold source that won't compile. And where Forth and R47 disagree about anything, R47 wins. That's the design rule the whole package follows.
 
-FWRD lists the words visible to the current program on the softkeys and inserts at the cursor:
+FWRD lists the words visible to the current program on the softkeys and inserts at the cursor. Here's the FDEMO listing in the editor, and the picker open at the end of it:
 
-[attachment=4]shot2-picker.png[/attachment]
+[attachment=2]forth-attach-1-editor-picker.png[/attachment]
 
 [b]The sample programs[/b]
 
 My FDEMO program exercises the whole language, recursion, all four loop shapes, GLOBAL and IMMEDIATE and FORGET, named variables, indirect stores, and both XEQ directions. It fills registers 00 through 16 with documented values, here's the stack after recalling three of them:
 
-[attachment=3]shot3-fdemo-results.png[/attachment]
+[attachment=1]forth-attach-2-fdemo-results.png[/attachment]
 
 [code]
 R00 15    5 SUMDOWN, recursive sum
@@ -50,13 +48,9 @@ R13 102   2 XEQ 'NATADD', a keystroke program called from Forth
 
 SAVE is a compounding savings schedule, six periods at 5% on 1000. It defines GROW, PUT, BUMP, TALLY, STEP and RUN, runs the loop, and writes the balance of each period to registers 00 through 05 with the final 1340.095640625 in R22:
 
-[attachment=1]shot5-save-listing.png[/attachment]
-
-[attachment=2]shot4-save-balance.png[/attachment]
+[attachment=0]forth-attach-3-save.png[/attachment]
 
 I promoted GROW to global in the listing, so after the run it's still there. Put 200 in X, XEQ 'GROW', and you get 210.
-
-[attachment=0]shot6-save-picker.png[/attachment]
 
 [b]Stack depth and recursion[/b]
 
