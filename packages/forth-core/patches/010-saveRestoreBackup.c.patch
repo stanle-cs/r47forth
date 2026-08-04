@@ -1,5 +1,5 @@
 diff --git a/src/c47/saveRestoreBackup.c b/src/c47/saveRestoreBackup.c
-index 0c89eeb12dd9f0a12c91227c15f9c2ad69cc8e3f..3dbb5c692d0ab178d613d3d77e2ddd88babdb671 100644
+index 621cd37c31bfa17f47be2cfd0282d7a88a358fa9..a6296c579b0f3bc40c2b920bf4206b84c0866c03 100644
 --- a/src/c47/saveRestoreBackup.c
 +++ b/src/c47/saveRestoreBackup.c
 @@ -8,6 +8,8 @@
@@ -11,7 +11,7 @@ index 0c89eeb12dd9f0a12c91227c15f9c2ad69cc8e3f..3dbb5c692d0ab178d613d3d77e2ddd88
  
  // This is used for the backup.cfg simulator backup file
  // The variable backupVersion is used in the connection
-@@ -527,6 +529,13 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+@@ -528,6 +530,13 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
      ramPtr = TO_C47MEMPTR(programList);
      saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
  
@@ -25,7 +25,7 @@ index 0c89eeb12dd9f0a12c91227c15f9c2ad69cc8e3f..3dbb5c692d0ab178d613d3d77e2ddd88
      ramPtr = TO_C47MEMPTR(currentSubroutineLevelData);
      saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
  
-@@ -925,6 +934,10 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+@@ -926,6 +935,10 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
      savedStatisticalSumsPointer = restoredPoolPointer(savedStatisticalSumsPointer, "savedStatisticalSumsPointer", NULL,                         &poolPointersInRange);
      labelList                   = restoredPoolPointer(labelList,                   "labelList",                   NULL,                         &poolPointersInRange);
      programList                 = restoredPoolPointer(programList,                 "programList",                 NULL,                         &poolPointersInRange);
@@ -36,7 +36,7 @@ index 0c89eeb12dd9f0a12c91227c15f9c2ad69cc8e3f..3dbb5c692d0ab178d613d3d77e2ddd88
      currentSubroutineLevelData  = restoredPoolPointer(currentSubroutineLevelData,  "currentSubroutineLevelData",  NULL,                         &poolPointersInRange);
      currentLocalFlags           = restoredPoolPointer(currentLocalFlags,           "currentLocalFlags",           NULL,                         &poolPointersInRange);
      currentLocalRegisters       = restoredPoolPointer(currentLocalRegisters,       "currentLocalRegisters",       NULL,                         &poolPointersInRange);
-@@ -948,6 +961,19 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+@@ -949,6 +962,19 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
        return;
      }
  
@@ -56,7 +56,7 @@ index 0c89eeb12dd9f0a12c91227c15f9c2ad69cc8e3f..3dbb5c692d0ab178d613d3d77e2ddd88
      restoreStateValue(globalFlags,                     sizeof(globalFlags),                                         "globalFlags",                    "hexDump");
      restoreStateValue(errorMessage,                    ERROR_MESSAGE_LENGTH,                                        "errorMessage",                   "hexDump");
      restoreStateValue(aimBuffer,                       AIM_BUFFER_LENGTH,                                           "aimBuffer",                      "hexDump");
-@@ -1463,6 +1489,10 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+@@ -1465,6 +1491,10 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
      // register (all classes, not just the global block) to the word size so stale bits cannot survive.
      clampShortIntegerRegistersToWordSize();
  

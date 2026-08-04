@@ -1,5 +1,5 @@
 diff --git a/src/c47/ui/tam.c b/src/c47/ui/tam.c
-index 412eac08b7fd8f44b7a820f55fe45ac94cef61f6..1a64bc0a8cfb69744cf1905dbaadc7faac21ae2c 100644
+index 939c974dfb2d79767cdd617905442f756d26be18..bb12aa6aaabaa4b8ea46b692a12f784bb1fe1d26 100644
 --- a/src/c47/ui/tam.c
 +++ b/src/c47/ui/tam.c
 @@ -2,6 +2,8 @@

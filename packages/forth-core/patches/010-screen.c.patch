@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index 04573e89af664b9e0e5c982dd036264b46bfa4f5..820e3e836029c8201679b7102324d7dea246c610 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..d9823178d717cf377536fb8117f8ae9fcf3b9bb0 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -3,6 +3,7 @@

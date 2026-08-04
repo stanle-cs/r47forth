@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/lblGtoXeq.c b/src/c47/programming/lblGtoXeq.c
-index 94207fce7e1f2ff2ac4957e5aaf4e4d03ff4bf9b..14468b88d4cc75265fa791eabe644849bf0235af 100644
+index 70944d629fa4e29c343f2483eda44a21526c0ef4..e79663c8778b98bff746844d7e522e084384bf4c 100644
 --- a/src/c47/programming/lblGtoXeq.c
 +++ b/src/c47/programming/lblGtoXeq.c
 @@ -7,6 +7,8 @@
