@@ -81,20 +81,11 @@ before every build, or your edit won't be in the firmware you flash.
 
 ## Typing a Forth line
 
-A Forth line starts out in alpha. That's right for word names. But half
-the catalog is easier to reach as a key press than as spelled-out
-letters. Press ALPHA inside the line and the keyboard flips back to its
-normal layout: SIN types `SIN`, the multiply key types `×`, digits stay
-digits. STO and RCL run their usual parameter entry. The finished form
-goes into the line as text: `STO 05`. You don't need to add spaces
-around any of this. A key press separates itself from whatever came
-before it. Press ALPHA again for letters. R/S closes the line and
-records a STOP step. EXIT backs out one level at a time: keys to
-letters, then the menus, then the line itself.
+A Forth line opens in alpha for typing word names. If you want the calculator keys instead, press ALPHA inside the line and the keyboard goes back to normal. Now the function keys type their own names. Press SIN and you get `SIN` in the line. Digits work like you expect. STO and RCL still ask for their parameter the normal way, then the whole thing ends up in the line as text, like `STO 05`. You don't have to put spaces around any of it, the spaces get put in for you. ALPHA again brings the letters back.
 
-Why bother when you can spell the names? Some you can't. x² is a
-superscript glyph the alpha keyboard doesn't have, but the key knows
-its own spelling.
+R/S ends the line and puts a STOP step after it. EXIT goes back one step at a time, keys to letters to menus, then it closes the line.
+
+Some names you can only get this way. x² has a superscript 2 in it and there's no way to type that with the letter keys, so just press the key.
 
 ## Notes
 

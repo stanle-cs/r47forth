@@ -25,3 +25,14 @@ STOP step, EXIT one level per press, x-squared glyph untypeable in
 alpha per the T6 trace).
 
 GATE: Stan's read. Model-clean is not done.
+
+Round 4 (STAN'S READ — the gate): "very good, but doesnt sound like me."
+Verdict: middle-register failure exactly as the skill names it — the
+scanners and both model lanes had converged on crafted prose (the
+"digits stay digits" symmetry, the "Some you can't." fragment closer,
+the "key knows its own spelling" flourish). Full rewrite against the
+2026 corpus register (the LocalLLM $200/month comment is the anchor
+shape): plain verbs, direct you-instructions, sequences instead of
+parallels, no closers. One "so" dropped to land the connector rate.
+aiaudit 0 flags on the rewrite; model lanes deliberately NOT re-run
+(seesaw risk — they endorsed the failed version). Awaiting his re-read.
