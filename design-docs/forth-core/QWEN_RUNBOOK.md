@@ -226,10 +226,12 @@ Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),
   `QWEN_PROMPTS_FIX6_bugscreen.md` (FIX-6B) — the SOLE packet allowed to
   touch `freeList.c` (it lifts the no-touch rule for that one hunk).
   **EXECUTED 2026-08-02 (`5c2e7109a`, architect; two gate amendments and
-  the +80 B flash correction recorded in DESIGN-HISTORY).** Remaining:
-  **S** forks/pushes/opens the MR with the fail-loud patch; the reply
-  (in UPSTREAM_REPORTS §3) flags one open call-context question (immediate
-  vs. latched raise) for upstream to finalize. Optional upstream reports
+  the +80 B flash correction recorded in DESIGN-HISTORY).** **STAGED
+  2026-08-03**: branch `fix/freelist-halt-on-overlapping-free`
+  (`92bacdeb5`, applies clean on upstream master) plus MR title,
+  description, and push commands in `FIX6B_MR.md`. Remaining: **S**
+  forks/pushes/opens it; the description flags the open call-context
+  question (immediate vs. latched raise) for upstream to finalize. Optional upstream reports
   (tam.c item-scan colon gap; decode.c renderer indexing) — **MOOT
   2026-08-03**: both were fixed upstream inside the migration window
   (`05508a7a7`, `6e26d2c09`), never filed by us; re-verification recorded
@@ -239,9 +241,12 @@ Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),
   capture onto aimBuffer) — filing is **S**'s call, draft carries the
   framing notes.
 - Final docs reconciliation pass (DESIGN.md stale/interim prose,
-  DESIGN-HISTORY, ledger closeout) — **A**, docs-only commits.
+  DESIGN-HISTORY, ledger closeout) — **DONE 2026-08-03** (eight stale
+  sites cleaned, two resolved open items removed; DESIGN-HISTORY entry
+  of the same date has the list).
 - Flash baseline/deltas (`make dmcp5r47`, RULE-1) — **A** runs and records
-  (owner ruling 2026-08-02; was S).
+  (owner ruling 2026-08-02; was S). Current through the migration merge
+  (`e9346a5f7`: 1105360 at base 26ec91634, forth-core's share 17272 B).
 - Then the accepted implementation backlog is **empty**; anything further
   starts with a new owner ruling (**S**).
 

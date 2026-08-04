@@ -30,9 +30,11 @@ simplifies the implementation, take it and record the measured delta on
 **How to read this document.** It states what is true **now**, in one voice,
 with one sanctioned exception: where the committed code and an accepted
 future decision diverge, the current behavior is marked *implemented
-interim* and the target carries a **stage-F** pointer into §10 (DECIDED,
-unimplemented) — both states are normative, each for its own phase, and
-nothing else about the future is interleaved here. Every normative claim
+interim* and the target carries a pointer into the decision records
+(§10-§11) — both states are normative, each for its own phase, and
+nothing else about the future is interleaved here. No such divergence is
+open today; the last interim markers closed with the 2026-08-03
+reconciliation pass. Every normative claim
 carries a `[VERIFIED: file:line]` citation against the tree, or an explicit
 `[GAP]` / `[OPEN]` marker. There are no amendment tags and no narrative
 history in the specification: the amendment trail — what was decided when,
@@ -652,7 +654,7 @@ or `ERROR_INVALID_CORRUPTED_DATA` and unwind via `INNER_LEAVE()` [VERIFIED:
 packages/forth-core/forth_inner.c:159-168 and every dispatch arm]. A restored
 or truncated body can therefore never read past the logical dictionary end.
 **Retention ruling (2026-07-15, RULE-1):** these per-dispatch guards stay as
-defense-in-depth even after the stage-F1 restore-time validator lands (§10) —
+defense-in-depth alongside the landed stage-F1 restore-time validator (§10) —
 the flash argument for removing them is void on the R47 target.
 
 **Cooperative break & key poll (DECIDED, verified against upstream 2026-07-06):**
@@ -868,9 +870,6 @@ while nextToken(buf):                          // tokenizer §3.3.3
     if label != INVALID_VARIABLE:              // see §4.1 order rationale
         if state == COMPILE:                   // label ids RENUMBER on every edit —
             emit(FTOK_XEQN); emitKind(253); emitName(word)  // never bake one; §3.3.6.
-                                               // STAGE F3 (§10): committed code
-                                               // rejects with ERROR_INVALID_NAME
-                                               // until XEQN lands (error table above)
         else:                                  // fresh findNamedLabel() per use.
                                                // Direct fnExecute, NOT the PGM_RUNNING
                                                // wrap — ITM_XEQ is the run-loop driver,
@@ -905,7 +904,6 @@ failure semantics:
 | Syntax error (`:` in compile, `;` in interpret, unterminated def) | `ERROR_INVALID_NAME` (48) | "Invalid name" |
 | Token exceeds `FORTH_TOKEN_MAX` (63) | `ERROR_INPUT_TOO_LONG` (10) | "Input is too long" |
 | Empty or overlong definition name | `ERROR_INVALID_NAME` (48) | "Invalid name" |
-| C47 label in compile state (stage-interim: until FTOK_XEQN lands in stage F3 — §3.3.6, §10 — compile state emits `FTOK_XEQN` instead and this row is deleted) | `ERROR_INVALID_NAME` (48) | "Invalid name" |
 | Outer re-entrancy guard | `ERROR_OPERATION_UNDEFINED` (13) | "Operation is undefined in this mode" |
 | Inner re-entrancy guard | `ERROR_OPERATION_UNDEFINED` (13) | "Operation is undefined in this mode" |
 | Unsupported PTP class in FTOK_C47 | `ERROR_OPERATION_UNDEFINED` (13) | "Operation is undefined in this mode" |
@@ -1435,8 +1433,7 @@ For a bare name typed at `ITM_FORTH` / found while compiling:
    explicit `:NAME:` spelling of stage F3 and never resolve from a bare name,
    §0.3/§10). Lets Forth call existing keystroke programs by name, in **both**
    states: compile state emits `FTOK_XEQN` + kind + the inline name (§2.2,
-   stage F3; committed interim rejects, §3.3.6), interpret state dispatches
-   per §3.3.6. Labels resolve *after* items, so a keystroke program named `SIN`
+   §3.3.6), interpret state dispatches per §3.3.6. Labels resolve *after* items, so a keystroke program named `SIN`
    does not shadow the builtin inside Forth source; it stays reachable as
    `XEQ 'SIN'`.
 
@@ -1539,16 +1536,20 @@ that encodes a LOCAL name resolves against local labels or fails — the Forth
 fallback in `_executeOp` is gated `opParam == GLOBAL_LABELS` and a local miss
 **never** reaches Forth vocabulary [VERIFIED:
 packages/forth-core/programming/lblGtoXeq.c, `forthFallbackEligible`]. The
-interactive TAM hook gains the matching `!tam.colon` gate (AUD-U1, scheduled).
+interactive TAM hook carries the matching `!tam.colon` gate — upstream's own
+fix, arrived with the migration base (AUD-U1 closed) [VERIFIED:
+packages/forth-core/ui/tam.c:976].
 
-**Interim behavior, documented (RULED 2026-07-15, Q4):** the resolver's item
-arm filters `CAT_FNCT` only — no PTP filter — and the dispatch sites pass
-`NOPARAM` to a matched item, so `XEQ` on a name matching a *parameterized*
-CAT_FNCT item (no label of that name) dispatches it with `NOPARAM` (65535).
-Pinned by `test_xeq_item_lookup` (FORTH/FCALL rows). This stands until stage
-F3, whose accepted B3 ruling makes a bare parameterized item an atomic syntax
-error (§10); do not "fix" it piecemeal before then — the test rows migrate
-with F3.
+**Item dispatch is unparameterized by construction.** The resolver's item arm
+filters `CAT_FNCT + PTP_NONE` [VERIFIED: packages/forth-core/forth_compile.c:1064],
+so a bare name never matches a parameterized item and the arm's `NOPARAM`
+dispatch is always correct for what it can match. Parameterized items are
+reachable only through their canonical spellings (B3, §10); a spelling that
+fails to parse is an atomic syntax error, `ERROR_INVALID_NAME`, aborting any
+open definition [VERIFIED: packages/forth-core/forth_compile.c:820-825].
+Pinned by `test_xeq_item_lookup`, whose FCALL row asserts the B3-reverse
+rejection of a bare parameterized item [VERIFIED:
+packages/forth-core/test_engine.part.h:1223-1229].
 
 **PEM recording of `XEQ 'NAME'` (names persist, never `widx`).** When
 `XEQ 'NAME'` resolves to a Forth colon word while **recording in PEM**, the
@@ -2548,14 +2549,12 @@ no catalog, no dictionary lookup:
   a reportable condition, and 170 unique word definitions before the cursor
   is far beyond any realistic personal program.
 - **Scan bound (documented deviation):** the builder walks at most **1000
-  steps** from the owning program's start [VERIFIED:
-  packages/forth-core/softmenus.c, `if (stepCount > 1000) break`]. A program
-  longer than that is not fully scanned, so definitions past step 1000 do not
-  appear in the picker; they still compile and run normally (§8.2). *(Known
-  code deviation, fix scheduled: the builder's owning-program loop still uses
-  the iteration-order scan the R4-E5 ruling replaced in forth_bridge.c — it
-  must call `forthOwningProgramStart(currentStep)` instead; small bounded
-  task, tracked with AUD-U1.)*
+  steps** (`FORTH_PICKER_MAX_SCAN_STEPS`) from the owning program's start,
+  found via `forthOwningProgramStart(currentStep)` per the R4-E5 ruling
+  [VERIFIED: packages/forth-core/forth_menu.c:97,104]. A program longer than
+  that is not fully scanned, so definitions past step 1000 do not appear in
+  the picker; they still compile and run normally (§8.2). The cut-off and
+  its literal are pinned by the G2 scan-cut-off test.
 - **Registration note (softmenu numbering):** `-MNU_FORTH`'s `softmenu[]` row
   sits at the end of the *dynamic area* (slot 022) — mid-table overall,
   deliberately deviating from upstream's "add new menus at the end" rule
@@ -2744,30 +2743,12 @@ dictionary high-water mark; region ceiling unchanged (≤ 2 KB, §5.4).
 Resolved items are not listed here; their history is in `DESIGN-HISTORY.md`.
 This list carries only what is genuinely unsettled.
 
-1. **[SUPERSEDED — resolved by the accepted scope architecture, §10]
-   Cross-program word visibility.** Under the *current* code, a nested `XEQ`
-   under `PGM_RUNNING` does not bump the run generation and the dictionary is
-   global within a generation, so program A calling `XEQ 'LIB'` likely leaves
-   LIB's words resolvable in A's later Forth lines (reasoned, never
-   empirically verified). The accepted F3 ruling settles the *contract*:
-   colon definitions are **local to their owning program** — a name lookup
-   cannot see a different owner's definitions. Do **not** write the
-   once-planned visibility test against the doomed current behavior; stage
-   F3's scope tests replace it. Until F3 lands, do not rely on cross-program
-   leakage and do not document it to users.
-
-2. **[Documented boundary] R/S-after-`GTO` cold start.** Such a start inherits
-   the previous run's dictionary generation (§8.3). The boundary is benign: the
-   first touch in any generation re-scans the owning program (§8.2), so stale
-   words are re-derived rather than trusted. Subsumed by the F1 pending-reset
-   design when it lands (§10); revisit only if user reports demand it sooner.
-
-3. **[Deferred — additive] Forth words are invisible to the rest of the UI.**
+1. **[Deferred — additive] Forth words are invisible to the rest of the UI.**
    RPN programs appear in the PROG catalog and can be `ASSIGN`ed to a key; Forth
    words can do neither (§4.3). Real asymmetry against the extension principle,
    but purely additive and with no format impact.
 
-4. **[Deferred — additive] Interactive `FORTH` requires a string in X.**
+2. **[Deferred — additive] Interactive `FORTH` requires a string in X.**
    `fnForthOuter` (§3.3.2) raises `ERROR_INVALID_DATA_TYPE_FOR_OP` unless X
    already holds a string, so the same item is an entry-mode toggle in PEM and a
    string-consuming function outside it. Extension-consistent would be: pressing
@@ -2775,16 +2756,11 @@ This list carries only what is genuinely unsettled.
    running the line. Same entry-layer surface as §8.4, so cheapest to build
    alongside it.
 
-**Scoping — implementation vs. contract (updated 2026-07-15).** The *current
-implementation* scopes words to a *run generation*, not to a program — the
-dictionary and its first-touch reset are global within one generation, so
-describing today's code as "program-local" would be wrong (a nested `XEQ`
-under `PGM_RUNNING` likely leaks the callee's words to the caller — item 1).
-The *accepted contract* (F3, §10) IS program-local: colon definitions are
-local to their owning RPN program, interactive definitions get a reserved
-interactive scope, and lookups cannot see another owner's definitions —
-implemented by mirroring upstream's `labelList[].program` pattern, the same
-architecture upstream's named local labels use (§0.3). Either way, RPN's unit
+**Scoping.** Colon definitions are local to their owning RPN program,
+interactive definitions live in a reserved interactive scope, and a name
+lookup cannot see another owner's definitions — the dictionary walk is
+owner-filtered (F3, §10) [VERIFIED:
+packages/forth-core/forth_dict.c:486-493]. RPN's unit
 of shared code *is* the labelled program, and `FTOK_XEQN` (§3.3.6) makes any
 keystroke program callable from inside a Forth definition. Forth words are
 local helpers; RPN programs are the sharing unit. Nothing is durable-at-risk:

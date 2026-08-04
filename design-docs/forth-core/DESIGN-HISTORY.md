@@ -2378,3 +2378,69 @@ from following the code. The rule it earns: **a gap is not a gap until
 you have shown something of ours reaches it.** Anything else is a guess
 wearing the word "residual", and it survives review precisely because it
 sounds like diligence.
+
+## 2026-08-03 — reconciliation pass: the interim markers are gone, and two "open items" had already closed
+
+The runbook's last standing docs item was a sweep of DESIGN.md for prose
+still describing landed work as future. Eight sites, one theme: the
+F-series landed, the migration carried upstream's own fixes in, and
+nobody went back for the sentences.
+
+- The §3.4 error-table row for "C47 label in compile state" carried its
+  own deletion instruction ("until FTOK_XEQN lands in stage F3 ... this
+  row is deleted"). FTOK_XEQN landed with F3-6 (forth_compile.c:1542
+  emits it); the row is deleted. The §3.3.6 pseudocode comment saying
+  committed code "rejects ... until XEQN lands" went with it.
+- §3's retention ruling said the per-dispatch guards stay "even after
+  the stage-F1 restore-time validator lands". It landed (F1-5). Tense
+  fixed, ruling unchanged.
+- §4.2's "(AUD-U1, scheduled)" for the interactive TAM `!tam.colon`
+  gate: upstream fixed this themselves inside the migration window
+  (05508a7a7 — the exact one-liner our unfiled report suggested). Now
+  cited as landed at packages/forth-core/ui/tam.c:976.
+- §4.2's "Interim behavior (RULED 2026-07-15, Q4)" paragraph — the
+  CAT_FNCT-only, NOPARAM-dispatch resolver arm — described code that
+  F3/F4 replaced: the arm filters CAT_FNCT + PTP_NONE
+  (forth_compile.c:1064) and a bare parameterized item is B3's atomic
+  syntax error, pinned by test_xeq_item_lookup's FCALL row. Rewritten
+  as current behavior.
+- §9.6's scan-bound bullet cited softmenus.c and a raw `stepCount >
+  1000`, and carried a "fix scheduled" for the owning-program scan. S2
+  moved the builder to forth_menu.c; the fix is in
+  (forthOwningProgramStart at forth_menu.c:97); the bound is
+  FORTH_PICKER_MAX_SCAN_STEPS (=1000, forth_menu.h:28). Re-cited.
+- Open items 1 and 2 were removed under the section's own rule
+  ("resolved items are not listed here"): cross-program visibility is
+  settled by F3-3's owner-filtered lookup (forth_dict.c:486-493), and
+  the GTO-then-R/S generation inheritance was subsumed by landed F1
+  (§8.3: cold starts no longer inherit). The scoping paragraph's
+  implementation-vs-contract contrast collapsed with them — the
+  implementation now IS the contract. Items 3-4 renumbered to 1-2.
+- The §0 preamble described §10 as "(DECIDED, unimplemented)". §10 has
+  been the landed decision record since the 2026-08-03 fold; the
+  preamble now points at the decision records and states that no
+  implemented-interim divergence is open.
+
+The marker convention itself survives: the next accepted-but-unlanded
+decision gets the same treatment. What ended today is the population.
+
+Same day, recorded here because the runbook row closed with it: the
+upstream report drafts were re-verified at the new base. Both unfiled
+b8f79e486 findings were fixed upstream inside the migration window
+(05508a7a7, 6e26d2c09); the 976b864b5 restoreCalc bookkeeping leak is
+mechanically intact upstream but our reproducer is gone by construction
+(S3 moved capture onto aimBuffer) — measured freeRam delta 0 across an
+open-capture round-trip, where 976b864b5 measured a deterministic
+−256 B. Details in the two UPSTREAM_REPORTS files; the FIX-6B MR is
+staged on branch fix/freelist-halt-on-overlapping-free (FIX6B_MR.md).
+
+Also closed with the pass: the design audit's REVIEW group E had never
+been re-baselined after D3 landed, so it still listed the three spill
+allocation sites (forth_inner.c:86-87,116) with its standing question,
+is each lifetime >= a save/restore cycle. Triage: yes for all three.
+The spill region is reset at both line boundaries
+(forthDataDepthEnterOuter/LeaveOuter), and the D3-3 boundary rule
+refuses any native item, SAVE included, while values are spilled — so
+saveCalc can never snapshot a live spill. The :116 site fills register
+payloads, which are persisted state. None is the 976b864b5 leak class.
+Baseline re-accepted.
