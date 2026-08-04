@@ -153,7 +153,12 @@ enter it.
 | T5 | FIX-7 | Asymmetry **confirmed and worse**: check mode skips item branches, so a folded `GTO 'X'` COMMITS SILENTLY and fails only when that step executes; folded `XEQ '…'` is refused at ENTER purely because the structural XEQ keyword shares its ASCII spelling. Glyph-delimiter acceptance has zero number-grammar collision (bytes ≥0x80 are never numbers); only a structural possibility of names containing the glyphs as content (no instance found). |
 | T6 | α glyph | Zero cost — see E15. g+key51 = ITM_omega confirmed on all four layouts. |
 
-## Related defects and sequencing
+## Related defects and sequencing — RESOLVED 2026-08-04
+
+**FIX-7/7b, FIX-8, FIX-9 all landed on forth-core/capture-fixes
+(81a326a0c, 3e0c6264c, 62f40bd8f; +224 B flash combined). Stage K's
+sequencing preconditions are satisfied; packets K1-K4 are authorable.**
+The paragraphs below record the pre-fix sequencing rationale.
 
 See DEFECTS_capture_roundtrip.md (D-C1/D-C2 now CONFIRMED by trace, D-C3
 added). Sequencing:

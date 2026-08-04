@@ -1,5 +1,16 @@
 # Defects — capture text round-trip, toggle-close, buried catalog menu (found 2026-08-04)
 
+**ALL FIXED 2026-08-04, branch forth-core/capture-fixes:** FIX-8 3e0c6264c,
+FIX-7/7b 81a326a0c, FIX-9 62f40bd8f. Combined flash delta (RULE-1, measured
+`make dmcp5r47` with CUSTOM_PKG_RECONFIGURE=1): 1107776 -> 1108000 (+224 B).
+Arena unchanged (dict 48/16, gdict 16/16, freeRamDelta=128). A fourth defect
+(D-C4/FIX-7b) was found by FIX-7's own reproducer: the F6-4 fold never
+recommitted the on-disk step, so ENTER/EXIT/Up/Down straight after a fold
+committed the PRE-fold text — audit #1 had patched only the suspend
+consumer. Fixed at the source (forthCapRecommitStep at the fold tail).
+Named classes and re-pins in DESIGN-HISTORY's three 2026-08-04 entries;
+Stage K is unblocked. Sections below record the pre-fix analysis.
+
 All three surfaced during the Stage K research passes (six-tracer research
 sweep + six-tracer pre-work verification, same day). **D-C1 and D-C2 are
 CONFIRMED by static trace** (T5/T4 verdicts folded below); D-C3 is suspected
@@ -19,7 +30,7 @@ text its own compiler refuses is one too.
 
 ## D-C1 — F6-4 fold emits quote glyphs the compiler cannot re-read
 
-**Severity: CONFIRMED bug (trace T5, 2026-08-04). Committed source that
+**Severity: CONFIRMED bug — FIXED (81a326a0c). Was: committed source that
 fails its own re-compile — silently, for everything except XEQ.**
 
 Trace verdict (sharper than the original suspicion): the ENTER-time
@@ -70,8 +81,8 @@ folds a primary flow). Tag: FIX-7.
 
 ## D-C2 — ITM_FORTH toggle-close arm leaves forthCap.state == FCAP_OPEN
 
-**Severity: CONFIRMED code defect (trace T4, 2026-08-04); UNREACHABLE today,
-ACTIVATED by Stage K.**
+**Severity: CONFIRMED code defect — FIXED (3e0c6264c). Unreachable today,
+would have been activated by Stage K.**
 
 Trace verdict: the omission is structural — the F6-1 packet enumerated the
 pemAlpha open/close retrofit sites and never listed this arm; its mutation
@@ -119,8 +130,9 @@ Tag: FIX-8, lands with or before Stage K.
 
 ## D-C3 — Catalog-initiated TAM during capture buries a catalog menu that later eats the ALPHA menu
 
-**Severity: suspected bug (trace T2, 2026-08-04 — static only). Reachable
-TODAY; independent of Stage K.**
+**Severity: CONFIRMED structurally, FIXED (62f40bd8f). The reproducer
+settled classification: key-unreachable today (FCNS is invisible
+mid-capture), so K-activated like D-C2 — but the fix landed defensively.**
 
 Route: during an open capture, pick a TAM item (STO/RCL/…) from a catalog.
 The catalog-family softmenu (e.g. -MNU_FCNS) is necessarily on the stack
