@@ -39,3 +39,9 @@ option('FORTH_DEBUG_SELFTEST',
   value       : true,
   description : 'Enable Forth dictionary self-test on boot'
 )
+
+option('mem',
+  type        : 'boolean',
+  value       : false,
+  description : 'Mem=1 diagnostic build: disable -flto so per-feature FLASH/QSPI sizes are real (not masked by LTO). Bigger binary, may not fit - measurement only.'
+)

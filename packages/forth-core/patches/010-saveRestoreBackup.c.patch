@@ -1,5 +1,5 @@
 diff --git a/src/c47/saveRestoreBackup.c b/src/c47/saveRestoreBackup.c
-index b86ac55c82f30de2ffd02e5b65928e626eebc6c8..944cec04de313e7344f407408aa53f8fe500b046 100644
+index 621cd37c31bfa17f47be2cfd0282d7a88a358fa9..a6296c579b0f3bc40c2b920bf4206b84c0866c03 100644
 --- a/src/c47/saveRestoreBackup.c
 +++ b/src/c47/saveRestoreBackup.c
 @@ -8,6 +8,8 @@
@@ -11,7 +11,7 @@ index b86ac55c82f30de2ffd02e5b65928e626eebc6c8..944cec04de313e7344f407408aa53f8f
  
  // This is used for the backup.cfg simulator backup file
  // The variable backupVersion is used in the connection
-@@ -525,6 +527,13 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+@@ -528,6 +530,13 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
      ramPtr = TO_C47MEMPTR(programList);
      saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
  
@@ -25,29 +25,38 @@ index b86ac55c82f30de2ffd02e5b65928e626eebc6c8..944cec04de313e7344f407408aa53f8f
      ramPtr = TO_C47MEMPTR(currentSubroutineLevelData);
      saveStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
  
-@@ -851,7 +860,20 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
-     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "programList",                    "c47Ptr");
-     programList = TO_PCMEMPTR(ramPtr);
+@@ -926,6 +935,10 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+     savedStatisticalSumsPointer = restoredPoolPointer(savedStatisticalSumsPointer, "savedStatisticalSumsPointer", NULL,                         &poolPointersInRange);
+     labelList                   = restoredPoolPointer(labelList,                   "labelList",                   NULL,                         &poolPointersInRange);
+     programList                 = restoredPoolPointer(programList,                 "programList",                 NULL,                         &poolPointersInRange);
++    // Seeded with NULL, not with the live gdict.base: a backup written before the Forth parameters existed carries no forthGDictBase, and the pointer the
++    // dictionary held on entry describes a pool the ram restore above has just overwritten. Absent parameter therefore means an empty dictionary, which is
++    // what forthGDictValidateRestored() normalizes the scalars to below.
++    gdict.base                  = restoredPoolPointer(NULL,                        "forthGDictBase",              NULL,                         &poolPointersInRange);
+     currentSubroutineLevelData  = restoredPoolPointer(currentSubroutineLevelData,  "currentSubroutineLevelData",  NULL,                         &poolPointersInRange);
+     currentLocalFlags           = restoredPoolPointer(currentLocalFlags,           "currentLocalFlags",           NULL,                         &poolPointersInRange);
+     currentLocalRegisters       = restoredPoolPointer(currentLocalRegisters,       "currentLocalRegisters",       NULL,                         &poolPointersInRange);
+@@ -949,6 +962,19 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+       return;
+     }
  
--    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
-+    ramPtr = C47_NULL;   /* default: old backup without Forth params -> empty gdict */
-+    restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "forthGDictBase",                 "c47Ptr");
-+    gdict.base = TO_PCMEMPTR(ramPtr);
++    // The dictionary scalars are read only once the pool pointers above are known good, so a refused file never reaches the header walk in
++    // forthGDictValidateRestored() — it dereferences gdict.base, which is why the base is restored with the other pool pointers rather than here.
++    // Each scalar is seeded with the value an old backup should produce, since restoreStateValue() leaves its destination alone when the file omits the name.
 +    {
 +      uint16_t forthV;
 +      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthGDictSizeBlocks", "uint16"); gdict.sizeBlocks = forthV;
 +      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthGDictHere",       "uint16"); gdict.here       = forthV;
 +      forthV = FORTH_NULL; restoreStateValue(&forthV, sizeof(forthV), "forthGDictLatest",     "uint16"); gdict.latest     = forthV;
 +      forthV = 0;          restoreStateValue(&forthV, sizeof(forthV), "forthGDictCount",      "uint16"); gdict.count      = forthV;
-+     }
-+      forthGDictValidateRestored();
-+      forthDictInit();
++    }
++    forthGDictValidateRestored();
++    forthDictInit();
 +
-+     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentSubroutineLevelData",     "c47Ptr");
-     currentSubroutineLevelData = TO_PCMEMPTR(ramPtr);
- 
-     restoreStateValue(&ramPtr,                         sizeof(ramPtr),                                              "currentLocalFlags",              "c47Ptr");
-@@ -1403,6 +1425,10 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+     restoreStateValue(globalFlags,                     sizeof(globalFlags),                                         "globalFlags",                    "hexDump");
+     restoreStateValue(errorMessage,                    ERROR_MESSAGE_LENGTH,                                        "errorMessage",                   "hexDump");
+     restoreStateValue(aimBuffer,                       AIM_BUFFER_LENGTH,                                           "aimBuffer",                      "hexDump");
+@@ -1465,6 +1491,10 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
      // register (all classes, not just the global block) to the word size so stale bits cannot survive.
      clampShortIntegerRegistersToWordSize();
  

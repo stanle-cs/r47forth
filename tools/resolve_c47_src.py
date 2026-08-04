@@ -28,6 +28,10 @@ Shadow mode:
     upstream sources followed by any newly-compiled files/*.c sources
     (both are plain shadow-dir paths; the caller does not need to tell
     them apart, both compile the same way)
+  SIBSRC:<root>:<path> lines (T2-A): shadow-tree source list for a
+    sibling upstream root (src/<root>, e.g. testSuite) that a package
+    patches; emitted only when such a patch/new file exists. Root
+    meson.build collects these into custom_pkg_<root>_src.
 
 Patch-overlay package system (PROPOSED_SPEC_CHANGES.md, revision 2):
   A package directory (project-root-relative, e.g. "packages/my-pkg")
@@ -71,6 +75,7 @@ from pkg_patch_apply import (
     collect_new_files,
     collect_patch_stacks,
 )
+from pkg_patch_common import SIBLING_ROOTS, upstream_repo_rel
 
 
 SENTINEL_NAME = 'DO_NOT_EDIT_shadow_tree.txt'
@@ -228,14 +233,54 @@ def do_shadow(meson_build, project_root, shadow_dir, pkg_list,
             link_or_copy(os.path.join(src_c47_dir, rel),
                          os.path.join(shadow_dir, rel))
 
+    # --- Sibling roots (T2-A): shadow src/<root> for every root that a
+    # patch or new file actually touches. The shadow entry keeps its
+    # root-prefixed rel (shadow_dir/testSuite/...) — src/c47 has no
+    # directory named like a sibling root, so the namespaces cannot
+    # collide. Roots nobody touches cost nothing.
+    active_sib_roots = sorted({
+        rel.split('/', 1)[0]
+        for rel in list(patch_stacks) + list(new_files)
+        if rel.split('/', 1)[0] in SIBLING_ROOTS})
+    for sib in active_sib_roots:
+        sib_dir = os.path.join(project_root, 'src', sib)
+        if not os.path.isdir(sib_dir):
+            print(f'ERROR: sibling root src/{sib} does not exist',
+                  file=sys.stderr)
+            sys.exit(1)
+        for root, dirs, files in os.walk(sib_dir):
+            for fname in files:
+                if fname == 'meson.build':
+                    continue
+                rel = os.path.relpath(os.path.join(root, fname), sib_dir)
+                link_or_copy(os.path.join(sib_dir, rel),
+                             os.path.join(shadow_dir, sib, rel))
+        if sib == 'testSuite':
+            # T6: the runner resolves case files relative to the LIST's
+            # directory and reads ../../c47/items.h from there (the lazy
+            # Item: table). The shadow's c47 files live FLAT at the
+            # shadow root, so a self-link makes
+            # shadow/testSuite/tests/../../c47/X resolve to shadow/X.
+            c47_compat = os.path.join(shadow_dir, 'c47')
+            if not os.path.lexists(c47_compat):
+                os.symlink('.', c47_compat)
+
     # --- Apply patch stacks (cumulative, ordered) ---------------------------
     for rel in sorted(patch_stacks):
         stack = patch_stacks[rel]
-        upstream_file = os.path.join(src_c47_dir, *rel.split('/'))
+        upstream_file = os.path.join(project_root,
+                                     *upstream_repo_rel(rel).split('/'))
         dst_path = os.path.join(shadow_dir, rel)
 
         # --- F11/F10 containment, same guards as the walk above ------------
-        assert_contained(upstream_file, src_c47_dir,
+        # A sibling-root rel is contained by src/<root>, everything else
+        # by src/c47.
+        first_seg = rel.split('/', 1)[0]
+        if first_seg in SIBLING_ROOTS:
+            contain_parent = os.path.join(project_root, 'src', first_seg)
+        else:
+            contain_parent = src_c47_dir
+        assert_contained(upstream_file, contain_parent,
                          label=f'upstream_file for patch target "{rel}"')
         assert_contained(os.path.dirname(dst_path), shadow_dir,
                          label=f'dst_path for patch target "{rel}"')
@@ -281,12 +326,53 @@ def do_shadow(meson_build, project_root, shadow_dir, pkg_list,
         if rel.endswith('.c'):
             new_source_rels.append(rel)
 
+    # A new .c under a sibling root belongs to that root's target, not
+    # to c47_src (T2-A) — split the list before emission.
+    sib_new_rels = [r for r in new_source_rels
+                    if r.split('/', 1)[0] in SIBLING_ROOTS]
+    new_source_rels = [r for r in new_source_rels
+                       if r.split('/', 1)[0] not in SIBLING_ROOTS]
+
     # Emit output
     print(inc_dirs_line)
     for s in upstream:
         print(os.path.join(shadow_dir, s))
     for rel in sorted(new_source_rels):
         print(os.path.join(shadow_dir, rel))
+
+    # --- Sibling-root source lists (T2-A): for each active root, parse
+    # src/<root>/meson.build for '<root>_src = files(...)' and emit its
+    # entries as shadow paths, plus any package-new .c files under that
+    # root. Root meson.build turns these into custom_pkg_<root>_src,
+    # which src/<root>/meson.build consumes in place of its files() list.
+    for sib in active_sib_roots:
+        sib_meson = os.path.join(project_root, 'src', sib, 'meson.build')
+        try:
+            with open(sib_meson) as f:
+                sib_content = strip_comments(f.read())
+        except OSError as e:
+            print(f'ERROR: cannot read {sib_meson}: {e}', file=sys.stderr)
+            sys.exit(1)
+        m_sib = re.search(
+            rf'{re.escape(sib)}_src\s*=\s*files\((.*?)\)',
+            sib_content, re.DOTALL)
+        if not m_sib:
+            print(f'ERROR: could not parse {sib}_src from {sib_meson}',
+                  file=sys.stderr)
+            sys.exit(1)
+        for entry in re.findall(r"'([^']+)'", m_sib.group(1)):
+            print(f'SIBSRC:{sib}:'
+                  + os.path.join(shadow_dir, sib, entry))
+        for rel in sorted(r for r in sib_new_rels
+                          if r.split('/', 1)[0] == sib):
+            print(f'SIBSRC:{sib}:' + os.path.join(shadow_dir, rel))
+        if sib == 'testSuite':
+            # T6: hand the runner the SHADOW list — patched entries and
+            # package-new case files resolve beside it; upstream case
+            # files are sibling-walk symlinks in the same directory.
+            print('SIBLIST:testSuite:'
+                  + os.path.join(shadow_dir, 'testSuite', 'tests',
+                                 'testSuiteList.txt'))
 
     # --- F1: Emit generator source lists if --gen-lists flag is set ---
     if gen_lists:

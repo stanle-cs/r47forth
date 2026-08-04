@@ -56,19 +56,124 @@ void forthSetTestInnerDepth(uint8_t depth) {
 static int16_t forthDataDepth   = 0;
 static bool_t  forthOuterActive = false;
 
+/* D3-1 spill region (DESIGN.md §11): arena-backed, per-execution, LIFO.
+ * Unused by product paths until D3-2 wires forthDataDepthApply to it.
+ * Slot: [uint32 dataType][uint16 sizeInBlocks][payload]. */
+static void    *forthSpillBase   = NULL;   /* arena block, or NULL */
+static uint16_t forthSpillBlocks = 0;      /* allocated size in blocks */
+static uint32_t forthSpillTop    = 0;      /* byte offset one past last slot */
+static uint16_t forthSpillSlots  = 0;      /* live slot count */
+
+uint16_t forthSpillCount(void) { return forthSpillSlots; }
+
+void forthSpillReset(void)
+{
+  if (forthSpillBase) {
+    freeC47Blocks(forthSpillBase, forthSpillBlocks);
+  }
+  forthSpillBase = NULL; forthSpillBlocks = 0;
+  forthSpillTop = 0; forthSpillSlots = 0;
+}
+
+bool_t forthSpillCatch(calcRegister_t reg)
+{
+  uint32_t type   = getRegisterDataType(reg);
+  uint16_t blocks = getRegisterFullSizeInBlocks(reg);
+  uint32_t need   = forthSpillTop + 6u + (uint32_t)blocks * 4u;
+  if (forthSpillBase == NULL || need > (uint32_t)forthSpillBlocks * 4u) {
+    uint16_t newBlocks = (uint16_t)((need + 63u) / 4u + 16u);
+    void *nb = forthSpillBase
+      ? reallocC47Blocks(forthSpillBase, forthSpillBlocks, newBlocks)
+      : allocC47Blocks(newBlocks);
+    if (nb == NULL) { return false; }          /* arena exhausted: caller errors */
+    forthSpillBase = nb; forthSpillBlocks = newBlocks;
+  }
+  { uint8_t *p = (uint8_t *)forthSpillBase + forthSpillTop;
+    xcopy(p, &type, 4);
+    xcopy(p + 4, &blocks, 2);
+    xcopy(p + 6, getRegisterDataPointer(reg), (uint32_t)blocks * 4u);
+  }
+  forthSpillTop += 6u + (uint32_t)blocks * 4u;
+  forthSpillSlots++;
+  return true;
+}
+
+bool_t forthSpillRefill(calcRegister_t reg)
+{
+  if (forthSpillSlots == 0) { return false; }
+  { /* walk from the base to find the LAST slot's offset */
+    uint32_t off = 0, prev = 0; uint16_t n = forthSpillSlots;
+    while (n-- > 0) {
+      uint16_t blocks; prev = off;
+      xcopy(&blocks, (uint8_t *)forthSpillBase + off + 4, 2);
+      off += 6u + (uint32_t)blocks * 4u;
+    }
+    { uint8_t *p = (uint8_t *)forthSpillBase + prev;
+      uint32_t type; uint16_t blocks;
+      xcopy(&type, p, 4);
+      xcopy(&blocks, p + 4, 2);
+      freeRegisterData(reg);
+      setRegisterDataPointer(reg, allocC47Blocks(blocks));
+      if (getRegisterDataPointer(reg) == NULL) { return false; }
+      setRegisterDataType(reg, (uint16_t)type, amNone);
+      xcopy(getRegisterDataPointer(reg), p + 6, (uint32_t)blocks * 4u);
+      forthSpillTop = prev;
+      forthSpillSlots--;
+    }
+  }
+  return true;
+}
+
 static int16_t forthStackCapacity(void)
 {
   return (int16_t)(getStackTop() - REGISTER_X + 1);
 }
 
+/* D3-2: after a primitive consumed values, pull spilled values back into
+ * the vacated deepest slots. Called from the dispatch bracket only. */
+void forthSpillSettle(void)
+{
+  while (forthSpillCount() > 0
+         && forthDataDepth < forthStackCapacity()) {
+    if (!forthSpillRefill(getStackTop())) {
+      break;   /* allocation failure: value stays spilled, count intact */
+    }
+    forthDataDepth++;
+  }
+}
+
+/* D3-2A (DESIGN.md §11): the ONLY way to invoke a primitive. Applies the
+ * declared stack effect (catching overflow into the spill), runs it,
+ * restores ASLIFT convention, then refills vacated slots. Returns false
+ * when the depth/spill accounting refused the invocation; callers keep
+ * their own lastErrorCode handling after fn(). */
+bool_t forthPrimInvoke(uint16_t idx)
+{
+  if (!forthDataDepthApply(forthPrims[idx].stackEffect)) {
+    return false;
+  }
+  forthPrims[idx].fn();
+  setSystemFlag(FLAG_ASLIFT);
+  forthSpillSettle();
+  return true;
+}
+
 void forthDataDepthEnterOuter(void)
 {
+  forthSpillReset();
   forthOuterActive = true;
   forthDataDepth   = 0;
 }
 
 void forthDataDepthLeaveOuter(void)
 {
+  if (forthSpillCount() > 0) {
+    /* D3-2A (§11): a completed line may not leave values beyond the
+     * visible stack — loud stop, then the reset below discards. */
+    lastErrorCode = ERROR_RAM_FULL;
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+  }
+  forthSpillReset();
   forthOuterActive = false;
 }
 
@@ -80,6 +185,17 @@ void forthDataDepthLeaveOuter(void)
  * which 0 happens to be exactly right. */
 void forthDataDepthResync(void)
 {
+  if (forthSpillCount() > 0) {
+    /* D3-2 interim, refined by D3-3: an arbitrary native cannot run
+     * while Forth values hide below the visible window. Loud stop. */
+    lastErrorCode = ERROR_RAM_FULL;
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "a native item cannot run while %u Forth value(s) are spilled below the visible stack", (unsigned)forthSpillCount());
+      moreInfoOnError("In function forthDataDepthResync:", errorMessage, NULL, NULL);
+    #endif
+    forthSpillReset();
+  }
   forthDataDepth = 0;
 }
 
@@ -95,11 +211,24 @@ bool_t forthDataDepthApply(int16_t net)
     return true;
   }
   if (net > 0 && forthDataDepth + net > forthStackCapacity()) {
-    lastErrorCode = ERROR_RAM_FULL;
-    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-    return false;
+    /* D3-2 (DESIGN.md §11): the falling values are Forth-owned — catch
+     * them into the spill, deepest first, BEFORE the primitive's lifts
+     * destroy them. LIFO refill in forthSpillSettle() restores the
+     * shallowest spilled value first. Depth saturates at capacity; the
+     * spill count carries the excess. Only arena exhaustion errors. */
+    int16_t overflow = (int16_t)(forthDataDepth + net - forthStackCapacity());
+    int16_t k;
+    for (k = 0; k < overflow; k++) {
+      if (!forthSpillCatch((calcRegister_t)(getStackTop() - k))) {
+        lastErrorCode = ERROR_RAM_FULL;
+        displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+        return false;
+      }
+    }
+    forthDataDepth = forthStackCapacity();
+  } else {
+    forthDataDepth += net;
   }
-  forthDataDepth += net;
   if (forthDataDepth < 0) {
     forthDataDepth = 0;       /* consumed inherited values, not Forth's own */
   }
@@ -180,9 +309,10 @@ static bool_t popIsFalse(void)
   /* FTOK_0BR CONSUMES its operand (DESIGN.md §2.2): pops X after the
      zero/false test.  IF compiles a DUP before 0BR precisely because
      0BR pops the tested value. */
-  fnDrop(NOPARAM);
-  (void)forthDataDepthApply(-1);
-  return isZero;
+   fnDrop(NOPARAM);
+   (void)forthDataDepthApply(-1);
+   forthSpillSettle();
+   return isZero;
 }
 
 /* ---- DMCP key poll: R/S (36) or EXIT (33) interrupt (§3.2) ---- */
@@ -225,11 +355,9 @@ forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *co
   {
     uint16_t pidx = forthFindPrim(name);
     if (pidx != FORTH_PRIM_NONE) {
-      if (!forthDataDepthApply(forthPrims[pidx].stackEffect)) {
+      if (!forthPrimInvoke(pidx)) {
         return FORTH_XEQN_ERR;
       }
-      forthPrims[pidx].fn();
-      setSystemFlag(FLAG_ASLIFT);   /* SLS_ENABLED, as upstream's epilogue does */
       if (lastErrorCode != ERROR_NONE) return FORTH_XEQN_ERR;
       return FORTH_XEQN_DONE;
     }
@@ -459,18 +587,13 @@ void forthInner(uint16_t wordRef, bool fromProgram)
                                  ERR_REGISTER_LINE, NIM_REGISTER_LINE);
          INNER_LEAVE();
        }
-       if (!forthDataDepthApply(forthPrims[primIdx].stackEffect)) {
-         INNER_LEAVE();
-       }
-       forthPrims[primIdx].fn();
-       /* SLS_ENABLED: every prim-equivalent item upstream (fnAdd, fnDrop,
-        * fnSwapXY, fnMultiply ...) carries it, so the epilogue sets ASLIFT.
-        * Prims bypass reallyRunFunction(), so mirror it here. D1. */
-       setSystemFlag(FLAG_ASLIFT);
-       if (lastErrorCode != ERROR_NONE) {
-         INNER_LEAVE();
-       }
-       continue;
+        if (!forthPrimInvoke(primIdx)) {
+          INNER_LEAVE();
+        }
+        if (lastErrorCode != ERROR_NONE) {
+          INNER_LEAVE();
+        }
+        continue;
     }
 
     if (tok <= 0x7EFF) {

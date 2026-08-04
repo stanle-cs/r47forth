@@ -249,6 +249,14 @@ void    forthDataDepthLeaveOuter(void);
 void    forthDataDepthResync(void);
 bool_t  forthDataDepthApply(int16_t net);
 
+/* D3-1 spill region (forth_inner.c) */
+uint16_t forthSpillCount(void);
+void     forthSpillReset(void);
+bool_t   forthSpillCatch(calcRegister_t reg);
+bool_t   forthSpillRefill(calcRegister_t reg);
+void     forthSpillSettle(void);
+bool_t   forthPrimInvoke(uint16_t idx);
+
 /* Bridge functions (§6) */
 void fnForthCall(uint16_t param);
 void fnForthOuter(uint16_t param);

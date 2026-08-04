@@ -596,7 +596,7 @@ typedef enum {
  */
 static bool forthParseXeqForm(const char *, uint8_t *, char *, uint8_t *);
 static bool emitXeqn(uint8_t, const char *, uint8_t);
-static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
+static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   if (forthOuterDepth >= FORTH_OUTER_NEST_MAX) {
     displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return;
@@ -847,9 +847,9 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
        * On the execution pass the marks re-apply as idempotent no-ops. */
       { uint16_t pidx = forthFindPrim(buf);
         if (pidx != FORTH_PRIM_NONE && (forthPrims[pidx].flags & FF_DEFMARK)) {
-          forthPrims[pidx].fn();
-          /* GLOBAL/IMMEDIATE touch no stack: SLS_UNCHANGED, so leave ASLIFT
-           * exactly as the last value-producing dispatch left it. D1. */
+          if (!forthPrimInvoke(pidx)) {
+            lineOK = false;
+          }
           if (lastErrorCode != ERROR_NONE) {
             lineOK = false;
           }
@@ -969,16 +969,13 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
             abortDefinition();
             lineOK = false;
           }
-        } else if (!forthDataDepthApply(forthPrims[idx].stackEffect)) {
+        } else if (!forthPrimInvoke(idx)) {
           if (isDefinitionOpen()) abortDefinition();
           lineOK = false;
-        } else {
-          forthPrims[idx].fn();
-          setSystemFlag(FLAG_ASLIFT);   /* SLS_ENABLED, mirrors forth_inner.c. D1 */
-          if (lastErrorCode != ERROR_NONE) {
-            if (isDefinitionOpen()) abortDefinition();
-            lineOK = false;
-          }
+        }
+        if (lastErrorCode != ERROR_NONE) {
+          if (isDefinitionOpen()) abortDefinition();
+          lineOK = false;
         }
         continue;
       }
@@ -1465,6 +1462,23 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   forthOuterCur = prevCtx;
 }
 
+/* D3-5: the depth/spill bracket lives at the single choke point so
+ * EVERY outer execution accounts — fnForthOuter, CHECK, DEFS_ONLY,
+ * SKIP_DEFS and the interpret wrapper alike. Nesting-aware: only the
+ * outermost run brackets (a Forth line can XEQ into another line). */
+static int16_t forthOuterRunNesting = 0;
+
+static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode)
+{
+  if (forthOuterRunNesting++ == 0) {
+    forthDataDepthEnterOuter();
+  }
+  forthOuterRunInner(ctx, mode);
+  if (--forthOuterRunNesting == 0) {
+    forthDataDepthLeaveOuter();
+  }
+}
+
 /* ---- F5-1: check mode public API ---- */
 
 bool forthCheckSourceLine(const char *source)
@@ -1541,9 +1555,7 @@ void forthOuterInterpret(const char *source)
     return;
   }
   memcpy(ctx.source, source, n + 1);
-  forthDataDepthEnterOuter();
   forthOuterRun(&ctx, FORTH_OUTER_FULL);
-  forthDataDepthLeaveOuter();
 }
 
 /* fnForthOuter — ITM_FORTH entry point (§3.3.2) */

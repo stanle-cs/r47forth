@@ -9,7 +9,7 @@ byte-for-byte identical.
 This is the plain-diff design (PROPOSED_SPEC_CHANGES.md, revision 2). It
 supersedes an earlier function-boundary/libclang design that briefly existed
 on this branch and was reverted — see
-`custom_package/IMPLEMENTATION_REPORT.md` if you're looking for that history.
+`design-docs/package-manager/IMPLEMENTATION_REPORT.md` if you're looking for that history.
 
 ---
 
@@ -17,7 +17,7 @@ on this branch and was reverted — see
 
 **The mechanism itself works** and is covered by automated tests
 (`tools/test_pkg_patch_*.py`) plus real end-to-end verification documented
-in `custom_package/IMPLEMENTATION_REPORT.md` §8 — patching, new files,
+in `design-docs/package-manager/IMPLEMENTATION_REPORT.md` §8 — patching, new files,
 cumulative composition, loud conflict failure, and `pkg_build` have all been
 exercised against real `meson`/`ninja`/`make` runs, not just unit tests.
 

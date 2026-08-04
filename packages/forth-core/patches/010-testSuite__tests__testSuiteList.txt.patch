@@ -1,0 +1,10 @@
+diff --git a/src/testSuite/tests/testSuiteList.txt b/src/testSuite/tests/testSuiteList.txt
+index 6bb764d1b588d13b2767c07e61837d86e4b5a0c0..345846bd9c028a10b64736d074e977b94dba46e9 100644
+--- a/src/testSuite/tests/testSuiteList.txt
++++ b/src/testSuite/tests/testSuiteList.txt
+@@ -507,3 +507,5 @@ nested_cov
+ 
+ config_cov
+ stack_cov
++
++forth_interp

@@ -1,5 +1,5 @@
 diff --git a/src/c47/c47Extensions/addons.c b/src/c47/c47Extensions/addons.c
-index 5c191c470be694f6b1819cbb4e55105814bd5821..5aaee169efe875a883c286d2d4de3338ee87f2d9 100644
+index 26d98873518bcec7a4eb2bc5a9bd2f069318300c..7092b0adf66b0d94711bfa5aa9925a2502d8aa68 100644
 --- a/src/c47/c47Extensions/addons.c
 +++ b/src/c47/c47Extensions/addons.c
 @@ -663,7 +663,7 @@ void fnEdit (uint16_t unusedParamButMandatory) {

@@ -285,7 +285,11 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
         paramCoreReadName(paramAddress, end);
         calcRegister_t regist = findNamedVariable(tmpStringLabelOrVariableName);
         if(tryAllocate) {
-          reallyRunFunction(op, findOrAllocateNamedVariable(tmpStringLabelOrVariableName));
+          // Reuse the lookup above; failed allocation remains INVALID_VARIABLE.
+          if(regist == INVALID_VARIABLE) {
+            regist = findOrAllocateNamedVariable(tmpStringLabelOrVariableName);
+          }
+          reallyRunFunction(op, regist);
         }
         else if(regist != INVALID_VARIABLE) {
           reallyRunFunction(op, regist);

@@ -1,0 +1,115 @@
+custom package v0.4 - external package overlay for C47 / R47
+============================================================
+
+This builds the firmware with your changes layered on top. Nothing under
+src/ gets modified. If you leave CUSTOM_PKG unset, the firmware comes out
+byte for byte the same as stock.
+
+I generated everything here against upstream c43 release 00.109.04.00b0
+(commit 057b62fc0).
+
+Licence: GPL-3.0-only, same as c43. Full text is in COPYING beside this
+file.
+
+
+WHAT IS IN HERE
+---------------
+
+  pkg-manager-integration.patch   the build-system hooks as one diff
+                                  (Makefile, meson.build, meson_options.txt)
+
+  tools/resolve_c47_src.py      configure-time overlay resolver
+  tools/pkg_patch_refresh.py    authoring: working area -> patches/ + files/
+  tools/pkg_patch_apply.py      patch stack application
+  tools/pkg_patch_common.py     shared helpers (imported by the above)
+  tools/pkg_patch_cli.py        package commands (used by ./package)
+  tools/pkg_patch_integrate.py  integration sessions against a new upstream
+  package                       thin entry-point for the commands above
+
+  tools/test_pkg_patch_common.py
+  tools/test_pkg_patch_refresh.py
+  tools/test_pkg_patch_resolver.py
+  tools/test_pkg_patch_integrate.py
+
+  design-docs/package-manager/README.md      the full documentation
+  packages/.gitignore           keeps generated output tracked, junk out
+  COPYING                       GPL-3.0 licence text
+
+Don't delete the test files. meson.build declares the first three as
+tests, and make pkg_build runs make test, so a missing file kills the
+build. If you really don't want them, take the test() blocks out of
+meson.build too.
+
+
+INSTALL
+-------
+
+Run the tests right here first. They don't need an upstream tree, and if
+all four pass, the tooling survived the download:
+
+  python3 tools/test_pkg_patch_common.py
+  python3 tools/test_pkg_patch_refresh.py
+  python3 tools/test_pkg_patch_resolver.py
+  python3 tools/test_pkg_patch_integrate.py
+
+Then get upstream, copy these files over it with the directory layout
+kept, and apply the build-system diff:
+
+  git clone https://gitlab.com/rpncalculators/c43.git
+  cd c43
+  git checkout 00.109.04.00b0
+  git apply pkg-manager-integration.patch
+
+
+USING IT
+--------
+
+A package is one flat directory laid out the same way as upstream, and
+there's nothing to declare inside it:
+
+  packages/my-pkg/
+      keyboard.c      your edited copy of an existing upstream file
+      my_module.c     a new source with no upstream counterpart
+
+Everything goes through the ./package entry point. For an upstream file,
+pull it at the package's base commit first so your patch stays just your
+edits:
+
+  ./package materialize my-pkg keyboard.c
+
+Run refresh and it works out which is which. If the path exists upstream
+you get a patch against it, and if it doesn't, the file gets copied in
+whole:
+
+  ./package refresh my-pkg
+
+Then build with the package active:
+
+  make sim CUSTOM_PKG=packages/my-pkg
+  make dist_dmcp5r47 CUSTOM_PKG=packages/my-pkg
+
+CUSTOM_PKG takes a comma-separated list. When two packages patch the
+same file, the patches stack in NNN filename order instead of one
+replacing the other. Two packages editing different parts of one
+function is fine. If both touch the same lines, configure fails and
+tells you which patch did it.
+
+
+REFRESH BEFORE YOU BUILD
+------------------------
+
+The build compiles from the generated patches/ and files/ directories
+and never looks at your flat working area. Edit a source without
+refreshing and you'll flash a build that doesn't have your change in
+it. Mine runs first thing in the build script.
+
+
+A PACKAGE THAT USES IT
+----------------------
+
+My Forth package for the R47 runs on this system, 16 patches against
+upstream files plus 19 new sources:
+
+  https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2
+
+The full documentation is in design-docs/package-manager/README.md.

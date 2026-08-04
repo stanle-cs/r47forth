@@ -41,6 +41,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pkg_patch_common import (
     decode_patch_filename,
     parse_patch_target,
+    upstream_abs_path,
+    upstream_repo_rel,
     validate_patch_declaration,
 )
 
@@ -174,7 +176,8 @@ def collect_new_files(pkg_list, project_root):
     pkg_list: ordered list of pkgdir (project-root-relative).
 
     Returns {rel: (pkgdir, absolute_path)} — the sole legal contributor
-    per rel (mirrors a path relative to src/c47/, recursively).
+    per rel (mirrors a path relative to src/c47/, or to src/ for a
+    SIBLING_ROOTS rel, recursively).
 
     Loud failures (PatchApplyError), never silent skips:
     - a files/<rel> entry whose mirrored path DOES exist under
@@ -187,7 +190,6 @@ def collect_new_files(pkg_list, project_root):
       caught here, before either file is ever copied into the shadow
       tree.
     """
-    src_c47_dir = os.path.join(project_root, 'src', 'c47')
     by_rel = {}  # rel -> [(pkgdir, abs_path), ...]
 
     for pkgdir in pkg_list:
@@ -204,14 +206,14 @@ def collect_new_files(pkg_list, project_root):
 
     result = {}
     for rel, contributors in by_rel.items():
-        upstream_path = os.path.join(src_c47_dir, *rel.split('/'))
+        upstream_path = upstream_abs_path(project_root, rel)
         if os.path.isfile(upstream_path):
             pkgs = sorted({p for p, _ in contributors})
             raise PatchApplyError(
                 f'files/{rel} (from {pkgs}) mirrors a path that exists '
-                f'upstream (src/c47/{rel}) — a files/ entry must have '
-                f'no upstream counterpart; this change belongs under '
-                f'patches/ instead.')
+                f'upstream ({upstream_repo_rel(rel)}) — a files/ entry '
+                f'must have no upstream counterpart; this change belongs '
+                f'under patches/ instead.')
         if len(contributors) > 1:
             pkgs = sorted({p for p, _ in contributors})
             raise PatchApplyError(
@@ -235,7 +237,7 @@ def apply_patch_stack(rel, patch_paths, project_root, dest_path,
     marker in the result after ANY patch (checked unconditionally,
     independent of git's exit status).
     """
-    src_file = os.path.join(project_root, 'src', 'c47', rel)
+    src_file = upstream_abs_path(project_root, rel)
     if base_content is None:
         if not os.path.isfile(src_file):
             raise PatchApplyError(
@@ -254,7 +256,7 @@ def apply_patch_stack(rel, patch_paths, project_root, dest_path,
                 raise PatchApplyError(
                     f'scratch repo setup failed: {r.stderr}')
 
-        target = os.path.join(scratch, 'src', 'c47', rel)
+        target = os.path.join(scratch, *upstream_repo_rel(rel).split('/'))
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, 'w') as f:
             f.write(base_content)
