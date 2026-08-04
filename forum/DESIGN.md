@@ -84,7 +84,13 @@ python3 forum/framescan.py  <files...>
 ```
 
 - `aiaudit.py` — phrase patterns from Wikipedia:Signs_of_AI_writing, formatting
-  tells, and sentence-length stylometry.
+  tells, and sentence-length stylometry. Synced against the live catalogue
+  2026-08-03: weasel attribution, the challenges/future-outlook formula,
+  notability-canned phrases, newer vocabulary, title-case headings, emoji,
+  markdown leaking into BBCode, and the inline-header list in its BBCode
+  form. Its `[HARD]` class (chatbot artifacts, unfilled placeholders,
+  knowledge-cutoff disclaimers, utm_source tracking) is disqualifying, not
+  a judgment call — one hit means nobody read the text after generation.
 - `framescan.py` — pattern-agnostic. Blanks content words and reports recurring
   function-word skeletons, contrast tails, cross-document shingles, repeated
   openers and closers. This is what catches tells nobody has named yet.

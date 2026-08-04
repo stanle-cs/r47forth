@@ -9,12 +9,26 @@ stripped before analysis, since code is not the thing under audit.
 import re, sys, statistics
 
 LEXICAL = {
- 'significance-inflation': r'\b(crucial|pivotal|vital|underscor\w+|testament|indelible|enduring|tapestry|interplay|intricate\w*|meticulous\w*|delve|garner\w*|bolster\w*|landscape of)\b',
- 'promotional': r'\b(vibrant|profound|nestled|groundbreaking|renowned|diverse array|boasts?|rich(ly)? (set|history|feature))\b',
- 'copula-avoidance': r'\b(serves as|stands as|marks the|functions as|operates as|represents the|acts as)\b',
+ 'significance-inflation': r'\b(crucial|pivotal|vital|underscor\w+|testament|indelible|enduring|tapestry|interplay|intricate\w*|meticulous\w*|delve|garner\w*|bolster\w*|landscape of|evolving landscape|focal point|deeply rooted|key (role|moment|turning point)|setting the stage|reflects broader|represents a shift|marking the)\b',
+ 'promotional': r'\b(vibrant|profound|nestled|groundbreaking|renowned|diverse array|boasts?|rich(ly)? (set|history|feature)|in the heart of|natural beauty|commitment to|exemplif\w+)\b',
+ 'copula-avoidance': r'\b(serves as|stands as|marks the|functions as|operates as|represents the|acts as|refers to|features a|offers a|maintains a)\b',
  'era-vocab': r'\b(additionally|moreover|furthermore|align(s|ed)? with|enhanc\w+|foster\w+|showcas\w+|holistic|robust|seamless\w*|leverag\w+|comprehensive|utiliz\w+)\b',
  'hedge-stack': r'\b(it(\'s| is) worth noting|it should be noted|generally speaking|in essence|essentially,|ultimately,|in summary|overall,)\b',
  'reader-address': r"\b(let(\'s| us) (explore|look|dive)|we(\'ll| will) (see|explore)|as we|you may be wondering)\b",
+ 'superficial-analysis': r'\b(valuable insights?|resonates? with|encompass\w+|cultivat\w+)\b',
+ 'weasel-attribution': r'\b(industry (reports|observers)|observers have (cited|noted)|experts (argue|agree|note|suggest)|some critics (argue|say)|(several|many|numerous) (sources|publications|outlets)|widely (regarded|recognized|considered))\b',
+ 'challenges-formula': r'\b(faces several challenges|despite (these|its) challenges|future (outlook|prospects)|challenges and (legacy|opportunities))\b',
+ 'notability-canned': r'\b(independent coverage|media outlets|trade publications?|profiled in|active social media presence)\b',
+}
+
+# Disqualifying, not judgment calls: chatbot leftovers the Wikipedia catalogue
+# lists as certain tells. One hit means the text passed through a model and
+# nobody read it after.
+HARD = {
+ 'chatbot-artifact':   r'(contentReference|oaicite|oai_citation|attributableIndex|turn\d+(search|view|news)\d*|\[cite:\s*\d+\]|start_span|end_span|grok_card|grok_render|ppl-ai-file-upload|attached_file|:::writing)',
+ 'placeholder':        r'(⟨[^⟩]*⟩|\[insert [^\]]+\]|\[[Yy]our [^\]]+\]|lorem ipsum)',
+ 'cutoff-disclaimer':  r"\b(as of my (last|latest) (update|training)|as an ai\b|i (cannot|can't) (browse|access)|knowledge cutoff)\b",
+ 'utm-tracking':       r'[?&]utm_[a-z]+=',
 }
 
 CONSTRUCTION = {
@@ -32,7 +46,17 @@ FORMATTING = {
  'em/en dash':        r'[—–]',
  'curly quotes':      r'[“”‘’]',
  'bold-colon list':   r'^\s*[-*•]\s*\*\*[^*]+\*\*\s*:',
+ 'emoji':             r'[\U0001F000-\U0001FAFF☀-⛿✀-➿]',
  'excessive bold':    None,   # counted separately
+}
+
+# Tells that only exist relative to the destination format: markdown syntax
+# inside a BBCode post means a model emitted its native format and nobody
+# converted it. Checked only when the file actually carries BBCode tags.
+BBCODE_ONLY = {
+ 'markdown link in bbcode':   r'\[[^\]]+\]\((?:https?|www)[^)]*\)',
+ 'markdown heading in bbcode': r'^#{1,6}\s+\S',
+ 'bbcode inline-header list': r'\[\*\]\s*\[b\][^\[]+\[/b\]\s*[:—–-]',
 }
 
 def strip_code(t):
@@ -52,6 +76,22 @@ def rule_of_three(t):
     # "a, b, and c" / "a, b and c" triplets in prose
     return re.findall(r'\b\w+(?:\s+\w+){0,3},\s+\w+(?:\s+\w+){0,3},?\s+and\s+\w+(?:\s+\w+){0,3}\b', t)
 
+def title_case_headings(raw):
+    # Title Case In Headings: every main word capitalized. Wikipedia lists it
+    # as a formatting tell; sentence case is the house style.
+    heads = re.findall(r'^#{1,6}\s+(.+)$', raw, flags=re.M)
+    heads += re.findall(r'\[b\]([^\[]{8,60})\[/b\]', raw, flags=re.I)
+    bad = []
+    for h in heads:
+        words = re.findall(r"[A-Za-z][A-Za-z'-]*", h)
+        big = [w for w in words if len(w) >= 4]
+        # Titlecase-shaped only (Word, not WORD): all-caps runs are Forth
+        # words and acronyms in reference tables, not a formatting tell.
+        if len(words) >= 3 and len(big) >= 2 \
+           and all(w[0].isupper() and w[1:].islower() for w in big):
+            bad.append(h.strip())
+    return bad
+
 def audit(path):
     raw = open(path, encoding='utf-8').read()
     prose = strip_code(raw)
@@ -65,12 +105,33 @@ def audit(path):
                 ex = re.search(pat, prose, flags=re.I)
                 ctx = prose[max(0, ex.start()-40):ex.end()+40].replace('\n', ' ').strip()
                 print(f"  [{group}] {name}: {len(hits)}  e.g. ...{ctx}...")
+    hard = 0
+    for name, pat in HARD.items():
+        hits = re.findall(pat, raw, flags=re.I)
+        if hits:
+            hard += len(hits)
+            ex = re.search(pat, raw, flags=re.I)
+            ctx = raw[max(0, ex.start()-30):ex.end()+30].replace('\n', ' ').strip()
+            print(f"  [HARD] {name}: {len(hits)}  e.g. ...{ctx}...")
+    if hard:
+        total += hard
+        print(f"  [HARD] {hard} disqualifying hit(s) — not judgment calls; the text was not read after generation")
     for name, pat in FORMATTING.items():
         if pat is None: continue
         hits = re.findall(pat, raw, flags=re.M)
         if hits:
             total += len(hits)
             print(f"  [FORMAT] {name}: {len(hits)}")
+    if re.search(r'\[(b|code|list|url)\]', raw, flags=re.I):
+        for name, pat in BBCODE_ONLY.items():
+            hits = re.findall(pat, raw, flags=re.M)
+            if hits:
+                total += len(hits)
+                print(f"  [FORMAT] {name}: {len(hits)}")
+    tc = title_case_headings(raw)
+    if tc:
+        total += len(tc)
+        print(f"  [FORMAT] title-case heading: {len(tc)}  e.g. \"{tc[0][:60]}\"")
     b = len(re.findall(r'\*\*[^*]+\*\*', raw)) + len(re.findall(r'\[b\]', raw, flags=re.I))
     if b > 6:
         total += 1
