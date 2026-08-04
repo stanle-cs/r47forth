@@ -225,3 +225,12 @@ so every draft is an extrapolation. If it still reads foreign, the
 better path is a Stan-written skeleton (ten messy lines of how he'd
 tell a friend) that gets fact-filled and trimmed, instead of another
 approximation round.
+
+## APPROVED (2026-08-03)
+
+Stan approved the post after the unwrap round. His approval supersedes
+the pending re-run of the model pairs; his read is the gate the pairs
+serve. Final zip (c47-pkg-manager-v0.3.zip, ./package-first INSTALL,
+verified from extraction) delivered for upload alongside the post.
+Remaining at posting time: his push of the release branch + zip, the
+§5 gates (repo public, BBCode balance in the paste), thread t=4876.

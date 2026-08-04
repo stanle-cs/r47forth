@@ -70,11 +70,17 @@ there's nothing to declare inside it:
       keyboard.c      your edited copy of an existing upstream file
       my_module.c     a new source with no upstream counterpart
 
+Everything goes through the ./package entry point. For an upstream file,
+pull it at the package's base commit first so your patch stays just your
+edits:
+
+  ./package materialize my-pkg keyboard.c
+
 Run refresh and it works out which is which. If the path exists upstream
 you get a patch against it, and if it doesn't, the file gets copied in
 whole:
 
-  python3 tools/pkg_patch_refresh.py packages/my-pkg
+  ./package refresh my-pkg
 
 Then build with the package active:
 
