@@ -203,3 +203,25 @@ Open question for Stan: the newer-upstream compatibility paragraph now
 sits at the end of How patches compose (it is resolver behavior). The
 other candidate home is Where to get it, next to the base commit. His
 call.
+
+## Fourth round: clause architecture (2026-08-03)
+
+Stan doubted the ", and" chains. Measured: draft ran 1.45/100w against
+his 0.25 — six times his rate. His 175 explanatory comments define how
+he explains new things: short independent sentences, sentence-initial
+But/And/So, rhetorical questions at one per ~200 words, "you can/need"
+instruction, parenthetical asides, no "for example", no "basically".
+Earlier rounds moved surface markers but kept foreign clause
+architecture.
+
+This pass split the chains (now 0.66/100w), converted two explanations
+to his question-then-answer shape ("Why not just copy the file out of
+your checked-out tree?" / "So what happens if you edit a source and
+forget to refresh?"), and added an aside. CV now 0.73 vs his 0.72,
+first exact rhythm match.
+
+Standing honest note: his corpus holds no long-form technical writing,
+so every draft is an extrapolation. If it still reads foreign, the
+better path is a Stan-written skeleton (ten messy lines of how he'd
+tell a friend) that gets fact-filled and trimmed, instead of another
+approximation round.

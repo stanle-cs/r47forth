@@ -9,7 +9,7 @@ round so I'll walk through what changed.
 [*]Overrides are git diffs now. v0.2 shipped whole edited files, and
 there was no way to see what a package changed without diffing by hand.
 Now I just open a file in patches/ and read it.
-[*]A package is a flat directory that mirrors upstream paths, and the
+[*]A package is a flat directory that mirrors upstream paths. The
 tooling works out the rest. You drop new files in, pull upstream ones
 with materialize, run a refresh, and the patches come out on the other
 side.
@@ -17,8 +17,8 @@ side.
 filename order (the NNN prefix), each on top of the previous result.
 They can even land in different parts of one function. But if they hit
 the same lines, configure fails and shows you which patch collided.
-[*]There's one ./package entry point for the whole workflow now, and
-everything below goes through it.
+[*]There's one ./package entry point for the whole workflow now.
+Everything below goes through it.
 [/list]
 
 [b]Making a package[/b]
@@ -32,10 +32,10 @@ packages/my-pkg/
     my_module.c     a new source with no upstream counterpart
 [/code]
 
-For editing an upstream file, use materialize instead of copying it
-out of your checked-out tree. If you just copy the file, there's a
-chance your tree is on a different version than the package base, and
-then the patch picks up upstream's changes as if they were yours:
+For editing an upstream file, use materialize. Why not just copy the
+file out of your checked-out tree? There's a chance your tree is on a
+different version than the package base, and then the patch picks up
+upstream's changes as if they were yours:
 
 [code]
 ./package materialize my-pkg keyboard.c
@@ -52,9 +52,9 @@ Then run the refresh:
 ./package refresh my-pkg
 [/code]
 
-It sorts your files, anything that exists under src/c47/ becomes a
-patch, and new files get copied in whole. The raw tools under tools/
-are still there, ./package just wraps them.
+It sorts your files. Anything that exists under src/c47/ becomes a
+patch, new files get copied in whole. (The raw tools are still under
+tools/ if a script wants them, ./package just wraps them.)
 
 [b]Building and testing with your package[/b]
 
@@ -79,8 +79,7 @@ PKG_MAX_SIZE, 1 MB by default.
 
 The resolver copies the clean upstream file in once, then applies each
 package's patch in order with git apply -3. Order is the numeric
-filename prefix, and ties go by position in your CUSTOM_PKG list. So
-with
+filename prefix. Ties go by your CUSTOM_PKG order. So with
 
 [code]
 make sim CUSTOM_PKG=packages/alpha,packages/beta
@@ -101,16 +100,16 @@ provide the same new file, that's caught before the shadow tree is
 built.
 
 I made the patches against one upstream commit, but a newer upstream
-will probably still build. The resolver checks every target
-file before it applies anything, and if upstream moved a file, configure
-stops and tells you which one.
+will probably still build. The resolver checks every target file
+before it applies anything. If upstream moved a file, configure stops
+and tells you which one.
 
 [b]Refresh before you build[/b]
 
 The build only reads the generated patches/ and files/ folders. Your
-flat working area never gets compiled, so if you edit a source and
-forget to refresh, you end up flashing the old code. I just run
-./package refresh at the top of my build script.
+flat working area never gets compiled. So what happens if you edit a
+source and forget to refresh? The build still succeeds, you just flash
+the old code. I run ./package refresh at the top of my build script.
 
 Everything in a package folder is tracked in git, including the
 generated output, since that's what actually builds. If you hand-edit
@@ -121,8 +120,8 @@ catches it from a hash manifest, warns you, and overwrites it.
 
 Target is R47/C47 on the DM42n (DMCP5 hardware). I built everything
 against upstream c43 at commit 26ec91634. It's GPL-3.0-only like the
-rest of c43, and the full text is in COPYING, both inside the zip and
-on the release branch.
+rest of c43. The full text is in COPYING, inside the zip and on the
+release branch.
 
 Download:
 [url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release branch[/url]
