@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..0ffe02c3da728dcbf71b34d2beaecd4866369514 100644
+index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a5bc8a944 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,6 +2,9 @@
@@ -185,7 +185,23 @@ index bc44026016e94a8865b8acc886386341596641c6..0ffe02c3da728dcbf71b34d2beaecd48
                    addStepInProgram(ITM_STOP);
                    keyActionProcessed = true;
                  }
-@@ -3868,6 +3935,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3856,6 +3923,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+           lastErrorCode = 0;
+           break;
+         }
++        if(forthCapIsOpen() && forthCapKeysMode() && !tam.mode) {
++          /* K2/E12.4: first ladder rung — EXIT in keys mode returns to
++           * alpha input; the rest of the E8 ladder is untouched below.
++           * Ladder is now: keys -> alpha -> submenu -> ALPHA menu ->
++           * drop keypad -> leave PEM, one level per press. */
++          forthCapSetKeysMode(false);
++          showSoftmenu(-MNU_ALPHA);
++          break;
++        }
+         if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
+           if(isAlphaSubmenu(0)) {
+             popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
+@@ -3868,6 +3944,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -193,7 +209,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0ffe02c3da728dcbf71b34d2beaecd48
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +3946,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +3955,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -216,7 +232,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0ffe02c3da728dcbf71b34d2beaecd48
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4366,9 +4450,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4459,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {

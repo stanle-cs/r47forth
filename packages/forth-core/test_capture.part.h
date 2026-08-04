@@ -8175,3 +8175,783 @@ static int test_keys_mode_nav_guards(void)
   lastErrorCode = ERROR_NONE;
   return fail;
 }
+
+/* ==================================================================
+ * K2 (Stage K packet 2) — token boundaries, the EXIT ladder rung, and
+ * the EEX / numlock residuals.  DESIGN rules E12.3 and E12.4, plus the
+ * token-boundary defect keys mode brought to the surface: with the
+ * normal columns up, digits-then-function is the primary flow, and
+ * every direct name-insert path used to glue the two together.
+ *
+ * Same discipline as the K1 group: the real entry points do the work
+ * (runFunction, pickerInsertName, fnKeyExit), the capture is opened by
+ * driving it, and the keys-mode bit is only ever set by the real
+ * ALPHA-gesture toggle.
+ * ================================================================== */
+
+/* T1 (C1): the class test for the token-boundary guard.
+ *
+ * The claim lives in forthCapInsertName, so it is exercised through the
+ * two callers that reach it directly: the F6-3 item arm (driven as a
+ * real function press with keys mode on) and the FWRD picker.  Three
+ * cursor preconditions cover the whole decision — line start, a
+ * non-space byte before the cursor, and a space before the cursor,
+ * which must NOT gain a second one.
+ *
+ * Escaping mutation: drop the `lead` logic from C1 — subcase 2 reads
+ * "42SIN " instead of "42 SIN ". */
+static int test_insert_token_boundary(void)
+{
+  extern void   fnGotoDot(uint16_t);
+  extern void   runFunction(int16_t);
+  extern bool_t pickerInsertName(void);
+  extern void   testInitVariableSoftmenu(int16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedCursorPos = T_cursorPos;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K2B");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);                       /* open the capture */
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+  runFunction(ITM_AIM);                       /* the real toggle to keys */
+  if (!forthCapKeysMode()) {
+    printf("    FIXTURE FAIL: toggle did not set keys mode\n");
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+    return 1;
+  }
+
+  /* ---- Subcase 1: line start — no leading separator ---- */
+  { int sc1 = 0;
+    runFunction(ITM_sin);
+    if (strcmp(forthTestCapText(), "SIN ") != 0) {
+      printf("    [1] FAIL: cap text = '%s', expected 'SIN '\n", forthTestCapText());
+      sc1 = 1;
+    }
+    else if (T_cursorPos != 4) {
+      printf("    [1] FAIL: T_cursorPos = %d, expected 4\n", T_cursorPos);
+      sc1 = 1;
+    }
+    else {
+      printf("    [1] PASS: an insert at the line start gains no leading separator\n");
+    }
+    fail |= sc1;
+  }
+
+  /* ---- Subcase 2: digits immediately before the cursor (the defect) ---- */
+  if (!fail) {
+    int sc2 = 0;
+    runFunction(ITM_CLA);
+    runFunction(ITM_4);
+    runFunction(ITM_2);
+    if (strcmp(forthTestCapText(), "42") != 0) {
+      printf("    [2] FIXTURE FAIL: typed line = '%s', expected '42'\n", forthTestCapText());
+      sc2 = 1;
+    }
+    else {
+      runFunction(ITM_sin);
+      if (strcmp(forthTestCapText(), "42 SIN ") != 0) {
+        printf("    [2] FAIL: cap text = '%s', expected '42 SIN '\n", forthTestCapText());
+        sc2 = 1;
+      }
+      else if (T_cursorPos != 7) {
+        printf("    [2] FAIL: T_cursorPos = %d, expected 7\n", T_cursorPos);
+        sc2 = 1;
+      }
+      else {
+        printf("    [2] PASS: a name after typed digits lands as its own token\n");
+      }
+    }
+    fail |= sc2;
+  }
+
+  /* ---- Subcase 3: a space already there — exactly one, not two ---- */
+  if (!fail) {
+    int sc3 = 0;
+    runFunction(ITM_CLA);
+    runFunction(ITM_4);
+    runFunction(ITM_2);
+    runFunction(ITM_SPACE);
+    if (strcmp(forthTestCapText(), "42 ") != 0) {
+      printf("    [3] FIXTURE FAIL: typed line = '%s', expected '42 '\n", forthTestCapText());
+      sc3 = 1;
+    }
+    else {
+      runFunction(ITM_sin);
+      if (strcmp(forthTestCapText(), "42 SIN ") != 0) {
+        printf("    [3] FAIL: cap text = '%s', expected '42 SIN ' (no double space)\n",
+               forthTestCapText());
+        sc3 = 1;
+      }
+      else if (T_cursorPos != 7) {
+        printf("    [3] FAIL: T_cursorPos = %d, expected 7\n", T_cursorPos);
+        sc3 = 1;
+      }
+      else {
+        printf("    [3] PASS: an existing separator is not doubled\n");
+      }
+    }
+    fail |= sc3;
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  tam.function = 0;
+  cleanupTestProgram();
+
+  /* ---- Subcase 4: the picker, the other direct insert path ---- */
+  if (!fail) {
+    int sc4 = 0;
+    /* marker | : SQ DUP * ; | marker  (picker fixture, copied from
+     * test_picker_insert_at_cursor: the menu content is built with the
+     * cursor past the definition, then the capture is driven open at the
+     * head of the program). */
+    uint8_t prog[] = {
+      0x8B, 0x1A, 0xFD, 0x00,                                            /* marker */
+      0x8B, 0x1A, 0xFD, 0x0C, ':', ' ', 'S', 'Q', ' ', 'D', 'U', 'P',    /* : SQ DUP * ; */
+      ' ', '*', ' ', ';',
+      0x8B, 0x1A, 0xFD, 0x00,                                            /* marker */
+    };
+    uint8_t savedSoftmenuStackId = softmenuStack[0].softmenuId;
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [4] FIXTURE FAIL: writeTestProgram\n");
+      sc4 = 1;
+    }
+    else {
+      currentProgramNumber = 1;
+      currentStep = beginOfProgramMemory + 4;         /* the SQ definition */
+      testInitVariableSoftmenu(22);
+
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      pemCursorIsZerothStep = false;
+      alphaCase = AC_UPPER;
+      nextChar = NC_NORMAL;
+      lastErrorCode = ERROR_NONE;
+      clearSystemFlag(FLAG_ALPHA);
+      forthCapClose();
+
+      currentStep = beginOfProgramMemory;
+      currentLocalStepNumber = 1;
+      runFunction(ITM_AIM);
+
+      if (!getSystemFlag(FLAG_ALPHA) || tam.function != ITM_FORTH) {
+        printf("    [4] FIXTURE FAIL: ITM_AIM did not open Forth capture\n");
+        sc4 = 1;
+      }
+      else {
+        runFunction(ITM_4);
+        runFunction(ITM_2);
+        if (strcmp(forthTestCapText(), "42") != 0) {
+          printf("    [4] FIXTURE FAIL: typed line = '%s', expected '42'\n", forthTestCapText());
+          sc4 = 1;
+        }
+        else {
+          softmenuStack[0].softmenuId = 22;
+          dynamicMenuItem = 0;
+          if (!pickerInsertName()) {
+            printf("    [4] FAIL: pickerInsertName returned false\n");
+            sc4 = 1;
+          }
+          else if (strcmp(forthTestCapText(), "42 SQ ") != 0) {
+            printf("    [4] FAIL: cap text = '%s', expected '42 SQ '\n", forthTestCapText());
+            sc4 = 1;
+          }
+          else if (T_cursorPos != 6) {
+            printf("    [4] FAIL: T_cursorPos = %d, expected 6\n", T_cursorPos);
+            sc4 = 1;
+          }
+          else {
+            printf("    [4] PASS: a picker pick after typed digits lands as its own token\n");
+          }
+        }
+      }
+
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      tam.function = 0;
+      softmenuStack[0].softmenuId = savedSoftmenuStackId;
+      if (dynamicSoftmenu[22].menuContent) {
+        free(dynamicSoftmenu[22].menuContent);
+        dynamicSoftmenu[22].menuContent = NULL;
+      }
+      dynamicSoftmenu[22].numItems = 0;
+      cleanupTestProgram();
+    }
+    fail |= sc4;
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  T_cursorPos = savedCursorPos;
+  shiftF = false;
+  shiftG = false;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* T2 (C1, end to end): the reproducer the owner's question surfaced.
+ *
+ * Keys mode up, four-two-SIN on the physical keys, ENTER.  Before K2 the
+ * line read "42SIN " — one unresolvable token, since the tokenizer splits
+ * on 0x20 alone.  The buffer assertion is the red-first evidence; the
+ * commit assertions pin that the corrected line is also a line the
+ * capture will actually take. */
+static int test_keys_digits_then_function(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K2D");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+  runFunction(ITM_AIM);                       /* the real toggle to keys */
+  if (!forthCapKeysMode()) {
+    printf("    FIXTURE FAIL: toggle did not set keys mode\n");
+    fail = 1;
+  }
+
+  if (!fail) {
+    runFunction(ITM_4);
+    runFunction(ITM_2);
+    runFunction(ITM_sin);
+
+    if (strcmp(forthTestCapText(), "42 SIN ") != 0) {
+      printf("    [1] FAIL: cap text = '%s', expected '42 SIN '\n", forthTestCapText());
+      fail = 1;
+    }
+    else {
+      lastErrorCode = ERROR_NONE;
+      runFunction(ITM_ENTER);
+
+      /* The committed source step sits between the opening marker and the
+       * relocked placeholder; pin its exact bytes. */
+      static const uint8_t wantSrc[11] = { 0x8B, 0x1A, 0xFD, 0x07,
+                                           '4', '2', ' ', 'S', 'I', 'N', ' ' };
+      uint8_t *sMarker = findNextStep(beginOfProgramMemory);      /* past LBL */
+      uint8_t *sSrc    = sMarker ? findNextStep(sMarker) : NULL;
+
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [1] FAIL: lastErrorCode %u after ENTER — the line was refused\n",
+               lastErrorCode);
+        fail = 1;
+      }
+      else if (forthTestCapState() != FCAP_OPEN) {
+        printf("    [1] FAIL: capture state %d after ENTER, expected FCAP_OPEN (relock)\n",
+               forthTestCapState());
+        fail = 1;
+      }
+      else if (tam.function != ITM_FORTH) {
+        printf("    [1] FAIL: tam.function 0x%04X after ENTER, expected ITM_FORTH\n",
+               tam.function);
+        fail = 1;
+      }
+      else if (forthCapKeysMode()) {
+        printf("    [1] FAIL: the relocked line did not start in alpha input\n");
+        fail = 1;
+      }
+      else if (sSrc == NULL || memcmp(sSrc, wantSrc, sizeof(wantSrc)) != 0) {
+        printf("    [1] FAIL: the committed step is not the source line \"42 SIN \"\n");
+        fail = 1;
+      }
+      else {
+        printf("    [1] PASS: 4 2 SIN in keys mode commits as \"42 SIN \" and relocks\n");
+      }
+    }
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* T3 (C3 / E12.4): the new first rung of the EXIT ladder.
+ *
+ * The claim is one level per press: EXIT in keys mode returns to alpha
+ * input and does nothing else, and the SECOND press then does exactly
+ * what EXIT has always done on that line — abort when empty, commit when
+ * there is text.  Both halves are needed: without the second press the
+ * rung could be swallowing a level rather than adding one.
+ *
+ * Escaping mutation: remove the C3 rung — the first press commits or
+ * aborts, so the capture is gone one press early. */
+static int test_exit_ladder_keys_rung(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void fnKeyExit(uint16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  uint8_t savedTemporaryInfo2 = temporaryInformation;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  for (int sc = 1; sc <= 2 && !fail; sc++) {
+    int scFail = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "K2X");
+    tpMarker(&p);
+    tpRtn(&p);
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    [%d] FIXTURE FAIL: build/write\n", sc);
+      fail = 1;
+      break;
+    }
+
+    calcMode = CM_PEM;
+    catalog = CATALOG_NONE;
+    tam.mode = 0;
+    tam.alpha = false;
+    tam.function = 0;
+    aimBuffer[0] = 0;
+    programRunStop = PGM_STOPPED;
+    dynamicMenuItem = -1;
+    temporaryInformation = TI_NO_INFO;
+    pemCursorIsZerothStep = false;
+    alphaCase = AC_UPPER;
+    nextChar = NC_NORMAL;
+    shiftF = false;
+    shiftG = false;
+    clearSystemFlag(FLAG_ALPHA);
+    clearSystemFlag(FLAG_NUMLOCK);
+    lastErrorCode = ERROR_NONE;
+    forthCapClose();
+    currentProgramNumber = 1;
+
+    fnGotoDot(2);
+    uint16_t stepsFixture = getNumberOfSteps();
+    runFunction(ITM_AIM);
+    if (!forthCapIsOpen()) {
+      printf("    [%d] FIXTURE FAIL: ITM_AIM did not open capture\n", sc);
+      fail = 1;
+      cleanupTestProgram();
+      break;
+    }
+
+    if (sc == 2) {
+      runFunction(ITM_2);                     /* a line with text on it */
+    }
+
+    runFunction(ITM_AIM);                     /* the real toggle to keys */
+    if (!forthCapKeysMode()) {
+      printf("    [%d] FIXTURE FAIL: toggle did not set keys mode\n", sc);
+      scFail = 1;
+    }
+    else {
+      /* ---- first press: the new rung, and nothing more ---- */
+      lastErrorCode = ERROR_NONE;
+      fnKeyExit(NOPARAM);
+
+      if (forthCapKeysMode()) {
+        printf("    [%d] FAIL: keys-mode bit survived the first EXIT\n", sc);
+        scFail = 1;
+      }
+      else if (forthTestCapState() != FCAP_OPEN) {
+        printf("    [%d] FAIL: capture state %d after the first EXIT, expected FCAP_OPEN\n",
+               sc, forthTestCapState());
+        scFail = 1;
+      }
+      else if (currentMenu() != -MNU_ALPHA) {
+        printf("    [%d] FAIL: currentMenu() = %d after the first EXIT, expected -MNU_ALPHA\n",
+               sc, currentMenu());
+        scFail = 1;
+      }
+      else if (strcmp(forthTestCapText(), sc == 2 ? "2" : "") != 0) {
+        printf("    [%d] FAIL: the first EXIT changed the line: '%s'\n",
+               sc, forthTestCapText());
+        scFail = 1;
+      }
+
+      /* ---- second press: the ladder rung that was always there ---- */
+      if (!scFail) {
+        lastErrorCode = ERROR_NONE;
+        fnKeyExit(NOPARAM);
+
+        if (forthTestCapState() != FCAP_CLOSED) {
+          printf("    [%d] FAIL: capture state %d after the second EXIT, expected FCAP_CLOSED\n",
+                 sc, forthTestCapState());
+          scFail = 1;
+        }
+        else if (sc == 1) {
+          if (getNumberOfSteps() != stepsFixture) {
+            printf("    [1] FAIL: %u steps after the empty abort, expected the fixture's %u\n",
+                   getNumberOfSteps(), stepsFixture);
+            scFail = 1;
+          }
+        }
+        else {
+          static const uint8_t wantSrc[5] = { 0x8B, 0x1A, 0xFD, 0x01, '2' };
+          uint8_t *sMarker = findNextStep(beginOfProgramMemory);   /* past LBL */
+          uint8_t *sSrc    = sMarker ? findNextStep(sMarker) : NULL;
+          if (sSrc == NULL || memcmp(sSrc, wantSrc, sizeof(wantSrc)) != 0) {
+            printf("    [2] FAIL: the committed step is not the source line \"2\"\n");
+            scFail = 1;
+          }
+        }
+      }
+
+      if (!scFail) {
+        printf("    [%d] PASS: EXIT in keys mode returns to alpha; the next press %s\n",
+               sc, sc == 1 ? "aborts the empty line" : "commits the text");
+      }
+    }
+
+    fail |= scFail;
+
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+    xcopy(softmenuStack, savedStack, sizeof(savedStack));
+    lastErrorCode = ERROR_NONE;
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  temporaryInformation = savedTemporaryInfo2;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* T4 (C4 / E12.3): the two residuals the normal columns expose.
+ *
+ * (1) EEX carries the softmenu name "EEX" (items.c row 990), three
+ *     letters the number grammar cannot read — it accepts e/E only.
+ * (2) The numlock translation table is keyed on the AIM columns, so it
+ *     has no business rewriting the normal-column ids keys mode feeds it.
+ *
+ * Escaping mutations: remove the C4a map — subcase 1 reads "1EEX5";
+ * remove the C4b guard — subcase 2 is the escape-valve candidate, since
+ * the table may simply hold no row for a normal-column digit. */
+static int test_keys_eex_and_numlock(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  bool_t savedNumlock = getSystemFlag(FLAG_NUMLOCK);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  for (int sc = 1; sc <= 2 && !fail; sc++) {
+    int scFail = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "K2E");
+    tpMarker(&p);
+    tpRtn(&p);
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    [%d] FIXTURE FAIL: build/write\n", sc);
+      fail = 1;
+      break;
+    }
+
+    calcMode = CM_PEM;
+    catalog = CATALOG_NONE;
+    tam.mode = 0;
+    tam.alpha = false;
+    tam.function = 0;
+    aimBuffer[0] = 0;
+    programRunStop = PGM_STOPPED;
+    dynamicMenuItem = -1;
+    pemCursorIsZerothStep = false;
+    alphaCase = AC_UPPER;
+    nextChar = NC_NORMAL;
+    shiftF = false;
+    shiftG = false;
+    clearSystemFlag(FLAG_ALPHA);
+    clearSystemFlag(FLAG_NUMLOCK);
+    lastErrorCode = ERROR_NONE;
+    forthCapClose();
+    currentProgramNumber = 1;
+
+    if (sc == 2) {
+      setSystemFlag(FLAG_NUMLOCK);            /* poison: the table is armed */
+    }
+
+    fnGotoDot(2);
+    runFunction(ITM_AIM);
+    if (!forthCapIsOpen()) {
+      printf("    [%d] FIXTURE FAIL: ITM_AIM did not open capture\n", sc);
+      fail = 1;
+      clearSystemFlag(FLAG_NUMLOCK);
+      cleanupTestProgram();
+      break;
+    }
+    runFunction(ITM_AIM);                     /* the real toggle to keys */
+    if (!forthCapKeysMode()) {
+      printf("    [%d] FIXTURE FAIL: toggle did not set keys mode\n", sc);
+      scFail = 1;
+    }
+    else if (sc == 1) {
+      /* EEX alone is one byte and no separator, then the composed form. */
+      runFunction(ITM_EXPONENT);
+      if (strcmp(forthTestCapText(), "e") != 0) {
+        printf("    [1] FAIL: cap text = '%s', expected 'e'\n", forthTestCapText());
+        scFail = 1;
+      }
+      else if (T_cursorPos != 1) {
+        printf("    [1] FAIL: T_cursorPos = %d, expected 1\n", T_cursorPos);
+        scFail = 1;
+      }
+      else {
+        runFunction(ITM_CLA);
+        runFunction(ITM_1);
+        runFunction(ITM_EXPONENT);
+        runFunction(ITM_5);
+        if (strcmp(forthTestCapText(), "1e5") != 0) {
+          printf("    [1] FAIL: cap text = '%s', expected '1e5'\n", forthTestCapText());
+          scFail = 1;
+        }
+        else {
+          lastErrorCode = ERROR_NONE;
+          runFunction(ITM_ENTER);
+          static const uint8_t wantSrc[7] = { 0x8B, 0x1A, 0xFD, 0x03, '1', 'e', '5' };
+          uint8_t *sMarker = findNextStep(beginOfProgramMemory);
+          uint8_t *sSrc    = sMarker ? findNextStep(sMarker) : NULL;
+          if (lastErrorCode != ERROR_NONE) {
+            printf("    [1] FAIL: lastErrorCode %u after ENTER — \"1e5\" was refused\n",
+                   lastErrorCode);
+            scFail = 1;
+          }
+          else if (forthTestCapState() != FCAP_OPEN) {
+            printf("    [1] FAIL: capture state %d after ENTER, expected FCAP_OPEN\n",
+                   forthTestCapState());
+            scFail = 1;
+          }
+          else if (sSrc == NULL || memcmp(sSrc, wantSrc, sizeof(wantSrc)) != 0) {
+            printf("    [1] FAIL: the committed step is not the source line \"1e5\"\n");
+            scFail = 1;
+          }
+        }
+      }
+      if (!scFail) {
+        printf("    [1] PASS: EEX types the grammar's exponent byte — \"1e5\" commits as one token\n");
+      }
+    }
+    else {
+      /* Numlock armed: a normal-column digit must reach the buffer as
+       * itself, with the aim-column translation table stepped over. */
+      runFunction(ITM_2);
+      if (strcmp(forthTestCapText(), "2") != 0) {
+        printf("    [2] FAIL: cap text = '%s', expected '2' (numlock rewrote the item)\n",
+               forthTestCapText());
+        scFail = 1;
+      }
+      else if (T_cursorPos != 1) {
+        printf("    [2] FAIL: T_cursorPos = %d, expected 1\n", T_cursorPos);
+        scFail = 1;
+      }
+      else {
+        printf("    [2] PASS: numlock does not translate keys-mode items\n");
+      }
+    }
+
+    fail |= scFail;
+
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    clearSystemFlag(FLAG_NUMLOCK);
+    tam.function = 0;
+    cleanupTestProgram();
+    xcopy(softmenuStack, savedStack, sizeof(savedStack));
+    lastErrorCode = ERROR_NONE;
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  if (savedNumlock) setSystemFlag(FLAG_NUMLOCK); else clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}

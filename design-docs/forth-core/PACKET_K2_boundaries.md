@@ -202,3 +202,20 @@ Final gate green incl. upstream suite; mutations per above; PASS-set diff
 vs pre-edit baseline shows only the new K2 lines; arena line reported;
 `test_capture_suspend` subcases 1-2 and the K1 group unchanged-green.
 Deliver the same structured report as K1. Do NOT commit.
+
+---
+
+## AMENDMENT K2-A (2026-08-04, post-implementation)
+
+1. **C4a underspecified the existing body's fate** — the EEX arm needed the
+   K1/C2b else-wrap idiom (without it the ordinary path would still append
+   "EEX" after the `e`). Implementer applied it correctly; recorded here so
+   the packet reads true.
+2. **M4 = ESCAPE, accepted with evidence:** numlockReplacements' NL clauses
+   are provably inert for every item keys mode can deliver (primaryAim
+   column holds no digit items; the FSHIFT clause is unreachable because
+   determineItem's tail consumed shift). The guard stays as defense.
+3. **M1's co-red on test_capture_suspend ("5 DUPSTO 05 ") proved C2's
+   wrapper removal is load-bearing on C1** — the separator now genuinely
+   comes from forthCapInsertName at the fold seam.
+Implementation: opus subagent, 28.1 min, first-pass green, no rescues.

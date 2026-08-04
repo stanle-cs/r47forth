@@ -3923,6 +3923,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           lastErrorCode = 0;
           break;
         }
+        if(forthCapIsOpen() && forthCapKeysMode() && !tam.mode) {
+          /* K2/E12.4: first ladder rung — EXIT in keys mode returns to
+           * alpha input; the rest of the E8 ladder is untouched below.
+           * Ladder is now: keys -> alpha -> submenu -> ALPHA menu ->
+           * drop keypad -> leave PEM, one level per press. */
+          forthCapSetKeysMode(false);
+          showSoftmenu(-MNU_ALPHA);
+          break;
+        }
         if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
           if(isAlphaSubmenu(0)) {
             popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it

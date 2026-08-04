@@ -23,20 +23,30 @@ static int forthSortMenu(void const *a, void const *b) {
   return compareString(a, b, CMP_EXTENSIVE);
 }
 
-/* Insert name + one trailing space into the open capture line at
- * T_cursorPos.  Same 256-byte/196-glyph cap as typing; false = no room
- * or capture not open.  §9.6 P-H7 discipline, generalized (F6-3). */
+/* Insert name into the open capture line at T_cursorPos as its own
+ * token: one trailing space always, plus one LEADING separator space
+ * whenever the byte before the cursor is neither a space nor the line
+ * start (K2 token-boundary guard).  Same 256-byte/196-glyph cap as
+ * typing; false = no room or capture not open.  §9.6 P-H7 discipline,
+ * generalized (F6-3). */
 bool_t forthCapInsertName(const char *name)
 {
   int32_t nameLen = stringByteLength(name);
   if(!forthCapIsOpen()) { return false; }
   int32_t bufLen = stringByteLength(aimBuffer);
-  if(bufLen + nameLen + 1 < 256 && stringGlyphLength(aimBuffer) + nameLen + 1 <= 196) {
-    xcopy(aimBuffer + T_cursorPos + nameLen + 1, aimBuffer + T_cursorPos,
+  /* K2: token-boundary guard — a name must land as its own token.  When
+   * the byte before the cursor is neither a space nor the line start,
+   * insert one leading separator space.  Previously only the F6-4 fold
+   * wrapper did this; the direct F6-3/picker/keys-mode paths glued
+   * digits to names ("42" + SIN -> "42SIN ", an unresolvable token). */
+  int32_t lead = (T_cursorPos > 0 && aimBuffer[T_cursorPos - 1] != ' ') ? 1 : 0;
+  if(bufLen + nameLen + lead + 1 < 256 && stringGlyphLength(aimBuffer) + nameLen + lead + 1 <= 196) {
+    xcopy(aimBuffer + T_cursorPos + nameLen + lead + 1, aimBuffer + T_cursorPos,
           stringByteLength(aimBuffer + T_cursorPos) + 1);
-    xcopy(aimBuffer + T_cursorPos, name, nameLen);
-    aimBuffer[T_cursorPos + nameLen] = ' ';
-    T_cursorPos += nameLen + 1;
+    if(lead) { aimBuffer[T_cursorPos] = ' '; }
+    xcopy(aimBuffer + T_cursorPos + lead, name, nameLen);
+    aimBuffer[T_cursorPos + lead + nameLen] = ' ';
+    T_cursorPos += nameLen + lead + 1;
     return true;
   }
   return false;

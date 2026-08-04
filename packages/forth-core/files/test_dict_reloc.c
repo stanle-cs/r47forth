@@ -1129,6 +1129,10 @@ static int test_resume_drains_buried_catalog(void);           /* FIX-9 */
 static int test_keys_mode_resolution(void);                   /* K1 */
 static int test_keys_mode_toggle_arm(void);                   /* K1 */
 static int test_keys_mode_nav_guards(void);                   /* K1 */
+static int test_insert_token_boundary(void);                  /* K2 */
+static int test_keys_digits_then_function(void);              /* K2 */
+static int test_exit_ladder_keys_rung(void);                  /* K2 */
+static int test_keys_eex_and_numlock(void);                   /* K2 */
 
 
 /* T5 split: forward declarations for the tests that now live in the
@@ -2103,6 +2107,28 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_keys_mode_nav_guards...\n");
   fail |= test_keys_mode_nav_guards();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH K2 TESTS (token boundaries + ladder)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_insert_token_boundary...\n");
+  fail |= test_insert_token_boundary();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_keys_digits_then_function...\n");
+  fail |= test_keys_digits_then_function();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_exit_ladder_keys_rung...\n");
+  fail |= test_exit_ladder_keys_rung();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_keys_eex_and_numlock...\n");
+  fail |= test_keys_eex_and_numlock();
   forthDictClear();
   forthGDictClear();
 

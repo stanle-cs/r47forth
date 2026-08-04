@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185d74e9cc0 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8d795593d84d66d8961279536ecd13c300494818 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,9 @@
@@ -107,7 +107,55 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
        resetShiftState();
        displayAIMbufferoffset = 0;
        if(!editCommand) {
-@@ -881,18 +944,28 @@ void pemAlpha(int16_t item) {
+@@ -863,36 +926,64 @@ void pemAlpha(int16_t item) {
+     }
+     if(indexOfItems[item].func == addItemToBuffer) {
+       int32_t len = stringByteLength(aimBuffer);
+-      item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
+-      if(alphaCase == AC_LOWER) {
+-          if(ITM_A <= item && item <= ITM_Z) {
+-            item += (ITM_a - ITM_A);
+-          }
++      if(forthCapIsOpen() && item == ITM_EXPONENT) {
++        /* K2/E12.3: EEX must produce the number grammar's exponent
++         * spelling, not the three letters "EEX" (its softmenu name).
++         * One byte, inserted under the same cap and cursor advance as any
++         * other character, and NOT via forthCapInsertName — no trailing
++         * space, because "1e5" has to stay a single token. */
++        if(len < (256 - 1) && stringGlyphLength(aimBuffer) < 196) {
++          xcopy(aimBuffer + T_cursorPos + 1, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
++          aimBuffer[T_cursorPos] = 'e';
++          T_cursorPos += 1;
++        }
+       }
++      else {
++        if(!(forthCapIsOpen() && forthCapKeysMode())) {
++          item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
++        }
++        /* K2/E12.3: keys-mode items are normal-column ids; the numlock
++         * translation table is aim-column keyed and must not touch them. */
++        if(alphaCase == AC_LOWER) {
++            if(ITM_A <= item && item <= ITM_Z) {
++              item += (ITM_a - ITM_A);
++            }
++        }
+ 
+-      if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
+-        item = convertItemToSubOrSup(item, nextChar);
+-        int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
+-        if(len < (256 - inputCharLength) && stringGlyphLength(aimBuffer) < 196) {
+-          xcopy(aimBuffer + T_cursorPos + inputCharLength, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
+-          xcopy(aimBuffer + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
+-          T_cursorPos += inputCharLength;
++        if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
++          item = convertItemToSubOrSup(item, nextChar);
++          int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
++          if(len < (256 - inputCharLength) && stringGlyphLength(aimBuffer) < 196) {
++            xcopy(aimBuffer + T_cursorPos + inputCharLength, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
++            xcopy(aimBuffer + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
++            T_cursorPos += inputCharLength;
++          }
+         }
        }
      }
      else if(item == ITM_BACKSPACE) {
@@ -138,7 +186,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
          int16_t lastGlyphPos;
          aimBuffer[T_cursorPos] = 0;
          lastGlyphPos = stringLastGlyph(aimBuffer);
-@@ -902,11 +975,23 @@ void pemAlpha(int16_t item) {
+@@ -902,11 +993,23 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_ENTER) {
@@ -167,7 +215,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
      }
      else if(item == ITM_USERMODE) {
        fnFlipFlag(FLAG_USER);
-@@ -956,6 +1041,13 @@ void pemAlpha(int16_t item) {
+@@ -956,6 +1059,13 @@ void pemAlpha(int16_t item) {
        fnT_ARROW(indexOfItems[item].param);
        return;
      }
@@ -181,7 +229,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
  
      int16_t aimFunc = currentStep[0];
      if(aimFunc & 0x80) {
-@@ -988,7 +1080,22 @@ void pemAlpha(int16_t item) {
+@@ -988,7 +1098,22 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -204,7 +252,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,6 +1105,141 @@ void pemCloseAlphaInput(void) {
+@@ -998,6 +1123,137 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -301,14 +349,10 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
 +      if (stringByteLength(tmpString) > 255) {
 +        break;   /* defensive: keep the step rather than truncate text */
 +      }
-+      { char conv[258]; char *t = conv;            /* 1 + 255 + NUL */
-+        if (T_cursorPos > 0 && aimBuffer[T_cursorPos - 1] != ' ') {
-+          *t++ = ' ';        /* word separator when mid-text */
-+        }
-+        xcopy(t, tmpString, stringByteLength(tmpString) + 1);
-+        if (!forthCapInsertName(conv)) {
-+          break;   /* no room: keep this and later steps after the line */
-+        }
++      /* K2: the leading separator now lives in forthCapInsertName itself
++       * (token-boundary guard) — pass the decoded text straight through. */
++      if (!forthCapInsertName(tmpString)) {
++        break;   /* no room: keep this and later steps after the line */
 +      }
 +      deleteStepsFromTo(ins, findNextStep(ins));
 +      folded = true;
@@ -346,7 +390,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
  }
  
  
-@@ -1013,7 +1255,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +1269,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -355,7 +399,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +1627,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +1641,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -393,7 +437,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +1668,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +1682,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -430,7 +474,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +1717,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +1731,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -498,7 +542,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +1789,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +1803,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -514,7 +558,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +1880,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +1894,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -538,7 +582,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2192,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2206,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

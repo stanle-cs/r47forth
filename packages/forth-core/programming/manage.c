@@ -926,20 +926,38 @@ void pemAlpha(int16_t item) {
     }
     if(indexOfItems[item].func == addItemToBuffer) {
       int32_t len = stringByteLength(aimBuffer);
-      item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
-      if(alphaCase == AC_LOWER) {
-          if(ITM_A <= item && item <= ITM_Z) {
-            item += (ITM_a - ITM_A);
-          }
+      if(forthCapIsOpen() && item == ITM_EXPONENT) {
+        /* K2/E12.3: EEX must produce the number grammar's exponent
+         * spelling, not the three letters "EEX" (its softmenu name).
+         * One byte, inserted under the same cap and cursor advance as any
+         * other character, and NOT via forthCapInsertName — no trailing
+         * space, because "1e5" has to stay a single token. */
+        if(len < (256 - 1) && stringGlyphLength(aimBuffer) < 196) {
+          xcopy(aimBuffer + T_cursorPos + 1, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
+          aimBuffer[T_cursorPos] = 'e';
+          T_cursorPos += 1;
+        }
       }
+      else {
+        if(!(forthCapIsOpen() && forthCapKeysMode())) {
+          item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
+        }
+        /* K2/E12.3: keys-mode items are normal-column ids; the numlock
+         * translation table is aim-column keyed and must not touch them. */
+        if(alphaCase == AC_LOWER) {
+            if(ITM_A <= item && item <= ITM_Z) {
+              item += (ITM_a - ITM_A);
+            }
+        }
 
-      if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
-        item = convertItemToSubOrSup(item, nextChar);
-        int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
-        if(len < (256 - inputCharLength) && stringGlyphLength(aimBuffer) < 196) {
-          xcopy(aimBuffer + T_cursorPos + inputCharLength, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
-          xcopy(aimBuffer + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
-          T_cursorPos += inputCharLength;
+        if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
+          item = convertItemToSubOrSup(item, nextChar);
+          int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
+          if(len < (256 - inputCharLength) && stringGlyphLength(aimBuffer) < 196) {
+            xcopy(aimBuffer + T_cursorPos + inputCharLength, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
+            xcopy(aimBuffer + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
+            T_cursorPos += inputCharLength;
+          }
         }
       }
     }
@@ -1198,14 +1216,10 @@ void forthCaptureResume(void) {
       if (stringByteLength(tmpString) > 255) {
         break;   /* defensive: keep the step rather than truncate text */
       }
-      { char conv[258]; char *t = conv;            /* 1 + 255 + NUL */
-        if (T_cursorPos > 0 && aimBuffer[T_cursorPos - 1] != ' ') {
-          *t++ = ' ';        /* word separator when mid-text */
-        }
-        xcopy(t, tmpString, stringByteLength(tmpString) + 1);
-        if (!forthCapInsertName(conv)) {
-          break;   /* no room: keep this and later steps after the line */
-        }
+      /* K2: the leading separator now lives in forthCapInsertName itself
+       * (token-boundary guard) — pass the decoded text straight through. */
+      if (!forthCapInsertName(tmpString)) {
+        break;   /* no room: keep this and later steps after the line */
       }
       deleteStepsFromTo(ins, findNextStep(ins));
       folded = true;
