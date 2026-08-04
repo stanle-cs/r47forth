@@ -79,6 +79,23 @@ python3 tools/pkg_patch_refresh.py packages/forth-core
 
 before every build, or your edit won't be in the firmware you flash.
 
+## Typing a Forth line
+
+A Forth line starts out in alpha. That's right for word names. But half
+the catalog is easier to reach as a key press than as spelled-out
+letters. Press ALPHA inside the line and the keyboard flips back to its
+normal layout: SIN types `SIN`, the multiply key types `×`, digits stay
+digits. STO and RCL run their usual parameter entry. The finished form
+goes into the line as text: `STO 05`. You don't need to add spaces
+around any of this. A key press separates itself from whatever came
+before it. Press ALPHA again for letters. R/S closes the line and
+records a STOP step. EXIT backs out one level at a time: keys to
+letters, then the menus, then the line itself.
+
+Why bother when you can spell the names? Some you can't. x² is a
+superscript glyph the alpha keyboard doesn't have, but the key knows
+its own spelling.
+
 ## Notes
 
 The Forth data stack is the calculator's own RPN stack, 4 or 8 levels
