@@ -230,8 +230,14 @@ Owners as in `R6_RESOLUTION_PLAN.md` §3: **A** = architect session (Claude),
   **S** forks/pushes/opens the MR with the fail-loud patch; the reply
   (in UPSTREAM_REPORTS §3) flags one open call-context question (immediate
   vs. latched raise) for upstream to finalize. Optional upstream reports
-  (tam.c item-scan colon gap; decode.c renderer indexing) — **A** drafts in
-  the `UPSTREAM_BUG_REM_alpha_menu.md` style, **S** files them.
+  (tam.c item-scan colon gap; decode.c renderer indexing) — **MOOT
+  2026-08-03**: both were fixed upstream inside the migration window
+  (`05508a7a7`, `6e26d2c09`), never filed by us; re-verification recorded
+  in `UPSTREAM_REPORTS_b8f79e486.md`. The restoreCalc leak draft
+  (`UPSTREAM_REPORTS_976b864b5.md`) was re-verified the same day:
+  mechanism intact at the new base, but our reproducer is gone (S3 moved
+  capture onto aimBuffer) — filing is **S**'s call, draft carries the
+  framing notes.
 - Final docs reconciliation pass (DESIGN.md stale/interim prose,
   DESIGN-HISTORY, ledger closeout) — **A**, docs-only commits.
 - Flash baseline/deltas (`make dmcp5r47`, RULE-1) — **A** runs and records

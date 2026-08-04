@@ -11,6 +11,9 @@ Each section is self-contained — paste as its own issue.
 
 ## 1. `XEQ :name:` falls through to the function-name scan when the local label is missing
 
+**Status (2026-08-03): fixed upstream — do not file.** See the
+re-verification section at the end of this file.
+
 **File:** `src/c47/ui/tam.c`, `_tamProcessInput`.
 
 The named-local-label feature resolves TAM label input kind-faithfully:
@@ -48,6 +51,9 @@ colon request either resolves a local label or fails.
 ---
 
 ## 2. `_decodeOneStep` indexes `indexOfItems[op]` without an upper bound
+
+**Status (2026-08-03): fixed upstream — do not file.** See the
+re-verification section at the end of this file.
 
 **File:** `src/c47/programming/decode.c`, `_decodeOneStep` (:846).
 
@@ -216,3 +222,31 @@ it is observable); the mechanism choice is upstream's to finalize.
 > afterwards it could swallow the screen. If that's a concern I'm happy to
 > latch a fault flag and raise at the next idle/refresh instead; your call
 > on which mechanism fits. I'll send whichever form you prefer as the MR.
+
+---
+
+### Re-verification at 26ec91634 (2026-08-03, post-migration)
+
+The upstream migration to `26ec91634` crossed 418 commits. Both unfiled
+findings were fixed upstream inside that window, independently of this
+file — neither was ever submitted.
+
+**§1 — CLOSED upstream.** `05508a7a7` ("Fix XEQ :name: issue when name is
+not a local label but refers to a built-in function", Didier, 2026-07-17)
+is exactly the one-line fix suggested above: `&& !tam.colon` added to the
+fallback condition. A colon request now either resolves a local label or
+errors.
+
+**§2 — CLOSED upstream, more broadly than suggested.** `6e26d2c09`
+("fix(programming): reject an out-of-range opcode before the item table",
+Pigazzini, 2026-07-11) guards not just `_decodeOneStep` but the whole
+class — its commit message identifies the same four decode sites
+(`clcvar.c`, `decode.c`, `lblGtoXeq.c`, `nextStep.c`) and lands a
+`>= LAST_ITEM` guard at each, with per-site ASAN reproducers. That
+supersedes the two-line suggestion above entirely.
+
+**§3 — unchanged by the migration.** The fail-loud rework (FIX-6B) is
+landed in our tree (`5c2e7109a`); the MR to upstream remains the open
+step. Pristine `freeListFree` at `26ec91634` still has no overlap guard
+and the A/B diagnostics are still `#if !defined(DMCP_BUILD)` — the patch
+applies on current master as-is.

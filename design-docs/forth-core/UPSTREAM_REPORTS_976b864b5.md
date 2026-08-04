@@ -116,3 +116,35 @@ there's a preference — this report is intentionally scoped to the finding
 and its mechanism, not a specific fix, since (unlike the FIX-6 finding)
 the right shape of fix depends on a call you're better positioned to make
 about the save-format/restore-contract tradeoffs involved.
+
+---
+
+## Re-verification at 26ec91634 (2026-08-03, post-migration) — internal status, not part of the paste
+
+**The mechanism is intact.** `restoreCalc()` at `26ec91634` still calls
+`doFnReset(CONFIRMED, loadAutoSav)` as its first act (saveRestoreBackup.c:830)
+and still overlays `ram`, `freeMemoryRegions`, and `allocatedMemoryRegions`
+wholesale from the file afterward (:900-917). The migration window's restore
+hardening (`f208a3727` region-count validation, `8b408019a`/`f53b62a06`
+bounded hexDump reads, `38605170d` pool-pointer range checks) is all
+file-validity work: a well-formed file that honestly records an ephemeral
+allocation as live at save time passes every new check and still reinstates
+it as allocated after the module's reset hook freed it. Nothing addresses
+the stale-bookkeeping shape.
+
+**Our reproducer no longer exists — by our own construction, not by an
+upstream fix.** The S3 cleanup (DESIGN-HISTORY 2026-08-02) moved the capture
+line back onto `aimBuffer`; forth-core no longer holds any block-allocator
+allocation whose lifetime is shorter than a save/restore cycle. Measured
+2026-08-03 at `26ec91634`: a save/restore round-trip with a capture open
+shows `getFreeRamMemory()` delta 0 (was deterministically −256 B at
+`976b864b5`).
+
+**Consequence for filing.** The finding stands as a structural observation
+(per the DESIGN-HISTORY 2026-08-02 ruling), but the "Reproduction" section
+above is historical: it describes a module shape (`forthCap`'s 64-block
+scratch buffer) that has since been redesigned away for unrelated reasons.
+If filed, present it as a code-inspection finding whose reproduction was
+measured at `976b864b5`, and note that any future module with an ephemeral
+allocator-backed buffer recreates the leak deterministically. Owner's call
+whether it is worth filing without a live in-tree reproducer.
