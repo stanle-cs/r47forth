@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..1ead2ff1a0764a2b070703207228716d002a23e8 100644
+index bc44026016e94a8865b8acc886386341596641c6..0ffe02c3da728dcbf71b34d2beaecd4866369514 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,6 +2,9 @@
@@ -62,7 +62,82 @@ index bc44026016e94a8865b8acc886386341596641c6..1ead2ff1a0764a2b070703207228716d
        }
  
        // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
-@@ -2249,6 +2279,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -1533,7 +1563,10 @@ endReturnTrue:
+ 
+ 
+ 
+-  static int16_t determineItem(const char *data) {
++  /* K1/C2: file-static in upstream; exported for the self-test build only so
++   * the suite can drive the real resolution layer (same idiom as
++   * _closeCatalog above).  Production linkage is unchanged. */
++  FORTH_SELFTEST_EXPORT int16_t determineItem(const char *data) {
+     delayCloseNim = false;
+     int16_t result;
+     const calcKey_t *key;
+@@ -1650,30 +1683,42 @@ endReturnTrue:
+       Check_MultiPresses(&result, key_no);        //JM
+       return result;
+     }
+-    else if(calcMode == CM_AIM || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA))) {
+-      result = shiftF ? key->fShiftedAim :
+-               shiftG ? key->gShiftedAim :
+-                        key->primaryAim;
+-      if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)) {
+-        if(result == ITM_DOWN_ARROW || scrLock == NC_SUBSCRIPT) {
+-          nextChar = NC_SUBSCRIPT;
++    else if(calcMode == CM_AIM || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && !(tam.function == ITM_FORTH && forthCapKeysMode()))) {
++      if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
++         && tam.function == ITM_FORTH && forthCapIsOpen()
++         && shiftF && key->fShifted == ITM_AIM) {
++        /* K1/E10: inside a Forth capture the ALPHA gesture is the keys-mode
++         * toggle — resolve to ITM_AIM instead of the aim-column ITM_alpha.
++         * Layout-independent: keyed on the row's normal-column fShifted,
++         * not on a key number.  Falls through to the shared function tail
++         * so shift state is consumed normally (no early return). */
++        result = ITM_AIM;
++      }
++      else {
++        result = shiftF ? key->fShiftedAim :
++                 shiftG ? key->gShiftedAim :
++                          key->primaryAim;
++        if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)) {
++          if(result == ITM_DOWN_ARROW || scrLock == NC_SUBSCRIPT) {
++            nextChar = NC_SUBSCRIPT;
++          }
++          else if(result == ITM_UP_ARROW || scrLock == NC_SUPERSCRIPT) {
++            nextChar = NC_SUPERSCRIPT;
++          }
+         }
+-        else if(result == ITM_UP_ARROW || scrLock == NC_SUPERSCRIPT) {
+-          nextChar = NC_SUPERSCRIPT;
++        else if((result == ITM_COMMA || result == ITM_PERIOD) && (calcMode == CM_EIM || calcMode == CM_AIM) && getSystemFlag(FLAG_ALPHA) ) {
++          switch((shiftG ? 2 : 0) + (getSystemFlag(FLAG_NUMLOCK) ? 1 : 0)) {                // gSHIFTED  numLock
++          //case 0: result = key->primaryAim;break;           //                                   0        0      key->primaryAim
++            case 1: result = RADIX34_MARK_DEC_ITM; break;     //                                   0        1      decimal
++          //case 2: result = RADIX34_MARK_DEC_ITM; break;     //                                   2        0      decimal
++            case 3: result = RADIX34_MARK_NOT_DEC_ITM; break; //                                   2        1      not the decimal
++            default:;
++          }
+         }
+-      }
+-      else if((result == ITM_COMMA || result == ITM_PERIOD) && (calcMode == CM_EIM || calcMode == CM_AIM) && getSystemFlag(FLAG_ALPHA) ) {
+-        switch((shiftG ? 2 : 0) + (getSystemFlag(FLAG_NUMLOCK) ? 1 : 0)) {                // gSHIFTED  numLock
+-        //case 0: result = key->primaryAim;break;           //                                   0        0      key->primaryAim
+-          case 1: result = RADIX34_MARK_DEC_ITM; break;     //                                   0        1      decimal
+-        //case 2: result = RADIX34_MARK_DEC_ITM; break;     //                                   2        0      decimal
+-          case 3: result = RADIX34_MARK_NOT_DEC_ITM; break; //                                   2        1      not the decimal
+-          default:;
++        if((calcMode == CM_EIM) && (result == -MNU_AIMCATALOG)) {
++          result = -MNU_EIMCATALOG;
+         }
+       }
+-      if((calcMode == CM_EIM) && (result == -MNU_AIMCATALOG)) {
+-        result = -MNU_EIMCATALOG;
+-      }
+     }
+     else if(tam.mode) {
+       result = key->primaryTam; // No shifted function in TAM
+@@ -2249,6 +2294,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
                }
              }
              else {
@@ -73,7 +148,44 @@ index bc44026016e94a8865b8acc886386341596641c6..1ead2ff1a0764a2b070703207228716d
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -3868,6 +3902,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3130,11 +3179,23 @@ RELEASE_END:
+                   keyActionProcessed = true;
+                 }
+                 else if(item == ITM_SST) {
++                  if(forthCapIsOpen() && aimBuffer[0] == 0) {
++                    pemAlpha(ITM_BACKSPACE);  /* K1/E12.2: abort the empty
++                       placeholder first — no navigation may leave
++                       FCAP_OPEN behind (fnSst/fnBst's own close branch
++                       only fires on non-empty aimBuffer). */
++                  }
+                   fnSst(NOPARAM);
+                   keyActionProcessed = true;
+                   refreshScreen(122);
+                 }
+                 else if(item == ITM_BST) {
++                  if(forthCapIsOpen() && aimBuffer[0] == 0) {
++                    pemAlpha(ITM_BACKSPACE);  /* K1/E12.2: abort the empty
++                       placeholder first — no navigation may leave
++                       FCAP_OPEN behind (fnSst/fnBst's own close branch
++                       only fires on non-empty aimBuffer). */
++                  }
+                   fnBst(NOPARAM);
+                   keyActionProcessed = true;
+                   refreshScreen(123);
+@@ -3154,6 +3215,12 @@ RELEASE_END:
+                   }
+                 }
+                 else if(item == ITM_RS) {
++                  if(forthCapIsOpen()) {
++                    pemCloseAlphaInput();     /* K1/E12.2: commit the line,
++                       then the native STOP step.  Without this, the E0
++                       alpha divert would type the text "STOP " into the
++                       line — a flow-reject word that cannot compile. */
++                  }
+                   addStepInProgram(ITM_STOP);
+                   keyActionProcessed = true;
+                 }
+@@ -3868,6 +3935,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -81,7 +193,7 @@ index bc44026016e94a8865b8acc886386341596641c6..1ead2ff1a0764a2b070703207228716d
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +3913,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +3946,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -104,7 +216,7 @@ index bc44026016e94a8865b8acc886386341596641c6..1ead2ff1a0764a2b070703207228716d
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4366,9 +4417,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4450,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {

@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "diagnostics": {},
+  "commands": {
+    "./packages/forth-core/build-test.sh >": {
+      "canonical": "./packages/forth-core/build-test.sh > /tmp/forth-g4-gate.log",
+      "timeout": 180000,
+      "runs": 106,
+      "forms": {
+        "./packages/forth-core/build-test.sh > /tmp/forth-sb-1-gate.log": 14,
+        "./packages/forth-core/build-test.sh > /tmp/forth-sb-1-mut1.log": 15,
+        "./packages/forth-core/build-test.sh > /tmp/test_output.txt": 2,
+        "./packages/forth-core/build-test.sh > /tmp/forth-sb-2-gate.log": 16,
+        "./packages/forth-core/build-test.sh > /tmp/forth-sb-2-mut1.log": 1,
+        "./packages/forth-core/build-test.sh > /tmp/forth-sb-2-mut2.log": 1,
+        "./packages/forth-core/build-test.sh > /tmp/forth-sb-2-mut3.log": 3,
+        "./packages/forth-core/build-test.sh > /tmp/forth-t5-1-gate.log": 1,
+        "./packages/forth-core/build-test.sh > /tmp/forth-t5-2-gate.log": 3,
+        "./packages/forth-core/build-test.sh > /tmp/forth-t5-2-mut1.log": 1,
+        "./packages/forth-core/build-test.sh > /tmp/forth-t5-2-mut2.log": 1,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-1-gate.log": 3,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-1-mut1.log": 2,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-1-mut2.log": 1,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-2-gate.log": 4,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-2-mut1.log": 2,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-2-mut2.log": 1,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-3-gate-pre.log": 1,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-3-gate.log": 6,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-3-mut1.log": 1,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-4-gate.log": 2,
+        "./packages/forth-core/build-test.sh > /tmp/forth-t5v2-gate.log": 2,
+        "./packages/forth-core/build-test.sh > /tmp/forth-t6-1-gate.log": 4,
+        "./packages/forth-core/build-test.sh > /tmp/forth-d3-5-gate.log": 1,
+        "./packages/forth-core/build-test.sh > /tmp/forth-g4-gate.log": 18
+      },
+      "timeouts": {
+        "120000": 3,
+        "180000": 26,
+        "300000": 74
+      },
+      "failures": {
+        "timed out": 1
+      },
+      "timedOutAt": 120000
+    },
+    "./packages/forth-core/build-test.sh": {
+      "canonical": "./packages/forth-core/build-test.sh",
+      "timeout": 180000,
+      "runs": 21,
+      "forms": {
+        "./packages/forth-core/build-test.sh": 21
+      },
+      "timeouts": {
+        "180000": 21
+      }
+    },
+    "python3 tools/split_test_corpus.py": {
+      "canonical": "python3 tools/split_test_corpus.py",
+      "runs": 2,
+      "forms": {
+        "python3 tools/split_test_corpus.py": 2
+      }
+    },
+    "./packages/forth-core/build-test.sh 2>/tmp/forth-debug.log": {
+      "canonical": "./packages/forth-core/build-test.sh 2>/tmp/forth-debug.log",
+      "timeout": 120000,
+      "runs": 1,
+      "forms": {
+        "./packages/forth-core/build-test.sh 2>/tmp/forth-debug.log": 1
+      },
+      "timeouts": {
+        "120000": 1
+      }
+    },
+    "python3 tools/pkg_patch_refresh.py": {
+      "canonical": "python3 tools/pkg_patch_refresh.py packages/forth-core --materialize testSuite/tests/testSuiteList.txt",
+      "runs": 4,
+      "forms": {
+        "python3 tools/pkg_patch_refresh.py packages/forth-core --materialize testSuite/tests/testSuiteList.txt": 2,
+        "python3 tools/pkg_patch_refresh.py packages/forth-core": 2
+      }
+    },
+    "make dist_dmcp5r47": {
+      "canonical": "make dist_dmcp5r47 CUSTOM_PKG=packages/forth-core CUSTOM_PKG_RECONFIGURE=1",
+      "timeout": 300000,
+      "runs": 2,
+      "forms": {
+        "make dist_dmcp5r47 CUSTOM_PKG=packages/forth-core CUSTOM_PKG_RECONFIGURE=1": 2
+      },
+      "timeouts": {
+        "300000": 2
+      }
+    }
+  }
+}

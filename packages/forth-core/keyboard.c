@@ -1563,7 +1563,10 @@ endReturnTrue:
 
 
 
-  static int16_t determineItem(const char *data) {
+  /* K1/C2: file-static in upstream; exported for the self-test build only so
+   * the suite can drive the real resolution layer (same idiom as
+   * _closeCatalog above).  Production linkage is unchanged. */
+  FORTH_SELFTEST_EXPORT int16_t determineItem(const char *data) {
     delayCloseNim = false;
     int16_t result;
     const calcKey_t *key;
@@ -1680,29 +1683,41 @@ endReturnTrue:
       Check_MultiPresses(&result, key_no);        //JM
       return result;
     }
-    else if(calcMode == CM_AIM || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA))) {
-      result = shiftF ? key->fShiftedAim :
-               shiftG ? key->gShiftedAim :
-                        key->primaryAim;
-      if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)) {
-        if(result == ITM_DOWN_ARROW || scrLock == NC_SUBSCRIPT) {
-          nextChar = NC_SUBSCRIPT;
-        }
-        else if(result == ITM_UP_ARROW || scrLock == NC_SUPERSCRIPT) {
-          nextChar = NC_SUPERSCRIPT;
-        }
+    else if(calcMode == CM_AIM || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && !(tam.function == ITM_FORTH && forthCapKeysMode()))) {
+      if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
+         && tam.function == ITM_FORTH && forthCapIsOpen()
+         && shiftF && key->fShifted == ITM_AIM) {
+        /* K1/E10: inside a Forth capture the ALPHA gesture is the keys-mode
+         * toggle — resolve to ITM_AIM instead of the aim-column ITM_alpha.
+         * Layout-independent: keyed on the row's normal-column fShifted,
+         * not on a key number.  Falls through to the shared function tail
+         * so shift state is consumed normally (no early return). */
+        result = ITM_AIM;
       }
-      else if((result == ITM_COMMA || result == ITM_PERIOD) && (calcMode == CM_EIM || calcMode == CM_AIM) && getSystemFlag(FLAG_ALPHA) ) {
-        switch((shiftG ? 2 : 0) + (getSystemFlag(FLAG_NUMLOCK) ? 1 : 0)) {                // gSHIFTED  numLock
-        //case 0: result = key->primaryAim;break;           //                                   0        0      key->primaryAim
-          case 1: result = RADIX34_MARK_DEC_ITM; break;     //                                   0        1      decimal
-        //case 2: result = RADIX34_MARK_DEC_ITM; break;     //                                   2        0      decimal
-          case 3: result = RADIX34_MARK_NOT_DEC_ITM; break; //                                   2        1      not the decimal
-          default:;
+      else {
+        result = shiftF ? key->fShiftedAim :
+                 shiftG ? key->gShiftedAim :
+                          key->primaryAim;
+        if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)) {
+          if(result == ITM_DOWN_ARROW || scrLock == NC_SUBSCRIPT) {
+            nextChar = NC_SUBSCRIPT;
+          }
+          else if(result == ITM_UP_ARROW || scrLock == NC_SUPERSCRIPT) {
+            nextChar = NC_SUPERSCRIPT;
+          }
         }
-      }
-      if((calcMode == CM_EIM) && (result == -MNU_AIMCATALOG)) {
-        result = -MNU_EIMCATALOG;
+        else if((result == ITM_COMMA || result == ITM_PERIOD) && (calcMode == CM_EIM || calcMode == CM_AIM) && getSystemFlag(FLAG_ALPHA) ) {
+          switch((shiftG ? 2 : 0) + (getSystemFlag(FLAG_NUMLOCK) ? 1 : 0)) {                // gSHIFTED  numLock
+          //case 0: result = key->primaryAim;break;           //                                   0        0      key->primaryAim
+            case 1: result = RADIX34_MARK_DEC_ITM; break;     //                                   0        1      decimal
+          //case 2: result = RADIX34_MARK_DEC_ITM; break;     //                                   2        0      decimal
+            case 3: result = RADIX34_MARK_NOT_DEC_ITM; break; //                                   2        1      not the decimal
+            default:;
+          }
+        }
+        if((calcMode == CM_EIM) && (result == -MNU_AIMCATALOG)) {
+          result = -MNU_EIMCATALOG;
+        }
       }
     }
     else if(tam.mode) {
@@ -3164,11 +3179,23 @@ RELEASE_END:
                   keyActionProcessed = true;
                 }
                 else if(item == ITM_SST) {
+                  if(forthCapIsOpen() && aimBuffer[0] == 0) {
+                    pemAlpha(ITM_BACKSPACE);  /* K1/E12.2: abort the empty
+                       placeholder first — no navigation may leave
+                       FCAP_OPEN behind (fnSst/fnBst's own close branch
+                       only fires on non-empty aimBuffer). */
+                  }
                   fnSst(NOPARAM);
                   keyActionProcessed = true;
                   refreshScreen(122);
                 }
                 else if(item == ITM_BST) {
+                  if(forthCapIsOpen() && aimBuffer[0] == 0) {
+                    pemAlpha(ITM_BACKSPACE);  /* K1/E12.2: abort the empty
+                       placeholder first — no navigation may leave
+                       FCAP_OPEN behind (fnSst/fnBst's own close branch
+                       only fires on non-empty aimBuffer). */
+                  }
                   fnBst(NOPARAM);
                   keyActionProcessed = true;
                   refreshScreen(123);
@@ -3188,6 +3215,12 @@ RELEASE_END:
                   }
                 }
                 else if(item == ITM_RS) {
+                  if(forthCapIsOpen()) {
+                    pemCloseAlphaInput();     /* K1/E12.2: commit the line,
+                       then the native STOP step.  Without this, the E0
+                       alpha divert would type the text "STOP " into the
+                       line — a flow-reject word that cannot compile. */
+                  }
                   addStepInProgram(ITM_STOP);
                   keyActionProcessed = true;
                 }

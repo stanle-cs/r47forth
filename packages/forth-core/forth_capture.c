@@ -7,10 +7,15 @@ void forthCapOpen(void) {
    * skip the resume choke point); the assignment below drops it. */
   aimBuffer[0] = 0;                         /* reopen = fresh line */
   forthCap.state = FCAP_OPEN;
+  forthCap.keysMode = 0;                    /* K1: a fresh capture starts in
+                                               alpha input (owner default) */
 }
 
 void forthCapClose(void) {
   forthCap.state = FCAP_CLOSED;
+  forthCap.keysMode = 0;                    /* K1/E14: since FIX-8 every close
+                                               path runs through here, so this
+                                               one site covers the whole sweep */
 }
 
 void forthCapSuspendState(uint16_t cursor, uint16_t localStep, uint32_t stepOffset, uint16_t stepCount) {
@@ -48,12 +53,18 @@ void     forthCapAbandonSuspended(void){ if (forthCap.state == FCAP_SUSPENDED) f
 void forthCapPowerReset(void) {
   forthCapClose();              /* flips OPEN and SUSPENDED alike */
   forthCapAbandonSuspended();   /* explicit for the suspended state */
+  forthCap.keysMode = 0;        /* K1: transient UI state never survives a
+                                   dictionary-lifecycle reset */
 }
 
 bool_t forthCapIsOpen(void)  { return forthCap.state == FCAP_OPEN; }
 bool_t forthCapTextNonEmpty(void) {
   return forthCap.state == FCAP_OPEN && aimBuffer[0] != 0;
 }
+
+/* K1 (E10-E12): the keys-mode bit.  Transient, never persisted. */
+bool_t forthCapKeysMode(void)            { return forthCap.keysMode != 0; }
+void   forthCapSetKeysMode(bool_t on)    { forthCap.keysMode = on ? 1 : 0; }
 
 #if defined(FORTH_DEBUG_SELFTEST)
 uint8_t forthTestCapState(void) { return forthCap.state; }

@@ -1,7 +1,7 @@
 # Stage K — keys mode inside Forth capture (design, pre-packet)
 
-**Status: DESIGN, owner-ruled 2026-08-04. Pre-work traces in flight; packets
-not yet authored.** Authority: DESIGN.md §8.4 rules E0–E9 stay normative and
+**Status: K1 LANDED 2026-08-04 (branch forth-core/stage-k; opus bench diff
+adopted, amendment K1-A). K2-K4 pending.** Authority: DESIGN.md §8.4 rules E0–E9 stay normative and
 unchanged; this stage adds rules E10–E15 (drafted here, folded into §8.4 at
 landing). Amendment trail goes to DESIGN-HISTORY.md as usual.
 

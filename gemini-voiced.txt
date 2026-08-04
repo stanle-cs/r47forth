@@ -1,0 +1,1 @@
+Error: Error: empty prompt. Usage: agy --print "your prompt here"

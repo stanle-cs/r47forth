@@ -6986,6 +6986,11 @@ static int test_capture_close_paths_reset_tuple(void)
       fail = 1;
       break;
     }
+    /* K1/E14: poison the keys-mode bit so every close path in this sweep
+     * has something to clear.  forthCapClose() is the single site that
+     * clears it, and since FIX-8 every close path runs through there —
+     * this turns the class sweep into the proof of that claim. */
+    forthCapSetKeysMode(true);
 
     switch (sc) {
       case 1:                       /* BACKSPACE on empty line: abort */
@@ -7020,6 +7025,10 @@ static int test_capture_close_paths_reset_tuple(void)
     }
     if (getSystemFlag(FLAG_ALPHA)) {
       printf("    [%d] FAIL: FLAG_ALPHA still set\n", sc);
+      scFail = 1;
+    }
+    if (forthCapKeysMode()) {
+      printf("    [%d] FAIL: keys-mode bit still set\n", sc);
       scFail = 1;
     }
     if (!scFail) {
@@ -7484,6 +7493,683 @@ static int test_resume_drains_buried_catalog(void)
   programRunStop = savedProgRunStop;
   dynamicMenuItem = savedDynamicMenu;
   fnKeyInCatalog = savedFnKeyInCatalog;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* ==================================================================
+ * K1 (Stage K packet 1) — keys-mode bit, toggle gesture, column swap,
+ * navigation guards.  DESIGN rules E10, E11, E12.1-.3, E14, and the
+ * E13 interim.
+ *
+ * The whole overlay is one transient bit: the capture stays OPEN and
+ * FLAG_ALPHA stays SET, and forthCapKeysMode() alone switches
+ * determineItem from the aim columns to the normal key columns.  These
+ * tests drive the real entry points — determineItem, runFunction and
+ * processKeyAction — and never prime the state under test; the accessor
+ * is called directly only where a subcase deliberately POISONS the bit
+ * to prove a reset fires.
+ * ================================================================== */
+
+/* T1 (E10 / E12.1): the column swap, at the resolution layer.
+ *
+ * Differential and layout-independent: the ALPHA-gesture row is located
+ * in the live kbd_std table by its normal-column fShifted, and every
+ * expectation is read back from that same row — a keyboard relayout
+ * cannot silently invalidate this test, and no key number or aim-column
+ * item id is hard-coded.
+ *
+ * Escaping mutation: delete `&& !(tam.function == ITM_FORTH &&
+ * forthCapKeysMode())` from the alpha-branch condition (C2a) — sc2 then
+ * resolves the aim column instead of the row's primary. */
+static int test_keys_mode_resolution(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern int16_t determineItem(const char *);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  bool_t savedUser = getSystemFlag(FLAG_USER);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  /* Locate the ALPHA-gesture row once, from the live table. */
+  int kIdx = -1;
+  for (int i = 0; i < 37; i++) {
+    if (kbd_std[i].fShifted == ITM_AIM) { kIdx = i; break; }
+  }
+  if (kIdx < 0) {
+    printf("    FIXTURE FAIL: no kbd_std row carries fShifted == ITM_AIM\n");
+    return 1;
+  }
+  char kb[3];
+  sprintf(kb, "%02d", kIdx);
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K1R");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  clearSystemFlag(FLAG_USER);          /* resolution must read kbd_std */
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+
+  /* sc1 (E10): capture open in the alpha sub-mode.  The f-shift on this
+   * row is the mode gesture, not the aim column's alpha glyph. */
+  {
+    lastErrorCode = ERROR_NONE;
+    shiftF = true;
+    int16_t got = determineItem(kb);
+    shiftF = false;
+    if (got != ITM_AIM) {
+      printf("    [1] FAIL: determineItem = %d, expected ITM_AIM (%d)\n", got, ITM_AIM);
+      fail = 1;
+    }
+    else {
+      printf("    [1] PASS: ALPHA gesture resolves to ITM_AIM inside a capture\n");
+    }
+  }
+
+  /* sc2 (the swap): with the bit set, CM_PEM falls through to the normal
+   * key columns — the expectation is read live from the same row. */
+  {
+    lastErrorCode = ERROR_NONE;
+    forthCapSetKeysMode(true);
+    shiftF = false;
+    int16_t want = kbd_std[kIdx].primary;
+    int16_t got = determineItem(kb);
+    shiftF = false;
+    if (got != want) {
+      printf("    [2] FAIL: determineItem = %d, expected primary %d\n", got, want);
+      fail = 1;
+    }
+    else {
+      printf("    [2] PASS: keys mode resolves the normal primary column\n");
+    }
+  }
+
+  /* sc3: the toggle-out gesture is symmetric — with the bit set the same
+   * f-shift resolves ITM_AIM again, now via the normal fShifted column. */
+  {
+    lastErrorCode = ERROR_NONE;
+    shiftF = true;
+    int16_t got = determineItem(kb);
+    shiftF = false;
+    if (got != ITM_AIM) {
+      printf("    [3] FAIL: determineItem = %d, expected ITM_AIM (%d)\n", got, ITM_AIM);
+      fail = 1;
+    }
+    else if (!forthCapIsOpen()) {
+      printf("    [3] FAIL: capture no longer open after resolution\n");
+      fail = 1;
+    }
+    else {
+      printf("    [3] PASS: toggle-out resolves ITM_AIM via the normal column\n");
+    }
+  }
+
+  /* sc4 (no leak outside a capture): abort the line, then POISON the bit
+   * and re-resolve.  The capture gate must be what silences the E10
+   * remap — not the bit, which is meaningless once the capture is gone. */
+  {
+    runFunction(ITM_CLA);
+    runFunction(ITM_BACKSPACE);
+    lastErrorCode = ERROR_NONE;
+    forthCapSetKeysMode(true);
+    shiftF = true;
+    int16_t want = kbd_std[kIdx].fShifted;
+    int16_t got = determineItem(kb);
+    shiftF = false;
+    if (forthCapIsOpen()) {
+      printf("    [4] FAIL: capture still open after abort\n");
+      fail = 1;
+    }
+    else if (got != want) {
+      printf("    [4] FAIL: determineItem = %d, expected fShifted %d\n", got, want);
+      fail = 1;
+    }
+    else {
+      printf("    [4] PASS: bit set with no capture leaves resolution on normal columns\n");
+    }
+    forthCapSetKeysMode(false);
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  shiftF = false;
+  shiftG = false;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  if (savedUser) setSystemFlag(FLAG_USER); else clearSystemFlag(FLAG_USER);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* T2 (E10/E11 + E6): the toggle arm, through the real dispatch.
+ *
+ * The gesture is driven as runFunction(ITM_AIM) — the same item T1 proved
+ * the keyboard now resolves — so the arm is exercised end to end rather
+ * than by poking the bit.  sc1 also pins the per-key recommit invariant:
+ * a toggle must not touch the buffer or the on-disk step.
+ *
+ * Escaping mutation: drop forthCapIsOpen() from the C4 gate — sc3's E6
+ * re-entry becomes a toggle and the capture never reopens. */
+static int test_keys_mode_toggle_arm(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K1T");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+
+  /* sc1: alpha -> keys.  Buffer and on-disk step must be byte-identical
+   * across the toggle (the per-key recommit invariant). */
+  {
+    runFunction(ITM_2);                       /* a line with text in it */
+    uint8_t  before[32];
+    uint16_t nBefore = 0;
+    uint8_t *nx = findNextStep(currentStep);
+    char bufBefore[AIM_BUFFER_LENGTH];
+    uint8_t *stepBefore = currentStep;
+    if (nx == NULL || nx <= currentStep || (nx - currentStep) > (int32_t)sizeof(before)) {
+      printf("    [1] FIXTURE FAIL: capture step not walkable\n");
+      fail = 1;
+    }
+    else {
+      nBefore = (uint16_t)(nx - currentStep);
+      xcopy(before, currentStep, nBefore);
+      xcopy(bufBefore, aimBuffer, stringByteLength(aimBuffer) + 1);
+
+      runFunction(ITM_AIM);                   /* the toggle gesture */
+
+      if (!forthCapKeysMode()) {
+        printf("    [1] FAIL: keys-mode bit not set after the toggle\n");
+        fail = 1;
+      }
+      else if (forthTestCapState() != FCAP_OPEN) {
+        printf("    [1] FAIL: capture state %d, expected FCAP_OPEN\n", forthTestCapState());
+        fail = 1;
+      }
+      else if (currentMenu() == -MNU_ALPHA) {
+        printf("    [1] FAIL: alpha menu still on top in keys mode\n");
+        fail = 1;
+      }
+      else if (compareString(aimBuffer, bufBefore, CMP_EXTENSIVE) != 0) {
+        printf("    [1] FAIL: aimBuffer changed across the toggle: '%s' -> '%s'\n",
+               bufBefore, aimBuffer);
+        fail = 1;
+      }
+      else if (currentStep != stepBefore ||
+               findNextStep(currentStep) == NULL ||
+               (uint16_t)(findNextStep(currentStep) - currentStep) != nBefore ||
+               memcmp(currentStep, before, nBefore) != 0) {
+        printf("    [1] FAIL: on-disk capture step changed across the toggle\n");
+        fail = 1;
+      }
+      else {
+        printf("    [1] PASS: toggle sets keys mode; buffer and step untouched\n");
+      }
+    }
+  }
+
+  /* sc2: keys -> alpha.  The visible row swap IS the mode indicator, so
+   * the ALPHA menu must come back on top. */
+  if (!fail) {
+    runFunction(ITM_AIM);
+    if (forthCapKeysMode()) {
+      printf("    [2] FAIL: keys-mode bit still set after toggling back\n");
+      fail = 1;
+    }
+    else if (forthTestCapState() != FCAP_OPEN) {
+      printf("    [2] FAIL: capture state %d, expected FCAP_OPEN\n", forthTestCapState());
+      fail = 1;
+    }
+    else if (currentMenu() != -MNU_ALPHA) {
+      printf("    [2] FAIL: currentMenu() = %d, expected -MNU_ALPHA\n", currentMenu());
+      fail = 1;
+    }
+    else {
+      printf("    [2] PASS: toggle back clears the bit and restores the ALPHA menu\n");
+    }
+  }
+
+  /* sc3 (E6 untouched): with the capture CLOSED, ITM_AIM is still the
+   * re-entry gesture, not a toggle — and a fresh capture starts alpha. */
+  if (!fail) {
+    runFunction(ITM_CLA);
+    runFunction(ITM_BACKSPACE);
+    if (forthCapIsOpen()) {
+      printf("    [3] FIXTURE FAIL: capture did not close on the empty abort\n");
+      fail = 1;
+    }
+    else {
+      tam.function = 0;                       /* seeding it would be vacuous */
+      lastErrorCode = ERROR_NONE;
+      runFunction(ITM_AIM);
+      if (forthTestCapState() != FCAP_OPEN) {
+        printf("    [3] FAIL: E6 re-entry did not reopen the capture (state=%d)\n",
+               forthTestCapState());
+        fail = 1;
+      }
+      else if (tam.function != ITM_FORTH) {
+        printf("    [3] FAIL: tam.function 0x%04X, expected ITM_FORTH\n", tam.function);
+        fail = 1;
+      }
+      else if (forthCapKeysMode()) {
+        printf("    [3] FAIL: reopened capture did not start in alpha input\n");
+        fail = 1;
+      }
+      else {
+        printf("    [3] PASS: E6 re-entry reopens a fresh capture in alpha input\n");
+      }
+    }
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* T3 (E12.2 + the E13 interim): the CM_PEM navigation guards, through
+ * processKeyAction.  These arms are unreachable while the aim columns
+ * are up; keys mode makes them real, and no navigation may leave a
+ * capture OPEN behind it.
+ *
+ * Escaping mutation: delete the ITM_RS guard — sc1's capture stays open
+ * and "STOP " lands as text, so the native 0x46 step never appears. */
+static int test_keys_mode_nav_guards(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void processKeyAction(int16_t);
+  extern void fnKeyExit(uint16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  uint8_t savedTemporaryInfo = temporaryInformation;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  for (int sc = 1; sc <= 4 && !fail; sc++) {
+    int scFail = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "K1N");
+    tpMarker(&p);
+    tpRtn(&p);
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    [%d] FIXTURE FAIL: build/write\n", sc);
+      fail = 1;
+      break;
+    }
+
+    calcMode = CM_PEM;
+    catalog = CATALOG_NONE;
+    tam.mode = 0;
+    tam.alpha = false;
+    tam.function = 0;
+    aimBuffer[0] = 0;
+    programRunStop = PGM_STOPPED;
+    dynamicMenuItem = -1;
+    temporaryInformation = TI_NO_INFO;
+    pemCursorIsZerothStep = false;
+    alphaCase = AC_UPPER;
+    nextChar = NC_NORMAL;
+    shiftF = false;
+    shiftG = false;
+    keyActionProcessed = false;
+    clearSystemFlag(FLAG_ALPHA);
+    clearSystemFlag(FLAG_NUMLOCK);
+    lastErrorCode = ERROR_NONE;
+    forthCapClose();
+    currentProgramNumber = 1;
+
+    fnGotoDot(2);
+    uint16_t stepsFixture = getNumberOfSteps();
+
+    if (sc != 3) {
+      runFunction(ITM_AIM);
+      if (!forthCapIsOpen()) {
+        printf("    [%d] FIXTURE FAIL: ITM_AIM did not open capture\n", sc);
+        fail = 1;
+        cleanupTestProgram();
+        break;
+      }
+    }
+
+    if (sc == 1) {
+      /* R/S with text on the line: commit the source, then the native
+       * STOP step.  Walk the program and pin all three steps. */
+      runFunction(ITM_2);
+      runFunction(ITM_AIM);                   /* the real toggle to keys */
+      if (!forthCapKeysMode()) {
+        printf("    [1] FIXTURE FAIL: toggle did not set keys mode\n");
+        scFail = 1;
+      }
+      else {
+        processKeyAction(ITM_RS);
+
+        /* Walk from the LBL step.  The fixture's RTN still sits between
+         * the committed source and the inserted STOP: addStepInProgram's
+         * pre-move is gated on FLAG_ALPHA being CLEAR, and
+         * pemCloseAlphaInput has just cleared it, so the STOP is placed
+         * after the cursor's next step.  Adjacency is therefore not the
+         * claim — presence and kind are: the line became a Forth SOURCE
+         * step and the R/S became exactly one NATIVE STOP step, rather
+         * than the text "STOP " landing inside the line. */
+        uint8_t *sMarker = findNextStep(beginOfProgramMemory);   /* past LBL */
+        uint8_t *sSrc    = sMarker ? findNextStep(sMarker) : NULL;
+        static const uint8_t wantMarker[4] = { 0x8B, 0x1A, 0xFD, 0x00 };
+        static const uint8_t wantSrc[5]    = { 0x8B, 0x1A, 0xFD, 0x01, '2' };
+
+        int nStop = 0;
+        {
+          uint8_t *s = beginOfProgramMemory;
+          for (int guard = 0; s != NULL && !isAtEndOfPrograms(s) && guard < 64; guard++) {
+            if (checkOpCodeOfStep(s, ITM_STOP)) { nStop++; }
+            uint8_t *n = findNextStep(s);
+            if (n == NULL || n <= s) { break; }
+            s = n;
+          }
+        }
+
+        if (forthTestCapState() != FCAP_CLOSED) {
+          printf("    [1] FAIL: capture state %d, expected FCAP_CLOSED\n",
+                 forthTestCapState());
+          scFail = 1;
+        }
+        if (forthCapKeysMode()) {
+          printf("    [1] FAIL: keys-mode bit survived the close\n");
+          scFail = 1;
+        }
+        if (!keyActionProcessed) {
+          printf("    [1] FAIL: keyActionProcessed not set by the R/S arm\n");
+          scFail = 1;
+        }
+        if (sMarker == NULL || sSrc == NULL) {
+          printf("    [1] FAIL: program walk ran off the end\n");
+          scFail = 1;
+        }
+        else if (memcmp(sMarker, wantMarker, sizeof(wantMarker)) != 0) {
+          printf("    [1] FAIL: step 2 is not the opening marker\n");
+          scFail = 1;
+        }
+        else if (memcmp(sSrc, wantSrc, sizeof(wantSrc)) != 0) {
+          printf("    [1] FAIL: step 3 is not the committed source line \"2\"\n");
+          scFail = 1;
+        }
+        if (nStop != 1) {
+          printf("    [1] FAIL: %d native STOP steps in the program, expected exactly 1\n",
+                 nStop);
+          scFail = 1;
+        }
+        if (!scFail) {
+          printf("    [1] PASS: R/S in keys mode commits the line then adds a native STOP\n");
+        }
+      }
+    }
+    else if (sc == 2) {
+      /* SST on an empty capture line: the placeholder must be aborted
+       * before the navigation, leaving the program as the fixture had it. */
+      runFunction(ITM_AIM);                   /* the real toggle to keys */
+      if (!forthCapKeysMode()) {
+        printf("    [2] FIXTURE FAIL: toggle did not set keys mode\n");
+        scFail = 1;
+      }
+      else {
+        processKeyAction(ITM_SST);
+        if (forthTestCapState() != FCAP_CLOSED) {
+          printf("    [2] FAIL: capture state %d, expected FCAP_CLOSED\n",
+                 forthTestCapState());
+          scFail = 1;
+        }
+        if (forthCapKeysMode()) {
+          printf("    [2] FAIL: keys-mode bit survived the close\n");
+          scFail = 1;
+        }
+        if (getNumberOfSteps() != stepsFixture) {
+          printf("    [2] FAIL: %u steps, expected the fixture's %u (placeholder left behind)\n",
+                 getNumberOfSteps(), stepsFixture);
+          scFail = 1;
+        }
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [2] FAIL: lastErrorCode %u after SST\n", lastErrorCode);
+          scFail = 1;
+        }
+        if (!scFail) {
+          printf("    [2] PASS: SST in keys mode aborts the empty placeholder first\n");
+        }
+      }
+    }
+    else if (sc == 3) {
+      /* Negative control: plain PEM, no capture.  Upstream R/S behavior
+       * must be exactly one added STOP step. */
+      uint16_t before = getNumberOfSteps();
+      processKeyAction(ITM_RS);
+      if (forthCapIsOpen()) {
+        printf("    [3] FAIL: a capture appeared out of nowhere\n");
+        scFail = 1;
+      }
+      if (getNumberOfSteps() != (uint16_t)(before + 1)) {
+        printf("    [3] FAIL: %u steps, expected %u (exactly one STOP)\n",
+               getNumberOfSteps(), (uint16_t)(before + 1));
+        scFail = 1;
+      }
+      else {
+        uint8_t *sMarker = findNextStep(beginOfProgramMemory);
+        uint8_t *sStop   = sMarker ? findNextStep(sMarker) : NULL;
+        if (sStop == NULL || sStop[0] != (uint8_t)ITM_STOP) {
+          printf("    [3] FAIL: the added step is not a native STOP\n");
+          scFail = 1;
+        }
+      }
+      if (!scFail) {
+        printf("    [3] PASS: R/S outside a capture is untouched upstream behavior\n");
+      }
+    }
+    else {
+      /* sc4 (E13 interim): a TAM round-trip returns to alpha input.
+       * Suspend clears the bit; resume rebuilds the ALPHA menu. */
+      runFunction(ITM_AIM);                   /* the real toggle to keys */
+      if (!forthCapKeysMode()) {
+        printf("    [4] FIXTURE FAIL: toggle did not set keys mode\n");
+        scFail = 1;
+      }
+      else {
+        runFunction(ITM_STO);                 /* physical-shaped TAM entry */
+        if (forthTestCapState() != FCAP_SUSPENDED) {
+          printf("    [4] FAIL: capture state %d, expected FCAP_SUSPENDED\n",
+                 forthTestCapState());
+          scFail = 1;
+        }
+        else if (forthCapKeysMode()) {
+          printf("    [4] FAIL: keys-mode bit survived the suspend\n");
+          scFail = 1;
+        }
+        else {
+          fnKeyExit(NOPARAM);                 /* cancel the TAM session */
+          if (forthTestCapState() != FCAP_OPEN) {
+            printf("    [4] FAIL: capture state %d after resume, expected FCAP_OPEN\n",
+                   forthTestCapState());
+            scFail = 1;
+          }
+          else if (forthCapKeysMode()) {
+            printf("    [4] FAIL: resumed capture is not in alpha input\n");
+            scFail = 1;
+          }
+          else if (currentMenu() != -MNU_ALPHA) {
+            printf("    [4] FAIL: currentMenu() = %d after resume, expected -MNU_ALPHA\n",
+                   currentMenu());
+            scFail = 1;
+          }
+        }
+        if (!scFail) {
+          printf("    [4] PASS: a TAM round-trip from keys mode resumes in alpha input\n");
+        }
+      }
+    }
+
+    fail |= scFail;
+
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+    xcopy(softmenuStack, savedStack, sizeof(savedStack));
+    lastErrorCode = ERROR_NONE;
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  temporaryInformation = savedTemporaryInfo;
   xcopy(softmenuStack, savedStack, sizeof(savedStack));
   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
   lastErrorCode = ERROR_NONE;

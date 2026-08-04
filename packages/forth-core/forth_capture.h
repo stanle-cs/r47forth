@@ -36,6 +36,9 @@ typedef enum { FCAP_CLOSED = 0, FCAP_OPEN = 1, FCAP_SUSPENDED = 2 } forthCapStat
 
 typedef struct {
   uint8_t     state;          /* forthCapState_t */
+  uint8_t     keysMode;       /* K1 (E10-E12): 0 = alpha input, 1 = keys.
+                                 Transient UI state, NEVER persisted;
+                                 meaningful only while state == FCAP_OPEN. */
   /* Suspend snapshot — meaningful only in FCAP_SUSPENDED: */
   uint16_t    savedCursor;    /* T_cursorPos at suspend */
   uint16_t    savedLocalStep; /* currentLocalStepNumber at suspend */
@@ -52,6 +55,8 @@ void        forthCapClose(void);      /* state FCAP_CLOSED; safe if already
                                          closed */
 bool_t      forthCapIsOpen(void);     /* state == FCAP_OPEN */
 bool_t      forthCapTextNonEmpty(void); /* open && aimBuffer[0] != 0 */
+bool_t      forthCapKeysMode(void);        /* K1: keys-mode bit */
+void        forthCapSetKeysMode(bool_t on);
 
 /* F6-2: suspend/resume state ops */
 void     forthCapSuspendState(uint16_t cursor, uint16_t localStep, uint32_t stepOffset, uint16_t stepCount);

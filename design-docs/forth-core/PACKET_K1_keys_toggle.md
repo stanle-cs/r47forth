@@ -268,3 +268,30 @@ a pre-edit baseline log shows ONLY the new K1 lines, arena line reported.
 Deliver: files changed, per-test PASS lines, mutation RED lines, arena
 line, and any STOP/deviation notes. Do NOT commit — leave the worktree
 dirty for architect review.
+
+---
+
+## AMENDMENT K1-A (2026-08-04, post-implementation — two architect spec defects, both caught independently by BOTH bench implementers)
+
+1. **C2's `processKeyAction` export instruction was wrong and dangerous.**
+   `processKeyAction` is NOT file-static — it is declared non-static in
+   upstream `keyboard.h:16` and called cross-file (screen.c:900). Wrapping
+   it in `FORTH_SELFTEST_EXPORT` would have made it `static` in PRODUCTION
+   builds and broken the hardware link — a defect the sim-only gate cannot
+   catch (the sim always defines FORTH_DEBUG_SELFTEST). Correct action
+   (taken): export `determineItem` only; T3 declares a plain extern.
+   Authoring lesson: before instructing an export, grep the upstream header
+   for an existing non-static declaration.
+
+2. **T3 sc1's step-adjacency expectation ignored the pre-move regate.**
+   After the RS guard's `pemCloseAlphaInput()` clears FLAG_ALPHA and
+   empties aimBuffer, `addStepInProgram`'s pre-move regates and the native
+   STOP lands AFTER the fixture's RTN — identical to upstream PEM
+   commit-then-insert semantics (consistent with ruling K-R4). Layout is
+   LBL / marker / src / RTN / STOP. The landed oracle asserts the exact
+   source bytes at step 3 plus exactly-one-ITM_STOP by full program walk —
+   stronger than the original adjacency check. M4 confirms it kills.
+
+Both implementations (opus 28.4 min / sonnet 40.9 min, both green, 4/4
+mutations red, identical defect findings) are recorded in the stage ledger;
+the opus diff was adopted (first-pass green, stronger T3 oracle).

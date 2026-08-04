@@ -1126,6 +1126,9 @@ static int test_capture_close_paths_reset_tuple(void);        /* FIX-8 class */
 static int test_forth_fold_commit_recompiles(void);           /* FIX-7 */
 static int test_quote_glyph_accept_parity(void);              /* FIX-7 class */
 static int test_resume_drains_buried_catalog(void);           /* FIX-9 */
+static int test_keys_mode_resolution(void);                   /* K1 */
+static int test_keys_mode_toggle_arm(void);                   /* K1 */
+static int test_keys_mode_nav_guards(void);                   /* K1 */
 
 
 /* T5 split: forward declarations for the tests that now live in the
@@ -2083,6 +2086,23 @@ int forthDictSelfTest(void)
   forthDictInit();
   printf("  [DEBUG] running test_resume_drains_buried_catalog...\n");
   fail |= test_resume_drains_buried_catalog();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH K1 TESTS (keys-mode toggle)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_keys_mode_resolution...\n");
+  fail |= test_keys_mode_resolution();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_keys_mode_toggle_arm...\n");
+  fail |= test_keys_mode_toggle_arm();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_keys_mode_nav_guards...\n");
+  fail |= test_keys_mode_nav_guards();
   forthDictClear();
   forthGDictClear();
 

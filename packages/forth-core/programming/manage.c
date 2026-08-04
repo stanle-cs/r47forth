@@ -1159,6 +1159,10 @@ void forthCaptureSuspend(void) {
   clearSystemFlag(FLAG_ALPHA);
   calcModeNormalGui();
   _closeAlphaMenus();
+  /* K1/E13 interim (packet K3 replaces this with snapshot+restore): a TAM
+   * round-trip returns to alpha input, which keeps the bit and the UI the
+   * resume path rebuilds (-MNU_ALPHA) coherent. */
+  forthCapSetKeysMode(false);
   forthCapSuspendState(cursor, localStep, stepOff, getNumberOfSteps());
 }
 
@@ -1665,6 +1669,22 @@ void insertStepInProgram(const int16_t func) {
   }
 
   if(func == ITM_AIM || (!tam.mode && getSystemFlag(FLAG_ALPHA) && func != ITM_FORTH)) {
+    if(func == ITM_AIM && forthCapIsOpen()) {
+      /* K1/E10-E11: the ALPHA gesture toggles alpha<->keys while a capture
+       * line is open.  Gated on forthCapIsOpen() so E6 (ITM_AIM re-entry
+       * with the capture CLOSED) is untouched.  K-R3: keys mode shows the
+       * underlying menus — the visible row swap IS the mode indicator. */
+      if(forthCapKeysMode()) {
+        forthCapSetKeysMode(false);
+        showSoftmenu(-MNU_ALPHA);
+      }
+      else {
+        forthCapSetKeysMode(true);
+        _closeAlphaMenus();
+      }
+      pemCursorIsZerothStep = false;
+      return;
+    }
     if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
       pemCloseNumberInput();
       aimBuffer[0] = 0;

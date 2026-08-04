@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8b63385d8 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5b010824b482abf66e95a158f2832185d74e9cc0 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,9 @@
@@ -204,7 +204,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,6 +1105,137 @@ void pemCloseAlphaInput(void) {
+@@ -998,6 +1105,141 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -262,6 +262,10 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8
 +  clearSystemFlag(FLAG_ALPHA);
 +  calcModeNormalGui();
 +  _closeAlphaMenus();
++  /* K1/E13 interim (packet K3 replaces this with snapshot+restore): a TAM
++   * round-trip returns to alpha input, which keeps the bit and the UI the
++   * resume path rebuilds (-MNU_ALPHA) coherent. */
++  forthCapSetKeysMode(false);
 +  forthCapSuspendState(cursor, localStep, stepOff, getNumberOfSteps());
 +}
 +
@@ -342,7 +346,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8
  }
  
  
-@@ -1013,7 +1251,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +1255,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -351,7 +355,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +1623,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +1627,37 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -389,12 +393,28 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +1664,18 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +1668,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
 -  if(func == ITM_AIM || (!tam.mode && getSystemFlag(FLAG_ALPHA))) {
 +  if(func == ITM_AIM || (!tam.mode && getSystemFlag(FLAG_ALPHA) && func != ITM_FORTH)) {
++    if(func == ITM_AIM && forthCapIsOpen()) {
++      /* K1/E10-E11: the ALPHA gesture toggles alpha<->keys while a capture
++       * line is open.  Gated on forthCapIsOpen() so E6 (ITM_AIM re-entry
++       * with the capture CLOSED) is untouched.  K-R3: keys mode shows the
++       * underlying menus — the visible row swap IS the mode indicator. */
++      if(forthCapKeysMode()) {
++        forthCapSetKeysMode(false);
++        showSoftmenu(-MNU_ALPHA);
++      }
++      else {
++        forthCapSetKeysMode(true);
++        _closeAlphaMenus();
++      }
++      pemCursorIsZerothStep = false;
++      return;
++    }
      if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
        pemCloseNumberInput();
        aimBuffer[0] = 0;
@@ -410,7 +430,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +1697,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +1717,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -478,7 +498,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +1769,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +1789,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -494,7 +514,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +1860,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +1880,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -518,7 +538,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8dbbadeded6d7f3bbb62a64ad11639d8
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2172,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2192,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;
