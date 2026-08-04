@@ -176,3 +176,30 @@ his own offered sentence shape ("if you just copy the file, there's a
 chance your tree is on a different version..."), fact-checked true
 before adoption. The drop-files-in bullet no longer implies bare
 copying covers upstream files.
+
+## Third human review round + self-review (2026-08-03)
+
+Stan flagged three passages: the Forth closer ("which runs on this:"
+colon flourish, "But that one gets its own post" punchy fragment), the
+licence/base block (semicolon apposition, and the newer-upstream
+sentences sitting in the wrong section), and the whole refresh section.
+All rewritten plain and first-person. The never-tail sentence — kept
+through seven model flags on the accuracy defense — died to his read:
+the fact survives as "Your flat working area never gets compiled, so
+...", the tail construction is gone. framescan now reads zero on both
+banned shapes for the first time.
+
+Self-review with the accumulated lens then caught six more: a sentence
+wrapped around a code block ("Then: [code] sorts your files"), so at 8
+uses in 40 sentences (now 4), a four-sentence paragraph (split), a
+passive "the patches were made" (now "I made the patches"), the
+announce-then-elaborate bullet shape in the entry-point bullet
+(merged), and a leftover "release lap" metaphor from an earlier round.
+
+Residual flags: 2x instead-of (literal file choice), 7x rule-of-three
+(factual process sequences). Judged, standing.
+
+Open question for Stan: the newer-upstream compatibility paragraph now
+sits at the end of How patches compose (it is resolver behavior). The
+other candidate home is Where to get it, next to the base commit. His
+call.

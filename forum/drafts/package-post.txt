@@ -16,9 +16,9 @@ side.
 [*]When two packages patch the same upstream file, the patches stack in
 filename order (the NNN prefix), each on top of the previous result.
 They can even land in different parts of one function. But if they hit
-the same lines, configure fails and names the patch that collided.
-[*]There's one entry point for the whole workflow now: ./package. Every
-command below goes through it.
+the same lines, configure fails and shows you which patch collided.
+[*]There's one ./package entry point for the whole workflow now, and
+everything below goes through it.
 [/list]
 
 [b]Making a package[/b]
@@ -43,18 +43,18 @@ then the patch picks up upstream's changes as if they were yours:
 
 This pulls the file as it was at the package's recorded base commit,
 so when you edit it, the diff is just your changes. Refresh always
-diffs against the base version either way, so if your tree happens to
-be sitting exactly at the base, a straight copy works out the same.
-Then:
+diffs against the base version either way. If your tree happens to be
+sitting exactly at the base, a straight copy works out the same anyway.
+
+Then run the refresh:
 
 [code]
 ./package refresh my-pkg
 [/code]
 
-sorts your files: paths that exist under src/c47/ become patches
-against upstream, anything else gets copied in whole as a new source.
-The raw tools under tools/ are still there and ./package just wraps
-them, so scripts can call them directly.
+It sorts your files, anything that exists under src/c47/ becomes a
+patch, and new files get copied in whole. The raw tools under tools/
+are still there, ./package just wraps them.
 
 [b]Building and testing with your package[/b]
 
@@ -70,9 +70,9 @@ check you didn't break the calculator before flashing it:
 make test CUSTOM_PKG=packages/my-pkg
 [/code]
 
-And make pkg_build PKG=packages/my-pkg does the whole release lap in
-one go: cleans, runs the suite with the package active, refreshes, and
-zips. If the tests fail, you get no zip. The zip also can't go over
+And make pkg_build PKG=packages/my-pkg does the whole thing in one go,
+it cleans, runs the suite with the package active, refreshes, and zips.
+If the tests fail, you get no zip. The zip also can't go over
 PKG_MAX_SIZE, 1 MB by default.
 
 [b]How patches compose[/b]
@@ -93,32 +93,36 @@ packages/alpha/patches/010-keyboard.c.patch
 keyboard.c gets alpha's 005 first, then the two 010s, alpha before beta
 because that's their order in CUSTOM_PKG. After every patch the
 resolver scans for conflict markers, even when git said the apply went
-fine. Configure refuses a patch whose filename disagrees with its own
-+++ header, and a patch whose target doesn't exist. And if two packages
-try to provide the same new file, that's caught before the shadow tree
-is built.
+fine.
+
+Configure also refuses a patch if its filename doesn't match its own
++++ header, or if its target doesn't exist. And if two packages try to
+provide the same new file, that's caught before the shadow tree is
+built.
+
+I made the patches against one upstream commit, but a newer upstream
+will probably still build. The resolver checks every target
+file before it applies anything, and if upstream moved a file, configure
+stops and tells you which one.
 
 [b]Refresh before you build[/b]
 
-The build reads only the generated patches/ and files/ directories,
-never your flat working area. If you edit a source and forget to
-refresh, the build still succeeds, it just compiles the code from
-before your edit. I run ./package refresh at the top of my build
-script.
+The build only reads the generated patches/ and files/ folders. Your
+flat working area never gets compiled, so if you edit a source and
+forget to refresh, you end up flashing the old code. I just run
+./package refresh at the top of my build script.
 
-Everything in a package directory is tracked in git, the generated
-output included, since that's what the build actually reads. A manifest
-of hashes backs this: hand-edit a generated patch instead of the
-working copy and the next refresh warns you, then overwrites it.
+Everything in a package folder is tracked in git, including the
+generated output, since that's what actually builds. If you hand-edit
+a generated patch instead of the working copy, the next refresh
+catches it from a hash manifest, warns you, and overwrites it.
 
 [b]Where to get it[/b]
 
-Target is R47/C47 on the DM42n (DMCP5 hardware). Licence is
-GPL-3.0-only, inherited from c43; the full text ships in COPYING inside
-the zip and on the release branch. I generated everything against
-upstream c43 at commit 26ec91634. A newer upstream will probably work
-too. The resolver checks every target before it applies anything, and
-if a file moved, configure stops and tells you which one.
+Target is R47/C47 on the DM42n (DMCP5 hardware). I built everything
+against upstream c43 at commit 26ec91634. It's GPL-3.0-only like the
+rest of c43, and the full text is in COPYING, both inside the zip and
+on the release branch.
 
 Download:
 [url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release branch[/url]
@@ -126,6 +130,6 @@ with the zip beside it. Run the four test_pkg_patch tests from the
 extracted zip before anything else, they check the tooling and don't
 need an upstream tree.
 
-The real example is my Forth package for the R47, which runs on this:
-16 patches against upstream files plus 19 new sources. But that one
-gets its own post.
+My Forth package for the R47 runs on this system, 16 patches against
+upstream files plus 19 new sources. I'll write about that one
+separately.
