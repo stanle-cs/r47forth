@@ -6760,3 +6760,287 @@ static int test_picker_pixel_layout(void)
 
   return fail;
 }
+
+/* FIX-8 (D-C2) reproducer: picking FORTH from a catalog while a capture line
+ * is OPEN must commit-and-close the line, not tear down the alpha UI around a
+ * live FCAP_OPEN. Before the fix, insertStepInProgram's toggle-close arm
+ * cleared FLAG_ALPHA and tam.function but never called forthCapClose() or
+ * cleared aimBuffer — the only close path that skipped the reset. Downstream,
+ * a stale FCAP_OPEN makes tamEnterMode's suspend seam destructively recommit
+ * and misroutes fnKeyExit's forthCapTextNonEmpty() resync.
+ *
+ * Drive shape mirrors test_forth_toggle_from_catalog_leaves_alpha_menu
+ * (catalog-shaped runFunction dispatch), but with the capture genuinely OPEN
+ * and holding text — the combination no landed test drove (T4 trace,
+ * 2026-08-04).
+ *
+ * Escaping mutation: revert the pemCloseAlphaInput() call in the ITM_FORTH
+ * arm — state stays FCAP_OPEN and aimBuffer keeps "2"; both assertions fail.
+ */
+static int test_forth_toggle_close_with_open_capture(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void showSoftmenu(int16_t);
+  extern void _closeCatalog(void);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedFnKeyInCatalog = fnKeyInCatalog;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "TC8");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  pemCursorIsZerothStep = false;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    fail = 1;
+  }
+  if (!fail) {
+    runFunction(ITM_2);
+    if (strcmp(forthTestCapText(), "2") != 0) {
+      printf("    FIXTURE FAIL: capture text \"%s\", expected \"2\"\n",
+             forthTestCapText());
+      fail = 1;
+    }
+  }
+
+  if (!fail) {
+    /* Catalog-shaped FORTH pick, exactly as keyboard.c dispatches it. */
+    catalog = CATALOG_FCNS;
+    showSoftmenu(-MNU_CATALOG);
+    showSoftmenu(-MNU_FCNS);
+    fnKeyInCatalog = 1;                /* after the menus: showSoftmenu clears it */
+    runFunction(ITM_FORTH);
+    _closeCatalog();
+    fnKeyInCatalog = savedFnKeyInCatalog;
+    catalog = CATALOG_NONE;
+
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    FAIL: capture state %d after toggle-close, expected FCAP_CLOSED\n",
+             forthTestCapState());
+      fail = 1;
+    }
+    if (aimBuffer[0] != 0) {
+      printf("    FAIL: aimBuffer holds \"%s\" after toggle-close, expected empty\n",
+             aimBuffer);
+      fail = 1;
+    }
+    if (tam.function != 0) {
+      printf("    FAIL: tam.function = 0x%04X after toggle-close, expected 0\n",
+             tam.function);
+      fail = 1;
+    }
+    if (getSystemFlag(FLAG_ALPHA)) {
+      printf("    FAIL: FLAG_ALPHA still set after toggle-close\n");
+      fail = 1;
+    }
+
+    /* The typed line must survive as a committed source step: the toggle
+     * closes the region, it must not eat the text. */
+    uint8_t *sMarker = findNextStep(tpStepAddr(&p, sLbl));
+    uint8_t *sSource = sMarker ? findNextStep(sMarker) : NULL;
+    if (!sSource || sSource[0] != 0x8B || sSource[1] != 0x1A ||
+        sSource[2] != 0xFD || sSource[3] != 1 ||
+        memcmp(sSource + 4, "2", 1) != 0) {
+      printf("    FAIL: committed source line lost by toggle-close\n");
+      fail = 1;
+    }
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  fnKeyInCatalog = savedFnKeyInCatalog;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+
+  if (!fail) {
+    printf("    PASS: FORTH toggle-close with open capture resets the full tuple\n");
+  }
+  return fail;
+}
+
+/* FIX-8 class test: capture-close completeness. The invariant (the CLASS the
+ * bug belonged to, per the bug-fix testing rule): EVERY path that ends a
+ * capture leaves the full tuple reset — forthCap.state == FCAP_CLOSED,
+ * aimBuffer empty, tam.function == 0, FLAG_ALPHA clear. The instance bug was
+ * one path (the E1 toggle-close arm) missing two of the four. Sweep all four
+ * landed close paths through their real entry points; any future close path
+ * (Stage K's E14 sites included) extends this sweep.
+ */
+static int test_capture_close_paths_reset_tuple(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void showSoftmenu(int16_t);
+  extern void fnKeyUp(uint16_t);
+  extern void fnKeyBackspace(uint16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedForthMenuItems = dynamicSoftmenu[22].numItems;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  /* One subcase = one fresh fixture + one real close-path drive + the tuple. */
+  for (int sc = 1; sc <= 4 && !fail; sc++) {
+    int scFail = 0;
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "TCLS");
+    tpMarker(&p);
+    tpRtn(&p);
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    [%d] FIXTURE FAIL: build/write\n", sc);
+      fail = 1;
+      break;
+    }
+
+    calcMode = CM_PEM;
+    catalog = CATALOG_NONE;
+    tam.mode = 0;
+    tam.function = 0;
+    aimBuffer[0] = 0;
+    pemCursorIsZerothStep = false;
+    alphaCase = AC_UPPER;
+    programRunStop = PGM_STOPPED;
+    dynamicMenuItem = -1;
+    nextChar = NC_NORMAL;
+    shiftF = false;
+    shiftG = false;
+    clearSystemFlag(FLAG_ALPHA);
+    clearSystemFlag(FLAG_NUMLOCK);
+    lastErrorCode = ERROR_NONE;
+    forthCapClose();
+    currentProgramNumber = 1;
+
+    fnGotoDot(2);
+    runFunction(ITM_AIM);
+    if (!forthCapIsOpen()) {
+      printf("    [%d] FIXTURE FAIL: ITM_AIM did not open capture\n", sc);
+      fail = 1;
+      break;
+    }
+
+    switch (sc) {
+      case 1:                       /* BACKSPACE on empty line: abort */
+        fnKeyBackspace(NOPARAM);
+        break;
+      case 2:                       /* ENTER on empty line: delete placeholder */
+        runFunction(ITM_ENTER);
+        break;
+      case 3:                       /* Up with text: navigation commit */
+        runFunction(ITM_7);
+        dynamicSoftmenu[22].numItems = 0;
+        showSoftmenu(-MNU_FORTH);
+        fnKeyUp(NOPARAM);
+        break;
+      case 4:                       /* FORTH toggle with text: region close */
+        runFunction(ITM_2);
+        runFunction(ITM_FORTH);
+        break;
+    }
+
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    [%d] FAIL: state %d, expected FCAP_CLOSED\n", sc, forthTestCapState());
+      scFail = 1;
+    }
+    if (aimBuffer[0] != 0) {
+      printf("    [%d] FAIL: aimBuffer \"%s\", expected empty\n", sc, aimBuffer);
+      scFail = 1;
+    }
+    if (tam.function != 0) {
+      printf("    [%d] FAIL: tam.function 0x%04X, expected 0\n", sc, tam.function);
+      scFail = 1;
+    }
+    if (getSystemFlag(FLAG_ALPHA)) {
+      printf("    [%d] FAIL: FLAG_ALPHA still set\n", sc);
+      scFail = 1;
+    }
+    if (!scFail) {
+      printf("    [%d] PASS: close path leaves the tuple fully reset\n", sc);
+    }
+    fail |= scFail;
+    cleanupTestProgram();
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  dynamicSoftmenu[22].numItems = savedForthMenuItems;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}

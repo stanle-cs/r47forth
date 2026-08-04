@@ -1121,6 +1121,8 @@ static int test_forth_capture_navigation(void);
 static int test_sim_bench_capture(void);
 static int test_sim_bench_nesting(void);
 static int test_pem_xeq_dynmenu_no_live_exec(void);
+static int test_forth_toggle_close_with_open_capture(void);   /* FIX-8 */
+static int test_capture_close_paths_reset_tuple(void);        /* FIX-8 class */
 
 
 /* T5 split: forward declarations for the tests that now live in the
@@ -2047,6 +2049,18 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_forth_capture_navigation...\n");
   fail |= test_forth_capture_navigation();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH FIX-8 TESTS (capture-close completeness)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_forth_toggle_close_with_open_capture...\n");
+  fail |= test_forth_toggle_close_with_open_capture();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_capture_close_paths_reset_tuple...\n");
+  fail |= test_capture_close_paths_reset_tuple();
   forthDictClear();
   forthGDictClear();
 

@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..91d346e75268de84844b5b7c0338b2312e7c70de 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8273403a8a4cea8744548ee1e7c5bce0af9c83c8 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,9 @@
@@ -386,13 +386,27 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..91d346e75268de84844b5b7c0338b231
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +1673,53 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +1673,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
 +  else if(func == ITM_FORTH) {
 +    if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
 +      pemCloseNumberInput(); aimBuffer[0] = 0;
++    }
++    if(forthCapIsOpen()) {
++      // FIX-8 (D-C2): FORTH picked while a capture line is OPEN — catalog
++      // today, keys mode later. Commit-and-close the line through the same
++      // path EXIT-with-text uses, so the toggle below proceeds from the
++      // closed-capture state every other tested entry reaches. The cursor is
++      // still ON the capture step here: addStepInProgram's pre-move is gated
++      // on FLAG_ALPHA being clear, so it did not run — exactly the state
++      // pemCloseAlphaInput's cursor math expects. Without this, the close arm
++      // left forthCap.state == FCAP_OPEN with the alpha UI torn down: the
++      // next tamEnterMode suspend seam destructively recommitted stale
++      // state, and fnKeyExit's forthCapTextNonEmpty() misrouted the EXIT
++      // ladder's currentStep resync.
++      pemCloseAlphaInput();
 +    }
 +    if(catalog) {   // forth-core: NOT the REM arm's single popSoftmenu() — see
 +      leaveAsmMode();                    // _forthCatalogBuriedOnStack() above.
@@ -440,7 +454,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..91d346e75268de84844b5b7c0338b231
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +1731,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +1745,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -456,7 +470,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..91d346e75268de84844b5b7c0338b231
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +1822,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +1836,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -480,7 +494,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..91d346e75268de84844b5b7c0338b231
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2134,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2148,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

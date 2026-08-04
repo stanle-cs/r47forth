@@ -2444,3 +2444,31 @@ refuses any native item, SAVE included, while values are spilled — so
 saveCalc can never snapshot a live spill. The :116 site fills register
 payloads, which are persisted state. None is the 976b864b5 leak class.
 Baseline re-accepted.
+
+## 2026-08-04 — FIX-8: the toggle-close arm was the one capture-close path that reset nothing
+
+Found by the Stage K research pass (trace T4 confirmed it; docket entry
+D-C2 in DEFECTS_capture_roundtrip.md). insertStepInProgram's ITM_FORTH
+close arm (wasOn == true) cleared FLAG_ALPHA and tam.function but never
+called forthCapClose() or cleared aimBuffer — the F6-1 packet enumerated
+the pemAlpha open/close retrofit sites and this arm simply was not on the
+list. Unreachable by any keystroke today (ITM_FORTH lives only in FCNS,
+and the CATALOG key is invisible in the AIM columns), but Stage K's
+column swap makes it a real key path, and the reproducer shows the buggy
+arm also mislays the typed line (the marker lands at the still-open
+capture's cursor).
+
+Fix: the arm now routes an open capture through pemCloseAlphaInput()
+first — the same commit-and-close EXIT-with-text uses. The cursor math
+needs no adjustment: addStepInProgram's pre-move is gated on FLAG_ALPHA
+being clear, so with a capture open the cursor is still ON the capture
+step, which is exactly the state pemCloseAlphaInput expects.
+
+**Named class (bug-fix testing rule): capture-close completeness — every
+path that ends a capture must leave the full tuple reset: forthCap.state
+FCAP_CLOSED, aimBuffer empty, tam.function 0, FLAG_ALPHA clear.** The
+class test (test_capture_close_paths_reset_tuple) sweeps all four landed
+close paths through their real entry points — BACKSPACE-abort, ENTER on
+empty, navigation commit, FORTH toggle-close — and is the sweep Stage K's
+E14 sites extend. Reproducer red run recorded (state 1, aimBuffer "2",
+line lost); the unfixed tree is the revert-mutation evidence.

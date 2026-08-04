@@ -1677,6 +1677,20 @@ void insertStepInProgram(const int16_t func) {
     if(aimBuffer[0] != 0 && !getSystemFlag(FLAG_ALPHA)) {
       pemCloseNumberInput(); aimBuffer[0] = 0;
     }
+    if(forthCapIsOpen()) {
+      // FIX-8 (D-C2): FORTH picked while a capture line is OPEN — catalog
+      // today, keys mode later. Commit-and-close the line through the same
+      // path EXIT-with-text uses, so the toggle below proceeds from the
+      // closed-capture state every other tested entry reaches. The cursor is
+      // still ON the capture step here: addStepInProgram's pre-move is gated
+      // on FLAG_ALPHA being clear, so it did not run — exactly the state
+      // pemCloseAlphaInput's cursor math expects. Without this, the close arm
+      // left forthCap.state == FCAP_OPEN with the alpha UI torn down: the
+      // next tamEnterMode suspend seam destructively recommitted stale
+      // state, and fnKeyExit's forthCapTextNonEmpty() misrouted the EXIT
+      // ladder's currentStep resync.
+      pemCloseAlphaInput();
+    }
     if(catalog) {   // forth-core: NOT the REM arm's single popSoftmenu() — see
       leaveAsmMode();                    // _forthCatalogBuriedOnStack() above.
       // Bounded: popSoftmenu() can re-push HOME, so never spin on it.
