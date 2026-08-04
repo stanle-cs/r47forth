@@ -6,7 +6,7 @@ both. Design documents and development history stay in the working repo.
 Licence: GPL-3.0-only, same as c43. Full text in `COPYING` at the root of this
 branch.
 
-Built against upstream c43 `b8f79e486`. Newer upstream will often work, but
+Built against upstream c43 `26ec91634`. Newer upstream will often work, but
 the patches were generated against that commit, and the resolver checks every
 target before it applies anything. If a file has moved, configure stops with
 an error.
@@ -18,11 +18,12 @@ Makefile  meson.build  meson_options.txt     modified upstream build files
 tools/resolve_c47_src.py                     configure-time overlay resolver
 tools/pkg_patch_refresh.py                   authoring: working area -> patches/+files/
 tools/pkg_patch_apply.py  pkg_patch_common.py
-tools/test_pkg_patch_{common,refresh,resolver}.py
+tools/pkg_patch_cli.py  pkg_patch_integrate.py  package     package commands
+tools/test_pkg_patch_{common,refresh,resolver}.py  test_package_cli.py
 design-docs/package-manager/README.md                     the package system, in full
 COPYING                                      GPL-3.0 licence text
-packages/forth-core/patches/                 14 diffs against upstream files
-packages/forth-core/files/                   13 new sources
+packages/forth-core/patches/                 16 diffs against upstream files
+packages/forth-core/files/                   19 new sources
 ```
 
 The two halves are independent. `tools/` and the three build files are the
@@ -49,7 +50,7 @@ Three passes means the resolver, the refresh tool and the patch stack all work.
 ```
 git clone https://gitlab.com/rpncalculators/c43.git
 cd c43
-git checkout b8f79e486
+git checkout 26ec91634
 ```
 
 Copy the files above over that tree, then:

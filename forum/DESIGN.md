@@ -139,6 +139,17 @@ pool is ChatGPT and Gemini: one pass each, either order, both through
 model-family level, so Claude never audits a Claude draft; if the drafter
 ever changes, the exclusion travels with it.
 
+**Audit drivers (2026-08-03).** The Gemini pass runs locally through the
+Antigravity CLI: `agy -p --model gemini-3.1-pro-high` with the audit
+prompt and the draft on stdin or in the prompt; each pass is a fresh
+invocation, and it must name a gemini-* model (agy also serves Claude
+models, which the exclusion forbids for our drafts). The ChatGPT pass
+runs through the Codex CLI (`codex exec`) once it is installed and logged
+in with the ChatGPT account (`npm install -g @openai/codex`, then
+`codex login`); until then that pass is pasted into ChatGPT by hand.
+Piping the prompt does not change who the auditor is: the model named in
+the invocation is the reader of record.
+
 **Voice reference (added 2026-08-03).** `forum/reference/reddit-trungdle.md`
 holds eleven years of Stan's public Reddit writing (1696 comments, 80
 submissions, collected from the RSS listings, deduplicated). It is

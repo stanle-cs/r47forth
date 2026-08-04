@@ -5,7 +5,7 @@ Build the firmware with your own changes layered on top, without touching
 anything under src/. Leave CUSTOM_PKG unset and you get byte for byte the same
 firmware as before.
 
-Generated against upstream c43 b8f79e486.
+Generated against upstream c43 26ec91634.
 
 Licence: GPL-3.0-only, same as c43. Full text in COPYING beside this file.
 
@@ -13,20 +13,24 @@ Licence: GPL-3.0-only, same as c43. Full text in COPYING beside this file.
 WHAT IS IN HERE
 ---------------
 
-  Makefile             \
-  meson.build           |  modified upstream build files - copy over yours
-  meson_options.txt    /
+  pkg-manager-integration.patch   the build-system hooks as one diff
+                                  (Makefile, meson.build, meson_options.txt)
 
   tools/resolve_c47_src.py      configure-time overlay resolver
   tools/pkg_patch_refresh.py    authoring: working area -> patches/ + files/
   tools/pkg_patch_apply.py      patch stack application
   tools/pkg_patch_common.py     shared helpers (imported by the above)
+  tools/pkg_patch_cli.py        package commands (used by ./package)
+  tools/pkg_patch_integrate.py  integration sessions against a new upstream
+  package                       thin entry-point for the commands above
 
   tools/test_pkg_patch_common.py     \
   tools/test_pkg_patch_refresh.py     |  keep these, see below
   tools/test_pkg_patch_resolver.py   /
+  tools/test_pkg_patch_integrate.py  standalone check of integration sessions
 
   design-docs/package-manager/README.md      the full documentation
+  packages/.gitignore           keeps generated output tracked, junk out
   COPYING                       GPL-3.0 licence text
 
 Keep the test files. meson.build declares them as tests unconditionally, so
@@ -47,11 +51,13 @@ download arrived intact:
 
 Three passes means the resolver, the refresh tool and the patch stack all work.
 
-Then get upstream and copy these files over it, keeping the directory layout:
+Then get upstream, copy these files over it keeping the directory layout, and
+apply the build-system diff:
 
   git clone https://gitlab.com/rpncalculators/c43.git
   cd c43
-  git checkout b8f79e486
+  git checkout 26ec91634
+  git apply pkg-manager-integration.patch
 
 
 USING IT
@@ -92,7 +98,7 @@ top of whatever script you build with.
 A PACKAGE THAT USES IT
 ----------------------
 
-The Forth package for R47, 14 patches against upstream files plus 13 new
+The Forth package for R47, 16 patches against upstream files plus 19 new
 sources:
 
   https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2
