@@ -1177,10 +1177,6 @@ void forthCaptureSuspend(void) {
   clearSystemFlag(FLAG_ALPHA);
   calcModeNormalGui();
   _closeAlphaMenus();
-  /* K1/E13 interim (packet K3 replaces this with snapshot+restore): a TAM
-   * round-trip returns to alpha input, which keeps the bit and the UI the
-   * resume path rebuilds (-MNU_ALPHA) coherent. */
-  forthCapSetKeysMode(false);
   forthCapSuspendState(cursor, localStep, stepOff, getNumberOfSteps());
 }
 
@@ -1196,8 +1192,14 @@ void forthCaptureResume(void) {
     #endif
     return;
   }
-  forthCapOpen();                           /* SUSPENDED → OPEN; clears aimBuffer,
+  { bool_t keysWas = forthCapKeysMode();    /* K3/E13: resume is not a fresh
+                                               capture — the sub-mode the user
+                                               keyed the TAM item from comes
+                                               back with the line */
+    forthCapOpen();                         /* SUSPENDED → OPEN; clears aimBuffer,
                                                which TAM may have used meanwhile */
+    forthCapSetKeysMode(keysWas);
+  }
   { uint8_t len = p[3];                     /* len 0 = empty line, legal */
     if (len > 0) { xcopy(aimBuffer, p + 4, len); }
     aimBuffer[len] = 0;
@@ -1252,7 +1254,11 @@ void forthCaptureResume(void) {
       i++) {
     popSoftmenu();
   }
-  showSoftmenu(-MNU_ALPHA);
+  if(!forthCapKeysMode()) {
+    showSoftmenu(-MNU_ALPHA);
+  }
+  /* K3/E13 + K-R3: in keys mode the underlying menu row IS the mode
+   * indicator — resume must not cover it with the alpha menu. */
   pemCursorIsZerothStep = false;
 }
 

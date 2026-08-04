@@ -103,3 +103,17 @@ suspension abandoned; assert bit FALSE and FCAP_CLOSED.
 As K1/K2: final gate green incl. upstream suite; four mutations red;
 PASS-set diff shows only the new K3 lines; K1/K2 groups and the landed
 suspend battery unchanged-green; arena line reported; no commits.
+
+---
+
+## AMENDMENT K3-A (2026-08-04, post-implementation)
+
+The packet's acceptance clause "K1 group unchanged-green" contradicted its
+own C1: K1's test_keys_mode_nav_guards sc4 explicitly pinned the E13
+interim that C1 deletes. Implementer resolved correctly per the re-pin
+precedent: sc4 now pins the ruled behavior on the TAM CANCEL path
+("a cancelled TAM round-trip resumes in keys mode"), complementing K3
+T1's commit path; it stays in the K1 test where the drive lives. C4
+needed braces (two statements), behavior as specified.
+Implementation: opus subagent, 17.9 min, 113k tok, 7 gate runs, 4/4
+mutations red, zero rescues.

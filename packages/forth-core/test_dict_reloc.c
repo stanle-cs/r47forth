@@ -1133,6 +1133,9 @@ static int test_insert_token_boundary(void);                  /* K2 */
 static int test_keys_digits_then_function(void);              /* K2 */
 static int test_exit_ladder_keys_rung(void);                  /* K2 */
 static int test_keys_eex_and_numlock(void);                   /* K2 */
+static int test_keys_tam_roundtrip(void);                     /* K3 */
+static int test_alpha_tam_roundtrip_unchanged(void);          /* K3 */
+static int test_abandon_clears_keys_bit(void);                /* K3 */
 
 
 /* T5 split: forward declarations for the tests that now live in the
@@ -2129,6 +2132,23 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_keys_eex_and_numlock...\n");
   fail |= test_keys_eex_and_numlock();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH K3 TESTS (keys-mode TAM persistence)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_keys_tam_roundtrip...\n");
+  fail |= test_keys_tam_roundtrip();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_alpha_tam_roundtrip_unchanged...\n");
+  fail |= test_alpha_tam_roundtrip_unchanged();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_abandon_clears_keys_bit...\n");
+  fail |= test_abandon_clears_keys_bit();
   forthDictClear();
   forthGDictClear();
 

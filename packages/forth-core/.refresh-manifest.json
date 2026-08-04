@@ -2,7 +2,7 @@
   "base_commit": "3de5b4be07fc22660aeec58ac7bf07f3f3eec098",
   "files": {
     "forth_bridge.c": "3fba1ded755df5cea7281e8a7db094b7736e8ebbef8edfe0054ff4dd9d697ef7",
-    "forth_capture.c": "82360249d2120804e8597d96ec15406d16fd2f9bfc28dcf03742c5ea302abca9",
+    "forth_capture.c": "99e1363ea4c7078f6222b70f07174bb32bce1170b6a4f54ae153c98e00d051f4",
     "forth_capture.h": "733236972e2979dfd8824e0d1b311b871ecf2f421ecd59448ea9abcda7ee32db",
     "forth_compile.c": "947b3437bcd1411e70f86446eeae9dac326665a7c8107a7c66733bbb556da1c3",
     "forth_dict.c": "7e67d54a6676da6a8167dce86c287d6176476b9cb25d0d48792b894a21450ccc",
@@ -15,8 +15,8 @@
     "programming/param_core.c": "a346aa8de0b6424214bef39940d84ad3947e998b316e08b73734c66fb82fe887",
     "programming/param_core.h": "ff4c3dec1227ced41df291faa66572894042302eb9fe86ce3f8c12e45d463d31",
     "testSuite/tests/forth_interp.txt": "2aa9984e1efea4f6ab3d2af667562be3e0ae31ade9b0a0834f7cd0b5a6499fcc",
-    "test_capture.part.h": "73e6367ca293a8548c1c614363da5e20ccb21fc70f305ccd34ca177d9dca97cb",
-    "test_dict_reloc.c": "9f0d74f7ff29c8c4393b5c3e3c0330900018cd3f0202935d9cb51585ad05a0dd",
+    "test_capture.part.h": "70998e052bd635dddc75d8da9dc805c6bdfdee7ddb5901ba26c4f48c1ca17045",
+    "test_dict_reloc.c": "658eec33ee65821ee9bb56ed40ff4ca82d86d925694f2e8d9a9003280da2f1f9",
     "test_engine.part.h": "845d885abda1a62b63978b8d8988f3e0e95ebbb662b47f01f839a33fdf2ccb34",
     "test_params.part.h": "affbe10adf3396e97c2612eaa3f7230670500e933406c145cc3498fbf1c80500",
     "test_persist.part.h": "b79ee400755dfedd50260e6a05b8389eca32572c256e6861ba36bb3f4b467cd0"
@@ -31,7 +31,7 @@
     "010-keyboard.c.patch": "e274a0f8b5995d13ad358180e51b500f9ee0a1f35edfadd996e8efb340e9f1e0",
     "010-programming__decode.c.patch": "444dbf0013ea020f8daa6eb402822afb1862483b5360c7fb238a4af937a2ec74",
     "010-programming__lblGtoXeq.c.patch": "a7e5588819367d7c0b8b75ec70a26a21136c634b73bf8137f29c175830e71651",
-    "010-programming__manage.c.patch": "9c5d10dbb27280e5fc40e0a23eaa2a7eae197abcf03982c4a1d11bbf490a536f",
+    "010-programming__manage.c.patch": "2e59049ba7b0c6a87b818a53cca743383a21ce1631e4255564a7fcd764dcca18",
     "010-saveRestoreBackup.c.patch": "131b341a18bdb3e4302458818677063eb702ea825dfb71add29d9d3401ccb894",
     "010-screen.c.patch": "5fcb8ea3e30d7fcbc1ec499462651e1f30fd8f296e28e37d9226f499c0003470",
     "010-softmenus.c.patch": "83b9e1d1e41a1f0209e6840f0511765db79c45aea9ff71782de239725c501ebf",

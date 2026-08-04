@@ -34,7 +34,12 @@ uint16_t forthCapSavedCursor(void)     { return forthCap.savedCursor; }
 uint16_t forthCapSavedLocalStep(void)  { return forthCap.savedLocalStep; }
 uint32_t forthCapSavedStepOffset(void) { return forthCap.savedStepOffset; }
 uint16_t forthCapSavedStepCount(void)  { return forthCap.savedStepCount; }
-void     forthCapAbandonSuspended(void){ if (forthCap.state == FCAP_SUSPENDED) forthCap.state = FCAP_CLOSED; }
+void     forthCapAbandonSuspended(void){ if (forthCap.state == FCAP_SUSPENDED) { forthCap.state = FCAP_CLOSED;
+  forthCap.keysMode = 0;                    /* K3/E14: since K3 the bit rides
+                                               the suspension, so an abandoned
+                                               suspension must clear it here or
+                                               it leaks into the next capture */
+} }
 
 /* F6-6: capture state cannot outlive the dictionary lifecycle.
  * forthCapClose already sets FCAP_CLOSED unconditionally (covering OPEN

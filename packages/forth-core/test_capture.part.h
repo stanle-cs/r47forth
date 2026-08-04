@@ -8104,8 +8104,11 @@ static int test_keys_mode_nav_guards(void)
       }
     }
     else {
-      /* sc4 (E13 interim): a TAM round-trip returns to alpha input.
-       * Suspend clears the bit; resume rebuilds the ALPHA menu. */
+      /* sc4 (E13 proper, was the K1 interim): a CANCELLED TAM round-trip
+       * comes back to the sub-mode it was keyed from.  K3 replaced the
+       * interim (suspend clears the bit) with snapshot+restore, so this
+       * subcase now pins the cancel path of the ruled behavior — K3's T1
+       * pins the commit path. */
       runFunction(ITM_AIM);                   /* the real toggle to keys */
       if (!forthCapKeysMode()) {
         printf("    [4] FIXTURE FAIL: toggle did not set keys mode\n");
@@ -8118,8 +8121,8 @@ static int test_keys_mode_nav_guards(void)
                  forthTestCapState());
           scFail = 1;
         }
-        else if (forthCapKeysMode()) {
-          printf("    [4] FAIL: keys-mode bit survived the suspend\n");
+        else if (!forthCapKeysMode()) {
+          printf("    [4] FAIL: keys-mode bit cleared by the suspend\n");
           scFail = 1;
         }
         else {
@@ -8129,18 +8132,17 @@ static int test_keys_mode_nav_guards(void)
                    forthTestCapState());
             scFail = 1;
           }
-          else if (forthCapKeysMode()) {
-            printf("    [4] FAIL: resumed capture is not in alpha input\n");
+          else if (!forthCapKeysMode()) {
+            printf("    [4] FAIL: the cancelled round-trip did not resume in keys mode\n");
             scFail = 1;
           }
-          else if (currentMenu() != -MNU_ALPHA) {
-            printf("    [4] FAIL: currentMenu() = %d after resume, expected -MNU_ALPHA\n",
-                   currentMenu());
+          else if (currentMenu() == -MNU_ALPHA) {
+            printf("    [4] FAIL: resume pushed the ALPHA menu over the keys-mode row\n");
             scFail = 1;
           }
         }
         if (!scFail) {
-          printf("    [4] PASS: a TAM round-trip from keys mode resumes in alpha input\n");
+          printf("    [4] PASS: a cancelled TAM round-trip resumes in keys mode\n");
         }
       }
     }
@@ -8952,6 +8954,429 @@ static int test_keys_eex_and_numlock(void)
   xcopy(softmenuStack, savedStack, sizeof(savedStack));
   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
   if (savedNumlock) setSystemFlag(FLAG_NUMLOCK); else clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* ==================================================================
+ * K3 (Stage K packet 3) — keys-mode persistence across the TAM
+ * round-trip.  E13 proper: the sub-mode the user keyed a parameterized
+ * item from comes back with the line, and E14 keeps an abandoned
+ * suspension from leaking the bit into the next capture.
+ *
+ * Same discipline as K1/K2: the capture is opened by driving it, the
+ * bit is only ever set by the real ALPHA-gesture toggle, and the TAM
+ * round-trip runs through tamProcessInput / fnKeyExit.
+ * ================================================================== */
+
+/* T1 (C1+C2+C3): a parameterized item keyed in keys mode returns to
+ * keys mode.  Three sequential subcases over one capture: the bit
+ * survives the suspension, it survives the reopen the resume performs,
+ * and the toggle is still symmetric afterwards.
+ *
+ * Escaping mutations: restore the C1 interim clear (sc1 red); drop
+ * C2's save/restore (sc2 red); make C3's push unconditional (sc2 red
+ * on the menu). */
+static int test_keys_tam_roundtrip(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void tamProcessInput(uint16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K3R");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+
+  /* sc1: the bit rides the suspension.  Pre-K3 the suspend seam cleared
+   * it (the E13 interim); the ruled behavior keeps it. */
+  {
+    runFunction(ITM_AIM);                     /* the real toggle to keys */
+    if (!forthCapKeysMode()) {
+      printf("    [1] FIXTURE FAIL: toggle did not set keys mode\n");
+      fail = 1;
+    }
+    else {
+      runFunction(ITM_STO);                   /* physical-shaped TAM entry */
+      if (forthTestCapState() != FCAP_SUSPENDED) {
+        printf("    [1] FAIL: capture state %d, expected FCAP_SUSPENDED\n",
+               forthTestCapState());
+        fail = 1;
+      }
+      else if (!forthCapKeysMode()) {
+        printf("    [1] FAIL: keys-mode bit cleared by the suspend\n");
+        fail = 1;
+      }
+      else {
+        printf("    [1] PASS: the keys-mode bit rides the TAM suspension\n");
+      }
+    }
+  }
+
+  /* sc2: the commit resumes in keys mode — the bit survives the reopen
+   * forthCaptureResume performs, and the resume does not cover the
+   * underlying row (which IS the mode indicator) with the alpha menu. */
+  if (!fail) {
+    tamProcessInput(ITM_0);
+    tamProcessInput(ITM_5);                   /* two digits auto-fire the commit */
+
+    if (forthTestCapState() != FCAP_OPEN) {
+      printf("    [2] FAIL: capture state %d after the commit, expected FCAP_OPEN\n",
+             forthTestCapState());
+      fail = 1;
+    }
+    else if (!forthCapKeysMode()) {
+      printf("    [2] FAIL: keys-mode bit lost across the resume\n");
+      fail = 1;
+    }
+    else if (strcmp(forthTestCapText(), "STO 05 ") != 0) {
+      printf("    [2] FAIL: cap text = '%s', expected 'STO 05 '\n", forthTestCapText());
+      fail = 1;
+    }
+    else if (currentMenu() == -MNU_ALPHA) {
+      printf("    [2] FAIL: resume pushed the ALPHA menu over the keys-mode row\n");
+      fail = 1;
+    }
+    else {
+      printf("    [2] PASS: the TAM commit resumes the line in keys mode\n");
+    }
+  }
+
+  /* sc3: the toggle is still symmetric after a round-trip. */
+  if (!fail) {
+    runFunction(ITM_AIM);
+    if (forthCapKeysMode()) {
+      printf("    [3] FAIL: keys-mode bit still set after toggling back\n");
+      fail = 1;
+    }
+    else if (currentMenu() != -MNU_ALPHA) {
+      printf("    [3] FAIL: currentMenu() = %d, expected -MNU_ALPHA\n", currentMenu());
+      fail = 1;
+    }
+    else {
+      printf("    [3] PASS: the toggle is still symmetric after the round-trip\n");
+    }
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* T2: the same drive WITHOUT the toggle.  The C3 gate must not regress
+ * the alpha path — a TAM round-trip from alpha input still comes back
+ * to alpha input with the ALPHA menu on top. */
+static int test_alpha_tam_roundtrip_unchanged(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void tamProcessInput(uint16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K3A");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+
+  if (forthCapKeysMode()) {
+    printf("    [1] FIXTURE FAIL: a fresh capture is not in alpha input\n");
+    fail = 1;
+  }
+  else {
+    runFunction(ITM_STO);
+    if (forthTestCapState() != FCAP_SUSPENDED) {
+      printf("    [1] FAIL: capture state %d, expected FCAP_SUSPENDED\n",
+             forthTestCapState());
+      fail = 1;
+    }
+    else {
+      tamProcessInput(ITM_0);
+      tamProcessInput(ITM_5);
+
+      if (forthTestCapState() != FCAP_OPEN) {
+        printf("    [1] FAIL: capture state %d after the commit, expected FCAP_OPEN\n",
+               forthTestCapState());
+        fail = 1;
+      }
+      else if (forthCapKeysMode()) {
+        printf("    [1] FAIL: the alpha round-trip came back in keys mode\n");
+        fail = 1;
+      }
+      else if (currentMenu() != -MNU_ALPHA) {
+        printf("    [1] FAIL: currentMenu() = %d after resume, expected -MNU_ALPHA\n",
+               currentMenu());
+        fail = 1;
+      }
+      else if (strcmp(forthTestCapText(), "STO 05 ") != 0) {
+        printf("    [1] FAIL: cap text = '%s', expected 'STO 05 '\n", forthTestCapText());
+        fail = 1;
+      }
+      else {
+        printf("    [1] PASS: the alpha-input round-trip is unchanged by the C3 gate\n");
+      }
+    }
+  }
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* T3 (C4/E14): with the bit now riding the suspension, an ABANDONED
+ * suspension must not leak it into the next capture.  Driven through
+ * the same falsified-step canary test_capture_suspend [5] uses: stomp
+ * the saved step's opcode, then hit the resume choke point.
+ *
+ * Escaping mutation: revert C4 — the bit survives the abandon. */
+static int test_abandon_clears_keys_bit(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void fnKeyExit(uint16_t);
+
+  int fail = 0;
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedTamAlpha = tam.alpha;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedProgRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  testProg_t p;
+  tpInit(&p);
+  int sLbl = tpLbl(&p, "K3X");
+  tpMarker(&p);
+  tpRtn(&p);
+  if (sLbl < 0 || !tpWrite(&p)) {
+    printf("    FIXTURE FAIL: build/write\n");
+    return 1;
+  }
+
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.alpha = false;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  alphaCase = AC_UPPER;
+  nextChar = NC_NORMAL;
+  shiftF = false;
+  shiftG = false;
+  clearSystemFlag(FLAG_ALPHA);
+  clearSystemFlag(FLAG_NUMLOCK);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  currentProgramNumber = 1;
+
+  fnGotoDot(2);
+  runFunction(ITM_AIM);
+  if (!forthCapIsOpen()) {
+    printf("    FIXTURE FAIL: ITM_AIM did not open capture\n");
+    cleanupTestProgram();
+    return 1;
+  }
+
+  runFunction(ITM_AIM);                       /* the real toggle to keys */
+  if (!forthCapKeysMode()) {
+    printf("    [1] FIXTURE FAIL: toggle did not set keys mode\n");
+    fail = 1;
+  }
+  else {
+    runFunction(ITM_STO);
+    if (forthTestCapState() != FCAP_SUSPENDED) {
+      printf("    [1] FIXTURE FAIL: capture state %d, expected FCAP_SUSPENDED\n",
+             forthTestCapState());
+      fail = 1;
+    }
+    else if (!forthCapKeysMode()) {
+      printf("    [1] FIXTURE FAIL: keys-mode bit cleared by the suspend\n");
+      fail = 1;
+    }
+    else {
+      /* Deliberate falsification, exactly as test_capture_suspend [5]:
+       * stomp the saved step's opcode byte with ITM_RTN so the
+       * resume-time structural check must reject it. */
+      uint8_t *savedStep = beginOfProgramMemory + forthCapSavedStepOffset();
+      savedStep[0] = 0x04;
+
+      fnKeyExit(NOPARAM);                     /* the resume choke point */
+
+      if (forthTestCapState() != FCAP_CLOSED) {
+        printf("    [1] FAIL: capture state %d after the abandon, expected FCAP_CLOSED\n",
+               forthTestCapState());
+        fail = 1;
+      }
+      else if (forthCapKeysMode()) {
+        printf("    [1] FAIL: keys-mode bit survived the abandoned suspension\n");
+        fail = 1;
+      }
+      else {
+        printf("    [1] PASS: an abandoned suspension clears the keys-mode bit\n");
+      }
+    }
+  }
+
+  /* The falsification corrupted program memory — rebuild from scratch. */
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  forthDictClear();
+  forthGDictClear();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  tam.alpha = savedTamAlpha;
+  alphaCase = savedAlphaCase;
+  programRunStop = savedProgRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
   lastErrorCode = ERROR_NONE;
   return fail;
 }
