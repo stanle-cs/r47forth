@@ -235,7 +235,9 @@ permanently link his Reddit history to this identity. Uses:
    figures are not trustworthy**: it printed "Name length: 63 chars max" when
    `FORTH_NAME_MAX` is 31 (63 is `FORTH_TOKEN_MAX`, a different limit).
 4. Program listings byte-identical to the passing test fixtures.
-5. BBCode tags balanced; prose wrapped at 79 columns.
+5. BBCode tags balanced; one line per paragraph, never hard-wrapped
+   (phpBB turns newlines into line breaks — ruled 2026-08-03 after the
+   79-column habit reached a draft).
 6. `COPYING` present in the release branch and inside every zip. `pkg_build`
    appends it automatically; hand-assembled artifacts need it added.
 

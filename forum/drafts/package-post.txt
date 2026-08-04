@@ -1,30 +1,17 @@
-Custom package v0.3 is up. It's the same idea as before, you build the
-C47/R47 firmware with your own changes layered on top and nothing under
-src/ gets touched, but I ended up rewriting most of the internals this
-round so I'll walk through what changed.
+Custom package v0.3 is up. It's the same idea as before, you build the C47/R47 firmware with your own changes layered on top and nothing under src/ gets touched, but I ended up rewriting most of the internals this round so I'll walk through what changed.
 
 [b]What changed from v0.2[/b]
 
 [list]
-[*]Overrides are git diffs now. v0.2 shipped whole edited files, and
-there was no way to see what a package changed without diffing by hand.
-Now I just open a file in patches/ and read it.
-[*]A package is a flat directory that mirrors upstream paths. The
-tooling works out the rest. You drop new files in, pull upstream ones
-with materialize, run a refresh, and the patches come out on the other
-side.
-[*]When two packages patch the same upstream file, the patches stack in
-filename order (the NNN prefix), each on top of the previous result.
-They can even land in different parts of one function. But if they hit
-the same lines, configure fails and shows you which patch collided.
-[*]There's one ./package entry point for the whole workflow now.
-Everything below goes through it.
+[*]Overrides are git diffs now. v0.2 shipped whole edited files, and there was no way to see what a package changed without diffing by hand. Now I just open a file in patches/ and read it.
+[*]A package is a flat directory that mirrors upstream paths. The tooling works out the rest. You drop new files in, pull upstream ones with materialize, run a refresh, and the patches come out on the other side.
+[*]When two packages patch the same upstream file, the patches stack in filename order (the NNN prefix), each on top of the previous result. They can even land in different parts of one function. But if they hit the same lines, configure fails and shows you which patch collided.
+[*]There's one ./package entry point for the whole workflow now. Everything below goes through it.
 [/list]
 
 [b]Making a package[/b]
 
-Start a flat directory under packages/ and put your files where they'd
-live upstream:
+Start a flat directory under packages/ and put your files where they'd live upstream:
 
 [code]
 packages/my-pkg/
@@ -32,19 +19,13 @@ packages/my-pkg/
     my_module.c     a new source with no upstream counterpart
 [/code]
 
-For editing an upstream file, use materialize. Why not just copy the
-file out of your checked-out tree? There's a chance your tree is on a
-different version than the package base, and then the patch picks up
-upstream's changes as if they were yours:
+For editing an upstream file, use materialize. Why not just copy the file out of your checked-out tree? There's a chance your tree is on a different version than the package base, and then the patch picks up upstream's changes as if they were yours:
 
 [code]
 ./package materialize my-pkg keyboard.c
 [/code]
 
-This pulls the file as it was at the package's recorded base commit,
-so when you edit it, the diff is just your changes. Refresh always
-diffs against the base version either way. If your tree happens to be
-sitting exactly at the base, a straight copy works out the same anyway.
+This pulls the file as it was at the package's recorded base commit, so when you edit it, the diff is just your changes. Refresh always diffs against the base version either way. If your tree happens to be sitting exactly at the base, a straight copy works out the same anyway.
 
 Then run the refresh:
 
@@ -52,9 +33,7 @@ Then run the refresh:
 ./package refresh my-pkg
 [/code]
 
-It sorts your files. Anything that exists under src/c47/ becomes a
-patch, new files get copied in whole. (The raw tools are still under
-tools/ if a script wants them, ./package just wraps them.)
+It sorts your files. Anything that exists under src/c47/ becomes a patch, new files get copied in whole. (The raw tools are still under tools/ if a script wants them, ./package just wraps them.)
 
 [b]Building and testing with your package[/b]
 
@@ -63,23 +42,17 @@ make sim CUSTOM_PKG=packages/my-pkg
 make dist_dmcp5r47 CUSTOM_PKG=packages/my-pkg
 [/code]
 
-The firmware test suite runs with your package active too, so you can
-check you didn't break the calculator before flashing it:
+The firmware test suite runs with your package active too, so you can check you didn't break the calculator before flashing it:
 
 [code]
 make test CUSTOM_PKG=packages/my-pkg
 [/code]
 
-And make pkg_build PKG=packages/my-pkg does the whole thing in one go,
-it cleans, runs the suite with the package active, refreshes, and zips.
-If the tests fail, you get no zip. The zip also can't go over
-PKG_MAX_SIZE, 1 MB by default.
+And make pkg_build PKG=packages/my-pkg does the whole thing in one go, it cleans, runs the suite with the package active, refreshes, and zips. If the tests fail, you get no zip. The zip also can't go over PKG_MAX_SIZE, 1 MB by default.
 
 [b]How patches compose[/b]
 
-The resolver copies the clean upstream file in once, then applies each
-package's patch in order with git apply -3. Order is the numeric
-filename prefix. Ties go by your CUSTOM_PKG order. So with
+The resolver copies the clean upstream file in once, then applies each package's patch in order with git apply -3. Order is the numeric filename prefix. Ties go by your CUSTOM_PKG order. So with
 
 [code]
 make sim CUSTOM_PKG=packages/alpha,packages/beta
@@ -89,46 +62,23 @@ packages/beta/patches/010-keyboard.c.patch
 packages/alpha/patches/010-keyboard.c.patch
 [/code]
 
-keyboard.c gets alpha's 005 first, then the two 010s, alpha before beta
-because that's their order in CUSTOM_PKG. After every patch the
-resolver scans for conflict markers, even when git said the apply went
-fine.
+keyboard.c gets alpha's 005 first, then the two 010s, alpha before beta because that's their order in CUSTOM_PKG. After every patch the resolver scans for conflict markers, even when git said the apply went fine.
 
-Configure also refuses a patch if its filename doesn't match its own
-+++ header, or if its target doesn't exist. And if two packages try to
-provide the same new file, that's caught before the shadow tree is
-built.
+Configure also refuses a patch if its filename doesn't match its own +++ header, or if its target doesn't exist. And if two packages try to provide the same new file, that's caught before the shadow tree is built.
 
-I made the patches against one upstream commit, but a newer upstream
-will probably still build. The resolver checks every target file
-before it applies anything. If upstream moved a file, configure stops
-and tells you which one.
+I made the patches against one upstream commit, but a newer upstream will probably still build. The resolver checks every target file before it applies anything. If upstream moved a file, configure stops and tells you which one.
 
 [b]Refresh before you build[/b]
 
-The build only reads the generated patches/ and files/ folders. Your
-flat working area never gets compiled. So what happens if you edit a
-source and forget to refresh? The build still succeeds, you just flash
-the old code. I run ./package refresh at the top of my build script.
+The build only reads the generated patches/ and files/ folders. Your flat working area never gets compiled. So what happens if you edit a source and forget to refresh? The build still succeeds, you just flash the old code. I run ./package refresh at the top of my build script.
 
-Everything in a package folder is tracked in git, including the
-generated output, since that's what actually builds. If you hand-edit
-a generated patch instead of the working copy, the next refresh
-catches it from a hash manifest, warns you, and overwrites it.
+Everything in a package folder is tracked in git, including the generated output, since that's what actually builds. If you hand-edit a generated patch instead of the working copy, the next refresh catches it from a hash manifest, warns you, and overwrites it.
 
 [b]Where to get it[/b]
 
-Target is R47/C47 on the DM42n (DMCP5 hardware). I built everything
-against upstream c43 at commit 26ec91634. It's GPL-3.0-only like the
-rest of c43. The full text is in COPYING, inside the zip and on the
-release branch.
+Target is R47/C47 on the DM42n (DMCP5 hardware). I built everything against upstream c43 at commit 26ec91634. It's GPL-3.0-only like the rest of c43. The full text is in COPYING, inside the zip and on the release branch.
 
-Download:
-[url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release branch[/url]
-with the zip beside it. Run the four test_pkg_patch tests from the
-extracted zip before anything else, they check the tooling and don't
-need an upstream tree.
+Download: [url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release branch[/url] with the zip beside it. Run the four test_pkg_patch tests from the extracted zip before anything else, they check the tooling and don't need an upstream tree.
 
-My Forth package for the R47 runs on this system, 16 patches against
-upstream files plus 19 new sources. I'll write about that one
-separately.
+My Forth package for the R47 runs on this system, 16 patches against upstream files plus 19 new sources. I'll write about that one separately.
+

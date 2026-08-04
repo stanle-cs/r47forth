@@ -34,7 +34,9 @@ not correct anything that looks wrong.⟩
 - Short declarative sentences only where order matters, such as an editing
   sequence or install steps.
 - No paragraph longer than three sentences.
-- Wrap prose at 79 columns. Leave code blocks and list items unwrapped.
+- One line per paragraph, no hard wrapping: phpBB renders every newline
+  as a line break, so wrapped prose posts as ragged short lines. Only
+  code blocks keep internal newlines.
 - Do not use `[b]Term[/b] — description` inline-header list items. Write
   `[b]WORD[/b]` followed by a plain description with no dash pivot.
 - Use bold for scanning only. Heavy bold reads as machine formatting.
