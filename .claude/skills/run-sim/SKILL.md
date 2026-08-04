@@ -238,3 +238,25 @@ Geometry: softkey rows are `y1 = 217 - SOFTMENU_HEIGHT * row`,
 The architect's fuller version of this recipe, including the interactive
 window and the traps behind each rule, is `.claude/skills/run-sim/SKILL.md`.
 <!-- END AGENTS.md BLOCK -->
+
+## Traps added 2026-08-04 (README-verification session)
+
+- **`--build` can hand you a stale shadow.** `build-test.sh --build`
+  refreshed `files/` but the binary still ran the previous runner — the
+  same stamp trap as `build.dmcp5`, now confirmed for `build.sim`. If
+  your driver's printf does not appear in the log, the binary predates
+  your edit; run the FULL gate before debugging anything else.
+- **Silence is not-run, not pass.** A driver (or any moved test group)
+  is only proven in by its banner in the log. This session found the
+  entire K4 group sitting unreachable inside the suite's `if (fail)`
+  verdict branch — landed green, never executed. Check the banner FIRST.
+- **Letter case is item identity.** `ITM_X` and `ITM_x` are different
+  items (uppercase inserts `X` regardless of alphaCase); superscript
+  conversion runs off `nextChar` via `convertItemToSubOrSup`
+  (bufferize.c) inside pemAlpha, so priming `nextChar = NC_SUPERSCRIPT`
+  before a digit item types the superscript digit.
+- **An empty-abort strands the cursor past the closing marker** (the
+  E2/E6 pre-move fires once FLAG_ALPHA drops), so a reopen without
+  `fnGotoDot` back onto the opening marker silently gives you a LITERAL
+  capture, not a Forth one — the driver reads an empty forthTestCapText
+  and every later assert lies. Reposition before every reopen.

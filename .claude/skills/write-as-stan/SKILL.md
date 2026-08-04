@@ -115,3 +115,20 @@ Six passes converged on "a human wrote this" while the text sounded
 nothing like Stan and taught the wrong interface. Model audits police
 tells; voicematch polices Stan-ness mechanically; ONLY human review
 catches content pedagogy. Never present model-clean as done.
+
+## Added 2026-08-04 (release-README cycle, Stan's rulings)
+
+- **When a fact inside his prose dies, the REPLACEMENT is his call.**
+  Deleting the dead claim is mechanical; choosing what argument (or no
+  argument) stands in its place is voice and opinion under his name.
+  Bring him the options — keep-with-truth, different example, delete the
+  passage — with a recommendation. Do not silently substitute an
+  argument he never made. (The x²-untypeable claim died to his read;
+  the silently-substituted "saves keys" pitch then died too, and the
+  ruled outcome was deletion.)
+- **Checkable behavior claims get sim-verified before they go in his
+  prose.** Facts-first now explicitly includes the run-sim path: if the
+  simulator can show the claim on the LCD, capture it before asserting
+  it. His two catches this cycle (register, then fact) both survived the
+  full scanner + cross-model battery — the machines endorse; only
+  verification and his read gate.
