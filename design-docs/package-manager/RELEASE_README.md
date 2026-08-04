@@ -7,10 +7,10 @@ development history live in the working repo.
 Licence: GPL-3.0-only, same as c43. Full text in `COPYING` at the root of
 this branch.
 
-I generated the patches against upstream c43 `26ec91634`. A newer
-upstream will probably build too, since the resolver checks every target
-file before it applies anything, but if upstream moved a file, configure
-stops and says so.
+I generated the patches against upstream c43 release `00.109.04.00b0`
+(commit `057b62fc0`). A newer upstream will probably build too, since
+the resolver checks every target file before it applies anything, but
+if upstream moved a file, configure stops and says so.
 
 ## What is here
 
@@ -54,7 +54,7 @@ the integrate tool are all working.
 ```
 git clone https://gitlab.com/rpncalculators/c43.git
 cd c43
-git checkout 26ec91634
+git checkout 00.109.04.00b0
 ```
 
 Copy this branch's files over that tree, keeping the layout, then:

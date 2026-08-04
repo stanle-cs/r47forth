@@ -76,7 +76,7 @@ Everything in a package folder is tracked in git, including the generated output
 
 [b]Where to get it[/b]
 
-Target is R47/C47 on the DM42n (DMCP5 hardware). I built everything against upstream c43 at commit 26ec91634. It's GPL-3.0-only like the rest of c43. The full text is in COPYING, inside the zip and on the release branch.
+Target is R47/C47 on the DM42n (DMCP5 hardware). I built everything against upstream c43 release 00.109.04.00b0. It's GPL-3.0-only like the rest of c43. The full text is in COPYING, inside the zip and on the release branch.
 
 Download: [url=https://github.com/stanle-cs/r47forth/tree/release/forth-core-stage2]release branch[/url] with the zip beside it. Run the four test_pkg_patch tests from the extracted zip before anything else, they check the tooling and don't need an upstream tree.
 
