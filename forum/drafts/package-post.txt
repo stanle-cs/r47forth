@@ -9,62 +9,104 @@ round so I'll walk through what changed.
 [*]Overrides are git diffs now. v0.2 shipped whole edited files, and
 there was no way to see what a package changed without diffing by hand.
 Now I just open a file in patches/ and read it.
+[*]A package is a flat directory that mirrors upstream paths, and the
+tooling works out the rest. You drop your files in, run a refresh, and
+the patches come out on the other side.
 [*]When two packages patch the same upstream file, the patches stack in
 filename order (the NNN prefix), each on top of the previous result.
 They can even land in different parts of one function. But if they hit
 the same lines, configure fails and names the patch that collided.
-[*]A package is a flat directory that mirrors upstream paths. It
-declares nothing, and there's no meson.build or file list to keep up.
-[*]The refresh tool sorts your files for you: paths that exist under
-src/c47/ become patches, anything else is copied in whole as a new
-source.
+[*]There's one entry point for the whole workflow now: ./package. Every
+command below goes through it.
 [/list]
 
-[b]Tooling[/b]
+[b]Making a package[/b]
 
-[list]
-[*]--materialize pulls an upstream file into your working area when you
-want to start editing it.
-[*]The package records the upstream commit it was generated against, so
-the patches always have a known base.
-[*]--rebase-base moves a package to a newer upstream. Conflicts land in
-your working copies as ordinary conflict markers. You fix them there.
-[*]The manifest keeps a hash of every file refresh writes. Hand-edit a
-generated patch instead of the working copy and refresh warns you, then
-overwrites it.
-[*].pkgignore keeps docs and dev scripts out of the generated output.
-[/list]
+Start a flat directory under packages/ and put your files where they'd
+live upstream:
 
-There's also a small ./package entry point that wraps the common
-commands so I don't have to remember tool paths. You probably won't
-have to either.
+[code]
+packages/my-pkg/
+    keyboard.c      your edited copy of an existing upstream file
+    my_module.c     a new source with no upstream counterpart
+[/code]
 
-[b]How composition works[/b]
+For editing an upstream file, don't copy it out of your checked-out
+tree. Your tree has probably moved past the commit the package is based
+on, so the copy would drag along upstream changes you never made, and
+the patch ends up carrying drift instead of just your edits. That's
+what materialize is for:
+
+[code]
+./package materialize my-pkg keyboard.c
+[/code]
+
+It pulls the file as it was at the package's recorded base commit, so
+when you edit it, the diff is exactly your changes. Then:
+
+[code]
+./package refresh my-pkg
+[/code]
+
+sorts your files: paths that exist under src/c47/ become patches
+against upstream, anything else gets copied in whole as a new source.
+The raw tools under tools/ are still there and ./package just wraps
+them, so scripts can call them directly.
+
+[b]Building and testing with your package[/b]
+
+[code]
+make sim CUSTOM_PKG=packages/my-pkg
+make dist_dmcp5r47 CUSTOM_PKG=packages/my-pkg
+[/code]
+
+The firmware test suite runs with your package active too, so you can
+check you didn't break the calculator before flashing it:
+
+[code]
+make test CUSTOM_PKG=packages/my-pkg
+[/code]
+
+And make pkg_build PKG=packages/my-pkg does the whole release lap in
+one go: cleans, runs the suite with the package active, refreshes, and
+zips. If the tests fail, you get no zip. The zip also can't go over
+PKG_MAX_SIZE, 1 MB by default.
+
+[b]How patches compose[/b]
 
 The resolver copies the clean upstream file in once, then applies each
 package's patch in order with git apply -3. Order is the numeric
-filename prefix; ties go by position in your CUSTOM_PKG list. It scans
-for conflict markers after every patch, even when git said the apply
-went fine. Configure refuses a patch whose filename disagrees with its
-own +++ header, and a patch whose target doesn't exist. And if two
-packages try to provide the same new file, that's caught before the
-shadow tree is built.
+filename prefix, and ties go by position in your CUSTOM_PKG list. So
+with
 
-[b]pkg_build[/b]
+[code]
+make sim CUSTOM_PKG=packages/alpha,packages/beta
 
-make pkg_build PKG=packages/my-pkg cleans, runs the test suite with the
-package active, refreshes, and zips the package. If the tests fail, you
-get no zip. The zip also can't go over PKG_MAX_SIZE, 1 MB by default.
+packages/alpha/patches/005-keyboard.c.patch
+packages/beta/patches/010-keyboard.c.patch
+packages/alpha/patches/010-keyboard.c.patch
+[/code]
+
+keyboard.c gets alpha's 005 first, then the two 010s, alpha before beta
+because that's their order in CUSTOM_PKG. After every patch the
+resolver scans for conflict markers, even when git said the apply went
+fine. Configure refuses a patch whose filename disagrees with its own
++++ header, and a patch whose target doesn't exist. And if two packages
+try to provide the same new file, that's caught before the shadow tree
+is built.
 
 [b]Refresh before you build[/b]
 
 The build reads only the generated patches/ and files/ directories,
 never your flat working area. If you edit a source and forget to
 refresh, the build still succeeds, it just compiles the code from
-before your edit. I run the refresh at the top of my build script.
+before your edit. I run ./package refresh at the top of my build
+script.
 
 Everything in a package directory is tracked in git, the generated
-output included, since that's what the build actually reads.
+output included, since that's what the build actually reads. A manifest
+of hashes backs this: hand-edit a generated patch instead of the
+working copy and the next refresh warns you, then overwrites it.
 
 [b]Where to get it[/b]
 

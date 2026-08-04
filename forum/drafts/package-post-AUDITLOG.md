@@ -134,3 +134,32 @@ RELEASE_README wordings, one INSTALL pairing) were fixed. Gemini's
 verdict text says no but its six findings are all settled dispositions
 (the never-tail's seventh flag, the true first-person intro, the locked
 list format). POST: clean pair as judged. Stan's read remains the gate.
+
+## Human content review (2026-08-03, the deepest cut)
+
+Stan's read found five things six model passes and every scanner
+missed, all content and pedagogy:
+
+1. The definition-by-absence bullet ("declares nothing... no
+   meson.build or file list"). Corpus check: 1.1% of his sentences
+   carry double negation, none definitional. Replaced with what a
+   package is and what you do.
+2. ./package is the built convenience and now leads the post; every
+   instruction goes through it. Verified against the CLI: eight
+   subcommands, bare package names accepted.
+3. The materialize trade-off is now taught with its reason (hand-copy
+   drags upstream drift; materialize pulls the file at the recorded
+   base).
+4. Package testing is explicit: make test CUSTOM_PKG=..., verified
+   against the Makefile's test target.
+5. Composition has a concrete loading-order example (alpha 005, two
+   010s, tie by CUSTOM_PKG position).
+
+DESIGN.md §6 carries the structure ruling. The restructure resets the
+audit pairs; they rerun once Stan approves this shape. INSTALL.txt
+still teaches raw tool paths and gets the ./package-first treatment
+after the post's shape settles.
+
+The lesson for the pipeline: the model audits and scanners police
+voice and tells; they never noticed the post taught the wrong
+interface. Content review is a distinct gate and stays human.

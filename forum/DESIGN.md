@@ -243,6 +243,21 @@ permanently link his Reddit history to this identity. Uses:
 
 ## 6. Post A content — custom package (v0.3)
 
+**Structure ruling (2026-08-03, Stan's content review of the first
+pipeline draft).** The numbered inventory below still binds as facts,
+but the post is BUILT differently: `./package` is the interface and is
+introduced first, with every instruction going through it (the raw
+tools get one mention as what's underneath). The materialize command is
+taught with its reason — copying a file out of your checked-out tree
+drags in upstream drift because the tree has moved past the package's
+base; materialize pulls the file at the recorded base so the patch is
+exactly your edits. Package testing is explicit (`make test
+CUSTOM_PKG=...`, and pkg_build as the release lap). Composition gets a
+concrete loading-order example (two packages, NNN prefixes, tie by
+CUSTOM_PKG position). Definitions are positive — what a package is and
+what you do — never by absence; his corpus runs 1.1% double-negation
+and none of it definitional.
+
 **What changed from v0.2**
 
 1. Overrides are git diffs against upstream, not whole-file copies
