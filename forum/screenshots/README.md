@@ -36,6 +36,12 @@ show is what the tests pin.
 4. `shot4-save-balance.png` — after XEQ 'SAVE': Y=1050 (first period,
    R00), X=1340.095640625 (final balance, R22) from six compounding
    periods at 5% on 1000.
+5. `shot5-save-listing.png` — PEM listing at the top of SAVE (262
+   bytes / 14 steps): `LBL 'SAVE'`, `»FORTH`, and the GROW/PUT/BUMP/
+   TALLY definitions, including the indirect `STO →20` glyph.
+6. `shot6-save-picker.png` — SAVE's tail (STEP, the RUN loop, the
+   setup lines, cursor on `FORTH«`) with the FWRD picker showing all
+   six words, each fitting its softkey cell untruncated.
 
 ## Not yet covered
 
