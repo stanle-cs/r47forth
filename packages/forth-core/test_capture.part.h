@@ -6410,10 +6410,17 @@ static int test_picker_renders_labels(void)
 
 /* Lit pixels inside softkey cell `cell` (0..5) of the menu band. */
 static int32_t g4CellPixels(int cell) {
+  /* Real softkey borders, not SCREEN_WIDTH/6. KEY_X = {-1,66,133,200,267,333,400}
+   * (c47.c), so an arithmetic sixth (66) puts cell 1's right-hand frame column
+   * at x=132 INSIDE a naive cell-2 window and reports ~12 stray pixels in a
+   * cell that is actually empty. Measure between the borders the renderer
+   * itself uses. */
+  extern const int KEY_X[7];
   int32_t lit = 0;
+  const uint32_t xFrom = (uint32_t)(KEY_X[cell]     < 0 ? 0 : KEY_X[cell]);
+  const uint32_t xTo   = (uint32_t)(KEY_X[cell + 1] < 0 ? 0 : KEY_X[cell + 1]);
   for (uint32_t y = 171; y < SCREEN_HEIGHT; y++) {
-    for (uint32_t x = (uint32_t)(cell * (SCREEN_WIDTH / 6));
-         x < (uint32_t)((cell + 1) * (SCREEN_WIDTH / 6)); x++) {
+    for (uint32_t x = xFrom; x < xTo; x++) {
       if (lcd_buffer_pixel_on(x, y)) { lit++; }
     }
   }
@@ -6601,15 +6608,31 @@ static int test_picker_pixel_layout(void)
     }
 
     if (!sc2) {
-      /* Render at firstItem=0 to paint all 6 cells with labels, then re-render at firstItem=6.
-       * The firstItem=6 render clears all 6 cells then paints only 2. Cells 3-5 end at 0.
-       * Cell 2 may have a small rendering artifact (~12px). Use c3-c5 for the equality check. */
+      /* Paint all six cells at firstItem=0, then re-render at firstItem=6: indices
+       * 6 and 7 land in cells 0 and 1, and the render clears the rest.
+       *
+       * Cell 2 is NOT identical to cells 3-5, and correctly so. Measured, its
+       * only lit pixels sit at x == KEY_X[2] on alternate rows: the dotted
+       * divider the last LIVE key draws down its right-hand edge, which by the
+       * KEY_X convention falls in the next cell's window. Cells 3-5 have no live
+       * neighbour to their left and read exactly 0.
+       *
+       * So the pin is sharper than "all four identical": the cells past the live
+       * ones carry no label, and cell 2 carries nothing but that one border
+       * column. Asserting cell 2's INTERIOR is empty says that precisely. */
       softmenuStack[0].firstItem = 0;
       showSoftmenuCurrentPart();
 
       softmenuStack[0].firstItem = 6;
       showSoftmenuCurrentPart();
 
+      extern const int KEY_X[7];
+      int32_t c2Interior = 0;                 /* cell 2 minus its left border column */
+      for (uint32_t yy = 171; yy < SCREEN_HEIGHT; yy++) {
+        for (uint32_t xx = (uint32_t)KEY_X[2] + 1; xx < (uint32_t)KEY_X[3]; xx++) {
+          if (lcd_buffer_pixel_on(xx, yy)) { c2Interior++; }
+        }
+      }
       int32_t c0 = g4CellPixels(0);
       int32_t c5 = g4CellPixels(5);
       int32_t c2 = g4CellPixels(2);
@@ -6620,10 +6643,14 @@ static int test_picker_pixel_layout(void)
         printf("    [2] FAIL: live cell 0 (%d px) should exceed empty cell 5 (%d px)\n", c0, c5);
         sc2 = 1;
       } else if (c3 != c4 || c4 != c5) {
-        printf("    [2] FAIL: empty cells differ — c2=%d c3=%d c4=%d c5=%d\n", c2, c3, c4, c5);
+        printf("    [2] FAIL: fully-empty cells differ — c3=%d c4=%d c5=%d\n", c3, c4, c5);
         sc2 = 1;
-      } else if (c2 > c0) {
-        printf("    [2] FAIL: cell 2 (%d px) exceeds live cell 0 (%d px)\n", c2, c0);
+      } else if (c3 != 0) {
+        printf("    [2] FAIL: cells past the live ones are not empty — c3=%d\n", c3);
+        sc2 = 1;
+      } else if (c2Interior != 0) {
+        printf("    [2] FAIL: cell 2 holds %d px beyond its border column — "
+               "a label is drawn past numItems (c2=%d)\n", c2Interior, c2);
         sc2 = 1;
       }
     }
@@ -6636,7 +6663,7 @@ static int test_picker_pixel_layout(void)
     cleanupTestProgram();
 
     if (!sc2) {
-      printf("    [2] PASS: cells past numItems draw chrome only, all four identical\n");
+      printf("    [2] PASS: no label past numItems — cells 3-5 empty, cell 2 only the divider\n");
     }
     fail |= sc2;
   }
@@ -6698,6 +6725,13 @@ static int test_picker_pixel_layout(void)
       if (c0 <= c1) {
         printf("    [3] FAIL: cell 0 (%d px) should exceed cell 1 (%d px) — label not drawn\n", c0, c1);
         sc3 = 1;
+      /* Not c1 == c2: cell 1's window opens at KEY_X[1], which is where the LIVE
+       * cell 0 draws its right-hand dotted divider — 12 px on alternate rows, the
+       * same border that shows up in subcase 2's cell 2. So an empty cell adjacent
+       * to a live one legitimately carries that column and an empty cell further
+       * out carries nothing. The 15 is that divider plus slack, not a fudge: a
+       * label bleeding out of cell 0 is worth tens of pixels, as the mutation
+       * lifting trimKey's per-cell clamp shows (131 px). */
       } else if (c1 > c2 + 15) {
         printf("    [3] FAIL: cell 1 (%d px) exceeds cell 2 (%d px) by more than 15 — name bled out\n", c1, c2);
         sc3 = 1;
