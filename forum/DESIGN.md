@@ -62,6 +62,16 @@ This is a constraint on the writing, not a polish pass at the end.
   followed by a plain stack comment, no dash pivots.
 - Keep bold for scanning only. Heavy bold reads as machine formatting.
 
+**Screenshots (ruled 2026-08-03)**
+
+- Every shot in a post comes from `forum/screenshots/`; its README carries
+  the provenance (which test pins the behaviour shown, how it was captured).
+- Each shot gets a one-line factual caption. Caption prose goes through the
+  same gate as body text: the §2 rules, the scanners, the rotation.
+- A shot may only illustrate a claim the simulator verifies. Hardware-only
+  claims (R/S interrupting `SPIN`) stay text-only; a sim capture must never
+  imply a hardware observation.
+
 ---
 
 ## 3. Mechanical gate
@@ -89,6 +99,31 @@ the count from one skeleton to the next.
 A fresh pass as a different model found five classes the self-audits never saw,
 including overcorrection scars left by the previous fix pass. Stan's read is
 the final gate; no scanner can tell whether it sounds like him.
+
+**The loop (ruled 2026-08-03).** A draft reaches Stan's read only through
+these steps, in order:
+
+1. Draft against the content inventory (§6/§7), by hand or via
+   `PROMPT_WRITE.md`. Record which model drafted.
+2. Self-check against §2; fix what you can see.
+3. Run both scanners; judge the flags.
+4. Cross-model audit via `PROMPT_AUDIT.md`, by a model that did not write
+   the draft. The auditor reports; the fixing is done on our side.
+5. Exit criterion: scanners clean as judged, AND two consecutive audits by
+   two different non-drafting models with no real findings. Any real
+   finding resets the count to zero.
+6. Stan reads. Nothing else substitutes for this step.
+
+**After approval.** A sentence-level rewrite re-runs the scanners on the
+changed section plus Stan's re-read of that section. Pure figure, typo and
+BBCode fixes are exempt. A new paragraph re-enters the loop at step 2.
+
+**Replies.** Every thread reply runs the full loop, however short (ruled
+2026-08-03; a lighter reply gate was offered and rejected).
+
+**Scanner growth.** A tell class confirmed by an audit or a rejection gets
+encoded before the next draft cycle: a pattern in `aiaudit.py` or
+`framescan.py` where it is mechanical, a §2 rule where it is not.
 
 ---
 
