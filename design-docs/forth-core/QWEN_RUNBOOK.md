@@ -317,6 +317,12 @@ rules; a packet that violates one is a packet defect.
 - The gate-grep EXECUTION GATE discipline stays: stale branch names,
   counts, and line citations rot between authoring and execution — no
   bare `file:line` in a packet without a grep+expected-count beside it.
+- LCD-capture packets are never authored freehand: instantiate
+  `QWEN_TEMPLATE_LCD_CAPTURE.md` (this directory), which wraps the
+  proven driver at `.claude/skills/run-sim/references/capture-driver.c`
+  in execution gates, a numeric blank-frame check, marker-anchored
+  removal, and the post-removal full gate. The implementer cannot see
+  images; visual acceptance of the PNGs stays with the architect.
 
 ## 4. Standing rules that survive every step
 

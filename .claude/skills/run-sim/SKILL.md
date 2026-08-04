@@ -56,6 +56,17 @@ Three facts that make this work headless:
 
 ### Recipe
 
+Start from `references/capture-driver.c` in this skill — the proven
+2026-08-03 driver (forum/screenshots/, commit `4022c5657`) with the
+save/restore machinery, all three render idioms (PEM listing, FWRD
+picker, normal screen), and marker comments for clean removal. Adapt its
+fixture; keep the machinery. To hand a capture job to the local
+implementer instead, instantiate
+`design-docs/forth-core/QWEN_TEMPLATE_LCD_CAPTURE.md` — it wraps the
+same driver in execution gates, a numeric blank-frame check (the
+implementer cannot see images), marker-anchored removal, and the
+post-removal full gate.
+
 1. Append a temporary driver to `packages/forth-core/test_capture.part.h`
    and register it in `packages/forth-core/test_dict_reloc.c` (a forward
    declaration beside the neighbouring `static int test_*(void);` lines, and
@@ -97,6 +108,13 @@ Three facts that make this work headless:
 
 ## Traps, each one paid for
 
+- **`screenUpdatingMode` can silently blank a normal-screen shot.** An
+  earlier battery test leaves it at 7 (manual statusbar/stack/menu), and
+  `refreshScreen()` then draws nothing but the date — a technically
+  successful dump of an empty frame. Force `screenUpdatingMode =
+  SCRUPD_AUTO;` (and `temporaryInformation = TI_NO_INFO;`) before the
+  refresh, and save/restore both. Cost a blank-frame debugging round on
+  2026-08-03.
 - **`refreshScreen()` on hand-built PEM state segfaults.** The full-screen
   redraw walks program memory through `currentStep` /
   `currentLocalStepNumber`; if you set those by hand and they disagree, it
@@ -159,6 +177,12 @@ append the block below to `AGENTS.md` verbatim.
 Do NOT do this on your own initiative. Only when a packet explicitly says
 to capture or inspect the LCD.
 
+Capture packets are instantiated from
+`design-docs/forth-core/QWEN_TEMPLATE_LCD_CAPTURE.md` and start from the
+proven driver at `.claude/skills/run-sim/references/capture-driver.c`;
+the packet tells you exactly what to copy and edit. Everything below
+still binds.
+
 The calculator screenshots itself. `fnScreenDump(0)` writes a 1-bit
 400x240 BMP named `YYYYMMDD-HHMMSSnn.bmp` into the current directory,
 built from `lcd_buffer_pixel_on()`. That read-back works headless:
@@ -169,7 +193,7 @@ There is NO screenshot or input tooling on this machine — no `xdotool`,
 `import`, `scrot`, `convert`. Do not `apt-get` any. Launching the GTK
 binary proves nothing you need; use the dump.
 
-Rules, all four binding:
+Rules, all five binding:
 
 1. **`lcd_clear_buf()` is off limits in `test_dict_reloc.c`.** It exists
    only in the c47-gtk HAL, and that file compiles into the testSuite
@@ -181,15 +205,25 @@ Rules, all four binding:
    hand-set values that disagree segfault it. Reach the state through a
    sequence copied from a LANDED test, and redraw only what you need
    (`showSoftmenu(-MNU_X); showSoftmenuCurrentPart();`).
-3. **A capture driver is temporary and you revert it.** `git checkout --`
-   the two test files, delete the BMPs, re-run the full gate green, and
-   confirm with `git status --short` before reporting. A driver left in a
-   commit is a defect of the same class as editing `src/`.
+3. **A capture driver is temporary and you remove it by its markers.**
+   The driver and its registration lines all carry the `TEMP-LCD-CAPTURE`
+   token: range-delete the BEGIN/END block in `test_capture.part.h`,
+   line-delete the token in `test_dict_reloc.c`, verify
+   `git diff --stat` on both files is EMPTY, delete the BMPs, and re-run
+   the full gate green before reporting. Never remove it with
+   `git checkout`/`git restore` — with uncommitted work in the file that
+   destroys the stage (standing rule, 2026-08-03 near-miss). A driver
+   left in a commit is a defect of the same class as editing `src/`.
 4. **Never assert a literal pixel count.** Upstream owns the font and the
    cell geometry; a legitimate change there must not turn a test red.
    Assert ordering only — longer label lights more pixels than a shorter
    one, which lights more than an empty cell. Copy the shape from
    `test_picker_renders_labels` in `test_capture.part.h`.
+5. **A normal-screen shot forces `screenUpdatingMode = SCRUPD_AUTO`
+   first** (and `temporaryInformation = TI_NO_INFO`), saving and
+   restoring both. An earlier battery test often leaves the mode manual
+   (7), and `refreshScreen()` then draws nothing but the date — the dump
+   succeeds and the frame is blank.
 
 Convert with PIL (installed; ImageMagick is not):
 `python3 -c "from PIL import Image; im=Image.open('X.bmp').convert('RGB'); im.resize((im.width*2,im.height*2), Image.NEAREST).save('/tmp/shot.png')"`
