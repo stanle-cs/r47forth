@@ -816,6 +816,76 @@ PEM already pays and nobody has complained about. It also makes the sweep
 rule trivial: *no scratch program may exist while no interactive capture
 is open.* Recommended shape.
 
+### T7.2b — keep it and grow it: the scratch program IS the history
+(owner-proposed 2026-08-04)
+
+**Proposed amendment to L-R5.** Do not create and destroy the scratch
+program. Keep it, and let committed lines accumulate in it as steps —
+the fold's workspace and L2's line history are then the same object.
+
+This is strictly better than the ruled ring on four counts, and it
+deletes a packet:
+
+1. **L2's ring disappears.** No 512 B BSS, no packed `[len][bytes]`
+   encoding, no eviction arithmetic, no separate lifetime or poison
+   sweep. History is a sequence of `ITM_FORTH` steps.
+2. **History persists across save/restore for free.** L-R5 settled for
+   NO persistence explicitly because "new save keys + restore validation
+   for a convenience buffer is not worth the format surface". Program
+   memory already *has* a persisted format and restore validation, so
+   this buys persistence at **zero** format cost — strictly better than
+   what the ruling settled for, by the ruling's own reasoning.
+3. **The leak problem dissolves entirely.** T7.2's hazard was a capture
+   step left behind by a crash. If committed lines belong in this
+   program, a leftover capture step *is* a history entry — it is where it
+   belongs. Only the transient TAM step still needs sweeping, and that
+   window is microseconds inside one `_tamProcessInput` call.
+4. **History becomes inspectable and editable with landed machinery.**
+   It is a program: open it in PEM, scroll it, edit a line, delete
+   entries. `pemAlpha(ITM_EDIT)` already turns an `ITM_FORTH` step back
+   into an editable capture line (manage.c:892-909), which is most of
+   the recall mechanism. T4's open question narrows from "how do we
+   store and re-edit history" to "which key browses it".
+
+**The one real cost, verified this pass.** `resizeProgramMemory` claims
+blocks from `freeMemoryRegions` (src/c47/memory.c:177-188) — the same
+pool `allocC47Blocks` serves, and therefore the same pool the Forth
+dictionary allocates from (forth_dict.c:367, 383). So history in program
+memory **does** compete with compile capacity, which is precisely what
+L-R5's arena-based alternative was rejected for. Two differences make it
+a different bargain rather than the same one:
+
+- It is **visible and under user control** — a program they can see,
+  count, and delete — not an invisible allocator quietly fighting the
+  dictionary.
+- It adds **no allocator machinery**: no new lifetime, no ownership, no
+  poison sweep. The steps simply exist, in the region already designed
+  to hold them.
+
+Against that: growth is not graceful at the limit. `resizeProgramMemory`
+on exhaustion calls `backToSystem(NOPARAM)` on DMCP
+(src/c47/memory.c:180-182) — it does not fail an insert, it leaves the
+app. Unbounded history in a shared pool therefore needs a policy, which
+is the one open owner decision (see below).
+
+**Open decisions this amendment raises:**
+
+- **Growth policy.** Cap with oldest-first eviction (one `deleteStepsFromTo`
+  on the first step — cheaper than the ring's packed eviction), or
+  "it is your program, clear it yourself", or a soft cap plus manual
+  clear. Owner's call; recorded, not assumed.
+- **Identity.** A visible program needs a name — a leading `LBL` with a
+  reserved name, or acceptance that it is the unnamed last program.
+- **Running it executes every history line.** Either a feature (re-run
+  the session) or a footgun. Needs a stated position, not silence.
+- **Save-file size** grows with history.
+
+**Not proposed here:** turning interactive Forth into PEM-on-a-hidden-
+program. This amendment changes where committed lines *live*; L1's host
+surface (`CM_AIM`, stack visible, AIM line render per T5) is unchanged.
+The convergence is worth noticing but is a separate question and would
+reopen ruled ground.
+
 Open, for the fold packet to settle before code (measurement, not
 reading):
 
