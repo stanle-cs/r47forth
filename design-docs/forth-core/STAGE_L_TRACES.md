@@ -737,14 +737,37 @@ buried:
 
 - `currentStep` interactively points wherever the PEM cursor was left, so
   the transient steps land inside a real user program.
-- Two windows, with very different exposure. The **capture step** is
-  present for the whole TAM episode (seconds) — and a leaked one is
-  benign *by construction* since 2026-08-04: len=1/NUL decodes blank,
-  executes as an empty line, the picker skips it, and EDIT heals it
-  (§8.1). The **TAM step** (e.g. `STO 05`, which would execute if left
-  behind) exists only between its commit and the resume splice, both
-  inside one `_tamProcessInput` call — microseconds, no user input in
-  between.
+- Two windows, with different durations — but **both leak live steps.**
+  The **capture step** is present for the whole TAM episode (seconds).
+  The **TAM step** (e.g. `STO 05`) exists only between its commit and the
+  resume splice, both inside one `_tamProcessInput` call — microseconds,
+  no user input in between.
+
+  **CORRECTION (2026-08-04, caught by the owner's question).** An earlier
+  draft of this section claimed a leaked capture step is benign by
+  construction, citing the len=1/NUL placeholder. That is wrong for the
+  fold. `forthFoldEnter` seeds the step with the **live line**, and
+  `_forthCapBuildStep` emits `len = n` with the text whenever the text is
+  non-empty (manage.c:846-859) — the len=1/NUL form is produced *only*
+  for empty text. So the fold's capture step is a real `ITM_FORTH` source
+  step, and `executeOneStep`'s `ITM_FORTH` arm runs **any** `len > 0`
+  step through `forthProgramStep` [VERIFIED by hand:
+  lblGtoXeq.c:632-638] — markers are display-only and gate nothing at
+  run time. A leaked fold step would therefore silently execute the
+  user's half-typed Forth line inside whatever program the PEM cursor
+  happened to be parked in.
+
+  Exposure requires a crash or reset inside the TAM window. **PEM carries
+  the identical exposure today** — its capture step holds the line for
+  the whole episode too — so this is not a new hazard *class*. The
+  difference that matters: in PEM the user is deliberately editing that
+  program and would see the stray line; interactively it lands somewhere
+  they are not looking. Mitigation options for the fold packet, none yet
+  ruled: (i) accept and document, on the PEM-parity argument; (ii) park
+  the fold's steps at a deterministic location instead of wherever
+  `currentStep` sits, so a leak is findable rather than arbitrary;
+  (iii) a boot/restore sweep — weak on its own, since a leaked step is
+  byte-indistinguishable from a legitimate PEM Forth source line.
 - `scanLabelsAndPrograms()` runs on both insert and delete
   (manage.c:770, :228), so insert-then-delete restores `labelList` and
   step numbering exactly.
