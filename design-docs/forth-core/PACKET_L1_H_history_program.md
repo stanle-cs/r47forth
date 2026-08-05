@@ -43,6 +43,11 @@ and report — the name is a spec decision, not an implementer choice.
 **Locate-or-create**, in `programming/manage.c`:
 
 ```
+forthHistoryGotoLastStep() -> bool_t /* park currentStep on FHIST's last step,
+                                        i.e. immediately before its END; false
+                                        if FHIST is absent.  DECLARED IN
+                                        forth_capture.h — L1-F1 calls it. */
+
 forthHistoryProgram() -> uint16_t   /* program number, or 0 if absent */
     scan labelList for a global label "FHIST"; return its .program, else 0
 
@@ -139,7 +144,7 @@ forthHistoryPush(const char *text):
     if text equals the newest FHIST line: return  /* L2 rule: consecutive
                                                      duplicates collapse */
     save cursor tuple
-    position on FHIST's last step (before its END)
+    forthHistoryGotoLastStep()
     _insertInProgram(tmpString, _forthCapBuildStep(tmpString, text))
     forthHistoryEvict()
     restore cursor tuple

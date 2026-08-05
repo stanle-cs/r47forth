@@ -33,9 +33,17 @@ grep -c "forthFold" packages/forth-core/programming/manage.c            # expect
 
 ```c
 typedef struct {
-  uint32_t savedGlobalStep;      /* the caller's PEM cursor, as a global step */
+  uint16_t savedProgram;         /* currentProgramNumber — NOT a global step
+                                    number: program boundaries are themselves
+                                    global step numbers and all shift when
+                                    FHIST grows or evicts (see L1-H C2) */
+  uint16_t savedLocalStep;       /* currentLocalStepNumber */
   uint16_t savedFirstDisplayed;  /* firstDisplayedLocalStepNumber */
-  uint16_t entryStepCount;       /* getNumberOfSteps() BEFORE the capture-step insert */
+  uint16_t entryStepCount;       /* getNumberOfSteps() in FHIST, BEFORE the insert */
+  uint32_t capStepOffset;        /* capture step vs beginOfProgramMemory —
+                                    program memory may relocate */
+  /* NOTE: forthHistoryGotoLastStep() is L1-H's export; if L1-H did not
+     declare it, that is a STOP, not something to re-implement here. */
   uint8_t  savedZerothStep;      /* pemCursorIsZerothStep */
   uint8_t  pad;
 } forthFoldCtx_t;                /* one static instance */
@@ -47,9 +55,24 @@ Plus one byte of state on the capture object, in `forth_capture.h` beside
 ```c
   uint8_t     foldMode;       /* 0 = none, 1 = FOLD (bracket armed),
                                  2 = PARK (materialised, bracket NOT armed).
-                                 Transient; cleared at the same three E14
-                                 reset sites as keysMode and origin. */
+                                 OWNED BY forthFoldEnter/forthFoldLeave, and
+                                 by forthCapPowerReset() ONLY.  forthCapOpen,
+                                 forthCapClose and forthCapAbandonSuspended
+                                 MUST NOT touch it — see below. */
 ```
+
+**`foldMode` does NOT join the E14 sweep.** `keysMode` is cleared at four
+sites — `forthCapOpen` (forth_capture.c:10), `forthCapClose` (:16),
+`forthCapAbandonSuspended` (:38), `forthCapPowerReset` (:61) — and
+`forthCaptureResume` calls **both** `forthCapOpen()` (manage.c:1224) and,
+on the canary path, `forthCapAbandonSuspended()` (manage.c:1214). Since
+F2 runs the resume immediately before the leave, clearing `foldMode` at
+those sites would make `forthFoldLeave()`'s `if(foldMode == 0) return;`
+fire every time: **the transient step would stay in FHIST forever and the
+PEM cursor globals would stay pointing into it.** The invariant:
+`forthFoldLeave()` must be able to sweep and restore even after a resume
+that abandoned the suspension. Only `forthCapPowerReset()` clears it, as
+the last-resort reset.
 
 **Report `sizeof(forthCap_t)` before and after.** `state`/`keysMode`/
 `origin`/`foldMode` are four `uint8_t`s ahead of a `uint16_t`, so it should
@@ -104,13 +127,32 @@ forthFoldEnter(func, mode):
   if !forthHistoryEnsure(): forthCap.foldMode = 0; return   /* no program, no fold */
 
   if currentProgramNumber < 1: goToGlobalStep(1)            /* guard programList[-1] */
-  forthFoldCtx.savedGlobalStep     = currentLocalStepNumber
-                                     + programList[currentProgramNumber - 1].step - 1
+  forthFoldCtx.savedProgram        = currentProgramNumber
+  forthFoldCtx.savedLocalStep      = currentLocalStepNumber
   forthFoldCtx.savedFirstDisplayed = firstDisplayedLocalStepNumber
   forthFoldCtx.savedZerothStep     = pemCursorIsZerothStep
-  forthFoldCtx.entryStepCount      = getNumberOfSteps()
+  pemCursorIsZerothStep = false     /* MUST: a parked capture step is a real
+                                       step, never the zeroth-step pseudo-
+                                       position.  addStepInProgram's pre-move
+                                       (manage.c:2264) is gated on this being
+                                       false; left true, the TAM step commits
+                                       BEFORE the capture step, resume's
+                                       offset-derived pointer (manage.c:1210-1213)
+                                       reads the TAM step, the canary
+                                       falsifies and the capture is abandoned.
+                                       It is a persistent global with no reset
+                                       on leaving PEM. */
 
-  position the cursor on FHIST's last step (before its END)   /* L1-H's helper */
+  forthHistoryGotoLastStep()        /* L1-H's helper; park on FHIST's last
+                                       step, before its END */
+
+  forthFoldCtx.entryStepCount      = getNumberOfSteps()   /* AFTER the reposition:
+                                       getNumberOfSteps() is keyed entirely on
+                                       currentProgramNumber (manage.c:2374-2387),
+                                       so sampling it in the CALLER's program and
+                                       comparing against FHIST's count in
+                                       forthFoldLeave would make the sweep eat
+                                       real history whenever FHIST is longer. */
 
   /* Materialise the capture step, seeded with the LIVE line.  This is
    * manage.c:941-952's shape verbatim, with aimBuffer instead of "". */
@@ -119,6 +161,7 @@ forthFoldEnter(func, mode):
   currentStep = findPreviousStep(currentStep)     /* park ON the capture step —
                                                     the state forthCaptureSuspend
                                                     documents at manage.c:1192-1197 */
+  forthFoldCtx.capStepOffset = (uint32_t)(currentStep - beginOfProgramMemory)
 
   forthCap.foldMode = _forthFoldAdmits(func, mode) ? 1 : 2
 ```
@@ -134,15 +177,35 @@ forthFoldLeave():
 
   /* Debris sweep.  Normally zero iterations: forthCaptureResume already
    * deleted the folded step (manage.c:1253).  This covers every break path
-   * in that loop (manage.c:1246 oversize, :1251 no room) and the PARK case,
-   * where interactively there is nowhere to leave a step. */
-  while getNumberOfSteps() > forthFoldCtx.entryStepCount + 1:
-      deleteStepsFromTo(findNextStep(currentStep), findNextStep(findNextStep(currentStep)))
-      if lastErrorCode != ERROR_NONE: break        /* L1-H's UAF guard, same reason */
+   * in that loop (manage.c:1246 oversize, :1251 no room) and the PARK case.
+   * BOUNDED and guarded — deleteStepsFromTo is a silent no-op when from==to
+   * (manage.c:221-227), so an unbounded while can spin; findNextStep can
+   * return NULL (src/c47/programming/nextStep.c:151-157); and lastErrorCode
+   * may already be set on entry.  Landed precedent for the bound is in the
+   * same file, manage.c:1279-1282 ("so never spin on the predicate"). */
+  savedErr = lastErrorCode; lastErrorCode = ERROR_NONE
+  for i in 0 .. 3:
+      if getNumberOfSteps() <= forthFoldCtx.entryStepCount + 1: break
+      victim = findNextStep(currentStep)
+      if victim == NULL or isAtEndOfProgram(victim) or isAtEndOfPrograms(victim): break
+      deleteStepsFromTo(victim, findNextStep(victim))
+      if lastErrorCode != ERROR_NONE: break        /* L1-H's UAF guard */
+  if lastErrorCode == ERROR_NONE: lastErrorCode = savedErr
 
-  deleteStepsFromTo(currentStep, findNextStep(currentStep))   /* the capture step */
+  /* The capture step, re-derived from an OFFSET with a canary — currentStep
+   * has survived an arbitrary TAM, and _insertInProgram rebases every
+   * program pointer whenever it grows the region (manage.c:723-733).  This
+   * is the landed pattern: forth_capture.h:44-48 keys the suspend snapshot
+   * off an offset for exactly this reason. */
+  cap = beginOfProgramMemory + forthFoldCtx.capStepOffset
+  if cap < firstFreeProgramByte
+     and checkOpCodeOfStep(cap, ITM_FORTH)
+     and cap[2] == STRING_LABEL_VARIABLE:
+      deleteStepsFromTo(cap, findNextStep(cap))
+  /* else: canary failed — skip the delete, but STILL restore the cursor and
+     STILL clear foldMode below.  Report it if a test ever reaches here. */
 
-  goToGlobalStep(forthFoldCtx.savedGlobalStep)
+  goToPgmStep(forthFoldCtx.savedProgram, forthFoldCtx.savedLocalStep)
   firstDisplayedLocalStepNumber = forthFoldCtx.savedFirstDisplayed
   defineFirstDisplayedStep()
   pemCursorIsZerothStep = forthFoldCtx.savedZerothStep
@@ -185,16 +248,30 @@ comment saying so at the materialise site, so a later reader does not
    leave still sweeps cleanly.
 6. **Sweep clears debris.** Hand-insert an extra step after the capture
    step, then `forthFoldLeave()`; assert the count returns to entry.
-7. **E14.** Assert `foldMode` is cleared by `forthCapClose()`,
-   `forthCapAbandonSuspended()` and `forthCapPowerReset()`.
+7. **`foldMode` survives the capture-object resets.** Arm a fold, then call
+   `forthCapClose()`, and separately `forthCapAbandonSuspended()`, and
+   separately `forthCapOpen()`; after each, assert `forthFoldPending()` is
+   **still true** and that `forthFoldLeave()` still sweeps and restores.
+   Then assert `forthCapPowerReset()` DOES clear it. This is the inverse of
+   what rev 1 asked for, and it is the assertion that keeps the fold able
+   to unwind after a resume that abandoned the suspension.
+8. **Zeroth-step normalisation.** Set `pemCursorIsZerothStep = true` before
+   `forthFoldEnter`; assert the TAM step lands **after** the capture step
+   and that leave restores the flag to true.
+9. **Sweep does not eat history.** With FHIST holding >= 3 steps and the
+   caller's program shorter (or empty), run enter+leave and assert FHIST's
+   step count is unchanged. This is the B1 pin — none of C6.1-C6.6 catches
+   a sweep keyed off the wrong program.
 
 ## Mutations
 
 1. Sample `entryStepCount` after the insert. RED at C6.6.
 2. Drop the `findPreviousStep` park. RED at C6.4 (the step lands wrong) —
    report which assertion actually fires.
-3. Restore the cursor with `goToPgmStep` instead of
-   `goToGlobalStep(savedGlobalStep)`. RED at C6.3.
+3. Restore the cursor with `goToGlobalStep` keyed off a global step number
+   instead of `goToPgmStep(savedProgram, savedLocalStep)`. RED at C6.3 —
+   drive it with FHIST holding enough lines that the caller's program
+   boundary has shifted.
 4. Omit the `lastErrorCode` check in the sweep. Report unpinned with
    evidence if it cannot be driven.
 5. Materialise at `currentStep` instead of in FHIST. RED at C6.3.
