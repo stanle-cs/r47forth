@@ -1134,6 +1134,9 @@ static int test_capture_interactive_divert(void);              /* L1-3 */
 static int test_history_program(void);                        /* L1-H */
 static int test_fold_context(void);                            /* L1-F1 */
 static int test_fold_seams(void);                              /* L1-F2 */
+static int test_fold_operand_parity(void);                     /* L1-F3 */
+static int test_fold_close_paths(void);                        /* L1-F3 */
+static int test_cm_gate_audit(void);                           /* L1-F3 */
 static int test_forth_fold_commit_recompiles(void);           /* FIX-7 */
 static int test_quote_glyph_accept_parity(void);              /* FIX-7 class */
 static int test_resume_drains_buried_catalog(void);           /* FIX-9 */
@@ -2145,6 +2148,26 @@ int forthDictSelfTest(void)
   fail |= test_fold_seams();
   forthDictClear();
   forthGDictClear();
+
+  printf("\nFORTH L1-F3 TESTS (operand-class parity, fold close paths, CM-gate audit)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_fold_operand_parity...\n");
+  fail |= test_fold_operand_parity();
+  forthDictClear();
+  forthGDictClear();
+
+  forthDictInit();
+  printf("  [DEBUG] running test_fold_close_paths...\n");
+  fail |= test_fold_close_paths();
+  forthDictClear();
+  forthGDictClear();
+
+  forthDictInit();
+  printf("  [DEBUG] running test_cm_gate_audit...\n");
+  fail |= test_cm_gate_audit();
+  forthDictClear();
+  forthGDictClear();
+
 
   printf("\nFORTH FIX-7 TESTS (emit/accept quote parity)\n");
   forthDictInit();

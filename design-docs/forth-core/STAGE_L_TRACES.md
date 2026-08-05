@@ -617,7 +617,7 @@ test asserting each verdict is the deliverable.
 | 11 | ui/tam.c:1102 | TAM step recording | ~~KEEP PEM-only~~ **WIDEN-by-bracket** (restated after the L-R4 (b) ruling; the original verdict predates it). F2's `calcMode` bracket forges CM_PEM precisely so this records. |
 | 12 | ui/tam.c:1180 | `tamEnterMode` capture suspend | ~~KEEP PEM-only under (a)~~ **WIDEN** — L-R4 ruled (b); F2 C1 rewrites this arm to fire interactively and to call `forthFoldEnter`. |
 | 13 | manage.c:1294 | `pemAlphaEdit` guard | **KEEP PEM-only** — EDIT is a program-step gesture |
-| 14 | manage.c:813-830 | `forthCaptureSanitizeRestoredUi` (CM_PEM + ALPHA + `tam.function == ITM_FORTH`) | **WIDEN** — a restored machine may hold an interactive origin; L1-1 extends the sanitizer and the close-paths class test |
+| 14 | manage.c:813-830 | `forthCaptureSanitizeRestoredUi` (CM_PEM + ALPHA + `tam.function == ITM_FORTH`) | ~~WIDEN~~ **KEEP PEM-only — corrected 2026-08-05.** L1-1 rev 2 dropped the widen deliberately (see its "Why there is no restore sanitizer" section): `forthCap` is process-local and reset at the dictionary seams, so a restore leaves the capture CLOSED, and what remains — `CM_AIM` + `FLAG_ALPHA` + the line in `aimBuffer` — **is** a native alpha session, which upstream restores on purpose (saveRestoreBackup.c:1545-1549). The PEM arm exists only because PEM's residue carries a Forth-specific persisted marker (`tam.function`); the interactive origin has none, so any arm keying on `CM_AIM` + `FLAG_ALPHA` alone would tear down a legitimate restored alpha session. F3's audit flagged the doc/code disagreement — the doc row was the stale half. |
 | 15 | forth_menu.c:68-73 | `forthPickerGuard` | **WIDEN** to the interactive origin; skip the `pemAlpha` re-commit tail |
 | 16 | forth_menu.c:107-177 | picker text-scan section keyed on `currentStep` | **GATE OFF** interactively (T6) |
 | 17 | screen.c:902, 1031 | PEM/AIM display gates | **KEEP** — no capture-specific behavior |
@@ -635,7 +635,8 @@ re-order:
   regressions from L-R2's intended behavior change. (T2)
 - **L1-1** capture origin bit + open/close seams — **plus** the FIX-9
   catalog-drain analog on the interactive open path, and the
-  `forthCaptureSanitizeRestoredUi` widen. (T6, gate 14)
+  ~~`forthCaptureSanitizeRestoredUi` widen~~ — dropped in L1-1 rev 2, see
+  the corrected gate-14 row above. (T6)
 - **L1-2** ENTER/EXIT/interpret loop — **plus** the 256-byte/196-glyph
   cap on the interactive alpha insert path, which PEM gets from
   `pemAlpha` and AIM does not. (T1)
