@@ -18,3 +18,7 @@
 - Division of labor: you (Claude) do design, review, and hard debugging.
   A local model implements from your specs — write specs with zero unstated
   decisions, exact struct layouts, and pseudocode for stateful logic.
+  The same discipline binds sub-agent prompts: inline the governing skill's
+  binding rules and name its reference artifacts (copy-adapt, never author)
+  in the prompt itself — "invoke the skill and follow it" alone has failed
+  (2026-08-04, hand-rolled capture driver).

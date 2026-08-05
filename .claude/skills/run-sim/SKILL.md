@@ -1,9 +1,13 @@
 ---
 name: run-sim
-description: Launch the C47/R47 simulator and capture what is actually on the LCD. Use when asked to run the app, show a screen, screenshot the calculator, or confirm a UI change renders for real rather than only passing a test. Covers the GTK window, the headless binary, the app's own BMP screenshot path, and the traps that make a naive attempt segfault or silently measure nothing.
+description: Launch the C47/R47 simulator and capture what is actually on the LCD. Use when asked to run the app, show a screen, screenshot the calculator, or confirm a UI change renders for real rather than only passing a test. Covers the GTK window, the headless binary, the app's own BMP screenshot path, and the traps that make a naive attempt segfault or silently measure nothing. Capture drivers are copy-adapted from this skill's references/capture-driver.c — never written from scratch.
 ---
 
 # Running the C47/R47 simulator and seeing the screen
+
+**If this task ends in a capture driver, you COPY
+`references/capture-driver.c` (in this skill) and adapt its fixture.
+A driver written from scratch is off-path even if it works — rule 6.**
 
 Two binaries are built from the same sources and both matter:
 
@@ -193,7 +197,7 @@ There is NO screenshot or input tooling on this machine — no `xdotool`,
 `import`, `scrot`, `convert`. Do not `apt-get` any. Launching the GTK
 binary proves nothing you need; use the dump.
 
-Rules, all five binding:
+Rules, all six binding:
 
 1. **`lcd_clear_buf()` is off limits in `test_dict_reloc.c`.** It exists
    only in the c47-gtk HAL, and that file compiles into the testSuite
@@ -224,6 +228,13 @@ Rules, all five binding:
    restoring both. An earlier battery test often leaves the mode manual
    (7), and `refreshScreen()` then draws nothing but the date — the dump
    succeeds and the frame is blank.
+6. **A driver is copied, never authored.** Copy
+   `.claude/skills/run-sim/references/capture-driver.c` and adapt its
+   fixture; keep the machinery. Typing save/restore, screenshot, or
+   registration scaffolding by hand means you are off-path — stop and
+   copy (standing rule, 2026-08-04: a sub-agent told to follow this
+   skill still hand-rolled a driver; the reference exists so the traps
+   above stay solved once).
 
 Convert with PIL (installed; ImageMagick is not):
 `python3 -c "from PIL import Image; im=Image.open('X.bmp').convert('RGB'); im.resize((im.width*2,im.height*2), Image.NEAREST).save('/tmp/shot.png')"`
