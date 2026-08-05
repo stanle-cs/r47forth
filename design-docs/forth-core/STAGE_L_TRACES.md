@@ -1040,6 +1040,147 @@ non-reentrancy.
    supply (manage.c:2191-2195 against the inbound snapshot at
    manage.c:1919-1920). If unsafe, `TM_MENU` moves from FOLD to PARK.
 
+## T8 — the PEM-host pivot: investigated 2026-08-04, REJECTED
+
+**Question (owner-directed).** Since history is now a real program of
+`ITM_FORTH` steps (L-R7) and the fold already works by temporarily
+pretending `calcMode == CM_PEM` (T7), should interactive Forth simply
+**be** PEM capture on the `FHIST` program, with the display showing the
+stack instead of the listing? If so it would delete the `runFunction`
+divert seam, the ~17 gate widenings, the fold bracket and context, and
+the `determineItem` fix.
+
+**Verdict: do not pivot. Stay on the AIM host.** One showstopper, and it
+is exactly the arbitrary-user-code case.
+
+### T8.1 — the showstopper: item functions test `calcMode` themselves
+
+I had checked that the Forth inner interpreter dispatches C47 items
+through `reallyRunFunction` (forth_inner.c:378), **not** `runFunction`,
+and concluded that executed words behave identically in PEM. That was
+the right check on the wrong layer. The dispatcher is
+`calcMode`-independent; **the item implementations are not.**
+
+```c
+void fnGoto(uint16_t label) {
+  if(tam.mode || calcMode != CM_PEM) {
+    …actually jump…                       /* lblGtoXeq.c:17-92  */
+  }
+  else {
+    insertStepInProgram(ITM_GTO);         /* lblGtoXeq.c:94-96   */
+  }
+}
+```
+
+[VERIFIED by hand: packages/forth-core/programming/lblGtoXeq.c:16-97.]
+
+Under the pivot `tam.mode == 0` and `calcMode == CM_PEM`, so a Forth line
+that calls a C47 label **writes a GTO step into FHIST instead of
+jumping**, and `runProgram` then executes from `currentStep` inside the
+history program. Calling a label is among the most ordinary things a user
+does from a Forth line.
+
+The escape is a bracket — save `calcMode`, set `CM_NORMAL`, interpret,
+restore — and it is disqualifying for three reasons:
+
+1. **It spans arbitrary, re-entrant user code**, not one bounded call. A
+   line can `XEQ` a program containing its own `ITM_FORTH` steps;
+   `runProgram` polls keys for abort; every error path must restore.
+   Contrast T7's bracket, which wraps a single TAM dispatch.
+2. **It concedes the thesis.** At the one moment the host mode would
+   matter for execution, the host mode must be switched off. The
+   record-instead-of-execute semantics the pivot adopts are precisely
+   what it must then suppress.
+3. **`fnGoto` is one instance of a class that cannot be enumerated
+   cheaply.** Because the Forth engine bypasses `runFunction`'s PEM
+   divert, the protection the pivot *appears* to inherit does not apply,
+   and every item leaf with its own `calcMode == CM_PEM` arm is reachable
+   from user text.
+
+Under the AIM host this does not exist: `CM_AIM != CM_PEM`, so
+lblGtoXeq.c:17 takes the jump arm.
+
+### T8.2 — the display saving was illusory
+
+My own earlier read — "the pivot costs two edits, because
+`_refreshNormalScreen()` already serves CM_NORMAL/CM_AIM/CM_NIM
+(screen.c:6192-6227) and the CM_PEM arm is one line (screen.c:6176)" —
+was **too optimistic**. To render the stack correctly under `CM_PEM` you
+must lie about `calcMode` there too:
+
+- `display.c:234-237` forces `displayFormat = DF_ALL` and clears
+  `FLAG_ENGOVR` whenever `calcMode == CM_PEM` — the stack would ignore
+  the user's display setting. [VERIFIED by hand.]
+- `screen.c:3636` suppresses the X-line solver/probability prefix under
+  `calcMode == CM_PEM`. [VERIFIED by hand.]
+
+So the pivot must bracket `calcMode` for the display *and* for execution.
+Once both brackets exist it has bought nothing in either place — only the
+input seam, which is one dispatch arm.
+
+### T8.3 — the cost the AIM host quietly avoids
+
+PEM capture rewrites the on-disk step **on every keystroke**:
+`pemAlpha`'s recommit tail does `deleteStepsFromTo` (manage.c:1104) then
+`_insertInProgram` (manage.c:1113) per character, and each of those calls
+`scanLabelsAndPrograms`, which walks program memory twice and does a
+`freeC47Blocks`/`allocC47Blocks` pair for both `labelList` and
+`programList`. Under the pivot, **typing** an interactive line would
+churn program memory per character; under the AIM host typing is
+`addItemToBuffer` into `aimBuffer` and touches program memory not at all.
+Arena cost is binding under CLAUDE.md, and this one is unmeasured.
+
+### T8.4 — adopted from the investigation anyway (the pivot's real yield)
+
+The pivot was rejected; the investigation was not wasted. Each of these
+applies to the AIM host and several are corrections to the plan of
+record. Anchors from the investigation are marked *(to verify at packet
+time)* where I did not re-read them myself this pass.
+
+1. **The fold's step-materialisation anchor is ui/tam.c:907-909**, the
+   `case CM_PEM: addStepInProgram(tamOperation())` inside the numeric
+   commit switch — not only the `:1102` site T7 cited, which is the
+   alpha-buffer branch. [VERIFIED by hand: ui/tam.c:902-917, and a third
+   at :929-930.] Both sit inside `_tamProcessInput` and are therefore
+   covered by T7's single bracket, so the **design is unchanged** — but
+   the packet must cite all three, not one.
+2. **`fnKeyEnter`'s CM_AIM arm needs its own explicit seam** in the plan:
+   it pops softmenus, calls `calcModeNormal()`, and stores `aimBuffer` to
+   X as a `dtString` with a stack lift (keyboard.c:3513-3570). T2 said
+   this; the packet list did not carry it as a named seam. Now it does.
+3. **The divert seam misses the dynamic-menu / USER RCL-XEQ arms.** T1
+   placed the new arm at `runFunction` before items.c:736, but
+   items.c:665-735 sits *above* it — the `ITM_RCL`/`ITM_XEQ`
+   dynamic-menu arms (items.c:670, :699, :711, :719) and their siblings
+   in keyboard.c/screen.c/forth_bridge.c dispatch before the divert is
+   reached. Fix: either place the divert above them, or add a
+   `forthCapIsOpen()` early-out in `insertUserItemInProgram`
+   *(to verify at packet time)*.
+4. **T5's "zero new display code" is too strong and must be narrowed.**
+   `_refreshNormalScreen`'s AIM arm paints T/Z/Y only when
+   `yMultiLineEdOffset == 3` (short lines), and the edit line occupies
+   REGISTER_X because `AIM_REGISTER_LINE == REGISTER_X`
+   (defines.h:1495). So the AIM host shows T/Z/Y plus the line for short
+   lines, and line-only for long ones, with X never visible while
+   composing. Still enough to justify L-R2, but **the long-line case
+   needs an explicit ruling** rather than an assumption *(to verify at
+   packet time)*.
+5. **`ITM_PR` leaks an open capture**: keyboard.c:3169-3176 calls
+   `leavePem(); calcModeNormal(); extractPFNMenus();` with no
+   `forthCapClose()`. Needs the guard on either host *(to verify at
+   packet time)*.
+6. **FHIST recall must copy the step's text, not execute the step.**
+   Payload is at `step + 4` for `step[3]` bytes and is **not**
+   NUL-terminated (`_forthCapBuildStep`, manage.c:846-859). Do not use
+   `+3` — that is the length byte.
+7. **Two bugs found in passing, independent of Stage L** *(both to verify
+   at packet time)*: a `leavePem` use-after-free — `scanLabelsAndPrograms`
+   frees `labelList`/`programList` and can early-return on RAM_FULL,
+   after which `leavePem` → `defineCurrentStep` dereferences
+   `programList[...]`, reachable once L-R7's eviction runs at the cap;
+   and a `.d` keystroke silently dropped at keyboard.c:3227 when the line
+   is non-empty.
+
 ### T7.8 — known v1 limitation, recorded not fixed
 
 Catalog-driven TAM commits bypass `tamProcessInput` entirely:
