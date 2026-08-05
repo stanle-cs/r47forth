@@ -86,27 +86,26 @@ landing gate never ran them. Require the implementer to quote the
 `[DEBUG] running …` line and every PASS line verbatim from the green log —
 the `ALL PASSED` banner alone is not evidence a new test ran.
 
-## 8. A mutation that does not go red is a finding — and design the mutation itself
+## 8. A mutation that does not go red is a finding — but design the mutation too
 
-Three coverage holes were found this way in the first two packets. But two
-of L1-F1's non-red mutations were **mutation-design errors, not holes**:
-one replicated the real code's arithmetic (computing the restore key at
-restore time, exactly as the real code does), and one probed a property
-the operation cannot violate (a fold is net-zero on program memory, so no
-saved key can go stale). Before reporting a mutation as unpinned, ask
-whether it actually differs from the original in the dimension the
-assertion tests. Where the answer is "the operation makes this
-unfalsifiable by construction", say so — that is a fact about the design
-worth recording, and it is different from a missing test.
+Three genuine coverage holes were found this way in the first two packets:
+no test asserted the `fnDrop` happened, none drove a maximum-length line,
+and one guard was unfalsifiable by construction. **Instruct the implementer
+to report such a mutation, not delete it.**
 
-## 8b. A mutation that does not go red is a finding
+But two of L1-F1's non-red mutations were **mutation-design errors rather
+than holes**: one replicated the real code's own arithmetic (computing the
+restore key at restore time, which is what the real code does), and one
+probed a property the operation cannot violate (a fold is net-zero on
+program memory, so no saved key can go stale). Before reporting a mutation
+as unpinned, ask whether it actually differs from the original *in the
+dimension the assertion tests*.
 
-Three coverage holes were found this way in the first two packets — no
-test asserted the `fnDrop` happened, none drove a maximum-length line, and
-one guard was unfalsifiable by construction. **Instruct the implementer to
-report it, not delete it.** If a mutation is genuinely unkillable (the
-state it guards is unreachable), say so in the packet up front and give
-the reason, so the implementer does not spend hours on it.
+Three outcomes, and they are different things: a coverage hole (fix the
+test), a mutation-design error (fix the mutation), and unfalsifiable by
+construction (record it as a fact about the design). If a mutation is
+unkillable, say so in the packet up front with the reason, so the
+implementer does not spend hours on it.
 
 ## 9. Verify the assertion can be driven before specifying it
 
