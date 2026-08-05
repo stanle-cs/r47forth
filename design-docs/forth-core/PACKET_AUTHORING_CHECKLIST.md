@@ -86,7 +86,20 @@ landing gate never ran them. Require the implementer to quote the
 `[DEBUG] running …` line and every PASS line verbatim from the green log —
 the `ALL PASSED` banner alone is not evidence a new test ran.
 
-## 8. A mutation that does not go red is a finding
+## 8. A mutation that does not go red is a finding — and design the mutation itself
+
+Three coverage holes were found this way in the first two packets. But two
+of L1-F1's non-red mutations were **mutation-design errors, not holes**:
+one replicated the real code's arithmetic (computing the restore key at
+restore time, exactly as the real code does), and one probed a property
+the operation cannot violate (a fold is net-zero on program memory, so no
+saved key can go stale). Before reporting a mutation as unpinned, ask
+whether it actually differs from the original in the dimension the
+assertion tests. Where the answer is "the operation makes this
+unfalsifiable by construction", say so — that is a fact about the design
+worth recording, and it is different from a missing test.
+
+## 8b. A mutation that does not go red is a finding
 
 Three coverage holes were found this way in the first two packets — no
 test asserted the `fnDrop` happened, none drove a maximum-length line, and
@@ -105,6 +118,15 @@ which reaches `forthCapRecommitStep` and would have **deleted whatever
 
 Ask, per assertion: does the harness have the gesture? Does the packet's
 own scope permit it? Does driving it touch anything destructive?
+
+**And: does the comparison survive the operation's own legitimate side
+effects?** L1-F1's C6.1 said "assert `currentStep` bit-identical", which
+reads as if a raw pointer comparison is safe. It is not —
+`_insertInProgram` rebases every program pointer when it grows the region,
+which is exactly the relocation the packet's own `capStepOffset` design
+exists to survive. Compare by **offset**, and pre-create any lazily-built
+structure before snapshotting. The implementer's first draft went red
+twice on this before diagnosing it.
 
 ## 10. Program-memory edits: name the position and the order
 
