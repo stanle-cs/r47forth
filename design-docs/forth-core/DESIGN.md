@@ -392,8 +392,10 @@ for `REM`/`42STR` steps [VERIFIED: src/c47/programming/manage.c:953-959].
 (§8.1). Step length falls out of upstream `countLiteralBytes` unchanged
 [VERIFIED: src/c47/programming/nextStep.c:236-238].
 `ITM_FCALL` is `PTP_NUMBER_16`, so **two** parameter bytes follow the opcode,
-holding the dictionary index (LE), consumed by `_executeOp(..., PARAM_NUMBER_16)`
-(the default arm at lblGtoXeq.c:835).
+holding the dictionary index (LE), consumed by
+`paramCoreExecuteOpBounded(..., PARAM_NUMBER_16)` (param_core.c, the F2
+extraction of upstream `_executeOp`; reached from `executeOneStep`'s default
+arm, package lblGtoXeq.c:652).
 
 ### 2.2 Forth threaded code (new) — the `ftoken_t`
 Each colon-definition body is a stream of 16-bit **tokens** (`ftoken_t`,
@@ -1477,19 +1479,21 @@ resolver:
 - `runFunction()`, XEQ-by-menu branch (items.c:664-685): after
   `findNamedLabel()` returns `INVALID_VARIABLE`, call `forthFindColon`; on hit,
   `reallyRunFunction(ITM_FCALL, widx)` instead of erroring.
-- `_executeOp`, `PARAM_LABEL`/`STRING_LABEL_VARIABLE` arm (lblGtoXeq.c:345-357):
-   same fallback before `ERROR_LABEL_NOT_FOUND`, for `op == ITM_XEQ || ITM_XEQP1` only;
+- `paramCoreExecuteOpBounded`, `PARAM_LABEL`/`STRING_LABEL_VARIABLE` arm
+   (package param_core.c:107-159 — the F2 extraction of upstream `_executeOp`,
+   upstream anchor lblGtoXeq.c:345-357): same fallback before
+   `ERROR_LABEL_NOT_FOUND`, for `op == ITM_XEQ || ITM_XEQP1` only;
    all other PARAM_LABEL ops keep the upstream ERROR_LABEL_NOT_FOUND halt (audit fix F3).
 
 **LBLQ semantics.** A Forth colon definition is not an RPN label. `LBL?` on a
 name that resolves only in the Forth dictionary reports label-not-found
-(`LBLQ`'s own negative result, not an error halt): `forthFallbackOp` gates the
+(`LBLQ`'s own negative result, not an error halt): `forthFallbackEligible` gates the
 Forth fallback to `ITM_XEQ`/`ITM_XEQP1` only, so a `FORTH_XEQ_COLON` result
 for `op == ITM_LBLQ` falls through to the `op == ITM_LBLQ` arm
 (`reallyRunFunction(op, INVALID_VARIABLE)`) instead of `ITM_FCALL` or
 `displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ...)`. Verified by the FIX-3
-gating in packages/forth-core/programming/lblGtoXeq.c:382-383 (`_executeOp`,
-`PARAM_LABEL` arm).
+gating in packages/forth-core/programming/param_core.c:121-126 & 160-161
+(`paramCoreExecuteOpBounded`, `PARAM_LABEL` arm).
 
 **Complete `findNamedLabel()` call-site map** (20 sites, 6 hooked, 14 excluded):
 
@@ -1533,9 +1537,10 @@ scan then colon fallback) [VERIFIED: packages/forth-core/ui/tam.c:964-991].
 Label-kind pins (b8f79e486, named local labels — §0.3): `forthResolveXEQ`'s
 label step and every Forth-side lookup bind `GLOBAL_LABELS`; a program step
 that encodes a LOCAL name resolves against local labels or fails — the Forth
-fallback in `_executeOp` is gated `opParam == GLOBAL_LABELS` and a local miss
-**never** reaches Forth vocabulary [VERIFIED:
-packages/forth-core/programming/lblGtoXeq.c, `forthFallbackEligible`]. The
+fallback in `paramCoreExecuteOpBounded` is gated `opParam == GLOBAL_LABELS`
+and a local miss **never** reaches Forth vocabulary [VERIFIED:
+packages/forth-core/programming/param_core.c:121-122,
+`forthFallbackEligible`]. The
 interactive TAM hook carries the matching `!tam.colon` gate — upstream's own
 fix, arrived with the migration base (AUD-U1 closed) [VERIFIED:
 packages/forth-core/ui/tam.c:976].
@@ -1558,13 +1563,14 @@ step recorded is the ordinary name-string `XEQ` step (opcode +
 src/c47/programming/manage.c:1775-1804; hook call at
 packages/forth-core/ui/tam.c:964, working-tree change of 2026-07-10] — NOT an
 `ITM_FCALL` step with a baked-in index. Resolution then happens at *run* time
-in the `_executeOp` `STRING_LABEL_VARIABLE` arm through `forthResolveXEQ`
-[VERIFIED: packages/forth-core/programming/lblGtoXeq.c:364-390], fresh on
+in the `paramCoreExecuteOpBounded` `STRING_LABEL_VARIABLE` arm through
+`forthResolveXEQ`
+[VERIFIED: packages/forth-core/programming/param_core.c:107-159], fresh on
 every execution. This keeps the §8 invariant that program↔Forth crossings are
 name strings; dictionary indices never persist in program memory. (The
 `ITM_XEQP1` return-step adjustment when the target is a colon word is part of
 the same change [VERIFIED:
-packages/forth-core/programming/lblGtoXeq.c:376-378].)
+packages/forth-core/programming/param_core.c:143-145].)
 
 **The names-only invariant is enforced at entry, not merely hoped for.**
 `ITM_FCALL` is a keyable `PTP_NUMBER_16` item, so a user *can* reach
@@ -1816,7 +1822,7 @@ is what keeps the generated diff small and future upstream merges reviewable.
 |-----|-------------------------------------|------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
 | H1  | `src/c47/items.c`                   | `indexOfItems[]` def at **items.c:1758**; spare rows **items.c:4690-4691**    | Replace slots 2842/2843 with the exact `ITM_FORTH`/`ITM_FCALL` rows given in §0.2 (param field, tamMinMax, EIM stated there).      |
 | H1b | `src/c47/items.h`                   | `#define ITM_2842 2842`, `#define ITM_2843 2843` (items.h ~2949-2950)         | Add `#define ITM_FORTH 2842` / `#define ITM_FCALL 2843` aliases (keep the numeric `ITM_2842`/`ITM_2843` names too). Do NOT touch upstream's `ITM_FWORD 2003` (items.h:2056) — that is the swap-endian item, referenced by softmenus.c:866 (§0.1 naming warning). |
-| H2  | `src/c47/programming/lblGtoXeq.c`   | `_executeOp` `PARAM_LABEL` arm **lblGtoXeq.c:341-357**                        | Before `ERROR_LABEL_NOT_FOUND`, add Forth colon-def fallback → `reallyRunFunction(ITM_FCALL,widx)`. |
+| H2  | `src/c47/programming/lblGtoXeq.c`   | `_executeOp` `PARAM_LABEL` arm **lblGtoXeq.c:341-357**                        | Before `ERROR_LABEL_NOT_FOUND`, add Forth colon-def fallback → `reallyRunFunction(ITM_FCALL,widx)`. **[LANDED via F2]**: the hook lives in the extracted `paramCoreExecuteOpBounded` (package param_core.c); the override deletes upstream's superseded `_executeOp`/`_executeWithIndirect*` (2026-08-04, so upstream edits there conflict at integrate time instead of landing silently in dead code) and redirects the call sites to `paramCoreExecuteOp`. |
 | H3  | `src/c47/items.c`                   | `runFunction()` XEQ-by-menu branch **items.c:664-685**                          | Same fallback as H2 for interactive `XEQ 'name'`.                                              |
 | H4  | `src/c47/keyboard.c`                | `executeFunction()` **keyboard.c:928** (near runFunction() call **:1164/:1429**) | **[LANDED]** §4.2 site 4: Forth fallback after label miss (`forthFindColon` → `reallyRunFunction(ITM_FCALL, widx)` at **keyboard.c:2293-2300**); P-H7: `MNU_FORTH` picker (`forthPickerGuard` + `pickerInsertName` at **keyboard.c:13-46**, dispatch **:1001-1008**, softmenu case **:113-118**). |
 | H5  | `src/c47/saveRestoreBackup.c`       | label save **:398/:526**, restore **:815-816/:988**                          | Add symmetric save/restore of the Forth region ptr + `fdict` scalars (§5.5).                    |
@@ -1834,7 +1840,7 @@ byte-identical to upstream except the marked insertions. **All rows below are
 |-----|-------------------------------------|------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
 | P-H1 | `src/c47/items.c` *(existing override)* | `ITM_FORTH` row, package items.c:4722                                    | `PTP_NONE` → `PTP_REM` (§0.2). Claim slot 213 for the `MNU_FORTH` `CAT_MENU` row (§0.1, §8.6). |
 | P-H2 | `src/c47/programming/manage.c` **(new override)** | REM route **manage.c:1386-1399**; addItemToBuffer route **:1411**; `pemAlpha` **:773-966**; `pemAlphaEdit` **:982-998**; fnPem cursor hack **:566-575** | `ITM_FORTH` toggle arm + in-region capture route in `insertStepInProgram`; `ITM_FORTH` support in `pemAlpha` (EDIT-extraction: bare, no prefix and no quotes; empty-commit rule) and `pemAlphaEdit`. The fnPem cursor-offset hack **does** need a Forth branch keyed on `tam.function == ITM_FORTH` (`cursorInString = T_cursorPos - 2`, R3-1 — see E7). All specified exactly in §8.4. |
-| P-H3 | `src/c47/programming/lblGtoXeq.c` *(existing override)* | `executeOneStep()` `PTP_REM` arm, package lblGtoXeq.c:838-863; `fnExecute` :~270-303; `runProgram()` :886-897 | `ITM_FORTH` case in the `PTP_REM` arm → `forthProgramStep` (§8.2); run-generation bump sites (§8.3). |
+| P-H3 | `src/c47/programming/lblGtoXeq.c` *(existing override)* | `executeOneStep()` `PTP_REM` arm, package lblGtoXeq.c:611 (`forthProgramStep` :635); `fnExecute` :169; `runProgram()` :667 (`forthRunGenBump` :676) | `ITM_FORTH` case in the `PTP_REM` arm → `forthProgramStep` (§8.2); run-generation bump sites (§8.3). |
 | P-H4 | `src/c47/programming/decode.c` **(new override)** | `decodeRem` **decode.c:828-843**                                          | `ITM_FORTH` marker arm: zero-length payload renders `»FORTH`/`FORTH«` from scan parity (§8.5); non-empty payloads render the source text **bare** — no item-name prefix, no quotes — NOT the generic `FORTH '…'` form (§8.5, E7). |
 | P-H5 | `src/c47/softmenus.c` **(new override — same file as H6)** | `softmenu[]` dynamic area **:1017-1029**, `dynamicSoftmenu[]` **:1211-1234**, `initVariableSoftmenu` **:1648+**, cached rebuild **:3039** | `MNU_FORTH` rows appended to BOTH arrays (order must match — upstream comment softmenus.c:1021-1028); `initVariableSoftmenu` case building the `: NAME` scan content (§8.6); `MNU_FORTH` added to the rebuild-always disjunction. |
 | P-H6 | `src/c47/defines.h` **(new header override)** | `NUMBER_OF_DYNAMIC_SOFTMENUS 22` **defines.h:1429**                        | 22 → 23. This is the upstream-documented procedure for adding a dynamic menu ("don't forget to adjust NUMBER_OF_DYNAMIC_SOFTMENUS in defines.h", softmenus.c:1025-1028). defines.h is machine-wide: keep the override byte-identical except this one line, and re-diff it on every upstream merge. |

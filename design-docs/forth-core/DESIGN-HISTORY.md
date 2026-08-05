@@ -2576,3 +2576,29 @@ appended to the standing discipline. The LCD session also confirmed on
 screen: keys-mode line "42 STO 05 SIN" typed entirely from calculator
 keys, and x-superscript-2 typed in alpha via the latch (Stan's catch —
 the README claim that it was untypeable was wrong and is deleted).
+
+## 2026-08-04 — package lblGtoXeq.c drops upstream's superseded `_executeOp` block
+
+The F2-1 extraction left upstream's `_executeOp` +
+`_executeWithIndirectRegister/Variable` in the package's lblGtoXeq.c,
+dead but byte-identical, and rebases kept updating the dead copy
+silently while the live logic lived in param_core.c — the b8f79e486
+named-local-labels port was caught by review, not by any conflict.
+The dead block (246 lines) is now deleted from the override: a future
+upstream edit to `_executeOp` fails the patch at integrate time and
+forces the port decision into param_core.c instead of vanishing into
+code the linker never sees. This also clears the `-Wunused-function`
+warning on the dmcp5 build. Same pass: `paramCoreReadByte` now writes
+its out-param on the failure path too (callers bail on false, so the
+zero is unreachable data), which retires all six `-Wmaybe-uninitialized`
+warnings in param_core.c. DESIGN.md anchors that still pointed at the
+dead copy (§2.1 FCALL consumer, §4.2 hook bullet + FIX-3/label-kind/
+XEQP1 VERIFIED refs, §6 H2/P-H3 rows) re-pointed at param_core.c or
+re-verified against the shortened file. TESTING.md's §3 evidence note
+("dead `_executeOp` block retained by the rebase") stays as written —
+it records that base, and the deletion confirms its point that the
+block cost 0 B. Flash: 1108360 -> 1108384 (+24 B, the `*value = 0`
+stores at the inlined bounded-read sites; measured `make dmcp5r47
+CUSTOM_PKG=packages/forth-core` on the dirty tree, so the clean-commit
+number may differ by the version-string suffix). Arena: untouched — no
+dictionary or RAM change.

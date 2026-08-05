@@ -37,12 +37,15 @@ static void paramCoreReadName(const uint8_t *stringAddress, const uint8_t *end) 
 }
 
 /* A bounded entry must also bound its fixed-width cells.  Name reads already
- * clamp by contract; a missing structural byte is corrupted encoded data. */
+ * clamp by contract; a missing structural byte is corrupted encoded data.
+ * *value is written on both paths — callers bail on false, and the
+ * unconditional write keeps every guarded read provably initialized. */
 static bool paramCoreReadByte(const uint8_t *address, const uint8_t *end,
                               uint8_t *value) {
   if(address >= end) {
     displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
                             ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    *value = 0;
     return false;
   }
   *value = *address;
