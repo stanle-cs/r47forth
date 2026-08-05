@@ -39,11 +39,20 @@ step asserts before moving on.
 
 ## C2 — poison sweeps
 
-1. **Close-path sweep, interactive rows.** L1-1 deferred these because the
-   landed test is a hardwired four-case PEM switch. Now that L1-2 owns the
-   EXIT ladder, add the interactive open as a second open-path axis and
-   assert the full close tuple (`state`, `keysMode`, `origin`, `foldMode`)
-   after every (open × close) pair. Report the pair count.
+1. **Close-path sweep, interactive axis.** L1-1 deferred these because the
+   landed test is a hardwired four-case **PEM** switch
+   (test_capture.part.h:6995-7012). **Do not build an (open × close) cross
+   product** — three of those four close paths do not close an interactive
+   capture at all: empty ENTER is an explicit no-op (L1-2), unshifted Up
+   stays the native case-change/scroll gesture since L1-H diverts only the
+   f-shifted ids (keyboard.c:4636-4655), and FORTH always opens rather
+   than toggle-closes (L-R2).
+
+   Enumerate the interactive close paths on their **own** axis — L1-2's
+   rung 3, `forthCapPowerReset()`, and any close L1-2's report identified
+   at the remaining `closeAim()` sites — and assert the full close tuple
+   (`state`, `keysMode`, `origin`, `foldMode`) after each. Report that
+   count, and report it as a separate number from the PEM four.
 2. **Arena residue.** Open/close an interactive capture 20 times; assert
    `getFreeRamMemory()` returns to its starting value, or that any residue
    is block-aligned and growth-only within the landed escape-valve bound

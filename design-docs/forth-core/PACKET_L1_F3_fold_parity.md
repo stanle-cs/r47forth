@@ -44,7 +44,7 @@ resulting line texts are `compareString(..., CMP_BINARY) == 0`.
 | 6 | dotted local flag | `SF` `.` `0` `2` |
 | 7 | named global label | `XEQ` + alpha name |
 | 8 | named local label | `XEQ` `:` + name (`tam.colon`) |
-| 9 | `TM_VALUE` > 250 | an item whose commit takes the `CNST_BEYOND_250` encoding (manage.c:2185-2188) |
+| 9 | ~~`TM_VALUE` > 250~~ | **DELETED — unreachable in this tree.** The `CNST_BEYOND_250` emit (manage.c:2174-2177) is gated on `PTP_NUMBER_8_16`, which occurs exactly once per tree: `items.c:2063`, `ITM_CNST`, whose `tamMinMax` max is `NOUC-1` = 83 (defines.h:1179), and `ui/tam.c:744` clamps the accumulator to `tam.max`. Do not hunt a fold bug here; there is no gesture that reaches it. |
 | 10 | `TM_VALUE` min/max edge | the item's `tamMinMax` bounds, both ends |
 | 11 | `TM_SHUFFLE` | the shuffle gesture |
 | 12 | `TM_MENU` | **only if F1 admitted it**; if F1 moved it to PARK, assert PARK behaviour instead and say so |
@@ -91,7 +91,16 @@ equals its pre-fold value, and `forthCap.foldMode == 0`.
 
 STAGE_L_TRACES.md carries a 17-row table of every landed `calcMode ==
 CM_PEM` gate with a widen/keep verdict. Encode the **verdicts** as
-assertions so a future edit that flips one goes red:
+assertions so a future edit that flips one goes red.
+
+**Two rows are stale and must be restated here before encoding.** The
+table predates the L-R4 (b) ruling — rows 11 and 12 still say "KEEP
+PEM-only", and row 12 even says "under (a) … under (c)", which dates it.
+Under (b) both are **WIDEN-by-bracket**: F2 C3 forges `calcMode = CM_PEM`
+precisely so `ui/tam.c:1102` records, and F2 C1 rewrites `ui/tam.c:1180`
+to fire interactively. Encode the **fold's** behaviour for those two rows,
+not the stale verdict — and fix the table in STAGE_L_TRACES.md in the same
+pass so the two do not disagree.
 
 - For each row marked **KEEP PEM-only**, drive the interactive equivalent
   and assert the PEM-only behaviour did **not** happen.

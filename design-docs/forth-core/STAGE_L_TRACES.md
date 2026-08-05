@@ -614,8 +614,8 @@ test asserting each verdict is the deliverable.
 | 8 | keyboard.c:3947-3985 | `fnKeyExit` PEM commit + `currentStep` resync | **KEEP PEM-only** — no steps interactively |
 | 9 | keyboard.c:4462-4485 | `fnKeyBackspace` PEM capture arm | **KEEP PEM-only** (T4: interactive backspace stays inert on empty) |
 | 10 | items.c:766-802 | PEM step recording in `runFunction` | **KEEP**; the interactive arm is a new sibling before items.c:736 |
-| 11 | ui/tam.c:1102 | TAM step recording | **KEEP PEM-only** — this IS the L-R4 asymmetry |
-| 12 | ui/tam.c:1180 | `tamEnterMode` capture suspend | **KEEP PEM-only** under (a); new CM_AIM arm under (c) |
+| 11 | ui/tam.c:1102 | TAM step recording | ~~KEEP PEM-only~~ **WIDEN-by-bracket** (restated after the L-R4 (b) ruling; the original verdict predates it). F2's `calcMode` bracket forges CM_PEM precisely so this records. |
+| 12 | ui/tam.c:1180 | `tamEnterMode` capture suspend | ~~KEEP PEM-only under (a)~~ **WIDEN** — L-R4 ruled (b); F2 C1 rewrites this arm to fire interactively and to call `forthFoldEnter`. |
 | 13 | manage.c:1294 | `pemAlphaEdit` guard | **KEEP PEM-only** — EDIT is a program-step gesture |
 | 14 | manage.c:813-830 | `forthCaptureSanitizeRestoredUi` (CM_PEM + ALPHA + `tam.function == ITM_FORTH`) | **WIDEN** — a restored machine may hold an interactive origin; L1-1 extends the sanitizer and the close-paths class test |
 | 15 | forth_menu.c:68-73 | `forthPickerGuard` | **WIDEN** to the interactive origin; skip the `pemAlpha` re-commit tail |
