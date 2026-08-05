@@ -167,8 +167,26 @@ Replace it with:
 
 Rename that test function `test_fnforthouter_brackets` →
 `test_forth_run_from_x_brackets`, updating its registration site and its
-three `printf` strings (`fnForthOuter` → `forthTestRunFromX` in the message
-text) so a red line names the function that actually failed.
+**four** `printf` strings (test_persist.part.h:1308, :1313, :1319, :1324 —
+`fnForthOuter` → `forthTestRunFromX` in the message text) so a red line
+names the function that actually failed.
+
+**Comment sweep (rev 2).** Beyond the two comments named above, the three
+battery files carry prose that names `fnForthOuter` while describing the
+call being retargeted. **One rule, applied everywhere in
+`test_params.part.h`, `test_engine.part.h` and `test_persist.part.h`:
+a comment describing the call under test says `forthTestRunFromX`.**
+The seven known sites in test_params.part.h are :166, :184, :357, :375,
+:393 ("via fnForthOuter" → "via forthTestRunFromX"), :2924 ("source string
+and fnForthOuter drops it" → "…and forthTestRunFromX drops it") and :3135
+("Note forthOuterInterpret (not fnForthOuter)" → "(not
+forthTestRunFromX)"). Sweep the other two files the same way and report
+the total count you changed — the list above is what one grep found, not a
+guarantee of completeness.
+
+Comments that describe *history* rather than the call — e.g. the two
+rewritten above, which explain why the pin moved — keep the name
+`fnForthOuter` deliberately, because they are about that function.
 
 ## C4 — the completeness proof (this is the acceptance criterion)
 
@@ -189,10 +207,15 @@ step 3 caught.
 
 ## Acceptance
 
-- `grep -c "fnForthOuter" packages/forth-core/test_params.part.h
+- **Zero call sites:**
+  `grep -c "fnForthOuter(NOPARAM)" packages/forth-core/test_params.part.h
   packages/forth-core/test_engine.part.h packages/forth-core/test_persist.part.h`
-  → the only remaining occurrences are inside the two comments rewritten in
-  C3. Zero call sites.
+  → 0, 0, 0. (The earlier form of this criterion counted *all* occurrences
+  and was unsatisfiable — prose comments legitimately name the function.
+  The call-site spelling is what matters.)
+- **Every surviving `fnForthOuter` mention is deliberate:** list them with
+  `grep -n "fnForthOuter"` across the three files and state, one line
+  each, why it stays. Anything you cannot justify is a missed C3 sweep.
 - Gate green.
 - **The battery's result set is unchanged.** Capture the sorted list of
   `PASS:`/`FAIL:` lines from a gate log taken BEFORE your first edit and
