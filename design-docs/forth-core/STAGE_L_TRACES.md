@@ -186,14 +186,14 @@ L-R4 option (c).
 
 ### PC-test / scripting entry — the sizeable finding
 
-`fnForthOuter` (forth_compile.c:1604-1620) is driven directly by **52
+`fnForthOuter` (forth_compile.c:1604-1620) is driven directly by **51
 self-test call sites** in the pattern `x_set_string("…");
 fnForthOuter(NOPARAM);` — test_params.part.h (44), test_engine.part.h
 (6), test_persist.part.h (1), plus test_dict_reloc.c's sub-phase C
 harness (test_dict_reloc.c:245, 1446).
 
 Under L-R2 (always capture) `fnForthOuter` stops interpreting: it opens a
-capture instead. All 52 sites would go **silently vacuous** — no error,
+capture instead. All 51 sites would go **silently vacuous** — no error,
 no result, assertions failing on stale state. That is a mechanical but
 non-trivial re-target and it is **not optional**; it is the gate.
 
@@ -201,7 +201,7 @@ Recommended shape (cheapest, preserves every existing assertion's stack
 expectation exactly): keep today's `fnForthOuter` body as a
 `FORTH_DEBUG_SELFTEST`-only helper `forthTestRunFromX(void)` in the test
 harness (copy X → `fnDrop` → `forthOuterRun(FULL)`), then substitute
-`fnForthOuter(NOPARAM)` → `forthTestRunFromX()` at the 52 sites. Do NOT
+`fnForthOuter(NOPARAM)` → `forthTestRunFromX()` at the 51 sites. Do NOT
 substitute `forthOuterInterpret(s)` — it never touches X, so the tests
 that assert post-run stack depth would silently change meaning.
 
@@ -598,7 +598,7 @@ test asserting each verdict is the deliverable.
 The doc's predicted decomposition survives, with two additions and one
 re-order:
 
-- **L1-0 (new, must land first): re-target the 52 `fnForthOuter` test
+- **L1-0 (new, must land first): re-target the 51 `fnForthOuter` test
   call sites** to a `FORTH_DEBUG_SELFTEST` helper preserving today's
   one-shot semantics. Without it the gate cannot distinguish L1's
   regressions from L-R2's intended behavior change. (T2)

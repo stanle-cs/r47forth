@@ -375,7 +375,7 @@ authored before its trace repeats the F1-5 P0 defect. Predicted traces:
   must hold. Each finding adversarially refuted before it is built on.
 
 Packet decomposition (post-rulings, T1–T6 applied): **L1-0 re-target the
-52 `fnForthOuter` self-test call sites** (T2 — must land first, or the
+51 `fnForthOuter` self-test call sites** (T2 — must land first, or the
 gate cannot distinguish L1's regressions from L-R2's intended behaviour
 change); L1-1 capture object origin bit + open/close seams, incl. the
 FIX-9 catalog-drain analog and the restore-sanitizer widen; L1-2
