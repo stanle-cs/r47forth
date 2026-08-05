@@ -94,9 +94,14 @@ if [[ "${DO_RUN}" -eq 1 ]]; then
   logfile=$(mktemp)
   trap 'rm -f "${logfile}"' EXIT
   set +e
-  "${BINARY}" --headless 2>&1 | tee "${logfile}"
+  # timeout: a hang-class regression (e.g. an unbounded scanner loop) must
+  # gate RED, not wedge the build — silence is not-run (2026-08-04 review).
+  timeout 600 "${BINARY}" --headless 2>&1 | tee "${logfile}"
   status="${PIPESTATUS[0]}"
   set -e
+  if [[ "${status}" -eq 124 ]]; then
+    echo "==> SELF-TEST TIMED OUT (600 s) — treating as RED." >&2
+  fi
   echo "==> self-test EXIT STATUS: ${status}"
   if [[ "${status}" -ne 0 ]]; then
     echo "==> SELF-TEST FAILED (exit ${status}) — suite gated the build red." >&2

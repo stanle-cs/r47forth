@@ -1214,6 +1214,7 @@ static int test_exec_step_marker_noop(void);
 static int test_exec_step_source_runs(void);
 static int test_exec_step_halts_on_error(void);
 static int test_marker_parity(void);
+static int test_placeholder_never_marker(void);   /* §8.1 class test, 2026-08-04 */
 static int test_entry_state_derivation(void);
 static int test_toggle_inserts_marker(void);
 static int test_forth_toggle_close_resets_sentinel(void);
@@ -1670,6 +1671,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_marker_parity...\n");
   fail |= test_marker_parity();
+  forthDictClear();
+
+  printf("  [DEBUG] running test_placeholder_never_marker...\n");
+  fail |= test_placeholder_never_marker();
   forthDictClear();
 
   printf("  [DEBUG] running test_entry_state_derivation...\n");

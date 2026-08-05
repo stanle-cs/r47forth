@@ -5922,6 +5922,288 @@ static int test_marker_parity(void)
   return fail;
 }
 
+/* test_placeholder_never_marker  (class test, 2026-08-04)
+ * BUG CLASS: a reader of program memory must never confuse the §8.1
+ * open-capture placeholder with a region marker.  Under the old len==0
+ * placeholder encoding every marker after the cursor rendered
+ * direction-flipped while the capture line was empty (2026-08-04 LCD
+ * repro), and out of alpha the suspended placeholder itself rendered as
+ * a phantom marker.  The placeholder is now len=1 with a single NUL
+ * payload byte — untypeable, so unambiguous.
+ *
+ * Part 1 (production emits): open a capture after an existing region and
+ * assert the 5-byte shape and correct parity/rendering of the following
+ * marker across open (pemAlpha insert), suspend/resume
+ * (forthCapRecommitStep — the out-of-alpha variant), and
+ * type+backspace-to-empty (pemAlpha recommit tail).
+ * Part 2 (leaked placeholder): hand-built bare placeholder with THREE
+ * markers after it — parity of all three unaffected, placeholder decodes
+ * blank, executes as a no-op, and the FWRD picker scan terminates
+ * (the len byte must never out-run the C-string walk).
+ *
+ * Escaping mutation: any emit site reverting to len==0 for the empty
+ * capture step — Part 1's parity assertions flip; any reader treating
+ * len==1/NUL as a marker — Part 2's parity assertions flip. */
+static int test_placeholder_never_marker(void)
+{
+  int fail = 0;
+
+  /* ---- Part 1: production placeholder, one region before the cursor ---- */
+  {
+    uint8_t prog[] = {
+      0x4C,                                                           /* ITM_sin (RPN) */
+      0x8B, 0x1A, 0xFD, 0x00,                                        /* M1 (opens) */
+      0x8B, 0x1A, 0xFD, 0x03, 'D', 'U', 'P',                         /* source */
+      0x8B, 0x1A, 0xFD, 0x00,                                        /* M2 (closes) */
+      0x85, 0xB2,                                                    /* ITM_END */
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    FAIL: writeTestProgram (part 1) failed\n");
+      return 1;
+    }
+
+    uint8_t *savedCurrentStep = currentStep;
+    bool_t savedZeroth = pemCursorIsZerothStep;
+    int16_t savedCatalog = catalog;
+    uint16_t savedLocalStep = currentLocalStepNumber;
+    bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+    int16_t savedTamFunc = tam.function;
+    uint8_t savedCalcMode = calcMode;
+
+    /* Cursor on ITM_END (offset 16) — pre-move skipped, wasOn=false */
+    currentStep = beginOfProgramMemory + 16;
+    pemCursorIsZerothStep = false;
+    currentLocalStepNumber = 5;
+    catalog = CATALOG_NONE;
+    aimBuffer[0] = 0;
+    tam.mode = 0;
+    tam.function = 0;
+    calcMode = CM_PEM;
+    clearSystemFlag(FLAG_ALPHA);
+
+    extern void addStepInProgram(int16_t func);
+    addStepInProgram(ITM_FORTH);
+    scanLabelsAndPrograms();
+
+    /* Layout now: sin(1) M1(+1) src(+5) M2(+12) M3(+16) P(+20,5B) M4(+25) */
+    uint8_t *m1 = beginOfProgramMemory + 1;
+    uint8_t *m2 = beginOfProgramMemory + 12;
+    uint8_t *m3 = beginOfProgramMemory + 16;
+    uint8_t *p  = beginOfProgramMemory + 20;
+    uint8_t *m4 = beginOfProgramMemory + 25;
+
+    if (currentStep != p || p[3] != 0x01 || p[4] != 0x00) {
+      printf("    FAIL: open placeholder not the 5-byte len=1/NUL form (len=0x%02X)\n", p[3]);
+      fail = 1;
+    }
+    if (!forthMarkerTurnsOn(m1) || forthMarkerTurnsOn(m2) ||
+        !forthMarkerTurnsOn(m3) || forthMarkerTurnsOn(m4)) {
+      printf("    FAIL: marker parity wrong with open placeholder (want T/F/T/F)\n");
+      fail = 1;
+    }
+    decodeOneStep(m4);       /* the 2026-08-04 repro: this used to flip to »FORTH */
+    if (strlen(tmpString) != 7 || memcmp(tmpString, "FORTH", 5) != 0 ||
+        tmpString[5] != (char)0x80 || tmpString[6] != (char)0xAB) {
+      printf("    FAIL: closing marker renders '%s' with capture open (want FORTH\\x80\\xab)\n", tmpString);
+      fail = 1;
+    }
+    decodeOneStep(p);
+    if (tmpString[0] != 0) {
+      printf("    FAIL: open placeholder renders '%s' in alpha (want blank)\n", tmpString);
+      fail = 1;
+    }
+
+    /* A REAL marker at currentStep during capture must still render as a
+     * marker — re-adding the old FLAG_ALPHA-keyed decode exception would
+     * blank it (the debug session's forced-state finding). */
+    {
+      uint8_t *savedStep = currentStep;
+      currentStep = m4;
+      decodeOneStep(m4);
+      currentStep = savedStep;
+      if (strlen(tmpString) != 7 || memcmp(tmpString, "FORTH", 5) != 0 ||
+          tmpString[5] != (char)0x80 || tmpString[6] != (char)0xAB) {
+        printf("    FAIL: marker AT currentStep renders '%s' during capture (want FORTH\\x80\\xab)\n", tmpString);
+        fail = 1;
+      }
+    }
+
+    /* Suspend: recommit via forthCapRecommitStep, FLAG_ALPHA drops — the
+     * out-of-alpha variant (a phantom FORTH« appeared here pre-change). */
+    forthCaptureSuspend();
+    if (p[3] != 0x01 || p[4] != 0x00) {
+      printf("    FAIL: suspended placeholder lost the len=1/NUL form (len=0x%02X)\n", p[3]);
+      fail = 1;
+    }
+    if (forthMarkerTurnsOn(m4)) {
+      printf("    FAIL: closing marker parity flipped after suspend\n");
+      fail = 1;
+    }
+    decodeOneStep(p);
+    if (tmpString[0] != 0) {
+      printf("    FAIL: suspended placeholder renders '%s' out of alpha (want blank)\n", tmpString);
+      fail = 1;
+    }
+
+    forthCaptureResume();
+    if (aimBuffer[0] != 0 || currentStep != p || T_cursorPos != 0) {
+      printf("    FAIL: resume did not restore empty capture line (cursor=%d)\n", T_cursorPos);
+      fail = 1;
+    }
+
+    /* Type one glyph, backspace to empty: the pemAlpha recommit tail must
+     * re-emit the 5-byte form, not a marker-aliased len==0. */
+    setSystemFlag(FLAG_ALPHA);          /* the tam-exit seam restores these */
+    tam.function = ITM_FORTH;
+    extern void pemAlpha(int16_t item);
+    pemAlpha(ITM_3);
+    if (currentStep[3] != 0x01 || currentStep[4] == 0x00) {
+      printf("    FAIL: typed step not len=1 with non-NUL payload\n");
+      fail = 1;
+    }
+    pemAlpha(ITM_BACKSPACE);
+    if (currentStep[3] != 0x01 || currentStep[4] != 0x00) {
+      printf("    FAIL: backspace-to-empty re-emitted len=0x%02X (want len=1/NUL)\n", currentStep[3]);
+      fail = 1;
+    }
+    if (forthMarkerTurnsOn(beginOfProgramMemory + 25)) {
+      printf("    FAIL: closing marker parity flipped after backspace-to-empty\n");
+      fail = 1;
+    }
+
+    forthCapClose();
+    clearSystemFlag(FLAG_ALPHA);
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    pemCursorIsZerothStep = savedZeroth;
+    catalog = savedCatalog;
+    currentLocalStepNumber = savedLocalStep;
+    if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+    tam.function = savedTamFunc;
+    calcMode = savedCalcMode;
+  }
+
+  /* ---- Part 2: leaked placeholder, three markers after it ---- */
+  {
+    uint8_t prog[] = {
+      0x4C,                                                           /* ITM_sin */
+      0x8B, 0x1A, 0xFD, 0x01, 0x00,                                  /* leaked placeholder */
+      0x8B, 0x1A, 0xFD, 0x00,                                        /* M1 (opens) */
+      0x8B, 0x1A, 0xFD, 0x07, ':', ' ', 'W', ' ', '1', ' ', ';',     /* source: W */
+      0x8B, 0x1A, 0xFD, 0x00,                                        /* M2 (closes) */
+      0x8B, 0x1A, 0xFD, 0x00,                                        /* M3 (opens) */
+      0x8B, 0x1A, 0xFD, 0x03, 'A', 0x00, 'B',                        /* corrupt: NUL at payload[1] */
+    };
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    FAIL: writeTestProgram (part 2) failed\n");
+      return 1;
+    }
+
+    uint8_t *lp = beginOfProgramMemory + 1;
+    uint8_t *k1 = beginOfProgramMemory + 6;
+    uint8_t *k2 = beginOfProgramMemory + 21;
+    uint8_t *k3 = beginOfProgramMemory + 25;
+    uint8_t *corrupt = beginOfProgramMemory + 29;
+
+    if (!forthMarkerTurnsOn(k1) || forthMarkerTurnsOn(k2) || !forthMarkerTurnsOn(k3)) {
+      printf("    FAIL: leaked placeholder altered marker parity (want T/F/T)\n");
+      fail = 1;
+    }
+    tmpString[0] = 'X';   /* poison: the blank assert must not pass on stale bytes */
+    decodeOneStep(lp);
+    if (tmpString[0] != 0) {
+      printf("    FAIL: leaked placeholder renders '%s' (want blank)\n", tmpString);
+      fail = 1;
+    }
+
+    /* Leaked placeholder executes as an empty line: no error, no effect. */
+    {
+      uint8_t step[] = { 0x8B, 0x1A, 0xFD, 0x01, 0x00 };
+      uint16_t countBefore = fdict.count;
+      lastErrorCode = ERROR_NONE;
+      int16_t ret = executeOneStep(step);
+      if ((ret != 1 && ret != 2) || lastErrorCode != ERROR_NONE || fdict.count != countBefore) {
+        printf("    FAIL: leaked placeholder execution ret=%d err=%d\n", ret, lastErrorCode);
+        fail = 1;
+      }
+    }
+
+    /* FWRD picker scan terminates over BOTH hazards: the leaked placeholder
+     * (skipped at the gate) and the embedded-NUL corrupt step (passes the
+     * gate on payload[0]=='A', so it exercises the C-string len clamp).
+     * Termination IS the assertion — a reverted guard spins forever and the
+     * gate's timeout wrapper (build-test.sh, 600 s) turns that into RED. */
+    {
+      uint8_t *savedCurrentStep2 = currentStep;
+      currentStep = corrupt;
+      extern void testInitVariableSoftmenu(int16_t menu);
+      testInitVariableSoftmenu(22);
+      currentStep = savedCurrentStep2;
+      printf("    PASS: picker scan over placeholder + embedded-NUL step terminated\n");
+    }
+
+    /* EDIT on the leaked placeholder is the sanctioned recovery gesture:
+     * it must reopen an EMPTY capture with the cursor at 0 and accept
+     * keystrokes (the len-byte cursor bug put the cursor at 1 behind the
+     * NUL and silently ate every typed glyph). */
+    {
+      uint8_t *savedCurrentStep3 = currentStep;
+      bool_t savedZeroth = pemCursorIsZerothStep;
+      uint16_t savedLocalStep = currentLocalStepNumber;
+      bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+      int16_t savedTamFunc = tam.function;
+      uint8_t savedCalcMode = calcMode;
+
+      currentStep = lp;
+      pemCursorIsZerothStep = false;
+      currentLocalStepNumber = 2;
+      calcMode = CM_PEM;
+      aimBuffer[0] = 0;
+      tam.function = 0;
+      clearSystemFlag(FLAG_ALPHA);
+
+      extern void pemAlpha(int16_t item);
+      pemAlpha(ITM_EDIT);
+      if (T_cursorPos != 0 || aimBuffer[0] != 0 || !getSystemFlag(FLAG_ALPHA)) {
+        printf("    FAIL: EDIT on leaked placeholder: cursor=%d buf='%s' (want 0, empty, alpha on)\n",
+               T_cursorPos, aimBuffer);
+        fail = 1;
+      }
+      pemAlpha(ITM_3);
+      if (aimBuffer[0] != '3' || aimBuffer[1] != 0 ||
+          currentStep[3] != 0x01 || currentStep[4] != '3') {
+        printf("    FAIL: keystroke after EDIT-recovery eaten (buf='%s' len=0x%02X)\n",
+               aimBuffer, currentStep[3]);
+        fail = 1;
+      }
+      pemAlpha(ITM_BACKSPACE);     /* back to empty: 5-byte placeholder again */
+      if (currentStep[3] != 0x01 || currentStep[4] != 0x00) {
+        printf("    FAIL: EDIT-recovery backspace re-emitted len=0x%02X (want len=1/NUL)\n",
+               currentStep[3]);
+        fail = 1;
+      }
+
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      currentStep = savedCurrentStep3;
+      pemCursorIsZerothStep = savedZeroth;
+      currentLocalStepNumber = savedLocalStep;
+      if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+      tam.function = savedTamFunc;
+      calcMode = savedCalcMode;
+    }
+
+    cleanupTestProgram();
+  }
+
+  if (!fail) {
+    printf("    PASS: placeholder is never a marker — parity, decode, exec, picker\n");
+  }
+  return fail;
+}
+
 /* test_entry_state_derivation
  * Same program + RPN step (ITM_sin) appended inside the region.
  * Point currentStep at each step and assert:
@@ -6080,7 +6362,7 @@ static int test_toggle_inserts_marker(void)
      * marker were inserted before ITM_END. */
     uint8_t *marker = beginOfProgramMemory + 1;
     uint8_t *placeholder = marker + 4;
-    uint8_t *autoClose = placeholder + 4;
+    uint8_t *autoClose = placeholder + 5;  /* §8.1 placeholder is 5 bytes */
     if (*(marker + 0) != 0x8B || *(marker + 1) != 0x1A ||
     *(marker + 2) != 0xFD || *(marker + 3) != 0x00) {
       printf("    FAIL: opening marker not found (got 0x%02X 0x%02X 0x%02X 0x%02X)\n",
@@ -6088,9 +6370,10 @@ static int test_toggle_inserts_marker(void)
       fail = 1;
     }
     else if (placeholder[0] != 0x8B || placeholder[1] != 0x1A ||
-             placeholder[2] != 0xFD || placeholder[3] != 0x00 ||
+             placeholder[2] != 0xFD || placeholder[3] != 0x01 ||
+             placeholder[4] != 0x00 ||
              currentStep != placeholder) {
-      printf("    FAIL: editable placeholder not between marker pair\n");
+      printf("    FAIL: editable placeholder (len=1, NUL payload) not between marker pair\n");
       fail = 1;
     }
     else if (autoClose[0] != 0x8B || autoClose[1] != 0x1A ||
@@ -7455,11 +7738,11 @@ static int test_e1_direction_mid_program(void)
 
   /* Assert: new bracket and placeholder inserted between RPN and old marker. */
   scanLabelsAndPrograms();
-  /* After insertion: RPN(1) + newOpen(4) + placeholder(4) + newClose(4)
-   * + oldMarker(4) + source(16) + marker2(4) + END(2) + .END.(2). */
+  /* After insertion: RPN(1) + newOpen(4) + placeholder(5, §8.1 len=1 NUL)
+   * + newClose(4) + oldMarker(4) + source(16) + marker2(4) + END(2) + .END.(2). */
   uint8_t *newMarker = beginOfProgramMemory + 1;  /* right after ITM_sin */
   uint8_t *placeholder = newMarker + 4;
-  uint8_t *autoClose = placeholder + 4;
+  uint8_t *autoClose = placeholder + 5;
   if (*(newMarker + 0) != 0x8B || *(newMarker + 1) != 0x1A ||
   *(newMarker + 2) != 0xFD || *(newMarker + 3) != 0x00) {
     printf("    FAIL: new marker not at expected position (got 0x%02X 0x%02X 0x%02X 0x%02X)\n",
@@ -7468,8 +7751,8 @@ static int test_e1_direction_mid_program(void)
   }
   else if (currentStep != placeholder || placeholder[0] != 0x8B ||
            placeholder[1] != 0x1A || placeholder[2] != 0xFD ||
-           placeholder[3] != 0x00) {
-    printf("    FAIL: new bracket placeholder not selected\n");
+           placeholder[3] != 0x01 || placeholder[4] != 0x00) {
+    printf("    FAIL: new bracket placeholder (len=1, NUL payload) not selected\n");
     fail = 1;
   }
   else if (autoClose[0] != 0x8B || autoClose[1] != 0x1A ||

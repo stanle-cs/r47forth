@@ -389,7 +389,8 @@ type byte `STRING_LABEL_VARIABLE` (253, defines.h:1363), a 1-byte length
 `len` (0..255), and `len` payload bytes — the same shape `pemAlpha` commits
 for `REM`/`42STR` steps [VERIFIED: src/c47/programming/manage.c:953-959].
 `len == 0` is the §8.4 toggle marker; `len > 0` is a Forth source line
-(§8.1). Step length falls out of upstream `countLiteralBytes` unchanged
+(§8.1) — except `len == 1` with a NUL payload, the §8.4 open-capture
+placeholder (entry-transient; §8.1). Step length falls out of upstream `countLiteralBytes` unchanged
 [VERIFIED: src/c47/programming/nextStep.c:236-238].
 `ITM_FCALL` is `PTP_NUMBER_16`, so **two** parameter bytes follow the opcode,
 holding the dictionary index (LE), consumed by
@@ -1991,7 +1992,8 @@ instead by validating the line on commit (§8.4), with no storage change.
 
 ### 8.1 Stored representation
 
-One step shape, two meanings (encoding normative in §2.1, ):
+One step shape, two persisted meanings plus one entry-transient (encoding
+normative in §2.1):
 
 ```
 0x8B 0x1A  STRING_LABEL_VARIABLE(0xFD)  len  bytes[len]
@@ -2003,8 +2005,24 @@ One step shape, two meanings (encoding normative in §2.1, ):
 - `len == 0` → **toggle marker**: a run-time no-op recording where the author
   flipped Forth entry on/off (§8.4). Marker vs. source is decided by `len`
   alone; there is no second item id.
+- `len == 1` with payload `0x00` → **open-capture placeholder**
+  (2026-08-04): the step under an open or suspended capture line while its
+  text is empty. Untypeable — capture text is NUL-terminated glyphs, so no
+  keyboard can author it — and never persisted (E3 deletes it on empty
+  commit). It is categorically NOT a marker: parity scanners test
+  `len == 0` and skip it by construction, so an open capture can no longer
+  flip the rendered direction of any marker after the cursor. Every
+  ITM_FORTH capture emit with empty text goes through
+  `_forthCapBuildStep` (manage.c override) — `len == 0` is never emitted
+  for a capture step. A leaked placeholder (crash mid-capture) decodes
+  blank, executes as an empty-line no-op (the NUL payload IS the C-string
+  terminator the extraction paths copy), is skipped by the §8.6 picker,
+  and `EDIT` on it reopens an empty capture — self-healing, since empty
+  commit then deletes it.
 - **Empty source lines are not representable** — the `len == 0` encoding is
-  reserved for markers. The entry layer enforces this (§8.4 rule E3).
+  reserved for markers, and the NUL-payload point for the placeholder: a
+  source line cannot begin with byte `0x00`. The entry layer enforces this
+  (§8.4 rule E3).
 - Payload capacity: 255 bytes (1-byte len). The capture buffer caps entry at
   196 glyphs / <256 bytes [VERIFIED: src/c47/programming/manage.c:854], and
   every payload fits `FORTH_SOURCE_MAX` (256 incl. NUL) [VERIFIED:
@@ -2332,8 +2350,11 @@ E3. *Empty-commit rule* in `pemAlpha`: when capture ends (`ITM_ENTER` arm,
     `pemCloseAlphaInput` path) with `tam.function == ITM_FORTH` **and**
     `aimBuffer[0] == 0`, delete the placeholder step (the exact deletion the
     empty-`ITM_BACKSPACE` arm already performs, manage.c:861-868) instead of
-    committing. Rationale: an empty committed line would be byte-identical
-    to a marker and flip every subsequent occurrence's parity (§8.1).
+    committing. Rationale: an empty line has nothing to keep. (Until
+    2026-08-04 the placeholder was byte-identical to a marker, so a
+    committed one would also have flipped every subsequent marker's parity;
+    the §8.1 len=1/NUL encoding closes that hazard by construction and E3
+    remains as entry-layer hygiene.)
 
 E4. *Capture machinery — two different sources of opcode truth.* Both paths
     are generic for `func >= 128` (they emit the two-byte form
@@ -2354,6 +2375,13 @@ E4. *Capture machinery — two different sources of opcode truth.* Both paths
     there is no opcode for re-insert to find — and E0's "stop `tam.function`
     being clobbered" requirement therefore binds only on the placeholder write,
     not on the per-key path.
+
+    Since 2026-08-04, every ITM_FORTH emit — placeholder write, per-key
+    re-insert, and `forthCapRecommitStep` — funnels through
+    `_forthCapBuildStep` (manage.c override), the single definition of the
+    step bytes: empty text produces the §8.1 len=1/NUL placeholder, never a
+    marker-aliased `len == 0`. REM/42STR keep their upstream 4-byte empty
+    form.
 
 E5. *The multi-line lock — ENTER stays in capture.* In `pemAlpha`'s `ITM_ENTER`
     arm (manage.c:912-918), after `pemCloseAlphaInput()` commits a **non-empty**
@@ -2540,12 +2568,14 @@ display time — never stored as two items and never cached:
   point. The `»FORTH`/`FORTH«` markers are the type cue, and in a seven-line
   window they may be scrolled off-screen; that ambiguity is accepted. No
   per-line visual tag is added.
-- *Transient during capture:* the open placeholder is byte-identical to a
-  marker until the first key lands (E4). The decode arm therefore renders
-  `len == 0` as an (empty) source line, not as a marker, when
-  `step == currentStep && getSystemFlag(FLAG_ALPHA) && tam.function ==
-  ITM_FORTH` — all globals visible to decode.c. E3 guarantees no empty line
-  survives capture, so the exception is display-only.
+- *During capture:* the open placeholder is `len == 1` with a NUL payload
+  (§8.1, 2026-08-04) and renders as a blank line through the ordinary
+  `len > 0` bare-text arm — decode needs no capture-state exception, in
+  or out of alpha, and `len == 0` always means a real marker. (The
+  earlier own-step exception keyed on `FLAG_ALPHA` is deleted: it never
+  covered the parity counter — every marker after the cursor rendered
+  flipped while the line was empty — and it stopped hiding the suspended
+  placeholder the moment alpha dropped, the 2026-08-04 LCD repro.)
 - The renderer *can* see the running state cheaply (one program walk per
   marker rendered, ≤ a handful per screen, §8.4 cost note) — so the
   documented fallback (two display-distinct items) is **not needed** and
@@ -2570,7 +2600,10 @@ no catalog, no dictionary lookup:
   P-H6 — the procedure upstream's comment explicitly prescribes).
 - **Content build** (`initVariableSoftmenu` case `MNU_FORTH`, P-H5): walk
   `findNextStep` from the owning program's start to `currentStep`
-  (inclusive); for each `ITM_FORTH` step with `len > 0`, scan the payload
+  (inclusive); for each `ITM_FORTH` step with `len > 0` **and a non-NUL
+  first payload byte** (the §8.1 placeholder is not authored source; and
+  the scan clamps `len` to the copied C-string length so an embedded NUL
+  can never out-run the glyph walk — 2026-08-04), scan the payload
   text with the §3.3.3 glyph-wise tokenizer for the pattern
   `":" <name>` (token `:` followed by a name token — mid-line occurrences
   after `;` included); collect names into fixed 15-byte slots in

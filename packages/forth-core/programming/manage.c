@@ -838,6 +838,26 @@ void forthCaptureSanitizeRestoredUi(void) {
   tam.function = 0;
 }
 
+/* §8.1: an ITM_FORTH capture step with empty text is the OPEN-CAPTURE
+ * PLACEHOLDER — len=1, single 0x00 payload byte — categorically distinct
+ * from a len==0 region marker.  Every ITM_FORTH capture emit goes through
+ * here: emitting len==0 instead would alias a marker and flip the parity
+ * of every marker after the cursor (the very hazard E3 names). */
+static uint16_t _forthCapBuildStep(char *dst, const char *text) {
+  uint16_t n = stringByteLength(text);
+  dst[0] = (ITM_FORTH >> 8) | 0x80;
+  dst[1] =  ITM_FORTH       & 0xff;
+  dst[2] = (char)STRING_LABEL_VARIABLE;
+  if(n == 0) {
+    dst[3] = 1;
+    dst[4] = 0;
+    return 5;
+  }
+  dst[3] = n;
+  xcopy(dst + 4, text, n);
+  return n + 4;
+}
+
 void pemAlpha(int16_t item) {
   bool_t editCommand = false;
   if(item == ITM_EDIT) {
@@ -877,7 +897,11 @@ void pemAlpha(int16_t item) {
       forthCapOpen();                    // cannot fail: nothing is allocated
       xcopy(aimBuffer, tmpString, ll);   // bare render: no name prefix, no quotes
       aimBuffer[ll] = 0;
-      T_cursorPos = stringLastGlyph(aimBuffer) + 1;
+      /* §8.1: a leaked placeholder decodes to "" — cursor 0, not
+       * stringLastGlyph("")+1 == 1, which would insert every glyph behind
+       * the terminating NUL and silently eat the keystrokes.  EDIT is the
+       * sanctioned recovery gesture for a restore-leaked capture step. */
+      T_cursorPos = (ll == 0) ? 0 : stringLastGlyph(aimBuffer) + 1;
       deleteStepsFromTo(currentStep, findNextStep(currentStep));
       tam.function = aimFunc;
       editCommand = true;
@@ -913,6 +937,9 @@ void pemAlpha(int16_t item) {
         tmpString[1] = (char)STRING_LABEL_VARIABLE;
         tmpString[2] = 0;
         _insertInProgram((uint8_t *)tmpString, 3);
+      }
+      else if(tam.function == ITM_FORTH) { // forth: §8.1 placeholder, never a marker-aliased len==0
+        _insertInProgram((uint8_t *)tmpString, _forthCapBuildStep(tmpString, ""));
       }
       else { // rem or 42str
         tmpString[0] = (tam.function >> 8) | 0x80;
@@ -1082,6 +1109,9 @@ void pemAlpha(int16_t item) {
       xcopy(tmpString + 3, aimBuffer, stringByteLength(aimBuffer));
       _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 3);
     }
+    else if(aimFunc == ITM_FORTH) { // forth: backspace-to-empty re-emits the §8.1 placeholder, never len==0
+      _insertInProgram((uint8_t *)tmpString, _forthCapBuildStep(tmpString, aimBuffer));
+    }
     else { // rem or 42str
       tmpString[0] = (aimFunc >> 8) | 0x80;
       tmpString[1] =  aimFunc       & 0xff;
@@ -1142,12 +1172,7 @@ static bool_t _forthCatalogMenuOnTop(void);
  * generic aimFunc branching the pemAlpha tail needs. */
 static void forthCapRecommitStep(void) {
   deleteStepsFromTo(currentStep, findNextStep(currentStep));
-  tmpString[0] = (ITM_FORTH >> 8) | 0x80;
-  tmpString[1] =  ITM_FORTH       & 0xff;
-  tmpString[2] = (char)STRING_LABEL_VARIABLE;
-  tmpString[3] = stringByteLength(aimBuffer);
-  xcopy(tmpString + 4, aimBuffer, stringByteLength(aimBuffer));
-  _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 4);
+  _insertInProgram((uint8_t *)tmpString, _forthCapBuildStep(tmpString, aimBuffer));
   --currentLocalStepNumber;
   currentStep = findPreviousStep(currentStep);
 }
@@ -1200,11 +1225,13 @@ void forthCaptureResume(void) {
                                                which TAM may have used meanwhile */
     forthCapSetKeysMode(keysWas);
   }
-  { uint8_t len = p[3];                     /* len 0 = empty line, legal */
+  { uint8_t len = p[3];                     /* §8.1: the empty placeholder is
+                                               len=1 payload 0x00 — the xcopy
+                                               yields "" by construction */
     if (len > 0) { xcopy(aimBuffer, p + 4, len); }
     aimBuffer[len] = 0;
     T_cursorPos = forthCapSavedCursor();
-    if (T_cursorPos > len) { T_cursorPos = len; }
+    if (T_cursorPos > stringByteLength(aimBuffer)) { T_cursorPos = stringByteLength(aimBuffer); }
   }
   currentLocalStepNumber = forthCapSavedLocalStep();
   currentStep = p;

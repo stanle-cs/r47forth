@@ -115,10 +115,13 @@ void forthBuildWordPicker(int16_t menu)
       uint8_t *next = findNextStep(step);
       if (checkOpCodeOfStep(step, ITM_FORTH) && step[2] == STRING_LABEL_VARIABLE) {
         uint8_t len = step[3];
-        if (len > 0) {
+        if (len > 0 && step[4] != 0) { /* skip the §8.1 open placeholder (len=1, NUL) — not authored source */
           char line[256];
           xcopy(line, (const char *)(step + 4), len);
           line[len] = 0;
+          /* clamp to C-string truth: an embedded NUL must never let the
+           * byte-count out-run stringNextGlyph's string walk (hang). */
+          len = (uint8_t)stringByteLength(line);
           int16_t pos = 0;
           char tok[FORTH_TOKEN_MAX + 1];
 

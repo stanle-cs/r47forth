@@ -2602,3 +2602,75 @@ stores at the inlined bounded-read sites; measured `make dmcp5r47
 CUSTOM_PKG=packages/forth-core` on the dirty tree, so the clean-commit
 number may differ by the version-string suffix). Arena: untouched — no
 dictionary or RAM change.
+
+## 2026-08-04 — placeholder re-encoded: len=1/NUL, never marker-aliased (repro: marker flip during capture)
+
+Stan's repro: with a Forth capture line open and empty, every marker after
+the cursor rendered direction-flipped (»FORTH for FORTH«); out of alpha,
+the suspended placeholder itself rendered as a phantom marker before the
+line. Root cause was a design decision, not a coding slip: E4 defined the
+open-capture placeholder to REUSE the marker's byte form (ITM_FORTH,
+len==0), and the §8.5 own-step render exception patched only ONE of the
+two consumers of "len==0 means marker" — forthMarkerTurnsOn's parity
+counter never got it, and the exception's FLAG_ALPHA keying stopped
+hiding the placeholder the moment alpha dropped (the suspend path).
+
+Fix is at the encoding level: the placeholder is now len=1 with a single
+0x00 payload byte — the one point in the §8.1 step grammar no keyboard
+can produce (capture text is NUL-terminated glyphs). Markers stay len==0
+with parity-derived direction; source lines stay len>0; nothing persisted
+changes format. All three empty-text emit sites in manage.c (pemAlpha
+open-insert, per-key recommit tail via backspace-to-empty, and
+forthCapRecommitStep used by suspend) funnel through one new helper,
+_forthCapBuildStep — the single definition of the step bytes, so the
+sites cannot drift apart again. decode.c's own-step exception is DELETED
+(the NUL payload renders blank through the ordinary bare-text arm, in and
+out of alpha). Scouting found one genuinely new hazard: forthBuildWordPicker's
+glyph tokenizer would spin forever on a NUL-first payload (stringNextGlyph
+cannot advance past a NUL while the loop bounds on the raw len byte) —
+closed twice, by a placeholder skip at the gate and a clamp of len to the
+copied C-string length. A leaked placeholder (crash mid-capture) is now
+benign by construction: decodes blank, executes as an empty line
+(forthProgramStep's extraction copies the NUL as its own terminator),
+picker skips it, EDIT on it reopens an empty capture and the E3 delete
+then heals the leak — versus the old encoding where a leak permanently
+flipped every following region's parity. Rejected alternatives, for the
+record: a shared is-placeholder discriminator consumed by both readers
+(keeps decode dependent on capture state, leaves the class open for the
+next consumer); self-describing marker direction bytes (cleanest end
+state but changes the persisted format of existing programs); a virtual
+cursor row with no step in memory (breaks PEM's cursor-on-a-real-step
+invariant).
+
+Class test (bug-fix rule): test_placeholder_never_marker — "no reader of
+program memory may confuse the placeholder with a marker". Part 1 drives
+the production paths (open, suspend/resume out of alpha, type +
+backspace-to-empty) asserting the 5-byte shape and stable parity/render
+of the following marker at each stage; Part 2 hand-builds a leaked
+placeholder with three markers after it and asserts parity, blank decode,
+no-op execution, and picker termination. The two existing placeholder
+byte-pin tests updated to the 5-byte shape. Gate green: full battery ALL
+PASSED, upstream testSuite green. DESIGN.md amended: §2.1, §8.1 (third
+step meaning), E3 rationale, E4 (single-emitter rule), §8.5 (exception
+repealed), §8.6 (picker gate). Flash: 1108384 -> 1108376 (-8 B, the
+deleted decode exception outweighs the helper). Arena: untouched; the
+placeholder costs +1 byte of PROGRAM memory only while a capture line is
+open and empty.
+
+Adversarial review round (same day, 3 lenses + 2 refuters per finding)
+confirmed four gaps, all closed before landing: (1) pemAlpha's EDIT arm
+read the old encoding — its `stringLastGlyph("")+1` cursor put EDIT on a
+leaked placeholder at position 1 behind the NUL, silently eating every
+keystroke (worse than the old refuse); fixed with a zero-length cursor
+guard, and EDIT is now the working recovery gesture the restore-sanitizer
+comment always promised (pinned by a Part-2 subcase: EDIT -> cursor 0 ->
+type -> committed). (2) The gate had NO timeout, so a hang-class
+regression (picker spin) would wedge the build instead of failing red —
+build-test.sh now wraps the headless battery in `timeout 600`, making
+"termination is the assertion" real. (3) The picker's embedded-NUL clamp
+had zero coverage (the placeholder skip fired first) — Part 2's fixture
+now carries a step with a NUL at payload[1] that passes the gate and
+exercises the clamp. (4) The decode-exception deletion was an unkilled
+revert-mutant — Part 1 now decodes a real marker AT currentStep during
+capture and asserts it still renders as a marker. Review-round flash
+delta: 0 B (text identical).
