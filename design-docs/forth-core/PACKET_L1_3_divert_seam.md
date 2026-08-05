@@ -58,7 +58,11 @@ is gone.
        * btnReleased -> runFunction (keyboard.c:2328); softkeys via
        * executeFunction -> runFunction (keyboard.c:1415).  This is exactly
        * where PEM already diverts, one block below. */
-      if(forthCapIsInteractive()) {
+      if(forthCapIsInteractive() && func > 0) {
+        /* func > 0 is LOAD-BEARING, not defensive: determineItem returns
+         * NEGATIVE softmenu ids (e.g. -MNU_AIMCATALOG, src/c47/assign.c:46)
+         * and indexOfItems[negative] is out of bounds.  Same conjunct L1-2's
+         * _forthCapAtCap carries, for the same reason. */
         if((indexOfItems[func].status & CAT_STATUS) == CAT_FNCT
            && (indexOfItems[func].status & PTP_STATUS) == PTP_NONE
            && func != ITM_AIM && func != ITM_FORTH
@@ -324,6 +328,14 @@ only" true by construction rather than by accident.
 
 - The fold / non-executing TAM — L1-F*. C6.8 pins the fall-through the
   fold hooks.
+- **But re-check L1-2's EXIT rung 2 against C4's drain before you finish.**
+  Rung 2's predicate (the native `softmenuStack[0].softmenuId <= 1 &&
+  menu(1) != -MNU_ALPHA` test) decides pop-vs-close on what is stacked, and
+  C4's keys-mode toggle changes exactly that. `isAlphaSubmenu` counts
+  `-MNU_FORTH` (softmenus.c:3880-3891), so the FWRD-on-top state is
+  reachable in both. Drive L1-2's C5.6 again after C4 lands and report
+  whether the ladder still behaves; a change there is a finding, not
+  something to absorb silently.
 - History and recall — L1-H.
 - The full CM-gate sweep as a class test — L1-5.
 
