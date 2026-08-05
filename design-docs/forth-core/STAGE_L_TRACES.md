@@ -1017,20 +1017,51 @@ natively from `CM_AIM` is currently unkeyable — but on a path this stage
 has not traced and cannot test. Filed as a separate observation; not
 bundled.
 
-### T7.5 — a latent PEM bug found on the way (independent, shippable now)
+### T7.5 — the `PTP_DISABLED` fold hazard: NOT a bug (corrected 2026-08-04)
 
-`decodeOneStep`'s `case PTP_DISABLED:` (decode.c:917-922) writes
-**nothing** to `tmpString` — it printfs under PC_BUILD and breaks. The
-fold splice at manage.c:1244-1245 then rejects only on
-`stringByteLength(tmpString) > 255`, so a `PTP_DISABLED` step folds
-**stale text from a previous caller** into the line. [VERIFIED by hand:
-decode.c:905-922, manage.c:1240-1248.]
+**First reported here as "a latent PEM bug, shippable now". That was
+wrong, and the correction is the useful part.** The two halves are real;
+the conclusion was not.
 
-Fix is one line — `tmpString[0] = 0;` before the `decodeOneStep(ins)`
-call — plus treating an empty result as the keep-the-step break. This is
-a PEM bug that exists today, independent of Stage L, and per the bug-fix
-class-test rule it lands with a reproducer and a class-level test.
-Reachability from a TAM commit is still open (see T7.7).
+Real half one: `decodeOneStep`'s `case PTP_DISABLED:` (decode.c:917-922)
+writes **nothing** to `tmpString` — it printfs under PC_BUILD and breaks.
+Real half two: the fold splice trusts it, rejecting only on
+`stringByteLength(tmpString) > 255` (manage.c:1244-1245). Both [VERIFIED
+by hand].
+
+What was not traced before the claim was made: **what step actually
+reaches the fold.** Only `addStepInProgram` → `insertStepInProgram` puts
+a step there, and that function's own `case PTP_DISABLED:` switch
+(manage.c:1958-2070) never emits a step carrying a `PTP_DISABLED`
+opcode. Every arm either rewrites the opcode or emits nothing:
+
+| Item | What is actually committed | Anchor |
+|---|---|---|
+| `ITM_KEYG`/`KEYX`/`42KEYG`/`42KEYX` | rewritten to `ITM_KEY`/`ITM_42KEY`, which are `PTP_KEYG_KEYX` (items.c:3383) — decodes normally | manage.c:1959-2010 |
+| `ITM_GTOP` | nothing inserted (a PC_BUILD printf) | manage.c:2012-2018 |
+| `ITM_DELPALL`, `ITM_BST`, `ITM_SST` | nothing inserted — they call `fnClPAll`/`fnBst`/`fnSst` | manage.c:2025-2038 |
+| `VAR_ACC`, `VAR_UEST`, `VAR_LEST`, … | rewritten to `ITM_STO 'ACC'` etc. | manage.c:2040-2069 |
+
+So `decodeOneStep`'s `PTP_DISABLED` arm is **unreachable from the fold**,
+and the earlier reproducer sketch (KEYG during a capture) does not
+reproduce anything: `ITM_KEYG` is indeed `TM_KEY` + `PTP_DISABLED`
+(items.c:3384) and does enter TAM, but the step it commits is an
+`ITM_KEY` step.
+
+Status: **an undocumented invariant, not a defect.** The fold is correct
+only because no `insertStepInProgram` arm emits a `PTP_DISABLED` opcode —
+a property of a switch nobody has written down, in upstream-shaped code,
+which a future arm could break silently. Proportionate response is
+hardening plus a class test that pins the invariant ("no step reaching
+the fold may carry a `PTP_DISABLED` opcode"), NOT a bug fix with a
+reproducer — there is nothing to reproduce. Carried as a Stage L
+hardening item, not as an independent shippable fix.
+
+Method note, since this cost a wrong claim twice: the sub-agent finding
+was accurate about both halves and silent about reachability, and I
+repeated it before tracing the commit path. Reachability is not a detail
+to defer — it is what turns two true facts into a bug or into an
+invariant.
 
 ### T7.6 — one sub-agent claim corrected
 
@@ -1061,9 +1092,9 @@ non-reentrancy.
    screen.c:3881 gates it off. Pre-existing native behaviour, not a
    regression, but the fold's look depends on it. Needs a `run-sim`
    capture of a native AIM TAM, not a read.
-4. Whether `PTP_DISABLED` is reachable from any TAM-committable item
-   (drives whether T7.5's class test is non-empty). Note
-   `addStepInProgram` has its own `PTP_DISABLED` arm at manage.c:2275.
+4. ~~Whether `PTP_DISABLED` is reachable from any TAM-committable item~~
+   **CLOSED 2026-08-04: not reachable** — see the corrected T7.5. This
+   was the open item that should have blocked the bug claim.
 5. `resizeProgramMemory` worst case for the transient pair — needs a
    measurement of `freeProgramBytes` around enter/leave with a worst-case
    named operand, not a read.
