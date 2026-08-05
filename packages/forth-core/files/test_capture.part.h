@@ -12018,3 +12018,747 @@ static int test_k4_arena_sweep(void)
   lastErrorCode = ERROR_NONE;
   return fail;
 }
+
+
+/* ==================================================================
+ * PACKET_L1_H (C5) — test_history_program.  The FHIST program: push,
+ * cap, evict, recall.
+ *
+ * Each subcase builds its own program-memory fixture via the tp*
+ * builder + writeTestProgram (or via real forthHistoryPush/Ensure calls
+ * on the pristine baseline), and calls cleanupTestProgram() before the
+ * next — same idiom as test_forth_capture_navigation and the picker
+ * tests above.  Subcase 0 is a fixture/empirical-verification step (name
+ * collision, the two f-shifted item ids); subcases 1-9 are C5.1-C5.9.
+ * ================================================================== */
+static int test_history_program(void)
+{
+  extern void fnForthOuter(uint16_t);
+  extern void fnKeyEnter(uint16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void runFunction(int16_t);
+  extern void processKeyAction(int16_t);
+  extern int16_t determineItem(const char *);
+
+  int fail = 0, scFail;
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedCursorPos = T_cursorPos;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedNextChar = nextChar;
+  bool_t savedShiftF = shiftF;
+  bool_t savedShiftG = shiftG;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  #define LH_RESET() do { \
+    calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
+    programRunStop = PGM_STOPPED; dynamicMenuItem = -1; alphaCase = AC_UPPER; \
+    nextChar = NC_NORMAL; shiftF = false; shiftG = false; \
+    clearSystemFlag(FLAG_ALPHA); lastErrorCode = ERROR_NONE; forthCapClose(); \
+  } while (0)
+
+  cleanupTestProgram();   /* pristine baseline before subcase 0 */
+
+  /* ---- Subcase 0: C1's name-collision check + C4's two f-shifted item
+   * ids, both driven for real (not guessed). The row lookup is
+   * layout-independent (primary == ITM_UP1/ITM_DOWN1), matching the
+   * convention test_capture_interactive_divert's subcase 3a already
+   * uses for the ALPHA-gesture row. ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    testProg_t p0;
+    tpInit(&p0);
+    tpLbl(&p0, "P0");
+    tpEnd(&p0);
+    if (!tpWrite(&p0)) {
+      printf("    [0] FIXTURE FAIL: build/write\n");
+      scFail = 1;
+    } else {
+      uint16_t p = 0;
+      forthXEQType_t res = forthResolveXEQ("FHIST", &p);
+      if (res != FORTH_XEQ_NONE) {
+        printf("    [0] FAIL: forthResolveXEQ(\"FHIST\") = %d, expected FORTH_XEQ_NONE (%d) on a machine with no FHIST\n",
+               res, FORTH_XEQ_NONE);
+        scFail = 1;
+      }
+      if (forthHistoryProgram() != 0) {
+        printf("    [0] FAIL: forthHistoryProgram() = %u, expected 0 before creation\n",
+               (unsigned)forthHistoryProgram());
+        scFail = 1;
+      }
+
+      {
+        int upRow = -1, downRow = -1, i;
+        for (i = 0; i < 37; i++) {
+          if (kbd_std[i].primary == ITM_UP1)   upRow = i;
+          if (kbd_std[i].primary == ITM_DOWN1) downRow = i;
+        }
+        if (upRow < 0 || downRow < 0) {
+          printf("    [0] FIXTURE FAIL: no kbd_std row carries primary ITM_UP1/ITM_DOWN1\n");
+          scFail = 1;
+        } else {
+          fnForthOuter(NOPARAM);
+          if (!forthCapIsOpen() || !forthCapIsInteractive() || forthCapKeysMode()) {
+            printf("    [0] FIXTURE FAIL: interactive (non-keys) open did not take\n");
+            scFail = 1;
+          } else {
+            char kbUp[3], kbDown[3];
+            int16_t gotUp, gotDown;
+            sprintf(kbUp, "%02d", upRow);
+            sprintf(kbDown, "%02d", downRow);
+            /* shiftF is one-shot: determineItem's own resetShiftState()
+             * clears it after the call, so it must be set again before
+             * each individual key. */
+            shiftF = true;
+            gotUp = determineItem(kbUp);
+            shiftF = true;
+            gotDown = determineItem(kbDown);
+            shiftF = false;
+            printf("    [0] REPORT: determineItem(shiftF, UP1 row %d) = %d, DOWN1 row %d = %d"
+                   " (kbd_std fShiftedAim: UP=%d DOWN=%d)\n",
+                   upRow, gotUp, downRow, gotDown,
+                   kbd_std[upRow].fShiftedAim, kbd_std[downRow].fShiftedAim);
+            if (gotUp != kbd_std[upRow].fShiftedAim || gotDown != kbd_std[downRow].fShiftedAim) {
+              printf("    [0] FAIL: determineItem does not resolve through fShiftedAim as expected\n");
+              scFail = 1;
+            }
+          }
+          forthCapClose();
+          clearSystemFlag(FLAG_ALPHA);
+        }
+      }
+    }
+  }
+  if (!scFail) printf("    [0] PASS: FHIST collides with nothing; f-shifted ids resolve through fShiftedAim\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 1 (C5.1): creation shape. One user program; assert
+   * FHIST is findable, differs from the user's program number, the
+   * user's bytes are unchanged (byte comparison), and record what
+   * numberOfPrograms did (settles the T7.2a open item). ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    testProg_t p1;
+    int sLbl;
+    tpInit(&p1);
+    sLbl = tpLbl(&p1, "P1");
+    tpSrc(&p1, "1 2 +");
+    tpEnd(&p1);
+    if (sLbl < 0 || !tpWrite(&p1)) {
+      printf("    [1] FIXTURE FAIL: build/write\n");
+      scFail = 1;
+    } else {
+      uint16_t numBefore = numberOfPrograms;
+      uint8_t before[32];
+      uint16_t beforeLen = p1.len;
+      bool_t created;
+      uint16_t histProg, numAfter;
+      xcopy(before, beginOfProgramMemory, beforeLen);
+
+      created = forthHistoryEnsure();
+      histProg = forthHistoryProgram();
+      numAfter = numberOfPrograms;
+
+      printf("    [1] REPORT: numberOfPrograms before=%u after=%u (empty FHIST just created)\n",
+             (unsigned)numBefore, (unsigned)numAfter);
+
+      if (!created || histProg == 0) {
+        printf("    [1] FAIL: forthHistoryEnsure/Program failed (created=%d, histProg=%u)\n",
+               created, (unsigned)histProg);
+        scFail = 1;
+      }
+      if (histProg == 1) {
+        printf("    [1] FAIL: FHIST landed as program 1 (the user's own program)\n");
+        scFail = 1;
+      }
+      if (numAfter != numBefore + 1) {
+        printf("    [1] FAIL: numberOfPrograms went %u -> %u, expected +1 (see [1] REPORT)\n",
+               (unsigned)numBefore, (unsigned)numAfter);
+        scFail = 1;
+      }
+      if (memcmp(beginOfProgramMemory, before, beforeLen) != 0) {
+        printf("    [1] FAIL: user's program bytes changed by FHIST creation\n");
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [1] PASS: FHIST created distinct from the user's program, user bytes unchanged\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 2 (C5.2): push three lines; assert three source steps
+   * in FHIST in order, each decoding to its text. ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    /* A subcase that never calls tpWrite/writeTestProgram leaves
+     * testProgOrigBegin NULL, which makes the trailing cleanupTestProgram()
+     * a no-op rescan rather than a real reset (restoreTestProgram's own
+     * guard) — so an explicit trivial baseline program is required here to
+     * make THIS subcase's own cleanup actually isolate the next one. */
+    testProg_t base2;
+    uint16_t prog;
+    tpInit(&base2);
+    tpLbl(&base2, "BASE2");
+    tpEnd(&base2);
+    if (!tpWrite(&base2)) {
+      printf("    [2] FIXTURE FAIL: baseline build/write\n");
+    }
+    forthHistoryPush("1 1 +");
+    forthHistoryPush("2 2 +");
+    forthHistoryPush("3 3 +");
+
+    prog = forthHistoryProgram();
+    if (prog == 0) {
+      printf("    [2] FIXTURE FAIL: FHIST not created by push\n");
+      scFail = 1;
+    } else {
+      uint8_t *lbl = programList[prog - 1].instructionPointer;
+      uint8_t *s1 = findNextStep(lbl);
+      uint8_t *s2 = s1 ? findNextStep(s1) : NULL;
+      uint8_t *s3 = s2 ? findNextStep(s2) : NULL;
+      uint8_t *s4 = s3 ? findNextStep(s3) : NULL;
+      uint8_t len;
+
+      if (!s1 || !forthStepPayload(s1, &len) || len != 5 || memcmp(s1 + 4, "1 1 +", 5) != 0) {
+        printf("    [2] FAIL: line 1 not \"1 1 +\"\n");
+        scFail = 1;
+      }
+      if (!s2 || !forthStepPayload(s2, &len) || len != 5 || memcmp(s2 + 4, "2 2 +", 5) != 0) {
+        printf("    [2] FAIL: line 2 not \"2 2 +\"\n");
+        scFail = 1;
+      }
+      if (!s3 || !forthStepPayload(s3, &len) || len != 5 || memcmp(s3 + 4, "3 3 +", 5) != 0) {
+        printf("    [2] FAIL: line 3 not \"3 3 +\"\n");
+        scFail = 1;
+      }
+      if (!s4 || !isAtEndOfProgram(s4)) {
+        printf("    [2] FAIL: a 4th step exists after the 3 pushed lines\n");
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [2] PASS: three pushed lines land as three ordered source steps\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 3 (C5.3): duplicates collapse. ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    /* See subcase 2's comment: an explicit baseline is required for THIS
+     * subcase's cleanup to actually isolate the next one. */
+    testProg_t base3;
+    uint16_t prog;
+    tpInit(&base3);
+    tpLbl(&base3, "BASE3");
+    tpEnd(&base3);
+    if (!tpWrite(&base3)) {
+      printf("    [3] FIXTURE FAIL: baseline build/write\n");
+    }
+    forthHistoryPush("1 2 +");
+    forthHistoryPush("1 2 +");
+
+    prog = forthHistoryProgram();
+    if (prog == 0) {
+      printf("    [3] FIXTURE FAIL: FHIST not created\n");
+      scFail = 1;
+    } else {
+      uint8_t *lbl = programList[prog - 1].instructionPointer;
+      uint8_t *s1 = findNextStep(lbl);
+      uint8_t *s2 = s1 ? findNextStep(s1) : NULL;
+      if (!s1 || !s2 || !isAtEndOfProgram(s2)) {
+        printf("    [3] FAIL: expected exactly one step after pushing \"1 2 +\" twice\n");
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [3] PASS: consecutive duplicate pushes collapse to one step\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 4 (C5.4): cap evicts oldest. Push well past
+   * FORTH_HISTORY_MAX_BYTES; assert the byte total is under the cap,
+   * the newest line survived, and the oldest is gone. ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    /* See subcase 2's comment: an explicit baseline is required for THIS
+     * subcase's cleanup to actually isolate the next one. */
+    testProg_t base4;
+    int n;
+    char line[16];
+    uint16_t prog;
+    tpInit(&base4);
+    tpLbl(&base4, "BASE4");
+    tpEnd(&base4);
+    if (!tpWrite(&base4)) {
+      printf("    [4] FIXTURE FAIL: baseline build/write\n");
+    }
+    for (n = 0; n < 200; n++) {
+      sprintf(line, "LINE%04d", n);
+      forthHistoryPush(line);
+    }
+    prog = forthHistoryProgram();
+    if (prog == 0) {
+      printf("    [4] FIXTURE FAIL: FHIST not created\n");
+      scFail = 1;
+    } else {
+      uint8_t *begin = programList[prog - 1].instructionPointer;
+      uint8_t *step = begin;
+      uint8_t *lastContent = NULL;
+      bool_t sawOldest = false;
+      uint32_t totalBytes;
+      while (!(isAtEndOfProgram(step) || isAtEndOfPrograms(step))) {
+        uint8_t len;
+        if (forthStepPayload(step, &len) && len == 8 && memcmp(step + 4, "LINE0000", 8) == 0) {
+          sawOldest = true;
+        }
+        lastContent = step;
+        step = findNextStep(step);
+      }
+      totalBytes = (uint32_t)(step - begin) + 2;
+      printf("    [4] REPORT: FHIST plateaus at %u bytes (cap %u) after 200 pushes\n",
+             (unsigned)totalBytes, (unsigned)FORTH_HISTORY_MAX_BYTES);
+
+      if (totalBytes > FORTH_HISTORY_MAX_BYTES) {
+        printf("    [4] FAIL: FHIST is %u bytes, over the %u cap\n",
+               (unsigned)totalBytes, (unsigned)FORTH_HISTORY_MAX_BYTES);
+        scFail = 1;
+      }
+      {
+        uint8_t len;
+        if (!lastContent || !forthStepPayload(lastContent, &len) || len != 8 ||
+            memcmp(lastContent + 4, "LINE0199", 8) != 0) {
+          printf("    [4] FAIL: newest line \"LINE0199\" did not survive\n");
+          scFail = 1;
+        }
+      }
+      if (sawOldest) {
+        printf("    [4] FAIL: oldest line \"LINE0000\" is still present\n");
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [4] PASS: cap evicts oldest-first; newest survives, total stays under FORTH_HISTORY_MAX_BYTES\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 5a (C5.5, order 1): the cursor is restored, FHIST
+   * created AFTER the caller's program. ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    testProg_t p5a;
+    int sLbl, sSrc2;
+    tpInit(&p5a);
+    sLbl = tpLbl(&p5a, "P1");
+    tpSrc(&p5a, "1 2 +");
+    sSrc2 = tpSrc(&p5a, "3 4 +");
+    tpEnd(&p5a);
+    if (sLbl < 0 || sSrc2 < 0 || !tpWrite(&p5a)) {
+      printf("    [5a] FIXTURE FAIL: build/write\n");
+      scFail = 1;
+    } else if (!tpSelectStep(&p5a, sSrc2)) {
+      printf("    [5a] FIXTURE FAIL: could not select step\n");
+      scFail = 1;
+    } else {
+      uint16_t tProg, tLocal, tFirst;
+      uint8_t tZero;
+      firstDisplayedLocalStepNumber = 0;
+      defineFirstDisplayedStep();
+      pemCursorIsZerothStep = false;
+
+      tProg = currentProgramNumber;
+      tLocal = currentLocalStepNumber;
+      tFirst = firstDisplayedLocalStepNumber;
+      tZero = (uint8_t)pemCursorIsZerothStep;
+
+      forthHistoryPush("seed one");   /* creates FHIST AFTER P1 */
+
+      if (currentProgramNumber != tProg || currentLocalStepNumber != tLocal ||
+          firstDisplayedLocalStepNumber != tFirst || (uint8_t)pemCursorIsZerothStep != tZero) {
+        printf("    [5a] FAIL: cursor tuple changed by push (prog %u->%u local %u->%u disp %u->%u zero %u->%u)\n",
+               tProg, currentProgramNumber, tLocal, currentLocalStepNumber,
+               tFirst, firstDisplayedLocalStepNumber, tZero, (uint8_t)pemCursorIsZerothStep);
+        scFail = 1;
+      } else {
+        int n;
+        char line[16];
+        for (n = 0; n < 200; n++) {
+          sprintf(line, "L%04d", n);
+          forthHistoryPush(line);
+        }
+        if (currentProgramNumber != tProg || currentLocalStepNumber != tLocal ||
+            firstDisplayedLocalStepNumber != tFirst || (uint8_t)pemCursorIsZerothStep != tZero) {
+          printf("    [5a] FAIL: cursor tuple changed across an eviction\n");
+          scFail = 1;
+        }
+      }
+    }
+  }
+  if (!scFail) printf("    [5a] PASS: cursor tuple restored, FHIST created after the caller's program\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 5b (C5.5, order 2): the caller's program created AFTER
+   * FHIST already exists (FHIST built directly into the fixture at
+   * program 1; the scan assigns program numbers in byte order, so FHIST
+   * ends up BEFORE P2 here — the mirror of 5a). ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    testProg_t p5b;
+    int sLbl2, sSrc2;
+    tpInit(&p5b);
+    tpLbl(&p5b, "FHIST");
+    tpSrc(&p5b, "seed");
+    tpEnd(&p5b);
+    sLbl2 = tpLbl(&p5b, "P2");
+    sSrc2 = tpSrc(&p5b, "5 6 +");
+    tpEnd(&p5b);
+    if (sLbl2 < 0 || sSrc2 < 0 || !tpWrite(&p5b)) {
+      printf("    [5b] FIXTURE FAIL: build/write\n");
+      scFail = 1;
+    } else if (forthHistoryProgram() != 1) {
+      printf("    [5b] FIXTURE FAIL: FHIST not program 1 as built (got %u)\n",
+             (unsigned)forthHistoryProgram());
+      scFail = 1;
+    } else if (!tpSelectStep(&p5b, sSrc2)) {
+      printf("    [5b] FIXTURE FAIL: could not select P2's step\n");
+      scFail = 1;
+    } else {
+      uint16_t tProg, tLocal, tFirst;
+      uint8_t tZero;
+      firstDisplayedLocalStepNumber = 0;
+      defineFirstDisplayedStep();
+      pemCursorIsZerothStep = false;
+
+      tProg = currentProgramNumber;
+      tLocal = currentLocalStepNumber;
+      tFirst = firstDisplayedLocalStepNumber;
+      tZero = (uint8_t)pemCursorIsZerothStep;
+
+      forthHistoryPush("seed two");
+
+      if (currentProgramNumber != tProg || currentLocalStepNumber != tLocal ||
+          firstDisplayedLocalStepNumber != tFirst || (uint8_t)pemCursorIsZerothStep != tZero) {
+        printf("    [5b] FAIL: cursor tuple changed by push (FHIST before the caller's program)\n");
+        scFail = 1;
+      } else {
+        int n;
+        char line[16];
+        for (n = 0; n < 200; n++) {
+          sprintf(line, "M%04d", n);
+          forthHistoryPush(line);
+        }
+        if (currentProgramNumber != tProg || currentLocalStepNumber != tLocal ||
+            firstDisplayedLocalStepNumber != tFirst || (uint8_t)pemCursorIsZerothStep != tZero) {
+          printf("    [5b] FAIL: cursor tuple changed across an eviction (FHIST before the caller's program)\n");
+          scFail = 1;
+        }
+      }
+    }
+  }
+  if (!scFail) printf("    [5b] PASS: cursor tuple restored, the caller's program created after FHIST\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 6 (C5.6): recall round-trip. Push two lines, open a
+   * capture, recall back twice and forward once; assert the line text
+   * at each step, then edit the browsed line and ENTER: a new newest
+   * is pushed and the browsed entry is untouched. ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    /* See subcase 2's comment: an explicit baseline is required for THIS
+     * subcase's cleanup to actually isolate the next one. */
+    testProg_t base6;
+    tpInit(&base6);
+    tpLbl(&base6, "BASE6");
+    tpEnd(&base6);
+    if (!tpWrite(&base6)) {
+      printf("    [6] FIXTURE FAIL: baseline build/write\n");
+    }
+    forthHistoryPush("1 1 +");
+    forthHistoryPush("2 2 +");
+
+    fnForthOuter(NOPARAM);
+    if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+      printf("    [6] FIXTURE FAIL: interactive open did not take\n");
+      scFail = 1;
+    } else {
+      int upRow = -1, downRow = -1, i;
+      char kbUp[3], kbDown[3];
+      int16_t itUp, itDown;
+      for (i = 0; i < 37; i++) {
+        if (kbd_std[i].primary == ITM_UP1)   upRow = i;
+        if (kbd_std[i].primary == ITM_DOWN1) downRow = i;
+      }
+      sprintf(kbUp, "%02d", upRow);
+      sprintf(kbDown, "%02d", downRow);
+      /* shiftF is one-shot: determineItem's own resetShiftState() clears
+       * it after the call, so it must be set again before each key. */
+      shiftF = true;
+      itUp = determineItem(kbUp);
+      shiftF = true;
+      itDown = determineItem(kbDown);
+      shiftF = false;
+
+      processKeyAction(itUp);
+      if (compareString(aimBuffer, "2 2 +", CMP_BINARY) != 0) {
+        printf("    [6] FAIL: 1st recall-back = \"%s\", expected \"2 2 +\"\n", aimBuffer);
+        scFail = 1;
+      }
+      processKeyAction(itUp);
+      if (compareString(aimBuffer, "1 1 +", CMP_BINARY) != 0) {
+        printf("    [6] FAIL: 2nd recall-back = \"%s\", expected \"1 1 +\"\n", aimBuffer);
+        scFail = 1;
+      }
+      processKeyAction(itDown);
+      if (compareString(aimBuffer, "2 2 +", CMP_BINARY) != 0) {
+        printf("    [6] FAIL: recall-forward = \"%s\", expected \"2 2 +\"\n", aimBuffer);
+        scFail = 1;
+      }
+
+      if (!scFail) {
+        runFunction(ITM_SPACE);
+        runFunction(ITM_3);
+        runFunction(ITM_SPACE);
+        runFunction(ITM_PLUS);
+        if (compareString(aimBuffer, "2 2 + 3 +", CMP_BINARY) != 0) {
+          printf("    [6] FIXTURE FAIL: edited line = \"%s\", expected \"2 2 + 3 +\"\n", aimBuffer);
+          scFail = 1;
+        } else {
+          fnKeyEnter(NOPARAM);
+          if (lastErrorCode != ERROR_NONE) {
+            printf("    [6] FIXTURE FAIL: ENTER on the edited line errored (%d)\n", lastErrorCode);
+            scFail = 1;
+          } else {
+            uint16_t prog = forthHistoryProgram();
+            uint8_t *lbl = prog ? programList[prog - 1].instructionPointer : NULL;
+            uint8_t *s1 = lbl ? findNextStep(lbl) : NULL;
+            uint8_t *s2 = s1 ? findNextStep(s1) : NULL;
+            uint8_t *s3 = s2 ? findNextStep(s2) : NULL;
+            uint8_t *s4 = s3 ? findNextStep(s3) : NULL;
+            uint8_t len;
+            if (!s2 || !forthStepPayload(s2, &len) || len != 5 || memcmp(s2 + 4, "2 2 +", 5) != 0) {
+              printf("    [6] FAIL: the browsed entry \"2 2 +\" was altered by the edit\n");
+              scFail = 1;
+            }
+            if (!s3 || !forthStepPayload(s3, &len) || len != 9 || memcmp(s3 + 4, "2 2 + 3 +", 9) != 0) {
+              printf("    [6] FAIL: the edited line did not land as a new newest \"2 2 + 3 +\"\n");
+              scFail = 1;
+            }
+            if (!s4 || !isAtEndOfProgram(s4)) {
+              printf("    [6] FAIL: unexpected 4th content step\n");
+              scFail = 1;
+            }
+          }
+        }
+      }
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+    }
+  }
+  if (!scFail) printf("    [6] PASS: recall back-back-forward round-trips; edit+ENTER pushes a new newest, browsed entry untouched\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 7 (C5.7): EXIT pushes (L-R2: EXIT never loses a line). ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    /* See subcase 2's comment: an explicit baseline is required for THIS
+     * subcase's cleanup to actually isolate the next one. */
+    testProg_t base7;
+    tpInit(&base7);
+    tpLbl(&base7, "BASE7");
+    tpEnd(&base7);
+    if (!tpWrite(&base7)) {
+      printf("    [7] FIXTURE FAIL: baseline build/write\n");
+    }
+    fnForthOuter(NOPARAM);
+    if (!forthCapIsOpen()) {
+      printf("    [7] FIXTURE FAIL: interactive open did not take\n");
+      scFail = 1;
+    } else {
+      uint16_t prog;
+      uint8_t *lbl, *s1;
+      uint8_t len;
+      runFunction(ITM_A);
+      runFunction(ITM_B);
+      runFunction(ITM_C);
+      fnKeyExit(NOPARAM);
+
+      prog = forthHistoryProgram();
+      lbl = prog ? programList[prog - 1].instructionPointer : NULL;
+      s1 = lbl ? findNextStep(lbl) : NULL;
+      if (!s1 || !forthStepPayload(s1, &len) || len != 3 || memcmp(s1 + 4, "ABC", 3) != 0) {
+        printf("    [7] FAIL: EXIT did not push \"ABC\" into FHIST\n");
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [7] PASS: EXIT pushes the open line into FHIST\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 8 (C5.8): the UAF guard. Build FHIST past the cap,
+   * then starve the free-memory arena so scanLabelsAndPrograms cannot
+   * reallocate labelList/programList, and drive forthHistoryEvict()
+   * directly (delete-only: never grows program memory, so
+   * resizeProgramMemory's exit(-3) path is never reached by this
+   * drive). freeMemoryRegions is restored from a snapshot immediately
+   * after, before anything else touches program memory. ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    /* See subcase 2's comment: an explicit baseline is required for THIS
+     * subcase's cleanup to actually isolate the next one. */
+    testProg_t base8;
+    int n;
+    char line[16];
+    uint16_t prog;
+    tpInit(&base8);
+    tpLbl(&base8, "BASE8");
+    tpEnd(&base8);
+    if (!tpWrite(&base8)) {
+      printf("    [8] FIXTURE FAIL: baseline build/write\n");
+    }
+    for (n = 0; n < 200; n++) {
+      sprintf(line, "U%04d", n);
+      forthHistoryPush(line);
+    }
+    prog = forthHistoryProgram();
+    if (prog == 0) {
+      printf("    [8] FIXTURE FAIL: FHIST not created\n");
+      scFail = 1;
+    } else {
+      int32_t savedCount = numberOfFreeMemoryRegions;
+      freeMemoryRegion_t savedRegions[MAX_FREE_REGIONS];
+      bool_t sawRamFull;
+      memcpy(savedRegions, freeMemoryRegions, sizeof(freeMemoryRegion_t) * savedCount);
+
+      numberOfFreeMemoryRegions = 0;
+      lastErrorCode = ERROR_NONE;
+      forthHistoryEvict();
+      sawRamFull = (lastErrorCode == ERROR_RAM_FULL);
+
+      numberOfFreeMemoryRegions = savedCount;
+      memcpy(freeMemoryRegions, savedRegions, sizeof(freeMemoryRegion_t) * savedCount);
+      lastErrorCode = ERROR_NONE;
+      scanLabelsAndPrograms();   /* labelList/programList valid again before anything else touches them */
+
+      if (sawRamFull) {
+        printf("    [8] PASS: eviction loop abandoned under a forced ERROR_RAM_FULL, no crash\n");
+      } else {
+        printf("    [8] REPORT: could not force ERROR_RAM_FULL here. Evicting only ever deletes a\n"
+               "        non-label, non-boundary FHIST content step, so numberOfLabels/numberOfPrograms\n"
+               "        never change across the rescan; scanLabelsAndPrograms frees the OLD labelList/\n"
+               "        programList first and then reallocates the identically-sized new ones, so its\n"
+               "        own just-freed block is always exactly the right size regardless of external\n"
+               "        RAM pressure. Pinned by mutation 5 alone.\n");
+      }
+    }
+  }
+  fail |= scFail;   /* only a FIXTURE failure fails this subcase; the RAM_FULL outcome is reported either way */
+  cleanupTestProgram();
+
+  /* ---- Subcase 9 (C5.9): user's programs untouched. Two user programs;
+   * assert both are byte-identical across a push AND an eviction (by
+   * actual byte comparison), and labelList still resolves their
+   * labels. ---- */
+  scFail = 0;
+  LH_RESET();
+  {
+    testProg_t p9;
+    tpInit(&p9);
+    tpLbl(&p9, "P1");
+    tpSrc(&p9, "1 2 +");
+    tpEnd(&p9);
+    tpLbl(&p9, "P2");
+    tpSrc(&p9, "3 4 +");
+    tpEnd(&p9);
+    if (!tpWrite(&p9)) {
+      printf("    [9] FIXTURE FAIL: build/write\n");
+      scFail = 1;
+    } else {
+      uint16_t p2StartOff = p9.stepOff[3];
+      uint16_t totalLen = p9.len;
+      uint8_t before1[32], before2[32];
+      xcopy(before1, beginOfProgramMemory, p2StartOff);
+      xcopy(before2, beginOfProgramMemory + p2StartOff, totalLen - p2StartOff);
+
+      forthHistoryPush("push one");
+
+      if (memcmp(beginOfProgramMemory, before1, p2StartOff) != 0 ||
+          memcmp(beginOfProgramMemory + p2StartOff, before2, totalLen - p2StartOff) != 0) {
+        printf("    [9] FAIL: P1/P2 bytes changed by a push\n");
+        scFail = 1;
+      } else {
+        int n;
+        char line[16];
+        for (n = 0; n < 200; n++) {
+          sprintf(line, "V%04d", n);
+          forthHistoryPush(line);
+        }
+        if (memcmp(beginOfProgramMemory, before1, p2StartOff) != 0 ||
+            memcmp(beginOfProgramMemory + p2StartOff, before2, totalLen - p2StartOff) != 0) {
+          printf("    [9] FAIL: P1/P2 bytes changed across an eviction\n");
+          scFail = 1;
+        }
+      }
+      if (findNamedLabel("P1", GLOBAL_LABELS) == INVALID_VARIABLE) {
+        printf("    [9] FAIL: labelList no longer resolves P1\n");
+        scFail = 1;
+      }
+      if (findNamedLabel("P2", GLOBAL_LABELS) == INVALID_VARIABLE) {
+        printf("    [9] FAIL: labelList no longer resolves P2\n");
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [9] PASS: user's programs are byte-identical across a push and an eviction; labels still resolve\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  #undef LH_RESET
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  T_cursorPos = savedCursorPos;
+  alphaCase = savedAlphaCase;
+  nextChar = savedNextChar;
+  shiftF = savedShiftF;
+  shiftG = savedShiftG;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}

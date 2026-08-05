@@ -43,9 +43,13 @@ and report — the name is a spec decision, not an implementer choice.
 **Locate-or-create**, in `programming/manage.c`:
 
 ```
-forthHistoryGotoLastStep() -> bool_t /* park currentStep on FHIST's last step,
-                                        i.e. immediately before its END; false
-                                        if FHIST is absent.  DECLARED IN
+forthHistoryGotoLastStep() -> bool_t /* park currentStep ON FHIST's OWN END
+                                        STEP — i.e. the position a subsequent
+                                        _insertInProgram appends at, since it
+                                        writes BEFORE currentStep.  NOT "the
+                                        last content step": that reading puts
+                                        new lines in the wrong place.  False if
+                                        FHIST is absent.  DECLARED IN
                                         forth_capture.h — L1-F1 calls it. */
 
 forthHistoryProgram() -> uint16_t   /* program number, or 0 if absent */
@@ -90,13 +94,15 @@ on a machine with one user program, assert `forthHistoryProgram()` returns
 a number **different from** the user's, and that the user program's bytes
 are unchanged — compare a captured byte range before and after, not prose.
 
-**OPEN, settle by test not by reading (T7.2a item 1):** an `END`
-immediately followed by `.END.` does **not** increment `numberOfPrograms`
-(src/c47/programming/manage.c:144). So an *empty* FHIST may be invisible
-to the program count while a *non-empty* one is visible. Write the test
-first (C5.1), record what actually happens, and if the empty form is
-invisible then `forthHistoryEnsure` must create the program **with its
-first line**, not empty. Report which shape you landed.
+**CLOSED 2026-08-05 by test (T7.2a item 1).** An empty FHIST **is**
+visible: `numberOfPrograms` goes 1 → 2 the moment `LBL 'FHIST'` + `END`
+are inserted on a one-user-program fixture. The reasoning I had backwards:
+the increment does not fire on FHIST's own `END` (whose successor *is*
+`.END.`) — it fires because the **preceding** program's `END` gains a
+non-`.END.` successor, namely FHIST's `LBL`. That happens whether or not
+FHIST has content. So the "seed it with its first line" contingency does
+not apply, and `forthHistoryEnsure` is the plain two-insert function C1
+specifies.
 
 ## C2 — the cursor tuple
 

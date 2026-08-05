@@ -2742,6 +2742,17 @@ RELEASE_END:
         }
 
         case CHR_caseUP: {                                                   //From keyboard: logic for Up/Dn case/num
+          /* L1-H (C4): f-up recalls an OLDER line into an open interactive
+           * capture. The unshifted arrows are unavailable here (T4: they
+           * are the case-change gesture / menu paging / destructive
+           * closeAim()+fnBst()) — this is the sanctioned recall gesture.
+           * Guarded, falling through to the landed case-change body when
+           * no interactive capture is open. */
+          if(forthCapIsInteractive()) {
+            forthHistoryRecall(-1);
+            keyActionProcessed = true;
+            break;
+          }
           if(getSystemFlag(FLAG_NUMLOCK))  {}
           else if(alphaCase == AC_LOWER) {
             processKeyAction(CHR_case);
@@ -2755,6 +2766,14 @@ RELEASE_END:
         }
 
         case CHR_caseDN: {                                                   //From keyboard: logic for Up/Dn case/num
+          /* L1-H (C4): the mirror of CHR_caseUP above — f-down recalls a
+           * NEWER line (delta +1), reaching "past the newest" (empty) one
+           * step past the newest pushed line. */
+          if(forthCapIsInteractive()) {
+            forthHistoryRecall(1);
+            keyActionProcessed = true;
+            break;
+          }
           if(getSystemFlag(FLAG_NUMLOCK)) {
             alphaCase = AC_UPPER;
             processKeyAction(CHR_numU);

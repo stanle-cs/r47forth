@@ -11,6 +11,8 @@ static void _forthCapOpenAs(uint8_t origin) {
   forthCap.keysMode = 0;                    /* K1: a fresh capture starts in
                                                alpha input (owner default) */
   forthCap.origin = origin;
+  forthCap.historyIndex = FORTH_HIST_BROWSE_NONE;  /* L1-H: fresh capture
+                                                       is not browsing */
 }
 
 void forthCapOpen(void)            { _forthCapOpenAs(FCAP_ORIGIN_PEM); }
@@ -70,6 +72,7 @@ void forthCapPowerReset(void) {
   forthCap.keysMode = 0;        /* K1: transient UI state never survives a
                                    dictionary-lifecycle reset */
   forthCap.origin = FCAP_ORIGIN_PEM; /* L1-1: same rationale as keysMode above */
+  forthCap.historyIndex = FORTH_HIST_BROWSE_NONE; /* L1-H: same rationale */
 }
 
 bool_t forthCapIsOpen(void)  { return forthCap.state == FCAP_OPEN; }
@@ -89,6 +92,10 @@ bool_t forthCapTextNonEmpty(void) {
 /* K1 (E10-E12): the keys-mode bit.  Transient, never persisted. */
 bool_t forthCapKeysMode(void)            { return forthCap.keysMode != 0; }
 void   forthCapSetKeysMode(bool_t on)    { forthCap.keysMode = on ? 1 : 0; }
+
+/* L1-H: the recall browse-index field. */
+uint16_t forthCapHistoryIndex(void)          { return forthCap.historyIndex; }
+void     forthCapSetHistoryIndex(uint16_t i) { forthCap.historyIndex = i; }
 
 #if defined(FORTH_DEBUG_SELFTEST)
 uint8_t forthTestCapState(void) { return forthCap.state; }

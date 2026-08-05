@@ -1362,6 +1362,328 @@ void forthInteractiveEnter(void) {
 }
 
 
+/* ==================================================================
+ * PACKET_L1_H — the FHIST program: push, cap, evict, recall.
+ *
+ * FHIST is a single, kept, named, runnable program that accumulates
+ * interactive lines as ITM_FORTH source steps.  It is created lazily (on
+ * the first push) and appended AFTER every existing program, never
+ * spliced into one — see the byte-layout note at forthHistoryEnsure().
+ * ================================================================== */
+
+#define FORTH_HISTORY_NAME     "FHIST"
+#define FORTH_HISTORY_NAME_LEN 5
+
+/* C2: the cursor tuple.  (program, localStep) — NOT a saved global step
+ * number, which program-boundary shifts (FHIST growing/evicting) would
+ * make stale by restore time (see forthHistoryPush's use of goToPgmStep,
+ * which re-reads programList AT RESTORE TIME, after scanLabelsAndPrograms
+ * has rebuilt it). */
+typedef struct {
+  uint16_t savedProgram;          /* currentProgramNumber */
+  uint16_t savedLocalStep;        /* currentLocalStepNumber */
+  uint16_t savedFirstDisplayed;   /* firstDisplayedLocalStepNumber */
+  uint8_t  savedZerothStep;       /* pemCursorIsZerothStep */
+  uint8_t  pad;
+} forthHistCursor_t;              /* 8 bytes, BSS, one instance */
+
+static forthHistCursor_t _forthHistCur;
+
+static void _forthHistSaveCursor(void) {
+  _forthHistCur.savedProgram        = currentProgramNumber;
+  _forthHistCur.savedLocalStep      = currentLocalStepNumber;
+  _forthHistCur.savedFirstDisplayed = firstDisplayedLocalStepNumber;
+  _forthHistCur.savedZerothStep     = (uint8_t)pemCursorIsZerothStep;
+}
+
+static void _forthHistRestoreCursor(void) {
+  goToPgmStep(_forthHistCur.savedProgram, _forthHistCur.savedLocalStep);
+  firstDisplayedLocalStepNumber = _forthHistCur.savedFirstDisplayed;
+  defineFirstDisplayedStep();
+  pemCursorIsZerothStep = _forthHistCur.savedZerothStep;
+}
+
+/* Program number of the FHIST program, or 0 if it does not exist yet.
+ * Scans labelList for a GLOBAL label named "FHIST" (labelList[i].step > 0
+ * — see scanLabelsAndPrograms, manage.c:190-193). boundProgramNameLength
+ * guards the read exactly as _removeLabelsAssignments does: a corrupt or
+ * crafted program cannot walk this past firstFreeProgramByte. */
+uint16_t forthHistoryProgram(void) {
+  int16_t i;
+  for(i = 0; i < numberOfLabels; i++) {
+    if(labelList[i].step > 0) {
+      uint8_t len = boundProgramNameLength(labelList[i].labelPointer + 1, labelList[i].labelPointer[0]);
+      if(len == FORTH_HISTORY_NAME_LEN
+         && memcmp(labelList[i].labelPointer + 1, FORTH_HISTORY_NAME, FORTH_HISTORY_NAME_LEN) == 0) {
+        return (uint16_t)labelList[i].program;
+      }
+    }
+  }
+  return 0;
+}
+
+/* Positions currentStep/currentProgramNumber/currentLocalStepNumber on the
+ * GLOBAL .END. step (isAtEndOfPrograms), the only safe insert point for a
+ * brand-new program: _insertInProgram writes BEFORE currentStep, and
+ * scanLabelsAndPrograms assigns a label to the program number current AT
+ * THE LABEL'S POSITION, so any earlier position would splice into an
+ * existing program. Reuses the landed getNumberOfSteps()/
+ * defineCurrentProgramFromCurrentStep() idiom rather than hand-counting. */
+static void _forthHistPositionAtEnd(void) {
+  currentStep = firstFreeProgramByte;
+  defineCurrentProgramFromCurrentStep();      /* currentProgramNumber == numberOfPrograms */
+  currentLocalStepNumber = getNumberOfSteps() + 1;   /* one past the last program's own END */
+}
+
+/* First content step of program `program` (right after its LBL), or its
+ * own END step if it has none. */
+static uint8_t *_forthHistFirstLineStep(uint16_t program) {
+  return findNextStep(programList[program - 1].instructionPointer);
+}
+
+/* Last content (ITM_FORTH source) step, or NULL if FHIST is empty. */
+static uint8_t *_forthHistLastLineStep(uint16_t program) {
+  uint8_t *step = _forthHistFirstLineStep(program);
+  uint8_t *last = NULL;
+  while(step != NULL && !isAtEndOfProgram(step)) {
+    last = step;
+    step = findNextStep(step);
+  }
+  return last;
+}
+
+/* Number of content (ITM_FORTH source) steps. */
+static uint16_t _forthHistLineCount(uint16_t program) {
+  uint16_t n = 0;
+  uint8_t *step = _forthHistFirstLineStep(program);
+  while(step != NULL && !isAtEndOfProgram(step)) {
+    n++;
+    step = findNextStep(step);
+  }
+  return n;
+}
+
+/* The content step at `index` counting from 0 = oldest, or NULL if `index`
+ * is out of range. */
+static uint8_t *_forthHistLineAt(uint16_t program, uint16_t index) {
+  uint8_t *step = _forthHistFirstLineStep(program);
+  while(index > 0 && step != NULL && !isAtEndOfProgram(step)) {
+    step = findNextStep(step);
+    index--;
+  }
+  if(step == NULL || isAtEndOfProgram(step)) {
+    return NULL;
+  }
+  return step;
+}
+
+/* Total byte span of program `program`, from its first byte through its
+ * own END inclusive — same idiom as _getProgramSize() (manage.c:378-389)
+ * but addressable for a program that is not necessarily the last one. */
+static uint32_t _forthHistProgramBytes(uint16_t program) {
+  uint8_t *begin = programList[program - 1].instructionPointer;
+  uint8_t *step = begin;
+  while(!(isAtEndOfProgram(step) || isAtEndOfPrograms(step))) {
+    step = findNextStep(step);
+  }
+  return (uint32_t)(step - begin) + 2;
+}
+
+/* C1: locate-or-create.  Byte layout (currentStep on the .END. step for
+ * BOTH inserts, per the position-and-order rule above):
+ *
+ *   [ …user progs… END ][ .END. ]          currentStep -> .END.
+ *   insert LBL 'FHIST'
+ *   [ …user progs… END ][ LBL ][ .END. ]   currentStep -> .END. (advanced past LBL)
+ *   insert END
+ *   [ …user progs… END ][ LBL ][ END ][ .END. ]
+ *
+ * The trailing END is what makes it a program: scanLabelsAndPrograms
+ * counts a program at an END whose successor is not .END.
+ * (src/c47/programming/manage.c:143-146) — the user's last END now counts
+ * (its successor is the new LBL, not .END.), and FHIST's own END
+ * (successor .END.) does not add another.  This increments numberOfPrograms
+ * by exactly 1 regardless of whether FHIST ends up empty or seeded: the
+ * increment is triggered by the PRECEDING program's END gaining a
+ * non-.END. successor, not by FHIST's own trailing END — settled by the
+ * C5.1 test, see its comment for the observed result. */
+bool_t forthHistoryEnsure(void) {
+  if(forthHistoryProgram() != 0) {
+    return true;
+  }
+
+  _forthHistSaveCursor();
+  _forthHistPositionAtEnd();
+
+  tmpString[0] = ITM_LBL;
+  tmpString[1] = (char)STRING_LABEL_VARIABLE;
+  tmpString[2] = FORTH_HISTORY_NAME_LEN;
+  xcopy(tmpString + 3, FORTH_HISTORY_NAME, FORTH_HISTORY_NAME_LEN);
+  _insertInProgram((uint8_t *)tmpString, 3 + FORTH_HISTORY_NAME_LEN);
+
+  tmpString[0] = (char)((ITM_END >> 8) | 0x80);
+  tmpString[1] = (char)(ITM_END & 0xff);
+  _insertInProgram((uint8_t *)tmpString, 2);
+
+  _forthHistRestoreCursor();
+
+  return forthHistoryProgram() != 0;
+}
+
+/* C1: parks currentStep on FHIST's own END step (its "last step" — END is
+ * always the final numbered step of a program, per getNumberOfSteps()'s
+ * own convention), i.e. immediately before it. _insertInProgram's
+ * insert-before-currentStep semantics then append new content as FHIST's
+ * newest line, immediately preceding that END.  False if FHIST is absent.
+ * L1-F1 (the fold) calls this too, to park its transient step there. */
+bool_t forthHistoryGotoLastStep(void) {
+  uint16_t program = forthHistoryProgram();
+  uint8_t *step;
+  uint16_t localStep;
+
+  if(program == 0) {
+    return false;
+  }
+
+  step = programList[program - 1].instructionPointer;   /* LBL */
+  localStep = 1;
+  while(!isAtEndOfProgram(step)) {
+    step = findNextStep(step);
+    localStep++;
+  }
+
+  goToPgmStep(program, localStep);
+  return true;
+}
+
+/* C3: oldest-first eviction down to FORTH_HISTORY_MAX_BYTES. */
+void forthHistoryEvict(void) {
+  uint16_t program = forthHistoryProgram();
+  if(program == 0) {
+    return;
+  }
+
+  while(_forthHistProgramBytes(program) > FORTH_HISTORY_MAX_BYTES) {
+    uint8_t *lbl = programList[program - 1].instructionPointer;
+    uint8_t *firstLine = findNextStep(lbl);
+    uint8_t *afterFirstLine;
+
+    if(firstLine == NULL || isAtEndOfProgram(firstLine)) {
+      break;   /* nothing left to evict (cap smaller than LBL+END alone) */
+    }
+    afterFirstLine = findNextStep(firstLine);
+    if(afterFirstLine == NULL) {
+      break;
+    }
+
+    deleteStepsFromTo(firstLine, afterFirstLine);
+    /* Upstream use-after-free guard (binding — STAGE_L_TRACES.md §T7.2b,
+     * PACKET_L1_H C3). deleteStepsFromTo calls scanLabelsAndPrograms, which
+     * frees labelList/programList up front (manage.c:132-133) and can
+     * early-return on ERROR_RAM_FULL without reallocating
+     * (src/c47/programming/manage.c:151-163), leaving both NULL. leavePem
+     * then dereferences programList via defineCurrentStep
+     * (keyboard.c:2404-2409 -> src/c47/programming/nextStep.c:532, a file
+     * with no package override) — an upstream defect we do not patch
+     * upstream (S1 precedent: UPSTREAM_REPORTS_globalRegister_reset.md).
+     * Abandon the loop rather than touch either list again. */
+    if(lastErrorCode != ERROR_NONE) {
+      return;
+    }
+
+    program = forthHistoryProgram();   /* re-resolve against the rebuilt list */
+    if(program == 0) {
+      return;
+    }
+  }
+}
+
+/* C3: push, cap, evict.  Silent on failure throughout — history is a
+ * convenience, never an error that blocks a run. */
+void forthHistoryPush(const char *text) {
+  uint16_t program;
+
+  if(text[0] == 0) {
+    return;
+  }
+  if(!forthHistoryEnsure()) {
+    return;
+  }
+
+  /* L2: consecutive duplicates collapse. */
+  program = forthHistoryProgram();
+  if(program != 0) {
+    uint8_t *newest = _forthHistLastLineStep(program);
+    if(newest != NULL) {
+      uint8_t len;
+      if(forthStepPayload(newest, &len)) {
+        uint16_t textLen = (uint16_t)stringByteLength(text);
+        if(len == textLen && memcmp(newest + 4, text, textLen) == 0) {
+          return;
+        }
+      }
+    }
+  }
+
+  _forthHistSaveCursor();
+
+  forthHistoryGotoLastStep();
+  _insertInProgram((uint8_t *)tmpString, _forthCapBuildStep(tmpString, text));
+  forthHistoryEvict();
+
+  _forthHistRestoreCursor();
+
+  forthCapSetHistoryIndex(FORTH_HIST_BROWSE_NONE);   /* C4: reset on every push */
+}
+
+/* C4: f-shifted up/down recall.  Read-only: never creates or modifies
+ * FHIST.  The browse index lives in forthCap (forthCapHistoryIndex/
+ * forthCapSetHistoryIndex) — FORTH_HIST_BROWSE_NONE resolves against the
+ * CURRENT line count at first use, so the reset at open/push needs no
+ * knowledge of FHIST's size. */
+void forthHistoryRecall(int16_t delta) {
+  uint16_t program = forthHistoryProgram();
+  uint16_t lineCount = (program != 0) ? _forthHistLineCount(program) : 0;
+  uint16_t cur = forthCapHistoryIndex();
+  int32_t next;
+
+  if(cur == FORTH_HIST_BROWSE_NONE || cur > lineCount) {
+    cur = lineCount;
+  }
+  next = (int32_t)cur + delta;
+  if(next < 0) {
+    next = 0;
+  }
+  if(next > (int32_t)lineCount) {
+    next = (int32_t)lineCount;
+  }
+
+  if((uint16_t)next == lineCount) {
+    aimBuffer[0] = 0;                                  /* past newest = empty */
+  }
+  else {
+    uint8_t *step = _forthHistLineAt(program, (uint16_t)next);
+    uint8_t len = 0;
+    if(step != NULL && forthStepPayload(step, &len)) {
+      /* Copy the text, do not execute the step: the payload is at step+4
+       * for step[3] bytes and is NOT NUL-terminated (_forthCapBuildStep;
+       * forthStepPayload). */
+      if(len > 0) {
+        xcopy(aimBuffer, step + 4, len);
+      }
+      aimBuffer[len] = 0;
+    }
+    else {
+      aimBuffer[0] = 0;   /* defensive: should not happen */
+    }
+  }
+
+  forthCapSetHistoryIndex((uint16_t)next);
+  T_cursorPos = (aimBuffer[0] == 0) ? 0 : stringLastGlyph(aimBuffer) + 1;
+  displayAIMbufferoffset = 0;
+}
+
+
 void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
   if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {
     hourGlassIconEnabled = false;

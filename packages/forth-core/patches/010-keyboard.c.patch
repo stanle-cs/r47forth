@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6289d069f 100644
+index bc44026016e94a8865b8acc886386341596641c6..bc1935d1d4c31b004aefe0cb8127d3c67cca19b0 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,12 +2,66 @@
@@ -312,7 +312,40 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -2835,8 +2946,28 @@ RELEASE_END:
+@@ -2631,6 +2742,17 @@ RELEASE_END:
+         }
+ 
+         case CHR_caseUP: {                                                   //From keyboard: logic for Up/Dn case/num
++          /* L1-H (C4): f-up recalls an OLDER line into an open interactive
++           * capture. The unshifted arrows are unavailable here (T4: they
++           * are the case-change gesture / menu paging / destructive
++           * closeAim()+fnBst()) — this is the sanctioned recall gesture.
++           * Guarded, falling through to the landed case-change body when
++           * no interactive capture is open. */
++          if(forthCapIsInteractive()) {
++            forthHistoryRecall(-1);
++            keyActionProcessed = true;
++            break;
++          }
+           if(getSystemFlag(FLAG_NUMLOCK))  {}
+           else if(alphaCase == AC_LOWER) {
+             processKeyAction(CHR_case);
+@@ -2644,6 +2766,14 @@ RELEASE_END:
+         }
+ 
+         case CHR_caseDN: {                                                   //From keyboard: logic for Up/Dn case/num
++          /* L1-H (C4): the mirror of CHR_caseUP above — f-down recalls a
++           * NEWER line (delta +1), reaching "past the newest" (empty) one
++           * step past the newest pushed line. */
++          if(forthCapIsInteractive()) {
++            forthHistoryRecall(1);
++            keyActionProcessed = true;
++            break;
++          }
+           if(getSystemFlag(FLAG_NUMLOCK)) {
+             alphaCase = AC_UPPER;
+             processKeyAction(CHR_numU);
+@@ -2835,8 +2965,28 @@ RELEASE_END:
  
                //also AIM Longpress cycle
                case CM_AIM: {
@@ -341,7 +374,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
                    closeAim();
                    runFunction(item);
                    keyActionProcessed = true;
-@@ -3130,11 +3261,23 @@ RELEASE_END:
+@@ -3130,11 +3280,23 @@ RELEASE_END:
                    keyActionProcessed = true;
                  }
                  else if(item == ITM_SST) {
@@ -365,7 +398,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
                    fnBst(NOPARAM);
                    keyActionProcessed = true;
                    refreshScreen(123);
-@@ -3154,6 +3297,12 @@ RELEASE_END:
+@@ -3154,6 +3316,12 @@ RELEASE_END:
                    }
                  }
                  else if(item == ITM_RS) {
@@ -378,7 +411,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
                    addStepInProgram(ITM_STOP);
                    keyActionProcessed = true;
                  }
-@@ -3444,6 +3593,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3444,6 +3612,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -393,7 +426,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
            if(softmenuStack[0].softmenuId <= 1 || menu(1) == -MNU_ALPHA) {
              popSoftmenu();
            }
-@@ -3799,6 +3956,79 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3799,6 +3975,79 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -473,7 +506,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
          if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines
            softmenuStack[0].softmenuId = 1;                                  //JM
          }                                                                   //JM
-@@ -3856,6 +4086,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3856,6 +4105,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            lastErrorCode = 0;
            break;
          }
@@ -489,7 +522,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
          if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
            if(isAlphaSubmenu(0)) {
              popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
-@@ -3868,6 +4107,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +4126,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -497,7 +530,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +4118,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +4137,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -520,7 +553,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4366,9 +4622,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4641,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -545,7 +578,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
-@@ -4544,6 +4814,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4544,6 +4833,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
@@ -559,7 +592,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e647052cb362e2f70b0ab5414e2f4df6
              closeAim();
            }
            fnBst(NOPARAM);
-@@ -4762,6 +5039,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4762,6 +5058,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {

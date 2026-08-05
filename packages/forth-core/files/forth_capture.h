@@ -56,7 +56,19 @@ typedef struct {
   uint16_t    savedStepCount; /* F6-4: getNumberOfSteps() at suspend, so
                                  resume can tell how many steps a TAM
                                  commit inserted */
+  uint16_t    historyIndex;   /* L1-H: recall browse index into FHIST —
+                                 transient, NEVER persisted.
+                                 FORTH_HIST_BROWSE_NONE ("past the newest")
+                                 outside a browse; reset to that value at
+                                 every capture open and at every
+                                 forthHistoryPush(). */
 } forthCap_t;
+
+/* L1-H: the recall browse-index sentinel ("past the newest" / not
+ * currently browsing).  Distinguishable from any real line index: FHIST's
+ * line count is bounded well under this by FORTH_HISTORY_MAX_BYTES (each
+ * line consumes at least 5 bytes). */
+#define FORTH_HIST_BROWSE_NONE ((uint16_t)0xFFFFu)
 
 void        forthCapOpen(void);       /* state FCAP_OPEN; clears aimBuffer.
                                          Cannot fail (nothing is allocated) */
@@ -81,11 +93,48 @@ void        forthCapSetKeysMode(bool_t on);
  * fnKeyEnter's CM_AIM divert and from the ITM_RS guard (C3). */
 void        forthInteractiveEnter(void);
 
-/* L1-H stub: pushes `line` onto the interactive history ring. Until L1-H
- * lands this is an intentional no-op — C1 (ENTER) and C2 (EXIT rung 3)
- * both call it BEFORE the line is lost (run or discard), so the call
- * sites are already correct for when L1-H fills the body in. */
-static inline void forthHistoryPush(const char *line) { (void)line; }
+/* L1-H: the FHIST interactive-history program — push, cap, evict, recall.
+ * Defined in programming/manage.c beside the other capture orchestrators
+ * (forthCaptureSuspend/Resume, forthInteractiveEnter). */
+
+/* Push `line` onto FHIST (creating it on first use).  C1 (ENTER) and C2
+ * (EXIT rung 3) both call it BEFORE the line is lost (run or discard).
+ * A no-op when `line` is empty; silent (never blocks the caller) when the
+ * program cannot be created or grown — history is a convenience, never an
+ * error that blocks a run. */
+void     forthHistoryPush(const char *line);
+
+/* Program number of the FHIST program, or 0 if it does not exist yet. */
+uint16_t forthHistoryProgram(void);
+
+/* Creates FHIST (LBL 'FHIST' + END, appended after every existing program)
+ * if it does not already exist.  Returns false only if creation failed.
+ * Idempotent: returns true immediately if FHIST already exists. */
+bool_t   forthHistoryEnsure(void);
+
+/* Parks currentStep on FHIST's own END step (i.e. immediately before it),
+ * ready for an _insertInProgram-style append as FHIST's newest line.
+ * Returns false if FHIST does not exist.  L1-F1 (the fold) calls this too,
+ * to park its transient step there. */
+bool_t   forthHistoryGotoLastStep(void);
+
+/* Deletes FHIST's oldest source steps (oldest-first) until its byte size
+ * is at or under FORTH_HISTORY_MAX_BYTES.  A no-op if FHIST does not exist
+ * or is already under the cap. */
+void     forthHistoryEvict(void);
+
+/* f-shifted up/down recall: moves the transient browse index by `delta`
+ * (-1 for up/older, +1 for down/newer) and copies the resulting FHIST line
+ * (or clears to empty, "past the newest") into aimBuffer.  Read-only: does
+ * not create or modify FHIST.  Called from keyboard.c's CHR_caseUP/
+ * CHR_caseDN arms, guarded on forthCapIsInteractive(). */
+void     forthHistoryRecall(int16_t delta);
+
+/* L1-H: the raw browse-index field — forthHistoryRecall's own state, plus
+ * the two reset points (capture open, in _forthCapOpenAs; and every
+ * forthHistoryPush()). */
+uint16_t forthCapHistoryIndex(void);
+void     forthCapSetHistoryIndex(uint16_t idx);
 
 /* L1-1 (C2b): public wrappers for the file-static E1 catalog-drain helpers
  * (programming/manage.c:1165-1166, defined at :1689/:1701) — forthCapOpenInteractive's
