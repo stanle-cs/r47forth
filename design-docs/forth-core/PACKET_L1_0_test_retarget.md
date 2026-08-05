@@ -132,6 +132,23 @@ fnForthOuter(NOPARAM)   ->   forthTestRunFromX()
 - `packages/forth-core/test_engine.part.h` — 6 sites
 - `packages/forth-core/test_persist.part.h` — 1 site
 
+**A 52nd site exists that no grep for the call spelling can find** (found
+by C4's completeness proof, 2026-08-05).
+`packages/forth-core/testSuite/tests/forth_interp.txt` drives the entry
+**by name** — `Func: fnForthOuter` — resolved through `funcTestNoParam[]`
+in `testSuite/testSuite.c`. Retargeting it needs three things beyond the
+rename: `forthTestRunFromX` takes a `uint16_t` so it is table-compatible;
+it is declared in `testSuite.c`; and its row sets the third field
+`coverageDriver` to 1, because the resolver at testSuite.c:5711 otherwise
+demands an `indexOfItems` row and fails setup with "must be somewhere in
+the indexOfItems array". That flag exists for exactly this case —
+testSuite-local drivers that are not catalog items.
+
+**Lesson for every later packet:** a call-site count derived from grepping
+the C call spelling is a lower bound, not the scope. Name-string dispatch
+tables and data-driven test files are invisible to it. The stub-and-gate
+proof is what makes the scope provable.
+
 This is a mechanical substitution; the surrounding `x_set_string(...)`
 setup and every assertion stay exactly as they are. Do not reflow, retab,
 or otherwise touch adjacent lines — the diff must be one changed token per
