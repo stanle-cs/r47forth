@@ -1280,3 +1280,71 @@ keyboard.c:1148 and :1160 gate three commit sites on
 they do not fire. The capture is never lost (the step is the store), but
 a flag-by-name or dynmenu-label pick during an interactive TAM will not
 fold. Deferred to a follow-on packet.
+
+---
+
+## T9 — the stack lift: opening a capture destroys X (found 2026-08-04)
+
+Found while verifying the L1-2 review. It is the most consequential
+finding of the packet round because it is a **design** error, not a spec
+slip, and it invalidates an assertion in the already-landed L1-1 packet.
+
+`fnForthOuter`'s interactive open calls `fnAim(NOPARAM)` →
+`calcModeAim` (src/c47/calcMode.c:62), whose body includes:
+
+```c
+    if(!tam.mode && calcMode != CM_ASSIGN && calcMode != CM_PEM && calcMode != CM_ASN_BROWSER) {
+      calcMode = CM_AIM;
+      liftStack();                                    /* calcMode.c:76 */
+```
+
+and `liftStack` (src/c47/stack.c) ends **unconditionally** with
+
+```c
+  setRegisterDataPointer(REGISTER_X, allocC47Blocks(REAL34_SIZE_IN_BLOCKS));
+  setRegisterDataType(REGISTER_X, dtReal34, amNone);
+```
+
+[VERIFIED by hand.] So opening the capture replaces X with a fresh,
+**uninitialised** `dtReal34` — pushing the old X to Y when `FLAG_ASLIFT`
+is set, and freeing it outright when it is not.
+
+**Why this is fatal rather than cosmetic.** The interactive capture's
+whole premise is that the line operates on the live stack: L-R2 already
+rules that a seeded string is *dropped* at seed "so interpreted words see
+a clean stack". If opening the capture lifts, then with 16 in X a user
+who types `1 +` and presses ENTER computes `garbage + 1`. The feature
+would be wrong on its most ordinary use.
+
+**Consequence: the interactive open must NOT route through
+`calcModeAim`'s lifting arm.** `calcModeAim` is upstream and not
+overridden, so L1-1 C2 cannot simply call `fnAim`. The options, in
+preference order:
+
+1. **Inline the non-lifting equivalent** in `fnForthOuter` — everything
+   `calcModeAim` does except `liftStack()`: `alphaCase = CAPS_AIM_DEFAULT`,
+   `nextChar = NC_NORMAL`, clear `FLAG_NUMLOCK`, `scrLock = NC_NORMAL`,
+   `calcMode = CM_AIM`, `clearRegisterLine(AIM_REGISTER_LINE, true, true)`,
+   the cursor variables, `showSoftmenu(-MNU_ALPHA)`, the
+   `softmenuStack[0].softmenuId` 0→1 normalisation, `setSystemFlag(FLAG_ALPHA)`,
+   `calcModeAimGui()`. About ten lines, and it is the only option that
+   leaves the stack demonstrably untouched.
+2. Call `fnAim` then repair — rejected: the repair is conditional on
+   `FLAG_ASLIFT` (with it set, drop; with it clear, the old X is already
+   freed and unrecoverable), so it cannot be made correct.
+3. Add a `bufferize.c`/`calcMode.c` override — rejected: new upstream
+   patch surface for one call, against the S1 discipline.
+
+**Assertions this invalidates.** L1-1's T1.2 ("non-string X, X untouched")
+and T1.5 ("oversize: X still holds the string") are correct only *after*
+this fix; as landed they would have been written against a lifting open
+and would have masked it. L1-2's C5.4 ("X unchanged after EXIT") likewise.
+The review's own L1-2 B1 — restore the pre-FORTH X via `undo()` at EXIT —
+is treating the symptom: with option 1 there is nothing to restore, and
+the undo slot is not consumed (which is the review's own owner question 2,
+answered by construction).
+
+**Standing lesson, added to the packet-authoring checklist:** a spec that
+says "call the landed entry point" must state what that entry point does
+to the *machine state the feature depends on*. `fnAim` was cited for the
+mode and the menu; nobody asked what it did to the stack.
