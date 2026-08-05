@@ -410,6 +410,37 @@ uses. The refresh is already wired: `processKeyAction`'s CM_AIM arm calls
 `refreshRegisterLine(AIM_REGISTER_LINE)` (keyboard.c:2896) and screen.c
 does the same on long-press (screen.c:1086-1088).
 
+**Narrowed 2026-08-04 (T8.4 item 4), and RULED — L-R8.** "Zero new
+display code" is true, but it does not mean "the stack stays visible".
+Verified by hand this pass:
+
+- `showStringEdC47` measures the line in the **large numeric font**
+  against `SCREEN_WIDTH - 50` = 350 px (screen.c:1667, defines.h:1510).
+  Under it: `multiEdLines = 2`, `yMultiLineEdOffset = 3`. Over it:
+  `multiEdLines = 3`, `yMultiLineEdOffset = 1` (small font, up to three
+  rows).
+- `_refreshNormalScreen`'s alpha arm branches on exactly that value
+  (screen.c:5933-5941): `yMultiLineEdOffset == 3` refreshes T, Z, Y and
+  then the edit line; otherwise it refreshes **the edit line alone**.
+- `AIM_REGISTER_LINE == REGISTER_X` (defines.h:1495), so the editor sits
+  on X's row. **X is never visible while composing**, at any line length.
+
+So: short line → T/Z/Y plus the line; past ~350 px in the large font
+(order 18–23 glyphs) → the line only. That threshold is reached by
+ordinary Forth lines — `1 2 + 3 * DUP SWAP` is already in range.
+
+**L-R8, RULED 2026-08-04: accept native AIM behaviour. No display code.**
+Consistency with alpha entry everywhere else on the calculator wins over
+a Forth-specific layout. Recorded consequence, so it is not a surprise at
+sim verification: interactive Forth's stack visibility degrades to
+nothing at ordinary composing lengths, and X — the last result, the
+register a REPL user most wants — is hidden throughout. The architect
+recommendation was a one-row line with horizontal scrolling
+(`displayAIMbufferoffset` already exists for it), which would have kept
+T/Z/Y visible at any length; not taken, not relitigated. Nothing in L
+forecloses revisiting it as a later additive change, since it is purely a
+render decision with no state behind it.
+
 Two consequences:
 
 - The gate is `calcMode == CM_AIM && !tam.mode`. Any design that keeps a
