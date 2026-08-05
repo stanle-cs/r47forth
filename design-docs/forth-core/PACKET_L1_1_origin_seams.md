@@ -291,8 +291,12 @@ which was written against a lifting open and would have masked this):**
 
 - T1.2 asserts X is **bit-identical** to its pre-FORTH value — same type,
   same value — via `read_reg_int32`, not merely "not a string".
-- New subcase: put `16` in X, open interactive, type `1 +`, ENTER, assert
-  X == 17. This is the assertion that actually pins T9.
+- ~~New subcase: put `16` in X, open interactive, type `1 +`, ENTER,
+  assert X == 17.~~ **Moved to L1-2** — it needs ENTER, which this
+  packet's Out-of-scope list forbids. T9 is pinned here instead by direct
+  register snapshotting across the open (subcase 2 asserts X, Y, Z and T
+  are each bit-identical), which mutation 9 kills with a textbook lift
+  signature. L1-2 carries the end-to-end form.
 - New subcase: assert `getStackTop()`-relative depth is unchanged by the
   open (nothing was pushed).
 
@@ -433,7 +437,7 @@ driven key (at minimum `fnKeyExit` in `CM_AIM`), assert afterwards:
 `!getSystemFlag(FLAG_ALPHA)`. Report which sites you could drive and
 which you could only reach by direct call.
 
-## Mutations (seven; each shown RED, then reverted)
+## Mutations (nine; each shown RED, then reverted)
 
 1. `forthCapIsInteractive()` → bare `origin == FCAP_ORIGIN_INTERACTIVE`.
    RED at T1.8 **only if** T1.8 also asserts `forthTestCapOrigin()`; if it
@@ -466,7 +470,7 @@ which you could only reach by direct call.
 - Gate green; landed F6/K suite unchanged; new tests' PASS lines quoted.
 - `sizeof(forthCap_t)` unchanged (reported).
 - The `closeAim()` call-site list reported with line numbers.
-- All **eight** mutations shown RED (or explicitly reported unobservable
+- All **nine** mutations shown RED (or explicitly reported unobservable
   with evidence) and reverted.
 - Flash delta and arena high-water reported.
 - **Sim check:** FORTH from `CM_NORMAL` opens a visible alpha line, and

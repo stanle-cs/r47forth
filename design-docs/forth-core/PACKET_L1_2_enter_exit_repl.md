@@ -262,6 +262,11 @@ is hit (manage.c:983's `if` has no else). Do not add an error.
 
 ## C5 — tests (`test_capture_interactive_repl`, new; register per L1-1 C4)
 
+0. **T9 end-to-end (moved here from L1-1, which cannot run ENTER).** Put
+   `16` in X, open interactive, type `1 +` through the real key path,
+   ENTER; assert **X == 17**. This is the assertion that proves the
+   interactive line operates on the live stack. L1-1 pins the open half by
+   register snapshotting; this closes it.
 1. **ENTER runs and reopens empty.** Open interactive, type `1 2 +`
    through the real key path, ENTER via `fnKeyEnter(NOPARAM)`. Assert
    X == 3, capture still `FCAP_OPEN`, `forthCapIsInteractive()`,
@@ -342,3 +347,17 @@ is hit (manage.c:983's `if` has no else). Do not add an error.
 - **Sim:** FORTH, type `1 2 +`, ENTER, see 3 on the stack and an empty
   line; EXIT returns to normal with X still 3. Capture via `run-sim`,
   copy-adapting `references/capture-driver.c`.
+
+  **Settle this open item while you are there (L1-1, 2026-08-05):** L1-1's
+  sim pass confirmed the alpha menu appears on FORTH and that EXIT
+  returns to the normal screen, but **the typed glyphs did not visibly
+  render** in the headless capture even though `aimBuffer` and
+  `T_cursorPos` were programmatically correct at that instant. Not root-
+  caused; not an L1-1 regression (that packet changed no display code).
+  Two candidates: a `screenUpdatingMode` capture trap — the `run-sim`
+  skill's rule 5 documents exactly this, an earlier battery test leaving
+  the mode manual so `refreshScreen()` draws nothing — or a real gap in
+  T5's "zero new display code" claim. **T5 is the stage's justification
+  for hosting on AIM at all, so this must be settled, not deferred
+  again.** If it is the trap, say so with the mode value; if the line
+  genuinely does not render, STOP and report — that reopens L-R8.
