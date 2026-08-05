@@ -868,17 +868,31 @@ on exhaustion calls `backToSystem(NOPARAM)` on DMCP
 app. Unbounded history in a shared pool therefore needs a policy, which
 is the one open owner decision (see below).
 
-**Open decisions this amendment raises:**
+**Decisions — RULED 2026-08-04 (L-R7):**
 
-- **Growth policy.** Cap with oldest-first eviction (one `deleteStepsFromTo`
-  on the first step — cheaper than the ring's packed eviction), or
-  "it is your program, clear it yourself", or a soft cap plus manual
-  clear. Owner's call; recorded, not assumed.
-- **Identity.** A visible program needs a name — a leading `LBL` with a
-  reserved name, or acceptance that it is the unnamed last program.
-- **Running it executes every history line.** Either a feature (re-run
-  the session) or a footgun. Needs a stated position, not silence.
-- **Save-file size** grows with history.
+- **Growth: soft cap, evict oldest.** A byte budget over the history
+  program's own steps; on overflow, `deleteStepsFromTo` the first step
+  repeatedly until under budget. One call per evicted line — cheaper
+  than the ring's packed-buffer eviction, and bounded by construction,
+  so the `backToSystem` exhaustion path is never approached by history
+  alone. The user can still clear the program by hand at any time.
+  **Proposed budget: 1024 bytes** (≈2× the ruled ring's promise, ≈25–100
+  realistic lines at 4 + `len` bytes per step). The number is a tunable
+  the acceptance battery pins, not a design invariant; it is reported
+  against §5.4 with the stage.
+- **Identity: a named, runnable program.** A leading `LBL` gives it a
+  name in PROGS, lets `XEQ` reach it, and gives the sweep a
+  discriminator. **Running it re-runs the session, deliberately** — that
+  is a feature, and it is opt-in by construction since the user must go
+  find the program and run it. No execution guard is built: it would be
+  new machinery and a new documented rule to prevent something the user
+  has to do on purpose.
+  **Proposed name: `FHIST`.** It must NOT be `FORTH`: `forthResolveXEQ`
+  tries labels before items (items.c:698-718), so a label named `FORTH`
+  would shadow the `FORTH` item for `XEQ 'FORTH'`. The chosen name must
+  be checked against that resolution order before it lands.
+- **Save-file size** grows with history — accepted; it is the user's
+  program memory and it is visible to them.
 
 **Not proposed here:** turning interactive Forth into PEM-on-a-hidden-
 program. This amendment changes where committed lines *live*; L1's host

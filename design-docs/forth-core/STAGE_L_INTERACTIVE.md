@@ -115,7 +115,20 @@ Mechanism notes for the trace to confirm, not rulings:
   close-paths class test extends to it (bug-fix class-test rule applies
   from day one).
 
-### L2 — line history (packed ring; L-R5 as amended)
+### L2 — line history (**L-R7: the fold's scratch program**)
+
+> **Superseded 2026-08-04.** Everything below describes the 512 B BSS
+> packed ring (L-R5). L-R7 replaced it: history lives as `ITM_FORTH`
+> steps in the kept, named `FHIST` program that the fold already needs —
+> so the ring, its encoding, its eviction arithmetic and its poison sweep
+> are all deleted, and history gains save/restore persistence at zero
+> format cost. The *rules* below survive almost unchanged (push on every
+> close path with non-empty text; consecutive duplicates collapse;
+> in-editor recall, not a softmenu); only the storage changes, and the
+> lifetime rule inverts — history now persists rather than dying at the
+> `forthCap` reset seams. Growth is a 1024-byte soft cap with oldest-
+> first eviction (`deleteStepsFromTo` on the first step). Rationale and
+> verified cost: STAGE_L_TRACES.md §T7.2b. Kept below for the record.
 
 After a successful ENTER the line is gone (the REPL loop reopens empty).
 History is a packed variable-length ring in one fixed 512-byte BSS buffer:
@@ -189,7 +202,8 @@ explicit.
 | L-R2 | String-in-X arm | **RULED 2026-08-04: always capture.** FORTH interactively always opens the capture; when X holds a string it seeds the line (over my recommendation to keep the one-shot arm — recorded, not relitigated). Spec consequences below. |
 | L-R3 | ENTER semantics | **RULED 2026-08-04: REPL loop.** Run, reopen empty, EXIT leaves; error path per L5 reopens with the line intact. |
 | L-R4 | Parameterized (TAM) items in interactive keys mode | **RULED 2026-08-04 on trace evidence: (b) build the fold.** Pressing STO 0 5 during an interactive capture types `STO 05` into the line, exactly as in PEM. Rationale (owner): one behaviour for one gesture — the fold is what the capture *means*, and an interactive capture that diverged from PEM would be a second thing to learn. Supersedes the architect recommendation of (a) and the owner-raised (c), both recorded below unchanged. Consequence: the three fold pieces (non-executing TAM, interactive suspend store, text synthesis) each get a trace before their packet — STAGE_L_TRACES.md §T7. |
-| L-R5 | History RAM | **RULED 2026-08-04, amended same day: 512 B packed variable-length ring** — supersedes the initial one-slot ruling after the owner asked for real line history (recommended budget accepted). ~a dozen realistic lines, minimum two worst-case 256 B lines; idle BSS; reported against §5.4 discipline with the stage. |
+| L-R5 | History RAM | ~~**RULED 2026-08-04, amended same day: 512 B packed variable-length ring**~~ — **SUPERSEDED BY L-R7 the same day.** Kept for the record: the ring was the right answer while history had nowhere else to live. Once the fold's scratch program existed, history had somewhere better. |
+| L-R7 | History storage | **RULED 2026-08-04: history IS the fold's scratch program.** Committed lines accumulate as `ITM_FORTH` steps in one kept, named, runnable program; the L2 BSS ring is deleted. Persistence comes free (program memory is already a persisted format with restore validation — the exact cost L-R5 rejected persistence over). **Growth: soft cap with oldest-first eviction**, proposed budget 1024 bytes, tunable pinned by the battery. **Identity: a leading `LBL`**, proposed `FHIST` — NOT `FORTH`, which would shadow the item for `XEQ 'FORTH'` (items.c:698-718 tries labels first). **Running it re-runs the session, deliberately**; no execution guard. Rationale and the verified cost analysis: STAGE_L_TRACES.md §T7.2b. |
 | L-R6 | Letter + branch | `L`, `forth-core/stage-l` — stands unless renumbered at branch creation. |
 
 ### L-R2 ruling consequences (architect spec notes, final wording post-trace)
@@ -401,11 +415,18 @@ stage.
   non-executing TAM gate, suspend store and synthesis path. Measured
   `make dmcp5r47` delta recorded in the stage commit (RULE-1); fine if
   justified, per standing policy.
-- **RAM:** +512 B idle BSS for the L2 history ring (L-R5 as amended),
-  plus the interactive suspend store — order +260 B (256-byte line
-  snapshot + cursor + mode bits), sized exactly by T7(e). Otherwise zero
-  beyond the existing `forthCap`. Arena high-water reported per packet
-  (§5.4); interpret path unchanged (private ctx on the C stack, §3.3.2).
+- **RAM:** revised again by T7 and L-R7, downward twice. The interactive
+  suspend store is **+8 bytes**, not ~260: the fold runs PEM's fold on a
+  real materialised step, so `forthCaptureSuspend`/`Resume` are reused
+  verbatim and the step is the store (T7.0). The L2 ring's **512 B is
+  deleted outright** (L-R7) — history is program steps. **Net idle BSS
+  for the whole stage: +8 bytes.** What history costs instead is
+  *program memory*, capped at 1024 bytes with oldest-first eviction, in
+  a region the user can see and clear; note that region shares its pool
+  with the Forth dictionary (src/c47/memory.c:177-188 vs
+  forth_dict.c:367), which is why it is capped rather than unbounded.
+  Arena high-water reported per packet (§5.4); interpret path unchanged
+  (private ctx on the C stack, §3.3.2).
 - **Risk register:** (1) the CM_PEM gate audit — every F6/K conditional
   reviewed for widen-vs-keep, swept by a class test, since a missed gate
   either breaks native AIM or leaks capture behavior into plain alpha;
