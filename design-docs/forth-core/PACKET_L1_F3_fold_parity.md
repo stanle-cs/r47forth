@@ -119,8 +119,12 @@ candidates, in the order the review expects them:
 
 - `_forthFoldAdmits` mis-classifying a mode (F1 C2).
 - The `TM_MENU` `tmpString` prefix hazard (T7.7 item 6).
-- A commit site that does not route through `leaveTamModeIfEnabled`
-  (F2 C2's enumerated list).
+- A commit site that dispatches live inside an armed fold — F2 C2's
+  enumerated no-CM_PEM-arm list (ui/tam.c:566-573, :303-304, :771-796,
+  :975-999, :1119-1124). The unwind is in F2's bracket epilogue so the
+  fold still closes, but such a site would have EXECUTED rather than
+  recorded, and the parity row would show the interactive text missing
+  the operand entirely.
 
 Report which, with the failing pair.
 
