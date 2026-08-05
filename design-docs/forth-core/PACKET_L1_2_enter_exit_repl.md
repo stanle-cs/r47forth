@@ -73,7 +73,7 @@ forthInteractiveEnter():
   forthHistoryPush(aimBuffer)
 
   /* The copy is mandatory and already exists: forthOuterInterpret
-   * memcpy's into ctx.source before running (forth_compile.c:1591-1603).
+   * memcpy's into ctx.source before running (forth_compile.c:1591-1603 (the FORTH_SOURCE_MAX check is at :1597, the memcpy at :1601)).
    * Do NOT hand it aimBuffer expecting it to be stable. */
   forthOuterInterpret(aimBuffer)
 
@@ -121,11 +121,19 @@ do not share code, the surrounding teardown differs):
             showSoftmenu(-MNU_ALPHA);
             break;
           }
-          /* Rung 2: an alpha SUBMENU is on top -> pop one level, stay in
-           * the capture.  isAlphaSubmenu(0) is the landed test
-           * (keyboard.c:3882 uses the same in the native arm). */
-          if(isAlphaSubmenu(0)) {
+          /* Rung 2: anything stacked above the base pops and the capture
+           * stays open.  This is the NATIVE CM_AIM test (keyboard.c:3869-3873,
+           * 3884-3886) adopted verbatim, INCLUDING its pre-normalisation —
+           * rev 2 used isAlphaSubmenu(0), which is narrower, so a non-alpha
+           * menu (STK, FIN, a catalog) stacked over the capture fell through
+           * to rung 3 and silently discarded the line.  The pre-normalisation
+           * is what makes -MNU_ALPHA-on-top (the ordinary capture state) fall
+           * THROUGH to rung 3 instead of popping: it retargets slot 0 to
+           * MyAlpha so the predicate reads "base menu displayed". */
+          if(currentMenu() == -MNU_ALPHA) { softmenuStack[0].softmenuId = 1; }
+          if(!(softmenuStack[0].softmenuId <= 1 && menu(1) != -MNU_ALPHA)) {
             popSoftmenu();
+            stayInAIM();                     /* native pair, keyboard.c:3885-3886 */
             break;
           }
           /* Rung 3: close.  L-R2 consequence + L-R7: a non-empty line is
@@ -138,8 +146,6 @@ do not share code, the surrounding teardown differs):
           T_cursorPos = 0;
           displayAIMbufferoffset = 0;
           calcModeNormal();
-          popSoftmenu();                     /* drop -MNU_ALPHA */
-          clearSystemFlag(FLAG_ALPHA);
           break;
         }
         /* … landed native-AIM body unchanged … */
@@ -148,6 +154,24 @@ do not share code, the surrounding teardown differs):
 **Rung 3 must NOT call `closeAim()`** — that commits `aimBuffer` to X as a
 `dtString` (src/c47/bufferize.c:2693-2712), which is exactly the native
 behaviour the Forth capture exists to avoid. Confirm by test (C5.4).
+
+**`calcModeNormal()` alone is the whole teardown.** It already pops
+`-MNU_ALPHA` when it is on top, normalises MyAlpha(1)→MyMenu(0), clears
+`FLAG_ALPHA`, hides the cursor and calls `calcModeNormalGui()`
+(src/c47/calcMode.c:44-57). Rev 2 added a trailing `popSoftmenu()` and a
+`clearSystemFlag(FLAG_ALPHA)`; **both were redundant, and the extra pop
+destroyed a menu the user had open before pressing FORTH** (a STK/FIN/MATX
+row would not come back). Do not re-add them.
+
+**No `undo()`, no `saveForUndo()`, no `updateMatrixHeightCache()`** — the
+native arm runs those (keyboard.c:3874-3879) because `closeAim` either
+commits the buffer to X or `undo()`s the placeholder that `calcModeAim`'s
+`liftStack()` created. **T9 removes that placeholder entirely**: the
+interactive open does not lift (PACKET_L1_1 C2b), so X is untouched from
+FORTH-press to EXIT and there is nothing to resolve. Calling `undo()` here
+would be actively wrong — it would roll back whatever the user's ENTER'd
+lines did to the stack. Say so in a comment at the site, so a later reader
+comparing against the native arm does not "restore" the omission.
 
 **Delete `_forthCapCloseIfInteractive` and its call sites** from L1-1 —
 the ladder supersedes it. **But first** enumerate L1-1's reported
@@ -188,20 +212,50 @@ bytes and then be refused by `forthOuterInterpret`'s
 `n >= FORTH_SOURCE_MAX` check (forth_compile.c:1595) **at ENTER** — a
 silent-until-ENTER failure and a divergence from PEM.
 
-Guard at the call site rather than inside `addItemToBuffer` (which is
-upstream and not overridden). In `processKeyAction`'s `case CM_AIM`,
-before `processAimInput(item)`:
+Guard at the call sites rather than inside `addItemToBuffer` (which is
+upstream and not overridden). **There are TWO seams, not one** — the
+physical-key path and the softkey path — and a guard on only the first
+leaves softkey character insertion uncapped (keyboard.c:1443-1445 is the
+live `CM_AIM` softkey-character tail, and `keyboard.c:1300-1302` confirms
+alphabetic softmenu presses in `CM_AIM` do not `closeAim()` and fall
+through to `runFunction`). Factor one helper and call it at both:
 
 ```c
-          if(forthCapIsInteractive()
-             && indexOfItems[item].func == addItemToBuffer
-             && !(stringByteLength(aimBuffer)
-                    + stringByteLength(indexOfItems[item].itemSoftmenuName) < 256
-                  && stringGlyphLength(aimBuffer) < 196)) {
+/* True when the interactive capture cannot take another character.
+ * item > 0 is LOAD-BEARING, not defensive: determineItem returns NEGATIVE
+ * softmenu ids in CM_AIM (e.g. -MNU_AIMCATALOG for the f-shifted catalog
+ * gesture, src/c47/assign.c:46), they reach processKeyAction's default arm
+ * and then case CM_AIM, and indexOfItems[negative] is out of bounds.
+ * (The landed keyboard.c:2794 tests `... || item < 0` for the same reason;
+ * that site's shape is a latent wart, not the pattern to copy.) */
+static bool_t _forthCapAtCap(int16_t item) {
+  if(!forthCapIsInteractive() || item <= 0) { return false; }
+  if(indexOfItems[item].func != addItemToBuffer) { return false; }
+  return !(stringByteLength(aimBuffer)
+             + stringByteLength(indexOfItems[item].itemSoftmenuName) < 256
+           && stringGlyphLength(aimBuffer) < 196);
+}
+```
+
+Seam 1 — `processKeyAction`'s `case CM_AIM`, before `processAimInput(item)`:
+
+```c
+          if(_forthCapAtCap(item)) {
             keyActionProcessed = true;    /* full: swallow the key, no error */
             break;
           }
 ```
+
+Seam 2 — `executeFunction`, immediately before `runFunction(item)`
+(keyboard.c:1415):
+
+```c
+                if(calcMode == CM_AIM && _forthCapAtCap(item)) { goto noMoreToDo; }
+```
+
+Use whatever the surrounding control flow there actually permits — if
+`goto noMoreToDo` is not reachable from that point, report it and use the
+equivalent skip. **C5.7 must drive the cap through BOTH seams.**
 
 Silently swallowing matches PEM, which simply does not insert when the cap
 is hit (manage.c:983's `if` has no else). Do not add an error.
@@ -217,17 +271,30 @@ is hit (manage.c:983's `if` has no else). Do not add an error.
 3. **Error reopens with the line intact.** ENTER `1 ZZQQ +`; assert
    `lastErrorCode != ERROR_NONE`, capture open, and `aimBuffer` still
    holds `1 ZZQQ +` with `T_cursorPos` at the end.
-4. **EXIT does not commit to X.** Open interactive, type `ABC`, note X,
-   EXIT via `fnKeyExit(NOPARAM)`; assert `FCAP_CLOSED`,
-   `!getSystemFlag(FLAG_ALPHA)`, `calcMode == CM_NORMAL`, and **X
-   unchanged** (the `closeAim` string commit did NOT happen).
+4. **EXIT does not commit to X.** Put a known long integer in X. Open
+   interactive, type `ABC`, EXIT via `fnKeyExit(NOPARAM)`; assert
+   `FCAP_CLOSED`, `!getSystemFlag(FLAG_ALPHA)`, `calcMode == CM_NORMAL`,
+   and **X is bit-identical to its pre-FORTH value** — same type, same
+   value, read back through the landed `read_reg_int32` idiom, not merely
+   "not a string". With T9's non-lifting open this must hold exactly; if
+   it does not, the open is still lifting and that is a STOP.
 5. **Ladder rung 1.** Open interactive, set keys mode via
    `forthCapSetKeysMode(true)`, EXIT; assert keys mode off, capture still
    OPEN, line intact.
-6. **Ladder rung 2.** Push an alpha submenu, EXIT; assert it popped and
-   the capture is still open.
-7. **Cap.** Drive 196 glyphs in, then one more; assert the line length did
-   not grow and no error was raised.
+6. **Ladder rung 2, two cases.** (a) Push an alpha submenu, EXIT; assert
+   it popped and the capture is still open. (b) Push a **non-alpha** menu
+   (e.g. STK), EXIT; assert it popped and the capture is **still open with
+   the line intact** — rev 2's narrower `isAlphaSubmenu(0)` predicate
+   closed the capture and discarded the line here.
+6b. **EXIT preserves the pre-FORTH menu.** With a non-default menu open,
+   press FORTH, then EXIT through rung 3; assert the original menu is
+   current again (rev 2's extra `popSoftmenu()` destroyed it).
+7. **Cap, both seams.** Drive 196 glyphs in, then one more via the
+   physical-key seam; assert no growth, no error. Repeat the last insert
+   via the **softkey** seam (`executeFunction` → `runFunction`) and assert
+   the same. Then drive a negative item id (the f-shifted AIM-catalog
+   gesture) into `processKeyAction` with a capture open and assert no
+   out-of-bounds read — the `item > 0` conjunct.
 8. **R/S runs the line.** Type `2 3 *`, drive `ITM_RS` through
    `processKeyAction`; assert X == 6 and the capture reopened empty.
 9. **A word that rewrites aimBuffer.** Run a line whose execution writes
@@ -240,13 +307,21 @@ is hit (manage.c:983's `if` has no else). Do not add an error.
 
 1. Delete the `forthCapIsInteractive()` divert in `fnKeyEnter`. RED at C5.4
    (X gets the string) and C5.1.
-2. Call `closeAim()` instead of the rung-3 teardown. RED at C5.4.
+2. Call `closeAim()` instead of the rung-3 teardown. RED at C5.4 (X gets
+   the string instead of its pre-FORTH value).
+2b. Re-add the trailing `popSoftmenu()` to rung 3. RED at C5.6b.
+2c. Narrow rung 2 back to `isAlphaSubmenu(0)`. RED at C5.6(b).
+2d. Drop the `item > 0` conjunct from `_forthCapAtCap`. RED at C5.7's
+   negative-id case (or a sanitiser/ASAN report — if the harness cannot
+   observe the out-of-bounds read, say so rather than deleting it).
 3. Skip `forthCheckSourceLine`. RED at a new subcase driving a line the
    E9 tier-1 check rejects.
 4. Use `aimBuffer` directly on the error path instead of the pre-run copy.
    RED at C5.9; if C5.9 could not be written, report this mutation as
    unpinned rather than deleting it.
-5. Remove the cap guard. RED at C5.7.
+5. Remove the cap guard from seam 1. RED at C5.7's physical-key case.
+5b. Remove it from seam 2 only. RED at C5.7's softkey case — this is the
+   mutation that proves the second seam is real.
 6. Make empty ENTER close the capture. RED at C5.2.
 
 ## Out of scope
