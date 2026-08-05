@@ -18,12 +18,31 @@ As PACKET_L1_1. Not repeated.
 ```
 grep -n "forthInteractiveEnter" packages/forth-core/programming/manage.c   # L1-2 landed
 grep -n "if(tam.mode == 0 && TM_VALUE <= indexOfItems\[func\].param" packages/forth-core/items.c
-grep -n "      if(calcMode == CM_PEM) {" packages/forth-core/items.c       # expect one at ~766
+grep -n "      if(calcMode == CM_PEM) {" packages/forth-core/items.c       # expect FIVE (670, 699, 711, 719, 766); the load-bearing one is 766
 grep -n "else if(calcMode == CM_AIM || (catalog" packages/forth-core/keyboard.c
 grep -n "if(calcMode == CM_AIM && !(isAlphabeticSoftmenu()" packages/forth-core/keyboard.c
 grep -n "return (calcMode == CM_PEM" packages/forth-core/forth_menu.c
 grep -n "progStart = forthOwningProgramStart(currentStep);" packages/forth-core/forth_menu.c
 ```
+
+## C0 — includes (do this first)
+
+`packages/forth-core/items.c` includes only `c47.h` and `forth_dict.h`
+(items.c:4-5), and neither reaches `forth_capture.h` or `forth_menu.h`.
+Every symbol this packet adds to that file — `forthCapIsInteractive`,
+`forthCapKeysMode`, `forthCapSetKeysMode`, `forthCapInsertName` — would be
+implicitly declared `int` and the build would stay green
+(`warning_level=2`, no `werror`) with ABI-unspecified returns. Add:
+
+```c
+#include "forth_capture.h"
+#include "forth_menu.h"
+```
+
+after `forth_dict.h`. **Do not** hand-declare them at the top of the file;
+items.c:8-9 does exactly that for `fnForthOuter`/`fnForthCall` and it is
+the pattern not to repeat. Gate grep:
+`grep -c 'forth_capture.h' packages/forth-core/items.c` must be 1 after.
 
 ## C1 — the divert arm in `runFunction` (items.c)
 
@@ -61,20 +80,37 @@ the keys-mode toggle (C4), `ITM_FORTH` re-entry, `ITM_ENTER`/`ITM_RS` run
 the line, `ITM_EXIT1` the ladder, `ITM_BACKSPACE` edits. Getting this
 exclusion list wrong is the most likely way to break L1-2.
 
-**The dynamic-menu hole (T8.4 item 3).** `runFunction`'s `ITM_RCL` and
-`ITM_XEQ` dynamic-menu arms sit **above** this site (items.c:665-735) and
-dispatch before the divert is reached; the same shape recurs at
-keyboard.c:2259/:2283, screen.c:818/:836 and forth_bridge.c:30. Close it
-at the shared sink instead of at six call sites: add to
-`insertUserItemInProgram` (manage.c:2229) a first-statement early-out
+**The dynamic-menu hole (T8.4 item 3) — fix it at the DECISION, not the
+sink.** `runFunction`'s `ITM_RCL`/`ITM_XEQ` dynamic-menu arms sit **above**
+this site (items.c:665-735) and dispatch before the divert is reached. Rev
+1 proposed an early-out inside `insertUserItemInProgram` (manage.c:2229) —
+**that is unreachable interactively.** All nine sites have the shape
+`if(calcMode == CM_PEM) { insertUserItemInProgram(...); } else
+{ reallyRunFunction(...); }`, and interactively `calcMode == CM_AIM`, so
+the else arm runs and the sink is never entered. An early-out there would
+be dead code, and Mutation 6 could not go RED against it.
+
+Add one helper and call it at all nine sites:
 
 ```c
-  if(forthCapIsInteractive()) { (void)forthCapInsertName(name); return; }
+/* L1-3: the three-way dispatch for a name resolved from a dynamic menu or
+ * a USER key.  PEM records a step, an open interactive capture takes the
+ * name as TEXT, everything else executes. */
+void forthUserItemDispatch(int16_t item, char *funcParam, int16_t execItem, uint16_t execParam) {
+  if(calcMode == CM_PEM)           { insertUserItemInProgram(item, funcParam); }
+  else if(forthCapIsInteractive()) { (void)forthCapInsertName(funcParam); }
+  else                             { reallyRunFunction(execItem, execParam); }
+}
 ```
 
-and **verify by test** (C6.5) that `XEQ 'SOMEWORD'` picked from a dynamic
-menu during an interactive capture inserts text rather than executing.
-Report whether any of the six call sites still reaches live execution.
+The nine sites, each currently an `if(calcMode == CM_PEM){insert}else{exec}`
+pair — **verify each against the tree before editing, and report any whose
+shape differs**: items.c:670/674, :699/703, :711/715, :719/723;
+keyboard.c:2259/2269, :2283/2293; screen.c:818/822, :836/840;
+forth_bridge.c:30/34 (`forthDispatchColon`).
+
+`screen.c` and `forth_bridge.c` need the same `forth_capture.h` include
+treatment as C0 — check each and report.
 
 ## C2 — `determineItem`: the keys-mode column (keyboard.c:1686)
 
@@ -88,13 +124,32 @@ escape. Add the interactive escape to the `CM_AIM` disjunct:
             || …unchanged…
 ```
 
+**This is HALF of an atomic two-part edit. Landing only this half puts a
+bug screen on every keypress in interactive keys mode.** Escaping the
+`CM_AIM` disjunct drops through `else if(tam.mode)` (false, keyboard.c:1723)
+to the normal-column branch at keyboard.c:1726 — which lists `CM_PEM` (that
+is why K1 works in PEM) but **does not list `CM_AIM`** — and then to
+`else { displayBugScreen(bugScreenItemNotDetermined); }` at keyboard.c:1737.
+
+So also add `CM_AIM` to the normal-column branch, with the **identical**
+predicate so the two halves cannot disagree:
+
+```c
+    else if(calcMode == CM_NORMAL || … || calcMode == CM_TIMER || calcMode == CM_LISTXY
+            || (calcMode == CM_AIM && forthCapIsInteractive() && forthCapKeysMode())) {
+```
+
 **Do not** use the broader `calcMode == CM_AIM && !tam.mode`. It would
 also change native AIM+TAM behaviour on a path this stage has not traced
 (recorded as an observation in T7.4, deliberately not bundled).
 
-Safety is provable from the write-set: `forthCapIsInteractive()` is false
-everywhere before Stage L, so the predicate's value is identical to
-today's for every execution that exists today.
+**Reachability, not write-set.** Rev 1 argued safety from the write-set —
+"the predicate is false everywhere before Stage L, so nothing existing
+changes". True, and irrelevant: the defect class is in the paths the
+escape **newly opens**, which is exactly what the bug screen above
+demonstrates. State the new state explicitly and what it resolves to:
+interactive capture + keys mode + `tam.mode == 0` → normal column; every
+other state unchanged.
 
 ## C3 — the E10/E11 toggle gesture (keyboard.c:1687-1690)
 
@@ -134,11 +189,29 @@ interactive twin in `runFunction`'s new arm (C1), **before** the
         }
 ```
 
-Note the asymmetry with PEM: PEM calls `_closeAlphaMenus()` (a file-static
-that clears the whole alpha stack); interactively the ALPHA menu is a
-single push from `calcModeAim`, so one `popSoftmenu()` is the twin. **Verify
-this by test (C6.3) rather than assuming** — if the stack turns out to hold
-more than one alpha level, report it and use a bounded drain loop instead.
+**One `popSoftmenu()` is NOT the twin — use a bounded drain.** PEM calls
+`_closeAlphaMenus()` (manage.c:776-800), a `SOFTMENU_STACK_SIZE`-bounded
+drain over the ALPHAINTL/ALPHAintl/ALPHAMATH/ALPHA_OMEGA/alpha_omega/
+ALPHA/MyAlpha family. Interactively an alpha **submenu** can sit above
+`-MNU_ALPHA` — `isAlphaSubmenu` counts `-MNU_FORTH` (the FWRD picker) as
+one (softmenus.c:3880-3891) — which is exactly the state C6.5 has the
+tester create. Specify:
+
+```c
+            for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
+              if(!isAlphaSubmenu(0) && currentMenu() != -MNU_ALPHA) { break; }
+              popSoftmenu();
+            }
+```
+
+**This is deliberately NOT byte-for-byte PEM parity, and the divergence is
+a decision this packet makes.** `_closeAlphaMenus` has no `MNU_FORTH` case
+and returns without popping when FWRD is on top, so "match PEM" has no
+answer for the FWRD-on-top state. **Interactive choice: drain everything
+alpha, FWRD included** — the K-R3 rationale is that the underlying row IS
+the mode indicator, and leaving FWRD standing would show an alpha row in
+keys mode, which is precisely the confusion K-R3 exists to prevent.
+Flag this in your report as a provisional decision for owner review.
 
 ## C5 — catalogs and the picker
 
@@ -203,9 +276,16 @@ only" true by construction rather than by accident.
    unchanged (it did **not** execute).
 2. **Token boundary.** Type `42`, then `ITM_SIN`; assert `42 SIN ` — the
    K2 leading-separator rule via `forthCapInsertName` (forth_menu.c:42).
-3. **Keys-mode toggle.** Drive the ALPHA gesture through `determineItem`
-   + `runFunction`; assert `forthCapKeysMode()` flipped and the softmenu
-   changed; toggle back and assert `-MNU_ALPHA` is current.
+3. **Keys-mode toggle, two legs.** (a) Drive the ALPHA gesture through
+   `determineItem` + `runFunction`; assert `forthCapKeysMode()` flipped
+   and the softmenu changed; toggle back and assert `-MNU_ALPHA` is
+   current. (b) Open the FWRD picker, THEN toggle to keys mode; assert the
+   current menu is neither `-MNU_ALPHA` nor an alpha submenu — the M3
+   drain.
+3b. **No bug screen in keys mode.** With keys mode on, drive a physical
+   key all the way through `determineItem`; assert the resolved item is
+   the normal-column one and that `calcMode != CM_BUG_ON_SCREEN`. This is
+   the B2 pin.
 4. **Catalog pick inserts, does not close.** Open FCNS, pick an item;
    assert the capture is still OPEN, `calcMode == CM_AIM`, and the name
    landed in the line.
@@ -231,7 +311,10 @@ only" true by construction rather than by accident.
    letter, not `ITM_SIN`).
 4. Remove the `closeAim` guard. RED at C6.4.
 5. Leave the picker's text-scan ungated. RED at C6.6.
-6. Drop the `insertUserItemInProgram` early-out. RED at C6.5's second half.
+6. Route one of the nine dispatch sites straight to `reallyRunFunction`
+   instead of `forthUserItemDispatch`. RED at C6.5's second half.
+6b. Add the `CM_AIM` escape at keyboard.c:1686 WITHOUT the companion at
+   :1726. RED at C6.3b (bug screen).
 7. Keep `pemAlpha(ITM_NOP)` on the interactive picker path. RED — report
    what it does (it will operate on whatever `currentStep` points at); if
    it is silently harmless, say so with evidence rather than deleting the
