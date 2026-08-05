@@ -925,6 +925,35 @@ is the one open owner decision (see below).
 - **Save-file size** grows with history — accepted; it is the user's
   program memory and it is visible to them.
 
+**Binding obligation on the eviction packet — the `leavePem`
+use-after-free.** `scanLabelsAndPrograms` frees `labelList` and
+`programList` up front (manage.c:129-130) and can early-return on
+`ERROR_RAM_FULL` after the free without reallocating
+(src/c47/programming/manage.c:151-163), leaving both NULL. `leavePem`
+then calls `defineCurrentStep()` unguarded (keyboard.c:2404-2409), which
+dereferences `programList[...]` in src/c47/programming/nextStep.c:532 —
+a file with **no package override**.
+
+This is an **upstream** defect: upstream logic, upstream failure mode,
+and the vulnerable dereference is in a file we do not override. Per the
+S1 precedent recorded in `UPSTREAM_REPORTS_globalRegister_reset.md` — a
+correct fix evicted from forth-core because it "has nothing to do with
+Forth, so it should not ride in this package's patch set" — **we do not
+fix it in our overrides.** Carrying an upstream behaviour change inside a
+package patch is the same divergence class the dead `_executeOp` block
+just cost us.
+
+What Stage L owes instead: L-R7's eviction is what makes it *reachable*
+(every eviction is a `deleteStepsFromTo`, hence a
+`scanLabelsAndPrograms`, hence a chance to leave both lists NULL). So the
+eviction path must not rely on upstream being safe — it **checks
+`lastErrorCode` after each `deleteStepsFromTo` and abandons the eviction
+loop on `ERROR_RAM_FULL` rather than proceeding**, and it never leaves a
+`leavePem` reachable with the lists in that state. That guard lives in
+code this stage writes, not in code it inherited. Owner ruled 2026-08-04
+not to file the upstream report at this time; the finding is recorded
+here so it is not lost.
+
 **Not proposed here:** turning interactive Forth into PEM-on-a-hidden-
 program. This amendment changes where committed lines *live*; L1's host
 surface (`CM_AIM`, stack visible, AIM line render per T5) is unchanged.
