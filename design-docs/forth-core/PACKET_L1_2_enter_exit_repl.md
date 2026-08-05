@@ -146,6 +146,8 @@ do not share code, the surrounding teardown differs):
           T_cursorPos = 0;
           displayAIMbufferoffset = 0;
           calcModeNormal();
+          popSoftmenu();                     /* see below — rev 2 removed this
+                                                and rev 3 puts it back */
           break;
         }
         /* … landed native-AIM body unchanged … */
@@ -155,13 +157,26 @@ do not share code, the surrounding teardown differs):
 `dtString` (src/c47/bufferize.c:2693-2712), which is exactly the native
 behaviour the Forth capture exists to avoid. Confirm by test (C5.4).
 
-**`calcModeNormal()` alone is the whole teardown.** It already pops
-`-MNU_ALPHA` when it is on top, normalises MyAlpha(1)→MyMenu(0), clears
-`FLAG_ALPHA`, hides the cursor and calls `calcModeNormalGui()`
-(src/c47/calcMode.c:44-57). Rev 2 added a trailing `popSoftmenu()` and a
-`clearSystemFlag(FLAG_ALPHA)`; **both were redundant, and the extra pop
-destroyed a menu the user had open before pressing FORTH** (a STK/FIN/MATX
-row would not come back). Do not re-add them.
+**The teardown is `calcModeNormal()` FOLLOWED BY `popSoftmenu()`** —
+exactly `closeAim()`'s own shape (src/c47/bufferize.c:2693-2695) minus its
+string commit. **Rev 2 removed the pop and rev 2 was wrong**; the
+implementing pass caught it with C5.6b red. The sequence:
+
+- Rung 2's pre-normalisation renames slot 0 to id 1 **in place** — it does
+  not pop. And `softmenu[1].menuItem` is `-MNU_MyAlpha`
+  (src/c47/softmenus.c:1039), **not** `-MNU_ALPHA`.
+- So `calcModeNormal()`'s own pop, guarded on
+  `softmenu[softmenuStack[0].softmenuId].menuItem == -MNU_ALPHA`
+  (src/c47/calcMode.c:45), can never fire here. Only its second check
+  (id 1 → 0) runs — another in-place rename.
+- Two renames, zero pops: the `-MNU_ALPHA` frame pushed at open survives,
+  and the user's pre-FORTH menu stays buried under it.
+
+Rev 2's reasoning ("`calcModeNormal` already pops") was true in isolation
+and false in sequence, because the same revision *also* added the
+pre-normalisation that falsifies its guard. Two individually defensible
+edits, jointly wrong. `clearSystemFlag(FLAG_ALPHA)` does stay deleted —
+`calcModeNormal` clears it at src/c47/calcMode.c:53.
 
 **No `undo()`, no `saveForUndo()`, no `updateMatrixHeightCache()`** — the
 native arm runs those (keyboard.c:3874-3879) because `closeAim` either
@@ -314,7 +329,10 @@ is hit (manage.c:983's `if` has no else). Do not add an error.
    (X gets the string) and C5.1.
 2. Call `closeAim()` instead of the rung-3 teardown. RED at C5.4 (X gets
    the string instead of its pre-FORTH value).
-2b. Re-add the trailing `popSoftmenu()` to rung 3. RED at C5.6b.
+2b. **REMOVE** the trailing `popSoftmenu()` from rung 3. RED at C5.6b —
+   the pre-FORTH menu stays buried. (Rev 2 had this mutation inverted,
+   which is how the defect survived review: the packet predicted red for
+   the correct code.)
 2c. Narrow rung 2 back to `isAlphaSubmenu(0)`. RED at C5.6(b).
 2d. Drop the `item > 0` conjunct from `_forthCapAtCap`. RED at C5.7's
    negative-id case (or a sanitiser/ASAN report — if the harness cannot

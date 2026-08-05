@@ -1299,6 +1299,69 @@ void forthCaptureResume(void) {
 }
 
 
+/* L1-2 (C1): ENTER's orchestrator for an interactive Forth capture.
+ * calcMode stays CM_AIM throughout — no calcModeNormal(), no closeAim(),
+ * no popSoftmenu() on this path; the caller (fnKeyEnter's CM_AIM divert,
+ * and the ITM_RS guard in keyboard.c) is exactly "run the line, decide
+ * whether to reopen empty or reopen with the line intact".
+ *
+ * The pre-run copy is mandatory, not a nicety (§3.3.2): a word an
+ * interactive line executes can rewrite aimBuffer, because aimBuffer is
+ * also the NIM buffer (src/c47/c47.c:132). forthOuterInterpret's own
+ * memcpy into ctx.source (forth_compile.c:1601) protects ITS parse, not
+ * this function's error-path read-back — that must come from a copy
+ * taken before the run, not from aimBuffer after. */
+void forthInteractiveEnter(void) {
+  if (aimBuffer[0] == 0) {
+    /* Empty ENTER is a no-op, NOT a close. EXIT is the documented close
+     * gesture (C2); an empty line has nothing to run and nothing to keep. */
+    return;
+  }
+
+  /* E9 tier 1: refuse the commit atomically, capture stays open with the
+   * line intact for correction, error already displayed. Same gate the
+   * PEM ENTER arm uses (manage.c:1025). */
+  if (!forthCheckSourceLine(aimBuffer)) {
+    return;
+  }
+
+  /* L1-H fills this in; until then it is an empty inline function
+   * (forth_capture.h). Push BEFORE the run: an executed word can rewrite
+   * aimBuffer (it is also the NIM buffer, §3.3.2), so the text must be
+   * captured while it is still the user's line. */
+  forthHistoryPush(aimBuffer);
+
+  /* Mandatory pre-run snapshot — see the function banner above. 256 bytes
+   * matches the capture cap enforced at every insertion site (C4): the
+   * cap keeps aimBuffer's byte length under 256, so this copy can never
+   * truncate a line the cap already accepted. */
+  char preRunCopy[256];
+  {
+    int32_t n = stringByteLength(aimBuffer);
+    xcopy(preRunCopy, aimBuffer, n + 1);
+  }
+
+  forthOuterInterpret(aimBuffer);
+
+  if (lastErrorCode != ERROR_NONE) {
+    /* L5: reopen with the line intact so the user edits rather than
+     * retypes. aimBuffer may have been rewritten by a partially-executed
+     * line, so restore from the pre-run copy, not from aimBuffer itself. */
+    int32_t n = stringByteLength(preRunCopy);
+    xcopy(aimBuffer, preRunCopy, n + 1);
+    T_cursorPos = stringLastGlyph(aimBuffer) + 1;   /* non-empty by construction */
+    return;                                          /* capture stays OPEN */
+  }
+
+  /* L-R3: REPL. Reopen empty, stay in CM_AIM. forthCapOpenInteractive
+   * clears aimBuffer and resets keysMode (E14/K1: a fresh capture opens
+   * in alpha input, matching the PEM E5 relock). */
+  forthCapOpenInteractive();
+  T_cursorPos = 0;
+  displayAIMbufferoffset = 0;
+}
+
+
 void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
   if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {
     hourGlassIconEnabled = false;

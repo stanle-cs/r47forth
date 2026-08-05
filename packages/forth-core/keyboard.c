@@ -10,7 +10,20 @@
 TO_QSPI static const char bugScreenNonexistentMenu[] = "In function determineFunctionKeyItem: nonexistent menu specified!";
 TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineItem: item was not determined!";
 
-static void executeFunction(const char *data, int16_t item_);
+// forth-core: the self-test suite drives executeFunction's softkey path
+// (C4/L1-2 seam 2) directly, with a known item id and data="" — the same
+// data[0]==0 branch btnFnClicked's (data, 0) call always takes in
+// production. executeFunction is file-static, so it must be exported for
+// the suite the same way _closeCatalog is below; production linkage is
+// unchanged. Defined up here (rather than beside _closeCatalog, where the
+// precedent lives) because the forward declaration right below needs it.
+#if defined(FORTH_DEBUG_SELFTEST)
+  #define FORTH_SELFTEST_EXPORT
+#else
+  #define FORTH_SELFTEST_EXPORT static
+#endif
+
+FORTH_SELFTEST_EXPORT void executeFunction(const char *data, int16_t item_);
 
 /* L1-1: nothing in the landed tree closes an INTERACTIVE capture —
  * closeAim() (upstream bufferize.c) does not know about forthCap, and every
@@ -18,10 +31,36 @@ static void executeFunction(const char *data, int16_t item_);
  * pemCloseAlphaInput.  A leaked FCAP_OPEN is not inert: insertStepInProgram's
  * `func == ITM_AIM && forthCapIsOpen()` arm (manage.c:1719-1734) has no
  * origin discriminator, so the next PEM ALPHA press would toggle keys mode
- * instead of opening literal input.  L1-2 replaces this with the full E8
- * ladder; until then, every AIM teardown in this file closes the capture. */
+ * instead of opening literal input.
+ *
+ * L1-2: the EXIT ladder (fnKeyExit's CM_AIM arm) supersedes this at THAT
+ * site — the ladder's rung 3 does the equivalent teardown without ever
+ * calling closeAim().  It does NOT supersede it anywhere else: the other
+ * five closeAim() sites in this file (executeFunction's ITM_INTEGRAL/
+ * ITM_INTEGRAL_YX arm, executeFunction's generic non-alpha-item arm,
+ * processKeyAction's BST/SST arm, fnKeyUp, fnKeyDown) are reachable with
+ * an interactive capture open and are untouched by L1-2's scope (ENTER,
+ * EXIT, R/S, the input cap) — each still funnels through here so a
+ * leaked FCAP_OPEN cannot survive them.  Disposition table reported in
+ * the L1-2 packet response. */
 static void _forthCapCloseIfInteractive(void) {
   if (forthCapIsInteractive()) { forthCapClose(); }
+}
+
+/* L1-2 (C4): true when the interactive capture cannot take another
+ * character.  item > 0 is LOAD-BEARING, not defensive: determineItem
+ * returns NEGATIVE softmenu ids in CM_AIM (e.g. -MNU_AIMCATALOG for the
+ * f-shifted catalog gesture, src/c47/assign.c:46), they reach
+ * processKeyAction's default arm and then case CM_AIM, and
+ * indexOfItems[negative] is out of bounds. (keyboard.c's own BST/SST-
+ * adjacent site tests `... || item < 0` for the same reason; that site's
+ * shape is a latent wart, not the pattern to copy.) */
+static bool_t _forthCapAtCap(int16_t item) {
+  if (!forthCapIsInteractive() || item <= 0) { return false; }
+  if (indexOfItems[item].func != addItemToBuffer) { return false; }
+  return !(stringByteLength(aimBuffer)
+             + stringByteLength(indexOfItems[item].itemSoftmenuName) < 256
+           && stringGlyphLength(aimBuffer) < 196);
 }
 
   int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
@@ -458,16 +497,11 @@ static void _forthCapCloseIfInteractive(void) {
     // forth-core: the self-test suite drives the real CAT->FORTH chain, which is
     // runFunction() immediately followed by _closeCatalog() (see the PEM catalog
     // arm's runFunction(item) / _closeCatalog() pair below).
-    // Both that call and executeFunction() are file-static, so a test can only
-    // reach the teardown by hand-rolling a pop sequence — which diverges from
-    // this function and silently tests the wrong thing. Export it for the suite
-    // only; production linkage is unchanged.
-    #if defined(FORTH_DEBUG_SELFTEST)
-      #define FORTH_SELFTEST_EXPORT
-    #else
-      #define FORTH_SELFTEST_EXPORT static
-    #endif
-
+    // That call is file-static (like executeFunction() above), so a test can
+    // only reach the teardown by hand-rolling a pop sequence — which diverges
+    // from this function and silently tests the wrong thing. Export it for
+    // the suite only; production linkage is unchanged.  FORTH_SELFTEST_EXPORT
+    // is defined near the top of this file (executeFunction needs it too).
     FORTH_SELFTEST_EXPORT void _closeCatalog(void) {
       bool_t inCatalog = false;
       for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
@@ -963,7 +997,7 @@ endReturnTrue:
    * \brief Executes one function from a softmenu
    * \return void
    ***********************************************/
-  static void executeFunction(const char *data, int16_t item_) {
+  FORTH_SELFTEST_EXPORT void executeFunction(const char *data, int16_t item_) {
     int16_t item = ITM_NOP;
     FN_timed_out_to_NOP_or_Executed = true;
 
@@ -1069,6 +1103,10 @@ endReturnTrue:
                 break;
               }
               case CM_AIM: {
+                /* L1-2 (C2) disposition: KEEP. Reachable with an interactive
+                 * capture open (ITM_INTEGRAL/ITM_INTEGRAL_YX press nothing
+                 * about calcMode's origin) and outside the EXIT ladder's
+                 * scope, so the guard stays to prevent a leaked FCAP_OPEN. */
                 _forthCapCloseIfInteractive();   /* L1-1 */
                 closeAim();
                 break;
@@ -1311,6 +1349,10 @@ endReturnTrue:
               cursorEnabled = false;               // cursor is re-activated automatically elsewhere, after button release
             }
             if(calcMode == CM_AIM && !(isAlphabeticSoftmenu() || isJMAlphaOnlySoftmenu() || item == ITM_KEYMAP)) {
+              /* L1-2 (C2) disposition: KEEP. Any non-alphabetic-softmenu
+               * function press while calcMode == CM_AIM reaches here
+               * regardless of capture origin, and it sits outside the EXIT
+               * ladder's scope — the guard stays. */
               _forthCapCloseIfInteractive();   /* L1-1 */
               closeAim();
             }
@@ -1426,6 +1468,12 @@ endReturnTrue:
                       printf("keyboard.c: executeFunction calcmode=%u %i (before runfunction): %i, %s tam.mode=%i\n", calcMode, item, currentMenu(), indexOfItems[-currentMenu()].itemSoftmenuName, tam.mode);
                     #endif //VERBOSEKEYS
 
+                /* L1-2 (C4) seam 2: the softkey path.  Seam 1 (processKeyAction)
+                 * guards the physical-key path; addItemToBuffer items reached
+                 * from a softmenu row land here instead, bypassing seam 1
+                 * entirely, so the cap must be re-checked at this second entry
+                 * point too. */
+                if(calcMode == CM_AIM && _forthCapAtCap(item)) { goto noMoreToDo; }
                 runFunction(item);
 
 
@@ -2898,8 +2946,27 @@ RELEASE_END:
 
               //also AIM Longpress cycle
               case CM_AIM: {
+                /* L1-2 (C3): R/S runs the interactive line — the closest
+                 * honest analog to K's "commit, then record a native STOP
+                 * step"; there is no step here to record. Checked before
+                 * the BST/SST arm below: ITM_RS matches neither. */
+                if(forthCapIsInteractive() && item == ITM_RS) {
+                  forthInteractiveEnter();     /* the closest honest analog */
+                  keyActionProcessed = true;
+                  break;
+                }
+                /* L1-2 (C4) seam 1: the physical-key path, before
+                 * processAimInput reaches addItemToBuffer. */
+                if(_forthCapAtCap(item)) {
+                  keyActionProcessed = true;    /* full: swallow the key, no error */
+                  break;
+                }
                 //JM In AIM, BST and SST is not reaching here, as it is reconfigured for CAPS lock and NUM lock
                 if(item == ITM_BST || item == ITM_SST) {
+                  /* L1-2 (C2) disposition: KEEP. Reachable with an
+                   * interactive capture open (this longpress arm does not
+                   * discriminate origin) and outside the EXIT ladder's
+                   * scope — the guard stays. */
                   _forthCapCloseIfInteractive();   /* L1-1 */
                   closeAim();
                   runFunction(item);
@@ -3526,6 +3593,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_AIM: {
+        /* L1-2 (C1): an interactive Forth capture diverts entirely — run
+         * the line (or reopen/no-op), never fall to the native AIM commit
+         * below.  calcMode stays CM_AIM throughout: no calcModeNormal(),
+         * no closeAim(), no popSoftmenu() on this path. */
+        if(forthCapIsInteractive()) {
+          forthInteractiveEnter();
+          break;
+        }
           if(softmenuStack[0].softmenuId <= 1 || menu(1) == -MNU_ALPHA) {
             popSoftmenu();
           }
@@ -3881,12 +3956,84 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_AIM: {
+        if(forthCapIsInteractive()) {
+          /* L1-2 (C2): the interactive EXIT ladder — supersedes
+           * _forthCapCloseIfInteractive() at this site (the native arm
+           * below is unreachable for an interactive capture now that this
+           * branch never falls through to it). */
+
+          /* Rung 1 (E12.4 analog): keys mode -> alpha input. */
+          if(forthCapKeysMode()) {
+            forthCapSetKeysMode(false);
+            showSoftmenu(-MNU_ALPHA);
+            break;
+          }
+          /* Rung 2: anything stacked above the base pops and the capture
+           * stays open.  This is the NATIVE CM_AIM test (below in this same
+           * arm) adopted verbatim, INCLUDING its pre-normalisation: a
+           * non-alpha menu (STK, FIN, a catalog) stacked over the capture
+           * must fall through to rung 3 and NOT be silently discarded, and
+           * the pre-normalisation is what makes -MNU_ALPHA-on-top (the
+           * ordinary capture state) fall THROUGH to rung 3 instead of
+           * popping — it retargets slot 0 to MyAlpha so the predicate reads
+           * "base menu displayed". */
+          if(currentMenu() == -MNU_ALPHA) { softmenuStack[0].softmenuId = 1; }
+          if(!(softmenuStack[0].softmenuId <= 1 && menu(1) != -MNU_ALPHA)) {
+            popSoftmenu();
+            stayInAIM();                     /* native pair, below in this arm */
+            break;
+          }
+          /* Rung 3: close.  A non-empty line is pushed to history BEFORE
+           * the close, so EXIT never loses it.
+           *
+           * Must NOT call closeAim() — that commits aimBuffer to X as a
+           * dtString (src/c47/bufferize.c:2693-2712), exactly the native
+           * behaviour the Forth capture exists to avoid (C5.4).
+           *
+           * The teardown is calcModeNormal() FOLLOWED BY popSoftmenu() —
+           * exactly closeAim()'s own shape (src/c47/bufferize.c:2693-2695),
+           * minus its string commit.  Both calls are needed, and rev 2 of
+           * this packet got it wrong by removing the pop:
+           *
+           *   - rung 2's pre-normalisation renames slot 0 to id 1 IN PLACE;
+           *     it does not pop.  softmenu[1].menuItem is -MNU_MyAlpha
+           *     (src/c47/softmenus.c:1039), NOT -MNU_ALPHA.
+           *   - so calcModeNormal()'s own pop, guarded on
+           *     softmenu[softmenuStack[0].softmenuId].menuItem == -MNU_ALPHA
+           *     (src/c47/calcMode.c:45), can never fire here.  Only its
+           *     second check (id 1 -> 0) runs, another in-place rename.
+           *   - two renames, zero pops: the -MNU_ALPHA frame pushed at open
+           *     stays, and the user's pre-FORTH menu stays buried under it.
+           *
+           * The unconditional popSoftmenu() is what actually removes that
+           * frame and reveals the pre-FORTH menu.  C5.6b pins it.
+           *
+           * No undo(), no saveForUndo(), no updateMatrixHeightCache() — the
+           * native arm below runs those because closeAim() either commits
+           * the buffer to X or undo()s the placeholder that calcModeAim's
+           * liftStack() created.  T9 removes that placeholder entirely: the
+           * interactive open does not lift (PACKET_L1_1 C2b), so X is
+           * untouched from FORTH-press to EXIT and there is nothing to
+           * resolve.  Calling undo() here would be actively wrong — it
+           * would roll back whatever the user's ENTER'd lines did to the
+           * stack. */
+          if(aimBuffer[0] != 0) {
+            forthHistoryPush(aimBuffer);     /* L1-H fills this in */
+          }
+          forthCapClose();
+          aimBuffer[0] = 0;
+          T_cursorPos = 0;
+          displayAIMbufferoffset = 0;
+          calcModeNormal();
+          popSoftmenu();          /* see above — the frame rung 2's
+                                     pre-normalisation renamed but did not pop */
+          break;
+        }
         if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines
           softmenuStack[0].softmenuId = 1;                                  //JM
         }                                                                   //JM
 
         if(softmenuStack[0].softmenuId <= 1 && menu(1) != -MNU_ALPHA) { // MyMenu or MyAlpha is displayed
-          _forthCapCloseIfInteractive();   /* L1-1 */
           closeAim();
                     #if defined(DEBUGUNDO)
                       printf(">>> saveForUndo from fnKeyExitA\n");
@@ -4667,6 +4814,12 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
             closeNim();
           }
           if(calcMode == CM_AIM) {
+            /* L1-2 (C2) disposition: KEEP (fnKeyUp). Reachable with an
+             * interactive capture open once the top softmenu is non-alpha
+             * and non-scrolling (see test_capture_interactive_close's
+             * [fnKeyUp] comment for why the bare "open then arrow" gesture
+             * does not reach it) — outside the EXIT ladder's scope, so the
+             * guard stays. */
             _forthCapCloseIfInteractive();   /* L1-1 */
             closeAim();
           }
@@ -4886,6 +5039,8 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
             closeNim();
           }
           if(calcMode == CM_AIM) {
+            /* L1-2 (C2) disposition: KEEP (fnKeyDown). Same reasoning as
+             * fnKeyUp's mirror site above. */
             _forthCapCloseIfInteractive();   /* L1-1 */
             closeAim();
           }

@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..090226de4d60c4a523b2e6bb9e6238308002c0b8 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..778dad5d20033324f10f41d3c3e42443b13c435c 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,9 @@
@@ -296,7 +296,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..090226de4d60c4a523b2e6bb9e623830
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,6 +1153,149 @@ void pemCloseAlphaInput(void) {
+@@ -998,6 +1153,212 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -443,10 +443,73 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..090226de4d60c4a523b2e6bb9e623830
 +  /* K3/E13 + K-R3: in keys mode the underlying menu row IS the mode
 +   * indicator — resume must not cover it with the alpha menu. */
 +  pemCursorIsZerothStep = false;
++}
++
++
++/* L1-2 (C1): ENTER's orchestrator for an interactive Forth capture.
++ * calcMode stays CM_AIM throughout — no calcModeNormal(), no closeAim(),
++ * no popSoftmenu() on this path; the caller (fnKeyEnter's CM_AIM divert,
++ * and the ITM_RS guard in keyboard.c) is exactly "run the line, decide
++ * whether to reopen empty or reopen with the line intact".
++ *
++ * The pre-run copy is mandatory, not a nicety (§3.3.2): a word an
++ * interactive line executes can rewrite aimBuffer, because aimBuffer is
++ * also the NIM buffer (src/c47/c47.c:132). forthOuterInterpret's own
++ * memcpy into ctx.source (forth_compile.c:1601) protects ITS parse, not
++ * this function's error-path read-back — that must come from a copy
++ * taken before the run, not from aimBuffer after. */
++void forthInteractiveEnter(void) {
++  if (aimBuffer[0] == 0) {
++    /* Empty ENTER is a no-op, NOT a close. EXIT is the documented close
++     * gesture (C2); an empty line has nothing to run and nothing to keep. */
++    return;
++  }
++
++  /* E9 tier 1: refuse the commit atomically, capture stays open with the
++   * line intact for correction, error already displayed. Same gate the
++   * PEM ENTER arm uses (manage.c:1025). */
++  if (!forthCheckSourceLine(aimBuffer)) {
++    return;
++  }
++
++  /* L1-H fills this in; until then it is an empty inline function
++   * (forth_capture.h). Push BEFORE the run: an executed word can rewrite
++   * aimBuffer (it is also the NIM buffer, §3.3.2), so the text must be
++   * captured while it is still the user's line. */
++  forthHistoryPush(aimBuffer);
++
++  /* Mandatory pre-run snapshot — see the function banner above. 256 bytes
++   * matches the capture cap enforced at every insertion site (C4): the
++   * cap keeps aimBuffer's byte length under 256, so this copy can never
++   * truncate a line the cap already accepted. */
++  char preRunCopy[256];
++  {
++    int32_t n = stringByteLength(aimBuffer);
++    xcopy(preRunCopy, aimBuffer, n + 1);
++  }
++
++  forthOuterInterpret(aimBuffer);
++
++  if (lastErrorCode != ERROR_NONE) {
++    /* L5: reopen with the line intact so the user edits rather than
++     * retypes. aimBuffer may have been rewritten by a partially-executed
++     * line, so restore from the pre-run copy, not from aimBuffer itself. */
++    int32_t n = stringByteLength(preRunCopy);
++    xcopy(aimBuffer, preRunCopy, n + 1);
++    T_cursorPos = stringLastGlyph(aimBuffer) + 1;   /* non-empty by construction */
++    return;                                          /* capture stays OPEN */
++  }
++
++  /* L-R3: REPL. Reopen empty, stay in CM_AIM. forthCapOpenInteractive
++   * clears aimBuffer and resets keysMode (E14/K1: a fresh capture opens
++   * in alpha input, matching the PEM E5 relock). */
++  forthCapOpenInteractive();
++  T_cursorPos = 0;
++  displayAIMbufferoffset = 0;
  }
  
  
-@@ -1013,7 +1311,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +1374,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -455,7 +518,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..090226de4d60c4a523b2e6bb9e623830
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +1683,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +1746,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -499,7 +562,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..090226de4d60c4a523b2e6bb9e623830
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +1730,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +1793,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -536,7 +599,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..090226de4d60c4a523b2e6bb9e623830
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +1779,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +1842,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -604,7 +667,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..090226de4d60c4a523b2e6bb9e623830
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +1851,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +1914,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -620,7 +683,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..090226de4d60c4a523b2e6bb9e623830
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +1942,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +2005,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -644,7 +707,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..090226de4d60c4a523b2e6bb9e623830
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2254,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2317,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

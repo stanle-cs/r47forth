@@ -7655,6 +7655,564 @@ static int test_capture_interactive_close(void)
   return fail;
 }
 
+/* PACKET_L1_2: the REPL — ENTER runs the line and reopens, EXIT unwinds the
+ * ladder, and the input cap holds on both insertion seams.  All typing goes
+ * through the real key path (runFunction/processKeyAction/executeFunction),
+ * never direct aimBuffer writes — that is the whole point of C5.
+ *
+ * Subcase 9 (a word whose execution rewrites aimBuffer, pinning the §3.3.2
+ * pre-run copy independently of the error path) was searched for and not
+ * found: every aimBuffer write in this tree lives in the UI input-handling
+ * code (keyboard.c/manage.c/bufferize.c), reached only by driving a key —
+ * never by a word forthOuterInterpret executes via XEQ dispatch. Per the
+ * packet's own fallback, mutation 4 is pinned by subcase 3 alone (see the
+ * mutation-testing notes in the L1-2 report). */
+static int test_capture_interactive_repl(void)
+{
+  extern void fnForthOuter(uint16_t);
+  extern void fnKeyEnter(uint16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void runFunction(int16_t);
+  extern void processKeyAction(int16_t);
+  extern void executeFunction(const char *data, int16_t item_);
+  extern void showSoftmenu(int16_t);
+  extern int16_t currentMenu(void);
+
+  int fail = 0, scFail;
+  uint8_t tType;
+  int32_t tVal;
+  longInteger_t li;
+
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedCursorPos = T_cursorPos;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedNextChar = nextChar;
+  bool_t savedShiftF = shiftF;
+  bool_t savedShiftG = shiftG;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  #define L12_RESET() do { \
+    calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
+    programRunStop = PGM_STOPPED; dynamicMenuItem = -1; alphaCase = AC_UPPER; \
+    nextChar = NC_NORMAL; shiftF = false; shiftG = false; \
+    clearSystemFlag(FLAG_ALPHA); lastErrorCode = ERROR_NONE; forthCapClose(); \
+  } while (0)
+
+  /* ---- Subcase 0: T9 end-to-end — ENTER runs on the LIVE stack. ---- */
+  scFail = 0;
+  L12_RESET();
+  longIntegerInit(li); int32ToLongInteger(16, li);
+  convertLongIntegerToLongIntegerRegister(li, REGISTER_X); longIntegerFree(li);
+
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+    printf("    [0] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    runFunction(ITM_1);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_PLUS);
+    fnKeyEnter(NOPARAM);
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 17) {
+      printf("    [0] FAIL: X = %ld type %u, expected 17 (16 in X, \"1 +\", ENTER — T9 live stack)\n",
+             (long)tVal, tType);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [0] PASS: T9 end-to-end — interactive ENTER runs on the live stack\n");
+  fail |= scFail;
+
+  /* ---- Subcase 1: ENTER runs and reopens empty. ---- */
+  scFail = 0;
+  L12_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [1] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    runFunction(ITM_1);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_2);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_PLUS);
+    fnKeyEnter(NOPARAM);
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 3) {
+      printf("    [1] FAIL: X = %ld type %u, expected 3\n", (long)tVal, tType);
+      scFail = 1;
+    }
+    if (forthTestCapState() != FCAP_OPEN) {
+      printf("    [1] FAIL: state %d, expected FCAP_OPEN\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (!forthCapIsInteractive()) {
+      printf("    [1] FAIL: forthCapIsInteractive() false after ENTER\n");
+      scFail = 1;
+    }
+    if (aimBuffer[0] != 0) {
+      printf("    [1] FAIL: aimBuffer \"%s\", expected empty (reopened)\n", aimBuffer);
+      scFail = 1;
+    }
+    if (T_cursorPos != 0) {
+      printf("    [1] FAIL: T_cursorPos %d, expected 0\n", T_cursorPos);
+      scFail = 1;
+    }
+    if (calcMode != CM_AIM) {
+      printf("    [1] FAIL: calcMode %d, expected CM_AIM\n", calcMode);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [1] PASS: ENTER runs \"1 2 +\", X == 3, capture reopens empty in CM_AIM\n");
+  fail |= scFail;
+
+  /* ---- Subcase 2: empty ENTER is a no-op. ---- */
+  scFail = 0;
+  L12_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [2] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    longIntegerInit(li); int32ToLongInteger(99, li);
+    convertLongIntegerToLongIntegerRegister(li, REGISTER_X); longIntegerFree(li);
+
+    fnKeyEnter(NOPARAM);   /* aimBuffer is empty from the fresh open */
+
+    if (forthTestCapState() != FCAP_OPEN) {
+      printf("    [2] FAIL: state %d, expected FCAP_OPEN\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (calcMode != CM_AIM) {
+      printf("    [2] FAIL: calcMode %d, expected CM_AIM\n", calcMode);
+      scFail = 1;
+    }
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 99) {
+      printf("    [2] FAIL: X = %ld type %u, expected unchanged 99\n", (long)tVal, tType);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [2] PASS: empty ENTER is a no-op, capture stays open, X unchanged\n");
+  fail |= scFail;
+
+  /* ---- Subcase 3: error reopens with the line intact. ---- */
+  scFail = 0;
+  L12_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [3] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    runFunction(ITM_1);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_Z);
+    runFunction(ITM_Z);
+    runFunction(ITM_Q);
+    runFunction(ITM_Q);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_PLUS);
+
+    fnKeyEnter(NOPARAM);
+
+    if (lastErrorCode == ERROR_NONE) {
+      printf("    [3] FAIL: lastErrorCode ERROR_NONE, expected an error from the unresolvable word\n");
+      scFail = 1;
+    }
+    if (forthTestCapState() != FCAP_OPEN) {
+      printf("    [3] FAIL: state %d, expected FCAP_OPEN\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (compareString(aimBuffer, "1 ZZQQ +", CMP_BINARY) != 0) {
+      printf("    [3] FAIL: aimBuffer \"%s\", expected \"1 ZZQQ +\" intact\n", aimBuffer);
+      scFail = 1;
+    }
+    if (T_cursorPos != stringLastGlyph(aimBuffer) + 1) {
+      printf("    [3] FAIL: T_cursorPos %d, expected %d (end of line)\n",
+             T_cursorPos, stringLastGlyph(aimBuffer) + 1);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [3] PASS: unresolvable line reopens with the line intact, cursor at end\n");
+  fail |= scFail;
+
+  /* ---- Subcase 3b: E9 tier-1 STRUCTURAL reject (mutation 3's pin).
+   * "1 ZZQQ +" (subcase 3) does NOT distinguish forthCheckSourceLine's own
+   * refusal from forthOuterInterpret's own runtime failure: name resolution
+   * is tier-2/advisory (test_engine.part.h's check-mode battery, subcase
+   * [2] "names and item-level conditions stay advisory"), AND an
+   * unresolvable-word run produces the identical observable outcome
+   * (error, line restored) whether or not the tier-1 gate ran first — so
+   * that line cannot pin mutation 3 by itself; a plain "IF" is caught by
+   * BOTH the tier-1 gate and a live run's own dispatcher (ERROR_OPERATION_
+   * UNDEFINED either way), so it can't either.
+   *
+   * "5 : A IF ;" can: "5" pushes onto the REAL data stack the moment it is
+   * actually interpreted, and ": A IF ;" is the tier-1 STRUCTURAL
+   * violation (same rejectLines[] entry test_engine.part.h's check-mode
+   * battery pins) later in the SAME line. forthCheckSourceLine's CHECK
+   * mode is documented side-effect-free (forth_compile.c FORTH_OUTER_CHECK
+   * comment) and scans the WHOLE line before anything runs for real, so
+   * the correct behaviour never pushes "5" onto X at all. Skip the gate
+   * (mutation 3) and forthOuterInterpret runs "5" for real before it ever
+   * reaches the structural failure — X changes and stays changed, because
+   * forthInteractiveEnter's error path restores aimBuffer's TEXT, not the
+   * stack. ---- */
+  scFail = 0;
+  L12_RESET();
+  longIntegerInit(li); int32ToLongInteger(777, li);
+  convertLongIntegerToLongIntegerRegister(li, REGISTER_X); longIntegerFree(li);
+
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [3b] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    runFunction(ITM_5);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_COLON);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_A);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_I);
+    runFunction(ITM_F);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_SEMICOLON);
+
+    fnKeyEnter(NOPARAM);
+
+    if (lastErrorCode == ERROR_NONE) {
+      printf("    [3b] FAIL: lastErrorCode ERROR_NONE, expected a tier-1 structural reject for \"5 : A IF ;\"\n");
+      scFail = 1;
+    }
+    if (forthTestCapState() != FCAP_OPEN) {
+      printf("    [3b] FAIL: state %d, expected FCAP_OPEN\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (compareString(aimBuffer, "5 : A IF ;", CMP_BINARY) != 0) {
+      printf("    [3b] FAIL: aimBuffer \"%s\", expected \"5 : A IF ;\" intact\n", aimBuffer);
+      scFail = 1;
+    }
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 777) {
+      printf("    [3b] FAIL: X = %ld type %u, expected untouched 777 (the tier-1 gate must refuse before \"5\" ever runs)\n",
+             (long)tVal, tType);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [3b] PASS: a tier-1 structural violation (\"5 : A IF ;\") is refused atomically before \"5\" runs, line intact\n");
+  fail |= scFail;
+
+  /* ---- Subcase 4: EXIT does not commit to X (T9). ---- */
+  scFail = 0;
+  L12_RESET();
+  longIntegerInit(li); int32ToLongInteger(123456, li);
+  convertLongIntegerToLongIntegerRegister(li, REGISTER_X); longIntegerFree(li);
+
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [4] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    runFunction(ITM_A);
+    runFunction(ITM_B);
+    runFunction(ITM_C);
+
+    fnKeyExit(NOPARAM);
+
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    [4] FAIL: state %d, expected FCAP_CLOSED\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (getSystemFlag(FLAG_ALPHA)) {
+      printf("    [4] FAIL: FLAG_ALPHA still set\n");
+      scFail = 1;
+    }
+    if (calcMode != CM_NORMAL) {
+      printf("    [4] FAIL: calcMode %d, expected CM_NORMAL\n", calcMode);
+      scFail = 1;
+    }
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 123456) {
+      printf("    [4] FAIL: X = %ld type %u, expected bit-identical 123456 (EXIT must not closeAim())\n",
+             (long)tVal, tType);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [4] PASS: EXIT closes without committing \"ABC\" to X\n");
+  fail |= scFail;
+
+  /* ---- Subcase 5: ladder rung 1 (keys mode). ---- */
+  scFail = 0;
+  L12_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [5] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    runFunction(ITM_A);
+    runFunction(ITM_B);
+    forthCapSetKeysMode(true);
+
+    fnKeyExit(NOPARAM);
+
+    if (forthCapKeysMode()) {
+      printf("    [5] FAIL: keys mode still on after EXIT\n");
+      scFail = 1;
+    }
+    if (forthTestCapState() != FCAP_OPEN) {
+      printf("    [5] FAIL: state %d, expected FCAP_OPEN\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (compareString(aimBuffer, "AB", CMP_BINARY) != 0) {
+      printf("    [5] FAIL: aimBuffer \"%s\", expected \"AB\" intact\n", aimBuffer);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [5] PASS: rung 1 — EXIT in keys mode returns to alpha input, capture stays open\n");
+  fail |= scFail;
+
+  /* ---- Subcase 6a: ladder rung 2, alpha submenu pops, capture stays open. ---- */
+  scFail = 0;
+  L12_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [6a] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    showSoftmenu(-MNU_ALPHA_OMEGA);
+    if (currentMenu() != -MNU_ALPHA_OMEGA) {
+      printf("    [6a] FIXTURE FAIL: showSoftmenu(-MNU_ALPHA_OMEGA) did not take\n");
+      scFail = 1;
+    } else {
+      fnKeyExit(NOPARAM);
+      if (currentMenu() == -MNU_ALPHA_OMEGA) {
+        printf("    [6a] FAIL: alpha submenu did not pop\n");
+        scFail = 1;
+      }
+      if (forthTestCapState() != FCAP_OPEN) {
+        printf("    [6a] FAIL: state %d, expected FCAP_OPEN\n", forthTestCapState());
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [6a] PASS: rung 2 — an alpha submenu pops, capture stays open\n");
+  fail |= scFail;
+
+  /* ---- Subcase 6(b): ladder rung 2, a NON-alpha menu (STK) pops, capture
+   * stays open with the line intact. Rev 2's narrower isAlphaSubmenu(0)
+   * predicate closed the capture and discarded the line here — mutation 2c
+   * escapes this subcase. ---- */
+  scFail = 0;
+  L12_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [6(b)] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    runFunction(ITM_A);
+    runFunction(ITM_B);
+    showSoftmenu(-MNU_STK);
+    if (currentMenu() != -MNU_STK) {
+      printf("    [6(b)] FIXTURE FAIL: showSoftmenu(-MNU_STK) did not take\n");
+      scFail = 1;
+    } else {
+      fnKeyExit(NOPARAM);
+      if (currentMenu() == -MNU_STK) {
+        printf("    [6(b)] FAIL: non-alpha menu did not pop\n");
+        scFail = 1;
+      }
+      if (forthTestCapState() != FCAP_OPEN) {
+        printf("    [6(b)] FAIL: state %d, expected FCAP_OPEN (line must not be discarded)\n",
+               forthTestCapState());
+        scFail = 1;
+      }
+      if (compareString(aimBuffer, "AB", CMP_BINARY) != 0) {
+        printf("    [6(b)] FAIL: aimBuffer \"%s\", expected \"AB\" intact\n", aimBuffer);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [6(b)] PASS: rung 2 — a non-alpha (STK) menu pops, capture stays open, line intact\n");
+  fail |= scFail;
+
+  /* ---- Subcase 6b: EXIT (through rung 3) preserves the pre-FORTH menu.
+   * Rev 2's extra trailing popSoftmenu() destroyed it — mutation 2b escapes
+   * this subcase. ---- */
+  scFail = 0;
+  L12_RESET();
+  showSoftmenu(-MNU_STK);
+  {
+    int16_t menuBefore = currentMenu();
+    if (menuBefore != -MNU_STK) {
+      printf("    [6b] FIXTURE FAIL: showSoftmenu(-MNU_STK) did not take\n");
+      scFail = 1;
+    } else {
+      fnForthOuter(NOPARAM);
+      if (!forthCapIsOpen()) {
+        printf("    [6b] FIXTURE FAIL: interactive open did not take\n");
+        scFail = 1;
+      } else {
+        fnKeyExit(NOPARAM);   /* nothing else pushed, keys mode off: straight to rung 3 */
+        if (forthTestCapState() != FCAP_CLOSED) {
+          printf("    [6b] FIXTURE FAIL: state %d, expected FCAP_CLOSED (not through rung 3)\n",
+                 forthTestCapState());
+          scFail = 1;
+        }
+        if (currentMenu() != menuBefore) {
+          printf("    [6b] FAIL: currentMenu() %d after EXIT, expected the pre-FORTH menu %d back\n",
+                 currentMenu(), menuBefore);
+          scFail = 1;
+        }
+      }
+    }
+  }
+  if (!scFail) printf("    [6b] PASS: EXIT through rung 3 preserves the pre-FORTH menu\n");
+  fail |= scFail;
+
+  /* ---- Subcase 7: the input cap, both seams, plus the item > 0 conjunct. ---- */
+  scFail = 0;
+  L12_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [7] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    /* Prime the buffer directly to 196 '1's rather than through the real key
+     * path: bufferize.c's addItemToBuffer bounds non-EIM CM_AIM insertion by
+     * on-screen PIXEL WIDTH (bufferize.c:597, stringWidthWithLimitC47), not
+     * by byte/glyph count. 196 repeated WIDE glyphs (e.g. 'A') hit that
+     * unrelated native cap around glyph 181 — well short of our 196-glyph
+     * Forth cap — and a narrow digit still hits it under 256 total insertion
+     * attempts once seam 1's guard is removed (verified: 'A' priming plus a
+     * single boundary 'A' insert passes even with the guard deleted, because
+     * the native width cap silently absorbs the 197th 'A' too, masking the
+     * mutation). '1' is narrow enough that 196 of them plus one more stay
+     * under the native width cap, so our Forth cap is the only thing that
+     * can be stopping growth. The cap boundary itself (what this subcase
+     * tests) IS driven through both real seams below; only the priming is
+     * direct. */
+    int i;
+    for (i = 0; i < 196; i++) { aimBuffer[i] = '1'; }
+    aimBuffer[196] = 0;
+    if (stringGlyphLength(aimBuffer) != 196) {
+      printf("    [7] FIXTURE FAIL: glyph length %ld after priming, expected 196\n",
+             (long)stringGlyphLength(aimBuffer));
+      scFail = 1;
+    } else {
+      /* Seam 1: the physical-key path (processKeyAction). */
+      processKeyAction(ITM_1);
+      if (stringGlyphLength(aimBuffer) != 196) {
+        printf("    [7] FAIL: glyph length %ld after seam-1 insert at cap, expected no growth\n",
+               (long)stringGlyphLength(aimBuffer));
+        scFail = 1;
+      }
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [7] FAIL: lastErrorCode %u after seam-1 insert at cap, expected ERROR_NONE (silent swallow)\n",
+               lastErrorCode);
+        scFail = 1;
+      }
+
+      /* Seam 2: the softkey path (executeFunction -> runFunction).
+       * executeFunction("", item_) is NOT this path: data[0] == 0 skips the
+       * entire `if(calcMode != CM_CONFIRMATION && data[0] != 0)` block
+       * (keyboard.c ~:1090, "data is used if operation is from the real
+       * keyboard. item is used directly if called from XEQM") — seam 2 lives
+       * INSIDE that block, so an empty-data call never reaches it and would
+       * silently exercise nothing. The real softkey path needs a non-empty
+       * data string resolved by determineFunctionKeyItem_C47. Push a STATIC
+       * alphabetic softmenu (isAlphabeticSoftmenu() true, so the unrelated
+       * closeAim() guard at :1351 stays skipped) and press its first softkey:
+       * data="1" -> fn=0 -> softkeyItem[0] = ITM_ALPHA, an addItemToBuffer
+       * item (2-byte STD_ALPHA glyph, still one glyph). */
+      showSoftmenu(-MNU_ALPHA_OMEGA);
+      executeFunction("1", 0);
+      popSoftmenu();
+      if (stringGlyphLength(aimBuffer) != 196) {
+        printf("    [7] FAIL: glyph length %ld after seam-2 insert at cap, expected no growth\n",
+               (long)stringGlyphLength(aimBuffer));
+        scFail = 1;
+      }
+
+      /* item > 0 conjunct: a negative item id must not index indexOfItems[]. */
+      processKeyAction(-MNU_AIMCATALOG);
+      if (!forthCapIsOpen()) {
+        printf("    [7] FAIL: capture state corrupted by the negative-item-id drive\n");
+        scFail = 1;
+      }
+      if (stringGlyphLength(aimBuffer) != 196) {
+        printf("    [7] FAIL: glyph length %ld after negative-item-id drive, expected no growth\n",
+               (long)stringGlyphLength(aimBuffer));
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [7] PASS: cap holds on both seams; negative item id does not corrupt state\n");
+  fail |= scFail;
+
+  /* ---- Subcase 8: R/S runs the line. ---- */
+  scFail = 0;
+  L12_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [8] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    runFunction(ITM_2);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_3);
+    runFunction(ITM_SPACE);
+    runFunction(ITM_ASTERISK);
+
+    processKeyAction(ITM_RS);
+
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 6) {
+      printf("    [8] FAIL: X = %ld type %u, expected 6\n", (long)tVal, tType);
+      scFail = 1;
+    }
+    if (forthTestCapState() != FCAP_OPEN) {
+      printf("    [8] FAIL: state %d, expected FCAP_OPEN (reopened)\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (aimBuffer[0] != 0) {
+      printf("    [8] FAIL: aimBuffer \"%s\", expected empty (reopened)\n", aimBuffer);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [8] PASS: R/S runs \"2 3 *\", X == 6, capture reopens empty\n");
+  fail |= scFail;
+
+  #undef L12_RESET
+
+  /* ---- restore the full tuple ---- */
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  T_cursorPos = savedCursorPos;
+  alphaCase = savedAlphaCase;
+  nextChar = savedNextChar;
+  shiftF = savedShiftF;
+  shiftG = savedShiftG;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
+
 /* FIX-7 (D-C1) reproducer: the F6-4 fold's committed text must survive its
  * own ENTER commit. decodeOneStep renders quoted names with the directional
  * glyphs STD_LEFT/RIGHT_SINGLE_QUOTE; before the fix the compiler accepted

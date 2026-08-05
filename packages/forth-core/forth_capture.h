@@ -74,6 +74,19 @@ bool_t      forthCapTextNonEmpty(void); /* open && aimBuffer[0] != 0 */
 bool_t      forthCapKeysMode(void);        /* K1: keys-mode bit */
 void        forthCapSetKeysMode(bool_t on);
 
+/* L1-2 (C1): ENTER's orchestrator for an interactive capture — runs the
+ * line, then either reopens empty (REPL) or reopens with the line intact
+ * for correction (error).  Defined in programming/manage.c beside the
+ * other capture orchestrators (forthCaptureSuspend/Resume). Called from
+ * fnKeyEnter's CM_AIM divert and from the ITM_RS guard (C3). */
+void        forthInteractiveEnter(void);
+
+/* L1-H stub: pushes `line` onto the interactive history ring. Until L1-H
+ * lands this is an intentional no-op — C1 (ENTER) and C2 (EXIT rung 3)
+ * both call it BEFORE the line is lost (run or discard), so the call
+ * sites are already correct for when L1-H fills the body in. */
+static inline void forthHistoryPush(const char *line) { (void)line; }
+
 /* L1-1 (C2b): public wrappers for the file-static E1 catalog-drain helpers
  * (programming/manage.c:1165-1166, defined at :1689/:1701) — forthCapOpenInteractive's
  * caller (fnForthOuter, forth_compile.c) needs them too. */
