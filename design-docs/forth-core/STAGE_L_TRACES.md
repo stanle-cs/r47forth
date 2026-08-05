@@ -762,12 +762,83 @@ buried:
   the whole episode too — so this is not a new hazard *class*. The
   difference that matters: in PEM the user is deliberately editing that
   program and would see the stray line; interactively it lands somewhere
-  they are not looking. Mitigation options for the fold packet, none yet
-  ruled: (i) accept and document, on the PEM-parity argument; (ii) park
-  the fold's steps at a deterministic location instead of wherever
-  `currentStep` sits, so a leak is findable rather than arbitrary;
-  (iii) a boot/restore sweep — weak on its own, since a leaked step is
-  byte-indistinguishable from a legitimate PEM Forth source line.
+  they are not looking.
+
+### T7.2a — the scratch program (owner-proposed 2026-08-04)
+
+**Direction: park the interactive fold's steps in a dedicated scratch
+program, not at `currentStep`.** Owner's proposal, adopted over the
+in-place variant. It fixes the property the earlier mitigation list could
+not:
+
+- **A leak becomes identifiable.** Debris inside the scratch program is
+  transient by definition, so a boot/restore sweep finally has something
+  to key on. Option (iii) above was weak precisely because a leaked step
+  is byte-indistinguishable from a legitimate PEM Forth source line —
+  *location* supplies the discriminator that the bytes cannot.
+- **The user's programs are never structurally touched.** No insert or
+  delete inside their code, so their step numbering, labels and cursor
+  are not perturbed-and-restored, they are simply left alone.
+  `forthFoldLeave`'s restore becomes `goToPgmStep` onto an *unmodified*
+  program instead of `goToGlobalStep` onto one that was edited twice.
+  Strictly less can go wrong.
+- **A leaked step is inert** unless the user deliberately runs the
+  scratch program, and a stray program is obvious and deletable in a way
+  a stray line buried in program #4 is not.
+
+Feasibility [VERIFIED by hand this pass]: a program boundary is simply an
+`END` step — `scanLabelsAndPrograms` increments `numberOfPrograms` on an
+`END` whose successor is not `.END.` (src/c47/programming/manage.c:143-146)
+— and `insertStepInProgram` already has an `ITM_END` arm
+(manage.c:1714). `deleteProgram` (src/c47/programming/manage.c:295-310)
+shows the delete shape, including the last-program adjustment
+`endOfCurrentProgram - ((currentProgramNumber == numberOfPrograms) ? 2 : 0)`.
+We would use raw `deleteStepsFromTo`, not `deleteProgram`, so
+`_removeLabelsAssignments()` is not involved — the scratch program has no
+labels.
+
+**Cost, in proportion.** Every `_insertInProgram` (manage.c:770) and
+every `deleteStepsFromTo` (manage.c:228) calls `scanLabelsAndPrograms`,
+which does two full walks of program memory and a
+`freeC47Blocks`/`allocC47Blocks` pair for **both** `labelList` and
+`programList` (src/c47/programming/manage.c:129-163). So:
+
+| | rescans per folded keypress |
+|---|---|
+| PEM today | 4 (capture-step recommit + TAM step in/out) |
+| interactive, in-place | 4 |
+| interactive, scratch program **per fold** | 6 |
+| interactive, scratch program **per capture** | 4 |
+
+Creating and destroying the scratch program **once per interactive
+capture** rather than once per fold brings it back to parity with what
+PEM already pays and nobody has complained about. It also makes the sweep
+rule trivial: *no scratch program may exist while no interactive capture
+is open.* Recommended shape.
+
+Open, for the fold packet to settle before code (measurement, not
+reading):
+
+1. Whether an `END` immediately before `.END.` counts as a program at
+   all — src/c47/programming/manage.c:144 says an `END` followed by
+   `.END.` does **not** increment `numberOfPrograms`, so an *empty*
+   scratch program may be invisible while a *non-empty* one is visible.
+   That asymmetry decides whether the user ever sees a program count
+   change, and it must be pinned by test, not assumed.
+2. Arena high-water across a fold, given `scanLabelsAndPrograms`
+   allocates on every call and its `ERROR_RAM_FULL` arm bails leaving
+   `labelList`/`programList` NULL (src/c47/programming/manage.c:151-163)
+   — a failure mid-fold needs a defined outcome. §5.4 discipline applies.
+3. The last-program special cases in `goToGlobalStep`/`_getProgramSize`
+   (src/c47/programming/manage.c:376-429) all key on
+   `currentProgramNumber == numberOfPrograms`; a transient trailing
+   program changes those values. This is the regression surface to test.
+4. Save/restore while a scratch program exists — it would be persisted,
+   and the restore sweep must remove it. New restore-path surface, the
+   area that produced `forthCaptureSanitizeRestoredUi`.
+5. That `addStepInProgram`'s pre-move still lands the TAM step correctly
+   when the capture step's successor is `END` rather than a closing
+   `»FORTH` marker (manage.c:2264).
 - `scanLabelsAndPrograms()` runs on both insert and delete
   (manage.c:770, :228), so insert-then-delete restores `labelList` and
   step numbering exactly.
