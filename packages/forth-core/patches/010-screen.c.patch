@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..d9823178d717cf377536fb8117f8ae9fcf3b9bb0 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..050b37c8954d9d8360d007f9fea86ce850354f05 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -3,6 +3,7 @@
@@ -10,8 +10,31 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..d9823178d717cf377536fb8117f8ae9f
  
  static void refreshRegisterLineRestoreT(void);
  static void _refreshPemScreen(void);
-@@ -840,6 +841,10 @@ void execTimerApp(uint16_t timerType) {
-         }
+@@ -814,12 +815,7 @@ void execTimerApp(uint16_t timerType) {
+     if(item == ITM_RCL && getSystemFlag(FLAG_USER) && funcParam[0] != 0) {
+       calcRegister_t var = findNamedVariable(funcParam);
+       if(var != INVALID_VARIABLE) {
+-        if(calcMode == CM_PEM) {  // Insert user variable recall in program
+-          insertUserItemInProgram(item, funcParam);
+-        }
+-        else {                    // Execute item
+-          reallyRunFunction(item, var);
+-        }
++        forthUserItemDispatch(item, funcParam, item, var);
+       }
+       else {
+         displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
+@@ -832,14 +828,13 @@ void execTimerApp(uint16_t timerType) {
+     else if(item == ITM_XEQ && getSystemFlag(FLAG_USER) && funcParam[0] != 0) {
+       calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
+       if(label != INVALID_VARIABLE) {
+-        if(calcMode == CM_PEM) {  // Insert user program call in program
+-          insertUserItemInProgram(item, funcParam);
+-        }
+-        else {                    // Execute item
+-          reallyRunFunction(item, label);
+-        }
++        forthUserItemDispatch(item, funcParam, item, label);
        }
        else {
 +        /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */

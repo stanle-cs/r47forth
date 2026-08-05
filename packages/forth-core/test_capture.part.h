@@ -8213,6 +8213,478 @@ static int test_capture_interactive_repl(void)
   return fail;
 }
 
+/* ==================================================================
+ * PACKET_L1_3 (C6) — test_capture_interactive_divert.  The interactive
+ * divert seam: direct function items, catalog picks and the FWRD picker
+ * insert their names as TEXT into an open interactive capture instead of
+ * executing; keys mode works interactively.  Parameterized items fall
+ * through to TAM unchanged (L-R4 (b) — the fold is L1-F*).
+ *
+ * Each subcase drives a real entry point (runFunction, determineItem,
+ * executeFunction) exactly as L1-1/L1-2's tests do; none primes the
+ * outcome under test.
+ * ================================================================== */
+static int test_capture_interactive_divert(void)
+{
+  extern void fnForthOuter(uint16_t);
+  extern void runFunction(int16_t);
+  extern int16_t determineItem(const char *);
+  extern void executeFunction(const char *data, int16_t item_);
+  extern void showSoftmenu(int16_t);
+  extern void showSoftmenuCurrentPart(void);
+  extern int16_t currentMenu(void);
+  extern bool_t isAlphaSubmenu(uint8_t n);
+  extern void _closeCatalog(void);
+  extern char *dynmenuGetLabel(int16_t menuitem);
+  extern const softmenu_t softmenu[];
+
+  int fail = 0, scFail;
+  uint8_t tType;
+  int32_t tVal;
+  longInteger_t li;
+
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedCursorPos = T_cursorPos;
+  uint8_t savedAlphaCase = alphaCase;
+  uint8_t savedNextChar = nextChar;
+  bool_t savedShiftF = shiftF;
+  bool_t savedShiftG = shiftG;
+  bool_t savedFnKeyInCatalog = fnKeyInCatalog;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  #define L13_RESET() do { \
+    calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
+    programRunStop = PGM_STOPPED; dynamicMenuItem = -1; alphaCase = AC_UPPER; \
+    nextChar = NC_NORMAL; shiftF = false; shiftG = false; fnKeyInCatalog = 0; \
+    clearSystemFlag(FLAG_ALPHA); lastErrorCode = ERROR_NONE; forthCapClose(); \
+    for (int _i = 0; _i < SOFTMENU_STACK_SIZE; ++_i) { \
+      softmenuStack[_i].softmenuId = 0; softmenuStack[_i].firstItem = 0; \
+      softmenuStack[_i].userMenuId = 0; softmenuStack[_i].calcMode = 0; \
+    } \
+  } while (0)
+
+  /* ---- Subcase 1: direct item inserts text, does not execute. ---- */
+  scFail = 0;
+  L13_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+    printf("    [1] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    forthCapSetKeysMode(true);
+    longIntegerInit(li); int32ToLongInteger(55, li);
+    convertLongIntegerToLongIntegerRegister(li, REGISTER_X); longIntegerFree(li);
+
+    runFunction(ITM_sin);
+
+    if (compareString(aimBuffer, "SIN ", CMP_BINARY) != 0) {
+      printf("    [1] FAIL: aimBuffer \"%s\", expected \"SIN \"\n", aimBuffer);
+      scFail = 1;
+    }
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 55) {
+      printf("    [1] FAIL: X = %ld type %u, expected untouched 55 (SIN must not execute)\n",
+             (long)tVal, tType);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [1] PASS: direct item (SIN) inserts text, X untouched\n");
+  fail |= scFail;
+
+  /* ---- Subcase 2: token boundary (K2 leading-separator rule). ---- */
+  scFail = 0;
+  L13_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [2] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    runFunction(ITM_4);
+    runFunction(ITM_2);
+    runFunction(ITM_sin);
+
+    if (compareString(aimBuffer, "42 SIN ", CMP_BINARY) != 0) {
+      printf("    [2] FAIL: aimBuffer \"%s\", expected \"42 SIN \"\n", aimBuffer);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [2] PASS: \"42\" + SIN token-boundary-separates to \"42 SIN \"\n");
+  fail |= scFail;
+
+  /* Locate the ALPHA-gesture row once, from the live table (layout-
+   * independent, per K1's rule — no key number or aim-column item id is
+   * hard-coded). */
+  int kIdx = -1;
+  for (int i = 0; i < 37; i++) {
+    if (kbd_std[i].fShifted == ITM_AIM) { kIdx = i; break; }
+  }
+  if (kIdx < 0) {
+    printf("    FIXTURE FAIL: no kbd_std row carries fShifted == ITM_AIM\n");
+    fail = 1;
+  } else {
+    char kb[3];
+    sprintf(kb, "%02d", kIdx);
+
+    /* ---- Subcase 3a: ALPHA gesture toggles keys mode, softmenu changes,
+     * toggle back lands on -MNU_ALPHA. ---- */
+    scFail = 0;
+    L13_RESET();
+    fnForthOuter(NOPARAM);
+    if (!forthCapIsOpen()) {
+      printf("    [3a] FIXTURE FAIL: interactive open did not take\n");
+      scFail = 1;
+    } else {
+      showSoftmenu(-MNU_ALPHA);
+      if (currentMenu() != -MNU_ALPHA) {
+        printf("    [3a] FIXTURE FAIL: showSoftmenu(-MNU_ALPHA) did not take\n");
+        scFail = 1;
+      } else {
+        shiftF = true;
+        int16_t got = determineItem(kb);
+        shiftF = false;
+        if (got != ITM_AIM) {
+          printf("    [3a] FAIL: determineItem = %d, expected ITM_AIM (%d)\n", got, ITM_AIM);
+          scFail = 1;
+        } else {
+          runFunction(ITM_AIM);
+          if (!forthCapKeysMode()) {
+            printf("    [3a] FAIL: keys mode bit not set after toggle-on\n");
+            scFail = 1;
+          }
+          if (currentMenu() == -MNU_ALPHA) {
+            printf("    [3a] FAIL: -MNU_ALPHA still on top after toggle-on (softmenu did not change)\n");
+            scFail = 1;
+          }
+          /* Toggle back off. */
+          shiftF = true;
+          got = determineItem(kb);
+          shiftF = false;
+          if (got != ITM_AIM) {
+            printf("    [3a] FAIL: toggle-back determineItem = %d, expected ITM_AIM (%d)\n", got, ITM_AIM);
+            scFail = 1;
+          } else {
+            runFunction(ITM_AIM);
+            if (forthCapKeysMode()) {
+              printf("    [3a] FAIL: keys mode bit still set after toggle-off\n");
+              scFail = 1;
+            }
+            if (currentMenu() != -MNU_ALPHA) {
+              printf("    [3a] FAIL: currentMenu() %d after toggle-off, expected -MNU_ALPHA (%d)\n",
+                     currentMenu(), -MNU_ALPHA);
+              scFail = 1;
+            }
+          }
+        }
+      }
+    }
+    if (!scFail) printf("    [3a] PASS: ALPHA gesture toggles keys mode both ways, softmenu tracks it\n");
+    fail |= scFail;
+
+    /* ---- Subcase 3(b): FWRD picker open, THEN toggle to keys mode — the
+     * M3 bounded drain must pop FWRD too (isAlphaSubmenu counts -MNU_FORTH,
+     * softmenus.c). ---- */
+    scFail = 0;
+    L13_RESET();
+    fnForthOuter(NOPARAM);
+    if (!forthCapIsOpen()) {
+      printf("    [3(b)] FIXTURE FAIL: interactive open did not take\n");
+      scFail = 1;
+    } else {
+      showSoftmenu(-MNU_ALPHA);
+      showSoftmenu(-MNU_FORTH);
+      if (currentMenu() != -MNU_FORTH) {
+        printf("    [3(b)] FIXTURE FAIL: showSoftmenu(-MNU_FORTH) did not take\n");
+        scFail = 1;
+      } else {
+        runFunction(ITM_AIM);   /* toggle to keys mode directly */
+        if (!forthCapKeysMode()) {
+          printf("    [3(b)] FAIL: keys mode bit not set after toggle-on\n");
+          scFail = 1;
+        }
+        if (currentMenu() == -MNU_ALPHA || isAlphaSubmenu(0)) {
+          printf("    [3(b)] FAIL: currentMenu() %d after drain, expected neither -MNU_ALPHA nor an alpha submenu\n",
+                 currentMenu());
+          scFail = 1;
+        }
+      }
+    }
+    if (!scFail) printf("    [3(b)] PASS: FWRD-on-top drains fully on toggle-to-keys-mode (M3)\n");
+    fail |= scFail;
+
+    /* ---- Subcase 3b: no bug screen in keys mode (B2 pin) — a physical key
+     * resolves to the normal-column item, calcMode stays off CM_BUG_ON_SCREEN. ---- */
+    scFail = 0;
+    L13_RESET();
+    fnForthOuter(NOPARAM);
+    if (!forthCapIsOpen()) {
+      printf("    [3b] FIXTURE FAIL: interactive open did not take\n");
+      scFail = 1;
+    } else {
+      forthCapSetKeysMode(true);
+      shiftF = false;
+      shiftG = false;
+      int16_t want = kbd_std[kIdx].primary;
+      int16_t got = determineItem(kb);
+      if (got != want) {
+        printf("    [3b] FAIL: determineItem = %d, expected normal-column primary %d\n", got, want);
+        scFail = 1;
+      }
+      if (calcMode == CM_BUG_ON_SCREEN) {
+        printf("    [3b] FAIL: calcMode == CM_BUG_ON_SCREEN (the C2 two-part edit is incomplete)\n");
+        scFail = 1;
+      }
+    }
+    if (!scFail) printf("    [3b] PASS: keys mode resolves the normal column, no bug screen\n");
+    fail |= scFail;
+  }
+
+  /* ---- Subcase 4: catalog pick inserts, does not close AIM. ---- */
+  scFail = 0;
+  L13_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [4] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    int16_t fcnsIdx = -1;
+    for (int si = 0; si < 300; si++) {
+      if (softmenu[si].menuItem == -MNU_FCNS) { fcnsIdx = si; break; }
+    }
+    int16_t sinPos = -1;
+    if (fcnsIdx >= 0) {
+      for (int pi = 0; pi < softmenu[fcnsIdx].numItems; pi++) {
+        if (softmenu[fcnsIdx].softkeyItem[pi] % 10000 == ITM_sin) { sinPos = pi; break; }
+      }
+    }
+    if (fcnsIdx < 0 || sinPos < 0) {
+      printf("    [4] FIXTURE FAIL: MNU_FCNS (%d) / SIN position (%d) not found\n", fcnsIdx, sinPos);
+      scFail = 1;
+    } else {
+      catalog = CATALOG_FCNS;
+      showSoftmenu(-MNU_CATALOG);
+      showSoftmenu(-MNU_FCNS);
+      softmenuStack[0].firstItem = sinPos;
+      fnKeyInCatalog = 1;
+      shiftF = false;
+      shiftG = false;
+
+      executeFunction("1", 0);   /* fn=0, itemShift=0 -> firstItem+0+0 = sinPos */
+
+      fnKeyInCatalog = savedFnKeyInCatalog;
+      catalog = CATALOG_NONE;
+
+      if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+        printf("    [4] FAIL: capture no longer open/interactive after the pick\n");
+        scFail = 1;
+      }
+      if (calcMode != CM_AIM) {
+        printf("    [4] FAIL: calcMode %d after the pick, expected CM_AIM\n", calcMode);
+        scFail = 1;
+      }
+      if (compareString(aimBuffer, "SIN ", CMP_BINARY) != 0) {
+        printf("    [4] FAIL: aimBuffer \"%s\", expected \"SIN \" (picked name landed as text)\n", aimBuffer);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [4] PASS: FCNS catalog pick inserts text, capture stays open in CM_AIM\n");
+  fail |= scFail;
+
+  /* ---- Subcase 5: dynamic-menu XEQ inserts (T8.4 hole) — the FWRD
+   * picker's pick, then items.c:699's ITM_XEQ dynamic-menu arm driven
+   * directly, both insert text and execute nothing. ---- */
+  scFail = 0;
+  L13_RESET();
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret(": W5DIV 42 ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    [5] FIXTURE FAIL: W5DIV def error %d\n", lastErrorCode);
+    scFail = 1;
+  } else {
+    fnForthOuter(NOPARAM);
+    if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+      printf("    [5] FIXTURE FAIL: interactive open did not take\n");
+      scFail = 1;
+    } else {
+      longIntegerInit(li); int32ToLongInteger(555, li);
+      convertLongIntegerToLongIntegerRegister(li, REGISTER_X); longIntegerFree(li);
+
+      showSoftmenu(-MNU_FORTH);
+      showSoftmenuCurrentPart();   /* the PUSH alone does not build content —
+                                       the draw does (test_picker_key_mapping's
+                                       precedent) */
+      if (dynamicSoftmenu[22].numItems < 1) {
+        printf("    [5] FIXTURE FAIL: MNU_FORTH picker has %d items, expected >= 1\n",
+               dynamicSoftmenu[22].numItems);
+        scFail = 1;
+      } else {
+        softmenuStack[0].firstItem = 0;
+        dynamicMenuItem = 0;
+
+        /* Part A: the FWRD picker's pick, through the real softkey path. */
+        executeFunction("1", 0);
+
+        read_reg_int32(REGISTER_X, &tType, &tVal);
+        if (tType != dtLongInteger || tVal != 555) {
+          printf("    [5a] FAIL: X = %ld type %u after picker pick, expected untouched 555\n",
+                 (long)tVal, tType);
+          scFail = 1;
+        }
+        if (compareString(aimBuffer, "W5DIV ", CMP_BINARY) != 0) {
+          printf("    [5a] FAIL: aimBuffer \"%s\", expected \"W5DIV \"\n", aimBuffer);
+          scFail = 1;
+        }
+        if (forthTestCapState() != FCAP_OPEN) {
+          printf("    [5a] FAIL: state %d, expected FCAP_OPEN\n", forthTestCapState());
+          scFail = 1;
+        }
+
+        /* Part B: items.c's ITM_XEQ dynamic-menu arm, driven directly
+         * (dynamicMenuItem still 0, dynmenuGetLabel(0) == "W5DIV"). */
+        if (!scFail) {
+          if (compareString(dynmenuGetLabel(dynamicMenuItem), "W5DIV", CMP_BINARY) != 0) {
+            printf("    [5b] FIXTURE FAIL: dynmenuGetLabel(0) = \"%s\", expected \"W5DIV\"\n",
+                   dynmenuGetLabel(dynamicMenuItem));
+            scFail = 1;
+          } else {
+            runFunction(ITM_XEQ);
+
+            read_reg_int32(REGISTER_X, &tType, &tVal);
+            if (tType != dtLongInteger || tVal != 555) {
+              printf("    [5b] FAIL: X = %ld type %u after XEQ dynamic-menu arm, expected untouched 555\n",
+                     (long)tVal, tType);
+              scFail = 1;
+            }
+            if (compareString(aimBuffer, "W5DIV W5DIV ", CMP_BINARY) != 0) {
+              printf("    [5b] FAIL: aimBuffer \"%s\", expected \"W5DIV W5DIV \"\n", aimBuffer);
+              scFail = 1;
+            }
+          }
+        }
+      }
+    }
+  }
+  if (!scFail) printf("    [5] PASS: FWRD picker pick and the ITM_XEQ dynamic-menu arm both insert text, execute nothing\n");
+  fail |= scFail;
+
+  /* ---- Subcase 6: picker sections interactively — section (a) (the
+   * on-disk program text scan) gated off, dictionary sections present. ---- */
+  scFail = 0;
+  L13_RESET();
+  {
+    /* marker | : FOO 1 ; | marker */
+    uint8_t prog[] = {
+      0x8B, 0x1A, 0xFD, 0x00,                                             /* marker (opening) */
+      0x8B, 0x1A, 0xFD, 0x09, ':', ' ', 'F', 'O', 'O', ' ', '1', ' ', ';', /* : FOO 1 ; */
+      0x8B, 0x1A, 0xFD, 0x00,                                             /* marker (closing) */
+    };
+    uint8_t *savedCurrentStep = currentStep;
+    uint16_t savedProgNum = currentProgramNumber;
+    bool_t savedZeroth = pemCursorIsZerothStep;
+
+    if (!writeTestProgram(prog, sizeof(prog))) {
+      printf("    [6] FIXTURE FAIL: writeTestProgram failed\n");
+      scFail = 1;
+    } else {
+      lastErrorCode = ERROR_NONE;
+      forthOuterInterpret(": BAR 1 ;");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    [6] FIXTURE FAIL: BAR def error %d\n", lastErrorCode);
+        scFail = 1;
+      } else {
+        currentProgramNumber = 1;
+        currentStep = beginOfProgramMemory + 4 + 13;   /* the closing marker: past FOO's def */
+        pemCursorIsZerothStep = false;
+
+        forthCapOpenInteractive();
+        calcMode = CM_AIM;
+
+        testInitVariableSoftmenu(22);
+
+        bool_t sawFoo = false, sawBar = false;
+        if (dynamicSoftmenu[22].menuContent) {
+          const uint8_t *ptr = dynamicSoftmenu[22].menuContent;
+          for (int i = 0; i < dynamicSoftmenu[22].numItems; i++) {
+            if (compareString((const char *)ptr, "FOO", CMP_BINARY) == 0) { sawFoo = true; }
+            if (compareString((const char *)ptr, "BAR", CMP_BINARY) == 0) { sawBar = true; }
+            ptr += stringByteLength((const char *)ptr) + 1;
+          }
+        }
+        if (sawFoo) {
+          printf("    [6] FAIL: FOO present in the picker (section (a) not gated off interactively)\n");
+          scFail = 1;
+        }
+        if (!sawBar) {
+          printf("    [6] FAIL: BAR absent from the picker (dictionary section (b) missing)\n");
+          scFail = 1;
+        }
+        if (dynamicSoftmenu[22].menuContent) {
+          free(dynamicSoftmenu[22].menuContent);
+          dynamicSoftmenu[22].menuContent = NULL;
+          dynamicSoftmenu[22].numItems = 0;
+        }
+      }
+    }
+
+    forthCapClose();
+    cleanupTestProgram();
+    currentStep = savedCurrentStep;
+    currentProgramNumber = savedProgNum;
+    pemCursorIsZerothStep = savedZeroth;
+  }
+  if (!scFail) printf("    [6] PASS: interactively FOO (program text) is absent, BAR (dictionary) is present\n");
+  fail |= scFail;
+
+  /* ---- Subcase 8: parameterized items fall through to TAM unchanged
+   * (L-R4 (b) — the fold is L1-F*, not this packet). ---- */
+  scFail = 0;
+  L13_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [8] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    forthCapSetKeysMode(true);
+    runFunction(ITM_STO);
+    if (tam.mode == 0) {
+      printf("    [8] FAIL: tam.mode == 0 after ITM_STO, expected TAM entered (divert must not swallow it)\n");
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [8] PASS: ITM_STO (parameterized) falls through to TAM, not swallowed by the divert\n");
+  fail |= scFail;
+
+  #undef L13_RESET
+
+  /* ---- restore the full tuple ---- */
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  T_cursorPos = savedCursorPos;
+  alphaCase = savedAlphaCase;
+  nextChar = savedNextChar;
+  shiftF = savedShiftF;
+  shiftG = savedShiftG;
+  fnKeyInCatalog = savedFnKeyInCatalog;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
+
 /* FIX-7 (D-C1) reproducer: the F6-4 fold's committed text must survive its
  * own ENTER commit. decodeOneStep renders quoted names with the directional
  * glyphs STD_LEFT/RIGHT_SINGLE_QUOTE; before the fix the compiler accepted

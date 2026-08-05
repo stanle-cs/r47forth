@@ -27,12 +27,7 @@ void fnForthCall(uint16_t param)
  * leaveTamModeIfEnabled() between the lookup and the dispatch. */
 void forthDispatchColon(int16_t item, char *name, uint16_t widx)
 {
-    if (calcMode == CM_PEM) {   // Insert user program call in program
-        insertUserItemInProgram(item, name);
-    }
-    else {                      // Execute item
-        reallyRunFunction(ITM_FCALL, widx);
-    }
+    forthUserItemDispatch(item, name, ITM_FCALL, widx);
 }
 
 /* Forth fallback after a native label miss (DESIGN.md §4.2): resolve `name`

@@ -47,9 +47,18 @@ the pattern not to repeat. Gate grep:
 ## C1 — the divert arm in `runFunction` (items.c)
 
 **Site: immediately before the TAM-entry block** (`if(tam.mode == 0 &&
-TM_VALUE <= indexOfItems[func].param …`, items.c:736). Placement is
-load-bearing: after it, `tamEnterMode` has already fired and the decision
-is gone.
+TM_VALUE <= indexOfItems[func].param …`, items.c:736).
+
+**Correction (2026-08-05, from implementation):** rev 1-3 called this
+placement "load-bearing". It is not, and mutation 1 is therefore
+unfalsifiable — verified independently over all 2507 rows of
+`indexOfItems[]`: **zero** items are simultaneously `CAT_FNCT | PTP_NONE`
+(the divert's insert criterion) and TAM-parameterized (`param` in
+`[TM_VALUE, TM_CMP]`). The two branches cannot both claim the same item,
+so their relative order is unobservable. Keep the placement anyway — it
+reads correctly and matches where PEM diverts one block below — but do
+not spend time trying to make mutation 1 go red, and do not let a future
+reader "prove" the ordering matters.
 
 ```c
       /* L1-3: the interactive E0-equivalent.  Both physical keys and
@@ -113,8 +122,12 @@ shape differs**: items.c:670/674, :699/703, :711/715, :719/723;
 keyboard.c:2259/2269, :2283/2293; screen.c:818/822, :836/840;
 forth_bridge.c:30/34 (`forthDispatchColon`).
 
-`screen.c` and `forth_bridge.c` need the same `forth_capture.h` include
-treatment as C0 — check each and report.
+~~`screen.c` and `forth_bridge.c` need the same `forth_capture.h` include
+treatment as C0~~ — **they do not, once the nine sites call
+`forthUserItemDispatch`**: neither file then references a forth-capture
+symbol directly, and `items.h` (which declares the helper) is already
+reachable from both via `c47.h`. Verified by a clean build with no
+implicit-declaration warnings. Only `items.c` needs the new includes.
 
 ## C2 — `determineItem`: the keys-mode column (keyboard.c:1686)
 
@@ -309,7 +322,11 @@ only" true by construction rather than by accident.
 
 ## Mutations
 
-1. Move the divert arm below the TAM block. RED at C6.1 (SIN executes).
+1. ~~Move the divert arm below the TAM block.~~ **Unfalsifiable — do not
+   attempt.** No item is both `CAT_FNCT|PTP_NONE` and TAM-parameterized
+   (verified over all 2507 `indexOfItems[]` rows), so the two branches
+   never contend and the order is unobservable. Recorded rather than
+   deleted so the next reader does not re-derive it.
 2. Drop `func != ITM_ENTER` from the exclusion list. RED at L1-2's C5.1.
 3. Drop the `determineItem` escape. RED at C6.1 (the key resolves to a
    letter, not `ITM_SIN`).
@@ -342,8 +359,8 @@ only" true by construction rather than by accident.
 ## Acceptance
 
 - Gate green; landed F6/K suite unchanged; PASS lines quoted.
-- Report which of the six `insertUserItemInProgram` call sites still reach
-  live execution, if any.
+- Report which of the **nine** dispatch sites still reach live execution,
+  if any. (Rev 1-3 said "six" here and "nine" in C1; nine is correct.)
 - Seven mutations RED-then-reverted (or reported with evidence).
 - Flash + arena reported.
 - **Sim:** in an interactive capture, ALPHA-toggle to keys mode, press SIN,

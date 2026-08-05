@@ -65,12 +65,11 @@ bool_t pickerInsertName(void)
 bool_t forthPickerGuard(int16_t item)
 {
   if(softmenu[softmenuStack[0].softmenuId].menuItem != -MNU_FORTH) return false;
-  return (calcMode == CM_PEM
-      && getSystemFlag(FLAG_ALPHA)
-      && tam.function == ITM_FORTH
+  return ((calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && tam.function == ITM_FORTH)
+          || forthCapIsInteractive())
       && item == ITM_NOP
       && dynamicMenuItem >= 0
-      && dynamicMenuItem < dynamicSoftmenu[softmenuStack[0].softmenuId].numItems);
+      && dynamicMenuItem < dynamicSoftmenu[softmenuStack[0].softmenuId].numItems;
 }
 
 /* MNU_FORTH content builder (§9.6, F6-5): the UNION of the edited
@@ -104,7 +103,11 @@ void forthBuildWordPicker(int16_t menu)
 
   memset(tmpString, 0, TMP_STR_LENGTH);
 
-  progStart = forthOwningProgramStart(currentStep);
+  /* L1-3 (C5): interactively, currentStep points at whatever the PEM cursor
+   * last was — not NULL — so scanning from it would list that program's
+   * definitions with false provenance.  Gate section (a) off; interactively
+   * the picker degrades to sections (b)/(c), dictionary words only. */
+  progStart = forthCapIsInteractive() ? NULL : forthOwningProgramStart(currentStep);
 
   if (progStart) {
     step = progStart;

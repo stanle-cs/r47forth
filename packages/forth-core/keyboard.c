@@ -1033,7 +1033,10 @@ endReturnTrue:
         // MNU_FORTH picker: insert name at cursor during Forth capture (§9.6 P-H7)
         if(forthPickerGuard(item)) {
           if(pickerInsertName()) {
-            pemAlpha(ITM_NOP);
+            /* pemAlpha(ITM_NOP) re-commits a PEM step; interactively there
+             * is no step to re-commit — forthCapInsertName already updated
+             * aimBuffer/T_cursorPos directly (Mutation 7's pin). */
+            if(!forthCapIsInteractive()) { pemAlpha(ITM_NOP); }
           }
           return;
         }
@@ -1348,12 +1351,20 @@ endReturnTrue:
             if(item == ITM_KEYMAP) {
               cursorEnabled = false;               // cursor is re-activated automatically elsewhere, after button release
             }
-            if(calcMode == CM_AIM && !(isAlphabeticSoftmenu() || isJMAlphaOnlySoftmenu() || item == ITM_KEYMAP)) {
-              /* L1-2 (C2) disposition: KEEP. Any non-alphabetic-softmenu
-               * function press while calcMode == CM_AIM reaches here
-               * regardless of capture origin, and it sits outside the EXIT
-               * ladder's scope — the guard stays. */
-              _forthCapCloseIfInteractive();   /* L1-1 */
+            if(calcMode == CM_AIM && !forthCapIsInteractive()
+               && !(isAlphabeticSoftmenu() || isJMAlphaOnlySoftmenu() || item == ITM_KEYMAP)) {
+              /* L1-2 (C2) disposition was KEEP here ("it sits outside the
+               * EXIT ladder's scope") because nothing yet gave catalog picks
+               * interactive-specific handling.  L1-3 (C5) supersedes that:
+               * catalog picks now divert through runFunction's interactive
+               * arm (C1) instead of executing, so closing/committing the
+               * capture here first would be wrong — picking any function
+               * from FCNS during an interactive capture must insert the
+               * name as text and leave the capture OPEN (C6.4).  The
+               * _forthCapCloseIfInteractive() call this replaced is now
+               * unreachable from this site for an interactive capture,
+               * which is intentional: the five OTHER sites still call it
+               * unchanged (L1-1's disposition table). */
               closeAim();
             }
             if(tam.mode && tam.alpha) {
@@ -1745,12 +1756,16 @@ endReturnTrue:
       Check_MultiPresses(&result, key_no);        //JM
       return result;
     }
-    else if(calcMode == CM_AIM || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && !(tam.function == ITM_FORTH && forthCapKeysMode()))) {
-      if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
-         && tam.function == ITM_FORTH && forthCapIsOpen()
+    else if((calcMode == CM_AIM && !(forthCapIsInteractive() && forthCapKeysMode())) || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && !(tam.function == ITM_FORTH && forthCapKeysMode()))) {
+      if(((calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
+             && tam.function == ITM_FORTH && forthCapIsOpen())
+          || forthCapIsInteractive())
          && shiftF && key->fShifted == ITM_AIM) {
         /* K1/E10: inside a Forth capture the ALPHA gesture is the keys-mode
          * toggle — resolve to ITM_AIM instead of the aim-column ITM_alpha.
+         * L1-3: widened to the interactive origin (no PEM/tam.function/
+         * FLAG_ALPHA preconditions there — an interactive capture's ALPHA
+         * gesture is always this toggle, ALPHA vs keys mode).
          * Layout-independent: keyed on the row's normal-column fShifted,
          * not on a key number.  Falls through to the shared function tail
          * so shift state is consumed normally (no early return). */
@@ -1785,7 +1800,8 @@ endReturnTrue:
     else if(tam.mode) {
       result = key->primaryTam; // No shifted function in TAM
     }
-    else if(calcMode == CM_NORMAL || calcMode == CM_NIM || calcMode == CM_MIM || calcMode == CM_FONT_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_BUG_ON_SCREEN || calcMode == CM_CONFIRMATION || calcMode == CM_PEM || GRAPHMODE || calcMode == CM_ASSIGN || calcMode == CM_TIMER  || calcMode == CM_LISTXY) {
+    else if(calcMode == CM_NORMAL || calcMode == CM_NIM || calcMode == CM_MIM || calcMode == CM_FONT_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_BUG_ON_SCREEN || calcMode == CM_CONFIRMATION || calcMode == CM_PEM || GRAPHMODE || calcMode == CM_ASSIGN || calcMode == CM_TIMER  || calcMode == CM_LISTXY
+            || (calcMode == CM_AIM && forthCapIsInteractive() && forthCapKeysMode())) {
       result = shiftF ? key->fShifted :
                shiftG ? key->gShifted :
                         key->primary;
@@ -2318,18 +2334,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
           if(item == ITM_RCL && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
             calcRegister_t var = findNamedVariable(funcParam);
             if(var != INVALID_VARIABLE) {
-              if(calcMode == CM_PEM) {  // Insert user variable recall in program
-                #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
-                  printf("**[DL]** insertUserItemInProgram(item=%d, funcParam=%s)\n", item, funcParam);
-                #endif //VERBOSE_DETERMINEITEM
-                insertUserItemInProgram(item, funcParam);
-              }
-              else {                    // Execute item
-                #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
-                  printf("**[DL]** reallyRunFunction(item=%d, var=%d, funcParam=%s)\n", item, var, funcParam);
-                #endif //VERBOSE_DETERMINEITEM
-                reallyRunFunction(item, var);
-              }
+              #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
+                printf("**[DL]** forthUserItemDispatch(item=%d, var=%d, funcParam=%s)\n", item, var, funcParam);
+              #endif //VERBOSE_DETERMINEITEM
+              forthUserItemDispatch(item, funcParam, item, var);
             }
             else {
               displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
@@ -2342,18 +2350,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
           else if(item == ITM_XEQ && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
             calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
             if(label != INVALID_VARIABLE) {
-              if(calcMode == CM_PEM) {  // Insert user program call in program
-                #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
-                  printf("**[DL]** insertUserItemInProgram(item=%d, funcParam=%s)\n", item, funcParam);
-                #endif //VERBOSE_DETERMINEITEM
-                insertUserItemInProgram(item, funcParam);
-              }
-              else {                    // Execute item
-                #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
-                  printf("**[DL]** reallyRunFunction(item=%d, label=%d, funcParam=%s)\n", item, label, funcParam);
-                #endif //VERBOSE_DETERMINEITEM
-                reallyRunFunction(item, label);
-              }
+              #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
+                printf("**[DL]** forthUserItemDispatch(item=%d, label=%d, funcParam=%s)\n", item, label, funcParam);
+              #endif //VERBOSE_DETERMINEITEM
+              forthUserItemDispatch(item, funcParam, item, label);
             }
             else {
               /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */

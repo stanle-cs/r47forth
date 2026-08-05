@@ -3039,6 +3039,12 @@ void reallyRunFunction(int16_t func, uint16_t param);
  */
 void runFunction      (int16_t func);
 
+/* L1-3: the three-way dispatch (PEM records / interactive capture inserts
+ * text / everything else executes) shared by the nine call sites that used
+ * to be a bare `if(calcMode == CM_PEM) {insert} else {exec}` pair.
+ * Defined in items.c. */
+void forthUserItemDispatch(int16_t item, char *funcParam, int16_t execItem, uint16_t execParam);
+
 ///**
 // * Dummy function for a function (part of an item) to be coded.
 // *

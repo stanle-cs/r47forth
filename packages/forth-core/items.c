@@ -3,6 +3,8 @@
 
 #include "c47.h"
 #include "forth_dict.h"
+#include "forth_capture.h"
+#include "forth_menu.h"
 
 /* Forth bridge functions (implemented in forth_bridge.c) */
 void fnForthOuter(uint16_t param);
@@ -648,6 +650,15 @@ bool_t isFunctionOldParam16(uint16_t func) {
     #endif // PC_BUILD
   }
 
+  /* L1-3: the three-way dispatch for a name resolved from a dynamic menu or
+   * a USER key.  PEM records a step, an open interactive capture takes the
+   * name as TEXT, everything else executes. */
+  void forthUserItemDispatch(int16_t item, char *funcParam, int16_t execItem, uint16_t execParam) {
+    if(calcMode == CM_PEM)           { insertUserItemInProgram(item, funcParam); }
+    else if(forthCapIsInteractive()) { (void)forthCapInsertName(funcParam); }
+    else                             { reallyRunFunction(execItem, execParam); }
+  }
+
   void runFunction(int16_t func) {
     #if defined(PC_BUILD) && defined(DEBUG_EXECUTE)
       printf("   >>>RunFunction: %5i%8s%8s\n", func, indexOfItems[abs(func)].itemCatalogName, indexOfItems[abs(func)].itemSoftmenuName);
@@ -667,12 +678,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
         if(strcmp(varCatalogItem, "RCL") != 0) {
           calcRegister_t var = findNamedVariable(varCatalogItem);
           if(var != INVALID_VARIABLE) {
-            if(calcMode == CM_PEM) {
-              insertUserItemInProgram(func, varCatalogItem);
-            }
-            else {
-              reallyRunFunction(func, var);
-            }
+            forthUserItemDispatch(func, varCatalogItem, func, var);
           }
           else {
             displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
@@ -696,32 +702,17 @@ bool_t isFunctionOldParam16(uint16_t func) {
           uint16_t resolvedParam;
           forthXEQType_t res = forthResolveXEQ(varCatalogItem, &resolvedParam);
           if (res == FORTH_XEQ_LABEL) {
-            if(calcMode == CM_PEM) {
-              insertUserItemInProgram(func, varCatalogItem);
-            }
-            else {
-              reallyRunFunction(func, resolvedParam);
-            }
+            forthUserItemDispatch(func, varCatalogItem, func, resolvedParam);
           }
           else if (res == FORTH_XEQ_COLON) {
             /* code-audit 2026-07-20: must record a step, not execute live,
              * when composing a program — mirrors the FORTH_XEQ_LABEL arm
              * above and DESIGN.md §4.2's "PEM recording of XEQ 'NAME'"
              * contract (names persist, never widx). */
-            if(calcMode == CM_PEM) {
-              insertUserItemInProgram(func, varCatalogItem);
-            }
-            else {
-              reallyRunFunction(ITM_FCALL, resolvedParam);
-            }
+            forthUserItemDispatch(func, varCatalogItem, ITM_FCALL, resolvedParam);
           }
           else if (res == FORTH_XEQ_ITEM) {
-            if(calcMode == CM_PEM) {
-              insertUserItemInProgram(func, varCatalogItem);
-            }
-            else {
-              reallyRunFunction(resolvedParam, NOPARAM);
-            }
+            forthUserItemDispatch(func, varCatalogItem, resolvedParam, NOPARAM);
           }
           else {
             displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
@@ -733,6 +724,79 @@ bool_t isFunctionOldParam16(uint16_t func) {
           return;
         }
       }
+      /* L1-3: the interactive E0-equivalent.  Both physical keys and
+       * softkeys converge here — keys via btnPressed -> processKeyAction ->
+       * processAimInput (falls through) -> showFunctionNameItem ->
+       * btnReleased -> runFunction (keyboard.c:2328); softkeys via
+       * executeFunction -> runFunction (keyboard.c:1415).  This is exactly
+       * where PEM already diverts, one block below. */
+      if(forthCapIsInteractive() && func > 0) {
+        /* func > 0 is LOAD-BEARING, not defensive: determineItem returns
+         * NEGATIVE softmenu ids (e.g. -MNU_AIMCATALOG, src/c47/assign.c:46)
+         * and indexOfItems[negative] is out of bounds.  Same conjunct L1-2's
+         * _forthCapAtCap carries, for the same reason. */
+        if(func == ITM_AIM) {
+          if(forthCapKeysMode()) {
+            forthCapSetKeysMode(false);
+            showSoftmenu(-MNU_ALPHA);
+          }
+          else {
+            forthCapSetKeysMode(true);
+            /* C4: bounded drain — match PEM's _closeAlphaMenus, but that
+             * helper is file-static to programming/manage.c.  Interactive
+             * choice (provisional, flagged for owner review): drain
+             * EVERYTHING alpha, FWRD (-MNU_FORTH) included.  _closeAlphaMenus
+             * has no MNU_FORTH case and stops without popping when FWRD is on
+             * top, so "match PEM" has no answer for that state; K-R3's
+             * rationale (the underlying row IS the mode indicator) says leave
+             * nothing alpha standing when keys mode goes on.
+             *
+             * DEVIATION FROM THE PACKET TEXT (found empirically, C6.3(a)/
+             * 3(b) went RED against the packet's literal loop — see report):
+             * popSoftmenu() (softmenus.c) carries its OWN calcMode==CM_AIM
+             * compensation — "if the pop would land on slot id 0 (MyMenu) or
+             * 1 (MyAlpha), force/keep an alpha row visible" (id 0 -> 1, and
+             * id 1 -> changeToALPHA(), which is showSoftmenu(-MNU_ALPHA)).
+             * That invariant exists for native AIM typing (always show an
+             * alpha row) and is inert for PEM's _closeAlphaMenus (calcMode
+             * there is CM_PEM), but interactively calcMode IS CM_AIM, so a
+             * naive "popSoftmenu() while alpha" loop just cycles: pop ALPHA
+             * -> reveals MyAlpha(1) -> popSoftmenu's own compensation
+             * re-pushes ALPHA -> still alpha -> pop again -> ... and never
+             * converges to a non-alpha state.  Fix: peek at what the pop
+             * would reveal (softmenuStack[1].softmenuId); once that is
+             * MyMenu(0) or MyAlpha(1), finish with the SAME raw assignment
+             * _closeAlphaMenus uses for its own MyAlpha case
+             * (softmenuStack[0].softmenuId = 0) instead of calling
+             * popSoftmenu() into the compensation. */
+            for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
+              if(!isAlphaSubmenu(0) && currentMenu() != -MNU_ALPHA) { break; }
+              if(softmenuStack[1].softmenuId <= 1) {
+                softmenuStack[0].softmenuId = 0;   /* MyMenu — raw, bypasses
+                                                       popSoftmenu()'s AIM
+                                                       re-push */
+                break;
+              }
+              popSoftmenu();
+            }
+          }
+          return;
+        }
+        if((indexOfItems[func].status & CAT_STATUS) == CAT_FNCT
+           && (indexOfItems[func].status & PTP_STATUS) == PTP_NONE
+           && func != ITM_AIM && func != ITM_FORTH
+           && func != ITM_ENTER && func != ITM_EXIT1
+           && func != ITM_BACKSPACE && func != ITM_RS) {
+          (void)forthCapInsertName(indexOfItems[func].itemCatalogName);
+          return;
+        }
+        /* Parameterized items fall THROUGH to the TAM block below —
+         * L-R4 (b): the fold makes them type their canonical spelling.
+         * Until L1-F* lands they enter TAM and execute, which is the
+         * documented interim (record it in your report; it is the one
+         * user-visible wart between L1-3 and L1-F1). */
+      }
+
       if(tam.mode == 0 && TM_VALUE <= indexOfItems[func].param && indexOfItems[func].param <= TM_CMP && (calcMode != CM_PEM || aimBuffer[0] == 0 || nimNumberPart != NP_INT_BASE)) {
         #if defined(VERBOSEKEYS)
           printf("items.c: runfunction (before tamEnterMode): %i, %s\n", softmenu[softmenuStack[0].softmenuId].menuItem, indexOfItems[-softmenu[softmenuStack[0].softmenuId].menuItem].itemSoftmenuName);

@@ -815,12 +815,7 @@ void execTimerApp(uint16_t timerType) {
     if(item == ITM_RCL && getSystemFlag(FLAG_USER) && funcParam[0] != 0) {
       calcRegister_t var = findNamedVariable(funcParam);
       if(var != INVALID_VARIABLE) {
-        if(calcMode == CM_PEM) {  // Insert user variable recall in program
-          insertUserItemInProgram(item, funcParam);
-        }
-        else {                    // Execute item
-          reallyRunFunction(item, var);
-        }
+        forthUserItemDispatch(item, funcParam, item, var);
       }
       else {
         displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
@@ -833,12 +828,7 @@ void execTimerApp(uint16_t timerType) {
     else if(item == ITM_XEQ && getSystemFlag(FLAG_USER) && funcParam[0] != 0) {
       calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
       if(label != INVALID_VARIABLE) {
-        if(calcMode == CM_PEM) {  // Insert user program call in program
-          insertUserItemInProgram(item, funcParam);
-        }
-        else {                    // Execute item
-          reallyRunFunction(item, label);
-        }
+        forthUserItemDispatch(item, funcParam, item, label);
       }
       else {
         /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
