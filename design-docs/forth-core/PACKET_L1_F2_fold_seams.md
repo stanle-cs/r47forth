@@ -136,10 +136,14 @@ becomes
 
 ```c
   void tamProcessInput(uint16_t item) {
-    /* L-R4 (b): every TAM commit site in this file already has a
-     * calcMode == CM_PEM arm that RECORDS a step instead of dispatching.
-     * Making that predicate true for the duration of the commit is the
-     * whole non-executing-TAM mechanism — no commit site is edited.
+    /* L-R4 (b): the RECORDING commit sites in this file (ui/tam.c:217, 552,
+     * 587, 605, 618, 907, 929, 1102) each have a calcMode == CM_PEM arm that
+     * records a step instead of dispatching.  Making that predicate true for
+     * the duration of the commit is the non-executing-TAM mechanism, and no
+     * commit site is edited.  It is NOT true of every site — see C2 for the
+     * ones that dispatch or navigate with no CM_PEM arm; those are covered by
+     * F1's admit set (PARK) or by the unwind in this epilogue, not by the
+     * bracket.
      * Narrow by design: a wider bracket would paint _refreshPemScreen
      * (screen.c:6176) and the PEM TAM overlay (screen.c:5637) under the
      * prompt.  Nothing inside the commit path refreshes: _insertInProgram's
