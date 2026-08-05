@@ -636,15 +636,237 @@ revised to +3–5 KB, measured at close per RULE-1.
 
 ## T7 — the fold's three pieces (added by the L-R4 (b) ruling)
 
-Pending. Runs as its own trace series before any fold packet is authored,
-under the same house rule that produced T1–T6: (a) TAM commit sites
-re-derived at current line numbers, and whether one choke point covers
-them; (b) whether the (item, operand) → step-bytes encoding can be
-produced into a caller-supplied scratch buffer without touching program
-memory; (c) whether `decodeOneStep` is context-free enough to render that
-buffer — decisive for the synthesis mechanism; (d) the landed PEM
-suspend/resume walked statement by statement, separating the
-program-memory-bound half from the substrate-independent
-decode→text→`forthCapInsertName`→recommit chain; (e) the full clobber
-list across an interactive TAM, which sizes the suspend store. Every
-finding adversarially refuted before it is built on.
+Method: five independent tracers over the fold's pieces, every
+load-bearing claim put through an adversarial refuter, then an architect
+pass. **Every claim carried below was then re-verified by hand against
+the tree** — the sub-agent findings are evidence, not authority, and one
+of them was wrong (noted in T7.6).
+
+### T7.0 — the result: all three pieces collapse into one decision
+
+The stage doc frames the fold as three constructions: a non-executing TAM
+variant, an interactive suspend store, and a text-synthesis path. That
+framing assumed the interactive fold would have to **emulate** PEM's
+fold. It does not have to. It can **run** PEM's fold:
+
+> Materialise a real `ITM_FORTH` capture step in program memory, then set
+> `calcMode = CM_PEM` for the duration of `_tamProcessInput` only. The
+> landed F6-2/F6-4 machinery then runs unmodified, on a real step, and
+> the interactive line gets the same text by the same code.
+
+Each piece then costs approximately nothing:
+
+- **(a) non-executing TAM — zero new gates.** Every commit site in
+  `ui/tam.c` *already* has a `calcMode == CM_PEM` arm that records a step
+  instead of dispatching (ui/tam.c:1102 is the main one). Making that
+  predicate true is the whole mechanism. No `tam.c` commit site is edited.
+- **(b) suspend store — +8 bytes, not +260.** With a real capture step in
+  program memory, `forthCaptureSuspend`/`forthCaptureResume`
+  (manage.c:1180-1290) are reused **verbatim**: the step IS the store,
+  exactly as in PEM. The 8 bytes are a save/restore context for the PEM
+  cursor, not a copy of the line.
+- **(c) text synthesis — nothing to write.** The decoder is handed a real
+  in-program step, so the fold splice at manage.c:1240-1256 works as-is.
+
+**This retires the scratch-buffer question that T7 was called to answer.**
+The answer would have mattered only if the step lived outside program
+memory; it does not, so every decoder hazard the tracers found —
+`firstFreeProgramByte` name clamping (decode.c:129-133),
+`findKey2ndParam`'s `programBytesAvailable` window
+(src/c47/programming/nextStep.c:17), the `forthMarkerTurnsOn` owning-
+program walk (decode.c:837) — is moot.
+
+**The encoder-extraction path is rejected outright, not deferred.**
+`_insertInProgram` is static (manage.c:716) and performs opcode
+substitution itself (manage.c:743-758); several `insertStepInProgram`
+arms execute side effects instead of emitting bytes; and `tmpString` is
+an implicit *input* to the encoder on some paths. There is no clean
+split. [VERIFIED by hand: manage.c:716-775.]
+
+### T7.1 — the bracket, and why it is one site
+
+`_tamProcessInput` is static (ui/tam.c:249) and
+**`tamProcessInput` (ui/tam.c:1414) is its only caller** — verified by
+grep over both trees this pass. So one wrapper brackets every commit and
+cancel path at once:
+
+```c
+void tamProcessInput(uint16_t item) {
+  const uint8_t savedMode = calcMode;
+  const bool_t  brk       = forthFoldArmed();
+  if(brk) { calcMode = CM_PEM; }
+  _tamProcessInput(item);
+  if(brk && calcMode == CM_PEM) { calcMode = savedMode; }
+  _tamUpdateBuffer();
+}
+```
+
+The `calcMode == CM_PEM` re-test on restore is load-bearing: an error
+raised inside the commit may have changed `calcMode`, and the epilogue
+must not clobber that.
+
+**Why per-site gating was rejected.** Five independent tracers each
+produced an *incomplete* enumeration of the commit sites, and they
+disagreed with each other — 6 vs 8, 20 vs 39, 3 vs 4 cancel sites. An
+enumeration nobody can produce reliably is not a gate anyone can
+maintain. The single bracket needs no enumeration at all.
+
+**Why a whole-episode bracket was rejected.** `screen.c` dispatches on
+`calcMode` (screen.c:6151) with a `CM_PEM` arm that paints the program
+listing, and the TAM overlay branches on `calcMode == CM_PEM`
+(screen.c:5637). A bracket spanning the episode would paint PEM under the
+TAM prompt. The narrow bracket cannot: no refresh runs inside the commit
+path — `_insertInProgram`'s tail calls `scanLabelsAndPrograms()` and
+`goToGlobalStep()` (manage.c:770-772), and neither refreshes
+[VERIFIED by hand: manage.c:770-775; lblGtoXeq.c:101-140]. The
+interactive TAM therefore renders exactly like a native AIM TAM.
+
+### T7.2 — what is materialised, and the one real hazard
+
+`forthFoldEnter` inserts one `ITM_FORTH` capture step seeded with the
+live line, using manage.c:941-952's shape verbatim (with `aimBuffer` in
+place of `""`), and parks `currentStep` on it — the state
+`forthCaptureSuspend` already expects (manage.c:1192-1197, whose comment
+documents exactly this contract). `forthFoldLeave` sweeps any residual
+step, deletes the capture step, and restores the PEM cursor context via
+`goToGlobalStep`.
+
+**This transiently mutates the user's program memory outside PEM.** That
+is the design's one genuine cost and it is stated plainly rather than
+buried:
+
+- `currentStep` interactively points wherever the PEM cursor was left, so
+  the transient steps land inside a real user program.
+- Two windows, with very different exposure. The **capture step** is
+  present for the whole TAM episode (seconds) — and a leaked one is
+  benign *by construction* since 2026-08-04: len=1/NUL decodes blank,
+  executes as an empty line, the picker skips it, and EDIT heals it
+  (§8.1). The **TAM step** (e.g. `STO 05`, which would execute if left
+  behind) exists only between its commit and the resume splice, both
+  inside one `_tamProcessInput` call — microseconds, no user input in
+  between.
+- `scanLabelsAndPrograms()` runs on both insert and delete
+  (manage.c:770, :228), so insert-then-delete restores `labelList` and
+  step numbering exactly.
+- `_insertInProgram` may call `resizeProgramMemory` (manage.c:723-728)
+  and `deleteStepsFromTo` does not shrink, so the first fold can
+  permanently grow program memory by up to one block. Not cumulative —
+  later folds reuse the freed space. Measure and report with the stage.
+
+The alternative — an explicit ~258-byte line buffer — forks
+`forthCaptureSuspend`/`forthCaptureResume` into interactive variants
+(parity risk on the exact code F6-4 exists to keep single-sourced),
+pushes named operands out of scope (they type into `aimBuffer`, which
+*is* the line), adds a lifetime and a poison sweep, **and still needs a
+program-memory anchor** for `addStepInProgram` to insert against and for
+`decodeOneStep` to read. Strictly more work for strictly less coverage.
+
+### T7.3 — admission: FOLD vs PARK
+
+Some TAM classes are out of v1 scope. They do **not** refuse the key and
+do **not** lose the line: they take **PARK** — the capture is still
+materialised and suspended (so the line survives) but the bracket is not
+armed, and the TAM executes live. PARK is precisely the owner-raised
+option (c), applied to the minority that cannot fold.
+
+PARK list, each with its reason: `ITM_GTOP` (navigates the program
+pointer via unguarded `fnGoto`/`goToPgmStep`, ui/tam.c:888-899 — not an
+operand); `ITM_ASSIGN`/`ITM_USERMODE` (zero `aimBuffer`, ui/tam.c:1198);
+`ITM_DELP` (already excluded by the PEM commit's own guard,
+ui/tam.c:1102); and modes `TM_NEWMENU`, `TM_STRING`, `TM_KEY` (each sets
+`FLAG_ALPHA` and/or zeroes `aimBuffer` on its own path, ui/tam.c:1351-1355).
+
+### T7.4 — the `determineItem` fix, and why it is provably safe
+
+One disjunct at keyboard.c:1686:
+
+```c
+else if((calcMode == CM_AIM && !(tam.mode && forthFoldPending())) || (catalog && …
+```
+
+PEM gets its escape for free because `forthCaptureSuspend` clears
+`FLAG_ALPHA` (manage.c:1202) and PEM's disjunct is
+`calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && …`. `CM_AIM` has no
+such conjunct, so it needs the explicit one.
+
+Safety is provable from the write-set, not from testing:
+`forthFoldPending()` reads `forthCap.foldMode`, written at exactly two
+places (`forthFoldEnter` sets, `forthFoldLeave` clears);
+`forthFoldEnter` has exactly one call site, gated on
+`forthCapIsInteractive()`, which is false everywhere before this stage.
+**The predicate's value is therefore identical to today's for every
+execution that exists today.**
+
+After the stage, in the one new state, parity holds both ways:
+`tam.alpha` false → falls through to `key->primaryTam` (the same column a
+PEM TAM gets); `tam.alpha` true → the `tam.alpha` disjunct on the same
+line still fires → AIM column → letters (again as PEM).
+
+Rejected: the broader `calcMode == CM_AIM && !tam.mode`. It also fixes
+what looks like a genuine pre-existing bug — a numeric TAM entered
+natively from `CM_AIM` is currently unkeyable — but on a path this stage
+has not traced and cannot test. Filed as a separate observation; not
+bundled.
+
+### T7.5 — a latent PEM bug found on the way (independent, shippable now)
+
+`decodeOneStep`'s `case PTP_DISABLED:` (decode.c:917-922) writes
+**nothing** to `tmpString` — it printfs under PC_BUILD and breaks. The
+fold splice at manage.c:1244-1245 then rejects only on
+`stringByteLength(tmpString) > 255`, so a `PTP_DISABLED` step folds
+**stale text from a previous caller** into the line. [VERIFIED by hand:
+decode.c:905-922, manage.c:1240-1248.]
+
+Fix is one line — `tmpString[0] = 0;` before the `decodeOneStep(ins)`
+call — plus treating an empty result as the keep-the-step break. This is
+a PEM bug that exists today, independent of Stage L, and per the bug-fix
+class-test rule it lands with a reproducer and a class-level test.
+Reachability from a TAM commit is still open (see T7.7).
+
+### T7.6 — one sub-agent claim corrected
+
+The synthesis reported a dead re-entrant call to `_tamProcessInput` at
+ui/tam.c:1347. The actual call there is to **`tamProcessInput`** — the
+public wrapper, i.e. the bracketed one. It is inside a `PC_BUILD`-only
+block guarded by `forceTamAlpha`, which is **never assigned `true`
+anywhere in either tree** (only ever cleared: ui/tam.c:1346,
+config.c:1789, src/c47/config.c:1778, src/c47/ui/tam.c:1331), so it is
+dead today. But the distinction matters: if that debug aid were ever
+enabled, it would re-enter the bracket from inside
+`leaveTamModeIfEnabled`, and the nested epilogue would restore
+`calcMode = CM_PEM`. The bracket must carry a comment pinning this, and
+the fold packet asserts `!forthFoldArmed()` on entry rather than assuming
+non-reentrancy.
+
+### T7.7 — still open before code is written
+
+1. Whether L1's landed interactive capture really is `CM_AIM` +
+   `FLAG_ALPHA` + line in `aimBuffer`. The whole shape assumes it; T1/T2
+   support it but L1 is not built yet. The fold's first packet sets that
+   state explicitly in its own fixture rather than assuming it.
+2. Whether a softkey press in `CM_AIM` with `tam.mode != 0` can execute
+   live before reaching `tamProcessInput` — `executeFunction` has
+   `calcMode != CM_PEM` arms above the TAM chain (keyboard.c:1047,
+   1053-1060). Settle by reading keyboard.c:1040-1240 as one chain.
+3. What paints the AIM register line during `CM_AIM` + `tam.mode`, given
+   screen.c:3881 gates it off. Pre-existing native behaviour, not a
+   regression, but the fold's look depends on it. Needs a `run-sim`
+   capture of a native AIM TAM, not a read.
+4. Whether `PTP_DISABLED` is reachable from any TAM-committable item
+   (drives whether T7.5's class test is non-empty). Note
+   `addStepInProgram` has its own `PTP_DISABLED` arm at manage.c:2275.
+5. `resizeProgramMemory` worst case for the transient pair — needs a
+   measurement of `freeProgramBytes` around enter/leave with a worst-case
+   named operand, not a read.
+6. Whether `TM_MENU`'s path reads a `tmpString` prefix the fold does not
+   supply (manage.c:2191-2195 against the inbound snapshot at
+   manage.c:1919-1920). If unsafe, `TM_MENU` moves from FOLD to PARK.
+
+### T7.8 — known v1 limitation, recorded not fixed
+
+Catalog-driven TAM commits bypass `tamProcessInput` entirely:
+keyboard.c:1148 and :1160 gate three commit sites on
+`calcMode == CM_PEM`, so the bracket never reaches them. Interactively
+they do not fire. The capture is never lost (the step is the store), but
+a flag-by-name or dynmenu-label pick during an interactive TAM will not
+fold. Deferred to a follow-on packet.
