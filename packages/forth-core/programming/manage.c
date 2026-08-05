@@ -1684,6 +1684,179 @@ void forthHistoryRecall(int16_t delta) {
 }
 
 
+/* ==================================================================
+ * PACKET_L1_F1 — the fold context: materialise, arm, sweep, restore.
+ *
+ * Materialises a real ITM_FORTH capture step in FHIST (L1-H's program),
+ * seeded with the live interactive line, so F2's calcMode = CM_PEM bracket
+ * around _tamProcessInput lets the landed F6-2/F6-4 PEM step-insert
+ * machinery run UNMODIFIED against a real step, giving the interactive line
+ * the same text by the same code.  This packet adds no tam.c wiring — it is
+ * inert in production, proven only by its own self-test which drives
+ * forthFoldEnter/forthFoldLeave directly.
+ * ================================================================== */
+
+/* C2: admission — FOLD (bracket armed) vs PARK (materialised and
+ * suspended so the line survives, bracket NOT armed, TAM runs live).  PARK
+ * is option (c) applied to the minority: it never refuses the key and
+ * never loses the line. */
+static bool_t _forthFoldAdmits(int16_t func, uint16_t mode) {
+  if(func == ITM_GTOP)   { return false; }  /* navigates the program pointer via
+                                               unguarded fnGoto/goToPgmStep,
+                                               ui/tam.c:888-899 — not an operand */
+  if(func == ITM_ASSIGN || func == ITM_USERMODE) { return false; }  /* zeroes
+                                               aimBuffer, ui/tam.c:1198-1200 */
+  if(func == ITM_DELP)   { return false; }  /* already excluded by the PEM commit's
+                                               own guard, ui/tam.c:1102 */
+  switch(mode) {
+    case TM_NEWMENU:                         /* sets FLAG_ALPHA + zeroes aimBuffer */
+    case TM_STRING:                          /* same */
+    case TM_KEY:                             /* half-buffer swap */
+      return false;
+    default: return true;
+  }
+}
+
+/* C1: the fold context.  One static instance.  savedProgram is
+ * currentProgramNumber — NOT a global step number: program boundaries are
+ * themselves global step numbers and all shift when FHIST grows or evicts
+ * (see L1-H C2).  forthFoldLeave restores via goToPgmStep, which re-reads
+ * programList[program - 1] AT RESTORE TIME, after scanLabelsAndPrograms has
+ * rebuilt it, so the base is current; a saved GLOBAL step number would be
+ * computed before FHIST grew/evicted and be stale by restore time.  Do not
+ * "simplify" this back to a saved global number. */
+typedef struct {
+  uint16_t savedProgram;
+  uint16_t savedLocalStep;
+  uint16_t savedFirstDisplayed;
+  uint16_t entryStepCount;      /* getNumberOfSteps() in FHIST, sampled AFTER
+                                    the reposition onto FHIST and BEFORE the
+                                    capture-step insert */
+  uint32_t capStepOffset;       /* capture step vs beginOfProgramMemory —
+                                    program memory may relocate */
+  uint8_t  savedZerothStep;     /* pemCursorIsZerothStep */
+  uint8_t  pad;
+} forthFoldCtx_t;
+
+static forthFoldCtx_t forthFoldCtx;
+
+/* C3: arm the fold.  Exact — see PACKET_L1_F1_fold_context.md C3 for the
+ * rationale behind every step; the comments here are the load-bearing
+ * subset. */
+void forthFoldEnter(int16_t func, uint16_t mode) {
+  if(!forthHistoryEnsure()) {
+    forthCapSetFoldModeRaw(0);   /* no program, no fold */
+    return;
+  }
+
+  if(currentProgramNumber < 1) {
+    goToGlobalStep(1);           /* guard programList[-1] below */
+  }
+  forthFoldCtx.savedProgram        = currentProgramNumber;
+  forthFoldCtx.savedLocalStep      = currentLocalStepNumber;
+  forthFoldCtx.savedFirstDisplayed = firstDisplayedLocalStepNumber;
+  forthFoldCtx.savedZerothStep     = (uint8_t)pemCursorIsZerothStep;
+  pemCursorIsZerothStep = false;  /* MUST: a parked capture step is a real
+                                      step, never the zeroth-step pseudo-
+                                      position.  addStepInProgram's pre-move
+                                      (manage.c:2664) is gated on this being
+                                      false; left true, the TAM step commits
+                                      BEFORE the capture step, resume's
+                                      offset-derived pointer (manage.c:
+                                      1210-1213) reads the TAM step, the
+                                      canary falsifies and the capture is
+                                      abandoned.  It is a persistent global
+                                      with no reset on leaving PEM. */
+
+  forthHistoryGotoLastStep();     /* L1-H's helper: park on FHIST's last
+                                      step, before its END */
+
+  forthFoldCtx.entryStepCount = getNumberOfSteps();  /* AFTER the reposition:
+                                      getNumberOfSteps() is keyed entirely on
+                                      currentProgramNumber (manage.c:2774-
+                                      2787), so sampling it in the CALLER's
+                                      program and comparing against FHIST's
+                                      count in forthFoldLeave would make the
+                                      sweep eat real history whenever FHIST
+                                      is longer. */
+
+  /* Materialise the capture step, seeded with the LIVE line.  This is
+   * manage.c:941-952's shape verbatim, with aimBuffer instead of "".  It
+   * leaves the live line recoverable in FHIST across a crash inside the
+   * fold — exactly where a history entry belongs (T7.2a) — so do not
+   * "simplify" this back to inserting at the caller's currentStep. */
+  _insertInProgram((uint8_t *)tmpString, _forthCapBuildStep(tmpString, aimBuffer));
+  --currentLocalStepNumber;
+  currentStep = findPreviousStep(currentStep);  /* park ON the capture step —
+                                      the state forthCaptureSuspend documents
+                                      at manage.c:1192-1197 */
+  forthFoldCtx.capStepOffset = (uint32_t)(currentStep - beginOfProgramMemory);
+
+  forthCapSetFoldModeRaw(_forthFoldAdmits(func, mode) ? 1 : 2);
+}
+
+/* C4: unwind the fold.  Exact — see PACKET_L1_F1_fold_context.md C4. */
+void forthFoldLeave(void) {
+  if(forthCapFoldModeRaw() == 0) {
+    return;
+  }
+
+  /* Debris sweep.  Normally zero iterations: forthCaptureResume already
+   * deleted the folded step (manage.c:1262).  This covers every break path
+   * in that loop (oversize text, no room) and the PARK case.  BOUNDED and
+   * guarded — deleteStepsFromTo is a silent no-op when from == to
+   * (manage.c:221-227), so an unbounded while can spin; findNextStep can
+   * return NULL (src/c47/programming/nextStep.c:151-157); and
+   * lastErrorCode may already be set on entry. */
+  { uint16_t savedErr = lastErrorCode;
+    int i;
+    lastErrorCode = ERROR_NONE;
+    for(i = 0; i < 4; i++) {
+      uint8_t *victim;
+      if(getNumberOfSteps() <= forthFoldCtx.entryStepCount + 1) {
+        break;
+      }
+      victim = findNextStep(currentStep);
+      if(victim == NULL || isAtEndOfProgram(victim) || isAtEndOfPrograms(victim)) {
+        break;
+      }
+      deleteStepsFromTo(victim, findNextStep(victim));
+      if(lastErrorCode != ERROR_NONE) {
+        break;                    /* L1-H's UAF guard */
+      }
+    }
+    if(lastErrorCode == ERROR_NONE) {
+      lastErrorCode = savedErr;
+    }
+  }
+
+  /* The capture step, re-derived from an OFFSET with a canary — currentStep
+   * has survived an arbitrary TAM, and _insertInProgram rebases every
+   * program pointer whenever it grows the region (manage.c:723-733).  This
+   * is the landed pattern: forth_capture.h keys the suspend snapshot off an
+   * offset for exactly this reason. */
+  { uint8_t *cap = beginOfProgramMemory + forthFoldCtx.capStepOffset;
+    if(cap < firstFreeProgramByte
+       && checkOpCodeOfStep(cap, ITM_FORTH)
+       && cap[2] == (uint8_t)STRING_LABEL_VARIABLE) {
+      deleteStepsFromTo(cap, findNextStep(cap));
+    }
+    /* else: canary failed — skip the delete, but still restore the cursor
+       and still clear foldMode below. */
+  }
+
+  goToPgmStep(forthFoldCtx.savedProgram, forthFoldCtx.savedLocalStep);
+  firstDisplayedLocalStepNumber = forthFoldCtx.savedFirstDisplayed;
+  defineFirstDisplayedStep();
+  pemCursorIsZerothStep = forthFoldCtx.savedZerothStep;
+
+  forthCapSetFoldModeRaw(0);
+}
+
+bool_t forthFoldArmed(void)   { return forthCapFoldModeRaw() == 1; }
+bool_t forthFoldPending(void) { return forthCapFoldModeRaw() != 0; }
+
+
 void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
   if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {
     hourGlassIconEnabled = false;

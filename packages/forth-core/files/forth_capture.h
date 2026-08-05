@@ -48,6 +48,19 @@ typedef struct {
                                  persisted.  Zero is PEM so every zero-init and
                                  memset-style reset means "PEM" — matching every
                                  capture that existed before Stage L. */
+  uint8_t     foldMode;       /* L1-F1: 0 = none, 1 = FOLD (bracket armed),
+                                 2 = PARK (materialised, bracket NOT armed).
+                                 OWNED BY forthFoldEnter/forthFoldLeave, and
+                                 by forthCapPowerReset() ONLY.  forthCapOpen,
+                                 forthCapClose and forthCapAbandonSuspended
+                                 MUST NOT touch it: forthCaptureResume calls
+                                 both forthCapOpen() and, on the canary path,
+                                 forthCapAbandonSuspended(), immediately
+                                 before F2 will call forthFoldLeave(), whose
+                                 first line early-returns on foldMode == 0 —
+                                 clearing it at those sites would make the
+                                 fold unable to unwind after a resume that
+                                 abandoned the suspension. */
   /* Suspend snapshot — meaningful only in FCAP_SUSPENDED: */
   uint16_t    savedCursor;    /* T_cursorPos at suspend */
   uint16_t    savedLocalStep; /* currentLocalStepNumber at suspend */
@@ -82,6 +95,14 @@ uint8_t     forthCapOriginRaw(void);     /* L1-1: the raw field — for the
                                              resume bracket */
 void        forthCapSetOrigin(uint8_t o);/* L1-1: the raw field — for the
                                              resume bracket */
+uint8_t     forthCapFoldModeRaw(void);     /* L1-F1: the raw field — for
+                                               forthFoldEnter/forthFoldLeave,
+                                               which live in manage.c (they
+                                               need the file-static insert/
+                                               step-build helpers there) and
+                                               so cannot reach the static
+                                               forthCap object directly */
+void        forthCapSetFoldModeRaw(uint8_t m); /* L1-F1: ditto */
 bool_t      forthCapTextNonEmpty(void); /* open && aimBuffer[0] != 0 */
 bool_t      forthCapKeysMode(void);        /* K1: keys-mode bit */
 void        forthCapSetKeysMode(bool_t on);
@@ -159,6 +180,21 @@ void     forthCaptureSanitizeRestoredUi(void);
 
 /* F6-3's shared inserter forthCapInsertName() now lives in forth_menu.h
  * alongside the picker that is its main caller (S2). */
+
+/* L1-F1: the fold context — materialise a real ITM_FORTH capture step in
+ * FHIST (L1-H's program), seeded with the live line, then (F2) let calcMode
+ * = CM_PEM for the duration of a TAM run the landed PEM step-insert
+ * machinery unmodified.  Defined in programming/manage.c beside the other
+ * capture orchestrators (forthCaptureSuspend/Resume, forthInteractiveEnter,
+ * the FHIST group) — they need the same file-static helpers.
+ * forthFoldEnter/forthFoldLeave are a bracket: every forthFoldEnter that
+ * returns with forthFoldPending() true must be matched by exactly one
+ * forthFoldLeave.  Inert until F2 wires a caller — this packet proves the
+ * pair only via its own self-test, which calls them directly. */
+void   forthFoldEnter(int16_t func, uint16_t mode);
+void   forthFoldLeave(void);
+bool_t forthFoldArmed(void);     /* foldMode == 1 (FOLD: bracket armed) */
+bool_t forthFoldPending(void);   /* foldMode != 0 (FOLD or PARK) */
 
 /* F6-6: capture state cannot outlive the dictionary lifecycle.  Called at
  * the same seams as forthScanTrackReset (init / clear / restore

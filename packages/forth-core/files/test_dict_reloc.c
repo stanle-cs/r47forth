@@ -1132,6 +1132,7 @@ static int test_capture_interactive_close(void);              /* L1-1 */
 static int test_capture_interactive_repl(void);                /* L1-2 */
 static int test_capture_interactive_divert(void);              /* L1-3 */
 static int test_history_program(void);                        /* L1-H */
+static int test_fold_context(void);                            /* L1-F1 */
 static int test_forth_fold_commit_recompiles(void);           /* FIX-7 */
 static int test_quote_glyph_accept_parity(void);              /* FIX-7 class */
 static int test_resume_drains_buried_catalog(void);           /* FIX-9 */
@@ -2127,6 +2128,13 @@ int forthDictSelfTest(void)
   forthDictInit();
   printf("  [DEBUG] running test_history_program...\n");
   fail |= test_history_program();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH L1-F1 TESTS (fold context: materialise, arm, sweep, restore)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_fold_context...\n");
+  fail |= test_fold_context();
   forthDictClear();
   forthGDictClear();
 

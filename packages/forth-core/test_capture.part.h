@@ -12762,3 +12762,605 @@ static int test_history_program(void)
 
   return fail;
 }
+
+
+/* L1-F1 (C6): total step count (LBL..END inclusive) of FHIST, or 0 if it
+ * does not exist yet.  Independent of currentProgramNumber on purpose —
+ * getNumberOfSteps() is keyed off that global (manage.c:2774-2787), which
+ * is exactly the coupling C6.9/Mutation-1 probe below, so counting must not
+ * go through it. */
+static uint16_t _tfcFhistStepCount(void)
+{
+  uint16_t prog = forthHistoryProgram();
+  uint8_t *step;
+  uint16_t n;
+  if (prog == 0) { return 0; }
+  step = programList[prog - 1].instructionPointer;
+  n = 1;
+  while (!(isAtEndOfProgram(step) || isAtEndOfPrograms(step))) {
+    n++;
+    step = findNextStep(step);
+  }
+  return n;
+}
+
+static int test_fold_context(void)
+{
+  int fail = 0, scFail;
+
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  int16_t savedCursorPos = T_cursorPos;
+
+  #define TFC_RESET() do { \
+    calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
+    clearSystemFlag(FLAG_ALPHA); lastErrorCode = ERROR_NONE; forthCapClose(); \
+  } while (0)
+
+  cleanupTestProgram();   /* pristine baseline before subcase 1 */
+
+  /* ---- Subcase 1 (C6.1): round-trip is bit-identical, no TAM in between. ---- */
+  scFail = 0;
+  TFC_RESET();
+  {
+    testProg_t p1;
+    int sEnd;
+    tpInit(&p1);
+    tpLbl(&p1, "F1P1");
+    tpSrc(&p1, "9 9 +");
+    sEnd = tpEnd(&p1);
+    if (sEnd < 0 || !tpWrite(&p1) || !tpSelectStep(&p1, sEnd)) {
+      printf("    [1] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t numBefore, localBefore, dispBefore;
+      uint32_t stepOffBefore, freeOffBefore;
+      bool_t zerothBefore;
+      char aimBefore[AIM_BUFFER_LENGTH];
+      int16_t cursorBefore;
+
+      firstDisplayedLocalStepNumber = 0;
+      defineFirstDisplayedStep();
+      pemCursorIsZerothStep = false;
+
+      /* FHIST must already exist before the snapshot: forthFoldEnter's own
+       * forthHistoryEnsure() call would otherwise create it here for the
+       * first time, permanently growing firstFreeProgramByte by FHIST's
+       * own LBL+END bytes — real, wanted growth (FHIST is a KEPT, persistent
+       * program, not something the fold cleans up), not something a round-
+       * trip identity check should be comparing against. */
+      forthHistoryEnsure();
+
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "1 2 +", 5); aimBuffer[5] = 0;
+      T_cursorPos = 5;
+
+      numBefore     = getNumberOfSteps();
+      /* OFFSETS, not raw pointers: _insertInProgram rebases every program
+       * pointer when it grows the underlying region (manage.c:723-733) —
+       * legitimate relocation the capture-step insert can still trigger
+       * even with FHIST pre-existing, not a defect.  A raw currentStep
+       * snapshot would be stale by construction across that; comparing the
+       * offset from beginOfProgramMemory is what actually survives it. */
+      stepOffBefore = (uint32_t)(currentStep - beginOfProgramMemory);
+      freeOffBefore = (uint32_t)(firstFreeProgramByte - beginOfProgramMemory);
+      localBefore  = currentLocalStepNumber;
+      dispBefore   = firstDisplayedLocalStepNumber;
+      zerothBefore = pemCursorIsZerothStep;
+      cursorBefore = T_cursorPos;
+      xcopy(aimBefore, aimBuffer, stringByteLength(aimBuffer) + 1);
+
+      forthFoldEnter(ITM_STO, TM_STORCL);
+      forthFoldLeave();
+
+      if (getNumberOfSteps() != numBefore) {
+        printf("    [1] FAIL: getNumberOfSteps() %u -> %u\n", numBefore, getNumberOfSteps());
+        scFail = 1;
+      }
+      if ((uint32_t)(currentStep - beginOfProgramMemory) != stepOffBefore) {
+        printf("    [1] FAIL: currentStep offset changed (%u -> %u)\n",
+               stepOffBefore, (unsigned)(currentStep - beginOfProgramMemory));
+        scFail = 1;
+      }
+      if ((uint32_t)(firstFreeProgramByte - beginOfProgramMemory) != freeOffBefore) {
+        printf("    [1] FAIL: firstFreeProgramByte offset changed (%u -> %u)\n",
+               freeOffBefore, (unsigned)(firstFreeProgramByte - beginOfProgramMemory));
+        scFail = 1;
+      }
+      if (currentLocalStepNumber != localBefore) {
+        printf("    [1] FAIL: currentLocalStepNumber %u -> %u\n", localBefore, currentLocalStepNumber);
+        scFail = 1;
+      }
+      if (firstDisplayedLocalStepNumber != dispBefore) {
+        printf("    [1] FAIL: firstDisplayedLocalStepNumber %u -> %u\n", dispBefore, firstDisplayedLocalStepNumber);
+        scFail = 1;
+      }
+      if ((bool_t)pemCursorIsZerothStep != zerothBefore) {
+        printf("    [1] FAIL: pemCursorIsZerothStep changed\n");
+        scFail = 1;
+      }
+      if (T_cursorPos != cursorBefore) {
+        printf("    [1] FAIL: T_cursorPos %d -> %d\n", cursorBefore, T_cursorPos);
+        scFail = 1;
+      }
+      if (compareString(aimBuffer, aimBefore, CMP_BINARY) != 0) {
+        printf("    [1] FAIL: aimBuffer \"%s\" -> \"%s\"\n", aimBefore, aimBuffer);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [1] PASS: enter+leave with no TAM in between is bit-identical to entry\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 2 (C6.2): same, with an empty caller program. ---- */
+  scFail = 0;
+  TFC_RESET();
+  {
+    testProg_t p2;
+    int sEnd;
+    tpInit(&p2);
+    tpLbl(&p2, "F1P2");
+    sEnd = tpEnd(&p2);
+    if (sEnd < 0 || !tpWrite(&p2) || !tpSelectStep(&p2, sEnd)) {
+      printf("    [2] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t numBefore, localBefore;
+      uint32_t stepOffBefore, freeOffBefore;
+
+      firstDisplayedLocalStepNumber = 0;
+      defineFirstDisplayedStep();
+      pemCursorIsZerothStep = false;
+
+      /* FHIST must already exist before the snapshot -- see subcase 1's
+       * comment: its own first-time creation is real, wanted growth, not
+       * something a round-trip identity check should be comparing against. */
+      forthHistoryEnsure();
+
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "2 2 +", 5); aimBuffer[5] = 0;
+      T_cursorPos = 5;
+
+      numBefore     = getNumberOfSteps();
+      /* Offsets, not raw pointers -- see subcase 1's comment: the capture-
+       * step insert can still rebase beginOfProgramMemory even with FHIST
+       * pre-existing. */
+      stepOffBefore = (uint32_t)(currentStep - beginOfProgramMemory);
+      freeOffBefore = (uint32_t)(firstFreeProgramByte - beginOfProgramMemory);
+      localBefore   = currentLocalStepNumber;
+
+      forthFoldEnter(ITM_STO, TM_STORCL);
+      forthFoldLeave();
+
+      if (getNumberOfSteps() != numBefore
+          || (uint32_t)(currentStep - beginOfProgramMemory) != stepOffBefore
+          || (uint32_t)(firstFreeProgramByte - beginOfProgramMemory) != freeOffBefore
+          || currentLocalStepNumber != localBefore) {
+        printf("    [2] FAIL: round-trip not identical on an empty (LBL+END only) caller program "
+               "(steps %u->%u, stepOff %u->%u, freeOff %u->%u, local %u->%u)\n",
+               numBefore, getNumberOfSteps(), stepOffBefore,
+               (unsigned)(currentStep - beginOfProgramMemory), freeOffBefore,
+               (unsigned)(firstFreeProgramByte - beginOfProgramMemory), localBefore, currentLocalStepNumber);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [2] PASS: round-trip is bit-identical with an empty caller program\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 3 (C6.3): cursor inside a user program, FHIST BEFORE it in
+   * memory (built directly into the fixture) so the fold's own insert
+   * shifts the caller program's absolute address and global step numbers —
+   * exactly the case Mutation 3 (global-step restore) needs to go red on.
+   * Assert the caller's program is byte-identical afterwards. ---- */
+  scFail = 0;
+  TFC_RESET();
+  {
+    testProg_t p3;
+    int sLbl, sSrc1;
+    uint16_t p3Off;
+    tpInit(&p3);
+    tpLbl(&p3, "FHIST");
+    tpSrc(&p3, "seed a");
+    tpSrc(&p3, "seed b");
+    tpEnd(&p3);
+    sLbl  = tpLbl(&p3, "F1P3");
+    sSrc1 = tpSrc(&p3, "1 1 +");
+    tpSrc(&p3, "2 2 +");
+    tpEnd(&p3);
+    p3Off = p3.stepOff[sLbl];
+    if (sSrc1 < 0 || !tpWrite(&p3) || !tpSelectStep(&p3, sSrc1)) {
+      printf("    [3] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t p3Len = p3.len - p3Off;
+      uint8_t before[128];
+      uint16_t progBefore = currentProgramNumber;
+      uint16_t localBefore = currentLocalStepNumber;
+
+      if (p3Len > sizeof(before)) {
+        printf("    [3] FIXTURE FAIL: p3 region too big for snapshot buffer\n");
+        scFail = 1;
+      } else {
+        xcopy(before, tpStepAddr(&p3, sLbl), p3Len);
+
+        forthCapOpenInteractive();
+        xcopy(aimBuffer, "3 3 +", 5); aimBuffer[5] = 0;
+
+        forthFoldEnter(ITM_STO, TM_STORCL);
+        forthFoldLeave();
+
+        if (memcmp(tpStepAddr(&p3, sLbl), before, p3Len) != 0) {
+          printf("    [3] FAIL: caller's program bytes changed by the fold round-trip\n");
+          scFail = 1;
+        }
+        if (currentProgramNumber != progBefore || currentLocalStepNumber != localBefore
+            || currentStep != tpStepAddr(&p3, sSrc1)) {
+          printf("    [3] FAIL: cursor not restored onto the caller's original step\n");
+          scFail = 1;
+        }
+      }
+    }
+  }
+  if (!scFail) printf("    [3] PASS: caller's program (positioned after FHIST) is byte-identical; cursor restored\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 4 (C6.4): the capture step is really materialised between
+   * enter and leave — FHIST gains one step that decodes to the line. ---- */
+  scFail = 0;
+  TFC_RESET();
+  {
+    testProg_t p4;
+    int sEnd;
+    tpInit(&p4);
+    tpLbl(&p4, "F1P4");
+    sEnd = tpEnd(&p4);
+    if (sEnd < 0 || !tpWrite(&p4) || !tpSelectStep(&p4, sEnd)) {
+      printf("    [4] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t countBefore, countAfter;
+
+      forthHistoryEnsure();   /* force-create FHIST empty, for a clean count */
+      countBefore = _tfcFhistStepCount();
+
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "4 4 +", 5); aimBuffer[5] = 0;
+
+      forthFoldEnter(ITM_STO, TM_STORCL);
+
+      countAfter = _tfcFhistStepCount();
+      if (countAfter != countBefore + 1) {
+        printf("    [4] FAIL: FHIST step count %u -> %u, expected +1\n", countBefore, countAfter);
+        scFail = 1;
+      }
+      {
+        uint8_t len;
+        if (!checkOpCodeOfStep(currentStep, ITM_FORTH)
+            || !forthStepPayload(currentStep, &len) || len != 5
+            || memcmp(currentStep + 4, "4 4 +", 5) != 0) {
+          printf("    [4] FAIL: parked capture step does not decode to \"4 4 +\"\n");
+          scFail = 1;
+        }
+      }
+
+      forthFoldLeave();
+    }
+  }
+  if (!scFail) printf("    [4] PASS: FHIST gains one step between enter and leave, decoding to the line\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 5 (C6.5): PARK does not arm. ---- */
+  scFail = 0;
+  TFC_RESET();
+  {
+    testProg_t p5;
+    int sEnd;
+    tpInit(&p5);
+    tpLbl(&p5, "F1P5");
+    sEnd = tpEnd(&p5);
+    if (sEnd < 0 || !tpWrite(&p5) || !tpSelectStep(&p5, sEnd)) {
+      printf("    [5] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t countBefore;
+      forthHistoryEnsure();
+      countBefore = _tfcFhistStepCount();
+
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "5 5 +", 5); aimBuffer[5] = 0;
+
+      forthFoldEnter(ITM_GTOP, TM_LABEL);
+
+      if (!forthFoldPending()) {
+        printf("    [5] FAIL: forthFoldPending() false right after enter\n");
+        scFail = 1;
+      }
+      if (forthFoldArmed()) {
+        printf("    [5] FAIL: forthFoldArmed() true for ITM_GTOP, expected PARK (false)\n");
+        scFail = 1;
+      }
+
+      forthFoldLeave();
+
+      if (forthFoldPending()) {
+        printf("    [5] FAIL: forthFoldPending() still true after leave\n");
+        scFail = 1;
+      }
+      if (_tfcFhistStepCount() != countBefore) {
+        printf("    [5] FAIL: FHIST step count %u -> %u, PARK leave did not sweep cleanly\n",
+               countBefore, _tfcFhistStepCount());
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [5] PASS: PARK (ITM_GTOP) is pending but not armed; leave still sweeps cleanly\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 6 (C6.6): sweep clears debris hand-inserted after the
+   * capture step (every break path in resume's own drain loop, and PARK). ---- */
+  scFail = 0;
+  TFC_RESET();
+  {
+    testProg_t p6;
+    int sEnd;
+    tpInit(&p6);
+    tpLbl(&p6, "F1P6");
+    sEnd = tpEnd(&p6);
+    if (sEnd < 0 || !tpWrite(&p6) || !tpSelectStep(&p6, sEnd)) {
+      printf("    [6] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t countBefore;
+      forthHistoryEnsure();
+      countBefore = _tfcFhistStepCount();
+
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "6 6 +", 5); aimBuffer[5] = 0;
+
+      forthFoldEnter(ITM_STO, TM_STORCL);
+
+      /* Hand-insert debris after the capture step: forthHistoryPush saves
+       * and restores the caller's cursor (here, the fold's own currentStep,
+       * parked ON the capture step), so it inserts "debris" immediately
+       * after the capture step and leaves currentStep back on it — exactly
+       * the shape a break path in forthCaptureResume's drain loop would
+       * leave behind. */
+      forthHistoryPush("debris");
+
+      forthFoldLeave();
+
+      if (_tfcFhistStepCount() != countBefore) {
+        printf("    [6] FAIL: FHIST step count %u -> %u after sweep, expected back to entry\n",
+               countBefore, _tfcFhistStepCount());
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [6] PASS: sweep clears hand-inserted debris; count returns to entry\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 7 (C6.7): foldMode survives forthCapClose/
+   * forthCapAbandonSuspended/forthCapOpen — the INVERTED expectation this
+   * packet's C1 documents (only forthCapPowerReset clears it). ---- */
+  scFail = 0;
+  TFC_RESET();
+  {
+    testProg_t p7;
+    int sEnd;
+    tpInit(&p7);
+    tpLbl(&p7, "F1P7");
+    sEnd = tpEnd(&p7);
+    if (sEnd < 0 || !tpWrite(&p7) || !tpSelectStep(&p7, sEnd)) {
+      printf("    [7] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t countBefore = (forthHistoryEnsure(), _tfcFhistStepCount());
+
+      /* Round A: forthCapClose() */
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "7 7 A", 5); aimBuffer[5] = 0;
+      forthFoldEnter(ITM_STO, TM_STORCL);
+      forthCapClose();
+      if (!forthFoldPending()) {
+        printf("    [7] FAIL: forthFoldPending() false after forthCapClose() (expected survive)\n");
+        scFail = 1;
+      }
+      forthFoldLeave();
+      if (forthFoldPending() || _tfcFhistStepCount() != countBefore) {
+        printf("    [7] FAIL: leave after forthCapClose() did not sweep/restore cleanly\n");
+        scFail = 1;
+      }
+
+      /* Round B: forthCapAbandonSuspended(), genuinely SUSPENDED first */
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "7 7 B", 5); aimBuffer[5] = 0;
+      forthFoldEnter(ITM_STO, TM_STORCL);
+      forthCapSuspendState(0, 0, 0, 0);   /* force FCAP_SUSPENDED */
+      forthCapAbandonSuspended();
+      if (!forthFoldPending()) {
+        printf("    [7] FAIL: forthFoldPending() false after forthCapAbandonSuspended() (expected survive)\n");
+        scFail = 1;
+      }
+      forthFoldLeave();
+      if (forthFoldPending() || _tfcFhistStepCount() != countBefore) {
+        printf("    [7] FAIL: leave after forthCapAbandonSuspended() did not sweep/restore cleanly\n");
+        scFail = 1;
+      }
+
+      /* Round C: forthCapOpen() (PEM open, not interactive) */
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "7 7 C", 5); aimBuffer[5] = 0;
+      forthFoldEnter(ITM_STO, TM_STORCL);
+      forthCapOpen();
+      if (!forthFoldPending()) {
+        printf("    [7] FAIL: forthFoldPending() false after forthCapOpen() (expected survive)\n");
+        scFail = 1;
+      }
+      forthFoldLeave();
+      if (forthFoldPending() || _tfcFhistStepCount() != countBefore) {
+        printf("    [7] FAIL: leave after forthCapOpen() did not sweep/restore cleanly\n");
+        scFail = 1;
+      }
+
+      /* forthCapPowerReset() DOES clear it — the last-resort reset, no
+       * cleanup promised (the debris capture step is left behind). */
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "7 7 D", 5); aimBuffer[5] = 0;
+      forthFoldEnter(ITM_STO, TM_STORCL);
+      if (!forthFoldPending()) {
+        printf("    [7] FIXTURE FAIL: enter did not arm before the power-reset check\n");
+        scFail = 1;
+      }
+      forthCapPowerReset();
+      if (forthFoldPending()) {
+        printf("    [7] FAIL: forthFoldPending() still true after forthCapPowerReset()\n");
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [7] PASS: foldMode survives Close/AbandonSuspended/Open; only PowerReset clears it\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 8 (C6.8): zeroth-step normalisation — set true before
+   * enter; the (simulated) TAM step lands after the capture step; leave
+   * restores the flag to true. ---- */
+  scFail = 0;
+  TFC_RESET();
+  {
+    testProg_t p8;
+    int sEnd;
+    tpInit(&p8);
+    tpLbl(&p8, "F1P8");
+    sEnd = tpEnd(&p8);
+    if (sEnd < 0 || !tpWrite(&p8) || !tpSelectStep(&p8, sEnd)) {
+      printf("    [8] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t countBefore = (forthHistoryEnsure(), _tfcFhistStepCount());
+
+      pemCursorIsZerothStep = true;
+
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "8 8 +", 5); aimBuffer[5] = 0;
+
+      forthFoldEnter(ITM_STO, TM_STORCL);
+
+      if (pemCursorIsZerothStep) {
+        printf("    [8] FAIL: pemCursorIsZerothStep still true after enter, expected false while folded\n");
+        scFail = 1;
+      }
+      {
+        /* Replicates addStepInProgram's own pre-move guard (manage.c:2664)
+         * verbatim -- the mechanism this subcase pins -- without invoking
+         * the full TAM dispatch (F2's scope, not this packet's). */
+        uint8_t *capStep = currentStep;
+        uint8_t *afterCap = findNextStep(capStep);
+        aimBuffer[0] = 0;
+        clearSystemFlag(FLAG_ALPHA);
+        if ((!pemCursorIsZerothStep)
+            && ((aimBuffer[0] == 0 && !getSystemFlag(FLAG_ALPHA)) || tam.mode)
+            && !isAtEndOfProgram(currentStep) && !isAtEndOfPrograms(currentStep)) {
+          currentStep = findNextStep(currentStep);
+          ++currentLocalStepNumber;
+        }
+        if (currentStep != afterCap) {
+          printf("    [8] FAIL: pre-move did not land past the capture step (TAM step would land before it)\n");
+          scFail = 1;
+        }
+      }
+
+      forthFoldLeave();
+
+      if (!pemCursorIsZerothStep) {
+        printf("    [8] FAIL: pemCursorIsZerothStep not restored to true after leave\n");
+        scFail = 1;
+      }
+      if (_tfcFhistStepCount() != countBefore) {
+        printf("    [8] FAIL: FHIST step count %u -> %u, expected back to entry\n",
+               countBefore, _tfcFhistStepCount());
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [8] PASS: zeroth-step forced false while folded; TAM step lands after; restored true on leave\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- Subcase 9 (C6.9, the B1 pin): FHIST holds >= 3 lines, the caller's
+   * program is shorter — the sweep must not eat real history. None of
+   * C6.1-C6.6 catches a sweep keyed off the wrong program's step count. ---- */
+  scFail = 0;
+  TFC_RESET();
+  {
+    testProg_t p9;
+    int sEnd;
+    tpInit(&p9);
+    tpLbl(&p9, "F1P9");            /* shorter than FHIST: LBL+END, 2 steps */
+    sEnd = tpEnd(&p9);
+    if (sEnd < 0 || !tpWrite(&p9) || !tpSelectStep(&p9, sEnd)) {
+      printf("    [9] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t countBefore;
+
+      forthHistoryPush("h1");
+      forthHistoryPush("h2");
+      forthHistoryPush("h3");
+      countBefore = _tfcFhistStepCount();   /* LBL + 3 lines + END = 5 */
+      if (countBefore < 5) {
+        printf("    [9] FIXTURE FAIL: FHIST only %u steps, expected >= 5 (LBL+3+END)\n", countBefore);
+        scFail = 1;
+      }
+
+      /* Re-select: forthHistoryPush restores the caller's cursor, but
+       * confirm we are still on the (2-step) caller program, shorter than
+       * FHIST, as the subcase requires. */
+      if (getNumberOfSteps() >= countBefore) {
+        printf("    [9] FIXTURE FAIL: caller program (%u steps) not shorter than FHIST (%u)\n",
+               getNumberOfSteps(), countBefore);
+        scFail = 1;
+      }
+
+      forthCapOpenInteractive();
+      xcopy(aimBuffer, "9 9 +", 5); aimBuffer[5] = 0;
+
+      forthFoldEnter(ITM_STO, TM_STORCL);
+      forthFoldLeave();
+
+      if (_tfcFhistStepCount() != countBefore) {
+        printf("    [9] FAIL: FHIST step count %u -> %u — sweep ate real history "
+               "(sampled entryStepCount in the wrong program)\n",
+               countBefore, _tfcFhistStepCount());
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [9] PASS: sweep does not eat real FHIST history when the caller's program is shorter\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  #undef TFC_RESET
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  T_cursorPos = savedCursorPos;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}

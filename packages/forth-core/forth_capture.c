@@ -73,6 +73,9 @@ void forthCapPowerReset(void) {
                                    dictionary-lifecycle reset */
   forthCap.origin = FCAP_ORIGIN_PEM; /* L1-1: same rationale as keysMode above */
   forthCap.historyIndex = FORTH_HIST_BROWSE_NONE; /* L1-H: same rationale */
+  forthCap.foldMode = 0;        /* L1-F1: the fold's own last-resort reset —
+                                   forthCapOpen/Close/AbandonSuspended MUST
+                                   NOT touch this field; see forth_capture.h */
 }
 
 bool_t forthCapIsOpen(void)  { return forthCap.state == FCAP_OPEN; }
@@ -85,6 +88,10 @@ bool_t forthCapIsInteractive(void) {
 }
 uint8_t forthCapOriginRaw(void)          { return forthCap.origin; }
 void    forthCapSetOrigin(uint8_t o)     { forthCap.origin = o; }
+/* L1-F1: raw foldMode access for forthFoldEnter/forthFoldLeave (manage.c —
+ * see forth_capture.h for why they cannot reach forthCap directly). */
+uint8_t forthCapFoldModeRaw(void)        { return forthCap.foldMode; }
+void    forthCapSetFoldModeRaw(uint8_t m){ forthCap.foldMode = m; }
 bool_t forthCapTextNonEmpty(void) {
   return forthCap.state == FCAP_OPEN && aimBuffer[0] != 0;
 }
