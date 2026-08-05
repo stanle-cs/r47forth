@@ -21,7 +21,7 @@ grep -n "forthHistoryPush" packages/forth-core/programming/manage.c   # L1-2 stu
 grep -n "static uint16_t _forthCapBuildStep" packages/forth-core/programming/manage.c
 grep -n "void scanLabelsAndPrograms" packages/forth-core/programming/manage.c
 grep -n "numberOfPrograms++" src/c47/programming/manage.c             # the END rule
-grep -n "bool_t forthStepPayload" packages/forth-core/forth_bridge.c
+grep -n "forthStepPayload" packages/forth-core/forth_bridge.c   # expect :60 (def) + call sites
 grep -n "void fnKeyUp" packages/forth-core/keyboard.c
 ```
 
@@ -49,15 +49,41 @@ forthHistoryProgram() -> uint16_t   /* program number, or 0 if absent */
 forthHistoryEnsure() -> bool_t      /* creates it if absent; false on failure */
     if forthHistoryProgram() != 0: return true
     save the caller's cursor tuple (see C2)
-    position at the end of program memory
-    insert:  LBL 'FHIST'            (a global named label — use the landed
-                                     STRING_LABEL_VARIABLE label emit shape)
-    insert:  END                     (the program boundary — a program is
-                                     delimited by an END step whose successor
-                                     is not .END., src/c47/programming/manage.c:143-146)
+    position currentStep ON THE .END. STEP  (test with isAtEndOfPrograms)
+    insert:  LBL 'FHIST'            (global named label; landed
+                                     STRING_LABEL_VARIABLE emit shape)
+    insert:  END
     restore the caller's cursor tuple
     return forthHistoryProgram() != 0
 ```
+
+**Position and order are load-bearing — rev 1 deferred them and rev 1 was
+wrong.** `_insertInProgram` shifts bytes up and writes **before** the step
+`currentStep` points at (manage.c:735 shift, :759-767 write), and
+`scanLabelsAndPrograms` assigns a label to the program number current **at
+the LBL's position** (src/c47/programming/manage.c:177). So parking on the
+last user program's `END` and inserting there would splice FHIST's label
+**into the user's last program** — silent corruption of their code.
+
+Correct sequence, with `currentStep` on the `.END.` step for BOTH inserts:
+
+```
+  [ …user progs… END ][ .END. ]          currentStep -> .END.
+  insert LBL 'FHIST'
+  [ …user progs… END ][ LBL ][ .END. ]   currentStep -> .END. (advanced past LBL)
+  insert END
+  [ …user progs… END ][ LBL ][ END ][ .END. ]
+```
+
+The trailing `END` is what makes it a program: `scanLabelsAndPrograms`
+counts a program at an `END` whose successor is not `.END.`
+(src/c47/programming/manage.c:143-146), so the user's last `END` now
+counts, and FHIST's own `END` (successor `.END.`) does not add another.
+
+**Assert the structure, do not assume it** (C5.1): after `forthHistoryEnsure`
+on a machine with one user program, assert `forthHistoryProgram()` returns
+a number **different from** the user's, and that the user program's bytes
+are unchanged — compare a captured byte range before and after, not prose.
 
 **OPEN, settle by test not by reading (T7.2a item 1):** an `END`
 immediately followed by `.END.` does **not** increment `numberOfPrograms`
@@ -75,18 +101,28 @@ them around every history operation, using the landed
 
 ```c
 typedef struct {
-  uint32_t savedGlobalStep;       /* currentLocalStepNumber + programList[n-1].step - 1 */
+  uint16_t savedProgram;          /* currentProgramNumber */
+  uint16_t savedLocalStep;        /* currentLocalStepNumber */
   uint16_t savedFirstDisplayed;   /* firstDisplayedLocalStepNumber */
   uint8_t  savedZerothStep;       /* pemCursorIsZerothStep */
   uint8_t  pad;
 } forthHistCursor_t;              /* 8 bytes, BSS, one instance */
 ```
 
-Restore via `goToGlobalStep(savedGlobalStep)` — it recomputes
-`currentProgramNumber`, `beginOfCurrentProgram`, `endOfCurrentProgram`,
-`currentLocalStepNumber` and `currentStep` consistently
-(lblGtoXeq.c:101-140) — then `firstDisplayedLocalStepNumber` +
-`defineFirstDisplayedStep()` + `pemCursorIsZerothStep`.
+Restore via `goToPgmStep(savedProgram, savedLocalStep)` (lblGtoXeq.c:155),
+then `firstDisplayedLocalStepNumber` + `defineFirstDisplayedStep()` +
+`pemCursorIsZerothStep`.
+
+**A global step number is NOT a stable key here** — rev 1 used one.
+Program boundaries are themselves global step numbers
+(src/c47/programming/manage.c:392), so every one of them shifts when FHIST
+gains or evicts a line; `goToGlobalStep` resolves by counting from the
+start (lblGtoXeq.c:120-133) and would land somewhere else. The landed
+suspend keys off a **byte offset** for exactly this reason
+(manage.c:1191). `(program, localStep)` is stable as long as FHIST is not
+inserted at a lower index than the caller's program — **and if the ensure
+creates FHIST, remap `savedProgram` accordingly**. C5.5 must run the
+restore test with FHIST **before** the caller's program as well as after.
 
 **Do not use `getNumberOfSteps()` to address FHIST.** It reads the
 *global* `currentProgramNumber` (manage.c:2374-2387) and is evaluated
@@ -158,12 +194,31 @@ Report what determineItem returns for the up and down keys with shiftF set
 in CM_AIM, and spec the divert against those ids.
 ```
 
-Divert them in `processKeyAction`'s `case CM_AIM`, beside L1-2's R/S guard:
+**The divert site is the item switch, NOT `case CM_AIM`.** Rev 1 said
+"beside L1-2's R/S guard" — wrong: `ITM_RS` has no `case` in
+`processKeyAction`'s `switch(item)` (keyboard.c:2496-2755), which is why
+it falls to `default:` and reaches `case CM_AIM:`; the f-shifted arrows
+resolve to `CHR_caseUP`/`CHR_caseDN` (src/c47/assign.c:27, :32, field 7 =
+`fShiftedAim`), which **do** have cases (keyboard.c:2682, :2695) that end
+`keyActionProcessed = true; break;` and therefore never reach `CM_AIM`.
 
+Add two guarded arms immediately before keyboard.c:2682, falling through
+to the landed case-change body when the guard is false:
+
+```c
+            case CHR_caseUP:
+              if(forthCapIsInteractive()) {
+                forthHistoryRecall(-1);
+                keyActionProcessed = true;
+                break;
+              }
+              /* fall through to the landed case-change body */
 ```
-    if forthCapIsInteractive() && item == <f-up id>:   forthHistoryRecall(-1); processed
-    if forthCapIsInteractive() && item == <f-down id>: forthHistoryRecall(+1); processed
-```
+
+and the mirror for `CHR_caseDN` with `+1`. **Confirm the resolved ids
+empirically before editing** — report what `determineItem` returns for the
+up and down keys with `shiftF` set in `CM_AIM`, and if it is not
+`CHR_caseUP`/`CHR_caseDN`, STOP and report rather than adapting.
 
 ```
 forthHistoryRecall(delta):
@@ -199,8 +254,11 @@ of push being unconditional and needs no extra code, but pin it (C5.6).
 4. **Cap evicts oldest.** Push lines until over `FORTH_HISTORY_MAX_BYTES`;
    assert the byte total is under the cap, the newest line survived, and
    the oldest is gone.
-5. **The cursor is restored.** Note the full cursor tuple, push, assert
-   every field is bit-identical afterwards. Repeat across an eviction.
+5. **The cursor is restored, both orders.** Note the full cursor tuple,
+   push, assert every field is bit-identical afterwards; repeat across an
+   eviction. Run it **twice**: once with FHIST created after the caller's
+   program, and once with the caller's program created after FHIST, so the
+   `(program, localStep)` key is exercised in both orders.
 6. **Recall round-trip.** Push two lines, open a capture, recall back
    twice and forward once; assert the line text at each step and that
    editing + ENTER pushes a new newest without altering the browsed entry.
