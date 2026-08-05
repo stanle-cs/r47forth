@@ -204,7 +204,7 @@ fnForthOuter(unused):
           if !(forthCatalogMenuOnTop() or forthCatalogBuriedOnStack()): break
           popSoftmenu()
 
-  fnAim(NOPARAM)                                /* CM_AIM, FLAG_ALPHA, -MNU_ALPHA */
+  forthEnterAimSurfaceNoLift()                  /* see below — NOT fnAim */
   forthCapOpenInteractive()                     /* clears aimBuffer; cannot fail */
   T_cursorPos = 0
   displayAIMbufferoffset = 0
@@ -218,14 +218,86 @@ fnForthOuter(unused):
       T_cursorPos = (aimBuffer[0] == 0) ? 0 : stringLastGlyph(aimBuffer) + 1
 ```
 
-**Ordering is load-bearing.** `fnAim` → `calcModeAim`
-(src/c47/calcMode.c:62) calls `liftStack()`, so the X read must precede
-it. `calcModeAim` also sets `alphaCase = CAPS_AIM_DEFAULT`,
-`nextChar = NC_NORMAL`, clears `FLAG_NUMLOCK`, resets `scrLock`, pushes
-`-MNU_ALPHA`, forces `softmenuStack[0].softmenuId` 0→1, and sets
-`FLAG_ALPHA` — all wanted, none to be re-implemented here. And
+### C2b — the AIM surface WITHOUT the stack lift (T9 — do not shortcut)
+
+**`fnAim` must not be used.** `fnAim` → `calcModeAim`
+(src/c47/calcMode.c:62-76) calls `liftStack()`, which ends
+**unconditionally** with
+
+```c
+  setRegisterDataPointer(REGISTER_X, allocC47Blocks(REAL34_SIZE_IN_BLOCKS));
+  setRegisterDataType(REGISTER_X, dtReal34, amNone);
+```
+
+replacing X with an **uninitialised** `dtReal34` — pushed to Y when
+`FLAG_ASLIFT` is set, freed outright when it is not. The interactive
+capture's premise is that the line operates on the **live stack** (L-R2
+drops a seeded string precisely "so interpreted words see a clean
+stack"). With a lifting open, `16` in X followed by typing `1 +` and
+ENTER computes `garbage + 1`. See STAGE_L_TRACES.md §T9.
+
+Repairing after `fnAim` is **not** an option: the repair is conditional on
+`FLAG_ASLIFT`, and when it is clear the old X has already been freed and
+is unrecoverable. An override of `calcMode.c`/`bufferize.c` is **not** an
+option: new upstream patch surface for one call, against S1 discipline.
+
+Write the non-lifting equivalent in `forth_compile.c` beside
+`fnForthOuter`. It is `calcModeAim`'s body **minus `liftStack()`**, and
+nothing else may differ — read src/c47/calcMode.c:62-92 and mirror it:
+
+```c
+/* T9: calcModeAim's setup WITHOUT its liftStack().  Every line below is
+ * calcModeAim's (src/c47/calcMode.c:62-92); the ONLY omission is the lift,
+ * because an interactive Forth line operates on the live stack.  If
+ * calcModeAim gains a statement upstream, this must gain it too — the
+ * rebase discipline for this function is "diff it against calcModeAim". */
+static void forthEnterAimSurfaceNoLift(void) {
+  alphaCase = CAPS_AIM_DEFAULT;
+  nextChar  = NC_NORMAL;
+  clearSystemFlag(FLAG_NUMLOCK);
+  scrLock   = NC_NORMAL;
+
+  calcMode = CM_AIM;
+  /* NO liftStack() — T9 */
+  clearRegisterLine(AIM_REGISTER_LINE, true, true);
+  xCursor = 1;
+  yCursor = Y_POSITION_OF_AIM_LINE + 6;
+  cursorFont = &standardFont;
+  cursorEnabled = true;
+
+  showSoftmenu(-MNU_ALPHA);
+  if(softmenuStack[0].softmenuId == 0) { softmenuStack[0].softmenuId = 1; }
+  setSystemFlag(FLAG_ALPHA);
+  calcModeAimGui();
+}
+```
+
+**Verify against the tree before landing**: read src/c47/calcMode.c:62-92
+and report any statement of `calcModeAim`'s that this omits other than
+`liftStack()`. A silent omission is a STOP condition. Note `calcModeAim`
+guards its `calcMode`/lift block on
+`!tam.mode && calcMode != CM_ASSIGN && calcMode != CM_PEM &&
+calcMode != CM_ASN_BROWSER`; state in your report whether
+`fnForthOuter` can be reached in any of those states and, if so, add the
+same guard.
+
 `forthCapOpenInteractive()` clears `aimBuffer` itself, which is why the
-seed copy follows it.
+seed copy follows it. The X read still precedes everything, because
+`forthTakeSourceFromX` drops X and the drop must happen before the
+surface is set up.
+
+**Test obligation (replaces T1.2's and T1.5's "X untouched" wording,
+which was written against a lifting open and would have masked this):**
+
+- T1.2 asserts X is **bit-identical** to its pre-FORTH value — same type,
+  same value — via `read_reg_int32`, not merely "not a string".
+- New subcase: put `16` in X, open interactive, type `1 +`, ENTER, assert
+  X == 17. This is the assertion that actually pins T9.
+- New subcase: assert `getStackTop()`-relative depth is unchanged by the
+  open (nothing was pushed).
+
+**Mutation 9:** replace `forthEnterAimSurfaceNoLift()` with
+`fnAim(NOPARAM)`. Expect RED at the `1 +` subcase.
 
 **`tam.function` is NOT set.** It is the PEM capture's sentinel, keyed to
 `calcMode == CM_PEM` at every consumer; setting it interactively leaks PEM
