@@ -90,6 +90,7 @@ void covLoadNestedPgms(uint16_t unusedButMandatoryParameter);
 void covBmpName(uint16_t which);
 void covHashBmp(uint16_t which);
 void fnForthOuter(uint16_t unused);
+void forthTestRunFromX(uint16_t unused);   /* L1-0: the one-shot interpret-from-X core */
 
 static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
 
@@ -715,6 +716,14 @@ const funcTest_t funcTestNoParam[] = {
   {"fnWho",                  fnWho                 },
 
   // Forth outer interpreter (forth-core package).
+  // L1-0: forth_interp.txt drives the one-shot interpret-from-X semantics.
+  // fnForthOuter becomes a capture opener in L1-1, so the .txt cases moved to
+  // forthTestRunFromX, which carries that body verbatim.  The fnForthOuter
+  // entry stays registered for L1-1's own cases.
+  {"forthTestRunFromX",      forthTestRunFromX, 1  },   /* coverageDriver: a
+                              testSuite-local driver, NOT a catalog item — it has
+                              no indexOfItems row, and the lookup at :5711 would
+                              fail without this flag. */
   {"fnForthOuter",           fnForthOuter          },
   {"fnExecute",              runPgm                },
   {"",                       NULL                  }

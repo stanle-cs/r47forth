@@ -1292,10 +1292,14 @@ static int test_spill_window_parity(void)
   return fail;
 }
 
-/* D3-5: pin the REAL item entry, not the test wrapper — fnForthOuter
- * must bracket depth/spill exactly like forthOuterInterpret. Found by
- * the T6 upstream-runner cases (spill dead on the keyboard path). */
-static int test_fnforthouter_brackets(void)
+/* D3-5: pin the interpret-from-X core — it must bracket depth/spill
+ * exactly like forthOuterInterpret.  Found by the T6 upstream-runner cases
+ * (spill dead on the keyboard path).  This pinned fnForthOuter until
+ * Stage L; L-R2 made that entry a capture opener, so the pin moved to
+ * forthTestRunFromX, which carries the old body verbatim.  L1-1 adds the
+ * separate pin for what fnForthOuter does NOW (opens a capture, seeds
+ * from a string X, consumes it at seed). */
+static int test_forth_run_from_x_brackets(void)
 {
   int fail = 0;
   uint8_t tType;
@@ -1303,25 +1307,25 @@ static int test_fnforthouter_brackets(void)
 
   x_set_string("1 2 3 4 5 6 7 8 9 10 11 + + + + + + + + + +");
   lastErrorCode = ERROR_NONE;
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
-    printf("    FAIL: fnForthOuter deep line errored (%d)\n", lastErrorCode);
+    printf("    FAIL: forthTestRunFromX deep line errored (%d)\n", lastErrorCode);
     fail = 1;
   } else {
     read_reg_int32(REGISTER_X, &tType, &tVal);
     if (tType != dtLongInteger || tVal != 66) {
-      printf("    FAIL: fnForthOuter deep line X=%ld type=%u, expected 66\n",
+      printf("    FAIL: forthTestRunFromX deep line X=%ld type=%u, expected 66\n",
              (long)tVal, (unsigned)tType);
       fail = 1;
     }
   }
   if (forthSpillCount() != 0) {
-    printf("    FAIL: spill not drained after fnForthOuter (%u)\n",
+    printf("    FAIL: spill not drained after forthTestRunFromX (%u)\n",
            (unsigned)forthSpillCount());
     fail = 1;
   }
   if (!fail) {
-    printf("    PASS: fnForthOuter brackets depth — deep line = 66, spill drained\n");
+    printf("    PASS: forthTestRunFromX brackets depth — deep line = 66, spill drained\n");
   }
 
   lastErrorCode = ERROR_NONE;

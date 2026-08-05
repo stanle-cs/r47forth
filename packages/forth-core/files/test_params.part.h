@@ -163,12 +163,12 @@ static int test_outer_real_literal(void)
   return 0;
 }
 
-/* "3 DUP +" via fnForthOuter -> X == 6 */
+/* "3 DUP +" via forthTestRunFromX -> X == 6 */
 static int test_outer_simple_expr(void)
 {
   lastErrorCode = ERROR_NONE;
   x_set_string("3 DUP +");
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: \"3 DUP +\" error %d\n", lastErrorCode);
     return 1;
@@ -181,12 +181,12 @@ static int test_outer_simple_expr(void)
   return 0;
 }
 
-/* ": SQ2 DUP * ;" then "3 SQ2" via fnForthOuter -> X == 9 (§7.4 full acceptance) */
+/* ": SQ2 DUP * ;" then "3 SQ2" via forthTestRunFromX -> X == 9 (§7.4 full acceptance) */
 static int test_outer_compile_invoke(void)
 {
   lastErrorCode = ERROR_NONE;
   x_set_string(": SQ2 DUP * ;");
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: \": SQ2 DUP * ;\" compile error %d\n", lastErrorCode);
     return 1;
@@ -194,7 +194,7 @@ static int test_outer_compile_invoke(void)
 
   lastErrorCode = ERROR_NONE;
   x_set_string("3 SQ2");
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: \"3 SQ2\" error %d\n", lastErrorCode);
     return 1;
@@ -343,7 +343,7 @@ static int test_outer_nonstring_x(void)
 {
   forthPushInt32(42);  /* X is now dtLongInteger, not dtString */
   lastErrorCode = ERROR_NONE;
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_INVALID_DATA_TYPE_FOR_OP) {
     printf("    FAIL: non-string X gave error %d (expected %d)\n",
     lastErrorCode, ERROR_INVALID_DATA_TYPE_FOR_OP);
@@ -354,12 +354,12 @@ static int test_outer_nonstring_x(void)
   return 0;
 }
 
-/* Keyboard glyph: "3 4 " STD_CROSS via fnForthOuter -> X == 12 */
+/* Keyboard glyph: "3 4 " STD_CROSS via forthTestRunFromX -> X == 12 */
 static int test_outer_glyph_cross(void)
 {
   lastErrorCode = ERROR_NONE;
   x_set_string("3 4 " STD_CROSS);
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: \"3 4 <cross>\" error %d\n", lastErrorCode);
     return 1;
@@ -372,12 +372,12 @@ static int test_outer_glyph_cross(void)
   return 0;
 }
 
-/* Keyboard glyph: "3 4 " STD_DOT via fnForthOuter -> X == 12 */
+/* Keyboard glyph: "3 4 " STD_DOT via forthTestRunFromX -> X == 12 */
 static int test_outer_glyph_dot(void)
 {
   lastErrorCode = ERROR_NONE;
   x_set_string("3 4 " STD_DOT);
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: \"3 4 <dot>\" error %d\n", lastErrorCode);
     return 1;
@@ -390,12 +390,12 @@ static int test_outer_glyph_dot(void)
   return 0;
 }
 
-/* Keyboard glyph: "8 4 " STD_DIVIDE via fnForthOuter -> X == 2 */
+/* Keyboard glyph: "8 4 " STD_DIVIDE via forthTestRunFromX -> X == 2 */
 static int test_outer_glyph_divide(void)
 {
   lastErrorCode = ERROR_NONE;
   x_set_string("8 4 " STD_DIVIDE);
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: \"8 4 <divide>\" error %d\n", lastErrorCode);
     return 1;
@@ -2291,7 +2291,7 @@ static int test_param_textual_numeric(void)
   { int subFail = 0;
     lastErrorCode = ERROR_NONE;
     x_set_string(": W1 RMODE 3 ;");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [1] FAIL: compile RMODE 3 error %d\n", lastErrorCode);
       subFail = 1;
@@ -2308,7 +2308,7 @@ static int test_param_textual_numeric(void)
   { int subFail = 0;
     lastErrorCode = ERROR_NONE;
     x_set_string("RMODE 3");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [2] FAIL: execute RMODE 3 error %d\n", lastErrorCode);
       subFail = 1;
@@ -2325,7 +2325,7 @@ static int test_param_textual_numeric(void)
   { int subFail = 0;
     lastErrorCode = ERROR_NONE;
     x_set_string(": W2 BestF 100 ;");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [3] FAIL: compile BestF 100 error %d\n", lastErrorCode);
       subFail = 1;
@@ -2343,7 +2343,7 @@ static int test_param_textual_numeric(void)
     /* Short form: compile CNST 10 (value 10 <= 249 -> [10][0]) */
     lastErrorCode = ERROR_NONE;
     x_set_string(": W3 CNST 10 ;");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [4] FAIL: compile CNST 10 error %d\n", lastErrorCode);
       subFail = 1;
@@ -2355,7 +2355,7 @@ static int test_param_textual_numeric(void)
       forthPushInt32(0);
       lastErrorCode = ERROR_NONE;
       x_set_string("CNST 10");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [4] FAIL: interpret CNST 10 error %d\n", lastErrorCode);
         subFail = 1;
@@ -2405,7 +2405,7 @@ static int test_param_textual_numeric(void)
   { int subFail = 0;
     lastErrorCode = ERROR_NONE;
     x_set_string("RMODE 10");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_OUT_OF_RANGE) {
       printf("    [5] FAIL: expected ERROR_OUT_OF_RANGE, got %d\n", lastErrorCode);
       subFail = 1;
@@ -2422,7 +2422,7 @@ static int test_param_textual_numeric(void)
   { int subFail = 0;
     lastErrorCode = ERROR_NONE;
     x_set_string("RMODE abc");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_INVALID_NAME) {
       printf("    [6] FAIL: expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
       subFail = 1;
@@ -2439,7 +2439,7 @@ static int test_param_textual_numeric(void)
   { int subFail = 0;
     lastErrorCode = ERROR_NONE;
     x_set_string("RTN");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_OPERATION_UNDEFINED) {
       printf("    [7] FAIL: expected ERROR_OPERATION_UNDEFINED, got %d\n", lastErrorCode);
       subFail = 1;
@@ -2475,14 +2475,14 @@ static int test_param_register_flag(void)
     lastErrorCode = ERROR_NONE;
     forthDictClear();
     x_set_string(": SR0 STO 05 ;");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [1] FAIL: compile SR0 error %d\n", lastErrorCode);
       subFail = 1;
     }
     if (!subFail) {
       x_set_string(": RR0 RCL 05 ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [1] FAIL: compile RR0 error %d\n", lastErrorCode);
         subFail = 1;
@@ -2517,7 +2517,7 @@ static int test_param_register_flag(void)
      * {5,0}, FTOK_EXIT. */
     if (!subFail) {
       x_set_string(": PR0 STO 05 ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [1] FAIL: compile PR0 error %d\n", lastErrorCode);
         subFail = 1;
@@ -2556,14 +2556,14 @@ static int test_param_register_flag(void)
     lastErrorCode = ERROR_NONE;
     forthDictClear();
     x_set_string(": SA STO A ;");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [2] FAIL: compile SA error %d\n", lastErrorCode);
       subFail = 1;
     }
     if (!subFail) {
       x_set_string(": RA RCL A ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [2] FAIL: compile RA error %d\n", lastErrorCode);
         subFail = 1;
@@ -2593,7 +2593,7 @@ static int test_param_register_flag(void)
     /* Byte-image pin: ": PRA STO A ;" body cells are FTOK_C47, ITM_STO, {104,0}, FTOK_EXIT */
     if (!subFail) {
       x_set_string(": PRA STO A ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [2] FAIL: compile PRA error %d\n", lastErrorCode);
         subFail = 1;
@@ -2634,14 +2634,14 @@ static int test_param_register_flag(void)
     lastErrorCode = ERROR_NONE;
     forthDictClear();
     x_set_string(": SM STO M ;");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [3] FAIL: compile SM error %d\n", lastErrorCode);
       subFail = 1;
     }
     if (!subFail) {
       x_set_string(": RM RCL M ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [3] FAIL: compile RM error %d\n", lastErrorCode);
         subFail = 1;
@@ -2676,7 +2676,7 @@ static int test_param_register_flag(void)
      * FTOK_C47, ITM_STO, {211,0}, FTOK_EXIT. */
     if (!subFail) {
       x_set_string(": PRM STO M ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [3] FAIL: compile PRM error %d\n", lastErrorCode);
         subFail = 1;
@@ -2716,7 +2716,7 @@ static int test_param_register_flag(void)
     forthDictClear();
     /* Byte-image: ": PRL STO .05 ;" body cell {117, 0} (112+5) */
     x_set_string(": PRL STO .05 ;");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [4] FAIL: compile PRL error %d\n", lastErrorCode);
       subFail = 1;
@@ -2750,7 +2750,7 @@ static int test_param_register_flag(void)
      * it raises OUT_OF_RANGE and performs no store. We mirror that exactly. */
     if (!subFail) {
       x_set_string(": PRL2 STO .05 ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [4] FAIL: compile PRL2 error %d\n", lastErrorCode);
         subFail = 1;
@@ -2784,7 +2784,7 @@ static int test_param_register_flag(void)
     forthDictClear();
     /* Byte-images */
     x_set_string(": PF1 SF 10 ;");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [5] FAIL: compile PF1 error %d\n", lastErrorCode);
       subFail = 1;
@@ -2814,7 +2814,7 @@ static int test_param_register_flag(void)
     /* PF2: SF .31 -> {143, 0} */
     if (!subFail) {
       x_set_string(": PF2 SF .31 ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [5] FAIL: compile PF2 error %d\n", lastErrorCode);
         subFail = 1;
@@ -2842,7 +2842,7 @@ static int test_param_register_flag(void)
     if (!subFail) {
       lastErrorCode = ERROR_NONE;
       x_set_string("SF .32");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_OUT_OF_RANGE) {
         printf("    [5] FAIL: SF .32 expected ERROR_OUT_OF_RANGE, got %d\n", lastErrorCode);
         subFail = 1;
@@ -2851,7 +2851,7 @@ static int test_param_register_flag(void)
     if (!subFail) {
       lastErrorCode = ERROR_NONE;
       x_set_string(": SFQ SF q ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_INVALID_NAME) {
         printf("    [5] FAIL: SF q expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
         subFail = 1;
@@ -2860,7 +2860,7 @@ static int test_param_register_flag(void)
     if (!subFail) {
       lastErrorCode = ERROR_NONE;
       x_set_string(": CF100 CF 100 ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_OUT_OF_RANGE) {
         printf("    [5] FAIL: CF 100 expected ERROR_OUT_OF_RANGE, got %d\n", lastErrorCode);
         subFail = 1;
@@ -2891,7 +2891,7 @@ static int test_param_register_flag(void)
       char cbuf[128];
       sprintf(cbuf, ": PSH %s ;", sbuf);
       x_set_string(cbuf);
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [6] FAIL: compile PSH error %d\n", lastErrorCode);
         subFail = 1;
@@ -2921,14 +2921,14 @@ static int test_param_register_flag(void)
     }
     /* Behavior: seed T=11,Z=22,Y=33,X=44, interpret -> X==33, Y==44, Z==22, T==11.
      * The seed MUST ride in the source line: x_set_string overwrites X with the
-     * source string and fnForthOuter drops it, so anything pushed beforehand is
+     * source string and forthTestRunFromX drops it, so anything pushed beforehand is
      * shifted out of place before the shuffle ever runs. */
     if (!subFail) {
       char rbuf[128];
       lastErrorCode = ERROR_NONE;
       sprintf(rbuf, "11 22 33 44 %s", sbuf);
       x_set_string(rbuf);
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [6] FAIL: shuffle yxzt error %d\n", lastErrorCode);
         subFail = 1;
@@ -2972,7 +2972,7 @@ static int test_param_register_flag(void)
       sprintf(bad0, "%s y", indexOfItems[1694].itemCatalogName);
       lastErrorCode = ERROR_NONE;
       x_set_string(bad0);
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_INVALID_NAME) {
         printf("    [6] FAIL: y expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
         subFail = 1;
@@ -2983,7 +2983,7 @@ static int test_param_register_flag(void)
       sprintf(bad1, "%s yxz", indexOfItems[1694].itemCatalogName);
       lastErrorCode = ERROR_NONE;
       x_set_string(bad1);
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_INVALID_NAME) {
         printf("    [6] FAIL: yxz expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
         subFail = 1;
@@ -2994,7 +2994,7 @@ static int test_param_register_flag(void)
       sprintf(bad2, "%s yxzq", indexOfItems[1694].itemCatalogName);
       lastErrorCode = ERROR_NONE;
       x_set_string(bad2);
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_INVALID_NAME) {
         printf("    [6] FAIL: yxzq expected ERROR_INVALID_NAME, got %d\n", lastErrorCode);
         subFail = 1;
@@ -3132,7 +3132,7 @@ static int test_param_named_indirect(void)
   }
 
   /* Subcase 1: named variable create + recall round-trip, and the inherited
-   * ERROR_UNDEF_SOURCE_VAR miss. Note forthOuterInterpret (not fnForthOuter):
+   * ERROR_UNDEF_SOURCE_VAR miss. Note forthOuterInterpret (not forthTestRunFromX):
    * x_set_string would overwrite the seeded X with the source string. */
   { int subFail = 0;
     lastErrorCode = ERROR_NONE;
@@ -3177,7 +3177,7 @@ static int test_param_named_indirect(void)
     lastErrorCode = ERROR_NONE;
     forthDictClear();
     x_set_string(": PN1 STO 'VZ' ;");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [2] FAIL: compile PN1 error %d\n", lastErrorCode);
       subFail = 1;
@@ -3202,7 +3202,7 @@ static int test_param_named_indirect(void)
     }
     if (!subFail) {
       x_set_string(": PN2 RCL 'ABC' ;");
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [2] FAIL: compile PN2 error %d\n", lastErrorCode);
         subFail = 1;
@@ -3233,7 +3233,7 @@ static int test_param_named_indirect(void)
     lastErrorCode = ERROR_NONE;
     forthDictClear();
     x_set_string(": PN1 STO 'VZ' ;");
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [3] FAIL: compile PN1 error %d\n", lastErrorCode);
       subFail = 1;
@@ -3293,7 +3293,7 @@ static int test_param_named_indirect(void)
     if (!subFail) {
       sprintf(sbuf, ": PN3 STO %s05 ;", STD_RIGHT_ARROW);
       x_set_string(sbuf);
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [4] FAIL: compile PN3 error %d\n", lastErrorCode);
         subFail = 1;
@@ -3366,7 +3366,7 @@ static int test_param_named_indirect(void)
     if (!subFail) {
       sprintf(sbuf, ": PN4 STO %s'VP' ;", STD_RIGHT_ARROW);
       x_set_string(sbuf);
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [5] FAIL: compile PN4 error %d\n", lastErrorCode);
         subFail = 1;
@@ -3398,7 +3398,7 @@ static int test_param_named_indirect(void)
     forthDictClear();
     sprintf(sbuf, ": PF3 SF '%s' ;", name0);
     x_set_string(sbuf);
-    fnForthOuter(NOPARAM);
+    forthTestRunFromX(NOPARAM);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [6] FAIL: compile SF '%s' error %d\n", name0, lastErrorCode);
       subFail = 1;
@@ -3415,7 +3415,7 @@ static int test_param_named_indirect(void)
     if (!subFail) {
       sprintf(sbuf, ": PF4 SF '%s' ;", name64);
       x_set_string(sbuf);
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [6] FAIL: compile SF '%s' error %d\n", name64, lastErrorCode);
         subFail = 1;
@@ -3461,7 +3461,7 @@ static int test_param_named_indirect(void)
     if (!subFail) {
       sprintf(sbuf, ": PM1 %s 'ZZQQ' ;", mname);
       x_set_string(sbuf);
-      fnForthOuter(NOPARAM);
+      forthTestRunFromX(NOPARAM);
       if (lastErrorCode != ERROR_NONE) {
         printf("    [7] FAIL: compile PM1 error %d\n", lastErrorCode);
         subFail = 1;

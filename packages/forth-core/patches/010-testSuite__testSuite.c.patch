@@ -1,20 +1,29 @@
 diff --git a/src/testSuite/testSuite.c b/src/testSuite/testSuite.c
-index bc8a9792a584984b3e18dee2a6626ce81a330205..43b5d96f84c054496c5ab0aab3264885f22c27ea 100644
+index bc8a9792a584984b3e18dee2a6626ce81a330205..97ef3538129a18b34e06710dcfbfbaea0106c2dd 100644
 --- a/src/testSuite/testSuite.c
 +++ b/src/testSuite/testSuite.c
-@@ -89,6 +89,7 @@ void covLoadGraphPgms(uint16_t unusedButMandatoryParameter);
+@@ -89,6 +89,8 @@ void covLoadGraphPgms(uint16_t unusedButMandatoryParameter);
  void covLoadNestedPgms(uint16_t unusedButMandatoryParameter);
  void covBmpName(uint16_t which);
  void covHashBmp(uint16_t which);
 +void fnForthOuter(uint16_t unused);
++void forthTestRunFromX(uint16_t unused);   /* L1-0: the one-shot interpret-from-X core */
  
  static const char regNames[] = "XYZTABCDLIJKMNPQRSEFGHOUVW";
  
-@@ -713,6 +714,8 @@ const funcTest_t funcTestNoParam[] = {
+@@ -713,6 +715,16 @@ const funcTest_t funcTestNoParam[] = {
    {"fnClAll",                fnClAll               },
    {"fnWho",                  fnWho                 },
  
 +  // Forth outer interpreter (forth-core package).
++  // L1-0: forth_interp.txt drives the one-shot interpret-from-X semantics.
++  // fnForthOuter becomes a capture opener in L1-1, so the .txt cases moved to
++  // forthTestRunFromX, which carries that body verbatim.  The fnForthOuter
++  // entry stays registered for L1-1's own cases.
++  {"forthTestRunFromX",      forthTestRunFromX, 1  },   /* coverageDriver: a
++                              testSuite-local driver, NOT a catalog item — it has
++                              no indexOfItems row, and the lookup at :5711 would
++                              fail without this flag. */
 +  {"fnForthOuter",           fnForthOuter          },
    {"fnExecute",              runPgm                },
    {"",                       NULL                  }

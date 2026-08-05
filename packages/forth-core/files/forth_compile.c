@@ -1620,6 +1620,47 @@ void fnForthOuter(uint16_t unused) {
   forthOuterRun(&ctx, FORTH_OUTER_FULL);
 }
 
+#if defined(FORTH_DEBUG_SELFTEST)
+/* L1-0: the battery's "interpret the string in X" entry.
+ *
+ * Until Stage L this WAS fnForthOuter: ITM_FORTH outside PEM required a
+ * string in X, interpreted it, and consumed it.  L-R2 rules that FORTH
+ * always opens an interactive capture instead, so the item entry stops
+ * interpreting and the sites that drove it for its interpret semantics
+ * need those semantics under their own name.
+ *
+ * The body is fnForthOuter's, VERBATIM as of 2026-08-04 — same two error
+ * codes, same copy-before-drop ordering (drop invalidates the string),
+ * same FORTH_OUTER_FULL run — so every existing assertion keeps its exact
+ * stack expectation.  Do not "improve" it: forthOuterInterpret() is NOT a
+ * substitute (it never touches X, so the drop that these tests' stack
+ * expectations are written against would not happen, and it clears
+ * lastErrorCode on entry where this does not).
+ *
+ * Self-test builds only; production never calls it. */
+void forthTestRunFromX(uint16_t unusedButMandatoryParameter) {
+  (void)unusedButMandatoryParameter;   /* L1-0: the signature exists so this
+                                          entry is dispatch-table compatible —
+                                          testSuite.c's table is
+                                          {name, void(*)(uint16_t)} and
+                                          forth_interp.txt drives it by name. */
+  if (getRegisterDataType(REGISTER_X) != dtString) {
+    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  int32_t len = stringByteLength(REGISTER_STRING_DATA(REGISTER_X));
+  if (len + 1 > FORTH_SOURCE_MAX) {
+    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  forthOuterCtx_t ctx;
+  ctx.savedScope = forthCurrentScope;
+  xcopy(ctx.source, REGISTER_STRING_DATA(REGISTER_X), len + 1);
+  fnDrop(NOPARAM);   /* copy MUST precede drop: drop invalidates the string */
+  forthOuterRun(&ctx, FORTH_OUTER_FULL);
+}
+#endif
+
 /* ---- P-2: Program-step entry point (§3.3.2, §9.2) ---- */
 
 /* §9.2 Architecture 2: first-touch pre-scan of the owning program.

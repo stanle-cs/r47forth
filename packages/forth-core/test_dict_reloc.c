@@ -242,7 +242,11 @@ static int y_is_longint(int32_t val)
 
 /* ==================================================================
  * Sub-phase C acceptance tests  --  DESIGN.md §7.4
- * Exercise fnForthOuter (the REAL entry point), not forthOuterInterpret.
+ * Exercise forthTestRunFromX (the one-shot interpret-from-X core), not
+ * forthOuterInterpret: these cases are written against a source line that
+ * ARRIVES IN X and is consumed, so their stack expectations depend on the
+ * drop.  Before Stage L this core was fnForthOuter itself; L-R2 made that
+ * item entry a capture opener (see PACKET_L1_0).
  * ================================================================== */
 
 /* Helper: store a C string as a dtString in REGISTER_X */
@@ -1259,7 +1263,7 @@ static int test_data_stack_overflow_guard(void);
 static int test_deep_recursion_spill(void);
 static int test_spill_native_boundary(void);
 static int test_spill_window_parity(void);
-static int test_fnforthouter_brackets(void);
+static int test_forth_run_from_x_brackets(void);
 static int test_native_lift_after_forth(void);
 static int test_savings_program(void);
 
@@ -2278,8 +2282,8 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_spill_window_parity...\n");
   fail |= test_spill_window_parity();
 
-  printf("  [DEBUG] running test_fnforthouter_brackets...\n");
-  fail |= test_fnforthouter_brackets();
+  printf("  [DEBUG] running test_forth_run_from_x_brackets...\n");
+  fail |= test_forth_run_from_x_brackets();
 
   printf("  [DEBUG] running test_spill_region...\n");
   fail |= test_spill_region();

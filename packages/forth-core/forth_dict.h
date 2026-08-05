@@ -260,6 +260,11 @@ bool_t   forthPrimInvoke(uint16_t idx);
 /* Bridge functions (§6) */
 void fnForthCall(uint16_t param);
 void fnForthOuter(uint16_t param);
+#if defined(FORTH_DEBUG_SELFTEST)
+void forthTestRunFromX(uint16_t unusedButMandatoryParameter);   /* L1-0: battery entry for the one-shot
+                                   interpret-the-string-in-X semantics that
+                                   fnForthOuter carried before Stage L */
+#endif
 
 /* Program-step entry (P-2, §3.3.2) */
 void forthProgramStep(const uint8_t *payload);

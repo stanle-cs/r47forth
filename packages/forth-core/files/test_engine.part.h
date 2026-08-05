@@ -977,7 +977,7 @@ static int test_ilit_compile_interpret_parity(void)
   /* Compiled path: define : W 128 + ; */
   lastErrorCode = ERROR_NONE;
   x_set_string(": W 128 + ;");
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: compile \": W 128 + ;\" error %d\n", lastErrorCode);
     return 1;
@@ -999,7 +999,7 @@ static int test_ilit_compile_interpret_parity(void)
   /* Interpreted path: "42 128 +" -> also 170 */
   x_set_string("42 128 +");
   lastErrorCode = ERROR_NONE;
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: interpreted \"42 128 +\" error %d\n", lastErrorCode);
     return 1;
@@ -5486,7 +5486,7 @@ static int test_dict_name_by_index(void)
 
   lastErrorCode = ERROR_NONE;
   x_set_string(": ALPHA 1 + ;");
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: define ALPHA error %d\n", lastErrorCode);
     return 1;
@@ -5494,7 +5494,7 @@ static int test_dict_name_by_index(void)
 
   lastErrorCode = ERROR_NONE;
   x_set_string(": BETA 2 + ;");
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: define BETA error %d\n", lastErrorCode);
     return 1;
@@ -9032,7 +9032,7 @@ static int test_unterminated_def_errors(void)
 
   lastErrorCode = ERROR_NONE;
   x_set_string(": FOO DUP");
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
 
   if (lastErrorCode != ERROR_INVALID_NAME) {
     printf("    FAIL: lastErrorCode = %d, expected %d (ERROR_INVALID_NAME)\n",
@@ -9074,7 +9074,7 @@ static int test_overlong_token_in_def_keeps_error(void)
 
   lastErrorCode = ERROR_NONE;
   x_set_string(longSource);
-  fnForthOuter(NOPARAM);
+  forthTestRunFromX(NOPARAM);
 
   if (lastErrorCode != ERROR_INPUT_TOO_LONG) {
     printf("    FAIL: lastErrorCode = %d, expected %d (ERROR_INPUT_TOO_LONG, not INVALID_NAME %d)\n",
