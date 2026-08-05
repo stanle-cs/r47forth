@@ -56,7 +56,7 @@ grep -c "fail |= test_interactive_acceptance();" packages/forth-core/test_dict_r
 grep -c "uint16_t forthCapHistoryIndex" packages/forth-core/forth_capture.h                # expect 1
 grep -c "forthCapFoldModeRaw(void);" packages/forth-core/forth_capture.h                   # expect 1
 git status --short | wc -l                                                                  # expect 0
-git log --oneline -3 | grep -c "the stage story, part 2"                                   # expect 1
+git log --oneline -3 | grep -c "recall, FHIST re-run, durability"                          # expect 1
 ```
 
 ## Edit 1 — the test body (APPEND at the very end of `packages/forth-core/test_capture.part.h`)
