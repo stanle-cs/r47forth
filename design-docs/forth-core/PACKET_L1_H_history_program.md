@@ -129,6 +129,18 @@ inserted at a lower index than the caller's program — **and if the ensure
 creates FHIST, remap `savedProgram` accordingly**. C5.5 must run the
 restore test with FHIST **before** the caller's program as well as after.
 
+**Why `goToPgmStep` is stable when a saved global step number is not — the
+distinction an implementer will otherwise "simplify" away.** `goToPgmStep`
+is itself `goToGlobalStep(programList[program - 1].step + step - 1)`
+(lblGtoXeq.c:155-158), so at a glance the two look equivalent. They are
+not: the difference is **when the global number is computed.** Saving a
+global step number computes it *before* FHIST grew or evicted, so it is
+stale by restore time. `goToPgmStep` re-reads `programList[program - 1]`
+*at restore time*, after `scanLabelsAndPrograms` has rebuilt it, so the
+base is current and `base + localStep - 1` lands where it should. Do not
+"simplify" this back to a saved global number.
+
+
 **Do not use `getNumberOfSteps()` to address FHIST.** It reads the
 *global* `currentProgramNumber` (manage.c:2374-2387) and is evaluated
 before any `goToPgmStep` call, so it counts the program you are leaving.

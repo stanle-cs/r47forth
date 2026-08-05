@@ -44,6 +44,17 @@ typedef struct {
                                     program memory may relocate */
   /* NOTE: forthHistoryGotoLastStep() is L1-H's export; if L1-H did not
      declare it, that is a STOP, not something to re-implement here. */
+**Why `goToPgmStep` is stable when a saved global step number is not — the
+distinction an implementer will otherwise "simplify" away.** `goToPgmStep`
+is itself `goToGlobalStep(programList[program - 1].step + step - 1)`
+(lblGtoXeq.c:155-158), so at a glance the two look equivalent. They are
+not: the difference is **when the global number is computed.** Saving a
+global step number computes it *before* FHIST grew or evicted, so it is
+stale by restore time. `goToPgmStep` re-reads `programList[program - 1]`
+*at restore time*, after `scanLabelsAndPrograms` has rebuilt it, so the
+base is current and `base + localStep - 1` lands where it should. Do not
+"simplify" this back to a saved global number.
+
   uint8_t  savedZerothStep;      /* pemCursorIsZerothStep */
   uint8_t  pad;
 } forthFoldCtx_t;                /* one static instance */
