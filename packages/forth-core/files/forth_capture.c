@@ -42,6 +42,10 @@ bool_t   forthCapIsSuspended(void)     { return forthCap.state == FCAP_SUSPENDED
 uint16_t forthCapSavedCursor(void)     { return forthCap.savedCursor; }
 uint16_t forthCapSavedLocalStep(void)  { return forthCap.savedLocalStep; }
 uint32_t forthCapSavedStepOffset(void) { return forthCap.savedStepOffset; }
+/* L1-F2 rev 3: re-point the suspension at a recovered capture step.  Used
+ * only by forthCaptureResume's fold-recovery path, when a second commit
+ * inside one fold window shifted the step off the saved offset. */
+void     forthCapSuspendStepOffset(uint32_t off) { forthCap.savedStepOffset = off; }
 uint16_t forthCapSavedStepCount(void)  { return forthCap.savedStepCount; }
 void     forthCapAbandonSuspended(void){ if (forthCap.state == FCAP_SUSPENDED) { forthCap.state = FCAP_CLOSED;
   forthCap.keysMode = 0;                    /* K3/E14: since K3 the bit rides

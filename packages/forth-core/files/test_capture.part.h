@@ -13364,3 +13364,545 @@ static int test_fold_context(void)
 
   return fail;
 }
+
+
+/* ==================================================================
+ * PACKET_L1_F2 — the three tam.c seams + determineItem fix.
+ *
+ * Wires F1's inert fold context into ui/tam.c: Seam 1 (tamEnterMode
+ * materialises+arms+suspends), Seam 2 (leaveTamModeIfEnabled resumes+
+ * sweeps, unchanged for its own resume — only the trigger condition
+ * widens), and Seam 3 (the calcMode bracket in tamProcessInput, where
+ * the fold actually unwinds).  keyboard.c's determineItem gets a fourth
+ * conjunct so TAM digits resolve as digits during a folded interactive
+ * session.  No tam.c commit site is edited — every subcase below drives
+ * the real entry points (runFunction, tamProcessInput, tamEnterMode,
+ * determineItem, fnKeyExit), never a hand-set item or a direct
+ * forthFoldEnter/Leave call.
+ * ================================================================== */
+static int test_fold_seams(void)
+{
+  extern void fnForthOuter(uint16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void runFunction(int16_t);
+  extern void tamProcessInput(uint16_t);
+  extern void tamEnterMode(int16_t);
+  extern int16_t determineItem(const char *);
+
+  int fail = 0, scFail;
+  uint8_t rType;
+  int32_t rVal;
+  longInteger_t li;
+
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  tamState_t savedTam = tam;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedCursorPos = T_cursorPos;
+  bool_t savedShiftF = shiftF;
+  bool_t savedShiftG = shiftG;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  /* Every subcase starts from the same known baseline, AND drains any
+   * fold left pending by the previous subcase (forthCapClose() does NOT
+   * touch foldMode — forth_capture.h's own documented invariant — so an
+   * un-swept fold would otherwise leak into the next subcase's fixture). */
+  #define FS_RESET() do { \
+    calcMode = CM_AIM; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
+    programRunStop = PGM_STOPPED; dynamicMenuItem = -1; shiftF = false; shiftG = false; \
+    clearSystemFlag(FLAG_ALPHA); lastErrorCode = ERROR_NONE; forthCapClose(); \
+    if (forthFoldPending()) { forthFoldLeave(); } \
+  } while (0)
+
+  /* ---- Subcase 1 (C5.1): the headline. STO 0 5 during an interactive
+   * capture (keys mode on) types "STO 05 " into the line; program memory
+   * (getNumberOfSteps, firstFreeProgramByte, FHIST's step count) is
+   * bit-identical to before the keypress. ---- */
+  scFail = 0;
+  FS_RESET();
+  {
+    testProg_t p1;
+    int sEnd;
+    tpInit(&p1);
+    tpLbl(&p1, "F2P1");
+    sEnd = tpEnd(&p1);
+    if (sEnd < 0 || !tpWrite(&p1) || !tpSelectStep(&p1, sEnd)) {
+      printf("    [1] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t numBefore, fhistBefore;
+      uint32_t freeOffBefore;
+
+      forthHistoryEnsure();   /* pre-create: its own growth must not count */
+      longIntegerInit(li); int32ToLongInteger(999, li);
+      convertLongIntegerToLongIntegerRegister(li, 5); longIntegerFree(li);
+
+      forthCapOpenInteractive();
+      forthCapSetKeysMode(true);
+      xcopy(aimBuffer, "42", 2); aimBuffer[2] = 0;
+      T_cursorPos = 2;
+
+      numBefore     = getNumberOfSteps();
+      freeOffBefore = (uint32_t)(firstFreeProgramByte - beginOfProgramMemory);
+      fhistBefore   = _tfcFhistStepCount();
+
+      runFunction(ITM_STO);
+      tamProcessInput(ITM_0);
+      tamProcessInput(ITM_5);   /* two digits auto-fire the STO commit */
+
+      if (compareString(aimBuffer, "42 STO 05 ", CMP_BINARY) != 0) {
+        printf("    [1] FAIL: aimBuffer \"%s\", expected \"42 STO 05 \"\n", aimBuffer);
+        scFail = 1;
+      }
+      if (getNumberOfSteps() != numBefore) {
+        printf("    [1] FAIL: getNumberOfSteps() %u -> %u\n", numBefore, getNumberOfSteps());
+        scFail = 1;
+      }
+      if ((uint32_t)(firstFreeProgramByte - beginOfProgramMemory) != freeOffBefore) {
+        printf("    [1] FAIL: firstFreeProgramByte offset changed (%u -> %u)\n",
+               freeOffBefore, (unsigned)(firstFreeProgramByte - beginOfProgramMemory));
+        scFail = 1;
+      }
+      if (_tfcFhistStepCount() != fhistBefore) {
+        printf("    [1] FAIL: FHIST step count %u -> %u\n", fhistBefore, _tfcFhistStepCount());
+        scFail = 1;
+      }
+      if (!forthCapIsOpen() || forthCapIsSuspended()) {
+        printf("    [1] FAIL: capture state %d, expected OPEN\n", forthTestCapState());
+        scFail = 1;
+      }
+      if (calcMode != CM_AIM) {
+        printf("    [1] FAIL: calcMode %d after, expected CM_AIM\n", calcMode);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [1] PASS: STO 0 5 types \"STO 05 \", program memory bit-identical\n");
+  fail |= scFail;
+  FS_RESET();
+  cleanupTestProgram();
+
+  /* ---- Subcase 2 (C5.2): nothing executed. Register 05 is unchanged by
+   * the headline sequence. ---- */
+  scFail = 0;
+  FS_RESET();
+  {
+    testProg_t p2;
+    int sEnd;
+    tpInit(&p2);
+    tpLbl(&p2, "F2P2");
+    sEnd = tpEnd(&p2);
+    if (sEnd < 0 || !tpWrite(&p2) || !tpSelectStep(&p2, sEnd)) {
+      printf("    [2] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      forthHistoryEnsure();
+      longIntegerInit(li); int32ToLongInteger(555, li);
+      convertLongIntegerToLongIntegerRegister(li, 5); longIntegerFree(li);
+
+      forthCapOpenInteractive();
+      forthCapSetKeysMode(true);
+      xcopy(aimBuffer, "42", 2); aimBuffer[2] = 0;
+      T_cursorPos = 2;
+
+      runFunction(ITM_STO);
+      tamProcessInput(ITM_0);
+      tamProcessInput(ITM_5);
+
+      read_reg_int32(5, &rType, &rVal);
+      if (rType != dtLongInteger || rVal != 555) {
+        printf("    [2] FAIL: register 05 = %ld type %u, expected untouched 555\n",
+               (long)rVal, rType);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [2] PASS: register 05 unchanged -- STO never executed\n");
+  fail |= scFail;
+  FS_RESET();
+  cleanupTestProgram();
+
+  /* ---- Subcase 3 (C5.3): TAM digits resolve as digits. With the fold
+   * pending, determineItem returns key->primaryTam for a digit key, not
+   * a letter.  Keys mode OFF (E10-E12's default): with keys mode ON the
+   * L1-3 conjunct already excludes the CM_AIM arm for a digit key, so
+   * OFF is the state the new C4 conjunct actually has to cover -- a
+   * parameterized item (STO) opens TAM from plain alpha-input too. ---- */
+  scFail = 0;
+  FS_RESET();
+  {
+    testProg_t p3;
+    int sEnd;
+    tpInit(&p3);
+    tpLbl(&p3, "F2P3");
+    sEnd = tpEnd(&p3);
+    if (sEnd < 0 || !tpWrite(&p3) || !tpSelectStep(&p3, sEnd)) {
+      printf("    [3] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      int zIdx = -1, i;
+      for (i = 0; i < 37; i++) {
+        if (kbd_std[i].primary == ITM_0) { zIdx = i; break; }
+      }
+      if (zIdx < 0) {
+        printf("    [3] FIXTURE FAIL: no kbd_std row carries primary == ITM_0\n");
+        scFail = 1;
+      } else {
+        char kb[3];
+        sprintf(kb, "%02d", zIdx);
+
+        forthCapOpenInteractive();
+        forthCapSetKeysMode(false);   /* explicit: E10-E12's default */
+        xcopy(aimBuffer, "42", 2); aimBuffer[2] = 0;
+
+        runFunction(ITM_STO);
+
+        if (!tam.mode || !forthFoldPending()) {
+          printf("    [3] FIXTURE FAIL: TAM not entered / fold not pending (tam.mode=%d pending=%d)\n",
+                 (int)tam.mode, (int)forthFoldPending());
+          scFail = 1;
+        } else {
+          int16_t got;
+          shiftF = false; shiftG = false;
+          got = determineItem(kb);
+          if (got != kbd_std[zIdx].primaryTam) {
+            printf("    [3] FAIL: determineItem = %d, expected key->primaryTam (%d)\n",
+                   got, kbd_std[zIdx].primaryTam);
+            scFail = 1;
+          }
+          if (kbd_std[zIdx].primaryAim != kbd_std[zIdx].primaryTam && got == kbd_std[zIdx].primaryAim) {
+            printf("    [3] FAIL: determineItem resolved to the AIM-column letter (%d), not TAM\n", got);
+            scFail = 1;
+          }
+        }
+        fnKeyExit(NOPARAM);   /* cancel cleanly before the next subcase */
+      }
+    }
+  }
+  if (!scFail) printf("    [3] PASS: fold pending -> digit key resolves via key->primaryTam, not a letter\n");
+  fail |= scFail;
+  FS_RESET();
+  cleanupTestProgram();
+
+  /* ---- Subcase 4 (C5.4): cancel. fnKeyExit before any digit -- the line
+   * is still "42", the capture is OPEN (not stuck SUSPENDED -- Mutation
+   * 3b's pin), and program memory is bit-identical. ---- */
+  scFail = 0;
+  FS_RESET();
+  {
+    testProg_t p4;
+    int sEnd;
+    tpInit(&p4);
+    tpLbl(&p4, "F2P4");
+    sEnd = tpEnd(&p4);
+    if (sEnd < 0 || !tpWrite(&p4) || !tpSelectStep(&p4, sEnd)) {
+      printf("    [4] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t numBefore, fhistBefore;
+      uint32_t freeOffBefore;
+
+      forthHistoryEnsure();
+      forthCapOpenInteractive();
+      forthCapSetKeysMode(true);
+      xcopy(aimBuffer, "42", 2); aimBuffer[2] = 0;
+      T_cursorPos = 2;
+
+      numBefore     = getNumberOfSteps();
+      freeOffBefore = (uint32_t)(firstFreeProgramByte - beginOfProgramMemory);
+      fhistBefore   = _tfcFhistStepCount();
+
+      runFunction(ITM_STO);
+      fnKeyExit(NOPARAM);   /* cancel before any digit */
+
+      if (compareString(aimBuffer, "42", CMP_BINARY) != 0) {
+        printf("    [4] FAIL: aimBuffer \"%s\", expected \"42\" intact\n", aimBuffer);
+        scFail = 1;
+      }
+      if (!forthCapIsOpen() || forthCapIsSuspended()) {
+        printf("    [4] FAIL: capture state %d, expected OPEN (not stuck SUSPENDED)\n",
+               forthTestCapState());
+        scFail = 1;
+      }
+      if (getNumberOfSteps() != numBefore) {
+        printf("    [4] FAIL: getNumberOfSteps() %u -> %u\n", numBefore, getNumberOfSteps());
+        scFail = 1;
+      }
+      if ((uint32_t)(firstFreeProgramByte - beginOfProgramMemory) != freeOffBefore) {
+        printf("    [4] FAIL: firstFreeProgramByte offset changed (%u -> %u)\n",
+               freeOffBefore, (unsigned)(firstFreeProgramByte - beginOfProgramMemory));
+        scFail = 1;
+      }
+      if (_tfcFhistStepCount() != fhistBefore) {
+        printf("    [4] FAIL: FHIST step count %u -> %u\n", fhistBefore, _tfcFhistStepCount());
+        scFail = 1;
+      }
+      if (calcMode != CM_AIM) {
+        printf("    [4] FAIL: calcMode %d after, expected CM_AIM\n", calcMode);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [4] PASS: EXIT before any digit cancels cleanly, line intact, capture OPEN\n");
+  fail |= scFail;
+  FS_RESET();
+  cleanupTestProgram();
+
+  /* ---- Subcase 5 (C5.5): PARK executes live and keeps the line. DELP is
+   * PARK-classified by func (F1's _forthFoldAdmits) and, unlike ASSIGN/
+   * USERMODE/TM_STRING/TM_NEWMENU/TM_KEY, does not itself clobber
+   * aimBuffer -- its operand is a plain program number, so "the line
+   * survives" is actually observable (those others zero aimBuffer as
+   * their OWN pre-existing semantics, fold-unrelated). ---- */
+  scFail = 0;
+  FS_RESET();
+  {
+    testProg_t p5;
+    int sEnd;
+    tpInit(&p5);
+    tpLbl(&p5, "F2P5");
+    sEnd = tpEnd(&p5);
+    if (sEnd < 0 || !tpWrite(&p5) || !tpSelectStep(&p5, sEnd)) {
+      printf("    [5] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t fhistBefore;
+      forthHistoryEnsure();
+      fhistBefore = _tfcFhistStepCount();
+
+      forthCapOpenInteractive();
+      forthCapSetKeysMode(true);
+      xcopy(aimBuffer, "42", 2); aimBuffer[2] = 0;
+
+      runFunction(ITM_DELP);
+
+      if (!tam.mode || forthFoldArmed() || !forthFoldPending()) {
+        printf("    [5] FIXTURE FAIL: expected TAM entered + PARK (pending, not armed); "
+               "tam.mode=%d armed=%d pending=%d\n",
+               (int)tam.mode, (int)forthFoldArmed(), (int)forthFoldPending());
+        scFail = 1;
+      } else {
+        static const int16_t digits[] = { ITM_1, ITM_0, ITM_0 };
+        int di;
+        for (di = 0; di < 3 && tam.mode != 0; di++) {
+          tamProcessInput(digits[di]);
+        }
+        if (tam.mode != 0) {
+          printf("    [5] FIXTURE FAIL: DELP TAM session never committed (tam.mode=%d)\n", (int)tam.mode);
+          scFail = 1;
+        }
+        if (compareString(aimBuffer, "42", CMP_BINARY) != 0) {
+          printf("    [5] FAIL: aimBuffer \"%s\", expected \"42\" (PARK does not fold text)\n", aimBuffer);
+          scFail = 1;
+        }
+        if (_tfcFhistStepCount() != fhistBefore) {
+          printf("    [5] FAIL: FHIST step count %u -> %u, PARK leave did not sweep cleanly\n",
+                 fhistBefore, _tfcFhistStepCount());
+          scFail = 1;
+        }
+        if (calcMode != CM_AIM) {
+          printf("    [5] FAIL: calcMode %d after, expected CM_AIM\n", calcMode);
+          scFail = 1;
+        }
+      }
+    }
+  }
+  if (!scFail) printf("    [5] PASS: PARK (DELP) runs live, line survives, FHIST swept clean\n");
+  fail |= scFail;
+  FS_RESET();
+  cleanupTestProgram();
+
+  /* ---- Subcase 6 (C5.6): PEM is untouched -- re-run the landed F6-2/
+   * F6-4 suite unchanged. ---- */
+  scFail = 0;
+  scFail |= test_capture_suspend();
+  scFail |= test_capture_param_text();
+  if (!scFail) printf("    [6] PASS: F6-2/F6-4 suite re-run clean, PEM unaffected\n");
+  else printf("    [6] FAIL: F6-2/F6-4 suite regressed\n");
+  fail |= scFail;
+
+  /* ---- Subcase 7 (C5.7): the bracket does not leak. calcMode == CM_AIM
+   * after every subcase above (already asserted individually), plus the
+   * error path: force lastErrorCode inside the commit (the real guard at
+   * ui/tam.c:1102 skips addStepInProgram whenever lastErrorCode != 0,
+   * which is the actual, drivable "error occurred inside the commit"
+   * shape in this tree) and confirm the bracket still restores CM_AIM. ---- */
+  scFail = 0;
+  FS_RESET();
+  {
+    testProg_t p7;
+    int sEnd;
+    tpInit(&p7);
+    tpLbl(&p7, "F2P7");
+    sEnd = tpEnd(&p7);
+    if (sEnd < 0 || !tpWrite(&p7) || !tpSelectStep(&p7, sEnd)) {
+      printf("    [7] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      forthHistoryEnsure();
+      forthCapOpenInteractive();
+      forthCapSetKeysMode(true);
+      xcopy(aimBuffer, "42", 2); aimBuffer[2] = 0;
+
+      runFunction(ITM_STO);
+      lastErrorCode = ERROR_UNDEF_SOURCE_VAR;   /* force an error mid-commit */
+      tamProcessInput(ITM_0);
+      tamProcessInput(ITM_5);
+
+      if (calcMode != CM_AIM) {
+        printf("    [7] FAIL: calcMode %d after an error mid-commit, expected CM_AIM (bracket leaked)\n",
+               calcMode);
+        scFail = 1;
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+  }
+  if (!scFail) printf("    [7] PASS: calcMode restored to CM_AIM even with an error forced mid-commit\n");
+  fail |= scFail;
+  FS_RESET();
+  cleanupTestProgram();
+
+  /* ---- Subcase A (the re-entry chain, C1's own contract). tamEnterMode
+   * is RE-ENTERED from inside a bracketed _tamProcessInput: XEQ 'STO'
+   * does not resolve as a label, falls to the native CAT_FNCT scan
+   * (ui/tam.c ~987), and calls runFunction(ITM_STO) reentrantly while the
+   * OUTER XEQ fold's bracket is still forged CM_PEM.  Assert the capture
+   * ends up OPEN, not stuck SUSPENDED, once everything unwinds -- L1-1's
+   * origin bit (forthCapIsInteractive()) must stay true across the
+   * suspension for Seam 1's guard to arm the fold at all. ---- */
+  scFail = 0;
+  FS_RESET();
+  {
+    testProg_t pA;
+    int sEnd;
+    tpInit(&pA);
+    tpLbl(&pA, "F2PA");
+    sEnd = tpEnd(&pA);
+    if (sEnd < 0 || !tpWrite(&pA) || !tpSelectStep(&pA, sEnd)) {
+      printf("    [A] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      forthHistoryEnsure();
+      forthCapOpenInteractive();
+      forthCapSetKeysMode(false);
+      xcopy(aimBuffer, "42", 2); aimBuffer[2] = 0;
+
+      runFunction(ITM_XEQ);
+      if (!tam.mode || !forthFoldPending()) {
+        printf("    [A] FIXTURE FAIL: XEQ did not enter TAM / arm the fold\n");
+        scFail = 1;
+      } else {
+        tamProcessInput(ITM_alpha);
+        runFunction(ITM_S);
+        runFunction(ITM_T);
+        runFunction(ITM_O);
+        tamProcessInput(ITM_ENTER);   /* "STO" resolves via the native CAT_FNCT
+                                       * fallback, re-entering tamEnterMode for
+                                       * ITM_STO from inside _tamProcessInput */
+
+        if (tam.mode) {
+          /* The reentrant STO TAM session needs an operand; cancel it so
+           * the whole chain unwinds rather than leaving this subcase's
+           * fixture mid-TAM for the next subcase's FS_RESET() to inherit. */
+          fnKeyExit(NOPARAM);
+        }
+
+        if (!forthCapIsOpen() || forthCapIsSuspended()) {
+          printf("    [A] FAIL: capture state %d after the re-entry chain unwinds, expected OPEN\n",
+                 forthTestCapState());
+          scFail = 1;
+        }
+      }
+    }
+  }
+  if (!scFail) printf("    [A] PASS: re-entrant tamEnterMode chain still ends with the capture OPEN\n");
+  fail |= scFail;
+  FS_RESET();
+  cleanupTestProgram();
+
+  /* ---- Subcase B (Mutation 3's own pin): a leave-then-dispatch site
+   * (ui/tam.c:566, the dddVEL arm of a menu_TamSto softkey reachable
+   * after STO) calls leaveTamModeIfEnabled() BEFORE its own
+   * runFunction(tamOperation()) dispatch. ---- */
+  scFail = 0;
+  FS_RESET();
+  {
+    testProg_t pB;
+    int sEnd;
+    tpInit(&pB);
+    tpLbl(&pB, "F2PB");
+    sEnd = tpEnd(&pB);
+    if (sEnd < 0 || !tpWrite(&pB) || !tpSelectStep(&pB, sEnd)) {
+      printf("    [B] FIXTURE FAIL: build/write/select\n");
+      scFail = 1;
+    } else {
+      uint16_t fhistBefore;
+      forthHistoryEnsure();
+      fhistBefore = _tfcFhistStepCount();
+
+      forthCapOpenInteractive();
+      forthCapSetKeysMode(true);
+      xcopy(aimBuffer, "42", 2); aimBuffer[2] = 0;
+
+      runFunction(ITM_STO);
+      if (!tam.mode || !forthFoldArmed()) {
+        printf("    [B] FIXTURE FAIL: STO did not enter TAM / arm the fold\n");
+        scFail = 1;
+      } else {
+        tamProcessInput(ITM_dddVEL);
+        /* rev 3: dddVEL maps to ITM_STOVEL (ui/tam.c's StoOperations table),
+         * which is TM_VALUE with tamMinMax max 4096 (items.c:4714) — up to
+         * FOUR digits, so unlike STO (max 99) two digits do NOT auto-fire the
+         * commit.  This softkey therefore opens a NESTED TAM that must be
+         * completed explicitly.  The fold staying pending across it is
+         * CORRECT: the line lives in the FHIST capture step until the whole
+         * interaction ends.  Complete it so the assertions below describe a
+         * finished gesture rather than a mid-flight one. */
+        tamProcessInput(ITM_0);
+        tamProcessInput(ITM_5);
+        if (tam.mode) { tamProcessInput(ITM_ENTER); }
+        if (compareString(aimBuffer, "42", CMP_BINARY) == 0) {
+          printf("    [B] FAIL: aimBuffer still \"42\" -- the dddVEL commit was not folded into the line\n");
+          scFail = 1;
+        }
+        if (_tfcFhistStepCount() != fhistBefore) {
+          printf("    [B] FAIL: FHIST step count %u -> %u -- leave-then-dispatch site left debris\n",
+                 fhistBefore, _tfcFhistStepCount());
+          scFail = 1;
+        }
+        if (!forthCapIsOpen() || forthCapIsSuspended()) {
+          printf("    [B] FAIL: capture state %d, expected OPEN\n", forthTestCapState());
+          scFail = 1;
+        }
+        printf("    [B] REPORT: aimBuffer=\"%s\" fhist %u->%u capstate=%d\n",
+               aimBuffer, fhistBefore, _tfcFhistStepCount(), forthTestCapState());
+      }
+    }
+  }
+  if (!scFail) printf("    [B] PASS: leave-then-dispatch (dddVEL) commit folds into text, no debris\n");
+  fail |= scFail;
+  FS_RESET();
+  cleanupTestProgram();
+
+  #undef FS_RESET
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam = savedTam;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  T_cursorPos = savedCursorPos;
+  shiftF = savedShiftF;
+  shiftG = savedShiftG;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
+

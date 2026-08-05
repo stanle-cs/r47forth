@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c3e1e536a 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64d572d818 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,9 @@
@@ -296,7 +296,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,8 +1153,709 @@ void pemCloseAlphaInput(void) {
+@@ -998,8 +1153,784 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -305,8 +305,8 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
 +  // REM/LITERAL/non-empty-FORTH source lines alike, so the reset must be
 +  // unconditional here too, not just gated on tam.function == ITM_FORTH.
 +  tam.function = 0;
-+}
-+
+ }
+ 
 +/* FIX-9: the E1 catalog-drain helpers are defined further down (above
 + * insertStepInProgram); forthCaptureResume needs them too. */
 +static bool_t _forthCatalogBuriedOnStack(void);
@@ -352,17 +352,66 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
 +  forthCapSuspendState(cursor, localStep, stepOff, getNumberOfSteps());
 +}
 +
++/* L1-F2 rev 3: recover the capture step when the saved offset no longer
++ * describes it.
++ *
++ * An interactive fold can see a SECOND commit inside ONE fold window: STO
++ * arms the fold, then a menu_TamSto softkey such as dddVEL supersedes it
++ * (ui/tam.c:566-573 calls leaveTamModeIfEnabled and THEN dispatches), and the
++ * item it dispatches to — ITM_STOVEL, TM_VALUE max 4096 (items.c:4714) — runs
++ * its own TAM whose commit inserts a step while the cursor is still parked on
++ * the capture step.  That insert shifts the capture step off
++ * forthCapSavedStepOffset(), the canary in forthCaptureResume falsifies, and
++ * before this the capture was ABANDONED — closing the user's line and
++ * orphaning both steps in FHIST.
++ *
++ * PEM cannot produce this: its TAM commits exactly once per suspension.  So
++ * the recovery is gated on forthFoldPending() and PEM keeps its
++ * abandon-on-canary behaviour, which test 5 pins.
++ *
++ * The capture step is the LAST ITM_FORTH step in FHIST: forthFoldEnter
++ * appends it immediately before FHIST's END, so every history line precedes
++ * it, and the interloper (a native TAM step) is not ITM_FORTH at all.
++ * Returns NULL when FHIST is absent or holds no ITM_FORTH step. */
++static uint8_t *_forthFoldFindCaptureStep(void) {
++  uint16_t prog = forthHistoryProgram();
++  uint8_t *step, *last = NULL;
++  if (prog == 0) { return NULL; }
++  step = programList[prog - 1].instructionPointer;
++  for (int i = 0; i < 512 && step != NULL; i++) {
++    uint8_t *next;
++    if (isAtEndOfPrograms(step) || isAtEndOfProgram(step)) { break; }
++    if (checkOpCodeOfStep(step, ITM_FORTH) && step[2] == (uint8_t)STRING_LABEL_VARIABLE) {
++      last = step;
++    }
++    next = findNextStep(step);
++    if (next == NULL || next <= step) { break; }
++    step = next;
++  }
++  return last;
++}
++
 +void forthCaptureResume(void) {
 +  if (!forthCapIsSuspended()) { return; }
 +  uint8_t *p = beginOfProgramMemory + forthCapSavedStepOffset();
 +  if (!(p < firstFreeProgramByte
 +        && checkOpCodeOfStep(p, ITM_FORTH)
 +        && p[2] == (uint8_t)STRING_LABEL_VARIABLE)) {
++    /* L1-F2 rev 3: an interactive fold can shift the capture step off the
++     * saved offset (see _forthFoldFindCaptureStep).  Recover rather than
++     * abandon — but ONLY for a fold; PEM keeps abandon-on-canary (test 5). */
++    uint8_t *recovered = forthFoldPending() ? _forthFoldFindCaptureStep() : NULL;
++    if (recovered != NULL) {
++      p = recovered;
++      forthCapSuspendStepOffset((uint32_t)(p - beginOfProgramMemory));
++    }
++    else {
 +    forthCapAbandonSuspended();             /* defensive canary — see test 5 */
 +    #if defined(FORTH_DEBUG_SELFTEST)
 +    printf("FORTH CANARY: suspended capture step falsified; suspension abandoned\n");
 +    #endif
 +    return;
++    }
 +  }
 +  { bool_t keysWas   = forthCapKeysMode();  /* K3/E13: resume is not a fresh
 +                                               capture — the sub-mode the user
@@ -862,8 +911,8 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
 +      return false;
 +    default: return true;
 +  }
- }
- 
++}
++
 +/* C1: the fold context.  One static instance.  savedProgram is
 + * currentProgramNumber — NOT a global step number: program boundaries are
 + * themselves global step numbers and all shift when FHIST grows or evicts
@@ -943,6 +992,32 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
 +}
 +
 +/* C4: unwind the fold.  Exact — see PACKET_L1_F1_fold_context.md C4. */
++/* L1-F2 (rev 3): unwind the fold once the TAM session has actually ENDED.
++ *
++ * Two defects in rev 2 forced this shape, both confirmed by test:
++ *
++ *  - The epilogue fired after EVERY tamProcessInput call, not only the one
++ *    that commits.  "STO 0 5" is two calls; the first digit does not commit,
++ *    so the fold was torn down BEFORE the commit — the second digit then ran
++ *    with the bracket off, took the live dispatch arm, and actually stored.
++ *    Hence the !tam.mode gate: unwind only when TAM is really over.
++ *
++ *  - The resume must not fire inside leaveTamModeIfEnabled for an ARMED
++ *    fold.  Eleven sites call that function and THEN dispatch (ui/tam.c:303,
++ *    494, 508, 520, 536, 572, 913, 934, 980, 996, 1130), so resuming there
++ *    happens before the dispatch inserts its step: the F6-4 splice sees
++ *    n == 0, folds nothing, and the line is lost while an orphan step stays
++ *    in FHIST.  So Seam 2 defers the resume for an armed fold and it happens
++ *    here instead, after _tamProcessInput has fully returned.
++ *
++ * forthCaptureResume() is a no-op unless FCAP_SUSPENDED, so calling it for a
++ * PARK that Seam 2 already resumed is harmless. */
++void forthFoldUnwindIfDone(void) {
++  if(!forthFoldPending() || tam.mode) { return; }
++  forthCaptureResume();
++  forthFoldLeave();
++}
++
 +void forthFoldLeave(void) {
 +  if(forthCapFoldModeRaw() == 0) {
 +    return;
@@ -1006,7 +1081,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
  
  void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
    if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {
-@@ -1013,7 +1869,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +1944,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -1015,7 +1090,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +2241,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +2316,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -1059,7 +1134,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +2288,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +2363,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -1096,7 +1171,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +2337,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +2412,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -1164,7 +1239,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +2409,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +2484,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -1180,7 +1255,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +2500,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +2575,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -1204,7 +1279,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..f207d2c7a916872ac0467d07a9739a3c
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2812,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2887,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

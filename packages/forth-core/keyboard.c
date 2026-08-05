@@ -1756,7 +1756,20 @@ endReturnTrue:
       Check_MultiPresses(&result, key_no);        //JM
       return result;
     }
-    else if((calcMode == CM_AIM && !(forthCapIsInteractive() && forthCapKeysMode())) || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && !(tam.function == ITM_FORTH && forthCapKeysMode()))) {
+    else if((calcMode == CM_AIM
+             && !(forthCapIsInteractive() && forthCapKeysMode())
+             /* L1-F2 (C4): calcMode does not change on TAM entry (tam.mode
+              * != 0 is the gate) — an interactive TAM session still has
+              * calcMode == CM_AIM here (determineItem runs OUTSIDE F2's C3
+              * bracket, before tamProcessInput/_tamProcessInput are ever
+              * called), so without this conjunct the CM_AIM disjunct fires
+              * ahead of the "else if(tam.mode)" arm below and TAM digits
+              * would resolve to letters.  Only reachable when keys mode is
+              * OFF: with keys mode ON the conjunct above already excludes
+              * this disjunct for a digit key, but keys mode is a UI choice,
+              * not a fold precondition — a parameterized item (STO, RCL, …)
+              * can open TAM from an alpha-input interactive capture too. */
+             && !(tam.mode && forthFoldPending())) || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && !(tam.function == ITM_FORTH && forthCapKeysMode()))) {
       if(((calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
              && tam.function == ITM_FORTH && forthCapIsOpen())
           || forthCapIsInteractive())
@@ -3892,6 +3905,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           aimBuffer[0] = 0;
         }
         leaveTamModeIfEnabled();
+        /* L1-F2 rev 3: EXIT during TAM never routes through tamProcessInput,
+         * so it never reaches that function's epilogue — without this call an
+         * armed fold is never unwound and its materialised capture step stays
+         * in FHIST permanently.  "type something, press STO, EXIT before
+         * finishing" is one of the most ordinary cancel gestures there is. */
+        forthFoldUnwindIfDone();
         if(calcMode == CM_PEM) {
           scrollPemBackwards();
         }

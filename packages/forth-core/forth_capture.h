@@ -169,6 +169,7 @@ bool_t   forthCapIsSuspended(void);
 uint16_t forthCapSavedCursor(void);
 uint16_t forthCapSavedLocalStep(void);
 uint32_t forthCapSavedStepOffset(void);
+void     forthCapSuspendStepOffset(uint32_t off);  /* L1-F2 rev 3: fold recovery */
 uint16_t forthCapSavedStepCount(void);  /* F6-4 */
 void     forthCapAbandonSuspended(void);
 
@@ -193,6 +194,7 @@ void     forthCaptureSanitizeRestoredUi(void);
  * pair only via its own self-test, which calls them directly. */
 void   forthFoldEnter(int16_t func, uint16_t mode);
 void   forthFoldLeave(void);
+void   forthFoldUnwindIfDone(void);  /* L1-F2 rev 3: resume+leave, once tam.mode is 0 */
 bool_t forthFoldArmed(void);     /* foldMode == 1 (FOLD: bracket armed) */
 bool_t forthFoldPending(void);   /* foldMode != 0 (FOLD or PARK) */
 

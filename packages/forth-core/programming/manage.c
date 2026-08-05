@@ -1205,17 +1205,66 @@ void forthCaptureSuspend(void) {
   forthCapSuspendState(cursor, localStep, stepOff, getNumberOfSteps());
 }
 
+/* L1-F2 rev 3: recover the capture step when the saved offset no longer
+ * describes it.
+ *
+ * An interactive fold can see a SECOND commit inside ONE fold window: STO
+ * arms the fold, then a menu_TamSto softkey such as dddVEL supersedes it
+ * (ui/tam.c:566-573 calls leaveTamModeIfEnabled and THEN dispatches), and the
+ * item it dispatches to — ITM_STOVEL, TM_VALUE max 4096 (items.c:4714) — runs
+ * its own TAM whose commit inserts a step while the cursor is still parked on
+ * the capture step.  That insert shifts the capture step off
+ * forthCapSavedStepOffset(), the canary in forthCaptureResume falsifies, and
+ * before this the capture was ABANDONED — closing the user's line and
+ * orphaning both steps in FHIST.
+ *
+ * PEM cannot produce this: its TAM commits exactly once per suspension.  So
+ * the recovery is gated on forthFoldPending() and PEM keeps its
+ * abandon-on-canary behaviour, which test 5 pins.
+ *
+ * The capture step is the LAST ITM_FORTH step in FHIST: forthFoldEnter
+ * appends it immediately before FHIST's END, so every history line precedes
+ * it, and the interloper (a native TAM step) is not ITM_FORTH at all.
+ * Returns NULL when FHIST is absent or holds no ITM_FORTH step. */
+static uint8_t *_forthFoldFindCaptureStep(void) {
+  uint16_t prog = forthHistoryProgram();
+  uint8_t *step, *last = NULL;
+  if (prog == 0) { return NULL; }
+  step = programList[prog - 1].instructionPointer;
+  for (int i = 0; i < 512 && step != NULL; i++) {
+    uint8_t *next;
+    if (isAtEndOfPrograms(step) || isAtEndOfProgram(step)) { break; }
+    if (checkOpCodeOfStep(step, ITM_FORTH) && step[2] == (uint8_t)STRING_LABEL_VARIABLE) {
+      last = step;
+    }
+    next = findNextStep(step);
+    if (next == NULL || next <= step) { break; }
+    step = next;
+  }
+  return last;
+}
+
 void forthCaptureResume(void) {
   if (!forthCapIsSuspended()) { return; }
   uint8_t *p = beginOfProgramMemory + forthCapSavedStepOffset();
   if (!(p < firstFreeProgramByte
         && checkOpCodeOfStep(p, ITM_FORTH)
         && p[2] == (uint8_t)STRING_LABEL_VARIABLE)) {
+    /* L1-F2 rev 3: an interactive fold can shift the capture step off the
+     * saved offset (see _forthFoldFindCaptureStep).  Recover rather than
+     * abandon — but ONLY for a fold; PEM keeps abandon-on-canary (test 5). */
+    uint8_t *recovered = forthFoldPending() ? _forthFoldFindCaptureStep() : NULL;
+    if (recovered != NULL) {
+      p = recovered;
+      forthCapSuspendStepOffset((uint32_t)(p - beginOfProgramMemory));
+    }
+    else {
     forthCapAbandonSuspended();             /* defensive canary — see test 5 */
     #if defined(FORTH_DEBUG_SELFTEST)
     printf("FORTH CANARY: suspended capture step falsified; suspension abandoned\n");
     #endif
     return;
+    }
   }
   { bool_t keysWas   = forthCapKeysMode();  /* K3/E13: resume is not a fresh
                                                capture — the sub-mode the user
@@ -1796,6 +1845,32 @@ void forthFoldEnter(int16_t func, uint16_t mode) {
 }
 
 /* C4: unwind the fold.  Exact — see PACKET_L1_F1_fold_context.md C4. */
+/* L1-F2 (rev 3): unwind the fold once the TAM session has actually ENDED.
+ *
+ * Two defects in rev 2 forced this shape, both confirmed by test:
+ *
+ *  - The epilogue fired after EVERY tamProcessInput call, not only the one
+ *    that commits.  "STO 0 5" is two calls; the first digit does not commit,
+ *    so the fold was torn down BEFORE the commit — the second digit then ran
+ *    with the bracket off, took the live dispatch arm, and actually stored.
+ *    Hence the !tam.mode gate: unwind only when TAM is really over.
+ *
+ *  - The resume must not fire inside leaveTamModeIfEnabled for an ARMED
+ *    fold.  Eleven sites call that function and THEN dispatch (ui/tam.c:303,
+ *    494, 508, 520, 536, 572, 913, 934, 980, 996, 1130), so resuming there
+ *    happens before the dispatch inserts its step: the F6-4 splice sees
+ *    n == 0, folds nothing, and the line is lost while an orphan step stays
+ *    in FHIST.  So Seam 2 defers the resume for an armed fold and it happens
+ *    here instead, after _tamProcessInput has fully returned.
+ *
+ * forthCaptureResume() is a no-op unless FCAP_SUSPENDED, so calling it for a
+ * PARK that Seam 2 already resumed is harmless. */
+void forthFoldUnwindIfDone(void) {
+  if(!forthFoldPending() || tam.mode) { return; }
+  forthCaptureResume();
+  forthFoldLeave();
+}
+
 void forthFoldLeave(void) {
   if(forthCapFoldModeRaw() == 0) {
     return;

@@ -1177,8 +1177,21 @@ printf("tam.value: %d\n", tam.value);
         closeNim();
       }
     }
-    else if(calcMode == CM_PEM && forthCapIsOpen()) {
-      forthCaptureSuspend();                /* F6-2: suspend, never close */
+    else if(forthCapIsOpen() && (calcMode == CM_PEM || forthCapIsInteractive())) {
+      if(forthCapIsInteractive()) { forthFoldEnter(func, tam.mode); }
+      forthCaptureSuspend();                                       /* F6-2: unchanged */
+    }
+    else if(forthFoldPending()) {
+      /* L1-F2 rev 3: a NESTED tamEnterMode inside an armed fold — the capture
+       * is already SUSPENDED (so the arm above cannot fire) and the fold is
+       * already materialised, so there is nothing to do here.  But this arm
+       * must EXIST, because the bracket has forged calcMode = CM_PEM and the
+       * next two arms are PEM arms: the aimBuffer one would run
+       * pemCloseAlphaInput() and CLOSE the user's capture outright.
+       *
+       * Reachable from every leave-then-dispatch site whose target is itself
+       * parameterized — e.g. STO then the dddVEL softkey (ui/tam.c:566-573),
+       * which dispatches ITM_STOVEL, TM_VALUE max 4096 (items.c:4714). */
     }
     else if(calcMode == CM_PEM && aimBuffer[0] != 0) {
       if(getSystemFlag(FLAG_ALPHA)) {
@@ -1403,15 +1416,60 @@ printf("tam.value: %d\n", tam.value);
       }
     #endif // PC_BUILD
 
-    if(calcMode == CM_PEM) {
+    /* L1-F2 rev 3: PEM and PARK resume here as before.  An ARMED fold does
+     * NOT — eleven sites call this function and THEN dispatch, and resuming
+     * before that dispatch inserts its step makes the F6-4 splice see n == 0,
+     * losing the line and orphaning a step in FHIST.  For an armed fold the
+     * resume is deferred to forthFoldUnwindIfDone(), called from
+     * tamProcessInput's epilogue after _tamProcessInput has fully returned. */
+    if((calcMode == CM_PEM || forthFoldPending()) && !forthFoldArmed()) {
       hourGlassIconEnabled = false;
-      forthCaptureResume();                   /* no-op unless FCAP_SUSPENDED */
+      forthCaptureResume();      /* no-op unless FCAP_SUSPENDED — unchanged */
     }
   }
 
 
 
   void tamProcessInput(uint16_t item) {
+    /* L-R4 (b): the RECORDING commit sites in this file (ui/tam.c:217, 552,
+     * 587, 605, 618, 907, 929, 1102) each have a calcMode == CM_PEM arm that
+     * records a step instead of dispatching.  Making that predicate true for
+     * the duration of the commit is the non-executing-TAM mechanism, and no
+     * commit site is edited.  It is NOT true of every site — see C2 for the
+     * ones that dispatch or navigate with no CM_PEM arm; those are covered by
+     * F1's admit set (PARK) or by the unwind in this epilogue, not by the
+     * bracket.
+     * Narrow by design: a wider bracket would paint _refreshPemScreen
+     * (screen.c:6176) and the PEM TAM overlay (screen.c:5637) under the
+     * prompt.  Nothing inside the commit path refreshes: _insertInProgram's
+     * tail calls scanLabelsAndPrograms + goToGlobalStep (manage.c:770-772),
+     * neither of which refreshes (lblGtoXeq.c:101-140). */
+    /* Re-entrancy hazard (documented, not asserted): leaveTamModeIfEnabled
+     * contains a PC_BUILD-only call to tamProcessInput guarded by
+     * forceTamAlpha (below, :1344-1349 pre-edit numbering).  forceTamAlpha is
+     * never assigned true anywhere in either tree (only cleared: :1346,
+     * config.c:1789, src/c47/config.c:1778, src/c47/ui/tam.c:1331) — dead
+     * today.  If it were ever enabled it would nest this bracket: the INNER
+     * tamProcessInput's epilogue would see calcMode == CM_PEM (this bracket's
+     * own forge, still in effect) and restore CM_PEM instead of the real
+     * savedMode, and — since forthFoldArmed()/forthFoldPending() are a
+     * single static instance, not a stack — the inner call's own
+     * forthFoldLeave() would unwind the OUTER call's fold context too early.
+     * Not asserted here (tam.c carries no FORTH_DEBUG_SELFTEST scaffolding
+     * today and the path is unreachable by construction); if forceTamAlpha
+     * is ever wired live, this bracket must be made reentrant first. */
+    const uint8_t savedMode = calcMode;
+    const bool_t  brk       = forthFoldArmed();
+    if(brk) { calcMode = CM_PEM; }
     _tamProcessInput(item);
+    /* Re-test before restoring: an error raised inside the commit may have
+     * changed calcMode, and the epilogue must not clobber that. */
+    if(brk && calcMode == CM_PEM) { calcMode = savedMode; }
+    /* The fold unwinds HERE, not in leaveTamModeIfEnabled — that function is
+     * not the exit choke (see C2): eleven sites call it and THEN dispatch, so
+     * an unwind hung on it would fire before the work it brackets.  This
+     * epilogue runs on every path out of _tamProcessInput. */
+    forthFoldUnwindIfDone();   /* rev 3: resume+leave, and ONLY once tam.mode
+                                  is 0 — see the helper's comment in manage.c */
     _tamUpdateBuffer();
   }
