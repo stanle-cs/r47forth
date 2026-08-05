@@ -5,7 +5,7 @@
     "./packages/forth-core/build-test.sh >": {
       "canonical": "./packages/forth-core/build-test.sh > /tmp/forth-g4-gate.log",
       "timeout": 180000,
-      "runs": 106,
+      "runs": 107,
       "forms": {
         "./packages/forth-core/build-test.sh > /tmp/forth-sb-1-gate.log": 14,
         "./packages/forth-core/build-test.sh > /tmp/forth-sb-1-mut1.log": 15,
@@ -31,12 +31,13 @@
         "./packages/forth-core/build-test.sh > /tmp/forth-t5v2-gate.log": 2,
         "./packages/forth-core/build-test.sh > /tmp/forth-t6-1-gate.log": 4,
         "./packages/forth-core/build-test.sh > /tmp/forth-d3-5-gate.log": 1,
-        "./packages/forth-core/build-test.sh > /tmp/forth-g4-gate.log": 18
+        "./packages/forth-core/build-test.sh > /tmp/forth-g4-gate.log": 18,
+        "./packages/forth-core/build-test.sh > /tmp/qwen-l1-5b-gate.log": 1
       },
       "timeouts": {
         "120000": 3,
         "180000": 26,
-        "300000": 74
+        "300000": 75
       },
       "failures": {
         "timed out": 1
