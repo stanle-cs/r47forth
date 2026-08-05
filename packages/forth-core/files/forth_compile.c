@@ -9,6 +9,7 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_prims.h"
+#include "forth_capture.h"
 #include "programming/param_core.h"
 
 /* ---- §2.2 Token constants (mirror forth_inner.c) ---- */
@@ -1602,22 +1603,138 @@ void forthOuterInterpret(const char *source)
   forthOuterRun(&ctx, FORTH_OUTER_FULL);
 }
 
-/* fnForthOuter — ITM_FORTH entry point (§3.3.2) */
-void fnForthOuter(uint16_t unused) {
+/* L1-1 (C2): the shared "take the source line out of X" core.  Used by
+ * fnForthOuter's C2a one-shot arm, fnForthOuter's interactive seed, and
+ * forthTestRunFromX (rewritten below to call this so the two cannot drift).
+ *
+ * Returns false with the documented error displayed and X untouched when X
+ * is not a string or the line is oversize.  On true, dst holds the
+ * NUL-terminated line and X HAS BEEN DROPPED.  Copy MUST precede drop:
+ * drop invalidates the string (§3.3.2). */
+static bool_t forthTakeSourceFromX(char *dst) {
   if (getRegisterDataType(REGISTER_X) != dtString) {
     displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-    return;
+    return false;
   }
   int32_t len = stringByteLength(REGISTER_STRING_DATA(REGISTER_X));
   if (len + 1 > FORTH_SOURCE_MAX) {
     displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+  xcopy(dst, REGISTER_STRING_DATA(REGISTER_X), len + 1);
+  fnDrop(NOPARAM);   /* copy MUST precede drop: drop invalidates the string */
+  return true;
+}
+
+/* T9: calcModeAim's setup (src/c47/calcMode.c:62-92) WITHOUT its
+ * liftStack().  An interactive Forth line operates on the LIVE stack — L-R2
+ * already drops a seeded string precisely "so interpreted words see a clean
+ * stack" — so a lifting open would replace X with a fresh uninitialised
+ * dtReal34 before the line ever ran: "16 in X, type 1 +, ENTER" would
+ * compute garbage + 1.  fnAim() cannot be used and calcModeAim cannot be
+ * repaired after the fact (the repair is conditional on FLAG_ASLIFT, and
+ * with it clear the old X is already freed).  Every line below is
+ * calcModeAim's; the only intentional omission is the lift.  If calcModeAim
+ * gains a statement upstream, this must gain it too — the rebase discipline
+ * for this function is "diff it against calcModeAim".
+ *
+ * C2b verification against src/c47/calcMode.c:62-92 (reported, not silently
+ * dropped, per the packet):
+ *   - The PC_BUILD-only jm_show_comment() debug scaffold at the top of
+ *     calcModeAim is omitted here: cosmetic GTK-debug output, irrelevant to
+ *     DMCP/PC behaviour either way.
+ *   - calcModeAim guards its calcMode/liftStack/cursor block on
+ *     `!tam.mode && calcMode != CM_ASSIGN && calcMode != CM_PEM &&
+ *     calcMode != CM_ASN_BROWSER`, and separately guards its
+ *     `showSoftmenu(-MNU_ALPHA)` on `!tam.mode` alone.  Both are omitted
+ *     below (unconditional instead).  Reachability check for fnForthOuter,
+ *     the only caller: CM_PEM is intercepted before reallyRunFunction is
+ *     ever reached, for both a direct FORTH keypress and a catalog pick —
+ *     items.c's runFunction() (~:734-772) records the step and returns
+ *     whenever `calcMode == CM_PEM`, and by the time that check runs,
+ *     tam.mode already reads 0 on every path that gets there (either it was
+ *     never set, or the enclosing keyboard.c branch — :1104-1300 — consumed
+ *     the tam.mode!=0 case itself via addItemToBuffer/leaveTamModeIfEnabled
+ *     before ever falling through to runFunction/reallyRunFunction).
+ *     CM_ASSIGN never reaches runFunction for a function item either:
+ *     keyboard.c's CM_ASSIGN arms (~:1044,:1049,:1314,:1373) capture the
+ *     pressed item as `itemToBeAssigned` or route it through
+ *     processAimInput, never runFunction.  CM_ASN_BROWSER is excluded
+ *     outright: keyboard.c:940 gates the ENTIRE executeFunction dispatch
+ *     block (including its terminal runFunction() call) on calcMode being
+ *     none of CM_REGISTER_BROWSER/CM_FLAG_BROWSER/CM_ASN_BROWSER/
+ *     CM_FONT_BROWSER.  So none of the four excluded states can co-occur
+ *     with a live fnForthOuter call through today's dispatch (the
+ *     PGM_RUNNING program-step path is separately guarded by C2a below, not
+ *     by this function) — the guards are left out, matching the packet's
+ *     literal text. This finding is dispatch-shaped and belongs to L1-3's
+ *     surface, not this packet's; revisit if dispatch changes. */
+static void forthEnterAimSurfaceNoLift(void) {
+  alphaCase = CAPS_AIM_DEFAULT;
+  nextChar  = NC_NORMAL;
+  clearSystemFlag(FLAG_NUMLOCK);
+  scrLock   = NC_NORMAL;
+
+  calcMode = CM_AIM;
+  /* NO liftStack() — T9 */
+  clearRegisterLine(AIM_REGISTER_LINE, true, true);
+  xCursor = 1;
+  yCursor = Y_POSITION_OF_AIM_LINE + 6;
+  cursorFont = &standardFont;
+  cursorEnabled = true;
+
+  showSoftmenu(-MNU_ALPHA);
+  if (softmenuStack[0].softmenuId == 0) { softmenuStack[0].softmenuId = 1; }
+  setSystemFlag(FLAG_ALPHA);
+  calcModeAimGui();
+}
+
+/* fnForthOuter — ITM_FORTH entry point (§3.3.2).  L1-1 (L-R2): outside a
+ * running program this now OPENS AN INTERACTIVE CAPTURE instead of
+ * interpreting X.  ENTER semantics, the REPL loop and the dispatch divert
+ * are L1-2/L1-3 — out of scope here. */
+void fnForthOuter(uint16_t unused) {
+  /* C2a: ITM_FORTH is PTP_REM (items.c:4771) and forthResolveXEQ deliberately
+   * keeps resolving it, so a program step `XEQ 'FORTH'` reaches this
+   * function while a program runs.  Unguarded, L-R2 would open an
+   * interactive capture mid-run; preserve the pre-Stage-L one-shot
+   * interpret-from-X behaviour for that case instead. */
+  if (programRunStop == PGM_RUNNING) {
+    forthOuterCtx_t ctx;
+    ctx.savedScope = forthCurrentScope;
+    if (!forthTakeSourceFromX(ctx.source)) { return; }
+    forthOuterRun(&ctx, FORTH_OUTER_FULL);
     return;
   }
-  forthOuterCtx_t ctx;
-  ctx.savedScope = forthCurrentScope;
-  xcopy(ctx.source, REGISTER_STRING_DATA(REGISTER_X), len + 1);
-  fnDrop(NOPARAM);   /* copy MUST precede drop: drop invalidates the string */
-  forthOuterRun(&ctx, FORTH_OUTER_FULL);
+
+  bool_t seeded = false;
+  char seed[FORTH_SOURCE_MAX];
+  if (getRegisterDataType(REGISTER_X) == dtString) {
+    if (!forthTakeSourceFromX(seed)) { return; }   /* oversize: error, NO capture */
+    seeded = true;
+  }
+
+  if (catalog) {   /* T6: FIX-9 analog — drain a buried/on-top catalog menu */
+    leaveAsmMode();
+    for (int i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+      if (!(forthCatalogMenuOnTop() || forthCatalogBuriedOnStack())) break;
+      popSoftmenu();
+    }
+  }
+
+  forthEnterAimSurfaceNoLift();                   /* see above — NOT fnAim */
+  forthCapOpenInteractive();                      /* clears aimBuffer; cannot fail */
+  T_cursorPos = 0;
+  displayAIMbufferoffset = 0;
+
+  if (seeded) {
+    xcopy(aimBuffer, seed, stringByteLength(seed) + 1);
+    /* Empty-line guard, copied from the landed PEM idiom (manage.c:900-904):
+     * an EMPTY string in X is a valid dtString and passes the size check, and
+     * stringLastGlyph("") + 1 == 1 would put the cursor one past the NUL and
+     * silently eat every keystroke. */
+    T_cursorPos = (aimBuffer[0] == 0) ? 0 : stringLastGlyph(aimBuffer) + 1;
+  }
 }
 
 #if defined(FORTH_DEBUG_SELFTEST)
@@ -1629,13 +1746,13 @@ void fnForthOuter(uint16_t unused) {
  * interpreting and the sites that drove it for its interpret semantics
  * need those semantics under their own name.
  *
- * The body is fnForthOuter's, VERBATIM as of 2026-08-04 — same two error
- * codes, same copy-before-drop ordering (drop invalidates the string),
- * same FORTH_OUTER_FULL run — so every existing assertion keeps its exact
- * stack expectation.  Do not "improve" it: forthOuterInterpret() is NOT a
- * substitute (it never touches X, so the drop that these tests' stack
- * expectations are written against would not happen, and it clears
- * lastErrorCode on entry where this does not).
+ * L1-1: rewritten to call the shared forthTakeSourceFromX() core instead of
+ * duplicating fnForthOuter's old body, so the two cannot drift.  Same two
+ * error codes, same copy-before-drop ordering, same FORTH_OUTER_FULL run —
+ * every existing assertion keeps its exact stack expectation.  Do not
+ * "improve" it: forthOuterInterpret() is NOT a substitute (it never touches
+ * X, so the drop these tests' stack expectations are written against would
+ * not happen, and it clears lastErrorCode on entry where this does not).
  *
  * Self-test builds only; production never calls it. */
 void forthTestRunFromX(uint16_t unusedButMandatoryParameter) {
@@ -1644,19 +1761,9 @@ void forthTestRunFromX(uint16_t unusedButMandatoryParameter) {
                                           testSuite.c's table is
                                           {name, void(*)(uint16_t)} and
                                           forth_interp.txt drives it by name. */
-  if (getRegisterDataType(REGISTER_X) != dtString) {
-    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-    return;
-  }
-  int32_t len = stringByteLength(REGISTER_STRING_DATA(REGISTER_X));
-  if (len + 1 > FORTH_SOURCE_MAX) {
-    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-    return;
-  }
   forthOuterCtx_t ctx;
   ctx.savedScope = forthCurrentScope;
-  xcopy(ctx.source, REGISTER_STRING_DATA(REGISTER_X), len + 1);
-  fnDrop(NOPARAM);   /* copy MUST precede drop: drop invalidates the string */
+  if (!forthTakeSourceFromX(ctx.source)) { return; }
   forthOuterRun(&ctx, FORTH_OUTER_FULL);
 }
 #endif

@@ -1217,13 +1217,22 @@ void forthCaptureResume(void) {
     #endif
     return;
   }
-  { bool_t keysWas = forthCapKeysMode();    /* K3/E13: resume is not a fresh
+  { bool_t keysWas   = forthCapKeysMode();  /* K3/E13: resume is not a fresh
                                                capture — the sub-mode the user
                                                keyed the TAM item from comes
                                                back with the line */
+    uint8_t originWas = forthCapOriginRaw();/* L1-1: forthCapOpen() unconditionally
+                                               zeroes origin to PEM too — this is
+                                               the SUSPENDED->OPEN re-open, not a
+                                               PEM open, so origin must survive it
+                                               exactly like keysMode does.  Inert
+                                               until L1-F* arms interactive
+                                               suspend/resume (suspend/resume is
+                                               PEM-only today, ui/tam.c:1181,:1408). */
     forthCapOpen();                         /* SUSPENDED → OPEN; clears aimBuffer,
                                                which TAM may have used meanwhile */
     forthCapSetKeysMode(keysWas);
+    forthCapSetOrigin(originWas);
   }
   { uint8_t len = p[3];                     /* §8.1: the empty placeholder is
                                                len=1 payload 0x00 — the xcopy
@@ -1704,6 +1713,12 @@ static bool_t _forthCatalogMenuOnTop(void) {
       || m == -MNU_CHARS   || m == -MNU_PROGS || m == -MNU_VARS
       || m == -MNU_MENUS;
 }
+
+/* L1-1 (C2b): public wrappers — fnForthOuter's interactive catalog drain
+ * (forth_compile.c) needs the same predicates insertStepInProgram's PEM
+ * drain uses below, but the helpers themselves are file-static here. */
+bool_t forthCatalogMenuOnTop(void)     { return _forthCatalogMenuOnTop(); }
+bool_t forthCatalogBuriedOnStack(void) { return _forthCatalogBuriedOnStack(); }
 
 void insertStepInProgram(const int16_t func) {
                                 #if defined(DEBUG_PGM)

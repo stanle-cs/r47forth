@@ -6991,6 +6991,10 @@ static int test_capture_close_paths_reset_tuple(void)
      * clears it, and since FIX-8 every close path runs through there —
      * this turns the class sweep into the proof of that claim. */
     forthCapSetKeysMode(true);
+    /* L1-1/E14: same rationale for origin — poison to INTERACTIVE (the
+     * fixture's own open via runFunction(ITM_AIM) already leaves it at
+     * FCAP_ORIGIN_PEM, which would make a missing reset unobservable). */
+    forthCapSetOrigin(FCAP_ORIGIN_INTERACTIVE);
 
     switch (sc) {
       case 1:                       /* BACKSPACE on empty line: abort */
@@ -7031,6 +7035,11 @@ static int test_capture_close_paths_reset_tuple(void)
       printf("    [%d] FAIL: keys-mode bit still set\n", sc);
       scFail = 1;
     }
+    if (forthTestCapOrigin() != FCAP_ORIGIN_PEM) {
+      printf("    [%d] FAIL: origin %d after close, expected FCAP_ORIGIN_PEM\n",
+             sc, forthTestCapOrigin());
+      scFail = 1;
+    }
     if (!scFail) {
       printf("    [%d] PASS: close path leaves the tuple fully reset\n", sc);
     }
@@ -7056,6 +7065,593 @@ static int test_capture_close_paths_reset_tuple(void)
   xcopy(softmenuStack, savedStack, sizeof(savedStack));
   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
   lastErrorCode = ERROR_NONE;
+  return fail;
+}
+
+/* PACKET_L1_1 (C1/C2): the capture origin bit + fnForthOuter's new life as an
+ * interactive-capture opener.  Numbered subcases 1-9 match the packet's C4
+ * list verbatim; each is independent (its own state reset) so one failure
+ * does not mask the next.
+ *
+ * T9 note (subcase 2): calcModeAim's liftStack() must NOT run on this path —
+ * X, Y, Z and the top-of-stack register are snapshotted with known
+ * long-integer sentinels and re-checked bit-identical afterward, which would
+ * catch a reintroduced lift (X would become an uninitialised dtReal34 and
+ * Y/Z/T would each shift up by one register). */
+static int test_capture_origin_lifecycle(void)
+{
+  extern void fnGotoDot(uint16_t);
+  extern void runFunction(int16_t);
+  extern void showSoftmenu(int16_t);
+  extern void fnForthOuter(uint16_t);
+  extern void _closeCatalog(void);
+
+  int fail = 0, scFail;
+  uint8_t tType;
+  int32_t tVal;
+  longInteger_t li;
+
+  uint8_t *savedCurrentStep = currentStep;
+  bool_t savedZeroth = pemCursorIsZerothStep;
+  uint16_t savedLocalStep = currentLocalStepNumber;
+  uint16_t savedProgNum = currentProgramNumber;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  bool_t savedFnKeyInCatalog = fnKeyInCatalog;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedCursorPos = T_cursorPos;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  /* ---- Subcase 1: default is PEM ---- */
+  scFail = 0;
+  {
+    testProg_t p;
+    tpInit(&p);
+    int sLbl = tpLbl(&p, "TORL");
+    tpMarker(&p);
+    tpRtn(&p);
+    if (sLbl < 0 || !tpWrite(&p)) {
+      printf("    [1] FIXTURE FAIL: build/write\n");
+      scFail = 1;
+    } else {
+      calcMode = CM_PEM;
+      catalog = CATALOG_NONE;
+      tam.mode = 0;
+      tam.function = 0;
+      aimBuffer[0] = 0;
+      pemCursorIsZerothStep = false;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      clearSystemFlag(FLAG_ALPHA);
+      lastErrorCode = ERROR_NONE;
+      forthCapClose();
+      currentProgramNumber = 1;
+
+      fnGotoDot(2);
+      runFunction(ITM_AIM);
+      if (!forthCapIsOpen()) {
+        printf("    [1] FIXTURE FAIL: ITM_AIM did not open capture\n");
+        scFail = 1;
+      } else {
+        if (forthTestCapOrigin() != FCAP_ORIGIN_PEM) {
+          printf("    [1] FAIL: origin %d, expected FCAP_ORIGIN_PEM\n", forthTestCapOrigin());
+          scFail = 1;
+        }
+        if (forthCapIsInteractive()) {
+          printf("    [1] FAIL: forthCapIsInteractive() true for a PEM open\n");
+          scFail = 1;
+        }
+      }
+      forthCapClose();
+      clearSystemFlag(FLAG_ALPHA);
+      cleanupTestProgram();
+    }
+  }
+  if (!scFail) printf("    [1] PASS: default open is FCAP_ORIGIN_PEM, not interactive\n");
+  fail |= scFail;
+
+  /* ---- Subcase 2: interactive open, live stack untouched (T9) ---- */
+  scFail = 0;
+  calcMode = CM_NORMAL;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+
+  longIntegerInit(li); int32ToLongInteger(555, li); convertLongIntegerToLongIntegerRegister(li, REGISTER_X); longIntegerFree(li);
+  longIntegerInit(li); int32ToLongInteger(201, li); convertLongIntegerToLongIntegerRegister(li, REGISTER_Y); longIntegerFree(li);
+  longIntegerInit(li); int32ToLongInteger(202, li); convertLongIntegerToLongIntegerRegister(li, REGISTER_Z); longIntegerFree(li);
+  longIntegerInit(li); int32ToLongInteger(203, li); convertLongIntegerToLongIntegerRegister(li, getStackTop()); longIntegerFree(li);
+
+  fnForthOuter(NOPARAM);
+
+  if (forthTestCapState() != FCAP_OPEN) {
+    printf("    [2] FAIL: state %d, expected FCAP_OPEN\n", forthTestCapState());
+    scFail = 1;
+  }
+  if (!forthCapIsInteractive()) {
+    printf("    [2] FAIL: forthCapIsInteractive() false after interactive open\n");
+    scFail = 1;
+  }
+  if (calcMode != CM_AIM) {
+    printf("    [2] FAIL: calcMode %d, expected CM_AIM\n", calcMode);
+    scFail = 1;
+  }
+  if (!getSystemFlag(FLAG_ALPHA)) {
+    printf("    [2] FAIL: FLAG_ALPHA not set\n");
+    scFail = 1;
+  }
+  if (aimBuffer[0] != 0) {
+    printf("    [2] FAIL: aimBuffer \"%s\", expected empty\n", aimBuffer);
+    scFail = 1;
+  }
+  if (T_cursorPos != 0) {
+    printf("    [2] FAIL: T_cursorPos %d, expected 0\n", T_cursorPos);
+    scFail = 1;
+  }
+  if (tam.function != 0) {
+    printf("    [2] FAIL: tam.function 0x%04X, expected 0\n", tam.function);
+    scFail = 1;
+  }
+  /* T9 pin: the whole visible RPN window, bit-identical. */
+  read_reg_int32(REGISTER_X, &tType, &tVal);
+  if (tType != dtLongInteger || tVal != 555) {
+    printf("    [2] FAIL: X = %ld type %u, expected 555 (T9: lift touched X)\n", (long)tVal, tType);
+    scFail = 1;
+  }
+  read_reg_int32(REGISTER_Y, &tType, &tVal);
+  if (tType != dtLongInteger || tVal != 201) {
+    printf("    [2] FAIL: Y = %ld type %u, expected 201 (T9: lift touched Y)\n", (long)tVal, tType);
+    scFail = 1;
+  }
+  read_reg_int32(REGISTER_Z, &tType, &tVal);
+  if (tType != dtLongInteger || tVal != 202) {
+    printf("    [2] FAIL: Z = %ld type %u, expected 202 (T9: lift touched Z)\n", (long)tVal, tType);
+    scFail = 1;
+  }
+  read_reg_int32(getStackTop(), &tType, &tVal);
+  if (tType != dtLongInteger || tVal != 203) {
+    printf("    [2] FAIL: top-of-stack = %ld type %u, expected 203 (T9: depth changed)\n", (long)tVal, tType);
+    scFail = 1;
+  }
+  if (!scFail) printf("    [2] PASS: interactive open leaves the live stack bit-identical (T9)\n");
+  fail |= scFail;
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = CM_NORMAL;
+
+  /* ---- Subcase 3: seed consumes X ---- */
+  scFail = 0;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+
+  longIntegerInit(li); int32ToLongInteger(42, li); convertLongIntegerToLongIntegerRegister(li, REGISTER_Y); longIntegerFree(li);
+  x_set_string("1 2 +");
+
+  fnForthOuter(NOPARAM);
+
+  if (compareString(aimBuffer, "1 2 +", CMP_BINARY) != 0) {
+    printf("    [3] FAIL: aimBuffer \"%s\", expected \"1 2 +\"\n", aimBuffer);
+    scFail = 1;
+  }
+  read_reg_int32(REGISTER_X, &tType, &tVal);
+  if (tType != dtLongInteger || tVal != 42) {
+    printf("    [3] FAIL: X = %ld type %u, expected 42 (Y's former value; drop did not happen)\n",
+           (long)tVal, tType);
+    scFail = 1;
+  }
+  if (T_cursorPos != 5) {
+    printf("    [3] FAIL: T_cursorPos %d, expected 5\n", T_cursorPos);
+    scFail = 1;
+  }
+  if (!scFail) printf("    [3] PASS: seed consumes X, cursor lands after the seeded line\n");
+  fail |= scFail;
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = CM_NORMAL;
+
+  /* ---- Subcase 4: empty string in X (M3 guard) ---- */
+  scFail = 0;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+
+  x_set_string("");
+  fnForthOuter(NOPARAM);
+
+  if (!forthCapIsOpen()) {
+    printf("    [4] FAIL: capture did not open on empty-string X\n");
+    scFail = 1;
+  }
+  if (aimBuffer[0] != 0) {
+    printf("    [4] FAIL: aimBuffer \"%s\", expected empty\n", aimBuffer);
+    scFail = 1;
+  }
+  if (T_cursorPos != 0) {
+    printf("    [4] FAIL: T_cursorPos %d, expected 0 (M3 guard)\n", T_cursorPos);
+    scFail = 1;
+  }
+  if (!scFail) {
+    runFunction(ITM_1);
+    if (aimBuffer[0] != '1') {
+      printf("    [4] FAIL: typed '1' landed at \"%s\", expected it at offset 0\n", aimBuffer);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [4] PASS: empty-string open lands the cursor at 0, first keystroke lands at offset 0\n");
+  fail |= scFail;
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = CM_NORMAL;
+
+  /* ---- Subcase 5: oversize refuses ---- */
+  scFail = 0;
+  {
+    char big[301];
+    int i;
+    for (i = 0; i < 300; i++) { big[i] = 'A'; }
+    big[300] = 0;
+
+    catalog = CATALOG_NONE;
+    tam.mode = 0;
+    tam.function = 0;
+    programRunStop = PGM_STOPPED;
+    dynamicMenuItem = -1;
+    clearSystemFlag(FLAG_ALPHA);
+    lastErrorCode = ERROR_NONE;
+    forthCapClose();
+    x_set_string(big);
+    uint8_t calcModeBefore = calcMode;
+
+    fnForthOuter(NOPARAM);
+
+    if (lastErrorCode != ERROR_INVALID_DATA_TYPE_FOR_OP) {
+      printf("    [5] FAIL: lastErrorCode %d, expected ERROR_INVALID_DATA_TYPE_FOR_OP\n", lastErrorCode);
+      scFail = 1;
+    }
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    [5] FAIL: state %d, expected FCAP_CLOSED\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (calcMode != calcModeBefore) {
+      printf("    [5] FAIL: calcMode changed (%d -> %d)\n", calcModeBefore, calcMode);
+      scFail = 1;
+    }
+    if (getRegisterDataType(REGISTER_X) != dtString ||
+        compareString(REGISTER_STRING_DATA(REGISTER_X), big, CMP_BINARY) != 0) {
+      printf("    [5] FAIL: X did not still hold the original 300-byte string bit-identical\n");
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [5] PASS: oversize X refuses, no capture, X untouched\n");
+  fail |= scFail;
+  lastErrorCode = ERROR_NONE;
+
+  /* ---- Subcase 6: running program keeps the one-shot ---- */
+  scFail = 0;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  calcMode = CM_NORMAL;
+  {
+    uint8_t calcModeBefore = calcMode;
+    programRunStop = PGM_RUNNING;
+    x_set_string("1 2 +");
+
+    fnForthOuter(NOPARAM);
+
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    if (tType != dtLongInteger || tVal != 3) {
+      printf("    [6] FAIL: X = %ld type %u, expected 3\n", (long)tVal, tType);
+      scFail = 1;
+    }
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    [6] FAIL: state %d, expected FCAP_CLOSED (no capture opened mid-run)\n",
+             forthTestCapState());
+      scFail = 1;
+    }
+    if (calcMode != calcModeBefore) {
+      printf("    [6] FAIL: calcMode changed (%d -> %d)\n", calcModeBefore, calcMode);
+      scFail = 1;
+    }
+    programRunStop = PGM_STOPPED;
+  }
+  if (!scFail) printf("    [6] PASS: PGM_RUNNING keeps the pre-Stage-L one-shot, no capture\n");
+  fail |= scFail;
+
+  /* ---- Subcases 7+8: origin rides a suspension (state level only); CLOSED
+   * reads as not-interactive.  Do NOT call forthCaptureSuspend/Resume on an
+   * interactive capture — forthCaptureSuspend guards only on
+   * forthCapIsOpen() (manage.c:1181) and forthCapRecommitStep()
+   * (manage.c:1173-1175) would deleteStepsFromTo whatever currentStep
+   * points at; with this fixture that is the 4-byte .END. sentinel. The
+   * real round-trip belongs to L1-F*. ---- */
+  scFail = 0;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  {
+    longInteger_t li2;
+    longIntegerInit(li2); int32ToLongInteger(9, li2);
+    convertLongIntegerToLongIntegerRegister(li2, REGISTER_X); longIntegerFree(li2);
+  }
+
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+    printf("    [7] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    forthCapSuspendState(0, 0, 0, 0);
+    if (forthTestCapState() != FCAP_SUSPENDED) {
+      printf("    [7] FAIL: state %d, expected FCAP_SUSPENDED\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (!forthCapIsInteractive()) {
+      printf("    [7] FAIL: forthCapIsInteractive() false while SUSPENDED\n");
+      scFail = 1;
+    }
+    if (!scFail) printf("    [7] PASS: origin rides the suspension at the state level\n");
+    fail |= scFail;
+
+    scFail = 0;
+    forthCapClose();
+    if (forthCapIsInteractive()) {
+      printf("    [8] FAIL: forthCapIsInteractive() true after close\n");
+      scFail = 1;
+    }
+    if (forthTestCapOrigin() != FCAP_ORIGIN_PEM) {
+      printf("    [8] FAIL: origin %d after close, expected FCAP_ORIGIN_PEM\n", forthTestCapOrigin());
+      scFail = 1;
+    }
+    if (!scFail) printf("    [8] PASS: CLOSED reads as not-interactive, origin back to PEM\n");
+  }
+  fail |= scFail;
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = CM_NORMAL;
+
+  /* ---- Subcase 9: catalog drain ---- */
+  scFail = 0;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  calcMode = CM_NORMAL;
+
+  catalog = CATALOG_FCNS;
+  showSoftmenu(-MNU_CATALOG);
+  showSoftmenu(-MNU_FCNS);
+  fnKeyInCatalog = 1;   /* after the menus: showSoftmenu clears it */
+
+  runFunction(ITM_FORTH);
+
+  if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+    printf("    [9] FAIL: FORTH from a catalog did not open an interactive capture\n");
+    scFail = 1;
+  }
+  {
+    bool_t catalogRemains = false;
+    int i;
+    for (i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+      int16_t mi = softmenu[softmenuStack[i].softmenuId].menuItem;
+      if (mi == -MNU_CATALOG || mi == -MNU_FCNS) { catalogRemains = true; break; }
+    }
+    if (catalogRemains) {
+      printf("    [9] FAIL: a catalog menu remains on softmenuStack after the drain\n");
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [9] PASS: catalog drain leaves no catalog menu, capture open\n");
+  fail |= scFail;
+  _closeCatalog();
+  fnKeyInCatalog = savedFnKeyInCatalog;
+  catalog = CATALOG_NONE;
+
+  /* ---- restore the full tuple ---- */
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  cleanupTestProgram();
+  currentStep = savedCurrentStep;
+  pemCursorIsZerothStep = savedZeroth;
+  currentLocalStepNumber = savedLocalStep;
+  currentProgramNumber = savedProgNum;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  fnKeyInCatalog = savedFnKeyInCatalog;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  T_cursorPos = savedCursorPos;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
+
+/* PACKET_L1_1 (C4): drive each closeAim() call site reachable by a driven
+ * key with an OPEN interactive capture, and confirm it closes fully — the
+ * minimum close this packet ships (L1-2 replaces it with the full E8
+ * ladder).  Three of the six closeAim() sites are driven here: fnKeyExit in
+ * CM_AIM (reachable directly from the just-opened state) and fnKeyUp/
+ * fnKeyDown (reachable once the current softmenu is non-alpha and
+ * non-scrolling — see the comment at each subcase for why the bare
+ * "open then arrow" gesture does NOT reach them).  The other three
+ * (executeFunction's ITM_INTEGRAL/ITM_INTEGRAL_YX arm, executeFunction's
+ * generic non-alpha-item arm, processKeyAction's BST/SST longpress arm) sit
+ * behind multi-step gestures or longpress timing this harness does not
+ * model; each calls the identical `_forthCapCloseIfInteractive();
+ * closeAim();` pair verified live at the three driven sites, so their
+ * correctness rests on code inspection (reported alongside the call-site
+ * list), not a live drive. */
+static int test_capture_interactive_close(void)
+{
+  extern void fnForthOuter(uint16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void fnKeyUp(uint16_t);
+  extern void fnKeyDown(uint16_t);
+  extern void showSoftmenu(int16_t);
+
+  int fail = 0, scFail;
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedCursorPos = T_cursorPos;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  /* Site 1: fnKeyExit, CM_AIM, the alpha submenu not showing (keyboard.c). */
+  scFail = 0;
+  calcMode = CM_NORMAL;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [fnKeyExit] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    fnKeyExit(NOPARAM);
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    [fnKeyExit] FAIL: state %d, expected FCAP_CLOSED\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (forthTestCapOrigin() != FCAP_ORIGIN_PEM) {
+      printf("    [fnKeyExit] FAIL: origin %d, expected FCAP_ORIGIN_PEM\n", forthTestCapOrigin());
+      scFail = 1;
+    }
+    if (getSystemFlag(FLAG_ALPHA)) {
+      printf("    [fnKeyExit] FAIL: FLAG_ALPHA still set\n");
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [fnKeyExit] PASS: EXIT in CM_AIM closes an open interactive capture\n");
+  fail |= scFail;
+
+  /* fnKeyUp/fnKeyDown's closeAim() arms sit behind
+   * `if(!arrowCasechange && calcMode == CM_AIM && isJMAlphaSoftmenu(menuId))`
+   * (keyboard.c ~:4652/:4871) — and `arrowCasechange` is `#define`d `false`
+   * (defines.h:500), so that condition is `calcMode == CM_AIM &&
+   * isJMAlphaSoftmenu(menuId)`, unconditionally true right after
+   * forthEnterAimSurfaceNoLift() shows -MNU_ALPHA.  A driven fnKeyUp/
+   * fnKeyDown from the ordinary just-opened state therefore takes the
+   * arrow-cursor arm (fnT_ARROW), never reaching closeAim() — true for a
+   * NATIVE alpha session too, not something L1-1 introduces.  Reaching the
+   * closeAim() arm needs the current softmenu to be non-alpha AND
+   * non-scrolling while calcMode stays CM_AIM: showSoftmenu(-MNU_HOME) gives
+   * both (softmenuId 0 is never alpha, and currentSoftmenuScrolls() requires
+   * menuId > 1 — softmenus.c:4169) — a real reachable combination (e.g. a
+   * catalog or menu selection landing on HOME while typing), just not the
+   * bare "open then press the arrow" gesture. */
+  scFail = 0;
+  calcMode = CM_NORMAL;
+  clearSystemFlag(FLAG_ALPHA);
+  forthCapClose();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [fnKeyUp] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    showSoftmenu(-MNU_HOME);
+    fnKeyUp(NOPARAM);
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    [fnKeyUp] FAIL: state %d, expected FCAP_CLOSED\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (forthTestCapOrigin() != FCAP_ORIGIN_PEM) {
+      printf("    [fnKeyUp] FAIL: origin %d, expected FCAP_ORIGIN_PEM\n", forthTestCapOrigin());
+      scFail = 1;
+    }
+    if (getSystemFlag(FLAG_ALPHA)) {
+      printf("    [fnKeyUp] FAIL: FLAG_ALPHA still set\n");
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [fnKeyUp] PASS: fnKeyUp's closeAim() site closes an open interactive capture\n");
+  fail |= scFail;
+
+  scFail = 0;
+  calcMode = CM_NORMAL;
+  clearSystemFlag(FLAG_ALPHA);
+  forthCapClose();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [fnKeyDown] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  } else {
+    showSoftmenu(-MNU_HOME);
+    fnKeyDown(NOPARAM);
+    if (forthTestCapState() != FCAP_CLOSED) {
+      printf("    [fnKeyDown] FAIL: state %d, expected FCAP_CLOSED\n", forthTestCapState());
+      scFail = 1;
+    }
+    if (forthTestCapOrigin() != FCAP_ORIGIN_PEM) {
+      printf("    [fnKeyDown] FAIL: origin %d, expected FCAP_ORIGIN_PEM\n", forthTestCapOrigin());
+      scFail = 1;
+    }
+    if (getSystemFlag(FLAG_ALPHA)) {
+      printf("    [fnKeyDown] FAIL: FLAG_ALPHA still set\n");
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [fnKeyDown] PASS: fnKeyDown's closeAim() site closes an open interactive capture\n");
+  fail |= scFail;
+
+  forthCapClose();
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  T_cursorPos = savedCursorPos;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+
   return fail;
 }
 

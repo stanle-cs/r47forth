@@ -12,6 +12,18 @@ TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineI
 
 static void executeFunction(const char *data, int16_t item_);
 
+/* L1-1: nothing in the landed tree closes an INTERACTIVE capture —
+ * closeAim() (upstream bufferize.c) does not know about forthCap, and every
+ * forthCapClose() production site is CM_PEM-gated inside pemAlpha/
+ * pemCloseAlphaInput.  A leaked FCAP_OPEN is not inert: insertStepInProgram's
+ * `func == ITM_AIM && forthCapIsOpen()` arm (manage.c:1719-1734) has no
+ * origin discriminator, so the next PEM ALPHA press would toggle keys mode
+ * instead of opening literal input.  L1-2 replaces this with the full E8
+ * ladder; until then, every AIM teardown in this file closes the capture. */
+static void _forthCapCloseIfInteractive(void) {
+  if (forthCapIsInteractive()) { forthCapClose(); }
+}
+
   int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
     int16_t item = ITM_NOP;
     dynamicMenuItem = -1;
@@ -1057,6 +1069,7 @@ endReturnTrue:
                 break;
               }
               case CM_AIM: {
+                _forthCapCloseIfInteractive();   /* L1-1 */
                 closeAim();
                 break;
               }
@@ -1298,6 +1311,7 @@ endReturnTrue:
               cursorEnabled = false;               // cursor is re-activated automatically elsewhere, after button release
             }
             if(calcMode == CM_AIM && !(isAlphabeticSoftmenu() || isJMAlphaOnlySoftmenu() || item == ITM_KEYMAP)) {
+              _forthCapCloseIfInteractive();   /* L1-1 */
               closeAim();
             }
             if(tam.mode && tam.alpha) {
@@ -2886,6 +2900,7 @@ RELEASE_END:
               case CM_AIM: {
                 //JM In AIM, BST and SST is not reaching here, as it is reconfigured for CAPS lock and NUM lock
                 if(item == ITM_BST || item == ITM_SST) {
+                  _forthCapCloseIfInteractive();   /* L1-1 */
                   closeAim();
                   runFunction(item);
                   keyActionProcessed = true;
@@ -3871,6 +3886,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
         }                                                                   //JM
 
         if(softmenuStack[0].softmenuId <= 1 && menu(1) != -MNU_ALPHA) { // MyMenu or MyAlpha is displayed
+          _forthCapCloseIfInteractive();   /* L1-1 */
           closeAim();
                     #if defined(DEBUGUNDO)
                       printf(">>> saveForUndo from fnKeyExitA\n");
@@ -4651,6 +4667,7 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
             closeNim();
           }
           if(calcMode == CM_AIM) {
+            _forthCapCloseIfInteractive();   /* L1-1 */
             closeAim();
           }
           fnBst(NOPARAM);
@@ -4869,6 +4886,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
             closeNim();
           }
           if(calcMode == CM_AIM) {
+            _forthCapCloseIfInteractive();   /* L1-1 */
             closeAim();
           }
           fnSst(NOPARAM);

@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8a5032639b67b6ccc2b0da39268356548c2935c3 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..090226de4d60c4a523b2e6bb9e6238308002c0b8 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,9 @@
@@ -296,7 +296,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8a5032639b67b6ccc2b0da3926835654
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,6 +1153,140 @@ void pemCloseAlphaInput(void) {
+@@ -998,6 +1153,149 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -364,13 +364,22 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8a5032639b67b6ccc2b0da3926835654
 +    #endif
 +    return;
 +  }
-+  { bool_t keysWas = forthCapKeysMode();    /* K3/E13: resume is not a fresh
++  { bool_t keysWas   = forthCapKeysMode();  /* K3/E13: resume is not a fresh
 +                                               capture — the sub-mode the user
 +                                               keyed the TAM item from comes
 +                                               back with the line */
++    uint8_t originWas = forthCapOriginRaw();/* L1-1: forthCapOpen() unconditionally
++                                               zeroes origin to PEM too — this is
++                                               the SUSPENDED->OPEN re-open, not a
++                                               PEM open, so origin must survive it
++                                               exactly like keysMode does.  Inert
++                                               until L1-F* arms interactive
++                                               suspend/resume (suspend/resume is
++                                               PEM-only today, ui/tam.c:1181,:1408). */
 +    forthCapOpen();                         /* SUSPENDED → OPEN; clears aimBuffer,
 +                                               which TAM may have used meanwhile */
 +    forthCapSetKeysMode(keysWas);
++    forthCapSetOrigin(originWas);
 +  }
 +  { uint8_t len = p[3];                     /* §8.1: the empty placeholder is
 +                                               len=1 payload 0x00 — the xcopy
@@ -437,7 +446,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8a5032639b67b6ccc2b0da3926835654
  }
  
  
-@@ -1013,7 +1302,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +1311,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -446,7 +455,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8a5032639b67b6ccc2b0da3926835654
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +1674,37 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +1683,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -481,10 +490,16 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8a5032639b67b6ccc2b0da3926835654
 +      || m == -MNU_MENUS;
 +}
 +
++/* L1-1 (C2b): public wrappers — fnForthOuter's interactive catalog drain
++ * (forth_compile.c) needs the same predicates insertStepInProgram's PEM
++ * drain uses below, but the helpers themselves are file-static here. */
++bool_t forthCatalogMenuOnTop(void)     { return _forthCatalogMenuOnTop(); }
++bool_t forthCatalogBuriedOnStack(void) { return _forthCatalogBuriedOnStack(); }
++
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +1715,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +1730,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -521,7 +536,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8a5032639b67b6ccc2b0da3926835654
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +1764,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +1779,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -589,7 +604,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8a5032639b67b6ccc2b0da3926835654
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +1836,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +1851,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -605,7 +620,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8a5032639b67b6ccc2b0da3926835654
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +1927,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +1942,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -629,7 +644,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..8a5032639b67b6ccc2b0da3926835654
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2239,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2254,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

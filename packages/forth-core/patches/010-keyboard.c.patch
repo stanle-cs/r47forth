@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a5bc8a944 100644
+index bc44026016e94a8865b8acc886386341596641c6..5a5736354d938cf08db2929d4b542a5704e9288f 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,6 +2,9 @@
@@ -12,7 +12,26 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
  
  
  TO_QSPI static const char bugScreenNonexistentMenu[] = "In function determineFunctionKeyItem: nonexistent menu specified!";
-@@ -75,6 +78,12 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -9,6 +12,18 @@ TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineI
+ 
+ static void executeFunction(const char *data, int16_t item_);
+ 
++/* L1-1: nothing in the landed tree closes an INTERACTIVE capture —
++ * closeAim() (upstream bufferize.c) does not know about forthCap, and every
++ * forthCapClose() production site is CM_PEM-gated inside pemAlpha/
++ * pemCloseAlphaInput.  A leaked FCAP_OPEN is not inert: insertStepInProgram's
++ * `func == ITM_AIM && forthCapIsOpen()` arm (manage.c:1719-1734) has no
++ * origin discriminator, so the next PEM ALPHA press would toggle keys mode
++ * instead of opening literal input.  L1-2 replaces this with the full E8
++ * ladder; until then, every AIM teardown in this file closes the capture. */
++static void _forthCapCloseIfInteractive(void) {
++  if (forthCapIsInteractive()) { forthCapClose(); }
++}
++
+   int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
+     int16_t item = ITM_NOP;
+     dynamicMenuItem = -1;
+@@ -75,6 +90,12 @@ static void executeFunction(const char *data, int16_t item_);
          break;
        }
  
@@ -25,7 +44,7 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
        case MNU_VAR: {
          dynamicMenuItem = firstItem + itemShift + fn;
          item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : MNU_DYNAMIC);
-@@ -434,7 +443,20 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -434,7 +455,20 @@ static void executeFunction(const char *data, int16_t item_);
      }
  
  
@@ -47,7 +66,7 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
        bool_t inCatalog = false;
        for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
          if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {
-@@ -961,6 +983,14 @@ endReturnTrue:
+@@ -961,6 +995,14 @@ endReturnTrue:
  
  
          lastKeyItemDetermined = item;
@@ -62,7 +81,23 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
        }
  
        // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
-@@ -1533,7 +1563,10 @@ endReturnTrue:
+@@ -1027,6 +1069,7 @@ endReturnTrue:
+                 break;
+               }
+               case CM_AIM: {
++                _forthCapCloseIfInteractive();   /* L1-1 */
+                 closeAim();
+                 break;
+               }
+@@ -1268,6 +1311,7 @@ endReturnTrue:
+               cursorEnabled = false;               // cursor is re-activated automatically elsewhere, after button release
+             }
+             if(calcMode == CM_AIM && !(isAlphabeticSoftmenu() || isJMAlphaOnlySoftmenu() || item == ITM_KEYMAP)) {
++              _forthCapCloseIfInteractive();   /* L1-1 */
+               closeAim();
+             }
+             if(tam.mode && tam.alpha) {
+@@ -1533,7 +1577,10 @@ endReturnTrue:
  
  
  
@@ -74,7 +109,7 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
      delayCloseNim = false;
      int16_t result;
      const calcKey_t *key;
-@@ -1650,30 +1683,42 @@ endReturnTrue:
+@@ -1650,30 +1697,42 @@ endReturnTrue:
        Check_MultiPresses(&result, key_no);        //JM
        return result;
      }
@@ -137,7 +172,7 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
      }
      else if(tam.mode) {
        result = key->primaryTam; // No shifted function in TAM
-@@ -2249,6 +2294,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2249,6 +2308,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
                }
              }
              else {
@@ -148,7 +183,15 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -3130,11 +3179,23 @@ RELEASE_END:
+@@ -2837,6 +2900,7 @@ RELEASE_END:
+               case CM_AIM: {
+                 //JM In AIM, BST and SST is not reaching here, as it is reconfigured for CAPS lock and NUM lock
+                 if(item == ITM_BST || item == ITM_SST) {
++                  _forthCapCloseIfInteractive();   /* L1-1 */
+                   closeAim();
+                   runFunction(item);
+                   keyActionProcessed = true;
+@@ -3130,11 +3194,23 @@ RELEASE_END:
                    keyActionProcessed = true;
                  }
                  else if(item == ITM_SST) {
@@ -172,7 +215,7 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
                    fnBst(NOPARAM);
                    keyActionProcessed = true;
                    refreshScreen(123);
-@@ -3154,6 +3215,12 @@ RELEASE_END:
+@@ -3154,6 +3230,12 @@ RELEASE_END:
                    }
                  }
                  else if(item == ITM_RS) {
@@ -185,7 +228,15 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
                    addStepInProgram(ITM_STOP);
                    keyActionProcessed = true;
                  }
-@@ -3856,6 +3923,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3804,6 +3886,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+         }                                                                   //JM
+ 
+         if(softmenuStack[0].softmenuId <= 1 && menu(1) != -MNU_ALPHA) { // MyMenu or MyAlpha is displayed
++          _forthCapCloseIfInteractive();   /* L1-1 */
+           closeAim();
+                     #if defined(DEBUGUNDO)
+                       printf(">>> saveForUndo from fnKeyExitA\n");
+@@ -3856,6 +3939,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            lastErrorCode = 0;
            break;
          }
@@ -201,7 +252,7 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
          if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
            if(isAlphaSubmenu(0)) {
              popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
-@@ -3868,6 +3944,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +3960,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -209,7 +260,7 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +3955,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +3971,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -232,7 +283,7 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4366,9 +4459,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4475,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -257,3 +308,19 @@ index bc44026016e94a8865b8acc886386341596641c6..38e7dd7570fe06ba86800b378c0d1f2a
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
+@@ -4544,6 +4667,7 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+             closeNim();
+           }
+           if(calcMode == CM_AIM) {
++            _forthCapCloseIfInteractive();   /* L1-1 */
+             closeAim();
+           }
+           fnBst(NOPARAM);
+@@ -4762,6 +4886,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+             closeNim();
+           }
+           if(calcMode == CM_AIM) {
++            _forthCapCloseIfInteractive();   /* L1-1 */
+             closeAim();
+           }
+           fnSst(NOPARAM);

@@ -2,20 +2,27 @@
 
 static forthCap_t forthCap;   /* zero-initialized: FCAP_CLOSED */
 
-void forthCapOpen(void) {
-  /* A still-SUSPENDED object is an orphan here (exotic mode changes that
-   * skip the resume choke point); the assignment below drops it. */
+/* L1-1: forthCapOpen split into the shared body plus a per-origin entry.
+ * A still-SUSPENDED object is an orphan here (exotic mode changes that skip
+ * the resume choke point); the assignment below drops it. */
+static void _forthCapOpenAs(uint8_t origin) {
   aimBuffer[0] = 0;                         /* reopen = fresh line */
   forthCap.state = FCAP_OPEN;
   forthCap.keysMode = 0;                    /* K1: a fresh capture starts in
                                                alpha input (owner default) */
+  forthCap.origin = origin;
 }
+
+void forthCapOpen(void)            { _forthCapOpenAs(FCAP_ORIGIN_PEM); }
+void forthCapOpenInteractive(void) { _forthCapOpenAs(FCAP_ORIGIN_INTERACTIVE); }
 
 void forthCapClose(void) {
   forthCap.state = FCAP_CLOSED;
   forthCap.keysMode = 0;                    /* K1/E14: since FIX-8 every close
                                                path runs through here, so this
                                                one site covers the whole sweep */
+  forthCap.origin = FCAP_ORIGIN_PEM;        /* L1-1/E14: same rationale — every
+                                               close path runs through here */
 }
 
 void forthCapSuspendState(uint16_t cursor, uint16_t localStep, uint32_t stepOffset, uint16_t stepCount) {
@@ -39,6 +46,8 @@ void     forthCapAbandonSuspended(void){ if (forthCap.state == FCAP_SUSPENDED) {
                                                the suspension, so an abandoned
                                                suspension must clear it here or
                                                it leaks into the next capture */
+  forthCap.origin = FCAP_ORIGIN_PEM;        /* L1-1/E14: origin rides the
+                                               suspension too (C1) */
 } }
 
 /* F6-6: capture state cannot outlive the dictionary lifecycle.
@@ -60,9 +69,19 @@ void forthCapPowerReset(void) {
   forthCapAbandonSuspended();   /* explicit for the suspended state */
   forthCap.keysMode = 0;        /* K1: transient UI state never survives a
                                    dictionary-lifecycle reset */
+  forthCap.origin = FCAP_ORIGIN_PEM; /* L1-1: same rationale as keysMode above */
 }
 
 bool_t forthCapIsOpen(void)  { return forthCap.state == FCAP_OPEN; }
+bool_t forthCapIsInteractive(void) {
+  /* Defence-in-depth: the state != CLOSED conjunction is not falsifiable on
+   * its own (forthCapClose() also resets origin to PEM, so (CLOSED,
+   * INTERACTIVE) is unreachable) — forthTestCapOrigin() exists precisely so
+   * mutation coverage can still pin the raw field. */
+  return forthCap.origin == FCAP_ORIGIN_INTERACTIVE && forthCap.state != FCAP_CLOSED;
+}
+uint8_t forthCapOriginRaw(void)          { return forthCap.origin; }
+void    forthCapSetOrigin(uint8_t o)     { forthCap.origin = o; }
 bool_t forthCapTextNonEmpty(void) {
   return forthCap.state == FCAP_OPEN && aimBuffer[0] != 0;
 }
@@ -76,4 +95,5 @@ uint8_t forthTestCapState(void) { return forthCap.state; }
 const char *forthTestCapText(void) {
   return forthCap.state == FCAP_OPEN ? (const char *)aimBuffer : "";
 }
+uint8_t forthTestCapOrigin(void) { return forthCap.origin; }
 #endif

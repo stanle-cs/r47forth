@@ -1127,6 +1127,8 @@ static int test_sim_bench_nesting(void);
 static int test_pem_xeq_dynmenu_no_live_exec(void);
 static int test_forth_toggle_close_with_open_capture(void);   /* FIX-8 */
 static int test_capture_close_paths_reset_tuple(void);        /* FIX-8 class */
+static int test_capture_origin_lifecycle(void);               /* L1-1 */
+static int test_capture_interactive_close(void);              /* L1-1 */
 static int test_forth_fold_commit_recompiles(void);           /* FIX-7 */
 static int test_quote_glyph_accept_parity(void);              /* FIX-7 class */
 static int test_resume_drains_buried_catalog(void);           /* FIX-9 */
@@ -2088,6 +2090,19 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_capture_close_paths_reset_tuple...\n");
   fail |= test_capture_close_paths_reset_tuple();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("\nFORTH L1-1 TESTS (capture origin bit, interactive open, minimum close)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_capture_origin_lifecycle...\n");
+  fail |= test_capture_origin_lifecycle();
+  forthDictClear();
+  forthGDictClear();
+
+  forthDictInit();
+  printf("  [DEBUG] running test_capture_interactive_close...\n");
+  fail |= test_capture_interactive_close();
   forthDictClear();
   forthGDictClear();
 

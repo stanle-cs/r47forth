@@ -34,11 +34,20 @@
 
 typedef enum { FCAP_CLOSED = 0, FCAP_OPEN = 1, FCAP_SUSPENDED = 2 } forthCapState_t;
 
+/* L1-1: where the capture was opened from. */
+typedef enum { FCAP_ORIGIN_PEM = 0, FCAP_ORIGIN_INTERACTIVE = 1 } forthCapOrigin_t;
+
 typedef struct {
   uint8_t     state;          /* forthCapState_t */
   uint8_t     keysMode;       /* K1 (E10-E12): 0 = alpha input, 1 = keys.
                                  Transient UI state, NEVER persisted;
                                  meaningful only while state == FCAP_OPEN. */
+  uint8_t     origin;         /* L1-1: forthCapOrigin_t.  PEM captures live on
+                                 a program step; INTERACTIVE captures live on
+                                 the AIM surface (L-R2).  Transient, NEVER
+                                 persisted.  Zero is PEM so every zero-init and
+                                 memset-style reset means "PEM" — matching every
+                                 capture that existed before Stage L. */
   /* Suspend snapshot — meaningful only in FCAP_SUSPENDED: */
   uint16_t    savedCursor;    /* T_cursorPos at suspend */
   uint16_t    savedLocalStep; /* currentLocalStepNumber at suspend */
@@ -51,12 +60,25 @@ typedef struct {
 
 void        forthCapOpen(void);       /* state FCAP_OPEN; clears aimBuffer.
                                          Cannot fail (nothing is allocated) */
+void        forthCapOpenInteractive(void);  /* L1-1: open with INTERACTIVE origin */
 void        forthCapClose(void);      /* state FCAP_CLOSED; safe if already
                                          closed */
 bool_t      forthCapIsOpen(void);     /* state == FCAP_OPEN */
+bool_t      forthCapIsInteractive(void); /* L1-1: origin == INTERACTIVE &&
+                                             state != CLOSED */
+uint8_t     forthCapOriginRaw(void);     /* L1-1: the raw field — for the
+                                             resume bracket */
+void        forthCapSetOrigin(uint8_t o);/* L1-1: the raw field — for the
+                                             resume bracket */
 bool_t      forthCapTextNonEmpty(void); /* open && aimBuffer[0] != 0 */
 bool_t      forthCapKeysMode(void);        /* K1: keys-mode bit */
 void        forthCapSetKeysMode(bool_t on);
+
+/* L1-1 (C2b): public wrappers for the file-static E1 catalog-drain helpers
+ * (programming/manage.c:1165-1166, defined at :1689/:1701) — forthCapOpenInteractive's
+ * caller (fnForthOuter, forth_compile.c) needs them too. */
+bool_t   forthCatalogMenuOnTop(void);
+bool_t   forthCatalogBuriedOnStack(void);
 
 /* F6-2: suspend/resume state ops */
 void     forthCapSuspendState(uint16_t cursor, uint16_t localStep, uint32_t stepOffset, uint16_t stepCount);
@@ -87,6 +109,8 @@ void     forthCapPowerReset(void);
 #if defined(FORTH_DEBUG_SELFTEST)
 uint8_t     forthTestCapState(void);
 const char *forthTestCapText(void);   /* "" when not open */
+uint8_t     forthTestCapOrigin(void); /* L1-1: raw field, so the E14 sweep is
+                                          falsifiable */
 #endif
 
 #endif
