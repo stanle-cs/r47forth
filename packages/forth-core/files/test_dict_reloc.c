@@ -1293,6 +1293,13 @@ static int test_console_ring_clear(void);
 static int test_console_ring_view(void);
 static int test_console_ring_reset_seam(void);
 static int test_console_ring_hammer(void);
+/* N1-2: the console view */
+static int test_console_view_gate(void);
+static int test_console_view_paints(void);
+static int test_console_view_rows(void);
+static int test_console_view_roll(void);
+static int test_console_view_arm(void);
+static int test_console_view_placement(void);
 
 int forthDictSelfTest(void)
 {
@@ -2471,6 +2478,27 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_console_ring_hammer...\n");
   fail |= test_console_ring_hammer();
+
+  /* N1-2: the console view */
+  printf("\nFORTH N1-2 TESTS (console view)\n");
+
+  printf("  [DEBUG] running test_console_view_gate...\n");
+  fail |= test_console_view_gate();
+
+  printf("  [DEBUG] running test_console_view_paints...\n");
+  fail |= test_console_view_paints();
+
+  printf("  [DEBUG] running test_console_view_rows...\n");
+  fail |= test_console_view_rows();
+
+  printf("  [DEBUG] running test_console_view_roll...\n");
+  fail |= test_console_view_roll();
+
+  printf("  [DEBUG] running test_console_view_arm...\n");
+  fail |= test_console_view_arm();
+
+  printf("  [DEBUG] running test_console_view_placement...\n");
+  fail |= test_console_view_placement();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

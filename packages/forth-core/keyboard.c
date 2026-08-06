@@ -4,6 +4,7 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_capture.h"
+#include "forth_console.h"
 #include "forth_menu.h"
 
 
@@ -1852,6 +1853,41 @@ endReturnTrue:
     else {
       displayBugScreen(bugScreenItemNotDetermined);
       result = 0;
+    }
+
+    /* N1-2 (N-T4): the console roll — g-shifted up/down browses the
+     * transcript.
+     *
+     * Placed AFTER the plane selection so it catches BOTH input modes with
+     * one arm: keys mode resolves through primary/fShifted/gShifted (:1842)
+     * and alpha input through the *Aim columns (:1811), and g-up means
+     * something different in each — ITM_RBR in keys mode, ITM_UP_ARROW (the
+     * glyph insert) in alpha.  Neither means anything inside a capture, and
+     * the displaced glyphs stay reachable on the alpha MISC softmenu
+     * (softmenus.c:711).
+     *
+     * The KEY is identified layout-independently by its own alpha f-column:
+     * CHR_caseUP/CHR_caseDN name the up/down keys on every layout table
+     * without hardcoding a key number.  Same discipline as the K1/E10
+     * ALPHA-toggle arm above, which keys on key->fShifted == ITM_AIM.
+     *
+     * The roll happens HERE rather than being carried to a handler as a new
+     * item: determineItem is called exactly once per press (btnPressed,
+     * :2026), the state changed is view-only, and the alternative — latching
+     * "this CHR_caseUP is a roll, not a recall" for the handler to consume —
+     * is a one-shot flag that desyncs into a wrong-gesture bug the first time
+     * a press resolves but never dispatches.  ITM_NOP then keeps every
+     * downstream arm out of it; btnReleased's refreshScreen(117) (:2478)
+     * repaints. */
+    if(forthCapIsInteractive() && shiftG && !tam.mode) {
+      if(key->fShiftedAim == CHR_caseUP) {
+        forthConsoleRoll(+1);                  /* one line OLDER */
+        result = ITM_NOP;
+      }
+      else if(key->fShiftedAim == CHR_caseDN) {
+        forthConsoleRoll(-1);                  /* one line NEWER */
+        result = ITM_NOP;
+      }
     }
 
                     #if defined(PC_BUILD)

@@ -386,3 +386,364 @@ static int test_console_ring_hammer(void)
   printf("    PASS: 5000-operation hammer, every ring invariant held every iteration\n");
   return 0;
 }
+
+/* ==================================================================
+ * N1-2 — the console VIEW: geometry, suppression, yields, the roll.
+ *
+ * Reads the framebuffer back, the G3/G4 way (test_capture.part.h:6304):
+ * lcd_buffer is filled by the software blitter whether or not a GTK window
+ * exists, and lcd_buffer_pixel_on() links in the sim binary and the
+ * upstream testSuite binary alike.  No pixel COUNT is hard-coded — upstream
+ * owns the font — only presence, absence and direction of change.
+ * ================================================================== */
+
+extern bool_t _forthConsoleActive(void);
+extern void   _forthConsoleRender(void);
+
+/* Lit pixels in the transcript band: the stack area ABOVE the AIM editor.
+ * The short-line editor's first pixel row is 128, so 24..127 is the band the
+ * console owns and the editor never touches.  The status bar ends below
+ * Y_POSITION_OF_REGISTER_T_LINE (topLeftGraphInfoY is 20), so nothing else
+ * paints here. */
+static int32_t _consoleBandPixels(void)
+{
+  int32_t lit = 0;
+  uint32_t x, y;
+  for (y = Y_POSITION_OF_REGISTER_T_LINE; y < 128; y++) {
+    for (x = 0; x < SCREEN_WIDTH; x++) {
+      if (lcd_buffer_pixel_on(x, y)) { lit++; }
+    }
+  }
+  return lit;
+}
+
+/* Put the calculator in the state the console arm gates on, with the
+ * short-line editor geometry (yMultiLineEdOffset == 3). */
+static void _consoleEnterViewState(void)
+{
+  forthCapOpenInteractive();
+  calcMode              = CM_AIM;
+  tam.mode              = 0;
+  lastErrorCode         = ERROR_NONE;
+  temporaryInformation  = TI_NO_INFO;
+  yMultiLineEdOffset    = 3;
+}
+
+static void _consoleLeaveViewState(uint8_t savedMode)
+{
+  forthCapClose();
+  calcMode = savedMode;
+  lastErrorCode = ERROR_NONE;
+  temporaryInformation = TI_NO_INFO;
+}
+
+/* ---- 10: the gate.  Every conjunct of _forthConsoleActive() falsified one
+ * at a time — the arm must yield on each, or it swallows an error display,
+ * a temporaryInformation screen, or a TAM prompt. ---- */
+static int test_console_view_gate(void)
+{
+  uint8_t saved = calcMode;
+  int fail = 0;
+
+  _consoleEnterViewState();
+  if (!_forthConsoleActive()) {
+    printf("    FAIL: the console must be active in its own state\n");
+    fail = 1;
+  }
+
+  lastErrorCode = ERROR_OUT_OF_RANGE;
+  if (_forthConsoleActive()) {
+    printf("    FAIL: must yield while lastErrorCode != 0 (the error paints on Z)\n");
+    fail = 1;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  temporaryInformation = TI_BATTV;
+  if (_forthConsoleActive()) {
+    printf("    FAIL: must yield on temporaryInformation — displayTemporaryInformationOnX"
+           " repaints all four rows from inside the X paint the console keeps\n");
+    fail = 1;
+  }
+  temporaryInformation = TI_NO_INFO;
+
+  tam.mode = TM_VALUE;
+  if (_forthConsoleActive()) {
+    printf("    FAIL: must yield during TAM (calcMode stays CM_AIM; the prompt paints on T)\n");
+    fail = 1;
+  }
+  tam.mode = 0;
+
+  calcMode = CM_NORMAL;
+  if (_forthConsoleActive()) {
+    printf("    FAIL: must yield outside CM_AIM\n");
+    fail = 1;
+  }
+  calcMode = CM_AIM;
+
+  forthCapClose();
+  if (_forthConsoleActive()) {
+    printf("    FAIL: must yield with no interactive capture open\n");
+    fail = 1;
+  }
+
+  /* A PEM capture is not the console's origin. */
+  forthCapOpen();
+  if (_forthConsoleActive()) {
+    printf("    FAIL: must yield for a PEM capture — the listing stays\n");
+    fail = 1;
+  }
+
+  _consoleLeaveViewState(saved);
+  if (!fail) {
+    printf("    PASS: the arm yields on every falsified conjunct (error, TI, TAM, mode, origin)\n");
+  }
+  return fail;
+}
+
+/* ---- 11: the transcript reaches the LCD, and an empty console shows an
+ * EMPTY area — which is also how "no register paints while the console is
+ * up" is proven, since the stack holds values throughout. ---- */
+static int test_console_view_paints(void)
+{
+  uint8_t saved = calcMode;
+  int32_t withText, empty;
+  int fail = 0;
+
+  forthPushInt32(11111); forthPushInt32(22222); forthPushInt32(33333);
+
+  _consoleEnterViewState();
+  forthConsoleClear();
+
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  empty = _consoleBandPixels();
+  if (empty != 0) {
+    printf("    FAIL: an empty console must paint nothing in the band"
+           " (got %d lit px — a register leaked through)\n", empty);
+    fail = 1;
+  }
+
+  forthConsoleAppendLine("HELLO CONSOLE");
+  forthConsoleAppendLine("SECOND LINE");
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  withText = _consoleBandPixels();
+  if (withText <= 0) {
+    printf("    FAIL: transcript text never reached lcd_buffer (%d lit px)\n", withText);
+    fail = 1;
+  }
+
+  _consoleLeaveViewState(saved);
+  if (!fail) {
+    printf("    PASS: transcript reaches the LCD (%d px); an empty console paints 0 px\n",
+           withText);
+  }
+  return fail;
+}
+
+/* ---- 12: row count per editor state.  Four rows fit above the short-line
+ * editor and two above the long-line one, so a six-line dialogue paints
+ * strictly MORE ink in the short state than in the long one. ---- */
+static int test_console_view_rows(void)
+{
+  uint8_t saved = calcMode;
+  int32_t shortState, longState;
+  int i, fail = 0;
+
+  _consoleEnterViewState();
+  forthConsoleClear();
+  for (i = 0; i < 6; i++) { forthConsoleAppendLine("MMMMMMMMMMMMMMMMMMMM"); }
+
+  yMultiLineEdOffset = 3;                       /* short line: editorTop 128 -> 4 rows */
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  shortState = _consoleBandPixels();
+
+  yMultiLineEdOffset = 1;                       /* long line: editorTop 67 -> 2 rows */
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  longState = _consoleBandPixels();
+
+  if (!(shortState > longState && longState > 0)) {
+    printf("    FAIL: expected short-line ink > long-line ink > 0, got %d and %d\n",
+           shortState, longState);
+    fail = 1;
+  }
+  /* Identical lines, so the ratio is the row ratio: 4 rows vs 2. */
+  if (!fail && shortState != 2 * longState) {
+    printf("    FAIL: with identical lines the ink must be exactly 4 rows vs 2"
+           " (%d vs %d)\n", shortState, longState);
+    fail = 1;
+  }
+
+  yMultiLineEdOffset = 3;
+  _consoleLeaveViewState(saved);
+  if (!fail) {
+    printf("    PASS: 4 rows short-line, 2 rows long-line (%d px vs %d px)\n",
+           shortState, longState);
+  }
+  return fail;
+}
+
+/* ---- 13: the roll.  Rolling back must reveal older lines, rolling forward
+ * must restore the newest, and any output must snap the view home. ---- */
+static int test_console_view_roll(void)
+{
+  uint8_t saved = calcMode;
+  int32_t atNewest, rolledBack, rolledHome, afterOutput;
+  int i, fail = 0;
+
+  _consoleEnterViewState();
+  forthConsoleClear();
+  /* One wide line, then six narrow ones: the wide line is off-screen at the
+   * newest view and must appear once the view rolls back past six lines. */
+  forthConsoleAppendLine("WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW");
+  for (i = 0; i < 6; i++) { forthConsoleAppendLine("."); }
+
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  atNewest = _consoleBandPixels();
+
+  for (i = 0; i < 6; i++) { forthConsoleRoll(+1); }
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  rolledBack = _consoleBandPixels();
+
+  if (rolledBack <= atNewest) {
+    printf("    FAIL: rolling back must reveal the wide older line (%d px vs %d px)\n",
+           rolledBack, atNewest);
+    fail = 1;
+  }
+
+  for (i = 0; i < 20; i++) { forthConsoleRoll(-1); }   /* clamps at the newest */
+  if (forthConsoleViewOffset() != 0) {
+    printf("    FAIL: rolling forward must clamp at the newest line, offset is %u\n",
+           forthConsoleViewOffset());
+    fail = 1;
+  }
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  rolledHome = _consoleBandPixels();
+  if (rolledHome != atNewest) {
+    printf("    FAIL: rolling home must restore the newest view exactly (%d px vs %d px)\n",
+           rolledHome, atNewest);
+    fail = 1;
+  }
+
+  /* And output snaps the view home from wherever it is. */
+  for (i = 0; i < 6; i++) { forthConsoleRoll(+1); }
+  forthConsoleAppendLine(".");
+  if (forthConsoleViewOffset() != 0) {
+    printf("    FAIL: output must snap the view to newest, offset is %u\n",
+           forthConsoleViewOffset());
+    fail = 1;
+  }
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  afterOutput = _consoleBandPixels();
+  if (afterOutput != atNewest) {
+    printf("    FAIL: after the snap the view must show the newest rows (%d px vs %d px)\n",
+           afterOutput, atNewest);
+    fail = 1;
+  }
+
+  _consoleLeaveViewState(saved);
+  if (!fail) {
+    printf("    PASS: roll reveals older lines (%d px), clamps, and output snaps home\n",
+           rolledBack);
+  }
+  return fail;
+}
+
+/* ---- 14: the ARM is wired.  Everything above drives _forthConsoleRender
+ * directly; this one goes through refreshScreen() and proves
+ * _refreshNormalScreen's CM_AIM arm actually reaches it — and that the yield
+ * falls back to the landed register paint rather than to nothing. ---- */
+static int test_console_view_arm(void)
+{
+  uint8_t saved = calcMode;
+  int32_t viaArm, yielded;
+  int fail = 0;
+
+  forthPushInt32(12345);
+  _consoleEnterViewState();
+  forthConsoleClear();
+  forthConsoleAppendLine("THROUGH THE ARM");
+  forthConsoleAppendLine("SECOND");
+
+  screenUpdatingMode = SCRUPD_AUTO;
+  refreshScreen(900);
+  viaArm = _consoleBandPixels();
+  if (viaArm <= 0) {
+    printf("    FAIL: refreshScreen did not reach the console arm (%d lit px)\n", viaArm);
+    fail = 1;
+  }
+
+  /* Yield: with an error live, the native register/error paint comes back. */
+  forthConsoleClear();                 /* so any ink in the band is NOT ours */
+  lastErrorCode = ERROR_OUT_OF_RANGE;
+  errorMessageRegisterLine = REGISTER_Z;
+  screenUpdatingMode = SCRUPD_AUTO;
+  refreshScreen(901);
+  yielded = _consoleBandPixels();
+  if (yielded <= 0) {
+    printf("    FAIL: on yield the native paint must return (%d lit px) —"
+           " an empty console must not swallow the error display\n", yielded);
+    fail = 1;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  _consoleLeaveViewState(saved);
+  if (!fail) {
+    printf("    PASS: the arm is wired (%d px through refreshScreen); yield restores"
+           " the native paint (%d px)\n", viaArm, yielded);
+  }
+  return fail;
+}
+
+/* ---- 15: row placement.  The newest line is at the BOTTOM, just above the
+ * input band, and older lines roll upward.  Every other view test compares
+ * ink TOTALS, which a reversed row order would leave untouched — this one
+ * asks which half of the band the ink is in. ---- */
+static int test_console_view_placement(void)
+{
+  uint8_t saved = calcMode;
+  int32_t topHalf = 0, bottomHalf = 0;
+  uint32_t x, y;
+  int i, fail = 0;
+
+  _consoleEnterViewState();
+  forthConsoleClear();
+  /* Four blank lines, then one wide line as the NEWEST.  Rows are at
+   * Y 44/65/86/107, so with newest-at-bottom the only ink is at Y >= 107. */
+  for (i = 0; i < 4; i++) { forthConsoleAppendLine(""); }
+  forthConsoleAppendLine("WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW");
+
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  for (y = Y_POSITION_OF_REGISTER_T_LINE; y < 128; y++) {
+    for (x = 0; x < SCREEN_WIDTH; x++) {
+      if (lcd_buffer_pixel_on(x, y)) {
+        if (y < 86) { topHalf++; } else { bottomHalf++; }
+      }
+    }
+  }
+
+  if (bottomHalf <= 0) {
+    printf("    FAIL: the newest line must paint in the BOTTOM rows, just above"
+           " the input band (%d px there)\n", bottomHalf);
+    fail = 1;
+  }
+  if (topHalf != 0) {
+    printf("    FAIL: the older (blank) lines must leave the top rows empty"
+           " (%d px there — row order reversed?)\n", topHalf);
+    fail = 1;
+  }
+
+  _consoleLeaveViewState(saved);
+  if (!fail) {
+    printf("    PASS: newest line paints at the bottom (%d px), older rows above it empty\n",
+           bottomHalf);
+  }
+  return fail;
+}

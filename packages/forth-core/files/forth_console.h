@@ -51,6 +51,7 @@ uint16_t forthConsoleLineCount(void);
 bool_t   forthConsoleLineAt(uint16_t n, char *out, uint16_t outSize);  /* n = 0 is NEWEST */
 uint16_t forthConsoleViewOffset(void);
 void     forthConsoleSetViewOffset(uint16_t n);
+void     forthConsoleRoll(int16_t delta);        /* +1 = one line OLDER (scroll back) */
 
 #if defined(FORTH_DEBUG_SELFTEST)
   /* Raw state for the N1-1 invariant assertions.  Production code has no

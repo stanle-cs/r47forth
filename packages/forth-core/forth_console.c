@@ -193,6 +193,19 @@ void forthConsoleSetViewOffset(uint16_t n) {
   consoleView = (count == 0) ? 0 : ((n >= count) ? (uint16_t)(count - 1) : n);
 }
 
+/* The roll (N1-2).  delta > 0 walks BACK through the dialogue (older lines),
+ * delta < 0 forward.  Clamps at both ends rather than wrapping: a terminal
+ * scrollback stops at the top, it does not cycle. */
+void forthConsoleRoll(int16_t delta) {
+  uint16_t count = forthConsoleLineCount();
+  int32_t  v;
+  if (count == 0) { consoleView = 0; return; }
+  v = (int32_t)consoleView + delta;
+  if (v < 0) { v = 0; }
+  if (v > (int32_t)(count - 1)) { v = (int32_t)(count - 1); }
+  consoleView = (uint16_t)v;
+}
+
 #if defined(FORTH_DEBUG_SELFTEST)
   uint16_t forthConsoleTestUsed(void)          { return consoleUsed; }
   uint16_t forthConsoleTestTail(void)          { return consoleTail; }

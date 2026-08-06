@@ -4,6 +4,8 @@
 #include "c47.h"
 #include "version.h"
 #include "forth_dict.h"
+#include "forth_capture.h"
+#include "forth_console.h"
 
 static void refreshRegisterLineRestoreT(void);
 static void _refreshPemScreen(void);
@@ -5657,6 +5659,109 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
   }
 
 
+  /* ================================================================
+   * N1-2 — the console view (Stage N, N-R3; geometry from N-T1).
+   *
+   * While an interactive Forth capture is open the console owns the whole
+   * stack area: the native AIM editor draws its line where it always did
+   * (refreshRegisterLine(REGISTER_X), untouched) and the transcript fills
+   * the rows the editor leaves above it, newest just above the input,
+   * older rolling upward.
+   * ================================================================ */
+
+  #define FORTH_CONSOLE_ROW_PITCH   21   /* the landed fnPem listing pitch
+                                            (manage.c:546-551), not
+                                            STANDARD_FONT_HEIGHT (22, the font
+                                            browser's metric) */
+
+  /* Every conjunct is load-bearing — see STAGE_N_TRACES.md N-T1:
+   *
+   *  - tam.mode: a TAM session over the capture keeps calcMode == CM_AIM and
+   *    paints its prompt on the T row.  The fold's forged CM_PEM does NOT
+   *    protect this arm: that bracket is three statements wide (ui/tam.c:
+   *    1459-1465) around code that never refreshes.
+   *  - lastErrorCode: the error text paints INSIDE _refreshRegisterLine on
+   *    errorMessageRegisterLine (screen.c:3778-3786, REGISTER_Z by default);
+   *    an unconditional console would swallow every error display.
+   *  - temporaryInformation: worse than a swallow.  Sixteen TI arms call
+   *    displayTemporaryInformationOnX, which repaints ALL FOUR register rows
+   *    (screen.c:2571-2576) — and they hang off the REGISTER_X paint the
+   *    console KEEPS, so a live TI would wipe the transcript from inside the
+   *    one call this arm does not own.  Reachable: a console line can execute
+   *    any CAT_FNCT/PTP_NONE item, and BATTV/BYTES/WHO/VERS all set one. */
+  /* Exported to the self-test only (the keyboard.c:21-25 precedent) so N1-2's
+   * geometry and roll cases can drive the renderer directly, without the
+   * menus, status bar and screenUpdatingMode arithmetic a full refreshScreen()
+   * drags in.  The ARM being wired is proven separately, through
+   * refreshScreen(), by test_console_view_arm. */
+  #if defined(FORTH_DEBUG_SELFTEST)
+    #define FORTH_CONSOLE_SELFTEST_EXPORT
+  #else
+    #define FORTH_CONSOLE_SELFTEST_EXPORT static
+  #endif
+
+  FORTH_CONSOLE_SELFTEST_EXPORT bool_t _forthConsoleActive(void) {
+    return calcMode == CM_AIM
+           && forthCapIsInteractive()
+           && !tam.mode
+           && lastErrorCode == 0
+           && temporaryInformation == TI_NO_INFO;
+  }
+
+  FORTH_CONSOLE_SELFTEST_EXPORT void _forthConsoleRender(void) {
+    /* The first pixel row the editor's own ink or cursor can occupy.
+     *
+     * Short line (yMultiLineEdOffset == 3): showStringEdC47 draws at
+     * Y_POSITION_OF_NIM_LINE - 3 = 129 and its cursor block starts one row
+     * above, at 128.  Long line (== 1): the caller's y is overridden to
+     * (yincr-1) + 1*(yincr-1) = 68 with yincr 35 (screen.c:1655,1680-1683),
+     * cursor from 67.
+     *
+     * DERIVED from yMultiLineEdOffset, never re-measured from the string:
+     * the landed AIM arm below trusts that same global at this same point in
+     * the frame, so reading it keeps the console and the editor in step —
+     * re-measuring would put them a frame apart on the call where the line
+     * crosses the long/short boundary. */
+    uint16_t editorTop = (yMultiLineEdOffset == 3) ? 128 : 67;
+    uint16_t rows, firstY, r, view, count;
+
+    if(editorTop <= Y_POSITION_OF_REGISTER_T_LINE) {
+      return;                                    /* graceful floor; unreachable
+                                                    with the two states above */
+    }
+    rows = (uint16_t)((editorTop - Y_POSITION_OF_REGISTER_T_LINE) / FORTH_CONSOLE_ROW_PITCH);
+    count = forthConsoleLineCount();
+    if(rows == 0 || count == 0) {
+      return;                                    /* an empty console shows an
+                                                    empty area, not registers */
+    }
+    /* Bottom-anchor the band to the editor: 4 rows at Y 44/65/86/107 in the
+     * short-line state, 2 at Y 25/46 in the long-line state (N-T1). */
+    firstY = (uint16_t)(editorTop - rows * FORTH_CONSOLE_ROW_PITCH);
+
+    for(r = 0; r < rows; r++) {
+      char line[FORTH_CONSOLE_LINE_MAX + 1];
+      /* The BOTTOM row (r == rows-1) shows the line at the roll offset —
+       * offset 0 is the newest — and every row above it is one line older. */
+      view = (uint16_t)(forthConsoleViewOffset() + (rows - 1 - r));
+      if(view >= count) {
+        continue;                                /* fewer lines than rows */
+      }
+      if(!forthConsoleLineAt(view, line, sizeof(line)) || line[0] == 0) {
+        continue;
+      }
+      /* Truncate with the native ellipsis — the landed idiom at
+       * screen.c:4982-4983; 14 px is STD_ELLIPSIS's width.  No wrapping:
+       * that is a Stage N non-goal, render-only and additive later. */
+      if(stringWidth(line, &standardFont, true, true) > SCREEN_WIDTH - 1) {
+        char *cut = stringAfterPixels(line, &standardFont, SCREEN_WIDTH - 14 - 1, true, true);
+        xcopy(cut, STD_ELLIPSIS, 3);
+      }
+      showString(line, &standardFont, 1,
+                 (uint32_t)(firstY + r * FORTH_CONSOLE_ROW_PITCH), vmNormal, true, true);
+    }
+  }
+
   static void _selectiveClearScreen(void) {
     if(screenUpdatingMode == SCRUPD_AUTO) {
       #if defined(PC_BUILD) && defined(MONITOR_CLRSCR)
@@ -5922,7 +6027,16 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           }
           else {
             //printf("##> CCCC 4lines ALPHA Mode\n");
-            if(yMultiLineEdOffset == 3) {
+            /* N1-2 (Stage N): while an interactive Forth capture is open the
+             * transcript replaces the T/Z/Y paints.  ADDITIVE — every yield
+             * case (error, temporaryInformation, TAM, a PEM capture, no
+             * capture at all) falls through to the landed block below, byte
+             * for byte, and the REGISTER_X paint that follows is the console's
+             * own input band either way. */
+            if(_forthConsoleActive()) {
+              _forthConsoleRender();
+            }
+            else if(yMultiLineEdOffset == 3) {
               refreshRegisterLine(REGISTER_T);
               refreshRegisterLine(REGISTER_Z);
               refreshRegisterLine(REGISTER_Y);

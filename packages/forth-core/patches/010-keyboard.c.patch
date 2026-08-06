@@ -1,13 +1,14 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff46fdafe8 100644
+index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c8bc259b1 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
-@@ -2,12 +2,66 @@
+@@ -2,12 +2,67 @@
  // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
  
  #include "c47.h"
 +#include "forth_dict.h"
 +#include "forth_capture.h"
++#include "forth_console.h"
 +#include "forth_menu.h"
  
  
@@ -70,7 +71,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
  
    int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
      int16_t item = ITM_NOP;
-@@ -75,6 +129,22 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -75,6 +130,22 @@ static void executeFunction(const char *data, int16_t item_);
          break;
        }
  
@@ -93,7 +94,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
        case MNU_VAR: {
          dynamicMenuItem = firstItem + itemShift + fn;
          item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : MNU_DYNAMIC);
-@@ -264,6 +334,21 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -264,6 +335,21 @@ static void executeFunction(const char *data, int16_t item_);
    #pragma GCC diagnostic pop
      if(calcMode == CM_ASSIGN && item != ITM_NOP && item != ITM_NULL) {
        switch(-softmenu[menuId].menuItem) {
@@ -115,7 +116,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
          case MNU_PROG:
          case MNU_PROGS: {
                      #if defined(VERBOSEKEYS)
-@@ -434,7 +519,15 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -434,7 +520,15 @@ static void executeFunction(const char *data, int16_t item_);
      }
  
  
@@ -132,7 +133,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
        bool_t inCatalog = false;
        for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
          if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {
-@@ -929,7 +1022,7 @@ endReturnTrue:
+@@ -929,7 +1023,7 @@ endReturnTrue:
     * \brief Executes one function from a softmenu
     * \return void
     ***********************************************/
@@ -141,7 +142,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
      int16_t item = ITM_NOP;
      FN_timed_out_to_NOP_or_Executed = true;
  
-@@ -961,6 +1054,17 @@ endReturnTrue:
+@@ -961,6 +1055,17 @@ endReturnTrue:
  
  
          lastKeyItemDetermined = item;
@@ -159,7 +160,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
        }
  
        // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
-@@ -1027,6 +1131,11 @@ endReturnTrue:
+@@ -1027,6 +1132,11 @@ endReturnTrue:
                  break;
                }
                case CM_AIM: {
@@ -171,7 +172,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
                  closeAim();
                  break;
                }
-@@ -1267,7 +1376,20 @@ endReturnTrue:
+@@ -1267,7 +1377,20 @@ endReturnTrue:
              if(item == ITM_KEYMAP) {
                cursorEnabled = false;               // cursor is re-activated automatically elsewhere, after button release
              }
@@ -193,7 +194,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
                closeAim();
              }
              if(tam.mode && tam.alpha) {
-@@ -1382,6 +1504,12 @@ endReturnTrue:
+@@ -1382,6 +1505,12 @@ endReturnTrue:
                        printf("keyboard.c: executeFunction calcmode=%u %i (before runfunction): %i, %s tam.mode=%i\n", calcMode, item, currentMenu(), indexOfItems[-currentMenu()].itemSoftmenuName, tam.mode);
                      #endif //VERBOSEKEYS
  
@@ -206,7 +207,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
                  runFunction(item);
  
  
-@@ -1533,7 +1661,10 @@ endReturnTrue:
+@@ -1533,7 +1662,10 @@ endReturnTrue:
  
  
  
@@ -218,7 +219,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
      delayCloseNim = false;
      int16_t result;
      const calcKey_t *key;
-@@ -1650,35 +1781,65 @@ endReturnTrue:
+@@ -1650,35 +1782,65 @@ endReturnTrue:
        Check_MultiPresses(&result, key_no);        //JM
        return result;
      }
@@ -305,7 +306,49 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
        result = shiftF ? key->fShifted :
                 shiftG ? key->gShifted :
                          key->primary;
-@@ -2211,18 +2372,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -1693,6 +1855,41 @@ endReturnTrue:
+       result = 0;
+     }
+ 
++    /* N1-2 (N-T4): the console roll — g-shifted up/down browses the
++     * transcript.
++     *
++     * Placed AFTER the plane selection so it catches BOTH input modes with
++     * one arm: keys mode resolves through primary/fShifted/gShifted (:1842)
++     * and alpha input through the *Aim columns (:1811), and g-up means
++     * something different in each — ITM_RBR in keys mode, ITM_UP_ARROW (the
++     * glyph insert) in alpha.  Neither means anything inside a capture, and
++     * the displaced glyphs stay reachable on the alpha MISC softmenu
++     * (softmenus.c:711).
++     *
++     * The KEY is identified layout-independently by its own alpha f-column:
++     * CHR_caseUP/CHR_caseDN name the up/down keys on every layout table
++     * without hardcoding a key number.  Same discipline as the K1/E10
++     * ALPHA-toggle arm above, which keys on key->fShifted == ITM_AIM.
++     *
++     * The roll happens HERE rather than being carried to a handler as a new
++     * item: determineItem is called exactly once per press (btnPressed,
++     * :2026), the state changed is view-only, and the alternative — latching
++     * "this CHR_caseUP is a roll, not a recall" for the handler to consume —
++     * is a one-shot flag that desyncs into a wrong-gesture bug the first time
++     * a press resolves but never dispatches.  ITM_NOP then keeps every
++     * downstream arm out of it; btnReleased's refreshScreen(117) (:2478)
++     * repaints. */
++    if(forthCapIsInteractive() && shiftG && !tam.mode) {
++      if(key->fShiftedAim == CHR_caseUP) {
++        forthConsoleRoll(+1);                  /* one line OLDER */
++        result = ITM_NOP;
++      }
++      else if(key->fShiftedAim == CHR_caseDN) {
++        forthConsoleRoll(-1);                  /* one line NEWER */
++        result = ITM_NOP;
++      }
++    }
++
+                     #if defined(PC_BUILD)
+                       sprintf(tmp, "^^^^^^^keyboard.c: determineitem: result1: %d:", result);
+                       jm_show_comment(tmp);
+@@ -2211,18 +2408,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
            if(item == ITM_RCL && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
              calcRegister_t var = findNamedVariable(funcParam);
              if(var != INVALID_VARIABLE) {
@@ -328,7 +371,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
              }
              else {
                displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
-@@ -2235,20 +2388,16 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2235,20 +2424,16 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
            else if(item == ITM_XEQ && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
              calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
              if(label != INVALID_VARIABLE) {
@@ -357,7 +400,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -2631,6 +2780,17 @@ RELEASE_END:
+@@ -2631,6 +2816,17 @@ RELEASE_END:
          }
  
          case CHR_caseUP: {                                                   //From keyboard: logic for Up/Dn case/num
@@ -375,7 +418,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
            if(getSystemFlag(FLAG_NUMLOCK))  {}
            else if(alphaCase == AC_LOWER) {
              processKeyAction(CHR_case);
-@@ -2644,6 +2804,14 @@ RELEASE_END:
+@@ -2644,6 +2840,14 @@ RELEASE_END:
          }
  
          case CHR_caseDN: {                                                   //From keyboard: logic for Up/Dn case/num
@@ -390,7 +433,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
            if(getSystemFlag(FLAG_NUMLOCK)) {
              alphaCase = AC_UPPER;
              processKeyAction(CHR_numU);
-@@ -2835,8 +3003,28 @@ RELEASE_END:
+@@ -2835,8 +3039,28 @@ RELEASE_END:
  
                //also AIM Longpress cycle
                case CM_AIM: {
@@ -419,7 +462,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
                    closeAim();
                    runFunction(item);
                    keyActionProcessed = true;
-@@ -3130,11 +3318,23 @@ RELEASE_END:
+@@ -3130,11 +3354,23 @@ RELEASE_END:
                    keyActionProcessed = true;
                  }
                  else if(item == ITM_SST) {
@@ -443,7 +486,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
                    fnBst(NOPARAM);
                    keyActionProcessed = true;
                    refreshScreen(123);
-@@ -3154,6 +3354,12 @@ RELEASE_END:
+@@ -3154,6 +3390,12 @@ RELEASE_END:
                    }
                  }
                  else if(item == ITM_RS) {
@@ -456,7 +499,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
                    addStepInProgram(ITM_STOP);
                    keyActionProcessed = true;
                  }
-@@ -3444,6 +3650,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3444,6 +3686,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -471,7 +514,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
            if(softmenuStack[0].softmenuId <= 1 || menu(1) == -MNU_ALPHA) {
              popSoftmenu();
            }
-@@ -3716,6 +3930,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3716,6 +3966,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            aimBuffer[0] = 0;
          }
          leaveTamModeIfEnabled();
@@ -484,7 +527,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
          if(calcMode == CM_PEM) {
            scrollPemBackwards();
          }
-@@ -3799,6 +4019,79 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3799,6 +4055,79 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -564,7 +607,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
          if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines
            softmenuStack[0].softmenuId = 1;                                  //JM
          }                                                                   //JM
-@@ -3856,6 +4149,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3856,6 +4185,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            lastErrorCode = 0;
            break;
          }
@@ -580,7 +623,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
          if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
            if(isAlphaSubmenu(0)) {
              popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
-@@ -3868,6 +4170,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +4206,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -588,7 +631,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +4181,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +4217,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -611,7 +654,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4366,9 +4685,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4721,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -636,7 +679,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
-@@ -4544,6 +4877,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4544,6 +4913,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
@@ -650,7 +693,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7d9cd4ab853bf513e39e69b9a2bb45ff
              closeAim();
            }
            fnBst(NOPARAM);
-@@ -4762,6 +5102,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4762,6 +5138,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
