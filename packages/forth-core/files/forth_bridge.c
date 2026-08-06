@@ -7,6 +7,7 @@
 
 #include "c47.h"
 #include "forth_dict.h"
+#include "forth_console.h"
 
 void fnForthCall(uint16_t param)
 {
@@ -216,5 +217,100 @@ bool forthEntryStateAtInsertion(void)
     }
     if (len > 0) return true;                            /* source step: Forth */
     return forthMarkerTurnsOn(prev);                     /* marker: its direction */
+  }
+}
+
+/* ---- N1-3: the console's value formatter (Stage N, N-R4/N-R5; N-T2) ----
+ *
+ * There is no single landed register->text entry: _refreshRegisterLine
+ * dispatches on getRegisterDataType() and calls a different display.c
+ * producer per type (screen.c:4791, 4879, 5022, 5190, 5249, 5284, ...).
+ * This mirrors that switch for the types a console line can leave in X,
+ * using the CURRENT display mode — which is what makes `.` and the ENTER
+ * echo agree with what the stack would have shown.
+ *
+ * copyRegisterToClipboardString (screen.c:193) is the proof that the switch
+ * is liftable out of a paint — it is a landed, paint-free, all-types
+ * register->string function built from the same family — but it is the
+ * wrong SEMANTICS here: it produces full-precision CSV text, not the
+ * display mode.  So the shape is borrowed and the producers are not.
+ *
+ * Formats into the CALLER's buffer and never into tmpString: display.c
+ * writes tmpString in ~190 places and the caller cannot know which producer
+ * aliases it.  Same choice copyRegisterToClipboardString makes, and for the
+ * same reason it records at screen.c:197.
+ *
+ * standardFont, not numericFont: the transcript is a text row at the fnPem
+ * pitch, so the width budget the formatter fits into is the one the
+ * console actually paints with. */
+void forthConsoleFormatRegister(calcRegister_t regist, char *out, int16_t outSize)
+{
+  char buf[FORTH_CONSOLE_FMT_MAX];
+  const int16_t maxWidth = SCREEN_WIDTH - 1;
+
+  if(out == NULL || outSize <= 0) { return; }
+  out[0] = 0;
+  buf[0] = 0;
+
+  switch(getRegisterDataType(regist)) {
+    case dtReal34:
+      real34ToDisplayString(REGISTER_REAL34_DATA(regist), getRegisterAngularMode(regist),
+                            buf, &standardFont, maxWidth, NUMBER_OF_DISPLAY_DIGITS,
+                            LIMITEXP, FRONTSPACE, FULLIRFRAC);
+      break;
+
+    case dtComplex34:
+      complex34ToDisplayString(REGISTER_COMPLEX34_DATA(regist), buf, &standardFont, maxWidth,
+                               NUMBER_OF_DISPLAY_DIGITS, LIMITEXP, FRONTSPACE, FULLIRFRAC,
+                               getComplexRegisterAngularMode(regist),
+                               getComplexRegisterPolarMode(regist) == amPolar);
+      break;
+
+    case dtLongInteger:
+      longIntegerRegisterToDisplayString(regist, buf, (int32_t)sizeof(buf), maxWidth, 50,
+                                         getSystemFlag(FLAG_LARGELI));
+      break;
+
+    case dtShortInteger:
+      shortIntegerToDisplayString(regist, buf, false, noBaseOverride);
+      break;
+
+    case dtTime:
+      timeToDisplayString(regist, buf, false);
+      break;
+
+    case dtDate:
+      dateToDisplayString(regist, buf);
+      break;
+
+    case dtString:
+      /* The string's own glyphs, not a quoted rendering: TYPE-class output
+       * is the text itself. */
+      { int32_t n = stringByteLength(REGISTER_STRING_DATA(regist));
+        if(n > (int32_t)sizeof(buf) - 1) { n = (int32_t)sizeof(buf) - 1; }
+        xcopy(buf, REGISTER_STRING_DATA(regist), (uint32_t)n);
+        buf[n] = 0;
+      }
+      break;
+
+    case dtReal34Matrix:
+      if(!vectorToDisplayString(regist, buf)) { real34MatrixToDisplayString(regist, buf); }
+      break;
+
+    case dtComplex34Matrix:
+      complex34MatrixToDisplayString(regist, buf);
+      break;
+
+    default:
+      /* dtConfig and anything a later stage adds: name the type rather than
+       * printing nothing, so the transcript never lies by omission. */
+      snprintf(buf, sizeof(buf), "{type %u}", (unsigned)getRegisterDataType(regist));
+      break;
+  }
+
+  { int32_t n = stringByteLength(buf);
+    if(n > outSize - 1) { n = outSize - 1; }
+    xcopy(out, buf, (uint32_t)n);
+    out[n] = 0;
   }
 }

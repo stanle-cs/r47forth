@@ -8,6 +8,7 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_capture.h"
+#include "forth_console.h"
 #include "forth_menu.h"
 
 // Structure of the program memory.
@@ -1379,6 +1380,22 @@ void forthInteractiveEnter(void) {
    * aimBuffer (it is also the NIM buffer, §3.3.2), so the text must be
    * captured while it is still the user's line. */
   forthHistoryPush(aimBuffer);
+  /* N1-3 (N-R4): the line echo and the FHIST push are ONE ACT — same bytes,
+   * same site, ordered together before the run.  That is mechanically what
+   * makes the rolled transcript lines and the old history the same history
+   * (the owner's 2026-08-05 amendment).  It sits after the E9 refusal above,
+   * so a refused line stays in the editor and neither echoes nor enters
+   * history; and before the run, so a word that rewrites aimBuffer cannot
+   * change what was echoed.
+   *
+   * A SECOND echo writer, a reorder against this push, or an echo on a path
+   * the push skips would make the transcript lie about history — the N1-6
+   * one-history assertion pins byte-equality, and N-R2 names the only two
+   * licensed divergences. */
+  { char echo[FORTH_CONSOLE_FMT_MAX];
+    snprintf(echo, sizeof(echo), STD_RIGHT_DOUBLE_ANGLE " %s", aimBuffer);
+    forthConsoleAppendLine(echo);
+  }
 
   /* Mandatory pre-run snapshot — see the function banner above. 256 bytes
    * matches the capture cap enforced at every insertion site (C4): the
@@ -1393,6 +1410,13 @@ void forthInteractiveEnter(void) {
   forthOuterInterpret(aimBuffer);
 
   if (lastErrorCode != ERROR_NONE) {
+    /* N1-3 (N-R4): the error echo.  §8.7's error PROTOCOL is unchanged —
+     * the native paint still covers the area until the next key — but that
+     * paint is transient, and the transcript line is what keeps the dialogue
+     * readable afterwards.  Generic message text only: S1 stands, no token.
+     * View-only; FHIST never holds output. */
+    forthConsoleAppendLine(errorMessageOf(lastErrorCode));
+
     /* L5: reopen with the line intact so the user edits rather than
      * retypes. aimBuffer may have been rewritten by a partially-executed
      * line, so restore from the pre-run copy, not from aimBuffer itself. */
@@ -1400,6 +1424,26 @@ void forthInteractiveEnter(void) {
     xcopy(aimBuffer, preRunCopy, n + 1);
     T_cursorPos = stringLastGlyph(aimBuffer) + 1;   /* non-empty by construction */
     return;                                          /* capture stays OPEN */
+  }
+
+  /* N1-3 (N-R4): the result echo — the calculator's "ok".  The stack is
+   * hidden while the console is up, so the console answers with where X
+   * landed, rendered by the same display mode the stack would have used.
+   * View-only, like the error line above.
+   *
+   * Suppressed when the line produced its own output and left it
+   * unterminated (a word ending in EMIT or `.` with no CR): appending X
+   * underneath would be a second answer to a line that already answered.
+   * The open record IS that signal — no extra state. */
+  if (!forthConsoleHasOpenLine()) {
+    char shown[FORTH_CONSOLE_FMT_MAX];
+    forthConsoleFormatRegister(REGISTER_X, shown, (int16_t)sizeof(shown));
+    if (shown[0] != 0) {
+      forthConsoleAppendLine(shown);
+    }
+  }
+  else {
+    forthConsoleNewline();      /* close the word's own output line */
   }
 
   /* L-R3: REPL. Reopen empty, stay in CM_AIM. forthCapOpenInteractive

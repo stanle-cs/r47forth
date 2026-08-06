@@ -1300,6 +1300,11 @@ static int test_console_view_rows(void);
 static int test_console_view_roll(void);
 static int test_console_view_arm(void);
 static int test_console_view_placement(void);
+/* N1-3: the dialogue */
+static int test_console_dialogue_echo(void);
+static int test_console_dialogue_error(void);
+static int test_console_dialogue_refusal(void);
+static int test_console_dialogue_session(void);
 
 int forthDictSelfTest(void)
 {
@@ -2499,6 +2504,16 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_console_view_placement...\n");
   fail |= test_console_view_placement();
+
+  printf("\nFORTH N1-3 TESTS (the dialogue)\n");
+  printf("  [DEBUG] running test_console_dialogue_echo...\n");
+  fail |= test_console_dialogue_echo();
+  printf("  [DEBUG] running test_console_dialogue_error...\n");
+  fail |= test_console_dialogue_error();
+  printf("  [DEBUG] running test_console_dialogue_refusal...\n");
+  fail |= test_console_dialogue_refusal();
+  printf("  [DEBUG] running test_console_dialogue_session...\n");
+  fail |= test_console_dialogue_session();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

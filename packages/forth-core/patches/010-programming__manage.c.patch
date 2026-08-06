@@ -1,18 +1,19 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64d572d818 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..2ca97167265be32ccbc368b5b48481bf3d52c726 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
-@@ -6,6 +6,9 @@
+@@ -6,6 +6,10 @@
   ***********************************************/
  
  #include "c47.h"
 +#include "forth_dict.h"
 +#include "forth_capture.h"
++#include "forth_console.h"
 +#include "forth_menu.h"
  
  // Structure of the program memory.
  // In this example the RAM is 16384 blocks (from 0 to 16383) of 4 bytes = 65536 bytes.
-@@ -588,10 +591,25 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
+@@ -588,10 +592,25 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
        decodeOneStep(step);
        if(firstDisplayedStepNumber + line - lineOffset == currentStepNumber && !tam.mode) {
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -41,7 +42,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
            xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
            tmpString[2 + cursorInString    ] = STD_CURSOR[0];
            tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
-@@ -792,6 +810,54 @@ static void _closeAlphaMenus(void) {
+@@ -792,6 +811,54 @@ static void _closeAlphaMenus(void) {
    }
  }
  
@@ -96,7 +97,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
  void pemAlpha(int16_t item) {
    bool_t editCommand = false;
    if(item == ITM_EDIT) {
-@@ -823,6 +889,24 @@ void pemAlpha(int16_t item) {
+@@ -823,6 +890,24 @@ void pemAlpha(int16_t item) {
        editCommand = true;
        item = aimFunc;
      }
@@ -121,7 +122,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
      else {
        aimBuffer[0] = 0;
        return;
-@@ -830,6 +914,9 @@ void pemAlpha(int16_t item) {
+@@ -830,6 +915,9 @@ void pemAlpha(int16_t item) {
    }
  
    if(!getSystemFlag(FLAG_ALPHA)) {
@@ -131,7 +132,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
        resetShiftState();
        displayAIMbufferoffset = 0;
        if(!editCommand) {
-@@ -851,6 +938,9 @@ void pemAlpha(int16_t item) {
+@@ -851,6 +939,9 @@ void pemAlpha(int16_t item) {
          tmpString[2] = 0;
          _insertInProgram((uint8_t *)tmpString, 3);
        }
@@ -141,7 +142,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
        else { // rem or 42str
          tmpString[0] = (tam.function >> 8) | 0x80;
          tmpString[1] =  tam.function       & 0xff;
-@@ -863,36 +953,64 @@ void pemAlpha(int16_t item) {
+@@ -863,36 +954,64 @@ void pemAlpha(int16_t item) {
      }
      if(indexOfItems[item].func == addItemToBuffer) {
        int32_t len = stringByteLength(aimBuffer);
@@ -220,7 +221,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
          int16_t lastGlyphPos;
          aimBuffer[T_cursorPos] = 0;
          lastGlyphPos = stringLastGlyph(aimBuffer);
-@@ -902,11 +1020,23 @@ void pemAlpha(int16_t item) {
+@@ -902,11 +1021,23 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_ENTER) {
@@ -249,7 +250,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
      }
      else if(item == ITM_USERMODE) {
        fnFlipFlag(FLAG_USER);
-@@ -956,6 +1086,13 @@ void pemAlpha(int16_t item) {
+@@ -956,6 +1087,13 @@ void pemAlpha(int16_t item) {
        fnT_ARROW(indexOfItems[item].param);
        return;
      }
@@ -263,7 +264,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
  
      int16_t aimFunc = currentStep[0];
      if(aimFunc & 0x80) {
-@@ -972,6 +1109,9 @@ void pemAlpha(int16_t item) {
+@@ -972,6 +1110,9 @@ void pemAlpha(int16_t item) {
        xcopy(tmpString + 3, aimBuffer, stringByteLength(aimBuffer));
        _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 3);
      }
@@ -273,7 +274,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
      else { // rem or 42str
        tmpString[0] = (aimFunc >> 8) | 0x80;
        tmpString[1] =  aimFunc       & 0xff;
-@@ -988,7 +1128,22 @@ void pemAlpha(int16_t item) {
+@@ -988,7 +1129,22 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -296,7 +297,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,8 +1153,784 @@ void pemCloseAlphaInput(void) {
+@@ -998,8 +1154,827 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -305,8 +306,8 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
 +  // REM/LITERAL/non-empty-FORTH source lines alike, so the reset must be
 +  // unconditional here too, not just gated on tam.function == ITM_FORTH.
 +  tam.function = 0;
- }
- 
++}
++
 +/* FIX-9: the E1 catalog-drain helpers are defined further down (above
 + * insertStepInProgram); forthCaptureResume needs them too. */
 +static bool_t _forthCatalogBuriedOnStack(void);
@@ -526,6 +527,22 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
 +   * aimBuffer (it is also the NIM buffer, §3.3.2), so the text must be
 +   * captured while it is still the user's line. */
 +  forthHistoryPush(aimBuffer);
++  /* N1-3 (N-R4): the line echo and the FHIST push are ONE ACT — same bytes,
++   * same site, ordered together before the run.  That is mechanically what
++   * makes the rolled transcript lines and the old history the same history
++   * (the owner's 2026-08-05 amendment).  It sits after the E9 refusal above,
++   * so a refused line stays in the editor and neither echoes nor enters
++   * history; and before the run, so a word that rewrites aimBuffer cannot
++   * change what was echoed.
++   *
++   * A SECOND echo writer, a reorder against this push, or an echo on a path
++   * the push skips would make the transcript lie about history — the N1-6
++   * one-history assertion pins byte-equality, and N-R2 names the only two
++   * licensed divergences. */
++  { char echo[FORTH_CONSOLE_FMT_MAX];
++    snprintf(echo, sizeof(echo), STD_RIGHT_DOUBLE_ANGLE " %s", aimBuffer);
++    forthConsoleAppendLine(echo);
++  }
 +
 +  /* Mandatory pre-run snapshot — see the function banner above. 256 bytes
 +   * matches the capture cap enforced at every insertion site (C4): the
@@ -540,6 +557,13 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
 +  forthOuterInterpret(aimBuffer);
 +
 +  if (lastErrorCode != ERROR_NONE) {
++    /* N1-3 (N-R4): the error echo.  §8.7's error PROTOCOL is unchanged —
++     * the native paint still covers the area until the next key — but that
++     * paint is transient, and the transcript line is what keeps the dialogue
++     * readable afterwards.  Generic message text only: S1 stands, no token.
++     * View-only; FHIST never holds output. */
++    forthConsoleAppendLine(errorMessageOf(lastErrorCode));
++
 +    /* L5: reopen with the line intact so the user edits rather than
 +     * retypes. aimBuffer may have been rewritten by a partially-executed
 +     * line, so restore from the pre-run copy, not from aimBuffer itself. */
@@ -547,6 +571,26 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
 +    xcopy(aimBuffer, preRunCopy, n + 1);
 +    T_cursorPos = stringLastGlyph(aimBuffer) + 1;   /* non-empty by construction */
 +    return;                                          /* capture stays OPEN */
++  }
++
++  /* N1-3 (N-R4): the result echo — the calculator's "ok".  The stack is
++   * hidden while the console is up, so the console answers with where X
++   * landed, rendered by the same display mode the stack would have used.
++   * View-only, like the error line above.
++   *
++   * Suppressed when the line produced its own output and left it
++   * unterminated (a word ending in EMIT or `.` with no CR): appending X
++   * underneath would be a second answer to a line that already answered.
++   * The open record IS that signal — no extra state. */
++  if (!forthConsoleHasOpenLine()) {
++    char shown[FORTH_CONSOLE_FMT_MAX];
++    forthConsoleFormatRegister(REGISTER_X, shown, (int16_t)sizeof(shown));
++    if (shown[0] != 0) {
++      forthConsoleAppendLine(shown);
++    }
++  }
++  else {
++    forthConsoleNewline();      /* close the word's own output line */
 +  }
 +
 +  /* L-R3: REPL. Reopen empty, stay in CM_AIM. forthCapOpenInteractive
@@ -750,8 +794,8 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
 +
 +  goToPgmStep(program, localStep);
 +  return true;
-+}
-+
+ }
+ 
 +/* C3: oldest-first eviction down to FORTH_HISTORY_MAX_BYTES. */
 +void forthHistoryEvict(void) {
 +  uint16_t program = forthHistoryProgram();
@@ -1081,7 +1125,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
  
  void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
    if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {
-@@ -1013,7 +1944,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +1988,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -1090,7 +1134,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +2316,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +2360,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -1134,7 +1178,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +2363,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +2407,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -1171,7 +1215,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +2412,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +2456,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -1239,7 +1283,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +2484,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +2528,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -1255,7 +1299,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +2575,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +2619,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -1279,7 +1323,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..028f91e05c2ee6bd895336090deeae64
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2887,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2931,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

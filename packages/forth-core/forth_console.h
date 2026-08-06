@@ -42,6 +42,16 @@
                                              everything else always leaves >= 768
                                              free and _reserve cannot fail. */
 #define FORTH_CONSOLE_NO_OPEN    0xFFFFu  /* "no unterminated record" */
+#define FORTH_CONSOLE_FMT_MAX      256    /* one formatted value; a bounded LOCAL,
+                                             never tmpString — display.c writes
+                                             tmpString in ~190 places and the
+                                             caller cannot know which producer
+                                             aliases it (N-T2) */
+
+/* N1-3: X (or any register) rendered per the CURRENT display mode, into the
+ * caller's buffer.  Lives in forth_bridge.c — it needs display.h, and this
+ * module stays display-free by construction. */
+void forthConsoleFormatRegister(calcRegister_t regist, char *out, int16_t outSize);
 
 void     forthConsoleClear(void);
 void     forthConsoleAppend(const char *s);      /* text; embedded '\n' breaks lines */
@@ -52,6 +62,7 @@ bool_t   forthConsoleLineAt(uint16_t n, char *out, uint16_t outSize);  /* n = 0 
 uint16_t forthConsoleViewOffset(void);
 void     forthConsoleSetViewOffset(uint16_t n);
 void     forthConsoleRoll(int16_t delta);        /* +1 = one line OLDER (scroll back) */
+bool_t   forthConsoleHasOpenLine(void);          /* a word left output unterminated */
 
 #if defined(FORTH_DEBUG_SELFTEST)
   /* Raw state for the N1-1 invariant assertions.  Production code has no

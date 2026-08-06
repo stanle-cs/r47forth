@@ -186,6 +186,11 @@ bool_t forthConsoleLineAt(uint16_t n, char *out, uint16_t outSize) {
   return true;
 }
 
+/* N1-3: is a line still open?  The ENTER dialogue reads this to tell "the
+ * word printed something and did not end the line" from "the word printed
+ * nothing", without either side carrying extra state. */
+bool_t forthConsoleHasOpenLine(void) { return consoleOpen != FORTH_CONSOLE_NO_OPEN; }
+
 uint16_t forthConsoleViewOffset(void) { return consoleView; }
 
 void forthConsoleSetViewOffset(uint16_t n) {

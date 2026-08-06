@@ -747,3 +747,237 @@ static int test_console_view_placement(void)
   }
   return fail;
 }
+
+/* ==================================================================
+ * N1-3 — the dialogue: what ENTER writes into the transcript.
+ * ================================================================== */
+
+/* The same reset the landed L1-2 battery uses (test_capture.part.h:7743),
+ * plus the ring, so each subcase starts from a known dialogue. */
+#define N13_RESET() do { \
+  calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
+  programRunStop = PGM_STOPPED; dynamicMenuItem = -1; \
+  lastErrorCode = ERROR_NONE; forthCapClose(); forthConsoleClear(); \
+} while (0)
+
+/* Type a line into the open capture and commit it, the way the key path
+ * does — forthInteractiveEnter is what keyboard.c:3694's ENTER arm calls. */
+static void _consoleEnterLine(const char *src)
+{
+  int32_t n = stringByteLength((char *)src);
+  xcopy(aimBuffer, src, (uint32_t)n + 1);
+  T_cursorPos = (int16_t)n;
+  forthInteractiveEnter();
+}
+
+/* ---- 16: the echo, the result, and the one-act ordering. ---- */
+static int test_console_dialogue_echo(void)
+{
+  int fail = 0;
+  char l0[FORTH_CONSOLE_FMT_MAX], l1[FORTH_CONSOLE_FMT_MAX];
+
+  N13_RESET();
+  forthCapOpenInteractive();
+  calcMode = CM_AIM;
+
+  _consoleEnterLine("1 2 +");
+
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: \"1 2 +\" errored (%u)\n", lastErrorCode);
+    fail = 1;
+  }
+  if (forthConsoleLineCount() != 2) {
+    printf("    FAIL: expected 2 transcript lines (echo + result), got %u\n",
+           forthConsoleLineCount());
+    fail = 1;
+  }
+  else {
+    forthConsoleLineAt(1, l1, sizeof(l1));      /* older: the echo */
+    forthConsoleLineAt(0, l0, sizeof(l0));      /* newer: the result */
+    if (compareString(l1, STD_RIGHT_DOUBLE_ANGLE " 1 2 +", CMP_BINARY) != 0) {
+      printf("    FAIL: echo is \"%s\", expected the prompt-prefixed line\n", l1);
+      fail = 1;
+    }
+    if (stringByteLength(l0) == 0) {
+      printf("    FAIL: no result echo — the console must answer with where X landed\n");
+      fail = 1;
+    }
+    else if (compareString(l0, "3", CMP_BINARY) != 0) {
+      printf("    FAIL: result echo is \"%s\", expected \"3\"\n", l0);
+      fail = 1;
+    }
+  }
+
+  /* The echo is ONE ACT with the FHIST push: the line the transcript shows
+   * is the line history recalled. */
+  { char recalled[FORTH_CONSOLE_FMT_MAX];
+    aimBuffer[0] = 0;
+    forthCapSetHistoryIndex(FORTH_HIST_BROWSE_NONE);
+    forthHistoryRecall(-1);
+    xcopy(recalled, aimBuffer, (uint32_t)stringByteLength(aimBuffer) + 1);
+    if (compareString(recalled, "1 2 +", CMP_BINARY) != 0) {
+      printf("    FAIL: FHIST recalled \"%s\", expected the echoed line \"1 2 +\"\n", recalled);
+      fail = 1;
+    }
+  }
+
+  forthCapClose();
+  forthConsoleClear();
+  if (!fail) {
+    printf("    PASS: ENTER echoes the prompt-prefixed line then X, and history holds the same line\n");
+  }
+  return fail;
+}
+
+/* ---- 17: the error line.  The native error paint is transient; the
+ * transcript is what keeps the dialogue readable afterwards. ---- */
+static int test_console_dialogue_error(void)
+{
+  int fail = 0;
+  char l0[FORTH_CONSOLE_FMT_MAX], l1[FORTH_CONSOLE_FMT_MAX];
+
+  N13_RESET();
+  forthCapOpenInteractive();
+  calcMode = CM_AIM;
+
+  _consoleEnterLine("NOSUCHWORD");
+
+  if (lastErrorCode == ERROR_NONE) {
+    printf("    FAIL: an undefined word must raise\n");
+    fail = 1;
+  }
+  if (forthConsoleLineCount() != 2) {
+    printf("    FAIL: expected echo + error line, got %u lines\n", forthConsoleLineCount());
+    fail = 1;
+  }
+  else {
+    forthConsoleLineAt(1, l1, sizeof(l1));
+    forthConsoleLineAt(0, l0, sizeof(l0));
+    if (compareString(l1, STD_RIGHT_DOUBLE_ANGLE " NOSUCHWORD", CMP_BINARY) != 0) {
+      printf("    FAIL: echo is \"%s\"\n", l1);
+      fail = 1;
+    }
+    if (compareString(l0, errorMessageOf(lastErrorCode), CMP_BINARY) != 0) {
+      printf("    FAIL: error line is \"%s\", expected \"%s\"\n",
+             l0, errorMessageOf(lastErrorCode));
+      fail = 1;
+    }
+  }
+  /* L5 interplay: the line is still in the editor for correction AND the
+   * transcript carries the message. */
+  if (compareString(aimBuffer, "NOSUCHWORD", CMP_BINARY) != 0) {
+    printf("    FAIL: the line must survive in the editor, got \"%s\"\n", aimBuffer);
+    fail = 1;
+  }
+  if (forthTestCapState() != FCAP_OPEN) {
+    printf("    FAIL: the capture must stay open after an error\n");
+    fail = 1;
+  }
+
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  forthConsoleClear();
+  if (!fail) {
+    printf("    PASS: an error echoes the line then the message, and the editor keeps the line\n");
+  }
+  return fail;
+}
+
+/* ---- 18: a REFUSED line writes NOTHING.  The echo sits after the E9 gate,
+ * so a line that never ran must not appear in the dialogue — nor in
+ * history.  This is the ordering half of the one-act rule. ---- */
+static int test_console_dialogue_refusal(void)
+{
+  int fail = 0;
+  uint16_t before;
+
+  N13_RESET();
+  forthCapOpenInteractive();
+  calcMode = CM_AIM;
+  forthConsoleAppendLine("PREVIOUS");
+  before = forthConsoleLineCount();
+
+  _consoleEnterLine(": A IF ;");                 /* tier-1 structural reject */
+
+  if (lastErrorCode == ERROR_NONE) {
+    printf("    FAIL: \": A IF ;\" must be refused by the E9 gate\n");
+    fail = 1;
+  }
+  if (forthConsoleLineCount() != before) {
+    printf("    FAIL: a refused line must not echo (%u lines, expected %u)\n",
+           forthConsoleLineCount(), before);
+    fail = 1;
+  }
+  if (compareString(aimBuffer, ": A IF ;", CMP_BINARY) != 0) {
+    printf("    FAIL: the refused line must stay in the editor, got \"%s\"\n", aimBuffer);
+    fail = 1;
+  }
+
+  /* An empty ENTER is a no-op too — nothing to run, nothing to echo. */
+  aimBuffer[0] = 0;
+  lastErrorCode = ERROR_NONE;
+  forthInteractiveEnter();
+  if (forthConsoleLineCount() != before) {
+    printf("    FAIL: an empty ENTER must write nothing (%u lines)\n",
+           forthConsoleLineCount());
+    fail = 1;
+  }
+
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+  forthConsoleClear();
+  if (!fail) {
+    printf("    PASS: a refused line and an empty ENTER both write nothing to the dialogue\n");
+  }
+  return fail;
+}
+
+/* ---- 19: the REPL runs, so the dialogue accumulates.  Three lines in,
+ * six transcript lines out, in order, oldest first. ---- */
+static int test_console_dialogue_session(void)
+{
+  int fail = 0;
+  char line[FORTH_CONSOLE_FMT_MAX];
+
+  N13_RESET();
+  forthCapOpenInteractive();
+  calcMode = CM_AIM;
+
+  _consoleEnterLine("XEQ 'CLSTK'");
+  _consoleEnterLine("2 3 *");
+  _consoleEnterLine("4 +");
+
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: session errored (%u)\n", lastErrorCode);
+    fail = 1;
+  }
+  if (forthConsoleLineCount() != 6) {
+    printf("    FAIL: three lines must leave six transcript lines, got %u\n",
+           forthConsoleLineCount());
+    fail = 1;
+  }
+  else {
+    forthConsoleLineAt(0, line, sizeof(line));
+    if (compareString(line, "10", CMP_BINARY) != 0) {
+      printf("    FAIL: newest line is \"%s\", expected the result \"10\"\n", line);
+      fail = 1;
+    }
+    forthConsoleLineAt(1, line, sizeof(line));
+    if (compareString(line, STD_RIGHT_DOUBLE_ANGLE " 4 +", CMP_BINARY) != 0) {
+      printf("    FAIL: line 1 is \"%s\", expected the last echo\n", line);
+      fail = 1;
+    }
+    forthConsoleLineAt(5, line, sizeof(line));
+    if (compareString(line, STD_RIGHT_DOUBLE_ANGLE " XEQ 'CLSTK'", CMP_BINARY) != 0) {
+      printf("    FAIL: oldest line is \"%s\", expected the first echo\n", line);
+      fail = 1;
+    }
+  }
+
+  forthCapClose();
+  forthConsoleClear();
+  if (!fail) {
+    printf("    PASS: a three-line REPL session leaves six transcript lines in order\n");
+  }
+  return fail;
+}
