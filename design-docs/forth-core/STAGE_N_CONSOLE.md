@@ -15,6 +15,24 @@ battery, not by a ruling. Branch `forth-core/stage-n` from the Stage M
 close (`adaa12b8a`). Not yet normative — folds into DESIGN.md at
 landing.**
 
+**Amended same day by the owner's second statement ("console view
+should take over all of the stack registers space … history of
+executed lines should scroll upward just like a terminal … still saved
+in program history so they're the same as the old history"): the
+console owns the whole stack area, not T/Z/Y only; the dialogue rolls
+terminal-style and rolling is in scope, not optional; and the rolled
+executed lines ARE FHIST's — one history, no second input store.
+N-R2/N-R3/N-R4 carry the amendment with the superseded authored
+wording noted in place.**
+
+**Owner follow-up, same day: "changed my mind, if FHIST no longer makes
+sense we can remove it and replace with a new history mechanism" — a
+conditional release, not an order. Evaluated and ruled N-R9: KEEP —
+FHIST still makes sense and is load-bearing (the fold parks on it, its
+persistence is free only there, and a shared ring would let output
+evict input history); removal is priced in the row and stays open to
+the owner.**
+
 ## Problem
 
 The interactive capture landed (§8.4.2) with a recorded ergonomic debt,
@@ -145,22 +163,32 @@ and one ring module.
   `forthCapPowerReset()` runs at the dictionary init/restore seams
   (F6-6); BSS survives deep sleep like `FLAG_ALPHA` state. The ring
   joins those seams — no new lifetime story, no save-format surface.
-- **FHIST is untouched.** Input history (recall, eviction, persistence)
-  is a landed, separate concern; the transcript is *output*, transient
-  by design, and echoing into FHIST-as-display would burn program
-  memory for scrollback. The two do not merge.
+- **FHIST already is the history the console rolls.** The landed store
+  (`ITM_FORTH` steps, 1024 B cap, §5.5 persistence, f-shifted recall)
+  holds exactly the executed lines the view scrolls — the console adds
+  a *view*, not a second history (owner, 2026-08-05: "they're the same
+  as the old history"). What FHIST must never hold is output — it is a
+  named, runnable program, and output is not a step — so the dialogue's
+  output half (X echoes, error lines, word output) lives in the view
+  ring only.
 
 ## Scope (N-R1) — three seams plus their battery
 
 **N1 — the console view.** While an interactive capture is open, the
-T/Z/Y register area paints the transcript tail (≈5 `standardFont` rows)
-instead of registers; the edit line stays the native AIM draw on X's
-row, untouched. Yields: to the native path while `lastErrorCode != 0`,
-during TAM/the fold (`!tam.mode`, forged-CM_PEM never reaches the arm),
-and in the long-line case (`yMultiLineEdOffset != 3` — L-R8's long-line
-arm stands). Overwide transcript rows truncate at the right edge with
-the native ellipsis. Scrollback browse: g-shifted up/down when N-T4
-clears the gesture; else v1 pins to newest.
+console owns the **entire stack area** (all four register rows,
+Y 24..167): the input band is the native AIM editor drawing at its
+native position and in both its line-length states, and the transcript
+fills every row the editor leaves above it — newest line just above
+the input, older lines rolling upward off the top, terminal flow. No
+register paints while the console is up. Yields entirely to the native
+path while `lastErrorCode != 0` and during TAM/the fold (`!tam.mode`,
+forged-CM_PEM never reaches the arm); in the long-line editor state
+the transcript does not vanish — it shrinks to the rows the editor
+leaves (N-T1 pins the per-state arithmetic; zero rows is the graceful
+floor). Overwide transcript rows truncate at the right edge with the
+native ellipsis. The view **rolls**: a scroll gesture browses older
+transcript — rolling is in scope by the owner's amendment; only the
+gesture choice is N-T4's to pin.
 
 **N2 — the output channel.** One BSS byte ring (proposed 1024 B, one
 constant) is *the* channel; the console is its view. Writers: the ENTER
@@ -183,13 +211,14 @@ printer/serial channels, any PEM-side view change.
 | # | Question | Ruling |
 |---|----------|--------|
 | N-R1 | Stage scope | **N1 + N2 + N3 as above.** Each is separable; N1 without N2 is an empty pane, N2 without N1 is a channel with no view — they land together, N3 rides the same seams. |
-| N-R2 | Transcript storage | **One BSS byte ring, 1024 B (`FORTH_CONSOLE_RING_BYTES`), glyph-encoded text, `\n`-terminated lines, oldest-line eviction by tail advance.** Not arena (a convenience buffer must not compete with compile capacity — the L-R5 argument), not program memory (output is transient display state; FHIST stays input-only). Survives capture close/reopen and deep sleep (BSS, the FLAG_ALPHA parallel — reopening the console restores the dialogue); cleared at the `forthCapPowerReset` seams and by `PAGE`; never persisted. ~25–40 realistic lines of scrollback. One constant, battery-pinned, cheap to retune. |
-| N-R3 | View geometry | **Transcript tail in the T/Z/Y area (~5 rows, `standardFont`, the fnPem row idiom); X's row stays the native AIM edit line.** The gate extends the landed CM_AIM arm's own conjuncts: interactive capture open, `!tam.mode`, `lastErrorCode == 0`, `yMultiLineEdOffset == 3`. Every yield case falls back to today's paint — the arm is additive by construction. Truncate-with-ellipsis, no wrap (render-only; revisitable). Status bar and softmenus untouched. |
-| N-R4 | The dialogue (what ENTER writes) | **Echo the committed line prompt-prefixed (`»`, the marker glyph); on success append X's value rendered by the landed register formatter; on interpret error append the §8.7 message text (generic form — S1 stands, no token).** The X echo is the calculator's "ok": the stack is hidden, so the console answers with where X landed. Echo belongs to `forthInteractiveEnter`, not the engine — program-run Forth steps echo nothing (only explicit output words write). The line echo sits beside the FHIST push (manage.c:1381), which is already after the E9 refusal — a refused line stays in the editor and never echoes; the result/error echoes sit on the two post-run arms (:1395/:1405). The error *display* protocol is unchanged (native paint over the area until the next key); the transcript line is the record that keeps the dialogue readable afterwards. |
-| N-R5 | The word set | **`.` (format X per current display mode via the landed formatter, append + trailing space, DROP), `.S` (one-line depth-prefixed picture of the live stack, non-destructive), `CR`, `EMIT` (X as C47 glyph code, ASCII subset ASCII-faithful, DROP), `SPACE`, `TYPE` (dtString in X → append text, DROP; else the standard type error), `PAGE` (clear ring + view).** All plain prims (no FF_IMMEDIATE), appended after PRIM_REPEAT, names subject to the N-T3 collision sweep (renames are the sweep's deliverable, not a relitigation). Formatting comes from the landed display code or it does not ship — the decodeOneStep argument, transplanted to values. Where no console is open the words still write the ring (one rule, no cases; PC tests assert ring bytes). |
+| N-R2 | Transcript storage — one history, two roles (amended 2026-08-05, owner) | **The store of executed lines is FHIST, unchanged and landed; the console adds no second input history** (supersedes the authored "FHIST stays input-only / the two do not merge" framing — the view now explicitly *is* FHIST's history rolling, per the owner's "they're the same as the old history"). What the stage adds is the **view buffer**: one BSS byte ring, 1024 B (`FORTH_CONSOLE_RING_BYTES`), glyph-encoded, `\n`-terminated lines, oldest-line eviction by tail advance — holding the dialogue *as displayed*: display copies of committed lines (written in the same act as the FHIST push — N-R4) interleaved with the output FHIST must never hold (X echoes, error lines, word output; FHIST is a runnable program and output is not a step). Not arena (the L-R5 argument), not program memory (that is FHIST's job, already done). The ring survives capture close/reopen and deep sleep (BSS, the FLAG_ALPHA parallel — reopening restores the dialogue); cleared at the `forthCapPowerReset` seams and by `PAGE` (view-only, never FHIST); never persisted — and needs no persistence, because **the input lines persist as FHIST already** (§5.5). Designed divergences, named: FHIST keeps its landed consecutive-duplicate collapse while the view echoes every commit (a terminal shows every run); after a power reset the view is empty while FHIST still recalls (the §8.4.2 restore posture); the two eviction depths (1024 B each) trim independently. ~25–40 realistic lines of view scrollback; one constant, battery-pinned. |
+| N-R3 | View geometry | **The console owns the whole stack area** (amended 2026-08-05, owner — supersedes the authored T/Z/Y-only wording): **the native editor is its input band at the bottom (native draw, native position, both line-length states), and the transcript fills every row the editor leaves** — ~4–5 `standardFont` rows at the fnPem pitch in the short-line state, fewer (possibly zero) under the 3-row long-line editor, N-T1 pinning the per-state arithmetic. Terminal flow: newest above the input band, rolling upward. The gate extends the landed CM_AIM arm's own conjuncts — interactive capture open, `!tam.mode`, `lastErrorCode == 0` — and the `yMultiLineEdOffset` split now selects the transcript row count rather than gating the view off. Every yield case falls back to today's paint — the arm stays additive. The roll: a scroll gesture moves the view window over the ring (gesture per N-T4); any commit or output snaps the view back to newest. Truncate-with-ellipsis, no wrap (render-only; revisitable). Status bar and softmenus untouched. |
+| N-R4 | The dialogue (what ENTER writes) | **Echo the committed line prompt-prefixed (`»`, the marker glyph); on success append X's value rendered by the landed register formatter; on interpret error append the §8.7 message text (generic form — S1 stands, no token).** The X echo is the calculator's "ok": the stack is hidden, so the console answers with where X landed. Echo belongs to `forthInteractiveEnter`, not the engine — program-run Forth steps echo nothing (only explicit output words write). **The line echo and the FHIST push are one act** — same bytes, same site (manage.c:1381), ordered together before the run — which is what makes the rolled lines and the old history the same history (the owner's amendment, mechanically); the site is already after the E9 refusal, so a refused line stays in the editor and neither echoes nor enters history. The result/error echoes sit on the two post-run arms (:1395/:1405) and are view-only output — they never touch FHIST. The error *display* protocol is unchanged (native paint over the area until the next key); the transcript line is the record that keeps the dialogue readable afterwards. |
+| N-R5 | The word set | **`.` (format X per current display mode via the landed formatter, append + trailing space, DROP), `.S` (one-line depth-prefixed picture of the live stack, non-destructive), `CR`, `EMIT` (X as C47 glyph code, ASCII subset ASCII-faithful, DROP), `SPACE`, `TYPE` (dtString in X → append text, DROP; else the standard type error), `PAGE` (clear the view ring; FHIST untouched — history surgery is not a display act).** All plain prims (no FF_IMMEDIATE), appended after PRIM_REPEAT, names subject to the N-T3 collision sweep (renames are the sweep's deliverable, not a relitigation). Formatting comes from the landed display code or it does not ship — the decodeOneStep argument, transplanted to values. Where no console is open the words still write the ring (one rule, no cases; PC tests assert ring bytes). |
 | N-R6 | Keys-first entry | **`keysMode = 1` set immediately after `forthCapOpenInteractive()` at both interactive open sites** — `fnForthOuter`'s arm (forth_compile.c:1726 area) and the REPL reopen (manage.c:1405-1410); the universal open-reset (forth_capture.c:11) stays, so PEM inherits alpha-first untouched. The E10/E11 gesture keeps toggling both ways (items.c:747-793 unchanged); **the EXIT ladder re-derives for keys-as-ground: alpha unwinds to keys (rung 1 inverts, keyboard.c:4029-4033), stacked menus pop, keys-ground closes** (rung table is N-T4's deliverable). At open the console pushes **`MNU_FORTH` (FWRD) as its home row** in place of the `-MNU_ALPHA` push at forth_compile.c:1686 (the :1687 `softmenuStack[0]` fixup re-derived alongside) — discovery on the softkeys, and a word softkey *types* the word (the landed capture-gated F6-3 sink; the Stage M CM_NORMAL execute arm is a different mode and untouched). The E8 row-1 disposition (FWRD → pop to ALPHA menu) and `isAlphaSubmenu`'s `-MNU_FORTH` row are re-derived for FWRD-as-home (N-T4). PEM: K4's alpha default stands, asserted by the same battery that pins the flip. |
-| N-R7 | Stack visibility | **The console replaces the stack display while open — deliberately** (the owner's ask; the N-R4 X-echo is the running feedback). Any native close path or EXIT rung 3 returns to the normal stack screen; reopening restores the dialogue (N-R2). L-R8 is superseded for the short-line interactive case by this stage's owner statement; its long-line arm and its PEM-side reasoning stand. |
+| N-R7 | Stack visibility | **The console replaces the stack display while open — deliberately** (the owner's ask; the N-R4 X-echo is the running feedback). Any native close path or EXIT rung 3 returns to the normal stack screen; reopening restores the dialogue (N-R2). L-R8's accept-native ruling is superseded for the interactive origin by this stage's owner statement; the native editor draw it protected survives as the console's input band, in both line-length states, and its PEM-side reasoning stands untouched. |
 | N-R8 | Letter + branch | `N`, `forth-core/stage-n`, branched from the Stage M close. |
+| N-R9 | Does FHIST still make sense beside the console? (owner follow-up 2026-08-05: "if FHIST no longer makes sense we can remove it and replace with a new history mechanism") | **KEEP — FHIST stays the history store; the ring stays the view.** Three load-bearing reasons. (1) **The fold parks on FHIST**: `forthFoldEnter` materialises the live line as FHIST's last content step and the landed PEM suspend runs on that step (§8.4.3, `forthHistoryGotoLastStep` — L1-F1); removing FHIST means re-homing the fold's substrate and re-deriving its seven-path close sweep, including the mid-fold power-reset story ("+1 step, indistinguishable from a legitimate history entry") that works precisely because the parking spot IS the history. (2) **Persistence is free only there**: program memory already persists with restore validation (§5.5, the L-R7 argument); a ring-only history either dies at every restore or buys the save keys + validation L-R5 rejected. (3) **View and history need different eviction dynamics**: one `EMIT`-chatty word floods a shared ring and evicts the input history behind the dialogue; FHIST's cap only ever trims lines you *typed*. The double store costs 1024 B of capped, user-visible, clearable program memory and buys recall, persistence and session replay — landed. The consecutive-duplicate collapse stays (a store rule, not a view rule — N-R2 names the divergence). Removal remains open to the owner at the recorded price: a fold re-homing packet (a new scratch-program lifecycle plus the close-sweep re-derivation), a persistence regression or a new format surface, and view/history eviction coupling. Nothing in Stage N deepens the FHIST coupling — the one-act echo (N-R4) is a single call site beside the landed push. |
 
 ## Mandatory architect pre-work (traces before any packet)
 
@@ -201,7 +230,11 @@ printer/serial channels, any PEM-side view change.
   and `clearRegisterLine`'s exact clear rects (screen.c:2201-2218).
   Deliverable: the console arm's gate expression with every conjunct
   justified; the row arithmetic (21 vs 22 px pitch, row count, first-row
-  Y); the paint-call inventory (what is suppressed, what is cleared);
+  Y) **per editor state** — the multi-line editor's exact rects in both
+  `multiEdLines` states (the `showStringEdC47` y-parameters), so the
+  transcript row count is a derived function of the editor's extent,
+  not a constant; the paint-call inventory (what is suppressed, what is
+  cleared);
   the TAM/fold interplay proof (forged CM_PEM routes to
   `_refreshPemScreen`, so the arm is unreachable during a fold — confirm
   at the `refreshScreen` switch, screen.c:6166-6216); and the
@@ -238,9 +271,11 @@ printer/serial channels, any PEM-side view change.
   a FWRD pushed by the console's open** rather than by an alpha catalog
   or the CATALOG tree: the console must not drain its own home row, and
   a later PEM entry must not inherit a stale one. Also: the K4 battery
-  rows enumerated flip-vs-assert-unchanged, and the g-shifted up/down
-  gesture's availability in CM_AIM (scrollback candidate) against
-  native meanings.
+  rows enumerated flip-vs-assert-unchanged, and **the roll gesture** —
+  g-shifted up/down's availability in CM_AIM against native meanings,
+  with the next-best chord as fallback. Rolling is in scope by the
+  owner's amendment; the trace's deliverable is *which* gesture, never
+  whether.
 - **N-T5 — the channel's writers and seams.** The ring's write contexts
   proven bounded (interactive ENTER, prim under `forthOuterRun` at
   nesting depth 2, program-step run under `runProgram`); the reset
@@ -259,8 +294,10 @@ lesson: reachability, not write-set).
   tests (eviction arithmetic, iteration, clear, nested-append hammer).
   No display code. *(New source file: the close packet carries the
   `CUSTOM_PKG_RECONFIGURE=1` measurement note from M1-3.)*
-- **N1-2 — the view.** The screen.c arm per N-T1: suppression gate, row
-  paints, truncation; the lcd_buffer display test (F15-3 precedent);
+- **N1-2 — the view.** The screen.c arm per N-T1: suppression gate,
+  per-editor-state row counts, row paints, truncation, and the roll
+  (view offset over the ring, the N-T4 gesture, snap-to-newest on any
+  commit or output); the lcd_buffer display test (F15-3 precedent);
   sim LCD verification via run-sim, capture driver copy-adapted from the
   skill's references, never hand-rolled (standing 2026-08-04 rule).
 - **N1-3 — the dialogue.** Echo/result/error lines in
@@ -276,10 +313,14 @@ lesson: reachability, not write-set).
   alpha; interactive must open keys; E13 round-trip preserved).
 - **N1-6 — acceptance + close.** The story battery (open → keys-typed
   arithmetic → echo + X → alpha excursion to define → `GLOBAL` → `.S` →
-  `PAGE` → EXIT → reopen with dialogue intact → power-reset seam clears
-  the ring); the close-sweep extension (ring untouched at capture
-  close, cleared at power reset — asserted in the same sweep that owns
-  the close tuple); DESIGN.md fold-in (§8.4.4 the console; §8.4.2
+  roll back through the dialogue and snap forward → `PAGE` → EXIT →
+  reopen with dialogue intact → power-reset seam clears the ring while
+  FHIST still recalls); the one-history assertion (the view's input
+  lines byte-equal FHIST's steps, modulo the two designed N-R2
+  divergences; f-shift recall and the roll are distinct gestures with
+  distinct targets); the close-sweep extension (ring untouched at
+  capture close, cleared at power reset — asserted in the same sweep
+  that owns the close tuple); DESIGN.md fold-in (§8.4.4 the console; §8.4.2
   amendments for keys-first; the §1.3 guardrail clarification; §5.4 BSS
   inventory; the L-R8 supersession note); DESIGN-HISTORY; RULE-1
   numbers; sim captures for the forum.
@@ -314,7 +355,12 @@ fallback per the F6-1/L1-5C precedent without ceremony.
   contexts — bounded-write proof plus a hammer test; no display calls
   outside the view by checked property (N-T5). (7) Upstream drift on
   screen.c, the largest override — markers around the arm, standing
-  re-grep discipline.
+  re-grep discipline. (8) View/history coherence — the one-act echo
+  (N-R4) is load-bearing: a second echo writer, a reorder against the
+  FHIST push, or an echo on a path the push skips makes the rolled
+  lines lie about history; the N1-6 one-history assertion pins
+  byte-equality, and the two designed divergences are the only licensed
+  ones.
 
 ## Non-goals (explicit)
 
@@ -326,8 +372,11 @@ fallback per the F6-1/L1-5C precedent without ceremony.
   line; the console never blocks a run on a keypress.
 - No cursor addressing, scroll regions, colors, or font selection — the
   transcript is an append-only tail view.
-- No transcript persistence: no save keys, no restore validation, no
-  format surface. The ring dies at the power-reset seams, deliberately.
+- No new persistence surface: the view ring is never saved and dies at
+  the power-reset seams, deliberately; the executed lines persist
+  because FHIST already does (§5.5, kept by N-R9) — history
+  persistence costs zero new format, and a ring-persistence save key
+  would relitigate L-R5.
 - No printer/IR/serial output channel; the ring is the only sink this
   stage defines.
 - No PEM-side view change: the PEM capture keeps the listing and the
