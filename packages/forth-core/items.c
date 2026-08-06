@@ -204,6 +204,15 @@ bool_t isFunctionOldParam16(uint16_t func) {
     if(abs(itemNr) <= LAST_ITEM) {                         // Predefined item
       itemName = (char *)indexOfItems[abs(itemNr)].itemCatalogName;
     }
+    else if(itemNr >= ASSIGN_FORTH_WORDS) {                // M2 (Stage M): global
+      /* Forth word, pick-time pseudo-item — tested BEFORE the labels arm,
+       * which claims everything >= 12000.  Same scratch as the label arm. */
+      if(!forthDictNameByRef((uint16_t)(FORTH_REF_GLOBAL | (uint16_t)(itemNr - ASSIGN_FORTH_WORDS)),
+                             tmpStringLabelOrVariableName, 16)) {
+        tmpStringLabelOrVariableName[0] = 0;
+      }
+      itemName = tmpStringLabelOrVariableName;
+    }
     else if(itemNr >= ASSIGN_LABELS) {                     // User program
       uint8_t *lblPtr = labelList[itemNr - ASSIGN_LABELS].labelPointer;
       uint32_t count = *(lblPtr++);

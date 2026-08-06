@@ -334,6 +334,21 @@ static bool_t _forthCapAtCap(int16_t item) {
   #pragma GCC diagnostic pop
     if(calcMode == CM_ASSIGN && item != ITM_NOP && item != ITM_NULL) {
       switch(-softmenu[menuId].menuItem) {
+        case MNU_FORTH: {
+          /* M2 (Stage M): a FWRD pick during ASSIGN captures a GLOBAL
+           * word as a named assignment (M-R2: interactive words and any
+           * stale name refuse with no state change — the G1 blank-key
+           * precedent).  The ORDINAL rides the int16 channel — never the
+           * raw ref, whose bit 15 would land in the negative bands;
+           * _assignItem rebuilds the ref and derefs the name. */
+          uint16_t fref;
+          char *fpick = (char *)getNthString(dynamicSoftmenu[menuId].menuContent, dynamicMenuItem);
+          if(forthFindColonRef(fpick, &fref, NULL) && (fref & FORTH_REF_GLOBAL)
+             && (int32_t)(fref & (uint16_t)~FORTH_REF_GLOBAL) <= (int32_t)(32767 - ASSIGN_FORTH_WORDS)) {
+            return (int16_t)((fref & (uint16_t)~FORTH_REF_GLOBAL) + ASSIGN_FORTH_WORDS);
+          }
+          return ITM_NOP;
+        }
         case MNU_PROG:
         case MNU_PROGS: {
                     #if defined(VERBOSEKEYS)

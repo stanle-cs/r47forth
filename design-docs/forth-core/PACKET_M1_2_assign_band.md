@@ -96,15 +96,30 @@ assignment state).
 6. **Pending display:** after the pick, the assign TAM buffer contains
    `MA1` (the E3 display consumer).
 
-## Mutations (each applied, RED, reverted)
+## Mutations (each applied, RED, reverted — results as run)
 
-- **E** — `_assignItem`'s band arm moved BELOW the labels arm: RED at
-  [1] (the labels arm claims 24000+ and derefs `labelList` garbage; the
-  key label is not `MA1`).
-- **F** — the global-bit requirement dropped in E2: RED at [2].
+- **E** — the band arm disabled (labels arm claims 24000+): **RED by
+  SIGSEGV** (exit 139) — `labelList[12000+]` is a wild deref in the sim,
+  which is exactly the failure mode the arm ORDER exists to prevent; the
+  gate goes red either way and the misorder cannot land.
+- **F** — the global-bit requirement dropped in E2: RED at [2]
+  (`itemToBeAssigned 24000 after an interactive-word pick, expected 0`).
 - **G** — E2 carries the raw ref instead of the ordinal: RED at [1]
-  (bit 15 lands the channel in the negative bands; the record never
-  forms).
+  (bit 15 lands the channel outside the band; no record forms) and [3]
+  (the surviving record is the degrade path: primary 99, empty label).
+
+## As-run deviations from rev 1 (recorded, all in the landed test)
+
+- The press is driven in TWO halves (resolution via `determineItem`,
+  dispatch mirroring `btnReleased`'s `ITM_XEQ` USER arm verbatim) — the
+  arm lives in the GTK-typed button handlers, not in `determineItem` as
+  the trace's shorthand suggested; [4] asserts the refusal + untouched X
+  and cites the arm's own error line rather than re-driving it.
+- The test restores the pre-test world for the lazily-created
+  `userKeyLabel` block, and BOTH M1 batteries register AFTER the FIX-6
+  region-count gate (the K4-A precedent): the assign flow's packed
+  label table legitimately relocates on every write, which the leak
+  gate has no allowance for.
 
 ## Acceptance
 

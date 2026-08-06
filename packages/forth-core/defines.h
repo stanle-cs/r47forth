@@ -2240,6 +2240,9 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 
 #define ASSIGN_NAMED_VARIABLES                 10000
 #define ASSIGN_LABELS                          12000
+#define ASSIGN_FORTH_WORDS                     24000  /* M2 (Stage M): global Forth
+        words in the pick channel.  Labels keep 12000..23999; every consumer
+        tests this band FIRST (>= ASSIGN_LABELS would claim it). */
 #define ASSIGN_RESERVED_VARIABLES                  (ASSIGN_NAMED_VARIABLES + FIRST_RESERVED_VARIABLE - FIRST_NAMED_VARIABLE)
 #define ASSIGN_USER_MENU                     (-10000)
 #define ASSIGN_CLEAR                         (-32768)

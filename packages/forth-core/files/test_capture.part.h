@@ -16556,3 +16556,360 @@ static int test_fwrd_normal_mode(void)
 
   return fail;
 }
+
+/* ==================================================================
+ * PACKET_M1_2 — test_fwrd_assign: a global Forth word onto a key.
+ * The pick rides the real resolution + CM_ASSIGN switch
+ * (executeFunction -> determineFunctionKeyItem_C47 -> the band); the
+ * record rides the real assignToKey/_assignItem; the press rides the
+ * real determineItem USER-key dispatch (label miss -> the landed
+ * forthTryColonFallback).  kbd_usr[21] and its label slot are
+ * snapshotted and restored.
+ * ================================================================== */
+static int test_fwrd_assign(void)
+{
+  extern void     showSoftmenu(int16_t menu);
+  extern char    *dynmenuGetLabel(int16_t menuitem);
+  extern void     testInitVariableSoftmenu(int16_t);
+  extern void     executeFunction(const char *data, int16_t item_);
+  extern void     fnGotoDot(uint16_t);
+  /* fnAssign, assignToKey, getUserKeyLabelString, setUserKeyArgument,
+   * determineItem: prototypes arrive via assign.h/c47.h — no local externs
+   * (a hand-extern with a drifted type is exactly the checklist-5 class). */
+
+  int fail = 0, scFail;
+  int i;
+  int idxMA1 = -1, idxMA2 = -1;
+  int16_t pressedUserItem = ITM_NOP;
+  bool_t fallbackFired = false;
+  uint8_t tType; int32_t tVal;
+
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  bool_t savedUser = getSystemFlag(FLAG_USER);
+  uint8_t savedCalcMode = calcMode;
+  uint8_t savedPreviousCalcMode = previousCalcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedItemToBeAssigned = itemToBeAssigned;
+  int16_t savedCachedDynamicMenu = cachedDynamicMenu;
+  uint8_t *savedMenuContent = dynamicSoftmenu[22].menuContent;
+  int16_t savedNumItems = dynamicSoftmenu[22].numItems;
+  calcKey_t savedKey21;
+  char savedKey21Label[16];
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+  xcopy(&savedKey21, kbd_usr + 21, sizeof(calcKey_t));
+  xcopy(savedKey21Label, (char *)getUserKeyLabelString(21 * 6),
+        stringByteLength((char *)getUserKeyLabelString(21 * 6)) + 1);
+
+  dynamicSoftmenu[22].menuContent = NULL;
+  dynamicSoftmenu[22].numItems = 0;
+
+  #define M12_RESET() do { \
+    calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
+    programRunStop = PGM_STOPPED; dynamicMenuItem = -1; alphaCase = AC_UPPER; \
+    nextChar = NC_NORMAL; shiftF = false; shiftG = false; itemToBeAssigned = 0; \
+    clearSystemFlag(FLAG_ALPHA); clearSystemFlag(FLAG_USER); \
+    lastErrorCode = ERROR_NONE; forthCapClose(); \
+  } while (0)
+
+  #define M12_SCAN() do { \
+    idxMA1 = idxMA2 = -1; \
+    for (i = 0; i < dynamicSoftmenu[22].numItems; i++) { \
+      char *lbl_ = dynmenuGetLabel(i); \
+      if (compareString(lbl_, "MA1", CMP_BINARY) == 0) idxMA1 = i; \
+      if (compareString(lbl_, "MA2", CMP_BINARY) == 0) idxMA2 = i; \
+    } \
+  } while (0)
+
+  /* The press, two halves back to back (the btnReleased XEQ arm is not
+   * harness-driveable: its funcParam/dispatch live in the GTK-typed
+   * button handlers).  Half 1: determineItem resolves the USER key.
+   * Half 2: the dispatch, mirroring btnReleased's item == ITM_XEQ arm
+   * VERBATIM — findNamedLabel first, forthTryColonFallback on the miss
+   * (the arm's own not-found error display is the statement below the
+   * mirrored site and is not re-driven; [4] asserts the refusal +
+   * untouched X instead). */
+  #define M12_PRESS_USER_KEY21() do { \
+    char *fp_; \
+    calcRegister_t lbl_; \
+    setSystemFlag(FLAG_USER); \
+    dynamicMenuItem = -1; \
+    pressedUserItem = determineItem("21"); \
+    clearSystemFlag(FLAG_USER); \
+    fp_ = (char *)getUserKeyLabelString(21 * 6); \
+    fallbackFired = false; \
+    if (pressedUserItem == ITM_XEQ && fp_[0] != 0) { \
+      lbl_ = findNamedLabel(fp_, GLOBAL_LABELS); \
+      if (lbl_ != INVALID_VARIABLE) { forthUserItemDispatch(pressedUserItem, fp_, pressedUserItem, lbl_); fallbackFired = true; } \
+      else { fallbackFired = forthTryColonFallback(pressedUserItem, fp_); } \
+    } \
+  } while (0)
+
+  bool_t hadUserKeyLabel = (userKeyLabel != NULL);
+  cleanupTestProgram();
+  {
+    testProg_t base;
+    tpInit(&base);
+    if (tpLbl(&base, "BASEN") < 0 || tpEnd(&base) < 0 || !tpWrite(&base)) {
+      printf("    FIXTURE FAIL: baseline build/write\n");
+      cleanupTestProgram();
+      return 1;
+    }
+  }
+  M12_RESET();
+  forthOuterInterpret(": MA1 43 ; GLOBAL");
+  forthOuterInterpret(": MA2 44 ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FIXTURE FAIL: word setup errored (%d)\n", lastErrorCode);
+    cleanupTestProgram();
+    return 1;
+  }
+
+  /* ---- [1] End to end: pick -> band -> record -> USER press runs. ---- */
+  scFail = 0;
+  showSoftmenu(-MNU_FORTH);
+  testInitVariableSoftmenu(22);
+  M12_SCAN();
+  if (idxMA1 < 0 || idxMA1 >= 6 || idxMA2 < 0 || idxMA2 >= 6) {
+    printf("    [1] FIXTURE FAIL: words not on page 0 (MA1=%d MA2=%d)\n", idxMA1, idxMA2);
+    scFail = 1;
+  }
+  if (!scFail) {
+    char kbuf[2];
+    previousCalcMode = CM_NORMAL;
+    fnAssign(0);
+    if (calcMode != CM_ASSIGN || itemToBeAssigned != 0) {
+      printf("    [1] FIXTURE FAIL: fnAssign did not arm CM_ASSIGN\n");
+      scFail = 1;
+    }
+    if (!scFail) {
+      softmenuStack[0].softmenuId = 22;
+      softmenuStack[0].firstItem = 0;
+      kbuf[0] = (char)('1' + idxMA1); kbuf[1] = 0;
+      executeFunction(kbuf, 0);
+      if (itemToBeAssigned < ASSIGN_FORTH_WORDS) {
+        printf("    [1] FAIL: itemToBeAssigned %d, expected the ASSIGN_FORTH_WORDS band\n",
+               itemToBeAssigned);
+        scFail = 1;
+      }
+      if (!scFail && compareString(getItemCatalogName(itemToBeAssigned), "MA1", CMP_BINARY) != 0) {
+        printf("    [1] FAIL: pseudo-item name \"%s\", expected \"MA1\"\n",
+               getItemCatalogName(itemToBeAssigned));
+        scFail = 1;
+      }
+    }
+    if (!scFail) {
+      shiftF = false; shiftG = false;
+      assignToKey("21");
+      if (kbd_usr[21].primary != ITM_XEQ) {
+        printf("    [1] FAIL: key 21 primary %d, expected ITM_XEQ\n", kbd_usr[21].primary);
+        scFail = 1;
+      }
+      if (!scFail && compareString((char *)getUserKeyLabelString(21 * 6), "MA1", CMP_BINARY) != 0) {
+        printf("    [1] FAIL: key 21 label \"%s\", expected \"MA1\"\n",
+               (char *)getUserKeyLabelString(21 * 6));
+        scFail = 1;
+      }
+    }
+    calcMode = CM_NORMAL;
+    itemToBeAssigned = 0;
+    if (!scFail) {
+      lastErrorCode = ERROR_NONE;
+      M12_PRESS_USER_KEY21();
+      if (pressedUserItem != ITM_XEQ) {
+        printf("    [1] FAIL: USER key resolved to %d, expected ITM_XEQ\n", pressedUserItem);
+        scFail = 1;
+      }
+      if (!scFail && (lastErrorCode != ERROR_NONE || !fallbackFired || !x_is_longint(43))) {
+        printf("    [1] FAIL: USER press did not run MA1 (err %d)\n", lastErrorCode);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [1] PASS: pick -> (ITM_XEQ, MA1) record -> USER press runs the word (X == 43)\n");
+  fail |= scFail;
+
+  /* ---- [2] Non-global pick refuses with no state change. ---- */
+  scFail = 0;
+  M12_RESET();
+  previousCalcMode = CM_NORMAL;
+  fnAssign(0);
+  {
+    char kbuf[2];
+    softmenuStack[0].softmenuId = 22;
+    softmenuStack[0].firstItem = 0;
+    kbuf[0] = (char)('1' + idxMA2); kbuf[1] = 0;
+    executeFunction(kbuf, 0);
+    if (itemToBeAssigned != 0) {
+      printf("    [2] FAIL: itemToBeAssigned %d after an interactive-word pick, expected 0\n",
+             itemToBeAssigned);
+      scFail = 1;
+    }
+  }
+  calcMode = CM_NORMAL;
+  itemToBeAssigned = 0;
+  if (!scFail) printf("    [2] PASS: a non-global pick refuses — no band value, no record\n");
+  fail |= scFail;
+
+  /* ---- [3] Save/restore round-trip: the record is ordinary format. ---- */
+  scFail = 0;
+  M12_RESET();
+  saveCalc();
+  forthGDictClear();
+  restoreCalc();
+  if (kbd_usr[21].primary != ITM_XEQ
+      || compareString((char *)getUserKeyLabelString(21 * 6), "MA1", CMP_BINARY) != 0) {
+    printf("    [3] FAIL: assignment did not survive save/restore (primary %d label \"%s\")\n",
+           kbd_usr[21].primary, (char *)getUserKeyLabelString(21 * 6));
+    scFail = 1;
+  }
+  if (!scFail) {
+    lastErrorCode = ERROR_NONE;
+    M12_PRESS_USER_KEY21();
+    if (lastErrorCode != ERROR_NONE || !fallbackFired || !x_is_longint(43)) {
+      printf("    [3] FAIL: restored assignment did not run (err %d)\n", lastErrorCode);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [3] PASS: the assignment survives save/restore and still runs (zero new format surface)\n");
+  fail |= scFail;
+
+  /* ---- [4] FORGET-then-press: the native error surface. ---- */
+  scFail = 0;
+  M12_RESET();
+  forthOuterInterpret("FORGET MA1");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    [4] FIXTURE FAIL: FORGET errored (%d)\n", lastErrorCode);
+    scFail = 1;
+  }
+  if (!scFail) {
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    lastErrorCode = ERROR_NONE;
+    M12_PRESS_USER_KEY21();
+    if (fallbackFired) {
+      printf("    [4] FAIL: a dangling name dispatched (fallback fired)\n");
+      scFail = 1;
+    }
+    if (!scFail) {
+      uint8_t tType2; int32_t tVal2;
+      read_reg_int32(REGISTER_X, &tType2, &tVal2);
+      if (tType2 != tType || tVal2 != tVal) {
+        printf("    [4] FAIL: X changed on a dangling-key press\n");
+        scFail = 1;
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+  if (!scFail) printf("    [4] PASS: a dangling key refuses (label and colon both miss), X untouched; the native arm's error line sits below the mirrored site\n");
+  fail |= scFail;
+
+  /* ---- [5] PEM press records XEQ 'MA1', never executes. ---- */
+  scFail = 0;
+  M12_RESET();
+  forthOuterInterpret(": MA1 43 ; GLOBAL");   /* re-create after [4]'s FORGET */
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    [5] FIXTURE FAIL: word re-setup errored (%d)\n", lastErrorCode);
+    scFail = 1;
+  }
+  if (!scFail) {
+    uint16_t stepsBefore;
+    calcMode = CM_PEM;
+    dynamicMenuItem = -1;
+    fnGotoDot(1);
+    stepsBefore = getNumberOfSteps();
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    lastErrorCode = ERROR_NONE;
+    M12_PRESS_USER_KEY21();
+    if (getNumberOfSteps() != stepsBefore + 1) {
+      printf("    [5] FAIL: step count %u, expected %u (record, not execute)\n",
+             getNumberOfSteps(), stepsBefore + 1);
+      scFail = 1;
+    }
+    if (!scFail) {
+      uint8_t tType2; int32_t tVal2;
+      read_reg_int32(REGISTER_X, &tType2, &tVal2);
+      if (tType2 != tType || tVal2 != tVal) {
+        printf("    [5] FAIL: X changed — the word executed live in PEM\n");
+        scFail = 1;
+      }
+    }
+    calcMode = CM_NORMAL;
+  }
+  if (!scFail) printf("    [5] PASS: a PEM press records the XEQ step by name and executes nothing\n");
+  fail |= scFail;
+
+  /* ---- [6] Pending display: the assign TAM buffer shows the word. ---- */
+  scFail = 0;
+  M12_RESET();
+  testInitVariableSoftmenu(22);
+  M12_SCAN();
+  if (idxMA1 < 0) {
+    printf("    [6] FIXTURE FAIL: MA1 not listed after re-create\n");
+    scFail = 1;
+  }
+  if (!scFail) {
+    char kbuf[2];
+    previousCalcMode = CM_NORMAL;
+    fnAssign(0);
+    softmenuStack[0].softmenuId = 22;
+    softmenuStack[0].firstItem = 0;
+    kbuf[0] = (char)('1' + idxMA1); kbuf[1] = 0;
+    executeFunction(kbuf, 0);
+    updateAssignTamBuffer();
+    if (strstr(tamBuffer, "MA1") == NULL) {
+      printf("    [6] FAIL: tamBuffer \"%s\" does not show MA1\n", tamBuffer);
+      scFail = 1;
+    }
+  }
+  calcMode = CM_NORMAL;
+  itemToBeAssigned = 0;
+  if (!scFail) printf("    [6] PASS: the pending-assignment display names the word\n");
+  fail |= scFail;
+
+  /* restore the key and every global */
+  xcopy(kbd_usr + 21, &savedKey21, sizeof(calcKey_t));
+  if (hadUserKeyLabel) {
+    setUserKeyArgument(21 * 6, savedKey21Label);
+  }
+  else if (userKeyLabel != NULL) {
+    /* This test's first setUserKeyArgument lazily created the persistent
+     * userKeyLabel block (assign.c initUserKeyArgument).  The suite's
+     * FIX-6 leak gate has no allowance for lazy persistent inits, so
+     * restore the pre-test world exactly: free what only this test
+     * caused to exist. */
+    freeC47Blocks(userKeyLabel, TO_BLOCKS(userKeyLabelSize));
+    userKeyLabel = NULL;
+    userKeyLabelSize = 0;
+  }
+  forthCapClose();
+  cleanupTestProgram();
+  forthDictClear();
+  forthGDictClear();
+  #undef M12_RESET
+  #undef M12_SCAN
+  if (dynamicSoftmenu[22].menuContent) {
+    free(dynamicSoftmenu[22].menuContent);
+  }
+  dynamicSoftmenu[22].menuContent = savedMenuContent;
+  dynamicSoftmenu[22].numItems = savedNumItems;
+  cachedDynamicMenu = savedCachedDynamicMenu;
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  previousCalcMode = savedPreviousCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  itemToBeAssigned = savedItemToBeAssigned;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  if (savedUser) setSystemFlag(FLAG_USER); else clearSystemFlag(FLAG_USER);
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}

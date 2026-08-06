@@ -1,5 +1,5 @@
 diff --git a/src/c47/items.c b/src/c47/items.c
-index f65402f25fdbbf808a058f4acae3a95b83683e9d..338b847d70724fbcb11ed0d65b924915c3f5beaf 100644
+index f65402f25fdbbf808a058f4acae3a95b83683e9d..a09b86980614693443ccc1f8440220954632624d 100644
 --- a/src/c47/items.c
 +++ b/src/c47/items.c
 @@ -2,6 +2,13 @@
@@ -16,7 +16,23 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..338b847d70724fbcb11ed0d65b924915
  
  void itemToBeCoded(uint16_t unusedButMandatoryParameter) {
    funcOK = false;
-@@ -643,6 +650,15 @@ bool_t isFunctionOldParam16(uint16_t func) {
+@@ -197,6 +204,15 @@ bool_t isFunctionOldParam16(uint16_t func) {
+     if(abs(itemNr) <= LAST_ITEM) {                         // Predefined item
+       itemName = (char *)indexOfItems[abs(itemNr)].itemCatalogName;
+     }
++    else if(itemNr >= ASSIGN_FORTH_WORDS) {                // M2 (Stage M): global
++      /* Forth word, pick-time pseudo-item — tested BEFORE the labels arm,
++       * which claims everything >= 12000.  Same scratch as the label arm. */
++      if(!forthDictNameByRef((uint16_t)(FORTH_REF_GLOBAL | (uint16_t)(itemNr - ASSIGN_FORTH_WORDS)),
++                             tmpStringLabelOrVariableName, 16)) {
++        tmpStringLabelOrVariableName[0] = 0;
++      }
++      itemName = tmpStringLabelOrVariableName;
++    }
+     else if(itemNr >= ASSIGN_LABELS) {                     // User program
+       uint8_t *lblPtr = labelList[itemNr - ASSIGN_LABELS].labelPointer;
+       uint32_t count = *(lblPtr++);
+@@ -643,6 +659,15 @@ bool_t isFunctionOldParam16(uint16_t func) {
      #endif // PC_BUILD
    }
  
@@ -32,7 +48,7 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..338b847d70724fbcb11ed0d65b924915
    void runFunction(int16_t func) {
      #if defined(PC_BUILD) && defined(DEBUG_EXECUTE)
        printf("   >>>RunFunction: %5i%8s%8s\n", func, indexOfItems[abs(func)].itemCatalogName, indexOfItems[abs(func)].itemSoftmenuName);
-@@ -662,12 +678,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
+@@ -662,12 +687,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
          if(strcmp(varCatalogItem, "RCL") != 0) {
            calcRegister_t var = findNamedVariable(varCatalogItem);
            if(var != INVALID_VARIABLE) {
@@ -46,7 +62,7 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..338b847d70724fbcb11ed0d65b924915
            }
            else {
              displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
-@@ -682,14 +693,26 @@ bool_t isFunctionOldParam16(uint16_t func) {
+@@ -682,14 +702,26 @@ bool_t isFunctionOldParam16(uint16_t func) {
        if(func == ITM_XEQ && dynamicMenuItem > -1) {
          char *varCatalogItem = dynmenuGetLabel(dynamicMenuItem);
          if(strcmp(varCatalogItem, "XEQ") != 0) {
@@ -81,7 +97,7 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..338b847d70724fbcb11ed0d65b924915
            }
            else {
              displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
-@@ -701,6 +724,79 @@ bool_t isFunctionOldParam16(uint16_t func) {
+@@ -701,6 +733,79 @@ bool_t isFunctionOldParam16(uint16_t func) {
            return;
          }
        }
@@ -161,7 +177,7 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..338b847d70724fbcb11ed0d65b924915
        if(tam.mode == 0 && TM_VALUE <= indexOfItems[func].param && indexOfItems[func].param <= TM_CMP && (calcMode != CM_PEM || aimBuffer[0] == 0 || nimNumberPart != NP_INT_BASE)) {
          #if defined(VERBOSEKEYS)
            printf("items.c: runfunction (before tamEnterMode): %i, %s\n", softmenu[softmenuStack[0].softmenuId].menuItem, indexOfItems[-softmenu[softmenuStack[0].softmenuId].menuItem].itemSoftmenuName);
-@@ -1683,6 +1779,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
+@@ -1683,6 +1788,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
    void fnSaveXFNRegister          (uint16_t unusedButMandatoryParameter) {}
    void fnCheckLessEqualMinusZero  (uint16_t unusedButMandatoryParameter) {}
    void fnCheckGreaterEqualPlusZero(uint16_t unusedButMandatoryParameter) {}
@@ -170,7 +186,7 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..338b847d70724fbcb11ed0d65b924915
  
  
  #endif // GENERATE_CATALOGS || defined(GENERATE_TESTPGMS)
-@@ -2032,7 +2130,7 @@ TO_QSPI const item_t indexOfItems[] = {
+@@ -2032,7 +2139,7 @@ TO_QSPI const item_t indexOfItems[] = {
  /*  210 */  { fnConstant,                      81,                          STD_mu STD_SUB_G,                              "c.gerver",                                    (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
  /*  211 */  { fnConstant,                      82,                          STD_tau,                                       "c.circle",                                    (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
  /*  212 */  { fnConstant,                      83,                          STD_pi,                                        "pi",                                          (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
@@ -179,7 +195,7 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..338b847d70724fbcb11ed0d65b924915
  /*  214 */  { itemToBeCoded,                   NOPARAM,                     "0214",                                        "0214",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
  /*  215 */  { itemToBeCoded,                   NOPARAM,                     "0215",                                        "0215",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
  /*  216 */  { itemToBeCoded,                   NOPARAM,                     "0216",                                        "0216",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
-@@ -4734,8 +4832,8 @@ TO_QSPI const item_t indexOfItems[] = {
+@@ -4734,8 +4841,8 @@ TO_QSPI const item_t indexOfItems[] = {
  /* 2839 */  UNIT_CONV(constFactorSlugKg      , divide           ,            "kg"                                 STD_RIGHT_ARROW                                                ,            "kg"                                 STD_RIGHT_ARROW                                                ),
  /* 2840 */  UNIT_CONV(constFactorSlinchKg    , multiply         ,            "lbf" STD_DOT "s" STD_SUP_2 "/in"    STD_RIGHT_ARROW                                                ,            "lbf" STD_DOT "s" STD_SUP_2 "/in"    STD_RIGHT_ARROW                                                ),
  /* 2841 */  UNIT_CONV(constFactorSlinchKg    , divide           ,            "kg"                                 STD_RIGHT_ARROW                                                ,            "kg"                                 STD_RIGHT_ARROW                                                ),

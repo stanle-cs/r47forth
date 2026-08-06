@@ -1141,6 +1141,7 @@ static int test_interactive_acceptance(void);                 /* L1-5 */
 static int test_interactive_close_sweep(void);                /* L1-5 */
 static int test_interactive_residue(void);                    /* L1-5 */
 static int test_fwrd_normal_mode(void);                       /* M1-1 */
+static int test_fwrd_assign(void);                            /* M1-2 */
 static int test_forth_fold_commit_recompiles(void);           /* FIX-7 */
 static int test_quote_glyph_accept_parity(void);              /* FIX-7 class */
 static int test_resume_drains_buried_catalog(void);           /* FIX-9 */
@@ -2191,12 +2192,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  printf("\nFORTH M1-1 TESTS (FWRD catalog outside captures)\n");
-  forthDictInit();
-  printf("  [DEBUG] running test_fwrd_normal_mode...\n");
-  fail |= test_fwrd_normal_mode();
-  forthDictClear();
-  forthGDictClear();
 
 
   printf("\nFORTH FIX-7 TESTS (emit/accept quote parity)\n");
@@ -2340,6 +2335,24 @@ int forthDictSelfTest(void)
    * program runs otherwise shift the free-list shape (16 regions, no
    * adjacent pair) and push test_freelist_interior_double_free into its
    * defensive SKIP, silently unexercising that assertion. */
+
+  /* M1 (Stage M): registered AFTER the FIX-6 leak gate, the K4-A
+   * precedent — the assign battery's save/restore cycle and USER-key
+   * table rebuilds legitimately shift the allocator composition (the
+   * packed userKeyLabel table relocates on every write), which the
+   * region-count gate has no allowance for. */
+  printf("\nFORTH M1 TESTS (FWRD catalog outside captures; ASSIGN band)\n");
+  forthDictInit();
+  printf("  [DEBUG] running test_fwrd_normal_mode...\n");
+  fail |= test_fwrd_normal_mode();
+  forthDictClear();
+  forthGDictClear();
+
+  forthDictInit();
+  printf("  [DEBUG] running test_fwrd_assign...\n");
+  fail |= test_fwrd_assign();
+  forthDictClear();
+  forthGDictClear();
 
   printf("\nFORTH K4 TESTS (stage acceptance)\n");
   forthDictInit();
