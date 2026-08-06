@@ -1402,3 +1402,236 @@ static int test_console_exit_ladder(void)
   }
   return fail;
 }
+
+/* ==================================================================
+ * N1-6 — the stage acceptance battery: one session, end to end, plus the
+ * one-history assertion and the close/power-reset sweep.
+ * ================================================================== */
+
+/* ---- 27: the story.  Open keys-first, do arithmetic, take an alpha
+ * excursion to define a word, make it GLOBAL, print with the new words,
+ * roll back through the dialogue and snap forward, PAGE, EXIT, reopen with
+ * the dialogue intact, then power-reset and watch the view die while FHIST
+ * still recalls. ---- */
+static int test_console_story(void)
+{
+  int fail = 0;
+  char line[FORTH_CONSOLE_FMT_MAX];
+  uint16_t afterSession;
+
+  N13_RESET();
+  forthDictInit();
+
+  /* [1] Open: keys input, FWRD home, empty dialogue. */
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsInteractive() || !forthCapKeysMode() || currentMenu() != -MNU_FORTH) {
+    printf("    [1] FAIL: the console did not open keys-first with FWRD home\n");
+    fail = 1;
+  }
+  if (forthConsoleLineCount() != 0) {
+    printf("    [1] FAIL: a fresh console after a dictionary init must show nothing\n");
+    fail = 1;
+  }
+
+  /* [2] Arithmetic: the echo, then where X landed. */
+  _consoleEnterLine("XEQ 'CLSTK' 2 3 +");
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (compareString(line, "5", CMP_BINARY) != 0) {
+    printf("    [2] FAIL: expected the result \"5\" as the newest line, got \"%s\"\n", line);
+    fail = 1;
+  }
+
+  /* [2b] The line surface SURVIVES a native item that resets calcMode.
+   * `XEQ 'CLSTK'` above calls calcModeNormal() inside fnClearStack, which
+   * without the repair leaves the capture open but off the AIM surface —
+   * keys stop routing through it and the console vanishes. */
+  if (calcMode != CM_AIM || !getSystemFlag(FLAG_ALPHA)) {
+    printf("    [2b] FAIL: the line surface did not survive a calcMode-resetting item"
+           " (calcMode=%u alpha=%d)\n", calcMode, getSystemFlag(FLAG_ALPHA));
+    fail = 1;
+  }
+
+  /* [3] The alpha excursion: define a word, make it global. */
+  forthCapSetKeysMode(false);
+  _consoleEnterLine(": SQ DUP * ; GLOBAL");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    [3] FAIL: defining SQ errored (%u)\n", lastErrorCode);
+    fail = 1;
+  }
+  { uint16_t ref;
+    if (!forthFindColonRef("SQ", &ref, NULL) || !(ref & FORTH_REF_GLOBAL)) {
+      printf("    [3] FAIL: SQ is not a GLOBAL word after the definition\n");
+      fail = 1;
+    }
+  }
+
+  /* [4] Back to keys, and use the word with the new output words. */
+  forthCapSetKeysMode(true);
+  _consoleEnterLine("7 SQ .");
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (compareString(line, "49 ", CMP_BINARY) != 0) {
+    printf("    [4] FAIL: `7 SQ .` printed \"%s\", expected \"49 \"\n", line);
+    fail = 1;
+  }
+  /* The word printed, so the dialogue must NOT also append X underneath. */
+  forthConsoleLineAt(1, line, sizeof(line));
+  if (compareString(line, STD_RIGHT_DOUBLE_ANGLE " 7 SQ .", CMP_BINARY) != 0) {
+    printf("    [4] FAIL: a line that printed must not get a second X answer"
+           " (line 1 is \"%s\")\n", line);
+    fail = 1;
+  }
+
+  _consoleEnterLine(".S");
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (line[0] != '<') {
+    printf("    [5] FAIL: `.S` did not draw the stack picture (\"%s\")\n", line);
+    fail = 1;
+  }
+
+  /* [6] Roll back through the dialogue, then snap forward. */
+  afterSession = forthConsoleLineCount();
+  forthConsoleRoll(+3);
+  if (forthConsoleViewOffset() != 3) {
+    printf("    [6] FAIL: the roll did not move the view (offset %u)\n",
+           forthConsoleViewOffset());
+    fail = 1;
+  }
+  _consoleEnterLine("1 1 +");
+  if (forthConsoleViewOffset() != 0) {
+    printf("    [6] FAIL: a commit must snap the view back to newest (offset %u)\n",
+           forthConsoleViewOffset());
+    fail = 1;
+  }
+  if (forthConsoleLineCount() <= afterSession) {
+    printf("    [6] FAIL: the session did not accumulate\n");
+    fail = 1;
+  }
+
+  /* [7] PAGE clears the view; the capture and history are untouched. */
+  _consoleEnterLine("PAGE");
+  if (forthConsoleLineCount() != 0) {
+    printf("    [7] FAIL: PAGE left %u lines\n", forthConsoleLineCount());
+    fail = 1;
+  }
+  if (!forthCapIsOpen()) {
+    printf("    [7] FAIL: PAGE must not close the capture\n");
+    fail = 1;
+  }
+
+  /* [8] EXIT closes; reopening RESTORES the dialogue (N-R2: BSS, not the
+   * capture's lifetime).  Something must be in the ring first. */
+  _consoleEnterLine("XEQ 'CLSTK' 9 9 +");
+  { uint16_t before = forthConsoleLineCount();
+    int press;
+    /* The ladder unwinds one level per press and a long session can leave a
+     * level or two up, so the story presses until it closes rather than
+     * asserting a press count — rung-by-rung is test 26's contract, not the
+     * story's. */
+    for (press = 0; press < 4 && forthCapIsOpen(); press++) { fnKeyExit(NOPARAM); }
+    if (forthCapIsOpen()) {
+      printf("    [8] FAIL: EXIT did not close the capture within four presses\n");
+      fail = 1;
+    }
+    if (forthConsoleLineCount() != before) {
+      printf("    [8] FAIL: capture close must NOT touch the dialogue (%u -> %u lines)\n",
+             before, forthConsoleLineCount());
+      fail = 1;
+    }
+    fnForthOuter(NOPARAM);
+    if (forthConsoleLineCount() != before) {
+      printf("    [8] FAIL: reopening must RESTORE the dialogue (%u lines)\n",
+             forthConsoleLineCount());
+      fail = 1;
+    }
+  }
+
+  /* [9] The power-reset seam: the VIEW dies, FHIST still recalls.  This is
+   * the designed divergence N-R2 names — the view is BSS and never
+   * persisted; the input lines persist because FHIST is a program. */
+  forthCapClose();
+  forthDictInit();                       /* the dictionary-lifecycle seam */
+  if (forthConsoleLineCount() != 0) {
+    printf("    [9] FAIL: the power-reset seam must clear the view (%u lines)\n",
+           forthConsoleLineCount());
+    fail = 1;
+  }
+  { char recalled[FORTH_CONSOLE_FMT_MAX];
+    forthCapOpenInteractive();
+    aimBuffer[0] = 0;
+    forthCapSetHistoryIndex(FORTH_HIST_BROWSE_NONE);
+    forthHistoryRecall(-1);
+    xcopy(recalled, aimBuffer, (uint32_t)stringByteLength(aimBuffer) + 1);
+    if (stringByteLength(recalled) == 0) {
+      printf("    [9] FAIL: FHIST must still recall after the view is gone\n");
+      fail = 1;
+    }
+  }
+
+  forthCapClose();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: story — open keys-first, compute, define GLOBAL in alpha, print,"
+           " roll and snap, PAGE, EXIT/reopen keeps the dialogue, power reset clears it\n");
+  }
+  return fail;
+}
+
+/* ---- 28: ONE HISTORY.  Every line the transcript shows prompt-prefixed is
+ * byte-equal to the line FHIST recalls, in the same order.  The one-act echo
+ * is what makes this true, and a second echo writer or a reorder against the
+ * push would break exactly this. ---- */
+static int test_console_one_history(void)
+{
+  int fail = 0;
+  const char *lines[3] = { "XEQ 'CLSTK'", "11 22 +", "3 4 *" };
+  int i;
+
+  N13_RESET();
+  forthDictInit();
+  fnForthOuter(NOPARAM);
+
+  for (i = 0; i < 3; i++) { _consoleEnterLine(lines[i]); }
+
+  /* Walk the transcript's prompt-prefixed lines newest-first and compare each
+   * against what f-shift recall returns, newest-first.  Same lines, same
+   * order, byte for byte. */
+  { uint16_t n = forthConsoleLineCount();
+    uint16_t seen = 0;
+    uint16_t idx;
+    forthCapSetHistoryIndex(FORTH_HIST_BROWSE_NONE);
+    for (idx = 0; idx < n && seen < 3; idx++) {
+      char shown[FORTH_CONSOLE_FMT_MAX], recalled[FORTH_CONSOLE_FMT_MAX];
+      char want[FORTH_CONSOLE_FMT_MAX];
+      forthConsoleLineAt(idx, shown, sizeof(shown));
+      if (compareString(shown, STD_RIGHT_DOUBLE_ANGLE " ", CMP_BINARY) == 0) { continue; }
+      if (stringByteLength(shown) < 3
+          || memcmp(shown, STD_RIGHT_DOUBLE_ANGLE " ", 3) != 0) {
+        continue;                                  /* an output line, not an echo */
+      }
+      aimBuffer[0] = 0;
+      forthHistoryRecall(-1);
+      xcopy(recalled, aimBuffer, (uint32_t)stringByteLength(aimBuffer) + 1);
+      snprintf(want, sizeof(want), "%s", shown + 3);   /* strip the prompt */
+      if (compareString(recalled, want, CMP_BINARY) != 0) {
+        printf("    FAIL: transcript line %u shows \"%s\" but history recalls \"%s\""
+               " — the rolled lines and the old history must be the SAME history\n",
+               idx, want, recalled);
+        fail = 1;
+      }
+      seen++;
+    }
+    if (seen != 3) {
+      printf("    FAIL: expected 3 prompt-prefixed lines in the transcript, found %u\n", seen);
+      fail = 1;
+    }
+  }
+
+  forthCapClose();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: one history — every echoed line is byte-equal to what FHIST recalls\n");
+  }
+  return fail;
+}

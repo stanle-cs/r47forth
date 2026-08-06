@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38e7ca2f2e 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..1504dea4e924d4ef720ac729313548199176c5e1 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,10 @@
@@ -297,7 +297,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,8 +1154,832 @@ void pemCloseAlphaInput(void) {
+@@ -998,8 +1154,859 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -306,8 +306,8 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
 +  // REM/LITERAL/non-empty-FORTH source lines alike, so the reset must be
 +  // unconditional here too, not just gated on tam.function == ITM_FORTH.
 +  tam.function = 0;
-+}
-+
+ }
+ 
 +/* FIX-9: the E1 catalog-drain helpers are defined further down (above
 + * insertStepInProgram); forthCaptureResume needs them too. */
 +static bool_t _forthCatalogBuriedOnStack(void);
@@ -554,7 +554,31 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
 +    xcopy(preRunCopy, aimBuffer, n + 1);
 +  }
 +
++  { uint32_t seqBefore = forthConsoleWriteSeq();
 +  forthOuterInterpret(aimBuffer);
++
++  /* N1-6: restore the capture's own input surface.
++   *
++   * A native item executed by the line can call calcModeNormal() — CLSTK does
++   * it outright ("a cleared stack is only visible on the normal screen",
++   * src/c47/stack.c:16) — which sets CM_NORMAL, clears FLAG_ALPHA, hides the
++   * cursor and can pop the alpha frame.  The capture object survives all of
++   * that, so the line surface came back OPEN but no longer on the AIM
++   * surface: determineItem stopped routing keys through it and the editor
++   * stopped drawing.  Pre-existing since Stage L and invisible while the
++   * stack still painted; the console makes it obvious, because the whole
++   * transcript vanishes after `XEQ 'CLSTK'`.
++   *
++   * Repaired here rather than at each offending item: this is the one choke
++   * point that knows a capture is still open, and it runs on every path out
++   * of a committed line.  Only for the interactive origin — a PEM capture
++   * lives on a program step, not on this surface. */
++  if (forthCapIsOpen() && forthCapIsInteractive() && calcMode != CM_AIM) {
++    calcMode = CM_AIM;
++    setSystemFlag(FLAG_ALPHA);
++    cursorEnabled = true;
++    calcModeAimGui();
++  }
 +
 +  if (lastErrorCode != ERROR_NONE) {
 +    /* N1-3 (N-R4): the error echo.  §8.7's error PROTOCOL is unchanged —
@@ -578,19 +602,22 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
 +   * landed, rendered by the same display mode the stack would have used.
 +   * View-only, like the error line above.
 +   *
-+   * Suppressed when the line produced its own output and left it
-+   * unterminated (a word ending in EMIT or `.` with no CR): appending X
-+   * underneath would be a second answer to a line that already answered.
-+   * The open record IS that signal — no extra state. */
-+  if (!forthConsoleHasOpenLine()) {
++   * Suppressed when the line SPOKE FOR ITSELF — any console write during the
++   * run, terminated or not.  Appending X underneath a line that already
++   * answered is a second, unasked-for answer.  The first shape of this test
++   * asked "is a line still open", which missed `.S` and PAGE: both write and
++   * then close, so both collected a redundant X echo.  A write counter
++   * sampled across the run asks the question that was actually meant. */
++  if (forthConsoleWriteSeq() == seqBefore) {
 +    char shown[FORTH_CONSOLE_FMT_MAX];
 +    forthConsoleFormatRegister(REGISTER_X, shown, (int16_t)sizeof(shown));
 +    if (shown[0] != 0) {
 +      forthConsoleAppendLine(shown);
 +    }
 +  }
-+  else {
++  else if (forthConsoleHasOpenLine()) {
 +    forthConsoleNewline();      /* close the word's own output line */
++  }
 +  }
 +
 +  /* L-R3: REPL. Reopen empty, stay in CM_AIM. forthCapOpenInteractive
@@ -1038,8 +1065,8 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
 +  forthFoldCtx.capStepOffset = (uint32_t)(currentStep - beginOfProgramMemory);
 +
 +  forthCapSetFoldModeRaw(_forthFoldAdmits(func, mode) ? 1 : 2);
- }
- 
++}
++
 +/* C4: unwind the fold.  Exact — see PACKET_L1_F1_fold_context.md C4. */
 +/* L1-F2 (rev 3): unwind the fold once the TAM session has actually ENDED.
 + *
@@ -1130,7 +1157,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
  
  void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
    if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {
-@@ -1013,7 +1993,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +2020,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -1139,7 +1166,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +2365,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +2392,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -1183,7 +1210,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +2412,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +2439,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -1220,7 +1247,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +2461,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +2488,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -1288,7 +1315,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +2533,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +2560,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -1304,7 +1331,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +2624,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +2651,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -1328,7 +1355,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..61328db87d434a259dd01849f1eb3e38
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2936,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2963,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

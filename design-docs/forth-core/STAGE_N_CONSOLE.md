@@ -39,6 +39,18 @@ row with the authored wording noted in place, and the trace's closing
 table is the index. The scope (N-R1) and the packet order are
 unchanged.**
 
+**STAGE COMPLETE 2026-08-06. N1-1..N1-6 all landed on
+`forth-core/stage-n`; normative record folded into DESIGN.md §8.4.4 with
+amendments to §8.4.1/§8.4.2/§1.3/§5.4, narrative in DESIGN-HISTORY.md.
+Flash +2208 B, RAM +1040 B, arena untouched. Three defects found during
+implementation that the traces did not predict — an unbounded ring walk
+that HUNG rather than miscounted, an EXIT that ate the user's own
+softmenu frame, and a native item (`CLSTK`) that had been able to tear
+the capture's input surface away since Stage L — plus two rulings made
+beyond the packets (the X echo is suppressed when the line spoke for
+itself; `.`'s declared stack delta is load-bearing for the spill
+accounting). All recorded in DESIGN-HISTORY.**
+
 ## Problem
 
 The interactive capture landed (§8.4.2) with a recorded ergonomic debt,

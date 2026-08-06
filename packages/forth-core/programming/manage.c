@@ -1407,7 +1407,31 @@ void forthInteractiveEnter(void) {
     xcopy(preRunCopy, aimBuffer, n + 1);
   }
 
+  { uint32_t seqBefore = forthConsoleWriteSeq();
   forthOuterInterpret(aimBuffer);
+
+  /* N1-6: restore the capture's own input surface.
+   *
+   * A native item executed by the line can call calcModeNormal() — CLSTK does
+   * it outright ("a cleared stack is only visible on the normal screen",
+   * src/c47/stack.c:16) — which sets CM_NORMAL, clears FLAG_ALPHA, hides the
+   * cursor and can pop the alpha frame.  The capture object survives all of
+   * that, so the line surface came back OPEN but no longer on the AIM
+   * surface: determineItem stopped routing keys through it and the editor
+   * stopped drawing.  Pre-existing since Stage L and invisible while the
+   * stack still painted; the console makes it obvious, because the whole
+   * transcript vanishes after `XEQ 'CLSTK'`.
+   *
+   * Repaired here rather than at each offending item: this is the one choke
+   * point that knows a capture is still open, and it runs on every path out
+   * of a committed line.  Only for the interactive origin — a PEM capture
+   * lives on a program step, not on this surface. */
+  if (forthCapIsOpen() && forthCapIsInteractive() && calcMode != CM_AIM) {
+    calcMode = CM_AIM;
+    setSystemFlag(FLAG_ALPHA);
+    cursorEnabled = true;
+    calcModeAimGui();
+  }
 
   if (lastErrorCode != ERROR_NONE) {
     /* N1-3 (N-R4): the error echo.  §8.7's error PROTOCOL is unchanged —
@@ -1431,19 +1455,22 @@ void forthInteractiveEnter(void) {
    * landed, rendered by the same display mode the stack would have used.
    * View-only, like the error line above.
    *
-   * Suppressed when the line produced its own output and left it
-   * unterminated (a word ending in EMIT or `.` with no CR): appending X
-   * underneath would be a second answer to a line that already answered.
-   * The open record IS that signal — no extra state. */
-  if (!forthConsoleHasOpenLine()) {
+   * Suppressed when the line SPOKE FOR ITSELF — any console write during the
+   * run, terminated or not.  Appending X underneath a line that already
+   * answered is a second, unasked-for answer.  The first shape of this test
+   * asked "is a line still open", which missed `.S` and PAGE: both write and
+   * then close, so both collected a redundant X echo.  A write counter
+   * sampled across the run asks the question that was actually meant. */
+  if (forthConsoleWriteSeq() == seqBefore) {
     char shown[FORTH_CONSOLE_FMT_MAX];
     forthConsoleFormatRegister(REGISTER_X, shown, (int16_t)sizeof(shown));
     if (shown[0] != 0) {
       forthConsoleAppendLine(shown);
     }
   }
-  else {
+  else if (forthConsoleHasOpenLine()) {
     forthConsoleNewline();      /* close the word's own output line */
+  }
   }
 
   /* L-R3: REPL. Reopen empty, stay in CM_AIM. forthCapOpenInteractive

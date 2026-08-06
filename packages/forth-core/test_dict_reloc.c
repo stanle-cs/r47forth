@@ -1314,6 +1314,9 @@ static int test_console_words_program(void);
 /* N1-5: keys-first */
 static int test_console_keys_first(void);
 static int test_console_exit_ladder(void);
+/* N1-6: acceptance */
+static int test_console_story(void);
+static int test_console_one_history(void);
 
 int forthDictSelfTest(void)
 {
@@ -2541,6 +2544,12 @@ int forthDictSelfTest(void)
   fail |= test_console_keys_first();
   printf("  [DEBUG] running test_console_exit_ladder...\n");
   fail |= test_console_exit_ladder();
+
+  printf("\nFORTH N1-6 TESTS (acceptance)\n");
+  printf("  [DEBUG] running test_console_story...\n");
+  fail |= test_console_story();
+  printf("  [DEBUG] running test_console_one_history...\n");
+  fail |= test_console_one_history();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

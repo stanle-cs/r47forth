@@ -63,6 +63,7 @@ uint16_t forthConsoleViewOffset(void);
 void     forthConsoleSetViewOffset(uint16_t n);
 void     forthConsoleRoll(int16_t delta);        /* +1 = one line OLDER (scroll back) */
 bool_t   forthConsoleHasOpenLine(void);          /* a word left output unterminated */
+uint32_t forthConsoleWriteSeq(void);             /* bumped by every writer */
 
 #if defined(FORTH_DEBUG_SELFTEST)
   /* Raw state for the N1-1 invariant assertions.  Production code has no

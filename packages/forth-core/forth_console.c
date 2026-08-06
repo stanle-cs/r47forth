@@ -16,6 +16,13 @@ static uint16_t consoleUsed;   /* bytes occupied, 0..FORTH_CONSOLE_RING_BYTES */
 static uint16_t consoleOpen = FORTH_CONSOLE_NO_OPEN;
                                /* index of the OPEN record's length byte */
 static uint16_t consoleView;   /* roll offset: 0 = newest line at the bottom */
+static uint32_t consoleSeq;    /* N1-6: bumped by every writer.  The ENTER
+                                  dialogue samples it across a run to tell
+                                  "the line spoke for itself" from "the line
+                                  said nothing", which is a stronger question
+                                  than "is a line still open" — `.S` and PAGE
+                                  both close their own output and would
+                                  otherwise still collect an X echo underneath. */
 
 /* head is DERIVED, never stored: one fewer field, one fewer invariant to
  * break. */
@@ -91,6 +98,7 @@ static bool_t _appendGlyph(const char *p, uint16_t g) {
 }
 
 void forthConsoleClear(void) {
+  consoleSeq++;
   consoleTail = 0;
   consoleUsed = 0;
   consoleOpen = FORTH_CONSOLE_NO_OPEN;
@@ -98,6 +106,7 @@ void forthConsoleClear(void) {
 }
 
 void forthConsoleNewline(void) {
+  consoleSeq++;
   if (consoleOpen == FORTH_CONSOLE_NO_OPEN) {
     (void)_openRecord();            /* CR on a fresh line IS a blank line */
   }
@@ -108,6 +117,7 @@ void forthConsoleNewline(void) {
 void forthConsoleAppend(const char *s) {
   const char *p;
   if (s == NULL) { return; }
+  if (*s != 0) { consoleSeq++; }
   p = s;
   while (*p) {
     uint16_t g = _glyphBytes(p);
@@ -190,6 +200,8 @@ bool_t forthConsoleLineAt(uint16_t n, char *out, uint16_t outSize) {
  * word printed something and did not end the line" from "the word printed
  * nothing", without either side carrying extra state. */
 bool_t forthConsoleHasOpenLine(void) { return consoleOpen != FORTH_CONSOLE_NO_OPEN; }
+
+uint32_t forthConsoleWriteSeq(void) { return consoleSeq; }
 
 uint16_t forthConsoleViewOffset(void) { return consoleView; }
 

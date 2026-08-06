@@ -2805,3 +2805,114 @@ added files. Sim captures: forum/screenshots/stage-m-*.png (the CATALOG
 tree's FWRD row; FWRD in CM_NORMAL; X == 43 after the press; the
 "ASSIGN MSHOW _" pending display). The DM42n hardware pass of the
 browse/assign story is Stan's, per the standing discipline.
+
+---
+
+## 2026-08-06 — Stage N: the console (N1-1..N1-6, landed)
+
+Folded into `DESIGN.md` §8.4.4, with amendments to §8.4.1 (the open
+default is per-origin), §8.4.2 (the interactive origin is now presented
+as a console; L-R8 superseded there), §1.3 (the guardrail clarification)
+and §5.4 (the ring in the BSS inventory). Design sheet
+`STAGE_N_CONSOLE.md`, evidence `STAGE_N_TRACES.md`; owner statements of
+2026-08-05 directed it.
+
+**What the traces corrected before a line was written.** Six findings,
+each recorded at its ruling: the transcript row counts are 4 and 2 and
+derived from `yMultiLineEdOffset` (the editor's multi-line pitch is 35,
+not the 21 its own relic comment claims, and `checkHP` cannot occur in
+CM_AIM); `!tam.mode` excludes the fold, not the forged CM_PEM, whose
+bracket is three statements wide around code that never refreshes;
+`temporaryInformation` is a required gate conjunct because sixteen TI
+arms repaint all four register rows from inside the REGISTER_X paint the
+console keeps; `TYPE` collides with a landed reachable item, so the
+string word is `.$`; keys-first swaps the key PLANE, stranding the
+landed history recall; and EXIT rung 2 cannot be adopted verbatim under
+FWRD-as-home.
+
+**Three defects found during implementation, none predicted by the
+traces.**
+
+1. **The record walk could HANG, not just miscount.** Every mutation that
+   desynchronised the ring hung the suite instead of reddening it:
+   `remaining - sz` underflows through 0 into 65535 and the walk never
+   terminates. On a device with no way to kill a spinning task that is
+   the wrong failure mode, so the walk is bounded twice over and a
+   corrupted ring degrades to a miscount. Found BY mutation testing —
+   the mutation that would not go red was the finding.
+
+2. **EXIT ate the user's own softmenu frame.** Rung 3 popped
+   unconditionally, which was right while the open always pushed a frame.
+   With FWRD as the home row, opening a console while FWRD is already
+   displayed — the state you reach by browsing the CATALOG tree before
+   pressing FORTH — pushes nothing that displaces the user's frame, and
+   popping anyway revealed whatever was beneath it. Fixed with
+   `forthCap.homePushed`. The first attempt at that bit asked "did the
+   stack GROW?", which is wrong: `pushSoftmenu` dedups against a match
+   anywhere in the array by lifting the stack over it, so the frame count
+   can be unchanged while slot 0 still changes. The predicate is slot 0
+   alone.
+
+3. **A native item could tear the capture's input surface away, and had
+   been able to since Stage L.** `fnClearStack` calls `calcModeNormal()`
+   outright (`src/c47/stack.c:16`, "a cleared stack is only visible on
+   the normal screen"), which drops CM_AIM, clears FLAG_ALPHA and hides
+   the cursor while the capture object survives — so `XEQ 'CLSTK'` on an
+   interactive line left the capture open but off the AIM surface, with
+   keys no longer routing through it. Invisible while the stack still
+   painted; the console makes it obvious, because the whole transcript
+   disappears. Repaired at `forthInteractiveEnter`, the one choke point
+   that knows a capture is still open, rather than at each offending
+   item. This was found by a screenshot, not by a test: the driver
+   produced a normal stack screen where a console was expected.
+
+**Two rulings made during implementation, beyond the packets.**
+
+- **The X echo is suppressed when the line spoke for itself.** N-R4 said
+  "on success append X's value", unconditionally, which gives `7 SQ .` a
+  second unasked-for answer under the word's own output. The first
+  implementation asked "is a line still open", which missed `.S` and
+  `PAGE` — both write and then close. The test is now a write counter
+  sampled across the run, which asks the question that was meant.
+- **`.`'s declared stack delta is not decoration.** Setting it to 0
+  passed the entire suite, because `pPrint` calls `fnDrop` itself and X
+  was right. The declared delta feeds `forthDataDepthApply`, which spills
+  Forth-owned values into the arena once the counter reaches capacity, so
+  a `.` that never decrements makes a print-heavy line spill values that
+  should never have spilled. A ten-pair push/print line now asserts zero
+  spills; the mutation fails it with ERROR_RAM_FULL.
+
+**One landed test had to be retargeted, and it is the shadowing hazard
+N-T3 named.** `test_number_bad_lone_dot` probed with a bare `.` and used
+"an error was raised" as a stand-in for "not a number". That proxy dies
+when `.` becomes a prim: prims resolve at §4.1 step 1 and never reach the
+number arm, so the test would have read a designed behaviour change as a
+grammar bug. The claim is unchanged and still pinned — the probe moved to
+`+.` and `-.`, which exercise the same `mantissaDigits == 0` rule and are
+shadowed by nothing. The sweep checked the item table, the prim table and
+the number grammar; it did not check tests that pin a name's ABSENCE.
+
+**K4 battery surgery** was flip-vs-assert throughout: the interactive
+rows flipped (open in keys, FWRD home, keys survives the REPL reopen,
+rung 1 inverted), every PEM row asserted unchanged, and the fixtures that
+merely *needed* a sub-mode now state it instead of inheriting a default
+that had moved. The L1-H recall row was strengthened to assert the
+gesture in both input modes, which is what pins the re-homing.
+
+**Numbers (RULE-1).** Cumulative over the stage, `make dmcp5r47
+CUSTOM_PKG_RECONFIGURE=1`: flash 1111680 → 1113888 = **+2208 B**; ram
+7844 → 8884 = **+1040 B** (the 1024-byte ring plus its state and the
+homePushed byte). Arena untouched at every packet — the stage adds no
+dictionary surface. The +2208 B sits at the low end of the stage's
+declared +2.5–4.5 KB estimate.
+
+A measurement note worth keeping: at N1-1 the ring measured +48 B flash
+and +8 B RAM, not the declared +1032, because nothing in the firmware
+WROTE it yet and LTO dropped the array outright — `arm-none-eabi-nm`
+found no console symbols in `R47.elf` at all. The BSS appeared at N1-2
+with the first reader. Same LTO effect that hid F5-2's check-mode cost.
+
+Sim captures: `forum/screenshots/stage-n-1-console-dialogue.png` and
+`stage-n-2-console-rolled.png`, both driven through the real path
+(`fnForthOuter` + `forthInteractiveEnter`), not by writing ring lines by
+hand.

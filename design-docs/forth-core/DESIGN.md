@@ -314,7 +314,20 @@ extern const forthPrimDef_t forthPrims[];   // forth_prims.c, index-stable, appe
 extern const uint16_t       forthPrimCount;
 ```
 
-**What the primitive table is for (read before adding one).** Every primitive is
+**What the primitive table is for (read before adding one).**
+
+> **Clarified by Stage N (2026-08-06).** The guardrail below bans
+> duplicating CALCULATOR operations reachable as `CAT_FNCT` items. It
+> does NOT ban Forth-LANGUAGE machinery that has no item-table
+> equivalent: `IF`, `BEGIN`, `GLOBAL`, `IMMEDIATE` and `RECURSE` were
+> always in that class, and §8.4.4's seven output words joined it — the
+> calculator has never had an output channel, so there is nothing to
+> duplicate. Adding a prim whose name ALREADY resolves (item, prim or
+> user word) is the thing to refuse: it is a silent meaning change by
+> §4.1 order 1, which is why every new name is swept against the whole
+> item table first.
+
+Every primitive is
 a thin wrapper over an existing C47 handler — `pDup`→`fnDupN(1)`,
 `pDrop`→`fnDrop`, `pSwap`→`fnSwapXY`, `pOver`→`fnRecall(REGISTER_Y)`,
 `pPlus`→`fnAdd`, `pMul`→`fnMultiply` [VERIFIED:
@@ -1717,7 +1730,10 @@ Worked examples:
 - 31-char name, body of 100 single-cell tokens (PRIM/CALL) →
   `ceil4(35)=36 + 2*101=202` = **238 bytes** (60 blocks).
 
-Fixed overheads: `forthDict_t` (12 bytes BSS), `rstack` (128 bytes BSS), the
+Fixed overheads: `forthDict_t` (12 bytes BSS), `rstack` (128 bytes BSS),
+**the console view ring (1024 bytes BSS + 10 bytes of head/used/open/view
+state, §8.4.4 — the stage's declared price, unchanged by any dictionary
+activity)**, the
 per-invocation `forthOuterCtx_t` (256-byte source buffer + tokenizer position,
 on the **caller's C stack** since D-3 — idle BSS is one pointer plus a depth
 byte, §3.3.2; the earlier "tokenizer scratch (reuse tmpString)" and the
@@ -2540,9 +2556,16 @@ landed F6-3/F6-4/picker text sinks. Rules:
   whose normal-column `fShifted` is ITM_AIM — layout-independent) toggles
   the sub-mode: alpha→keys closes the alpha menus (the underlying menu
   row IS the mode indicator, K-R3); keys→alpha restores `-MNU_ALPHA`.
-  E6 (re-entry with the capture closed) is untouched; a fresh capture
-  always opens in alpha input, including the E5 relock (pinned by the K4
-  battery as the default, not a ruling).
+  E6 (re-entry with the capture closed) is untouched. A fresh PEM capture
+  opens in alpha input, including the E5 relock. **Amended by Stage N
+  (N-R6, landed 2026-08-06): the open default is per-ORIGIN. The
+  universal reset in `_forthCapOpenAs` still zeroes the bit — which is
+  what keeps PEM alpha-first — and the two INTERACTIVE open sites set it
+  again immediately after, so the console opens in keys input and stays
+  there across every REPL reopen (the E5 relock no longer applies to the
+  interactive origin). The K4 battery pins both directions: a PEM capture
+  opening in keys is a regression, an interactive one opening in alpha is
+  the feature dead.**
 - **E12 (keys-mode routing).** Direct CAT_FNCT|PTP_NONE items insert
   their `itemCatalogName` as text; parameterized items take the F6-2/F6-4
   suspend-and-fold; digits/period insert as characters; EEX inserts the
@@ -2566,6 +2589,15 @@ Stage record: STAGE_K_KEYS_MODE.md (rulings K-R1..K-R4, traces T1-T6);
 packets PACKET_K1..K4 with amendments K1-A..K4-A are the ledger.
 
 #### 8.4.2 The interactive origin (Stage L, landed 2026-08-05)
+
+> **Amended by Stage N (landed 2026-08-06).** The interactive capture is
+> now presented as a CONSOLE: the transcript owns the stack area above
+> the editor, entry is keys-first with FWRD as the home row, and seven
+> output words write a view ring. §8.4.4 is the whole of it; L-R8's
+> "accept the native stack-display degradation" ruling is superseded for
+> this origin, and the native editor draw it protected survives as the
+> console's input band. Everything below still describes where the line
+> lives and what closes it, with the EXIT ladder as re-derived in §8.4.4.
 
 The same capture, opened from the normal screen. `ITM_FORTH` outside PEM
 no longer demands a string in X (the pre-L one-shot survives only under a
@@ -2696,6 +2728,117 @@ too).
   bare power reset mid-fold leaves exactly +1 FHIST step —
   indistinguishable from a legitimate history entry, the designed
   outcome.
+
+#### 8.4.4 The console (Stage N, landed 2026-08-06)
+
+The interactive capture with a face: a transcript over the stack area, an
+output channel the words can write, and keys-first entry. Directed by the
+owner on 2026-08-05 ("full console/terminal for interactive forth taking
+over the whole area used for the stack on screen; change interactive to
+start in non-alpha mode"), amended the same day to the whole area with
+terminal-style rolling and one history. Design sheet:
+`STAGE_N_CONSOLE.md`; evidence: `STAGE_N_TRACES.md`.
+
+- **Two stores, two jobs.** FHIST stays the history STORE — a named,
+  runnable program that persists (§5.5, §8.1). The console adds a VIEW
+  ring: 1024 B of BSS (`FORTH_CONSOLE_RING_BYTES`), length-prefixed
+  records, oldest-record eviction, one record per display line. It holds
+  the dialogue AS DISPLAYED — echoed input lines interleaved with the
+  output FHIST must never hold, because output is not a program step.
+  Ruled N-R9 against the owner's conditional release of FHIST: the fold
+  parks on it, its persistence is free only in program memory, and a
+  shared store would let one `EMIT`-chatty word evict typed history.
+- **Length-prefixed records, not newline-terminated,** and the reason is
+  load-bearing: a C47 two-byte glyph's SECOND byte may be any value
+  including 0x0A (`STD_UP_ARROW` is `"\xa1\x91"`), so a newline scanner
+  splits glyphs and desynchronises the ring. The walk is bounded twice
+  over — on a device with no way to kill a spinning task, a corrupted
+  ring must degrade to a miscount, not a hang.
+- **Lifetime.** BSS, like the `FLAG_ALPHA` state it sits beside. It
+  SURVIVES capture close and reopen — reopening restores the dialogue —
+  and dies at the dictionary-lifecycle seam (`forthCapPowerReset`, whose
+  only callers are `forthDictInit`/`forthDictClear`) and at `PAGE`. Never
+  persisted, and it needs no persistence: the input lines persist because
+  FHIST already does. Two designed divergences, and only these two: FHIST
+  keeps its consecutive-duplicate collapse while the view echoes every
+  commit, and after a power reset the view is empty while FHIST still
+  recalls.
+- **The view.** While an interactive capture is open the transcript
+  replaces the T/Z/Y paints; the native AIM editor draws its line where
+  it always did and is the console's input band. Four `standardFont` rows
+  at the landed fnPem 21 px pitch (Y 44/65/86/107) above the short-line
+  editor, two (Y 25/46) above the long-line one — DERIVED from
+  `yMultiLineEdOffset`, never re-measured, so the console and the editor
+  cannot fall a frame out of step. Newest line at the bottom, older
+  rolling upward, truncate-with-ellipsis, no wrapping.
+- **The gate is additive and yields on five conjuncts:** interactive
+  capture open, `calcMode == CM_AIM`, `!tam.mode`, `lastErrorCode == 0`,
+  `temporaryInformation == TI_NO_INFO`. Every yield falls through to the
+  landed register paint byte for byte. Two of those are not obvious and
+  cost a trace each: `!tam.mode` — not the fold's forged CM_PEM — is what
+  excludes the fold, because that bracket is three statements wide around
+  code that never refreshes; and `temporaryInformation` is REQUIRED
+  rather than hygiene, because sixteen TI arms call
+  `displayTemporaryInformationOnX`, which repaints all four register rows
+  from inside the REGISTER_X paint the console keeps.
+- **The dialogue.** ENTER echoes the committed line prompt-prefixed with
+  `»`, then answers with where X landed, rendered in the current display
+  mode. **The echo and the FHIST push are ONE ACT** — same bytes, same
+  site, ordered together before the run — and that is mechanically what
+  makes the rolled transcript and the old history the same history. It
+  sits after the E9 refusal, so a refused line neither echoes nor enters
+  history; before the run, so a word that rewrites `aimBuffer` cannot
+  change what was echoed. On error the transcript carries the §8.7
+  message text (generic form; S1 stands) while the error PROTOCOL is
+  unchanged. The X echo is suppressed when the line SPOKE FOR ITSELF —
+  any console write during the run — so a line ending in `.` does not
+  collect a second, unasked-for answer.
+- **The words.** `.` `.S` `CR` `EMIT` `SPACE` `.$` `PAGE`, appended prims
+  at indices 22..28. **§1.3's guardrail is clarified here rather than
+  re-argued at every output word:** it bans duplicating CALCULATOR
+  operations reachable as `CAT_FNCT` items. These are LANGUAGE surface,
+  the same class as `IF`, `BEGIN`, `GLOBAL` and `RECURSE` — the
+  calculator has never had an output channel, so there is nothing to
+  duplicate. They write the ring wherever they run (interactive, key
+  press, program step) and none of them paints; a ring append is a
+  bounded BSS write, legal from every context.
+  - The string word is **`.$`, not the Forth-83 `TYPE`**: `TYPE` is a
+    landed `CAT_FNCT`/`PTP_NONE` item (`fnGetType`) that already resolves
+    from a Forth line, and a prim of that name would silently change an
+    existing meaning. The other six were swept clear against all 2601
+    item rows, the prim table and the number grammar.
+  - `EMIT` takes the encoding `showStringEdC47` decodes: 0x20..0x7E as
+    one byte, 0x8000..0xFFFF as two. A bare 0x80..0xFF is a truncated
+    glyph and is refused.
+  - **Upgrade note (the shadowing hazard, §4.1 order 1):** a user colon
+    definition named `.` or `PAGE` in a restored dictionary now loses to
+    the prim, silently. Not fixable without a rule change; recorded so it
+    is not rediscovered as a bug.
+- **Keys-first entry.** The interactive capture opens with
+  `keysMode = 1` and `MNU_FORTH` as its home row, and both survive every
+  REPL reopen; alpha is the excursion the E10/E11 gesture toggles into.
+  Keys-first swaps the KEY PLANE, not just a default, so the landed FHIST
+  recall gesture (`CHR_caseUP`/`CHR_caseDN`, the AIM f-column) is
+  re-homed to resolve in both input modes — without that the console
+  would open with its own history unreachable. The roll gesture is
+  g-shifted up/down in both modes, keyed layout-independently on the
+  row's own alpha f-column.
+- **The EXIT ladder, re-derived for keys-as-ground.** Rung 1 unwinds the
+  ALPHA excursion back to keys and restores the FWRD row (inverted). Rung
+  2 asks directly whether anything is stacked above the console's base —
+  the landed pre-normalisation cannot be reused, because renaming slot 0
+  is destructive when the open pushed nothing. Rung 3 closes, and pops
+  ONLY what the open displaced: `forthCap.homePushed` records whether
+  FWRD was already the current menu, because opening a console over an
+  already-displayed FWRD (the state you reach by browsing the CATALOG
+  tree) otherwise ate the user's own frame. "Did the stack grow?" is the
+  wrong test — `pushSoftmenu` dedups against a match anywhere in the
+  array by lifting the stack over it, so the frame count can be unchanged
+  while slot 0 still changes.
+- **Out of scope, deliberately:** line wrapping, string literals (`."`),
+  input words (`KEY`/`ACCEPT`), cursor addressing or scroll regions,
+  transcript persistence, printer/IR/serial channels, and any PEM-side
+  view change — the PEM capture keeps its listing.
 
 ### 8.5 Symmetric display — `»FORTH` / `FORTH«` at render time
 
