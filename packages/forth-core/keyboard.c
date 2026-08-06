@@ -131,7 +131,17 @@ static bool_t _forthCapAtCap(int16_t item) {
 
       case MNU_FORTH: {
         dynamicMenuItem = firstItem + itemShift + fn;
-        item = ITM_NOP; // always ITM_NOP: press handled in executeFunction (§9.6 P-H7)
+        /* M1 (Stage M): CM_NORMAL executes and CM_ASSIGN feeds the assign
+         * pick switch, both via the PROGS shape (ITM_XEQ + dynamicMenuItem
+         * -> the landed dynamic-XEQ dispatch, PEM guard and error surface
+         * included).  Every other state resolves ITM_NOP — captures live
+         * in CM_PEM/CM_AIM, so the picker-insert guard's precondition
+         * (item == ITM_NOP) holds by mode arithmetic; the M1-1 packet's
+         * mutation A proved an explicit capture branch unreachable, and
+         * the [3]/[4]/[5]/[9] battery pins every NOP disposition. */
+        item = ((calcMode == CM_NORMAL || calcMode == CM_ASSIGN) && tam.mode == 0
+                && dynamicMenuItem < dynamicSoftmenu[menuId].numItems)
+                 ? ITM_XEQ : ITM_NOP;
         break;
       }
 

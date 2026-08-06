@@ -1,5 +1,5 @@
 diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
-index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..62defb2a0807bf447d04e3928b57f024ee459e28 100644
+index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..3606ac7b51dcb11d1f5bf2e6d96295acf1813a92 100644
 --- a/src/c47/softmenus.c
 +++ b/src/c47/softmenus.c
 @@ -2,6 +2,7 @@
@@ -9,6 +9,15 @@ index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..62defb2a0807bf447d04e3928b57f024
 +#include "forth_menu.h"
  
  TO_QSPI static const char bugScreenIdMustNotBe0[] = "In function showSoftmenu: id must not be 0!";
+ 
+@@ -467,7 +468,7 @@ TO_QSPI const int16_t menu_XXFCNS[]    =   { ITM_DEG2_XFN,                  ITM_
+ /*                                          <---------------------------------------------------------------------- 6 f shifted functions ------------------------------------------------------------------------->  */
+ /*                                          <---------------------------------------------------------------------- 6 g shifted functions ------------------------------------------------------------------------->  */
+ TO_QSPI const int16_t menu_CATALOG[]     = { -MNU_FCNS,                    -MNU_CONST,                  -MNU_CHARS,               -MNU_PROGS,            -MNU_VARS,                   -MNU_MENUS,
+-                                              ITM_NULL,                    ITM_NULL,                    ITM_NULL,                 ITM_NULL,              ITM_NULL,                     ITM_KEYMAP,                   };
++                                             -MNU_FORTH,                   ITM_NULL,                    ITM_NULL,                 ITM_NULL,              ITM_NULL,                     ITM_KEYMAP,                   };   /* forth-core M1: FWRD in the catalog tree (Stage M, M-R5) */
+ 
+ TO_QSPI const int16_t menu_AIMCATALOG[]  = { -MNU_MyAlpha,                 -MNU_ALPHA_OMEGA,            -MNU_ALPHAMATH,           -MNU_ALPHAMISC,        -MNU_ALPHAINTL,              ITM_KEYMAP                    };
  
 @@ -1012,8 +1013,9 @@ TO_QSPI const int16_t menu_PLOT_STAT[]    = {
  

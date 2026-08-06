@@ -6139,7 +6139,9 @@ static int test_placeholder_never_marker(void)
       uint8_t *savedCurrentStep2 = currentStep;
       currentStep = corrupt;
       extern void testInitVariableSoftmenu(int16_t menu);
-      testInitVariableSoftmenu(22);
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        testInitVariableSoftmenu(22);
+        calcMode = m1e3s_; }
       currentStep = savedCurrentStep2;
       printf("    PASS: picker scan over placeholder + embedded-NUL step terminated\n");
     }
@@ -9772,7 +9774,9 @@ static int test_word_catalog(void)
   if (!fail) {
     /* ---- Subcase 1: Union content and section order ---- */
     { int sc1 = 0;
-      testInitVariableSoftmenu(22);
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        testInitVariableSoftmenu(22);
+        calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 3) {
         printf("    [1] FAIL: numItems = %d, expected 3\n", dynamicSoftmenu[22].numItems);
         sc1 = 1;
@@ -9808,7 +9812,9 @@ static int test_word_catalog(void)
 
     /* ---- Subcase 2: Program-owned dict entries stay out of section (b) ---- */
     { int sc2 = 0;
-      testInitVariableSoftmenu(22);
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        testInitVariableSoftmenu(22);
+        calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 3) {
         printf("    [2] FAIL: numItems = %d, expected 3\n", dynamicSoftmenu[22].numItems);
         sc2 = 1;
@@ -9840,7 +9846,9 @@ static int test_word_catalog(void)
     /* ---- Subcase 3: Smudged entries absent ---- */
     { int sc3 = 0;
       forthTestSmudgeSet("WI", true);
-      testInitVariableSoftmenu(22);
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        testInitVariableSoftmenu(22);
+        calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 2) {
         printf("    [3] FAIL: numItems = %d, expected 2 (WI smudged)\n", dynamicSoftmenu[22].numItems);
         sc3 = 1;
@@ -9862,7 +9870,9 @@ static int test_word_catalog(void)
       }
 
       forthTestSmudgeSet("WI", false);
-      testInitVariableSoftmenu(22);
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        testInitVariableSoftmenu(22);
+        calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 3) {
         printf("    [3] FAIL: numItems = %d, expected 3 (WI restored)\n", dynamicSoftmenu[22].numItems);
         sc3 = 1;
@@ -9896,7 +9906,9 @@ static int test_word_catalog(void)
         printf("    [4] FAIL: WINTERACTIVELONG def error %d\n", lastErrorCode);
         sc4 = 1;
       }
-      testInitVariableSoftmenu(22);
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        testInitVariableSoftmenu(22);
+        calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 3) {
         printf("    [4] FAIL: numItems = %d, expected 3 (unchanged)\n", dynamicSoftmenu[22].numItems);
         sc4 = 1;
@@ -9942,7 +9954,9 @@ static int test_word_catalog(void)
         printf("    [5] FAIL: interactive PW def error %d\n", lastErrorCode);
         sc5 = 1;
       }
-      testInitVariableSoftmenu(22);
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        testInitVariableSoftmenu(22);
+        calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 4) {
         printf("    [5] FAIL: numItems = %d, expected 4\n", dynamicSoftmenu[22].numItems);
         sc5 = 1;

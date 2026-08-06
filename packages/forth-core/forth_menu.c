@@ -103,11 +103,19 @@ void forthBuildWordPicker(int16_t menu)
 
   memset(tmpString, 0, TMP_STR_LENGTH);
 
-  /* L1-3 (C5): interactively, currentStep points at whatever the PEM cursor
-   * last was — not NULL — so scanning from it would list that program's
-   * definitions with false provenance.  Gate section (a) off; interactively
-   * the picker degrades to sections (b)/(c), dictionary words only. */
-  progStart = forthCapIsInteractive() ? NULL : forthOwningProgramStart(currentStep);
+  /* L1-3 (C5), extended by M1 (Stage M) ADDITIVELY: the interactive gate
+   * keeps its L1-3 rationale, and the two surfaces Stage M opens —
+   * CM_NORMAL and CM_ASSIGN, the catalog-tree reachability — join it:
+   * there currentStep points at whatever the PEM cursor last was, so
+   * scanning would list that program's definitions with false provenance,
+   * and a normal-mode press of such a name resolves to nothing and
+   * errors, so it must not be offered.  Every OTHER mode keeps its landed
+   * behaviour byte for byte (an earlier over-wide PEM-only gate turned
+   * twelve landed text-scan tests red — the builder is deliberately
+   * mode-blind everywhere the pre-M surfaces reach it). */
+  progStart = (forthCapIsInteractive()
+               || calcMode == CM_NORMAL || calcMode == CM_ASSIGN)
+                ? NULL : forthOwningProgramStart(currentStep);
 
   if (progStart) {
     step = progStart;

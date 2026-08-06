@@ -231,7 +231,9 @@ static int test_picker_scan_basic(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)cubeStep;
 
-  testInitVariableSoftmenu(22);
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    testInitVariableSoftmenu(22);
+    calcMode = m1e3s_; }
 
   int fail = 0;
 
@@ -318,7 +320,9 @@ static int test_picker_omits_long_names(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)closingMarker;
 
-  testInitVariableSoftmenu(22);
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    testInitVariableSoftmenu(22);
+    calcMode = m1e3s_; }
 
   int fail = 0;
 
@@ -394,6 +398,8 @@ static int test_picker_rebuilds_same_menu(void)
 
   uint8_t *savedCurrentStep = currentStep;
   uint16_t savedProgNum = currentProgramNumber;
+  uint8_t savedCalcMode = calcMode;
+  calcMode = CM_PEM;   /* Stage M E3: the draws build; PEM cursor context */
   softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
   xcopy(savedStack, softmenuStack, sizeof(savedStack));
   int16_t savedCachedDynamicMenu = cachedDynamicMenu;
@@ -451,6 +457,7 @@ static int test_picker_rebuilds_same_menu(void)
   cachedDynamicMenu = savedCachedDynamicMenu;
   xcopy(softmenuStack, savedStack, sizeof(savedStack));
   currentStep = savedCurrentStep;
+  calcMode = savedCalcMode;
   currentProgramNumber = savedProgNum;
   cleanupTestProgram();
 
@@ -511,7 +518,9 @@ static int test_picker_capacity_boundary(void)
   currentProgramNumber = 1;
   currentStep = closingMarker;
 
-  testInitVariableSoftmenu(22);
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    testInitVariableSoftmenu(22);
+    calcMode = m1e3s_; }
 
   int fail = 0;
 
@@ -582,7 +591,9 @@ static int test_picker_dedupes(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)marker2;
 
-  testInitVariableSoftmenu(22);
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    testInitVariableSoftmenu(22);
+    calcMode = m1e3s_; }
 
   int fail = 0;
 
@@ -660,7 +671,9 @@ static int test_picker_insert_at_cursor(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)sqStep;
 
-  testInitVariableSoftmenu(22);
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    testInitVariableSoftmenu(22);
+    calcMode = m1e3s_; }
 
   int fail = 0;
 
@@ -778,7 +791,9 @@ static int test_picker_insert_mid_line(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)sqStep;
 
-  testInitVariableSoftmenu(22);
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    testInitVariableSoftmenu(22);
+    calcMode = m1e3s_; }
 
   int fail = 0;
 
@@ -901,7 +916,9 @@ static int test_picker_trailing_space(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)sqStep;
 
-  testInitVariableSoftmenu(22);
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    testInitVariableSoftmenu(22);
+    calcMode = m1e3s_; }
 
   int fail = 0;
 
@@ -1174,6 +1191,7 @@ static int test_picker_key_mapping(void)
   { int sc1 = 0;
     const int16_t pages[4] = {0, 6, 12, 18};
 
+    calcMode = CM_PEM;   /* Stage M E3: the draws build; PEM cursor context (restored from savedCalcMode) */
     showSoftmenu(-MNU_FORTH);
 
     for (int pi = 0; pi < 4 && !sc1; pi++) {
@@ -1501,7 +1519,9 @@ static int test_picker_scan_and_alloc(void)
       currentProgramNumber = 1;
       currentStep          = beginOfProgramMemory + (progLen - 4);   /* closing marker */
 
-      testInitVariableSoftmenu(22);
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        testInitVariableSoftmenu(22);
+        calcMode = m1e3s_; }
 
       int foundNear = 0, foundFar = 0;
       if (dynamicSoftmenu[22].menuContent) {
@@ -1551,7 +1571,9 @@ static int test_picker_scan_and_alloc(void)
     currentProgramNumber = 1;
     currentStep          = beginOfProgramMemory;
 
-    testInitVariableSoftmenu(22);
+    { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      testInitVariableSoftmenu(22);
+      calcMode = m1e3s_; }
 
     if (dynamicSoftmenu[22].numItems != 0) {
       printf("    [2] FAIL: empty picker numItems = %d, expected 0\n",
@@ -1644,7 +1666,9 @@ static int test_picker_glyph_tokenize(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)defStep;
 
-  testInitVariableSoftmenu(22);
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    testInitVariableSoftmenu(22);
+    calcMode = m1e3s_; }
 
   int fail = 0;
 
@@ -1757,7 +1781,9 @@ static int test_picker_long_token_skipped(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)defStep;
 
-  testInitVariableSoftmenu(22);
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    testInitVariableSoftmenu(22);
+    calcMode = m1e3s_; }
 
   int fail = 0;
 
@@ -1834,7 +1860,9 @@ static int test_softmenu_trailing_null(void)
     }
   }
 
-  testInitVariableSoftmenu(22);
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    testInitVariableSoftmenu(22);
+    calcMode = m1e3s_; }
 
   if (dynamicSoftmenu[22].numItems != 1) {
     printf("    FAIL: numItems = %d, expected 1\n", dynamicSoftmenu[22].numItems);
@@ -3451,7 +3479,9 @@ static int test_capture_menus(void)
         char textBefore[64];
         xcopy(textBefore, forthTestCapText(), stringByteLength((char *)forthTestCapText()) + 1);
 
-        testInitVariableSoftmenu(22);
+        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+          testInitVariableSoftmenu(22);
+          calcMode = m1e3s_; }
         showSoftmenu(-MNU_FORTH);
 
         if (currentMenu() != -MNU_FORTH) {
@@ -3487,7 +3517,9 @@ static int test_capture_menus(void)
         xcopy(textBefore, forthTestCapText(), stringByteLength((char *)forthTestCapText()) + 1);
         int16_t cursorBefore = T_cursorPos;
 
-        testInitVariableSoftmenu(22);
+        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+          testInitVariableSoftmenu(22);
+          calcMode = m1e3s_; }
         showSoftmenu(-MNU_FORTH);
         fnKeyExit(NOPARAM);   /* no page-navigation idiom on an empty picker; EXIT stands in */
 
@@ -4121,7 +4153,9 @@ static int test_capture_acceptance(void)
         }
       }
       if (!fail && !sc2) {
-        testInitVariableSoftmenu(22);
+        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+          testInitVariableSoftmenu(22);
+          calcMode = m1e3s_; }
         showSoftmenu(-MNU_FORTH);
         if (currentMenu() != -MNU_FORTH) {
           printf("    [2] FAIL: picker not on top after push\n");
@@ -6206,7 +6240,9 @@ static int test_pem_xeq_dynmenu_no_live_exec(void)
   if (!fail) {
     currentProgramNumber = 1;
     currentStep = tpStepAddr(&p, sMarker);
-    testInitVariableSoftmenu(22);
+    { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      testInitVariableSoftmenu(22);
+      calcMode = m1e3s_; }
     showSoftmenu(-MNU_FORTH);
 
     if (dynamicSoftmenu[22].numItems < 1 || !dynamicSoftmenu[22].menuContent ||
@@ -6298,6 +6334,7 @@ static int test_pem_xeq_dynmenu_no_live_exec(void)
  * six cells divide SCREEN_WIDTH, so the first is x < SCREEN_WIDTH / 6. */
 static int test_picker_renders_labels(void)
 {
+  uint8_t savedCalcModeM_ = calcMode;
   extern void showSoftmenu(int16_t menu);
   extern void showSoftmenuCurrentPart(void);
 
@@ -6354,6 +6391,7 @@ static int test_picker_renders_labels(void)
     currentProgramNumber = 1;
     currentStep          = beginOfProgramMemory + (progLen - 4);
 
+    calcMode = CM_PEM;   /* Stage M E3: the draws build; PEM cursor context */
     showSoftmenu(-MNU_FORTH);
     showSoftmenuCurrentPart();
 
@@ -6410,6 +6448,7 @@ static int test_picker_renders_labels(void)
     printf("    PASS: picker labels reach lcd_buffer — %d px (14-byte) > %d px (2-byte) > %d px (chrome only)\n",
            litInFirstCell[0], litInFirstCell[1], litInFirstCell[2]);
   }
+    calcMode = savedCalcModeM_;
   return fail;
 }
 
@@ -6443,6 +6482,7 @@ static int32_t g4CellPixels(int cell) {
  * same run. No literal pixel count — upstream owns the font and cell layout. */
 static int test_picker_pixel_layout(void)
 {
+  uint8_t savedCalcModeM_ = calcMode;
   extern void showSoftmenu(int16_t menu);
   extern void showSoftmenuCurrentPart(void);
 
@@ -6519,6 +6559,7 @@ static int test_picker_pixel_layout(void)
       currentProgramNumber = 1;
       currentStep = beginOfProgramMemory + progLen - 4;
 
+      calcMode = CM_PEM;   /* Stage M E3: the draws build; PEM cursor context */
       showSoftmenu(-MNU_FORTH);
       softmenuStack[0].firstItem = 0;
       showSoftmenuCurrentPart();
@@ -6763,6 +6804,7 @@ static int test_picker_pixel_layout(void)
   currentStep          = savedCurrentStep;
   currentProgramNumber = savedProgNum;
 
+      calcMode = savedCalcModeM_;
   return fail;
 }
 
@@ -8606,7 +8648,9 @@ static int test_capture_interactive_divert(void)
         forthCapOpenInteractive();
         calcMode = CM_AIM;
 
-        testInitVariableSoftmenu(22);
+        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+          testInitVariableSoftmenu(22);
+          calcMode = m1e3s_; }
 
         bool_t sawFoo = false, sawBar = false;
         if (dynamicSoftmenu[22].menuContent) {
@@ -9998,7 +10042,9 @@ static int test_insert_token_boundary(void)
     else {
       currentProgramNumber = 1;
       currentStep = beginOfProgramMemory + 4;         /* the SQ definition */
-      testInitVariableSoftmenu(22);
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        testInitVariableSoftmenu(22);
+        calcMode = m1e3s_; }
 
       calcMode = CM_PEM;
       catalog = CATALOG_NONE;
@@ -15131,7 +15177,9 @@ static int test_cm_gate_audit(void)
       currentStep = beginOfProgramMemory + 4 + 16;   /* stale PEM cursor, past "SQ"'s step */
 
       forthCapOpenInteractive();
-      testInitVariableSoftmenu(22);
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        testInitVariableSoftmenu(22);
+        calcMode = m1e3s_; }
 
       if (dynamicSoftmenu[22].numItems != 0) {
         printf("    [16] FAIL: MNU_FORTH picker has %d items under an interactive origin, "
@@ -16092,6 +16140,406 @@ static int test_interactive_residue(void)
   forthCapClose();
   cleanupTestProgram();
   #undef L15D_RESET
+  clearSystemFlag(FLAG_ALPHA);
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  tam.function = savedTamFunction;
+  tam.mode = savedTamMode;
+  programRunStop = savedProgramRunStop;
+  dynamicMenuItem = savedDynamicMenu;
+  T_cursorPos = savedCursorPos;
+  shiftF = savedShiftF;
+  shiftG = savedShiftG;
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
+
+/* ==================================================================
+ * PACKET_M1_1 — test_fwrd_normal_mode: the FWRD catalog outside
+ * captures.  E2's dispositions (capture-insert / normal-execute /
+ * inert elsewhere; the CM_ASSIGN feed is M1-2's battery), E3's
+ * listing gate, the M-T5 drain row, and the stale-press error
+ * surface.  Presses drive the real resolution
+ * (determineFunctionKeyItem_C47, the G1 stack-staging idiom) and
+ * execution rides runFunction(pressedItem) — the executeFunction
+ * tail's own call.
+ * ================================================================== */
+static int test_fwrd_normal_mode(void)
+{
+  extern void     showSoftmenu(int16_t menu);
+  extern char    *dynmenuGetLabel(int16_t menuitem);
+  extern int16_t  determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG);
+  extern bool_t   forthPickerGuard(int16_t item);
+  extern bool_t   pickerInsertName(void);
+  extern void     runFunction(int16_t);
+  extern void     fnForthOuter(uint16_t);
+  extern void     fnKeyExit(uint16_t);
+  extern void     tamEnterMode(int16_t);
+  extern void     testInitVariableSoftmenu(int16_t);
+
+  int fail = 0, scFail;
+  int i;
+  int16_t pressedItem = ITM_NOP;
+  int idxMW1 = -1, idxMW2 = -1, idxMW3 = -1, idxPW = -1;
+  uint8_t tType; int32_t tVal;
+
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  int16_t savedTamFunction = tam.function;
+  int16_t savedTamMode = tam.mode;
+  uint8_t savedProgramRunStop = programRunStop;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedCursorPos = T_cursorPos;
+  bool_t savedShiftF = shiftF;
+  bool_t savedShiftG = shiftG;
+  int16_t savedCachedDynamicMenu = cachedDynamicMenu;
+  uint8_t *savedMenuContent = dynamicSoftmenu[22].menuContent;
+  int16_t savedNumItems = dynamicSoftmenu[22].numItems;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  dynamicSoftmenu[22].menuContent = NULL;
+  dynamicSoftmenu[22].numItems = 0;
+
+  #define M11_RESET() do { \
+    calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
+    programRunStop = PGM_STOPPED; dynamicMenuItem = -1; alphaCase = AC_UPPER; \
+    nextChar = NC_NORMAL; shiftF = false; shiftG = false; \
+    clearSystemFlag(FLAG_ALPHA); lastErrorCode = ERROR_NONE; forthCapClose(); \
+  } while (0)
+
+  #define M11_PRESS(idx_) do { \
+    char kbuf_[2]; \
+    softmenuStack[0].softmenuId = 22; \
+    softmenuStack[0].firstItem = 0; \
+    kbuf_[0] = (char)('1' + (idx_)); kbuf_[1] = 0; \
+    pressedItem = determineFunctionKeyItem_C47(kbuf_, false, false); \
+  } while (0)
+
+  #define M11_SCAN() do { \
+    idxMW1 = idxMW2 = idxMW3 = idxPW = -1; \
+    for (i = 0; i < dynamicSoftmenu[22].numItems; i++) { \
+      char *lbl_ = dynmenuGetLabel(i); \
+      if (compareString(lbl_, "MW1", CMP_BINARY) == 0) idxMW1 = i; \
+      if (compareString(lbl_, "MW2", CMP_BINARY) == 0) idxMW2 = i; \
+      if (compareString(lbl_, "MW3", CMP_BINARY) == 0) idxMW3 = i; \
+      if (compareString(lbl_, "PW",  CMP_BINARY) == 0) idxPW  = i; \
+    } \
+  } while (0)
+
+  /* Fixture: baseline program with one Forth source step (the text-scan
+   * probe), one global and one interactive word. */
+  cleanupTestProgram();
+  {
+    testProg_t base;
+    tpInit(&base);
+    if (tpLbl(&base, "BASEM") < 0 || tpSrc(&base, ": PW 7 ;") < 0 || tpEnd(&base) < 0
+        || !tpWrite(&base)) {
+      printf("    FIXTURE FAIL: baseline build/write\n");
+      cleanupTestProgram();
+      return 1;
+    }
+  }
+  M11_RESET();
+  forthOuterInterpret(": MW1 41 ; GLOBAL");
+  forthOuterInterpret(": MW2 42 ;");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FIXTURE FAIL: word setup errored (%d)\n", lastErrorCode);
+    cleanupTestProgram();
+    return 1;
+  }
+
+  /* ---- [1] CM_NORMAL press of the global word executes (+6a: no PW). ---- */
+  scFail = 0;
+  showSoftmenu(-MNU_FORTH);
+  testInitVariableSoftmenu(22);   /* showSoftmenu pushes; the DRAW builds —
+                                     build directly, the landed idiom */
+  M11_SCAN();
+  if (idxMW1 < 0 || idxMW2 < 0 || idxMW1 >= 6 || idxMW2 >= 6) {
+    printf("    [1] FIXTURE FAIL: words not on page 0 (MW1=%d MW2=%d)\n", idxMW1, idxMW2);
+    scFail = 1;
+  }
+  if (!scFail && idxPW != -1) {
+    printf("    [1] FAIL: text-scan name PW listed in CM_NORMAL (E3 gate)\n");
+    scFail = 1;
+  }
+  if (!scFail) {
+    M11_PRESS(idxMW1);
+    if (pressedItem != ITM_XEQ || dynamicMenuItem != idxMW1) {
+      printf("    [1] FAIL: resolution item %d dynIdx %d, expected ITM_XEQ at %d\n",
+             pressedItem, dynamicMenuItem, idxMW1);
+      scFail = 1;
+    }
+  }
+  if (!scFail) {
+    runFunction(pressedItem);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [1] FAIL: dispatch errored (%d)\n", lastErrorCode);
+      scFail = 1;
+    }
+    if (!scFail && !x_is_longint(41)) {
+      printf("    [1] FAIL: X != 41 after pressing MW1\n");
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [1] PASS: CM_NORMAL FWRD press executes the global word; text-scan name not listed\n");
+  fail |= scFail;
+
+  /* ---- [2] CM_NORMAL press of the interactive word executes. ---- */
+  scFail = 0;
+  if (idxMW2 < 0) {
+    printf("    [2] FIXTURE FAIL: MW2 not listed\n");
+    scFail = 1;
+  }
+  if (!scFail) M11_PRESS(idxMW2);
+  if (pressedItem != ITM_XEQ) {
+    printf("    [2] FAIL: resolution item %d, expected ITM_XEQ\n", pressedItem);
+    scFail = 1;
+  }
+  if (!scFail) {
+    runFunction(pressedItem);
+    if (lastErrorCode != ERROR_NONE || !x_is_longint(42)) {
+      printf("    [2] FAIL: interactive word did not run (err %d)\n", lastErrorCode);
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [2] PASS: CM_NORMAL FWRD press executes the interactive word (X == 42)\n");
+  fail |= scFail;
+
+  /* ---- [3] Capture press still inserts (coupled edit, direction A). ---- */
+  scFail = 0;
+  lastErrorCode = ERROR_NONE;
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+    printf("    [3] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  }
+  if (!scFail && idxMW1 < 0) {
+    printf("    [3] FIXTURE FAIL: MW1 not listed\n");
+    scFail = 1;
+  }
+  if (!scFail) {
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    M11_PRESS(idxMW1);
+    if (pressedItem != ITM_NOP) {
+      printf("    [3] FAIL: resolution item %d during capture, expected ITM_NOP\n", pressedItem);
+      scFail = 1;
+    }
+    if (!scFail && !forthPickerGuard(pressedItem)) {
+      printf("    [3] FAIL: picker guard did not fire during capture\n");
+      scFail = 1;
+    }
+    if (!scFail) {
+      pickerInsertName();
+      if (compareString(aimBuffer, "MW1 ", CMP_BINARY) != 0) {
+        printf("    [3] FAIL: line \"%s\", expected \"MW1 \"\n", aimBuffer);
+        scFail = 1;
+      }
+    }
+    if (!scFail) {
+      uint8_t tType2; int32_t tVal2;
+      read_reg_int32(REGISTER_X, &tType2, &tVal2);
+      if (tType2 != tType || tVal2 != tVal) {
+        printf("    [3] FAIL: X changed across a capture press (executed?)\n");
+        scFail = 1;
+      }
+    }
+    aimBuffer[0] = 0;      /* abandon the line so EXIT pushes nothing */
+    T_cursorPos = 0;
+    fnKeyExit(NOPARAM);
+  }
+  if (!scFail) printf("    [3] PASS: capture press inserts \"MW1 \" and executes nothing\n");
+  fail |= scFail;
+
+  /* ---- [4] Native AIM (no capture) stays inert. ---- */
+  scFail = 0;
+  M11_RESET();
+  calcMode = CM_AIM;
+  setSystemFlag(FLAG_ALPHA);
+  aimBuffer[0] = 0;
+  M11_PRESS(idxMW1);
+  if (pressedItem != ITM_NOP) {
+    printf("    [4] FAIL: resolution item %d in native AIM, expected ITM_NOP\n", pressedItem);
+    scFail = 1;
+  }
+  if (!scFail && forthPickerGuard(pressedItem)) {
+    printf("    [4] FAIL: picker guard fired without a capture\n");
+    scFail = 1;
+  }
+  if (!scFail && aimBuffer[0] != 0) {
+    printf("    [4] FAIL: native AIM line gained text\n");
+    scFail = 1;
+  }
+  clearSystemFlag(FLAG_ALPHA);
+  if (!scFail) printf("    [4] PASS: native AIM press is inert (no insert, no execute)\n");
+  fail |= scFail;
+
+  /* ---- [5] PEM outside a capture stays inert. ---- */
+  scFail = 0;
+  M11_RESET();
+  calcMode = CM_PEM;
+  {
+    uint16_t stepsBefore = getNumberOfSteps();
+    M11_PRESS(idxMW1);
+    if (pressedItem != ITM_NOP) {
+      printf("    [5] FAIL: resolution item %d in PEM-no-capture, expected ITM_NOP\n", pressedItem);
+      scFail = 1;
+    }
+    if (!scFail && getNumberOfSteps() != stepsBefore) {
+      printf("    [5] FAIL: step count changed\n");
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [5] PASS: PEM-outside-capture press is inert\n");
+  fail |= scFail;
+
+  /* ---- [6] The listing gate's PEM half: PW appears with true provenance. ---- */
+  scFail = 0;
+  M11_RESET();
+  calcMode = CM_PEM;
+  dynamicMenuItem = -1;
+  fnGotoDot(2);                    /* the ": PW 7 ;" source step */
+  testInitVariableSoftmenu(22);
+  M11_SCAN();
+  if (idxPW < 0) {
+    printf("    [6] FAIL: PW not listed in CM_PEM at its own program (gate too wide)\n");
+    scFail = 1;
+  }
+  M11_RESET();
+  testInitVariableSoftmenu(22);
+  M11_SCAN();
+  if (!scFail && idxPW != -1) {
+    printf("    [6] FAIL: PW still listed after returning to CM_NORMAL\n");
+    scFail = 1;
+  }
+  if (!scFail) printf("    [6] PASS: text-scan section lists in CM_PEM only (E3 gate, both directions)\n");
+  fail |= scFail;
+
+  /* ---- [7] Stale-picker press errors natively. ---- */
+  scFail = 0;
+  M11_RESET();
+  testInitVariableSoftmenu(22);
+  M11_SCAN();
+  if (idxMW1 < 0) {
+    printf("    [7] FIXTURE FAIL: MW1 not listed before the clear\n");
+    scFail = 1;
+  }
+  if (!scFail) {
+    uint8_t tType2; int32_t tVal2;
+    forthDictClear();
+    forthGDictClear();
+    read_reg_int32(REGISTER_X, &tType, &tVal);
+    M11_PRESS(idxMW1);
+    runFunction(pressedItem);
+    if (lastErrorCode != ERROR_LABEL_NOT_FOUND) {
+      printf("    [7] FAIL: error %d, expected ERROR_LABEL_NOT_FOUND\n", lastErrorCode);
+      scFail = 1;
+    }
+    read_reg_int32(REGISTER_X, &tType2, &tVal2);
+    if (!scFail && (tType2 != tType || tVal2 != tVal)) {
+      printf("    [7] FAIL: X changed on a not-found press\n");
+      scFail = 1;
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+  if (!scFail) printf("    [7] PASS: a stale FWRD press surfaces ERROR_LABEL_NOT_FOUND, X untouched\n");
+  fail |= scFail;
+
+  /* ---- [8] A capture opened over stacked FWRD/CATALOG: buried and
+   * harmless, and EXIT restores the user's menus.  (M-T5 as CORRECTED
+   * by this test: the FIX-9-analog drain is catalog-VAR-gated —
+   * forth_compile.c:1717 `if (catalog)` — and menu-tree rows never set
+   * that variable, so the plain stack legitimately survives beneath the
+   * capture's alpha frame; rung 3's teardown then reveals it again,
+   * exactly closeAim's native shape.  The trace predicted a drain here
+   * and was wrong about the gate — reachability, not write-set.) ---- */
+  scFail = 0;
+  M11_RESET();
+  showSoftmenu(-MNU_CATALOG);
+  showSoftmenu(-MNU_FORTH);
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    [8] FIXTURE FAIL: interactive open did not take\n");
+    scFail = 1;
+  }
+  if (!scFail && currentMenu() != -MNU_ALPHA) {
+    printf("    [8] FAIL: alpha row not on top after open over a stack (menu %d)\n", currentMenu());
+    scFail = 1;
+  }
+  if (!scFail) {
+    runFunction(ITM_1);
+    if (compareString(aimBuffer, "1", CMP_BINARY) != 0) {
+      printf("    [8] FAIL: typing over the buried stack broke (line \"%s\")\n", aimBuffer);
+      scFail = 1;
+    }
+  }
+  if (!scFail) {
+    aimBuffer[0] = 0;
+    T_cursorPos = 0;
+    fnKeyExit(NOPARAM);
+    if (forthTestCapState() != FCAP_CLOSED || calcMode != CM_NORMAL) {
+      printf("    [8] FAIL: EXIT did not close cleanly over the stack\n");
+      scFail = 1;
+    }
+    if (!scFail && currentMenu() != -MNU_FORTH) {
+      printf("    [8] FAIL: the user's FWRD menu did not come back after EXIT (menu %d)\n",
+             currentMenu());
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [8] PASS: capture works over a buried FWRD/CATALOG stack; EXIT restores the user's menus\n");
+  fail |= scFail;
+
+  /* ---- [9] XEQ-TAM keeps the latch shape (the tam.mode == 0 conjunct). ---- */
+  scFail = 0;
+  M11_RESET();
+  forthOuterInterpret(": MW3 43 ;");
+  testInitVariableSoftmenu(22);
+  M11_SCAN();
+  if (idxMW3 < 0 || idxMW3 >= 6) {
+    printf("    [9] FIXTURE FAIL: MW3 not on page 0 (%d)\n", idxMW3);
+    scFail = 1;
+  }
+  if (!scFail) {
+    tamEnterMode(ITM_XEQ);
+    if (tam.mode == 0) {
+      printf("    [9] FIXTURE FAIL: XEQ TAM did not arm\n");
+      scFail = 1;
+    }
+    if (!scFail) {
+      M11_PRESS(idxMW3);
+      if (pressedItem != ITM_NOP) {
+        printf("    [9] FAIL: resolution item %d during XEQ TAM, expected ITM_NOP (latch shape)\n",
+               pressedItem);
+        scFail = 1;
+      }
+      if (!scFail && dynamicMenuItem != idxMW3) {
+        printf("    [9] FAIL: dynamicMenuItem %d not latched to %d\n", dynamicMenuItem, idxMW3);
+        scFail = 1;
+      }
+    }
+    fnKeyExit(NOPARAM);            /* cancel the TAM */
+  }
+  if (!scFail) printf("    [9] PASS: XEQ-TAM press keeps the landed latch-then-dispatch shape\n");
+  fail |= scFail;
+
+  forthCapClose();
+  cleanupTestProgram();
+  forthDictClear();
+  forthGDictClear();
+  #undef M11_RESET
+  #undef M11_PRESS
+  #undef M11_SCAN
+  if (dynamicSoftmenu[22].menuContent) {
+    free(dynamicSoftmenu[22].menuContent);
+  }
+  dynamicSoftmenu[22].menuContent = savedMenuContent;
+  dynamicSoftmenu[22].numItems = savedNumItems;
+  cachedDynamicMenu = savedCachedDynamicMenu;
   clearSystemFlag(FLAG_ALPHA);
   calcMode = savedCalcMode;
   catalog = savedCatalog;

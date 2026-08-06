@@ -203,3 +203,18 @@ CANNOT, today, because the switch is gated `item != ITM_NOP` and the
 FWRD resolution is always-NOP; the reachability trace is what surfaced
 M1-before-M2 as a hard ordering (M2's arm is dead code until M1's
 resolution ships). The packet order below follows from it.
+
+## M-T5 correction (2026-08-05, found by the M1-1 battery, not the trace)
+
+The "drains by construction" claim above was wrong about the GATE: the
+FIX-9-analog drain in `fnForthOuter` runs only under
+`if (catalog)` (forth_compile.c:1717), and the `catalog` browse variable
+is set by the FCNS/ASM machinery — never by plain menu-tree rows. A
+FWRD-over-CATALOG stack reached through the M1 catalog row therefore
+survives a capture open, buried beneath the alpha frame — and that is
+the CORRECT outcome, not a defect: typing works over the buried stack,
+and rung 3's teardown (closeAim's native shape) reveals the user's
+menus again on EXIT. The predicates' dispositions stay KEEP; the [8]
+subcase now pins the stack-and-unwind behaviour instead of a drain that
+never had this path in its gate. Same lesson as T7.5, one stage later:
+the trace read the predicates and not the `if` above them.

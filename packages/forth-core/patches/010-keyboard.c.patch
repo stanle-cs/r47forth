@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712beae4e77150 100644
+index bc44026016e94a8865b8acc886386341596641c6..67c924b6fce835a88e2e0ec9aa0453a31ad9133e 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,12 +2,66 @@
@@ -70,20 +70,30 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
  
    int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
      int16_t item = ITM_NOP;
-@@ -75,6 +129,12 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -75,6 +129,22 @@ static void executeFunction(const char *data, int16_t item_);
          break;
        }
  
 +      case MNU_FORTH: {
 +        dynamicMenuItem = firstItem + itemShift + fn;
-+        item = ITM_NOP; // always ITM_NOP: press handled in executeFunction (§9.6 P-H7)
++        /* M1 (Stage M): CM_NORMAL executes and CM_ASSIGN feeds the assign
++         * pick switch, both via the PROGS shape (ITM_XEQ + dynamicMenuItem
++         * -> the landed dynamic-XEQ dispatch, PEM guard and error surface
++         * included).  Every other state resolves ITM_NOP — captures live
++         * in CM_PEM/CM_AIM, so the picker-insert guard's precondition
++         * (item == ITM_NOP) holds by mode arithmetic; the M1-1 packet's
++         * mutation A proved an explicit capture branch unreachable, and
++         * the [3]/[4]/[5]/[9] battery pins every NOP disposition. */
++        item = ((calcMode == CM_NORMAL || calcMode == CM_ASSIGN) && tam.mode == 0
++                && dynamicMenuItem < dynamicSoftmenu[menuId].numItems)
++                 ? ITM_XEQ : ITM_NOP;
 +        break;
 +      }
 +
        case MNU_VAR: {
          dynamicMenuItem = firstItem + itemShift + fn;
          item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : MNU_DYNAMIC);
-@@ -434,7 +494,15 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -434,7 +504,15 @@ static void executeFunction(const char *data, int16_t item_);
      }
  
  
@@ -100,7 +110,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
        bool_t inCatalog = false;
        for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
          if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {
-@@ -929,7 +997,7 @@ endReturnTrue:
+@@ -929,7 +1007,7 @@ endReturnTrue:
     * \brief Executes one function from a softmenu
     * \return void
     ***********************************************/
@@ -109,7 +119,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
      int16_t item = ITM_NOP;
      FN_timed_out_to_NOP_or_Executed = true;
  
-@@ -961,6 +1029,17 @@ endReturnTrue:
+@@ -961,6 +1039,17 @@ endReturnTrue:
  
  
          lastKeyItemDetermined = item;
@@ -127,7 +137,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
        }
  
        // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
-@@ -1027,6 +1106,11 @@ endReturnTrue:
+@@ -1027,6 +1116,11 @@ endReturnTrue:
                  break;
                }
                case CM_AIM: {
@@ -139,7 +149,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
                  closeAim();
                  break;
                }
-@@ -1267,7 +1351,20 @@ endReturnTrue:
+@@ -1267,7 +1361,20 @@ endReturnTrue:
              if(item == ITM_KEYMAP) {
                cursorEnabled = false;               // cursor is re-activated automatically elsewhere, after button release
              }
@@ -161,7 +171,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
                closeAim();
              }
              if(tam.mode && tam.alpha) {
-@@ -1382,6 +1479,12 @@ endReturnTrue:
+@@ -1382,6 +1489,12 @@ endReturnTrue:
                        printf("keyboard.c: executeFunction calcmode=%u %i (before runfunction): %i, %s tam.mode=%i\n", calcMode, item, currentMenu(), indexOfItems[-currentMenu()].itemSoftmenuName, tam.mode);
                      #endif //VERBOSEKEYS
  
@@ -174,7 +184,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
                  runFunction(item);
  
  
-@@ -1533,7 +1636,10 @@ endReturnTrue:
+@@ -1533,7 +1646,10 @@ endReturnTrue:
  
  
  
@@ -186,7 +196,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
      delayCloseNim = false;
      int16_t result;
      const calcKey_t *key;
-@@ -1650,35 +1756,65 @@ endReturnTrue:
+@@ -1650,35 +1766,65 @@ endReturnTrue:
        Check_MultiPresses(&result, key_no);        //JM
        return result;
      }
@@ -273,7 +283,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
        result = shiftF ? key->fShifted :
                 shiftG ? key->gShifted :
                          key->primary;
-@@ -2211,18 +2347,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2211,18 +2357,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
            if(item == ITM_RCL && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
              calcRegister_t var = findNamedVariable(funcParam);
              if(var != INVALID_VARIABLE) {
@@ -296,7 +306,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
              }
              else {
                displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
-@@ -2235,20 +2363,16 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2235,20 +2373,16 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
            else if(item == ITM_XEQ && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
              calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
              if(label != INVALID_VARIABLE) {
@@ -325,7 +335,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -2631,6 +2755,17 @@ RELEASE_END:
+@@ -2631,6 +2765,17 @@ RELEASE_END:
          }
  
          case CHR_caseUP: {                                                   //From keyboard: logic for Up/Dn case/num
@@ -343,7 +353,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
            if(getSystemFlag(FLAG_NUMLOCK))  {}
            else if(alphaCase == AC_LOWER) {
              processKeyAction(CHR_case);
-@@ -2644,6 +2779,14 @@ RELEASE_END:
+@@ -2644,6 +2789,14 @@ RELEASE_END:
          }
  
          case CHR_caseDN: {                                                   //From keyboard: logic for Up/Dn case/num
@@ -358,7 +368,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
            if(getSystemFlag(FLAG_NUMLOCK)) {
              alphaCase = AC_UPPER;
              processKeyAction(CHR_numU);
-@@ -2835,8 +2978,28 @@ RELEASE_END:
+@@ -2835,8 +2988,28 @@ RELEASE_END:
  
                //also AIM Longpress cycle
                case CM_AIM: {
@@ -387,7 +397,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
                    closeAim();
                    runFunction(item);
                    keyActionProcessed = true;
-@@ -3130,11 +3293,23 @@ RELEASE_END:
+@@ -3130,11 +3303,23 @@ RELEASE_END:
                    keyActionProcessed = true;
                  }
                  else if(item == ITM_SST) {
@@ -411,7 +421,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
                    fnBst(NOPARAM);
                    keyActionProcessed = true;
                    refreshScreen(123);
-@@ -3154,6 +3329,12 @@ RELEASE_END:
+@@ -3154,6 +3339,12 @@ RELEASE_END:
                    }
                  }
                  else if(item == ITM_RS) {
@@ -424,7 +434,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
                    addStepInProgram(ITM_STOP);
                    keyActionProcessed = true;
                  }
-@@ -3444,6 +3625,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3444,6 +3635,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -439,7 +449,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
            if(softmenuStack[0].softmenuId <= 1 || menu(1) == -MNU_ALPHA) {
              popSoftmenu();
            }
-@@ -3716,6 +3905,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3716,6 +3915,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            aimBuffer[0] = 0;
          }
          leaveTamModeIfEnabled();
@@ -452,7 +462,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
          if(calcMode == CM_PEM) {
            scrollPemBackwards();
          }
-@@ -3799,6 +3994,79 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3799,6 +4004,79 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -532,7 +542,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
          if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines
            softmenuStack[0].softmenuId = 1;                                  //JM
          }                                                                   //JM
-@@ -3856,6 +4124,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3856,6 +4134,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            lastErrorCode = 0;
            break;
          }
@@ -548,7 +558,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
          if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
            if(isAlphaSubmenu(0)) {
              popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
-@@ -3868,6 +4145,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +4155,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -556,7 +566,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +4156,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +4166,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -579,7 +589,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4366,9 +4660,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4670,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -604,7 +614,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
-@@ -4544,6 +4852,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4544,6 +4862,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
@@ -618,7 +628,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b61a23877b1c9774cb2a935db712bea
              closeAim();
            }
            fnBst(NOPARAM);
-@@ -4762,6 +5077,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4762,6 +5087,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
