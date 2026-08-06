@@ -2674,3 +2674,78 @@ exercises the clamp. (4) The decode-exception deletion was an unkilled
 revert-mutant — Part 1 now decodes a real marker AT currentStep during
 capture and asserts it still renders as a marker. Review-round flash
 delta: 0 B (text identical).
+
+## 2026-08-05 — Stage L landed: interactive Forth capture (L1-0..L1-5)
+
+FORTH pressed outside PEM now opens the same capture PEM gives you, on
+the AIM surface, with the live stack underneath: ENTER interprets and
+reopens (REPL, L-R3), errors reopen with the line intact (L5), EXIT
+unwinds the E8 ladder, history is the FHIST program with f-shifted
+up/down recall (L-R7), and parameterized keys fold to canonical text
+exactly as in PEM (L-R4 (b), operand-class parity pinned pairwise).
+Rulings L-R1..L-R8: STAGE_L_INTERACTIVE.md, now superseded where
+normative-pending — the normative record is DESIGN.md §8.4.2 (the
+interactive origin), §8.4.3 (the fold interactively), §8.1 (FHIST),
+§8.3 (interactive durability), §3.3.2 (entry re-point), §8.10 (item 2
+discharged; item 1 = Stage M stays deferred).
+
+Commit series: L1-0 (`c32a415fa` + rev 3) re-target of the 52 one-shot
+test call sites (the 52nd found by stub-proof, not grep); L1-1
+(`a6a39ab6e`) origin bit + non-lifting open + minimum close; L1-2
+(`bf90667d1`) ENTER/EXIT ladder/input cap; L1-3 (`2b68c883b`) the
+divert seam, catalogs, picker, keys mode; L1-H (`cf938b49c`) FHIST;
+L1-F1..F3 (`d34f2e3e9`, `1085bd71f`, `115ca3c59`) the fold; L1-5
+(`9ab280ae8`, `e10a91d4d`, `5692fffd9`, `e4cb4c666`) the acceptance
+battery: the 10-step stage story end to end, the interactive close-path
+sweep (7 paths, full tuple, counted apart from the PEM four and the
+fold seven), and the residue pair (zero arena residue over 20
+lifecycles; a full cap cycle grows program memory by exactly FHIST's
+own bytes).
+
+Notable history, kept deliberately:
+
+- **L-R5 → L-R7 the same day.** The 512 B packed history ring was
+  ruled, amended, then superseded once the fold's scratch program
+  existed — history had somewhere better to live, and the ring's 512 B
+  was never spent.
+- **T7.5 retraction.** The `PTP_DISABLED` fold hazard was reported to
+  the owner twice as a shippable PEM bug; the reachability trace
+  retracted it (no `insertStepInProgram` arm emits such an opcode). Two
+  true facts, wrong conclusion — reachability-not-write-set became
+  checklist item 1, and the invariant is pinned by a class test.
+- **T8 pivot rejected, bracket kept.** The PEM-host pivot died on item
+  functions testing `calcMode` themselves; its one yield is the forged
+  `calcMode` bracket the fold uses (T8.4).
+- **T9.** The lifting open would have computed `garbage + 1` on the
+  feature's most ordinary use; the non-lifting open is normative, and
+  "state what the landed entry point does to the state you depend on"
+  became checklist item 3.
+- **The close-path push rule specialised at landing.** "One rule, no
+  cases" (L-R2's consequence sheet) is, in the landed tree: the EXIT
+  ladder's rung 3 pushes to FHIST; the five native closeAim arms
+  preserve the line in X via the native string commit (KEEP
+  disposition); the power reset drops it at the dictionary seams (§8
+  A5 analogue). §8.4.2 records the dispositions; the sweep asserts
+  them.
+- **Implementer record.** L1-0..L1-F3 ran through the local model per
+  the standing division of labor. The L1-5 sessions moved to
+  fully-inlined transcription packets after a spec-style session spent
+  its lookup budget pre-edit (loop-guard); two sessions were finished
+  by the architect when LM Studio's engine died at the finish line
+  (5A: registration + gate; 5B: verified green log, committed), and
+  5C/5D were architect-implemented outright after a 40-minute
+  pre-edit stall (F6-1 precedent). Both models are now pre-loaded via
+  `lms` with no TTL.
+
+Stage numbers (C4, RULE-1): flash `make dmcp5r47
+CUSTOM_PKG=packages/forth-core` 1108504 -> 1111456, **+2952 B** for the
+whole stage (estimate band was +3–5 KB). Idle RAM 7820 -> 7844,
+**+24 B**: `forthFoldCtx_t` 16 B (the doc's earlier "+8 B" was the
+T7-era estimate, before L1-F2 grew the context by the reposition
+tuple), `_forthHistCur` 8 B, `sizeof(forthCap_t)` unchanged at 16
+(`historyIndex` absorbed the old tail pad). FORTH ARENA high-water
+unchanged all stage: dict here=48 sizeBlocks=16, gdict here=16
+sizeBlocks=16, freeRamDelta=128. Program-memory high-water with a full
+history: **1024 bytes**, exactly the cap. History costs program memory,
+visible and clearable by the user; net idle BSS for the whole stage is
+the +24 B above.

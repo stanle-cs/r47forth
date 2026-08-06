@@ -1,5 +1,11 @@
 # Stage L — interactive Forth capture (PROPOSAL, pre-ruling)
 
+> **SUPERSEDED 2026-08-05 where normative-pending.** Stage L landed
+> (L1-0..L1-3, L1-H, L1-F1..F3, L1-5); DESIGN.md §8.4.2/§8.4.3, §8.1
+> (FHIST), §8.3 (interactive durability), §3.3.2 (entry re-point) and
+> §8.10 (item 2 discharged) are now the normative record. This file
+> remains the stage's proposal and ruling history.
+
 **Status: FULLY RULED 2026-08-04. Scope is full — L1+L2+L3+L5; L-R5
 amended same day (L2 = 512 B packed history ring; terminal-console view
 PARKED — see Non-goals). L-R4 closed same day on trace evidence:

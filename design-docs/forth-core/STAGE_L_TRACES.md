@@ -6,6 +6,13 @@ end, not decided here. Not normative — this is the evidence sheet
 STAGE_L_INTERACTIVE.md's "Mandatory architect pre-work" section
 requires before any packet is authored.**
 
+> **SUPERSEDED 2026-08-05 where normative-pending.** Stage L landed;
+> DESIGN.md §8.4.2/§8.4.3 (and §8.1, §8.3, §3.3.2, §8.10) carry the
+> normative record. This file remains the evidence sheet; where a trace
+> disagrees with landed code, the code and DESIGN.md win (one such case:
+> T7's forthCaptureSanitizeRestoredUi widen-recommendation, dropped by
+> L1-1 rev 2 and corrected in the L1-F3 CM-gate audit, row 14).
+
 Method: read-only trace of the landed tree (branch `forth-core/stage-k`,
 gate green — forth battery ALL PASSED + upstream testSuite GREEN — before
 tracing). All anchors are the package working area

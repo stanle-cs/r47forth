@@ -991,6 +991,15 @@ void fnForthOuter(uint16_t unused) {
 }                                             // directly callable from PC tests
 ```
 
+**Stage L (2026-08-05):** the body above survives as `fnForthOuter`'s
+**running-program arm** only (`programRunStop == PGM_RUNNING` — a program
+step `XEQ 'FORTH'` must never open UI), with the copy/drop discipline
+factored into `forthTakeSourceFromX`, shared by that arm and the seed
+path. Outside a running program, `fnForthOuter` opens the interactive
+capture (§8.4.2). The PC-test entry is `forthOuterRun` /
+`forthOuterInterpret` — L1-0 re-targeted all 52 self-test call sites and
+proved completeness by stubbing, not by grep.
+
 `forthOuterRun` performs the depth check, links `ctx` onto `forthOuterCur`,
 saves the definition state, runs `forthOuterInterpret()`, then restores and
 unlinks on **every** exit path.
@@ -2036,6 +2045,15 @@ normative in §2.1):
   one source step. An unterminated definition is aborted and reported at that
   step (§8.7).
 
+**FHIST (Stage L).** One kept, named, runnable program — `LBL 'FHIST'` +
+`ITM_FORTH` source steps + END, created lazily on the first history push
+and appended after every existing program, never spliced into one — is
+both the interactive line history (L-R7) and the fold's scratch substrate
+(§8.4.3). Capped at `FORTH_HISTORY_MAX_BYTES` (1024) with oldest-first
+eviction; running it re-runs the session, deliberately — no execution
+guard. The name is `FHIST`, not `FORTH`: a label spelled `FORTH` would
+shadow the item for `XEQ 'FORTH'` (§4.2 tries labels first).
+
 ### 8.2 Execution semantics — run-start pre-scan
 
 **The model.** `forthProgramStep` runs `forthRunGenCheckReset()` (§8.3 — which
@@ -2170,6 +2188,14 @@ Consequences, all deliberate (R4 lifetime rulings 1-4):
   this stage: a program that uses a Forth word defines it. *(Under F3's
   accepted scopes, interactive definitions get a reserved interactive-local
   scope instead — §10.3.)*
+
+**Interactive durability (Stage L, the §8.10-item-2 contract).**
+Interactive definitions die at the next lifetime consumption — this
+section's mechanism, unchanged; `GLOBAL` is the durability mechanism
+(gdict survives lifetimes and save/restore with its own H5 restore
+validation). The cross-scope isolation above is deliberate and unchanged:
+programs cannot see interactive words, and vice versa. Pinned end to end
+by `test_interactive_acceptance` step 10.
 
 ### 8.4 Entry-only toggle — no runtime flag, keypad state derived
 
@@ -2529,6 +2555,138 @@ landed F6-3/F6-4/picker text sinks. Rules:
 Stage record: STAGE_K_KEYS_MODE.md (rulings K-R1..K-R4, traces T1-T6);
 packets PACKET_K1..K4 with amendments K1-A..K4-A are the ledger.
 
+#### 8.4.2 The interactive origin (Stage L, landed 2026-08-05)
+
+The same capture, opened from the normal screen. `ITM_FORTH` outside PEM
+no longer demands a string in X (the pre-L one-shot survives only under a
+running program — below); it opens a Forth capture on the AIM surface and
+E0–E14 stay untouched for PEM. What is different interactively is *where
+the capture lives* and *what closes it*; everything typed into it — alpha,
+catalogs, the FWRD picker, keys mode, the fold — behaves as §8.4/§8.4.1
+already specify.
+
+- **Where it lives.** The line is `aimBuffer` on the native AIM input
+  surface (`calcMode == CM_AIM`, `FLAG_ALPHA`), rendered by the stock
+  AIM line draw — zero new display code (T5). `forthCap.origin`
+  (transient, never persisted, zero = PEM) records the origin so close
+  seams and sinks key correctly; it resets at the same three E14 sites as
+  `keysMode` plus `forthCapPowerReset()`, and rides suspend/resume via
+  the same bracket that preserves `keysMode`.
+- **What opens it.** `fnForthOuter` (L-R2: always capture). Non-string X:
+  opens empty, X untouched — the open is **non-lifting** by construction
+  (T9): it mirrors `calcModeAim` minus `liftStack()`, because the line
+  operates on the live stack. String X: seeds the line and consumes X at
+  seed (copy before drop, §3.3.2); oversize raises today's error and no
+  capture opens. Under a running program (`programRunStop == PGM_RUNNING`)
+  the one-shot interpret-from-X survives unchanged — a program step
+  `XEQ 'FORTH'` must never open UI.
+- **ENTER (L-R3: REPL).** Runs the line via the private-copy discipline
+  (§3.3.2), pushes it onto FHIST **before** the run (an executed word can
+  rewrite `aimBuffer`), then reopens empty with keys mode relocked (the
+  E5-relock analogue). On an interpret error the capture reopens with the
+  line intact from the pre-run copy (L5) — edit, don't retype. Empty
+  ENTER is a no-op, not a close. R/S runs the line exactly as ENTER.
+- **EXIT (the E8 ladder, extended).** Rung 1: keys mode → alpha input.
+  Rung 2: a stacked non-base menu pops, capture stays open. Rung 3:
+  close — a non-empty line is pushed onto FHIST first, so EXIT never
+  loses a line; the teardown is `calcModeNormal()` + `popSoftmenu()`,
+  closeAim's shape **minus its string commit** (X is untouched).
+- **Close-path dispositions (the interactive axis, seven paths).** The
+  ladder's rung 3 pushes the line to history. The five native
+  `closeAim()` arms that remain reachable with an interactive capture
+  open (executeFunction's ITM_INTEGRAL and generic non-alpha-item arms,
+  the BST/SST longpress arm, fnKeyUp, fnKeyDown) close the capture via
+  one choke point (`_forthCapCloseIfInteractive`) and then run native
+  `closeAim()`, which commits the line to X as a string — the line is
+  preserved *in X*, not in history; native behaviour stays native
+  outside the ladder (the L1-2 KEEP disposition). `forthCapPowerReset()`
+  drops the line: it runs at the dictionary init/restore seams, where
+  transient UI state never survives. Swept by
+  `test_interactive_close_sweep` on the full close tuple
+  (state, keysMode, origin, foldMode), separately from the PEM four and
+  the fold seven.
+- **Restore (the §8 A5 analogue).** `forthCap` is process-local and the
+  power reset runs at the restore-validation seams, so a save taken
+  mid-capture restores as a plain, usable alpha session — the line is in
+  `aimBuffer`, no capture behaviour attached. That is a correct outcome,
+  not a defect: the interactive origin has no persisted marker (setting
+  `tam.function` interactively is forbidden — it is the PEM sentinel),
+  and an arm keying on `CM_AIM + FLAG_ALPHA` alone would tear down
+  legitimate restored alpha sessions.
+- **Composing view (L-R8, render contract).** The edit line sits on X's
+  row (`AIM_REGISTER_LINE == REGISTER_X`), so X is hidden while
+  composing; past ~350 px in the large font the native renderer drops
+  T/Z/Y and paints the line alone. Ruled: consistency with alpha entry
+  everywhere beats a Forth-specific layout; purely a render decision,
+  revisitable additively.
+- **History (L-R7).** Committed lines accumulate as `ITM_FORTH` source
+  steps in FHIST (§8.1): push on ENTER and on rung-3 EXIT with non-empty
+  text; consecutive duplicates collapse; f-shifted up/down recalls
+  older/newer into the editor (the browse index is transient, resets at
+  open and at every push); unshifted arrows stay native (case/scroll —
+  T4). Persistence is program memory's own (§5.5); the capture state
+  around it stays debt-free.
+
+The one-shot's 52 self-test call sites were re-targeted at
+`forthOuterRun`/`forthOuterInterpret` before any of this landed (L1-0),
+and the 52nd was found by the stub-to-return completeness proof, not by
+grep — a name-string dispatch in a test program file.
+
+#### 8.4.3 The fold interactively (L-R4 (b), landed 2026-08-05)
+
+Pressing a parameterized key during an interactive capture types its
+canonical spelling, exactly as in PEM: `STO` `0` `5` yields `STO 05 ` in
+the line and nothing stores. One behaviour for one gesture — the fold is
+what a capture *means* (owner ruling, L-R4).
+
+Mechanism (L1-F1..F3): `forthFoldEnter` materialises a real `ITM_FORTH`
+capture step holding the live line as the **last content step of FHIST**,
+suspends the capture onto it (the landed PEM suspend, reused verbatim —
+the step is the store), and forges `calcMode = CM_PEM` for the TAM's
+duration so the landed step-insert, decode and splice machinery runs
+unmodified. The committed TAM step is rendered to text by
+`decodeOneStep` — canonical by construction, the F6-4 argument;
+re-implementing the spelling grammar stays rejected — then spliced, the
+step deleted, the capture resumed, the cursor restored, and `calcMode`
+restored. The unwind is gated on `!tam.mode` (a two-keystroke TAM must
+not tear the bracket down between digits) and runs from both the
+`tamProcessInput` epilogue and `fnKeyExit` (cancel mid-TAM must unwind
+too).
+
+- **FOLD vs PARK.** TAM classes that cannot fold do not refuse and do
+  not lose the line: they PARK — materialised and suspended (the line is
+  safe in the step), bracket unarmed, TAM executes live. The PARK list
+  and each reason: `ITM_GTOP`, `ITM_ASSIGN`/`ITM_USERMODE`, `ITM_DELP`,
+  and modes `TM_NEWMENU`, `TM_STRING`, `TM_KEY` (each navigates the
+  program pointer, zeroes `aimBuffer`, or flips `FLAG_ALPHA` on its own
+  path — STAGE_L_TRACES §T7.3).
+- **The parity contract (L1-F3).** Every operand class of the F4 grammar
+  is driven through the fold twice — once in a real PEM capture, once
+  interactively — and the two texts are compared string-identical in one
+  assertion (`test_fold_operand_parity`, twelve rows). Parity is the
+  spec: a fold spelling defect is by definition a divergence from PEM.
+- **The forged-calcMode hazard, named.** While the bracket is armed,
+  every PEM arm in the tree is reachable; arms that assume a PEM capture
+  exists must be stopped explicitly (the nested-TAM fall-through into
+  `pemCloseAlphaInput` was found and fixed this way — L1-F2). The
+  `determineItem` AIM-first disjunct carries the one new conjunct
+  (`!(tam.mode && forthFoldPending())`), provably inert for every
+  pre-stage execution (write-set argument, STAGE_L_TRACES §T7.4).
+- **Known v1 limitations.** (a) Catalog-driven TAM commits bypass
+  `tamProcessInput` (three commit sites gated `calcMode == CM_PEM`), so
+  a flag-by-name or dynmenu-label pick during an interactive TAM
+  executes without folding; the capture is never lost (the step is the
+  store). Deferred to a follow-on packet (T7.8). (b) The fold relies on
+  no TAM-committable step carrying `PTP_DISABLED` (whose decode arm
+  writes nothing); that invariant is undocumented upstream and pinned
+  only by our class test (T7.5 — first reported as a bug, retracted on
+  the reachability trace: two true facts, wrong conclusion).
+- **Close paths.** A fold may never leave an outstanding transient step:
+  seven fold close paths are swept by `test_fold_close_paths` (7/7); a
+  bare power reset mid-fold leaves exactly +1 FHIST step —
+  indistinguishable from a legitimate history entry, the designed
+  outcome.
+
 ### 8.5 Symmetric display — `»FORTH` / `FORTH«` at render time
 
 The same single item renders directionally, computed from scan parity at
@@ -2824,13 +2982,12 @@ This list carries only what is genuinely unsettled.
    words can do neither (§4.3). Real asymmetry against the extension principle,
    but purely additive and with no format impact.
 
-2. **[Deferred — additive] Interactive `FORTH` requires a string in X.**
-   `fnForthOuter` (§3.3.2) raises `ERROR_INVALID_DATA_TYPE_FOR_OP` unless X
-   already holds a string, so the same item is an entry-mode toggle in PEM and a
-   string-consuming function outside it. Extension-consistent would be: pressing
-   FORTH interactively opens the same capture PEM gives you (§8.4), with ENTER
-   running the line. Same entry-layer surface as §8.4, so cheapest to build
-   alongside it.
+2. **Discharged by Stage L (2026-08-05).** Interactive `FORTH` no longer
+   requires a string in X: pressing FORTH interactively opens the same
+   capture PEM gives you, ENTER runs the line (§8.4.2), history is FHIST
+   (§8.1), and the fold works identically to PEM (§8.4.3). Item 1
+   (browse/ASSIGN of Forth words — Stage M) remains deferred with its own
+   owner statement.
 
 **Scoping.** Colon definitions are local to their owning RPN program,
 interactive definitions live in a reserved interactive scope, and a name
