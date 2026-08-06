@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c15268303f299af6 100644
+index bc44026016e94a8865b8acc886386341596641c6..e25df8a8ad187cd7bc3f9866a73732f49daf0ea1 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,12 +2,67 @@
@@ -541,7 +541,7 @@ index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c1526830
          if(calcMode == CM_PEM) {
            scrollPemBackwards();
          }
-@@ -3799,6 +4069,115 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3799,6 +4069,127 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -558,7 +558,10 @@ index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c1526830
 +           * ground rather than toward it. */
 +          if(!forthCapKeysMode()) {
 +            forthCapSetKeysMode(true);
-+            showSoftmenu(-MNU_FORTH);
++            /* AUDIT C9: REPLACE the excursion's ALPHA row, do not push FWRD
++             * over it — a push left two console rows on the stack and rung 3's
++             * single pop then revealed ALPHA instead of the owner's menu. */
++            forthConsoleShowSurface();
 +            break;
 +          }
 +          /* Rung 2: anything stacked above the base pops and the capture
@@ -594,7 +597,16 @@ index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c1526830
 +           * cannot fire here, as before.) */
 +          if(currentMenu() != -MNU_FORTH && currentMenu() != -MNU_ALPHA) {
 +            popSoftmenu();
-+            stayInAIM();                     /* native pair, below in this arm */
++            /* AUDIT C8: NO stayInAIM() here.  Its job is the native AIM rule
++             * "always leave an alpha row showing", and it implements that with
++             * changeToALPHA() -> showSoftmenu(-MNU_ALPHA), which PUSHES a
++             * frame (softmenus.c:3844).  Called on every rung-2 pop it both
++             * covered the console's own row and leaked a frame the close
++             * accounting knew nothing about.  The console has its own rule for
++             * which row belongs to which sub-mode, and one owner for it; the
++             * surface is already CM_AIM with FLAG_ALPHA set, which is the only
++             * other thing stayInAIM was contributing here. */
++            forthConsoleShowSurface();
 +            break;
 +          }
 +          /* Rung 3: close.  A non-empty line is pushed to history BEFORE
@@ -657,7 +669,7 @@ index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c1526830
          if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines
            softmenuStack[0].softmenuId = 1;                                  //JM
          }                                                                   //JM
-@@ -3856,6 +4235,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3856,6 +4247,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            lastErrorCode = 0;
            break;
          }
@@ -673,7 +685,7 @@ index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c1526830
          if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
            if(isAlphaSubmenu(0)) {
              popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
-@@ -3868,6 +4256,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +4268,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -681,7 +693,7 @@ index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c1526830
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +4267,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +4279,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -704,7 +716,7 @@ index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c1526830
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4366,9 +4771,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4783,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -729,7 +741,7 @@ index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c1526830
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
-@@ -4544,6 +4963,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4544,6 +4975,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
@@ -743,7 +755,7 @@ index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c1526830
              closeAim();
            }
            fnBst(NOPARAM);
-@@ -4762,6 +5188,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4762,6 +5200,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {

@@ -1431,6 +1431,12 @@ void forthInteractiveEnter(void) {
     setSystemFlag(FLAG_ALPHA);
     cursorEnabled = true;
     calcModeAimGui();
+    /* AUDIT C2-family: calcModeNormal() does not only change the mode — it
+     * POPS the console's own softmenu frame when that frame is the ALPHA row
+     * and retargets MyAlpha to MyMenu (src/c47/calcMode.c:44-49).  Restoring
+     * the mode without restoring the row left the console frameless with a
+     * stale homePushed, and EXIT then handed the owner MyMenu. */
+    forthConsoleRestoreSurface();
   }
 
   if (lastErrorCode != ERROR_NONE) {
@@ -1476,12 +1482,24 @@ void forthInteractiveEnter(void) {
   /* L-R3: REPL. Reopen empty, stay in CM_AIM. forthCapOpenInteractive
    * clears aimBuffer and resets keysMode (E14/K1: a fresh capture opens
    * in alpha input, matching the PEM E5 relock). */
-  forthCapOpenInteractive();
+  { /* AUDIT C3: homePushed must survive the reopen exactly as keysMode does.
+     * forthCapOpenInteractive() zeroes BOTH, and N1-5 restored only keysMode,
+     * so after any ENTER the close accounting believed the console had pushed
+     * nothing and rung 3 left its row sitting on the owner's menu. */
+    bool_t homeWas = forthCapHomePushed();
+    forthCapOpenInteractive();
+    forthCapSetHomePushed(homeWas);
+  }
   forthCapSetKeysMode(true);   /* N1-5 (N-R6): the REPL reopen is the second
                                   interactive open site, and keys-first must
                                   survive every ENTER — not just the first
                                   one.  Same set-after-open shape as
                                   fnForthOuter's arm. */
+  /* AUDIT C4: forcing keys mode back on is only half the job — the row has to
+   * follow the sub-mode, or ENTER from an alpha excursion leaves the ALPHA
+   * keypad displayed while the keyboard has already switched to keys input,
+   * and the row says A where the key now types Σ+. */
+  forthConsoleShowSurface();
   T_cursorPos = 0;
   displayAIMbufferoffset = 0;
 }

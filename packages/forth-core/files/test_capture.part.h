@@ -8466,14 +8466,22 @@ static int test_capture_interactive_divert(void)
           printf("    [3(b)] FAIL: keys mode bit not set after toggle-on\n");
           scFail = 1;
         }
-        if (currentMenu() == -MNU_ALPHA || isAlphaSubmenu(0)) {
-          printf("    [3(b)] FAIL: currentMenu() %d after drain, expected neither -MNU_ALPHA nor an alpha submenu\n",
-                 currentMenu());
+        /* AUDIT C2 FLIPS this row.  It was written when FWRD was a PICKER
+         * stacked over an alpha capture, and the toggle drained every alpha
+         * row including FWRD (isAlphaSubmenu counts -MNU_FORTH), so "nothing
+         * alpha standing" was the correct post-state.  N-R6 made FWRD the
+         * console's HOME row: K-R3's rationale — the underlying row IS the
+         * mode indicator — is now served by SHOWING FWRD in keys input rather
+         * than by showing nothing, and the old drain was deleting the row the
+         * console had just pushed. */
+        if (currentMenu() != -MNU_FORTH) {
+          printf("    [3(b)] FAIL: currentMenu() %d after toggle-to-keys, expected the"
+                 " console's FWRD home row (%d)\n", currentMenu(), -MNU_FORTH);
           scFail = 1;
         }
       }
     }
-    if (!scFail) printf("    [3(b)] PASS: FWRD-on-top drains fully on toggle-to-keys-mode (M3)\n");
+    if (!scFail) printf("    [3(b)] PASS: toggle-to-keys shows the console's FWRD home row (AUDIT C2)\n");
     fail |= scFail;
 
     /* ---- Subcase 3b: no bug screen in keys mode (B2 pin) — a physical key

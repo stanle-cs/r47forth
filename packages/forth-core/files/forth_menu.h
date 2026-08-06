@@ -21,6 +21,15 @@ bool_t pickerInsertName(void);
  * pick rather than as its own item (§9.6). */
 bool_t forthPickerGuard(int16_t item);
 
+/* AUDIT C2/C3/C4/C8/C9: establish the console's own softmenu row for the
+ * current input sub-mode.  The ONLY function that may change it while an
+ * interactive capture is open; see forth_menu.c for why it retargets rather
+ * than pushing. */
+void forthConsoleShowSurface(void);
+
+/* Re-establish that row after a native item may have destroyed it. */
+void forthConsoleRestoreSurface(void);
+
 /* Scan cut-off for the picker's program-text pass (§9.6 documented
  * deviation): programs with more steps than this before the cursor are not
  * fully scanned. Declared here, not in forth_menu.c, so the pin in the test

@@ -745,50 +745,20 @@ bool_t isFunctionOldParam16(uint16_t func) {
          * and indexOfItems[negative] is out of bounds.  Same conjunct L1-2's
          * _forthCapAtCap carries, for the same reason. */
         if(func == ITM_AIM) {
-          if(forthCapKeysMode()) {
-            forthCapSetKeysMode(false);
-            showSoftmenu(-MNU_ALPHA);
-          }
-          else {
-            forthCapSetKeysMode(true);
-            /* C4: bounded drain — match PEM's _closeAlphaMenus, but that
-             * helper is file-static to programming/manage.c.  Interactive
-             * choice (provisional, flagged for owner review): drain
-             * EVERYTHING alpha, FWRD (-MNU_FORTH) included.  _closeAlphaMenus
-             * has no MNU_FORTH case and stops without popping when FWRD is on
-             * top, so "match PEM" has no answer for that state; K-R3's
-             * rationale (the underlying row IS the mode indicator) says leave
-             * nothing alpha standing when keys mode goes on.
-             *
-             * DEVIATION FROM THE PACKET TEXT (found empirically, C6.3(a)/
-             * 3(b) went RED against the packet's literal loop — see report):
-             * popSoftmenu() (softmenus.c) carries its OWN calcMode==CM_AIM
-             * compensation — "if the pop would land on slot id 0 (MyMenu) or
-             * 1 (MyAlpha), force/keep an alpha row visible" (id 0 -> 1, and
-             * id 1 -> changeToALPHA(), which is showSoftmenu(-MNU_ALPHA)).
-             * That invariant exists for native AIM typing (always show an
-             * alpha row) and is inert for PEM's _closeAlphaMenus (calcMode
-             * there is CM_PEM), but interactively calcMode IS CM_AIM, so a
-             * naive "popSoftmenu() while alpha" loop just cycles: pop ALPHA
-             * -> reveals MyAlpha(1) -> popSoftmenu's own compensation
-             * re-pushes ALPHA -> still alpha -> pop again -> ... and never
-             * converges to a non-alpha state.  Fix: peek at what the pop
-             * would reveal (softmenuStack[1].softmenuId); once that is
-             * MyMenu(0) or MyAlpha(1), finish with the SAME raw assignment
-             * _closeAlphaMenus uses for its own MyAlpha case
-             * (softmenuStack[0].softmenuId = 0) instead of calling
-             * popSoftmenu() into the compensation. */
-            for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
-              if(!isAlphaSubmenu(0) && currentMenu() != -MNU_ALPHA) { break; }
-              if(softmenuStack[1].softmenuId <= 1) {
-                softmenuStack[0].softmenuId = 0;   /* MyMenu — raw, bypasses
-                                                       popSoftmenu()'s AIM
-                                                       re-push */
-                break;
-              }
-              popSoftmenu();
-            }
-          }
+          /* AUDIT C2 (2026-08-06): the sub-mode changes, and ONE owner
+           * establishes the console's row for it (forth_menu.c).
+           *
+           * What was here was a bounded drain that popped every alpha row
+           * INCLUDING FWRD, because isAlphaSubmenu() counts -MNU_FORTH.  That
+           * was right in Stage K, when FWRD was a picker stacked over an alpha
+           * capture and "leave nothing alpha standing" was the rule.  N-R6 made
+           * FWRD the console's HOME row, and the drain then deleted the row the
+           * console had just pushed — after which EXIT's rung 3, still holding
+           * homePushed, popped the OWNER'S frame in its place.  The drain's
+           * popSoftmenu-compensation workaround goes with it: retargeting slot
+           * 0 never enters that loop. */
+          forthCapSetKeysMode(!forthCapKeysMode());
+          forthConsoleShowSurface();
           return;
         }
         if((indexOfItems[func].status & CAT_STATUS) == CAT_FNCT

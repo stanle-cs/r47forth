@@ -4082,7 +4082,10 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            * ground rather than toward it. */
           if(!forthCapKeysMode()) {
             forthCapSetKeysMode(true);
-            showSoftmenu(-MNU_FORTH);
+            /* AUDIT C9: REPLACE the excursion's ALPHA row, do not push FWRD
+             * over it — a push left two console rows on the stack and rung 3's
+             * single pop then revealed ALPHA instead of the owner's menu. */
+            forthConsoleShowSurface();
             break;
           }
           /* Rung 2: anything stacked above the base pops and the capture
@@ -4118,7 +4121,16 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            * cannot fire here, as before.) */
           if(currentMenu() != -MNU_FORTH && currentMenu() != -MNU_ALPHA) {
             popSoftmenu();
-            stayInAIM();                     /* native pair, below in this arm */
+            /* AUDIT C8: NO stayInAIM() here.  Its job is the native AIM rule
+             * "always leave an alpha row showing", and it implements that with
+             * changeToALPHA() -> showSoftmenu(-MNU_ALPHA), which PUSHES a
+             * frame (softmenus.c:3844).  Called on every rung-2 pop it both
+             * covered the console's own row and leaked a frame the close
+             * accounting knew nothing about.  The console has its own rule for
+             * which row belongs to which sub-mode, and one owner for it; the
+             * surface is already CM_AIM with FLAG_ALPHA set, which is the only
+             * other thing stayInAIM was contributing here. */
+            forthConsoleShowSurface();
             break;
           }
           /* Rung 3: close.  A non-empty line is pushed to history BEFORE

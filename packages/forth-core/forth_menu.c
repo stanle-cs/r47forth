@@ -262,3 +262,100 @@ void forthBuildWordPicker(int16_t menu)
 
   dynamicSoftmenu[menu].numItems = nNames;
 }
+
+/* ---- AUDIT C2/C3/C4/C8/C9 (2026-08-06): one owner for the console's row ----
+ *
+ * While an interactive capture is open, the console owns EXACTLY ONE softmenu
+ * frame: FWRD in keys input, ALPHA in the alpha excursion.  Stage N pushed
+ * that frame at open and then let four other sites manage it independently —
+ * the E10/E11 toggle, both EXIT rungs, and the REPL reopen — and every one of
+ * them got a different part of it wrong:
+ *
+ *   - the toggle's alpha->keys drain treats FWRD as an alpha submenu and pops
+ *     it (isAlphaSubmenu counts -MNU_FORTH), so the console's own row vanished
+ *     and EXIT then popped the OWNER'S frame in its place;
+ *   - rung 1 re-pushed FWRD OVER the excursion's ALPHA frame instead of
+ *     replacing it, so one EXIT press was swallowed;
+ *   - rung 2's stayInAIM() calls changeToALPHA() whenever the current row is
+ *     not alpha (keyboard.c:3877), which covers the console's row again every
+ *     time a stacked menu pops;
+ *   - the REPL reopen cleared homePushed, so EXIT after any ENTER took the
+ *     no-pop branch and left the console's row on top of the owner's menu.
+ *
+ * They are one defect: N-R6 turned FWRD from a picker into the console's home
+ * row, and the flip was carried through the EXIT ladder only.  This is now
+ * the ONLY function that changes the console's row.
+ *
+ * It RETARGETS slot 0 in place rather than popping and pushing, and that is
+ * load-bearing: popSoftmenu() carries its own CM_AIM compensation that
+ * re-pushes an alpha row (softmenus.c:3719-3733), and pushSoftmenu() dedups
+ * against a match ANYWHERE in the array by lifting the stack over it
+ * (softmenus.c:3671-3683), so a pop/push pair conserves neither the frame
+ * count nor the contents.  Retargeting conserves both by construction, and it
+ * is the idiom the surrounding code already uses for exactly this
+ * (`softmenuStack[0].softmenuId = 1` in the EXIT ladder's pre-normalisation). */
+static int16_t _softmenuIndexOf(int16_t menuId) {
+  int16_t m = 0;
+  while(softmenu[m].menuItem != 0) {
+    if(softmenu[m].menuItem == menuId) { return m; }
+    m++;
+  }
+  return -1;
+}
+
+void forthConsoleShowSurface(void) {
+  int16_t want, cur, m;
+
+  if(!forthCapIsInteractive() || !forthCapIsOpen()) { return; }
+
+  want = forthCapKeysMode() ? -MNU_FORTH : -MNU_ALPHA;
+  cur  = currentMenu();
+
+  if(cur == want) { return; }                  /* already right */
+
+  if(cur == -MNU_FORTH || cur == -MNU_ALPHA) {
+    /* Our own row is on top — swap it for the other one, in place. */
+    m = _softmenuIndexOf(want);
+    if(m >= 0) {
+      softmenuStack[0].softmenuId = m;
+      softmenuStack[0].firstItem  = 0;
+      doRefreshSoftMenu = true;
+    }
+    return;
+  }
+
+  /* Something the USER stacked is on top (a catalog, STK, an alpha submenu).
+   * Leave it: it is theirs, EXIT rung 2 unwinds it one press at a time, and
+   * this function will be called again when it is gone. */
+}
+
+/* Re-establish the console's row after something may have DESTROYED it.
+ *
+ * Separate entry point because the precondition differs and the caller is the
+ * only one who knows it.  forthConsoleShowSurface() above leaves a foreign top
+ * row alone, because a foreign row normally means the user stacked something.
+ * After a line has run, a foreign row can instead mean the console's own frame
+ * was popped out from under it: calcModeNormal() pops the ALPHA row
+ * (src/c47/calcMode.c:44-46) and retargets MyAlpha to MyMenu, and any native
+ * item may call it — fnClearStack does, outright.  `XEQ 'CLSTK'` typed in the
+ * alpha excursion therefore left the console with no row, a stale homePushed,
+ * and an EXIT that handed the owner MyMenu instead of the menu they came
+ * from. */
+void forthConsoleRestoreSurface(void) {
+  int16_t want;
+
+  if(!forthCapIsInteractive() || !forthCapIsOpen()) { return; }
+
+  want = forthCapKeysMode() ? -MNU_FORTH : -MNU_ALPHA;
+  if(currentMenu() == want) { return; }
+
+  if(currentMenu() == -MNU_FORTH || currentMenu() == -MNU_ALPHA) {
+    forthConsoleShowSurface();               /* ours, wrong one: retarget */
+    return;
+  }
+
+  /* Ours is gone.  Push a fresh one and record that we own it — sampling the
+   * ownership BEFORE the push, the same test the open site uses. */
+  forthCapSetHomePushed(true);
+  showSoftmenu(want);
+}

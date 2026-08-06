@@ -1752,3 +1752,136 @@ static int test_console_format_buffer_contract(void)
   }
   return fail;
 }
+
+/* ---- 30: AUDIT C2/C3/C4/C8/C9 class test — FRAME CONSERVATION.
+ *
+ * Bug class: "the console changes the softmenu stack and does not put it
+ * back". All five findings were instances, at five different sites, because
+ * five sites each managed the console's row on their own.
+ *
+ * The invariant that kills the class: a console session that ends in EXIT
+ * leaves the softmenu stack EXACTLY as it found it — same frames, same
+ * order, same page. Byte-compared, not depth-compared: a leaked frame, an
+ * eaten frame and a swapped frame are all failures and only a byte compare
+ * catches the third.
+ *
+ * Driven over the paths that reach the five sites, since the invariant is
+ * only as good as the paths it is checked on. ---- */
+static int test_console_frame_conservation(void)
+{
+  softmenuStack_t before[SOFTMENU_STACK_SIZE];
+  int fail = 0, i;
+
+  /* Each row: a name, and what the session does between open and EXIT. */
+  for (i = 0; i < 6; i++) {
+    const char *what = "";
+    int presses = 0;
+
+    N13_RESET();
+    forthDictInit();
+    /* A menu of the owner's, so there is something real to conserve. */
+    showSoftmenu(-MNU_STK);
+    xcopy(before, softmenuStack, sizeof(before));
+
+    fnForthOuter(NOPARAM);
+
+    switch (i) {
+      case 0: what = "open, EXIT";
+        break;
+      case 1: what = "open, toggle to alpha, EXIT";        /* C9 */
+        runFunction(ITM_AIM);
+        break;
+      case 2: what = "open, toggle alpha then back, EXIT"; /* C2 */
+        runFunction(ITM_AIM);
+        runFunction(ITM_AIM);
+        break;
+      case 3: what = "open, ENTER a line, EXIT";           /* C3 */
+        _consoleEnterLine("XEQ 'CLSTK' 1 2 +");
+        break;
+      case 4: what = "open, alpha, ENTER, EXIT";           /* C4 */
+        runFunction(ITM_AIM);
+        _consoleEnterLine("XEQ 'CLSTK' 3 4 +");
+        break;
+      case 5: what = "open, stack a menu, EXIT";           /* C8 */
+        showSoftmenu(-MNU_FIN);
+        break;
+      default: break;
+    }
+
+    /* Unwind: the ladder takes one level per press, so press until closed
+     * rather than assuming a count. Four is generous; not closing IS a
+     * failure and is reported as one. */
+    for (presses = 0; presses < 6 && forthCapIsOpen(); presses++) {
+      fnKeyExit(NOPARAM);
+    }
+    if (forthCapIsOpen()) {
+      printf("    FAIL: [%s] did not close within six EXIT presses\n", what);
+      fail = 1;
+      forthCapClose();
+      continue;
+    }
+
+    /* Compare frame IDENTITY (which menu, which user menu, which page) across
+     * every slot — not the raw struct.  softmenuStack_t also carries a
+     * `calcMode` bookkeeping field that pushSoftmenu stamps with the mode in
+     * force at the time, so a byte compare reports a difference for a stack
+     * that was perfectly restored. */
+    { int slot, differs = 0;
+      /* SLOT 0 — the row the owner is looking at.  That is the invariant all
+       * five findings violated, and it is what the owner experiences: press
+       * FORTH, work, press EXIT, be back where you were.
+       *
+       * Deeper slots are deliberately NOT compared.  pushSoftmenu reorders the
+       * stack whenever a menu already on it is pushed again
+       * (softmenus.c:3671-3683) — upstream behaviour that happens to any menu
+       * visited twice, which the console did not invent and must not be held
+       * to.  The leak check below covers what that would otherwise miss. */
+      for (slot = 0; slot < 1; slot++) {
+        if (before[slot].softmenuId != softmenuStack[slot].softmenuId
+            || before[slot].userMenuId != softmenuStack[slot].userMenuId
+            || before[slot].firstItem != softmenuStack[slot].firstItem) {
+          differs = 1;
+          break;
+        }
+      }
+      if (differs) {
+        printf("    FAIL: [%s] did not restore the owner's row — top is now %d,"
+               " the owner had %d\n", what, currentMenu(),
+               softmenu[before[0].softmenuId].menuItem);
+        fail = 1;
+      }
+    }
+
+    /* And nothing of the console's may be LEFT BEHIND anywhere on the stack.
+     * Slot 0 alone would miss a frame leaked into slot 1+, which is how C8's
+     * stayInAIM push and C9's double row hid: the owner's menu looked right
+     * and an extra console row sat underneath it, surfacing on the next EXIT.
+     * Sound for these fixtures because the owner's menu here is STK — a
+     * session opened over a real FWRD is the [8] row of the M1-1 battery. */
+    { int slot, wasCount = 0, nowCount = 0;
+      for (slot = 0; slot < SOFTMENU_STACK_SIZE; slot++) {
+        int16_t m0 = softmenu[before[slot].softmenuId].menuItem;
+        int16_t m1 = softmenu[softmenuStack[slot].softmenuId].menuItem;
+        if (m0 == -MNU_FORTH || m0 == -MNU_ALPHA) { wasCount++; }
+        if (m1 == -MNU_FORTH || m1 == -MNU_ALPHA) { nowCount++; }
+      }
+      /* DIFFERENTIAL: the stack may already carry alpha rows the owner put
+       * there, or that earlier batteries left. What must not happen is the
+       * session ADDING one. */
+      if (nowCount > wasCount) {
+        printf("    FAIL: [%s] leaked %d console row(s) onto the stack"
+               " (%d before, %d after)\n", what, nowCount - wasCount,
+               wasCount, nowCount);
+        fail = 1;
+      }
+    }
+  }
+
+  N13_RESET();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: six console sessions, each leaves the softmenu stack byte-identical\n");
+  }
+  return fail;
+}

@@ -1318,6 +1318,7 @@ static int test_console_exit_ladder(void);
 static int test_console_story(void);
 static int test_console_one_history(void);
 static int test_console_format_buffer_contract(void);
+static int test_console_frame_conservation(void);
 
 int forthDictSelfTest(void)
 {
@@ -2554,6 +2555,9 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_console_format_buffer_contract...\n");
   fail |= test_console_format_buffer_contract();
+
+  printf("  [DEBUG] running test_console_frame_conservation...\n");
+  fail |= test_console_frame_conservation();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();
