@@ -2916,3 +2916,77 @@ Sim captures: `forum/screenshots/stage-n-1-console-dialogue.png` and
 `stage-n-2-console-rolled.png`, both driven through the real path
 (`fnForthOuter` + `forthInteractiveEnter`), not by writing ring lines by
 hand.
+
+## 2026-08-06 — AUDIT C17: frame ownership rides the frame (homePushed retired)
+
+The last of the audit's ownership findings, and the only one whose first
+fix attempt failed. C17: every console ownership decision asked "is the
+visible menu FWRD or ALPHA?", and a menu id is a value two different
+owners can hold. Browse the CATALOG tree to FWRD, press FORTH, toggle to
+alpha, run `XEQ 'CLSTK'`: the user's OWN frame answered "ours", was
+retargeted to ALPHA, `calcModeNormal()` popped it, and EXIT handed the
+owner the catalog level underneath. Frame count conserved, identity not —
+which is why the landed battery stayed green.
+
+**The first attempt (previous session) gated the retarget on
+`homePushed` and pushed when the console did not own slot 0. It failed
+its own probe rows and regressed a passing case** (the owner's row came
+back as a stale TAM menu — the signature of popping one frame too many).
+The root problem is that a bit on the capture object can say whether the
+console owns *a* frame, never *which* — and it had to be hand-preserved
+across every reopen (the C3 family: two sites, each missed once).
+
+**The landed shape: registration in the frame itself.** The frame the
+console relies on carries a sentinel in its `userMenuId` — OWNED
+(console-created; rung 3 pops it) or BORROWED (the user's row on loan;
+rung 3 releases it). Exactly one frame is registered while a capture is
+open; the close funnel clears both sentinels. The field is inert
+upstream: it is meaningful only for `-MNU_DYNAMIC` frames, native pushes
+write 0, real user-menu ids are >= 0, and the one native mutator only
+decrements values greater than a non-negative threshold — a negative
+sentinel passes through everything, and rides the frame through every
+push/pop/dedup-lift, reopen and resume. `forthCap.homePushed` is gone,
+along with both hand-preservation sites.
+
+**Both out-of-family readers reviewed the design before it was coded,
+and both attacks landed.** GPT-5 Sol (via `codex`, first completed
+automated run — see CODE_AUDIT.md) showed that an UNMARKED borrowed base
+is lifted out from under the console by `pushSoftmenu`'s
+`(softmenuId, userMenuId)` dedup and then misclassified by the ladder —
+hence the BORROW stamp, which also makes the base dedup-invisible.
+Gemini showed that folding back onto a user's ALPHA row hands it
+straight to the next line's `calcModeNormal()` — hence fold-back is FWRD
+only, and ALPHA re-acquisition is a hand-rolled push that dedup never
+sees. A single-stamp draft would have passed the battery and failed in
+the field; the review round cost minutes.
+
+**Two fixtures repaired under the C22 rule** (a fixture must assert it
+reached the state it claims to test): the rung-1 ladder case and the
+K-battery [3a] toggle case both faked the alpha excursion by forcing
+`keysMode` and hand-pushing `-MNU_ALPHA` — a SEPARATE unregistered row
+above the console's frame, which frame ownership correctly treats as
+user-stacked. Both now enter through the real E10/E11 toggle and assert
+the entry took.
+
+**Class test:** frame-conservation battery rows 7–11 — owner rows that
+are themselves FWRD (via CATALOG) or ALPHA, crossed with the toggle and
+a `calcModeNormal()` line, slot-0 identity asserted. Three mutations
+redden it: identity-based retarget of a borrowed base (row 10, the exact
+C17 signature), identity-based rung-3 pop (all four own-FWRD rows), and
+register-always-OWNED (the class rows plus the M1-1 [8] fixture).
+
+**Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`, measured against the pre-fix HEAD the same
+session: flash 1114120 → 1114464 = **+344 B**; ram 8884 → 8884 = **±0**
+(the retired homePushed byte is absorbed by struct padding; the stamps
+live in existing frames). Arena untouched — no dictionary change.
+
+**Measurement trap, second of its kind (the first was `f=1`, 2026-07-19):
+`make dmcp5r47 CUSTOM_PKG_RECONFIGURE=1` WITHOUT `CUSTOM_PKG=` builds
+STOCK firmware and reports plausible sizes with no error** — flash
+~1090.5 KB instead of ~1114 KB, zero forth symbols in the ELF.  The
+first measurement of this fix compared two stock builds and read their
+±8 B version-string noise as the fix's delta; caught because the
+absolute numbers disagreed with the Stage N close's, and pinned by
+`arm-none-eabi-nm | grep -c forthConsole` = 0.  The tell is the absolute
+flash figure; the check is the symbol grep.

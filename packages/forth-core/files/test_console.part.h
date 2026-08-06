@@ -1333,11 +1333,23 @@ static int test_console_exit_ladder(void)
   int fail = 0;
 
   /* Rung 1 INVERTED: from the alpha excursion, EXIT returns to keys and
-   * restores the FWRD home row; the capture stays open. */
+   * restores the FWRD home row; the capture stays open.
+   *
+   * AUDIT C17 fixture repair: the excursion is entered through the REAL
+   * E10/E11 toggle, not by forcing keysMode and hand-pushing -MNU_ALPHA.
+   * The hand-push created a SEPARATE unregistered row above the console's
+   * frame — under frame ownership that is a user-stacked row (rung 1
+   * declines it, rung 2 pops it), not the excursion, so the old fixture no
+   * longer reaches the state this case claims to test (the C22 rule). */
   N13_RESET();
   fnForthOuter(NOPARAM);
-  forthCapSetKeysMode(false);
-  showSoftmenu(-MNU_ALPHA);
+  runFunction(ITM_AIM);
+  if (forthCapKeysMode() || currentMenu() != -MNU_ALPHA) {
+    printf("    FIXTURE FAIL: rung 1 — the E10/E11 toggle did not enter the"
+           " alpha excursion (keys=%d, menu %d)\n",
+           (int)forthCapKeysMode(), currentMenu());
+    fail = 1;
+  }
   fnKeyExit(NOPARAM);
   if (!forthCapIsOpen() || !forthCapKeysMode()) {
     printf("    FAIL: rung 1 — EXIT from alpha must return to keys with the capture open\n");
@@ -1772,15 +1784,53 @@ static int test_console_frame_conservation(void)
   softmenuStack_t before[SOFTMENU_STACK_SIZE];
   int fail = 0, i;
 
-  /* Each row: a name, and what the session does between open and EXIT. */
-  for (i = 0; i < 7; i++) {
+  /* Each row: a name, and what the session does between open and EXIT.
+   *
+   * Rows 7-11 are the AUDIT C17 class rows: the owner's row is one of the
+   * console's OWN two rows — FWRD reached through the CATALOG tree (the
+   * forth_capture.h state the old homePushed comment named verbatim), and
+   * separately ALPHA — crossed with the alpha toggle and with a
+   * calcModeNormal()-calling line.  The bug class is "ownership inferred
+   * from a value two different owners can hold": every pre-C17 ownership
+   * test asked `menu == -MNU_FORTH/-MNU_ALPHA`, the owner's own frame
+   * answered "ours", and a CLSTK line then consumed it — slot 0 identity
+   * broken while the frame COUNT stayed conserved, which is why rows 0-6
+   * never saw it.  The pair of rows the landed battery's comment below
+   * concedes it delegated to the M1-1 [8] fixture — which never toggles and
+   * never runs a line. */
+  for (i = 0; i < 12; i++) {
     const char *what = "";
     int presses = 0;
 
     N13_RESET();
     forthDictInit();
-    /* A menu of the owner's, so there is something real to conserve. */
-    showSoftmenu(-MNU_STK);
+    /* A menu of the owner's, so there is something real to conserve.
+     * Rows 7-10 make the owner's own FWRD frame slot 0 (CATALOG tree
+     * underneath, exactly the browse-then-open gesture); row 11 makes it
+     * the raw ALPHA row. */
+    if (i >= 7 && i <= 10) {
+      showSoftmenu(-MNU_CATALOG);
+      showSoftmenu(-MNU_FORTH);
+      if (currentMenu() != -MNU_FORTH) {
+        printf("    FIXTURE FAIL: [row %d] owner's own FWRD not on top (menu %d)\n",
+               i, currentMenu());
+        fail = 1;
+        continue;
+      }
+    }
+    else if (i == 11) {
+      showSoftmenu(-MNU_STK);
+      showSoftmenu(-MNU_ALPHA);
+      if (currentMenu() != -MNU_ALPHA) {
+        printf("    FIXTURE FAIL: [row %d] owner's own ALPHA not on top (menu %d)\n",
+               i, currentMenu());
+        fail = 1;
+        continue;
+      }
+    }
+    else {
+      showSoftmenu(-MNU_STK);
+    }
     xcopy(before, softmenuStack, sizeof(before));
 
     fnForthOuter(NOPARAM);
@@ -1814,6 +1864,25 @@ static int test_console_frame_conservation(void)
       case 6: what = "open, stack a menu, ENTER a CLSTK line, EXIT";
         showSoftmenu(-MNU_FIN);
         _consoleEnterLine("XEQ 'CLSTK'");
+        break;
+      /* ---- AUDIT C17 class rows ---- */
+      case 7: what = "own FWRD: open, ENTER a plain line, EXIT";
+        _consoleEnterLine("1 2 +");
+        break;
+      case 8: what = "own FWRD: open, ENTER a CLSTK line, EXIT";
+        _consoleEnterLine("XEQ 'CLSTK'");
+        break;
+      case 9: what = "own FWRD: open, toggle alpha then back, EXIT";
+        runFunction(ITM_AIM);
+        runFunction(ITM_AIM);
+        break;
+      case 10: what = "own FWRD: open, toggle alpha, ENTER a CLSTK line, EXIT";
+        runFunction(ITM_AIM);
+        _consoleEnterLine("XEQ 'CLSTK'");
+        break;
+      case 11: what = "own ALPHA: open, toggle alpha, ENTER a plain line, EXIT";
+        runFunction(ITM_AIM);
+        _consoleEnterLine("3 4 +");
         break;
       default: break;
     }
@@ -1866,8 +1935,8 @@ static int test_console_frame_conservation(void)
      * Slot 0 alone would miss a frame leaked into slot 1+, which is how C8's
      * stayInAIM push and C9's double row hid: the owner's menu looked right
      * and an extra console row sat underneath it, surfacing on the next EXIT.
-     * Sound for these fixtures because the owner's menu here is STK — a
-     * session opened over a real FWRD is the [8] row of the M1-1 battery. */
+     * The DIFFERENTIAL form below is what makes this sound for the C17 rows
+     * too, whose owner rows are themselves FWRD/ALPHA. */
     { int slot, wasCount = 0, nowCount = 0;
       for (slot = 0; slot < SOFTMENU_STACK_SIZE; slot++) {
         int16_t m0 = softmenu[before[slot].softmenuId].menuItem;
@@ -1891,7 +1960,7 @@ static int test_console_frame_conservation(void)
   forthConsoleClear();
   lastErrorCode = ERROR_NONE;
   if (!fail) {
-    printf("    PASS: seven console sessions, each restores the owner's row and leaks no frame\n");
+    printf("    PASS: twelve console sessions, each restores the owner's row and leaks no frame\n");
   }
   return fail;
 }
@@ -1899,15 +1968,18 @@ static int test_console_frame_conservation(void)
 /* ---- 31: AUDIT round 2 — the transient capture bits survive BOTH re-open
  * sites, not just the REPL one.
  *
- * forthCapOpenInteractive()/forthCapOpen() zero keysMode, origin and
- * homePushed by design, and every path that re-opens an ALREADY-LIVE capture
- * has to put them back. There are two such paths — the REPL reopen after
- * ENTER, and forthCaptureResume() after a fold — and round 1's fix closed
- * only the first. Five of the eight round-2 readers found the second
- * independently.
+ * forthCapOpenInteractive()/forthCapOpen() zero keysMode and origin by
+ * design, and every path that re-opens an ALREADY-LIVE capture has to put
+ * them back. There are two such paths — the REPL reopen after ENTER, and
+ * forthCaptureResume() after a fold — and round 1's fix closed only the
+ * first. Five of the eight round-2 readers found the second independently.
  *
  * Enumerated rather than sampled: the class is "a field that rides the
- * capture across a re-open", and it is the whole transient set. ---- */
+ * capture across a re-open".  homePushed left the class with C17: frame
+ * ownership now lives in the softmenu frame itself (forth_menu.c's stamp),
+ * which no capture re-open can touch — its reopen coverage moved into the
+ * frame-conservation battery's line-running rows, which fail if ownership
+ * is forgotten across the REPL reopen. ---- */
 static int test_console_capture_bits_survive_reopen(void)
 {
   int fail = 0;
@@ -1917,14 +1989,9 @@ static int test_console_capture_bits_survive_reopen(void)
   forthDictInit();
   fnForthOuter(NOPARAM);
   forthCapSetKeysMode(true);
-  forthCapSetHomePushed(true);
   _consoleEnterLine("XEQ 'CLSTK' 1 2 +");
   if (!forthCapKeysMode()) {
     printf("    FAIL: REPL reopen dropped keysMode\n");
-    fail = 1;
-  }
-  if (!forthCapHomePushed()) {
-    printf("    FAIL: REPL reopen dropped homePushed\n");
     fail = 1;
   }
   if (!forthCapIsInteractive()) {
@@ -1952,7 +2019,7 @@ static int test_console_capture_bits_survive_reopen(void)
   forthConsoleClear();
   lastErrorCode = ERROR_NONE;
   if (!fail) {
-    printf("    PASS: keysMode, origin and homePushed survive the REPL reopen"
+    printf("    PASS: keysMode and origin survive the REPL reopen"
            " (the resume site is a documented gap — see the comment)\n");
   }
   return fail;

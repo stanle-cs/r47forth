@@ -2828,13 +2828,31 @@ terminal-style rolling and one history. Design sheet:
   2 asks directly whether anything is stacked above the console's base —
   the landed pre-normalisation cannot be reused, because renaming slot 0
   is destructive when the open pushed nothing. Rung 3 closes, and pops
-  ONLY what the open displaced: `forthCap.homePushed` records whether
-  FWRD was already the current menu, because opening a console over an
-  already-displayed FWRD (the state you reach by browsing the CATALOG
-  tree) otherwise ate the user's own frame. "Did the stack grow?" is the
-  wrong test — `pushSoftmenu` dedups against a match anywhere in the
-  array by lifting the stack over it, so the frame count can be unchanged
-  while slot 0 still changes.
+  ONLY what the open displaced.
+- **Frame ownership rides the frame, not the capture object (AUDIT C17,
+  2026-08-06).** Menu ownership — not merely visible menu identity —
+  controls the surface swap, the restore path and the EXIT ladder: a menu
+  id is a value two different owners can hold, and every identity-based
+  test broke on the state you reach by browsing the CATALOG tree to FWRD
+  before pressing FORTH (the user's OWN frame answered "ours", was
+  retargeted, and a line's `calcModeNormal()` consumed it). The frame
+  the console relies on is REGISTERED by a sentinel in its own
+  `userMenuId` — console-created (rung 3 pops it) or the user's row on
+  loan (rung 3 releases it) — exactly one frame registered while a
+  capture is open, both sentinels cleared by the close funnel. Because
+  the mark is in the frame it moves with every push/pop/dedup-lift and
+  survives every REPL reopen and fold resume by construction, retiring
+  `forthCap.homePushed` and its hand-preservation sites (the C3 family).
+  "Did the stack grow?" remains the wrong open-time test —
+  `pushSoftmenu` dedups against a match anywhere in the array by lifting
+  the stack over it, so the frame count can be unchanged while slot 0
+  still changes. Two bounded exceptions to retarget-in-place, both from
+  the out-of-family design reviews: the keys-mode swap FOLDS BACK (pops)
+  onto a directly-underlying FWRD row rather than duplicating it — FWRD
+  only, since nothing native pops FWRD while `calcModeNormal()` pops
+  ALPHA on sight — and ALPHA re-acquisition is a hand-rolled push so
+  dedup can neither lift a user's own ALPHA row into `calcModeNormal()`'s
+  reach nor early-return against the borrowed base.
 - **Out of scope, deliberately:** line wrapping, string literals (`."`),
   input words (`KEY`/`ACCEPT`), cursor addressing or scroll regions,
   transcript persistence, printer/IR/serial channels, and any PEM-side

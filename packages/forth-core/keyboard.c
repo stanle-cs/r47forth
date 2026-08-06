@@ -4118,8 +4118,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            * catalog, STK, FIN — none of them is the base, so they pop one per
            * press and the capture stays open; the base itself falls through
            * to rung 3.  (calcModeNormal's own -MNU_ALPHA-guarded pop still
-           * cannot fire here, as before.) */
-          if(currentMenu() != -MNU_FORTH && currentMenu() != -MNU_ALPHA) {
+           * cannot fire here, as before.)
+           *
+           * AUDIT C17: "is this the base" is an OWNERSHIP question, and menu
+           * identity is a value two owners can hold — a duplicate FWRD/ALPHA
+           * row stacked over the console's registered frame must pop like any
+           * other user row, not masquerade as the base.  The predicate tests
+           * the frame stamp (forth_menu.c), with the old identity test as the
+           * conservative fallback for unregistered states. */
+          if(!forthConsoleBaseOnTop()) {
             popSoftmenu();
             /* AUDIT C8: NO stayInAIM() here.  Its job is the native AIM rule
              * "always leave an alpha row showing", and it implements that with
@@ -4170,8 +4177,13 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           if(aimBuffer[0] != 0) {
             forthHistoryPush(aimBuffer);     /* L1-H fills this in */
           }
-          { bool_t popHome = forthCapHomePushed();   /* read BEFORE the close
-                                                        clears it */
+          { bool_t popHome = forthConsoleOwnsSlot0(); /* C17: pop only a frame
+                                                        the console CREATED — a
+                                                        BORROWED base is the
+                                                        user's own row and is
+                                                        released, not popped.
+                                                        Read BEFORE the close
+                                                        clears the stamp. */
             forthCapClose();
             aimBuffer[0] = 0;
             T_cursorPos = 0;

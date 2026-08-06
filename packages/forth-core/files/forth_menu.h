@@ -21,14 +21,25 @@ bool_t pickerInsertName(void);
  * pick rather than as its own item (§9.6). */
 bool_t forthPickerGuard(int16_t item);
 
-/* AUDIT C2/C3/C4/C8/C9: establish the console's own softmenu row for the
- * current input sub-mode.  The ONLY function that may change it while an
- * interactive capture is open; see forth_menu.c for why it retargets rather
- * than pushing. */
+/* AUDIT C2/C3/C4/C8/C9: establish the console's row for the current input
+ * sub-mode.  The ONLY function that may change it while an interactive
+ * capture is open; see forth_menu.c for why it retargets rather than
+ * pushing. */
 void forthConsoleShowSurface(void);
 
 /* Re-establish that row after a native item may have destroyed it. */
 void forthConsoleRestoreSurface(void);
+
+/* AUDIT C17: frame ownership.  The frame the console relies on is REGISTERED
+ * by a sentinel in its own userMenuId (owned = console-created, rung 3 pops
+ * it; borrowed = the user's row on loan, rung 3 releases it).  Ownership
+ * rides the frame through every push/pop/reopen/resume; see the banner in
+ * forth_menu.c. */
+bool_t forthConsoleOwnsSlot0(void);     /* slot 0 is console-CREATED */
+bool_t forthConsoleStampOnStack(void);  /* a registered frame exists anywhere */
+bool_t forthConsoleBaseOnTop(void);     /* EXIT rung 2: fall through, or pop? */
+void   forthConsoleRegisterSlot0(bool_t created);  /* open site (forth_compile.c) */
+void   forthConsoleUnstampAll(void);    /* close funnel (forthCapClose) only */
 
 /* Scan cut-off for the picker's program-text pass (§9.6 documented
  * deviation): programs with more steps than this before the cursor are not

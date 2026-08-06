@@ -8393,12 +8393,17 @@ static int test_capture_interactive_divert(void)
       scFail = 1;
     } else {
       /* N1-5: the capture now OPENS in keys input, so this subcase — which is
-       * about the E10/E11 TOGGLE, not about the default — states its starting
-       * sub-mode instead of inheriting it. */
-      forthCapSetKeysMode(false);
-      showSoftmenu(-MNU_ALPHA);
-      if (currentMenu() != -MNU_ALPHA) {
-        printf("    [3a] FIXTURE FAIL: showSoftmenu(-MNU_ALPHA) did not take\n");
+       * about the E10/E11 TOGGLE, not about the default — enters the alpha
+       * excursion first.  AUDIT C17 fixture repair: entered via the REAL
+       * toggle, not by forcing keysMode and hand-pushing -MNU_ALPHA — the
+       * hand-push created a SEPARATE unregistered row above the console's
+       * frame, which frame ownership correctly treats as user-stacked (the
+       * toggle declines it) rather than as the excursion (the C22 rule). */
+      runFunction(ITM_AIM);
+      if (forthCapKeysMode() || currentMenu() != -MNU_ALPHA) {
+        printf("    [3a] FIXTURE FAIL: the toggle did not enter the alpha"
+               " excursion (keys=%d, menu %d)\n",
+               (int)forthCapKeysMode(), currentMenu());
         scFail = 1;
       } else {
         shiftF = true;

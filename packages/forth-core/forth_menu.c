@@ -264,36 +264,80 @@ void forthBuildWordPicker(int16_t menu)
 }
 
 /* ---- AUDIT C2/C3/C4/C8/C9 (2026-08-06): one owner for the console's row ----
+ * ---- AUDIT C17 (2026-08-06): ownership rides the FRAME, not the menu id ----
  *
- * While an interactive capture is open, the console owns EXACTLY ONE softmenu
+ * While an interactive capture is open, the console owns AT MOST ONE softmenu
  * frame: FWRD in keys input, ALPHA in the alpha excursion.  Stage N pushed
  * that frame at open and then let four other sites manage it independently —
  * the E10/E11 toggle, both EXIT rungs, and the REPL reopen — and every one of
- * them got a different part of it wrong:
+ * them got a different part of it wrong (the C2/C3/C4/C8/C9 family; see the
+ * round-1 report).  This is the ONLY function that changes the console's row.
  *
- *   - the toggle's alpha->keys drain treats FWRD as an alpha submenu and pops
- *     it (isAlphaSubmenu counts -MNU_FORTH), so the console's own row vanished
- *     and EXIT then popped the OWNER'S frame in its place;
- *   - rung 1 re-pushed FWRD OVER the excursion's ALPHA frame instead of
- *     replacing it, so one EXIT press was swallowed;
- *   - rung 2's stayInAIM() calls changeToALPHA() whenever the current row is
- *     not alpha (keyboard.c:3877), which covers the console's row again every
- *     time a stacked menu pops;
- *   - the REPL reopen cleared homePushed, so EXIT after any ENTER took the
- *     no-pop branch and left the console's row on top of the owner's menu.
+ * C17 is what was still wrong after that consolidation: every ownership
+ * decision asked "is the visible menu FWRD or ALPHA?", and a menu id is a
+ * value TWO DIFFERENT OWNERS can hold.  The user's own FWRD frame — slot 0
+ * precisely when they browsed the CATALOG tree to FWRD before pressing FORTH
+ * — answered "ours", was retargeted to ALPHA, and a line's calcModeNormal()
+ * then popped it: their frame, consumed, unrecoverable.  A single homePushed
+ * bit on the capture object could not fix this: it says whether the console
+ * owns A frame, never WHICH frame, and it had to be hand-preserved across
+ * every capture reopen (the C3 family — two sites patched, each missed once).
  *
- * They are one defect: N-R6 turned FWRD from a picker into the console's home
- * row, and the flip was carried through the EXIT ladder only.  This is now
- * the ONLY function that changes the console's row.
+ * So ownership now lives IN the frame.  The frame the console relies on
+ * carries a sentinel in its userMenuId — FRAME_STAMP for a frame the console
+ * CREATED (rung 3 pops it at close), BORROW_STAMP for the USER'S OWN row the
+ * console is merely displaying (rung 3 releases it at close) — and every
+ * decision — retarget, restore, rung 2's "is anything stacked above the
+ * base", rung 3's "pop what the open pushed" — tests the stamps.  Exactly
+ * one frame is registered while an interactive capture is open; that is the
+ * invariant, and both sentinels are cleared by the close funnel.
  *
- * It RETARGETS slot 0 in place rather than popping and pushing, and that is
- * load-bearing: popSoftmenu() carries its own CM_AIM compensation that
- * re-pushes an alpha row (softmenus.c:3719-3733), and pushSoftmenu() dedups
- * against a match ANYWHERE in the array by lifting the stack over it
- * (softmenus.c:3671-3683), so a pop/push pair conserves neither the frame
- * count nor the contents.  Retargeting conserves both by construction, and it
- * is the idiom the surrounding code already uses for exactly this
- * (`softmenuStack[0].softmenuId = 1` in the EXIT ladder's pre-normalisation). */
+ * The field is safe to borrow: it is meaningful only for -MNU_DYNAMIC frames
+ * (pushSoftmenu/popSoftmenu/fnGetMenu all gate on that), native pushes write
+ * 0, real user-menu ids are >= 0, and the one native mutator
+ * (removeUserMenuFromStack's re-number loop) only decrements values GREATER
+ * than a non-negative threshold — a NEGATIVE stamp is inert everywhere
+ * upstream.  Because the stamp is in the frame, it shifts with every
+ * push/pop/dedup-lift and survives every capture reopen and resume by
+ * construction: the whole "preserve homePushed across reopen X" class dies.
+ * Marking the BORROWED base is load-bearing, not bookkeeping: an unmarked
+ * base no longer matches pushSoftmenu's (softmenuId, userMenuId) dedup, so a
+ * native re-push of the same menu can neither lift the user's base out from
+ * under the console nor early-return against it — the failure sequence the
+ * out-of-family design review (GPT-5 Sol, 2026-08-06) constructed against a
+ * single-stamp draft of this fix.
+ *
+ * The frame count/content discipline is unchanged: the sub-mode swap still
+ * RETARGETS slot 0 in place rather than popping and pushing, because
+ * popSoftmenu() carries its own CM_AIM compensation that re-pushes an alpha
+ * row (softmenus.c:3719-3733) and pushSoftmenu() dedups against a match
+ * ANYWHERE in the array by lifting the stack over it (softmenus.c:3671-3683).
+ * Two deliberate exceptions, both bounded:
+ *
+ *   - FOLD-BACK, FWRD only: when the console's own frame sits directly on a
+ *     FWRD row that is not also console-created, the keys-mode swap POPS ours
+ *     instead of retargeting — returning the user's frame at the user's page
+ *     instead of keeping a duplicate above it.  FWRD only, because nothing
+ *     native ever pops a FWRD row; folding back onto a user's ALPHA row would
+ *     hand it straight to the next line's calcModeNormal(), which pops
+ *     -MNU_ALPHA on sight (the failure sequence the OTHER out-of-family
+ *     reader, Gemini, constructed against the same draft).  Safe from
+ *     popSoftmenu's CM_AIM compensation: that fires only when the pop reveals
+ *     softmenuId 0/1, and the revealed row here is a real FWRD.
+ *
+ *   - HAND-ROLLED ALPHA acquisition: re-establishing the ALPHA surface never
+ *     goes through showSoftmenu, whose dedup would LIFT a user's own ALPHA
+ *     row to slot 0 — where the next calcModeNormal() destroys it (C17's
+ *     class) — and whose early-return would leave the user's row where a
+ *     console-created one was needed.  A fresh frame is shifted in above
+ *     whatever is there; a user ALPHA row deeper stays SHIELDED beneath it.
+ *     ALPHA is a static menu, so no content build is skipped.  FWRD
+ *     acquisition, by contrast, does use showSoftmenu (the picker content
+ *     must be rebuilt) — if dedup hoists a user's own FWRD row, it is
+ *     registered as BORROWED, never claimed. */
+#define FORTH_CONSOLE_FRAME_STAMP  ((int16_t)-0x4643)   /* console-created  */
+#define FORTH_CONSOLE_BORROW_STAMP ((int16_t)-0x4642)   /* user's, on loan  */
+
 static int16_t _softmenuIndexOf(int16_t menuId) {
   int16_t m = 0;
   while(softmenu[m].menuItem != 0) {
@@ -301,6 +345,93 @@ static int16_t _softmenuIndexOf(int16_t menuId) {
     m++;
   }
   return -1;
+}
+
+static bool_t _ownedAt(int i) {
+  return softmenuStack[i].userMenuId == FORTH_CONSOLE_FRAME_STAMP;
+}
+static bool_t _stampedAt(int i) {
+  return softmenuStack[i].userMenuId == FORTH_CONSOLE_FRAME_STAMP
+      || softmenuStack[i].userMenuId == FORTH_CONSOLE_BORROW_STAMP;
+}
+
+bool_t forthConsoleOwnsSlot0(void) {
+  return _ownedAt(0);
+}
+
+bool_t forthConsoleStampOnStack(void) {
+  int i;
+  for(i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+    if(_stampedAt(i)) { return true; }
+  }
+  return false;
+}
+
+/* Register slot 0 as the console's surface frame.  `created` says whether the
+ * open/acquire pushed it (OWNED: rung 3 pops it) or it is the user's own row
+ * (BORROWED: rung 3 releases it).  No-op when any frame is already registered
+ * — the only path that gets here with a live stamp is FORTH pressed inside an
+ * open console (C6, open finding), and re-registering there would either
+ * downgrade the owned frame or mint a second one. */
+void forthConsoleRegisterSlot0(bool_t created) {
+  if(forthConsoleStampOnStack()) { return; }
+  softmenuStack[0].userMenuId = created ? FORTH_CONSOLE_FRAME_STAMP
+                                        : FORTH_CONSOLE_BORROW_STAMP;
+}
+
+/* Every close path funnels through forthCapClose(), which calls this: a
+ * stamp must not outlive the capture that minted it, or the next native
+ * push of the same menu fails pushSoftmenu's (softmenuId, userMenuId) dedup
+ * and duplicates the row.  Clearing to 0 restores exactly what a native
+ * push writes for non-dynamic frames, so a released BORROWED base is
+ * byte-identical to the frame the user stacked. */
+void forthConsoleUnstampAll(void) {
+  int i;
+  for(i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+    if(_stampedAt(i)) { softmenuStack[i].userMenuId = 0; }
+  }
+}
+
+/* EXIT rung 2's predicate: is the console's BASE the visible row (so EXIT
+ * should fall through to rung 3), or is something stacked above it (so EXIT
+ * should pop)?  The base is the registered frame when one exists.  With no
+ * stamp anywhere (transiently possible mid-line, between a destructive
+ * calcModeNormal() and the restore choke point, or after an exotic external
+ * unwind) the legacy identity test is the conservative fallback: it can only
+ * make rung 3 decline a pop, never over-pop. */
+bool_t forthConsoleBaseOnTop(void) {
+  if(_stampedAt(0)) { return true; }
+  if(forthConsoleStampOnStack()) { return false; }   /* ours is buried */
+  return currentMenu() == -MNU_FORTH || currentMenu() == -MNU_ALPHA;
+}
+
+/* Bring a `want` row to slot 0 and register it.  Callers guarantee no frame
+ * is currently registered.  See the banner: ALPHA is hand-rolled (dedup must
+ * not touch user rows), FWRD goes through showSoftmenu (picker rebuild) and
+ * registers a dedup-hoisted user row as BORROWED. */
+static void _forthConsoleAcquireRow(int16_t want) {
+  if(want == -MNU_ALPHA) {
+    int16_t m = _softmenuIndexOf(-MNU_ALPHA);
+    if(m < 0) { return; }
+    xcopy(softmenuStack + 1, softmenuStack,
+          (SOFTMENU_STACK_SIZE - 1) * sizeof(softmenuStack_t));
+    softmenuStack[0].softmenuId = m;
+    softmenuStack[0].firstItem  = 0;
+    softmenuStack[0].userMenuId = FORTH_CONSOLE_FRAME_STAMP;
+    softmenuStack[0].calcMode   = calcMode;
+    doRefreshSoftMenu = true;
+    return;
+  }
+  { bool_t theirs = false;
+    int i;
+    for(i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+      if(menu((uint8_t)i) == -MNU_FORTH && !_stampedAt(i)) { theirs = true; break; }
+    }
+    showSoftmenu(-MNU_FORTH);
+    if(currentMenu() == -MNU_FORTH && !_stampedAt(0)) {
+      forthConsoleRegisterSlot0(!theirs);
+    }
+  }
 }
 
 void forthConsoleShowSurface(void) {
@@ -311,10 +442,19 @@ void forthConsoleShowSurface(void) {
   want = forthCapKeysMode() ? -MNU_FORTH : -MNU_ALPHA;
   cur  = currentMenu();
 
-  if(cur == want) { return; }                  /* already right */
-
-  if(cur == -MNU_FORTH || cur == -MNU_ALPHA) {
-    /* Our own row is on top — swap it for the other one, in place. */
+  if(_ownedAt(0)) {
+    if(cur == want) { return; }                /* already right */
+    /* Fold back onto the FWRD row beneath ours instead of keeping a
+     * duplicate above it — FWRD only; see the banner. */
+    if(want == -MNU_FORTH && menu(1) == -MNU_FORTH && !_ownedAt(1)) {
+      popSoftmenu();
+      if(!_stampedAt(0)) {
+        softmenuStack[0].userMenuId = FORTH_CONSOLE_BORROW_STAMP;
+      }
+      return;
+    }
+    /* Our own frame, wrong row — swap it in place.  userMenuId is untouched:
+     * the stamp rides the frame. */
     m = _softmenuIndexOf(want);
     if(m >= 0) {
       softmenuStack[0].softmenuId = m;
@@ -324,9 +464,20 @@ void forthConsoleShowSurface(void) {
     return;
   }
 
-  /* Something the USER stacked is on top (a catalog, STK, an alpha submenu).
-   * Leave it: it is theirs, EXIT rung 2 unwinds it one press at a time, and
-   * this function will be called again when it is gone. */
+  if(_stampedAt(0)) {                          /* BORROWED base on top */
+    if(cur == want) { return; }
+    /* C17: the user's own surface row shows the other sub-mode.  Never
+     * retarget their frame — acquire our own over it; theirs stays put
+     * (and, for ALPHA, shielded) beneath. */
+    _forthConsoleAcquireRow(want);
+    return;
+  }
+
+  /* Slot 0 is not registered: either rows the USER stacked sit above the
+   * base (rung 2 unwinds them one press at a time, and this function runs
+   * again when they are gone), or nothing is registered at all — a line
+   * just destroyed the surface and forthConsoleRestoreSurface() is the
+   * re-establisher, not this function.  Leave the stack alone. */
 }
 
 /* Re-establish the console's row after something may have DESTROYED it.
@@ -337,46 +488,22 @@ void forthConsoleShowSurface(void) {
  * After a line has run, a foreign row can instead mean the console's own frame
  * was popped out from under it: calcModeNormal() pops the ALPHA row
  * (src/c47/calcMode.c:44-46) and retargets MyAlpha to MyMenu, and any native
- * item may call it — fnClearStack does, outright.  `XEQ 'CLSTK'` typed in the
- * alpha excursion therefore left the console with no row, a stale homePushed,
- * and an EXIT that handed the owner MyMenu instead of the menu they came
- * from. */
+ * item may call it — fnClearStack does, outright.
+ *
+ * The scan asks "does the REGISTERED frame survive, anywhere?", and if so the
+ * normal ownership rules apply.  (Top-row-only inspection was the frame leak
+ * the OUT-OF-FAMILY reader found on 2026-08-06 after eight in-family readers
+ * missed it: with a menu stacked it concluded "ours is gone" and pushed a
+ * SECOND console row.)  Only when the registered frame is gone is the surface
+ * re-established, through the acquisition rules — never by adopting whatever
+ * the pop revealed, which is the C17 half of the same class. */
 void forthConsoleRestoreSurface(void) {
-  int16_t want;
-
   if(!forthCapIsInteractive() || !forthCapIsOpen()) { return; }
 
-  want = forthCapKeysMode() ? -MNU_FORTH : -MNU_ALPHA;
-  if(currentMenu() == want) { return; }
-
-  if(currentMenu() == -MNU_FORTH || currentMenu() == -MNU_ALPHA) {
-    forthConsoleShowSurface();               /* ours, wrong one: retarget */
+  if(forthConsoleStampOnStack()) {
+    forthConsoleShowSurface();                 /* alive somewhere: the
+                                                  ownership rules decide */
     return;
   }
-
-  /* A foreign row is on top.  That means one of two things, and pushing
-   * without telling them apart is a leak:
-   *
-   *   - the user stacked a menu over us and our frame is still UNDERNEATH it
-   *     (the common case — and it stays theirs until EXIT rung 2 pops it, at
-   *     which point forthConsoleShowSurface puts the right row back);
-   *   - our frame really was destroyed.
-   *
-   * Found by the OUT-OF-FAMILY reader (Gemini, 2026-08-06) after eight
-   * in-family readers and the author missed it: the first version of this
-   * function inspected only currentMenu(), so with a menu stacked it
-   * concluded "ours is gone" and pushed a SECOND console row, leaving two on
-   * the stack and the owner's menu buried under both.  Reaching it needs a
-   * stacked menu AND a line that calls calcModeNormal() — which is why no
-   * single-purpose fixture had it. */
-  { int i;
-    for(i = 0; i < SOFTMENU_STACK_SIZE; i++) {
-      int16_t m = menu((uint8_t)i);
-      if(m == -MNU_FORTH || m == -MNU_ALPHA) {
-        return;                                /* still on the stack: keep it */
-      }
-    }
-  }
-  forthCapSetHomePushed(true);
-  showSoftmenu(want);
+  _forthConsoleAcquireRow(forthCapKeysMode() ? -MNU_FORTH : -MNU_ALPHA);
 }

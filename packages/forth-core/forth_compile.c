@@ -10,6 +10,7 @@
 #include "forth_dict.h"
 #include "forth_prims.h"
 #include "forth_capture.h"
+#include "forth_menu.h"     /* AUDIT C17: forthConsoleRegisterSlot0 at the open site */
 #include "programming/param_core.h"
 
 /* ---- §2.2 Token constants (mirror forth_inner.c) ---- */
@@ -1669,11 +1670,6 @@ static bool_t forthTakeSourceFromX(char *dst) {
  *     by this function) — the guards are left out, matching the packet's
  *     literal text. This finding is dispatch-shaped and belongs to L1-3's
  *     surface, not this packet's; revisit if dispatch changes. */
-/* N1-5: set by forthEnterAimSurfaceNoLift, consumed by fnForthOuter one line
- * after it opens the capture — the capture object cannot carry it earlier
- * because forthCapOpenInteractive() zeroes the field. */
-static bool_t forthHomeWasFresh = false;
-
 static void forthEnterAimSurfaceNoLift(void) {
   alphaCase = CAPS_AIM_DEFAULT;
   nextChar  = NC_NORMAL;
@@ -1698,9 +1694,9 @@ static void forthEnterAimSurfaceNoLift(void) {
    * entering AIM" idiom (popSoftmenu does the same, softmenus.c:3719-3721)
    * and has no meaning for a non-alpha home row.  Rung 2 of the EXIT ladder
    * is re-derived to match (keyboard.c). */
-  /* Record whether this push DISPLACES the user's top frame, which is what
-   * rung 3 has to undo.  The test is slot 0 only, and getting that wrong once
-   * is why it is spelled out here:
+  /* AUDIT C17: register the frame the console will rely on, in the frame
+   * itself (forth_menu.c's stamp).  The fresh test is slot 0 only, and
+   * getting that wrong once is why it is spelled out here:
    *
    * "did the stack grow?" is the WRONG question.  pushSoftmenu dedups against
    * a match ANYWHERE in the array (softmenus.c:3671-3683) — including a stale
@@ -1708,12 +1704,21 @@ static void forthEnterAimSurfaceNoLift(void) {
    * COUNT is unchanged while slot 0 still becomes FWRD and the user's menu
    * still gets buried one deeper.  Scanning the whole stack therefore says
    * "nothing pushed" for a case that very much did displace something, and
-   * EXIT then leaves the console's own row up.
+   * EXIT would then leave the console's own row up.
    *
    * Only when FWRD is ALREADY the current menu does slot 0 stay the user's
-   * own frame — and that is exactly the case rung 3 must not pop. */
-  forthHomeWasFresh = (currentMenu() != -MNU_FORTH);
-  showSoftmenu(-MNU_FORTH);
+   * own frame — the state you reach by browsing the CATALOG tree to FWRD
+   * before pressing FORTH.  That frame is registered BORROWED: the console
+   * displays it, nothing may retarget or pop it, and close releases it.  A
+   * fresh push is registered OWNED: rung 3 pops it.  (When a stale deep FWRD
+   * entry existed, the dedup lift has already consumed it into the frame
+   * pushed here — landed behaviour, unchanged by C17.) */
+  { bool_t fresh = (currentMenu() != -MNU_FORTH);
+    showSoftmenu(-MNU_FORTH);
+    if(currentMenu() == -MNU_FORTH) {
+      forthConsoleRegisterSlot0(fresh);
+    }
+  }
   setSystemFlag(FLAG_ALPHA);
   calcModeAimGui();
 }
@@ -1751,9 +1756,9 @@ void fnForthOuter(uint16_t unused) {
     }
   }
 
-  forthEnterAimSurfaceNoLift();                   /* see above — NOT fnAim */
+  forthEnterAimSurfaceNoLift();                   /* see above — NOT fnAim;
+                                                     registers the frame (C17) */
   forthCapOpenInteractive();                      /* clears aimBuffer; cannot fail */
-  forthCapSetHomePushed(forthHomeWasFresh);       /* N1-5: see above */
   /* N1-5 (N-R6): keys-first.  SET AFTER the open, because _forthCapOpenAs
    * zeroes the bit unconditionally (forth_capture.c:11) — that universal
    * reset stays, which is exactly how PEM keeps inheriting alpha-first

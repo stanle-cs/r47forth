@@ -1,5 +1,6 @@
 #include "forth_capture.h"
 #include "forth_console.h"
+#include "forth_menu.h"     /* AUDIT C17: forthConsoleUnstampAll at the close funnel */
 
 static forthCap_t forthCap;   /* zero-initialized: FCAP_CLOSED */
 
@@ -14,8 +15,10 @@ static void _forthCapOpenAs(uint8_t origin) {
   forthCap.origin = origin;
   forthCap.historyIndex = FORTH_HIST_BROWSE_NONE;  /* L1-H: fresh capture
                                                        is not browsing */
-  forthCap.homePushed = 0;                  /* N1-5: the open records this
-                                               itself, right after this call */
+  /* AUDIT C17: frame ownership is NOT reset here — it lives in the softmenu
+   * frame itself (forth_menu.c's stamp), which is exactly why it survives
+   * the REPL reopen and the fold resume without the hand-preservation the
+   * old homePushed bit needed at both sites (the C3 family). */
 }
 
 void forthCapOpen(void)            { _forthCapOpenAs(FCAP_ORIGIN_PEM); }
@@ -28,7 +31,13 @@ void forthCapClose(void) {
                                                one site covers the whole sweep */
   forthCap.origin = FCAP_ORIGIN_PEM;        /* L1-1/E14: same rationale — every
                                                close path runs through here */
-  forthCap.homePushed = 0;                  /* N1-5: same family as keysMode */
+  forthConsoleUnstampAll();                 /* AUDIT C17: same rationale — a
+                                               frame stamp must not outlive the
+                                               capture that minted it.  Rung 3
+                                               reads forthConsoleOwnsSlot0()
+                                               BEFORE calling this (the same
+                                               read-before-close shape the old
+                                               homePushed bit required). */
 }
 
 void forthCapSuspendState(uint16_t cursor, uint16_t localStep, uint32_t stepOffset, uint16_t stepCount) {
@@ -81,7 +90,6 @@ void forthCapPowerReset(void) {
                                    dictionary-lifecycle reset */
   forthCap.origin = FCAP_ORIGIN_PEM; /* L1-1: same rationale as keysMode above */
   forthCap.historyIndex = FORTH_HIST_BROWSE_NONE; /* L1-H: same rationale */
-  forthCap.homePushed = 0;      /* N1-5: same rationale */
   forthCap.foldMode = 0;        /* L1-F1: the fold's own last-resort reset —
                                    forthCapOpen/Close/AbandonSuspended MUST
                                    NOT touch this field; see forth_capture.h */
@@ -119,8 +127,6 @@ bool_t forthCapTextNonEmpty(void) {
 /* K1 (E10-E12): the keys-mode bit.  Transient, never persisted. */
 bool_t forthCapKeysMode(void)            { return forthCap.keysMode != 0; }
 void   forthCapSetKeysMode(bool_t on)    { forthCap.keysMode = on ? 1 : 0; }
-void   forthCapSetHomePushed(bool_t on)  { forthCap.homePushed = on ? 1 : 0; }
-bool_t forthCapHomePushed(void)          { return forthCap.homePushed != 0; }
 
 /* L1-H: the recall browse-index field. */
 uint16_t forthCapHistoryIndex(void)          { return forthCap.historyIndex; }
