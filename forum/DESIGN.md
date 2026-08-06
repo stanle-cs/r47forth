@@ -159,11 +159,32 @@ pool is ChatGPT and Gemini: one pass each, either order, both through
 model-family level, so Claude never audits a Claude draft; if the drafter
 ever changes, the exclusion travels with it.
 
-**Audit drivers (2026-08-03).** The Gemini pass runs locally through the
-Antigravity CLI: `agy -p --model gemini-3.1-pro-high` with the audit
-prompt and the draft on stdin or in the prompt; each pass is a fresh
-invocation, and it must name a gemini-* model (agy also serves Claude
-models, which the exclusion forbids for our drafts). The ChatGPT pass
+**Audit drivers (2026-08-03; invocation CORRECTED 2026-08-06).** The
+Gemini pass runs locally through the Antigravity CLI. The model flag must
+come **BEFORE** `-p`, and the prompt must be an argument rather than
+stdin:
+
+```
+agy --model gemini-3.1-pro-high --print-timeout 25m -p "$(cat prompt.txt)"
+```
+
+**`agy -p --model gemini-3.1-pro-high` — the order this file carried until
+now — silently serves Claude.** Verified 2026-08-06 by asking each form
+which model it was: the `-p`-first order answered "Claude Opus 4.6
+(Thinking)", the `--model`-first order answered Gemini. That is not a
+cosmetic difference, it is the drafter exclusion failing open: any audit
+run with the old order was a Claude model auditing a Claude draft, which
+is the one thing the two-family pool exists to prevent, and it would have
+reported clean for exactly the tells a same-family reader cannot see.
+
+**So verify the reader, every pass.** Put "state your model name" at the
+top of the audit prompt and check the answer before believing the
+findings. A silent fallback is indistinguishable from a good audit.
+
+Two further traps, both hit the same day: print mode has a **5-minute
+default timeout** and returns EMPTY output when a long prompt exceeds it
+(hence `--print-timeout`), and `agy models` lists what is actually
+available — the name in the flag has to be on that list. The ChatGPT pass
 runs through the Codex CLI (`codex exec`) once it is installed and logged
 in with the ChatGPT account (`npm install -g @openai/codex`, then
 `codex login`); until then that pass is pasted into ChatGPT by hand.

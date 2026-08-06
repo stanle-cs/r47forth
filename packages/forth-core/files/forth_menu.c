@@ -354,8 +354,29 @@ void forthConsoleRestoreSurface(void) {
     return;
   }
 
-  /* Ours is gone.  Push a fresh one and record that we own it — sampling the
-   * ownership BEFORE the push, the same test the open site uses. */
+  /* A foreign row is on top.  That means one of two things, and pushing
+   * without telling them apart is a leak:
+   *
+   *   - the user stacked a menu over us and our frame is still UNDERNEATH it
+   *     (the common case — and it stays theirs until EXIT rung 2 pops it, at
+   *     which point forthConsoleShowSurface puts the right row back);
+   *   - our frame really was destroyed.
+   *
+   * Found by the OUT-OF-FAMILY reader (Gemini, 2026-08-06) after eight
+   * in-family readers and the author missed it: the first version of this
+   * function inspected only currentMenu(), so with a menu stacked it
+   * concluded "ours is gone" and pushed a SECOND console row, leaving two on
+   * the stack and the owner's menu buried under both.  Reaching it needs a
+   * stacked menu AND a line that calls calcModeNormal() — which is why no
+   * single-purpose fixture had it. */
+  { int i;
+    for(i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+      int16_t m = menu((uint8_t)i);
+      if(m == -MNU_FORTH || m == -MNU_ALPHA) {
+        return;                                /* still on the stack: keep it */
+      }
+    }
+  }
   forthCapSetHomePushed(true);
   showSoftmenu(want);
 }

@@ -1773,7 +1773,7 @@ static int test_console_frame_conservation(void)
   int fail = 0, i;
 
   /* Each row: a name, and what the session does between open and EXIT. */
-  for (i = 0; i < 6; i++) {
+  for (i = 0; i < 7; i++) {
     const char *what = "";
     int presses = 0;
 
@@ -1804,6 +1804,16 @@ static int test_console_frame_conservation(void)
         break;
       case 5: what = "open, stack a menu, EXIT";           /* C8 */
         showSoftmenu(-MNU_FIN);
+        break;
+      /* Found by the out-of-family reader (Gemini, 2026-08-06), not by the
+       * in-family audit and not by the five fixtures above: the restore path
+       * only inspects the TOP row, so with a user menu stacked it concludes
+       * the console's frame is gone and pushes a SECOND one.  Needs both a
+       * stacked menu AND a line that calls calcModeNormal() — CLSTK does —
+       * which is the combination no single-purpose fixture had. */
+      case 6: what = "open, stack a menu, ENTER a CLSTK line, EXIT";
+        showSoftmenu(-MNU_FIN);
+        _consoleEnterLine("XEQ 'CLSTK'");
         break;
       default: break;
     }
@@ -1881,7 +1891,7 @@ static int test_console_frame_conservation(void)
   forthConsoleClear();
   lastErrorCode = ERROR_NONE;
   if (!fail) {
-    printf("    PASS: six console sessions, each leaves the softmenu stack byte-identical\n");
+    printf("    PASS: seven console sessions, each restores the owner's row and leaks no frame\n");
   }
   return fail;
 }
