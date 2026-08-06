@@ -1635,3 +1635,120 @@ static int test_console_one_history(void)
   }
   return fail;
 }
+
+/* ---- 29: AUDIT C1 class test — the formatter must satisfy every producer's
+ * BUFFER CONTRACT, not just its calling convention.
+ *
+ * Bug class: a display.c producer that uses the caller's buffer as scratch
+ * beyond the text it returns.  shortIntegerToDisplayString is the known
+ * member — it builds digits from displayString[ERROR_MESSAGE_LENGTH / 2]
+ * upward and compacts them to the front — and handing it a 256-byte local
+ * put its first write one past the end of the frame.
+ *
+ * The class is ENUMERABLE (every arm of forthConsoleFormatRegister's switch),
+ * so this drives all of them through a canary-guarded buffer.  A producer
+ * that scribbles past what it was given trips the canary regardless of what
+ * the returned text looks like. ---- */
+static int test_console_format_buffer_contract(void)
+{
+  /* The formatter's out buffer, wrapped in canaries.  Sized exactly as its
+   * callers size theirs (FORTH_CONSOLE_FMT_MAX), because the defect was a
+   * function of that size. */
+  struct { uint32_t front; char out[FORTH_CONSOLE_FMT_MAX]; uint32_t back; } g;
+  int fail = 0;
+  uint8_t types[4];
+  int n = 0, i;
+
+  forthDictInit();
+  forthConsoleClear();
+
+  types[n++] = dtLongInteger;
+  types[n++] = dtReal34;
+  types[n++] = dtShortInteger;
+  types[n++] = dtString;
+
+  for (i = 0; i < n; i++) {
+    lastErrorCode = ERROR_NONE;
+    forthOuterInterpret("XEQ 'CLSTK'");
+    lastErrorCode = ERROR_NONE;
+
+    switch (types[i]) {
+      case dtLongInteger:  forthPushInt32(12345);                     break;
+      case dtReal34:       forthOuterInterpret("1.5");                break;
+      /* The C1 case, built directly and at its WIDEST: a full 64-bit value in
+       * base 2 is the longest thing this producer can render, and it is the
+       * rendering that runs furthest past the buffer.  Built rather than
+       * typed because the first version of this test used
+       * `255 XEQ 'HEX'` — HEX is a CAT_FNCT item reached by BARE NAME, so
+       * that line raised label-not-found, X stayed a long integer, and the
+       * short-integer arm was never reached.  The test passed the C1
+       * mutation.  Hence the type assertion below. */
+      case dtShortInteger:
+        convertUInt64ToShortIntegerRegister(0, (uint64_t)0xFFFFFFFFFFFFFFFFull,
+                                            2, REGISTER_X);
+        break;
+      case dtString:       x_set_string("A STRING");                  break;
+      default: break;
+    }
+    lastErrorCode = ERROR_NONE;
+
+    /* THE FIXTURE MUST PROVE IT REACHED THE STATE IT CLAIMS TO TEST.
+     * Without this, a fixture that quietly fails to build the type turns the
+     * whole subcase into a check of the long-integer arm wearing another
+     * arm's name — which is exactly how the first version of this test
+     * survived the defect it exists to catch. */
+    if (getRegisterDataType(REGISTER_X) != types[i]) {
+      printf("    FAIL: fixture — X is type %u, expected %u; this subcase did"
+             " NOT exercise the arm it names\n",
+             (unsigned)getRegisterDataType(REGISTER_X), (unsigned)types[i]);
+      fail = 1;
+      continue;
+    }
+
+    g.front = 0xA5A5A5A5u;
+    g.back  = 0x5A5A5A5Au;
+    memset(g.out, 0, sizeof(g.out));
+
+    forthConsoleFormatRegister(REGISTER_X, g.out, (int16_t)sizeof(g.out));
+
+    if (g.back != 0x5A5A5A5Au) {
+      printf("    FAIL: type %u — the producer wrote PAST the %u-byte buffer"
+             " (back canary %08X). Its buffer contract is not satisfied.\n",
+             (unsigned)types[i], (unsigned)FORTH_CONSOLE_FMT_MAX, g.back);
+      fail = 1;
+    }
+    if (g.front != 0xA5A5A5A5u) {
+      printf("    FAIL: type %u — the producer wrote BEFORE the buffer"
+             " (front canary %08X)\n", (unsigned)types[i], g.front);
+      fail = 1;
+    }
+    if (stringByteLength(g.out) >= (int32_t)sizeof(g.out)) {
+      printf("    FAIL: type %u — result not NUL-terminated inside the buffer\n",
+             (unsigned)types[i]);
+      fail = 1;
+    }
+  }
+
+  /* And the reproducer end to end: the C1 gesture through the real dialogue. */
+  N13_RESET();
+  forthCapOpenInteractive();
+  calcMode = CM_AIM;
+  convertUInt64ToShortIntegerRegister(0, (uint64_t)0xFFFFFFFFFFFFFFFFull, 2, REGISTER_X);
+  _consoleEnterLine("DUP DROP");
+  { char line[FORTH_CONSOLE_FMT_MAX];
+    forthConsoleLineAt(0, line, sizeof(line));
+    if (stringByteLength(line) == 0) {
+      printf("    FAIL: the C1 gesture produced no X echo\n");
+      fail = 1;
+    }
+  }
+  forthCapClose();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+
+  if (!fail) {
+    printf("    PASS: every formatter arm stays inside the caller's buffer;"
+           " the C1 gesture echoes cleanly\n");
+  }
+  return fail;
+}

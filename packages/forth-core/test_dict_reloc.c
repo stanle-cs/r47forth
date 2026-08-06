@@ -1317,6 +1317,7 @@ static int test_console_exit_ladder(void);
 /* N1-6: acceptance */
 static int test_console_story(void);
 static int test_console_one_history(void);
+static int test_console_format_buffer_contract(void);
 
 int forthDictSelfTest(void)
 {
@@ -2550,6 +2551,9 @@ int forthDictSelfTest(void)
   fail |= test_console_story();
   printf("  [DEBUG] running test_console_one_history...\n");
   fail |= test_console_one_history();
+
+  printf("  [DEBUG] running test_console_format_buffer_contract...\n");
+  fail |= test_console_format_buffer_contract();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

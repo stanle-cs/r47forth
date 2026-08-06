@@ -272,7 +272,26 @@ void forthConsoleFormatRegister(calcRegister_t regist, char *out, int16_t outSiz
       break;
 
     case dtShortInteger:
-      shortIntegerToDisplayString(regist, buf, false, noBaseOverride);
+      /* AUDIT C1 (2026-08-06): this producer does NOT write from the front.
+       * It builds digits from displayString[ERROR_MESSAGE_LENGTH / 2] — that
+       * is buf[256] — upward as scratch, then compacts them to the front
+       * (display.c:2059 sets `i = ERROR_MESSAGE_LENGTH / 2`, and the
+       * `displayString[j] = displayString[k]` loop at :2281 brings them
+       * back).  Handing it the 256-byte local below meant its FIRST write
+       * landed one past the end of the frame, and it wrote forward from
+       * there: `1 HEX` then ENTER corrupted the stack.
+       *
+       * So this one arm uses tmpString, which is what every upstream caller
+       * passes and what the producer's arithmetic actually requires.  That
+       * does not weaken the "never tmpString" rule above — that rule is about
+       * HOLDING a pointer into tmpString across other producers that also
+       * write it.  Nothing runs between this call and the copy-out below. */
+      shortIntegerToDisplayString(regist, tmpString, false, noBaseOverride);
+      { int32_t n = stringByteLength(tmpString);
+        if(n > (int32_t)sizeof(buf) - 1) { n = (int32_t)sizeof(buf) - 1; }
+        xcopy(buf, tmpString, (uint32_t)n);
+        buf[n] = 0;
+      }
       break;
 
     case dtTime:
