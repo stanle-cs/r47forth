@@ -25,6 +25,7 @@
 #include "c47.h"
 #include "forth_dict.h"
 #include "forth_capture.h"
+#include "forth_console.h"
 #include "forth_menu.h"
 #include "programming/param_core.h"
 #include "saveRestoreBackup.h"
@@ -1282,6 +1283,16 @@ static int test_spill_window_parity(void);
 static int test_forth_run_from_x_brackets(void);
 static int test_native_lift_after_forth(void);
 static int test_savings_program(void);
+/* N1-1: the console view ring */
+static int test_console_ring_basic(void);
+static int test_console_ring_partial(void);
+static int test_console_ring_evict(void);
+static int test_console_ring_linecap(void);
+static int test_console_ring_glyph(void);
+static int test_console_ring_clear(void);
+static int test_console_ring_view(void);
+static int test_console_ring_reset_seam(void);
+static int test_console_ring_hammer(void);
 
 int forthDictSelfTest(void)
 {
@@ -2427,6 +2438,44 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
+  /* N1-1: the console view ring (Stage N).  No dictionary dependency —
+   * the ring is BSS and knows nothing about fdict/gdict — but the seam
+   * test drives forthDictInit/forthDictClear, so the block owns its own
+   * lifecycle exactly like its neighbours. */
+  printf("\nFORTH N1-1 TESTS (console view ring)\n");
+  forthDictInit();
+
+  printf("  [DEBUG] running test_console_ring_basic...\n");
+  fail |= test_console_ring_basic();
+
+  printf("  [DEBUG] running test_console_ring_partial...\n");
+  fail |= test_console_ring_partial();
+
+  printf("  [DEBUG] running test_console_ring_evict...\n");
+  fail |= test_console_ring_evict();
+
+  printf("  [DEBUG] running test_console_ring_linecap...\n");
+  fail |= test_console_ring_linecap();
+
+  printf("  [DEBUG] running test_console_ring_glyph...\n");
+  fail |= test_console_ring_glyph();
+
+  printf("  [DEBUG] running test_console_ring_clear...\n");
+  fail |= test_console_ring_clear();
+
+  printf("  [DEBUG] running test_console_ring_view...\n");
+  fail |= test_console_ring_view();
+
+  printf("  [DEBUG] running test_console_ring_reset_seam...\n");
+  fail |= test_console_ring_reset_seam();
+
+  printf("  [DEBUG] running test_console_ring_hammer...\n");
+  fail |= test_console_ring_hammer();
+
+  forthConsoleClear();          /* leave no dialogue behind for later tests */
+  forthDictClear();
+  forthGDictClear();
+
   /* FIX-6: free-list integrity — LAST test, after all cleanup */
 
   /* Stale-list tripwire (probeListPtrs): any labelList/programList pointer
@@ -2590,5 +2639,6 @@ static int forthExprIsZero(const char *src)
  * visible to them; forward decls before the runner cover all call sites. */
 #include "test_persist.part.h"
 #include "test_engine.part.h"
+#include "test_console.part.h"
 
 #endif  // PC_BUILD && FORTH_DEBUG_SELFTEST

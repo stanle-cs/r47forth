@@ -1,4 +1,5 @@
 #include "forth_capture.h"
+#include "forth_console.h"
 
 static forthCap_t forthCap;   /* zero-initialized: FCAP_CLOSED */
 
@@ -80,6 +81,17 @@ void forthCapPowerReset(void) {
   forthCap.foldMode = 0;        /* L1-F1: the fold's own last-resort reset —
                                    forthCapOpen/Close/AbandonSuspended MUST
                                    NOT touch this field; see forth_capture.h */
+  forthConsoleClear();          /* N1-1 (N-T5): the view ring is not capture
+                                   state, but it shares the capture's lifecycle
+                                   seam — this function's only two production
+                                   callers are forthDictInit (forth_dict.c:57)
+                                   and forthDictClear (:71), which is exactly
+                                   the power-reset boundary N-R2 clears the view
+                                   at.  Deliberately NOT in forthCapClose /
+                                   forthCapAbandonSuspended: N-R2 rules the
+                                   dialogue SURVIVES capture close and reopen,
+                                   and test_console_ring_reset_seam pins that
+                                   direction. */
 }
 
 bool_t forthCapIsOpen(void)  { return forthCap.state == FCAP_OPEN; }
