@@ -2749,3 +2749,59 @@ sizeBlocks=16, freeRamDelta=128. Program-memory high-water with a full
 history: **1024 bytes**, exactly the cap. History costs program memory,
 visible and clearable by the user; net idle BSS for the whole stage is
 the +24 B above.
+## 2026-08-05 — Stage M landed: Forth words in the wider UI (M1-1..M1-3)
+
+The §8.10-item-1 residue, discharged. FWRD joined the CATALOG tree; a
+word softkey in CM_NORMAL executes through the landed dynamic-XEQ
+dispatch (the PROGS shape); a GLOBAL word ASSIGNs to a key as an
+(ITM_XEQ, name) record — the same record kind a program produces, so
+storage, save/restore, USER display and the 2026-07-27 press dispatch
+were all pre-existing surface; binding is by name, late
+(test_fwrd_late_binding pins FORGET + re-define retargeting the key).
+Interactive words refuse the pick (M-R2 — §8.3's durability contract).
+Normative record: DESIGN.md §8.10 item 1, §8.6 (the wider-UI
+paragraph), §4.2 (press-order note). Stage docs:
+STAGE_M_BROWSE_ASSIGN.md (rulings M-R1..M-R6, architect-decided under
+the owner's 2026-08-05 delegation), STAGE_M_TRACES.md (M-T1..M-T5 +
+the M-T5 correction), packets M1-1/M1-2.
+
+Commit series: `bc7aa1bd6` stage authored; `d0ccd10ef` traces;
+`887f296be` M1-1 (catalog row, execute resolution, additive listing
+gate; mutation A retired by simplification; the twelve-test fixture
+sweep); `c88d23f42` M1-2 (the ASSIGN band, assign.c joins the package;
+mutations E by SIGSEGV / F / G); stage close (this commit) with the
+late-binding pin, the fold-in, numbers and captures.
+
+Corrections the stage recorded about itself, T7.5-style:
+
+- The M-T5 trace claimed the FIX-9 drain would clear a FWRD-over-
+  CATALOG stack "by construction"; the M1-1 battery falsified it — the
+  drain is `catalog`-VARIABLE-gated (forth_compile.c:1717) and menu
+  rows never set that variable. The landed truth (stack buried
+  harmlessly, EXIT restores it) is the pinned behaviour. Same lesson as
+  T7.5: the predicates were traced, the `if` above them was not.
+- Mutation A (M1-1) proved the resolution case's explicit capture
+  branch unreachable by mode arithmetic; the code simplified and the
+  mutation retired — checklist item 8's "fix the code" outcome.
+- The first E3 listing-gate shape (PEM-only) turned twelve landed
+  text-scan tests red; the additive gate (new surfaces only) plus a
+  26-site fixture sweep stating the PEM context is the landed answer.
+- The M1-2 batteries register AFTER the FIX-6 region gate (the K4-A
+  precedent): the packed userKeyLabel table legitimately relocates on
+  every write.
+
+Stage numbers (RULE-1): flash `make dmcp5r47
+CUSTOM_PKG=packages/forth-core` 1111456 -> 1111680, **+224 B** for the
+whole stage (estimate band was +0.5–1.5 KB — the record-vocabulary
+reuse is why the low end held). Idle RAM 7844, **unchanged** — no new
+persistent state. FORTH ARENA high-water unchanged (no dictionary
+change). Measurement note, binding for future new-file packages: the
+first `make dmcp5r47` after `assign.c` joined the package reused the
+build dir and silently compiled WITHOUT the new override (+16 B, wrong);
+`CUSTOM_PKG_RECONFIGURE=1` picked it up (2 shadow assign.c compiles)
+and gave the real number — a NEW package source file requires the
+reconfigure, extending the 2026-07-x incident's lesson from changed to
+added files. Sim captures: forum/screenshots/stage-m-*.png (the CATALOG
+tree's FWRD row; FWRD in CM_NORMAL; X == 43 after the press; the
+"ASSIGN MSHOW _" pending display). The DM42n hardware pass of the
+browse/assign story is Stan's, per the standing discipline.

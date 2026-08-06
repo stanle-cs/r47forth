@@ -412,3 +412,20 @@ absence reads as a decision, not an omission.
 Remaining Stage L item that is NOT the implementer's: the C5 DM42n
 hardware pass (PACKET_L1_5_acceptance.md §C5) — **S** drives the C1
 story on the device and reports divergence from the sim, if any.
+
+## 2e. Stage M — browse/execute + ASSIGN of global words (2026-08-05; COMPLETE)
+
+| # | Step | Who | Input |
+|---|---|---|---|
+| M docs | stage + decision sheet (owner-delegated) + traces M-T1..T5 | **DONE** (`bc7aa1bd6`, `d0ccd10ef`) | `STAGE_M_BROWSE_ASSIGN.md`, `STAGE_M_TRACES.md` |
+| M1-1 | CATALOG row, execute resolution, additive listing gate | **DONE** (`887f296be`) — architect-implemented; mutation A retired by simplification; 26-site fixture sweep | `PACKET_M1_1_catalog_execute.md` |
+| M1-2 | ASSIGN band, assign.c override, (ITM_XEQ, name) records | **DONE** (`c88d23f42`) — architect-implemented; E RED by SIGSEGV, F/G RED; K4-A registration | `PACKET_M1_2_assign_band.md` |
+| M1-3 | late-binding pin, fold-in, numbers, captures | **DONE** (stage-close commit) | — |
+
+Measurement trap (binding): a NEW package source file needs
+`CUSTOM_PKG_RECONFIGURE=1` on the next `make dmcp5r47` — the incremental
+build silently compiles without it (measured +16 B wrong vs +224 B
+real, this stage).
+
+Remaining Stage M item that is NOT the implementer's: the DM42n
+hardware pass of the browse/assign story — **S**.

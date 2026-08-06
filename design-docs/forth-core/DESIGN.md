@@ -1592,6 +1592,16 @@ instead; an unresolvable or indirect `widx` is rejected with
 packages/forth-core/programming/manage.c:1567-1582]. Verified by
 `test_fcall_redirect_records_name` / `test_fcall_redirect_rejects_stale`.
 
+**Key presses and catalog presses resolve in this same order (Stage M).**
+A USER key assigned `(ITM_XEQ, name)` dispatches native label first,
+then the colon fallback (`forthTryColonFallback`, forth_bridge.c —
+call sites in the button handlers and `execTimerApp`), behind the same
+`CM_PEM` record-vs-execute split; a FWRD catalog press in `CM_NORMAL`
+rides the dynamic-XEQ dispatch above. One name, one order, typed or
+pressed; binding is late (the name resolves at press time), so
+FORGET + re-define retargets every key that names the word
+(`test_fwrd_late_binding`).
+
 ### 4.3 Why not synthesize label IDs
 Rejected alternative: register Forth words into `labelList[]` with synthetic IDs
 in a reserved slice of `FIRST_LABEL..LAST_LABEL`. That would auto-populate the
@@ -2749,6 +2759,21 @@ src/c47/softmenus.c:1673-1704 (menu build)]. While Forth capture is active,
 previously *authored* words in this program are pickable — no compilation,
 no catalog, no dictionary lookup:
 
+**Stage M (2026-08-05) — the same menu, outside captures.** FWRD is a
+CATALOG-tree row; the softkey resolution takes the PROGS shape
+(`ITM_XEQ` + `dynamicMenuItem`) in `CM_NORMAL` (press = run, through the
+landed dynamic-XEQ dispatch) and `CM_ASSIGN` (feeds the
+`ASSIGN_FORTH_WORDS` pick band; GLOBAL words only), and stays `ITM_NOP`
+everywhere else — captures keep the picker-insert guard by mode
+arithmetic, native alpha and PEM-outside-capture stay inert, XEQ-TAM
+keeps the latch shape. The text-scan section below lists only where the
+cursor's provenance is true: the L1-3 interactive conjunct plus the two
+Stage M surfaces gate it off ADDITIVELY; every pre-M mode keeps its
+landed listing. A capture opened over a stacked FWRD/CATALOG buries the
+stack harmlessly and EXIT restores it (the FIX-9 drain is
+`catalog`-variable-gated and menu rows never set that variable — the
+M-T5 correction).
+
 - **Menu id:** `MNU_FORTH` = item 213 (§0.1). Registration requires all
   three upstream pieces, in matching order (upstream's own comment:
   softmenus.c:1021-1028): a `softmenu[]` row and a `dynamicSoftmenu[]` row
@@ -2977,10 +3002,20 @@ dictionary high-water mark; region ceiling unchanged (≤ 2 KB, §5.4).
 Resolved items are not listed here; their history is in `DESIGN-HISTORY.md`.
 This list carries only what is genuinely unsettled.
 
-1. **[Deferred — additive] Forth words are invisible to the rest of the UI.**
-   RPN programs appear in the PROG catalog and can be `ASSIGN`ed to a key; Forth
-   words can do neither (§4.3). Real asymmetry against the extension principle,
-   but purely additive and with no format impact.
+1. **Discharged by Stage M (2026-08-05).** FWRD sits in the CATALOG tree;
+   a word softkey pressed in `CM_NORMAL` executes the word through the
+   landed dynamic-XEQ dispatch (the PROGS shape — resolution, PEM
+   recording guard and error surface included), and a GLOBAL word is
+   `ASSIGN`able to a key as an `(ITM_XEQ, name)` record — byte-identical
+   in kind to a program assignment, so storage, save/restore, USER-mode
+   display and the 2026-07-27 press dispatch are all pre-existing
+   surface. Binding is by NAME, late: FORGET + re-define and the same
+   key runs the new word; a dangling name is the native not-found
+   surface. Interactive words are deliberately not assignable (they die
+   at the next lifetime consumption — §8.3; the pick refuses). The
+   normal-mode picker lists dictionary sections only (the text-scan
+   section keeps PEM-cursor provenance — §8.6). Record: STAGE_M
+   docs/packets; traces STAGE_M_TRACES.md.
 
 2. **Discharged by Stage L (2026-08-05).** Interactive `FORTH` no longer
    requires a string in X: pressing FORTH interactively opens the same

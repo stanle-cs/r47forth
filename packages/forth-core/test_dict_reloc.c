@@ -1142,6 +1142,7 @@ static int test_interactive_close_sweep(void);                /* L1-5 */
 static int test_interactive_residue(void);                    /* L1-5 */
 static int test_fwrd_normal_mode(void);                       /* M1-1 */
 static int test_fwrd_assign(void);                            /* M1-2 */
+static int test_fwrd_late_binding(void);                      /* M1-3 */
 static int test_forth_fold_commit_recompiles(void);           /* FIX-7 */
 static int test_quote_glyph_accept_parity(void);              /* FIX-7 class */
 static int test_resume_drains_buried_catalog(void);           /* FIX-9 */
@@ -2353,6 +2354,13 @@ int forthDictSelfTest(void)
   fail |= test_fwrd_assign();
   forthDictClear();
   forthGDictClear();
+
+  forthDictInit();
+  printf("  [DEBUG] running test_fwrd_late_binding...\n");
+  fail |= test_fwrd_late_binding();
+  forthDictClear();
+  forthGDictClear();
+
 
   printf("\nFORTH K4 TESTS (stage acceptance)\n");
   forthDictInit();

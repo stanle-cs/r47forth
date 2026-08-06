@@ -16913,3 +16913,113 @@ static int test_fwrd_assign(void)
 
   return fail;
 }
+
+/* ==================================================================
+ * M1-3 — test_fwrd_late_binding: the one cross-feature beat the M1-1/
+ * M1-2 batteries do not already pin.  The assignment stores a NAME
+ * (M-R3): after FORGET + re-define, the same key runs the NEW
+ * definition — no stale index, no rebind step.
+ * ================================================================== */
+static int test_fwrd_late_binding(void)
+{
+  int fail = 0;
+  int16_t pressedUserItem = ITM_NOP;
+  bool_t fallbackFired = false;
+
+  bool_t savedUser = getSystemFlag(FLAG_USER);
+  uint8_t savedCalcMode = calcMode;
+  uint8_t savedPreviousCalcMode = previousCalcMode;
+  int16_t savedDynamicMenu = dynamicMenuItem;
+  int16_t savedItemToBeAssigned = itemToBeAssigned;
+  uint8_t savedProgramRunStop = programRunStop;
+  calcKey_t savedKey21;
+  char savedKey21Label[16];
+  bool_t hadUserKeyLabel = (userKeyLabel != NULL);
+  xcopy(&savedKey21, kbd_usr + 21, sizeof(calcKey_t));
+  if (hadUserKeyLabel) {
+    xcopy(savedKey21Label, (char *)getUserKeyLabelString(21 * 6),
+          stringByteLength((char *)getUserKeyLabelString(21 * 6)) + 1);
+  } else {
+    savedKey21Label[0] = 0;
+  }
+
+  calcMode = CM_NORMAL;
+  programRunStop = PGM_STOPPED;
+  dynamicMenuItem = -1;
+  itemToBeAssigned = 0;
+  clearSystemFlag(FLAG_USER);
+  lastErrorCode = ERROR_NONE;
+  forthCapClose();
+
+  forthOuterInterpret(": MLB 51 ; GLOBAL");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FIXTURE FAIL: word setup errored (%d)\n", lastErrorCode);
+    return 1;
+  }
+  /* Assign by the record directly (the pick flow is M1-2 [1]'s pin;
+   * this test pins the BINDING, not the pick). */
+  kbd_usr[21].primary = ITM_XEQ;
+  setUserKeyArgument(21 * 6, "MLB");
+
+  #define MLB_PRESS() do { \
+    char *fp_; \
+    calcRegister_t lbl_; \
+    setSystemFlag(FLAG_USER); \
+    dynamicMenuItem = -1; \
+    pressedUserItem = determineItem("21"); \
+    clearSystemFlag(FLAG_USER); \
+    fp_ = (char *)getUserKeyLabelString(21 * 6); \
+    fallbackFired = false; \
+    if (pressedUserItem == ITM_XEQ && fp_[0] != 0) { \
+      lbl_ = findNamedLabel(fp_, GLOBAL_LABELS); \
+      if (lbl_ != INVALID_VARIABLE) { forthUserItemDispatch(pressedUserItem, fp_, pressedUserItem, lbl_); fallbackFired = true; } \
+      else { fallbackFired = forthTryColonFallback(pressedUserItem, fp_); } \
+    } \
+  } while (0)
+
+  MLB_PRESS();
+  if (!fallbackFired || !x_is_longint(51)) {
+    printf("    FAIL: first press did not run the original MLB (51)\n");
+    fail = 1;
+  }
+  if (!fail) {
+    forthOuterInterpret("FORGET MLB");
+    forthOuterInterpret(": MLB 52 ; GLOBAL");
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    FIXTURE FAIL: re-define errored (%d)\n", lastErrorCode);
+      fail = 1;
+    }
+  }
+  if (!fail) {
+    MLB_PRESS();
+    if (!fallbackFired || !x_is_longint(52)) {
+      printf("    FAIL: press after FORGET+re-define did not run the NEW definition (52)\n");
+      fail = 1;
+    }
+  }
+  if (!fail) printf("    PASS: the key is bound to the NAME — FORGET + re-define, the same press runs the new word (51 -> 52)\n");
+
+  #undef MLB_PRESS
+  forthOuterInterpret("FORGET MLB");
+  lastErrorCode = ERROR_NONE;
+  xcopy(kbd_usr + 21, &savedKey21, sizeof(calcKey_t));
+  if (hadUserKeyLabel) {
+    setUserKeyArgument(21 * 6, savedKey21Label);
+  }
+  else if (userKeyLabel != NULL) {
+    freeC47Blocks(userKeyLabel, TO_BLOCKS(userKeyLabelSize));
+    userKeyLabel = NULL;
+    userKeyLabelSize = 0;
+  }
+  forthDictClear();
+  forthGDictClear();
+  calcMode = savedCalcMode;
+  previousCalcMode = savedPreviousCalcMode;
+  dynamicMenuItem = savedDynamicMenu;
+  itemToBeAssigned = savedItemToBeAssigned;
+  programRunStop = savedProgramRunStop;
+  if (savedUser) setSystemFlag(FLAG_USER); else clearSystemFlag(FLAG_USER);
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
