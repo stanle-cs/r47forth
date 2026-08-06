@@ -120,7 +120,30 @@ eight hats.
 | **Gemini** | `agy --model gemini-3.1-pro-high --print-timeout 12m -p "$(cat prompt.txt)"` | **WORKS.** Answers a ~3 KB packet in a couple of minutes. This is the reader to use. |
 | Sol | `codex exec -s read-only --skip-git-repo-check -m gpt-5.6-sol -c model_reasoning_effort="medium" --cd <empty dir> -o out.txt - < prompt.txt` | **BLOCKED on a system package** — see below. |
 
-**Sol is blocked on bubblewrap, and that is the whole story.** `codex`
+**Settled 2026-08-06 after twelve runs: use Gemini. Sol via `codex` does
+not complete an audit, and the reason is behavioural rather than
+environmental.**
+
+The sandbox blocker below is real and the owner's bypass authorisation
+clears it — `--dangerously-bypass-approvals-and-sandbox` gives
+`sandbox: danger-full-access`, needs no bubblewrap, and Sol then ran four
+times longer than any sandboxed attempt and left the tree untouched
+despite write access. It still produced no report. It reads
+exhaustively and does not self-limit: told to skip the prior audit
+reports it went to `DESIGN.md` instead and was still reading at 58
+minutes. Told in three different phrasings to budget its exploration and
+to write a partial report rather than run out, it did neither.
+
+That is not a flag to tune. **Give the out-of-family pass to Gemini**,
+which answers a whole-function packet in minutes and has already earned
+its place — it found a frame leak eight in-family readers missed. Keep
+Sol for the paste route, where a human closes the loop.
+
+The rest of this section is kept because each item still bites, and
+because the bubblewrap diagnosis is correct for anyone running codex
+sandboxed:
+
+**Sol is blocked on bubblewrap when sandboxed, and that part is the whole story.** `codex`
 sandboxes every shell command the model runs; bubblewrap is not
 installed here (`apt-cache policy bubblewrap` → `Installed: (none)`), so
 it falls back to a bundled copy that does not work under WSL2. The
