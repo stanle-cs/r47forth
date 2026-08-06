@@ -1669,6 +1669,11 @@ static bool_t forthTakeSourceFromX(char *dst) {
  *     by this function) — the guards are left out, matching the packet's
  *     literal text. This finding is dispatch-shaped and belongs to L1-3's
  *     surface, not this packet's; revisit if dispatch changes. */
+/* N1-5: set by forthEnterAimSurfaceNoLift, consumed by fnForthOuter one line
+ * after it opens the capture — the capture object cannot carry it earlier
+ * because forthCapOpenInteractive() zeroes the field. */
+static bool_t forthHomeWasFresh = false;
+
 static void forthEnterAimSurfaceNoLift(void) {
   alphaCase = CAPS_AIM_DEFAULT;
   nextChar  = NC_NORMAL;
@@ -1683,8 +1688,32 @@ static void forthEnterAimSurfaceNoLift(void) {
   cursorFont = &standardFont;
   cursorEnabled = true;
 
-  showSoftmenu(-MNU_ALPHA);
-  if (softmenuStack[0].softmenuId == 0) { softmenuStack[0].softmenuId = 1; }
+  /* N1-5 (N-R6): the console's home row is FWRD, not the alpha keypad.
+   * Discovery lives on the softkeys — a word softkey TYPES the word through
+   * the landed F6-3 capture-gated sink — and the alpha keypad becomes the
+   * excursion you toggle into, where it pushes -MNU_ALPHA over this frame.
+   *
+   * The `softmenuStack[0].softmenuId == 0 -> 1` fixup that used to sit here
+   * is GONE deliberately: it is the native "MyMenu becomes MyAlpha on
+   * entering AIM" idiom (popSoftmenu does the same, softmenus.c:3719-3721)
+   * and has no meaning for a non-alpha home row.  Rung 2 of the EXIT ladder
+   * is re-derived to match (keyboard.c). */
+  /* Record whether this push DISPLACES the user's top frame, which is what
+   * rung 3 has to undo.  The test is slot 0 only, and getting that wrong once
+   * is why it is spelled out here:
+   *
+   * "did the stack grow?" is the WRONG question.  pushSoftmenu dedups against
+   * a match ANYWHERE in the array (softmenus.c:3671-3683) — including a stale
+   * deep entry no user can see — by lifting the stack over it, so the frame
+   * COUNT is unchanged while slot 0 still becomes FWRD and the user's menu
+   * still gets buried one deeper.  Scanning the whole stack therefore says
+   * "nothing pushed" for a case that very much did displace something, and
+   * EXIT then leaves the console's own row up.
+   *
+   * Only when FWRD is ALREADY the current menu does slot 0 stay the user's
+   * own frame — and that is exactly the case rung 3 must not pop. */
+  forthHomeWasFresh = (currentMenu() != -MNU_FORTH);
+  showSoftmenu(-MNU_FORTH);
   setSystemFlag(FLAG_ALPHA);
   calcModeAimGui();
 }
@@ -1724,6 +1753,13 @@ void fnForthOuter(uint16_t unused) {
 
   forthEnterAimSurfaceNoLift();                   /* see above — NOT fnAim */
   forthCapOpenInteractive();                      /* clears aimBuffer; cannot fail */
+  forthCapSetHomePushed(forthHomeWasFresh);       /* N1-5: see above */
+  /* N1-5 (N-R6): keys-first.  SET AFTER the open, because _forthCapOpenAs
+   * zeroes the bit unconditionally (forth_capture.c:11) — that universal
+   * reset stays, which is exactly how PEM keeps inheriting alpha-first
+   * untouched.  `1 2 +` is three keypresses here; the alpha keypad is one
+   * E10/E11 toggle away. */
+  forthCapSetKeysMode(true);
   T_cursorPos = 0;
   displayAIMbufferoffset = 0;
 

@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c8bc259b1 100644
+index bc44026016e94a8865b8acc886386341596641c6..74e3abe798b0989e1fcfa919c15268303f299af6 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,12 +2,67 @@
@@ -306,7 +306,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
        result = shiftF ? key->fShifted :
                 shiftG ? key->gShifted :
                          key->primary;
-@@ -1693,6 +1855,41 @@ endReturnTrue:
+@@ -1693,6 +1855,55 @@ endReturnTrue:
        result = 0;
      }
  
@@ -334,21 +334,35 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
 +     * a press resolves but never dispatches.  ITM_NOP then keeps every
 +     * downstream arm out of it; btnReleased's refreshScreen(117) (:2478)
 +     * repaints. */
-+    if(forthCapIsInteractive() && shiftG && !tam.mode) {
-+      if(key->fShiftedAim == CHR_caseUP) {
-+        forthConsoleRoll(+1);                  /* one line OLDER */
++    if(forthCapIsInteractive() && !tam.mode
++       && (key->fShiftedAim == CHR_caseUP || key->fShiftedAim == CHR_caseDN)) {
++      bool_t isUp = (key->fShiftedAim == CHR_caseUP);
++      if(shiftG) {
++        forthConsoleRoll(isUp ? +1 : -1);      /* +1 = one line OLDER */
 +        result = ITM_NOP;
 +      }
-+      else if(key->fShiftedAim == CHR_caseDN) {
-+        forthConsoleRoll(-1);                  /* one line NEWER */
-+        result = ITM_NOP;
++      else if(shiftF) {
++        /* N1-5 (N-T4): RE-HOME the FHIST recall gesture.
++         *
++         * L1-H put recall on CHR_caseUP/CHR_caseDN, which live in the AIM
++         * f-column — reachable only while the capture is in ALPHA input.
++         * That was a footnote while keys mode was an excursion.  Keys-first
++         * makes it the ground state, and in keys mode determineItem takes the
++         * NORMAL columns (:1842), where f-up/f-down are ITM_BST/ITM_SST —
++         * so without this arm the console would open with its own history
++         * unreachable, and the flip would silently cost a landed feature.
++         *
++         * Resolving to CHR_caseUP/CHR_caseDN in BOTH modes is idempotent in
++         * alpha input (the AIM plane already yields exactly these) and is the
++         * whole fix in keys input. */
++        result = isUp ? CHR_caseUP : CHR_caseDN;
 +      }
 +    }
 +
                      #if defined(PC_BUILD)
                        sprintf(tmp, "^^^^^^^keyboard.c: determineitem: result1: %d:", result);
                        jm_show_comment(tmp);
-@@ -2211,18 +2408,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2211,18 +2422,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
            if(item == ITM_RCL && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
              calcRegister_t var = findNamedVariable(funcParam);
              if(var != INVALID_VARIABLE) {
@@ -371,7 +385,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
              }
              else {
                displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
-@@ -2235,20 +2424,16 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2235,20 +2438,16 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
            else if(item == ITM_XEQ && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
              calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
              if(label != INVALID_VARIABLE) {
@@ -400,7 +414,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -2631,6 +2816,17 @@ RELEASE_END:
+@@ -2631,6 +2830,17 @@ RELEASE_END:
          }
  
          case CHR_caseUP: {                                                   //From keyboard: logic for Up/Dn case/num
@@ -418,7 +432,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
            if(getSystemFlag(FLAG_NUMLOCK))  {}
            else if(alphaCase == AC_LOWER) {
              processKeyAction(CHR_case);
-@@ -2644,6 +2840,14 @@ RELEASE_END:
+@@ -2644,6 +2854,14 @@ RELEASE_END:
          }
  
          case CHR_caseDN: {                                                   //From keyboard: logic for Up/Dn case/num
@@ -433,7 +447,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
            if(getSystemFlag(FLAG_NUMLOCK)) {
              alphaCase = AC_UPPER;
              processKeyAction(CHR_numU);
-@@ -2835,8 +3039,28 @@ RELEASE_END:
+@@ -2835,8 +3053,28 @@ RELEASE_END:
  
                //also AIM Longpress cycle
                case CM_AIM: {
@@ -462,7 +476,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
                    closeAim();
                    runFunction(item);
                    keyActionProcessed = true;
-@@ -3130,11 +3354,23 @@ RELEASE_END:
+@@ -3130,11 +3368,23 @@ RELEASE_END:
                    keyActionProcessed = true;
                  }
                  else if(item == ITM_SST) {
@@ -486,7 +500,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
                    fnBst(NOPARAM);
                    keyActionProcessed = true;
                    refreshScreen(123);
-@@ -3154,6 +3390,12 @@ RELEASE_END:
+@@ -3154,6 +3404,12 @@ RELEASE_END:
                    }
                  }
                  else if(item == ITM_RS) {
@@ -499,7 +513,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
                    addStepInProgram(ITM_STOP);
                    keyActionProcessed = true;
                  }
-@@ -3444,6 +3686,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3444,6 +3700,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -514,7 +528,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
            if(softmenuStack[0].softmenuId <= 1 || menu(1) == -MNU_ALPHA) {
              popSoftmenu();
            }
-@@ -3716,6 +3966,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3716,6 +3980,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            aimBuffer[0] = 0;
          }
          leaveTamModeIfEnabled();
@@ -527,7 +541,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
          if(calcMode == CM_PEM) {
            scrollPemBackwards();
          }
-@@ -3799,6 +4055,79 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3799,6 +4069,115 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -537,10 +551,14 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
 +           * below is unreachable for an interactive capture now that this
 +           * branch never falls through to it). */
 +
-+          /* Rung 1 (E12.4 analog): keys mode -> alpha input. */
-+          if(forthCapKeysMode()) {
-+            forthCapSetKeysMode(false);
-+            showSoftmenu(-MNU_ALPHA);
++          /* Rung 1 — INVERTED by N1-5 (N-T4).  Keys input is now the console's
++           * GROUND state, so the first EXIT press unwinds the ALPHA excursion
++           * back to it and restores the FWRD home row; it no longer unwinds
++           * keys into alpha, which would have been a step away from the
++           * ground rather than toward it. */
++          if(!forthCapKeysMode()) {
++            forthCapSetKeysMode(true);
++            showSoftmenu(-MNU_FORTH);
 +            break;
 +          }
 +          /* Rung 2: anything stacked above the base pops and the capture
@@ -552,8 +570,29 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
 +           * ordinary capture state) fall THROUGH to rung 3 instead of
 +           * popping — it retargets slot 0 to MyAlpha so the predicate reads
 +           * "base menu displayed". */
-+          if(currentMenu() == -MNU_ALPHA) { softmenuStack[0].softmenuId = 1; }
-+          if(!(softmenuStack[0].softmenuId <= 1 && menu(1) != -MNU_ALPHA)) {
++          /* Rung 2 — RE-DERIVED by N1-5 (N-T4), and stated directly rather
++           * than by patching the landed boolean.
++           *
++           * The landed form pre-normalised an -MNU_ALPHA slot 0 to MyAlpha
++           * (id 1) so that `softmenuStack[0].softmenuId <= 1 && menu(1) !=
++           * -MNU_ALPHA` read "the base is displayed" and fell through to
++           * rung 3.  Neither half survives FWRD-as-home:
++           *
++           *  - the rename is DESTRUCTIVE when the open pushed nothing.  With
++           *    FWRD already on the stack, pushSoftmenu dedups, so slot 0 is
++           *    the USER'S OWN FWRD frame — renaming it to MyAlpha corrupts
++           *    the menu the user gets back on EXIT.
++           *  - `menu(1)` cannot be consulted for FWRD either: the user's
++           *    pre-FORTH menu is frequently FWRD, and testing it there pops
++           *    the very frame rung 3 is supposed to leave standing.
++           *
++           * What the rung actually means is "is anything stacked ABOVE the
++           * console's base?", so it asks exactly that.  An alpha submenu, a
++           * catalog, STK, FIN — none of them is the base, so they pop one per
++           * press and the capture stays open; the base itself falls through
++           * to rung 3.  (calcModeNormal's own -MNU_ALPHA-guarded pop still
++           * cannot fire here, as before.) */
++          if(currentMenu() != -MNU_FORTH && currentMenu() != -MNU_ALPHA) {
 +            popSoftmenu();
 +            stayInAIM();                     /* native pair, below in this arm */
 +            break;
@@ -595,19 +634,30 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
 +          if(aimBuffer[0] != 0) {
 +            forthHistoryPush(aimBuffer);     /* L1-H fills this in */
 +          }
-+          forthCapClose();
-+          aimBuffer[0] = 0;
-+          T_cursorPos = 0;
-+          displayAIMbufferoffset = 0;
-+          calcModeNormal();
-+          popSoftmenu();          /* see above — the frame rung 2's
-+                                     pre-normalisation renamed but did not pop */
++          { bool_t popHome = forthCapHomePushed();   /* read BEFORE the close
++                                                        clears it */
++            forthCapClose();
++            aimBuffer[0] = 0;
++            T_cursorPos = 0;
++            displayAIMbufferoffset = 0;
++            calcModeNormal();
++            /* Pop ONLY what the open pushed.  The unconditional pop was right
++             * while the open always added a frame; with FWRD as the home row
++             * it does not when FWRD was already on the stack (pushSoftmenu
++             * dedups), and popping anyway ate the user's own FWRD frame and
++             * revealed whatever was beneath it — see forth_capture.h's
++             * homePushed note and the [8] row of the M1-1 battery. */
++            if(popHome) {
++              popSoftmenu();      /* the frame rung 2's pre-normalisation
++                                     renamed but did not pop */
++            }
++          }
 +          break;
 +        }
          if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines
            softmenuStack[0].softmenuId = 1;                                  //JM
          }                                                                   //JM
-@@ -3856,6 +4185,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3856,6 +4235,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            lastErrorCode = 0;
            break;
          }
@@ -623,7 +673,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
          if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
            if(isAlphaSubmenu(0)) {
              popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
-@@ -3868,6 +4206,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +4256,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -631,7 +681,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +4217,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +4267,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -654,7 +704,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4366,9 +4721,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4771,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -679,7 +729,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
-@@ -4544,6 +4913,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4544,6 +4963,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
@@ -693,7 +743,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fdf4d41dc50e96ca9bc600cc50f7d00c
              closeAim();
            }
            fnBst(NOPARAM);
-@@ -4762,6 +5138,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4762,6 +5188,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {

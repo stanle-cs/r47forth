@@ -1450,6 +1450,11 @@ void forthInteractiveEnter(void) {
    * clears aimBuffer and resets keysMode (E14/K1: a fresh capture opens
    * in alpha input, matching the PEM E5 relock). */
   forthCapOpenInteractive();
+  forthCapSetKeysMode(true);   /* N1-5 (N-R6): the REPL reopen is the second
+                                  interactive open site, and keys-first must
+                                  survive every ENTER — not just the first
+                                  one.  Same set-after-open shape as
+                                  fnForthOuter's arm. */
   T_cursorPos = 0;
   displayAIMbufferoffset = 0;
 }

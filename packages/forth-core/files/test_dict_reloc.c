@@ -1311,6 +1311,9 @@ static int test_console_words_stack(void);
 static int test_console_words_emit(void);
 static int test_console_words_str_page(void);
 static int test_console_words_program(void);
+/* N1-5: keys-first */
+static int test_console_keys_first(void);
+static int test_console_exit_ladder(void);
 
 int forthDictSelfTest(void)
 {
@@ -2532,6 +2535,12 @@ int forthDictSelfTest(void)
   fail |= test_console_words_str_page();
   printf("  [DEBUG] running test_console_words_program...\n");
   fail |= test_console_words_program();
+
+  printf("\nFORTH N1-5 TESTS (keys-first entry)\n");
+  printf("  [DEBUG] running test_console_keys_first...\n");
+  fail |= test_console_keys_first();
+  printf("  [DEBUG] running test_console_exit_ladder...\n");
+  fail |= test_console_exit_ladder();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

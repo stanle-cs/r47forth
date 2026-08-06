@@ -48,6 +48,22 @@ typedef struct {
                                  persisted.  Zero is PEM so every zero-init and
                                  memset-style reset means "PEM" — matching every
                                  capture that existed before Stage L. */
+  uint8_t     homePushed;     /* N1-5: did the interactive open DISPLACE the
+                                 user's top softmenu frame with its FWRD home
+                                 row?  It does not when FWRD was already the
+                                 current menu — precisely the state you reach
+                                 by browsing the CATALOG tree before pressing
+                                 FORTH — and there rung 3 must not pop, or the
+                                 user loses their own FWRD frame and gets
+                                 whatever was under it instead.
+                                 NOT "did the stack grow": pushSoftmenu dedups
+                                 against a match anywhere in the array
+                                 (softmenus.c:3671-3683) by lifting the stack
+                                 over it, so the frame COUNT can stay the same
+                                 while slot 0 still changes.  See the note at
+                                 the sample site in forth_compile.c.
+                                 Transient UI state, never persisted; rides the
+                                 same resets as keysMode. */
   uint8_t     foldMode;       /* L1-F1: 0 = none, 1 = FOLD (bracket armed),
                                  2 = PARK (materialised, bracket NOT armed).
                                  OWNED BY forthFoldEnter/forthFoldLeave, and
@@ -113,6 +129,8 @@ void        forthCapSetKeysMode(bool_t on);
  * other capture orchestrators (forthCaptureSuspend/Resume). Called from
  * fnKeyEnter's CM_AIM divert and from the ITM_RS guard (C3). */
 void        forthInteractiveEnter(void);
+void        forthCapSetHomePushed(bool_t on);
+bool_t      forthCapHomePushed(void);
 
 /* L1-H: the FHIST interactive-history program — push, cap, evict, recall.
  * Defined in programming/manage.c beside the other capture orchestrators

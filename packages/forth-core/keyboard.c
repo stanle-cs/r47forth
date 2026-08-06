@@ -1879,14 +1879,28 @@ endReturnTrue:
      * a press resolves but never dispatches.  ITM_NOP then keeps every
      * downstream arm out of it; btnReleased's refreshScreen(117) (:2478)
      * repaints. */
-    if(forthCapIsInteractive() && shiftG && !tam.mode) {
-      if(key->fShiftedAim == CHR_caseUP) {
-        forthConsoleRoll(+1);                  /* one line OLDER */
+    if(forthCapIsInteractive() && !tam.mode
+       && (key->fShiftedAim == CHR_caseUP || key->fShiftedAim == CHR_caseDN)) {
+      bool_t isUp = (key->fShiftedAim == CHR_caseUP);
+      if(shiftG) {
+        forthConsoleRoll(isUp ? +1 : -1);      /* +1 = one line OLDER */
         result = ITM_NOP;
       }
-      else if(key->fShiftedAim == CHR_caseDN) {
-        forthConsoleRoll(-1);                  /* one line NEWER */
-        result = ITM_NOP;
+      else if(shiftF) {
+        /* N1-5 (N-T4): RE-HOME the FHIST recall gesture.
+         *
+         * L1-H put recall on CHR_caseUP/CHR_caseDN, which live in the AIM
+         * f-column — reachable only while the capture is in ALPHA input.
+         * That was a footnote while keys mode was an excursion.  Keys-first
+         * makes it the ground state, and in keys mode determineItem takes the
+         * NORMAL columns (:1842), where f-up/f-down are ITM_BST/ITM_SST —
+         * so without this arm the console would open with its own history
+         * unreachable, and the flip would silently cost a landed feature.
+         *
+         * Resolving to CHR_caseUP/CHR_caseDN in BOTH modes is idempotent in
+         * alpha input (the AIM plane already yields exactly these) and is the
+         * whole fix in keys input. */
+        result = isUp ? CHR_caseUP : CHR_caseDN;
       }
     }
 
@@ -4061,10 +4075,14 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            * below is unreachable for an interactive capture now that this
            * branch never falls through to it). */
 
-          /* Rung 1 (E12.4 analog): keys mode -> alpha input. */
-          if(forthCapKeysMode()) {
-            forthCapSetKeysMode(false);
-            showSoftmenu(-MNU_ALPHA);
+          /* Rung 1 — INVERTED by N1-5 (N-T4).  Keys input is now the console's
+           * GROUND state, so the first EXIT press unwinds the ALPHA excursion
+           * back to it and restores the FWRD home row; it no longer unwinds
+           * keys into alpha, which would have been a step away from the
+           * ground rather than toward it. */
+          if(!forthCapKeysMode()) {
+            forthCapSetKeysMode(true);
+            showSoftmenu(-MNU_FORTH);
             break;
           }
           /* Rung 2: anything stacked above the base pops and the capture
@@ -4076,8 +4094,29 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            * ordinary capture state) fall THROUGH to rung 3 instead of
            * popping — it retargets slot 0 to MyAlpha so the predicate reads
            * "base menu displayed". */
-          if(currentMenu() == -MNU_ALPHA) { softmenuStack[0].softmenuId = 1; }
-          if(!(softmenuStack[0].softmenuId <= 1 && menu(1) != -MNU_ALPHA)) {
+          /* Rung 2 — RE-DERIVED by N1-5 (N-T4), and stated directly rather
+           * than by patching the landed boolean.
+           *
+           * The landed form pre-normalised an -MNU_ALPHA slot 0 to MyAlpha
+           * (id 1) so that `softmenuStack[0].softmenuId <= 1 && menu(1) !=
+           * -MNU_ALPHA` read "the base is displayed" and fell through to
+           * rung 3.  Neither half survives FWRD-as-home:
+           *
+           *  - the rename is DESTRUCTIVE when the open pushed nothing.  With
+           *    FWRD already on the stack, pushSoftmenu dedups, so slot 0 is
+           *    the USER'S OWN FWRD frame — renaming it to MyAlpha corrupts
+           *    the menu the user gets back on EXIT.
+           *  - `menu(1)` cannot be consulted for FWRD either: the user's
+           *    pre-FORTH menu is frequently FWRD, and testing it there pops
+           *    the very frame rung 3 is supposed to leave standing.
+           *
+           * What the rung actually means is "is anything stacked ABOVE the
+           * console's base?", so it asks exactly that.  An alpha submenu, a
+           * catalog, STK, FIN — none of them is the base, so they pop one per
+           * press and the capture stays open; the base itself falls through
+           * to rung 3.  (calcModeNormal's own -MNU_ALPHA-guarded pop still
+           * cannot fire here, as before.) */
+          if(currentMenu() != -MNU_FORTH && currentMenu() != -MNU_ALPHA) {
             popSoftmenu();
             stayInAIM();                     /* native pair, below in this arm */
             break;
@@ -4119,13 +4158,24 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           if(aimBuffer[0] != 0) {
             forthHistoryPush(aimBuffer);     /* L1-H fills this in */
           }
-          forthCapClose();
-          aimBuffer[0] = 0;
-          T_cursorPos = 0;
-          displayAIMbufferoffset = 0;
-          calcModeNormal();
-          popSoftmenu();          /* see above — the frame rung 2's
-                                     pre-normalisation renamed but did not pop */
+          { bool_t popHome = forthCapHomePushed();   /* read BEFORE the close
+                                                        clears it */
+            forthCapClose();
+            aimBuffer[0] = 0;
+            T_cursorPos = 0;
+            displayAIMbufferoffset = 0;
+            calcModeNormal();
+            /* Pop ONLY what the open pushed.  The unconditional pop was right
+             * while the open always added a frame; with FWRD as the home row
+             * it does not when FWRD was already on the stack (pushSoftmenu
+             * dedups), and popping anyway ate the user's own FWRD frame and
+             * revealed whatever was beneath it — see forth_capture.h's
+             * homePushed note and the [8] row of the M1-1 battery. */
+            if(popHome) {
+              popSoftmenu();      /* the frame rung 2's pre-normalisation
+                                     renamed but did not pop */
+            }
+          }
           break;
         }
         if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines

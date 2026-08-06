@@ -1269,3 +1269,136 @@ static int test_console_words_program(void)
   }
   return fail;
 }
+
+/* ==================================================================
+ * N1-5 — keys-first entry, the FWRD home row, and the re-derived ladder.
+ * ================================================================== */
+
+/* ---- 25: the default flips for the INTERACTIVE origin and only there.
+ * Both leak directions are regressions: a PEM capture opening in keys, or an
+ * interactive one opening in alpha (the feature dead). ---- */
+static int test_console_keys_first(void)
+{
+  int fail = 0;
+
+  N13_RESET();
+  fnForthOuter(NOPARAM);
+  if (!forthCapIsInteractive()) {
+    printf("    FAIL: fixture — interactive open did not take\n");
+    return 1;
+  }
+  if (!forthCapKeysMode()) {
+    printf("    FAIL: the console must open in KEYS input (N-R6)\n");
+    fail = 1;
+  }
+  if (currentMenu() != -MNU_FORTH) {
+    printf("    FAIL: the console's home row must be FWRD, got menu %d\n", currentMenu());
+    fail = 1;
+  }
+
+  /* And it must survive the REPL reopen — every ENTER, not just the open. */
+  xcopy(aimBuffer, "1 2 +", 6);
+  T_cursorPos = 5;
+  forthInteractiveEnter();
+  if (!forthCapKeysMode()) {
+    printf("    FAIL: keys input must survive the REPL reopen\n");
+    fail = 1;
+  }
+
+  /* The leak direction: PEM inherits the universal open-reset untouched. */
+  forthCapClose();
+  forthCapOpen();                          /* the PEM origin */
+  if (forthCapKeysMode()) {
+    printf("    FAIL: a PEM capture must still open in ALPHA input (K4's pin stands)\n");
+    fail = 1;
+  }
+  if (forthCapIsInteractive()) {
+    printf("    FAIL: fixture — forthCapOpen must be the PEM origin\n");
+    fail = 1;
+  }
+
+  forthCapClose();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: interactive opens keys-first with FWRD home and stays; PEM still opens alpha\n");
+  }
+  return fail;
+}
+
+/* ---- 26: the re-derived EXIT ladder, rung by rung, plus the frame the open
+ * must not eat. ---- */
+static int test_console_exit_ladder(void)
+{
+  int fail = 0;
+
+  /* Rung 1 INVERTED: from the alpha excursion, EXIT returns to keys and
+   * restores the FWRD home row; the capture stays open. */
+  N13_RESET();
+  fnForthOuter(NOPARAM);
+  forthCapSetKeysMode(false);
+  showSoftmenu(-MNU_ALPHA);
+  fnKeyExit(NOPARAM);
+  if (!forthCapIsOpen() || !forthCapKeysMode()) {
+    printf("    FAIL: rung 1 — EXIT from alpha must return to keys with the capture open\n");
+    fail = 1;
+  }
+  if (currentMenu() != -MNU_FORTH) {
+    printf("    FAIL: rung 1 must restore the FWRD home row, got menu %d\n", currentMenu());
+    fail = 1;
+  }
+
+  /* Rung 2: a menu stacked over the console pops and the capture survives.
+   * Its own fixture — a fresh open, so the stack under the console is
+   * whatever the reset left and not the residue of the rung-1 case. */
+  N13_RESET();
+  fnForthOuter(NOPARAM);
+  showSoftmenu(-MNU_STK);
+  if (currentMenu() != -MNU_STK) {
+    printf("    FAIL: fixture — could not stack STK over the console\n");
+    fail = 1;
+  }
+  fnKeyExit(NOPARAM);
+  if (!forthCapIsOpen()) {
+    printf("    FAIL: rung 2 — a stacked menu must pop without closing the capture\n");
+    fail = 1;
+  }
+  if (currentMenu() == -MNU_STK) {
+    printf("    FAIL: rung 2 did not pop the stacked menu\n");
+    fail = 1;
+  }
+
+  /* Rung 3: from the keys ground, EXIT closes. */
+  N13_RESET();
+  fnForthOuter(NOPARAM);
+  fnKeyExit(NOPARAM);
+  if (forthCapIsOpen()) {
+    printf("    FAIL: rung 3 — EXIT from the keys ground must close the capture\n");
+    fail = 1;
+  }
+
+  /* And the frame the open must NOT eat: with FWRD already displayed, the
+   * open pushes nothing that displaces it, so EXIT must leave it standing. */
+  N13_RESET();
+  showSoftmenu(-MNU_STK);
+  showSoftmenu(-MNU_FORTH);
+  fnForthOuter(NOPARAM);
+  fnKeyExit(NOPARAM);
+  if (forthCapIsOpen()) {
+    printf("    FAIL: EXIT did not close over an already-FWRD stack\n");
+    fail = 1;
+  }
+  if (currentMenu() != -MNU_FORTH) {
+    printf("    FAIL: opening over an already-displayed FWRD must not eat the user's own"
+           " frame — got menu %d, expected FWRD still up\n", currentMenu());
+    fail = 1;
+  }
+
+  forthCapClose();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: rung 1 inverts to keys+FWRD, rung 2 pops, rung 3 closes, home frame preserved\n");
+  }
+  return fail;
+}

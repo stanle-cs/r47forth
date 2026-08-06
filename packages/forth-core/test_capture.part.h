@@ -7991,7 +7991,11 @@ static int test_capture_interactive_repl(void)
   if (!scFail) printf("    [4] PASS: EXIT closes without committing \"ABC\" to X\n");
   fail |= scFail;
 
-  /* ---- Subcase 5: ladder rung 1 (keys mode). ---- */
+  /* ---- Subcase 5: ladder rung 1 — INVERTED by N1-5 (keys-first).
+   * Keys input is the console's GROUND state now, so rung 1 unwinds the
+   * ALPHA EXCURSION back to keys and restores the FWRD home row.  It used to
+   * unwind keys into alpha, which after the flip would be a step AWAY from
+   * the ground.  The capture staying open is unchanged. ---- */
   scFail = 0;
   L12_RESET();
   fnForthOuter(NOPARAM);
@@ -7999,14 +8003,19 @@ static int test_capture_interactive_repl(void)
     printf("    [5] FIXTURE FAIL: interactive open did not take\n");
     scFail = 1;
   } else {
+    forthCapSetKeysMode(false);        /* the alpha excursion, stated explicitly */
     runFunction(ITM_A);
     runFunction(ITM_B);
-    forthCapSetKeysMode(true);
 
     fnKeyExit(NOPARAM);
 
-    if (forthCapKeysMode()) {
-      printf("    [5] FAIL: keys mode still on after EXIT\n");
+    if (!forthCapKeysMode()) {
+      printf("    [5] FAIL: EXIT from the alpha excursion must return to keys input\n");
+      scFail = 1;
+    }
+    if (currentMenu() != -MNU_FORTH) {
+      printf("    [5] FAIL: currentMenu() %d after EXIT, expected the FWRD home row (%d)\n",
+             currentMenu(), -MNU_FORTH);
       scFail = 1;
     }
     if (forthTestCapState() != FCAP_OPEN) {
@@ -8383,6 +8392,10 @@ static int test_capture_interactive_divert(void)
       printf("    [3a] FIXTURE FAIL: interactive open did not take\n");
       scFail = 1;
     } else {
+      /* N1-5: the capture now OPENS in keys input, so this subcase — which is
+       * about the E10/E11 TOGGLE, not about the default — states its starting
+       * sub-mode instead of inheriting it. */
+      forthCapSetKeysMode(false);
       showSoftmenu(-MNU_ALPHA);
       if (currentMenu() != -MNU_ALPHA) {
         printf("    [3a] FIXTURE FAIL: showSoftmenu(-MNU_ALPHA) did not take\n");
@@ -8439,6 +8452,9 @@ static int test_capture_interactive_divert(void)
       printf("    [3(b)] FIXTURE FAIL: interactive open did not take\n");
       scFail = 1;
     } else {
+      forthCapSetKeysMode(false);   /* N1-5: the capture now opens in keys input;
+                                       this subcase is about the DRAIN, so it
+                                       states the sub-mode it toggles FROM */
       showSoftmenu(-MNU_ALPHA);
       showSoftmenu(-MNU_FORTH);
       if (currentMenu() != -MNU_FORTH) {
@@ -12156,29 +12172,49 @@ static int test_history_program(void)
           scFail = 1;
         } else {
           fnForthOuter(NOPARAM);
-          if (!forthCapIsOpen() || !forthCapIsInteractive() || forthCapKeysMode()) {
-            printf("    [0] FIXTURE FAIL: interactive (non-keys) open did not take\n");
+          if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+            printf("    [0] FIXTURE FAIL: interactive open did not take\n");
             scFail = 1;
-          } else {
+          }
+          else if (!forthCapKeysMode()) {
+            printf("    [0] FIXTURE FAIL: N1-5 opens the console in KEYS input; bit not set\n");
+            scFail = 1;
+          }
+          else {
             char kbUp[3], kbDown[3];
             int16_t gotUp, gotDown;
+            int mode;
             sprintf(kbUp, "%02d", upRow);
             sprintf(kbDown, "%02d", downRow);
-            /* shiftF is one-shot: determineItem's own resetShiftState()
-             * clears it after the call, so it must be set again before
-             * each individual key. */
-            shiftF = true;
-            gotUp = determineItem(kbUp);
-            shiftF = true;
-            gotDown = determineItem(kbDown);
-            shiftF = false;
-            printf("    [0] REPORT: determineItem(shiftF, UP1 row %d) = %d, DOWN1 row %d = %d"
-                   " (kbd_std fShiftedAim: UP=%d DOWN=%d)\n",
-                   upRow, gotUp, downRow, gotDown,
-                   kbd_std[upRow].fShiftedAim, kbd_std[downRow].fShiftedAim);
-            if (gotUp != kbd_std[upRow].fShiftedAim || gotDown != kbd_std[downRow].fShiftedAim) {
-              printf("    [0] FAIL: determineItem does not resolve through fShiftedAim as expected\n");
-              scFail = 1;
+            /* N1-5 (N-T4) STRENGTHENS this row to BOTH input modes.
+             *
+             * The recall gesture lives on CHR_caseUP/CHR_caseDN, which are
+             * the AIM f-column — so before the flip it was reachable only in
+             * alpha input.  Keys-first makes keys the GROUND state, and in
+             * keys mode determineItem takes the NORMAL columns, where f-up
+             * and f-down are ITM_BST/ITM_SST: without the re-homing arm the
+             * console would open with its own history unreachable.  Asserting
+             * the same resolution in both modes is what pins the fix. */
+            for (mode = 0; mode < 2; mode++) {
+              forthCapSetKeysMode(mode == 0);      /* keys first, then alpha */
+              /* shiftF is one-shot: determineItem's own resetShiftState()
+               * clears it after the call, so it must be set again before
+               * each individual key. */
+              shiftF = true;
+              gotUp = determineItem(kbUp);
+              shiftF = true;
+              gotDown = determineItem(kbDown);
+              shiftF = false;
+              printf("    [0] REPORT: %s input: determineItem(shiftF, UP1 row %d) = %d,"
+                     " DOWN1 row %d = %d (kbd_std fShiftedAim: UP=%d DOWN=%d)\n",
+                     mode == 0 ? "keys" : "alpha", upRow, gotUp, downRow, gotDown,
+                     kbd_std[upRow].fShiftedAim, kbd_std[downRow].fShiftedAim);
+              if (gotUp != kbd_std[upRow].fShiftedAim || gotDown != kbd_std[downRow].fShiftedAim) {
+                printf("    [0] FAIL: %s input does not resolve f-up/f-down to the recall"
+                       " gesture — history is unreachable there\n",
+                       mode == 0 ? "keys" : "alpha");
+                scFail = 1;
+              }
             }
           }
           forthCapClose();
@@ -12187,7 +12223,7 @@ static int test_history_program(void)
       }
     }
   }
-  if (!scFail) printf("    [0] PASS: FHIST collides with nothing; f-shifted ids resolve through fShiftedAim\n");
+  if (!scFail) printf("    [0] PASS: FHIST collides with nothing; f-up/f-down reach recall in BOTH input modes\n");
   fail |= scFail;
   cleanupTestProgram();
 
@@ -15389,7 +15425,11 @@ static int test_interactive_acceptance(void)
   /* ---- [5] Keys mode: SIN inserts its name; backspace edits natively
    * (items.c's divert exclusion list). ---- */
   scFail = 0;
-  runFunction(ITM_AIM);                    /* the ALPHA gesture: alpha -> keys */
+  forthCapSetKeysMode(true);               /* N1-5: the console OPENS in keys input now, so the ALPHA gesture here
+                                        would toggle it OFF.  These subcases are
+                                        about keys-mode BEHAVIOUR, not about the
+                                        toggle (which [3a]/[3(b)] own), so they
+                                        state the sub-mode they need. */
   if (!forthCapKeysMode()) {
     printf("    [5] FIXTURE FAIL: keys mode did not arm\n");
     scFail = 1;
@@ -15470,15 +15510,22 @@ static int test_interactive_acceptance(void)
       printf("    [6] FAIL: capture not open after ENTER\n");
       scFail = 1;
     }
-    if (!scFail && forthCapKeysMode()) {
-      printf("    [6] FAIL: keys mode survived the REPL reopen (E5 relock)\n");
+    /* N1-5 (N-R6) FLIPS this row.  It used to pin the E5 relock — a REPL
+     * reopen dropped back to alpha input.  Keys input is the console's ground
+     * now, and the flip has to survive EVERY ENTER, not just the first open,
+     * or the session silently reverts one line in. */
+    if (!scFail && !forthCapKeysMode()) {
+      printf("    [6] FAIL: keys mode must SURVIVE the REPL reopen (N-R6 keys-first)\n");
       scFail = 1;
     }
   }
   if (!scFail) printf("    [6] PASS: keys-mode fold \"STO 05 \" types text, executes only at ENTER (R05 555 -> 16)\n");
   fail |= scFail;
 
-  /* ---- [7] EXIT closes; no string commit (rung 3 never touches X). ---- */
+  /* ---- [7] EXIT closes; no string commit (rung 3 never touches X).
+   * N1-5: the capture is in keys input here (the ground state), so rung 1
+   * does not fire and EXIT falls through rung 2's base test to rung 3 — one
+   * press, exactly as before the flip. ---- */
   scFail = 0;
   fnKeyExit(NOPARAM);
   if (forthTestCapState() != FCAP_CLOSED) {
@@ -15814,16 +15861,19 @@ static int test_interactive_close_sweep(void)
   }
   if (!scFail) {
     runFunction(ITM_1);                /* the line: "1" */
-    runFunction(ITM_AIM);              /* arm keys mode */
-    if (!forthCapKeysMode()) {
-      printf("    [1] FIXTURE FAIL: keys mode did not arm\n");
+    /* N1-5 INVERTS rung 1: keys input is the ground state, so the rung
+     * unwinds the ALPHA EXCURSION back to keys.  The subcase starts from the
+     * excursion and expects to land in keys, capture still open. */
+    forthCapSetKeysMode(false);
+    if (forthCapKeysMode()) {
+      printf("    [1] FIXTURE FAIL: could not enter the alpha excursion\n");
       scFail = 1;
     }
   }
   if (!scFail) {
-    fnKeyExit(NOPARAM);                /* rung 1: keys -> alpha */
-    if (!forthCapIsOpen() || forthCapKeysMode()) {
-      printf("    [1] FAIL: rung 1 should leave the capture OPEN in alpha (open=%d keys=%d)\n",
+    fnKeyExit(NOPARAM);                /* rung 1: alpha -> keys (N1-5) */
+    if (!forthCapIsOpen() || !forthCapKeysMode()) {
+      printf("    [1] FAIL: rung 1 should leave the capture OPEN in keys input (open=%d keys=%d)\n",
              forthCapIsOpen(), forthCapKeysMode());
       scFail = 1;
     }
@@ -15846,7 +15896,7 @@ static int test_interactive_close_sweep(void)
       scFail = 1;
     }
   }
-  if (!scFail) printf("    [1] PASS: EXIT ladder — rung 1 unwinds keys mode, rung 3 closes with the full tuple and pushes the line\n");
+  if (!scFail) printf("    [1] PASS: EXIT ladder — rung 1 unwinds the alpha excursion to keys, rung 3 closes with the full tuple and pushes the line\n");
   fail |= scFail;
 
   /* ---- [2] fnKeyUp's closeAim arm: full tuple; the native commit
@@ -15860,7 +15910,8 @@ static int test_interactive_close_sweep(void)
   }
   if (!scFail) {
     runFunction(ITM_2);                /* the line: "2" */
-    runFunction(ITM_AIM);              /* arm keys mode (tuple must reset it) */
+    forthCapSetKeysMode(true);         /* N1-5: keys is the open default now;
+                                          the ALPHA gesture would toggle it OFF */
     if (!forthCapKeysMode()) {
       printf("    [2] FIXTURE FAIL: keys mode did not arm\n");
       scFail = 1;
@@ -15891,7 +15942,8 @@ static int test_interactive_close_sweep(void)
   }
   if (!scFail) {
     runFunction(ITM_3);
-    runFunction(ITM_AIM);
+    forthCapSetKeysMode(true);         /* N1-5: keys is the open default now;
+                                          the ALPHA gesture would toggle it OFF */
     if (!forthCapKeysMode()) {
       printf("    [3] FIXTURE FAIL: keys mode did not arm\n");
       scFail = 1;
@@ -15922,7 +15974,8 @@ static int test_interactive_close_sweep(void)
   }
   if (!scFail) {
     runFunction(ITM_4);
-    runFunction(ITM_AIM);
+    forthCapSetKeysMode(true);         /* N1-5: keys is the open default now;
+                                          the ALPHA gesture would toggle it OFF */
     if (!forthCapKeysMode()) {
       printf("    [4] FIXTURE FAIL: keys mode did not arm\n");
       scFail = 1;
@@ -16466,8 +16519,12 @@ static int test_fwrd_normal_mode(void)
     printf("    [8] FIXTURE FAIL: interactive open did not take\n");
     scFail = 1;
   }
-  if (!scFail && currentMenu() != -MNU_ALPHA) {
-    printf("    [8] FAIL: alpha row not on top after open over a stack (menu %d)\n", currentMenu());
+  /* N1-5 (N-R6): the console's home row is FWRD, so THAT is what sits on top
+   * after an open — the drain disposition this subcase pins (KEEP, buried and
+   * harmless) is unchanged; only the identity of the frame the open pushes
+   * has moved from -MNU_ALPHA to -MNU_FORTH. */
+  if (!scFail && currentMenu() != -MNU_FORTH) {
+    printf("    [8] FAIL: FWRD home row not on top after open over a stack (menu %d)\n", currentMenu());
     scFail = 1;
   }
   if (!scFail) {
