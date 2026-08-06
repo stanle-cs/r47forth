@@ -391,3 +391,24 @@ tpStepAddr(..., <numeric literal>)
 
 Any match is a packet failure. Encoding tests may retain exact expected byte
 arrays, but their execution addresses must still obey this rule.
+
+## 2d. Stage L — interactive Forth capture (2026-08-04/05; COMPLETE)
+
+| # | Step | Who | Input |
+|---|---|---|---|
+| L1-0..L1-F3 | re-target, origin/open/close, ENTER/EXIT, divert, FHIST, fold F1-F3 | **DONE** (`c32a415fa`..`115ca3c59`) — local model implemented, architect debugged | `PACKET_L1_*.md` |
+| L1-5A/B | the stage story, C1 steps 1-10 | **DONE** (`9ab280ae8`, `e10a91d4d`) — local model transcribed inlined packets; architect finished both sessions after LM Studio engine faults | `PACKET_L1_5A/B_*.md` |
+| L1-5C/D | close-path sweep + residue pair | **DONE** (`5692fffd9`, `e4cb4c666`) — architect-implemented after a pre-edit session stall (F6-1 precedent) | `PACKET_L1_5C/D_*.md` |
+| L1-5 close | DESIGN.md fold-in, numbers, sim captures | **DONE** (`7547b7d0a` + captures commit) | `PACKET_L1_5_acceptance.md` C3-C5 |
+
+Mutation disposition for L1-5: the acceptance battery re-drives
+mechanisms whose mutation sets landed with their own packets (L1-1
+origin/close, L1-H push/recall/evict, L1-F* fold seams and close paths,
+F1-2 lifetime, F3-4 GLOBAL); the parent packet deliberately defines no
+new mutation round, and the two genuinely new pins (residue arithmetic,
+the literal 1024 cap) are measurements, not gates. Recorded here so the
+absence reads as a decision, not an omission.
+
+Remaining Stage L item that is NOT the implementer's: the C5 DM42n
+hardware pass (PACKET_L1_5_acceptance.md §C5) — **S** drives the C1
+story on the device and reports divergence from the sim, if any.
