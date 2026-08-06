@@ -111,18 +111,40 @@ eight hats.
 |---|---|---|
 | in-family subagents | the workflow | the eight dimensions, blind to each other |
 | **GPT-5.6 Sol / Gemini, by paste** | paste `PROMPT_CODE_AUDIT.md` plus the diff into a fresh session | **the out-of-family pass. This is the route that works.** |
-| GPT-5.6 Sol, via `codex` | see the note below before trying | automation attempt; unproven here |
+| GPT-5.6 Sol, via `codex` | self-contained packets ONLY — see the note below | proven 2026-08-06 (C17 design review); repo-exploration runs remain a dead end |
 
 **Automating the out-of-family pass — what works, 2026-08-06.**
 
 | reader | invocation | state |
 |---|---|---|
 | **Gemini** | `agy --model gemini-3.1-pro-high --print-timeout 12m -p "$(cat prompt.txt)"` | **WORKS.** Answers a ~3 KB packet in a couple of minutes. This is the reader to use. |
-| Sol | `codex exec -s read-only --skip-git-repo-check -m gpt-5.6-sol -c model_reasoning_effort="medium" --cd <empty dir> -o out.txt - < prompt.txt` | **BLOCKED on a system package** — see below. |
+| **Sol** | `cd <empty dir> && timeout 900 codex exec -s read-only --skip-git-repo-check -m gpt-5.6-sol -c model_reasoning_effort="medium" -o out.txt - < prompt.txt` | **WORKS for self-contained packets** — see the 2026-08-06 (second session) note below. Repo-exploration audits remain a dead end. |
 
-**Settled 2026-08-06 after twelve runs: use Gemini. Sol via `codex` does
-not complete an audit, and the reason is behavioural rather than
+**Settled 2026-08-06 after twelve runs: use Gemini for anything that
+needs the repository. Sol via `codex` does not complete an audit that
+lets it explore, and the reason is behavioural rather than
 environmental.**
+
+**Amended 2026-08-06, second session: Sol completes a SELF-CONTAINED
+packet, and well.** The C17 fix-design review was the first automated
+`codex` run to return a report: a ~120-line packet carrying the whole
+subject inline (both functions verbatim, an orientation block for every
+structure it could not inspect, the defect, the proposed design, an
+explicit budget instruction), run from an EMPTY directory with the
+read-only sandbox — no shell needed, so the bubblewrap wall was never
+hit — and `model_reasoning_effort=medium`. It answered inside ten
+minutes with three concrete failure sequences, one of which
+(`pushSoftmenu`'s dedup lifting an UNMARKED borrowed base out from under
+the console) was a real hole that reshaped the fix, and it passed the
+model-name probe ("GPT-5 (Codex)", not Claude). Gemini reviewed the
+same packet in parallel and found a DIFFERENT real hole (fold-back
+handing a user ALPHA row to `calcModeNormal()`), which is the
+rotation argument made flesh: same packet, two families, two distinct
+genuine defects. The regime that works is exactly the regime the
+twelve failed runs pointed at: **give Sol nothing to explore.** Small
+packet, everything inline, empty cwd, sandbox on, a hard `timeout` as
+the backstop. The behavioural diagnosis below stands for anything that
+needs the repository.
 
 The sandbox blocker below is real and the owner's bypass authorisation
 clears it — `--dangerously-bypass-approvals-and-sandbox` gives
