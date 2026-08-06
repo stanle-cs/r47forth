@@ -113,11 +113,60 @@ eight hats.
 | **GPT-5.6 Sol / Gemini, by paste** | paste `PROMPT_CODE_AUDIT.md` plus the diff into a fresh session | **the out-of-family pass. This is the route that works.** |
 | GPT-5.6 Sol, via `codex` | see the note below before trying | automation attempt; unproven here |
 
-**On automating the out-of-family pass — read this before spending an
-evening on it.** The `codex` CLI is installed and authenticated, and
-`gpt-5.6-sol` resolves, so the pass *looks* automatable. Six attempts on
-2026-08-06 produced no completed report, and the failures were all
-different:
+**Automating the out-of-family pass — what works, 2026-08-06.**
+
+| reader | invocation | state |
+|---|---|---|
+| **Gemini** | `agy --model gemini-3.1-pro-high --print-timeout 12m -p "$(cat prompt.txt)"` | **WORKS.** Answers a ~3 KB packet in a couple of minutes. This is the reader to use. |
+| Sol | `codex exec -s read-only --skip-git-repo-check -m gpt-5.6-sol -c model_reasoning_effort="medium" --cd <empty dir> -o out.txt - < prompt.txt` | **BLOCKED on a system package** — see below. |
+
+**Sol is blocked on bubblewrap, and that is the whole story.** `codex`
+sandboxes every shell command the model runs; bubblewrap is not
+installed here (`apt-cache policy bubblewrap` → `Installed: (none)`), so
+it falls back to a bundled copy that does not work under WSL2. The
+symptom is exact and reproducible: prompts needing NO shell answer fine
+(a "reply SOL-OK" probe returned twice), and every prompt where the model
+runs a command hangs until the wall clock kills it, emitting no final
+message. Nine runs on 2026-08-06 chased this through three wrong
+diagnoses before the pattern was clear.
+
+Unblocking it is one line and needs the owner's sudo:
+
+```bash
+sudo apt-get install bubblewrap
+```
+
+`--dangerously-bypass-approvals-and-sandbox` also removes the dependency
+and is deliberately NOT used here: this model has already demonstrated it
+ignores an explicit "do not run any commands", and an unsandboxed reader
+loose in the repo is a worse trade than one missing reader.
+
+Three more things learned the same day, all of which cost a run each:
+
+- **`reasoning effort` defaults to `none`** in `~/.codex/config.toml`.
+  That alone makes a free-form run wander a large diff and never
+  conclude. Diagnose it FIRST; it presents exactly as a wall-clock
+  problem.
+- **Both readers fail on large prompts and succeed on small ones.** The
+  full 304-line packet returned nothing from either; a 60-line one
+  worked first try. Give the out-of-family reader the FUNCTIONS under
+  review, not the stage — which is what it should get anyway, since its
+  job is depth rather than coverage.
+- **Sol ignores "do not run any commands"** even with the source fully
+  inlined. Running it in an empty scratch directory
+  (`--skip-git-repo-check --cd <dir>`) is what removes the temptation.
+- **Send WHOLE FUNCTIONS, and state the orientation of anything the
+  reader cannot see.** Round 2's packet was assembled with `sed` and cut
+  a function off before its copy-out tail; the reader duly reported "this
+  never writes its output", which was true of the packet and false of the
+  code. The same round produced a finding that inverted the softmenu
+  stack — slot 0 is the TOP (`currentMenu()` is `menu(0)`), and nothing
+  in the excerpt said so. A reader with no repository cannot check either
+  of those, so both belong in the packet: whole functions, and a line of
+  orientation for every shared structure they touch. The failure mode is
+  expensive because it looks exactly like a good finding.
+
+The earlier failure list, kept because each one still bites:
 
 - `reasoning effort` defaults to **none** in `~/.codex/config.toml`,
   which is the real reason a free-form run wanders a large diff and never

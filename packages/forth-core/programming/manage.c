@@ -1271,6 +1271,19 @@ void forthCaptureResume(void) {
                                                capture — the sub-mode the user
                                                keyed the TAM item from comes
                                                back with the line */
+    bool_t homeWas   = forthCapHomePushed();/* AUDIT round 2: the SECOND site that
+                                               must survive forthCapOpen()'s reset,
+                                               and the one the round-1 C3 fix
+                                               missed — that fix closed the REPL
+                                               reopen only.  A fold (any TAM item
+                                               keyed inside the console, e.g.
+                                               STO 05) suspends and resumes
+                                               through here, so without this the
+                                               close accounting forgets the
+                                               console pushed a row and EXIT
+                                               leaves it on the owner's menu.
+                                               Found independently by five of the
+                                               eight round-2 readers. */
     uint8_t originWas = forthCapOriginRaw();/* L1-1: forthCapOpen() unconditionally
                                                zeroes origin to PEM too — this is
                                                the SUSPENDED->OPEN re-open, not a
@@ -1283,6 +1296,7 @@ void forthCaptureResume(void) {
                                                which TAM may have used meanwhile */
     forthCapSetKeysMode(keysWas);
     forthCapSetOrigin(originWas);
+    forthCapSetHomePushed(homeWas);
   }
   { uint8_t len = p[3];                     /* §8.1: the empty placeholder is
                                                len=1 payload 0x00 — the xcopy

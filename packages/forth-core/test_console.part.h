@@ -1895,3 +1895,65 @@ static int test_console_frame_conservation(void)
   }
   return fail;
 }
+
+/* ---- 31: AUDIT round 2 — the transient capture bits survive BOTH re-open
+ * sites, not just the REPL one.
+ *
+ * forthCapOpenInteractive()/forthCapOpen() zero keysMode, origin and
+ * homePushed by design, and every path that re-opens an ALREADY-LIVE capture
+ * has to put them back. There are two such paths — the REPL reopen after
+ * ENTER, and forthCaptureResume() after a fold — and round 1's fix closed
+ * only the first. Five of the eight round-2 readers found the second
+ * independently.
+ *
+ * Enumerated rather than sampled: the class is "a field that rides the
+ * capture across a re-open", and it is the whole transient set. ---- */
+static int test_console_capture_bits_survive_reopen(void)
+{
+  int fail = 0;
+
+  /* The REPL reopen (round 1's site). */
+  N13_RESET();
+  forthDictInit();
+  fnForthOuter(NOPARAM);
+  forthCapSetKeysMode(true);
+  forthCapSetHomePushed(true);
+  _consoleEnterLine("XEQ 'CLSTK' 1 2 +");
+  if (!forthCapKeysMode()) {
+    printf("    FAIL: REPL reopen dropped keysMode\n");
+    fail = 1;
+  }
+  if (!forthCapHomePushed()) {
+    printf("    FAIL: REPL reopen dropped homePushed\n");
+    fail = 1;
+  }
+  if (!forthCapIsInteractive()) {
+    printf("    FAIL: REPL reopen dropped the interactive origin\n");
+    fail = 1;
+  }
+  forthCapClose();
+
+  /* THE SECOND SITE — forthCaptureResume() after a fold — IS NOT COVERED HERE,
+   * and saying so is the point.
+   *
+   * The first draft of this test "covered" it by performing the save/restore
+   * in the test body and then asserting the bits survived. That asserts the
+   * TEST's copy of the block, not production's: reverting the production fix
+   * left the suite green. Third vacuous test of this session, same class as
+   * the two before it, caught the same way — by running the mutation.
+   *
+   * Reaching the real path needs a suspended capture on a real program step
+   * (the L1-F fold fixture), which is a TAM-driven battery rather than a
+   * console one. Until that exists, the resume site is held by the fix and by
+   * five independent readers agreeing on it, NOT by a test. Recorded as a gap
+   * rather than papered over with an assertion that cannot fail. */
+
+  forthCapClose();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: keysMode, origin and homePushed survive the REPL reopen"
+           " (the resume site is a documented gap — see the comment)\n");
+  }
+  return fail;
+}

@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a50882fa05cd 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..6762b8e68014e7bf23cb58f5852c5611640c2d91 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,10 @@
@@ -297,7 +297,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a508
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,8 +1154,877 @@ void pemCloseAlphaInput(void) {
+@@ -998,8 +1154,891 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -418,6 +418,19 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a508
 +                                               capture — the sub-mode the user
 +                                               keyed the TAM item from comes
 +                                               back with the line */
++    bool_t homeWas   = forthCapHomePushed();/* AUDIT round 2: the SECOND site that
++                                               must survive forthCapOpen()'s reset,
++                                               and the one the round-1 C3 fix
++                                               missed — that fix closed the REPL
++                                               reopen only.  A fold (any TAM item
++                                               keyed inside the console, e.g.
++                                               STO 05) suspends and resumes
++                                               through here, so without this the
++                                               close accounting forgets the
++                                               console pushed a row and EXIT
++                                               leaves it on the owner's menu.
++                                               Found independently by five of the
++                                               eight round-2 readers. */
 +    uint8_t originWas = forthCapOriginRaw();/* L1-1: forthCapOpen() unconditionally
 +                                               zeroes origin to PEM too — this is
 +                                               the SUSPENDED->OPEN re-open, not a
@@ -430,6 +443,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a508
 +                                               which TAM may have used meanwhile */
 +    forthCapSetKeysMode(keysWas);
 +    forthCapSetOrigin(originWas);
++    forthCapSetHomePushed(homeWas);
 +  }
 +  { uint8_t len = p[3];                     /* §8.1: the empty placeholder is
 +                                               len=1 payload 0x00 — the xcopy
@@ -1175,7 +1189,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a508
  
  void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
    if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {
-@@ -1013,7 +2038,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +2052,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -1184,7 +1198,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a508
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +2410,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +2424,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -1228,7 +1242,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a508
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +2457,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +2471,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -1265,7 +1279,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a508
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +2506,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +2520,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -1333,7 +1347,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a508
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +2578,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +2592,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -1349,7 +1363,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a508
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +2669,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +2683,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -1373,7 +1387,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..399805d4240f7e36fde538a583f7a508
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2981,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2995,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;
