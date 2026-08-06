@@ -762,22 +762,45 @@ static int test_number_bad_exponent_sign_position(void)
   return fail;
 }
 
-/* Test: lone . is NOT a valid number (Axis 4 spec edge case) */
+/* Test: a dot with NO MANTISSA DIGITS is not a valid number (Axis 4 spec
+ * edge case — classifyNumber's `mantissaDigits == 0` rule).
+ *
+ * RETARGETED by Stage N packet N1-4 (2026-08-06).  The probe used to be a
+ * bare ".", with "lastErrorCode != ERROR_NONE" standing in for "not a
+ * number".  That proxy died when `.` became a console output prim: prims
+ * resolve at §4.1 step 1, so a bare "." now runs and never reaches the
+ * number arm at step 3 — the test would have read a legitimate, designed
+ * behaviour change as a grammar bug.
+ *
+ * The CLAIM is unchanged and still worth pinning, so the probe moved to a
+ * token that exercises the same grammar rule and is shadowed by nothing:
+ * "+." and "-." are a sign followed by a dot and no digits, which
+ * classifyNumber must reject for exactly the mantissaDigits reason, and
+ * neither is a prim, an item or a label.  This is the user-shadowing hazard
+ * N-T3 named, realised against a test rather than against a user's word. */
 static int test_number_bad_lone_dot(void)
 {
-  forthDictInit();
-  lastErrorCode = ERROR_NONE;
-  uint8_t xTypeBefore = getRegisterDataType(REGISTER_X);
-  forthOuterInterpret(".");
-  if (lastErrorCode == ERROR_NONE) {
-    printf("    FAIL: lone dot accepted — grammar bug\n");
-    return 1;
+  const char *probes[2] = { "+.", "-." };
+  int i;
+
+  for (i = 0; i < 2; i++) {
+    forthDictInit();
+    lastErrorCode = ERROR_NONE;
+    errorMessage[0] = 0;
+    uint8_t xTypeBefore = getRegisterDataType(REGISTER_X);
+    forthOuterInterpret(probes[i]);
+    if (lastErrorCode != ERROR_FUNCTION_NOT_FOUND) {
+      printf("    FAIL: '%s' gave error %d, expected ERROR_FUNCTION_NOT_FOUND (%d)"
+             " — a dot with no mantissa digits must not parse as a number\n",
+             probes[i], lastErrorCode, ERROR_FUNCTION_NOT_FOUND);
+      return 1;
+    }
+    if (getRegisterDataType(REGISTER_X) != xTypeBefore) {
+      printf("    FAIL: '%s' modified X\n", probes[i]);
+      return 1;
+    }
   }
-  if (getRegisterDataType(REGISTER_X) != xTypeBefore) {
-    printf("    FAIL: lone dot modified X register\n");
-    return 1;
-  }
-  printf("    PASS: lone dot rejected (error %d, not a number)\n", lastErrorCode);
+  printf("    PASS: '+.' and '-.' rejected as undefined words, not parsed as numbers\n");
   return 0;
 }
 

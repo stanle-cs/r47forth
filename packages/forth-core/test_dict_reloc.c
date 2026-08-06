@@ -1305,6 +1305,12 @@ static int test_console_dialogue_echo(void);
 static int test_console_dialogue_error(void);
 static int test_console_dialogue_refusal(void);
 static int test_console_dialogue_session(void);
+/* N1-4: the words */
+static int test_console_words_print(void);
+static int test_console_words_stack(void);
+static int test_console_words_emit(void);
+static int test_console_words_str_page(void);
+static int test_console_words_program(void);
 
 int forthDictSelfTest(void)
 {
@@ -2514,6 +2520,18 @@ int forthDictSelfTest(void)
   fail |= test_console_dialogue_refusal();
   printf("  [DEBUG] running test_console_dialogue_session...\n");
   fail |= test_console_dialogue_session();
+
+  printf("\nFORTH N1-4 TESTS (the output words)\n");
+  printf("  [DEBUG] running test_console_words_print...\n");
+  fail |= test_console_words_print();
+  printf("  [DEBUG] running test_console_words_stack...\n");
+  fail |= test_console_words_stack();
+  printf("  [DEBUG] running test_console_words_emit...\n");
+  fail |= test_console_words_emit();
+  printf("  [DEBUG] running test_console_words_str_page...\n");
+  fail |= test_console_words_str_page();
+  printf("  [DEBUG] running test_console_words_program...\n");
+  fail |= test_console_words_program();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

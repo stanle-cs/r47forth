@@ -981,3 +981,291 @@ static int test_console_dialogue_session(void)
   }
   return fail;
 }
+
+/* ==================================================================
+ * N1-4 — the seven output words.  Ring bytes, stack deltas, type errors,
+ * and the rule that they write with no console open.
+ * ================================================================== */
+
+/* Run a Forth line with a clean ring and a clean error state. */
+static void _consoleRun(const char *src)
+{
+  lastErrorCode = ERROR_NONE;
+  forthOuterInterpret((char *)src);
+}
+
+/* ---- 20: `.` `SPACE` `CR` — the printing core, with NO console open.
+ * The words write the ring wherever they run: one rule, no cases. ---- */
+static int test_console_words_print(void)
+{
+  int fail = 0;
+  char line[FORTH_CONSOLE_FMT_MAX];
+
+  forthCapClose();                        /* deliberately: no console open */
+  calcMode = CM_NORMAL;
+  forthDictInit();
+  forthConsoleClear();
+
+  _consoleRun("XEQ 'CLSTK' 1 . 2 . 3 .");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: printing line errored (%u)\n", lastErrorCode);
+    fail = 1;
+  }
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (compareString(line, "1 2 3 ", CMP_BINARY) != 0) {
+    printf("    FAIL: `1 . 2 . 3 .` wrote \"%s\", expected \"1 2 3 \"\n", line);
+    fail = 1;
+  }
+  if (!forthConsoleHasOpenLine()) {
+    printf("    FAIL: `.` must not close the line — CR does that\n");
+    fail = 1;
+  }
+
+  forthConsoleClear();
+  _consoleRun("XEQ 'CLSTK' 7 . CR 8 .");
+  if (forthConsoleLineCount() != 2) {
+    printf("    FAIL: CR must break the line (%u lines)\n", forthConsoleLineCount());
+    fail = 1;
+  }
+  else {
+    forthConsoleLineAt(1, line, sizeof(line));
+    if (compareString(line, "7 ", CMP_BINARY) != 0) {
+      printf("    FAIL: first line \"%s\", expected \"7 \"\n", line);
+      fail = 1;
+    }
+  }
+
+  forthConsoleClear();
+  _consoleRun("XEQ 'CLSTK' 5 . SPACE 6 .");
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (compareString(line, "5  6 ", CMP_BINARY) != 0) {
+    printf("    FAIL: SPACE line is \"%s\", expected \"5  6 \"\n", line);
+    fail = 1;
+  }
+
+  forthConsoleClear();
+  if (!fail) {
+    printf("    PASS: `.` `SPACE` `CR` write the ring with no console open\n");
+  }
+  return fail;
+}
+
+/* ---- 21: stack deltas.  `.` consumes, `.S` does not. ---- */
+static int test_console_words_stack(void)
+{
+  int fail = 0;
+  uint8_t t; int32_t v;
+  char line[FORTH_CONSOLE_FMT_MAX];
+
+  forthDictInit();
+  forthConsoleClear();
+
+  _consoleRun("XEQ 'CLSTK' 11 22 .");
+  read_reg_int32(REGISTER_X, &t, &v);
+  if (t != dtLongInteger || v != 11) {
+    printf("    FAIL: after `11 22 .` X should be 11 (`.` DROPs), got type %u value %ld\n",
+           t, (long)v);
+    fail = 1;
+  }
+
+  forthConsoleClear();
+  _consoleRun("XEQ 'CLSTK' 33 .S");
+  read_reg_int32(REGISTER_X, &t, &v);
+  if (t != dtLongInteger || v != 33) {
+    printf("    FAIL: `.S` must be non-destructive, X is type %u value %ld\n", t, (long)v);
+    fail = 1;
+  }
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (line[0] != '<') {
+    printf("    FAIL: `.S` must lead with the depth, wrote \"%s\"\n", line);
+    fail = 1;
+  }
+  if (forthConsoleHasOpenLine()) {
+    printf("    FAIL: `.S` writes a whole line and closes it\n");
+    fail = 1;
+  }
+
+  /* The DECLARED stack delta, not just the observable DROP.  forthPrims'
+   * fourth field feeds forthDataDepthApply (forth_inner.c:152), which spills
+   * Forth-owned values into the arena once the counter reaches capacity.  A
+   * `.` declared 0 instead of -1 never decrements, so the counter climbs on a
+   * print-heavy line and the engine spills values that should never have
+   * spilled — invisible in X, loud here.  Ten push/print pairs never exceed a
+   * depth of one, so the correct answer is zero spills. */
+  forthConsoleClear();
+  _consoleRun("XEQ 'CLSTK' 1 . 2 . 3 . 4 . 5 . 6 . 7 . 8 . 9 . 10 .");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: a print-heavy line errored (%u)\n", lastErrorCode);
+    fail = 1;
+  }
+  if (forthSpillCount() != 0) {
+    printf("    FAIL: %u value(s) spilled on a line whose depth never exceeds one —"
+           " `.`'s declared stack delta is wrong\n", forthSpillCount());
+    fail = 1;
+  }
+
+  forthConsoleClear();
+  if (!fail) {
+    printf("    PASS: `.` consumes X and declares it (zero spills), `.S` leaves the stack alone\n");
+  }
+  return fail;
+}
+
+/* ---- 22: EMIT's code space and its refusals. ---- */
+static int test_console_words_emit(void)
+{
+  int fail = 0;
+  char line[FORTH_CONSOLE_FMT_MAX];
+
+  forthDictInit();
+  forthConsoleClear();
+
+  _consoleRun("XEQ 'CLSTK' 65 EMIT 66 EMIT 67 EMIT");
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (compareString(line, "ABC", CMP_BINARY) != 0) {
+    printf("    FAIL: `65 EMIT 66 EMIT 67 EMIT` wrote \"%s\", expected \"ABC\"\n", line);
+    fail = 1;
+  }
+
+  /* A two-byte glyph: STD_UP_ARROW is 0xa191 = 41361. */
+  forthConsoleClear();
+  _consoleRun("XEQ 'CLSTK' 41361 EMIT");
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (compareString(line, STD_UP_ARROW, CMP_BINARY) != 0) {
+    printf("    FAIL: a two-byte glyph code must emit both bytes\n");
+    fail = 1;
+  }
+
+  /* A bare high byte is a TRUNCATED glyph, not a character: refused. */
+  forthConsoleClear();
+  _consoleRun("XEQ 'CLSTK' 200 EMIT");
+  if (lastErrorCode == ERROR_NONE) {
+    printf("    FAIL: EMIT must refuse 200 — a lone high byte is half a glyph\n");
+    fail = 1;
+  }
+  if (forthConsoleLineCount() != 0) {
+    printf("    FAIL: a refused EMIT must write nothing\n");
+    fail = 1;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  /* And a string in X is the standard type error. */
+  forthConsoleClear();
+  _consoleRun("XEQ 'CLSTK'");
+  x_set_string("ABC");
+  _consoleRun("EMIT");
+  if (lastErrorCode == ERROR_NONE) {
+    printf("    FAIL: EMIT of a string must raise the type error\n");
+    fail = 1;
+  }
+  lastErrorCode = ERROR_NONE;
+
+  forthConsoleClear();
+  if (!fail) {
+    printf("    PASS: EMIT writes ASCII and two-byte glyphs, refuses a lone high byte and a string\n");
+  }
+  return fail;
+}
+
+/* ---- 23: `.$` and `PAGE`. ---- */
+static int test_console_words_str_page(void)
+{
+  int fail = 0;
+  char line[FORTH_CONSOLE_FMT_MAX];
+  uint8_t t; int32_t v;
+
+  forthDictInit();
+  forthConsoleClear();
+
+  /* No string LITERALS in this dialect (§2.2 has no string token — a Stage N
+   * non-goal), so X is seeded directly, the way every landed string test
+   * does it. */
+  _consoleRun("XEQ 'CLSTK'");
+  x_set_string("HELLO");
+  _consoleRun(".$");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: `.$` of a string errored (%u)\n", lastErrorCode);
+    fail = 1;
+  }
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (compareString(line, "HELLO", CMP_BINARY) != 0) {
+    printf("    FAIL: `.$` wrote \"%s\", expected \"HELLO\"\n", line);
+    fail = 1;
+  }
+
+  forthConsoleClear();
+  _consoleRun("XEQ 'CLSTK' 42 .$");
+  if (lastErrorCode == ERROR_NONE) {
+    printf("    FAIL: `.$` of a non-string must raise the type error\n");
+    fail = 1;
+  }
+  lastErrorCode = ERROR_NONE;
+  read_reg_int32(REGISTER_X, &t, &v);
+  if (t != dtLongInteger || v != 42) {
+    printf("    FAIL: a refused `.$` must not DROP\n");
+    fail = 1;
+  }
+
+  /* PAGE clears the VIEW and leaves history alone.  Probed through recall
+   * rather than a step count: recall is the user-visible face of FHIST, and
+   * what must survive is the ability to get the line back. */
+  forthConsoleClear();
+  forthHistoryPush("REMEMBER ME");
+  forthConsoleAppendLine("one");
+  forthConsoleAppendLine("two");
+  _consoleRun("PAGE");
+  if (forthConsoleLineCount() != 0) {
+    printf("    FAIL: PAGE must clear the view (%u lines left)\n", forthConsoleLineCount());
+    fail = 1;
+  }
+  { char recalled[FORTH_CONSOLE_FMT_MAX];
+    aimBuffer[0] = 0;
+    forthCapSetHistoryIndex(FORTH_HIST_BROWSE_NONE);
+    forthHistoryRecall(-1);
+    xcopy(recalled, aimBuffer, (uint32_t)stringByteLength(aimBuffer) + 1);
+    if (compareString(recalled, "REMEMBER ME", CMP_BINARY) != 0) {
+      printf("    FAIL: PAGE must not touch FHIST — recall gave \"%s\","
+             " expected \"REMEMBER ME\" (history surgery is not a display act)\n",
+             recalled);
+      fail = 1;
+    }
+  }
+
+  forthConsoleClear();
+  if (!fail) {
+    printf("    PASS: `.$` prints a string and refuses anything else; PAGE clears the view only\n");
+  }
+  return fail;
+}
+
+/* ---- 24: the words run from a PROGRAM STEP too — a bounded BSS write is
+ * legal from every context (§3.3.2), and no console need be open. ---- */
+static int test_console_words_program(void)
+{
+  int fail = 0;
+  char line[FORTH_CONSOLE_FMT_MAX];
+
+  forthDictInit();
+  forthConsoleClear();
+  forthCapClose();
+  calcMode = CM_NORMAL;
+
+  /* A colon definition that prints, invoked from an interpreted line: the
+   * word body runs under forthInner, one nesting level down. */
+  _consoleRun("XEQ 'CLSTK' : SHOUT 72 EMIT 73 EMIT ; 0 DROP SHOUT");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: defining and running a printing word errored (%u)\n", lastErrorCode);
+    fail = 1;
+  }
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (compareString(line, "HI", CMP_BINARY) != 0) {
+    printf("    FAIL: a word body's output is \"%s\", expected \"HI\"\n", line);
+    fail = 1;
+  }
+
+  forthConsoleClear();
+  if (!fail) {
+    printf("    PASS: output words write the ring from inside a compiled word, no console open\n");
+  }
+  return fail;
+}

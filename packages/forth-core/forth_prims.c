@@ -4,6 +4,7 @@
 #include "c47.h"
 #include "forth_prims.h"
 #include "forth_dict.h"
+#include "forth_console.h"
 
 /* ---------- wrapper stubs (C47 handlers take uint16_t, primitives take void) ---------- */
 
@@ -70,6 +71,127 @@ static void pImmediate(void)
   }
 }
 
+/* ---------- N1-4: the console output words (Stage N, N-R5) ----------
+ *
+ * §1.3's guardrail bans duplicating CALCULATOR operations reachable as
+ * CAT_FNCT items.  These are LANGUAGE surface, in the same class as IF,
+ * BEGIN, GLOBAL and RECURSE — there is no item-table equivalent of "print
+ * the top of stack", because the calculator has never had an output
+ * channel.  The fold-in records that clarification so the guardrail is not
+ * re-argued at every output word.
+ *
+ * All seven write the ring wherever they run — interactive, a key press, a
+ * program step — and none of them paints.  A ring append is a bounded BSS
+ * write, legal from interpret, program-step and nested contexts alike
+ * (§3.3.2, nesting <= 2); the view repaints at the seam that already
+ * repaints the stack.  Where no console is open they still write, and the
+ * tests assert the ring bytes rather than a screen.
+ *
+ * The name `.$` is NOT the Forth-83 `TYPE`: TYPE is a landed
+ * CAT_FNCT/PTP_NONE item (items.c:4368, fnGetType) that already resolves
+ * from a Forth line, and a prim of that name would silently change an
+ * existing meaning.  The N-T3 sweep cleared the other six against all 2601
+ * item rows. */
+
+/* `.` — X per the current display mode, then a separating space, then DROP.
+ * The trailing space is what makes `1 . 2 . 3 .` read as "1 2 3 " rather
+ * than "123". */
+static void pPrint(void)
+{
+  char shown[FORTH_CONSOLE_FMT_MAX];
+  forthConsoleFormatRegister(REGISTER_X, shown, (int16_t)sizeof(shown));
+  forthConsoleAppend(shown);
+  forthConsoleAppend(" ");
+  fnDrop(NOPARAM);
+}
+
+/* `.S` — a one-line, depth-prefixed picture of the live stack, NON-
+ * destructive.  The visible window is what displayStack says (4 or 8); the
+ * D3 spill region can hold more, so the count is reported and the levels
+ * are shown top-down from X.  Truncation is the view's job (the transcript
+ * row ellipsis), not this word's — but the DEPTH is written first so the
+ * part that must never be truncated away cannot be. */
+static void pPrintStack(void)
+{
+  char shown[FORTH_CONSOLE_FMT_MAX];
+  char head[32];
+  uint16_t levels = (displayStack > 4) ? 8 : 4;
+  uint16_t i;
+
+  snprintf(head, sizeof(head), "<%u> ", (unsigned)levels);
+  forthConsoleAppend(head);
+  for(i = 0; i < levels; i++) {
+    /* REGISTER_X..REGISTER_T are consecutive (defines.h); above T the
+     * visible window continues into the spare registers the 8-level
+     * display already shows. */
+    forthConsoleFormatRegister((calcRegister_t)(REGISTER_X + i), shown, (int16_t)sizeof(shown));
+    forthConsoleAppend(shown);
+    if(i + 1 < levels) { forthConsoleAppend(" "); }
+  }
+  forthConsoleNewline();
+}
+
+static void pCr(void)    { forthConsoleNewline(); }
+static void pSpace(void) { forthConsoleAppend(" "); }
+static void pPage(void)  { forthConsoleClear(); }   /* the VIEW only — FHIST is
+                                                       untouched; history surgery
+                                                       is not a display act */
+
+/* `EMIT` — X as a C47 glyph code, then DROP.
+ *
+ * The encoding is the one screen.c:1725-1728 decodes: one byte below 0x80,
+ * two bytes (high first) at 0x8000 and above.  A bare 0x80..0xFF is a
+ * TRUNCATED glyph, not a character, and is refused — writing it would put a
+ * lone high byte in the ring for the painter to pair with whatever follows. */
+static void pEmit(void)
+{
+  int32_t code = 0;
+  char g[3];
+
+  if(getRegisterDataType(REGISTER_X) == dtLongInteger) {
+    longInteger_t li;
+    longIntegerInit(li);
+    convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
+    longIntegerToInt32(li, code);
+    longIntegerFree(li);
+  }
+  else if(getRegisterDataType(REGISTER_X) == dtReal34) {
+    code = real34ToInt32(REGISTER_REAL34_DATA(REGISTER_X));
+  }
+  else {
+    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+
+  if(code >= 0x20 && code <= 0x7E) {
+    g[0] = (char)code; g[1] = 0;
+  }
+  else if(code >= 0x8000 && code <= 0xFFFF) {
+    g[0] = (char)((code >> 8) & 0xFF); g[1] = (char)(code & 0xFF); g[2] = 0;
+  }
+  else {
+    displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  forthConsoleAppend(g);
+  fnDrop(NOPARAM);
+}
+
+/* `.$` — the string in X as text, then DROP.  Anything else is the standard
+ * type error, unchanged. */
+static void pPrintStr(void)
+{
+  if(getRegisterDataType(REGISTER_X) != dtString) {
+    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  { char shown[FORTH_CONSOLE_FMT_MAX];
+    forthConsoleFormatRegister(REGISTER_X, shown, (int16_t)sizeof(shown));
+    forthConsoleAppend(shown);
+  }
+  fnDrop(NOPARAM);
+}
+
 /* ---------- primitive table (index-stable, append-only) ---------- */
 
 enum {
@@ -95,7 +217,16 @@ enum {
   PRIM_AGAIN     = 19,
   PRIM_WHILE     = 20,
   PRIM_REPEAT    = 21,
-  PRIM_COUNT     = 22
+  /* N1-4: the console output words.  Appended after PRIM_REPEAT; the
+   * identifiers avoid PRIM_DOT, which is already the multiplication dot. */
+  PRIM_PRINT     = 22,   /* .   */
+  PRIM_PRINTS    = 23,   /* .S  */
+  PRIM_CR        = 24,   /* CR  */
+  PRIM_EMIT      = 25,   /* EMIT */
+  PRIM_SPACE     = 26,   /* SPACE */
+  PRIM_PRINTSTR  = 27,   /* .$  */
+  PRIM_PAGE      = 28,   /* PAGE */
+  PRIM_COUNT     = 29
 };
 
 const forthPrimDef_t forthPrims[PRIM_COUNT] = {
@@ -121,6 +252,14 @@ const forthPrimDef_t forthPrims[PRIM_COUNT] = {
   [PRIM_AGAIN]     = { "AGAIN",  FF_IMMEDIATE, forthCtlAgain , 0 },
   [PRIM_WHILE]     = { "WHILE",  FF_IMMEDIATE, forthCtlWhile , 0 },
   [PRIM_REPEAT]    = { "REPEAT", FF_IMMEDIATE, forthCtlRepeat, 0 },
+  /* N1-4: plain prims, no FF_IMMEDIATE — they RUN, they do not compile. */
+  [PRIM_PRINT]     = { ".",      0, pPrint,      -1 },
+  [PRIM_PRINTS]    = { ".S",     0, pPrintStack,  0 },
+  [PRIM_CR]        = { "CR",     0, pCr,          0 },
+  [PRIM_EMIT]      = { "EMIT",   0, pEmit,       -1 },
+  [PRIM_SPACE]     = { "SPACE",  0, pSpace,       0 },
+  [PRIM_PRINTSTR]  = { ".$",     0, pPrintStr,   -1 },
+  [PRIM_PAGE]      = { "PAGE",   0, pPage,        0 },
 };
 
 const uint16_t forthPrimCount = PRIM_COUNT;
