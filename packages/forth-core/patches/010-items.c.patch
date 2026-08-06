@@ -1,5 +1,5 @@
 diff --git a/src/c47/items.c b/src/c47/items.c
-index f65402f25fdbbf808a058f4acae3a95b83683e9d..9bcdab6d608673947a45e53a570174c92773a3a6 100644
+index f65402f25fdbbf808a058f4acae3a95b83683e9d..7c9b5e078fe3ec1db69bc7a12bef653fcec24c3a 100644
 --- a/src/c47/items.c
 +++ b/src/c47/items.c
 @@ -2,6 +2,13 @@
@@ -97,7 +97,7 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..9bcdab6d608673947a45e53a570174c9
            }
            else {
              displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
-@@ -701,6 +733,49 @@ bool_t isFunctionOldParam16(uint16_t func) {
+@@ -701,6 +733,59 @@ bool_t isFunctionOldParam16(uint16_t func) {
            return;
          }
        }
@@ -121,12 +121,22 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..9bcdab6d608673947a45e53a570174c9
 +           * was right in Stage K, when FWRD was a picker stacked over an alpha
 +           * capture and "leave nothing alpha standing" was the rule.  N-R6 made
 +           * FWRD the console's HOME row, and the drain then deleted the row the
-+           * console had just pushed — after which EXIT's rung 3, still holding
-+           * homePushed, popped the OWNER'S frame in its place.  The drain's
-+           * popSoftmenu-compensation workaround goes with it: retargeting slot
-+           * 0 never enters that loop. */
-+          forthCapSetKeysMode(!forthCapKeysMode());
-+          forthConsoleShowSurface();
++           * console had just pushed — after which EXIT's close rung, still
++           * believing the console owned a frame, popped the OWNER'S frame in
++           * its place.  The drain's popSoftmenu-compensation workaround goes
++           * with it: retargeting slot 0 never enters that loop.
++           *
++           * AUDIT C18: the flip is REFUSED while a user-stacked row covers the
++           * console's base.  The row IS the mode indicator (K-R3), and this
++           * caller used to commit keysMode and then call a function entitled
++           * to change nothing — after which the keypad typed Σ+ where the row
++           * said A.  With an overlay up, EXIT pops it (one per press) and the
++           * gesture works again; refusing is the round-2 report's sanctioned
++           * alternative to forcing the row. */
++          if(forthConsoleBaseOnTop()) {
++            forthCapSetKeysMode(!forthCapKeysMode());
++            forthConsoleShowSurface();
++          }
 +          return;
 +        }
 +        if((indexOfItems[func].status & CAT_STATUS) == CAT_FNCT
@@ -147,7 +157,7 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..9bcdab6d608673947a45e53a570174c9
        if(tam.mode == 0 && TM_VALUE <= indexOfItems[func].param && indexOfItems[func].param <= TM_CMP && (calcMode != CM_PEM || aimBuffer[0] == 0 || nimNumberPart != NP_INT_BASE)) {
          #if defined(VERBOSEKEYS)
            printf("items.c: runfunction (before tamEnterMode): %i, %s\n", softmenu[softmenuStack[0].softmenuId].menuItem, indexOfItems[-softmenu[softmenuStack[0].softmenuId].menuItem].itemSoftmenuName);
-@@ -1683,6 +1758,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
+@@ -1683,6 +1768,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
    void fnSaveXFNRegister          (uint16_t unusedButMandatoryParameter) {}
    void fnCheckLessEqualMinusZero  (uint16_t unusedButMandatoryParameter) {}
    void fnCheckGreaterEqualPlusZero(uint16_t unusedButMandatoryParameter) {}
@@ -156,7 +166,7 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..9bcdab6d608673947a45e53a570174c9
  
  
  #endif // GENERATE_CATALOGS || defined(GENERATE_TESTPGMS)
-@@ -2032,7 +2109,7 @@ TO_QSPI const item_t indexOfItems[] = {
+@@ -2032,7 +2119,7 @@ TO_QSPI const item_t indexOfItems[] = {
  /*  210 */  { fnConstant,                      81,                          STD_mu STD_SUB_G,                              "c.gerver",                                    (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
  /*  211 */  { fnConstant,                      82,                          STD_tau,                                       "c.circle",                                    (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
  /*  212 */  { fnConstant,                      83,                          STD_pi,                                        "pi",                                          (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
@@ -165,7 +175,7 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..9bcdab6d608673947a45e53a570174c9
  /*  214 */  { itemToBeCoded,                   NOPARAM,                     "0214",                                        "0214",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
  /*  215 */  { itemToBeCoded,                   NOPARAM,                     "0215",                                        "0215",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
  /*  216 */  { itemToBeCoded,                   NOPARAM,                     "0216",                                        "0216",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
-@@ -4734,8 +4811,8 @@ TO_QSPI const item_t indexOfItems[] = {
+@@ -4734,8 +4821,8 @@ TO_QSPI const item_t indexOfItems[] = {
  /* 2839 */  UNIT_CONV(constFactorSlugKg      , divide           ,            "kg"                                 STD_RIGHT_ARROW                                                ,            "kg"                                 STD_RIGHT_ARROW                                                ),
  /* 2840 */  UNIT_CONV(constFactorSlinchKg    , multiply         ,            "lbf" STD_DOT "s" STD_SUP_2 "/in"    STD_RIGHT_ARROW                                                ,            "lbf" STD_DOT "s" STD_SUP_2 "/in"    STD_RIGHT_ARROW                                                ),
  /* 2841 */  UNIT_CONV(constFactorSlinchKg    , divide           ,            "kg"                                 STD_RIGHT_ARROW                                                ,            "kg"                                 STD_RIGHT_ARROW                                                ),

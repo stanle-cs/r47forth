@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..51548b2d1836d77f5603a0cee07ab270064b1ab5 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc77350201f69901 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,10 @@
@@ -297,7 +297,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..51548b2d1836d77f5603a0cee07ab270
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,8 +1154,878 @@ void pemCloseAlphaInput(void) {
+@@ -998,8 +1154,889 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -596,7 +596,18 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..51548b2d1836d77f5603a0cee07ab270
 +     * the native paint still covers the area until the next key — but that
 +     * paint is transient, and the transcript line is what keeps the dialogue
 +     * readable afterwards.  Generic message text only: S1 stands, no token.
-+     * View-only; FHIST never holds output. */
++     * View-only; FHIST never holds output.
++     *
++     * AUDIT C19: close the word's own open output record FIRST — `1 . BOGUS`
++     * really does print before it raises (tokens run sequentially and the
++     * ENTER gate is tier-1 structural only), and appending into the open
++     * record merged the message onto the output row, where wide output
++     * pushed it off the right edge under the renderer's ellipsis.  The
++     * success arm below already closes before its echo; the two post-run
++     * arms must agree on the invariant they re-establish. */
++    if (forthConsoleHasOpenLine()) {
++      forthConsoleNewline();
++    }
 +    forthConsoleAppendLine(errorMessageOf(lastErrorCode));
 +
 +    /* L5: reopen with the line intact so the user edits rather than
@@ -1176,7 +1187,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..51548b2d1836d77f5603a0cee07ab270
  
  void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
    if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {
-@@ -1013,7 +2039,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +2050,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -1185,7 +1196,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..51548b2d1836d77f5603a0cee07ab270
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +2411,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +2422,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -1229,7 +1240,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..51548b2d1836d77f5603a0cee07ab270
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +2458,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +2469,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -1266,7 +1277,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..51548b2d1836d77f5603a0cee07ab270
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +2507,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +2518,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -1334,7 +1345,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..51548b2d1836d77f5603a0cee07ab270
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +2579,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +2590,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -1350,7 +1361,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..51548b2d1836d77f5603a0cee07ab270
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +2670,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +2681,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -1374,7 +1385,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..51548b2d1836d77f5603a0cee07ab270
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2982,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +2993,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

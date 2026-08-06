@@ -2990,3 +2990,56 @@ first measurement of this fix compared two stock builds and read their
 absolute numbers disagreed with the Stage N close's, and pinned by
 `arm-none-eabi-nm | grep -c forthConsole` = 0.  The tell is the absolute
 flash figure; the check is the symbol grep.
+
+## 2026-08-06 — AUDIT C18 + C19: the ladder pops before it flips; the error echo closes the line
+
+**C18** was the round-2 finding that three callers commit the keysMode
+flip and then call `forthConsoleShowSurface`, which is entitled to do
+nothing — after which the keypad types `Σ+` where the row says `A`
+(K-R3's rule broken: the row IS the mode indicator).  Three legs, one
+per writer:
+
+- **The EXIT ladder now pops before it flips.**  The overlay rung
+  (formerly rung 2) runs first: EXIT unwinds the topmost thing on
+  screen, and a Greek keypad or catalog stacked by the user is above the
+  sub-mode.  The excursion rung then runs with the base on top by
+  construction, so its flip can never be committed where the row cannot
+  follow.  This also retires C18's reaching input (b) — the AIMCATALOG
+  press that "cost a press and a lie" now costs the press it visibly
+  spends popping the catalog.
+- **The toggle refuses under an overlay** — the round-2 report's own
+  sanctioned disposition ("refusing the flip is as valid a fix as
+  forcing the row").  EXIT pops the overlay; the gesture then works.
+- **The REPL reopen keeps its mandatory keys-first flip (N-R6) and the
+  base stays truthful beneath the overlay**: `forthConsoleShowSurface`
+  now retargets the console's OWNED frame in place at depth.  Possible
+  only because of C17 — the stamp identifies our frame when it is
+  buried, which no menu-identity test could.
+
+**C19**: the ENTER error arm appended the message into a word's
+still-open output record (`1 . BOGUS` — the `.` output lands before the
+raise), where wide output pushed the message off the right edge under
+the renderer's ellipsis.  The arm now closes the open record first,
+matching the success arm; the two post-run arms agree on the invariant
+they re-establish.
+
+**Fixture repair, fourth of the session under the C22 rule:** K-battery
+[3(b)] forced keysMode and hand-pushed both rows, then asserted the
+toggle landed — true only under identity-based ownership.  Re-pointed to
+the real gesture end-to-end: overlay refuses the toggle, EXIT pops it,
+the toggle then lands keys+FWRD.
+
+**Class tests.**  C18: `test_console_submode_row_agreement` — {toggle,
+EXIT, ENTER} × {no overlay, Greek submenu, STK}, asserting the row and
+sub-mode never disagree and that refusals leave both unmoved; the
+ENTER-overlay rows pin the buried retarget as a stack-census
+differential.  C19: `test_console_error_echo_closes_output` — the
+post-run dispositions, with "error after output" asserting the message
+lands as its own record.  Four mutations redden them: flip-before-pop
+(the EXIT overlay rows), unguarded toggle (the toggle overlay rows plus
+[3(b)]), no buried retarget (the ENTER overlay rows), and
+message-into-open-record (the C19 row).
+
+**Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`: flash 1114464 → 1114528 = **+64 B**; ram
+8884 → 8884 = **±0**.  Arena untouched — no dictionary change.

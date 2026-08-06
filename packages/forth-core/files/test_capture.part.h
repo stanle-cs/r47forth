@@ -8447,46 +8447,57 @@ static int test_capture_interactive_divert(void)
     if (!scFail) printf("    [3a] PASS: ALPHA gesture toggles keys mode both ways, softmenu tracks it\n");
     fail |= scFail;
 
-    /* ---- Subcase 3(b): FWRD picker open, THEN toggle to keys mode — the
-     * M3 bounded drain must pop FWRD too (isAlphaSubmenu counts -MNU_FORTH,
-     * softmenus.c). ---- */
+    /* ---- Subcase 3(b), re-pointed by AUDIT C18: the FWRD picker stacked
+     * OVER the alpha excursion is an overlay, and the toggle is REFUSED
+     * while it is up — flipping the key plane under a row that cannot
+     * follow is exactly the row-lies defect.  EXIT pops the overlay (one
+     * press), after which the toggle works.  The pre-C18 form of this row
+     * forced keysMode and hand-pushed the rows, then asserted the flip
+     * landed — true only while ownership was inferred from the visible
+     * menu id (the C22 fixture rule, third instance this stage). ---- */
     scFail = 0;
     L13_RESET();
     fnForthOuter(NOPARAM);
-    if (!forthCapIsOpen()) {
-      printf("    [3(b)] FIXTURE FAIL: interactive open did not take\n");
+    runFunction(ITM_AIM);               /* the REAL excursion entry */
+    if (!forthCapIsOpen() || forthCapKeysMode() || currentMenu() != -MNU_ALPHA) {
+      printf("    [3(b)] FIXTURE FAIL: excursion entry did not take"
+             " (open=%d keys=%d menu %d)\n",
+             (int)forthCapIsOpen(), (int)forthCapKeysMode(), currentMenu());
       scFail = 1;
     } else {
-      forthCapSetKeysMode(false);   /* N1-5: the capture now opens in keys input;
-                                       this subcase is about the DRAIN, so it
-                                       states the sub-mode it toggles FROM */
-      showSoftmenu(-MNU_ALPHA);
-      showSoftmenu(-MNU_FORTH);
+      showSoftmenu(-MNU_FORTH);         /* the picker, stacked as an overlay */
       if (currentMenu() != -MNU_FORTH) {
-        printf("    [3(b)] FIXTURE FAIL: showSoftmenu(-MNU_FORTH) did not take\n");
+        printf("    [3(b)] FIXTURE FAIL: picker overlay did not stack\n");
         scFail = 1;
       } else {
-        runFunction(ITM_AIM);   /* toggle to keys mode directly */
-        if (!forthCapKeysMode()) {
-          printf("    [3(b)] FAIL: keys mode bit not set after toggle-on\n");
+        runFunction(ITM_AIM);
+        if (forthCapKeysMode() || currentMenu() != -MNU_FORTH) {
+          printf("    [3(b)] FAIL: toggle under an overlay must be refused with"
+                 " the row unmoved (keys=%d, menu %d)\n",
+                 (int)forthCapKeysMode(), currentMenu());
           scFail = 1;
         }
-        /* AUDIT C2 FLIPS this row.  It was written when FWRD was a PICKER
-         * stacked over an alpha capture, and the toggle drained every alpha
-         * row including FWRD (isAlphaSubmenu counts -MNU_FORTH), so "nothing
-         * alpha standing" was the correct post-state.  N-R6 made FWRD the
-         * console's HOME row: K-R3's rationale — the underlying row IS the
-         * mode indicator — is now served by SHOWING FWRD in keys input rather
-         * than by showing nothing, and the old drain was deleting the row the
-         * console had just pushed. */
-        if (currentMenu() != -MNU_FORTH) {
-          printf("    [3(b)] FAIL: currentMenu() %d after toggle-to-keys, expected the"
-                 " console's FWRD home row (%d)\n", currentMenu(), -MNU_FORTH);
-          scFail = 1;
+        if (!scFail) {
+          fnKeyExit(NOPARAM);           /* overlay rung: pop the picker */
+          if (forthCapKeysMode() || currentMenu() != -MNU_ALPHA || !forthCapIsOpen()) {
+            printf("    [3(b)] FAIL: EXIT must pop the overlay, sub-mode unmoved"
+                   " (open=%d keys=%d menu %d)\n",
+                   (int)forthCapIsOpen(), (int)forthCapKeysMode(), currentMenu());
+            scFail = 1;
+          }
+        }
+        if (!scFail) {
+          runFunction(ITM_AIM);         /* now the toggle works */
+          if (!forthCapKeysMode() || currentMenu() != -MNU_FORTH) {
+            printf("    [3(b)] FAIL: toggle after the pop must land keys+FWRD"
+                   " (keys=%d, menu %d)\n",
+                   (int)forthCapKeysMode(), currentMenu());
+            scFail = 1;
+          }
         }
       }
     }
-    if (!scFail) printf("    [3(b)] PASS: toggle-to-keys shows the console's FWRD home row (AUDIT C2)\n");
+    if (!scFail) printf("    [3(b)] PASS: overlay refuses the toggle, EXIT pops it, toggle then lands keys+FWRD (AUDIT C18)\n");
     fail |= scFail;
 
     /* ---- Subcase 3b: no bug screen in keys mode (B2 pin) — a physical key

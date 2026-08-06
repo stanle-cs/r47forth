@@ -2823,12 +2823,27 @@ terminal-style rolling and one history. Design sheet:
   would open with its own history unreachable. The roll gesture is
   g-shifted up/down in both modes, keyed layout-independently on the
   row's own alpha f-column.
-- **The EXIT ladder, re-derived for keys-as-ground.** Rung 1 unwinds the
-  ALPHA excursion back to keys and restores the FWRD row (inverted). Rung
-  2 asks directly whether anything is stacked above the console's base —
-  the landed pre-normalisation cannot be reused, because renaming slot 0
-  is destructive when the open pushed nothing. Rung 3 closes, and pops
-  ONLY what the open displaced.
+- **The EXIT ladder, re-derived for keys-as-ground; overlay rung first
+  (AUDIT C18, 2026-08-06).** EXIT unwinds the topmost thing on screen:
+  the OVERLAY rung pops any user-stacked row above the console's base,
+  one per press; the EXCURSION rung then unwinds alpha back to keys and
+  restores the FWRD row (inverted); the close rung pops ONLY what the
+  open displaced. The overlay rung runs FIRST because the sub-mode may
+  only move when the base row can follow it — the pre-C18 order flipped
+  keysMode under the overlay and the keypad typed Σ+ where the row said
+  A. The base predicate asks directly whether anything is stacked above
+  the console's base (the landed pre-normalisation cannot be reused,
+  because renaming slot 0 is destructive when the open pushed nothing).
+- **The sub-mode and the base row never disagree (AUDIT C18).** K-R3's
+  rule — the underlying row IS the mode indicator — is enforced at every
+  keysMode writer: the E10/E11 toggle REFUSES the flip while an overlay
+  covers the base (EXIT pops overlays; the gesture then works); the EXIT
+  ladder pops before it flips; and the REPL reopen, whose keys-first
+  flip is mandatory (N-R6) even under an overlay, retargets the
+  console's OWNED base frame in place at depth so the indicator is
+  right the moment the overlay pops — possible only because C17's stamp
+  identifies the frame when it is buried. A BORROWED base is never
+  rewritten (it is FWRD, which is what keys wants).
 - **Frame ownership rides the frame, not the capture object (AUDIT C17,
   2026-08-06).** Menu ownership — not merely visible menu identity —
   controls the surface swap, the restore path and the EXIT ladder: a menu

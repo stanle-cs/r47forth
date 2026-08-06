@@ -1449,7 +1449,18 @@ void forthInteractiveEnter(void) {
      * the native paint still covers the area until the next key — but that
      * paint is transient, and the transcript line is what keeps the dialogue
      * readable afterwards.  Generic message text only: S1 stands, no token.
-     * View-only; FHIST never holds output. */
+     * View-only; FHIST never holds output.
+     *
+     * AUDIT C19: close the word's own open output record FIRST — `1 . BOGUS`
+     * really does print before it raises (tokens run sequentially and the
+     * ENTER gate is tier-1 structural only), and appending into the open
+     * record merged the message onto the output row, where wide output
+     * pushed it off the right edge under the renderer's ellipsis.  The
+     * success arm below already closes before its echo; the two post-run
+     * arms must agree on the invariant they re-establish. */
+    if (forthConsoleHasOpenLine()) {
+      forthConsoleNewline();
+    }
     forthConsoleAppendLine(errorMessageOf(lastErrorCode));
 
     /* L5: reopen with the line intact so the user edits rather than

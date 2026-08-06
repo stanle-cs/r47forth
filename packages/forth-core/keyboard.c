@@ -4075,30 +4075,18 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            * below is unreachable for an interactive capture now that this
            * branch never falls through to it). */
 
-          /* Rung 1 — INVERTED by N1-5 (N-T4).  Keys input is now the console's
-           * GROUND state, so the first EXIT press unwinds the ALPHA excursion
-           * back to it and restores the FWRD home row; it no longer unwinds
-           * keys into alpha, which would have been a step away from the
-           * ground rather than toward it. */
-          if(!forthCapKeysMode()) {
-            forthCapSetKeysMode(true);
-            /* AUDIT C9: REPLACE the excursion's ALPHA row, do not push FWRD
-             * over it — a push left two console rows on the stack and rung 3's
-             * single pop then revealed ALPHA instead of the owner's menu. */
-            forthConsoleShowSurface();
-            break;
-          }
-          /* Rung 2: anything stacked above the base pops and the capture
-           * stays open.  This is the NATIVE CM_AIM test (below in this same
-           * arm) adopted verbatim, INCLUDING its pre-normalisation: a
-           * non-alpha menu (STK, FIN, a catalog) stacked over the capture
-           * must fall through to rung 3 and NOT be silently discarded, and
-           * the pre-normalisation is what makes -MNU_ALPHA-on-top (the
-           * ordinary capture state) fall THROUGH to rung 3 instead of
-           * popping — it retargets slot 0 to MyAlpha so the predicate reads
-           * "base menu displayed". */
-          /* Rung 2 — RE-DERIVED by N1-5 (N-T4), and stated directly rather
-           * than by patching the landed boolean.
+          /* AUDIT C18: the OVERLAY rung runs FIRST.  EXIT unwinds the topmost
+           * thing on screen, and a row the user stacked (the Greek keypad, a
+           * catalog) is above the sub-mode: popping it before the flip is
+           * what keeps K-R3 — the row IS the mode indicator — true at every
+           * step.  The old order flipped first: with an overlay up, rung 1
+           * committed keysMode while forthConsoleShowSurface was entitled to
+           * change nothing, and the keypad then typed Σ+ where the row said
+           * A.  (The rung's own text below is the C17 ownership form.)
+           *
+           * Rung: anything stacked above the base pops and the capture
+           * stays open — RE-DERIVED by N1-5 (N-T4), and stated directly
+           * rather than by patching the landed boolean.
            *
            * The landed form pre-normalised an -MNU_ALPHA slot 0 to MyAlpha
            * (id 1) so that `softmenuStack[0].softmenuId <= 1 && menu(1) !=
@@ -4117,8 +4105,8 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            * console's base?", so it asks exactly that.  An alpha submenu, a
            * catalog, STK, FIN — none of them is the base, so they pop one per
            * press and the capture stays open; the base itself falls through
-           * to rung 3.  (calcModeNormal's own -MNU_ALPHA-guarded pop still
-           * cannot fire here, as before.)
+           * to the rungs below.  (calcModeNormal's own -MNU_ALPHA-guarded pop
+           * still cannot fire here, as before.)
            *
            * AUDIT C17: "is this the base" is an OWNERSHIP question, and menu
            * identity is a value two owners can hold — a duplicate FWRD/ALPHA
@@ -4137,6 +4125,21 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              * which row belongs to which sub-mode, and one owner for it; the
              * surface is already CM_AIM with FLAG_ALPHA set, which is the only
              * other thing stayInAIM was contributing here. */
+            forthConsoleShowSurface();
+            break;
+          }
+          /* The EXCURSION rung — INVERTED by N1-5 (N-T4).  Keys input is the
+           * console's GROUND state, so EXIT unwinds the ALPHA excursion back
+           * to it and restores the FWRD home row; it no longer unwinds keys
+           * into alpha, which would have been a step away from the ground
+           * rather than toward it.  Runs with the base on top by construction
+           * (the overlay rung above already broke), so the flip can never be
+           * committed where the row cannot follow (C18). */
+          if(!forthCapKeysMode()) {
+            forthCapSetKeysMode(true);
+            /* AUDIT C9: REPLACE the excursion's ALPHA row, do not push FWRD
+             * over it — a push left two console rows on the stack and rung 3's
+             * single pop then revealed ALPHA instead of the owner's menu. */
             forthConsoleShowSurface();
             break;
           }

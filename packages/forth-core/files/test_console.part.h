@@ -2024,3 +2024,287 @@ static int test_console_capture_bits_survive_reopen(void)
   }
   return fail;
 }
+
+/* ---- 32: AUDIT C18 class test — the row and the sub-mode never disagree.
+ *
+ * Bug class: "a state change committed by the caller and the display of that
+ * state established by a callee that may decline."  K-R3's rule is that the
+ * underlying row IS the mode indicator; the round-2 report's invariant is
+ * asserted at every keysMode writer, over every overlay state:
+ * (keysMode, base row) is one of the two legal pairs, OR the sub-mode did
+ * not move.  The disjunction is the report's own — refusing the flip is as
+ * valid as forcing the row — and each case below pins WHICH disposition the
+ * landed fix chose, so a regression to the third option (flip committed,
+ * row untouched) cannot hide in the disjunction.
+ *
+ * Overlay states: none, an alpha submenu (Greek keypad), a non-alpha menu
+ * (STK).  Gestures: the E10/E11 toggle, EXIT, and ENTER's REPL reopen. ---- */
+static int test_console_submode_row_agreement(void)
+{
+  int fail = 0, o, presses;
+  const int16_t overlays[3] = { 0, -MNU_ALPHA_OMEGA, -MNU_STK };
+  const char *oname[3] = { "no overlay", "Greek submenu", "STK" };
+
+  for (o = 0; o < 3; o++) {
+    /* --- gesture 1: the toggle --- */
+    N13_RESET();
+    forthDictInit();
+    showSoftmenu(-MNU_STK);                 /* something of the owner's */
+    fnForthOuter(NOPARAM);
+    if (overlays[o] != 0) {
+      showSoftmenu(overlays[o]);
+      if (currentMenu() != overlays[o]) {
+        printf("    FIXTURE FAIL: [toggle, %s] overlay did not stack\n", oname[o]);
+        fail = 1;
+        continue;
+      }
+    }
+    { bool_t keysBefore = forthCapKeysMode();
+      runFunction(ITM_AIM);
+      if (overlays[o] == 0) {
+        if (forthCapKeysMode() == keysBefore || currentMenu() != -MNU_ALPHA) {
+          printf("    FAIL: [toggle, %s] flip must land with the row following"
+                 " (keys=%d, menu %d)\n", oname[o],
+                 (int)forthCapKeysMode(), currentMenu());
+          fail = 1;
+        }
+      }
+      else {
+        if (forthCapKeysMode() != keysBefore || currentMenu() != overlays[o]) {
+          printf("    FAIL: [toggle, %s] with an overlay the flip must be"
+                 " REFUSED with the row unmoved (keys %d->%d, menu %d)\n",
+                 oname[o], (int)keysBefore, (int)forthCapKeysMode(),
+                 currentMenu());
+          fail = 1;
+        }
+      }
+    }
+    for (presses = 0; presses < 6 && forthCapIsOpen(); presses++) { fnKeyExit(NOPARAM); }
+    if (forthCapIsOpen()) {
+      printf("    FAIL: [toggle, %s] did not close within six EXIT presses\n", oname[o]);
+      fail = 1;
+      forthCapClose();
+    }
+
+    /* --- gesture 2: EXIT from the alpha excursion --- */
+    N13_RESET();
+    forthDictInit();
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    runFunction(ITM_AIM);                    /* enter the excursion, base on top */
+    if (forthCapKeysMode() || currentMenu() != -MNU_ALPHA) {
+      printf("    FIXTURE FAIL: [EXIT, %s] excursion entry did not take\n", oname[o]);
+      fail = 1;
+      forthCapClose();
+      continue;
+    }
+    if (overlays[o] != 0) { showSoftmenu(overlays[o]); }
+    fnKeyExit(NOPARAM);
+    if (overlays[o] == 0) {
+      if (!forthCapKeysMode() || currentMenu() != -MNU_FORTH) {
+        printf("    FAIL: [EXIT, %s] must unwind the excursion to keys+FWRD"
+               " (keys=%d, menu %d)\n", oname[o],
+               (int)forthCapKeysMode(), currentMenu());
+        fail = 1;
+      }
+    }
+    else {
+      /* The overlay rung runs FIRST: the stacked row pops, the sub-mode
+       * does NOT move, and the base beneath is the excursion's own row —
+       * the legal (alpha, ALPHA) pair.  The old ladder flipped first and
+       * left the Greek keypad up while the keys plane typed Σ+. */
+      if (forthCapKeysMode() || currentMenu() != -MNU_ALPHA) {
+        printf("    FAIL: [EXIT, %s] must pop the overlay first, sub-mode"
+               " unmoved (keys=%d, menu %d)\n", oname[o],
+               (int)forthCapKeysMode(), currentMenu());
+        fail = 1;
+      }
+    }
+    for (presses = 0; presses < 6 && forthCapIsOpen(); presses++) { fnKeyExit(NOPARAM); }
+    if (forthCapIsOpen()) { forthCapClose(); fail = 1; }
+
+    /* --- gesture 3: ENTER's REPL reopen --- */
+    N13_RESET();
+    forthDictInit();
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    runFunction(ITM_AIM);
+    if (forthCapKeysMode() || currentMenu() != -MNU_ALPHA) {
+      printf("    FIXTURE FAIL: [ENTER, %s] excursion entry did not take\n", oname[o]);
+      fail = 1;
+      forthCapClose();
+      continue;
+    }
+    { int slot, forthBefore = 0, alphaBefore = 0;
+      if (overlays[o] != 0) { showSoftmenu(overlays[o]); }
+      /* DIFFERENTIAL, like the frame-conservation battery: the stack may
+       * carry FWRD/ALPHA residue from earlier batteries, so the buried
+       * retarget is pinned as a delta, not as an absolute census. */
+      for (slot = 0; slot < SOFTMENU_STACK_SIZE; slot++) {
+        int16_t m = menu((uint8_t)slot);
+        if (m == -MNU_FORTH) { forthBefore++; }
+        if (m == -MNU_ALPHA) { alphaBefore++; }
+      }
+      _consoleEnterLine("1 2 +");
+      if (!forthCapKeysMode()) {
+        printf("    FAIL: [ENTER, %s] keys-first must survive every ENTER (N-R6)\n",
+               oname[o]);
+        fail = 1;
+      }
+      if (overlays[o] == 0) {
+        if (currentMenu() != -MNU_FORTH) {
+          printf("    FAIL: [ENTER, %s] reopen must show the FWRD home row"
+                 " (menu %d)\n", oname[o], currentMenu());
+          fail = 1;
+        }
+      }
+      else {
+        /* The reopen must not eat the user's overlay — but the BASE beneath
+         * must be truthful for the moment the overlay pops: the excursion's
+         * ALPHA became FWRD in place.  This is the buried retarget,
+         * observable without stamp access. */
+        int forthAfter = 0, alphaAfter = 0;
+        if (currentMenu() != overlays[o]) {
+          printf("    FAIL: [ENTER, %s] reopen must leave the user's overlay up"
+                 " (menu %d)\n", oname[o], currentMenu());
+          fail = 1;
+        }
+        for (slot = 0; slot < SOFTMENU_STACK_SIZE; slot++) {
+          int16_t m = menu((uint8_t)slot);
+          if (m == -MNU_FORTH) { forthAfter++; }
+          if (m == -MNU_ALPHA) { alphaAfter++; }
+        }
+        if (forthAfter != forthBefore + 1 || alphaAfter != alphaBefore - 1) {
+          printf("    FAIL: [ENTER, %s] the base beneath the overlay must be"
+                 " retargeted to FWRD (FWRD %d->%d, ALPHA %d->%d)\n",
+                 oname[o], forthBefore, forthAfter, alphaBefore, alphaAfter);
+          fail = 1;
+        }
+      }
+    }
+    for (presses = 0; presses < 6 && forthCapIsOpen(); presses++) { fnKeyExit(NOPARAM); }
+    if (forthCapIsOpen()) { forthCapClose(); fail = 1; }
+  }
+
+  N13_RESET();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: nine gesture/overlay pairs — the row and the sub-mode"
+           " never disagree, refusals leave both unmoved\n");
+  }
+  return fail;
+}
+
+/* ---- 33: AUDIT C19 class test — every post-run arm re-closes the ring.
+ *
+ * Bug class: "two arms of one post-condition, one of which re-establishes an
+ * invariant the other assumes."  The invariant: no exit path from
+ * forthInteractiveEnter's run leaves the ring's open record open.  Driven
+ * over the post-run dispositions; the E9-refusal disposition is pinned by
+ * test_console_dialogue_refusal (writes nothing at all) and not repeated
+ * here.  The load-bearing row is "error AFTER output": `1 . BOGUS` really
+ * does print before it raises, and the error message must land as its OWN
+ * record, not inside the word's open output row where the renderer's
+ * ellipsis can eat it. ---- */
+static int test_console_error_echo_closes_output(void)
+{
+  int fail = 0;
+  uint16_t before;
+  char l0[FORTH_CONSOLE_FMT_MAX], l1[FORTH_CONSOLE_FMT_MAX];
+
+  N13_RESET();
+  forthDictInit();
+  fnForthOuter(NOPARAM);
+
+  /* Disposition: clean line, no output — echo + X echo, closed. */
+  before = forthConsoleLineCount();
+  _consoleEnterLine("1 2 +");
+  if (forthConsoleLineCount() != before + 2 || forthConsoleHasOpenLine()) {
+    printf("    FAIL: [clean, no output] expected +2 closed records, got +%d"
+           " (open=%d)\n", forthConsoleLineCount() - before,
+           (int)forthConsoleHasOpenLine());
+    fail = 1;
+  }
+
+  /* Disposition: clean line WITH output — echo + the word's output, closed
+   * by the success arm. */
+  before = forthConsoleLineCount();
+  _consoleEnterLine("1 .");
+  if (forthConsoleLineCount() != before + 2 || forthConsoleHasOpenLine()) {
+    printf("    FAIL: [clean, output] expected +2 closed records, got +%d"
+           " (open=%d)\n", forthConsoleLineCount() - before,
+           (int)forthConsoleHasOpenLine());
+    fail = 1;
+  }
+
+  /* Disposition: error, no output — echo + message. */
+  before = forthConsoleLineCount();
+  _consoleEnterLine("NOSUCHWORD");
+  if (lastErrorCode == ERROR_NONE) {
+    printf("    FIXTURE FAIL: [error, no output] NOSUCHWORD did not raise\n");
+    fail = 1;
+  }
+  else {
+    const char *msg = errorMessageOf(lastErrorCode);
+    forthConsoleLineAt(0, l0, sizeof(l0));
+    if (forthConsoleLineCount() != before + 2 || forthConsoleHasOpenLine()
+        || compareString(l0, (char *)msg, CMP_BINARY) != 0) {
+      printf("    FAIL: [error, no output] expected +2 records ending in the"
+             " message, got +%d, last \"%s\"\n",
+             forthConsoleLineCount() - before, l0);
+      fail = 1;
+    }
+  }
+  lastErrorCode = ERROR_NONE;
+  _consoleEnterLine("");            /* not needed for state; keep the REPL shape */
+
+  /* THE C19 ROW — error AFTER output.  `.` leaves its record open by
+   * design; the error arm must close it and write the message as its own
+   * record: echo + "1 " + message = +3, and the last two records are
+   * distinct. */
+  before = forthConsoleLineCount();
+  _consoleEnterLine("1 . BOGUS");
+  if (lastErrorCode == ERROR_NONE) {
+    printf("    FIXTURE FAIL: [error after output] BOGUS did not raise\n");
+    fail = 1;
+  }
+  else {
+    const char *msg = errorMessageOf(lastErrorCode);
+    forthConsoleLineAt(0, l0, sizeof(l0));
+    forthConsoleLineAt(1, l1, sizeof(l1));
+    if (forthConsoleLineCount() != before + 3) {
+      printf("    FAIL: [error after output] expected +3 records (echo,"
+             " output, message), got +%d — the message merged into the"
+             " word's open output row\n", forthConsoleLineCount() - before);
+      fail = 1;
+    }
+    else if (compareString(l0, (char *)msg, CMP_BINARY) != 0) {
+      printf("    FAIL: [error after output] last record is \"%s\", expected"
+             " the bare message\n", l0);
+      fail = 1;
+    }
+    else if (stringByteLength(l1) == 0 || l1[0] != '1') {
+      printf("    FAIL: [error after output] second-last record is \"%s\","
+             " expected the word's own output\n", l1);
+      fail = 1;
+    }
+    if (forthConsoleHasOpenLine()) {
+      printf("    FAIL: [error after output] the ring is still open\n");
+      fail = 1;
+    }
+  }
+
+  lastErrorCode = ERROR_NONE;
+  { int presses;
+    for (presses = 0; presses < 6 && forthCapIsOpen(); presses++) { fnKeyExit(NOPARAM); }
+    if (forthCapIsOpen()) { forthCapClose(); fail = 1; }
+  }
+  N13_RESET();
+  forthConsoleClear();
+  if (!fail) {
+    printf("    PASS: every post-run arm closes the ring; the error after"
+           " output lands as its own record\n");
+  }
+  return fail;
+}

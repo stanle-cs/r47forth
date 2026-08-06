@@ -753,12 +753,22 @@ bool_t isFunctionOldParam16(uint16_t func) {
            * was right in Stage K, when FWRD was a picker stacked over an alpha
            * capture and "leave nothing alpha standing" was the rule.  N-R6 made
            * FWRD the console's HOME row, and the drain then deleted the row the
-           * console had just pushed — after which EXIT's rung 3, still holding
-           * homePushed, popped the OWNER'S frame in its place.  The drain's
-           * popSoftmenu-compensation workaround goes with it: retargeting slot
-           * 0 never enters that loop. */
-          forthCapSetKeysMode(!forthCapKeysMode());
-          forthConsoleShowSurface();
+           * console had just pushed — after which EXIT's close rung, still
+           * believing the console owned a frame, popped the OWNER'S frame in
+           * its place.  The drain's popSoftmenu-compensation workaround goes
+           * with it: retargeting slot 0 never enters that loop.
+           *
+           * AUDIT C18: the flip is REFUSED while a user-stacked row covers the
+           * console's base.  The row IS the mode indicator (K-R3), and this
+           * caller used to commit keysMode and then call a function entitled
+           * to change nothing — after which the keypad typed Σ+ where the row
+           * said A.  With an overlay up, EXIT pops it (one per press) and the
+           * gesture works again; refusing is the round-2 report's sanctioned
+           * alternative to forcing the row. */
+          if(forthConsoleBaseOnTop()) {
+            forthCapSetKeysMode(!forthCapKeysMode());
+            forthConsoleShowSurface();
+          }
           return;
         }
         if((indexOfItems[func].status & CAT_STATUS) == CAT_FNCT

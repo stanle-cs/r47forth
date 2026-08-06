@@ -1320,6 +1320,9 @@ static int test_console_one_history(void);
 static int test_console_format_buffer_contract(void);
 static int test_console_frame_conservation(void);
 static int test_console_capture_bits_survive_reopen(void);
+/* AUDIT C18 / C19 class tests */
+static int test_console_submode_row_agreement(void);
+static int test_console_error_echo_closes_output(void);
 
 int forthDictSelfTest(void)
 {
@@ -2562,6 +2565,12 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_console_capture_bits_survive_reopen...\n");
   fail |= test_console_capture_bits_survive_reopen();
+
+  printf("  [DEBUG] running test_console_submode_row_agreement...\n");
+  fail |= test_console_submode_row_agreement();
+
+  printf("  [DEBUG] running test_console_error_echo_closes_output...\n");
+  fail |= test_console_error_echo_closes_output();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

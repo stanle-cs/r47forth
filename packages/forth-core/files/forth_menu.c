@@ -473,11 +473,34 @@ void forthConsoleShowSurface(void) {
     return;
   }
 
-  /* Slot 0 is not registered: either rows the USER stacked sit above the
-   * base (rung 2 unwinds them one press at a time, and this function runs
-   * again when they are gone), or nothing is registered at all — a line
-   * just destroyed the surface and forthConsoleRestoreSurface() is the
-   * re-establisher, not this function.  Leave the stack alone. */
+  /* Slot 0 is not registered: rows the USER stacked sit above the base (the
+   * EXIT ladder's overlay rung unwinds them one press at a time), or nothing
+   * is registered at all — a line just destroyed the surface and
+   * forthConsoleRestoreSurface() is the re-establisher, not this function.
+   *
+   * AUDIT C18: a buried OWNED frame is still retargeted IN PLACE, so the
+   * base stays truthful beneath the overlay — the REPL reopen legitimately
+   * flips to keys while an overlay is up (N-R6: keys-first survives every
+   * ENTER), and leaving the covered base on ALPHA would leave the mode
+   * indicator wrong the moment the overlay pops.  Possible at all only
+   * because the stamp identifies OUR frame at depth (C17); a BORROWED base
+   * is the user's frame and is never rewritten — for it, the reopen's flip
+   * needs no repair (a borrowed base is FWRD, which is what keys wants).
+   * User rows above and below stay untouched. */
+  { int i;
+    for(i = 1; i < SOFTMENU_STACK_SIZE; i++) {
+      if(_ownedAt(i)) {
+        if(menu((uint8_t)i) != want) {
+          m = _softmenuIndexOf(want);
+          if(m >= 0) {
+            softmenuStack[i].softmenuId = m;
+            softmenuStack[i].firstItem  = 0;
+          }
+        }
+        return;
+      }
+    }
+  }
 }
 
 /* Re-establish the console's row after something may have DESTROYED it.

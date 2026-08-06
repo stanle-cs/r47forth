@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfce2463f05 100644
+index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a4a57c106 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,12 +2,67 @@
@@ -541,7 +541,7 @@ index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfc
          if(calcMode == CM_PEM) {
            scrollPemBackwards();
          }
-@@ -3799,6 +4069,139 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3799,6 +4069,142 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -551,30 +551,18 @@ index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfc
 +           * below is unreachable for an interactive capture now that this
 +           * branch never falls through to it). */
 +
-+          /* Rung 1 — INVERTED by N1-5 (N-T4).  Keys input is now the console's
-+           * GROUND state, so the first EXIT press unwinds the ALPHA excursion
-+           * back to it and restores the FWRD home row; it no longer unwinds
-+           * keys into alpha, which would have been a step away from the
-+           * ground rather than toward it. */
-+          if(!forthCapKeysMode()) {
-+            forthCapSetKeysMode(true);
-+            /* AUDIT C9: REPLACE the excursion's ALPHA row, do not push FWRD
-+             * over it — a push left two console rows on the stack and rung 3's
-+             * single pop then revealed ALPHA instead of the owner's menu. */
-+            forthConsoleShowSurface();
-+            break;
-+          }
-+          /* Rung 2: anything stacked above the base pops and the capture
-+           * stays open.  This is the NATIVE CM_AIM test (below in this same
-+           * arm) adopted verbatim, INCLUDING its pre-normalisation: a
-+           * non-alpha menu (STK, FIN, a catalog) stacked over the capture
-+           * must fall through to rung 3 and NOT be silently discarded, and
-+           * the pre-normalisation is what makes -MNU_ALPHA-on-top (the
-+           * ordinary capture state) fall THROUGH to rung 3 instead of
-+           * popping — it retargets slot 0 to MyAlpha so the predicate reads
-+           * "base menu displayed". */
-+          /* Rung 2 — RE-DERIVED by N1-5 (N-T4), and stated directly rather
-+           * than by patching the landed boolean.
++          /* AUDIT C18: the OVERLAY rung runs FIRST.  EXIT unwinds the topmost
++           * thing on screen, and a row the user stacked (the Greek keypad, a
++           * catalog) is above the sub-mode: popping it before the flip is
++           * what keeps K-R3 — the row IS the mode indicator — true at every
++           * step.  The old order flipped first: with an overlay up, rung 1
++           * committed keysMode while forthConsoleShowSurface was entitled to
++           * change nothing, and the keypad then typed Σ+ where the row said
++           * A.  (The rung's own text below is the C17 ownership form.)
++           *
++           * Rung: anything stacked above the base pops and the capture
++           * stays open — RE-DERIVED by N1-5 (N-T4), and stated directly
++           * rather than by patching the landed boolean.
 +           *
 +           * The landed form pre-normalised an -MNU_ALPHA slot 0 to MyAlpha
 +           * (id 1) so that `softmenuStack[0].softmenuId <= 1 && menu(1) !=
@@ -593,8 +581,8 @@ index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfc
 +           * console's base?", so it asks exactly that.  An alpha submenu, a
 +           * catalog, STK, FIN — none of them is the base, so they pop one per
 +           * press and the capture stays open; the base itself falls through
-+           * to rung 3.  (calcModeNormal's own -MNU_ALPHA-guarded pop still
-+           * cannot fire here, as before.)
++           * to the rungs below.  (calcModeNormal's own -MNU_ALPHA-guarded pop
++           * still cannot fire here, as before.)
 +           *
 +           * AUDIT C17: "is this the base" is an OWNERSHIP question, and menu
 +           * identity is a value two owners can hold — a duplicate FWRD/ALPHA
@@ -613,6 +601,21 @@ index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfc
 +             * which row belongs to which sub-mode, and one owner for it; the
 +             * surface is already CM_AIM with FLAG_ALPHA set, which is the only
 +             * other thing stayInAIM was contributing here. */
++            forthConsoleShowSurface();
++            break;
++          }
++          /* The EXCURSION rung — INVERTED by N1-5 (N-T4).  Keys input is the
++           * console's GROUND state, so EXIT unwinds the ALPHA excursion back
++           * to it and restores the FWRD home row; it no longer unwinds keys
++           * into alpha, which would have been a step away from the ground
++           * rather than toward it.  Runs with the base on top by construction
++           * (the overlay rung above already broke), so the flip can never be
++           * committed where the row cannot follow (C18). */
++          if(!forthCapKeysMode()) {
++            forthCapSetKeysMode(true);
++            /* AUDIT C9: REPLACE the excursion's ALPHA row, do not push FWRD
++             * over it — a push left two console rows on the stack and rung 3's
++             * single pop then revealed ALPHA instead of the owner's menu. */
 +            forthConsoleShowSurface();
 +            break;
 +          }
@@ -681,7 +684,7 @@ index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfc
          if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines
            softmenuStack[0].softmenuId = 1;                                  //JM
          }                                                                   //JM
-@@ -3856,6 +4259,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3856,6 +4262,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            lastErrorCode = 0;
            break;
          }
@@ -697,7 +700,7 @@ index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfc
          if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
            if(isAlphaSubmenu(0)) {
              popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
-@@ -3868,6 +4280,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +4283,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -705,7 +708,7 @@ index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfc
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +4291,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +4294,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -728,7 +731,7 @@ index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfc
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4366,9 +4795,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4798,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -753,7 +756,7 @@ index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfc
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
-@@ -4544,6 +4987,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4544,6 +4990,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
@@ -767,7 +770,7 @@ index bc44026016e94a8865b8acc886386341596641c6..aa128b44a68c2dfed178eec6fe01bbfc
              closeAim();
            }
            fnBst(NOPARAM);
-@@ -4762,6 +5212,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4762,6 +5215,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
