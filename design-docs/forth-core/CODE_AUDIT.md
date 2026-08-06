@@ -110,8 +110,40 @@ eight hats.
 | reader | how | role |
 |---|---|---|
 | in-family subagents | the workflow | the eight dimensions, blind to each other |
-| **GPT-5.6 Sol** | `codex exec -s read-only -m gpt-5.6-sol --cd /home/stan/c43 - < brief.txt` | the out-of-family pass. Installed and authenticated locally; `read-only` is the auditor posture — it reads and runs commands, it cannot edit. |
-| Gemini / ChatGPT web | paste `PROMPT_CODE_AUDIT.md` | fallback, or a third family when a finding is contested |
+| **GPT-5.6 Sol / Gemini, by paste** | paste `PROMPT_CODE_AUDIT.md` plus the diff into a fresh session | **the out-of-family pass. This is the route that works.** |
+| GPT-5.6 Sol, via `codex` | see the note below before trying | automation attempt; unproven here |
+
+**On automating the out-of-family pass — read this before spending an
+evening on it.** The `codex` CLI is installed and authenticated, and
+`gpt-5.6-sol` resolves, so the pass *looks* automatable. Six attempts on
+2026-08-06 produced no completed report, and the failures were all
+different:
+
+- `reasoning effort` defaults to **none** in `~/.codex/config.toml`,
+  which is the real reason a free-form run wanders a large diff and never
+  concludes. Set `-c model_reasoning_effort="high"`. Diagnose this FIRST;
+  it looks exactly like a wall-clock problem and is not.
+- `codex exec review --base <commit>` is the bounded form, but `--base`
+  is mutually exclusive with a custom prompt — so the audit brief cannot
+  be supplied with it, and the review runs on its own generic
+  instructions.
+- `codex exec review` rejects `--cd`; plain `codex exec` accepts it.
+- `--cd /tmp` fails the trusted-directory check; run from the repo.
+- Even single-shot, with the source inlined and no exploration allowed,
+  the run returned with no model output inside 25 minutes.
+
+The value of the out-of-family reader does not depend on any of this.
+`PROMPT_CODE_AUDIT.md` is written to be pasted whole, which is how
+`forum/PROMPT_AUDIT.md` has always been used and how the prose workflow
+gets its second family. **Paste it. Do not let the automation become the
+reason the pass is skipped** — the pass is what closes the audit, and the
+tooling is only there to save a copy-paste.
+
+One partial run did land a finding before it died: `.S` reports the
+display-window size as if it were the stack depth. The in-family pass
+found the same defect independently (C7). Two readers, no contact, same
+defect — that is the agreement worth having, and it arrived from a run
+that never finished.
 
 Sol is already this project's established independent reviewer:
 `CODE_REVIEW_SERIES.md` is addressed to it by name, and it ran the F1-5,
