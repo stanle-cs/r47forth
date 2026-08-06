@@ -1,5 +1,12 @@
 # Correctness review series — C47 forth-core
 
+> **Superseded for anything worth more than one pass by
+> `CODE_AUDIT.md`** (2026-08-06), which runs the same hunt with several
+> blind readers, an adversarial refutation pass, and a report as its
+> output. This series remains the record of R1–R5 and is still the right
+> shape when you want one area, one session, and a Qwen prompt list at
+> the end rather than a report.
+
 **What this is.** A personal hobby project: firmware for a DM42-class pocket
 calculator (a fork of the open-source C47/R47 firmware,
 gitlab.com/rpncalculators/c43). Single-user handheld — no network stack, no

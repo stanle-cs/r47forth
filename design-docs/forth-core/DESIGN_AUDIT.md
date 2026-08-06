@@ -1,9 +1,9 @@
 # forth-core — DESIGN AUDIT
 
 A repeatable check that the package still obeys its own design philosophy.
-Not a bug hunt: `/code-review` and the code-audit series do that. This asks a
-different question — **is this still the design we decided on, or has it
-drifted?**
+Not a bug hunt: `CODE_AUDIT.md` (the adversarial multi-reader audit),
+`/code-review` and the R-series do that. This asks a different question —
+**is this still the design we decided on, or has it drifted?**
 
 Run it at every stage close, before any release/MR, and after any session that
 touched an upstream file. It is deliberately short enough to run often.
