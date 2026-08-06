@@ -1138,6 +1138,7 @@ static int test_fold_operand_parity(void);                     /* L1-F3 */
 static int test_fold_close_paths(void);                        /* L1-F3 */
 static int test_cm_gate_audit(void);                           /* L1-F3 */
 static int test_interactive_acceptance(void);                 /* L1-5 */
+static int test_interactive_close_sweep(void);                /* L1-5 */
 static int test_forth_fold_commit_recompiles(void);           /* FIX-7 */
 static int test_quote_glyph_accept_parity(void);              /* FIX-7 class */
 static int test_resume_drains_buried_catalog(void);           /* FIX-9 */
@@ -2173,6 +2174,12 @@ int forthDictSelfTest(void)
   forthDictInit();
   printf("  [DEBUG] running test_interactive_acceptance...\n");
   fail |= test_interactive_acceptance();
+  forthDictClear();
+  forthGDictClear();
+
+  forthDictInit();
+  printf("  [DEBUG] running test_interactive_close_sweep...\n");
+  fail |= test_interactive_close_sweep();
   forthDictClear();
   forthGDictClear();
 
