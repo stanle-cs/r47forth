@@ -3078,3 +3078,80 @@ mechanism under test cannot reach it.*
 
 **Numbers (RULE-1).** Selftest-only: flash 1114528 unchanged, ram 8884
 unchanged, arena untouched.
+
+## 2026-08-06 — AUDIT round 3: four regressions from the same day's fixes
+
+Round 3 audited `b5a0202c9..48c8776fe` — the C17/C18/C19 fixes and the C21
+battery, all landed hours earlier.  Report:
+`AUDIT_round3_2026-08-06.md`.  **Every confirmed finding was a regression
+introduced by those fixes**, which is round 2's headline repeating exactly:
+four of round 2's seven came from round 1's fixes, and four of round 3's
+four came from round 2's.  The rate is not falling.
+
+**R1, found independently by four of seven finders — the C17 stamp is
+persisted.**  `softmenuStack` is saved and restored WHOLESALE as a hex dump
+(`saveRestoreBackup.c:293`/`:986`), `userMenuId` included, and the restore
+lands AFTER the dict-lifecycle seam whose unstamp was meant to clear it.  So
+a stamp came back from the state file with no capture open, and the next
+console open declined to register (a stamp already existed), leaving its
+EXIT reading ownership off a dead capture.
+
+This is the cost of C17's central move, and it is worth stating as a rule:
+**`homePushed` was capture state, explicitly never persisted; the frame is
+persisted.**  Moving ownership into the frame was right and necessary — it
+is what made ownership survive reopen and resume — but it changed the
+persistence contract of the state, and nothing in the fix noticed.  The
+class: *state moved into a structure with a different persistence contract
+than the one it left.*  Fixed at `forthCaptureSanitizeRestoredUi()`, which
+exists for exactly this ordering problem (the F6-6 FLAG_ALPHA precedent).
+
+**R2** — `forthCapAbandonSuspended` closes without passing the unstamp
+funnel (two finders).  **R3** — a line that destroys the console's row
+without leaving CM_AIM is never repaired: `EXITALL` is CAT_FNCT/PTP_NONE, a
+typed line runs it, it pops every frame down to MyMenu and never touches
+calcMode, so the repair block's `calcMode != CM_AIM` gate skipped the
+surface repair along with the mode repair.  Two repairs, one guard, and the
+guard belonged to only one of them.
+
+**R4 — the invariant as written was false**, caught by two in-family finders
+and by Sol independently.  "Exactly one frame is registered" is not what the
+code does: the alpha excursion over the user's own FWRD row registers a
+BORROWED base and an OWNED excursion frame, and that is correct.  The
+documentation described a rule the code must not follow.  Restated in all
+three places as *at most one borrowed base and at most one owned frame,
+owned above borrowed*, and `forthConsoleRegisterSlot0` now enforces the real
+rule with the ALPHA acquire routed through it, so one site decides
+ownership.
+
+**A third wrong attribution, killed by its own mutation.**  Test 11's
+empty-band assertion has now been mis-attributed twice in commit messages
+(register suppression, then the `count == 0` guard) and a third story was
+drafted and disproved: removing the `view >= count` skip leaves the gate
+green, because `forthConsoleLineAt` rejects the out-of-range view.  The
+assertion is defended three deep and no single-line mutation fires it.  It
+is recorded in the test as a DOCUMENTED GAP rather than given a fourth
+confident story.  The lesson generalises the C22 rule: **an assertion's
+provenance is a claim, and claims get mutations too.**
+
+**Five fixture defects this session, and the fifth is new in kind.**  Round
+3's own first-draft oracle used `forthConsoleBaseOnTop()`, whose identity
+fallback answers "true" for a stack carrying no stamp at all — it
+MANUFACTURED three false failures instead of hiding a real one.  Wrong
+oracles fail in both directions, and a green suite is not the only thing
+they can fake.
+
+**Process state, recorded because it changes what the next session can
+trust:** the refutation pass and the report synthesis both died on usage
+credits — eleven verifiers and the synthesiser.  Every verdict in the round-3
+report is therefore the AUTHOR's trace of the author's own code, which is the
+arrangement the whole system exists to avoid, and the `design` dimension
+never ran either.  Round 4 is required and its first job is re-verifying
+round 3's fixes with a refutation pass that actually runs.  The out-of-family
+half worked: Gemini and Sol both answered, both landed real findings (R4
+among them), and Sol's one bad finding was a PACKET defect — the packet did
+not mention the package's `softmenus.c` override that rebuilds the FWRD
+picker on every paint, which a reader with no repository cannot know.
+
+**Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`: flash 1114528 → 1114568 = **+40 B**; ram 8884 →
+8884 = **±0**.  Arena untouched.

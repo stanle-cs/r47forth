@@ -31,9 +31,15 @@ void forthConsoleShowSurface(void);
 void forthConsoleRestoreSurface(void);
 
 /* AUDIT C17: frame ownership.  The frame the console relies on is REGISTERED
- * by a sentinel in its own userMenuId (owned = console-created, rung 3 pops
- * it; borrowed = the user's row on loan, rung 3 releases it).  Ownership
- * rides the frame through every push/pop/reopen/resume; see the banner in
+ * by a sentinel in its own userMenuId (owned = console-created, the close
+ * rung pops it; borrowed = the user's row on loan, the close rung releases
+ * it).  Ownership rides the frame through every push/pop/reopen/resume.
+ *
+ * Invariant: at most one BORROWED base and at most one OWNED frame, the
+ * owned one above the borrowed one when both exist (the alpha excursion
+ * opened over the user's own FWRD row is the two-registration case, and it
+ * is correct).  Never two OWNED, never a stamp outliving its capture — the
+ * stack is PERSISTED, so the restore seam unstamps too.  See the banner in
  * forth_menu.c. */
 bool_t forthConsoleOwnsSlot0(void);     /* slot 0 is console-CREATED */
 bool_t forthConsoleStampOnStack(void);  /* a registered frame exists anywhere */

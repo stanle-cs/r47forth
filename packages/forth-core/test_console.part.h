@@ -523,9 +523,31 @@ static int test_console_view_paints(void)
   lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
   _forthConsoleRender();
   empty = _consoleBandPixels();
+  /* DOCUMENTED GAP — this assertion is defended three deep and NO single
+   * mutation found so far can fire it.  Recorded rather than papered over,
+   * and the history is worth keeping because two confident attributions were
+   * both false:
+   *
+   *   - it was first advertised as proving "no register paints while the
+   *     console is up" (AUDIT C21 killed that: this case calls
+   *     _forthConsoleRender directly, which has no register-paint call on
+   *     its path at all — the real proof lives in test 14);
+   *   - the C21 commit then re-attributed it to the renderer's `count == 0`
+   *     early return.  Also false: delete that return and every row hits the
+   *     `view >= count` skip, so nothing paints (AUDIT round 3);
+   *   - and the skip is not it either.  MUTATION RUN: turning that
+   *     `continue` into a fallthrough left the gate GREEN, because
+   *     forthConsoleLineAt() rejects an out-of-range view and the
+   *     `!forthConsoleLineAt(...) || line[0] == 0` guard below catches it.
+   *
+   * So the assertion is real but effectively unfalsifiable by any one-line
+   * change to the current renderer: three independent mechanisms each
+   * produce the empty band.  It stays as a belt-and-braces regression guard
+   * against a rewrite that removes all three.  It is NOT evidence of
+   * anything, and no comment here may claim it is. */
   if (empty != 0) {
     printf("    FAIL: an empty console must paint nothing in the band"
-           " (got %d lit px — the renderer's count==0 guard is broken)\n", empty);
+           " (got %d lit px)\n", empty);
     fail = 1;
   }
 
@@ -2351,6 +2373,205 @@ static int test_console_error_echo_closes_output(void)
   if (!fail) {
     printf("    PASS: every post-run arm closes the ring; the error after"
            " output lands as its own record\n");
+  }
+  return fail;
+}
+
+/* ---- 34: AUDIT round 3 class test — a frame stamp never outlives its
+ * capture.
+ *
+ * Bug class: "ownership state reachable by a close path that does not pass
+ * the funnel that clears it."  C17 moved ownership OUT of the capture object
+ * and INTO softmenuStack[].userMenuId, which bought the reopen/resume
+ * survival the old homePushed bit could not have — and cost this: the frame
+ * array is PERSISTED wholesale (saveRestoreBackup.c), and two paths reach a
+ * closed capture without calling forthCapClose().
+ *
+ * Enumerated, because the class is enumerable: every way a capture can end.
+ * The invariant asserted after each: NO stamp anywhere on the stack.
+ *
+ * Oracle: forthConsoleStampOnStack(), which asks the question directly.
+ * The first draft of this test used forthConsoleBaseOnTop() and reported
+ * three FALSE failures: that predicate falls back to a menu-IDENTITY test
+ * when no stamp exists, and a non-ladder close legitimately leaves the
+ * console's FWRD row standing — so it answered "true" for a stack with no
+ * stamp on it at all.  Fifth fixture of this stage caught by the C22 rule,
+ * and the first where the wrong oracle manufactured failures rather than
+ * hiding them. ---- */
+static int test_console_stamp_never_outlives_capture(void)
+{
+  int fail = 0;
+
+  /* (a) the ordinary EXIT close. */
+  N13_RESET();
+  forthDictInit();
+  showSoftmenu(-MNU_STK);
+  fnForthOuter(NOPARAM);
+  { int presses;
+    for (presses = 0; presses < 6 && forthCapIsOpen(); presses++) { fnKeyExit(NOPARAM); }
+  }
+  if (forthConsoleStampOnStack()) {
+    printf("    FAIL: [EXIT close] a stamp survived the close funnel\n");
+    fail = 1;
+  }
+
+  /* (b) a close through the funnel that is NOT the EXIT ladder — the shape
+   * every non-ladder key takes (_forthCapCloseIfInteractive). */
+  N13_RESET();
+  forthDictInit();
+  showSoftmenu(-MNU_STK);
+  fnForthOuter(NOPARAM);
+  forthCapClose();
+  if (forthConsoleStampOnStack()) {
+    printf("    FAIL: [funnel close] a stamp survived forthCapClose()\n");
+    fail = 1;
+  }
+
+  /* (c) an ABANDONED suspension — reached standalone by forthCaptureResume's
+   * canary arm, and it does NOT call forthCapClose(). */
+  N13_RESET();
+  forthDictInit();
+  showSoftmenu(-MNU_STK);
+  fnForthOuter(NOPARAM);
+  forthCapSuspendState(0, 0, 0, 0);            /* OPEN -> SUSPENDED */
+  if (!forthCapIsSuspended()) {
+    printf("    FIXTURE FAIL: [abandon] the capture did not suspend\n");
+    fail = 1;
+  }
+  forthCapAbandonSuspended();
+  if (forthCapIsOpen() || forthCapIsSuspended()) {
+    printf("    FIXTURE FAIL: [abandon] the capture did not close\n");
+    fail = 1;
+  }
+  if (forthConsoleStampOnStack()) {
+    printf("    FAIL: [abandon] a stamp survived forthCapAbandonSuspended()"
+           " — that close path bypasses the funnel\n");
+    fail = 1;
+  }
+
+  /* (d) THE PERSISTENCE ROW.  softmenuStack is saved and restored as a raw
+   * hex dump, so a backup taken with the console open carries the stamps
+   * into the file and the restore writes them back — AFTER the seam whose
+   * unstamp was supposed to clear them.  Simulated exactly as the restore
+   * does it: capture reset first (the dict-lifecycle seam), then the stack
+   * overwritten from the "file" image, then the sanitizer.
+   *
+   * The consequence this pins is the one that bites the NEXT session: with a
+   * stale stamp present, forthConsoleRegisterSlot0 declines, so the next
+   * open registers nothing and its EXIT reads ownership off a dead capture. */
+  { softmenuStack_t image[SOFTMENU_STACK_SIZE];
+    N13_RESET();
+    forthDictInit();
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);                     /* console open, frame stamped */
+    xcopy(image, softmenuStack, sizeof(image));/* <- what saveCalc writes */
+
+    forthCapPowerReset();                      /* the seam at :975-976 */
+    xcopy(softmenuStack, image, sizeof(image));/* <- restoreStateValue at :986 */
+    forthCaptureSanitizeRestoredUi();          /* the seam at :1496 */
+
+    if (forthCapIsOpen()) {
+      printf("    FIXTURE FAIL: [restore] the capture must be closed after"
+             " the reset\n");
+      fail = 1;
+    }
+    if (forthConsoleStampOnStack()) {
+      printf("    FAIL: [restore] a stamp came back from the state file and"
+             " outlived its capture — it must be cleared AFTER the stack is"
+             " restored, not before\n");
+      fail = 1;
+    }
+    /* And the session after the restore must own its own frame. */
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    if (!forthConsoleOwnsSlot0()) {
+      printf("    FAIL: [restore] the session after a restore did not register"
+             " its frame — a stale stamp made the open decline\n");
+      fail = 1;
+    }
+    { int presses;
+      for (presses = 0; presses < 6 && forthCapIsOpen(); presses++) { fnKeyExit(NOPARAM); }
+    }
+  }
+
+  N13_RESET();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: four capture endings — EXIT, funnel, abandoned"
+           " suspension, save/restore — none leaves a stamp behind\n");
+  }
+  return fail;
+}
+
+/* ---- 35: AUDIT round 3 class test — a line that destroys the console's row
+ * WITHOUT leaving CM_AIM is still repaired.
+ *
+ * Bug class: "two repairs sharing one guard, where the guard belongs to only
+ * one of them."  The post-run block repaired the MODE and the SURFACE under
+ * a single `calcMode != CM_AIM` test, which conflated "the line left the AIM
+ * surface" with "the line damaged the console's row".  `EXITALL` does the
+ * second without the first: CAT_FNCT/PTP_NONE, so a typed line resolves and
+ * runs it, and it pops every frame down to MyMenu without touching calcMode.
+ *
+ * Driven as a differential against `CLSTK`, which damages the row via
+ * calcModeNormal() and DOES leave CM_AIM — the case the landed battery
+ * already covered. Both must end with the console owning a row again. ---- */
+static int test_console_surface_repair_ungated(void)
+{
+  int fail = 0;
+  int i;
+
+  for (i = 0; i < 2; i++) {
+    const char *what = (i == 0) ? "XEQ 'CLSTK' (leaves CM_AIM)"
+                                : "EXITALL (stays in CM_AIM)";
+    N13_RESET();
+    forthDictInit();
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    if (!forthConsoleOwnsSlot0()) {
+      printf("    FIXTURE FAIL: [%s] the open did not register a frame\n", what);
+      fail = 1;
+      forthCapClose();
+      continue;
+    }
+
+    _consoleEnterLine((i == 0) ? "XEQ 'CLSTK'" : "EXITALL");
+
+    if (!forthCapIsOpen()) {
+      printf("    FIXTURE FAIL: [%s] the capture did not survive the line\n", what);
+      fail = 1;
+      continue;
+    }
+    if (calcMode != CM_AIM) {
+      printf("    FAIL: [%s] the line left the console off the AIM surface\n", what);
+      fail = 1;
+    }
+    /* The repair: the console has a row again, and it is one it owns or
+     * borrows — not whatever the pops happened to reveal. */
+    if (!forthConsoleBaseOnTop()) {
+      printf("    FAIL: [%s] the console's surface was not re-established"
+             " (menu %d) — the repair was skipped\n", what, currentMenu());
+      fail = 1;
+    }
+    if (currentMenu() != -MNU_FORTH) {
+      printf("    FAIL: [%s] the restored row must be FWRD in keys mode"
+             " (menu %d)\n", what, currentMenu());
+      fail = 1;
+    }
+
+    { int presses;
+      for (presses = 0; presses < 6 && forthCapIsOpen(); presses++) { fnKeyExit(NOPARAM); }
+      if (forthCapIsOpen()) { forthCapClose(); fail = 1; }
+    }
+  }
+
+  N13_RESET();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: both a mode-leaving and a mode-preserving destructive"
+           " line leave the console owning its row\n");
   }
   return fail;
 }

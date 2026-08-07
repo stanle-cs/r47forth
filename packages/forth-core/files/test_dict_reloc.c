@@ -1323,6 +1323,9 @@ static int test_console_capture_bits_survive_reopen(void);
 /* AUDIT C18 / C19 class tests */
 static int test_console_submode_row_agreement(void);
 static int test_console_error_echo_closes_output(void);
+/* AUDIT round 3 class tests */
+static int test_console_stamp_never_outlives_capture(void);
+static int test_console_surface_repair_ungated(void);
 
 int forthDictSelfTest(void)
 {
@@ -2571,6 +2574,12 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_console_error_echo_closes_output...\n");
   fail |= test_console_error_echo_closes_output();
+
+  printf("  [DEBUG] running test_console_stamp_never_outlives_capture...\n");
+  fail |= test_console_stamp_never_outlives_capture();
+
+  printf("  [DEBUG] running test_console_surface_repair_ungated...\n");
+  fail |= test_console_surface_repair_ungated();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

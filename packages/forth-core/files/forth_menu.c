@@ -285,12 +285,24 @@ void forthBuildWordPicker(int16_t menu)
  *
  * So ownership now lives IN the frame.  The frame the console relies on
  * carries a sentinel in its userMenuId — FRAME_STAMP for a frame the console
- * CREATED (rung 3 pops it at close), BORROW_STAMP for the USER'S OWN row the
- * console is merely displaying (rung 3 releases it at close) — and every
- * decision — retarget, restore, rung 2's "is anything stacked above the
- * base", rung 3's "pop what the open pushed" — tests the stamps.  Exactly
- * one frame is registered while an interactive capture is open; that is the
- * invariant, and both sentinels are cleared by the close funnel.
+ * CREATED (the close rung pops it), BORROW_STAMP for the USER'S OWN row the
+ * console is merely displaying (the close rung releases it) — and every
+ * decision — retarget, restore, "is anything stacked above the base", "pop
+ * what the open pushed" — tests the stamps.
+ *
+ * THE INVARIANT, stated correctly (AUDIT round 3 — an earlier draft of this
+ * banner claimed "exactly one frame is registered", which is NOT what the
+ * code does and was caught by three independent readers): while an
+ * interactive capture is open the stack carries AT MOST ONE BORROWED base
+ * and AT MOST ONE OWNED frame, and when both exist the OWNED one is ABOVE
+ * the borrowed one.  Two registrations is the normal, correct state of the
+ * alpha excursion opened over the user's own FWRD row: the borrow marks
+ * their row so dedup cannot lift it and the close cannot pop it, while the
+ * owned frame carries the excursion.  What must never happen is two OWNED
+ * frames, or a stamp of either kind outliving its capture.  Every close
+ * path clears both — forthCapClose() is the funnel, with
+ * forthCapAbandonSuspended() and the restore sanitizer as the two paths
+ * that reach a closed capture WITHOUT passing through it.
  *
  * The field is safe to borrow: it is meaningful only for -MNU_DYNAMIC frames
  * (pushSoftmenu/popSoftmenu/fnGetMenu all gate on that), native pushes write
@@ -368,13 +380,24 @@ bool_t forthConsoleStampOnStack(void) {
 }
 
 /* Register slot 0 as the console's surface frame.  `created` says whether the
- * open/acquire pushed it (OWNED: rung 3 pops it) or it is the user's own row
- * (BORROWED: rung 3 releases it).  No-op when any frame is already registered
- * — the only path that gets here with a live stamp is FORTH pressed inside an
- * open console (C6, open finding), and re-registering there would either
- * downgrade the owned frame or mint a second one. */
+ * open/acquire pushed it (OWNED: the close rung pops it) or it is the user's
+ * own row (BORROWED: the close rung releases it).
+ *
+ * An OWNED registration is refused while an OWNED frame already exists — two
+ * owned frames is the state the invariant forbids, and the path that reaches
+ * here with one live is FORTH pressed inside an open console (C6, open
+ * finding).  A BORROWED registration is refused while ANY stamp exists: the
+ * borrow marks the base, and the base is claimed once, at the open. */
 void forthConsoleRegisterSlot0(bool_t created) {
-  if(forthConsoleStampOnStack()) { return; }
+  if(created) {
+    int i;
+    for(i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+      if(_ownedAt(i)) { return; }
+    }
+  }
+  else if(forthConsoleStampOnStack()) {
+    return;
+  }
   softmenuStack[0].userMenuId = created ? FORTH_CONSOLE_FRAME_STAMP
                                         : FORTH_CONSOLE_BORROW_STAMP;
 }
@@ -417,8 +440,10 @@ static void _forthConsoleAcquireRow(int16_t want) {
           (SOFTMENU_STACK_SIZE - 1) * sizeof(softmenuStack_t));
     softmenuStack[0].softmenuId = m;
     softmenuStack[0].firstItem  = 0;
-    softmenuStack[0].userMenuId = FORTH_CONSOLE_FRAME_STAMP;
+    softmenuStack[0].userMenuId = 0;          /* a fresh native-shaped frame... */
     softmenuStack[0].calcMode   = calcMode;
+    forthConsoleRegisterSlot0(true);          /* ...claimed through the ONE
+                                                 site that decides ownership */
     doRefreshSoftMenu = true;
     return;
   }

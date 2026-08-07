@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc77350201f69901 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..a8167c2499edbf49296cdddf74ea3977fbe20c2f 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,10 @@
@@ -42,11 +42,42 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
            xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
            tmpString[2 + cursorInString    ] = STD_CURSOR[0];
            tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
-@@ -792,6 +811,54 @@ static void _closeAlphaMenus(void) {
+@@ -792,6 +811,85 @@ static void _closeAlphaMenus(void) {
    }
  }
  
 +void forthCaptureSanitizeRestoredUi(void) {
++  /* AUDIT round 3 — the C17 frame stamp MUST be cleared here, and it is
++   * deliberately ABOVE the gate below.
++   *
++   * Frame ownership rides softmenuStack[].userMenuId, and softmenuStack is
++   * persisted WHOLESALE as a hex dump (saveRestoreBackup.c:293/:986).  So a
++   * backup taken with the console open carries the stamps into the file, and
++   * the restore writes them back into the live stack — at :986, which is
++   * AFTER the dict-lifecycle seam at :975-976 whose forthCapPowerReset() ->
++   * forthCapClose() -> forthConsoleUnstampAll() was supposed to clear them.
++   * The unstamp is silently overwritten moments later, exactly as a
++   * FLAG_ALPHA clear attempted in that seam would be (the F6-6 finding, and
++   * the reason THIS function exists).
++   *
++   * The consequence is not cosmetic: a stale stamp with no capture open makes
++   * the next console open's forthConsoleRegisterSlot0() a no-op (it declines
++   * when a stamp already exists), so that session registers nothing and its
++   * EXIT reads ownership off a frame belonging to a capture that ended before
++   * the restore.
++   *
++   * This is the defect the old homePushed bit did NOT have — it was capture
++   * state, explicitly never persisted.  Moving ownership into the frame
++   * (which is right, and is what C17 needed) moved it into a PERSISTED
++   * structure, and this is the seam that pays for that.
++   *
++   * Unconditional, and above the early return: a restore always lands with
++   * the capture CLOSED (forthCap.state is process-local), so no live stamp
++   * can exist here to protect, and the gate below is CM_PEM-only — the
++   * interactive origin would never reach it.  Found by four of seven
++   * independent readers in round 3. */
++  forthConsoleUnstampAll();
++
 +  /* forthCap.state is process-local and is reset before restoreCalc()
 +   * reloads the persisted UI fields, so a backup taken mid-capture restores
 +   * CM_PEM + ALPHA + tam.function == ITM_FORTH around a CLOSED capture.
@@ -97,7 +128,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
  void pemAlpha(int16_t item) {
    bool_t editCommand = false;
    if(item == ITM_EDIT) {
-@@ -823,6 +890,24 @@ void pemAlpha(int16_t item) {
+@@ -823,6 +921,24 @@ void pemAlpha(int16_t item) {
        editCommand = true;
        item = aimFunc;
      }
@@ -122,7 +153,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
      else {
        aimBuffer[0] = 0;
        return;
-@@ -830,6 +915,9 @@ void pemAlpha(int16_t item) {
+@@ -830,6 +946,9 @@ void pemAlpha(int16_t item) {
    }
  
    if(!getSystemFlag(FLAG_ALPHA)) {
@@ -132,7 +163,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
        resetShiftState();
        displayAIMbufferoffset = 0;
        if(!editCommand) {
-@@ -851,6 +939,9 @@ void pemAlpha(int16_t item) {
+@@ -851,6 +970,9 @@ void pemAlpha(int16_t item) {
          tmpString[2] = 0;
          _insertInProgram((uint8_t *)tmpString, 3);
        }
@@ -142,7 +173,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
        else { // rem or 42str
          tmpString[0] = (tam.function >> 8) | 0x80;
          tmpString[1] =  tam.function       & 0xff;
-@@ -863,36 +954,64 @@ void pemAlpha(int16_t item) {
+@@ -863,36 +985,64 @@ void pemAlpha(int16_t item) {
      }
      if(indexOfItems[item].func == addItemToBuffer) {
        int32_t len = stringByteLength(aimBuffer);
@@ -221,7 +252,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
          int16_t lastGlyphPos;
          aimBuffer[T_cursorPos] = 0;
          lastGlyphPos = stringLastGlyph(aimBuffer);
-@@ -902,11 +1021,23 @@ void pemAlpha(int16_t item) {
+@@ -902,11 +1052,23 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_ENTER) {
@@ -250,7 +281,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
      }
      else if(item == ITM_USERMODE) {
        fnFlipFlag(FLAG_USER);
-@@ -956,6 +1087,13 @@ void pemAlpha(int16_t item) {
+@@ -956,6 +1118,13 @@ void pemAlpha(int16_t item) {
        fnT_ARROW(indexOfItems[item].param);
        return;
      }
@@ -264,7 +295,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
  
      int16_t aimFunc = currentStep[0];
      if(aimFunc & 0x80) {
-@@ -972,6 +1110,9 @@ void pemAlpha(int16_t item) {
+@@ -972,6 +1141,9 @@ void pemAlpha(int16_t item) {
        xcopy(tmpString + 3, aimBuffer, stringByteLength(aimBuffer));
        _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 3);
      }
@@ -274,7 +305,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
      else { // rem or 42str
        tmpString[0] = (aimFunc >> 8) | 0x80;
        tmpString[1] =  aimFunc       & 0xff;
-@@ -988,7 +1129,22 @@ void pemAlpha(int16_t item) {
+@@ -988,7 +1160,22 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -297,7 +328,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,8 +1154,889 @@ void pemCloseAlphaInput(void) {
+@@ -998,8 +1185,904 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -306,8 +337,8 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
 +  // REM/LITERAL/non-empty-FORTH source lines alike, so the reset must be
 +  // unconditional here too, not just gated on tam.function == ITM_FORTH.
 +  tam.function = 0;
- }
- 
++}
++
 +/* FIX-9: the E1 catalog-drain helpers are defined further down (above
 + * insertStepInProgram); forthCaptureResume needs them too. */
 +static bool_t _forthCatalogBuriedOnStack(void);
@@ -578,16 +609,31 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
 +   * point that knows a capture is still open, and it runs on every path out
 +   * of a committed line.  Only for the interactive origin — a PEM capture
 +   * lives on a program step, not on this surface. */
-+  if (forthCapIsOpen() && forthCapIsInteractive() && calcMode != CM_AIM) {
-+    calcMode = CM_AIM;
-+    setSystemFlag(FLAG_ALPHA);
-+    cursorEnabled = true;
-+    calcModeAimGui();
++  if (forthCapIsOpen() && forthCapIsInteractive()) {
++    if (calcMode != CM_AIM) {
++      calcMode = CM_AIM;
++      setSystemFlag(FLAG_ALPHA);
++      cursorEnabled = true;
++      calcModeAimGui();
++    }
 +    /* AUDIT C2-family: calcModeNormal() does not only change the mode — it
 +     * POPS the console's own softmenu frame when that frame is the ALPHA row
 +     * and retargets MyAlpha to MyMenu (src/c47/calcMode.c:44-49).  Restoring
-+     * the mode without restoring the row left the console frameless with a
-+     * stale homePushed, and EXIT then handed the owner MyMenu. */
++     * the mode without restoring the row left the console frameless and EXIT
++     * then handed the owner MyMenu.
++     *
++     * AUDIT round 3: the SURFACE repair is no longer gated on the MODE
++     * repair.  The two were one `if`, which conflated "the line left the AIM
++     * surface" with "the line damaged the console's row" — and a line can do
++     * the second without the first.  `EXITALL` is the reaching input: it is
++     * CAT_FNCT/PTP_NONE, so a typed line resolves and runs it
++     * (softmenus.c:4250), it pops every frame down to MyMenu — the console's
++     * registered frame among them — and it never touches calcMode, so the
++     * whole repair block used to be skipped.  The console was left with no
++     * row and no stamp, after which EXIT's fallback identity test popped the
++     * user's own remaining menus one press at a time.
++     * forthConsoleRestoreSurface() is a no-op when the frame is intact, so
++     * running it unconditionally costs a stack scan. */
 +    forthConsoleRestoreSurface();
 +  }
 +
@@ -1095,8 +1141,8 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
 +  forthFoldCtx.capStepOffset = (uint32_t)(currentStep - beginOfProgramMemory);
 +
 +  forthCapSetFoldModeRaw(_forthFoldAdmits(func, mode) ? 1 : 2);
-+}
-+
+ }
+ 
 +/* C4: unwind the fold.  Exact — see PACKET_L1_F1_fold_context.md C4. */
 +/* L1-F2 (rev 3): unwind the fold once the TAM session has actually ENDED.
 + *
@@ -1187,7 +1233,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
  
  void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
    if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {
-@@ -1013,7 +2050,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +2096,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -1196,7 +1242,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +2422,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +2468,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -1240,7 +1286,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +2469,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +2515,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -1277,7 +1323,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +2518,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +2564,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -1345,7 +1391,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +2590,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +2636,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -1361,7 +1407,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +2681,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +2727,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -1385,7 +1431,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..92b9a09ff04bf2efa015895edc773502
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +2993,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +3039,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

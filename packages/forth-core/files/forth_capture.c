@@ -67,6 +67,17 @@ void     forthCapAbandonSuspended(void){ if (forthCap.state == FCAP_SUSPENDED) {
                                                it leaks into the next capture */
   forthCap.origin = FCAP_ORIGIN_PEM;        /* L1-1/E14: origin rides the
                                                suspension too (C1) */
+  forthConsoleUnstampAll();                 /* AUDIT round 3: this is a CLOSE
+                                               path that does NOT go through
+                                               forthCapClose(), so the C17
+                                               frame stamp has to be cleared
+                                               here for the same reason
+                                               keysMode and origin are.
+                                               Reached standalone by
+                                               forthCaptureResume's canary arm
+                                               (manage.c) — the power-reset
+                                               caller is already covered by its
+                                               own forthCapClose(). */
 } }
 
 /* F6-6: capture state cannot outlive the dictionary lifecycle.

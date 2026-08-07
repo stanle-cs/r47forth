@@ -812,6 +812,37 @@ static void _closeAlphaMenus(void) {
 }
 
 void forthCaptureSanitizeRestoredUi(void) {
+  /* AUDIT round 3 — the C17 frame stamp MUST be cleared here, and it is
+   * deliberately ABOVE the gate below.
+   *
+   * Frame ownership rides softmenuStack[].userMenuId, and softmenuStack is
+   * persisted WHOLESALE as a hex dump (saveRestoreBackup.c:293/:986).  So a
+   * backup taken with the console open carries the stamps into the file, and
+   * the restore writes them back into the live stack — at :986, which is
+   * AFTER the dict-lifecycle seam at :975-976 whose forthCapPowerReset() ->
+   * forthCapClose() -> forthConsoleUnstampAll() was supposed to clear them.
+   * The unstamp is silently overwritten moments later, exactly as a
+   * FLAG_ALPHA clear attempted in that seam would be (the F6-6 finding, and
+   * the reason THIS function exists).
+   *
+   * The consequence is not cosmetic: a stale stamp with no capture open makes
+   * the next console open's forthConsoleRegisterSlot0() a no-op (it declines
+   * when a stamp already exists), so that session registers nothing and its
+   * EXIT reads ownership off a frame belonging to a capture that ended before
+   * the restore.
+   *
+   * This is the defect the old homePushed bit did NOT have — it was capture
+   * state, explicitly never persisted.  Moving ownership into the frame
+   * (which is right, and is what C17 needed) moved it into a PERSISTED
+   * structure, and this is the seam that pays for that.
+   *
+   * Unconditional, and above the early return: a restore always lands with
+   * the capture CLOSED (forthCap.state is process-local), so no live stamp
+   * can exist here to protect, and the gate below is CM_PEM-only — the
+   * interactive origin would never reach it.  Found by four of seven
+   * independent readers in round 3. */
+  forthConsoleUnstampAll();
+
   /* forthCap.state is process-local and is reset before restoreCalc()
    * reloads the persisted UI fields, so a backup taken mid-capture restores
    * CM_PEM + ALPHA + tam.function == ITM_FORTH around a CLOSED capture.
@@ -1431,16 +1462,31 @@ void forthInteractiveEnter(void) {
    * point that knows a capture is still open, and it runs on every path out
    * of a committed line.  Only for the interactive origin — a PEM capture
    * lives on a program step, not on this surface. */
-  if (forthCapIsOpen() && forthCapIsInteractive() && calcMode != CM_AIM) {
-    calcMode = CM_AIM;
-    setSystemFlag(FLAG_ALPHA);
-    cursorEnabled = true;
-    calcModeAimGui();
+  if (forthCapIsOpen() && forthCapIsInteractive()) {
+    if (calcMode != CM_AIM) {
+      calcMode = CM_AIM;
+      setSystemFlag(FLAG_ALPHA);
+      cursorEnabled = true;
+      calcModeAimGui();
+    }
     /* AUDIT C2-family: calcModeNormal() does not only change the mode — it
      * POPS the console's own softmenu frame when that frame is the ALPHA row
      * and retargets MyAlpha to MyMenu (src/c47/calcMode.c:44-49).  Restoring
-     * the mode without restoring the row left the console frameless with a
-     * stale homePushed, and EXIT then handed the owner MyMenu. */
+     * the mode without restoring the row left the console frameless and EXIT
+     * then handed the owner MyMenu.
+     *
+     * AUDIT round 3: the SURFACE repair is no longer gated on the MODE
+     * repair.  The two were one `if`, which conflated "the line left the AIM
+     * surface" with "the line damaged the console's row" — and a line can do
+     * the second without the first.  `EXITALL` is the reaching input: it is
+     * CAT_FNCT/PTP_NONE, so a typed line resolves and runs it
+     * (softmenus.c:4250), it pops every frame down to MyMenu — the console's
+     * registered frame among them — and it never touches calcMode, so the
+     * whole repair block used to be skipped.  The console was left with no
+     * row and no stamp, after which EXIT's fallback identity test popped the
+     * user's own remaining menus one press at a time.
+     * forthConsoleRestoreSurface() is a no-op when the frame is intact, so
+     * running it unconditionally costs a stack scan. */
     forthConsoleRestoreSurface();
   }
 

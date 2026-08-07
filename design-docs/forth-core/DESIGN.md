@@ -2858,6 +2858,14 @@ terminal-style rolling and one history. Design sheet:
   the mark is in the frame it moves with every push/pop/dedup-lift and
   survives every REPL reopen and fold resume by construction, retiring
   `forthCap.homePushed` and its hand-preservation sites (the C3 family).
+  The invariant is **at most one borrowed base and at most one owned
+  frame, owned above borrowed** — the alpha excursion opened over the
+  user's own FWRD row registers both, and that is correct. Two owned
+  frames is the forbidden state, and so is a stamp that outlives its
+  capture: `softmenuStack` is **persisted wholesale**, so besides the
+  close funnel the restore seam clears the stamps after the stack comes
+  back from the file (round 3 — the one thing the retired `homePushed`
+  bit got for free by being capture state that was never persisted).
   "Did the stack grow?" remains the wrong open-time test —
   `pushSoftmenu` dedups against a match anywhere in the array by lifting
   the stack over it, so the frame count can be unchanged while slot 0
