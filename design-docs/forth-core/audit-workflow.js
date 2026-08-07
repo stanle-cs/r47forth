@@ -231,12 +231,28 @@ is a MUTATION: break the thing, run ./packages/forth-core/build-test.sh, and see
 whether it goes red. Apply the mutation, observe, and REVERT it in the same
 step. The tree must be clean when you finish — verify with \`git status\`.
 
+YOU ARE IN YOUR OWN GIT WORKTREE. Mutate freely HERE; this is the only place
+you may. Round 5 is why this is spelled out: verifiers shared the owner's
+working tree, and two of three mutation runs were contaminated by a sibling's
+live \`/* MUTATION */\` edits — one saw a baseline gate come back RED at a
+clean HEAD. Do NOT touch any tree but your own, and do not revert an edit you
+did not make: a foreign edit means a stale sibling, and the correct response is
+to say so in your evidence, not to clean up after it.
+
 Otherwise do not edit the tree at all.
 
 Answer REFUTED or SURVIVES, one paragraph of why, then your evidence: the path
 you constructed, the trace you followed, or the ruling you found.`,
     { label: `refute:${lens.key}:${f.file.split('/').pop()}:${f.line}`, phase: 'Refute',
-      schema: VERDICT_SCHEMA, effort: 'high' })
+      schema: VERDICT_SCHEMA, effort: 'high',
+      /* AUDIT round 5 earned this: verifiers mutate to prove a coverage claim,
+       * they run concurrently, and in the owner's shared tree two of three
+       * mutation runs were contaminated by a sibling's live edit.  A worktree
+       * per verifier is the cost of trustworthy mutation evidence — the only
+       * uncontaminated proof that round produced (R9) was the one reader who
+       * made its own.  Auto-removed when unchanged, so the non-mutating
+       * verifiers pay setup only. */
+      isolation: 'worktree' })
     .then(v => ({ ...f, lens: lens.key, verdict: v }))
     .catch(() => ({ ...f, lens: lens.key, verdict: null }))
 }))

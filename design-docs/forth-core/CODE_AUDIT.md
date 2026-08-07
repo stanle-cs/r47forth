@@ -117,7 +117,7 @@ eight hats.
 
 | reader | invocation | state |
 |---|---|---|
-| **Gemini** | `agy --model gemini-3.1-pro-high --print-timeout 12m -p "$(cat prompt.txt)"` | **WORKS.** Answers a ~3 KB packet in a couple of minutes. This is the reader to use. |
+| **Gemini** | `agy --model gemini-3.1-pro-high --print-timeout 12m -p "$(cat prompt.txt)"` | **WORKS.** Answers a ~3 KB packet in a couple of minutes, and a 10 KB one in the same few minutes (round 5, three runs). This is the reader to use. |
 | **Sol** | `cd <empty dir> && timeout 900 codex exec -s read-only --skip-git-repo-check -m gpt-5.6-sol -c model_reasoning_effort="medium" -o out.txt - < prompt.txt` | **WORKS for self-contained packets** — see the 2026-08-06 (second session) note below. Repo-exploration audits remain a dead end. |
 
 **Settled 2026-08-06 after twelve runs: use Gemini for anything that
@@ -210,6 +210,39 @@ Three more things learned the same day, all of which cost a run each:
   of those, so both belong in the packet: whole functions, and a line of
   orientation for every shared structure they touch. The failure mode is
   expensive because it looks exactly like a good finding.
+- **CONDENSING A LOAD-BEARING COMMENT IS TRUNCATION** (round 5). A packet
+  paraphrased `forthConsoleShowSurface`'s fall-through comment and dropped
+  the clause naming `forthConsoleRestoreSurface` as the re-establisher, and
+  left that function out of the excerpt. The reader reported "a destroyed
+  ALPHA frame is never re-acquired" and quoted the truncation back as its
+  evidence. Re-sent with the comment verbatim and the function included, it
+  did not repeat the finding. **If a comment names a function, that function
+  is part of the packet.** These comments are load-bearing by design; a
+  packet that trims them is auditing a different codebase.
+- **STATE THE PRECONDITION, NOT JUST THE MEANING** (round 5, and the same
+  omission cost two runs). Both packets defined the BORROWED stamp as "the
+  user's own row the console displays" and never stated the open site's
+  gate, `fresh = (currentMenu() != -MNU_FORTH)`. The reader assumed the open
+  borrows whatever is on top, and both of its findings rest on that. "A
+  BORROWED frame is always FWRD" is the claim that blocks the wrong trace,
+  and it is a different claim from what the stamp means. **For every state
+  the packet discusses, say what establishes it.**
+- **The size ceiling is higher than the record said** (round 5). Three
+  packets of **9.6 KB and 10.9 KB were all answered in minutes**, model
+  probe passing. The "~3 KB works / 13 KB returned nothing" note below is
+  two data points and the 13 KB failure was probably not size alone. Keep
+  packets small because depth beats breadth, not because 10 KB fails.
+
+**Mutation evidence needs a worktree, and the runner now enforces it**
+(round 5). Verifiers mutate to prove a coverage claim, they run
+concurrently, and in the owner's shared working tree two of three mutation
+runs were contaminated by a sibling's live `/* MUTATION */` edits — one saw
+a baseline gate come back RED at a nominally clean HEAD. The only
+uncontaminated mutation proof that round produced came from the one reader
+that made its own worktree. `audit-workflow.js` now passes
+`isolation: 'worktree'` to every refutation agent and says so in the brief.
+Readers are told not to revert a foreign edit: it means a stale sibling, and
+the right response is to report it, not to tidy up.
 
 The earlier failure list, kept because each one still bites:
 
