@@ -228,3 +228,117 @@ sound; it is the in-family half that needs re-running.
 Where it breaks first: the fold/suspend window, which no round has driven
 with a real fixture and which R2 shows is reachable in ways the batteries
 do not cover.
+
+---
+
+# Round 4 — the refutation pass round 3 never got
+
+Round 3's verdicts were the author's own traces of the author's own code,
+because eleven verifiers and the synthesiser died on usage credits. This is
+that pass, run afterwards against the four landed fixes. **Readers: Gemini
+and GPT-5 Sol, out-of-family, each given the refutation brief from
+`PROMPT_CODE_AUDIT.md` verbatim and told to kill the fixes.**
+
+The packet's orientation block was made exhaustive for every package
+override the excerpts touch — the fix for the defect that produced round 3's
+one bad finding. No packet artefact appeared this round.
+
+## Verdicts
+
+| fix | Gemini | Sol | resolution |
+|---|---|---|---|
+| R1 restore-seam unstamp | SURVIVES | SURVIVES | **CONFIRMED** |
+| R2 abandon-path unstamp | SURVIVES | SURVIVES | **CONFIRMED** |
+| R3 ungated surface repair | SURVIVES | SURVIVES | **CONFIRMED** |
+| R4 ownership invariant + one register site | REFUTED | REFUTED | **survives — both traces disproved, but see below** |
+
+Three fixes survived both readers independently. That is the first
+unanimous-survival result this audit has produced.
+
+## R4 — both refutations were wrong, and both were worth having
+
+Both readers, independently, refuted R4 with the same failure shape: the
+ALPHA acquisition PUSHES a frame and then delegates stamping to a function
+entitled to DECLINE, so a decline leaves a pushed frame nothing owns — EXIT's
+overlay rung pops it, the surface owner re-pushes it, and the press cycles
+without reaching the excursion rung.
+
+**Both traces were disproved by probe.** Each assumed the sub-mode toggle
+over an OWNED base enters the acquisition path. It does not:
+`forthConsoleShowSurface` retargets that frame IN PLACE. Instrumented run,
+applied and reverted:
+
+```
+R4-PROBE: after toggle — ownsSlot0=1 menu=-1922 menu(1)=-1363
+```
+
+Slot 0 is ALPHA and still stamped; slot 1 is the owner's STK. No second
+frame, no acquisition call, no orphan. Sol's variant routed through a
+surface rebuilt by R3 first, which reaches the same retarget branch.
+
+**But the shape they described is real, and R4 is what prevents it.**
+Mutation M-A reverts `forthConsoleRegisterSlot0` to its pre-R4 "decline if
+ANY stamp exists" form. Five assertions redden, including the two the
+readers predicted in their own words:
+
+```
+FAIL: [borrowed base] the excursion row must be the console's base —
+      an unregistered row here traps EXIT on the overlay rung
+FAIL: [own FWRD: open, toggle alpha then back, EXIT] did not close within
+      six EXIT presses
+```
+
+So the readers described, precisely, the defect that R4 fixes — they simply
+located it in the shipped code instead of the code it replaced. **Two
+independent out-of-family readers converging on a failure mode that a
+mutation then reproduces is the strongest signal this process has produced,
+and it arrived from two findings that were both, as written, wrong.**
+
+## What changed as a result
+
+`_forthConsoleAcquireRow` now returns early by retargeting an existing OWNED
+frame instead of stacking a second one, so the push-then-decline window does
+not exist by construction. This is **hardening, not a bug fix**, and it is
+recorded as such:
+
+- The state is unreachable today. The function's two callers are
+  `forthConsoleShowSurface` (only from the BORROWED-base branch, and an owned
+  frame is always created ABOVE the borrow, so the borrow cannot be back on
+  top while one exists) and `forthConsoleRestoreSurface` (only when no stamp
+  exists anywhere).
+- **Mutation M-B removes the guard and the gate stays GREEN.** No test can
+  pin it, and none is claimed to. Stated here rather than papered over —
+  the C22 rule, and the third documented gap of this stage.
+- It earns its four lines anyway: the failure mode is the C18 class
+  (*"a state change committed by the caller and the display of that state
+  established by a callee that may decline"*), which this codebase has
+  already paid for once; the reachability argument rests on an invariant a
+  future caller could break silently; and two independent readers found it.
+
+## And the invariant is now enforced rather than asserted in prose
+
+Round 3's R4 was a *documentation* defect — the banner claimed "exactly one
+frame is registered" for a whole session and three readers caught it before
+any test did, because **no test asserted it**. `forth_menu.c` now exports a
+selftest-only stamp census, and `test_console_ownership_invariant` checks,
+after every step of two gesture sweeps: at most one owned, at most one
+borrowed, owned above borrowed when both exist, neither with the capture
+closed, and every EXIT press making progress. The sweeps deliberately
+include the two gestures the round-4 readers attacked.
+
+Mutation M-A reddens it. That is the fix for the class round 3 could only
+describe: *an invariant that lives only in prose is not enforcement.*
+
+## Round and exit state
+
+**Round 4 was a verification round, not a coverage round.** Three fixes
+confirmed by two independent out-of-family readers; one attacked by both and
+sustained on probe evidence, with a hardening and a new invariant battery
+landing as a result.
+
+**The exit criterion is still not met, and one clean round does not meet
+it** — it requires *two consecutive* rounds with no new confirmed finding.
+Round 4 produced no new confirmed finding but did produce new code (the
+hardening, the census, the battery), which by this project's own reset rule
+is unaudited. Round 5 needs the in-family dimensions that credits killed in
+round 3 — `design` (D7) above all, which has now not run for two rounds.

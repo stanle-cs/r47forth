@@ -3155,3 +3155,67 @@ picker on every paint, which a reader with no repository cannot know.
 **Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
 CUSTOM_PKG_RECONFIGURE=1`: flash 1114528 → 1114568 = **+40 B**; ram 8884 →
 8884 = **±0**.  Arena untouched.
+
+## 2026-08-06 — Round 4: the refutation pass, and a wrong finding worth having
+
+Round 3's verdicts were the author's own traces of the author's own code —
+the refutation pass had died on credits.  Round 4 is that pass, run against
+the four landed fixes with both out-of-family readers given
+`PROMPT_CODE_AUDIT.md`'s refutation brief verbatim.  Report: the round-4
+section appended to `AUDIT_round3_2026-08-06.md`.
+
+**R1, R2 and R3 survived both readers independently** — the first
+unanimous-survival result this audit has produced.
+
+**R4 was refuted by both, and both refutations were wrong in the same
+interesting way.**  Each described the ALPHA acquisition pushing a frame and
+then delegating the stamp to a function entitled to decline, leaving a row
+nothing owns and an EXIT press that cycles without progress.  Both traces
+assumed the sub-mode toggle over an OWNED base enters that path; it does
+not — `forthConsoleShowSurface` retargets the frame in place, keeping its
+stamp, which a probe showed directly (`ownsSlot0=1`, slot 0 ALPHA, slot 1 the
+owner's STK).
+
+**But the failure they described is real, and R4 is what prevents it.**
+Mutation M-A reverts `forthConsoleRegisterSlot0` to its pre-R4 form and five
+assertions redden, two of them in the readers' own words — *"an unregistered
+row here traps EXIT on the overlay rung"* and *"did not close within six EXIT
+presses"*.  They located a real defect in the shipped code instead of in the
+code it replaced.  **Two independent out-of-family readers converging on a
+failure mode that a mutation then reproduces is the strongest signal this
+process has produced, and it arrived from two findings that were, as
+written, both wrong.**  The lesson for the reader pool: a refuted finding is
+not a worthless one, and "which version of the code is this true of" is a
+question worth asking before discarding it.
+
+**Two things landed as a result.**
+
+`_forthConsoleAcquireRow` now retargets an existing OWNED frame instead of
+stacking a second one, so the push-then-decline window cannot exist.  This is
+**hardening, not a bug fix**, and is recorded that way: the state is
+unreachable today (the function's two callers cannot reach it with an owned
+frame live), and **mutation M-B removes the guard with the gate staying
+GREEN — no test pins it and none is claimed to**.  It earns its four lines
+because the shape is the C18 class this codebase already paid for once, the
+reachability argument rests on an invariant a future caller could break
+silently, and two readers found it independently.  Third documented gap of
+the stage.
+
+And the invariant is now **enforced instead of asserted in prose**.  Round
+3's R4 was a documentation defect that survived a whole session because no
+test checked it.  `forth_menu.c` exports a selftest-only stamp census and
+`test_console_ownership_invariant` asserts, after every step of two gesture
+sweeps: at most one owned, at most one borrowed, owned above borrowed when
+both exist, neither with the capture closed, and every EXIT press making
+progress.  Mutation M-A reddens it.  *An invariant that lives only in prose
+is not enforcement.*
+
+**Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`: flash 1114568 → 1114632 = **+64 B**; ram 8884 →
+8884 = **±0**.  Arena untouched.
+
+**Exit state.** Round 4 found no new confirmed finding — but it produced new
+code, which by this project's own reset rule is unaudited, and the criterion
+needs TWO consecutive clean rounds anyway.  Round 5 needs the in-family
+dimensions credits killed in round 3, `design` (D7) above all: it has now
+not run for two rounds.

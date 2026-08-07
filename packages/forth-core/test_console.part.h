@@ -2575,3 +2575,152 @@ static int test_console_surface_repair_ungated(void)
   }
   return fail;
 }
+
+/* ---- 36: AUDIT round 4 class test — the OWNERSHIP INVARIANT itself.
+ *
+ * Bug class: "an invariant that lives only in prose."  The banner claimed
+ * "exactly one frame is registered" for a whole session; it was false, and
+ * three independent readers caught it before any test did — because no test
+ * asserted it.  Prose is not enforcement.
+ *
+ * The invariant, as the code actually needs it:
+ *   - at most ONE owned frame, ever;
+ *   - at most ONE borrowed frame, ever;
+ *   - when both exist, the owned one is ABOVE (lower slot index) the
+ *     borrowed one;
+ *   - with no capture open, NEITHER exists.
+ *
+ * Asserted after every step of a gesture sweep that crosses the paths which
+ * create, move, fold and destroy registrations — including the two the
+ * round-4 readers attacked (the sub-mode toggle over an owned base, and a
+ * surface rebuilt after a line destroyed it). ---- */
+static int _consoleOwnershipOk(const char *where, int *fail)
+{
+  uint8_t owned  = forthConsoleTestOwnedCount();
+  uint8_t borrow = forthConsoleTestBorrowCount();
+  int ok = 1;
+
+  if (owned > 1) {
+    printf("    FAIL: [%s] %u OWNED frames — at most one, ever\n", where, owned);
+    *fail = 1; ok = 0;
+  }
+  if (borrow > 1) {
+    printf("    FAIL: [%s] %u BORROWED frames — at most one, ever\n", where, borrow);
+    *fail = 1; ok = 0;
+  }
+  if (owned == 1 && borrow == 1
+      && forthConsoleTestOwnedSlot() > forthConsoleTestBorrowSlot()) {
+    printf("    FAIL: [%s] the owned frame (slot %d) is BELOW the borrowed"
+           " base (slot %d) — the close rung would release the wrong one\n",
+           where, forthConsoleTestOwnedSlot(), forthConsoleTestBorrowSlot());
+    *fail = 1; ok = 0;
+  }
+  if (!forthCapIsOpen() && (owned || borrow)) {
+    printf("    FAIL: [%s] %u owned + %u borrowed with NO capture open\n",
+           where, owned, borrow);
+    *fail = 1; ok = 0;
+  }
+  return ok;
+}
+
+static int test_console_ownership_invariant(void)
+{
+  int fail = 0;
+  int i;
+
+  /* Two owner fixtures: a menu that is NOT one of the console's rows (the
+   * open CREATES its frame), and the user's own FWRD row reached through
+   * the catalog tree (the open BORROWS it).  The borrow fixture is the one
+   * that legitimately reaches two registrations. */
+  for (i = 0; i < 2; i++) {
+    const char *own = (i == 0) ? "created base" : "borrowed base";
+
+    N13_RESET();
+    forthDictInit();
+    if (i == 0) {
+      showSoftmenu(-MNU_STK);
+    }
+    else {
+      showSoftmenu(-MNU_CATALOG);
+      showSoftmenu(-MNU_FORTH);
+    }
+    _consoleOwnershipOk(own, &fail);          /* nothing registered yet */
+
+    fnForthOuter(NOPARAM);
+    _consoleOwnershipOk(own, &fail);          /* after the open */
+    if (i == 0 && forthConsoleTestOwnedCount() != 1) {
+      printf("    FAIL: [%s] the open over a foreign row must CREATE a frame\n", own);
+      fail = 1;
+    }
+    if (i == 1 && forthConsoleTestBorrowCount() != 1) {
+      printf("    FAIL: [%s] the open over the user's own FWRD must BORROW it\n", own);
+      fail = 1;
+    }
+
+    /* The gesture the round-4 readers attacked: toggle into the excursion. */
+    runFunction(ITM_AIM);
+    _consoleOwnershipOk(own, &fail);
+    if (currentMenu() != -MNU_ALPHA) {
+      printf("    FAIL: [%s] the toggle did not reach the alpha row (menu %d)\n",
+             own, currentMenu());
+      fail = 1;
+    }
+    if (!forthConsoleBaseOnTop()) {
+      printf("    FAIL: [%s] the excursion row must be the console's base —"
+             " an unregistered row here traps EXIT on the overlay rung\n", own);
+      fail = 1;
+    }
+
+    /* Toggle back (the fold-back path for a borrowed base). */
+    runFunction(ITM_AIM);
+    _consoleOwnershipOk(own, &fail);
+    if (currentMenu() != -MNU_FORTH) {
+      printf("    FAIL: [%s] the toggle back did not reach FWRD (menu %d)\n",
+             own, currentMenu());
+      fail = 1;
+    }
+
+    /* A line that DESTROYS the registered frame, then the repair. */
+    _consoleEnterLine("EXITALL");
+    _consoleOwnershipOk(own, &fail);
+    if (!forthConsoleBaseOnTop()) {
+      printf("    FAIL: [%s] the surface was not re-registered after EXITALL\n", own);
+      fail = 1;
+    }
+
+    /* And the excursion again, now over the REBUILT frame — the exact
+     * sequence Sol's refutation predicted would leave an unstamped row. */
+    runFunction(ITM_AIM);
+    _consoleOwnershipOk(own, &fail);
+    if (!forthConsoleBaseOnTop()) {
+      printf("    FAIL: [%s] excursion over a REBUILT base left an"
+             " unregistered row on top\n", own);
+      fail = 1;
+    }
+
+    /* Unwind, and nothing may be left registered. */
+    { int presses;
+      for (presses = 0; presses < 8 && forthCapIsOpen(); presses++) {
+        fnKeyExit(NOPARAM);
+        _consoleOwnershipOk(own, &fail);
+      }
+      if (forthCapIsOpen()) {
+        printf("    FAIL: [%s] did not close within eight EXIT presses —"
+               " a press cycling without progress is the shape round 4"
+               " predicted\n", own);
+        fail = 1;
+        forthCapClose();
+      }
+    }
+    _consoleOwnershipOk(own, &fail);
+  }
+
+  N13_RESET();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: the ownership invariant holds at every step of both"
+           " gesture sweeps, and every EXIT press makes progress\n");
+  }
+  return fail;
+}

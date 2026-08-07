@@ -415,6 +415,40 @@ void forthConsoleUnstampAll(void) {
   }
 }
 
+#if defined(FORTH_DEBUG_SELFTEST)
+/* AUDIT round 4: the ownership invariant is stated in the banner and was
+ * WRONG for a whole session before three readers caught it, so the battery
+ * now asserts it rather than trusting the prose.  Selftest-only, same
+ * rationale as forthTestCapOrigin: production has no business counting
+ * stamps, but mutation coverage must be able to pin the raw field. */
+uint8_t forthConsoleTestOwnedCount(void) {
+  uint8_t n = 0; int i;
+  for(i = 0; i < SOFTMENU_STACK_SIZE; i++) { if(_ownedAt(i)) { n++; } }
+  return n;
+}
+uint8_t forthConsoleTestBorrowCount(void) {
+  uint8_t n = 0; int i;
+  for(i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+    if(softmenuStack[i].userMenuId == FORTH_CONSOLE_BORROW_STAMP) { n++; }
+  }
+  return n;
+}
+/* Slot index of the single owned/borrowed frame, or -1.  The "owned ABOVE
+ * borrowed" half of the invariant needs the positions, not just the counts. */
+int16_t forthConsoleTestOwnedSlot(void) {
+  int i;
+  for(i = 0; i < SOFTMENU_STACK_SIZE; i++) { if(_ownedAt(i)) { return (int16_t)i; } }
+  return -1;
+}
+int16_t forthConsoleTestBorrowSlot(void) {
+  int i;
+  for(i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+    if(softmenuStack[i].userMenuId == FORTH_CONSOLE_BORROW_STAMP) { return (int16_t)i; }
+  }
+  return -1;
+}
+#endif
+
 /* EXIT rung 2's predicate: is the console's BASE the visible row (so EXIT
  * should fall through to rung 3), or is something stacked above it (so EXIT
  * should pop)?  The base is the registered frame when one exists.  With no
@@ -428,11 +462,55 @@ bool_t forthConsoleBaseOnTop(void) {
   return currentMenu() == -MNU_FORTH || currentMenu() == -MNU_ALPHA;
 }
 
-/* Bring a `want` row to slot 0 and register it.  Callers guarantee no frame
- * is currently registered.  See the banner: ALPHA is hand-rolled (dedup must
- * not touch user rows), FWRD goes through showSoftmenu (picker rebuild) and
- * registers a dedup-hoisted user row as BORROWED. */
+/* Bring a `want` row to slot 0 and register it.  See the banner: ALPHA is
+ * hand-rolled (dedup must not touch user rows), FWRD goes through
+ * showSoftmenu (picker rebuild) and registers a dedup-hoisted user row as
+ * BORROWED.
+ *
+ * AUDIT round 4 — the OWNED-already guard below is why this cannot become a
+ * C18.  Both out-of-family readers, independently, attacked this function
+ * with the same shape: it PUSHES a frame and then delegates the stamping to
+ * a function entitled to DECLINE, so a decline would leave a pushed frame
+ * that nothing owns — and EXIT's overlay rung would pop it, the surface
+ * owner would re-push it, and the press would cycle without reaching the
+ * excursion rung.
+ *
+ * BOTH TRACES WERE WRONG about how the state is reached (they had the
+ * sub-mode toggle over an owned base entering here, when
+ * forthConsoleShowSurface retargets that frame IN PLACE and never calls
+ * this — verified by probe: after the toggle slot 0 is ALPHA and still
+ * stamped).  Enumerating this function's two callers, neither can reach it
+ * with an OWNED frame live: ShowSurface calls it only from the BORROWED-base
+ * branch, and an owned frame is always created ABOVE the borrow so the
+ * borrow cannot be back on top while one exists; RestoreSurface calls it
+ * only when NO stamp exists anywhere.
+ *
+ * The guard is therefore hardening, not a bug fix, and it is worth its four
+ * lines: the failure the readers described is exactly the class this
+ * codebase already paid for once (C18 — "a state change committed by the
+ * caller and the display of that state established by a callee that may
+ * decline"), the reachability argument above rests on an invariant that a
+ * future caller could break silently, and two independent readers finding
+ * the same shape is the agreement CODE_AUDIT.md says to act on.  Retarget
+ * the owned frame instead of stacking a second one: same end state, and the
+ * push-then-decline window does not exist. */
 static void _forthConsoleAcquireRow(int16_t want) {
+  { int i;
+    for(i = 0; i < SOFTMENU_STACK_SIZE; i++) {
+      if(_ownedAt(i)) {
+        if(menu((uint8_t)i) != want) {
+          int16_t m = _softmenuIndexOf(want);
+          if(m >= 0) {
+            softmenuStack[i].softmenuId = m;
+            softmenuStack[i].firstItem  = 0;
+            doRefreshSoftMenu = true;
+          }
+        }
+        return;
+      }
+    }
+  }
+
   if(want == -MNU_ALPHA) {
     int16_t m = _softmenuIndexOf(-MNU_ALPHA);
     if(m < 0) { return; }

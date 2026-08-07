@@ -57,4 +57,14 @@ void   forthConsoleUnstampAll(void);    /* close funnel (forthCapClose) only */
  * The caller has already freed the previous menuContent. */
 void forthBuildWordPicker(int16_t menu);
 
+#if defined(FORTH_DEBUG_SELFTEST)
+/* AUDIT round 4: raw stamp census, so the battery can ASSERT the ownership
+ * invariant instead of trusting the banner that stated it wrongly for a
+ * whole session. */
+uint8_t forthConsoleTestOwnedCount(void);
+uint8_t forthConsoleTestBorrowCount(void);
+int16_t forthConsoleTestOwnedSlot(void);
+int16_t forthConsoleTestBorrowSlot(void);
+#endif
+
 #endif /* FORTH_MENU_H */

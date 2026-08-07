@@ -1326,6 +1326,8 @@ static int test_console_error_echo_closes_output(void);
 /* AUDIT round 3 class tests */
 static int test_console_stamp_never_outlives_capture(void);
 static int test_console_surface_repair_ungated(void);
+/* AUDIT round 4 */
+static int test_console_ownership_invariant(void);
 
 int forthDictSelfTest(void)
 {
@@ -2580,6 +2582,9 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_console_surface_repair_ungated...\n");
   fail |= test_console_surface_repair_ungated();
+
+  printf("  [DEBUG] running test_console_ownership_invariant...\n");
+  fail |= test_console_ownership_invariant();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();
