@@ -3043,3 +3043,38 @@ message-into-open-record (the C19 row).
 **Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
 CUSTOM_PKG_RECONFIGURE=1`: flash 1114464 → 1114528 = **+64 B**; ram
 8884 → 8884 = **±0**.  Arena untouched — no dictionary change.
+
+## 2026-08-06 — AUDIT C21: the suppression battery can now fail
+
+Tests only; no production change.  N-R3's "no register paints while the
+console is up" — folded into DESIGN.md as "the transcript replaces the
+T/Z/Y paints" — had no test that could fail: four of the five view cases
+drive `_forthConsoleRender()` directly, which contains no register-paint
+call by construction, and the arm case's oracles were lower bounds,
+which leaked register ink satisfies MORE easily.  The round-2 report
+proved it by mutation: un-else `screen.c`'s suppression branch and the
+whole gate stays green while 830 px of register numerals land in the
+transcript band.
+
+The two oracles the report prescribed now live in
+`test_console_view_arm`, the one case where the suppressed
+`refreshRegisterLine(T/Z/Y)` calls are even on the code path:
+
+- **Equality**: the band through `refreshScreen()` equals a direct
+  render of the same transcript (1045 px == 1045 px; the mutation makes
+  it 2045 vs 1045).
+- **The mirror**: an ACTIVE console with an EMPTY ring and T/Z/Y loaded,
+  refreshed through the arm, paints 0 px in the band — any ink is
+  provably a register (the mutation paints 2045 px).
+
+The same mutation applied, observed RED on both oracles, and reverted.
+Test 11's header stopped claiming the suppression proof it never had
+(*"which is also how 'no register paints' is proven"* — it is not; a
+direct-render case cannot reach the register path), and its FAIL message
+now names what it actually guards, the renderer's `count == 0` arm.
+
+Bug class, same as C22 and round 1's C13: *an oracle placed where the
+mechanism under test cannot reach it.*
+
+**Numbers (RULE-1).** Selftest-only: flash 1114528 unchanged, ram 8884
+unchanged, arena untouched.

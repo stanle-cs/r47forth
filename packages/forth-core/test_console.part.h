@@ -501,8 +501,14 @@ static int test_console_view_gate(void)
 }
 
 /* ---- 11: the transcript reaches the LCD, and an empty console shows an
- * EMPTY area — which is also how "no register paints while the console is
- * up" is proven, since the stack holds values throughout. ---- */
+ * EMPTY area.
+ *
+ * AUDIT C21: this case does NOT prove register suppression, and its first
+ * form claimed it did.  It drives _forthConsoleRender() directly, and that
+ * function contains no register-paint call by construction — no input can
+ * reach the register path through it.  The suppression proof lives in the
+ * ARM case (test 14), which goes through refreshScreen(), where the
+ * suppressed refreshRegisterLine(T/Z/Y) calls actually exist. ---- */
 static int test_console_view_paints(void)
 {
   uint8_t saved = calcMode;
@@ -519,7 +525,7 @@ static int test_console_view_paints(void)
   empty = _consoleBandPixels();
   if (empty != 0) {
     printf("    FAIL: an empty console must paint nothing in the band"
-           " (got %d lit px — a register leaked through)\n", empty);
+           " (got %d lit px — the renderer's count==0 guard is broken)\n", empty);
     fail = 1;
   }
 
@@ -655,17 +661,32 @@ static int test_console_view_roll(void)
   return fail;
 }
 
-/* ---- 14: the ARM is wired.  Everything above drives _forthConsoleRender
- * directly; this one goes through refreshScreen() and proves
- * _refreshNormalScreen's CM_AIM arm actually reaches it — and that the yield
- * falls back to the landed register paint rather than to nothing. ---- */
+/* ---- 14: the ARM is wired, and the suppression is REAL.  Everything above
+ * drives _forthConsoleRender directly; this one goes through refreshScreen()
+ * and proves _refreshNormalScreen's CM_AIM arm actually reaches it — and
+ * that the yield falls back to the landed register paint rather than to
+ * nothing.
+ *
+ * AUDIT C21: the two suppression oracles live here, because this is the only
+ * case where the suppressed refreshRegisterLine(T/Z/Y) calls are even on the
+ * code path.  Both are exact, not lower bounds — extra register ink
+ * satisfies a lower bound MORE easily, which is how the original battery
+ * could not fail when the suppression `else` was removed:
+ *
+ *   (a) EQUALITY: the band painted through the arm equals the band painted
+ *       by a direct render of the same transcript.  Register ink on top of
+ *       the transcript breaks the equality.
+ *   (b) THE MIRROR: an ACTIVE console with an EMPTY ring, T/Z/Y holding
+ *       values, refreshed through the arm, paints NOTHING in the band —
+ *       _forthConsoleRender returns at its count==0 guard, so any ink here
+ *       is provably a register paint the console failed to suppress. ---- */
 static int test_console_view_arm(void)
 {
   uint8_t saved = calcMode;
-  int32_t viaArm, yielded;
+  int32_t viaArm, direct, suppressed, yielded;
   int fail = 0;
 
-  forthPushInt32(12345);
+  forthPushInt32(12345); forthPushInt32(23456); forthPushInt32(34567);
   _consoleEnterViewState();
   forthConsoleClear();
   forthConsoleAppendLine("THROUGH THE ARM");
@@ -679,8 +700,32 @@ static int test_console_view_arm(void)
     fail = 1;
   }
 
-  /* Yield: with an error live, the native register/error paint comes back. */
-  forthConsoleClear();                 /* so any ink in the band is NOT ours */
+  /* C21 (a): the equality oracle. */
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  direct = _consoleBandPixels();
+  if (viaArm != direct) {
+    printf("    FAIL: the band through the arm must EQUAL a direct render of the"
+           " same transcript (%d px vs %d px — a register painted with the"
+           " transcript)\n", viaArm, direct);
+    fail = 1;
+  }
+
+  /* C21 (b): the mirror — empty ring, loaded registers, through the arm. */
+  forthConsoleClear();
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  screenUpdatingMode = SCRUPD_AUTO;
+  refreshScreen(902);
+  suppressed = _consoleBandPixels();
+  if (suppressed != 0) {
+    printf("    FAIL: an active console with an empty ring must paint NOTHING in"
+           " the band through the arm (got %d lit px — a register leaked"
+           " through)\n", suppressed);
+    fail = 1;
+  }
+
+  /* Yield: with an error live, the native register/error paint comes back.
+   * (The ring is already empty from (b), so any ink in the band is NOT ours.) */
   lastErrorCode = ERROR_OUT_OF_RANGE;
   errorMessageRegisterLine = REGISTER_Z;
   screenUpdatingMode = SCRUPD_AUTO;
@@ -695,8 +740,9 @@ static int test_console_view_arm(void)
 
   _consoleLeaveViewState(saved);
   if (!fail) {
-    printf("    PASS: the arm is wired (%d px through refreshScreen); yield restores"
-           " the native paint (%d px)\n", viaArm, yielded);
+    printf("    PASS: the arm is wired (%d px == %d px direct); empty-ring arm"
+           " paints 0 px with registers loaded; yield restores the native paint"
+           " (%d px)\n", viaArm, direct, yielded);
   }
   return fail;
 }
