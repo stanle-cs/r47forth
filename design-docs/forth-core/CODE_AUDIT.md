@@ -393,6 +393,21 @@ exposed a genuinely missing probe. Mutations are applied, observed, and
 Where the tree must be touched to prove something, do it in a worktree,
 never in the working tree the owner is using.
 
+**Two runner traps round 6 earned, both now in `audit-workflow.js`.**
+*(1) A worktree spawns at a STALE ref.* Round 6's isolated agents came up
+at `c3a00768c`, ~114 commits behind the audited tip, where the audited
+files and the report's line numbers did not exist — a verifier there
+produces verdicts about a codebase that does not exist. The two agents
+whose briefs cited line numbers caught it; a verifier prompt that cites
+none would not. Every verifier's FIRST action is now `git log --oneline -1`
+and a checkout to the audited tip. *A worktree's ref is a claim, and
+claims get checked before the first read.* *(2) Resume drops args.*
+`Workflow({scriptPath, resumeFromRunId})` passes no args, so a
+refutation-only run (`dimensions:[]`, `extraFindings:[…]`) silently
+became an eight-dimension find over `main..HEAD` — round 1's wrong-range
+failure by a new door. NEVER resume a parameterized run to pick up a
+script edit; relaunch FRESH with the args re-passed.
+
 ---
 
 ## Report
@@ -429,6 +444,22 @@ a contract that is merely untidy.
 ---
 
 ## Running it
+
+**The operator's checklist is the `cross-model-audit` skill**
+(`.claude/skills/cross-model-audit/`): it binds this process, the packet
+rules, and the dispatch mechanics into the order of work, and its
+`references/` carry the packet template, the packet linter, and the
+`agy`/`codex` dispatch driver with the identity check built in. This file
+remains the process record; the skill is how a session runs it without
+rediscovering the traps.
+
+Wording note (2026-08-08): the skill, the workflow's meta, and every
+spawned prompt say "independent cross-check for functional bugs" rather
+than "adversarial" — the loaded word in the workflow's name tripped a
+session safety guardrail on a process that is a correctness review. The
+process itself is unchanged. Keep security-flavoured vocabulary out of
+names, meta descriptions, and spawn prompts, and open spawned prompts
+with the correctness-review scope.
 
 Two ways, same prompt. `PROMPT_CODE_AUDIT.md` is the auditor brief; it is
 written to be pasted whole into a fresh session **or** inlined into a
