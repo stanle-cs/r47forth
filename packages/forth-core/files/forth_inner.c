@@ -149,11 +149,29 @@ void forthSpillSettle(void)
  * their own lastErrorCode handling after fn(). */
 bool_t forthPrimInvoke(uint16_t idx)
 {
-  if (!forthDataDepthApply(forthPrims[idx].stackEffect)) {
+  int16_t  net         = forthPrims[idx].stackEffect;
+  int16_t  depthBefore = forthDataDepth;
+  uint16_t errBefore   = lastErrorCode;
+  if (!forthDataDepthApply(net)) {
     return false;
   }
   forthPrims[idx].fn();
   setSystemFlag(FLAG_ASLIFT);
+  /* AUDIT round 6 (F11): a consuming prim that REFUSES (EMIT out of range,
+   * `.$` on a non-string — R47 convention: loud stop, operand preserved)
+   * performs NONE of its declared effect, but the -1 above was already
+   * applied.  Settling against that false depth freed the deepest live
+   * register, refilled it with a spilled value, and emptied the spill — so
+   * the line-end ERROR_RAM_FULL stop never fired: silent corruption in
+   * place of a loud refusal.  Restore the pre-applied accounting and skip
+   * the settle; the stack the prim leaves is the stack it was handed.
+   * (Consumption never touches the spill, so the depth snapshot restores
+   * exactly; growth prims have no refuse path today and keep the old
+   * behaviour.) */
+  if (net < 0 && lastErrorCode != ERROR_NONE && errBefore == ERROR_NONE) {
+    forthDataDepth = depthBefore;
+    return true;
+  }
   forthSpillSettle();
   return true;
 }

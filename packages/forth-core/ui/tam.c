@@ -800,6 +800,16 @@ printf("tam.value: %d\n", tam.value);
           tam.function = ITM_GTOP;
           tam.min = 0;
           tam.max = max(getNumberOfSteps(), 99);
+          /* AUDIT round 6 (F1): the fold admitted GTO/XEQ (TM_LABEL) at
+           * entry; GTOP is NOT an admitted item — _forthFoldAdmits excludes
+           * it because it navigates the program pointer.  This promotion
+           * happens AFTER admission, so re-derive the decision: an armed
+           * fold downgrades to PARK, exactly what keying GTOP at entry
+           * would have produced.  Left armed, the second `.` ran GTOP live
+           * inside the bracket, moved currentProgramNumber off FHIST, and
+           * the resume splice subtracted two different programs' step
+           * counts — the GTO . . SIGSEGV. */
+          if(forthFoldArmed()) { forthCapSetFoldModeRaw(2); }
         }
         else if(tam.indirect && (currentNumberOfLocalRegisters || calcMode == CM_PEM)) {
           tam.dot = true;

@@ -804,6 +804,8 @@ void execTimerApp(uint16_t timerType) {
     assignToKey(kc);
     itemToBeAssigned = 0;
     leaveTamModeIfEnabled();
+    forthFoldUnwindIfDone();   /* round 6 (F4's class): ASSIGN parks the fold;
+                                  this teardown is outside both unwind owners */
     keyActionProcessed = true;
     calcMode = previousCalcMode;
     shiftF = shiftG = false;
@@ -912,6 +914,21 @@ void execTimerApp(uint16_t timerType) {
               funcParam = (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode);
               setCurrentUserMenu(item, funcParam);
               if(shiftF) {
+                /* AUDIT round 6 (F7): the console OWNS its row while a live
+                 * interactive capture is open (forth_menu.h) — this juggling
+                 * popped the registered FWRD frame (isAlphabeticSoftmenu is
+                 * isAlphaSubmenu(0), widened to -MNU_FORTH in Stage L, and
+                 * this consumer was never re-enumerated) and covered the
+                 * surface with a raw ALPHA push: the row then read ALPHA
+                 * while the keypad stayed on the keys plane, with the stamp
+                 * destroyed.  The console's own ALPHA gesture is the
+                 * keys-mode toggle; the long-press leaves its row alone.
+                 * tam.alpha still gets its TAMALPHA row: during TAM the
+                 * capture is SUSPENDED, so the guard does not fire. */
+                if(forthCapInteractiveLive()) {
+                  /* leave the console's registered row untouched */
+                }
+                else {
                 if(getSystemFlag(FLAG_ALPHA) && ((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu())) {
                   popSoftmenu();
                 }
@@ -931,6 +948,7 @@ void execTimerApp(uint16_t timerType) {
                   showSoftmenu(-MNU_HOME);
                 }
                 showSoftmenuCurrentPart();
+                }
               }
               else {
                 bool_t baseOverrideOnce = true;
@@ -5701,8 +5719,11 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
   #endif
 
   FORTH_CONSOLE_SELFTEST_EXPORT bool_t _forthConsoleActive(void) {
+    /* round 6 (F8): LIVE, not origin — the render gate fired on the
+     * suspended residue and painted TAM's abandoned aimBuffer as an
+     * editable console line. */
     return calcMode == CM_AIM
-           && forthCapIsInteractive()
+           && forthCapInteractiveLive()
            && !tam.mode
            && lastErrorCode == 0
            && temporaryInformation == TI_NO_INFO;

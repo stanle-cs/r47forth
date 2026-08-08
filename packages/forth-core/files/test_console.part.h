@@ -2615,9 +2615,14 @@ static int _consoleOwnershipOk(const char *where, int *fail)
            where, forthConsoleTestOwnedSlot(), forthConsoleTestBorrowSlot());
     *fail = 1; ok = 0;
   }
-  if (!forthCapIsOpen() && (owned || borrow)) {
-    printf("    FAIL: [%s] %u owned + %u borrowed with NO capture open\n",
-           where, owned, borrow);
+  /* Round 6 (F12/U1): SUSPENDED is not ended — the stamp survives a
+   * suspension by design (forth_menu.c: a stamp must not outlive its
+   * CAPTURE; DESIGN.md: the mark survives every fold resume by
+   * construction).  The old !IsOpen clause failed on the correct answer
+   * and blocked the TAM-driven fixture for four rounds. */
+  if (!(forthCapIsOpen() || forthCapIsSuspended()) && (owned || borrow)) {
+    printf("    FAIL: [%s] %u owned + %u borrowed with NO capture open"
+           " or suspended\n", where, owned, borrow);
     *fail = 1; ok = 0;
   }
   return ok;
@@ -2678,6 +2683,29 @@ static int test_console_ownership_invariant(void)
       printf("    FAIL: [%s] the toggle back did not reach FWRD (menu %d)\n",
              own, currentMenu());
       fail = 1;
+    }
+
+    /* Round 6 (F12/U1): a keys-mode suspension keeps the stamp (round-5
+     * §6.2), and the oracle must PASS on it — a suspended capture has not
+     * ended (forth_menu.c:302: a stamp must not outlive its CAPTURE;
+     * DESIGN.md: the mark survives every fold resume by construction).
+     * The oracle's old no-capture clause fired exactly here, which is what
+     * blocked the TAM-driven fixture for four rounds. */
+    { extern void tamProcessInput(uint16_t);
+      xcopy(aimBuffer, "8", 2); T_cursorPos = 1;
+      runFunction(ITM_STO);
+      if (!forthCapIsSuspended()) {
+        printf("    FAIL: [%s] STO did not suspend the capture\n", own);
+        fail = 1;
+      }
+      _consoleOwnershipOk(own, &fail);      /* SUSPENDED: stamp intact */
+      tamProcessInput(ITM_0);
+      tamProcessInput(ITM_5);               /* commit -> resume */
+      if (!forthCapIsOpen()) {
+        printf("    FAIL: [%s] the STO commit did not resume the capture\n", own);
+        fail = 1;
+      }
+      _consoleOwnershipOk(own, &fail);      /* resumed */
     }
 
     /* A line that DESTROYS the registered frame, then the repair. */

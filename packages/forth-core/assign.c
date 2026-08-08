@@ -4,6 +4,8 @@
 #include "c47.h"
 #include "forth_dict.h"   /* M2 (Stage M): forthDictNameByRef for the
                              ASSIGN_FORTH_WORDS band arms */
+#include "forth_capture.h" /* round 6 (F4's class): forthFoldUnwindIfDone at
+                              the assignLeaveAlpha teardown */
 
 // C47 Layout from Layout_template_automation template: Do not change manually
 //This variable is to store in flash memory
@@ -1191,6 +1193,9 @@ void assignLeaveAlpha(void) {
   tam.alpha = false;
   clearSystemFlag(FLAG_ALPHA);
   leaveTamModeIfEnabled();
+  forthFoldUnwindIfDone();   /* AUDIT round 6 (F4's class): ASSIGN parks the
+                                fold; this teardown is outside both unwind
+                                owners.  Self-guarded no-op otherwise. */
   alphaCursor = 0;
   calcModeNormalGui();
 }

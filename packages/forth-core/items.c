@@ -663,9 +663,11 @@ bool_t isFunctionOldParam16(uint16_t func) {
    * a USER key.  PEM records a step, an open interactive capture takes the
    * name as TEXT, everything else executes. */
   void forthUserItemDispatch(int16_t item, char *funcParam, int16_t execItem, uint16_t execParam) {
-    if(calcMode == CM_PEM)           { insertUserItemInProgram(item, funcParam); }
-    else if(forthCapIsInteractive()) { (void)forthCapInsertName(funcParam); }
-    else                             { reallyRunFunction(execItem, execParam); }
+    /* round 6 (F8): LIVE, not origin — with the capture suspended the insert
+     * refuses and the gesture died silently; suspended dispatch executes. */
+    if(calcMode == CM_PEM)             { insertUserItemInProgram(item, funcParam); }
+    else if(forthCapInteractiveLive()) { (void)forthCapInsertName(funcParam); }
+    else                               { reallyRunFunction(execItem, execParam); }
   }
 
   void runFunction(int16_t func) {
@@ -739,11 +741,14 @@ bool_t isFunctionOldParam16(uint16_t func) {
        * btnReleased -> runFunction (keyboard.c:2328); softkeys via
        * executeFunction -> runFunction (keyboard.c:1415).  This is exactly
        * where PEM already diverts, one block below. */
-      if(forthCapIsInteractive() && func > 0) {
+      if(forthCapInteractiveLive() && func > 0) {
         /* func > 0 is LOAD-BEARING, not defensive: determineItem returns
          * NEGATIVE softmenu ids (e.g. -MNU_AIMCATALOG, src/c47/assign.c:46)
          * and indexOfItems[negative] is out of bounds.  Same conjunct L1-2's
-         * _forthCapAtCap carries, for the same reason. */
+         * _forthCapAtCap carries, for the same reason.
+         * Round 6 (F8): LIVE, not origin — in the suspended residue this
+         * divert swallowed every parameterless key (InsertName refuses on a
+         * closed line); suspended keys dispatch natively. */
         if(func == ITM_AIM) {
           /* AUDIT C2 (2026-08-06): the sub-mode changes, and ONE owner
            * establishes the console's row for it (forth_menu.c).

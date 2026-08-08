@@ -7,6 +7,7 @@
  ***********************************************/
 
 #include "c47.h"
+#include "forth_capture.h" /* round 6 (F4's class): forthFoldUnwindIfDone at the fnExecute TAM teardown */
 #include "forth_dict.h"
 #include "param_core.h"
 
@@ -203,6 +204,8 @@ void fnExecute(uint16_t label) {
     if(lastErrorCode == ERROR_NONE) {
       if(tam.mode) {
         leaveTamModeIfEnabled();
+        forthFoldUnwindIfDone();   /* AUDIT round 6 (F4's class): teardown
+                                      outside both unwind owners; self-guarded */
         refreshScreen(2);
       }
       runProgram(false, INVALID_VARIABLE);

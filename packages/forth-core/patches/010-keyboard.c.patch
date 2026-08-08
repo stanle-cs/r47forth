@@ -1,8 +1,8 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a4a57c106 100644
+index bc44026016e94a8865b8acc886386341596641c6..5d171f4f6506635c7fccf38bdb24d3505bb85795 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
-@@ -2,12 +2,67 @@
+@@ -2,12 +2,69 @@
  // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
  
  #include "c47.h"
@@ -62,7 +62,9 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
 + * adjacent site tests `... || item < 0` for the same reason; that site's
 + * shape is a latent wart, not the pattern to copy.) */
 +static bool_t _forthCapAtCap(int16_t item) {
-+  if (!forthCapIsInteractive() || item <= 0) { return false; }
++  /* round 6 (F8): the LIVE predicate — a suspended capture's aimBuffer is
++   * TAM's, and this cap must not meter it. */
++  if (!forthCapInteractiveLive() || item <= 0) { return false; }
 +  if (indexOfItems[item].func != addItemToBuffer) { return false; }
 +  return !(stringByteLength(aimBuffer)
 +             + stringByteLength(indexOfItems[item].itemSoftmenuName) < 256
@@ -71,7 +73,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
  
    int16_t determineFunctionKeyItem_C47(const char *data, bool_t shiftF, bool_t shiftG) { //Added itemshift param JM
      int16_t item = ITM_NOP;
-@@ -75,6 +130,22 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -75,6 +132,22 @@ static void executeFunction(const char *data, int16_t item_);
          break;
        }
  
@@ -94,7 +96,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
        case MNU_VAR: {
          dynamicMenuItem = firstItem + itemShift + fn;
          item = (dynamicMenuItem >= dynamicSoftmenu[menuId].numItems ? ITM_NOP : MNU_DYNAMIC);
-@@ -264,6 +335,21 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -264,6 +337,21 @@ static void executeFunction(const char *data, int16_t item_);
    #pragma GCC diagnostic pop
      if(calcMode == CM_ASSIGN && item != ITM_NOP && item != ITM_NULL) {
        switch(-softmenu[menuId].menuItem) {
@@ -116,7 +118,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
          case MNU_PROG:
          case MNU_PROGS: {
                      #if defined(VERBOSEKEYS)
-@@ -434,7 +520,15 @@ static void executeFunction(const char *data, int16_t item_);
+@@ -434,7 +522,15 @@ static void executeFunction(const char *data, int16_t item_);
      }
  
  
@@ -133,7 +135,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
        bool_t inCatalog = false;
        for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
          if(softmenu[softmenuStack[i].softmenuId].menuItem == -MNU_CATALOG) {
-@@ -929,7 +1023,7 @@ endReturnTrue:
+@@ -929,7 +1025,7 @@ endReturnTrue:
     * \brief Executes one function from a softmenu
     * \return void
     ***********************************************/
@@ -142,7 +144,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
      int16_t item = ITM_NOP;
      FN_timed_out_to_NOP_or_Executed = true;
  
-@@ -961,6 +1055,17 @@ endReturnTrue:
+@@ -961,6 +1057,17 @@ endReturnTrue:
  
  
          lastKeyItemDetermined = item;
@@ -160,7 +162,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
        }
  
        // in graph plot menu, wanting to change Normal Mode items, so open the correct menu first and return to Normal Mode, and stop the processing.
-@@ -1027,6 +1132,11 @@ endReturnTrue:
+@@ -1027,6 +1134,11 @@ endReturnTrue:
                  break;
                }
                case CM_AIM: {
@@ -172,7 +174,45 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
                  closeAim();
                  break;
                }
-@@ -1267,7 +1377,20 @@ endReturnTrue:
+@@ -1107,6 +1219,12 @@ endReturnTrue:
+           else if(tam.function == ITM_GTOP && catalog == CATALOG_PROG) {
+             runFunction(item);
+             leaveTamModeIfEnabled();
++            /* AUDIT round 6 (F4/D7-1): this teardown is outside both unwind
++             * owners (the tamProcessInput epilogue and fnKeyExit), so a
++             * pending fold was stranded here — the second door of F2's
++             * class.  The dispatch above has already run; the unwind is
++             * self-guarded and correct after every leave in this file. */
++            forthFoldUnwindIfDone();
+             hourGlassIconEnabled = false;
+             _closeCatalog();
+             refreshScreen(112);
+@@ -1123,6 +1241,8 @@ endReturnTrue:
+               tam.value = (indexOfItems[item].param & 0xff);
+               addStepInProgram(tamOperation());
+               leaveTamModeIfEnabled();
++              forthFoldUnwindIfDone();   /* round 6 (F4's class): commit done,
++                                            TAM over, outside the epilogue */
+             }
+           }
+ 
+@@ -1136,6 +1256,7 @@ endReturnTrue:
+               tam.alpha = true;
+               addStepInProgram(tamOperation());
+               leaveTamModeIfEnabled();
++              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
+             }
+             else  if(indexOfItems[item].func == addItemToBuffer) {   //this section is added, it was commented out in btnFnPressed line 760, it is moved here, as longpress works on release.
+               //Here we deal with PEM TAM mode menu entry, i.e. item's sent to buffer. See issue #454 context.
+@@ -1160,6 +1281,7 @@ endReturnTrue:
+               tam.alpha = true;
+               addStepInProgram(tamOperation());
+               leaveTamModeIfEnabled();
++              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
+             }
+             else {
+                     #if defined(VERBOSEKEYS)
+@@ -1267,7 +1389,20 @@ endReturnTrue:
              if(item == ITM_KEYMAP) {
                cursorEnabled = false;               // cursor is re-activated automatically elsewhere, after button release
              }
@@ -194,7 +234,24 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
                closeAim();
              }
              if(tam.mode && tam.alpha) {
-@@ -1382,6 +1505,12 @@ endReturnTrue:
+@@ -1292,10 +1427,16 @@ endReturnTrue:
+               ) {
+               if(calcMode != CM_PEM || item != ITM_NOP) { // Here we left TAM in the context of issue #454
+                 leaveTamModeIfEnabled();
++                /* round 6 (F4's class): a TAM cancelled here dispatches the
++                 * cancelling item next — the unwind must run first, or a
++                 * pending fold is stranded (and a re-entering parameterized
++                 * item would clobber the single fold context). */
++                forthFoldUnwindIfDone();
+               }
+             }
+             else if(tam.mode == TM_VALUE && (item == ITM_TAMMAX || item == ITM_YY_TRACK || item == ITM_YY_OFF)) {
+               leaveTamModeIfEnabled();
++              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
+             }
+ 
+                     #if defined(VERBOSEKEYS)
+@@ -1382,6 +1523,12 @@ endReturnTrue:
                        printf("keyboard.c: executeFunction calcmode=%u %i (before runfunction): %i, %s tam.mode=%i\n", calcMode, item, currentMenu(), indexOfItems[-currentMenu()].itemSoftmenuName, tam.mode);
                      #endif //VERBOSEKEYS
  
@@ -207,7 +264,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
                  runFunction(item);
  
  
-@@ -1533,7 +1662,10 @@ endReturnTrue:
+@@ -1533,7 +1680,10 @@ endReturnTrue:
  
  
  
@@ -219,7 +276,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
      delayCloseNim = false;
      int16_t result;
      const calcKey_t *key;
-@@ -1650,35 +1782,65 @@ endReturnTrue:
+@@ -1650,35 +1800,68 @@ endReturnTrue:
        Check_MultiPresses(&result, key_no);        //JM
        return result;
      }
@@ -231,7 +288,9 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
 -        if(result == ITM_DOWN_ARROW || scrLock == NC_SUBSCRIPT) {
 -          nextChar = NC_SUBSCRIPT;
 +    else if((calcMode == CM_AIM
-+             && !(forthCapIsInteractive() && forthCapKeysMode())
++             && !(forthCapInteractiveLive() && forthCapKeysMode())   /* round 6
++              * (F8): LIVE, not origin — in the suspended residue the input
++              * plane must not follow a suspended capture's mode bit */
 +             /* L1-F2 (C4): calcMode does not change on TAM entry (tam.mode
 +              * != 0 is the gate) — an interactive TAM session still has
 +              * calcMode == CM_AIM here (determineItem runs OUTSIDE F2's C3
@@ -246,7 +305,8 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
 +             && !(tam.mode && forthFoldPending())) || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && !(tam.function == ITM_FORTH && forthCapKeysMode()))) {
 +      if(((calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
 +             && tam.function == ITM_FORTH && forthCapIsOpen())
-+          || forthCapIsInteractive())
++          || forthCapInteractiveLive())    /* round 6 (F8): the toggle is a
++                                              live-console gesture */
 +         && shiftF && key->fShifted == ITM_AIM) {
 +        /* K1/E10: inside a Forth capture the ALPHA gesture is the keys-mode
 +         * toggle — resolve to ITM_AIM instead of the aim-column ITM_alpha.
@@ -302,11 +362,11 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
      }
 -    else if(calcMode == CM_NORMAL || calcMode == CM_NIM || calcMode == CM_MIM || calcMode == CM_FONT_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_BUG_ON_SCREEN || calcMode == CM_CONFIRMATION || calcMode == CM_PEM || GRAPHMODE || calcMode == CM_ASSIGN || calcMode == CM_TIMER  || calcMode == CM_LISTXY) {
 +    else if(calcMode == CM_NORMAL || calcMode == CM_NIM || calcMode == CM_MIM || calcMode == CM_FONT_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_BUG_ON_SCREEN || calcMode == CM_CONFIRMATION || calcMode == CM_PEM || GRAPHMODE || calcMode == CM_ASSIGN || calcMode == CM_TIMER  || calcMode == CM_LISTXY
-+            || (calcMode == CM_AIM && forthCapIsInteractive() && forthCapKeysMode())) {
++            || (calcMode == CM_AIM && forthCapInteractiveLive() && forthCapKeysMode())) {   /* round 6 (F8) */
        result = shiftF ? key->fShifted :
                 shiftG ? key->gShifted :
                          key->primary;
-@@ -1693,6 +1855,55 @@ endReturnTrue:
+@@ -1693,6 +1876,55 @@ endReturnTrue:
        result = 0;
      }
  
@@ -362,7 +422,15 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
                      #if defined(PC_BUILD)
                        sprintf(tmp, "^^^^^^^keyboard.c: determineitem: result1: %d:", result);
                        jm_show_comment(tmp);
-@@ -2211,18 +2422,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2198,6 +2430,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+             }
+             else if(item != ITM_BACKSPACE) {          // [DL] to ensure backspace will be processed in tamProcessInput
+               leaveTamModeIfEnabled();
++              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
+             }
+           }
+           if(item == ITM_EXIT1 && tam.alpha && aimBuffer[0] != 0)  {
+@@ -2211,18 +2444,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
            if(item == ITM_RCL && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
              calcRegister_t var = findNamedVariable(funcParam);
              if(var != INVALID_VARIABLE) {
@@ -385,7 +453,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
              }
              else {
                displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
-@@ -2235,20 +2438,16 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2235,20 +2460,16 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
            else if(item == ITM_XEQ && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
              calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
              if(label != INVALID_VARIABLE) {
@@ -414,7 +482,15 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -2631,6 +2830,17 @@ RELEASE_END:
+@@ -2274,6 +2495,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+ 
+             if(item == ITM_BASEMENU) {
+               leaveTamModeIfEnabled();
++              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
+             }
+ 
+               runFunction(item);
+@@ -2631,6 +2853,20 @@ RELEASE_END:
          }
  
          case CHR_caseUP: {                                                   //From keyboard: logic for Up/Dn case/num
@@ -423,8 +499,11 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
 +           * are the case-change gesture / menu paging / destructive
 +           * closeAim()+fnBst()) — this is the sanctioned recall gesture.
 +           * Guarded, falling through to the landed case-change body when
-+           * no interactive capture is open. */
-+          if(forthCapIsInteractive()) {
++           * no interactive capture is open.
++           * Round 6 (F6): LIVE, not origin — while SUSPENDED, aimBuffer is
++           * TAM's name buffer (forth_capture.c's suspension contract) and
++           * the recall was overwriting it mid-name. */
++          if(forthCapInteractiveLive()) {
 +            forthHistoryRecall(-1);
 +            keyActionProcessed = true;
 +            break;
@@ -432,14 +511,14 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
            if(getSystemFlag(FLAG_NUMLOCK))  {}
            else if(alphaCase == AC_LOWER) {
              processKeyAction(CHR_case);
-@@ -2644,6 +2854,14 @@ RELEASE_END:
+@@ -2644,6 +2880,14 @@ RELEASE_END:
          }
  
          case CHR_caseDN: {                                                   //From keyboard: logic for Up/Dn case/num
 +          /* L1-H (C4): the mirror of CHR_caseUP above — f-down recalls a
 +           * NEWER line (delta +1), reaching "past the newest" (empty) one
-+           * step past the newest pushed line. */
-+          if(forthCapIsInteractive()) {
++           * step past the newest pushed line.  Round 6 (F6): LIVE — see up. */
++          if(forthCapInteractiveLive()) {
 +            forthHistoryRecall(1);
 +            keyActionProcessed = true;
 +            break;
@@ -447,15 +526,17 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
            if(getSystemFlag(FLAG_NUMLOCK)) {
              alphaCase = AC_UPPER;
              processKeyAction(CHR_numU);
-@@ -2835,8 +3053,28 @@ RELEASE_END:
+@@ -2835,8 +3079,30 @@ RELEASE_END:
  
                //also AIM Longpress cycle
                case CM_AIM: {
 +                /* L1-2 (C3): R/S runs the interactive line — the closest
 +                 * honest analog to K's "commit, then record a native STOP
 +                 * step"; there is no step here to record. Checked before
-+                 * the BST/SST arm below: ITM_RS matches neither. */
-+                if(forthCapIsInteractive() && item == ITM_RS) {
++                 * the BST/SST arm below: ITM_RS matches neither.
++                 * Round 6 (F9): LIVE — in the suspended residue this arm ran
++                 * TAM's leftover scratch as a Forth line. */
++                if(forthCapInteractiveLive() && item == ITM_RS) {
 +                  forthInteractiveEnter();     /* the closest honest analog */
 +                  keyActionProcessed = true;
 +                  break;
@@ -476,7 +557,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
                    closeAim();
                    runFunction(item);
                    keyActionProcessed = true;
-@@ -3130,11 +3368,23 @@ RELEASE_END:
+@@ -3130,11 +3396,23 @@ RELEASE_END:
                    keyActionProcessed = true;
                  }
                  else if(item == ITM_SST) {
@@ -500,7 +581,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
                    fnBst(NOPARAM);
                    keyActionProcessed = true;
                    refreshScreen(123);
-@@ -3154,6 +3404,12 @@ RELEASE_END:
+@@ -3154,6 +3432,12 @@ RELEASE_END:
                    }
                  }
                  else if(item == ITM_RS) {
@@ -513,22 +594,39 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
                    addStepInProgram(ITM_STOP);
                    keyActionProcessed = true;
                  }
-@@ -3444,6 +3700,14 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3444,6 +3728,16 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
 +        /* L1-2 (C1): an interactive Forth capture diverts entirely — run
 +         * the line (or reopen/no-op), never fall to the native AIM commit
 +         * below.  calcMode stays CM_AIM throughout: no calcModeNormal(),
-+         * no closeAim(), no popSoftmenu() on this path. */
-+        if(forthCapIsInteractive()) {
++         * no closeAim(), no popSoftmenu() on this path.
++         * Round 6 (F8): LIVE — while SUSPENDED, aimBuffer is TAM's, and this
++         * divert was committing TAM's scratch to FHIST and running it. */
++        if(forthCapInteractiveLive()) {
 +          forthInteractiveEnter();
 +          break;
 +        }
            if(softmenuStack[0].softmenuId <= 1 || menu(1) == -MNU_ALPHA) {
              popSoftmenu();
            }
-@@ -3716,6 +3980,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3670,6 +3964,14 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+                     if(tam.mode && currentMenu() == -MNU_SYSFL) {                                           //JM auto recover out of SYSFL in the CFLG TAM flow; a plain catalog SYS.FL exits via the standard path below
+                       numberOfTamMenusToPop = 2;                                                   //JM
+                       leaveTamModeIfEnabled();                                                     //JM
++                      /* AUDIT round 6 (F2): this return sits ABOVE the TAM
++                       * branch's own unwind below.  Without it the ordinary
++                       * catalog cancel strands the fold ARMED with the
++                       * capture SUSPENDED — and the next normal-mode STO is
++                       * forged into a program step by tamProcessInput's
++                       * bracket.  Self-guarded: no-op unless the fold is
++                       * pending and TAM is really over. */
++                      forthFoldUnwindIfDone();
+                       return;                                                                      //JM
+                     }                                                                              //JM
+                     leaveAsmMode();
+@@ -3716,6 +4018,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            aimBuffer[0] = 0;
          }
          leaveTamModeIfEnabled();
@@ -541,10 +639,21 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
          if(calcMode == CM_PEM) {
            scrollPemBackwards();
          }
-@@ -3799,6 +4069,142 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3799,6 +4107,153 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
++        if(forthCapIsInteractive() && !forthCapIsOpen()) {
++          /* AUDIT round 6 (F8): the suspended residue — TAM torn down
++           * without the unwind (a strand door), or an exotic path skipped
++           * the resume choke point.  EXIT is the recovery gesture: resume
++           * the line instead of running the ladder (whose close rung would
++           * eat it) or falling to the native arm (whose closeAim would
++           * commit TAM's scratch to X). */
++          forthFoldUnwindIfDone();
++          if(forthCapIsSuspended()) { forthCaptureResume(); }
++          break;
++        }
 +        if(forthCapIsInteractive()) {
 +          /* L1-2 (C2): the interactive EXIT ladder — supersedes
 +           * _forthCapCloseIfInteractive() at this site (the native arm
@@ -684,7 +793,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
          if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines
            softmenuStack[0].softmenuId = 1;                                  //JM
          }                                                                   //JM
-@@ -3856,6 +4262,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3856,6 +4311,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            lastErrorCode = 0;
            break;
          }
@@ -700,7 +809,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
          if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
            if(isAlphaSubmenu(0)) {
              popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
-@@ -3868,6 +4283,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +4332,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -708,7 +817,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +4294,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +4343,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -731,7 +840,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4366,9 +4798,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4847,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -756,7 +865,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
-@@ -4544,6 +4990,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4544,6 +5039,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
@@ -770,7 +879,7 @@ index bc44026016e94a8865b8acc886386341596641c6..65657da3fb50bc2cd91638456ea02e0a
              closeAim();
            }
            fnBst(NOPARAM);
-@@ -4762,6 +5215,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4762,6 +5264,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {

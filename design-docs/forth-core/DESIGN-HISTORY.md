@@ -3219,3 +3219,73 @@ code, which by this project's own reset rule is unaudited, and the criterion
 needs TWO consecutive clean rounds anyway.  Round 5 needs the in-family
 dimensions credits killed in round 3, `design` (D7) above all: it has now
 not run for two rounds.
+
+## 2026-08-08 — the round-6 fix wave: the fold/suspend window closed
+
+Every confirmed finding of `AUDIT_round6_2026-08-08.md` except F13 (owner
+ruling, see the handoff) landed in one gate-green commit, each with a
+reproducer that was RED on the unfixed tree first — the red run is quoted in
+the commit.  The named classes, generalized past their instances:
+
+- **Unbounded derived counter crossed with scope-mismatched sampling** (F1).
+  The resume splice subtracted FHIST's saved step count from
+  `getNumberOfSteps()` of whatever program `currentProgramNumber` happened
+  to be on; a live GTOP had moved it.  Fix: re-anchor with
+  `defineCurrentProgramFromCurrentStep()`, clamp the difference, and give
+  the delete loop the sweep's own NULL/END guards.  Class rule: a counter
+  derived from two samples must prove both samples come from the same
+  scope, and any loop it drives carries its own reality checks.
+- **Stale admission across an in-place promotion** (F1's door).  The `.`
+  promotion rewrites `tam.function` GTO→GTOP after `_forthFoldAdmits`
+  already admitted GTO; the fold now re-derives to PARK at the promotion.
+  Class: any decision cached across a state rewrite must be re-derived at
+  the rewrite.
+- **Bracket with an open-ended owner set** (F2/F4, D7-1's shape).  Two
+  proven strand doors (the SYSFL EXIT arm, the GTOP recall guard) plus
+  every other `leaveTamModeIfEnabled` caller outside the two unwind owners
+  now call `forthFoldUnwindIfDone()` — self-guarded, a no-op unless the
+  fold is pending and TAM is over.  The by-construction fix (a single
+  terminal `tamFinish`) remains the owner's design decision.
+- **Origin tested where openness is meant** (F3/F6/F8/F9, D7-2).
+  `forthCapInteractiveLive()` (origin INTERACTIVE and state OPEN) now
+  answers the liveness question at the render gate, both plane selects,
+  both dispatch arms, the recall guards, the R/S arm, the ENTER divert,
+  the input cap, and the EXIT ladder — which additionally treats a
+  suspended residue as a recovery: EXIT resumes the line.  Class: a
+  predicate answering "whose" must never gate "is it live now".
+- **Single-owner contract with an untracked writer** (F5).  Resume's raw
+  `showSoftmenu(-MNU_ALPHA)` became `forthConsoleRestoreSurface()` — the
+  named re-establisher registers what it shows.
+- **Predicate widened for one consumer, another never re-enumerated**
+  (F7).  The f long-press alpha juggling in `Shft_handler` popped the
+  console's registered FWRD row through `isAlphabeticSoftmenu()`
+  (= `isAlphaSubmenu(0)`, widened in Stage L); it now leaves a live
+  console's row alone.
+- **Disposition collision** (F10).  The splice's "keep this and later
+  steps" and the sweep's "covers every break path" prescribed opposite
+  fates for a kept TAM commit; `_forthFoldKeptSteps` carries the keep into
+  the sweep's threshold, and the committed operation survives in FHIST.
+  The `test_fold_close_paths` subcase that pinned the old deletion
+  migrated with the fix, per the contract-migration rule.
+- **Declared stack effect not honoured on the error path** (F11).
+  `forthPrimInvoke` restores the pre-applied depth and skips the settle
+  when a consuming prim raised an error — a refusal leaves the stack it
+  was handed, the spill stays, and the line-end `ERROR_RAM_FULL` stays
+  loud.  Class test sweeps EMIT and `.$` on a spilled stack.
+- **Oracle asserting a lifetime narrower than the design's** (F12/U1).
+  The ownership oracle now accepts a stamped SUSPENDED capture; the
+  ownership sweep gained suspend/resume steps in both fixtures, which is
+  the TAM-driven coverage the handoff demanded for four rounds.
+- **D7-3**: the three "PEM-only / inert in production" comments on the
+  fold machinery were corrected — they described the window every crash
+  in rounds 5 and 6 lived in as dormant.
+
+**Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`: flash 1114632 → 1114904 = **+272 B**; ram 8884 →
+8884 = **±0** (`arm-none-eabi-nm | grep -c forthConsole` = 19, package
+confirmed in).  Arena untouched — no dictionary change.
+
+**Exit state.** Thirteen fixes are new code written in one day.  By this
+project's own regression record (r2 4/7, r3 4/4, r5 9/12 findings from the
+previous round's fixes) round 7 audits THIS commit before anything else,
+and the earliest audit close moves to round 8.

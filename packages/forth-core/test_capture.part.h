@@ -14507,9 +14507,13 @@ static int test_fold_close_paths(void)
   cleanupTestProgram();
 
   /* ---- Subcase 5: oversize-text break -- a capture line long enough that
-   * forthCapInsertName refuses (196-glyph cap). The landed loop breaks and
-   * keeps the committed step; assert forthFoldLeave's sweep removes it
-   * anyway. ---- */
+   * forthCapInsertName refuses (196-glyph cap). The splice breaks and KEEPS
+   * the committed step, and since round 6 (F10) the sweep honours the keep:
+   * the committed operation survives in FHIST rather than vanishing with no
+   * error.  (This subcase used to pin the opposite — the sweep deleting the
+   * kept step — which is exactly the disposition collision F10 confirmed:
+   * a committed STO dropped between the splice's "keep" and the sweep.
+   * Contract migrated with the fix.) ---- */
   scFail = 0;
   FCP_RESET();
   {
@@ -14557,12 +14561,15 @@ static int test_fold_close_paths(void)
           scFail = 1;
         }
         if (getNumberOfSteps() != numBefore) {
-          printf("    [5] FAIL: getNumberOfSteps() %u -> %u (the refused STO step should have been swept)\n",
+          printf("    [5] FAIL: getNumberOfSteps() %u -> %u — the caller's own"
+                 " program must be untouched (the kept step lives in FHIST)\n",
                  numBefore, getNumberOfSteps());
           scFail = 1;
         }
-        if ((uint32_t)(firstFreeProgramByte - beginOfProgramMemory) != freeOffBefore) {
-          printf("    [5] FAIL: firstFreeProgramByte changed (debris left behind)\n");
+        if ((uint32_t)(firstFreeProgramByte - beginOfProgramMemory) <= freeOffBefore) {
+          printf("    [5] FAIL: firstFreeProgramByte did not grow — the kept"
+                 " step is missing from FHIST (round 6 F10: a refused commit"
+                 " is KEPT, never silently swept)\n");
           scFail = 1;
         }
         if (forthFoldPending()) {
@@ -14572,8 +14579,8 @@ static int test_fold_close_paths(void)
       }
     }
   }
-  if (!scFail) printf("    [5] PASS: oversize commit refused by forthCapInsertName; forthFoldLeave's "
-                      "sweep removes the kept-but-undecoded step anyway\n");
+  if (!scFail) printf("    [5] PASS: oversize commit refused by forthCapInsertName; the committed "
+                      "step is KEPT in FHIST (round 6 F10), fold clear\n");
   fail |= scFail;
   FCP_RESET();
   cleanupTestProgram();
@@ -17100,6 +17107,477 @@ static int test_fwrd_late_binding(void)
   itemToBeAssigned = savedItemToBeAssigned;
   programRunStop = savedProgramRunStop;
   if (savedUser) setSystemFlag(FLAG_USER); else clearSystemFlag(FLAG_USER);
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}
+
+
+/* ==================================================================
+ * AUDIT round 6 (AUDIT_round6_2026-08-08.md) — the fold/suspend window,
+ * driven.  Reproducers and class tests for the round's confirmed findings:
+ *
+ *   [1] F2  — the SYSFL EXIT cancel must unwind the armed fold
+ *   [2] F1  — the GTO->GTOP promotion re-derives the fold admission
+ *   [3] F10 — a TAM commit the splice cannot fold is KEPT, never swept
+ *   [4] F5  — resume re-registers the row through the surface owner
+ *   [5] F6  — history recall is refused while the capture is SUSPENDED
+ *   [6] F7  — the f long-press leaves the console's registered frame alone
+ *   [7] F8/F9 — the suspended residue is NOT a live console (render gate,
+ *               ENTER, EXIT recovery)
+ *   [8] F11 — a prim that refuses performs none of its declared stack effect
+ *   [9] F1  — GTO . . from an open console: the resume splice survives a
+ *             moved currentProgramNumber (pre-fix: SIGSEGV, so this subcase
+ *             runs LAST)
+ *
+ * Fixture shape copies test_fold_seams (L1-F2): real dispatch only —
+ * fnForthOuter, runFunction, tamProcessInput, fnKeyExit/fnKeyEnter, the
+ * timer exec chain.  aimBuffer content is seeded directly where the landed
+ * batteries do the same (test_fold_seams subcase 1). */
+static int test_fold_round6_window(void)
+{
+  extern void fnForthOuter(uint16_t);
+  extern void fnKeyExit(uint16_t);
+  extern void fnKeyEnter(uint16_t);
+  extern void runFunction(int16_t);
+  extern void tamProcessInput(uint16_t);
+  extern void processKeyAction(int16_t);
+  extern void leaveTamModeIfEnabled(void);
+  extern void Shft_handler(void);
+  extern bool_t _forthConsoleActive(void);
+  extern void forthInteractiveEnter(void);
+  extern void fnTimerStart(uint8_t, uint16_t, uint32_t);
+  extern void fnTimerExec(uint8_t);
+
+  int fail = 0, scFail;
+  longInteger_t li;
+  int32_t rVal;
+
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  tamState_t savedTam = tam;
+  uint8_t savedProgramRunStop = programRunStop;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  /* The FS_RESET shape, plus the console ring and menu stack: each subcase
+   * opens its own console over a known foreign row. */
+  #define R6_RESET() do { \
+    calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
+    programRunStop = PGM_STOPPED; dynamicMenuItem = -1; shiftF = false; shiftG = false; \
+    clearSystemFlag(FLAG_ALPHA); lastErrorCode = ERROR_NONE; forthCapClose(); \
+    if (forthFoldPending()) { forthFoldLeave(); } \
+    forthConsoleClear(); \
+    xcopy(softmenuStack, savedStack, sizeof(savedStack)); \
+  } while (0)
+
+  /* ---- [1] F2: the SYSFL EXIT cancel. keyboard.c's auto-recover arm
+   * returns above the unwind; the fold must not stay armed (the next
+   * normal-mode STO would record a program step instead of storing). ---- */
+  scFail = 0;
+  R6_RESET();
+  {
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    xcopy(aimBuffer, "12", 3); T_cursorPos = 2;
+    runFunction(ITM_SF);                  /* TM_FLAGW: admitted -> fold ARMS */
+    if (!forthFoldArmed() || !forthCapIsSuspended()) {
+      printf("    [1] FIXTURE BUG: SF did not arm+suspend (armed=%d susp=%d)\n",
+             (int)forthFoldArmed(), (int)forthCapIsSuspended());
+      scFail = 1;
+    }
+    else {
+      /* The SYS.FL catalog level.  The menu row is driven for real; the
+       * catalog id is what upstream's CFLG flow sets at calcMode.c:120 —
+       * fixture-established, since the arm under test reads it, and the
+       * state under test here is the FOLD bracket, not catalog derivation. */
+      showSoftmenu(-MNU_SYSFL);
+      catalog = CATALOG_SYFL;
+      fnKeyExit(NOPARAM);                 /* the SYSFL auto-recover arm */
+      catalog = CATALOG_NONE;
+      if (forthFoldArmed() || forthCapIsSuspended()) {
+        printf("    [1] FAIL (F2): SYSFL EXIT stranded the fold (armed=%d susp=%d)"
+               " — tamProcessInput's bracket would forge the next store into a"
+               " program step\n",
+               (int)forthFoldArmed(), (int)forthCapIsSuspended());
+        scFail = 1;
+      }
+      else if (!forthCapIsOpen()
+               || compareString(aimBuffer, "12", CMP_BINARY) != 0) {
+        printf("    [1] FAIL (F2): line not restored after the cancel"
+               " (open=%d aim=\"%s\")\n", (int)forthCapIsOpen(), aimBuffer);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [1] PASS (F2): the SYSFL EXIT cancel unwinds the fold and restores the line\n");
+  fail |= scFail;
+  R6_RESET();
+
+  /* ---- [2] F1's door: the `.` promotion rewrites tam.function AFTER the
+   * fold admitted GTO.  GTOP is NOT an admitted item (_forthFoldAdmits) —
+   * the fold must re-derive to PARK at the promotion. ---- */
+  scFail = 0;
+  {
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    xcopy(aimBuffer, "7", 2); T_cursorPos = 1;
+    runFunction(ITM_GTO);                 /* TM_LABEL: admitted -> ARMED */
+    if (!forthFoldArmed()) {
+      printf("    [2] FIXTURE BUG: GTO did not arm the fold\n");
+      scFail = 1;
+    }
+    else {
+      tamProcessInput(ITM_PERIOD);        /* promotes GTO -> GTOP in place */
+      if (tam.function != ITM_GTOP) {
+        printf("    [2] FIXTURE BUG: `.` did not promote to GTOP (tam.function=%d)\n",
+               (int)tam.function);
+        scFail = 1;
+      }
+      else if (forthFoldArmed()) {
+        printf("    [2] FAIL (F1 door): the GTO->GTOP promotion left the fold"
+               " ARMED — GTOP is excluded by _forthFoldAdmits and will run"
+               " live inside the bracket\n");
+        scFail = 1;
+      }
+      else if (!forthFoldPending()) {
+        printf("    [2] FAIL (F1 door): the promotion cleared the fold outright"
+               " — expected a PARK downgrade (mode 2), the line must survive\n");
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [2] PASS (F1 door): the promotion downgrades the fold to PARK\n");
+  fail |= scFail;
+  R6_RESET();
+
+  /* ---- [3] F10: a commit the splice cannot fold (near-cap line) is KEPT
+   * in FHIST — the sweep must honour the splice's keep, not delete it. ---- */
+  scFail = 0;
+  {
+    uint16_t fhBefore;
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    { int i;
+      for (i = 0; i < 250; i += 2) { aimBuffer[i] = '7'; aimBuffer[i + 1] = ' '; }
+      aimBuffer[250] = 0;
+    }
+    T_cursorPos = 250;
+    fhBefore = _tfcFhistStepCount();
+    runFunction(ITM_STO);
+    tamProcessInput(ITM_1);
+    tamProcessInput(ITM_0);               /* commit STO 10: no room to fold */
+    if (forthFoldPending()) {
+      printf("    [3] FIXTURE BUG: fold still pending after the commit epilogue\n");
+      scFail = 1;
+    }
+    else if (_tfcFhistStepCount() != (uint16_t)(fhBefore + 1)) {
+      printf("    [3] FAIL (F10): the no-room TAM commit vanished — kept by the"
+             " splice, deleted by the sweep (FHIST %u -> %u, expected %u)\n",
+             fhBefore, _tfcFhistStepCount(), (unsigned)(fhBefore + 1));
+      scFail = 1;
+    }
+    else if (stringByteLength(aimBuffer) != 250) {
+      printf("    [3] FAIL (F10): the near-cap line changed length (%d)\n",
+             (int)stringByteLength(aimBuffer));
+      scFail = 1;
+    }
+  }
+  if (!scFail) printf("    [3] PASS (F10): the unfoldable commit is kept in FHIST, the line intact\n");
+  fail |= scFail;
+  R6_RESET();
+
+  /* ---- [4] F5: the alpha-excursion fold.  Suspend pops the OWNED ALPHA
+   * frame; resume must re-establish the row THROUGH THE OWNER, registered —
+   * not with a raw showSoftmenu push. ---- */
+  scFail = 0;
+  {
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);                /* keys-first: FWRD row, OWNED */
+    runFunction(ITM_AIM);                 /* the excursion: row -> ALPHA */
+    if (forthConsoleTestOwnedCount() != 1 || currentMenu() != -MNU_ALPHA) {
+      printf("    [4] FIXTURE BUG: excursion not reached (owned=%u menu=%d)\n",
+             forthConsoleTestOwnedCount(), (int)currentMenu());
+      scFail = 1;
+    }
+    else {
+      xcopy(aimBuffer, "5", 2); T_cursorPos = 1;
+      runFunction(ITM_STO);               /* suspend pops the owned ALPHA row */
+      tamProcessInput(ITM_0);
+      tamProcessInput(ITM_5);             /* commit -> resume */
+      if (!forthCapIsOpen()) {
+        printf("    [4] FIXTURE BUG: capture not resumed (state=%d)\n",
+               forthTestCapState());
+        scFail = 1;
+      }
+      else if (forthConsoleTestOwnedCount() + forthConsoleTestBorrowCount() != 1) {
+        printf("    [4] FAIL (F5): resume re-pushed the row UNREGISTERED"
+               " (owned=%u borrow=%u) — one EXIT now commits keysMode where"
+               " the surface owner refuses to follow (C18's symptom)\n",
+               forthConsoleTestOwnedCount(), forthConsoleTestBorrowCount());
+        scFail = 1;
+      }
+      else if (currentMenu() != -MNU_ALPHA) {
+        printf("    [4] FAIL (F5): resumed row is %d, expected the ALPHA"
+               " excursion row back\n", (int)currentMenu());
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [4] PASS (F5): resume re-registers the excursion row through the owner\n");
+  fail |= scFail;
+  R6_RESET();
+
+  /* ---- [5] F6: while SUSPENDED, aimBuffer belongs to TAM
+   * (forth_capture.c's suspension contract) — the f-UP history recall must
+   * not fire and overwrite it mid-name. ---- */
+  scFail = 0;
+  {
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    xcopy(aimBuffer, "12 34 +", 8); T_cursorPos = 7;
+    forthInteractiveEnter();              /* one real history line */
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    [5] FIXTURE BUG: seed line errored (%u)\n", lastErrorCode);
+      scFail = 1; lastErrorCode = ERROR_NONE;
+    }
+    else {
+      runFunction(ITM_GTO);               /* ARMED + SUSPENDED, TAM live */
+      if (!forthCapIsSuspended()) {
+        printf("    [5] FIXTURE BUG: GTO did not suspend\n");
+        scFail = 1;
+      }
+      else {
+        xcopy(aimBuffer, "AB", 3);        /* TAM's own name entry, mid-name */
+        processKeyAction(CHR_caseUP);     /* the sanctioned recall gesture */
+        if (compareString(aimBuffer, "AB", CMP_BINARY) != 0) {
+          printf("    [5] FAIL (F6): recall fired while SUSPENDED and clobbered"
+                 " TAM's name buffer (aim=\"%s\")\n", aimBuffer);
+          scFail = 1;
+        }
+      }
+    }
+  }
+  if (!scFail) printf("    [5] PASS (F6): recall is refused while the capture is suspended\n");
+  fail |= scFail;
+  R6_RESET();
+
+  /* ---- [6] F7: the f long-press (real timer chain: fnTimerStart, then
+   * fnTimerExec fires TO_FG_LONG's configured refreshFn -> Shft_handler).
+   * The console's registered FWRD frame must survive it. ---- */
+  scFail = 0;
+  {
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);                /* keys mode, FWRD row OWNED */
+    if (forthConsoleTestOwnedCount() != 1 || currentMenu() != -MNU_FORTH) {
+      printf("    [6] FIXTURE BUG: console home row not established"
+             " (owned=%u menu=%d)\n",
+             forthConsoleTestOwnedCount(), (int)currentMenu());
+      scFail = 1;
+    }
+    else {
+      { extern void refreshFn(uint16_t);
+        extern void fnTimerConfig(uint8_t, void (*)(uint16_t), uint16_t);
+        /* c47.c:767's own configuration — headless init never runs it, and
+         * fnTimerExec calls through the configured pointer. */
+        fnTimerConfig(TO_FG_LONG, refreshFn, TO_FG_LONG);
+      }
+      shiftF = true; shiftG = false;
+      Shft_LongPress_f_g = true;
+      fnTimerStart(TO_FG_LONG, TO_FG_LONG, 10);
+      fnTimerExec(TO_FG_LONG);            /* COMPLETED + refreshFn callback */
+      Shft_handler();                     /* the screen.c long-press arm */
+      shiftF = false;
+      if (forthConsoleTestOwnedCount() + forthConsoleTestBorrowCount() == 0) {
+        printf("    [6] FAIL (F7): the long-press de-registered the console's"
+               " row (menu now %d, keysMode=%d) — the row says one plane while"
+               " the keypad types the other\n",
+               (int)currentMenu(), (int)forthCapKeysMode());
+        scFail = 1;
+      }
+      else if (currentMenu() != -MNU_FORTH) {
+        printf("    [6] FAIL (F7): the long-press replaced the console's row"
+               " (menu now %d)\n", (int)currentMenu());
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [6] PASS (F7): the long-press leaves the console's registered row alone\n");
+  fail |= scFail;
+  R6_RESET();
+
+  /* ---- [7] F8/F9: the suspended residue (capture SUSPENDED, TAM torn down
+   * by the raw funnel — exactly what the strand doors produced) is NOT a
+   * live console: the render gate declines, ENTER does not commit TAM's
+   * scratch, and EXIT recovers the line. ---- */
+  scFail = 0;
+  {
+    uint16_t fhResidue;
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    xcopy(aimBuffer, "5", 2); T_cursorPos = 1;
+    runFunction(ITM_STO);                 /* ARMED + SUSPENDED */
+    leaveTamModeIfEnabled();              /* the raw teardown, no unwind */
+    if (tam.mode != 0 || !forthCapIsSuspended()) {
+      printf("    [7] FIXTURE BUG: residue not reached (tam.mode=%d susp=%d)\n",
+             (int)tam.mode, (int)forthCapIsSuspended());
+      scFail = 1;
+    }
+    else {
+      calcMode = CM_AIM;                  /* the residue's mode (round 6 F2) */
+      if (_forthConsoleActive()) {
+        printf("    [7] FAIL (F8): the render gate treats the suspended residue"
+               " as a live console — TAM's abandoned aimBuffer would paint as"
+               " an editable line\n");
+        scFail = 1;
+      }
+      fhResidue = _tfcFhistStepCount();
+      xcopy(aimBuffer, "99", 3); T_cursorPos = 2;   /* TAM's leftover scratch */
+      fnKeyEnter(NOPARAM);
+      if (_tfcFhistStepCount() != fhResidue) {
+        printf("    [7] FAIL (F9): ENTER in the residue committed TAM's scratch"
+               " as a Forth line (FHIST %u -> %u)\n",
+               fhResidue, _tfcFhistStepCount());
+        scFail = 1;
+      }
+      if (forthCapIsOpen()) {
+        printf("    [7] FAIL (F8): ENTER in the residue re-opened/committed the"
+               " capture\n");
+        scFail = 1;
+      }
+      /* EXIT is the recovery gesture: the ladder must not run on the residue;
+       * it resumes the suspended line instead of closing it. */
+      calcMode = CM_AIM;
+      fnKeyExit(NOPARAM);
+      if (!forthCapIsOpen()) {
+        printf("    [7] FAIL (F8): EXIT on the residue %s the capture instead"
+               " of recovering it (state=%d)\n",
+               forthCapIsSuspended() ? "left" : "closed", forthTestCapState());
+        scFail = 1;
+      }
+      else if (compareString(aimBuffer, "5", CMP_BINARY) != 0) {
+        printf("    [7] FAIL (F8): EXIT recovery lost the line (aim=\"%s\")\n",
+               aimBuffer);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [7] PASS (F8/F9): the residue is not live; EXIT recovers the line\n");
+  fail |= scFail;
+  R6_RESET();
+
+  /* ---- [8] F11: a prim that REFUSES performs none of its declared stack
+   * effect — forthPrimInvoke must not settle the spill against the false
+   * depth (that frees the deepest live register and silences the line-end
+   * RAM_FULL stop). Capacity-agnostic: capacity+1 pushes spill one value;
+   * EMIT's operand (capacity+1 <= 31) is below the glyph range, so EMIT
+   * refuses without consuming. ---- */
+  scFail = 0;
+  {
+    char line[128];
+    int  pos = 0;
+    /* forthStackCapacity() is static to forth_inner.c; the same derivation
+     * getStackTop() uses (defines.h:2287). */
+    uint16_t cap = getSystemFlag(FLAG_SSIZE8) ? 8 : 4;
+    uint16_t v;
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    for (v = 1; v <= (uint16_t)(cap + 1); v++) {
+      pos += sprintf(line + pos, "%u ", (unsigned)v);
+    }
+    sprintf(line + pos, "EMIT");
+    xcopy(aimBuffer, line, stringByteLength(line) + 1);
+    T_cursorPos = stringByteLength(line);
+    forthInteractiveEnter();
+    if (lastErrorCode != ERROR_RAM_FULL) {
+      printf("    [8] FAIL (F11): line-end loud stop missing (lastErrorCode=%u)"
+             " — the erroneous settle emptied the spill, silencing the"
+             " ERROR_RAM_FULL a non-empty spill must raise\n", lastErrorCode);
+      scFail = 1;
+    }
+    { calcRegister_t deepest = getStackTop();
+      if (getRegisterDataType(deepest) != dtLongInteger) {
+        printf("    [8] FAIL (F11): deepest register type %u, expected a long"
+               " integer\n", getRegisterDataType(deepest));
+        scFail = 1;
+      }
+      else {
+        longIntegerInit(li);
+        convertLongIntegerRegisterToLongInteger(deepest, li);
+        longIntegerToInt32(li, rVal);
+        longIntegerFree(li);
+        if (rVal != 2) {
+          printf("    [8] FAIL (F11): deepest register = %d, expected 2 — the"
+                 " false settle freed a live register and refilled it with the"
+                 " spilled value\n", (int)rVal);
+          scFail = 1;
+        }
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+  if (!scFail) printf("    [8] PASS (F11): a refusing prim leaves depth, spill and the deepest register alone\n");
+  fail |= scFail;
+  R6_RESET();
+
+  /* ---- [9] F1, LAST because the unfixed tree SIGSEGVs here: GTO . . from
+   * an open console.  The second `.` runs GTOP live (navigates
+   * currentProgramNumber off FHIST, growing program memory); the resume
+   * splice must re-anchor and clamp, not subtract two different programs'
+   * step counts into an unguarded delete loop. ---- */
+  scFail = 0;
+  {
+    uint16_t fhBefore;
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
+    forthInteractiveEnter();
+    xcopy(aimBuffer, "3 4 +", 6); T_cursorPos = 5;
+    forthInteractiveEnter();              /* two history lines: FHIST longer
+                                             than the program GTOP creates */
+    lastErrorCode = ERROR_NONE;
+    fhBefore = _tfcFhistStepCount();
+    xcopy(aimBuffer, "7", 2); T_cursorPos = 1;
+    runFunction(ITM_GTO);
+    tamProcessInput(ITM_PERIOD);          /* promote (PARK) */
+    tamProcessInput(ITM_PERIOD);          /* GTOP runs live; epilogue resumes */
+    if (forthFoldPending()) {
+      printf("    [9] FAIL (F1): fold still pending after the GTOP epilogue\n");
+      scFail = 1;
+    }
+    if (!forthCapIsOpen()) {
+      printf("    [9] FAIL (F1): capture did not survive GTO . . (state=%d)\n",
+             forthTestCapState());
+      scFail = 1;
+    }
+    else if (compareString(aimBuffer, "7", CMP_BINARY) != 0) {
+      printf("    [9] FAIL (F1): the typed line did not survive GTO . ."
+             " (aim=\"%s\")\n", aimBuffer);
+      scFail = 1;
+    }
+    if (_tfcFhistStepCount() != fhBefore) {
+      printf("    [9] FAIL (F1): the resume splice ate FHIST (%u -> %u)\n",
+             fhBefore, _tfcFhistStepCount());
+      scFail = 1;
+    }
+    /* The GTOP arm legitimately created one empty program (END only) at the
+     * end of program memory; later suites start from their own fixtures, so
+     * it is left in place — deleting steps here would re-enter the very
+     * machinery under test. */
+    lastErrorCode = ERROR_NONE;
+  }
+  if (!scFail) printf("    [9] PASS (F1): GTO . . resumes clean — splice anchored and clamped\n");
+  fail |= scFail;
+
+  R6_RESET();
+  #undef R6_RESET
+  tam = savedTam;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  programRunStop = savedProgramRunStop;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
   lastErrorCode = ERROR_NONE;
 
   return fail;

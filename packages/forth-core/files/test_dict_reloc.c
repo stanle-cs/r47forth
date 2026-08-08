@@ -1134,6 +1134,7 @@ static int test_capture_interactive_repl(void);                /* L1-2 */
 static int test_capture_interactive_divert(void);              /* L1-3 */
 static int test_history_program(void);                        /* L1-H */
 static int test_fold_context(void);                            /* L1-F1 */
+static int test_fold_round6_window(void);                      /* AUDIT round 6 */
 static int test_fold_seams(void);                              /* L1-F2 */
 static int test_fold_operand_parity(void);                     /* L1-F3 */
 static int test_fold_close_paths(void);                        /* L1-F3 */
@@ -2585,6 +2586,10 @@ int forthDictSelfTest(void)
 
   printf("  [DEBUG] running test_console_ownership_invariant...\n");
   fail |= test_console_ownership_invariant();
+
+  printf("\nFORTH AUDIT ROUND 6 TESTS (the fold/suspend window, driven)\n");
+  printf("  [DEBUG] running test_fold_round6_window...\n");
+  fail |= test_fold_round6_window();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

@@ -101,6 +101,15 @@ void        forthCapClose(void);      /* state FCAP_CLOSED; safe if already
 bool_t      forthCapIsOpen(void);     /* state == FCAP_OPEN */
 bool_t      forthCapIsInteractive(void); /* L1-1: origin == INTERACTIVE &&
                                              state != CLOSED */
+bool_t      forthCapInteractiveLive(void); /* AUDIT round 6 (F8/D7-2): origin
+                                             INTERACTIVE and state OPEN — the
+                                             "is there a live line" question.
+                                             IsInteractive above answers
+                                             ORIGIN and is deliberately TRUE
+                                             while SUSPENDED (TAM owns
+                                             aimBuffer then); every render,
+                                             route or gate site that means
+                                             "live" must ask THIS one. */
 uint8_t     forthCapOriginRaw(void);     /* L1-1: the raw field — for the
                                              resume bracket */
 void        forthCapSetOrigin(uint8_t o);/* L1-1: the raw field — for the

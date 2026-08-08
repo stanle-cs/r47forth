@@ -1197,6 +1197,15 @@ void pemCloseAlphaInput(void) {
 static bool_t _forthCatalogBuriedOnStack(void);
 static bool_t _forthCatalogMenuOnTop(void);
 
+/* AUDIT round 6 (F10): steps the resume splice deliberately KEPT (oversize
+ * decode, no room in the line).  forthFoldLeave's debris sweep counts them
+ * into its threshold instead of deleting them — before this, the splice's
+ * "keep this and later steps" and the sweep's "covers every break path"
+ * prescribed opposite dispositions for the same steps, and a committed
+ * STO vanished between them with no error.  Set by forthCaptureResume,
+ * consumed and cleared by forthFoldLeave, reset by forthFoldEnter. */
+static uint16_t _forthFoldKeptSteps = 0;
+
 /* FIX-7b: re-establish the per-key recommit invariant — the on-disk capture
  * step mirrors aimBuffer.  Mirrors pemAlpha's own glyph-editing recommit
  * tail; callers guarantee currentStep is ON the capture step, and a capture
@@ -1306,10 +1315,15 @@ void forthCaptureResume(void) {
                                                zeroes origin to PEM too — this is
                                                the SUSPENDED->OPEN re-open, not a
                                                PEM open, so origin must survive it
-                                               exactly like keysMode does.  Inert
-                                               until L1-F* arms interactive
-                                               suspend/resume (suspend/resume is
-                                               PEM-only today, ui/tam.c:1181,:1408). */
+                                               exactly like keysMode does.  LIVE
+                                               since L1-F2 wired the interactive
+                                               fold: ui/tam.c's tamEnterMode seam
+                                               enters the fold and suspends for a
+                                               live interactive capture (round 6
+                                               D7-3 corrected this comment — it
+                                               claimed PEM-only long after the
+                                               wiring landed, and verifiers
+                                               mis-assessed the window on it). */
     forthCapOpen();                         /* SUSPENDED → OPEN; clears aimBuffer,
                                                which TAM may have used meanwhile */
     forthCapSetKeysMode(keysWas);
@@ -1330,25 +1344,48 @@ void forthCaptureResume(void) {
   }
   currentLocalStepNumber = forthCapSavedLocalStep();
   currentStep = p;
+  /* AUDIT round 6 (F1): a TAM item that ran LIVE inside the fold (the
+   * GTO->GTOP promotion door) can leave currentProgramNumber on ANOTHER
+   * program — GTOP navigates and grows program memory.  getNumberOfSteps()
+   * is keyed entirely on currentProgramNumber, so without re-anchoring, the
+   * splice below subtracted two different programs' step counts: the
+   * uint16_t underflow drove deleteStepsFromTo(from, NULL) through
+   * xcopy(..., ~4.1e9) — SIGSEGV in three keypresses; on the device, a
+   * reboot and the typed line lost.  Re-anchor to the program that actually
+   * contains the validated capture step, then clamp and guard like
+   * forthFoldLeave's own sweep. */
+  defineCurrentProgramFromCurrentStep();
   /* F6-4: steps the suspended TAM committed become canonical text.
    * n is 0 (cancel) or 1 (one commit) today; the loop is defensive. */
-  { uint16_t n = getNumberOfSteps() - forthCapSavedStepCount();
+  { uint16_t total = getNumberOfSteps();
+    uint16_t saved = forthCapSavedStepCount();
+    uint16_t n     = (total > saved) ? (uint16_t)(total - saved) : 0;
+    uint16_t kept  = 0;
     bool_t folded = false;
     while (n > 0) {
       uint8_t *ins = findNextStep(currentStep);   /* first inserted step */
+      if (ins == NULL || isAtEndOfProgram(ins) || isAtEndOfPrograms(ins)) {
+        break;   /* round 6 (F1): the count over-ran reality — the sweep's
+                    own NULL/END guard shape (see forthFoldLeave) */
+      }
       decodeOneStep(ins);                          /* canonical text → tmpString */
       if (stringByteLength(tmpString) > 255) {
-        break;   /* defensive: keep the step rather than truncate text */
+        kept = n;  /* defensive: keep the step rather than truncate text */
+        break;
       }
       /* K2: the leading separator now lives in forthCapInsertName itself
        * (token-boundary guard) — pass the decoded text straight through. */
       if (!forthCapInsertName(tmpString)) {
-        break;   /* no room: keep this and later steps after the line */
+        kept = n;  /* no room: keep this and later steps after the line —
+                      and TELL the sweep (round 6 F10), or it deletes what
+                      this arm just promised to keep */
+        break;
       }
       deleteStepsFromTo(ins, findNextStep(ins));
       folded = true;
       --n;
     }
+    _forthFoldKeptSteps = kept;
     if (folded) {
       /* FIX-7b: forthCapInsertName wrote into aimBuffer only — recommit so
        * the on-disk step holds the folded text.  Without this, a commit
@@ -1376,11 +1413,21 @@ void forthCaptureResume(void) {
       i++) {
     popSoftmenu();
   }
-  if(!forthCapKeysMode()) {
-    showSoftmenu(-MNU_ALPHA);
+  if(forthCapIsInteractive()) {
+    /* AUDIT round 6 (F5): re-establish the row THROUGH THE OWNER.  The raw
+     * showSoftmenu push here left the resumed excursion row UNREGISTERED —
+     * owned+borrow 0 with the capture OPEN — after which one EXIT committed
+     * keysMode where forthConsoleShowSurface is entitled to change nothing:
+     * C18's exact symptom, produced by the fix's own resume path.
+     * forthConsoleRestoreSurface is the named re-establisher: stamp alive
+     * somewhere → the ownership rules decide; stamp gone → acquire and
+     * register.  In keys mode it is a no-op on the intact FWRD base, which
+     * is K3/E13 + K-R3 unchanged (the row IS the mode indicator). */
+    forthConsoleRestoreSurface();
   }
-  /* K3/E13 + K-R3: in keys mode the underlying menu row IS the mode
-   * indicator — resume must not cover it with the alpha menu. */
+  else if(!forthCapKeysMode()) {
+    showSoftmenu(-MNU_ALPHA);   /* PEM resume: the native alpha row, unchanged */
+  }
   pemCursorIsZerothStep = false;
 }
 
@@ -1892,8 +1939,10 @@ void forthHistoryRecall(int16_t delta) {
  * seeded with the live interactive line, so F2's calcMode = CM_PEM bracket
  * around _tamProcessInput lets the landed F6-2/F6-4 PEM step-insert
  * machinery run UNMODIFIED against a real step, giving the interactive line
- * the same text by the same code.  This packet adds no tam.c wiring — it is
- * inert in production, proven only by its own self-test which drives
+ * the same text by the same code.  L1-F1 landed this inert; L1-F2 wired it
+ * LIVE (ui/tam.c's tamEnterMode seam) — round 6 D7-3 corrected this
+ * comment, which still said "inert in production" while every crash of the
+ * round lived in this window.  The self-test additionally drives
  * forthFoldEnter/forthFoldLeave directly.
  * ================================================================== */
 
@@ -1971,6 +2020,8 @@ void forthFoldEnter(int16_t func, uint16_t mode) {
 
   forthHistoryGotoLastStep();     /* L1-H's helper: park on FHIST's last
                                       step, before its END */
+  _forthFoldKeptSteps = 0;        /* round 6 (F10): defensive reset — a stale
+                                      kept count would blind the next sweep */
 
   forthFoldCtx.entryStepCount = getNumberOfSteps();  /* AFTER the reposition:
                                       getNumberOfSteps() is keyed entirely on
@@ -2029,18 +2080,21 @@ void forthFoldLeave(void) {
   }
 
   /* Debris sweep.  Normally zero iterations: forthCaptureResume already
-   * deleted the folded step (manage.c:1262).  This covers every break path
-   * in that loop (oversize text, no room) and the PARK case.  BOUNDED and
-   * guarded — deleteStepsFromTo is a silent no-op when from == to
-   * (manage.c:221-227), so an unbounded while can spin; findNextStep can
-   * return NULL (src/c47/programming/nextStep.c:151-157); and
-   * lastErrorCode may already be set on entry. */
+   * deleted the folded step (manage.c:1262).  This covers the PARK case and
+   * break paths that keep NOTHING; steps the splice deliberately KEPT
+   * (oversize decode, no room — round 6 F10) are counted in
+   * _forthFoldKeptSteps and stay, or the committed operation vanishes
+   * between the splice's "keep" and this sweep.  BOUNDED and guarded —
+   * deleteStepsFromTo is a silent no-op when from == to (manage.c:221-227),
+   * so an unbounded while can spin; findNextStep can return NULL
+   * (src/c47/programming/nextStep.c:151-157); and lastErrorCode may already
+   * be set on entry. */
   { uint16_t savedErr = lastErrorCode;
     int i;
     lastErrorCode = ERROR_NONE;
     for(i = 0; i < 4; i++) {
       uint8_t *victim;
-      if(getNumberOfSteps() <= forthFoldCtx.entryStepCount + 1) {
+      if(getNumberOfSteps() <= forthFoldCtx.entryStepCount + 1 + _forthFoldKeptSteps) {
         break;
       }
       victim = findNextStep(currentStep);
@@ -2078,6 +2132,7 @@ void forthFoldLeave(void) {
   pemCursorIsZerothStep = forthFoldCtx.savedZerothStep;
 
   forthCapSetFoldModeRaw(0);
+  _forthFoldKeptSteps = 0;      /* round 6 (F10): consumed by this sweep */
 }
 
 bool_t forthFoldArmed(void)   { return forthCapFoldModeRaw() == 1; }

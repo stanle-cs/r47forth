@@ -125,6 +125,14 @@ bool_t forthCapIsInteractive(void) {
    * mutation coverage can still pin the raw field. */
   return forthCap.origin == FCAP_ORIGIN_INTERACTIVE && forthCap.state != FCAP_CLOSED;
 }
+/* AUDIT round 6 (F8/D7-2): the OPENNESS question.  Six sites read the origin
+ * predicate above where "is there a live line" was meant; TRUE-while-SUSPENDED
+ * turned the stranded-fold residue into a zombie console — the render gate
+ * painted TAM's abandoned aimBuffer as an editable line, ENTER and long-press
+ * R/S ran it as Forth, and the recall gesture clobbered TAM's name entry. */
+bool_t forthCapInteractiveLive(void) {
+  return forthCap.origin == FCAP_ORIGIN_INTERACTIVE && forthCap.state == FCAP_OPEN;
+}
 uint8_t forthCapOriginRaw(void)          { return forthCap.origin; }
 void    forthCapSetOrigin(uint8_t o)     { forthCap.origin = o; }
 /* L1-F1: raw foldMode access for forthFoldEnter/forthFoldLeave (manage.c —

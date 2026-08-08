@@ -57,7 +57,9 @@ static void _forthCapCloseIfInteractive(void) {
  * adjacent site tests `... || item < 0` for the same reason; that site's
  * shape is a latent wart, not the pattern to copy.) */
 static bool_t _forthCapAtCap(int16_t item) {
-  if (!forthCapIsInteractive() || item <= 0) { return false; }
+  /* round 6 (F8): the LIVE predicate — a suspended capture's aimBuffer is
+   * TAM's, and this cap must not meter it. */
+  if (!forthCapInteractiveLive() || item <= 0) { return false; }
   if (indexOfItems[item].func != addItemToBuffer) { return false; }
   return !(stringByteLength(aimBuffer)
              + stringByteLength(indexOfItems[item].itemSoftmenuName) < 256
@@ -1217,6 +1219,12 @@ endReturnTrue:
           else if(tam.function == ITM_GTOP && catalog == CATALOG_PROG) {
             runFunction(item);
             leaveTamModeIfEnabled();
+            /* AUDIT round 6 (F4/D7-1): this teardown is outside both unwind
+             * owners (the tamProcessInput epilogue and fnKeyExit), so a
+             * pending fold was stranded here — the second door of F2's
+             * class.  The dispatch above has already run; the unwind is
+             * self-guarded and correct after every leave in this file. */
+            forthFoldUnwindIfDone();
             hourGlassIconEnabled = false;
             _closeCatalog();
             refreshScreen(112);
@@ -1233,6 +1241,8 @@ endReturnTrue:
               tam.value = (indexOfItems[item].param & 0xff);
               addStepInProgram(tamOperation());
               leaveTamModeIfEnabled();
+              forthFoldUnwindIfDone();   /* round 6 (F4's class): commit done,
+                                            TAM over, outside the epilogue */
             }
           }
 
@@ -1246,6 +1256,7 @@ endReturnTrue:
               tam.alpha = true;
               addStepInProgram(tamOperation());
               leaveTamModeIfEnabled();
+              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
             }
             else  if(indexOfItems[item].func == addItemToBuffer) {   //this section is added, it was commented out in btnFnPressed line 760, it is moved here, as longpress works on release.
               //Here we deal with PEM TAM mode menu entry, i.e. item's sent to buffer. See issue #454 context.
@@ -1270,6 +1281,7 @@ endReturnTrue:
               tam.alpha = true;
               addStepInProgram(tamOperation());
               leaveTamModeIfEnabled();
+              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
             }
             else {
                     #if defined(VERBOSEKEYS)
@@ -1415,10 +1427,16 @@ endReturnTrue:
               ) {
               if(calcMode != CM_PEM || item != ITM_NOP) { // Here we left TAM in the context of issue #454
                 leaveTamModeIfEnabled();
+                /* round 6 (F4's class): a TAM cancelled here dispatches the
+                 * cancelling item next — the unwind must run first, or a
+                 * pending fold is stranded (and a re-entering parameterized
+                 * item would clobber the single fold context). */
+                forthFoldUnwindIfDone();
               }
             }
             else if(tam.mode == TM_VALUE && (item == ITM_TAMMAX || item == ITM_YY_TRACK || item == ITM_YY_OFF)) {
               leaveTamModeIfEnabled();
+              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
             }
 
                     #if defined(VERBOSEKEYS)
@@ -1783,7 +1801,9 @@ endReturnTrue:
       return result;
     }
     else if((calcMode == CM_AIM
-             && !(forthCapIsInteractive() && forthCapKeysMode())
+             && !(forthCapInteractiveLive() && forthCapKeysMode())   /* round 6
+              * (F8): LIVE, not origin — in the suspended residue the input
+              * plane must not follow a suspended capture's mode bit */
              /* L1-F2 (C4): calcMode does not change on TAM entry (tam.mode
               * != 0 is the gate) — an interactive TAM session still has
               * calcMode == CM_AIM here (determineItem runs OUTSIDE F2's C3
@@ -1798,7 +1818,8 @@ endReturnTrue:
              && !(tam.mode && forthFoldPending())) || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && !(tam.function == ITM_FORTH && forthCapKeysMode()))) {
       if(((calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
              && tam.function == ITM_FORTH && forthCapIsOpen())
-          || forthCapIsInteractive())
+          || forthCapInteractiveLive())    /* round 6 (F8): the toggle is a
+                                              live-console gesture */
          && shiftF && key->fShifted == ITM_AIM) {
         /* K1/E10: inside a Forth capture the ALPHA gesture is the keys-mode
          * toggle — resolve to ITM_AIM instead of the aim-column ITM_alpha.
@@ -1840,7 +1861,7 @@ endReturnTrue:
       result = key->primaryTam; // No shifted function in TAM
     }
     else if(calcMode == CM_NORMAL || calcMode == CM_NIM || calcMode == CM_MIM || calcMode == CM_FONT_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_BUG_ON_SCREEN || calcMode == CM_CONFIRMATION || calcMode == CM_PEM || GRAPHMODE || calcMode == CM_ASSIGN || calcMode == CM_TIMER  || calcMode == CM_LISTXY
-            || (calcMode == CM_AIM && forthCapIsInteractive() && forthCapKeysMode())) {
+            || (calcMode == CM_AIM && forthCapInteractiveLive() && forthCapKeysMode())) {   /* round 6 (F8) */
       result = shiftF ? key->fShifted :
                shiftG ? key->gShifted :
                         key->primary;
@@ -2409,6 +2430,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
             }
             else if(item != ITM_BACKSPACE) {          // [DL] to ensure backspace will be processed in tamProcessInput
               leaveTamModeIfEnabled();
+              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
             }
           }
           if(item == ITM_EXIT1 && tam.alpha && aimBuffer[0] != 0)  {
@@ -2473,6 +2495,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
 
             if(item == ITM_BASEMENU) {
               leaveTamModeIfEnabled();
+              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
             }
 
               runFunction(item);
@@ -2835,8 +2858,11 @@ RELEASE_END:
            * are the case-change gesture / menu paging / destructive
            * closeAim()+fnBst()) — this is the sanctioned recall gesture.
            * Guarded, falling through to the landed case-change body when
-           * no interactive capture is open. */
-          if(forthCapIsInteractive()) {
+           * no interactive capture is open.
+           * Round 6 (F6): LIVE, not origin — while SUSPENDED, aimBuffer is
+           * TAM's name buffer (forth_capture.c's suspension contract) and
+           * the recall was overwriting it mid-name. */
+          if(forthCapInteractiveLive()) {
             forthHistoryRecall(-1);
             keyActionProcessed = true;
             break;
@@ -2856,8 +2882,8 @@ RELEASE_END:
         case CHR_caseDN: {                                                   //From keyboard: logic for Up/Dn case/num
           /* L1-H (C4): the mirror of CHR_caseUP above — f-down recalls a
            * NEWER line (delta +1), reaching "past the newest" (empty) one
-           * step past the newest pushed line. */
-          if(forthCapIsInteractive()) {
+           * step past the newest pushed line.  Round 6 (F6): LIVE — see up. */
+          if(forthCapInteractiveLive()) {
             forthHistoryRecall(1);
             keyActionProcessed = true;
             break;
@@ -3056,8 +3082,10 @@ RELEASE_END:
                 /* L1-2 (C3): R/S runs the interactive line — the closest
                  * honest analog to K's "commit, then record a native STOP
                  * step"; there is no step here to record. Checked before
-                 * the BST/SST arm below: ITM_RS matches neither. */
-                if(forthCapIsInteractive() && item == ITM_RS) {
+                 * the BST/SST arm below: ITM_RS matches neither.
+                 * Round 6 (F9): LIVE — in the suspended residue this arm ran
+                 * TAM's leftover scratch as a Forth line. */
+                if(forthCapInteractiveLive() && item == ITM_RS) {
                   forthInteractiveEnter();     /* the closest honest analog */
                   keyActionProcessed = true;
                   break;
@@ -3703,8 +3731,10 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
         /* L1-2 (C1): an interactive Forth capture diverts entirely — run
          * the line (or reopen/no-op), never fall to the native AIM commit
          * below.  calcMode stays CM_AIM throughout: no calcModeNormal(),
-         * no closeAim(), no popSoftmenu() on this path. */
-        if(forthCapIsInteractive()) {
+         * no closeAim(), no popSoftmenu() on this path.
+         * Round 6 (F8): LIVE — while SUSPENDED, aimBuffer is TAM's, and this
+         * divert was committing TAM's scratch to FHIST and running it. */
+        if(forthCapInteractiveLive()) {
           forthInteractiveEnter();
           break;
         }
@@ -3934,6 +3964,14 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
                     if(tam.mode && currentMenu() == -MNU_SYSFL) {                                           //JM auto recover out of SYSFL in the CFLG TAM flow; a plain catalog SYS.FL exits via the standard path below
                       numberOfTamMenusToPop = 2;                                                   //JM
                       leaveTamModeIfEnabled();                                                     //JM
+                      /* AUDIT round 6 (F2): this return sits ABOVE the TAM
+                       * branch's own unwind below.  Without it the ordinary
+                       * catalog cancel strands the fold ARMED with the
+                       * capture SUSPENDED — and the next normal-mode STO is
+                       * forged into a program step by tamProcessInput's
+                       * bracket.  Self-guarded: no-op unless the fold is
+                       * pending and TAM is really over. */
+                      forthFoldUnwindIfDone();
                       return;                                                                      //JM
                     }                                                                              //JM
                     leaveAsmMode();
@@ -4069,6 +4107,17 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_AIM: {
+        if(forthCapIsInteractive() && !forthCapIsOpen()) {
+          /* AUDIT round 6 (F8): the suspended residue — TAM torn down
+           * without the unwind (a strand door), or an exotic path skipped
+           * the resume choke point.  EXIT is the recovery gesture: resume
+           * the line instead of running the ladder (whose close rung would
+           * eat it) or falling to the native arm (whose closeAim would
+           * commit TAM's scratch to X). */
+          forthFoldUnwindIfDone();
+          if(forthCapIsSuspended()) { forthCaptureResume(); }
+          break;
+        }
         if(forthCapIsInteractive()) {
           /* L1-2 (C2): the interactive EXIT ladder — supersedes
            * _forthCapCloseIfInteractive() at this site (the native arm

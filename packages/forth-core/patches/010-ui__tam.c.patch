@@ -1,5 +1,5 @@
 diff --git a/src/c47/ui/tam.c b/src/c47/ui/tam.c
-index 939c974dfb2d79767cdd617905442f756d26be18..02402752432f5db9beef2e856995da6e28051053 100644
+index 939c974dfb2d79767cdd617905442f756d26be18..372635bb1600d22dfa9b69d4d4c009f0fbab97e2 100644
 --- a/src/c47/ui/tam.c
 +++ b/src/c47/ui/tam.c
 @@ -2,6 +2,8 @@
@@ -11,7 +11,24 @@ index 939c974dfb2d79767cdd617905442f756d26be18..02402752432f5db9beef2e856995da6e
  
      TO_QSPI const int16_t StoOperations[][2] = {
        {ITM_ADD,      ITM_STOADD},
-@@ -986,6 +988,16 @@ printf("tam.value: %d\n", tam.value);
+@@ -798,6 +800,16 @@ printf("tam.value: %d\n", tam.value);
+           tam.function = ITM_GTOP;
+           tam.min = 0;
+           tam.max = max(getNumberOfSteps(), 99);
++          /* AUDIT round 6 (F1): the fold admitted GTO/XEQ (TM_LABEL) at
++           * entry; GTOP is NOT an admitted item — _forthFoldAdmits excludes
++           * it because it navigates the program pointer.  This promotion
++           * happens AFTER admission, so re-derive the decision: an armed
++           * fold downgrades to PARK, exactly what keying GTOP at entry
++           * would have produced.  Left armed, the second `.` ran GTOP live
++           * inside the bracket, moved currentProgramNumber off FHIST, and
++           * the resume splice subtracted two different programs' step
++           * counts — the GTO . . SIGSEGV. */
++          if(forthFoldArmed()) { forthCapSetFoldModeRaw(2); }
+         }
+         else if(tam.indirect && (currentNumberOfLocalRegisters || calcMode == CM_PEM)) {
+           tam.dot = true;
+@@ -986,6 +998,16 @@ printf("tam.value: %d\n", tam.value);
                  return;
                }
              }
@@ -28,7 +45,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..02402752432f5db9beef2e856995da6e
            }
            if(calcMode != CM_PEM) {
              leaveTamModeIfEnabled();
-@@ -1165,6 +1177,22 @@ printf("tam.value: %d\n", tam.value);
+@@ -1165,6 +1187,22 @@ printf("tam.value: %d\n", tam.value);
          closeNim();
        }
      }
@@ -51,7 +68,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..02402752432f5db9beef2e856995da6e
      else if(calcMode == CM_PEM && aimBuffer[0] != 0) {
        if(getSystemFlag(FLAG_ALPHA)) {
          pemCloseAlphaInput();
-@@ -1388,14 +1416,60 @@ printf("tam.value: %d\n", tam.value);
+@@ -1388,14 +1426,60 @@ printf("tam.value: %d\n", tam.value);
        }
      #endif // PC_BUILD
  
