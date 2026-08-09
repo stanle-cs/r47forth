@@ -17587,3 +17587,272 @@ static int test_fold_round6_window(void)
 
   return fail;
 }
+
+
+/* ==================================================================
+ * AUDIT round 8 — the round-7 fix wave's findings, driven
+ * (AUDIT_round7_2026-08-08.md + its out-of-family addendum).
+ *
+ *   [1] P-1 — DELP of FHIST from a live console: the fold's debris sweep
+ *             must never run keyed on a program that is not the fold's own
+ *
+ * Fixture shape copies test_fold_round6_window: real dispatch only —
+ * fnForthOuter, runFunction, tamProcessInput, forthInteractiveEnter — and
+ * every subcase asserts it REACHED the state it claims to test before it
+ * asserts anything about the fix (the C22 rule).  The P-1 drive itself is
+ * the round-7 evidence driver (/tmp/claude-1000/r7-simdrive, DRIVE 1B)
+ * promoted to permanent coverage. */
+static int test_fold_round8_window(void)
+{
+  extern void fnForthOuter(uint16_t);
+  extern void runFunction(int16_t);
+  extern void tamProcessInput(uint16_t);
+  extern void forthInteractiveEnter(void);
+
+  int fail = 0, scFail;
+  testProg_t p;
+
+  bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  uint8_t savedCalcMode = calcMode;
+  int16_t savedCatalog = catalog;
+  tamState_t savedTam = tam;
+  uint8_t savedProgramRunStop = programRunStop;
+  softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
+  xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  #define R8_RESET() do { \
+    calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
+    programRunStop = PGM_STOPPED; dynamicMenuItem = -1; shiftF = false; shiftG = false; \
+    clearSystemFlag(FLAG_ALPHA); lastErrorCode = ERROR_NONE; forthCapClose(); \
+    if (forthFoldPending()) { forthFoldLeave(); } \
+    forthConsoleClear(); \
+    xcopy(softmenuStack, savedStack, sizeof(savedStack)); \
+  } while (0)
+
+  /* step count of an arbitrary program — _tfcFhistStepCount's walk, keyed
+   * on a program number instead of on FHIST's, because the whole point of
+   * [1] is what happens to a program that is NOT FHIST. */
+  #define R8_PROG_STEPS(progNum, out) do { \
+    uint8_t *s_ = programList[(progNum) - 1].instructionPointer; \
+    uint16_t n_ = 1; \
+    int g_ = 0; \
+    while (s_ != NULL && !(isAtEndOfProgram(s_) || isAtEndOfPrograms(s_)) && g_ < 512) { \
+      n_++; s_ = findNextStep(s_); g_++; \
+    } \
+    (out) = n_; \
+  } while (0)
+
+  /* ---- [1] P-1: console open -> DELP -> "FHIST" -> ENTER.
+   *
+   * DELP is fold-NON-admitted, so the fold PARKs and the commit dispatches
+   * fnClP LIVE — which deletes FHIST, the very program holding the parked
+   * capture step.  forthCaptureResume's canary then falsifies and it exits
+   * through forthCapAbandonSuspended BEFORE the F1 re-anchor, leaving
+   * currentProgramNumber wherever fnClP left it.  Pre-fix, forthFoldLeave's
+   * debris sweep compared FHIST's entry step count against THAT program's
+   * length and deleted up to four of its steps: in the FHIST-first memory
+   * order — the ordinary layout when the console was used before the
+   * program was written — a real user program went 13 steps to 9, with
+   * `111 222 333 444` decoded away.  EXECUTED in round 7.
+   *
+   * The line is lost either way (the user deleted the program holding it);
+   * what must not happen is damage to a program the gesture never named. ---- */
+  scFail = 0;
+  R8_RESET();
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+  {
+    uint16_t usrBefore = 0, usrAfter = 0;
+    uint16_t fhProgBefore, fhProgAfter, usrProgBefore, usrProgAfter;
+    calcRegister_t usrLbl;
+
+    /* FHIST-first memory order: LBL 'FHIST' + END is byte-for-byte what
+     * forthHistoryEnsure creates (manage.c:1740-1779), so
+     * forthHistoryProgram() adopts program 1 as the history program. */
+    tpInit(&p);
+    if (tpLbl(&p, "FHIST") < 0 ||
+        tpEnd(&p) < 0 ||
+        tpLbl(&p, "PUSR") < 0 ||
+        tpSrc(&p, "111") < 0 || tpSrc(&p, "222") < 0 || tpSrc(&p, "333") < 0 ||
+        tpSrc(&p, "444") < 0 || tpSrc(&p, "555") < 0 || tpSrc(&p, "666") < 0 ||
+        tpSrc(&p, "777") < 0 || tpSrc(&p, "888") < 0 || tpSrc(&p, "999") < 0 ||
+        tpSrc(&p, "1010") < 0 ||
+        tpRtn(&p) < 0 ||
+        tpEnd(&p) < 0 ||
+        !tpWrite(&p)) {
+      printf("    [1] FIXTURE BUG: program build/write failed\n");
+      scFail = 1;
+    }
+    else {
+      showSoftmenu(-MNU_STK);
+      fnForthOuter(NOPARAM);                    /* interactive console, keys mode */
+      xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
+      forthInteractiveEnter();                  /* one real history line in FHIST */
+      lastErrorCode = ERROR_NONE;
+
+      fhProgBefore  = forthHistoryProgram();
+      usrLbl        = findNamedLabel("PUSR", GLOBAL_LABELS);
+      usrProgBefore = (usrLbl == INVALID_VARIABLE) ? 0
+                      : (uint16_t)labelList[usrLbl - FIRST_LABEL].program;
+      if (usrProgBefore != 0) { R8_PROG_STEPS(usrProgBefore, usrBefore); }
+
+      if (fhProgBefore != 1 || usrProgBefore != 2 || usrBefore < 8) {
+        printf("    [1] FIXTURE BUG: FHIST-first order not reached"
+               " (FHIST prog=%u PUSR prog=%u steps=%u)\n",
+               fhProgBefore, usrProgBefore, usrBefore);
+        scFail = 1;
+      }
+      else {
+        xcopy(aimBuffer, "42", 3); T_cursorPos = 2;   /* the live typed line */
+        runFunction(ITM_DELP);
+        if (!forthFoldPending() || forthFoldArmed() || !forthCapIsSuspended()
+            || tam.function != ITM_DELP) {
+          printf("    [1] FIXTURE BUG: DELP did not PARK+suspend"
+                 " (pending=%d armed=%d susp=%d tam.function=%d)\n",
+                 (int)forthFoldPending(), (int)forthFoldArmed(),
+                 (int)forthCapIsSuspended(), (int)tam.function);
+          scFail = 1;
+        }
+        else {
+          tamProcessInput(ITM_alpha);            /* TM_LBLONLY name entry */
+          if (!tam.alpha) {
+            printf("    [1] FIXTURE BUG: the label prompt refused alpha entry\n");
+            scFail = 1;
+          }
+          else {
+            xcopy(aimBuffer, "FHIST", 6);
+            tamProcessInput(ITM_ENTER);          /* commit: fnClP runs LIVE */
+
+            fhProgAfter   = forthHistoryProgram();
+            usrLbl        = findNamedLabel("PUSR", GLOBAL_LABELS);
+            usrProgAfter  = (usrLbl == INVALID_VARIABLE) ? 0
+                            : (uint16_t)labelList[usrLbl - FIRST_LABEL].program;
+            if (usrProgAfter != 0) { R8_PROG_STEPS(usrProgAfter, usrAfter); }
+
+            /* REACHED: the door really opened — the label was accepted and
+             * fnClP really deleted FHIST.  Without this the assertion below
+             * would pass on a tree where DELP simply refused. */
+            if (fhProgAfter != 0) {
+              printf("    [1] FIXTURE BUG: FHIST survived the DELP commit"
+                     " (prog %u -> %u, lastErr=%u) — the P-1 door was not"
+                     " taken\n", fhProgBefore, fhProgAfter, lastErrorCode);
+              scFail = 1;
+            }
+            /* The class assertion: the sweep may only ever act on the
+             * fold's own program. */
+            else if (usrProgAfter == 0 || usrAfter != usrBefore) {
+              printf("    [1] FAIL (P-1): the fold's debris sweep ate the user's"
+                     " program — PUSR %u steps -> %u (prog %u -> %u)\n",
+                     usrBefore, usrAfter, usrProgBefore, usrProgAfter);
+              scFail = 1;
+            }
+            if (forthFoldPending()) {
+              printf("    [1] FAIL (P-1): the fold is still pending after the"
+                     " abandon (foldMode=%u)\n", forthCapFoldModeRaw());
+              scFail = 1;
+            }
+          }
+        }
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+  if (!scFail) printf("    [1] PASS (P-1): DELP of FHIST abandons the line without"
+                      " touching another program\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- [2] C-1: the BACKSPACE demotion is the SECOND tam.function rewrite
+   * site, and the F1 fix re-derived fold admission at only the first.
+   * `GTO . BACKSPACE 0 5 ENTER` from an open console: the `.` promotes to
+   * GTOP and downgrades the fold to PARK (round-6 subcase [2] pins that
+   * direction); the BACKSPACE demotes back to GTO and — pre-fix — left
+   * foldMode on 2, so the commit dispatched reallyRunFunction(ITM_GTO, 5)
+   * LIVE instead of recording the step the splice folds.  The committed
+   * operation vanished twice over: no text in the line, no effect.
+   *
+   * This is the mirror of round-6 [2], and the pair is the class test the
+   * rule asks for: after EVERY tam.function rewrite, foldMode agrees with
+   * _forthFoldAdmits.  The rewrite-site count is pinned below. ---- */
+  scFail = 0;
+  R8_RESET();
+  {
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    xcopy(aimBuffer, "7", 2); T_cursorPos = 1;
+    runFunction(ITM_GTO);                     /* TM_LABEL: admitted -> ARMED */
+    if (!forthFoldArmed() || !forthCapIsSuspended()) {
+      printf("    [2] FIXTURE BUG: GTO did not arm+suspend the fold"
+             " (armed=%d susp=%d)\n",
+             (int)forthFoldArmed(), (int)forthCapIsSuspended());
+      scFail = 1;
+    }
+    else {
+      tamProcessInput(ITM_PERIOD);            /* promote: GTO -> GTOP, fold PARKs */
+      if (tam.function != ITM_GTOP || forthFoldArmed() || !forthFoldPending()) {
+        printf("    [2] FIXTURE BUG: the promotion state was not reached"
+               " (tam.function=%d armed=%d pending=%d)\n",
+               (int)tam.function, (int)forthFoldArmed(), (int)forthFoldPending());
+        scFail = 1;
+      }
+      else {
+        tamProcessInput(ITM_BACKSPACE);       /* digitsSoFar == 0: demote to GTO */
+        if (tam.function != ITM_GTO) {
+          printf("    [2] FIXTURE BUG: BACKSPACE did not demote to GTO"
+                 " (tam.function=%d digitsSoFar=%d)\n",
+                 (int)tam.function, (int)tam.digitsSoFar);
+          scFail = 1;
+        }
+        /* The class assertion, stated at the rewrite site itself. */
+        else if (!forthFoldArmed()) {
+          printf("    [2] FAIL (C-1): the demotion did not re-derive the fold"
+                 " admission — GTO/TM_LABEL is admitted, foldMode=%u"
+                 " (expected 1); the commit will run LIVE instead of folding\n",
+                 forthCapFoldModeRaw());
+          scFail = 1;
+        }
+        else {
+          tamProcessInput(ITM_0);
+          tamProcessInput(ITM_5);
+          if (tam.mode != 0) { tamProcessInput(ITM_ENTER); }
+          /* PEM-parity oracle: the five keys must land in the line as text. */
+          if (!forthCapIsOpen()) {
+            printf("    [2] FAIL (C-1): the capture did not come back open"
+                   " (state=%d)\n", forthTestCapState());
+            scFail = 1;
+          }
+          else if (strstr(aimBuffer, "GTO") == NULL) {
+            printf("    [2] FAIL (C-1): the committed GTO never reached the line"
+                   " (aim=\"%s\", expected the folded step's text)\n", aimBuffer);
+            scFail = 1;
+          }
+          if (forthFoldPending()) {
+            printf("    [2] FAIL (C-1): the fold is still pending after the"
+                   " commit epilogue (foldMode=%u)\n", forthCapFoldModeRaw());
+            scFail = 1;
+          }
+          lastErrorCode = ERROR_NONE;
+        }
+      }
+    }
+  }
+  if (!scFail) printf("    [2] PASS (C-1): the BACKSPACE demotion re-derives the fold"
+                      " admission — GTO . BACKSPACE 0 5 folds into the line\n");
+  fail |= scFail;
+
+  R8_RESET();
+  #undef R8_RESET
+  #undef R8_PROG_STEPS
+  forthDictClear();
+  forthGDictClear();
+  tam = savedTam;
+  calcMode = savedCalcMode;
+  catalog = savedCatalog;
+  programRunStop = savedProgramRunStop;
+  if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  xcopy(softmenuStack, savedStack, sizeof(savedStack));
+  lastErrorCode = ERROR_NONE;
+
+  return fail;
+}

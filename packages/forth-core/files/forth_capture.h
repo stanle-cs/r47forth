@@ -217,6 +217,15 @@ void   forthFoldUnwindIfDone(void);  /* L1-F2 rev 3: resume+leave, once tam.mode
 bool_t forthFoldArmed(void);     /* foldMode == 1 (FOLD: bracket armed) */
 bool_t forthFoldPending(void);   /* foldMode != 0 (FOLD or PARK) */
 
+/* AUDIT round 8 (C-1): admission was decided from (tam.function, tam.mode)
+ * at forthFoldEnter, so EVERY mid-session rewrite of tam.function must
+ * re-derive it — the round-6 F1 fix re-derived at the GTO->GTOP promotion
+ * and missed the sibling BACKSPACE demotion, which silently lost the
+ * committed operation.  Call this at every tam.function rewrite site
+ * instead of writing foldMode by hand; it no-ops when no fold is pending.
+ * The site count is pinned in design-audit.sh group I. */
+void   forthFoldRederiveAdmission(int16_t func, uint16_t mode);
+
 /* F6-6: capture state cannot outlive the dictionary lifecycle.  Called at
  * the same seams as forthScanTrackReset (init / clear / restore
  * validation): a restored or re-initialized machine starts CLOSED.

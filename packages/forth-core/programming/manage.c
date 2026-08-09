@@ -2082,51 +2082,78 @@ void forthFoldLeave(void) {
     return;
   }
 
-  /* Debris sweep.  Normally zero iterations: forthCaptureResume already
-   * deleted the folded step (manage.c:1262).  This covers the PARK case and
-   * break paths that keep NOTHING; steps the splice deliberately KEPT
-   * (oversize decode, no room — round 6 F10) are counted in
-   * _forthFoldKeptSteps and stay, or the committed operation vanishes
-   * between the splice's "keep" and this sweep.  BOUNDED and guarded —
-   * deleteStepsFromTo is a silent no-op when from == to (manage.c:221-227),
-   * so an unbounded while can spin; findNextStep can return NULL
-   * (src/c47/programming/nextStep.c:151-157); and lastErrorCode may already
-   * be set on entry. */
-  { uint16_t savedErr = lastErrorCode;
-    int i;
-    lastErrorCode = ERROR_NONE;
-    for(i = 0; i < 4; i++) {
-      uint8_t *victim;
-      if(getNumberOfSteps() <= forthFoldCtx.entryStepCount + 1 + _forthFoldKeptSteps) {
-        break;
-      }
-      victim = findNextStep(currentStep);
-      if(victim == NULL || isAtEndOfProgram(victim) || isAtEndOfPrograms(victim)) {
-        break;
-      }
-      deleteStepsFromTo(victim, findNextStep(victim));
-      if(lastErrorCode != ERROR_NONE) {
-        break;                    /* L1-H's UAF guard */
-      }
-    }
-    if(lastErrorCode == ERROR_NONE) {
-      lastErrorCode = savedErr;
-    }
-  }
-
-  /* The capture step, re-derived from an OFFSET with a canary — currentStep
-   * has survived an arbitrary TAM, and _insertInProgram rebases every
-   * program pointer whenever it grows the region (manage.c:723-733).  This
-   * is the landed pattern: forth_capture.h keys the suspend snapshot off an
-   * offset for exactly this reason. */
+  /* AUDIT round 8 (P-1): BOTH numbers this block consumes were sampled in
+   * FHIST at forthFoldEnter — entryStepCount is FHIST's step count and
+   * capStepOffset is a FHIST address — and getNumberOfSteps() is keyed
+   * entirely on currentProgramNumber.  Neither means anything anywhere
+   * else, and the cursor is NOT guaranteed to be in FHIST when we get
+   * here: the PARK dispatch runs LIVE after the resume and can navigate
+   * (GTOP), and forthCaptureResume's abandon arm returns BEFORE the F1
+   * re-anchor whenever the canary falsifies.  EXECUTED door: console open
+   * -> DELP -> "FHIST" -> ENTER deletes FHIST from inside its own fold;
+   * the sweep then compared FHIST's entry count against a real user
+   * program's length and deleted four of its steps (13 -> 9, `111 222 333
+   * 444` decoded away).
+   *
+   * So re-anchor onto the capture step first — F1's own fix, applied at
+   * the second consumer of an FHIST-scoped count — and when the capture
+   * step is gone, do NOTHING here: no anchor, no sweep, no delete.  The
+   * residue in that case is debris left in FHIST, and in the only known
+   * door FHIST is itself the program that was deleted, so there is none.
+   * The cursor restore and the foldMode clear below still run. */
   { uint8_t *cap = beginOfProgramMemory + forthFoldCtx.capStepOffset;
     if(cap < firstFreeProgramByte
        && checkOpCodeOfStep(cap, ITM_FORTH)
        && cap[2] == (uint8_t)STRING_LABEL_VARIABLE) {
-      deleteStepsFromTo(cap, findNextStep(cap));
+      currentStep = cap;
+      defineCurrentProgramFromCurrentStep();   /* the sweep's threshold is now
+                                                  read in the fold's OWN program
+                                                  by construction */
+
+      /* Debris sweep.  Normally zero iterations: forthCaptureResume already
+       * deleted the folded step (manage.c:1262).  This covers the PARK case and
+       * break paths that keep NOTHING; steps the splice deliberately KEPT
+       * (oversize decode, no room — round 6 F10) are counted in
+       * _forthFoldKeptSteps and stay, or the committed operation vanishes
+       * between the splice's "keep" and this sweep.  BOUNDED and guarded —
+       * deleteStepsFromTo is a silent no-op when from == to (manage.c:221-227),
+       * so an unbounded while can spin; findNextStep can return NULL
+       * (src/c47/programming/nextStep.c:151-157); and lastErrorCode may already
+       * be set on entry. */
+      { uint16_t savedErr = lastErrorCode;
+        int i;
+        lastErrorCode = ERROR_NONE;
+        for(i = 0; i < 4; i++) {
+          uint8_t *victim;
+          if(getNumberOfSteps() <= forthFoldCtx.entryStepCount + 1 + _forthFoldKeptSteps) {
+            break;
+          }
+          victim = findNextStep(currentStep);
+          if(victim == NULL || isAtEndOfProgram(victim) || isAtEndOfPrograms(victim)) {
+            break;
+          }
+          deleteStepsFromTo(victim, findNextStep(victim));
+          if(lastErrorCode != ERROR_NONE) {
+            break;                    /* L1-H's UAF guard */
+          }
+        }
+        if(lastErrorCode == ERROR_NONE) {
+          lastErrorCode = savedErr;
+        }
+      }
+
+      /* The capture step, re-derived from the OFFSET a second time — the
+       * sweep above may have shortened the region, and _insertInProgram
+       * rebases every program pointer whenever it grows it
+       * (manage.c:723-733).  This is the landed pattern: forth_capture.h
+       * keys the suspend snapshot off an offset for exactly this reason. */
+      cap = beginOfProgramMemory + forthFoldCtx.capStepOffset;
+      if(cap < firstFreeProgramByte
+         && checkOpCodeOfStep(cap, ITM_FORTH)
+         && cap[2] == (uint8_t)STRING_LABEL_VARIABLE) {
+        deleteStepsFromTo(cap, findNextStep(cap));
+      }
     }
-    /* else: canary failed — skip the delete, but still restore the cursor
-       and still clear foldMode below. */
   }
 
   goToPgmStep(forthFoldCtx.savedProgram, forthFoldCtx.savedLocalStep);
@@ -2140,6 +2167,23 @@ void forthFoldLeave(void) {
 
 bool_t forthFoldArmed(void)   { return forthCapFoldModeRaw() == 1; }
 bool_t forthFoldPending(void) { return forthCapFoldModeRaw() != 0; }
+
+/* AUDIT round 8 (C-1): the one way to re-derive fold admission after TAM
+ * rewrites tam.function mid-session.  forthFoldEnter decided FOLD vs PARK
+ * from the item it was ENTERED with; a rewrite makes that decision stale in
+ * exactly the sense the F1 class names — "any decision cached across a
+ * state rewrite must be re-derived at the rewrite" — and the two rewrites
+ * run in opposite directions, so a hand-written one-way patch at one site
+ * (which is what F1 landed) is wrong at the other.
+ *
+ * No-op unless a fold is pending: a rewrite outside the console's bracket
+ * must never ARM one. */
+void forthFoldRederiveAdmission(int16_t func, uint16_t mode) {
+  if(!forthFoldPending()) {
+    return;
+  }
+  forthCapSetFoldModeRaw(_forthFoldAdmits(func, mode) ? 1 : 2);
+}
 
 
 void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {

@@ -396,6 +396,55 @@ else
   note "all cited paths resolve"
 fi
 
+# --- I. Enumerated-site counts (HARD) ----------------------------------------
+# AUDIT round 8, from round 7's D7-a: "enumeration without a count check" was
+# the dominant defect class of the round, operating at code, record and
+# process level at once — F7 guarded one of two consumers of a widened
+# predicate, the F1 fix re-derived one of two rewrite sites, and the approved
+# D7-1 design counted eleven of 28 sites. Every one was a hand list standing
+# in for a counted one.
+#
+# This group is the countermeasure: a fix or design that enumerates sites
+# registers its grep and its expected count HERE. When someone adds a site,
+# the count diverges and the audit says so — instead of a reviewer being
+# expected to remember. A divergence is not automatically a defect: it means
+# the new site must be checked against the rule and the count re-accepted in
+# the same commit that adds it.
+#
+# Format: one PIN per line — expected count, then the description, then the
+# grep. Keep the grep anchored to a specific file where possible; a
+# repo-wide grep drifts for unrelated reasons and stops being read.
+head2 "I. Enumerated-site counts (D7-a pins)"
+i_out=""
+pin() {  # pin <expected> <description> <count-command...>
+  local want="$1" desc="$2"; shift 2
+  local got
+  got=$("$@" 2>/dev/null | tr -d '[:space:]')
+  [[ -z "${got}" ]] && got=0
+  if [[ "${got}" != "${want}" ]]; then
+    i_out+="${desc}: expected ${want}, found ${got}"$'\n'
+  else
+    printf '  ok  %-58s %s\n' "${desc}" "${got}"
+  fi
+}
+
+# C-1 (round 8): every mid-session tam.function rewrite must re-derive fold
+# admission through forthFoldRederiveAdmission. Two rewrite sites, two calls.
+# Three writes total: tamEnterMode's entry write (whose admission
+# forthFoldEnter derives from the same func) plus the two rewrites. Both
+# counts are pinned so a new write of ANY shape moves one of them.
+pin 3 "ui/tam.c 'tam.function =' writes (1 entry + 2 rewrites)" \
+    grep -c 'tam\.function *=[^=]' "${PKG}/ui/tam.c"
+pin 2 "ui/tam.c mid-session tam.function rewrites" \
+    grep -c 'tam\.function = ITM_' "${PKG}/ui/tam.c"
+pin 2 "ui/tam.c forthFoldRederiveAdmission call sites" \
+    grep -c 'forthFoldRederiveAdmission(' "${PKG}/ui/tam.c"
+
+if [[ -n "${i_out}" ]]; then
+  printf '%s' "${i_out}" | sed 's/^/  /'
+  flag "an enumerated-site count moved — check every new site against the rule the pin encodes, then re-accept the count in the same commit"
+fi
+
 # --- accept / summary --------------------------------------------------------
 if [[ "${ACCEPT}" -eq 1 ]]; then
   cat > "${BASELINE}" <<EOF

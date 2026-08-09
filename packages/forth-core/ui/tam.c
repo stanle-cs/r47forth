@@ -345,6 +345,14 @@ static void _tamLeave(void);
         tam.function = ITM_GTO;
         tam.min = indexOfItems[ITM_GTO].tamMinMax >> TAM_MAX_BITS;
         tam.max = indexOfItems[ITM_GTO].tamMinMax & TAM_MAX_MASK;
+        /* AUDIT round 8 (C-1): the sibling of the GTO->GTOP promotion, in
+         * the other direction.  GTO/TM_LABEL IS admitted, so a fold parked
+         * by the promotion must ARM again here — without this the commit
+         * dispatched reallyRunFunction(ITM_GTO, n) LIVE, the bracket never
+         * forged CM_PEM, and `GTO . BACKSPACE 0 5 ENTER` lost the operation
+         * in both directions at once: no text spliced into the line and no
+         * navigation left standing (foldLeave's cursor restore undoes it). */
+        forthFoldRederiveAdmission(tam.function, tam.mode);
       }
       else if(tam.dot) {
         tam.dot = false;
@@ -812,8 +820,10 @@ printf("tam.value: %d\n", tam.value);
            * would have produced.  Left armed, the second `.` ran GTOP live
            * inside the bracket, moved currentProgramNumber off FHIST, and
            * the resume splice subtracted two different programs' step
-           * counts — the GTO . . SIGSEGV. */
-          if(forthFoldArmed()) { forthCapSetFoldModeRaw(2); }
+           * counts — the GTO . . SIGSEGV.
+           * AUDIT round 8 (C-1): through the shared re-derivation, so this
+           * site and the BACKSPACE demotion below cannot drift apart. */
+          forthFoldRederiveAdmission(tam.function, tam.mode);
         }
         else if(tam.indirect && (currentNumberOfLocalRegisters || calcMode == CM_PEM)) {
           tam.dot = true;
