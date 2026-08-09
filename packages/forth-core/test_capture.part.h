@@ -17613,12 +17613,35 @@ static int test_fold_round8_window(void)
   testProg_t p;
 
   bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
+  bool_t savedHome3 = getSystemFlag(FLAG_HOME_TRIPLE);
+  bool_t savedMyM3  = getSystemFlag(FLAG_MYM_TRIPLE);
+  bool_t savedBaseM = getSystemFlag(FLAG_BASE_MYM);
+  bool_t savedBaseH = getSystemFlag(FLAG_BASE_HOME);
+  bool_t savedUser  = getSystemFlag(FLAG_USER);
   uint8_t savedCalcMode = calcMode;
   int16_t savedCatalog = catalog;
   tamState_t savedTam = tam;
   uint8_t savedProgramRunStop = programRunStop;
   softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
   xcopy(savedStack, softmenuStack, sizeof(savedStack));
+
+  /* The f long-press, third completion — the branch that reaches
+   * openHOMEorMyM (package screen.c:1023), driven through the real timer
+   * chain exactly as round-6 subcase [6] drives the sibling branch.
+   * fnTimerConfig is c47.c:767's own configuration: headless init never
+   * runs it, and fnTimerExec calls through the configured pointer. */
+  #define R8_LONGPRESS_F() do { \
+    extern void refreshFn(uint16_t); \
+    extern void fnTimerConfig(uint8_t, void (*)(uint16_t), uint16_t); \
+    fnTimerConfig(TO_FG_LONG, refreshFn, TO_FG_LONG); \
+    Shft_LongPress_f_g = false; \
+    Shft_timeouts = true; \
+    shiftF = false; shiftG = true;        /* state after the second completion */ \
+    fnTimerStart(TO_FG_LONG, TO_FG_LONG, 10); \
+    fnTimerExec(TO_FG_LONG);              /* COMPLETED + refreshFn callback */ \
+    Shft_handler();                       /* defensive second pass, [6]'s idiom */ \
+    shiftF = false; shiftG = false; \
+  } while (0)
 
   #define R8_RESET() do { \
     calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
@@ -17841,9 +17864,137 @@ static int test_fold_round8_window(void)
                       " admission — GTO . BACKSPACE 0 5 folds into the line\n");
   fail |= scFail;
 
+  /* ---- [3] C-2: upstream openHOMEorMyM is the second, un-re-enumerated
+   * consumer of isAlphabeticSoftmenu — the predicate Stage L widened to
+   * count -MNU_FORTH.  The round-6 F7 fix guarded the package-tree copy of
+   * this shape in screen.c and stopped there; a package grep is not an
+   * upstream census.  From a live console with HOME.3 enabled, the f
+   * long-press pops the REGISTERED FWRD frame and covers it with a raw
+   * ALPHA push while forthCapKeysMode() stays true: the row reads ALPHA
+   * while the keypad types the keys plane, with the ownership stamp
+   * destroyed.  EXECUTED with screenshots in round 7.
+   *
+   * Sibling of round-6 subcase [6], which pins the screen.c door; this one
+   * drives the same gesture down the branch that reaches openHOMEorMyM
+   * (Shft_timeouts, third completion — package screen.c:1023). ---- */
+  scFail = 0;
+  R8_RESET();
+  setSystemFlag(FLAG_HOME_TRIPLE);
+  clearSystemFlag(FLAG_MYM_TRIPLE);
+  {
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    xcopy(aimBuffer, "1 2", 4); T_cursorPos = 3;
+    if (forthConsoleTestOwnedCount() != 1 || currentMenu() != -MNU_FORTH
+        || !forthCapKeysMode() || !forthCapIsOpen() || !forthConsoleStampOnStack()) {
+      printf("    [3] FIXTURE BUG: live console with an owned FWRD row not"
+             " reached (owned=%u menu=%d keys=%d open=%d stamp=%d)\n",
+             forthConsoleTestOwnedCount(), (int)currentMenu(),
+             (int)forthCapKeysMode(), (int)forthCapIsOpen(),
+             (int)forthConsoleStampOnStack());
+      scFail = 1;
+    }
+    else {
+      R8_LONGPRESS_F();
+      if (forthConsoleTestOwnedCount() + forthConsoleTestBorrowCount() == 0
+          || !forthConsoleStampOnStack()) {
+        printf("    [3] FAIL (C-2): openHOMEorMyM popped the console's registered"
+               " row (menu now %d, keysMode=%d, owned=%u borrow=%u) — the row"
+               " says ALPHA while the keypad types the keys plane, and the C18"
+               " close accounting now pops the wrong frames\n",
+               (int)currentMenu(), (int)forthCapKeysMode(),
+               forthConsoleTestOwnedCount(), forthConsoleTestBorrowCount());
+        scFail = 1;
+      }
+      else if (currentMenu() != -MNU_FORTH) {
+        printf("    [3] FAIL (C-2): openHOMEorMyM replaced the console's row"
+               " (menu now %d)\n", (int)currentMenu());
+        scFail = 1;
+      }
+      if (compareString(aimBuffer, "1 2", CMP_BINARY) != 0) {
+        printf("    [3] FAIL (C-2): the typed line did not survive the gesture"
+               " (aim=\"%s\")\n", aimBuffer);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [3] PASS (C-2): the HOME.3 long-press leaves the live"
+                      " console's registered row alone\n");
+  fail |= scFail;
+
+  /* ---- [4] OOF-1: the SECOND row-destroying call in the same function,
+   * which the isAlphabeticSoftmenu-census fix shape does not cover.  With
+   * MyM.3 enabled and both base-menu flags clear, openHOMEorMyM's normal
+   * mode arm calls fnExitAllMenus(0), which pops the WHOLE softmenu stack.
+   *
+   * The state that reaches it is the one the wrapper itself creates: mid
+   * TAM the capture is SUSPENDED and FLAG_ALPHA is clear, so control takes
+   * the non-alpha branch, whose own leaveTamModeIfEnabled() — the D7-1
+   * wrapper — settles the fold, resumes the capture and re-registers the
+   * console's row.  The wipe lands two arms later, on the row that call
+   * just restored.  Hence OOF-2's constraint, which this subcase is the
+   * proof of: the guard has to hold POST-resume, so it must be evaluated
+   * at the call site and never snapshotted at function entry. ---- */
+  scFail = 0;
+  R8_RESET();
+  clearSystemFlag(FLAG_HOME_TRIPLE);
+  setSystemFlag(FLAG_MYM_TRIPLE);
+  clearSystemFlag(FLAG_BASE_MYM);
+  clearSystemFlag(FLAG_BASE_HOME);
+  clearSystemFlag(FLAG_USER);
+  {
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    xcopy(aimBuffer, "1 2", 4); T_cursorPos = 3;
+    runFunction(ITM_GTO);                     /* ARMED + SUSPENDED, FLAG_ALPHA off */
+    if (calcModel != USER_C47) {
+      printf("    [4] FIXTURE BUG: calcModel %d has no long-press key code\n",
+             (int)calcModel);
+      scFail = 1;
+    }
+    else if (getSystemFlag(FLAG_ALPHA) || !forthCapIsSuspended() || tam.mode == 0) {
+      printf("    [4] FIXTURE BUG: the mid-TAM suspension was not reached"
+             " (alpha=%d susp=%d tam.mode=%d)\n",
+             (int)getSystemFlag(FLAG_ALPHA), (int)forthCapIsSuspended(),
+             (int)tam.mode);
+      scFail = 1;
+    }
+    else {
+      R8_LONGPRESS_F();
+      /* REACHED: the wrapper really did settle and resume — without this the
+       * assertion below could pass on a tree where the gesture never got
+       * that far, and the arm under test would be untested. */
+      if (!forthCapIsOpen() || forthFoldPending()) {
+        printf("    [4] FIXTURE BUG: the wrapper did not settle+resume"
+               " (open=%d foldPending=%d state=%d) — the fnExitAllMenus arm"
+               " was not reached in its post-resume state\n",
+               (int)forthCapIsOpen(), (int)forthFoldPending(), forthTestCapState());
+        scFail = 1;
+      }
+      else if (forthConsoleTestOwnedCount() + forthConsoleTestBorrowCount() == 0
+               || !forthConsoleStampOnStack()) {
+        printf("    [4] FAIL (OOF-1): fnExitAllMenus(0) wiped the row the same"
+               " gesture's wrapper had just re-registered (menu now %d,"
+               " owned=%u borrow=%u, capture OPEN)\n",
+               (int)currentMenu(), forthConsoleTestOwnedCount(),
+               forthConsoleTestBorrowCount());
+        scFail = 1;
+      }
+      /* Deliberately NOT asserted here: that the FWRD row is CURRENT.  This
+       * arm's contract is that the frame survives — a menu pushed OVER the
+       * console's row buries it and EXIT gets it back, which is the round-5
+       * benign-overlay ruling.  Destruction is the defect; covering is not. */
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+  if (!scFail) printf("    [4] PASS (OOF-1): the MyM.3 long-press does not wipe the"
+                      " row its own wrapper restored\n");
+  fail |= scFail;
+
   R8_RESET();
   #undef R8_RESET
   #undef R8_PROG_STEPS
+  #undef R8_LONGPRESS_F
   forthDictClear();
   forthGDictClear();
   tam = savedTam;
@@ -17851,6 +18002,11 @@ static int test_fold_round8_window(void)
   catalog = savedCatalog;
   programRunStop = savedProgramRunStop;
   if (savedAlpha) setSystemFlag(FLAG_ALPHA); else clearSystemFlag(FLAG_ALPHA);
+  if (savedHome3) setSystemFlag(FLAG_HOME_TRIPLE); else clearSystemFlag(FLAG_HOME_TRIPLE);
+  if (savedMyM3)  setSystemFlag(FLAG_MYM_TRIPLE);  else clearSystemFlag(FLAG_MYM_TRIPLE);
+  if (savedBaseM) setSystemFlag(FLAG_BASE_MYM);    else clearSystemFlag(FLAG_BASE_MYM);
+  if (savedBaseH) setSystemFlag(FLAG_BASE_HOME);   else clearSystemFlag(FLAG_BASE_HOME);
+  if (savedUser)  setSystemFlag(FLAG_USER);        else clearSystemFlag(FLAG_USER);
   xcopy(softmenuStack, savedStack, sizeof(savedStack));
   lastErrorCode = ERROR_NONE;
 

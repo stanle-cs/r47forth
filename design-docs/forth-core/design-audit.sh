@@ -440,6 +440,22 @@ pin 2 "ui/tam.c mid-session tam.function rewrites" \
 pin 2 "ui/tam.c forthFoldRederiveAdmission call sites" \
     grep -c 'forthFoldRederiveAdmission(' "${PKG}/ui/tam.c"
 
+# C-2/OOF-1 (round 8): every call in keyboardTweak.c that DESTROYS a softmenu
+# frame — rather than stacking over one — is guarded on
+# forthCapInteractiveLive(). Two destroyers, two guards. A third destroyer
+# arriving from upstream moves the first count and must be guarded or ruled.
+pin 2 "c47Extensions/keyboardTweak.c frame-destroying calls" \
+    grep -cE '^ +(popSoftmenu\(\)|fnExitAllMenus\()' "${PKG}/c47Extensions/keyboardTweak.c"
+pin 2 "c47Extensions/keyboardTweak.c forthCapInteractiveLive guards" \
+    grep -c 'forthCapInteractiveLive()' "${PKG}/c47Extensions/keyboardTweak.c"
+
+# C-2 (round 8): the UPSTREAM census of the predicate Stage L widened to
+# count -MNU_FORTH. Round 6's F7 fix enumerated the package tree only and
+# came back one consumer short — this counts the upstream files, so a new
+# upstream consumer is a finding the day the package rebases onto it.
+pin 5 "upstream files consuming isAlphabeticSoftmenu/isAlphaSubmenu" \
+    bash -c "grep -rl 'isAlphabeticSoftmenu\|isAlphaSubmenu' '${UPSTREAM}' --include=*.c | wc -l"
+
 if [[ -n "${i_out}" ]]; then
   printf '%s' "${i_out}" | sed 's/^/  /'
   flag "an enumerated-site count moved — check every new site against the rule the pin encodes, then re-accept the count in the same commit"

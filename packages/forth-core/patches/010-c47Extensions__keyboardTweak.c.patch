@@ -1,0 +1,88 @@
+diff --git a/src/c47/c47Extensions/keyboardTweak.c b/src/c47/c47Extensions/keyboardTweak.c
+index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..2d330b29ca4cc1b38fc99bc2c2325a65218d21f5 100644
+--- a/src/c47/c47Extensions/keyboardTweak.c
++++ b/src/c47/c47Extensions/keyboardTweak.c
+@@ -6,6 +6,38 @@
+  ***********************************************/
+ 
+ #include "c47.h"
++#include "forth_capture.h"
++
++/* AUDIT round 8 (C-2 + OOF-1) — why forth-core overrides this file.
++ *
++ * openHOMEorMyM is reached from two gestures a console user makes with no
++ * intent to touch the menu at all: the f/g long-press ladder (screen.c's
++ * Shft_timeouts arm) and the triple-f detector below.  Two of its calls
++ * DESTROY softmenu frames rather than stacking over them, and both of them
++ * can destroy the frame a live interactive Forth capture owns:
++ *
++ *   1. the FLAG_ALPHA branch's popSoftmenu(), gated on
++ *      isAlphabeticSoftmenu() — which Stage L widened to count -MNU_FORTH.
++ *      Round 6's F7 fix re-enumerated that predicate's consumers in the
++ *      PACKAGE tree and guarded screen.c's copy of this shape; this file
++ *      is the upstream copy, and a package grep is not an upstream census.
++ *   2. the normal-mode MyM.3 arm's fnExitAllMenus(0), which pops the whole
++ *      stack.  No predicate is involved, so a census of consumer 1 misses
++ *      it entirely — that is why the census unit here is "the calls in
++ *      this function that destroy a frame", not "the consumers of that
++ *      predicate".
++ *
++ * Both guards are evaluated AT THE CALL, never snapshotted at entry.  The
++ * non-alpha branch reaches (2) only from a mid-TAM suspension, and its own
++ * leaveTamModeIfEnabled() — the D7-1 wrapper — settles the fold, resumes
++ * the capture and re-registers the console's row before the wipe: the
++ * guard has to be true in the state the wrapper itself creates.
++ *
++ * Pushes are left alone deliberately: showSoftmenu over the console's row
++ * buries it and EXIT gets it back (the round-5 benign-overlay ruling).
++ * _executeItem in the USER-mode arm is out of scope — it runs the item the
++ * owner assigned to that long-press, which is the gesture doing what it
++ * was asked.  Counts pinned in design-audit.sh group I. */
+ 
+ void fnSHIFTf(uint16_t unusedButMandatoryParameter) {
+   shiftF = true;
+@@ -180,6 +212,18 @@ void resetKeytimers(void) {
+       if(getSystemFlag(FLAG_ALPHA)) {
+         leaveTamModeIfEnabled();
+         if(getSystemFlag(FLAG_HOME_TRIPLE)) {
++          if(forthCapInteractiveLive()) {
++            /* AUDIT round 8 (C-2): row-destroying call 1 of 2.  The console
++             * OWNS its row while a live interactive capture is open
++             * (forth_menu.h), so leave it alone entirely — the same
++             * disposition round 6's F7 fix gave the screen.c twin of this
++             * block, because the console's own ALPHA gesture is the
++             * keys-mode toggle and a raw ALPHA push here would leave the
++             * row reading ALPHA while the keypad types the keys plane.
++             * tam.alpha still gets its TAMALPHA row below in the ordinary
++             * case: during TAM the capture is SUSPENDED, not live. */
++          }
++          else {
+           if((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu()) {
+             popSoftmenu();
+           }
+@@ -189,6 +233,7 @@ void resetKeytimers(void) {
+           else {
+             showSoftmenu(-MNU_ALPHA);
+           }
++          }
+         }
+         else if(getSystemFlag(FLAG_MYM_TRIPLE)) {
+           showSoftmenu(-MNU_MyAlpha);
+@@ -257,7 +302,16 @@ void resetKeytimers(void) {
+               else {
+                 baseOverrideOnce = false;
+                 BASE_OVERRIDEONCE = baseOverrideOnce;
+-                fnExitAllMenus(0);               // If MyMb and HOMEb are both clear, return to the blank base menu display
++                if(!forthCapInteractiveLive()) {
++                  fnExitAllMenus(0);             // If MyMb and HOMEb are both clear, return to the blank base menu display
++                }
++                /* AUDIT round 8 (OOF-1): row-destroying call 2 of 2, and the
++                 * one no predicate census would have found.  Reached only
++                 * from a mid-TAM suspension, where the branch's own
++                 * leaveTamModeIfEnabled() has already resumed the capture and
++                 * re-registered the console's row — so this wipe landed on a
++                 * row the same gesture had just restored.  Evaluated here,
++                 * post-resume, exactly as OOF-2 requires. */
+               }
+             }  //If none selected, do not display any menu, keep the screen blank
+           }

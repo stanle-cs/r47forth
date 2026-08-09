@@ -17,7 +17,7 @@
     "programming/param_core.c": "1b4c4f5c2afd072c4e5a9d56e2ed2a4b355851758979ce3f08bfef1c853c9ea9",
     "programming/param_core.h": "ff4c3dec1227ced41df291faa66572894042302eb9fe86ce3f8c12e45d463d31",
     "testSuite/tests/forth_interp.txt": "a22bc642cb5d3002cb0ff2683bb09bfb2fd26e765c935588412fa69404e679ef",
-    "test_capture.part.h": "9f32c5bf3946c922fca65e8fe94e7346720c2a94ca359457956cd19ee4ab8399",
+    "test_capture.part.h": "32704322eb35804be891d01ddcb334d5a8babbea2683daf4c185e808c82d9376",
     "test_console.part.h": "a1bf0e58d48865e151d89f73040710989e2caef546ed3d7deb5d329d1ee0da71",
     "test_dict_reloc.c": "5b3ebfa5d9ada23368b6bfebc76109a769ec0308b5e6ccc709c8731523de3232",
     "test_engine.part.h": "081e18051a3d680ba69a7e957a5beb5ff14fca5b9814f172aa851bf099a3b968",
@@ -27,6 +27,7 @@
   "patches": {
     "010-assign.c.patch": "96daff3451fac361def3d0fa34213dbb4893cee98cb45c5bcbfb9d2520688d5a",
     "010-c47Extensions__addons.c.patch": "bbe667fa75d8b397eb446b465bc8f72ebd3887f6c66adb8c06715e45c7213cda",
+    "010-c47Extensions__keyboardTweak.c.patch": "8684ce67bcf02970672ed0a32482aa0dbf45b388faaa1f4fd8d34b92ba0a8fa8",
     "010-config.c.patch": "36e52569c26b333d901e86c290d4b12bdea005c155b5030a99fd4370d5b3c3aa",
     "010-core__freeList.c.patch": "3dd5dcceff47d9ad2e6efa0f5e3864e79dc44de580ddf104ecdbb975cc97e6ca",
     "010-defines.h.patch": "604dc402261b8ae7041dbb38836595f984c0648129fa4f294179c63ce8b13f05",
