@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..26b5f4eef80df1651e1ff0a80f125bb9b888cb77 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..0c0b67109bf746bad261a44469d79a03e962f1af 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -3,6 +3,9 @@
@@ -46,7 +46,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..26b5f4eef80df1651e1ff0a80f125bb9
          displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
            #if (EXTRA_INFO_ON_CALC_ERROR == 1)
              sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -915,6 +912,21 @@ void execTimerApp(uint16_t timerType) {
+@@ -915,6 +912,28 @@ void execTimerApp(uint16_t timerType) {
                funcParam = (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode);
                setCurrentUserMenu(item, funcParam);
                if(shiftF) {
@@ -61,14 +61,21 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..26b5f4eef80df1651e1ff0a80f125bb9
 +                 * keys-mode toggle; the long-press leaves its row alone.
 +                 * tam.alpha still gets its TAMALPHA row: during TAM the
 +                 * capture is SUSPENDED, so the guard does not fire. */
-+                if(forthCapInteractiveLive()) {
-+                  /* leave the console's registered row untouched */
++                if(forthCapInteractiveLive() && forthConsoleBaseOnTop()) {
++                  /* leave the console's registered row untouched.
++                   * AUDIT round 8: forthConsoleBaseOnTop() added here for
++                   * the same reason as in the keyboardTweak twin — the F7
++                   * guard asked "is a line live" where the question is "is
++                   * the frame I would destroy mine", so it also refused to
++                   * dismiss a foreign row stacked over the console.  Two
++                   * sites, one shape; the count is pinned in
++                   * design-audit.sh group I. */
 +                }
 +                else {
                  if(getSystemFlag(FLAG_ALPHA) && ((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu())) {
                    popSoftmenu();
                  }
-@@ -934,6 +946,7 @@ void execTimerApp(uint16_t timerType) {
+@@ -934,6 +953,7 @@ void execTimerApp(uint16_t timerType) {
                    showSoftmenu(-MNU_HOME);
                  }
                  showSoftmenuCurrentPart();
@@ -76,7 +83,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..26b5f4eef80df1651e1ff0a80f125bb9
                }
                else {
                  bool_t baseOverrideOnce = true;
-@@ -5662,6 +5675,173 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -5662,6 +5682,173 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
    }
  
  
@@ -250,7 +257,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..26b5f4eef80df1651e1ff0a80f125bb9
    static void _selectiveClearScreen(void) {
      if(screenUpdatingMode == SCRUPD_AUTO) {
        #if defined(PC_BUILD) && defined(MONITOR_CLRSCR)
-@@ -5927,7 +6107,16 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -5927,7 +6114,16 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
            }
            else {
              //printf("##> CCCC 4lines ALPHA Mode\n");

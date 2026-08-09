@@ -449,6 +449,14 @@ pin 2 "c47Extensions/keyboardTweak.c frame-destroying calls" \
 pin 2 "c47Extensions/keyboardTweak.c forthCapInteractiveLive guards" \
     grep -c 'forthCapInteractiveLive()' "${PKG}/c47Extensions/keyboardTweak.c"
 
+# Round 8, out-of-family: a guard that SKIPS a pop must ask whether the frame
+# it would destroy is the console's own, not merely whether a line is live —
+# otherwise it also refuses to dismiss a foreign row stacked over the console.
+# Two sites have that shape (screen.c's F7 guard and its keyboardTweak twin);
+# both pair Live with BaseOnTop. A third pop-skipping site must do the same.
+pin 2 "pop-skipping guards paired with forthConsoleBaseOnTop()" \
+    bash -c "grep -rn 'forthCapInteractiveLive() && forthConsoleBaseOnTop()' '${PKG}' --include=*.c | grep -v '/files/' | wc -l"
+
 # C-2 (round 8): the UPSTREAM census of the predicate Stage L widened to
 # count -MNU_FORTH. Round 6's F7 fix enumerated the package tree only and
 # came back one consumer short — this counts the upstream files, so a new

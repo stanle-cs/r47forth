@@ -923,8 +923,15 @@ void execTimerApp(uint16_t timerType) {
                  * keys-mode toggle; the long-press leaves its row alone.
                  * tam.alpha still gets its TAMALPHA row: during TAM the
                  * capture is SUSPENDED, so the guard does not fire. */
-                if(forthCapInteractiveLive()) {
-                  /* leave the console's registered row untouched */
+                if(forthCapInteractiveLive() && forthConsoleBaseOnTop()) {
+                  /* leave the console's registered row untouched.
+                   * AUDIT round 8: forthConsoleBaseOnTop() added here for
+                   * the same reason as in the keyboardTweak twin — the F7
+                   * guard asked "is a line live" where the question is "is
+                   * the frame I would destroy mine", so it also refused to
+                   * dismiss a foreign row stacked over the console.  Two
+                   * sites, one shape; the count is pinned in
+                   * design-audit.sh group I. */
                 }
                 else {
                 if(getSystemFlag(FLAG_ALPHA) && ((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu())) {

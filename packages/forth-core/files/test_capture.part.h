@@ -18104,6 +18104,160 @@ static int test_fold_round8_window(void)
                       " fold-less suspension is never built\n");
   fail |= scFail;
 
+  /* ---- [6] OUT-OF-FAMILY (round 8, Gemini on the P-1 fix): the fold
+   * context's capStepOffset is an offset from beginOfProgramMemory, and
+   * deleting a program that sits BEFORE FHIST shifts FHIST — and the parked
+   * capture step — DOWN by that program's size.  Nothing updates the fold
+   * context's copy of the offset.  (forthCaptureResume recovers: its canary
+   * falsifies, _forthFoldFindCaptureStep finds the real step and it fixes
+   * the CAPTURE's offset — but not the fold context's.)
+   *
+   * So forthFoldLeave resolves a stale address, and both outcomes are bad:
+   * the canary fails and the owner's parked line is stranded in FHIST as
+   * debris, or the address happens to hold another ITM_FORTH string step —
+   * which is exactly what a Forth step inside a user program looks like —
+   * the canary falsely authenticates it, and the P-1 re-anchor then aims
+   * the sweep at THAT program.
+   *
+   * Reaching input, all ordinary: console open with a line, DELP, spell a
+   * program that lives before FHIST, ENTER. ---- */
+  scFail = 0;
+  R8_RESET();
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+  {
+    uint16_t fhBefore = 0, fhAfter = 0;
+    uint16_t fhProg;
+
+    tpInit(&p);
+    if (tpLbl(&p, "PEAR") < 0 ||
+        tpSrc(&p, "111") < 0 || tpSrc(&p, "222") < 0 || tpSrc(&p, "333") < 0 ||
+        tpRtn(&p) < 0 ||
+        tpEnd(&p) < 0 ||
+        !tpWrite(&p)) {
+      printf("    [6] FIXTURE BUG: program build/write failed\n");
+      scFail = 1;
+    }
+    else {
+      showSoftmenu(-MNU_STK);
+      fnForthOuter(NOPARAM);
+      xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
+      forthInteractiveEnter();                /* FHIST is created AFTER PEAR */
+      lastErrorCode = ERROR_NONE;
+      fhProg   = forthHistoryProgram();
+      fhBefore = _tfcFhistStepCount();
+
+      if (fhProg != 2 || fhBefore < 2) {
+        printf("    [6] FIXTURE BUG: FHIST-second layout not reached"
+               " (FHIST prog=%u steps=%u)\n", fhProg, fhBefore);
+        scFail = 1;
+      }
+      else {
+        xcopy(aimBuffer, "42", 3); T_cursorPos = 2;   /* the live typed line */
+        runFunction(ITM_DELP);
+        if (!forthFoldPending() || tam.function != ITM_DELP) {
+          printf("    [6] FIXTURE BUG: DELP did not park the fold\n");
+          scFail = 1;
+        }
+        else {
+          tamProcessInput(ITM_alpha);
+          if (!tam.alpha) {
+            printf("    [6] FIXTURE BUG: the label prompt refused alpha entry\n");
+            scFail = 1;
+          }
+          else {
+            xcopy(aimBuffer, "PEAR", 5);
+            tamProcessInput(ITM_ENTER);       /* fnClP deletes PEAR, LIVE */
+
+            if (forthHistoryProgram() == 0) {
+              printf("    [6] FIXTURE BUG: FHIST went away — wrong door\n");
+              scFail = 1;
+            }
+            else {
+              fhAfter = _tfcFhistStepCount();
+              printf("    [6] OBS: FHIST steps %u -> %u, numberOfPrograms=%u,"
+                     " capture state=%d, aim=\"%s\"\n",
+                     fhBefore, fhAfter, (unsigned)numberOfPrograms,
+                     forthTestCapState(), aimBuffer);
+              if (fhAfter != fhBefore) {
+                printf("    [6] FAIL (OOF): the fold left FHIST changed"
+                       " (%u -> %u) — the parked capture step was stranded as"
+                       " debris, or a wrong step was deleted\n",
+                       fhBefore, fhAfter);
+                scFail = 1;
+              }
+            }
+            if (forthFoldPending()) {
+              printf("    [6] FAIL: fold still pending after the epilogue\n");
+              scFail = 1;
+            }
+          }
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+  }
+  if (!scFail) printf("    [6] PASS (OOF): deleting a program that precedes FHIST"
+                      " leaves the fold's own bookkeeping sound\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- [7] OUT-OF-FAMILY (round 8, Gemini on the C-2 fix): the guard is
+   * broader than the thing it protects.  It skips openHOMEorMyM's pop
+   * whenever a console line is live — but the frame that pop would destroy
+   * is only sometimes the console's.  Push any other alphabetic row OVER
+   * the console (a push is ruled benign, the console's frame survives
+   * buried) and the same gesture that used to dismiss that row now does
+   * nothing: the overlay is stuck, and the owner's toggle is ignored.
+   *
+   * The guard's question is therefore "is slot 0 MINE", not "am I live" —
+   * forthConsoleBaseOnTop answers exactly that, including the buried case.
+   *
+   * Drive: live console, push -MNU_MyAlpha over it (what this function's
+   * own MyM.3 arm does), then the HOME.3 long-press.  The overlay must go
+   * and the console's own frame must still be registered underneath. ---- */
+  scFail = 0;
+  R8_RESET();
+  setSystemFlag(FLAG_HOME_TRIPLE);
+  clearSystemFlag(FLAG_MYM_TRIPLE);
+  {
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    xcopy(aimBuffer, "1 2", 4); T_cursorPos = 3;
+    showSoftmenu(-MNU_MyAlpha);               /* the benign overlay */
+    if (currentMenu() != -MNU_MyAlpha || forthConsoleTestOwnedCount() != 1) {
+      printf("    [7] FIXTURE BUG: overlay-over-live-console not reached"
+             " (menu=%d owned=%u)\n",
+             (int)currentMenu(), forthConsoleTestOwnedCount());
+      scFail = 1;
+    }
+    else {
+      R8_LONGPRESS_F();
+      if (currentMenu() == -MNU_MyAlpha) {
+        printf("    [7] FAIL (OOF): the guard skipped the pop for a frame that"
+               " is not the console's — the overlay is stuck (menu=%d) and the"
+               " owner's dismiss gesture does nothing\n", (int)currentMenu());
+        scFail = 1;
+      }
+      if (forthConsoleTestOwnedCount() + forthConsoleTestBorrowCount() == 0
+          || !forthConsoleStampOnStack()) {
+        printf("    [7] FAIL: dismissing the overlay destroyed the console's own"
+               " frame (owned=%u borrow=%u)\n",
+               forthConsoleTestOwnedCount(), forthConsoleTestBorrowCount());
+        scFail = 1;
+      }
+      if (compareString(aimBuffer, "1 2", CMP_BINARY) != 0) {
+        printf("    [7] FAIL: the typed line did not survive (aim=\"%s\")\n",
+               aimBuffer);
+        scFail = 1;
+      }
+    }
+  }
+  if (!scFail) printf("    [7] PASS (OOF): the guard protects the console's OWN"
+                      " frame and lets a foreign overlay be dismissed\n");
+  fail |= scFail;
+
   R8_RESET();
   forthHistoryEnsureFailInjected = false;     /* belt and braces: no injected
                                                  fault outlives this fixture */

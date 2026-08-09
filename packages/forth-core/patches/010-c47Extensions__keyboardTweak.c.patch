@@ -1,12 +1,13 @@
 diff --git a/src/c47/c47Extensions/keyboardTweak.c b/src/c47/c47Extensions/keyboardTweak.c
-index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..2d330b29ca4cc1b38fc99bc2c2325a65218d21f5 100644
+index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..e140f0a0c188e1ee94f84a095a7c9680dea27809 100644
 --- a/src/c47/c47Extensions/keyboardTweak.c
 +++ b/src/c47/c47Extensions/keyboardTweak.c
-@@ -6,6 +6,38 @@
+@@ -6,6 +6,39 @@
   ***********************************************/
  
  #include "c47.h"
 +#include "forth_capture.h"
++#include "forth_menu.h"
 +
 +/* AUDIT round 8 (C-2 + OOF-1) — why forth-core overrides this file.
 + *
@@ -41,11 +42,11 @@ index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..2d330b29ca4cc1b38fc99bc2c2325a65
  
  void fnSHIFTf(uint16_t unusedButMandatoryParameter) {
    shiftF = true;
-@@ -180,6 +212,18 @@ void resetKeytimers(void) {
+@@ -180,6 +213,28 @@ void resetKeytimers(void) {
        if(getSystemFlag(FLAG_ALPHA)) {
          leaveTamModeIfEnabled();
          if(getSystemFlag(FLAG_HOME_TRIPLE)) {
-+          if(forthCapInteractiveLive()) {
++          if(forthCapInteractiveLive() && forthConsoleBaseOnTop()) {
 +            /* AUDIT round 8 (C-2): row-destroying call 1 of 2.  The console
 +             * OWNS its row while a live interactive capture is open
 +             * (forth_menu.h), so leave it alone entirely — the same
@@ -54,13 +55,23 @@ index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..2d330b29ca4cc1b38fc99bc2c2325a65
 +             * keys-mode toggle and a raw ALPHA push here would leave the
 +             * row reading ALPHA while the keypad types the keys plane.
 +             * tam.alpha still gets its TAMALPHA row below in the ordinary
-+             * case: during TAM the capture is SUSPENDED, not live. */
++             * case: during TAM the capture is SUSPENDED, not live.
++             *
++             * The forthConsoleBaseOnTop() half is round 8's out-of-family
++             * finding against the first version of this guard: "the console
++             * is live" is not the same question as "the frame this pop
++             * would destroy is the console's".  Push any other alphabetic
++             * row OVER the console — which this function's own MyM.3 arm
++             * does, and which is ruled benign — and the live-only guard
++             * made the gesture that dismisses that row do nothing at all,
++             * leaving the overlay stuck.  forthConsoleBaseOnTop answers the
++             * narrow question, including the buried case. */
 +          }
 +          else {
            if((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu()) {
              popSoftmenu();
            }
-@@ -189,6 +233,7 @@ void resetKeytimers(void) {
+@@ -189,6 +244,7 @@ void resetKeytimers(void) {
            else {
              showSoftmenu(-MNU_ALPHA);
            }
@@ -68,7 +79,7 @@ index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..2d330b29ca4cc1b38fc99bc2c2325a65
          }
          else if(getSystemFlag(FLAG_MYM_TRIPLE)) {
            showSoftmenu(-MNU_MyAlpha);
-@@ -257,7 +302,16 @@ void resetKeytimers(void) {
+@@ -257,7 +313,16 @@ void resetKeytimers(void) {
                else {
                  baseOverrideOnce = false;
                  BASE_OVERRIDEONCE = baseOverrideOnce;

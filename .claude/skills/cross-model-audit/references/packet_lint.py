@@ -71,6 +71,28 @@ def lint(path):
                 print(f"  [HARD] truncation marker ({what}) at line {at}: send WHOLE "
                       f"functions. Round 2's sed-cut packet produced a confident "
                       f"wrong finding about a copy-out tail the packet dropped.")
+    # Seventh packet-defect class (round 8, caught by this linter's own fence
+    # check on the SECOND packet after the first slipped through): a packet
+    # assembled by concatenating extracted function bodies gets its closing
+    # fence glued to the last brace — `}```  ` on one line, which Markdown
+    # does not treat as a fence at all. With one code block the packet lints
+    # as "no code fence"; with several, the openers pair with each other, the
+    # check passes, and the reader receives the task section INSIDE a code
+    # block. Cheap and exact: a fence marker must own its line.
+    for m in re.finditer(r'^(.*\S)```\s*$', text, flags=re.M):
+        hard += 1
+        at = text[:m.start()].count('\n') + 1
+        print(f"  [HARD] fence glued to content at line {at}: ```` ``` ```` must "
+              f"start its own line, or Markdown does not close the block and "
+              f"everything after it — including your task section — is read as "
+              f"code. Extracted bodies need a trailing newline.")
+    fence_lines = re.findall(r'^```', text, flags=re.M)
+    if len(fence_lines) % 2:
+        hard += 1
+        print(f"  [HARD] odd number of fence markers ({len(fence_lines)}): a code "
+              f"block is unterminated, so the prose after it reaches the reader "
+              f"as code.")
+
     allow_imb = '<!-- lint: allow-imbalance -->' in text
     for ln, body in fen:
         net = body.count('{') - body.count('}')

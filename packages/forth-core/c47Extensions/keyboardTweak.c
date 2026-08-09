@@ -7,6 +7,7 @@
 
 #include "c47.h"
 #include "forth_capture.h"
+#include "forth_menu.h"
 
 /* AUDIT round 8 (C-2 + OOF-1) — why forth-core overrides this file.
  *
@@ -212,7 +213,7 @@ void resetKeytimers(void) {
       if(getSystemFlag(FLAG_ALPHA)) {
         leaveTamModeIfEnabled();
         if(getSystemFlag(FLAG_HOME_TRIPLE)) {
-          if(forthCapInteractiveLive()) {
+          if(forthCapInteractiveLive() && forthConsoleBaseOnTop()) {
             /* AUDIT round 8 (C-2): row-destroying call 1 of 2.  The console
              * OWNS its row while a live interactive capture is open
              * (forth_menu.h), so leave it alone entirely — the same
@@ -221,7 +222,17 @@ void resetKeytimers(void) {
              * keys-mode toggle and a raw ALPHA push here would leave the
              * row reading ALPHA while the keypad types the keys plane.
              * tam.alpha still gets its TAMALPHA row below in the ordinary
-             * case: during TAM the capture is SUSPENDED, not live. */
+             * case: during TAM the capture is SUSPENDED, not live.
+             *
+             * The forthConsoleBaseOnTop() half is round 8's out-of-family
+             * finding against the first version of this guard: "the console
+             * is live" is not the same question as "the frame this pop
+             * would destroy is the console's".  Push any other alphabetic
+             * row OVER the console — which this function's own MyM.3 arm
+             * does, and which is ruled benign — and the live-only guard
+             * made the gesture that dismisses that row do nothing at all,
+             * leaving the overlay stuck.  forthConsoleBaseOnTop answers the
+             * narrow question, including the buried case. */
           }
           else {
           if((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu()) {

@@ -2100,6 +2100,54 @@ void forthFoldUnwindIfDone(void) {
   forthFoldLeave();
 }
 
+/* AUDIT round 8, out-of-family: where the fold's parked capture step
+ * actually is, as opposed to where forthFoldEnter left it.
+ *
+ * forthFoldCtx.capStepOffset is an offset from beginOfProgramMemory, which
+ * is stable against everything that happens ABOVE it and stale against
+ * anything that happens below: delete a program that sits BEFORE FHIST and
+ * the capture step slides down by that program's size while the context's
+ * copy does not move.  forthCaptureResume already recovers from exactly
+ * this — its canary falsifies, _forthFoldFindCaptureStep locates the real
+ * step and it rewrites the CAPTURE's offset — but the fold context has its
+ * own copy and nobody rewrote that one.  Executed (console open, DELP,
+ * spell a program that precedes FHIST, ENTER): FHIST came back one step
+ * longer, the owner's parked line stranded in it as debris.
+ *
+ * Two rules, and the second is the one the raw canary was missing: the
+ * answer must be INSIDE FHIST, because the capture step is only ever
+ * created there.  A stale address that happens to satisfy the opcode
+ * canary is not a near-miss — a Forth step inside a user's own program
+ * satisfies it exactly, and forthFoldLeave re-anchors the debris sweep
+ * onto whatever program the answer lives in.
+ *
+ * Returns NULL when FHIST is gone or holds no capture step, which is the
+ * DELP-of-FHIST door: the caller then does nothing at all. */
+static uint8_t *_forthFoldResolveCaptureStep(void) {
+  uint16_t hist = forthHistoryProgram();
+  uint8_t *cap, *from, *to;
+
+  if(hist == 0) { return NULL; }
+
+  from = programList[hist - 1].instructionPointer;
+  to   = (hist < numberOfPrograms) ? programList[hist].instructionPointer
+                                   : firstFreeProgramByte;
+
+  cap = beginOfProgramMemory + forthFoldCtx.capStepOffset;
+  if(cap >= from && cap < to
+     && cap < firstFreeProgramByte
+     && checkOpCodeOfStep(cap, ITM_FORTH)
+     && cap[2] == (uint8_t)STRING_LABEL_VARIABLE) {
+    return cap;
+  }
+
+  /* The offset is stale.  Same recovery forthCaptureResume uses: the
+   * capture step is the LAST ITM_FORTH step in FHIST — forthFoldEnter
+   * appends it after every history line, and a step TAM committed is not
+   * ITM_FORTH at all. */
+  return _forthFoldFindCaptureStep();
+}
+
 void forthFoldLeave(void) {
   if(forthCapFoldModeRaw() == 0) {
     return;
@@ -2121,13 +2169,23 @@ void forthFoldLeave(void) {
    * So re-anchor onto the capture step first — F1's own fix, applied at
    * the second consumer of an FHIST-scoped count — and when the capture
    * step is gone, do NOTHING here: no anchor, no sweep, no delete.  The
-   * residue in that case is debris left in FHIST, and in the only known
-   * door FHIST is itself the program that was deleted, so there is none.
-   * The cursor restore and the foldMode clear below still run. */
-  { uint8_t *cap = beginOfProgramMemory + forthFoldCtx.capStepOffset;
-    if(cap < firstFreeProgramByte
-       && checkOpCodeOfStep(cap, ITM_FORTH)
-       && cap[2] == (uint8_t)STRING_LABEL_VARIABLE) {
+   * cursor restore and the foldMode clear below still run.
+   *
+   * AUDIT round 8, OUT-OF-FAMILY: resolving that step through
+   * _forthFoldResolveCaptureStep and NOT through the raw offset is the
+   * whole of the second half of this fix.  capStepOffset is an offset from
+   * beginOfProgramMemory, so deleting a program that sits BEFORE FHIST
+   * shifts the capture step DOWN and strands the context's copy — and
+   * nothing updated it, because the recovery forthCaptureResume already
+   * has for exactly this case fixes the CAPTURE's offset only.  Executed:
+   * console open, DELP, spell a program that precedes FHIST, ENTER — FHIST
+   * came back one step longer, the owner's parked line left behind as
+   * debris.  The reader's other consequence is worse and shares the root:
+   * the stale address can land on a Forth step inside a USER program,
+   * which satisfies this canary exactly, after which the re-anchor would
+   * aim the sweep at that program. */
+  { uint8_t *cap = _forthFoldResolveCaptureStep();
+    if(cap != NULL) {
       currentStep = cap;
       defineCurrentProgramFromCurrentStep();   /* the sweep's threshold is now
                                                   read in the fold's OWN program
@@ -2165,15 +2223,13 @@ void forthFoldLeave(void) {
         }
       }
 
-      /* The capture step, re-derived from the OFFSET a second time — the
-       * sweep above may have shortened the region, and _insertInProgram
-       * rebases every program pointer whenever it grows it
-       * (manage.c:723-733).  This is the landed pattern: forth_capture.h
-       * keys the suspend snapshot off an offset for exactly this reason. */
-      cap = beginOfProgramMemory + forthFoldCtx.capStepOffset;
-      if(cap < firstFreeProgramByte
-         && checkOpCodeOfStep(cap, ITM_FORTH)
-         && cap[2] == (uint8_t)STRING_LABEL_VARIABLE) {
+      /* The capture step, RE-RESOLVED a second time — the sweep above may
+       * have shortened the region, and _insertInProgram rebases every
+       * program pointer whenever it grows it (manage.c:723-733).  Through
+       * the same resolver, so the second look cannot answer a different
+       * question than the first. */
+      cap = _forthFoldResolveCaptureStep();
+      if(cap != NULL) {
         deleteStepsFromTo(cap, findNextStep(cap));
       }
     }
