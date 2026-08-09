@@ -3872,3 +3872,78 @@ inside the bracket, moved currentProgramNumber off FHIST, and
 the resume splice subtracted two different programs' step
 counts — the GTO . . SIGSEGV.
 ```
+
+---
+
+## 2026-08-09 — the consolidation wave, closed: the upstream diff at 42% of what it was
+
+**What this was.** `SPEC_consolidation-wave_2026-08-09.md`, ten packets,
+implementing every item of `REVIEW_upstream-minimality_2026-08-09.md` plus the
+follow-up consolidation assessment. Owner-approved the same day ("all of them").
+Close-out review: `REVIEW_upstream-minimality_2026-08-09b.md`.
+
+**The numbers, against the 2026-08-09 baseline at `88703343f`.**
+
+| | pre-wave | post-wave |
+|---|---|---|
+| mechanical churn findings | 51 | **0** (scanner exit 1 → 0) |
+| added patch lines | 3,066 | **1,243** |
+| modified/deleted upstream lines | 362 | **340** |
+| hunks | 172 | 139 |
+| override files | 18 | 19 |
+| `manage.c` added lines | 1,651 | 345 |
+| `keyboard.c` added lines | 558 | 328 |
+| `screen.c` added lines | 286 | 73 |
+
+Per-packet flash, `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`, each measured at its own commit:
+
+| packet | flash | delta | note |
+|---|---|---|---|
+| P1 churn zeroing | 1115712 | 0 | whitespace and comments |
+| P2 insert-name predicate | 1115720 | +8 | one predicate, two inlined chains gone |
+| P3 PEM abort helper | 1115712 | −8 | |
+| P4 SST/BST abort helper | 1115712 | 0 | |
+| P5 SELFTEST_EXPORT macro | 1115712 | 0 | macro only |
+| P6 closeAim funnel | 1115696 | −16 | four guards become one |
+| P7 console view extracted | 1115728 | +32 | three calls now cross-TU |
+| P8 fold subsystem extracted | 1115800 | +72 | plus ram 9140 → 9144 (BSS padding) |
+| P9 EXIT ladder extracted | 1115832 | +32 | one more cross-TU boundary |
+| P10 comment relocation | 1115832 | 0 | comments only |
+
+Net: **flash 1115592 → 1115832 = +240 B, ram +4 B, arena untouched** (no
+dictionary change anywhere in the wave). The +136 B of it that P7-P9 cost is
+the price of the extractions — calls that were file-local are cross-TU now and
+the inliner loses them — and it bought −1,657 patch lines.
+
+**What changed in kind, not just in size.**
+
+- Two guards stopped being enumerations. P6 moved the L1-1 interactive-close
+  guard inside `closeAim()`, the D7-1 argument applied to a second class; P4
+  moved the SST/BST empty-placeholder guard inside its own helper.
+- Two forked predicates became one each: P2's insert-name eligibility (whose
+  `interactive` argument is the cross-file coupling that was previously
+  implicit) and P5's self-test export macro.
+- Three subsystems left upstream files for `files/`: the console view (P7), the
+  fold/history/capture orchestrators (P8, 1,269 lines on two 3-line seams), and
+  the interactive EXIT ladder (P9, deferred as rebase-adjacent since round 6).
+
+**Two defects fell out of the work, both recorded at their packets.** P2's
+predicate added an `item > 0` conjunct the `pemAlpha` site had never had —
+load-bearing, not defensive, since `indexOfItems[negative]` is out of bounds.
+P7's build surfaced `screen.c` calling `forthConsoleBaseOnTop()` with no
+declaration in scope: an implicit-int resolution of a `bool_t` function,
+warned on every compile of every target, inert today.
+
+**Every refactor packet proved its claim by mutation, not by reading.** P2's
+truth table reddens on dropping the interactive exclusions; P6 reddens BOTH
+close batteries; P9 reddens the M1-1 battery's `[8]` row with its own message
+("the user's FWRD menu did not come back after EXIT"). P8's move was verified
+mechanically instead: the block extracted from the pre-move file, with the five
+named renames applied, compares byte-equal to the new file's body.
+
+**Audit status is unaffected.** These are refactors, but round 9 must still read
+this wave's commits — the regression record (each round's findings come mostly
+from the previous round's fixes) does not exempt behaviour-neutral intent, and
+relocating state is the most dangerous fix shape this project has measured. The
+exit criterion is unchanged: earliest close stays round 10.
