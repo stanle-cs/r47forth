@@ -1305,9 +1305,46 @@ static uint8_t *_forthFoldFindCaptureStep(void) {
 void forthCaptureResume(void) {
   if (!forthCapIsSuspended()) { return; }
   uint8_t *p = beginOfProgramMemory + forthCapSavedStepOffset();
-  if (!(p < firstFreeProgramByte
-        && checkOpCodeOfStep(p, ITM_FORTH)
-        && p[2] == (uint8_t)STRING_LABEL_VARIABLE)) {
+  bool_t pValid = (p < firstFreeProgramByte
+                   && checkOpCodeOfStep(p, ITM_FORTH)
+                   && p[2] == (uint8_t)STRING_LABEL_VARIABLE);
+  /* FOUND BY the [1] history-line-length parameterisation (2026-08-09),
+   * the fourth consumer of R8-1's class — an identity resolved by
+   * remembered address plus a shape test where the design states it
+   * structurally.  The out-of-family fix gave the FOLD CONTEXT's copy of
+   * this offset the structural rule (_forthFoldResolveCaptureStep: the
+   * answer must lie INSIDE FHIST, because the capture step is only ever
+   * created there) — but this canary, the recovery that fix's comment
+   * POINTS AT, kept the raw shape.  Executed: DELP of FHIST with a 9-byte
+   * history line puts a USER program's own Forth step at exactly the
+   * stale offset; the opcode canary passed, the resume rebuilt the
+   * owner's line from that step's text, and the splice plus sweep ate
+   * eight of the user program's steps (13 -> 5).  The OOF reader named
+   * this consequence and it was cleared as "forthCaptureResume recovers"
+   * — the recovery's own gate was the door.
+   *
+   * So for a pending FOLD the address must also lie inside FHIST; when it
+   * does not, fall through to the same FHIST-scan recovery below, whose
+   * hist == 0 arm abandons — which is P-1's DELP-of-FHIST behaviour.  A
+   * PEM capture (no fold) has no FHIST rule — its step lives in the
+   * program being edited, no structural bound is stated for it, and
+   * abandon-on-canary stays (test 5).  The PEM sibling of this door (DELP
+   * from a PEM TAM, alignment onto another program's Forth step) is
+   * recorded in the round-9 notes, not silently fixed here. */
+  if (pValid && forthFoldPending()) {
+    uint16_t hist = forthHistoryProgram();
+    if (hist == 0) {
+      pValid = false;
+    }
+    else {
+      uint8_t *from = programList[hist - 1].instructionPointer;
+      uint8_t *to   = (hist < numberOfPrograms)
+                        ? programList[hist].instructionPointer
+                        : firstFreeProgramByte;
+      pValid = (p >= from && p < to);
+    }
+  }
+  if (!pValid) {
     /* L1-F2 rev 3: an interactive fold can shift the capture step off the
      * saved offset (see _forthFoldFindCaptureStep).  Recover rather than
      * abandon — but ONLY for a fold; PEM keeps abandon-on-canary (test 5). */
@@ -1746,11 +1783,20 @@ static uint8_t *_forthHistLastLineStep(uint16_t program) {
   return last;
 }
 
-/* Number of content (ITM_FORTH source) steps. */
+/* Number of content (ITM_FORTH source) steps.
+ *
+ * AUDIT round 8 §6 (the unbounded-walk class, third recurrence): this
+ * walker and _forthHistProgramBytes below had no iteration cap while their
+ * siblings in this file carry one (_forthFoldFindCaptureStep's i < 512).
+ * They only ever walk FHIST and findNextStep returns NULL only on an
+ * invalid parameter encoding, so there is no reaching input today — the
+ * cap is the sibling idiom applied before the class comes back a third
+ * time.  _forthHistLineAt needs none: its walk is bounded by `index`,
+ * which strictly decreases. */
 static uint16_t _forthHistLineCount(uint16_t program) {
   uint16_t n = 0;
   uint8_t *step = _forthHistFirstLineStep(program);
-  while(step != NULL && !isAtEndOfProgram(step)) {
+  while(step != NULL && !isAtEndOfProgram(step) && n < 512) {
     n++;
     step = findNextStep(step);
   }
@@ -1777,8 +1823,20 @@ static uint8_t *_forthHistLineAt(uint16_t program, uint16_t index) {
 static uint32_t _forthHistProgramBytes(uint16_t program) {
   uint8_t *begin = programList[program - 1].instructionPointer;
   uint8_t *step = begin;
-  while(!(isAtEndOfProgram(step) || isAtEndOfPrograms(step))) {
+  uint16_t guard = 0;
+  /* The NULL check is the load-bearing half (round 8 §6): this walker
+   * handed findNextStep's result straight to isAtEndOfProgram, and
+   * findNextStep can return NULL on an invalid parameter encoding
+   * (src/c47/programming/nextStep.c:151-157).  On NULL or a tripped cap,
+   * report a size that STOPS the caller: forthHistoryEvict's only use is
+   * `> FORTH_HISTORY_MAX_BYTES`, so 0 ends eviction rather than letting it
+   * delete steps measured against garbage. */
+  while(step != NULL && !(isAtEndOfProgram(step) || isAtEndOfPrograms(step))
+        && guard++ < 512) {
     step = findNextStep(step);
+  }
+  if(step == NULL || guard > 512) {
+    return 0;
   }
   return (uint32_t)(step - begin) + 2;
 }

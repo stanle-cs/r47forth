@@ -17702,8 +17702,28 @@ static int test_fold_round8_window(void)
    * `111 222 333 444` decoded away.  EXECUTED in round 7.
    *
    * The line is lost either way (the user deleted the program holding it);
-   * what must not happen is damage to a program the gesture never named. ---- */
+   * what must not happen is damage to a program the gesture never named.
+   *
+   * Round 8 §3's class test (b), previously unlanded: the whole scenario
+   * runs at FOUR history-line lengths.  The parked capture step sits after
+   * the FHIST line the console just pushed, so capStepOffset is
+   * 12 + line-length (LBL 'FHIST' is 8 bytes, a source step is 4 + text) —
+   * and after DELP-of-FHIST shifts PUSR down, PUSR's own step boundaries
+   * sit at 7 + 7k.  A single fixed line can therefore let offset
+   * arithmetic pass or fail by ALIGNMENT alone.  The 9-byte line is the
+   * armed one: 12 + 9 = 21 lands the stale offset EXACTLY on a user step,
+   * which satisfies the opcode canary — under the raw-offset mutation
+   * (resolver's FHIST-bounds conjunct and fallback removed) that length
+   * reds while the others stay green, which is the whole argument for
+   * running more than one. ---- */
   scFail = 0;
+  { static const char *const histLine[4] = {
+      "1 2 +",
+      "1 2 3 + +",
+      "12345 67890 + DROP",
+      "1 2 3 4 5 6 7 8 9 + + + + + + + + DROP" };
+    int li;
+  for (li = 0; li < 4 && !scFail; li++) {
   R8_RESET();
   forthDictClear();
   forthGDictClear();
@@ -17733,7 +17753,8 @@ static int test_fold_round8_window(void)
     else {
       showSoftmenu(-MNU_STK);
       fnForthOuter(NOPARAM);                    /* interactive console, keys mode */
-      xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
+      { uint16_t hl = (uint16_t)stringByteLength(histLine[li]);
+        xcopy(aimBuffer, histLine[li], hl + 1); T_cursorPos = hl; }
       forthInteractiveEnter();                  /* one real history line in FHIST */
       lastErrorCode = ERROR_NONE;
 
@@ -17804,8 +17825,14 @@ static int test_fold_round8_window(void)
     }
     lastErrorCode = ERROR_NONE;
   }
+  if (scFail) {
+    printf("    [1] NOTE: failing history-line length is %u bytes\n",
+           (unsigned)stringByteLength(histLine[li]));
+  }
+  cleanupTestProgram();
+  } }
   if (!scFail) printf("    [1] PASS (P-1): DELP of FHIST abandons the line without"
-                      " touching another program\n");
+                      " touching another program, at four history-line lengths\n");
   fail |= scFail;
   cleanupTestProgram();
 
@@ -18098,6 +18125,56 @@ static int test_fold_round8_window(void)
         printf("    [5] FAIL: the refusal lost the typed line (aim=\"%s\","
                " expected \"1 2\")\n", aimBuffer);
         scFail = 1;
+      }
+
+      /* Sol's dependency (b), named by the round-8 report and never
+       * checked until now: ERROR_RAM_FULL's dismissal must hand back the
+       * live console's editor presentation.  Driven through the real key
+       * path — processKeyAction's EXIT arm (keyboard.c: the
+       * `else if(lastErrorCode != 0)` arm under case ITM_EXIT1), which
+       * dismisses the error and sets keyActionProcessed so the EXIT close
+       * ladder does NOT also run.  The refusal itself wrote no
+       * presentation state (it returns before any TAM write), so what
+       * this settles is the dismissal's half: error cleared, capture
+       * still open, line still there, calcMode and FLAG_ALPHA unchanged.
+       * RED under the arm's inverse (drop its keyActionProcessed): EXIT
+       * falls through to the close ladder on top of the dismissal and the
+       * capture — with the owner's line — is gone. */
+      { extern void processKeyAction(int16_t);
+        uint16_t modeBefore = calcMode;
+        int alphaBefore = getSystemFlag(FLAG_ALPHA) ? 1 : 0;
+        if (lastErrorCode != ERROR_RAM_FULL) {
+          printf("    [5] FIXTURE BUG (Sol-b): no pending error to dismiss"
+                 " (lastErrorCode=%u)\n", lastErrorCode);
+          scFail = 1;
+        }
+        keyActionProcessed = false;
+        processKeyAction(ITM_EXIT1);
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    [5] FAIL (Sol-b): EXIT did not dismiss the error"
+                 " (lastErrorCode=%u)\n", lastErrorCode);
+          scFail = 1;
+        }
+        if (!keyActionProcessed) {
+          printf("    [5] FAIL (Sol-b): the dismissal fell through — EXIT"
+                 " would run the close ladder on top of it\n");
+          scFail = 1;
+        }
+        if (!forthCapIsOpen()
+            || compareString(aimBuffer, "1 2", CMP_BINARY) != 0) {
+          printf("    [5] FAIL (Sol-b): the dismissal cost the console its"
+                 " line (open=%d aim=\"%s\")\n",
+                 (int)forthCapIsOpen(), aimBuffer);
+          scFail = 1;
+        }
+        if (calcMode != modeBefore
+            || (getSystemFlag(FLAG_ALPHA) ? 1 : 0) != alphaBefore) {
+          printf("    [5] FAIL (Sol-b): the dismissal changed the editor"
+                 " presentation (calcMode %u -> %u, alpha %d -> %d)\n",
+                 modeBefore, calcMode, alphaBefore,
+                 getSystemFlag(FLAG_ALPHA) ? 1 : 0);
+          scFail = 1;
+        }
       }
 
       /* P-2's own oracle, now asked of the refused state: the console is
@@ -18394,6 +18471,114 @@ static int test_fold_round8_window(void)
   }
   if (!scFail) printf("    [8] PASS (R8-1): a PARK dispatch that deletes a program"
                       " leaves the cursor inside programList\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- [9] R8-P1 (round 8 §4, PLAUSIBLE and unconstructed — settled by
+   * this drive): the same dynamicMenuItem divert as R8-2, at the fold's
+   * ENTRY navigation.  The softkey that OPENS a parameterized TAM (STO in
+   * a MyMenu or user DYNAMIC slot) latches dynamicMenuItem
+   * (determineFunctionKeyItem_C47's MNU_MyMenu arm) and runFunction never
+   * clears it, so forthFoldEnter's park — forthHistoryGotoLastStep ->
+   * goToPgmStep -> goToGlobalStep — takes the dynamic branch and RETURNS
+   * WITHOUT NAVIGATING (lblGtoXeq.c:102-116; this fixture's latch is out
+   * of range for the top menu, so the divert's own empty-label no-nav arm
+   * fires — every arm of that branch ends the same way, without moving the
+   * cursor).  forthHistoryGotoLastStep returns true regardless, so pre-
+   * bracket the caller could not detect the no-op: entryStepCount was
+   * sampled in the CALLER's program and the capture step MATERIALISED
+   * there — the shape forthFoldEnter's own comment forbids — and the
+   * sweep's threshold was then read against the wrong program.  The R8-2
+   * bracket at forthHistoryGotoLastStep closes the entry side; this drive
+   * is the reaching input the round-8 verifier never constructed.  The
+   * fall-through premise (a parameterized item is NOT consumed by the
+   * live-capture divert and does reach TAM) is subcase 8's pin, at
+   * test_capture.part.h's items seam. ---- */
+  scFail = 0;
+  R8_RESET();
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+  {
+    uint16_t fhProg, usrProg;
+    uint16_t fhBefore = 0, fhAfter = 0, usrBefore = 0, usrAfter = 0;
+    calcRegister_t usrLbl;
+
+    tpInit(&p);
+    if (tpLbl(&p, "PUSR") < 0 || tpSrc(&p, "111") < 0 || tpSrc(&p, "222") < 0 ||
+        tpRtn(&p) < 0 || tpEnd(&p) < 0 || !tpWrite(&p)) {
+      printf("    [9] FIXTURE BUG: program build/write failed\n");
+      scFail = 1;
+    }
+    else {
+      showSoftmenu(-MNU_STK);
+      fnForthOuter(NOPARAM);
+      xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
+      forthInteractiveEnter();                  /* FHIST exists, one real line */
+      lastErrorCode = ERROR_NONE;
+
+      fhProg = forthHistoryProgram();
+      usrLbl = findNamedLabel("PUSR", GLOBAL_LABELS);
+      usrProg = (usrLbl == INVALID_VARIABLE) ? 0
+                : (uint16_t)labelList[usrLbl - FIRST_LABEL].program;
+      if (fhProg == 0 || usrProg == 0) {
+        printf("    [9] FIXTURE BUG: FHIST/PUSR missing (fh=%u usr=%u)\n",
+               fhProg, usrProg);
+        scFail = 1;
+      }
+      else {
+        R8_PROG_STEPS(fhProg, fhBefore);
+        R8_PROG_STEPS(usrProg, usrBefore);
+        goToPgmStep(usrProg, 1);                /* the owner's PEM cursor */
+        xcopy(aimBuffer, "42", 3); T_cursorPos = 2;   /* the live typed line */
+
+        dynamicMenuItem = 0;                    /* the latch, exactly as the
+                                                   softkey press leaves it */
+        runFunction(ITM_STO);                   /* parameterized: falls through
+                                                   the divert into TAM, and
+                                                   forthFoldEnter parks */
+        dynamicMenuItem = -1;
+
+        if (!forthFoldPending() || tam.function != ITM_STO) {
+          printf("    [9] FIXTURE BUG: STO did not open TAM over the fold"
+                 " (pending=%d tam.function=%d)\n",
+                 (int)forthFoldPending(), (int)tam.function);
+          scFail = 1;
+        }
+        else {
+          fhProg  = forthHistoryProgram();      /* re-resolve: the insert
+                                                   rebuilt both lists */
+          usrLbl  = findNamedLabel("PUSR", GLOBAL_LABELS);
+          usrProg = (usrLbl == INVALID_VARIABLE) ? 0
+                    : (uint16_t)labelList[usrLbl - FIRST_LABEL].program;
+          if (fhProg != 0)  { R8_PROG_STEPS(fhProg, fhAfter); }
+          if (usrProg != 0) { R8_PROG_STEPS(usrProg, usrAfter); }
+
+          if (currentProgramNumber != fhProg || fhProg == 0) {
+            printf("    [9] FAIL (R8-P1): the park never reached FHIST — the"
+                   " divert ate the navigation (cursor prog=%u, FHIST=%u)\n",
+                   (unsigned)currentProgramNumber, fhProg);
+            scFail = 1;
+          }
+          if (usrProg == 0 || usrAfter != usrBefore) {
+            printf("    [9] FAIL (R8-P1): the capture step materialised in the"
+                   " OWNER's program (PUSR %u -> %u steps)\n",
+                   usrBefore, usrAfter);
+            scFail = 1;
+          }
+          if (fhProg == 0 || fhAfter != (uint16_t)(fhBefore + 1)) {
+            printf("    [9] FAIL (R8-P1): the capture step is not in FHIST"
+                   " (%u -> %u steps, expected +1)\n", fhBefore, fhAfter);
+            scFail = 1;
+          }
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+  }
+  if (!scFail) printf("    [9] PASS (R8-P1): a latched dynamicMenuItem cannot"
+                      " divert the fold's entry park — the capture step lands"
+                      " in FHIST\n");
   fail |= scFail;
   cleanupTestProgram();
 

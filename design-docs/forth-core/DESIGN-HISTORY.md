@@ -3545,3 +3545,70 @@ red-first, in class groups. All nine close.
 (`_forthHistScratch[FORTH_CONSOLE_LINE_MAX + 1]`) — the only RAM growth this
 stage has taken, and the alternative is to keep losing the typed line on the
 first recall press. Arena untouched.
+
+## 2026-08-09 — the round-8 residues cleared, and the test that landed found a fourth consumer
+
+Owner: *fix residues of any rounds left.* Everything the round-8 record
+named as owed and unlanded, closed in one wave — and the class test that
+landed last found a live defect on its first run, which is the strongest
+argument yet for landing them.
+
+- **R8-P1 settled by execution** (round 8 §4's gate item, PLAUSIBLE and
+  unconstructed since the pass). New test [9]: `dynamicMenuItem` latched as
+  the softkey leaves it, `runFunction(ITM_STO)` from a live console, assert
+  the capture step lands in FHIST and the owner's program is untouched.
+  GREEN at HEAD — the R8-2 bracket at `forthHistoryGotoLastStep` covers the
+  entry side. RED under the bracket's inverse, with the finding's exact
+  consequence: capture step materialised in the OWNER's program (PUSR
+  5 → 6 steps), cursor never reached FHIST. R8-P1 is CLOSED.
+- **R8-1's class test (b) landed** — test [1] parameterised over FOUR
+  history-line lengths. The arithmetic is in the test's comment: the stale
+  capture-step offset is 12 + line-length, a shifted user program's step
+  boundaries sit at 7 + 7k, so length 9 lands the offset EXACTLY on a user
+  step, which satisfies the opcode canary. Under the raw-offset mutation
+  (resolver's FHIST gate removed) length 9 reds while 5 stays green —
+  alignment, executed.
+- **And at HEAD, with the real resolver, length 9 STILL failed** — PUSR
+  13 → 5 steps. `forthCaptureResume`'s own canary (manage.c:1307) was the
+  FOURTH consumer of R8-1's class: raw offset + opcode shape test, no
+  FHIST bounds. The OOF fix gave the fold context's copy the structural
+  rule and its comment pointed at this very function as "the recovery" —
+  the recovery's own gate was the door. At the 9-byte alignment the canary
+  passed on the user's own Forth step; the resume rebuilt the owner's line
+  from that step's text and the splice ate eight user steps. FIXED with
+  the same rule stated at the resolver: for a pending fold the address
+  must lie INSIDE FHIST, else the FHIST-scan recovery (whose hist == 0
+  arm preserves P-1's abandon). **The PEM sibling of this door (DELP from
+  a PEM TAM, alignment onto another program's step) is recorded as a
+  round-9 item, not silently fixed** — no structural bound is stated for
+  a PEM capture step's program, and inventing one is how workarounds
+  start. **Class: an identity resolved by remembered address plus a shape
+  test, where the design states the identity structurally — fourth
+  consumer, found by the class test built for the first three.**
+- **Sol's dependency (a) checked and pinned.** All eight `tamEnterMode`
+  call sites read against the P-2 refusal: items.c's TAM block and
+  keyboard.c's MNU_Sfdx arm are terminal; the M.GOTO row→column chain and
+  the CM_ASSIGN ITM_USERMODE arm tolerate a non-entry; assignEnterAlpha
+  and both addons.c PARAM_* arms cannot run while the live predicate
+  holds (CM_ASSIGN entry and both CM_PEM forgeries suspend the capture
+  first). Group I pins the count at 8 CALL SITES (R8-4's lesson); the pin
+  moved 8 → 9 under a mutation caller and back on revert.
+- **Sol's dependency (b) checked by execution.** Test [5] extended: with
+  ERROR_RAM_FULL pending after the refusal, EXIT through the real key
+  path (processKeyAction) dismisses the error, sets keyActionProcessed so
+  the close ladder does NOT run, and leaves calcMode, FLAG_ALPHA, the
+  capture and the typed line untouched. RED under the dismissal arm's
+  inverse (keyActionProcessed dropped): "the dismissal fell through".
+- **The unbounded FHIST walkers capped** (round 8 §6, cleared-but-cheap):
+  `_forthHistLineCount` and `_forthHistProgramBytes` now carry the sibling
+  512 cap, and `_forthHistProgramBytes` no longer hands findNextStep's
+  NULL to isAtEndOfProgram — on NULL or a tripped cap it reports 0, which
+  STOPS forthHistoryEvict rather than letting it delete steps measured
+  against garbage. `_forthHistLineAt` needs no cap (bounded by its
+  strictly-decreasing index) and the comment says so. No reaching input
+  today; hardening only, no class test owed.
+
+**Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`: flash 1115592 → 1115712 = **+120 B** (the
+resume-canary bounds check and the walker guards); ram 9140 unchanged.
+Arena untouched.

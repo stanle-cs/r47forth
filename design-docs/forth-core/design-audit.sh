@@ -499,6 +499,18 @@ pin 13 "upstream call sites of isAlphabeticSoftmenu/isAlphaSubmenu" \
 pin 4 "manage.c navigations bracketing dynamicMenuItem" \
     grep -c 'dynamicMenuItem = -1;' "${PKG}/programming/manage.c"
 
+# Sol's dependency (a), round 8 — checked 2026-08-09: tamEnterMode can REFUSE
+# (the P-2 arm) and every present caller either dispatches terminally
+# (items.c's TAM block, keyboard.c's MNU_Sfdx arm), tolerates a non-entry
+# (the M.GOTO row->column chain, the CM_ASSIGN ITM_USERMODE arm), or cannot
+# run while the live predicate holds (assignEnterAlpha and both addons.c
+# PARAM_* arms — CM_ASSIGN entry and both CM_PEM forgeries suspend the
+# capture first).  8 counts CALL SITES, not files (R8-4's lesson); a ninth
+# caller has NOT been audited against the refusal — do that before
+# re-accepting the count.
+pin 8 "tamEnterMode call sites audited against the P-2 refusal" \
+    bash -c "grep -rn 'tamEnterMode(' '${PKG}' --include=*.c | grep -v '/files/' | grep -v '/test_' | grep -v 'void tamEnterMode' | wc -l"
+
 # C10/C11 (rounds 1-2, fixed 2026-08-09): every length-limited copy of text
 # into the console ring cuts on a GLYPH boundary, through one helper. A byte
 # cut leaves a lone lead byte the painter re-pairs with what follows.
