@@ -10173,6 +10173,80 @@ static int test_insert_token_boundary(void)
   return fail;
 }
 
+/* CONSOLIDATE P2: the truth table of the insert-name eligibility predicate.
+ *
+ * The two forked copies this replaced disagreed on ENTER / EXIT / BACKSPACE /
+ * R-S, and the disagreement was correct: pemAlpha's earlier arms consume
+ * those four before its copy runs, while runFunction's divert sees the raw
+ * key stream and has to exclude them itself.  That is what the `interactive`
+ * argument carries, so the ENTER row below is asymmetric ON PURPOSE — it is
+ * an artifact of the site split, not of the item.
+ *
+ * A pure predicate over indexOfItems: no fixture, no capture, no program.
+ *
+ * Escaping mutation: drop the `interactive &&` exclusions from
+ * forthCapNameInsertEligible — subcase 2 reads eligible(ITM_ENTER, true) as
+ * true and reddens. */
+static int test_insert_name_eligibility(void)
+{
+  int fail = 0;
+
+  /* ---- Subcase 1: an ordinary parameterless function — eligible both ways ---- */
+  { int sc = 0;
+    if (!forthCapNameInsertEligible(ITM_sin, true))  { printf("    [1] FAIL: SIN not eligible interactive\n"); sc = 1; }
+    if (!forthCapNameInsertEligible(ITM_sin, false)) { printf("    [1] FAIL: SIN not eligible in PEM\n"); sc = 1; }
+    if (!sc) printf("    [1] PASS: a CAT_FNCT/PTP_NONE item inserts from both sites\n");
+    fail |= sc;
+  }
+
+  /* ---- Subcase 2: the console keys — excluded interactive, allowed in PEM ---- */
+  { int sc = 0;
+    const int16_t consoleKeys[] = { ITM_ENTER, ITM_EXIT1, ITM_BACKSPACE, ITM_RS };
+    for (unsigned i = 0; i < sizeof(consoleKeys) / sizeof(consoleKeys[0]); i++) {
+      if (forthCapNameInsertEligible(consoleKeys[i], true)) {
+        printf("    [2] FAIL: item %d eligible from the raw key stream\n", (int)consoleKeys[i]);
+        sc = 1;
+      }
+    }
+    /* ENTER is the readable half of the asymmetry: pemAlpha never reaches its
+     * arm with ITM_ENTER, so the predicate does not have to refuse it there. */
+    if (!forthCapNameInsertEligible(ITM_ENTER, false)) {
+      printf("    [2] FAIL: ITM_ENTER refused in PEM — the site split is gone\n");
+      sc = 1;
+    }
+    if (!sc) printf("    [2] PASS: ENTER/EXIT/BACKSPACE/R-S excluded interactive only\n");
+    fail |= sc;
+  }
+
+  /* ---- Subcase 3: the two mode gestures — never text, at either site ---- */
+  { int sc = 0;
+    if (forthCapNameInsertEligible(ITM_AIM, true)    || forthCapNameInsertEligible(ITM_AIM, false))   { printf("    [3] FAIL: ITM_AIM eligible\n"); sc = 1; }
+    if (forthCapNameInsertEligible(ITM_FORTH, true)  || forthCapNameInsertEligible(ITM_FORTH, false)) { printf("    [3] FAIL: ITM_FORTH eligible\n"); sc = 1; }
+    if (!sc) printf("    [3] PASS: ITM_AIM and ITM_FORTH are gestures, not text\n");
+    fail |= sc;
+  }
+
+  /* ---- Subcase 4: a negative id — the load-bearing conjunct ---- */
+  { int sc = 0;
+    /* determineItem returns negative softmenu ids (-MNU_AIMCATALOG and
+     * friends); indexOfItems[negative] is out of bounds, so the refusal has
+     * to happen before any status read. */
+    if (forthCapNameInsertEligible(-MNU_AIMCATALOG, true) ||
+        forthCapNameInsertEligible(-MNU_AIMCATALOG, false)) {
+      printf("    [4] FAIL: a negative softmenu id passed the predicate\n");
+      sc = 1;
+    }
+    if (forthCapNameInsertEligible(0, true) || forthCapNameInsertEligible(0, false)) {
+      printf("    [4] FAIL: item 0 passed the predicate\n");
+      sc = 1;
+    }
+    if (!sc) printf("    [4] PASS: negative and zero ids refused before any status read\n");
+    fail |= sc;
+  }
+
+  return fail;
+}
+
 /* T2 (C1, end to end): the reproducer the owner's question surfaced.
  *
  * Keys mode up, four-two-SIN on the physical keys, ENTER.  Before K2 the

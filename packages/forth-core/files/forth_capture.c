@@ -151,6 +151,28 @@ void   forthCapSetKeysMode(bool_t on)    { forthCap.keysMode = on ? 1 : 0; }
 uint16_t forthCapHistoryIndex(void)          { return forthCap.historyIndex; }
 void     forthCapSetHistoryIndex(uint16_t i) { forthCap.historyIndex = i; }
 
+/* CONSOLIDATE P2: the one spelling of "can this item be inserted into a
+ * capture as text".  Two sites had forked copies: pemAlpha's PEM arm and
+ * runFunction's interactive divert, whose exclusion lists differed
+ * because pemAlpha's earlier arms consume ENTER/BACKSPACE/EXIT/R-S
+ * before its copy ran.  That coupling was implicit and cross-file; it is
+ * now this function.  item > 0 is LOAD-BEARING at both sites:
+ * determineItem returns negative softmenu ids and
+ * indexOfItems[negative] is out of bounds (the L1-2 _forthCapAtCap
+ * precedent).  interactive == the runFunction divert (raw key stream);
+ * false == the PEM pemAlpha arm (console keys already consumed). */
+bool_t forthCapNameInsertEligible(int16_t item, bool_t interactive) {
+  if(item <= 0)                                              { return false; }
+  if((indexOfItems[item].status & CAT_STATUS) != CAT_FNCT)   { return false; }
+  if((indexOfItems[item].status & PTP_STATUS) != PTP_NONE)   { return false; }
+  if(item == ITM_AIM || item == ITM_FORTH)                   { return false; }
+  if(interactive && (item == ITM_ENTER || item == ITM_EXIT1
+                     || item == ITM_BACKSPACE || item == ITM_RS)) {
+    return false;
+  }
+  return true;
+}
+
 #if defined(FORTH_DEBUG_SELFTEST)
 uint8_t forthTestCapState(void) { return forthCap.state; }
 const char *forthTestCapText(void) {

@@ -212,6 +212,15 @@ void     forthCaptureSanitizeRestoredUi(void);
 /* F6-3's shared inserter forthCapInsertName() now lives in forth_menu.h
  * alongside the picker that is its main caller (S2). */
 
+/* CONSOLIDATE P2: "can this item be inserted into a capture as text" — the
+ * one predicate behind pemAlpha's PEM arm and runFunction's interactive
+ * divert, which used to carry forked copies of the exclusion list.  Pass
+ * interactive = true from the raw key stream (runFunction), false from the
+ * PEM arm, whose earlier arms have already consumed ENTER / BACKSPACE /
+ * EXIT / R-S.  See the definition in forth_capture.c for why item > 0 is
+ * load-bearing rather than defensive. */
+bool_t   forthCapNameInsertEligible(int16_t item, bool_t interactive);
+
 /* L1-F1: the fold context — materialise a real ITM_FORTH capture step in
  * FHIST (L1-H's program), seeded with the live line, then (F2) let calcMode
  * = CM_PEM for the duration of a TAM run the landed PEM step-insert

@@ -1156,6 +1156,7 @@ static int test_keys_mode_resolution(void);                   /* K1 */
 static int test_keys_mode_toggle_arm(void);                   /* K1 */
 static int test_keys_mode_nav_guards(void);                   /* K1 */
 static int test_insert_token_boundary(void);                  /* K2 */
+static int test_insert_name_eligibility(void);                 /* CONSOLIDATE P2 */
 static int test_keys_digits_then_function(void);              /* K2 */
 static int test_exit_ladder_keys_rung(void);                  /* K2 */
 static int test_keys_eex_and_numlock(void);                   /* K2 */
@@ -2289,6 +2290,11 @@ int forthDictSelfTest(void)
   forthDictInit();
   printf("  [DEBUG] running test_insert_token_boundary...\n");
   fail |= test_insert_token_boundary();
+  forthDictClear();
+  forthGDictClear();
+
+  printf("  [DEBUG] running test_insert_name_eligibility...\n");
+  fail |= test_insert_name_eligibility();
   forthDictClear();
   forthGDictClear();
 

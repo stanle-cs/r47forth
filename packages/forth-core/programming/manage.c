@@ -1141,10 +1141,7 @@ void pemAlpha(int16_t item) {
       fnT_ARROW(indexOfItems[item].param);
       return;
     }
-    else if(forthCapIsOpen()
-            && (indexOfItems[item].status & CAT_STATUS) == CAT_FNCT
-            && (indexOfItems[item].status & PTP_STATUS) == PTP_NONE
-            && item != ITM_AIM && item != ITM_FORTH) {
+    else if(forthCapIsOpen() && forthCapNameInsertEligible(item, false)) {
       (void)forthCapInsertName(indexOfItems[item].itemCatalogName);
       /* falls through to the re-commit tail: the step tracks the insert */
     }

@@ -775,11 +775,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
           }
           return;
         }
-        if((indexOfItems[func].status & CAT_STATUS) == CAT_FNCT
-           && (indexOfItems[func].status & PTP_STATUS) == PTP_NONE
-           && func != ITM_AIM && func != ITM_FORTH
-           && func != ITM_ENTER && func != ITM_EXIT1
-           && func != ITM_BACKSPACE && func != ITM_RS) {
+        if(forthCapNameInsertEligible(func, true)) {
           (void)forthCapInsertName(indexOfItems[func].itemCatalogName);
           return;
         }
