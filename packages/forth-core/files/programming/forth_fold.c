@@ -98,10 +98,21 @@ void forthCaptureSuspend(void) {
  * (ui/tam.c:566-573 calls leaveTamModeIfEnabled and THEN dispatches), and the
  * item it dispatches to — ITM_STOVEL, TM_VALUE max 4096 (items.c:4714) — runs
  * its own TAM whose commit inserts a step while the cursor is still parked on
- * the capture step.  That insert shifts the capture step off
- * forthCapSavedStepOffset(), the canary in forthCaptureResume falsifies, and
- * before this the capture was ABANDONED — closing the user's line and
- * orphaning both steps in FHIST.
+ * the capture step.  That insert lands AFTER the capture step and shifts what
+ * follows, so the saved offset no longer describes the region the resume
+ * expects; the canary in forthCaptureResume falsifies, and before this the
+ * capture was ABANDONED — closing the user's line and orphaning both steps in
+ * FHIST.
+ *
+ * AUDIT round 9: "shifts the capture step off forthCapSavedStepOffset()" is
+ * what this used to say, and it is loose in a way that cost an out-of-family
+ * reader a whole finding (G2/G1-2, refuted): it reads as though the insert
+ * could land BEFORE the capture step and move it, which would mean the splice
+ * below scans the wrong way.  It cannot.  forthFoldEnter forces
+ * pemCursorIsZerothStep = false precisely so addStepInProgram's pre-move
+ * steps the cursor forward off the capture step, and every fold-window commit
+ * therefore inserts after it — which is why the splice looks forward and is
+ * right to.
  *
  * PEM cannot produce this: its TAM commits exactly once per suspension.  So
  * the recovery is gated on forthFoldPending() and PEM keeps its
@@ -129,26 +140,89 @@ static uint8_t *_forthFoldFindCaptureStep(void) {
   return last;
 }
 
+/* The capture step's SHAPE test: an ITM_FORTH step carrying a variable
+ * string payload, inside program memory.  Necessary, never sufficient — a
+ * Forth step inside a user's own program satisfies it exactly, which is the
+ * whole of R8-1's class.  Use _forthStepIsCaptureStepInHistory below unless
+ * the caller has no FHIST rule to apply (a PEM capture does not). */
+static bool_t _forthStepHasCaptureShape(const uint8_t *p) {
+  return (bool_t)(p != NULL
+                  && p < firstFreeProgramByte
+                  && checkOpCodeOfStep((uint8_t *)p, ITM_FORTH)
+                  && p[2] == (uint8_t)STRING_LABEL_VARIABLE);
+}
+
+/* AUDIT round 9 (R9-5): the ONE spelling of the structural rule.
+ *
+ * "The capture step lies INSIDE FHIST, because the capture step is only
+ * ever created there" was written twice — once inlined in the resume
+ * canary, once in _forthFoldResolveCaptureStep — over two separately
+ * stored copies of the same offset, with nothing forcing the two to agree.
+ * This class has produced four confirmed defects across rounds 8 and 9,
+ * every one of them a consumer that still had the raw shape test when the
+ * others had been given the rule; the fix for the FOURTH consumer added
+ * the second copy of the bound rather than sharing the first.  One
+ * predicate, so the next consumer inherits the rule instead of restating
+ * it, and so the recorded PEM-sibling question resolves to a call here
+ * rather than to a third spelling.
+ *
+ * forthFoldLeave's own comment already states the principle this gives the
+ * resume site: "Through the same resolver, so the second look cannot answer
+ * a different question than the first."
+ *
+ * MUTATION STATUS, stated because a green mutation is evidence about the
+ * TESTS and this one is easy to misread (round 9, fourth documented gap of
+ * the stage):
+ *
+ *  - The predicate as a whole IS pinned: made to deny unconditionally, the
+ *    F6-4 sweep battery's [6] reddens ("FHIST step count 2 -> 3 after
+ *    sweep").  Both consumers reach the live code.
+ *  - The `hist == 0` arm is pinned by test [1] at four history-line
+ *    lengths — the DELP-of-FHIST door the residue wave executed.
+ *  - The `p >= from && p < to` bound alone is NOT falsifiable by any input
+ *    anyone has constructed: removing it leaves the whole gate green.  That
+ *    is not a coverage hole to paper over with a fixture that forces the
+ *    state.  Round 9's out-of-family reader tried to construct it (G1-1,
+ *    the "stale offset lands on a history line" attack) and was refuted on
+ *    geometry: the one door that grows program memory during a suspension,
+ *    the GTO->GTOP promotion, inserts at firstFreeProgramByte — ABOVE every
+ *    program including FHIST — so FHIST never shifts and the saved offset
+ *    cannot come to rest on another step inside it.  The bound is defence
+ *    in depth against a future door of that shape, exactly like the
+ *    resolver's `p < firstFreeProgramByte` conjunct, and it is documented
+ *    here rather than deleted because the class it belongs to has produced
+ *    four confirmed defects.  If someone finds the door, it is a finding
+ *    with a reaching input and this comment is where the answer already
+ *    is. */
+static bool_t _forthStepIsCaptureStepInHistory(const uint8_t *p) {
+  uint16_t hist = forthHistoryProgram();
+  const uint8_t *from, *to;
+
+  if(hist == 0)                        { return false; }
+  if(!_forthStepHasCaptureShape(p))    { return false; }
+
+  from = programList[hist - 1].instructionPointer;
+  to   = (hist < numberOfPrograms) ? programList[hist].instructionPointer
+                                   : firstFreeProgramByte;
+  return (bool_t)(p >= from && p < to);
+}
+
 void forthCaptureResume(void) {
   if (!forthCapIsSuspended()) { return; }
   uint8_t *p = beginOfProgramMemory + forthCapSavedStepOffset();
-  bool_t pValid = (p < firstFreeProgramByte
-                   && checkOpCodeOfStep(p, ITM_FORTH)
-                   && p[2] == (uint8_t)STRING_LABEL_VARIABLE);
   /* FOUND BY the [1] history-line-length parameterisation (2026-08-09),
    * the fourth consumer of R8-1's class — an identity resolved by
    * remembered address plus a shape test where the design states it
    * structurally.  The out-of-family fix gave the FOLD CONTEXT's copy of
-   * this offset the structural rule (_forthFoldResolveCaptureStep: the
-   * answer must lie INSIDE FHIST, because the capture step is only ever
-   * created there) — but this canary, the recovery that fix's comment
-   * POINTS AT, kept the raw shape.  Executed: DELP of FHIST with a 9-byte
-   * history line puts a USER program's own Forth step at exactly the
-   * stale offset; the opcode canary passed, the resume rebuilt the
-   * owner's line from that step's text, and the splice plus sweep ate
-   * eight of the user program's steps (13 -> 5).  The OOF reader named
-   * this consequence and it was cleared as "forthCaptureResume recovers"
-   * — the recovery's own gate was the door.
+   * this offset the structural rule (the answer must lie INSIDE FHIST,
+   * because the capture step is only ever created there) — but this
+   * canary, the recovery that fix's comment POINTS AT, kept the raw shape.
+   * Executed: DELP of FHIST with a 9-byte history line puts a USER
+   * program's own Forth step at exactly the stale offset; the opcode canary
+   * passed, the resume rebuilt the owner's line from that step's text, and
+   * the splice plus sweep ate eight of the user program's steps (13 -> 5).
+   * The OOF reader named this consequence and it was cleared as
+   * "forthCaptureResume recovers" — the recovery's own gate was the door.
    *
    * So for a pending FOLD the address must also lie inside FHIST; when it
    * does not, fall through to the same FHIST-scan recovery below, whose
@@ -157,20 +231,15 @@ void forthCaptureResume(void) {
    * program being edited, no structural bound is stated for it, and
    * abandon-on-canary stays (test 5).  The PEM sibling of this door (DELP
    * from a PEM TAM, alignment onto another program's Forth step) is
-   * recorded in the round-9 notes, not silently fixed here. */
-  if (pValid && forthFoldPending()) {
-    uint16_t hist = forthHistoryProgram();
-    if (hist == 0) {
-      pValid = false;
-    }
-    else {
-      uint8_t *from = programList[hist - 1].instructionPointer;
-      uint8_t *to   = (hist < numberOfPrograms)
-                        ? programList[hist].instructionPointer
-                        : firstFreeProgramByte;
-      pValid = (p >= from && p < to);
-    }
-  }
+   * recorded in the round-9 notes, not silently fixed here; when it is
+   * closed it resolves to a call on the shared predicate above, which is
+   * why R9-5 unified the rule first.
+   *
+   * AUDIT round 9 (R9-5): the bound is no longer spelled here.  Both arms
+   * go through the predicates above, so the fold rule has exactly one
+   * definition and the resolver cannot answer a different question. */
+  bool_t pValid = forthFoldPending() ? _forthStepIsCaptureStepInHistory(p)
+                                     : _forthStepHasCaptureShape(p);
   if (!pValid) {
     /* L1-F2 rev 3: an interactive fold can shift the capture step off the
      * saved offset (see _forthFoldFindCaptureStep).  Recover rather than
@@ -497,6 +566,80 @@ void forthInteractiveEnter(void) {
 }
 
 
+/* AUDIT round 9 (R9-1/R9-2): the ONE restore for a saved PEM cursor tuple.
+ *
+ * Both of this package's saved cursors — the fold context's and L1-H's
+ * _forthHistCur — are (program, localStep) pairs sampled before a dispatch
+ * that can shorten or delete the program they name.  R8-1 closed the
+ * PROGRAM half at the deleter (upstream's fnClP convention) and clamped it
+ * here as defence in depth; the LOCAL STEP half had neither, at either
+ * site, and it reaches the same unguarded walk:
+ *
+ *   goToPgmStep -> goToGlobalStep's `while(true)` (lblGtoXeq.c:122-133) has
+ *   no NULL break and no iteration cap.  A step number past the program's
+ *   end walks off its END, past the global .END. — where findNextStep
+ *   returns NULL — and then findNextStep(NULL) returns NULL until the
+ *   counter arrives, assigning currentStep = NULL.  The next PEM insert's
+ *   shift loop (manage.c:748, `for(pos = ...; pos > currentStep; --pos)`)
+ *   then walks firstFreeProgramByte down toward address 0.  Executed as
+ *   subcase [10] of the R8 battery: DELP the program the cursor is parked
+ *   deep inside, from the console — localStep 12 restored into the
+ *   three-step successor, currentStep NULL.
+ *
+ * UPSTREAM'S CONVENTION, and the reason this is not a package invention:
+ * when a deletion invalidates the cursor, upstream restores STEP 1 of the
+ * (adjusted) program and never a remembered step — `_clearProgram` does it
+ * three times over (src/c47/programming/manage.c:297, :305, :308) and
+ * fnClP's RAM arm uses fnGotoDot(1).  fnClP restores its saved
+ * localStep ONLY on the arms where the cursor's own program came through
+ * intact (:325, :340, :354).  So: honour the saved step when it still
+ * fits, fall back to step 1 when it does not — which is exactly the answer
+ * upstream produces, rather than a clamp to the last step, an answer it
+ * never produces.
+ *
+ * Step 1 always exists, so the first navigation is unconditionally safe and
+ * it is what makes getNumberOfSteps() (keyed entirely on
+ * currentProgramNumber) answer for THIS program; the second runs only
+ * inside the count it just measured.
+ *
+ * The R8-2 dynamicMenuItem bracket lives here now, once, instead of at each
+ * site: goToGlobalStep with dynamicMenuItem >= 0 is not a "go to this step"
+ * primitive at all — it reinterprets the request as the label the dynamic
+ * menu names and returns WITHOUT NAVIGATING when that does not resolve
+ * (lblGtoXeq.c:102, :114-116; DESIGN.md §3.3.6).  The softkey that commits
+ * a console TAM latches exactly that global and nothing on the commit path
+ * clears it.  Count pinned in design-audit.sh group I. */
+static void _forthRestoreCursorTuple(uint16_t program, uint16_t localStep,
+                                     uint16_t firstDisplayed, uint8_t zerothStep) {
+  int16_t savedDynamicMenuItem;
+
+  if(numberOfPrograms == 0) { return; }
+  if(program < 1)                { program = 1; }
+  if(program > numberOfPrograms) { program = numberOfPrograms; }
+
+  savedDynamicMenuItem = dynamicMenuItem;
+  dynamicMenuItem = -1;
+
+  goToPgmStep(program, 1);                    /* always valid; anchors the count */
+  if(localStep > 1 && localStep <= getNumberOfSteps()) {
+    goToPgmStep(program, localStep);
+  }
+  else {
+    /* Upstream's answer for a cursor its own dispatch invalidated.  The
+     * saved display window described a program state that no longer
+     * exists, so it is not restored either — defineFirstDisplayedStep()
+     * re-derives one around the step we actually landed on. */
+    firstDisplayed = 0;
+    zerothStep     = 0;
+  }
+  firstDisplayedLocalStepNumber = firstDisplayed;
+  defineFirstDisplayedStep();
+  pemCursorIsZerothStep = zerothStep;
+
+  dynamicMenuItem = savedDynamicMenuItem;
+}
+
+
 /* ==================================================================
  * PACKET_L1_H — the FHIST program: push, cap, evict, recall.
  *
@@ -550,15 +693,17 @@ static void _forthHistSaveCursor(void) {
 }
 
 static void _forthHistRestoreCursor(void) {
-  /* R8-2: the third of the package's three navigations during a keypress;
-   * see the bracket's rationale at forthFoldLeave's restore. */
-  int16_t savedDynamicMenuItem = dynamicMenuItem;
-  dynamicMenuItem = -1;
-  goToPgmStep(_forthHistCur.savedProgram, _forthHistCur.savedLocalStep);
-  firstDisplayedLocalStepNumber = _forthHistCur.savedFirstDisplayed;
-  defineFirstDisplayedStep();
-  pemCursorIsZerothStep = _forthHistCur.savedZerothStep;
-  dynamicMenuItem = savedDynamicMenuItem;
+  /* AUDIT round 9 (R9-2): through the shared restore, which carries the
+   * R8-2 bracket and the step bound.  This site's own door is eviction
+   * rather than deletion: a near-cap push with the PEM cursor parked inside
+   * FHIST evicts oldest steps, and the saved step number then names a step
+   * FHIST no longer has — the C2 tuple comment above claims the tuple form
+   * survives "FHIST growing/evicting", and it does for the program half
+   * only. */
+  _forthRestoreCursorTuple(_forthHistCur.savedProgram,
+                           _forthHistCur.savedLocalStep,
+                           _forthHistCur.savedFirstDisplayed,
+                           _forthHistCur.savedZerothStep);
 }
 
 /* Program number of the FHIST program, or 0 if it does not exist yet.
@@ -976,7 +1121,22 @@ void forthFoldEnter(int16_t func, uint16_t mode) {
   }
 
   if(currentProgramNumber < 1) {
+    /* AUDIT round 9 (R9-7): bracketed like every other package navigation.
+     * This is the fourth site; c106008de's "the package's three keypress
+     * navigations now all bracket it" was a hand census, and this one was
+     * outside it — not because it was judged safe and left, but because a
+     * hand list came back short, which is D7-a exactly.  Misbehaving here
+     * needs currentProgramNumber < 1 AND a latched dynamicMenuItem at the
+     * same moment, and nobody could construct that pair; bracketing anyway
+     * costs two lines and removes the question, where an exemption comment
+     * would leave the next reader re-deriving the argument.  The pin in
+     * design-audit.sh group I now counts NAVIGATIONS and asserts none is
+     * unbracketed, so a fifth site cannot hide from it the way this one
+     * did. */
+    int16_t savedDynamicMenuItem = dynamicMenuItem;
+    dynamicMenuItem = -1;
     goToGlobalStep(1);           /* guard programList[-1] below */
+    dynamicMenuItem = savedDynamicMenuItem;
   }
   forthFoldCtx.savedProgram        = currentProgramNumber;
   forthFoldCtx.savedLocalStep      = currentLocalStepNumber;
@@ -1077,20 +1237,19 @@ void forthFoldUnwindIfDone(void) {
  * Returns NULL when FHIST is gone or holds no capture step, which is the
  * DELP-of-FHIST door: the caller then does nothing at all. */
 static uint8_t *_forthFoldResolveCaptureStep(void) {
-  uint16_t hist = forthHistoryProgram();
-  uint8_t *cap, *from, *to;
+  uint8_t *cap;
 
-  if(hist == 0) { return NULL; }
+  if(forthHistoryProgram() == 0) { return NULL; }
 
-  from = programList[hist - 1].instructionPointer;
-  to   = (hist < numberOfPrograms) ? programList[hist].instructionPointer
-                                   : firstFreeProgramByte;
-
+  /* AUDIT round 9 (R9-5): through the shared predicate.  The bounds
+   * computation this function used to spell inline is now stated once, at
+   * _forthStepIsCaptureStepInHistory, and the resume canary asks the same
+   * question through the same code — which is the property this function's
+   * own caller comment already claimed ("so the second look cannot answer a
+   * different question than the first") and which two spellings could not
+   * actually guarantee. */
   cap = beginOfProgramMemory + forthFoldCtx.capStepOffset;
-  if(cap >= from && cap < to
-     && cap < firstFreeProgramByte
-     && checkOpCodeOfStep(cap, ITM_FORTH)
-     && cap[2] == (uint8_t)STRING_LABEL_VARIABLE) {
+  if(_forthStepIsCaptureStepInHistory(cap)) {
     return cap;
   }
 
@@ -1170,6 +1329,10 @@ void forthFoldLeave(void) {
    * which satisfies this canary exactly, after which the re-anchor would
    * aim the sweep at that program. */
   { uint8_t *cap = _forthFoldResolveCaptureStep();
+    bool_t listsUnsafe = false;   /* R9-P1: set when the sweep abandons on an
+                                     error, because scanLabelsAndPrograms frees
+                                     labelList/programList up front and returns
+                                     early without reallocating them */
     if(cap != NULL) {
       currentStep = cap;
       defineCurrentProgramFromCurrentStep();   /* the sweep's threshold is now
@@ -1200,7 +1363,8 @@ void forthFoldLeave(void) {
           }
           deleteStepsFromTo(victim, findNextStep(victim));
           if(lastErrorCode != ERROR_NONE) {
-            break;                    /* L1-H's UAF guard */
+            listsUnsafe = true;       /* L1-H's UAF guard — see below */
+            break;
           }
         }
         if(lastErrorCode == ERROR_NONE) {
@@ -1212,8 +1376,35 @@ void forthFoldLeave(void) {
        * have shortened the region, and _insertInProgram rebases every
        * program pointer whenever it grows it (manage.c:723-733).  Through
        * the same resolver, so the second look cannot answer a different
-       * question than the first. */
-      cap = _forthFoldResolveCaptureStep();
+       * question than the first.
+       *
+       * AUDIT round 9 (R9-P1): NOT when the sweep abandoned on an error.
+       * The break above is L1-H's UAF guard, whose rule is stated at
+       * forthHistoryEvict — "Abandon the loop rather than touch either list
+       * again" — and every sibling site obeys it by abandoning.  This one
+       * did not: the very next statement resolves the capture step, which
+       * walks labelList for a numberOfLabels counted before the failed
+       * allocation and reads programList[hist - 1].  The audit could not
+       * construct the allocator failure (freeListAlloc re-serves a
+       * free-then-smaller allocation in every case analysed) and filed it
+       * PLAUSIBLE; it is fixed anyway under the owner's standing test —
+       * a documented finding whose fix is quick AND robust gets fixed —
+       * because "obey the convention the sibling sites obey" costs one
+       * flag and removes the question, where "prove the allocator cannot
+       * fail" would have to be re-proved after every allocator change.
+       * The debris is left rather than swept; the error is already on
+       * screen and the next unwind resolves it.
+       *
+       * NOT MUTATION-PROVABLE, and that is the finding's own content: the
+       * flag can only be set by an allocator failure the audit could not
+       * construct, so removing this guard leaves the gate green.  Round 8's
+       * P-2 precedent — the fault-injection hook that turned an
+       * unconstructible arm into an executed one, and found TWO defects
+       * where the finding named one — is the way to settle it for real, and
+       * it is on round 10's docket.  Recorded here as a documented gap
+       * rather than pinned by a fixture that would have to forge
+       * lastErrorCode and thereby test its own forgery. */
+      cap = listsUnsafe ? NULL : _forthFoldResolveCaptureStep();
       if(cap != NULL) {
         deleteStepsFromTo(cap, findNextStep(cap));
       }
@@ -1254,33 +1445,21 @@ void forthFoldLeave(void) {
    * no iteration cap — reproduced as a SIGSEGV.  A repair at this site
    * alone could never fix the identity half, because nothing HERE knows
    * which program went; that is precisely why the fix belongs in the
-   * deleter. */
-  { uint16_t p = forthFoldCtx.savedProgram;
-    if(numberOfPrograms > 0) {
-      if(p < 1)                { p = 1; }
-      if(p > numberOfPrograms) { p = numberOfPrograms; }
-      /* AUDIT round 8 (R8-2): goToGlobalStep, which goToPgmStep reaches, is
-       * not a "go to this step" primitive — with dynamicMenuItem >= 0 it
-       * reinterprets the request as the label the dynamic menu names and
-       * RETURNS WITHOUT NAVIGATING when that does not resolve
-       * (lblGtoXeq.c:102, :114-116; DESIGN.md §3.3.6).  The softkey that
-       * commits a console TAM latches exactly that global — press DELP,
-       * PROG, then a program-name softkey — and nothing on the commit path
-       * clears it, so this restore silently did not happen and the owner
-       * was left parked inside FHIST at a step number belonging to another
-       * program.  Bracketed here the way this tree already brackets its two
-       * other navigations: _insertInProgram (manage.c:721/772/774) and
-       * forth_compile.c:1431-1437. */
-      { int16_t savedDynamicMenuItem = dynamicMenuItem;
-        dynamicMenuItem = -1;
-        goToPgmStep(p, forthFoldCtx.savedLocalStep);
-        firstDisplayedLocalStepNumber = forthFoldCtx.savedFirstDisplayed;
-        defineFirstDisplayedStep();
-        pemCursorIsZerothStep = forthFoldCtx.savedZerothStep;
-        dynamicMenuItem = savedDynamicMenuItem;
-      }
-    }
-  }
+   * deleter.
+   *
+   * AUDIT round 9 (R9-1): and the STEP half needed the same treatment, one
+   * field over.  The deleter's do-nothing arm for a deletion AT the cursor
+   * leaves savedProgram naming the SUCCESSOR — correct, and upstream's own
+   * rule — but the successor can be shorter than savedLocalStep, and this
+   * site restored it unbounded into the unguarded goToGlobalStep walk.
+   * Both the clamp and the bound now live in _forthRestoreCursorTuple,
+   * which this site and L1-H's share; the rationale, and upstream's
+   * step-1 convention for a cursor its own dispatch invalidated, are
+   * stated there. */
+  _forthRestoreCursorTuple(forthFoldCtx.savedProgram,
+                           forthFoldCtx.savedLocalStep,
+                           forthFoldCtx.savedFirstDisplayed,
+                           forthFoldCtx.savedZerothStep);
 
   forthCapSetFoldModeRaw(0);
   _forthFoldKeptSteps = 0;      /* round 6 (F10): consumed by this sweep */

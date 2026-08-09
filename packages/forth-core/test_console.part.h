@@ -1631,6 +1631,83 @@ static int test_console_line_survives_gestures(void)
     fail = 1;
   }
 
+  /* [C6b] AUDIT round 9 (R9-3): the same gesture must not empty X either.
+   *
+   * C6's contract is "the honest answer is to do nothing", and its own
+   * comment names consumption as part of the harm it fixes — "If X held a
+   * string the re-open additionally seeded from it and consumed it."  The
+   * landed fix guarded the LINE and left the seed block above it, so the
+   * second press still ran forthTakeSourceFromX, which copies X and then
+   * DROPS it.  The class rule DESIGN-HISTORY records is the same one:
+   * a gesture that is neither commit nor abandon must not be able to empty
+   * a line — X being emptied instead of the line is that class, half-fixed.
+   *
+   * Round 2 predicted exactly this in writing: "a reader fixing only the
+   * line-discard half will leave this behind."  Both legs below are the
+   * class, not one case: an ordinary string, and the oversize string whose
+   * sibling arm raised ERROR_INVALID_DATA_TYPE on a gesture documented as
+   * a no-op. */
+  { int i;
+    for (i = 0; i < 2; i++) {
+      const char *what = (i == 0) ? "a string" : "an oversize string";
+      N13_RESET();
+      forthDictInit();
+      fnForthOuter(NOPARAM);
+      xcopy(aimBuffer, "KEEPME", 7); T_cursorPos = 6;
+
+      /* Put a dtString in X, then a distinct value in Y, so a DROP is
+       * visible as Y's content arriving in X rather than as "X changed". */
+      /* 400 has one requirement: EXCEED forth_compile.c's FORTH_SOURCE_MAX
+       * (256, file-static there, so not referenceable from here).  If that
+       * cap ever rose past 400 this leg would merely duplicate leg 0 —
+       * it cannot turn into a false pass. */
+      { char big[400];
+        const char *sTxt;
+        int n;
+        if (i == 0) { sTxt = "XSTR"; }
+        else {
+          for (n = 0; n < (int)sizeof(big) - 1; n++) { big[n] = 'x'; }
+          big[sizeof(big) - 1] = 0;
+          sTxt = big;
+        }
+        liftStack();
+        { int16_t len = (int16_t)(stringByteLength((char *)sTxt) + 1);
+          reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(len), amNone);
+          xcopy(REGISTER_STRING_DATA(REGISTER_X), (char *)sTxt, len);
+        }
+      }
+
+      if (getRegisterDataType(REGISTER_X) != dtString) {
+        printf("    FIXTURE BUG (C6b): X is not a dtString before the press\n");
+        fail = 1;
+      }
+      else {
+        lastErrorCode = ERROR_NONE;
+        fnForthOuter(NOPARAM);                   /* the second press */
+
+        if (getRegisterDataType(REGISTER_X) != dtString) {
+          printf("    FAIL (R9-3): the no-op second FORTH press consumed %s"
+                 " from X (X is now type %u) — the C6 guard sits BELOW the"
+                 " seed block that reads and drops X\n",
+                 what, (unsigned)getRegisterDataType(REGISTER_X));
+          fail = 1;
+        }
+        if (lastErrorCode != ERROR_NONE) {
+          printf("    FAIL (R9-3): the no-op second FORTH press raised error"
+                 " %u with %s in X — a gesture documented as doing nothing\n",
+                 lastErrorCode, what);
+          fail = 1;
+          lastErrorCode = ERROR_NONE;
+        }
+        if (compareString(aimBuffer, "KEEPME", CMP_BINARY) != 0) {
+          printf("    FAIL (R9-3): the line did not survive the press with %s"
+                 " in X (aim=\"%s\")\n", what, aimBuffer);
+          fail = 1;
+        }
+      }
+    }
+  }
+
   N13_RESET();
   lastErrorCode = ERROR_NONE;
   if (!fail) {
@@ -2735,7 +2812,9 @@ static int test_console_stamp_never_outlives_capture(void)
   }
 
   /* (b) a close through the funnel that is NOT the EXIT ladder — the shape
-   * every non-ladder key takes (_forthCapCloseIfInteractive). */
+   * every non-ladder key takes.  The funnel is closeAim()'s own first
+   * statement (bufferize.c, CONSOLIDATE P6); this comment named the
+   * deleted per-site helper until R9-8. */
   N13_RESET();
   forthDictInit();
   showSoftmenu(-MNU_STK);

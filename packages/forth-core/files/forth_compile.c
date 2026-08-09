@@ -1743,10 +1743,6 @@ void fnForthOuter(uint16_t unused) {
 
   bool_t seeded = false;
   char seed[FORTH_SOURCE_MAX];
-  if (getRegisterDataType(REGISTER_X) == dtString) {
-    if (!forthTakeSourceFromX(seed)) { return; }   /* oversize: error, NO capture */
-    seeded = true;
-  }
 
   if (catalog) {   /* T6: FIX-9 analog — drain a buried/on-top catalog menu */
     leaveAsmMode();
@@ -1766,10 +1762,26 @@ void fnForthOuter(uint16_t unused) {
    * to do nothing.  The surface is still re-established, because the press
    * may have come from a catalog whose menus the drain above just popped —
    * that leaves the console's row buried, and restoring it is exactly what
-   * forthConsoleRestoreSurface exists for. */
+   * forthConsoleRestoreSurface exists for.
+   *
+   * AUDIT round 9 (R9-3): this guard must run BEFORE the seed read, and
+   * the seed read is why it moved rather than the guard.  "Do nothing"
+   * has to mean nothing: forthTakeSourceFromX copies X and then DROPS it,
+   * so with the seed block above this return the no-op press silently ate
+   * the owner's stack top — the very consumption the paragraph above names
+   * as part of C6's harm — and an oversize string raised
+   * ERROR_INVALID_DATA_TYPE on a gesture documented as inert.  The guard
+   * cannot move ABOVE the catalog drain instead: the restore below is only
+   * correct once the drain has popped the catalog menus burying the row.
+   * So the drain runs, then this guard, then the seed. */
   if(forthCapInteractiveLive()) {                  /* C-6: the named predicate */
     forthConsoleRestoreSurface();
     return;
+  }
+
+  if (getRegisterDataType(REGISTER_X) == dtString) {
+    if (!forthTakeSourceFromX(seed)) { return; }   /* oversize: error, NO capture */
+    seeded = true;
   }
 
   forthEnterAimSurfaceNoLift();                   /* see above — NOT fnAim;

@@ -1379,8 +1379,9 @@ immediate in stage C (no `IMMEDIATE` word exists to set the flag, and
 `forthFindColon` exposes no flags out-param), so the colon branch compiles
 `FTOK_CALL` unconditionally — this is a **stated non-goal**, not an
 oversight. Stage 2 (control-flow words) adds: an `IMMEDIATE` primitive
-setting `FF_IMMEDIATE` on `fdict.latest`, and a flags out-param (or
-`forthDictFlagsByIndex` helper) so the compiler can honor it. No stage-C
+setting `FF_IMMEDIATE` on `fdict.latest`, and a flags out-param (or a
+flags-by-index helper — no such function exists yet, so it is named here
+in prose rather than in backticks) so the compiler can honor it. No stage-C
 code may assume colon words are never immediate in the *encoding* (the
 flags bit is already reserved and stored).
 
@@ -1599,10 +1600,10 @@ packages/forth-core/programming/param_core.c:143-145].)
 `ITM_FCALL` is a keyable `PTP_NUMBER_16` item, so a user *can* reach
 `FCALL nn` from the FCNS catalog in PEM. That gesture does not persist an
 index: the `insertStepInProgram` FCALL arm reverse-looks-up the name via
-`forthDictNameByIndex` and records an ordinary `ITM_FORTH` **name** step
+`forthDictNameByRef` and records an ordinary `ITM_FORTH` **name** step
 instead; an unresolvable or indirect `widx` is rejected with
 `ERROR_NON_PROGRAMMABLE_COMMAND` [VERIFIED:
-packages/forth-core/programming/manage.c:1567-1582]. Verified by
+packages/forth-core/programming/manage.c:1836-1851]. Verified by
 `test_fcall_redirect_records_name` / `test_fcall_redirect_rejects_stale`.
 
 **Key presses and catalog presses resolve in this same order (Stage M).**
@@ -1769,12 +1770,17 @@ region-relative, the saved bytes are position-independent; on restore, set
 **IMPLEMENTED (H5, 2026-07-13 — commits "P1 save/restore integration (H5)"
 and "P1 validator hardening"):** five name-keyed parameters in the package
 patch of `saveRestoreBackup.c`, anchored after the `programList` pair on
-both the save and restore sides: `forthDictBase` (c47Ptr) plus
-`forthDictSizeBlocks`/`forthDictHere`/`forthDictLatest`/`forthDictCount`
-(uint16). No `...Offset` companion is needed — `fdict.base` is always the
-block-aligned raw allocC47Blocks result. Defaults are pre-seeded before
-every `restoreStateValue` call, so pre-H5 backup files load as an empty
-dictionary. `forthDictValidateRestored()` (forth_dict.c) clamps
+both the save and restore sides: `forthGDictBase` (c47Ptr) plus
+`forthGDictSizeBlocks`/`forthGDictHere`/`forthGDictLatest`/`forthGDictCount`
+(uint16). These are the literal parameter names written into the backup
+file, so they are load-bearing for anything that reads one: this paragraph
+said `forthDict*` until round 9's symbol-liveness check caught it (R9-8's
+class — the doc naming a mechanism the tree does not have), and the shipping
+names have the G throughout, for the GLOBAL dictionary. No `...Offset`
+companion is needed — `gdict.base` is always the block-aligned raw
+allocC47Blocks result. Defaults are pre-seeded before every
+`restoreStateValue` call, so pre-H5 backup files load as an empty
+dictionary. `forthGDictValidateRestored()` (forth_dict.c) clamps
 inconsistent restored state to empty; on failure it deliberately ORPHANS
 the region rather than freeing through the very allocation tables it just
 failed to trust (documented exception). The config.c self-test hook is
@@ -2645,14 +2651,23 @@ already specify.
   loses a line; the teardown is `calcModeNormal()` + `popSoftmenu()`,
   closeAim's shape **minus its string commit** (X is untouched).
 - **Close-path dispositions (the interactive axis, seven paths).** The
-  ladder's rung 3 pushes the line to history. The five native
-  `closeAim()` arms that remain reachable with an interactive capture
-  open (executeFunction's ITM_INTEGRAL and generic non-alpha-item arms,
-  the BST/SST longpress arm, fnKeyUp, fnKeyDown) close the capture via
-  one choke point (`_forthCapCloseIfInteractive`) and then run native
-  `closeAim()`, which commits the line to X as a string — the line is
-  preserved *in X*, not in history; native behaviour stays native
-  outside the ladder (the L1-2 KEEP disposition). `forthCapPowerReset()`
+  ladder's rung 3 pushes the line to history. The native `closeAim()`
+  arms that remain reachable with an interactive capture open
+  (executeFunction's ITM_INTEGRAL arm, the BST/SST longpress arm,
+  fnKeyUp, fnKeyDown — executeFunction's generic non-alpha-item arm is
+  held out by its own `!forthCapIsInteractive()` conjunct, the L1-3/C5
+  FCNS ruling) close the capture and then run native `closeAim()`, which
+  commits the line to X as a string — the line is preserved *in X*, not
+  in history; native behaviour stays native outside the ladder (the L1-2
+  KEEP disposition). **The close is inside `closeAim()` itself**
+  (`packages/forth-core/bufferize.c`), as its first statement, since
+  CONSOLIDATE P6: it used to be a per-call-site helper called
+  `_forthCapCloseIfInteractive`, and that function no longer exists — a
+  future upstream `closeAim()` caller in any file is now correct by
+  default instead of being a finding waiting for the next audit. This
+  paragraph named the deleted helper as the live choke point until round
+  9 (R9-8); do not add a site-local guard to a new close path, because
+  that forks the funnel. `forthCapPowerReset()`
   drops the line: it runs at the dictionary init/restore seams, where
   transient UI state never survives. Swept by
   `test_interactive_close_sweep` on the full close tuple
@@ -3181,7 +3196,7 @@ All Forth errors surface through the existing C47 protocol at the
     with `tam.value = widx` does NOT put `0x8B 0x1B` in program memory:
     `insertStepInProgram`'s own `ITM_FCALL` arm (programming/manage.c) is
     a SECOND name-faithfulness guard — it resolves the index back to the
-    name via `forthDictNameByIndex` and records an `ITM_FORTH` source step
+    name via `forthDictNameByRef` and records an `ITM_FORTH` source step
     (or rejects with `ERROR_NON_PROGRAMMABLE_COMMAND` when unresolvable).
     The re-route is still detected: the XEQ-name-step probe goes RED
     (`0x03 0xFD len glyphs` absent). No reachable insertion path can

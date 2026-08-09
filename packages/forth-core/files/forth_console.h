@@ -97,8 +97,25 @@ uint16_t _forthConsoleEditorTop(void);
  * (src/c47/screen.c:1660, `yincr = 35`).  Upstream keeps it as a function
  * local, so the package cannot reference it by name; naming it here, at
  * its upstream address, is as close to upstream's own constant as this
- * side can get.  The _Static_asserts below turn any drift into a build
- * failure rather than a mispainted band. */
+ * side can get.
+ *
+ * AUDIT round 9 (R9-6): this comment used to end "the _Static_asserts below
+ * turn any drift into a build failure rather than a mispainted band", and
+ * for THIS constant that was false — an assert cannot reference a function
+ * local, so the asserts in forth_console_view.c check the macro against
+ * itself and upstream's Y_POSITION_* names, never against the 35 they are
+ * standing in for.  Mutation-proven silent: the verifier changed the
+ * compiled yincr to 30, left this macro at 35, and the full gate — build,
+ * self-test, upstream testSuite — stayed GREEN, which is exactly the
+ * band/editor overlap the sentence promised could not happen.  This is
+ * C14's own class (a constant copied by value across a module boundary),
+ * left open by C14's close under an overstated cover claim.
+ *
+ * What now catches the drift is design-audit.sh group I's yincr pin, which
+ * greps upstream's showStringEdC47 for the literal and fails when it moves.
+ * The asserts below are still worth having — they tie the BAND's row counts
+ * to upstream's Y_POSITION_* names — but they are not what guards this
+ * number, and saying so is the point of this paragraph. */
 #define FORTH_CONSOLE_ED_YINCR    35
 /* One pixel of clearance: the editor's cursor block starts one row above
  * the text baseline showStringEdC47 draws at, and the band stops below

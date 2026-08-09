@@ -390,13 +390,38 @@ for p in cites:
         bad.append(p)
 for p in sorted(bad):
     print(f"{p}  — cited in DESIGN.md, file does not exist")
+
+# AUDIT round 9 (R9-8): paths were the only thing checked, so a doc naming a
+# DELETED FUNCTION as the live mechanism passed. CONSOLIDATE P6 moved the
+# interactive-close guard into closeAim() and deleted
+# _forthCapCloseIfInteractive; DESIGN.md §8.4.2 went on naming it as the
+# choke point every close path goes through, which is the "comment that
+# outlived its mechanism" class (r5 R13) at the authoritative doc — and a
+# maintainer adding a sixth close path would go looking for a guard that is
+# not there, or re-add a site-local one and fork the funnel P6 built.
+#
+# So: every package-private identifier DESIGN.md names in backticks must
+# still exist in the package sources. Scope is the package's own `forth*`
+# and `_forth*` symbols — upstream names are upstream's to delete, and
+# DESIGN.md legitimately discusses them in the past tense.
+ident = set(re.findall(r'`(_?forth[A-Za-z0-9_]+)\(?\)?`', txt))
+live = ''
+for dirpath, _dirs, files in os.walk(pkg):
+    if '/files/' in dirpath + '/' or dirpath.endswith('/files'):
+        continue
+    for f in files:
+        if f.endswith(('.c', '.h')):
+            live += open(os.path.join(dirpath, f), errors='replace').read()
+dead = sorted(n for n in ident if n not in live)
+for n in dead:
+    print(f"{n}  — named in DESIGN.md, no such symbol in the package sources")
 PYEOF
 )
 if [[ -n "${h_out}" ]]; then
   echo "${h_out}" | sed 's/^/  /'
-  flag "DESIGN.md cites source that is gone — the authoritative doc describes code that no longer exists"
+  flag "DESIGN.md cites source or a symbol that is gone — the authoritative doc describes code that no longer exists"
 else
-  note "all cited paths resolve"
+  note "all cited paths resolve; every package symbol DESIGN.md names is live"
 fi
 
 # --- I. Enumerated-site counts (HARD) ----------------------------------------
@@ -503,8 +528,44 @@ pin 13 "upstream call sites of isAlphabeticSoftmenu/isAlphaSubmenu" \
 # programming/forth_fold.c with the rest of the fold subsystem, so the FILE
 # TARGET is now both files. The count is unchanged and re-verified: 1 in
 # manage.c, 3 in forth_fold.c.
-pin 4 "capture navigations bracketing dynamicMenuItem" \
-    bash -c "grep -ho 'dynamicMenuItem = -1;' \"${PKG}/programming/manage.c\" \"${PKG}/programming/forth_fold.c\" | wc -l"
+#
+# R9-7 (round 9): the pin above counted the FIX, not the SUBJECT — the
+# bracket idiom, so a package navigation added WITHOUT a bracket left it
+# green. Mutation-proven blind: an unbracketed goToPgmStep(1, 1) appended to
+# forth_fold.c kept the count at 4 and the whole gate green. That is R8-3/4/5
+# recurring inside the countermeasure they created, second consecutive round,
+# and the rule it violates is written ten lines above it.
+#
+# Now it counts the NAVIGATIONS themselves — the thing that must be
+# bracketed — and separately asserts that NONE of them is unbracketed. The
+# second pin is the one with teeth: it goes red on a navigation the fix
+# idiom never reached, which is precisely what the old pin could not see.
+#
+# Scope is forth_fold.c, the package's OWN file, where P8 collected every
+# package navigation. programming/manage.c is an UPSTREAM override and its
+# goToPgmStep calls are upstream's own (fnClP, _clearProgram); counting
+# those would flag upstream's code as the package's debt. The one bracket
+# the package added inside that override is pinned on its own below.
+#
+# R9-7 also closed the site that made the census ambiguous: forthFoldEnter's
+# goToGlobalStep(1) guard now carries the bracket like every other, so the
+# rule reads "every package navigation is bracketed" with no exemption
+# mechanism to argue about.
+pin 4 "package navigations subject to the dynamicMenuItem bracket" \
+    bash -c "grep -cE 'goToPgmStep\(|goToGlobalStep\(' \"${PKG}/programming/forth_fold.c\""
+# The bracket is a SCOPE, not a neighbouring line: one bracket legitimately
+# covers several navigations (the shared cursor restore makes two calls
+# inside one). So track the open/close pair rather than peeking at the
+# preceding lines — a fixed-size window called the shared restore's second
+# navigation unbracketed on this pin's first run, which is the same
+# false-positive shape the pins exist to avoid producing.
+pin 0 "package navigations left UNBRACKETED" \
+    bash -c "awk '/dynamicMenuItem = -1;/ { inside = 1 }
+                  /dynamicMenuItem = savedDynamicMenuItem;/ { inside = 0 }
+                  /goToPgmStep\(|goToGlobalStep\(/ { if (!inside) n++ }
+                  END { print n + 0 }' \"${PKG}/programming/forth_fold.c\""
+pin 1 "the package's own bracket inside the manage.c override" \
+    bash -c "grep -c 'dynamicMenuItem = -1;' \"${PKG}/programming/manage.c\""
 
 # Sol's dependency (a), round 8 — checked 2026-08-09: tamEnterMode can REFUSE
 # (the P-2 arm) and every present caller either dispatches terminally
@@ -530,9 +591,65 @@ pin 5 "glyph-boundary copies (forthCopyWholeGlyphs, definition + sites)" \
 pin 0 "longhand IsInteractive/IsOpen conjunctions in production sources" \
     bash -c "grep -rn 'forthCapIsInteractive() *&& *forthCapIsOpen()\|forthCapIsOpen() *&& *forthCapIsInteractive()\|!forthCapIsInteractive() *|| *!forthCapIsOpen()\|!forthCapIsOpen() *|| *!forthCapIsInteractive()' '${PKG}' --include=*.c --include=*.h | grep -v '/files/' | grep -v '/test_' | wc -l"
 
+# R9-5 (round 9): the "capture step lies INSIDE FHIST" structural rule was
+# spelled TWICE — inlined in the resume canary and again in the fold
+# resolver — over two separately stored copies of the same offset, with
+# nothing forcing them to agree. Four confirmed defects across rounds 8-9
+# came from a consumer still carrying the raw shape test after the others
+# had the rule. One definition: the FHIST span may be computed in exactly
+# one function. When the recorded PEM-sibling question is closed it must
+# resolve to a CALL here, not to a third spelling — this pin is what makes
+# that visible the day it does not.
+pin 1 "definitions of the FHIST-span bound (programList[hist-1] .. next)" \
+    bash -c "grep -c 'programList\[hist - 1\].instructionPointer' \"${PKG}/programming/forth_fold.c\""
+
+# R9-6 (round 9): FORTH_CONSOLE_ED_YINCR copies upstream showStringEdC47's
+# FUNCTION-LOCAL yincr, which no _Static_assert can reference — the header
+# claimed assert coverage it structurally cannot have, and the gap was
+# mutation-proven silent (compiled yincr 35 -> 30, macro left at 35, whole
+# gate GREEN, band and editor overlapping). C14's own class, left open by
+# C14's close. This is the source-anchored pin that C14's fix should have
+# carried: it greps UPSTREAM for the literal, so a rebase that moves 35
+# moves this count and the build stops.
+pin 1 "upstream showStringEdC47's yincr = 35, the value forth_console.h copies" \
+    bash -c "grep -c 'yincr *= *35' \"${UPSTREAM}/screen.c\""
+
 if [[ -n "${i_out}" ]]; then
   printf '%s' "${i_out}" | sed 's/^/  /'
   flag "an enumerated-site count moved — check every new site against the rule the pin encodes, then re-accept the count in the same commit"
+fi
+
+# --- J. Upstream-diff churn (HARD) -------------------------------------------
+# D7-5, recommended by the consolidation close-out and again by round 9's
+# R9-10, wired here on the third asking. The ten-packet wave drove mechanical
+# churn from 51 findings to 0; with the count AT zero this is the cheapest
+# regression guard the project has — any future churn is a diff of one
+# against a known-empty baseline, instead of waiting for the next full
+# upstream-diff-review to notice.
+#
+# CHURN is hard zero. NEAR is a judged tier: the four standing hits were read
+# individually by the 2026-08-09b review (two appended disjuncts that cannot
+# be spelled another way, and one real rename in two halves) and cleared.
+# R9-10 proposes a purely additive reshape of the fnPem hunk that retires the
+# rename pair; when it lands, this count drops to 2 and moves here.
+head2 "J. Upstream-diff churn (patch minimality)"
+j_scan="${SCRIPT_DIR}/../../.claude/skills/upstream-diff-review/references/patch_churn_scan.py"
+if [[ -f "${j_scan}" ]]; then
+  j_out=$(python3 "${j_scan}" "${PKG}"/patches/*.patch 2>&1 || true)
+  j_churn=$(printf '%s\n' "${j_out}" | grep -c '^\[CHURN\]' || true)
+  j_near=$(printf '%s\n' "${j_out}" | grep -c '^\[NEAR\]' || true)
+  printf '  %-58s %s\n' "mechanical churn findings (must be 0)" "${j_churn}"
+  printf '  %-58s %s\n' "NEAR hits (judged; baseline 4, see comment)" "${j_near}"
+  if [[ "${j_churn}" -ne 0 ]]; then
+    printf '%s\n' "${j_out}" | grep -A2 '^\[CHURN\]' | sed 's/^/  /'
+    flag "patch churn regressed above zero — a hunk is carrying reformatting or a rewrite where an append would do"
+  elif [[ "${j_near}" -ne 4 ]]; then
+    flag "the NEAR count moved (baseline 4) — read each new hit and re-accept the count in the same commit"
+  else
+    note "churn 0, NEAR at its judged baseline"
+  fi
+else
+  note "churn scanner not found — skipped (expected at .claude/skills/upstream-diff-review/references/)"
 fi
 
 # --- accept / summary --------------------------------------------------------

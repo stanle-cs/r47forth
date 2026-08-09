@@ -346,20 +346,37 @@ bool_t forthConsoleExitLadder(void) {
      * The teardown is calcModeNormal() FOLLOWED BY popSoftmenu() —
      * exactly closeAim()'s own shape (src/c47/bufferize.c:2693-2695),
      * minus its string commit.  Both calls are needed, and rev 2 of
-     * this packet got it wrong by removing the pop:
+     * this packet got it wrong by removing the pop.
      *
-     *   - rung 2's pre-normalisation renames slot 0 to id 1 IN PLACE;
-     *     it does not pop.  softmenu[1].menuItem is -MNU_MyAlpha
-     *     (src/c47/softmenus.c:1039), NOT -MNU_ALPHA.
-     *   - so calcModeNormal()'s own pop, guarded on
+     * AUDIT round 9 (R9-9): this paragraph used to argue that from rung
+     * 2's "pre-normalisation" — an in-place rename of slot 0 to id 1 —
+     * and to call the pop below "unconditional".  BOTH premises are dead,
+     * and the rung-1 comment sixty lines above says so itself ("Neither
+     * half survives FWRD-as-home"): no rename code exists anywhere in the
+     * console path (forth_compile.c:1693 records that it "is GONE
+     * deliberately"), and the pop below is guarded by `if(popHome)`.  The
+     * code was right and its stated reasons were not, which is the r5
+     * R12/R13 class at the highest-regression function in the audit
+     * record — C3, C5.6b, C17 and the M1-1 [8] row all live in this rung.
+     * P9 moved the block verbatim, as specified; P10's narrative sweep
+     * exempted `files/` sources by rule, so nothing reconciled it.  Round
+     * 9's out-of-family reader re-derived it independently as G2-2, a
+     * third family on the same site.
+     *
+     * WHY BOTH CALLS ARE STILL NEEDED, from the code as it now stands:
+     *
+     *   - the console's home row is -MNU_FWRD, not -MNU_ALPHA.  So
+     *     calcModeNormal()'s own pop, guarded on
      *     softmenu[softmenuStack[0].softmenuId].menuItem == -MNU_ALPHA
-     *     (src/c47/calcMode.c:45), can never fire here.  Only its
-     *     second check (id 1 -> 0) runs, another in-place rename.
-     *   - two renames, zero pops: the -MNU_ALPHA frame pushed at open
-     *     stays, and the user's pre-FORTH menu stays buried under it.
-     *
-     * The unconditional popSoftmenu() is what actually removes that
-     * frame and reveals the pre-FORTH menu.  C5.6b pins it.
+     *     (src/c47/calcMode.c:45), does not fire for the console's own
+     *     base — it never did here, though for a different reason than
+     *     the dead paragraph gave.
+     *   - so calcModeNormal() leaves the frame standing, and the explicit
+     *     popSoftmenu() below is the only thing that removes it and
+     *     reveals the pre-FORTH menu.  C5.6b pins that.
+     *   - and it is CONDITIONAL on popHome for the C17 reason stated at
+     *     the call itself: when the open borrowed the user's own FWRD row
+     *     instead of pushing one, popping would eat the owner's frame.
      *
      * No undo(), no saveForUndo(), no updateMatrixHeightCache() — the
      * native arm below runs those because closeAim() either commits
@@ -392,8 +409,13 @@ bool_t forthConsoleExitLadder(void) {
        * revealed whatever was beneath it — see forth_capture.h's
        * homePushed note and the [8] row of the M1-1 battery. */
       if(popHome) {
-        popSoftmenu();      /* the frame rung 2's pre-normalisation
-                               renamed but did not pop */
+        popSoftmenu();      /* the console's own base frame, which
+                               calcModeNormal() above cannot pop (its pop
+                               is guarded on -MNU_ALPHA and this row is
+                               -MNU_FWRD).  R9-9: this said "the frame
+                               rung 2's pre-normalisation renamed but did
+                               not pop" — there is no pre-normalisation
+                               and no rename; see the rung banner. */
       }
     }
     return true;

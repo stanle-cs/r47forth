@@ -7554,10 +7554,12 @@ static int test_capture_origin_lifecycle(void)
  * (executeFunction's ITM_INTEGRAL/ITM_INTEGRAL_YX arm, executeFunction's
  * generic non-alpha-item arm, processKeyAction's BST/SST longpress arm) sit
  * behind multi-step gestures or longpress timing this harness does not
- * model; each calls the identical `_forthCapCloseIfInteractive();
- * closeAim();` pair verified live at the three driven sites, so their
- * correctness rests on code inspection (reported alongside the call-site
- * list), not a live drive. */
+ * model; each calls plain `closeAim()`, whose FIRST STATEMENT is the
+ * interactive close (bufferize.c, since CONSOLIDATE P6 — it was a
+ * per-site `_forthCapCloseIfInteractive();` call before that, and this
+ * comment said so until round 9's R9-8).  That is what makes inspection
+ * adequate here: there is one guard, inside the teardown, and the driven
+ * sites exercise it. */
 static int test_capture_interactive_close(void)
 {
   extern void fnForthOuter(uint16_t);
@@ -15893,12 +15895,13 @@ static int test_interactive_acceptance(void)
 
 /* ==================================================================
  * PACKET_L1_5 (C2.1) — test_interactive_close_sweep: the interactive
- * close-path axis, full tuple.  Seven paths on this axis (see the
- * keyboard.c banner over _forthCapCloseIfInteractive): four driven
- * below, three reported (multi-step gestures / longpress timing the
- * harness does not model; each calls the identical
- * `_forthCapCloseIfInteractive(); closeAim();` pair the driven sites
- * verify live).  Reported separately from the PEM four
+ * close-path axis, full tuple.  Seven paths on this axis (the guard is
+ * the first statement of closeAim() itself, bufferize.c, since
+ * CONSOLIDATE P6; before that it was a per-site
+ * `_forthCapCloseIfInteractive();` call and this banner pointed at the
+ * keyboard.c list of them — R9-8): four driven below, three reported
+ * (multi-step gestures / longpress timing the harness does not model;
+ * each reaches the same one guard the driven sites verify live).  Reported separately from the PEM four
  * (test_capture_close_paths_reset_tuple) and the fold seven
  * (test_fold_close_paths), which own their axes.
  * ================================================================== */
@@ -16100,8 +16103,8 @@ static int test_interactive_close_sweep(void)
 
   /* ---- [5] The three inspection-only paths, reported not driven. ---- */
   printf("    [5] REPORT: 3 further interactive close paths sit behind gestures this harness\n"
-         "        does not model and are verified by inspection (identical\n"
-         "        _forthCapCloseIfInteractive(); closeAim(); pair as [2]/[3]):\n"
+         "        does not model and are verified by inspection (they reach the\n"
+         "        same guard inside closeAim() that [2]/[3] drive live):\n"
          "        executeFunction ITM_INTEGRAL/ITM_INTEGRAL_YX arm; executeFunction\n"
          "        generic non-alpha-item arm; processKeyAction BST/SST longpress arm.\n");
   printf("    [5] REPORT: interactive close-path axis: 7 paths — 4 driven above, 3 by\n"
@@ -18653,6 +18656,264 @@ static int test_fold_round8_window(void)
   if (!scFail) printf("    [9] PASS (R8-P1): a latched dynamicMenuItem cannot"
                       " divert the fold's entry park — the capture step lands"
                       " in FHIST\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- [10] R9-1 (round 9, arithmetic dimension): R8-1 closed the saved
+   * cursor's PROGRAM half and left its LOCAL STEP half open.  The deleter
+   * rule R8-1 implemented is upstream's — a deletion BEFORE the cursor
+   * decrements the index, a deletion AT it leaves the index alone so it
+   * names the successor — but nothing bounds savedLocalStep against the
+   * program it is restored INTO, and the successor can be shorter.
+   *
+   * goToGlobalStep's walk (lblGtoXeq.c:122-133) has no NULL break and no
+   * iteration cap: overshoot walks past the program's END, past the global
+   * .END. (findNextStep returns NULL there), then findNextStep(NULL) → NULL
+   * until the counter arrives — and assigns currentStep = NULL.  The next
+   * PEM insert's shift loop (manage.c:748, `pos > currentStep`) then walks
+   * firstFreeProgramByte down toward address 0.
+   *
+   * The drive: park deep inside a LONG program, DELP that same program from
+   * the console.  Its index survives as the successor's — and the successor
+   * here is FHIST, three steps long, against a saved local step of 12.
+   *
+   * Ordered LAST: pre-fix this drive can take the whole suite down with it,
+   * which is itself the finding. ---- */
+  scFail = 0;
+  R8_RESET();
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+  {
+    uint16_t longProg, deepStep = 12, stepsInLong;
+
+    tpInit(&p);
+    if (tpLbl(&p, "PLNG") < 0 ||
+        tpSrc(&p, "1") < 0 || tpSrc(&p, "2") < 0 || tpSrc(&p, "3") < 0 ||
+        tpSrc(&p, "4") < 0 || tpSrc(&p, "5") < 0 || tpSrc(&p, "6") < 0 ||
+        tpSrc(&p, "7") < 0 || tpSrc(&p, "8") < 0 || tpSrc(&p, "9") < 0 ||
+        tpSrc(&p, "10") < 0 || tpSrc(&p, "11") < 0 || tpSrc(&p, "12") < 0 ||
+        tpRtn(&p) < 0 || tpEnd(&p) < 0 || !tpWrite(&p)) {
+      printf("    [10] FIXTURE BUG: long-program build/write failed\n");
+      scFail = 1;
+    }
+    else {
+      showSoftmenu(-MNU_STK);
+      fnForthOuter(NOPARAM);
+      xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
+      forthInteractiveEnter();      /* FHIST is created AFTER PLNG */
+      lastErrorCode = ERROR_NONE;
+
+      { calcRegister_t l = findNamedLabel("PLNG", GLOBAL_LABELS);
+        longProg = (l == INVALID_VARIABLE) ? 0
+                   : (uint16_t)labelList[l - FIRST_LABEL].program;
+      }
+      if (longProg != 0) { goToPgmStep(longProg, 1); }
+      stepsInLong = (longProg == 0) ? 0 : getNumberOfSteps();
+
+      /* The reaching state, ASSERTED not assumed (the C22 rule): the cursor
+       * is deep inside PLNG, PLNG is not the last program, and the program
+       * that will inherit its index is SHORTER than the parked step. */
+      if (longProg == 0 || stepsInLong < deepStep
+          || longProg >= numberOfPrograms) {
+        printf("    [10] FIXTURE BUG: deep-cursor-in-PLNG not reached"
+               " (PLNG=%u steps=%u progs=%u)\n",
+               longProg, stepsInLong, (unsigned)numberOfPrograms);
+        scFail = 1;
+      }
+      else {
+        goToPgmStep(longProg, deepStep);
+        if (currentProgramNumber != longProg
+            || currentLocalStepNumber != deepStep) {
+          printf("    [10] FIXTURE BUG: the cursor did not park at %u/%u"
+                 " (got %u/%u)\n", longProg, deepStep,
+                 (unsigned)currentProgramNumber,
+                 (unsigned)currentLocalStepNumber);
+          scFail = 1;
+        }
+        else {
+          xcopy(aimBuffer, "42", 3); T_cursorPos = 2;
+          runFunction(ITM_DELP);
+          if (!forthFoldPending() || tam.function != ITM_DELP) {
+            printf("    [10] FIXTURE BUG: DELP did not park the fold\n");
+            scFail = 1;
+          }
+          else {
+            tamProcessInput(ITM_alpha);
+            if (!tam.alpha) {
+              printf("    [10] FIXTURE BUG: the label prompt refused alpha\n");
+              scFail = 1;
+            }
+            else {
+              uint16_t stepsAfter;
+              xcopy(aimBuffer, "PLNG", 5);   /* the cursor's OWN program */
+              tamProcessInput(ITM_ENTER);    /* fnClP deletes it, LIVE */
+
+              /* Reaching this line is half the assertion: pre-fix the walk
+               * either dies here or returns with currentStep NULL. */
+              stepsAfter = (numberOfPrograms > 0
+                            && currentProgramNumber >= 1
+                            && currentProgramNumber <= numberOfPrograms)
+                           ? getNumberOfSteps() : 0;
+              printf("    [10] OBS: survived the unwind — progs=%u cursor"
+                     " prog=%u localStep=%u steps=%u currentStep=%s\n",
+                     (unsigned)numberOfPrograms,
+                     (unsigned)currentProgramNumber,
+                     (unsigned)currentLocalStepNumber, stepsAfter,
+                     (currentStep == NULL) ? "NULL" : "non-NULL");
+
+              if (currentStep == NULL) {
+                printf("    [10] FAIL (R9-1): the restore left currentStep"
+                       " NULL — the next PEM insert's shift loop walks from"
+                       " firstFreeProgramByte down toward address 0\n");
+                scFail = 1;
+              }
+              else if (currentProgramNumber < 1
+                       || currentProgramNumber > numberOfPrograms) {
+                printf("    [10] FAIL (R9-1): the cursor is outside"
+                       " programList (prog=%u progs=%u)\n",
+                       (unsigned)currentProgramNumber,
+                       (unsigned)numberOfPrograms);
+                scFail = 1;
+              }
+              else if (currentLocalStepNumber > stepsAfter) {
+                printf("    [10] FAIL (R9-1): the restored local step %u is"
+                       " past the end of the program it landed in (%u"
+                       " steps) — the saved tuple's step half was not"
+                       " bounded by the program it was restored into\n",
+                       (unsigned)currentLocalStepNumber, stepsAfter);
+                scFail = 1;
+              }
+              /* And the positive contract, upstream's own: when the saved
+               * step cannot be honoured, the cursor is at STEP 1 of the
+               * program — what _clearProgram does at manage.c:305-308. */
+              else if (currentLocalStepNumber != 1
+                       && currentLocalStepNumber != deepStep) {
+                printf("    [10] FAIL (R9-1): the restore invented a step"
+                       " upstream never produces (%u; expected 1 on"
+                       " overshoot or %u when it fits)\n",
+                       (unsigned)currentLocalStepNumber, deepStep);
+                scFail = 1;
+              }
+            }
+          }
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+  }
+  if (!scFail) printf("    [10] PASS (R9-1): a saved cursor whose program was"
+                      " deleted comes back inside a real step of a real"
+                      " program\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- [11] R9-2, the class's SECOND member: same saved-cursor tuple,
+   * different deleter.  L1-H's _forthHistCur is sampled by
+   * forthHistoryPush before the push, and the push evicts oldest-first
+   * down to FORTH_HISTORY_MAX_BYTES — so when the PEM cursor is parked
+   * inside FHIST itself (an ordinary visible program; nothing bars the
+   * cursor from it), the restore names a step eviction just removed.
+   *
+   * The C2 tuple comment claims the (program, localStep) form was chosen
+   * so that "program-boundary shifts (FHIST growing/evicting)" cannot make
+   * it stale — true of the program half, false of the step half, which is
+   * the whole of R9-2.  Enumerating the class means driving EVERY mutation
+   * between save and restore: [10] drives deletion, this drives eviction.
+   * ---- */
+  scFail = 0;
+  R8_RESET();
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+  {
+    uint16_t hist, linesBefore, deepStep, stepsBefore, stepsAfter;
+    int i;
+    char line[16];
+
+    /* Fill FHIST past its 1024-byte cap.  Each line is distinct: L2
+     * collapses CONSECUTIVE duplicates, so identical text would push once
+     * and the fixture would never reach the cap. */
+    for (i = 0; i < 240; i++) {
+      snprintf(line, sizeof(line), "%d", i);
+      forthHistoryPush(line);
+    }
+    hist = forthHistoryProgram();
+    if (hist == 0) {
+      printf("    [11] FIXTURE BUG: FHIST does not exist after the fill\n");
+      scFail = 1;
+    }
+    else {
+      goToPgmStep(hist, 1);
+      stepsBefore = getNumberOfSteps();
+      /* Park DEEP inside FHIST — near its end, where eviction's victims
+       * are not, so only the step NUMBER goes stale. */
+      deepStep = (uint16_t)(stepsBefore - 1);
+
+      /* The reaching state, asserted: FHIST is at its cap (so the next
+       * push must evict) and the cursor is parked deep inside it. */
+      if (stepsBefore < 20) {
+        printf("    [11] FIXTURE BUG: FHIST holds only %u steps — the fill"
+               " did not reach the eviction cap\n", stepsBefore);
+        scFail = 1;
+      }
+      else {
+        goToPgmStep(hist, deepStep);
+        if (currentProgramNumber != hist
+            || currentLocalStepNumber != deepStep) {
+          printf("    [11] FIXTURE BUG: the cursor did not park at FHIST/%u"
+                 " (got %u/%u)\n", deepStep,
+                 (unsigned)currentProgramNumber,
+                 (unsigned)currentLocalStepNumber);
+          scFail = 1;
+        }
+        else {
+          linesBefore = stepsBefore;
+          /* One more push, long enough that eviction must take several
+           * oldest steps to get back under the cap. */
+          forthHistoryPush("0123456789012345678901234567890123456789"
+                           "0123456789012345678901234567890123456789"
+                           "0123456789012345678901234567890123456789");
+
+          hist       = forthHistoryProgram();
+          stepsAfter = 0;
+          if (hist != 0 && currentProgramNumber >= 1
+              && currentProgramNumber <= numberOfPrograms) {
+            stepsAfter = getNumberOfSteps();
+          }
+          printf("    [11] OBS: FHIST steps %u -> (cursor prog=%u"
+                 " localStep=%u steps=%u) currentStep=%s\n",
+                 linesBefore, (unsigned)currentProgramNumber,
+                 (unsigned)currentLocalStepNumber, stepsAfter,
+                 (currentStep == NULL) ? "NULL" : "non-NULL");
+
+          if (currentStep == NULL) {
+            printf("    [11] FAIL (R9-2): the history restore left"
+                   " currentStep NULL after an evicting push — same"
+                   " unguarded goToGlobalStep walk as [10]\n");
+            scFail = 1;
+          }
+          else if (currentProgramNumber < 1
+                   || currentProgramNumber > numberOfPrograms) {
+            printf("    [11] FAIL (R9-2): the cursor is outside programList"
+                   " (prog=%u progs=%u)\n",
+                   (unsigned)currentProgramNumber,
+                   (unsigned)numberOfPrograms);
+            scFail = 1;
+          }
+          else if (currentLocalStepNumber > stepsAfter) {
+            printf("    [11] FAIL (R9-2): the restored local step %u is past"
+                   " the end of the program it landed in (%u steps)\n",
+                   (unsigned)currentLocalStepNumber, stepsAfter);
+            scFail = 1;
+          }
+        }
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+  if (!scFail) printf("    [11] PASS (R9-2): an evicting history push leaves"
+                      " its saved cursor on a real step\n");
   fail |= scFail;
   cleanupTestProgram();
 

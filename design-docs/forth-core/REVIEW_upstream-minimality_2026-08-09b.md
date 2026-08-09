@@ -107,10 +107,19 @@ All three candidates the pre-wave review ranked are gone from `patches/`:
 - **the interactive EXIT ladder** (P9) — 155 lines out of `fnKeyExit`
   into `forthConsoleExitLadder()`. keyboard.c 486 → 328.
 
-No new extraction candidate is open. The largest inline block left is
-keyboard.c's `determineItem` console-roll arm (~40 lines including its
-comment), and it cannot move: it must run at that exact point in the plane
-selection, which is the whole content of its rationale.
+No new extraction candidate is open.
+
+**Corrected 2026-08-09 (round 9, D7-6).** This paragraph said "the largest
+inline block left is keyboard.c's `determineItem` console-roll arm (~40
+lines including its comment)". The roll arm's own claim stands — it cannot
+move, because running at that exact point in the plane selection is the
+whole content of its rationale — but *largest* was wrong: the ITM_FORTH arm
+in `insertStepInProgram` is 61 lines (`programming/manage.c:1673-1733`).
+That block is also ruled to stay (the wave's own spec names the hook arms
+under "Stays in manage.c (do NOT move)", and STAGE_L_T7 rejected splitting
+`insertStepInProgram` outright rather than deferring it), so nothing moves
+either way — but a census that is wrong in a report becomes a premise in
+the next spec, which is why it is corrected here rather than left.
 
 ## 3. Documentation drift
 
