@@ -1,5 +1,5 @@
 diff --git a/src/c47/ui/tam.c b/src/c47/ui/tam.c
-index 939c974dfb2d79767cdd617905442f756d26be18..68c4f0029672e25cf7f118972035672379adb290 100644
+index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf8f01300f 100644
 --- a/src/c47/ui/tam.c
 +++ b/src/c47/ui/tam.c
 @@ -2,6 +2,12 @@
@@ -319,7 +319,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..68c4f0029672e25cf7f1189720356723
 +     * Placed at the very top on purpose: no TAM state has been written yet,
 +     * so the refusal needs no teardown — and a teardown here would have to
 +     * undo FLAG_ALPHA and the AIM GUI the live capture still needs. */
-+    if(calcMode != CM_NIM && forthCapIsOpen() && forthCapIsInteractive()
++    if(calcMode != CM_NIM && forthCapInteractiveLive()
 +       && !forthHistoryEnsure()) {
 +      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
 +      return;

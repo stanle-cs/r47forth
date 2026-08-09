@@ -174,7 +174,11 @@ void     forthHistoryEvict(void);
  * (-1 for up/older, +1 for down/newer) and copies the resulting FHIST line
  * (or clears to empty, "past the newest") into aimBuffer.  Read-only: does
  * not create or modify FHIST.  Called from keyboard.c's CHR_caseUP/
- * CHR_caseDN arms, guarded on forthCapIsInteractive(). */
+ * CHR_caseDN arms, guarded on forthCapInteractiveLive() — round 6's F6 fix
+ * moved them off forthCapIsInteractive() so recall is refused while the
+ * capture is SUSPENDED and TAM owns aimBuffer.  (AUDIT round 8, C-6: this
+ * sentence still named the old predicate, which is false data for the next
+ * reader enumerating the Live sites.) */
 void     forthHistoryRecall(int16_t delta);
 
 /* L1-H: the raw browse-index field — forthHistoryRecall's own state, plus

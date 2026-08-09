@@ -456,6 +456,16 @@ pin 2 "c47Extensions/keyboardTweak.c forthCapInteractiveLive guards" \
 pin 5 "upstream files consuming isAlphabeticSoftmenu/isAlphaSubmenu" \
     bash -c "grep -rl 'isAlphabeticSoftmenu\|isAlphaSubmenu' '${UPSTREAM}' --include=*.c | wc -l"
 
+# C-6 (round 8): forthCapInteractiveLive IS "origin INTERACTIVE and state
+# OPEN". Three production sites hand-rolled that conjunction, which is
+# bit-identical today and forks the day the predicate's definition moves or
+# one copy is edited alone. No render, route or gate site may spell it out
+# longhand — that is the header's contract. The test battery may and does:
+# a fixture's REACHED check asserts the two facts SEPARATELY, on purpose, so
+# its failure message says which one was wrong. Hence production only.
+pin 0 "longhand IsInteractive/IsOpen conjunctions in production sources" \
+    bash -c "grep -rn 'forthCapIsInteractive() *&& *forthCapIsOpen()\|forthCapIsOpen() *&& *forthCapIsInteractive()\|!forthCapIsInteractive() *|| *!forthCapIsOpen()\|!forthCapIsOpen() *|| *!forthCapIsInteractive()' '${PKG}' --include=*.c --include=*.h | grep -v '/files/' | grep -v '/test_' | wc -l"
+
 if [[ -n "${i_out}" ]]; then
   printf '%s' "${i_out}" | sed 's/^/  /'
   flag "an enumerated-site count moved — check every new site against the rule the pin encodes, then re-accept the count in the same commit"

@@ -56,6 +56,28 @@ enumerable. A contract that is correct but that every caller gets wrong —
 which is a defect of the contract, not of the callers. A guard whose conjuncts
 cannot all be falsified.
 
+**Standing lenses.** These are findings by definition wherever they appear,
+in any dimension — each is a class the audit has already paid for:
+
+- **A teardown that bypasses the wrapper.** `leaveTamModeIfEnabled` is the
+  ONE public TAM teardown (D7-1, approved 2026-08-08): it ends the session
+  and settles the fold bracket in one act, which is what makes the F2/F4
+  strand class impossible by construction. Any NEW direct caller of
+  `_tamLeave`, or any teardown path that reaches TAM's exit without going
+  through the wrapper, is a finding. The one direction the construction
+  CANNOT defend, so look for it specifically: a future upstream merge that
+  adds an in-file `leaveTamModeIfEnabled(); <dispatch>` pair inside
+  `_tamProcessInput`'s call tree. It references the public name, so it
+  merges with no conflict, and it fires the unwind BEFORE its dispatch
+  inserts its step — the exact L1-F2 rev-2 typed-line loss D7-1 exists to
+  close, with the gate green because no fixture drives the new site.
+
+- **An enumeration with no count behind it.** A fix, comment or design that
+  lists call sites, arms or consumers — "the eleven sites", "both
+  consumers", "every caller" — and is not backed by a grep whose count is
+  pinned in `design-audit.sh` group I. Round 7's dominant class (D7-a): a
+  hand list stands in for a counted one, and it comes back short.
+
 For each finding you must supply, or the finding does not count:
 
 1. **Where** — `file:line`.

@@ -1509,7 +1509,7 @@ void forthInteractiveEnter(void) {
    * point that knows a capture is still open, and it runs on every path out
    * of a committed line.  Only for the interactive origin — a PEM capture
    * lives on a program step, not on this surface. */
-  if (forthCapIsOpen() && forthCapIsInteractive()) {
+  if (forthCapInteractiveLive()) {            /* C-6: the named predicate */
     if (calcMode != CM_AIM) {
       calcMode = CM_AIM;
       setSystemFlag(FLAG_ALPHA);

@@ -540,7 +540,9 @@ static void _forthConsoleAcquireRow(int16_t want) {
 void forthConsoleShowSurface(void) {
   int16_t want, cur, m;
 
-  if(!forthCapIsInteractive() || !forthCapIsOpen()) { return; }
+  /* AUDIT round 8 (C-6): through the named predicate, not a longhand copy
+   * of its definition — see the contract in forth_capture.h. */
+  if(!forthCapInteractiveLive()) { return; }
 
   want = forthCapKeysMode() ? -MNU_FORTH : -MNU_ALPHA;
   cur  = currentMenu();
@@ -624,7 +626,7 @@ void forthConsoleShowSurface(void) {
  * re-established, through the acquisition rules — never by adopting whatever
  * the pop revealed, which is the C17 half of the same class. */
 void forthConsoleRestoreSurface(void) {
-  if(!forthCapIsInteractive() || !forthCapIsOpen()) { return; }
+  if(!forthCapInteractiveLive()) { return; }   /* C-6: the named predicate */
 
   if(forthConsoleStampOnStack()) {
     forthConsoleShowSurface();                 /* alive somewhere: the

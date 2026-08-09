@@ -17424,9 +17424,25 @@ static int test_fold_round6_window(void)
      * the raw teardown was a real door.) */
     tam.mode = 0;
     clearSystemFlag(FLAG_ALPHA);
-    if (tam.mode != 0 || !forthCapIsSuspended()) {
-      printf("    [7] FIXTURE BUG: residue not reached (tam.mode=%d susp=%d)\n",
-             (int)tam.mode, (int)forthCapIsSuspended());
+    /* AUDIT round 8 (C-7): this guard used to lead with `tam.mode != 0`,
+     * two lines after `tam.mode = 0` — a disjunct that could not be true on
+     * any tree, fixed or broken (mutation-proved: replacing it with
+     * constant 0 left the gate green with identical output), while the
+     * printed message claimed the guard verified TAM teardown.
+     *
+     * The rule it broke: a guard may only read state the fixture did not
+     * just write.  Every disjunct below is established by the real gesture
+     * above — runFunction(ITM_STO) arms the fold, suspends the capture and
+     * leaves the origin interactive — so each one falsifies if that
+     * machinery breaks.  The two facts the priming DID write are not
+     * re-read; what is asserted instead is their consequence, which the
+     * subject of the subcase depends on: the residue is not LIVE. */
+    if (!forthCapIsSuspended() || !forthFoldArmed()
+        || !forthCapIsInteractive() || forthCapInteractiveLive()) {
+      printf("    [7] FIXTURE BUG: residue not reached (susp=%d armed=%d"
+             " interactive=%d live=%d)\n",
+             (int)forthCapIsSuspended(), (int)forthFoldArmed(),
+             (int)forthCapIsInteractive(), (int)forthCapInteractiveLive());
       scFail = 1;
     }
     else {

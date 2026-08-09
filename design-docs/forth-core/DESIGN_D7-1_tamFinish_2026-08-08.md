@@ -1,5 +1,32 @@
 # D7-1 — closing the TAM teardown owner set: `tamFinish`
 
+> **AMENDMENT, 2026-08-08 (AUDIT round 8, finding C-4).** Everywhere this
+> document says the internal population is **eleven** sites, the number is
+> **28**, and it was wrong when the document was drafted — not overtaken by
+> events. Four of the eleven line numbers listed in §"What the wave left
+> standing" (913, 980, 996, 1130) match no `_tamLeave` site in any relevant
+> revision. The implementation swapped all 28, and round 7 proved
+> independently, five times over, that swapping all 28 was REQUIRED: the 17
+> left on the wrapper would each have been an L1-F2 rev-2
+> unwind-before-dispatch site. So the landed code is right and this
+> document's approval basis was not; the paragraphs below are corrected in
+> place, with the count and the command that produces it.
+>
+> ```bash
+> grep -c '_tamLeave();' packages/forth-core/ui/tam.c        # 28
+> ```
+>
+> 26 sites in `_tamProcessInput`, 2 in `_tamHandleShuffle`; sole callers
+> `_tamProcessInput:263` and `tamProcessInput:1503`, so every one is
+> dominated by the epilogue's `forthFoldUnwindIfDone()`.
+>
+> The cost of leaving this uncorrected was paid inside the audit that found
+> it: round 7's own tasking inherited "the approved design said eleven" and
+> forced both verifiers to re-derive the dominance proof from scratch. The
+> class is the project's own — *a human list of call sites not backed by a
+> build-time count is a comment, and it comes back short* — which is why
+> the count now lives in `design-audit.sh` group I, not only here.
+
 Design for owner review, 2026-08-08. No code. Sol's round-6 verdict
 (self-contained packet, GPT-5.6) is the starting point: *the fold bracket
 cannot be correct by construction while teardown and fold-finalisation have
@@ -13,9 +40,12 @@ and nothing but review catches it.
 
 Two populations of teardown call sites, with different constraints:
 
-1. **Internal** — the eleven `ui/tam.c` leave-then-dispatch sites inside
-   `_tamProcessInput`'s call tree (ui/tam.c:303, 494, 508, 520, 536, 572,
-   913, 934, 980, 996, 1130). Their resume MUST stay deferred to the
+1. **Internal** — the [AMENDED: 28, not eleven] `ui/tam.c`
+   leave-then-dispatch sites inside `_tamProcessInput`'s call tree (26 in
+   `_tamProcessInput`, 2 in `_tamHandleShuffle`; `grep -c '_tamLeave();'`
+   is the enumeration, and four of the line numbers this paragraph
+   originally listed — 913, 980, 996, 1130 — matched no site at all).
+   Their resume MUST stay deferred to the
    `tamProcessInput` epilogue: the L1-F2 rev-2 failure is on record —
    unwinding at the leave site fires before the dispatch inserts its step,
    the splice sees n == 0, and the line is lost. These sites are already
@@ -56,7 +86,7 @@ Three moves, ALL confined to the existing `ui/tam.c` patch:
     * Name and signature are upstream's, so every upstream caller —
     * including the six files the package does not override — inherits the
     * unwind through the override, with no header patch and no new
-    * overrides.  The eleven leave-then-dispatch sites in THIS file call
+    * overrides.  The 28 leave-then-dispatch sites in THIS file call
     * _tamLeave() directly: their resume must stay deferred to the
     * tamProcessInput epilogue (the L1-F2 rev-2 loss is the record). */
    void leaveTamModeIfEnabled(void) {
@@ -64,7 +94,7 @@ Three moves, ALL confined to the existing `ui/tam.c` patch:
      forthFoldUnwindIfDone();
    }
    ```
-3. **The eleven internal sites and the epilogue swap to `_tamLeave()`** —
+3. **The 28 internal sites and the epilogue swap to `_tamLeave()`** —
    mechanical, same file. The epilogue keeps its own
    `forthFoldUnwindIfDone()` after `_tamProcessInput` returns, unchanged.
 
@@ -92,8 +122,8 @@ override set.*
 
 Sol's fullest shape — one terminal transition also owning the **dispatch**
 (commit as a parameter/thunk, raw leave unreachable even inside tam.c) —
-would fold the eleven internal sites into the same construction. The cost
-sits exactly there: eleven call sites re-sequenced around a C-style
+would fold the 28 internal sites into the same construction. The cost
+sits exactly there: 28 call sites re-sequenced around a C-style
 deferred-dispatch parameter, in the most re-entrancy-sensitive file in the
 package, to defend against a class (an internal site that dispatches after
 leave but outside the epilogue's reach) that has never produced a finding.
@@ -114,25 +144,47 @@ buys the by-construction property where the bugs actually were.
 - `PROMPT_CODE_AUDIT.md`'s D1 lens gains one line: any NEW direct caller
   of `_tamLeave`, or any teardown path that bypasses the wrapper, is a
   finding by definition.
+  **LANDED 2026-08-08 (AUDIT round 8, C-5)** — as a *standing lens*, which
+  every dimension reads rather than D1 alone, and carrying the
+  future-upstream direction named in Risks below. It was dropped from the
+  implementation commit and appeared on none of the three owed-items lists:
+  neither done nor deferred, which is how a promised enforcement becomes an
+  invariant that lives only in reviewer memory.
 
 ## Risks
 
 - **Relocation risk is the project's most dangerous fix shape** — but
   nothing here relocates state: the same two calls run in the same order
   at the same sites. The diff is one rename inside ui/tam.c, a three-line
-  wrapper, eleven same-file swaps, and ten deletions of now-redundant
-  unwind calls.
+  wrapper, 28 same-file swaps, and thirteen deletions of now-redundant
+  unwind calls (the draft said ten; the landed commit deleted thirteen).
 - **The six un-overridden upstream callers change behaviour**: their
   teardown now settles a pending fold. That is the point — but each is a
   path no fixture has driven, so the round-7 census above must precede or
   accompany the landing, and the class test asserts the wrapper's unwind
   fires (mutation: revert the wrapper to `_tamLeave` alone → the F2/F4
   reproducers go red again).
+- **The one direction no construction can defend** (added 2026-08-08,
+  AUDIT round 8, finding C-5 — this was missing from the approved design,
+  and it is the only way the by-construction guarantee fails): a future
+  upstream merge that adds an in-file `leaveTamModeIfEnabled(); <dispatch>`
+  pair inside `_tamProcessInput`'s call tree. It references the PUBLIC
+  name, so it merges cleanly with no patch conflict; it links the wrapper,
+  so its unwind fires BEFORE the dispatch inserts its step; and that is the
+  L1-F2 rev-2 typed-line loss this design exists to close — with the gate
+  green, because no fixture drives a site that did not exist when the
+  fixtures were written. Nothing in the code can catch it: correctness
+  inside this file depends on the epilogue owning the unwind, and the
+  wrapper is indistinguishable from the correct call at the merge. The
+  guard is therefore a review rule, and it now lives where reviewers
+  actually read it — `PROMPT_CODE_AUDIT.md`'s standing lenses, landed
+  2026-08-08 (it was promised by this document's "Enforcement and tests"
+  section and never written; that gap IS C-5).
 - The PC_BUILD `forceTamAlpha` re-entrancy hazard (documented dead in the
   bracket comment) is unchanged by this design.
 - `fnKeyExit`'s TAM branch calls leave then unwind with PEM scroll logic
   between them; its explicit unwind becomes redundant under the wrapper
-  and is removed with the other ten.
+  and is removed with the other twelve.
 
 ## Sequencing
 
@@ -140,6 +192,6 @@ New code resets the audit clock, so this lands AFTER round 7 has read the
 round-6 fix wave — as its own small commit, with the round-7 upstream
 caller census (above) preceding or accompanying it. Implementation is
 within the local implementer's range (a mechanical packet: the rename,
-the three-line wrapper, eleven same-file swaps, eleven redundant-unwind
+the three-line wrapper, 28 same-file swaps, thirteen redundant-unwind
 deletions, gate green, class tests unchanged, the wrapper-revert mutation
 red), with the packet citing this document.

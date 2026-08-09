@@ -1202,7 +1202,7 @@ printf("tam.value: %d\n", tam.value);
      * Placed at the very top on purpose: no TAM state has been written yet,
      * so the refusal needs no teardown — and a teardown here would have to
      * undo FLAG_ALPHA and the AIM GUI the live capture still needs. */
-    if(calcMode != CM_NIM && forthCapIsOpen() && forthCapIsInteractive()
+    if(calcMode != CM_NIM && forthCapInteractiveLive()
        && !forthHistoryEnsure()) {
       displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
       return;

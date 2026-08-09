@@ -97,6 +97,27 @@ def lint(path):
                   "one that was dropped). Include each, or state in Orientation "
                   "why the reader does not need its body.")
 
+    # Round 7's D7-a: "enumeration without a count check" was the round's
+    # dominant class, and it hit the audit process itself — the round's own
+    # tasking inherited an approved design's "eleven" for a population of 28,
+    # and both verifiers had to re-derive the truth from scratch. A packet
+    # that counts sites is making a claim, and a claim gets its command.
+    prose_only = re.sub(r'```.*?```', ' ', text, flags=re.S)
+    counted = re.findall(
+        r'\b(both|one|two|three|four|five|six|seven|eight|nine|ten|eleven|'
+        r'twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|'
+        r'twenty|\d{1,3})\s+'
+        r'(?:[\w-]+\s+){0,3}?'
+        r'(call sites?|sites?|callers?|consumers?|arms?|writers?|places?)\b',
+        prose_only, flags=re.I)
+    if counted and not re.search(r'grep\s+-[a-zA-Z]*c|grep -c', text):
+        shown = ', '.join(f"{n} {w}" for n, w in counted[:5])
+        print(f"  [JUDGE] enumeration with no count command: {shown}")
+        print("          A packet that says how many sites there are must carry "
+              "the grep that produces the number, so the reader can check it "
+              "instead of trusting it. The approved D7-1 design said eleven "
+              "where the tree had 28, and the audit paid for it twice.")
+
     if not re.search(r'^##\s+Orientation', text, flags=re.M):
         print("  [JUDGE] no Orientation section: shared-structure facts, what "
               "ESTABLISHES each state, and every package override the excerpt "
