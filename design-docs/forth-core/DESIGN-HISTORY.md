@@ -3667,3 +3667,208 @@ review does not "fix" it back into an enumeration.
 **Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
 CUSTOM_PKG_RECONFIGURE=1`: recorded in the P6 commit. Arena untouched —
 nothing here changes the dictionary.
+
+---
+
+## 2026-08-09 — CONSOLIDATE P10: the narrative moved out of the patches
+
+**Wave.** The last packet of `SPEC_consolidation-wave_2026-08-09.md`. P6-P9
+had already relocated the largest comment masses into package files, where
+comments cost nothing. What remained in `patches/` is sorted here under the
+owner-approved rule:
+
+- **Constraint comments stay inline** — anything a reader needs in order not
+  to break the line below: the "LIVE, not origin" notes, load-bearing
+  conjunct notes, refusal rationales, mechanism explanations.
+- **Narrative moves** — which round found it, what was there before, how the
+  refutation went, cross-references to superseded revisions. Inline keeps a
+  one-line pointer to this entry.
+
+Ten blocks moved; every other block of six lines or more was classified STAY.
+The classification table is in the P10 commit message. The narratives follow
+verbatim, so nothing is lost — each is the text that stood in the override
+until this commit.
+
+### keyboardTweak.c — why the override exists, the two-call census (round 8 C-2 + OOF-1)
+
+```
+AUDIT round 8 (C-2 + OOF-1) — why forth-core overrides this file.
+
+openHOMEorMyM is reached from two gestures a console user makes with no
+intent to touch the menu at all: the f/g long-press ladder (screen.c's
+Shft_timeouts arm) and the triple-f detector below.  Two of its calls
+DESTROY softmenu frames rather than stacking over them, and both of them
+can destroy the frame a live interactive Forth capture owns:
+
+  1. the FLAG_ALPHA branch's popSoftmenu(), gated on
+     isAlphabeticSoftmenu() — which Stage L widened to count -MNU_FORTH.
+     Round 6's F7 fix re-enumerated that predicate's consumers in the
+     PACKAGE tree and guarded screen.c's copy of this shape; this file
+     is the upstream copy, and a package grep is not an upstream census.
+  2. the normal-mode MyM.3 arm's fnExitAllMenus(0), which pops the whole
+     stack.  No predicate is involved, so a census of consumer 1 misses
+     it entirely — that is why the census unit here is "the calls in
+     this function that destroy a frame", not "the consumers of that
+     predicate".
+
+Both guards are evaluated AT THE CALL, never snapshotted at entry.  The
+non-alpha branch reaches (2) only from a mid-TAM suspension, and its own
+leaveTamModeIfEnabled() — the D7-1 wrapper — settles the fold, resumes
+the capture and re-registers the console's row before the wipe: the
+guard has to be true in the state the wrapper itself creates.
+
+Pushes are left alone deliberately: showSoftmenu over the console's row
+buries it and EXIT gets it back (the round-5 benign-overlay ruling).
+_executeItem in the USER-mode arm is out of scope — it runs the item the
+owner assigned to that long-press, which is the gesture doing what it
+was asked.  Counts pinned in design-audit.sh group I.
+```
+
+### keyboardTweak.c / screen.c — why the guard asks base-on-top, not live (round 8 OOF)
+
+```
+The forthConsoleBaseOnTop() half is round 8's out-of-family
+finding against the first version of this guard: "the console
+is live" is not the same question as "the frame this pop
+would destroy is the console's".  Push any other alphabetic
+row OVER the console — which this function's own MyM.3 arm
+does, and which is ruled benign — and the live-only guard
+made the gesture that dismisses that row do nothing at all,
+leaving the overlay stuck.  forthConsoleBaseOnTop answers the
+narrow question, including the buried case.
+```
+
+### screen.c — what the Shft_handler juggling did to the console row (round 6 F7)
+
+```
+interactive capture is open (forth_menu.h) — this juggling
+popped the registered FWRD frame (isAlphabeticSoftmenu is
+isAlphaSubmenu(0), widened to -MNU_FORTH in Stage L, and
+this consumer was never re-enumerated) and covered the
+surface with a raw ALPHA push: the row then read ALPHA
+while the keypad stayed on the keys plane, with the stamp
+destroyed.
+```
+
+### items.c — the bounded alpha drain the one-owner retarget replaced (AUDIT C2)
+
+```
+What was here was a bounded drain that popped every alpha row
+INCLUDING FWRD, because isAlphaSubmenu() counts -MNU_FORTH.  That
+was right in Stage K, when FWRD was a picker stacked over an alpha
+capture and "leave nothing alpha standing" was the rule.  N-R6 made
+FWRD the console's HOME row, and the drain then deleted the row the
+console had just pushed — after which EXIT's close rung, still
+believing the console owned a frame, popped the OWNER'S frame in
+its place.  The drain's popSoftmenu-compensation workaround goes
+with it: retargeting slot 0 never enters that loop.
+```
+
+### manage.c — the persisted C17 stamp, in full (round 3)
+
+```
+AUDIT round 3 — the C17 frame stamp MUST be cleared here, and it is
+deliberately ABOVE the gate below.
+
+Frame ownership rides softmenuStack[].userMenuId, and softmenuStack is
+persisted WHOLESALE as a hex dump (saveRestoreBackup.c:293/:986).  So a
+backup taken with the console open carries the stamps into the file, and
+the restore writes them back into the live stack — at :986, which is
+AFTER the dict-lifecycle seam at :975-976 whose forthCapPowerReset() ->
+forthCapClose() -> forthConsoleUnstampAll() was supposed to clear them.
+The unstamp is silently overwritten moments later, exactly as a
+FLAG_ALPHA clear attempted in that seam would be (the F6-6 finding, and
+the reason THIS function exists).
+
+The consequence is not cosmetic: a stale stamp with no capture open makes
+the next console open's forthConsoleRegisterSlot0() a no-op (it declines
+when a stamp already exists), so that session registers nothing and its
+EXIT reads ownership off a frame belonging to a capture that ended before
+the restore.
+
+This is the defect the old homePushed bit did NOT have — it was capture
+state, explicitly never persisted.  Moving ownership into the frame
+(which is right, and is what C17 needed) moved it into a PERSISTED
+structure, and this is the seam that pays for that.
+
+Unconditional, and above the early return: a restore always lands with
+the capture CLOSED (forthCap.state is process-local), so no live stamp
+can exist here to protect, and the gate below is CM_PEM-only — the
+interactive origin would never reach it.  Found by four of seven
+independent readers in round 3.
+```
+
+### screen.c — C14, from two hand-fitted literals to upstream's arithmetic
+
+```
+AUDIT C14, closed 2026-08-08 under the standing rule (follow upstream's
+convention where one exists): this used to `return (yMultiLineEdOffset
+== 3) ? 128 : 67;` — two literals hand-fitted to upstream's layout,
+with the derivation living only in a comment.  Upstream names its
+vertical geometry (Y_POSITION_OF_*_LINE, defines.h:1518-1521), so the
+numbers are now COMPUTED from those names by upstream's own arithmetic:
+
+  short line (yMultiLineEdOffset == 3) — showStringEdC47's wrapped-line
+    reposition at :1685-1688 does NOT run, because its guard is
+    `lastline > yMultiLineEdOffset` and lastline is multiEdLines == 2.
+    So the editor draws at the y its CALLER passes, screen.c:3886:
+    `Y_POSITION_OF_NIM_LINE - 3 - checkHPoffset`.
+  long line — the reposition DOES run and overrides y with
+    `(yincr-1) + yMultiLineEdOffset * (yincr-1)` (:1687).
+
+One behaviour change comes with the derivation, and it is a fix:
+checkHPoffset (screen.c:385) lifts the editor by 50 px in the HP-style
+layout, and the old literal 128 did not follow it — the band would have
+overlapped the editor there.  Reading upstream's expression instead of
+copying its result makes the band track it for free.
+```
+
+### keyboard.c — the L1-2 KEEP disposition L1-3 superseded at the FCNS arm
+
+```
+L1-2 (C2) disposition was KEEP here ("it sits outside the
+EXIT ladder's scope") because nothing yet gave catalog picks
+interactive-specific handling.  L1-3 (C5) supersedes that:
+catalog picks now divert through runFunction's interactive
+arm (C1) instead of executing, so closing/committing the
+```
+
+### keyboard.c — why the FHIST recall gesture had to be re-homed (N1-5)
+
+```
+L1-H put recall on CHR_caseUP/CHR_caseDN, which live in the AIM
+f-column — reachable only while the capture is in ALPHA input.
+That was a footnote while keys mode was an excursion.  Keys-first
+makes it the ground state, and in keys mode determineItem takes the
+NORMAL columns (:1842), where f-up/f-down are ITM_BST/ITM_SST —
+so without this arm the console would open with its own history
+unreachable, and the flip would silently cost a landed feature.
+```
+
+### ui/tam.c — the SUSPENDED-with-no-fold state, driven (round 8 P-2)
+
+```
+The seam below suspends a live interactive capture UNCONDITIONALLY,
+one line after forthFoldEnter — which returns having done nothing if
+FHIST cannot be created ("no program, no fold").  That produced a
+state nothing downstream understands: SUSPENDED with no fold pending.
+With the fault-injection hook the record's rulings could finally be
+settled by execution, and BOTH consequences are real:
+
+  - the capture is never resumed.  The resume owners are keyed on the
+    fold — forthFoldUnwindIfDone returns on !forthFoldPending(), and
+    _tamLeave's tail wants CM_PEM or a pending fold — so the console
+    stayed suspended and the typed line was gone.
+  - mid-TAM keys resolve as LETTERS.  With no fold pending the F8
+    conjunct at keyboard.c:1789 stops excluding the CM_AIM column;
+    driven, the digit-5 key returned ITM_U.
+```
+
+### ui/tam.c — what the un-re-derived fold did on GTO . . (round 6 F1)
+
+```
+would have produced.  Left armed, the second `.` ran GTOP live
+inside the bracket, moved currentProgramNumber off FHIST, and
+the resume splice subtracted two different programs' step
+counts — the GTO . . SIGSEGV.
+```

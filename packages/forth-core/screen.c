@@ -914,13 +914,11 @@ void execTimerApp(uint16_t timerType) {
               setCurrentUserMenu(item, funcParam);
               if(shiftF) {
                 /* AUDIT round 6 (F7): the console OWNS its row while a live
-                 * interactive capture is open (forth_menu.h) — this juggling
-                 * popped the registered FWRD frame (isAlphabeticSoftmenu is
-                 * isAlphaSubmenu(0), widened to -MNU_FORTH in Stage L, and
-                 * this consumer was never re-enumerated) and covered the
-                 * surface with a raw ALPHA push: the row then read ALPHA
-                 * while the keypad stayed on the keys plane, with the stamp
-                 * destroyed.  The console's own ALPHA gesture is the
+                 * interactive capture is open (forth_menu.h), so this
+                 * juggling leaves it alone.  What it did before, and why the
+                 * predicate's consumers had to be re-enumerated:
+                 * DESIGN-HISTORY 2026-08-09 (P10, the F7 juggling).
+                 * The console's own ALPHA gesture is the
                  * keys-mode toggle; the long-press leaves its row alone.
                  * tam.alpha still gets its TAMALPHA row: during TAM the
                  * capture is SUSPENDED, so the guard does not fire. */
@@ -5688,12 +5686,8 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
    * (the C14 duplicated-constant class).  DERIVED from yMultiLineEdOffset,
    * never re-measured from the string; see the comment in the renderer.
    *
-   * AUDIT C14, closed 2026-08-08 under the standing rule (follow upstream's
-   * convention where one exists): this used to `return (yMultiLineEdOffset
-   * == 3) ? 128 : 67;` — two literals hand-fitted to upstream's layout,
-   * with the derivation living only in a comment.  Upstream names its
-   * vertical geometry (Y_POSITION_OF_*_LINE, defines.h:1518-1521), so the
-   * numbers are now COMPUTED from those names by upstream's own arithmetic:
+   * AUDIT C14 (closed 2026-08-08): the numbers are COMPUTED from upstream's
+   * own names by upstream's own arithmetic, never hand-fitted:
    *
    *   short line (yMultiLineEdOffset == 3) — showStringEdC47's wrapped-line
    *     reposition at :1685-1688 does NOT run, because its guard is
@@ -5703,11 +5697,10 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
    *   long line — the reposition DOES run and overrides y with
    *     `(yincr-1) + yMultiLineEdOffset * (yincr-1)` (:1687).
    *
-   * One behaviour change comes with the derivation, and it is a fix:
-   * checkHPoffset (screen.c:385) lifts the editor by 50 px in the HP-style
-   * layout, and the old literal 128 did not follow it — the band would have
-   * overlapped the editor there.  Reading upstream's expression instead of
-   * copying its result makes the band track it for free. */
+   * checkHPoffset is read, not ignored: the HP-style layout lifts the editor
+   * by 50 px and the band has to follow.  What the two literals were before
+   * the derivation, and the behaviour change that came with it:
+   * DESIGN-HISTORY 2026-08-09 (P10, C14's derivation). */
   /* Non-static since CONSOLIDATE P7: the rest of the console view moved to
    * forth_console_view.c and calls this through forth_console.h. */
   uint16_t _forthConsoleEditorTop(void) {

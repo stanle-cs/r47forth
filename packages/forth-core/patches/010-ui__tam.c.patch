@@ -1,5 +1,5 @@
 diff --git a/src/c47/ui/tam.c b/src/c47/ui/tam.c
-index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf8f01300f 100644
+index 939c974dfb2d79767cdd617905442f756d26be18..9de462576f4ce85d02d06673ac1d565ca6878958 100644
 --- a/src/c47/ui/tam.c
 +++ b/src/c47/ui/tam.c
 @@ -2,6 +2,12 @@
@@ -170,7 +170,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
          hourGlassIconEnabled = false;
          return;
        }
-@@ -798,6 +812,18 @@ printf("tam.value: %d\n", tam.value);
+@@ -798,6 +812,16 @@ printf("tam.value: %d\n", tam.value);
            tam.function = ITM_GTOP;
            tam.min = 0;
            tam.max = max(getNumberOfSteps(), 99);
@@ -179,17 +179,15 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
 +           * it because it navigates the program pointer.  This promotion
 +           * happens AFTER admission, so re-derive the decision: an armed
 +           * fold downgrades to PARK, exactly what keying GTOP at entry
-+           * would have produced.  Left armed, the second `.` ran GTOP live
-+           * inside the bracket, moved currentProgramNumber off FHIST, and
-+           * the resume splice subtracted two different programs' step
-+           * counts — the GTO . . SIGSEGV.
++           * would have produced.  (Left armed, this crashed: DESIGN-HISTORY
++           * 2026-08-09, P10, the GTO . . SIGSEGV.)
 +           * AUDIT round 8 (C-1): through the shared re-derivation, so this
 +           * site and the BACKSPACE demotion below cannot drift apart. */
 +          forthFoldRederiveAdmission(tam.function, tam.mode);
          }
          else if(tam.indirect && (currentNumberOfLocalRegisters || calcMode == CM_PEM)) {
            tam.dot = true;
-@@ -908,28 +934,28 @@ printf("tam.value: %d\n", tam.value);
+@@ -908,28 +932,28 @@ printf("tam.value: %d\n", tam.value);
              }
              default: {
                if(tam.mode == TM_MENU) {                        // Leave TAM menu before opening a new menu
@@ -223,7 +221,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
            reallyRunFunction(tamOperation(), value);
          }
        }
-@@ -975,7 +1001,7 @@ printf("tam.value: %d\n", tam.value);
+@@ -975,7 +999,7 @@ printf("tam.value: %d\n", tam.value);
              for(int i = 0; i < LAST_ITEM; ++i) {
                // Match strictness: CMP_NAME strict (exact spelling & space), CMP_COMMAND relax (exact spelling, any space), CMP_CLEANED_STRING_ONLY loose (rank1 equiv., beware not tested)
                if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(buffer, indexOfItems[i].itemCatalogName, CMP_COMMAND) == 0) {
@@ -232,7 +230,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
                  if(calcMode == CM_PEM) {
                    aimBuffer[0] = 0;
                    if(!programListEnd) {
-@@ -986,9 +1012,19 @@ printf("tam.value: %d\n", tam.value);
+@@ -986,9 +1010,19 @@ printf("tam.value: %d\n", tam.value);
                  return;
                }
              }
@@ -253,7 +251,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
              if(!tam.indirect) {
                #if defined(OPTION_IR_PRINTING)
                  sprintf(errorMessage, "'%s'", buffer);
-@@ -1026,7 +1062,7 @@ printf("tam.value: %d\n", tam.value);
+@@ -1026,7 +1060,7 @@ printf("tam.value: %d\n", tam.value);
          }
          else if(calcMode != CM_PEM) {
            reallyRunFunction(tamOperation(), value);
@@ -262,7 +260,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
            return;
          }
        }
-@@ -1115,7 +1151,7 @@ printf("tam.value: %d\n", tam.value);
+@@ -1115,7 +1149,7 @@ printf("tam.value: %d\n", tam.value);
          }
          else if(tam.mode == TM_MENU) {
            if(value != INVALID_MENU) {
@@ -271,7 +269,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
              reallyRunFunction(tamOperation(), value);
            }
          }
-@@ -1124,11 +1160,11 @@ printf("tam.value: %d\n", tam.value);
+@@ -1124,11 +1158,11 @@ printf("tam.value: %d\n", tam.value);
          }
        }
        if(tamOperation() == ITM_M_GOTO_ROW) {
@@ -285,7 +283,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
        }
      }
    }
-@@ -1136,6 +1172,42 @@ printf("tam.value: %d\n", tam.value);
+@@ -1136,6 +1170,35 @@ printf("tam.value: %d\n", tam.value);
  
  
    void tamEnterMode(int16_t func) {
@@ -294,18 +292,11 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
 +     *
 +     * The seam below suspends a live interactive capture UNCONDITIONALLY,
 +     * one line after forthFoldEnter — which returns having done nothing if
-+     * FHIST cannot be created ("no program, no fold").  That produced a
-+     * state nothing downstream understands: SUSPENDED with no fold pending.
-+     * With the fault-injection hook the record's rulings could finally be
-+     * settled by execution, and BOTH consequences are real:
-+     *
-+     *   - the capture is never resumed.  The resume owners are keyed on the
-+     *     fold — forthFoldUnwindIfDone returns on !forthFoldPending(), and
-+     *     _tamLeave's tail wants CM_PEM or a pending fold — so the console
-+     *     stayed suspended and the typed line was gone.
-+     *   - mid-TAM keys resolve as LETTERS.  With no fold pending the F8
-+     *     conjunct at keyboard.c:1789 stops excluding the CM_AIM column;
-+     *     driven, the digit-5 key returned ITM_U.
++     * FHIST cannot be created ("no program, no fold").  That produced a state
++     * nothing downstream understands: SUSPENDED with no fold pending, whose
++     * two consequences (the capture never resumed, and mid-TAM keys resolving
++     * as letters) were settled by execution in round 8 — DESIGN-HISTORY
++     * 2026-08-09 (P10, the P-2 refusal).
 +     *
 +     * Guarding those two sites would be two patches against a state that
 +     * should not exist.  This is the construction instead: the capture step
@@ -328,7 +319,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
      tam.mode = func == ITM_ASSIGN ? TM_LABEL : func == ITM_USERMODE ? TM_NEWMENU : indexOfItems[func].param; // TM_LABEL should be fine and TM_LBLONLY not needed here
      func = func == ITM_USERMODE ? ITM_ASSIGN : func;
      tam.function = func;
-@@ -1165,6 +1237,22 @@ printf("tam.value: %d\n", tam.value);
+@@ -1165,6 +1228,22 @@ printf("tam.value: %d\n", tam.value);
          closeNim();
        }
      }
@@ -351,7 +342,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
      else if(calcMode == CM_PEM && aimBuffer[0] != 0) {
        if(getSystemFlag(FLAG_ALPHA)) {
          pemCloseAlphaInput();
-@@ -1345,7 +1433,14 @@ printf("tam.value: %d\n", tam.value);
+@@ -1345,7 +1424,14 @@ printf("tam.value: %d\n", tam.value);
  
  
  
@@ -367,7 +358,7 @@ index 939c974dfb2d79767cdd617905442f756d26be18..04b952cb76a0b0bc43f99ac8435b48cf
      if(!tam.mode) {
        return;
      }
-@@ -1388,14 +1483,80 @@ printf("tam.value: %d\n", tam.value);
+@@ -1388,14 +1474,80 @@ printf("tam.value: %d\n", tam.value);
        }
      #endif // PC_BUILD
  

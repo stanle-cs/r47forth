@@ -1359,14 +1359,11 @@ endReturnTrue:
             }
             if(calcMode == CM_AIM && !forthCapIsInteractive()
                && !(isAlphabeticSoftmenu() || isJMAlphaOnlySoftmenu() || item == ITM_KEYMAP)) {
-              /* L1-2 (C2) disposition was KEEP here ("it sits outside the
-               * EXIT ladder's scope") because nothing yet gave catalog picks
-               * interactive-specific handling.  L1-3 (C5) supersedes that:
-               * catalog picks now divert through runFunction's interactive
-               * arm (C1) instead of executing, so closing/committing the
-               * capture here first would be wrong — picking any function
-               * from FCNS during an interactive capture must insert the
-               * name as text and leave the capture OPEN (C6.4).  Hence the
+              /* L1-3 (C5): picking any function from FCNS during an
+               * interactive capture must insert the name as text and leave
+               * the capture OPEN (C6.4) — closing or committing here would be
+               * wrong.  (The superseded L1-2 disposition: DESIGN-HISTORY
+               * 2026-08-09, P10.)  Hence the
                * !forthCapIsInteractive() conjunct above, which is what keeps
                * this site out of closeAim() — and so out of the L1-1 close
                * funnel now living inside it (CONSOLIDATE P6) — for an
@@ -1875,13 +1872,10 @@ endReturnTrue:
       else if(shiftF) {
         /* N1-5 (N-T4): RE-HOME the FHIST recall gesture.
          *
-         * L1-H put recall on CHR_caseUP/CHR_caseDN, which live in the AIM
-         * f-column — reachable only while the capture is in ALPHA input.
-         * That was a footnote while keys mode was an excursion.  Keys-first
-         * makes it the ground state, and in keys mode determineItem takes the
-         * NORMAL columns (:1842), where f-up/f-down are ITM_BST/ITM_SST —
-         * so without this arm the console would open with its own history
-         * unreachable, and the flip would silently cost a landed feature.
+         * In keys mode determineItem takes the NORMAL columns (:1842), where
+         * f-up/f-down are ITM_BST/ITM_SST, so without this arm the console
+         * would open with its own history unreachable.  Why recall started in
+         * the AIM f-column: DESIGN-HISTORY 2026-08-09 (P10, N1-5).
          *
          * Resolving to CHR_caseUP/CHR_caseDN in BOTH modes is idempotent in
          * alpha input (the AIM plane already yields exactly these) and is the

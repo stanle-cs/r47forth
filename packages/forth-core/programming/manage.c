@@ -834,34 +834,21 @@ void forthPkgCloseAlphaMenus(void) {
 
 void forthCaptureSanitizeRestoredUi(void) {
   /* AUDIT round 3 — the C17 frame stamp MUST be cleared here, and it is
-   * deliberately ABOVE the gate below.
+   * deliberately ABOVE the gate below, and unconditional.
    *
    * Frame ownership rides softmenuStack[].userMenuId, and softmenuStack is
-   * persisted WHOLESALE as a hex dump (saveRestoreBackup.c:293/:986).  So a
-   * backup taken with the console open carries the stamps into the file, and
-   * the restore writes them back into the live stack — at :986, which is
-   * AFTER the dict-lifecycle seam at :975-976 whose forthCapPowerReset() ->
-   * forthCapClose() -> forthConsoleUnstampAll() was supposed to clear them.
-   * The unstamp is silently overwritten moments later, exactly as a
-   * FLAG_ALPHA clear attempted in that seam would be (the F6-6 finding, and
-   * the reason THIS function exists).
+   * persisted WHOLESALE as a hex dump (saveRestoreBackup.c:293/:986) — the
+   * restore writes the stamps back AFTER the dict-lifecycle seam whose
+   * forthConsoleUnstampAll() was supposed to clear them, so the unstamp is
+   * silently overwritten.  A stale stamp with no capture open makes the next
+   * console open's forthConsoleRegisterSlot0() a no-op, and that session's
+   * EXIT then reads ownership off a dead capture's frame.
    *
-   * The consequence is not cosmetic: a stale stamp with no capture open makes
-   * the next console open's forthConsoleRegisterSlot0() a no-op (it declines
-   * when a stamp already exists), so that session registers nothing and its
-   * EXIT reads ownership off a frame belonging to a capture that ended before
-   * the restore.
-   *
-   * This is the defect the old homePushed bit did NOT have — it was capture
-   * state, explicitly never persisted.  Moving ownership into the frame
-   * (which is right, and is what C17 needed) moved it into a PERSISTED
-   * structure, and this is the seam that pays for that.
-   *
-   * Unconditional, and above the early return: a restore always lands with
-   * the capture CLOSED (forthCap.state is process-local), so no live stamp
-   * can exist here to protect, and the gate below is CM_PEM-only — the
-   * interactive origin would never reach it.  Found by four of seven
-   * independent readers in round 3. */
+   * A restore always lands with the capture CLOSED (forthCap.state is
+   * process-local), so no live stamp can exist here to protect, and the gate
+   * below is CM_PEM-only.  Full trace, and why moving ownership into a
+   * persisted structure is what this seam pays for: DESIGN-HISTORY
+   * 2026-08-09 (P10, the round-3 stamp seam). */
   forthConsoleUnstampAll();
 
   /* forthCap.state is process-local and is reset before restoreCalc()

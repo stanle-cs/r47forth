@@ -817,10 +817,8 @@ printf("tam.value: %d\n", tam.value);
            * it because it navigates the program pointer.  This promotion
            * happens AFTER admission, so re-derive the decision: an armed
            * fold downgrades to PARK, exactly what keying GTOP at entry
-           * would have produced.  Left armed, the second `.` ran GTOP live
-           * inside the bracket, moved currentProgramNumber off FHIST, and
-           * the resume splice subtracted two different programs' step
-           * counts — the GTO . . SIGSEGV.
+           * would have produced.  (Left armed, this crashed: DESIGN-HISTORY
+           * 2026-08-09, P10, the GTO . . SIGSEGV.)
            * AUDIT round 8 (C-1): through the shared re-derivation, so this
            * site and the BACKSPACE demotion below cannot drift apart. */
           forthFoldRederiveAdmission(tam.function, tam.mode);
@@ -1177,18 +1175,11 @@ printf("tam.value: %d\n", tam.value);
      *
      * The seam below suspends a live interactive capture UNCONDITIONALLY,
      * one line after forthFoldEnter — which returns having done nothing if
-     * FHIST cannot be created ("no program, no fold").  That produced a
-     * state nothing downstream understands: SUSPENDED with no fold pending.
-     * With the fault-injection hook the record's rulings could finally be
-     * settled by execution, and BOTH consequences are real:
-     *
-     *   - the capture is never resumed.  The resume owners are keyed on the
-     *     fold — forthFoldUnwindIfDone returns on !forthFoldPending(), and
-     *     _tamLeave's tail wants CM_PEM or a pending fold — so the console
-     *     stayed suspended and the typed line was gone.
-     *   - mid-TAM keys resolve as LETTERS.  With no fold pending the F8
-     *     conjunct at keyboard.c:1789 stops excluding the CM_AIM column;
-     *     driven, the digit-5 key returned ITM_U.
+     * FHIST cannot be created ("no program, no fold").  That produced a state
+     * nothing downstream understands: SUSPENDED with no fold pending, whose
+     * two consequences (the capture never resumed, and mid-TAM keys resolving
+     * as letters) were settled by execution in round 8 — DESIGN-HISTORY
+     * 2026-08-09 (P10, the P-2 refusal).
      *
      * Guarding those two sites would be two patches against a state that
      * should not exist.  This is the construction instead: the capture step

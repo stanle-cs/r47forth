@@ -752,15 +752,9 @@ bool_t isFunctionOldParam16(uint16_t func) {
           /* AUDIT C2 (2026-08-06): the sub-mode changes, and ONE owner
            * establishes the console's row for it (forth_menu.c).
            *
-           * What was here was a bounded drain that popped every alpha row
-           * INCLUDING FWRD, because isAlphaSubmenu() counts -MNU_FORTH.  That
-           * was right in Stage K, when FWRD was a picker stacked over an alpha
-           * capture and "leave nothing alpha standing" was the rule.  N-R6 made
-           * FWRD the console's HOME row, and the drain then deleted the row the
-           * console had just pushed — after which EXIT's close rung, still
-           * believing the console owned a frame, popped the OWNER'S frame in
-           * its place.  The drain's popSoftmenu-compensation workaround goes
-           * with it: retargeting slot 0 never enters that loop.
+           * The bounded alpha drain this replaced, and why it deleted the
+           * row the console had just pushed: DESIGN-HISTORY 2026-08-09 (P10,
+           * the C2 drain).
            *
            * AUDIT C18: the flip is REFUSED while a user-stacked row covers the
            * console's base.  The row IS the mode indicator (K-R3), and this

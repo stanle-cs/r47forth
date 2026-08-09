@@ -30,21 +30,21 @@
     "010-assign.c.patch": "96daff3451fac361def3d0fa34213dbb4893cee98cb45c5bcbfb9d2520688d5a",
     "010-bufferize.c.patch": "62b76976c087c663ba435a29e7b1ac86494781b6d0f6898ed0faba20c6a372ef",
     "010-c47Extensions__addons.c.patch": "bbe667fa75d8b397eb446b465bc8f72ebd3887f6c66adb8c06715e45c7213cda",
-    "010-c47Extensions__keyboardTweak.c.patch": "e083e22f90bb12ab77c8c2cace344b585317540bd6f8110bbf64f649b579bb8d",
+    "010-c47Extensions__keyboardTweak.c.patch": "436c56ddb1bcf6e51994fe03abd7ab662655e41fd13714627129d3263b36073d",
     "010-config.c.patch": "36e52569c26b333d901e86c290d4b12bdea005c155b5030a99fd4370d5b3c3aa",
     "010-core__freeList.c.patch": "3dd5dcceff47d9ad2e6efa0f5e3864e79dc44de580ddf104ecdbb975cc97e6ca",
     "010-defines.h.patch": "604dc402261b8ae7041dbb38836595f984c0648129fa4f294179c63ce8b13f05",
-    "010-items.c.patch": "811aee2a7316df30a5e189f418fb4d1a60c79b1b7fcf06b1045490346763bb1f",
+    "010-items.c.patch": "214ab1db37c8d5dad3d3676537050bd33dc79c09b077abb75aeae45624e34f25",
     "010-items.h.patch": "f8eef506e25ebf8538d5889f9c87bc12cd6e815d5cafbcbae9a07ebe7cde6cfb",
-    "010-keyboard.c.patch": "e1c47dff04390f310db1effadfd627774f2bad849091197790378b7401c8c5e3",
+    "010-keyboard.c.patch": "f7d4d3656a87fbf2ba5756ff72443162a2de8e9a0f82a8d62daa8451fb98c5e8",
     "010-programming__decode.c.patch": "a1bc419ca7a940d6fe6774f68db1c4ddab0d6b46387167c53fc27568f91b764e",
     "010-programming__lblGtoXeq.c.patch": "74e708a47b8b6cbc445b021a97f81fa450cdfe36dfd318b184a9ff2bce021261",
-    "010-programming__manage.c.patch": "8e93f29f0f8bb12f91c1fb43dae6d4539acca5a92951fad38d074a8e5b2cd368",
+    "010-programming__manage.c.patch": "0eae8e3214340fbf9a5e2fcdd3abf95939c165e908f0eae9f55a91b160a71c31",
     "010-saveRestoreBackup.c.patch": "131b341a18bdb3e4302458818677063eb702ea825dfb71add29d9d3401ccb894",
-    "010-screen.c.patch": "e2eca47381d2f2465f8da8d0ed601dbf008f5e767b7510f3a257eba97ccc89f1",
+    "010-screen.c.patch": "17154480c142eba6300e9fea4d99324f151621f832e044df737bb9201d2892ae",
     "010-softmenus.c.patch": "5b6c24dd8363107391741f9c22eb721e8bad1f123908471e9adb7ebd9f2e031e",
     "010-testSuite__testSuite.c.patch": "203d66016d80265da9753f7d99e2e62e58759c43a483c1da193b264979d5ef66",
     "010-testSuite__tests__testSuiteList.txt.patch": "6bd0d491f159e721e1478b8e715ff00d7bdd1105c1fb5dbff786ea5e864ca93f",
-    "010-ui__tam.c.patch": "0c6caf6155bb7f59cb46ac0197edb3d009d75e95f5205c8ff18e3a6606dfece5"
+    "010-ui__tam.c.patch": "47a37249391321f2806b4b09c16ca9ffb7ec0426faf6ac02dc1f8aa54216ba90"
   }
 }

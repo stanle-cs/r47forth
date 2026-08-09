@@ -12,33 +12,13 @@
 /* AUDIT round 8 (C-2 + OOF-1) — why forth-core overrides this file.
  *
  * openHOMEorMyM is reached from two gestures a console user makes with no
- * intent to touch the menu at all: the f/g long-press ladder (screen.c's
- * Shft_timeouts arm) and the triple-f detector below.  Two of its calls
- * DESTROY softmenu frames rather than stacking over them, and both of them
- * can destroy the frame a live interactive Forth capture owns:
- *
- *   1. the FLAG_ALPHA branch's popSoftmenu(), gated on
- *      isAlphabeticSoftmenu() — which Stage L widened to count -MNU_FORTH.
- *      Round 6's F7 fix re-enumerated that predicate's consumers in the
- *      PACKAGE tree and guarded screen.c's copy of this shape; this file
- *      is the upstream copy, and a package grep is not an upstream census.
- *   2. the normal-mode MyM.3 arm's fnExitAllMenus(0), which pops the whole
- *      stack.  No predicate is involved, so a census of consumer 1 misses
- *      it entirely — that is why the census unit here is "the calls in
- *      this function that destroy a frame", not "the consumers of that
- *      predicate".
- *
- * Both guards are evaluated AT THE CALL, never snapshotted at entry.  The
- * non-alpha branch reaches (2) only from a mid-TAM suspension, and its own
- * leaveTamModeIfEnabled() — the D7-1 wrapper — settles the fold, resumes
- * the capture and re-registers the console's row before the wipe: the
- * guard has to be true in the state the wrapper itself creates.
- *
- * Pushes are left alone deliberately: showSoftmenu over the console's row
- * buries it and EXIT gets it back (the round-5 benign-overlay ruling).
- * _executeItem in the USER-mode arm is out of scope — it runs the item the
- * owner assigned to that long-press, which is the gesture doing what it
- * was asked.  Counts pinned in design-audit.sh group I. */
+ * intent to touch the menu at all, and two of its calls DESTROY softmenu
+ * frames rather than stacking over them — either of which can destroy the
+ * frame a live interactive Forth capture owns.  Both guards below are
+ * evaluated AT THE CALL, never snapshotted at entry.  The census of the two
+ * calls, the disposition of the pushes and of _executeItem, and how the
+ * census unit was arrived at: DESIGN-HISTORY 2026-08-09 (P10, keyboardTweak.c
+ * census).  Counts pinned in design-audit.sh group I. */
 
 void fnSHIFTf(uint16_t unusedButMandatoryParameter) {
   shiftF = true;
@@ -224,15 +204,10 @@ void resetKeytimers(void) {
              * tam.alpha still gets its TAMALPHA row below in the ordinary
              * case: during TAM the capture is SUSPENDED, not live.
              *
-             * The forthConsoleBaseOnTop() half is round 8's out-of-family
-             * finding against the first version of this guard: "the console
-             * is live" is not the same question as "the frame this pop
-             * would destroy is the console's".  Push any other alphabetic
-             * row OVER the console — which this function's own MyM.3 arm
-             * does, and which is ruled benign — and the live-only guard
-             * made the gesture that dismisses that row do nothing at all,
-             * leaving the overlay stuck.  forthConsoleBaseOnTop answers the
-             * narrow question, including the buried case. */
+             * forthConsoleBaseOnTop, not the live predicate alone: the
+             * question is whether the frame this pop would destroy is the
+             * console's — DESIGN-HISTORY 2026-08-09 (P10, the base-on-top
+             * refutation). */
           }
           else {
           if((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu()) {
