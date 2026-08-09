@@ -17608,6 +17608,7 @@ static int test_fold_round8_window(void)
   extern void runFunction(int16_t);
   extern void tamProcessInput(uint16_t);
   extern void forthInteractiveEnter(void);
+  extern int16_t determineItem(const char *);
 
   int fail = 0, scFail;
   testProg_t p;
@@ -17991,7 +17992,105 @@ static int test_fold_round8_window(void)
                       " row its own wrapper restored\n");
   fail |= scFail;
 
+  /* ---- [5] P-2 and the whole foldMode-0 family (owner ruling 2026-08-08:
+   * buy the fault-injection hook).
+   *
+   * forthFoldEnter's "no program, no fold" arm fires when
+   * forthHistoryEnsure() returns false — and tamEnterMode's seam suspends
+   * the capture ANYWAY, one line later.  That leaves a state nothing else
+   * produces: origin INTERACTIVE, capture SUSPENDED, tam.mode != 0, fold
+   * NOT pending.  Three rounds raised findings inside it (K-N §6a R1,
+   * round 5 (b), round 7 R-1 and P-2) and every one was decided on whether
+   * the premise was constructible, never on what the state actually does,
+   * because nothing could reach it.  With the hook it is reachable, so the
+   * arm is executed rather than argued.
+   *
+   * P-2's specific claim: with the fold NOT pending, the F8 conjunct at
+   * keyboard.c:1789 no longer excludes the CM_AIM column, so mid-TAM keys
+   * resolve as letters instead of reaching the TAM handler.  The oracle
+   * below is determineItem's own output for a digit key. ---- */
+  scFail = 0;
   R8_RESET();
+  {
+    char kb[4];
+    int16_t got;
+    uint8_t stateAfter;
+
+    /* kbd_std_C47[24] is the digit-5 key (keyID 63): primaryTam ITM_5,
+     * primaryAim ITM_U — so the answer names which column won. */
+    xcopy(kb, "24", 3);
+    showSoftmenu(-MNU_STK);
+    fnForthOuter(NOPARAM);
+    xcopy(aimBuffer, "1 2", 4); T_cursorPos = 3;
+    if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+      printf("    [5] FIXTURE BUG: no live interactive capture to refuse from\n");
+      scFail = 1;
+    }
+    else {
+      forthHistoryEnsureFailInjected = true;
+      runFunction(ITM_STO);                   /* TM_STORCL, admitted — but the
+                                                 fold cannot materialise */
+      stateAfter = forthTestCapState();
+
+      /* The class assertion: the state "SUSPENDED with no fold pending"
+       * must not exist.  Both of the family's executed defects — the never
+       * resumed capture and the letter-column misroute — are properties of
+       * that state, so the contract is that the operation is refused. */
+      if (forthCapIsSuspended() && !forthFoldPending()) {
+        printf("    [5] FAIL (P-2 family): a suspension with no fold pending"
+               " (state=%d tam.mode=%d) — the resume owners are keyed on the"
+               " fold, so this capture is never resumed and its line is lost\n",
+               (int)stateAfter, (int)tam.mode);
+        scFail = 1;
+      }
+      if (tam.mode != 0) {
+        printf("    [5] FAIL: TAM started anyway with no room for the fold"
+               " (tam.mode=%d)\n", (int)tam.mode);
+        scFail = 1;
+      }
+      if (lastErrorCode != ERROR_RAM_FULL) {
+        printf("    [5] FAIL: the refusal was silent (lastErrorCode=%u,"
+               " expected ERROR_RAM_FULL=%d) — losing the operation without"
+               " saying so is the failure mode the fold exists to avoid\n",
+               lastErrorCode, (int)ERROR_RAM_FULL);
+        scFail = 1;
+      }
+      if (!forthCapIsOpen()) {
+        printf("    [5] FAIL: the refusal closed the capture (state=%d) — the"
+               " line must survive an operation that never started\n",
+               (int)stateAfter);
+        scFail = 1;
+      }
+      else if (compareString(aimBuffer, "1 2", CMP_BINARY) != 0) {
+        printf("    [5] FAIL: the refusal lost the typed line (aim=\"%s\","
+               " expected \"1 2\")\n", aimBuffer);
+        scFail = 1;
+      }
+
+      /* P-2's own oracle, now asked of the refused state: the console is
+       * live, so the digit key belongs to the console — never to the AIM
+       * letter column (ITM_U on this key).  Driven, in the pre-fix
+       * suspension, this returned ITM_U. */
+      lastErrorCode = ERROR_NONE;
+      got = determineItem(kb);
+      if (got == ITM_U) {
+        printf("    [5] FAIL (P-2): the digit key resolved to the AIM letter"
+               " column (ITM_U) with the console live\n");
+        scFail = 1;
+      }
+      forthHistoryEnsureFailInjected = false;
+    }
+    forthHistoryEnsureFailInjected = false;
+    lastErrorCode = ERROR_NONE;
+  }
+  if (!scFail) printf("    [5] PASS (P-2 family): with no room for the fold the"
+                      " operation is refused loudly, the line survives, and the"
+                      " fold-less suspension is never built\n");
+  fail |= scFail;
+
+  R8_RESET();
+  forthHistoryEnsureFailInjected = false;     /* belt and braces: no injected
+                                                 fault outlives this fixture */
   #undef R8_RESET
   #undef R8_PROG_STEPS
   #undef R8_LONGPRESS_F

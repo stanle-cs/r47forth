@@ -1755,7 +1755,30 @@ static uint32_t _forthHistProgramBytes(uint16_t program) {
  * increment is triggered by the PRECEDING program's END gaining a
  * non-.END. successor, not by FHIST's own trailing END — settled by the
  * C5.1 test, see its comment for the observed result. */
+#if defined(FORTH_DEBUG_SELFTEST)
+/* AUDIT round 8 (P-2, owner ruling 2026-08-08): the ONE seam that lets a
+ * fixture reach the "no program, no fold" family.
+ *
+ * Three audit rounds raised findings whose entire chain hangs on this
+ * function returning false (K-N §6a R1, round 5 (b), round 7 R-1 and
+ * P-2), and every one was ruled on the premise rather than settled by
+ * evidence, because there is no way in: _insertInProgram has no failure
+ * return, and every failure mode inside faults before it could return
+ * false.  The record calls that a dead premise; it is also an untestable
+ * one, so the defensive foldMode-0 arm it guards has never once been
+ * executed by the battery.  The owner ruled to buy the coverage.
+ *
+ * Selftest builds only, and set only by the fixture that owns the family
+ * (test_fold_foldmode0_family) — which restores it in every exit path. */
+bool_t forthHistoryEnsureFailInjected = false;
+#endif
+
 bool_t forthHistoryEnsure(void) {
+#if defined(FORTH_DEBUG_SELFTEST)
+  if(forthHistoryEnsureFailInjected) {
+    return false;
+  }
+#endif
   if(forthHistoryProgram() != 0) {
     return true;
   }

@@ -2875,3 +2875,116 @@ static int test_console_roll_view_clamp(void)
   if (!fail) printf("    PASS (C12): the view clamps the roll at count-rows, both directions\n");
   return fail;
 }
+
+/* ---- C-3 (AUDIT round 8; owner ruling: the clamp moves to render time).
+ * C12 put the bound on the ROLL, and the roll is the only writer — but rows
+ * is FRAME-VARIABLE: the editor's long-line state halves the band from 4
+ * rows to 2.  So a view clamped legally at count-2 while the line is long
+ * becomes illegal the moment BACKSPACE shortens the line back, with no roll
+ * key pressed and nothing to re-clamp it.  The renderer's only guard is
+ * `view >= count -> continue`, so the top rows painted NOTHING: the blank
+ * band C12 was fixed to remove, back through a door the fix does not watch.
+ *
+ * The class is "write-time clamp against a frame-variable bound", and the
+ * class test is both rows transitions: reach the old state's legal maximum,
+ * cross the boundary by editing, render, and assert the invariant the
+ * renderer now enforces — view <= count - rows, so the band is full
+ * whenever there are lines enough to fill it. ---- */
+static int test_console_render_view_clamp(void)
+{
+  extern void forthConsoleRollView(int16_t);
+  extern void _forthConsoleRender(void);
+  extern uint16_t forthConsoleViewRows(void);
+  int fail = 0;
+  int i;
+  uint8_t savedY = yMultiLineEdOffset;
+  int16_t savedTempInfo = temporaryInformation;
+
+  N13_RESET();
+  forthCapOpenInteractive();
+  calcMode = CM_AIM;
+  temporaryInformation = TI_NO_INFO;
+  for (i = 0; i < 6; i++) {
+    char l[8];
+    sprintf(l, "L%d", i);
+    forthConsoleAppendLine(l);
+  }
+
+  /* [a] long -> short (rows 2 -> 4): the reported direction. */
+  yMultiLineEdOffset = 1;                /* long-line state: 2 rows */
+  if (forthConsoleViewRows() != 2) {
+    printf("    FIXTURE BUG (C-3): long-line state is %u rows, expected 2\n",
+           forthConsoleViewRows());
+    fail = 1;
+  }
+  else {
+    for (i = 0; i < 10; i++) { forthConsoleRollView(+1); }
+    if (forthConsoleViewOffset() != 4) {
+      printf("    FIXTURE BUG (C-3): view %u after clamping at count-rows,"
+             " expected 4 (count 6 - rows 2)\n", forthConsoleViewOffset());
+      fail = 1;
+    }
+    else {
+      yMultiLineEdOffset = 3;            /* the edit: short-line state, 4 rows */
+      /* REACHED: the offset is now ILLEGAL for this frame — without this the
+       * assertion below would pass on a tree that never reached the state. */
+      if (forthConsoleViewOffset() <= (uint16_t)(6 - forthConsoleViewRows())) {
+        printf("    FIXTURE BUG (C-3): crossing the boundary did not strand the"
+               " view (offset %u, rows %u)\n",
+               forthConsoleViewOffset(), forthConsoleViewRows());
+        fail = 1;
+      }
+      else {
+        _forthConsoleRender();
+        if (forthConsoleViewOffset() > (uint16_t)(6 - forthConsoleViewRows())) {
+          printf("    FAIL (C-3): the render left the view past count-rows"
+                 " (offset %u, count 6, rows %u) — the top %u band rows paint"
+                 " blank though lines exist to fill them\n",
+                 forthConsoleViewOffset(), forthConsoleViewRows(),
+                 (unsigned)(forthConsoleViewOffset()
+                            - (uint16_t)(6 - forthConsoleViewRows())));
+          fail = 1;
+        }
+      }
+    }
+  }
+
+  /* [b] short -> long (rows 4 -> 2): the other direction of the same
+   * transition.  It cannot strand the view — the bound only grows — so the
+   * assertion is that the render leaves a legal offset ALONE.  A clamp that
+   * fired here would silently move the user's scroll position on a repaint. */
+  N13_RESET();
+  forthCapOpenInteractive();
+  calcMode = CM_AIM;
+  temporaryInformation = TI_NO_INFO;
+  for (i = 0; i < 6; i++) {
+    char l[8];
+    sprintf(l, "L%d", i);
+    forthConsoleAppendLine(l);
+  }
+  yMultiLineEdOffset = 3;                /* short-line state: 4 rows */
+  for (i = 0; i < 10; i++) { forthConsoleRollView(+1); }
+  if (forthConsoleViewOffset() != 2) {
+    printf("    FIXTURE BUG (C-3b): view %u, expected 2 (count 6 - rows 4)\n",
+           forthConsoleViewOffset());
+    fail = 1;
+  }
+  else {
+    yMultiLineEdOffset = 1;              /* the edit: long-line state, 2 rows */
+    _forthConsoleRender();
+    if (forthConsoleViewOffset() != 2) {
+      printf("    FAIL (C-3b): the render moved a legal view offset (2 -> %u)"
+             " — the clamp must only ever pull an out-of-range offset back\n",
+             forthConsoleViewOffset());
+      fail = 1;
+    }
+  }
+
+  yMultiLineEdOffset = savedY;
+  temporaryInformation = savedTempInfo;
+  N13_RESET();
+  forthConsoleClear();
+  if (!fail) printf("    PASS (C-3): the render clamps a stranded view and leaves a"
+                    " legal one alone, both rows transitions\n");
+  return fail;
+}

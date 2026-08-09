@@ -1138,6 +1138,7 @@ static int test_fold_round6_window(void);                      /* AUDIT round 6 
 static int test_fold_round8_window(void);                      /* AUDIT round 8 */
 static int test_console_error_recovery_keys(void);             /* R12 ruling */
 static int test_console_roll_view_clamp(void);                 /* C12 ruling */
+static int test_console_render_view_clamp(void);               /* AUDIT round 8 C-3 */
 static int test_fold_seams(void);                              /* L1-F2 */
 static int test_fold_operand_parity(void);                     /* L1-F3 */
 static int test_fold_close_paths(void);                        /* L1-F3 */
@@ -2603,6 +2604,8 @@ int forthDictSelfTest(void)
   fail |= test_console_error_recovery_keys();
   printf("  [DEBUG] running test_console_roll_view_clamp...\n");
   fail |= test_console_roll_view_clamp();
+  printf("  [DEBUG] running test_console_render_view_clamp...\n");
+  fail |= test_console_render_view_clamp();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

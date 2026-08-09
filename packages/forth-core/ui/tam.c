@@ -1172,6 +1172,42 @@ printf("tam.value: %d\n", tam.value);
 
 
   void tamEnterMode(int16_t func) {
+    /* AUDIT round 8 (P-2 and its family, owner ruling 2026-08-08): refuse
+     * the operation rather than build a suspension the machine cannot hold.
+     *
+     * The seam below suspends a live interactive capture UNCONDITIONALLY,
+     * one line after forthFoldEnter — which returns having done nothing if
+     * FHIST cannot be created ("no program, no fold").  That produced a
+     * state nothing downstream understands: SUSPENDED with no fold pending.
+     * With the fault-injection hook the record's rulings could finally be
+     * settled by execution, and BOTH consequences are real:
+     *
+     *   - the capture is never resumed.  The resume owners are keyed on the
+     *     fold — forthFoldUnwindIfDone returns on !forthFoldPending(), and
+     *     _tamLeave's tail wants CM_PEM or a pending fold — so the console
+     *     stayed suspended and the typed line was gone.
+     *   - mid-TAM keys resolve as LETTERS.  With no fold pending the F8
+     *     conjunct at keyboard.c:1789 stops excluding the CM_AIM column;
+     *     driven, the digit-5 key returned ITM_U.
+     *
+     * Guarding those two sites would be two patches against a state that
+     * should not exist.  This is the construction instead: the capture step
+     * has nowhere to live without FHIST, so the operation does not start.
+     * The line survives and the owner is told, which is the trade the fold's
+     * own admission rule (C2: never refuse the key, never lose the line)
+     * makes when the machine cannot honour both.  forthHistoryEnsure is
+     * idempotent, so on every ordinary path this is the call forthFoldEnter
+     * would have made a moment later, and nothing changes.
+     *
+     * Placed at the very top on purpose: no TAM state has been written yet,
+     * so the refusal needs no teardown — and a teardown here would have to
+     * undo FLAG_ALPHA and the AIM GUI the live capture still needs. */
+    if(calcMode != CM_NIM && forthCapIsOpen() && forthCapIsInteractive()
+       && !forthHistoryEnsure()) {
+      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
+      return;
+    }
+
     tam.mode = func == ITM_ASSIGN ? TM_LABEL : func == ITM_USERMODE ? TM_NEWMENU : indexOfItems[func].param; // TM_LABEL should be fine and TM_LBLONLY not needed here
     func = func == ITM_USERMODE ? ITM_ASSIGN : func;
     tam.function = func;

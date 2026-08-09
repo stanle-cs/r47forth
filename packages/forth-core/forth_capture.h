@@ -152,6 +152,13 @@ uint16_t forthHistoryProgram(void);
  * Idempotent: returns true immediately if FHIST already exists. */
 bool_t   forthHistoryEnsure(void);
 
+#if defined(FORTH_DEBUG_SELFTEST)
+/* AUDIT round 8 (P-2, owner ruling): forces the "creation failed" return so
+ * a fixture can execute the foldMode-0 family.  Selftest builds only; see
+ * the banner at the definition in programming/manage.c. */
+extern bool_t forthHistoryEnsureFailInjected;
+#endif
+
 /* Parks currentStep on FHIST's own END step (i.e. immediately before it),
  * ready for an _insertInProgram-style append as FHIST's newest line.
  * Returns false if FHIST does not exist.  L1-F1 (the fold) calls this too,

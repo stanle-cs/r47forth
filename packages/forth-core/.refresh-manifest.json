@@ -3,7 +3,7 @@
   "files": {
     "forth_bridge.c": "e525f940ce07d428f640e6a3047910adce485fbe39eedab1af1cb48ebb635c45",
     "forth_capture.c": "a71af14e53834b3f2d1afc1481d954683db659bc5e771539f1895c3b5a00c9c2",
-    "forth_capture.h": "8877637ece70b1d37e27259f879e8136d5b8043a37216d4df28f4d2f63aaf224",
+    "forth_capture.h": "f85d5213576a7528a90fcf4ee827a3e08022a88f186da04314870cc8436c1112",
     "forth_compile.c": "5159bf4ff1643276d45d8a769c17460bec5f20328e1d34c9a6c26e62bd57578b",
     "forth_console.c": "1b87109d75c2ffbb0d3dcaab5dea2661e6dd89e3670f5a25849299bda2207431",
     "forth_console.h": "540e0535a534010f3fe474cf3c97d29be1c2186cf3ca1d4f5e5599e795588be0",
@@ -17,9 +17,9 @@
     "programming/param_core.c": "1b4c4f5c2afd072c4e5a9d56e2ed2a4b355851758979ce3f08bfef1c853c9ea9",
     "programming/param_core.h": "ff4c3dec1227ced41df291faa66572894042302eb9fe86ce3f8c12e45d463d31",
     "testSuite/tests/forth_interp.txt": "a22bc642cb5d3002cb0ff2683bb09bfb2fd26e765c935588412fa69404e679ef",
-    "test_capture.part.h": "32704322eb35804be891d01ddcb334d5a8babbea2683daf4c185e808c82d9376",
-    "test_console.part.h": "a1bf0e58d48865e151d89f73040710989e2caef546ed3d7deb5d329d1ee0da71",
-    "test_dict_reloc.c": "5b3ebfa5d9ada23368b6bfebc76109a769ec0308b5e6ccc709c8731523de3232",
+    "test_capture.part.h": "511d123636386119e5892ec5bf8e6eb21a73490df518bfb5f22659458296eb5e",
+    "test_console.part.h": "e1d8d71f5eb2b54b4ab5a8bb85f1b27d2bc8a3a06ae0a615988368b7de3c3d57",
+    "test_dict_reloc.c": "c8a24ed9323b6f3a21f1b3063db37316aab87efd633ece0cc2c3a295150d5d3a",
     "test_engine.part.h": "081e18051a3d680ba69a7e957a5beb5ff14fca5b9814f172aa851bf099a3b968",
     "test_params.part.h": "e687ca459d1a6d345ef80ac7531c68d2393fa5de5e1b88c4c6846d10ccfc26f3",
     "test_persist.part.h": "7842b4c841a777178f0f14d81bc36b16501d932993cb965eb845e3a13487ac6e"
@@ -36,12 +36,12 @@
     "010-keyboard.c.patch": "ff676d612498335f8cb3d7af00f53687c5039b42a42bc27177191c981a375307",
     "010-programming__decode.c.patch": "a1bc419ca7a940d6fe6774f68db1c4ddab0d6b46387167c53fc27568f91b764e",
     "010-programming__lblGtoXeq.c.patch": "74e708a47b8b6cbc445b021a97f81fa450cdfe36dfd318b184a9ff2bce021261",
-    "010-programming__manage.c.patch": "0270e1a7da31834cd85f8541edf1f33818a8a6a421be36391810f26543aa380c",
+    "010-programming__manage.c.patch": "1009dc48b55431c2e488a9e06cc53ca6138192ded7e6d53786b613ade2d6418d",
     "010-saveRestoreBackup.c.patch": "131b341a18bdb3e4302458818677063eb702ea825dfb71add29d9d3401ccb894",
-    "010-screen.c.patch": "69dc617b6d1fa9cfcd01e7769a69a04fa87e5751d1701dcbc98a9e6b433de703",
+    "010-screen.c.patch": "f33d5c550d9a36df92838ed7595ad9a3ebb13c4fa18bb6032a9b55d48d2854f4",
     "010-softmenus.c.patch": "0e2bb1aecbecba36749a170edf7357a3402b84f064172500943a03b80655970e",
     "010-testSuite__testSuite.c.patch": "203d66016d80265da9753f7d99e2e62e58759c43a483c1da193b264979d5ef66",
     "010-testSuite__tests__testSuiteList.txt.patch": "6bd0d491f159e721e1478b8e715ff00d7bdd1105c1fb5dbff786ea5e864ca93f",
-    "010-ui__tam.c.patch": "45685c53730705df8a7b8a9e1bf4b46a00f3f22061859a4a9d1e929b9ee83ee8"
+    "010-ui__tam.c.patch": "712667b91805fc42840808e3d8c59dd6cd85e8074e11f333e16f6e6abdecff3b"
   }
 }

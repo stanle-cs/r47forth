@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..48fcb7aaa561a18816bfcda32428c90606838ee0 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..5364266300b05f910072e8626c4a2c9d0f3c09de 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,10 @@
@@ -328,7 +328,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..48fcb7aaa561a18816bfcda32428c906
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,6 +1185,1004 @@ void pemCloseAlphaInput(void) {
+@@ -998,6 +1185,1027 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -902,7 +902,30 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..48fcb7aaa561a18816bfcda32428c906
 + * increment is triggered by the PRECEDING program's END gaining a
 + * non-.END. successor, not by FHIST's own trailing END — settled by the
 + * C5.1 test, see its comment for the observed result. */
++#if defined(FORTH_DEBUG_SELFTEST)
++/* AUDIT round 8 (P-2, owner ruling 2026-08-08): the ONE seam that lets a
++ * fixture reach the "no program, no fold" family.
++ *
++ * Three audit rounds raised findings whose entire chain hangs on this
++ * function returning false (K-N §6a R1, round 5 (b), round 7 R-1 and
++ * P-2), and every one was ruled on the premise rather than settled by
++ * evidence, because there is no way in: _insertInProgram has no failure
++ * return, and every failure mode inside faults before it could return
++ * false.  The record calls that a dead premise; it is also an untestable
++ * one, so the defensive foldMode-0 arm it guards has never once been
++ * executed by the battery.  The owner ruled to buy the coverage.
++ *
++ * Selftest builds only, and set only by the fixture that owns the family
++ * (test_fold_foldmode0_family) — which restores it in every exit path. */
++bool_t forthHistoryEnsureFailInjected = false;
++#endif
++
 +bool_t forthHistoryEnsure(void) {
++#if defined(FORTH_DEBUG_SELFTEST)
++  if(forthHistoryEnsureFailInjected) {
++    return false;
++  }
++#endif
 +  if(forthHistoryProgram() != 0) {
 +    return true;
 +  }
@@ -1333,7 +1356,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..48fcb7aaa561a18816bfcda32428c906
  }
  
  
-@@ -1013,7 +2198,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +2221,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -1342,7 +1365,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..48fcb7aaa561a18816bfcda32428c906
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +2570,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +2593,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -1386,7 +1409,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..48fcb7aaa561a18816bfcda32428c906
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +2617,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +2640,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -1423,7 +1446,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..48fcb7aaa561a18816bfcda32428c906
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +2666,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +2689,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -1491,7 +1514,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..48fcb7aaa561a18816bfcda32428c906
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +2738,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +2761,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -1507,7 +1530,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..48fcb7aaa561a18816bfcda32428c906
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +2829,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +2852,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -1531,7 +1554,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..48fcb7aaa561a18816bfcda32428c906
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +3141,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +3164,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

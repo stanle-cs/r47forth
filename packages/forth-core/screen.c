@@ -5733,19 +5733,44 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
     return (uint16_t)((editorTop - Y_POSITION_OF_REGISTER_T_LINE) / FORTH_CONSOLE_ROW_PITCH);
   }
 
+  /* C12's bound, in one place: the largest view offset that still fills the
+   * band.  AUDIT round 8 (C-3) extracted it because the roll is no longer
+   * its only enforcer — see _forthConsoleClampView. */
+  static uint16_t _forthConsoleMaxView(uint16_t rows, uint16_t count) {
+    return (count > rows) ? (uint16_t)(count - rows) : 0;
+  }
+
+  /* AUDIT round 8 (C-3; owner ruling 2026-08-08: enforce at render time).
+   * C12 clamped where the offset is WRITTEN, which is correct only while
+   * the bound is constant — and it is not: rows is frame-variable, because
+   * the editor's long-line state halves the band from 4 rows to 2.  An
+   * offset clamped legally at count-2 with a long line becomes illegal the
+   * moment BACKSPACE shortens the line, no roll key pressed and nothing to
+   * re-clamp it; the renderer's only guard is `view >= count -> continue`,
+   * so the top rows painted nothing.  That is C12's own symptom returning
+   * through the one variable N-R3 does not govern.
+   *
+   * So the clamp is enforced per FRAME, and it NORMALISES the stored offset
+   * rather than clamping a local copy: one truth about where the view is,
+   * and no consumer can ever read an out-of-range value.  The accepted
+   * consequence is that crossing the boundary settles the scroll position
+   * at the new maximum instead of remembering the old one — which is what a
+   * roll key would have done anyway. */
+  static void _forthConsoleClampView(uint16_t rows, uint16_t count) {
+    uint16_t maxView;
+    if(rows == 0 || count == 0) { return; }
+    maxView = _forthConsoleMaxView(rows, count);
+    if(forthConsoleViewOffset() > maxView) {
+      forthConsoleSetViewOffset(maxView);
+    }
+  }
+
   void forthConsoleRollView(int16_t delta) {
-    uint16_t rows, count, maxView;
     forthConsoleRoll(delta);
     /* C12: the ring's roll stops at count-1 (its own bound: there is no
      * older line).  The VIEW stops at count-rows, so the band stays full —
      * past that, each press emptied the transcript one row at a time. */
-    rows  = forthConsoleViewRows();
-    count = forthConsoleLineCount();
-    if(rows == 0 || count == 0) { return; }
-    maxView = (count > rows) ? (uint16_t)(count - rows) : 0;
-    if(forthConsoleViewOffset() > maxView) {
-      forthConsoleSetViewOffset(maxView);
-    }
+    _forthConsoleClampView(forthConsoleViewRows(), forthConsoleLineCount());
   }
 
   FORTH_CONSOLE_SELFTEST_EXPORT bool_t _forthConsoleActive(void) {
@@ -5786,6 +5811,10 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
       return;                                    /* an empty console shows an
                                                     empty area, not registers */
     }
+    _forthConsoleClampView(rows, count);         /* C-3: rows is frame-variable,
+                                                    so the bound is re-checked
+                                                    every frame, not only where
+                                                    the offset is written */
     /* Bottom-anchor the band to the editor: 4 rows at Y 44/65/86/107 in the
      * short-line state, 2 at Y 25/46 in the long-line state (N-T1). */
     firstY = (uint16_t)(editorTop - rows * FORTH_CONSOLE_ROW_PITCH);
