@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a185588aa9fcee 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..624be99614d0c70613291f8bf796f87eb295beb0 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,10 @@
@@ -204,15 +204,10 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
        else { // rem or 42str
          tmpString[0] = (tam.function >> 8) | 0x80;
          tmpString[1] =  tam.function       & 0xff;
-@@ -863,36 +1002,64 @@ void pemAlpha(int16_t item) {
+@@ -863,7 +1002,24 @@ void pemAlpha(int16_t item) {
      }
      if(indexOfItems[item].func == addItemToBuffer) {
        int32_t len = stringByteLength(aimBuffer);
--      item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
--      if(alphaCase == AC_LOWER) {
--          if(ITM_A <= item && item <= ITM_Z) {
--            item += (ITM_a - ITM_A);
--          }
 +      if(forthCapIsOpen() && item == ITM_EXPONENT) {
 +        /* K2/E12.3: EEX must produce the number grammar's exponent
 +         * spelling, not the three letters "EEX" (its softmenu name).
@@ -224,41 +219,25 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
 +          aimBuffer[T_cursorPos] = 'e';
 +          T_cursorPos += 1;
 +        }
-       }
++      }
 +      else {
-+        if(!(forthCapIsOpen() && forthCapKeysMode())) {
-+          item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
-+        }
-+        /* K2/E12.3: keys-mode items are normal-column ids; the numlock
-+         * translation table is aim-column keyed and must not touch them. */
-+        if(alphaCase == AC_LOWER) {
-+            if(ITM_A <= item && item <= ITM_Z) {
-+              item += (ITM_a - ITM_A);
-+            }
-+        }
- 
--      if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
--        item = convertItemToSubOrSup(item, nextChar);
--        int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
--        if(len < (256 - inputCharLength) && stringGlyphLength(aimBuffer) < 196) {
--          xcopy(aimBuffer + T_cursorPos + inputCharLength, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
--          xcopy(aimBuffer + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
--          T_cursorPos += inputCharLength;
-+        if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
-+          item = convertItemToSubOrSup(item, nextChar);
-+          int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
-+          if(len < (256 - inputCharLength) && stringGlyphLength(aimBuffer) < 196) {
-+            xcopy(aimBuffer + T_cursorPos + inputCharLength, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
-+            xcopy(aimBuffer + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
-+            T_cursorPos += inputCharLength;
-+          }
++      /* K2/E12.3: keys-mode items are normal-column ids; the numlock
++       * translation table is aim-column keyed and must not touch them. */
++      if(!(forthCapIsOpen() && forthCapKeysMode())) {
+       item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
++      }
+       if(alphaCase == AC_LOWER) {
+           if(ITM_A <= item && item <= ITM_Z) {
+             item += (ITM_a - ITM_A);
+@@ -879,6 +1035,7 @@ void pemAlpha(int16_t item) {
+           T_cursorPos += inputCharLength;
          }
        }
++      }
      }
      else if(item == ITM_BACKSPACE) {
--      if(aimBuffer[0] == 0) {
-+      if((aimBuffer[0]) == 0) {
-         deleteStepsFromTo(currentStep, findNextStep(currentStep));
+       if(aimBuffer[0] == 0) {
+@@ -886,6 +1043,16 @@ void pemAlpha(int16_t item) {
          clearSystemFlag(FLAG_ALPHA);
          calcModeNormalGui();
          _closeAlphaMenus();
@@ -275,44 +254,36 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
          return;
        }
        else if(T_cursorPos == 0) {
-         return;
-       }
-       else {
--        char cursorByte = aimBuffer[T_cursorPos];
-+          char cursorByte = aimBuffer[T_cursorPos];
-         int16_t lastGlyphPos;
-         aimBuffer[T_cursorPos] = 0;
-         lastGlyphPos = stringLastGlyph(aimBuffer);
-@@ -902,11 +1069,23 @@ void pemAlpha(int16_t item) {
+@@ -902,10 +1069,28 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_ENTER) {
--      pemCloseAlphaInput();
--      //--firstDisplayedLocalStepNumber;
--      defineFirstDisplayedStep();
--        _closeAlphaMenus();
--      return;
 +      bool_t wasForth = (tam.function == ITM_FORTH);
 +      bool_t hadText  = (aimBuffer[0] != 0);   // E5 locks on a NON-EMPTY line
++      /* E9 tier 1: commit refused atomically — the capture stays open,
++       * aimBuffer intact for correction, and the error is already displayed.
++       * Tier 2 (names) never reaches here: forthCheckSourceLine accepts
++       * them. */
 +      if(wasForth && hadText && !forthCheckSourceLine(aimBuffer)) {
-+        return;   /* E9 tier 1: commit refused atomically — capture stays
-+                     open, aimBuffer intact for correction, the error is
-+                     already displayed.  Tier 2 (names) never reaches here:
-+                     forthCheckSourceLine accepts them. */
++        return;
 +      }
-+      pemCloseAlphaInput();                            // only: an empty ENTER is the
-+      //--firstDisplayedLocalStepNumber;               // escape hatch (E3 deletes the
-+      defineFirstDisplayedStep();                      // placeholder and leaves the
-+      _closeAlphaMenus();                              // region open behind it).
-+      if(wasForth && hadText && forthEntryStateAtInsertion()) {   // forth-core: multi-line lock.
-+        tam.function = ITM_FORTH;                      // State is DERIVED from the
-+        pemAlpha(0);                                   // program bytes at the cursor —
-+      }                                                // never stored. ENTER just drops
-+      return;                                          // to the next Forth line.
++      /* forth-core: an empty ENTER is the escape hatch — E3 deletes the
++       * placeholder and leaves the region open behind it. */
+       pemCloseAlphaInput();
+       //--firstDisplayedLocalStepNumber;
+       defineFirstDisplayedStep();
+         _closeAlphaMenus();
++      /* forth-core: the multi-line lock.  The state is DERIVED from the
++       * program bytes at the cursor — never stored.  ENTER just drops to the
++       * next Forth line. */
++      if(wasForth && hadText && forthEntryStateAtInsertion()) {
++        tam.function = ITM_FORTH;
++        pemAlpha(0);
++      }
+       return;
      }
      else if(item == ITM_USERMODE) {
-       fnFlipFlag(FLAG_USER);
-@@ -956,6 +1135,13 @@ void pemAlpha(int16_t item) {
+@@ -956,6 +1141,13 @@ void pemAlpha(int16_t item) {
        fnT_ARROW(indexOfItems[item].param);
        return;
      }
@@ -326,7 +297,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
  
      int16_t aimFunc = currentStep[0];
      if(aimFunc & 0x80) {
-@@ -972,6 +1158,9 @@ void pemAlpha(int16_t item) {
+@@ -972,6 +1164,9 @@ void pemAlpha(int16_t item) {
        xcopy(tmpString + 3, aimBuffer, stringByteLength(aimBuffer));
        _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 3);
      }
@@ -336,7 +307,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
      else { // rem or 42str
        tmpString[0] = (aimFunc >> 8) | 0x80;
        tmpString[1] =  aimFunc       & 0xff;
-@@ -988,7 +1177,22 @@ void pemAlpha(int16_t item) {
+@@ -988,7 +1183,22 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -359,7 +330,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,6 +1202,1281 @@ void pemCloseAlphaInput(void) {
+@@ -998,6 +1208,1281 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -1641,7 +1612,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
  }
  
  
-@@ -1013,7 +2492,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +2498,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -1650,7 +1621,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +2864,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +2870,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -1694,7 +1665,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +2911,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +2917,37 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -1720,18 +1691,20 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
        pemCloseNumberInput();
        aimBuffer[0] = 0;
      }
--    tam.function = ITM_LITERAL;
++    /* forth-core: ALPHA inside a Forth region resumes the Forth capture, not
++     * a string literal, and an already-open capture is preserved.  Upstream
++     * forced ITM_LITERAL unconditionally, which killed the empty-commit rule,
++     * the FWRD picker guard and the toggle-off gesture. */
 +    if(func == ITM_AIM && forthEntryStateAtInsertion()) {
-+      tam.function = ITM_FORTH;         // forth-core: ALPHA inside a Forth region
-+    }                                   // resumes Forth capture, not a string literal
-+    else if(tam.function != ITM_FORTH) { // forth-core: preserve an open Forth capture;
-+      tam.function = ITM_LITERAL;        // upstream forced ITM_LITERAL unconditionally,
-+    }                                    // which killed the empty-commit rule, the FWRD
-+                                         // picker guard and the toggle-off gesture
++      tam.function = ITM_FORTH;
++    }
++    else if(tam.function != ITM_FORTH) {
+     tam.function = ITM_LITERAL;
++    }
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +2960,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +2969,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -1799,7 +1772,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +3032,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +3041,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -1815,7 +1788,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +3123,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +3132,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -1839,7 +1812,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..b41eedc29c63e787fd569e4ff4a18558
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +3435,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +3444,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

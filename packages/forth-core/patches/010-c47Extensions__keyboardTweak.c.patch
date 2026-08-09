@@ -1,5 +1,5 @@
 diff --git a/src/c47/c47Extensions/keyboardTweak.c b/src/c47/c47Extensions/keyboardTweak.c
-index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..e140f0a0c188e1ee94f84a095a7c9680dea27809 100644
+index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..f3978ad742ba3af725e682b1500e9b59aa662eef 100644
 --- a/src/c47/c47Extensions/keyboardTweak.c
 +++ b/src/c47/c47Extensions/keyboardTweak.c
 @@ -6,6 +6,39 @@
@@ -83,9 +83,8 @@ index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..e140f0a0c188e1ee94f84a095a7c9680
                else {
                  baseOverrideOnce = false;
                  BASE_OVERRIDEONCE = baseOverrideOnce;
--                fnExitAllMenus(0);               // If MyMb and HOMEb are both clear, return to the blank base menu display
 +                if(!forthCapInteractiveLive()) {
-+                  fnExitAllMenus(0);             // If MyMb and HOMEb are both clear, return to the blank base menu display
+                 fnExitAllMenus(0);               // If MyMb and HOMEb are both clear, return to the blank base menu display
 +                }
 +                /* AUDIT round 8 (OOF-1): row-destroying call 2 of 2, and the
 +                 * one no predicate census would have found.  Reached only

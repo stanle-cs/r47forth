@@ -1218,8 +1218,9 @@ endReturnTrue:
           }
           else if(tam.function == ITM_GTOP && catalog == CATALOG_PROG) {
             runFunction(item);
-            leaveTamModeIfEnabled();  /* D7-1: settles the fold — this was F4,
-                                         the strand class's second door */
+            /* D7-1: settles the fold — this was F4, the strand class's
+             * second door. */
+            leaveTamModeIfEnabled();
             hourGlassIconEnabled = false;
             _closeCatalog();
             refreshScreen(112);
@@ -1817,29 +1818,29 @@ endReturnTrue:
         result = ITM_AIM;
       }
       else {
-        result = shiftF ? key->fShiftedAim :
-                 shiftG ? key->gShiftedAim :
-                          key->primaryAim;
-        if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)) {
-          if(result == ITM_DOWN_ARROW || scrLock == NC_SUBSCRIPT) {
-            nextChar = NC_SUBSCRIPT;
-          }
-          else if(result == ITM_UP_ARROW || scrLock == NC_SUPERSCRIPT) {
-            nextChar = NC_SUPERSCRIPT;
-          }
+      result = shiftF ? key->fShiftedAim :
+               shiftG ? key->gShiftedAim :
+                        key->primaryAim;
+      if(calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)) {
+        if(result == ITM_DOWN_ARROW || scrLock == NC_SUBSCRIPT) {
+          nextChar = NC_SUBSCRIPT;
         }
-        else if((result == ITM_COMMA || result == ITM_PERIOD) && (calcMode == CM_EIM || calcMode == CM_AIM) && getSystemFlag(FLAG_ALPHA) ) {
-          switch((shiftG ? 2 : 0) + (getSystemFlag(FLAG_NUMLOCK) ? 1 : 0)) {                // gSHIFTED  numLock
-          //case 0: result = key->primaryAim;break;           //                                   0        0      key->primaryAim
-            case 1: result = RADIX34_MARK_DEC_ITM; break;     //                                   0        1      decimal
-          //case 2: result = RADIX34_MARK_DEC_ITM; break;     //                                   2        0      decimal
-            case 3: result = RADIX34_MARK_NOT_DEC_ITM; break; //                                   2        1      not the decimal
-            default:;
-          }
+        else if(result == ITM_UP_ARROW || scrLock == NC_SUPERSCRIPT) {
+          nextChar = NC_SUPERSCRIPT;
         }
-        if((calcMode == CM_EIM) && (result == -MNU_AIMCATALOG)) {
-          result = -MNU_EIMCATALOG;
+      }
+      else if((result == ITM_COMMA || result == ITM_PERIOD) && (calcMode == CM_EIM || calcMode == CM_AIM) && getSystemFlag(FLAG_ALPHA) ) {
+        switch((shiftG ? 2 : 0) + (getSystemFlag(FLAG_NUMLOCK) ? 1 : 0)) {                // gSHIFTED  numLock
+        //case 0: result = key->primaryAim;break;           //                                   0        0      key->primaryAim
+          case 1: result = RADIX34_MARK_DEC_ITM; break;     //                                   0        1      decimal
+        //case 2: result = RADIX34_MARK_DEC_ITM; break;     //                                   2        0      decimal
+          case 3: result = RADIX34_MARK_NOT_DEC_ITM; break; //                                   2        1      not the decimal
+          default:;
         }
+      }
+      if((calcMode == CM_EIM) && (result == -MNU_AIMCATALOG)) {
+        result = -MNU_EIMCATALOG;
+      }
       }
     }
     else if(tam.mode) {
@@ -2430,9 +2431,9 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
           if(item == ITM_RCL && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
             calcRegister_t var = findNamedVariable(funcParam);
             if(var != INVALID_VARIABLE) {
-              #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
-                printf("**[DL]** forthUserItemDispatch(item=%d, var=%d, funcParam=%s)\n", item, var, funcParam);
-              #endif //VERBOSE_DETERMINEITEM
+                #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
+                  printf("**[DL]** forthUserItemDispatch(item=%d, var=%d, funcParam=%s)\n", item, var, funcParam);
+                #endif //VERBOSE_DETERMINEITEM
               forthUserItemDispatch(item, funcParam, item, var);
             }
             else {
@@ -2446,9 +2447,9 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
           else if(item == ITM_XEQ && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
             calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
             if(label != INVALID_VARIABLE) {
-              #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
-                printf("**[DL]** forthUserItemDispatch(item=%d, label=%d, funcParam=%s)\n", item, label, funcParam);
-              #endif //VERBOSE_DETERMINEITEM
+                #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
+                  printf("**[DL]** forthUserItemDispatch(item=%d, label=%d, funcParam=%s)\n", item, label, funcParam);
+                #endif //VERBOSE_DETERMINEITEM
               forthUserItemDispatch(item, funcParam, item, label);
             }
             else {
@@ -3948,9 +3949,9 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
                 else {
                     if(tam.mode && currentMenu() == -MNU_SYSFL) {                                           //JM auto recover out of SYSFL in the CFLG TAM flow; a plain catalog SYS.FL exits via the standard path below
                       numberOfTamMenusToPop = 2;                                                   //JM
-                      leaveTamModeIfEnabled();  /* D7-1: settles the fold —
-                                                   this cancel was F2, the
-                                                   strand class's front door */
+                      /* D7-1: settles the fold — this cancel was F2, the
+                       * strand class's front door. */
+                      leaveTamModeIfEnabled();                                                     //JM
                       return;                                                                      //JM
                     }                                                                              //JM
                     leaveAsmMode();
@@ -3996,12 +3997,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
         if(calcMode == CM_PEM) {
           aimBuffer[0] = 0;
         }
-        leaveTamModeIfEnabled();  /* D7-1: the wrapper settles the fold —
-                                     EXIT during TAM never routes through
-                                     tamProcessInput's epilogue, and "type
-                                     something, press STO, EXIT before
-                                     finishing" is one of the most ordinary
-                                     cancel gestures there is (L1-F2 rev 3) */
+        /* D7-1: the wrapper settles the fold — EXIT during TAM never routes
+         * through tamProcessInput's epilogue, and "type something, press STO,
+         * EXIT before finishing" is one of the most ordinary cancel gestures
+         * there is (L1-F2 rev 3). */
+        leaveTamModeIfEnabled();
         if(calcMode == CM_PEM) {
           scrollPemBackwards();
         }

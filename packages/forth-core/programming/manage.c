@@ -1015,30 +1015,30 @@ void pemAlpha(int16_t item) {
         }
       }
       else {
-        if(!(forthCapIsOpen() && forthCapKeysMode())) {
-          item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
-        }
-        /* K2/E12.3: keys-mode items are normal-column ids; the numlock
-         * translation table is aim-column keyed and must not touch them. */
-        if(alphaCase == AC_LOWER) {
-            if(ITM_A <= item && item <= ITM_Z) {
-              item += (ITM_a - ITM_A);
-            }
-        }
-
-        if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
-          item = convertItemToSubOrSup(item, nextChar);
-          int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
-          if(len < (256 - inputCharLength) && stringGlyphLength(aimBuffer) < 196) {
-            xcopy(aimBuffer + T_cursorPos + inputCharLength, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
-            xcopy(aimBuffer + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
-            T_cursorPos += inputCharLength;
+      /* K2/E12.3: keys-mode items are normal-column ids; the numlock
+       * translation table is aim-column keyed and must not touch them. */
+      if(!(forthCapIsOpen() && forthCapKeysMode())) {
+      item = numlockReplacements(0, item, getSystemFlag(FLAG_NUMLOCK), shiftF, shiftG);
+      }
+      if(alphaCase == AC_LOWER) {
+          if(ITM_A <= item && item <= ITM_Z) {
+            item += (ITM_a - ITM_A);
           }
+      }
+
+      if((nextChar == NC_NORMAL) || ((item != ITM_DOWN_ARROW) && (item != ITM_UP_ARROW))) {
+        item = convertItemToSubOrSup(item, nextChar);
+        int32_t inputCharLength = stringByteLength(indexOfItems[item].itemSoftmenuName);
+        if(len < (256 - inputCharLength) && stringGlyphLength(aimBuffer) < 196) {
+          xcopy(aimBuffer + T_cursorPos + inputCharLength, aimBuffer + T_cursorPos, stringByteLength(aimBuffer + T_cursorPos) + 1);
+          xcopy(aimBuffer + T_cursorPos, indexOfItems[item].itemSoftmenuName, inputCharLength);
+          T_cursorPos += inputCharLength;
         }
+      }
       }
     }
     else if(item == ITM_BACKSPACE) {
-      if((aimBuffer[0]) == 0) {
+      if(aimBuffer[0] == 0) {
         deleteStepsFromTo(currentStep, findNextStep(currentStep));
         clearSystemFlag(FLAG_ALPHA);
         calcModeNormalGui();
@@ -1059,7 +1059,7 @@ void pemAlpha(int16_t item) {
         return;
       }
       else {
-          char cursorByte = aimBuffer[T_cursorPos];
+        char cursorByte = aimBuffer[T_cursorPos];
         int16_t lastGlyphPos;
         aimBuffer[T_cursorPos] = 0;
         lastGlyphPos = stringLastGlyph(aimBuffer);
@@ -1071,21 +1071,27 @@ void pemAlpha(int16_t item) {
     else if(item == ITM_ENTER) {
       bool_t wasForth = (tam.function == ITM_FORTH);
       bool_t hadText  = (aimBuffer[0] != 0);   // E5 locks on a NON-EMPTY line
+      /* E9 tier 1: commit refused atomically — the capture stays open,
+       * aimBuffer intact for correction, and the error is already displayed.
+       * Tier 2 (names) never reaches here: forthCheckSourceLine accepts
+       * them. */
       if(wasForth && hadText && !forthCheckSourceLine(aimBuffer)) {
-        return;   /* E9 tier 1: commit refused atomically — capture stays
-                     open, aimBuffer intact for correction, the error is
-                     already displayed.  Tier 2 (names) never reaches here:
-                     forthCheckSourceLine accepts them. */
+        return;
       }
-      pemCloseAlphaInput();                            // only: an empty ENTER is the
-      //--firstDisplayedLocalStepNumber;               // escape hatch (E3 deletes the
-      defineFirstDisplayedStep();                      // placeholder and leaves the
-      _closeAlphaMenus();                              // region open behind it).
-      if(wasForth && hadText && forthEntryStateAtInsertion()) {   // forth-core: multi-line lock.
-        tam.function = ITM_FORTH;                      // State is DERIVED from the
-        pemAlpha(0);                                   // program bytes at the cursor —
-      }                                                // never stored. ENTER just drops
-      return;                                          // to the next Forth line.
+      /* forth-core: an empty ENTER is the escape hatch — E3 deletes the
+       * placeholder and leaves the region open behind it. */
+      pemCloseAlphaInput();
+      //--firstDisplayedLocalStepNumber;
+      defineFirstDisplayedStep();
+        _closeAlphaMenus();
+      /* forth-core: the multi-line lock.  The state is DERIVED from the
+       * program bytes at the cursor — never stored.  ENTER just drops to the
+       * next Forth line. */
+      if(wasForth && hadText && forthEntryStateAtInsertion()) {
+        tam.function = ITM_FORTH;
+        pemAlpha(0);
+      }
+      return;
     }
     else if(item == ITM_USERMODE) {
       fnFlipFlag(FLAG_USER);
@@ -2932,13 +2938,16 @@ void insertStepInProgram(const int16_t func) {
       pemCloseNumberInput();
       aimBuffer[0] = 0;
     }
+    /* forth-core: ALPHA inside a Forth region resumes the Forth capture, not
+     * a string literal, and an already-open capture is preserved.  Upstream
+     * forced ITM_LITERAL unconditionally, which killed the empty-commit rule,
+     * the FWRD picker guard and the toggle-off gesture. */
     if(func == ITM_AIM && forthEntryStateAtInsertion()) {
-      tam.function = ITM_FORTH;         // forth-core: ALPHA inside a Forth region
-    }                                   // resumes Forth capture, not a string literal
-    else if(tam.function != ITM_FORTH) { // forth-core: preserve an open Forth capture;
-      tam.function = ITM_LITERAL;        // upstream forced ITM_LITERAL unconditionally,
-    }                                    // which killed the empty-commit rule, the FWRD
-                                         // picker guard and the toggle-off gesture
+      tam.function = ITM_FORTH;
+    }
+    else if(tam.function != ITM_FORTH) {
+    tam.function = ITM_LITERAL;
+    }
     pemAlpha(func);
     pemCursorIsZerothStep = false;
     return;

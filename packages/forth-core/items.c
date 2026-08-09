@@ -712,17 +712,16 @@ bool_t isFunctionOldParam16(uint16_t func) {
            * same label behavior, plus the item/colon fallback. */
           uint16_t resolvedParam;
           forthXEQType_t res = forthResolveXEQ(varCatalogItem, &resolvedParam);
-          if (res == FORTH_XEQ_LABEL) {
-            forthUserItemDispatch(func, varCatalogItem, func, resolvedParam);
-          }
-          else if (res == FORTH_XEQ_COLON) {
-            /* code-audit 2026-07-20: must record a step, not execute live,
-             * when composing a program — mirrors the FORTH_XEQ_LABEL arm
-             * above and DESIGN.md §4.2's "PEM recording of XEQ 'NAME'"
-             * contract (names persist, never widx). */
-            forthUserItemDispatch(func, varCatalogItem, ITM_FCALL, resolvedParam);
-          }
-          else if (res == FORTH_XEQ_ITEM) {
+          /* One-line arms: a standalone added `}` at this indentation pairs
+           * with upstream's deleted brace as whitespace churn in the
+           * minimality scan (CONSOLIDATE P1). */
+          if     (res == FORTH_XEQ_LABEL) { forthUserItemDispatch(func, varCatalogItem, func, resolvedParam); }
+          /* code-audit 2026-07-20: the colon arm must record a step, not
+           * execute live, when composing a program — mirrors the
+           * FORTH_XEQ_LABEL arm above and DESIGN.md §4.2's "PEM recording of
+           * XEQ 'NAME'" contract (names persist, never widx). */
+          else if(res == FORTH_XEQ_COLON) { forthUserItemDispatch(func, varCatalogItem, ITM_FCALL, resolvedParam); }
+          else if(res == FORTH_XEQ_ITEM) {
             forthUserItemDispatch(func, varCatalogItem, resolvedParam, NOPARAM);
           }
           else {

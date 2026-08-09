@@ -314,7 +314,7 @@ void resetKeytimers(void) {
                 baseOverrideOnce = false;
                 BASE_OVERRIDEONCE = baseOverrideOnce;
                 if(!forthCapInteractiveLive()) {
-                  fnExitAllMenus(0);             // If MyMb and HOMEb are both clear, return to the blank base menu display
+                fnExitAllMenus(0);               // If MyMb and HOMEb are both clear, return to the blank base menu display
                 }
                 /* AUDIT round 8 (OOF-1): row-destroying call 2 of 2, and the
                  * one no predicate census would have found.  Reached only
