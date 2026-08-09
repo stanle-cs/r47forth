@@ -27,36 +27,66 @@ Two populations of teardown call sites, with different constraints:
 
 ## The design
 
-Make the compiler close the external set. Three moves, all in `ui/tam.c`
-and the header:
+**Rev 1 of this design (static + a new `tamFinish` name) is DEAD, and the
+owner's question killed it.** Twelve upstream files call
+`leaveTamModeIfEnabled`; six of them are NOT in the package's override set
+(`flags.c`, `ui/matrixEditor.c`, `c47Extensions/keyboardTweak.c`,
+`printing/print.c`, `programming/input.c`, plus the `ui/tam.h`
+declaration). A static would break their link, and overriding six upstream
+files for an enforcement mechanism is D8 footprint growth the discipline
+forbids — group A is already one file over budget.
 
-1. **`leaveTamModeIfEnabled` becomes file-static** (its declaration leaves
-   the header). The eleven internal sites and the epilogue keep calling it
-   unchanged. Any external caller becomes a link error — the enforcement
-   is the toolchain, not a review rule.
-2. **New public `tamFinish(void)`**, the ONLY external way to end a TAM
-   session:
+**Rev 2 inverts the enforcement, and covers more for less.** The package
+already overrides `ui/tam.c`, so every caller in the whole tree — package
+and un-overridden upstream alike — links the package's version of the
+function. So keep the public name and make it settle the bracket itself.
+Three moves, ALL confined to the existing `ui/tam.c` patch:
+
+1. **The current body moves to a file-static `_tamLeave(void)`** —
+   byte-identical, including the PEM/PARK resume gate and the rev-3
+   armed-fold deferral.
+2. **`leaveTamModeIfEnabled` becomes the public wrapper**:
 
    ```c
-   /* The one external teardown.  Ends the TAM session and settles the
-    * fold bracket in one act, in this order and no other:
-    *   leaveTamModeIfEnabled();     teardown (menus, tam.mode, resume for
-    *                                PEM/PARK — unchanged semantics)
-    *   forthFoldUnwindIfDone();     the bracket: resume + foldLeave, only
-    *                                if the fold is pending and TAM is over
-    * External callers that dispatch a cancelling item afterwards get the
-    * unwound, restored console first — the EXIT-cancel semantic the
-    * round-6 wave established at every door. */
-   void tamFinish(void);
+   /* The one teardown every caller outside this file gets.  Ends the TAM
+    * session and settles the fold bracket in one act:
+    *   _tamLeave();                teardown — unchanged semantics
+    *   forthFoldUnwindIfDone();    the bracket: resume + foldLeave, only
+    *                               if the fold is pending and TAM is over
+    * Name and signature are upstream's, so every upstream caller —
+    * including the six files the package does not override — inherits the
+    * unwind through the override, with no header patch and no new
+    * overrides.  The eleven leave-then-dispatch sites in THIS file call
+    * _tamLeave() directly: their resume must stay deferred to the
+    * tamProcessInput epilogue (the L1-F2 rev-2 loss is the record). */
+   void leaveTamModeIfEnabled(void) {
+     _tamLeave();
+     forthFoldUnwindIfDone();
+   }
    ```
-3. **The ten external sites swap** `leaveTamModeIfEnabled();` +
-   `forthFoldUnwindIfDone();` for `tamFinish();` — a mechanical
-   substitution of exactly the pairs the wave created.
+3. **The eleven internal sites and the epilogue swap to `_tamLeave()`** —
+   mechanical, same file. The epilogue keeps its own
+   `forthFoldUnwindIfDone()` after `_tamProcessInput` returns, unchanged.
 
-The `tamProcessInput` epilogue is untouched: it already runs after
-`_tamProcessInput` fully returns, which is the one ordering the internal
-sites need. `forthFoldUnwindIfDone` stays public (manage.c owns it; the
-epilogue and `fnKeyExit`'s TAM branch call it directly).
+Then the round-6 wave's ten manual `forthFoldUnwindIfDone()` calls after
+external leaves become redundant and are REMOVED (keyboard.c ×7, screen.c,
+assign.c, lblGtoXeq.c) — the external patches shrink back to upstream's
+own shape, which is the direction D8 wants.
+
+Enforcement is now correctness-by-default rather than refusal: a NEW
+external teardown site that calls the public name is right without knowing
+the fold exists, and `_tamLeave` is unreachable outside the file. Both
+directions closed.
+
+**The census gap this uncovered (round-7 item).** Every armed-fold census
+so far — the audit's and the fix wave's — grepped the PACKAGE working
+area. The six un-overridden upstream callers were never checked for
+reachability with a pending fold. Rev 2 guards them regardless (they link
+the wrapper), but round 7 should still trace whether any is reachable with
+the console's fold pending, because each such path was an unguarded strand
+door until this lands. Census rule, generalized: *a package-tree grep is
+not an upstream census — enumerate callers in `src/` and diff against the
+override set.*
 
 ## What this deliberately does not do
 
@@ -74,31 +104,42 @@ buys the by-construction property where the bugs actually were.
 
 ## Enforcement and tests
 
-- The link error IS the class guard for new external sites.
+- Correctness-by-default IS the class guard: a new external teardown that
+  calls the public name settles the bracket without knowing it exists,
+  and `_tamLeave` cannot be reached from outside the file.
 - The existing census class tests (fnKeyExit returns, the F4 doors) keep
-  pinning behaviour; they need no change — `tamFinish` is behaviourally
-  identical to the pairs it replaces.
-- `PROMPT_CODE_AUDIT.md`'s D1 lens gains one line: an external
-  `leaveTamModeIfEnabled` caller is a finding by definition (it cannot
-  compile, so finding one means the static was reverted).
+  pinning behaviour unchanged — the wrapper is behaviourally identical to
+  the pairs it replaces. The one new mutation: revert the wrapper to
+  `_tamLeave` alone and the F2/F4 reproducers must go red.
+- `PROMPT_CODE_AUDIT.md`'s D1 lens gains one line: any NEW direct caller
+  of `_tamLeave`, or any teardown path that bypasses the wrapper, is a
+  finding by definition.
 
 ## Risks
 
 - **Relocation risk is the project's most dangerous fix shape** — but
   nothing here relocates state: the same two calls run in the same order
-  at the same sites, renamed. The diff is a static keyword, a two-line
-  function, and ten mechanical swaps.
+  at the same sites. The diff is one rename inside ui/tam.c, a three-line
+  wrapper, eleven same-file swaps, and ten deletions of now-redundant
+  unwind calls.
+- **The six un-overridden upstream callers change behaviour**: their
+  teardown now settles a pending fold. That is the point — but each is a
+  path no fixture has driven, so the round-7 census above must precede or
+  accompany the landing, and the class test asserts the wrapper's unwind
+  fires (mutation: revert the wrapper to `_tamLeave` alone → the F2/F4
+  reproducers go red again).
 - The PC_BUILD `forceTamAlpha` re-entrancy hazard (documented dead in the
   bracket comment) is unchanged by this design.
 - `fnKeyExit`'s TAM branch calls leave then unwind with PEM scroll logic
-  between them; it keeps its explicit pair (it is upstream-shaped code) or
-  swaps to `tamFinish` + scroll — decided at implementation, either is
-  correct.
+  between them; its explicit unwind becomes redundant under the wrapper
+  and is removed with the other ten.
 
 ## Sequencing
 
 New code resets the audit clock, so this lands AFTER round 7 has read the
-round-6 fix wave — as its own small commit with the swap enumerated in the
-message. Implementation is within the local implementer's range (a
-mechanical packet: one static, one function, ten swaps, gate green, class
-tests unchanged), with the packet citing this document.
+round-6 fix wave — as its own small commit, with the round-7 upstream
+caller census (above) preceding or accompanying it. Implementation is
+within the local implementer's range (a mechanical packet: the rename,
+the three-line wrapper, eleven same-file swaps, eleven redundant-unwind
+deletions, gate green, class tests unchanged, the wrapper-revert mutation
+red), with the packet citing this document.
