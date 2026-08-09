@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..0cfdc1b68f0408752207223575ee36542b0f33f5 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..ef4d7d2016c419a9e32b2027fd359f21ec53d57f 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,10 @@
@@ -328,7 +328,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..0cfdc1b68f0408752207223575ee3654
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,9 +1185,960 @@ void pemCloseAlphaInput(void) {
+@@ -998,9 +1185,963 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -1205,13 +1205,16 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..0cfdc1b68f0408752207223575ee3654
 + *    with the bracket off, took the live dispatch arm, and actually stored.
 + *    Hence the !tam.mode gate: unwind only when TAM is really over.
 + *
-+ *  - The resume must not fire inside leaveTamModeIfEnabled for an ARMED
-+ *    fold.  Eleven sites call that function and THEN dispatch (ui/tam.c:303,
-+ *    494, 508, 520, 536, 572, 913, 934, 980, 996, 1130), so resuming there
-+ *    happens before the dispatch inserts its step: the F6-4 splice sees
-+ *    n == 0, folds nothing, and the line is lost while an orphan step stays
-+ *    in FHIST.  So Seam 2 defers the resume for an armed fold and it happens
-+ *    here instead, after _tamProcessInput has fully returned.
++ *  - The resume must not fire inside ui/tam.c's RAW teardown (_tamLeave)
++ *    for an ARMED fold.  That file's leave-then-dispatch sites tear down
++ *    and THEN dispatch, so resuming there happens before the dispatch
++ *    inserts its step: the F6-4 splice sees n == 0, folds nothing, and the
++ *    line is lost while an orphan step stays in FHIST.  So Seam 2 defers
++ *    the resume for an armed fold and it happens here instead, after
++ *    _tamProcessInput has fully returned.  (D7-1, 2026-08-08: the PUBLIC
++ *    leaveTamModeIfEnabled is now a wrapper that calls this function
++ *    itself, so every teardown outside ui/tam.c settles the bracket by
++ *    construction — the F2/F4 strand class cannot recur through it.)
 + *
 + * forthCaptureResume() is a no-op unless FCAP_SUSPENDED, so calling it for a
 + * PARK that Seam 2 already resumed is harmless. */
@@ -1289,7 +1292,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..0cfdc1b68f0408752207223575ee3654
  void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
    if(getSystemFlag(FLAG_ALPHA) || calcMode != CM_PEM || tam.mode) {
      hourGlassIconEnabled = false;
-@@ -1013,7 +2151,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +2154,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -1298,7 +1301,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..0cfdc1b68f0408752207223575ee3654
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +2523,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +2526,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -1342,7 +1345,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..0cfdc1b68f0408752207223575ee3654
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +2570,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +2573,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -1379,7 +1382,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..0cfdc1b68f0408752207223575ee3654
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +2619,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +2622,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -1447,7 +1450,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..0cfdc1b68f0408752207223575ee3654
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +2691,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +2694,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -1463,7 +1466,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..0cfdc1b68f0408752207223575ee3654
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +2782,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +2785,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -1487,7 +1490,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..0cfdc1b68f0408752207223575ee3654
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +3094,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +3097,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

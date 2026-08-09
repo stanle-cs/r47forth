@@ -2058,13 +2058,16 @@ void forthFoldEnter(int16_t func, uint16_t mode) {
  *    with the bracket off, took the live dispatch arm, and actually stored.
  *    Hence the !tam.mode gate: unwind only when TAM is really over.
  *
- *  - The resume must not fire inside leaveTamModeIfEnabled for an ARMED
- *    fold.  Eleven sites call that function and THEN dispatch (ui/tam.c:303,
- *    494, 508, 520, 536, 572, 913, 934, 980, 996, 1130), so resuming there
- *    happens before the dispatch inserts its step: the F6-4 splice sees
- *    n == 0, folds nothing, and the line is lost while an orphan step stays
- *    in FHIST.  So Seam 2 defers the resume for an armed fold and it happens
- *    here instead, after _tamProcessInput has fully returned.
+ *  - The resume must not fire inside ui/tam.c's RAW teardown (_tamLeave)
+ *    for an ARMED fold.  That file's leave-then-dispatch sites tear down
+ *    and THEN dispatch, so resuming there happens before the dispatch
+ *    inserts its step: the F6-4 splice sees n == 0, folds nothing, and the
+ *    line is lost while an orphan step stays in FHIST.  So Seam 2 defers
+ *    the resume for an armed fold and it happens here instead, after
+ *    _tamProcessInput has fully returned.  (D7-1, 2026-08-08: the PUBLIC
+ *    leaveTamModeIfEnabled is now a wrapper that calls this function
+ *    itself, so every teardown outside ui/tam.c settles the bracket by
+ *    construction — the F2/F4 strand class cannot recur through it.)
  *
  * forthCaptureResume() is a no-op unless FCAP_SUSPENDED, so calling it for a
  * PARK that Seam 2 already resumed is harmless. */

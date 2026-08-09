@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831bfe41c9d1 100644
+index bc44026016e94a8865b8acc886386341596641c6..0e41d97c3165c418ff048b910f4316e15f41313f 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,12 +2,69 @@
@@ -174,45 +174,17 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
                  closeAim();
                  break;
                }
-@@ -1107,6 +1219,12 @@ endReturnTrue:
+@@ -1106,7 +1218,8 @@ endReturnTrue:
+           }
            else if(tam.function == ITM_GTOP && catalog == CATALOG_PROG) {
              runFunction(item);
-             leaveTamModeIfEnabled();
-+            /* AUDIT round 6 (F4/D7-1): this teardown is outside both unwind
-+             * owners (the tamProcessInput epilogue and fnKeyExit), so a
-+             * pending fold was stranded here — the second door of F2's
-+             * class.  The dispatch above has already run; the unwind is
-+             * self-guarded and correct after every leave in this file. */
-+            forthFoldUnwindIfDone();
+-            leaveTamModeIfEnabled();
++            leaveTamModeIfEnabled();  /* D7-1: settles the fold — this was F4,
++                                         the strand class's second door */
              hourGlassIconEnabled = false;
              _closeCatalog();
              refreshScreen(112);
-@@ -1123,6 +1241,8 @@ endReturnTrue:
-               tam.value = (indexOfItems[item].param & 0xff);
-               addStepInProgram(tamOperation());
-               leaveTamModeIfEnabled();
-+              forthFoldUnwindIfDone();   /* round 6 (F4's class): commit done,
-+                                            TAM over, outside the epilogue */
-             }
-           }
- 
-@@ -1136,6 +1256,7 @@ endReturnTrue:
-               tam.alpha = true;
-               addStepInProgram(tamOperation());
-               leaveTamModeIfEnabled();
-+              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
-             }
-             else  if(indexOfItems[item].func == addItemToBuffer) {   //this section is added, it was commented out in btnFnPressed line 760, it is moved here, as longpress works on release.
-               //Here we deal with PEM TAM mode menu entry, i.e. item's sent to buffer. See issue #454 context.
-@@ -1160,6 +1281,7 @@ endReturnTrue:
-               tam.alpha = true;
-               addStepInProgram(tamOperation());
-               leaveTamModeIfEnabled();
-+              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
-             }
-             else {
-                     #if defined(VERBOSEKEYS)
-@@ -1267,7 +1389,20 @@ endReturnTrue:
+@@ -1267,7 +1380,20 @@ endReturnTrue:
              if(item == ITM_KEYMAP) {
                cursorEnabled = false;               // cursor is re-activated automatically elsewhere, after button release
              }
@@ -234,24 +206,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
                closeAim();
              }
              if(tam.mode && tam.alpha) {
-@@ -1292,10 +1427,16 @@ endReturnTrue:
-               ) {
-               if(calcMode != CM_PEM || item != ITM_NOP) { // Here we left TAM in the context of issue #454
-                 leaveTamModeIfEnabled();
-+                /* round 6 (F4's class): a TAM cancelled here dispatches the
-+                 * cancelling item next — the unwind must run first, or a
-+                 * pending fold is stranded (and a re-entering parameterized
-+                 * item would clobber the single fold context). */
-+                forthFoldUnwindIfDone();
-               }
-             }
-             else if(tam.mode == TM_VALUE && (item == ITM_TAMMAX || item == ITM_YY_TRACK || item == ITM_YY_OFF)) {
-               leaveTamModeIfEnabled();
-+              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
-             }
- 
-                     #if defined(VERBOSEKEYS)
-@@ -1382,6 +1523,12 @@ endReturnTrue:
+@@ -1382,6 +1508,12 @@ endReturnTrue:
                        printf("keyboard.c: executeFunction calcmode=%u %i (before runfunction): %i, %s tam.mode=%i\n", calcMode, item, currentMenu(), indexOfItems[-currentMenu()].itemSoftmenuName, tam.mode);
                      #endif //VERBOSEKEYS
  
@@ -264,7 +219,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
                  runFunction(item);
  
  
-@@ -1533,7 +1680,10 @@ endReturnTrue:
+@@ -1533,7 +1665,10 @@ endReturnTrue:
  
  
  
@@ -276,7 +231,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
      delayCloseNim = false;
      int16_t result;
      const calcKey_t *key;
-@@ -1650,35 +1800,68 @@ endReturnTrue:
+@@ -1650,35 +1785,68 @@ endReturnTrue:
        Check_MultiPresses(&result, key_no);        //JM
        return result;
      }
@@ -366,7 +321,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
        result = shiftF ? key->fShifted :
                 shiftG ? key->gShifted :
                          key->primary;
-@@ -1693,6 +1876,57 @@ endReturnTrue:
+@@ -1693,6 +1861,57 @@ endReturnTrue:
        result = 0;
      }
  
@@ -424,15 +379,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
                      #if defined(PC_BUILD)
                        sprintf(tmp, "^^^^^^^keyboard.c: determineitem: result1: %d:", result);
                        jm_show_comment(tmp);
-@@ -2198,6 +2432,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
-             }
-             else if(item != ITM_BACKSPACE) {          // [DL] to ensure backspace will be processed in tamProcessInput
-               leaveTamModeIfEnabled();
-+              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
-             }
-           }
-           if(item == ITM_EXIT1 && tam.alpha && aimBuffer[0] != 0)  {
-@@ -2211,18 +2446,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2211,18 +2430,10 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
            if(item == ITM_RCL && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
              calcRegister_t var = findNamedVariable(funcParam);
              if(var != INVALID_VARIABLE) {
@@ -455,7 +402,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
              }
              else {
                displayCalcErrorMessage(ERROR_UNDEF_SOURCE_VAR, ERR_REGISTER_LINE, REGISTER_X);
-@@ -2235,20 +2462,16 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
+@@ -2235,20 +2446,16 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
            else if(item == ITM_XEQ && (getSystemFlag(FLAG_USER) || Norm_Key_00_released) && funcParam[0] != 0) {
              calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
              if(label != INVALID_VARIABLE) {
@@ -484,15 +431,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
                displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
                #if (EXTRA_INFO_ON_CALC_ERROR == 1)
                  sprintf(errorMessage, "string '%s' is not a named label", funcParam);
-@@ -2274,6 +2497,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
- 
-             if(item == ITM_BASEMENU) {
-               leaveTamModeIfEnabled();
-+              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
-             }
- 
-               runFunction(item);
-@@ -2631,6 +2855,20 @@ RELEASE_END:
+@@ -2631,6 +2838,20 @@ RELEASE_END:
          }
  
          case CHR_caseUP: {                                                   //From keyboard: logic for Up/Dn case/num
@@ -513,7 +452,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
            if(getSystemFlag(FLAG_NUMLOCK))  {}
            else if(alphaCase == AC_LOWER) {
              processKeyAction(CHR_case);
-@@ -2644,6 +2882,14 @@ RELEASE_END:
+@@ -2644,6 +2865,14 @@ RELEASE_END:
          }
  
          case CHR_caseDN: {                                                   //From keyboard: logic for Up/Dn case/num
@@ -528,7 +467,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
            if(getSystemFlag(FLAG_NUMLOCK)) {
              alphaCase = AC_UPPER;
              processKeyAction(CHR_numU);
-@@ -2835,8 +3081,30 @@ RELEASE_END:
+@@ -2835,8 +3064,30 @@ RELEASE_END:
  
                //also AIM Longpress cycle
                case CM_AIM: {
@@ -559,7 +498,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
                    closeAim();
                    runFunction(item);
                    keyActionProcessed = true;
-@@ -3130,11 +3398,23 @@ RELEASE_END:
+@@ -3130,11 +3381,23 @@ RELEASE_END:
                    keyActionProcessed = true;
                  }
                  else if(item == ITM_SST) {
@@ -583,7 +522,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
                    fnBst(NOPARAM);
                    keyActionProcessed = true;
                    refreshScreen(123);
-@@ -3154,6 +3434,12 @@ RELEASE_END:
+@@ -3154,6 +3417,12 @@ RELEASE_END:
                    }
                  }
                  else if(item == ITM_RS) {
@@ -596,7 +535,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
                    addStepInProgram(ITM_STOP);
                    keyActionProcessed = true;
                  }
-@@ -3444,6 +3730,16 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3444,6 +3713,16 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -613,35 +552,32 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
            if(softmenuStack[0].softmenuId <= 1 || menu(1) == -MNU_ALPHA) {
              popSoftmenu();
            }
-@@ -3670,6 +3966,14 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3669,7 +3948,9 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+                 else {
                      if(tam.mode && currentMenu() == -MNU_SYSFL) {                                           //JM auto recover out of SYSFL in the CFLG TAM flow; a plain catalog SYS.FL exits via the standard path below
                        numberOfTamMenusToPop = 2;                                                   //JM
-                       leaveTamModeIfEnabled();                                                     //JM
-+                      /* AUDIT round 6 (F2): this return sits ABOVE the TAM
-+                       * branch's own unwind below.  Without it the ordinary
-+                       * catalog cancel strands the fold ARMED with the
-+                       * capture SUSPENDED — and the next normal-mode STO is
-+                       * forged into a program step by tamProcessInput's
-+                       * bracket.  Self-guarded: no-op unless the fold is
-+                       * pending and TAM is really over. */
-+                      forthFoldUnwindIfDone();
+-                      leaveTamModeIfEnabled();                                                     //JM
++                      leaveTamModeIfEnabled();  /* D7-1: settles the fold —
++                                                   this cancel was F2, the
++                                                   strand class's front door */
                        return;                                                                      //JM
                      }                                                                              //JM
                      leaveAsmMode();
-@@ -3716,6 +4020,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3715,7 +3996,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+         if(calcMode == CM_PEM) {
            aimBuffer[0] = 0;
          }
-         leaveTamModeIfEnabled();
-+        /* L1-F2 rev 3: EXIT during TAM never routes through tamProcessInput,
-+         * so it never reaches that function's epilogue — without this call an
-+         * armed fold is never unwound and its materialised capture step stays
-+         * in FHIST permanently.  "type something, press STO, EXIT before
-+         * finishing" is one of the most ordinary cancel gestures there is. */
-+        forthFoldUnwindIfDone();
+-        leaveTamModeIfEnabled();
++        leaveTamModeIfEnabled();  /* D7-1: the wrapper settles the fold —
++                                     EXIT during TAM never routes through
++                                     tamProcessInput's epilogue, and "type
++                                     something, press STO, EXIT before
++                                     finishing" is one of the most ordinary
++                                     cancel gestures there is (L1-F2 rev 3) */
          if(calcMode == CM_PEM) {
            scrollPemBackwards();
          }
-@@ -3799,6 +4109,161 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3799,6 +4085,161 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -803,7 +739,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
          if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines
            softmenuStack[0].softmenuId = 1;                                  //JM
          }                                                                   //JM
-@@ -3856,6 +4321,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3856,6 +4297,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            lastErrorCode = 0;
            break;
          }
@@ -819,7 +755,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
          if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
            if(isAlphaSubmenu(0)) {
              popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
-@@ -3868,6 +4342,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +4318,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -827,7 +763,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +4353,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +4329,22 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -850,7 +786,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4266,6 +4757,19 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4266,6 +4733,19 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -870,7 +806,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
          if(catalog && catalog != CATALOG_MVAR) {
            if(stringByteLength(aimBuffer) > 0) {
              lg = stringLastGlyph(aimBuffer);
-@@ -4366,9 +4870,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4846,23 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -895,7 +831,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
                --currentLocalStepNumber;
                defineCurrentStep();
                if(!programListEnd) {
-@@ -4544,6 +5062,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4544,6 +5038,13 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {
@@ -909,7 +845,7 @@ index bc44026016e94a8865b8acc886386341596641c6..fe19d350ad4fca7964792a27c8e3831b
              closeAim();
            }
            fnBst(NOPARAM);
-@@ -4762,6 +5287,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4762,6 +5263,9 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
              closeNim();
            }
            if(calcMode == CM_AIM) {

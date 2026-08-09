@@ -17142,7 +17142,6 @@ static int test_fold_round6_window(void)
   extern void runFunction(int16_t);
   extern void tamProcessInput(uint16_t);
   extern void processKeyAction(int16_t);
-  extern void leaveTamModeIfEnabled(void);
   extern void Shft_handler(void);
   extern bool_t _forthConsoleActive(void);
   extern void forthInteractiveEnter(void);
@@ -17418,7 +17417,13 @@ static int test_fold_round6_window(void)
     fnForthOuter(NOPARAM);
     xcopy(aimBuffer, "5", 2); T_cursorPos = 1;
     runFunction(ITM_STO);                 /* ARMED + SUSPENDED */
-    leaveTamModeIfEnabled();              /* the raw teardown, no unwind */
+    /* D7-1 made the residue unreachable through ANY teardown — the public
+     * leave settles the bracket by construction — so the state is primed
+     * directly: the sites under test are DEFENSIVE and the residue is the
+     * subject.  (This line used to be leaveTamModeIfEnabled(), back when
+     * the raw teardown was a real door.) */
+    tam.mode = 0;
+    clearSystemFlag(FLAG_ALPHA);
     if (tam.mode != 0 || !forthCapIsSuspended()) {
       printf("    [7] FIXTURE BUG: residue not reached (tam.mode=%d susp=%d)\n",
              (int)tam.mode, (int)forthCapIsSuspended());

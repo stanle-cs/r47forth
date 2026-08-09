@@ -1218,13 +1218,8 @@ endReturnTrue:
           }
           else if(tam.function == ITM_GTOP && catalog == CATALOG_PROG) {
             runFunction(item);
-            leaveTamModeIfEnabled();
-            /* AUDIT round 6 (F4/D7-1): this teardown is outside both unwind
-             * owners (the tamProcessInput epilogue and fnKeyExit), so a
-             * pending fold was stranded here — the second door of F2's
-             * class.  The dispatch above has already run; the unwind is
-             * self-guarded and correct after every leave in this file. */
-            forthFoldUnwindIfDone();
+            leaveTamModeIfEnabled();  /* D7-1: settles the fold — this was F4,
+                                         the strand class's second door */
             hourGlassIconEnabled = false;
             _closeCatalog();
             refreshScreen(112);
@@ -1241,8 +1236,6 @@ endReturnTrue:
               tam.value = (indexOfItems[item].param & 0xff);
               addStepInProgram(tamOperation());
               leaveTamModeIfEnabled();
-              forthFoldUnwindIfDone();   /* round 6 (F4's class): commit done,
-                                            TAM over, outside the epilogue */
             }
           }
 
@@ -1256,7 +1249,6 @@ endReturnTrue:
               tam.alpha = true;
               addStepInProgram(tamOperation());
               leaveTamModeIfEnabled();
-              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
             }
             else  if(indexOfItems[item].func == addItemToBuffer) {   //this section is added, it was commented out in btnFnPressed line 760, it is moved here, as longpress works on release.
               //Here we deal with PEM TAM mode menu entry, i.e. item's sent to buffer. See issue #454 context.
@@ -1281,7 +1273,6 @@ endReturnTrue:
               tam.alpha = true;
               addStepInProgram(tamOperation());
               leaveTamModeIfEnabled();
-              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
             }
             else {
                     #if defined(VERBOSEKEYS)
@@ -1427,16 +1418,10 @@ endReturnTrue:
               ) {
               if(calcMode != CM_PEM || item != ITM_NOP) { // Here we left TAM in the context of issue #454
                 leaveTamModeIfEnabled();
-                /* round 6 (F4's class): a TAM cancelled here dispatches the
-                 * cancelling item next — the unwind must run first, or a
-                 * pending fold is stranded (and a re-entering parameterized
-                 * item would clobber the single fold context). */
-                forthFoldUnwindIfDone();
               }
             }
             else if(tam.mode == TM_VALUE && (item == ITM_TAMMAX || item == ITM_YY_TRACK || item == ITM_YY_OFF)) {
               leaveTamModeIfEnabled();
-              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
             }
 
                     #if defined(VERBOSEKEYS)
@@ -2432,7 +2417,6 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
             }
             else if(item != ITM_BACKSPACE) {          // [DL] to ensure backspace will be processed in tamProcessInput
               leaveTamModeIfEnabled();
-              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
             }
           }
           if(item == ITM_EXIT1 && tam.alpha && aimBuffer[0] != 0)  {
@@ -2497,7 +2481,6 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
 
             if(item == ITM_BASEMENU) {
               leaveTamModeIfEnabled();
-              forthFoldUnwindIfDone();   /* round 6 (F4's class) */
             }
 
               runFunction(item);
@@ -3965,15 +3948,9 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
                 else {
                     if(tam.mode && currentMenu() == -MNU_SYSFL) {                                           //JM auto recover out of SYSFL in the CFLG TAM flow; a plain catalog SYS.FL exits via the standard path below
                       numberOfTamMenusToPop = 2;                                                   //JM
-                      leaveTamModeIfEnabled();                                                     //JM
-                      /* AUDIT round 6 (F2): this return sits ABOVE the TAM
-                       * branch's own unwind below.  Without it the ordinary
-                       * catalog cancel strands the fold ARMED with the
-                       * capture SUSPENDED — and the next normal-mode STO is
-                       * forged into a program step by tamProcessInput's
-                       * bracket.  Self-guarded: no-op unless the fold is
-                       * pending and TAM is really over. */
-                      forthFoldUnwindIfDone();
+                      leaveTamModeIfEnabled();  /* D7-1: settles the fold —
+                                                   this cancel was F2, the
+                                                   strand class's front door */
                       return;                                                                      //JM
                     }                                                                              //JM
                     leaveAsmMode();
@@ -4019,13 +3996,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
         if(calcMode == CM_PEM) {
           aimBuffer[0] = 0;
         }
-        leaveTamModeIfEnabled();
-        /* L1-F2 rev 3: EXIT during TAM never routes through tamProcessInput,
-         * so it never reaches that function's epilogue — without this call an
-         * armed fold is never unwound and its materialised capture step stays
-         * in FHIST permanently.  "type something, press STO, EXIT before
-         * finishing" is one of the most ordinary cancel gestures there is. */
-        forthFoldUnwindIfDone();
+        leaveTamModeIfEnabled();  /* D7-1: the wrapper settles the fold —
+                                     EXIT during TAM never routes through
+                                     tamProcessInput's epilogue, and "type
+                                     something, press STO, EXIT before
+                                     finishing" is one of the most ordinary
+                                     cancel gestures there is (L1-F2 rev 3) */
         if(calcMode == CM_PEM) {
           scrollPemBackwards();
         }

@@ -3320,3 +3320,43 @@ after, full gate + upstream suite green.
 **Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
 CUSTOM_PKG_RECONFIGURE=1`: flash 1114904 → 1115040 = **+136 B**; ram 8884
 unchanged (`nm | grep -c forthConsole` = 22). Arena untouched.
+
+## 2026-08-08 — D7-1 landed: the teardown owner set closed by construction
+
+Owner approved rev 2 of `DESIGN_D7-1_tamFinish_2026-08-08.md` and ordered
+immediate implementation, superseding the doc's own wait-for-round-7
+sequencing note (his call; round 7 reads this commit with the rest).
+
+The shape: ui/tam.c's raw teardown became file-static `_tamLeave()`, used
+only by the 28 leave-then-dispatch sites inside `_tamProcessInput`'s call
+tree (their fold resume stays deferred to the epilogue — the L1-F2 rev-2
+loss is the record).  `tamEnterMode`'s previous-session leave keeps the
+PUBLIC wrapper deliberately: it runs outside the epilogue, and entering a
+new TAM while an old fold is pending must settle the old bracket first or
+the single fold context is clobbered.  The public `leaveTamModeIfEnabled`
+is now the wrapper — `_tamLeave()` then `forthFoldUnwindIfDone()` — and since the
+package overrides ui/tam.c, EVERY caller in the tree links it: the four
+overridden files whose manual unwinds the round-6 wave added (all thirteen
+deleted again), and the six upstream files the package does not override
+(flags.c, ui/matrixEditor.c, keyboardTweak.c, printing/print.c,
+programming/input.c), which had never even been censused for fold
+reachability.  A new external teardown site is correct by default; the
+F2/F4 strand class cannot recur through this name.
+
+The census defect that forced rev 2 is itself the named class: **a
+package-tree grep is not an upstream census** — enumerate callers in
+`src/` and diff against the override set.  Round 7 still owes the
+reachability trace for the six upstream callers (defensively covered
+regardless).
+
+The residue class test changed with the design: the suspended residue is
+now unreachable through ANY teardown, so the round-6 [7] fixture primes
+the state directly and says why — the sites it drives are defensive.
+
+Mutation proof: reverting the wrapper to `_tamLeave` alone reddens the
+round-6 [1] reproducer (`FAIL (F2): SYSFL EXIT stranded the fold`);
+restored, the full gate and upstream suite are green.
+
+**Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`: flash 1115040 → 1115008 = **−32 B**; ram 8884
+unchanged. Arena untouched.

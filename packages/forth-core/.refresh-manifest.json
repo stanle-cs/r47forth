@@ -17,7 +17,7 @@
     "programming/param_core.c": "1b4c4f5c2afd072c4e5a9d56e2ed2a4b355851758979ce3f08bfef1c853c9ea9",
     "programming/param_core.h": "ff4c3dec1227ced41df291faa66572894042302eb9fe86ce3f8c12e45d463d31",
     "testSuite/tests/forth_interp.txt": "a22bc642cb5d3002cb0ff2683bb09bfb2fd26e765c935588412fa69404e679ef",
-    "test_capture.part.h": "b817001b1c0f5cffeb0c78150d4a06cd97d805dc25d63b2bfc6921d418e15df1",
+    "test_capture.part.h": "8882c3d8bc6e417ebc06e1c4b8c590f210941726803a5144ccce217ba8d970c6",
     "test_console.part.h": "a1bf0e58d48865e151d89f73040710989e2caef546ed3d7deb5d329d1ee0da71",
     "test_dict_reloc.c": "89dfd0b6475a8aace8cf460f8d32fc280231da283d259821e0892209b3f11967",
     "test_engine.part.h": "081e18051a3d680ba69a7e957a5beb5ff14fca5b9814f172aa851bf099a3b968",
@@ -25,22 +25,22 @@
     "test_persist.part.h": "7842b4c841a777178f0f14d81bc36b16501d932993cb965eb845e3a13487ac6e"
   },
   "patches": {
-    "010-assign.c.patch": "44e18ecfca691093cb46ac36298d2b2e64657a2f69ad4ff4d0937094c92a0fe1",
+    "010-assign.c.patch": "96daff3451fac361def3d0fa34213dbb4893cee98cb45c5bcbfb9d2520688d5a",
     "010-c47Extensions__addons.c.patch": "bbe667fa75d8b397eb446b465bc8f72ebd3887f6c66adb8c06715e45c7213cda",
     "010-config.c.patch": "36e52569c26b333d901e86c290d4b12bdea005c155b5030a99fd4370d5b3c3aa",
     "010-core__freeList.c.patch": "3dd5dcceff47d9ad2e6efa0f5e3864e79dc44de580ddf104ecdbb975cc97e6ca",
     "010-defines.h.patch": "604dc402261b8ae7041dbb38836595f984c0648129fa4f294179c63ce8b13f05",
     "010-items.c.patch": "09a0e7700ab79df5eda1fffc0a91655e4680f05733825707d1ca140de36ec27e",
     "010-items.h.patch": "f8eef506e25ebf8538d5889f9c87bc12cd6e815d5cafbcbae9a07ebe7cde6cfb",
-    "010-keyboard.c.patch": "6dbfa44844e2f010f8d6ed77b37ec4d39157dd5380532bc62a3b454203b06c0e",
+    "010-keyboard.c.patch": "ff676d612498335f8cb3d7af00f53687c5039b42a42bc27177191c981a375307",
     "010-programming__decode.c.patch": "a1bc419ca7a940d6fe6774f68db1c4ddab0d6b46387167c53fc27568f91b764e",
-    "010-programming__lblGtoXeq.c.patch": "0da0c6d759ec5b890b7174831d2fa4f1f2f8218a39c9a7ba7f2dd11538e82f18",
-    "010-programming__manage.c.patch": "6d3b9bb119136659be12cd31e49de417a6b2812bb771f670aac69382147194ba",
+    "010-programming__lblGtoXeq.c.patch": "74e708a47b8b6cbc445b021a97f81fa450cdfe36dfd318b184a9ff2bce021261",
+    "010-programming__manage.c.patch": "046eb30131d4eee9580e09e74fa46b90d93395321e8516887f92793231e2c0d2",
     "010-saveRestoreBackup.c.patch": "131b341a18bdb3e4302458818677063eb702ea825dfb71add29d9d3401ccb894",
-    "010-screen.c.patch": "88e2854e77985581251c075712c658e2510516342aa04d47e11fa378e8f35b7a",
+    "010-screen.c.patch": "69dc617b6d1fa9cfcd01e7769a69a04fa87e5751d1701dcbc98a9e6b433de703",
     "010-softmenus.c.patch": "0e2bb1aecbecba36749a170edf7357a3402b84f064172500943a03b80655970e",
     "010-testSuite__testSuite.c.patch": "203d66016d80265da9753f7d99e2e62e58759c43a483c1da193b264979d5ef66",
     "010-testSuite__tests__testSuiteList.txt.patch": "6bd0d491f159e721e1478b8e715ff00d7bdd1105c1fb5dbff786ea5e864ca93f",
-    "010-ui__tam.c.patch": "7bcef08f7b9b616f81000a469620709c3aad56921961818e9bffcd4c4893dd95"
+    "010-ui__tam.c.patch": "1851c3dd00b90322d14c783960f8486b4b716071102202f78348f988fedff738"
   }
 }

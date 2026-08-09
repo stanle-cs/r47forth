@@ -5,6 +5,10 @@
 #include "forth_dict.h"
 #include "forth_capture.h"
 
+/* D7-1: the raw TAM teardown, private to this file — see its definition
+ * beside the public leaveTamModeIfEnabled wrapper. */
+static void _tamLeave(void);
+
     TO_QSPI const int16_t StoOperations[][2] = {
       {ITM_ADD,      ITM_STOADD},
       {ITM_SUB,      ITM_STOSUB},
@@ -220,7 +224,7 @@
               else {
                 reallyRunFunction(tamOperation(), tam.value);
               }
-              leaveTamModeIfEnabled();
+              _tamLeave();
             }
             break;
           }
@@ -235,7 +239,7 @@
             break;
           }
           else if(i == 0) {
-            leaveTamModeIfEnabled();
+            _tamLeave();
             scrollPemBackwards();
             break;
           }
@@ -300,7 +304,7 @@
           }
         }
         else if(tam.mode == TM_NEWMENU) {
-          leaveTamModeIfEnabled();
+          _tamLeave();
           runFunction(ITM_ASSIGN);
         }
         else {
@@ -314,11 +318,11 @@
             --numberOfTamMenusToPop;
           }
           if(calcMode == CM_ASSIGN) {
-            leaveTamModeIfEnabled();
+            _tamLeave();
             calcModeNormalGui();
           }
           else if(tam.mode == TM_STRING) {
-            leaveTamModeIfEnabled();
+            _tamLeave();
             scrollPemBackwards();
           }
           else {
@@ -428,7 +432,7 @@
         calcModeTamGui();
       }
       else {
-        leaveTamModeIfEnabled();
+        _tamLeave();
         scrollPemBackwards();
         if(calcMode == CM_ASSIGN) {
           calcMode = CM_NORMAL;
@@ -491,7 +495,7 @@
     }
     else if(!tam.digitsSoFar && !tam.indirect && tam.mode == TM_FLAGW && (item == ITM_BCD || item == ITM_TOPHEX || item == ITM_CB_LEADING_ZERO || item == ITM_OVERFLOW || item == ITM_CARRY)) {
       if(tam.mode) {
-        leaveTamModeIfEnabled();
+        _tamLeave();
       }
       hourGlassIconEnabled = false;
       return;
@@ -505,7 +509,7 @@
           if(item == ITM_Max) { // UP
             if(currentLocalStepNumber == 1) { // We are on 1st step of current program
               if(currentProgramNumber == 1) { // It's the 1st program in memory
-                leaveTamModeIfEnabled();      // Nothing to do
+                _tamLeave();      // Nothing to do
                 return;
               }
               else { // It isn't the 1st program in memory
@@ -517,7 +521,7 @@
             }
             reallyRunFunction(ITM_GTOP, tam.value);
             pemCursorIsZerothStep = true;
-            leaveTamModeIfEnabled();
+            _tamLeave();
             hourGlassIconEnabled = false;
             return;
           }
@@ -533,7 +537,7 @@
               reallyRunFunction(ITM_GTOP, tam.value);
               pemCursorIsZerothStep = true;
             }
-            leaveTamModeIfEnabled();
+            _tamLeave();
             hourGlassIconEnabled = false;
             return;
           }
@@ -557,7 +561,7 @@
                 runFunction(item);
               }
             }
-            leaveTamModeIfEnabled();
+            _tamLeave();
             hourGlassIconEnabled = false;
             return;
           }
@@ -569,7 +573,7 @@
 //                && !tam.alpha && !tam.dot
 //                && (indexOfItems[tam.function].status & PTP_STATUS) != PTP_SKIP_BACK && (indexOfItems[tam.function].status & PTP_STATUS) != PTP_DECLARE_LABEL
               ) {
-              leaveTamModeIfEnabled();
+              _tamLeave();
               runFunction(tamOperation());
             }
             return;
@@ -592,7 +596,7 @@
                   reallyRunFunction(tamOperation(), NOPARAM);
                 }
               }
-              leaveTamModeIfEnabled();
+              _tamLeave();
               hourGlassIconEnabled = false;
               return;
             }
@@ -611,7 +615,7 @@
         fnJM_2SI(NOPARAM);   // round  Real -> LI; LI->SI; SI->LI;
         fnLint(NOPARAM);     // change to long integer output
       }
-      leaveTamModeIfEnabled();
+      _tamLeave();
       return;
     }
     else if((tam.function == ITM_toINT || tam.function == ITM_HASH_JM)  && ((item == ITM_alpha && calcModel == USER_C47) || (item == ITM_REG_F && isR47FAM))) {
@@ -623,7 +627,7 @@
         fnFp(NOPARAM);       // retain data type
         fnToReal(NOPARAM);   // change to real fp output
       }
-      leaveTamModeIfEnabled();
+      _tamLeave();
       return;
     }
     else if((tam.function == ITM_toINT || tam.function == ITM_HASH_JM) && (item == ITM_REG_D || item == ITM_ENTER)) {   //ENTER gives base 10
@@ -791,7 +795,7 @@ printf("tam.value: %d\n", tam.value);
           tam.value = programList[numberOfPrograms - 1].step;
           reallyRunFunction(ITM_GTOP, tam.value);
         }
-        leaveTamModeIfEnabled();
+        _tamLeave();
         hourGlassIconEnabled = false;
         return;
       }
@@ -920,28 +924,28 @@ printf("tam.value: %d\n", tam.value);
             }
             default: {
               if(tam.mode == TM_MENU) {                        // Leave TAM menu before opening a new menu
-                leaveTamModeIfEnabled();
+                _tamLeave();
               }
               reallyRunFunction(tamOperation(), value);
             }
           }
         }
         if(tamOperation() == ITM_M_GOTO_ROW) {
-          leaveTamModeIfEnabled();
+          _tamLeave();
           tamEnterMode(ITM_M_GOTO_COLUMN);
         }
         else {
-          leaveTamModeIfEnabled();
+          _tamLeave();
         }
       }
       else if(tam.mode == TM_MENU && softmenu[softmenuStack[0].softmenuId].menuItem == -MNU_MENU) {
         int16_t value = tam.value;
         if(calcMode == CM_PEM) {
           addStepInProgram(tamOperation());
-          leaveTamModeIfEnabled();
+          _tamLeave();
         }
         else {
-          leaveTamModeIfEnabled();
+          _tamLeave();
           reallyRunFunction(tamOperation(), value);
         }
       }
@@ -987,7 +991,7 @@ printf("tam.value: %d\n", tam.value);
             for(int i = 0; i < LAST_ITEM; ++i) {
               // Match strictness: CMP_NAME strict (exact spelling & space), CMP_COMMAND relax (exact spelling, any space), CMP_CLEANED_STRING_ONLY loose (rank1 equiv., beware not tested)
               if((indexOfItems[i].status & CAT_STATUS) == CAT_FNCT && compareString(buffer, indexOfItems[i].itemCatalogName, CMP_COMMAND) == 0) {
-                leaveTamModeIfEnabled();
+                _tamLeave();
                 if(calcMode == CM_PEM) {
                   aimBuffer[0] = 0;
                   if(!programListEnd) {
@@ -1003,14 +1007,14 @@ printf("tam.value: %d\n", tam.value);
             {
               uint16_t widx;
               if (!tam.colon && forthFindColon(buffer, &widx)) {
-                leaveTamModeIfEnabled();
+                _tamLeave();
                 forthDispatchColon(tam.function, buffer, widx);
                 return;
               }
             }
           }
           if(calcMode != CM_PEM) {
-            leaveTamModeIfEnabled();
+            _tamLeave();
             if(!tam.indirect) {
               #if defined(OPTION_IR_PRINTING)
                 sprintf(errorMessage, "'%s'", buffer);
@@ -1048,7 +1052,7 @@ printf("tam.value: %d\n", tam.value);
         }
         else if(calcMode != CM_PEM) {
           reallyRunFunction(tamOperation(), value);
-          leaveTamModeIfEnabled();
+          _tamLeave();
           return;
         }
       }
@@ -1137,7 +1141,7 @@ printf("tam.value: %d\n", tam.value);
         }
         else if(tam.mode == TM_MENU) {
           if(value != INVALID_MENU) {
-            leaveTamModeIfEnabled();                                // Leave TAM menu before opening a new menu
+            _tamLeave();                                // Leave TAM menu before opening a new menu
             reallyRunFunction(tamOperation(), value);
           }
         }
@@ -1146,11 +1150,11 @@ printf("tam.value: %d\n", tam.value);
         }
       }
       if(tamOperation() == ITM_M_GOTO_ROW) {
-        leaveTamModeIfEnabled();
+        _tamLeave();
         tamEnterMode(ITM_M_GOTO_COLUMN);
       }
       else {
-        leaveTamModeIfEnabled();
+        _tamLeave();
       }
     }
   }
@@ -1383,7 +1387,14 @@ printf("tam.value: %d\n", tam.value);
 
 
 
-  void leaveTamModeIfEnabled(void) {
+  /* D7-1 (approved 2026-08-08): the raw teardown, file-static.  Callable
+   * only from THIS file — the sites inside _tamProcessInput's call tree,
+   * whose fold resume must stay deferred to tamProcessInput's epilogue
+   * (the L1-F2 rev-2 loss is the record: unwinding at a leave-then-dispatch
+   * site fires before the dispatch inserts its step).  Every caller outside
+   * this file gets the public wrapper below, which settles the fold bracket
+   * itself. */
+  static void _tamLeave(void) {
     if(!tam.mode) {
       return;
     }
@@ -1427,15 +1438,33 @@ printf("tam.value: %d\n", tam.value);
     #endif // PC_BUILD
 
     /* L1-F2 rev 3: PEM and PARK resume here as before.  An ARMED fold does
-     * NOT — eleven sites call this function and THEN dispatch, and resuming
-     * before that dispatch inserts its step makes the F6-4 splice see n == 0,
-     * losing the line and orphaning a step in FHIST.  For an armed fold the
-     * resume is deferred to forthFoldUnwindIfDone(), called from
-     * tamProcessInput's epilogue after _tamProcessInput has fully returned. */
+     * NOT — this file's leave-then-dispatch sites call _tamLeave and THEN
+     * dispatch, and resuming before that dispatch inserts its step makes the
+     * F6-4 splice see n == 0, losing the line and orphaning a step in FHIST.
+     * For an armed fold the resume is deferred to forthFoldUnwindIfDone() —
+     * tamProcessInput's epilogue for this file's sites, the public wrapper
+     * below for everyone else. */
     if((calcMode == CM_PEM || forthFoldPending()) && !forthFoldArmed()) {
       hourGlassIconEnabled = false;
       forthCaptureResume();      /* no-op unless FCAP_SUSPENDED — unchanged */
     }
+  }
+
+  /* D7-1 (approved 2026-08-08): the one teardown every caller outside this
+   * file gets.  Ends the TAM session and settles the fold bracket in one
+   * act — teardown, then forthFoldUnwindIfDone(), which is a no-op unless
+   * the fold is pending and TAM is really over.  Name and signature are
+   * upstream's, and the package overrides this file, so EVERY caller in the
+   * tree — including the six upstream files the package does not override
+   * (flags.c, ui/matrixEditor.c, keyboardTweak.c, printing/print.c,
+   * programming/input.c) — inherits the unwind through the link, with no
+   * header patch and no new overrides.  A new external teardown site is
+   * correct by default; the round-6 F2/F4 strand class cannot recur through
+   * this name.  (The wrapper-revert mutation reddens the round-6 [1]
+   * reproducer — that is the pin.) */
+  void leaveTamModeIfEnabled(void) {
+    _tamLeave();
+    forthFoldUnwindIfDone();
   }
 
 
@@ -1475,10 +1504,12 @@ printf("tam.value: %d\n", tam.value);
     /* Re-test before restoring: an error raised inside the commit may have
      * changed calcMode, and the epilogue must not clobber that. */
     if(brk && calcMode == CM_PEM) { calcMode = savedMode; }
-    /* The fold unwinds HERE, not in leaveTamModeIfEnabled — that function is
-     * not the exit choke (see C2): eleven sites call it and THEN dispatch, so
-     * an unwind hung on it would fire before the work it brackets.  This
-     * epilogue runs on every path out of _tamProcessInput. */
+    /* The fold unwinds HERE for this file's own sites: they call the raw
+     * _tamLeave and THEN dispatch, so an unwind hung on the teardown would
+     * fire before the work it brackets (see C2).  This epilogue runs on
+     * every path out of _tamProcessInput.  Callers OUTSIDE this file go
+     * through the public leaveTamModeIfEnabled wrapper, which settles the
+     * bracket itself (D7-1). */
     forthFoldUnwindIfDone();   /* rev 3: resume+leave, and ONLY once tam.mode
                                   is 0 — see the helper's comment in manage.c */
     _tamUpdateBuffer();

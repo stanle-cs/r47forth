@@ -804,8 +804,6 @@ void execTimerApp(uint16_t timerType) {
     assignToKey(kc);
     itemToBeAssigned = 0;
     leaveTamModeIfEnabled();
-    forthFoldUnwindIfDone();   /* round 6 (F4's class): ASSIGN parks the fold;
-                                  this teardown is outside both unwind owners */
     keyActionProcessed = true;
     calcMode = previousCalcMode;
     shiftF = shiftG = false;

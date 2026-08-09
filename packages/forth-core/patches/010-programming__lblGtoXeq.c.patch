@@ -1,27 +1,17 @@
 diff --git a/src/c47/programming/lblGtoXeq.c b/src/c47/programming/lblGtoXeq.c
-index 70944d629fa4e29c343f2483eda44a21526c0ef4..8c2e8da74603c735314e998724808af37d229952 100644
+index 70944d629fa4e29c343f2483eda44a21526c0ef4..62abe5882d39bc96e36726e452997685e31e0630 100644
 --- a/src/c47/programming/lblGtoXeq.c
 +++ b/src/c47/programming/lblGtoXeq.c
-@@ -7,6 +7,9 @@
+@@ -7,6 +7,8 @@
   ***********************************************/
  
  #include "c47.h"
-+#include "forth_capture.h" /* round 6 (F4's class): forthFoldUnwindIfDone at the fnExecute TAM teardown */
 +#include "forth_dict.h"
 +#include "param_core.h"
  
  // Drop stale interrupt keys at top-level program start (a leftover key prior to pgm run can trip us). 1 = on, 0 = off.
  #define CLEAR_KEYS_ON_PGM_START 0
-@@ -201,6 +204,8 @@ void fnExecute(uint16_t label) {
-     if(lastErrorCode == ERROR_NONE) {
-       if(tam.mode) {
-         leaveTamModeIfEnabled();
-+        forthFoldUnwindIfDone();   /* AUDIT round 6 (F4's class): teardown
-+                                      outside both unwind owners; self-guarded */
-         refreshScreen(2);
-       }
-       runProgram(false, INVALID_VARIABLE);
-@@ -322,252 +327,6 @@ void fnStopProgram(uint16_t unusedButMandatoryParameter) {
+@@ -322,252 +324,6 @@ void fnStopProgram(uint16_t unusedButMandatoryParameter) {
  
  
  
@@ -274,7 +264,7 @@ index 70944d629fa4e29c343f2483eda44a21526c0ef4..8c2e8da74603c735314e998724808af3
  static void _putLiteral(uint8_t *literalAddress) {
    switch(*(literalAddress++)) {
        case BINARY_SHORT_INTEGER: {
-@@ -749,10 +508,15 @@ static void _putLiteral(uint8_t *literalAddress) {
+@@ -749,10 +505,15 @@ static void _putLiteral(uint8_t *literalAddress) {
    }
  }
  
@@ -290,7 +280,7 @@ index 70944d629fa4e29c343f2483eda44a21526c0ef4..8c2e8da74603c735314e998724808af3
  
    op = *(step++);
    if(op & 0x80) {
-@@ -783,8 +547,15 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -783,8 +544,15 @@ int16_t executeOneStep(uint8_t *step) {
      case ITM_CASE:        //  1418
      case ITM_SKIP: {      //  1603
        uint8_t previousErrorCodeMeM = previousErrorCode;
@@ -307,7 +297,7 @@ index 70944d629fa4e29c343f2483eda44a21526c0ef4..8c2e8da74603c735314e998724808af3
        return -1;
        }
  
-@@ -803,7 +574,7 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -803,7 +571,7 @@ int16_t executeOneStep(uint8_t *step) {
  
      case ITM_SOLVE: {     //  1608
        currentSolverStatus &= ~SOLVER_STATUS_USES_FORMULA;
@@ -316,7 +306,7 @@ index 70944d629fa4e29c343f2483eda44a21526c0ef4..8c2e8da74603c735314e998724808af3
        if(temporaryInformation == TI_SOLVER_FAILED) {
          if(lastErrorCode == ERROR_SOLVER_ABORT) {   // abort: keep the error so the loop halts on the SOLVE step (like INT); no not-found skip
            return 0;
-@@ -861,6 +632,14 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -861,6 +629,14 @@ int16_t executeOneStep(uint8_t *step) {
                fn42Append(NOPARAM);
              }
            }
@@ -331,7 +321,7 @@ index 70944d629fa4e29c343f2483eda44a21526c0ef4..8c2e8da74603c735314e998724808af3
            else {  // REM
                    // just ignore it
            }
-@@ -868,12 +647,12 @@ int16_t executeOneStep(uint8_t *step) {
+@@ -868,12 +644,12 @@ int16_t executeOneStep(uint8_t *step) {
          }
  
          case PTP_KEYG_KEYX: {
@@ -346,7 +336,7 @@ index 70944d629fa4e29c343f2483eda44a21526c0ef4..8c2e8da74603c735314e998724808af3
          }
        }
        #if defined(OPTION_IR_PRINTING)
-@@ -897,6 +676,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
+@@ -897,6 +673,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
        clearKeyBuffer();
      }
    #endif

@@ -1,19 +1,17 @@
 diff --git a/src/c47/assign.c b/src/c47/assign.c
-index c23deaaa9231d501c134b0e55dc296818e21359e..04b9ede546ee12b8c2a080380132466438082a05 100644
+index c23deaaa9231d501c134b0e55dc296818e21359e..ba27482576d0fbf44daecd9b12bec4e4be6c7bfc 100644
 --- a/src/c47/assign.c
 +++ b/src/c47/assign.c
-@@ -2,6 +2,10 @@
+@@ -2,6 +2,8 @@
  // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
  
  #include "c47.h"
 +#include "forth_dict.h"   /* M2 (Stage M): forthDictNameByRef for the
 +                             ASSIGN_FORTH_WORDS band arms */
-+#include "forth_capture.h" /* round 6 (F4's class): forthFoldUnwindIfDone at
-+                              the assignLeaveAlpha teardown */
  
  // C47 Layout from Layout_template_automation template: Do not change manually
  //This variable is to store in flash memory
-@@ -741,6 +745,15 @@ void updateAssignTamBuffer(void) {
+@@ -741,6 +743,15 @@ void updateAssignTamBuffer(void) {
    else if(itemToBeAssigned == ASSIGN_CLEAR) {
      tbPtr = stringCopy(tbPtr, "NULL");
    }
@@ -29,7 +27,7 @@ index c23deaaa9231d501c134b0e55dc296818e21359e..04b9ede546ee12b8c2a0803801324664
    else if(itemToBeAssigned >= ASSIGN_LABELS) {
      uint8_t *lblPtr = labelList[itemToBeAssigned - ASSIGN_LABELS].labelPointer;
      uint32_t count = *(lblPtr++);
-@@ -805,6 +818,20 @@ void _assignItem(userMenuItem_t *menuItem) {
+@@ -805,6 +816,20 @@ void _assignItem(userMenuItem_t *menuItem) {
      menuItem->item            = ITM_NULL;
      menuItem->argumentName[0] = 0;
    }
@@ -50,13 +48,3 @@ index c23deaaa9231d501c134b0e55dc296818e21359e..04b9ede546ee12b8c2a0803801324664
    else if(itemToBeAssigned >= ASSIGN_LABELS) {
      lblPtr                    = labelList[itemToBeAssigned - ASSIGN_LABELS].labelPointer;
      menuItem->item            = ITM_XEQ;
-@@ -1166,6 +1193,9 @@ void assignLeaveAlpha(void) {
-   tam.alpha = false;
-   clearSystemFlag(FLAG_ALPHA);
-   leaveTamModeIfEnabled();
-+  forthFoldUnwindIfDone();   /* AUDIT round 6 (F4's class): ASSIGN parks the
-+                                fold; this teardown is outside both unwind
-+                                owners.  Self-guarded no-op otherwise. */
-   alphaCursor = 0;
-   calcModeNormalGui();
- }
