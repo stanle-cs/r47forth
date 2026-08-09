@@ -140,10 +140,13 @@ real news sits beside it.
   silently does not navigate while `dynamicMenuItem` is latched by the
   softkey that committed the TAM. Both FIXED in `c106008de` — the crash by
   clamping, R8-2 by the bracket this tree already applies at two other
-  navigations. **R8-1's wrong-program half is a DOCUMENTED GAP**: nothing
-  at that site can know WHICH program went, and the repair is the one
-  upstream gives itself — the deleter adjusts the saved cursor. That is a
-  design change and it is the owner's call (§8).
+  navigations. **R8-1's wrong-program half is also CLOSED** — the owner
+  ruled the standing rule rather than the case: *follow upstream's
+  conventions when possible for fix decisions*. Upstream's convention was
+  in the same file all along (the deleter adjusts every saved cursor;
+  `fnClP` renumbers its own), so `_clearProgram` now maintains the fold's
+  cursor by the same rule at the same moment, and test [8] tightened from
+  printing the mismatch to asserting identity (`c17c0f3`-series).
 - **R8-3/R8-4/R8-5 — D7-a recurring inside its own countermeasure.** Three
   of group I's pins were mutation-proven blind: the frame-destroyer pin
   was anchored to `^ +`, and a third destroyer left the pin AND the full
@@ -169,12 +172,15 @@ subcase was DELETED rather than shipped. The canary gate is what closes
 the executed door; the re-anchor is defensive, and no mutation available
 today reddens it.
 
-**R8-1's wrong-cursor half is open by design, not by oversight.** Skipping
-the restore was tried and is worse — the resume has already re-anchored
-onto the capture step, so skipping parks the owner inside FHIST rather
-than one program off. Test [8] PRINTS the identity mismatch and asserts
-only the in-range property, so the day the design change lands it tightens
-by one line.
+**R8-1's wrong-cursor half was written off too early, and the owner's
+standing rule caught it.** I fixed the crash at the restore site, proved
+that site cannot know which program was deleted, and recorded the rest as
+an unfixable gap — without checking how upstream solves the same problem.
+It solves it in the same file: the DELETER adjusts every saved cursor.
+Applying that convention closed the gap the same day. The general lesson is
+now a standing rule: a workaround is only correct when no upstream
+convention covers the case, and "the site I happened to be editing cannot
+do it" is not evidence that none exists.
 
 **This round is not findings-only.** The tree moved seven times during it.
 Every fix carries a red-first reproducer, and `58e07a2bd`, `bdbfffeb1`,
@@ -219,16 +225,16 @@ half is mutation-provable.
 
 ## 7. Verdict
 
-**Would I ship it? Not before R8-1's remaining half is ruled on — and much
-closer than round 7 otherwise.** Round 7's worst was a silent wrong-result
-on five keypresses; round 8's worst was a SIGSEGV, and it is fixed. What
-is left open is a wrong cursor after a delete, which costs the owner
-confusion rather than data.
+**Would I ship it? Closer than any round so far, with one caveat that is
+about process, not code.** Round 7's worst was a silent wrong-result on
+five keypresses; round 8's worst was a SIGSEGV, and it is fixed, as is the
+wrong-cursor half beside it. The caveat: five commits of this round are
+unaudited (§8), and they are fixes to fixes.
 
-**Where it breaks first.** `FORTH → DELP → <a program before the cursor's>
-→ ENTER`: the PEM cursor comes back one program off, silently. In range,
-so nothing reads out of bounds; wrong, and unfixable at the site that
-restores it.
+**Where it breaks first.** Nothing known in the fold window. The last open
+behaviour — `FORTH → DELP → <a program before the cursor's> → ENTER`
+returning the PEM cursor one program off — closed when the fix moved to
+the deleter, where upstream keeps its own.
 
 **The pattern, eighth round running, and it has moved.** For seven rounds
 the shape was "a fix that enforced its own rule on an enumerated subset of
@@ -262,14 +268,10 @@ commits.
    divert defeating `forthFoldEnter`'s park onto FHIST, which would
    materialise the capture step in the caller's program.
 
-**Owner rulings owed:**
-
-- **R8-1's wrong-cursor half.** The repair is the one upstream gives
-  itself — the deleter adjusts the fold's saved cursor, which means the
-  fold registering its cursor with whatever performs the delete. Design
-  change, not a patch.
-- Carried: C12's layering is closed, but P1 (round 3), P2's push ruling,
-  C22-vs-C1 and F13/U5 stand as before.
+**Owner rulings owed:** none new. R8-1's remaining half was ruled the same
+day, as a standing rule rather than a one-off — *follow upstream's
+conventions when possible for fix decisions* — and closed under it.
+Carried unchanged: P1 (round 3), P2's push ruling, C22-vs-C1, F13/U5.
 
 **Standing items unchanged:** the DM42n hardware pass for stages L/M/N,
 the merge to main (110+ commits), the FIX-6B MR push, the leak-report

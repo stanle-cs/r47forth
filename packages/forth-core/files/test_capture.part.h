@@ -18371,18 +18371,19 @@ static int test_fold_round8_window(void)
                        (unsigned)numberOfPrograms);
                 scFail = 1;
               }
-              /* DOCUMENTED GAP, printed and NOT asserted: the contract the
-               * owner cares about is IDENTITY — they were editing PCCC and
-               * should still be — and forthFoldLeave cannot deliver it,
-               * because entryProgramCount says a program went, never which.
-               * See the banner at the restore. The day the deleter adjusts
-               * the fold's cursor, this printf becomes the assertion. */
+              /* The contract the owner cares about is IDENTITY: they were
+               * editing PCCC and must still be.  This was a documented gap
+               * for exactly one commit — the restore site cannot know WHICH
+               * program went — and it closed the moment the fix followed
+               * upstream's convention instead of working around it: the
+               * DELETER adjusts every saved cursor, which is what fnClP
+               * already does for its own. */
               else if (pccNow == 0 || currentProgramNumber != pccNow) {
-                printf("    [8] GAP (R8-1, expected today): the cursor came back"
-                       " one program off — PCCC is now program %u, cursor is in"
-                       " %u. In range, so no out-of-bounds read; wrong program,"
-                       " which needs the deleter's cooperation to fix.\n",
+                printf("    [8] FAIL (R8-1): the cursor came back one program"
+                       " off — PCCC is now program %u, cursor is in %u; the"
+                       " deleter did not renumber the fold's saved cursor\n",
                        pccNow, (unsigned)currentProgramNumber);
+                scFail = 1;
               }
             }
           }

@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/manage.c b/src/c47/programming/manage.c
-index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f1ca4567f 100644
+index b65ac7ab60a5a07424031decda44f30f0e3c23d5..ca4515922c7f7ee187b79a5c23667b9e91d6013f 100644
 --- a/src/c47/programming/manage.c
 +++ b/src/c47/programming/manage.c
 @@ -6,6 +6,10 @@
@@ -13,7 +13,38 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
  
  // Structure of the program memory.
  // In this example the RAM is 16384 blocks (from 0 to 16383) of 4 bytes = 65536 bytes.
-@@ -588,10 +592,25 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
+@@ -283,6 +287,11 @@ void fnClPAll(uint16_t confirmation) {
+ 
+ 
+ 
++/* AUDIT round 8 (R8-1): defined with the fold context far below; declared
++ * here because the DELETER is where upstream adjusts saved cursors, and the
++ * fold holds one. */
++static void _forthFoldNoteProgramDeleted(uint16_t deletedProgramNumber);
++
+ static int _clearProgram(void) {
+   if(beginOfCurrentProgram == beginOfProgramMemory && (endOfCurrentProgram >= firstFreeProgramByte || (*endOfCurrentProgram == 255 && *(endOfCurrentProgram + 1) == 255))) { // There is only one program in memory
+     fnClPAll(CONFIRMED);
+@@ -294,6 +303,18 @@ static int _clearProgram(void) {
+ 
+     uint16_t savedCurrentProgramNumber = currentProgramNumber;
+ 
++    /* AUDIT round 8 (R8-1), following upstream's own convention rather than
++     * working around it: the DELETER adjusts every saved cursor.  fnClP
++     * renumbers its own `savedCurrentProgramNumber` when the deleted program
++     * precedes it (:354-357) and this function clamps its own below; the
++     * Forth fold context holds a THIRD copy of the same quantity, and this
++     * is the one place that knows which program is going.  Same rule, same
++     * shape, same moment.
++     *
++     * The alternative — repairing it at forthFoldLeave — was tried and
++     * cannot work: that site can count that a program went, never WHICH. */
++    _forthFoldNoteProgramDeleted(currentProgramNumber);
++
+     goToPgmStep(currentProgramNumber, 1);  // [DL] work around for crash when label deleted is not at the beginning of the program
+     firstDisplayedLocalStepNumber = 0;     // ditto
+ 
+@@ -588,10 +609,25 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
        decodeOneStep(step);
        if(firstDisplayedStepNumber + line - lineOffset == currentStepNumber && !tam.mode) {
          if(getSystemFlag(FLAG_ALPHA)) {
@@ -42,7 +73,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
            xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
            tmpString[2 + cursorInString    ] = STD_CURSOR[0];
            tmpString[2 + cursorInString + 1] = STD_CURSOR[1];
-@@ -792,6 +811,85 @@ static void _closeAlphaMenus(void) {
+@@ -792,6 +828,85 @@ static void _closeAlphaMenus(void) {
    }
  }
  
@@ -128,7 +159,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
  void pemAlpha(int16_t item) {
    bool_t editCommand = false;
    if(item == ITM_EDIT) {
-@@ -823,6 +921,24 @@ void pemAlpha(int16_t item) {
+@@ -823,6 +938,24 @@ void pemAlpha(int16_t item) {
        editCommand = true;
        item = aimFunc;
      }
@@ -153,7 +184,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
      else {
        aimBuffer[0] = 0;
        return;
-@@ -830,6 +946,9 @@ void pemAlpha(int16_t item) {
+@@ -830,6 +963,9 @@ void pemAlpha(int16_t item) {
    }
  
    if(!getSystemFlag(FLAG_ALPHA)) {
@@ -163,7 +194,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
        resetShiftState();
        displayAIMbufferoffset = 0;
        if(!editCommand) {
-@@ -851,6 +970,9 @@ void pemAlpha(int16_t item) {
+@@ -851,6 +987,9 @@ void pemAlpha(int16_t item) {
          tmpString[2] = 0;
          _insertInProgram((uint8_t *)tmpString, 3);
        }
@@ -173,7 +204,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
        else { // rem or 42str
          tmpString[0] = (tam.function >> 8) | 0x80;
          tmpString[1] =  tam.function       & 0xff;
-@@ -863,36 +985,64 @@ void pemAlpha(int16_t item) {
+@@ -863,36 +1002,64 @@ void pemAlpha(int16_t item) {
      }
      if(indexOfItems[item].func == addItemToBuffer) {
        int32_t len = stringByteLength(aimBuffer);
@@ -252,7 +283,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
          int16_t lastGlyphPos;
          aimBuffer[T_cursorPos] = 0;
          lastGlyphPos = stringLastGlyph(aimBuffer);
-@@ -902,11 +1052,23 @@ void pemAlpha(int16_t item) {
+@@ -902,11 +1069,23 @@ void pemAlpha(int16_t item) {
        }
      }
      else if(item == ITM_ENTER) {
@@ -281,7 +312,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
      }
      else if(item == ITM_USERMODE) {
        fnFlipFlag(FLAG_USER);
-@@ -956,6 +1118,13 @@ void pemAlpha(int16_t item) {
+@@ -956,6 +1135,13 @@ void pemAlpha(int16_t item) {
        fnT_ARROW(indexOfItems[item].param);
        return;
      }
@@ -295,7 +326,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
  
      int16_t aimFunc = currentStep[0];
      if(aimFunc & 0x80) {
-@@ -972,6 +1141,9 @@ void pemAlpha(int16_t item) {
+@@ -972,6 +1158,9 @@ void pemAlpha(int16_t item) {
        xcopy(tmpString + 3, aimBuffer, stringByteLength(aimBuffer));
        _insertInProgram((uint8_t *)tmpString, stringByteLength(aimBuffer) + 3);
      }
@@ -305,7 +336,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
      else { // rem or 42str
        tmpString[0] = (aimFunc >> 8) | 0x80;
        tmpString[1] =  aimFunc       & 0xff;
-@@ -988,7 +1160,22 @@ void pemAlpha(int16_t item) {
+@@ -988,7 +1177,22 @@ void pemAlpha(int16_t item) {
  }
  
  void pemCloseAlphaInput(void) {
@@ -328,7 +359,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
    clearSystemFlag(FLAG_ALPHA);
    calcModeNormalGui();
    ++currentLocalStepNumber;
-@@ -998,6 +1185,1180 @@ void pemCloseAlphaInput(void) {
+@@ -998,6 +1202,1186 @@ void pemCloseAlphaInput(void) {
      firstDisplayedStep = findNextStep(firstDisplayedStep);
    }
    _closeAlphaMenus();
@@ -1168,11 +1199,6 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
 +                                    capture-step insert */
 +  uint32_t capStepOffset;       /* capture step vs beginOfProgramMemory —
 +                                    program memory may relocate */
-+  uint16_t entryProgramCount;   /* AUDIT round 8 (R8-1): numberOfPrograms at
-+                                    entry.  savedProgram is an INDEX into a
-+                                    list the PARK dispatch can shorten, and
-+                                    the only cheap way to know it did is to
-+                                    have counted before. */
 +  uint8_t  savedZerothStep;     /* pemCursorIsZerothStep */
 +  uint8_t  pad;
 +} forthFoldCtx_t;
@@ -1192,7 +1218,6 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
 +    goToGlobalStep(1);           /* guard programList[-1] below */
 +  }
 +  forthFoldCtx.savedProgram        = currentProgramNumber;
-+  forthFoldCtx.entryProgramCount   = numberOfPrograms;   /* R8-1 */
 +  forthFoldCtx.savedLocalStep      = currentLocalStepNumber;
 +  forthFoldCtx.savedFirstDisplayed = firstDisplayedLocalStepNumber;
 +  forthFoldCtx.savedZerothStep     = (uint8_t)pemCursorIsZerothStep;
@@ -1328,6 +1353,25 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
 +  return _forthFoldFindCaptureStep();
 +}
 +
++/* AUDIT round 8 (R8-1): the fold's half of upstream's deleter convention.
++ * Called from _clearProgram, which is where fnClP renumbers its own saved
++ * cursor — and the rule is upstream's, character for character: a deletion
++ * BELOW the saved program shifts it down by one; a deletion AT it leaves the
++ * index alone (upstream's `programNumberToDelete != savedCurrentProgramNumber`
++ * arm does nothing, so the cursor lands on what is now the next program, and
++ * the fold follows rather than inventing a different answer).
++ *
++ * No-op when no fold is pending, so an ordinary DELP outside the console
++ * costs one compare. */
++static void _forthFoldNoteProgramDeleted(uint16_t deletedProgramNumber) {
++  if(!forthFoldPending()) {
++    return;
++  }
++  if(deletedProgramNumber < forthFoldCtx.savedProgram) {
++    --forthFoldCtx.savedProgram;
++  }
++}
++
 +void forthFoldLeave(void) {
 +  if(forthCapFoldModeRaw() == 0) {
 +    return;
@@ -1435,28 +1479,21 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
 +   * on the freshly reallocated arena, and goToGlobalStep walked the garbage
 +   * with no NULL guard and no iteration cap — reproduced as a SIGSEGV.
 +   *
-+   * What is fixed here is the OUT-OF-BOUNDS half, by clamping the index
-+   * into the list that exists now.  That is the crash, and it is the half
-+   * that can be fixed from here.
++   * The index is now MAINTAINED by the deleter, which is upstream's own
++   * convention and not a workaround: `_clearProgram` calls
++   * `_forthFoldNoteProgramDeleted` at the moment it knows which program is
++   * going, applying the same rule fnClP applies to its own saved cursor.
++   * That is what makes the ordinary case correct — the owner comes back to
++   * the program they were editing.
 +   *
-+   * DOCUMENTED GAP, with its reaching input, because the honest answer is
-+   * that the other half cannot be fixed at this site: when the deleted
-+   * program PRECEDED the saved one, the correct new index is one lower,
-+   * and nothing here knows which program went.  entryProgramCount says
-+   * THAT one went, never WHICH.  Skipping the restore is not the answer
-+   * either — it was tried and is worse: forthCaptureResume has already
-+   * re-anchored the cursor onto the capture step, so skipping parks the
-+   * owner inside FHIST rather than one program off.  The real repair is
-+   * the one upstream gives itself — the deleter adjusts the saved cursor
-+   * (fnClP, src/c47 manage.c:350-355) — which would mean the fold
-+   * registering its cursor with whatever performs the delete.  That is a
-+   * design change, not a patch, and it is the owner's call.
-+   *
-+   * Reaching input for the residue: console open, DELP, name a program
-+   * that precedes the one the PEM cursor was left in, ENTER — the cursor
-+   * comes back one program off, silently.  Test [8] pins the in-range
-+   * property and PRINTS the identity mismatch rather than asserting it,
-+   * so the day the design change lands the test tightens by one line. */
++   * The clamp below stays as the crash guard.  It is defence in depth for
++   * a shrink no deleter announced: this used to be the only thing between
++   * a stale index and `programList[numberOfPrograms]` on a freshly
++   * reallocated arena, walked by `goToGlobalStep` with no NULL guard and
++   * no iteration cap — reproduced as a SIGSEGV.  A repair at this site
++   * alone could never fix the identity half, because nothing HERE knows
++   * which program went; that is precisely why the fix belongs in the
++   * deleter. */
 +  { uint16_t p = forthFoldCtx.savedProgram;
 +    if(numberOfPrograms > 0) {
 +      if(p < 1)                { p = 1; }
@@ -1509,7 +1546,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
  }
  
  
-@@ -1013,7 +2374,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
+@@ -1013,7 +2397,7 @@ void pemAlphaEdit (uint16_t unusedButMandatoryParameter) {
      func <<= 8;
      func |= currentStep[1];
    }
@@ -1518,7 +1555,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
      pemAlpha(ITM_EDIT);
    }
    hourGlassIconEnabled = false;
-@@ -1385,6 +2746,43 @@ static void _pemCloseAngleInput(int item) {
+@@ -1385,6 +2769,43 @@ static void _pemCloseAngleInput(int item) {
    }
  }
  
@@ -1562,7 +1599,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
  void insertStepInProgram(const int16_t func) {
                                  #if defined(DEBUG_PGM)
                                    print_caller(NULL);
-@@ -1395,12 +2793,34 @@ void insertStepInProgram(const int16_t func) {
+@@ -1395,12 +2816,34 @@ void insertStepInProgram(const int16_t func) {
      firstDisplayedLocalStepNumber = 0;
    }
  
@@ -1599,7 +1636,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
      pemAlpha(func);
      pemCursorIsZerothStep = false;
      return;
-@@ -1422,6 +2842,67 @@ void insertStepInProgram(const int16_t func) {
+@@ -1422,6 +2865,67 @@ void insertStepInProgram(const int16_t func) {
      pemCursorIsZerothStep = false;
      return;
    }
@@ -1667,7 +1704,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
    else if(func == ITM_42STRING || func == ITM_42APPEND) {
      tmpString[0] = (func >> 8) | 0x80;
      tmpString[1] =  func  & 0xff;
-@@ -1433,6 +2914,15 @@ void insertStepInProgram(const int16_t func) {
+@@ -1433,6 +2937,15 @@ void insertStepInProgram(const int16_t func) {
      return;
    }
  
@@ -1683,7 +1720,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
    if(   indexOfItems[func].func == addItemToBuffer
       || (!tam.mode && aimBuffer[0] != 0 && (   func == ITM_CHS || func == ITM_CC || func == ITM_op_j || func == ITM_op_j_pol || func == ITM_toINT
                                              || (nimNumberPart == NP_INT_BASE && (   ( isR47FAM && (func == ITM_SQUAREROOTX || func == ITM_YX))
-@@ -1515,6 +3005,23 @@ void insertStepInProgram(const int16_t func) {
+@@ -1515,6 +3028,23 @@ void insertStepInProgram(const int16_t func) {
      tmpString[1] =  func       & 0xff;
    }
  
@@ -1707,7 +1744,7 @@ index b65ac7ab60a5a07424031decda44f30f0e3c23d5..c0e95fed5e348a55200f25a5bfe7b55f
     switch(indexOfItems[func].status & PTP_STATUS) {
      case PTP_DISABLED: {
        switch(func) {
-@@ -1810,7 +3317,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
+@@ -1810,7 +3340,7 @@ void insertUserItemInProgram(int16_t func, char *funcParam) {
    }
    else {
      tmpString[opBytes++] = (func >> 8) | 0x80;

@@ -287,6 +287,11 @@ void fnClPAll(uint16_t confirmation) {
 
 
 
+/* AUDIT round 8 (R8-1): defined with the fold context far below; declared
+ * here because the DELETER is where upstream adjusts saved cursors, and the
+ * fold holds one. */
+static void _forthFoldNoteProgramDeleted(uint16_t deletedProgramNumber);
+
 static int _clearProgram(void) {
   if(beginOfCurrentProgram == beginOfProgramMemory && (endOfCurrentProgram >= firstFreeProgramByte || (*endOfCurrentProgram == 255 && *(endOfCurrentProgram + 1) == 255))) { // There is only one program in memory
     fnClPAll(CONFIRMED);
@@ -297,6 +302,18 @@ static int _clearProgram(void) {
     _removeLabelsAssignments();
 
     uint16_t savedCurrentProgramNumber = currentProgramNumber;
+
+    /* AUDIT round 8 (R8-1), following upstream's own convention rather than
+     * working around it: the DELETER adjusts every saved cursor.  fnClP
+     * renumbers its own `savedCurrentProgramNumber` when the deleted program
+     * precedes it (:354-357) and this function clamps its own below; the
+     * Forth fold context holds a THIRD copy of the same quantity, and this
+     * is the one place that knows which program is going.  Same rule, same
+     * shape, same moment.
+     *
+     * The alternative — repairing it at forthFoldLeave — was tried and
+     * cannot work: that site can count that a program went, never WHICH. */
+    _forthFoldNoteProgramDeleted(currentProgramNumber);
 
     goToPgmStep(currentProgramNumber, 1);  // [DL] work around for crash when label deleted is not at the beginning of the program
     firstDisplayedLocalStepNumber = 0;     // ditto
@@ -2021,11 +2038,6 @@ typedef struct {
                                     capture-step insert */
   uint32_t capStepOffset;       /* capture step vs beginOfProgramMemory —
                                     program memory may relocate */
-  uint16_t entryProgramCount;   /* AUDIT round 8 (R8-1): numberOfPrograms at
-                                    entry.  savedProgram is an INDEX into a
-                                    list the PARK dispatch can shorten, and
-                                    the only cheap way to know it did is to
-                                    have counted before. */
   uint8_t  savedZerothStep;     /* pemCursorIsZerothStep */
   uint8_t  pad;
 } forthFoldCtx_t;
@@ -2045,7 +2057,6 @@ void forthFoldEnter(int16_t func, uint16_t mode) {
     goToGlobalStep(1);           /* guard programList[-1] below */
   }
   forthFoldCtx.savedProgram        = currentProgramNumber;
-  forthFoldCtx.entryProgramCount   = numberOfPrograms;   /* R8-1 */
   forthFoldCtx.savedLocalStep      = currentLocalStepNumber;
   forthFoldCtx.savedFirstDisplayed = firstDisplayedLocalStepNumber;
   forthFoldCtx.savedZerothStep     = (uint8_t)pemCursorIsZerothStep;
@@ -2181,6 +2192,25 @@ static uint8_t *_forthFoldResolveCaptureStep(void) {
   return _forthFoldFindCaptureStep();
 }
 
+/* AUDIT round 8 (R8-1): the fold's half of upstream's deleter convention.
+ * Called from _clearProgram, which is where fnClP renumbers its own saved
+ * cursor — and the rule is upstream's, character for character: a deletion
+ * BELOW the saved program shifts it down by one; a deletion AT it leaves the
+ * index alone (upstream's `programNumberToDelete != savedCurrentProgramNumber`
+ * arm does nothing, so the cursor lands on what is now the next program, and
+ * the fold follows rather than inventing a different answer).
+ *
+ * No-op when no fold is pending, so an ordinary DELP outside the console
+ * costs one compare. */
+static void _forthFoldNoteProgramDeleted(uint16_t deletedProgramNumber) {
+  if(!forthFoldPending()) {
+    return;
+  }
+  if(deletedProgramNumber < forthFoldCtx.savedProgram) {
+    --forthFoldCtx.savedProgram;
+  }
+}
+
 void forthFoldLeave(void) {
   if(forthCapFoldModeRaw() == 0) {
     return;
@@ -2288,28 +2318,21 @@ void forthFoldLeave(void) {
    * on the freshly reallocated arena, and goToGlobalStep walked the garbage
    * with no NULL guard and no iteration cap — reproduced as a SIGSEGV.
    *
-   * What is fixed here is the OUT-OF-BOUNDS half, by clamping the index
-   * into the list that exists now.  That is the crash, and it is the half
-   * that can be fixed from here.
+   * The index is now MAINTAINED by the deleter, which is upstream's own
+   * convention and not a workaround: `_clearProgram` calls
+   * `_forthFoldNoteProgramDeleted` at the moment it knows which program is
+   * going, applying the same rule fnClP applies to its own saved cursor.
+   * That is what makes the ordinary case correct — the owner comes back to
+   * the program they were editing.
    *
-   * DOCUMENTED GAP, with its reaching input, because the honest answer is
-   * that the other half cannot be fixed at this site: when the deleted
-   * program PRECEDED the saved one, the correct new index is one lower,
-   * and nothing here knows which program went.  entryProgramCount says
-   * THAT one went, never WHICH.  Skipping the restore is not the answer
-   * either — it was tried and is worse: forthCaptureResume has already
-   * re-anchored the cursor onto the capture step, so skipping parks the
-   * owner inside FHIST rather than one program off.  The real repair is
-   * the one upstream gives itself — the deleter adjusts the saved cursor
-   * (fnClP, src/c47 manage.c:350-355) — which would mean the fold
-   * registering its cursor with whatever performs the delete.  That is a
-   * design change, not a patch, and it is the owner's call.
-   *
-   * Reaching input for the residue: console open, DELP, name a program
-   * that precedes the one the PEM cursor was left in, ENTER — the cursor
-   * comes back one program off, silently.  Test [8] pins the in-range
-   * property and PRINTS the identity mismatch rather than asserting it,
-   * so the day the design change lands the test tightens by one line. */
+   * The clamp below stays as the crash guard.  It is defence in depth for
+   * a shrink no deleter announced: this used to be the only thing between
+   * a stale index and `programList[numberOfPrograms]` on a freshly
+   * reallocated arena, walked by `goToGlobalStep` with no NULL guard and
+   * no iteration cap — reproduced as a SIGSEGV.  A repair at this site
+   * alone could never fix the identity half, because nothing HERE knows
+   * which program went; that is precisely why the fix belongs in the
+   * deleter. */
   { uint16_t p = forthFoldCtx.savedProgram;
     if(numberOfPrograms > 0) {
       if(p < 1)                { p = 1; }
