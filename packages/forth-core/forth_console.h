@@ -105,6 +105,11 @@ uint16_t _forthConsoleEditorTop(void);
  * that row. */
 #define FORTH_CONSOLE_ED_CLEAR     1
 bool_t   forthConsoleHasOpenLine(void);          /* a word left output unterminated */
+
+/* F13/U5 (CONSOLIDATE P9): the interactive EXIT ladder, out of upstream's
+   fnKeyExit.  True means the press was consumed and the caller breaks; false
+   means no interactive capture is engaged and the native arm runs. */
+bool_t   forthConsoleExitLadder(void);
 uint32_t forthConsoleWriteSeq(void);             /* bumped by every writer */
 
 #if defined(FORTH_DEBUG_SELFTEST)
