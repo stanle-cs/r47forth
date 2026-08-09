@@ -175,7 +175,7 @@ to write at items.c:4690-4691 are therefore exactly:
 
 (the `ITM_FORTH` row above shows `PTP_REM`, superseding the `PTP_NONE`
 this section originally specified. `PTP_REM` landed via PEM C2
-[VERIFIED: packages/forth-core/items.c:4722 — `PTP_REM` confirmed]. The
+[VERIFIED: packages/forth-core/items.c:4818 — `PTP_REM` confirmed]. The
 `PTP_REM` shape follows `REM` itself: `fnNop, NOPARAM, ... CAT_FNCT |
 SLS_ENABLED | US_ENABLED | EIM_DISABLED | PTP_REM | HG_ENABLED` [VERIFIED:
 packages/forth-core/items.c:3391]. `func` stays `fnForthOuter` — interactive
@@ -703,7 +703,7 @@ using the SAME mechanism and cadence upstream uses:
   `setLastKeyCode(key)` exactly as upstream, returning `false`. The break
   fires for BOTH interactive and program entry (upstream's `!nestedEngine`
   gate maps to the §3.2 re-entrancy guard: `forthInner` nests only up to
-  `FORTH_NEST_MAX` [VERIFIED: packages/forth-core/forth_inner.c:159-166], and
+  `FORTH_NEST_MAX` [VERIFIED: packages/forth-core/forth_inner.c:557-563], and
   the innermost level is the one that polls while a word runs).
   When entered `fromProgram`, `runProgram()`'s own
   `if(programRunStop != PGM_RUNNING) break` (lblGtoXeq.c:929-931) then stops
@@ -1034,7 +1034,7 @@ argument missing): `forthInner(widx, programRunStop == PGM_RUNNING)`.
 the program runner reaches an `ITM_FORTH` source step, source comes from the
 step's inline payload, not from X. A sibling entry point in `forth_compile.c`
 shares the context machinery (`forthOuterCur`/`forthOuterDepth` are `static`
-there [VERIFIED: packages/forth-core/forth_compile.c:23-24], which is why this
+there [VERIFIED: packages/forth-core/forth_compile.c:45-46], which is why this
 function must live in the same file). Full semantics are §8.2:
 
 ```c
@@ -1144,7 +1144,7 @@ same `convertLongIntegerToLongIntegerRegister` idiom — NOT as a real34.
 `FTOK_LIT` (explicit decimal/exponent forms) stays real34, matching the
 keyboard. **IMPLEMENTED:** `forthPushInt32` builds a `longInteger_t` from the
 int32 and stores it via `convertLongIntegerToLongIntegerRegister(lgInt,
-REGISTER_X)` after the lift [VERIFIED: packages/forth-core/forth_inner.c:42-54];
+REGISTER_X)` after the lift [VERIFIED: packages/forth-core/forth_inner.c:297-311];
 `test_ilit_compile_interpret_parity` and acceptance §8.9-6 pin the type. Integer literals wider than int32 (upstream long integers
 are arbitrary-precision) do not fit `FTOK_ILIT`'s 4-byte payload; stage 1
 compiles them as `FTOK_LIT` real34 — a documented stage-1 limitation, applied
@@ -1364,8 +1364,8 @@ above the copy length is `nameLen` by construction; the clamp is defensive.)
    `here + neededBytes` would not fit in 16 bits, before growing: on 256 KB
    hardware `reallocC47Blocks` can otherwise push the region past 64 KB and
    `here` silently wraps, corrupting the dictionary. The guard is
-   `if ((uint32_t)fdict.here + bytes > 0xFFFEu) { RAM_FULL; return false; }`
-   [VERIFIED: packages/forth-core/forth_dict.c:113-117]; 0xFFFF is the
+   `if ((uint32_t)d->here + bytes > 0xFFFEu) { RAM_FULL; return false; }`
+   [VERIFIED: packages/forth-core/forth_dict.c:353-357]; 0xFFFF is the
    FORTH_NULL sentinel and must stay unused.
 2. **Count cap:** enforced in `startDefinition` (code above);
    `forthDictAllocate` itself remains uncapped for test use, so the compiler
@@ -1553,9 +1553,9 @@ behavior exactly), Forth colon def second. This is the *opposite* precedence of
 §4.1 on purpose — inside Forth, Forth wins; from the C47 side, C47 wins, so no
 existing keystroke program silently changes meaning. The committed resolver
 `forthResolveXEQ` implements label → C47 item name → colon, in that order
-[VERIFIED: packages/forth-core/forth_dict.c:420-456], and the interactive TAM
+[VERIFIED: packages/forth-core/forth_dict.c:1109], and the interactive TAM
 hook applies the same order (label handled upstream of the hook; item-name
-scan then colon fallback) [VERIFIED: packages/forth-core/ui/tam.c:964-991].
+scan then colon fallback) [VERIFIED: packages/forth-core/ui/tam.c:1013-1022].
 
 Label-kind pins (b8f79e486, named local labels — §0.3): `forthResolveXEQ`'s
 label step and every Forth-side lookup bind `GLOBAL_LABELS`; a program step
@@ -1569,12 +1569,12 @@ fix, arrived with the migration base (AUD-U1 closed) [VERIFIED:
 packages/forth-core/ui/tam.c:976].
 
 **Item dispatch is unparameterized by construction.** The resolver's item arm
-filters `CAT_FNCT + PTP_NONE` [VERIFIED: packages/forth-core/forth_compile.c:1064],
+filters `CAT_FNCT + PTP_NONE` [VERIFIED: packages/forth-core/forth_compile.c:1091-1104],
 so a bare name never matches a parameterized item and the arm's `NOPARAM`
 dispatch is always correct for what it can match. Parameterized items are
 reachable only through their canonical spellings (B3, §10); a spelling that
 fails to parse is an atomic syntax error, `ERROR_INVALID_NAME`, aborting any
-open definition [VERIFIED: packages/forth-core/forth_compile.c:820-825].
+open definition [VERIFIED: packages/forth-core/forth_compile.c:716-719].
 Pinned by `test_xeq_item_lookup`, whose FCALL row asserts the B3-reverse
 rejection of a bare parameterized item [VERIFIED:
 packages/forth-core/test_engine.part.h:1223-1229].
@@ -1654,7 +1654,7 @@ switches on the item's PTP class and mirrors the C47 VM's own arm for that class
 | `PTP_NONE` | `SIN` | — | `reallyRunFunction(itemId, NOPARAM)` |
 | `PTP_NUMBER_8` | `item nn` | 1 byte + 1 pad | value as-is |
 | `PTP_NUMBER_16` | `item nnnn` | 2 bytes LE | value as-is |
-| `PTP_REGISTER` | `STO 05`, `STO .05`, `STO X` | 1 KS-code byte + 1 pad | `regInRange(regKStoC(p))` then `reallyRunFunction(itemId, regKStoC(p))` — mirrors [VERIFIED: packages/forth-core/programming/lblGtoXeq.c:485-491] |
+| `PTP_REGISTER` | `STO 05`, `STO .05`, `STO X` | 1 KS-code byte + 1 pad | `regInRange(regKStoC(p))` then `reallyRunFunction(itemId, regKStoC(p))` — mirrors [VERIFIED: packages/forth-core/programming/param_core.c:280-287] |
 
 `regKStoC`/`regCtoKS` are existing inline helpers [VERIFIED: src/c47/defines.h:1386-1398].
 Any PTP class outside this table raises `ERROR_OPERATION_UNDEFINED`.
@@ -1941,9 +1941,9 @@ when the arena itself has just been rebuilt (the RESET path above,
 config.c:1957 in the package override [VERIFIED:
 packages/forth-core/config.c:1957]). Calling it while the arena is live
 *leaks the dictionary region* (base is dropped without `freeC47Blocks`).
-`forthDictClear()` (forth_dict.c:48-58) frees the region first and is the
+`forthDictClear()` (forth_dict.c:60-72) frees the region first and is the
 correct primitive for any live-arena reset — in particular the §8.3
-run-scoped dictionary reset [VERIFIED: packages/forth-core/forth_dict.c:39-58].
+run-scoped dictionary reset [VERIFIED: packages/forth-core/forth_dict.c:60-72].
 
 ---
 
@@ -1977,7 +1977,7 @@ run-scoped dictionary reset [VERIFIED: packages/forth-core/forth_dict.c:39-58].
   `startDefinition` (§3.3.7); `forthDictAllocate` remains uncapped for
   test use, so the compiler must never bypass `startDefinition`. The prim
   bound is enforced at compile time: `_Static_assert(PRIM_COUNT <= 0x0FFF,
-  ...)` [VERIFIED: packages/forth-core/forth_prims.c:51] — this is the one
+  ...)` [VERIFIED: packages/forth-core/forth_prims.c:308] — this is the one
   invariant that would break silently when primitives are appended, which is
   why it is a build-time assert and not a runtime check.
 - `fdict.here + neededBytes ≤ 0xFFFE` checked at the top of `forthDictEnsure`
@@ -2135,7 +2135,7 @@ Documented limitations, each a consequence rather than a defect:
    ever compared, never dereferenced.
 
 **Runner dispatch site.** `executeOneStep()`'s `PTP_REM` arm — package-owned
-[VERIFIED: packages/forth-core/programming/lblGtoXeq.c:838-863] — gains an
+[VERIFIED: packages/forth-core/programming/lblGtoXeq.c:611-640] — gains an
 `ITM_FORTH` case, modeled byte-for-byte on the `ITM_42STRING` case:
 
 ```c
@@ -2153,12 +2153,12 @@ else if(op == ITM_FORTH) {
 - **Halting on error:** `forthProgramStep` reports through
   `displayCalcErrorMessage`/`lastErrorCode` (§3.3, §8.7). `runProgram()` checks
   `lastErrorCode` after every step and breaks *without advancing*
-  [VERIFIED: packages/forth-core/programming/lblGtoXeq.c:925-947], so the
+  [VERIFIED: packages/forth-core/programming/lblGtoXeq.c:715], so the
   program halts showing the offending `ITM_FORTH` step. `return 1` is
   correct for the success path (advance one step), same as `42STRING`.
 - **`:`-lines are stack-neutral.** In compile state the outer interpreter
   only emits tokens — prims/colon-calls/numbers all take the `emit()` branch
-  [VERIFIED: packages/forth-core/forth_compile.c:250-254, 271-275, 156-158];
+  [VERIFIED: packages/forth-core/forth_compile.c:995 (prims), 1021 (colon calls), 578-601 (numbers)];
   nothing touches the C47 stack except an immediate primitive (none carry
   `FF_IMMEDIATE` in stage C) or an error path. Any other line executes
   against the shared C47 stack exactly as the interactive REPL does.
@@ -2458,7 +2458,7 @@ E5. *The multi-line lock — ENTER stays in capture.* In `pemAlpha`'s `ITM_ENTER
 
     *Why the lazy model could not work.* The original design left re-entry to E2,
     firing on the next printable key. But `FLAG_ALPHA` is what selects the alpha
-    keyboard layout [VERIFIED: packages/forth-core/keyboard.c:1698-1702]; with it
+    keyboard layout [VERIFIED: packages/forth-core/keyboard.c:1778-1798]; with it
     cleared, letter keys produce `ITM_SIN` etc., never `ITM_A`. Only digits could
     ever satisfy E2's `addItemToBuffer` gate, so no keystroke re-opened a Forth
     *text* line and the region was unreachable after the first ENTER.
@@ -3005,7 +3005,7 @@ M-T5 correction).
 - **Scan bound (documented deviation):** the builder walks at most **1000
   steps** (`FORTH_PICKER_MAX_SCAN_STEPS`) from the owning program's start,
   found via `forthOwningProgramStart(currentStep)` per the R4-E5 ruling
-  [VERIFIED: packages/forth-core/forth_menu.c:97,104]. A program longer than
+  [VERIFIED: packages/forth-core/forth_menu.c:118,125]. A program longer than
   that is not fully scanned, so definitions past step 1000 do not appear in
   the picker; they still compile and run normally (§8.2). The cut-off and
   its literal are pinned by the G2 scan-cut-off test.
@@ -3045,7 +3045,7 @@ All Forth errors surface through the existing C47 protocol at the
 
 - `forthProgramStep` → `forthOuterInterpret()` displays via
   `displayCalcErrorMessage` and sets `lastErrorCode` (§3.3 pseudocode;
-  committed paths [VERIFIED: packages/forth-core/forth_compile.c:210-341]).
+  committed paths [VERIFIED: packages/forth-core/forth_compile.c:1593]).
 - `runProgram()` halts *at* the step, cursor on it, because the step pointer
   only advances when `lastErrorCode == ERROR_NONE` [VERIFIED:
   packages/forth-core/programming/lblGtoXeq.c:925-947].

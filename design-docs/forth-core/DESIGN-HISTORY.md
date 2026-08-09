@@ -3947,3 +3947,98 @@ this wave's commits — the regression record (each round's findings come mostly
 from the previous round's fixes) does not exempt behaviour-neutral intent, and
 relocating state is the most dangerous fix shape this project has measured. The
 exit criterion is unchanged: earliest close stays round 10.
+
+
+## 2026-08-09 — design audit (post-consolidation)
+
+Run the same day the wave closed, on the judgement debt the close-out
+deliberately left: it re-set the section-A budgets and refused to re-baseline
+the two REVIEW counts so that a judgement pass would read them on their
+merits. This is that pass. Gate green the same run (build + self-test +
+upstream testSuite).
+
+**Mechanical: 2 finding groups, both triaged to acceptance after one scanner
+correction.**
+
+- Check B (no-Forth hunks, 3 baselined vs 29 measured): 20 of the 29 were
+  D7-1's sanctioned `_tamLeave()` one-line rewrites in ui/tam.c — package
+  content the KEY regex did not recognise, drowning the check. The regex now
+  counts `_tamLeave` as Forth content; the surviving 8 are each attributable
+  (freeList/FIX-6B deferred on the upstream MR; the two day-one accepted
+  items; three D7-1 provenance comments; two paired-brace artifacts of
+  round-8 guard restructures). Re-baselined at 8 with the reasons in the
+  baseline file.
+- Check D (big inline blocks, 16 vs 36): all 36 read in full. Every block is
+  a seam arm that must run at its exact point, a comment-dominated call site,
+  the manage.c standing exception, the freeList guard, or the config.c
+  selftest trigger. Re-baselined at 36. One residual extraction candidate
+  recorded against the close-out's "no extraction candidate is open":
+  `forthCaptureSanitizeRestoredUi` and the two catalog predicates sit in
+  manage.c but no longer depend on file residence — P8's own wrappers
+  (`forthPkgCloseAlphaMenus`) would carry them. Covered today by the manage.c
+  exception; worth ~90 patch lines if manage.c footprint ever matters.
+  Deferred with that name.
+
+**Philosophy — answers that changed:**
+
+- **2.8, the finding of the audit: line-precise `[VERIFIED:]` citations into
+  package sources had rotted wholesale — 16 of 19 pointed at the wrong code.**
+  Check H validates that cited *paths* exist; rounds 6–8 and the wave
+  inserted and moved code, so the *lines* drifted silently (worst case:
+  `forth_dict.c:420-456` for `forthResolveXEQ`, now at :1109; two citations
+  pointed into a file the F2 extraction had emptied of the cited code, whose
+  true home is now param_core.c). All 19 re-verified against the tree and
+  re-pointed this audit; every underlying *claim* checked out — the rot was
+  in the pointers, not the design. The class remains open: package-file line
+  numbers move on every fix wave, and nothing mechanical catches it.
+  Options for the owner: an anchor-token convention check H could verify
+  (citation carries a backticked identifier; H greps a window around the
+  cited line), or accepting a re-point sweep as a standing audit item.
+- **2.5 answered for the spill region** (never audited since D3 landed):
+  strictly line-bracketed — allocated in `forthSpillCatch`, freed at
+  `forthDataDepthEnterOuter`/`LeaveOuter`/`Resync` — and a save runs only
+  from the main loop, never mid-line, so it can never be live at a save and
+  the phantom-restore leak class does not apply. The refill's register
+  allocation becomes register data the register system owns. DESIGN_AUDIT.md
+  2.5 still said "only forth_dict.c allocates"; corrected.
+- **2.2/2.3/2.4/2.10 unchanged by the wave**, verified rather than assumed:
+  no new cached state (the moved statics kept their persistence contracts);
+  the ITM_FCALL grep is clean — every hit is live-execution or the
+  name-recording arm itself; the new seams are single-sourced (one
+  eligibility predicate with two consumers, one SELFTEST_EXPORT definition,
+  one close funnel inside closeAim, one editor-top owner).
+- The 2026-08-02 rotation candidate — the retained dead `_executeOp` block in
+  lblGtoXeq.c — resolved itself before this audit: F2 deleted the block so
+  upstream edits there conflict at integrate time. Off the rotation list.
+
+**Expired-premise sweep (three mechanisms, all first-time):**
+
+1. **The capture state object** (three states + origin) — **keep, premise
+   strengthened.** The non-derivability argument (tamEnterMode overwrites
+   `tam.function` before the suspend seam fires) still holds — the round-8
+   P-2 refusal sits above TAM state writes for exactly that ordering. All
+   three states are load-bearing now in a way they were not at design time:
+   the Live predicate composes OPEN∧INTERACTIVE at 14 sites, and rounds 6–8
+   were substantially about SUSPENDED residue. Both enum fields are consulted
+   independently (F8's LIVE-not-origin corrections).
+2. **`forthPickerGuard`'s menu-identity check** — **keep, premise
+   strengthened.** The OOB it prevents (indexing `dynamicSoftmenu[]` for a
+   menu that is not MNU_FORTH) is *more* reachable post-C18 than at design
+   time: a user-stacked row over the console base is precisely "capture
+   conjuncts hold, wrong menu on top". Pinned by its escaping-mutation test.
+3. **The `_closeCatalog` selftest export + config.c trigger** — **keep;
+   the named re-test trigger fired twice** (T2-A gave the gate a second,
+   upstream harness; P5 consolidated the export macro) **and neither change
+   touches the premise.** The package suite still needs one in-firmware
+   entry, doFnReset is still where restoreCalc re-enters, the run-once guard
+   is still required, and the export is now single-sourced in
+   forth_capture.h. The upstream testSuite runs beside, not instead.
+
+**Footprint: 19 files, 1243 added lines, flash 1115712 — all unchanged (this
+audit landed only documentation and audit tooling).**
+
+**Actions:** citation repairs, the 2.5 correction, the check-B regex fix and
+both re-baselines landed now, one commit. Queued for the owner: the
+citation-rot countermeasure ruling (anchor tokens vs standing sweep), and the
+manage.c residual extraction (named above, no urgency). Round 9 is untouched
+by this audit and still owes the wave a code-audit read, D7 included.

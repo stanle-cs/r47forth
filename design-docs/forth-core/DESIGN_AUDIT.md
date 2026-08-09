@@ -54,7 +54,7 @@ past `.design-audit-baseline`:**
 
 | Check | What it means when it grows |
 |---|---|
-| **B. hunks with no Forth content** | The strongest single signal that something not ours is riding along. This is exactly how S1 found the global-register descriptor memset. Accepted today: `core/freeList.c` (deferred, see below), a masked-low-byte comment in `manage.c`, and `testInitVariableSoftmenu` in `softmenus.c`. |
+| **B. hunks with no Forth content** | The strongest single signal that something not ours is riding along. This is exactly how S1 found the global-register descriptor memset. `_tamLeave` counts as Forth content (D7-1's package-introduced rename — 2026-08-09). Accepted today: `core/freeList.c` (deferred, see below), a masked-low-byte comment in `manage.c`, `testInitVariableSoftmenu` in `softmenus.c`, three D7-1 provenance comments in `keyboard.c`, and the paired-brace artifacts of the round-8 guard restructures (`keyboardTweak.c`, `screen.c`). |
 | **D. contiguous added blocks ≥ 12 lines** | Package logic is being written *into* an upstream file instead of a package-owned `.c`. This is what S2 unwound. `manage.c` is the standing exception — see Part 2.1. |
 | **E. package-owned allocations** | Listed every run, never auto-flagged. Each one needs an answer to Part 2.5. |
 
@@ -143,11 +143,17 @@ An allocation whose lifetime is *shorter* than a save/restore cycle is
 therefore reintroduced as a phantom entry nothing will free
 (`UPSTREAM_REPORTS_976b864b5.md`).
 
-Check E lists the candidates. Today only `forth_dict.c` allocates: `gdict` is
-persisted (lifetime ≥ the cycle, fine) and `fdict` is per-lifetime but reset
-at the documented seams. S3 removed the one violating case. **Any new
-short-lived allocation reopens this leak** — prefer an existing native buffer,
-as the capture now does.
+Check E lists the candidates. Two files allocate today. `forth_dict.c`:
+`gdict` is persisted (lifetime ≥ the cycle, fine) and `fdict` is
+per-lifetime but reset at the documented seams; S3 removed the one violating
+case. `forth_inner.c` (the D3 spill region, answered 2026-08-09): the spill
+block is strictly line-bracketed — allocated in `forthSpillCatch`, freed at
+`forthDataDepthEnterOuter`/`LeaveOuter`/`Resync` — and a save can only run
+from the main loop, never mid-line, so it is never live at a save and cannot
+become a phantom entry; the refill's register allocation becomes register
+data the register system owns and persists. **Any new short-lived allocation
+reopens this leak** — prefer an existing native buffer, as the capture now
+does.
 
 ### 2.6 Are upstream bugs reported rather than locally fixed?
 

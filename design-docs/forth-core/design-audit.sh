@@ -91,7 +91,10 @@ fi
 head2 "B. Hunks whose added lines never mention Forth"
 b_out=$(python3 - "${PKG}" <<'PYEOF'
 import re, sys, glob, os
-KEY = re.compile(r'forth|fdict|gdict|FCAP|FWRD|ITM_FCALL|param_core|paramCore|aimBuffer', re.I)
+# _tamLeave is D7-1's package-introduced rename of upstream teardown calls
+# (2026-08-09 audit): those hunks ARE Forth content, and 20 of them were
+# drowning check B's signal.
+KEY = re.compile(r'forth|fdict|gdict|FCAP|FWRD|ITM_FCALL|param_core|paramCore|aimBuffer|_tamLeave', re.I)
 for f in sorted(glob.glob(f'{sys.argv[1]}/patches/*.patch')):
     hunks, cur = [], None
     for l in open(f).read().split('\n'):
