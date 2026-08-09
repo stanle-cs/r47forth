@@ -17437,12 +17437,18 @@ static int test_fold_round6_window(void)
      * machinery breaks.  The two facts the priming DID write are not
      * re-read; what is asserted instead is their consequence, which the
      * subject of the subcase depends on: the residue is not LIVE. */
+    /* AUDIT round 8 (R8-6): the first version of this rewrite added a
+     * `forthCapInteractiveLive()` disjunct — which cannot be true once
+     * `!forthCapIsSuspended()` above has passed, because Live means state
+     * OPEN.  That is C-7's own defect, reproduced by C-7's own fix, one
+     * commit later.  Removed; the three that remain each read state the
+     * real gesture established. */
     if (!forthCapIsSuspended() || !forthFoldArmed()
-        || !forthCapIsInteractive() || forthCapInteractiveLive()) {
+        || !forthCapIsInteractive()) {
       printf("    [7] FIXTURE BUG: residue not reached (susp=%d armed=%d"
-             " interactive=%d live=%d)\n",
+             " interactive=%d)\n",
              (int)forthCapIsSuspended(), (int)forthFoldArmed(),
-             (int)forthCapIsInteractive(), (int)forthCapInteractiveLive());
+             (int)forthCapIsInteractive());
       scFail = 1;
     }
     else {
@@ -17913,6 +17919,17 @@ static int test_fold_round8_window(void)
     }
     else {
       R8_LONGPRESS_F();
+      /* AUDIT round 8 (R8-7): every assertion below is also satisfied by a
+       * gesture that did NOTHING, so the subcase needs evidence that the
+       * ladder actually dispatched.  Shft_timeouts is cleared by the third
+       * completion, in the same arm that calls openHOMEorMyM — if it is
+       * still set, the drive never got there. */
+      if (Shft_timeouts) {
+        printf("    [3] FIXTURE BUG: the long-press ladder did not reach its"
+               " third completion — openHOMEorMyM was never called, so the"
+               " assertions below prove nothing\n");
+        scFail = 1;
+      }
       if (forthConsoleTestOwnedCount() + forthConsoleTestBorrowCount() == 0
           || !forthConsoleStampOnStack()) {
         printf("    [3] FAIL (C-2): openHOMEorMyM popped the console's registered"

@@ -1773,8 +1773,11 @@ static uint32_t _forthHistProgramBytes(uint16_t program) {
  * one, so the defensive foldMode-0 arm it guards has never once been
  * executed by the battery.  The owner ruled to buy the coverage.
  *
- * Selftest builds only, and set only by the fixture that owns the family
- * (test_fold_foldmode0_family) — which restores it in every exit path. */
+ * Selftest builds only, and set only by the fixture that owns the family —
+ * test_fold_round8_window subcase [5], which clears it on every arm out,
+ * including its own FIXTURE BUG paths, and again at the fixture's tail.
+ * (AUDIT round 8, R8-8: this banner previously named a fixture that does
+ * not exist — a reader looking for the owner would not have found it.) */
 bool_t forthHistoryEnsureFailInjected = false;
 #endif
 

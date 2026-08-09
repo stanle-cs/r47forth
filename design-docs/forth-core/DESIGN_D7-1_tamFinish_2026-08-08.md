@@ -13,12 +13,20 @@
 > place, with the count and the command that produces it.
 >
 > ```bash
-> grep -c '_tamLeave();' packages/forth-core/ui/tam.c        # 28
+> grep -c '_tamLeave();' packages/forth-core/ui/tam.c        # 29
 > ```
 >
-> 26 sites in `_tamProcessInput`, 2 in `_tamHandleShuffle`; sole callers
-> `_tamProcessInput:263` and `tamProcessInput:1503`, so every one is
-> dominated by the epilogue's `forthFoldUnwindIfDone()`.
+> **29, not 28** — and the difference is the point, so it is stated rather
+> than adjusted away (AUDIT round 8, R8-9: the first version of this
+> amendment published the command beside the number 28, and the command
+> does not produce 28). One of the 29 is the public wrapper's OWN call to
+> `_tamLeave()`, which is not a leave-then-dispatch site but the mechanism
+> itself. The 28 are the dispatch sites: 26 in `_tamProcessInput`, 2 in
+> `_tamHandleShuffle`; sole callers `_tamProcessInput:263` and
+> `tamProcessInput:1503`, so every one is dominated by the epilogue's
+> `forthFoldUnwindIfDone()`. A pin for this count lives in
+> `design-audit.sh` group I only if someone adds one — as of round 8 it
+> does not, and this note is the record of that.
 >
 > The cost of leaving this uncorrected was paid inside the audit that found
 > it: round 7's own tasking inherited "the approved design said eleven" and
