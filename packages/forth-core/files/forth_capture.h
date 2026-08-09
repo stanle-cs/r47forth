@@ -212,8 +212,32 @@ void     forthCapSuspendStepOffset(uint32_t off);  /* L1-F2 rev 3: fold recovery
 uint16_t forthCapSavedStepCount(void);  /* F6-4 */
 void     forthCapAbandonSuspended(void);
 
-/* F6-2: orchestrators (programming/manage.c — need the file-static
- * _closeAlphaMenus) */
+/* CONSOLIDATE P8: manage.c seams.  The fold/history subsystem moved to
+ * programming/forth_fold.c and needs exactly two of manage.c's file-statics;
+ * these are the 3-line wrappers that export them (the paramCorePutLiteral
+ * precedent, lblGtoXeq.c).  Package code only — nothing upstream calls them. */
+void     forthPkgInsertInProgram(const uint8_t *dat, uint16_t size);
+void     forthPkgCloseAlphaMenus(void);
+
+/* §8.1: build an ITM_FORTH capture step for `text` into `dst`, returning its
+ * byte length.  Empty text emits the OPEN-CAPTURE PLACEHOLDER (len 1, one
+ * 0x00 payload byte), never a len==0 region marker — see the definition in
+ * programming/forth_fold.c for why that distinction is load-bearing.  Public
+ * since P8: both halves of the split need it (pemAlpha's two insert arms stay
+ * in manage.c, the fold and the history push moved). */
+uint16_t forthCapBuildStep(char *dst, const char *text);
+
+/* AUDIT round 8 (R8-1): the fold context holds a saved program number, so the
+ * DELETER tells it which program went — upstream's own convention for saved
+ * cursors, applied to the third copy of the quantity.  Called from
+ * _clearProgram in the manage.c override; defined with the fold context in
+ * programming/forth_fold.c. */
+void     _forthFoldNoteProgramDeleted(uint16_t deletedProgramNumber);
+
+/* F6-2: orchestrators.  forthCaptureSuspend/Resume moved to
+ * programming/forth_fold.c with the rest of the fold subsystem (P8);
+ * forthCaptureSanitizeRestoredUi stays in the manage.c override — it calls
+ * _closeAlphaMenus directly and sits with pemAlpha. */
 void     forthCaptureSuspend(void);
 void     forthCaptureResume(void);
 void     forthCaptureSanitizeRestoredUi(void);

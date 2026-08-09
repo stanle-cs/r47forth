@@ -491,13 +491,17 @@ pin 13 "upstream call sites of isAlphabeticSoftmenu/isAlphaSubmenu" \
 # a fixture's REACHED check asserts the two facts SEPARATELY, on purpose, so
 # its failure message says which one was wrong. Hence production only.
 # R8-2 (round 8): goToPgmStep/goToGlobalStep silently do NOT navigate when
-# dynamicMenuItem >= 0, and a softkey commit latches it. FOUR brackets in this
-# file: upstream's own at _insertInProgram (:772), and the package's three
+# dynamicMenuItem >= 0, and a softkey commit latches it. FOUR brackets: the
+# manage.c override's own at _insertInProgram (:772), and the package's three
 # keypress navigations — _forthHistRestoreCursor, forthHistoryGotoLastStep,
 # forthFoldLeave's restore. The pin caught its own author's miscount the first
 # time it ran, which is the entire argument for group I.
-pin 4 "manage.c navigations bracketing dynamicMenuItem" \
-    grep -c 'dynamicMenuItem = -1;' "${PKG}/programming/manage.c"
+# CONSOLIDATE P8 (2026-08-09): those three navigations moved to
+# programming/forth_fold.c with the rest of the fold subsystem, so the FILE
+# TARGET is now both files. The count is unchanged and re-verified: 1 in
+# manage.c, 3 in forth_fold.c.
+pin 4 "capture navigations bracketing dynamicMenuItem" \
+    bash -c "grep -ho 'dynamicMenuItem = -1;' \"${PKG}/programming/manage.c\" \"${PKG}/programming/forth_fold.c\" | wc -l"
 
 # Sol's dependency (a), round 8 — checked 2026-08-09: tamEnterMode can REFUSE
 # (the P-2 arm) and every present caller either dispatches terminally
