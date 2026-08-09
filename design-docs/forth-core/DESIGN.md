@@ -1888,12 +1888,23 @@ a hook of the same ID in §6.
 
 **Override status.** Every file in the working area that mirrors an upstream
 path is live by construction — classification is automatic, so there is no
-registration step to forget and no list to keep in sync. Current overrides:
-`items.c`/`items.h`, `defines.h`, `config.c`, `error.c`, `screen.c`,
-`keyboard.c`, `softmenus.c`, `saveRestoreBackup.c`, `core/freeList.c`,
-`programming/lblGtoXeq.c`, `programming/manage.c`, `programming/decode.c`,
-`ui/tam.c` [VERIFIED: packages/forth-core/patches/ — one generated patch per
-entry].
+registration step to forget and no list to keep in sync.
+
+**And therefore this document does not keep one.** It used to, and the list
+went stale exactly as that sentence predicts: it named `error.c`, which
+stopped being an override, and omitted `assign.c`, which is one — AUDIT C15,
+raised in round 1 and open until 2026-08-09, by which time the list was
+thirteen entries against eighteen patches. A hand list of files is the same
+defect class as a hand list of call sites (D7-a): it is a comment, and it
+comes back short. The tree is the record:
+
+```bash
+ls packages/forth-core/patches/*.patch | wc -l    # the override count
+ls packages/forth-core/patches/                   # and which files
+```
+
+[VERIFIED: packages/forth-core/patches/ — one generated patch per override,
+produced by tools/pkg_patch_refresh.py from the working area.]
 
 Genuinely-new package sources (no upstream counterpart — auto-copied to
 `files/`):

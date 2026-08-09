@@ -243,6 +243,38 @@ bool forthEntryStateAtInsertion(void)
  * standardFont, not numericFont: the transcript is a text row at the fnPem
  * pitch, so the width budget the formatter fits into is the one the
  * console actually paints with. */
+
+/* AUDIT C11: copy text into a fixed buffer, cutting only on a GLYPH
+ * boundary.
+ *
+ * The C47 string encoding is one byte below 0x80 and two bytes (high first)
+ * at 0x80 and above — the same encoding screen.c decodes and the console
+ * ring stores.  A plain byte cut can therefore end a record with a lone
+ * lead byte, which the painter and forthConsoleLineAt both re-pair with
+ * whatever follows: C10's orphan reached by a different door.
+ *
+ * Walks with upstream's own boundary primitive (stringNextGlyph,
+ * charString.c:379) rather than re-deriving the encoding here, so a change
+ * to the encoding cannot leave this behind.  Returns the bytes written. */
+int32_t forthCopyWholeGlyphs(char *dst, const char *src, int32_t cap) {
+  int32_t out = 0;
+  int16_t at  = 0;
+  int16_t next;
+
+  if(cap <= 1) { if(cap == 1) { dst[0] = 0; } return 0; }
+
+  while(src[at] != 0) {
+    next = stringNextGlyph(src, at);
+    if(next <= at)          { break; }          /* defensive: no progress */
+    if(next > cap - 1)      { break; }          /* the glyph does not fit */
+    at = next;
+  }
+  out = at;
+  xcopy(dst, src, (uint32_t)out);
+  dst[out] = 0;
+  return out;
+}
+
 void forthConsoleFormatRegister(calcRegister_t regist, char *out, int16_t outSize)
 {
   char buf[FORTH_CONSOLE_FMT_MAX];
@@ -286,12 +318,30 @@ void forthConsoleFormatRegister(calcRegister_t regist, char *out, int16_t outSiz
        * does not weaken the "never tmpString" rule above — that rule is about
        * HOLDING a pointer into tmpString across other producers that also
        * write it.  Nothing runs between this call and the copy-out below. */
+      /* AUDIT C22: the invariant C1 actually rests on, pinned at BUILD time
+       * rather than by a runtime canary that cannot fire.
+       *
+       * shortIntegerToDisplayString builds its digits from
+       * displayString[ERROR_MESSAGE_LENGTH / 2] UPWARD and compacts them to
+       * the front, so the buffer it is handed must be at least
+       * ERROR_MESSAGE_LENGTH bytes.  Handing it the 256-byte local put its
+       * first write one past the end of the frame — that was C1.  The C1
+       * class test wrapped the formatter's OUT buffer in canaries, but no
+       * producer is ever handed `out` (it is written once, by the clamped
+       * copy below), so those canaries could never trip: C22.  A static
+       * assertion catches the revert that a runtime check could not. */
+      _Static_assert(TMP_STR_LENGTH >= ERROR_MESSAGE_LENGTH,
+                     "C1/C22: shortIntegerToDisplayString writes from "
+                     "ERROR_MESSAGE_LENGTH/2 upward, so its buffer must be at "
+                     "least ERROR_MESSAGE_LENGTH bytes");
+      _Static_assert(FORTH_CONSOLE_FMT_MAX < ERROR_MESSAGE_LENGTH,
+                     "C1/C22: if the format buffer ever grows past "
+                     "ERROR_MESSAGE_LENGTH, the comment above and the tmpString "
+                     "detour must both be re-derived, not assumed");
       shortIntegerToDisplayString(regist, tmpString, false, noBaseOverride);
-      { int32_t n = stringByteLength(tmpString);
-        if(n > (int32_t)sizeof(buf) - 1) { n = (int32_t)sizeof(buf) - 1; }
-        xcopy(buf, tmpString, (uint32_t)n);
-        buf[n] = 0;
-      }
+      /* C11: the same glyph-boundary cut — shortIntegerToDisplayString can
+       * emit two-byte glyphs (the base prefix and the sign). */
+      forthCopyWholeGlyphs(buf, tmpString, (int32_t)sizeof(buf));
       break;
 
     case dtTime:
@@ -305,11 +355,8 @@ void forthConsoleFormatRegister(calcRegister_t regist, char *out, int16_t outSiz
     case dtString:
       /* The string's own glyphs, not a quoted rendering: TYPE-class output
        * is the text itself. */
-      { int32_t n = stringByteLength(REGISTER_STRING_DATA(regist));
-        if(n > (int32_t)sizeof(buf) - 1) { n = (int32_t)sizeof(buf) - 1; }
-        xcopy(buf, REGISTER_STRING_DATA(regist), (uint32_t)n);
-        buf[n] = 0;
-      }
+      /* C11: glyph boundary, not byte boundary. */
+      forthCopyWholeGlyphs(buf, REGISTER_STRING_DATA(regist), (int32_t)sizeof(buf));
       break;
 
     case dtReal34Matrix:

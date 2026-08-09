@@ -115,10 +115,27 @@ static void pPrintStack(void)
 {
   char shown[FORTH_CONSOLE_FMT_MAX];
   char head[32];
-  uint16_t levels = (displayStack > 4) ? 8 : 4;
+  /* AUDIT C7: the LIVE stack, not the display-line count.
+   *
+   * This used to read `(displayStack > 4) ? 8 : 4`.  displayStack counts
+   * stack DISPLAY LINES and every writer caps it at 4 (fnDisplayStack, and
+   * the dSTACK item row's own max), so the branch was dead: the prefix was
+   * the constant <4> whatever was on the stack, and under SSIZE8 the top
+   * four levels were silently absent from the picture.
+   *
+   * The Forth data stack on this machine IS the calculator stack — X up to
+   * getStackTop(), which FLAG_SSIZE8 makes 4 or 8 — plus the D3 spill
+   * region below it (STAGE_N_TRACES N-T5).  Both terms are read live, from
+   * the same expressions the engine's own capacity check uses
+   * (forth_inner.c:127-129), so this cannot fall out of step with the
+   * stack the way a second copy of the rule did. */
+  uint16_t levels = (uint16_t)(getStackTop() - REGISTER_X + 1);
+  uint16_t depth  = (uint16_t)(levels + forthSpillCount());
   uint16_t i;
 
-  snprintf(head, sizeof(head), "<%u> ", (unsigned)levels);
+  /* N-T5: "depth first, then levels until the width runs out" — the depth
+   * is the part that must never be truncated away. */
+  snprintf(head, sizeof(head), "<%u> ", (unsigned)depth);
   forthConsoleAppend(head);
   for(i = 0; i < levels; i++) {
     /* REGISTER_X..REGISTER_T are consecutive (defines.h); above T the
@@ -150,10 +167,27 @@ static void pEmit(void)
 
   if(getRegisterDataType(REGISTER_X) == dtLongInteger) {
     longInteger_t li;
+    bool_t inRange;
     longIntegerInit(li);
     convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
-    longIntegerToInt32(li, code);
+    /* AUDIT C20: test the magnitude BEFORE converting.  longIntegerToInt32
+     * is mpz_get_si, which returns the low 32 bits of anything larger — so
+     * `2147483647 2147483647 + 67 + EMIT` used to arrive here as 2^32+65,
+     * come out as 65, pass the ASCII gate and print `A`.  A code the owner
+     * never asked for is worse than a refusal.
+     *
+     * Upstream's own convention for this exact question is compare-then-
+     * convert: factorial.c:28-38 does `longIntegerCompareUInt(x, MAX) > 0`
+     * → error, and only then longIntegerToUInt32. */
+    inRange = !longIntegerIsNegative(li) && longIntegerCompareUInt(li, 0xFFFF) <= 0;
+    if(inRange) {
+      longIntegerToInt32(li, code);
+    }
     longIntegerFree(li);
+    if(!inRange) {
+      displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+      return;
+    }
   }
   else if(getRegisterDataType(REGISTER_X) == dtReal34) {
     code = real34ToInt32(REGISTER_REAL34_DATA(REGISTER_X));
@@ -166,7 +200,14 @@ static void pEmit(void)
   if(code >= 0x20 && code <= 0x7E) {
     g[0] = (char)code; g[1] = 0;
   }
-  else if(code >= 0x8000 && code <= 0xFFFF) {
+  else if(code >= 0x8000 && code <= 0xFFFF && (code & 0xFF) != 0) {
+    /* AUDIT C10: the low byte must not be NUL.  A two-byte glyph whose
+     * second byte is 0x00 cannot exist as a C string — g would be ONE byte
+     * long, the ring would store the lead byte alone, and forthConsoleLineAt
+     * would re-pair it with whatever followed (`33024 EMIT 65 EMIT` rendered
+     * as one wrong glyph and swallowed the A).  This is the same refusal the
+     * banner already gives a bare 0x80..0xFF, for the same reason: a
+     * truncated glyph is not a character. */
     g[0] = (char)((code >> 8) & 0xFF); g[1] = (char)(code & 0xFF); g[2] = 0;
   }
   else {

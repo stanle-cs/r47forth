@@ -1166,9 +1166,14 @@ static int test_console_words_stack(void)
     printf("    FAIL: a print-heavy line errored (%u)\n", lastErrorCode);
     fail = 1;
   }
-  if (forthSpillCount() != 0) {
+  /* AUDIT C13: read the WATERMARK, not the live count.  forthSpillCount() is
+   * zeroed by forthDataDepthLeaveOuter at the end of every line, so this
+   * check could never fire — mutating PRIM_PRINT's effect from -1 to 0
+   * reddened only the generic neighbour above, with error 11, and the
+   * diagnostic that names the defect never printed. */
+  if (forthTestSpillHighWater() != 0) {
     printf("    FAIL: %u value(s) spilled on a line whose depth never exceeds one —"
-           " `.`'s declared stack delta is wrong\n", forthSpillCount());
+           " `.`'s declared stack delta is wrong\n", forthTestSpillHighWater());
     fail = 1;
   }
 
@@ -1334,6 +1339,303 @@ static int test_console_words_program(void)
   forthConsoleClear();
   if (!fail) {
     printf("    PASS: output words write the ring from inside a compiled word, no console open\n");
+  }
+  return fail;
+}
+
+/* ---- AUDIT C10 / C11 / C20 — one class: an output word that produces a
+ * BYTE where the ring, the painter and the string decoders all speak
+ * GLYPHS.  All three were raised in rounds 1-2 and stood open through
+ * round 8.
+ *
+ *   C10  EMIT of a code whose low byte is 0x00 (0x8100, 0x8200 ... 0xFF00)
+ *        wrote g[0]=high, g[1]=0x00 — a ONE-byte C string.  The ring stored
+ *        the orphan high byte alone, and forthConsoleLineAt then re-paired
+ *        it with whatever followed: `33024 EMIT 65 EMIT` rendered as one
+ *        wrong glyph and swallowed the A.
+ *   C20  EMIT of a long integer outside int32 was TRUNCATED into range by
+ *        longIntegerToInt32: 2^40+65 became 65 and printed `A` instead of
+ *        refusing.  Reachable in one line: 2147483647 2147483647 + 67 + EMIT.
+ *   C11  the register formatter cut a dtString at a BYTE boundary, so a
+ *        256-byte string ended in a lone lead byte — C10's orphan by a
+ *        different door.  The ENTER echo cut the same way.
+ *
+ * The class assertion is one sentence: no output word may put a lead byte
+ * in the ring without its trailing byte. ---- */
+static int test_console_output_glyph_integrity(void)
+{
+  int fail = 0;
+  char line[FORTH_CONSOLE_FMT_MAX];
+
+  forthDictInit();
+  forthConsoleClear();
+  forthCapClose();
+  calcMode = CM_NORMAL;
+
+  /* [C10] A two-byte code whose low byte is NUL cannot be represented as a
+   * C string, so EMIT must refuse it rather than store half of it. */
+  _consoleRun("XEQ 'CLSTK' 33024 EMIT");
+  if (lastErrorCode == ERROR_NONE) {
+    forthConsoleLineAt(0, line, sizeof(line));
+    printf("    FAIL (C10): EMIT accepted 33024 (0x8100) — a glyph whose low"
+           " byte is NUL; the ring holds \"%s\" (%d byte(s)), an orphan lead"
+           " byte the painter will pair with whatever follows\n",
+           line, (int)stringByteLength(line));
+    fail = 1;
+  }
+  lastErrorCode = ERROR_NONE;
+  forthConsoleClear();
+
+  /* And the neighbouring code that IS representable still works, so the
+   * refusal is not a blanket ban on the two-byte range. */
+  _consoleRun("XEQ 'CLSTK' 33089 EMIT");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL (C10): EMIT refused 33089 (0x8141), which is a complete"
+           " two-byte glyph (%u)\n", lastErrorCode);
+    fail = 1;
+  }
+  else {
+    forthConsoleLineAt(0, line, sizeof(line));
+    if (stringByteLength(line) != 2) {
+      printf("    FAIL (C10): a complete two-byte glyph stored %d byte(s)\n",
+             (int)stringByteLength(line));
+      fail = 1;
+    }
+  }
+  lastErrorCode = ERROR_NONE;
+  forthConsoleClear();
+
+  /* [C20] A long integer outside int32 must be REFUSED, not truncated into
+   * the accepted range.  2147483647 2147483647 + 67 + = 2^32 + 65: its low
+   * 32 bits are 65, which used to print `A`. */
+  _consoleRun("XEQ 'CLSTK' 2147483647 2147483647 + 67 + EMIT");
+  if (lastErrorCode == ERROR_NONE) {
+    forthConsoleLineAt(0, line, sizeof(line));
+    printf("    FAIL (C20): EMIT truncated an out-of-int32 code into range and"
+           " printed \"%s\" instead of refusing it\n", line);
+    fail = 1;
+  }
+  lastErrorCode = ERROR_NONE;
+  forthConsoleClear();
+
+  /* [C11] The register formatter must cut a long string on a GLYPH
+   * boundary.  Build a string of two-byte glyphs longer than the format
+   * buffer and make the console print it. */
+  {
+    char big[FORTH_CONSOLE_FMT_MAX * 2];
+    int i;
+    for (i = 0; i + 1 < (int)sizeof(big) - 1; i += 2) {
+      big[i]     = (char)0x81;      /* a lead byte ... */
+      big[i + 1] = (char)0x41;      /* ... and its trailing byte */
+    }
+    big[i] = 0;
+
+    x_set_string(big);                    /* X is now an oversized dtString */
+    forthConsoleFormatRegister(REGISTER_X, line, (int16_t)sizeof(line));
+    if (stringByteLength(line) > 0) {
+      const char *p = line;
+      int32_t n = stringByteLength(line);
+      int32_t at = 0;
+      while (at < n) { at += (p[at] & 0x80) ? 2 : 1; }
+      if (at != n) {
+        printf("    FAIL (C11): the formatter cut a string mid-glyph — %d"
+               " bytes ending in a lone lead byte\n", (int)n);
+        fail = 1;
+      }
+    }
+  }
+
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS (C10/C11/C20): no output word puts a lead byte in the ring"
+           " without its trailing byte, and an out-of-range code is refused\n");
+  }
+  return fail;
+}
+
+/* ---- AUDIT C7 — `.S` printed the WINDOW SIZE, not the depth, and under
+ * SSIZE8 showed only the bottom half of the stack.
+ *
+ * `levels = (displayStack > 4) ? 8 : 4` looked like it adapted, but
+ * `displayStack` counts stack DISPLAY LINES and every writer caps it at 4
+ * (fnDisplayStack, and the dSTACK item row's own max), so the branch was
+ * dead and the prefix was the constant `<4>` whatever was on the stack.
+ * N-T5: "depth first, then levels until the width runs out" — the depth is
+ * the part that must never be truncated away. ---- */
+static int test_console_print_stack_depth(void)
+{
+  int fail = 0;
+  char line[FORTH_CONSOLE_FMT_MAX];
+
+  forthDictInit();
+  forthConsoleClear();
+  forthCapClose();
+  calcMode = CM_NORMAL;
+
+  /* The oracle is the LIVE stack, which is what N-T5 means by depth: this
+   * machine's Forth stack is the calculator stack (X..getStackTop(), 4 or 8
+   * by FLAG_SSIZE8) plus the D3 spill region.  `displayStack` — the old
+   * source — counts display LINES and is capped at 4 by every writer, which
+   * is why the prefix was the constant <4>. */
+  { bool_t savedSS8 = getSystemFlag(FLAG_SSIZE8);
+    int i;
+
+    for (i = 0; i < 2; i++) {
+      uint16_t expect;
+      char want[8];
+
+      if (i == 0) { clearSystemFlag(FLAG_SSIZE8); } else { setSystemFlag(FLAG_SSIZE8); }
+      expect = (uint16_t)(getStackTop() - REGISTER_X + 1);
+      snprintf(want, sizeof(want), "<%u>", (unsigned)expect);
+
+      forthConsoleClear();
+      _consoleRun("XEQ 'CLSTK' 11 22 .S");
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    FAIL (C7): the .S line errored (%u) with SSIZE8 %s\n",
+               lastErrorCode, (i == 0) ? "off" : "on");
+        fail = 1;
+      }
+      forthConsoleLineAt(0, line, sizeof(line));
+      if (stringByteLength(line) < (int32_t)stringByteLength(want)
+          || memcmp(line, want, stringByteLength(want)) != 0) {
+        printf("    FAIL (C7): with SSIZE8 %s the live stack is %u levels but"
+               " .S printed \"%s\" — the prefix follows displayStack (capped"
+               " at 4), not the stack\n",
+               (i == 0) ? "off" : "on", (unsigned)expect, line);
+        fail = 1;
+      }
+      /* And the picture must actually SHOW that many levels: under SSIZE8
+       * the top half used to be silently absent. */
+      { int shown = 0;
+        int32_t at = (int32_t)stringByteLength(want);
+        while (at < (int32_t)stringByteLength(line)) {
+          while (at < (int32_t)stringByteLength(line) && line[at] == ' ') { at++; }
+          if (at < (int32_t)stringByteLength(line)) { shown++; }
+          while (at < (int32_t)stringByteLength(line) && line[at] != ' ') { at++; }
+        }
+        if (shown < (int)expect) {
+          printf("    FAIL (C7): with SSIZE8 %s .S showed %d of %u levels"
+                 " (\"%s\") — the top of the stack is absent from the"
+                 " picture\n", (i == 0) ? "off" : "on", shown,
+                 (unsigned)expect, line);
+          fail = 1;
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+
+    if (savedSS8) { setSystemFlag(FLAG_SSIZE8); } else { clearSystemFlag(FLAG_SSIZE8); }
+  }
+
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS (C7): .S's depth and level count follow the live stack,"
+           " in both stack sizes\n");
+  }
+  return fail;
+}
+
+/* ---- AUDIT C5 / C6 — one class: an ordinary gesture destroys the line the
+ * owner is typing, with no way to get it back.  Both raised in round 1 and
+ * open through round 8.
+ *
+ *   C5  f-up/f-down with nothing to recall clears aimBuffer.  The browse
+ *       index is NONE at open and after every push, so `cur = lineCount`
+ *       and the very first press lands "past newest" — which is spelled
+ *       `aimBuffer[0] = 0`.  On a fresh calculator the first f-up a curious
+ *       owner presses destroys whatever they had typed.
+ *   C6  pressing FORTH while the console is already open re-opens it, and
+ *       forthCapOpenInteractive's first act clears aimBuffer.  The line is
+ *       not pushed to FHIST first, so f-up cannot bring it back either.
+ *
+ * The class assertion: a gesture that is not "commit" and not "abandon"
+ * must not be able to empty a non-empty line. ---- */
+static int test_console_line_survives_gestures(void)
+{
+  int fail = 0;
+
+  /* [C5a] f-down on a fresh console (no history at all): the line stands.
+   *
+   * The battery shares program memory, so "no history" has to be
+   * ESTABLISHED, not assumed — the first draft of this subcase inherited
+   * another test's FHIST and recalled a real entry, which looks exactly
+   * like the defect it was hunting. */
+  N13_RESET();
+  forthDictInit();
+  fnClPAll(CONFIRMED);                           /* upstream's own clear-all */
+  if (forthHistoryProgram() != 0) {
+    printf("    FIXTURE BUG (C5): FHIST survived the clear — 'nothing to"
+           " recall' was not reached\n");
+    return 1;
+  }
+  fnForthOuter(NOPARAM);
+  xcopy(aimBuffer, "12 34 +", 8); T_cursorPos = 7;
+  forthHistoryRecall(-1);
+  if (compareString(aimBuffer, "12 34 +", CMP_BINARY) != 0) {
+    printf("    FAIL (C5): f-down with nothing to recall wiped the typed line"
+           " (aim=\"%s\", expected \"12 34 +\")\n", aimBuffer);
+    fail = 1;
+  }
+
+  /* [C5b] f-up in the same state — the report's "fresh calculator" door. */
+  xcopy(aimBuffer, "12 34 +", 8); T_cursorPos = 7;
+  forthHistoryRecall(+1);
+  if (compareString(aimBuffer, "12 34 +", CMP_BINARY) != 0) {
+    printf("    FAIL (C5): f-up with nothing to recall wiped the typed line"
+           " (aim=\"%s\")\n", aimBuffer);
+    fail = 1;
+  }
+
+  /* [C5c] The feature still works: with history present, recall REPLACES
+   * the line, and coming back past the newest entry restores what was being
+   * typed rather than emptying it. */
+  N13_RESET();
+  forthDictInit();
+  fnForthOuter(NOPARAM);
+  xcopy(aimBuffer, "1 1 +", 6); T_cursorPos = 5;
+  forthInteractiveEnter();                       /* FHIST gains "1 1 +" */
+  lastErrorCode = ERROR_NONE;
+  xcopy(aimBuffer, "SCRATCH", 8); T_cursorPos = 7;
+  forthHistoryRecall(-1);                        /* back one: the history line */
+  if (compareString(aimBuffer, "1 1 +", CMP_BINARY) != 0) {
+    printf("    FAIL (C5): recall did not bring back the history line"
+           " (aim=\"%s\", expected \"1 1 +\")\n", aimBuffer);
+    fail = 1;
+  }
+  else {
+    forthHistoryRecall(+1);                      /* forward again: past newest */
+    if (compareString(aimBuffer, "SCRATCH", CMP_BINARY) != 0) {
+      printf("    FAIL (C5): returning past the newest entry did not restore the"
+             " line being typed (aim=\"%s\", expected \"SCRATCH\")\n", aimBuffer);
+      fail = 1;
+    }
+  }
+
+  /* [C6] FORTH pressed inside an open console must not discard the line. */
+  N13_RESET();
+  forthDictInit();
+  fnForthOuter(NOPARAM);
+  xcopy(aimBuffer, ": SQ DUP * ;", 13); T_cursorPos = 12;
+  fnForthOuter(NOPARAM);                         /* the second press */
+  if (!forthCapIsOpen() || !forthCapIsInteractive()) {
+    printf("    FAIL (C6): the second FORTH press closed the console"
+           " (state=%d)\n", forthTestCapState());
+    fail = 1;
+  }
+  else if (compareString(aimBuffer, ": SQ DUP * ;", CMP_BINARY) != 0) {
+    printf("    FAIL (C6): pressing FORTH inside the console discarded the line"
+           " (aim=\"%s\") — and it was never pushed to FHIST, so f-up cannot"
+           " bring it back\n", aimBuffer);
+    fail = 1;
+  }
+
+  N13_RESET();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS (C5/C6): recall with nothing to recall and a second FORTH"
+           " press both leave the typed line standing\n");
   }
   return fail;
 }
@@ -1791,6 +2093,23 @@ static int test_console_format_buffer_contract(void)
 
     forthConsoleFormatRegister(REGISTER_X, g.out, (int16_t)sizeof(g.out));
 
+    /* AUDIT C22 — READ THIS BEFORE TRUSTING THE CANARIES BELOW.
+     *
+     * They cannot fire, and saying so is worth more than deleting them.
+     * forthConsoleFormatRegister hands NO producer this buffer: every arm
+     * writes the function's own local (or tmpString), and `out` is written
+     * exactly once, by a copy clamped to outSize - 1.  So a producer overrun
+     * — C1's actual defect — lands in the formatter's frame and can never
+     * reach g.front/g.back, and the NUL check below is unconditionally true.
+     * The C1 mutation went red in round 1 because of the SIMULATOR's stack
+     * protector, which the DMCP target build does not have.
+     *
+     * They stay as a cheap regression net for the day someone makes an arm
+     * write `out` directly — which is the shape that WOULD make them live —
+     * and the real pin for C1 now sits at the site, as the two
+     * _Static_asserts in forth_bridge.c's short-integer arm: the buffer that
+     * arm passes must be at least ERROR_MESSAGE_LENGTH, which is exactly the
+     * invariant C1 violated and a runtime canary here could never observe. */
     if (g.back != 0x5A5A5A5Au) {
       printf("    FAIL: type %u — the producer wrote PAST the %u-byte buffer"
              " (back canary %08X). Its buffer contract is not satisfied.\n",

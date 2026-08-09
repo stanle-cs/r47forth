@@ -253,6 +253,12 @@ bool_t  forthDataDepthApply(int16_t net);
 
 /* D3-1 spill region (forth_inner.c) */
 uint16_t forthSpillCount(void);
+#if defined(FORTH_DEBUG_SELFTEST)
+/* AUDIT C13: per-line high-water mark of the spill region.  forthSpillCount
+ * is reset by forthDataDepthLeaveOuter before a test can read it, which made
+ * the assertion pinning `.`'s declared stack delta structurally dead. */
+uint16_t forthTestSpillHighWater(void);
+#endif
 void     forthSpillReset(void);
 bool_t   forthSpillCatch(calcRegister_t reg);
 bool_t   forthSpillRefill(calcRegister_t reg);

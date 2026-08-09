@@ -3483,3 +3483,65 @@ of `defineCurrentProgramFromCurrentStep`, FIX-6B's `displayBugScreen`).
 
 **Numbers (RULE-1).** flash 1115360 → 1115464 = **+104 B**; ram 8884
 unchanged. Arena untouched.
+
+## 2026-08-09 — the standing open list cleared: nine findings from rounds 1-2
+
+Owner: *fix them now.* Every finding that had stood open since rounds 1-2,
+red-first, in class groups. All nine close.
+
+- **C10 / C11 / C20 — one class: an output word producing a BYTE where the
+  ring, the painter and the string decoders speak GLYPHS.** EMIT of a code
+  whose low byte is NUL wrote a one-byte C string and the ring stored an
+  orphan lead byte that `forthConsoleLineAt` re-paired with whatever
+  followed (C10); EMIT of a long integer outside int32 was truncated INTO
+  range by `longIntegerToInt32` and printed a character the owner never
+  asked for (C20); the register formatter and the ENTER echo cut strings on
+  BYTE boundaries, leaving the same orphan (C11). Fixed as one class: EMIT
+  refuses a NUL low byte for the same reason it already refuses a bare
+  0x80..0xFF, and tests magnitude BEFORE converting — upstream's own
+  compare-then-convert convention (`factorial.c:28-38`). All three
+  length-limited copies now go through `forthCopyWholeGlyphs`, which walks
+  with upstream's `stringNextGlyph` rather than re-deriving the encoding.
+  **Class: a byte cut in a glyph-encoded stream.**
+- **C5 / C6 — one class: an ordinary gesture destroys the line being
+  typed.** "Past the newest entry" was spelled `aimBuffer[0] = 0`, so with
+  the browse index at NONE the FIRST f-up or f-down cleared the editor —
+  on a fresh calculator, with no history to show for it (C5). And FORTH
+  pressed inside an open console re-opened it, whose first act clears
+  aimBuffer, without pushing to FHIST first (C6). Recall now stashes the
+  in-progress line on the way out of the past-newest slot and restores it on
+  the way back, which is what every line editor with a history does; the
+  second FORTH press restores the surface and returns. **Class: a gesture
+  that is neither commit nor abandon must not be able to empty a line.**
+- **C7 — `.S` printed the window size, not the depth.** `displayStack > 4`
+  was dead (every writer caps `displayStack` at 4), so the prefix was the
+  constant `<4>` and under SSIZE8 the top four levels were absent from the
+  picture. Both now come from the live stack — `getStackTop() - REGISTER_X
+  + 1` plus `forthSpillCount()`, the same expressions the engine's own
+  capacity check uses. **Class: a second copy of a rule, drifted from the
+  thing it describes.**
+- **C13 — an assertion that could not fire.** The spill check read
+  `forthSpillCount()`, which `forthDataDepthLeaveOuter` zeroes at the end of
+  every line. A selftest-only per-line WATERMARK makes it observable;
+  mutating `PRIM_PRINT`'s declared effect from -1 to 0 now reddens the
+  diagnostic that NAMES the defect ("2 value(s) spilled on a line whose
+  depth never exceeds one"), where before only a generic neighbour fired
+  with error 11.
+- **C22 — canaries guarding a buffer no producer receives.** Stated in the
+  test rather than deleted, because the reason is the finding. C1's real
+  invariant is now pinned at the SITE and at BUILD time: two
+  `_Static_assert`s that the buffer the short-integer arm passes is at least
+  `ERROR_MESSAGE_LENGTH`, which is what C1 violated and what no runtime
+  canary around `out` could ever observe.
+- **C15 — the stale override list, deleted rather than corrected.**
+  DESIGN.md said "there is no list to keep in sync" directly above a list
+  that had gone out of sync (naming `error.c`, omitting `assign.c`, thirteen
+  entries against eighteen patches). It now carries the commands that
+  produce the answer. **Class: D7-a at document level — a hand list is a
+  comment, and it comes back short.**
+
+**Numbers (RULE-1).** flash 1115464 → 1115592 = **+128 B**. **RAM 8884 →
+9140 = +256 B**, all of it C5's browse stash
+(`_forthHistScratch[FORTH_CONSOLE_LINE_MAX + 1]`) — the only RAM growth this
+stage has taken, and the alternative is to keep losing the typed line on the
+first recall press. Arena untouched.

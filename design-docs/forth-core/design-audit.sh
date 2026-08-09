@@ -499,6 +499,15 @@ pin 13 "upstream call sites of isAlphabeticSoftmenu/isAlphaSubmenu" \
 pin 4 "manage.c navigations bracketing dynamicMenuItem" \
     grep -c 'dynamicMenuItem = -1;' "${PKG}/programming/manage.c"
 
+# C10/C11 (rounds 1-2, fixed 2026-08-09): every length-limited copy of text
+# into the console ring cuts on a GLYPH boundary, through one helper. A byte
+# cut leaves a lone lead byte the painter re-pairs with what follows.
+# 5 = the definition plus its FOUR call sites (the formatter's short-integer
+# and string arms, the ENTER echo, and C5's browse stash). The pin caught the
+# author's count twice while this landed, same as the navigation pin did.
+pin 5 "glyph-boundary copies (forthCopyWholeGlyphs, definition + sites)" \
+    bash -c "grep -rn 'forthCopyWholeGlyphs(' '${PKG}' --include=*.c | grep -v '/files/' | grep -v '/test_' | wc -l"
+
 pin 0 "longhand IsInteractive/IsOpen conjunctions in production sources" \
     bash -c "grep -rn 'forthCapIsInteractive() *&& *forthCapIsOpen()\|forthCapIsOpen() *&& *forthCapIsInteractive()\|!forthCapIsInteractive() *|| *!forthCapIsOpen()\|!forthCapIsOpen() *|| *!forthCapIsInteractive()' '${PKG}' --include=*.c --include=*.h | grep -v '/files/' | grep -v '/test_' | wc -l"
 

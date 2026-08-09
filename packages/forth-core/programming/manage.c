@@ -1493,7 +1493,13 @@ void forthInteractiveEnter(void) {
    * one-history assertion pins byte-equality, and N-R2 names the only two
    * licensed divergences. */
   { char echo[FORTH_CONSOLE_FMT_MAX];
-    snprintf(echo, sizeof(echo), STD_RIGHT_DOUBLE_ANGLE " %s", aimBuffer);
+    /* AUDIT C11 (the third site of the class): snprintf truncates on a BYTE
+     * boundary, so a near-maximal line ends the echo record with a lone lead
+     * byte — the same orphan C10 refuses at EMIT.  Build the prefix, then
+     * copy the line on a GLYPH boundary into what is left. */
+    int32_t at = (int32_t)stringByteLength(STD_RIGHT_DOUBLE_ANGLE " ");
+    xcopy(echo, STD_RIGHT_DOUBLE_ANGLE " ", (uint32_t)at);
+    forthCopyWholeGlyphs(echo + at, aimBuffer, (int32_t)sizeof(echo) - at);
     forthConsoleAppendLine(echo);
   }
 
@@ -1653,6 +1659,24 @@ typedef struct {
 } forthHistCursor_t;              /* 8 bytes, BSS, one instance */
 
 static forthHistCursor_t _forthHistCur;
+
+/* AUDIT C5: the line the owner was typing when browsing started.
+ *
+ * "Past the newest entry" is a real browse position — it is where you are
+ * before you press anything — but it was spelled `aimBuffer[0] = 0`, so
+ * arriving there EMPTIED the line instead of showing it.  Since the browse
+ * index is NONE at open and after every push, the very first f-up or
+ * f-down a curious owner pressed destroyed whatever they had typed, on a
+ * fresh calculator with no history to show for it.
+ *
+ * The line is stashed on the way out of the past-newest slot and restored
+ * on the way back in, which is what every line editor with a history does.
+ * It lives in BSS beside the fold context, not in the capture object: it is
+ * strictly browse-local, must not survive a suspension or a restore, and
+ * has no persistence contract of its own (round 3's R1 is the record of
+ * what happens when transient state is put somewhere persisted). */
+static char _forthHistScratch[FORTH_CONSOLE_LINE_MAX + 1];
+
 
 static void _forthHistSaveCursor(void) {
   _forthHistCur.savedProgram        = currentProgramNumber;
@@ -1936,6 +1960,8 @@ void forthHistoryPush(const char *text) {
   _forthHistRestoreCursor();
 
   forthCapSetHistoryIndex(FORTH_HIST_BROWSE_NONE);   /* C4: reset on every push */
+  _forthHistScratch[0] = 0;                          /* C5: and the browse-local
+                                                        stash dies with it */
 }
 
 /* C4: f-shifted up/down recall.  Read-only: never creates or modifies
@@ -1960,8 +1986,19 @@ void forthHistoryRecall(int16_t delta) {
     next = (int32_t)lineCount;
   }
 
+  /* C5: leaving the past-newest slot stashes the line being typed. */
+  if(cur == lineCount && (uint16_t)next != lineCount) {
+    forthCopyWholeGlyphs(_forthHistScratch, aimBuffer, (int32_t)sizeof(_forthHistScratch));
+  }
+
   if((uint16_t)next == lineCount) {
-    aimBuffer[0] = 0;                                  /* past newest = empty */
+    /* C5: and arriving back at it restores that line rather than emptying
+     * the editor.  With nothing stashed — the ordinary "nothing to recall"
+     * press — the stash is empty and the line stands untouched. */
+    if((uint16_t)cur == lineCount) {
+      return;                                          /* no movement at all */
+    }
+    xcopy(aimBuffer, _forthHistScratch, stringByteLength(_forthHistScratch) + 1);
   }
   else {
     uint8_t *step = _forthHistLineAt(program, (uint16_t)next);

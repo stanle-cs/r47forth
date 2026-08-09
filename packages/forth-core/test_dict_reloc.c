@@ -1314,6 +1314,9 @@ static int test_console_dialogue_session(void);
 static int test_console_words_print(void);
 static int test_console_words_stack(void);
 static int test_console_words_emit(void);
+static int test_console_output_glyph_integrity(void);     /* AUDIT C10/C11/C20 */
+static int test_console_line_survives_gestures(void);     /* AUDIT C5/C6 */
+static int test_console_print_stack_depth(void);          /* AUDIT C7 */
 static int test_console_words_str_page(void);
 static int test_console_words_program(void);
 /* N1-5: keys-first */
@@ -2550,6 +2553,12 @@ int forthDictSelfTest(void)
   fail |= test_console_words_stack();
   printf("  [DEBUG] running test_console_words_emit...\n");
   fail |= test_console_words_emit();
+  printf("  [DEBUG] running test_console_output_glyph_integrity...\n");
+  fail |= test_console_output_glyph_integrity();
+  printf("  [DEBUG] running test_console_line_survives_gestures...\n");
+  fail |= test_console_line_survives_gestures();
+  printf("  [DEBUG] running test_console_print_stack_depth...\n");
+  fail |= test_console_print_stack_depth();
   printf("  [DEBUG] running test_console_words_str_page...\n");
   fail |= test_console_words_str_page();
   printf("  [DEBUG] running test_console_words_program...\n");

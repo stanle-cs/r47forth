@@ -66,6 +66,23 @@ static uint16_t forthSpillSlots  = 0;      /* live slot count */
 
 uint16_t forthSpillCount(void) { return forthSpillSlots; }
 
+#if defined(FORTH_DEBUG_SELFTEST)
+/* AUDIT C13: the high-water mark of the spill region for the current line.
+ *
+ * forthSpillCount() is the LIVE count, and forthDataDepthLeaveOuter resets
+ * it before any test can read it — so the assertion that pins `.`'s declared
+ * stack delta ("zero values spilled on a line whose depth never exceeds
+ * one") was structurally dead: mutating PRIM_PRINT's effect from -1 to 0
+ * reddened only the neighbouring generic check, with error 11, and the
+ * diagnostic that NAMES the defect never printed.
+ *
+ * The watermark is written where the live count is, reset where the line's
+ * depth accounting is, and read after the line has finished.  Selftest
+ * builds only. */
+static uint16_t forthSpillHighWater = 0;
+uint16_t forthTestSpillHighWater(void) { return forthSpillHighWater; }
+#endif
+
 void forthSpillReset(void)
 {
   if (forthSpillBase) {
@@ -95,6 +112,9 @@ bool_t forthSpillCatch(calcRegister_t reg)
   }
   forthSpillTop += 6u + (uint32_t)blocks * 4u;
   forthSpillSlots++;
+  #if defined(FORTH_DEBUG_SELFTEST)
+    if(forthSpillSlots > forthSpillHighWater) { forthSpillHighWater = forthSpillSlots; }
+  #endif
   return true;
 }
 
@@ -178,6 +198,9 @@ bool_t forthPrimInvoke(uint16_t idx)
 
 void forthDataDepthEnterOuter(void)
 {
+  #if defined(FORTH_DEBUG_SELFTEST)
+    forthSpillHighWater = 0;                 /* C13: per-line watermark */
+  #endif
   forthSpillReset();
   forthOuterActive = true;
   forthDataDepth   = 0;

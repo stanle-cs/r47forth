@@ -1756,6 +1756,22 @@ void fnForthOuter(uint16_t unused) {
     }
   }
 
+  /* AUDIT C6: FORTH pressed while the console is ALREADY open must not
+   * re-open it.  forthCapOpenInteractive's first act is `aimBuffer[0] = 0`,
+   * so the second press discarded the line — and, unlike ENTER, pushed
+   * nothing to FHIST first, so f-up could not bring it back either.  If X
+   * held a string the re-open additionally seeded from it and consumed it.
+   *
+   * The gesture is already "you are in the console"; the honest answer is
+   * to do nothing.  The surface is still re-established, because the press
+   * may have come from a catalog whose menus the drain above just popped —
+   * that leaves the console's row buried, and restoring it is exactly what
+   * forthConsoleRestoreSurface exists for. */
+  if(forthCapInteractiveLive()) {                  /* C-6: the named predicate */
+    forthConsoleRestoreSurface();
+    return;
+  }
+
   forthEnterAimSurfaceNoLift();                   /* see above — NOT fnAim;
                                                      registers the frame (C17) */
   forthCapOpenInteractive();                      /* clears aimBuffer; cannot fail */

@@ -53,6 +53,14 @@
  * module stays display-free by construction. */
 void forthConsoleFormatRegister(calcRegister_t regist, char *out, int16_t outSize);
 
+/* AUDIT C11: copy text into a fixed buffer, cutting only on a GLYPH
+ * boundary (the C47 encoding is one byte below 0x80, two bytes above).  A
+ * byte cut leaves a lone lead byte that the painter and forthConsoleLineAt
+ * both re-pair with whatever follows — C10's orphan by another door.  Every
+ * site that puts a length-limited string into the ring goes through this.
+ * Returns the bytes written; always NUL-terminates when cap >= 1. */
+int32_t forthCopyWholeGlyphs(char *dst, const char *src, int32_t cap);
+
 void     forthConsoleClear(void);
 void     forthConsoleAppend(const char *s);      /* text; embedded '\n' breaks lines */
 void     forthConsoleNewline(void);              /* close the line (CR) */
