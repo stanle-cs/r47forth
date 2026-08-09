@@ -70,7 +70,14 @@ finding.
      forthConsoleRestoreSurface and the reader's whole finding rested on the
      gap). No `...`, no /* snip */, no elided tails — round 2's sed-cut
      packet produced "this never writes its output", true of the packet and
-     false of the code. -->
+     false of the code.
+
+     LABEL context-only functions as context. Round 7: a packet whose
+     Subject said "every function below is same-day fix code" also carried
+     two upstream-verbatim helpers included only for reference; the reader
+     audited them as the subject and both findings were out of scope. If a
+     body is included so other code can be read, say so at its fence:
+     "context, not the subject — byte-identical to upstream". -->
 
 ```c
 ```

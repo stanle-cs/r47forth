@@ -210,6 +210,13 @@ reports.forEach((r, i) => (r.findings || []).forEach(f => all.push({ ...f, dim: 
  * args.dimensions = [] this becomes a refutation-only round, which is what
  * round 4 was. */
 const extra = Array.isArray(A.extraFindings) ? A.extraFindings : []
+/* Round-7 trap: extraFindings in the wrong shape (where/claim instead of
+ * file/line/title) collapse in the dedup on undefined keys, kill the refute
+ * fan-out on f.file.split, and the synthesis still writes a confident report
+ * over ZERO verified findings — a single-reader artifact wearing the pass's
+ * clothes. Refuse loudly BEFORE any agent runs. */
+{ const bad = extra.filter(f => !f || typeof f.file !== 'string' || !Number.isInteger(f.line) || !f.title)
+  if (bad.length) throw new Error(`extraFindings must be FINDING_SCHEMA-shaped (title, file, line:int, reaching_input, consequence, violated, severity): ${bad.length} of ${extra.length} malformed — refusing to run a refutation over mangled findings`) }
 extra.forEach(f => all.push({ dim: 'out-of-family', ...f }))
 if (extra.length) log(`${extra.length} out-of-family findings joined the refutation queue`)
 
