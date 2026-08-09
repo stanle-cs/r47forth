@@ -907,6 +907,24 @@ static uint16_t _forthCapBuildStep(char *dst, const char *text) {
   return n + 4;
 }
 
+/* CONSOLIDATE P3: the empty-capture PEM abort — delete the §8.1
+ * placeholder, drop ALPHA, restore the normal GUI, close the capture.
+ * tam.function reset rationale/citations: tam.function is set by the Forth
+ * capture open paths (the `func == ITM_AIM` and `func == ITM_FORTH` arms in
+ * `insertStepInProgram`) and never reset by upstream on this exit.  The idle
+ * value 0 matches the global `tam`'s zero-initialized boot state [VERIFIED:
+ * src/c47/c47.c:190 — no initializer, static storage] and the documented
+ * invariant that tam.mode, not tam.function, is the "in TAM" gate [VERIFIED:
+ * src/c47/typeDefinitions.h:672-680]. */
+static void _forthCapAbortPemInput(void) {
+  deleteStepsFromTo(currentStep, findNextStep(currentStep));
+  clearSystemFlag(FLAG_ALPHA);
+  calcModeNormalGui();
+  _closeAlphaMenus();
+  forthCapClose();
+  tam.function = 0;
+}
+
 void pemAlpha(int16_t item) {
   bool_t editCommand = false;
   if(item == ITM_EDIT) {
@@ -1039,20 +1057,9 @@ void pemAlpha(int16_t item) {
     }
     else if(item == ITM_BACKSPACE) {
       if(aimBuffer[0] == 0) {
-        deleteStepsFromTo(currentStep, findNextStep(currentStep));
-        clearSystemFlag(FLAG_ALPHA);
-        calcModeNormalGui();
-        _closeAlphaMenus();
-        // Capture-abort reset: tam.function is set by the Forth capture open
-        // paths (the `func == ITM_AIM` and `func == ITM_FORTH` arms in
-        // `insertStepInProgram`) and never reset by upstream on
-        // this backspace-abort exit. Idle value 0 matches the global `tam`'s
-        // zero-initialized boot state [VERIFIED: src/c47/c47.c:190 — no
-        // initializer, static storage] and the documented invariant that
-        // tam.mode, not tam.function, is the "in TAM" gate [VERIFIED:
-        // src/c47/typeDefinitions.h:672-680].
-        forthCapClose();
-        tam.function = 0;
+        /* forth-core: backspace on an empty capture line is the abort — the
+         * sequence is _forthCapAbortPemInput above. */
+        _forthCapAbortPemInput();
         return;
       }
       else if(T_cursorPos == 0) {
@@ -1181,14 +1188,9 @@ void pemAlpha(int16_t item) {
 
 void pemCloseAlphaInput(void) {
   if(tam.function == ITM_FORTH && !forthCapTextNonEmpty()) {
-    deleteStepsFromTo(currentStep, findNextStep(currentStep));
-    clearSystemFlag(FLAG_ALPHA);
-    calcModeNormalGui();
-    _closeAlphaMenus();
-    // Capture-close reset: see the identical rationale/citations at the
-    // `ITM_BACKSPACE` empty-buffer arm above.
-    forthCapClose();
-    tam.function = 0;
+    /* forth-core: closing an empty Forth capture is the same abort the
+     * ITM_BACKSPACE arm takes — _forthCapAbortPemInput above. */
+    _forthCapAbortPemInput();
     return;
   }
   aimBuffer[0] = 0;

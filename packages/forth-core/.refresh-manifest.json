@@ -36,7 +36,7 @@
     "010-keyboard.c.patch": "285496415114d3be28c2cba104a046bba9eda23dc251e22b6d6e2cb7625bd14b",
     "010-programming__decode.c.patch": "a1bc419ca7a940d6fe6774f68db1c4ddab0d6b46387167c53fc27568f91b764e",
     "010-programming__lblGtoXeq.c.patch": "74e708a47b8b6cbc445b021a97f81fa450cdfe36dfd318b184a9ff2bce021261",
-    "010-programming__manage.c.patch": "b0e298213037c4ea655ff01f26e4e6199ea4fdeceea69f86914847c7bf0b8f1b",
+    "010-programming__manage.c.patch": "2c340f82fb76826f4dab95c082f265e941bc7652db48959220ca5f58ef34cacd",
     "010-saveRestoreBackup.c.patch": "131b341a18bdb3e4302458818677063eb702ea825dfb71add29d9d3401ccb894",
     "010-screen.c.patch": "76bc14ba0031975a26514e6ec5cac058c05fec1598fbb9d1d540673fdd5ac15d",
     "010-softmenus.c.patch": "5b6c24dd8363107391741f9c22eb721e8bad1f123908471e9adb7ebd9f2e031e",
