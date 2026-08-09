@@ -1,0 +1,32 @@
+diff --git a/src/c47/bufferize.c b/src/c47/bufferize.c
+index 8e3c6b1b719e05a09034908975d5cfe3f7616be3..4090243f3f373f661591a75ea2ae61ac50e42a3d 100644
+--- a/src/c47/bufferize.c
++++ b/src/c47/bufferize.c
+@@ -2,6 +2,7 @@
+ // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
+ 
+ #include "c47.h"
++#include "forth_capture.h"
+ 
+ bool_t delayCloseNim = false;
+ 
+@@ -2691,6 +2692,19 @@ TO_QSPI static const numStr NumMsg[] = { { "^0" }, { "^1" }, { "^2" }, { "^3" },
+ 
+ 
+   void closeAim(void) {
++    /* forth-core L1-1 (CONSOLIDATE P6): nothing upstream closes an
++     * INTERACTIVE capture, and a leaked FCAP_OPEN is not inert (the next
++     * PEM ALPHA press toggles keys mode instead of opening literal
++     * input).  This guard lived at each closeAim() call site in
++     * keyboard.c (the L1-1 disposition table); it now runs in the one
++     * teardown itself, so a future upstream closeAim() caller in any
++     * file is correct by default — the D7-1 argument, applied to this
++     * class.  The interactive EXIT ladder never calls closeAim (its
++     * teardown is calcModeNormal+popSoftmenu minus the string commit),
++     * so this cannot fire there. */
++    if(forthCapIsInteractive()) {
++      forthCapClose();
++    }
+     calcModeNormal();
+     popSoftmenu();
+ 

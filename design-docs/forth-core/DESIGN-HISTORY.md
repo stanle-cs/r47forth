@@ -3612,3 +3612,58 @@ argument yet for landing them.
 CUSTOM_PKG_RECONFIGURE=1`: flash 1115592 → 1115712 = **+120 B** (the
 resume-canary bounds check and the walker guards); ram 9140 unchanged.
 Arena untouched.
+
+---
+
+## 2026-08-09 — the closeAim funnel: the L1-1 guard moved inside the teardown
+
+**Wave.** CONSOLIDATE P6 of `SPEC_consolidation-wave_2026-08-09.md`, the
+10-packet consolidation the owner approved on 2026-08-09 ("all of them") off
+`REVIEW_upstream-minimality_2026-08-09.md`.
+
+**What moved.** `_forthCapCloseIfInteractive()` and its four call sites are
+gone from the keyboard.c override. The guard now runs as the first statement
+of `closeAim()` itself, in a new bufferize.c override:
+
+```c
+if(forthCapIsInteractive()) { forthCapClose(); }
+```
+
+**The argument is D7-1's, applied to a second class.** L1-1's shape was an
+enumeration: find every `closeAim()` caller that can run with an interactive
+capture open, and put the guard at each one. That is correct exactly as long
+as the enumeration is, and the enumeration is a package-side census of an
+upstream call graph — the same thing D7-1 rejected for `leaveTamModeIfEnabled`
+and the same thing round 8's OOF-1 caught in keyboardTweak.c, where a census
+of one predicate's consumers missed a second frame-destroying call in the same
+function. A future upstream `closeAim()` caller, in any file, is now correct
+by default instead of being a finding waiting for the next audit.
+
+**Why this cannot fire where the guard was deliberately absent.** Two sites
+had rulings against closing:
+
+- executeFunction's generic non-alpha-item arm keeps its
+  `!forthCapIsInteractive()` conjunct — L1-3 (C5) requires an FCNS pick during
+  an interactive capture to insert the name as text and leave the capture
+  OPEN, and that conjunct is what keeps the site out of `closeAim()` at all.
+  It is load-bearing now in a second way, and its comment says so.
+- The interactive EXIT ladder (fnKeyExit's CM_AIM arm) never calls
+  `closeAim()`; its teardown is `calcModeNormal` + `popSoftmenu` minus the
+  string commit. Stated at the funnel, where the next reader will ask.
+
+**Proved by mutation, not by reading.** Funnel body commented out: BOTH
+close batteries redden — `test_capture_interactive_close`'s `[fnKeyUp]` and
+`[fnKeyDown]` rows (state 1, expected FCAP_CLOSED; origin 1, expected
+FCAP_ORIGIN_PEM) and `test_interactive_close_sweep`'s `[2]` and `[3]`
+(state, keysMode and origin all leaked). The moved code is the live code, and
+the class had test coverage already — no gap to fill.
+
+**Cost, stated.** Override count 18 → 19, over the budget of 16. The
+bufferize.c patch is 14 added lines in 2 hunks with no modified upstream line;
+keyboard.c's patch loses 45 added lines and 3 hunks. Catalogued in the
+upstream-diff-review skill's `deliberate-exceptions.md` so a later minimality
+review does not "fix" it back into an enumeration.
+
+**Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`: recorded in the P6 commit. Arena untouched —
+nothing here changes the dictionary.

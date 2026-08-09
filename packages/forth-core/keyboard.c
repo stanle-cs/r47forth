@@ -20,26 +20,13 @@ TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineI
 
 FORTH_SELFTEST_EXPORT void executeFunction(const char *data, int16_t item_);
 
-/* L1-1: nothing in the landed tree closes an INTERACTIVE capture —
- * closeAim() (upstream bufferize.c) does not know about forthCap, and every
- * forthCapClose() production site is CM_PEM-gated inside pemAlpha/
- * pemCloseAlphaInput.  A leaked FCAP_OPEN is not inert: insertStepInProgram's
- * `func == ITM_AIM && forthCapIsOpen()` arm (manage.c:1719-1734) has no
- * origin discriminator, so the next PEM ALPHA press would toggle keys mode
- * instead of opening literal input.
- *
- * L1-2: the EXIT ladder (fnKeyExit's CM_AIM arm) supersedes this at THAT
- * site — the ladder's rung 3 does the equivalent teardown without ever
- * calling closeAim().  It does NOT supersede it anywhere else: the other
- * five closeAim() sites in this file (executeFunction's ITM_INTEGRAL/
- * ITM_INTEGRAL_YX arm, executeFunction's generic non-alpha-item arm,
- * processKeyAction's BST/SST arm, fnKeyUp, fnKeyDown) are reachable with
- * an interactive capture open and are untouched by L1-2's scope (ENTER,
- * EXIT, R/S, the input cap) — each still funnels through here so a
- * leaked FCAP_OPEN cannot survive them.  Disposition table reported in
- * the L1-2 packet response. */
-static void _forthCapCloseIfInteractive(void) {
-  if (forthCapIsInteractive()) { forthCapClose(); }
+/* K1/E12.2 (CONSOLIDATE P4): abort the empty placeholder before SST/BST
+ * navigation — no navigation may leave FCAP_OPEN behind (fnSst/fnBst's
+ * own close branch only fires on non-empty aimBuffer). */
+static void _forthCapAbortEmptyPlaceholder(void) {
+  if(forthCapIsOpen() && aimBuffer[0] == 0) {
+    pemAlpha(ITM_BACKSPACE);
+  }
 }
 
 /* L1-2 (C4): true when the interactive capture cannot take another
@@ -50,15 +37,6 @@ static void _forthCapCloseIfInteractive(void) {
  * indexOfItems[negative] is out of bounds. (keyboard.c's own BST/SST-
  * adjacent site tests `... || item < 0` for the same reason; that site's
  * shape is a latent wart, not the pattern to copy.) */
-/* K1/E12.2 (CONSOLIDATE P4): abort the empty placeholder before SST/BST
- * navigation — no navigation may leave FCAP_OPEN behind (fnSst/fnBst's
- * own close branch only fires on non-empty aimBuffer). */
-static void _forthCapAbortEmptyPlaceholder(void) {
-  if(forthCapIsOpen() && aimBuffer[0] == 0) {
-    pemAlpha(ITM_BACKSPACE);
-  }
-}
-
 static bool_t _forthCapAtCap(int16_t item) {
   /* round 6 (F8): the LIVE predicate — a suspended capture's aimBuffer is
    * TAM's, and this cap must not meter it. */
@@ -1137,11 +1115,6 @@ endReturnTrue:
                 break;
               }
               case CM_AIM: {
-                /* L1-2 (C2) disposition: KEEP. Reachable with an interactive
-                 * capture open (ITM_INTEGRAL/ITM_INTEGRAL_YX press nothing
-                 * about calcMode's origin) and outside the EXIT ladder's
-                 * scope, so the guard stays to prevent a leaked FCAP_OPEN. */
-                _forthCapCloseIfInteractive();   /* L1-1 */
                 closeAim();
                 break;
               }
@@ -1393,11 +1366,12 @@ endReturnTrue:
                * arm (C1) instead of executing, so closing/committing the
                * capture here first would be wrong — picking any function
                * from FCNS during an interactive capture must insert the
-               * name as text and leave the capture OPEN (C6.4).  The
-               * _forthCapCloseIfInteractive() call this replaced is now
-               * unreachable from this site for an interactive capture,
-               * which is intentional: the five OTHER sites still call it
-               * unchanged (L1-1's disposition table). */
+               * name as text and leave the capture OPEN (C6.4).  Hence the
+               * !forthCapIsInteractive() conjunct above, which is what keeps
+               * this site out of closeAim() — and so out of the L1-1 close
+               * funnel now living inside it (CONSOLIDATE P6) — for an
+               * interactive capture.  Load-bearing: drop it and picking a
+               * function from FCNS would close the console. */
               closeAim();
             }
             if(tam.mode && tam.alpha) {
@@ -3087,11 +3061,6 @@ RELEASE_END:
                 }
                 //JM In AIM, BST and SST is not reaching here, as it is reconfigured for CAPS lock and NUM lock
                 if(item == ITM_BST || item == ITM_SST) {
-                  /* L1-2 (C2) disposition: KEEP. Reachable with an
-                   * interactive capture open (this longpress arm does not
-                   * discriminate origin) and outside the EXIT ladder's
-                   * scope — the guard stays. */
-                  _forthCapCloseIfInteractive();   /* L1-1 */
                   closeAim();
                   runFunction(item);
                   keyActionProcessed = true;
@@ -4098,10 +4067,12 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           break;
         }
         if(forthCapIsInteractive()) {
-          /* L1-2 (C2): the interactive EXIT ladder — supersedes
-           * _forthCapCloseIfInteractive() at this site (the native arm
-           * below is unreachable for an interactive capture now that this
-           * branch never falls through to it). */
+          /* L1-2 (C2): the interactive EXIT ladder — supersedes the L1-1
+           * close guard at this site (the native arm below is unreachable
+           * for an interactive capture now that this branch never falls
+           * through to it).  The ladder does its own teardown and never
+           * calls closeAim(), so the P6 funnel inside closeAim() does not
+           * reach here either. */
 
           /* AUDIT C18: the OVERLAY rung runs FIRST.  EXIT unwinds the topmost
            * thing on screen, and a row the user stacked (the Greek keypad, a
@@ -5031,13 +5002,6 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
             closeNim();
           }
           if(calcMode == CM_AIM) {
-            /* L1-2 (C2) disposition: KEEP (fnKeyUp). Reachable with an
-             * interactive capture open once the top softmenu is non-alpha
-             * and non-scrolling (see test_capture_interactive_close's
-             * [fnKeyUp] comment for why the bare "open then arrow" gesture
-             * does not reach it) — outside the EXIT ladder's scope, so the
-             * guard stays. */
-            _forthCapCloseIfInteractive();   /* L1-1 */
             closeAim();
           }
           fnBst(NOPARAM);
@@ -5256,9 +5220,6 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
             closeNim();
           }
           if(calcMode == CM_AIM) {
-            /* L1-2 (C2) disposition: KEEP (fnKeyDown). Same reasoning as
-             * fnKeyUp's mirror site above. */
-            _forthCapCloseIfInteractive();   /* L1-1 */
             closeAim();
           }
           fnSst(NOPARAM);
