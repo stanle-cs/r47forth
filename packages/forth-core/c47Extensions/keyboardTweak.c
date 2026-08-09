@@ -193,21 +193,10 @@ void resetKeytimers(void) {
       if(getSystemFlag(FLAG_ALPHA)) {
         leaveTamModeIfEnabled();
         if(getSystemFlag(FLAG_HOME_TRIPLE)) {
-          if(forthCapInteractiveLive() && forthConsoleBaseOnTop()) {
-            /* AUDIT round 8 (C-2): row-destroying call 1 of 2.  The console
-             * OWNS its row while a live interactive capture is open
-             * (forth_menu.h), so leave it alone entirely — the same
-             * disposition round 6's F7 fix gave the screen.c twin of this
-             * block, because the console's own ALPHA gesture is the
-             * keys-mode toggle and a raw ALPHA push here would leave the
-             * row reading ALPHA while the keypad types the keys plane.
-             * tam.alpha still gets its TAMALPHA row below in the ordinary
-             * case: during TAM the capture is SUSPENDED, not live.
-             *
-             * forthConsoleBaseOnTop, not the live predicate alone: the
-             * question is whether the frame this pop would destroy is the
-             * console's — DESIGN-HISTORY 2026-08-09 (P10, the base-on-top
-             * refutation). */
+          if(forthConsoleHomeRow()) {
+            /* R9-4: HOME.3 over a live console — dismiss, then land on the
+             * row matching the sub-mode.  Ruling and upstream's own shape
+             * at forth_menu.c's definition. */
           }
           else {
           if((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu()) {

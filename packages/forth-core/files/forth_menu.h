@@ -44,6 +44,13 @@ void forthConsoleRestoreSurface(void);
 bool_t forthConsoleOwnsSlot0(void);     /* slot 0 is console-CREATED */
 bool_t forthConsoleStampOnStack(void);  /* a registered frame exists anywhere */
 bool_t forthConsoleBaseOnTop(void);     /* EXIT rung 2: fall through, or pop? */
+
+/* R9-4: HOME.3's two halves (dismiss the overlay, land on the row matching
+ * the sub-mode) for a live console.  True means the gesture was handled and
+ * the caller skips its native arm.  Called from the two upstream long-press
+ * sites; the ruling and upstream's own shape are stated at the definition.
+ * Site count pinned in design-audit.sh group I. */
+bool_t forthConsoleHomeRow(void);
 void   forthConsoleRegisterSlot0(bool_t created);  /* open site (forth_compile.c) */
 void   forthConsoleUnstampAll(void);    /* close funnel (forthCapClose) only */
 

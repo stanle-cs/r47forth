@@ -604,25 +604,34 @@ void fnPem(uint16_t unusedButMandatoryParameter) {
       decodeOneStep(step);
       if(firstDisplayedStepNumber + line - lineOffset == currentStepNumber && !tam.mode) {
         if(getSystemFlag(FLAG_ALPHA)) {
-          char tmpChar4 = tmpString[4];
-          char tmpChar6 = tmpString[6];
-          int16_t cursorInString;
-          tmpString[6] = 0;
+          char tmpChar = tmpString[4];
           tmpString[4] = 0;
+          int16_t cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
+          tmpString[4] = tmpChar;
           if(tam.function == ITM_FORTH) {
             /* R3-1: a non-empty ITM_FORTH source step is decoded BARE
              * (decodeRem, §8.5) — no two-byte opening quote to skip. The
              * ordinary-literal/REM/42-string branches below all assume that
              * quote and are followed by an unconditional +2; give Forth a
              * zero-byte prefix so cursorInString+2 lands before the first
-             * real payload byte instead of on top of the second one. */
+             * real payload byte instead of on top of the second one.
+             *
+             * AUDIT round 9 (R9-10): stated as an OVERRIDE of upstream's
+             * result rather than as a fork of its computation, so the four
+             * lines above are byte-identical to upstream and this hunk is
+             * purely additive.  Upstream's ternary still runs and its
+             * answer is discarded here — strcmp is pure and T_cursorPos is
+             * a plain extern, so the dead computation costs nothing and
+             * buys a hunk that cannot conflict on those four lines.
+             *
+             * The tmpString[6] save/zero/restore that used to sit around
+             * this block went with it: it was inert.  Both literals
+             * compared above are FOUR bytes ("REM ", and "42" plus a
+             * two-byte glyph — src/c47/fonts.h:347,396), and tmpString[4]
+             * = 0 terminates every one of those strcmps before byte 6 is
+             * ever read. */
             cursorInString = T_cursorPos - 2;
           }
-          else {
-            cursorInString = (strcmp(tmpString, "REM ") == 0 ? T_cursorPos + 4 : (strcmp(tmpString, "42" STD_alpha) == 0)  || (strcmp(tmpString, "42" STD_RIGHT_TACK) == 0) ? T_cursorPos +5 : T_cursorPos);
-          }
-          tmpString[4] = tmpChar4;
-          tmpString[6] = tmpChar6;
           xcopy(tmpString + 2 + cursorInString + 2, tmpString + 2 + cursorInString, stringByteLength(tmpString + 2 + cursorInString) + 1);
           tmpString[2 + cursorInString    ] = STD_CURSOR[0];
           tmpString[2 + cursorInString + 1] = STD_CURSOR[1];

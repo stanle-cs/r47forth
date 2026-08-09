@@ -1,5 +1,5 @@
 diff --git a/src/c47/c47Extensions/keyboardTweak.c b/src/c47/c47Extensions/keyboardTweak.c
-index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..a2823c480336286446e693fb7666a275f620dc4a 100644
+index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..88509aa651953cd0771552bdbb1f728a06e41b6a 100644
 --- a/src/c47/c47Extensions/keyboardTweak.c
 +++ b/src/c47/c47Extensions/keyboardTweak.c
 @@ -6,6 +6,19 @@
@@ -22,31 +22,20 @@ index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..a2823c480336286446e693fb7666a275
  
  void fnSHIFTf(uint16_t unusedButMandatoryParameter) {
    shiftF = true;
-@@ -180,6 +193,23 @@ void resetKeytimers(void) {
+@@ -180,6 +193,12 @@ void resetKeytimers(void) {
        if(getSystemFlag(FLAG_ALPHA)) {
          leaveTamModeIfEnabled();
          if(getSystemFlag(FLAG_HOME_TRIPLE)) {
-+          if(forthCapInteractiveLive() && forthConsoleBaseOnTop()) {
-+            /* AUDIT round 8 (C-2): row-destroying call 1 of 2.  The console
-+             * OWNS its row while a live interactive capture is open
-+             * (forth_menu.h), so leave it alone entirely — the same
-+             * disposition round 6's F7 fix gave the screen.c twin of this
-+             * block, because the console's own ALPHA gesture is the
-+             * keys-mode toggle and a raw ALPHA push here would leave the
-+             * row reading ALPHA while the keypad types the keys plane.
-+             * tam.alpha still gets its TAMALPHA row below in the ordinary
-+             * case: during TAM the capture is SUSPENDED, not live.
-+             *
-+             * forthConsoleBaseOnTop, not the live predicate alone: the
-+             * question is whether the frame this pop would destroy is the
-+             * console's — DESIGN-HISTORY 2026-08-09 (P10, the base-on-top
-+             * refutation). */
++          if(forthConsoleHomeRow()) {
++            /* R9-4: HOME.3 over a live console — dismiss, then land on the
++             * row matching the sub-mode.  Ruling and upstream's own shape
++             * at forth_menu.c's definition. */
 +          }
 +          else {
            if((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu()) {
              popSoftmenu();
            }
-@@ -189,6 +219,7 @@ void resetKeytimers(void) {
+@@ -189,6 +208,7 @@ void resetKeytimers(void) {
            else {
              showSoftmenu(-MNU_ALPHA);
            }
@@ -54,7 +43,7 @@ index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..a2823c480336286446e693fb7666a275
          }
          else if(getSystemFlag(FLAG_MYM_TRIPLE)) {
            showSoftmenu(-MNU_MyAlpha);
-@@ -257,7 +288,16 @@ void resetKeytimers(void) {
+@@ -257,7 +277,16 @@ void resetKeytimers(void) {
                else {
                  baseOverrideOnce = false;
                  BASE_OVERRIDEONCE = baseOverrideOnce;

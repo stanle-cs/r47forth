@@ -18423,10 +18423,47 @@ static int test_fold_round8_window(void)
                aimBuffer);
         scFail = 1;
       }
+      /* AUDIT round 9 (R9-4): assert the POSITIVE property, not the absence
+       * of one named menu.  The old three checks above all passed while the
+       * gesture left a raw -MNU_ALPHA frame standing over the console's
+       * stamped base — "not MyAlpha" and "the stamp survives" are both true
+       * of that state, which is how a shipped test drove a live defect and
+       * stayed green.
+       *
+       * K-R3, the invariant: THE ROW IS THE MODE INDICATOR.  Whatever the
+       * gesture lands on, the displayed row and the sub-mode the keypad is
+       * actually typing in must agree.  This is also what upstream's own
+       * HOME.3 does — it picks TAMALPHA or ALPHA by the current input
+       * context — so the console owes the same agreement for the sub-mode
+       * upstream does not have. */
+      if (forthCapKeysMode() && currentMenu() == -MNU_ALPHA) {
+        printf("    [7] FAIL (R9-4): the row reads ALPHA while the console is"
+               " in KEYS mode — the keypad types the keys plane and the row"
+               " says otherwise (K-R3).  HOME.3 landed on a raw ALPHA push"
+               " instead of the console's own row\n");
+        scFail = 1;
+      }
+      if (!forthCapKeysMode() && currentMenu() == -MNU_FORTH) {
+        printf("    [7] FAIL (R9-4): the row reads FWRD (MNU_FORTH) while the"
+               " console is in the ALPHA excursion — same K-R3 violation,"
+               " other direction\n");
+        scFail = 1;
+      }
+      /* And the native half of the gesture: HOME.3 LANDS somewhere — after
+       * the overlay is dismissed the console's own base must be on top,
+       * which is what makes the row above meaningful at all. */
+      if (!forthConsoleBaseOnTop()) {
+        printf("    [7] FAIL (R9-4): HOME.3 dismissed the overlay but did not"
+               " land on the console's own row (menu=%d) — upstream's HOME.3"
+               " always lands on a home row; the console's is its surface\n",
+               (int)currentMenu());
+        scFail = 1;
+      }
     }
   }
-  if (!scFail) printf("    [7] PASS (OOF): the guard protects the console's OWN"
-                      " frame and lets a foreign overlay be dismissed\n");
+  if (!scFail) printf("    [7] PASS (OOF+R9-4): HOME.3 dismisses a foreign"
+                      " overlay and lands on the console's own row, with the"
+                      " row matching the sub-mode\n");
   fail |= scFail;
 
   /* ---- [8] R8-1 (in-family D3, executed by its verifier to a SIGSEGV):

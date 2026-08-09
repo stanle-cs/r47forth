@@ -487,18 +487,43 @@ pin 2 "ui/tam.c forthFoldRederiveAdmission call sites" \
 # differently-spelled call — arrived unguarded with the pin AND the full gate
 # green. A verifier mutation proved it. Count the calls wherever they appear,
 # and exclude only comment lines.
+# R9-4 (round 9): the count stays 2 here. The console arm now performs the
+# dismiss itself (HOME.3's native first half), but that pop lives in
+# forth_menu.c's forthConsoleHomeRow, not in this override — which is the
+# point of putting it there. The rule still holds for both remaining
+# destroyers, and the moved one is gated on !forthConsoleBaseOnTop() so the
+# only frame it can destroy is one that is not the console's own.
 pin 2 "c47Extensions/keyboardTweak.c frame-destroying calls" \
     bash -c "grep -nE '(popSoftmenu *\(|fnExitAllMenus *\()' '${PKG}/c47Extensions/keyboardTweak.c' | grep -vE '^[0-9]+: *[*/]' | wc -l"
-pin 2 "c47Extensions/keyboardTweak.c forthCapInteractiveLive guards" \
-    grep -c 'forthCapInteractiveLive()' "${PKG}/c47Extensions/keyboardTweak.c"
+# R9-4 (round 9): "two destroyers, two guards" still holds, but one guard is
+# now DELEGATED — the HOME.3 destroyer's guard is the first line of
+# forth_menu.c's forthConsoleHomeRow(), which is where the pop moved too.
+# Counting only the literal predicate would read 1 against correct code and
+# force the next reader to re-derive why. Count the guard however it is
+# spelled at this file's destroyers: inline, or through the delegate.
+pin 2 "c47Extensions/keyboardTweak.c destroyer guards (inline or delegated)" \
+    bash -c "grep -cE 'forthCapInteractiveLive\(\)|forthConsoleHomeRow\(\)' '${PKG}/c47Extensions/keyboardTweak.c'"
 
 # Round 8, out-of-family: a guard that SKIPS a pop must ask whether the frame
 # it would destroy is the console's own, not merely whether a line is live —
 # otherwise it also refuses to dismiss a foreign row stacked over the console.
-# Two sites have that shape (screen.c's F7 guard and its keyboardTweak twin);
-# both pair Live with BaseOnTop. A third pop-skipping site must do the same.
-pin 2 "pop-skipping guards paired with forthConsoleBaseOnTop()" \
-    bash -c "grep -rn 'forthCapInteractiveLive() && forthConsoleBaseOnTop()' '${PKG}' --include=*.c | grep -v '/files/' | wc -l"
+# Two sites have that shape: screen.c's F7 guard and its keyboardTweak twin.
+#
+# R9-4 (round 9) REPLACES that pin rather than re-accepting it, because its
+# subject stopped existing: neither site skips a pop any more. Aligning with
+# what HOME.3 natively does — dismiss the overlay, THEN land on the row
+# matching the current input context — the console arm now performs both
+# halves itself. The old pin counted the `Live && BaseOnTop` conjunction and
+# would read 0 against the correct code, which is a pin outliving its rule
+# (the same class as R9-8/R9-9, at the audit script).
+#
+# The invariant worth holding is the LAND half, because its absence WAS the
+# defect: a console arm that dismisses an overlay and then leaves the row to
+# a raw -MNU_ALPHA push breaks K-R3. Both twins must land through
+# forthConsoleShowSurface, which picks the row from the sub-mode exactly as
+# upstream picks TAMALPHA vs ALPHA from tam.alpha.
+pin 2 "twin HOME.3 sites going through forthConsoleHomeRow()" \
+    bash -c "grep -rn 'forthConsoleHomeRow()' '${PKG}' --include=*.c | grep -v '/files/' | grep -v 'bool_t forthConsoleHomeRow' | wc -l"
 
 # C-2 (round 8): the UPSTREAM census of the predicate Stage L widened to
 # count -MNU_FORTH. Round 6's F7 fix enumerated the package tree only and
@@ -627,11 +652,12 @@ fi
 # against a known-empty baseline, instead of waiting for the next full
 # upstream-diff-review to notice.
 #
-# CHURN is hard zero. NEAR is a judged tier: the four standing hits were read
-# individually by the 2026-08-09b review (two appended disjuncts that cannot
-# be spelled another way, and one real rename in two halves) and cleared.
-# R9-10 proposes a purely additive reshape of the fnPem hunk that retires the
-# rename pair; when it lands, this count drops to 2 and moves here.
+# CHURN is hard zero. NEAR is a judged tier: the standing hits were read
+# individually by the 2026-08-09b review and cleared. R9-10 landed the
+# fnPem hunk's purely additive reshape the same day, which retired the
+# tmpChar rename in both its halves — 4 -> 2. The two that remain are the
+# appended disjuncts in keyboard.c and softmenus.c, which cannot be spelled
+# any other way.
 head2 "J. Upstream-diff churn (patch minimality)"
 j_scan="${SCRIPT_DIR}/../../.claude/skills/upstream-diff-review/references/patch_churn_scan.py"
 if [[ -f "${j_scan}" ]]; then
@@ -639,12 +665,12 @@ if [[ -f "${j_scan}" ]]; then
   j_churn=$(printf '%s\n' "${j_out}" | grep -c '^\[CHURN\]' || true)
   j_near=$(printf '%s\n' "${j_out}" | grep -c '^\[NEAR\]' || true)
   printf '  %-58s %s\n' "mechanical churn findings (must be 0)" "${j_churn}"
-  printf '  %-58s %s\n' "NEAR hits (judged; baseline 4, see comment)" "${j_near}"
+  printf '  %-58s %s\n' "NEAR hits (judged; baseline 2, see comment)" "${j_near}"
   if [[ "${j_churn}" -ne 0 ]]; then
     printf '%s\n' "${j_out}" | grep -A2 '^\[CHURN\]' | sed 's/^/  /'
     flag "patch churn regressed above zero — a hunk is carrying reformatting or a rewrite where an append would do"
-  elif [[ "${j_near}" -ne 4 ]]; then
-    flag "the NEAR count moved (baseline 4) — read each new hit and re-accept the count in the same commit"
+  elif [[ "${j_near}" -ne 2 ]]; then
+    flag "the NEAR count moved (baseline 2) — read each new hit and re-accept the count in the same commit"
   else
     note "churn 0, NEAR at its judged baseline"
   fi

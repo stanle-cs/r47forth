@@ -635,3 +635,79 @@ void forthConsoleRestoreSurface(void) {
   }
   _forthConsoleAcquireRow(forthCapKeysMode() ? -MNU_FORTH : -MNU_ALPHA);
 }
+
+
+/* AUDIT round 9 (R9-4): HOME.3 over a live console, both halves, in ONE
+ * place — the two upstream sites that used to spell it inline are overrides,
+ * and a thirty-line rationale inside an override is thirty lines of future
+ * merge conflict (D8; the upstream-diff-review rule that modified upstream
+ * lines outrank added ones).  Each site is a two-line seam now.
+ *
+ * THE RULING, taken from what the gesture NATIVELY does rather than from
+ * picking between two readings.  Upstream's own arm
+ * (c47Extensions/keyboardTweak.c, openHOMEorMyM's FLAG_ALPHA branch) is:
+ *
+ *     if(currentMenu() == -MNU_MyAlpha || currentMenu() == -MNU_AIMCATALOG
+ *        || isAlphabeticSoftmenu())          popSoftmenu();
+ *     if(tam.alpha) showSoftmenu(-MNU_TAMALPHA);
+ *     else          showSoftmenu(-MNU_ALPHA);
+ *
+ * — dismiss the alphabetic overlay if one is on top, then LAND on the row
+ * that matches the current input context.  Two halves, and the second is
+ * the one the gesture is named for: openHOMEorMyM OPENS a home row.  Note
+ * upstream already conditions that row on state (tam.alpha); its row and
+ * its input mode always agree because native AIM has exactly one input
+ * mode.
+ *
+ * The console adds a sub-mode upstream does not have, so the faithful
+ * translation keeps both halves and evaluates the same conditional against
+ * the state the console actually has: forthConsoleShowSurface picks FWRD or
+ * ALPHA from keysMode exactly as upstream picks TAMALPHA or ALPHA from
+ * tam.alpha.  That keeps K-R3 — the row IS the mode indicator — which is
+ * the console's spelling of the agreement upstream gets for free.
+ *
+ * What was here before (round 8's C-2 fix) guarded on
+ * `forthCapInteractiveLive() && forthConsoleBaseOnTop()` and let everything
+ * else fall through to the native arm.  That got the dismiss half right and
+ * the land half wrong: with the console's base BURIED the native arm popped
+ * the overlay and then pushed a raw -MNU_ALPHA over the console's stamped
+ * base, leaving the row reading ALPHA while the keypad typed the keys plane
+ * — precisely the state round 8's own comment said a raw push must not
+ * produce, re-admitted by the conjunct added to fix the stuck-overlay case.
+ * Test [7] drove that state and stayed green because it asserted the
+ * absence of one named menu instead of the K-R3 property.
+ *
+ * tam.alpha is unaffected and still reaches the native arm: during a TAM
+ * session the capture is SUSPENDED, not live, so this returns false.
+ *
+ * MUTATION STATUS, stated because the two halves are pinned differently:
+ *
+ *  - The ARM ITSELF is pinned. Made to return false — ceding to the native
+ *    arm, which is the pre-fix behaviour — test [7] reddens with both R9-4
+ *    messages, the row reading ALPHA at menu -1922 in keys mode.
+ *  - The LAND half alone is NOT falsifiable today: delete the
+ *    forthConsoleShowSurface call and the gate stays green. That is not a
+ *    coverage hole. Popping a correctly-registered base always reveals a row
+ *    that already matches the sub-mode, because C18 refuses the sub-mode
+ *    toggle while an overlay is up, so no reachable state has the base's row
+ *    disagreeing with keysMode at this point. The call is kept because it is
+ *    the half that makes this the same gesture upstream performs — landing,
+ *    not merely dismissing — and because the invariant it enforces is the
+ *    one the next overlay-dismissing site will need. If a future edit lets
+ *    the sub-mode change under an overlay, this call is already correct and
+ *    its absence would be the defect.
+ *
+ * Returns true when the gesture was handled here and the caller must skip
+ * its native arm entirely. */
+bool_t forthConsoleHomeRow(void) {
+  if(!forthCapInteractiveLive()) {
+    return false;
+  }
+  if(!forthConsoleBaseOnTop()) {
+    popSoftmenu();          /* the dismiss half — ONE frame per press, which
+                               is both upstream's shape here and the EXIT
+                               ladder's rung-1 idiom */
+  }
+  forthConsoleShowSurface();/* the land half, row chosen by sub-mode */
+  return true;
+}
