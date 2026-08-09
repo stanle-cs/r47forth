@@ -56,6 +56,15 @@ static void _forthCapCloseIfInteractive(void) {
  * indexOfItems[negative] is out of bounds. (keyboard.c's own BST/SST-
  * adjacent site tests `... || item < 0` for the same reason; that site's
  * shape is a latent wart, not the pattern to copy.) */
+/* K1/E12.2 (CONSOLIDATE P4): abort the empty placeholder before SST/BST
+ * navigation — no navigation may leave FCAP_OPEN behind (fnSst/fnBst's
+ * own close branch only fires on non-empty aimBuffer). */
+static void _forthCapAbortEmptyPlaceholder(void) {
+  if(forthCapIsOpen() && aimBuffer[0] == 0) {
+    pemAlpha(ITM_BACKSPACE);
+  }
+}
+
 static bool_t _forthCapAtCap(int16_t item) {
   /* round 6 (F8): the LIVE predicate — a suspended capture's aimBuffer is
    * TAM's, and this cap must not meter it. */
@@ -3382,23 +3391,13 @@ RELEASE_END:
                   keyActionProcessed = true;
                 }
                 else if(item == ITM_SST) {
-                  if(forthCapIsOpen() && aimBuffer[0] == 0) {
-                    pemAlpha(ITM_BACKSPACE);  /* K1/E12.2: abort the empty
-                       placeholder first — no navigation may leave
-                       FCAP_OPEN behind (fnSst/fnBst's own close branch
-                       only fires on non-empty aimBuffer). */
-                  }
+                  _forthCapAbortEmptyPlaceholder();
                   fnSst(NOPARAM);
                   keyActionProcessed = true;
                   refreshScreen(122);
                 }
                 else if(item == ITM_BST) {
-                  if(forthCapIsOpen() && aimBuffer[0] == 0) {
-                    pemAlpha(ITM_BACKSPACE);  /* K1/E12.2: abort the empty
-                       placeholder first — no navigation may leave
-                       FCAP_OPEN behind (fnSst/fnBst's own close branch
-                       only fires on non-empty aimBuffer). */
-                  }
+                  _forthCapAbortEmptyPlaceholder();
                   fnBst(NOPARAM);
                   keyActionProcessed = true;
                   refreshScreen(123);
