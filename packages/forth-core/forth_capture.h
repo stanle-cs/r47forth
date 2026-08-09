@@ -3,6 +3,15 @@
 
 #include "c47.h"
 
+/* CONSOLIDATE P5: file-statics exported to the self-test build only;
+ * production linkage unchanged.  One definition — keyboard.c and
+ * screen.c each carried a private copy of this idiom. */
+#if defined(FORTH_DEBUG_SELFTEST)
+  #define FORTH_SELFTEST_EXPORT
+#else
+  #define FORTH_SELFTEST_EXPORT static
+#endif
+
 /* Forth capture state.
  *
  * S3 (simplification pass): the capture line lives in `aimBuffer`, the

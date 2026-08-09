@@ -16,13 +16,7 @@ TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineI
 // data[0]==0 branch btnFnClicked's (data, 0) call always takes in
 // production. executeFunction is file-static, so it must be exported for
 // the suite the same way _closeCatalog is below; production linkage is
-// unchanged. Defined up here (rather than beside _closeCatalog, where the
-// precedent lives) because the forward declaration right below needs it.
-#if defined(FORTH_DEBUG_SELFTEST)
-  #define FORTH_SELFTEST_EXPORT
-#else
-  #define FORTH_SELFTEST_EXPORT static
-#endif
+// unchanged. The macro itself lives in forth_capture.h (CONSOLIDATE P5).
 
 FORTH_SELFTEST_EXPORT void executeFunction(const char *data, int16_t item_);
 

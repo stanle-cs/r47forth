@@ -5717,12 +5717,6 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
    * menus, status bar and screenUpdatingMode arithmetic a full refreshScreen()
    * drags in.  The ARM being wired is proven separately, through
    * refreshScreen(), by test_console_view_arm. */
-  #if defined(FORTH_DEBUG_SELFTEST)
-    #define FORTH_CONSOLE_SELFTEST_EXPORT
-  #else
-    #define FORTH_CONSOLE_SELFTEST_EXPORT static
-  #endif
-
   /* showStringEdC47's own line pitch for the wrapped-line state
    * (src/c47/screen.c:1660, `yincr = 35`).  Upstream keeps it as a function
    * local, so the package cannot reference it by name; naming it here, at
@@ -5842,7 +5836,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
 
   /* The offset THIS frame paints from: the stored one, clamped to the
    * frame's own bound.  Pure — see the shape note above. */
-  FORTH_CONSOLE_SELFTEST_EXPORT uint16_t _forthConsoleViewBase(uint16_t rows, uint16_t count) {
+  FORTH_SELFTEST_EXPORT uint16_t _forthConsoleViewBase(uint16_t rows, uint16_t count) {
     uint16_t maxView = _forthConsoleMaxView(rows, count);
     uint16_t view    = forthConsoleViewOffset();
     return (view > maxView) ? maxView : view;
@@ -5856,7 +5850,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
     _forthConsoleClampView(forthConsoleViewRows(), forthConsoleLineCount());
   }
 
-  FORTH_CONSOLE_SELFTEST_EXPORT bool_t _forthConsoleActive(void) {
+  FORTH_SELFTEST_EXPORT bool_t _forthConsoleActive(void) {
     /* round 6 (F8): LIVE, not origin — the render gate fired on the
      * suspended residue and painted TAM's abandoned aimBuffer as an
      * editable console line. */
@@ -5867,7 +5861,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
            && temporaryInformation == TI_NO_INFO;
   }
 
-  FORTH_CONSOLE_SELFTEST_EXPORT void _forthConsoleRender(void) {
+  FORTH_SELFTEST_EXPORT void _forthConsoleRender(void) {
     /* The first pixel row the editor's own ink or cursor can occupy.
      *
      * Short line (yMultiLineEdOffset == 3): showStringEdC47 draws at
