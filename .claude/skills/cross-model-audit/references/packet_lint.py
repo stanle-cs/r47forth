@@ -169,9 +169,11 @@ def lint(path):
     # the model probe passing, so the proven ceiling is ~17 KB, not the ~11 KB
     # round 5 recorded. Size is a depth trade-off, not a wall; the old 13 KB
     # failure was over-read, not over-length.
+    # Round 9: 22.1 KB (Gemini, whole-function fix packet) and 18.6 KB (Sol,
+    # self-contained design packet) both answered well, identity passing.
     note = ('thin — is the whole function really here?' if kb < 2 else
-            'proven range' if kb <= 17 else
-            'beyond the tested range (16.6 KB is the largest proven); split for depth')
+            'proven range' if kb <= 22.5 else
+            'beyond the tested range (22.1 KB Gemini / 18.6 KB Sol are the largest proven); split for depth')
     print(f"  [SIZE] {size} bytes ({kb:.1f} KB) — {note}")
 
     if hard:

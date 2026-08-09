@@ -72,7 +72,13 @@ test can fail.
    workflow as `args.extraFindings` (with `dimensions: []` for a
    refutation-only round, which is what round 4 was). Gemini has produced
    one real leak eight in-family readers missed AND two findings refuted
-   against the code.
+   against the code. Two rules round 9 paid for: TRANSLATE reply line
+   numbers to real file:line before feeding them — packet replies cite
+   excerpt-relative lines, and a wrong anchor is the round-6 stale-ref
+   trap by another door; and SUPPLY pre-verified facts in the subject
+   (prior dispositions, deleted-helper provenance, checked upstream
+   contracts) — in round 9 those facts prevented two wrong credits and
+   spared eight verifiers re-proving them.
 7. **Report** per `CODE_AUDIT.md`'s template, ranked by owner cost.
    Findings, not fixes: the tree ends the audit exactly as it began.
 8. **Bookkeeping.** Update the handoff (round, readers, exit state, where
@@ -100,8 +106,10 @@ the template and the linter; the linter's HARD hits are non-negotiable.
   on (round 3's bad Sol finding), and what ESTABLISHES each state, not
   only what it means — "a BORROWED frame is always FWRD" blocks the wrong
   trace; "BORROWED = the user's own row" licenses it (cost two runs).
-- **Size:** 3–11 KB proven to answer in minutes. Keep packets small for
-  depth, not from fear of 10 KB — the old 13 KB failure was over-read.
+- **Size:** 3–11 KB proven to answer in minutes; round 9 extended the
+  proven range to 22.1 KB (Gemini) and 18.6 KB (Sol, self-contained
+  design packet). Keep packets small for depth, not from fear of size —
+  the old 13 KB failure was over-read.
 - **One packet, one question**, with a budget note and "name the gap
   instead of guessing".
 
