@@ -4042,3 +4042,94 @@ both re-baselines landed now, one commit. Queued for the owner: the
 citation-rot countermeasure ruling (anchor tokens vs standing sweep), and the
 manage.c residual extraction (named above, no urgency). Round 9 is untouched
 by this audit and still owes the wave a code-audit read, D7 included.
+
+---
+
+## 2026-08-09 — round 9's fix wave: one crash class at two sites, C6's other half, and the debt the consolidation left in its documents
+
+Non-normative narrative for `7d5d805ec`. The findings are in
+`AUDIT_round9_2026-08-09.md` (in-family, ten confirmed) and
+`AUDIT_round9_out-of-family_2026-08-09.md` (eight findings, none survived).
+
+### The classes this wave names
+
+**Saved cursor tuple with an unmaintained half** (R9-1, R9-2). R8-1 fixed
+the PROGRAM half of a saved `(program, localStep)` pair at the deleter and
+clamped it at the restore; the LOCAL STEP half had neither guard, at either
+of the two sites that keep such a pair. The consequence is not a wrong
+cursor — it is `currentStep = NULL`, because `goToGlobalStep`'s walk has no
+NULL break and no iteration cap, after which the next PEM insert's shift
+loop runs from `firstFreeProgramByte` down toward address 0.
+
+The lesson is about how a class gets closed. R8-1 was closed one FIELD at a
+time when it should have been closed one TUPLE at a time: the enumeration
+that matters is not "which sites cache a program number" but "which sites
+cache a cursor". The fix is a single `_forthRestoreCursorTuple` that both
+sites call, and the class test drives every mutation that can happen
+between save and restore — deletion for the fold context ([10]), eviction
+for L1-H's ([11]) — rather than one door per site.
+
+Upstream decided the fallback, per the standing rule: `_clearProgram`
+restores STEP 1 three times over and `fnClP` restores a saved local step
+only on the arms where the cursor's own program came through intact. So a
+step that no longer fits lands at step 1, not clamped to the program's last
+step — an answer upstream never produces and this package should not invent.
+
+**Guard placed below the state-consuming read it guards** (R9-3). C6's fix
+made the second FORTH press a no-op for the LINE while the seed block above
+it went on reading X and dropping it. The fix moved the READ, not the
+guard: the guard cannot precede the catalog drain, because the drain's pops
+are what make its surface restore correct. A "do nothing" contract has to
+be checked against every piece of state the path can touch, not the one the
+finding named.
+
+**Structural rule spelled per-site** (R9-5). Four confirmed defects across
+rounds 8 and 9 came from one consumer still carrying a raw shape test after
+the others had been given the structural rule. There is one predicate now
+and a pin holding it at one definition. The recorded PEM-sibling question
+must resolve to a call on it.
+
+### Three documented gaps, stated rather than papered over
+
+Round 9's own rule, and the reason the wave took longer than the fixes:
+a green mutation is evidence about the TESTS, and it has three different
+meanings. All three appear here.
+
+1. **R9-5's `from`/`to` bound alone is unfalsifiable.** Removing it leaves
+   the gate green. Not a coverage hole: the out-of-family reader tried to
+   construct the door (G1-1) and was refuted on geometry — the one door
+   that grows program memory during a suspension inserts *above* every
+   program, so FHIST never shifts. Defence in depth, recorded at the
+   predicate.
+2. **R9-P1's guard is not mutation-provable**, because the flag can only be
+   set by an allocator failure nobody could construct. Fixed anyway under
+   the owner's standing test; the P-2 fault-injection hook is how it gets
+   settled for real.
+3. **R9-6's `yincr`** is a constant no `_Static_assert` can reach, and the
+   header claimed otherwise. The claim is corrected and the guard is now a
+   source-anchored pin against upstream.
+
+### The countermeasure found the class it was built for, same day
+
+Check H learned to verify SYMBOL liveness rather than only paths, because
+R9-8 was the authoritative doc naming a function CONSOLIDATE P6 deleted. On
+its first run it found seven more of exactly that class: the H5 backup
+parameter names are `forthGDict*` and the doc said `forthDict*`, and the
+FCALL redirect resolves through `forthDictNameByRef` where the doc said
+`forthDictNameByIndex` — the latter carrying a `[VERIFIED:]` line range
+that now points at an unrelated function. This is the second consecutive
+round in which a pin caught something on the run that introduced it (round
+8's navigation pin caught its author's miscount), and it is the whole
+argument for the group.
+
+R9-7 is the counter-example that keeps the argument honest: the bracket pin
+counted the FIX IDIOM rather than the navigations, so a site that never got
+the idiom was invisible to it — D7-a recurring inside its own
+countermeasure, second round running. And the replacement's first draft
+used a three-line window and produced a false positive against the very
+helper this wave introduced. **A pin is code**, and it gets the fixtures'
+discipline: mutation-run at authoring time, or assumed blind.
+
+**Footprint: flash 1115832 → 1115824 = −8 B, ram 9144 unchanged, arena
+untouched.** The shared restore deduplicates two copies of the
+bracket-and-restore block, more than paying for the bound it adds.

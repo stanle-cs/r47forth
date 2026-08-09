@@ -45,8 +45,30 @@ recorded in DESIGN-HISTORY.md; the round tag says where the evidence lives.
   persisted/on-disk twin; every consumer of the mirror reads stale data.
 - **Buried frame without a drain** (r1 C2 family): every code path that can
   bury a menu/frame needs a matching drain, not just the creation path.
+- **Saved cursor tuple with an unmaintained half** (r9 R9-1/R9-2, one field
+  over from r8 R8-1): a remembered `(program, localStep)` pair whose
+  program half is maintained by the deleter and whose step half is
+  restored raw into a program that may have shrunk. The consequence is not
+  a wrong cursor but a NULL one, because the navigation walk it feeds has
+  no bound. Close such a class one TUPLE at a time, never one field at a
+  time, and drive EVERY mutation possible between save and restore
+  (deletion, eviction, insertion) rather than one door per site.
+- **Structural rule spelled per-site** (r9 R9-5): the same structural
+  invariant written independently at each consumer, over separately stored
+  copies of the quantity it constrains. Four confirmed defects across two
+  rounds came from the consumer that still had the raw test after the
+  others were given the rule. One predicate, plus a pin holding it at one
+  definition, so the NEXT consumer inherits the rule instead of restating
+  it.
 
 ## Predicates and guards
+
+- **Guard placed below the state-consuming read it guards** (r9 R9-3): a
+  "this gesture does nothing" contract enforced after the code that
+  already read and dropped the state. Fixed by moving the READ, not the
+  guard, when the guard has its own ordering constraint. A no-op contract
+  is checked against every piece of state on the path, not only the one
+  the finding named.
 
 - **Origin-vs-openness confusion** (r5): a predicate answering "what kind
   is this" read as "is this live now"; the answers coincide except exactly
@@ -177,3 +199,14 @@ recorded in DESIGN-HISTORY.md; the round tag says where the evidence lives.
 - **Hand-maintained inventory of a machine-derivable set** (C15): the
   override list drifted in both directions; the checker should diff the
   computed truth against the doc.
+- **Doc naming a symbol its tree does not have** (r9 R9-8): path checks
+  pass while the authoritative doc names a DELETED function as the live
+  mechanism, so a maintainer goes looking for a guard that is not there —
+  or re-adds a site-local one and forks the funnel the deletion built.
+  Check symbol liveness, not only paths; the check found seven more of its
+  own class on its first run.
+- **Stale load-bearing narration after relocation** (r9 R9-9): a verbatim
+  move carries a comment whose premises the same function refutes sixty
+  lines above. The code executes correctly and the stated reasons are
+  dead, which is worse than no comment in the one place — the highest-
+  regression function — where a reviewer most needs to trust one.
