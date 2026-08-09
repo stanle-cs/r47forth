@@ -2,6 +2,7 @@
 #define FORTH_CONSOLE_H
 
 #include "c47.h"
+#include "forth_capture.h"   /* FORTH_SELFTEST_EXPORT (CONSOLIDATE P5) */
 
 /* forth_console -- the console VIEW ring (Stage N, N-R2).
  *
@@ -71,12 +72,38 @@ uint16_t forthConsoleViewOffset(void);
 void     forthConsoleSetViewOffset(uint16_t n);
 void     forthConsoleRoll(int16_t delta);        /* +1 = one line OLDER (scroll back) */
 
-/* View-side (implemented in screen.c): the band's row count and the roll
-   bounded by it.  C12's owner ruling (2026-08-08): rows is a VIEW concept
-   this ring module deliberately does not have — the view owns the clamp;
-   forthConsoleRoll above stops only at ring bounds. */
+/* View-side (implemented in forth_console_view.c since CONSOLIDATE P7): the
+   band's row count and the roll bounded by it.  C12's owner ruling
+   (2026-08-08): rows is a VIEW concept this ring module deliberately does not
+   have — the view owns the clamp; forthConsoleRoll above stops only at ring
+   bounds. */
 uint16_t forthConsoleViewRows(void);
 void     forthConsoleRollView(int16_t delta);
+
+/* N1-2's gate and paint, called from the screen.c override's refresh arm.
+   Non-static since the P7 extraction moved them out of that file. */
+bool_t   _forthConsoleActive(void);
+void     _forthConsoleRender(void);
+
+/* The offset a frame paints from, clamped to the frame's own bound (C-3).
+   Exported to the self-test build only; static in production. */
+FORTH_SELFTEST_EXPORT uint16_t _forthConsoleViewBase(uint16_t rows, uint16_t count);
+
+/* Defined in the screen.c override — reads screen.c's checkHPoffset
+   macro, the one coupling the P7 extraction could not move. */
+uint16_t _forthConsoleEditorTop(void);
+
+/* showStringEdC47's own line pitch for the wrapped-line state
+ * (src/c47/screen.c:1660, `yincr = 35`).  Upstream keeps it as a function
+ * local, so the package cannot reference it by name; naming it here, at
+ * its upstream address, is as close to upstream's own constant as this
+ * side can get.  The _Static_asserts below turn any drift into a build
+ * failure rather than a mispainted band. */
+#define FORTH_CONSOLE_ED_YINCR    35
+/* One pixel of clearance: the editor's cursor block starts one row above
+ * the text baseline showStringEdC47 draws at, and the band stops below
+ * that row. */
+#define FORTH_CONSOLE_ED_CLEAR     1
 bool_t   forthConsoleHasOpenLine(void);          /* a word left output unterminated */
 uint32_t forthConsoleWriteSeq(void);             /* bumped by every writer */
 
