@@ -433,6 +433,16 @@ pin() {  # pin <expected> <description> <count-command...>
 # Three writes total: tamEnterMode's entry write (whose admission
 # forthFoldEnter derives from the same func) plus the two rewrites. Both
 # counts are pinned so a new write of ANY shape moves one of them.
+#
+# R8-5 (round 8, against this pin's first version): the entry write is NOT
+# always covered by forthFoldEnter. On a nested TAM — ui/tam.c's
+# `_tamLeave(); runFunction(tamOperation());` sites, which the code documents
+# as reachable — the capture is SUSPENDED, so tamEnterMode takes the
+# fold-pending no-op arm and NOTHING re-derives admission for the new
+# function: the fold keeps the outer item's verdict. Inert today because
+# every reachable nested target is admitted, and recorded here rather than
+# silently relied on. The pin below also could not see tam.function writes
+# outside ui/tam.c, so the repo-wide count is pinned too.
 pin 3 "ui/tam.c 'tam.function =' writes (1 entry + 2 rewrites)" \
     grep -c 'tam\.function *=[^=]' "${PKG}/ui/tam.c"
 pin 2 "ui/tam.c mid-session tam.function rewrites" \
@@ -444,8 +454,13 @@ pin 2 "ui/tam.c forthFoldRederiveAdmission call sites" \
 # frame — rather than stacking over one — is guarded on
 # forthCapInteractiveLive(). Two destroyers, two guards. A third destroyer
 # arriving from upstream moves the first count and must be guarded or ruled.
+# R8-3 (found by round 8 against this pin's first version): it was anchored
+# to '^ +', so a destroyer at any other indentation — or reached through a
+# differently-spelled call — arrived unguarded with the pin AND the full gate
+# green. A verifier mutation proved it. Count the calls wherever they appear,
+# and exclude only comment lines.
 pin 2 "c47Extensions/keyboardTweak.c frame-destroying calls" \
-    grep -cE '^ +(popSoftmenu\(\)|fnExitAllMenus\()' "${PKG}/c47Extensions/keyboardTweak.c"
+    bash -c "grep -nE '(popSoftmenu *\(|fnExitAllMenus *\()' '${PKG}/c47Extensions/keyboardTweak.c' | grep -vE '^[0-9]+: *[*/]' | wc -l"
 pin 2 "c47Extensions/keyboardTweak.c forthCapInteractiveLive guards" \
     grep -c 'forthCapInteractiveLive()' "${PKG}/c47Extensions/keyboardTweak.c"
 
@@ -461,8 +476,12 @@ pin 2 "pop-skipping guards paired with forthConsoleBaseOnTop()" \
 # count -MNU_FORTH. Round 6's F7 fix enumerated the package tree only and
 # came back one consumer short — this counts the upstream files, so a new
 # upstream consumer is a finding the day the package rebases onto it.
-pin 5 "upstream files consuming isAlphabeticSoftmenu/isAlphaSubmenu" \
-    bash -c "grep -rl 'isAlphabeticSoftmenu\|isAlphaSubmenu' '${UPSTREAM}' --include=*.c | wc -l"
+# R8-4 (round 8, against this pin's first version): counting FILES meant a
+# NEW consumer inside any of the five files already counted never moved it —
+# and screen.c and keyboard.c, the two files where consumers actually live,
+# were both already in the count. Count the call sites.
+pin 13 "upstream call sites of isAlphabeticSoftmenu/isAlphaSubmenu" \
+    bash -c "grep -rn 'isAlphabeticSoftmenu\|isAlphaSubmenu' '${UPSTREAM}' --include=*.c | grep -vE ':[0-9]+: *(//|/\*|\*)' | wc -l"
 
 # C-6 (round 8): forthCapInteractiveLive IS "origin INTERACTIVE and state
 # OPEN". Three production sites hand-rolled that conjunction, which is
@@ -471,6 +490,15 @@ pin 5 "upstream files consuming isAlphabeticSoftmenu/isAlphaSubmenu" \
 # longhand — that is the header's contract. The test battery may and does:
 # a fixture's REACHED check asserts the two facts SEPARATELY, on purpose, so
 # its failure message says which one was wrong. Hence production only.
+# R8-2 (round 8): goToPgmStep/goToGlobalStep silently do NOT navigate when
+# dynamicMenuItem >= 0, and a softkey commit latches it. FOUR brackets in this
+# file: upstream's own at _insertInProgram (:772), and the package's three
+# keypress navigations — _forthHistRestoreCursor, forthHistoryGotoLastStep,
+# forthFoldLeave's restore. The pin caught its own author's miscount the first
+# time it ran, which is the entire argument for group I.
+pin 4 "manage.c navigations bracketing dynamicMenuItem" \
+    grep -c 'dynamicMenuItem = -1;' "${PKG}/programming/manage.c"
+
 pin 0 "longhand IsInteractive/IsOpen conjunctions in production sources" \
     bash -c "grep -rn 'forthCapIsInteractive() *&& *forthCapIsOpen()\|forthCapIsOpen() *&& *forthCapIsInteractive()\|!forthCapIsInteractive() *|| *!forthCapIsOpen()\|!forthCapIsOpen() *|| *!forthCapIsInteractive()' '${PKG}' --include=*.c --include=*.h | grep -v '/files/' | grep -v '/test_' | wc -l"
 

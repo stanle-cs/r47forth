@@ -1645,10 +1645,15 @@ static void _forthHistSaveCursor(void) {
 }
 
 static void _forthHistRestoreCursor(void) {
+  /* R8-2: the third of the package's three navigations during a keypress;
+   * see the bracket's rationale at forthFoldLeave's restore. */
+  int16_t savedDynamicMenuItem = dynamicMenuItem;
+  dynamicMenuItem = -1;
   goToPgmStep(_forthHistCur.savedProgram, _forthHistCur.savedLocalStep);
   firstDisplayedLocalStepNumber = _forthHistCur.savedFirstDisplayed;
   defineFirstDisplayedStep();
   pemCursorIsZerothStep = _forthHistCur.savedZerothStep;
+  dynamicMenuItem = savedDynamicMenuItem;
 }
 
 /* Program number of the FHIST program, or 0 if it does not exist yet.
@@ -1823,7 +1828,13 @@ bool_t forthHistoryGotoLastStep(void) {
     localStep++;
   }
 
-  goToPgmStep(program, localStep);
+  /* R8-2: same bracket as forthFoldLeave's restore — this is the fold's
+   * entry-side navigation, reached from the same keypress. */
+  { int16_t savedDynamicMenuItem = dynamicMenuItem;
+    dynamicMenuItem = -1;
+    goToPgmStep(program, localStep);
+    dynamicMenuItem = savedDynamicMenuItem;
+  }
   return true;
 }
 
@@ -2007,6 +2018,11 @@ typedef struct {
                                     capture-step insert */
   uint32_t capStepOffset;       /* capture step vs beginOfProgramMemory —
                                     program memory may relocate */
+  uint16_t entryProgramCount;   /* AUDIT round 8 (R8-1): numberOfPrograms at
+                                    entry.  savedProgram is an INDEX into a
+                                    list the PARK dispatch can shorten, and
+                                    the only cheap way to know it did is to
+                                    have counted before. */
   uint8_t  savedZerothStep;     /* pemCursorIsZerothStep */
   uint8_t  pad;
 } forthFoldCtx_t;
@@ -2026,6 +2042,7 @@ void forthFoldEnter(int16_t func, uint16_t mode) {
     goToGlobalStep(1);           /* guard programList[-1] below */
   }
   forthFoldCtx.savedProgram        = currentProgramNumber;
+  forthFoldCtx.entryProgramCount   = numberOfPrograms;   /* R8-1 */
   forthFoldCtx.savedLocalStep      = currentLocalStepNumber;
   forthFoldCtx.savedFirstDisplayed = firstDisplayedLocalStepNumber;
   forthFoldCtx.savedZerothStep     = (uint8_t)pemCursorIsZerothStep;
@@ -2248,10 +2265,74 @@ void forthFoldLeave(void) {
     }
   }
 
-  goToPgmStep(forthFoldCtx.savedProgram, forthFoldCtx.savedLocalStep);
-  firstDisplayedLocalStepNumber = forthFoldCtx.savedFirstDisplayed;
-  defineFirstDisplayedStep();
-  pemCursorIsZerothStep = forthFoldCtx.savedZerothStep;
+  /* AUDIT round 8 (R8-1): the cursor restore is the THIRD consumer of a
+   * quantity sampled across the PARK dispatch, and the P-1 fix above ruled
+   * it out of scope in one clause ("the cursor restore and the foldMode
+   * clear below still run").  It is the same class and it was the worst of
+   * the three.
+   *
+   * savedProgram is an INDEX into programList, which every
+   * scanLabelsAndPrograms reallocates to exactly numberOfPrograms entries,
+   * and the PARK dispatch can DELETE a program: console open, DELP, name a
+   * program that precedes the cursor's, ENTER.  Upstream states the rule in
+   * the very function that dispatch runs — fnClP renumbers its own saved
+   * cursor when the deleted program precedes it (src/c47 manage.c:350-355)
+   * and _clearProgram clamps again — and this was a third cache of the same
+   * quantity with neither guard.  Ordinary case: the cursor silently landed
+   * in a program the owner was not editing, overwriting fnClP's CORRECT
+   * restore, with no error.  Boundary case (the cursor's program was the
+   * last one): goToPgmStep read programList[numberOfPrograms] out of bounds
+   * on the freshly reallocated arena, and goToGlobalStep walked the garbage
+   * with no NULL guard and no iteration cap — reproduced as a SIGSEGV.
+   *
+   * What is fixed here is the OUT-OF-BOUNDS half, by clamping the index
+   * into the list that exists now.  That is the crash, and it is the half
+   * that can be fixed from here.
+   *
+   * DOCUMENTED GAP, with its reaching input, because the honest answer is
+   * that the other half cannot be fixed at this site: when the deleted
+   * program PRECEDED the saved one, the correct new index is one lower,
+   * and nothing here knows which program went.  entryProgramCount says
+   * THAT one went, never WHICH.  Skipping the restore is not the answer
+   * either — it was tried and is worse: forthCaptureResume has already
+   * re-anchored the cursor onto the capture step, so skipping parks the
+   * owner inside FHIST rather than one program off.  The real repair is
+   * the one upstream gives itself — the deleter adjusts the saved cursor
+   * (fnClP, src/c47 manage.c:350-355) — which would mean the fold
+   * registering its cursor with whatever performs the delete.  That is a
+   * design change, not a patch, and it is the owner's call.
+   *
+   * Reaching input for the residue: console open, DELP, name a program
+   * that precedes the one the PEM cursor was left in, ENTER — the cursor
+   * comes back one program off, silently.  Test [8] pins the in-range
+   * property and PRINTS the identity mismatch rather than asserting it,
+   * so the day the design change lands the test tightens by one line. */
+  { uint16_t p = forthFoldCtx.savedProgram;
+    if(numberOfPrograms > 0) {
+      if(p < 1)                { p = 1; }
+      if(p > numberOfPrograms) { p = numberOfPrograms; }
+      /* AUDIT round 8 (R8-2): goToGlobalStep, which goToPgmStep reaches, is
+       * not a "go to this step" primitive — with dynamicMenuItem >= 0 it
+       * reinterprets the request as the label the dynamic menu names and
+       * RETURNS WITHOUT NAVIGATING when that does not resolve
+       * (lblGtoXeq.c:102, :114-116; DESIGN.md §3.3.6).  The softkey that
+       * commits a console TAM latches exactly that global — press DELP,
+       * PROG, then a program-name softkey — and nothing on the commit path
+       * clears it, so this restore silently did not happen and the owner
+       * was left parked inside FHIST at a step number belonging to another
+       * program.  Bracketed here the way this tree already brackets its two
+       * other navigations: _insertInProgram (manage.c:721/772/774) and
+       * forth_compile.c:1431-1437. */
+      { int16_t savedDynamicMenuItem = dynamicMenuItem;
+        dynamicMenuItem = -1;
+        goToPgmStep(p, forthFoldCtx.savedLocalStep);
+        firstDisplayedLocalStepNumber = forthFoldCtx.savedFirstDisplayed;
+        defineFirstDisplayedStep();
+        pemCursorIsZerothStep = forthFoldCtx.savedZerothStep;
+        dynamicMenuItem = savedDynamicMenuItem;
+      }
+    }
+  }
 
   forthCapSetFoldModeRaw(0);
   _forthFoldKeptSteps = 0;      /* round 6 (F10): consumed by this sweep */

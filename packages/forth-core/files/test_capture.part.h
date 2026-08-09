@@ -18258,6 +18258,127 @@ static int test_fold_round8_window(void)
                       " frame and lets a foreign overlay be dismissed\n");
   fail |= scFail;
 
+  /* ---- [8] R8-1 (in-family D3, executed by its verifier to a SIGSEGV):
+   * forthFoldCtx.savedProgram is an INDEX into programList, cached across a
+   * PARK dispatch that can DELETE a program.  DELP a program that precedes
+   * the cursor's and the index is stale by one: the restore lands in a
+   * program the owner was not editing, overwriting fnClP's own correct
+   * renumbered restore.  When the cursor's program was the LAST one, the
+   * index runs one past the end of a freshly reallocated programList and
+   * goToGlobalStep walks the garbage with no NULL guard and no iteration
+   * cap — the verifier's run died at exit 139.
+   *
+   * Ordered LAST for the same reason round-6 subcase [9] is: pre-fix this
+   * drive takes the whole suite down with it. ---- */
+  scFail = 0;
+  R8_RESET();
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+  {
+    uint16_t progsBefore, cursorProgBefore;
+
+    tpInit(&p);
+    if (tpLbl(&p, "PAAA") < 0 || tpSrc(&p, "111") < 0 || tpRtn(&p) < 0 || tpEnd(&p) < 0 ||
+        tpLbl(&p, "PBBB") < 0 || tpSrc(&p, "222") < 0 || tpRtn(&p) < 0 || tpEnd(&p) < 0 ||
+        tpLbl(&p, "PCCC") < 0 || tpSrc(&p, "333") < 0 || tpRtn(&p) < 0 || tpEnd(&p) < 0 ||
+        !tpWrite(&p)) {
+      printf("    [8] FIXTURE BUG: program build/write failed\n");
+      scFail = 1;
+    }
+    else {
+      showSoftmenu(-MNU_STK);
+      fnForthOuter(NOPARAM);
+      xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
+      forthInteractiveEnter();                /* FHIST exists, after the three */
+      lastErrorCode = ERROR_NONE;
+
+      /* Sampled AFTER the console line: forthInteractiveEnter creates FHIST,
+       * which is itself a program. */
+      progsBefore = numberOfPrograms;
+      { calcRegister_t l = findNamedLabel("PCCC", GLOBAL_LABELS);
+        cursorProgBefore = (l == INVALID_VARIABLE) ? 0
+                           : (uint16_t)labelList[l - FIRST_LABEL].program;
+      }
+      /* Park the PEM cursor in the owner's last program — the ordinary state
+       * after writing a program and pressing P/R out. */
+      if (cursorProgBefore != 0) { goToPgmStep(cursorProgBefore, 1); }
+
+      if (cursorProgBefore == 0 || progsBefore < 4
+          || currentProgramNumber != cursorProgBefore) {
+        printf("    [8] FIXTURE BUG: cursor-in-PCCC not reached"
+               " (progs=%u PCCC=%u cursor=%u)\n",
+               progsBefore, cursorProgBefore, (unsigned)currentProgramNumber);
+        scFail = 1;
+      }
+      else {
+        xcopy(aimBuffer, "42", 3); T_cursorPos = 2;
+        runFunction(ITM_DELP);
+        if (!forthFoldPending() || tam.function != ITM_DELP) {
+          printf("    [8] FIXTURE BUG: DELP did not park the fold\n");
+          scFail = 1;
+        }
+        else {
+          tamProcessInput(ITM_alpha);
+          if (!tam.alpha) {
+            printf("    [8] FIXTURE BUG: the label prompt refused alpha entry\n");
+            scFail = 1;
+          }
+          else {
+            xcopy(aimBuffer, "PAAA", 5);      /* a program BEFORE the cursor's */
+            tamProcessInput(ITM_ENTER);       /* fnClP deletes it, LIVE */
+
+            /* Reaching this line at all is half the assertion: pre-fix the
+             * boundary case never returned. */
+            printf("    [8] OBS: survived the unwind — programs %u -> %u,"
+                   " cursor prog=%u localStep=%u, lastErr=%u\n",
+                   progsBefore, (unsigned)numberOfPrograms,
+                   (unsigned)currentProgramNumber,
+                   (unsigned)currentLocalStepNumber, lastErrorCode);
+            if (numberOfPrograms != (uint16_t)(progsBefore - 1)) {
+              printf("    [8] FIXTURE BUG: PAAA was not deleted"
+                     " (programs %u -> %u) — the door was not taken\n",
+                     progsBefore, (unsigned)numberOfPrograms);
+              scFail = 1;
+            }
+            else {
+              calcRegister_t l = findNamedLabel("PCCC", GLOBAL_LABELS);
+              uint16_t pccNow = (l == INVALID_VARIABLE) ? 0
+                                : (uint16_t)labelList[l - FIRST_LABEL].program;
+              if (currentProgramNumber < 1
+                  || currentProgramNumber > numberOfPrograms) {
+                printf("    [8] FAIL (R8-1): the cursor is outside programList"
+                       " (prog=%u, numberOfPrograms=%u) — the next paint reads"
+                       " out of bounds\n",
+                       (unsigned)currentProgramNumber,
+                       (unsigned)numberOfPrograms);
+                scFail = 1;
+              }
+              /* DOCUMENTED GAP, printed and NOT asserted: the contract the
+               * owner cares about is IDENTITY — they were editing PCCC and
+               * should still be — and forthFoldLeave cannot deliver it,
+               * because entryProgramCount says a program went, never which.
+               * See the banner at the restore. The day the deleter adjusts
+               * the fold's cursor, this printf becomes the assertion. */
+              else if (pccNow == 0 || currentProgramNumber != pccNow) {
+                printf("    [8] GAP (R8-1, expected today): the cursor came back"
+                       " one program off — PCCC is now program %u, cursor is in"
+                       " %u. In range, so no out-of-bounds read; wrong program,"
+                       " which needs the deleter's cooperation to fix.\n",
+                       pccNow, (unsigned)currentProgramNumber);
+              }
+            }
+          }
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+  }
+  if (!scFail) printf("    [8] PASS (R8-1): a PARK dispatch that deletes a program"
+                      " leaves the cursor inside programList\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
   R8_RESET();
   forthHistoryEnsureFailInjected = false;     /* belt and braces: no injected
                                                  fault outlives this fixture */
