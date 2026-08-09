@@ -199,6 +199,12 @@ recorded in DESIGN-HISTORY.md; the round tag says where the evidence lives.
 - **Hand-maintained inventory of a machine-derivable set** (C15): the
   override list drifted in both directions; the checker should diff the
   computed truth against the doc.
+- **Test asserting the absence of one wrong answer** (r9 R9-4, C22's class
+  one level up): a fixture that checks `!= theOneWrongThingIThoughtOf`
+  passes on every OTHER wrong answer, so it can DRIVE a live defect and
+  report success on every run. Assert the positive property the design
+  states (here K-R3, "the row is the mode indicator"), not the absence of
+  the instance that happened to come to mind.
 - **Doc naming a symbol its tree does not have** (r9 R9-8): path checks
   pass while the authoritative doc names a DELETED function as the live
   mechanism, so a maintainer goes looking for a guard that is not there —

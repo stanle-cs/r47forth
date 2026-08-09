@@ -4133,3 +4133,78 @@ discipline: mutation-run at authoring time, or assumed blind.
 **Footprint: flash 1115832 → 1115824 = −8 B, ram 9144 unchanged, arena
 untouched.** The shared restore deduplicates two copies of the
 bracket-and-restore block, more than paying for the bound it adds.
+
+---
+
+## 2026-08-09 — the two round-9 items that needed a ruling, and where the ruling came from
+
+Non-normative narrative for `b9d885046`. Round 9 stopped at two findings the
+report said were the owner's. Both closed the same day, and the first is the
+more interesting of the two.
+
+### R9-4: the ruling was already written, in upstream
+
+The question the audit put was binary — with the console live and its base
+buried, does HOME.3 mean *dismiss the overlay* or *show the ALPHA row*? The
+owner did not answer it in those terms. He asked what the gesture's NATIVE
+function is and said to align with that.
+
+Read that way the question dissolves: upstream's own arm, four lines below
+the override, pops the alphabetic overlay **and then** shows a row — ALPHA,
+or TAMALPHA when `tam.alpha`. It is a go-home gesture in two halves, and the
+second is the one `openHOMEorMyM` is named for. The binary was false.
+
+The part worth keeping is *why* upstream never has to state K-R3: native AIM
+has exactly one input mode, so its row and its keypad cannot disagree. The
+console introduced a sub-mode upstream does not have, and the faithful
+translation is not "copy the ALPHA push" but "evaluate the same conditional
+against the state we actually have" — which is `forthConsoleShowSurface`
+choosing FWRD or ALPHA from `keysMode`, precisely as upstream chooses
+TAMALPHA or ALPHA from `tam.alpha`.
+
+**The generalisation.** When a package gesture has a native counterpart,
+the ruling is usually a reading of the counterpart rather than a decision.
+Round 8's standing rule said to follow upstream's convention *for fix
+shapes*; this extends it to SEMANTICS: ask what the gesture natively does
+before asking what it should do here. It has now settled a design question
+that two audit rounds carried as open.
+
+### A test that drove a live defect and stayed green
+
+Test `[7]` asserted `currentMenu() != -MNU_MyAlpha` and that the console's
+stamp survived. Both are true of the broken state — a raw `-MNU_ALPHA` frame
+over the console's base — so the fixture executed the defect on every run and
+reported success. Rewritten to the positive property (row agrees with
+sub-mode; the gesture lands on the console's own base) it goes red at the old
+code and green at the new.
+
+**The class, and it is not new — it is C22's, one level up.** A test that
+asserts the ABSENCE of one named wrong answer passes on every other wrong
+answer. Assert the property, not the absence of the instance you happened to
+think of.
+
+### Minimality is a correctness tool, not tidiness
+
+R9-4's first draft put its thirty-line rationale inside the two upstream
+override files and pushed added patch lines to 1277 against a 1243 budget —
+the audit script flagged it immediately. Moving the rule into the package's
+own `forth_menu.c` and leaving a two-line seam at each override took the
+count to **1226, seventeen below where the session started**, and produced a
+single definition of a rule that had been about to exist in two copies —
+which is R9-5's lesson arriving by a different road.
+
+### R9-10, and what the dead code was hiding
+
+The fnPem hunk now restores upstream's four lines byte-identically and
+appends the Forth case as an OVERRIDE of the result rather than a fork of the
+computation. Upstream's ternary still runs and its answer is discarded; the
+cost is nothing (a pure `strcmp`, a plain extern) and the purchase is four
+lines that cannot conflict on the next rebase.
+
+The inert `tmpString[6]` triplet went with it. Its inertness is a fact about
+the DATA — every literal compared is four bytes, and `tmpString[4] = 0`
+terminates each `strcmp` before byte 6 is read — and that fact is now stated
+at the site instead of being implied by code that appeared to do something.
+
+**Footprint: flash 1115824 → 1115832 = +8 B, returning the stage to exactly
+where round 9's audit measured it; ram 9144 unchanged; arena untouched.**
