@@ -2144,7 +2144,20 @@ static uint8_t *_forthFoldResolveCaptureStep(void) {
   /* The offset is stale.  Same recovery forthCaptureResume uses: the
    * capture step is the LAST ITM_FORTH step in FHIST — forthFoldEnter
    * appends it after every history line, and a step TAM committed is not
-   * ITM_FORTH at all. */
+   * ITM_FORTH at all.
+   *
+   * The assumption this rests on, stated so it can be attacked: while a
+   * fold is pending its capture step is still in FHIST, so the last
+   * ITM_FORTH step is that step and not a history line.  Deliberately NOT
+   * defended with a step-count check, because no door to the contrary
+   * exists — this function is the only thing that deletes the capture step,
+   * and it clears foldMode in the same breath; the resume's splice deletes
+   * only the steps TAM inserted after it; and the one gesture that removes
+   * the step from underneath (DELP of FHIST) removes the whole program, so
+   * the hist == 0 arm above returns NULL first.  If someone finds a door
+   * that deletes the step while FHIST survives, that is a finding with a
+   * reaching input, and the guard to add is
+   * `FHIST step count > forthFoldCtx.entryStepCount`. */
   return _forthFoldFindCaptureStep();
 }
 
