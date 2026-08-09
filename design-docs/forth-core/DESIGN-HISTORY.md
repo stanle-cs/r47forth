@@ -3446,3 +3446,40 @@ wave; ram 8884 unchanged. Arena untouched — no stage in this range changes
 the dictionary. Override files 17 → 18 (budget 16), added lines 2384 →
 2490: the standing overlay cost, and the new override is one 1580-line
 upstream file carrying two guards.
+
+## 2026-08-08 — the upstream-convention sweep: C-3 reshaped, C14 closed
+
+Owner's standing rule, given after round 8: **follow upstream's conventions
+when possible for fix decisions**, then a sweep of rounds 1–8 for fixes that
+do not. Two non-conformances, both repaired; the rest conform, several
+deliberately (D7-1's kept name and signature, R12's mirrored arms, F1's use
+of `defineCurrentProgramFromCurrentStep`, FIX-6B's `displayBugScreen`).
+
+- **C-3 (landed the same day) reshaped.** Upstream solves "a display window
+  index that can outrun its content" with a WRITE clamp at the scroll site
+  (`scrollPemBackwards`/`Forwards`) and a paint that TOLERATES an
+  out-of-range window (`defineFirstDisplayedStep` breaks when content runs
+  out). C-3 had normalised the stored offset inside the renderer. The write
+  clamp now belongs to `forthConsoleRollView` — this band's scroll site,
+  where C12 already had it — and `_forthConsoleViewBase` gives the frame a
+  clamped LOCAL copy. Same ruled behaviour (band full every frame); a paint
+  no longer writes state. **Class: a paint that normalises the state it
+  reads — enforce the invariant where the state is written, and tolerate it
+  where it is consumed.**
+- **C14 closed, open since round 1.** `_forthConsoleEditorTop()` returned
+  `(yMultiLineEdOffset == 3) ? 128 : 67` — literals hand-fitted to
+  upstream's layout with the derivation only in a comment. They are now
+  computed from upstream's named geometry by upstream's own arithmetic (the
+  caller's `Y_POSITION_OF_NIM_LINE - 3 - checkHPoffset` in the short state;
+  showStringEdC47's own wrapped-line reposition in the long state).
+  Byte-identical in the default layout — 128/67, 4 rows and 2 — and the
+  `_Static_assert`s now tie the band's row counts to UPSTREAM's names
+  instead of asserting that two copies of a literal agree. **Class:
+  duplicated constant — copy the expression, not the result.**
+
+  The derivation also fixed a latent bug: `checkHPoffset` lifts the editor
+  50 px in the HP-style layout and the literal did not follow it, so the
+  band would have overlapped the editor there.
+
+**Numbers (RULE-1).** flash 1115360 → 1115464 = **+104 B**; ram 8884
+unchanged. Arena untouched.

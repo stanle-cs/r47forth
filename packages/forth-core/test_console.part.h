@@ -2895,6 +2895,7 @@ static int test_console_render_view_clamp(void)
   extern void forthConsoleRollView(int16_t);
   extern void _forthConsoleRender(void);
   extern uint16_t forthConsoleViewRows(void);
+  extern uint16_t _forthConsoleViewBase(uint16_t rows, uint16_t count);
   int fail = 0;
   int i;
   uint8_t savedY = yMultiLineEdOffset;
@@ -2935,14 +2936,25 @@ static int test_console_render_view_clamp(void)
         fail = 1;
       }
       else {
+        uint16_t stored = forthConsoleViewOffset();
+        uint16_t rows   = forthConsoleViewRows();
+        /* The contract, in upstream's shape: the PAINT is clamped to this
+         * frame's bound, and the paint does not write the stored offset. */
+        if (_forthConsoleViewBase(rows, 6) > (uint16_t)(6 - rows)) {
+          printf("    FAIL (C-3): the frame paints from %u, past count-rows"
+                 " (count 6, rows %u) — the top band rows paint blank though"
+                 " lines exist to fill them\n",
+                 _forthConsoleViewBase(rows, 6), rows);
+          fail = 1;
+        }
         _forthConsoleRender();
-        if (forthConsoleViewOffset() > (uint16_t)(6 - forthConsoleViewRows())) {
-          printf("    FAIL (C-3): the render left the view past count-rows"
-                 " (offset %u, count 6, rows %u) — the top %u band rows paint"
-                 " blank though lines exist to fill them\n",
-                 forthConsoleViewOffset(), forthConsoleViewRows(),
-                 (unsigned)(forthConsoleViewOffset()
-                            - (uint16_t)(6 - forthConsoleViewRows())));
+        if (forthConsoleViewOffset() != stored) {
+          printf("    FAIL (C-3): the render WROTE the stored view offset"
+                 " (%u -> %u).  Upstream clamps at the scroll site and lets"
+                 " the paint tolerate an out-of-range window"
+                 " (defineFirstDisplayedStep); a paint must not move where"
+                 " the owner left the view\n",
+                 stored, forthConsoleViewOffset());
           fail = 1;
         }
       }
@@ -2973,9 +2985,14 @@ static int test_console_render_view_clamp(void)
     yMultiLineEdOffset = 1;              /* the edit: long-line state, 2 rows */
     _forthConsoleRender();
     if (forthConsoleViewOffset() != 2) {
-      printf("    FAIL (C-3b): the render moved a legal view offset (2 -> %u)"
-             " — the clamp must only ever pull an out-of-range offset back\n",
-             forthConsoleViewOffset());
+      printf("    FAIL (C-3b): the render moved the stored view offset"
+             " (2 -> %u)\n", forthConsoleViewOffset());
+      fail = 1;
+    }
+    if (_forthConsoleViewBase(forthConsoleViewRows(), 6) != 2) {
+      printf("    FAIL (C-3b): the frame paints from %u, not the legal stored"
+             " offset 2 — the clamp must only ever pull an OUT-of-range"
+             " window back\n", _forthConsoleViewBase(forthConsoleViewRows(), 6));
       fail = 1;
     }
   }
@@ -2984,7 +3001,7 @@ static int test_console_render_view_clamp(void)
   temporaryInformation = savedTempInfo;
   N13_RESET();
   forthConsoleClear();
-  if (!fail) printf("    PASS (C-3): the render clamps a stranded view and leaves a"
-                    " legal one alone, both rows transitions\n");
+  if (!fail) printf("    PASS (C-3): the frame paints from a clamped window and the"
+                    " paint never writes the stored offset, both rows transitions\n");
   return fail;
 }

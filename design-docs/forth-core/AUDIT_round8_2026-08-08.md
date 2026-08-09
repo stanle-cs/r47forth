@@ -273,7 +273,9 @@ day, as a standing rule rather than a one-off — *follow upstream's
 conventions when possible for fix decisions* — and closed under it.
 Carried unchanged: P1 (round 3), P2's push ruling, C22-vs-C1, F13/U5.
 
-**Standing items unchanged:** the DM42n hardware pass for stages L/M/N,
-the merge to main (110+ commits), the FIX-6B MR push, the leak-report
-filing, and the pre-round-6 open findings C5, C6, C7, C10, C11, C13, C14,
-C15, C20, C22.
+**Standing items:** the DM42n hardware pass for stages L/M/N, the merge to
+main (110+ commits), the FIX-6B MR push, the leak-report filing, and the
+pre-round-6 open findings C5, C6, C7, C10, C11, C13, C15, C20, C22 —
+**C14 closed** in the upstream-convention sweep that followed this round
+(eleventh handoff addendum), together with a reshape of C-3 to upstream's
+own clamp-at-the-scroll-site / tolerate-in-the-paint form.

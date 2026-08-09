@@ -5723,13 +5723,68 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
     #define FORTH_CONSOLE_SELFTEST_EXPORT static
   #endif
 
+  /* showStringEdC47's own line pitch for the wrapped-line state
+   * (src/c47/screen.c:1660, `yincr = 35`).  Upstream keeps it as a function
+   * local, so the package cannot reference it by name; naming it here, at
+   * its upstream address, is as close to upstream's own constant as this
+   * side can get.  The _Static_asserts below turn any drift into a build
+   * failure rather than a mispainted band. */
+  #define FORTH_CONSOLE_ED_YINCR    35
+  /* One pixel of clearance: the editor's cursor block starts one row above
+   * the text baseline showStringEdC47 draws at, and the band stops below
+   * that row. */
+  #define FORTH_CONSOLE_ED_CLEAR     1
+
   /* The one owner of the band's vertical geometry — _forthConsoleRender and
    * the view-side roll both derive from here, so the two can never disagree
    * (the C14 duplicated-constant class).  DERIVED from yMultiLineEdOffset,
-   * never re-measured from the string; see the comment in the renderer. */
+   * never re-measured from the string; see the comment in the renderer.
+   *
+   * AUDIT C14, closed 2026-08-08 under the standing rule (follow upstream's
+   * convention where one exists): this used to `return (yMultiLineEdOffset
+   * == 3) ? 128 : 67;` — two literals hand-fitted to upstream's layout,
+   * with the derivation living only in a comment.  Upstream names its
+   * vertical geometry (Y_POSITION_OF_*_LINE, defines.h:1518-1521), so the
+   * numbers are now COMPUTED from those names by upstream's own arithmetic:
+   *
+   *   short line (yMultiLineEdOffset == 3) — showStringEdC47's wrapped-line
+   *     reposition at :1685-1688 does NOT run, because its guard is
+   *     `lastline > yMultiLineEdOffset` and lastline is multiEdLines == 2.
+   *     So the editor draws at the y its CALLER passes, screen.c:3886:
+   *     `Y_POSITION_OF_NIM_LINE - 3 - checkHPoffset`.
+   *   long line — the reposition DOES run and overrides y with
+   *     `(yincr-1) + yMultiLineEdOffset * (yincr-1)` (:1687).
+   *
+   * One behaviour change comes with the derivation, and it is a fix:
+   * checkHPoffset (screen.c:385) lifts the editor by 50 px in the HP-style
+   * layout, and the old literal 128 did not follow it — the band would have
+   * overlapped the editor there.  Reading upstream's expression instead of
+   * copying its result makes the band track it for free. */
   static uint16_t _forthConsoleEditorTop(void) {
-    return (yMultiLineEdOffset == 3) ? 128 : 67;
+    if(yMultiLineEdOffset == 3) {
+      return (uint16_t)(Y_POSITION_OF_NIM_LINE - 3 - checkHPoffset
+                        - FORTH_CONSOLE_ED_CLEAR);
+    }
+    return (uint16_t)((FORTH_CONSOLE_ED_YINCR - 1) * (1 + yMultiLineEdOffset)
+                      - FORTH_CONSOLE_ED_CLEAR);
   }
+
+  /* C14's actual enforcement: the band's row counts are what Stage N's
+   * N-T1 geometry was designed and tested against (4 short, 2 long).  Tie
+   * them to UPSTREAM's names, so that moving a register line or the NIM
+   * line upstream breaks this build instead of silently repainting the
+   * transcript over the editor.  checkHPoffset is a runtime term and cannot
+   * appear here; the default layout (checkHPoffset == 0) is what is
+   * asserted, which is the layout every landed test drives. */
+  _Static_assert((Y_POSITION_OF_NIM_LINE - 3 - FORTH_CONSOLE_ED_CLEAR
+                  - Y_POSITION_OF_REGISTER_T_LINE) / FORTH_CONSOLE_ROW_PITCH == 4,
+                 "C14: the short-line band is no longer 4 rows — upstream's "
+                 "Y_POSITION_OF_NIM_LINE/REGISTER_T_LINE geometry moved, and "
+                 "N-T1's layout must be re-derived, not re-fitted");
+  _Static_assert(((FORTH_CONSOLE_ED_YINCR - 1) * 2 - FORTH_CONSOLE_ED_CLEAR
+                  - Y_POSITION_OF_REGISTER_T_LINE) / FORTH_CONSOLE_ROW_PITCH == 2,
+                 "C14: the long-line band is no longer 2 rows — showStringEdC47's "
+                 "yincr or upstream's REGISTER_T_LINE moved");
 
   /* C12 (owner ruling 2026-08-08): rows is a VIEW concept the ring module
    * deliberately does not have, so the view owns both the row count and the
@@ -5757,12 +5812,25 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
    * so the top rows painted nothing.  That is C12's own symptom returning
    * through the one variable N-R3 does not govern.
    *
-   * So the clamp is enforced per FRAME, and it NORMALISES the stored offset
-   * rather than clamping a local copy: one truth about where the view is,
-   * and no consumer can ever read an out-of-range value.  The accepted
-   * consequence is that crossing the boundary settles the scroll position
-   * at the new maximum instead of remembering the old one — which is what a
-   * roll key would have done anyway. */
+   * SHAPE (revised 2026-08-08 under the standing rule: follow upstream's
+   * convention where one exists).  Upstream has this exact class — a
+   * display window index that can outrun its content — and solves it in two
+   * parts, neither of which is a write during the paint:
+   *
+   *   - the WRITE clamp lives at the scroll site: scrollPemBackwards and
+   *     scrollPemForwards guard before they move
+   *     (src/c47/programming/manage.c:432-446);
+   *   - the paint TOLERATES an out-of-range index instead of rewriting it:
+   *     defineFirstDisplayedStep walks to the window and simply breaks if
+   *     the content runs out (src/c47/programming/nextStep.c:548-560).
+   *
+   * So the write clamp below belongs to forthConsoleRollView — the roll IS
+   * this band's scroll site, and C12 already had it in the right place —
+   * and the renderer clamps a LOCAL copy for the frame
+   * (_forthConsoleViewBase).  The owner's ruling is unchanged: the band is
+   * full on every frame.  What changes is that a paint no longer writes
+   * state, and a stored offset means "where the owner left the view", not
+   * "where the last repaint happened to leave it". */
   static void _forthConsoleClampView(uint16_t rows, uint16_t count) {
     uint16_t maxView;
     if(rows == 0 || count == 0) { return; }
@@ -5770,6 +5838,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
     if(forthConsoleViewOffset() > maxView) {
       forthConsoleSetViewOffset(maxView);
     }
+  }
+
+  /* The offset THIS frame paints from: the stored one, clamped to the
+   * frame's own bound.  Pure — see the shape note above. */
+  FORTH_CONSOLE_SELFTEST_EXPORT uint16_t _forthConsoleViewBase(uint16_t rows, uint16_t count) {
+    uint16_t maxView = _forthConsoleMaxView(rows, count);
+    uint16_t view    = forthConsoleViewOffset();
+    return (view > maxView) ? maxView : view;
   }
 
   void forthConsoleRollView(int16_t delta) {
@@ -5806,7 +5882,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
      * re-measuring would put them a frame apart on the call where the line
      * crosses the long/short boundary. */
     uint16_t editorTop = _forthConsoleEditorTop();
-    uint16_t rows, firstY, r, view, count;
+    uint16_t rows, firstY, r, view, count, viewBase;
 
     if(editorTop <= Y_POSITION_OF_REGISTER_T_LINE) {
       return;                                    /* graceful floor; unreachable
@@ -5818,10 +5894,11 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
       return;                                    /* an empty console shows an
                                                     empty area, not registers */
     }
-    _forthConsoleClampView(rows, count);         /* C-3: rows is frame-variable,
-                                                    so the bound is re-checked
-                                                    every frame, not only where
-                                                    the offset is written */
+    viewBase = _forthConsoleViewBase(rows, count);  /* C-3: rows is
+                                                    frame-variable, so the bound
+                                                    is re-checked every frame —
+                                                    for the paint only, never by
+                                                    writing the stored offset */
     /* Bottom-anchor the band to the editor: 4 rows at Y 44/65/86/107 in the
      * short-line state, 2 at Y 25/46 in the long-line state (N-T1). */
     firstY = (uint16_t)(editorTop - rows * FORTH_CONSOLE_ROW_PITCH);
@@ -5830,7 +5907,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
       char line[FORTH_CONSOLE_LINE_MAX + 1];
       /* The BOTTOM row (r == rows-1) shows the line at the roll offset —
        * offset 0 is the newest — and every row above it is one line older. */
-      view = (uint16_t)(forthConsoleViewOffset() + (rows - 1 - r));
+      view = (uint16_t)(viewBase + (rows - 1 - r));
       if(view >= count) {
         continue;                                /* fewer lines than rows */
       }
