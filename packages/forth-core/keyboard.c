@@ -1900,11 +1900,13 @@ endReturnTrue:
      * a press resolves but never dispatches.  ITM_NOP then keeps every
      * downstream arm out of it; btnReleased's refreshScreen(117) (:2478)
      * repaints. */
-    if(forthCapIsInteractive() && !tam.mode
+    if(forthCapInteractiveLive() && !tam.mode   /* round 6 (F8): LIVE */
        && (key->fShiftedAim == CHR_caseUP || key->fShiftedAim == CHR_caseDN)) {
       bool_t isUp = (key->fShiftedAim == CHR_caseUP);
       if(shiftG) {
-        forthConsoleRoll(isUp ? +1 : -1);      /* +1 = one line OLDER */
+        forthConsoleRollView(isUp ? +1 : -1);  /* +1 = one line OLDER; C12:
+                                                  the view-owned roll, clamped
+                                                  at count-rows */
         result = ITM_NOP;
       }
       else if(shiftF) {
@@ -4107,6 +4109,14 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_AIM: {
+        if(forthCapIsInteractive() && lastErrorCode != 0) {
+          /* AUDIT round 5 R12 (ruled 2026-08-08): EXIT is the other key the
+           * error recovery invites, exempted from the sweep without its
+           * paired clear.  Dismiss the stale error first — the CM_NORMAL
+           * arm's own order — and unwind on the next press. */
+          lastErrorCode = 0;
+          break;
+        }
         if(forthCapIsInteractive() && !forthCapIsOpen()) {
           /* AUDIT round 6 (F8): the suspended residue — TAM torn down
            * without the unwind (a strand door), or an exotic path skipped
@@ -4747,6 +4757,19 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_AIM: {
+        if(forthCapInteractiveLive() && lastErrorCode != 0) {
+          /* AUDIT round 5 R12 (ruled 2026-08-08): BACKSPACE is one of the
+           * two keys the error recovery invites, and the error sweep exempts
+           * it because in CM_NORMAL it IS the dismiss gesture with its own
+           * clear — an exemption inherited here without its paired clear
+           * (round 6's class).  Without this, the render gate kept yielding
+           * on the stale error and the transcript stayed hidden for as many
+           * presses as the owner made.  Mirror the CM_NORMAL arm exactly:
+           * dismiss first, edit on the next press. */
+          lastErrorCode = 0;
+          screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
+          return;
+        }
         if(catalog && catalog != CATALOG_MVAR) {
           if(stringByteLength(aimBuffer) > 0) {
             lg = stringLastGlyph(aimBuffer);

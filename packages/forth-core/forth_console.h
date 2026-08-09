@@ -62,6 +62,13 @@ bool_t   forthConsoleLineAt(uint16_t n, char *out, uint16_t outSize);  /* n = 0 
 uint16_t forthConsoleViewOffset(void);
 void     forthConsoleSetViewOffset(uint16_t n);
 void     forthConsoleRoll(int16_t delta);        /* +1 = one line OLDER (scroll back) */
+
+/* View-side (implemented in screen.c): the band's row count and the roll
+   bounded by it.  C12's owner ruling (2026-08-08): rows is a VIEW concept
+   this ring module deliberately does not have — the view owns the clamp;
+   forthConsoleRoll above stops only at ring bounds. */
+uint16_t forthConsoleViewRows(void);
+void     forthConsoleRollView(int16_t delta);
 bool_t   forthConsoleHasOpenLine(void);          /* a word left output unterminated */
 uint32_t forthConsoleWriteSeq(void);             /* bumped by every writer */
 

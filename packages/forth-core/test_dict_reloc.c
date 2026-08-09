@@ -1135,6 +1135,8 @@ static int test_capture_interactive_divert(void);              /* L1-3 */
 static int test_history_program(void);                        /* L1-H */
 static int test_fold_context(void);                            /* L1-F1 */
 static int test_fold_round6_window(void);                      /* AUDIT round 6 */
+static int test_console_error_recovery_keys(void);             /* R12 ruling */
+static int test_console_roll_view_clamp(void);                 /* C12 ruling */
 static int test_fold_seams(void);                              /* L1-F2 */
 static int test_fold_operand_parity(void);                     /* L1-F3 */
 static int test_fold_close_paths(void);                        /* L1-F3 */
@@ -2590,6 +2592,12 @@ int forthDictSelfTest(void)
   printf("\nFORTH AUDIT ROUND 6 TESTS (the fold/suspend window, driven)\n");
   printf("  [DEBUG] running test_fold_round6_window...\n");
   fail |= test_fold_round6_window();
+
+  printf("\nFORTH ROUND-5 RULINGS (R12, C12 — landed 2026-08-08)\n");
+  printf("  [DEBUG] running test_console_error_recovery_keys...\n");
+  fail |= test_console_error_recovery_keys();
+  printf("  [DEBUG] running test_console_roll_view_clamp...\n");
+  fail |= test_console_roll_view_clamp();
 
   forthConsoleClear();          /* leave no dialogue behind for later tests */
   forthDictClear();

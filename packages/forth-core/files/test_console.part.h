@@ -2752,3 +2752,126 @@ static int test_console_ownership_invariant(void)
   }
   return fail;
 }
+
+/* ==================================================================
+ * Round-5 rulings landed 2026-08-08 (owner: "if it's a quick fix to be
+ * robust, do it"): R12 and C12.
+ * ================================================================== */
+
+/* ---- R12: BACKSPACE and EXIT are the two keys the error recovery
+ * invites, and both were exempted from the error sweep without the
+ * paired clear the exemption assumes (round 6's class: exemption
+ * inherited without its paired clear).  The stale error kept the render
+ * gate yielding, so the transcript stayed hidden for as many presses as
+ * the owner made. ---- */
+static int test_console_error_recovery_keys(void)
+{
+  extern bool_t _forthConsoleActive(void);
+  extern void fnKeyBackspace(uint16_t);
+  extern void fnKeyExit(uint16_t);
+  int fail = 0;
+
+  N13_RESET();
+  forthCapOpenInteractive();
+  calcMode = CM_AIM;
+
+  _consoleEnterLine("1 BOGUS");
+  if (lastErrorCode == ERROR_NONE) {
+    printf("    FIXTURE BUG: \"1 BOGUS\" raised no error\n");
+    fail = 1;
+  }
+  else {
+    if (_forthConsoleActive()) {
+      printf("    FIXTURE BUG: render gate live while the error shows\n");
+      fail = 1;
+    }
+    fnKeyBackspace(NOPARAM);
+    if (lastErrorCode != ERROR_NONE) {
+      printf("    FAIL (R12): BACKSPACE did not dismiss the stale error — the"
+             " transcript stays hidden for every further press\n");
+      fail = 1;
+    }
+    else if (!_forthConsoleActive()) {
+      printf("    FAIL (R12): error cleared but the render gate still yields\n");
+      fail = 1;
+    }
+    else if (compareString(aimBuffer, "1 BOGUS", CMP_BINARY) != 0) {
+      printf("    FAIL (R12): the first press must DISMISS only (CM_NORMAL"
+             " parity); line is \"%s\"\n", aimBuffer);
+      fail = 1;
+    }
+  }
+
+  /* the other invited key */
+  if (!fail) {
+    _consoleEnterLine("1 BOGUS");
+    if (lastErrorCode == ERROR_NONE) {
+      printf("    FIXTURE BUG: second \"1 BOGUS\" raised no error\n");
+      fail = 1;
+    }
+    else {
+      fnKeyExit(NOPARAM);
+      if (lastErrorCode != ERROR_NONE) {
+        printf("    FAIL (R12): EXIT did not dismiss the stale error\n");
+        fail = 1;
+      }
+      else if (!forthCapIsOpen()) {
+        printf("    FAIL (R12): EXIT must dismiss FIRST and unwind on the"
+               " next press — the capture closed (state via oracle)\n");
+        fail = 1;
+      }
+      else if (compareString(aimBuffer, "1 BOGUS", CMP_BINARY) != 0) {
+        printf("    FAIL (R12): the dismissing EXIT lost the line (\"%s\")\n",
+               aimBuffer);
+        fail = 1;
+      }
+    }
+  }
+
+  lastErrorCode = ERROR_NONE;
+  N13_RESET();
+  if (!fail) printf("    PASS (R12): both invited recovery keys dismiss the stale error first, line intact\n");
+  return fail;
+}
+
+/* ---- C12 (owner ruling 2026-08-08: the VIEW owns the clamp).  The ring's
+ * roll stops at count-1, a ring bound; the view stops at count-rows so the
+ * band stays full.  Rolling past that emptied the transcript one row per
+ * press. ---- */
+static int test_console_roll_view_clamp(void)
+{
+  extern void forthConsoleRollView(int16_t);
+  int fail = 0;
+  int i;
+  uint8_t savedY = yMultiLineEdOffset;
+
+  N13_RESET();
+  forthCapOpenInteractive();
+  calcMode = CM_AIM;
+  for (i = 0; i < 6; i++) {
+    char l[8];
+    sprintf(l, "L%d", i);
+    forthConsoleAppendLine(l);
+  }
+  yMultiLineEdOffset = 3;              /* short-line state: 4 rows (N-T1) */
+
+  for (i = 0; i < 10; i++) { forthConsoleRollView(+1); }
+  if (forthConsoleViewOffset() != 2) {
+    printf("    FAIL (C12): view offset %u after rolling past the top,"
+           " expected 2 (count 6 - rows 4) — the band empties row by row\n",
+           forthConsoleViewOffset());
+    fail = 1;
+  }
+  for (i = 0; i < 10; i++) { forthConsoleRollView(-1); }
+  if (forthConsoleViewOffset() != 0) {
+    printf("    FAIL (C12): view offset %u after rolling forward, expected 0\n",
+           forthConsoleViewOffset());
+    fail = 1;
+  }
+
+  yMultiLineEdOffset = savedY;
+  N13_RESET();
+  forthConsoleClear();
+  if (!fail) printf("    PASS (C12): the view clamps the roll at count-rows, both directions\n");
+  return fail;
+}

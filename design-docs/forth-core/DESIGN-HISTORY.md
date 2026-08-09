@@ -3289,3 +3289,34 @@ confirmed in).  Arena untouched — no dictionary change.
 project's own regression record (r2 4/7, r3 4/4, r5 9/12 findings from the
 previous round's fixes) round 7 audits THIS commit before anything else,
 and the earliest audit close moves to round 8.
+
+## 2026-08-08 — two carried rulings closed: R12 and C12
+
+Owner's rule, applied: a documented finding whose fix is quick AND robust
+gets fixed; documentation is for rulings (P2: matches native push,
+deliberate), risky one-liners (P1: a funnel pop double-pops the ladder and
+fires inside save/restore), and evidence-strength notes (C22: the code fix
+is right, only the test's device-side proof leaned on a sim-only flag).
+
+- **R12** (round 5): BACKSPACE and EXIT — the two keys the error recovery
+  invites — are exempt from the error sweep because in CM_NORMAL they ARE
+  the dismiss gesture with their own clears; the console's CM_AIM arms
+  inherited the exemption without the paired clear (round 6's named
+  class), so a stale error hid the transcript for every further press.
+  Both arms now mirror CM_NORMAL: dismiss first, act on the next press.
+  Class test drives both keys against a live stale-error console.
+- **C12** (round 1, ruled 2026-08-08: the VIEW owns the clamp): the ring's
+  roll stops at count-1, a ring bound; the view stops at count-rows so the
+  band stays full.  `forthConsoleRollView` (screen.c) wraps the ring roll
+  and clamps with the renderer's own row count; both derive from one
+  `_forthConsoleEditorTop`, so the geometry cannot fork (the C14 class).
+  The determineItem roll gate also moved to `forthCapInteractiveLive()`
+  (round 6's F8 sweep, one site it had missed).
+
+Red-first: `FAIL (R12): BACKSPACE did not dismiss the stale error`,
+`FAIL (C12): view offset 5 ... expected 2 (count 6 - rows 4)`; both green
+after, full gate + upstream suite green.
+
+**Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`: flash 1114904 → 1115040 = **+136 B**; ram 8884
+unchanged (`nm | grep -c forthConsole` = 22). Arena untouched.

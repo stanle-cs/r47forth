@@ -5718,6 +5718,38 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
     #define FORTH_CONSOLE_SELFTEST_EXPORT static
   #endif
 
+  /* The one owner of the band's vertical geometry — _forthConsoleRender and
+   * the view-side roll both derive from here, so the two can never disagree
+   * (the C14 duplicated-constant class).  DERIVED from yMultiLineEdOffset,
+   * never re-measured from the string; see the comment in the renderer. */
+  static uint16_t _forthConsoleEditorTop(void) {
+    return (yMultiLineEdOffset == 3) ? 128 : 67;
+  }
+
+  /* C12 (owner ruling 2026-08-08): rows is a VIEW concept the ring module
+   * deliberately does not have, so the view owns both the row count and the
+   * roll's upper bound. */
+  uint16_t forthConsoleViewRows(void) {
+    uint16_t editorTop = _forthConsoleEditorTop();
+    if(editorTop <= Y_POSITION_OF_REGISTER_T_LINE) { return 0; }
+    return (uint16_t)((editorTop - Y_POSITION_OF_REGISTER_T_LINE) / FORTH_CONSOLE_ROW_PITCH);
+  }
+
+  void forthConsoleRollView(int16_t delta) {
+    uint16_t rows, count, maxView;
+    forthConsoleRoll(delta);
+    /* C12: the ring's roll stops at count-1 (its own bound: there is no
+     * older line).  The VIEW stops at count-rows, so the band stays full —
+     * past that, each press emptied the transcript one row at a time. */
+    rows  = forthConsoleViewRows();
+    count = forthConsoleLineCount();
+    if(rows == 0 || count == 0) { return; }
+    maxView = (count > rows) ? (uint16_t)(count - rows) : 0;
+    if(forthConsoleViewOffset() > maxView) {
+      forthConsoleSetViewOffset(maxView);
+    }
+  }
+
   FORTH_CONSOLE_SELFTEST_EXPORT bool_t _forthConsoleActive(void) {
     /* round 6 (F8): LIVE, not origin — the render gate fired on the
      * suspended residue and painted TAM's abandoned aimBuffer as an
@@ -5743,14 +5775,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
      * the frame, so reading it keeps the console and the editor in step —
      * re-measuring would put them a frame apart on the call where the line
      * crosses the long/short boundary. */
-    uint16_t editorTop = (yMultiLineEdOffset == 3) ? 128 : 67;
+    uint16_t editorTop = _forthConsoleEditorTop();
     uint16_t rows, firstY, r, view, count;
 
     if(editorTop <= Y_POSITION_OF_REGISTER_T_LINE) {
       return;                                    /* graceful floor; unreachable
                                                     with the two states above */
     }
-    rows = (uint16_t)((editorTop - Y_POSITION_OF_REGISTER_T_LINE) / FORTH_CONSOLE_ROW_PITCH);
+    rows = forthConsoleViewRows();
     count = forthConsoleLineCount();
     if(rows == 0 || count == 0) {
       return;                                    /* an empty console shows an
