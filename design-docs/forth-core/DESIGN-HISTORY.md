@@ -3360,3 +3360,89 @@ restored, the full gate and upstream suite are green.
 **Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
 CUSTOM_PKG_RECONFIGURE=1`: flash 1115040 → 1115008 = **−32 B**; ram 8884
 unchanged. Arena untouched.
+
+## 2026-08-08 — the round-7 fix wave: nine findings, and the counting made mechanical
+
+`AUDIT_round7_2026-08-08.md` + its out-of-family addendum, fixed red-first
+in four commits. Two rulings the owner made this session are in it, and one
+of them found a defect nobody had reported.
+
+- **P-1** (executed in round 7; the wave's worst): the fold's debris sweep
+  consumed two numbers sampled in FHIST — `entryStepCount` and
+  `capStepOffset` — while `getNumberOfSteps()` is keyed on
+  `currentProgramNumber`, which nothing kept in FHIST. `FORTH → DELP →
+  "FHIST" → ENTER` deletes FHIST from inside its own fold; the resume's
+  abandon arm returns before the F1 re-anchor; the sweep then measured a
+  real user program against FHIST's count and deleted four of its steps.
+  Fixed by applying F1's own re-anchor at the second consumer of an
+  FHIST-scoped count: resolve the capture step, put the cursor on it,
+  `defineCurrentProgramFromCurrentStep()`, then sweep — and when the
+  capture step is gone, do nothing at all. **Class: a count is only
+  meaningful in the scope it was sampled in; re-anchor at every consumer,
+  not just the first.**
+- **C-1**: `tam.function` has two mid-session rewrite sites and the F1 fix
+  re-derived fold admission at one. `GTO . BACKSPACE 0 5 ENTER` committed
+  with foldMode still PARK, so the operation ran live and vanished in both
+  directions. The re-derivation is now one function
+  (`forthFoldRederiveAdmission`) called at both sites. **Class: the F1
+  class applied in one direction only.**
+- **C-2 + OOF-1** (one fix, new override `c47Extensions/keyboardTweak.c`):
+  `openHOMEorMyM` destroys softmenu frames two ways — the
+  `isAlphabeticSoftmenu` pop and `fnExitAllMenus(0)` — and both could
+  destroy the frame a live capture owns. Round 6's F7 fix guarded the
+  package-tree copy of the first shape and stopped there. Both guards are
+  evaluated AT THE CALL, because the branch reaching the second one has
+  already resumed the capture through the D7-1 wrapper: the guard has to
+  hold in the state the wrapper itself creates. **Class: predicate widened
+  for one consumer, others unchecked — and the census unit is the calls
+  that destroy a frame, not the consumers of the predicate.**
+- **C-3** (ruled: enforce at render time): C12 clamped where the offset is
+  written, which is right only while the bound is constant — and `rows` is
+  frame-variable. The bound is now one function enforced per frame by both
+  the roll and the renderer, normalising the stored offset. **Class:
+  write-time clamp against a frame-variable bound.**
+- **P-2** (ruled: buy the fault-injection hook): three rounds had ruled on
+  whether `forthHistoryEnsure()` could return false; none could execute the
+  state. One selftest-only flag settled it, and the family has two defects,
+  not one — P-2's letter-column misroute is real, AND the capture is never
+  resumed at all, because both resume owners are keyed on the fold. Both
+  are properties of one state — SUSPENDED with no fold pending — that
+  `tamEnterMode` built by suspending unconditionally after a `forthFoldEnter`
+  that did nothing. Fixed at the top of `tamEnterMode`: with no room for
+  FHIST the operation is refused with ERROR_RAM_FULL and the line survives.
+  **Class: a defensive arm that no test can execute is a design decision
+  nobody has made — and the fix is to stop building the state, not to guard
+  its consequences.**
+- **C-4/C-5/C-6/C-7**: the D7-1 design doc's eleven-vs-28 enumeration
+  amended with its grep; D7-1's promised audit-prompt lens landed as a
+  standing lens, carrying the one direction no construction can defend (a
+  cleanly-merging future upstream in-file caller); three longhand Live
+  composites converted and a stale header comment corrected; the residue
+  fixture's vacuous disjunct replaced with state the gesture established.
+
+**D7-a made mechanical.** Round 7's dominant class was "enumeration without
+a count check", operating at code, record and process level at once. It now
+has tooling at two of the three: `design-audit.sh` group **I** holds
+enumerated-site pins (an expected count and the grep that produces it, HARD
+on divergence — seven pins so far), and `packet_lint.py` flags an audit
+packet that counts sites without carrying its grep. A fix that enumerates
+registers its count there instead of asking a reviewer to remember it.
+
+Red-first evidence, quoted in the four commits: `FAIL (P-1): the fold's
+debris sweep ate the user's program — PUSR 13 steps -> 9`; `FAIL (C-1): the
+demotion did not re-derive the fold admission`; `FAIL (C-2):
+openHOMEorMyM popped the console's registered row`; `FAIL (OOF-1):
+fnExitAllMenus(0) wiped the row the same gesture's wrapper had just
+re-registered`; `FAIL (C-3): the render left the view past count-rows`;
+`FAIL (P-2): the digit key resolved to 570, not ITM_5`; `FAIL: the capture
+did not come back from a foldMode-0 suspension — the line is gone`.
+
+Coverage: `test_fold_round8_window` (five subcases, real dispatch only,
+each asserting it REACHED its state) plus `test_console_render_view_clamp`.
+
+**Numbers (RULE-1).** `make dmcp5r47 CUSTOM_PKG=packages/forth-core
+CUSTOM_PKG_RECONFIGURE=1`: flash 1115008 → 1115184 = **+176 B** across the
+wave; ram 8884 unchanged. Arena untouched — no stage in this range changes
+the dictionary. Override files 17 → 18 (budget 16), added lines 2384 →
+2490: the standing overlay cost, and the new override is one 1580-line
+upstream file carrying two guards.
