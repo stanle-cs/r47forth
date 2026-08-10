@@ -61,16 +61,30 @@ def lint(path):
         hard += 1
         print("  [HARD] no code fence: a packet carries the code under audit "
               "inline. The reader has no repository.")
+    # Round 10: this check false-positived on VERBATIM source. forth_menu.c
+    # carries a two-part comment whose second half opens `/* ...claimed through
+    # the ONE site that decides ownership */` — a sentence continuation, not a
+    # truncation marker. The only ways past it were to edit the excerpt (which
+    # is exactly the paraphrase-is-truncation defect this whole linter exists to
+    # prevent) or to drop the function. So there is an escape, in the same shape
+    # as allow-imbalance below: the operator must say WHY in the packet, and the
+    # marker is deliberately ugly enough that nobody reaches for it to silence a
+    # real cut. Do NOT add it to make an actually-truncated packet pass.
+    allow_snip = '<!-- lint: allow-snip -->' in text
     for ln, body in fen:
         for pat, what in ((r'^\s*(\.\.\.|…)\s*$', 'bare ellipsis line'),
                           (r'/\*\s*(\.\.\.|snip|elided|omitted|etc)[^*]*\*/', 'snip comment'),
                           (r'//\s*(\.\.\.|snip|elided|omitted)\s*$', 'snip comment')):
             for m in re.finditer(pat, body, flags=re.M | re.I):
+                if allow_snip:
+                    continue
                 hard += 1
                 at = ln + body[:m.start()].count('\n')
                 print(f"  [HARD] truncation marker ({what}) at line {at}: send WHOLE "
                       f"functions. Round 2's sed-cut packet produced a confident "
-                      f"wrong finding about a copy-out tail the packet dropped.")
+                      f"wrong finding about a copy-out tail the packet dropped. "
+                      f"If this marker is VERBATIM SOURCE, say so in the packet "
+                      f"and add <!-- lint: allow-snip -->.")
     # Seventh packet-defect class (round 8, caught by this linter's own fence
     # check on the SECOND packet after the first slipped through): a packet
     # assembled by concatenating extracted function bodies gets its closing
@@ -101,6 +115,22 @@ def lint(path):
             print(f"  [HARD] brace imbalance ({net:+d}) in fence at line {ln}: a "
                   f"function is cut off. If the fragment is deliberate, say why "
                   f"in the packet and add <!-- lint: allow-imbalance -->.")
+    # Eighth packet-defect class (round 10, and the escape hatch above is how it
+    # got out). A fragment packet was cut by line ranges chosen from the COMMENT
+    # BANNERS of the two pieces it wanted; the second range ended inside its
+    # banner, so the statement that banner describes — the one the Orientation
+    # promised was included — was not in the packet at all. The brace check DID
+    # fire and allow-imbalance waved it through on a justification that was
+    # itself wrong. Sol caught it by naming the gap instead of guessing, which
+    # is the only reason it cost nothing. Suppressing the check is therefore the
+    # moment to verify by grep, not the moment to stop checking.
+    if allow_imb:
+        print("  [JUDGE] allow-imbalance is in force, so the cut-off-function "
+              "check is OFF for this packet. Round 10 shipped a fragment whose "
+              "Orientation named a statement the ranges did not include. Before "
+              "dispatch, grep the ASSEMBLED packet for every identifier your "
+              "prose claims is present — the range you chose from a comment "
+              "banner probably ends inside it.")
 
     # --- judged flags --------------------------------------------------------
     if code:
@@ -171,9 +201,14 @@ def lint(path):
     # failure was over-read, not over-length.
     # Round 9: 22.1 KB (Gemini, whole-function fix packet) and 18.6 KB (Sol,
     # self-contained design packet) both answered well, identity passing.
+    # Round 10: 23.9 KB (Gemini, whole-function fix packet — four findings, one
+    # a real premise-level catch) and 19.2 KB (Sol, design packet) both answered
+    # well. Two packets in that round WERE split for size and the split cost
+    # nothing, so the ceiling is still advice, not a wall: split for DEPTH — one
+    # packet, one question — and let size follow from that.
     note = ('thin — is the whole function really here?' if kb < 2 else
-            'proven range' if kb <= 22.5 else
-            'beyond the tested range (22.1 KB Gemini / 18.6 KB Sol are the largest proven); split for depth')
+            'proven range' if kb <= 24 else
+            'beyond the tested range (23.9 KB Gemini / 19.2 KB Sol are the largest proven); split for depth')
     print(f"  [SIZE] {size} bytes ({kb:.1f} KB) — {note}")
 
     if hard:

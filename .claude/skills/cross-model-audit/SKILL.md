@@ -106,10 +106,12 @@ the template and the linter; the linter's HARD hits are non-negotiable.
   on (round 3's bad Sol finding), and what ESTABLISHES each state, not
   only what it means — "a BORROWED frame is always FWRD" blocks the wrong
   trace; "BORROWED = the user's own row" licenses it (cost two runs).
-- **Size:** 3–11 KB proven to answer in minutes; round 9 extended the
-  proven range to 22.1 KB (Gemini) and 18.6 KB (Sol, self-contained
+- **Size:** 3–11 KB proven to answer in minutes; rounds 9 and 10 extended
+  the proven range to 23.9 KB (Gemini) and 19.2 KB (Sol, self-contained
   design packet). Keep packets small for depth, not from fear of size —
-  the old 13 KB failure was over-read.
+  the old 13 KB failure was over-read. Round 10 split two oversized
+  packets and the splits cost nothing, so **split on the QUESTION, not on
+  the byte count**: one packet, one question, and the size follows.
 - **One packet, one question**, with a budget note and "name the gap
   instead of guessing".
 

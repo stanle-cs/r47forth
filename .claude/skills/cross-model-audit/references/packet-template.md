@@ -77,7 +77,18 @@ finding.
      two upstream-verbatim helpers included only for reference; the reader
      audited them as the subject and both findings were out of scope. If a
      body is included so other code can be read, say so at its fence:
-     "context, not the subject — byte-identical to upstream". -->
+     "context, not the subject — byte-identical to upstream".
+
+     EIGHTH CLASS (round 10): if you cut by LINE RANGE, do not choose the
+     range from the comment banner. A design packet took two pieces of one
+     long function — the loop that sets a flag and the statement that
+     consumes it — by grepping for their banners; the second range ended
+     INSIDE its banner, so the consuming statement the Orientation promised
+     was never in the packet. `allow-imbalance` waved the brace check
+     through on that wrong justification. The reader named the gap instead
+     of guessing, which is the only reason it cost nothing. So: after
+     assembling, GREP THE PACKET for every identifier your prose claims is
+     present. The linter reminds you whenever allow-imbalance is in force. -->
 
 ```c
 ```
