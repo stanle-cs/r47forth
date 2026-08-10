@@ -4274,3 +4274,25 @@ every list consumer after the sweep.
 
 **Footprint: flash 1,115,832 → 1,115,976 = +144 B; ram 9,144 unchanged;
 arena untouched.**
+
+### R10-OOF-2 ruled and closed the same day: FHIST is RESERVED
+
+The owner ruled the name reserved, and the enforcement follows the class
+(O-a: *what makes this the same one, rather than a matching one?*):
+`forthHistoryProgram` applies an ownership test at the point of use — a
+candidate program conforms when its body is empty or contains at least one
+Forth source step, which refuses the ordinary collision (a native program
+that merely spells its label FHIST) at both doors, adoption and
+resolution. The first draft required Forth-then-native ordering and the
+suite itself refuted it — the F10 kept-step pattern legitimately puts
+later lines after a kept native step — which is the strictness the store's
+real invariant supports and no more, learned red-first rather than
+shipped. The residual is stated in §8.1: an owner program taking the
+reserved name AND containing Forth source steps is the store's
+indistinguishable twin, and the reserved semantics apply to it.
+Creation-time refusal cannot close the door (no upstream reserved-label
+machinery; programs arrive by restore), so resolution-time ownership is
+the enforceable half.
+
+**Footprint: flash 1,116,088 (+112 B); ram 9,144 unchanged; arena
+untouched.**
