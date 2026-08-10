@@ -5,6 +5,58 @@ Built as a package on top of the [C47 firmware](https://gitlab.com/rpncalculator
 
 The Forth data stack is the calculator's RPN stack (4 or 8 registers, depending on SSIZE8) plus an arena-backed spill region that gives you unlimited depth for mid-line computation. `.S` shows the full picture with a `|` separator at the spill boundary.
 
+## Screenshots
+
+### Console
+
+The interactive console takes over the stack area. Output words write to the transcript, input sits at the bottom.
+
+![Console dialogue](forum/screenshots/stage-n-1-console-dialogue.png)
+
+`.S` shows the full stack. The `|` separates register values from spilled values:
+
+![.S with spill separator](forum/screenshots/stage-n-3-spill-separator.png)
+
+The transcript rolls upward as you work:
+
+![Console rolled](forum/screenshots/stage-n-2-console-rolled.png)
+
+### Interactive REPL
+
+FORTH outside PEM opens a capture on the normal screen. ENTER runs the line, EXIT closes.
+
+![Composing a line](forum/screenshots/stage-l-1-composing.png)
+
+After execution, the stack shows the results:
+
+![After execution](forum/screenshots/stage-l-2-repl-reopen.png)
+
+### Keys mode and fold
+
+The ALPHA gesture toggles between alpha and calculator-key input. Parameterized keys fold their canonical spelling into the line:
+
+![Keys mode fold](forum/screenshots/stage-l-3-keysmode-fold.png)
+
+### Catalog and ASSIGN
+
+FWRD appears in the catalog tree under FCNS:
+
+![FWRD in catalog](forum/screenshots/stage-m-1-catalog-fwrd-row.png)
+
+Global Forth words can be ASSIGNed to user keys:
+
+![ASSIGN pending](forum/screenshots/stage-m-4-assign-pending.png)
+
+### PEM listing
+
+Forth source lives inside normal R47 programs as program steps:
+
+![PEM listing](forum/screenshots/shot1-pem-listing.png)
+
+The FWRD picker lists words visible to the current program:
+
+![FWRD picker](forum/screenshots/shot2-picker.png)
+
 ## Forth word reference
 
 ### Stack manipulation

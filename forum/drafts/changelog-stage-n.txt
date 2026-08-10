@@ -1,0 +1,33 @@
+## What's new
+
+### Console (Stage N)
+
+- Interactive Forth has a transcript view over the stack area, rolling upward like a terminal
+- Seven output words: `.` `.S` `CR` `EMIT` `SPACE` `.$` `PAGE`
+- `.S` shows the full stack including spilled values, with `|` at the spill boundary
+- Console opens in keys mode with FWRD as the home row
+
+### Interactive REPL (Stage L)
+
+- `FORTH` outside PEM opens a capture on the normal screen
+- ENTER runs the line and reopens empty, EXIT closes
+- Lines saved to FHIST; f-shifted up/down recalls history
+- Parameterized keys fold their canonical spelling into the line (e.g. STO 0 5 types `STO 05 `)
+
+### Keys mode (Stage K)
+
+- ALPHA gesture toggles between alpha and calculator-key input inside a capture
+- Physical keys resolve through normal columns in keys mode
+- Persists across TAM round-trips
+
+### Catalog and ASSIGN (Stage M)
+
+- FWRD appears in the catalog tree under FCNS
+- Picking a word outside PEM executes it
+- Global Forth words can be ASSIGNed to user keys
+
+### Dictionary
+
+- 29 primitives, 4 structural words (`:` `;` `FORGET` `XEQ`)
+- Every C47 calculator function callable by catalog name
+- Word reference table on the repo main page
