@@ -1,8 +1,7 @@
 /*
  * forth_bridge.c — C47↔Forth bridge
  * fnForthCall: invoked by ITM_FCALL (XEQ) with dictionary index in param
- * Per DESIGN.md §6, Stage-H1 Step 11
- * §9.4 derived-state helpers
+ * Per DESIGN.md §6, §9.4 (derived-state helpers)
  */
 
 #include "c47.h"
@@ -19,10 +18,10 @@ void fnForthCall(uint16_t param)
 /* Dispatch a name that forthFindColon() has already resolved to colon word
  * `widx`: record a step when composing a program, execute it otherwise.
  *
- * code-audit 2026-07-20: PEM must RECORD a step, not execute live — this
- * mirrors the native label arm at every call site and honours DESIGN.md
- * §4.2's "PEM recording of XEQ 'NAME'" contract (the NAME persists in the
- * program, never the dictionary index, which is not stable across edits).
+ * PEM must RECORD a step, not execute live — this mirrors the native label
+ * arm at every call site and honours DESIGN.md §4.2's "PEM recording of XEQ
+ * 'NAME'" contract (the NAME persists in the program, never the dictionary
+ * index, which is not stable across edits).
  *
  * Split from forthTryColonFallback() because ui/tam.c must run
  * leaveTamModeIfEnabled() between the lookup and the dispatch. */
@@ -68,20 +67,15 @@ bool forthStepPayload(const uint8_t *step, uint8_t *lenOut)
  * outside the C47 RAM arena entirely, or ptr lies at/after the start of the
  * genuinely next program.
  *
- * Bounds found during R2-T2: this scan had none, so ANY pointer at or past
- * the last program's start resolved to that program — including a pointer
- * outside program memory entirely (a stack buffer), which is what made
- * test_exec_step_halts_on_error's original stack-local fixture silently
- * pre-scan a real, unrelated program. Harmless in production only because
- * every caller today passes a genuinely in-program pointer; this closes the
- * gap for the first one that doesn't.
+ * The arena-membership check is required: without it, any pointer at or past
+ * the last program's start would resolve to that program, including a
+ * pointer outside program memory entirely (e.g. a stack buffer) — harmless
+ * only because every caller today passes a genuinely in-program pointer.
  *
  * The upper bound is deliberately coarse (arena membership), not
- * firstFreeProgramByte: several PEM fixtures legitimately set currentStep ==
- * firstFreeProgramByte (cursor parked ON the .END. sentinel, a normal PEM
- * position), and a tighter bound rejected that — regression caught by the
- * full gate before this landed. A stack address fails the arena check by a
- * huge margin, so it alone closes T2's actual gap without that fragility. */
+ * firstFreeProgramByte: PEM legitimately parks currentStep ==
+ * firstFreeProgramByte (cursor on the .END. sentinel, a normal PEM
+ * position), and a tighter bound rejects that valid position. */
 uint8_t *forthOwningProgramStart(const uint8_t *ptr)
 {
     uint8_t *arenaBase = (uint8_t *)ram;
@@ -90,16 +84,11 @@ uint8_t *forthOwningProgramStart(const uint8_t *ptr)
         return NULL;
     }
 
-    /* R4 accepted ruling (E5): compute the greatest qualifying start
-     * explicitly, matching forthNextProgramStart's own min-tracking below —
-     * do not rely on or prove programList ordering. Verified:
-     * scanLabelsAndPrograms (manage.c:102-129) walks program memory
-     * sequentially and appends in that order, so programList IS built
-     * address-ascending today — but that is the builder's behavior, not a
-     * documented contract this function may depend on. The old loop just
-     * overwrote progStart on every qualifying i (last-in-iteration-order,
-     * not largest), which happens to coincide with the max only because of
-     * that unstated invariant. */
+    /* Compute the greatest qualifying start explicitly, matching
+     * forthNextProgramStart's own min-tracking below — do not rely on
+     * programList being address-ascending; that is scanLabelsAndPrograms's
+     * current behavior, not a documented contract this function may depend
+     * on. */
     uint8_t *progStart = NULL;
     for (uint16_t i = 0; i < numberOfPrograms; i++) {
         uint8_t *ip = programList[i].instructionPointer;
@@ -176,20 +165,20 @@ bool forthEntryStateAtCursor(void)
     return forthMarkerTurnsOn(currentStep);
 }
 
-/* §9.4 (audit fix F1): entry state governing an INSERTION at currentStep.
+/* §9.4: entry state governing an INSERTION at currentStep.
  * The new step will follow the step immediately BEFORE currentStep, so derive
  * from that predecessor. currentStep may sit past the pre-move of
- * addStepInProgram (manage.c) or past the committed line after ENTER
+ * addStepInProgram or past the committed line after ENTER
  * (pemCloseAlphaInput) — in both cases the predecessor is the step the spec's
  * "cursor lands on" language means.
  *
- * forth-core (F6-1): RTN does not itself close an open-ended (no closing
- * »FORTH marker) region — a routine can be entirely Forth source with RTN
- * as its sole terminator. When the predecessor is RTN, it is transparent:
- * look through it to ITS predecessor instead of concluding RPN, so a
- * capture that empties all the way back to RTN and reopens still resolves
- * Forth. Bounded by progStart like the outer walk; only RTN specifically is
- * looked through, so a genuine RPN predecessor is unaffected. */
+ * RTN does not itself close an open-ended (no closing »FORTH marker) region
+ * — a routine can be entirely Forth source with RTN as its sole terminator.
+ * When the predecessor is RTN, it is transparent: look through it to ITS
+ * predecessor instead of concluding RPN, so a capture that empties all the
+ * way back to RTN and reopens still resolves Forth. Bounded by progStart
+ * like the outer walk; only RTN specifically is looked through, so a
+ * genuine RPN predecessor is unaffected. */
 bool forthEntryStateAtInsertion(void)
 {
   if (pemCursorIsZerothStep) return false;
@@ -220,42 +209,38 @@ bool forthEntryStateAtInsertion(void)
   }
 }
 
-/* ---- N1-3: the console's value formatter (Stage N, N-R4/N-R5; N-T2) ----
+/* ---- the console's value formatter ----
  *
  * There is no single landed register->text entry: _refreshRegisterLine
  * dispatches on getRegisterDataType() and calls a different display.c
- * producer per type (screen.c:4791, 4879, 5022, 5190, 5249, 5284, ...).
- * This mirrors that switch for the types a console line can leave in X,
- * using the CURRENT display mode — which is what makes `.` and the ENTER
- * echo agree with what the stack would have shown.
+ * producer per type. This mirrors that switch for the types a console line
+ * can leave in X, using the CURRENT display mode — which is what makes `.`
+ * and the ENTER echo agree with what the stack would have shown.
  *
- * copyRegisterToClipboardString (screen.c:193) is the proof that the switch
- * is liftable out of a paint — it is a landed, paint-free, all-types
- * register->string function built from the same family — but it is the
+ * copyRegisterToClipboardString is a landed, paint-free, all-types
+ * register->string function built from the same family, but it is the
  * wrong SEMANTICS here: it produces full-precision CSV text, not the
- * display mode.  So the shape is borrowed and the producers are not.
+ * display mode. So the shape is borrowed and the producers are not.
  *
  * Formats into the CALLER's buffer and never into tmpString: display.c
  * writes tmpString in ~190 places and the caller cannot know which producer
- * aliases it.  Same choice copyRegisterToClipboardString makes, and for the
- * same reason it records at screen.c:197.
+ * aliases it.
  *
  * standardFont, not numericFont: the transcript is a text row at the fnPem
  * pitch, so the width budget the formatter fits into is the one the
  * console actually paints with. */
 
-/* AUDIT C11: copy text into a fixed buffer, cutting only on a GLYPH
- * boundary.
+/* Copy text into a fixed buffer, cutting only on a GLYPH boundary.
  *
  * The C47 string encoding is one byte below 0x80 and two bytes (high first)
  * at 0x80 and above — the same encoding screen.c decodes and the console
- * ring stores.  A plain byte cut can therefore end a record with a lone
- * lead byte, which the painter and forthConsoleLineAt both re-pair with
- * whatever follows: C10's orphan reached by a different door.
+ * ring stores. A plain byte cut can therefore end a record with a lone lead
+ * byte, which the painter and forthConsoleLineAt both re-pair with whatever
+ * follows.
  *
- * Walks with upstream's own boundary primitive (stringNextGlyph,
- * charString.c:379) rather than re-deriving the encoding here, so a change
- * to the encoding cannot leave this behind.  Returns the bytes written. */
+ * Walks with upstream's own boundary primitive (stringNextGlyph) rather
+ * than re-deriving the encoding here, so a change to the encoding cannot
+ * leave this behind. Returns the bytes written. */
 int32_t forthCopyWholeGlyphs(char *dst, const char *src, int32_t cap) {
   int32_t out = 0;
   int16_t at  = 0;
@@ -304,32 +289,21 @@ void forthConsoleFormatRegister(calcRegister_t regist, char *out, int16_t outSiz
       break;
 
     case dtShortInteger:
-      /* AUDIT C1 (2026-08-06): this producer does NOT write from the front.
-       * It builds digits from displayString[ERROR_MESSAGE_LENGTH / 2] — that
-       * is buf[256] — upward as scratch, then compacts them to the front
-       * (display.c:2059 sets `i = ERROR_MESSAGE_LENGTH / 2`, and the
-       * `displayString[j] = displayString[k]` loop at :2281 brings them
-       * back).  Handing it the 256-byte local below meant its FIRST write
-       * landed one past the end of the frame, and it wrote forward from
-       * there: `1 HEX` then ENTER corrupted the stack.
+      /* shortIntegerToDisplayString does NOT write from the front: it builds
+       * digits from displayString[ERROR_MESSAGE_LENGTH / 2] upward as
+       * scratch, then compacts them to the front, so the buffer it is
+       * handed must be at least ERROR_MESSAGE_LENGTH bytes. The 256-byte
+       * local `buf` is too small for that; this arm uses tmpString instead,
+       * which is what every upstream caller passes and what the producer's
+       * arithmetic requires. That does not weaken the "never tmpString"
+       * rule above — that rule is about HOLDING a pointer into tmpString
+       * across other producers that also write it; nothing runs between
+       * this call and the copy-out below.
        *
-       * So this one arm uses tmpString, which is what every upstream caller
-       * passes and what the producer's arithmetic actually requires.  That
-       * does not weaken the "never tmpString" rule above — that rule is about
-       * HOLDING a pointer into tmpString across other producers that also
-       * write it.  Nothing runs between this call and the copy-out below. */
-      /* AUDIT C22: the invariant C1 actually rests on, pinned at BUILD time
-       * rather than by a runtime canary that cannot fire.
-       *
-       * shortIntegerToDisplayString builds its digits from
-       * displayString[ERROR_MESSAGE_LENGTH / 2] UPWARD and compacts them to
-       * the front, so the buffer it is handed must be at least
-       * ERROR_MESSAGE_LENGTH bytes.  Handing it the 256-byte local put its
-       * first write one past the end of the frame — that was C1.  The C1
-       * class test wrapped the formatter's OUT buffer in canaries, but no
-       * producer is ever handed `out` (it is written once, by the clamped
-       * copy below), so those canaries could never trip: C22.  A static
-       * assertion catches the revert that a runtime check could not. */
+       * The static asserts below pin this at BUILD time: no producer is
+       * ever handed `out` directly (it is written once, by the clamped
+       * copy at the end of this function), so a runtime canary on `out`
+       * could never catch a regression here. */
       _Static_assert(TMP_STR_LENGTH >= ERROR_MESSAGE_LENGTH,
                      "C1/C22: shortIntegerToDisplayString writes from "
                      "ERROR_MESSAGE_LENGTH/2 upward, so its buffer must be at "
@@ -339,8 +313,8 @@ void forthConsoleFormatRegister(calcRegister_t regist, char *out, int16_t outSiz
                      "ERROR_MESSAGE_LENGTH, the comment above and the tmpString "
                      "detour must both be re-derived, not assumed");
       shortIntegerToDisplayString(regist, tmpString, false, noBaseOverride);
-      /* C11: the same glyph-boundary cut — shortIntegerToDisplayString can
-       * emit two-byte glyphs (the base prefix and the sign). */
+      /* The same glyph-boundary cut — shortIntegerToDisplayString can emit
+       * two-byte glyphs (the base prefix and the sign). */
       forthCopyWholeGlyphs(buf, tmpString, (int32_t)sizeof(buf));
       break;
 
@@ -354,8 +328,7 @@ void forthConsoleFormatRegister(calcRegister_t regist, char *out, int16_t outSiz
 
     case dtString:
       /* The string's own glyphs, not a quoted rendering: TYPE-class output
-       * is the text itself. */
-      /* C11: glyph boundary, not byte boundary. */
+       * is the text itself. Glyph boundary, not byte boundary. */
       forthCopyWholeGlyphs(buf, REGISTER_STRING_DATA(regist), (int32_t)sizeof(buf));
       break;
 

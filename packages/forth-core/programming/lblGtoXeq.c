@@ -632,7 +632,7 @@ int16_t executeOneStep(uint8_t *step) {
           else if(op == ITM_FORTH) {
             if(*step++ == STRING_LABEL_VARIABLE) {
               if(*step != 0) {              // len > 0: source step
-                forthProgramStep(step);     // step -> [len][bytes...] (§9.2)
+                forthProgramStep(step);     // step -> [len][bytes...]
               }                             // len == 0: marker — run-time no-op
             }
             return 1;
@@ -673,7 +673,7 @@ void runProgram(bool_t singleStep, uint16_t menuLabel) {
       clearKeyBuffer();
     }
   #endif
-  if(!nestedEngine) { /* F1-2: sole lifetime signal — every top-level engine entry (XEQ, R/S, SST, menu, solver). forthRunGenBump() defers while a Forth frame is active. */ forthRunGenBump(); }
+  if(!nestedEngine) { /* Sole lifetime signal for every top-level engine entry (XEQ, R/S, SST, menu, solver); forthRunGenBump() defers while a Forth frame is active. */ forthRunGenBump(); }
   lastErrorCode = ERROR_NONE;
   hourGlassIconEnabled = true;
   programRunStop = PGM_RUNNING;

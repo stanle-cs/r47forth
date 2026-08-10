@@ -1,4 +1,4 @@
-/* packages/forth-core/test_console.part.h — Stage N packet N1-1 (2026-08-06).
+/* packages/forth-core/test_console.part.h
  *
  * This is NOT a standalone header: it is a source PART, #included exactly
  * once at the end of test_dict_reloc.c so the suite stays one compilation
@@ -235,7 +235,7 @@ static int test_console_ring_clear(void)
   return 0;
 }
 
-/* ---- 7: the roll offset clamps, and ANY output snaps it to newest (N-R3) ---- */
+/* ---- 7: the roll offset clamps, and ANY output snaps it to newest ---- */
 static int test_console_ring_view(void)
 {
   forthConsoleClear();
@@ -286,8 +286,8 @@ static int test_console_ring_view(void)
 }
 
 /* ---- 8: the reset seam.  Cleared at the dictionary lifecycle; UNTOUCHED by
- * capture close — N-R2 rules the dialogue survives close and reopen, and a
- * "clear it everywhere" reflex breaks exactly this direction. ---- */
+ * capture close — the dialogue survives close and reopen, and a "clear it
+ * everywhere" reflex breaks exactly this direction. ---- */
 static int test_console_ring_reset_seam(void)
 {
   forthConsoleClear();
@@ -390,9 +390,9 @@ static int test_console_ring_hammer(void)
 /* ==================================================================
  * N1-2 — the console VIEW: geometry, suppression, yields, the roll.
  *
- * Reads the framebuffer back, the G3/G4 way (test_capture.part.h:6304):
- * lcd_buffer is filled by the software blitter whether or not a GTK window
- * exists, and lcd_buffer_pixel_on() links in the sim binary and the
+ * Reads the framebuffer back: lcd_buffer is filled by the software blitter
+ * whether or not a GTK window exists, and lcd_buffer_pixel_on() links in
+ * the sim binary and the
  * upstream testSuite binary alike.  No pixel COUNT is hard-coded — upstream
  * owns the font — only presence, absence and direction of change.
  * ================================================================== */
@@ -501,14 +501,9 @@ static int test_console_view_gate(void)
 }
 
 /* ---- 11: the transcript reaches the LCD, and an empty console shows an
- * EMPTY area.
- *
- * AUDIT C21: this case does NOT prove register suppression, and its first
- * form claimed it did.  It drives _forthConsoleRender() directly, and that
- * function contains no register-paint call by construction — no input can
- * reach the register path through it.  The suppression proof lives in the
- * ARM case (test 14), which goes through refreshScreen(), where the
- * suppressed refreshRegisterLine(T/Z/Y) calls actually exist. ---- */
+ * EMPTY area.  This does NOT prove register suppression: _forthConsoleRender()
+ * has no register-paint call on its path.  That proof lives in the ARM case
+ * (test 14), which goes through refreshScreen(). ---- */
 static int test_console_view_paints(void)
 {
   uint8_t saved = calcMode;
@@ -523,28 +518,9 @@ static int test_console_view_paints(void)
   lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
   _forthConsoleRender();
   empty = _consoleBandPixels();
-  /* DOCUMENTED GAP — this assertion is defended three deep and NO single
-   * mutation found so far can fire it.  Recorded rather than papered over,
-   * and the history is worth keeping because two confident attributions were
-   * both false:
-   *
-   *   - it was first advertised as proving "no register paints while the
-   *     console is up" (AUDIT C21 killed that: this case calls
-   *     _forthConsoleRender directly, which has no register-paint call on
-   *     its path at all — the real proof lives in test 14);
-   *   - the C21 commit then re-attributed it to the renderer's `count == 0`
-   *     early return.  Also false: delete that return and every row hits the
-   *     `view >= count` skip, so nothing paints (AUDIT round 3);
-   *   - and the skip is not it either.  MUTATION RUN: turning that
-   *     `continue` into a fallthrough left the gate GREEN, because
-   *     forthConsoleLineAt() rejects an out-of-range view and the
-   *     `!forthConsoleLineAt(...) || line[0] == 0` guard below catches it.
-   *
-   * So the assertion is real but effectively unfalsifiable by any one-line
-   * change to the current renderer: three independent mechanisms each
-   * produce the empty band.  It stays as a belt-and-braces regression guard
-   * against a rewrite that removes all three.  It is NOT evidence of
-   * anything, and no comment here may claim it is. */
+  /* DOCUMENTED GAP: three independent mechanisms in the renderer each
+   * produce the empty band, so this assertion cannot be fired by any single
+   * one-line mutation; it stays as a belt-and-braces regression guard. */
   if (empty != 0) {
     printf("    FAIL: an empty console must paint nothing in the band"
            " (got %d lit px)\n", empty);
@@ -683,17 +659,10 @@ static int test_console_view_roll(void)
   return fail;
 }
 
-/* ---- 14: the ARM is wired, and the suppression is REAL.  Everything above
- * drives _forthConsoleRender directly; this one goes through refreshScreen()
- * and proves _refreshNormalScreen's CM_AIM arm actually reaches it — and
- * that the yield falls back to the landed register paint rather than to
- * nothing.
- *
- * AUDIT C21: the two suppression oracles live here, because this is the only
- * case where the suppressed refreshRegisterLine(T/Z/Y) calls are even on the
- * code path.  Both are exact, not lower bounds — extra register ink
- * satisfies a lower bound MORE easily, which is how the original battery
- * could not fail when the suppression `else` was removed:
+/* ---- 14: the ARM is wired, and the suppression is REAL.  This is the only
+ * case where the suppressed refreshRegisterLine(T/Z/Y) calls are on the code
+ * path (via refreshScreen()'s CM_AIM arm), so both oracles here are exact,
+ * not lower bounds — a lower bound is satisfied more easily by leaked ink:
  *
  *   (a) EQUALITY: the band painted through the arm equals the band painted
  *       by a direct render of the same transcript.  Register ink on top of
@@ -722,7 +691,7 @@ static int test_console_view_arm(void)
     fail = 1;
   }
 
-  /* C21 (a): the equality oracle. */
+  /* (a): the equality oracle. */
   lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
   _forthConsoleRender();
   direct = _consoleBandPixels();
@@ -733,7 +702,7 @@ static int test_console_view_arm(void)
     fail = 1;
   }
 
-  /* C21 (b): the mirror — empty ring, loaded registers, through the arm. */
+  /* (b): the mirror — empty ring, loaded registers, through the arm. */
   forthConsoleClear();
   lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
   screenUpdatingMode = SCRUPD_AUTO;
@@ -820,16 +789,16 @@ static int test_console_view_placement(void)
  * N1-3 — the dialogue: what ENTER writes into the transcript.
  * ================================================================== */
 
-/* The same reset the landed L1-2 battery uses (test_capture.part.h:7743),
- * plus the ring, so each subcase starts from a known dialogue. */
+/* The same reset the L1-2 battery uses, plus the ring, so each subcase
+ * starts from a known dialogue. */
 #define N13_RESET() do { \
   calcMode = CM_NORMAL; catalog = CATALOG_NONE; tam.mode = 0; tam.function = 0; \
   programRunStop = PGM_STOPPED; dynamicMenuItem = -1; \
   lastErrorCode = ERROR_NONE; forthCapClose(); forthConsoleClear(); \
 } while (0)
 
-/* Type a line into the open capture and commit it, the way the key path
- * does — forthInteractiveEnter is what keyboard.c:3694's ENTER arm calls. */
+/* Type a line into the open capture and commit it, the way the key path's
+ * ENTER arm calls forthInteractiveEnter. */
 static void _consoleEnterLine(const char *src)
 {
   int32_t n = stringByteLength((char *)src);
@@ -1154,23 +1123,20 @@ static int test_console_words_stack(void)
   }
 
   /* The DECLARED stack delta, not just the observable DROP.  forthPrims'
-   * fourth field feeds forthDataDepthApply (forth_inner.c:152), which spills
-   * Forth-owned values into the arena once the counter reaches capacity.  A
-   * `.` declared 0 instead of -1 never decrements, so the counter climbs on a
-   * print-heavy line and the engine spills values that should never have
-   * spilled — invisible in X, loud here.  Ten push/print pairs never exceed a
-   * depth of one, so the correct answer is zero spills. */
+   * fourth field feeds forthDataDepthApply, which spills Forth-owned values
+   * into the arena once the counter reaches capacity.  A `.` declared 0
+   * instead of -1 never decrements, so the counter climbs on a print-heavy
+   * line and the engine spills values that should never have spilled —
+   * invisible in X, loud here.  Ten push/print pairs never exceed a depth of
+   * one, so the correct answer is zero spills. */
   forthConsoleClear();
   _consoleRun("XEQ 'CLSTK' 1 . 2 . 3 . 4 . 5 . 6 . 7 . 8 . 9 . 10 .");
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: a print-heavy line errored (%u)\n", lastErrorCode);
     fail = 1;
   }
-  /* AUDIT C13: read the WATERMARK, not the live count.  forthSpillCount() is
-   * zeroed by forthDataDepthLeaveOuter at the end of every line, so this
-   * check could never fire — mutating PRIM_PRINT's effect from -1 to 0
-   * reddened only the generic neighbour above, with error 11, and the
-   * diagnostic that names the defect never printed. */
+  /* Read the WATERMARK, not the live count: forthSpillCount() is zeroed by
+   * forthDataDepthLeaveOuter at the end of every line. */
   if (forthTestSpillHighWater() != 0) {
     printf("    FAIL: %u value(s) spilled on a line whose depth never exceeds one —"
            " `.`'s declared stack delta is wrong\n", forthTestSpillHighWater());
@@ -1343,25 +1309,11 @@ static int test_console_words_program(void)
   return fail;
 }
 
-/* ---- AUDIT C10 / C11 / C20 — one class: an output word that produces a
- * BYTE where the ring, the painter and the string decoders all speak
- * GLYPHS.  All three were raised in rounds 1-2 and stood open through
- * round 8.
- *
- *   C10  EMIT of a code whose low byte is 0x00 (0x8100, 0x8200 ... 0xFF00)
- *        wrote g[0]=high, g[1]=0x00 — a ONE-byte C string.  The ring stored
- *        the orphan high byte alone, and forthConsoleLineAt then re-paired
- *        it with whatever followed: `33024 EMIT 65 EMIT` rendered as one
- *        wrong glyph and swallowed the A.
- *   C20  EMIT of a long integer outside int32 was TRUNCATED into range by
- *        longIntegerToInt32: 2^40+65 became 65 and printed `A` instead of
- *        refusing.  Reachable in one line: 2147483647 2147483647 + 67 + EMIT.
- *   C11  the register formatter cut a dtString at a BYTE boundary, so a
- *        256-byte string ended in a lone lead byte — C10's orphan by a
- *        different door.  The ENTER echo cut the same way.
- *
- * The class assertion is one sentence: no output word may put a lead byte
- * in the ring without its trailing byte. ---- */
+/* ---- one class: an output word that produces a BYTE where the ring, the
+ * painter and the string decoders all speak GLYPHS.  The class assertion is
+ * one sentence: no output word may put a lead byte in the ring without its
+ * trailing byte, and no out-of-range code may be silently truncated into a
+ * valid one. ---- */
 static int test_console_output_glyph_integrity(void)
 {
   int fail = 0;
@@ -1372,7 +1324,7 @@ static int test_console_output_glyph_integrity(void)
   forthCapClose();
   calcMode = CM_NORMAL;
 
-  /* [C10] A two-byte code whose low byte is NUL cannot be represented as a
+  /* (a) A two-byte code whose low byte is NUL cannot be represented as a
    * C string, so EMIT must refuse it rather than store half of it. */
   _consoleRun("XEQ 'CLSTK' 33024 EMIT");
   if (lastErrorCode == ERROR_NONE) {
@@ -1386,8 +1338,8 @@ static int test_console_output_glyph_integrity(void)
   lastErrorCode = ERROR_NONE;
   forthConsoleClear();
 
-  /* And the neighbouring code that IS representable still works, so the
-   * refusal is not a blanket ban on the two-byte range. */
+  /* (a) cont.: the neighbouring code that IS representable still works, so
+   * the refusal is not a blanket ban on the two-byte range. */
   _consoleRun("XEQ 'CLSTK' 33089 EMIT");
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL (C10): EMIT refused 33089 (0x8141), which is a complete"
@@ -1405,9 +1357,9 @@ static int test_console_output_glyph_integrity(void)
   lastErrorCode = ERROR_NONE;
   forthConsoleClear();
 
-  /* [C20] A long integer outside int32 must be REFUSED, not truncated into
+  /* (b) A long integer outside int32 must be REFUSED, not truncated into
    * the accepted range.  2147483647 2147483647 + 67 + = 2^32 + 65: its low
-   * 32 bits are 65, which used to print `A`. */
+   * 32 bits are 65. */
   _consoleRun("XEQ 'CLSTK' 2147483647 2147483647 + 67 + EMIT");
   if (lastErrorCode == ERROR_NONE) {
     forthConsoleLineAt(0, line, sizeof(line));
@@ -1418,9 +1370,9 @@ static int test_console_output_glyph_integrity(void)
   lastErrorCode = ERROR_NONE;
   forthConsoleClear();
 
-  /* [C11] The register formatter must cut a long string on a GLYPH
-   * boundary.  Build a string of two-byte glyphs longer than the format
-   * buffer and make the console print it. */
+  /* (c) The register formatter must cut a long string on a GLYPH boundary.
+   * Build a string of two-byte glyphs longer than the format buffer and
+   * make the console print it. */
   {
     char big[FORTH_CONSOLE_FMT_MAX * 2];
     int i;
@@ -1454,15 +1406,10 @@ static int test_console_output_glyph_integrity(void)
   return fail;
 }
 
-/* ---- AUDIT C7 — `.S` printed the WINDOW SIZE, not the depth, and under
- * SSIZE8 showed only the bottom half of the stack.
- *
- * `levels = (displayStack > 4) ? 8 : 4` looked like it adapted, but
+/* ---- `.S` must print the actual stack DEPTH, not a display-line count.
  * `displayStack` counts stack DISPLAY LINES and every writer caps it at 4
- * (fnDisplayStack, and the dSTACK item row's own max), so the branch was
- * dead and the prefix was the constant `<4>` whatever was on the stack.
- * N-T5: "depth first, then levels until the width runs out" — the depth is
- * the part that must never be truncated away. ---- */
+ * (fnDisplayStack, and the dSTACK item row's own max), so branching on it
+ * cannot track SSIZE8 depth — the depth must never be truncated away. ---- */
 static int test_console_print_stack_depth(void)
 {
   int fail = 0;
@@ -1473,11 +1420,11 @@ static int test_console_print_stack_depth(void)
   forthCapClose();
   calcMode = CM_NORMAL;
 
-  /* The oracle is the LIVE stack, which is what N-T5 means by depth: this
-   * machine's Forth stack is the calculator stack (X..getStackTop(), 4 or 8
-   * by FLAG_SSIZE8) plus the D3 spill region.  `displayStack` — the old
-   * source — counts display LINES and is capped at 4 by every writer, which
-   * is why the prefix was the constant <4>. */
+  /* The oracle is the LIVE stack: this machine's Forth stack is the
+   * calculator stack (X..getStackTop(), 4 or 8 by FLAG_SSIZE8) plus the D3
+   * spill region.  `displayStack` — the old source — counts display LINES
+   * and is capped at 4 by every writer, which is why the prefix was the
+   * constant <4>. */
   { bool_t savedSS8 = getSystemFlag(FLAG_SSIZE8);
     int i;
 
@@ -1537,31 +1484,18 @@ static int test_console_print_stack_depth(void)
   return fail;
 }
 
-/* ---- AUDIT C5 / C6 — one class: an ordinary gesture destroys the line the
- * owner is typing, with no way to get it back.  Both raised in round 1 and
- * open through round 8.
- *
- *   C5  f-up/f-down with nothing to recall clears aimBuffer.  The browse
- *       index is NONE at open and after every push, so `cur = lineCount`
- *       and the very first press lands "past newest" — which is spelled
- *       `aimBuffer[0] = 0`.  On a fresh calculator the first f-up a curious
- *       owner presses destroys whatever they had typed.
- *   C6  pressing FORTH while the console is already open re-opens it, and
- *       forthCapOpenInteractive's first act clears aimBuffer.  The line is
- *       not pushed to FHIST first, so f-up cannot bring it back either.
- *
- * The class assertion: a gesture that is not "commit" and not "abandon"
- * must not be able to empty a non-empty line. ---- */
+/* ---- one class: an ordinary gesture destroys the line the owner is
+ * typing, with no way to get it back — f-up/f-down with nothing to recall,
+ * or FORTH pressed to re-open an already-open console.  The class
+ * assertion: a gesture that is not "commit" and not "abandon" must not be
+ * able to empty a non-empty line. ---- */
 static int test_console_line_survives_gestures(void)
 {
   int fail = 0;
 
-  /* [C5a] f-down on a fresh console (no history at all): the line stands.
-   *
+  /* (a) f-down on a fresh console (no history at all): the line stands.
    * The battery shares program memory, so "no history" has to be
-   * ESTABLISHED, not assumed — the first draft of this subcase inherited
-   * another test's FHIST and recalled a real entry, which looks exactly
-   * like the defect it was hunting. */
+   * ESTABLISHED, not assumed. */
   N13_RESET();
   forthDictInit();
   fnClPAll(CONFIRMED);                           /* upstream's own clear-all */
@@ -1579,7 +1513,7 @@ static int test_console_line_survives_gestures(void)
     fail = 1;
   }
 
-  /* [C5b] f-up in the same state — the report's "fresh calculator" door. */
+  /* (b) f-up in the same state. */
   xcopy(aimBuffer, "12 34 +", 8); T_cursorPos = 7;
   forthHistoryRecall(+1);
   if (compareString(aimBuffer, "12 34 +", CMP_BINARY) != 0) {
@@ -1588,7 +1522,7 @@ static int test_console_line_survives_gestures(void)
     fail = 1;
   }
 
-  /* [C5c] The feature still works: with history present, recall REPLACES
+  /* (c) The feature still works: with history present, recall REPLACES
    * the line, and coming back past the newest entry restores what was being
    * typed rather than emptying it. */
   N13_RESET();
@@ -1613,7 +1547,7 @@ static int test_console_line_survives_gestures(void)
     }
   }
 
-  /* [C6] FORTH pressed inside an open console must not discard the line. */
+  /* (d) FORTH pressed inside an open console must not discard the line. */
   N13_RESET();
   forthDictInit();
   fnForthOuter(NOPARAM);
@@ -1631,22 +1565,12 @@ static int test_console_line_survives_gestures(void)
     fail = 1;
   }
 
-  /* [C6b] AUDIT round 9 (R9-3): the same gesture must not empty X either.
-   *
-   * C6's contract is "the honest answer is to do nothing", and its own
-   * comment names consumption as part of the harm it fixes — "If X held a
-   * string the re-open additionally seeded from it and consumed it."  The
-   * landed fix guarded the LINE and left the seed block above it, so the
-   * second press still ran forthTakeSourceFromX, which copies X and then
-   * DROPS it.  The class rule DESIGN-HISTORY records is the same one:
-   * a gesture that is neither commit nor abandon must not be able to empty
-   * a line — X being emptied instead of the line is that class, half-fixed.
-   *
-   * Round 2 predicted exactly this in writing: "a reader fixing only the
-   * line-discard half will leave this behind."  Both legs below are the
-   * class, not one case: an ordinary string, and the oversize string whose
-   * sibling arm raised ERROR_INVALID_DATA_TYPE on a gesture documented as
-   * a no-op. */
+  /* (e) The same gesture must not empty X either: the guard on the LINE
+   * sits below the seed block, so the second press can still run
+   * forthTakeSourceFromX, which copies X and then DROPS it.  Both legs
+   * below are the class, not one case: an ordinary string, and an oversize
+   * string whose sibling arm raises ERROR_INVALID_DATA_TYPE on a gesture
+   * documented as a no-op. */
   { int i;
     for (i = 0; i < 2; i++) {
       const char *what = (i == 0) ? "a string" : "an oversize string";
@@ -1780,14 +1704,11 @@ static int test_console_exit_ladder(void)
   int fail = 0;
 
   /* Rung 1 INVERTED: from the alpha excursion, EXIT returns to keys and
-   * restores the FWRD home row; the capture stays open.
-   *
-   * AUDIT C17 fixture repair: the excursion is entered through the REAL
-   * E10/E11 toggle, not by forcing keysMode and hand-pushing -MNU_ALPHA.
-   * The hand-push created a SEPARATE unregistered row above the console's
-   * frame — under frame ownership that is a user-stacked row (rung 1
-   * declines it, rung 2 pops it), not the excursion, so the old fixture no
-   * longer reaches the state this case claims to test (the C22 rule). */
+   * restores the FWRD home row; the capture stays open.  The excursion is
+   * entered through the REAL E10/E11 toggle, not by forcing keysMode and
+   * hand-pushing -MNU_ALPHA — a hand-push creates a separate unregistered
+   * row above the console's frame, a user-stacked row rather than the
+   * excursion itself. */
   N13_RESET();
   fnForthOuter(NOPARAM);
   runFunction(ITM_AIM);
@@ -1977,7 +1898,7 @@ static int test_console_story(void)
     fail = 1;
   }
 
-  /* [8] EXIT closes; reopening RESTORES the dialogue (N-R2: BSS, not the
+  /* [8] EXIT closes; reopening RESTORES the dialogue (BSS, not the
    * capture's lifetime).  Something must be in the ring first. */
   _consoleEnterLine("XEQ 'CLSTK' 9 9 +");
   { uint16_t before = forthConsoleLineCount();
@@ -2004,9 +1925,9 @@ static int test_console_story(void)
     }
   }
 
-  /* [9] The power-reset seam: the VIEW dies, FHIST still recalls.  This is
-   * the designed divergence N-R2 names — the view is BSS and never
-   * persisted; the input lines persist because FHIST is a program. */
+  /* [9] The power-reset seam: the VIEW dies, FHIST still recalls.  The view
+   * is BSS and never persisted; the input lines persist because FHIST is a
+   * program. */
   forthCapClose();
   forthDictInit();                       /* the dictionary-lifecycle seam */
   if (forthConsoleLineCount() != 0) {
@@ -2095,8 +2016,8 @@ static int test_console_one_history(void)
   return fail;
 }
 
-/* ---- 29: AUDIT C1 class test — the formatter must satisfy every producer's
- * BUFFER CONTRACT, not just its calling convention.
+/* ---- 29: class test — the formatter must satisfy every producer's BUFFER
+ * CONTRACT, not just its calling convention.
  *
  * Bug class: a display.c producer that uses the caller's buffer as scratch
  * beyond the text it returns.  shortIntegerToDisplayString is the known
@@ -2134,14 +2055,11 @@ static int test_console_format_buffer_contract(void)
     switch (types[i]) {
       case dtLongInteger:  forthPushInt32(12345);                     break;
       case dtReal34:       forthOuterInterpret("1.5");                break;
-      /* The C1 case, built directly and at its WIDEST: a full 64-bit value in
-       * base 2 is the longest thing this producer can render, and it is the
-       * rendering that runs furthest past the buffer.  Built rather than
-       * typed because the first version of this test used
-       * `255 XEQ 'HEX'` — HEX is a CAT_FNCT item reached by BARE NAME, so
-       * that line raised label-not-found, X stayed a long integer, and the
-       * short-integer arm was never reached.  The test passed the C1
-       * mutation.  Hence the type assertion below. */
+      /* Built directly and at its WIDEST: a full 64-bit value in base 2 is
+       * the longest thing this producer can render, and it is the
+       * rendering that runs furthest past the buffer.  Hence the type
+       * assertion below, which proves the fixture actually reached this
+       * arm. */
       case dtShortInteger:
         convertUInt64ToShortIntegerRegister(0, (uint64_t)0xFFFFFFFFFFFFFFFFull,
                                             2, REGISTER_X);
@@ -2154,8 +2072,7 @@ static int test_console_format_buffer_contract(void)
     /* THE FIXTURE MUST PROVE IT REACHED THE STATE IT CLAIMS TO TEST.
      * Without this, a fixture that quietly fails to build the type turns the
      * whole subcase into a check of the long-integer arm wearing another
-     * arm's name — which is exactly how the first version of this test
-     * survived the defect it exists to catch. */
+     * arm's name. */
     if (getRegisterDataType(REGISTER_X) != types[i]) {
       printf("    FAIL: fixture — X is type %u, expected %u; this subcase did"
              " NOT exercise the arm it names\n",
@@ -2170,23 +2087,17 @@ static int test_console_format_buffer_contract(void)
 
     forthConsoleFormatRegister(REGISTER_X, g.out, (int16_t)sizeof(g.out));
 
-    /* AUDIT C22 — READ THIS BEFORE TRUSTING THE CANARIES BELOW.
-     *
-     * They cannot fire, and saying so is worth more than deleting them.
+    /* READ THIS BEFORE TRUSTING THE CANARIES BELOW: they cannot fire.
      * forthConsoleFormatRegister hands NO producer this buffer: every arm
      * writes the function's own local (or tmpString), and `out` is written
      * exactly once, by a copy clamped to outSize - 1.  So a producer overrun
-     * — C1's actual defect — lands in the formatter's frame and can never
-     * reach g.front/g.back, and the NUL check below is unconditionally true.
-     * The C1 mutation went red in round 1 because of the SIMULATOR's stack
-     * protector, which the DMCP target build does not have.
-     *
-     * They stay as a cheap regression net for the day someone makes an arm
-     * write `out` directly — which is the shape that WOULD make them live —
-     * and the real pin for C1 now sits at the site, as the two
-     * _Static_asserts in forth_bridge.c's short-integer arm: the buffer that
-     * arm passes must be at least ERROR_MESSAGE_LENGTH, which is exactly the
-     * invariant C1 violated and a runtime canary here could never observe. */
+     * lands in the formatter's frame and can never reach g.front/g.back, and
+     * the NUL check below is unconditionally true.  They stay as a cheap
+     * regression net for the day someone makes an arm write `out` directly
+     * — which is the shape that WOULD make them live.  The real pin sits at
+     * the site, as the two _Static_asserts in forth_bridge.c's short-integer
+     * arm: the buffer that arm passes must be at least
+     * ERROR_MESSAGE_LENGTH. */
     if (g.back != 0x5A5A5A5Au) {
       printf("    FAIL: type %u — the producer wrote PAST the %u-byte buffer"
              " (back canary %08X). Its buffer contract is not satisfied.\n",
@@ -2205,7 +2116,7 @@ static int test_console_format_buffer_contract(void)
     }
   }
 
-  /* And the reproducer end to end: the C1 gesture through the real dialogue. */
+  /* And the reproducer end to end, through the real dialogue. */
   N13_RESET();
   forthCapOpenInteractive();
   calcMode = CM_AIM;
@@ -2229,11 +2140,11 @@ static int test_console_format_buffer_contract(void)
   return fail;
 }
 
-/* ---- 30: AUDIT C2/C3/C4/C8/C9 class test — FRAME CONSERVATION.
+/* ---- 30: class test — FRAME CONSERVATION.
  *
  * Bug class: "the console changes the softmenu stack and does not put it
- * back". All five findings were instances, at five different sites, because
- * five sites each managed the console's row on their own.
+ * back", at five different sites, because five sites each managed the
+ * console's row on their own.
  *
  * The invariant that kills the class: a console session that ends in EXIT
  * leaves the softmenu stack EXACTLY as it found it — same frames, same
@@ -2250,18 +2161,14 @@ static int test_console_frame_conservation(void)
 
   /* Each row: a name, and what the session does between open and EXIT.
    *
-   * Rows 7-11 are the AUDIT C17 class rows: the owner's row is one of the
-   * console's OWN two rows — FWRD reached through the CATALOG tree (the
-   * forth_capture.h state the old homePushed comment named verbatim), and
-   * separately ALPHA — crossed with the alpha toggle and with a
-   * calcModeNormal()-calling line.  The bug class is "ownership inferred
-   * from a value two different owners can hold": every pre-C17 ownership
-   * test asked `menu == -MNU_FORTH/-MNU_ALPHA`, the owner's own frame
-   * answered "ours", and a CLSTK line then consumed it — slot 0 identity
-   * broken while the frame COUNT stayed conserved, which is why rows 0-6
-   * never saw it.  The pair of rows the landed battery's comment below
-   * concedes it delegated to the M1-1 [8] fixture — which never toggles and
-   * never runs a line. */
+   * Rows 7-11 make the owner's row one of the console's OWN two rows — FWRD
+   * reached through the CATALOG tree, and separately ALPHA — crossed with
+   * the alpha toggle and with a calcModeNormal()-calling line.  The bug
+   * class is "ownership inferred from a value two different owners can
+   * hold": a naive ownership test asks `menu == -MNU_FORTH/-MNU_ALPHA`, the
+   * owner's own frame answers "ours", and a CLSTK line then consumes it —
+   * slot 0 identity broken while the frame COUNT stays conserved, which is
+   * why rows 0-6 alone would miss it. */
   for (i = 0; i < 12; i++) {
     const char *what = "";
     int presses = 0;
@@ -2302,34 +2209,32 @@ static int test_console_frame_conservation(void)
     switch (i) {
       case 0: what = "open, EXIT";
         break;
-      case 1: what = "open, toggle to alpha, EXIT";        /* C9 */
+      case 1: what = "open, toggle to alpha, EXIT";
         runFunction(ITM_AIM);
         break;
-      case 2: what = "open, toggle alpha then back, EXIT"; /* C2 */
+      case 2: what = "open, toggle alpha then back, EXIT";
         runFunction(ITM_AIM);
         runFunction(ITM_AIM);
         break;
-      case 3: what = "open, ENTER a line, EXIT";           /* C3 */
+      case 3: what = "open, ENTER a line, EXIT";
         _consoleEnterLine("XEQ 'CLSTK' 1 2 +");
         break;
-      case 4: what = "open, alpha, ENTER, EXIT";           /* C4 */
+      case 4: what = "open, alpha, ENTER, EXIT";
         runFunction(ITM_AIM);
         _consoleEnterLine("XEQ 'CLSTK' 3 4 +");
         break;
-      case 5: what = "open, stack a menu, EXIT";           /* C8 */
+      case 5: what = "open, stack a menu, EXIT";
         showSoftmenu(-MNU_FIN);
         break;
-      /* Found by the out-of-family reader (Gemini, 2026-08-06), not by the
-       * in-family audit and not by the five fixtures above: the restore path
-       * only inspects the TOP row, so with a user menu stacked it concludes
-       * the console's frame is gone and pushes a SECOND one.  Needs both a
-       * stacked menu AND a line that calls calcModeNormal() — CLSTK does —
-       * which is the combination no single-purpose fixture had. */
+      /* The restore path only inspects the TOP row, so with a user menu
+       * stacked it concludes the console's frame is gone and pushes a
+       * SECOND one.  Needs both a stacked menu AND a line that calls
+       * calcModeNormal() — CLSTK does. */
       case 6: what = "open, stack a menu, ENTER a CLSTK line, EXIT";
         showSoftmenu(-MNU_FIN);
         _consoleEnterLine("XEQ 'CLSTK'");
         break;
-      /* ---- AUDIT C17 class rows ---- */
+      /* ---- own-row class rows ---- */
       case 7: what = "own FWRD: open, ENTER a plain line, EXIT";
         _consoleEnterLine("1 2 +");
         break;
@@ -2370,15 +2275,14 @@ static int test_console_frame_conservation(void)
      * force at the time, so a byte compare reports a difference for a stack
      * that was perfectly restored. */
     { int slot, differs = 0;
-      /* SLOT 0 — the row the owner is looking at.  That is the invariant all
-       * five findings violated, and it is what the owner experiences: press
-       * FORTH, work, press EXIT, be back where you were.
+      /* SLOT 0 — the row the owner is looking at: press FORTH, work, press
+       * EXIT, be back where you were.
        *
-       * Deeper slots are deliberately NOT compared.  pushSoftmenu reorders the
-       * stack whenever a menu already on it is pushed again
-       * (softmenus.c:3671-3683) — upstream behaviour that happens to any menu
-       * visited twice, which the console did not invent and must not be held
-       * to.  The leak check below covers what that would otherwise miss. */
+       * Deeper slots are deliberately NOT compared.  pushSoftmenu reorders
+       * the stack whenever a menu already on it is pushed again — upstream
+       * behaviour that happens to any menu visited twice, which the console
+       * did not invent and must not be held to.  The leak check below
+       * covers what that would otherwise miss. */
       for (slot = 0; slot < 1; slot++) {
         if (before[slot].softmenuId != softmenuStack[slot].softmenuId
             || before[slot].userMenuId != softmenuStack[slot].userMenuId
@@ -2396,11 +2300,10 @@ static int test_console_frame_conservation(void)
     }
 
     /* And nothing of the console's may be LEFT BEHIND anywhere on the stack.
-     * Slot 0 alone would miss a frame leaked into slot 1+, which is how C8's
-     * stayInAIM push and C9's double row hid: the owner's menu looked right
-     * and an extra console row sat underneath it, surfacing on the next EXIT.
-     * The DIFFERENTIAL form below is what makes this sound for the C17 rows
-     * too, whose owner rows are themselves FWRD/ALPHA. */
+     * Slot 0 alone would miss a frame leaked into slot 1+: the owner's menu
+     * looks right and an extra console row sits underneath it, surfacing on
+     * the next EXIT.  The DIFFERENTIAL form below is what makes this sound
+     * even for the rows whose owner rows are themselves FWRD/ALPHA. */
     { int slot, wasCount = 0, nowCount = 0;
       for (slot = 0; slot < SOFTMENU_STACK_SIZE; slot++) {
         int16_t m0 = softmenu[before[slot].softmenuId].menuItem;
@@ -2429,26 +2332,24 @@ static int test_console_frame_conservation(void)
   return fail;
 }
 
-/* ---- 31: AUDIT round 2 — the transient capture bits survive BOTH re-open
- * sites, not just the REPL one.
+/* ---- 31: the transient capture bits survive BOTH re-open sites, not just
+ * the REPL one.
  *
  * forthCapOpenInteractive()/forthCapOpen() zero keysMode and origin by
  * design, and every path that re-opens an ALREADY-LIVE capture has to put
  * them back. There are two such paths — the REPL reopen after ENTER, and
- * forthCaptureResume() after a fold — and round 1's fix closed only the
- * first. Five of the eight round-2 readers found the second independently.
+ * forthCaptureResume() after a fold.
  *
  * Enumerated rather than sampled: the class is "a field that rides the
- * capture across a re-open".  homePushed left the class with C17: frame
- * ownership now lives in the softmenu frame itself (forth_menu.c's stamp),
- * which no capture re-open can touch — its reopen coverage moved into the
- * frame-conservation battery's line-running rows, which fail if ownership
- * is forgotten across the REPL reopen. ---- */
+ * capture across a re-open".  Frame ownership lives in the softmenu frame
+ * itself (forth_menu.c's stamp), which no capture re-open can touch — its
+ * reopen coverage moved into the frame-conservation battery's line-running
+ * rows, which fail if ownership is forgotten across the REPL reopen. ---- */
 static int test_console_capture_bits_survive_reopen(void)
 {
   int fail = 0;
 
-  /* The REPL reopen (round 1's site). */
+  /* The REPL reopen. */
   N13_RESET();
   forthDictInit();
   fnForthOuter(NOPARAM);
@@ -2464,20 +2365,9 @@ static int test_console_capture_bits_survive_reopen(void)
   }
   forthCapClose();
 
-  /* THE SECOND SITE — forthCaptureResume() after a fold — IS NOT COVERED HERE,
-   * and saying so is the point.
-   *
-   * The first draft of this test "covered" it by performing the save/restore
-   * in the test body and then asserting the bits survived. That asserts the
-   * TEST's copy of the block, not production's: reverting the production fix
-   * left the suite green. Third vacuous test of this session, same class as
-   * the two before it, caught the same way — by running the mutation.
-   *
-   * Reaching the real path needs a suspended capture on a real program step
-   * (the L1-F fold fixture), which is a TAM-driven battery rather than a
-   * console one. Until that exists, the resume site is held by the fix and by
-   * five independent readers agreeing on it, NOT by a test. Recorded as a gap
-   * rather than papered over with an assertion that cannot fail. */
+  /* DOCUMENTED GAP: THE SECOND SITE — forthCaptureResume() after a fold —
+   * is not covered here.  Reaching it needs a suspended capture on a real
+   * program step (a TAM-driven battery, not a console one). */
 
   forthCapClose();
   forthConsoleClear();
@@ -2489,17 +2379,17 @@ static int test_console_capture_bits_survive_reopen(void)
   return fail;
 }
 
-/* ---- 32: AUDIT C18 class test — the row and the sub-mode never disagree.
+/* ---- 32: class test — the row and the sub-mode never disagree.
  *
- * Bug class: "a state change committed by the caller and the display of that
- * state established by a callee that may decline."  K-R3's rule is that the
- * underlying row IS the mode indicator; the round-2 report's invariant is
- * asserted at every keysMode writer, over every overlay state:
- * (keysMode, base row) is one of the two legal pairs, OR the sub-mode did
- * not move.  The disjunction is the report's own — refusing the flip is as
- * valid as forcing the row — and each case below pins WHICH disposition the
- * landed fix chose, so a regression to the third option (flip committed,
- * row untouched) cannot hide in the disjunction.
+ * Bug class: "a state change committed by the caller and the display of
+ * that state established by a callee that may decline."  The underlying row
+ * IS the mode indicator; the invariant is asserted at every keysMode
+ * writer, over every overlay state: (keysMode, base row) is one of the two
+ * legal pairs, OR the sub-mode did not move.  The disjunction is
+ * deliberate — refusing the flip is as valid as forcing the row — and each
+ * case below pins WHICH disposition the fix chose, so a regression to the
+ * third option (flip committed, row untouched) cannot hide in the
+ * disjunction.
  *
  * Overlay states: none, an alpha submenu (Greek keypad), a non-alpha menu
  * (STK).  Gestures: the E10/E11 toggle, EXIT, and ENTER's REPL reopen. ---- */
@@ -2660,7 +2550,7 @@ static int test_console_submode_row_agreement(void)
   return fail;
 }
 
-/* ---- 33: AUDIT C19 class test — every post-run arm re-closes the ring.
+/* ---- 33: class test — every post-run arm re-closes the ring.
  *
  * Bug class: "two arms of one post-condition, one of which re-establishes an
  * invariant the other assumes."  The invariant: no exit path from
@@ -2723,8 +2613,8 @@ static int test_console_error_echo_closes_output(void)
   lastErrorCode = ERROR_NONE;
   _consoleEnterLine("");            /* not needed for state; keep the REPL shape */
 
-  /* THE C19 ROW — error AFTER output.  `.` leaves its record open by
-   * design; the error arm must close it and write the message as its own
+  /* THE LOAD-BEARING ROW — error AFTER output.  `.` leaves its record open
+   * by design; the error arm must close it and write the message as its own
    * record: echo + "1 " + message = +3, and the last two records are
    * distinct. */
   before = forthConsoleLineCount();
@@ -2773,27 +2663,22 @@ static int test_console_error_echo_closes_output(void)
   return fail;
 }
 
-/* ---- 34: AUDIT round 3 class test — a frame stamp never outlives its
- * capture.
+/* ---- 34: a frame stamp never outlives its capture.
  *
  * Bug class: "ownership state reachable by a close path that does not pass
- * the funnel that clears it."  C17 moved ownership OUT of the capture object
- * and INTO softmenuStack[].userMenuId, which bought the reopen/resume
- * survival the old homePushed bit could not have — and cost this: the frame
+ * the funnel that clears it."  Ownership lives in
+ * softmenuStack[].userMenuId, not in the capture object, so the frame
  * array is PERSISTED wholesale (saveRestoreBackup.c), and two paths reach a
  * closed capture without calling forthCapClose().
  *
  * Enumerated, because the class is enumerable: every way a capture can end.
  * The invariant asserted after each: NO stamp anywhere on the stack.
  *
- * Oracle: forthConsoleStampOnStack(), which asks the question directly.
- * The first draft of this test used forthConsoleBaseOnTop() and reported
- * three FALSE failures: that predicate falls back to a menu-IDENTITY test
- * when no stamp exists, and a non-ladder close legitimately leaves the
- * console's FWRD row standing — so it answered "true" for a stack with no
- * stamp on it at all.  Fifth fixture of this stage caught by the C22 rule,
- * and the first where the wrong oracle manufactured failures rather than
- * hiding them. ---- */
+ * Oracle: forthConsoleStampOnStack(), which asks the question directly —
+ * NOT forthConsoleBaseOnTop(), which falls back to a menu-IDENTITY test when
+ * no stamp exists, and a non-ladder close legitimately leaves the console's
+ * FWRD row standing, so it can answer "true" for a stack with no stamp on
+ * it at all. ---- */
 static int test_console_stamp_never_outlives_capture(void)
 {
   int fail = 0;
@@ -2813,8 +2698,7 @@ static int test_console_stamp_never_outlives_capture(void)
 
   /* (b) a close through the funnel that is NOT the EXIT ladder — the shape
    * every non-ladder key takes.  The funnel is closeAim()'s own first
-   * statement (bufferize.c, CONSOLIDATE P6); this comment named the
-   * deleted per-site helper until R9-8. */
+   * statement. */
   N13_RESET();
   forthDictInit();
   showSoftmenu(-MNU_STK);
@@ -2864,9 +2748,9 @@ static int test_console_stamp_never_outlives_capture(void)
     fnForthOuter(NOPARAM);                     /* console open, frame stamped */
     xcopy(image, softmenuStack, sizeof(image));/* <- what saveCalc writes */
 
-    forthCapPowerReset();                      /* the seam at :975-976 */
-    xcopy(softmenuStack, image, sizeof(image));/* <- restoreStateValue at :986 */
-    forthCaptureSanitizeRestoredUi();          /* the seam at :1496 */
+    forthCapPowerReset();                      /* the reset seam */
+    xcopy(softmenuStack, image, sizeof(image));/* <- restoreStateValue */
+    forthCaptureSanitizeRestoredUi();          /* the sanitize seam */
 
     if (forthCapIsOpen()) {
       printf("    FIXTURE FAIL: [restore] the capture must be closed after"
@@ -2902,8 +2786,8 @@ static int test_console_stamp_never_outlives_capture(void)
   return fail;
 }
 
-/* ---- 35: AUDIT round 3 class test — a line that destroys the console's row
- * WITHOUT leaving CM_AIM is still repaired.
+/* ---- 35: a line that destroys the console's row WITHOUT leaving CM_AIM is
+ * still repaired.
  *
  * Bug class: "two repairs sharing one guard, where the guard belongs to only
  * one of them."  The post-run block repaired the MODE and the SURFACE under
@@ -2974,12 +2858,10 @@ static int test_console_surface_repair_ungated(void)
   return fail;
 }
 
-/* ---- 36: AUDIT round 4 class test — the OWNERSHIP INVARIANT itself.
+/* ---- 36: the OWNERSHIP INVARIANT itself.
  *
- * Bug class: "an invariant that lives only in prose."  The banner claimed
- * "exactly one frame is registered" for a whole session; it was false, and
- * three independent readers caught it before any test did — because no test
- * asserted it.  Prose is not enforcement.
+ * Bug class: "an invariant that lives only in prose."  Prose is not
+ * enforcement.
  *
  * The invariant, as the code actually needs it:
  *   - at most ONE owned frame, ever;
@@ -2989,9 +2871,9 @@ static int test_console_surface_repair_ungated(void)
  *   - with no capture open, NEITHER exists.
  *
  * Asserted after every step of a gesture sweep that crosses the paths which
- * create, move, fold and destroy registrations — including the two the
- * round-4 readers attacked (the sub-mode toggle over an owned base, and a
- * surface rebuilt after a line destroyed it). ---- */
+ * create, move, fold and destroy registrations — including the sub-mode
+ * toggle over an owned base, and a surface rebuilt after a line destroyed
+ * it. ---- */
 static int _consoleOwnershipOk(const char *where, int *fail)
 {
   uint8_t owned  = forthConsoleTestOwnedCount();
@@ -3013,11 +2895,9 @@ static int _consoleOwnershipOk(const char *where, int *fail)
            where, forthConsoleTestOwnedSlot(), forthConsoleTestBorrowSlot());
     *fail = 1; ok = 0;
   }
-  /* Round 6 (F12/U1): SUSPENDED is not ended — the stamp survives a
-   * suspension by design (forth_menu.c: a stamp must not outlive its
-   * CAPTURE; DESIGN.md: the mark survives every fold resume by
-   * construction).  The old !IsOpen clause failed on the correct answer
-   * and blocked the TAM-driven fixture for four rounds. */
+  /* SUSPENDED is not ended — the stamp survives a suspension by design: a
+   * stamp must not outlive its CAPTURE, and the mark survives every fold
+   * resume by construction. */
   if (!(forthCapIsOpen() || forthCapIsSuspended()) && (owned || borrow)) {
     printf("    FAIL: [%s] %u owned + %u borrowed with NO capture open"
            " or suspended\n", where, owned, borrow);
@@ -3060,7 +2940,7 @@ static int test_console_ownership_invariant(void)
       fail = 1;
     }
 
-    /* The gesture the round-4 readers attacked: toggle into the excursion. */
+    /* Toggle into the excursion. */
     runFunction(ITM_AIM);
     _consoleOwnershipOk(own, &fail);
     if (currentMenu() != -MNU_ALPHA) {
@@ -3083,12 +2963,8 @@ static int test_console_ownership_invariant(void)
       fail = 1;
     }
 
-    /* Round 6 (F12/U1): a keys-mode suspension keeps the stamp (round-5
-     * §6.2), and the oracle must PASS on it — a suspended capture has not
-     * ended (forth_menu.c:302: a stamp must not outlive its CAPTURE;
-     * DESIGN.md: the mark survives every fold resume by construction).
-     * The oracle's old no-capture clause fired exactly here, which is what
-     * blocked the TAM-driven fixture for four rounds. */
+    /* A keys-mode suspension keeps the stamp, and the oracle must PASS on
+     * it — a suspended capture has not ended. */
     { extern void tamProcessInput(uint16_t);
       xcopy(aimBuffer, "8", 2); T_cursorPos = 1;
       runFunction(ITM_STO);
@@ -3114,8 +2990,7 @@ static int test_console_ownership_invariant(void)
       fail = 1;
     }
 
-    /* And the excursion again, now over the REBUILT frame — the exact
-     * sequence Sol's refutation predicted would leave an unstamped row. */
+    /* And the excursion again, now over the REBUILT frame. */
     runFunction(ITM_AIM);
     _consoleOwnershipOk(own, &fail);
     if (!forthConsoleBaseOnTop()) {
@@ -3152,16 +3027,13 @@ static int test_console_ownership_invariant(void)
 }
 
 /* ==================================================================
- * Round-5 rulings landed 2026-08-08 (owner: "if it's a quick fix to be
- * robust, do it"): R12 and C12.
+ * Error recovery keys, and the roll/view clamp.
  * ================================================================== */
 
-/* ---- R12: BACKSPACE and EXIT are the two keys the error recovery
- * invites, and both were exempted from the error sweep without the
- * paired clear the exemption assumes (round 6's class: exemption
- * inherited without its paired clear).  The stale error kept the render
- * gate yielding, so the transcript stayed hidden for as many presses as
- * the owner made. ---- */
+/* ---- BACKSPACE and EXIT are the two keys the error recovery invites, and
+ * both were exempted from the error sweep without the paired clear the
+ * exemption assumes.  The stale error kept the render gate yielding, so the
+ * transcript stayed hidden for as many presses as the owner made. ---- */
 static int test_console_error_recovery_keys(void)
 {
   extern bool_t _forthConsoleActive(void);
@@ -3232,10 +3104,9 @@ static int test_console_error_recovery_keys(void)
   return fail;
 }
 
-/* ---- C12 (owner ruling 2026-08-08: the VIEW owns the clamp).  The ring's
- * roll stops at count-1, a ring bound; the view stops at count-rows so the
- * band stays full.  Rolling past that emptied the transcript one row per
- * press. ---- */
+/* ---- Owner ruling: the VIEW owns the clamp.  The ring's roll stops at
+ * count-1, a ring bound; the view stops at count-rows so the band stays
+ * full.  Rolling past that emptied the transcript one row per press. ---- */
 static int test_console_roll_view_clamp(void)
 {
   extern void forthConsoleRollView(int16_t);
@@ -3251,7 +3122,7 @@ static int test_console_roll_view_clamp(void)
     sprintf(l, "L%d", i);
     forthConsoleAppendLine(l);
   }
-  yMultiLineEdOffset = 3;              /* short-line state: 4 rows (N-T1) */
+  yMultiLineEdOffset = 3;              /* short-line state: 4 rows */
 
   for (i = 0; i < 10; i++) { forthConsoleRollView(+1); }
   if (forthConsoleViewOffset() != 2) {
@@ -3274,14 +3145,14 @@ static int test_console_roll_view_clamp(void)
   return fail;
 }
 
-/* ---- C-3 (AUDIT round 8; owner ruling: the clamp moves to render time).
- * C12 put the bound on the ROLL, and the roll is the only writer — but rows
- * is FRAME-VARIABLE: the editor's long-line state halves the band from 4
- * rows to 2.  So a view clamped legally at count-2 while the line is long
- * becomes illegal the moment BACKSPACE shortens the line back, with no roll
- * key pressed and nothing to re-clamp it.  The renderer's only guard is
- * `view >= count -> continue`, so the top rows painted NOTHING: the blank
- * band C12 was fixed to remove, back through a door the fix does not watch.
+/* ---- Owner ruling: the clamp moves to render time.  Putting the bound on
+ * the ROLL alone is not enough — rows is FRAME-VARIABLE: the editor's
+ * long-line state halves the band from 4 rows to 2.  So a view clamped
+ * legally at count-2 while the line is long becomes illegal the moment
+ * BACKSPACE shortens the line back, with no roll key pressed and nothing to
+ * re-clamp it.  The renderer's only guard is `view >= count -> continue`,
+ * so the top rows paint NOTHING — a blank band reopened through a door the
+ * roll-time fix does not watch.
  *
  * The class is "write-time clamp against a frame-variable bound", and the
  * class test is both rows transitions: reach the old state's legal maximum,

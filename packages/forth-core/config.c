@@ -1544,11 +1544,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
 
     /* Reset hook (DESIGN.md §6): null the Forth dictionary descriptors
      * (they would otherwise dangle into the wiped ram[]) and close the
-     * capture.
-     * Position note: running BEFORE the wipe is now inert, not
-     * load-bearing — nothing in this hook frees any more. See
-     * DESIGN-HISTORY.md 2026-07-25 (design audit) for the two expired
-     * justifications this replaces; do not re-derive a third. */
+     * capture. */
     forthDictInit();
     forthGDictInit();
 

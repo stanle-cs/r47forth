@@ -204,7 +204,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
     if(abs(itemNr) <= LAST_ITEM) {                         // Predefined item
       itemName = (char *)indexOfItems[abs(itemNr)].itemCatalogName;
     }
-    else if(itemNr >= ASSIGN_FORTH_WORDS) {                // M2 (Stage M): global
+    else if(itemNr >= ASSIGN_FORTH_WORDS) {                // global
       /* Forth word, pick-time pseudo-item — tested BEFORE the labels arm,
        * which claims everything >= 12000.  Same scratch as the label arm. */
       if(!forthDictNameByRef((uint16_t)(FORTH_REF_GLOBAL | (uint16_t)(itemNr - ASSIGN_FORTH_WORDS)),
@@ -659,12 +659,12 @@ bool_t isFunctionOldParam16(uint16_t func) {
     #endif // PC_BUILD
   }
 
-  /* L1-3: the three-way dispatch for a name resolved from a dynamic menu or
-   * a USER key.  PEM records a step, an open interactive capture takes the
-   * name as TEXT, everything else executes. */
+  /* The three-way dispatch for a name resolved from a dynamic menu or a USER
+   * key. PEM records a step, an open interactive capture takes the name as
+   * TEXT, everything else executes. */
   void forthUserItemDispatch(int16_t item, char *funcParam, int16_t execItem, uint16_t execParam) {
-    /* round 6 (F8): LIVE, not origin — with the capture suspended the insert
-     * refuses and the gesture died silently; suspended dispatch executes. */
+    /* LIVE, not origin — with the capture suspended the insert refuses and
+     * the gesture died silently; suspended dispatch executes. */
     if(calcMode == CM_PEM)             { insertUserItemInProgram(item, funcParam); }
     else if(forthCapInteractiveLive()) { (void)forthCapInsertName(funcParam); }
     else                               { reallyRunFunction(execItem, execParam); }
@@ -704,22 +704,17 @@ bool_t isFunctionOldParam16(uint16_t func) {
       if(func == ITM_XEQ && dynamicMenuItem > -1) {
         char *varCatalogItem = dynmenuGetLabel(dynamicMenuItem);
         if(strcmp(varCatalogItem, "XEQ") != 0) {
-          /* Rebase to b8f79e486: upstream's own fix here hardcodes
-           * GLOBAL_LABELS (a dynamic-menu selection has no encoded local/
-           * global marker byte — see the opParam-aware fix in lblGtoXeq.c
-           * for the case that does). forthResolveXEQ's label step already
-           * searches GLOBAL_LABELS only, so ours is a strict superset:
-           * same label behavior, plus the item/colon fallback. */
+          /* A dynamic-menu selection has no encoded local/global marker byte,
+           * so this hardcodes GLOBAL_LABELS. forthResolveXEQ's label step
+           * already searches GLOBAL_LABELS only, so this is a strict
+           * superset: same label behavior, plus the item/colon fallback. */
           uint16_t resolvedParam;
           forthXEQType_t res = forthResolveXEQ(varCatalogItem, &resolvedParam);
-          /* One-line arms: a standalone added `}` at this indentation pairs
-           * with upstream's deleted brace as whitespace churn in the
-           * minimality scan (CONSOLIDATE P1). */
           if     (res == FORTH_XEQ_LABEL) { forthUserItemDispatch(func, varCatalogItem, func, resolvedParam); }
-          /* code-audit 2026-07-20: the colon arm must record a step, not
-           * execute live, when composing a program — mirrors the
-           * FORTH_XEQ_LABEL arm above and DESIGN.md §4.2's "PEM recording of
-           * XEQ 'NAME'" contract (names persist, never widx). */
+          /* The colon arm must record a step, not execute live, when
+           * composing a program — mirrors the FORTH_XEQ_LABEL arm above and
+           * DESIGN.md §4.2's "PEM recording of XEQ 'NAME'" contract (names
+           * persist, never widx). */
           else if(res == FORTH_XEQ_COLON) { forthUserItemDispatch(func, varCatalogItem, ITM_FCALL, resolvedParam); }
           else if(res == FORTH_XEQ_ITEM) {
             forthUserItemDispatch(func, varCatalogItem, resolvedParam, NOPARAM);
@@ -734,35 +729,23 @@ bool_t isFunctionOldParam16(uint16_t func) {
           return;
         }
       }
-      /* L1-3: the interactive E0-equivalent.  Both physical keys and
-       * softkeys converge here — keys via btnPressed -> processKeyAction ->
-       * processAimInput (falls through) -> showFunctionNameItem ->
-       * btnReleased -> runFunction (keyboard.c:2328); softkeys via
-       * executeFunction -> runFunction (keyboard.c:1415).  This is exactly
-       * where PEM already diverts, one block below. */
+      /* The interactive E0-equivalent. Both physical keys and softkeys
+       * converge here — keys via processAimInput falling through to
+       * runFunction, softkeys via executeFunction -> runFunction. This is
+       * exactly where PEM already diverts, one block below. */
       if(forthCapInteractiveLive() && func > 0) {
         /* func > 0 is LOAD-BEARING, not defensive: determineItem returns
-         * NEGATIVE softmenu ids (e.g. -MNU_AIMCATALOG, src/c47/assign.c:46)
-         * and indexOfItems[negative] is out of bounds.  Same conjunct L1-2's
-         * _forthCapAtCap carries, for the same reason.
-         * Round 6 (F8): LIVE, not origin — in the suspended residue this
-         * divert swallowed every parameterless key (InsertName refuses on a
-         * closed line); suspended keys dispatch natively. */
+         * NEGATIVE softmenu ids and indexOfItems[negative] is out of bounds.
+         * LIVE, not origin — in the suspended residue this divert swallowed
+         * every parameterless key (InsertName refuses on a closed line);
+         * suspended keys dispatch natively. */
         if(func == ITM_AIM) {
-          /* AUDIT C2 (2026-08-06): the sub-mode changes, and ONE owner
-           * establishes the console's row for it (forth_menu.c).
-           *
-           * The bounded alpha drain this replaced, and why it deleted the
-           * row the console had just pushed: DESIGN-HISTORY 2026-08-09 (P10,
-           * the C2 drain).
-           *
-           * AUDIT C18: the flip is REFUSED while a user-stacked row covers the
-           * console's base.  The row IS the mode indicator (K-R3), and this
-           * caller used to commit keysMode and then call a function entitled
-           * to change nothing — after which the keypad typed Σ+ where the row
-           * said A.  With an overlay up, EXIT pops it (one per press) and the
-           * gesture works again; refusing is the round-2 report's sanctioned
-           * alternative to forcing the row. */
+          /* The sub-mode changes, and ONE owner establishes the console's
+           * row for it. The flip is REFUSED while a user-stacked row covers
+           * the console's base — the row IS the mode indicator, and
+           * committing keysMode with a stale row means the keypad types
+           * where the row says otherwise. With an overlay up, EXIT pops it
+           * (one per press) and the gesture works again. */
           if(forthConsoleBaseOnTop()) {
             forthCapSetKeysMode(!forthCapKeysMode());
             forthConsoleShowSurface();
@@ -773,11 +756,10 @@ bool_t isFunctionOldParam16(uint16_t func) {
           (void)forthCapInsertName(indexOfItems[func].itemCatalogName);
           return;
         }
-        /* Parameterized items fall THROUGH to the TAM block below —
-         * L-R4 (b): the fold makes them type their canonical spelling.
-         * Until L1-F* lands they enter TAM and execute, which is the
-         * documented interim (record it in your report; it is the one
-         * user-visible wart between L1-3 and L1-F1). */
+        /* Parameterized items fall THROUGH to the TAM block below — the
+         * fold makes them type their canonical spelling. They enter TAM and
+         * execute, which is the documented interim, the one user-visible
+         * wart in this dispatch. */
       }
 
       if(tam.mode == 0 && TM_VALUE <= indexOfItems[func].param && indexOfItems[func].param <= TM_CMP && (calcMode != CM_PEM || aimBuffer[0] == 0 || nimNumberPart != NP_INT_BASE)) {

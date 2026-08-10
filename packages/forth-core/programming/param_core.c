@@ -15,7 +15,7 @@
 uint32_t paramCoreDebugNameLengthReads = 0;
 #endif
 
-/* F2-2 (§10.2): bounded variant of decode.c's getStringLabelOrVariableName.
+/* (§10.2): bounded variant of decode.c's getStringLabelOrVariableName.
  * end is EXCLUSIVE. A name that would read past end is clamped to the
  * available bytes; the caller's normal not-found path then reports it.
  * The unbounded decode.c reader remains for display paths only. */
@@ -106,16 +106,16 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
       }
       else if((opParam == STRING_LABEL_VARIABLE) || (opParam == LOCAL_LABEL_VARIABLE)) {
         paramCoreReadName(paramAddress, end);
-        /* Rebase to b8f79e486: upstream added named LOCAL labels, reusing
-         * this same opParam byte (STRING_LABEL_VARIABLE == GLOBAL_LABELS,
-         * LOCAL_LABEL_VARIABLE == LOCAL_LABELS) as the labelType selector —
-         * do the real, opParam-aware label search FIRST, exactly as
-         * upstream's fix does, so a step that specifically encodes a local
-         * name resolves against local labels, not silently against an
-         * unrelated global label/colon word/item of the same name.
-         * Forth's XEQ/XEQP1 colon+item fallback only applies when the step
-         * encoded a GLOBAL name (opParam == GLOBAL_LABELS): a step asking
-         * for a LOCAL label must fail as "not found" if no local label
+        /* Upstream added named LOCAL labels, reusing this same opParam
+         * byte (STRING_LABEL_VARIABLE == GLOBAL_LABELS, LOCAL_LABEL_VARIABLE
+         * == LOCAL_LABELS) as the labelType selector — do the real,
+         * opParam-aware label search FIRST, exactly as upstream's fix
+         * does, so a step that specifically encodes a local name resolves
+         * against local labels, not silently against an unrelated global
+         * label/colon word/item of the same name.  Forth's XEQ/XEQP1
+         * colon+item fallback only applies when the step encoded a
+         * GLOBAL name (opParam == GLOBAL_LABELS): a step asking for a
+         * LOCAL label must fail as "not found" if no local label
          * matches, never fall through to Forth vocabulary. */
         calcRegister_t label = findNamedLabel(tmpStringLabelOrVariableName, opParam);
         bool_t forthFallbackEligible = (opParam == GLOBAL_LABELS)
@@ -124,8 +124,8 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
           reallyRunFunction(op, label);
         }
         else if (forthFallbackEligible) {
-          /* F3-3A: this resolution acts for the step being executed — enter
-           * the owning program's scope (first touch included) so same-
+          /* This resolution acts for the step being executed — enter the
+           * owning program's scope (first touch included) so same-
            * program words resolve and cross-scope words do not.  paramAddress
            * points into the step; a non-program address (defensive) falls
            * back to INTERACTIVE inside the helper.  Scope guards name
@@ -369,7 +369,7 @@ void paramCoreExecuteOpBounded(uint8_t *paramAddress, const uint8_t *end, uint16
 }
   }
 
-/* F2-3 (§10.2): shared direct-parameter validation.
+/* (§10.2): shared direct-parameter validation.
  * Mirrors the traced native range checks exactly.
  * PTP_NUMBER_16: native arm applies no range check in either the
  * isFunctionOldParam16 or the new-param16 path — always true. */
@@ -398,7 +398,7 @@ bool paramCoreValidateDirect(uint16_t op, uint16_t ptpClass, uint16_t value) {
   return false;
 }
 
-/* F2-3/F4-2: shared direct-parameter dispatch.
+/* Shared direct-parameter dispatch.
  * PTP_REGISTER converts KS code to C register; all other classes pass value as-is. */
 void paramCoreDispatchDirect(uint16_t op, uint16_t ptpClass, uint16_t value) {
   if (ptpClass == PTP_REGISTER) {
@@ -408,7 +408,7 @@ void paramCoreDispatchDirect(uint16_t op, uint16_t ptpClass, uint16_t value) {
   }
 }
 
-/* F4-3: unbounded wrapper — delegates to Bounded with program-memory end.
+/* Unbounded wrapper — delegates to Bounded with program-memory end.
  * All landed native callers go through this unchanged. */
 void paramCoreExecuteOp(uint8_t *paramAddress, uint16_t op, uint16_t paramMode) {
   paramCoreExecuteOpBounded(paramAddress, firstFreeProgramByte, op, paramMode);

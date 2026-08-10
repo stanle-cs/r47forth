@@ -11,35 +11,28 @@
 TO_QSPI static const char bugScreenNonexistentMenu[] = "In function determineFunctionKeyItem: nonexistent menu specified!";
 TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineItem: item was not determined!";
 
-// forth-core: the self-test suite drives executeFunction's softkey path
-// (C4/L1-2 seam 2) directly, with a known item id and data="" — the same
-// data[0]==0 branch btnFnClicked's (data, 0) call always takes in
-// production. executeFunction is file-static, so it must be exported for
-// the suite the same way _closeCatalog is below; production linkage is
-// unchanged. The macro itself lives in forth_capture.h (CONSOLIDATE P5).
+// forth-core: executeFunction is file-static in upstream; exported here so
+// the self-test suite can drive its softkey path directly. Production
+// linkage is unchanged.
 
 FORTH_SELFTEST_EXPORT void executeFunction(const char *data, int16_t item_);
 
-/* K1/E12.2 (CONSOLIDATE P4): abort the empty placeholder before SST/BST
- * navigation — no navigation may leave FCAP_OPEN behind (fnSst/fnBst's
- * own close branch only fires on non-empty aimBuffer). */
+/* Abort the empty placeholder before SST/BST navigation — no navigation may
+ * leave FCAP_OPEN behind (fnSst/fnBst's own close branch only fires on
+ * non-empty aimBuffer). */
 static void _forthCapAbortEmptyPlaceholder(void) {
   if(forthCapIsOpen() && aimBuffer[0] == 0) {
     pemAlpha(ITM_BACKSPACE);
   }
 }
 
-/* L1-2 (C4): true when the interactive capture cannot take another
- * character.  item > 0 is LOAD-BEARING, not defensive: determineItem
- * returns NEGATIVE softmenu ids in CM_AIM (e.g. -MNU_AIMCATALOG for the
- * f-shifted catalog gesture, src/c47/assign.c:46), they reach
- * processKeyAction's default arm and then case CM_AIM, and
- * indexOfItems[negative] is out of bounds. (keyboard.c's own BST/SST-
- * adjacent site tests `... || item < 0` for the same reason; that site's
- * shape is a latent wart, not the pattern to copy.) */
+/* True when the interactive capture cannot take another character. item > 0
+ * is LOAD-BEARING, not defensive: determineItem returns NEGATIVE softmenu
+ * ids in CM_AIM, which reach processKeyAction's default arm and then case
+ * CM_AIM, and indexOfItems[negative] is out of bounds. */
 static bool_t _forthCapAtCap(int16_t item) {
-  /* round 6 (F8): the LIVE predicate — a suspended capture's aimBuffer is
-   * TAM's, and this cap must not meter it. */
+  /* LIVE predicate — a suspended capture's aimBuffer is TAM's, and this cap
+   * must not meter it. */
   if (!forthCapInteractiveLive() || item <= 0) { return false; }
   if (indexOfItems[item].func != addItemToBuffer) { return false; }
   return !(stringByteLength(aimBuffer)
@@ -115,14 +108,10 @@ static bool_t _forthCapAtCap(int16_t item) {
 
       case MNU_FORTH: {
         dynamicMenuItem = firstItem + itemShift + fn;
-        /* M1 (Stage M): CM_NORMAL executes and CM_ASSIGN feeds the assign
-         * pick switch, both via the PROGS shape (ITM_XEQ + dynamicMenuItem
-         * -> the landed dynamic-XEQ dispatch, PEM guard and error surface
-         * included).  Every other state resolves ITM_NOP — captures live
-         * in CM_PEM/CM_AIM, so the picker-insert guard's precondition
-         * (item == ITM_NOP) holds by mode arithmetic; the M1-1 packet's
-         * mutation A proved an explicit capture branch unreachable, and
-         * the [3]/[4]/[5]/[9] battery pins every NOP disposition. */
+        /* CM_NORMAL executes and CM_ASSIGN feeds the assign pick switch,
+         * both via the PROGS shape. Every other state resolves ITM_NOP —
+         * captures live in CM_PEM/CM_AIM, so the picker-insert guard's
+         * precondition (item == ITM_NOP) holds by mode arithmetic. */
         item = ((calcMode == CM_NORMAL || calcMode == CM_ASSIGN) && tam.mode == 0
                 && dynamicMenuItem < dynamicSoftmenu[menuId].numItems)
                  ? ITM_XEQ : ITM_NOP;
@@ -319,12 +308,10 @@ static bool_t _forthCapAtCap(int16_t item) {
     if(calcMode == CM_ASSIGN && item != ITM_NOP && item != ITM_NULL) {
       switch(-softmenu[menuId].menuItem) {
         case MNU_FORTH: {
-          /* M2 (Stage M): a FWRD pick during ASSIGN captures a GLOBAL
-           * word as a named assignment (M-R2: interactive words and any
-           * stale name refuse with no state change — the G1 blank-key
-           * precedent).  The ORDINAL rides the int16 channel — never the
-           * raw ref, whose bit 15 would land in the negative bands;
-           * _assignItem rebuilds the ref and derefs the name. */
+          /* A FWRD pick during ASSIGN captures a GLOBAL word as a named
+           * assignment. The ORDINAL rides the int16 channel — never the raw
+           * ref, whose bit 15 would land in the negative bands; _assignItem
+           * rebuilds the ref and derefs the name. */
           uint16_t fref;
           char *fpick = (char *)getNthString(dynamicSoftmenu[menuId].menuContent, dynamicMenuItem);
           if(forthFindColonRef(fpick, &fref, NULL) && (fref & FORTH_REF_GLOBAL)
@@ -503,14 +490,9 @@ static bool_t _forthCapAtCap(int16_t item) {
     }
 
 
-    // forth-core: the self-test suite drives the real CAT->FORTH chain, which is
-    // runFunction() immediately followed by _closeCatalog() (see the PEM catalog
-    // arm's runFunction(item) / _closeCatalog() pair below).
-    // That call is file-static (like executeFunction() above), so a test can
-    // only reach the teardown by hand-rolling a pop sequence — which diverges
-    // from this function and silently tests the wrong thing. Export it for
-    // the suite only; production linkage is unchanged.  FORTH_SELFTEST_EXPORT
-    // is defined near the top of this file (executeFunction needs it too).
+    // forth-core: file-static in upstream, like executeFunction() above;
+    // exported so the self-test suite can drive the real CAT->FORTH teardown
+    // instead of hand-rolling one. Production linkage is unchanged.
     FORTH_SELFTEST_EXPORT void _closeCatalog(void) {
       bool_t inCatalog = false;
       for(int i = 0; i < SOFTMENU_STACK_SIZE; ++i) {
@@ -1039,12 +1021,12 @@ endReturnTrue:
 
         lastKeyItemDetermined = item;
 
-        // MNU_FORTH picker: insert name at cursor during Forth capture (§9.6 P-H7)
+        // MNU_FORTH picker: insert name at cursor during Forth capture
         if(forthPickerGuard(item)) {
           if(pickerInsertName()) {
             /* pemAlpha(ITM_NOP) re-commits a PEM step; interactively there
              * is no step to re-commit — forthCapInsertName already updated
-             * aimBuffer/T_cursorPos directly (Mutation 7's pin). */
+             * aimBuffer/T_cursorPos directly. */
             if(!forthCapIsInteractive()) { pemAlpha(ITM_NOP); }
           }
           return;
@@ -1194,8 +1176,6 @@ endReturnTrue:
           }
           else if(tam.function == ITM_GTOP && catalog == CATALOG_PROG) {
             runFunction(item);
-            /* D7-1: settles the fold — this was F4, the strand class's
-             * second door. */
             leaveTamModeIfEnabled();
             hourGlassIconEnabled = false;
             _closeCatalog();
@@ -1359,16 +1339,11 @@ endReturnTrue:
             }
             if(calcMode == CM_AIM && !forthCapIsInteractive()
                && !(isAlphabeticSoftmenu() || isJMAlphaOnlySoftmenu() || item == ITM_KEYMAP)) {
-              /* L1-3 (C5): picking any function from FCNS during an
-               * interactive capture must insert the name as text and leave
-               * the capture OPEN (C6.4) — closing or committing here would be
-               * wrong.  (The superseded L1-2 disposition: DESIGN-HISTORY
-               * 2026-08-09, P10.)  Hence the
-               * !forthCapIsInteractive() conjunct above, which is what keeps
-               * this site out of closeAim() — and so out of the L1-1 close
-               * funnel now living inside it (CONSOLIDATE P6) — for an
-               * interactive capture.  Load-bearing: drop it and picking a
-               * function from FCNS would close the console. */
+              /* Picking any function from FCNS during an interactive capture
+               * must insert the name as text and leave the capture OPEN —
+               * closing or committing here would be wrong. Load-bearing:
+               * drop the !forthCapIsInteractive() conjunct above and picking
+               * a function from FCNS would close the console. */
               closeAim();
             }
             if(tam.mode && tam.alpha) {
@@ -1483,11 +1458,11 @@ endReturnTrue:
                       printf("keyboard.c: executeFunction calcmode=%u %i (before runfunction): %i, %s tam.mode=%i\n", calcMode, item, currentMenu(), indexOfItems[-currentMenu()].itemSoftmenuName, tam.mode);
                     #endif //VERBOSEKEYS
 
-                /* L1-2 (C4) seam 2: the softkey path.  Seam 1 (processKeyAction)
-                 * guards the physical-key path; addItemToBuffer items reached
-                 * from a softmenu row land here instead, bypassing seam 1
-                 * entirely, so the cap must be re-checked at this second entry
-                 * point too. */
+                /* Seam 2: the softkey path. Seam 1 (processKeyAction) guards
+                 * the physical-key path; addItemToBuffer items reached from a
+                 * softmenu row land here instead, bypassing seam 1 entirely,
+                 * so the cap must be re-checked at this second entry point
+                 * too. */
                 if(calcMode == CM_AIM && _forthCapAtCap(item)) { goto noMoreToDo; }
                 runFunction(item);
 
@@ -1640,9 +1615,9 @@ endReturnTrue:
 
 
 
-  /* K1/C2: file-static in upstream; exported for the self-test build only so
-   * the suite can drive the real resolution layer (same idiom as
-   * _closeCatalog above).  Production linkage is unchanged. */
+  /* File-static in upstream; exported for the self-test build only so the
+   * suite can drive the real resolution layer (same idiom as _closeCatalog
+   * above). Production linkage is unchanged. */
   FORTH_SELFTEST_EXPORT int16_t determineItem(const char *data) {
     delayCloseNim = false;
     int16_t result;
@@ -1761,34 +1736,28 @@ endReturnTrue:
       return result;
     }
     else if((calcMode == CM_AIM
-             && !(forthCapInteractiveLive() && forthCapKeysMode())   /* round 6
-              * (F8): LIVE, not origin — in the suspended residue the input
-              * plane must not follow a suspended capture's mode bit */
-             /* L1-F2 (C4): calcMode does not change on TAM entry (tam.mode
-              * != 0 is the gate) — an interactive TAM session still has
-              * calcMode == CM_AIM here (determineItem runs OUTSIDE F2's C3
-              * bracket, before tamProcessInput/_tamProcessInput are ever
-              * called), so without this conjunct the CM_AIM disjunct fires
-              * ahead of the "else if(tam.mode)" arm below and TAM digits
-              * would resolve to letters.  Only reachable when keys mode is
-              * OFF: with keys mode ON the conjunct above already excludes
-              * this disjunct for a digit key, but keys mode is a UI choice,
-              * not a fold precondition — a parameterized item (STO, RCL, …)
-              * can open TAM from an alpha-input interactive capture too. */
+             && !(forthCapInteractiveLive() && forthCapKeysMode())   /* LIVE,
+              * not origin — in the suspended residue the input plane must
+              * not follow a suspended capture's mode bit */
+             /* calcMode does not change on TAM entry (tam.mode != 0 is the
+              * gate): an interactive TAM session still has calcMode ==
+              * CM_AIM here, so without this conjunct the CM_AIM disjunct
+              * fires ahead of the "else if(tam.mode)" arm below and TAM
+              * digits would resolve to letters. Only reachable when keys
+              * mode is OFF: with keys mode ON the conjunct above already
+              * excludes this disjunct for a digit key, but keys mode is a
+              * UI choice, not a fold precondition. */
              && !(tam.mode && forthFoldPending())) || (catalog && catalog != CATALOG_MVAR && calcMode != CM_NIM) || calcMode == CM_EIM || tam.alpha || (calcMode == CM_ASSIGN && (previousCalcMode == CM_AIM || previousCalcMode == CM_EIM)) || (calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA) && !(tam.function == ITM_FORTH && forthCapKeysMode()))) {
       if(((calcMode == CM_PEM && getSystemFlag(FLAG_ALPHA)
              && tam.function == ITM_FORTH && forthCapIsOpen())
-          || forthCapInteractiveLive())    /* round 6 (F8): the toggle is a
-                                              live-console gesture */
+          || forthCapInteractiveLive())    /* the toggle is a live-console
+                                              gesture */
          && shiftF && key->fShifted == ITM_AIM) {
-        /* K1/E10: inside a Forth capture the ALPHA gesture is the keys-mode
-         * toggle — resolve to ITM_AIM instead of the aim-column ITM_alpha.
-         * L1-3: widened to the interactive origin (no PEM/tam.function/
-         * FLAG_ALPHA preconditions there — an interactive capture's ALPHA
-         * gesture is always this toggle, ALPHA vs keys mode).
-         * Layout-independent: keyed on the row's normal-column fShifted,
-         * not on a key number.  Falls through to the shared function tail
-         * so shift state is consumed normally (no early return). */
+        /* Inside a Forth capture the ALPHA gesture is the keys-mode toggle —
+         * resolve to ITM_AIM instead of the aim-column ITM_alpha.
+         * Layout-independent: keyed on the row's normal-column fShifted, not
+         * on a key number. Falls through to the shared function tail so
+         * shift state is consumed normally (no early return). */
         result = ITM_AIM;
       }
       else {
@@ -1821,7 +1790,7 @@ endReturnTrue:
       result = key->primaryTam; // No shifted function in TAM
     }
     else if(calcMode == CM_NORMAL || calcMode == CM_NIM || calcMode == CM_MIM || calcMode == CM_FONT_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_BUG_ON_SCREEN || calcMode == CM_CONFIRMATION || calcMode == CM_PEM || GRAPHMODE || calcMode == CM_ASSIGN || calcMode == CM_TIMER  || calcMode == CM_LISTXY
-            || (calcMode == CM_AIM && forthCapInteractiveLive() && forthCapKeysMode())) {   /* round 6 (F8) */
+            || (calcMode == CM_AIM && forthCapInteractiveLive() && forthCapKeysMode())) {
       result = shiftF ? key->fShifted :
                shiftG ? key->gShifted :
                         key->primary;
@@ -1836,50 +1805,27 @@ endReturnTrue:
       result = 0;
     }
 
-    /* N1-2 (N-T4): the console roll — g-shifted up/down browses the
-     * transcript.
-     *
-     * Placed AFTER the plane selection so it catches BOTH input modes with
-     * one arm: keys mode resolves through primary/fShifted/gShifted (:1842)
-     * and alpha input through the *Aim columns (:1811), and g-up means
-     * something different in each — ITM_RBR in keys mode, ITM_UP_ARROW (the
-     * glyph insert) in alpha.  Neither means anything inside a capture, and
-     * the displaced glyphs stay reachable on the alpha MISC softmenu
-     * (softmenus.c:711).
-     *
-     * The KEY is identified layout-independently by its own alpha f-column:
-     * CHR_caseUP/CHR_caseDN name the up/down keys on every layout table
-     * without hardcoding a key number.  Same discipline as the K1/E10
-     * ALPHA-toggle arm above, which keys on key->fShifted == ITM_AIM.
-     *
-     * The roll happens HERE rather than being carried to a handler as a new
-     * item: determineItem is called exactly once per press (btnPressed,
-     * :2026), the state changed is view-only, and the alternative — latching
-     * "this CHR_caseUP is a roll, not a recall" for the handler to consume —
-     * is a one-shot flag that desyncs into a wrong-gesture bug the first time
-     * a press resolves but never dispatches.  ITM_NOP then keeps every
-     * downstream arm out of it; btnReleased's refreshScreen(117) (:2478)
-     * repaints. */
-    if(forthCapInteractiveLive() && !tam.mode   /* round 6 (F8): LIVE */
+    /* The console roll — g-shifted up/down browses the transcript. Placed
+     * AFTER the plane selection so it catches both input modes with one arm.
+     * Done here rather than carried to a handler as a new item: determineItem
+     * is called exactly once per press, the state changed is view-only, and
+     * latching a one-shot flag for the handler to consume desyncs into a
+     * wrong-gesture bug the first time a press resolves but never dispatches.
+     * ITM_NOP then keeps every downstream arm out of it. */
+    if(forthCapInteractiveLive() && !tam.mode   /* LIVE */
        && (key->fShiftedAim == CHR_caseUP || key->fShiftedAim == CHR_caseDN)) {
       bool_t isUp = (key->fShiftedAim == CHR_caseUP);
       if(shiftG) {
-        forthConsoleRollView(isUp ? +1 : -1);  /* +1 = one line OLDER; C12:
-                                                  the view-owned roll, clamped
+        forthConsoleRollView(isUp ? +1 : -1);  /* +1 = one line OLDER; the
+                                                  view-owned roll, clamped
                                                   at count-rows */
         result = ITM_NOP;
       }
       else if(shiftF) {
-        /* N1-5 (N-T4): RE-HOME the FHIST recall gesture.
-         *
-         * In keys mode determineItem takes the NORMAL columns (:1842), where
-         * f-up/f-down are ITM_BST/ITM_SST, so without this arm the console
-         * would open with its own history unreachable.  Why recall started in
-         * the AIM f-column: DESIGN-HISTORY 2026-08-09 (P10, N1-5).
-         *
-         * Resolving to CHR_caseUP/CHR_caseDN in BOTH modes is idempotent in
-         * alpha input (the AIM plane already yields exactly these) and is the
-         * whole fix in keys input. */
+        /* RE-HOME the FHIST recall gesture: in keys mode determineItem takes
+         * the NORMAL columns, where f-up/f-down are ITM_BST/ITM_SST, so
+         * without this arm the console would open with its own history
+         * unreachable. */
         result = isUp ? CHR_caseUP : CHR_caseDN;
       }
     }
@@ -2424,7 +2370,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
               forthUserItemDispatch(item, funcParam, item, label);
             }
             else {
-              /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
+              /* forth-core: Forth fallback after label miss (DESIGN.md §4.2) */
               if(forthTryColonFallback(item, funcParam)) {
                 return;
               }
@@ -2810,15 +2756,13 @@ RELEASE_END:
         }
 
         case CHR_caseUP: {                                                   //From keyboard: logic for Up/Dn case/num
-          /* L1-H (C4): f-up recalls an OLDER line into an open interactive
-           * capture. The unshifted arrows are unavailable here (T4: they
-           * are the case-change gesture / menu paging / destructive
-           * closeAim()+fnBst()) — this is the sanctioned recall gesture.
-           * Guarded, falling through to the landed case-change body when
-           * no interactive capture is open.
-           * Round 6 (F6): LIVE, not origin — while SUSPENDED, aimBuffer is
-           * TAM's name buffer (forth_capture.c's suspension contract) and
-           * the recall was overwriting it mid-name. */
+          /* f-up recalls an OLDER line into an open interactive capture. The
+           * unshifted arrows are unavailable here (they are the case-change
+           * gesture / menu paging / destructive closeAim()+fnBst()) — this is
+           * the sanctioned recall gesture. Guarded, falling through to the
+           * landed case-change body when no interactive capture is open.
+           * LIVE, not origin — while SUSPENDED, aimBuffer is TAM's name
+           * buffer and the recall was overwriting it mid-name. */
           if(forthCapInteractiveLive()) {
             forthHistoryRecall(-1);
             keyActionProcessed = true;
@@ -2837,9 +2781,9 @@ RELEASE_END:
         }
 
         case CHR_caseDN: {                                                   //From keyboard: logic for Up/Dn case/num
-          /* L1-H (C4): the mirror of CHR_caseUP above — f-down recalls a
-           * NEWER line (delta +1), reaching "past the newest" (empty) one
-           * step past the newest pushed line.  Round 6 (F6): LIVE — see up. */
+          /* The mirror of CHR_caseUP above — f-down recalls a NEWER line
+           * (delta +1), reaching "past the newest" (empty) one step past the
+           * newest pushed line. LIVE — see up. */
           if(forthCapInteractiveLive()) {
             forthHistoryRecall(1);
             keyActionProcessed = true;
@@ -3036,19 +2980,18 @@ RELEASE_END:
 
               //also AIM Longpress cycle
               case CM_AIM: {
-                /* L1-2 (C3): R/S runs the interactive line — the closest
-                 * honest analog to K's "commit, then record a native STOP
-                 * step"; there is no step here to record. Checked before
-                 * the BST/SST arm below: ITM_RS matches neither.
-                 * Round 6 (F9): LIVE — in the suspended residue this arm ran
-                 * TAM's leftover scratch as a Forth line. */
+                /* R/S runs the interactive line — the closest honest analog
+                 * to "commit, then record a native STOP step"; there is no
+                 * step here to record. Checked before the BST/SST arm below:
+                 * ITM_RS matches neither. LIVE — in the suspended residue
+                 * this arm ran TAM's leftover scratch as a Forth line. */
                 if(forthCapInteractiveLive() && item == ITM_RS) {
                   forthInteractiveEnter();     /* the closest honest analog */
                   keyActionProcessed = true;
                   break;
                 }
-                /* L1-2 (C4) seam 1: the physical-key path, before
-                 * processAimInput reaches addItemToBuffer. */
+                /* Seam 1: the physical-key path, before processAimInput
+                 * reaches addItemToBuffer. */
                 if(_forthCapAtCap(item)) {
                   keyActionProcessed = true;    /* full: swallow the key, no error */
                   break;
@@ -3375,10 +3318,10 @@ RELEASE_END:
                 }
                 else if(item == ITM_RS) {
                   if(forthCapIsOpen()) {
-                    pemCloseAlphaInput();     /* K1/E12.2: commit the line,
-                       then the native STOP step.  Without this, the E0
-                       alpha divert would type the text "STOP " into the
-                       line — a flow-reject word that cannot compile. */
+                    pemCloseAlphaInput();     /* commit the line, then the
+                       native STOP step. Without this, the alpha divert would
+                       type the text "STOP " into the line — a flow-reject
+                       word that cannot compile. */
                   }
                   addStepInProgram(ITM_STOP);
                   keyActionProcessed = true;
@@ -3670,12 +3613,12 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_AIM: {
-        /* L1-2 (C1): an interactive Forth capture diverts entirely — run
-         * the line (or reopen/no-op), never fall to the native AIM commit
-         * below.  calcMode stays CM_AIM throughout: no calcModeNormal(),
-         * no closeAim(), no popSoftmenu() on this path.
-         * Round 6 (F8): LIVE — while SUSPENDED, aimBuffer is TAM's, and this
-         * divert was committing TAM's scratch to FHIST and running it. */
+        /* An interactive Forth capture diverts entirely — run the line (or
+         * reopen/no-op), never fall to the native AIM commit below. calcMode
+         * stays CM_AIM throughout: no calcModeNormal(), no closeAim(), no
+         * popSoftmenu() on this path. LIVE — while SUSPENDED, aimBuffer is
+         * TAM's, and this divert was committing TAM's scratch to FHIST and
+         * running it. */
         if(forthCapInteractiveLive()) {
           forthInteractiveEnter();
           break;
@@ -3905,8 +3848,6 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
                 else {
                     if(tam.mode && currentMenu() == -MNU_SYSFL) {                                           //JM auto recover out of SYSFL in the CFLG TAM flow; a plain catalog SYS.FL exits via the standard path below
                       numberOfTamMenusToPop = 2;                                                   //JM
-                      /* D7-1: settles the fold — this cancel was F2, the
-                       * strand class's front door. */
                       leaveTamModeIfEnabled();                                                     //JM
                       return;                                                                      //JM
                     }                                                                              //JM
@@ -3953,10 +3894,9 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
         if(calcMode == CM_PEM) {
           aimBuffer[0] = 0;
         }
-        /* D7-1: the wrapper settles the fold — EXIT during TAM never routes
-         * through tamProcessInput's epilogue, and "type something, press STO,
-         * EXIT before finishing" is one of the most ordinary cancel gestures
-         * there is (L1-F2 rev 3). */
+        /* EXIT during TAM never routes through tamProcessInput's epilogue,
+         * and "type something, press STO, EXIT before finishing" is one of
+         * the most ordinary cancel gestures there is. */
         leaveTamModeIfEnabled();
         if(calcMode == CM_PEM) {
           scrollPemBackwards();
@@ -4041,8 +3981,8 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_AIM: {
-        /* forth-core F13: the interactive EXIT ladder lives in
-         * forth_console.c; true means the press was consumed. */
+        /* forth-core: the interactive EXIT ladder lives in forth_console.c;
+         * true means the press was consumed. */
         if(forthConsoleExitLadder()) {
           break;
         }
@@ -4104,10 +4044,10 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           break;
         }
         if(forthCapIsOpen() && forthCapKeysMode() && !tam.mode) {
-          /* K2/E12.4: first ladder rung — EXIT in keys mode returns to
-           * alpha input; the rest of the E8 ladder is untouched below.
-           * Ladder is now: keys -> alpha -> submenu -> ALPHA menu ->
-           * drop keypad -> leave PEM, one level per press. */
+          /* First ladder rung — EXIT in keys mode returns to alpha input;
+           * the rest of the ladder is untouched below. Ladder is now:
+           * keys -> alpha -> submenu -> ALPHA menu -> drop keypad -> leave
+           * PEM, one level per press. */
           forthCapSetKeysMode(false);
           showSoftmenu(-MNU_ALPHA);
           break;
@@ -4136,19 +4076,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           }
           aimBuffer[0] = 0;
           if(wasForthCap) {
-            // forth-core: aimBuffer[0] is already 0 on EVERY path into this
-            // branch (the line above, unconditionally) — fnBst's own
-            // "if(aimBuffer[0] != 0)" guard (below) is therefore always
-            // false here regardless of Forth vs REM/LITERAL, and the ONLY
-            // step-back this call site has ever applied is fnBst's bare
-            // _bstInPem(), a single currentLocalStepNumber-- with no
-            // currentStep update. For REM/LITERAL that leaves currentStep
-            // one step ahead of currentLocalStepNumber, tolerated because
-            // nothing reopens immediately after. A Forth capture's very
-            // next operation is typically another ITM_AIM, which DOES
-            // depend on currentStep, so only the pointer half needs
-            // resyncing here — NOT a second counter decrement, which
-            // would double-compensate against _bstInPem()'s own.
+            // forth-core: fnBst below only decrements currentLocalStepNumber
+            // (_bstInPem's bare counter, no currentStep update); a Forth
+            // capture's next operation depends on currentStep, so only the
+            // pointer half needs resyncing here — NOT a second counter
+            // decrement, which would double-compensate against _bstInPem().
             currentStep = findPreviousStep(currentStep);
           }
           fnBst(NOPARAM); // Set the PGM pointer to the original position
@@ -4540,14 +4472,10 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
 
       case CM_AIM: {
         if(forthCapInteractiveLive() && lastErrorCode != 0) {
-          /* AUDIT round 5 R12 (ruled 2026-08-08): BACKSPACE is one of the
-           * two keys the error recovery invites, and the error sweep exempts
-           * it because in CM_NORMAL it IS the dismiss gesture with its own
-           * clear — an exemption inherited here without its paired clear
-           * (round 6's class).  Without this, the render gate kept yielding
-           * on the stale error and the transcript stayed hidden for as many
-           * presses as the owner made.  Mirror the CM_NORMAL arm exactly:
-           * dismiss first, edit on the next press. */
+          /* BACKSPACE is one of the two keys the error recovery invites,
+           * because in CM_NORMAL it IS the dismiss gesture with its own
+           * clear. Mirror the CM_NORMAL arm exactly: dismiss first, edit
+           * on the next press. */
           lastErrorCode = 0;
           screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
           return;
@@ -4656,14 +4584,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
           pemAlpha(ITM_BACKSPACE);
           if(aimBuffer[0] == 0 && !getSystemFlag(FLAG_ALPHA)) {
             if(wasForthCapOpen) {
-              // forth-core: the Forth capture's empty-abort branch
-              // (pemAlpha's C4) deletes the placeholder IN PLACE, so the
-              // following step already occupies currentStep/
-              // currentLocalStepNumber unchanged — the step-back below
-              // (needed for the aimBuffer REM/LITERAL path, whose own
-              // abort leaves the cursor one position past where it should
-              // land) would overshoot onto the PRECEDING step for Forth
-              // and must be skipped.
+              // forth-core: the Forth capture's empty-abort branch deletes
+              // the placeholder IN PLACE, so currentStep/currentLocalStepNumber
+              // are unchanged — the step-back below (needed for the
+              // REM/LITERAL path) would overshoot onto the PRECEDING step for
+              // Forth and must be skipped.
               if(!programListEnd) {
                 scrollPemBackwards();
               }

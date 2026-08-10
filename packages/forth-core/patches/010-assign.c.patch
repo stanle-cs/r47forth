@@ -1,23 +1,21 @@
 diff --git a/src/c47/assign.c b/src/c47/assign.c
-index c23deaaa9231d501c134b0e55dc296818e21359e..ba27482576d0fbf44daecd9b12bec4e4be6c7bfc 100644
+index c23deaaa9231d501c134b0e55dc296818e21359e..3d6bf891dde7c530d3ff937cd72b9032b15ae49c 100644
 --- a/src/c47/assign.c
 +++ b/src/c47/assign.c
-@@ -2,6 +2,8 @@
+@@ -2,6 +2,7 @@
  // SPDX-FileCopyrightText: Copyright The WP43 and C47 Authors
  
  #include "c47.h"
-+#include "forth_dict.h"   /* M2 (Stage M): forthDictNameByRef for the
-+                             ASSIGN_FORTH_WORDS band arms */
++#include "forth_dict.h"
  
  // C47 Layout from Layout_template_automation template: Do not change manually
  //This variable is to store in flash memory
-@@ -741,6 +743,15 @@ void updateAssignTamBuffer(void) {
+@@ -741,6 +742,14 @@ void updateAssignTamBuffer(void) {
    else if(itemToBeAssigned == ASSIGN_CLEAR) {
      tbPtr = stringCopy(tbPtr, "NULL");
    }
 +  else if(itemToBeAssigned >= ASSIGN_FORTH_WORDS) {
-+    /* M2 (Stage M): pending-assignment display of a global Forth word —
-+     * tested BEFORE the labels arm, which claims everything >= 12000. */
++    /* Tested BEFORE the labels arm, which claims everything >= 12000. */
 +    char fwName[16];
 +    if(forthDictNameByRef((uint16_t)(FORTH_REF_GLOBAL | (uint16_t)(itemToBeAssigned - ASSIGN_FORTH_WORDS)),
 +                          fwName, sizeof(fwName))) {
@@ -27,17 +25,14 @@ index c23deaaa9231d501c134b0e55dc296818e21359e..ba27482576d0fbf44daecd9b12bec4e4
    else if(itemToBeAssigned >= ASSIGN_LABELS) {
      uint8_t *lblPtr = labelList[itemToBeAssigned - ASSIGN_LABELS].labelPointer;
      uint32_t count = *(lblPtr++);
-@@ -805,6 +816,20 @@ void _assignItem(userMenuItem_t *menuItem) {
+@@ -805,6 +814,17 @@ void _assignItem(userMenuItem_t *menuItem) {
      menuItem->item            = ITM_NULL;
      menuItem->argumentName[0] = 0;
    }
 +  else if(itemToBeAssigned >= ASSIGN_FORTH_WORDS) {
-+    /* M2 (Stage M): a global Forth word — the record is (ITM_XEQ, name),
-+     * the same kind a program label produces; the band dies here.  Tested
-+     * BEFORE the labels arm, which claims everything >= 12000.  A deref
-+     * miss cannot happen between pick and key press (CM_ASSIGN executes
-+     * nothing, so gdict cannot mutate); if it ever does, degrade to a
-+     * no-op assignment rather than a garbage name. */
++    /* Tested BEFORE the labels arm, which claims everything >= 12000; a
++     * deref miss (should not happen — gdict cannot mutate between pick
++     * and key press) degrades to a no-op assignment, not a garbage name. */
 +    menuItem->item            = ITM_XEQ;
 +    if(!forthDictNameByRef((uint16_t)(FORTH_REF_GLOBAL | (uint16_t)(itemToBeAssigned - ASSIGN_FORTH_WORDS)),
 +                           menuItem->argumentName, sizeof(menuItem->argumentName))) {

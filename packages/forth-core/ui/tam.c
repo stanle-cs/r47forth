@@ -5,8 +5,8 @@
 #include "forth_dict.h"
 #include "forth_capture.h"
 
-/* D7-1: the raw TAM teardown, private to this file — see its definition
- * beside the public leaveTamModeIfEnabled wrapper. */
+/* The raw TAM teardown, private to this file — see its definition beside
+ * the public leaveTamModeIfEnabled wrapper. */
 static void _tamLeave(void);
 
     TO_QSPI const int16_t StoOperations[][2] = {
@@ -345,13 +345,11 @@ static void _tamLeave(void);
         tam.function = ITM_GTO;
         tam.min = indexOfItems[ITM_GTO].tamMinMax >> TAM_MAX_BITS;
         tam.max = indexOfItems[ITM_GTO].tamMinMax & TAM_MAX_MASK;
-        /* AUDIT round 8 (C-1): the sibling of the GTO->GTOP promotion, in
-         * the other direction.  GTO/TM_LABEL IS admitted, so a fold parked
-         * by the promotion must ARM again here — without this the commit
-         * dispatched reallyRunFunction(ITM_GTO, n) LIVE, the bracket never
-         * forged CM_PEM, and `GTO . BACKSPACE 0 5 ENTER` lost the operation
-         * in both directions at once: no text spliced into the line and no
-         * navigation left standing (foldLeave's cursor restore undoes it). */
+        /* The sibling of the GTO->GTOP promotion, in the other direction:
+         * GTO/TM_LABEL IS admitted, so a fold parked by the promotion must
+         * ARM again here — without this, `GTO . BACKSPACE 0 5 ENTER` lost
+         * the operation in both directions at once (no text spliced into
+         * the line, no navigation left standing). */
         forthFoldRederiveAdmission(tam.function, tam.mode);
       }
       else if(tam.dot) {
@@ -812,15 +810,13 @@ printf("tam.value: %d\n", tam.value);
           tam.function = ITM_GTOP;
           tam.min = 0;
           tam.max = max(getNumberOfSteps(), 99);
-          /* AUDIT round 6 (F1): the fold admitted GTO/XEQ (TM_LABEL) at
-           * entry; GTOP is NOT an admitted item — _forthFoldAdmits excludes
-           * it because it navigates the program pointer.  This promotion
-           * happens AFTER admission, so re-derive the decision: an armed
-           * fold downgrades to PARK, exactly what keying GTOP at entry
-           * would have produced.  (Left armed, this crashed: DESIGN-HISTORY
-           * 2026-08-09, P10, the GTO . . SIGSEGV.)
-           * AUDIT round 8 (C-1): through the shared re-derivation, so this
-           * site and the BACKSPACE demotion below cannot drift apart. */
+          /* The fold admitted GTO/XEQ (TM_LABEL) at entry; GTOP is NOT an
+           * admitted item — _forthFoldAdmits excludes it because it
+           * navigates the program pointer. This promotion happens AFTER
+           * admission, so re-derive the decision: an armed fold downgrades
+           * to PARK, exactly what keying GTOP at entry would have produced
+           * (left armed, this crashes). Shared re-derivation keeps this
+           * site and the BACKSPACE demotion below from drifting apart. */
           forthFoldRederiveAdmission(tam.function, tam.mode);
         }
         else if(tam.indirect && (currentNumberOfLocalRegisters || calcMode == CM_PEM)) {
@@ -1010,8 +1006,8 @@ printf("tam.value: %d\n", tam.value);
                 return;
               }
             }
-            /* forth-core H-hook: Forth fallback after GLOBAL label miss — never for a
-             * tam.colon (LOCAL) request (DESIGN.md §0.3/§4.2 label-kind pins) */
+            /* forth-core H-hook: Forth fallback after GLOBAL label miss —
+             * never for a tam.colon (LOCAL) request. */
             {
               uint16_t widx;
               if (!tam.colon && forthFindColon(buffer, &widx)) {
@@ -1170,29 +1166,16 @@ printf("tam.value: %d\n", tam.value);
 
 
   void tamEnterMode(int16_t func) {
-    /* AUDIT round 8 (P-2 and its family, owner ruling 2026-08-08): refuse
-     * the operation rather than build a suspension the machine cannot hold.
-     *
-     * The seam below suspends a live interactive capture UNCONDITIONALLY,
-     * one line after forthFoldEnter — which returns having done nothing if
-     * FHIST cannot be created ("no program, no fold").  That produced a state
-     * nothing downstream understands: SUSPENDED with no fold pending, whose
-     * two consequences (the capture never resumed, and mid-TAM keys resolving
-     * as letters) were settled by execution in round 8 — DESIGN-HISTORY
-     * 2026-08-09 (P10, the P-2 refusal).
-     *
-     * Guarding those two sites would be two patches against a state that
-     * should not exist.  This is the construction instead: the capture step
-     * has nowhere to live without FHIST, so the operation does not start.
-     * The line survives and the owner is told, which is the trade the fold's
-     * own admission rule (C2: never refuse the key, never lose the line)
-     * makes when the machine cannot honour both.  forthHistoryEnsure is
-     * idempotent, so on every ordinary path this is the call forthFoldEnter
-     * would have made a moment later, and nothing changes.
-     *
-     * Placed at the very top on purpose: no TAM state has been written yet,
-     * so the refusal needs no teardown — and a teardown here would have to
-     * undo FLAG_ALPHA and the AIM GUI the live capture still needs. */
+    /* Refuse the operation rather than build a suspension the machine
+     * cannot hold: the seam below suspends a live interactive capture
+     * UNCONDITIONALLY, and forthFoldEnter does nothing if FHIST cannot be
+     * created, leaving SUSPENDED with no fold pending — a state nothing
+     * downstream understands. The capture step has nowhere to live without
+     * FHIST, so refuse here instead: the line survives and the owner is
+     * told, per the fold's own admission rule (never refuse the key, never
+     * lose the line). forthHistoryEnsure is idempotent, so on the ordinary
+     * path this changes nothing. Placed at the very top on purpose: no TAM
+     * state has been written yet, so the refusal needs no teardown. */
     if(calcMode != CM_NIM && forthCapInteractiveLive()
        && !forthHistoryEnsure()) {
       displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, REGISTER_X);
@@ -1230,19 +1213,15 @@ printf("tam.value: %d\n", tam.value);
     }
     else if(forthCapIsOpen() && (calcMode == CM_PEM || forthCapIsInteractive())) {
       if(forthCapIsInteractive()) { forthFoldEnter(func, tam.mode); }
-      forthCaptureSuspend();                                       /* F6-2: unchanged */
+      forthCaptureSuspend();
     }
     else if(forthFoldPending()) {
-      /* L1-F2 rev 3: a NESTED tamEnterMode inside an armed fold — the capture
-       * is already SUSPENDED (so the arm above cannot fire) and the fold is
-       * already materialised, so there is nothing to do here.  But this arm
-       * must EXIST, because the bracket has forged calcMode = CM_PEM and the
+      /* A NESTED tamEnterMode inside an armed fold: the capture is already
+       * SUSPENDED (so the arm above cannot fire) and the fold is already
+       * materialised, so there is nothing to do here. But this arm must
+       * EXIST, because the bracket has forged calcMode = CM_PEM and the
        * next two arms are PEM arms: the aimBuffer one would run
-       * pemCloseAlphaInput() and CLOSE the user's capture outright.
-       *
-       * Reachable from every leave-then-dispatch site whose target is itself
-       * parameterized — e.g. STO then the dddVEL softkey (ui/tam.c:566-573),
-       * which dispatches ITM_STOVEL, TM_VALUE max 4096 (items.c:4714). */
+       * pemCloseAlphaInput() and CLOSE the user's capture outright. */
     }
     else if(calcMode == CM_PEM && aimBuffer[0] != 0) {
       if(getSystemFlag(FLAG_ALPHA)) {
@@ -1424,13 +1403,12 @@ printf("tam.value: %d\n", tam.value);
 
 
 
-  /* D7-1 (approved 2026-08-08): the raw teardown, file-static.  Callable
-   * only from THIS file — the sites inside _tamProcessInput's call tree,
-   * whose fold resume must stay deferred to tamProcessInput's epilogue
-   * (the L1-F2 rev-2 loss is the record: unwinding at a leave-then-dispatch
-   * site fires before the dispatch inserts its step).  Every caller outside
-   * this file gets the public wrapper below, which settles the fold bracket
-   * itself. */
+  /* The raw teardown, file-static. Callable only from THIS file — the
+   * sites inside _tamProcessInput's call tree, whose fold resume must stay
+   * deferred to tamProcessInput's epilogue: unwinding at a leave-then-
+   * dispatch site fires before the dispatch inserts its step. Every caller
+   * outside this file gets the public wrapper below, which settles the
+   * fold bracket itself. */
   static void _tamLeave(void) {
     if(!tam.mode) {
       return;
@@ -1474,31 +1452,24 @@ printf("tam.value: %d\n", tam.value);
       }
     #endif // PC_BUILD
 
-    /* L1-F2 rev 3: PEM and PARK resume here as before.  An ARMED fold does
-     * NOT — this file's leave-then-dispatch sites call _tamLeave and THEN
-     * dispatch, and resuming before that dispatch inserts its step makes the
-     * F6-4 splice see n == 0, losing the line and orphaning a step in FHIST.
-     * For an armed fold the resume is deferred to forthFoldUnwindIfDone() —
-     * tamProcessInput's epilogue for this file's sites, the public wrapper
-     * below for everyone else. */
+    /* PEM and PARK resume here as before. An ARMED fold does NOT — this
+     * file's leave-then-dispatch sites call _tamLeave and THEN dispatch,
+     * so resuming before the dispatch inserts its step would lose the line.
+     * For an armed fold the resume is deferred to forthFoldUnwindIfDone(). */
     if((calcMode == CM_PEM || forthFoldPending()) && !forthFoldArmed()) {
       hourGlassIconEnabled = false;
-      forthCaptureResume();      /* no-op unless FCAP_SUSPENDED — unchanged */
+      forthCaptureResume();      /* no-op unless FCAP_SUSPENDED */
     }
   }
 
-  /* D7-1 (approved 2026-08-08): the one teardown every caller outside this
-   * file gets.  Ends the TAM session and settles the fold bracket in one
-   * act — teardown, then forthFoldUnwindIfDone(), which is a no-op unless
-   * the fold is pending and TAM is really over.  Name and signature are
-   * upstream's, and the package overrides this file, so EVERY caller in the
-   * tree — including the six upstream files the package does not override
-   * (flags.c, ui/matrixEditor.c, keyboardTweak.c, printing/print.c,
-   * programming/input.c) — inherits the unwind through the link, with no
-   * header patch and no new overrides.  A new external teardown site is
-   * correct by default; the round-6 F2/F4 strand class cannot recur through
-   * this name.  (The wrapper-revert mutation reddens the round-6 [1]
-   * reproducer — that is the pin.) */
+  /* The one teardown every caller outside this file gets: ends the TAM
+   * session and settles the fold bracket in one act — teardown, then
+   * forthFoldUnwindIfDone(), a no-op unless the fold is pending and TAM is
+   * really over. Name and signature are upstream's, and the package
+   * overrides this file, so EVERY caller in the tree — including the
+   * upstream files the package does not override — inherits the unwind
+   * through the link, with no header patch and no new overrides. A new
+   * external teardown site is correct by default. */
   void leaveTamModeIfEnabled(void) {
     _tamLeave();
     forthFoldUnwindIfDone();
@@ -1507,33 +1478,25 @@ printf("tam.value: %d\n", tam.value);
 
 
   void tamProcessInput(uint16_t item) {
-    /* L-R4 (b): the RECORDING commit sites in this file (ui/tam.c:217, 552,
-     * 587, 605, 618, 907, 929, 1102) each have a calcMode == CM_PEM arm that
-     * records a step instead of dispatching.  Making that predicate true for
-     * the duration of the commit is the non-executing-TAM mechanism, and no
-     * commit site is edited.  It is NOT true of every site — see C2 for the
-     * ones that dispatch or navigate with no CM_PEM arm; those are covered by
-     * F1's admit set (PARK) or by the unwind in this epilogue, not by the
-     * bracket.
-     * Narrow by design: a wider bracket would paint _refreshPemScreen
-     * (screen.c:6176) and the PEM TAM overlay (screen.c:5637) under the
-     * prompt.  Nothing inside the commit path refreshes: _insertInProgram's
-     * tail calls scanLabelsAndPrograms + goToGlobalStep (manage.c:770-772),
-     * neither of which refreshes (lblGtoXeq.c:101-140). */
+    /* The RECORDING commit sites in this file each have a calcMode ==
+     * CM_PEM arm that records a step instead of dispatching. Making that
+     * predicate true for the duration of the commit is the
+     * non-executing-TAM mechanism, and no commit site is edited. It is NOT
+     * true of every site — the ones that dispatch or navigate with no
+     * CM_PEM arm are covered by the admit set (PARK) or by the unwind in
+     * this epilogue, not by the bracket. Narrow by design: a wider bracket
+     * would paint the PEM screen refresh under the prompt, and nothing
+     * inside the commit path refreshes. */
     /* Re-entrancy hazard (documented, not asserted): leaveTamModeIfEnabled
      * contains a PC_BUILD-only call to tamProcessInput guarded by
-     * forceTamAlpha (below, :1344-1349 pre-edit numbering).  forceTamAlpha is
-     * never assigned true anywhere in either tree (only cleared: :1346,
-     * config.c:1789, src/c47/config.c:1778, src/c47/ui/tam.c:1331) — dead
-     * today.  If it were ever enabled it would nest this bracket: the INNER
-     * tamProcessInput's epilogue would see calcMode == CM_PEM (this bracket's
-     * own forge, still in effect) and restore CM_PEM instead of the real
-     * savedMode, and — since forthFoldArmed()/forthFoldPending() are a
-     * single static instance, not a stack — the inner call's own
-     * forthFoldLeave() would unwind the OUTER call's fold context too early.
-     * Not asserted here (tam.c carries no FORTH_DEBUG_SELFTEST scaffolding
-     * today and the path is unreachable by construction); if forceTamAlpha
-     * is ever wired live, this bracket must be made reentrant first. */
+     * forceTamAlpha, which is never assigned true anywhere — dead today. If
+     * it were ever enabled it would nest this bracket: the INNER call's
+     * epilogue would see calcMode == CM_PEM (this bracket's own forge) and
+     * restore CM_PEM instead of the real savedMode, and — since
+     * forthFoldArmed()/forthFoldPending() are a single static instance, not
+     * a stack — its forthFoldLeave() would unwind the OUTER call's fold
+     * context too early. If forceTamAlpha is ever wired live, this bracket
+     * must be made reentrant first. */
     const uint8_t savedMode = calcMode;
     const bool_t  brk       = forthFoldArmed();
     if(brk) { calcMode = CM_PEM; }
@@ -1543,11 +1506,11 @@ printf("tam.value: %d\n", tam.value);
     if(brk && calcMode == CM_PEM) { calcMode = savedMode; }
     /* The fold unwinds HERE for this file's own sites: they call the raw
      * _tamLeave and THEN dispatch, so an unwind hung on the teardown would
-     * fire before the work it brackets (see C2).  This epilogue runs on
-     * every path out of _tamProcessInput.  Callers OUTSIDE this file go
-     * through the public leaveTamModeIfEnabled wrapper, which settles the
-     * bracket itself (D7-1). */
-    forthFoldUnwindIfDone();   /* rev 3: resume+leave, and ONLY once tam.mode
+     * fire before the work it brackets. This epilogue runs on every path
+     * out of _tamProcessInput. Callers OUTSIDE this file go through the
+     * public leaveTamModeIfEnabled wrapper, which settles the bracket
+     * itself. */
+    forthFoldUnwindIfDone();   /* resume+leave, and ONLY once tam.mode
                                   is 0 — see the helper's comment in manage.c */
     _tamUpdateBuffer();
   }

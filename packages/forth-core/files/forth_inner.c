@@ -1,7 +1,6 @@
 /*
  * forth_inner.c -- Forth inner interpreter (fetch-decode-dispatch loop)
  * Per DESIGN.md §2 (token table) and §3.2 (inner interpreter)
- * FTOK_C47: §2.2 decoder (PGM_RUNNING wrap lands in H1)
  */
 
 #include "c47.h"
@@ -29,7 +28,7 @@ static uint8_t  rsp;
 static uint64_t rstackRegionBits;   /* bit i = region of rstack[i]'s ip (1 = gdict) */
 static uint8_t forthDepth = 0;   /* nested forthInner invocations */
 
-/* Active-frame predicate (§9.3, F1-1) */
+/* Active-frame predicate (§9.3) */
 bool forthInnerIsActive(void) {
   return forthDepth != 0;
 }
@@ -42,22 +41,20 @@ void forthSetTestInnerDepth(uint8_t depth) {
 
 /* ---- Push helpers (stack discipline per §3.2) ---- */
 
-/* ---- D2: data-stack overflow guard ----
- * The Forth data stack IS the C47 RPN stack (4 or 8 levels, FLAG_SSIZE8), so a
- * push past the top silently discards the bottom-most entry. For a user keying
- * values that is ordinary RPN behaviour, but a recursive word overrunning its
- * OWN operands is silent corruption: 7 FACT used to return 4320 instead of
- * 5040, with lastErrorCode 0 throughout.
+/* ---- Data-stack overflow guard ----
+ * The Forth data stack IS the C47 RPN stack (4 or 8 levels, FLAG_SSIZE8): a
+ * push past the top silently discards the bottom-most entry, which is
+ * ordinary RPN behaviour for user keying but silent corruption for a
+ * recursive word overrunning its own operands.
  *
- * forthDataDepth counts values Forth has pushed and not yet consumed since the
- * current line began. It is only ever <= the true depth, so the guard can fail
- * to fire but can never fire falsely -- a spurious "stack full" on a correct
- * program would be worse than the silence it replaces. */
+ * forthDataDepth counts values Forth has pushed and not yet consumed since
+ * the current line began. It is only ever <= the true depth, so the guard
+ * can fail to fire but can never fire falsely -- a spurious "stack full" on
+ * a correct program would be worse than the silence it replaces. */
 static int16_t forthDataDepth   = 0;
 static bool_t  forthOuterActive = false;
 
-/* D3-1 spill region (DESIGN.md §11): arena-backed, per-execution, LIFO.
- * Unused by product paths until D3-2 wires forthDataDepthApply to it.
+/* Spill region (DESIGN.md §11): arena-backed, per-execution, LIFO.
  * Slot: [uint32 dataType][uint16 sizeInBlocks][payload]. */
 static void    *forthSpillBase   = NULL;   /* arena block, or NULL */
 static uint16_t forthSpillBlocks = 0;      /* allocated size in blocks */
@@ -67,18 +64,9 @@ static uint16_t forthSpillSlots  = 0;      /* live slot count */
 uint16_t forthSpillCount(void) { return forthSpillSlots; }
 
 #if defined(FORTH_DEBUG_SELFTEST)
-/* AUDIT C13: the high-water mark of the spill region for the current line.
- *
- * forthSpillCount() is the LIVE count, and forthDataDepthLeaveOuter resets
- * it before any test can read it — so the assertion that pins `.`'s declared
- * stack delta ("zero values spilled on a line whose depth never exceeds
- * one") was structurally dead: mutating PRIM_PRINT's effect from -1 to 0
- * reddened only the neighbouring generic check, with error 11, and the
- * diagnostic that NAMES the defect never printed.
- *
- * The watermark is written where the live count is, reset where the line's
- * depth accounting is, and read after the line has finished.  Selftest
- * builds only. */
+/* High-water mark of the spill region for the current line. Written where
+ * the live count is, reset where the line's depth accounting is, and read
+ * after the line has finished. Selftest builds only. */
 static uint16_t forthSpillHighWater = 0;
 uint16_t forthTestSpillHighWater(void) { return forthSpillHighWater; }
 #endif
@@ -149,8 +137,8 @@ static int16_t forthStackCapacity(void)
   return (int16_t)(getStackTop() - REGISTER_X + 1);
 }
 
-/* D3-2: after a primitive consumed values, pull spilled values back into
- * the vacated deepest slots. Called from the dispatch bracket only. */
+/* After a primitive consumed values, pull spilled values back into the
+ * vacated deepest slots. Called from the dispatch bracket only. */
 void forthSpillSettle(void)
 {
   while (forthSpillCount() > 0
@@ -162,7 +150,7 @@ void forthSpillSettle(void)
   }
 }
 
-/* D3-2A (DESIGN.md §11): the ONLY way to invoke a primitive. Applies the
+/* The ONLY way to invoke a primitive (DESIGN.md §11). Applies the
  * declared stack effect (catching overflow into the spill), runs it,
  * restores ASLIFT convention, then refills vacated slots. Returns false
  * when the depth/spill accounting refused the invocation; callers keep
@@ -177,17 +165,16 @@ bool_t forthPrimInvoke(uint16_t idx)
   }
   forthPrims[idx].fn();
   setSystemFlag(FLAG_ASLIFT);
-  /* AUDIT round 6 (F11): a consuming prim that REFUSES (EMIT out of range,
-   * `.$` on a non-string — R47 convention: loud stop, operand preserved)
-   * performs NONE of its declared effect, but the -1 above was already
-   * applied.  Settling against that false depth freed the deepest live
-   * register, refilled it with a spilled value, and emptied the spill — so
-   * the line-end ERROR_RAM_FULL stop never fired: silent corruption in
-   * place of a loud refusal.  Restore the pre-applied accounting and skip
-   * the settle; the stack the prim leaves is the stack it was handed.
-   * (Consumption never touches the spill, so the depth snapshot restores
-   * exactly; growth prims have no refuse path today and keep the old
-   * behaviour.) */
+  /* A consuming prim that REFUSES (EMIT out of range, `.$` on a non-string
+   * -- R47 convention: loud stop, operand preserved) performs NONE of its
+   * declared effect, but the -1 above was already applied. Settling against
+   * that false depth would free the deepest live register, refill it with
+   * a spilled value, and empty the spill -- so the line-end ERROR_RAM_FULL
+   * stop would never fire: silent corruption in place of a loud refusal.
+   * Restore the pre-applied accounting and skip the settle; the stack the
+   * prim leaves is the stack it was handed. (Consumption never touches the
+   * spill, so the depth snapshot restores exactly; growth prims have no
+   * refuse path today and keep the old behaviour.) */
   if (net < 0 && lastErrorCode != ERROR_NONE && errBefore == ERROR_NONE) {
     forthDataDepth = depthBefore;
     return true;
@@ -199,7 +186,7 @@ bool_t forthPrimInvoke(uint16_t idx)
 void forthDataDepthEnterOuter(void)
 {
   #if defined(FORTH_DEBUG_SELFTEST)
-    forthSpillHighWater = 0;                 /* C13: per-line watermark */
+    forthSpillHighWater = 0;                 /* per-line watermark */
   #endif
   forthSpillReset();
   forthOuterActive = true;
@@ -209,8 +196,8 @@ void forthDataDepthEnterOuter(void)
 void forthDataDepthLeaveOuter(void)
 {
   if (forthSpillCount() > 0) {
-    /* D3-2A (§11): a completed line may not leave values beyond the
-     * visible stack — loud stop, then the reset below discards. */
+    /* §11: a completed line may not leave values beyond the visible
+     * stack -- loud stop, then the reset below discards. */
     lastErrorCode = ERROR_RAM_FULL;
     displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
   }
@@ -227,8 +214,8 @@ void forthDataDepthLeaveOuter(void)
 void forthDataDepthResync(void)
 {
   if (forthSpillCount() > 0) {
-    /* D3-2 interim, refined by D3-3: an arbitrary native cannot run
-     * while Forth values hide below the visible window. Loud stop. */
+    /* An arbitrary native cannot run while Forth values hide below the
+     * visible window. Loud stop. */
     lastErrorCode = ERROR_RAM_FULL;
     displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
@@ -252,8 +239,8 @@ bool_t forthDataDepthApply(int16_t net)
     return true;
   }
   if (net > 0 && forthDataDepth + net > forthStackCapacity()) {
-    /* D3-2 (DESIGN.md §11): the falling values are Forth-owned — catch
-     * them into the spill, deepest first, BEFORE the primitive's lifts
+    /* DESIGN.md §11: the falling values are Forth-owned -- catch them
+     * into the spill, deepest first, BEFORE the primitive's lifts
      * destroy them. LIFO refill in forthSpillSettle() restores the
      * shallowest spilled value first. Depth saturates at capacity; the
      * spill count carries the excess. Only arena exhaustion errors. */
@@ -277,11 +264,11 @@ bool_t forthDataDepthApply(int16_t net)
 }
 
 /* ASLIFT is left SET after a push: a value now sits in X, and upstream's
- * SLS_ENABLED convention says whatever runs next must lift onto it rather than
- * overwrite it. Clearing it here made a following native item (RCL, and any
- * other result-producing item) clobber X instead of lifting -- see
- * DEFECTS_stack_semantics.md D1. Each push sets the flag on entry for its own
- * lift, so nothing depends on it being clear. */
+ * SLS_ENABLED convention says whatever runs next must lift onto it rather
+ * than overwrite it. Clearing it here made a following native item (RCL,
+ * and any other result-producing item) clobber X instead of lifting. Each
+ * push sets the flag on entry for its own lift, so nothing depends on it
+ * being clear. */
 void forthPushReal34(const real34_t *r)
 {
   if (!forthDataDepthApply(+1)) {
@@ -372,7 +359,7 @@ static bool_t pollProgramInterrupt(void)
 }
 #endif
 
-/* ---- F3-6: XEQN shared dispatch (kind-faithful, B2 chain, B4 matrix) ---- */
+/* ---- XEQN shared dispatch (kind-faithful, B2 chain, B4 matrix) ---- */
 
 forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *colonRef)
 {
@@ -381,7 +368,7 @@ forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *co
   if (label != INVALID_VARIABLE) {
     dynamicMenuItem = -1;
     fnExecute((uint16_t)label);
-    forthDataDepthResync();   /* R47 label body: resync the count (D2) */
+    forthDataDepthResync();   /* R47 label body: resync the count */
     if (lastErrorCode != ERROR_NONE) return FORTH_XEQN_ERR;
     return FORTH_XEQN_DONE;
   }
@@ -417,7 +404,7 @@ forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *co
       uint8_t savedRunStop = programRunStop;
       programRunStop = PGM_RUNNING;
       reallyRunFunction((int16_t)itemId, NOPARAM);
-      forthDataDepthResync();   /* native item: resync the count (D2) */
+      forthDataDepthResync();   /* native item: resync the count */
       if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
       if (lastErrorCode != ERROR_NONE) return FORTH_XEQN_ERR;
       return FORTH_XEQN_DONE;
@@ -472,11 +459,11 @@ static inline ftoken_t readToken(bool g, uint16_t ip)
   return (ftoken_t)((hi << 8) | lo);
 }
 
-/* R1-2: forthInner read the next token and every inline LIT/ILIT/branch/C47
+/* forthInner reads the next token and every inline LIT/ILIT/branch/C47
  * operand directly from the active region base with no proof the bytes lie
  * below the region's here. One guard, checked before every fixed-size
  * inline read; callers exit via INNER_LEAVE() on false so rsp/forthDepth
- * unwind (this function cannot call that macro itself — it is scoped to
+ * unwind (this function cannot call that macro itself -- it is scoped to
  * forthInner's locals). */
 static inline bool boundedRead(bool g, uint16_t ip, uint16_t byteCount)
 {
@@ -493,7 +480,7 @@ static inline bool boundedRead(bool g, uint16_t ip, uint16_t byteCount)
  *  §3.2 Inner interpreter: fetch-decode-dispatch (cross-region)
  * ====================================================================== */
 
-/* F4-3: shared marker-cell dispatch — the ONE dispatch body, used by the
+/* Shared marker-cell dispatch -- the ONE dispatch body, used by the
  * FTOK_C47 runtime decode below and by forth_compile.c's interpret path.
  * paramMode is the native PARAM_* selector: (status & PTP_STATUS) >> 9. */
 void forthParamMarkerDispatch(uint16_t op, uint16_t ptpClass, uint8_t *nbuf, uint16_t used)
@@ -506,12 +493,12 @@ void forthParamMarkerDispatch(uint16_t op, uint16_t ptpClass, uint8_t *nbuf, uin
 
 typedef enum { FORTH_MARK_NONE, FORTH_MARK_OK, FORTH_MARK_BAD } forthMarkResult_t;
 
-/* F4-3: decode one marker parameter cell group at ip into nbuf.
+/* Decode one marker parameter cell group at ip into nbuf.
  * NONE = the leading byte is not a marker legal for this class (the caller
  * decodes its own direct form); OK = decoded, *used and *advance set;
  * BAD = malformed encoding, ERROR_INVALID_CORRUPTED_DATA already raised.
  * Legality comes from forthParamMarkerMask, and the cell grammar from
- * forthParamCellSpan — the same two functions the validator walks use, so a
+ * forthParamCellSpan -- the same two functions the validator walks use, so a
  * body that validates always decodes and vice versa. The caller has already
  * bounded-read the first cell. */
 static forthMarkResult_t decodeMarkerCell(bool g, uint16_t ip, uint16_t ptpClass,
@@ -553,9 +540,9 @@ void forthInner(uint16_t wordRef, bool fromProgram)
   uint32_t dispatches = 0;
   bool curG = (wordRef & FORTH_REF_GLOBAL) != 0;
 
-  /* Re-entrancy (§3.2, D-3): bounded nesting; rstack shared via watermark */
+  /* Re-entrancy (§3.2): bounded nesting; rstack shared via watermark */
   if (forthDepth >= FORTH_NEST_MAX) {
-    lastErrorCode = ERROR_OPERATION_UNDEFINED;   /* C-12: same code as old guard */
+    lastErrorCode = ERROR_OPERATION_UNDEFINED;
     displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED,
                             ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return;
@@ -679,7 +666,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
 
         case FTOK_ILIT: {
           /* Push 4-byte int32 as dtLongInteger (§2.2, §3.3.5)
-           * memcpy avoids sign-extension bug on byte 0 (fix #1). */
+           * memcpy avoids sign-extension bug on byte 0. */
           if (!boundedRead(curG, ip, 4)) {
             INNER_LEAVE();
           }
@@ -695,7 +682,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
 
         case FTOK_BR: {
          /* Unconditional branch: signed int16 delta in cells (§2.2)
-          * memcpy avoids sign-extension bug on byte 0 (fix #16a). */
+          * memcpy avoids sign-extension bug on byte 0. */
          if (!boundedRead(curG, ip, 2)) {
            INNER_LEAVE();
          }
@@ -708,7 +695,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
 
         case FTOK_0BR: {
           /* Conditional branch: pop X, branch if zero/false (§2.2, §3.2)
-           * memcpy avoids sign-extension bug on byte 0 (fix #16b). */
+           * memcpy avoids sign-extension bug on byte 0. */
           if (!boundedRead(curG, ip, 2)) {
             INNER_LEAVE();
           }
@@ -747,7 +734,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
 
         /* Decode inline param per PTP class; unsupported PTP → error */
         uint16_t param = NOPARAM;
-        /* F4-3: marker forms first — the mask says which markers this class
+        /* Marker forms first -- the mask says which markers this class
          * accepts, and a hit dispatches straight through the bounded native
          * core (names resolve at run time, source-as-truth). */
         {
@@ -778,7 +765,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             /* No inline param */
             break;
           case PTP_NUMBER_8:
-            /* 1-byte value padded to a 2-byte cell (§2.2 resolved issue 1) */
+            /* 1-byte value padded to a 2-byte cell (§2.2) */
             if (!boundedRead(curG, ip, 2)) {
               INNER_LEAVE();
             }
@@ -786,7 +773,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             ip += 2;
             break;
           case PTP_NUMBER_16:
-            /* F4-3: no marker forms — a [254][ks] cell is indistinguishable
+            /* No marker forms -- a [254][ks] cell is indistinguishable
              * from a legal little-endian value with low byte 254. */
             if (!boundedRead(curG, ip, 2)) {
               INNER_LEAVE();
@@ -816,9 +803,9 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             break;
           }
           case PTP_REGISTER: {
-            /* F4-2: one cell, b0 <= 224 legal; anything else is either a
-             * marker (handled above) or a corrupt cell — fail loud. The
-             * silence parity is for legal-form out-of-range VALUES. */
+            /* One cell, b0 <= 224 legal; anything else is either a marker
+             * (handled above) or a corrupt cell -- fail loud. The silence
+             * parity is for legal-form out-of-range VALUES. */
             if (!boundedRead(curG, ip, 2)) {
               INNER_LEAVE();
             }
@@ -835,7 +822,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             break;
           }
           case PTP_FLAG: {
-            /* F4-2: one cell, legal bytes (<=143 or 211..224); 250 and the
+            /* One cell, legal bytes (<=143 or 211..224); 250 and the
              * indirection markers are handled above. */
             if (!boundedRead(curG, ip, 2)) {
               INNER_LEAVE();
@@ -853,7 +840,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             break;
           }
           case PTP_SHUFFLE: {
-            /* F4-2: one cell, any byte. */
+            /* One cell, any byte. */
             if (!boundedRead(curG, ip, 2)) {
               INNER_LEAVE();
             }
@@ -862,7 +849,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
             break;
           }
           case PTP_MENU:
-            /* F4-3: MENU has no direct form — every legal cell is a marker
+            /* MENU has no direct form -- every legal cell is a marker
              * cell, so reaching here means the cell is corrupt. */
             lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
             displayCalcErrorMessage(ERROR_INVALID_CORRUPTED_DATA,
@@ -876,8 +863,8 @@ void forthInner(uint16_t wordRef, bool fromProgram)
              INNER_LEAVE();
           }
 
-          /* F2-3/F4-2: dispatch through shared parameter core (§10.2).
-           * PGM_RUNNING save/set/restore wrap around the call (§2.2 resolved issue 2). */
+          /* Dispatch through shared parameter core (§10.2).
+           * PGM_RUNNING save/set/restore wrap around the call (§2.2). */
          if (paramCoreValidateDirect(itemId, ptpClass, param)) {
            uint8_t savedRunStop = programRunStop;
            programRunStop = PGM_RUNNING;
@@ -895,7 +882,7 @@ void forthInner(uint16_t wordRef, bool fromProgram)
       }
 
       case FTOK_XEQN: {
-        /* F3-6: XEQN runtime dispatch — bounded-read kind/len/name/pad */
+        /* XEQN runtime dispatch -- bounded-read kind/len/name/pad */
         if (!boundedRead(curG, ip, 2)) {
           INNER_LEAVE();
         }

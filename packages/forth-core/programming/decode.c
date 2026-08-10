@@ -830,7 +830,7 @@ static void decodeRem(uint8_t *literalAddress, uint16_t op) {
   if (op == ITM_FORTH && *(uint8_t *)literalAddress == STRING_LABEL_VARIABLE) {
     uint8_t len = *(uint8_t *)(literalAddress + 1);
     if (len == 0) {
-      /* §8.1: len==0 is always a real region marker — the open-capture
+      /* len==0 is always a real region marker — the open-capture
        * placeholder is len=1 with a NUL payload and renders blank through
        * the bare-text arm below, so no own-step exception is needed. */
       uint8_t *opcodeStart = literalAddress - 2;

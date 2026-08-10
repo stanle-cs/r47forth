@@ -125,7 +125,7 @@ static void emit_int16(int16_t v)
   forthDictEmitBytes(&v, 2);
 }
 
-/* ---- gdict test builders (F3-2) ---- */
+/* ---- gdict test builders ---- */
 
 static uint16_t gbegin_word(const char *name, uint8_t nameLen)
 {
@@ -221,7 +221,7 @@ static int y_is_longint(int32_t val)
 
 
 
-/* ---- R1-2: truncated inline operands ----
+/* ---- Truncated inline operands ----
  * forthInner read the next token and every inline LIT/ILIT/branch/C47 operand
  * directly from fdict.base with no proof the bytes lie below fdict.here. A
  * restored word whose logical end falls immediately after one of these tokens
@@ -246,8 +246,7 @@ static int y_is_longint(int32_t val)
  * Exercise forthTestRunFromX (the one-shot interpret-from-X core), not
  * forthOuterInterpret: these cases are written against a source line that
  * ARRIVES IN X and is consumed, so their stack expectations depend on the
- * drop.  Before Stage L this core was fnForthOuter itself; L-R2 made that
- * item entry a capture opener (see PACKET_L1_0).
+ * drop.
  * ================================================================== */
 
 /* Helper: store a C string as a dtString in REGISTER_X */
@@ -345,10 +344,8 @@ static void cleanupTestProgram(void);
 
 
 
-/* ---- COMMIT 3: Program-step, run-generation, name-by-index tests ---- */
-/* (build_payload helper retired with Architecture 2: forthProgramStep's
- * contract requires payloads inside real programs — see the migrated
- * tests below.) */
+/* (No build_payload helper: forthProgramStep's contract requires payloads
+ * inside real programs — see the migrated tests below.) */
 
 
 
@@ -371,12 +368,10 @@ static void cleanupTestProgram(void);
 
 
 
-/* ---- COMMIT 4: executeOneStep ITM_FORTH arm tests ---- */
-
-/* read_reg_int32 — R2-T4 item 4 helper: type + int32 value of a long-integer
- * stack register, so a marker-noop test can snapshot all four RPN registers
- * without repeating longInteger_t boilerplate four times over. Test-local
- * only; no production counterpart. */
+/* read_reg_int32 — type + int32 value of a long-integer stack register, so
+ * a marker-noop test can snapshot all four RPN registers without repeating
+ * longInteger_t boilerplate four times over. Test-local only; no production
+ * counterpart. */
 static void read_reg_int32(int reg, uint8_t *type, int32_t *val)
 {
   *type = getRegisterDataType(reg);
@@ -391,9 +386,9 @@ static void read_reg_int32(int reg, uint8_t *type, int32_t *val)
   }
 }
 
-/* seedParamParityState — F2-5: reset RPN stack and execution state
- * to a known baseline before each native/Forth NUMBER_16 dispatch,
- * so the parity comparison starts from identical observable input. */
+/* seedParamParityState — reset RPN stack and execution state to a known
+ * baseline before each native/Forth NUMBER_16 dispatch, so the parity
+ * comparison starts from identical observable input. */
 static void seedParamParityState(void)
 {
   forthPushInt32(11);
@@ -408,14 +403,12 @@ static void seedParamParityState(void)
 
 
 
-/* probeListPtrs — silent tripwire (was a temporary debug probe):
- * For each of labelList and programList, if non-NULL, check whether
- * TO_C47MEMPTR(ptr) falls inside any freeMemoryRegions[] entry — i.e. a
- * stale list pointer left dangling into freed arena space, the harness
- * precondition violation class this suite once suffered from. Prints
- * NOTHING when the invariant holds; on violation it prints the offending
- * pointer/region and latches probeListPtrsViolation, which fails the
- * suite in forthDictSelfTest. */
+/* probeListPtrs — silent tripwire: for each of labelList and programList,
+ * if non-NULL, check whether TO_C47MEMPTR(ptr) falls inside any
+ * freeMemoryRegions[] entry — i.e. a stale list pointer left dangling into
+ * freed arena space. Prints NOTHING when the invariant holds; on violation
+ * it prints the offending pointer/region and latches probeListPtrsViolation,
+ * which fails the suite in forthDictSelfTest. */
 static int probeListPtrsViolation = 0;
 
 static void probeListPtrs(const char *tag)
@@ -466,14 +459,14 @@ static void probeListPtrs(const char *tag)
   }
 }
 
-/* ---- COMMIT 5: §8.4 derived-state helpers + test-program infrastructure ---- */
+/* ---- §8.4 derived-state helpers + test-program infrastructure ---- */
 
 /* writeTestProgram: expand program memory if needed, write bytes, append
  * .END. sentinel, fix bookkeeping, re-scan. Returns true on success.
  * restoreTestProgram: restore the pristine empty program at the original
  * beginOfProgramMemory location and re-scan.
  *
- * Reset-time program memory layout (INVESTIGATION RESULTS):
+ * Reset-time program memory layout:
  *   beginOfProgramMemory = ram + (RAM_SIZE_IN_BLOCKS - 1)  [last block of RAM]
  *   Minimal valid program: [ITM_END_hi|0x80][ITM_END_lo][0xFF][0xFF]
  *     = [0x85][0xB2][0xFF][0xFF]  (ITM_END=1458=0x05B2)
@@ -491,10 +484,9 @@ static void probeListPtrs(const char *tag)
 static uint8_t *testProgOrigBegin;   /* saved for restoreTestProgram */
 static uint16_t testProgOrigFreeSize; /* saved freeMemoryRegions[0].sizeInBlocks */
 
-/* FIX-6: Production-API restore — avoids hand-editing freeMemoryRegions[]
- * which caused 49 overlap warnings and 7 accounting errors per run.
+/* Production-API restore — avoids hand-editing freeMemoryRegions[].
  *
- * Mutation target (kept in #if 0 for test): the old region-surgery approach
+ * Do not simplify this back to direct region surgery: the old approach
  * below directly manipulates freeMemoryRegions[0].sizeInBlocks and compacts
  * the array, creating overlaps when intermediate free regions from test
  * allocations fall inside the restored region.  Re-enabling this block
@@ -553,7 +545,7 @@ static void restoreTestProgram(void)
   currentStep = beginOfProgramMemory;
 
   /* Re-scan labels and programs; recomputes firstFreeProgramByte and
-   * freeProgramBytes from the program bytes (manage.c:184-185). */
+   * freeProgramBytes from the program bytes. */
   probeListPtrs("restoreTestProgram");
   scanLabelsAndPrograms();
 }
@@ -614,15 +606,13 @@ static bool writeTestProgram(const uint8_t *bytes, uint16_t n)
   return true;
 }
 
-/* ---- Program-fixture builder (2026-07-18) ------------------------------
- * Hand-computed byte offsets in fixtures caused five defect cycles (the
- * F1-1 +3/+4 pointer, the F1-5 P0 payload length, the F15-4 expected
- * image, the F2-1 fixture drive, the F2-2 +24-for-+26 segfault). Fixtures
- * are now BUILT: each step append records its offset, payload lengths come
- * from strlen, and step addresses are QUERIED via tpStepAddr — never
- * computed by hand. tpRaw() is the sole escape hatch for a deliberate
- * malformation or exact encoding assertion. New tests must use this builder
- * (packet authoring rule); existing tests are not migrated opportunistically. */
+/* ---- Program-fixture builder ------------------------------------------
+ * Hand-computed byte offsets in fixtures caused repeated defect cycles.
+ * Fixtures are now BUILT: each step append records its offset, payload
+ * lengths come from strlen, and step addresses are QUERIED via tpStepAddr
+ * — never computed by hand. tpRaw() is the sole escape hatch for a
+ * deliberate malformation or exact encoding assertion. New tests must use
+ * this builder; existing tests are not migrated opportunistically. */
 
 static const uint8_t tpForthPrefix[3] = {
   0x8B, 0x1A, STRING_LABEL_VARIABLE
@@ -835,28 +825,22 @@ static uint8_t *tpSrcPayload(const testProg_t *p, int idx) /* -> the LENGTH byte
 
 
 
-/* ---- COMMIT 6: manage.c override — toggle, in-region, FCALL redirect ---- */
 
 
 
 
 
 
-/* ---- COMMIT 7: manage.c slice 2 — E3 empty-commit, E5 EDIT, cursor ---- */
 
 
 
 
-
-
-/* COMMIT 10: MNU_FORTH registered as dynamic softmenu #22, NUMBER_OF_DYNAMIC_SOFTMENUS == 23.
+/* MNU_FORTH registered as dynamic softmenu #22, NUMBER_OF_DYNAMIC_SOFTMENUS == 23.
  * Escaping mutation: bump NUMBER_OF_DYNAMIC_SOFTMENUS without inserting the softmenu[] and
  * dynamicSoftmenu[] rows — TAMFLAG (index 22) is misclassified as dynamic, renders empty. */
 _Static_assert(NUMBER_OF_DYNAMIC_SOFTMENUS == 23, "NUMBER_OF_DYNAMIC_SOFTMENUS must be 23 (P-H6)");
 
 
-
-/* ---- COMMIT 11: softmenus.c slice 2 — the : NAME picker builder ---- */
 
 extern void testInitVariableSoftmenu(int16_t menu);
 
@@ -865,7 +849,6 @@ extern void testInitVariableSoftmenu(int16_t menu);
 
 
 
-/* ---- COMMIT 12: keyboard.c — picker insert at cursor ---- */
 
 
 
@@ -878,7 +861,6 @@ extern void testInitVariableSoftmenu(int16_t menu);
 
 
 
-/* FIX-3 tests: restrict Forth fallback to XEQ/XEQ.SKP only */
 
 
 
@@ -886,73 +868,49 @@ extern void testInitVariableSoftmenu(int16_t menu);
 
 
 
-
-
-/* FIX-6: free-list integrity check */
 static int test_freelist_consistent(void);
 
-/* FIX-6: double-free guard tests (range-overlap guard in freeListFree) */
 static int test_freelist_double_free_guarded(void);
 static int test_freelist_interior_double_free(void);
 static int test_freelist_no_mutation_on_oversize_free(void);
 
-/* F5: alpha menu presentation tests */
 static int test_alpha_menu_on_top_during_capture(void);
 static int test_alpha_menu_contains_fwrd(void);
 
-/* A8: real-keyboard-path regression tests */
 static int test_forth_toggle_from_catalog_leaves_alpha_menu(void);
 static int test_forth_drain_clears_buried_catalog(void);
 static int test_forth_capture_survives_keystroke(void);
 static int test_forth_alpha_gesture_resumes_forth(void);
 
-/* C-13: end-of-line error precedence tests */
 static int test_unterminated_def_errors(void);
 static int test_overlong_token_in_def_keeps_error(void);
 
-/* F2-1: parameter core extraction test */
 static int test_param_core_extraction(void);
 
-/* F2-2: bounded name reader test */
 static int test_param_core_bounded_names(void);
 
-/* F2-3: shared direct dispatch parity test */
 static int test_c47_param_shared_dispatch(void);
 
-/* F2-4: native/Forth parameter parity acceptance sweep */
 static int test_param_parity_sweep(void);
 
-/* F4-1: parameter classification + direct numeric parameters */
 static int test_param_textual_numeric(void);
 static int test_param_register_flag(void);
-/* F4-3: named, system-flag, and indirect parameter forms */
 static int test_param_named_indirect(void);
-/* F4-4: Series C error table and native/Forth parity acceptance */
 static int test_param_series_c_acceptance(void);
-/* F5-1: check mode — the tokenizer validates its own grammar */
 static int test_check_source_line(void);
-/* F5-2: E9 commit gate — structural rejects at ENTER, advisory commits */
 static int test_commit_gate(void);
-/* F6-1: managed capture buffer behind the capture object */
 static int test_capture_buffer(void);
-/* F6-2: TAM suspend/resume keeps capture alive */
 static int test_capture_suspend(void);
-/* F6-3: catalogs and menus during capture */
 static int test_capture_menus(void);
-/* F6-4: parameter entry emits canonical text */
 static int test_capture_param_text(void);
-/* F6-5: the dictionary-backed word catalog */
 static int test_word_catalog(void);
-/* F6-6: capture acceptance battery */
 static int test_capture_acceptance(void);
-/* SB-1: sim bench, capture mechanics + cancel edges (charter A2-A6, F1, F2) */
 static int test_sim_bench_capture(void);
 static int test_sim_bench_nesting(void);
-/* code-audit: dynamic-menu XEQ of a Forth word/colon must insert in PEM, not execute live */
+/* dynamic-menu XEQ of a Forth word/colon must insert in PEM, not execute live */
 static int test_pem_xeq_dynmenu_no_live_exec(void);
-/* code-audit (adversarial): edit an existing Forth line, MODIFY it, re-commit via ENTER */
 static int test_forth_edit_modify_commit(void);
-/* code-audit: PEM Up/Down must commit the managed Forth sink before moving */
+/* PEM Up/Down must commit the managed Forth sink before moving */
 static int test_forth_capture_navigation(void);
 /* complete user-facing language showcase from FORTH_SHOWCASE_PROGRAM.txt */
 static int test_showcase_program(void);
@@ -964,7 +922,7 @@ static int test_spill_native_boundary(void);
 static int test_spill_window_parity(void);
 static int test_spill_region(void);
 
-/* ---- Pillar 1 (H5) backup-file helpers ---- */
+/* ---- backup-file helpers ---- */
 #define TEST_BACKUP_NAME (CALCMODEL == USER_C47 ? "backup.cfg" : "backupR47.cfg")
 
 static char *savedBackupBytes = NULL;
@@ -1040,9 +998,8 @@ static int editBackupFile(const char *dropPrefix, const char *replPrefix, const 
 
 
 
-/* T5-2 reader-side step accessors (PROGRAM-FIXTURE RULE, inspection
- * clause): tests never hand-index step bytes — layout facts live here
- * and in tpSrcPayload only. */
+/* Reader-side step accessors: tests never hand-index step bytes — layout
+ * facts live here and in tpSrcPayload only. */
 static bool_t stepIsForthStep(const uint8_t *step) {
   return step && step[0] == 0x8B && step[1] == 0x1A && step[2] == 0xFD;
 }
@@ -1059,8 +1016,8 @@ static bool_t stepSrcTextEq(const uint8_t *step, const char *expected) {
 
 
 
-/* T5 split: forward declarations for the tests that now live in the
- * .part.h include-parts (see the parts' banner comments). */
+/* Forward declarations for the tests that now live in the .part.h
+ * include-parts (see the parts' banner comments). */
 static int test_literal_after_lit(void);
 static int test_c47_ptp_number8_padded(void);
 static int test_nested_preserves_outer_rstack(void);
@@ -1126,52 +1083,52 @@ static int test_forth_capture_navigation(void);
 static int test_sim_bench_capture(void);
 static int test_sim_bench_nesting(void);
 static int test_pem_xeq_dynmenu_no_live_exec(void);
-static int test_forth_toggle_close_with_open_capture(void);   /* FIX-8 */
-static int test_capture_close_paths_reset_tuple(void);        /* FIX-8 class */
-static int test_capture_origin_lifecycle(void);               /* L1-1 */
-static int test_capture_interactive_close(void);              /* L1-1 */
-static int test_capture_interactive_repl(void);                /* L1-2 */
-static int test_capture_interactive_divert(void);              /* L1-3 */
-static int test_history_program(void);                        /* L1-H */
-static int test_fold_context(void);                            /* L1-F1 */
-static int test_fold_round6_window(void);                      /* AUDIT round 6 */
-static int test_fold_round8_window(void);                      /* AUDIT round 8 */
-static int test_console_error_recovery_keys(void);             /* R12 ruling */
-static int test_console_roll_view_clamp(void);                 /* C12 ruling */
-static int test_console_render_view_clamp(void);               /* AUDIT round 8 C-3 */
-static int test_fold_seams(void);                              /* L1-F2 */
-static int test_fold_operand_parity(void);                     /* L1-F3 */
-static int test_fold_close_paths(void);                        /* L1-F3 */
-static int test_cm_gate_audit(void);                           /* L1-F3 */
-static int test_interactive_acceptance(void);                 /* L1-5 */
-static int test_interactive_close_sweep(void);                /* L1-5 */
-static int test_interactive_residue(void);                    /* L1-5 */
-static int test_fwrd_normal_mode(void);                       /* M1-1 */
-static int test_fwrd_assign(void);                            /* M1-2 */
-static int test_fwrd_late_binding(void);                      /* M1-3 */
-static int test_forth_fold_commit_recompiles(void);           /* FIX-7 */
-static int test_quote_glyph_accept_parity(void);              /* FIX-7 class */
-static int test_resume_drains_buried_catalog(void);           /* FIX-9 */
-static int test_keys_mode_resolution(void);                   /* K1 */
-static int test_keys_mode_toggle_arm(void);                   /* K1 */
-static int test_keys_mode_nav_guards(void);                   /* K1 */
-static int test_insert_token_boundary(void);                  /* K2 */
-static int test_insert_name_eligibility(void);                 /* CONSOLIDATE P2 */
-static int test_keys_digits_then_function(void);              /* K2 */
-static int test_exit_ladder_keys_rung(void);                  /* K2 */
-static int test_keys_eex_and_numlock(void);                   /* K2 */
-static int test_keys_tam_roundtrip(void);                     /* K3 */
-static int test_alpha_tam_roundtrip_unchanged(void);          /* K3 */
-static int test_abandon_clears_keys_bit(void);                /* K3 */
-static int test_k4_mixed_input_definition(void);              /* K4 */
-static int test_k4_keys_only_line(void);                      /* K4 */
-static int test_k4_relock_submode(void);                      /* K4 */
-static int test_k4_ladder_full_unwind(void);                  /* K4 */
-static int test_k4_arena_sweep(void);                         /* K4 */
+static int test_forth_toggle_close_with_open_capture(void);
+static int test_capture_close_paths_reset_tuple(void);
+static int test_capture_origin_lifecycle(void);
+static int test_capture_interactive_close(void);
+static int test_capture_interactive_repl(void);
+static int test_capture_interactive_divert(void);
+static int test_history_program(void);
+static int test_fold_context(void);
+static int test_fold_round6_window(void);
+static int test_fold_round8_window(void);
+static int test_console_error_recovery_keys(void);
+static int test_console_roll_view_clamp(void);
+static int test_console_render_view_clamp(void);
+static int test_fold_seams(void);
+static int test_fold_operand_parity(void);
+static int test_fold_close_paths(void);
+static int test_cm_gate_audit(void);
+static int test_interactive_acceptance(void);
+static int test_interactive_close_sweep(void);
+static int test_interactive_residue(void);
+static int test_fwrd_normal_mode(void);
+static int test_fwrd_assign(void);
+static int test_fwrd_late_binding(void);
+static int test_forth_fold_commit_recompiles(void);
+static int test_quote_glyph_accept_parity(void);
+static int test_resume_drains_buried_catalog(void);
+static int test_keys_mode_resolution(void);
+static int test_keys_mode_toggle_arm(void);
+static int test_keys_mode_nav_guards(void);
+static int test_insert_token_boundary(void);
+static int test_insert_name_eligibility(void);
+static int test_keys_digits_then_function(void);
+static int test_exit_ladder_keys_rung(void);
+static int test_keys_eex_and_numlock(void);
+static int test_keys_tam_roundtrip(void);
+static int test_alpha_tam_roundtrip_unchanged(void);
+static int test_abandon_clears_keys_bit(void);
+static int test_k4_mixed_input_definition(void);
+static int test_k4_keys_only_line(void);
+static int test_k4_relock_submode(void);
+static int test_k4_ladder_full_unwind(void);
+static int test_k4_arena_sweep(void);
 
 
-/* T5 split: forward declarations for the tests that now live in the
- * .part.h include-parts (see the parts' banner comments). */
+/* Forward declarations for the tests that now live in the .part.h
+ * include-parts (see the parts' banner comments). */
 static int test_stack_aslift(void);
 static int test_branch_fwd(void);
 static int test_branch_back(void);
@@ -1241,7 +1198,7 @@ static int test_exec_step_marker_noop(void);
 static int test_exec_step_source_runs(void);
 static int test_exec_step_halts_on_error(void);
 static int test_marker_parity(void);
-static int test_placeholder_never_marker(void);   /* §8.1 class test, 2026-08-04 */
+static int test_placeholder_never_marker(void);
 static int test_entry_state_derivation(void);
 static int test_toggle_inserts_marker(void);
 static int test_forth_toggle_close_resets_sentinel(void);
@@ -1289,7 +1246,6 @@ static int test_spill_window_parity(void);
 static int test_forth_run_from_x_brackets(void);
 static int test_native_lift_after_forth(void);
 static int test_savings_program(void);
-/* N1-1: the console view ring */
 static int test_console_ring_basic(void);
 static int test_console_ring_partial(void);
 static int test_console_ring_evict(void);
@@ -1299,43 +1255,35 @@ static int test_console_ring_clear(void);
 static int test_console_ring_view(void);
 static int test_console_ring_reset_seam(void);
 static int test_console_ring_hammer(void);
-/* N1-2: the console view */
 static int test_console_view_gate(void);
 static int test_console_view_paints(void);
 static int test_console_view_rows(void);
 static int test_console_view_roll(void);
 static int test_console_view_arm(void);
 static int test_console_view_placement(void);
-/* N1-3: the dialogue */
 static int test_console_dialogue_echo(void);
 static int test_console_dialogue_error(void);
 static int test_console_dialogue_refusal(void);
 static int test_console_dialogue_session(void);
-/* N1-4: the words */
 static int test_console_words_print(void);
 static int test_console_words_stack(void);
 static int test_console_words_emit(void);
-static int test_console_output_glyph_integrity(void);     /* AUDIT C10/C11/C20 */
-static int test_console_line_survives_gestures(void);     /* AUDIT C5/C6 */
-static int test_console_print_stack_depth(void);          /* AUDIT C7 */
+static int test_console_output_glyph_integrity(void);
+static int test_console_line_survives_gestures(void);
+static int test_console_print_stack_depth(void);
 static int test_console_words_str_page(void);
 static int test_console_words_program(void);
-/* N1-5: keys-first */
 static int test_console_keys_first(void);
 static int test_console_exit_ladder(void);
-/* N1-6: acceptance */
 static int test_console_story(void);
 static int test_console_one_history(void);
 static int test_console_format_buffer_contract(void);
 static int test_console_frame_conservation(void);
 static int test_console_capture_bits_survive_reopen(void);
-/* AUDIT C18 / C19 class tests */
 static int test_console_submode_row_agreement(void);
 static int test_console_error_echo_closes_output(void);
-/* AUDIT round 3 class tests */
 static int test_console_stamp_never_outlives_capture(void);
 static int test_console_surface_repair_ungated(void);
-/* AUDIT round 4 */
 static int test_console_ownership_invariant(void);
 
 int forthDictSelfTest(void)
@@ -1351,7 +1299,7 @@ int forthDictSelfTest(void)
 
   forthDictInit();
 
-  /* FIX-6: snapshot allocated regions at suite start (§freeList diagnostics) */
+  /* Snapshot allocated regions at suite start (§freeList diagnostics) */
   int32_t allocRegionsStart = numberOfAllocatedMemoryRegions;
 
   const char *words[] = { "A", "B", "C", "D", "E" };
@@ -1383,7 +1331,7 @@ int forthDictSelfTest(void)
     printf("  WARN: no relocation observed (base unchanged at %p)\n", (void *)baseBefore);
   }
 
-  /* Fix #14: gate on relocObserved — §7.2 requires "grow across a move". */
+  /* Gate on relocObserved — §7.2 requires "grow across a move". */
   if (!relocObserved) {
     fail = 1;
   }
@@ -1594,17 +1542,14 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_undo_rows_us_enabled...\n");
   fail |= test_undo_rows_us_enabled();
 
-  /* Fix #15: double-free in test_xeq_precedence is fixed; no need to
-   * skip the final free anymore. */
   forthDictClear();
 
-  /* COMMIT 2: P-1 representation — ITM_FORTH is PTP_REM */
+  /* ITM_FORTH's representation is PTP_REM. */
   printf("  [DEBUG] running test_forth_step_ptp_rem...\n");
   fail |= test_forth_step_ptp_rem();
   printf("  [DEBUG] running test_forth_step_sizing...\n");
   fail |= test_forth_step_sizing();
 
-  /* COMMIT 3: Program-step entry, run-generation, name-by-index */
   printf("\nFORTH COMMIT 3 TESTS (program-step / run-gen / name-by-index)\n");
   forthDictInit();
 
@@ -1624,7 +1569,6 @@ int forthDictSelfTest(void)
   fail |= test_run_entry_lifetime_signaling();
   forthDictClear();
 
-  /* P2: Pillar 2 — pre-scan contract tests (T2.1-T2.4) */
   printf("\nFORTH P2 TESTS (pre-scan contract: forward ref, no tail, no recompile, owning scope, gen rearm, error halt, last step, two programs)\n");
   forthDictInit();
 
@@ -1724,7 +1668,6 @@ int forthDictSelfTest(void)
   fail |= test_param_parity_sweep();
   forthDictClear();
 
-  /* COMMIT 4: executeOneStep ITM_FORTH arm + bump sites */
   printf("\nFORTH COMMIT 4 TESTS (executeOneStep ITM_FORTH arm)\n");
   forthDictInit();
 
@@ -1740,7 +1683,6 @@ int forthDictSelfTest(void)
   fail |= test_exec_step_halts_on_error();
   forthDictClear();
 
-  /* COMMIT 5: §8.4 derived-state helpers + test-program infrastructure */
   printf("\nFORTH COMMIT 5 TESTS (§8.4 derived-state helpers)\n");
   forthDictInit();
 
@@ -1756,7 +1698,6 @@ int forthDictSelfTest(void)
   fail |= test_entry_state_derivation();
   forthDictClear();
 
-  /* COMMIT 6: manage.c override — toggle, in-region, FCALL redirect */
   printf("\nFORTH COMMIT 6 TESTS (manage.c override)\n");
   forthDictInit();
 
@@ -1776,7 +1717,6 @@ int forthDictSelfTest(void)
   fail |= test_fcall_redirect_rejects_stale();
   forthDictClear();
 
-  /* COMMIT 7: manage.c slice 2 — E3 empty-commit, E5 EDIT, cursor */
   printf("\nFORTH COMMIT 7 TESTS (manage.c slice 2: E3/E5)\n");
   forthDictInit();
 
@@ -1788,7 +1728,6 @@ int forthDictSelfTest(void)
   fail |= test_forth_edit_extracts_source();
   forthDictClear();
 
-  /* COMMIT 8: decode.c override — §8.5 symmetric display */
   printf("\nFORTH COMMIT 8 TESTS (decode.c override: §8.5 marker rendering)\n");
   forthDictInit();
 
@@ -1804,7 +1743,6 @@ int forthDictSelfTest(void)
   fail |= test_mnu_forth_row();
   forthDictClear();
 
-  /* COMMIT 10: softmenus.c registration + defines.h */
   printf("\nFORTH COMMIT 10 TESTS (softmenus.c/defines.h: MNU_FORTH registration)\n");
   forthDictInit();
 
@@ -1816,7 +1754,6 @@ int forthDictSelfTest(void)
   fail |= test_static_menu_integrity();
   forthDictClear();
 
-  /* COMMIT 11: softmenus.c slice 2 — the : NAME picker builder */
   printf("\nFORTH COMMIT 11 TESTS (softmenus.c: MNU_FORTH picker builder)\n");
   forthDictInit();
 
@@ -1840,7 +1777,6 @@ int forthDictSelfTest(void)
   fail |= test_picker_dedupes();
   forthDictClear();
 
-  /* COMMIT 12: picker insert at cursor tests */
   printf("  [DEBUG] running test_picker_insert_at_cursor...\n");
   fail |= test_picker_insert_at_cursor();
 
@@ -1865,12 +1801,10 @@ int forthDictSelfTest(void)
   fail |= test_picker_trailing_space();
   forthDictClear();
 
-  /* COMMIT 13: keyboard.c — F7 picker-guard menu-identity conjunct */
   printf("  [DEBUG] running test_picker_guard_menu_identity...\n");
   fail |= test_picker_guard_menu_identity();
   forthDictClear();
 
-  /* FIX-1: softmenus.c — glyph-wise bounded picker tokenizer */
   printf("  [DEBUG] running test_picker_glyph_tokenize...\n");
   fail |= test_picker_glyph_tokenize();
   forthDictClear();
@@ -1895,7 +1829,6 @@ int forthDictSelfTest(void)
   fail |= test_softmenu_trailing_null();
   forthDictClear();
 
-  /* FIX-2: derived state at insertion point */
   printf("\nFORTH FIX-2 TESTS (derived state at insertion point)\n");
   forthDictInit();
 
@@ -1923,7 +1856,6 @@ int forthDictSelfTest(void)
   fail |= test_tam_function_cleared_after_abort();
   forthDictClear();
 
-  /* FIX-3: restrict Forth fallback to XEQ/XEQ.SKP only */
   printf("\nFORTH FIX-3 TESTS (PARAM_LABEL fallback restricted to XEQ/XEQ.SKP)\n");
   forthDictInit();
 
@@ -1939,7 +1871,6 @@ int forthDictSelfTest(void)
   fail |= test_xeq_word_still_calls();
   forthDictClear();
 
-  /* FIX-4: manage.c — insertUserItemInProgram opcode low-byte mask */
   printf("\nFORTH FIX-4 TESTS (manage.c: insertUserItemInProgram low-byte mask)\n");
   forthDictInit();
 
@@ -1963,7 +1894,6 @@ int forthDictSelfTest(void)
   fail |= test_alpha_menu_contains_fwrd();
   forthDictClear();
 
-  /* A8: real-keyboard-path regression tests */
   printf("\nFORTH A8 TESTS (real keyboard dispatch chain)\n");
   forthDictInit();
 
@@ -1982,7 +1912,6 @@ int forthDictSelfTest(void)
   fail |= test_forth_alpha_gesture_resumes_forth();
   forthDictClear();
 
-  /* C-13: end-of-line error precedence tests */
   printf("\nFORTH C-13 TESTS (end-of-line error precedence)\n");
   printf("  [DEBUG] running test_unterminated_def_errors...\n");
   fail |= test_unterminated_def_errors();
@@ -1992,7 +1921,6 @@ int forthDictSelfTest(void)
   fail |= test_overlong_token_in_def_keeps_error();
   forthDictClear();
 
-  /* F3-3: scope isolation */
   printf("\nFORTH F3-3 TESTS (scope isolation)\n");
   forthDictInit();
 
@@ -2000,7 +1928,6 @@ int forthDictSelfTest(void)
   fail |= test_scope_isolation();
   forthDictClear();
 
-  /* F3-4: GLOBAL/IMMEDIATE/FORGET with same-line mark discipline */
   printf("\nFORTH F3-4 TESTS (global marks)\n");
   forthDictInit();
   forthGDictInit();
@@ -2010,7 +1937,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F3-5: compile-time control flow */
   printf("\nFORTH F3-5 TESTS (compile-time control flow)\n");
   forthDictInit();
   forthGDictInit();
@@ -2020,7 +1946,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F4-1: parameter classification + direct numeric parameters */
   printf("\nFORTH F4-1 TESTS (parameter classification + direct numeric)\n");
   forthDictInit();
 
@@ -2028,7 +1953,6 @@ int forthDictSelfTest(void)
   fail |= test_param_textual_numeric();
   forthDictClear();
 
-  /* F4-2: register, flag, and shuffle direct forms */
   printf("\nFORTH F4-2 TESTS (register, flag, shuffle direct forms)\n");
   forthDictInit();
 
@@ -2037,7 +1961,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F4-3: named, system-flag, and indirect parameter forms */
   printf("\nFORTH F4-3 TESTS (named, system-flag, indirect parameter forms)\n");
   forthDictInit();
 
@@ -2046,7 +1969,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F4-4: Series C error table and native/Forth parity acceptance */
   printf("\nFORTH F4-4 TESTS (Series C error table and native/Forth parity)\n");
   forthDictInit();
 
@@ -2055,7 +1977,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F5-1: check mode — the tokenizer validates its own grammar */
   printf("\nFORTH F5-1 TESTS (check mode: tokenizer self-validation)\n");
   forthDictInit();
 
@@ -2064,7 +1985,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F5-2: E9 commit gate — structural rejects at ENTER, advisory commits */
   printf("\nFORTH F5-2 TESTS (E9 commit gate)\n");
   forthDictInit();
 
@@ -2073,7 +1993,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F6-1: managed capture buffer behind the capture object */
   printf("\nFORTH F6-1 TESTS (managed capture buffer)\n");
   forthDictInit();
 
@@ -2082,7 +2001,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F6-2: TAM suspend/resume keeps capture alive */
   printf("\nFORTH F6-2 TESTS (TAM suspend/resume)\n");
   forthDictInit();
 
@@ -2091,7 +2009,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F6-3: catalogs and menus during capture */
   printf("\nFORTH F6-3 TESTS (catalogs and menus during capture)\n");
   forthDictInit();
 
@@ -2100,7 +2017,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F6-4: parameter entry emits canonical text */
   printf("\nFORTH F6-4 TESTS (parameter entry emits canonical text)\n");
   forthDictInit();
 
@@ -2109,7 +2025,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F6-5: the dictionary-backed word catalog */
   printf("\nFORTH F6-5 TESTS (dictionary-backed word catalog)\n");
   forthDictInit();
 
@@ -2118,7 +2033,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* F6-6: capture acceptance battery */
   printf("\nFORTH F6-6 TESTS (capture acceptance battery)\n");
   forthDictInit();
 
@@ -2343,7 +2257,7 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_freelist_no_mutation_on_oversize_free...\n");
   fail |= test_freelist_no_mutation_on_oversize_free();
 
-  /* FIX-6: Arena report (§5.4/§8.9 duty) — define words, report, then clear */
+  /* Arena report (§5.4/§8.9 duty) — define words, report, then clear */
   { uint32_t freeRamBefore = getFreeRamMemory();
     forthDictInit();
     forthGDictInit();
@@ -2381,26 +2295,24 @@ int forthDictSelfTest(void)
   fail |= test_validate_direct_corruption();
   restoreBackupFile();
 
-  /* FIX-6: allocated regions must return to the start value after all
-   * cleanup. A growth here means some test leaked an allocation (the two
-   * historical offenders: forthDictInit on a live dict — §6.2 P-4 — and
-   * the interior-double-free test's split-free). Gate, don't warn: a WARN
-   * was permanent noise nobody failed on. */
+  /* Allocated regions must return to the start value after all cleanup.
+   * A growth here means some test leaked an allocation.  Gate, don't
+   * warn: a WARN was permanent noise nobody failed on. */
   if (numberOfAllocatedMemoryRegions != allocRegionsStart) {
     printf("  FAIL: numberOfAllocatedMemoryRegions = %d (start=%d, expected unchanged)\n",
     numberOfAllocatedMemoryRegions, allocRegionsStart);
     fail = 1;
   }
 
-  /* K4-A: registered AFTER the FIX-6 freelist group — the battery's two
-   * program runs otherwise shift the free-list shape (16 regions, no
+  /* Registered AFTER the free-list integrity group above — the battery's
+   * two program runs otherwise shift the free-list shape (16 regions, no
    * adjacent pair) and push test_freelist_interior_double_free into its
    * defensive SKIP, silently unexercising that assertion. */
 
-  /* M1 (Stage M): registered AFTER the FIX-6 leak gate, the K4-A
-   * precedent — the assign battery's save/restore cycle and USER-key
-   * table rebuilds legitimately shift the allocator composition (the
-   * packed userKeyLabel table relocates on every write), which the
+  /* Also registered AFTER the leak gate above, for the same reason: the
+   * assign battery's save/restore cycle and USER-key table rebuilds
+   * legitimately shift the allocator composition (the packed
+   * userKeyLabel table relocates on every write), which the
    * region-count gate has no allowance for. */
   printf("\nFORTH M1 TESTS (FWRD catalog outside captures; ASSIGN band)\n");
   forthDictInit();
@@ -2487,10 +2399,10 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* N1-1: the console view ring (Stage N).  No dictionary dependency —
-   * the ring is BSS and knows nothing about fdict/gdict — but the seam
-   * test drives forthDictInit/forthDictClear, so the block owns its own
-   * lifecycle exactly like its neighbours. */
+  /* The console view ring has no dictionary dependency — it is BSS and
+   * knows nothing about fdict/gdict — but the seam test drives
+   * forthDictInit/forthDictClear, so the block owns its own lifecycle
+   * exactly like its neighbours. */
   printf("\nFORTH N1-1 TESTS (console view ring)\n");
   forthDictInit();
 
@@ -2521,7 +2433,6 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_console_ring_hammer...\n");
   fail |= test_console_ring_hammer();
 
-  /* N1-2: the console view */
   printf("\nFORTH N1-2 TESTS (console view)\n");
 
   printf("  [DEBUG] running test_console_view_gate...\n");
@@ -2626,8 +2537,6 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  /* FIX-6: free-list integrity — LAST test, after all cleanup */
-
   /* Stale-list tripwire (probeListPtrs): any labelList/programList pointer
    * observed inside a free region during the run fails the suite. */
   if (probeListPtrsViolation) {
@@ -2668,22 +2577,7 @@ int forthDictSelfTest(void)
 
 
 
-/* ==========================================================================
- * F4-3: Named, system-flag, and indirect parameter forms
- * ========================================================================== */
-
-
-
-/* ==========================================================================
- * F5-1: Check mode — the tokenizer validates its own grammar
- * ========================================================================== */
-
-
-/* ==========================================================================
- * F5-1: Check mode — the tokenizer validates its own grammar
- * ========================================================================== */
-
-/* F5-2A: fill the stack region an about-to-be-called frame will occupy with
+/* Fill the stack region an about-to-be-called frame will occupy with
  * 0xAA, so that a callee reading an uninitialized local sees a deterministic
  * poison value instead of whatever the previous call left behind. volatile
  * keeps the writes; the array is deliberately larger than the frames under
@@ -2705,31 +2599,16 @@ static void poisonAutoFrame(void)
 
 
 
-/* test_pem_xeq_dynmenu_no_live_exec — code-audit finding, 2026-07-20.
+/* test_pem_xeq_dynmenu_no_live_exec — a Forth word/colon picked from a
+ * dynamic menu via XEQ while editing a program (CM_PEM) must insert an
+ * "XEQ 'NAME'" step, never execute live — DESIGN.md §4.2's "PEM recording
+ * of XEQ 'NAME': names persist, never widx" contract.
  *
- * items.c's runFunction() dispatches ITM_XEQ picked from a dynamic menu
- * (dynamicMenuItem >= 0): a resolved native LABEL correctly branches on
- * calcMode (insertUserItemInProgram in PEM, reallyRunFunction otherwise),
- * but the forth-core-added FORTH_XEQ_COLON/FORTH_XEQ_ITEM branches used to
- * skip that check entirely and always call reallyRunFunction — so picking
- * a Forth word from the MNU_FORTH picker via XEQ while editing a program
- * (CM_PEM) would execute it live instead of recording an "XEQ 'NAME'"
- * step, corrupting register/stack state mid-edit instead of composing the
- * program (violates DESIGN.md §4.2's "PEM recording of XEQ 'NAME': names
- * persist, never widx" contract). The same missing-check pattern was found
- * and fixed at two more call sites (screen.c's _executeItem, keyboard.c's
- * btnReleased) — both FLAG_USER-key XEQ dispatch, not exercised by this
- * test, fixed by inspection/mirroring this one's shape.
- *
- * Drive: compile W7 interactively (fdict-resident, F6-5's "interactive-
- * scope dictionary words" catalog section), build a real MNU_FORTH picker
- * over a minimal program, select W7 via dynamicMenuItem, call
- * runFunction(ITM_XEQ) with calcMode == CM_PEM. Oracle: a step must be
- * recorded (getNumberOfSteps() increases by exactly 1) and the sentinel
- * left in X must survive untouched (no live execution).
- * Escaping mutation: drop the calcMode == CM_PEM check in the
- * FORTH_XEQ_COLON arm (items.c) — X becomes 7 (the word ran) and the step
- * count stays unchanged, both caught below. */
+ * Drive: compile W7 interactively, build a real MNU_FORTH picker over a
+ * minimal program, select W7 via dynamicMenuItem, call runFunction(ITM_XEQ)
+ * with calcMode == CM_PEM. Oracle: a step must be recorded
+ * (getNumberOfSteps() increases by exactly 1) and the sentinel left in X
+ * must survive untouched (no live execution). */
 
 
 
@@ -2747,8 +2626,7 @@ static void poisonAutoFrame(void)
  * inside compiled Forth overwrites X rather than lifting the Forth stack, so
  * a working value CANNOT be parked on the stack across an RCL. The schedule
  * therefore carries its state in R19 (countdown), R20 (slot index) and R21
- * (running balance). An earlier draft that kept the balance on the stack
- * stored six zeros and passed nothing. */
+ * (running balance). */
 static int forthExprIsZero(const char *src)
 {
   uint32_t t;

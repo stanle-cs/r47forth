@@ -1,7 +1,6 @@
 /*
  * forth_compile.c -- Forth outer interpreter + tokenizer + number grammar
- * Per DESIGN.md §3.3.1 (state machine, C-4), §3.3.2 (source, C-5),
- * §3.3.3 (tokenizer, C-6), §3.3.5 (numbers, C-8), §3.3.6 (C47 labels, C-1)
+ * Per DESIGN.md §3.3.1, §3.3.2, §3.3.3, §3.3.5, §3.3.6
  */
 
 #include <string.h>
@@ -10,7 +9,7 @@
 #include "forth_dict.h"
 #include "forth_prims.h"
 #include "forth_capture.h"
-#include "forth_menu.h"     /* AUDIT C17: forthConsoleRegisterSlot0 at the open site */
+#include "forth_menu.h"
 #include "programming/param_core.h"
 
 /* ---- §2.2 Token constants (mirror forth_inner.c) ---- */
@@ -23,7 +22,7 @@
 #define FTOK_BR           0x7F02
 #define FTOK_0BR          0x7F03
 
-/* ---- §3.3.2 / D-3: per-invocation context; idle BSS = one ptr + 2 bytes ---- */
+/* ---- §3.3.2: per-invocation context; idle BSS = one ptr + 2 bytes ---- */
 typedef enum {
   FORTH_OUTER_FULL      = 0,  /* compile and execute (interactive semantics) */
   FORTH_OUTER_DEFS_ONLY = 1,  /* pre-scan: compile definitions, skip ALL interpret-state tokens */
@@ -37,21 +36,21 @@ typedef struct {
   char            source[FORTH_SOURCE_MAX];
   int16_t         pos;          /* tokenizer position */
   forthDefState_t savedDef;     /* outer level's open-definition snapshot */
-  uint16_t        savedScope;   /* outer level's scope snapshot (F3-3) */
-  uint16_t        savedLatestClosed; /* F3-4: outer level's tracker snapshot */
+  uint16_t        savedScope;   /* outer level's scope snapshot */
+  uint16_t        savedLatestClosed; /* outer level's tracker snapshot */
 } forthOuterCtx_t;
 
 #define FORTH_OUTER_NEST_MAX 2
 static forthOuterCtx_t *forthOuterCur   = NULL;
 static uint8_t          forthOuterDepth = 0;
 
-/* F3-4: same-line tracker — most recently closed definition on this line */
+/* same-line tracker — most recently closed definition on this line */
 static uint16_t forthLatestClosedRef = FORTH_NULL;
 
 uint16_t forthLatestClosedRefGet(void) { return forthLatestClosedRef; }
 void     forthLatestClosedRefSet(uint16_t ref) { forthLatestClosedRef = ref; }
 
-/* ---- F3-5: control stack for compile-time branching ---- */
+/* ---- Control stack for compile-time branching ---- */
 
 #define FORTH_CSTACK_DEPTH 8
 #define CTL_ORIG 1
@@ -60,7 +59,7 @@ typedef struct { uint16_t pos; uint8_t kind; } forthCtl_t;
 static forthCtl_t forthCstack[FORTH_CSTACK_DEPTH];
 static uint8_t forthCsp = 0;
 
-/* F5-1: PRIM_* indices from forth_prims.c (append-frozen, not exported) */
+/* PRIM_* indices from forth_prims.c (append-frozen, not exported) */
 #define PRIM_RECURSE   11
 #define PRIM_GLOBAL    12
 #define PRIM_IMMEDIATE 13
@@ -143,7 +142,7 @@ void forthCtlRepeat(void){ CTL_GUARD(); uint16_t d, o;
                             if (!ctlEmitBack(FTOK_BR, d)) return;
                             ctlPatchTo(o, fdict.here); }
 
-/* ---- §9.3 Run-generation counter (P-5, F1-1: pending-reset truth) ---- */
+/* ---- §9.3 Run-generation counter ---- */
 
 static uint16_t forthRunGeneration   = 0;
 static uint16_t forthResetGeneration = 0;
@@ -156,14 +155,13 @@ void forthRunGenBump(void) {
   }
 }
 
-/* §9.2 first-touch pre-scan tracking — F1-3 (R4-E1): dynamic records inside
- * the dictionary region. One 8-byte record per scanned program:
+/* §9.2 first-touch pre-scan tracking: dynamic records inside the
+ * dictionary region. One 8-byte record per scanned program:
  * [uint32 progOffset][uint16 prevOff][uint16 zero], newest at forthScanHead.
  * Records die with the region (clear/init/restore reset the head); capacity
  * failure is ordinary dictionary exhaustion. The two walk guards below are
- * defense-in-depth for a dangling head — declared redundant on every
- * production path (a generation seam precedes every query); do not remove
- * without re-running the mutation analysis. */
+ * defense-in-depth for a dangling head, redundant on every production path
+ * (a generation seam precedes every query) — do not remove. */
 static uint16_t forthScanHead = FORTH_NULL;
 
 void forthScanTrackReset(void) {
@@ -218,7 +216,7 @@ static bool forthScanRecord(const uint8_t *progStart) {
   return true;
 }
 
-/* F3-3: scope variable -- current owner for definition stamping and filtered lookup */
+/* scope variable -- current owner for definition stamping and filtered lookup */
 static uint16_t forthCurrentScope = FORTH_OWNER_INTERACTIVE;
 uint16_t forthCurrentScopeGet(void) { return forthCurrentScope; }
 #if defined(FORTH_DEBUG_SELFTEST)
@@ -234,14 +232,14 @@ static void forthRunGenCheckReset(void) {
   forthResetPending = false;                  /* consume only after clear */
 }
 
-/* ---- §3.3.3 Tokenizer state (C-6) ---- */
+/* ---- §3.3.3 Tokenizer state ---- */
 
 static void forthTokenizerInit(void) {
   forthOuterCur->pos = 0;
 }
 
 /*
- * C-6: glyph-wise tokenizer.  Delimiter: exactly 0x20.
+ * Glyph-wise tokenizer.  Delimiter: exactly 0x20.
  * Returns false at end of line.
  */
 static bool nextToken(char buf[FORTH_TOKEN_MAX + 1]) {
@@ -261,7 +259,7 @@ static bool nextToken(char buf[FORTH_TOKEN_MAX + 1]) {
   return true;
 }
 
-/* §10.4 F4-1: Decimal, unsigned, leading-zero-insensitive (TAM parity).
+/* §10.4: Decimal, unsigned, leading-zero-insensitive (TAM parity).
  * Returns false on any non-digit byte, empty token, or accumulated value
  * above TAM_MAX_MASK. */
 static bool parseParamDigits(const char *tok, uint16_t *out)
@@ -278,8 +276,8 @@ static bool parseParamDigits(const char *tok, uint16_t *out)
   return true;
 }
 
-/* F4-3: indirection prefix — the two-byte glyph STD_RIGHT_ARROW only.
- * No ASCII "->" and no IND spelling (V4): the typeable surface is exactly
+/* Indirection prefix — the two-byte glyph STD_RIGHT_ARROW only.
+ * No ASCII "->" and no IND spelling: the typeable surface is exactly
  * the arrow glyph and the ASCII quote. Returns the remainder or NULL. */
 static const char *checkArrowPrefix(const char *tok)
 {
@@ -287,16 +285,14 @@ static const char *checkArrowPrefix(const char *tok)
   return NULL;
 }
 
-/* FIX-7: quote delimiters are ASCII 0x27 (the typeable canonical spelling,
- * V4) OR the directional glyph pair STD_LEFT/RIGHT_SINGLE_QUOTE
- * (\xa0\x18 / \xa0\x19) that decodeOneStep renders and the F6-4 fold
- * writes into capture lines — before this, the fold emitted committed
- * source its own compiler refused (D-C1). Open/close are matched
- * independently (decode always emits the glyph pair, typing always
- * produces 0x27; a mixed pair is harmless). Content bytes pass through
- * raw either way; a mid-token right-glyph stays content — only the LAST
- * glyph closes. No number-grammar collision: any byte >= 0x80 already
- * disqualifies a token as a number (classifyNumber). */
+/* Quote delimiters are ASCII 0x27 (the typeable canonical spelling) OR the
+ * directional glyph pair STD_LEFT/RIGHT_SINGLE_QUOTE (\xa0\x18 / \xa0\x19)
+ * that decodeOneStep renders and the capture fold writes into capture
+ * lines. Open/close are matched independently (decode always emits the
+ * glyph pair, typing always produces 0x27; a mixed pair is harmless).
+ * Content bytes pass through raw either way; a mid-token right-glyph stays
+ * content — only the LAST glyph closes. No number-grammar collision: any
+ * byte >= 0x80 already disqualifies a token as a number (classifyNumber). */
 static uint8_t quoteOpenLen(const char *tok)   /* 0 = not an opening quote */
 {
   if (tok[0] == 0x27) return 1;
@@ -310,10 +306,10 @@ static uint8_t quoteCloseLen(const char *tok)  /* close AND last glyph, else 0 *
   return 0;
 }
 
-/* F4-3: 'NAME' — delimiters per quoteOpenLen/quoteCloseLen (FIX-7); the
- * closing quote must be the LAST GLYPH (a two-byte glyph's second byte that
- * equals 0x27 is not a close).  Twin of forthParseXeqForm's quote arm
- * (F3-6); kept separate so the landed XEQ parser stays untouched. */
+/* 'NAME' — delimiters per quoteOpenLen/quoteCloseLen; the closing quote
+ * must be the LAST GLYPH (a two-byte glyph's second byte that equals 0x27
+ * is not a close). Twin of forthParseXeqForm's quote arm; kept separate so
+ * the XEQ parser stays untouched. */
 static bool parseQuotedName(const char *tok, char *name, uint8_t *lenOut)
 {
   uint8_t len = 0;
@@ -326,7 +322,7 @@ static bool parseQuotedName(const char *tok, char *name, uint8_t *lenOut)
       closed = true;
       break;
     }
-    if (*tok == 0x27) return false;  /* mid-token ASCII quote: malformed (unchanged) */
+    if (*tok == 0x27) return false;  /* mid-token ASCII quote: malformed */
     if (len >= FORTH_NAME_MAX) return false;
     name[len++] = *tok++;
   }
@@ -336,7 +332,7 @@ static bool parseQuotedName(const char *tok, char *name, uint8_t *lenOut)
   return true;
 }
 
-/* F4-2: KS letter table (26 entries) — uppercase only (native itemSoftmenuName parity).
+/* KS letter table (26 entries) — uppercase only (native itemSoftmenuName parity).
  * Note: W (224) parses natively but dispatches as a silent no-op for flags;
  * this quirk is parity, do not fix it. */
 static const struct { char c; uint8_t ks; } paramLetterKS[26] = {
@@ -357,8 +353,8 @@ static bool paramLetterToKS(const char *tok, uint8_t *ks)
   return false;
 }
 
-/* F4-3: the F4-2 direct register shapes (NN, .NN, letter), reused as the
- * target of the indirection arrow. */
+/* The direct register shapes (NN, .NN, letter), reused as the target of
+ * the indirection arrow. */
 static bool parseDirectRegisterKS(const char *tok, uint8_t *ks)
 {
   uint16_t v;
@@ -375,7 +371,7 @@ static bool parseDirectRegisterKS(const char *tok, uint8_t *ks)
   return paramLetterToKS(tok, ks);
 }
 
-/* F4-3: system-flag reverse map — b = 0..63 over indexOfItems[b + SFL_TDM24],
+/* System-flag reverse map — b = 0..63 over indexOfItems[b + SFL_TDM24],
  * b = 64..127 over indexOfItems[(b & 0x3f) + SFL_MONIT] (the same two ranges
  * the native PARAM_FLAG arm decodes). compareString returns 0 on equal. */
 static bool parseSystemFlagName(const char *name, uint8_t *idx)
@@ -396,7 +392,7 @@ static bool parseSystemFlagName(const char *name, uint8_t *idx)
   return false;
 }
 
-/* F4-3: parse the marker parameter forms `ptpClass` accepts — 'NAME' (253),
+/* Parse the marker parameter forms `ptpClass` accepts — 'NAME' (253),
  * system-flag names (250), →register (254), →'NAME' (255). Legality comes
  * from forthParamMarkerMask, the one table the runtime decode and the
  * validator walks also read. Fills nbuf[0..*used-1]; false = not a marker
@@ -444,7 +440,7 @@ static bool parseMarkerForm(const char *tok, uint16_t ptpClass,
   return false;
 }
 
-/* F4-3: land a parsed marker form. Compile: FTOK_C47 + itemId + the bytes
+/* Land a parsed marker form. Compile: FTOK_C47 + itemId + the bytes
  * zero-padded to whole cells. Interpret: the ONE bounded-core dispatch body
  * (forthParamMarkerDispatch), so compiled and interpreted forms cannot
  * drift. False = error already displayed and the definition aborted. */
@@ -463,7 +459,7 @@ static bool emitOrRunMarkerForm(bool compiling, uint16_t itemId, uint16_t ptpCla
     return true;
   }
   forthParamMarkerDispatch(itemId, ptpClass, nbuf, used);
-  forthDataDepthResync();   /* native item: resync the count (D2) */
+  forthDataDepthResync();   /* native item: resync the count */
   if (lastErrorCode != ERROR_NONE) {
     if (isDefinitionOpen()) abortDefinition();
     return false;
@@ -471,7 +467,7 @@ static bool emitOrRunMarkerForm(bool compiling, uint16_t itemId, uint16_t ptpCla
   return true;
 }
 
-/* ---- §3.3.5 Number grammar (C-8) ---- */
+/* ---- §3.3.5 Number grammar ---- */
 
 typedef enum {
   FORTH_NUM_NONE = 0,
@@ -479,7 +475,7 @@ typedef enum {
   FORTH_NUM_REAL = 2
 } forthNumType_t;
 
-/* Classify token against C-8 grammar. */
+/* Classify token against the §3.3.5 number grammar. */
 static forthNumType_t classifyNumber(const char *s) {
   int16_t i = 0;
   int16_t len = 0;
@@ -514,12 +510,10 @@ static forthNumType_t classifyNumber(const char *s) {
       i++;
     } else if ((s[i] == '+' || s[i] == '-') && hasExp && expDigits == 0
                && i > 0 && (s[i - 1] == 'e' || s[i - 1] == 'E')) {
-      /* R4-1: grammar is [eE][+-]?digit+ — a sign is legal ONLY as the first
-       * byte immediately after e/E, and only one. The old clause accepted a
-       * sign anywhere after an exponent marker (e.g. "1e2-3" tokenized as a
-       * valid number instead of being rejected as an undefined word).
-       * Probed: forthOuterInterpret("1e2-3 7") left lastErrorCode ==
-       * ERROR_NONE. */
+      /* Grammar is [eE][+-]?digit+ — a sign is legal ONLY as the first byte
+       * immediately after e/E, and only one; a sign anywhere else after an
+       * exponent marker must not tokenize as part of the number (e.g.
+       * "1e2-3" must reject as an undefined word, not parse as a number). */
       i++;
     } else {
       return FORTH_NUM_NONE;
@@ -532,7 +526,6 @@ static forthNumType_t classifyNumber(const char *s) {
   return FORTH_NUM_INT;
 }
 
-/* Parse integer: skip '+', mpz_set_str, range-check int32. */
 static bool parseNumberAsInt32(const char *buf, int32_t *out) {
   const char *p = buf;
   if (*p == '+') p++;
@@ -582,7 +575,7 @@ static bool processNumber(const char *buf, bool compile) {
       }
       return true;
     }
-    /* Out of range int -> real34 fallback (C-8, both states) */
+    /* Out of range int -> real34 fallback (both states) */
     real34_t r;
     if (!parseNumberAsReal34(buf, &r)) return false;
     if (compile) {
@@ -609,7 +602,7 @@ static bool processNumber(const char *buf, bool compile) {
   return false;
 }
 
-/* ---- §3.3.1 State machine / outer interpreter (C-4) ---- */
+/* ---- §3.3.1 State machine / outer interpreter ---- */
 
 typedef enum {
   STATE_INTERPRET = 0,
@@ -619,7 +612,7 @@ typedef enum {
 /*
  * forthOuterRun — core interpret/compile loop.
  * Called by forthOuterInterpret, fnForthOuter, and forthProgramStep.
- * Per DESIGN.md §3.3 pseudocode, §3.3.1 (C-4), §3.3.6 (C-1).
+ * Per DESIGN.md §3.3 pseudocode, §3.3.1, §3.3.6.
  */
 static bool forthParseXeqForm(const char *, uint8_t *, char *, uint8_t *);
 static bool emitXeqn(uint8_t, const char *, uint8_t);
@@ -628,12 +621,12 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
     displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return;
   }
-  /* PRECONDITION (R4-E3, accepted): a nested outer interpretation must begin
-   * with no open definition. Nested error paths call abortDefinition(),
-   * which observes the OUTER invocation's openDef — the epilogue restores
-   * openDef.open but not the dictionary bytes an inner abort rolled back.
-   * Unreachable from natural stage-C paths (compile state executes nothing);
-   * revisit only if an EVALUATE-like or immediate source word lands. */
+  /* PRECONDITION: a nested outer interpretation must begin with no open
+   * definition. Nested error paths call abortDefinition(), which observes
+   * the OUTER invocation's openDef — the epilogue restores openDef.open but
+   * not the dictionary bytes an inner abort rolled back. Currently
+   * unreachable (compile state executes nothing); revisit if an
+   * EVALUATE-like or immediate source word lands. */
   #ifdef FORTH_DEBUG_SELFTEST
   if (forthOuterDepth > 0 && isDefinitionOpen()) {
     printf("FORTH CANARY: nested outer interpret entered with an open definition (R4-E3 precondition violated)\n");
@@ -649,7 +642,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
 
   const bool checking = (mode == FORTH_OUTER_CHECK);
 
-  /* F5-1: simulation state — live only in check mode */
+  /* Simulation state — live only in check mode */
   bool simOpen = false;
   bool simClosedThisLine = false;
   uint8_t simCsp = 0;
@@ -660,10 +653,10 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   char buf[FORTH_TOKEN_MAX + 1];
 
   while (lineOK && nextToken(buf)) {
-    bool colonHit = false;   /* F5-1: for §2(f) number suppression in check mode */
-    /* ---- C-4: ':' colon matches the ':' character (B2) ---- */
+    bool colonHit = false;   /* for §2(f) number suppression in check mode */
+    /* ---- ':' colon matches the ':' character ---- */
     if (compareString(buf, ":", CMP_BINARY) == 0) {
-       /* F5-1: check mode — structural simulation, no dictionary touch */
+       /* Check mode — structural simulation, no dictionary touch */
        if (checking) {
          if (simOpen) {
            displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -687,7 +680,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
          continue;
        }
        if (mode == FORTH_OUTER_SKIP_DEFS) {
-        /* SKIP_DEFS (D-2b): definition was compiled by the pre-scan — consume
+        /* SKIP_DEFS: definition was compiled by the pre-scan — consume
          * ':' <name> ... ';' without touching the dictionary. */
         char name[FORTH_TOKEN_MAX + 1];
         if (!nextToken(name)) {
@@ -702,7 +695,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
             displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
             lineOK = false;
           } else {
-            /* F3-4: resolve consumed name for tracker (pre-scan may have moved to gdict) */
+            /* resolve consumed name for tracker (pre-scan may have moved to gdict) */
             { uint16_t ref; uint8_t fl;
               if (forthFindColonRef(name, &ref, &fl)) {
                 forthLatestClosedRef = ref;
@@ -731,9 +724,9 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
        continue;
      }
 
-      /* ---- C-4: ';' ---- */
+      /* ---- ';' ---- */
       if (strcmp(buf, ";") == 0) {
-        /* F5-1: check mode — structural close simulation */
+        /* Check mode — structural close simulation */
         if (checking) {
           if (!simOpen) {
             displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -762,19 +755,19 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           } else if (!finishDefinition()) {
           lineOK = false;
         }
-        /* F3-4: set tracker for same-line marks (GLOBAL/IMMEDIATE) */
+        /* set tracker for same-line marks (GLOBAL/IMMEDIATE) */
         if (lineOK) {
           forthLatestClosedRef = (uint16_t)(fdict.count - 1);
         }
-        /* M3: state = INTERPRET unconditionally on ';' */
+        /* state = INTERPRET unconditionally on ';' */
         state = STATE_INTERPRET;
       }
       continue;
     }
 
-    /* F3-4: FORGET — structural, gdict-only */
+    /* FORGET — structural, gdict-only */
     if (compareString(buf, "FORGET", CMP_BINARY) == 0) {
-      /* F5-1: check mode — consume name, no gdict consult (tier 2) */
+      /* Check mode — consume name, no gdict consult (tier 2) */
       if (checking) {
         if (simOpen) {
           displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -815,9 +808,9 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
        continue;
     }
 
-    /* F3-6: XEQ — structural, deliberately unshadowable */
+    /* XEQ — structural, deliberately unshadowable */
     if (compareString(buf, "XEQ", CMP_BINARY) == 0) {
-      /* F5-1: check mode — parse form, no emit/dispatch (tier 2) */
+      /* Check mode — parse form, no emit/dispatch (tier 2) */
       if (checking) {
         char xtok[FORTH_TOKEN_MAX + 1];
         char xname[FORTH_NAME_MAX + 1];
@@ -847,7 +840,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       if (!forthParseXeqForm(xtok, &xkind, xname, &xlen)) {
         if (isDefinitionOpen()) abortDefinition();
         displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
-        lineOK = false;               /* B3: only the canonical spellings exist */
+        lineOK = false;               /* only the canonical spellings exist */
         continue;
       }
       if (state == STATE_COMPILE) {
@@ -869,9 +862,9 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
     }
 
     if (mode == FORTH_OUTER_DEFS_ONLY && state == STATE_INTERPRET) {
-      /* F3-4: allow GLOBAL/IMMEDIATE marks through the pre-scan so that
-       * subsequent definitions on the same line see the mark immediately.
-       * On the execution pass the marks re-apply as idempotent no-ops. */
+      /* Allow GLOBAL/IMMEDIATE marks through the pre-scan so that subsequent
+       * definitions on the same line see the mark immediately. On the
+       * execution pass the marks re-apply as idempotent no-ops. */
       { uint16_t pidx = forthFindPrim(buf);
         if (pidx != FORTH_PRIM_NONE && (forthPrims[pidx].flags & FF_DEFMARK)) {
           if (!forthPrimInvoke(pidx)) {
@@ -883,18 +876,17 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           continue;
         }
       }
-      continue;   /* D-2a: pre-scan must not execute tail code */
+      continue;   /* pre-scan must not execute tail code */
     }
 
     /* ---- §4.1 step 1: primitive lookup ---- */
     {
       uint16_t idx = forthFindPrim(buf);
       if (idx != FORTH_PRIM_NONE) {
-        /* F5-1: check mode — control-structure simulation, no emit/execute */
+        /* Check mode — control-structure simulation, no emit/execute */
         if (checking) {
           bool stop = false;
           if (idx >= PRIM_IF && idx <= PRIM_REPEAT) {
-            /* Control prim */
             if (!simOpen) {
               displayCalcErrorMessage(ERROR_OPERATION_UNDEFINED, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
               stop = true;
@@ -1013,9 +1005,8 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       uint16_t widx; uint8_t wflags;
       colonHit = forthFindColonRef(buf, &widx, &wflags);
       if (checking) {
-        /* F5-1: check mode — continue on hit or miss (tier 2), but colonHit
+        /* Check mode — continue on hit or miss (tier 2), but colonHit
          * is needed by the number branch for §2(f) suppression */
-        /* Fall through to number branch for suppression check */
       } else if (colonHit) {
         if (state == STATE_COMPILE && !(wflags & FF_IMMEDIATE)) {
           if (!forthDictEmit(forthTokenFromRef(widx))) {
@@ -1034,12 +1025,11 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       /* colonHit not set and not checking: fall through to number */
     }
 
-    /* ---- §4.1 step 3: number (C-2: number BEFORE label, C-8 classify-gate) ---- */
-    /* F5-1: check mode — parse into locals, no push/emit; suppressed by colonHit (§2f) */
+    /* ---- §4.1 step 3: number (number BEFORE label) ---- */
+    /* Check mode — parse into locals, no push/emit; suppressed by colonHit (§2f) */
     if (checking) {
       forthNumType_t numType = classifyNumber(buf);
       if (numType != FORTH_NUM_NONE && !colonHit) {
-        /* Parse into locals — no push, no emit */
         bool numOK = false;
         if (numType == FORTH_NUM_INT) {
           int32_t v;
@@ -1063,7 +1053,6 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           lineOK = false;
         }
       }
-      /* Success or suppressed -> continue */
     } else {
       if (classifyNumber(buf) != FORTH_NUM_NONE) {
         if (!processNumber(buf, state == STATE_COMPILE)) {
@@ -1081,9 +1070,9 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       }
     }
 
-    /* F5-1: check mode — item, parameterized-item, and label branches are
-     * SKIPPED ENTIRELY (tier 2). The parameterized-item's parameter token is
-     * NOT consumed: an unshadowed run would consume it, a shadowed run would
+    /* Check mode — item, parameterized-item, and label branches are SKIPPED
+     * ENTIRELY (tier 2). The parameterized-item's parameter token is NOT
+     * consumed: an unshadowed run would consume it, a shadowed run would
      * not; consuming in check could mask a tier-1 violation in the next token. */
     if (checking)
       continue;
@@ -1110,7 +1099,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           uint8_t savedRunStop = programRunStop;
           programRunStop = PGM_RUNNING;
           reallyRunFunction((int16_t)itemId, NOPARAM);
-          forthDataDepthResync();   /* native item: resync the count (D2) */
+          forthDataDepthResync();   /* native item: resync the count */
           if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
           if (lastErrorCode != ERROR_NONE) {
             if (isDefinitionOpen()) abortDefinition();
@@ -1121,9 +1110,9 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       }
     }
 
-    /* F4-1: Series-C parameter-grammar entry (replaces F3-6 blanket reject).
-     * DEFS_ONLY: in a tail, the interpret-state gate already skipped the item
-     * token before this arm; inside a definition the pre-scan compiles normally. */
+    /* Parameter-grammar entry. DEFS_ONLY: in a tail, the interpret-state
+     * gate already skipped the item token before this arm; inside a
+     * definition the pre-scan compiles normally. */
     {
       uint16_t paramItemId;
       if (forthFindItemParameterized(buf, &paramItemId)) {
@@ -1144,8 +1133,8 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
         if (ptpClass == PTP_NUMBER_8 || ptpClass == PTP_NUMBER_16 || ptpClass == PTP_NUMBER_8_16) {
           uint16_t value;
           if (!parseParamDigits(ptok, &value)) {
-            /* F4-3: not digits — the indirection forms are the only other
-             * shape these classes take (NUMBER_16 has an empty mask). */
+            /* Not digits — the indirection forms are the only other shape
+             * these classes take (NUMBER_16 has an empty mask). */
             uint8_t mbuf[2 + FORTH_NAME_MAX + 1];
             uint16_t mused;
             if (parseMarkerForm(ptok, ptpClass, mbuf, &mused)) {
@@ -1219,7 +1208,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
               uint8_t savedRunStop = programRunStop;
               programRunStop = PGM_RUNNING;
               paramCoreDispatchDirect(paramItemId, ptpClass, value);
-              forthDataDepthResync();   /* native item: resync the count (D2) */
+              forthDataDepthResync();   /* native item: resync the count */
               if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
             }
             if (lastErrorCode != ERROR_NONE) {
@@ -1230,7 +1219,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           }
           continue;
         } else if (ptpClass == PTP_REGISTER) {
-          /* F4-2: register direct forms — number, dot, letter */
+          /* Register direct forms — number, dot, letter */
           uint16_t regValue;
           uint8_t regKS;
           if (parseParamDigits(ptok, &regValue) && regValue <= 99) {
@@ -1244,9 +1233,8 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
             lineOK = false;
             continue;
           } else if (paramLetterToKS(ptok, &regKS)) {
-            /* single letter */
           } else {
-            /* F4-3: named, system-flag, and indirect forms */
+            /* Named, system-flag, and indirect forms */
             uint8_t mbuf[2 + FORTH_NAME_MAX + 1];
             uint16_t mused;
             if (parseMarkerForm(ptok, ptpClass, mbuf, &mused)) {
@@ -1270,7 +1258,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
               uint8_t savedRunStop = programRunStop;
               programRunStop = PGM_RUNNING;
               paramCoreDispatchDirect(paramItemId, ptpClass, regKS);
-              forthDataDepthResync();   /* native item: resync the count (D2) */
+              forthDataDepthResync();   /* native item: resync the count */
               if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
             }
             if (lastErrorCode != ERROR_NONE) {
@@ -1281,7 +1269,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           }
           continue;
         } else if (ptpClass == PTP_FLAG) {
-          /* F4-2: flag direct forms — number, dot, letter */
+          /* Flag direct forms — number, dot, letter */
           uint16_t flagValue;
           uint8_t flagByte;
           if (parseParamDigits(ptok, &flagValue) && flagValue <= 99) {
@@ -1301,7 +1289,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           } else if (paramLetterToKS(ptok, &flagByte)) {
             /* single letter — quirk: W (224) parses natively but dispatches as no-op */
           } else {
-            /* F4-3: named, system-flag, and indirect forms */
+            /* Named, system-flag, and indirect forms */
             uint8_t mbuf[2 + FORTH_NAME_MAX + 1];
             uint16_t mused;
             if (parseMarkerForm(ptok, ptpClass, mbuf, &mused)) {
@@ -1325,7 +1313,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
               uint8_t savedRunStop = programRunStop;
               programRunStop = PGM_RUNNING;
               paramCoreDispatchDirect(paramItemId, ptpClass, flagByte);
-              forthDataDepthResync();   /* native item: resync the count (D2) */
+              forthDataDepthResync();   /* native item: resync the count */
               if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
             }
             if (lastErrorCode != ERROR_NONE) {
@@ -1336,7 +1324,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           }
           continue;
         } else if (ptpClass == PTP_SHUFFLE) {
-          /* F4-2: shuffle — exactly 4 lowercase chars from {x,y,z,t} */
+          /* Shuffle — exactly 4 lowercase chars from {x,y,z,t} */
           {
             const char *shuffleReg = "xyzt";
             uint8_t packed = 0, ci;
@@ -1367,7 +1355,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
                 uint8_t savedRunStop = programRunStop;
                 programRunStop = PGM_RUNNING;
                 paramCoreDispatchDirect(paramItemId, ptpClass, packed);
-              forthDataDepthResync();   /* native item: resync the count (D2) */
+              forthDataDepthResync();   /* native item: resync the count */
                 if (programRunStop == PGM_RUNNING) programRunStop = savedRunStop;
               }
               if (lastErrorCode != ERROR_NONE) {
@@ -1380,7 +1368,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
           shuffle_done:
           continue;
         } else {
-          /* F4-3: named, system-flag, and indirect forms (MENU and any other
+          /* Named, system-flag, and indirect forms (MENU and any other
            * marker-capable class); PTP_NUMBER_16 has an empty mask, so the
            * arrow there falls straight through to ERROR_INVALID_NAME. */
           {
@@ -1402,11 +1390,11 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
       }
     }
 
-      /* ---- §4.1 step 5: C47 label (§3.3.6, C-1) ---- */
+      /* ---- §4.1 step 5: C47 label (§3.3.6) ---- */
      {
-       /* GLOBAL_LABELS (upstream rebase to b8f79e486): see forth_dict.c's
-        * forthResolveXEQ for the same note — Forth's bare-name label lookup
-        * has only ever meant global labels. */
+       /* GLOBAL_LABELS: see forth_dict.c's forthResolveXEQ for the same
+        * note — Forth's bare-name label lookup has only ever meant global
+        * labels. */
        calcRegister_t label = findNamedLabel(buf, GLOBAL_LABELS);
        if (label != INVALID_VARIABLE) {
           if (state == STATE_COMPILE) {
@@ -1414,29 +1402,25 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
             abortDefinition();
             lineOK = false;
           } else {
-            /* C-1 amendment (proposed, see PROPOSED_SPEC_CHANGES.md): dispatch
-             * via fnExecute directly, NOT reallyRunFunction under a forced
-             * PGM_RUNNING wrap. ITM_XEQ is unlike ordinary items: under
-             * PGM_RUNNING, fnExecute only pushes a subroutine level and defers
-             * stepping to an enclosing runProgram loop — from an interactive
-             * Forth line no such loop exists, so the program never ran and the
-             * level leaked 3 blocks per call (found by T3.5). The §2.2
-             * livelock lives in items.c's normal-mode dispatch
-             * (refreshStatusBar pump), which a direct fnExecute call bypasses.
-             * Interactively this takes the same fnGoto+runProgram path as a
-             * keyboard XEQ and fires §9.3 bump site A (a run start must bump —
-             * the old wrap wrongly suppressed it); from a program-context
-             * Forth step (programRunStop == PGM_RUNNING) the nested branch is
-             * taken unchanged (continuation semantics, level popped by RTN).
+            /* Dispatch via fnExecute directly, NOT reallyRunFunction under a
+             * forced PGM_RUNNING wrap. ITM_XEQ is unlike ordinary items:
+             * under PGM_RUNNING, fnExecute only pushes a subroutine level
+             * and defers stepping to an enclosing runProgram loop — from an
+             * interactive Forth line no such loop exists, so the program
+             * would never run and the level would leak. Interactively this
+             * takes the same fnGoto+runProgram path as a keyboard XEQ; from
+             * a program-context Forth step (programRunStop == PGM_RUNNING)
+             * the nested branch is taken unchanged (continuation semantics,
+             * level popped by RTN).
              * dynamicMenuItem must be cleared FIRST: fnGoto's
              * dynamicMenuItem >= 0 branch reinterprets the label ID as a
-             * global step number (menu-launch semantics); leftover menu state
-             * (e.g. 0 after the reset path shows MyMenu) sent goToGlobalStep
-             * off the end of program memory. fnExecute itself resets it only
-             * AFTER fnGoto — too late for a name-resolved, non-menu call. */
+             * global step number (menu-launch semantics), sending
+             * goToGlobalStep off the end of program memory. fnExecute
+             * itself resets it only AFTER fnGoto — too late for a
+             * name-resolved, non-menu call. */
              dynamicMenuItem = -1;
              fnExecute((uint16_t)label);
-             forthDataDepthResync();   /* R47 label body: resync the count (D2) */
+             forthDataDepthResync();   /* R47 label body: resync the count */
             if (lastErrorCode != ERROR_NONE) {
              if (isDefinitionOpen()) abortDefinition();
              lineOK = false;
@@ -1447,7 +1431,7 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
      }
 
     /* ---- §4.1 last resort: undefined word ---- */
-    /* F5-1: check mode — unknown = tier 2, continue */
+    /* Check mode — unknown = tier 2, continue */
     if (!checking) {
       char defName[FORTH_TOKEN_MAX + 1];
       if (isDefinitionOpen() && openDefinitionName(defName, sizeof(defName))) {
@@ -1465,20 +1449,20 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
 
   /* ---- End of line ---- */
   if (checking) {
-    /* F5-1: check mode — simOpen means unterminated definition; no abort
+    /* Check mode — simOpen means unterminated definition; no abort
      * (nothing was actually opened); NO ASLIFT write */
     if (simOpen && lastErrorCode == ERROR_NONE) {
       displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     }
   } else if (state == STATE_COMPILE && isDefinitionOpen()) {
-    /* C-4: truly unterminated — abort always; display INVALID_NAME only if
+    /* Truly unterminated — abort always; display INVALID_NAME only if
      * no prior error was shown (never mask e.g. ERROR_INPUT_TOO_LONG). */
     abortDefinition();
     if (lastErrorCode == ERROR_NONE) {
       displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     }
   } else if (lastErrorCode == ERROR_NONE) {
-    /* C-7: ASLIFT-set gate checks lastErrorCode == ERROR_NONE */
+    /* ASLIFT-set gate checks lastErrorCode == ERROR_NONE */
     setSystemFlag(FLAG_ASLIFT);
   }
 
@@ -1489,10 +1473,10 @@ static void forthOuterRunInner(forthOuterCtx_t *ctx, forthOuterMode_t mode) {
   forthOuterCur = prevCtx;
 }
 
-/* D3-5: the depth/spill bracket lives at the single choke point so
- * EVERY outer execution accounts — fnForthOuter, CHECK, DEFS_ONLY,
- * SKIP_DEFS and the interpret wrapper alike. Nesting-aware: only the
- * outermost run brackets (a Forth line can XEQ into another line). */
+/* The depth/spill bracket lives at the single choke point so EVERY outer
+ * execution accounts — fnForthOuter, CHECK, DEFS_ONLY, SKIP_DEFS and the
+ * interpret wrapper alike. Nesting-aware: only the outermost run brackets
+ * (a Forth line can XEQ into another line). */
 static int16_t forthOuterRunNesting = 0;
 
 static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode)
@@ -1506,7 +1490,7 @@ static void forthOuterRun(forthOuterCtx_t *ctx, forthOuterMode_t mode)
   }
 }
 
-/* ---- F5-1: check mode public API ---- */
+/* ---- Check mode public API ---- */
 
 bool forthCheckSourceLine(const char *source)
 {
@@ -1520,22 +1504,20 @@ bool forthCheckSourceLine(const char *source)
   /* forthOuterRun's epilogue restores forthCurrentScope FROM ctx.savedScope;
    * the prologue fills savedDef/savedLatestClosed but NOT this field — every
    * entry point must snapshot it, or the epilogue writes stack garbage into
-   * the live scope. Latent while only the F5-1 test called check mode (it
-   * never observed scope); poisoned the whole suite the moment F5-2 wired
-   * check mode into pemAlpha's commit seam. */
+   * the live scope. */
   ctx.savedScope = forthCurrentScope;
   lastErrorCode = ERROR_NONE;
   forthOuterRun(&ctx, FORTH_OUTER_CHECK);
   return lastErrorCode == ERROR_NONE;
 }
 
-/* ---- F3-6: XEQ source-form helpers ---- */
+/* ---- XEQ source-form helpers ---- */
 
 /* 'NAME' -> kind 253; :NAME: -> kind 249.  The closing delimiter must be
  * the LAST GLYPH (a two-byte glyph whose second byte merely equals the
  * delimiter is not a close).  Name bytes pass through raw (C47 glyphs
- * legal; 0x20 is inexpressible in a token by construction).  FIX-7: the
- * quote spelling also accepts the directional glyph pair the F6-4 fold
+ * legal; 0x20 is inexpressible in a token by construction).  The quote
+ * spelling also accepts the directional glyph pair the capture fold
  * emits (see quoteOpenLen/quoteCloseLen above); :NAME: is unchanged. */
 static bool forthParseXeqForm(const char *tok, uint8_t *kind,
                               char *name, uint8_t *lenOut)
@@ -1604,9 +1586,9 @@ void forthOuterInterpret(const char *source)
   forthOuterRun(&ctx, FORTH_OUTER_FULL);
 }
 
-/* L1-1 (C2): the shared "take the source line out of X" core.  Used by
- * fnForthOuter's C2a one-shot arm, fnForthOuter's interactive seed, and
- * forthTestRunFromX (rewritten below to call this so the two cannot drift).
+/* The shared "take the source line out of X" core.  Used by fnForthOuter's
+ * one-shot arm, fnForthOuter's interactive seed, and forthTestRunFromX
+ * (calls this so the two cannot drift).
  *
  * Returns false with the documented error displayed and X untouched when X
  * is not a string or the line is oversize.  On true, dst holds the
@@ -1627,49 +1609,22 @@ static bool_t forthTakeSourceFromX(char *dst) {
   return true;
 }
 
-/* T9: calcModeAim's setup (src/c47/calcMode.c:62-92) WITHOUT its
- * liftStack().  An interactive Forth line operates on the LIVE stack — L-R2
- * already drops a seeded string precisely "so interpreted words see a clean
- * stack" — so a lifting open would replace X with a fresh uninitialised
- * dtReal34 before the line ever ran: "16 in X, type 1 +, ENTER" would
- * compute garbage + 1.  fnAim() cannot be used and calcModeAim cannot be
- * repaired after the fact (the repair is conditional on FLAG_ASLIFT, and
- * with it clear the old X is already freed).  Every line below is
- * calcModeAim's; the only intentional omission is the lift.  If calcModeAim
- * gains a statement upstream, this must gain it too — the rebase discipline
- * for this function is "diff it against calcModeAim".
+/* calcModeAim's setup (src/c47/calcMode.c) WITHOUT its liftStack().  An
+ * interactive Forth line operates on the LIVE stack — a lifting open would
+ * replace X with a fresh uninitialised dtReal34 before the line ever ran:
+ * "16 in X, type 1 +, ENTER" would compute garbage + 1.  fnAim() cannot be
+ * used and calcModeAim cannot be repaired after the fact (the repair is
+ * conditional on FLAG_ASLIFT, and with it clear the old X is already
+ * freed).  Every line below is calcModeAim's; the only intentional
+ * omission is the lift.  If calcModeAim gains a statement upstream, this
+ * must gain it too — diff it against calcModeAim.
  *
- * C2b verification against src/c47/calcMode.c:62-92 (reported, not silently
- * dropped, per the packet):
- *   - The PC_BUILD-only jm_show_comment() debug scaffold at the top of
- *     calcModeAim is omitted here: cosmetic GTK-debug output, irrelevant to
- *     DMCP/PC behaviour either way.
- *   - calcModeAim guards its calcMode/liftStack/cursor block on
- *     `!tam.mode && calcMode != CM_ASSIGN && calcMode != CM_PEM &&
- *     calcMode != CM_ASN_BROWSER`, and separately guards its
- *     `showSoftmenu(-MNU_ALPHA)` on `!tam.mode` alone.  Both are omitted
- *     below (unconditional instead).  Reachability check for fnForthOuter,
- *     the only caller: CM_PEM is intercepted before reallyRunFunction is
- *     ever reached, for both a direct FORTH keypress and a catalog pick —
- *     items.c's runFunction() (~:734-772) records the step and returns
- *     whenever `calcMode == CM_PEM`, and by the time that check runs,
- *     tam.mode already reads 0 on every path that gets there (either it was
- *     never set, or the enclosing keyboard.c branch — :1104-1300 — consumed
- *     the tam.mode!=0 case itself via addItemToBuffer/leaveTamModeIfEnabled
- *     before ever falling through to runFunction/reallyRunFunction).
- *     CM_ASSIGN never reaches runFunction for a function item either:
- *     keyboard.c's CM_ASSIGN arms (~:1044,:1049,:1314,:1373) capture the
- *     pressed item as `itemToBeAssigned` or route it through
- *     processAimInput, never runFunction.  CM_ASN_BROWSER is excluded
- *     outright: keyboard.c:940 gates the ENTIRE executeFunction dispatch
- *     block (including its terminal runFunction() call) on calcMode being
- *     none of CM_REGISTER_BROWSER/CM_FLAG_BROWSER/CM_ASN_BROWSER/
- *     CM_FONT_BROWSER.  So none of the four excluded states can co-occur
- *     with a live fnForthOuter call through today's dispatch (the
- *     PGM_RUNNING program-step path is separately guarded by C2a below, not
- *     by this function) — the guards are left out, matching the packet's
- *     literal text. This finding is dispatch-shaped and belongs to L1-3's
- *     surface, not this packet's; revisit if dispatch changes. */
+ * calcModeAim also guards its calcMode/liftStack/cursor block and its
+ * showSoftmenu(-MNU_ALPHA) call on tam.mode and on calcMode excluding
+ * CM_ASSIGN/CM_PEM/CM_ASN_BROWSER; both guards are omitted below
+ * (unconditional instead) because none of those states can co-occur with
+ * a live fnForthOuter call through today's dispatch — revisit if dispatch
+ * changes. */
 static void forthEnterAimSurfaceNoLift(void) {
   alphaCase = CAPS_AIM_DEFAULT;
   nextChar  = NC_NORMAL;
@@ -1677,42 +1632,34 @@ static void forthEnterAimSurfaceNoLift(void) {
   scrLock   = NC_NORMAL;
 
   calcMode = CM_AIM;
-  /* NO liftStack() — T9 */
+  /* NO liftStack() — see comment above */
   clearRegisterLine(AIM_REGISTER_LINE, true, true);
   xCursor = 1;
   yCursor = Y_POSITION_OF_AIM_LINE + 6;
   cursorFont = &standardFont;
   cursorEnabled = true;
 
-  /* N1-5 (N-R6): the console's home row is FWRD, not the alpha keypad.
-   * Discovery lives on the softkeys — a word softkey TYPES the word through
-   * the landed F6-3 capture-gated sink — and the alpha keypad becomes the
-   * excursion you toggle into, where it pushes -MNU_ALPHA over this frame.
+  /* The console's home row is FWRD, not the alpha keypad. Discovery lives
+   * on the softkeys — a word softkey TYPES the word through the
+   * capture-gated sink — and the alpha keypad becomes the excursion you
+   * toggle into, where it pushes -MNU_ALPHA over this frame.
    *
    * The `softmenuStack[0].softmenuId == 0 -> 1` fixup that used to sit here
    * is GONE deliberately: it is the native "MyMenu becomes MyAlpha on
-   * entering AIM" idiom (popSoftmenu does the same, softmenus.c:3719-3721)
-   * and has no meaning for a non-alpha home row.  Rung 2 of the EXIT ladder
-   * is re-derived to match (keyboard.c). */
-  /* AUDIT C17: register the frame the console will rely on, in the frame
-   * itself (forth_menu.c's stamp).  The fresh test is slot 0 only, and
-   * getting that wrong once is why it is spelled out here:
-   *
-   * "did the stack grow?" is the WRONG question.  pushSoftmenu dedups against
-   * a match ANYWHERE in the array (softmenus.c:3671-3683) — including a stale
-   * deep entry no user can see — by lifting the stack over it, so the frame
-   * COUNT is unchanged while slot 0 still becomes FWRD and the user's menu
-   * still gets buried one deeper.  Scanning the whole stack therefore says
-   * "nothing pushed" for a case that very much did displace something, and
-   * EXIT would then leave the console's own row up.
+   * entering AIM" idiom (popSoftmenu does the same) and has no meaning for
+   * a non-alpha home row. Rung 2 of the EXIT ladder (keyboard.c) must match
+   * this. */
+  /* Register the frame the console will rely on, in the frame itself
+   * (forth_menu.c's stamp).  Fresh must be tested via currentMenu() ==
+   * -MNU_FORTH, NOT "did the stack grow": pushSoftmenu dedups against a
+   * match ANYWHERE in the array by lifting the stack over it, so the frame
+   * COUNT can stay unchanged while slot 0 still becomes FWRD.
    *
    * Only when FWRD is ALREADY the current menu does slot 0 stay the user's
    * own frame — the state you reach by browsing the CATALOG tree to FWRD
    * before pressing FORTH.  That frame is registered BORROWED: the console
    * displays it, nothing may retarget or pop it, and close releases it.  A
-   * fresh push is registered OWNED: rung 3 pops it.  (When a stale deep FWRD
-   * entry existed, the dedup lift has already consumed it into the frame
-   * pushed here — landed behaviour, unchanged by C17.) */
+   * fresh push is registered OWNED: rung 3 pops it. */
   { bool_t fresh = (currentMenu() != -MNU_FORTH);
     showSoftmenu(-MNU_FORTH);
     if(currentMenu() == -MNU_FORTH) {
@@ -1723,16 +1670,13 @@ static void forthEnterAimSurfaceNoLift(void) {
   calcModeAimGui();
 }
 
-/* fnForthOuter — ITM_FORTH entry point (§3.3.2).  L1-1 (L-R2): outside a
- * running program this now OPENS AN INTERACTIVE CAPTURE instead of
- * interpreting X.  ENTER semantics, the REPL loop and the dispatch divert
- * are L1-2/L1-3 — out of scope here. */
+/* fnForthOuter — ITM_FORTH entry point (§3.3.2).  Outside a running
+ * program this OPENS AN INTERACTIVE CAPTURE instead of interpreting X. */
 void fnForthOuter(uint16_t unused) {
-  /* C2a: ITM_FORTH is PTP_REM (items.c:4771) and forthResolveXEQ deliberately
-   * keeps resolving it, so a program step `XEQ 'FORTH'` reaches this
-   * function while a program runs.  Unguarded, L-R2 would open an
-   * interactive capture mid-run; preserve the pre-Stage-L one-shot
-   * interpret-from-X behaviour for that case instead. */
+  /* ITM_FORTH is PTP_REM and forthResolveXEQ deliberately keeps resolving
+   * it, so a program step `XEQ 'FORTH'` reaches this function while a
+   * program runs.  Unguarded, this would open an interactive capture
+   * mid-run; preserve the one-shot interpret-from-X behaviour instead. */
   if (programRunStop == PGM_RUNNING) {
     forthOuterCtx_t ctx;
     ctx.savedScope = forthCurrentScope;
@@ -1744,7 +1688,7 @@ void fnForthOuter(uint16_t unused) {
   bool_t seeded = false;
   char seed[FORTH_SOURCE_MAX];
 
-  if (catalog) {   /* T6: FIX-9 analog — drain a buried/on-top catalog menu */
+  if (catalog) {   /* drain a buried/on-top catalog menu */
     leaveAsmMode();
     for (int i = 0; i < SOFTMENU_STACK_SIZE; i++) {
       if (!(forthCatalogMenuOnTop() || forthCatalogBuriedOnStack())) break;
@@ -1752,11 +1696,12 @@ void fnForthOuter(uint16_t unused) {
     }
   }
 
-  /* AUDIT C6: FORTH pressed while the console is ALREADY open must not
-   * re-open it.  forthCapOpenInteractive's first act is `aimBuffer[0] = 0`,
-   * so the second press discarded the line — and, unlike ENTER, pushed
+  /* FORTH pressed while the console is ALREADY open must not re-open it.
+   * forthCapOpenInteractive's first act is `aimBuffer[0] = 0`, so the
+   * second press would discard the line — and, unlike ENTER, pushes
    * nothing to FHIST first, so f-up could not bring it back either.  If X
-   * held a string the re-open additionally seeded from it and consumed it.
+   * held a string the re-open would additionally seed from it and consume
+   * it.
    *
    * The gesture is already "you are in the console"; the honest answer is
    * to do nothing.  The surface is still re-established, because the press
@@ -1764,17 +1709,14 @@ void fnForthOuter(uint16_t unused) {
    * that leaves the console's row buried, and restoring it is exactly what
    * forthConsoleRestoreSurface exists for.
    *
-   * AUDIT round 9 (R9-3): this guard must run BEFORE the seed read, and
-   * the seed read is why it moved rather than the guard.  "Do nothing"
-   * has to mean nothing: forthTakeSourceFromX copies X and then DROPS it,
-   * so with the seed block above this return the no-op press silently ate
-   * the owner's stack top — the very consumption the paragraph above names
-   * as part of C6's harm — and an oversize string raised
-   * ERROR_INVALID_DATA_TYPE on a gesture documented as inert.  The guard
-   * cannot move ABOVE the catalog drain instead: the restore below is only
-   * correct once the drain has popped the catalog menus burying the row.
-   * So the drain runs, then this guard, then the seed. */
-  if(forthCapInteractiveLive()) {                  /* C-6: the named predicate */
+   * ORDERING: drain, then this guard, then the seed read.  This guard must
+   * run BEFORE the seed read — forthTakeSourceFromX copies X and then DROPS
+   * it, so a no-op press would otherwise silently eat the owner's stack top
+   * (and an oversize string would raise an error on a gesture documented as
+   * inert).  The guard cannot move ABOVE the catalog drain: the restore
+   * below is only correct once the drain has popped the catalog menus
+   * burying the row. */
+  if(forthCapInteractiveLive()) {
     forthConsoleRestoreSurface();
     return;
   }
@@ -1785,48 +1727,37 @@ void fnForthOuter(uint16_t unused) {
   }
 
   forthEnterAimSurfaceNoLift();                   /* see above — NOT fnAim;
-                                                     registers the frame (C17) */
+                                                     registers the frame */
   forthCapOpenInteractive();                      /* clears aimBuffer; cannot fail */
-  /* N1-5 (N-R6): keys-first.  SET AFTER the open, because _forthCapOpenAs
-   * zeroes the bit unconditionally (forth_capture.c:11) — that universal
-   * reset stays, which is exactly how PEM keeps inheriting alpha-first
-   * untouched.  `1 2 +` is three keypresses here; the alpha keypad is one
-   * E10/E11 toggle away. */
+  /* Keys-first.  SET AFTER the open, because _forthCapOpenAs zeroes the bit
+   * unconditionally — that universal reset stays, which is exactly how PEM
+   * keeps inheriting alpha-first untouched. */
   forthCapSetKeysMode(true);
   T_cursorPos = 0;
   displayAIMbufferoffset = 0;
 
   if (seeded) {
     xcopy(aimBuffer, seed, stringByteLength(seed) + 1);
-    /* Empty-line guard, copied from the landed PEM idiom (manage.c:900-904):
-     * an EMPTY string in X is a valid dtString and passes the size check, and
-     * stringLastGlyph("") + 1 == 1 would put the cursor one past the NUL and
-     * silently eat every keystroke. */
+    /* Empty-line guard, matching the PEM idiom: an EMPTY string in X is a
+     * valid dtString and passes the size check, and stringLastGlyph("") + 1
+     * == 1 would put the cursor one past the NUL and silently eat every
+     * keystroke. */
     T_cursorPos = (aimBuffer[0] == 0) ? 0 : stringLastGlyph(aimBuffer) + 1;
   }
 }
 
 #if defined(FORTH_DEBUG_SELFTEST)
-/* L1-0: the battery's "interpret the string in X" entry.
+/* The battery's "interpret the string in X" entry.
  *
- * Until Stage L this WAS fnForthOuter: ITM_FORTH outside PEM required a
- * string in X, interpreted it, and consumed it.  L-R2 rules that FORTH
- * always opens an interactive capture instead, so the item entry stops
- * interpreting and the sites that drove it for its interpret semantics
- * need those semantics under their own name.
- *
- * L1-1: rewritten to call the shared forthTakeSourceFromX() core instead of
- * duplicating fnForthOuter's old body, so the two cannot drift.  Same two
- * error codes, same copy-before-drop ordering, same FORTH_OUTER_FULL run —
- * every existing assertion keeps its exact stack expectation.  Do not
- * "improve" it: forthOuterInterpret() is NOT a substitute (it never touches
- * X, so the drop these tests' stack expectations are written against would
- * not happen, and it clears lastErrorCode on entry where this does not).
+ * Do not "improve" this to call forthOuterInterpret() instead: it is NOT a
+ * substitute — it never touches X, so the drop these tests' stack
+ * expectations are written against would not happen, and it clears
+ * lastErrorCode on entry where this does not.
  *
  * Self-test builds only; production never calls it. */
 void forthTestRunFromX(uint16_t unusedButMandatoryParameter) {
-  (void)unusedButMandatoryParameter;   /* L1-0: the signature exists so this
-                                          entry is dispatch-table compatible —
+  (void)unusedButMandatoryParameter;   /* the signature exists so this entry
+                                          is dispatch-table compatible —
                                           testSuite.c's table is
                                           {name, void(*)(uint16_t)} and
                                           forth_interp.txt drives it by name. */
@@ -1837,12 +1768,12 @@ void forthTestRunFromX(uint16_t unusedButMandatoryParameter) {
 }
 #endif
 
-/* ---- P-2: Program-step entry point (§3.3.2, §9.2) ---- */
+/* ---- Program-step entry point (§3.3.2, §9.2) ---- */
 
-/* §9.2 Architecture 2: first-touch pre-scan of the owning program.
- * DEFS_ONLY-compiles every Forth source step so forward references from any
- * step's tail resolve. D-2: (a) no tail execution, (b) no recompile,
- * (c) owning program only. */
+/* §9.2: first-touch pre-scan of the owning program.  DEFS_ONLY-compiles
+ * every Forth source step so forward references from any step's tail
+ * resolve: (a) no tail execution, (b) no recompile, (c) owning program
+ * only. */
 static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
 {
   uint8_t *progStart = forthOwningProgramStart(anyPtrInProgram);
@@ -1853,16 +1784,16 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
     return;   /* first touch already done this generation */
   }
 
-  /* Snapshot for rollback (R4-4 policy unchanged: base/sizeBlocks are
-   * deliberately NOT restored). The record participates in the snapshot:
-   * appended first, trimmed with everything else if the scan errors. */
+  /* Snapshot for rollback (base/sizeBlocks are deliberately NOT restored).
+   * The record participates in the snapshot: appended first, trimmed with
+   * everything else if the scan errors. */
   uint16_t scanHere   = fdict.here;
   uint16_t scanLatest = fdict.latest;
   uint16_t scanCount  = fdict.count;
   uint16_t scanHead   = forthScanHead;
 
   if (!forthScanRecord(progStart)) {
-    /* Ordinary dictionary exhaustion (R4-E1): surface it, halt the step. */
+    /* Ordinary dictionary exhaustion: surface it, halt the step. */
     if (lastErrorCode == ERROR_NONE) {
       displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     }
@@ -1873,7 +1804,7 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
     return;
   }
 
-  /* F3-3: set scope to the new record's offset for definition stamping */
+  /* set scope to the new record's offset for definition stamping */
   uint16_t savedScope = forthCurrentScope;
   forthCurrentScope = forthScanHead;
 
@@ -1907,10 +1838,10 @@ static void forthPreScanOwningProgram(const uint8_t *anyPtrInProgram)
   forthCurrentScope = savedScope;
 }
 
-/* F3-3A: single scope-entry primitive for every scope-sensitive step arm
- * (the ITM_FORTH source-step handler below; the XEQ/XEQP1 name fallback
- * in param_core.c).  Generation check + first-touch pre-scan, then select
- * the owning program's scope.  Returns the previous scope for
+/* Single scope-entry primitive for every scope-sensitive step arm (the
+ * ITM_FORTH source-step handler below; the XEQ/XEQP1 name fallback in
+ * param_core.c).  Generation check + first-touch pre-scan, then select the
+ * owning program's scope.  Returns the previous scope for
  * forthScopeRestore.  On pre-scan error the scope is left unchanged and
  * the caller halts its step. */
 uint16_t forthScopeEnterProgramStep(const uint8_t *anyPtrInProgram)
@@ -1935,7 +1866,7 @@ uint16_t forthScopeEnterProgramStep(const uint8_t *anyPtrInProgram)
 
 void forthScopeRestore(uint16_t prev) { forthCurrentScope = prev; }
 
-/* Test-only: program-step entry counter (F3-7) */
+/* Test-only: program-step entry counter */
 #ifdef FORTH_DEBUG_SELFTEST
 static uint32_t forthTestProgramStepCount = 0;
 #endif
@@ -1956,14 +1887,14 @@ void forthProgramStep(const uint8_t *payload) {
   forthOuterRun(&ctx, FORTH_OUTER_SKIP_DEFS);
 }
 
-/* Test-only: outer-interpreter nesting introspection (D-3) */
+/* Test-only: outer-interpreter nesting introspection */
 #ifdef FORTH_DEBUG_SELFTEST
 void *forthTestOuterCur(void) { return (void *)forthOuterCur; }
 uint8_t forthTestOuterDepth(void) { return forthOuterDepth; }
 void forthTestSetOuterDepth(uint8_t d) { forthOuterDepth = d; }
 #endif
 
-/* Test-only: program-step entry counter (F3-7) */
+/* Test-only: program-step entry counter */
 #ifdef FORTH_DEBUG_SELFTEST
 void forthTestProgramStepCountReset(void) { forthTestProgramStepCount = 0; }
 uint32_t forthTestProgramStepCountGet(void) { return forthTestProgramStepCount; }

@@ -92,7 +92,7 @@ void forthGDictClear(void)
   gdict.count = 0;
 }
 
-/* ---- §2.2 token constants (mirror forth_inner.c) — F1-5 validator ---- */
+/* ---- §2.2 token constants (mirror forth_inner.c) ---- */
 #define FTOK_CALL_BASE    0x1000
 #define FTOK_LIT          0x7F00
 #define FTOK_ILIT         0x7F01
@@ -100,12 +100,12 @@ void forthGDictClear(void)
 #define FTOK_0BR          0x7F03
 #define FTOK_C47          0x7F04
 
-/* F4-3: the ONE marker-legality table. Every consumer (compiler, runtime
+/* The ONE marker-legality table. Every consumer (compiler, runtime
  * decode, all three walks) reads it, so a class cannot accept a form in one
  * place and reject it in another. Classes absent here take no marker at all
  * — PTP_NUMBER_16 most importantly: a [254][ks] cell is indistinguishable
  * from a legal little-endian direct value with low byte 254, so indirection
- * is excluded there by design (QWEN_PROMPTS_F4_core.md §2.2). */
+ * is excluded there by design. */
 uint8_t forthParamMarkerMask(uint16_t ptpClass)
 {
   switch (ptpClass) {
@@ -118,7 +118,7 @@ uint8_t forthParamMarkerMask(uint16_t ptpClass)
   }
 }
 
-/* F4-3: marker bit of a leading parameter byte, 0 if it is not a marker. */
+/* Marker bit of a leading parameter byte, 0 if it is not a marker. */
 uint8_t forthParamMarkerBit(uint8_t b0)
 {
   switch (b0) {
@@ -130,7 +130,7 @@ uint8_t forthParamMarkerBit(uint8_t b0)
   }
 }
 
-/* F4-3: does this class carry a name after the marker byte (253/255)? */
+/* Does this class carry a name after the marker byte (253/255)? */
 static bool markerCarriesName(uint8_t bit)
 {
   return bit == FORTH_MK_NAME || bit == FORTH_MK_IND_VAR;
@@ -200,7 +200,7 @@ bool forthParamCellSpan(const uint8_t *base, uint16_t pos, uint16_t limit,
   return true;
 }
 
-/* F1-5: validate one restored body in gdict, or (checkTarget != FORTH_NULL)
+/* Validate one restored body in gdict, or (checkTarget != FORTH_NULL)
  * prove that checkTarget is a token boundary of this body at or before EXIT.
  * limit is exclusive. Restore-time only; the per-branch boundary sub-walk
  * is O(body^2) and deliberately unoptimized. */
@@ -263,7 +263,7 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
         pos += span; }
     }
     else if (tok == FTOK_XEQN) {
-      /* F3-6: XEQN inline [kind][len][name][pad] */
+      /* XEQN inline [kind][len][name][pad] */
       if ((uint32_t)pos + 2u > limit) return false;
       uint8_t xkind = gdict.base[pos];
       uint8_t xlen = gdict.base[pos + 1];
@@ -281,7 +281,7 @@ static bool vBodyWalk(uint16_t bodyStart, uint16_t limit, uint16_t entryIdx,
   }
 }
 
-/* H5 (§5.5): sanity-check gdict after a state restore. A torn or corrupt
+/* §5.5: sanity-check gdict after a state restore. A torn or corrupt
  * backup must never leave gdict able to read/write out of bounds. */
 void forthGDictValidateRestored(void)
 {
@@ -341,7 +341,7 @@ void forthGDictValidateRestored(void)
 #endif
     lastErrorCode = ERROR_INVALID_CORRUPTED_DATA;
     /* Deliberate orphan: do NOT freeC47Blocks here — the restored allocation
-     * tables are exactly what we just failed to trust (P-4 exception). */
+     * tables are exactly what we just failed to trust. */
     forthGDictInit();
   }
 }
@@ -350,7 +350,7 @@ void forthGDictValidateRestored(void)
 
 static bool dictEnsureOn(forthDict_t *d, uint16_t bytes, uint16_t initialBlocks)
 {
-  /* 64 KB offset wrap (§3.3.8 C-10): reject before growing */
+  /* 64 KB offset wrap (§3.3.8): reject before growing */
   if ((uint32_t)d->here + bytes > 0xFFFEu) {
     displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
@@ -409,12 +409,11 @@ bool forthGDictEnsure(uint16_t bytes)
 
 uint16_t forthDictAllocate(uint8_t nameLen, uint16_t bodyBytes)
 {
-  /* R4-2 item 2: widened to uint32_t. The uint16_t form wraps a large
-   * bodyBytes request silently (probed: forthDictAllocate(31, 0xFFF0)
-   * wrapped and returned offset 0 with no error). The compiler today only
-   * calls this with bodyBytes==0, so the wrap is unreachable in practice —
-   * but the helper's own contract is checked here, not left as a false
-   * promise for the first caller that uses bodyBytes for real. */
+  /* Widened to uint32_t: the uint16_t form wraps a large bodyBytes request
+   * silently. The compiler today only calls this with bodyBytes==0, so the
+   * wrap is unreachable in practice — but the helper's own contract is
+   * checked here, not left as a false promise for the first caller that
+   * uses bodyBytes for real. */
   uint32_t hdrSize = 6u + nameLen;
   uint32_t alignedHdr = (uint32_t)TO_BLOCKS(hdrSize) * BYTES_PER_BLOCK;
   uint32_t total = alignedHdr + bodyBytes;
@@ -483,7 +482,7 @@ bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags)
 {
   size_t queryLen = strlen(name);
 
-  /* Walk fdict newest-first, filtered by owner (F3-3). */
+  /* Walk fdict newest-first, filtered by owner. */
   if (fdict.base) {
     uint16_t off = fdict.latest;
     uint16_t n = 0;
@@ -527,7 +526,7 @@ bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags)
   return false;
 }
 
-/* F6-5 browse surface: newest-first walk, listable entries only. */
+/* Browse surface: newest-first walk, listable entries only. */
 bool_t forthDictBrowseName(uint16_t n, uint16_t owner, char *out)
 {
   if (fdict.base) {
@@ -598,7 +597,7 @@ bool forthFindColon(const char *name, uint16_t *ref)
 
 /* §4.1 step 4: forward (Forth-source) C47 item lookup.
  * Only matches CAT_FNCT + PTP_NONE items.  Parameterized items
- * (PTP_REGISTER, PTP_NUMBER_8/16) are excluded — stage F4. */
+ * (PTP_REGISTER, PTP_NUMBER_8/16) are excluded. */
 bool forthFindItem(const char *name, uint16_t *itemId)
 {
   uint16_t i;
@@ -632,11 +631,10 @@ bool forthFindItemParameterized(const char *name, uint16_t *itemId)
 }
 
 /* §10.4: control/declarative steps are not Forth-callable.  The PTP_NONE
- * subset is upstream's own funcIsProgramStopControl set (items.c);
- * CASE is flow inside PTP_REGISTER; FCALL's parameter is a Forth
- * dictionary index (names-only invariant).  Class rejects: label
- * declaration/target, step-relative jumps, skip-on-compare, key
- * declarations. */
+ * subset is upstream's own funcIsProgramStopControl set; CASE is flow
+ * inside PTP_REGISTER; FCALL's parameter is a Forth dictionary index
+ * (names-only invariant).  Class rejects: label declaration/target,
+ * step-relative jumps, skip-on-compare, key declarations. */
 bool forthItemIsFlowReject(uint16_t itemId)
 {
   uint16_t ptp = (uint16_t)(indexOfItems[itemId].status & PTP_STATUS);
@@ -653,7 +651,7 @@ bool forthItemIsFlowReject(uint16_t itemId)
 
 static struct { uint16_t here, latest, count, entryOff; bool open; } openDef;
 
-/* §3.2 re-entrancy (D-3): snapshot/restore openDef so a nested interpret can
+/* §3.2 re-entrancy: snapshot/restore openDef so a nested interpret can
  * never finish or abort the outer line's definition. */
 void forthDefStateSave(forthDefState_t *out)
 {
@@ -773,7 +771,7 @@ bool openDefinitionName(char *buf, int bufSize)
   return len > 0;
 }
 
-/* ---- Ref → name reverse lookup (for FCALL redirect, C6) ---- */
+/* ---- Ref → name reverse lookup (for FCALL redirect) ---- */
 
 bool forthDictNameByRef(uint16_t ref, char *buf, int bufSize)
 {
@@ -824,7 +822,7 @@ bool forthDictNameByRef(uint16_t ref, char *buf, int bufSize)
   return false;
 }
 
-/* ---- F3-4: GLOBAL — move transient word to gdict ---- */
+/* ---- GLOBAL — move transient word to gdict ---- */
 
 static bool validateWalkOn(const uint8_t *base, uint16_t bodyStart, uint16_t limit,
                            uint16_t selfTok, uint16_t trefIdx, uint16_t gcount)
@@ -847,7 +845,7 @@ static bool validateWalkOn(const uint8_t *base, uint16_t bodyStart, uint16_t lim
       if ((uint16_t)(tok - FORTH_GCALL_BASE) >= gcount) return false;
     }
     else if (tok == FTOK_XEQN) {
-      /* F3-6: XEQN — names resolve fresh at runtime; accept and advance */
+      /* XEQN — names resolve fresh at runtime; accept and advance */
       if ((uint32_t)pos + 2u > limit) return false;
       uint8_t vk = base[pos];
       uint8_t vl = base[pos + 1];
@@ -895,7 +893,6 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
 {
   uint16_t idx = tref;
 
-  /* Step 1: validate preconditions */
   if (!fdict.base || fdict.latest == FORTH_NULL ||
       idx != (uint16_t)(fdict.count - 1)) {
     displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -905,7 +902,6 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
   uint16_t off = fdict.latest;
   forthHeader_t *hdr = (forthHeader_t *)(fdict.base + off);
 
-  /* Step 2: defensive smudge check + compute body start */
   if (hdr->flags & FF_SMUDGE) {
     displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
@@ -914,13 +910,11 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
   uint16_t bodyStart = off + (uint16_t)TO_BLOCKS(6 + hdr->nameLen) * BYTES_PER_BLOCK;
   uint16_t selfTok = (ftoken_t)(0x1000 + idx);
 
-  /* Step 3: validate walk */
   if (!validateWalkOn(fdict.base, bodyStart, fdict.here, selfTok, idx, gdict.count)) {
     displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
     return false;
   }
 
-  /* Recompute end from walk */
   {
     uint16_t pos = bodyStart;
     for (;;) {
@@ -937,7 +931,7 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
         pos += 2;
         { uint16_t ptp2 = (uint16_t)(indexOfItems[itemId2].status & PTP_STATUS);
           uint16_t span2;
-          /* F4-3: same grammar as the validator — a named/indirect cell is
+          /* Same grammar as the validator — a named/indirect cell is
            * wider than one cell, so a plain +2 would mis-walk the body. */
           if (!forthParamCellSpan(fdict.base, pos, fdict.here, ptp2, true, &span2)) {
             displayCalcErrorMessage(ERROR_INVALID_NAME, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -954,13 +948,11 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
     }
     uint16_t entryBytes = pos - off;
 
-    /* Step 4: ensure gdict space */
     if (!forthGDictEnsure(entryBytes)) return false;
 
     /* Re-derive hdr for hygiene */
     hdr = (forthHeader_t *)(fdict.base + off);
 
-    /* Step 5: copy to gdict */
     uint16_t goff = gdict.here;
     uint16_t gEntryEnd = (uint16_t)(goff + entryBytes);
     memcpy(gdict.base + goff, fdict.base + off, entryBytes);
@@ -970,7 +962,7 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
     ((forthHeader_t *)(gdict.base + goff))->link = link;
     ((forthHeader_t *)(gdict.base + goff))->owner = FORTH_OWNER_GLOBAL;
 
-    /* Step 6: rewrite walk on the COPY — rewrite selfTok */
+    /* Rewrite walk on the COPY — rewrite selfTok */
     {
       ftoken_t newTok = (ftoken_t)(FORTH_GCALL_BASE + gdict.count);
       uint8_t newTokBytes[2];
@@ -1013,24 +1005,21 @@ bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut)
       }
     }
 
-    /* Step 7: commit gdict */
     gdict.latest = goff;
     gdict.here = (uint16_t)TO_BLOCKS(goff + entryBytes) * BYTES_PER_BLOCK;
     gdict.count++;
 
-    /* Step 8: roll off fdict */
     uint16_t savedLink = hdr->link;
     fdict.here = off;
     fdict.latest = savedLink;
     fdict.count--;
 
-    /* Step 9: return global ref */
     *grefOut = (uint16_t)(FORTH_REF_GLOBAL | (gdict.count - 1));
     return true;
   }
 }
 
-/* ---- F3-4: IMMEDIATE — set FF_IMMEDIATE by ref ---- */
+/* ---- IMMEDIATE — set FF_IMMEDIATE by ref ---- */
 
 bool forthDictSetImmediateByRef(uint16_t ref)
 {
@@ -1070,7 +1059,7 @@ bool forthDictSetImmediateByRef(uint16_t ref)
   return false;
 }
 
-/* ---- F3-4: FORGET — truncate gdict at named word ---- */
+/* ---- FORGET — truncate gdict at named word ---- */
 
 bool forthGDictForget(const char *name)
 {
@@ -1109,19 +1098,18 @@ bool forthGDictForget(const char *name)
 forthXEQType_t forthResolveXEQ(const char *name, uint16_t *param)
 {
   /* C47 label first (§4.2: preserve existing programs' behavior).
-   * GLOBAL_LABELS (upstream rebase to b8f79e486): findNamedLabel gained a
-   * labelType selector when upstream added named LOCAL labels. Forth's
-   * label lookup has only ever meant global labels (R4 ruling: "native RPN
-   * labels retain their established global visibility") — GLOBAL_LABELS
-   * preserves that exactly and does not silently adopt local-named lookup. */
+   * findNamedLabel takes a labelType selector because upstream added named
+   * LOCAL labels; Forth's label lookup has only ever meant global labels,
+   * so GLOBAL_LABELS preserves that and does not silently adopt
+   * local-named lookup. */
   calcRegister_t label = findNamedLabel(name, GLOBAL_LABELS);
   if (label != INVALID_VARIABLE) {
     *param = (uint16_t)label;
     return FORTH_XEQ_LABEL;
   }
 
-  /* C47 item name second (built-in functions like FORTH)
-   * B3 reverse: reject parameterized items (PTP_DECLARE_LABEL..PTP_MENU).
+  /* C47 item name second (built-in functions like FORTH).
+   * Reject parameterized items (PTP_DECLARE_LABEL..PTP_MENU).
    * ITM_FORTH (PTP_REM) keeps resolving; ITM_FCALL (PTP_NUMBER_16) stops. */
   {
     uint16_t i;

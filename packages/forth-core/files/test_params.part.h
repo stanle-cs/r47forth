@@ -1,4 +1,4 @@
-/* packages/forth-core/test_params.part.h — T5 split part of test_dict_reloc.c (2026-08-03).
+/* packages/forth-core/test_params.part.h — split part of test_dict_reloc.c.
  *
  * This is NOT a standalone header: it is a source PART, #included exactly
  * once at the end of test_dict_reloc.c so the suite stays one compilation
@@ -36,7 +36,7 @@ static int test_literal_after_lit(void)
   return 0;
 }
 
-/* ---- Fix #13: FTOK_C47 PTP_NUMBER_8 padded dispatch (hand-assembled) ----
+/* ---- FTOK_C47 PTP_NUMBER_8 padded dispatch (hand-assembled) ----
  * Body: C47(ITM_PAUSE, 0) | ILIT(33) | EXIT
  * ITM_PAUSE (38) has PTP_NUMBER_8 — 1-byte param padded to 2-byte cell.
  * fnPause is a no-op stub; param=0 means no pause.
@@ -67,7 +67,7 @@ static int test_c47_ptp_number8_padded(void)
   return 0;
 }
 
-/* T3.2 (D-3 core): nested forthInner fires while the OUTER level has rsp > 0.
+/* Nested forthInner fires while the OUTER level has rsp > 0.
  * Must fail if forthInner still zeroes rsp on entry (outer return chain
  * destroyed: TOP's tail after MID never runs). */
 static int test_nested_preserves_outer_rstack(void)
@@ -134,15 +134,14 @@ static int test_nested_preserves_outer_rstack(void)
   return 0;
 }
 
-/* ---- Fix #13: outer interpreter real literal ----
+/* ---- Outer interpreter real literal ----
  * forthOuterInterpret("2.5 2 *") -> X is dtReal34, value 5.0.
  * Mutation: real literal not classified -> undefined word error. ---- */
 static int test_outer_real_literal(void)
 {
-  /* forthDictClear, NOT forthDictInit: the sub-phase C section's earlier
-   * tests (test_outer_compile_invoke) leave the dict region live, and
-   * forthDictInit on a live arena leaks the region + its allocation
-   * record (DESIGN.md §6.2 P-4). Clear frees first. */
+  /* forthDictClear, not forthDictInit: an earlier test leaves the dict
+   * region live, and forthDictInit on a live arena leaks the region and
+   * its allocation record. Clear frees first. */
   forthDictClear();
   lastErrorCode = ERROR_NONE;
   forthOuterInterpret("2.5 2 *");
@@ -181,7 +180,7 @@ static int test_outer_simple_expr(void)
   return 0;
 }
 
-/* ": SQ2 DUP * ;" then "3 SQ2" via forthTestRunFromX -> X == 9 (§7.4 full acceptance) */
+/* ": SQ2 DUP * ;" then "3 SQ2" via forthTestRunFromX -> X == 9 */
 static int test_outer_compile_invoke(void)
 {
   lastErrorCode = ERROR_NONE;
@@ -207,8 +206,8 @@ static int test_outer_compile_invoke(void)
   return 0;
 }
 
-/* §4.1 step 4: C47 item lookup in the outer interpreter.
- * Tests forthFindItem and the new outer arm (compile + interpret). */
+/* C47 item lookup in the outer interpreter.
+ * Tests forthFindItem and the outer arm (compile + interpret). */
 static int test_outer_item_lookup(void)
 {
   uint16_t itemId;
@@ -408,9 +407,9 @@ static int test_outer_glyph_divide(void)
   return 0;
 }
 
-/* T3.5 (D-3): a Forth line XEQs a label whose program contains a Forth
- * source step (outer-in-outer). The OUTER line's remaining tokens must still
- * be consumed after the nested line. Must fail if tokenizer state is shared
+/* A Forth line XEQs a label whose program contains a Forth source step
+ * (outer-in-outer). The OUTER line's remaining tokens must still be
+ * consumed after the nested line. Must fail if tokenizer state is shared
  * statics (nested init clobbers the outer position). */
 static int test_outer_nesting_tokenizer(void)
 {
@@ -456,16 +455,15 @@ static int test_outer_nesting_tokenizer(void)
   return 0;
 }
 
-/* T3.6 (rewritten by architect ruling): the outer depth cap is UNREACHABLE
- * by natural construction — a label XEQ from a program-context Forth step is
- * continuation-style (fnExecute's nested branch pushes a level and defers to
- * the enclosing runProgram loop), so interpreter frames never stack past 2.
- * Phase A therefore primes the depth via test hook and pins the cap check
- * itself: must fail if the FORTH_OUTER_NEST_MAX guard in forthOuterRun is
- * removed (the primed line would execute). Phase B keeps the two-program
- * construct as a continuation-XEQ integration test: must fail if fnExecute's
- * nested branch stops working from a Forth step (X != 3) or leaks its
- * subroutine level / leaves outer depth dangling. */
+/* The outer depth cap is UNREACHABLE by natural construction — a label XEQ
+ * from a program-context Forth step is continuation-style (fnExecute's
+ * nested branch pushes a level and defers to the enclosing runProgram
+ * loop), so interpreter frames never stack past 2. Phase A primes the
+ * depth via test hook and pins the cap check itself: must fail if the
+ * FORTH_OUTER_NEST_MAX guard in forthOuterRun is removed. Phase B keeps
+ * the two-program construct as a continuation-XEQ integration test: must
+ * fail if fnExecute's nested branch stops working from a Forth step
+ * (X != 3) or leaks its subroutine level / leaves outer depth dangling. */
 static int test_outer_depth_cap(void)
 {
   int fail = 0;
@@ -532,7 +530,7 @@ static int test_outer_depth_cap(void)
   return 0;
 }
 
-/* T3.7: after any nesting episode, forthOuterCur must be NULL at rest.
+/* After any nesting episode, forthOuterCur must be NULL at rest.
  * Must fail if an exit path restores depth but not the ctx pointer
  * (use-after-return into a dead stack frame on the next line). */
 static int test_outer_ctx_at_rest(void)
@@ -552,7 +550,7 @@ static int test_outer_ctx_at_rest(void)
     fail = 1;
   }
 
-  /* Nested scenario (same as T3.5) */
+  /* Nested scenario (same as test_outer_nesting_tokenizer) */
   {
     uint8_t prog[] = {
       0x01, 0xFD, 0x03, 'N', 'L', 'B',                         /* LBL 'NLB' */
@@ -605,14 +603,10 @@ static int test_outer_ctx_at_rest(void)
   return 0;
 }
 
-/* test_number_then_no_label_fallthrough
- * C-8 classify-gate: a classified number that fails to emit must NOT fall
- * through to label lookup.  Without the gate, processNumber returns false
- * on emit failure, the token falls through to findNamedLabel, then to
- * ERROR_FUNCTION_NOT_FOUND (overwriting the original ERROR_RAM_FULL).
- * Mutation: revert to single-bool fall-through -> lastErrorCode ends as
- * ERROR_FUNCTION_NOT_FOUND and the test FAILS.
- */
+/* A classified number that fails to emit must NOT fall through to label
+ * lookup. Without the gate, processNumber returns false on emit failure,
+ * the token falls through to findNamedLabel, then to
+ * ERROR_FUNCTION_NOT_FOUND (overwriting the original ERROR_RAM_FULL). */
 static int test_number_then_no_label_fallthrough(void)
 {
   forthDictClear();
@@ -725,14 +719,11 @@ static int test_number_bad_3e(void)
   return 0;
 }
 
-/* test_number_bad_exponent_sign_position
- * R4-1: the grammar is [eE][+-]?digit+ — a sign is legal only as the FIRST
- * byte immediately after e/E, and only once. "1e2-3" has its '-' after the
+/* The grammar is [eE][+-]?digit+ — a sign is legal only as the FIRST byte
+ * immediately after e/E, and only once. "1e2-3" has its '-' after the
  * exponent digit '2', not immediately after 'e', so it must be rejected as
  * an undefined word — not silently accepted as a number, and not silently
- * truncating the line before the tail "7".
- * Escaping mutation: restore the broad clause
- * `(s[i] == '+' || s[i] == '-') && hasExp` — lastErrorCode stays ERROR_NONE. */
+ * truncating the line before the tail "7". */
 static int test_number_bad_exponent_sign_position(void)
 {
   forthDictClear();
@@ -762,22 +753,11 @@ static int test_number_bad_exponent_sign_position(void)
   return fail;
 }
 
-/* Test: a dot with NO MANTISSA DIGITS is not a valid number (Axis 4 spec
- * edge case — classifyNumber's `mantissaDigits == 0` rule).
- *
- * RETARGETED by Stage N packet N1-4 (2026-08-06).  The probe used to be a
- * bare ".", with "lastErrorCode != ERROR_NONE" standing in for "not a
- * number".  That proxy died when `.` became a console output prim: prims
- * resolve at §4.1 step 1, so a bare "." now runs and never reaches the
- * number arm at step 3 — the test would have read a legitimate, designed
- * behaviour change as a grammar bug.
- *
- * The CLAIM is unchanged and still worth pinning, so the probe moved to a
- * token that exercises the same grammar rule and is shadowed by nothing:
- * "+." and "-." are a sign followed by a dot and no digits, which
- * classifyNumber must reject for exactly the mantissaDigits reason, and
- * neither is a prim, an item or a label.  This is the user-shadowing hazard
- * N-T3 named, realised against a test rather than against a user's word. */
+/* A dot with NO MANTISSA DIGITS is not a valid number
+ * (classifyNumber's `mantissaDigits == 0` rule). "+." and "-." are a sign
+ * followed by a dot and no digits, which classifyNumber must reject for
+ * exactly the mantissaDigits reason; neither is a prim, an item, or a
+ * label, so the rejection isn't masked by an unrelated match. */
 static int test_number_bad_lone_dot(void)
 {
   const char *probes[2] = { "+.", "-." };
@@ -804,8 +784,8 @@ static int test_number_bad_lone_dot(void)
   return 0;
 }
 
-/* T1.2 (old-backup defaults). Must fail if: the pre-seeded defaults before
- * each restoreStateValue call are removed (stale ramPtr from the programList
+/* Old-backup defaults. Must fail if the pre-seeded defaults before each
+ * restoreStateValue call are removed (stale ramPtr from the programList
  * restore would masquerade as the gdict base). */
 static int test_restore_missing_params_defaults(void)
 {
@@ -848,10 +828,8 @@ static int test_restore_missing_params_defaults(void)
   return fail;
 }
 
-/* test_param_core_extraction
- * F2-1: verify the extracted parameter core (param_core.c/h) behaves
- * identically to the original _executeOp in lblGtoXeq.c.  Two
- * independently reported subcases. */
+/* The extracted parameter core (param_core.c/h) behaves identically to
+ * the original _executeOp in lblGtoXeq.c. */
 static int test_param_core_extraction(void)
 {
   int fail = 0;
@@ -987,11 +965,10 @@ static int test_param_core_extraction(void)
       fail = 1;
     }
     else {
-      /* F2 audit regression: before executeOneStep distinguished a
-       * synchronous Forth-name fallback from a native label branch, it
-       * returned -1 here and the real run loop repeated this XEQ forever.
-       * The direct return-value guard above keeps that mutation from
-       * hanging the suite; now prove the complete engine drive terminates. */
+      /* Before executeOneStep distinguished a synchronous Forth-name
+       * fallback from a native label branch, it returned -1 here and the
+       * run loop repeated this XEQ forever; the return-value guard above
+       * checks that. Now prove the full engine drive terminates. */
       programRunStop = PGM_STOPPED;
       lastErrorCode = ERROR_NONE;
       dynamicMenuItem = -1;
@@ -1022,10 +999,9 @@ static int test_param_core_extraction(void)
   return fail;
 }
 
-/* test_param_core_bounded_names
- * F2-2: verify the bounded name reader (paramCoreReadName) in
- * param_core.c clamps reads to firstFreeProgramByte.
- * F4 audit: fixed-width structural bytes honor the same exclusive bound. */
+/* The bounded name reader (paramCoreReadName) in param_core.c clamps
+ * reads to firstFreeProgramByte; fixed-width structural bytes honor the
+ * same exclusive bound. */
 static int test_param_core_bounded_names(void)
 {
   int fail = 0;
@@ -1287,10 +1263,9 @@ static int test_param_core_bounded_names(void)
   return fail;
 }
 
-/* test_c47_param_shared_dispatch
- * F2-3: verify that Forth's FTOK_C47 dispatch and the native engine
- * share the same parameter validation/dispatch path, closing the
- * out-of-range direct-parameter drift (§10.2). */
+/* Forth's FTOK_C47 dispatch and the native engine share the same
+ * parameter validation/dispatch path, closing the out-of-range
+ * direct-parameter drift. */
 static int test_c47_param_shared_dispatch(void)
 {
   int fail = 0;
@@ -1569,12 +1544,9 @@ static int test_c47_param_shared_dispatch(void)
       { uint16_t itemId = ITM_sin; forthDictEmitBytes(&itemId, 2); }
       end_word(w);
 
-      /* Longint seed: sin() always produces a dtReal34 result regardless
-       * of value or angular mode, so a type-change check below proves
-       * ITM_sin actually dispatched rather than silently no-op'ing —
-       * !err && lastErrorCode==ERROR_NONE alone can't distinguish "ran"
-       * from "paramCoreValidateDirect's PTP_NONE arm returned true but
-       * the seam never called reallyRunFunction." */
+      /* sin() always produces dtReal34 regardless of input, so the type
+       * check below proves ITM_sin actually dispatched (rather than the
+       * PTP_NONE arm returning true without calling reallyRunFunction). */
       forthPushInt32(0);
       lastErrorCode = ERROR_NONE;
       bool err = run_word("SN01");
@@ -1608,9 +1580,7 @@ static int test_c47_param_shared_dispatch(void)
   return fail;
 }
 
-/* test_param_parity_sweep
- * F2-4: pin native/Forth parameter parity across all PTP classes Forth
- * can carry.  Four independently reported subcases. */
+/* Native/Forth parameter parity across all PTP classes Forth can carry. */
 static int test_param_parity_sweep(void)
 {
   int fail = 0;
@@ -2290,22 +2260,8 @@ static int test_param_parity_sweep(void)
   return fail;
 }
 
-/* test_param_textual_numeric
- * F4-1: parameter classification + direct numeric parameters.
- * Subcase 1: NUMBER_8 compile path
- * Subcase 2: NUMBER_8 execute path
- * Subcase 3: NUMBER_16 compile path
- * Subcase 4: NUMBER_8_16 compile path (short + extended)
- * Subcase 5: Range error (value > max)
- * Subcase 6: Invalid token (non-digit)
- * Subcase 7: Flow reject (RTN)
- *
- * Escaping mutation 1: revert step-4 to blanket reject (F3-6) — subcases 1-4 fail.
- * Escaping mutation 2: remove PTP_NUMBER_8_16 from paramCoreValidateDirect — subcase 4 fails.
- * Escaping mutation 3: remove PTP_NUMBER_8_16 from forth_inner.c decode — runtime of W4 errors.
- * Escaping mutation 4: omit forthItemIsFlowReject in step-4 — subcase 7 fails (RTN runs).
- * Escaping mutation 5: remove TAM_MIN/MAX check — subcase 5 fails (no range error).
- */
+/* Parameter classification for direct numeric parameters: NUMBER_8/16/8_16
+ * compile and execute paths, range error, invalid token, and flow reject. */
 static int test_param_textual_numeric(void)
 {
   int fail = 0;
@@ -2478,16 +2434,9 @@ static int test_param_textual_numeric(void)
   return fail;
 }
 
-/* test_param_register_flag
- * F4-2: register, flag, and shuffle direct parameter forms.
- * Subcase 1: STO/RCL numbered round-trip, interpret + compiled
- * Subcase 2: Letter registers
- * Subcase 3: Stat-letter conversion is live
- * Subcase 4: Local dot form encodes and stays silent unallocated
- * Subcase 5: Flag forms
- * Subcase 6: Shuffle
- * Subcase 7: Validator arms
- */
+/* Register, flag, and shuffle direct parameter forms: STO/RCL numbered
+ * round-trip (interpret + compiled), letter registers, stat-letter
+ * conversion, local dot form, flag forms, shuffle, validator arms. */
 static int test_param_register_flag(void)
 {
   int fail = 0;
@@ -2766,11 +2715,11 @@ static int test_param_register_flag(void)
         subFail = 1;
       }
     }
-    /* Behavior parity (traced 2026-07-19, corrects the F4-2 packet): the native
-     * PARAM_REGISTER arm gates on regInRange(), and regInRange() is NOT a pure
-     * predicate — on a miss it calls displayCalcErrorMessage(ERROR_OUT_OF_RANGE)
-     * itself (store.c:17-72). So an unallocated local is NOT silent natively:
-     * it raises OUT_OF_RANGE and performs no store. We mirror that exactly. */
+    /* The native PARAM_REGISTER arm gates on regInRange(), which is not a
+     * pure predicate — on a miss it calls
+     * displayCalcErrorMessage(ERROR_OUT_OF_RANGE) itself. So an unallocated
+     * local is NOT silent natively: it raises OUT_OF_RANGE and performs no
+     * store. We mirror that exactly. */
     if (!subFail) {
       x_set_string(": PRL2 STO .05 ;");
       forthTestRunFromX(NOPARAM);
@@ -3140,7 +3089,7 @@ static int test_param_named_indirect(void)
   uint16_t savedNamedVars = numberOfNamedVariables;
   uint16_t menuItem = 0, n16Item = 0;
 
-  /* Runtime discovery — never hardcode an item id (F3-core §0). */
+  /* Runtime discovery — never hardcode an item id. */
   { uint16_t id;
     for (id = 1; id < LAST_ITEM; id++) {
       uint16_t st = indexOfItems[id].status;
@@ -3656,9 +3605,7 @@ static int test_param_named_indirect(void)
   return fail;
 }
 
-/* test_param_series_c_acceptance
- * F4-4: Series C error table and native/Forth parity acceptance sweep.
- * Closes stage F4. */
+/* Series C error table and native/Forth parity acceptance sweep. */
 static int test_param_series_c_acceptance(void)
 {
   int fail = 0;

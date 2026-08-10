@@ -834,7 +834,7 @@ void execTimerApp(uint16_t timerType) {
         forthUserItemDispatch(item, funcParam, item, label);
       }
       else {
-        /* forth-core H-hook: Forth fallback after label miss (DESIGN.md §4.2) */
+        /* forth-core: Forth fallback after label miss (DESIGN.md §4.2) */
         if(forthTryColonFallback(item, funcParam)) {
           return;
         }
@@ -913,18 +913,15 @@ void execTimerApp(uint16_t timerType) {
               funcParam = (char *)getUserKeyLabelString(keyCode * 6 + keyStateCode);
               setCurrentUserMenu(item, funcParam);
               if(shiftF) {
-                /* AUDIT round 6 (F7): the console OWNS its row while a live
-                 * interactive capture is open (forth_menu.h), so this
-                 * juggling leaves it alone.  What it did before, and why the
-                 * predicate's consumers had to be re-enumerated:
-                 * DESIGN-HISTORY 2026-08-09 (P10, the F7 juggling).
-                 * The console's own ALPHA gesture is the
-                 * keys-mode toggle; the long-press leaves its row alone.
-                 * tam.alpha still gets its TAMALPHA row: during TAM the
-                 * capture is SUSPENDED, so the guard does not fire. */
+                /* The console OWNS its row while a live interactive capture
+                 * is open, so this juggling leaves it alone. The console's
+                 * own ALPHA gesture is the keys-mode toggle; the long-press
+                 * leaves its row alone. tam.alpha still gets its TAMALPHA
+                 * row: during TAM the capture is SUSPENDED, so the guard
+                 * does not fire. */
                 if(forthConsoleHomeRow()) {
-                  /* R9-4: the keyboardTweak twin's shape, one definition —
-                   * see forth_menu.c. */
+                  /* The keyboardTweak twin's shape, one definition — see
+                   * forth_menu.c. */
                 }
                 else {
                 if(getSystemFlag(FLAG_ALPHA) && ((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu())) {
@@ -5676,27 +5673,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
 
 
   /* The one owner of the band's vertical geometry — _forthConsoleRender and
-   * the view-side roll both derive from here, so the two can never disagree
-   * (the C14 duplicated-constant class).  DERIVED from yMultiLineEdOffset,
-   * never re-measured from the string; see the comment in the renderer.
-   *
-   * AUDIT C14 (closed 2026-08-08): the numbers are COMPUTED from upstream's
-   * own names by upstream's own arithmetic, never hand-fitted:
-   *
-   *   short line (yMultiLineEdOffset == 3) — showStringEdC47's wrapped-line
-   *     reposition at :1685-1688 does NOT run, because its guard is
-   *     `lastline > yMultiLineEdOffset` and lastline is multiEdLines == 2.
-   *     So the editor draws at the y its CALLER passes, screen.c:3886:
-   *     `Y_POSITION_OF_NIM_LINE - 3 - checkHPoffset`.
-   *   long line — the reposition DOES run and overrides y with
-   *     `(yincr-1) + yMultiLineEdOffset * (yincr-1)` (:1687).
-   *
-   * checkHPoffset is read, not ignored: the HP-style layout lifts the editor
-   * by 50 px and the band has to follow.  What the two literals were before
-   * the derivation, and the behaviour change that came with it:
-   * DESIGN-HISTORY 2026-08-09 (P10, C14's derivation). */
-  /* Non-static since CONSOLIDATE P7: the rest of the console view moved to
-   * forth_console_view.c and calls this through forth_console.h. */
+   * the view-side roll both derive from here, so the two can never disagree.
+   * DERIVED from yMultiLineEdOffset via upstream's own arithmetic for the
+   * short-line and long-line reposition cases, never hand-fitted or
+   * re-measured from the string. checkHPoffset is read, not ignored: the
+   * HP-style layout lifts the editor by 50 px and the band has to follow. */
+  /* Non-static: the rest of the console view lives in forth_console_view.c
+   * and calls this through forth_console.h. */
   uint16_t _forthConsoleEditorTop(void) {
     if(yMultiLineEdOffset == 3) {
       return (uint16_t)(Y_POSITION_OF_NIM_LINE - 3 - checkHPoffset
@@ -5972,12 +5955,11 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
           }
           else {
             //printf("##> CCCC 4lines ALPHA Mode\n");
-            /* N1-2 (Stage N): while an interactive Forth capture is open the
-             * transcript replaces the T/Z/Y paints.  ADDITIVE — every yield
-             * case (error, temporaryInformation, TAM, a PEM capture, no
-             * capture at all) falls through to the landed block below, byte
-             * for byte, and the REGISTER_X paint that follows is the console's
-             * own input band either way. */
+            /* While an interactive Forth capture is open the transcript
+             * replaces the T/Z/Y paints. ADDITIVE — every other case falls
+             * through to the landed block below unchanged, and the
+             * REGISTER_X paint that follows is the console's own input band
+             * either way. */
             if(_forthConsoleActive()) {
               _forthConsoleRender();
             }

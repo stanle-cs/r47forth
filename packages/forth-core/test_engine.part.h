@@ -1,10 +1,10 @@
-/* packages/forth-core/test_engine.part.h — T5 split part of test_dict_reloc.c (2026-08-03).
+/* packages/forth-core/test_engine.part.h — split part of test_dict_reloc.c.
  *
  * This is NOT a standalone header: it is a source PART, #included exactly
  * once at the end of test_dict_reloc.c so the suite stays one compilation
- * unit (shared statics, unchanged build/audit/citations). Edit rules are
- * the same as for test_dict_reloc.c; anchor edits on subcase printf text.
- * Functions here are forward-declared in the main file before the runner.
+ * unit. Edit rules are the same as for test_dict_reloc.c; anchor edits on
+ * subcase printf text. Functions here are forward-declared in the main
+ * file before the runner.
  */
 /* ---- Stack test: ILIT + DUP + arithmetic + ASLIFT on normal exit ----
  * Mutation: ASLIFT not set after return (C4 missing)               ---- */
@@ -264,7 +264,7 @@ static int test_0br_longint_taken_branch(void)
   return 0;
 }
 
-/* ---- Fix #13: FTOK_LIT roundtrip (hand-assembled) ----
+/* ---- FTOK_LIT roundtrip (hand-assembled) ----
  * Body: LIT(42.0) | ILIT(777) | EXIT
  * LIT pushes 16-byte real34; ILIT 777 lifts stack and pushes to X.
  * If ip advances 16 bytes past LIT payload, ILIT 777 runs -> X=777.
@@ -297,7 +297,7 @@ static int test_lit_roundtrip(void)
   return 0;
 }
 
-/* ---- Fix #13: FTOK_C47 PTP_NONE dispatch (hand-assembled) ----
+/* ---- FTOK_C47 PTP_NONE dispatch (hand-assembled) ----
  * Body: C47(ITM_NULL, NOPARAM) | ILIT(55) | EXIT
  * ITM_NULL (0) has PTP_NONE — no inline param consumed, no-op on stack.
  * ip advances 2 bytes past itemId, then ILIT 55 runs.
@@ -326,7 +326,7 @@ static int test_c47_ptp_none(void)
   return 0;
 }
 
-/* ---- Fix #13: FTOK_C47 bad PTP (PTP_LABEL not supported) ----
+/* ---- FTOK_C47 bad PTP (PTP_LABEL not supported) ----
  * Body: C47(ITM_GTO) | EXIT
  * ITM_GTO (2) has PTP_LABEL — not supported in sub-phase C.
  * Expect ERROR_OPERATION_UNDEFINED, forthInner returns.
@@ -353,7 +353,7 @@ static int test_c47_bad_ptp(void)
   return 0;
 }
 
-/* ---- Fix #13: FTOK_C47 nested re-entrancy guard ----
+/* ---- FTOK_C47 nested re-entrancy guard ----
  * Define word "NR1": ILIT(42) EXIT
  * Hand-assemble: C47(ITM_FCALL, idx(NR1)) | ILIT(999) | EXIT
  * P3: nested forthInner via ITM_FCALL now succeeds (depth 2 <= FORTH_NEST_MAX).
@@ -455,25 +455,11 @@ static int test_nested_error_unwinds_rsp(void)
   return 0;
 }
 
-/* ---- Divide-by-zero halt (fix #14: de-vacuous) ----
- * Pushes 42 (long int), then DIV by 0.
- * DIV by zero should set lastErrorCode and halt.
- * Sentinel (ILIT 999) after DIV must NOT execute.
- * Assert: lastErrorCode == ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN.
- * Assert: X != 999 (sentinel did not execute).
- * Assert: X is real34 zero — NOT the original longint 42 (test-audit
- * finding 2026-07-20: this comment used to claim X==42, but that was
- * never actually checked or true. Traced via src/c47/mathematics/
- * division.c: divLonILonI sees a zero divisor and converts BOTH X and Y
- * to dtReal34 in place *before* calling divRealReal(), which is where
- * ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN actually gets raised (divRealReal's
- * zero-divisor branch, FLAG_SPCRES clear) — X is left at its
- * already-converted value (real34 0.0), not restored to the pre-op
- * longint. registers.c's adjustResult() calls undo() on a nonzero
- * lastErrorCode, but undo() restores from SAVED_REGISTER_X/saveForUndo(),
- * a checkpoint this Forth-driven primitive call never populates, so it
- * has no effect on the outcome here — confirmed empirically, not by
- * reading undo()'s call sites exhaustively).
+/* ---- Divide-by-zero halt: de-vacuous ----
+ * DZ: ILIT 42 | ILIT 0 | DIV | ILIT 999 | EXIT. DIV by zero must halt
+ * before the sentinel; X ends as real34 zero (divLonILonI converts before
+ * raising the error), not restored to the original longint 42 — undo()
+ * is never populated for this Forth-driven call, so it has no effect here.
  * Mutation: error not checked, sentinel executes -> X=999.             ---- */
 static int test_div_zero_halt(void)
 {
@@ -614,9 +600,8 @@ static int test_runaway_guard(void)
 }
 
 /* Body is empty: zero bytes after the header. The very first token fetch
- * (2 bytes) has nothing to read.
- * Escaping mutation: remove the main-loop boundedRead(ip, 2) call — the read
- * proceeds on whatever garbage sits past fdict.here. */
+ * (2 bytes) must be rejected by the main-loop boundedRead(ip, 2) guard
+ * rather than reading garbage past fdict.here. */
 static int test_truncated_token_fetch(void)
 {
   int fail = 0;
@@ -645,9 +630,8 @@ static int test_truncated_token_fetch(void)
   return fail;
 }
 
-/* Body is FTOK_ILIT with no following 4-byte int32.
- * Escaping mutation: remove the boundedRead(ip, 4) call in case FTOK_ILIT —
- * the memcpy reads 4 bytes past fdict.here. */
+/* Body is FTOK_ILIT with no following 4-byte int32; the boundedRead(ip, 4)
+ * guard must reject it before the memcpy reads past fdict.here. */
 static int test_truncated_inline_operand(void)
 {
   int fail = 0;
@@ -677,25 +661,12 @@ static int test_truncated_inline_operand(void)
   return fail;
 }
 
-/* Body is FTOK_C47 with no following 2-byte itemId.
- * The two bytes past fdict.here are block-rounding padding inside the SAME
- * allocated block, not unmapped memory — their content is whatever was last
- * written there. Forced to 0 (ITM_NULL, PTP_NONE) here so the test is
- * deterministic: an uncontrolled garbage value read as itemId=8712 on one
- * run, which the EXISTING downstream `itemId >= LAST_ITEM` check also
- * rejects with the same error code, masking whether the new guard ran at all.
- *
- * NOT independently mutation-isolable from the main fetch guard, verified by
- * trying: with itemId forced to 0/PTP_NONE, removing ONLY this guard still
- * passes, because the itemId "read" (of controlled, in-bounds-looking zero
- * bytes) consumes no further param, ip lands exactly on the now-exhausted
- * fdict.here, and the OUTER LOOP's own boundedRead(ip, 2) — unmutated, one
- * iteration later — catches the truncation instead. That is defense in
- * depth working as intended, not a gap: this guard and its neighbor protect
- * the same hazard from two sides, and removing either alone still gets
- * caught by the other for this specific body shape. The main-fetch guard's
- * own dedicated test (test_truncated_token_fetch) already proves that guard
- * in isolation. */
+/* Body is FTOK_C47 with no following 2-byte itemId. The two bytes past
+ * fdict.here are in-block padding, forced to 0 (ITM_NULL, PTP_NONE) so the
+ * read is deterministic rather than tripping the unrelated itemId-range check.
+ * Gap: this guard isn't independently isolable from the main fetch guard
+ * (defense in depth — removing either alone is still caught by the other
+ * for this body shape); test_truncated_token_fetch covers that guard alone. */
 static int test_truncated_c47_item_id(void)
 {
   int fail = 0;
@@ -839,7 +810,7 @@ static int test_malformed_token(void)
   return fail;
 }
 
-/* ---- ILIT sign-extend fix (fix #1) ----
+/* ---- ILIT sign-extend ----
  * Compiles : TEST128 128 ; and verifies X = 128 (not -128).
  * Mutation: revert to (int8_t) sign-extend on byte 0.               ---- */
 static int test_ilit_sign_extend(void)
@@ -892,7 +863,7 @@ static int test_ilit_sign_extend(void)
   return 0;
 }
 
-/* ---- ILIT arithmetic divergence (fix #1) ----
+/* ---- ILIT arithmetic divergence ----
  * ILIT 42 + ILIT 128 + PLUS should produce 170.
  * Mutation: ILIT 128 produces -128 (sign-extend); 42+(-128) = -86 != 170. ---- */
 static int test_ilit_arithmetic_divergence(void)
@@ -921,7 +892,7 @@ static int test_ilit_arithmetic_divergence(void)
   return 0;
 }
 
-/* ---- BR delta sign-extend fix (fix #16) ----
+/* ---- BR delta sign-extend ----
  * BR with delta whose high byte != 0 must not sign-extend from byte 0.
  * Tests a forward branch with delta = 260 cells (0x0104).
  * With memcpy, delta = +260 cells.  Without memcpy (old buggy code),
@@ -967,7 +938,7 @@ static int test_br_delta_sign_extend(void)
   return 0;
 }
 
-/* ---- ILIT compiled vs interpreted parity (fix #1) ----
+/* ---- ILIT compiled vs interpreted parity ----
  * Compiled ": W 128 + ;" with X=42 -> 170.
  * Interpreted "42 128 +" -> 170.
  * Both paths must agree. Mutation: ILIT sign-extend in compiled path
@@ -1013,14 +984,9 @@ static int test_ilit_compile_interpret_parity(void)
   return 0;
 }
 
-/* R2-T7: renamed from test_xeq_end_to_end, which claimed to test XEQ of
- * ITM_FORTH/ITM_FCALL but calls fnForthCall directly — it exercises no XEQ
- * step, ITM_FORTH, or ITM_FCALL dispatch at all. Describes only what it
- * actually calls/asserts: fnForthCall executing a colon word by dictionary
- * index, plus a static indexOfItems bounds check on ITM_FCALL/ITM_FORTH.
- * TODO: missing acceptance coverage: real XEQ execution of ITM_FORTH and
- * ITM_FCALL; fixture deferred pending an independently verified reachable
- * path. */
+/* fnForthCall executing a colon word by dictionary index, plus a static
+ * indexOfItems bounds check on ITM_FCALL/ITM_FORTH.
+ * Gap: no coverage yet of real XEQ execution of ITM_FORTH/ITM_FCALL. */
 static int test_fnforthcall_executes_colon_by_index(void)
 {
   /* Verify indexOfItems bounds: ITM_FCALL (2843) < LAST_ITEM */
@@ -1166,12 +1132,10 @@ static int test_xeq_precedence(void)
   /* Define a Forth word with the same name */
   uint16_t w = begin_word(sharedName, nameLen);
   if (w == FORTH_NULL) {
-    /* reallocC47Blocks() above already freed the pre-expansion labelList
-     * block (freeListRealloc frees the old pointer on success — core/
-     * freeList.c:90 [VERIFIED]); rescanning rebuilds labelList/
-     * numberOfLabels from the (unmodified) program memory instead of
-     * reinstating a pointer/size pair that a later scanLabelsAndPrograms()
-     * would free a second time. */
+    /* reallocC47Blocks() already freed the pre-expansion labelList block
+     * (freeListRealloc frees the old pointer on success); rescanning
+     * rebuilds labelList/numberOfLabels instead of reinstating a pointer
+     * that a later scanLabelsAndPrograms() would free a second time. */
     scanLabelsAndPrograms();
     freeC47Blocks(labelBuf, TO_BLOCKS(nameLen + 1));
     printf("    SKIP: alloc failed\n");
@@ -1186,12 +1150,8 @@ static int test_xeq_precedence(void)
   forthXEQType_t res = forthResolveXEQ(sharedName, &param);
 
   /* Rescan to rebuild labelList/numberOfLabels from the (unmodified) program
-   * memory. The old "Fix #15" approach of restoring savedLabelList/
-   * savedNumLabels here was itself a double-free: reallocC47Blocks() already
-   * freed the pre-expansion labelList block on success (freeListRealloc
-   * frees the old pointer unconditionally — core/freeList.c:90 [VERIFIED]),
-   * so reinstating that stale pointer left the next scanLabelsAndPrograms()
-   * call freeing already-freed memory. */
+   * memory — restoring the pre-expansion pointer here would double-free it,
+   * since reallocC47Blocks() already freed it unconditionally on success. */
   scanLabelsAndPrograms();
   freeC47Blocks(labelBuf, TO_BLOCKS(nameLen + 1));
 
@@ -1236,10 +1196,10 @@ static int test_xeq_item_lookup(void)
     fail = 1;
   }
 
-  /* Test 4 (R2-T7 item 2): item-before-colon precedence. A Forth colon word
-   * named SIN must NOT shadow the built-in item ITM_sin — resolver order is
-   * label -> item -> colon (forth_dict.c:390-419); test_xeq_precedence
-   * already pins label->colon, this pins item->colon. */
+  /* Test 4: item-before-colon precedence. A Forth colon word named SIN
+   * must NOT shadow the built-in item ITM_sin — resolver order is
+   * label -> item -> colon; test_xeq_precedence already pins label->colon,
+   * this pins item->colon. */
   forthDictClear();
   {
     uint16_t w = begin_word("SIN", 3);
@@ -1267,7 +1227,7 @@ static int test_xeq_item_lookup(void)
   return fail;
 }
 
-/* F3-6: XEQ source forms, FTOK_XEQN, kind-faithful end to end */
+/* XEQ source forms, FTOK_XEQN, kind-faithful end to end */
 static int test_xeqn(void)
 {
   int fail = 0;
@@ -1547,7 +1507,7 @@ static int test_xeqn(void)
 }
 
 /* test_xeqn_acceptance
- * F3-7: four independent pins at the native/Forth resolution boundary.
+ * Four independent pins at the native/Forth resolution boundary.
  * No product behavior changes — all instrumentation is FORTH_DEBUG_SELFTEST. */
 static int test_xeqn_acceptance(void)
 {
@@ -1979,7 +1939,7 @@ static int test_xeqn_acceptance(void)
   return fail;
 }
 
-/* §7.1 fnForthCall interactive (fix #4): fromProgram must reflect programRunStop.
+/* §7.1 fnForthCall interactive: fromProgram must reflect programRunStop.
  * Compiles : FIFTEEN 15 ; calls via fnForthCall with PGM_STOPPED.
  * Mutation: revert to hardcoded true -> word exits immediately on break check. ---- */
 static int test_fnforthcall_interactive(void)
@@ -2002,8 +1962,8 @@ static int test_fnforthcall_interactive(void)
   }
 
   /* Interactive call: programRunStop = PGM_STOPPED (not running).
-   * With fix #4: fromProgram = false, word executes fully.
-   * Without fix: fromProgram = true, forthInner breaks on PGM_STOPPED check. */
+   * fromProgram must be false so the word executes fully, instead of
+   * forthInner breaking on the PGM_STOPPED check. */
   uint8_t savedRunStop = programRunStop;
   programRunStop = PGM_STOPPED;
   forthPushInt32(999);  /* Sentinel: if word doesn't execute, X stays 999 */
@@ -2025,30 +1985,14 @@ static int test_fnforthcall_interactive(void)
 }
 
 /* test_lblq_forth_name_not_local_label
- * §4.2 LBL? UB fix: ordinary LBL? must ask for INVALID_VARIABLE, so a
- * Forth-only colon name is never mistaken for a same-numbered LOCAL label.
- * Program is LBL 00 + LBL?"FW", with FW a colon word at dictionary index 0 —
- * local label 00 and colon index 0 are deliberately the same numeric value, so
- * passing the resolved index instead of INVALID_VARIABLE finds LBL 00.
- *
- * PRECONDITION, and the whole reason the first attempt could not fail:
- * fnCheckLabel (lblGtoXeq.c:1005-1008) opens with
- *   if(dynamicMenuItem >= 0) { label = findNamedLabel(dynmenuGetLabel(...)); }
- * i.e. it DISCARDS its label argument whenever a dynamic menu item is active.
- * dynamicMenuItem is zero-initialized (c47.c:259) and 0 is >= 0, so under the
- * harness the argument under test was never read and NO fixture work could make
- * the mutation observable. Production never executes a step in that state:
- * fnRunProgram sets dynamicMenuItem = -1 immediately before runProgram
- * (lblGtoXeq.c:301), and the fnGoto/XEQ paths do the same (:178, :193).
- * executeOneStep sits below that layer, so this test must establish the
- * precondition production establishes. That is reproducing a documented
- * production invariant, not priming the state under test.
- *
- * Escaping mutation: in _executeOp's ITM_LBLQ arm (lblGtoXeq.c:381), change
- * reallyRunFunction(op, (uint16_t)INVALID_VARIABLE) to
- * reallyRunFunction(op, resolvedParam) — LBL 00 is then found and TI_TRUE.
- * Verified RED with TI=13 (TI_TRUE); correct code gives TI=12 (TI_FALSE).
- */
+ * §4.2: ordinary LBL? must resolve to INVALID_VARIABLE, so a Forth-only
+ * colon name is never mistaken for a same-numbered LOCAL label. Program is
+ * LBL 00 + LBL?"FW", with FW a colon word at dictionary index 0 — local
+ * label 00 and colon index 0 are deliberately the same numeric value.
+ * Precondition: fnCheckLabel discards its label argument whenever
+ * dynamicMenuItem >= 0, and dynamicMenuItem is zero-initialized, so the
+ * fixture must set dynamicMenuItem = -1 itself to reach the code under
+ * test — production always does this before running a step. */
 static int test_lblq_forth_name_not_local_label(void)
 {
   int fail = 0;
@@ -2084,7 +2028,7 @@ static int test_lblq_forth_name_not_local_label(void)
   uint8_t savedTI          = temporaryInformation;
   uint8_t savedRunStop     = programRunStop;
 
-  dynamicMenuItem      = -1;            /* as fnRunProgram does, lblGtoXeq.c:301 */
+  dynamicMenuItem      = -1;            /* as fnRunProgram does before running a step */
   temporaryInformation = TI_TRUE;       /* must be flipped to TI_FALSE by the arm */
   lastErrorCode        = ERROR_NONE;
   programRunStop       = PGM_RUNNING;
@@ -2335,14 +2279,8 @@ static int test_dict_space_full(void)
 }
 
 /* test_dict_first_ensure_capacity
- * R1-1: forthDictEnsure's null-base branch allocated the configured initial
- * block count unconditionally and returned true even when that allocation did
- * not cover the requested bytes — a first request larger than the initial
- * region was reported safe while the caller could write past it.
- * Escaping mutation: drop the minBlocks-to-initBlocks raise (revert to the
- * unconditional `uint16_t initBlocks = FORTH_INITIAL_BLOCKS` / test-override
- * allocation) — TO_BYTES(sizeBlocks) < requested and the capacity assertion
- * fails. */
+ * forthDictEnsure's null-base branch must grow to actually cover a first
+ * request larger than the initial region, not just report success. */
 static int test_dict_first_ensure_capacity(void)
 {
   int fail = 0;
@@ -2391,17 +2329,12 @@ static int test_dict_first_ensure_capacity(void)
 }
 
 /* test_dict_capacity_arithmetic
- * R4-2: two independent violations of the same capacity contract.
- * Subcase 1 restates R1-1's fix at the forthDictEnsure level (kept light —
- * test_dict_first_ensure_capacity above is the thorough version, proving the
- * fix by actually writing the last requested byte; both target the same
- * null-base branch and would be redundant in full).
- * Subcase 2 is the independent forthDictAllocate defect: hdrSize/alignedHdr/
- * total were uint16_t and wrapped silently. Probed: forthDictAllocate(31,
- * 0xFFF0) wrapped the total and returned offset 0 with no error.
- * Escaping mutation: revert forthDictAllocate's total to uint16_t (drop the
- * widened-arithmetic overflow check) — subcase 2 gets FORTH_NULL/ERROR_NONE
- * become offset-0/no-error instead. */
+ * Two independent violations of the same capacity contract.
+ * Subcase 1 restates the forthDictEnsure fix lightly (same null-base branch
+ * as test_dict_first_ensure_capacity, which is the thorough version).
+ * Subcase 2: forthDictAllocate's hdrSize/alignedHdr/total were uint16_t and
+ * wrapped silently — forthDictAllocate(31, 0xFFF0) must not wrap the total
+ * and return offset 0 with no error. */
 static int test_dict_capacity_arithmetic(void)
 {
   int fail = 0;
@@ -2471,17 +2404,8 @@ static int test_prefix_no_match(void)
 }
 
 /* Test: items.c FORTH/FCALL rows carry US_ENABLED (§0.2)
- *
- * No runtime mutation check: R2-T3 asked for one ("temporarily clear
- * US_ENABLED from one runtime table entry ... require its exact FAIL label,
- * then restore"), but indexOfItems[] is `const item_t[]` and, even in the PC
- * build where TO_QSPI is empty, lands in a read-only-mapped section.
- * Confirmed empirically: casting away const and writing indexOfItems[
- * ITM_FORTH].status SIGSEGVs (exit 139), reverted. The FAIL branch below is
- * real and correctly labeled — read the two comparisons — but it can only be
- * exercised by editing items.c and rebuilding, not by a runtime probe. This
- * test's value is as a regression tripwire on the real data table if items.c
- * itself changes. */
+ * Gap: indexOfItems[] is const and read-only-mapped, so this can only be a
+ * regression tripwire on the data table, not a runtime mutation check. */
 static int test_undo_rows_us_enabled(void)
 {
   uint16_t forthUS = indexOfItems[ITM_FORTH].status & US_STATUS;
@@ -2499,8 +2423,7 @@ static int test_undo_rows_us_enabled(void)
   return 0;
 }
 
-/* COMMIT 2: P-1 — ITM_FORTH step is PTP_REM, not PTP_NONE.
- * Escaping mutation: reverting items.c PTP_REM back to PTP_NONE. */
+/* ITM_FORTH step is PTP_REM, not PTP_NONE. */
 static int test_forth_step_ptp_rem(void)
 {
   if ((indexOfItems[ITM_FORTH].status & PTP_STATUS) != PTP_REM) {
@@ -2512,19 +2435,11 @@ static int test_forth_step_ptp_rem(void)
   return 0;
 }
 
-/* COMMIT 2: P-1 — ITM_FORTH step sizing via findKey2ndParam (PTP_REM path).
- * Escaping mutation: reverting items.c PTP_REM back to PTP_NONE (sizes as 2 bytes).
- *
- * Rebase to b8f79e486: upstream's findKey2ndParam (nextStep.c) gained
- * programBytesAvailable(address, count) bounds-checking — it now rejects any
- * computed "next step" pointer that falls outside [beginOfProgramMemory,
- * firstFreeProgramByte]. The original bare stack-local marker[]/source[]
- * arrays here are outside that range by construction (they were never part
- * of any real program), so upstream's new guard correctly returns NULL for
- * them — the same "stack-local test fixture" defect class as this session's
- * own R2-T2 fix (test_exec_step_halts_on_error), independently found and
- * fixed upstream. Rebuilt via writeTestProgram so both steps live in real,
- * registered program memory. */
+/* ITM_FORTH step sizing via findKey2ndParam (PTP_REM path).
+ * findKey2ndParam bounds-checks the computed next-step pointer against
+ * [beginOfProgramMemory, firstFreeProgramByte], so the fixture must use
+ * writeTestProgram to put both steps in real, registered program memory
+ * rather than bare stack-local buffers. */
 static int test_forth_step_sizing(void)
 {
   uint8_t prog[] = {
@@ -2562,13 +2477,9 @@ static int test_forth_step_sizing(void)
 }
 
 /* test_program_step_define_and_use
- * MIGRATED to Architecture 2 (P2 ruling, 2026-07-13): forthProgramStep's
- * contract now requires the payload to reside inside a real program (the
- * first touch pre-scans the owning program, compiling definitions;
- * SKIP_DEFS executes only tails). Stack-buffer payloads encode the retired
- * execute-in-place semantics.
- * Mutations: a no-op forthProgramStep handler (§8.9 acceptance 1), or a
- * no-op pre-scan — either way SQ never compiles and step 2 errors. */
+ * forthProgramStep's payload must reside inside a real program: the first
+ * touch pre-scans the owning program, compiling definitions; SKIP_DEFS
+ * executes only tails. */
 static int test_program_step_define_and_use(void)
 {
   uint8_t prog[] = {
@@ -2586,9 +2497,9 @@ static int test_program_step_define_and_use(void)
   lastErrorCode = ERROR_NONE;
   forthProgramStep(beginOfProgramMemory + 3);        /* define step payload */
   if (lastErrorCode == ERROR_NONE) {
-    /* Canary (R2-T4 item 2): a dropped handler must leave -123456 on X, not
-     * a stale 9 left over from an earlier test — X==9 alone cannot tell
-     * "this step ran" from "a previous test already left X at 9". */
+    /* Canary: a dropped handler must leave -123456 on X, not a stale 9
+     * left over from an earlier test — X==9 alone can't tell "this step
+     * ran" from "a previous test already left X at 9". */
     forthPushInt32(-123456);
     forthProgramStep(beginOfProgramMemory + 16 + 3); /* "3 SQ" payload */
   }
@@ -2614,14 +2525,9 @@ static int test_program_step_define_and_use(void)
 }
 
 /* test_program_step_gen_reset
- * MIGRATED to Architecture 2 (P2 ruling, 2026-07-13). The OLD expectation
- * (FUNCTION_NOT_FOUND after a generation bump) is exactly what the
- * pre-scan eliminates: the bump clears the dictionary AND re-arms the
- * scan, so a later step regains program-defined words via re-scan. The
- * new observable for the reset is an INTERACTIVE word: it must NOT
- * survive the generation change.
- * Mutation: deleting the forthRunGenCheckReset call in forthProgramStep
- * -> GENX survives the bump (dict never cleared). */
+ * A generation bump clears the dictionary and re-arms the pre-scan, so a
+ * later step regains program-defined words via re-scan. The observable is
+ * an INTERACTIVE word: it must NOT survive the generation change. */
 static int test_program_step_gen_reset(void)
 {
   uint8_t prog[] = {
@@ -2689,7 +2595,7 @@ static int test_program_step_gen_reset(void)
 }
 
 /* test_pending_reset_lifetime
- * F1-1: pending-reset flag is truth; active frames defer invalidation.
+ * Pending-reset flag is truth; active frames defer invalidation.
  * Subcase 1: 16-bit wrap cannot cancel a reset (counter equality is NOT truth).
  * Subcase 2: nested launch (active frame) does not request a generation.
  * Subcase 3: pending reset waits for a safe entry (no active frame). */
@@ -2854,9 +2760,9 @@ static int test_pending_reset_lifetime(void)
 }
 
 /* test_run_entry_lifetime_signaling
- * F1-2: Every top-level engine entry signals a fresh Forth lifetime.
+ * Every top-level engine entry signals a fresh Forth lifetime.
  * Subcase 1: Interactive XEQ start is a fresh lifetime.
- * Subcase 2: Run-mode SST is a fresh lifetime (R4 ruling 3).
+ * Subcase 2: Run-mode SST is a fresh lifetime.
  * Subcase 3: A nested engine entry preserves the active lifetime. */
 static int test_run_entry_lifetime_signaling(void)
 {
@@ -3217,23 +3123,15 @@ static int test_prescan_owning_scope(void)
 }
 
 /* test_owning_program_start_bounds
- * R2-T2 finding, code-defect track: forthOwningProgramStart's scan had no
- * upper bound — ANY pointer at or past the last program's start resolved to
- * that program, including a pointer outside program memory entirely. That is
- * what made test_exec_step_halts_on_error's original stack-local fixture
- * silently pre-scan a real, unrelated program (probe: a stack address
- * resolved to a real progStart instead of NULL).
+ * forthOwningProgramStart's scan must have an upper bound — a pointer at
+ * or past the last program's start must not resolve to that program if
+ * it's actually outside program memory.
  * Three subcases, one program:
  *   1. A pointer genuinely inside the program's payload resolves to progStart.
  *   2. currentStep == firstFreeProgramByte (cursor on the .END. sentinel, a
- *      normal PEM position — several capture tests set exactly this) must
- *      still resolve. Regression guard: the first fix attempt rejected this
- *      and broke test_e2_continuation_after_enter and three sibling tests;
- *      caught by the full gate before landing, not by this test alone.
+ *      normal PEM position) must still resolve.
  *   3. A stack-local buffer's address — nowhere near the C47 RAM arena —
- *      must return NULL.
- * Escaping mutation: delete the arena-membership check; subcase 3 finds a
- * real progStart instead of NULL. */
+ *      must return NULL. */
 static int test_owning_program_start_bounds(void)
 {
   uint8_t prog[] = {
@@ -3276,19 +3174,13 @@ static int test_owning_program_start_bounds(void)
 }
 
 /* test_owning_program_start_max_not_last
- * R4 accepted ruling (E5): forthOwningProgramStart must compute the greatest
- * qualifying programList entry explicitly, not rely on programList being
- * address-ascending. scanLabelsAndPrograms happens to build it that way today
- * (manage.c:102-129 walks program memory sequentially), so the bug is latent,
- * not currently reachable — this proves the FUNCTION's own contract,
- * independent of that unstated builder invariant.
- * Two programs, then programList[0] and [1] are swapped by hand so array
- * order no longer matches address order. A query inside the higher-address
- * program (P2) must still resolve to P2, not fall back to P1 because P1 now
- * appears LATER in the (deliberately reversed) array.
- * Escaping mutation: revert to unconditional overwrite
- * (`if (ip <= ptr) progStart = ip;`, no `ip > progStart` comparison) — with
- * this swap, the query resolves to P1 (wrong) instead of P2. */
+ * forthOwningProgramStart must compute the greatest qualifying programList
+ * entry explicitly, not rely on programList being address-ascending
+ * (scanLabelsAndPrograms happens to build it that way today, so the bug
+ * is otherwise latent). programList[0] and [1] are swapped by hand so
+ * array order no longer matches address order; a query inside the
+ * higher-address program (P2) must still resolve to P2, not fall back
+ * to P1 because P1 now appears later in the array. */
 static int test_owning_program_start_max_not_last(void)
 {
   uint8_t prog[] = {
@@ -3461,16 +3353,11 @@ static int test_prescan_error_halts(void)
 }
 
 /* test_prescan_error_rolls_back_prior_defs
- * R4-4: a pre-scan is not transactional across its own steps. Unlike
- * test_prescan_error_halts (error in the FIRST definition, so nothing prior
- * ever succeeds), this program has a VALID definition before the failing
- * one: ": G 1 ;" then ": B NOPE ;" (NOPE undefined). Before the fix, the
- * first failed touch left G compiled (fdict.count=1, program unrecorded), and
- * because the program stays unrecorded on error, a retry re-scanned from
- * scratch and compiled a SECOND G (count=2) before failing again — probed
- * exactly this: counts 1 then 2. A calculator owner retrying a program with
- * one typo would consume RAM on every attempt until the dictionary filled.
- * With the fix, both touches roll back to empty: count 0 both times. */
+ * Unlike test_prescan_error_halts (error in the FIRST definition), this
+ * program has a VALID definition before the failing one: ": G 1 ;" then
+ * ": B NOPE ;" (NOPE undefined). A pre-scan must roll fdict.count back to 0
+ * on error, on both the first scan and a retry — not leave G compiled, or
+ * recompile it on every retry (which would consume RAM on each attempt). */
 static int test_prescan_error_rolls_back_prior_defs(void)
 {
   uint8_t prog[] = {
@@ -3562,14 +3449,13 @@ static int test_prescan_last_step_visible(void)
 }
 
 /* test_prescan_two_programs_first_touch
- * T2.8 / R2-T4 item 1: Two programs in one write, each with a single Forth
- * step that both defines and immediately calls its own word (": P1W 9 ; P1W",
- * ": P2W 4 ; P2W") — one forthProgramStep call does both. Touch P1, then P2,
- * then P1 again, all in ONE generation.
- * Must fail if the scanned-program list is a single slot instead of an array:
- * P2's touch would evict P1's record, so the third P1 touch would re-scan and
- * recompile P1W a second time (fdict.count would read 3, not 2, and fdict.here
- * would grow) instead of just re-running the tail call. */
+ * Two programs in one write, each with a single Forth step that both
+ * defines and immediately calls its own word (": P1W 9 ; P1W",
+ * ": P2W 4 ; P2W") — one forthProgramStep call does both. Touch P1, then
+ * P2, then P1 again, all in ONE generation.
+ * The scanned-program list must be an array, not a single slot: otherwise
+ * P2's touch evicts P1's record and the third P1 touch re-scans and
+ * recompiles P1W a second time instead of just re-running the tail call. */
 static int test_prescan_two_programs_first_touch(void)
 {
   uint8_t prog[] = {
@@ -3668,9 +3554,9 @@ static int test_prescan_two_programs_first_touch(void)
 }
 
 /* test_scan_dynamic_no_cliff
- * F1-3: R4-E1 successor — 9 programs exceed the old 8-slot array cliff.
- * Records live in the dictionary arena; capacity failure is ordinary
- * dictionary exhaustion. Re-touch stability: no re-scan, no recompile. */
+ * 9 programs exceed an old 8-slot array cliff; records must live in the
+ * dictionary arena so capacity failure is ordinary dictionary exhaustion.
+ * Re-touch stability: no re-scan, no recompile. */
 static int test_scan_dynamic_no_cliff(void)
 {
   uint8_t prog[169];   /* 9 steps x 17 bytes + 8 separators x 2 bytes */
@@ -3790,7 +3676,7 @@ static int test_scan_dynamic_no_cliff(void)
 }
 
 /* test_recurse_compile_only
- * F1-4: RECURSE is compile-only immediate; emits call to open definition by index. */
+ * RECURSE is compile-only immediate; emits call to open definition by index. */
 static int test_recurse_compile_only(void)
 {
   int fail = 0;
@@ -3921,7 +3807,7 @@ static int test_recurse_compile_only(void)
       printf("    FAIL [5]: expected ERROR_RAM_FULL, got %d\n", lastErrorCode);
       sub5Fail = 1;
     }
-    else if (forthFindColon("PRW", &idx)) {   /* F3-3: program-owned, invisible interactively */
+    else if (forthFindColon("PRW", &idx)) {   /* program-owned, invisible interactively */
       printf("    FAIL [5]: PRW visible from interactive scope (F3-3 isolation)\n");
       sub5Fail = 1;
     }
@@ -3941,7 +3827,7 @@ static int test_recurse_compile_only(void)
 }
 
 /* test_accept_run_lifecycle
- * F15-1: End-to-end acceptance of the F1 lifecycle through the real XEQ/R/S
+ * End-to-end acceptance of the F1 lifecycle through the real XEQ/R/S
  * engine.  Five subcases covering §8.9 items 1, 7(a,b), 9(a,b). */
 static int test_accept_run_lifecycle(void)
 {
@@ -4111,7 +3997,7 @@ static int test_accept_run_lifecycle(void)
         printf("    [3] FAIL: X != 9 after resume (SQ not re-derived)\n");
         fail = 1;
       }
-      else if (forthFindColon("SQ", &idx)) {   /* F3-3: program-owned, invisible interactively */
+      else if (forthFindColon("SQ", &idx)) {   /* program-owned, invisible interactively */
         printf("    [3] FAIL: SQ visible from interactive scope after resume (F3-3 isolation)\n");
         fail = 1;
       }
@@ -4252,7 +4138,7 @@ static int test_accept_run_lifecycle(void)
 }
 
 /* test_accept_entry_state_roundtrip
- * F15-2: §8.9 item 2(a-d) — PEM derives keypad state from the landed step,
+ * §8.9 item 2(a-d) — PEM derives keypad state from the landed step,
  * including after power-off. Four independently accumulated subcases. */
 static int test_accept_entry_state_roundtrip(void)
 {
@@ -4752,7 +4638,7 @@ static int test_accept_entry_state_roundtrip(void)
  }
 
  /* test_accept_display_parity
-  * F15-3: §8.9 item 4 — one real program renders the same marker directions
+  * §8.9 item 4 — one real program renders the same marker directions
   * on PEM, SST, and BST surfaces. Three independently accumulated subcases. */
  static int test_accept_display_parity(void)
  {
@@ -5078,7 +4964,7 @@ static int test_accept_entry_state_roundtrip(void)
   }
 
   /* test_accept_glyph_type_parity
-   * F15-4: §8.9 items 5 and 6 — alpha-authored glyphs compile and run,
+   * §8.9 items 5 and 6 — alpha-authored glyphs compile and run,
    * and RPN-keypad / Forth-source literals share a data type.
    * Three independently accumulated subcases. */
   static int test_accept_glyph_type_parity(void)
@@ -5538,7 +5424,7 @@ static int test_dict_name_by_index(void)
 }
 
 /* test_accept_xeq_name_step
- * F15-5: §8.9 item 10 — In PEM, XEQ + alpha name of a Forth word records
+ * §8.9 item 10 — In PEM, XEQ + alpha name of a Forth word records
  * the NAME (not an index), re-resolved at run time. Two independently
  * reported subcases. */
 static int test_accept_xeq_name_step(void)
@@ -5679,16 +5565,11 @@ cleanup:
   return fail;
 }
 
-/* test_exec_step_marker_noop
- * Mutation: the arm calling forthProgramStep for len==0 too (the marker
- * would interpret an empty line and set FLAG_ASLIFT/N drop state).
- * (§8.9 acceptance 8a)
- * R2-T4 item 4: the old test read only X and fdict.count. Seeds all four RPN
- * registers with distinct values and also checks fdict.here, so a marker that
- * silently touches Y/Z/T or grows the dict without moving X or count would
- * still be caught. len==0 never reaches forthProgramStep (the arm's guard is
- * `if(*step != 0)`), so no writeTestProgram/program membership is needed
- * here — this is testing that the guard itself holds, not program execution. */
+/* test_exec_step_marker_noop (§8.9 acceptance 8a)
+ * A len==0 marker step must not reach forthProgramStep — the arm's guard
+ * is `if(*step != 0)`. Seeds all four RPN registers with distinct values
+ * and checks fdict.here too, so a marker that silently touches Y/Z/T or
+ * grows the dict (without moving X or count) is still caught. */
 static int test_exec_step_marker_noop(void)
 {
   uint8_t step[] = { 0x8B, 0x1A, 0xFD, 0x00 }; /* ITM_FORTH, STRING_LABEL_VARIABLE, len=0 */
@@ -5758,13 +5639,11 @@ static int test_exec_step_marker_noop(void)
   return fail;
 }
 
-/* test_exec_step_source_runs
- * MIGRATED to Architecture 2 (P2 ruling, 2026-07-13): drives the REAL
- * dispatch arm (executeOneStep -> ITM_FORTH -> forthProgramStep) with
- * steps residing in a real program, as the pre-scan contract requires.
- * Unique coverage: the lblGtoXeq.c arm routing, not just forthProgramStep.
- * Mutation: dropping the forthProgramStep call (arm returns 1 silently)
- * (§8.9 acceptance 1 at executeOneStep granularity). */
+/* test_exec_step_source_runs (§8.9 acceptance 1 at executeOneStep granularity)
+ * Drives the real dispatch arm (executeOneStep -> ITM_FORTH ->
+ * forthProgramStep) with steps residing in a real program, as the
+ * pre-scan contract requires — unique coverage of the dispatch arm
+ * routing, not just forthProgramStep. */
 static int test_exec_step_source_runs(void)
 {
   uint8_t prog[] = {
@@ -5782,7 +5661,7 @@ static int test_exec_step_source_runs(void)
   lastErrorCode = ERROR_NONE;
   executeOneStep(beginOfProgramMemory);        /* define step */
   if (lastErrorCode == ERROR_NONE) {
-    /* Canary (R2-T4 item 2): see test_program_step_define_and_use. */
+    /* Canary: see test_program_step_define_and_use. */
     forthPushInt32(-123456);
     executeOneStep(beginOfProgramMemory + 16); /* "3 SQ" step */
   }
@@ -5807,21 +5686,11 @@ static int test_exec_step_source_runs(void)
   return fail;
 }
 
-/* test_exec_step_halts_on_error
- * Mutation: the arm clearing lastErrorCode before returning.
- * (§8.9 acceptance 7b's PC-testable half)
- *
- * R2-T4 item 3 / architect ruling 2026-07-15 (FOR_THE_ARCHITECT_R2.md):
- * standalone step execution is a fixture artifact, not a supported API — the
- * P2 ruling of 2026-07-13 already requires forthProgramStep's payload to live
- * inside a real program. The old fixture had two independent defects: its
- * length byte said 4 for the five bytes "3 SQX" (so it silently executed
- * "3 SQ" and never told the interpreter about the X), and its stack-local
- * step buffer resolved through forthOwningProgramStart to a REAL, unrelated
- * program (that function has no upper bound on its `instructionPointer <=
- * ptr` scan), so the pre-scan compiled whatever that program happened to
- * contain before the step ever ran. Rebuilt via writeTestProgram: no SQ
- * definition anywhere, no stack-local step. */
+/* test_exec_step_halts_on_error (§8.9 acceptance 7b's PC-testable half)
+ * Property: the arm must not clear lastErrorCode before returning on error.
+ * Fixture must use writeTestProgram — a stack-local step buffer resolves
+ * through forthOwningProgramStart to whatever real program happens to be
+ * last in memory, silently pre-scanning and compiling its contents. */
 static int test_exec_step_halts_on_error(void)
 {
   uint8_t prog[] = {
@@ -5848,12 +5717,10 @@ static int test_exec_step_halts_on_error(void)
            lastErrorCode, ERROR_FUNCTION_NOT_FOUND);
     fail = 1;
   }
-  /* Identify WHICH word was reported missing, not just that something was.
-   * With no SQ definition anywhere in this test, a length-4 truncation
-   * ("3 SQ" instead of "3 SQX") would raise the identical
-   * ERROR_FUNCTION_NOT_FOUND — SQ is exactly as undefined as SQX — so the
-   * error code alone cannot catch that mutation. errorMessage carries the
-   * offending token (forth_compile.c:409-414); require it names SQX. */
+  /* Identify WHICH word was reported missing, not just that something was:
+   * a length-4 truncation ("3 SQ" instead of "3 SQX") would raise the same
+   * ERROR_FUNCTION_NOT_FOUND (SQ is exactly as undefined as SQX), so the
+   * error code alone can't catch that — errorMessage must name SQX. */
   else if (!strstr(errorMessage, "SQX")) {
     printf("    FAIL: errorMessage = \"%s\" (expected to name SQX — got a "
            "truncated read of the source, e.g. only \"SQ\")\n", errorMessage);
@@ -5869,11 +5736,9 @@ static int test_exec_step_halts_on_error(void)
   return fail;
 }
 
-/* test_marker_parity
+/* test_marker_parity (§8.9 acceptance 4 logic)
  * Program: marker, source(: SQ DUP * ;), marker, marker
- * Assert turnsOn == true/false/true for the 1st/3rd/4th markers.
- * Escaping mutation: inverting the parity test (odd instead of even) —
- * every direction flips. (§8.9 acceptance 4 logic) */
+ * Assert turnsOn == true/false/true for the 1st/3rd/4th markers. */
 static int test_marker_parity(void)
 {
   /* marker | source | marker | marker | .END. */
@@ -5922,14 +5787,11 @@ static int test_marker_parity(void)
   return fail;
 }
 
-/* test_placeholder_never_marker  (class test, 2026-08-04)
+/* test_placeholder_never_marker (class test)
  * BUG CLASS: a reader of program memory must never confuse the §8.1
- * open-capture placeholder with a region marker.  Under the old len==0
- * placeholder encoding every marker after the cursor rendered
- * direction-flipped while the capture line was empty (2026-08-04 LCD
- * repro), and out of alpha the suspended placeholder itself rendered as
- * a phantom marker.  The placeholder is now len=1 with a single NUL
- * payload byte — untypeable, so unambiguous.
+ * open-capture placeholder with a region marker. The placeholder is
+ * len=1 with a single NUL payload byte — untypeable, so unambiguous
+ * (the old len==0 encoding was indistinguishable from an empty marker).
  *
  * Part 1 (production emits): open a capture after an existing region and
  * assert the 5-byte shape and correct parity/rendering of the following
@@ -5938,12 +5800,8 @@ static int test_marker_parity(void)
  * type+backspace-to-empty (pemAlpha recommit tail).
  * Part 2 (leaked placeholder): hand-built bare placeholder with THREE
  * markers after it — parity of all three unaffected, placeholder decodes
- * blank, executes as a no-op, and the FWRD picker scan terminates
- * (the len byte must never out-run the C-string walk).
- *
- * Escaping mutation: any emit site reverting to len==0 for the empty
- * capture step — Part 1's parity assertions flip; any reader treating
- * len==1/NUL as a marker — Part 2's parity assertions flip. */
+ * blank, executes as a no-op, and the FWRD picker scan terminates (the
+ * len byte must never out-run the C-string walk). */
 static int test_placeholder_never_marker(void)
 {
   int fail = 0;
@@ -6002,7 +5860,7 @@ static int test_placeholder_never_marker(void)
       printf("    FAIL: marker parity wrong with open placeholder (want T/F/T/F)\n");
       fail = 1;
     }
-    decodeOneStep(m4);       /* the 2026-08-04 repro: this used to flip to »FORTH */
+    decodeOneStep(m4);       /* closing marker must not render as »FORTH */
     if (strlen(tmpString) != 7 || memcmp(tmpString, "FORTH", 5) != 0 ||
         tmpString[5] != (char)0x80 || tmpString[6] != (char)0xAB) {
       printf("    FAIL: closing marker renders '%s' with capture open (want FORTH\\x80\\xab)\n", tmpString);
@@ -6139,7 +5997,7 @@ static int test_placeholder_never_marker(void)
       uint8_t *savedCurrentStep2 = currentStep;
       currentStep = corrupt;
       extern void testInitVariableSoftmenu(int16_t menu);
-      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
         testInitVariableSoftmenu(22);
         calcMode = m1e3s_; }
       currentStep = savedCurrentStep2;
@@ -6206,14 +6064,12 @@ static int test_placeholder_never_marker(void)
   return fail;
 }
 
-/* test_entry_state_derivation
- * Same program + RPN step (ITM_sin) appended inside the region.
- * Point currentStep at each step and assert:
+/* test_entry_state_derivation (§8.9 acceptance 2 logic)
+ * Same program + RPN step (ITM_sin) appended inside the region. The state
+ * must be derived per-step, not cached in a static bool toggled by
+ * callers. Point currentStep at each step and assert:
  *   RPN step → false, source step → true, opening marker → true,
- *   closing marker → false, zeroth-step → false.
- * Escaping mutation: replacing the derivation with a static bool toggled
- * by callers (the persisted-flag bug) — the land-on-step cases regress.
- * (§8.9 acceptance 2 logic) */
+ *   closing marker → false, zeroth-step → false. */
 static int test_entry_state_derivation(void)
 {
   /* marker | source | marker | marker | ITM_sin | .END. */
@@ -6305,9 +6161,6 @@ static int test_entry_state_derivation(void)
  *
  * Closing case: program [marker][source(: SQ ...)][ITM_END][.END.], cursor on ITM_END.
  *   Pre-move skipped, predecessor = source step → wasOn=true → capture closes.
- *
- * Escaping mutation: E1 unconditionally entering capture (ignoring wasOn) —
- * the closing assertion fails (FLAG_ALPHA set when it should be clear).
  */
 static int test_toggle_inserts_marker(void)
 {
@@ -6353,7 +6206,7 @@ static int test_toggle_inserts_marker(void)
       fail = 1;
     }
 
-    /* Check: the real call derives ITM_FORTH — R2-T6 item 1 */
+    /* Check: the real call derives ITM_FORTH */
     if (tam.function != ITM_FORTH) {
       printf("    FAIL: tam.function = %d, expected ITM_FORTH (%d) after opening toggle\n",
              tam.function, ITM_FORTH);
@@ -6436,9 +6289,9 @@ static int test_toggle_inserts_marker(void)
       fail = 1;
     }
 
-    /* No tam.function assertion here (R2-T6 item 1): whether E1 must clear
-     * the sentinel on close is unresolved; asserting either value would
-     * encode an unmade decision. */
+    /* No tam.function assertion here: whether E1 must clear the sentinel
+     * on close is unresolved; asserting either value would encode an
+     * unmade decision. */
 
     /* Check: closing marker inserted before ITM_END (offset 20) */
     uint8_t *marker2 = beginOfProgramMemory + 20;
@@ -6469,15 +6322,11 @@ static int test_toggle_inserts_marker(void)
  * cleared when capture closes. A new region now owns its closing marker, so
  * committing its one source line with EXIT must clear that state without a
  * second FORTH toggle.
- * Probed and confirmed live, not just theoretical: after a normal open+close,
- * a SUBSEQUENT, unrelated plain alpha capture (func == ITM_AIM, structurally
- * outside any Forth region) got silently mislabeled — insertStepInProgram's
- * `else if(tam.function != ITM_FORTH) tam.function = ITM_LITERAL;` guard skips
- * the assignment when the sentinel is already (stale-)true, so the new
- * capture inherits ITM_FORTH. That then misroutes R3-1's cursor-offset math,
- * which is keyed on tam.function, not the step's real type.
- * Escaping mutation: remove the non-empty Forth close reset in
- * pemCloseAlphaInput — this test's post-close and post-AIM assertions fail. */
+ * Concrete failure mode: insertStepInProgram's
+ * `else if(tam.function != ITM_FORTH) tam.function = ITM_LITERAL;` guard
+ * skips the assignment when the sentinel is already (stale-)true, so a
+ * subsequent unrelated plain alpha capture inherits ITM_FORTH and gets
+ * misrouted by the cursor-offset math keyed on tam.function. */
 static int test_forth_toggle_close_resets_sentinel(void)
 {
   int fail = 0;
@@ -6580,9 +6429,8 @@ static int test_forth_toggle_close_resets_sentinel(void)
 /* test_fcall_redirect_records_name
  * Define SQ in dictionary; set tam.value to its widx;
  * insertStepInProgram(ITM_FCALL); byte-probe: step is
- * 0x8B 0x1A 0xFD 0x02 'S' 'Q' and NO 0x8B 0x1B (ITM_FCALL opcode).
- * Escaping mutation: falling through to PTP_NUMBER_16 arm (recording
- * 0x8B 0x1B + index — the exact names-only violation).
+ * 0x8B 0x1A 0xFD 0x02 'S' 'Q' and NO 0x8B 0x1B (ITM_FCALL opcode) —
+ * must record by name, not fall through to the PTP_NUMBER_16 index arm.
  */
 static int test_fcall_redirect_records_name(void)
 {
@@ -6680,9 +6528,9 @@ static int test_fcall_redirect_records_name(void)
     p++;
   }
 
-  /* R2-T6 item 5: copy the name out BEFORE cleanupTestProgram() releases/
-   * restores the program region `s` points into — the old code dereferenced
-   * `s + 4` in the PASS printf AFTER cleanup, a stale-pointer read. */
+  /* Copy the name out BEFORE cleanupTestProgram() releases/restores the
+   * program region `s` points into — dereferencing `s + 4` after cleanup
+   * would be a stale-pointer read. */
   char recordedName[3];
   recordedName[0] = *(s + 4);
   recordedName[1] = *(s + 5);
@@ -6702,8 +6550,8 @@ static int test_fcall_redirect_records_name(void)
 
 /* test_fcall_redirect_rejects_stale
  * tam.value = fdict.count (invalid); call insertStepInProgram(ITM_FCALL);
- * assert ERROR_NON_PROGRAMMABLE_COMMAND and step count unchanged.
- * Escaping mutation: recording a step with empty/garbage name instead of rejecting.
+ * assert ERROR_NON_PROGRAMMABLE_COMMAND and step count unchanged — must
+ * reject, not record a step with an empty/garbage name.
  */
 static int test_fcall_redirect_rejects_stale(void)
 {
@@ -6784,9 +6632,7 @@ static int test_fcall_redirect_rejects_stale(void)
  * Open capture via insertStepInProgram(ITM_FORTH) (opening toggle), then
  * pemAlpha(ITM_ENTER) with empty aimBuffer; assert program step count
  * returned to exactly the automatic marker pair (no phantom source step) and
- * FLAG_ALPHA clear.
- * Escaping mutation: dropping E3 — the empty placeholder commits and
- * COMMIT 5's test_marker_parity invariant would flip downstream. */
+ * FLAG_ALPHA clear. */
 static int test_forth_empty_enter_leaves_no_step(void)
 {
   uint8_t prog[] = { 0x4C };  /* ITM_sin */
@@ -6886,9 +6732,9 @@ static int test_forth_empty_enter_leaves_no_step(void)
 
 /* test_forth_edit_extracts_source
  * Write a FORTH ': SQ DUP * ;' step, point currentStep at it, call
- * pemAlpha(ITM_EDIT); assert aimBuffer == ": SQ DUP * ;".
- * Escaping mutation: using the REM offset 6 instead of 8 (aimBuffer
- * starts with two garbage bytes from STD_LEFT_SINGLE_QUOTE). */
+ * pemAlpha(ITM_EDIT); assert aimBuffer == ": SQ DUP * ;" — the REM offset
+ * is 8, not 6 (offset 6 leaves two garbage bytes from STD_LEFT_SINGLE_QUOTE
+ * at the front of aimBuffer). */
 static int test_forth_edit_extracts_source(void)
 {
   uint8_t prog[] = {
@@ -6945,13 +6791,10 @@ static int test_forth_edit_extracts_source(void)
   return 0;
 }
 
-/* test_decode_marker_directions
+/* test_decode_marker_directions (§8.9 acceptance 4)
  * Writes marker/source/marker/marker program; decodeOneStep each marker;
  * assert tmpString bytes are \x80\xbbFORTH, FORTH\x80\xab, \x80\xbbFORTH
- * respectively; decode the source step and assert it renders bare
- * (§8.9 acceptance 4).
- * Escaping mutation: inverting the parity (call !forthMarkerTurnsOn) —
- * all three direction assertions fail. */
+ * respectively; decode the source step and assert it renders bare. */
 static int test_decode_marker_directions(void)
 {
   uint8_t prog[] = {
@@ -7023,11 +6866,10 @@ static int test_decode_marker_directions(void)
 
 /* test_decode_source_bare
  * A len > 0 ITM_FORTH step renders its payload BARE: no "FORTH " name prefix
- * and no surrounding quotes. Quoting would be actively harmful — a string
- * literal step already renders 'text' WITH quotes, so a quoted Forth payload
- * would be indistinguishable from one. Bare collides with nothing.
- * Escaping mutation: the len > 0 case falling through to the generic
- * NAME STD_LEFT_SINGLE_QUOTE payload STD_RIGHT_SINGLE_QUOTE path. */
+ * and no surrounding quotes — must not fall through to the generic NAME
+ * STD_LEFT_SINGLE_QUOTE payload STD_RIGHT_SINGLE_QUOTE path. Quoting would
+ * be actively harmful: a string literal step already renders 'text' WITH
+ * quotes, so a quoted Forth payload would be indistinguishable from one. */
 static int test_decode_source_bare(void)
 {
   const char srcText[] = "2 2 +";
@@ -7072,8 +6914,7 @@ static int test_decode_source_bare(void)
   return 0;
 }
 
-/* COMMIT 9: MNU_FORTH row at slot 213 is CAT_MENU with "FWRD" label.
- * Escaping mutation: reverting slot 213 back to CAT_FREE (botched upstream merge). */
+/* MNU_FORTH row at slot 213 is CAT_MENU with "FWRD" label. */
 static int test_mnu_forth_row(void)
 {
   int fail = 0;
@@ -7096,11 +6937,11 @@ static int test_mnu_forth_row(void)
   return fail;
 }
 
-/* test_program_memory_no_overlap
- * Mutation: writeTestProgram directly manipulates freeMemoryRegions[0].sizeInBlocks
- * instead of using resizeProgramMemory, creating free-list fragments that overlap
- * with region 0 and trigger the firmware-bug screen in freeListFree() (FIX-6B).
- * (§memory refactor: allocator consistency) */
+/* test_program_memory_no_overlap (§memory refactor: allocator consistency)
+ * writeTestProgram must resize via resizeProgramMemory, not manipulate
+ * freeMemoryRegions[0].sizeInBlocks directly — the latter creates free-list
+ * fragments that overlap region 0 and trigger the firmware-bug screen in
+ * freeListFree(). */
 static int test_program_memory_no_overlap(void)
 {
   /* Program large enough to trigger resizeProgramMemory expansion */
@@ -7153,11 +6994,10 @@ static int test_program_memory_no_overlap(void)
   return fail;
 }
 
-/* test_cleanup_no_overlap
- * Mutation: dict is freed AFTER restoreTestProgram collapses free regions,
- * so the dict's allocation falls inside restored region 0 and triggers
- * the firmware-bug screen in freeListFree() (FIX-6B).
- * (§memory refactor: cleanup order) */
+/* test_cleanup_no_overlap (§memory refactor: cleanup order)
+ * The dict must be freed BEFORE restoreTestProgram collapses free regions —
+ * otherwise the dict's allocation falls inside restored region 0 and
+ * triggers the firmware-bug screen in freeListFree(). */
 static int test_cleanup_no_overlap(void)
 {
   uint8_t prog[] = {
@@ -7220,9 +7060,7 @@ static int test_cleanup_no_overlap(void)
  * Program: marker, source step, .END. (appended by writeTestProgram).
  * Cursor placed on .END. (where pemCloseAlphaInput leaves it after ENTER).
  * addStepInProgram(ITM_2) — pre-move skipped (isAtEndOfPrograms true on .END.),
- * predecessor = source step → Forth capture opens.
- * Escaping mutation: swap both call sites back to forthEntryStateAtCursor —
- * .END. derives false (not an ITM_FORTH step), E2 misses, RPN number entry. */
+ * predecessor = source step → Forth capture opens. */
 static int test_e2_continuation_after_enter(void)
 {
   uint8_t prog[] = {
@@ -7319,9 +7157,9 @@ static int test_e2_continuation_after_enter(void)
 /* test_e2_not_inside_rpn_gap
  * Program: marker, source step, RPN step (ITM_sin), marker, .END.
  * Cursor ON the RPN step; addStepInProgram(ITM_2); pre-move puts currentStep
- * on the closing marker, predecessor = RPN step → no capture (FLAG_ALPHA clear).
- * Escaping mutation: a naive "always derive from predecessor of the PRE-move
- * cursor" (two steps back) — this case flips to capture. */
+ * on the closing marker, predecessor = RPN step → no capture (FLAG_ALPHA
+ * clear). Must derive from the predecessor of the POST-move cursor, not a
+ * naive "always two steps back from the pre-move cursor". */
 static int test_e2_not_inside_rpn_gap(void)
 {
   uint8_t prog[] = {
@@ -7530,8 +7368,7 @@ static int test_xeq_word_still_calls(void)
 
 /* test_useritem_xeqp1_opcode
  * insertUserItemInProgram(ITM_XEQP1, "SQ2") — byte-probe the inserted step:
- * 0x88 0xAF 0xFD 0x03 'S' 'Q' '2'.
- * Escaping mutation: revert manage.c:1863 to & 0x7f — low byte becomes 0x2F. */
+ * 0x88 0xAF 0xFD 0x03 'S' 'Q' '2'. */
 static int test_useritem_xeqp1_opcode(void)
 {
   /* Minimal program */
@@ -7607,27 +7444,11 @@ static int test_useritem_xeqp1_opcode(void)
   return 0;
 }
 
-/* test_useritem_xeqp1_decodes
- * F4 follow-through (DESIGN.md §8.10 item 4): the write side
- * (insertUserItemInProgram) is tested by test_useritem_xeqp1_opcode; this
- * test verifies the full insert -> decode/display path. decode.c's own
- * two-byte opcode reassembly (_decodeOneStep: op &= 0x7f; op <<= 8;
- * op |= *(step++);) already ORs in the low byte unmasked and is
- * byte-identical to upstream src/c47/programming/decode.c at that site
- * [VERIFIED: programming/decode.c, opCode reconstruction from first byte
- * through low-byte OR] -- no decode-
- * side bug exists. This test instead exercises manage.c's write-side fix
- * THROUGH decode: insertUserItemInProgram(ITM_XEQP1, "SQ2") writes the step,
- * decodeOneStep() reconstructs the opcode from those bytes and renders it,
- * and the rendered text must name ITM_XEQP1's catalog entry "XEQ.SKP"
- * [VERIFIED: src/c47/items.c:4033] via the PARAM_LABEL/STRING_LABEL_VARIABLE
- * rendering [VERIFIED: packages/forth-core/programming/decode.c:198-224],
- * i.e. "XEQ.SKP 'SQ2'" -- not the item at the corrupted opcode.
- * Escaping mutation: revert manage.c's mask to & 0x7f (the F4 regression) --
- * the written low byte becomes 0x2F, decode.c faithfully (and correctly)
- * reconstructs opcode 0x082F = 2095, whose catalog entry is the unrelated
- * unit-conversion item "rad/s->" [VERIFIED: src/c47/items.c:3905], so the
- * rendered-text assertion fails. */
+/* test_useritem_xeqp1_decodes (DESIGN.md §8.10 item 4)
+ * Exercises the full insert -> decode/display path: insertUserItemInProgram
+ * writes the step, decodeOneStep reconstructs the opcode and renders it,
+ * and the text must name ITM_XEQP1's catalog entry "XEQ.SKP" — i.e.
+ * "XEQ.SKP 'SQ2'", not the item at a corrupted (mis-masked) opcode. */
 static int test_useritem_xeqp1_decodes(void)
 {
   /* Minimal program */
@@ -7687,10 +7508,9 @@ static int test_useritem_xeqp1_decodes(void)
  * Program: RPN step, marker(»), source, marker(«), END, .END.
  * Cursor ON the RPN step (predecessor semantics: insertion follows it,
  * before the »). addStepInProgram(ITM_FORTH) — E1 fires, predecessor = RPN
- * step → wasOn = false → a balanced marker pair and placeholder are inserted,
- * with capture open on the placeholder.
- * Escaping mutation: the at-cursor derivation (state from the old » = true)
- * suppresses the capture — assertion fails. */
+ * step → wasOn = false → a balanced marker pair and placeholder are
+ * inserted, with capture open on the placeholder. Must derive state from
+ * the predecessor, not the old at-cursor » (which would suppress capture). */
 static int test_e1_direction_mid_program(void)
 {
   uint8_t prog[] = {
@@ -7790,17 +7610,9 @@ static int test_e1_direction_mid_program(void)
  * §8.4 E5: committing a NON-EMPTY Forth source line with ENTER while the
  * cursor is still inside an open region must re-open capture on the next
  * line — FLAG_ALPHA set and tam.function == ITM_FORTH. ENTER drops to the
- * next Forth line; it does not leave the region.
- *
- * This test formerly asserted the opposite (tam.function != ITM_FORTH,
- * "no stale sentinel"). That was the pre-E5 contract, under which the region
- * became unreachable after the first ENTER — the exact hardware defect E5
- * exists to fix. The anti-leak concern it guarded is real but lives on the
- * EMPTY-ENTER escape hatch instead, where the sentinel genuinely must clear;
- * test_forth_empty_enter_leaves_no_step pins that.
- *
- * Escaping mutation: drop the `hadText` term from the E5 condition — the lock
- * then also fires on the empty escape hatch and E3's test fails. */
+ * next Forth line; it does not leave the region. (The anti-leak concern —
+ * sentinel must clear — lives on the EMPTY-ENTER escape hatch instead;
+ * test_forth_empty_enter_leaves_no_step pins that.) */
 static int test_forth_multiline_lock_holds(void)
 {
   uint8_t prog[] = {
@@ -7885,11 +7697,10 @@ static int test_forth_multiline_lock_holds(void)
  * here=0<=0, latest=FORTH_NULL skips the walk, n=0==count).
  * V2 must fail if the nameLen bounds check is removed (a zeroed nameLen
  * header walks clean through the off/link/count checks).
- * V3 (R4-3) must fail if the off+4+nameLen<=here extent check is removed: the
- * validator proved off+4<=here (the HEADER fits) and 1<=nameLen<=31, but never
- * proved the NAME that follows the header also fits inside here. Probed: a
- * valid ": VX 1 ;" entry with here force-set to latest+6 (header fits, name
- * does not) survived validation before this fix. */
+ * V3 must fail if the off+4+nameLen<=here extent check is removed: proving
+ * the header fits (off+4<=here) and 1<=nameLen<=31 does not prove the name
+ * that follows the header also fits — fixture forces here to latest+6 on a
+ * valid ": VX 1 ;" entry so the header fits but the name does not. */
 static int test_validate_direct_corruption(void)
 {
   int fail = 0;
@@ -7959,7 +7770,7 @@ static int test_validate_direct_corruption(void)
 }
 
 /* test_scope_isolation
- * F3-3: definitions are scope-owned and lookup honors the owner.
+ * Definitions are scope-owned and lookup honors the owner.
  * Five subcases covering scope isolation, cross-program rejection,
  * interactive/program mutual invisibility, scope restore, and global
  * word visibility. */
@@ -8196,7 +8007,7 @@ static int test_scope_isolation(void)
 }
 
 /* test_global_marks
- * F3-4: GLOBAL/IMMEDIATE/FORGET with same-line mark discipline.
+ * GLOBAL/IMMEDIATE/FORGET with same-line mark discipline.
  * Eleven subcases covering GLOBAL move, same-line discipline, transient-call
  * rejection, RECURSE rewrite, IMMEDIATE compile-time execution, FORGET
  * truncation, pre-scan IMMEDIATE carve-out, global+IMMEDIATE persistence,
@@ -8650,7 +8461,7 @@ static int test_global_marks(void)
 }
 
 /* test_control_flow
- * F3-5: compile-time control flow words: IF/ELSE/THEN, BEGIN/UNTIL/AGAIN/WHILE/REPEAT
+ * Compile-time control flow words: IF/ELSE/THEN, BEGIN/UNTIL/AGAIN/WHILE/REPEAT
  */
 static int test_control_flow(void)
 {
@@ -8911,29 +8722,14 @@ static int test_control_flow(void)
 }
 
 /* test_forth_drain_clears_buried_catalog
- * R3: the ITM_FORTH catalog drain must use the same stack-wide predicate as
- * _closeCatalog(), which scans the ENTIRE softmenu stack for MNU_CATALOG.
- *
- * STRUCTURAL/DEFENSIVE TEST — this constructs the state rather than reaching it
- * by keypress, and the state is not known to be user-reachable today: ITM_FORTH
- * lives only in the FCNS catalog, and MNU_FCNS *is* in the old top-of-stack
- * list. It is a regression guard on the predicate itself, because the old drain
- * had two latent gaps and both are invisible until something does become
- * reachable:
- *   (a) it tested only the top of the stack, while _closeCatalog() is stack-wide;
- *   (b) its hand-written menu list (CATALOG/FCNS/CONST/CHARS/PROGS/VARS/MENUS)
- *       omits every catalog menu that enterAsmModeIfMenuIsACatalog() also sets
- *       `catalog` for — MNU_SYSFL here, plus the whole VARS family (MNU_REALS,
- *       MNU_MATRS, MNU_DATES, ...) that upstream itself lists in CatalogMenus[]
- *       (keyboard.c:407-419). A list that must be kept in sync by hand is the
- *       defect; the stack-wide test removes the need for one.
- * MNU_SYSFL is used because it sets `catalog` (CATALOG_SYFL, calcMode.c:120),
- * is a static menu, and is absent from the old drain list.
- * Escaping mutation: revert the drain to the old top-of-stack while-loop —
- * MNU_SYSFL is not in its list, so it stops immediately, the buried MNU_CATALOG
- * survives, and _closeCatalog() pops the MNU_ALPHA that pemAlpha() just pushed
- * (MNU_ALPHA is itself listed in CatalogMenus[], keyboard.c:402).
- */
+ * The ITM_FORTH catalog drain must use the same stack-wide predicate as
+ * _closeCatalog() (which scans the ENTIRE softmenu stack for MNU_CATALOG),
+ * not a hand-written top-of-stack menu list that has to be kept in sync
+ * with upstream's CatalogMenus[] by hand.
+ * Gap: this state isn't known to be user-reachable today (ITM_FORTH lives
+ * only in the FCNS catalog); this is a regression guard on the predicate.
+ * MNU_SYSFL is used because it sets `catalog`, is a static menu, and was
+ * absent from the old hand-written drain list. */
 static int test_forth_drain_clears_buried_catalog(void)
 {
   int fail = 0;
@@ -8955,7 +8751,7 @@ static int test_forth_drain_clears_buried_catalog(void)
   bool_t savedAlpha = getSystemFlag(FLAG_ALPHA);
   uint8_t savedCalcMode = calcMode;
   int16_t savedTamFunc = tam.function;
-  bool_t savedFnKeyInCatalog = fnKeyInCatalog;   /* R2-T6 item 3: incoming value, not 0 */
+  bool_t savedFnKeyInCatalog = fnKeyInCatalog;   /* incoming value, not 0 */
   /* The drain pops the whole stack down past MNU_CATALOG, so restoring only
    * currentMenu() would leak a truncated stack into later tests. */
   softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
@@ -8993,7 +8789,7 @@ static int test_forth_drain_clears_buried_catalog(void)
   extern void _closeCatalog(void);
   runFunction(ITM_FORTH);
   _closeCatalog();              /* exactly what keyboard.c does next */
-  fnKeyInCatalog = savedFnKeyInCatalog;   /* R2-T6 item 3: restore, don't hardcode 0 */
+  fnKeyInCatalog = savedFnKeyInCatalog;   /* restore, don't hardcode 0 */
 
   if (currentMenu() != -MNU_ALPHA) {
     printf("    FAIL: currentMenu() = %d, expected %d (-MNU_ALPHA) — buried "
@@ -9022,11 +8818,9 @@ static int test_forth_drain_clears_buried_catalog(void)
 }
 
 /* test_unterminated_def_errors
- * C-4: End of line with state == COMPILE (unterminated definition) must
+ * End of line with state == COMPILE (unterminated definition) must
  * abort the definition and display ERROR_INVALID_NAME. The word must not
- * be visible after the error, and fdict.count must be restored.
- * Escaping mutation: remove or over-tighten the end-of-line block in
- * forth_compile.c — no error is shown and the count grows (smudged leak). */
+ * be visible after the error, and fdict.count must be restored. */
 static int test_unterminated_def_errors(void)
 {
   uint16_t countBefore = fdict.count;
@@ -9058,12 +8852,10 @@ static int test_unterminated_def_errors(void)
 }
 
 /* test_overlong_token_in_def_keeps_error
- * C-13: When a token exceeds FORTH_TOKEN_MAX inside a definition, the
+ * When a token exceeds FORTH_TOKEN_MAX inside a definition, the
  * ERROR_INPUT_TOO_LONG from the tokenizer must NOT be masked by a subsequent
  * ERROR_INVALID_NAME from the end-of-line handler. The definition must be
- * aborted, the word invisible, and count restored.
- * Escaping mutation: revert to unconditional displayCalcErrorMessage(ERROR_INVALID_NAME)
- * in the end-of-line block — INVALID_NAME masks INPUT_TOO_LONG. */
+ * aborted, the word invisible, and count restored. */
 static int test_overlong_token_in_def_keeps_error(void)
 {
   uint16_t countBefore = fdict.count;
@@ -9100,7 +8892,7 @@ static int test_overlong_token_in_def_keeps_error(void)
 }
 
 /* test_commit_gate
- * F5-2: E9 commit gate — structural rejects at ENTER, advisory commits.
+ * E9 commit gate — structural rejects at ENTER, advisory commits.
  * Five subcases in one capture session. */
 static int test_commit_gate(void)
 {
@@ -9624,17 +9416,12 @@ static int test_check_source_line(void)
     fail |= subFail;
   }
 
-  /* Subcase 6 (F5-2A): check mode is state-NEUTRAL. §10.5 says check mode
-   * "executes nothing, allocates nothing, mutates no live state", but the
-   * landed F5-1 pins only read the verdict — so forthCheckSourceLine could
-   * (and did) restore forthCurrentScope from an uninitialized ctx field
-   * without any test noticing. It stayed latent until F5-2 called check
-   * mode from pemAlpha's commit seam, where the garbage scope poisoned four
-   * unrelated tests. This subcase pins the contract itself, from a scope
-   * that is NOT the default, over both an accepted and a rejected line.
-   * poisonAutoFrame() fills the stack region the callee's frame will occupy
-   * with 0xAA, so an uninitialized restore is deterministic (0xAAAA), not
-   * luck-of-the-stack. */
+  /* Subcase 6: check mode is state-NEUTRAL. §10.5 says check mode
+   * "executes nothing, allocates nothing, mutates no live state" — this
+   * pins the contract itself, from a scope that is NOT the default, over
+   * both an accepted and a rejected line. poisonAutoFrame() fills the
+   * stack region the callee's frame will occupy with 0xAA, so an
+   * uninitialized restore is deterministic (0xAAAA), not luck-of-the-stack. */
   { int subFail = 0;
     const uint16_t probeScope = 0x1234;
     lastErrorCode = ERROR_NONE;
@@ -9695,7 +9482,7 @@ static int test_check_source_line(void)
   return fail;
 }
 
-/* test_word_catalog — F6-5: MNU_FORTH becomes the union catalog of the
+/* test_word_catalog — MNU_FORTH becomes the union catalog of the
  * edited program's words (text scan), interactive-scope dictionary
  * words, and global dictionary words. */
 static int test_word_catalog(void)
@@ -9721,8 +9508,8 @@ static int test_word_catalog(void)
     return 1;
   }
 
-  /* Drive sDef once (F3-3 drive discipline) so fdict holds a
-   * PROGRAM-owned PW entry — section (b) must not list it. */
+  /* Drive sDef once so fdict holds a PROGRAM-owned PW entry — section (b)
+   * must not list it. */
   lastErrorCode = ERROR_NONE;
   programRunStop = PGM_RUNNING;
   forthRunGenBump();
@@ -9744,8 +9531,7 @@ static int test_word_catalog(void)
     }
   }
 
-  /* Global GVIS (F3-3 subcase-5 fixture shape, verbatim: FTOK_ILIT,
-   * int32 9, FTOK_EXIT). */
+  /* Global GVIS (FTOK_ILIT, int32 9, FTOK_EXIT). */
   if (!fail) {
     uint16_t gw = gbegin_word("GVIS", 4);
     if (gw == FORTH_NULL) {
@@ -9774,7 +9560,7 @@ static int test_word_catalog(void)
   if (!fail) {
     /* ---- Subcase 1: Union content and section order ---- */
     { int sc1 = 0;
-      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
         testInitVariableSoftmenu(22);
         calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 3) {
@@ -9812,7 +9598,7 @@ static int test_word_catalog(void)
 
     /* ---- Subcase 2: Program-owned dict entries stay out of section (b) ---- */
     { int sc2 = 0;
-      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
         testInitVariableSoftmenu(22);
         calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 3) {
@@ -9846,7 +9632,7 @@ static int test_word_catalog(void)
     /* ---- Subcase 3: Smudged entries absent ---- */
     { int sc3 = 0;
       forthTestSmudgeSet("WI", true);
-      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
         testInitVariableSoftmenu(22);
         calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 2) {
@@ -9870,7 +9656,7 @@ static int test_word_catalog(void)
       }
 
       forthTestSmudgeSet("WI", false);
-      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
         testInitVariableSoftmenu(22);
         calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 3) {
@@ -9906,7 +9692,7 @@ static int test_word_catalog(void)
         printf("    [4] FAIL: WINTERACTIVELONG def error %d\n", lastErrorCode);
         sc4 = 1;
       }
-      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
         testInitVariableSoftmenu(22);
         calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 3) {
@@ -9954,7 +9740,7 @@ static int test_word_catalog(void)
         printf("    [5] FAIL: interactive PW def error %d\n", lastErrorCode);
         sc5 = 1;
       }
-      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
         testInitVariableSoftmenu(22);
         calcMode = m1e3s_; }
       if (dynamicSoftmenu[22].numItems != 4) {
@@ -10387,10 +10173,10 @@ cleanup:
   return fail;
 }
 
-/* ---- D3-2: recursion past the data stack spills, drains in order ----
- * The Forth data stack is the RPN stack (8 levels here), and a recursive word
- * holds one live operand per level. FACT used to run off the top silently and
- * return 720*6 = 4320 for 7!, with lastErrorCode 0. It must now refuse.
+/* ---- Recursion past the data stack spills, drains in order ----
+ * The Forth data stack is the RPN stack (8 levels here); a recursive word
+ * holds one live operand per level and must refuse rather than run off
+ * the top silently.
  * Mutation: drop the forthDataDepthApply() call at the FTOK_PRIM dispatch ->
  * 7 FACT returns 4320 again and subcase 2 fails. ---- */
 static int test_data_stack_overflow_guard(void)
@@ -10419,7 +10205,7 @@ static int test_data_stack_overflow_guard(void)
     fail = 1;
   }
 
-  /* Subcase 2a: D3-2A — push capacity+3 values and consume back in the same line.
+  /* Subcase 2a: push capacity+3 values and consume back in the same line.
    * Eleven literals then ten + drains to one value: sum(1..11) = 66. */
   {
     lastErrorCode = ERROR_NONE;
@@ -10432,7 +10218,7 @@ static int test_data_stack_overflow_guard(void)
     }
   }
 
-  /* Subcase 2b: D3-2A — push capacity+3 and end line: line-end contract triggers
+  /* Subcase 2b: push capacity+3 and end line: line-end contract triggers
    * ERROR_RAM_FULL. Then verify a following ordinary line still works. */
   {
     lastErrorCode = ERROR_NONE;

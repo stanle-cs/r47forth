@@ -405,13 +405,22 @@ for p in sorted(bad):
 # and `_forth*` symbols — upstream names are upstream's to delete, and
 # DESIGN.md legitimately discusses them in the past tense.
 ident = set(re.findall(r'`(_?forth[A-Za-z0-9_]+)\(?\)?`', txt))
+# Symbol liveness is tested against CODE, not text: comments are stripped
+# before the substring test, because this codebase's comments legitimately
+# discuss symbols, and a mention in a comment is not an existing symbol
+# (R10-4: the check could not fail for the deleted function it was built
+# for, because two test comments still named it).
+def _strip_comments(s):
+    s = re.sub(r'/\*.*?\*/', '', s, flags=re.S)
+    s = re.sub(r'//[^\n]*', '', s)
+    return s
 live = ''
 for dirpath, _dirs, files in os.walk(pkg):
     if '/files/' in dirpath + '/' or dirpath.endswith('/files'):
         continue
     for f in files:
         if f.endswith(('.c', '.h')):
-            live += open(os.path.join(dirpath, f), errors='replace').read()
+            live += _strip_comments(open(os.path.join(dirpath, f), errors='replace').read())
 dead = sorted(n for n in ident if n not in live)
 for n in dead:
     print(f"{n}  — named in DESIGN.md, no such symbol in the package sources")
@@ -616,17 +625,18 @@ pin 5 "glyph-boundary copies (forthCopyWholeGlyphs, definition + sites)" \
 pin 0 "longhand IsInteractive/IsOpen conjunctions in production sources" \
     bash -c "grep -rn 'forthCapIsInteractive() *&& *forthCapIsOpen()\|forthCapIsOpen() *&& *forthCapIsInteractive()\|!forthCapIsInteractive() *|| *!forthCapIsOpen()\|!forthCapIsOpen() *|| *!forthCapIsInteractive()' '${PKG}' --include=*.c --include=*.h | grep -v '/files/' | grep -v '/test_' | wc -l"
 
-# R9-5 (round 9): the "capture step lies INSIDE FHIST" structural rule was
-# spelled TWICE — inlined in the resume canary and again in the fold
-# resolver — over two separately stored copies of the same offset, with
-# nothing forcing them to agree. Four confirmed defects across rounds 8-9
-# came from a consumer still carrying the raw shape test after the others
-# had the rule. One definition: the FHIST span may be computed in exactly
-# one function. When the recorded PEM-sibling question is closed it must
-# resolve to a CALL here, not to a third spelling — this pin is what makes
-# that visible the day it does not.
-pin 1 "definitions of the FHIST-span bound (programList[hist-1] .. next)" \
-    bash -c "grep -c 'programList\[hist - 1\].instructionPointer' \"${PKG}/programming/forth_fold.c\""
+# One definition: the FHIST span may be computed in exactly one function.
+# When the recorded PEM-sibling question is closed it must resolve to a CALL
+# on the shared predicate, not to another spelling — this pin is what makes
+# that visible the day it does not. The pin counts FUNCTION BODIES containing
+# the span's lower-bound read paired with its upper-bound read, whatever the
+# local variable is named (a literal grep of one spelling was proven blind to
+# a differently-named local, R10-5).
+pin 1 "functions computing the FHIST-span bound (lower+upper pair)" \
+    bash -c "awk '/^\}/ { if (lo && hi) n++; lo = hi = 0 }
+                  /programList\[[A-Za-z_]+ - 1\]\.instructionPointer/ { lo = 1 }
+                  /programList\[[A-Za-z_]+\]\.instructionPointer/ { hi = 1 }
+                  END { print n + 0 }' \"${PKG}/programming/forth_fold.c\""
 
 # R9-6 (round 9): FORTH_CONSOLE_ED_YINCR copies upstream showStringEdC47's
 # FUNCTION-LOCAL yincr, which no _Static_assert can reference — the header
@@ -653,24 +663,32 @@ fi
 # upstream-diff-review to notice.
 #
 # CHURN is hard zero. NEAR is a judged tier: the standing hits were read
-# individually by the 2026-08-09b review and cleared. R9-10 landed the
-# fnPem hunk's purely additive reshape the same day, which retired the
-# tmpChar rename in both its halves — 4 -> 2. The two that remain are the
-# appended disjuncts in keyboard.c and softmenus.c, which cannot be spelled
-# any other way.
+# individually and cleared. The three that remain are the appended
+# disjuncts in keyboard.c and softmenus.c, which cannot be spelled any
+# other way, and defines.h's NUMBER_OF_DYNAMIC_SOFTMENUS 22 -> 23 (the
+# FWRD dynamic menu — a real, deliberate change; it surfaced in this tier
+# only when the comment ruling removed the trailing tag that had kept the
+# pair over the scanner's edit-distance cap).
 head2 "J. Upstream-diff churn (patch minimality)"
 j_scan="${SCRIPT_DIR}/../../.claude/skills/upstream-diff-review/references/patch_churn_scan.py"
 if [[ -f "${j_scan}" ]]; then
-  j_out=$(python3 "${j_scan}" "${PKG}"/patches/*.patch 2>&1 || true)
-  j_churn=$(printf '%s\n' "${j_out}" | grep -c '^\[CHURN\]' || true)
-  j_near=$(printf '%s\n' "${j_out}" | grep -c '^\[NEAR\]' || true)
+  # The scanner's tiers are [WS-ONLY], [COMMENT-ONLY] and [NEAR] — count the
+  # tiers it actually emits, and keep its exit status as a second signal so a
+  # scanner crash (or a renamed tier) cannot read as a clean zero.
+  j_out=$(python3 "${j_scan}" "${PKG}"/patches/*.patch 2>&1)
+  j_rc=$?
+  j_churn=$(printf '%s\n' "${j_out}" | grep -cE '^\[(WS-ONLY|COMMENT-ONLY)\]')
+  j_near=$(printf '%s\n' "${j_out}" | grep -c '^\[NEAR\]')
   printf '  %-58s %s\n' "mechanical churn findings (must be 0)" "${j_churn}"
-  printf '  %-58s %s\n' "NEAR hits (judged; baseline 2, see comment)" "${j_near}"
+  printf '  %-58s %s\n' "NEAR hits (judged; baseline 3, see comment)" "${j_near}"
   if [[ "${j_churn}" -ne 0 ]]; then
-    printf '%s\n' "${j_out}" | grep -A2 '^\[CHURN\]' | sed 's/^/  /'
+    printf '%s\n' "${j_out}" | grep -A2 -E '^\[(WS-ONLY|COMMENT-ONLY)\]' | sed 's/^/  /'
     flag "patch churn regressed above zero — a hunk is carrying reformatting or a rewrite where an append would do"
-  elif [[ "${j_near}" -ne 2 ]]; then
-    flag "the NEAR count moved (baseline 2) — read each new hit and re-accept the count in the same commit"
+  elif [[ "${j_rc}" -ne 0 && "${j_churn}" -eq 0 ]]; then
+    printf '%s\n' "${j_out}" | tail -5 | sed 's/^/  /'
+    flag "churn scanner exited ${j_rc} but no known tier was parsed — scanner crash or tier rename; the gate cannot certify zero"
+  elif [[ "${j_near}" -ne 3 ]]; then
+    flag "the NEAR count moved (baseline 3) — read each new hit and re-accept the count in the same commit"
   else
     note "churn 0, NEAR at its judged baseline"
   fi

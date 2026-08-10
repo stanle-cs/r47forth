@@ -2692,16 +2692,9 @@ TO_QSPI static const numStr NumMsg[] = { { "^0" }, { "^1" }, { "^2" }, { "^3" },
 
 
   void closeAim(void) {
-    /* forth-core L1-1 (CONSOLIDATE P6): nothing upstream closes an
-     * INTERACTIVE capture, and a leaked FCAP_OPEN is not inert (the next
-     * PEM ALPHA press toggles keys mode instead of opening literal
-     * input).  This guard lived at each closeAim() call site in
-     * keyboard.c (the L1-1 disposition table); it now runs in the one
-     * teardown itself, so a future upstream closeAim() caller in any
-     * file is correct by default — the D7-1 argument, applied to this
-     * class.  The interactive EXIT ladder never calls closeAim (its
-     * teardown is calcModeNormal+popSoftmenu minus the string commit),
-     * so this cannot fire there. */
+    /* Nothing upstream closes an INTERACTIVE capture; a leaked FCAP_OPEN
+     * is not inert (next PEM ALPHA press toggles keys mode instead of
+     * opening literal input), so close it here on every closeAim() path. */
     if(forthCapIsInteractive()) {
       forthCapClose();
     }

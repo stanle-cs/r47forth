@@ -1520,7 +1520,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define Y_POSITION_OF_REGISTER_Y_LINE             96
 #define Y_POSITION_OF_REGISTER_X_LINE            132
 
-#define NUMBER_OF_DYNAMIC_SOFTMENUS               23  // forth-core P-H6
+#define NUMBER_OF_DYNAMIC_SOFTMENUS               23
 #define SOFTMENU_HEIGHT                           23
 
 
@@ -2240,7 +2240,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 
 #define ASSIGN_NAMED_VARIABLES                 10000
 #define ASSIGN_LABELS                          12000
-#define ASSIGN_FORTH_WORDS                     24000  /* M2 (Stage M): global Forth
+#define ASSIGN_FORTH_WORDS                     24000  /* Global Forth
         words in the pick channel.  Labels keep 12000..23999; every consumer
         tests this band FIRST (>= ASSIGN_LABELS would claim it). */
 #define ASSIGN_RESERVED_VARIABLES                  (ASSIGN_NAMED_VARIABLES + FIRST_RESERVED_VARIABLE - FIRST_NAMED_VARIABLE)

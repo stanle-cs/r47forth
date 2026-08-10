@@ -11,27 +11,26 @@
 
 /* Insert `name` + one trailing space into the open capture line at
  * T_cursorPos.  Same 256-byte/196-glyph cap as typing; false = no room
- * or capture not open.  §9.6 P-H7 discipline, generalized (F6-3). */
+ * or capture not open.  §9.6 discipline. */
 bool_t forthCapInsertName(const char *name);
 
-/* Insert the currently selected dynamic-menu label (§9.6 P-H7). */
+/* Insert the currently selected dynamic-menu label (§9.6). */
 bool_t pickerInsertName(void);
 
 /* True when a softkey press should be handled as an MNU_FORTH picker
  * pick rather than as its own item (§9.6). */
 bool_t forthPickerGuard(int16_t item);
 
-/* AUDIT C2/C3/C4/C8/C9: establish the console's row for the current input
- * sub-mode.  The ONLY function that may change it while an interactive
- * capture is open; see forth_menu.c for why it retargets rather than
- * pushing. */
+/* Establish the console's row for the current input sub-mode.  The ONLY
+ * function that may change it while an interactive capture is open; see
+ * forth_menu.c for why it retargets rather than pushing. */
 void forthConsoleShowSurface(void);
 
 /* Re-establish that row after a native item may have destroyed it. */
 void forthConsoleRestoreSurface(void);
 
-/* AUDIT C17: frame ownership.  The frame the console relies on is REGISTERED
- * by a sentinel in its own userMenuId (owned = console-created, the close
+/* Frame ownership.  The frame the console relies on is REGISTERED by a
+ * sentinel in its own userMenuId (owned = console-created, the close
  * rung pops it; borrowed = the user's row on loan, the close rung releases
  * it).  Ownership rides the frame through every push/pop/reopen/resume.
  *
@@ -45,11 +44,11 @@ bool_t forthConsoleOwnsSlot0(void);     /* slot 0 is console-CREATED */
 bool_t forthConsoleStampOnStack(void);  /* a registered frame exists anywhere */
 bool_t forthConsoleBaseOnTop(void);     /* EXIT rung 2: fall through, or pop? */
 
-/* R9-4: HOME.3's two halves (dismiss the overlay, land on the row matching
- * the sub-mode) for a live console.  True means the gesture was handled and
- * the caller skips its native arm.  Called from the two upstream long-press
- * sites; the ruling and upstream's own shape are stated at the definition.
- * Site count pinned in design-audit.sh group I. */
+/* HOME.3's two halves (dismiss the overlay, land on the row matching the
+ * sub-mode) for a live console.  True means the gesture was handled and
+ * the caller skips its native arm.  Called from the two upstream
+ * long-press sites; the ruling and upstream's own shape are stated at
+ * the definition.  Site count pinned in design-audit.sh group I. */
 bool_t forthConsoleHomeRow(void);
 void   forthConsoleRegisterSlot0(bool_t created);  /* open site (forth_compile.c) */
 void   forthConsoleUnstampAll(void);    /* close funnel (forthCapClose) only */
@@ -60,14 +59,12 @@ void   forthConsoleUnstampAll(void);    /* close funnel (forthCapClose) only */
  * battery references the same number the builder uses. */
 #define FORTH_PICKER_MAX_SCAN_STEPS 1000
 
-/* Build dynamicSoftmenu[menu]'s content for MNU_FORTH (§9.6, F6-5).
+/* Build dynamicSoftmenu[menu]'s content for MNU_FORTH (§9.6).
  * The caller has already freed the previous menuContent. */
 void forthBuildWordPicker(int16_t menu);
 
 #if defined(FORTH_DEBUG_SELFTEST)
-/* AUDIT round 4: raw stamp census, so the battery can ASSERT the ownership
- * invariant instead of trusting the banner that stated it wrongly for a
- * whole session. */
+/* Raw stamp census, so the battery can ASSERT the ownership invariant. */
 uint8_t forthConsoleTestOwnedCount(void);
 uint8_t forthConsoleTestBorrowCount(void);
 int16_t forthConsoleTestOwnedSlot(void);

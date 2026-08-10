@@ -1,17 +1,14 @@
-/* packages/forth-core/test_persist.part.h — T5 split part of test_dict_reloc.c (2026-08-03).
+/* packages/forth-core/test_persist.part.h — source PART of test_dict_reloc.c.
  *
- * This is NOT a standalone header: it is a source PART, #included exactly
- * once at the end of test_dict_reloc.c so the suite stays one compilation
- * unit (shared statics, unchanged build/audit/citations). Edit rules are
- * the same as for test_dict_reloc.c; anchor edits on subcase printf text.
- * Functions here are forward-declared in the main file before the runner.
+ * Not a standalone header: #included exactly once at the end of
+ * test_dict_reloc.c so the suite stays one compilation unit. Functions here
+ * are forward-declared in the main file before the runner.
  */
-/* test_validate_restored_bodies
- * F1-5: full threaded-code validator pins. Independently reported
- * subcases — one PASS line each. T1.3b idiom: build, corrupt, call
- * forthGDictValidateRestored() directly, assert outcome, release orphan,
- * forthGDictClear() between subcases. Hand-built entries use gbegin_word/
- * gend_word with 4-glyph names only (header = 8 bytes, no padding). */
+/* test_validate_restored_bodies: builds/corrupts gdict entries directly,
+ * calls forthGDictValidateRestored(), and asserts the accept/reject outcome
+ * per subcase, releasing any orphan and clearing gdict between subcases.
+ * Hand-built entries use gbegin_word/gend_word with 4-glyph names only
+ * (header = 8 bytes, no padding). */
 static int test_validate_restored_bodies(void)
 {
   int fail = 0;
@@ -397,9 +394,9 @@ static int test_validate_restored_bodies(void)
   return fail;
 }
 
-/* T1.1 (H5 round-trip). Must fail if: any of the five forthGDict* params is
- * dropped from the save or restore hunk, or the restore rebases gdict.base
- * without TO_PCMEMPTR. */
+/* Save/restore round trip: rebuild GW1/GW2 in gdict, saveCalc(), clobber
+ * gdict, restoreCalc(), and confirm the five gdict scalars, the entries,
+ * and a cross-region call all survive intact. */
 static int test_save_restore_roundtrip(void)
 {
   int fail = 0;
@@ -484,10 +481,10 @@ static int test_save_restore_roundtrip(void)
     }
   }
 
-  /* A5 / backupR47.cfg regression: forthCap is deliberately not persisted,
-   * but older backups do persist the surrounding PEM + ALPHA + ITM_FORTH UI
-   * and its cursor.  Restore must close that split state before the exact
-   * reported RRRLLLRRL sequence reaches the text cursor. */
+  /* backupR47.cfg case: forthCap is deliberately not persisted, but older
+   * backups do persist the surrounding PEM + ALPHA + ITM_FORTH UI and its
+   * cursor. Restore must close that split state before an arrow-key replay
+   * reaches the text cursor. */
   {
     uint8_t savedCalcMode = calcMode;
     int16_t savedTamFunction = tam.function;
@@ -577,10 +574,9 @@ static int test_save_restore_roundtrip(void)
   return fail;
 }
 
-/* T1.3 (validation clamps corruption). Must fail if:
- * forthGDictValidateRestored is not called from the restore hunk, or its
- * here-bound / chain-count checks are deleted (next dict write would land
- * out of bounds). */
+/* Corrupt a saved gdict scalar (forthGDictHere / forthGDictCount) before
+ * restore; forthGDictValidateRestored() must reject and reset rather than
+ * let the next dict write land out of bounds. */
 static int test_restore_validation_clamps(void)
 {
   int fail = 0;
@@ -812,12 +808,9 @@ static int test_spill_region(void)
   return fail;
 }
 
-/* test_freelist_consistent
- * FIX-6: free-list integrity check — walks freeMemoryRegions[0..n), asserts
+/* test_freelist_consistent: walks freeMemoryRegions[0..n), asserts
  * blockAddress strictly increasing, no overlap (addr+size <= next.addr),
- * and no region overlaps program memory.
- * Escaping mutation: the old restoreTestProgram region surgery (#if 0 block)
- * creates overlapping regions that this test catches. */
+ * and no region overlaps program memory. */
 static int test_freelist_consistent(void)
 {
   int fail = 0;
@@ -865,12 +858,9 @@ static int test_freelist_consistent(void)
   return fail;
 }
 
-/* test_freelist_double_free_guarded
- * FIX-6: freeListFree's range-overlap guard must reject a double free of the
- * exact same (pointer, size) pair without mutating the free list at all.
- * Escaping mutation: remove the guard loop in freeListFree (core/freeList.c)
- * — the second free proceeds, inserts a duplicate/overlapping region, and
- * test_freelist_consistent() FAILs (overlap between adjacent regions). */
+/* test_freelist_double_free_guarded: freeListFree's range-overlap guard must
+ * reject a double free of the exact same (pointer, size) pair without
+ * mutating the free list at all. */
 static int test_freelist_double_free_guarded(void)
 {
   int fail = 0;
@@ -921,34 +911,25 @@ static int test_freelist_double_free_guarded(void)
   return fail;
 }
 
-/* test_freelist_interior_double_free
- * FIX-6: free two adjacent allocations so they coalesce into one free region,
- * then double-free the SECOND allocation's address — now interior to the
- * coalesced region, not equal to its blockAddress. The range-overlap guard
- * must still catch this.
- * Escaping mutation: revert the guard to the old exact blockAddress==C47RamPtr
- * match — the interior address no longer equals any region's blockAddress, the
- * double free slips through, inserts an overlapping region, and
- * test_freelist_consistent() FAILs. */
+/* test_freelist_interior_double_free: free two adjacent allocations so they
+ * coalesce into one free region, then double-free the SECOND allocation's
+ * address — now interior to the coalesced region, not equal to its
+ * blockAddress. The range-overlap guard must still catch this. */
 static int test_freelist_interior_double_free(void)
 {
   int fail = 0;
 
   /* Build an ADJACENT pair from SEPARATELY TRACKED allocations, so every
    * free below is legitimate against allocatedMemoryRegions[] and produces
-   * zero bookkeeping diagnostics. (An earlier revision allocated one
-   * 5-block region and split-freed it 2+3, which left a stale allocation
-   * record behind and tripped the "Memory freeing A/B" diagnostics on
-   * every run — harness-made allocator-accounting staleness, not a real
-   * caller pattern.)
+   * zero bookkeeping diagnostics.
    *
    * freeListAlloc is best-fit (exact-size hole first, else the smallest
-   * larger region, carved from the front — core/freeList.c:18,35-37,55),
-   * so two back-to-back allocations carry no adjacency guarantee. Instead
-   * allocate a batch of equal-size chunks: once exact-size holes are
-   * exhausted, consecutive chunks are carved contiguously from one region,
-   * so a batch of 8 always contains an adjacent pair in practice. SKIP
-   * defensively if fragmentation ever defeats that. */
+   * larger region, carved from the front), so two back-to-back allocations
+   * carry no adjacency guarantee. Instead allocate a batch of equal-size
+   * chunks: once exact-size holes are exhausted, consecutive chunks are
+   * carved contiguously from one region, so a batch of 8 always contains an
+   * adjacent pair in practice. SKIP defensively if fragmentation ever
+   * defeats that. */
   enum { CHUNKS = 8 };
   const size_t chunkBlocks = 2;             /* 2 blocks per chunk */
   void *chunk[CHUNKS];
@@ -1028,12 +1009,9 @@ static int test_freelist_interior_double_free(void)
   return fail;
 }
 
-/* test_freelist_no_mutation_on_oversize_free
- * FIX-6: double-freeing with a LARGER sizeInBlocks than originally allocated
- * must not grow the free region the address falls in.
- * Escaping mutation: re-add the old size-grow branch (if sizeInBlocks <
- * requested, grow freeMemoryRegions[i].sizeInBlocks to the requested size) —
- * the region grows and the size-unchanged assertion FAILs. */
+/* test_freelist_no_mutation_on_oversize_free: double-freeing with a LARGER
+ * sizeInBlocks than originally allocated must not grow the free region the
+ * address falls in. */
 static int test_freelist_no_mutation_on_oversize_free(void)
 {
   int fail = 0;
@@ -1085,9 +1063,9 @@ static int test_freelist_no_mutation_on_oversize_free(void)
   return fail;
 }
 
-/* ---- D3-2: deep recursion with spill should compute 7 FACT = 5040 ----
- * Without spilling, 7 FACT overflows the visible stack and returns garbage.
- * With D3-2 spilling, the intermediate values spill and refill correctly. ---- */
+/* ---- Deep recursion with spill: 7 FACT = 5040. Without spilling, 7 FACT
+ * overflows the visible stack and returns garbage; spilling lets the
+ * intermediate values spill and refill correctly. ---- */
 static int test_deep_recursion_spill(void)
 {
   int fail = 0;
@@ -1127,9 +1105,8 @@ static int test_deep_recursion_spill(void)
   return fail;
 }
 
-/* ---- D3-3: spill boundary rule — named message + tests ----
- * Blocked side: a native item cannot run while spilled values exist.
- * Allowed side: draining spilled values back below capacity permits the call. ---- */
+/* ---- Spill boundary rule: a native item cannot run while spilled values
+ * exist; draining spilled values back below capacity permits the call. ---- */
 static int test_spill_native_boundary(void)
 {
   int fail = 0;
@@ -1200,7 +1177,7 @@ static int test_spill_native_boundary(void)
   return fail;
 }
 
-/* ---- D3-4: spill activity must be invisible to the native window ----
+/* ---- Spill activity must be invisible to the native window.
  * WP-1: same computation spilled vs unspilled produces identical result.
  * WP-2: after drain, visible window depth and order match unlimited-capacity
  *        arithmetic; spill count returns to 0. ---- */
@@ -1292,13 +1269,9 @@ static int test_spill_window_parity(void)
   return fail;
 }
 
-/* D3-5: pin the interpret-from-X core — it must bracket depth/spill
- * exactly like forthOuterInterpret.  Found by the T6 upstream-runner cases
- * (spill dead on the keyboard path).  This pinned fnForthOuter until
- * Stage L; L-R2 made that entry a capture opener, so the pin moved to
- * forthTestRunFromX, which carries the old body verbatim.  L1-1 adds the
- * separate pin for what fnForthOuter does NOW (opens a capture, seeds
- * from a string X, consumes it at seed). */
+/* forthTestRunFromX must bracket depth/spill exactly like
+ * forthOuterInterpret: run a deep line seeded from X and confirm the spill
+ * drains. */
 static int test_forth_run_from_x_brackets(void)
 {
   int fail = 0;

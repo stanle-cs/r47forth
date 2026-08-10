@@ -18,7 +18,7 @@ typedef struct {
                                              * Compile-time words (RECURSE, the
                                              * defmarks, IF..REPEAT) are 0: they
                                              * emit tokens, they do not run.
-                                             * Used by the D2 overflow guard. */
+                                             * Used by the stack-overflow guard. */
 } forthPrimDef_t;
 
 extern const forthPrimDef_t forthPrims[];   /* forth_prims.c, index-stable, append-only */

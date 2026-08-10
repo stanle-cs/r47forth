@@ -1,10 +1,10 @@
-/* packages/forth-core/test_capture.part.h — T5 split part of test_dict_reloc.c (2026-08-03).
+/* packages/forth-core/test_capture.part.h — split part of test_dict_reloc.c.
  *
  * This is NOT a standalone header: it is a source PART, #included exactly
  * once at the end of test_dict_reloc.c so the suite stays one compilation
- * unit (shared statics, unchanged build/audit/citations). Edit rules are
- * the same as for test_dict_reloc.c; anchor edits on subcase printf text.
- * Functions here are forward-declared in the main file before the runner.
+ * unit. Edit rules are the same as for test_dict_reloc.c; anchor edits on
+ * subcase printf text. Functions here are forward-declared in the main
+ * file before the runner.
  */
 /* §4.2 TAM dispatcher: reallyRunFunction(ITM_FCALL, idx) executes Forth word.
  * Tests the exact dispatch path used by the tam.c H-hook (DESIGN.md §4.2).
@@ -30,7 +30,7 @@ static int test_tam_dispatcher(void)
   }
 
   /* Dispatch via reallyRunFunction — the exact path the tam.c H-hook uses:
-   *   reallyRunFunction(ITM_FCALL, widx);  (tam.c ~line 970) */
+   *   reallyRunFunction(ITM_FCALL, widx); */
   uint8_t savedRunStop = programRunStop;
   programRunStop = PGM_RUNNING;
   lastErrorCode = ERROR_NONE;
@@ -49,7 +49,7 @@ static int test_tam_dispatcher(void)
   return 0;
 }
 
-/* AUD-U1: a tam.colon (LOCAL) request never falls through to Forth vocabulary.
+/* A tam.colon (LOCAL) request never falls through to Forth vocabulary.
  * Drives the real public TAM chain: tamEnterMode, TAM alpha entry, and the
  * letter items' runFunction -> addItemToBuffer -> tamProcessInput path.
  * Control leg (no colon): global request -> Forth fallback dispatches word.
@@ -179,9 +179,10 @@ static int test_dynamic_menu_registration(void)
 }
 
 /* test_static_menu_integrity
- * Escaping mutation: bump NUMBER_OF_DYNAMIC_SOFTMENUS without inserting the softmenu[] and
- * dynamicSoftmenu[] rows — TAMFLAG shifts to index 22, which is now < NUMBER_OF_DYNAMIC_SOFTMENUS,
- * so it is treated as dynamic (empty). This test guards the exact off-by-one. */
+ * Guards the exact off-by-one: bumping NUMBER_OF_DYNAMIC_SOFTMENUS without
+ * inserting matching softmenu[]/dynamicSoftmenu[] rows shifts TAMFLAG to
+ * index 22 — now < NUMBER_OF_DYNAMIC_SOFTMENUS, so it reads as dynamic
+ * (empty) instead of static. */
 static int test_static_menu_integrity(void)
 {
   int fail = 0;
@@ -198,13 +199,12 @@ static int test_static_menu_integrity(void)
   return fail;
 }
 
-/* test_picker_scan_basic
+/* test_picker_scan_basic (§8.9 acceptance 3)
  * Program: marker, : SQ DUP * ;, : CUBE DUP DUP * * ;, marker.
  * currentStep on the last marker. Call initVariableSoftmenu(22).
  * Assert menuContent contains "SQ" and "CUBE", numItems == 2, sorted.
- * Escaping mutation: the walk stopping BEFORE currentStep (exclusive bound) —
- * a word defined on the immediately preceding line is missing; this is
- * §8.9 acceptance 3's essence. */
+ * The walk bound at currentStep must be inclusive, not exclusive — a word
+ * defined on the immediately preceding line must not go missing. */
 static int test_picker_scan_basic(void)
 {
   /* marker | : SQ DUP * ; | : CUBE DUP DUP * * ; | marker | .END. */
@@ -231,7 +231,7 @@ static int test_picker_scan_basic(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)cubeStep;
 
-  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
     testInitVariableSoftmenu(22);
     calcMode = m1e3s_; }
 
@@ -243,9 +243,9 @@ static int test_picker_scan_basic(void)
   }
 
   if (dynamicSoftmenu[22].menuContent) {
-    /* R2-T5 item 1: exact order, not membership. qsort's comparator is
-     * compareString(..., CMP_EXTENSIVE) (softmenus.c sortMenu) — binary
-     * alphabetic order puts CUBE ('C') before SQ ('S'). */
+    /* Exact order, not membership: qsort's comparator is
+     * compareString(..., CMP_EXTENSIVE) (sortMenu) — binary alphabetic
+     * order puts CUBE ('C') before SQ ('S'). */
     const char *content = (const char *)dynamicSoftmenu[22].menuContent;
     int16_t len0 = strlen(content);
     if (compareString(content, "CUBE", CMP_BINARY) != 0) {
@@ -285,14 +285,12 @@ static int test_picker_scan_basic(void)
 }
 
 /* test_picker_omits_long_names
- * R2-T5 item 2: the old "kept" name was SHORT (5 bytes) — nowhere near the
- * nameLen<=14 boundary (softmenus.c: `if (nameLen > 0 && nameLen <= 14)`), so
- * R2's `<=14 -> <=13` mutation stayed GREEN even though it moved the boundary.
- * Kept name is now exactly 14 bytes (KEEPABCDEFGHIJ) and shares no prefix
- * with either rejected 15-byte name (ABCDEFGHIJKLMNO, PQRSTUVWXYZABCD), so a
- * boundary-off-by-one can't coincidentally still look right.
- * Escaping mutation: truncating instead of omitting — the 15-byte names
- * are cut to 14 bytes and appear in menuContent, so numItems > 1. */
+ * The kept name must be exactly at the nameLen<=14 boundary
+ * (`if (nameLen > 0 && nameLen <= 14)`) and share no prefix with either
+ * rejected 15-byte name (ABCDEFGHIJKLMNO, PQRSTUVWXYZABCD), so an
+ * off-by-one at the boundary can't coincidentally still look right.
+ * Must omit long names outright, not truncate them to 14 bytes and
+ * include them in menuContent. */
 static int test_picker_omits_long_names(void)
 {
   /* marker | :ABCDEFGHIJKLMNO(15) | :PQRSTUVWXYZABCD(15) | :KEEPABCDEFGHIJ(14) | marker | .END. */
@@ -320,7 +318,7 @@ static int test_picker_omits_long_names(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)closingMarker;
 
-  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
     testInitVariableSoftmenu(22);
     calcMode = m1e3s_; }
 
@@ -358,22 +356,13 @@ static int test_picker_omits_long_names(void)
 }
 
 /* test_picker_rebuilds_same_menu
- * R2-T5 item 3: R2 deleted the special-case term in showSoftmenuCurrentPart's
- * dynamic-menu cache check —
- *   if(softmenu[m].menuItem != cachedDynamicMenu || ... || softmenu[m].menuItem == -MNU_FORTH)
- * (softmenus.c) — and the full suite stayed GREEN, because every existing
- * picker test calls initVariableSoftmenu directly (via testInitVariableSoftmenu),
- * bypassing the cache gate entirely. This test drives the REAL public path —
- * showSoftmenu(-MNU_FORTH) then showSoftmenuCurrentPart(), exactly what the UI
- * calls — twice in a row without ever changing softmenuStack[0] in between, so
- * the second call reaches the gate with cachedDynamicMenu already == -MNU_FORTH.
- * Every other dynamic menu can trust "same identity -> same content"; MNU_FORTH
- * cannot, because its content is derived from live program memory that a user
- * can edit between two views of the same menu (add a word, look at the menu
- * again without leaving it).
- * Escaping mutation: drop the `|| softmenu[m].menuItem == -MNU_FORTH` term —
- * the second showSoftmenuCurrentPart() call sees an identity match and skips
- * the rebuild, so TWO stays absent from the still-cached, now-stale content. */
+ * showSoftmenuCurrentPart's dynamic-menu cache check must always rebuild
+ * MNU_FORTH's content, even on an identity match with cachedDynamicMenu —
+ * unlike other dynamic menus, its content is derived from live program
+ * memory a user can edit between two views of the same menu. Drives the
+ * real public path (showSoftmenu(-MNU_FORTH) then showSoftmenuCurrentPart())
+ * twice without changing softmenuStack[0], so the second call reaches the
+ * gate with cachedDynamicMenu already == -MNU_FORTH. */
 static int test_picker_rebuilds_same_menu(void)
 {
   /* marker | : ONE 1 ; | : TWO 2 ; | marker | .END. */
@@ -399,7 +388,7 @@ static int test_picker_rebuilds_same_menu(void)
   uint8_t *savedCurrentStep = currentStep;
   uint16_t savedProgNum = currentProgramNumber;
   uint8_t savedCalcMode = calcMode;
-  calcMode = CM_PEM;   /* Stage M E3: the draws build; PEM cursor context */
+  calcMode = CM_PEM;   /* the draws build; PEM cursor context */
   softmenuStack_t savedStack[SOFTMENU_STACK_SIZE];
   xcopy(savedStack, softmenuStack, sizeof(savedStack));
   int16_t savedCachedDynamicMenu = cachedDynamicMenu;
@@ -476,10 +465,7 @@ static int test_picker_rebuilds_same_menu(void)
  * once: exactly 170 survive (the "at cap" edge — none of the first 170 are
  * lost to an off-by-one), and the 171st, which is LAST in scan order, is the
  * one dropped (proves truncation is by scan order, not silently keeping an
- * arbitrary later one instead of an earlier one).
- * Escaping mutation: drop the `nNames < forthPickerMaxNames` guard — numItems
- * becomes 171 instead of 170, and (with a fixed build) the 171st slot write
- * lands one 15-byte slot past tmpString's declared length. */
+ * arbitrary later one instead of an earlier one). */
 static int test_picker_capacity_boundary(void)
 {
   const int totalDefs = 171;   /* cap (170) + 1 */
@@ -518,7 +504,7 @@ static int test_picker_capacity_boundary(void)
   currentProgramNumber = 1;
   currentStep = closingMarker;
 
-  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
     testInitVariableSoftmenu(22);
     calcMode = m1e3s_; }
 
@@ -565,8 +551,7 @@ static int test_picker_capacity_boundary(void)
 }
 
 /* test_picker_dedupes
- * The same : SQ on two lines yields one entry.
- * Escaping mutation: skipping the dedupe — numItems == 2 for one name. */
+ * The same : SQ on two lines must dedupe to one entry, not numItems==2. */
 static int test_picker_dedupes(void)
 {
   /* marker | : SQ DUP * ; | : SQ DUP * ; | marker | .END. */
@@ -591,7 +576,7 @@ static int test_picker_dedupes(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)marker2;
 
-  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
     testInitVariableSoftmenu(22);
     calcMode = m1e3s_; }
 
@@ -635,9 +620,9 @@ static int test_picker_dedupes(void)
 /* test_picker_insert_at_cursor
  * Build picker menu with "SQ" from program. Set aimBuffer empty, cursor at 0.
  * Call pickerInsertName; assert aimBuffer == "SQ ", T_cursorPos == 3.
- * Escaping mutation: inserting at aimBuffer end instead of T_cursorPos —
- * with empty buffer end == cursor so this only catches the case when
- * buffer is non-empty (tested by test_picker_insert_mid_line). */
+ * Insert must land at T_cursorPos; with an empty buffer end==cursor, so
+ * this alone doesn't distinguish the two — test_picker_insert_mid_line
+ * covers the non-empty case. */
 static int test_picker_insert_at_cursor(void)
 {
   /* marker | : SQ DUP * ; | marker | .END. */
@@ -671,7 +656,7 @@ static int test_picker_insert_at_cursor(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)sqStep;
 
-  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
     testInitVariableSoftmenu(22);
     calcMode = m1e3s_; }
 
@@ -754,10 +739,8 @@ static int test_picker_insert_at_cursor(void)
 
 /* test_picker_insert_mid_line
  * Build picker menu with "SQ". Set aimBuffer = "DUP ", cursor at position 0.
- * Call pickerInsertName; assert aimBuffer == "SQ DUP " (SQ inserted at
- * cursor, not appended at end).
- * Escaping mutation: inserting at aimBuffer end instead of T_cursorPos —
- * would produce "DUP SQ" instead of "SQ DUP ". */
+ * Call pickerInsertName; assert aimBuffer == "SQ DUP " — SQ must insert at
+ * cursor, not append at end ("DUP SQ"). */
 static int test_picker_insert_mid_line(void)
 {
   /* marker | : SQ DUP * ; | marker | .END. */
@@ -791,7 +774,7 @@ static int test_picker_insert_mid_line(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)sqStep;
 
-  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
     testInitVariableSoftmenu(22);
     calcMode = m1e3s_; }
 
@@ -881,8 +864,7 @@ static int test_picker_insert_mid_line(void)
 
 /* test_picker_trailing_space
  * Build picker menu with "SQ". Open capture, type "DUP ", cursor at end (4).
- * Insert "SQ"; assert cap text == "DUP SQ " (trailing space present).
- * Escaping mutation: omitting trailing space — would produce "DUP SQ" */
+ * Insert "SQ"; assert cap text == "DUP SQ " — trailing space must be present. */
 static int test_picker_trailing_space(void)
 {
   /* marker | : SQ DUP * ; | marker | .END. */
@@ -916,7 +898,7 @@ static int test_picker_trailing_space(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)sqStep;
 
-  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
     testInitVariableSoftmenu(22);
     calcMode = m1e3s_; }
 
@@ -1009,9 +991,7 @@ static int test_picker_trailing_space(void)
  * == -MNU_FORTH BEFORE any dynamicSoftmenu[] indexing. With Forth capture
  * globals set (CM_PEM, FLAG_ALPHA, tam.function=ITM_FORTH, valid dynamicMenuItem),
  * pointing at the MNU_FORTH menu -> guard true; pointing at any other menu
- * -> guard false.
- * Escaping mutation: drop the menu-identity conjunct from forthPickerGuard —
- * the wrong-menu case returns true and the test FAILs. */
+ * -> guard false. */
 static int test_picker_guard_menu_identity(void)
 {
   extern bool_t forthPickerGuard(int16_t);
@@ -1191,7 +1171,7 @@ static int test_picker_key_mapping(void)
   { int sc1 = 0;
     const int16_t pages[4] = {0, 6, 12, 18};
 
-    calcMode = CM_PEM;   /* Stage M E3: the draws build; PEM cursor context (restored from savedCalcMode) */
+    calcMode = CM_PEM;   /* the draws build; PEM cursor context (restored from savedCalcMode) */
     showSoftmenu(-MNU_FORTH);
 
     for (int pi = 0; pi < 4 && !sc1; pi++) {
@@ -1453,9 +1433,7 @@ static int test_picker_scan_and_alloc(void)
      * below sizes itself from FORTH_PICKER_MAX_SCAN_STEPS so it always
      * overruns whatever the constant says — which makes the fixture immune
      * to a change in the constant, and therefore blind to one. Changing 1000
-     * changes what the calculator does, so it is pinned here as a literal.
-     * (Found by mutation: raising the constant to 2000 left the mechanism
-     * asserts green, because they scaled with it.) */
+     * changes what the calculator does, so it is pinned here as a literal. */
     if (FORTH_PICKER_MAX_SCAN_STEPS != 1000) {
       printf("    [1] FAIL: FORTH_PICKER_MAX_SCAN_STEPS is %d, documented as 1000 (§9.6)\n",
              FORTH_PICKER_MAX_SCAN_STEPS);
@@ -1519,7 +1497,7 @@ static int test_picker_scan_and_alloc(void)
       currentProgramNumber = 1;
       currentStep          = beginOfProgramMemory + (progLen - 4);   /* closing marker */
 
-      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
         testInitVariableSoftmenu(22);
         calcMode = m1e3s_; }
 
@@ -1571,7 +1549,7 @@ static int test_picker_scan_and_alloc(void)
     currentProgramNumber = 1;
     currentStep          = beginOfProgramMemory;
 
-    { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
       testInitVariableSoftmenu(22);
       calcMode = m1e3s_; }
 
@@ -1640,9 +1618,8 @@ static int test_picker_scan_and_alloc(void)
  * Source step: ": A<a2><20>B DUP ;" — name contains STD_ANGLE ("\xa2\x20").
  * Build the menu; assert menuContent contains the 4-byte name "A\xa2\x20B"
  * and does NOT contain the 2-byte prefix "A\xa2" (which would appear if
- * byte-wise splitting cut the token inside the glyph).
- * Escaping mutation: restore the byte-wise src[pos] != ' ' advance — the
- * name splits at 0x20 and both assertions fail. */
+ * byte-wise splitting cut the token inside the glyph — the tokenizer must
+ * advance glyph-wise, not by a raw src[pos] != ' ' byte check). */
 static int test_picker_glyph_tokenize(void)
 {
   /* marker | : A<STD_ANGLE>B DUP ; | marker | .END. */
@@ -1666,7 +1643,7 @@ static int test_picker_glyph_tokenize(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)defStep;
 
-  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
     testInitVariableSoftmenu(22);
     calcMode = m1e3s_; }
 
@@ -1721,20 +1698,8 @@ static int test_picker_glyph_tokenize(void)
  * Source step: 200-byte spaceless token followed by " : SQ DUP ;".
  * The 200-byte token exceeds FORTH_TOKEN_MAX (63) and must be skipped.
  * Assert numItems == 1 and "SQ" present (the long token was skipped, not copied).
- *
- * R2-T5 item 4: this test pins SEMANTIC OMISSION ONLY — that an over-length
- * token does not appear in the built menu. It does NOT catch an unchecked
- * copy into a fixed buffer; that claim was false and is retracted here.
- * softmenus.c's token copy (`case MNU_FORTH:`, the `xcopy(tok, line + start,
- * tokLen)` line) is inline in the giant initVariableSoftmenu switch, gated by
- * `if (tokLen > FORTH_TOKEN_MAX) { skip, continue; }` immediately above it —
- * there is no separable helper function to wrap with pre/post canaries under
- * FORTH_DEBUG_SELFTEST. Per this task's own instruction ("If the production
- * code has no separable helper, STOP and report instead of inventing an ASan
- * command or relying on stack corruption"): stopped. An overflow of the
- * length check itself can only be verified under ASan, which is not the
- * sanctioned gate — this remains an accepted, documented gap, not a covered
- * mutation. */
+ * Gap: pins semantic omission only — verifying the length check itself is
+ * overflow-safe would need ASan, which isn't part of this gate. */
 static int test_picker_long_token_skipped(void)
 {
   /* Build payload: 200 'X' bytes + " : SQ DUP ;" (11 bytes) = 211 bytes */
@@ -1781,7 +1746,7 @@ static int test_picker_long_token_skipped(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)defStep;
 
-  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
     testInitVariableSoftmenu(22);
     calcMode = m1e3s_; }
 
@@ -1848,10 +1813,10 @@ static int test_softmenu_trailing_null(void)
   currentProgramNumber = 1;
   currentStep = (uint8_t *)cubeStep;
 
-  /* R2-T5 item 5: pollute the heap allocator's same-size bin with non-zero
-   * bytes before the builder's calloc(1, 4) (one name "SQ": numberOfBytes =
-   * 1 + (2+1) = 4), so a malloc()-instead-of-calloc() mutation cannot pass
-   * by accident on a freshly-mapped, already-zero page. */
+  /* Pollute the heap allocator's same-size bin with non-zero bytes before
+   * the builder's calloc(1, 4) (one name "SQ": numberOfBytes = 1 + (2+1)
+   * = 4), so a malloc()-instead-of-calloc() bug can't pass by accident on
+   * a freshly-mapped, already-zero page. */
   for (int p = 0; p < 8; p++) {
     void *junk = malloc(4);
     if (junk) {
@@ -1860,7 +1825,7 @@ static int test_softmenu_trailing_null(void)
     }
   }
 
-  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+  { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
     testInitVariableSoftmenu(22);
     calcMode = m1e3s_; }
 
@@ -1906,14 +1871,11 @@ static int test_softmenu_trailing_null(void)
 }
 
 /* test_tam_function_cleared_after_abort
- * The sentinel-clear invariant, but for the
- * abort path: opening the capture (addStepInProgram(ITM_FORTH), as in
- * test_toggle_inserts_marker's opening case) leaves aimBuffer empty, then
- * pemAlpha(ITM_BACKSPACE) with an empty buffer is the abort/EXIT gesture
- * (manage.c:883-897) — it deletes the placeholder step and clears
- * FLAG_ALPHA. Assert tam.function != ITM_FORTH afterward.
- * Escaping mutation: remove the `tam.function = 0;` reset added in the
- * ITM_BACKSPACE abort branch (manage.c:889-896) — the assertion fails. */
+ * The sentinel-clear invariant, but for the abort path: opening the capture
+ * (addStepInProgram(ITM_FORTH), as in test_toggle_inserts_marker's opening
+ * case) leaves aimBuffer empty, then pemAlpha(ITM_BACKSPACE) with an empty
+ * buffer is the abort/EXIT gesture — it deletes the placeholder step and
+ * clears FLAG_ALPHA. Assert tam.function != ITM_FORTH afterward. */
 static int test_tam_function_cleared_after_abort(void)
 {
   uint8_t prog[] = {
@@ -1985,11 +1947,9 @@ static int test_tam_function_cleared_after_abort(void)
 }
 
 /* test_alpha_menu_on_top_during_capture
- * F5: Opening Forth capture should leave MNU_ALPHA on top of the softmenu stack,
- * not MNU_FORTH. The picker is a submenu entry, not a forced overlay.
- * Escaping mutation: re-add showSoftmenu(-MNU_FORTH) after showSoftmenu(-MNU_ALPHA)
- * in pemAlpha — the assertion fails (top becomes MNU_FORTH instead of MNU_ALPHA).
- */
+ * Opening Forth capture should leave MNU_ALPHA on top of the softmenu
+ * stack, not MNU_FORTH. The picker is a submenu entry, not a forced
+ * overlay. */
 static int test_alpha_menu_on_top_during_capture(void)
 {
   int fail = 0;
@@ -2019,8 +1979,8 @@ static int test_alpha_menu_on_top_during_capture(void)
   aimBuffer[0] = 0;
   tam.mode = 0;
   clearSystemFlag(FLAG_ALPHA);
-  /* R2-T6 item 2: seed 0, not ITM_FORTH — priming the derived value defeats
-   * the point of a test that exists to prove the call DERIVES it. */
+  /* Seed 0, not ITM_FORTH — priming the derived value defeats the point
+   * of a test that exists to prove the call DERIVES it. */
   tam.function = 0;
 
   extern void addStepInProgram(int16_t func);
@@ -2054,11 +2014,8 @@ static int test_alpha_menu_on_top_during_capture(void)
 }
 
 /* test_alpha_menu_contains_fwrd
- * F5: The MNU_ALPHA item table (menu_ALPHA) must contain a -MNU_FORTH entry
- * so the Forth word picker is reachable as a submenu from the alpha menu.
- * Escaping mutation: remove the -MNU_FORTH entry from menu_ALPHA — the assertion fails.
- * [VERIFIED: softmenus.c, menu_ALPHA row containing -MNU_FORTH]
- */
+ * The MNU_ALPHA item table (menu_ALPHA) must contain a -MNU_FORTH entry
+ * so the Forth word picker is reachable as a submenu from the alpha menu. */
 static int test_alpha_menu_contains_fwrd(void)
 {
   int fail = 0;
@@ -2099,21 +2056,18 @@ static int test_alpha_menu_contains_fwrd(void)
 }
 
 /* test_forth_toggle_from_catalog_leaves_alpha_menu
- * A8: When Forth is toggled from the Functions catalog (CAT → FCNS → FORTH),
- * the real keyboard path must leave MNU_ALPHA on top.  fnKeyInCatalog=1 is what
- * executeFunction sets before calling runFunction in catalog context.
+ * When Forth is toggled from the Functions catalog (CAT → FCNS → FORTH),
+ * the real keyboard path must leave MNU_ALPHA on top. fnKeyInCatalog=1 is
+ * what executeFunction sets before calling runFunction in catalog context.
  *
- * The chain under test is keyboard.c:1213-1216 — runFunction(item) followed
- * immediately by _closeCatalog().  _closeCatalog is what eats MNU_ALPHA when the
- * catalog stack is only half torn down (MNU_ALPHA is in CatalogMenus[]), so it is
- * the whole point of the test and must be the REAL one: it is exported for this
- * suite via FORTH_SELFTEST_EXPORT.  Do not hand-roll it as popSoftmenu() calls —
- * the real one is a no-op once A2's teardown has emptied the catalog menus,
- * whereas blind pops eat MNU_ALPHA and fail a correct implementation.
- *
- * Escaping mutation: revert A2 (pop once instead of draining the catalog menus)
- * and _closeCatalog then finds MNU_CATALOG still stacked, pops MNU_ALPHA, and the
- * assertion fails.
+ * The chain under test is runFunction(item) followed immediately by
+ * _closeCatalog(). _closeCatalog is what eats MNU_ALPHA when the catalog
+ * stack is only half torn down (MNU_ALPHA is in CatalogMenus[]), so it is
+ * the whole point of the test and must be the REAL one, exported for this
+ * suite via FORTH_SELFTEST_EXPORT. Do not hand-roll it as popSoftmenu()
+ * calls — the real one is a no-op once the catalog-menu teardown has
+ * emptied the catalog menus, whereas blind pops eat MNU_ALPHA and fail a
+ * correct implementation.
  */
 static int test_forth_toggle_from_catalog_leaves_alpha_menu(void)
 {
@@ -2137,7 +2091,7 @@ static int test_forth_toggle_from_catalog_leaves_alpha_menu(void)
   uint8_t savedCalcMode = calcMode;
   int16_t savedMenu = currentMenu();
   int16_t savedTamFunc = tam.function;
-  bool_t savedFnKeyInCatalog = fnKeyInCatalog;   /* R2-T6 item 3: incoming value, not 0 */
+  bool_t savedFnKeyInCatalog = fnKeyInCatalog;   /* incoming value, not 0 */
 
   currentStep = beginOfProgramMemory + 1;
   pemCursorIsZerothStep = false;
@@ -2154,9 +2108,8 @@ static int test_forth_toggle_from_catalog_leaves_alpha_menu(void)
   showSoftmenu(-MNU_FCNS);
 
   /* fnKeyInCatalog must be set AFTER the menus are up and immediately before
-   * the dispatch — showSoftmenu() clears it. That is the real ordering too
-   * (keyboard.c:1190 sets it, :1213 dispatches, :1229 clears it). Setting it
-   * before showSoftmenu leaves it false, runFunction's PEM gate
+   * the dispatch — showSoftmenu() clears it, matching the real ordering.
+   * Setting it before showSoftmenu leaves it false, runFunction's PEM gate
    * (!catalog || catalog == CATALOG_MVAR || fnKeyInCatalog) then fails, and
    * runFunction falls through to reallyRunFunction() — EXECUTING Forth instead
    * of inserting a step, so the arm under test never runs at all. */
@@ -2165,8 +2118,8 @@ static int test_forth_toggle_from_catalog_leaves_alpha_menu(void)
   extern void runFunction(int16_t func);
   extern void _closeCatalog(void);
   runFunction(ITM_FORTH);
-  _closeCatalog();          /* exactly what keyboard.c does next, :1216 */
-  fnKeyInCatalog = savedFnKeyInCatalog;   /* R2-T6 item 3: restore, don't hardcode 0 */
+  _closeCatalog();          /* exactly what keyboard.c does next */
+  fnKeyInCatalog = savedFnKeyInCatalog;   /* restore, don't hardcode 0 */
 
   if (currentMenu() != -MNU_ALPHA) {
     printf("    FAIL: currentMenu() = %d, expected %d (-MNU_ALPHA)\n",
@@ -2196,36 +2149,31 @@ static int test_forth_toggle_from_catalog_leaves_alpha_menu(void)
 }
 
 /* test_forth_capture_survives_keystroke
- * A8 / A1 regression: with a capture open, a SECOND printable keystroke driven
- * through the real path must leave tam.function == ITM_FORTH. Upstream's first
- * arm of insertStepInProgram set tam.function = ITM_LITERAL unconditionally,
- * clobbering the capture on every key.
+ * With a capture open, a SECOND printable keystroke driven through the real
+ * path must leave tam.function == ITM_FORTH — an unconditional
+ * tam.function = ITM_LITERAL in insertStepInProgram's first arm would
+ * clobber the capture on every key.
  *
  * The capture must be OPENED by driving it, not by assigning tam.function and
  * FLAG_ALPHA: pemAlpha's per-key re-insert path takes the step opcode from
- * currentStep[0] (manage.c:970), not from tam.function. With the cursor parked
- * on an arbitrary step, a hand-primed capture rewrites THAT step into
+ * currentStep[0], not from tam.function. With the cursor parked on an
+ * arbitrary step, a hand-primed capture rewrites THAT step into
  * <its opcode> + STRING_LABEL_VARIABLE + payload — e.g. ITM_sin becomes
  * `4c fd 01 41`, a PTP_NONE item carrying a string. findNextStep then steps one
  * byte onto the 0xfd, decodes it as op 0x7d01, and findKey2ndParam indexes
  * indexOfItems[32001] (LAST_ITEM is 2870) — an out-of-bounds read that
- * segfaults. Priming the state under test does not just weaken this test; it
- * corrupts program memory.
- *
- * Escaping mutation: restore the unconditional tam.function = ITM_LITERAL in
- * insertStepInProgram's first arm — the assertion fails.
+ * segfaults. Priming the state under test corrupts program memory.
  */
 static int test_forth_capture_survives_keystroke(void)
 {
   int fail = 0;
 
   /* The marker alone. The entry state is derived from the step immediately
-   * BEFORE the insertion point (forth_bridge.c:126 — an RPN predecessor means
-   * RPN, whatever came before it), and addStepInProgram advances the cursor one
-   * step before inserting (manage.c:1920-1923). So the cursor must sit ON the
-   * marker for the marker to end up as the predecessor. Parking it after an
-   * intervening ITM_sin would make that sin the predecessor and derive RPN —
-   * correctly. */
+   * BEFORE the insertion point (an RPN predecessor means RPN, whatever came
+   * before it), and addStepInProgram advances the cursor one step before
+   * inserting. So the cursor must sit ON the marker for the marker to end
+   * up as the predecessor. Parking it after an intervening ITM_sin would
+   * make that sin the predecessor and derive RPN — correctly. */
   uint8_t prog[] = {
     0x8B, 0x1A, 0xFD, 0x00,                                         /* opening marker */
   };
@@ -2307,19 +2255,16 @@ static int test_forth_capture_survives_keystroke(void)
 }
 
 /* test_forth_alpha_gesture_resumes_forth
- * A8 / A7 regression: with the cursor inside an open Forth region and the keypad
- * dropped to RPN, pressing ALPHA (ITM_AIM) must resume a FORTH capture, not a
+ * With the cursor inside an open Forth region and the keypad dropped to
+ * RPN, pressing ALPHA (ITM_AIM) must resume a FORTH capture, not a
  * string-literal one — this is what makes dropping the keypad survivable.
  *
- * tam.function MUST start at 0 here, not ITM_FORTH. A7's guard reads
+ * tam.function MUST start at 0 here, not ITM_FORTH. The guard reads
  *   if(func == ITM_AIM && forthEntryStateAtInsertion()) tam.function = ITM_FORTH;
  *   else if(tam.function != ITM_FORTH)                  tam.function = ITM_LITERAL;
- * so seeding the sentinel satisfies the else and the assertion holds even with
- * A7 deleted — the test would be vacuous. Starting from 0 means only A7's branch
- * can produce ITM_FORTH.
- *
- * Escaping mutation: delete A7's ITM_AIM branch — tam.function comes back
- * ITM_LITERAL and the assertion fails.
+ * so seeding the sentinel satisfies the else and the assertion would hold
+ * vacuously even if that branch were deleted. Starting from 0 means only
+ * that branch can produce ITM_FORTH.
  */
 static int test_forth_alpha_gesture_resumes_forth(void)
 {
@@ -2389,7 +2334,7 @@ static int test_forth_alpha_gesture_resumes_forth(void)
 }
 
 /* test_capture_buffer
- * F6-1: managed capture buffer — Forth capture text moves off aimBuffer.
+ * Managed capture buffer — Forth capture text moves off aimBuffer.
  * Eleven subcases verifying the capture object lifecycle. */
 static int test_capture_buffer(void)
 {
@@ -2477,10 +2422,8 @@ static int test_capture_buffer(void)
       fail |= sc1;
     }
 
-    /* ---- Subcase 2: Typing lands in aimBuffer and the step ----
-     * S3 re-pin: the capture sink IS aimBuffer now (see forth_capture.h).
-     * Before S3 this asserted the opposite — that aimBuffer stayed empty
-     * while the text accumulated in a separately allocated buffer. */
+    /* ---- Subcase 2: Typing lands in aimBuffer and the step (the capture
+     * sink IS aimBuffer; see forth_capture.h) ---- */
     { int sc2 = 0;
       if (!fail) {
         const int16_t items[] = {
@@ -2647,7 +2590,7 @@ static int test_capture_buffer(void)
       fail |= sc6;
     }
 
-    /* ---- Subcase 7: TAM entry suspends the capture (F6-2) ---- */
+    /* ---- Subcase 7: TAM entry suspends the capture ---- */
     { int sc7 = 0;
       if (!fail) {
         runFunction(ITM_AIM);
@@ -2839,7 +2782,7 @@ static int test_capture_buffer(void)
 }
 
 /* test_capture_suspend
- * F6-2: TAM suspend/resume keeps capture alive. Six subcases verifying
+ * TAM suspend/resume keeps capture alive. Six subcases verifying
  * suspend-on-entry, resume-on-exit, tam.colon no-leak, empty-line
  * uniformity, a falsified-step canary, and arena hygiene. */
 static int test_capture_suspend(void)
@@ -2948,8 +2891,8 @@ static int test_capture_suspend(void)
                  forthTestCapState());
           sc1 = 1;
         }
-        /* F6-4: the suspended TAM commit is converted to canonical text
-         * and appended, then the native step is deleted again — no step
+        /* The suspended TAM commit is converted to canonical text and
+         * appended, then the native step is deleted again — no step
          * survives after the capture line. */
         else if (strcmp(forthTestCapText(), "5 DUP STO 05 ") != 0) {
           printf("    [1] FAIL: cap text = '%s', expected '5 DUP STO 05 '\n", forthTestCapText());
@@ -2965,11 +2908,10 @@ static int test_capture_suspend(void)
                  (int)tam.mode, (int)tam.function);
           sc1 = 1;
         }
-        /* FIX-7b re-pin: the fold now recommits the on-disk step, which may
-         * legally relocate program memory (resize), so raw-pointer identity
-         * with the pre-STO capture step is no longer the right oracle.  The
-         * stronger post-fix pin is the recommit invariant itself: currentStep
-         * is ON an ITM_FORTH step whose payload mirrors aimBuffer verbatim. */
+        /* The fold may legally relocate program memory (resize), so raw-
+         * pointer identity with the pre-STO capture step is not the right
+         * oracle. Pin the recommit invariant instead: currentStep is ON an
+         * ITM_FORTH step whose payload mirrors aimBuffer verbatim. */
         else if (currentStep[0] != 0x8B || currentStep[1] != 0x1A ||
                  currentStep[2] != 0xFD ||
                  currentStep[3] != stringByteLength(aimBuffer) ||
@@ -2988,14 +2930,11 @@ static int test_capture_suspend(void)
       fail |= sc1;
     }
 
-    /* ---- Subcase 2: Cancel round-trip ---- */
-    /* Text-loss bug fixed 2026-07-20 (code-audit finding, see
-     * DESIGN-HISTORY.md same date): expected text is now "5 DUP STO 05 "
-     * — subcase 1's F6-4 fold, preserved — matching the F6-2 packet's
-     * "text intact" requirement. forthCaptureSuspend() (manage.c) now
-     * recommits the buffer to the on-disk step before snapshotting its
-     * offset, so a suspend/resume with no intervening keystroke can no
-     * longer read a stale pre-fold snapshot. */
+    /* ---- Subcase 2: Cancel round-trip ----
+     * forthCaptureSuspend() must recommit the buffer to the on-disk step
+     * before snapshotting its offset, so a suspend/resume with no
+     * intervening keystroke doesn't read a stale pre-fold snapshot; text
+     * stays "5 DUP STO 05 " (subcase 1's fold, preserved). */
     { int sc2 = 0;
       if (!fail) {
         uint16_t stepsBefore = getNumberOfSteps();
@@ -3246,16 +3185,15 @@ static int test_capture_suspend(void)
         uint32_t after6 = getFreeRamMemory();
         uint32_t delta = (freeBefore6 > after6) ? (freeBefore6 - after6) : (after6 - freeBefore6);
         if (delta == BYTES_PER_BLOCK && freeBefore6 > after6) {
-          /* Escape valve (packet-anticipated): the FIRST ITM_AIM open
-           * inserted the capture placeholder before .END. with zero
-           * program-memory slack, growing the block allocation by one
-           * quantum; deleteStepsFromTo only ever adjusts
-           * firstFreeProgramByte/freeProgramBytes bookkeeping, it never
-           * calls resizeProgramMemory to shrink back. Pre-existing
-           * program-memory behavior, not a capture-buffer leak: the
-           * suspend/resume cycles themselves (the thing under test) are
-           * a separate 64-block allocation that free/alloc back to the
-           * same address every cycle (F6-1 established this). */
+          /* Escape valve: the FIRST ITM_AIM open inserted the capture
+           * placeholder before .END. with zero program-memory slack,
+           * growing the block allocation by one quantum; deleteStepsFromTo
+           * only ever adjusts firstFreeProgramByte/freeProgramBytes
+           * bookkeeping, it never calls resizeProgramMemory to shrink back.
+           * Pre-existing program-memory behavior, not a capture-buffer
+           * leak — the suspend/resume cycles under test are a separate
+           * 64-block allocation that frees/allocs back to the same
+           * address every cycle. */
           printf("    [6] PASS (escape valve): freeRam %u -> %u is one program-memory"
                  " resize quantum (%u B), not a capture leak\n",
                  (unsigned)freeBefore6, (unsigned)after6, (unsigned)BYTES_PER_BLOCK);
@@ -3297,7 +3235,7 @@ static int test_capture_suspend(void)
 }
 
 /* test_capture_menus
- * F6-3: a catalog pick is a text insertion. Six subcases: item-pick
+ * A catalog pick is a text insertion. Six subcases: item-pick
  * insertion, glyph-arm precedence, EXIT-ladder pop/commit/abort, picker
  * navigation, and cursor-position discipline. */
 static int test_capture_menus(void)
@@ -3329,9 +3267,8 @@ static int test_capture_menus(void)
   extern bool_t isAlphaSubmenu(uint8_t);
   extern void _closeCatalog(void);
 
-  /* Build fixture: LBL, marker (no colon-defs — the F6-5 stage owns
-   * section (a) content; this stage only needs a valid, poppable
-   * -MNU_FORTH picker on the stack). */
+  /* Build fixture: LBL, marker (no colon-defs — this stage only needs a
+   * valid, poppable -MNU_FORTH picker on the stack). */
   testProg_t p;
   tpInit(&p);
   tpLbl(&p, "F63");
@@ -3426,12 +3363,10 @@ static int test_capture_menus(void)
           sc1 = 1;
         }
       }
-      /* itemCatalogName/itemSoftmenuName both read "SIN" for ITM_sin
-       * (items.c:1859), so a field-swap mutation is silent against SIN
-       * alone (F15-4/F15-5 precedent, DESIGN-HISTORY.md 2026-07-18).
-       * ARCCOS's two fields diverge ("ARCCOS" catalog vs "ACOS" softmenu,
-       * items.c:1864, ITM_arccos=81, same CAT_FNCT|PTP_NONE class) so a
-       * field swap is observable here. */
+      /* itemCatalogName/itemSoftmenuName both read "SIN" for ITM_sin, so a
+       * field-swap mutation is silent against SIN alone. ARCCOS's two
+       * fields diverge ("ARCCOS" catalog vs "ACOS" softmenu, same
+       * CAT_FNCT|PTP_NONE class) so a field swap is observable here. */
       if (!sc1) {
         runFunction(ITM_arccos);
         if (strcmp(forthTestCapText(), "1 SIN ARCCOS ") != 0) {
@@ -3479,7 +3414,7 @@ static int test_capture_menus(void)
         char textBefore[64];
         xcopy(textBefore, forthTestCapText(), stringByteLength((char *)forthTestCapText()) + 1);
 
-        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
           testInitVariableSoftmenu(22);
           calcMode = m1e3s_; }
         showSoftmenu(-MNU_FORTH);
@@ -3517,7 +3452,7 @@ static int test_capture_menus(void)
         xcopy(textBefore, forthTestCapText(), stringByteLength((char *)forthTestCapText()) + 1);
         int16_t cursorBefore = T_cursorPos;
 
-        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
           testInitVariableSoftmenu(22);
           calcMode = m1e3s_; }
         showSoftmenu(-MNU_FORTH);
@@ -3626,7 +3561,7 @@ static int test_capture_menus(void)
   return fail;
 }
 
-/* test_capture_param_text — F6-4: a suspended TAM commit is converted to
+/* test_capture_param_text — a suspended TAM commit is converted to
  * canonical text (through the landed decoder) and inserted at the
  * capture cursor; a TAM cancel still inserts nothing. */
 static int test_capture_param_text(void)
@@ -3895,22 +3830,18 @@ static int test_capture_param_text(void)
         else if (!sc4 && getFreeRamMemory() != freeBefore4) {
           uint32_t after4 = getFreeRamMemory();
           uint32_t delta4 = (freeBefore4 > after4) ? (freeBefore4 - after4) : (after4 - freeBefore4);
-          /* Escape valve (F6-2 [6] precedent, widened for two cycles):
-           * each convert cycle temporarily inserts a real native step
-           * then deletes it again — deleteStepsFromTo is bookkeeping-
-           * only, it never calls resizeProgramMemory to shrink the
-           * block-level allocation back down (the same mechanism the
-           * F6-2 escape valve documents for a single first-open).  Two
-           * insert/delete cycles plus the first-ever AIM open on this
-           * zero-slack fixture can each cost up to one quantum.
+          /* Escape valve, widened for two cycles: each convert cycle
+           * temporarily inserts a real native step then deletes it again
+           * — deleteStepsFromTo is bookkeeping-only, it never calls
+           * resizeProgramMemory to shrink the block-level allocation back
+           * down. Two insert/delete cycles plus the first-ever AIM open
+           * on this zero-slack fixture can each cost up to one quantum,
+           * and each convert cycle also does one recommit (delete +
+           * re-insert of a now-longer step), so the bound is 6 quanta.
            * step count and pgmSize (firstFreeProgramByte) both fully
-           * restored under direct measurement confirm this is
-           * allocator quantization, not a leak, so a bounded,
-           * block-aligned, growth-only residue is tolerated instead of
-           * an unbounded one.  FIX-7b adds one recommit (delete +
-           * re-insert of a now-longer step) per convert cycle, so the
-           * bound widens from 4 to 6 quanta — still block-aligned,
-           * still growth-only, still bounded. */
+           * restored under direct measurement confirm this is allocator
+           * quantization, not a leak, so a bounded, block-aligned,
+           * growth-only residue is tolerated instead of an unbounded one. */
           if (delta4 > 0 && delta4 % BYTES_PER_BLOCK == 0
               && delta4 <= 6 * BYTES_PER_BLOCK && freeBefore4 > after4) {
             printf("    [4] PASS (escape valve): freeRam %u -> %u is %u program-memory"
@@ -3954,7 +3885,7 @@ static int test_capture_param_text(void)
   return fail;
 }
 
-/* test_capture_acceptance — F6-6: the stage's end-to-end pin. A full
+/* test_capture_acceptance — the stage's end-to-end pin. A full
  * type -> commit -> run session through the real toggle and key paths,
  * the EXIT ladder rung by rung, marker rules, the power-off/restore
  * contract, a cap round-trip, and an arena-residue sweep. */
@@ -4129,12 +4060,11 @@ static int test_capture_acceptance(void)
     /* ---- Subcase 2: EXIT ladder walk ---- */
     { int sc2 = 0;
       if (!fail) {
-        /* Reopen ON the first existing source step (def1) via EDIT — the
-         * landed F6-1 subcase-6 reopen mechanism (pemAlpha(ITM_EDIT)),
-         * which refills the buffer from the step. ITM_AIM on an
-         * already-committed, non-empty step opens plain alpha instead
-         * (it is the "start a fresh line" gesture, not "re-edit this
-         * one") — confirmed empirically, not the right drive here. */
+        /* Reopen ON the first existing source step (def1) via EDIT
+         * (pemAlpha(ITM_EDIT)), which refills the buffer from the step.
+         * ITM_AIM on an already-committed, non-empty step opens plain
+         * alpha instead (it is the "start a fresh line" gesture, not
+         * "re-edit this one") — not the right drive here. */
         fnGotoDot(3);
         if (currentLocalStepNumber != 3) {
           printf("    [2] FAIL: fnGotoDot(3) landed on step %u\n", currentLocalStepNumber);
@@ -4153,7 +4083,7 @@ static int test_capture_acceptance(void)
         }
       }
       if (!fail && !sc2) {
-        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
           testInitVariableSoftmenu(22);
           calcMode = m1e3s_; }
         showSoftmenu(-MNU_FORTH);
@@ -4258,18 +4188,16 @@ static int test_capture_acceptance(void)
       if (!fail) {
         uint32_t freeBase;
 
-        /* Fresh, minimal fixture for this subcase (F6-4 subcase-4
-         * precedent): subcases 1-3's F66 program has been through
-         * several insert/delete/toggle cycles, and program memory's
-         * block-level allocation never shrinks back down after a
-         * delete (the F6-2/F6-4 escape-valve mechanism) — that slack
-         * is where an independently-allocated capture buffer can end
-         * up sitting. A restoreCalc() resize of THAT program then
-         * legitimately reclaims blocks the capture buffer also
-         * occupies, and the double-free guard (correctly) rejects the
-         * second free — orphaning the buffer for the rest of the run.
-         * A fresh fixture with no resize history avoids the conflict;
-         * it does not touch the seam being tested. */
+        /* Fresh, minimal fixture for this subcase: subcases 1-3's program
+         * has been through several insert/delete/toggle cycles, and
+         * program memory's block-level allocation never shrinks back down
+         * after a delete — that slack is where an independently-allocated
+         * capture buffer can end up sitting. A restoreCalc() resize of
+         * THAT program then legitimately reclaims blocks the capture
+         * buffer also occupies, and the double-free guard (correctly)
+         * rejects the second free — orphaning the buffer for the rest of
+         * the run. A fresh fixture with no resize history avoids the
+         * conflict; it does not touch the seam being tested. */
         testProg_t p4;
         tpInit(&p4);
         tpLbl(&p4, "F66B");
@@ -4293,27 +4221,19 @@ static int test_capture_acceptance(void)
           forthCapClose();
 
           /* Phase 0: establish freeBase via the SAME mechanism phase 1
-           * measures against below (packet correction, traced during
-           * F6-6 authoring: a real saveCalc()/restoreCalc() round-trip
-           * here — the packet's literal "F15-2 power-off round-trip
-           * idiom" — restores numberOfAllocatedMemoryRegions/
+           * measures against below — a real saveCalc()/restoreCalc()
+           * round-trip restores numberOfAllocatedMemoryRegions/
            * allocatedMemoryRegions wholesale from the backup file
            * (saveRestoreBackup.c) independently of anything Forth- or
-           * capture-related, and was independently confirmed, by
-           * temporarily disabling it, to be the sole source of a
-           * +1-region discrepancy even with NO capture ever open in
-           * this phase. A second pre-existing saveCalc/restoreCalc
-           * issue, distinct from phase 1's — logged for the forth-core
-           * code audit alongside it. Establishing freeBase this way
-           * instead keeps the comparison meaningful: both sides of the
-           * phase 1 equality check now go through the identical
-           * forthGDictValidateRestored()/forthDictInit() path). */
+           * capture-related, which otherwise causes a spurious
+           * +1-region discrepancy. Establishing freeBase this way keeps
+           * the comparison meaningful: both sides of the phase 1
+           * equality check go through the identical
+           * forthGDictValidateRestored()/forthDictInit() path. */
           forthDictClear();   /* hygiene: fdict may hold SQ from subcase 1 —
                                 * forthDictInit() below nulls fdict.base
                                 * without freeing, so a live allocation left
-                                * here would leak silently (F6-6 authoring:
-                                * this was the suite's actual +1
-                                * numberOfAllocatedMemoryRegions source). */
+                                * here would leak silently. */
           forthGDictValidateRestored();
           forthDictInit();
           freeBase = getFreeRamMemory();
@@ -4325,32 +4245,23 @@ static int test_capture_acceptance(void)
            * case) rather than a full saveCalc()/restoreCalc() file
            * round-trip.
            *
-           * Packet correction, discovered and traced during F6-6
-           * authoring: restoreCalc() restores numberOfFreeMemoryRegions/
+           * Gap: restoreCalc() restores numberOfFreeMemoryRegions/
            * freeMemoryRegions/numberOfAllocatedMemoryRegions/
            * allocatedMemoryRegions WHOLESALE from the backup file
            * (saveRestoreBackup.c) before this seam ever runs. With a
            * capture genuinely OPEN at save time — the scenario this
-           * phase exists to test; no earlier F-series test ever
-           * exercised it — the round-trip leaves the arena in a state
-           * where this seam's forthCapClose() free is REJECTED by the
-           * double-free guard (freeListFree "Memory freeing C", traced
-           * to this exact call site), orphaning one capture buffer's
-           * worth of blocks. Reproduced identically across three
-           * independent variations (subcases 1-3's edited program,
-           * this subcase's fresh fixture, and a pre-inflated program
-           * memory footprint) with the byte delta varying between
-           * attempts (256-272 B) — a real, deterministic, pre-existing
-           * arena/restore interaction, not fixture fragmentation or a
-           * bounded quantum this stage's established escape-valve
-           * pattern can honestly cover. A full architectural fix is
-           * out of scope here ("No other product changes" — Authority)
-           * and unsafe to improvise (the orphaned block cannot be
-           * safely re-freed without risking a double-free against
-           * whatever the arena allocates into that address range
-           * next). Logged for the forth-core code audit. This
-           * subcase's actual subject — the lifecycle-reset seam
-           * closing an OPEN (not just suspended) capture — is still
+           * phase exists to test — the round-trip leaves the arena in a
+           * state where this seam's forthCapClose() free is REJECTED by
+           * the double-free guard (freeListFree "Memory freeing C"),
+           * orphaning one capture buffer's
+           * worth of blocks (256-272 B, reproduced across three independent
+           * variations) — a real, deterministic, pre-existing arena/restore
+           * interaction, not fixture fragmentation. A full architectural
+           * fix is out of scope here and unsafe to improvise (the orphaned
+           * block cannot be safely re-freed without risking a double-free
+           * against whatever the arena allocates into that address range
+           * next). This subcase's actual subject — the lifecycle-reset
+           * seam closing an OPEN (not just suspended) capture — is still
            * fully exercised and pinned below, just via the same
            * direct-call drive already proven safe for phase 2. */
           forthDictClear();   /* hygiene BEFORE opening: fdict may hold SQ from
@@ -4510,19 +4421,16 @@ static int test_capture_acceptance(void)
           sc5 = 1;
         }
         else {
-          /* Step back onto the committed 196-glyph step (findPreviousStep,
-           * the F6-1 subcase-6 pointer-walk idiom — no hardcoded
-           * fnGotoDot(N), which would need an absolute count across
-           * four prior subcases' mutations). */
+          /* Step back onto the committed 196-glyph step via findPreviousStep
+           * — no hardcoded fnGotoDot(N), which would need an absolute
+           * count across four prior subcases' mutations. */
           currentStep = findPreviousStep(currentStep);
           --currentLocalStepNumber;
           calcMode = CM_PEM;
           tam.mode = 0;
           clearSystemFlag(FLAG_ALPHA);
           tam.function = 0;
-          pemAlpha(ITM_EDIT);   /* landed F6-1 subcase-6 reopen mechanism
-                                  * (the packet's own "pemAlphaEdit(0)" name
-                                  * does not exist in the tree) */
+          pemAlpha(ITM_EDIT);
           if (forthTestCapState() != FCAP_OPEN) {
             printf("    [5] FAIL: capture not open after EDIT\n");
             sc5 = 1;
@@ -4784,7 +4692,7 @@ static int test_forth_capture_navigation(void)
   return fail;
 }
 
-/* SB-1: sim bench, capture mechanics + cancel edges (charter A2-A6, F1, F2) */
+/* Sim bench: capture mechanics + cancel edges */
 static int test_sim_bench_capture(void)
 {
   int fail = 0;
@@ -6240,7 +6148,7 @@ static int test_pem_xeq_dynmenu_no_live_exec(void)
   if (!fail) {
     currentProgramNumber = 1;
     currentStep = tpStepAddr(&p, sMarker);
-    { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+    { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
       testInitVariableSoftmenu(22);
       calcMode = m1e3s_; }
     showSoftmenu(-MNU_FORTH);
@@ -6302,7 +6210,7 @@ static int test_pem_xeq_dynmenu_no_live_exec(void)
 }
 
 
-/* test_picker_renders_labels — G3: the picker's label reaches the LCD.
+/* test_picker_renders_labels — the picker's label reaches the LCD.
  *
  * Everything else in stage G stops at the content array or at
  * dynmenuGetLabel(). This one reads the framebuffer back. lcd_buffer is
@@ -6391,7 +6299,7 @@ static int test_picker_renders_labels(void)
     currentProgramNumber = 1;
     currentStep          = beginOfProgramMemory + (progLen - 4);
 
-    calcMode = CM_PEM;   /* Stage M E3: the draws build; PEM cursor context */
+    calcMode = CM_PEM;   /* the draws build; PEM cursor context */
     showSoftmenu(-MNU_FORTH);
     showSoftmenuCurrentPart();
 
@@ -6559,7 +6467,7 @@ static int test_picker_pixel_layout(void)
       currentProgramNumber = 1;
       currentStep = beginOfProgramMemory + progLen - 4;
 
-      calcMode = CM_PEM;   /* Stage M E3: the draws build; PEM cursor context */
+      calcMode = CM_PEM;   /* the draws build; PEM cursor context */
       showSoftmenu(-MNU_FORTH);
       softmenuStack[0].firstItem = 0;
       showSoftmenuCurrentPart();
@@ -6808,21 +6716,17 @@ static int test_picker_pixel_layout(void)
   return fail;
 }
 
-/* FIX-8 (D-C2) reproducer: picking FORTH from a catalog while a capture line
- * is OPEN must commit-and-close the line, not tear down the alpha UI around a
- * live FCAP_OPEN. Before the fix, insertStepInProgram's toggle-close arm
- * cleared FLAG_ALPHA and tam.function but never called forthCapClose() or
- * cleared aimBuffer — the only close path that skipped the reset. Downstream,
- * a stale FCAP_OPEN makes tamEnterMode's suspend seam destructively recommit
- * and misroutes fnKeyExit's forthCapTextNonEmpty() resync.
+/* Picking FORTH from a catalog while a capture line is OPEN must
+ * commit-and-close the line, not tear down the alpha UI around a live
+ * FCAP_OPEN. insertStepInProgram's toggle-close arm must call
+ * forthCapClose() and clear aimBuffer, not just FLAG_ALPHA/tam.function —
+ * otherwise a stale FCAP_OPEN makes tamEnterMode's suspend seam
+ * destructively recommit and misroutes fnKeyExit's
+ * forthCapTextNonEmpty() resync.
  *
  * Drive shape mirrors test_forth_toggle_from_catalog_leaves_alpha_menu
- * (catalog-shaped runFunction dispatch), but with the capture genuinely OPEN
- * and holding text — the combination no landed test drove (T4 trace,
- * 2026-08-04).
- *
- * Escaping mutation: revert the pemCloseAlphaInput() call in the ITM_FORTH
- * arm — state stays FCAP_OPEN and aimBuffer keeps "2"; both assertions fail.
+ * (catalog-shaped runFunction dispatch), but with the capture genuinely
+ * OPEN and holding text.
  */
 static int test_forth_toggle_close_with_open_capture(void)
 {
@@ -6956,13 +6860,12 @@ static int test_forth_toggle_close_with_open_capture(void)
   return fail;
 }
 
-/* FIX-8 class test: capture-close completeness. The invariant (the CLASS the
- * bug belonged to, per the bug-fix testing rule): EVERY path that ends a
- * capture leaves the full tuple reset — forthCap.state == FCAP_CLOSED,
- * aimBuffer empty, tam.function == 0, FLAG_ALPHA clear. The instance bug was
- * one path (the E1 toggle-close arm) missing two of the four. Sweep all four
- * landed close paths through their real entry points; any future close path
- * (Stage K's E14 sites included) extends this sweep.
+/* Capture-close completeness class test. The invariant: EVERY path that
+ * ends a capture leaves the full tuple reset — forthCap.state ==
+ * FCAP_CLOSED, aimBuffer empty, tam.function == 0, FLAG_ALPHA clear. The
+ * instance bug was one path (the toggle-close arm) missing two of the
+ * four. Sweep all four landed close paths through their real entry
+ * points; any future close path extends this sweep.
  */
 static int test_capture_close_paths_reset_tuple(void)
 {
@@ -7028,13 +6931,13 @@ static int test_capture_close_paths_reset_tuple(void)
       fail = 1;
       break;
     }
-    /* K1/E14: poison the keys-mode bit so every close path in this sweep
-     * has something to clear.  forthCapClose() is the single site that
-     * clears it, and since FIX-8 every close path runs through there —
-     * this turns the class sweep into the proof of that claim. */
+    /* Poison the keys-mode bit so every close path in this sweep has
+     * something to clear. forthCapClose() is the single site that clears
+     * it, and every close path runs through there — this turns the class
+     * sweep into the proof of that claim. */
     forthCapSetKeysMode(true);
-    /* L1-1/E14: same rationale for origin — poison to INTERACTIVE (the
-     * fixture's own open via runFunction(ITM_AIM) already leaves it at
+    /* Same rationale for origin — poison to INTERACTIVE (the fixture's
+     * own open via runFunction(ITM_AIM) already leaves it at
      * FCAP_ORIGIN_PEM, which would make a missing reset unobservable). */
     forthCapSetOrigin(FCAP_ORIGIN_INTERACTIVE);
 
@@ -7110,16 +7013,14 @@ static int test_capture_close_paths_reset_tuple(void)
   return fail;
 }
 
-/* PACKET_L1_1 (C1/C2): the capture origin bit + fnForthOuter's new life as an
- * interactive-capture opener.  Numbered subcases 1-9 match the packet's C4
- * list verbatim; each is independent (its own state reset) so one failure
- * does not mask the next.
+/* The capture origin bit + fnForthOuter's new life as an interactive-
+ * capture opener. Nine independent subcases (each resets its own state).
  *
- * T9 note (subcase 2): calcModeAim's liftStack() must NOT run on this path —
- * X, Y, Z and the top-of-stack register are snapshotted with known
- * long-integer sentinels and re-checked bit-identical afterward, which would
- * catch a reintroduced lift (X would become an uninitialised dtReal34 and
- * Y/Z/T would each shift up by one register). */
+ * Subcase 2: calcModeAim's liftStack() must NOT run on this path — X, Y, Z
+ * and the top-of-stack register are snapshotted with known long-integer
+ * sentinels and re-checked bit-identical afterward, which would catch a
+ * reintroduced lift (X would become an uninitialised dtReal34 and Y/Z/T
+ * would each shift up by one register). */
 static int test_capture_origin_lifecycle(void)
 {
   extern void fnGotoDot(uint16_t);
@@ -7425,12 +7326,11 @@ static int test_capture_origin_lifecycle(void)
   fail |= scFail;
 
   /* ---- Subcases 7+8: origin rides a suspension (state level only); CLOSED
-   * reads as not-interactive.  Do NOT call forthCaptureSuspend/Resume on an
+   * reads as not-interactive. Do NOT call forthCaptureSuspend/Resume on an
    * interactive capture — forthCaptureSuspend guards only on
-   * forthCapIsOpen() (manage.c:1181) and forthCapRecommitStep()
-   * (manage.c:1173-1175) would deleteStepsFromTo whatever currentStep
-   * points at; with this fixture that is the 4-byte .END. sentinel. The
-   * real round-trip belongs to L1-F*. ---- */
+   * forthCapIsOpen(), and forthCapRecommitStep() would deleteStepsFromTo
+   * whatever currentStep points at; with this fixture that is the 4-byte
+   * .END. sentinel. ---- */
   scFail = 0;
   catalog = CATALOG_NONE;
   tam.mode = 0;
@@ -7543,23 +7443,18 @@ static int test_capture_origin_lifecycle(void)
   return fail;
 }
 
-/* PACKET_L1_1 (C4): drive each closeAim() call site reachable by a driven
- * key with an OPEN interactive capture, and confirm it closes fully — the
- * minimum close this packet ships (L1-2 replaces it with the full E8
- * ladder).  Three of the six closeAim() sites are driven here: fnKeyExit in
- * CM_AIM (reachable directly from the just-opened state) and fnKeyUp/
- * fnKeyDown (reachable once the current softmenu is non-alpha and
- * non-scrolling — see the comment at each subcase for why the bare
- * "open then arrow" gesture does NOT reach them).  The other three
- * (executeFunction's ITM_INTEGRAL/ITM_INTEGRAL_YX arm, executeFunction's
- * generic non-alpha-item arm, processKeyAction's BST/SST longpress arm) sit
- * behind multi-step gestures or longpress timing this harness does not
- * model; each calls plain `closeAim()`, whose FIRST STATEMENT is the
- * interactive close (bufferize.c, since CONSOLIDATE P6 — it was a
- * per-site `_forthCapCloseIfInteractive();` call before that, and this
- * comment said so until round 9's R9-8).  That is what makes inspection
- * adequate here: there is one guard, inside the teardown, and the driven
- * sites exercise it. */
+/* Drive each closeAim() call site reachable by a driven key with an OPEN
+ * interactive capture, and confirm it closes fully. Three of the six
+ * closeAim() sites are driven here: fnKeyExit in CM_AIM (reachable
+ * directly from the just-opened state) and fnKeyUp/fnKeyDown (reachable
+ * once the current softmenu is non-alpha and non-scrolling — see the
+ * comment at each subcase for why the bare "open then arrow" gesture does
+ * NOT reach them). The other three (executeFunction's
+ * ITM_INTEGRAL/ITM_INTEGRAL_YX arm, executeFunction's generic non-alpha-
+ * item arm, processKeyAction's BST/SST longpress arm) sit behind
+ * multi-step gestures or longpress timing this harness does not model;
+ * each calls plain `closeAim()`, whose FIRST STATEMENT is the interactive
+ * close — one guard, inside the teardown, exercised by the driven sites. */
 static int test_capture_interactive_close(void)
 {
   extern void fnForthOuter(uint16_t);
@@ -7616,19 +7511,17 @@ static int test_capture_interactive_close(void)
 
   /* fnKeyUp/fnKeyDown's closeAim() arms sit behind
    * `if(!arrowCasechange && calcMode == CM_AIM && isJMAlphaSoftmenu(menuId))`
-   * (keyboard.c ~:4652/:4871) — and `arrowCasechange` is `#define`d `false`
-   * (defines.h:500), so that condition is `calcMode == CM_AIM &&
-   * isJMAlphaSoftmenu(menuId)`, unconditionally true right after
-   * forthEnterAimSurfaceNoLift() shows -MNU_ALPHA.  A driven fnKeyUp/
-   * fnKeyDown from the ordinary just-opened state therefore takes the
-   * arrow-cursor arm (fnT_ARROW), never reaching closeAim() — true for a
-   * NATIVE alpha session too, not something L1-1 introduces.  Reaching the
-   * closeAim() arm needs the current softmenu to be non-alpha AND
-   * non-scrolling while calcMode stays CM_AIM: showSoftmenu(-MNU_HOME) gives
-   * both (softmenuId 0 is never alpha, and currentSoftmenuScrolls() requires
-   * menuId > 1 — softmenus.c:4169) — a real reachable combination (e.g. a
-   * catalog or menu selection landing on HOME while typing), just not the
-   * bare "open then press the arrow" gesture. */
+   * — and `arrowCasechange` is `#define`d `false`, so that condition is
+   * `calcMode == CM_AIM && isJMAlphaSoftmenu(menuId)`, unconditionally true
+   * right after forthEnterAimSurfaceNoLift() shows -MNU_ALPHA. A driven
+   * fnKeyUp/fnKeyDown from the ordinary just-opened state therefore takes
+   * the arrow-cursor arm (fnT_ARROW), never reaching closeAim() — true for
+   * a NATIVE alpha session too. Reaching the closeAim() arm needs the
+   * current softmenu to be non-alpha AND non-scrolling while calcMode stays
+   * CM_AIM: showSoftmenu(-MNU_HOME) gives both (softmenuId 0 is never
+   * alpha, and currentSoftmenuScrolls() requires menuId > 1) — a real
+   * reachable combination (e.g. a catalog or menu selection landing on HOME
+   * while typing), just not the bare "open then press the arrow" gesture. */
   scFail = 0;
   calcMode = CM_NORMAL;
   clearSystemFlag(FLAG_ALPHA);
@@ -7699,18 +7592,16 @@ static int test_capture_interactive_close(void)
   return fail;
 }
 
-/* PACKET_L1_2: the REPL — ENTER runs the line and reopens, EXIT unwinds the
- * ladder, and the input cap holds on both insertion seams.  All typing goes
- * through the real key path (runFunction/processKeyAction/executeFunction),
- * never direct aimBuffer writes — that is the whole point of C5.
+/* The REPL — ENTER runs the line and reopens, EXIT unwinds the ladder, and
+ * the input cap holds on both insertion seams. All typing goes through the
+ * real key path (runFunction/processKeyAction/executeFunction), never
+ * direct aimBuffer writes.
  *
- * Subcase 9 (a word whose execution rewrites aimBuffer, pinning the §3.3.2
- * pre-run copy independently of the error path) was searched for and not
- * found: every aimBuffer write in this tree lives in the UI input-handling
- * code (keyboard.c/manage.c/bufferize.c), reached only by driving a key —
- * never by a word forthOuterInterpret executes via XEQ dispatch. Per the
- * packet's own fallback, mutation 4 is pinned by subcase 3 alone (see the
- * mutation-testing notes in the L1-2 report). */
+ * A subcase pinning the §3.3.2 pre-run copy via a word whose execution
+ * rewrites aimBuffer was searched for and not found: every aimBuffer write
+ * in this tree lives in the UI input-handling code
+ * (keyboard.c/manage.c/bufferize.c), reached only by driving a key — never
+ * by a word forthOuterInterpret executes via XEQ dispatch. */
 static int test_capture_interactive_repl(void)
 {
   extern void fnForthOuter(uint16_t);
@@ -7993,11 +7884,10 @@ static int test_capture_interactive_repl(void)
   if (!scFail) printf("    [4] PASS: EXIT closes without committing \"ABC\" to X\n");
   fail |= scFail;
 
-  /* ---- Subcase 5: ladder rung 1 — INVERTED by N1-5 (keys-first).
-   * Keys input is the console's GROUND state now, so rung 1 unwinds the
-   * ALPHA EXCURSION back to keys and restores the FWRD home row.  It used to
-   * unwind keys into alpha, which after the flip would be a step AWAY from
-   * the ground.  The capture staying open is unchanged. ---- */
+  /* ---- Subcase 5: ladder rung 1 (keys-first). Keys input is the
+   * console's GROUND state, so rung 1 unwinds the ALPHA EXCURSION back to
+   * keys and restores the FWRD home row. The capture staying open is
+   * unchanged. ---- */
   scFail = 0;
   L12_RESET();
   fnForthOuter(NOPARAM);
@@ -8140,8 +8030,8 @@ static int test_capture_interactive_repl(void)
   } else {
     /* Prime the buffer directly to 196 '1's rather than through the real key
      * path: bufferize.c's addItemToBuffer bounds non-EIM CM_AIM insertion by
-     * on-screen PIXEL WIDTH (bufferize.c:597, stringWidthWithLimitC47), not
-     * by byte/glyph count. 196 repeated WIDE glyphs (e.g. 'A') hit that
+     * on-screen PIXEL WIDTH (stringWidthWithLimitC47), not by byte/glyph
+     * count. 196 repeated WIDE glyphs (e.g. 'A') hit that
      * unrelated native cap around glyph 181 — well short of our 196-glyph
      * Forth cap — and a narrow digit still hits it under 256 total insertion
      * attempts once seam 1's guard is removed (verified: 'A' priming plus a
@@ -8267,15 +8157,13 @@ static int test_capture_interactive_repl(void)
 }
 
 /* ==================================================================
- * PACKET_L1_3 (C6) — test_capture_interactive_divert.  The interactive
- * divert seam: direct function items, catalog picks and the FWRD picker
- * insert their names as TEXT into an open interactive capture instead of
- * executing; keys mode works interactively.  Parameterized items fall
- * through to TAM unchanged (L-R4 (b) — the fold is L1-F*).
+ * test_capture_interactive_divert. The interactive divert seam: direct
+ * function items, catalog picks and the FWRD picker insert their names as
+ * TEXT into an open interactive capture instead of executing; keys mode
+ * works interactively. Parameterized items fall through to TAM unchanged.
  *
  * Each subcase drives a real entry point (runFunction, determineItem,
- * executeFunction) exactly as L1-1/L1-2's tests do; none primes the
- * outcome under test.
+ * executeFunction); none primes the outcome under test.
  * ================================================================== */
 static int test_capture_interactive_divert(void)
 {
@@ -8394,13 +8282,13 @@ static int test_capture_interactive_divert(void)
       printf("    [3a] FIXTURE FAIL: interactive open did not take\n");
       scFail = 1;
     } else {
-      /* N1-5: the capture now OPENS in keys input, so this subcase — which is
+      /* The capture now OPENS in keys input, so this subcase — which is
        * about the E10/E11 TOGGLE, not about the default — enters the alpha
-       * excursion first.  AUDIT C17 fixture repair: entered via the REAL
-       * toggle, not by forcing keysMode and hand-pushing -MNU_ALPHA — the
-       * hand-push created a SEPARATE unregistered row above the console's
-       * frame, which frame ownership correctly treats as user-stacked (the
-       * toggle declines it) rather than as the excursion (the C22 rule). */
+       * excursion first, via the REAL toggle, not by forcing keysMode and
+       * hand-pushing -MNU_ALPHA: the hand-push would create a SEPARATE
+       * unregistered row above the console's frame, which frame ownership
+       * correctly treats as user-stacked (the toggle declines it) rather
+       * than as the excursion. */
       runFunction(ITM_AIM);
       if (forthCapKeysMode() || currentMenu() != -MNU_ALPHA) {
         printf("    [3a] FIXTURE FAIL: the toggle did not enter the alpha"
@@ -8581,9 +8469,9 @@ static int test_capture_interactive_divert(void)
   if (!scFail) printf("    [4] PASS: FCNS catalog pick inserts text, capture stays open in CM_AIM\n");
   fail |= scFail;
 
-  /* ---- Subcase 5: dynamic-menu XEQ inserts (T8.4 hole) — the FWRD
-   * picker's pick, then items.c:699's ITM_XEQ dynamic-menu arm driven
-   * directly, both insert text and execute nothing. ---- */
+  /* ---- Subcase 5: dynamic-menu XEQ inserts — the FWRD picker's pick,
+   * then the ITM_XEQ dynamic-menu arm driven directly, both insert text
+   * and execute nothing. ---- */
   scFail = 0;
   L13_RESET();
   lastErrorCode = ERROR_NONE;
@@ -8690,7 +8578,7 @@ static int test_capture_interactive_divert(void)
         forthCapOpenInteractive();
         calcMode = CM_AIM;
 
-        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+        { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
           testInitVariableSoftmenu(22);
           calcMode = m1e3s_; }
 
@@ -8728,8 +8616,7 @@ static int test_capture_interactive_divert(void)
   if (!scFail) printf("    [6] PASS: interactively FOO (program text) is absent, BAR (dictionary) is present\n");
   fail |= scFail;
 
-  /* ---- Subcase 8: parameterized items fall through to TAM unchanged
-   * (L-R4 (b) — the fold is L1-F*, not this packet). ---- */
+  /* ---- Subcase 8: parameterized items fall through to TAM unchanged. ---- */
   scFail = 0;
   L13_RESET();
   fnForthOuter(NOPARAM);
@@ -8771,17 +8658,14 @@ static int test_capture_interactive_divert(void)
   return fail;
 }
 
-/* FIX-7 (D-C1) reproducer: the F6-4 fold's committed text must survive its
- * own ENTER commit. decodeOneStep renders quoted names with the directional
- * glyphs STD_LEFT/RIGHT_SINGLE_QUOTE; before the fix the compiler accepted
- * only ASCII 0x27, so the folded "2 XEQ <glyph>WA<glyph>" line — the exact
- * text the landed test_capture_param_text subcase 2 pins — was REFUSED at
- * ENTER by forthCheckSourceLine's XEQ arm (E9 tier 1). Non-XEQ named forms
- * were worse: check mode skips item branches, so they committed silently and
- * failed at run (class test below).
- *
- * Escaping mutation: revert the quote-glyph acceptance in parseQuotedName /
- * forthParseXeqForm — ENTER refuses again and the assertions fail.
+/* The fold's committed text must survive its own ENTER commit.
+ * decodeOneStep renders quoted names with the directional glyphs
+ * STD_LEFT/RIGHT_SINGLE_QUOTE; forthCheckSourceLine's XEQ arm (E9 tier 1)
+ * must accept those glyphs, not just ASCII 0x27, or the folded
+ * "2 XEQ <glyph>WA<glyph>" line — the exact text test_capture_param_text
+ * subcase 2 pins — gets REFUSED at ENTER. Non-XEQ named forms are worse:
+ * check mode skips item branches, so they'd commit silently and fail at
+ * run (class test below).
  */
 static int test_forth_fold_commit_recompiles(void)
 {
@@ -8838,7 +8722,7 @@ static int test_forth_fold_commit_recompiles(void)
   }
 
   if (!fail) {
-    /* The landed F6-4 drive: type "2 ", fold XEQ 'WA' through real TAM. */
+    /* Type "2 ", fold XEQ 'WA' through real TAM. */
     runFunction(ITM_2);
     runFunction(ITM_SPACE);
     runFunction(ITM_XEQ);
@@ -8906,14 +8790,14 @@ static int test_forth_fold_commit_recompiles(void)
   return fail;
 }
 
-/* FIX-7 class test: emit/accept quote parity. The class (bug-fix testing
- * rule): every glyph-quoted spelling decodeOneStep can render — named form
- * 253, indirect variable 255, system flag 250, XEQ name — must be accepted
- * by the compiler exactly as its ASCII-0x27 twin is, emitting the identical
- * marker encoding. Sweeps every quoted form in forthParamMarkerMask's
- * repertoire plus the structural XEQ, compile-state (interpret shares the
- * one bounded-core dispatch body, DESIGN-HISTORY 2026-07-19). A negative
- * subcase pins that an unbalanced glyph quote still errors.
+/* Emit/accept quote parity class test: every glyph-quoted spelling
+ * decodeOneStep can render — named form 253, indirect variable 255, system
+ * flag 250, XEQ name — must be accepted by the compiler exactly as its
+ * ASCII-0x27 twin is, emitting the identical marker encoding. Sweeps every
+ * quoted form in forthParamMarkerMask's repertoire plus the structural
+ * XEQ, compile-state (interpret shares the one bounded-core dispatch
+ * body). A negative subcase pins that an unbalanced glyph quote still
+ * errors.
  */
 static int test_quote_glyph_accept_parity(void)
 {
@@ -9039,25 +8923,21 @@ static int test_quote_glyph_accept_parity(void)
   return fail;
 }
 
-/* FIX-9 (D-C3) reproducer + class test: softmenu-stack reconciliation across
- * TAM suspend/resume. A catalog-initiated TAM during capture necessarily has
- * a catalog-family menu on the stack when tamEnterMode pushes the TAM menu;
- * _closeCatalog declines to pop under a TAM menu, leaveTamModeIfEnabled pops
- * only the TAM menu, and (pre-fix) forthCaptureResume pushed -MNU_ALPHA with
- * no stack-wide check — leaving -MNU_CATALOG buried. The NEXT softkey
- * dispatch's _closeCatalog() then scans the whole stack, finds the buried
- * entry, sees -MNU_ALPHA on top — which is itself on CatalogMenus[]
- * (keyboard.c) — and pops the capture's menu out from under it. Trap-#6's
- * exact shape; the E1 arm got the bounded drain, the resume seam had none.
+/* Softmenu-stack reconciliation across TAM suspend/resume, class test.
+ * A catalog-initiated TAM during capture necessarily has a catalog-family
+ * menu on the stack when tamEnterMode pushes the TAM menu; _closeCatalog
+ * declines to pop under a TAM menu, leaveTamModeIfEnabled pops only the
+ * TAM menu, so forthCaptureResume pushing -MNU_ALPHA needs a stack-wide
+ * check — otherwise -MNU_CATALOG stays buried. The NEXT softkey dispatch's
+ * _closeCatalog() then scans the whole stack, finds the buried entry, sees
+ * -MNU_ALPHA on top — which is itself on CatalogMenus[] — and pops the
+ * capture's menu out from under it.
  * Structural/defensive today (FCNS is not reachable mid-capture from the
- * standard alpha keyboard); Stage K's column swap makes it a real key path.
+ * standard alpha keyboard).
  *
- * Subcase 1 is the reproducer (red pre-fix at the post-_closeCatalog menu
- * check); subcase 2 is the negative control — a plain (non-catalog) STO
+ * Subcase 1 is the reproducer (the post-_closeCatalog menu check);
+ * subcase 2 is the negative control — a plain (non-catalog) STO
  * round-trip must be unaffected by the drain.
- *
- * Escaping mutation: revert the drain loop in forthCaptureResume — subcase 1
- * loses -MNU_ALPHA after _closeCatalog and fails.
  */
 static int test_resume_drains_buried_catalog(void)
 {
@@ -9225,7 +9105,7 @@ static int test_resume_drains_buried_catalog(void)
  * to prove a reset fires.
  * ================================================================== */
 
-/* T1 (E10 / E12.1): the column swap, at the resolution layer.
+/* The column swap, at the resolution layer.
  *
  * Differential and layout-independent: the ALPHA-gesture row is located
  * in the live kbd_std table by its normal-column fShifted, and every
@@ -9233,9 +9113,9 @@ static int test_resume_drains_buried_catalog(void)
  * cannot silently invalidate this test, and no key number or aim-column
  * item id is hard-coded.
  *
- * Escaping mutation: delete `&& !(tam.function == ITM_FORTH &&
- * forthCapKeysMode())` from the alpha-branch condition (C2a) — sc2 then
- * resolves the aim column instead of the row's primary. */
+ * The alpha-branch condition must include
+ * `&& !(tam.function == ITM_FORTH && forthCapKeysMode())` — otherwise
+ * sc2 would resolve the aim column instead of the row's primary. */
 static int test_keys_mode_resolution(void)
 {
   extern void fnGotoDot(uint16_t);
@@ -9414,15 +9294,16 @@ static int test_keys_mode_resolution(void)
   return fail;
 }
 
-/* T2 (E10/E11 + E6): the toggle arm, through the real dispatch.
+/* The toggle arm, through the real dispatch.
  *
- * The gesture is driven as runFunction(ITM_AIM) — the same item T1 proved
- * the keyboard now resolves — so the arm is exercised end to end rather
- * than by poking the bit.  sc1 also pins the per-key recommit invariant:
- * a toggle must not touch the buffer or the on-disk step.
+ * The gesture is driven as runFunction(ITM_AIM) — the same item the
+ * previous test proved the keyboard now resolves — so the arm is
+ * exercised end to end rather than by poking the bit. sc1 also pins the
+ * per-key recommit invariant: a toggle must not touch the buffer or the
+ * on-disk step.
  *
- * Escaping mutation: drop forthCapIsOpen() from the C4 gate — sc3's E6
- * re-entry becomes a toggle and the capture never reopens. */
+ * The gate must include forthCapIsOpen() — otherwise sc3's re-entry
+ * becomes a toggle and the capture never reopens. */
 static int test_keys_mode_toggle_arm(void)
 {
   extern void fnGotoDot(uint16_t);
@@ -9606,13 +9487,12 @@ static int test_keys_mode_toggle_arm(void)
   return fail;
 }
 
-/* T3 (E12.2 + the E13 interim): the CM_PEM navigation guards, through
- * processKeyAction.  These arms are unreachable while the aim columns
- * are up; keys mode makes them real, and no navigation may leave a
- * capture OPEN behind it.
+/* The CM_PEM navigation guards, through processKeyAction. These arms are
+ * unreachable while the aim columns are up; keys mode makes them real,
+ * and no navigation may leave a capture OPEN behind it.
  *
- * Escaping mutation: delete the ITM_RS guard — sc1's capture stays open
- * and "STOP " lands as text, so the native 0x46 step never appears. */
+ * The ITM_RS guard must fire — otherwise sc1's capture stays open and
+ * "STOP " lands as text, so the native 0x46 step never appears. */
 static int test_keys_mode_nav_guards(void)
 {
   extern void fnGotoDot(uint16_t);
@@ -9903,17 +9783,15 @@ static int test_keys_mode_nav_guards(void)
  * ALPHA-gesture toggle.
  * ================================================================== */
 
-/* T1 (C1): the class test for the token-boundary guard.
+/* The class test for the token-boundary guard.
  *
  * The claim lives in forthCapInsertName, so it is exercised through the
- * two callers that reach it directly: the F6-3 item arm (driven as a
- * real function press with keys mode on) and the FWRD picker.  Three
+ * two callers that reach it directly: the catalog item arm (driven as a
+ * real function press with keys mode on) and the FWRD picker. Three
  * cursor preconditions cover the whole decision — line start, a
  * non-space byte before the cursor, and a space before the cursor,
- * which must NOT gain a second one.
- *
- * Escaping mutation: drop the `lead` logic from C1 — subcase 2 reads
- * "42SIN " instead of "42 SIN ". */
+ * which must NOT gain a second one. The `lead` logic must run —
+ * otherwise subcase 2 reads "42SIN " instead of "42 SIN ". */
 static int test_insert_token_boundary(void)
 {
   extern void   fnGotoDot(uint16_t);
@@ -10084,7 +9962,7 @@ static int test_insert_token_boundary(void)
     else {
       currentProgramNumber = 1;
       currentStep = beginOfProgramMemory + 4;         /* the SQ definition */
-      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
         testInitVariableSoftmenu(22);
         calcMode = m1e3s_; }
 
@@ -10175,20 +10053,15 @@ static int test_insert_token_boundary(void)
   return fail;
 }
 
-/* CONSOLIDATE P2: the truth table of the insert-name eligibility predicate.
+/* The truth table of the insert-name eligibility predicate.
  *
- * The two forked copies this replaced disagreed on ENTER / EXIT / BACKSPACE /
- * R-S, and the disagreement was correct: pemAlpha's earlier arms consume
- * those four before its copy runs, while runFunction's divert sees the raw
- * key stream and has to exclude them itself.  That is what the `interactive`
- * argument carries, so the ENTER row below is asymmetric ON PURPOSE — it is
- * an artifact of the site split, not of the item.
+ * ENTER / EXIT / BACKSPACE / R-S are asymmetric ON PURPOSE: pemAlpha's
+ * earlier arms consume those four before its own copy runs, while
+ * runFunction's divert sees the raw key stream and has to exclude them
+ * itself via the `interactive` argument — an artifact of the site split,
+ * not of the item.
  *
- * A pure predicate over indexOfItems: no fixture, no capture, no program.
- *
- * Escaping mutation: drop the `interactive &&` exclusions from
- * forthCapNameInsertEligible — subcase 2 reads eligible(ITM_ENTER, true) as
- * true and reddens. */
+ * A pure predicate over indexOfItems: no fixture, no capture, no program. */
 static int test_insert_name_eligibility(void)
 {
   int fail = 0;
@@ -10390,16 +10263,15 @@ static int test_keys_digits_then_function(void)
   return fail;
 }
 
-/* T3 (C3 / E12.4): the new first rung of the EXIT ladder.
+/* The first rung of the EXIT ladder.
  *
  * The claim is one level per press: EXIT in keys mode returns to alpha
  * input and does nothing else, and the SECOND press then does exactly
  * what EXIT has always done on that line — abort when empty, commit when
- * there is text.  Both halves are needed: without the second press the
- * rung could be swallowing a level rather than adding one.
- *
- * Escaping mutation: remove the C3 rung — the first press commits or
- * aborts, so the capture is gone one press early. */
+ * there is text. Both halves are needed: without the second press the
+ * rung could be swallowing a level rather than adding one. This rung must
+ * be present — otherwise the first press commits or aborts, so the
+ * capture is gone one press early. */
 static int test_exit_ladder_keys_rung(void)
 {
   extern void fnGotoDot(uint16_t);
@@ -10566,16 +10438,13 @@ static int test_exit_ladder_keys_rung(void)
   return fail;
 }
 
-/* T4 (C4 / E12.3): the two residuals the normal columns expose.
+/* Two residuals the normal columns expose.
  *
- * (1) EEX carries the softmenu name "EEX" (items.c row 990), three
- *     letters the number grammar cannot read — it accepts e/E only.
+ * (1) EEX carries the softmenu name "EEX", three letters the number
+ *     grammar cannot read — it accepts e/E only. A map must translate it,
+ *     or subcase 1 reads "1EEX5".
  * (2) The numlock translation table is keyed on the AIM columns, so it
- *     has no business rewriting the normal-column ids keys mode feeds it.
- *
- * Escaping mutations: remove the C4a map — subcase 1 reads "1EEX5";
- * remove the C4b guard — subcase 2 is the escape-valve candidate, since
- * the table may simply hold no row for a normal-column digit. */
+ *     must not rewrite the normal-column ids keys mode feeds it. */
 static int test_keys_eex_and_numlock(void)
 {
   extern void fnGotoDot(uint16_t);
@@ -10747,24 +10616,19 @@ static int test_keys_eex_and_numlock(void)
 }
 
 /* ==================================================================
- * K3 (Stage K packet 3) — keys-mode persistence across the TAM
- * round-trip.  E13 proper: the sub-mode the user keyed a parameterized
- * item from comes back with the line, and E14 keeps an abandoned
- * suspension from leaking the bit into the next capture.
+ * Keys-mode persistence across the TAM round-trip. The sub-mode the
+ * user keyed a parameterized item from comes back with the line, and an
+ * abandoned suspension must not leak the bit into the next capture.
  *
- * Same discipline as K1/K2: the capture is opened by driving it, the
- * bit is only ever set by the real ALPHA-gesture toggle, and the TAM
- * round-trip runs through tamProcessInput / fnKeyExit.
+ * Same discipline as the earlier keys-mode tests: the capture is opened
+ * by driving it, the bit is only ever set by the real ALPHA-gesture
+ * toggle, and the TAM round-trip runs through tamProcessInput / fnKeyExit.
  * ================================================================== */
 
-/* T1 (C1+C2+C3): a parameterized item keyed in keys mode returns to
- * keys mode.  Three sequential subcases over one capture: the bit
- * survives the suspension, it survives the reopen the resume performs,
- * and the toggle is still symmetric afterwards.
- *
- * Escaping mutations: restore the C1 interim clear (sc1 red); drop
- * C2's save/restore (sc2 red); make C3's push unconditional (sc2 red
- * on the menu). */
+/* A parameterized item keyed in keys mode returns to keys mode. Three
+ * sequential subcases over one capture: the bit survives the suspension,
+ * it survives the reopen the resume performs, and the toggle is still
+ * symmetric afterwards. */
 static int test_keys_tam_roundtrip(void)
 {
   extern void fnGotoDot(uint16_t);
@@ -11039,12 +10903,10 @@ static int test_alpha_tam_roundtrip_unchanged(void)
   return fail;
 }
 
-/* T3 (C4/E14): with the bit now riding the suspension, an ABANDONED
- * suspension must not leak it into the next capture.  Driven through
- * the same falsified-step canary test_capture_suspend [5] uses: stomp
- * the saved step's opcode, then hit the resume choke point.
- *
- * Escaping mutation: revert C4 — the bit survives the abandon. */
+/* With the bit now riding the suspension, an ABANDONED suspension must
+ * not leak it into the next capture. Driven through the same
+ * falsified-step canary test_capture_suspend [5] uses: stomp the saved
+ * step's opcode, then hit the resume choke point. */
 static int test_abandon_clears_keys_bit(void)
 {
   extern void fnGotoDot(uint16_t);
@@ -11202,7 +11064,7 @@ static int k4_reg_is_longint(calcRegister_t reg, int32_t val)
   return v == val;
 }
 
-/* A1 — the stage's headline story, driven end to end.
+/* The stage's headline story, driven end to end.
  *
  * ": SQ DUP " is typed on the alpha keyboard; the multiply is pressed on
  * the PHYSICAL key (located differentially in kbd_std by its normal
@@ -11211,15 +11073,11 @@ static int k4_reg_is_longint(calcRegister_t reg, int32_t val)
  * typed on the relocked line; EXIT commits and closes; the label is then
  * XEQ'd and X must be 16.
  *
- * One assertion chain covers mixed-sub-mode entry, the K2 token
- * boundary, glyph-name resolution of the keys-inserted multiply (the
- * item's name is STD_CROSS, which is also the Forth primitive's name),
- * the commit, and execution.  Nothing here is layout-dependent: the key
- * row is found by table search, not by key number.
- *
- * Escaping mutation: disable K1's toggle arm (M1) — the ALPHA gesture
- * stops toggling, the multiply key types a letter instead, and the
- * definition never compiles. */
+ * One assertion chain covers mixed-sub-mode entry, the token boundary,
+ * glyph-name resolution of the keys-inserted multiply (the item's name
+ * is STD_CROSS, which is also the Forth primitive's name), the commit,
+ * and execution. Nothing here is layout-dependent: the key row is found
+ * by table search, not by key number. */
 static int test_k4_mixed_input_definition(void)
 {
   extern void fnGotoDot(uint16_t);
@@ -11460,15 +11318,12 @@ static int test_k4_mixed_input_definition(void)
   return fail;
 }
 
-/* A2 — a line entered entirely on the physical keys.
+/* A line entered entirely on the physical keys.
  *
- * 4, 2, STO, then the TAM digits 0 and 0.  The fold has to put the K2
+ * 4, 2, STO, then the TAM digits 0 and 0. The fold has to put a
  * separator between the digits and the folded name ("42 STO 00 ", never
  * "42STO 00 "), the line has to commit, and the program has to actually
- * store 42 into R00 when it runs.
- *
- * Escaping mutation: force K2's `lead` to 0 (M2) — the fold glues the
- * name to the digits and the committed line stops being a program. */
+ * store 42 into R00 when it runs. */
 static int test_k4_keys_only_line(void)
 {
   extern void fnGotoDot(uint16_t);
@@ -12183,15 +12038,14 @@ static int test_k4_arena_sweep(void)
 
 
 /* ==================================================================
- * PACKET_L1_H (C5) — test_history_program.  The FHIST program: push,
- * cap, evict, recall.
+ * test_history_program. The FHIST program: push, cap, evict, recall.
  *
  * Each subcase builds its own program-memory fixture via the tp*
  * builder + writeTestProgram (or via real forthHistoryPush/Ensure calls
  * on the pristine baseline), and calls cleanupTestProgram() before the
  * next — same idiom as test_forth_capture_navigation and the picker
- * tests above.  Subcase 0 is a fixture/empirical-verification step (name
- * collision, the two f-shifted item ids); subcases 1-9 are C5.1-C5.9.
+ * tests above. Subcase 0 is a fixture/empirical-verification step (name
+ * collision, the two f-shifted item ids).
  * ================================================================== */
 static int test_history_program(void)
 {
@@ -12286,7 +12140,7 @@ static int test_history_program(void)
             int mode;
             sprintf(kbUp, "%02d", upRow);
             sprintf(kbDown, "%02d", downRow);
-            /* N1-5 (N-T4) STRENGTHENS this row to BOTH input modes.
+            /* This row is strengthened to BOTH input modes.
              *
              * The recall gesture lives on CHR_caseUP/CHR_caseDN, which are
              * the AIM f-column — so before the flip it was reachable only in
@@ -12946,11 +12800,10 @@ static int test_history_program(void)
 }
 
 
-/* L1-F1 (C6): total step count (LBL..END inclusive) of FHIST, or 0 if it
- * does not exist yet.  Independent of currentProgramNumber on purpose —
- * getNumberOfSteps() is keyed off that global (manage.c:2774-2787), which
- * is exactly the coupling C6.9/Mutation-1 probe below, so counting must not
- * go through it. */
+/* Total step count (LBL..END inclusive) of FHIST, or 0 if it does not
+ * exist yet. Independent of currentProgramNumber on purpose —
+ * getNumberOfSteps() is keyed off that global, which is exactly the
+ * coupling probed below, so counting must not go through it. */
 static uint16_t _tfcFhistStepCount(void)
 {
   uint16_t prog = forthHistoryProgram();
@@ -13022,8 +12875,8 @@ static int test_fold_context(void)
 
       numBefore     = getNumberOfSteps();
       /* OFFSETS, not raw pointers: _insertInProgram rebases every program
-       * pointer when it grows the underlying region (manage.c:723-733) —
-       * legitimate relocation the capture-step insert can still trigger
+       * pointer when it grows the underlying region — legitimate
+       * relocation the capture-step insert can still trigger
        * even with FHIST pre-existing, not a defect.  A raw currentStep
        * snapshot would be stale by construction across that; comparing the
        * offset from beginOfProgramMemory is what actually survives it. */
@@ -13443,9 +13296,9 @@ static int test_fold_context(void)
         scFail = 1;
       }
       {
-        /* Replicates addStepInProgram's own pre-move guard (manage.c:2664)
-         * verbatim -- the mechanism this subcase pins -- without invoking
-         * the full TAM dispatch (F2's scope, not this packet's). */
+        /* Replicates addStepInProgram's own pre-move guard verbatim -- the
+         * mechanism this subcase pins -- without invoking the full TAM
+         * dispatch (out of scope here). */
         uint8_t *capStep = currentStep;
         uint8_t *afterCap = findNextStep(capStep);
         aimBuffer[0] = 0;
@@ -13549,9 +13402,9 @@ static int test_fold_context(void)
 
 
 /* ==================================================================
- * PACKET_L1_F2 — the three tam.c seams + determineItem fix.
+ * The three tam.c seams + determineItem fix.
  *
- * Wires F1's inert fold context into ui/tam.c: Seam 1 (tamEnterMode
+ * Wires the inert fold context into ui/tam.c: Seam 1 (tamEnterMode
  * materialises+arms+suspends), Seam 2 (leaveTamModeIfEnabled resumes+
  * sweeps, unchanged for its own resume — only the trigger condition
  * widens), and Seam 3 (the calcMode bracket in tamProcessInput, where
@@ -13707,12 +13560,12 @@ static int test_fold_seams(void)
   FS_RESET();
   cleanupTestProgram();
 
-  /* ---- Subcase 3 (C5.3): TAM digits resolve as digits. With the fold
-   * pending, determineItem returns key->primaryTam for a digit key, not
-   * a letter.  Keys mode OFF (E10-E12's default): with keys mode ON the
-   * L1-3 conjunct already excludes the CM_AIM arm for a digit key, so
-   * OFF is the state the new C4 conjunct actually has to cover -- a
-   * parameterized item (STO) opens TAM from plain alpha-input too. ---- */
+  /* ---- Subcase 3: TAM digits resolve as digits. With the fold pending,
+   * determineItem returns key->primaryTam for a digit key, not a letter.
+   * Keys mode OFF (the default): with keys mode ON the existing conjunct
+   * already excludes the CM_AIM arm for a digit key, so OFF is the state
+   * that actually needs covering -- a parameterized item (STO) opens TAM
+   * from plain alpha-input too. ---- */
   scFail = 0;
   FS_RESET();
   {
@@ -13737,7 +13590,7 @@ static int test_fold_seams(void)
         sprintf(kb, "%02d", zIdx);
 
         forthCapOpenInteractive();
-        forthCapSetKeysMode(false);   /* explicit: E10-E12's default */
+        forthCapSetKeysMode(false);   /* explicit: the default */
         xcopy(aimBuffer, "42", 2); aimBuffer[2] = 0;
 
         runFunction(ITM_STO);
@@ -13897,8 +13750,8 @@ static int test_fold_seams(void)
   FS_RESET();
   cleanupTestProgram();
 
-  /* ---- Subcase 6 (C5.6): PEM is untouched -- re-run the landed F6-2/
-   * F6-4 suite unchanged. ---- */
+  /* ---- Subcase 6: PEM is untouched -- re-run the capture-suspend/
+   * capture-param-text suite unchanged. ---- */
   scFail = 0;
   scFail |= test_capture_suspend();
   scFail |= test_capture_param_text();
@@ -13906,12 +13759,12 @@ static int test_fold_seams(void)
   else printf("    [6] FAIL: F6-2/F6-4 suite regressed\n");
   fail |= scFail;
 
-  /* ---- Subcase 7 (C5.7): the bracket does not leak. calcMode == CM_AIM
-   * after every subcase above (already asserted individually), plus the
-   * error path: force lastErrorCode inside the commit (the real guard at
-   * ui/tam.c:1102 skips addStepInProgram whenever lastErrorCode != 0,
-   * which is the actual, drivable "error occurred inside the commit"
-   * shape in this tree) and confirm the bracket still restores CM_AIM. ---- */
+  /* ---- Subcase 7: the bracket does not leak. calcMode == CM_AIM after
+   * every subcase above (already asserted individually), plus the error
+   * path: force lastErrorCode inside the commit (the real guard skips
+   * addStepInProgram whenever lastErrorCode != 0, which is the actual,
+   * drivable "error occurred inside the commit" shape in this tree) and
+   * confirm the bracket still restores CM_AIM. ---- */
   scFail = 0;
   FS_RESET();
   {
@@ -13947,14 +13800,14 @@ static int test_fold_seams(void)
   FS_RESET();
   cleanupTestProgram();
 
-  /* ---- Subcase A (the re-entry chain, C1's own contract). tamEnterMode
-   * is RE-ENTERED from inside a bracketed _tamProcessInput: XEQ 'STO'
-   * does not resolve as a label, falls to the native CAT_FNCT scan
-   * (ui/tam.c ~987), and calls runFunction(ITM_STO) reentrantly while the
-   * OUTER XEQ fold's bracket is still forged CM_PEM.  Assert the capture
-   * ends up OPEN, not stuck SUSPENDED, once everything unwinds -- L1-1's
-   * origin bit (forthCapIsInteractive()) must stay true across the
-   * suspension for Seam 1's guard to arm the fold at all. ---- */
+  /* ---- Subcase A: the re-entry chain. tamEnterMode is RE-ENTERED from
+   * inside a bracketed _tamProcessInput: XEQ 'STO' does not resolve as a
+   * label, falls to the native CAT_FNCT scan, and calls
+   * runFunction(ITM_STO) reentrantly while the OUTER XEQ fold's bracket
+   * is still forged CM_PEM. Assert the capture ends up OPEN, not stuck
+   * SUSPENDED, once everything unwinds -- the origin bit
+   * (forthCapIsInteractive()) must stay true across the suspension for
+   * Seam 1's guard to arm the fold at all. ---- */
   scFail = 0;
   FS_RESET();
   {
@@ -14005,10 +13858,10 @@ static int test_fold_seams(void)
   FS_RESET();
   cleanupTestProgram();
 
-  /* ---- Subcase B (Mutation 3's own pin): a leave-then-dispatch site
-   * (ui/tam.c:566, the dddVEL arm of a menu_TamSto softkey reachable
-   * after STO) calls leaveTamModeIfEnabled() BEFORE its own
-   * runFunction(tamOperation()) dispatch. ---- */
+  /* ---- Subcase B: a leave-then-dispatch site (the dddVEL arm of a
+   * menu_TamSto softkey reachable after STO) calls
+   * leaveTamModeIfEnabled() BEFORE its own runFunction(tamOperation())
+   * dispatch. ---- */
   scFail = 0;
   FS_RESET();
   {
@@ -14035,8 +13888,8 @@ static int test_fold_seams(void)
         scFail = 1;
       } else {
         tamProcessInput(ITM_dddVEL);
-        /* rev 3: dddVEL maps to ITM_STOVEL (ui/tam.c's StoOperations table),
-         * which is TM_VALUE with tamMinMax max 4096 (items.c:4714) — up to
+        /* dddVEL maps to ITM_STOVEL (ui/tam.c's StoOperations table),
+         * which is TM_VALUE with tamMinMax max 4096 — up to
          * FOUR digits, so unlike STO (max 99) two digits do NOT auto-fire the
          * commit.  This softkey therefore opens a NESTED TAM that must be
          * completed explicitly.  The fold staying pending across it is
@@ -14090,20 +13943,19 @@ static int test_fold_seams(void)
 
 
 /* ==================================================================
- * PACKET_L1_F3 — operand-class parity and the fold's close paths.
+ * Operand-class parity and the fold's close paths.
  *
- * C1 proves the L-R4 (b) contract directly: for the SAME key sequence,
- * the interactive fold and the PEM fold produce STRING-IDENTICAL line
- * text, across every operand class of the §4 (F4) grammar.  Row 9
- * (TM_VALUE > 250 / CNST_BEYOND_250) is DELETED as unreachable in this
- * tree — see the packet.  Row 10 covers both ends of the item's
+ * For the SAME key sequence, the interactive fold and the PEM fold must
+ * produce STRING-IDENTICAL line text, across every operand class of the
+ * §4 grammar. Row 9 (TM_VALUE > 250 / CNST_BEYOND_250) is DELETED as
+ * unreachable in this tree. Row 10 covers both ends of the item's
  * tamMinMax bounds (10a min, 10b max).
  *
- * C2 extends the E14 close-paths class with the fold's own invariant:
- * no fold may leave an outstanding transient step.
+ * Extends the close-paths class with the fold's own invariant: no fold
+ * may leave an outstanding transient step.
  *
- * C3 is the CM-gate audit sweep: STAGE_L_TRACES.md's 17-row table,
- * encoded as assertions (or an explicit reported gap) per row.
+ * The CM-gate audit sweep encodes a 17-row table as assertions (or an
+ * explicit reported gap) per row.
  * ================================================================== */
 
 extern void fnForthOuter(uint16_t);
@@ -14540,12 +14392,12 @@ static int test_fold_close_paths(void)
       numBefore  = getNumberOfSteps();
       freeOffBefore = (uint32_t)(firstFreeProgramByte - beginOfProgramMemory);
 
-      /* ui/tam.c:1102's lastErrorCode gate sits in the NAMED-operand commit
-       * path (tam.alpha), not the plain-numeric one -- a bare "STO 05" never
+      /* The lastErrorCode gate sits in the NAMED-operand commit path
+       * (tam.alpha), not the plain-numeric one -- a bare "STO 05" never
        * reaches it (that commit is unconditional at the numeric branch's own
        * "case CM_PEM: addStepInProgram(...)"). Use the same undefined-name
-       * XEQ gesture C1 row 7 / test_capture_param_text [2] use (XEQ 'WA'),
-       * which resolves through the CAT_FNCT/Forth-fallback miss and falls
+       * XEQ gesture test_capture_param_text [2] uses (XEQ 'WA'), which
+       * resolves through the CAT_FNCT/Forth-fallback miss and falls
        * to the shared tail at :1102, forcing the error right before ENTER. */
       runFunction(ITM_XEQ);
       tamProcessInput(ITM_alpha);
@@ -14863,10 +14715,9 @@ static int test_cm_gate_audit(void)
   } while (0)
 
   /* ---- Row 1: keyboard.c determineItem AIM/PEM column selection.
-   * WIDEN -- the K1 keys-mode escape (L1-3, tested elsewhere) plus the
-   * fold-precedence conjunct T3 finding 4 requires: with the fold
-   * pending, a digit key must resolve via key->primaryTam, not the AIM
-   * column's letter. ---- */
+   * WIDEN -- the keys-mode escape (tested elsewhere) plus the
+   * fold-precedence conjunct requires: with the fold pending, a digit
+   * key must resolve via key->primaryTam, not the AIM column's letter. ---- */
   scFail = 0;
   CGA_RESET();
   {
@@ -15220,15 +15071,13 @@ static int test_cm_gate_audit(void)
   cleanupTestProgram();
 
   /* ---- Row 14: forthCaptureSanitizeRestoredUi (CM_PEM + ALPHA +
-   * tam.function == ITM_FORTH). Documented verdict: WIDEN -- "a restored
-   * machine may hold an interactive origin; L1-1 extends the sanitizer."
-   * Driven directly against the CURRENT code: simulate a restored
-   * INTERACTIVE capture (calcMode == CM_AIM, FLAG_ALPHA set,
-   * tam.function == ITM_FORTH, forthCap.state already CLOSED by
-   * doFnReset -- exactly saveRestoreBackup.c's own comment) and check
-   * whether the sanitizer cleans it up. This is a FINDING, not adjusted
-   * to pass -- see the report; not counted toward `fail` since fixing
-   * production code is out of this packet's tests-only scope. ---- */
+   * tam.function == ITM_FORTH). Simulates a restored INTERACTIVE capture
+   * (calcMode == CM_AIM, FLAG_ALPHA set, tam.function == ITM_FORTH,
+   * forthCap.state already CLOSED by doFnReset) and checks whether the
+   * sanitizer cleans it up.
+   * Gap: the sanitizer is still gated on calcMode == CM_PEM only, so a
+   * restored INTERACTIVE capture is left untouched; not counted toward
+   * `fail` since fixing production code is out of scope here. ---- */
   {
     calcMode = CM_AIM;
     setSystemFlag(FLAG_ALPHA);
@@ -15320,7 +15169,7 @@ static int test_cm_gate_audit(void)
       currentStep = beginOfProgramMemory + 4 + 16;   /* stale PEM cursor, past "SQ"'s step */
 
       forthCapOpenInteractive();
-      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* Stage M E3: legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
+      { uint8_t m1e3s_ = calcMode; calcMode = CM_PEM;  /* legacy mode-naked fixture — the text-scan always meant a PEM cursor context */
         testInitVariableSoftmenu(22);
         calcMode = m1e3s_; }
 
@@ -15378,12 +15227,12 @@ static int test_cm_gate_audit(void)
 }
 
 /* ==================================================================
- * PACKET_L1_5 (C1) — test_interactive_acceptance: the stage story.
- * Steps 1-7 here (session A); steps 8-10 appended at the seam below
- * (session B).  ONE function, ONE story: state flows from step to step
- * deliberately — do not isolate the steps from each other.  Every step
- * drives real entry points only (fnForthOuter, runFunction, fnKeyEnter,
- * fnKeyExit, tamProcessInput).
+ * test_interactive_acceptance: the stage story. Steps 1-7 here
+ * (session A); steps 8-10 appended at the seam below (session B). ONE
+ * function, ONE story: state flows from step to step deliberately — do
+ * not isolate the steps from each other. Every step drives real entry
+ * points only (fnForthOuter, runFunction, fnKeyEnter, fnKeyExit,
+ * tamProcessInput).
  * ================================================================== */
 static int test_interactive_acceptance(void)
 {
@@ -15419,10 +15268,10 @@ static int test_interactive_acceptance(void)
     clearSystemFlag(FLAG_ALPHA); lastErrorCode = ERROR_NONE; forthCapClose(); \
   } while (0)
 
-  /* Baseline program isolation (the L1-H lesson): FHIST is created by the
-   * story's first ENTER and must land AFTER a real program, so the final
-   * cleanup isolates the next test.  Nothing global is modified yet, so
-   * the abort path needs no restore. */
+  /* Baseline program isolation: FHIST is created by the story's first
+   * ENTER and must land AFTER a real program, so the final cleanup
+   * isolates the next test. Nothing global is modified yet, so the
+   * abort path needs no restore. */
   cleanupTestProgram();
   {
     testProg_t base;
@@ -15532,7 +15381,7 @@ static int test_interactive_acceptance(void)
   /* ---- [5] Keys mode: SIN inserts its name; backspace edits natively
    * (items.c's divert exclusion list). ---- */
   scFail = 0;
-  forthCapSetKeysMode(true);               /* N1-5: the console OPENS in keys input now, so the ALPHA gesture here
+  forthCapSetKeysMode(true);               /* the console OPENS in keys input now, so the ALPHA gesture here
                                         would toggle it OFF.  These subcases are
                                         about keys-mode BEHAVIOUR, not about the
                                         toggle (which [3a]/[3(b)] own), so they
@@ -15617,10 +15466,9 @@ static int test_interactive_acceptance(void)
       printf("    [6] FAIL: capture not open after ENTER\n");
       scFail = 1;
     }
-    /* N1-5 (N-R6) FLIPS this row.  It used to pin the E5 relock — a REPL
-     * reopen dropped back to alpha input.  Keys input is the console's ground
-     * now, and the flip has to survive EVERY ENTER, not just the first open,
-     * or the session silently reverts one line in. */
+    /* Keys input is the console's ground state, and this must survive
+     * EVERY ENTER, not just the first open, or the session silently
+     * reverts one line in. */
     if (!scFail && !forthCapKeysMode()) {
       printf("    [6] FAIL: keys mode must SURVIVE the REPL reopen (N-R6 keys-first)\n");
       scFail = 1;
@@ -15630,9 +15478,9 @@ static int test_interactive_acceptance(void)
   fail |= scFail;
 
   /* ---- [7] EXIT closes; no string commit (rung 3 never touches X).
-   * N1-5: the capture is in keys input here (the ground state), so rung 1
-   * does not fire and EXIT falls through rung 2's base test to rung 3 — one
-   * press, exactly as before the flip. ---- */
+   * The capture is in keys input here (the ground state), so rung 1
+   * does not fire and EXIT falls through rung 2's base test to rung 3 —
+   * one press. ---- */
   scFail = 0;
   fnKeyExit(NOPARAM);
   if (forthTestCapState() != FCAP_CLOSED) {
@@ -15679,7 +15527,7 @@ static int test_interactive_acceptance(void)
     } else {
       sprintf(kbUp, "%02d", upRow);
       /* shiftF is one-shot: determineItem's own resetShiftState() clears
-       * it after the call (landed recall idiom, L1-H C5.6). */
+       * it after the call. */
       shiftF = true;
       itUp = determineItem(kbUp);
       shiftF = false;
@@ -15712,7 +15560,7 @@ static int test_interactive_acceptance(void)
       }
       /* The recall matches FHIST's newest by DIRECT comparison against
        * the recalled buffer — one comparison, no second literal to
-       * drift (the L1-F3 parity discipline). */
+       * drift. */
       if (!scFail && !stepSrcTextEq(s4, aimBuffer)) {
         printf("    [8] FAIL: recalled line \"%s\" is not FHIST's newest\n", aimBuffer);
         scFail = 1;
@@ -15894,16 +15742,13 @@ static int test_interactive_acceptance(void)
 
 
 /* ==================================================================
- * PACKET_L1_5 (C2.1) — test_interactive_close_sweep: the interactive
- * close-path axis, full tuple.  Seven paths on this axis (the guard is
- * the first statement of closeAim() itself, bufferize.c, since
- * CONSOLIDATE P6; before that it was a per-site
- * `_forthCapCloseIfInteractive();` call and this banner pointed at the
- * keyboard.c list of them — R9-8): four driven below, three reported
- * (multi-step gestures / longpress timing the harness does not model;
- * each reaches the same one guard the driven sites verify live).  Reported separately from the PEM four
- * (test_capture_close_paths_reset_tuple) and the fold seven
- * (test_fold_close_paths), which own their axes.
+ * test_interactive_close_sweep: the interactive close-path axis, full
+ * tuple. Seven paths on this axis (the guard is the first statement of
+ * closeAim() itself): four driven below, three reported (multi-step
+ * gestures / longpress timing the harness does not model; each reaches
+ * the same one guard the driven sites verify live). Reported separately
+ * from the PEM four (test_capture_close_paths_reset_tuple) and the fold
+ * seven (test_fold_close_paths), which own their axes.
  * ================================================================== */
 static int test_interactive_close_sweep(void)
 {
@@ -15969,9 +15814,9 @@ static int test_interactive_close_sweep(void)
   }
   if (!scFail) {
     runFunction(ITM_1);                /* the line: "1" */
-    /* N1-5 INVERTS rung 1: keys input is the ground state, so the rung
-     * unwinds the ALPHA EXCURSION back to keys.  The subcase starts from the
-     * excursion and expects to land in keys, capture still open. */
+    /* Keys input is the ground state, so rung 1 unwinds the ALPHA
+     * EXCURSION back to keys. The subcase starts from the excursion and
+     * expects to land in keys, capture still open. */
     forthCapSetKeysMode(false);
     if (forthCapKeysMode()) {
       printf("    [1] FIXTURE FAIL: could not enter the alpha excursion\n");
@@ -15979,7 +15824,7 @@ static int test_interactive_close_sweep(void)
     }
   }
   if (!scFail) {
-    fnKeyExit(NOPARAM);                /* rung 1: alpha -> keys (N1-5) */
+    fnKeyExit(NOPARAM);                /* rung 1: alpha -> keys */
     if (!forthCapIsOpen() || !forthCapKeysMode()) {
       printf("    [1] FAIL: rung 1 should leave the capture OPEN in keys input (open=%d keys=%d)\n",
              forthCapIsOpen(), forthCapKeysMode());
@@ -16008,7 +15853,7 @@ static int test_interactive_close_sweep(void)
   fail |= scFail;
 
   /* ---- [2] fnKeyUp's closeAim arm: full tuple; the native commit
-   * PRESERVES the line in X as a string (KEEP disposition, L1-2). ---- */
+   * PRESERVES the line in X as a string (KEEP disposition). ---- */
   scFail = 0;
   L15C_RESET();
   fnForthOuter(NOPARAM);
@@ -16018,7 +15863,7 @@ static int test_interactive_close_sweep(void)
   }
   if (!scFail) {
     runFunction(ITM_2);                /* the line: "2" */
-    forthCapSetKeysMode(true);         /* N1-5: keys is the open default now;
+    forthCapSetKeysMode(true);         /* keys is the open default now;
                                           the ALPHA gesture would toggle it OFF */
     if (!forthCapKeysMode()) {
       printf("    [2] FIXTURE FAIL: keys mode did not arm\n");
@@ -16050,7 +15895,7 @@ static int test_interactive_close_sweep(void)
   }
   if (!scFail) {
     runFunction(ITM_3);
-    forthCapSetKeysMode(true);         /* N1-5: keys is the open default now;
+    forthCapSetKeysMode(true);         /* keys is the open default now;
                                           the ALPHA gesture would toggle it OFF */
     if (!forthCapKeysMode()) {
       printf("    [3] FIXTURE FAIL: keys mode did not arm\n");
@@ -16082,7 +15927,7 @@ static int test_interactive_close_sweep(void)
   }
   if (!scFail) {
     runFunction(ITM_4);
-    forthCapSetKeysMode(true);         /* N1-5: keys is the open default now;
+    forthCapSetKeysMode(true);         /* keys is the open default now;
                                           the ALPHA gesture would toggle it OFF */
     if (!forthCapKeysMode()) {
       printf("    [4] FIXTURE FAIL: keys mode did not arm\n");
@@ -16135,14 +15980,14 @@ static int test_interactive_close_sweep(void)
 }
 
 /* ==================================================================
- * PACKET_L1_5 (C2.2/C2.3) — test_interactive_residue.
+ * test_interactive_residue.
  * [1] the capture lifecycle itself allocates nothing: 20 open/close
- *     cycles return getFreeRamMemory() to baseline (escape valve per
- *     the landed F6-2 [6] precedent: bounded, block-aligned,
- *     growth-only allocator quantization is reported, not failed).
+ *     cycles return getFreeRamMemory() to baseline (escape valve:
+ *     bounded, block-aligned, growth-only allocator quantization is
+ *     reported, not failed).
  * [2] a full history cap cycle grows program memory by exactly FHIST's
  *     own bytes — nothing else leaks; the cap holds; eviction is
- *     oldest-first.  The plateau is the C4 "program-memory high-water"
+ *     oldest-first. The plateau is the "program-memory high-water"
  *     number, printed as a REPORT line.
  * ================================================================== */
 static int test_interactive_residue(void)
@@ -16214,8 +16059,8 @@ static int test_interactive_residue(void)
       if (freeAfter != freeBefore) {
         uint32_t delta = (freeBefore > freeAfter) ? (freeBefore - freeAfter)
                                                   : (freeAfter - freeBefore);
-        /* Escape valve, landed F6-2 [6] shape: bounded, block-aligned,
-         * growth-only allocator quantization is a report, not a leak. */
+        /* Escape valve: bounded, block-aligned, growth-only allocator
+         * quantization is a report, not a leak. */
         if (delta % BYTES_PER_BLOCK == 0 && delta <= 6 * BYTES_PER_BLOCK
             && freeBefore > freeAfter) {
           printf("    [1] PASS (escape valve): freeRam %u -> %u is %u resize quantum(s), not a lifecycle leak\n",
@@ -16273,9 +16118,9 @@ static int test_interactive_residue(void)
 
         /* The cap is asserted as the LITERAL 1024, not the macro: a
          * fixture sized from the constant is immune to a change in the
-         * constant, and therefore blind to one (the G2 cut-off lesson,
-         * QWEN_RUNBOOK §2c).  The L1-H cap subcase uses the macro and is
-         * legacy evidence; this is the literal pin beside the mechanism. */
+         * constant, and therefore blind to one. test_history_program's
+         * cap subcase uses the macro; this is the literal pin beside
+         * the mechanism. */
         if (totalBytes > 1024) {
           printf("    [2] FAIL: FHIST is %u bytes, over the 1024-byte cap\n",
                  (unsigned)totalBytes);
@@ -16319,12 +16164,11 @@ static int test_interactive_residue(void)
 }
 
 /* ==================================================================
- * PACKET_M1_1 — test_fwrd_normal_mode: the FWRD catalog outside
- * captures.  E2's dispositions (capture-insert / normal-execute /
- * inert elsewhere; the CM_ASSIGN feed is M1-2's battery), E3's
- * listing gate, the M-T5 drain row, and the stale-press error
- * surface.  Presses drive the real resolution
- * (determineFunctionKeyItem_C47, the G1 stack-staging idiom) and
+ * test_fwrd_normal_mode: the FWRD catalog outside captures. Dispositions
+ * (capture-insert / normal-execute / inert elsewhere; the CM_ASSIGN
+ * feed), the listing gate, the drain row, and the stale-press error
+ * surface. Presses drive the real resolution
+ * (determineFunctionKeyItem_C47, the stack-staging idiom) and
  * execution rides runFunction(pressedItem) — the executeFunction
  * tail's own call.
  * ================================================================== */
@@ -16611,13 +16455,11 @@ static int test_fwrd_normal_mode(void)
   fail |= scFail;
 
   /* ---- [8] A capture opened over stacked FWRD/CATALOG: buried and
-   * harmless, and EXIT restores the user's menus.  (M-T5 as CORRECTED
-   * by this test: the FIX-9-analog drain is catalog-VAR-gated —
-   * forth_compile.c:1717 `if (catalog)` — and menu-tree rows never set
+   * harmless, and EXIT restores the user's menus. The drain is
+   * catalog-VAR-gated (`if (catalog)`), and menu-tree rows never set
    * that variable, so the plain stack legitimately survives beneath the
    * capture's alpha frame; rung 3's teardown then reveals it again,
-   * exactly closeAim's native shape.  The trace predicted a drain here
-   * and was wrong about the gate — reachability, not write-set.) ---- */
+   * exactly closeAim's native shape. ---- */
   scFail = 0;
   M11_RESET();
   showSoftmenu(-MNU_CATALOG);
@@ -16627,10 +16469,10 @@ static int test_fwrd_normal_mode(void)
     printf("    [8] FIXTURE FAIL: interactive open did not take\n");
     scFail = 1;
   }
-  /* N1-5 (N-R6): the console's home row is FWRD, so THAT is what sits on top
-   * after an open — the drain disposition this subcase pins (KEEP, buried and
-   * harmless) is unchanged; only the identity of the frame the open pushes
-   * has moved from -MNU_ALPHA to -MNU_FORTH. */
+  /* The console's home row is FWRD, so THAT is what sits on top after an
+   * open — the drain disposition this subcase pins (KEEP, buried and
+   * harmless) is unchanged; only the identity of the frame the open
+   * pushes has moved from -MNU_ALPHA to -MNU_FORTH. */
   if (!scFail && currentMenu() != -MNU_FORTH) {
     printf("    [8] FAIL: FWRD home row not on top after open over a stack (menu %d)\n", currentMenu());
     scFail = 1;
@@ -16723,13 +16565,12 @@ static int test_fwrd_normal_mode(void)
 }
 
 /* ==================================================================
- * PACKET_M1_2 — test_fwrd_assign: a global Forth word onto a key.
+ * test_fwrd_assign: a global Forth word onto a key.
  * The pick rides the real resolution + CM_ASSIGN switch
  * (executeFunction -> determineFunctionKeyItem_C47 -> the band); the
  * record rides the real assignToKey/_assignItem; the press rides the
- * real determineItem USER-key dispatch (label miss -> the landed
- * forthTryColonFallback).  kbd_usr[21] and its label slot are
- * snapshotted and restored.
+ * real determineItem USER-key dispatch (label miss -> forthTryColonFallback).
+ * kbd_usr[21] and its label slot are snapshotted and restored.
  * ================================================================== */
 static int test_fwrd_assign(void)
 {
@@ -17042,10 +16883,9 @@ static int test_fwrd_assign(void)
   }
   else if (userKeyLabel != NULL) {
     /* This test's first setUserKeyArgument lazily created the persistent
-     * userKeyLabel block (assign.c initUserKeyArgument).  The suite's
-     * FIX-6 leak gate has no allowance for lazy persistent inits, so
-     * restore the pre-test world exactly: free what only this test
-     * caused to exist. */
+     * userKeyLabel block (assign.c initUserKeyArgument). The suite's leak
+     * gate has no allowance for lazy persistent inits, so restore the
+     * pre-test world exactly: free what only this test caused to exist. */
     freeC47Blocks(userKeyLabel, TO_BLOCKS(userKeyLabelSize));
     userKeyLabel = NULL;
     userKeyLabelSize = 0;
@@ -17080,10 +16920,10 @@ static int test_fwrd_assign(void)
 }
 
 /* ==================================================================
- * M1-3 — test_fwrd_late_binding: the one cross-feature beat the M1-1/
- * M1-2 batteries do not already pin.  The assignment stores a NAME
- * (M-R3): after FORGET + re-define, the same key runs the NEW
- * definition — no stale index, no rebind step.
+ * test_fwrd_late_binding: the one cross-feature beat the batteries
+ * above do not already pin. The assignment stores a NAME: after
+ * FORGET + re-define, the same key runs the NEW definition — no stale
+ * index, no rebind step.
  * ================================================================== */
 static int test_fwrd_late_binding(void)
 {
@@ -17121,7 +16961,7 @@ static int test_fwrd_late_binding(void)
     printf("    FIXTURE FAIL: word setup errored (%d)\n", lastErrorCode);
     return 1;
   }
-  /* Assign by the record directly (the pick flow is M1-2 [1]'s pin;
+  /* Assign by the record directly (the pick flow is pinned elsewhere;
    * this test pins the BINDING, not the pick). */
   kbd_usr[21].primary = ITM_XEQ;
   setUserKeyArgument(21 * 6, "MLB");
@@ -17191,25 +17031,24 @@ static int test_fwrd_late_binding(void)
 
 
 /* ==================================================================
- * AUDIT round 6 (AUDIT_round6_2026-08-08.md) — the fold/suspend window,
- * driven.  Reproducers and class tests for the round's confirmed findings:
+ * The fold/suspend window, driven. Reproducers and class tests:
  *
- *   [1] F2  — the SYSFL EXIT cancel must unwind the armed fold
- *   [2] F1  — the GTO->GTOP promotion re-derives the fold admission
- *   [3] F10 — a TAM commit the splice cannot fold is KEPT, never swept
- *   [4] F5  — resume re-registers the row through the surface owner
- *   [5] F6  — history recall is refused while the capture is SUSPENDED
- *   [6] F7  — the f long-press leaves the console's registered frame alone
- *   [7] F8/F9 — the suspended residue is NOT a live console (render gate,
- *               ENTER, EXIT recovery)
- *   [8] F11 — a prim that refuses performs none of its declared stack effect
- *   [9] F1  — GTO . . from an open console: the resume splice survives a
- *             moved currentProgramNumber (pre-fix: SIGSEGV, so this subcase
- *             runs LAST)
+ *   [1] the SYSFL EXIT cancel must unwind the armed fold
+ *   [2] the GTO->GTOP promotion re-derives the fold admission
+ *   [3] a TAM commit the splice cannot fold is KEPT, never swept
+ *   [4] resume re-registers the row through the surface owner
+ *   [5] history recall is refused while the capture is SUSPENDED
+ *   [6] the f long-press leaves the console's registered frame alone
+ *   [7] the suspended residue is NOT a live console (render gate,
+ *       ENTER, EXIT recovery)
+ *   [8] a prim that refuses performs none of its declared stack effect
+ *   [9] GTO . . from an open console: the resume splice survives a
+ *       moved currentProgramNumber (pre-fix: SIGSEGV, so this subcase
+ *       runs LAST)
  *
- * Fixture shape copies test_fold_seams (L1-F2): real dispatch only —
+ * Fixture shape copies test_fold_seams: real dispatch only —
  * fnForthOuter, runFunction, tamProcessInput, fnKeyExit/fnKeyEnter, the
- * timer exec chain.  aimBuffer content is seeded directly where the landed
+ * timer exec chain. aimBuffer content is seeded directly where earlier
  * batteries do the same (test_fold_seams subcase 1). */
 static int test_fold_round6_window(void)
 {
@@ -17264,10 +17103,10 @@ static int test_fold_round6_window(void)
       scFail = 1;
     }
     else {
-      /* The SYS.FL catalog level.  The menu row is driven for real; the
-       * catalog id is what upstream's CFLG flow sets at calcMode.c:120 —
-       * fixture-established, since the arm under test reads it, and the
-       * state under test here is the FOLD bracket, not catalog derivation. */
+      /* The SYS.FL catalog level. The menu row is driven for real; the
+       * catalog id is what upstream's CFLG flow sets — fixture-established,
+       * since the arm under test reads it, and the state under test here
+       * is the FOLD bracket, not catalog derivation. */
       showSoftmenu(-MNU_SYSFL);
       catalog = CATALOG_SYFL;
       fnKeyExit(NOPARAM);                 /* the SYSFL auto-recover arm */
@@ -17455,8 +17294,8 @@ static int test_fold_round6_window(void)
     else {
       { extern void refreshFn(uint16_t);
         extern void fnTimerConfig(uint8_t, void (*)(uint16_t), uint16_t);
-        /* c47.c:767's own configuration — headless init never runs it, and
-         * fnTimerExec calls through the configured pointer. */
+        /* headless init never runs this configuration, and fnTimerExec
+         * calls through the configured pointer. */
         fnTimerConfig(TO_FG_LONG, refreshFn, TO_FG_LONG);
       }
       shiftF = true; shiftG = false;
@@ -17494,32 +17333,18 @@ static int test_fold_round6_window(void)
     fnForthOuter(NOPARAM);
     xcopy(aimBuffer, "5", 2); T_cursorPos = 1;
     runFunction(ITM_STO);                 /* ARMED + SUSPENDED */
-    /* D7-1 made the residue unreachable through ANY teardown — the public
-     * leave settles the bracket by construction — so the state is primed
+    /* The residue is unreachable through any teardown — the public leave
+     * settles the bracket by construction — so the state is primed
      * directly: the sites under test are DEFENSIVE and the residue is the
-     * subject.  (This line used to be leaveTamModeIfEnabled(), back when
-     * the raw teardown was a real door.) */
+     * subject. */
     tam.mode = 0;
     clearSystemFlag(FLAG_ALPHA);
-    /* AUDIT round 8 (C-7): this guard used to lead with `tam.mode != 0`,
-     * two lines after `tam.mode = 0` — a disjunct that could not be true on
-     * any tree, fixed or broken (mutation-proved: replacing it with
-     * constant 0 left the gate green with identical output), while the
-     * printed message claimed the guard verified TAM teardown.
-     *
-     * The rule it broke: a guard may only read state the fixture did not
-     * just write.  Every disjunct below is established by the real gesture
-     * above — runFunction(ITM_STO) arms the fold, suspends the capture and
-     * leaves the origin interactive — so each one falsifies if that
-     * machinery breaks.  The two facts the priming DID write are not
-     * re-read; what is asserted instead is their consequence, which the
-     * subject of the subcase depends on: the residue is not LIVE. */
-    /* AUDIT round 8 (R8-6): the first version of this rewrite added a
-     * `forthCapInteractiveLive()` disjunct — which cannot be true once
-     * `!forthCapIsSuspended()` above has passed, because Live means state
-     * OPEN.  That is C-7's own defect, reproduced by C-7's own fix, one
-     * commit later.  Removed; the three that remain each read state the
-     * real gesture established. */
+    /* Rule: a guard may only read state the fixture did not just write.
+     * Every disjunct below is established by the real gesture above —
+     * runFunction(ITM_STO) arms the fold, suspends the capture and leaves
+     * the origin interactive — so each one falsifies if that machinery
+     * breaks. The two facts the priming DID write are not re-read; what
+     * is asserted instead is their consequence: the residue is not LIVE. */
     if (!forthCapIsSuspended() || !forthFoldArmed()
         || !forthCapIsInteractive()) {
       printf("    [7] FIXTURE BUG: residue not reached (susp=%d armed=%d"
@@ -17529,7 +17354,7 @@ static int test_fold_round6_window(void)
       scFail = 1;
     }
     else {
-      calcMode = CM_AIM;                  /* the residue's mode (round 6 F2) */
+      calcMode = CM_AIM;                  /* the residue's mode */
       if (_forthConsoleActive()) {
         printf("    [7] FAIL (F8): the render gate treats the suspended residue"
                " as a live console — TAM's abandoned aimBuffer would paint as"
@@ -17689,18 +17514,15 @@ static int test_fold_round6_window(void)
 
 
 /* ==================================================================
- * AUDIT round 8 — the round-7 fix wave's findings, driven
- * (AUDIT_round7_2026-08-08.md + its out-of-family addendum).
+ * The round-7 fix wave's findings, driven.
  *
- *   [1] P-1 — DELP of FHIST from a live console: the fold's debris sweep
- *             must never run keyed on a program that is not the fold's own
+ *   [1] DELP of FHIST from a live console: the fold's debris sweep must
+ *       never run keyed on a program that is not the fold's own
  *
  * Fixture shape copies test_fold_round6_window: real dispatch only —
  * fnForthOuter, runFunction, tamProcessInput, forthInteractiveEnter — and
  * every subcase asserts it REACHED the state it claims to test before it
- * asserts anything about the fix (the C22 rule).  The P-1 drive itself is
- * the round-7 evidence driver (/tmp/claude-1000/r7-simdrive, DRIVE 1B)
- * promoted to permanent coverage. */
+ * asserts anything about the fix. */
 static int test_fold_round8_window(void)
 {
   extern void fnForthOuter(uint16_t);
@@ -17726,10 +17548,9 @@ static int test_fold_round8_window(void)
   xcopy(savedStack, softmenuStack, sizeof(savedStack));
 
   /* The f long-press, third completion — the branch that reaches
-   * openHOMEorMyM (package screen.c:1023), driven through the real timer
-   * chain exactly as round-6 subcase [6] drives the sibling branch.
-   * fnTimerConfig is c47.c:767's own configuration: headless init never
-   * runs it, and fnTimerExec calls through the configured pointer. */
+   * openHOMEorMyM, driven through the real timer chain exactly as the
+   * sibling branch above. fnTimerConfig: headless init never runs it,
+   * and fnTimerExec calls through the configured pointer. */
   #define R8_LONGPRESS_F() do { \
     extern void refreshFn(uint16_t); \
     extern void fnTimerConfig(uint8_t, void (*)(uint16_t), uint16_t); \
@@ -17765,34 +17586,20 @@ static int test_fold_round8_window(void)
     (out) = n_; \
   } while (0)
 
-  /* ---- [1] P-1: console open -> DELP -> "FHIST" -> ENTER.
+  /* ---- [1] console open -> DELP -> "FHIST" -> ENTER.
    *
    * DELP is fold-NON-admitted, so the fold PARKs and the commit dispatches
    * fnClP LIVE — which deletes FHIST, the very program holding the parked
-   * capture step.  forthCaptureResume's canary then falsifies and it exits
-   * through forthCapAbandonSuspended BEFORE the F1 re-anchor, leaving
-   * currentProgramNumber wherever fnClP left it.  Pre-fix, forthFoldLeave's
-   * debris sweep compared FHIST's entry step count against THAT program's
-   * length and deleted up to four of its steps: in the FHIST-first memory
-   * order — the ordinary layout when the console was used before the
-   * program was written — a real user program went 13 steps to 9, with
-   * `111 222 333 444` decoded away.  EXECUTED in round 7.
+   * capture step. The line is lost either way (the user deleted the
+   * program holding it); what must not happen is damage to a program the
+   * gesture never named.
    *
-   * The line is lost either way (the user deleted the program holding it);
-   * what must not happen is damage to a program the gesture never named.
-   *
-   * Round 8 §3's class test (b), previously unlanded: the whole scenario
-   * runs at FOUR history-line lengths.  The parked capture step sits after
-   * the FHIST line the console just pushed, so capStepOffset is
-   * 12 + line-length (LBL 'FHIST' is 8 bytes, a source step is 4 + text) —
-   * and after DELP-of-FHIST shifts PUSR down, PUSR's own step boundaries
-   * sit at 7 + 7k.  A single fixed line can therefore let offset
-   * arithmetic pass or fail by ALIGNMENT alone.  The 9-byte line is the
-   * armed one: 12 + 9 = 21 lands the stale offset EXACTLY on a user step,
-   * which satisfies the opcode canary — under the raw-offset mutation
-   * (resolver's FHIST-bounds conjunct and fallback removed) that length
-   * reds while the others stay green, which is the whole argument for
-   * running more than one. ---- */
+   * Runs at four history-line lengths: capStepOffset = 12 + line-length
+   * (LBL 'FHIST' is 8 bytes, a source step is 4 + text), and after
+   * DELP-of-FHIST shifts PUSR down, PUSR's own step boundaries sit at
+   * 7 + 7k — a single fixed line could let offset arithmetic pass or fail
+   * by ALIGNMENT alone (the 9-byte line happens to land the stale offset
+   * exactly on a user step), so more than one length is needed. ---- */
   scFail = 0;
   { static const char *const histLine[4] = {
       "1 2 +",
@@ -17811,8 +17618,8 @@ static int test_fold_round8_window(void)
     calcRegister_t usrLbl;
 
     /* FHIST-first memory order: LBL 'FHIST' + END is byte-for-byte what
-     * forthHistoryEnsure creates (manage.c:1740-1779), so
-     * forthHistoryProgram() adopts program 1 as the history program. */
+     * forthHistoryEnsure creates, so forthHistoryProgram() adopts program
+     * 1 as the history program. */
     tpInit(&p);
     if (tpLbl(&p, "FHIST") < 0 ||
         tpEnd(&p) < 0 ||
@@ -17991,19 +17798,19 @@ static int test_fold_round8_window(void)
                       " admission — GTO . BACKSPACE 0 5 folds into the line\n");
   fail |= scFail;
 
-  /* ---- [3] C-2: upstream openHOMEorMyM is the second, un-re-enumerated
-   * consumer of isAlphabeticSoftmenu — the predicate Stage L widened to
-   * count -MNU_FORTH.  The round-6 F7 fix guarded the package-tree copy of
-   * this shape in screen.c and stopped there; a package grep is not an
-   * upstream census.  From a live console with HOME.3 enabled, the f
+  /* ---- [3] upstream openHOMEorMyM is the second, un-re-enumerated
+   * consumer of isAlphabeticSoftmenu — the predicate widened to count
+   * -MNU_FORTH. The earlier fix guarded the package-tree copy of this
+   * shape in screen.c and stopped there; a package grep is not an
+   * upstream census. From a live console with HOME.3 enabled, the f
    * long-press pops the REGISTERED FWRD frame and covers it with a raw
    * ALPHA push while forthCapKeysMode() stays true: the row reads ALPHA
    * while the keypad types the keys plane, with the ownership stamp
-   * destroyed.  EXECUTED with screenshots in round 7.
+   * destroyed.
    *
-   * Sibling of round-6 subcase [6], which pins the screen.c door; this one
+   * Sibling of the subcase above, which pins the screen.c door; this one
    * drives the same gesture down the branch that reaches openHOMEorMyM
-   * (Shft_timeouts, third completion — package screen.c:1023). ---- */
+   * (Shft_timeouts, third completion). ---- */
   scFail = 0;
   R8_RESET();
   setSystemFlag(FLAG_HOME_TRIPLE);
@@ -18023,11 +17830,11 @@ static int test_fold_round8_window(void)
     }
     else {
       R8_LONGPRESS_F();
-      /* AUDIT round 8 (R8-7): every assertion below is also satisfied by a
-       * gesture that did NOTHING, so the subcase needs evidence that the
-       * ladder actually dispatched.  Shft_timeouts is cleared by the third
-       * completion, in the same arm that calls openHOMEorMyM — if it is
-       * still set, the drive never got there. */
+      /* Every assertion below is also satisfied by a gesture that did
+       * NOTHING, so the subcase needs evidence that the ladder actually
+       * dispatched. Shft_timeouts is cleared by the third completion, in
+       * the same arm that calls openHOMEorMyM — if it is still set, the
+       * drive never got there. */
       if (Shft_timeouts) {
         printf("    [3] FIXTURE BUG: the long-press ladder did not reach its"
                " third completion — openHOMEorMyM was never called, so the"
@@ -18060,19 +17867,18 @@ static int test_fold_round8_window(void)
                       " console's registered row alone\n");
   fail |= scFail;
 
-  /* ---- [4] OOF-1: the SECOND row-destroying call in the same function,
-   * which the isAlphabeticSoftmenu-census fix shape does not cover.  With
-   * MyM.3 enabled and both base-menu flags clear, openHOMEorMyM's normal
-   * mode arm calls fnExitAllMenus(0), which pops the WHOLE softmenu stack.
+  /* ---- [4] The SECOND row-destroying call in the same function, which
+   * the isAlphabeticSoftmenu-census fix shape does not cover. With MyM.3
+   * enabled and both base-menu flags clear, openHOMEorMyM's normal mode
+   * arm calls fnExitAllMenus(0), which pops the WHOLE softmenu stack.
    *
    * The state that reaches it is the one the wrapper itself creates: mid
-   * TAM the capture is SUSPENDED and FLAG_ALPHA is clear, so control takes
-   * the non-alpha branch, whose own leaveTamModeIfEnabled() — the D7-1
-   * wrapper — settles the fold, resumes the capture and re-registers the
-   * console's row.  The wipe lands two arms later, on the row that call
-   * just restored.  Hence OOF-2's constraint, which this subcase is the
-   * proof of: the guard has to hold POST-resume, so it must be evaluated
-   * at the call site and never snapshotted at function entry. ---- */
+   * TAM the capture is SUSPENDED and FLAG_ALPHA is clear, so control
+   * takes the non-alpha branch, whose own leaveTamModeIfEnabled() settles
+   * the fold, resumes the capture and re-registers the console's row.
+   * The wipe lands two arms later, on the row that call just restored.
+   * The guard has to hold POST-resume, so it must be evaluated at the
+   * call site and never snapshotted at function entry. ---- */
   scFail = 0;
   R8_RESET();
   clearSystemFlag(FLAG_HOME_TRIPLE);
@@ -18118,10 +17924,10 @@ static int test_fold_round8_window(void)
                forthConsoleTestBorrowCount());
         scFail = 1;
       }
-      /* Deliberately NOT asserted here: that the FWRD row is CURRENT.  This
+      /* Deliberately NOT asserted here: that the FWRD row is CURRENT. This
        * arm's contract is that the frame survives — a menu pushed OVER the
-       * console's row buries it and EXIT gets it back, which is the round-5
-       * benign-overlay ruling.  Destruction is the defect; covering is not. */
+       * console's row buries it and EXIT gets it back. Destruction is the
+       * defect; covering is not. */
     }
     lastErrorCode = ERROR_NONE;
   }
@@ -18129,23 +17935,19 @@ static int test_fold_round8_window(void)
                       " row its own wrapper restored\n");
   fail |= scFail;
 
-  /* ---- [5] P-2 and the whole foldMode-0 family (owner ruling 2026-08-08:
-   * buy the fault-injection hook).
+  /* ---- [5] The whole foldMode-0 family, via a fault-injection hook.
    *
    * forthFoldEnter's "no program, no fold" arm fires when
    * forthHistoryEnsure() returns false — and tamEnterMode's seam suspends
-   * the capture ANYWAY, one line later.  That leaves a state nothing else
+   * the capture ANYWAY, one line later. That leaves a state nothing else
    * produces: origin INTERACTIVE, capture SUSPENDED, tam.mode != 0, fold
-   * NOT pending.  Three rounds raised findings inside it (K-N §6a R1,
-   * round 5 (b), round 7 R-1 and P-2) and every one was decided on whether
-   * the premise was constructible, never on what the state actually does,
-   * because nothing could reach it.  With the hook it is reachable, so the
-   * arm is executed rather than argued.
+   * NOT pending. With the hook this state is reachable, so the arm is
+   * executed rather than argued.
    *
-   * P-2's specific claim: with the fold NOT pending, the F8 conjunct at
-   * keyboard.c:1789 no longer excludes the CM_AIM column, so mid-TAM keys
-   * resolve as letters instead of reaching the TAM handler.  The oracle
-   * below is determineItem's own output for a digit key. ---- */
+   * Specific claim: with the fold NOT pending, the F8 conjunct no longer
+   * excludes the CM_AIM column, so mid-TAM keys resolve as letters
+   * instead of reaching the TAM handler. The oracle below is
+   * determineItem's own output for a digit key. ---- */
   scFail = 0;
   R8_RESET();
   {
@@ -18204,19 +18006,15 @@ static int test_fold_round8_window(void)
         scFail = 1;
       }
 
-      /* Sol's dependency (b), named by the round-8 report and never
-       * checked until now: ERROR_RAM_FULL's dismissal must hand back the
-       * live console's editor presentation.  Driven through the real key
-       * path — processKeyAction's EXIT arm (keyboard.c: the
-       * `else if(lastErrorCode != 0)` arm under case ITM_EXIT1), which
-       * dismisses the error and sets keyActionProcessed so the EXIT close
-       * ladder does NOT also run.  The refusal itself wrote no
-       * presentation state (it returns before any TAM write), so what
-       * this settles is the dismissal's half: error cleared, capture
-       * still open, line still there, calcMode and FLAG_ALPHA unchanged.
-       * RED under the arm's inverse (drop its keyActionProcessed): EXIT
-       * falls through to the close ladder on top of the dismissal and the
-       * capture — with the owner's line — is gone. */
+      /* ERROR_RAM_FULL's dismissal must hand back the live console's
+       * editor presentation. Driven through the real key path —
+       * processKeyAction's EXIT arm (the `else if(lastErrorCode != 0)`
+       * arm under case ITM_EXIT1), which dismisses the error and sets
+       * keyActionProcessed so the EXIT close ladder does NOT also run.
+       * The refusal itself wrote no presentation state (it returns before
+       * any TAM write), so what this settles is the dismissal's half:
+       * error cleared, capture still open, line still there, calcMode and
+       * FLAG_ALPHA unchanged. */
       { extern void processKeyAction(int16_t);
         uint16_t modeBefore = calcMode;
         int alphaBefore = getSystemFlag(FLAG_ALPHA) ? 1 : 0;
@@ -18254,10 +18052,9 @@ static int test_fold_round8_window(void)
         }
       }
 
-      /* P-2's own oracle, now asked of the refused state: the console is
+      /* The oracle, now asked of the refused state: the console is
        * live, so the digit key belongs to the console — never to the AIM
-       * letter column (ITM_U on this key).  Driven, in the pre-fix
-       * suspension, this returned ITM_U. */
+       * letter column (ITM_U on this key). */
       lastErrorCode = ERROR_NONE;
       got = determineItem(kb);
       if (got == ITM_U) {
@@ -18275,11 +18072,11 @@ static int test_fold_round8_window(void)
                       " fold-less suspension is never built\n");
   fail |= scFail;
 
-  /* ---- [6] OUT-OF-FAMILY (round 8, Gemini on the P-1 fix): the fold
-   * context's capStepOffset is an offset from beginOfProgramMemory, and
-   * deleting a program that sits BEFORE FHIST shifts FHIST — and the parked
-   * capture step — DOWN by that program's size.  Nothing updates the fold
-   * context's copy of the offset.  (forthCaptureResume recovers: its canary
+  /* ---- [6] The fold context's capStepOffset is an offset from
+   * beginOfProgramMemory, and deleting a program that sits BEFORE FHIST
+   * shifts FHIST — and the parked capture step — DOWN by that program's
+   * size. Nothing updates the fold context's copy of the offset.
+   * (forthCaptureResume recovers: its canary
    * falsifies, _forthFoldFindCaptureStep finds the real step and it fixes
    * the CAPTURE's offset — but not the fold context's.)
    *
@@ -18374,8 +18171,8 @@ static int test_fold_round8_window(void)
   fail |= scFail;
   cleanupTestProgram();
 
-  /* ---- [7] OUT-OF-FAMILY (round 8, Gemini on the C-2 fix): the guard is
-   * broader than the thing it protects.  It skips openHOMEorMyM's pop
+  /* ---- [7] The guard is broader than the thing it protects. It skips
+   * openHOMEorMyM's pop
    * whenever a console line is live — but the frame that pop would destroy
    * is only sometimes the console's.  Push any other alphabetic row OVER
    * the console (a push is ruled benign, the console's frame survives
@@ -18423,14 +18220,11 @@ static int test_fold_round8_window(void)
                aimBuffer);
         scFail = 1;
       }
-      /* AUDIT round 9 (R9-4): assert the POSITIVE property, not the absence
-       * of one named menu.  The old three checks above all passed while the
-       * gesture left a raw -MNU_ALPHA frame standing over the console's
-       * stamped base — "not MyAlpha" and "the stamp survives" are both true
-       * of that state, which is how a shipped test drove a live defect and
-       * stayed green.
+      /* Assert the POSITIVE property, not the absence of one named menu:
+       * the three checks above all pass even if the gesture leaves a raw
+       * -MNU_ALPHA frame standing over the console's stamped base.
        *
-       * K-R3, the invariant: THE ROW IS THE MODE INDICATOR.  Whatever the
+       * The invariant: THE ROW IS THE MODE INDICATOR.  Whatever the
        * gesture lands on, the displayed row and the sub-mode the keypad is
        * actually typing in must agree.  This is also what upstream's own
        * HOME.3 does — it picks TAMALPHA or ALPHA by the current input
@@ -18466,18 +18260,17 @@ static int test_fold_round8_window(void)
                       " row matching the sub-mode\n");
   fail |= scFail;
 
-  /* ---- [8] R8-1 (in-family D3, executed by its verifier to a SIGSEGV):
-   * forthFoldCtx.savedProgram is an INDEX into programList, cached across a
-   * PARK dispatch that can DELETE a program.  DELP a program that precedes
-   * the cursor's and the index is stale by one: the restore lands in a
-   * program the owner was not editing, overwriting fnClP's own correct
-   * renumbered restore.  When the cursor's program was the LAST one, the
-   * index runs one past the end of a freshly reallocated programList and
-   * goToGlobalStep walks the garbage with no NULL guard and no iteration
-   * cap — the verifier's run died at exit 139.
+  /* ---- [8] forthFoldCtx.savedProgram is an INDEX into programList,
+   * cached across a PARK dispatch that can DELETE a program.  DELP a
+   * program that precedes the cursor's and the index is stale by one: the
+   * restore lands in a program the owner was not editing, overwriting
+   * fnClP's own correct renumbered restore.  When the cursor's program was
+   * the LAST one, the index runs one past the end of a freshly
+   * reallocated programList and goToGlobalStep walks the garbage with no
+   * NULL guard and no iteration cap — SIGSEGV (exit 139).
    *
-   * Ordered LAST for the same reason round-6 subcase [9] is: pre-fix this
-   * drive takes the whole suite down with it. ---- */
+   * Ordered LAST for the same reason the earlier SIGSEGV subcase is:
+   * pre-fix this drive takes the whole suite down with it. ---- */
   scFail = 0;
   R8_RESET();
   forthDictClear();
@@ -18563,12 +18356,9 @@ static int test_fold_round8_window(void)
                 scFail = 1;
               }
               /* The contract the owner cares about is IDENTITY: they were
-               * editing PCCC and must still be.  This was a documented gap
-               * for exactly one commit — the restore site cannot know WHICH
-               * program went — and it closed the moment the fix followed
-               * upstream's convention instead of working around it: the
-               * DELETER adjusts every saved cursor, which is what fnClP
-               * already does for its own. */
+               * editing PCCC and must still be — the deleter must adjust
+               * every saved cursor, the same way fnClP already does for
+               * its own. */
               else if (pccNow == 0 || currentProgramNumber != pccNow) {
                 printf("    [8] FAIL (R8-1): the cursor came back one program"
                        " off — PCCC is now program %u, cursor is in %u; the"
@@ -18588,26 +18378,22 @@ static int test_fold_round8_window(void)
   fail |= scFail;
   cleanupTestProgram();
 
-  /* ---- [9] R8-P1 (round 8 §4, PLAUSIBLE and unconstructed — settled by
-   * this drive): the same dynamicMenuItem divert as R8-2, at the fold's
-   * ENTRY navigation.  The softkey that OPENS a parameterized TAM (STO in
-   * a MyMenu or user DYNAMIC slot) latches dynamicMenuItem
+  /* ---- [9] The same dynamicMenuItem divert, at the fold's ENTRY
+   * navigation. The softkey that OPENS a parameterized TAM (STO in a
+   * MyMenu or user DYNAMIC slot) latches dynamicMenuItem
    * (determineFunctionKeyItem_C47's MNU_MyMenu arm) and runFunction never
    * clears it, so forthFoldEnter's park — forthHistoryGotoLastStep ->
    * goToPgmStep -> goToGlobalStep — takes the dynamic branch and RETURNS
-   * WITHOUT NAVIGATING (lblGtoXeq.c:102-116; this fixture's latch is out
-   * of range for the top menu, so the divert's own empty-label no-nav arm
-   * fires — every arm of that branch ends the same way, without moving the
-   * cursor).  forthHistoryGotoLastStep returns true regardless, so pre-
-   * bracket the caller could not detect the no-op: entryStepCount was
-   * sampled in the CALLER's program and the capture step MATERIALISED
-   * there — the shape forthFoldEnter's own comment forbids — and the
-   * sweep's threshold was then read against the wrong program.  The R8-2
-   * bracket at forthHistoryGotoLastStep closes the entry side; this drive
-   * is the reaching input the round-8 verifier never constructed.  The
-   * fall-through premise (a parameterized item is NOT consumed by the
-   * live-capture divert and does reach TAM) is subcase 8's pin, at
-   * test_capture.part.h's items seam. ---- */
+   * WITHOUT NAVIGATING (this fixture's latch is out of range for the top
+   * menu, so the divert's own empty-label no-nav arm fires — every arm of
+   * that branch ends the same way, without moving the cursor).
+   * forthHistoryGotoLastStep returns true regardless, so pre-bracket the
+   * caller could not detect the no-op: entryStepCount was sampled in the
+   * CALLER's program and the capture step MATERIALISED there — the shape
+   * forthFoldEnter's own comment forbids — and the sweep's threshold was
+   * then read against the wrong program. The fall-through premise (a
+   * parameterized item is NOT consumed by the live-capture divert and
+   * does reach TAM) is pinned elsewhere. ---- */
   scFail = 0;
   R8_RESET();
   forthDictClear();
@@ -18696,26 +18482,26 @@ static int test_fold_round8_window(void)
   fail |= scFail;
   cleanupTestProgram();
 
-  /* ---- [10] R9-1 (round 9, arithmetic dimension): R8-1 closed the saved
-   * cursor's PROGRAM half and left its LOCAL STEP half open.  The deleter
-   * rule R8-1 implemented is upstream's — a deletion BEFORE the cursor
-   * decrements the index, a deletion AT it leaves the index alone so it
-   * names the successor — but nothing bounds savedLocalStep against the
-   * program it is restored INTO, and the successor can be shorter.
+  /* ---- [10] The saved cursor's LOCAL STEP half: the deleter rule is
+   * upstream's — a deletion BEFORE the cursor decrements the index, a
+   * deletion AT it leaves the index alone so it names the successor —
+   * but nothing bounds savedLocalStep against the program it is restored
+   * INTO, and the successor can be shorter.
    *
-   * goToGlobalStep's walk (lblGtoXeq.c:122-133) has no NULL break and no
-   * iteration cap: overshoot walks past the program's END, past the global
-   * .END. (findNextStep returns NULL there), then findNextStep(NULL) → NULL
-   * until the counter arrives — and assigns currentStep = NULL.  The next
-   * PEM insert's shift loop (manage.c:748, `pos > currentStep`) then walks
+   * goToGlobalStep's walk has no NULL break and no iteration cap:
+   * overshoot walks past the program's END, past the global .END.
+   * (findNextStep returns NULL there), then findNextStep(NULL) -> NULL
+   * until the counter arrives — and assigns currentStep = NULL. The next
+   * PEM insert's shift loop (`pos > currentStep`) then walks
    * firstFreeProgramByte down toward address 0.
    *
-   * The drive: park deep inside a LONG program, DELP that same program from
-   * the console.  Its index survives as the successor's — and the successor
-   * here is FHIST, three steps long, against a saved local step of 12.
+   * The drive: park deep inside a LONG program, DELP that same program
+   * from the console. Its index survives as the successor's — and the
+   * successor here is FHIST, three steps long, against a saved local
+   * step of 12.
    *
-   * Ordered LAST: pre-fix this drive can take the whole suite down with it,
-   * which is itself the finding. ---- */
+   * Ordered LAST: pre-fix this drive can take the whole suite down with
+   * it, which is itself the finding. ---- */
   scFail = 0;
   R8_RESET();
   forthDictClear();
@@ -18748,9 +18534,10 @@ static int test_fold_round8_window(void)
       if (longProg != 0) { goToPgmStep(longProg, 1); }
       stepsInLong = (longProg == 0) ? 0 : getNumberOfSteps();
 
-      /* The reaching state, ASSERTED not assumed (the C22 rule): the cursor
-       * is deep inside PLNG, PLNG is not the last program, and the program
-       * that will inherit its index is SHORTER than the parked step. */
+      /* The reaching state, asserted before the property: the cursor
+       * is deep inside PLNG, PLNG is not the last program, and the
+       * program that will inherit its index is SHORTER than the parked
+       * step. */
       if (longProg == 0 || stepsInLong < deepStep
           || longProg >= numberOfPrograms) {
         printf("    [10] FIXTURE BUG: deep-cursor-in-PLNG not reached"
@@ -18823,7 +18610,7 @@ static int test_fold_round8_window(void)
               }
               /* And the positive contract, upstream's own: when the saved
                * step cannot be honoured, the cursor is at STEP 1 of the
-               * program — what _clearProgram does at manage.c:305-308. */
+               * program — what _clearProgram does. */
               else if (currentLocalStepNumber != 1
                        && currentLocalStepNumber != deepStep) {
                 printf("    [10] FAIL (R9-1): the restore invented a step"
@@ -18845,18 +18632,18 @@ static int test_fold_round8_window(void)
   fail |= scFail;
   cleanupTestProgram();
 
-  /* ---- [11] R9-2, the class's SECOND member: same saved-cursor tuple,
-   * different deleter.  L1-H's _forthHistCur is sampled by
-   * forthHistoryPush before the push, and the push evicts oldest-first
-   * down to FORTH_HISTORY_MAX_BYTES — so when the PEM cursor is parked
-   * inside FHIST itself (an ordinary visible program; nothing bars the
-   * cursor from it), the restore names a step eviction just removed.
+  /* ---- [11] The class's SECOND member: same saved-cursor tuple,
+   * different deleter. _forthHistCur is sampled by forthHistoryPush
+   * before the push, and the push evicts oldest-first down to
+   * FORTH_HISTORY_MAX_BYTES — so when the PEM cursor is parked inside
+   * FHIST itself (an ordinary visible program; nothing bars the cursor
+   * from it), the restore names a step eviction just removed.
    *
-   * The C2 tuple comment claims the (program, localStep) form was chosen
-   * so that "program-boundary shifts (FHIST growing/evicting)" cannot make
-   * it stale — true of the program half, false of the step half, which is
-   * the whole of R9-2.  Enumerating the class means driving EVERY mutation
-   * between save and restore: [10] drives deletion, this drives eviction.
+   * The (program, localStep) tuple form was chosen so that
+   * "program-boundary shifts (FHIST growing/evicting)" cannot make it
+   * stale — true of the program half, false of the step half. Enumerating
+   * the class means driving EVERY mutation between save and restore: [10]
+   * drives deletion, this drives eviction.
    * ---- */
   scFail = 0;
   R8_RESET();

@@ -1,14 +1,8 @@
 /*
- * forth_menu.c — Forth capture UI: the FWRD word picker and the
- * name-insertion helpers shared by the picker and the catalogs.
- *
- * S2 (simplification pass): this code previously lived inside the
- * upstream files it is called from — the MNU_FORTH builder inside
- * softmenus.c's initVariableSoftmenu(), the insert/guard helpers at the
- * top of keyboard.c.  Nothing here is upstream logic, so carrying it as
- * ~210 lines of patch against two large, actively-maintained upstream
- * files bought nothing but rebase surface.  Moved verbatim; the upstream
- * patches are now the call sites alone.
+ * forth_menu.c — Forth capture UI: the FWRD word picker, the
+ * name-insertion helpers shared by the picker and the catalogs, and the
+ * console's softmenu-frame ownership.  Nothing here is upstream logic;
+ * the upstream patches are the call sites alone.
  */
 
 #include "c47.h"
@@ -26,19 +20,16 @@ static int forthSortMenu(void const *a, void const *b) {
 /* Insert name into the open capture line at T_cursorPos as its own
  * token: one trailing space always, plus one LEADING separator space
  * whenever the byte before the cursor is neither a space nor the line
- * start (K2 token-boundary guard).  Same 256-byte/196-glyph cap as
- * typing; false = no room or capture not open.  §9.6 P-H7 discipline,
- * generalized (F6-3). */
+ * start (token-boundary guard).  Same 256-byte/196-glyph cap as typing;
+ * false = no room or capture not open. */
 bool_t forthCapInsertName(const char *name)
 {
   int32_t nameLen = stringByteLength(name);
   if(!forthCapIsOpen()) { return false; }
   int32_t bufLen = stringByteLength(aimBuffer);
-  /* K2: token-boundary guard — a name must land as its own token.  When
-   * the byte before the cursor is neither a space nor the line start,
-   * insert one leading separator space.  Previously only the F6-4 fold
-   * wrapper did this; the direct F6-3/picker/keys-mode paths glued
-   * digits to names ("42" + SIN -> "42SIN ", an unresolvable token). */
+  /* A name must land as its own token: without the leading separator the
+   * direct picker/keys-mode paths glue digits to names ("42" + SIN ->
+   * "42SIN ", an unresolvable token). */
   int32_t lead = (T_cursorPos > 0 && aimBuffer[T_cursorPos - 1] != ' ') ? 1 : 0;
   if(bufLen + nameLen + lead + 1 < 256 && stringGlyphLength(aimBuffer) + nameLen + lead + 1 <= 196) {
     xcopy(aimBuffer + T_cursorPos + nameLen + lead + 1, aimBuffer + T_cursorPos,
@@ -72,10 +63,10 @@ bool_t forthPickerGuard(int16_t item)
       && dynamicMenuItem < dynamicSoftmenu[softmenuStack[0].softmenuId].numItems;
 }
 
-/* MNU_FORTH content builder (§9.6, F6-5): the UNION of the edited
- * program's own ': NAME' definitions before the cursor (text scan — no
- * execution needed), the interactive-scope dictionary, and the global
- * dictionary, each section sorted independently.
+/* MNU_FORTH content builder (§9.6): the UNION of the edited program's own
+ * ': NAME' definitions before the cursor (text scan — no execution
+ * needed), the interactive-scope dictionary, and the global dictionary,
+ * each section sorted independently.
  *
  * Called from initVariableSoftmenu()'s MNU_FORTH arm, which has already
  * freed the previous menuContent; this function only allocates the new
@@ -87,32 +78,23 @@ void forthBuildWordPicker(int16_t menu)
   uint8_t *progStart = NULL;
   uint8_t *step;
   int16_t nNames = 0;
-  /* R2 finding 6, ruled: accepted names are copied into 15-byte slots in
-   * this same global tmpString with no capacity check; TMP_STR_LENGTH/15
-   * = 170 complete slots fit, and a personal program with more unique
-   * definitions before the cursor could write past the workspace.
-   * Policy: truncate by scan order. Once the cap is reached, stop
-   * RECORDING new names but keep tokenizing normally — nothing else in
-   * this loop depends on nNames, and the cap must not desync the
-   * tokenizer's position in the line. Sorting applies only to the names
-   * actually collected. No error UI: this is ordinary single-user
-   * robustness (a reboot/lost-edit risk), not a reportable condition,
-   * and 170 unique word definitions before the cursor is far beyond any
-   * realistic personal program. */
+  /* Accepted names are copied into 15-byte slots in this same global
+   * tmpString; TMP_STR_LENGTH/15 = 170 complete slots fit.  Policy:
+   * truncate by scan order — once the cap is reached, stop RECORDING new
+   * names but keep tokenizing normally, so the cap cannot desync the
+   * tokenizer's position in the line.  Sorting applies only to the names
+   * actually collected. */
   const int16_t forthPickerMaxNames = TMP_STR_LENGTH / 15;
 
   memset(tmpString, 0, TMP_STR_LENGTH);
 
-  /* L1-3 (C5), extended by M1 (Stage M) ADDITIVELY: the interactive gate
-   * keeps its L1-3 rationale, and the two surfaces Stage M opens —
-   * CM_NORMAL and CM_ASSIGN, the catalog-tree reachability — join it:
-   * there currentStep points at whatever the PEM cursor last was, so
-   * scanning would list that program's definitions with false provenance,
-   * and a normal-mode press of such a name resolves to nothing and
-   * errors, so it must not be offered.  Every OTHER mode keeps its landed
-   * behaviour byte for byte (an earlier over-wide PEM-only gate turned
-   * twelve landed text-scan tests red — the builder is deliberately
-   * mode-blind everywhere the pre-M surfaces reach it). */
+  /* The program-scan section is suppressed for the interactive capture
+   * and for CM_NORMAL/CM_ASSIGN (the catalog-tree surfaces): there
+   * currentStep points at whatever the PEM cursor last was, so scanning
+   * would list that program's definitions with false provenance, and a
+   * normal-mode press of such a name resolves to nothing and errors.
+   * Every other mode keeps the scan — the builder is deliberately
+   * mode-blind everywhere else. */
   progStart = (forthCapIsInteractive()
                || calcMode == CM_NORMAL || calcMode == CM_ASSIGN)
                 ? NULL : forthOwningProgramStart(currentStep);
@@ -191,7 +173,7 @@ void forthBuildWordPicker(int16_t menu)
     qsort(tmpString, nNames, 15, forthSortMenu);
   }
 
-  /* F6-5 section (b): interactive-scope dictionary words. */
+  /* Section (b): interactive-scope dictionary words. */
   { uint16_t bi = 0;
     int16_t nB = 0;
     char slot[15];
@@ -215,7 +197,7 @@ void forthBuildWordPicker(int16_t menu)
     }
   }
 
-  /* F6-5 section (c): global dictionary words. */
+  /* Section (c): global dictionary words. */
   { uint16_t ci = 0;
     int16_t nC = 0;
     char slot[15];
@@ -263,87 +245,65 @@ void forthBuildWordPicker(int16_t menu)
   dynamicSoftmenu[menu].numItems = nNames;
 }
 
-/* ---- AUDIT C2/C3/C4/C8/C9 (2026-08-06): one owner for the console's row ----
- * ---- AUDIT C17 (2026-08-06): ownership rides the FRAME, not the menu id ----
+/* ---- One owner for the console's row; ownership rides the FRAME ----
  *
- * While an interactive capture is open, the console owns AT MOST ONE softmenu
- * frame: FWRD in keys input, ALPHA in the alpha excursion.  Stage N pushed
- * that frame at open and then let four other sites manage it independently —
- * the E10/E11 toggle, both EXIT rungs, and the REPL reopen — and every one of
- * them got a different part of it wrong (the C2/C3/C4/C8/C9 family; see the
- * round-1 report).  This is the ONLY function that changes the console's row.
+ * While an interactive capture is open, the console owns AT MOST ONE
+ * softmenu frame: FWRD in keys input, ALPHA in the alpha excursion.  This
+ * is the ONLY function file that changes the console's row.
  *
- * C17 is what was still wrong after that consolidation: every ownership
- * decision asked "is the visible menu FWRD or ALPHA?", and a menu id is a
- * value TWO DIFFERENT OWNERS can hold.  The user's own FWRD frame — slot 0
- * precisely when they browsed the CATALOG tree to FWRD before pressing FORTH
- * — answered "ours", was retargeted to ALPHA, and a line's calcModeNormal()
- * then popped it: their frame, consumed, unrecoverable.  A single homePushed
- * bit on the capture object could not fix this: it says whether the console
- * owns A frame, never WHICH frame, and it had to be hand-preserved across
- * every capture reopen (the C3 family — two sites patched, each missed once).
+ * A menu id is a value TWO DIFFERENT OWNERS can hold (the user's own FWRD
+ * frame is indistinguishable from the console's by identity alone), so
+ * ownership lives IN the frame: the frame the console relies on carries a
+ * sentinel in its userMenuId — FRAME_STAMP for a frame the console
+ * CREATED (the close rung pops it), BORROW_STAMP for the USER'S OWN row
+ * the console is merely displaying (the close rung releases it) — and
+ * every decision (retarget, restore, "is anything stacked above the
+ * base", "pop what the open pushed") tests the stamps.
  *
- * So ownership now lives IN the frame.  The frame the console relies on
- * carries a sentinel in its userMenuId — FRAME_STAMP for a frame the console
- * CREATED (the close rung pops it), BORROW_STAMP for the USER'S OWN row the
- * console is merely displaying (the close rung releases it) — and every
- * decision — retarget, restore, "is anything stacked above the base", "pop
- * what the open pushed" — tests the stamps.
+ * THE INVARIANT: while an interactive capture is open the stack carries
+ * AT MOST ONE BORROWED base and AT MOST ONE OWNED frame, and when both
+ * exist the OWNED one is ABOVE the borrowed one.  Two registrations is
+ * the normal, correct state of the alpha excursion opened over the user's
+ * own FWRD row.  What must never happen is two OWNED frames, or a stamp
+ * of either kind outliving its capture: forthCapClose() is the clearing
+ * funnel, with forthCapAbandonSuspended() and the restore sanitizer as
+ * the two paths that reach a closed capture without passing through it.
  *
- * THE INVARIANT, stated correctly (AUDIT round 3 — an earlier draft of this
- * banner claimed "exactly one frame is registered", which is NOT what the
- * code does and was caught by three independent readers): while an
- * interactive capture is open the stack carries AT MOST ONE BORROWED base
- * and AT MOST ONE OWNED frame, and when both exist the OWNED one is ABOVE
- * the borrowed one.  Two registrations is the normal, correct state of the
- * alpha excursion opened over the user's own FWRD row: the borrow marks
- * their row so dedup cannot lift it and the close cannot pop it, while the
- * owned frame carries the excursion.  What must never happen is two OWNED
- * frames, or a stamp of either kind outliving its capture.  Every close
- * path clears both — forthCapClose() is the funnel, with
- * forthCapAbandonSuspended() and the restore sanitizer as the two paths
- * that reach a closed capture WITHOUT passing through it.
+ * The field is safe to borrow: it is meaningful only for -MNU_DYNAMIC
+ * frames, native pushes write 0, real user-menu ids are >= 0, and the one
+ * native mutator (removeUserMenuFromStack's re-number loop) only
+ * decrements values GREATER than a non-negative threshold — a NEGATIVE
+ * stamp is inert everywhere upstream.  Because the stamp is in the frame,
+ * it shifts with every push/pop/dedup-lift and survives every capture
+ * reopen and resume by construction.  Marking the BORROWED base is
+ * load-bearing, not bookkeeping: an unmarked base would still match
+ * pushSoftmenu's (softmenuId, userMenuId) dedup, so a native re-push of
+ * the same menu could lift the user's base out from under the console or
+ * early-return against it.
  *
- * The field is safe to borrow: it is meaningful only for -MNU_DYNAMIC frames
- * (pushSoftmenu/popSoftmenu/fnGetMenu all gate on that), native pushes write
- * 0, real user-menu ids are >= 0, and the one native mutator
- * (removeUserMenuFromStack's re-number loop) only decrements values GREATER
- * than a non-negative threshold — a NEGATIVE stamp is inert everywhere
- * upstream.  Because the stamp is in the frame, it shifts with every
- * push/pop/dedup-lift and survives every capture reopen and resume by
- * construction: the whole "preserve homePushed across reopen X" class dies.
- * Marking the BORROWED base is load-bearing, not bookkeeping: an unmarked
- * base no longer matches pushSoftmenu's (softmenuId, userMenuId) dedup, so a
- * native re-push of the same menu can neither lift the user's base out from
- * under the console nor early-return against it — the failure sequence the
- * out-of-family design review (GPT-5 Sol, 2026-08-06) constructed against a
- * single-stamp draft of this fix.
+ * The sub-mode swap RETARGETS slot 0 in place rather than popping and
+ * pushing, because popSoftmenu() carries its own CM_AIM compensation that
+ * re-pushes an alpha row and pushSoftmenu() dedups against a match
+ * ANYWHERE in the array by lifting the stack over it.  Two deliberate
+ * exceptions, both bounded:
  *
- * The frame count/content discipline is unchanged: the sub-mode swap still
- * RETARGETS slot 0 in place rather than popping and pushing, because
- * popSoftmenu() carries its own CM_AIM compensation that re-pushes an alpha
- * row (softmenus.c:3719-3733) and pushSoftmenu() dedups against a match
- * ANYWHERE in the array by lifting the stack over it (softmenus.c:3671-3683).
- * Two deliberate exceptions, both bounded:
+ *   - FOLD-BACK, FWRD only: when the console's own frame sits directly on
+ *     a FWRD row that is not also console-created, the keys-mode swap POPS
+ *     ours instead of retargeting — returning the user's frame at the
+ *     user's page instead of keeping a duplicate above it.  FWRD only:
+ *     nothing native ever pops a FWRD row, while folding back onto a
+ *     user's ALPHA row would hand it straight to the next line's
+ *     calcModeNormal(), which pops -MNU_ALPHA on sight.  Safe from
+ *     popSoftmenu's CM_AIM compensation: that fires only when the pop
+ *     reveals softmenuId 0/1, and the revealed row here is a real FWRD.
  *
- *   - FOLD-BACK, FWRD only: when the console's own frame sits directly on a
- *     FWRD row that is not also console-created, the keys-mode swap POPS ours
- *     instead of retargeting — returning the user's frame at the user's page
- *     instead of keeping a duplicate above it.  FWRD only, because nothing
- *     native ever pops a FWRD row; folding back onto a user's ALPHA row would
- *     hand it straight to the next line's calcModeNormal(), which pops
- *     -MNU_ALPHA on sight (the failure sequence the OTHER out-of-family
- *     reader, Gemini, constructed against the same draft).  Safe from
- *     popSoftmenu's CM_AIM compensation: that fires only when the pop reveals
- *     softmenuId 0/1, and the revealed row here is a real FWRD.
- *
- *   - HAND-ROLLED ALPHA acquisition: re-establishing the ALPHA surface never
- *     goes through showSoftmenu, whose dedup would LIFT a user's own ALPHA
- *     row to slot 0 — where the next calcModeNormal() destroys it (C17's
- *     class) — and whose early-return would leave the user's row where a
+ *   - HAND-ROLLED ALPHA acquisition: re-establishing the ALPHA surface
+ *     never goes through showSoftmenu, whose dedup would LIFT a user's
+ *     own ALPHA row to slot 0 — where the next calcModeNormal() destroys
+ *     it — and whose early-return would leave the user's row where a
  *     console-created one was needed.  A fresh frame is shifted in above
- *     whatever is there; a user ALPHA row deeper stays SHIELDED beneath it.
- *     ALPHA is a static menu, so no content build is skipped.  FWRD
+ *     whatever is there; a user ALPHA row deeper stays SHIELDED beneath
+ *     it.  ALPHA is a static menu, so no content build is skipped.  FWRD
  *     acquisition, by contrast, does use showSoftmenu (the picker content
  *     must be rebuilt) — if dedup hoists a user's own FWRD row, it is
  *     registered as BORROWED, never claimed. */
@@ -379,15 +339,14 @@ bool_t forthConsoleStampOnStack(void) {
   return false;
 }
 
-/* Register slot 0 as the console's surface frame.  `created` says whether the
- * open/acquire pushed it (OWNED: the close rung pops it) or it is the user's
- * own row (BORROWED: the close rung releases it).
+/* Register slot 0 as the console's surface frame.  `created` says whether
+ * the open/acquire pushed it (OWNED: the close rung pops it) or it is the
+ * user's own row (BORROWED: the close rung releases it).
  *
- * An OWNED registration is refused while an OWNED frame already exists — two
- * owned frames is the state the invariant forbids, and the path that reaches
- * here with one live is FORTH pressed inside an open console (C6, open
- * finding).  A BORROWED registration is refused while ANY stamp exists: the
- * borrow marks the base, and the base is claimed once, at the open. */
+ * An OWNED registration is refused while an OWNED frame already exists —
+ * two owned frames is the state the invariant forbids.  A BORROWED
+ * registration is refused while ANY stamp exists: the borrow marks the
+ * base, and the base is claimed once, at the open. */
 void forthConsoleRegisterSlot0(bool_t created) {
   if(created) {
     int i;
@@ -416,11 +375,9 @@ void forthConsoleUnstampAll(void) {
 }
 
 #if defined(FORTH_DEBUG_SELFTEST)
-/* AUDIT round 4: the ownership invariant is stated in the banner and was
- * WRONG for a whole session before three readers caught it, so the battery
- * now asserts it rather than trusting the prose.  Selftest-only, same
- * rationale as forthTestCapOrigin: production has no business counting
- * stamps, but mutation coverage must be able to pin the raw field. */
+/* Selftest-only stamp census: the battery asserts the ownership invariant
+ * rather than trusting the prose, and mutation coverage must be able to
+ * pin the raw field. */
 uint8_t forthConsoleTestOwnedCount(void) {
   uint8_t n = 0; int i;
   for(i = 0; i < SOFTMENU_STACK_SIZE; i++) { if(_ownedAt(i)) { n++; } }
@@ -467,33 +424,13 @@ bool_t forthConsoleBaseOnTop(void) {
  * showSoftmenu (picker rebuild) and registers a dedup-hoisted user row as
  * BORROWED.
  *
- * AUDIT round 4 — the OWNED-already guard below is why this cannot become a
- * C18.  Both out-of-family readers, independently, attacked this function
- * with the same shape: it PUSHES a frame and then delegates the stamping to
- * a function entitled to DECLINE, so a decline would leave a pushed frame
- * that nothing owns — and EXIT's overlay rung would pop it, the surface
- * owner would re-push it, and the press would cycle without reaching the
- * excursion rung.
- *
- * BOTH TRACES WERE WRONG about how the state is reached (they had the
- * sub-mode toggle over an owned base entering here, when
- * forthConsoleShowSurface retargets that frame IN PLACE and never calls
- * this — verified by probe: after the toggle slot 0 is ALPHA and still
- * stamped).  Enumerating this function's two callers, neither can reach it
- * with an OWNED frame live: ShowSurface calls it only from the BORROWED-base
- * branch, and an owned frame is always created ABOVE the borrow so the
- * borrow cannot be back on top while one exists; RestoreSurface calls it
- * only when NO stamp exists anywhere.
- *
- * The guard is therefore hardening, not a bug fix, and it is worth its four
- * lines: the failure the readers described is exactly the class this
- * codebase already paid for once (C18 — "a state change committed by the
- * caller and the display of that state established by a callee that may
- * decline"), the reachability argument above rests on an invariant that a
- * future caller could break silently, and two independent readers finding
- * the same shape is the agreement CODE_AUDIT.md says to act on.  Retarget
- * the owned frame instead of stacking a second one: same end state, and the
- * push-then-decline window does not exist. */
+ * The OWNED-already arm retargets the existing owned frame rather than
+ * stacking a second one: a push whose stamping is delegated to a function
+ * entitled to DECLINE would leave a pushed frame nothing owns — EXIT's
+ * overlay rung would pop it, the surface owner would re-push it, and the
+ * press would cycle without reaching the excursion rung.  Neither caller
+ * can reach here with an OWNED frame live today; the arm is hardening
+ * against a future caller breaking that invariant silently. */
 static void _forthConsoleAcquireRow(int16_t want) {
   { int i;
     for(i = 0; i < SOFTMENU_STACK_SIZE; i++) {
@@ -540,8 +477,6 @@ static void _forthConsoleAcquireRow(int16_t want) {
 void forthConsoleShowSurface(void) {
   int16_t want, cur, m;
 
-  /* AUDIT round 8 (C-6): through the named predicate, not a longhand copy
-   * of its definition — see the contract in forth_capture.h. */
   if(!forthCapInteractiveLive()) { return; }
 
   want = forthCapKeysMode() ? -MNU_FORTH : -MNU_ALPHA;
@@ -571,7 +506,7 @@ void forthConsoleShowSurface(void) {
 
   if(_stampedAt(0)) {                          /* BORROWED base on top */
     if(cur == want) { return; }
-    /* C17: the user's own surface row shows the other sub-mode.  Never
+    /* The user's own surface row shows the other sub-mode.  Never
      * retarget their frame — acquire our own over it; theirs stays put
      * (and, for ALPHA, shielded) beneath. */
     _forthConsoleAcquireRow(want);
@@ -583,15 +518,14 @@ void forthConsoleShowSurface(void) {
    * is registered at all — a line just destroyed the surface and
    * forthConsoleRestoreSurface() is the re-establisher, not this function.
    *
-   * AUDIT C18: a buried OWNED frame is still retargeted IN PLACE, so the
-   * base stays truthful beneath the overlay — the REPL reopen legitimately
-   * flips to keys while an overlay is up (N-R6: keys-first survives every
-   * ENTER), and leaving the covered base on ALPHA would leave the mode
-   * indicator wrong the moment the overlay pops.  Possible at all only
-   * because the stamp identifies OUR frame at depth (C17); a BORROWED base
-   * is the user's frame and is never rewritten — for it, the reopen's flip
-   * needs no repair (a borrowed base is FWRD, which is what keys wants).
-   * User rows above and below stay untouched. */
+   * A buried OWNED frame is still retargeted IN PLACE, so the base stays
+   * truthful beneath the overlay — the REPL reopen legitimately flips to
+   * keys while an overlay is up, and leaving the covered base on ALPHA
+   * would leave the mode indicator wrong the moment the overlay pops.
+   * Possible at all only because the stamp identifies OUR frame at depth;
+   * a BORROWED base is the user's frame and is never rewritten (a
+   * borrowed base is FWRD, which is what keys wants).  User rows above
+   * and below stay untouched. */
   { int i;
     for(i = 1; i < SOFTMENU_STACK_SIZE; i++) {
       if(_ownedAt(i)) {
@@ -610,23 +544,21 @@ void forthConsoleShowSurface(void) {
 
 /* Re-establish the console's row after something may have DESTROYED it.
  *
- * Separate entry point because the precondition differs and the caller is the
- * only one who knows it.  forthConsoleShowSurface() above leaves a foreign top
- * row alone, because a foreign row normally means the user stacked something.
- * After a line has run, a foreign row can instead mean the console's own frame
- * was popped out from under it: calcModeNormal() pops the ALPHA row
- * (src/c47/calcMode.c:44-46) and retargets MyAlpha to MyMenu, and any native
- * item may call it — fnClearStack does, outright.
+ * Separate entry point because the precondition differs and the caller is
+ * the only one who knows it.  forthConsoleShowSurface() leaves a foreign
+ * top row alone, because a foreign row normally means the user stacked
+ * something.  After a line has run, a foreign row can instead mean the
+ * console's own frame was popped out from under it: calcModeNormal() pops
+ * the ALPHA row and retargets MyAlpha to MyMenu, and any native item may
+ * call it.
  *
- * The scan asks "does the REGISTERED frame survive, anywhere?", and if so the
- * normal ownership rules apply.  (Top-row-only inspection was the frame leak
- * the OUT-OF-FAMILY reader found on 2026-08-06 after eight in-family readers
- * missed it: with a menu stacked it concluded "ours is gone" and pushed a
- * SECOND console row.)  Only when the registered frame is gone is the surface
- * re-established, through the acquisition rules — never by adopting whatever
- * the pop revealed, which is the C17 half of the same class. */
+ * The scan asks "does the REGISTERED frame survive, anywhere?" — a
+ * top-row-only inspection would conclude "ours is gone" under any stacked
+ * menu and push a SECOND console row.  Only when the registered frame is
+ * gone is the surface re-established, through the acquisition rules —
+ * never by adopting whatever the pop revealed. */
 void forthConsoleRestoreSurface(void) {
-  if(!forthCapInteractiveLive()) { return; }   /* C-6: the named predicate */
+  if(!forthCapInteractiveLive()) { return; }
 
   if(forthConsoleStampOnStack()) {
     forthConsoleShowSurface();                 /* alive somewhere: the
@@ -637,65 +569,23 @@ void forthConsoleRestoreSurface(void) {
 }
 
 
-/* AUDIT round 9 (R9-4): HOME.3 over a live console, both halves, in ONE
- * place — the two upstream sites that used to spell it inline are overrides,
- * and a thirty-line rationale inside an override is thirty lines of future
- * merge conflict (D8; the upstream-diff-review rule that modified upstream
- * lines outrank added ones).  Each site is a two-line seam now.
+/* HOME.3 over a live console, both halves, in ONE place — each upstream
+ * site is a two-line seam.
  *
- * THE RULING, taken from what the gesture NATIVELY does rather than from
- * picking between two readings.  Upstream's own arm
- * (c47Extensions/keyboardTweak.c, openHOMEorMyM's FLAG_ALPHA branch) is:
+ * THE RULING, taken from what the gesture NATIVELY does: upstream's own
+ * arm (openHOMEorMyM's FLAG_ALPHA branch) dismisses the alphabetic
+ * overlay if one is on top, then LANDS on the row that matches the
+ * current input context (TAMALPHA vs ALPHA by tam.alpha).  Two halves,
+ * and the second is the one the gesture is named for: openHOMEorMyM
+ * OPENS a home row.  The console adds a sub-mode upstream does not have,
+ * so the faithful translation keeps both halves and evaluates the same
+ * conditional against the state the console actually has:
+ * forthConsoleShowSurface picks FWRD or ALPHA from keysMode exactly as
+ * upstream picks TAMALPHA or ALPHA from tam.alpha.  That keeps K-R3 —
+ * the row IS the mode indicator.
  *
- *     if(currentMenu() == -MNU_MyAlpha || currentMenu() == -MNU_AIMCATALOG
- *        || isAlphabeticSoftmenu())          popSoftmenu();
- *     if(tam.alpha) showSoftmenu(-MNU_TAMALPHA);
- *     else          showSoftmenu(-MNU_ALPHA);
- *
- * — dismiss the alphabetic overlay if one is on top, then LAND on the row
- * that matches the current input context.  Two halves, and the second is
- * the one the gesture is named for: openHOMEorMyM OPENS a home row.  Note
- * upstream already conditions that row on state (tam.alpha); its row and
- * its input mode always agree because native AIM has exactly one input
- * mode.
- *
- * The console adds a sub-mode upstream does not have, so the faithful
- * translation keeps both halves and evaluates the same conditional against
- * the state the console actually has: forthConsoleShowSurface picks FWRD or
- * ALPHA from keysMode exactly as upstream picks TAMALPHA or ALPHA from
- * tam.alpha.  That keeps K-R3 — the row IS the mode indicator — which is
- * the console's spelling of the agreement upstream gets for free.
- *
- * What was here before (round 8's C-2 fix) guarded on
- * `forthCapInteractiveLive() && forthConsoleBaseOnTop()` and let everything
- * else fall through to the native arm.  That got the dismiss half right and
- * the land half wrong: with the console's base BURIED the native arm popped
- * the overlay and then pushed a raw -MNU_ALPHA over the console's stamped
- * base, leaving the row reading ALPHA while the keypad typed the keys plane
- * — precisely the state round 8's own comment said a raw push must not
- * produce, re-admitted by the conjunct added to fix the stuck-overlay case.
- * Test [7] drove that state and stayed green because it asserted the
- * absence of one named menu instead of the K-R3 property.
- *
- * tam.alpha is unaffected and still reaches the native arm: during a TAM
- * session the capture is SUSPENDED, not live, so this returns false.
- *
- * MUTATION STATUS, stated because the two halves are pinned differently:
- *
- *  - The ARM ITSELF is pinned. Made to return false — ceding to the native
- *    arm, which is the pre-fix behaviour — test [7] reddens with both R9-4
- *    messages, the row reading ALPHA at menu -1922 in keys mode.
- *  - The LAND half alone is NOT falsifiable today: delete the
- *    forthConsoleShowSurface call and the gate stays green. That is not a
- *    coverage hole. Popping a correctly-registered base always reveals a row
- *    that already matches the sub-mode, because C18 refuses the sub-mode
- *    toggle while an overlay is up, so no reachable state has the base's row
- *    disagreeing with keysMode at this point. The call is kept because it is
- *    the half that makes this the same gesture upstream performs — landing,
- *    not merely dismissing — and because the invariant it enforces is the
- *    one the next overlay-dismissing site will need. If a future edit lets
- *    the sub-mode change under an overlay, this call is already correct and
- *    its absence would be the defect.
+ * tam.alpha still reaches the native arm: during a TAM session the
+ * capture is SUSPENDED, not live, so this returns false.
  *
  * Returns true when the gesture was handled here and the caller must skip
  * its native arm entirely. */

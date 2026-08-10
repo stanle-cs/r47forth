@@ -1913,14 +1913,11 @@ ls packages/forth-core/patches/                   # and which files
 produced by tools/pkg_patch_refresh.py from the working area.]
 
 Genuinely-new package sources (no upstream counterpart — auto-copied to
-`files/`):
-```
-packages/forth-core/forth_dict.c/.h      dictionary region mgmt, find*, grow, save hooks
-packages/forth-core/forth_prims.c/.h     static primitive table (index-stable)
-packages/forth-core/forth_inner.c        threaded-code interpreter (§3.2)
-packages/forth-core/forth_compile.c      tokenizer + : ; compiler (§3.3)
-packages/forth-core/forth_bridge.c       fnForthCall (ITM_FCALL), §8.4 derived-state helpers
-packages/forth-core/test_dict_reloc.c    package self-tests
+`files/`) are the same kind of set, and this document does not keep a hand
+list of them either, for the same D7-a reason. The tree is the record:
+
+```bash
+ls packages/forth-core/files packages/forth-core/files/programming
 ```
 The package declares no build file. `.refresh-manifest.json` records the hash of
 every generated entry plus the `base_commit` the package was authored against;
@@ -2065,7 +2062,7 @@ normative in §2.1):
   `len == 0` and skip it by construction, so an open capture can no longer
   flip the rendered direction of any marker after the cursor. Every
   ITM_FORTH capture emit with empty text goes through
-  `_forthCapBuildStep` (manage.c override) — `len == 0` is never emitted
+  `forthCapBuildStep` (programming/forth_fold.c) — `len == 0` is never emitted
   for a capture step. A leaked placeholder (crash mid-capture) decodes
   blank, executes as an empty-line no-op (the NUL payload IS the C-string
   terminator the extraction paths copy), is skipped by the §8.6 picker,
@@ -2447,7 +2444,7 @@ E4. *Capture machinery — two different sources of opcode truth.* Both paths
 
     Since 2026-08-04, every ITM_FORTH emit — placeholder write, per-key
     re-insert, and `forthCapRecommitStep` — funnels through
-    `_forthCapBuildStep` (manage.c override), the single definition of the
+    `forthCapBuildStep` (programming/forth_fold.c), the single definition of the
     step bytes: empty text produces the §8.1 len=1/NUL placeholder, never a
     marker-aliased `len == 0`. REM/42STR keep their upstream 4-byte empty
     form.
@@ -2661,13 +2658,11 @@ already specify.
   in history; native behaviour stays native outside the ladder (the L1-2
   KEEP disposition). **The close is inside `closeAim()` itself**
   (`packages/forth-core/bufferize.c`), as its first statement, since
-  CONSOLIDATE P6: it used to be a per-call-site helper called
-  `_forthCapCloseIfInteractive`, and that function no longer exists — a
+  CONSOLIDATE P6: it used to be a per-call-site helper, since deleted — a
   future upstream `closeAim()` caller in any file is now correct by
-  default instead of being a finding waiting for the next audit. This
-  paragraph named the deleted helper as the live choke point until round
-  9 (R9-8); do not add a site-local guard to a new close path, because
-  that forks the funnel. `forthCapPowerReset()`
+  default instead of being a finding waiting for the next audit. Do not
+  add a site-local guard to a new close path, because that forks the
+  funnel. `forthCapPowerReset()`
   drops the line: it runs at the dictionary init/restore seams, where
   transient UI state never survives. Swept by
   `test_interactive_close_sweep` on the full close tuple

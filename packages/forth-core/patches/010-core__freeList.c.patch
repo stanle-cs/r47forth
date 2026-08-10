@@ -1,22 +1,17 @@
 diff --git a/src/c47/core/freeList.c b/src/c47/core/freeList.c
-index a5f39cfdebcad142f39f9a65dd553f0dfe4465a4..2f44fdace1b0a5061ff6583c1475191320cb90e2 100644
+index a5f39cfdebcad142f39f9a65dd553f0dfe4465a4..07116fa7ff285ff9e035c95d8adc86407b1045a8 100644
 --- a/src/c47/core/freeList.c
 +++ b/src/c47/core/freeList.c
-@@ -208,7 +208,26 @@ void freeListFree(void *pcMemPtr, size_t sizeInBlocks) {
+@@ -208,7 +208,21 @@ void freeListFree(void *pcMemPtr, size_t sizeInBlocks) {
    if(sizeInBlocks == 0) {
      sizeInBlocks = 1;
    }
 +
    C47RamPtr = TO_C47MEMPTR(pcMemPtr);
 +
-+  // Double-free / invalid-free guard (FIX-6B): reject any free whose range
-+  // overlaps an existing free region. Runs unconditionally (device + PC).
-+  // An overlap means an earlier invariant already broke and memory is no
-+  // longer trustworthy; per upstream doctrine we HALT rather than continue.
-+  // The list is left unmutated (return precedes all insert/merge logic) and
-+  // the firmware-bug screen is raised so the user can hardware-reset and
-+  // report. displayBugScreen is upstream's own internal-fault mechanism and
-+  // is non-blocking (draws + sets calcMode, returns).
++  // Double-free / invalid-free guard: reject any free whose range overlaps
++  // an existing free region — memory is no longer trustworthy, so halt via
++  // displayBugScreen (non-blocking) rather than mutate the list further.
 +  for(i=0; i<numberOfFreeMemoryRegions; i++) {
 +    uint32_t rStart = (uint32_t)freeMemoryRegions[i].blockAddress;
 +    uint32_t rEnd   = rStart + (uint32_t)freeMemoryRegions[i].sizeInBlocks;

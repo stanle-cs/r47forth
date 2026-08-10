@@ -12,10 +12,10 @@
 /* ---- §1.1 In-RAM header layout ---- */
 
 #define FORTH_NULL      0xFFFFu     /* end-of-chain sentinel (region-relative) */
-#define FORTH_PRIM_NONE ((uint16_t)0xFFFFu)  /* forthFindPrim miss sentinel (C-3, §3.3) */
+#define FORTH_PRIM_NONE ((uint16_t)0xFFFFu)  /* forthFindPrim miss sentinel (§3.3) */
 #define FORTH_NAME_MAX  31
 #define FORTH_TOKEN_MAX 63  /* §3.3.3 tokenizer max token length */
-#define FORTH_HISTORY_MAX_BYTES 1024  /* L1-H: FHIST program-memory cap (bytes),
+#define FORTH_HISTORY_MAX_BYTES 1024  /* FHIST program-memory cap (bytes),
                                           oldest-first eviction beyond this */
 
 #define FF_IMMEDIATE    0x01        /* execute even in compile state */
@@ -74,7 +74,7 @@ static inline uint16_t forthRefFromToken(ftoken_t tok) {
 void forthDictInit(void);
 void forthDictClear(void);
 
-/* H5: sanity-check gdict after restoreCalc; resets to empty on corruption. */
+/* Sanity-check gdict after restoreCalc; resets to empty on corruption. */
 void forthGDictValidateRestored(void);
 
 /* Test-only: override initial block count to force early realloc (DESIGN.md §7) */
@@ -123,7 +123,7 @@ void forthDefStateRestore(const forthDefState_t *in);
 /* Returns true if a definition is currently open (smudged). */
 bool isDefinitionOpen(void);
 
-/* F1-4: index of the definition under construction (== openDef.count;
+/* Index of the definition under construction (== openDef.count;
    the entry is smudged and invisible to forthFindColon until ';').
    Returns false when no definition is open. */
 bool forthOpenDefinitionIndex(uint16_t *idx);
@@ -132,7 +132,7 @@ bool forthOpenDefinitionIndex(uint16_t *idx);
    Returns true if a name was copied, false if no open definition. */
 bool openDefinitionName(char *buf, int bufSize);
 
-/* F3-5: compile-time control flow (forth_compile.c) */
+/* Compile-time control flow (forth_compile.c) */
 void forthCtlIf(void);
 void forthCtlThen(void);
 void forthCtlElse(void);
@@ -160,17 +160,17 @@ bool forthFindColonRef(const char *name, uint16_t *ref, uint8_t *flags);
 void   forthDispatchColon(int16_t item, char *name, uint16_t widx);
 bool_t forthTryColonFallback(int16_t item, char *name);
 
-/* F6-5 browse surface: copy the name of the n-th listable entry
+/* Browse surface: copy the name of the n-th listable entry
  * (newest-first) into out (>= 15 bytes, NUL-terminated).  Listable =
  * not FF_SMUDGE, nameLen 1..14, and (fdict variant) owner matches.
  * Returns false when fewer than n+1 listable entries exist.  This is
  * a BROWSE surface: it reads owners directly and never enters a
- * program-step scope (F3-3A: scope entry is for execution only). */
+ * program-step scope (scope entry is for execution only). */
 bool_t forthDictBrowseName(uint16_t n, uint16_t owner, char *out);
 bool_t forthGDictBrowseName(uint16_t n, char *out);
 
 #if defined(FORTH_DEBUG_SELFTEST)
-/* F6-5 test hook: newest-first fdict walk, FIRST name match regardless
+/* Test hook: newest-first fdict walk, FIRST name match regardless
  * of owner or smudge state; set/clear FF_SMUDGE on that header.  No
  * product surface. */
 void forthTestSmudgeSet(const char *name, bool_t on);
@@ -185,11 +185,10 @@ bool forthFindItem(const char *name, uint16_t *itemId);
 bool forthFindItemParameterized(const char *name, uint16_t *itemId);
 
 /* §10.4: control/declarative steps are not Forth-callable.  The PTP_NONE
- * subset is upstream's own funcIsProgramStopControl set (items.c);
- * CASE is flow inside PTP_REGISTER; FCALL's parameter is a Forth
- * dictionary index (names-only invariant).  Class rejects: label
- * declaration/target, step-relative jumps, skip-on-compare, key
- * declarations. */
+ * subset is upstream's own funcIsProgramStopControl set; CASE is flow
+ * inside PTP_REGISTER; FCALL's parameter is a Forth dictionary index
+ * (names-only invariant).  Class rejects: label declaration/target,
+ * step-relative jumps, skip-on-compare, key declarations. */
 bool forthItemIsFlowReject(uint16_t itemId);
 
 /* Reverse lookup: §4.2 resolution order (label > item > colon) */
@@ -204,22 +203,22 @@ typedef enum {
    Sets *param to label ID (LABEL), item ID (ITEM), or dictionary index (COLON). */
 forthXEQType_t forthResolveXEQ(const char *name, uint16_t *param);
 
-/* F3-6: XEQN dispatch result */
+/* XEQN dispatch result */
 typedef enum { FORTH_XEQN_DONE, FORTH_XEQN_COLON, FORTH_XEQN_ERR } forthXeqnResult_t;
 
-/* F3-6: shared XEQN dispatch (kind-faithful, B2 chain, B4 matrix).
+/* Shared XEQN dispatch (kind-faithful).
    kind: 253 (STRING_LABEL_VARIABLE) or 249 (LOCAL_LABEL_VARIABLE).
    On COLON, sets *colonRef and returns — the caller dispatches. */
 forthXeqnResult_t forthXeqnDispatch(const char *name, uint8_t kind, uint16_t *colonRef);
 
-/* F4-3: shared marker-cell dispatch (253/250/254/255).
+/* Shared marker-cell dispatch (253/250/254/255).
    nbuf: marker byte + len/param byte + name bytes (for 253/255) or
          marker byte + param byte (for 254/250).
    used: byte count of the meaningful portion of nbuf.
    Dispatches through paramCoreExecuteOpBounded(nbuf, nbuf+used, op, paramMode). */
 void forthParamMarkerDispatch(uint16_t op, uint16_t ptpClass, uint8_t *nbuf, uint16_t used);
 
-/* F4-3: which marker bytes a PTP class accepts. ONE table (forth_dict.c) —
+/* Which marker bytes a PTP class accepts. ONE table (forth_dict.c) —
    the compiler, the runtime decode, and all three walks read it, so a class
    can never accept a form in one place and reject it in another. */
 #define FORTH_MK_NAME     0x01u   /* 253 STRING_LABEL_VARIABLE: 'NAME'    */
@@ -229,7 +228,7 @@ void forthParamMarkerDispatch(uint16_t op, uint16_t ptpClass, uint8_t *nbuf, uin
 uint8_t forthParamMarkerMask(uint16_t ptpClass);
 uint8_t forthParamMarkerBit(uint8_t firstParamByte);
 
-/* F4-3: byte span of ONE FTOK_C47 inline parameter group starting at `pos`
+/* Byte span of ONE FTOK_C47 inline parameter group starting at `pos`
    (the first parameter cell; `limit` is exclusive). `strict` enforces byte
    legality and the pad-zero rule. Runtime, restore, and promotion walks pass
    true so malformed parameter data cannot become executable or persistent.
@@ -244,19 +243,18 @@ void forthInner(uint16_t entryIndex, bool fromProgram);
 void forthPushReal34(const real34_t *val);
 void forthPushInt32(int32_t val);
 
-/* D2 data-stack overflow guard (forth_inner.c). The outer interpreter brackets
+/* Data-stack overflow guard (forth_inner.c). The outer interpreter brackets
  * each line so the count starts clean and nested forthInner calls inherit it. */
 void    forthDataDepthEnterOuter(void);
 void    forthDataDepthLeaveOuter(void);
 void    forthDataDepthResync(void);
 bool_t  forthDataDepthApply(int16_t net);
 
-/* D3-1 spill region (forth_inner.c) */
+/* Spill region (forth_inner.c) */
 uint16_t forthSpillCount(void);
 #if defined(FORTH_DEBUG_SELFTEST)
-/* AUDIT C13: per-line high-water mark of the spill region.  forthSpillCount
- * is reset by forthDataDepthLeaveOuter before a test can read it, which made
- * the assertion pinning `.`'s declared stack delta structurally dead. */
+/* Per-line high-water mark of the spill region.  forthSpillCount is
+ * reset by forthDataDepthLeaveOuter before a test can read it. */
 uint16_t forthTestSpillHighWater(void);
 #endif
 void     forthSpillReset(void);
@@ -269,15 +267,15 @@ bool_t   forthPrimInvoke(uint16_t idx);
 void fnForthCall(uint16_t param);
 void fnForthOuter(uint16_t param);
 #if defined(FORTH_DEBUG_SELFTEST)
-void forthTestRunFromX(uint16_t unusedButMandatoryParameter);   /* L1-0: battery entry for the one-shot
-                                   interpret-the-string-in-X semantics that
-                                   fnForthOuter carried before Stage L */
+void forthTestRunFromX(uint16_t unusedButMandatoryParameter);   /* Battery entry for the one-shot
+                                   interpret-the-string-in-X semantics
+                                   that fnForthOuter carries */
 #endif
 
-/* Program-step entry (P-2, §3.3.2) */
+/* Program-step entry (§3.3.2) */
 void forthProgramStep(const uint8_t *payload);
 
-/* Scope variable (F3-3) */
+/* Scope variable */
 uint16_t forthCurrentScopeGet(void);
 uint16_t forthScopeEnterProgramStep(const uint8_t *anyPtrInProgram);
 void forthScopeRestore(uint16_t prev);
@@ -285,30 +283,30 @@ void forthScopeRestore(uint16_t prev);
 /* Run-generation (§9.3) */
 void forthRunGenBump(void);
 
-/* F1-3: drop all first-touch scan records (state lives in forth_compile.c). */
+/* Drop all first-touch scan records (state lives in forth_compile.c). */
 void forthScanTrackReset(void);
 
-/* Active-frame predicate (§9.3, F1-1) */
+/* Active-frame predicate (§9.3) */
 bool forthInnerIsActive(void);
 
 #if defined(PC_BUILD)
 void forthSetTestInnerDepth(uint8_t depth);
 #endif
 
-/* Ref → name reverse lookup (for FCALL redirect, C6) */
+/* Ref → name reverse lookup (for FCALL redirect) */
 bool forthDictNameByRef(uint16_t ref, char *buf, int bufSize);
 
-/* F3-4: same-line tracker (implemented in forth_compile.c) */
+/* Same-line tracker (implemented in forth_compile.c) */
 uint16_t forthLatestClosedRefGet(void);
 void     forthLatestClosedRefSet(uint16_t ref);
 
-/* F3-4: GLOBAL — move transient word to gdict */
+/* GLOBAL — move transient word to gdict */
 bool forthDictMakeLatestGlobal(uint16_t tref, uint16_t *grefOut);
 
-/* F3-4: IMMEDIATE — set FF_IMMEDIATE flag on a word */
+/* IMMEDIATE — set FF_IMMEDIATE flag on a word */
 bool forthDictSetImmediateByRef(uint16_t ref);
 
-/* F3-4: FORGET — truncate gdict at named word */
+/* FORGET — truncate gdict at named word */
 bool forthGDictForget(const char *name);
 
 /* Outer interpreter (§3.3) */
@@ -321,7 +319,7 @@ bool forthMarkerTurnsOn(const uint8_t *markerStep);
 bool forthEntryStateAtCursor(void);
 bool forthEntryStateAtInsertion(void);
 
-/* §9.2 owning-program helpers (P2 pre-scan + §9.4 refactor) */
+/* §9.2 owning-program helpers */
 uint8_t *forthOwningProgramStart(const uint8_t *ptr);
 uint8_t *forthNextProgramStart(const uint8_t *progStart);
 
@@ -338,20 +336,20 @@ uint8_t forthTestGetDepth(void);
 uint8_t forthTestGetRsp(void);
 #endif
 
-/* Test-only: outer-interpreter nesting introspection (D-3) */
+/* Test-only: outer-interpreter nesting introspection */
 #ifdef FORTH_DEBUG_SELFTEST
 void *forthTestOuterCur(void);
 uint8_t forthTestOuterDepth(void);
 void forthTestSetOuterDepth(uint8_t d);
 #endif
 
-/* Test-only: program-step entry counter (F3-7) */
+/* Test-only: program-step entry counter */
 #ifdef FORTH_DEBUG_SELFTEST
 void forthTestProgramStepCountReset(void);
 uint32_t forthTestProgramStepCountGet(void);
 #endif
 
-/* Test-only: scope override (F5-2) — lets a test prove that an outer-run
+/* Test-only: scope override — lets a test prove that an outer-run
    entry point restores the scope it found rather than writing whatever its
    uninitialized ctx.savedScope happened to hold. */
 #ifdef FORTH_DEBUG_SELFTEST

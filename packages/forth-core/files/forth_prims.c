@@ -19,7 +19,7 @@ static void pDiv(void)   { fnDivide(NOPARAM); }
 
 #define FTOK_CALL_BASE 0x1000   /* mirror forth_compile.c / forth_inner.c */
 
-/* F1-4: compile-only immediate. Emits a call to the definition under
+/* Compile-only immediate. Emits a call to the definition under
  * construction; the smudged name itself stays invisible until ';'. */
 static void pRecurse(void)
 {
@@ -35,7 +35,7 @@ static void pRecurse(void)
    }
  }
 
-/* F3-4: GLOBAL — move the latest closed definition to gdict */
+/* GLOBAL — move the latest closed definition to gdict */
 static void pGlobal(void)
 {
   uint16_t ref = forthLatestClosedRefGet();
@@ -58,7 +58,7 @@ static void pGlobal(void)
   }
 }
 
-/* F3-4: IMMEDIATE — set FF_IMMEDIATE on the latest closed definition */
+/* IMMEDIATE — set FF_IMMEDIATE on the latest closed definition */
 static void pImmediate(void)
 {
   uint16_t ref = forthLatestClosedRefGet();
@@ -71,27 +71,19 @@ static void pImmediate(void)
   }
 }
 
-/* ---------- N1-4: the console output words (Stage N, N-R5) ----------
+/* ---------- the console output words ----------
  *
- * §1.3's guardrail bans duplicating CALCULATOR operations reachable as
- * CAT_FNCT items.  These are LANGUAGE surface, in the same class as IF,
- * BEGIN, GLOBAL and RECURSE — there is no item-table equivalent of "print
- * the top of stack", because the calculator has never had an output
- * channel.  The fold-in records that clarification so the guardrail is not
- * re-argued at every output word.
+ * §1.3 bans duplicating CALCULATOR operations reachable as CAT_FNCT items;
+ * these are LANGUAGE surface instead, like IF, BEGIN, GLOBAL and RECURSE,
+ * because there is no item-table equivalent of "print the top of stack".
  *
- * All seven write the ring wherever they run — interactive, a key press, a
- * program step — and none of them paints.  A ring append is a bounded BSS
- * write, legal from interpret, program-step and nested contexts alike
- * (§3.3.2, nesting <= 2); the view repaints at the seam that already
- * repaints the stack.  Where no console is open they still write, and the
- * tests assert the ring bytes rather than a screen.
+ * All seven write the ring wherever they run — interactive, a key press,
+ * a program step — and none of them paints; a ring append is legal from
+ * interpret, program-step and nested contexts alike (§3.3.2, nesting <= 2).
  *
- * The name `.$` is NOT the Forth-83 `TYPE`: TYPE is a landed
- * CAT_FNCT/PTP_NONE item (items.c:4368, fnGetType) that already resolves
- * from a Forth line, and a prim of that name would silently change an
- * existing meaning.  The N-T3 sweep cleared the other six against all 2601
- * item rows. */
+ * `.$` is NOT the Forth-83 TYPE: TYPE is a landed CAT_FNCT/PTP_NONE item
+ * (fnGetType) that already resolves from a Forth line, and a prim of that
+ * name would silently change an existing meaning. */
 
 /* `.` — X per the current display mode, then a separating space, then DROP.
  * The trailing space is what makes `1 . 2 . 3 .` read as "1 2 3 " rather
@@ -115,32 +107,27 @@ static void pPrintStack(void)
 {
   char shown[FORTH_CONSOLE_FMT_MAX];
   char head[32];
-  /* AUDIT C7: the LIVE stack, not the display-line count.
-   *
-   * This used to read `(displayStack > 4) ? 8 : 4`.  displayStack counts
-   * stack DISPLAY LINES and every writer caps it at 4 (fnDisplayStack, and
-   * the dSTACK item row's own max), so the branch was dead: the prefix was
-   * the constant <4> whatever was on the stack, and under SSIZE8 the top
-   * four levels were silently absent from the picture.
+  /* The LIVE stack, not the display-line count: displayStack counts
+   * DISPLAY LINES and every writer caps it at 4, so using it here would
+   * silently drop the top four levels under SSIZE8.
    *
    * The Forth data stack on this machine IS the calculator stack — X up to
    * getStackTop(), which FLAG_SSIZE8 makes 4 or 8 — plus the D3 spill
-   * region below it (STAGE_N_TRACES N-T5).  Both terms are read live, from
-   * the same expressions the engine's own capacity check uses
-   * (forth_inner.c:127-129), so this cannot fall out of step with the
-   * stack the way a second copy of the rule did. */
+   * region below it. Both terms are read live, from the same expressions
+   * the engine's own capacity check uses, so this cannot fall out of step
+   * with the stack. */
   uint16_t levels = (uint16_t)(getStackTop() - REGISTER_X + 1);
   uint16_t depth  = (uint16_t)(levels + forthSpillCount());
   uint16_t i;
 
-  /* N-T5: "depth first, then levels until the width runs out" — the depth
+  /* "depth first, then levels until the width runs out" — the depth
    * is the part that must never be truncated away. */
   snprintf(head, sizeof(head), "<%u> ", (unsigned)depth);
   forthConsoleAppend(head);
   for(i = 0; i < levels; i++) {
-    /* REGISTER_X..REGISTER_T are consecutive (defines.h); above T the
-     * visible window continues into the spare registers the 8-level
-     * display already shows. */
+    /* REGISTER_X..REGISTER_T are consecutive; above T the visible window
+     * continues into the spare registers the 8-level display already
+     * shows. */
     forthConsoleFormatRegister((calcRegister_t)(REGISTER_X + i), shown, (int16_t)sizeof(shown));
     forthConsoleAppend(shown);
     if(i + 1 < levels) { forthConsoleAppend(" "); }
@@ -156,10 +143,10 @@ static void pPage(void)  { forthConsoleClear(); }   /* the VIEW only — FHIST i
 
 /* `EMIT` — X as a C47 glyph code, then DROP.
  *
- * The encoding is the one screen.c:1725-1728 decodes: one byte below 0x80,
- * two bytes (high first) at 0x8000 and above.  A bare 0x80..0xFF is a
- * TRUNCATED glyph, not a character, and is refused — writing it would put a
- * lone high byte in the ring for the painter to pair with whatever follows. */
+ * One byte below 0x80, two bytes (high first) at 0x8000 and above — the
+ * encoding the painter decodes. A bare 0x80..0xFF is a TRUNCATED glyph,
+ * not a character, and is refused: writing it would put a lone high byte
+ * in the ring for the painter to pair with whatever follows. */
 static void pEmit(void)
 {
   int32_t code = 0;
@@ -170,15 +157,10 @@ static void pEmit(void)
     bool_t inRange;
     longIntegerInit(li);
     convertLongIntegerRegisterToLongInteger(REGISTER_X, li);
-    /* AUDIT C20: test the magnitude BEFORE converting.  longIntegerToInt32
-     * is mpz_get_si, which returns the low 32 bits of anything larger — so
-     * `2147483647 2147483647 + 67 + EMIT` used to arrive here as 2^32+65,
-     * come out as 65, pass the ASCII gate and print `A`.  A code the owner
-     * never asked for is worse than a refusal.
-     *
-     * Upstream's own convention for this exact question is compare-then-
-     * convert: factorial.c:28-38 does `longIntegerCompareUInt(x, MAX) > 0`
-     * → error, and only then longIntegerToUInt32. */
+    /* Test the magnitude BEFORE converting: longIntegerToInt32 is
+     * mpz_get_si, which returns the low 32 bits of anything larger, so a
+     * value that overflows int32 would silently pass the ASCII gate as a
+     * wrong code instead of being refused. */
     inRange = !longIntegerIsNegative(li) && longIntegerCompareUInt(li, 0xFFFF) <= 0;
     if(inRange) {
       longIntegerToInt32(li, code);
@@ -201,13 +183,11 @@ static void pEmit(void)
     g[0] = (char)code; g[1] = 0;
   }
   else if(code >= 0x8000 && code <= 0xFFFF && (code & 0xFF) != 0) {
-    /* AUDIT C10: the low byte must not be NUL.  A two-byte glyph whose
-     * second byte is 0x00 cannot exist as a C string — g would be ONE byte
-     * long, the ring would store the lead byte alone, and forthConsoleLineAt
-     * would re-pair it with whatever followed (`33024 EMIT 65 EMIT` rendered
-     * as one wrong glyph and swallowed the A).  This is the same refusal the
-     * banner already gives a bare 0x80..0xFF, for the same reason: a
-     * truncated glyph is not a character. */
+    /* The low byte must not be NUL: a two-byte glyph whose second byte is
+     * 0x00 cannot exist as a C string — g would be ONE byte long, the ring
+     * would store the lead byte alone, and forthConsoleLineAt would re-pair
+     * it with whatever followed. Same refusal as the bare 0x80..0xFF case:
+     * a truncated glyph is not a character. */
     g[0] = (char)((code >> 8) & 0xFF); g[1] = (char)(code & 0xFF); g[2] = 0;
   }
   else {
@@ -258,8 +238,8 @@ enum {
   PRIM_AGAIN     = 19,
   PRIM_WHILE     = 20,
   PRIM_REPEAT    = 21,
-  /* N1-4: the console output words.  Appended after PRIM_REPEAT; the
-   * identifiers avoid PRIM_DOT, which is already the multiplication dot. */
+  /* Appended after PRIM_REPEAT; the identifiers avoid PRIM_DOT, which is
+   * already the multiplication dot. */
   PRIM_PRINT     = 22,   /* .   */
   PRIM_PRINTS    = 23,   /* .S  */
   PRIM_CR        = 24,   /* CR  */
@@ -293,7 +273,7 @@ const forthPrimDef_t forthPrims[PRIM_COUNT] = {
   [PRIM_AGAIN]     = { "AGAIN",  FF_IMMEDIATE, forthCtlAgain , 0 },
   [PRIM_WHILE]     = { "WHILE",  FF_IMMEDIATE, forthCtlWhile , 0 },
   [PRIM_REPEAT]    = { "REPEAT", FF_IMMEDIATE, forthCtlRepeat, 0 },
-  /* N1-4: plain prims, no FF_IMMEDIATE — they RUN, they do not compile. */
+  /* plain prims, no FF_IMMEDIATE — they RUN, they do not compile. */
   [PRIM_PRINT]     = { ".",      0, pPrint,      -1 },
   [PRIM_PRINTS]    = { ".S",     0, pPrintStack,  0 },
   [PRIM_CR]        = { "CR",     0, pCr,          0 },

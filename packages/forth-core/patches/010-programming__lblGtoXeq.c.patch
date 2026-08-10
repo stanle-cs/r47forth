@@ -1,5 +1,5 @@
 diff --git a/src/c47/programming/lblGtoXeq.c b/src/c47/programming/lblGtoXeq.c
-index 70944d629fa4e29c343f2483eda44a21526c0ef4..62abe5882d39bc96e36726e452997685e31e0630 100644
+index 70944d629fa4e29c343f2483eda44a21526c0ef4..59a150efddb7dd48416954ea3ddd02570e51d038 100644
 --- a/src/c47/programming/lblGtoXeq.c
 +++ b/src/c47/programming/lblGtoXeq.c
 @@ -7,6 +7,8 @@
@@ -313,7 +313,7 @@ index 70944d629fa4e29c343f2483eda44a21526c0ef4..62abe5882d39bc96e36726e452997685
 +          else if(op == ITM_FORTH) {
 +            if(*step++ == STRING_LABEL_VARIABLE) {
 +              if(*step != 0) {              // len > 0: source step
-+                forthProgramStep(step);     // step -> [len][bytes...] (§9.2)
++                forthProgramStep(step);     // step -> [len][bytes...]
 +              }                             // len == 0: marker — run-time no-op
 +            }
 +            return 1;
@@ -340,7 +340,7 @@ index 70944d629fa4e29c343f2483eda44a21526c0ef4..62abe5882d39bc96e36726e452997685
        clearKeyBuffer();
      }
    #endif
-+  if(!nestedEngine) { /* F1-2: sole lifetime signal — every top-level engine entry (XEQ, R/S, SST, menu, solver). forthRunGenBump() defers while a Forth frame is active. */ forthRunGenBump(); }
++  if(!nestedEngine) { /* Sole lifetime signal for every top-level engine entry (XEQ, R/S, SST, menu, solver); forthRunGenBump() defers while a Forth frame is active. */ forthRunGenBump(); }
    lastErrorCode = ERROR_NONE;
    hourGlassIconEnabled = true;
    programRunStop = PGM_RUNNING;

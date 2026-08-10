@@ -1,41 +1,34 @@
 diff --git a/src/c47/c47Extensions/keyboardTweak.c b/src/c47/c47Extensions/keyboardTweak.c
-index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..88509aa651953cd0771552bdbb1f728a06e41b6a 100644
+index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..de2d397946f968fcdf1ef10778276025ef972ea9 100644
 --- a/src/c47/c47Extensions/keyboardTweak.c
 +++ b/src/c47/c47Extensions/keyboardTweak.c
-@@ -6,6 +6,19 @@
+@@ -6,6 +6,13 @@
   ***********************************************/
  
  #include "c47.h"
 +#include "forth_capture.h"
 +#include "forth_menu.h"
 +
-+/* AUDIT round 8 (C-2 + OOF-1) — why forth-core overrides this file.
-+ *
-+ * openHOMEorMyM is reached from two gestures a console user makes with no
-+ * intent to touch the menu at all, and two of its calls DESTROY softmenu
-+ * frames rather than stacking over them — either of which can destroy the
-+ * frame a live interactive Forth capture owns.  Both guards below are
-+ * evaluated AT THE CALL, never snapshotted at entry.  The census of the two
-+ * calls, the disposition of the pushes and of _executeItem, and how the
-+ * census unit was arrived at: DESIGN-HISTORY 2026-08-09 (P10, keyboardTweak.c
-+ * census).  Counts pinned in design-audit.sh group I. */
++/* openHOMEorMyM is reached from two gestures with no intent to touch the
++ * menu; two of its calls DESTROY softmenu frames rather than stacking,
++ * which can destroy the frame a live interactive Forth capture owns —
++ * so both guards below are evaluated AT THE CALL, never at entry. */
  
  void fnSHIFTf(uint16_t unusedButMandatoryParameter) {
    shiftF = true;
-@@ -180,6 +193,12 @@ void resetKeytimers(void) {
+@@ -180,6 +187,11 @@ void resetKeytimers(void) {
        if(getSystemFlag(FLAG_ALPHA)) {
          leaveTamModeIfEnabled();
          if(getSystemFlag(FLAG_HOME_TRIPLE)) {
 +          if(forthConsoleHomeRow()) {
-+            /* R9-4: HOME.3 over a live console — dismiss, then land on the
-+             * row matching the sub-mode.  Ruling and upstream's own shape
-+             * at forth_menu.c's definition. */
++            /* HOME.3 over a live console — dismiss, then land on the row
++             * matching the sub-mode. */
 +          }
 +          else {
            if((currentMenu() == -MNU_MyAlpha) || (currentMenu() == -MNU_AIMCATALOG) || isAlphabeticSoftmenu()) {
              popSoftmenu();
            }
-@@ -189,6 +208,7 @@ void resetKeytimers(void) {
+@@ -189,6 +201,7 @@ void resetKeytimers(void) {
            else {
              showSoftmenu(-MNU_ALPHA);
            }
@@ -43,20 +36,18 @@ index c1f0225c46399f4e0f6e3c92e4d43989937a88ed..88509aa651953cd0771552bdbb1f728a
          }
          else if(getSystemFlag(FLAG_MYM_TRIPLE)) {
            showSoftmenu(-MNU_MyAlpha);
-@@ -257,7 +277,16 @@ void resetKeytimers(void) {
+@@ -257,7 +270,14 @@ void resetKeytimers(void) {
                else {
                  baseOverrideOnce = false;
                  BASE_OVERRIDEONCE = baseOverrideOnce;
 +                if(!forthCapInteractiveLive()) {
                  fnExitAllMenus(0);               // If MyMb and HOMEb are both clear, return to the blank base menu display
 +                }
-+                /* AUDIT round 8 (OOF-1): row-destroying call 2 of 2, and the
-+                 * one no predicate census would have found.  Reached only
-+                 * from a mid-TAM suspension, where the branch's own
-+                 * leaveTamModeIfEnabled() has already resumed the capture and
-+                 * re-registered the console's row — so this wipe landed on a
-+                 * row the same gesture had just restored.  Evaluated here,
-+                 * post-resume, exactly as OOF-2 requires. */
++                /* Row-destroying call, reached only from a mid-TAM
++                 * suspension where the branch's own leaveTamModeIfEnabled()
++                 * has already resumed the capture and re-registered the
++                 * console's row — an unguarded wipe would land on a row the
++                 * same gesture had just restored. */
                }
              }  //If none selected, do not display any menu, keep the screen blank
            }

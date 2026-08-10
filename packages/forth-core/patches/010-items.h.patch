@@ -1,5 +1,5 @@
 diff --git a/src/c47/items.h b/src/c47/items.h
-index 98924313217f3b57f1b663367c8e45c0dc0f1010..ee5181b432df42d97779c2470eb7122a87f1071e 100644
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..cf2e22335f8f58bca9fc5819d1fa74899675cc07 100644
 --- a/src/c47/items.h
 +++ b/src/c47/items.h
 @@ -2948,6 +2948,9 @@
@@ -12,14 +12,13 @@ index 98924313217f3b57f1b663367c8e45c0dc0f1010..ee5181b432df42d97779c2470eb7122a
  
  #define MNU_CONV_SECTION            2844
  #define MNU_CONV_MATERL             2845
-@@ -3036,6 +3039,12 @@ void reallyRunFunction(int16_t func, uint16_t param);
+@@ -3036,6 +3039,11 @@ void reallyRunFunction(int16_t func, uint16_t param);
   */
  void runFunction      (int16_t func);
  
-+/* L1-3: the three-way dispatch (PEM records / interactive capture inserts
-+ * text / everything else executes) shared by the nine call sites that used
-+ * to be a bare `if(calcMode == CM_PEM) {insert} else {exec}` pair.
-+ * Defined in items.c. */
++/* The three-way dispatch (PEM records / interactive capture inserts text /
++ * everything else executes) shared by call sites that used to be a bare
++ * `if(calcMode == CM_PEM) {insert} else {exec}` pair. Defined in items.c. */
 +void forthUserItemDispatch(int16_t item, char *funcParam, int16_t execItem, uint16_t execParam);
 +
  ///**
