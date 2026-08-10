@@ -13269,16 +13269,20 @@ static int test_fold_context(void)
 
   /* ---- Subcase 8 (C6.8): zeroth-step normalisation — set true before
    * enter; the (simulated) TAM step lands after the capture step; leave
-   * restores the flag to true. ---- */
+   * restores the flag to true.  Parked at STEP 1, because that is the
+   * only pairing a real zeroth-step cursor ever has (upstream writes
+   * localStep = 1 and the flag together) — a (localStep 2, zeroth true)
+   * fixture exercises only the arm where the flag restore is trivially
+   * kept. ---- */
   scFail = 0;
   TFC_RESET();
   {
     testProg_t p8;
-    int sEnd;
+    int sLbl, sEnd;
     tpInit(&p8);
-    tpLbl(&p8, "F1P8");
+    sLbl = tpLbl(&p8, "F1P8");
     sEnd = tpEnd(&p8);
-    if (sEnd < 0 || !tpWrite(&p8) || !tpSelectStep(&p8, sEnd)) {
+    if (sLbl < 0 || sEnd < 0 || !tpWrite(&p8) || !tpSelectStep(&p8, sLbl)) {
       printf("    [8] FIXTURE FAIL: build/write/select\n");
       scFail = 1;
     } else {
@@ -17607,6 +17611,7 @@ static int test_fold_round8_window(void)
       "12345 67890 + DROP",
       "1 2 3 4 5 6 7 8 9 + + + + + + + + DROP" };
     int li;
+    int anyAligned = 0;
   for (li = 0; li < 4 && !scFail; li++) {
   R8_RESET();
   forthDictClear();
@@ -17615,6 +17620,7 @@ static int test_fold_round8_window(void)
   {
     uint16_t usrBefore = 0, usrAfter = 0;
     uint16_t fhProgBefore, fhProgAfter, usrProgBefore, usrProgAfter;
+    uint32_t staleOff = 0;
     calcRegister_t usrLbl;
 
     /* FHIST-first memory order: LBL 'FHIST' + END is byte-for-byte what
@@ -17672,6 +17678,8 @@ static int test_fold_round8_window(void)
             scFail = 1;
           }
           else {
+            staleOff = forthCapSavedStepOffset();  /* the offset that goes
+                                                      stale when FHIST dies */
             xcopy(aimBuffer, "FHIST", 6);
             tamProcessInput(ITM_ENTER);          /* commit: fnClP runs LIVE */
 
@@ -17680,6 +17688,28 @@ static int test_fold_round8_window(void)
             usrProgAfter  = (usrLbl == INVALID_VARIABLE) ? 0
                             : (uint16_t)labelList[usrLbl - FIRST_LABEL].program;
             if (usrProgAfter != 0) { R8_PROG_STEPS(usrProgAfter, usrAfter); }
+
+            /* The arming, asserted per length rather than hand-computed:
+             * this fixture's whole detection power for the raw-offset
+             * class needs at least one length whose stale offset lands
+             * EXACTLY on a shifted user step.  Measure it instead of
+             * trusting the 12+L / 7+7k arithmetic in the banner — any
+             * change to the step encoding disarms the coincidence
+             * silently while everything else stays green. */
+            if (usrProgAfter != 0) {
+              uint8_t *s_ = programList[usrProgAfter - 1].instructionPointer;
+              int g_ = 0;
+              while (s_ != NULL
+                     && !(isAtEndOfProgram(s_) || isAtEndOfPrograms(s_))
+                     && g_ < 512) {
+                if ((uint32_t)(s_ - beginOfProgramMemory) == staleOff) {
+                  anyAligned = 1;
+                  break;
+                }
+                s_ = findNextStep(s_);
+                g_++;
+              }
+            }
 
             /* REACHED: the door really opened — the label was accepted and
              * fnClP really deleted FHIST.  Without this the assertion below
@@ -17714,7 +17744,15 @@ static int test_fold_round8_window(void)
            (unsigned)stringByteLength(histLine[li]));
   }
   cleanupTestProgram();
-  } }
+  }
+  if (!scFail && !anyAligned) {
+    printf("    [1] FIXTURE BUG: no parameterised length landed the stale"
+           " offset on a user-step boundary — the aligned case is disarmed"
+           " and the raw-offset class this fixture exists to catch would"
+           " pass undetected\n");
+    scFail = 1;
+  }
+  }
   if (!scFail) printf("    [1] PASS (P-1): DELP of FHIST abandons the line without"
                       " touching another program, at four history-line lengths\n");
   fail |= scFail;
@@ -18171,93 +18209,76 @@ static int test_fold_round8_window(void)
   fail |= scFail;
   cleanupTestProgram();
 
-  /* ---- [7] The guard is broader than the thing it protects. It skips
-   * openHOMEorMyM's pop
-   * whenever a console line is live — but the frame that pop would destroy
-   * is only sometimes the console's.  Push any other alphabetic row OVER
-   * the console (a push is ruled benign, the console's frame survives
-   * buried) and the same gesture that used to dismiss that row now does
-   * nothing: the overlay is stuck, and the owner's toggle is ignored.
-   *
-   * The guard's question is therefore "is slot 0 MINE", not "am I live" —
-   * forthConsoleBaseOnTop answers exactly that, including the buried case.
-   *
-   * Drive: live console, push -MNU_MyAlpha over it (what this function's
-   * own MyM.3 arm does), then the HOME.3 long-press.  The overlay must go
-   * and the console's own frame must still be registered underneath. ---- */
+  /* ---- [7] HOME.3 over a live console must LAND on the console's own
+   * row at EVERY overlay depth — the positive property (base on top, row
+   * agreeing with the sub-mode, stamp intact, line intact), never the
+   * absence of one named menu.  Depths: 0 none; 1 a MyAlpha overlay;
+   * 2 two overlays with MyAlpha on top; 3 two overlays with MyAlpha
+   * BURIED — the door where popSoftmenu's CM_AIM compensation re-pushes
+   * an alpha row over the revealed MyAlpha and a naive pop loop
+   * oscillates. ---- */
   scFail = 0;
-  R8_RESET();
-  setSystemFlag(FLAG_HOME_TRIPLE);
-  clearSystemFlag(FLAG_MYM_TRIPLE);
-  {
-    showSoftmenu(-MNU_STK);
-    fnForthOuter(NOPARAM);
-    xcopy(aimBuffer, "1 2", 4); T_cursorPos = 3;
-    showSoftmenu(-MNU_MyAlpha);               /* the benign overlay */
-    if (currentMenu() != -MNU_MyAlpha || forthConsoleTestOwnedCount() != 1) {
-      printf("    [7] FIXTURE BUG: overlay-over-live-console not reached"
-             " (menu=%d owned=%u)\n",
-             (int)currentMenu(), forthConsoleTestOwnedCount());
-      scFail = 1;
-    }
-    else {
+  { int d;
+    for (d = 0; d < 4 && !scFail; d++) {
+      R8_RESET();
+      setSystemFlag(FLAG_HOME_TRIPLE);
+      clearSystemFlag(FLAG_MYM_TRIPLE);
+      showSoftmenu(-MNU_STK);
+      fnForthOuter(NOPARAM);
+      xcopy(aimBuffer, "1 2", 4); T_cursorPos = 3;
+      switch (d) {
+        case 0:                                   break;
+        case 1: showSoftmenu(-MNU_MyAlpha);       break;
+        case 2: showSoftmenu(-MNU_FIN);
+                showSoftmenu(-MNU_MyAlpha);       break;
+        case 3: showSoftmenu(-MNU_MyAlpha);
+                showSoftmenu(-MNU_FIN);           break;
+      }
+      if (forthConsoleTestOwnedCount() != 1 || !forthCapKeysMode()
+          || !forthCapIsOpen() || !forthConsoleStampOnStack()) {
+        printf("    [7] FIXTURE BUG: depth-%d live-console fixture not reached"
+               " (owned=%u keys=%d open=%d stamp=%d)\n", d,
+               forthConsoleTestOwnedCount(), (int)forthCapKeysMode(),
+               (int)forthCapIsOpen(), (int)forthConsoleStampOnStack());
+        scFail = 1;
+        break;
+      }
       R8_LONGPRESS_F();
-      if (currentMenu() == -MNU_MyAlpha) {
-        printf("    [7] FAIL (OOF): the guard skipped the pop for a frame that"
-               " is not the console's — the overlay is stuck (menu=%d) and the"
-               " owner's dismiss gesture does nothing\n", (int)currentMenu());
+      if (compareString(aimBuffer, "1 2", CMP_BINARY) != 0) {
+        printf("    [7] FAIL: the typed line did not survive HOME.3 at depth"
+               " %d (aim=\"%s\")\n", d, aimBuffer);
         scFail = 1;
       }
       if (forthConsoleTestOwnedCount() + forthConsoleTestBorrowCount() == 0
           || !forthConsoleStampOnStack()) {
-        printf("    [7] FAIL: dismissing the overlay destroyed the console's own"
-               " frame (owned=%u borrow=%u)\n",
+        printf("    [7] FAIL: HOME.3 at depth %d destroyed the console's own"
+               " frame (owned=%u borrow=%u)\n", d,
                forthConsoleTestOwnedCount(), forthConsoleTestBorrowCount());
         scFail = 1;
       }
-      if (compareString(aimBuffer, "1 2", CMP_BINARY) != 0) {
-        printf("    [7] FAIL: the typed line did not survive (aim=\"%s\")\n",
-               aimBuffer);
+      /* The row IS the mode indicator: whatever the gesture lands on, the
+       * displayed row and the sub-mode the keypad types in must agree. */
+      if (forthCapKeysMode() && currentMenu() != -MNU_FORTH) {
+        printf("    [7] FAIL (R10-2): after HOME.3 at depth %d the row reads"
+               " %d while the console is in KEYS mode — the keypad types the"
+               " keys plane and the row says otherwise\n",
+               d, (int)currentMenu());
         scFail = 1;
       }
-      /* Assert the POSITIVE property, not the absence of one named menu:
-       * the three checks above all pass even if the gesture leaves a raw
-       * -MNU_ALPHA frame standing over the console's stamped base.
-       *
-       * The invariant: THE ROW IS THE MODE INDICATOR.  Whatever the
-       * gesture lands on, the displayed row and the sub-mode the keypad is
-       * actually typing in must agree.  This is also what upstream's own
-       * HOME.3 does — it picks TAMALPHA or ALPHA by the current input
-       * context — so the console owes the same agreement for the sub-mode
-       * upstream does not have. */
-      if (forthCapKeysMode() && currentMenu() == -MNU_ALPHA) {
-        printf("    [7] FAIL (R9-4): the row reads ALPHA while the console is"
-               " in KEYS mode — the keypad types the keys plane and the row"
-               " says otherwise (K-R3).  HOME.3 landed on a raw ALPHA push"
-               " instead of the console's own row\n");
-        scFail = 1;
-      }
-      if (!forthCapKeysMode() && currentMenu() == -MNU_FORTH) {
-        printf("    [7] FAIL (R9-4): the row reads FWRD (MNU_FORTH) while the"
-               " console is in the ALPHA excursion — same K-R3 violation,"
-               " other direction\n");
-        scFail = 1;
-      }
-      /* And the native half of the gesture: HOME.3 LANDS somewhere — after
-       * the overlay is dismissed the console's own base must be on top,
-       * which is what makes the row above meaningful at all. */
+      /* The LAND half: the gesture is named for landing, at every depth. */
       if (!forthConsoleBaseOnTop()) {
-        printf("    [7] FAIL (R9-4): HOME.3 dismissed the overlay but did not"
-               " land on the console's own row (menu=%d) — upstream's HOME.3"
-               " always lands on a home row; the console's is its surface\n",
-               (int)currentMenu());
+        printf("    [7] FAIL (R10-2): HOME.3 at depth %d did not land on the"
+               " console's own row (menu=%d)\n", d, (int)currentMenu());
         scFail = 1;
+      }
+      if (scFail) {
+        printf("    [7] NOTE: failing overlay depth is %d\n", d);
       }
     }
   }
-  if (!scFail) printf("    [7] PASS (OOF+R9-4): HOME.3 dismisses a foreign"
-                      " overlay and lands on the console's own row, with the"
-                      " row matching the sub-mode\n");
+  if (!scFail) printf("    [7] PASS (R9-4+R10-2): HOME.3 lands on the console's"
+                      " own row, matching the sub-mode, at overlay depths"
+                      " 0 through 3\n");
   fail |= scFail;
 
   /* ---- [8] forthFoldCtx.savedProgram is an INDEX into programList,
@@ -18534,17 +18555,25 @@ static int test_fold_round8_window(void)
       if (longProg != 0) { goToPgmStep(longProg, 1); }
       stepsInLong = (longProg == 0) ? 0 : getNumberOfSteps();
 
-      /* The reaching state, asserted before the property: the cursor
-       * is deep inside PLNG, PLNG is not the last program, and the
-       * program that will inherit its index is SHORTER than the parked
-       * step. */
-      if (longProg == 0 || stepsInLong < deepStep
-          || longProg >= numberOfPrograms) {
-        printf("    [10] FIXTURE BUG: deep-cursor-in-PLNG not reached"
-               " (PLNG=%u steps=%u progs=%u)\n",
-               longProg, stepsInLong, (unsigned)numberOfPrograms);
-        scFail = 1;
+      /* The reaching state, asserted before the property — ALL THREE
+       * conjuncts: the cursor is deep inside PLNG, PLNG is not the last
+       * program, and the program that will inherit its index is SHORTER
+       * than the parked step (asserted, not inherited from the fixture's
+       * current shape). */
+      { uint16_t succSteps = 0;
+        if (longProg != 0 && longProg < numberOfPrograms) {
+          R8_PROG_STEPS(longProg + 1, succSteps);
+        }
+        if (longProg == 0 || stepsInLong < deepStep
+            || longProg >= numberOfPrograms || succSteps >= deepStep) {
+          printf("    [10] FIXTURE BUG: deep-cursor-in-PLNG not reached"
+                 " (PLNG=%u steps=%u progs=%u succSteps=%u)\n",
+                 longProg, stepsInLong, (unsigned)numberOfPrograms,
+                 succSteps);
+          scFail = 1;
+        }
       }
+      if (scFail) { /* reaching state not established — skip the drive */ }
       else {
         goToPgmStep(longProg, deepStep);
         if (currentProgramNumber != longProg
@@ -18651,84 +18680,105 @@ static int test_fold_round8_window(void)
   forthGDictClear();
   cleanupTestProgram();
   {
-    uint16_t hist, linesBefore, deepStep, stepsBefore, stepsAfter;
-    int i;
+    uint16_t hist, stepsBefore;
+    int i, arm;
     char line[16];
 
-    /* Fill FHIST past its 1024-byte cap.  Each line is distinct: L2
-     * collapses CONSECUTIVE duplicates, so identical text would push once
-     * and the fixture would never reach the cap. */
+    /* Fill FHIST past its 1024-byte cap.  Each line is distinct: the
+     * consecutive-duplicate collapse would otherwise push once and the
+     * fixture would never reach the cap. */
     for (i = 0; i < 240; i++) {
       snprintf(line, sizeof(line), "%d", i);
       forthHistoryPush(line);
     }
     hist = forthHistoryProgram();
-    if (hist == 0) {
-      printf("    [11] FIXTURE BUG: FHIST does not exist after the fill\n");
+    goToPgmStep(hist ? hist : 1, 1);
+    stepsBefore = hist ? getNumberOfSteps() : 0;
+    if (hist == 0 || stepsBefore < 20) {
+      printf("    [11] FIXTURE BUG: FHIST fill did not reach the eviction"
+             " cap (hist=%u steps=%u)\n", hist, stepsBefore);
       scFail = 1;
     }
     else {
-      goToPgmStep(hist, 1);
-      stepsBefore = getNumberOfSteps();
-      /* Park DEEP inside FHIST — near its end, where eviction's victims
-       * are not, so only the step NUMBER goes stale. */
-      deepStep = (uint16_t)(stepsBefore - 1);
+      /* Two parks, both on the keep arm — mid-depth and the newest line —
+       * asserting step IDENTITY (the payload the cursor was parked on),
+       * not merely that the restored number still fits: FHIST evicts from
+       * the FRONT, so a number that still fits after eviction names a
+       * DIFFERENT line unless the deleter renumbered the saved step. */
+      for (arm = 0; arm < 2 && !scFail; arm++) {
+        uint16_t park, before, after;
+        char parked[136], probe[136];
+        uint8_t plen = 0;
 
-      /* The reaching state, asserted: FHIST is at its cap (so the next
-       * push must evict) and the cursor is parked deep inside it. */
-      if (stepsBefore < 20) {
-        printf("    [11] FIXTURE BUG: FHIST holds only %u steps — the fill"
-               " did not reach the eviction cap\n", stepsBefore);
-        scFail = 1;
-      }
-      else {
-        goToPgmStep(hist, deepStep);
-        if (currentProgramNumber != hist
-            || currentLocalStepNumber != deepStep) {
-          printf("    [11] FIXTURE BUG: the cursor did not park at FHIST/%u"
-                 " (got %u/%u)\n", deepStep,
+        hist = forthHistoryProgram();
+        goToPgmStep(hist, 1);
+        before = getNumberOfSteps();
+        park = (arm == 0) ? (uint16_t)(before / 2) : (uint16_t)(before - 1);
+        goToPgmStep(hist, park);
+        if (currentProgramNumber != hist || currentLocalStepNumber != park
+            || !forthStepPayload(currentStep, &plen)
+            || plen == 0 || plen >= sizeof(parked)) {
+          printf("    [11] FIXTURE BUG: arm %d did not park on a payload"
+                 " step (prog=%u step=%u plen=%u)\n", arm,
                  (unsigned)currentProgramNumber,
-                 (unsigned)currentLocalStepNumber);
+                 (unsigned)currentLocalStepNumber, plen);
+          scFail = 1;
+          break;
+        }
+        xcopy(parked, currentStep + 4, plen); parked[plen] = 0;
+
+        /* A distinct long line, so this push must evict. */
+        snprintf(probe, sizeof(probe), "%0120d", arm + 1);
+        forthHistoryPush(probe);
+
+        hist  = forthHistoryProgram();
+        after = (hist != 0 && currentProgramNumber >= 1
+                 && currentProgramNumber <= numberOfPrograms)
+                ? getNumberOfSteps() : 0;
+        printf("    [11] OBS: arm %d FHIST steps %u -> %u, cursor prog=%u"
+               " localStep=%u currentStep=%s\n", arm, before, after,
+               (unsigned)currentProgramNumber,
+               (unsigned)currentLocalStepNumber,
+               (currentStep == NULL) ? "NULL" : "non-NULL");
+
+        /* The reaching state, asserted: the push really evicted — without
+         * an eviction this arm proves nothing about the class. */
+        if (after >= (uint16_t)(before + 1)) {
+          printf("    [11] FIXTURE BUG: arm %d push did not evict"
+                 " (%u -> %u)\n", arm, before, after);
+          scFail = 1;
+        }
+        else if (currentStep == NULL) {
+          printf("    [11] FAIL (R9-2): the history restore left currentStep"
+                 " NULL after an evicting push\n");
+          scFail = 1;
+        }
+        else if (currentProgramNumber != hist
+                 || currentLocalStepNumber > after) {
+          printf("    [11] FAIL (R9-2): the restored cursor is out of bounds"
+                 " (prog=%u hist=%u localStep=%u steps=%u)\n",
+                 (unsigned)currentProgramNumber, hist,
+                 (unsigned)currentLocalStepNumber, after);
           scFail = 1;
         }
         else {
-          linesBefore = stepsBefore;
-          /* One more push, long enough that eviction must take several
-           * oldest steps to get back under the cap. */
-          forthHistoryPush("0123456789012345678901234567890123456789"
-                           "0123456789012345678901234567890123456789"
-                           "0123456789012345678901234567890123456789");
-
-          hist       = forthHistoryProgram();
-          stepsAfter = 0;
-          if (hist != 0 && currentProgramNumber >= 1
-              && currentProgramNumber <= numberOfPrograms) {
-            stepsAfter = getNumberOfSteps();
-          }
-          printf("    [11] OBS: FHIST steps %u -> (cursor prog=%u"
-                 " localStep=%u steps=%u) currentStep=%s\n",
-                 linesBefore, (unsigned)currentProgramNumber,
-                 (unsigned)currentLocalStepNumber, stepsAfter,
-                 (currentStep == NULL) ? "NULL" : "non-NULL");
-
-          if (currentStep == NULL) {
-            printf("    [11] FAIL (R9-2): the history restore left"
-                   " currentStep NULL after an evicting push — same"
-                   " unguarded goToGlobalStep walk as [10]\n");
-            scFail = 1;
-          }
-          else if (currentProgramNumber < 1
-                   || currentProgramNumber > numberOfPrograms) {
-            printf("    [11] FAIL (R9-2): the cursor is outside programList"
-                   " (prog=%u progs=%u)\n",
-                   (unsigned)currentProgramNumber,
-                   (unsigned)numberOfPrograms);
-            scFail = 1;
-          }
-          else if (currentLocalStepNumber > stepsAfter) {
-            printf("    [11] FAIL (R9-2): the restored local step %u is past"
-                   " the end of the program it landed in (%u steps)\n",
-                   (unsigned)currentLocalStepNumber, stepsAfter);
+          uint8_t l2 = 0;
+          if (!forthStepPayload(currentStep, &l2) || l2 != plen
+              || memcmp(currentStep + 4, parked, plen) != 0) {
+            char got[136];
+            uint8_t glen = 0;
+            if (forthStepPayload(currentStep, &glen) && glen < sizeof(got)) {
+              xcopy(got, currentStep + 4, glen);
+              got[glen] = 0;
+            }
+            else {
+              got[0] = 0;
+            }
+            printf("    [11] FAIL (R10-OOF-1): the restored cursor names a"
+                   " DIFFERENT history line — parked on \"%s\", came back on"
+                   " \"%s\" (localStep %u): the saved step number was not"
+                   " renumbered by the eviction\n",
+                   parked, got, (unsigned)currentLocalStepNumber);
             scFail = 1;
           }
         }
@@ -18736,8 +18786,82 @@ static int test_fold_round8_window(void)
     }
     lastErrorCode = ERROR_NONE;
   }
-  if (!scFail) printf("    [11] PASS (R9-2): an evicting history push leaves"
-                      " its saved cursor on a real step\n");
+  if (!scFail) printf("    [11] PASS (R9-2+R10-OOF-1): an evicting history"
+                      " push leaves its saved cursor on the SAME line, at"
+                      " both park depths\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
+  /* ---- [12] Per-field round trip of the saved cursor tuple.  A
+   * zeroth-step park (BST at step 1: localStep stays 1, the zeroth flag
+   * goes true — upstream writes the two together) must survive a console
+   * ENTER's save/restore brackets with NO intervening list mutation:
+   * every field of the tuple comes back, the zeroth flag included.  A
+   * valid localStep == 1 is not an invalidated tuple. ---- */
+  scFail = 0;
+  R8_RESET();
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+  {
+    extern void fnBst(uint16_t);
+    uint16_t prog = 0;
+    tpInit(&p);
+    if (tpLbl(&p, "PZR") < 0 || tpSrc(&p, "11") < 0 || tpSrc(&p, "22") < 0 ||
+        tpRtn(&p) < 0 || tpEnd(&p) < 0 || !tpWrite(&p)) {
+      printf("    [12] FIXTURE BUG: program build/write failed\n");
+      scFail = 1;
+    }
+    else {
+      { calcRegister_t l = findNamedLabel("PZR", GLOBAL_LABELS);
+        prog = (l == INVALID_VARIABLE) ? 0
+               : (uint16_t)labelList[l - FIRST_LABEL].program; }
+      if (prog == 0) {
+        printf("    [12] FIXTURE BUG: PZR missing\n");
+        scFail = 1;
+      }
+      else {
+        goToPgmStep(prog, 1);
+        calcMode = CM_PEM;
+        aimBuffer[0] = 0;
+        fnBst(NOPARAM);                /* the real zeroth-step gesture */
+        calcMode = CM_NORMAL;
+        if (!pemCursorIsZerothStep || currentLocalStepNumber != 1
+            || currentProgramNumber != prog) {
+          printf("    [12] FIXTURE BUG: zeroth-step park not reached"
+                 " (zeroth=%d prog=%u step=%u)\n",
+                 (int)pemCursorIsZerothStep,
+                 (unsigned)currentProgramNumber,
+                 (unsigned)currentLocalStepNumber);
+          scFail = 1;
+        }
+        else {
+          showSoftmenu(-MNU_STK);
+          fnForthOuter(NOPARAM);
+          xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
+          forthInteractiveEnter();     /* Ensure + push: two save/restore
+                                          brackets over the parked tuple */
+          lastErrorCode = ERROR_NONE;
+          if (currentProgramNumber != prog || currentLocalStepNumber != 1
+              || !pemCursorIsZerothStep) {
+            printf("    [12] FAIL (R10-1): the cursor tuple did not round-trip"
+                   " (prog %u -> %u, localStep %u, zeroth=%d) — a valid saved"
+                   " field was dropped by the shared restore\n",
+                   prog, (unsigned)currentProgramNumber,
+                   (unsigned)currentLocalStepNumber,
+                   (int)pemCursorIsZerothStep);
+            scFail = 1;
+          }
+        }
+      }
+    }
+    pemCursorIsZerothStep = false;     /* do not leak the pseudo-position
+                                          into later fixtures */
+    lastErrorCode = ERROR_NONE;
+  }
+  if (!scFail) printf("    [12] PASS (R10-1): a zeroth-step cursor survives a"
+                      " console ENTER's save/restore round trip, every field"
+                      " restored\n");
   fail |= scFail;
   cleanupTestProgram();
 

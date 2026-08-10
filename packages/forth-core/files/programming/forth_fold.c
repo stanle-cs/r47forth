@@ -428,8 +428,15 @@ static void _forthRestoreCursorTuple(uint16_t program, uint16_t localStep,
   dynamicMenuItem = -1;
 
   goToPgmStep(program, 1);                    /* always valid; anchors the count */
-  if(localStep > 1 && localStep <= getNumberOfSteps()) {
-    goToPgmStep(program, localStep);
+  if(localStep >= 1 && localStep <= getNumberOfSteps()) {
+    /* The saved tuple is valid: restore EVERY field.  localStep == 1 is a
+     * valid saved step (and the only pairing a zeroth-step cursor ever
+     * has — upstream writes the flag and the 1 together), so "the second
+     * navigation is redundant" must not be conflated with "the tuple is
+     * invalid". */
+    if(localStep > 1) {
+      goToPgmStep(program, localStep);
+    }
   }
   else {
     /* Upstream's answer for a cursor its own dispatch invalidated: stay
@@ -461,7 +468,8 @@ static void _forthRestoreCursorTuple(uint16_t program, uint16_t localStep,
 /* The cursor tuple.  (program, localStep) — NOT a saved global step
  * number, which program-boundary shifts (FHIST growing/evicting) would
  * make stale by restore time; the restore re-reads programList AFTER
- * scanLabelsAndPrograms has rebuilt it. */
+ * scanLabelsAndPrograms has rebuilt it.  The step half is maintained by
+ * forthHistoryEvict, which renumbers the saved step as it deletes. */
 typedef struct {
   uint16_t savedProgram;          /* currentProgramNumber */
   uint16_t savedLocalStep;        /* currentLocalStepNumber */
@@ -670,11 +678,24 @@ bool_t forthHistoryGotoLastStep(void) {
   return true;
 }
 
-/* Oldest-first eviction down to FORTH_HISTORY_MAX_BYTES. */
-void forthHistoryEvict(void) {
+/* Oldest-first eviction down to FORTH_HISTORY_MAX_BYTES.
+ *
+ * Returns false when the loop ABANDONED on an error: scanLabelsAndPrograms
+ * frees labelList/programList up front and can early-return without
+ * reallocating, so after a false return neither list may be touched again
+ * — the caller must skip its cursor restore (the L1-H rule, at the second
+ * site it was found short at).
+ *
+ * The DELETER maintains the saved cursor (upstream's own convention, the
+ * rule fnClP applies to its saved program): every evicted step is FHIST's
+ * local step 2, so a saved cursor in FHIST past it slides down by one,
+ * and a cursor AT it keeps its number — the successor inherits it.  A
+ * saved step number that merely still FITS after eviction names a
+ * different line; renumbering is what makes the restore an identity. */
+bool_t forthHistoryEvict(void) {
   uint16_t program = forthHistoryProgram();
   if(program == 0) {
-    return;
+    return true;
   }
 
   while(_forthHistProgramBytes(program) > FORTH_HISTORY_MAX_BYTES) {
@@ -691,20 +712,22 @@ void forthHistoryEvict(void) {
     }
 
     deleteStepsFromTo(firstLine, afterFirstLine);
-    /* Upstream use-after-free guard (binding).  deleteStepsFromTo calls
-     * scanLabelsAndPrograms, which frees labelList/programList up front
-     * and can early-return on ERROR_RAM_FULL without reallocating,
-     * leaving both NULL.  Abandon the loop rather than touch either list
-     * again. */
+    if(_forthHistCur.savedProgram == program) {
+      if(_forthHistCur.savedLocalStep      > 2) { --_forthHistCur.savedLocalStep; }
+      if(_forthHistCur.savedFirstDisplayed > 2) { --_forthHistCur.savedFirstDisplayed; }
+    }
+    /* Upstream use-after-free guard (binding): abandon the loop rather
+     * than touch either list again. */
     if(lastErrorCode != ERROR_NONE) {
-      return;
+      return false;
     }
 
     program = forthHistoryProgram();   /* re-resolve against the rebuilt list */
     if(program == 0) {
-      return;
+      return true;
     }
   }
+  return true;
 }
 
 /* Push, cap, evict.  Silent on failure throughout — history is a
@@ -738,9 +761,11 @@ void forthHistoryPush(const char *text) {
 
   forthHistoryGotoLastStep();
   forthPkgInsertInProgram((uint8_t *)tmpString, forthCapBuildStep(tmpString, text));
-  forthHistoryEvict();
-
-  _forthHistRestoreCursor();
+  if(forthHistoryEvict()) {
+    /* Only while the lists are safe: an abandoned eviction leaves
+     * labelList/programList freed, and the restore walks both. */
+    _forthHistRestoreCursor();
+  }
 
   forthCapSetHistoryIndex(FORTH_HIST_BROWSE_NONE);   /* reset on every push */
   _forthHistScratch[0] = 0;                          /* the browse-local stash
@@ -1044,18 +1069,23 @@ void forthFoldLeave(void) {
         deleteStepsFromTo(cap, findNextStep(cap));
       }
     }
-  }
 
-  /* The saved cursor, through the shared bounded restore.  savedProgram
-   * is an INDEX into programList and the PARK dispatch can DELETE a
-   * program: the index is MAINTAINED by the deleter
-   * (_forthFoldNoteProgramDeleted, upstream's fnClP convention), and the
-   * restore's clamp stays as the crash guard for a shrink no deleter
-   * announced. */
-  _forthRestoreCursorTuple(forthFoldCtx.savedProgram,
-                           forthFoldCtx.savedLocalStep,
-                           forthFoldCtx.savedFirstDisplayed,
-                           forthFoldCtx.savedZerothStep);
+    /* The saved cursor, through the shared bounded restore.  savedProgram
+     * is an INDEX into programList and the PARK dispatch can DELETE a
+     * program: the index is MAINTAINED by the deleter
+     * (_forthFoldNoteProgramDeleted, upstream's fnClP convention), and the
+     * restore's clamp stays as the crash guard for a shrink no deleter
+     * announced.  NOT when the sweep abandoned: the restore walks
+     * programList through goToPgmStep, so it obeys the same abandon rule
+     * as the resolver — the guard covers every list consumer after the
+     * sweep, not only the resolve. */
+    if(!listsUnsafe) {
+      _forthRestoreCursorTuple(forthFoldCtx.savedProgram,
+                               forthFoldCtx.savedLocalStep,
+                               forthFoldCtx.savedFirstDisplayed,
+                               forthFoldCtx.savedZerothStep);
+    }
+  }
 
   forthCapSetFoldModeRaw(0);
   _forthFoldKeptSteps = 0;      /* consumed by this sweep */

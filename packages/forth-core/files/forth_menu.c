@@ -590,13 +590,33 @@ void forthConsoleRestoreSurface(void) {
  * Returns true when the gesture was handled here and the caller must skip
  * its native arm entirely. */
 bool_t forthConsoleHomeRow(void) {
+  int i;
+
   if(!forthCapInteractiveLive()) {
     return false;
   }
-  if(!forthConsoleBaseOnTop()) {
-    popSoftmenu();          /* the dismiss half — ONE frame per press, which
-                               is both upstream's shape here and the EXIT
-                               ladder's rung-1 idiom */
+  /* The dismiss half, to the BASE.  Upstream's arm pops at most one frame
+   * and then unconditionally shows a home row, so it LANDS at every
+   * depth; one pop per press would land only at depth 1 and leave the
+   * gesture a ladder rung, which is EXIT's job, not this one's.  Bounded:
+   * popSoftmenu can push as well as pop (its CM_AIM compensation), so
+   * never spin on the predicate alone. */
+  for(i = 0; i < SOFTMENU_STACK_SIZE && !forthConsoleBaseOnTop(); i++) {
+    /* popSoftmenu re-pushes an alpha row whenever a pop reveals
+     * MyMenu/MyAlpha (softmenuId 0/1) in CM_AIM, so a home frame buried
+     * above the base would make the pop loop oscillate: pop, reveal,
+     * compensate, pop the compensation, reveal again.  A buried home
+     * frame here is itself an overlay this gesture dismisses — drop it in
+     * place (slot 0 untouched, nothing repaints), then pop the top. */
+    int j;
+    for(j = 0; j < SOFTMENU_STACK_SIZE
+               && softmenuStack[1].softmenuId <= 1 && !_stampedAt(1)
+               && forthConsoleStampOnStack(); j++) {
+      xcopy(softmenuStack + 1, softmenuStack + 2,
+            (SOFTMENU_STACK_SIZE - 2) * sizeof(softmenuStack_t));
+      memset(softmenuStack + SOFTMENU_STACK_SIZE - 1, 0, sizeof(softmenuStack_t));
+    }
+    popSoftmenu();
   }
   forthConsoleShowSurface();/* the land half, row chosen by sub-mode */
   return true;

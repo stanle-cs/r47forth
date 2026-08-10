@@ -141,8 +141,11 @@ bool_t   forthHistoryGotoLastStep(void);
 
 /* Deletes FHIST's oldest source steps (oldest-first) until its byte size
  * is at or under FORTH_HISTORY_MAX_BYTES.  A no-op if FHIST does not exist
- * or is already under the cap. */
-void     forthHistoryEvict(void);
+ * or is already under the cap.  Renumbers the push bracket's saved cursor
+ * as it deletes (the deleter-adjusts convention).  Returns false when the
+ * loop abandoned on an error — labelList/programList are then unsafe and
+ * the caller must not restore a cursor through them. */
+bool_t   forthHistoryEvict(void);
 
 /* f-shifted up/down recall: moves the transient browse index by `delta`
  * (-1 for up/older, +1 for down/newer) and copies the resulting FHIST line
