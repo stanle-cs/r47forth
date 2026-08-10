@@ -18865,6 +18865,91 @@ static int test_fold_round8_window(void)
   fail |= scFail;
   cleanupTestProgram();
 
+  /* ---- [13] FHIST is a RESERVED name: the store is identified
+   * structurally, so an owner program that merely SPELLS its label FHIST
+   * (body not exclusively Forth source steps) is never adopted, appended
+   * to, or evicted from — and with that decoy label in a LOWER-numbered
+   * program, the package's own store still resolves and a fold round
+   * trip still lands its line. ---- */
+  scFail = 0;
+  R8_RESET();
+  forthDictClear();
+  forthGDictClear();
+  cleanupTestProgram();
+  {
+    uint16_t ownProg = 0, ownBefore = 0, ownAfter = 0, hist;
+    tpInit(&p);
+    if (tpLbl(&p, "FHIST") < 0 || tpRtn(&p) < 0 || tpRtn(&p) < 0 ||
+        tpEnd(&p) < 0 || !tpWrite(&p)) {
+      printf("    [13] FIXTURE BUG: program build/write failed\n");
+      scFail = 1;
+    }
+    else {
+      { calcRegister_t l = findNamedLabel("FHIST", GLOBAL_LABELS);
+        ownProg = (l == INVALID_VARIABLE) ? 0
+                  : (uint16_t)labelList[l - FIRST_LABEL].program; }
+      if (ownProg == 0) {
+        printf("    [13] FIXTURE BUG: the owner's FHIST program is missing\n");
+        scFail = 1;
+      }
+      else {
+        R8_PROG_STEPS(ownProg, ownBefore);
+        showSoftmenu(-MNU_STK);
+        fnForthOuter(NOPARAM);
+        xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
+        forthInteractiveEnter();
+        lastErrorCode = ERROR_NONE;
+
+        hist = forthHistoryProgram();
+        R8_PROG_STEPS(ownProg, ownAfter);
+        if (hist == 0 || hist == ownProg) {
+          printf("    [13] FAIL (R10-OOF-2): the store adopted the owner's"
+                 " program by NAME (hist=%u ownProg=%u) — a reserved name"
+                 " must resolve structurally\n", hist, ownProg);
+          scFail = 1;
+        }
+        if (ownAfter != ownBefore) {
+          printf("    [13] FAIL (R10-OOF-2): the console appended to the"
+                 " owner's program (%u steps -> %u)\n", ownBefore, ownAfter);
+          scFail = 1;
+        }
+        if (!scFail) {
+          xcopy(aimBuffer, "42", 3); T_cursorPos = 2;
+          runFunction(ITM_STO);
+          if (!forthFoldPending() || tam.function != ITM_STO) {
+            printf("    [13] FIXTURE BUG: STO did not open TAM over the fold"
+                   " (pending=%d tam.function=%d)\n",
+                   (int)forthFoldPending(), (int)tam.function);
+            scFail = 1;
+          }
+          else {
+            tamProcessInput(ITM_0);
+            tamProcessInput(ITM_5);
+            if (tam.mode != 0) { tamProcessInput(ITM_ENTER); }
+            if (!forthCapIsOpen() || strstr(aimBuffer, "STO") == NULL) {
+              printf("    [13] FAIL (R10-OOF-2): the fold round trip lost the"
+                     " line over the owner's decoy label (open=%d"
+                     " aim=\"%s\")\n", (int)forthCapIsOpen(), aimBuffer);
+              scFail = 1;
+            }
+            R8_PROG_STEPS(ownProg, ownAfter);
+            if (ownAfter != ownBefore) {
+              printf("    [13] FAIL (R10-OOF-2): the fold touched the owner's"
+                     " program (%u steps -> %u)\n", ownBefore, ownAfter);
+              scFail = 1;
+            }
+          }
+        }
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+  }
+  if (!scFail) printf("    [13] PASS (R10-OOF-2): a program that merely spells"
+                      " its label FHIST is never adopted, appended to, or"
+                      " swept — the reserved name resolves structurally\n");
+  fail |= scFail;
+  cleanupTestProgram();
+
   R8_RESET();
   forthHistoryEnsureFailInjected = false;     /* belt and braces: no injected
                                                  fault outlives this fixture */

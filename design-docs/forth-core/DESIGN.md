@@ -2094,6 +2094,22 @@ eviction; running it re-runs the session, deliberately — no execution
 guard. The name is `FHIST`, not `FORTH`: a label spelled `FORTH` would
 shadow the item for `XEQ 'FORTH'` (§4.2 tries labels first).
 
+**The name is RESERVED (ruled 2026-08-10).** The store owns its identity,
+and `forthHistoryProgram` enforces it structurally rather than by name
+alone: a candidate label's program conforms when its body is empty (a
+fresh store is `LBL` + `END`) or contains at least one `ITM_FORTH` source
+step. No stronger test exists — kept native steps (an unfoldable TAM
+commit stays in the store, §8.4.3) interleave arbitrarily with later
+lines and capture steps, so step order carries no signal. What this
+refuses is the ordinary collision: a native program that merely spells
+its label `FHIST`, by hand or out of a restored backup, is never adopted,
+appended to, or evicted from. An owner program that takes the reserved
+name *and* contains Forth source steps is indistinguishable from the
+store, and the reserved semantics apply to it: the name belongs to the
+history mechanism. Upstream has no reserved-label machinery and programs
+also arrive by restore, so creation-time refusal cannot close the door;
+resolution-time ownership is the enforceable half.
+
 ### 8.2 Execution semantics — run-start pre-scan
 
 **The model.** `forthProgramStep` runs `forthRunGenCheckReset()` (§8.3 — which

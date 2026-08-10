@@ -503,9 +503,43 @@ static void _forthHistRestoreCursor(void) {
                            _forthHistCur.savedZerothStep);
 }
 
+/* §8.1: FHIST is a RESERVED name, and the store owns its identity — a
+ * name match alone is a proxy, not an identity.  A candidate program is
+ * the store only when its body is EMPTY (a fresh store is LBL + END) or
+ * contains at least one ITM_FORTH source step.  No stronger structural
+ * test exists: kept native steps (an unfoldable TAM commit stays in the
+ * store) interleave arbitrarily with later lines and capture steps, so
+ * step ORDER carries no signal.  What this refuses is the ordinary
+ * collision — a native program that merely spells its label FHIST, by
+ * hand or out of a restored backup — which must never be adopted,
+ * appended to, or evicted from.  An owner program that takes the
+ * reserved name AND contains Forth source steps is indistinguishable
+ * from the store; the reserved semantics apply to it. */
+static bool_t _forthHistProgramConforms(uint16_t program) {
+  uint8_t *step = findNextStep(programList[program - 1].instructionPointer);
+  uint16_t guard = 0;
+  bool_t sawForth = false, sawOther = false;
+  while(step != NULL && !(isAtEndOfProgram(step) || isAtEndOfPrograms(step))
+        && guard++ < 512) {
+    if(checkOpCodeOfStep(step, ITM_FORTH)
+       && step[2] == (uint8_t)STRING_LABEL_VARIABLE) {
+      sawForth = true;
+    }
+    else {
+      sawOther = true;
+    }
+    step = findNextStep(step);
+  }
+  if(step == NULL || guard > 512) { return false; }
+  return (bool_t)(sawForth || !sawOther);
+}
+
 /* Program number of the FHIST program, or 0 if it does not exist yet.
- * Scans labelList for a GLOBAL label named "FHIST" (labelList[i].step > 0).
- * boundProgramNameLength guards the read exactly as
+ * Scans labelList for a GLOBAL label named "FHIST" (labelList[i].step > 0)
+ * whose program passes the ownership test above — the first NAME match is
+ * upstream's convention for resolving a label, but this store is a
+ * package-private artefact in the owner's namespace, so the name alone
+ * must not decide.  boundProgramNameLength guards the read exactly as
  * _removeLabelsAssignments does: a corrupt or crafted program cannot walk
  * this past firstFreeProgramByte. */
 uint16_t forthHistoryProgram(void) {
@@ -514,7 +548,8 @@ uint16_t forthHistoryProgram(void) {
     if(labelList[i].step > 0) {
       uint8_t len = boundProgramNameLength(labelList[i].labelPointer + 1, labelList[i].labelPointer[0]);
       if(len == FORTH_HISTORY_NAME_LEN
-         && memcmp(labelList[i].labelPointer + 1, FORTH_HISTORY_NAME, FORTH_HISTORY_NAME_LEN) == 0) {
+         && memcmp(labelList[i].labelPointer + 1, FORTH_HISTORY_NAME, FORTH_HISTORY_NAME_LEN) == 0
+         && _forthHistProgramConforms((uint16_t)labelList[i].program)) {
         return (uint16_t)labelList[i].program;
       }
     }
