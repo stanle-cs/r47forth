@@ -10,7 +10,7 @@
 ### Interactive REPL (Stage L)
 
 - `FORTH` outside PEM opens a capture on the normal screen
-- ENTER runs the line and reopens empty, EXIT closes
+- ENTER types a space (token separator), R/S runs the line and reopens empty, EXIT closes
 - Lines saved to FHIST; f-shifted up/down recalls history
 - Parameterized keys fold their canonical spelling into the line (e.g. STO 0 5 types `STO 05 `)
 
@@ -22,7 +22,7 @@
 
 ### Catalog and ASSIGN (Stage M)
 
-- FWRD appears in the catalog tree under FCNS
+- FWRD appears alongside FCNS in the catalog tree
 - Picking a word outside PEM executes it
 - Global Forth words can be ASSIGNed to user keys
 

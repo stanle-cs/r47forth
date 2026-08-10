@@ -9,7 +9,7 @@ The Forth data stack is the calculator's RPN stack (4 or 8 registers, depending 
 
 ### Console
 
-The interactive console takes over the stack area. Output words write to the transcript, input sits at the bottom.
+The interactive console takes over the stack area. Output words write to the transcript, input sits at the bottom. ENTER types a space (token separator), R/S runs the line.
 
 ![Console dialogue](forum/screenshots/stage-n-1-console-dialogue.png)
 
@@ -23,7 +23,7 @@ The transcript rolls upward as you work:
 
 ### Interactive REPL
 
-FORTH outside PEM opens a capture on the normal screen. ENTER runs the line, EXIT closes.
+FORTH outside PEM opens a capture on the normal screen. ENTER types a space (token separator), R/S runs the line, EXIT closes.
 
 ![Composing a line](forum/screenshots/stage-l-1-composing.png)
 
@@ -39,7 +39,7 @@ The ALPHA gesture toggles between alpha and calculator-key input. Parameterized 
 
 ### Catalog and ASSIGN
 
-FWRD appears in the catalog tree under FCNS:
+FWRD appears alongside FCNS in the catalog tree:
 
 ![FWRD in catalog](forum/screenshots/stage-m-1-catalog-fwrd-row.png)
 
@@ -68,6 +68,8 @@ The FWRD picker lists words visible to the current program:
 | `SWAP` | 0 | Exchange X and Y. |
 | `OVER` | +1 | Copy Y on top of the stack. |
 
+![Stack after 1 2 3 .S](forum/screenshots/stage-n-1-console-dialogue.png)
+
 ### Arithmetic
 
 | Word | Effect | Description |
@@ -76,6 +78,8 @@ The FWRD picker lists words visible to the current program:
 | `-` | -1 | Y - X. |
 | `*` | -1 | Y * X. The `×` and `·` glyphs work too. |
 | `/` | -1 | Y / X. The `÷` glyph works too. |
+
+![7 SQ . prints 49](forum/screenshots/stage-n-2-console-rolled.png)
 
 ### Console output
 
@@ -89,6 +93,8 @@ The FWRD picker lists words visible to the current program:
 | `SPACE` | 0 | Single space. |
 | `PAGE` | 0 | Clear the console view. History stays intact. |
 
+![.S with spill separator](forum/screenshots/stage-n-3-spill-separator.png)
+
 ### Definitions
 
 | Word | Effect | Description |
@@ -99,6 +105,8 @@ The FWRD picker lists words visible to the current program:
 | `GLOBAL` | 0 | Move the last closed definition to the global dictionary, so it survives power cycles. |
 | `IMMEDIATE` | 0 | Mark the last closed definition as immediate. It'll execute during compilation. |
 | `FORGET` | 0 | Remove a word (and everything after it) from the global dictionary. Reads the next token as the name. |
+
+![Defining SQ with : SQ DUP * ; GLOBAL](forum/screenshots/stage-n-2-console-rolled.png)
 
 ### Control flow
 
@@ -118,9 +126,9 @@ All of these are compile-only. They emit branch tokens into the word you're defi
 Patterns:
 
 ```forth
-: ABS-DIFF  - DUP 0 < IF CHS THEN ;
+: ABS-DIFF  - ABS ;
 
-: COUNT-DOWN  BEGIN DUP . 1 - DUP 0 = UNTIL DROP ;
+: SHOW-STACK  DUP . 1 - DUP IF RECURSE THEN DROP ;
 
 : RUN  BEGIN RCL 19 WHILE STEP REPEAT ;
 ```
@@ -143,7 +151,7 @@ Every C47 calculator function is callable by its catalog name. The interpreter r
 | `STO+ n` | Arithmetic store. `STO+`, `STO-`, `STO×`, `STO÷`. Same parameter forms. |
 | `SF n` / `CF n` | Set/clear flag. `SF 00`..`SF 99`, `SF A`, `SF 'SYSFLAG'`, dot-flags for locals. |
 | `FS? n` / `FC? n` | Test flag. Pushes 1 or 0. |
-| `x<` / `x=` / `x>` | Comparison tests against Y. Push 1 (true) or 0 (false). |
+| `x< n` / `x= n` / `x> n` | Compare X against register *n*. Push 1 (true) or 0 (false). |
 | `SHUFFLE xyzt` | Stack reorder with 4 chars from `{x,y,z,t}`. |
 
 Items that control C47 program flow (`END`, `RTN`, `STOP`, `GTO`, `CASE`) are rejected.
