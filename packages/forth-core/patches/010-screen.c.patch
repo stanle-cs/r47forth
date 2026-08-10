@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..670071650cd17c79e6eb683aebbf94351a718b53 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..67e8bfb608477bbe40a6c7ffb60f357fb64a8a50 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -3,6 +3,10 @@
@@ -73,6 +73,24 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..670071650cd17c79e6eb683aebbf9435
                }
                else {
                  bool_t baseOverrideOnce = true;
+@@ -1159,7 +1169,7 @@ return res;
+   uint32_t showGlyphCode(uint16_t charCode, const font_t *font, uint32_t x, uint32_t y, videoMode_t videoMode, bool_t showLeadingCols, bool_t showEndingCols, bool_t noPreClear) {
+     uint32_t col, row, xGlyph, endingCols;
+     int32_t  glyphId;
+-    uint8_t  byte;
++    uint8_t  byte = 0;
+     int8_t   *data;
+     const glyph_t *glyph;
+ 
+@@ -2197,7 +2207,7 @@ return res;
+ 
+ 
+   void clearRect(uint32_t g_line_x, uint32_t g_line_y) {
+-    uint32_t fcol, frow;
++    uint32_t fcol = 0, frow = 0;
+     getGlyphBounds(" ", 0, &standardFont, &fcol, &frow);
+     lcd_fill_rect((uint32_t) g_line_x, (uint32_t) g_line_y, SCREEN_WIDTH-g_line_x-1, frow, LCD_SET_VALUE);
+   }
 @@ -5662,6 +5672,24 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
    }
  

@@ -17,12 +17,13 @@
  * forthTestSetDepth/GetDepth). */
 #if defined(PC_BUILD) && defined(FORTH_DEBUG_SELFTEST)
 
+#include "c47.h"
+
 #include <string.h>
 #include <signal.h>   /* SIGALRM: the fork test turns a child hang into a signal */
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include "c47.h"
 #include "forth_dict.h"
 #include "forth_capture.h"
 #include "forth_console.h"
@@ -808,19 +809,6 @@ static bool tpSelectStep(const testProg_t *p, int idx)
   }
   currentLocalStepNumber = stepNum + 1;
   return true;
-}
-
-static uint8_t *tpSrcPayload(const testProg_t *p, int idx) /* -> the LENGTH byte (the forthProgramStep +3 contract) */
-{
-  uint8_t *step = tpStepAddr(p, idx);
-  if (step == NULL) {
-    return NULL;
-  }
-  if (p->stepKind[idx] != TP_STEP_SRC) {
-    printf("    FIXTURE BUG: tpSrcPayload(%d) is not a source step\n", idx);
-    return NULL;
-  }
-  return step + 3;
 }
 
 

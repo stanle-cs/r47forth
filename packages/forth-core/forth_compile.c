@@ -3,9 +3,10 @@
  * Per DESIGN.md §3.3.1, §3.3.2, §3.3.3, §3.3.5, §3.3.6
  */
 
+#include "c47.h"
+
 #include <string.h>
 
-#include "c47.h"
 #include "forth_dict.h"
 #include "forth_prims.h"
 #include "forth_capture.h"

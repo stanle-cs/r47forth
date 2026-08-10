@@ -1169,7 +1169,7 @@ return res;
   uint32_t showGlyphCode(uint16_t charCode, const font_t *font, uint32_t x, uint32_t y, videoMode_t videoMode, bool_t showLeadingCols, bool_t showEndingCols, bool_t noPreClear) {
     uint32_t col, row, xGlyph, endingCols;
     int32_t  glyphId;
-    uint8_t  byte;
+    uint8_t  byte = 0;
     int8_t   *data;
     const glyph_t *glyph;
 
@@ -2207,7 +2207,7 @@ return res;
 
 
   void clearRect(uint32_t g_line_x, uint32_t g_line_y) {
-    uint32_t fcol, frow;
+    uint32_t fcol = 0, frow = 0;
     getGlyphBounds(" ", 0, &standardFont, &fcol, &frow);
     lcd_fill_rect((uint32_t) g_line_x, (uint32_t) g_line_y, SCREEN_WIDTH-g_line_x-1, frow, LCD_SET_VALUE);
   }

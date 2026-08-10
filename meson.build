@@ -119,7 +119,7 @@ if custom_pkg_list != []
                          check: true)
   foreach w : pkg_info.stderr().strip().split('\n')
     if w != ''
-      warning(w)
+      message(w)
     endif
   endforeach
   lines = pkg_info.stdout().strip().split('\n')

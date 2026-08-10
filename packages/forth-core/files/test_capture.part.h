@@ -6,6 +6,22 @@
  * subcase printf text. Functions here are forward-declared in the main
  * file before the runner.
  */
+extern int16_t determineItem(const char *);
+
+#define TEST_KBD_STD_COUNT ((int)(sizeof(kbd_std_C47) / sizeof(kbd_std_C47[0])))
+
+/* Test stories find a physical key by meaning, then drive the same textual
+ * key-code seam as the simulator.  Keep both halves table-independent: the
+ * search bound comes from the table, and the formatter is not limited to the
+ * current two-digit indices. */
+static int16_t testDetermineStdItem(int keyIndex)
+{
+  char keyCode[16];
+  int written = snprintf(keyCode, sizeof(keyCode), "%02d", keyIndex);
+  if (written < 0 || written >= (int)sizeof(keyCode)) { return ITM_NOP; }
+  return determineItem(keyCode);
+}
+
 /* §4.2 TAM dispatcher: reallyRunFunction(ITM_FCALL, idx) executes Forth word.
  * Tests the exact dispatch path used by the tam.c H-hook (DESIGN.md §4.2).
  * Mutation: remove H-hook from tam.c -> ERROR_FUNCTION_NOT_FOUND instead of
@@ -5509,7 +5525,6 @@ static int test_sim_bench_nesting(void)
   int16_t savedTamMode = tam.mode;
   uint8_t savedProgRunStop = programRunStop;
   int16_t savedDynamicMenu = dynamicMenuItem;
-  int16_t savedMenu = currentMenu();
   char aimBufSave[256];
   memcpy(aimBufSave, aimBuffer, sizeof(aimBufSave));
   uint8_t savedAlphaCase = alphaCase;
@@ -8263,16 +8278,13 @@ static int test_capture_interactive_divert(void)
    * independent, per K1's rule — no key number or aim-column item id is
    * hard-coded). */
   int kIdx = -1;
-  for (int i = 0; i < 37; i++) {
+  for (int i = 0; i < TEST_KBD_STD_COUNT; i++) {
     if (kbd_std[i].fShifted == ITM_AIM) { kIdx = i; break; }
   }
   if (kIdx < 0) {
     printf("    FIXTURE FAIL: no kbd_std row carries fShifted == ITM_AIM\n");
     fail = 1;
   } else {
-    char kb[3];
-    sprintf(kb, "%02d", kIdx);
-
     /* ---- Subcase 3a: ALPHA gesture toggles keys mode, softmenu changes,
      * toggle back lands on -MNU_ALPHA. ---- */
     scFail = 0;
@@ -8297,7 +8309,7 @@ static int test_capture_interactive_divert(void)
         scFail = 1;
       } else {
         shiftF = true;
-        int16_t got = determineItem(kb);
+        int16_t got = testDetermineStdItem(kIdx);
         shiftF = false;
         if (got != ITM_AIM) {
           printf("    [3a] FAIL: determineItem = %d, expected ITM_AIM (%d)\n", got, ITM_AIM);
@@ -8314,7 +8326,7 @@ static int test_capture_interactive_divert(void)
           }
           /* Toggle back off. */
           shiftF = true;
-          got = determineItem(kb);
+          got = testDetermineStdItem(kIdx);
           shiftF = false;
           if (got != ITM_AIM) {
             printf("    [3a] FAIL: toggle-back determineItem = %d, expected ITM_AIM (%d)\n", got, ITM_AIM);
@@ -8403,7 +8415,7 @@ static int test_capture_interactive_divert(void)
       shiftF = false;
       shiftG = false;
       int16_t want = kbd_std[kIdx].primary;
-      int16_t got = determineItem(kb);
+      int16_t got = testDetermineStdItem(kIdx);
       if (got != want) {
         printf("    [3b] FAIL: determineItem = %d, expected normal-column primary %d\n", got, want);
         scFail = 1;
@@ -9142,16 +9154,13 @@ static int test_keys_mode_resolution(void)
 
   /* Locate the ALPHA-gesture row once, from the live table. */
   int kIdx = -1;
-  for (int i = 0; i < 37; i++) {
+  for (int i = 0; i < TEST_KBD_STD_COUNT; i++) {
     if (kbd_std[i].fShifted == ITM_AIM) { kIdx = i; break; }
   }
   if (kIdx < 0) {
     printf("    FIXTURE FAIL: no kbd_std row carries fShifted == ITM_AIM\n");
     return 1;
   }
-  char kb[3];
-  sprintf(kb, "%02d", kIdx);
-
   testProg_t p;
   tpInit(&p);
   int sLbl = tpLbl(&p, "K1R");
@@ -9195,7 +9204,7 @@ static int test_keys_mode_resolution(void)
   {
     lastErrorCode = ERROR_NONE;
     shiftF = true;
-    int16_t got = determineItem(kb);
+    int16_t got = testDetermineStdItem(kIdx);
     shiftF = false;
     if (got != ITM_AIM) {
       printf("    [1] FAIL: determineItem = %d, expected ITM_AIM (%d)\n", got, ITM_AIM);
@@ -9213,7 +9222,7 @@ static int test_keys_mode_resolution(void)
     forthCapSetKeysMode(true);
     shiftF = false;
     int16_t want = kbd_std[kIdx].primary;
-    int16_t got = determineItem(kb);
+    int16_t got = testDetermineStdItem(kIdx);
     shiftF = false;
     if (got != want) {
       printf("    [2] FAIL: determineItem = %d, expected primary %d\n", got, want);
@@ -9229,7 +9238,7 @@ static int test_keys_mode_resolution(void)
   {
     lastErrorCode = ERROR_NONE;
     shiftF = true;
-    int16_t got = determineItem(kb);
+    int16_t got = testDetermineStdItem(kIdx);
     shiftF = false;
     if (got != ITM_AIM) {
       printf("    [3] FAIL: determineItem = %d, expected ITM_AIM (%d)\n", got, ITM_AIM);
@@ -9254,7 +9263,7 @@ static int test_keys_mode_resolution(void)
     forthCapSetKeysMode(true);
     shiftF = true;
     int16_t want = kbd_std[kIdx].fShifted;
-    int16_t got = determineItem(kb);
+    int16_t got = testDetermineStdItem(kIdx);
     shiftF = false;
     if (forthCapIsOpen()) {
       printf("    [4] FAIL: capture still open after abort\n");
@@ -11106,16 +11115,13 @@ static int test_k4_mixed_input_definition(void)
 
   /* Locate the multiply row once, from the live table (K1 T1's idiom). */
   int mIdx = -1;
-  for (int i = 0; i < 37; i++) {
+  for (int i = 0; i < TEST_KBD_STD_COUNT; i++) {
     if (kbd_std[i].primary == ITM_MULT) { mIdx = i; break; }
   }
   if (mIdx < 0) {
     printf("    FIXTURE FAIL: no kbd_std row carries primary == ITM_MULT\n");
     return 1;
   }
-  char kb[3];
-  sprintf(kb, "%02d", mIdx);
-
   testProg_t p;
   tpInit(&p);
   int sLbl = tpLbl(&p, "K4A");
@@ -11174,7 +11180,7 @@ static int test_k4_mixed_input_definition(void)
   }
   else {
     shiftF = false;
-    int16_t mItem = determineItem(kb);
+    int16_t mItem = testDetermineStdItem(mIdx);
     shiftF = false;
     if (mItem != ITM_MULT) {
       printf("    [1] FAIL: the multiply key resolved to %d, expected ITM_MULT (%d)\n",
@@ -12117,7 +12123,7 @@ static int test_history_program(void)
 
       {
         int upRow = -1, downRow = -1, i;
-        for (i = 0; i < 37; i++) {
+        for (i = 0; i < TEST_KBD_STD_COUNT; i++) {
           if (kbd_std[i].primary == ITM_UP1)   upRow = i;
           if (kbd_std[i].primary == ITM_DOWN1) downRow = i;
         }
@@ -12135,11 +12141,8 @@ static int test_history_program(void)
             scFail = 1;
           }
           else {
-            char kbUp[3], kbDown[3];
             int16_t gotUp, gotDown;
             int mode;
-            sprintf(kbUp, "%02d", upRow);
-            sprintf(kbDown, "%02d", downRow);
             /* This row is strengthened to BOTH input modes.
              *
              * The recall gesture lives on CHR_caseUP/CHR_caseDN, which are
@@ -12155,9 +12158,9 @@ static int test_history_program(void)
                * clears it after the call, so it must be set again before
                * each individual key. */
               shiftF = true;
-              gotUp = determineItem(kbUp);
+              gotUp = testDetermineStdItem(upRow);
               shiftF = true;
-              gotDown = determineItem(kbDown);
+              gotDown = testDetermineStdItem(downRow);
               shiftF = false;
               printf("    [0] REPORT: %s input: determineItem(shiftF, UP1 row %d) = %d,"
                      " DOWN1 row %d = %d (kbd_std fShiftedAim: UP=%d DOWN=%d)\n",
@@ -12539,20 +12542,17 @@ static int test_history_program(void)
       scFail = 1;
     } else {
       int upRow = -1, downRow = -1, i;
-      char kbUp[3], kbDown[3];
       int16_t itUp, itDown;
-      for (i = 0; i < 37; i++) {
+      for (i = 0; i < TEST_KBD_STD_COUNT; i++) {
         if (kbd_std[i].primary == ITM_UP1)   upRow = i;
         if (kbd_std[i].primary == ITM_DOWN1) downRow = i;
       }
-      sprintf(kbUp, "%02d", upRow);
-      sprintf(kbDown, "%02d", downRow);
       /* shiftF is one-shot: determineItem's own resetShiftState() clears
        * it after the call, so it must be set again before each key. */
       shiftF = true;
-      itUp = determineItem(kbUp);
+      itUp = testDetermineStdItem(upRow);
       shiftF = true;
-      itDown = determineItem(kbDown);
+      itDown = testDetermineStdItem(downRow);
       shiftF = false;
 
       processKeyAction(itUp);
@@ -13583,16 +13583,13 @@ static int test_fold_seams(void)
       scFail = 1;
     } else {
       int zIdx = -1, i;
-      for (i = 0; i < 37; i++) {
+      for (i = 0; i < TEST_KBD_STD_COUNT; i++) {
         if (kbd_std[i].primary == ITM_0) { zIdx = i; break; }
       }
       if (zIdx < 0) {
         printf("    [3] FIXTURE FAIL: no kbd_std row carries primary == ITM_0\n");
         scFail = 1;
       } else {
-        char kb[3];
-        sprintf(kb, "%02d", zIdx);
-
         forthCapOpenInteractive();
         forthCapSetKeysMode(false);   /* explicit: the default */
         xcopy(aimBuffer, "42", 2); aimBuffer[2] = 0;
@@ -13606,7 +13603,7 @@ static int test_fold_seams(void)
         } else {
           int16_t got;
           shiftF = false; shiftG = false;
-          got = determineItem(kb);
+          got = testDetermineStdItem(zIdx);
           if (got != kbd_std[zIdx].primaryTam) {
             printf("    [3] FAIL: determineItem = %d, expected key->primaryTam (%d)\n",
                    got, kbd_std[zIdx].primaryTam);
@@ -14735,16 +14732,13 @@ static int test_cm_gate_audit(void)
       scFail = 1;
     } else {
       int zIdx = -1, ki;
-      for (ki = 0; ki < 37; ki++) {
+      for (ki = 0; ki < TEST_KBD_STD_COUNT; ki++) {
         if (kbd_std[ki].primary == ITM_0) { zIdx = ki; break; }
       }
       if (zIdx < 0) {
         printf("    [1] FIXTURE FAIL: no kbd_std row carries primary == ITM_0\n");
         scFail = 1;
       } else {
-        char kb[3];
-        sprintf(kb, "%02d", zIdx);
-
         forthCapOpenInteractive();
         forthCapSetKeysMode(false);
         xcopy(aimBuffer, "1", 1); aimBuffer[1] = 0;
@@ -14756,7 +14750,7 @@ static int test_cm_gate_audit(void)
         } else {
           int16_t got;
           shiftF = false; shiftG = false;
-          got = determineItem(kb);
+          got = testDetermineStdItem(zIdx);
           if (got != kbd_std[zIdx].primaryTam) {
             printf("    [1] FAIL: determineItem = %d, expected key->primaryTam (%d)\n",
                    got, kbd_std[zIdx].primaryTam);
@@ -14782,16 +14776,13 @@ static int test_cm_gate_audit(void)
   CGA_RESET();
   {
     int kIdx = -1, ki;
-    for (ki = 0; ki < 37; ki++) {
+    for (ki = 0; ki < TEST_KBD_STD_COUNT; ki++) {
       if (kbd_std[ki].fShifted == ITM_AIM) { kIdx = ki; break; }
     }
     if (kIdx < 0) {
       printf("    [2] FIXTURE FAIL: no kbd_std row carries fShifted == ITM_AIM\n");
       scFail = 1;
     } else {
-      char kb[3];
-      sprintf(kb, "%02d", kIdx);
-
       fnForthOuter(NOPARAM);
       if (!forthCapIsOpen() || !forthCapIsInteractive()) {
         printf("    [2] FIXTURE FAIL: interactive open did not take\n");
@@ -14799,7 +14790,7 @@ static int test_cm_gate_audit(void)
       } else {
         int16_t got;
         shiftF = true; shiftG = false;
-        got = determineItem(kb);
+        got = testDetermineStdItem(kIdx);
         if (got != ITM_AIM) {
           printf("    [2] FAIL: determineItem = %d, expected ITM_AIM\n", got);
           scFail = 1;
@@ -15520,20 +15511,18 @@ static int test_interactive_acceptance(void)
   if (!scFail) {
     extern void processKeyAction(int16_t);
     int upRow = -1, i;
-    char kbUp[3];
     int16_t itUp;
-    for (i = 0; i < 37; i++) {
+    for (i = 0; i < TEST_KBD_STD_COUNT; i++) {
       if (kbd_std[i].primary == ITM_UP1) { upRow = i; }
     }
     if (upRow < 0) {
       printf("    [8] FIXTURE FAIL: ITM_UP1 not on kbd_std\n");
       scFail = 1;
     } else {
-      sprintf(kbUp, "%02d", upRow);
       /* shiftF is one-shot: determineItem's own resetShiftState() clears
        * it after the call. */
       shiftF = true;
-      itUp = determineItem(kbUp);
+      itUp = testDetermineStdItem(upRow);
       shiftF = false;
       processKeyAction(itUp);
     }
@@ -17982,20 +17971,23 @@ static int test_fold_round8_window(void)
    * NOT pending. With the hook this state is reachable, so the arm is
    * executed rather than argued.
    *
-   * Specific claim: with the fold NOT pending, the F8 conjunct no longer
-   * excludes the CM_AIM column, so mid-TAM keys resolve as letters
-   * instead of reaching the TAM handler. The oracle below is
-   * determineItem's own output for a digit key. ---- */
+   * Specific claim: after the refused operation, the console is still live
+   * in keys mode, so determineItem must resolve a digit through the normal
+   * key plane. ---- */
   scFail = 0;
   R8_RESET();
   {
-    char kb[4];
+    int digitIdx = -1, keyIdx;
     int16_t got;
     uint8_t stateAfter;
 
-    /* kbd_std_C47[24] is the digit-5 key (keyID 63): primaryTam ITM_5,
-     * primaryAim ITM_U — so the answer names which column won. */
-    xcopy(kb, "24", 3);
+    for (keyIdx = 0; keyIdx < TEST_KBD_STD_COUNT; keyIdx++) {
+      if (kbd_std[keyIdx].primary == ITM_5) { digitIdx = keyIdx; break; }
+    }
+    if (digitIdx < 0) {
+      printf("    [5] FIXTURE BUG: no kbd_std row carries primary == ITM_5\n");
+      scFail = 1;
+    }
     showSoftmenu(-MNU_STK);
     fnForthOuter(NOPARAM);
     xcopy(aimBuffer, "1 2", 4); T_cursorPos = 3;
@@ -18090,15 +18082,18 @@ static int test_fold_round8_window(void)
         }
       }
 
-      /* The oracle, now asked of the refused state: the console is
-       * live, so the digit key belongs to the console — never to the AIM
-       * letter column (ITM_U on this key). */
-      lastErrorCode = ERROR_NONE;
-      got = determineItem(kb);
-      if (got == ITM_U) {
-        printf("    [5] FAIL (P-2): the digit key resolved to the AIM letter"
-               " column (ITM_U) with the console live\n");
-        scFail = 1;
+      /* Positive oracle: after the refusal the console is live in keys mode,
+       * so the digit must resolve through the normal plane.  Merely rejecting
+       * this layout's AIM letter would let every other wrong item pass. */
+      if (digitIdx >= 0) {
+        lastErrorCode = ERROR_NONE;
+        got = testDetermineStdItem(digitIdx);
+        if (got != kbd_std[digitIdx].primary) {
+          printf("    [5] FAIL (P-2): the digit key resolved to %d, expected"
+                 " normal-plane item %d with the console live\n",
+                 got, kbd_std[digitIdx].primary);
+          scFail = 1;
+        }
       }
       forthHistoryEnsureFailInjected = false;
     }

@@ -3546,9 +3546,10 @@ void showSoftmenuCurrentPart(void) {
               default:break;
             }
             int16_t x1, y1, x2, y2;
-            initSoftkeyCoordinates(tmpq, x, 2, &x1, &x2, &y1, &y2);
-            showKey(tmpq, x1, x2, y1, y2, vmNormal, false, true, NOVAL, NOVAL, tmpp);
-            diagonalsOnTop(x1, x2, y1, y2, vmNormal);
+            if(initSoftkeyCoordinates(tmpq, x, 2, &x1, &x2, &y1, &y2)) {
+              showKey(tmpq, x1, x2, y1, y2, vmNormal, false, true, NOVAL, NOVAL, tmpp);
+              diagonalsOnTop(x1, x2, y1, y2, vmNormal);
+            }
           }
 
           fnStrikeOutIfNotCoded(item%10000, x, y-currentFirstItem/6);

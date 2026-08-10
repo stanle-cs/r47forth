@@ -4939,7 +4939,6 @@ static int test_accept_entry_state_roundtrip(void)
      }
    }
 
- free_rects:
    free(exp1); free(exp2); free(exp3); free(actual);
  restore_exit:
    currentStep = savedCurrentStep;
@@ -5333,7 +5332,6 @@ static int test_accept_entry_state_roundtrip(void)
       }
     }
 
-  restore_exit:
     currentStep = savedCurrentStep;
     currentProgramNumber = savedProgNum;
     currentLocalStepNumber = savedLocalStep;
@@ -10441,4 +10439,3 @@ cleanup:
   cleanupTestProgram();
   return fail;
 }
-

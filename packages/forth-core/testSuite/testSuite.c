@@ -5494,16 +5494,16 @@ var2:
                   }
 
                   if(!real34AreEqual(VARIABLE_REAL34_DATA(REGISTER_COMPLEX34_MATRIX_ELEMENTS(regist) + element), &expectedReal34)) {
-                    char str[404];
-                    sprintf(str, "%s %cix %s", real, imag[0] == '-' ? '-' : '+', imag + (imag[0] == '-' ? 1 : 0));
+                    char str[sizeof(real) + sizeof(imag) + 6];
+                    snprintf(str, sizeof(str), "%s %cix %s", real, imag[0] == '-' ? '-' : '+', imag + (imag[0] == '-' ? 1 : 0));
                     expectedAndShouldBeValueForElement(regist, letter, element / cols + 1, element % cols + 1, str, registerExpectedAndValue);
                     if(relativeErrorReal34(&expectedReal34, VARIABLE_REAL34_DATA(REGISTER_COMPLEX34_MATRIX_ELEMENTS(regist) + element), "real", regist, letter) == RE_INACCURATE) {
                       wrongElementValue(regist, letter, element / cols + 1, element % cols + 1, str);
                     }
                   }
                   else if(!real34AreEqual(VARIABLE_IMAG34_DATA(REGISTER_COMPLEX34_MATRIX_ELEMENTS(regist) + element), &expectedImag34)) {
-                    char str[404];
-                    sprintf(str, "%s %cix %s", real, imag[0] == '-' ? '-' : '+', imag + (imag[0] == '-' ? 1 : 0));
+                    char str[sizeof(real) + sizeof(imag) + 6];
+                    snprintf(str, sizeof(str), "%s %cix %s", real, imag[0] == '-' ? '-' : '+', imag + (imag[0] == '-' ? 1 : 0));
                     expectedAndShouldBeValueForElement(regist, letter, element / cols + 1, element % cols + 1, str, registerExpectedAndValue);
                     if(relativeErrorReal34(&expectedImag34, VARIABLE_IMAG34_DATA(REGISTER_COMPLEX34_MATRIX_ELEMENTS(regist) + element), "imaginary", regist, letter) == RE_INACCURATE) {
                       wrongElementValue(regist, letter, element / cols + 1, element % cols + 1, str);
@@ -6159,13 +6159,11 @@ int processTests(const char *listPath) {
   setSystemFlag(FLAG_DENFIX);                              //JM default
   denMax = 9999;                                           //JM default
 
-  fgets(line, 9999, fileList);
-  while(!feof(fileList)) {
+  while(fgets(line, 9999, fileList) != NULL) {
     standardizeLine();
     if(line[0] != 0) {
       processOneFile();
     }
-    ignoreReturnedValue(fgets(line, 9999, fileList));
   }
 
   fclose(fileList);

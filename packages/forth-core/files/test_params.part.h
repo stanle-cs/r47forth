@@ -1284,7 +1284,6 @@ static int test_c47_param_shared_dispatch(void)
 
   /* ---- Subcase 1: in-range NUMBER_8 parity ---- */
   {
-    uint16_t sdlMax = (uint16_t)(indexOfItems[ITM_SDL].tamMinMax & TAM_MAX_MASK);
     uint8_t paramVal = 3;  /* SDL 3: shift left by 3 */
     int subFail = 0;
 
@@ -1481,7 +1480,7 @@ static int test_c47_param_shared_dispatch(void)
         }
 
         if (!subFail) {
-          bool err = run_word("SOOR");
+          run_word("SOOR");
           int32_t forthX = 0;
           longInteger_t li2;
           longIntegerInit(li2);
@@ -3868,7 +3867,6 @@ static int test_param_series_c_acceptance(void)
         lastErrorCode = ERROR_NONE; programRunStop = PGM_STOPPED; dynamicMenuItem = -1;
         uint8_t *step = tpStepAddr(&tp, sSdl);
         if (step) {
-          int32_t preX = 44;
           tpSelectStep(&tp, sSdl);
           programRunStop = PGM_RUNNING;
           executeOneStep(step);
@@ -4373,4 +4371,3 @@ static int test_param_series_c_acceptance(void)
   lastErrorCode = ERROR_NONE;
   return fail;
 }
-
