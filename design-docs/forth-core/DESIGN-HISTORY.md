@@ -4208,3 +4208,69 @@ at the site instead of being implied by code that appeared to do something.
 
 **Footprint: flash 1115824 → 1115832 = +8 B, returning the stage to exactly
 where round 9's audit measured it; ram 9144 unchanged; arena untouched.**
+
+---
+
+## 2026-08-09 — the comment ruling applied, and round 10's fix wave
+
+### The comment ruling, executed
+
+Package-owned sources and the package-added comments in every override:
+provenance narration, finding IDs, MUTATION STATUS paragraphs and every
+`file:line` anchor deleted; invariants kept, load-bearing references
+reduced to function names. Net −1800 lines; patch added-lines 1232 → 1009
+with upstream-removed lines unchanged at 337. Verified comment-only by
+stripping comments from both versions of all 38 files and comparing code
+lines. Two side effects worth the record: check H (comment-stripped by the
+same wave) immediately caught DESIGN.md still naming `_forthCapBuildStep`,
+a symbol renamed at P8 that a package comment had been masking; and the
+churn scanner's NEAR tier gained defines.h's 22 → 23 dynamic-menu pair,
+visible only once its trailing tag stopped holding the pair over the
+edit-distance cap — baseline re-accepted at 3.
+
+### The instruments, made falsifiable (R10-3/4/5)
+
+Check J counted a `[CHURN]` tag its scanner never emits; check H tested
+symbol liveness against text that includes comments; the R9-5 pin grepped
+one local-variable spelling. All three now go red against the class they
+exist to catch, proven by injection before landing: a WS-ONLY re-indent
+flags J, a comment-only symbol reports dead under H, and the PEM-sibling
+mutation with a differently-named local moves the span pin 1 → 2. The rule
+this wave binds: **a gate that consumes another tool's output lands with a
+red-first injection, or it does not land.**
+
+### R10-1 + R10-OOF-1 — the cursor tuple, fourth wave, both remaining halves
+
+The shared restore now honours every field of a valid tuple (a zeroth-step
+cursor is always `localStep == 1`; validity is the step fitting, not the
+step exceeding 1), and `forthHistoryEvict` renumbers the saved cursor as
+it deletes — the deleter-adjusts convention, applied where the eviction
+happens instead of validated where the restore happens. Both red-first:
+subcase `[12]` (BST-driven zeroth park, per-field round trip), `[C6.8]`
+repointed at the only pairing a real zeroth cursor has, and `[11]`
+reworked to payload identity at two park depths with the eviction itself
+asserted. Classes: *consolidation gating a restore on a different field*;
+*range test standing in for an identity test*.
+
+### R10-2 — HOME.3 lands at every depth
+
+The dismiss half unwinds to the console's base — upstream's arm pops at
+most one frame and then unconditionally lands, so it lands at every depth;
+one-pop-per-press is EXIT's ladder idiom and amending R9-4's landing
+ruling was the only other consistent shape. A buried MyMenu/MyAlpha frame
+is dropped in place before each pop, because popSoftmenu's CM_AIM
+compensation otherwise re-pushes an alpha row over the revealed home frame
+and the loop oscillates — the same mechanism that made the depth-2 state
+plant a raw ALPHA row over a keys-mode keypad through the R9-4-fixed code.
+Test `[7]` asserts the positive property at depths 0–3.
+
+### R10-P1 — the abandon rule at every consumer
+
+`listsUnsafe` now covers the fold's cursor restore, and the history push
+skips its restore when the eviction abandoned (`forthHistoryEvict` returns
+whether the lists stayed safe). Unchanged status: not mutation-provable
+until the allocator failure is constructible; the convention now holds at
+every list consumer after the sweep.
+
+**Footprint: flash 1,115,832 → 1,115,976 = +144 B; ram 9,144 unchanged;
+arena untouched.**

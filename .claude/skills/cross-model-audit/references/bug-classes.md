@@ -216,3 +216,24 @@ recorded in DESIGN-HISTORY.md; the round tag says where the evidence lives.
   lines above. The code executes correctly and the stated reasons are
   dead, which is worse than no comment in the one place — the highest-
   regression function — where a reviewer most needs to trust one.
+- **Consolidation gating a restore on a different field** (r10 R10-1): a
+  shared restore merged two sites' unconditional per-field assignments and
+  gated one field's restore on a predicate about ANOTHER field of the same
+  tuple — "the second navigation is redundant" read as "the tuple is
+  invalid". Class test: per-field round-trip identity with no intervening
+  mutation, for every field of every consolidated tuple.
+- **Range test standing in for an identity test** (r10 R10-OOF-1, third
+  turn of the unmaintained-cursor class): a saved index restored on a
+  validity check where the tuple promises a position — eviction from the
+  front renumbers everything after it, so a number that still FITS names a
+  different element. The deleter renumbers the saved index (upstream's
+  own convention); the fixture asserts payload identity, not bounds.
+- **Two-half gesture with the second half conditional** (r10 R10-2): a
+  dismiss-then-land translation whose land half only fires in the state
+  the dismiss half establishes at depth 1. Parameterise the fixture over
+  depth and assert the landing property at every depth.
+- **Gate consuming output its producer never emits** (r10 R10-3/4/5): a
+  check grepping a tag the tool does not print, a liveness test satisfied
+  by comments, a pin counting one spelling of its subject. A new gate
+  lands with a red-first injection of the class it exists to catch, or it
+  does not land.
