@@ -22,7 +22,7 @@ static uint16_t consoleUsed;   /* bytes occupied, 0..FORTH_CONSOLE_RING_BYTES */
 static uint16_t consoleOpen = FORTH_CONSOLE_NO_OPEN;
                                /* index of the OPEN record's length byte */
 static uint16_t consoleView;   /* roll offset: 0 = newest line at the bottom */
-static uint32_t consoleSeq;    /* bumped by every writer.  The ENTER
+static uint32_t consoleSeq;    /* bumped by every writer.  The R/S
                                   dialogue samples it across a run to tell
                                   "the line spoke for itself" from "the line
                                   said nothing", which is a stronger question
@@ -334,7 +334,7 @@ bool_t forthConsoleExitLadder(void) {
      * liftStack() created.  The interactive open does not lift, so X is
      * untouched from FORTH-press to EXIT and there is nothing to
      * resolve.  Calling undo() here would be actively wrong — it
-     * would roll back whatever the user's ENTER'd lines did to the
+     * would roll back whatever the user's R/S-run lines did to the
      * stack. */
     if(aimBuffer[0] != 0) {
       forthHistoryPush(aimBuffer);

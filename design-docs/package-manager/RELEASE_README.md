@@ -1,4 +1,4 @@
-# R47 Forth release tree
+# R47 Forth and package-manager release tree
 
 This branch is the build tree and nothing else: the package system, the
 Forth package, and what you need to build both. Design docs and the
@@ -28,9 +28,22 @@ packages/forth-core/files/                   19 new sources
 ```
 
 The package system and the Forth package don't depend on each other.
-The build files plus tools/ are the package system, v0.4, and any
-package can ride on them. packages/forth-core/ is the one I built with
-it.
+The build files plus tools/ are the package system, **v0.4**, and any
+package can ride on them. `packages/forth-core/` is versioned separately:
+the Forth-core baseline is **v0.3**, and the current Forth-core hotfix is
+**v0.3.1**. A Forth release does not imply a new package-manager release;
+package-manager v0.4 remains the compatible tooling release.
+
+## Forth core v0.3.1 hotfix
+
+- The interactive console now advertises its terminal controls directly:
+  `ENTER=SPACE  R/S=RUN`.
+- ENTER inserts a literal token separator in a live Forth console; R/S runs
+  the completed line. This makes ordinary calculator-key arithmetic such as
+  `3 ENTER 4 ENTER + R/S` evaluate as a Forth line.
+- The existing keys-first input, retained transcript, output words, FHIST
+  history, program-mode folding, FWRD browsing, and global-word assignment
+  remain part of the Forth core. Package-manager v0.4 is unchanged.
 
 Leave the test files in place. meson.build declares the first three as
 tests no matter what, and `make pkg_build` runs `make test`, so removing
@@ -81,9 +94,15 @@ before every build, or your edit won't be in the firmware you flash.
 
 ## Typing a Forth line
 
-A Forth line opens in alpha for typing word names. If you want the calculator keys instead, press ALPHA inside the line and the keyboard goes back to normal. Now the function keys type their own names. Press SIN and you get `SIN` in the line. Digits work like you expect. STO and RCL still ask for their parameter the normal way, then the whole thing ends up in the line as text, like `STO 05`. You don't have to put spaces around any of it, the spaces get put in for you. ALPHA again brings the letters back.
+The interactive console opens in calculator-key mode. ENTER inserts a literal
+space and R/S runs the current line, so `3 ENTER 4 ENTER + R/S` evaluates to
+`7`. Press ALPHA inside the line to type word names; pressing ALPHA again
+returns to calculator keys. In key mode, function keys type their own names:
+pressing SIN inserts `SIN`. Digits work normally. STO and RCL still request
+their parameter, then insert text such as `STO 05` into the line.
 
-R/S ends the line and puts a STOP step after it. EXIT goes back one step at a time, keys to letters to menus, then it closes the line.
+EXIT unwinds one level at a time—letters to keys to menus—then closes the
+line.
 
 ## Notes
 

@@ -786,7 +786,7 @@ static int test_console_view_placement(void)
 }
 
 /* ==================================================================
- * N1-3 — the dialogue: what ENTER writes into the transcript.
+ * N1-3 — the dialogue: what R/S writes into the transcript.
  * ================================================================== */
 
 /* The same reset the L1-2 battery uses, plus the ring, so each subcase
@@ -797,14 +797,14 @@ static int test_console_view_placement(void)
   lastErrorCode = ERROR_NONE; forthCapClose(); forthConsoleClear(); \
 } while (0)
 
-/* Type a line into the open capture and commit it, the way the key path's
- * ENTER arm calls forthInteractiveEnter. */
-static void _consoleEnterLine(const char *src)
+/* Type a line into the open capture and run it, the way the R/S key path
+ * calls forthInteractiveRun. */
+static void _consoleRunLine(const char *src)
 {
   int32_t n = stringByteLength((char *)src);
   xcopy(aimBuffer, src, (uint32_t)n + 1);
   T_cursorPos = (int16_t)n;
-  forthInteractiveEnter();
+  forthInteractiveRun();
 }
 
 /* ---- 16: the echo, the result, and the one-act ordering. ---- */
@@ -817,7 +817,7 @@ static int test_console_dialogue_echo(void)
   forthCapOpenInteractive();
   calcMode = CM_AIM;
 
-  _consoleEnterLine("1 2 +");
+  _consoleRunLine("1 2 +");
 
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: \"1 2 +\" errored (%u)\n", lastErrorCode);
@@ -861,7 +861,7 @@ static int test_console_dialogue_echo(void)
   forthCapClose();
   forthConsoleClear();
   if (!fail) {
-    printf("    PASS: ENTER echoes the prompt-prefixed line then X, and history holds the same line\n");
+    printf("    PASS: R/S echoes the prompt-prefixed line then X, and history holds the same line\n");
   }
   return fail;
 }
@@ -877,7 +877,7 @@ static int test_console_dialogue_error(void)
   forthCapOpenInteractive();
   calcMode = CM_AIM;
 
-  _consoleEnterLine("NOSUCHWORD");
+  _consoleRunLine("NOSUCHWORD");
 
   if (lastErrorCode == ERROR_NONE) {
     printf("    FAIL: an undefined word must raise\n");
@@ -934,7 +934,7 @@ static int test_console_dialogue_refusal(void)
   forthConsoleAppendLine("PREVIOUS");
   before = forthConsoleLineCount();
 
-  _consoleEnterLine(": A IF ;");                 /* tier-1 structural reject */
+  _consoleRunLine(": A IF ;");                 /* tier-1 structural reject */
 
   if (lastErrorCode == ERROR_NONE) {
     printf("    FAIL: \": A IF ;\" must be refused by the E9 gate\n");
@@ -950,12 +950,12 @@ static int test_console_dialogue_refusal(void)
     fail = 1;
   }
 
-  /* An empty ENTER is a no-op too — nothing to run, nothing to echo. */
+  /* An empty R/S is a no-op too — nothing to run, nothing to echo. */
   aimBuffer[0] = 0;
   lastErrorCode = ERROR_NONE;
-  forthInteractiveEnter();
+  forthInteractiveRun();
   if (forthConsoleLineCount() != before) {
-    printf("    FAIL: an empty ENTER must write nothing (%u lines)\n",
+    printf("    FAIL: an empty R/S must write nothing (%u lines)\n",
            forthConsoleLineCount());
     fail = 1;
   }
@@ -980,9 +980,9 @@ static int test_console_dialogue_session(void)
   forthCapOpenInteractive();
   calcMode = CM_AIM;
 
-  _consoleEnterLine("XEQ 'CLSTK'");
-  _consoleEnterLine("2 3 *");
-  _consoleEnterLine("4 +");
+  _consoleRunLine("XEQ 'CLSTK'");
+  _consoleRunLine("2 3 *");
+  _consoleRunLine("4 +");
 
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: session errored (%u)\n", lastErrorCode);
@@ -1529,7 +1529,7 @@ static int test_console_line_survives_gestures(void)
   forthDictInit();
   fnForthOuter(NOPARAM);
   xcopy(aimBuffer, "1 1 +", 6); T_cursorPos = 5;
-  forthInteractiveEnter();                       /* FHIST gains "1 1 +" */
+  forthInteractiveRun();                         /* FHIST gains "1 1 +" */
   lastErrorCode = ERROR_NONE;
   xcopy(aimBuffer, "SCRATCH", 8); T_cursorPos = 7;
   forthHistoryRecall(-1);                        /* back one: the history line */
@@ -1645,7 +1645,78 @@ static int test_console_line_survives_gestures(void)
  * N1-5 — keys-first entry, the FWRD home row, and the re-derived ladder.
  * ================================================================== */
 
-/* ---- 25: the default flips for the INTERACTIVE origin and only there.
+/* ---- 25: console terminal controls.  ENTER is a literal separator and
+ * R/S is the only run gesture.  Drive their real entry points: fnKeyEnter
+ * for the physical ENTER key and processKeyAction for the R/S guard. ---- */
+static int test_console_terminal_controls(void)
+{
+  int fail = 0;
+  char line[FORTH_CONSOLE_FMT_MAX];
+  extern void fnKeyEnter(uint16_t);
+  extern void processKeyAction(int16_t);
+
+  N13_RESET();
+  forthDictInit();
+  fnForthOuter(NOPARAM);
+
+  if (forthConsoleLineCount() != 1
+      || !_consoleLineIs(0, FORTH_CONSOLE_CONTROL_HINT)) {
+    printf("    FAIL: a fresh console must display the ENTER/R/S control hint\n");
+    fail = 1;
+  }
+  fnForthOuter(NOPARAM);
+  if (forthConsoleLineCount() != 1) {
+    printf("    FAIL: pressing FORTH in a live console must not duplicate the control hint\n");
+    fail = 1;
+  }
+
+  runFunction(ITM_3);
+  fnKeyEnter(NOPARAM);
+  runFunction(ITM_4);
+  fnKeyEnter(NOPARAM);
+  runFunction(ITM_PLUS);
+  if (compareString(aimBuffer, "3 4 +", CMP_BINARY) != 0) {
+    printf("    FAIL: ENTER must insert literal separators, got \"%s\"\n", aimBuffer);
+    fail = 1;
+  }
+
+  processKeyAction(ITM_RS);
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: R/S did not run \"3 4 +\" (error %u)\n", lastErrorCode);
+    fail = 1;
+  }
+  if (forthConsoleLineCount() != 3) {
+    printf("    FAIL: R/S must add echo and result after the hint (%u lines)\n",
+           forthConsoleLineCount());
+    fail = 1;
+  }
+  else {
+    forthConsoleLineAt(0, line, sizeof(line));
+    if (compareString(line, "7", CMP_BINARY) != 0) {
+      printf("    FAIL: R/S result is \"%s\", expected \"7\"\n", line);
+      fail = 1;
+    }
+    forthConsoleLineAt(1, line, sizeof(line));
+    if (compareString(line, STD_RIGHT_DOUBLE_ANGLE " 3 4 +", CMP_BINARY) != 0) {
+      printf("    FAIL: R/S echo is \"%s\", expected the entered line\n", line);
+      fail = 1;
+    }
+  }
+  if (aimBuffer[0] != 0 || !forthCapKeysMode()) {
+    printf("    FAIL: R/S must reopen an empty keys-first line\n");
+    fail = 1;
+  }
+
+  forthCapClose();
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: ENTER inserts spaces, R/S runs, and the console advertises both\n");
+  }
+  return fail;
+}
+
+/* ---- 26: the default flips for the INTERACTIVE origin and only there.
  * Both leak directions are regressions: a PEM capture opening in keys, or an
  * interactive one opening in alpha (the feature dead). ---- */
 static int test_console_keys_first(void)
@@ -1667,10 +1738,10 @@ static int test_console_keys_first(void)
     fail = 1;
   }
 
-  /* And it must survive the REPL reopen — every ENTER, not just the open. */
+  /* And it must survive the REPL reopen — every R/S, not just the open. */
   xcopy(aimBuffer, "1 2 +", 6);
   T_cursorPos = 5;
-  forthInteractiveEnter();
+  forthInteractiveRun();
   if (!forthCapKeysMode()) {
     printf("    FAIL: keys input must survive the REPL reopen\n");
     fail = 1;
@@ -1697,7 +1768,7 @@ static int test_console_keys_first(void)
   return fail;
 }
 
-/* ---- 26: the re-derived EXIT ladder, rung by rung, plus the frame the open
+/* ---- 27: the re-derived EXIT ladder, rung by rung, plus the frame the open
  * must not eat. ---- */
 static int test_console_exit_ladder(void)
 {
@@ -1802,19 +1873,21 @@ static int test_console_story(void)
   N13_RESET();
   forthDictInit();
 
-  /* [1] Open: keys input, FWRD home, empty dialogue. */
+  /* [1] Open: keys input, FWRD home, and a visible control hint. */
   fnForthOuter(NOPARAM);
   if (!forthCapIsInteractive() || !forthCapKeysMode() || currentMenu() != -MNU_FORTH) {
     printf("    [1] FAIL: the console did not open keys-first with FWRD home\n");
     fail = 1;
   }
-  if (forthConsoleLineCount() != 0) {
-    printf("    [1] FAIL: a fresh console after a dictionary init must show nothing\n");
+  if (forthConsoleLineCount() != 1
+      || !_consoleLineIs(0, FORTH_CONSOLE_CONTROL_HINT)) {
+    printf("    [1] FAIL: a fresh console must show the ENTER/R/S control hint\n");
     fail = 1;
   }
+  forthConsoleClear();  /* keep the acceptance transcript focused on the session. */
 
   /* [2] Arithmetic: the echo, then where X landed. */
-  _consoleEnterLine("XEQ 'CLSTK' 2 3 +");
+  _consoleRunLine("XEQ 'CLSTK' 2 3 +");
   forthConsoleLineAt(0, line, sizeof(line));
   if (compareString(line, "5", CMP_BINARY) != 0) {
     printf("    [2] FAIL: expected the result \"5\" as the newest line, got \"%s\"\n", line);
@@ -1833,7 +1906,7 @@ static int test_console_story(void)
 
   /* [3] The alpha excursion: define a word, make it global. */
   forthCapSetKeysMode(false);
-  _consoleEnterLine(": SQ DUP * ; GLOBAL");
+  _consoleRunLine(": SQ DUP * ; GLOBAL");
   if (lastErrorCode != ERROR_NONE) {
     printf("    [3] FAIL: defining SQ errored (%u)\n", lastErrorCode);
     fail = 1;
@@ -1847,7 +1920,7 @@ static int test_console_story(void)
 
   /* [4] Back to keys, and use the word with the new output words. */
   forthCapSetKeysMode(true);
-  _consoleEnterLine("7 SQ .");
+  _consoleRunLine("7 SQ .");
   forthConsoleLineAt(0, line, sizeof(line));
   if (compareString(line, "49 ", CMP_BINARY) != 0) {
     printf("    [4] FAIL: `7 SQ .` printed \"%s\", expected \"49 \"\n", line);
@@ -1861,7 +1934,7 @@ static int test_console_story(void)
     fail = 1;
   }
 
-  _consoleEnterLine(".S");
+  _consoleRunLine(".S");
   forthConsoleLineAt(0, line, sizeof(line));
   if (line[0] != '<') {
     printf("    [5] FAIL: `.S` did not draw the stack picture (\"%s\")\n", line);
@@ -1876,7 +1949,7 @@ static int test_console_story(void)
            forthConsoleViewOffset());
     fail = 1;
   }
-  _consoleEnterLine("1 1 +");
+  _consoleRunLine("1 1 +");
   if (forthConsoleViewOffset() != 0) {
     printf("    [6] FAIL: a commit must snap the view back to newest (offset %u)\n",
            forthConsoleViewOffset());
@@ -1888,7 +1961,7 @@ static int test_console_story(void)
   }
 
   /* [7] PAGE clears the view; the capture and history are untouched. */
-  _consoleEnterLine("PAGE");
+  _consoleRunLine("PAGE");
   if (forthConsoleLineCount() != 0) {
     printf("    [7] FAIL: PAGE left %u lines\n", forthConsoleLineCount());
     fail = 1;
@@ -1900,7 +1973,7 @@ static int test_console_story(void)
 
   /* [8] EXIT closes; reopening RESTORES the dialogue (BSS, not the
    * capture's lifetime).  Something must be in the ring first. */
-  _consoleEnterLine("XEQ 'CLSTK' 9 9 +");
+  _consoleRunLine("XEQ 'CLSTK' 9 9 +");
   { uint16_t before = forthConsoleLineCount();
     int press;
     /* The ladder unwinds one level per press and a long session can leave a
@@ -1918,8 +1991,9 @@ static int test_console_story(void)
       fail = 1;
     }
     fnForthOuter(NOPARAM);
-    if (forthConsoleLineCount() != before) {
-      printf("    [8] FAIL: reopening must RESTORE the dialogue (%u lines)\n",
+    if (forthConsoleLineCount() != before + 1
+        || !_consoleLineIs(0, FORTH_CONSOLE_CONTROL_HINT)) {
+      printf("    [8] FAIL: reopening must restore dialogue and show the control hint (%u lines)\n",
              forthConsoleLineCount());
       fail = 1;
     }
@@ -1971,7 +2045,7 @@ static int test_console_one_history(void)
   forthDictInit();
   fnForthOuter(NOPARAM);
 
-  for (i = 0; i < 3; i++) { _consoleEnterLine(lines[i]); }
+  for (i = 0; i < 3; i++) { _consoleRunLine(lines[i]); }
 
   /* Walk the transcript's prompt-prefixed lines newest-first and compare each
    * against what f-shift recall returns, newest-first.  Same lines, same
@@ -2121,7 +2195,7 @@ static int test_console_format_buffer_contract(void)
   forthCapOpenInteractive();
   calcMode = CM_AIM;
   convertUInt64ToShortIntegerRegister(0, (uint64_t)0xFFFFFFFFFFFFFFFFull, 2, REGISTER_X);
-  _consoleEnterLine("DUP DROP");
+  _consoleRunLine("DUP DROP");
   { char line[FORTH_CONSOLE_FMT_MAX];
     forthConsoleLineAt(0, line, sizeof(line));
     if (stringByteLength(line) == 0) {
@@ -2216,12 +2290,12 @@ static int test_console_frame_conservation(void)
         runFunction(ITM_AIM);
         runFunction(ITM_AIM);
         break;
-      case 3: what = "open, ENTER a line, EXIT";
-        _consoleEnterLine("XEQ 'CLSTK' 1 2 +");
+      case 3: what = "open, R/S a line, EXIT";
+        _consoleRunLine("XEQ 'CLSTK' 1 2 +");
         break;
-      case 4: what = "open, alpha, ENTER, EXIT";
+      case 4: what = "open, alpha, R/S, EXIT";
         runFunction(ITM_AIM);
-        _consoleEnterLine("XEQ 'CLSTK' 3 4 +");
+        _consoleRunLine("XEQ 'CLSTK' 3 4 +");
         break;
       case 5: what = "open, stack a menu, EXIT";
         showSoftmenu(-MNU_FIN);
@@ -2230,28 +2304,28 @@ static int test_console_frame_conservation(void)
        * stacked it concludes the console's frame is gone and pushes a
        * SECOND one.  Needs both a stacked menu AND a line that calls
        * calcModeNormal() — CLSTK does. */
-      case 6: what = "open, stack a menu, ENTER a CLSTK line, EXIT";
+      case 6: what = "open, stack a menu, R/S a CLSTK line, EXIT";
         showSoftmenu(-MNU_FIN);
-        _consoleEnterLine("XEQ 'CLSTK'");
+        _consoleRunLine("XEQ 'CLSTK'");
         break;
       /* ---- own-row class rows ---- */
-      case 7: what = "own FWRD: open, ENTER a plain line, EXIT";
-        _consoleEnterLine("1 2 +");
+      case 7: what = "own FWRD: open, R/S a plain line, EXIT";
+        _consoleRunLine("1 2 +");
         break;
-      case 8: what = "own FWRD: open, ENTER a CLSTK line, EXIT";
-        _consoleEnterLine("XEQ 'CLSTK'");
+      case 8: what = "own FWRD: open, R/S a CLSTK line, EXIT";
+        _consoleRunLine("XEQ 'CLSTK'");
         break;
       case 9: what = "own FWRD: open, toggle alpha then back, EXIT";
         runFunction(ITM_AIM);
         runFunction(ITM_AIM);
         break;
-      case 10: what = "own FWRD: open, toggle alpha, ENTER a CLSTK line, EXIT";
+      case 10: what = "own FWRD: open, toggle alpha, R/S a CLSTK line, EXIT";
         runFunction(ITM_AIM);
-        _consoleEnterLine("XEQ 'CLSTK'");
+        _consoleRunLine("XEQ 'CLSTK'");
         break;
-      case 11: what = "own ALPHA: open, toggle alpha, ENTER a plain line, EXIT";
+      case 11: what = "own ALPHA: open, toggle alpha, R/S a plain line, EXIT";
         runFunction(ITM_AIM);
-        _consoleEnterLine("3 4 +");
+        _consoleRunLine("3 4 +");
         break;
       default: break;
     }
@@ -2337,7 +2411,7 @@ static int test_console_frame_conservation(void)
  *
  * forthCapOpenInteractive()/forthCapOpen() zero keysMode and origin by
  * design, and every path that re-opens an ALREADY-LIVE capture has to put
- * them back. There are two such paths — the REPL reopen after ENTER, and
+ * them back. There are two such paths — the REPL reopen after R/S, and
  * forthCaptureResume() after a fold.
  *
  * Enumerated rather than sampled: the class is "a field that rides the
@@ -2354,7 +2428,7 @@ static int test_console_capture_bits_survive_reopen(void)
   forthDictInit();
   fnForthOuter(NOPARAM);
   forthCapSetKeysMode(true);
-  _consoleEnterLine("XEQ 'CLSTK' 1 2 +");
+  _consoleRunLine("XEQ 'CLSTK' 1 2 +");
   if (!forthCapKeysMode()) {
     printf("    FAIL: REPL reopen dropped keysMode\n");
     fail = 1;
@@ -2392,7 +2466,7 @@ static int test_console_capture_bits_survive_reopen(void)
  * disjunction.
  *
  * Overlay states: none, an alpha submenu (Greek keypad), a non-alpha menu
- * (STK).  Gestures: the E10/E11 toggle, EXIT, and ENTER's REPL reopen. ---- */
+ * (STK).  Gestures: the E10/E11 toggle, EXIT, and R/S's REPL reopen. ---- */
 static int test_console_submode_row_agreement(void)
 {
   int fail = 0, o, presses;
@@ -2477,7 +2551,7 @@ static int test_console_submode_row_agreement(void)
     for (presses = 0; presses < 6 && forthCapIsOpen(); presses++) { fnKeyExit(NOPARAM); }
     if (forthCapIsOpen()) { forthCapClose(); fail = 1; }
 
-    /* --- gesture 3: ENTER's REPL reopen --- */
+    /* --- gesture 3: R/S's REPL reopen --- */
     N13_RESET();
     forthDictInit();
     showSoftmenu(-MNU_STK);
@@ -2499,15 +2573,15 @@ static int test_console_submode_row_agreement(void)
         if (m == -MNU_FORTH) { forthBefore++; }
         if (m == -MNU_ALPHA) { alphaBefore++; }
       }
-      _consoleEnterLine("1 2 +");
+      _consoleRunLine("1 2 +");
       if (!forthCapKeysMode()) {
-        printf("    FAIL: [ENTER, %s] keys-first must survive every ENTER (N-R6)\n",
+        printf("    FAIL: [R/S, %s] keys-first must survive every R/S (N-R6)\n",
                oname[o]);
         fail = 1;
       }
       if (overlays[o] == 0) {
         if (currentMenu() != -MNU_FORTH) {
-          printf("    FAIL: [ENTER, %s] reopen must show the FWRD home row"
+          printf("    FAIL: [R/S, %s] reopen must show the FWRD home row"
                  " (menu %d)\n", oname[o], currentMenu());
           fail = 1;
         }
@@ -2519,7 +2593,7 @@ static int test_console_submode_row_agreement(void)
          * observable without stamp access. */
         int forthAfter = 0, alphaAfter = 0;
         if (currentMenu() != overlays[o]) {
-          printf("    FAIL: [ENTER, %s] reopen must leave the user's overlay up"
+          printf("    FAIL: [R/S, %s] reopen must leave the user's overlay up"
                  " (menu %d)\n", oname[o], currentMenu());
           fail = 1;
         }
@@ -2554,7 +2628,7 @@ static int test_console_submode_row_agreement(void)
  *
  * Bug class: "two arms of one post-condition, one of which re-establishes an
  * invariant the other assumes."  The invariant: no exit path from
- * forthInteractiveEnter's run leaves the ring's open record open.  Driven
+ * forthInteractiveRun's run leaves the ring's open record open.  Driven
  * over the post-run dispositions; the E9-refusal disposition is pinned by
  * test_console_dialogue_refusal (writes nothing at all) and not repeated
  * here.  The load-bearing row is "error AFTER output": `1 . BOGUS` really
@@ -2573,7 +2647,7 @@ static int test_console_error_echo_closes_output(void)
 
   /* Disposition: clean line, no output — echo + X echo, closed. */
   before = forthConsoleLineCount();
-  _consoleEnterLine("1 2 +");
+  _consoleRunLine("1 2 +");
   if (forthConsoleLineCount() != before + 2 || forthConsoleHasOpenLine()) {
     printf("    FAIL: [clean, no output] expected +2 closed records, got +%d"
            " (open=%d)\n", forthConsoleLineCount() - before,
@@ -2584,7 +2658,7 @@ static int test_console_error_echo_closes_output(void)
   /* Disposition: clean line WITH output — echo + the word's output, closed
    * by the success arm. */
   before = forthConsoleLineCount();
-  _consoleEnterLine("1 .");
+  _consoleRunLine("1 .");
   if (forthConsoleLineCount() != before + 2 || forthConsoleHasOpenLine()) {
     printf("    FAIL: [clean, output] expected +2 closed records, got +%d"
            " (open=%d)\n", forthConsoleLineCount() - before,
@@ -2594,7 +2668,7 @@ static int test_console_error_echo_closes_output(void)
 
   /* Disposition: error, no output — echo + message. */
   before = forthConsoleLineCount();
-  _consoleEnterLine("NOSUCHWORD");
+  _consoleRunLine("NOSUCHWORD");
   if (lastErrorCode == ERROR_NONE) {
     printf("    FIXTURE FAIL: [error, no output] NOSUCHWORD did not raise\n");
     fail = 1;
@@ -2611,14 +2685,14 @@ static int test_console_error_echo_closes_output(void)
     }
   }
   lastErrorCode = ERROR_NONE;
-  _consoleEnterLine("");            /* not needed for state; keep the REPL shape */
+  _consoleRunLine("");               /* not needed for state; keep the REPL shape */
 
   /* THE LOAD-BEARING ROW — error AFTER output.  `.` leaves its record open
    * by design; the error arm must close it and write the message as its own
    * record: echo + "1 " + message = +3, and the last two records are
    * distinct. */
   before = forthConsoleLineCount();
-  _consoleEnterLine("1 . BOGUS");
+  _consoleRunLine("1 . BOGUS");
   if (lastErrorCode == ERROR_NONE) {
     printf("    FIXTURE FAIL: [error after output] BOGUS did not raise\n");
     fail = 1;
@@ -2818,7 +2892,7 @@ static int test_console_surface_repair_ungated(void)
       continue;
     }
 
-    _consoleEnterLine((i == 0) ? "XEQ 'CLSTK'" : "EXITALL");
+    _consoleRunLine((i == 0) ? "XEQ 'CLSTK'" : "EXITALL");
 
     if (!forthCapIsOpen()) {
       printf("    FIXTURE FAIL: [%s] the capture did not survive the line\n", what);
@@ -2983,7 +3057,7 @@ static int test_console_ownership_invariant(void)
     }
 
     /* A line that DESTROYS the registered frame, then the repair. */
-    _consoleEnterLine("EXITALL");
+    _consoleRunLine("EXITALL");
     _consoleOwnershipOk(own, &fail);
     if (!forthConsoleBaseOnTop()) {
       printf("    FAIL: [%s] the surface was not re-registered after EXITALL\n", own);
@@ -3045,7 +3119,7 @@ static int test_console_error_recovery_keys(void)
   forthCapOpenInteractive();
   calcMode = CM_AIM;
 
-  _consoleEnterLine("1 BOGUS");
+  _consoleRunLine("1 BOGUS");
   if (lastErrorCode == ERROR_NONE) {
     printf("    FIXTURE BUG: \"1 BOGUS\" raised no error\n");
     fail = 1;
@@ -3074,7 +3148,7 @@ static int test_console_error_recovery_keys(void)
 
   /* the other invited key */
   if (!fail) {
-    _consoleEnterLine("1 BOGUS");
+    _consoleRunLine("1 BOGUS");
     if (lastErrorCode == ERROR_NONE) {
       printf("    FIXTURE BUG: second \"1 BOGUS\" raised no error\n");
       fail = 1;

@@ -118,7 +118,7 @@ bool_t forthCapIsInteractive(void) {
 /* The OPENNESS question, distinct from forthCapIsInteractive above: that
  * predicate is true while SUSPENDED too, which is wrong wherever "is there
  * a live line" is meant — e.g. painting a stranded-fold residue as an
- * editable line, running it as Forth on ENTER/long-press R/S, or letting
+ * editable line, running it as Forth on R/S, or letting
  * the recall gesture clobber TAM's name entry. */
 bool_t forthCapInteractiveLive(void) {
   return forthCap.origin == FCAP_ORIGIN_INTERACTIVE && forthCap.state == FCAP_OPEN;

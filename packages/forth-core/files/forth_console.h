@@ -41,6 +41,7 @@
                                              at most 256 bytes, so evicting
                                              everything else always leaves >= 768
                                              free and _reserve cannot fail. */
+#define FORTH_CONSOLE_CONTROL_HINT  "ENTER=SPACE  R/S=RUN"
 #define FORTH_CONSOLE_NO_OPEN    0xFFFFu  /* "no unterminated record" */
 #define FORTH_CONSOLE_FMT_MAX      256    /* one formatted value; a bounded LOCAL,
                                              never tmpString — display.c writes

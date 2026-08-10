@@ -264,7 +264,7 @@ void forthCaptureResume(void) {
 }
 
 
-/* ENTER's orchestrator for an interactive Forth capture.  calcMode stays
+/* R/S's orchestrator for an interactive Forth capture.  calcMode stays
  * CM_AIM throughout — no calcModeNormal(), no closeAim(), no popSoftmenu()
  * on this path: run the line, decide whether to reopen empty or reopen
  * with the line intact.
@@ -274,14 +274,14 @@ void forthCaptureResume(void) {
  * forthOuterInterpret's own copy protects ITS parse, not this function's
  * error-path read-back — that must come from a copy taken before the
  * run. */
-void forthInteractiveEnter(void) {
+void forthInteractiveRun(void) {
   if (aimBuffer[0] == 0) {
-    /* Empty ENTER is a no-op, NOT a close: EXIT is the close gesture. */
+    /* Empty R/S is a no-op, NOT a close: EXIT is the close gesture. */
     return;
   }
 
   /* Refuse the commit atomically: capture stays open with the line intact
-   * for correction, error already displayed — the same gate the PEM ENTER
+   * for correction, error already displayed — the same gate the PEM
    * arm uses. */
   if (!forthCheckSourceLine(aimBuffer)) {
     return;
@@ -382,9 +382,9 @@ void forthInteractiveEnter(void) {
   /* REPL: reopen empty, stay in CM_AIM.  forthCapOpenInteractive clears
    * aimBuffer and resets keysMode. */
   forthCapOpenInteractive();
-  forthCapSetKeysMode(true);   /* keys-first must survive every ENTER, not
+  forthCapSetKeysMode(true);   /* keys-first must survive every R/S, not
                                   just the first open */
-  /* The row has to follow the sub-mode, or ENTER from an alpha excursion
+  /* The row has to follow the sub-mode, or R/S from an alpha excursion
    * leaves the ALPHA keypad displayed while the keyboard already types
    * the keys plane. */
   forthConsoleShowSurface();

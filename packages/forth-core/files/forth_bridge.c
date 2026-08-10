@@ -215,7 +215,7 @@ bool forthEntryStateAtInsertion(void)
  * dispatches on getRegisterDataType() and calls a different display.c
  * producer per type. This mirrors that switch for the types a console line
  * can leave in X, using the CURRENT display mode — which is what makes `.`
- * and the ENTER echo agree with what the stack would have shown.
+ * and the R/S echo agree with what the stack would have shown.
  *
  * copyRegisterToClipboardString is a landed, paint-free, all-types
  * register->string function built from the same family, but it is the

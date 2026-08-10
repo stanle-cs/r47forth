@@ -7607,7 +7607,7 @@ static int test_capture_interactive_close(void)
   return fail;
 }
 
-/* The REPL — ENTER runs the line and reopens, EXIT unwinds the ladder, and
+/* The REPL — R/S runs the line and reopens, EXIT unwinds the ladder, and
  * the input cap holds on both insertion seams. All typing goes through the
  * real key path (runFunction/processKeyAction/executeFunction), never
  * direct aimBuffer writes.
@@ -7620,7 +7620,6 @@ static int test_capture_interactive_close(void)
 static int test_capture_interactive_repl(void)
 {
   extern void fnForthOuter(uint16_t);
-  extern void fnKeyEnter(uint16_t);
   extern void fnKeyExit(uint16_t);
   extern void runFunction(int16_t);
   extern void processKeyAction(int16_t);
@@ -7655,7 +7654,7 @@ static int test_capture_interactive_repl(void)
     clearSystemFlag(FLAG_ALPHA); lastErrorCode = ERROR_NONE; forthCapClose(); \
   } while (0)
 
-  /* ---- Subcase 0: T9 end-to-end — ENTER runs on the LIVE stack. ---- */
+  /* ---- Subcase 0: T9 end-to-end — R/S runs on the LIVE stack. ---- */
   scFail = 0;
   L12_RESET();
   longIntegerInit(li); int32ToLongInteger(16, li);
@@ -7669,18 +7668,18 @@ static int test_capture_interactive_repl(void)
     runFunction(ITM_1);
     runFunction(ITM_SPACE);
     runFunction(ITM_PLUS);
-    fnKeyEnter(NOPARAM);
+    processKeyAction(ITM_RS);
     read_reg_int32(REGISTER_X, &tType, &tVal);
     if (tType != dtLongInteger || tVal != 17) {
-      printf("    [0] FAIL: X = %ld type %u, expected 17 (16 in X, \"1 +\", ENTER — T9 live stack)\n",
+      printf("    [0] FAIL: X = %ld type %u, expected 17 (16 in X, \"1 +\", R/S — T9 live stack)\n",
              (long)tVal, tType);
       scFail = 1;
     }
   }
-  if (!scFail) printf("    [0] PASS: T9 end-to-end — interactive ENTER runs on the live stack\n");
+  if (!scFail) printf("    [0] PASS: T9 end-to-end — interactive R/S runs on the live stack\n");
   fail |= scFail;
 
-  /* ---- Subcase 1: ENTER runs and reopens empty. ---- */
+  /* ---- Subcase 1: R/S runs and reopens empty. ---- */
   scFail = 0;
   L12_RESET();
   fnForthOuter(NOPARAM);
@@ -7693,7 +7692,7 @@ static int test_capture_interactive_repl(void)
     runFunction(ITM_2);
     runFunction(ITM_SPACE);
     runFunction(ITM_PLUS);
-    fnKeyEnter(NOPARAM);
+    processKeyAction(ITM_RS);
     read_reg_int32(REGISTER_X, &tType, &tVal);
     if (tType != dtLongInteger || tVal != 3) {
       printf("    [1] FAIL: X = %ld type %u, expected 3\n", (long)tVal, tType);
@@ -7704,7 +7703,7 @@ static int test_capture_interactive_repl(void)
       scFail = 1;
     }
     if (!forthCapIsInteractive()) {
-      printf("    [1] FAIL: forthCapIsInteractive() false after ENTER\n");
+      printf("    [1] FAIL: forthCapIsInteractive() false after R/S\n");
       scFail = 1;
     }
     if (aimBuffer[0] != 0) {
@@ -7720,10 +7719,10 @@ static int test_capture_interactive_repl(void)
       scFail = 1;
     }
   }
-  if (!scFail) printf("    [1] PASS: ENTER runs \"1 2 +\", X == 3, capture reopens empty in CM_AIM\n");
+  if (!scFail) printf("    [1] PASS: R/S runs \"1 2 +\", X == 3, capture reopens empty in CM_AIM\n");
   fail |= scFail;
 
-  /* ---- Subcase 2: empty ENTER is a no-op. ---- */
+  /* ---- Subcase 2: empty R/S is a no-op. ---- */
   scFail = 0;
   L12_RESET();
   fnForthOuter(NOPARAM);
@@ -7734,7 +7733,7 @@ static int test_capture_interactive_repl(void)
     longIntegerInit(li); int32ToLongInteger(99, li);
     convertLongIntegerToLongIntegerRegister(li, REGISTER_X); longIntegerFree(li);
 
-    fnKeyEnter(NOPARAM);   /* aimBuffer is empty from the fresh open */
+    processKeyAction(ITM_RS);   /* aimBuffer is empty from the fresh open */
 
     if (forthTestCapState() != FCAP_OPEN) {
       printf("    [2] FAIL: state %d, expected FCAP_OPEN\n", forthTestCapState());
@@ -7750,7 +7749,7 @@ static int test_capture_interactive_repl(void)
       scFail = 1;
     }
   }
-  if (!scFail) printf("    [2] PASS: empty ENTER is a no-op, capture stays open, X unchanged\n");
+  if (!scFail) printf("    [2] PASS: empty R/S is a no-op, capture stays open, X unchanged\n");
   fail |= scFail;
 
   /* ---- Subcase 3: error reopens with the line intact. ---- */
@@ -7770,7 +7769,7 @@ static int test_capture_interactive_repl(void)
     runFunction(ITM_SPACE);
     runFunction(ITM_PLUS);
 
-    fnKeyEnter(NOPARAM);
+    processKeyAction(ITM_RS);
 
     if (lastErrorCode == ERROR_NONE) {
       printf("    [3] FAIL: lastErrorCode ERROR_NONE, expected an error from the unresolvable word\n");
@@ -7813,7 +7812,7 @@ static int test_capture_interactive_repl(void)
    * the correct behaviour never pushes "5" onto X at all. Skip the gate
    * (mutation 3) and forthOuterInterpret runs "5" for real before it ever
    * reaches the structural failure — X changes and stays changed, because
-   * forthInteractiveEnter's error path restores aimBuffer's TEXT, not the
+   * forthInteractiveRun's error path restores aimBuffer's TEXT, not the
    * stack. ---- */
   scFail = 0;
   L12_RESET();
@@ -7836,7 +7835,7 @@ static int test_capture_interactive_repl(void)
     runFunction(ITM_SPACE);
     runFunction(ITM_SEMICOLON);
 
-    fnKeyEnter(NOPARAM);
+    processKeyAction(ITM_RS);
 
     if (lastErrorCode == ERROR_NONE) {
       printf("    [3b] FAIL: lastErrorCode ERROR_NONE, expected a tier-1 structural reject for \"5 : A IF ;\"\n");
@@ -12056,7 +12055,6 @@ static int test_k4_arena_sweep(void)
 static int test_history_program(void)
 {
   extern void fnForthOuter(uint16_t);
-  extern void fnKeyEnter(uint16_t);
   extern void fnKeyExit(uint16_t);
   extern void runFunction(int16_t);
   extern void processKeyAction(int16_t);
@@ -12580,9 +12578,9 @@ static int test_history_program(void)
           printf("    [6] FIXTURE FAIL: edited line = \"%s\", expected \"2 2 + 3 +\"\n", aimBuffer);
           scFail = 1;
         } else {
-          fnKeyEnter(NOPARAM);
+          processKeyAction(ITM_RS);
           if (lastErrorCode != ERROR_NONE) {
-            printf("    [6] FIXTURE FAIL: ENTER on the edited line errored (%d)\n", lastErrorCode);
+            printf("    [6] FIXTURE FAIL: R/S on the edited line errored (%d)\n", lastErrorCode);
             scFail = 1;
           } else {
             uint16_t prog = forthHistoryProgram();
@@ -14874,7 +14872,7 @@ static int test_cm_gate_audit(void)
   printf("    [5] NOT DRIVEN -- KEEP, structural: catalog letter-entry, not capture text\n");
 
   /* ---- Row 6: processKeyAction's CM_PEM arm (SST/BST/RS/dotD capture
-   * guards). KEEP PEM-only; the interactive analog (R/S -> ENTER, T4) is
+   * guards). KEEP PEM-only; the interactive R/S-run path (T4) is
    * a separate site (keyboard.c's CM_AIM arm). Driven directly. ---- */
   scFail = 0;
   CGA_RESET();
@@ -15232,9 +15230,9 @@ static int test_cm_gate_audit(void)
 static int test_interactive_acceptance(void)
 {
   extern void fnForthOuter(uint16_t);
-  extern void fnKeyEnter(uint16_t);
   extern void fnKeyExit(uint16_t);
   extern void runFunction(int16_t);
+  extern void processKeyAction(int16_t);
   extern void tamProcessInput(uint16_t);
 
   int fail = 0, scFail;
@@ -15308,7 +15306,7 @@ static int test_interactive_acceptance(void)
   if (!scFail) printf("    [1] PASS: FORTH from CM_NORMAL opens interactive; X bit-identical (no lift)\n");
   fail |= scFail;
 
-  /* ---- [2] "1 2 +", ENTER: live stack, REPL reopens empty. ---- */
+  /* ---- [2] "1 2 +", R/S: live stack, REPL reopens empty. ---- */
   scFail = 0;
   if (!forthCapIsOpen()) {
     printf("    [2] FIXTURE FAIL: capture not open\n");
@@ -15317,9 +15315,9 @@ static int test_interactive_acceptance(void)
     runFunction(ITM_1); runFunction(ITM_SPACE);
     runFunction(ITM_2); runFunction(ITM_SPACE);
     runFunction(ITM_PLUS);
-    fnKeyEnter(NOPARAM);
+    processKeyAction(ITM_RS);
     if (lastErrorCode != ERROR_NONE) {
-      printf("    [2] FAIL: ENTER errored (%d)\n", lastErrorCode);
+    printf("    [2] FAIL: R/S errored (%d)\n", lastErrorCode);
       scFail = 1;
     }
     if (!scFail && !x_is_longint(3)) {
@@ -15335,7 +15333,7 @@ static int test_interactive_acceptance(void)
       scFail = 1;
     }
   }
-  if (!scFail) printf("    [2] PASS: \"1 2 +\" ENTER computes 3 on the live stack; REPL reopens empty\n");
+  if (!scFail) printf("    [2] PASS: \"1 2 +\" R/S computes 3 on the live stack; REPL reopens empty\n");
   fail |= scFail;
 
   /* ---- [3] ": SQ DUP * ;" through the key path (landed typing drive). ---- */
@@ -15345,9 +15343,9 @@ static int test_interactive_acceptance(void)
   runFunction(ITM_D); runFunction(ITM_U); runFunction(ITM_P); runFunction(ITM_SPACE);
   runFunction(ITM_ASTERISK); runFunction(ITM_SPACE);
   runFunction(ITM_SEMICOLON);
-  fnKeyEnter(NOPARAM);
+  processKeyAction(ITM_RS);
   if (lastErrorCode != ERROR_NONE) {
-    printf("    [3] FAIL: ENTER errored (%d)\n", lastErrorCode);
+    printf("    [3] FAIL: R/S errored (%d)\n", lastErrorCode);
     scFail = 1;
   }
   if (!scFail && !forthFindColon("SQ", &idx)) {
@@ -15361,9 +15359,9 @@ static int test_interactive_acceptance(void)
   scFail = 0;
   runFunction(ITM_4); runFunction(ITM_SPACE);
   runFunction(ITM_S); runFunction(ITM_Q);
-  fnKeyEnter(NOPARAM);
+  processKeyAction(ITM_RS);
   if (lastErrorCode != ERROR_NONE) {
-    printf("    [4] FAIL: ENTER errored (%d)\n", lastErrorCode);
+    printf("    [4] FAIL: R/S errored (%d)\n", lastErrorCode);
     scFail = 1;
   }
   if (!scFail && !x_is_longint(16)) {
@@ -15436,9 +15434,9 @@ static int test_interactive_acceptance(void)
     }
   }
   if (!scFail) {
-    fnKeyEnter(NOPARAM);
+    processKeyAction(ITM_RS);
     if (lastErrorCode != ERROR_NONE) {
-      printf("    [6] FAIL: ENTER errored (%d)\n", lastErrorCode);
+      printf("    [6] FAIL: R/S errored (%d)\n", lastErrorCode);
       scFail = 1;
     }
     if (!scFail) {
@@ -15643,7 +15641,7 @@ static int test_interactive_acceptance(void)
     runFunction(ITM_SEMICOLON); runFunction(ITM_SPACE);
     runFunction(ITM_G); runFunction(ITM_L); runFunction(ITM_O);
     runFunction(ITM_B); runFunction(ITM_A); runFunction(ITM_L);
-    fnKeyEnter(NOPARAM);
+    processKeyAction(ITM_RS);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [10] FAIL: \": TGLO 6 ; GLOBAL\" errored (%d)\n", lastErrorCode);
       scFail = 1;
@@ -15655,7 +15653,7 @@ static int test_interactive_acceptance(void)
     runFunction(ITM_T); runFunction(ITM_D); runFunction(ITM_U); runFunction(ITM_R);
     runFunction(ITM_SPACE); runFunction(ITM_5); runFunction(ITM_SPACE);
     runFunction(ITM_SEMICOLON);
-    fnKeyEnter(NOPARAM);
+    processKeyAction(ITM_RS);
     if (lastErrorCode != ERROR_NONE) {
       printf("    [10] FAIL: \": TDUR 5 ;\" errored (%d)\n", lastErrorCode);
       scFail = 1;
@@ -17053,7 +17051,7 @@ static int test_fold_round6_window(void)
   extern void processKeyAction(int16_t);
   extern void Shft_handler(void);
   extern bool_t _forthConsoleActive(void);
-  extern void forthInteractiveEnter(void);
+  extern void forthInteractiveRun(void);
   extern void fnTimerStart(uint8_t, uint16_t, uint32_t);
   extern void fnTimerExec(uint8_t);
 
@@ -17245,7 +17243,7 @@ static int test_fold_round6_window(void)
     showSoftmenu(-MNU_STK);
     fnForthOuter(NOPARAM);
     xcopy(aimBuffer, "12 34 +", 8); T_cursorPos = 7;
-    forthInteractiveEnter();              /* one real history line */
+    forthInteractiveRun();                /* one real history line */
     if (lastErrorCode != ERROR_NONE) {
       printf("    [5] FIXTURE BUG: seed line errored (%u)\n", lastErrorCode);
       scFail = 1; lastErrorCode = ERROR_NONE;
@@ -17411,7 +17409,7 @@ static int test_fold_round6_window(void)
     sprintf(line + pos, "EMIT");
     xcopy(aimBuffer, line, stringByteLength(line) + 1);
     T_cursorPos = stringByteLength(line);
-    forthInteractiveEnter();
+    forthInteractiveRun();
     if (lastErrorCode != ERROR_RAM_FULL) {
       printf("    [8] FAIL (F11): line-end loud stop missing (lastErrorCode=%u)"
              " — the erroneous settle emptied the spill, silencing the"
@@ -17454,9 +17452,9 @@ static int test_fold_round6_window(void)
     showSoftmenu(-MNU_STK);
     fnForthOuter(NOPARAM);
     xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
-    forthInteractiveEnter();
+    forthInteractiveRun();
     xcopy(aimBuffer, "3 4 +", 6); T_cursorPos = 5;
-    forthInteractiveEnter();              /* two history lines: FHIST longer
+    forthInteractiveRun();                /* two history lines: FHIST longer
                                              than the program GTOP creates */
     lastErrorCode = ERROR_NONE;
     fhBefore = _tfcFhistStepCount();
@@ -17513,7 +17511,7 @@ static int test_fold_round6_window(void)
  *       never run keyed on a program that is not the fold's own
  *
  * Fixture shape copies test_fold_round6_window: real dispatch only —
- * fnForthOuter, runFunction, tamProcessInput, forthInteractiveEnter — and
+ * fnForthOuter, runFunction, tamProcessInput, forthInteractiveRun — and
  * every subcase asserts it REACHED the state it claims to test before it
  * asserts anything about the fix. */
 static int test_fold_round8_window(void)
@@ -17521,7 +17519,7 @@ static int test_fold_round8_window(void)
   extern void fnForthOuter(uint16_t);
   extern void runFunction(int16_t);
   extern void tamProcessInput(uint16_t);
-  extern void forthInteractiveEnter(void);
+  extern void forthInteractiveRun(void);
   extern int16_t determineItem(const char *);
 
   int fail = 0, scFail;
@@ -17634,7 +17632,7 @@ static int test_fold_round8_window(void)
       fnForthOuter(NOPARAM);                    /* interactive console, keys mode */
       { uint16_t hl = (uint16_t)stringByteLength(histLine[li]);
         xcopy(aimBuffer, histLine[li], hl + 1); T_cursorPos = hl; }
-      forthInteractiveEnter();                  /* one real history line in FHIST */
+      forthInteractiveRun();                    /* one real history line in FHIST */
       lastErrorCode = ERROR_NONE;
 
       fhProgBefore  = forthHistoryProgram();
@@ -18144,7 +18142,7 @@ static int test_fold_round8_window(void)
       showSoftmenu(-MNU_STK);
       fnForthOuter(NOPARAM);
       xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
-      forthInteractiveEnter();                /* FHIST is created AFTER PEAR */
+      forthInteractiveRun();                  /* FHIST is created AFTER PEAR */
       lastErrorCode = ERROR_NONE;
       fhProg   = forthHistoryProgram();
       fhBefore = _tfcFhistStepCount();
@@ -18307,10 +18305,10 @@ static int test_fold_round8_window(void)
       showSoftmenu(-MNU_STK);
       fnForthOuter(NOPARAM);
       xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
-      forthInteractiveEnter();                /* FHIST exists, after the three */
+      forthInteractiveRun();                  /* FHIST exists, after the three */
       lastErrorCode = ERROR_NONE;
 
-      /* Sampled AFTER the console line: forthInteractiveEnter creates FHIST,
+      /* Sampled AFTER the console line: forthInteractiveRun creates FHIST,
        * which is itself a program. */
       progsBefore = numberOfPrograms;
       { calcRegister_t l = findNamedLabel("PCCC", GLOBAL_LABELS);
@@ -18430,7 +18428,7 @@ static int test_fold_round8_window(void)
       showSoftmenu(-MNU_STK);
       fnForthOuter(NOPARAM);
       xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
-      forthInteractiveEnter();                  /* FHIST exists, one real line */
+      forthInteractiveRun();                    /* FHIST exists, one real line */
       lastErrorCode = ERROR_NONE;
 
       fhProg = forthHistoryProgram();
@@ -18540,7 +18538,7 @@ static int test_fold_round8_window(void)
       showSoftmenu(-MNU_STK);
       fnForthOuter(NOPARAM);
       xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
-      forthInteractiveEnter();      /* FHIST is created AFTER PLNG */
+      forthInteractiveRun();        /* FHIST is created AFTER PLNG */
       lastErrorCode = ERROR_NONE;
 
       { calcRegister_t l = findNamedLabel("PLNG", GLOBAL_LABELS);
@@ -18828,7 +18826,7 @@ static int test_fold_round8_window(void)
           showSoftmenu(-MNU_STK);
           fnForthOuter(NOPARAM);
           xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
-          forthInteractiveEnter();     /* Ensure + push: two save/restore
+          forthInteractiveRun();       /* Ensure + push: two save/restore
                                           brackets over the parked tuple */
           lastErrorCode = ERROR_NONE;
           if (currentProgramNumber != prog || currentLocalStepNumber != 1
@@ -18885,7 +18883,7 @@ static int test_fold_round8_window(void)
         showSoftmenu(-MNU_STK);
         fnForthOuter(NOPARAM);
         xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
-        forthInteractiveEnter();
+        forthInteractiveRun();
         lastErrorCode = ERROR_NONE;
 
         hist = forthHistoryProgram();

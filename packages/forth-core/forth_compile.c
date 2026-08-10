@@ -10,6 +10,7 @@
 #include "forth_dict.h"
 #include "forth_prims.h"
 #include "forth_capture.h"
+#include "forth_console.h"
 #include "forth_menu.h"
 #include "programming/param_core.h"
 
@@ -1699,7 +1700,7 @@ void fnForthOuter(uint16_t unused) {
 
   /* FORTH pressed while the console is ALREADY open must not re-open it.
    * forthCapOpenInteractive's first act is `aimBuffer[0] = 0`, so the
-   * second press would discard the line — and, unlike ENTER, pushes
+   * second press would discard the line — and, unlike R/S, pushes
    * nothing to FHIST first, so f-up could not bring it back either.  If X
    * held a string the re-open would additionally seed from it and consume
    * it.
@@ -1736,6 +1737,7 @@ void fnForthOuter(uint16_t unused) {
   forthCapSetKeysMode(true);
   T_cursorPos = 0;
   displayAIMbufferoffset = 0;
+  forthConsoleAppendLine(FORTH_CONSOLE_CONTROL_HINT);
 
   if (seeded) {
     xcopy(aimBuffer, seed, stringByteLength(seed) + 1);

@@ -2986,7 +2986,7 @@ RELEASE_END:
                  * ITM_RS matches neither. LIVE — in the suspended residue
                  * this arm ran TAM's leftover scratch as a Forth line. */
                 if(forthCapInteractiveLive() && item == ITM_RS) {
-                  forthInteractiveEnter();     /* the closest honest analog */
+                  forthInteractiveRun();       /* the closest honest analog */
                   keyActionProcessed = true;
                   break;
                 }
@@ -3613,14 +3613,17 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
       }
 
       case CM_AIM: {
-        /* An interactive Forth capture diverts entirely — run the line (or
-         * reopen/no-op), never fall to the native AIM commit below. calcMode
-         * stays CM_AIM throughout: no calcModeNormal(), no closeAim(), no
-         * popSoftmenu() on this path. LIVE — while SUSPENDED, aimBuffer is
-         * TAM's, and this divert was committing TAM's scratch to FHIST and
-         * running it. */
+        /* An interactive Forth capture gives ENTER its calculator-console
+         * meaning: one literal token separator.  R/S owns execution above.
+         * Do not fall to the native AIM commit below: it would commit the
+         * whole editor to X. LIVE — a suspended capture's aimBuffer belongs
+         * to TAM, so it must retain native ENTER semantics. */
         if(forthCapInteractiveLive()) {
-          forthInteractiveEnter();
+          if(!_forthCapAtCap(ITM_SPACE)) {
+            screenUpdatingMode &= ~(SCRUPD_MANUAL_STACK | SCRUPD_SKIP_STACK_ONE_TIME);
+            processAimInput(ITM_SPACE);
+            refreshRegisterLine(AIM_REGISTER_LINE);
+          }
           break;
         }
           if(softmenuStack[0].softmenuId <= 1 || menu(1) == -MNU_ALPHA) {

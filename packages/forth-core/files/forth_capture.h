@@ -104,16 +104,16 @@ bool_t      forthCapTextNonEmpty(void); /* open && aimBuffer[0] != 0 */
 bool_t      forthCapKeysMode(void);        /* keys-mode bit */
 void        forthCapSetKeysMode(bool_t on);
 
-/* ENTER's orchestrator for an interactive capture — runs the line, then
+/* R/S's orchestrator for an interactive capture — runs the line, then
  * either reopens empty (REPL) or reopens with the line intact for
- * correction (error).  Called from fnKeyEnter's CM_AIM divert and from
- * the ITM_RS guard. */
-void        forthInteractiveEnter(void);
+ * correction (error).  ENTER inserts a literal space; the ITM_RS guard
+ * calls this routine to run the completed line. */
+void        forthInteractiveRun(void);
 
 /* The FHIST interactive-history program — push, cap, evict, recall.
  * Defined in programming/forth_fold.c. */
 
-/* Push `line` onto FHIST (creating it on first use).  ENTER and EXIT
+/* Push `line` onto FHIST (creating it on first use).  R/S and EXIT
  * rung 3 both call it BEFORE the line is lost (run or discard).  A no-op
  * when `line` is empty; silent when the program cannot be created or
  * grown — history is a convenience, never an error that blocks a run. */

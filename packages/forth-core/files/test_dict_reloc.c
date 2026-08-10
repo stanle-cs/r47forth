@@ -1261,6 +1261,7 @@ static int test_console_line_survives_gestures(void);
 static int test_console_print_stack_depth(void);
 static int test_console_words_str_page(void);
 static int test_console_words_program(void);
+static int test_console_terminal_controls(void);
 static int test_console_keys_first(void);
 static int test_console_exit_ladder(void);
 static int test_console_story(void);
@@ -2077,7 +2078,7 @@ int forthDictSelfTest(void)
   forthDictClear();
   forthGDictClear();
 
-  printf("\nFORTH L1-2 TESTS (interactive REPL: ENTER, EXIT ladder, input cap)\n");
+  printf("\nFORTH L1-2 TESTS (interactive REPL: R/S, EXIT ladder, input cap)\n");
   forthDictInit();
   printf("  [DEBUG] running test_capture_interactive_repl...\n");
   fail |= test_capture_interactive_repl();
@@ -2469,7 +2470,9 @@ int forthDictSelfTest(void)
   printf("  [DEBUG] running test_console_words_program...\n");
   fail |= test_console_words_program();
 
-  printf("\nFORTH N1-5 TESTS (keys-first entry)\n");
+  printf("\nFORTH N1-5 TESTS (keys-first console entry and controls)\n");
+  printf("  [DEBUG] running test_console_terminal_controls...\n");
+  fail |= test_console_terminal_controls();
   printf("  [DEBUG] running test_console_keys_first...\n");
   fail |= test_console_keys_first();
   printf("  [DEBUG] running test_console_exit_ladder...\n");

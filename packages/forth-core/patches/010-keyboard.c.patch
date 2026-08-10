@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61b446c26c 100644
+index bc44026016e94a8865b8acc886386341596641c6..083b846077e809dec9b9c65fbd7365af939e93b5 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -2,12 +2,43 @@
@@ -251,16 +251,16 @@ index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61
              calcRegister_t var = findNamedVariable(funcParam);
              if(var != INVALID_VARIABLE) {
 -              if(calcMode == CM_PEM) {  // Insert user variable recall in program
-                 #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
+-                #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
 -                  printf("**[DL]** insertUserItemInProgram(item=%d, funcParam=%s)\n", item, funcParam);
-+                  printf("**[DL]** forthUserItemDispatch(item=%d, var=%d, funcParam=%s)\n", item, var, funcParam);
-                 #endif //VERBOSE_DETERMINEITEM
+-                #endif //VERBOSE_DETERMINEITEM
 -                insertUserItemInProgram(item, funcParam);
 -              }
 -              else {                    // Execute item
--                #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
+                 #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
 -                  printf("**[DL]** reallyRunFunction(item=%d, var=%d, funcParam=%s)\n", item, var, funcParam);
--                #endif //VERBOSE_DETERMINEITEM
++                  printf("**[DL]** forthUserItemDispatch(item=%d, var=%d, funcParam=%s)\n", item, var, funcParam);
+                 #endif //VERBOSE_DETERMINEITEM
 -                reallyRunFunction(item, var);
 -              }
 +              forthUserItemDispatch(item, funcParam, item, var);
@@ -272,16 +272,16 @@ index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61
              calcRegister_t label = findNamedLabel(funcParam, GLOBAL_LABELS);
              if(label != INVALID_VARIABLE) {
 -              if(calcMode == CM_PEM) {  // Insert user program call in program
-                 #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
+-                #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
 -                  printf("**[DL]** insertUserItemInProgram(item=%d, funcParam=%s)\n", item, funcParam);
-+                  printf("**[DL]** forthUserItemDispatch(item=%d, label=%d, funcParam=%s)\n", item, label, funcParam);
-                 #endif //VERBOSE_DETERMINEITEM
+-                #endif //VERBOSE_DETERMINEITEM
 -                insertUserItemInProgram(item, funcParam);
 -              }
 -              else {                    // Execute item
--                #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
+                 #if defined(PC_BUILD) && defined(VERBOSE_DETERMINEITEM)
 -                  printf("**[DL]** reallyRunFunction(item=%d, label=%d, funcParam=%s)\n", item, label, funcParam);
--                #endif //VERBOSE_DETERMINEITEM
++                  printf("**[DL]** forthUserItemDispatch(item=%d, label=%d, funcParam=%s)\n", item, label, funcParam);
+                 #endif //VERBOSE_DETERMINEITEM
 -                reallyRunFunction(item, label);
 -              }
 +              forthUserItemDispatch(item, funcParam, item, label);
@@ -338,7 +338,7 @@ index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61
 +                 * ITM_RS matches neither. LIVE — in the suspended residue
 +                 * this arm ran TAM's leftover scratch as a Forth line. */
 +                if(forthCapInteractiveLive() && item == ITM_RS) {
-+                  forthInteractiveEnter();     /* the closest honest analog */
++                  forthInteractiveRun();       /* the closest honest analog */
 +                  keyActionProcessed = true;
 +                  break;
 +                }
@@ -378,24 +378,27 @@ index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61
                    addStepInProgram(ITM_STOP);
                    keyActionProcessed = true;
                  }
-@@ -3444,6 +3613,16 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3444,6 +3613,19 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
-+        /* An interactive Forth capture diverts entirely — run the line (or
-+         * reopen/no-op), never fall to the native AIM commit below. calcMode
-+         * stays CM_AIM throughout: no calcModeNormal(), no closeAim(), no
-+         * popSoftmenu() on this path. LIVE — while SUSPENDED, aimBuffer is
-+         * TAM's, and this divert was committing TAM's scratch to FHIST and
-+         * running it. */
++        /* An interactive Forth capture gives ENTER its calculator-console
++         * meaning: one literal token separator.  R/S owns execution above.
++         * Do not fall to the native AIM commit below: it would commit the
++         * whole editor to X. LIVE — a suspended capture's aimBuffer belongs
++         * to TAM, so it must retain native ENTER semantics. */
 +        if(forthCapInteractiveLive()) {
-+          forthInteractiveEnter();
++          if(!_forthCapAtCap(ITM_SPACE)) {
++            screenUpdatingMode &= ~(SCRUPD_MANUAL_STACK | SCRUPD_SKIP_STACK_ONE_TIME);
++            processAimInput(ITM_SPACE);
++            refreshRegisterLine(AIM_REGISTER_LINE);
++          }
 +          break;
 +        }
            if(softmenuStack[0].softmenuId <= 1 || menu(1) == -MNU_ALPHA) {
              popSoftmenu();
            }
-@@ -3715,6 +3894,9 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3715,6 +3897,9 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          if(calcMode == CM_PEM) {
            aimBuffer[0] = 0;
          }
@@ -405,7 +408,7 @@ index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61
          leaveTamModeIfEnabled();
          if(calcMode == CM_PEM) {
            scrollPemBackwards();
-@@ -3799,6 +3981,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3799,6 +3984,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -417,7 +420,7 @@ index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61
          if(currentMenu() == -MNU_ALPHA) {  //JM get out of the ALPHA menu and go to MyM fto satisfy the old exit routines
            softmenuStack[0].softmenuId = 1;                                  //JM
          }                                                                   //JM
-@@ -3856,6 +4043,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3856,6 +4046,15 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            lastErrorCode = 0;
            break;
          }
@@ -433,7 +436,7 @@ index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61
          if(getSystemFlag(FLAG_ALPHA) && !tam.mode) {
            if(isAlphaSubmenu(0)) {
              popSoftmenu();           // Current menu is an Alpha sub-menu: just pop it
-@@ -3868,6 +4064,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3868,6 +4067,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
            break;
          }
          if(aimBuffer[0] != 0 && !tam.mode) {
@@ -441,7 +444,7 @@ index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61
            if(getSystemFlag(FLAG_ALPHA)) {
              pemCloseAlphaInput();
            }
-@@ -3878,6 +4075,14 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3878,6 +4078,14 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
              pemCloseNumberInput();
            }
            aimBuffer[0] = 0;
@@ -456,7 +459,7 @@ index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61
            fnBst(NOPARAM); // Set the PGM pointer to the original position
            break;
          }
-@@ -4266,6 +4471,15 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4266,6 +4474,15 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
        }
  
        case CM_AIM: {
@@ -472,7 +475,7 @@ index bc44026016e94a8865b8acc886386341596641c6..41a85194c7220d03658a6a155cde0d61
          if(catalog && catalog != CATALOG_MVAR) {
            if(stringByteLength(aimBuffer) > 0) {
              lg = stringLastGlyph(aimBuffer);
-@@ -4366,9 +4580,20 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4366,9 +4583,20 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
            return;
          }
          if(getSystemFlag(FLAG_ALPHA)) {
