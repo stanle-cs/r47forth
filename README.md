@@ -126,12 +126,15 @@ All of these are compile-only. They emit branch tokens into the word you're defi
 Patterns:
 
 ```forth
-: ABS-DIFF  - ABS ;
+: ABS-DIFF  - |x| ;
 
-: SHOW-STACK  DUP . 1 - DUP IF RECURSE THEN DROP ;
+: COUNT-DOWN  DUP IF DUP . 1 - RECURSE ELSE DROP THEN ;
 
-: RUN  BEGIN RCL 19 WHILE STEP REPEAT ;
+: STEP  RCL 19 1 - STO 19 DROP ;
+: RUN   BEGIN RCL 19 WHILE STEP REPEAT ;
 ```
+
+`COUNT-DOWN` prints n down to 1 and leaves a clean stack. `RUN` keeps calling `STEP` until register 19 reaches zero.
 
 ### Execution
 
@@ -145,16 +148,15 @@ Every C47 calculator function is callable by its catalog name. The interpreter r
 
 | Syntax | Examples |
 |--------|---------|
-| `FUNC` | `SIN`, `COS`, `ABS`, `SQRT`, `LN`, `EXP`, `CHS`, `IP`, `FP`, `x!`, `CLSTK` |
+| `FUNC` | `SIN`, `COS`, `LN`, `CHS`, `IP`, `FP`, `\|x\|`, `x!`, `CLSTK`. The name must match the catalog spelling exactly — it's `\|x\|`, not ABS, and square root is the `√x̅` glyph. |
 | `STO n` | `STO 00`..`STO 99`, `STO A`..`STO W`, `STO 'name'`, `STO .00`..`.98` (local), `STO →nn` (indirect) |
 | `RCL n` | Same parameter forms as `STO`. |
 | `STO+ n` | Arithmetic store. `STO+`, `STO-`, `STO×`, `STO÷`. Same parameter forms. |
 | `SF n` / `CF n` | Set/clear flag. `SF 00`..`SF 99`, `SF A`, `SF 'SYSFLAG'`, dot-flags for locals. |
-| `FS? n` / `FC? n` | Test flag. Pushes 1 or 0. |
-| `x< n` / `x= n` / `x> n` | Compare X against register *n*. Push 1 (true) or 0 (false). |
-| `SHUFFLE xyzt` | Stack reorder with 4 chars from `{x,y,z,t}`. |
+| `FS? n` / `FC? n` | Test flag. The True/False verdict shows on screen; nothing is pushed. |
+| `⇄ xyzt` | Stack reorder with 4 chars from `{x,y,z,t}`. `⇄` is the shuffle item's catalog name. |
 
-Items that control C47 program flow (`END`, `RTN`, `STOP`, `GTO`, `CASE`) are rejected.
+Items that control C47 program flow (`END`, `RTN`, `STOP`, `GTO`, `CASE`) are rejected, and so are the skip-on-compare tests (`x= ?`, `x< ?`, `x> ?` and family) — their native meaning is "skip the next program step", which has no Forth equivalent. Compute a difference with `-` (and `sign` if you need the direction) and branch with `IF` instead.
 
 ### Token resolution order
 
@@ -166,7 +168,7 @@ When the interpreter sees a token, it tries these in order. First match wins.
 | 2 | Primitive table | The 29 built-in Forth words listed above |
 | 3 | User-defined words | Colon definitions in the transient or global dictionary |
 | 4 | Number literal | `42`, `3.14`, `-7` |
-| 5 | C47 zero-param item | `SIN`, `ABS`, `CLSTK`, etc. |
+| 5 | C47 zero-param item | `SIN`, `\|x\|`, `CLSTK`, etc. |
 | 6 | C47 parameterized item | `STO 20`, `RCL 'X'`, `SF 10`, etc. |
 | 7 | Global program label | Bare label name (interpret state only) |
 | 8 | Error | Undefined word |
