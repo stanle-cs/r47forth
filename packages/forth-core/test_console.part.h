@@ -1651,17 +1651,42 @@ static int test_console_line_survives_gestures(void)
 static int test_console_terminal_controls(void)
 {
   int fail = 0;
+  int32_t openPixels, runPixels;
   char line[FORTH_CONSOLE_FMT_MAX];
   extern void fnKeyEnter(uint16_t);
   extern void processKeyAction(int16_t);
+  extern void forthTestConsoleRefreshArm(bool_t);
+  extern uint16_t forthTestConsoleRefreshCountGet(void);
+  extern uint8_t forthTestConsoleRefreshModeGet(void);
+  extern void forthTestConsolePrepareOpeningRefresh(int16_t);
 
   N13_RESET();
   forthDictInit();
   fnForthOuter(NOPARAM);
 
+  /* executeFunction owns the actual physical key and its generic refresh.
+   * This seam is immediately before that refresh, so assert the condition
+   * the full screen observes without manufacturing a menu stack that leaks
+   * into later Forth audit fixtures. */
+  screenUpdatingMode = SCRUPD_MANUAL_STACK | SCRUPD_SKIP_STACK_ONE_TIME;
+  forthTestConsolePrepareOpeningRefresh(ITM_FORTH);
+
   if (forthConsoleLineCount() != 1
       || !_consoleLineIs(0, FORTH_CONSOLE_CONTROL_HINT)) {
     printf("    FAIL: a fresh console must display the ENTER/R/S control hint\n");
+    fail = 1;
+  }
+  if ((screenUpdatingMode & (SCRUPD_MANUAL_STACK | SCRUPD_SKIP_STACK_ONE_TIME)) != 0) {
+    printf("    FAIL: FORTH must clear stack suppression before its first full repaint (mode=%u)\n",
+           screenUpdatingMode);
+    fail = 1;
+  }
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  _forthConsoleRender();
+  openPixels = _consoleBandPixels();
+  if (openPixels <= 0) {
+    printf("    FAIL: the opening hint did not reach the console renderer (%d px)\n",
+           openPixels);
     fail = 1;
   }
   fnForthOuter(NOPARAM);
@@ -1680,6 +1705,12 @@ static int test_console_terminal_controls(void)
     fail = 1;
   }
 
+  /* R/S uses the real physical-key path.  Its self-test seam records the
+   * full-screen request before the generic cursor-walking renderer; the
+   * direct render below proves the newly written dialogue has ink to paint. */
+  lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+  screenUpdatingMode = SCRUPD_MANUAL_STACK | SCRUPD_SKIP_STACK_ONE_TIME;
+  forthTestConsoleRefreshArm(true);
   processKeyAction(ITM_RS);
   if (lastErrorCode != ERROR_NONE) {
     printf("    FAIL: R/S did not run \"3 4 +\" (error %u)\n", lastErrorCode);
@@ -1702,6 +1733,20 @@ static int test_console_terminal_controls(void)
       fail = 1;
     }
   }
+  if (forthTestConsoleRefreshCountGet() != 1
+      || (forthTestConsoleRefreshModeGet()
+          & (SCRUPD_MANUAL_STACK | SCRUPD_SKIP_STACK_ONE_TIME)) != 0) {
+    printf("    FAIL: R/S must immediately request one unsuppressed full repaint (requests=%u mode=%u)\n",
+           forthTestConsoleRefreshCountGet(), forthTestConsoleRefreshModeGet());
+    fail = 1;
+  }
+  _forthConsoleRender();
+  runPixels = _consoleBandPixels();
+  if (runPixels <= 0) {
+    printf("    FAIL: R/S dialogue did not reach the console renderer (%d px)\n",
+           runPixels);
+    fail = 1;
+  }
   if (aimBuffer[0] != 0 || !forthCapKeysMode()) {
     printf("    FAIL: R/S must reopen an empty keys-first line\n");
     fail = 1;
@@ -1709,6 +1754,7 @@ static int test_console_terminal_controls(void)
 
   forthCapClose();
   forthConsoleClear();
+  forthTestConsoleRefreshArm(false);
   lastErrorCode = ERROR_NONE;
   if (!fail) {
     printf("    PASS: ENTER inserts spaces, R/S runs, and the console advertises both\n");

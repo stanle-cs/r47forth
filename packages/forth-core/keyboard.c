@@ -17,6 +17,60 @@ TO_QSPI static const char bugScreenItemNotDetermined[] = "In function determineI
 
 FORTH_SELFTEST_EXPORT void executeFunction(const char *data, int16_t item_);
 
+#if defined(FORTH_DEBUG_SELFTEST)
+/* Full-screen refresh walks the live program cursor.  Several existing
+ * terminal tests hand-build an interactive line but not that cursor; they
+ * test language/input semantics, not a graphical redraw.  The one terminal
+ * test that needs this seam records the request explicitly, while normal
+ * firmware always falls through to refreshScreen(). */
+static bool_t forthTestSuppressConsoleRefresh = false;
+static uint16_t forthTestConsoleRefreshCount = 0;
+static uint8_t forthTestConsoleRefreshMode = 0;
+
+FORTH_SELFTEST_EXPORT void forthTestConsoleRefreshArm(bool_t suppress) {
+  forthTestSuppressConsoleRefresh = suppress;
+  forthTestConsoleRefreshCount = 0;
+  forthTestConsoleRefreshMode = 0;
+}
+
+FORTH_SELFTEST_EXPORT uint16_t forthTestConsoleRefreshCountGet(void) {
+  return forthTestConsoleRefreshCount;
+}
+
+FORTH_SELFTEST_EXPORT uint8_t forthTestConsoleRefreshModeGet(void) {
+  return forthTestConsoleRefreshMode;
+}
+#endif
+
+static void _forthConsoleRefreshAfterRun(void) {
+#if defined(FORTH_DEBUG_SELFTEST)
+  if(forthCapInteractiveLive()) {
+    if(forthTestSuppressConsoleRefresh) {
+      forthTestConsoleRefreshMode = screenUpdatingMode;
+      forthTestConsoleRefreshCount++;
+    }
+    return;
+  }
+#endif
+  refreshScreen(142);
+}
+
+static void _forthConsolePrepareOpeningRefresh(int16_t item) {
+  /* The physical FORTH command opens an AIM editor AND adds the console's
+   * control hint above it.  The caller's full refresh owns that screen, but
+   * can legitimately inherit a one-shot stack suppression from the
+   * preceding menu. */
+  if(item == ITM_FORTH && forthCapInteractiveLive()) {
+    screenUpdatingMode &= ~(SCRUPD_MANUAL_STACK | SCRUPD_SKIP_STACK_ONE_TIME);
+  }
+}
+
+#if defined(FORTH_DEBUG_SELFTEST)
+FORTH_SELFTEST_EXPORT void forthTestConsolePrepareOpeningRefresh(int16_t item) {
+  _forthConsolePrepareOpeningRefresh(item);
+}
+#endif
+
 /* Abort the empty placeholder before SST/BST navigation — no navigation may
  * leave FCAP_OPEN behind (fnSst/fnBst's own close branch only fires on
  * non-empty aimBuffer). */
@@ -1466,7 +1520,7 @@ endReturnTrue:
                 if(calcMode == CM_AIM && _forthCapAtCap(item)) { goto noMoreToDo; }
                 runFunction(item);
 
-
+                _forthConsolePrepareOpeningRefresh(item);
                 // Double execution when a custom conversion: additional to the runfunction which operated the 'normal' conversion
                 if(!(programRunStop == PGM_RUNNING || programRunStop == PGM_PAUSED) && calcMode != CM_PEM && item > 0 && isItemConversion(item)) {
                   int16_t itemNrPair;
@@ -2987,6 +3041,13 @@ RELEASE_END:
                  * this arm ran TAM's leftover scratch as a Forth line. */
                 if(forthCapInteractiveLive() && item == ITM_RS) {
                   forthInteractiveRun();       /* the closest honest analog */
+                  /* R/S changes the transcript (echo/result or error), not
+                   * merely the AIM input row.  The ordinary CM_AIM path
+                   * below intentionally repaints only that row for typing;
+                   * here the full screen is required so the console changes
+                   * are visible on THIS keypress, not the next ENTER. */
+                  screenUpdatingMode &= ~(SCRUPD_MANUAL_STACK | SCRUPD_SKIP_STACK_ONE_TIME);
+                  _forthConsoleRefreshAfterRun();
                   keyActionProcessed = true;
                   break;
                 }
