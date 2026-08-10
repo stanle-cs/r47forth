@@ -5,9 +5,22 @@ description: Launch the C47/R47 simulator and capture what is actually on the LC
 
 # Running the C47/R47 simulator and seeing the screen
 
-**If this task ends in a capture driver, you COPY
-`references/capture-driver.c` (in this skill) and adapt its fixture.
+**If this task ends in a capture driver, you COPY one of the two
+reference drivers (in this skill) and adapt its fixture.
 A driver written from scratch is off-path even if it works — rule 6.**
+
+Two reference drivers:
+
+| Driver | Use it for |
+|---|---|
+| `references/capture-driver.c` | PEM listing, FWRD picker, normal-screen after a program run (the original 2026-08-03 driver) |
+| `references/console-capture-driver.c` | Interactive console sessions: keying in lines, running them, capturing the transcript, full-screen with input line + softkeys, and FHIST history scrolling (proven 2026-08-10) |
+
+Both go into `test_capture.part.h` at file END — the console driver
+inlines `_consoleRunLine` as `_TLC_RUN()` because `test_console.part.h`
+is included after it.  The console driver produces two shot types:
+`_TLC_SHOT()` (transcript band only) and `_TLC_FULL_SHOT()` (full
+`refreshScreen`, shows the AIM input line and FWRD picker bar).
 
 Two binaries are built from the same sources and both matter:
 

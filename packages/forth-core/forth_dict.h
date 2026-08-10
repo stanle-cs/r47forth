@@ -260,6 +260,7 @@ uint16_t forthTestSpillHighWater(void);
 void     forthSpillReset(void);
 bool_t   forthSpillCatch(calcRegister_t reg);
 bool_t   forthSpillRefill(calcRegister_t reg);
+bool_t   forthSpillPeekInto(uint16_t index, calcRegister_t reg);
 void     forthSpillSettle(void);
 bool_t   forthPrimInvoke(uint16_t idx);
 

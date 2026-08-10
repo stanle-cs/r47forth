@@ -132,6 +132,30 @@ bool_t forthSpillRefill(calcRegister_t reg)
   return true;
 }
 
+bool_t forthSpillPeekInto(uint16_t index, calcRegister_t reg)
+{
+  if (index >= forthSpillSlots) { return false; }
+  { uint32_t off = 0; uint16_t n;
+    for (n = 0; n < index; n++) {
+      uint16_t blk;
+      xcopy(&blk, (uint8_t *)forthSpillBase + off + 4, 2);
+      off += 6u + (uint32_t)blk * 4u;
+    }
+    { uint8_t *p = (uint8_t *)forthSpillBase + off;
+      uint32_t type; uint16_t blk;
+      xcopy(&type, p, 4);
+      xcopy(&blk, p + 4, 2);
+      { void *tmp = allocC47Blocks(blk);
+        if (tmp == NULL) { return false; }
+        xcopy(tmp, p + 6, (uint32_t)blk * 4u);
+        setRegisterDataPointer(reg, tmp);
+        setRegisterDataType(reg, (uint16_t)type, amNone);
+      }
+    }
+  }
+  return true;
+}
+
 static int16_t forthStackCapacity(void)
 {
   return (int16_t)(getStackTop() - REGISTER_X + 1);

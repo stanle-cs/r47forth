@@ -107,30 +107,37 @@ static void pPrintStack(void)
 {
   char shown[FORTH_CONSOLE_FMT_MAX];
   char head[32];
-  /* The LIVE stack, not the display-line count: displayStack counts
-   * DISPLAY LINES and every writer caps it at 4, so using it here would
-   * silently drop the top four levels under SSIZE8.
-   *
-   * The Forth data stack on this machine IS the calculator stack — X up to
-   * getStackTop(), which FLAG_SSIZE8 makes 4 or 8 — plus the D3 spill
-   * region below it. Both terms are read live, from the same expressions
-   * the engine's own capacity check uses, so this cannot fall out of step
-   * with the stack. */
   uint16_t levels = (uint16_t)(getStackTop() - REGISTER_X + 1);
-  uint16_t depth  = (uint16_t)(levels + forthSpillCount());
+  uint16_t spills = forthSpillCount();
+  uint16_t depth  = (uint16_t)(levels + spills);
   uint16_t i;
 
-  /* "depth first, then levels until the width runs out" — the depth
-   * is the part that must never be truncated away. */
   snprintf(head, sizeof(head), "<%u> ", (unsigned)depth);
   forthConsoleAppend(head);
   for(i = 0; i < levels; i++) {
-    /* REGISTER_X..REGISTER_T are consecutive; above T the visible window
-     * continues into the spare registers the 8-level display already
-     * shows. */
     forthConsoleFormatRegister((calcRegister_t)(REGISTER_X + i), shown, (int16_t)sizeof(shown));
     forthConsoleAppend(shown);
-    if(i + 1 < levels) { forthConsoleAppend(" "); }
+    if(i + 1 < depth) { forthConsoleAppend(" "); }
+  }
+
+  if(spills > 0) {
+    void     *savedPtr  = getRegisterDataPointer(TEMP_REGISTER_1);
+    uint32_t  savedType = getRegisterDataType(TEMP_REGISTER_1);
+    uint32_t  savedTag  = getRegisterTag(TEMP_REGISTER_1);
+
+    forthConsoleAppend("| ");
+
+    for(i = spills; i > 0; i--) {
+      if(forthSpillPeekInto((uint16_t)(i - 1), TEMP_REGISTER_1)) {
+        forthConsoleFormatRegister(TEMP_REGISTER_1, shown, (int16_t)sizeof(shown));
+        forthConsoleAppend(shown);
+        if(i > 1) { forthConsoleAppend(" "); }
+        freeRegisterData(TEMP_REGISTER_1);
+      }
+    }
+
+    setRegisterDataPointer(TEMP_REGISTER_1, savedPtr);
+    setRegisterDataType(TEMP_REGISTER_1, (uint16_t)savedType, savedTag);
   }
   forthConsoleNewline();
 }

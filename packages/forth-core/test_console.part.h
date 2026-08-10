@@ -1484,6 +1484,53 @@ static int test_console_print_stack_depth(void)
   return fail;
 }
 
+static int test_console_print_stack_spill(void)
+{
+  int fail = 0;
+  char line[FORTH_CONSOLE_FMT_MAX];
+
+  forthDictInit();
+  forthConsoleClear();
+  forthCapClose();
+  calcMode = CM_NORMAL;
+  clearSystemFlag(FLAG_SSIZE8);
+
+  _consoleRun("XEQ 'CLSTK' 1 2 3 4 5 6 .S DROP DROP");
+  if (lastErrorCode != ERROR_NONE) {
+    printf("    FAIL: spill .S errored (%u)\n", lastErrorCode);
+    fail = 1;
+  }
+  forthConsoleLineAt(0, line, sizeof(line));
+  if (memcmp(line, "<6>", 3) != 0) {
+    printf("    FAIL: spill .S depth prefix is \"%s\", expected <6>\n", line);
+    fail = 1;
+  }
+  if (strstr(line, "|") == NULL) {
+    printf("    FAIL: spill .S missing separator (\"%s\")\n", line);
+    fail = 1;
+  }
+  { int vals = 0;
+    int32_t at = 4;
+    while (at < (int32_t)stringByteLength(line)) {
+      while (at < (int32_t)stringByteLength(line) && line[at] == ' ') { at++; }
+      if (at < (int32_t)stringByteLength(line) && line[at] != '|') { vals++; }
+      while (at < (int32_t)stringByteLength(line) && line[at] != ' ') { at++; }
+    }
+    if (vals != 6) {
+      printf("    FAIL: spill .S showed %d values, expected 6 (\"%s\")\n",
+             vals, line);
+      fail = 1;
+    }
+  }
+
+  forthConsoleClear();
+  lastErrorCode = ERROR_NONE;
+  if (!fail) {
+    printf("    PASS: .S prints 6 values with | separator at the spill boundary\n");
+  }
+  return fail;
+}
+
 /* ---- one class: an ordinary gesture destroys the line the owner is
  * typing, with no way to get it back — f-up/f-down with nothing to recall,
  * or FORTH pressed to re-open an already-open console.  The class
