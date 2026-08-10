@@ -468,8 +468,9 @@ static void _forthRestoreCursorTuple(uint16_t program, uint16_t localStep,
 /* The cursor tuple.  (program, localStep) — NOT a saved global step
  * number, which program-boundary shifts (FHIST growing/evicting) would
  * make stale by restore time; the restore re-reads programList AFTER
- * scanLabelsAndPrograms has rebuilt it.  The step half is maintained by
- * forthHistoryEvict, which renumbers the saved step as it deletes. */
+ * scanLabelsAndPrograms has rebuilt it.  The tuple may name either a user
+ * program or a step in package-owned FHIST; eviction repairs the latter's
+ * local step after removing an older history entry. */
 typedef struct {
   uint16_t savedProgram;          /* currentProgramNumber */
   uint16_t savedLocalStep;        /* currentLocalStepNumber */
@@ -503,18 +504,13 @@ static void _forthHistRestoreCursor(void) {
                            _forthHistCur.savedZerothStep);
 }
 
-/* §8.1: FHIST is a RESERVED name, and the store owns its identity — a
- * name match alone is a proxy, not an identity.  A candidate program is
- * the store only when its body is EMPTY (a fresh store is LBL + END) or
- * contains at least one ITM_FORTH source step.  No stronger structural
- * test exists: kept native steps (an unfoldable TAM commit stays in the
- * store) interleave arbitrarily with later lines and capture steps, so
- * step ORDER carries no signal.  What this refuses is the ordinary
- * collision — a native program that merely spells its label FHIST, by
- * hand or out of a restored backup — which must never be adopted,
- * appended to, or evicted from.  An owner program that takes the
- * reserved name AND contains Forth source steps is indistinguishable
- * from the store; the reserved semantics apply to it. */
+/* §8.1: FHIST is a RESERVED, package-owned label.  This predicate is
+ * defence in depth for raw program memory restored from an older or damaged
+ * image, not an ownership rule for a user's program.  It recognises an
+ * EMPTY store (LBL + END) or one holding a
+ * Forth source step, while refusing a native-only collision so the package
+ * never appends to or evicts an untrusted image.  Kept native steps may
+ * interleave with source steps in the real store, so order is not evidence. */
 static bool_t _forthHistProgramConforms(uint16_t program) {
   uint8_t *step = findNextStep(programList[program - 1].instructionPointer);
   uint16_t guard = 0;
@@ -538,10 +534,10 @@ static bool_t _forthHistProgramConforms(uint16_t program) {
  * Scans labelList for a GLOBAL label named "FHIST" (labelList[i].step > 0)
  * whose program passes the ownership test above — the first NAME match is
  * upstream's convention for resolving a label, but this store is a
- * package-private artefact in the owner's namespace, so the name alone
- * must not decide.  boundProgramNameLength guards the read exactly as
- * _removeLabelsAssignments does: a corrupt or crafted program cannot walk
- * this past firstFreeProgramByte. */
+ * package-private artefact, so an untrusted restored image is not accepted
+ * by name alone.  boundProgramNameLength guards the read exactly as
+ * _removeLabelsAssignments does: corrupt program memory cannot walk this
+ * past firstFreeProgramByte. */
 uint16_t forthHistoryProgram(void) {
   int16_t i;
   for(i = 0; i < numberOfLabels; i++) {
@@ -721,12 +717,9 @@ bool_t forthHistoryGotoLastStep(void) {
  * — the caller must skip its cursor restore (the L1-H rule, at the second
  * site it was found short at).
  *
- * The DELETER maintains the saved cursor (upstream's own convention, the
- * rule fnClP applies to its saved program): every evicted step is FHIST's
- * local step 2, so a saved cursor in FHIST past it slides down by one,
- * and a cursor AT it keeps its number — the successor inherits it.  A
- * saved step number that merely still FITS after eviction names a
- * different line; renumbering is what makes the restore an identity. */
+ * The saved tuple may name a step in package-owned FHIST.  When an eviction
+ * deletes an older step from that same program, the adjustments below keep
+ * the tuple on its original entry by upstream's deleter convention. */
 bool_t forthHistoryEvict(void) {
   uint16_t program = forthHistoryProgram();
   if(program == 0) {

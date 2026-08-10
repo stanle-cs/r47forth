@@ -18661,19 +18661,13 @@ static int test_fold_round8_window(void)
   fail |= scFail;
   cleanupTestProgram();
 
-  /* ---- [11] The class's SECOND member: same saved-cursor tuple,
-   * different deleter. _forthHistCur is sampled by forthHistoryPush
-   * before the push, and the push evicts oldest-first down to
-   * FORTH_HISTORY_MAX_BYTES — so when the PEM cursor is parked inside
-   * FHIST itself (an ordinary visible program; nothing bars the cursor
-   * from it), the restore names a step eviction just removed.
-   *
-   * The (program, localStep) tuple form was chosen so that
-   * "program-boundary shifts (FHIST growing/evicting)" cannot make it
-   * stale — true of the program half, false of the step half. Enumerating
-   * the class means driving EVERY mutation between save and restore: [10]
-   * drives deletion, this drives eviction.
-   * ---- */
+  /* ---- [11] FHIST is a RESERVED, package-owned program.  A PEM
+   * cursor can nevertheless name a step in that internal store:
+   * reservation governs ownership of the name, not cursor reachability.
+   * forthHistoryPush samples _forthHistCur before its oldest-first
+   * eviction, so the saved (program, localStep) tuple must keep naming
+   * the same payload after a front deletion.  [10] drives a deleted
+   * program; this block drives eviction within the reserved store. ---- */
   scFail = 0;
   R8_RESET();
   forthDictClear();
@@ -18786,8 +18780,8 @@ static int test_fold_round8_window(void)
     }
     lastErrorCode = ERROR_NONE;
   }
-  if (!scFail) printf("    [11] PASS (R9-2+R10-OOF-1): an evicting history"
-                      " push leaves its saved cursor on the SAME line, at"
+  if (!scFail) printf("    [11] PASS: an evicting reserved FHIST store"
+                      " leaves its internal cursor on the SAME line, at"
                       " both park depths\n");
   fail |= scFail;
   cleanupTestProgram();
@@ -18865,19 +18859,18 @@ static int test_fold_round8_window(void)
   fail |= scFail;
   cleanupTestProgram();
 
-  /* ---- [13] FHIST is a RESERVED name: the store is identified
-   * structurally, so an owner program that merely SPELLS its label FHIST
-   * (body not exclusively Forth source steps) is never adopted, appended
-   * to, or evicted from — and with that decoy label in a LOWER-numbered
-   * program, the package's own store still resolves and a fold round
-   * trip still lands its line. ---- */
+  /* ---- [13] FHIST is a RESERVED, package-owned name.  This direct
+   * fixture represents an untrusted restored or damaged program image,
+   * never a program an owner can create.  A native-only collision must not
+   * be adopted, appended to, or evicted; the package's real store is then
+   * created separately and the fold round trip still lands its line. ---- */
   scFail = 0;
   R8_RESET();
   forthDictClear();
   forthGDictClear();
   cleanupTestProgram();
   {
-    uint16_t ownProg = 0, ownBefore = 0, ownAfter = 0, hist;
+    uint16_t rawProg = 0, rawBefore = 0, rawAfter = 0, hist;
     tpInit(&p);
     if (tpLbl(&p, "FHIST") < 0 || tpRtn(&p) < 0 || tpRtn(&p) < 0 ||
         tpEnd(&p) < 0 || !tpWrite(&p)) {
@@ -18886,14 +18879,14 @@ static int test_fold_round8_window(void)
     }
     else {
       { calcRegister_t l = findNamedLabel("FHIST", GLOBAL_LABELS);
-        ownProg = (l == INVALID_VARIABLE) ? 0
+        rawProg = (l == INVALID_VARIABLE) ? 0
                   : (uint16_t)labelList[l - FIRST_LABEL].program; }
-      if (ownProg == 0) {
-        printf("    [13] FIXTURE BUG: the owner's FHIST program is missing\n");
+      if (rawProg == 0) {
+        printf("    [13] FIXTURE BUG: the raw FHIST collision is missing\n");
         scFail = 1;
       }
       else {
-        R8_PROG_STEPS(ownProg, ownBefore);
+        R8_PROG_STEPS(rawProg, rawBefore);
         showSoftmenu(-MNU_STK);
         fnForthOuter(NOPARAM);
         xcopy(aimBuffer, "1 2 +", 6); T_cursorPos = 5;
@@ -18901,16 +18894,16 @@ static int test_fold_round8_window(void)
         lastErrorCode = ERROR_NONE;
 
         hist = forthHistoryProgram();
-        R8_PROG_STEPS(ownProg, ownAfter);
-        if (hist == 0 || hist == ownProg) {
-          printf("    [13] FAIL (R10-OOF-2): the store adopted the owner's"
-                 " program by NAME (hist=%u ownProg=%u) — a reserved name"
-                 " must resolve structurally\n", hist, ownProg);
+        R8_PROG_STEPS(rawProg, rawAfter);
+        if (hist == 0 || hist == rawProg) {
+          printf("    [13] FAIL (R10-OOF-2): the store adopted the raw"
+                 " collision by NAME (hist=%u rawProg=%u) — a reserved name"
+                 " must resolve structurally\n", hist, rawProg);
           scFail = 1;
         }
-        if (ownAfter != ownBefore) {
+        if (rawAfter != rawBefore) {
           printf("    [13] FAIL (R10-OOF-2): the console appended to the"
-                 " owner's program (%u steps -> %u)\n", ownBefore, ownAfter);
+                 " raw collision (%u steps -> %u)\n", rawBefore, rawAfter);
           scFail = 1;
         }
         if (!scFail) {
@@ -18928,14 +18921,14 @@ static int test_fold_round8_window(void)
             if (tam.mode != 0) { tamProcessInput(ITM_ENTER); }
             if (!forthCapIsOpen() || strstr(aimBuffer, "STO") == NULL) {
               printf("    [13] FAIL (R10-OOF-2): the fold round trip lost the"
-                     " line over the owner's decoy label (open=%d"
+                     " line over the raw collision (open=%d"
                      " aim=\"%s\")\n", (int)forthCapIsOpen(), aimBuffer);
               scFail = 1;
             }
-            R8_PROG_STEPS(ownProg, ownAfter);
-            if (ownAfter != ownBefore) {
-              printf("    [13] FAIL (R10-OOF-2): the fold touched the owner's"
-                     " program (%u steps -> %u)\n", ownBefore, ownAfter);
+            R8_PROG_STEPS(rawProg, rawAfter);
+            if (rawAfter != rawBefore) {
+              printf("    [13] FAIL (R10-OOF-2): the fold touched the raw"
+                     " collision (%u steps -> %u)\n", rawBefore, rawAfter);
               scFail = 1;
             }
           }
@@ -18944,9 +18937,8 @@ static int test_fold_round8_window(void)
       lastErrorCode = ERROR_NONE;
     }
   }
-  if (!scFail) printf("    [13] PASS (R10-OOF-2): a program that merely spells"
-                      " its label FHIST is never adopted, appended to, or"
-                      " swept — the reserved name resolves structurally\n");
+  if (!scFail) printf("    [13] PASS (R10-OOF-2): an untrusted raw FHIST"
+                      " collision is never adopted, appended to, or swept\n");
   fail |= scFail;
   cleanupTestProgram();
 
