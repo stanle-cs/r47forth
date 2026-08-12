@@ -41,7 +41,10 @@ with open(path1, 'rb') as f1:
       Info_ID = bytearray("SMFW", "ascii")
       Fw_ID   = bytearray([0xd3, 0x42, 0xe1, 0xee])
       splitFwName = FwName.split('.', 2)
-      name = splitFwName[2] if len(splitFwName) == 3 else FwName
+      if(len(splitFwName) < 2):
+        name = FwName
+      else:
+        name = splitFwName[2]
       name = name[:12] if len(name) > 12 else name  # max 12 characters
       print(name)
       Fw_Name = bytearray(name, "ascii") + bytearray(12 - len(name))
