@@ -132,3 +132,32 @@ catches content pedagogy. Never present model-clean as done.
   it. His two catches this cycle (register, then fact) both survived the
   full scanner + cross-model battery — the machines endorse; only
   verification and his read gate.
+
+## Added 2026-08-10 (forth v0.3 update post, Stan's structural rewrite)
+
+His final edit restructured the whole post; the full shape is ruled in
+forum/DESIGN.md §2 ("Update-post structure"). What it teaches about
+drafting:
+
+- **Update posts are changelog-led.** Versioned heading, no intro,
+  list → attachment → short prose per section. The pipeline draft had
+  it inverted (prose tour first, changelog last) and he flipped it.
+- **He deletes hypophora on sight.** Two question-then-answer
+  transitions were corpus-attested, measured toward his 11% question
+  rate, and kept through two audit rounds with reasons logged. He cut
+  both. The corpus stat describes Reddit arguments, not his release
+  notes. Register beats corpus statistics.
+- **Changelog bullets stay impersonal.** Both audit lanes pushed
+  "are rejected" toward "I made the interpreter refuse"; he reverted
+  to "The interpreter refuse the compare tests". First-person is for
+  prose where he acts ("after I define SQ"), never for bullets.
+- **Parenthetical asides carry reasons and scope.** "( ENTER ran the
+  line before the console landed, doesn't work well in new design)",
+  "(if forth exceeds max R47 stack size)". This is his aside habit
+  doing changelog work.
+- **Boilerplate does not repeat across posts.** Target, base, licence
+  and the sim-only disclosure live in the announcement post; the
+  update post carries only repo + build + disclaimer.
+- **Write clean, let him roughen.** His posted grammar ("The
+  interpreter refuse") is his ESL fingerprint. Drafts neither polish
+  his edits nor imitate the roughness.

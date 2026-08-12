@@ -86,6 +86,34 @@ This is a constraint on the writing, not a polish pass at the end.
   claims (R/S interrupting `SPIN`) stay text-only; a sim capture must never
   imply a hardware observation.
 
+**Update-post structure (Stan's edit, 2026-08-10, forth v0.3).** He
+restructured the pipeline draft before posting; his shape governs
+update posts from now on:
+
+- The changelog LEADS, under a versioned heading (`[b]Changelog
+  v0.3[/b]`). No intro paragraph.
+- Interleave: `[list]` changelog block, then its attachment, then one
+  or two short prose paragraphs about the picture. Not prose-first
+  with the changelog at the bottom.
+- No rhetorical questions, none. He deleted two corpus-attested
+  hypophora that had survived two clean-ish audit rounds. Plain
+  declaratives.
+- Bullets stay impersonal. He removed the first-person ownership
+  framing the auditors had pushed for ("I made the interpreter
+  refuse" became "The interpreter refuse the compare tests").
+  Auditor pressure toward "I" in changelog bullets is an anti-pattern
+  for his posts.
+- His grammar is his. Do not polish "The interpreter refuse" to
+  "refuses" and do not imitate the pattern either; drafts are written
+  clean and he roughens where he pleases.
+- Behaviour changes and scope qualifiers go in parentheses with the
+  reason inline: "( ENTER ran the line before the console landed,
+  doesn't work well in new design)".
+- Changelog verbs are plain: "added", "support:".
+- The closing is repo link, build command, flash disclaimer. He cut
+  the target/base/licence recap and the sim-vs-hardware disclosure
+  from the update post (the stage-2 post already carries them).
+
 ---
 
 ## 3. Mechanical gate

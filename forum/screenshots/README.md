@@ -43,6 +43,41 @@ show is what the tests pin.
    setup lines, cursor on `FORTH«`) with the FWRD picker showing all
    six words, each fitting its softkey cell untruncated.
 
+## Stage K-N shots (sim, 2026-08-05 and 2026-08-10)
+
+Captured with the console capture driver
+(`.claude/skills/run-sim/references/console-capture-driver.c`), reverted
+after each session. All 400x240 native dumps via `fnScreenDump`.
+
+- `stage-n-1-console-dialogue.png` — console dialogue: `7 SQ .` printing
+  49, `1 2 3 .S` printing `<4> 3 2 1 5`, input line mid-composition.
+  Dialogue behaviour pinned by the N1-3 tests.
+- `stage-n-2-console-rolled.png` — rolled transcript: `: SQ DUP * ;
+  GLOBAL`, the result line, `7 SQ .` printing 49. Roll pinned by N1-2.
+- `stage-n-3-spill-separator.png` — `.S` on a six-deep stack:
+  `<6> 6 5 4 3 | 2 1`, the `|` at the spill boundary. Pinned by the
+  `.S` spill test (b5636f6c9).
+- `stage-n-4-countdown.png` — `: COUNT-DOWN DUP IF DUP . 1 - RECURSE
+  ELSE DROP THEN ;` then `5 COUNT-DOWN` printing `5 4 3 2 1`. The word
+  itself was sim-verified against a stack canary the same day.
+- `stage-n-5-error-line.png` — the dialogue's error arm: `WRONG` echoed,
+  `No such function` under it (N1-3).
+- `stage-n-6-history-recall.png` — full screen after
+  `forthHistoryRecall(-1)`: the last line back in the input editor, the
+  FWRD home row on the softkeys (L1-H, N1-5).
+- `stage-m-1-catalog-fwrd-row.png` — CATALOG tree with the FWRD row
+  beside FCNS (M1-1).
+- `stage-m-2-fwrd-normal-mode.png` — FWRD softmenu in CM_NORMAL, one
+  global word (MSHOW) on the softkeys (M1-1).
+- `stage-m-4-assign-pending.png` — ASSIGN with a global Forth word
+  pending on the key wait (M1-2).
+
+Composites for the stage-N forum post (3-attachment limit): 
+`forth2-attach-1-console.png` = n-1 + n-2 + n-3, 
+`forth2-attach-2-repl.png` = n-4 + n-5 + n-6, 
+`forth2-attach-3-catalog.png` = m-1 + m-2 + m-4. 
+Stacked at native scale with 4 px white separators.
+
 ## Not yet covered
 
 Simulator captures cannot stand in for the hardware checks the post

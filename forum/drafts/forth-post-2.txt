@@ -1,0 +1,90 @@
+The Forth package grew a console since the last post. Here's what it looks like, mostly in pictures. I've put the full changelog since stage 2 at the bottom.
+
+[b]The console[/b]
+
+FORTH outside the program editor now opens a terminal over the stack area. Your line echoes with a » prefix and its output prints under it. As more arrives the transcript rolls up.
+
+[attachment=2]forth2-attach-1-console.png[/attachment]
+
+Top to bottom: a SQ session with a .S dump, then the transcript after I define SQ and promote it with GLOBAL, then .S on a six-deep stack. That | in the last shot marks where the spill region starts.
+
+Typing works like this: ENTER puts a space in the line, R/S runs it, EXIT closes the console. It opens in keys mode with your words on the softkeys.
+
+Seven output words landed with the console:
+
+[code]
+.      print X, then drop
+.S     dump the whole stack, spill included
+.$     print the string in X
+EMIT   print X as a glyph code
+CR     newline
+SPACE  one space
+PAGE   clear the view, history stays
+[/code]
+
+[b]Running words, catching mistakes[/b]
+
+[attachment=1]forth2-attach-2-repl.png[/attachment]
+
+Here a recursive countdown runs straight at the console, an undefined word gets its error line, and history recall puts the last line back in the editor. Why keep a failed line in history? You get it back with one press and fix it in place.
+
+Where do the lines go? There's a hidden program named FHIST that collects everything you run, capped at 1KB with the oldest lines falling off first. You walk through it with the f-shifted up and down arrows. FHIST is a reserved name now, the package owns it.
+
+[b]The catalog knows Forth[/b]
+
+[attachment=0]forth2-attach-3-catalog.png[/attachment]
+
+These three show the FWRD row in the catalog tree, a global word on the softkeys in normal mode, and ASSIGN waiting for a key with a Forth word pending. Press a word softkey outside the editor and it runs on the spot.
+
+Keys mode from stage K rides along in every capture. The ALPHA gesture flips you between alpha typing and calculator keys, and the changelog below has the rest.
+
+[b]Changelog since the stage 2 post[/b]
+
+Console:
+[list]
+[*]The interactive capture draws a transcript over the whole stack area and rolls it upward like a terminal.
+[*]Each run echoes the line, prints its output, and prints an error line when something fails.
+[*]New words: . .S .$ EMIT CR SPACE PAGE.
+[*].S prints spilled values behind a | separator.
+[*]R/S runs the line and ENTER types a space. That changed, ENTER ran the line before the console landed.
+[*]The console opens in keys mode with the FWRD words as the home row.
+[/list]
+
+Interactive entry and history:
+[list]
+[*]Typing FORTH with no program editor open starts a live session right there.
+[*]A run line reopens the editor empty, and EXIT shuts the whole thing down.
+[*]Lines persist in FHIST across sessions, 1KB cap, oldest evicted first. I reserved that name for the package.
+[*]f-shifted up and down recall old lines for editing and re-running.
+[/list]
+
+Keys mode:
+[list]
+[*]The ALPHA gesture toggles alpha and calculator-key input inside a capture.
+[*]Physical keys land in their normal columns while you're on keys.
+[*]Parameterized keys fold their canonical spelling: STO 0 5 types STO 05.
+[*]Keys mode persists across TAM round trips.
+[/list]
+
+Catalog and ASSIGN:
+[list]
+[*]FWRD sits in the catalog tree beside FCNS.
+[*]A word softkey pressed outside the editor executes the word.
+[*]ASSIGN puts a global Forth word on a user key.
+[/list]
+
+Reference notes:
+[list]
+[*]The primitive table is 29 words, the glyph aliases for × · ÷ included.
+[*]Calculator functions resolve by exact catalog spelling. Absolute value is |x|, ABS won't resolve.
+[*]I made the interpreter refuse the compare tests x=? x<? x>?. Their native meaning is skip the next step and Forth has no step to skip. Compute a difference and use IF.
+[*]The full word reference with every parameter form is on the repo front page now.
+[/list]
+
+[b]Where to get it[/b]
+
+Same target and base as before: a DM42n on R47/C47 firmware (DMCP5), upstream c43 release 00.109.04.00b0. The licence is still GPL-3.0-only from c43, and COPYING carries it.
+
+Everything above is on the [url=https://github.com/stanle-cs/r47forth]repo[/url] main branch. Build it with the package tooling from the earlier post and make dist_dmcp5r47 CUSTOM_PKG=packages/forth-core.
+
+All of this ran in the simulator. I still haven't flashed this build to my DM42n. Back up your calculator state before flashing anything, and flash at your own risk.

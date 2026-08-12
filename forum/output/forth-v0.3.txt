@@ -1,0 +1,75 @@
+[b]Changelog v0.3[/b]
+Console:
+[list]
+[*]The interactive capture draws a transcript over the whole stack area and rolls it upward like a terminal.
+[*]Each run echoes the line, prints its output, and prints an error line when something fails.
+[*]New words: . .S .$ EMIT CR SPACE PAGE.
+[*].S prints spilled values (if forth exceeds max R47 stack size) behind a | separator.
+[*]R/S runs the line and ENTER types a space. ( ENTER ran the line before the console landed, doesn't work well in new design).
+[*]The console opens in keys mode with the FWRD words as the home row.
+[/list]
+
+[attachment=2]forth2-attach-1-console.png[/attachment]
+
+FORTH outside the program editor now opens a terminal over the stack area. Your line echoes with a » prefix and its output prints under it. As more arrives the transcript rolls up.
+
+Top to bottom: a SQ session with a .S dump, then the transcript after I define SQ and promote it with GLOBAL, then .S on a six-deep stack. That | in the last shot marks where the spill region starts.
+
+[b]Output words[/b]
+
+Seven output words landed with the console:
+
+[code]
+.      print X, then drop
+.S     dump the whole stack, spill included
+.$     print the string in X
+EMIT   print X as a glyph code
+CR     newline
+SPACE  one space
+PAGE   clear the view, history stays
+[/code]
+
+
+Interactive entry and history:
+[list]
+[*]Typing FORTH with no program editor open starts a live session.
+[*]A run line reopens the editor empty, leave with EXIT.
+[*]Lines persist in FHIST across sessions, 1KB cap, oldest evicted first. FHIST is also a reserved label/name.
+[*]f-shifted up and down recall old lines for editing and re-running.
+[/list]
+
+Keys mode:
+[list]
+[*]ALPHA toggles alpha and calculator-key input inside a capture.
+[*]Physical keys land in their normal columns while you're on keys.
+[*]Parameterized keys support: STO 0 5 types STO 05.
+[*]Keys mode persists across TAM round trips.
+[/list]
+
+Catalog and ASSIGN:
+[list]
+[*]FWRD added in the catalog tree beside FCNS.
+[*]A word softkey pressed outside the editor executes the word.
+[*]ASSIGN puts a global Forth word on a user key.
+[/list]
+[attachment=0]forth2-attach-3-catalog.png[/attachment]
+Reference notes:
+[list]
+[*]Calculator functions resolve by exact catalog spelling. Absolute value is |x|, ABS won't resolve.
+[*]The interpreter refuse the compare tests x=? x<? x>?. Their native meaning is skip the next step and Forth has no step to skip. Compute a difference and use IF.
+[*]The full word reference with every parameter form is on the repo front page now.
+[/list]
+
+[b]Error handling[/b]
+
+[attachment=1]forth2-attach-2-repl.png[/attachment]
+
+Here a recursive countdown runs straight at the console, an undefined word gets its error line, and history recall puts the last line back in the editor. Line is stored in history so you can scroll up and fix in place.
+
+There's a hidden program named FHIST that collects everything you run, capped at 1KB with the oldest lines falling off first. You walk through it with the f-shifted up and down arrows. FHIST is a reserved name.
+
+[b]Where to get it[/b]
+
+[url=https://github.com/stanle-cs/r47forth]Repo[/url] main branch. Build it with the package tooling from the earlier post and make dist_dmcp5r47 CUSTOM_PKG=packages/forth-core.
+
+Back up your calculator state before flashing anything, and flash at your own risk.
