@@ -4296,3 +4296,84 @@ the enforceable half.
 
 **Footprint: flash 1,116,088 (+112 B); ram 9,144 unchanged; arena
 untouched.**
+
+## 2026-08-10 — the console gets terminal controls, and `.S` learns to see the spill
+
+Four commits landed the day the v0.3 forum post went out, and none of
+them carried a record until now: `d5f4811aa` (terminal controls),
+`8a3c6e146` (refresh on open and run), `b5636f6c9` (`.S` over the spill
+region) and the package refresh `b5c4020af` that regenerated
+`patches/`+`files/` for all three. The entries below are written after
+the fact, from the landed code; DESIGN.md §8.4.2/§8.4.4/§5.7 carry the
+normative statements they were missing.
+
+### N-R10 — ENTER stops running the line, R/S starts
+
+The interactive console shipped with ENTER as its run key, inherited
+from the pre-console REPL where the capture had no face and ENTER was
+the only gesture that could mean "commit". A console changes the
+question. The line is a typed sentence with token separators in it, and
+the key that types the separator on a calculator keyboard is the one
+labelled ENTER — the owner's own note in the post says the old binding
+"doesn't work well in new design". So ENTER became one literal space
+(`processAimInput(ITM_SPACE)`, metered by the ordinary capture cap) and
+R/S became the run key, which it already was as an alias.
+
+The rename went all the way down: `forthInteractiveEnter` is now
+`forthInteractiveRun`, and every comment that reasoned about "the ENTER
+echo" or "empty ENTER is a no-op" now reasons about R/S. What did NOT
+change is the gate that keeps it honest — the divert is LIVE-gated, so a
+SUSPENDED capture's `aimBuffer`, which belongs to TAM, keeps native
+ENTER, and every non-console CM_AIM line still commits to X the way it
+always did.
+
+One thing the swap buys that the old binding could not: a line can now
+be typed with explicit separators and run as one act, and the two
+controls are no longer guessable-only. `fnForthOuter` appends
+`FORTH_CONSOLE_CONTROL_HINT` — `"ENTER=SPACE  R/S=RUN"` — as an ordinary
+ring record at open, so it rolls, evicts and clears like any other line
+and costs no state.
+
+### Two refreshes, because the landed paint discipline is right for typing
+
+The CM_AIM path repaints the input row only. That is correct for typing
+and wrong for a key that rewrites the transcript: without a full
+refresh, an R/S run's echo and answer appeared only on the NEXT
+keypress. The R/S arm therefore clears `SCRUPD_MANUAL_STACK` and
+`SCRUPD_SKIP_STACK_ONE_TIME` and takes `refreshScreen(142)`. The open
+has a smaller version of the same problem — it adds the hint line to a
+screen whose one-shot stack suppression can be inherited from the
+preceding menu — so `_forthConsolePrepareOpeningRefresh` clears the same
+two bits and lets the caller's full refresh own the screen.
+
+The self-test seam is not test scaffolding for its own sake: a full
+refresh walks the live program cursor, and the terminal tests that
+hand-build an interactive line do not have one. They assert the
+REQUEST and the mode word (`forthTestConsoleRefreshArm`/`CountGet`/
+`ModeGet`); normal firmware always falls through to `refreshScreen()`.
+
+### `.S` over the spill region — the picture stops lying about depth
+
+`.S` printed the register window, which meant that on a stack deep
+enough to spill (§5.7) the picture silently disagreed with the depth
+prefix it printed beside itself. It now walks the whole data stack:
+window levels top-down from X, a `| ` separator, then the spilled values
+deepest-last — `<6> 6 5 4 3 | 2 1`. A picture with no `|` is a stack
+that never spilled.
+
+Reading a spilled slot needed a new accessor, and the only safe shape is
+a non-destructive one: `forthSpillPeekInto(index, reg)` (`forth_inner.c`)
+walks the LIFO records by index, copies the slot into `TEMP_REGISTER_1`
+through a transient block, and the caller saves and restores that
+register's pointer/type/tag around the loop. The block is freed per
+slot, so the arena high-water rises by one value's blocks rather than by
+the depth. A slot whose transient allocation fails is skipped while the
+depth prefix still counts it — the count is the truth, the picture is
+best-effort, and truncation was always the view's job.
+
+**Footprint (measured, not estimated): flash 1,116,088 → 1,116,256 =
++168 B for the two console commits, → 1,116,488 = +232 B for the `.S`
+spill walk; +400 B for the wave. Ram 9,144 unchanged. Arena untouched:
+`forthSpillPeekInto`'s block is allocated and freed per slot.** The
+1,116,088 baseline is the recorded R10-OOF-2 figure; `4fc8662f4`, which
+sits between it and the first measurement, is comment-only.

@@ -1844,6 +1844,9 @@ no spill). A line that completes with a non-empty spill is a loud
 `ERROR_RAM_FULL` stop before the reset — the visible stack is the only
 legal carrier of values across lines. The arena high-water discipline
 (§5.4) applies: every gate proves the spill frees everything it took.
+Read access for display is `forthSpillPeekInto(index, reg)` — index-
+addressed, non-destructive, one transient block per slot — which is how
+`.S` prints the spilled values without disturbing the region (§8.4.4).
 
 ## 6. Exact hook points (file:line)
 
@@ -2652,12 +2655,25 @@ already specify.
   capture opens. Under a running program (`programRunStop == PGM_RUNNING`)
   the one-shot interpret-from-X survives unchanged — a program step
   `XEQ 'FORTH'` must never open UI.
-- **ENTER (L-R3: REPL).** Runs the line via the private-copy discipline
-  (§3.3.2), pushes it onto FHIST **before** the run (an executed word can
-  rewrite `aimBuffer`), then reopens empty with keys mode relocked (the
-  E5-relock analogue). On an interpret error the capture reopens with the
-  line intact from the pre-run copy (L5) — edit, don't retype. Empty
-  ENTER is a no-op, not a close. R/S runs the line exactly as ENTER.
+- **R/S (L-R3: REPL; the running key since N-R10, 2026-08-10).** Runs the
+  line via the private-copy discipline (§3.3.2), pushes it onto FHIST
+  **before** the run (an executed word can rewrite `aimBuffer`), then
+  reopens empty with keys mode relocked (the E5-relock analogue). On an
+  interpret error the capture reopens with the line intact from the
+  pre-run copy (L5) — edit, don't retype. Empty R/S is a no-op, not a
+  close. The orchestrator is `forthInteractiveRun()`
+  (`packages/forth-core/programming/forth_fold.c`), reached from the
+  `ITM_RS` guard at the head of `processKeyAction`'s CM_AIM arm — checked
+  before the BST/SST arm, which `ITM_RS` does not match. `calcMode` stays
+  CM_AIM across the whole act: no `calcModeNormal()`, no `closeAim()`, no
+  `popSoftmenu()` on this path.
+- **ENTER (N-R10: one token separator).** ENTER types a literal space
+  into the line — `processAimInput(ITM_SPACE)`, metered by the same
+  capture cap as any typed character — and never commits the editor to X.
+  The divert sits in `fnKeyEnter`'s CM_AIM arm and is **LIVE-gated**: a
+  suspended capture's `aimBuffer` belongs to TAM and keeps native ENTER,
+  which is also why the native AIM commit below the divert stays
+  reachable for every non-console CM_AIM line.
 - **EXIT (the E8 ladder, extended).** Rung 1: keys mode → alpha input.
   Rung 2: a stacked non-base menu pops, capture stays open. Rung 3:
   close — a non-empty line is pushed onto FHIST first, so EXIT never
@@ -2699,7 +2715,7 @@ already specify.
   everywhere beats a Forth-specific layout; purely a render decision,
   revisitable additively.
 - **History (L-R7).** Committed lines accumulate as `ITM_FORTH` source
-  steps in FHIST (§8.1): push on ENTER and on rung-3 EXIT with non-empty
+  steps in FHIST (§8.1): push on R/S and on rung-3 EXIT with non-empty
   text; consecutive duplicates collapse; f-shifted up/down recalls
   older/newer into the editor (the browse index is transient, resets at
   open and at every push); unshifted arrows stay native (case/scroll —
@@ -2818,7 +2834,7 @@ terminal-style rolling and one history. Design sheet:
   rather than hygiene, because sixteen TI arms call
   `displayTemporaryInformationOnX`, which repaints all four register rows
   from inside the REGISTER_X paint the console keeps.
-- **The dialogue.** ENTER echoes the committed line prompt-prefixed with
+- **The dialogue.** R/S echoes the committed line prompt-prefixed with
   `»`, then answers with where X landed, rendered in the current display
   mode. **The echo and the FHIST push are ONE ACT** — same bytes, same
   site, ordered together before the run — and that is mechanically what
@@ -2830,6 +2846,30 @@ terminal-style rolling and one history. Design sheet:
   unchanged. The X echo is suppressed when the line SPOKE FOR ITSELF —
   any console write during the run — so a line ending in `.` does not
   collect a second, unasked-for answer.
+- **The control hint (2026-08-10).** The open writes one transcript line,
+  `FORTH_CONSOLE_CONTROL_HINT` = `"ENTER=SPACE  R/S=RUN"`
+  (`forth_console.h`), appended by `fnForthOuter` after keys mode is set.
+  It is an ordinary ring record — it rolls, evicts and clears like any
+  other line, and costs no new state. It exists because N-R10 moved the
+  running key: the two controls a console user must know are the two the
+  hint names.
+- **Two refreshes the console owns (2026-08-10).** Both repair a screen
+  the landed paint discipline would otherwise leave a keypress stale.
+  (1) **After a run:** the ordinary CM_AIM path repaints only the input
+  row, which is right for typing and wrong for R/S — R/S changes the
+  transcript, so the arm clears `SCRUPD_MANUAL_STACK` and
+  `SCRUPD_SKIP_STACK_ONE_TIME` and takes a full `refreshScreen(142)`
+  (`_forthConsoleRefreshAfterRun`, keyboard.c). Without it the run's echo
+  and answer appear only on the NEXT keypress. (2) **At the open:**
+  `ITM_FORTH` opens the editor and adds the hint line in one act, so
+  `_forthConsolePrepareOpeningRefresh` clears the same one-shot stack
+  suppression the preceding menu can leave behind, and the caller's full
+  refresh owns the screen. The `FORTH_DEBUG_SELFTEST` seam
+  (`forthTestConsoleRefreshArm`/`CountGet`/`ModeGet`) exists because a
+  full-screen refresh walks the live program cursor, which the terminal
+  tests that hand-build a line do not have: they assert the REQUEST and
+  the mode word, never the pixels. Normal firmware always falls through
+  to `refreshScreen()`.
 - **The words.** `.` `.S` `CR` `EMIT` `SPACE` `.$` `PAGE`, appended prims
   at indices 22..28. **§1.3's guardrail is clarified here rather than
   re-argued at every output word:** it bans duplicating CALCULATOR
@@ -2839,6 +2879,22 @@ terminal-style rolling and one history. Design sheet:
   duplicate. They write the ring wherever they run (interactive, key
   press, program step) and none of them paints; a ring append is a
   bounded BSS write, legal from every context.
+  - **`.S` prints the WHOLE data stack, spill included (2026-08-10).**
+    The depth prefix `<n>` counts the register window plus
+    `forthSpillCount()`; the register levels print top-down from X, then
+    a `| ` separator, then the spilled values deepest-last —
+    `<6> 6 5 4 3 | 2 1`. The separator marks where the visible machine
+    ends and §5.7's arena-backed region begins, so a picture with no `|`
+    is a stack that never spilled. Reading a spilled slot is
+    `forthSpillPeekInto` (`forth_inner.c`), added for this: it copies the
+    slot into `TEMP_REGISTER_1` **non-destructively** — the spill region
+    is not popped, the walk is index-addressed, and the caller's
+    `TEMP_REGISTER_1` pointer/type/tag are saved and restored around the
+    loop. Its transient block is allocated and freed per slot, so the
+    arena high-water rises by one value's blocks, not by the depth. A
+    slot whose temporary allocation fails is skipped silently while the
+    depth prefix still counts it — the count is the truth, the picture is
+    best-effort, and truncation is the view's job either way.
   - The string word is **`.$`, not the Forth-83 `TYPE`**: `TYPE` is a
     landed `CAT_FNCT`/`PTP_NONE` item (`fnGetType`) that already resolves
     from a Forth line, and a prim of that name would silently change an
@@ -3240,7 +3296,7 @@ This list carries only what is genuinely unsettled.
 
 2. **Discharged by Stage L (2026-08-05).** Interactive `FORTH` no longer
    requires a string in X: pressing FORTH interactively opens the same
-   capture PEM gives you, ENTER runs the line (§8.4.2), history is FHIST
+   capture PEM gives you, R/S runs the line (§8.4.2), history is FHIST
    (§8.1), and the fold works identically to PEM (§8.4.3). Item 1
    (browse/ASSIGN of Forth words — Stage M) remains deferred with its own
    owner statement.
