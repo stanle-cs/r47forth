@@ -2207,7 +2207,7 @@ return res;
 
 
   void clearRect(uint32_t g_line_x, uint32_t g_line_y) {
-    uint32_t fcol = 0, frow = 0;
+    uint32_t fcol, frow;
     getGlyphBounds(" ", 0, &standardFont, &fcol, &frow);
     lcd_fill_rect((uint32_t) g_line_x, (uint32_t) g_line_y, SCREEN_WIDTH-g_line_x-1, frow, LCD_SET_VALUE);
   }

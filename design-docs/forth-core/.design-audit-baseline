@@ -22,7 +22,30 @@
 #     audit). One residual candidate recorded, not counted: sanitize/catalog
 #     helpers in manage.c are movable through P8's own wrappers — see the
 #     DESIGN-HISTORY entry.
+#
+# 2026-08-11 (the refresh-sweep ruling): b5c4020af's blanket refresh had
+# swept working-area drift into the package. Two whole new overrides
+# (printing/print.c, testSuite/hal/lcd.c — LCD-capture scaffolding with no
+# caller) were REMOVED, taking override files 21 -> 19; the five non-Forth
+# hunks it added were ruled one at a time by the owner.
+#
+#   BASE_NO_FORTH 8 -> 11, and every one of the eleven now has a
+#     disposition. The three new keeps: the softmenus.c TIMER-hint guard
+#     (real uninitialized-coordinate draw, upstream's own convention at
+#     showSoftkey, filed upstream), and testSuite.c's sized snprintf and
+#     fgets loop (real defects in the harness this gate runs). screen.c's
+#     byte = 0 was kept as a warning silencer with no defect behind it;
+#     screen.c's fcol/frow initializer was REVERTED and filed instead
+#     (UPSTREAM_REPORTS_getGlyphBounds_partial.md).
+#   BASE_BIG_BLOCKS 36 -> 26, a measured drop, accepted as the new ceiling.
+#   MAX_ADDED_LINES stays 1243, the ruled budget: --accept would have
+#     tightened it to the measured 1078 and left no headroom nobody asked
+#     to give up.
+#   Churn is NOT baselineable and reads 2: the softmenus guard re-indents
+#     the two lines it wraps. Catalogued in the upstream-diff-review
+#     skill's deliberate-exceptions file; it goes to 0 when upstream takes
+#     the fix.
 MAX_OVERRIDE_FILES=19
 MAX_ADDED_LINES=1243
-BASE_NO_FORTH=8
-BASE_BIG_BLOCKS=36
+BASE_NO_FORTH=11
+BASE_BIG_BLOCKS=26

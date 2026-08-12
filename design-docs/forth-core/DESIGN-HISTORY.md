@@ -4437,3 +4437,31 @@ for a day.
 **Footprint: unchanged. The removed files produced no product code —
 `printLcd`'s PC path is never called and the test HAL's `lcd_line_addr`
 had no caller; flash 1,116,488, ram 9,144, arena untouched.**
+
+### The ruling on those five, same day
+
+The owner took them one at a time rather than as a class, and the split is
+instructive: what survives is not "the real defects" but "what the package
+has a reason to carry".
+
+- **`softmenus.c` TIMER guard — KEPT.** The uninitialized-coordinate draw
+  is real and the guard follows upstream's own convention. The two churn
+  hits are accepted as the cost of the catalogue entry.
+- **`screen.c` `byte = 0` — KEPT**, against the minimality recommendation
+  and knowing there is no defect behind it. A quiet build in a hot render
+  loop was judged worth one hunk.
+- **`screen.c` `fcol = 0, frow = 0` — REVERTED.** Real, but a mitigation
+  rather than a fix: `getGlyphBounds` returns without writing either
+  out-parameter and the caller never asks, so zeroing one of the three
+  exposed call sites buys almost nothing. Filed as
+  `UPSTREAM_REPORTS_getGlyphBounds_partial.md`, which found the other two
+  sites and the fourth caller (`getStringBounds`) that already pre-zeroes
+  its locals — the file already knew.
+- **`testSuite.c` snprintf + fgets loop — KEPT, both.** They harden the
+  harness our own gate runs: `real`/`imag` are `char[2000]` each formatted
+  into 404 bytes, and a read error leaves `feof` clear so upstream
+  reprocesses the stale line forever.
+
+Design audit after the revert: override files 19/19, no-Forth hunks 11
+(baseline re-accepted now that each has a disposition), churn 2 (the
+catalogued guard re-indent, red until upstream takes the fix).

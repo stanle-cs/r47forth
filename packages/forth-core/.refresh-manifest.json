@@ -41,7 +41,7 @@
     "010-programming__lblGtoXeq.c.patch": "f3cd38f485db6fff898b9acfcd3b7f79edb356ecabdfc372195bb052bee98a90",
     "010-programming__manage.c.patch": "61b38288139addb80216764f8330c55a115da4a3eaa745e5b9b1e0b69ee9f638",
     "010-saveRestoreBackup.c.patch": "131b341a18bdb3e4302458818677063eb702ea825dfb71add29d9d3401ccb894",
-    "010-screen.c.patch": "6e76faff96279267a23826e6d56c9e399d332753e076f4ddd7fc1b69b83b1409",
+    "010-screen.c.patch": "0e0532b8911f6f1d58cf52fe0716ab991dfeb3d695a11cb8762c535987e46d19",
     "010-softmenus.c.patch": "b51e1bc6bb0616efc5944a63a8cbff7d0d0dd9e49c9ec5023f9051890f1aca34",
     "010-testSuite__testSuite.c.patch": "4ebb71af5b74c895c5df0b016a28439c6a04d836cc83df8b39cb41e84c2c3ce8",
     "010-testSuite__tests__testSuiteList.txt.patch": "6bd0d491f159e721e1478b8e715ff00d7bdd1105c1fb5dbff786ea5e864ca93f",
