@@ -237,3 +237,40 @@ recorded in DESIGN-HISTORY.md; the round tag says where the evidence lives.
   by comments, a pin counting one spelling of its subject. A new gate
   lands with a red-first injection of the class it exists to catch, or it
   does not land.
+- **Serialisation that claims byte-fidelity and omits a header field**
+  (r11 R11-IF-1, the worst of the round): the D3 spill record is
+  `[dataType][sizeInBlocks][payload]` and DESIGN.md calls it a
+  "byte-faithful register image", but `registerHeader_t` also carries the
+  TAG — which for a long integer IS the sign, for a short integer the
+  base, and for a real34 the angular mode. Both readers restored `amNone`
+  (5), so `LI_NEGATIVE` (1) never matched and a spilled negative came
+  back positive, silently, inside `ERROR_NONE`. Sibling: C11's orphan
+  lead byte. Class test: round-trip EVERY header field through the
+  serialiser for one value of each type that uses the field — and pick
+  fixtures the defect can reach, because five rounds missed this one on a
+  fixture set of plain reals and positive integers, for which the wrong
+  restore is indistinguishable from the right one.
+- **A user-facing control expressed as an item id, resolved by upstream's
+  key-translation stack** (r11 R11-IF-2/3, and D7-a): the N-R10 controls
+  synthesize `ITM_SPACE` into `processAimInput` and match on `ITM_RS`.
+  That stack rewrites items by plane, by shift, by NUMLOCK, by CAPS and
+  by press duration — so ENTER types `+` with NUMLOCK on, and R/S types
+  `?` in the alpha plane where key 84's `primaryAim` is
+  `ITM_QUESTION_MARK`. A control is a GESTURE, not an item: pin it
+  against every plane and modifier the translator applies, or bind it
+  above the translator.
+- **The harness enters below the layer where the bugs are** (r11, the
+  round's most useful observation, reached independently by both legs):
+  every console test starts at `processKeyAction(<item>)` or calls the
+  orchestrator directly, so no test can see a defect introduced by key
+  translation, which happens earlier. A green suite over a control's
+  behaviour proves nothing about the control's REACHABILITY by the
+  gesture the documentation advertises. When a fixture synthesizes the
+  item, name in the test what layer it is skipping.
+- **One-door seam** (r11 R11-1, confirmed out-of-family with a
+  screenshot): a guard installed at one of two entry doors, where the
+  same file already installs a DIFFERENT guard at both and each of its
+  comments names the other door. The cap got it right; the opening
+  refresh did not. Ask of every new guard: what is the complete list of
+  doors into this surface — and keep that list somewhere better than a
+  comment per site.
