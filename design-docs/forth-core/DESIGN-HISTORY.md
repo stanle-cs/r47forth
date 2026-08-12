@@ -4377,3 +4377,63 @@ spill walk; +400 B for the wave. Ram 9,144 unchanged. Arena untouched:
 `forthSpillPeekInto`'s block is allocated and freed per slot.** The
 1,116,088 baseline is the recorded R10-OOF-2 figure; `4fc8662f4`, which
 sits between it and the first measurement, is comment-only.
+
+## 2026-08-11 — what the blanket refresh swept in, and what a refresh is not
+
+`b5c4020af` ("complete stage-n package refresh") regenerated `patches/`
+and `files/` from a working area that had accumulated edits unrelated to
+the stage. A refresh promotes whatever it finds: the commit turned that
+drift into shipped upstream overrides, including **two upstream files the
+package had never touched before**.
+
+Measured against the last accepted design-audit baseline (`447b92f0e`,
+green): override files 19 → **21, over the budget of 19** — a HARD
+finding, not a REVIEW one; added lines 1010 → 1090; hunks whose added
+lines never mention Forth 7 → 14; mechanical churn 0 → 2.
+
+### The two new overrides were LCD-capture scaffolding
+
+`printing/print.c` (2577 lines carried to change three) implements
+`printLcd`'s PC path over upstream's `// To be coded` stub, and
+`testSuite/hal/lcd.c` adds the `lcd_line_addr` that the rewritten
+`printLcd` then calls. Neither is used by anything: no package source
+calls `lcd_line_addr`, the self-test does not print, and the documented
+screenshot path is `fnScreenDump` reading `lcd_buffer_pixel_on` — it
+never goes near the IR printer. Both were removed, and the removal was
+proved before it was made: an isolated worktree with the two files gone,
+refreshed and run through the full gate, came back BUILD + SELF-TEST +
+upstream testSuite GREEN. Override files are back to 19, added lines
+1079.
+
+### Five non-Forth hunks stayed, and one of them is an upstream defect
+
+- **`softmenus.c`, the TIMER hint row.** `initSoftkeyCoordinates` is a
+  partial function returning `bool_t`, and its `GRAPHMODE && xSoftkey >= 2`
+  refusal returns before writing any out-parameter. `showSoftkey` and
+  `showSoftkey2` both guard the return; the TIMER branch of
+  `showSoftmenuCurrentPart` ignores it and draws from four indeterminate
+  automatics. The package's guard follows upstream's own convention at
+  the other two call sites, so it stands — catalogued as a deliberate
+  exception, filed as `UPSTREAM_REPORTS_softmenus_timer_coords.md`. The
+  two churn hits are its re-indent: wrapping existing lines in a guard
+  moves them one level, which the mechanical scanner cannot tell from
+  reformatting.
+- **`screen.c` ×2** (`byte = 0`, `fcol = 0, frow = 0`) and
+  **`testSuite.c` ×2** (`sprintf` → sized `snprintf`, `fgets`+`feof` loop
+  → `while(fgets(...) != NULL)`) are compiler-warning and harness fixes.
+  They are kept but flagged: the package is carrying upstream fixes,
+  which is exactly the shape check B exists to catch, and the owner may
+  prefer them reverted and filed instead.
+
+### The rule this pays for
+
+**A refresh is not a review.** `pkg_patch_refresh.py` cannot distinguish
+the stage's work from a stray edit in the same tree, so "complete the
+refresh" is the commit where unreviewed drift becomes an upstream
+override. Run the design audit BEFORE the refresh commit, not after the
+next audit round finds it — the whole cost here was that nobody looked
+for a day.
+
+**Footprint: unchanged. The removed files produced no product code —
+`printLcd`'s PC path is never called and the test HAL's `lcd_line_addr`
+had no caller; flash 1,116,488, ram 9,144, arena untouched.**
