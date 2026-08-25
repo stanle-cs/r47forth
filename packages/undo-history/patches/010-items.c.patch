@@ -1,0 +1,32 @@
+diff --git a/src/c47/items.c b/src/c47/items.c
+index f65402f25fdbbf808a058f4acae3a95b83683e9d..6359400f388aaadcadc97b22d81359cb88721d42 100644
+--- a/src/c47/items.c
++++ b/src/c47/items.c
+@@ -296,6 +296,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
+         #if defined(DEBUGUNDO)
+           printf(">>> saveForUndo from reallyRunFunction: %i, %s, calcMode = %i ", func, indexOfItems[func].itemCatalogName, calcMode);
+         #endif // DEBUGUNDO
++        undoHistoryNoteFunction(func);   // label the history entry with the item about to run
+         saveForUndo();
+       }
+ 
+@@ -1675,6 +1676,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
+   void fnAlphaRight               (uint16_t unusedButMandatoryParameter) {}
+   void fnAlphaRev                 (uint16_t unusedButMandatoryParameter) {}
+   void fnAlphaTrim                (uint16_t unusedButMandatoryParameter) {}
++  void fnRedo                     (uint16_t unusedButMandatoryParameter) {}
++  void fnHistoryClear             (uint16_t unusedButMandatoryParameter) {}
+   void fnSaveStackRegisters       (uint16_t unusedButMandatoryParameter) {}
+   void fnSaveNRegisters           (uint16_t unusedButMandatoryParameter) {}
+   void fnSaveRegister             (uint16_t unusedButMandatoryParameter) {}
+@@ -2253,8 +2256,8 @@ TO_QSPI const item_t indexOfItems[] = {
+ /*  425 */  { fnZip,                           NOPARAM,                     "ZIP",                                         "ZIP",                                         (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
+ /*  426 */  { fnUnzip,                         NOPARAM,                     "UNZIP",                                       "UNZIP",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
+ /*  427 */  { itemToBeCoded,                   NOPARAM,                     "0427",                                        "0427",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+-/*  428 */  { itemToBeCoded,                   NOPARAM,                     "0428",                                        "0428",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+-/*  429 */  { itemToBeCoded,                   NOPARAM,                     "0429",                                        "0429",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
++/*  428 */  { fnRedo,                          NOPARAM,                     "REDO",                                        "REDO",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         | RESULT_IN_X },
++/*  429 */  { fnHistoryClear,                  NOPARAM,                     "HCLR",                                        "HCLR",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+ /*  430 */  { itemToBeCoded,                   NOPARAM,                     "0430",                                        "0430",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+ /*  431 */  { itemToBeCoded,                   NOPARAM,                     "0431",                                        "0431",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+ /*  432 */  { itemToBeCoded,                   NOPARAM,                     "0432",                                        "0432",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },

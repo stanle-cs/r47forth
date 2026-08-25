@@ -1,0 +1,12 @@
+diff --git a/src/c47/c47.h b/src/c47/c47.h
+index 1dade6b5c0efe403bb366e388d204d42b0a32709..7a1e3bf743ac45b1ef09009aa61ab72574753d9e 100644
+--- a/src/c47/c47.h
++++ b/src/c47/c47.h
+@@ -128,6 +128,7 @@
+     #include "ui/matrixEditor.h"
+     #include "ui/tam.h"
+     #include "ui/tone.h"
++    #include "undoHistory.h"
+ 
+     #if defined(TESTSUITE_BUILD)
+       #include "testSuite.h"

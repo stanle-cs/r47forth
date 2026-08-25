@@ -1,0 +1,47 @@
+;*************************************************************
+;**  undo-history package cases                             **
+;**  historyTestRing:     in-driver ring battery, X = fails **
+;**  historyTestSequence: X carries a script — unsigned     **
+;**    integers enter values, other tokens run items by     **
+;**    catalog name (the real capture/label path).          **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+Func: historyTestRing
+
+; The battery covers: round-trip restore, dedupe, eviction coherence,
+; branch truncation, oversized-capture skip + GAPBEFORE, the fnUndo/fnRedo
+; cursor walk, and the SOLVING/error-rollback gates.
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"
+
+Func: historyTestSequence
+
+; Single value entry.
+In:  FL_ASLIFT=1 RX=Stri:"42"
+Out: EC=0 RX=LonI:"42"
+
+; UNDO of an operation restores its operands (single-level path).
+In:  FL_ASLIFT=1 RX=Stri:"3 4 + UNDO"
+Out: EC=0 RX=LonI:"4" RY=LonI:"3"
+
+; REDO returns to the pre-undo state through the live anchor.
+In:  FL_ASLIFT=1 RX=Stri:"3 4 + UNDO REDO"
+Out: EC=0 RX=LonI:"7"
+
+; A new operation after navigating back kills the redo tail: the trailing
+; REDO must hold position instead of resurrecting the dropped anchor {7}.
+In:  FL_ASLIFT=1 RX=Stri:"3 4 + UNDO 5 + REDO"
+Out: EC=0 RX=LonI:"9" RY=LonI:"3"
+
+; Three levels deep and one step forward again.
+In:  FL_ASLIFT=1 RX=Stri:"1 2 3 4 UNDO UNDO UNDO REDO"
+Out: EC=0 RX=LonI:"2" RY=LonI:"1"
+
+; HCLR drops the ring but must leave the single-level buffer alone:
+; the first UNDO still works, the second finds nothing to walk.
+In:  FL_ASLIFT=1 RX=Stri:"7 8 + HCLR UNDO UNDO"
+Out: EC=0 RX=LonI:"8" RY=LonI:"7"
+
+; Eight-level stack round-trips through capture and restore.
+In:  SS=8 FL_ASLIFT=1 RX=Stri:"1 2 3 4 5 6 7 8 9 + UNDO"
+Out: EC=0 RX=LonI:"9" RY=LonI:"8"

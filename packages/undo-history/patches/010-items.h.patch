@@ -1,0 +1,15 @@
+diff --git a/src/c47/items.h b/src/c47/items.h
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..5aa07ede7b2c4f9aa7eedf69efd884d593b6df44 100644
+--- a/src/c47/items.h
++++ b/src/c47/items.h
+@@ -447,8 +447,8 @@
+ #define ITM_ZIP                      425
+ #define ITM_UNZIP                    426
+ #define ITM_0427                     427
+-#define ITM_0428                     428
+-#define ITM_0429                     429
++#define ITM_REDO                     428
++#define ITM_HCLR                     429
+ #define ITM_0430                     430
+ #define ITM_0431                     431
+ #define ITM_0432                     432

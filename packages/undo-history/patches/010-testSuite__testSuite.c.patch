@@ -1,0 +1,25 @@
+diff --git a/src/testSuite/testSuite.c b/src/testSuite/testSuite.c
+index bc8a9792a584984b3e18dee2a6626ce81a330205..65fb73c3d386b587436af24667f438be3004dee3 100644
+--- a/src/testSuite/testSuite.c
++++ b/src/testSuite/testSuite.c
+@@ -83,6 +83,8 @@ void covEff(uint16_t unusedButMandatoryParameter);
+ void covEffToI(uint16_t unusedButMandatoryParameter);
+ void covAmort(uint16_t which);
+ void covAmortNext(uint16_t which);
++void historyTestRing(uint16_t unusedButMandatoryParameter);       // undo-history package driver
++void historyTestSequence(uint16_t unusedButMandatoryParameter);   // undo-history package driver
+ void covEqSet(uint16_t which);
+ void covEqClear(uint16_t unusedButMandatoryParameter);
+ void covLoadGraphPgms(uint16_t unusedButMandatoryParameter);
+@@ -710,6 +712,11 @@ const funcTest_t funcTestNoParam[] = {
+   {"fnMenuGapRX",            fnMenuGapRX           },
+   {"fnSettingsDispFormatGrpL", fnSettingsDispFormatGrpL},
+   {"fnSettingsDispFormatGrpR", fnSettingsDispFormatGrpR},
++
++  // undo-history package: coverage drivers for tests/undo_history.txt.
++  // They have no indexOfItems row, hence the coverageDriver flag.
++  {"historyTestRing",        historyTestRing,     1},
++  {"historyTestSequence",    historyTestSequence, 1},
+   {"fnClAll",                fnClAll               },
+   {"fnWho",                  fnWho                 },
+ 

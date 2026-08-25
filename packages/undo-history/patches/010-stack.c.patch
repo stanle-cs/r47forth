@@ -1,0 +1,29 @@
+diff --git a/src/c47/stack.c b/src/c47/stack.c
+index f76952d972d8fb0816e7aece29d04f1205108aa0..30d822e365ae94f4bd8a51ec62cc8f88db22ee13 100644
+--- a/src/c47/stack.c
++++ b/src/c47/stack.c
+@@ -310,6 +310,7 @@ void saveForUndo(void) {
+     xcopy(savedStatisticalSumsPointer, statisticalSumsPointer, NUMBER_OF_STATISTICAL_SUMS * REAL_SIZE_IN_BYTES(75));
+   }
+ 
++  undoHistoryCapture();   // feed the multi-level ring from the freshly committed SAVED_* state
+   thereIsSomethingToUndo = true;
+   return;
+ 
+@@ -330,8 +331,16 @@ void fnUndo(uint16_t unusedButMandatoryParameter) {
+                                   print_caller(NULL);
+                                 #endif
+   if(thereIsSomethingToUndo) {
++    undoHistoryNoteFirstUndo();
+     undo();
+   }
++  else if(undoHistoryUserContext() && undoHistoryCanStepBack()) {
++    // The single-level buffer is spent: walk the history ring one state
++    // further back. Restricted to direct user context because SLV and
++    // INTEGRAL call fnUndo(0) internally with nothing to undo, and
++    // stepping into the ring there would swap states mid-computation.
++    undoHistoryStepBack();
++  }
+ }
+ 
+ 

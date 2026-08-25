@@ -1,0 +1,12 @@
+diff --git a/src/c47/config.c b/src/c47/config.c
+index b4b65f5207e0939215616d0258fdbf2e1a91dc15..78a05cf8796687ddd6e350ee187fcf0287de40be 100644
+--- a/src/c47/config.c
++++ b/src/c47/config.c
+@@ -1697,6 +1697,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+ 
+     statisticalSumsPointer = NULL;
+     savedStatisticalSumsPointer = NULL;
++    undoHistoryReset();   // pool reinitialized: forget the history ring without freeing
+     statisticalSumsUpdate = true;
+     lrChosen    = 0;
+     lrChosenUndo = 0;

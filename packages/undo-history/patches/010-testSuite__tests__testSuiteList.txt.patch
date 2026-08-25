@@ -1,0 +1,12 @@
+diff --git a/src/testSuite/tests/testSuiteList.txt b/src/testSuite/tests/testSuiteList.txt
+index 6bb764d1b588d13b2767c07e61837d86e4b5a0c0..ebfe4eeaf7f06406c9a3786f4118bac7e5de117f 100644
+--- a/src/testSuite/tests/testSuiteList.txt
++++ b/src/testSuite/tests/testSuiteList.txt
+@@ -505,5 +505,7 @@ graphs_cov
+ 
+ nested_cov
+ 
++undo_history
++
+ config_cov
+ stack_cov
