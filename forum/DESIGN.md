@@ -155,19 +155,27 @@ these steps, in order:
    `PROMPT_WRITE.md`. Record which model drafted.
 2. Self-check against §2; fix what you can see.
 3. Run both scanners; judge the flags.
-3b'. Run `voicematch2.py --register release` (added 2026-08-25 after the
-   undo-history v0.1 rejection; Stan's ruling was to rebuild the voice
-   framework from the Reddit data). It measures the PRESENCE of his
-   corpus constructions (I-hedges, direct-you, fronted connectors,
-   questions, analogies, enthusiasm, stakes) instead of the absence of
-   AI tells, and reports sentence-skeleton support against the corpus.
-   Any MISSING construction row is blocking: back to step 2. The
-   companion references are forum/reference/stan-voice-profile.md and
-   stan-exemplars.md (local-only); the drafter writes with the
-   exemplars open. Data corrections recorded there: "for example",
-   "Thus/However/Moreover" and explanatory questions are IN-voice;
-   the no-hypophora rule is scoped to changelog sections of release
-   posts.
+3b'. Run `voicematch2.py --register release|update|chat` (added
+   2026-08-25 after the undo-history v0.1 rejection, register-
+   conditioned the same day after the r2 rejection). It measures his
+   corpus constructions BOTH directions: floors (a construction his
+   register owes that the draft lacks — MISSING) and caps (a
+   construction stuffed past his release density — STUFFED/FORBIDDEN).
+   Announcement posts use `release` (floors and caps), changelog-led
+   update posts use `update` (his published v0.3 artifact owes no
+   floors; caps and the segue-question rule still bind), replies use
+   `chat`. Any blocking row: back to step 2. Constructions are
+   licenses, not quotas — r2 satisfied every floor by stuffing
+   (two segue hypophora, a twist-tailed analogy, a no-judgment hedge,
+   a fake-humble closer) and read as AI to him anyway. Questions in
+   posts must be the reader's actual mechanism-question (the published
+   v0.3 post keeps two, one opening a paragraph); segue formulas
+   ("So what are you looking at?", "What about X?") are forbidden in
+   any position. The companion references are
+   forum/reference/stan-voice-profile.md (register mapping + deployment
+   rule) and stan-exemplars.md (local-only); the drafter writes with
+   the exemplars open, then STRIPS every construction that is not doing
+   real work before the scanners run.
 3b. Run `voicematch.py` against the reference corpus (added 2026-08-03
    after the first pipeline draft passed both model audits and still
    failed Stan's read — the audits measure "human", not "Stan"). Compare

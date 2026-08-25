@@ -181,8 +181,9 @@ What the rebuild established, all measured from the corpus:
 - **Several old "his numbers" claims were lore, not data.** "for
   example" appears 11 times in the corpus (the old skill said almost
   never). "Thus", "However", "Moreover" are in-voice. Questions run
-  1.33/100w including explanatory hypophora; the v0.3 hypophora
-  deletion is a changelog-section register ruling, not a global fact.
+  1.33/100w including explanatory hypophora — but see the r2 section
+  below for what that licenses in a post: content-bearing reader
+  questions only, never segue formulas.
 - **New reference set** (all LOCAL-ONLY beside the corpus):
   `forum/reference/stan-voice-profile.md` (measured rates, the
   construction catalog with corpus quotes, the grammar fingerprint,
@@ -200,3 +201,47 @@ What the rebuild established, all measured from the corpus:
   a verified fact inventory (numbers, commands, captions, required
   boilerplate) and fact-check his text afterward; the pipeline's
   drafting half stands down.
+
+## Added 2026-08-25, same day (r2 rejection: construction stuffing)
+
+The first draft under the rebuilt framework satisfied every presence
+row and Stan rejected it too: "Better, but too many AI-generated tell
+tales slipped through. Still a shit framework." The failure inverted:
+v0.1 had none of his constructions, r2 had all of them AS ORNAMENTS.
+
+- **Constructions are licenses, not quotas.** voicematch2 floors are
+  minimums of opportunity; writing TO the tool produces stuffing, which
+  reads as AI exactly like absence does. The tool now carries CAPS
+  (STUFFED/FORBIDDEN are as blocking as MISSING) and a third register:
+  `release` for announcements, `update` for changelog-led posts (owe NO
+  floors — his published v0.3 artifact has none of them), `chat` for
+  replies.
+- **The question rule, finally correct.** His published v0.3 post
+  carries TWO questions and one OPENS a paragraph — position and count
+  were never the tell. Both of his are the reader's actual mechanism-
+  question, answered at once ("Why keep a failed line in history? You
+  get it back with one press", "Where do the lines go? There's a hidden
+  program named FHIST"). What died to his read, twice, are presentational
+  SEGUES that frame a tour instead of asking anything: "So what are you
+  looking at?", "What about states too big to keep?". Formula segues are
+  forbidden in any position; two content-bearing questions is the
+  ceiling.
+- **Tells that reached r2 unflagged, now aiaudit classes:** twist tails
+  (", except ..." on an analogy; "like the solver never ran"),
+  negative parallelism split across a sentence boundary ("isn't just X.
+  It's Y" — the one-sentence regex missed it), fabricated vignette
+  ("you usually notice a mistake three operations later"), fake-humble
+  closer ("I'm sure there are corners I haven't hit"), colon-elaboration
+  ("Here's ENTER ...:"), precision theater ("exactly one step"),
+  "drops you straight into".
+- **Manufactured constructions are stuffing too:** a hedge with no
+  judgment under it ("I think that's the fastest way to use the whole
+  thing") and ornament enthusiasm ("surprisingly handy") both died. A
+  hedge must sit beside a claim he could actually be wrong about
+  (r3's: "I think it's quicker than digging U.HIST out of the STK
+  menu" — a real comparison).
+- **Calibration is the acceptance test for the framework itself.** After
+  this iteration the tools reproduce all three of his verdicts: v0.1
+  red (absence), r2 red (stuffing), the published v0.3 post green. A
+  framework change that cannot re-derive his past verdicts is not an
+  iteration, it is drift.

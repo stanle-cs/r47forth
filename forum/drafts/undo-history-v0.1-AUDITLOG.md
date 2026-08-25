@@ -113,3 +113,40 @@ provided Reddit samples"); keep.
 
 Stan reads r2. Same open items as before: unpushed base commit, thread
 placement, attachment indices.
+
+## r2 rejected — framework iterated, r3 drafted (2026-08-25)
+
+Stan on r2: "Better, but too many AI-generated tell tales slipped
+through. Still a shit framework, need to iterate further." Diagnosis
+against the published v0.3 artifact and the trap catalog, tell by tell:
+two segue hypophora ("So what are you looking at?", "What about states
+too big to keep?"), a twist-tailed analogy ("except the calculator makes
+them for you"), "like the solver never ran", the fabricated vignette
+("you usually notice a mistake three operations later"), "isn't just X.
+It's Y" split across the sentence boundary the aiaudit regex couldn't
+cross, a no-judgment hedge ("I think that's the fastest way"),
+"surprisingly handy", "Here's ENTER...:", "exactly one step", "drops you
+straight into", and the fake-humble closer ("I'm sure there are corners
+I haven't hit"). Root cause: voicematch2 v1 set corpus floors with no
+caps, so drafting to the tool stuffed argument-register constructions
+into a release post; it even REQUIRED a question in release prose.
+
+Framework changes: voicematch2 register-conditioned (release/update/
+chat) with caps as blocking as floors; the question rule corrected
+against the artifact (his published post carries two content-bearing
+reader questions, one paragraph-opening; segue formulas are what died,
+forbidden in any position); floors scale with prose length; eight new
+aiaudit classes for the tells above. Calibration now reproduces all
+three of his verdicts: v0.1 BLOCKING (absence), r2 BLOCKING (stuffing:
+analogy + both segues), published v0.3 clean under --register update.
+
+r3 (undo-history-v0.1-r3.txt) is r2's surgery: every tell above removed,
+the him-ness kept (I-lead, one plain analogy, stakes, comma splices,
+fronted But/So), one grounded hedge added ("I think it's quicker than
+digging U.HIST out of the STK menu" — a real comparison), and one
+content-bearing question in the published post's exact shape ("Why skip
+instead of dropping older levels to make room?" — the documented design
+reason). Battery: voicematch2 release all ok; aiaudit 5 flags (4
+rule-of-three enumerations + instead-of-pivot on the real design
+alternative, judged keep); framescan shapes are enumeration frames, no
+tails, no shingles. Cross-model round on r3 launched.

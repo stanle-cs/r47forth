@@ -40,6 +40,15 @@ CONSTRUCTION = {
  'announcing-insight':      r'\b(the (key|important|crucial) (thing|point)|what(\'s| is) (important|notable)|the (real|actual) (problem|issue|point))\b',
  'trailing-which-is':       r',\s+which is\b',
  'the-one-thing':           r'\b(the one (thing|trap|catch)|one thing (that|to)|two things)\b',
+ # added 2026-08-25 — classes that reached the rejected undo-history r2 draft unflagged
+ 'split-neg-parallel':      r"\b(?:isn'?t|aren'?t|wasn'?t|is not|are not)\s+(?:just|only)\b[^.;!?]{0,60}[.!?]\s+It(?:'s| is)\b",
+ 'twist-tail-except':       r',\s+except\b[^,.;]{0,80}[.;]',
+ 'twist-tail-never':        r'\b(?:like|as if)\b[^,.;]{0,50}\bnever\s+(?:ran|happened|existed|was)\b',
+ 'vivid-scenario':          r"\byou\s+(?:usually|often|always|inevitably)\s+(?:notice|find|realize|end up|discover)\b|\bwe'?ve all\b|\bsound familiar\b",
+ 'fake-humble':             r"\bI'?m sure there\b[^.]{0,70}\bI haven'?t\b|\b(?:corners|edge cases|rough edges)\s+I haven'?t\s+(?:hit|found|covered)\b",
+ 'colon-elaboration':       r"\bHere'?s\s+[^.:\n]{0,60}:",
+ 'precision-theater':       r'\b(?:exactly|precisely)\s+(?:one|two|three|\d+)\b',
+ 'flourish-into':           r'\bdrops?\s+you\s+(?:straight|right)\s+into\b',
 }
 
 FORMATTING = {
