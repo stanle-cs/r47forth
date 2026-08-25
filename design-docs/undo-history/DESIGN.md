@@ -56,22 +56,28 @@ made live by navigation.
 
 ## 3. Storage
 
-- **One-time malloc, never freed** (`historyRing`, `HISTORY_RING_BYTES`):
-  8 KiB ring on new hardware, 2 KiB on old (`RAM_SIZE_IN_BLOCKS == RAM_SIZE_IN_BLOCKS_NEW_HW` discriminates;
-  DM42 stays best-effort per the 2026-07-15 ruling), plus the preview
-  scratch. This is the same heap the C47 pool itself comes from (SRAM3 on
-  DMCP5 — upstream's own convention for big buffers, `ram` is malloc'd
-  there at boot). **Deliberately not `allocC47Blocks`** — measured, not
-  aesthetic: a resident pool block fragments the pool's contiguous space
-  and broke upstream's own 14×14 eigenvalue test (matrix.txt RCL58,
-  workspace growth calibrated to the full pool); a
-  yield-on-allocation-failure hook in memory.c was implemented and rejected
-  (the freed hole sits low in the pool and does not coalesce with the main
-  free region). **Deliberately not a static array either**: DMCP5 globals
-  live in the 16 KiB SRAM4, which the ring overflows by ~2 KiB (measured,
-  linker error). The block survives RESET/state-restore (the heap is not
-  part of the wiped pool) and is reused; malloc failure just skips captures
-  until memory appears.
+- **One resident `allocC47Blocks` block, armed at RESET, never freed**
+  (`historyRing`, 1024 blocks = 4 KiB on new hardware, 256 = 1 KiB on old;
+  `RAM_SIZE_IN_BLOCKS == RAM_SIZE_IN_BLOCKS_NEW_HW` discriminates, DM42
+  stays best-effort per the 2026-07-15 ruling) — pool-native per the
+  2026-08-25 convention ruling, the forth-core gdict shape. Two measured
+  laws govern it (matrix.txt RCL58, whose QR workspace requests one
+  contiguous chunk of 29,820 blocks against ~31,236 available vanilla —
+  free-list dump in DESIGN-HISTORY):
+  1. **Total resident size is the law**: every resident block anywhere
+     below the pool's top run shrinks that run one-for-one, so the
+     firmware-wide budget for ALL resident pool allocations is the
+     ~1,400-block (5.6 KiB) vanilla slack. The ring takes 1,024 of it;
+     8 KiB variants of every shape (slab, register banks, per-level
+     blocks, with and without a yield-under-pressure retry in memory.c)
+     were built and measured red.
+  2. **Arming time shapes the scraps**: the reset-time allocation (right
+     after doFnReset rebuilds the free list) sits at the pool's low edge
+     beside the boot structures; a mid-session allocation lands between
+     live churn. Lazy arming is therefore forbidden (pin S1) and a state
+     restore re-arms via the saveRestoreBackup tail hook.
+  Arena-arming failure (a nearly-full restored pool) just disables capture
+  until the next reset — history is best-effort.
 - Linear compacting layout: entries contiguous ascending, oldest evicted by
   memmove; an offset directory (`historyEntryOffset[48]`) gives indexed
   access. Entries are 8-byte rounded; register payload slack is zeroed so
@@ -119,12 +125,14 @@ made live by navigation.
 
 ## 5. Lifecycle
 
-Session-local by design (v1): `doFnReset` calls `undoHistoryReset()`
-(pointer/counters forgotten; the arena is static so nothing leaks), and
-`restoreCalc` funnels through `doFnReset`, which covers backup restore with
-no saveRestoreBackup.c patch. HCLR (`fnHistoryClear`) empties the ring but
-**leaves the single-level buffer intact** (class-tested). Backup-file
-persistence of the ring is possible future work for the upstream MR, not v1.
+Session-local by design (v1): `doFnReset` calls `undoHistoryReset()` —
+counters forgotten and the ring block re-armed from the freshly rebuilt
+pool (low-edge placement; see §3) — and the saveRestoreBackup restore tail
+calls it again so a state load forgets the replaced pool's block and
+re-arms from the restored one. HCLR (`fnHistoryClear`) empties the ring
+but keeps the block resident and **leaves the single-level buffer intact**
+(class-tested). Backup-file persistence of the ring is possible future
+work for the upstream MR, not v1.
 
 ## 6. Composition claims (binding for other packages)
 
@@ -142,6 +150,14 @@ persistence of the ring is possible future work for the upstream MR, not v1.
   `CUSTOM_PKG=packages/forth-core,packages/undo-history`) is the proof; any
   drift fails loudly at patch-apply time by design.
 
+### Depth that follows from the budget
+
+4 KiB holds roughly 20 shallow levels (a real34 stack entry serializes to
+~176 bytes); matrices and long strings consume more and self-limit through
+the per-entry cap (arena/4). This is the honest capacity the RCL58 headroom
+allows; widening it is an upstream conversation (bound the QR workspace —
+see the eigen report), not a package knob.
+
 ## 7. Upstream findings (reported, not patched)
 
 Three defects/fragilities in unrelated upstream code were found and
@@ -153,12 +169,14 @@ suite's own RCL58), `UPSTREAM_REPORTS_displayBugScreen_headless.md`
 (guarded by R9), `UPSTREAM_REPORTS_toDisplayString_buffer_contract.md`
 (pinned by R10).
 
-## 8. Upstream patch surface (7 files)
+## 8. Upstream patch surface (8 files)
 
 stack.c (capture tail + fnUndo two-branch), items.c (label line, two rows,
 two generator stubs), items.h (two renamed spare defines), c47.h (one
-include), config.c (doFnReset reset line), testSuite/testSuite.c (driver
-declarations + two coverageDriver rows), testSuite/tests/testSuiteList.txt
-(one anchored line). New files: undoHistory.c/.h (+ browsers/historyBrowser
-in U2). All patch content is submission-ready upstream code; comments
+include), config.c (doFnReset reset line — which also arms the ring),
+saveRestoreBackup.c (one restore-tail line: forget + re-arm from the
+restored pool; anchored 13 lines from forth-core's hook there),
+testSuite/testSuite.c (driver declarations + two coverageDriver rows),
+testSuite/tests/testSuiteList.txt (one anchored line). New files:
+undoHistory.c/.h (+ browsers/historyBrowser in U2). All patch content is submission-ready upstream code; comments
 explain invariants in upstream's own voice, and no package markers are used.

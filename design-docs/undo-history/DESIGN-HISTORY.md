@@ -46,5 +46,31 @@
   The ROUND/RSD `displayValueX` architecture is real and stays listed as a
   reason display code is never side-effect-free, but it was NOT the SPIRAL
   mechanism.
+- **2026-08-25 (storage, final).** The malloc arena was rejected by ruling
+  ("straying from upstream convention, like not using allocC47Blocks, makes
+  the design not good"). The pool-native ladder, each rung built and
+  measured against matrix.txt RCL58:
+  1. 13 register banks in the 137..255 enum gap (copySource-native, the
+     serializer deleted) — red: banks pin ~117 register-class blocks, and
+     even their cleared stubs (4 blocks each) stay resident.
+  2. Zero-floor variant, one pool block per level (the
+     savedStatisticalSumsPointer shape) + a memory.c yield-and-retry seam
+     that frees every package block on allocation failure — still red.
+  3. The free-list dump at the OOM gave the real law: RCL58's QR
+     decomposition requests 29,820 contiguous blocks in ONE allocation
+     (matrix.c:5413); the pool's top run was 29,188 with a 2,048-block
+     arena resident; vanilla has ~31,236 — about 1,400 blocks (5.6 KiB) of
+     TOTAL slack for the entire firmware. Every resident block anywhere
+     below the top run shrinks it one-for-one; placement only shapes the
+     scraps. (The U1 "freed hole does not coalesce" reading of the
+     yield-hook failure was incomplete — hole location never mattered, the
+     arithmetic did.)
+  4. Final shape: the U1 ring engine on one reset-armed allocC47Blocks
+     block sized INSIDE the slack (1,024 blocks new HW, 256 old), the
+     forth-core gdict pattern — RCL58 green, suite green. Reset-time
+     arming is load-bearing (pin S1 pins it); the saveRestoreBackup
+     restore-tail hook re-arms after a state load, and the suite proves
+     that path itself: undo_history.txt runs after serialize_cov's
+     backup-restore cycle and R8 asserts the ring is armed.
 - **2026-08-24.** Catalog name "HIST" found taken by upstream item 1401
   (CAT_MENU); U2 browser item renamed U.HIST, rows 427-429 kept.

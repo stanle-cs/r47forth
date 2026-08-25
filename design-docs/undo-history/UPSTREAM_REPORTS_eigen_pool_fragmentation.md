@@ -29,7 +29,14 @@ Fragmented free memory: 119300 bytes
 ```
 
 so the allocation pattern needs, at peak, close to the pool's entire
-contiguous free space (PC pool = 65534 blocks ≈ 256 KiB). With a vanilla
+contiguous free space (PC pool = 65534 blocks ≈ 256 KiB). Later measured
+precisely: `QR_decomposition_householder` (matrix.c:5413) makes ONE
+contiguous `allocC47Blocks(29820)` request (116.5 KiB for a 14×14 real
+matrix at 75-digit precision), and the vanilla pool's top free run at that
+moment is ~31,236 blocks — about 1,400 blocks (5.6 KiB) of slack. That
+slack is the ENTIRE firmware's budget for resident pool allocations, of
+any size, anywhere: every resident block below the top run shrinks it
+one-for-one regardless of placement. With a vanilla
 build that just barely works. Allocate one long-lived 8 KiB block from
 `allocC47Blocks` early in the run (anything resident: a package buffer, a
 future upstream feature) and the test fails — not because 8 KiB is missing,
@@ -56,5 +63,7 @@ still failed.)
 Either bound the eigen workspace (free per-iteration temporaries, or
 preallocate one reusable block), or treat RCL58's headroom as a documented
 invariant so resident allocations are a known trade-off. No package-side
-change is requested: the undo-history package moved its buffer off the pool
-entirely (one-time `malloc`, the same heap `ram` itself comes from).
+change is requested: the undo-history package sized its resident ring
+block (4 KiB, armed at RESET time) inside the measured slack. Until the
+workspace is bounded, ~5.6 KiB is the hard ceiling for everything anyone
+adds to this firmware's pool.
