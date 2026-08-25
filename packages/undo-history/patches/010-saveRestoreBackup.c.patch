@@ -1,0 +1,16 @@
+diff --git a/src/c47/saveRestoreBackup.c b/src/c47/saveRestoreBackup.c
+index 621cd37c31bfa17f47be2cfd0282d7a88a358fa9..f029a4ae54d0cdb3141c68e6cd343aca47ed4e3c 100644
+--- a/src/c47/saveRestoreBackup.c
++++ b/src/c47/saveRestoreBackup.c
+@@ -1478,6 +1478,11 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+     defineFirstDisplayedStep();
+     defineCurrentProgramFromCurrentStep();
+ 
++    // The undo history described a machine state and lived in a pool that
++    // were both just replaced wholesale: forget it and re-arm its ring
++    // block from the restored pool.
++    undoHistoryReset();
++
+     //defineCurrentLocalRegisters();
+ 
+     //save and restore screenData is not mandatory

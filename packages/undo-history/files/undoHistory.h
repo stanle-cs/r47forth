@@ -12,12 +12,16 @@
 #if !defined(UNDOHISTORY_H)
   #define UNDOHISTORY_H
 
-  // Ring sizing. The old hardware pool is a quarter of the new one, so the
-  // history ring shrinks with it.
+  // Ring sizing. The ceiling is upstream's, not ours: matrix.txt RCL58's
+  // QR workspace requests one contiguous chunk within ~1400 blocks of the
+  // pool's ENTIRE free space (measured: 29820 requested, 31236 available
+  // vanilla), so the firmware-wide budget for resident pool allocations is
+  // about 5 KiB — this ring takes 4 KiB of it on the new hardware and
+  // scales down with the quarter-size old pool.
   #if RAM_SIZE_IN_BLOCKS == RAM_SIZE_IN_BLOCKS_NEW_HW
-    #define HISTORY_RING_SIZE_IN_BLOCKS  2048  // 8 KiB
+    #define HISTORY_RING_SIZE_IN_BLOCKS  1024  // 4 KiB
   #else
-    #define HISTORY_RING_SIZE_IN_BLOCKS   512  // 2 KiB
+    #define HISTORY_RING_SIZE_IN_BLOCKS   256  // 1 KiB
   #endif
   #define HISTORY_MAX_ENTRIES              48
 
@@ -70,8 +74,10 @@
   bool_t undoHistoryUserContext  (void);
 
   /**
-   * Forgets the ring without freeing (pool was overwritten or reset):
-   * state restore and RESET path.
+   * Forgets the ring without freeing (the pool it lived in was rebuilt or
+   * replaced) and re-arms it from the current pool. Runs at RESET — right
+   * after doFnReset rebuilds the free list, which pins the block to the
+   * pool's low edge — and at the end of a state restore.
    */
   void   undoHistoryReset        (void);
 

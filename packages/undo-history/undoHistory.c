@@ -40,15 +40,18 @@ typedef struct {
   uint16_t payloadBytes;                  ///< bytes copied from/to the register data pointer
 } historyRegRecord_t;
 
-// The ring is malloc'd once and never freed — the same heap the C47 pool
-// itself comes from (SRAM3 on DMCP5), without entering the pool's BLOCK
-// allocator: a resident allocC47Blocks block fragments the pool's contiguous
-// space and measurably broke upstream's own 14x14 eigenvalue test (RCL58),
-// whose workspace growth is calibrated to the full pool; a
-// yield-on-allocation-failure hook was tried and rejected (the freed hole
-// does not coalesce with the main free region). A static array is out too:
-// on DMCP5 globals live in the 16 KiB SRAM4, which the ring overflows.
-static uint8_t  *historyRing = NULL;      // HISTORY_RING_BYTES once armed
+// One resident pool block, allocated at RESET time and never freed — the
+// forth-core gdict pattern. The allocation point is load-bearing, not
+// style: doFnReset() arms the ring right after the free list is rebuilt,
+// so the block sits at the pool's LOW EDGE next to the boot structures and
+// cannot split the pool's contiguous middle. A mid-session allocation of
+// the very same block lands between live churn and measurably breaks
+// upstream's 14x14 eigenvalue test (matrix.txt RCL58), whose QR workspace
+// requests one contiguous chunk of essentially the pool's entire free
+// space (29820 blocks vs 29825 free, measured) — as do a scattered
+// register-bank layout and a yield-under-pressure retry, both tried and
+// measured red before this shape (see DESIGN-HISTORY).
+static uint8_t  *historyRing = NULL;      // HISTORY_RING_BYTES once armed at reset
 static uint32_t  historyUsedBytes = 0;
 static uint16_t  historyEntryOffset[HISTORY_MAX_ENTRIES];
 static uint8_t   historyEntryCount = 0;
@@ -258,9 +261,8 @@ static int historySerializePush(bool_t fromSaved, int16_t labelItem, uint8_t ext
 }
 
 static bool_t historyEnsureRing(void) {
-  if(historyRing == NULL) {
-    historyRing = malloc(HISTORY_RING_BYTES);
-  }
+  // Armed at reset (undoHistoryReset), NEVER lazily: a mid-session
+  // allocation loses the low-edge placement — see the storage comment.
   return historyRing != NULL;
 }
 
@@ -418,9 +420,17 @@ void fnHistoryClear(uint16_t unusedButMandatoryParameter) {
 }
 
 void undoHistoryReset(void) {
-  // RESET and state-restore path (restoreCalc funnels through doFnReset):
-  // the machine state the entries describe is gone wholesale. The malloc
-  // block survives (the heap is not part of the wiped pool) and is reused.
+  // RESET path (doFnReset, right after the free list is rebuilt) and the
+  // end of a state restore: the machine state the entries described is
+  // gone, and so is the pool the old ring block lived in — forget the
+  // pointer without freeing, then re-arm from the current pool. At reset
+  // the pool is empty, which pins the block to the low edge (see the
+  // storage comment); after a state restore the placement is whatever the
+  // restored layout allows.
+  historyRing = NULL;
+  if(isMemoryBlockAvailable(HISTORY_RING_SIZE_IN_BLOCKS, 1, 0.25f)) {
+    historyRing = allocC47Blocks(HISTORY_RING_SIZE_IN_BLOCKS);
+  }
   historyUsedBytes = 0;
   historyEntryCount = 0;
   historyCursor = HISTORY_CURSOR_NONE;
@@ -679,22 +689,23 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  { // R8: storage independence — the ring must live outside the C47 pool
-    // and a capture must cost the pool nothing. The pool-resident ring
-    // measurably broke upstream's RCL58 eigen test (fragmentation), so this
-    // is a structural ownership check, not a style preference.
+  { // R8: storage residency — the ring is ONE pool block armed at reset
+    // (the upstream-convention ruling, 2026-08-25: allocC47Blocks, the
+    // gdict pattern), it is already armed BEFORE any capture (lazy
+    // mid-session arming loses the low-edge placement and breaks RCL58 —
+    // measured), and a capture costs the pool nothing.
+    const uint8_t *poolLo = (const uint8_t *)ram;
+    const uint8_t *poolHi = (const uint8_t *)(ram + RAM_SIZE_IN_BLOCKS);
     historyTestBaseline();
-    historyTestWriteLonI(REGISTER_X, 42);
-    saveForUndo();                       // arms the ring
     if(historyRing == NULL) {
-      historyTestFail("R8 ring should be armed after a capture");
+      historyTestFail("R8 ring must be armed at reset, before any capture");
     }
     else {
-      const uint8_t *poolLo = (const uint8_t *)ram;
-      const uint8_t *poolHi = (const uint8_t *)(ram + RAM_SIZE_IN_BLOCKS);
-      if((const uint8_t *)historyRing >= poolLo && (const uint8_t *)historyRing < poolHi) {
-        historyTestFail("R8 ring must not live inside the C47 pool");
+      if((const uint8_t *)historyRing < poolLo || (const uint8_t *)historyRing >= poolHi) {
+        historyTestFail("R8 ring block must live inside the C47 pool");
       }
+      historyTestWriteLonI(REGISTER_X, 42);
+      saveForUndo();
       uint32_t freeBefore = getFreeRamMemory();
       undoHistoryCapture();              // direct: full serialize, dedupe-merge
       if(getFreeRamMemory() != freeBefore) {
