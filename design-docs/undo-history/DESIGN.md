@@ -186,7 +186,10 @@ suite's own RCL58), `UPSTREAM_REPORTS_displayBugScreen_headless.md`
 enters CM_HIST_BROWSER (saving previousCalcMode) and doubles as the
 refreshScreen renderer. Rows list levels newest-first — seq, gap mark
 (`~`), cursor mark (`*`), label (item catalog name, `(now)` for the live
-anchor, `-` for unlabeled captures) and the X preview, rendered lazily via
+anchor, `(val)` for unlabeled captures — the two synthetic labels are
+parenthesized so they stay outside the item-name namespace, pinned by B8:
+a plain `-` was indistinguishable from ITM_SUB's catalog name) and the X
+preview, rendered lazily via
 `undoHistoryStagePreview` into TEMP_REGISTER_1 and the standard
 `*ToDisplayString` code, in display context per §3. The selected row is
 inverted. UP/DOWN move the selection (clamped), ENTER restores the

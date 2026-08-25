@@ -70,6 +70,7 @@ restores:
 | V2 | drop the leave in `historyBrowserEnter` | browser battery B3 (ENTER must leave the browser) |
 | F1 | wrong flag in the SYSFL row 2299 item | browser battery B7 (the SFL_MONIT offset arithmetic) |
 | F2 | drop the flag check in `undoHistoryKeyReroute` | browser battery B7 (reroute must be off while the flag is clear) |
+| L1 | a synthetic browser label equal to an item catalog name | browser battery B8 (whole-namespace scan; red-first against the shipped `-`, which collided with ITM_SUB) |
 
 R10 carries no mutation pin: it pins an **upstream** contract, not package
 code — if it ever goes red, TMP_STR_LENGTH stopped being enough and the U2

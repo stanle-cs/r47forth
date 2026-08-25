@@ -96,3 +96,15 @@
   one-line-by-construction; sim keypress verification is manual.
 - **2026-08-24.** Catalog name "HIST" found taken by upstream item 1401
   (CAT_MENU); U2 browser item renamed U.HIST, rows 427-429 kept.
+- **2026-08-25.** Label collision found by Stan reading the announcement
+  draft: unlabeled captures rendered `-`, byte-identical to ITM_SUB's
+  catalog name (items.c row 96), so a value-entry row and a subtraction
+  row were indistinguishable — a value entry of a negative number read
+  `- -3.`. Fixed red-first: B8 scans the whole item namespace against
+  both synthetic labels (fails on the shipped `-`), the placeholder is
+  now `(val)` — parenthesized like `(now)` so the meta-label namespace
+  is disjoint from item names by construction, and 5 glyphs so the
+  label column keeps its gap before the preview at HB_PREVIEW_X
+  (`(entry)` at 7 glyphs touched it). All three post screenshots
+  re-captured with the recovered marker-block drivers, removed again
+  after capture, full gate green.
