@@ -4,8 +4,8 @@
     "browsers/historyBrowser.c": "aff8eb51929cd346e78b056ca45e9964a6f95597f143f7bc56f0d5d601c79092",
     "browsers/historyBrowser.h": "4c08ffd10768041f08eb17d086ca98973fd046fb6ed46cd204c1b61205973386",
     "testSuite/tests/undo_history.txt": "cda5209cd37a3a726d4492054a9fb6a9a7db43d12671966315cee80994fd4b76",
-    "undoHistory.c": "4f63ed7ab6106f19842be9d50425191c4801c1aed0bde3ba3756865a130762c4",
-    "undoHistory.h": "0327bc7cda23aa4ef26c65d4512d25f8391624a6466a5b8a15f95e2bc3103c4e"
+    "undoHistory.c": "a2cf72be0b78d8847c6a3f115e423b120c35f9313d1968b1a74a4eb2197b937f",
+    "undoHistory.h": "0a06cc29bd82c15ca75525c3f3374852b03916728376603a41c6af9ed8983a73"
   },
   "patches": {
     "010-browsers__browsers.h.patch": "2683e909fb7d1ceb21e93806b3f4b443278b990d5130338b663275010c10edf3",
@@ -15,10 +15,10 @@
     "010-c47Extensions__keyboardTweak.c.patch": "d1e058789cca8fa156744bc91bc6a9f156c0f87df3ee14f0bd9dfd9d14e53552",
     "010-config.c.patch": "98b0569ead121afe6771229a78ed5239bcf5dcef393148617f067f39e48efac7",
     "010-debug.c.patch": "51f925121fabc42bede7e0d70e03cd4456700f3f32fc8bdbe2622fa83b0a81a3",
-    "010-defines.h.patch": "494a159a79c686028821be7f39a90717e0f2aebe63cf2af2ac9ed2e9dd35dbe1",
-    "010-items.c.patch": "4c056e68e05dbfbc967cab712480fcb5a0e07b69b1a0c371531ac1b94e892a64",
-    "010-items.h.patch": "f0002c7d6d37aff911403d5e413dd7b89176f7ac9cb4015df18267dbcf9093fb",
-    "010-keyboard.c.patch": "8503b068ff1172fdc1cc6767d55ef6c3ba51cef48f829cce493125362f9118c1",
+    "010-defines.h.patch": "a8148141cd9ec5b79344d60d9d2da155e24e50e4d34c56ee0119193f13e1d0eb",
+    "010-items.c.patch": "5f496e9664f7bd253ffe420e80a48be713e0ee1472ac952c028ba875eacf1659",
+    "010-items.h.patch": "ccc2798fd7798415cabcf835de92dc785c5b03dfa65350490fc89d1b5c21af9f",
+    "010-keyboard.c.patch": "c3703885fa3a110fd9eaa3a0f11c1ad0031da9ff088c45db022b80fd6022a9bb",
     "010-saveRestoreBackup.c.patch": "21ab821bd71553d45bb9df98ed9c958a06308e6be048d3aed90a978eab398bc0",
     "010-screen.c.patch": "fe398fd6917b8e324a4d58adfca60eebc65b8e66482ca12213237b9d4447b3ba",
     "010-softmenus.c.patch": "d67ce8ca900fd992f00b73c1dba5d15421789083c9758145e5c842591d21e1b6",

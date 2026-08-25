@@ -68,6 +68,8 @@ restores:
 
 | V1 | drop the clamp in `historyBrowserUp` | browser battery B2 (ups must clamp at the newest) |
 | V2 | drop the leave in `historyBrowserEnter` | browser battery B3 (ENTER must leave the browser) |
+| F1 | wrong flag in the SYSFL row 2299 item | browser battery B7 (the SFL_MONIT offset arithmetic) |
+| F2 | drop the flag check in `undoHistoryKeyReroute` | browser battery B7 (reroute must be off while the flag is clear) |
 
 R10 carries no mutation pin: it pins an **upstream** contract, not package
 code — if it ever goes red, TMP_STR_LENGTH stopped being enough and the U2

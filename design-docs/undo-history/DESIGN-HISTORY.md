@@ -84,5 +84,15 @@
   pixels via the run-sim dump path (marker-removed temporary capture in
   the battery driver; status bar, newest-first rows, inverted selection,
   cursor mark all present).
+- **2026-08-25 (FLAG_UHIST).** The shifted-UP shortcut landed as a real
+  system flag (bit 112, the first free one) with its SYSFL item in row
+  2299 — which the SFL_MONIT offset arithmetic dictates, not a choice; the
+  pre-named `SFL_2299` spare confirmed upstream planned the slot. The
+  determineItem hook reuses the package's existing chain-head insertion
+  (no new keyboard.c conflict surface vs forth-core), with the predicate
+  package-side for testability. The key reroute itself cannot be driven
+  headless (determineItem is static, the harness has no key injection) —
+  the predicate is fully unit-tested/pinned and the resolution line is
+  one-line-by-construction; sim keypress verification is manual.
 - **2026-08-24.** Catalog name "HIST" found taken by upstream item 1401
   (CAT_MENU); U2 browser item renamed U.HIST, rows 427-429 kept.

@@ -111,4 +111,12 @@
    * \return true when the level was made live
    */
   bool_t  undoHistoryRestoreLevel(uint8_t logical);
+
+  /**
+   * The FLAG_UHIST key reroute predicate, called from determineItem: true
+   * when the f-shifted UP key should resolve to ITM_UHIST instead of its
+   * assignment — flag set, normal mode, f shift, the UP key. Kept here so
+   * the behavior is unit-testable and the keyboard hook stays one line.
+   */
+  bool_t  undoHistoryKeyReroute  (bool_t shiftFActive, int16_t keyPrimary);
 #endif // !UNDOHISTORY_H

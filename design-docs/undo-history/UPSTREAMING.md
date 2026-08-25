@@ -10,7 +10,8 @@ What an upstream MR contains beyond this package's patches/+files/:
    themselves once moved there. No extra work expected.
 3. Wiki/manual: U.HIST, REDO and HCLR item descriptions
    (catalog-reachable, user-assignable, and on the STK menu's free
-   slots). The menu-number
+   slots), plus the UHIST system flag (f-shifted UP opens the history
+   browser when set). The menu-number
    freeze note in softmenus.c is respected — no new menus.
 4. Decide backup persistence of the ring (v1 is session-local; DESIGN.md
    §5) with upstream maintainers.

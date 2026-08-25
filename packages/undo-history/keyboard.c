@@ -1639,6 +1639,9 @@ endReturnTrue:
                shiftG ? key->gShifted :
                         key->primary;
     }
+    else if(undoHistoryKeyReroute(shiftF, key->primary)) {
+      result = ITM_UHIST;               // the UHIST system flag routes f-UP to the history browser
+    }
     else if( !tam.mode && (calcMode == CM_NIM || calcMode == CM_NORMAL) && (lastIntegerBase >= 2 && getSystemFlag(FLAG_TOPHEX)) && (key_no >= 0 && key_no <= 5 )) {               //JMNIM vv Added direct A-F for hex entry
       result = shiftF ? key->fShifted :
                shiftG ? key->gShifted :

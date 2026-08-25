@@ -1015,8 +1015,9 @@
 #define FLAG_PDIFF                            0x806D
 #define FLAG_PSHADE                           0x806E //47
 #define FLAG_SBadm                            0x806F //48
+#define FLAG_UHIST                            0x8070 //49 f-shifted UP opens the undo history browser
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+48 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+49 // We can have a maximum of 128 system flags
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode

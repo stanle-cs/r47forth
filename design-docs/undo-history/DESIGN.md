@@ -138,7 +138,12 @@ work for the upstream MR, not v1.
 
 - Claimed upstream resources: item rows **427 ("U.HIST"), 428 ("REDO"),
   429 ("HCLR")** (spare CAT_FREE rows, far from forth-core's hunks at
-  213/2842-2843) and calcMode **19** (CM_HIST_BROWSER).
+  213/2842-2843), calcMode **19** (CM_HIST_BROWSER), system flag
+  **FLAG_UHIST = 0x8070** (bit 112; NUMBER_OF_SYSTEM_FLAGS 112 → 113) and
+  its SYSFL row **2299** — the row is NOT free to choose: keyboard.c
+  resolves SF/CF menu presses as `indexOfItems[(offset & 0x3f) +
+  SFL_MONIT]`, so the SYSFL row position IS the flag number (class-tested
+  in B7).
 - keyboard.c's combined key-resolution list in determineItem (the big
   `else if(calcMode == CM_NORMAL || …)` chain) is **rewritten by
   forth-core's patch** — editing that line, or inserting adjacent to it,
@@ -189,6 +194,18 @@ selected level through `undoHistoryRestoreLevel` (user-gated) and leaves,
 EXIT/BACKSPACE leave without restoring; an empty history still opens and
 says so. Selection starts on the navigation cursor when one is active,
 else on the newest level.
+
+**The FLAG_UHIST key shortcut**: when the system flag is set (SF on
+"UHIST" in SYSFL, persisted with the other system flags, visible in the
+flag browser), the f-shifted UP key in CM_NORMAL resolves to ITM_UHIST
+instead of its assignment (BST by default) and opens the browser. The
+predicate lives in the package (`undoHistoryKeyReroute` — flag, normal
+mode, f shift, the UP key; unit-tested and pinned), so determineItem's
+hook is one line inside the package's existing chain-head branch — no new
+composition surface, and BST stays untouched everywhere else (PEM
+included). Because system flags ride the undo snapshots like every other
+flag, undoing past the toggle restores the previous setting — upstream's
+own semantics for flag-affecting operations.
 
 ## 9. Upstream patch surface
 

@@ -487,6 +487,10 @@ bool_t undoHistoryStagePreview(uint8_t logical) {
   return true;
 }
 
+bool_t undoHistoryKeyReroute(bool_t shiftFActive, int16_t keyPrimary) {
+  return shiftFActive && keyPrimary == ITM_UP1 && calcMode == CM_NORMAL && getSystemFlag(FLAG_UHIST);
+}
+
 bool_t undoHistoryRestoreLevel(uint8_t logical) {
   if(!undoHistoryUserContext() || historyRing == NULL || logical >= historyEntryCount) {
     return false;
@@ -987,6 +991,34 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
     if(calcMode != CM_NORMAL) {
       historyTestFail("B5 ENTER on empty history must just leave");
     }
+  }
+
+  { // B7: the FLAG_UHIST reroute — the SFL offset arithmetic that maps the
+    // flag to its SYSFL item (keyboard.c resolves SF/CF menu presses as
+    // indexOfItems[(offset & 0x3f) + SFL_MONIT], so the row position IS the
+    // flag number), and the key predicate across flag/mode/shift/key.
+    bool_t was = getSystemFlag(FLAG_UHIST);
+    if(SFL_MONIT + (FLAG_UHIST & 0x3f) != SFL_UHIST || indexOfItems[SFL_UHIST].param != FLAG_UHIST) {
+      historyTestFail("B7 FLAG_UHIST must map to its SYSFL row by the SFL_MONIT arithmetic");
+    }
+    clearSystemFlag(FLAG_UHIST);
+    if(undoHistoryKeyReroute(true, ITM_UP1)) {
+      historyTestFail("B7 reroute must be off while the flag is clear");
+    }
+    setSystemFlag(FLAG_UHIST);
+    calcMode = CM_NORMAL;
+    if(!undoHistoryKeyReroute(true, ITM_UP1)) {
+      historyTestFail("B7 flag + f-shift + UP in normal mode must reroute");
+    }
+    if(undoHistoryKeyReroute(false, ITM_UP1) || undoHistoryKeyReroute(true, ITM_DOWN1)) {
+      historyTestFail("B7 reroute must require the f shift and the UP key");
+    }
+    calcMode = CM_PEM;
+    if(undoHistoryKeyReroute(true, ITM_UP1)) {
+      historyTestFail("B7 reroute must stay out of program-entry mode");
+    }
+    calcMode = CM_NORMAL;
+    if(was) { setSystemFlag(FLAG_UHIST); } else { clearSystemFlag(FLAG_UHIST); }
   }
 
   { // B6: the preview staging path delivers the level's X to TEMP_REGISTER_1.
