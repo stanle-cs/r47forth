@@ -1030,6 +1030,18 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  { // B8: the two synthetic labels stay outside the item catalog namespace
+    // — an unlabeled row rendering "-" was indistinguishable from ITM_SUB.
+    for(uint32_t i = 1; i <= LAST_ITEM; i++) {
+      const char *nm = indexOfItems[i].itemCatalogName;
+      if(nm != NULL && (strcmp(nm, HISTORY_LABEL_UNLABELED) == 0 ||
+                        strcmp(nm, HISTORY_LABEL_ANCHOR) == 0)) {
+        historyTestFail("B8 a browser meta label collides with an item catalog name");
+        break;
+      }
+    }
+  }
+
   historyTestBaseline();
   historyTestWriteLonI(REGISTER_X, historyTestFailures);
 }

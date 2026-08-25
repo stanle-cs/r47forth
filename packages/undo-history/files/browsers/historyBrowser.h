@@ -14,6 +14,11 @@
    *
    * \param[in] unusedButMandatoryParameter uint16_t
    */
+  // The browser's two synthetic labels. They live in the item-name column,
+  // so they must never equal an item catalog name (B8 pins the namespace).
+  #define HISTORY_LABEL_UNLABELED "(val)"
+  #define HISTORY_LABEL_ANCHOR    "(now)"
+
   void    historyBrowser        (uint16_t unusedButMandatoryParameter);
 
   void    historyBrowserUp      (void);   ///< selection toward the newest level

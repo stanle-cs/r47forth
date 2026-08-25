@@ -133,7 +133,7 @@ static void historyPreviewString(uint8_t logical, char *dest) {
       uint16_t seq;
       int16_t labelItem;
       uint8_t flags;
-      const char *name = "-";                        // unlabeled capture
+      const char *name = HISTORY_LABEL_UNLABELED;    // unlabeled capture
       videoMode_t vm = logical == currentHistorySelection ? vmReverse : vmNormal;
       int16_t y = HB_FIRST_ROW_Y + row * HB_ROW_HEIGHT;
 
@@ -141,7 +141,7 @@ static void historyPreviewString(uint8_t logical, char *dest) {
         break;
       }
       if(flags & HISTORY_ENTRY_LIVEANCHOR) {
-        name = "(now)";
+        name = HISTORY_LABEL_ANCHOR;
       }
       else if(labelItem > 0 && labelItem <= LAST_ITEM) {
         name = indexOfItems[labelItem].itemCatalogName;
