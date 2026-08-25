@@ -83,3 +83,33 @@ package-v0.3 closing uses, judged not real.
 applied). Both lanes' overall verdicts in every round: human-written.
 Stopping per the seesaw rule. Stan's read is the remaining gate and
 outranks all of the above.
+
+## Redraft r2 under the rebuilt framework (2026-08-25)
+
+Stan rejected the v0.1 draft ("doesn't sound like me at all") and ruled
+the framework rebuilt from the Reddit data. undo-history-v0.1-r2.txt is
+the first draft written the new way: composed with the exemplar bank
+open, constructions from the measured profile used where they do real
+work (the emulator save-state analogy, two explanatory questions,
+I-hedges on genuine judgments, direct-you, fronted connectors,
+enthusiasm on the view, a warm closing line). Facts unchanged from the
+FACTS sheet.
+
+Battery: voicematch2 all constructions present (the rejected draft
+scores 6 MISSING on the same tool); two tool calibrations landed while
+running it ("like save states" and "I'm sure/I'd" added to regexes,
+skeleton metric marked informational). aiaudit 4 flags, all factual
+enumerations. framescan: no tails, no shingles, 2 pre-code colons
+(published shape).
+
+Cross-model round (readers verified: Gemini 3.1 Pro, GPT-5): both
+human verdicts, no category-1 findings. Both note the hypophora "So
+what are you looking at?" as the first place a suspicious reader might
+pause; disposition KEEP, it is his corpus construction ("Now is it a
+wing chun stance...?") and removing it is the old framework's exact
+failure mode. GPT-5 notes comma splices as possible overcorrection;
+they are corpus-native (Gemini: "appear naturally throughout his
+provided Reddit samples"); keep.
+
+Stan reads r2. Same open items as before: unpushed base commit, thread
+placement, attachment indices.

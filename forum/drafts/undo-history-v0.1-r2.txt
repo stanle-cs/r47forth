@@ -1,0 +1,54 @@
+[b]undo-history v0.1[/b]
+
+I made a package that gives R47 a real undo trail. Stock UNDO remembers exactly one step, and you usually notice a mistake three operations later, when there's nothing left to go back to. This package keeps the last couple dozen states around, like save states in an emulator, except the calculator makes them for you on every operation.
+
+[list]
+[*]UNDO steps back one level per press (the first press is the stock undo, the rest come from the package).
+[*]REDO steps forward again, until you run something new (a new operation drops the redo trail, same as any editor).
+[*]U.HIST opens the history view. UP and DOWN move the selection, ENTER restores the selected level, EXIT leaves.
+[*]HCLR empties the history (the stock one-step undo stays loaded).
+[*]All four sit on the STK menu and in the catalog, and they can be assigned to keys.
+[*]The UHIST system flag routes f-shifted UP to the view (normal mode only, BST everywhere else is untouched). Off by default, set it with SF in SYSFL.
+[/list]
+
+Set the flag and f-shifted UP drops you straight into the view. I think that's the fastest way to use the whole thing.
+
+[attachment=2]undo-attach-1-history-view.png[/attachment]
+
+So what are you looking at? Each row is one level, newest on top: the level number, what ran next, and what X held at that moment. Operations show their real names, a dash is a plain value entry, and (now) is where you were before you started undoing. The * is where undo stands right now, and the inverted row is your selection. The shot came from a session with some arithmetic, a transposed 2x3 matrix, SLVQ on 1 -3 2, and a complex number, then one press of UNDO. It's also surprisingly handy for just checking what an operation did to your stack, without restoring anything.
+
+A level isn't just X. It's the whole stack plus LASTx, the flags, and the statistical sums if you have any. When you restore, all of it comes back together.
+
+[attachment=1]undo-attach-3-restored.png[/attachment]
+
+Here's ENTER on the SLVQ row from the first shot: the matrix is back in T and the three coefficients are sitting in Z, Y and X like the solver never ran.
+
+[b]The ~ mark[/b]
+
+[attachment=0]undo-attach-2-gap.png[/attachment]
+
+What about states too big to keep? The whole history lives in 4 KB (the pool only has about 5 KB to spare before upstream's own matrix tests start failing), and one big matrix could eat most of that alone. So anything over about 1 KB is skipped, and the next stored level gets a ~ to tell you something happened between it and the row below that isn't in the list. The numbering stays consecutive, the ~ is the only trace. Most people will probably never see it, you need a decently large matrix or a long string on the stack to trigger it. Undo still works across the gap, one press there just covers more than one operation. But you can't land inside it.
+
+[b]Limits[/b]
+
+[list]
+[*]History is session-only. RESET and loading a saved state clear it.
+[*]Depth depends on the values. Plain reals give about 25 levels at stack size 4, about 16 with SSIZE8, 48 at most.
+[*]Solver and integrator internals stay out of the history (SLV alone would flood it with iteration states). One solver call is one level.
+[*]A running program doesn't capture (the stock undo skips those too).
+[*]Undo restores system flags along with the stack. Stock UNDO already did that.
+[/list]
+
+[b]Install[/b]
+
+Unzip the attachment into packages/undo-history and build with the package active:
+
+[code]make sim CUSTOM_PKG=packages/undo-history[/code]
+
+It composes with forth-core if you run both:
+
+[code]make sim CUSTOM_PKG=packages/forth-core,packages/undo-history[/code]
+
+For the calculator it's make dmcp5r47 with the same CUSTOM_PKG. The firmware grows by 3.9 KB, and the history takes its 4 KB from the memory pool at reset, you'll see the difference in the FLGS free-memory line.
+
+Package base is r47forth commit faf9d698c. Upstream's full test suite runs green with the package active, alone and combined with forth-core, and my own tests add about thirty cases on top. Everything above is from the simulator, I haven't flashed a real DM42n with this yet. So make a calculator backup and flash at your own risk. The zip has COPYING inside, the licence is GPL-3.0-only, inherited from c43. I'm sure there are corners I haven't hit, report anything weird.

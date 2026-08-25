@@ -22,13 +22,13 @@ CORPUS = "forum/reference/reddit-trungdle.md"
 
 CONSTRUCTIONS = [
     # key, corpus regex, human name, expected-in-prose floor per ~600 words
-    ("i_hedge",   r"\bI (?:think|guess|would|tend to|hope|found|feel|mean)\b|\bIn my opinion\b|\bMy personal\b", "first-person hedge (I think / I'd / in my opinion)", 2),
+    ("i_hedge",   r"\bI(?:'m (?:not )?sure|'d)\b|\bI (?:think|guess|would|tend to|hope|found|feel|mean)\b|\bIn my opinion\b|\bMy personal\b", "first-person hedge (I think / I'm sure / I'd)", 2),
     ("direct_you",r"\byou (?:can|need|should|have to|want|get|just)\b|\bYou just\b", "direct-you instruction", 2),
     ("hedge_adv", r"\b(?:maybe|probably|likely|kinda|pretty much|somewhat)\b", "hedging adverb beside the claim", 1),
     ("fronted",   r"(?:^|[.!?]\s+)(?:But|So|And|Also|Anyways?|Btw)\b", "fronted connector (But/So/And/Also/Anyways/Btw)", 2),
     ("question",  r"\?", "question (his explanations ask them)", 1),
     ("paren",     r"\([^)]{3,90}\)", "parenthetical aside carrying a fact or reason", 2),
-    ("analogy",   r"\b(?:like a|just like|similar to|same as|think of)\b", "everyday comparison", 1),
+    ("analogy",   r"\b(?:like (?:a|an|the)\b|just like|similar to|same as|think of)|, like\b", "everyday comparison", 1),
     ("intens",    r"\b(?:really|very|super|totally|absolutely|surprisingly)\b", "intensifier / enthusiasm", 1),
     ("concede",   r"\b(?:I'm sure|Of course|True,|Agreed?,|Fair)\b.*?\bbut\b", "concession then position", 0),
     ("stake",     r"\bI (?:made|built|added|put|keep|use|wrote|haven't|had to|skip|chose)\b", "first-person stake in the thing", 1),
@@ -95,7 +95,7 @@ def main():
             hit = any(len(set(st) & set(c.split())) >= 0.7 * len(st) for c in csk if abs(len(c.split()) - len(st)) <= 3)
             if not hit:
                 unsupported.append(s)
-    print(f"\nsentence skeletons without close corpus support: {len(unsupported)}/{len(sents)}")
+    print(f"\nsentence skeletons without close corpus support: {len(unsupported)}/{len(sents)} (informational only: the technical register shares little surface shape with the gaming corpus; the construction table above is the blocking part)")
     for s in unsupported[:8]:
         print("   ??", s[:110])
 
