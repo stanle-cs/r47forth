@@ -136,10 +136,16 @@ work for the upstream MR, not v1.
 
 ## 6. Composition claims (binding for other packages)
 
-- Claimed upstream resources: item rows **428 ("REDO"), 429 ("HCLR")**
-  (spare CAT_FREE rows, far from forth-core's hunks at 213/2842-2843);
-  stage U2 will claim **427 ("U.HIST")** and calcMode **19**
-  (CM_HIST_BROWSER).
+- Claimed upstream resources: item rows **427 ("U.HIST"), 428 ("REDO"),
+  429 ("HCLR")** (spare CAT_FREE rows, far from forth-core's hunks at
+  213/2842-2843) and calcMode **19** (CM_HIST_BROWSER).
+- keyboard.c's combined key-resolution list in determineItem (the big
+  `else if(calcMode == CM_NORMAL || …)` chain) is **rewritten by
+  forth-core's patch** — editing that line, or inserting adjacent to it,
+  conflicts (measured). CM_HIST_BROWSER therefore resolves keys in its own
+  branch at the head of that chain, inside the gap between forth-core's
+  hunks; every other browser-group addition is a plain member insert in
+  lists forth-core does not touch.
 - testSuiteList.txt entry `undo_history` is anchored after `nested_cov`,
   mid-file — forth-core appends at EOF; sharing that hunk context would be a
   guaranteed apply conflict.
@@ -169,14 +175,37 @@ suite's own RCL58), `UPSTREAM_REPORTS_displayBugScreen_headless.md`
 (guarded by R9), `UPSTREAM_REPORTS_toDisplayString_buffer_contract.md`
 (pinned by R10).
 
-## 8. Upstream patch surface (8 files)
+## 8. The browser (stage U2)
 
-stack.c (capture tail + fnUndo two-branch), items.c (label line, two rows,
-two generator stubs), items.h (two renamed spare defines), c47.h (one
-include), config.c (doFnReset reset line — which also arms the ring),
-saveRestoreBackup.c (one restore-tail line: forget + re-arm from the
-restored pool; anchored 13 lines from forth-core's hook there),
-testSuite/testSuite.c (driver declarations + two coverageDriver rows),
-testSuite/tests/testSuiteList.txt (one anchored line). New files:
-undoHistory.c/.h (+ browsers/historyBrowser in U2). All patch content is submission-ready upstream code; comments
-explain invariants in upstream's own voice, and no package markers are used.
+`browsers/historyBrowser.c` follows flagBrowser's shape: the item handler
+enters CM_HIST_BROWSER (saving previousCalcMode) and doubles as the
+refreshScreen renderer. Rows list levels newest-first — seq, gap mark
+(`~`), cursor mark (`*`), label (item catalog name, `(now)` for the live
+anchor, `-` for unlabeled captures) and the X preview, rendered lazily via
+`undoHistoryStagePreview` into TEMP_REGISTER_1 and the standard
+`*ToDisplayString` code, in display context per §3. The selected row is
+inverted. UP/DOWN move the selection (clamped), ENTER restores the
+selected level through `undoHistoryRestoreLevel` (user-gated) and leaves,
+EXIT/BACKSPACE leave without restoring; an empty history still opens and
+says so. Selection starts on the navigation cursor when one is active,
+else on the newest level.
+
+## 9. Upstream patch surface
+
+Stage U1 (8 files): stack.c (capture tail + fnUndo two-branch), items.c
+(label line, item rows, generator stubs), items.h (renamed spare defines),
+c47.h (one include), config.c (doFnReset reset line — which also arms the
+ring), saveRestoreBackup.c (restore-tail forget + re-arm),
+testSuite/testSuite.c (driver declarations + coverageDriver rows),
+testSuite/tests/testSuiteList.txt (one anchored line).
+
+Stage U2 adds the browser dispatch (9 more): defines.h (CM_HIST_BROWSER),
+keyboard.c (the chain-head resolution branch + the browser groups and
+per-key cases), screen.c (refreshScreen case + browser group),
+statusBar.c, softmenus.c (browser exclusion group + the menu_STK row:
+U.HIST/REDO/HCLR), c47Extensions/keyboardTweak.c, c47Extensions/addons.c,
+debug.c and c47Extensions/jm.c (mode name "his.bro"), plus
+browsers/browsers.h (one include). New files: undoHistory.c/.h,
+browsers/historyBrowser.c/.h. All patch content is submission-ready
+upstream code; comments explain invariants in upstream's own voice, and no
+package markers are used.

@@ -33,7 +33,15 @@ the forthTestRunFromX pattern) in testSuite.c and ships
   resurrect the dropped anchor), three-deep walk both ways, HCLR leaving
   the single-level buffer intact, and SS=8.
 
-Both drivers are `PC_BUILD`-only and start from `historyTestBaseline()` +
+- `historyTestBrowser` — the browser's state machine, driven through the
+  same functions the keyboard dispatch calls: entry (mode switch, previous
+  mode kept, selection on the newest level), clamped navigation both ways,
+  ENTER-restore with cursor placement and browser exit, reopen-at-cursor,
+  the empty browser, and preview staging into TEMP_REGISTER_1. The entry
+  path runs `refreshScreen` for real, so the render executes headless on
+  every suite run; pixel truth comes from the run-sim capture at review.
+
+The drivers are `PC_BUILD`-only and start from `historyTestBaseline()` +
 stack clear so every .txt block is self-contained (the suite runs in one
 process; ring state must not leak between blocks).
 
@@ -57,6 +65,9 @@ restores:
 | M5 | drop `setRegisterTag` in `historyRestoreToIndex` | ring battery R1 (tagged real34 round-trip) |
 | S1 | lazy arming: allocate the ring in `historyEnsureRing` instead of at reset | ring battery R8 (ring must be armed at reset, before any capture) |
 | P1 | reintroduce a capture-time preview with the historical slip — `sizeof` of a pointer passed as the formatter's string budget | ring battery R9, locally: "wrote into errorMessage" + "switched calcMode" (the silent displayBugScreen class caught at the capture) |
+
+| V1 | drop the clamp in `historyBrowserUp` | browser battery B2 (ups must clamp at the newest) |
+| V2 | drop the leave in `historyBrowserEnter` | browser battery B3 (ENTER must leave the browser) |
 
 R10 carries no mutation pin: it pins an **upstream** contract, not package
 code — if it ever goes red, TMP_STR_LENGTH stopped being enough and the U2

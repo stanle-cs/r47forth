@@ -72,5 +72,17 @@
      restore-tail hook re-arms after a state load, and the suite proves
      that path itself: undo_history.txt runs after serialize_cov's
      backup-restore cycle and R8 asserts the ring is armed.
+- **2026-08-25 (U2).** The browser landed per the original browser-mode
+  ruling (CM_HIST_BROWSER, the CM_ASN_BROWSER precedent). One measured
+  composition lesson: the first combined gate failed because our
+  CM_HIST_BROWSER addition edited determineItem's combined key-resolution
+  list — the exact line forth-core's patch rewrites; an insertion adjacent
+  to it conflicted too (three-way merges treat insertion-next-to-
+  modification as overlap). Resolved by giving the mode its own branch at
+  the head of that chain, in the clear gap between forth-core's hunks —
+  now a binding composition claim in DESIGN.md §6. Render verified on real
+  pixels via the run-sim dump path (marker-removed temporary capture in
+  the battery driver; status bar, newest-first rows, inverted selection,
+  cursor mark all present).
 - **2026-08-24.** Catalog name "HIST" found taken by upstream item 1401
   (CAT_MENU); U2 browser item renamed U.HIST, rows 427-429 kept.
