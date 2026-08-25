@@ -84,3 +84,26 @@ Simulator captures cannot stand in for the hardware checks the post
 needs (R/S interrupting SPIN is hardware-only; forum/DESIGN.md §5 has
 the full list). These are illustrations, taken where the sim and the
 device provably render alike.
+
+# Undo history screenshots (sim, 2026-08-25)
+
+Three LCD captures for the undo-history post, taken at the stage-u2 tree
+(package base faf9d698c). Same mechanism as the Forth set: real 400x240
+framebuffer dumps via `fnScreenDump`, scaled 2x, driven by a temporary
+marker-wrapped block inside the package's own `historyTestBrowser` battery
+driver, removed after capture with the full gate re-run green. The browser
+states shown are the ones the battery pins on every gate run: entry,
+selection and cursor placement by B1-B4, the gap flag by ring case R5, the
+restore path by B3.
+
+1. `undo-attach-1-history-view.png` — the view after a 13-step session
+   (arithmetic, a 2x3 matrix transposed, SLVQ on 1/-3/2, an oversized
+   string, a complex number) and one UNDO. Shows the (now) anchor with a
+   complex preview, the * cursor on the selected row, a ~ gap mark, the
+   SLVQ label, and a [3x2] matrix preview.
+2. `undo-attach-2-gap.png` — five levels after an oversized state was
+   skipped: numbering stays consecutive and the ~ on the newest level is
+   the only trace of the missing state.
+3. `undo-attach-3-restored.png` — the normal screen after ENTER on the
+   SLVQ level: [3x2 Matrix], 1., -3., 2 back on the stack, the complete
+   pre-solver state.
