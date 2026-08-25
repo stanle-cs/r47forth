@@ -178,11 +178,14 @@ static int historySerializePush(bool_t fromSaved, int16_t labelItem, uint8_t ext
   h.sysFlags1  = fromSaved ? savedSystemFlags1 : systemFlags1;
   h.lrSel      = fromSaved ? lrSelectionUndo : lrSelection;
   h.lrCho      = sumsSource != NULL ? (fromSaved ? lrChosenUndo : lrChosen) : 0;
-  // Deliberately NO display formatting here: ROUND/RSD compute by rendering
-  // X into displayValueX and re-parsing it, so the display pipeline is part
-  // of upstream's math path — re-entering it mid-capture perturbs live
-  // state (surfaced as a wrong SPIRAL program result three test files
-  // later). The browser formats entries lazily at render time instead.
+  // Deliberately NO display formatting here. The display path is not
+  // side-effect-free in a capture context: its validation failures call
+  // displayBugScreen(), which silently switches calcMode mid-operation
+  // (invisible headless — it surfaced as a wrong SPIRAL program result
+  // three test files later), ROUND/RSD do real math through the global
+  // displayValueX, and part of the family assumes TMP_STR_LENGTH buffers
+  // without checking. The browser formats entries lazily at render time,
+  // in display context, instead.
 
   offset = historyUsedBytes + historyRound8(sizeof(historyEntryHeader_t));
   for(uint8_t i = 0; i < regCount; i++) {
@@ -673,6 +676,176 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = ERROR_NONE;
     if(historyEntryCount != before) {
       historyTestFail("R7 error-rollback fnUndo must not mint an anchor");
+    }
+  }
+
+  { // R8: storage independence — the ring must live outside the C47 pool
+    // and a capture must cost the pool nothing. The pool-resident ring
+    // measurably broke upstream's RCL58 eigen test (fragmentation), so this
+    // is a structural ownership check, not a style preference.
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_X, 42);
+    saveForUndo();                       // arms the ring
+    if(historyRing == NULL) {
+      historyTestFail("R8 ring should be armed after a capture");
+    }
+    else {
+      const uint8_t *poolLo = (const uint8_t *)ram;
+      const uint8_t *poolHi = (const uint8_t *)(ram + RAM_SIZE_IN_BLOCKS);
+      if((const uint8_t *)historyRing >= poolLo && (const uint8_t *)historyRing < poolHi) {
+        historyTestFail("R8 ring must not live inside the C47 pool");
+      }
+      uint32_t freeBefore = getFreeRamMemory();
+      undoHistoryCapture();              // direct: full serialize, dedupe-merge
+      if(getFreeRamMemory() != freeBefore) {
+        historyTestFail("R8 a capture must not allocate from the pool");
+      }
+    }
+  }
+
+  { // R9: capture purity — serialization must leave the machine surface
+    // untouched. The class that broke SPIRAL: a display-formatter call
+    // during capture whose validation failure ran displayBugScreen(), which
+    // silently flips calcMode (invisible headless; the damage surfaced
+    // three test files later). calcMode is asserted here for exactly that
+    // reason. This fences the enumerable surface; the suite's own
+    // ulp -> programs ordering stays the integration guard for the rest.
+    char dvxBefore[DISPLAY_VALUE_LEN];
+    realContext_t c34, c39, c75;
+    longInteger_t li;
+    bool_t udvx;
+    uint8_t df, dfd, sd;
+    uint32_t am, dm, cm, pcm, ti;
+    uint64_t sf0, sf1;
+    uint8_t ec;
+
+    historyTestBaseline();
+    // Stage the two trigger shapes on the stack: a 49-digit long integer in
+    // X (the width that trips longIntegerToAllocatedString's validation
+    // when a caller lies about its buffer) and a complex34 in Y.
+    longIntegerInit(li);
+    uInt32ToLongInteger(9999999u, li);
+    longIntegerMultiply(li, li, li);
+    longIntegerMultiply(li, li, li);                     // ~28 digits
+    longIntegerMultiplyUInt(li, 4000000000u, li);
+    longIntegerMultiplyUInt(li, 4000000000u, li);        // ~47-49 digits
+    convertLongIntegerToLongIntegerRegister(li, REGISTER_X);
+    longIntegerFree(li);
+    reallocateRegister(REGISTER_Y, dtComplex34, 0, amNone);
+    stringToReal34("2.5", REGISTER_REAL34_DATA(REGISTER_Y));
+    stringToReal34("-1.5", REGISTER_IMAG34_DATA(REGISTER_Y));
+
+    // Snapshot BEFORE the first capture: the window must cover the capture
+    // inside saveForUndo() too, or a one-shot state switch there (the
+    // displayBugScreen class latches behind its own calcMode guard) escapes
+    // the assertions below.
+    memset(tmpString, 0x5a, 256);
+    memset(errorMessage, 0x5a, 64);
+    xcopy(dvxBefore, displayValueX, DISPLAY_VALUE_LEN);
+    udvx = updateDisplayValueX;
+    df   = displayFormat;
+    dfd  = displayFormatDigits;
+    sd   = significantDigits;
+    am   = (uint32_t)currentAngularMode;
+    dm   = denMax;
+    sf0  = systemFlags0;
+    sf1  = systemFlags1;
+    ec   = lastErrorCode;
+    cm   = (uint32_t)calcMode;
+    pcm  = (uint32_t)previousCalcMode;
+    ti   = (uint32_t)temporaryInformation;
+    xcopy(&c34, &ctxtReal34, sizeof(realContext_t));
+    xcopy(&c39, &ctxtReal39, sizeof(realContext_t));
+    xcopy(&c75, &ctxtReal75, sizeof(realContext_t));
+
+    saveForUndo();                       // SAVED_X/SAVED_Y hold the triggers
+    undoHistoryCapture();
+
+    for(uint32_t i = 0; i < 256; i++) {
+      if(tmpString[i] != 0x5a) {
+        historyTestFail("R9 capture wrote into tmpString");
+        break;
+      }
+    }
+    for(uint32_t i = 0; i < 64; i++) {
+      if(errorMessage[i] != 0x5a) {
+        historyTestFail("R9 capture wrote into errorMessage");
+        break;
+      }
+    }
+    if(memcmp(dvxBefore, displayValueX, DISPLAY_VALUE_LEN) != 0 || udvx != updateDisplayValueX) {
+      historyTestFail("R9 capture touched displayValueX");
+    }
+    if(df != displayFormat || dfd != displayFormatDigits || sd != significantDigits) {
+      historyTestFail("R9 capture touched the display format");
+    }
+    if(am != (uint32_t)currentAngularMode || dm != denMax) {
+      historyTestFail("R9 capture touched angular mode or denMax");
+    }
+    if(sf0 != systemFlags0 || sf1 != systemFlags1 || ec != lastErrorCode) {
+      historyTestFail("R9 capture touched system flags or the error code");
+    }
+    if(cm != (uint32_t)calcMode || pcm != (uint32_t)previousCalcMode || ti != (uint32_t)temporaryInformation) {
+      historyTestFail("R9 capture switched calcMode or temporary information");
+    }
+    if(memcmp(&c34, &ctxtReal34, sizeof(realContext_t)) != 0 ||
+       memcmp(&c39, &ctxtReal39, sizeof(realContext_t)) != 0 ||
+       memcmp(&c75, &ctxtReal75, sizeof(realContext_t)) != 0) {
+      historyTestFail("R9 capture touched a rounding context");
+    }
+    errorMessage[0] = 0;                 // drop the sentinels
+    tmpString[0] = 0;
+  }
+
+  { // R10: the render-path contract stage U2 relies on — worst-case values
+    // from the formatters U2's lazy preview will call stay inside a
+    // TMP_STR_LENGTH buffer (a 200-byte buffer is smashed regardless of the
+    // final string length; see DESIGN-HISTORY). complex34ToDisplayString is
+    // deliberately absent: it is the state-perturber (see R9) and only runs
+    // in display context, where U2's own tests cover it.
+    static char cbuf[TMP_STR_LENGTH + 256];
+    longInteger_t li;
+    uint8_t df, dfd;
+    bool_t guardIntact = true;
+
+    historyTestBaseline();
+    updateDisplayValueX = false;
+    df  = displayFormat;
+    dfd = displayFormatDigits;
+
+    memset(cbuf + TMP_STR_LENGTH, 0x5a, 256);
+
+    reallocateRegister(REGISTER_X, dtShortInteger, 0, 2);     // base 2, WS=64: the widest render
+    *REGISTER_SHORT_INTEGER_DATA(REGISTER_X) = 0xffffffffffffffffULL;
+    shortIntegerToDisplayString(REGISTER_X, cbuf, false, 0);
+
+    longIntegerInit(li);
+    uInt32ToLongInteger(9999999u, li);
+    for(int i = 0; i < 40; i++) {
+      longIntegerMultiply(li, li, li);   // squares: astronomically many digits capped by maxWidth
+      if(longIntegerBits(li) > 4000) {
+        break;
+      }
+    }
+    convertLongIntegerToLongIntegerRegister(li, REGISTER_X);
+    longIntegerFree(li);
+    longIntegerRegisterToDisplayString(REGISTER_X, cbuf, TMP_STR_LENGTH, 140, 50, false);
+
+    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+    stringToReal34("1.234567890123456789012345678901234e-6143", REGISTER_REAL34_DATA(REGISTER_X));
+    real34ToDisplayString(REGISTER_REAL34_DATA(REGISTER_X), amNone, cbuf, &standardFont, 140, 8, LIMITEXP, !FRONTSPACE, NOIRFRAC);
+
+    for(uint32_t i = 0; i < 256; i++) {
+      if(cbuf[TMP_STR_LENGTH + i] != 0x5a) {
+        guardIntact = false;
+        break;
+      }
+    }
+    if(!guardIntact) {
+      historyTestFail("R10 a formatter wrote past TMP_STR_LENGTH");
+    }
+    if(df != displayFormat || dfd != displayFormatDigits || updateDisplayValueX) {
+      historyTestFail("R10 a render-path formatter left display state changed");
     }
   }
 
