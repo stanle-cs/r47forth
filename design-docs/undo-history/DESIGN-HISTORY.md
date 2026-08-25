@@ -23,15 +23,28 @@
      (saveRestoreBackup.c:831/948), so the config.c doFnReset hook already
      covers state restore.
 - **2026-08-24 (U1, capture purity).** Capture-time preview formatting
-  removed wholesale after a second display-pipeline defect class: with
-  previews on, ulp.txt's fifth capture (a complex34) left state that turned
-  programs.txt SPIRAL (which uses RND) wrong three files later — ROUND/RSD
-  compute *through* the display pipeline (format to `displayValueX`,
-  re-parse), so the pipeline is math, not just paint. Bisected to the exact
-  preview call under gdb (file bisect → call-index bisect → per-type
-  no-op). Ruling: capture never re-enters the display pipeline; the U2
-  browser formats lazily at render time via TEMP_REGISTER_1 staging
-  (registerBrowser precedent). This also dropped the TMP_STR_LENGTH scratch
-  and the per-entry 28-byte preview field.
+  removed wholesale after a wrong SPIRAL program result three test files
+  downstream of ulp.txt captures. Ruling: capture never re-enters the
+  display pipeline; the U2 browser formats lazily at render time via
+  TEMP_REGISTER_1 staging (registerBrowser precedent). Also dropped the
+  TMP_STR_LENGTH scratch and the per-entry 28-byte preview field.
+- **2026-08-25 (root cause corrected).** The first causal story for the
+  SPIRAL failure (ROUND/RSD computing through `displayValueX`) was wrong —
+  plausible, consistent with the bisects, and unproven. A config-matrix
+  rerun (formatter × buffer location × malloc size × tail writes) plus a
+  `displayBugScreen` breakpoint found the true chain: the tail-buffer
+  preview passed `sizeof(buf)` where `buf` was a **pointer** → strLg = 8 →
+  a 48-digit long-integer preview tripped `longIntegerToAllocatedString`'s
+  validation → `displayBugScreen` → `calcMode = CM_BUG_ON_SCREEN`,
+  **silently** (LCD-only, headless-invisible) → SPIRAL later computed under
+  bug-screen mode. Two upstream findings extracted (silent headless bug
+  screens; uneven formatter buffer-contract enforcement — the ShoI member
+  smashes a 200-byte stack buffer with no check at all, which was the
+  earlier SIGSEGV). The capture-purity ruling stands, now for proven
+  reasons; R9 asserts calcMode — the global the first diagnosis never
+  diffed — and pin P1 reproduces the exact historical slip against it.
+  The ROUND/RSD `displayValueX` architecture is real and stays listed as a
+  reason display code is never side-effect-free, but it was NOT the SPIRAL
+  mechanism.
 - **2026-08-24.** Catalog name "HIST" found taken by upstream item 1401
   (CAT_MENU); U2 browser item renamed U.HIST, rows 427-429 kept.

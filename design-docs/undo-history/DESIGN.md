@@ -83,17 +83,22 @@ made live by navigation.
   argument, payload length, payload bytes. Restore is
   `reallocateRegister(SAVED_*, …)` + copy + `setRegisterTag`, aborting
   cleanly on ERROR_RAM_FULL with the ring untouched.
-- **Capture is pure serialization — no display formatting, ever.** Two
-  measured reasons (see DESIGN-HISTORY): the `*ToDisplayString` family is
-  written against TMP_STR_LENGTH buffers and smashes smaller stack buffers
-  regardless of final string length; and the display pipeline is part of
-  upstream's *math* path — ROUND/RSD compute by rendering X into the global
-  `displayValueX` and re-parsing it, so re-entering the pipeline mid-capture
-  perturbs live state (surfaced as a wrong SPIRAL program result three test
-  files later). Entry previews for the U2 browser are therefore formatted
-  **lazily at render time**, staging the serialized X record into
-  TEMP_REGISTER_1 — registerBrowser's own scratch pattern — in display
-  context where these functions are designed to run.
+- **Capture is pure serialization — no display formatting, ever.** Three
+  measured reasons (see DESIGN-HISTORY and the UPSTREAM_REPORTS_* files):
+  the `*ToDisplayString` family assumes TMP_STR_LENGTH buffers and one
+  member smashes smaller stack buffers without any check; another member
+  validates its length but fails through `displayBugScreen`, which
+  **silently switches calcMode** in headless builds — a capture-time
+  formatting failure therefore changes machine state mid-operation and
+  surfaces as wrong results arbitrarily far away (measured: a wrong SPIRAL
+  program result three test files after the trigger); and ROUND/RSD
+  genuinely compute through the global `displayValueX`, so display code is
+  not side-effect-free by design. Battery case R9 fences the enumerable
+  surface (calcMode included) around a capture; R10 pins the
+  TMP_STR_LENGTH contract the U2 render path will rely on. Entry previews
+  for the U2 browser are formatted **lazily at render time**, staging the
+  serialized X record into TEMP_REGISTER_1 — registerBrowser's own scratch
+  pattern — in display context where these functions are designed to run.
 
 ## 4. Gates (load-bearing)
 
@@ -137,7 +142,18 @@ persistence of the ring is possible future work for the upstream MR, not v1.
   `CUSTOM_PKG=packages/forth-core,packages/undo-history`) is the proof; any
   drift fails loudly at patch-apply time by design.
 
-## 7. Upstream patch surface (7 files)
+## 7. Upstream findings (reported, not patched)
+
+Three defects/fragilities in unrelated upstream code were found and
+root-caused during bring-up. Per the 2026-08-25 ruling they are addressed
+**without modifying upstream code unrelated to this feature**: each has a
+package-side structural/class test plus a paste-ready report —
+`UPSTREAM_REPORTS_eigen_pool_fragmentation.md` (guarded by R8 and the
+suite's own RCL58), `UPSTREAM_REPORTS_displayBugScreen_headless.md`
+(guarded by R9), `UPSTREAM_REPORTS_toDisplayString_buffer_contract.md`
+(pinned by R10).
+
+## 8. Upstream patch surface (7 files)
 
 stack.c (capture tail + fnUndo two-branch), items.c (label line, two rows,
 two generator stubs), items.h (two renamed spare defines), c47.h (one

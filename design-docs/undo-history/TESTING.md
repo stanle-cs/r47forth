@@ -11,8 +11,15 @@ the forthTestRunFromX pattern) in testSuite.c and ships
   translation unit): round-trip restore per type, dedupe, eviction
   offset/size coherence, branch truncation + merge-after-restore, oversized
   skip + GAPBEFORE, the fnUndo/fnRedo cursor walk incl. both no-op ends,
-  and the two gates (FLAG_SOLVING exclusion; error-rollback fnUndo minting
-  no anchor — the RANI# class). X returns the failure count; the .txt
+  the two gates (FLAG_SOLVING exclusion; error-rollback fnUndo minting no
+  anchor — the RANI# class), and the three finding guards: **R8** storage
+  independence (ring address outside the pool, capture costs the pool
+  nothing), **R9** capture purity (display/math/mode surface byte-identical
+  across a capture, calcMode included — the window opens BEFORE
+  saveForUndo so a one-shot latch cannot escape it), **R10** the
+  TMP_STR_LENGTH render contract for the formatters U2's lazy preview will
+  call (sentinel-guarded worst cases; complex34ToDisplayString deliberately
+  excluded — display context only). X returns the failure count; the .txt
   asserts `RX=LonI:"0"`.
 - `historyTestSequence` — script-from-X sequencer: unsigned integer tokens
   enter values with the closeNim ordering (saveForUndo, lift, write), any
@@ -44,5 +51,12 @@ restores:
 | M3 | drop `undoHistoryUserContext()` from fnUndo's ring branch (stack.c) | ring battery R7 (FLAG_SOLVING walk) |
 | M4 | `historyCursor - 1` → `historyCursor + 1` in `undoHistoryStepBack` | ring battery R6 / sequence three-deep walk |
 | M5 | drop `setRegisterTag` in `historyRestoreToIndex` | ring battery R1 (tagged real34 round-trip) |
+| S1 | `malloc` → `allocC47Blocks` in `historyEnsureRing` | ring battery R8 (ring address inside the pool) |
+| P1 | reintroduce a capture-time preview with the historical slip — `sizeof` of a pointer passed as the formatter's string budget | ring battery R9, locally: "wrote into errorMessage" + "switched calcMode" (the silent displayBugScreen class caught at the capture) |
+
+R10 carries no mutation pin: it pins an **upstream** contract, not package
+code — if it ever goes red, TMP_STR_LENGTH stopped being enough and the U2
+render plan needs revisiting, which is precisely the alarm it exists to
+raise.
 
 Run results are recorded in the stage commit message, not here.
