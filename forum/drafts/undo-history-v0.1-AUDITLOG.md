@@ -150,3 +150,17 @@ reason). Battery: voicematch2 release all ok; aiaudit 5 flags (4
 rule-of-three enumerations + instead-of-pivot on the real design
 alternative, judged keep); framescan shapes are enumeration frames, no
 tails, no shingles. Cross-model round on r3 launched.
+
+Cross-model round on r3 (readers verified: Gemini 3.1 Pro (High),
+GPT-5): both human verdicts. Gemini's comma-splice observation is the
+right kind of evidence ("a massive tell that a human wrote it" — they
+are corpus-native). Dispositions: parenthetical-reason bullets and the
+UNDO-subject openers KEPT (his ruled shapes; auditor polish-push);
+"Why skip instead of dropping older levels" KEPT (content-bearing
+reader question, the published v0.3 shape; Codex itself says leave it);
+ONE fix applied — the comma before "without restoring anything" dropped
+(bolted-on rhythm, same words). Battery re-run clean after the edit.
+Exit criterion met: scanners clean-as-judged plus clean-as-judged
+audits from both non-drafting models in the same round. Stan reads r3;
+the FACTS sheet stands if he prefers to write from it. Open items
+unchanged: unpushed base commit, thread placement, attachment indices.
