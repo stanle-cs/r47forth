@@ -85,6 +85,7 @@ void covAmort(uint16_t which);
 void covAmortNext(uint16_t which);
 void historyTestRing(uint16_t unusedButMandatoryParameter);       // undo-history package driver
 void historyTestSequence(uint16_t unusedButMandatoryParameter);   // undo-history package driver
+void historyTestBrowser(uint16_t unusedButMandatoryParameter);    // undo-history package driver
 void covEqSet(uint16_t which);
 void covEqClear(uint16_t unusedButMandatoryParameter);
 void covLoadGraphPgms(uint16_t unusedButMandatoryParameter);
@@ -717,6 +718,7 @@ const funcTest_t funcTestNoParam[] = {
   // They have no indexOfItems row, hence the coverageDriver flag.
   {"historyTestRing",        historyTestRing,     1},
   {"historyTestSequence",    historyTestSequence, 1},
+  {"historyTestBrowser",     historyTestBrowser,  1},
   {"fnClAll",                fnClAll               },
   {"fnWho",                  fnWho                 },
 

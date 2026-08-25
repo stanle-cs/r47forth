@@ -1,5 +1,5 @@
 diff --git a/src/c47/saveRestoreBackup.c b/src/c47/saveRestoreBackup.c
-index 621cd37c31bfa17f47be2cfd0282d7a88a358fa9..f029a4ae54d0cdb3141c68e6cd343aca47ed4e3c 100644
+index 621cd37c31bfa17f47be2cfd0282d7a88a358fa9..25cd9e68fdc99322665efeb750c5516e039ce41a 100644
 --- a/src/c47/saveRestoreBackup.c
 +++ b/src/c47/saveRestoreBackup.c
 @@ -1478,6 +1478,11 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
@@ -14,3 +14,11 @@ index 621cd37c31bfa17f47be2cfd0282d7a88a358fa9..f029a4ae54d0cdb3141c68e6cd343aca
      //defineCurrentLocalRegisters();
  
      //save and restore screenData is not mandatory
+@@ -1502,6 +1507,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+             || calcMode == CM_FLAG_BROWSER
+             || calcMode == CM_ASN_BROWSER
+             || calcMode == CM_FONT_BROWSER
++            || calcMode == CM_HIST_BROWSER
+             || calcMode == CM_PEM
+             || calcMode == CM_PLOT_STAT
+             || calcMode == CM_GRAPH

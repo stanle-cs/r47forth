@@ -1,0 +1,174 @@
+diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
+index bc44026016e94a8865b8acc886386341596641c6..9432e611cbbc05c03c3f7610ee91fffdf926fab4 100644
+--- a/src/c47/keyboard.c
++++ b/src/c47/keyboard.c
+@@ -687,7 +687,7 @@ static void executeFunction(const char *data, int16_t item_);
+       #pragma GCC diagnostic pop
+         _closeCatalog();
+       }
+-      else if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER) {
++      else if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_HIST_BROWSER) {
+ 
+                     #if defined(VERBOSEKEYS)
+                     printf(">>>>Z 0012 btnFnPressed >>determineFunctionKeyItem_C47; data=|%s| data[0]=%d shiftF=%d shiftG=%d\n", (char*)data, ((char*)data)[0], shiftF, shiftG);
+@@ -829,7 +829,7 @@ endReturnTrue:
+       return;
+     }
+ 
+-    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER) {
++    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_HIST_BROWSER) {
+       if(tam.mode == TM_KEY && !tam.keyInputFinished) {
+         if(tam.digitsSoFar == 0) {
+           switch(((char *)data)[0]) {
+@@ -937,7 +937,7 @@ endReturnTrue:
+                       printf("keyboard.c: executeFunction %i (beginning of executeFunction): %i, %s tam.mode=%i calcMode=%u aimBuffer=%s\n", item, currentMenu(), indexOfItems[-currentMenu()].itemSoftmenuName, tam.mode, calcMode, aimBuffer);
+                     #endif //VERBOSEKEYS
+ 
+-    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER) {
++    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_HIST_BROWSER) {
+ 
+       if(data[0] == 0) {
+         item = item_;
+@@ -1601,7 +1601,7 @@ endReturnTrue:
+     }
+ 
+     //handle the shift button processing
+-    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_TIMER)) {
++    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER || calcMode == CM_TIMER)) {
+       if(((key->primary == ITM_SHIFTf || ShiftOverride == ITM_SHIFTf))) {
+         commonShiftProcessing(ITM_SHIFTf);
+         return ITM_NOP;
+@@ -1634,7 +1634,12 @@ endReturnTrue:
+                       jm_show_comment(tmp);
+                     #endif //PC_BUILD
+                                                                                                                          //JM shifts
+-    if( !tam.mode && (calcMode == CM_NIM || calcMode == CM_NORMAL) && (lastIntegerBase >= 2 && getSystemFlag(FLAG_TOPHEX)) && (key_no >= 0 && key_no <= 5 )) {               //JMNIM vv Added direct A-F for hex entry
++    if(calcMode == CM_HIST_BROWSER) {   // mutually exclusive with every branch below
++      result = shiftF ? key->fShifted :
++               shiftG ? key->gShifted :
++                        key->primary;
++    }
++    else if( !tam.mode && (calcMode == CM_NIM || calcMode == CM_NORMAL) && (lastIntegerBase >= 2 && getSystemFlag(FLAG_TOPHEX)) && (key_no >= 0 && key_no <= 5 )) {               //JMNIM vv Added direct A-F for hex entry
+       result = shiftF ? key->fShifted :
+                shiftG ? key->gShifted :
+                         key->primaryAim;
+@@ -2305,7 +2310,8 @@ RELEASE_END:
+         case CM_REGISTER_BROWSER:
+         case CM_FLAG_BROWSER:
+         case CM_ASN_BROWSER:
+-        case CM_FONT_BROWSER: {
++        case CM_FONT_BROWSER:
++        case CM_HIST_BROWSER: {
+           screenUpdatingMode = SCRUPD_AUTO;
+           break;
+         }
+@@ -2571,7 +2577,7 @@ RELEASE_END:
+             }
+             keyActionProcessed = true;
+           }
+-          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_TIMER) {
++          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER || calcMode == CM_TIMER) {
+             keyActionProcessed = true;
+           }
+           break;
+@@ -2608,7 +2614,7 @@ RELEASE_END:
+             }
+             keyActionProcessed = true;
+           }
+-          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER) {
++          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER) {
+             keyActionProcessed = true;
+           }
+           else if(calcMode == CM_CONFIRMATION) {
+@@ -3565,6 +3571,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+         break;
+       }
+ 
++      case CM_HIST_BROWSER: {
++        historyBrowserEnter();
++        break;
++      }
++
+       case CM_REGISTER_BROWSER:
+       case CM_FLAG_BROWSER:
+       case CM_ASN_BROWSER:
+@@ -3654,6 +3665,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+         case CM_FLAG_BROWSER:
+         case CM_ASN_BROWSER:
+         case CM_FONT_BROWSER:
++        case CM_HIST_BROWSER:
+         case CM_CONFIRMATION:
+         case CM_ERROR_MESSAGE:
+         case CM_BUG_ON_SCREEN: {
+@@ -3728,6 +3740,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+       case CM_FLAG_BROWSER:
+       case CM_ASN_BROWSER:
+       case CM_FONT_BROWSER:
++      case CM_HIST_BROWSER:
+       case CM_CONFIRMATION:
+       case CM_ERROR_MESSAGE:
+       case CM_BUG_ON_SCREEN: {
+@@ -3927,6 +3940,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+         break;
+       }
+ 
++      case CM_HIST_BROWSER: {
++        historyBrowserLeave();
++        break;
++      }
++
+       case CM_REGISTER_BROWSER:
+       case CM_FLAG_BROWSER:
+       case CM_FONT_BROWSER: {
+@@ -4200,6 +4218,7 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
+       case CM_FLAG_BROWSER:
+       case CM_ASN_BROWSER:
+       case CM_FONT_BROWSER:
++      case CM_HIST_BROWSER:
+       case CM_PLOT_STAT:
+       case CM_TIMER:
+       case CM_LISTXY:
+@@ -4336,6 +4355,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+         break;
+       }
+ 
++      case CM_HIST_BROWSER: {
++        historyBrowserLeave();
++        break;
++      }
++
+       case CM_REGISTER_BROWSER:
+       case CM_FLAG_BROWSER:
+       case CM_FONT_BROWSER: {
+@@ -4597,6 +4621,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+         break;
+       }
+ 
++      case CM_HIST_BROWSER: {
++        historyBrowserUp();
++        break;
++      }
++
+       case CM_ASN_BROWSER: {
+         currentAsnScr++;                          //JM removed the 3-x part
+         if(currentAsnScr == 0 ||currentAsnScr >= 7) {
+@@ -4823,6 +4852,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+         break;
+       }
+ 
++      case CM_HIST_BROWSER: {
++        historyBrowserDown();
++        break;
++      }
++
+       case CM_FONT_BROWSER: {
+         if(currentFntScr < numScreensNumericFont + numScreensNumericFontBold + numScreensStandardFont + numScreensTinyFont) {
+           currentFntScr++;
+@@ -4935,6 +4969,7 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+       case CM_FLAG_BROWSER:
+       case CM_ASN_BROWSER:
+       case CM_FONT_BROWSER:
++      case CM_HIST_BROWSER:
+       case CM_PLOT_STAT:
+       case CM_GRAPH:
+       case CM_MIM:

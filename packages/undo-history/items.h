@@ -446,7 +446,7 @@
 #define ITM_SDR                      424
 #define ITM_ZIP                      425
 #define ITM_UNZIP                    426
-#define ITM_0427                     427
+#define ITM_UHIST                    427
 #define ITM_REDO                     428
 #define ITM_HCLR                     429
 #define ITM_0430                     430

@@ -1,13 +1,15 @@
 diff --git a/src/c47/items.h b/src/c47/items.h
-index 98924313217f3b57f1b663367c8e45c0dc0f1010..5aa07ede7b2c4f9aa7eedf69efd884d593b6df44 100644
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..7bd1cd361c354a3032ba54e5aaff6bdfa4bcd72f 100644
 --- a/src/c47/items.h
 +++ b/src/c47/items.h
-@@ -447,8 +447,8 @@
+@@ -446,9 +446,9 @@
+ #define ITM_SDR                      424
  #define ITM_ZIP                      425
  #define ITM_UNZIP                    426
- #define ITM_0427                     427
+-#define ITM_0427                     427
 -#define ITM_0428                     428
 -#define ITM_0429                     429
++#define ITM_UHIST                    427
 +#define ITM_REDO                     428
 +#define ITM_HCLR                     429
  #define ITM_0430                     430

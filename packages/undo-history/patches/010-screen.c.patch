@@ -1,0 +1,28 @@
+diff --git a/src/c47/screen.c b/src/c47/screen.c
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..aff166fea55ff354812e02c34042bd467bc92513 100644
+--- a/src/c47/screen.c
++++ b/src/c47/screen.c
+@@ -648,7 +648,7 @@ void execTimerApp(uint16_t timerType) {
+ 
+   uint16_t yUnderlined = 3;
+   void underline_softkey(uint16_t xSoftkeyMask, uint16_t ySoftkey) {
+-    if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || (!getSystemFlag(FLAG_FGLNFUL) && !getSystemFlag(FLAG_FGLNLIM))  ) {
++    if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER || (!getSystemFlag(FLAG_FGLNFUL) && !getSystemFlag(FLAG_FGLNLIM))  ) {
+       return;
+     }
+     xSoftkeyMask &= (GRAPHMODE ? 0b000011u : 0b111111u);
+@@ -6152,6 +6152,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+         force_refresh(force);
+         break;
+ 
++      case CM_HIST_BROWSER:
++        last_CM = calcMode;
++        clearScreen(19);
++        historyBrowser(NOPARAM);
++        refreshStatusBar();
++        force_refresh(force);
++        break;
++
+       case CM_FONT_BROWSER:
+         last_CM = calcMode;
+         clearScreen(10);

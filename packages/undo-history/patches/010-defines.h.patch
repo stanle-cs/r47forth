@@ -1,0 +1,12 @@
+diff --git a/src/c47/defines.h b/src/c47/defines.h
+index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..d0b2ea66b82d201fe406b0f94f3953751411ffa4 100644
+--- a/src/c47/defines.h
++++ b/src/c47/defines.h
+@@ -1719,6 +1719,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
+ #define CM_NO_UNDO                                16 // Running functions without undo affected
+ #define CM_ASN_BROWSER                            17 // Assignments browser   //JM
+ #define CM_LISTXY                                 18 // Display stat list   //JM
++#define CM_HIST_BROWSER                           19 // Undo history browser
+ 
+ // Next character in AIM 2 bits
+ #define NC_NORMAL                                  0

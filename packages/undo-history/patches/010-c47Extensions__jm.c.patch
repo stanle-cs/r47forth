@@ -1,0 +1,12 @@
+diff --git a/src/c47/c47Extensions/jm.c b/src/c47/c47Extensions/jm.c
+index 915512692959c985b36bfce8d3643148f41abfe6..2b5c89d8f5015f1b25f96215adc6b02474a08e50 100644
+--- a/src/c47/c47Extensions/jm.c
++++ b/src/c47/c47Extensions/jm.c
+@@ -18,6 +18,7 @@
+       if(cm == CM_ASN_BROWSER)      return "asn.bro";
+       if(cm == CM_FLAG_BROWSER)     return "flg.bro";
+       if(cm == CM_FONT_BROWSER)     return "fnt.bro";
++      if(cm == CM_HIST_BROWSER)     return "his.bro";
+       if(cm == CM_PLOT_STAT)        return "plot.st";
+       if(cm == CM_GRAPH)            return "plot.gr";
+       if(cm == CM_ERROR_MESSAGE)    return "err.msg";

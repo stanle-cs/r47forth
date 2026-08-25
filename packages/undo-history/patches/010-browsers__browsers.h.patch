@@ -1,0 +1,11 @@
+diff --git a/src/c47/browsers/browsers.h b/src/c47/browsers/browsers.h
+index 0ee97eb3a4e1c9a4eefd886a8f18ea0e06fa8cc8..c0ba5b5787db5a76bb6f501f533722505b743da5 100644
+--- a/src/c47/browsers/browsers.h
++++ b/src/c47/browsers/browsers.h
+@@ -10,5 +10,6 @@
+   #include "asnBrowser.h"
+   #include "flagBrowser.h"
+   #include "fontBrowser.h"
++  #include "historyBrowser.h"
+   #include "registerBrowser.h"
+ #endif // !BROWSERS_H

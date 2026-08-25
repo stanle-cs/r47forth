@@ -1507,6 +1507,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
             || calcMode == CM_FLAG_BROWSER
             || calcMode == CM_ASN_BROWSER
             || calcMode == CM_FONT_BROWSER
+            || calcMode == CM_HIST_BROWSER
             || calcMode == CM_PEM
             || calcMode == CM_PLOT_STAT
             || calcMode == CM_GRAPH

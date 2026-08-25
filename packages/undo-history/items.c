@@ -1678,6 +1678,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnAlphaTrim                (uint16_t unusedButMandatoryParameter) {}
   void fnRedo                     (uint16_t unusedButMandatoryParameter) {}
   void fnHistoryClear             (uint16_t unusedButMandatoryParameter) {}
+  void historyBrowser             (uint16_t unusedButMandatoryParameter) {}
   void fnSaveStackRegisters       (uint16_t unusedButMandatoryParameter) {}
   void fnSaveNRegisters           (uint16_t unusedButMandatoryParameter) {}
   void fnSaveRegister             (uint16_t unusedButMandatoryParameter) {}
@@ -2255,7 +2256,7 @@ TO_QSPI const item_t indexOfItems[] = {
 /*  424 */  { fnSdr,                           TM_VALUE,                    "SDR",                                         "SDR",                                         (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NUMBER_8     | HG_ENABLED         | RESULT_IN_X },
 /*  425 */  { fnZip,                           NOPARAM,                     "ZIP",                                         "ZIP",                                         (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /*  426 */  { fnUnzip,                         NOPARAM,                     "UNZIP",                                       "UNZIP",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
-/*  427 */  { itemToBeCoded,                   NOPARAM,                     "0427",                                        "0427",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/*  427 */  { historyBrowser,                  NOPARAM,                     "U.HIST",                                      "U.HIST",                                      (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /*  428 */  { fnRedo,                          NOPARAM,                     "REDO",                                        "REDO",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         | RESULT_IN_X },
 /*  429 */  { fnHistoryClear,                  NOPARAM,                     "HCLR",                                        "HCLR",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /*  430 */  { itemToBeCoded,                   NOPARAM,                     "0430",                                        "0430",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },

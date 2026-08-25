@@ -1,0 +1,12 @@
+diff --git a/src/c47/debug.c b/src/c47/debug.c
+index 4bfc3e7ec26f4a64b8ea151d37d3ec69e375c4cc..a9ce974667c11446d4fba5300986913a41b810cb 100644
+--- a/src/c47/debug.c
++++ b/src/c47/debug.c
+@@ -520,6 +520,7 @@ void debugNIM(void) {
+       case CM_ASN_BROWSER:      return "asn.bro";
+       case CM_FLAG_BROWSER:     return "flg.bro";
+       case CM_FONT_BROWSER:     return "fnt.bro";
++      case CM_HIST_BROWSER:     return "his.bro";
+       case CM_PLOT_STAT:        return "plot.st";
+       case CM_GRAPH:            return "plot.gr";
+       case CM_ERROR_MESSAGE:    return "err.msg";

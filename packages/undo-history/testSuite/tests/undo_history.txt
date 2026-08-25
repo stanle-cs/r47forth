@@ -14,6 +14,14 @@ Func: historyTestRing
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 
+Func: historyTestBrowser
+
+; Browser state machine: entry mode/selection, clamped navigation,
+; ENTER-restore with cursor placement, reopen-at-cursor, the empty
+; browser, and preview staging into TEMP_REGISTER_1.
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"
+
 Func: historyTestSequence
 
 ; Single value entry.

@@ -1,0 +1,22 @@
+diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
+index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..27c432d224dfb25cc9583f198d0bb7019d558bd9 100644
+--- a/src/c47/softmenus.c
++++ b/src/c47/softmenus.c
+@@ -391,7 +391,7 @@ TO_QSPI const int16_t menu_HPLOT[]   = {
+ 
+ TO_QSPI const int16_t menu_STK[]         = { ITM_DROP,                      ITM_Rdown,                  ITM_Rup,                  ITM_LASTX,             ITM_FILL,                    ITM_CLSTK,
+                                              ITM_DROPY,                     ITM_Xex,                    ITM_Yex,                  ITM_Zex,               ITM_Tex,                     ITM_SHUFFLE,
+-                                             ITM_4SWAP,                     ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                   -MNU_MULTSTK                   };
++                                             ITM_4SWAP,                     ITM_UHIST,                  ITM_REDO,                 ITM_HCLR,              ITM_NULL,                   -MNU_MULTSTK                   };
+ 
+ TO_QSPI const int16_t menu_MULTSTK[]     = { ITM_3STO,                      ITM_3RCL,                   ITM_3DROP,                ITM_3DUP,              ITM_3SWAP,                   ITM_4SWAP,
+                                              ITM_2STO,                      ITM_2RCL,                   ITM_NDROP,                ITM_NDUP,              ITM_NSWAP,                   ITM_NULL                      };
+@@ -3115,7 +3115,7 @@ void showSoftmenuCurrentPart(void) {
+   screenUpdatingMode &= ~(SCRUPD_MANUAL_MENU | SCRUPD_SKIP_MENU_ONE_TIME);
+   setScreenUpdateFromMenu(softmenu[m].menuItem, openMenu);
+ 
+-  if((!IS_BASEBLANK_(m) || BASE_OVERRIDEONCE) && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_REGISTER_BROWSER && calcMode != CM_BUG_ON_SCREEN) {           //JM: Added exclusions, as this procedure is not only called from refreshScreen, but from various places due to underline
++  if((!IS_BASEBLANK_(m) || BASE_OVERRIDEONCE) && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_HIST_BROWSER && calcMode != CM_REGISTER_BROWSER && calcMode != CM_BUG_ON_SCREEN) {           //JM: Added exclusions, as this procedure is not only called from refreshScreen, but from various places due to underline
+     if(currentMenu() != -MNU_SHOW) {                                                                //the blank menu carries no softkeys or underlines, and the screen owner has already painted over the menu area
+       clearScreenOld(false, false, true); //JM, added to ensure the f/g underlines are deleted
+     }

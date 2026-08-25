@@ -1,18 +1,30 @@
 {
   "base_commit": "faf9d698c3042cbc9349541f07ea10d872355bab",
   "files": {
-    "testSuite/tests/undo_history.txt": "7254e9762bdd9137cbc5f176da6d245c126bc0106daebf597e941389efe6fb96",
-    "undoHistory.c": "09b548d6626ca8b82cc9d42068b8be09aa28316d00f403f857841825d3319cec",
-    "undoHistory.h": "d947b521561ed3520f53dd2f8ca38001848f74fb44b4c8074297dc73c9def721"
+    "browsers/historyBrowser.c": "aff8eb51929cd346e78b056ca45e9964a6f95597f143f7bc56f0d5d601c79092",
+    "browsers/historyBrowser.h": "4c08ffd10768041f08eb17d086ca98973fd046fb6ed46cd204c1b61205973386",
+    "testSuite/tests/undo_history.txt": "cda5209cd37a3a726d4492054a9fb6a9a7db43d12671966315cee80994fd4b76",
+    "undoHistory.c": "4f63ed7ab6106f19842be9d50425191c4801c1aed0bde3ba3756865a130762c4",
+    "undoHistory.h": "0327bc7cda23aa4ef26c65d4512d25f8391624a6466a5b8a15f95e2bc3103c4e"
   },
   "patches": {
+    "010-browsers__browsers.h.patch": "2683e909fb7d1ceb21e93806b3f4b443278b990d5130338b663275010c10edf3",
     "010-c47.h.patch": "548fbdc6e79bd23bd894bab0597ca11b2d1abaaec530cff8d5f4584efff4ac8d",
+    "010-c47Extensions__addons.c.patch": "deb9da01eb042fac1808d164712b87ff24e86aa76129e7a1dbff46d992af06b3",
+    "010-c47Extensions__jm.c.patch": "418af455e443e7acd6d70f47fc909ece447d8dc172326c7485a41c4b49ba3a0d",
+    "010-c47Extensions__keyboardTweak.c.patch": "d1e058789cca8fa156744bc91bc6a9f156c0f87df3ee14f0bd9dfd9d14e53552",
     "010-config.c.patch": "98b0569ead121afe6771229a78ed5239bcf5dcef393148617f067f39e48efac7",
-    "010-items.c.patch": "0103858f61ecb270bfd68babdddbe611d8302f40286e314fe4b31d5b583178e3",
-    "010-items.h.patch": "5f1801daf68b64a6f76b41ec5f72868bbde9c52ec21c287ec003c40f8344c688",
-    "010-saveRestoreBackup.c.patch": "afdd990f56b0d42adca6722b73f60342ec4c4ace342d364f5cd7a3bfa9cd5ffa",
+    "010-debug.c.patch": "51f925121fabc42bede7e0d70e03cd4456700f3f32fc8bdbe2622fa83b0a81a3",
+    "010-defines.h.patch": "494a159a79c686028821be7f39a90717e0f2aebe63cf2af2ac9ed2e9dd35dbe1",
+    "010-items.c.patch": "4c056e68e05dbfbc967cab712480fcb5a0e07b69b1a0c371531ac1b94e892a64",
+    "010-items.h.patch": "f0002c7d6d37aff911403d5e413dd7b89176f7ac9cb4015df18267dbcf9093fb",
+    "010-keyboard.c.patch": "8503b068ff1172fdc1cc6767d55ef6c3ba51cef48f829cce493125362f9118c1",
+    "010-saveRestoreBackup.c.patch": "21ab821bd71553d45bb9df98ed9c958a06308e6be048d3aed90a978eab398bc0",
+    "010-screen.c.patch": "fe398fd6917b8e324a4d58adfca60eebc65b8e66482ca12213237b9d4447b3ba",
+    "010-softmenus.c.patch": "d67ce8ca900fd992f00b73c1dba5d15421789083c9758145e5c842591d21e1b6",
     "010-stack.c.patch": "a9aa0b72e7a16e46e9a79523e869e275f504aea30663a1cce14db28072afd714",
-    "010-testSuite__testSuite.c.patch": "247548ee6cf843862c1d9e00aa5c8ea33558b2ce2fabf9a0d52c9e1044d40fc7",
+    "010-statusBar.c.patch": "e8e3fef2dbb9461095e8859dda1c569bc0db204a2868868dd3ac1f9482f831c3",
+    "010-testSuite__testSuite.c.patch": "9d933c4c93207df06eaf5dc7c923451f0fd2e2922f63f1d965fd3651622eb2ba",
     "010-testSuite__tests__testSuiteList.txt.patch": "555c339d0194851711cc63219773f173c4e547f09843bee230725d7a2ef8f134"
   }
 }

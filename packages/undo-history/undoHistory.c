@@ -441,6 +441,58 @@ void undoHistoryReset(void) {
 }
 
 
+
+uint8_t undoHistoryDepth(void) {
+  return historyEntryCount;
+}
+
+int16_t undoHistoryCursorIndex(void) {
+  return historyCursor;
+}
+
+bool_t undoHistoryLevelInfo(uint8_t logical, uint16_t *seq, int16_t *labelItem, uint8_t *flags) {
+  historyEntryHeader_t h;
+  if(historyRing == NULL || logical >= historyEntryCount) {
+    return false;
+  }
+  historyHeaderOf(logical, &h);
+  *seq       = h.seq;
+  *labelItem = h.labelItem;
+  *flags     = h.flags;
+  return true;
+}
+
+bool_t undoHistoryStagePreview(uint8_t logical) {
+  historyRegRecord_t rec;
+  uint32_t offset;
+  uint8_t ecSave;
+  if(historyRing == NULL || logical >= historyEntryCount) {
+    return false;
+  }
+  // The X register is the first record of every entry (slots serialize in
+  // bank order, X first).
+  offset = historyEntryOffset[logical] + historyRound8(sizeof(historyEntryHeader_t));
+  xcopy(&rec, historyRing + offset, sizeof(rec));
+  offset += sizeof(rec);
+  ecSave = lastErrorCode;
+  lastErrorCode = ERROR_NONE;
+  reallocateRegister(TEMP_REGISTER_1, rec.dataType, rec.allocParam, amNone);
+  if(lastErrorCode == ERROR_RAM_FULL) {
+    lastErrorCode = ecSave;              // a preview is best-effort, never an error
+    return false;
+  }
+  lastErrorCode = ecSave;
+  xcopy(getRegisterDataPointer(TEMP_REGISTER_1), historyRing + offset, rec.payloadBytes);
+  setRegisterTag(TEMP_REGISTER_1, rec.tag);
+  return true;
+}
+
+bool_t undoHistoryRestoreLevel(uint8_t logical) {
+  if(!undoHistoryUserContext() || historyRing == NULL || logical >= historyEntryCount) {
+    return false;
+  }
+  return historyRestoreToIndex(logical);
+}
 #if defined(PC_BUILD)
 /* === testSuite coverage drivers ==========================================
  * Registered in testSuite.c's funcTestNoParam with coverageDriver = 1 and
@@ -861,6 +913,92 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
   }
 
   historyTestBaseline();                 // leave no half-navigated state behind
+  historyTestWriteLonI(REGISTER_X, historyTestFailures);
+}
+
+void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
+  historyTestFailures = 0;
+  historyTestBaseline();
+
+  { // B1: entry — mode switch, previous mode kept, selection on the newest.
+    historyTestWriteLonI(REGISTER_X, 1);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 2);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 3);
+    saveForUndo();
+    historyBrowser(NOPARAM);
+    if(calcMode != CM_HIST_BROWSER || previousCalcMode != CM_NORMAL) {
+      historyTestFail("B1 opening must enter CM_HIST_BROWSER from CM_NORMAL");
+    }
+    if(historyBrowserSelection() != (int16_t)undoHistoryDepth() - 1) {
+      historyTestFail("B1 selection must start on the newest level");
+    }
+  }
+
+  { // B2: navigation clamps at both ends.
+    historyBrowserDown();
+    historyBrowserDown();
+    if(historyBrowserSelection() != 0) {
+      historyTestFail("B2 two downs from the top of 3 must reach the oldest");
+    }
+    historyBrowserDown();
+    if(historyBrowserSelection() != 0) {
+      historyTestFail("B2 down at the oldest must hold");
+    }
+    for(int i = 0; i < 5; i++) {
+      historyBrowserUp();
+    }
+    if(historyBrowserSelection() != (int16_t)undoHistoryDepth() - 1) {
+      historyTestFail("B2 ups must clamp at the newest");
+    }
+  }
+
+  { // B3: ENTER restores the selected level and leaves the browser.
+    historyBrowserDown();
+    historyBrowserDown();                // oldest = pre-{1} capture state
+    historyBrowserEnter();
+    if(calcMode != CM_NORMAL) {
+      historyTestFail("B3 ENTER must leave the browser");
+    }
+    if(undoHistoryCursorIndex() != 0) {
+      historyTestFail("B3 ENTER must move the cursor to the restored level");
+    }
+  }
+
+  { // B4: reopening starts on the navigation cursor.
+    historyBrowser(NOPARAM);
+    if(historyBrowserSelection() != 0) {
+      historyTestFail("B4 reopening must select the cursor level");
+    }
+    historyBrowserLeave();
+    if(calcMode != CM_NORMAL) {
+      historyTestFail("B4 EXIT must return to the previous mode");
+    }
+  }
+
+  { // B5: the empty browser opens, renders and leaves cleanly.
+    historyTestBaseline();
+    historyBrowser(NOPARAM);
+    if(calcMode != CM_HIST_BROWSER) {
+      historyTestFail("B5 empty history must still open the browser");
+    }
+    historyBrowserEnter();               // nothing to restore: acts as leave
+    if(calcMode != CM_NORMAL) {
+      historyTestFail("B5 ENTER on empty history must just leave");
+    }
+  }
+
+  { // B6: the preview staging path delivers the level's X to TEMP_REGISTER_1.
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_X, 77);
+    saveForUndo();
+    if(!undoHistoryStagePreview(0) || !historyTestIsLonI(TEMP_REGISTER_1, 77)) {
+      historyTestFail("B6 preview staging must reproduce the level's X");
+    }
+  }
+
+  historyTestBaseline();
   historyTestWriteLonI(REGISTER_X, historyTestFailures);
 }
 
