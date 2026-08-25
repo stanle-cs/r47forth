@@ -155,6 +155,19 @@ these steps, in order:
    `PROMPT_WRITE.md`. Record which model drafted.
 2. Self-check against §2; fix what you can see.
 3. Run both scanners; judge the flags.
+3b'. Run `voicematch2.py --register release` (added 2026-08-25 after the
+   undo-history v0.1 rejection; Stan's ruling was to rebuild the voice
+   framework from the Reddit data). It measures the PRESENCE of his
+   corpus constructions (I-hedges, direct-you, fronted connectors,
+   questions, analogies, enthusiasm, stakes) instead of the absence of
+   AI tells, and reports sentence-skeleton support against the corpus.
+   Any MISSING construction row is blocking: back to step 2. The
+   companion references are forum/reference/stan-voice-profile.md and
+   stan-exemplars.md (local-only); the drafter writes with the
+   exemplars open. Data corrections recorded there: "for example",
+   "Thus/However/Moreover" and explanatory questions are IN-voice;
+   the no-hypophora rule is scoped to changelog sections of release
+   posts.
 3b. Run `voicematch.py` against the reference corpus (added 2026-08-03
    after the first pipeline draft passed both model audits and still
    failed Stan's read — the audits measure "human", not "Stan"). Compare

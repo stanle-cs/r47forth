@@ -161,3 +161,42 @@ drafting:
 - **Write clean, let him roughen.** His posted grammar ("The
   interpreter refuse") is his ESL fingerprint. Drafts neither polish
   his edits nor imitate the roughness.
+
+## Added 2026-08-25 (undo-history v0.1 rejection, framework rebuilt)
+
+Stan rejected a draft that had passed both scanners, voicematch rates and
+three rounds of the two-lane audit pool: "The writing sucks, and it
+doesn't sound like me at all. The framework developed didn't
+appropriately capture my own writing style, from the data saved." His
+ruling on the fix: rebuild from the Reddit data.
+
+What the rebuild established, all measured from the corpus:
+
+- **The old method was subtractive and that is the root failure.**
+  Deleting AI tells converges on polished-plain prose that belongs to
+  nobody. His voice is a set of PRESENT constructions: first-person
+  walkthroughs, hedges beside the verb, direct-you, questions inside
+  explanations, everyday analogies, enthusiasm, warm asides. A draft
+  with zero of these passes every scanner and fails his read.
+- **Several old "his numbers" claims were lore, not data.** "for
+  example" appears 11 times in the corpus (the old skill said almost
+  never). "Thus", "However", "Moreover" are in-voice. Questions run
+  1.33/100w including explanatory hypophora; the v0.3 hypophora
+  deletion is a changelog-section register ruling, not a global fact.
+- **New reference set** (all LOCAL-ONLY beside the corpus):
+  `forum/reference/stan-voice-profile.md` (measured rates, the
+  construction catalog with corpus quotes, the grammar fingerprint,
+  the register mapping) and `forum/reference/stan-exemplars.md`
+  (30 full explanatory comments, ~270 words average). The drafter
+  writes WITH the exemplars open, imitating construction by
+  construction. Never lift a sentence.
+- **New tool**: `forum/voicematch2.py <draft> [--register release|chat]`
+  measures construction PRESENCE against the live corpus and reports
+  which of his moves are missing, plus sentence-skeleton support.
+  Calibration: the rejected draft scores 6 of 10 constructions MISSING
+  and 27/30 unsupported skeletons. It joins the mechanical battery as a
+  blocking check: any MISSING row sends the draft back to step 2.
+- **Fact-sheet path.** When he wants to write the post himself, deliver
+  a verified fact inventory (numbers, commands, captions, required
+  boilerplate) and fact-check his text afterward; the pipeline's
+  drafting half stands down.
