@@ -164,3 +164,21 @@ Exit criterion met: scanners clean-as-judged plus clean-as-judged
 audits from both non-drafting models in the same round. Stan reads r3;
 the FACTS sheet stands if he prefers to write from it. Open items
 unchanged: unpushed base commit, thread placement, attachment indices.
+
+## The dash finding (2026-08-25, Stan reading r3)
+
+"reading this I realize, a dash can easily be confused with a
+substraction." Confirmed worse than prose: ITM_SUB's catalog name IS
+"-" (items.c row 96), so in the view itself a value-entry row and a
+subtraction row were indistinguishable — a negative value entry
+rendered "- -3.". Fixed in the package red-first: B8 scans the whole
+item namespace against both synthetic labels (red on the shipped "-",
+green after), placeholder now "(val)" — parenthesized like "(now)" so
+the meta-label namespace is disjoint by construction, 5 glyphs so the
+label column keeps its gap ("(entry)" at 7 touched the preview column;
+seen on the LCD, rejected). Gate green solo+combined; all three shots
+re-captured with the recovered marker-block drivers (removed again,
+post-removal gate green); zip rebuilt; flash re-measured +3904 B total
+(was +3896). Post change is one factual marker in the same sentence
+("a dash" -> "(val)"), battery re-run clean; no new lane round for a
+verified-fact substitution, logged as such.

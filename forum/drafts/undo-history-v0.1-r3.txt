@@ -15,7 +15,7 @@ I keep the flag set and go f-UP straight into the view, I think it's quicker tha
 
 [attachment=2]undo-attach-1-history-view.png[/attachment]
 
-That shot is the view after a session with some arithmetic, a transposed 2x3 matrix, SLVQ on 1 -3 2, and a complex number, then one press of UNDO. Each row is one level, newest on top: the level number, what ran next, and what X held at that moment. Operations show their real names, a dash is a plain value entry, and (now) is where you were when you started undoing. The * marks where undo currently stands and the inverted row is your selection. I also use the view just to check what an operation did to the stack without restoring anything.
+That shot is the view after a session with some arithmetic, a transposed 2x3 matrix, SLVQ on 1 -3 2, and a complex number, then one press of UNDO. Each row is one level, newest on top: the level number, what ran next, and what X held at that moment. Operations show their real names, (val) is a plain value entry, and (now) is where you were when you started undoing. The * marks where undo currently stands and the inverted row is your selection. I also use the view just to check what an operation did to the stack without restoring anything.
 
 A level holds the whole stack plus LASTx, the flags, and the statistical sums if you have any. Restore puts all of it back.
 

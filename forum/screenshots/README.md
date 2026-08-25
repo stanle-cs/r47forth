@@ -88,7 +88,11 @@ device provably render alike.
 # Undo history screenshots (sim, 2026-08-25)
 
 Three LCD captures for the undo-history post, taken at the stage-u2 tree
-(package base faf9d698c). Same mechanism as the Forth set: real 400x240
+(package base faf9d698c). Re-captured 2026-08-25 after the label fix:
+unlabeled captures now render `(val)` instead of `-` (the dash was
+ambiguous against subtraction's catalog name — Stan's catch, pinned by
+battery case B8). Same two marker-block drivers, recovered verbatim from
+the session transcript, removed again after capture, full gate green. Same mechanism as the Forth set: real 400x240
 framebuffer dumps via `fnScreenDump`, scaled 2x, driven by a temporary
 marker-wrapped block inside the package's own `historyTestBrowser` battery
 driver, removed after capture with the full gate re-run green. The browser

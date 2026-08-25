@@ -31,8 +31,12 @@ wording.
 - Restore = complete state comes back (verified: matrix in T + 3
   coefficients restored together, screenshot 3).
 - Labels: operations dispatched normally show their catalog name (+, SLVQ,
-  [M]^T). Plain value entries show "-". "(now)" = the pre-undo anchor
+  [M]^T). Plain value entries show "(val)". "(now)" = the pre-undo anchor
   level. "*" = where undo currently stands. Inverted row = selection.
+  (Was "-" until 2026-08-25: your read of the draft caught that a plain
+  dash is ambiguous against subtraction's catalog name "-" — a negative
+  value entry rendered "- -3.". Fixed red-first with a namespace class
+  test, B8; both synthetic labels are parenthesized now.)
 
 ## Numbers (all measured)
 - History buffer: 4 KB, one block from the C47 memory pool, allocated at
@@ -45,7 +49,7 @@ wording.
   Undo works across the gap; the skipped state cannot be returned to.
 - Depth: ~25 levels of plain reals at stack size 4; ~16 at SSIZE8; hard
   cap 48.
-- Flash cost: +3896 bytes (1090504 -> 1094400, make dmcp5r47).
+- Flash cost: +3904 bytes (1090504 -> 1094408, make dmcp5r47, re-measured after the (val) label fix).
 - SRAM4 statics: +124 bytes.
 - Zip: 44 KB.
 
