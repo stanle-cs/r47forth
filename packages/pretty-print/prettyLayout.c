@@ -35,6 +35,9 @@ typedef struct {
   int16_t radAbove;    ///< radical-sign glyph: ink rows above its baseline
   int16_t radInk;      ///< radical-sign glyph: total ink rows
   int16_t radAdvance;  ///< radical-sign glyph: advance width (leading cols dropped)
+  int16_t parAbove;    ///< '(' glyph: rowsAboveGlyph
+  int16_t parInk;      ///< '(' glyph: ink rows
+  int16_t parAdvance;  ///< '(' glyph advance (leading cols dropped)
 } ppMetrics_t;
 
 static ppMetrics_t ppMet[3];
@@ -72,13 +75,17 @@ static void ppMetricsInit(void) {
     {
       // 0xa21a = STD_SQUARE_ROOT
       const glyph_t *rad = ppGlyphOf(f[i], 0xa21a);
-      if(rad == NULL) {
+      const glyph_t *par = ppGlyphOf(f[i], '(');
+      if(rad == NULL || par == NULL) {
         ppMetOk = false;
       }
       else {
         ppMet[i].radAbove   = rad->rowsAboveGlyph;
         ppMet[i].radInk     = rad->rowsGlyph;
         ppMet[i].radAdvance = rad->colsGlyph + rad->colsAfterGlyph;
+        ppMet[i].parAbove   = par->rowsAboveGlyph;
+        ppMet[i].parInk     = par->rowsGlyph;
+        ppMet[i].parAdvance = par->colsGlyph + par->colsAfterGlyph;
       }
     }
   }
@@ -275,6 +282,35 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
       return true;
     }
 
+    case PP_PAREN: {
+      uint8_t child = nd->firstChild;
+      if(child == PP_NONE || ppPool[child].nextSibling != PP_NONE) {
+        return false;
+      }
+      if(!ppMeasure(child, depth + 1)) {
+        return false;
+      }
+      int16_t h = ppPool[child].ascent + ppPool[child].descent;
+      ppPool[child].relBase = 0;
+      if(h <= m->parInk + 2) {
+        // glyph parens cover the child; paint recomputes this same test
+        ppPool[child].relX = m->parAdvance;
+        nd->width   = ppPool[child].width + 2 * m->parAdvance;
+        int16_t pAsc  = m->boxAscent - m->parAbove;
+        int16_t pDesc = (m->parAbove + m->parInk) - m->boxAscent;
+        nd->ascent  = (ppPool[child].ascent  > pAsc)  ? ppPool[child].ascent  : pAsc;
+        nd->descent = (ppPool[child].descent > pDesc) ? ppPool[child].descent : pDesc;
+      }
+      else {
+        // synthesized tall parens: 5 px each side, one row over/under
+        ppPool[child].relX = 5;
+        nd->width   = ppPool[child].width + 10;
+        nd->ascent  = ppPool[child].ascent + 1;
+        nd->descent = ppPool[child].descent + 1;
+      }
+      return true;
+    }
+
     case PP_FRAC: {
       uint8_t num = nd->firstChild;
       if(num == PP_NONE) {
@@ -327,6 +363,29 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       ppPaint(nd->firstChild, x + m->radAdvance, baseline);
       lcd_fill_rect(x + m->radAdvance - 1, vincTop,
                     nd->width - m->radAdvance + 1, m->vincThick, LCD_EMPTY_VALUE);
+      return;
+    }
+
+    case PP_PAREN: {
+      uint8_t child = nd->firstChild;
+      ppPaint(child, x + ppPool[child].relX, baseline + ppPool[child].relBase);
+      int16_t h = ppPool[child].ascent + ppPool[child].descent;
+      if(h <= m->parInk + 2) {
+        showString("(", m->font, x, baseline - m->boxAscent, vmNormal, false, true);
+        showString(")", m->font, (int16_t)(x + nd->width - m->parAdvance),
+                   baseline - m->boxAscent, vmNormal, false, true);
+      }
+      else {
+        int16_t top = baseline - nd->ascent;
+        int16_t hh  = nd->ascent + nd->descent;
+        int16_t xr  = (int16_t)(x + nd->width - 5);
+        lcd_fill_rect(x + 1,  top + 2, 2, hh - 4, LCD_EMPTY_VALUE);
+        lcd_fill_rect(x + 2,  top,     2, 2,      LCD_EMPTY_VALUE);
+        lcd_fill_rect(x + 2,  top + hh - 2, 2, 2, LCD_EMPTY_VALUE);
+        lcd_fill_rect(xr + 2, top + 2, 2, hh - 4, LCD_EMPTY_VALUE);
+        lcd_fill_rect(xr,     top,     2, 2,      LCD_EMPTY_VALUE);
+        lcd_fill_rect(xr,     top + hh - 2, 2, 2, LCD_EMPTY_VALUE);
+      }
       return;
     }
 

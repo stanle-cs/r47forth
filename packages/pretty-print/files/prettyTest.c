@@ -858,4 +858,191 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }
 
+
+/* ==== prettyTestFormula =================================================
+ * Layout signatures: RUN -> its text with spaces stripped; HBOX ->
+ * [children space-joined]; FRAC -> F(a|b); SUP -> S(a|b); RAD -> R(a);
+ * PAREN -> P(a). Expected strings build from catalog names at runtime. */
+
+static void ppfTestSigNode(uint8_t n, char *out, size_t cap) {
+  if(strlen(out) + 24 >= cap) {
+    return;
+  }
+  const ppNode_t *nd = ppNodeAt(n);
+  if(nd == NULL) {
+    strcat(out, "?");
+    return;
+  }
+  switch(nd->kind) {
+    case PP_RUN: {
+      const char *t = ppTextAt(nd->textOff);
+      char *e = out + strlen(out);
+      while(*t && (size_t)(e - out) + 2 < cap) {
+        if(*t != ' ') {
+          *e++ = *t;
+        }
+        t++;
+      }
+      *e = 0;
+      break;
+    }
+    case PP_HBOX: {
+      strcat(out, "[");
+      for(uint8_t c = nd->firstChild; c != PP_NONE; c = ppNodeAt(c)->nextSibling) {
+        if(c != nd->firstChild) {
+          strcat(out, " ");
+        }
+        ppfTestSigNode(c, out, cap);
+      }
+      strcat(out, "]");
+      break;
+    }
+    case PP_FRAC:
+      strcat(out, "F(");
+      ppfTestSigNode(nd->firstChild, out, cap);
+      strcat(out, "|");
+      ppfTestSigNode(ppNodeAt(nd->firstChild)->nextSibling, out, cap);
+      strcat(out, ")");
+      break;
+    case PP_SUP:
+      strcat(out, "S(");
+      ppfTestSigNode(nd->firstChild, out, cap);
+      strcat(out, "|");
+      ppfTestSigNode(ppNodeAt(nd->firstChild)->nextSibling, out, cap);
+      strcat(out, ")");
+      break;
+    case PP_RAD:
+      strcat(out, "R(");
+      ppfTestSigNode(nd->firstChild, out, cap);
+      strcat(out, ")");
+      break;
+    case PP_PAREN:
+      strcat(out, "P(");
+      ppfTestSigNode(nd->firstChild, out, cap);
+      strcat(out, ")");
+      break;
+    default:
+      strcat(out, "?");
+      break;
+  }
+}
+
+static void ppfTestExpect(const char *what, uint8_t root, const char *expected) {
+  char sig[192];
+  sig[0] = 0;
+  ppfTestSigNode(root, sig, sizeof(sig));
+  if(strcmp(sig, expected) != 0) {
+    ppTestFailures++;
+    printf("prettyPrint test FAIL: %s (expected '%s', actual '%s')\n", what, expected, sig);
+  }
+}
+
+void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
+  (void)unusedButMandatoryParameter;
+  ppTestFailures = 0;
+  char expect[192];
+  uint8_t root;
+  const char *nADD  = indexOfItems[ITM_ADD].itemCatalogName;
+  const char *nMULT = indexOfItems[ITM_MULT].itemCatalogName;
+
+  // FV1: precedence parens — (2+3)×4
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestType("4");
+  ppcTestOp(ITM_MULT);
+  ppReset();
+  if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
+    ppTestFail("FV1 build");
+  }
+  else {
+    sprintf(expect, "[P([2 %s 3]) %s 4]", nADD, nMULT);
+    ppfTestExpect("FV1 precedence", root, expect);
+  }
+
+  // FV2: division becomes a stacked fraction, children unparenthesized
+  ppcTestReset();
+  ppcTestType("6");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestOp(ITM_DIV);
+  ppReset();
+  if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
+    ppTestFail("FV2 build");
+  }
+  else {
+    sprintf(expect, "F(6|[2 %s 3])", nADD);
+    ppfTestExpect("FV2 div as fraction", root, expect);
+  }
+
+  // FV3: history entry decodes with its result
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestType("5");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("6");
+  ppcTestOp(ITM_ADD);
+  if(ppcHistoryCount() != 1) {
+    ppTestFailInt("FV3 hist", 1, ppcHistoryCount());
+  }
+  else {
+    ppReset();
+    if(!ppfBuildEntry(ppcHistoryEntry(0, NULL, NULL), PP_FONT_STANDARD, PP_FONT_STANDARD, true, &root)) {
+      ppTestFail("FV3 decode");
+    }
+    else {
+      sprintf(expect, "[[2 %s 3] = 5]", nADD);
+      ppfTestExpect("FV3 entry with result", root, expect);
+    }
+  }
+
+  // FV4: sqrt scopes without parens; square wraps in SUP
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_SQUAREROOTX);
+  ppcTestOp(ITM_SQUARE);
+  ppReset();
+  if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
+    ppTestFail("FV4 build");
+  }
+  else {
+    ppfTestExpect("FV4 sqrt+square", root, "S(R(2)|2)");
+  }
+
+  // FV5: PHIST pager paints frames and arms the protocol; PCLR empties
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestType("5");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("6");
+  ppcTestOp(ITM_ADD);
+  screenUpdatingMode = SCRUPD_AUTO;
+  screenHoldsDrawnPixels = false;
+  temporaryInformation = TI_NO_INFO;
+  fnPrettyHist(NOPARAM);
+  if(!ppTestRowAllLit(20, 0, SCREEN_WIDTH - 1))  ppTestFail("FV5 frame 20");
+  if(!ppTestRowAllLit(168, 0, SCREEN_WIDTH - 1)) ppTestFail("FV5 frame 168");
+  if(!ppTestRectAnyLit(21, 167, 0, SCREEN_WIDTH - 1)) ppTestFail("FV5 no content ink");
+  if(!(screenUpdatingMode & SCRUPD_MANUAL_STACK)) ppTestFail("FV5 protocol not armed");
+  if(!screenHoldsDrawnPixels)                     ppTestFail("FV5 pixels not held");
+  fnPrettyHistClear(NOPARAM);
+  if(ppcHistoryCount() != 0) ppTestFailInt("FV5 PCLR", 0, ppcHistoryCount());
+  screenUpdatingMode = SCRUPD_AUTO;
+  screenHoldsDrawnPixels = false;
+
+  ppcTestReset();
+  ppTestWriteLonI(REGISTER_X, ppTestFailures);
+}
+
 #endif // PC_BUILD

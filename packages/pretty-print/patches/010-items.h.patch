@@ -1,15 +1,19 @@
 diff --git a/src/c47/items.h b/src/c47/items.h
-index 98924313217f3b57f1b663367c8e45c0dc0f1010..f9a5abbf0773bf60f2f64e9c6cb4a6c35228359d 100644
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..95e26560b93dba8ee831326c0b7d72d6b20954fa 100644
 --- a/src/c47/items.h
 +++ b/src/c47/items.h
-@@ -481,8 +481,8 @@
+@@ -481,10 +481,10 @@
  #define ITM_SIGMA1ony2               456
  #define ITM_SIGMAx3                  457
  #define ITM_SIGMAx4                  458
 -#define ITM_0459                     459
 -#define ITM_0460                     460
+-#define ITM_0461                     461
+-#define ITM_0462                     462
 +#define ITM_PSHOW                    459  // pretty-print package: full-screen pretty SHOW
 +#define ITM_PPON                     460  // pretty-print package: natural-display toggle
- #define ITM_0461                     461
- #define ITM_0462                     462
++#define ITM_PCLR                     461  // pretty-print package: clear the formula history
++#define ITM_PHIST                    462  // pretty-print package: calculation-history pager
  
+ 
+ // System flags

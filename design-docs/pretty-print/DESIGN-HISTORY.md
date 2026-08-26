@@ -2,6 +2,31 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP4 (formula view)
+
+- **The browser became a pager (RULED).** The plan's CM-mode browser
+  costs ~20 keyboard.c sites in the one upstream file where forth-core
+  rewrites the determineItem chain and undo-history already had to
+  squeeze its branch into a hunk gap — the project's riskiest
+  three-package composition surface. PHIST on the PSHOW manual-paint
+  protocol delivers the user goal (seeing the chained operations
+  naturally) with zero keyboard/defines churn: repeated presses page,
+  any key releases. calcMode 20 stays reserved; the full browser is an
+  explicitly possible later upgrade, not a closed door.
+- **One constructor pair (`ppfCombine1/2`) serves both the live tree and
+  the token stream**, so the two paths cannot drift typographically.
+  DIV → FRAC (children never parenthesized — the bar scopes), YX → SUP
+  with the base keeping its parens, √ → RAD (the vinculum scopes),
+  1/x → FRAC(1,x), x²/x³ → SUP, CHS → leading minus, everything else →
+  function form name(…) — which also future-proofs unknown dyadics that
+  later become classified.
+- **PP_PAREN has two modes chosen at measure time**: glyph parens when
+  the child fits the font's '(' ink, synthesized 5 px stroke parens for
+  tall children (fraction inside parens). The paint recomputes the same
+  test instead of storing a mode bit.
+- All six drivers green on the first PP4 build — the PP3 trace helpers
+  (real key paths) carried the formula tests for free.
+
 ## 2026-08-26 — PP3 (capture engine)
 
 - **Thirteen of sixteen traces passed on the first real-path run** — the

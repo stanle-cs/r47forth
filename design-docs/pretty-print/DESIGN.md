@@ -225,10 +225,19 @@ access), `ppHistoryCount()` / `ppHistoryEntry(idx, &len, &seq)`,
   releases them. Zero keyboard.c churn, zero screen.c hunks, status-bar rows
   0..15 untouched so the clock keeps ticking. Builder failure falls back to
   `fnC47Show(NOPARAM)` — the user always gets a SHOW.
-- **Formula view** (PP4): current formula rendered live plus a scrollable
-  history browser on the `historyBrowser.c` template (new calcMode 20; the
-  honest cost is ~20 keyboard.c sites / ~200 patch lines, exactly like
-  undo-history's browser — budgeted for PP4, not smuggled in earlier).
+- **Formula view** (PP4, RULED 2026-08-26): a PAGER, not a browser mode.
+  `PHIST` (row 462) renders the current formula plus the finished-formula
+  history as 2D infix — division stacked, powers raised, roots under
+  vinculums, precedence parens (glyph or synthesized-tall) — four rows per
+  page on the same manual-paint protocol as PSHOW. Repeated `PHIST`
+  presses page forward; any other key releases the screen. `PCLR` (row
+  461) clears the ring. Value leaves and results format at display time
+  via TEMP_REGISTER_1 staging (undo-history's lazy-preview recipe),
+  never at capture. Zero keyboard.c/defines.h churn; the full
+  CM-mode browser (selection, per-row scrolling) remains an explicitly
+  possible upgrade on reserved calcMode 20 — it was traded away because
+  keyboard.c is the project's riskiest three-package composition surface,
+  not because the pager is the end state.
 
 ## §7 Composition claims (BINDING for other packages)
 
@@ -237,8 +246,8 @@ Verified against the tree at branch point (undo-history/stage-u2 tip,
 
 | resource | claim | verified placement |
 |---|---|---|
-| item rows | **459 `PSHOW`, 460 `PPON`, 461 `PCLR`** | spare `itemToBeCoded` rows at items.c:2290-2292 — ~30 lines below undo-history's 427-429 hunk (ends :2260); items.h defines at :484-486, ~30 lines below its hunk (:446-454) |
-| calcMode | **20 `CM_PRETTY_BROWSER`** (wired at PP4) | must NOT be inserted adjacent to undo-history's `CM_HIST_BROWSER 19` insertion (after defines.h:1721) — anchor the `#define` ≥4 context lines below, e.g. after the :1727 region |
+| item rows | **459 `PSHOW`, 460 `PPON`, 461 `PCLR`, 462 `PHIST`** | spare `itemToBeCoded` rows at items.c:2290-2293 — ~30 lines below undo-history's 427-429 hunk (ends :2260); items.h defines at :484-487, ~30 lines below its hunk (:446-454) |
+| calcMode | **20 reserved** (not wired) | PP4 shipped the history view as a manual-paint PAGER instead of a browser mode (see §6), avoiding ~20 keyboard.c sites in the one file where forth-core rewrites the determineItem chain undo-history already squeezed into. If a full browser lands later, its `#define` must NOT be adjacent to undo-history's `CM_HIST_BROWSER 19` insertion (after defines.h:1721) — anchor ≥4 context lines away |
 | system flag | **none in v1** | undo-history's patch edits the single `NUMBER_OF_SYSTEM_FLAGS` line; two packages editing the same line cannot compose. Toggle = package BSS bool + `PPON` item. Flag persistence is deferred to an explicitly coordinated change. |
 | resident pool | **zero** | all pretty-print state is BSS (~2.8 KiB end-state); the ~1.6 KiB pool slack remaining after undo-history's 4 KiB ring stays untouched |
 

@@ -16,7 +16,7 @@
 #if !defined(PRETTYINTERNAL_H)
 #define PRETTYINTERNAL_H
 
-enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2, PP_RAD = 3, PP_SUP = 4 };
+enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2, PP_RAD = 3, PP_SUP = 4, PP_PAREN = 5 };
 enum { PP_FONT_NUMERIC = 0, PP_FONT_STANDARD = 1, PP_FONT_TINY = 2 };
 
 #define PP_NONE        0xFF
@@ -84,6 +84,11 @@ typedef struct {
   uint8_t  pad[2];      ///< VAL: tag, payloadBytes
   uint8_t  payload[16]; ///< LIT text / VAL raw register payload
 } ppcNode_t;
+
+// prettyFormula.c — capture tree / token stream -> infix layout
+bool_t ppfBuildCurrent(uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
+                     bool_t withResult, uint8_t *rootOut);
 
 // viewer/test API — all lazy, no formatter runs at capture time
 const ppcNode_t *ppcNodeAt(uint8_t n);

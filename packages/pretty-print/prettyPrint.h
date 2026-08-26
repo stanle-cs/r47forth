@@ -33,6 +33,12 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
 // fnPixel manual-paint protocol; falls back to fnC47Show.
 void fnPrettyShow(uint16_t unusedButMandatoryParameter);
 
+// PHIST (ITM_PHIST, row 462): the calculation-history pager — repeated
+// presses page through, any other key releases. PCLR (ITM_PCLR, row 461)
+// clears the formula history.
+void fnPrettyHist     (uint16_t unusedButMandatoryParameter);
+void fnPrettyHistClear(uint16_t unusedButMandatoryParameter);
+
 // Capture-engine hooks (prettyCapture.c), called from small upstream
 // patches. STAGE/DONE bracket the item dispatch in reallyRunFunction;
 // the NIM trio mirrors number entry at the closeNim funnel with the
@@ -51,5 +57,6 @@ void prettyTestPixels  (uint16_t unusedButMandatoryParameter);
 void prettyTestFallback(uint16_t unusedButMandatoryParameter);
 void prettyTestShow    (uint16_t unusedButMandatoryParameter);
 void prettyTestCapture (uint16_t unusedButMandatoryParameter);
+void prettyTestFormula (uint16_t unusedButMandatoryParameter);
 
 #endif // !PRETTYPRINT_H

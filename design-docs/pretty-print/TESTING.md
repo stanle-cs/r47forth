@@ -64,6 +64,19 @@ does this first, always.
   `screenHoldsDrawnPixels` armed; string X falls back to the ordinary
   SHOW (temporaryInformation leaves TI_NO_INFO).
 
+### PP4 additions
+
+- **`prettyTestFormula`** — layout-signature pins over the infix
+  renderer (RUN text / `[hbox]` / `F(a|b)` / `S(a|b)` / `R(a)` / `P(a)`,
+  expectations built from catalog names): FV1 `(2+3)×4` keeps its
+  parens; FV2 `6÷(2+3)` becomes `F(6|[2+3])` with unparenthesized
+  children; FV3 a history token stream decodes to `[[2+3] = 5]`; FV4
+  `√2` then `x²` gives `S(R(2)|2)`; FV5 the PHIST pager paints its
+  frames, holds content ink, arms the manual-paint protocol, and PCLR
+  empties the ring. Note for mutation runs: FAIL detail lines can carry
+  raw glyph bytes (×), which flips grep into binary mode — trust the
+  pass/fail counts.
+
 ### PP3 additions
 
 - **`prettyTestCapture`** — sixteen traces through the REAL interactive
@@ -106,6 +119,9 @@ after restore.
 | MUT-14 | shadow lift applied at NIM open instead of commit (PP3) | T16 (abort with ASLIFT set strands the tree; surfaces as a spurious emission) |
 | MUT-15 | unknown-item default flipped to ignore (PP3) | T14 |
 | MUT-16 | DONE applies the staged transform despite an error (PP3) | T11 |
+| MUT-17 | precedence parens dropped (PP4) | FV1 |
+| MUT-18 | DIV falls to function form instead of a stacked fraction (PP4) | FV2 |
+| MUT-19 | token decoder pops operands swapped (PP4) | FV3 |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

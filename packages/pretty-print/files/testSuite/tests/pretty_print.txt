@@ -39,6 +39,14 @@ Func: prettyTestShow
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 
+Func: prettyTestFormula
+
+; FV1 precedence parens (2+3)x4; FV2 division as a stacked fraction; FV3
+; a history entry decoding with its = result; FV4 sqrt/square scoping;
+; FV5 the PHIST pager frames + manual-paint protocol + PCLR.
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"
+
 Func: prettyTestCapture
 
 ; The 15 normative traces from DESIGN.md §4, driven through the REAL
