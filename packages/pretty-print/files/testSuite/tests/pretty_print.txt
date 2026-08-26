@@ -38,3 +38,13 @@ Func: prettyTestShow
 ; unsupported type falls back to the ordinary SHOW.
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
+
+Func: prettyTestCapture
+
+; The 15 normative traces from DESIGN.md §4, driven through the REAL
+; paths (addItemToNimBuffer/closeNim/runFunction): chaining, supersession,
+; monadic, ENTER dup, CLX displacement, as-typed 2.50, NIM abort, swap,
+; UNDO discard, error invalidation, arena exhaustion, LASTx, the
+; unknown-item default, and the eRPN ENTER leg.
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"

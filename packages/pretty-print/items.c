@@ -410,8 +410,10 @@ bool_t isFunctionOldParam16(uint16_t func) {
     //**RunFunction
     if(!itemNotAvail(func)) {
       stackWatermarkBeforeDispatch();
+      prettyNoteFunction(func, param);       // pretty-print package: STAGE (pre-op registers)
       indexOfItems[func].func(param);
       stackWatermarkAfterDispatch();
+      prettyNoteFunctionDone();              // pretty-print package: DONE (apply / invalidate)
 
       #if defined(OPTION_IR_PRINTING)
         printTraceTI();

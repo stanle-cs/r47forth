@@ -1,0 +1,13 @@
+diff --git a/src/c47/config.c b/src/c47/config.c
+index b4b65f5207e0939215616d0258fdbf2e1a91dc15..cc54fcad9cd5b2c6c1aade8ba56a46e730f7e71a 100644
+--- a/src/c47/config.c
++++ b/src/c47/config.c
+@@ -1714,6 +1714,8 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+     real34SetZero(&hiBinR);
+     histElementXorY = -1;
+ 
++    prettyReset();   // pretty-print package: re-arm the shadow expression stack
++
+ 
+     int32ToReal(-10, x_min);
+     int32ToReal(10, x_max);

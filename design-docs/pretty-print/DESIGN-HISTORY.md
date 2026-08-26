@@ -2,6 +2,40 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP3 (capture engine)
+
+- **Thirteen of sixteen traces passed on the first real-path run** — the
+  two-phase STAGE/DONE design and the deferred NIM lift survived contact
+  with the actual choreography. The three findings:
+  (1) `ppcDeepCopy` masked `PPA_EMITTED` out of `aux` for every node
+  kind, but LIT/VAL store a LENGTH there — a copied `"2"` truncated to
+  the empty string (T4). Flags now strip for op nodes only.
+  (2) A trace script bug, not an engine bug: backspacing an
+  already-aborted NIM lands in CM_NORMAL and leaves an error that the
+  next DONE treats as invalidation (T8's stray second backspace).
+  (3) Arena exhaustion recovers BETTER than designed: after the
+  invalidate, ensureKnown rebuilds truthfully from value leaves and the
+  chain continues as `# 1 + 1 +` — the pin now asserts the recovery.
+- **`nimWhenButtonPressed` is keyboard-owned** and false under a test
+  driver, which flips fnKeyEnter's eRPN condition; both the shadow's
+  mirror and the driver read/mimic the real global (T15).
+- **L degrades to UNKNOWN on every op** rather than deep-copying the
+  consumed operand (the design's "move" would alias a child node):
+  LASTx returns as a truthful value leaf — `(2+3)×3` renders with the 3
+  as a value, which is what the registers say (T13).
+- **Deferred lift earned its keep twice**: T8 (abort after ENTER) and
+  T16 (abort with ASLIFT set), the latter added when MUT-14 survived T8
+  — lift-at-open only mis-fires when the abort follows a lift-armed
+  open, and T8's abort follows ENTER (ASLIFT clear).
+- **Top-of-stack falloff emits without a result** — by the time the
+  shadow applies a lift, the real register is gone; the token stream
+  simply omits TKRES for those formulas.
+- **Driver hygiene:** the capture driver's real NIM typing left
+  `aimBuffer` residue that broke `fn42Alpha` in string_cov.txt ("aimBuffer
+  is empty headless") — a one-test blast radius the full-suite gate
+  caught. Rule reaffirmed: a driver leaves the machine as it found it,
+  including input buffers, not just flags and registers.
+
 ## 2026-08-26 — PP2 (radicals, exponents, IRFRAC, complex, PSHOW)
 
 - **Radical sign strategy narrowed for PP2:** the raised-glyph approach

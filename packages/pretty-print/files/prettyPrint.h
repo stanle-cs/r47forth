@@ -33,11 +33,23 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
 // fnPixel manual-paint protocol; falls back to fnC47Show.
 void fnPrettyShow(uint16_t unusedButMandatoryParameter);
 
+// Capture-engine hooks (prettyCapture.c), called from small upstream
+// patches. STAGE/DONE bracket the item dispatch in reallyRunFunction;
+// the NIM trio mirrors number entry at the closeNim funnel with the
+// lift decision latched at calcModeNim; prettyReset re-arms at doFnReset.
+void prettyNoteFunction    (int16_t func, uint16_t param);
+void prettyNoteFunctionDone(void);
+void prettyNoteNimOpen     (void);
+void prettyNoteNimText     (const char *aim);
+void prettyNoteNumberCommit(void);
+void prettyReset           (void);
+
 // testSuite coverage drivers (prettyTest.c, PC_BUILD only; registered in
 // funcTestNoParam with coverageDriver = 1).
 void prettyTestMeasure (uint16_t unusedButMandatoryParameter);
 void prettyTestPixels  (uint16_t unusedButMandatoryParameter);
 void prettyTestFallback(uint16_t unusedButMandatoryParameter);
 void prettyTestShow    (uint16_t unusedButMandatoryParameter);
+void prettyTestCapture (uint16_t unusedButMandatoryParameter);
 
 #endif // !PRETTYPRINT_H

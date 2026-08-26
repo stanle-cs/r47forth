@@ -64,6 +64,25 @@ does this first, always.
   `screenHoldsDrawnPixels` armed; string X falls back to the ordinary
   SHOW (temporaryInformation leaves TI_NO_INFO).
 
+### PP3 additions
+
+- **`prettyTestCapture`** — sixteen traces through the REAL interactive
+  paths (digits via `addItemToNimBuffer`, which opens NIM itself from
+  CM_NORMAL; operators close NIM at the addItemToNimBuffer tail before
+  `runFunction`, exactly the press/release split): T1 chaining, T2
+  supersession (`2+3=5` emitted, `5+6` current), T3 monadic through the
+  funnel, T4 ENTER dup (deep-copy independence — caught the aux/EMITTED
+  length-truncation bug on first run), T5 chain through monadic, T6 CLX
+  displacement, T7 as-typed `2.50`, T8 NIM abort (deferred lift → no
+  ghost), T9 swap order, T10 UNDO discard, T11 DONE-on-error, T12
+  arena-exhaustion truthful recovery (`# 1 + 1 +`), T13 LASTx as value
+  leaf, T14 unknown-item default (MIN emits then invalidates), T15 eRPN
+  ENTER (driver mimics `nimWhenButtonPressed` — keyboard-owned, false in
+  a driver, so the eRPN condition needs the mimic), T16 abort with
+  ASLIFT set (separates deferred-lift from lift-at-open designs).
+  Expected signatures build from `indexOfItems[].itemCatalogName` at
+  runtime so name changes never turn them red.
+
 ## Mutation pins (run each separately, battery green between restores)
 
 All six demonstrated red on 2026-08-26 (targeted single-file battery), green
@@ -81,6 +100,12 @@ after restore.
 | MUT-8 | exponent base loses the plain `10` append (PP2) | M6 |
 | MUT-9 | IRFRAC accepts bare constant names (PP2) | M8 |
 | MUT-10 | PSHOW does not arm the manual-paint protocol (PP2) | S3 |
+| MUT-11 | swap not mirrored (PP3) | T9 (operand order flips) |
+| MUT-12 | supersession removed (PP3) | T2 (history stays empty) |
+| MUT-13 | as-typed literals dropped for value leaves (PP3) | T2/T3/T5/T8/T9/T12 |
+| MUT-14 | shadow lift applied at NIM open instead of commit (PP3) | T16 (abort with ASLIFT set strands the tree; surfaces as a spurious emission) |
+| MUT-15 | unknown-item default flipped to ignore (PP3) | T14 |
+| MUT-16 | DONE applies the staged transform despite an error (PP3) | T11 |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

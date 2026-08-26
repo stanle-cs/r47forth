@@ -1,0 +1,20 @@
+diff --git a/src/c47/bufferize.c b/src/c47/bufferize.c
+index 8e3c6b1b719e05a09034908975d5cfe3f7616be3..2f28fc4fd0a043472e57e88796c9ce30abe5f2ea 100644
+--- a/src/c47/bufferize.c
++++ b/src/c47/bufferize.c
+@@ -2342,6 +2342,7 @@ TO_QSPI static const numStr NumMsg[] = { { "^0" }, { "^1" }, { "^2" }, { "^3" },
+     setSystemFlag(FLAG_ASLIFT);
+     //printf("closeNim\n");
+     screenUpdatingMode &= ~(SCRUPD_MANUAL_STACK | SCRUPD_SKIP_STACK_ONE_TIME);
++    prettyNoteNimText(aimBuffer);   // pretty-print package: as-typed snapshot before mutation
+ 
+     if(nimNumberPart == NP_INT_10) {                //JM Input default type vv
+       switch(Input_Default) {
+@@ -2686,6 +2687,7 @@ TO_QSPI static const numStr NumMsg[] = { { "^0" }, { "^1" }, { "^2" }, { "^3" },
+     #endif //OPTION_IR_PRINTING
+ 
+     closeNim_exit:
++    prettyNoteNumberCommit();   // pretty-print package: mirror the committed number
+     nimNumberPart = NP_EMPTY;   //Added to ensure test for nimNumberPart in insertStepInProgram() will have the correct value
+   }
+ 

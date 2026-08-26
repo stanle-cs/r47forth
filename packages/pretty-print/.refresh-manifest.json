@@ -1,19 +1,23 @@
 {
   "base_commit": "70f8b7db7425422ec80e0342e627ed3e2cfd71a6",
   "files": {
-    "prettyInternal.h": "b0c9268e10a212b1827f7e4cdf8cf98cc358ad13a511c9f2cc3ef6f206304366",
+    "prettyCapture.c": "591ca76f9b8c1d715fb74460efa266f7a0701b2ba34b1ba687635ca38d331e06",
+    "prettyInternal.h": "af64142275a9e9920a389555c0f384eda55710577de467c1d098ec1a4dfd8582",
     "prettyLayout.c": "eba366c758daa81320c8f9e977ee2bc96f9c4da0baed22680273c726ef7e563b",
-    "prettyPrint.h": "e60f7fb4844172ffdd947385ea4a7f193d0d2896b3e97da1ec2e6667fac25629",
-    "prettyTest.c": "ca8e8afaaeb6640870a1f88e53ccb7043d8b88f9e77aa2ff379f00cda17e03f6",
+    "prettyPrint.h": "03fab5dc9047ad8cd47a2113a385fadf84ed88e9c4590ce3d8a5f29d6e815072",
+    "prettyTest.c": "81c425d8c0227f0bd638d2b85bf979d1a52b59e2ad50585c899bca995c265d72",
     "prettyValue.c": "abf2f49521fa8f463c362c88e0580458ad971ce33b50a63cd9c8bd3ed42ae333",
-    "testSuite/tests/pretty_print.txt": "374710a13583028d1086c55b66dbe65f3bbab791ccaa24e92be1208516983edf"
+    "testSuite/tests/pretty_print.txt": "400b79956440572e609a1431ef63f82c70d3f4a8a72351d1d04d7e257890d2c9"
   },
   "patches": {
+    "010-bufferize.c.patch": "03977a78177c15a757ccd5882b671a6d82a79b0aaeca3b67bab78d607d2842f4",
     "010-c47.h.patch": "8adcafd5cd068e00bbc87c9ea635b6ddc88b65eaa6944e82abf6c293a8a77e32",
-    "010-items.c.patch": "5f79c919837e27c0700c4443a4a117df4f2ef1818398fc9425e656164178e8d3",
+    "010-calcMode.c.patch": "7312ae4e482d9a24d707cc2a8528e08b4c4d3e16277e3282de94abc9b352d6da",
+    "010-config.c.patch": "3cc9d11c16c33b58f0c8b71a6f4e329bfe52ee01b3ff233dbc473513b7cc99c0",
+    "010-items.c.patch": "52fa5dd117aa3a406d28bd5e6a29458d1d2ad70284b3a59f9506ad7d29c3d89c",
     "010-items.h.patch": "45997524469e291f8ae9c97b95d39b5174047a4ab5f17599aaa09cc9f35279b4",
     "010-screen.c.patch": "2d96c47aaef360f5297f6bb3917f03b1e09c271a9bf819733d16964a7c0fbe2d",
-    "010-testSuite__testSuite.c.patch": "8141e96210553db2283e94c9f8423b972420ea2358639b83feeb5908c8198fea",
+    "010-testSuite__testSuite.c.patch": "b47ec29f949fd12f6b3acba2a90e293960f38062721d1293bd67b2c92b9ad869",
     "010-testSuite__tests__testSuiteList.txt.patch": "7602270613b0807bd2f56e6a3bba266176226695f6f2ba3de0fbe99cf53bf666"
   }
 }

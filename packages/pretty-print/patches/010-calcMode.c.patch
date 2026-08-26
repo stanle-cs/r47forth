@@ -1,0 +1,13 @@
+diff --git a/src/c47/calcMode.c b/src/c47/calcMode.c
+index f296702924d2ea6edfba9b4445e4d71a41ebb0f5..badd239df8abb106b7ec38b3252bfc4fe9940a12 100644
+--- a/src/c47/calcMode.c
++++ b/src/c47/calcMode.c
+@@ -266,6 +266,8 @@
+     calcMode = CM_NIM;
+     clearSystemFlag(FLAG_ALPHA);
+ 
++    prettyNoteNimOpen();   // pretty-print package: latch the deferred lift decision
++
+     liftStack();
+     real34SetZero(REGISTER_REAL34_DATA(REGISTER_X));
+     setRegisterAngularMode(REGISTER_X, amNone);

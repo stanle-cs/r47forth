@@ -16,6 +16,8 @@
 
 #include <stdio.h>
 
+extern bool_t nimWhenButtonPressed;   // keyboard.c file scope, non-static
+
 static uint32_t ppTestFailures;
 
 static void ppTestFail(const char *what) {
@@ -537,6 +539,322 @@ void prettyTestFallback(uint16_t unusedButMandatoryParameter) {
   if(!hadFract) {
     clearSystemFlag(FLAG_FRACT);
   }
+  ppTestWriteLonI(REGISTER_X, ppTestFailures);
+}
+
+/* ==== prettyTestCapture =================================================
+ * Drives the REAL interactive paths: digits through addItemToNimBuffer
+ * (which itself opens NIM from CM_NORMAL), operator keys close NIM at the
+ * addItemToNimBuffer tail exactly as a keypress does, then the item runs
+ * through runFunction -> reallyRunFunction where the STAGE/DONE hooks
+ * live. Expected signatures are built from indexOfItems catalog names at
+ * runtime so font/name changes never turn these red. */
+
+static void ppcTestSigNode(uint8_t n, char *out, size_t cap) {
+  size_t len = strlen(out);
+  if(len + 24 >= cap) {
+    return;
+  }
+  const ppcNode_t *nd = ppcNodeAt(n);
+  if(n == PPC_UNKNOWN) {
+    strcat(out, "#");
+    return;
+  }
+  if(n == PPC_NIL || nd == NULL) {
+    strcat(out, "?");
+    return;
+  }
+  switch(nd->kind) {
+    case PPN_OP2:
+      ppcTestSigNode(nd->child[0], out, cap);
+      strcat(out, " ");
+      ppcTestSigNode(nd->child[1], out, cap);
+      strcat(out, " ");
+      strncat(out, indexOfItems[nd->item].itemCatalogName, 15);
+      break;
+    case PPN_OP1:
+      ppcTestSigNode(nd->child[0], out, cap);
+      strcat(out, " ");
+      strncat(out, indexOfItems[nd->item].itemCatalogName, 15);
+      break;
+    case PPN_LIT: {
+      char text[32];
+      uint8_t l = nd->aux > 15 ? 15 : nd->aux;
+      xcopy(text, nd->payload, l);
+      text[l] = 0;
+      if(nd->child[0] != PPC_NIL && ppcNodeAt(nd->child[0]) != NULL
+          && ppcNodeAt(nd->child[0])->kind == PPN_LIT2) {
+        const ppcNode_t *c = ppcNodeAt(nd->child[0]);
+        uint8_t cl = c->aux > 15 ? 15 : c->aux;
+        xcopy(text + l, c->payload, cl);
+        text[l + cl] = 0;
+      }
+      strcat(out, text);
+      break;
+    }
+    case PPN_VAL:    strcat(out, "#"); break;
+    case PPN_CONST:  strncat(out, indexOfItems[nd->item].itemCatalogName, 15); break;
+    case PPN_OPAQUE: strcat(out, "!"); break;
+    default:         strcat(out, "?"); break;
+  }
+}
+
+static void ppcTestSig(char *out, size_t cap) {
+  out[0] = 0;
+  uint8_t root = ppcCurrentFormulaRoot();
+  if(root == PPC_NIL) {
+    strcpy(out, "-");
+    return;
+  }
+  ppcTestSigNode(root, out, cap);
+}
+
+static void ppcTestReset(void) {
+  calcMode = CM_NORMAL;
+  temporaryInformation = TI_NO_INFO;
+  lastErrorCode = 0;
+  programRunStop = PGM_STOPPED;
+  clearSystemFlag(FLAG_SOLVING);
+  clearSystemFlag(FLAG_INTING);
+  clearSystemFlag(FLAG_ERPN);
+  setSystemFlag(FLAG_ASLIFT);
+  aimBuffer[0] = 0;      // NIM typing residue must not leak into later
+  nimNumberPart = NP_EMPTY;   // suite blocks (fn42Alpha asserts an empty buffer)
+  prettyReset();
+}
+
+static void ppcTestType(const char *s) {
+  for(const char *p = s; *p; p++) {
+    if(*p >= '0' && *p <= '9') {
+      addItemToNimBuffer(ITM_0 + (*p - '0'));
+    }
+    else if(*p == '.') {
+      addItemToNimBuffer(ITM_PERIOD);
+    }
+    else if(*p == '<') {
+      addItemToNimBuffer(ITM_BACKSPACE);
+    }
+  }
+}
+
+static void ppcTestOp(int16_t item) {
+  if(calcMode == CM_NIM) {
+    addItemToNimBuffer(item);   // the keypress closes NIM before the run
+  }
+  runFunction(item);
+}
+
+static void ppcTestExpectSig(const char *what, const char *expected) {
+  char sig[128];
+  ppcTestSig(sig, sizeof(sig));
+  if(strcmp(sig, expected) != 0) {
+    ppTestFailures++;
+    printf("prettyPrint test FAIL: %s (expected '%s', actual '%s')\n", what, expected, sig);
+  }
+}
+
+static void ppcTestExpectHist(const char *what, uint8_t expected) {
+  if(ppcHistoryCount() != expected) {
+    ppTestFailInt(what, expected, ppcHistoryCount());
+  }
+}
+
+void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
+  (void)unusedButMandatoryParameter;
+  ppTestFailures = 0;
+  char expect[128];
+  const char *nADD  = indexOfItems[ITM_ADD].itemCatalogName;
+  const char *nMULT = indexOfItems[ITM_MULT].itemCatalogName;
+  const char *nSUB  = indexOfItems[ITM_SUB].itemCatalogName;
+  const char *nSIN  = indexOfItems[ITM_sin].itemCatalogName;
+  const char *n1ONX = indexOfItems[ITM_1ONX].itemCatalogName;
+
+  // T1: 2 ENTER 3 + 4 x — one formula, consuming continues it
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestType("4");
+  ppcTestOp(ITM_MULT);
+  sprintf(expect, "2 3 %s 4 %s", nADD, nMULT);
+  ppcTestExpectSig("T1 chained sig", expect);
+  ppcTestExpectHist("T1 hist", 0);
+
+  // T2: supersession — a new root not consuming (2+3) emits it
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestType("5");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("6");
+  ppcTestOp(ITM_ADD);
+  sprintf(expect, "5 6 %s", nADD);
+  ppcTestExpectSig("T2 new formula", expect);
+  ppcTestExpectHist("T2 hist", 1);
+
+  // T3: monadic through the NIM funnel
+  ppcTestReset();
+  ppcTestType("12");
+  ppcTestOp(ITM_sin);
+  sprintf(expect, "12 %s", nSIN);
+  ppcTestExpectSig("T3 monadic", expect);
+
+  // T4: ENTER dup mirrored as a deep copy
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestOp(ITM_ENTER);
+  ppcTestOp(ITM_MULT);
+  sprintf(expect, "2 2 %s", nMULT);
+  ppcTestExpectSig("T4 dup", expect);
+
+  // T5: monadic result consumed by a dyadic — one formula
+  ppcTestReset();
+  ppcTestType("5");
+  ppcTestOp(ITM_1ONX);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  sprintf(expect, "5 %s 3 %s", n1ONX, nADD);
+  ppcTestExpectSig("T5 chain through monadic", expect);
+  ppcTestExpectHist("T5 hist", 0);
+
+  // T6: CLX displaces — the natural explicit terminator
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestOp(ITM_CLX);
+  ppcTestType("7");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("8");
+  ppcTestOp(ITM_MULT);
+  sprintf(expect, "7 8 %s", nMULT);
+  ppcTestExpectSig("T6 after CLX", expect);
+  ppcTestExpectHist("T6 hist", 1);
+
+  // T7: as-typed literal survives
+  ppcTestReset();
+  ppcTestType("2.50");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("4");
+  ppcTestOp(ITM_MULT);
+  sprintf(expect, "2.50 4 %s", nMULT);
+  ppcTestExpectSig("T7 as-typed", expect);
+
+  // T8: NIM abort by backspace leaves no ghost (deferred lift pays off)
+  ppcTestReset();
+  ppcTestType("5");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3<");     // type 3, then backspace to empty = abort
+  ppcTestType("4");
+  ppcTestOp(ITM_ADD);
+  sprintf(expect, "5 4 %s", nADD);
+  ppcTestExpectSig("T8 abort", expect);
+
+  // T9: swap mirrored — operand order flips
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_XexY);
+  ppcTestOp(ITM_SUB);
+  sprintf(expect, "3 2 %s", nSUB);
+  ppcTestExpectSig("T9 swap", expect);
+
+  // T10: UNDO discards the current formula, history untouched
+  ppcTestReset();
+  ppcTestType("3");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("4");
+  ppcTestOp(ITM_ADD);
+  ppcTestOp(ITM_UNDO);
+  ppcTestExpectSig("T10 after UNDO", "-");
+  ppcTestExpectHist("T10 hist", 0);
+
+  // T11: an erroring dispatch invalidates (DONE-on-error)
+  ppcTestReset();
+  clearSystemFlag(FLAG_SPCRES);
+  ppcTestType("1");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("0");
+  ppcTestOp(ITM_DIV);
+  if(lastErrorCode == ERROR_NONE) {
+    ppTestFail("T11 division by zero did not error");
+  }
+  lastErrorCode = 0;
+  ppcTestExpectSig("T11 after error", "-");
+
+  // T12: arena exhaustion invalidates mid-chain, then the engine rebuilds
+  // truthfully from value-leaf upgrades — the tail of the chain reads
+  // "VAL 1 + 1 +", which is honest (# is register Y's live value)
+  ppcTestReset();
+  ppcTestType("1");
+  ppcTestOp(ITM_ENTER);
+  for(int i = 0; i < 14; i++) {
+    ppcTestType("1");
+    ppcTestOp(ITM_ADD);
+  }
+  sprintf(expect, "# 1 %s 1 %s", nADD, nADD);
+  ppcTestExpectSig("T12 exhaustion recovery", expect);
+
+  // T13: LASTx returns as a truthful value leaf
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestOp(ITM_LASTX);
+  ppcTestOp(ITM_MULT);
+  sprintf(expect, "2 3 %s # %s", nADD, nMULT);
+  ppcTestExpectSig("T13 LASTx", expect);
+
+  // T14: unknown undo-enabled item (MIN, deliberately unclassified)
+  // emits the current formula, then invalidates
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestType("9");
+  ppcTestOp(ITM_MIN);
+  ppcTestExpectSig("T14 after unknown", "-");
+  ppcTestExpectHist("T14 hist", 1);
+
+  // T15: eRPN ENTER does not dup — the consumed Y upgrades to a value.
+  // nimWhenButtonPressed is keyboard-owned; the driver mimics the real
+  // keypress (a NIM was open when ENTER went down) so fnKeyEnter's eRPN
+  // condition — and the shadow's mirror of it — sees the true state.
+  ppcTestReset();
+  setSystemFlag(FLAG_ERPN);
+  ppcTestType("5");
+  nimWhenButtonPressed = true;
+  ppcTestOp(ITM_ENTER);
+  nimWhenButtonPressed = false;
+  ppcTestOp(ITM_MULT);
+  sprintf(expect, "# 5 %s", nMULT);
+  ppcTestExpectSig("T15 eRPN", expect);
+  clearSystemFlag(FLAG_ERPN);
+
+  // T16: abort while ASLIFT is set (straight after an operator result) —
+  // the deferred-lift design absorbs the upstream undo() for free; a
+  // shadow that lifts at NIM open strands the tree one slot up
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestType("5<");     // open with ASLIFT set, then abort
+  ppcTestType("6");
+  ppcTestOp(ITM_MULT);
+  sprintf(expect, "2 3 %s 6 %s", nADD, nMULT);
+  ppcTestExpectSig("T16 abort under lift", expect);
+  ppcTestExpectHist("T16 hist", 0);
+
+  ppcTestReset();
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }
 
