@@ -178,5 +178,5 @@ wording.
   instead); a retry after freeing memory works. Two new tests drive
   the calculator to genuine RAM-full to pin this.
 - Round 6 came back functionally clean (one comment reworded, no code
-  change). Zip rebuilt: pkg_dist/undo-history.zip is now 52432 B —
+  change). Zip rebuilt: pkg_dist/undo-history.zip is now 52361 B (comment trim shaved it) —
   attach the LATEST zip; every earlier one lacks these fixes.

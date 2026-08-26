@@ -280,3 +280,13 @@
   ordinary-use invariance, retry idempotence, pin-per-site coverage,
   helper soundness, and the sums-session walk. Rounds 7 (prose-only
   delta) and 8 close the audit if clean.
+- **2026-08-26 engine comment trim (Stan's zip-size question):** eleven
+  audit-provenance tags ("audit r3/r4/r5/r6", "audit A1/A2", pin
+  cross-refs) removed from engine comments per the standing 2026-08-09
+  comment ruling and this package's submission-ready rule — an
+  upstream reviewer cannot resolve them. Invariant sentences kept
+  verbatim; every ruling stays traceable here and in the AUDIT_round*
+  reports. The A1 comment's old-code narration ("the old refuse path
+  minted, evicted the target") rewritten as the invariant it taught.
+  Engine comment density measured 20% before the trim — the tag CLASS
+  was the violation, not the volume.

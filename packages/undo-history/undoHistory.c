@@ -235,9 +235,8 @@ static int historySerializePush(bool_t fromSaved, int16_t labelItem, uint8_t ext
   // everything except totalBytes/seq/label and the provenance flags.
   if(historyEntryCount > 0 && !(extraFlags & HISTORY_ENTRY_GAPBEFORE)) {
     // A state equal to the top but separated from it by a GAP is a
-    // DISTINCT temporal occurrence, not a duplicate: merging collapsed
-    // the pre-gap and post-gap levels and pointed the ~ the wrong way
-    // (audit r3, both readers convergent).
+    // DISTINCT temporal occurrence, not a duplicate: merging would collapse
+    // the pre-gap and post-gap levels and point the ~ the wrong way.
     historyEntryHeader_t top;
     historyHeaderOf(historyEntryCount - 1, &top);
     if(top.totalBytes == h.totalBytes &&
@@ -331,7 +330,7 @@ bool_t undoHistoryNoteFirstUndo(void) {
       // never fit the ring). The caller steps straight to the last ring
       // level — one press covers the gap, as documented — so the cursor
       // sits on the anchor for that step. With no older level, the
-      // caller falls back to the plain single-level undo (audit A2).
+      // caller falls back to the plain single-level undo.
       historyGapPending = false;
       historyCursor = historyEntryCount - 1;
       return historyEntryCount >= 2;
@@ -340,8 +339,8 @@ bool_t undoHistoryNoteFirstUndo(void) {
                     ? historyEntryCount - 2 : HISTORY_CURSOR_NONE;
   }
   else if(result == 2) {
-    // Unreachable with gapAnchor set: a gap-marked mint never dedupes
-    // (audit r3) — a merge here is always the plain no-gap kind.
+    // Unreachable with gapAnchor set: a gap-marked mint never dedupes —
+    // a merge here is always the plain no-gap kind.
     historyCursor = (historyLastCaptureSeq != 0 && historySeqOf(historyEntryCount - 1) == historyLastCaptureSeq)
                     ? historyEntryCount - 1 : HISTORY_CURSOR_NONE;
   }
@@ -375,13 +374,13 @@ static bool_t historyRestoreToIndex(uint8_t index) {
         // Slots below i already took this entry's payloads: in the
         // general case the bank is torn, and the browser path leaves
         // thereIsSomethingToUndo armed for a later plain undo() to
-        // consume it (audit r5, cross-refuted). Retire it. This is
-        // DELIBERATELY conservative (ruled, audit r6): a staged slot
+        // consume it. Retire it. This is DELIBERATELY conservative:
+        // a staged slot
         // that happened to write bytes equal to the pre-op bank
         // retires too — proving coherence would be new failure-path
         // code whose own defect points the dangerous way, silently
         // KEEPING a torn bank. A slot-0 failure mutates nothing and
-        // keeps the user's single-level undo (R16/R17).
+        // keeps the user's single-level undo.
         thereIsSomethingToUndo = false;
       }
       return false;   // ring untouched; failure-side bookkeeping lives in
@@ -405,8 +404,7 @@ static bool_t historyRestoreToIndex(uint8_t index) {
       lastErrorCode = ERROR_RAM_FULL;
       thereIsSomethingToUndo = false;   // every register and flag is staged
                                         // already: the bank holds level
-                                        // state, not the armed pre-op
-                                        // state (audit r5)
+                                        // state, not the armed pre-op state
       return false;
     }
     xcopy(savedStatisticalSumsPointer, historyRing + offset, HISTORY_SUMS_BYTES);
@@ -427,7 +425,7 @@ static bool_t historyRestoreToIndex(uint8_t index) {
   historyGapPending = false;   // any successful restore abandons the
                                // un-captured live tip, its pending gap
                                // included — the rule lives HERE so every
-                               // caller is covered (audit r4, convergent)
+                               // caller is covered
   return true;
 }
 
@@ -551,8 +549,8 @@ bool_t undoHistoryRestoreLevel(uint8_t logical) {
     // redo out of: mint the (now) anchor exactly like the first UNDO
     // press. The mint evicts oldest-first, so refuse BEFORE it commits
     // anything if fitting the anchor would take the selected level with
-    // it (audit A1: the old refuse path minted, evicted the target, and
-    // left the cursor claiming a state the machine does not hold). An
+    // it — a mint that evicts the target would leave the cursor
+    // claiming a state the machine does not hold. An
     // oversized live state (needed > cap) mints nothing and commits
     // nothing, so it passes through. The seq re-find below stays as the
     // belt for index shifts from ordinary eviction.
@@ -587,7 +585,7 @@ bool_t undoHistoryRestoreLevel(uint8_t logical) {
         // The machine still holds the live state: if the mint pushed, the
         // top IS that state — point the cursor at it. Detected by the
         // TOP SEQ, not the entry count: an evict-plus-push keeps the
-        // count equal and even shrinks it (audit r3).
+        // count equal and can even shrink it.
         bool_t pushed = historyEntryCount > 0 && historySeqOf((uint8_t)(historyEntryCount - 1)) != topSeqBefore;
         historyCursor = pushed ? historyEntryCount - 1 : HISTORY_CURSOR_NONE;
         return false;
@@ -598,7 +596,7 @@ bool_t undoHistoryRestoreLevel(uint8_t logical) {
   {
     // A mid-trail jump abandons the un-captured live continuation too —
     // including a retry after a failed live restore left the cursor on
-    // the anchor (audit r3): any successful restore starts clean.
+    // the anchor: any successful restore starts clean.
     return historyRestoreToIndex(logical);
   }
 }
